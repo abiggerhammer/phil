@@ -8,6 +8,7 @@ module Phil.Core.Refinement
   , substituteProposition
   , propositionMentions
   , evidenceProposition
+  , bindingEvidencePropositions
   , findMatchingEvidence
   , dischargeProposition
   , dischargePropositionUsing
@@ -234,6 +235,17 @@ evidenceProposition ty =
       Just (Atom claim [RefVar context, RefVar subject])
     _ -> Nothing
 
+bindingEvidencePropositions :: Name -> Ty -> [Proposition]
+bindingEvidencePropositions subjectName ty =
+  case ty of
+    TyRefined binder base proposition ->
+      substituteProposition binder (RefVar subjectName) proposition
+        : bindingEvidencePropositions subjectName base
+    _ ->
+      case evidenceProposition ty of
+        Just proposition -> [proposition]
+        Nothing -> []
+
 findMatchingEvidence :: Proposition -> CheckState -> Maybe Name
 findMatchingEvidence required state =
   fst <$> firstMatching
@@ -244,7 +256,7 @@ findMatchingEvidence required state =
       case
         [ (name, proposition)
         | (name, ty) <- candidates
-        , Just proposition <- [evidenceProposition ty]
+        , proposition <- bindingEvidencePropositions name ty
         , normalizeProposition proposition == normalizedRequired
         ] of
           [] -> Nothing

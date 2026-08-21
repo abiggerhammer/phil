@@ -168,7 +168,17 @@ checkValueInternal explicitEvidence residualSpec value expected state =
       case compareTypes actual expected of
         DefinitionallyEqual -> Right synthesized { valueResultType = expected }
         RequiresPropositionalEquality -> Left (ExplicitTransportRequired actual expected)
-        IncompatibleTypes -> Left (ValueTypeMismatch actual expected)
+        IncompatibleTypes
+          | refinementErasesTo actual expected ->
+              Right synthesized { valueResultType = expected }
+          | otherwise -> Left (ValueTypeMismatch actual expected)
+
+refinementErasesTo :: Ty -> Ty -> Bool
+refinementErasesTo actual expected =
+  case actual of
+    TyRefined _ base _ ->
+      definitionallyEqualTy base expected || refinementErasesTo base expected
+    _ -> False
 
 instantiateRefinement
   :: Name
