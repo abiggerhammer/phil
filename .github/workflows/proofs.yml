@@ -27,8 +27,10 @@ jobs:
       - name: Check out repository
         uses: actions/checkout@v4
 
-      - name: Check session proofs
+      - name: Check proof corpus
         run: |
           export PATH="/home/rocq/.opam/${COMPILER}/bin:$PATH"
           rocq c -Q proof/Phil Phil proof/Phil/Core/Syntax.v
           rocq c -Q proof/Phil Phil proof/Phil/Core/Session.v
+          rocq c -Q proof/Phil Phil proof/Phil/Core/Context.v
+          rocq c -Q proof/Phil Phil proof/Phil/Core/Process.v
