@@ -61,8 +61,8 @@ failedFlow failureClass detail = terminalFlow (Failed failureClass detail)
 
 sequenceFlow
   :: ProcessFlow
-  -> (CheckState -> Either ProcessError ProcessFlow)
-  -> Either ProcessError ProcessFlow
+  -> (CheckState -> Either err ProcessFlow)
+  -> Either err ProcessFlow
 sequenceFlow (ProcessFlow paths) continuation =
   ProcessFlow . concat <$> mapM advance paths
   where
