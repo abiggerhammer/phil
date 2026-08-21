@@ -19,7 +19,6 @@ import Control.Monad (foldM, zipWithM)
 import qualified Data.Map.Strict as Map
 import qualified Data.Set as Set
 import Data.Text (Text)
-import qualified Data.Text as Text
 import Phil.Core.Checker
   ( CheckState (..)
   , emptyCheckState
@@ -72,6 +71,7 @@ data FocusMechanism
 data FocusStep
   = ExpandedTransparentClaim Text
   | InsertedUIntToNat RefTerm
+  | SurfacedPrerequisite Proposition
   | NormalizedProposition Proposition Proposition
   | MatchedInScopeEvidence Name
   deriving (Eq, Ord, Show)
@@ -191,11 +191,19 @@ focusRecursive staticContext state proposition = do
   let prerequisites = deduplicateRequirements $
         concatMap (\plan -> focusPrerequisites plan ++ [focusGoal plan]) sidePlans
       sideSteps = concatMap focusTrace sidePlans
+      surfacedSteps = map (SurfacedPrerequisite . focusedCanonical . focusGoal) sidePlans
+      preNormalizationSteps = filter (not . isNormalizationStep) steps
+      normalizationSteps = filter isNormalizationStep steps
       goal = FocusedRequirement proposition canonical mechanism
   Right FocusPlan
     { focusPrerequisites = prerequisites
     , focusGoal = goal
-    , focusTrace = steps ++ sideSteps ++ mechanismSteps
+    , focusTrace =
+        preNormalizationSteps
+          ++ surfacedSteps
+          ++ sideSteps
+          ++ normalizationSteps
+          ++ mechanismSteps
     }
 
 classifyRequirement
@@ -433,6 +441,12 @@ parameterState claimName parameters =
           (TyOpaqueSorted ("claim-param:" <> claimName <> ":" <> unName parameterName) sort)
           (resourceContext state)
       Right state { resourceContext = context }
+
+isNormalizationStep :: FocusStep -> Bool
+isNormalizationStep step =
+  case step of
+    NormalizedProposition _ _ -> True
+    _ -> False
 
 firstDuplicate :: Ord a => [a] -> Maybe a
 firstDuplicate = go Set.empty
