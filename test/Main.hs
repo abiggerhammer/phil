@@ -67,7 +67,7 @@ main = do
     , test "select exposes branch payload and continuation" testSelectProgression
     , test "offer exposes peer-selected branch payload and continuation" testOfferProgression
     , test "unknown session labels are rejected" testUnknownLabel
-    , test "duplicate session labels are rejected" testDuplicateLabel
+    , test "duplicate session labels invalidate the whole choice" testDuplicateLabel
     , test "offer cannot be used on internal choice" testOfferWrongPolarity
     , test "successor endpoint must have a fresh identity" testFreshSuccessor
     , test "close consumes endpoint only at matching outcome" testCloseProgression
@@ -246,13 +246,14 @@ testUnknownLabel = do
 testDuplicateLabel :: Either String ()
 testDuplicateLabel = do
   let session = Select
-        [ Branch "same" Nothing (End (Outcome "success"))
+        [ Branch "safe" Nothing (End (Outcome "success"))
+        , Branch "same" Nothing (End (Outcome "success"))
         , Branch "same" Nothing (End (Outcome "failure"))
         ]
   context <- endpointContext (name "e0") session
-  case selectEndpoint (name "e0") (name "e1") "same" context of
+  case selectEndpoint (name "e0") (name "e1") "safe" context of
     Left (DuplicateSessionLabel label) -> assert (label == "same") "wrong duplicate label reported"
-    other -> Left ("duplicate session label was not rejected: " ++ show other)
+    other -> Left ("malformed choice with duplicate labels was allowed to progress: " ++ show other)
 
 testOfferWrongPolarity :: Either String ()
 testOfferWrongPolarity = do

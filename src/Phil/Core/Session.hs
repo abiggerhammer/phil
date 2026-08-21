@@ -170,11 +170,23 @@ continueWith endpoint successor action message continuation consumed
         }
 
 selectBranch :: Text -> [Branch] -> Either SessionError Branch
-selectBranch label branches =
+selectBranch label branches = do
+  ensureUniqueLabels branches
   case filter ((== label) . branchLabel) branches of
     [] -> Left (UnknownSessionLabel label (map branchLabel branches))
     [branch] -> Right branch
     _ -> Left (DuplicateSessionLabel label)
+
+ensureUniqueLabels :: [Branch] -> Either SessionError ()
+ensureUniqueLabels = go Set.empty
+  where
+    go :: Set Text -> [Branch] -> Either SessionError ()
+    go _ [] = Right ()
+    go seen (branch : rest)
+      | Set.member label seen = Left (DuplicateSessionLabel label)
+      | otherwise = go (Set.insert label seen) rest
+      where
+        label = branchLabel branch
 
 branchMessage :: Branch -> Maybe MessageSpec
 branchMessage branch =
