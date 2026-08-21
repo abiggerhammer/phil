@@ -46,6 +46,7 @@ import Phil.Core.Syntax
   , ObligationId (ObligationId)
   , Outcome (Outcome)
   , Proposition (Atom)
+  , RefTerm (RefVar)
   , Session (..)
   , Ty (..)
   )
@@ -142,13 +143,15 @@ testObligationIdConflict :: Either String ()
 testObligationIdConflict = do
   let first = Obligation
         (ObligationId "upload.begin.policy")
-        (Atom "BeginPolicy" ["κ1", "begin"])
+        (Atom "BeginPolicy" [RefVar (name "κ1"), RefVar (name "begin")])
         "server.phil:begin"
+        "upload-server"
         "before Accept"
       conflicting = Obligation
         (ObligationId "upload.begin.policy")
-        (Atom "BeginPolicy" ["κ2", "begin"])
+        (Atom "BeginPolicy" [RefVar (name "κ2"), RefVar (name "begin")])
         "server.phil:begin"
+        "upload-server"
         "before Accept"
   state1 <- mapLeft show $ emitObligation first emptyCheckState
   _ <- mapLeft show $ emitObligation first state1

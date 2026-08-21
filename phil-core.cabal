@@ -23,6 +23,7 @@ library
       Phil.Core.Session
       Phil.Core.Process
       Phil.Core.Recognition
+      Phil.Core.Refinement
       Phil.Core.Value
   build-depends:
       base >=4.17 && <5,
@@ -109,6 +110,17 @@ test-suite phil-value-tests
   type:               exitcode-stdio-1.0
   hs-source-dirs:     test
   main-is:            ValueMain.hs
+  build-depends:
+      base >=4.17 && <5,
+      containers >=0.6 && <0.8,
+      phil-core,
+      text >=2.0 && <2.2
+
+test-suite phil-refinement-evidence-tests
+  import:             common-settings
+  type:               exitcode-stdio-1.0
+  hs-source-dirs:     test
+  main-is:            RefinementEvidenceMain.hs
   build-depends:
       base >=4.17 && <5,
       containers >=0.6 && <0.8,

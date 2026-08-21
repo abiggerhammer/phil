@@ -16,6 +16,7 @@ import Phil.Core.Context
   , insertBinding
   , startSharedLoan
   )
+import Phil.Core.Refinement (RefinementError (MissingEvidence))
 import Phil.Core.Syntax
   ( Branch (..)
   , FrameId (FrameId)
@@ -27,6 +28,7 @@ import Phil.Core.Syntax
   , Outcome (Outcome)
   , PendingRecvSpec (PendingRecvSpec)
   , Proposition (Atom)
+  , RefTerm (..)
   , Session (..)
   , Ty (..)
   , Value (..)
@@ -58,7 +60,7 @@ main = do
     , test "checking accepts definitional equality" testCheckExact
     , test "dependent index mismatch requires explicit transport" testExplicitTransportBoundary
     , test "unrelated types are incompatible" testTypeMismatch
-    , test "refined expected types require the evidence layer" testRefinedExpected
+    , test "refined expected types require matching evidence" testRefinedExpected
     , test "refined ascriptions cannot erase proof obligations" testRefinedAscription
     , test "guarded recursive endpoint types compare equi-recursively" testRecursiveSessionEquality
     , test "choice label order does not affect session equality" testChoiceOrderEquality
@@ -70,6 +72,9 @@ main = do
 
 name :: Text -> Name
 name = Name
+
+var :: Text -> RefTerm
+var = RefVar . name
 
 test :: String -> Either String () -> IO Bool
 test label result =
@@ -117,14 +122,14 @@ testAffineVariable = do
 
 testLinearVariable :: Either String ()
 testLinearVariable = do
-  context <- mapLeft show $ insertBinding Linear (name "payload") (TyBytes "4096") (resourceContext emptyCheckState)
+  context <- mapLeft show $ insertBinding Linear (name "payload") (TyBytes (RefNat 4096)) (resourceContext emptyCheckState)
   result <- mapLeft show $ synthValue (VVar (name "payload")) (emptyCheckState { resourceContext = context })
   assert (valueResultMode result == Just Linear) "linear variable reported the wrong mode"
   assert (Map.notMember (name "payload") (linearBindings (resourceContext (valueResultState result)))) "linear variable remained live after use"
 
 testBorrowedOwner :: Either String ()
 testBorrowedOwner = do
-  context0 <- mapLeft show $ insertBinding Linear (name "payload") (TyBytes "4096") (resourceContext emptyCheckState)
+  context0 <- mapLeft show $ insertBinding Linear (name "payload") (TyBytes (RefNat 4096)) (resourceContext emptyCheckState)
   context1 <- mapLeft show $ startSharedLoan (name "payload") context0
   case synthValue (VVar (name "payload")) (emptyCheckState { resourceContext = context1 }) of
     Left (ValueResourceError (OwnerBorrowed owner)) ->
@@ -154,9 +159,9 @@ testAscription = do
 
 testAscriptionPreservesMode :: Either String ()
 testAscriptionPreservesMode = do
-  context <- mapLeft show $ insertBinding Linear (name "payload") (TyBytes "4096") (resourceContext emptyCheckState)
+  context <- mapLeft show $ insertBinding Linear (name "payload") (TyBytes (RefNat 4096)) (resourceContext emptyCheckState)
   result <- mapLeft show $ synthValue
-    (VAscribe (VVar (name "payload")) (TyBytes "4096"))
+    (VAscribe (VVar (name "payload")) (TyBytes (RefNat 4096)))
     (emptyCheckState { resourceContext = context })
   assert (valueResultMode result == Just Linear) "ascription erased the structural mode of its variable use"
 
@@ -173,9 +178,12 @@ testCheckExact = do
 
 testExplicitTransportBoundary :: Either String ()
 testExplicitTransportBoundary = do
-  context <- mapLeft show $ insertBinding Linear (name "payload") (TyBytes "4096") (resourceContext emptyCheckState)
-  case checkValue (VVar (name "payload")) (TyBytes "begin.length") (emptyCheckState { resourceContext = context }) of
-    Left (ExplicitTransportRequired (TyBytes "4096") (TyBytes "begin.length")) -> Right ()
+  let sourceTy = TyBytes (RefNat 4096)
+      targetTy = TyBytes (RefToNat (RefField (var "begin") "length"))
+  context <- mapLeft show $ insertBinding Linear (name "payload") sourceTy (resourceContext emptyCheckState)
+  case checkValue (VVar (name "payload")) targetTy (emptyCheckState { resourceContext = context }) of
+    Left (ExplicitTransportRequired actual expected) ->
+      assert (actual == sourceTy && expected == targetTy) "transport boundary reported the wrong types"
     other -> Left ("dependent mismatch did not demand explicit transport: " ++ show other)
 
 testTypeMismatch :: Either String ()
@@ -186,16 +194,25 @@ testTypeMismatch =
 
 testRefinedExpected :: Either String ()
 testRefinedExpected = do
-  let refined = TyRefined (name "v") (TyUInt 16) (Atom "member" ["v", "hello.versions"])
+  let refined = TyRefined
+        (name "v")
+        (TyUInt 16)
+        (Atom "member" [var "v", RefField (var "hello") "versions"])
   case checkValue (VUInt 16 1) refined emptyCheckState of
-    Left (RefinementEvidenceRequired actual) -> assert (actual == refined) "wrong refined type reported"
+    Left (ValueRefinementError (MissingEvidence required)) ->
+      assert
+        (required == Atom "member" [RefUInt 16 1, RefField (var "hello") "versions"])
+        "wrong instantiated refinement reported"
     other -> Left ("refined check bypassed evidence handling: " ++ show other)
 
 testRefinedAscription :: Either String ()
 testRefinedAscription = do
-  let refined = TyRefined (name "v") (TyUInt 16) (Atom "member" ["v", "hello.versions"])
+  let refined = TyRefined
+        (name "v")
+        (TyUInt 16)
+        (Atom "member" [var "v", RefField (var "hello") "versions"])
   case synthValue (VAscribe (VUInt 16 1) refined) emptyCheckState of
-    Left (RefinementEvidenceRequired actual) -> assert (actual == refined) "wrong refined ascription reported"
+    Left (ValueRefinementError (MissingEvidence _)) -> Right ()
     other -> Left ("refined ascription bypassed evidence handling: " ++ show other)
 
 testRecursiveSessionEquality :: Either String ()
@@ -229,8 +246,9 @@ testObligationsPreserved :: Either String ()
 testObligationsPreserved = do
   let obligation = Obligation
         (ObligationId "value.test")
-        (Atom "SomeClaim" ["subject"])
+        (Atom "SomeClaim" [var "subject"])
         "ValueMain"
+        "value-test"
         "after synthesis"
   state <- mapLeft show $ emitObligation obligation emptyCheckState
   result <- mapLeft show $ synthValue (VBool True) state

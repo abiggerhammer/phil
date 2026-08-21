@@ -5,6 +5,7 @@ module Phil.Core.Syntax
   , GrammarId (..)
   , FrameId (..)
   , Mode (..)
+  , RefTerm (..)
   , Ty (..)
   , Value (..)
   , Proposition (..)
@@ -34,14 +35,32 @@ data Mode
   | Linear
   deriving (Eq, Ord, Show)
 
+-- | Structured terms in the Phase 0 refinement fragment. These are semantic
+-- terms, not source syntax. In particular, UInt values remain distinct from
+-- Nat until an explicit/canonical RefToNat node is present.
+data RefTerm
+  = RefVar Name
+  | RefNat Integer
+  | RefUInt Int Integer
+  | RefBool Bool
+  | RefField RefTerm Text
+  | RefLen RefTerm
+  | RefToNat RefTerm
+  | RefAdd RefTerm RefTerm
+  | RefSub RefTerm RefTerm
+  | RefScale Integer RefTerm
+  | RefOpaque Text
+  deriving (Eq, Ord, Show)
+
 data Ty
   = TyUnit
   | TyBool
   | TyUInt Int
-  | TyBytes Text
+  | TyBytes RefTerm
   | TyFrame GrammarId
   | TyPendingRecv PendingRecvSpec
   | TyProof Proposition
+  | TyValidated Text Name Name
   | TyEndpoint Session
   | TyRefined Name Ty Proposition
   | TyOpaque Text
@@ -53,13 +72,22 @@ data Value
   | VBool Bool
   | VUInt Int Integer
   | VAscribe Value Ty
+  | VTransport Value Name Ty
   deriving (Eq, Ord, Show)
 
 data Proposition
   = Truth
-  | Atom Text [Text]
-  | Equal Text Text
+  | Falsehood
+  | Equal RefTerm RefTerm
+  | NotEqual RefTerm RefTerm
+  | LessThan RefTerm RefTerm
+  | LessEqual RefTerm RefTerm
+  | Member RefTerm RefTerm
+  | Disjoint RefTerm RefTerm
   | Conjunction Proposition Proposition
+  | Disjunction Proposition Proposition
+  | Negation Proposition
+  | Atom Text [RefTerm]
   deriving (Eq, Ord, Show)
 
 newtype Outcome = Outcome { unOutcome :: Text }
@@ -105,6 +133,7 @@ data Obligation = Obligation
   { obligationId :: ObligationId
   , obligationProposition :: Proposition
   , obligationOrigin :: Text
+  , obligationScope :: Text
   , obligationRequiredPoint :: Text
   }
   deriving (Eq, Ord, Show)
