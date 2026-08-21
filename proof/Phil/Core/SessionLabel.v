@@ -156,7 +156,7 @@ Proof.
           as HatMostOne.
         pose proof
           (findBranch_some_count_positive
-            target branches foundPayload foundContinuation Hfind)
+            target branches payload continuation Hfind)
           as Hpositive.
         lia.
     + discriminate.
