@@ -35,6 +35,12 @@ The success theorem deliberately abstracts the implementation's error-classifica
 
 The proof uses a structurally recursive presentation equivalent to the implementation's `mapM` plus concatenation; list order and multiplicity are preserved.
 
-## Session label selection
+### PHIL-SESSION-LABEL-001 — session label selection
 
-`PHIL-SESSION-LABEL-001` models the current `ensureUniqueLabels` / `selectBranch` boundary. The Haskell implementation uses `Data.Set`; the proof checks uniqueness structurally over the proof-oriented branch spine. The mechanized claims are that duplicate-label branch sets are rejected before lookup, absent requested labels are rejected, every successful lookup occurs only in a globally unique branch set where the requested label occurs exactly once, and the successful payload/continuation is exactly the result of the requested-label lookup. Payload types and continuations are carried through unchanged and are not inspected by this theorem.
+`proof/Phil/Core/SessionLabel.v` models the current `ensureUniqueLabels` / `selectBranch` boundary. The Haskell implementation uses `Data.Set`; the proof checks uniqueness structurally over the proof-oriented branch spine. The mechanized claims are that duplicate-label branch sets are rejected before lookup, absent requested labels are rejected, every successful lookup occurs only in a globally unique branch set where the requested label occurs exactly once, and the successful payload/continuation is exactly the result of the requested-label lookup. Payload types and continuations are carried through unchanged and are not inspected by this theorem.
+
+## Current proof slice
+
+### PHIL-CTX-BIND-001 — exact fresh binding insertion
+
+`proof/Phil/Core/Context.v` now also models `insertBinding`. A successful insertion proves that the inserted name was absent from all three structural binding maps, appears afterward in exactly the selected mode, leaves every unrelated lookup unchanged, and preserves the active-loan set. The proof uses the same extensional binding-map abstraction as `PHIL-CTX-LIN-001`; finite-map representation details and the concrete `DuplicateBinding` diagnostic payload remain outside the successful-result claim.
