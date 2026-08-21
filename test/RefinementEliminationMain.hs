@@ -3,15 +3,16 @@
 module Main (main) where
 
 import Control.Monad (unless)
+import qualified Data.Map.Strict as Map
 import Data.Text (Text)
 import Phil.Core.Checker (CheckState (..), emptyCheckState)
-import Phil.Core.Context (insertBinding)
+import Phil.Core.Context (ResourceContext (..), insertBinding)
 import Phil.Core.Refinement
   ( EvidenceUse (..)
   , RefinementError (MissingEvidence)
   )
 import Phil.Core.Syntax
-  ( Mode (Unrestricted)
+  ( Mode (..)
   , Name (Name)
   , Proposition (..)
   , RefTerm (..)
@@ -31,6 +32,7 @@ main = do
     [ test "refined values erase canonically to their base type" testRefinementElimination
     , test "unrestricted refined bindings entail their instantiated refinement" testRefinedBindingEvidence
     , test "refined binding evidence remains subject-specific" testRefinedBindingSubjectIdentity
+    , test "linear refined values retain their fact across ownership consumption" testLinearRefinementPreserved
     ]
   unless (and results) exitFailure
 
@@ -52,7 +54,7 @@ testRefinementElimination = do
         (name "x")
         (TyUInt 16)
         (Atom "Allowed" [var "x"])
-  state <- bind (name "selected") refined emptyCheckState
+  state <- bind Unrestricted (name "selected") refined emptyCheckState
   result <- mapLeft show $ checkValue (VVar (name "selected")) (TyUInt 16) state
   assert (valueResultType result == TyUInt 16) "refined value did not erase to its base type"
 
@@ -66,7 +68,7 @@ testRefinedBindingEvidence = do
         (name "x")
         (TyUInt 16)
         (Member (var "x") (RefField (var "hello") "versions"))
-  state <- bind (name "selected") selectedTy emptyCheckState
+  state <- bind Unrestricted (name "selected") selectedTy emptyCheckState
   result <- mapLeft show $ checkValue (VVar (name "selected")) requiredTy state
   assert
     (EvidenceByBinding
@@ -85,16 +87,32 @@ testRefinedBindingSubjectIdentity = do
         (name "x")
         (TyUInt 16)
         (Atom "Allowed" [var "x"])
-  state0 <- bind (name "selected") selectedTy emptyCheckState
-  state1 <- bind (name "other") (TyUInt 16) state0
+  state0 <- bind Unrestricted (name "selected") selectedTy emptyCheckState
+  state1 <- bind Unrestricted (name "other") (TyUInt 16) state0
   case checkValue (VVar (name "other")) otherTy state1 of
     Left (ValueRefinementError (MissingEvidence (Atom "Allowed" [RefVar subject]))) ->
       assert (subject == name "other") "missing-evidence proposition lost the actual subject"
     other -> Left ("refined evidence for another subject was accepted: " ++ show other)
 
-bind :: Name -> Ty -> CheckState -> Either String CheckState
-bind binding ty state = do
-  context <- mapLeft show $ insertBinding Unrestricted binding ty (resourceContext state)
+testLinearRefinementPreserved :: Either String ()
+testLinearRefinementPreserved = do
+  let refined = TyRefined
+        (name "p")
+        (TyOpaque "Payload")
+        (Atom "DigestChecked" [var "p"])
+  state <- bind Linear (name "payload") refined emptyCheckState
+  result <- mapLeft show $ checkValue (VVar (name "payload")) refined state
+  assert
+    (Map.notMember (name "payload") (linearBindings (resourceContext (valueResultState result))))
+    "linear refined source was not consumed"
+  assert
+    (EvidenceByBinding (name "payload") (Atom "DigestChecked" [var "payload"])
+      `elem` valueResultEvidence result)
+    "linear refined fact disappeared when the owner was consumed"
+
+bind :: Mode -> Name -> Ty -> CheckState -> Either String CheckState
+bind mode binding ty state = do
+  context <- mapLeft show $ insertBinding mode binding ty (resourceContext state)
   Right (state { resourceContext = context })
 
 assert :: Bool -> String -> Either String ()

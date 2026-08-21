@@ -23,6 +23,7 @@ import Phil.Core.Refinement
   ( EvidenceUse (..)
   , RefinementError
   , ResidualSpec
+  , bindingEvidencePropositions
   , dischargeProposition
   , dischargePropositionUsing
   , normalizeProposition
@@ -85,7 +86,9 @@ synthValue value state =
           { valueResultType = ty
           , valueResultMode = Just mode
           , valueResultTerm = Just (RefVar name)
-          , valueResultEvidence = []
+          , valueResultEvidence =
+              map (EvidenceByBinding name . normalizeProposition)
+                (bindingEvidencePropositions name ty)
           , valueResultState = state { resourceContext = nextContext }
           }
     VUnit -> pureLiteral TyUnit Nothing
@@ -143,23 +146,26 @@ checkValueInternal explicitEvidence residualSpec value expected state =
       baseResult <- checkValue value base state
       required <- instantiateRefinement binder proposition baseResult
       (evidenceUse, nextState) <-
-        case (explicitEvidence, residualSpec) of
-          (_, _) | normalizeProposition required == Truth ->
-            Right (EvidenceByDefinition required, valueResultState baseResult)
-          (Just evidenceName, _) -> do
-            use <- mapLeft ValueRefinementError $
-              dischargePropositionUsing evidenceName required (valueResultState baseResult)
-            Right (use, valueResultState baseResult)
-          (Nothing, Just spec) ->
-            mapLeft ValueRefinementError $
-              residualizeProposition spec required (valueResultState baseResult)
-          (Nothing, Nothing) -> do
-            use <- mapLeft ValueRefinementError $
-              dischargeProposition required (valueResultState baseResult)
-            Right (use, valueResultState baseResult)
+        case matchingCarriedEvidence required (valueResultEvidence baseResult) of
+          Just carried -> Right (carried, valueResultState baseResult)
+          Nothing ->
+            case (explicitEvidence, residualSpec) of
+              (_, _) | normalizeProposition required == Truth ->
+                Right (EvidenceByDefinition required, valueResultState baseResult)
+              (Just evidenceName, _) -> do
+                use <- mapLeft ValueRefinementError $
+                  dischargePropositionUsing evidenceName required (valueResultState baseResult)
+                Right (use, valueResultState baseResult)
+              (Nothing, Just spec) ->
+                mapLeft ValueRefinementError $
+                  residualizeProposition spec required (valueResultState baseResult)
+              (Nothing, Nothing) -> do
+                use <- mapLeft ValueRefinementError $
+                  dischargeProposition required (valueResultState baseResult)
+                Right (use, valueResultState baseResult)
       Right baseResult
         { valueResultType = expected
-        , valueResultEvidence = valueResultEvidence baseResult ++ [evidenceUse]
+        , valueResultEvidence = appendEvidence evidenceUse (valueResultEvidence baseResult)
         , valueResultState = nextState
         }
     _ -> do
@@ -172,6 +178,24 @@ checkValueInternal explicitEvidence residualSpec value expected state =
           | refinementErasesTo actual expected ->
               Right synthesized { valueResultType = expected }
           | otherwise -> Left (ValueTypeMismatch actual expected)
+
+matchingCarriedEvidence :: Proposition -> [EvidenceUse] -> Maybe EvidenceUse
+matchingCarriedEvidence required = go
+  where
+    normalizedRequired = normalizeProposition required
+    go [] = Nothing
+    go (evidenceUse : rest) =
+      case evidenceUse of
+        EvidenceByDefinition proposition
+          | normalizeProposition proposition == normalizedRequired -> Just evidenceUse
+        EvidenceByBinding _ proposition
+          | normalizeProposition proposition == normalizedRequired -> Just evidenceUse
+        _ -> go rest
+
+appendEvidence :: EvidenceUse -> [EvidenceUse] -> [EvidenceUse]
+appendEvidence evidenceUse existing
+  | evidenceUse `elem` existing = existing
+  | otherwise = existing ++ [evidenceUse]
 
 refinementErasesTo :: Ty -> Ty -> Bool
 refinementErasesTo actual expected =
@@ -213,7 +237,7 @@ transportValue value proofName targetTy state = do
             dischargePropositionUsing proofName proposition (valueResultState source)
           Right source
             { valueResultType = targetTy
-            , valueResultEvidence = valueResultEvidence source ++ [evidenceUse]
+            , valueResultEvidence = appendEvidence evidenceUse (valueResultEvidence source)
             }
 
 data TransportRequirement
