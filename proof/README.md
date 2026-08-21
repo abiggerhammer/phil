@@ -34,3 +34,7 @@ The success theorem deliberately abstracts the implementation's error-classifica
 `proof/Phil/Core/Process.v` mirrors the `Either`-style failure behavior of `sequenceFlow` while treating `CheckState` as opaque. It proves that `Continue` is exactly the control case delegated to the continuation and that every non-`Continue` path (`Return`, `Closed`, or `Failed`) occurs unchanged in every successful sequencing result.
 
 The proof uses a structurally recursive presentation equivalent to the implementation's `mapM` plus concatenation; list order and multiplicity are preserved.
+
+## Session label selection
+
+`PHIL-SESSION-LABEL-001` models the current `ensureUniqueLabels` / `selectBranch` boundary. The Haskell implementation uses `Data.Set`; the proof checks uniqueness structurally over the proof-oriented branch spine. The mechanized claims are that duplicate-label branch sets are rejected before lookup, absent requested labels are rejected, every successful lookup occurs only in a globally unique branch set where the requested label occurs exactly once, and the successful payload/continuation is exactly the result of the requested-label lookup. Payload types and continuations are carried through unchanged and are not inspected by this theorem.
