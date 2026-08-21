@@ -3,6 +3,8 @@
 module Main (main) where
 
 import Control.Monad (unless)
+import Data.Text (Text)
+import qualified Data.Text as Text
 import Phil.Core.Checker (CheckState (..), emptyCheckState)
 import Phil.Core.Context (insertBinding)
 import Phil.Core.SortCheck
@@ -17,7 +19,9 @@ import Phil.Core.Syntax
   , RefSort (..)
   , RefTerm (..)
   , Ty (..)
+  , Value (VVar)
   )
+import Phil.Core.Value (ValueResult (..), checkValue)
 import System.Exit (exitFailure)
 
 main :: IO ()
@@ -37,10 +41,7 @@ test label result =
     Left message -> putStrLn ("FAIL: " ++ label ++ " -- " ++ message) >> pure False
 
 name :: String -> Name
-name = Name . fromString
-
-fromString :: String -> Data.Text.Text
-fromString = Data.Text.pack
+name = Name . Text.pack
 
 testCollectionVariable :: Either String ()
 testCollectionVariable = do
@@ -69,9 +70,9 @@ testSortedOpaqueValueType :: Either String ()
 testSortedOpaqueValueType = do
   let ty = TyOpaqueSorted "SupportedVersions" (SortFiniteSet (SortUInt 16))
   state <- withUnrestricted (name "supported") ty emptyCheckState
-  case Phil.Core.Value.checkValue (Phil.Core.Syntax.VVar (name "supported")) ty state of
+  case checkValue (VVar (name "supported")) ty state of
     Right result
-      | Phil.Core.Value.valueResultType result == ty -> Right ()
+      | valueResultType result == ty -> Right ()
     other -> Left ("sorted opaque value did not check against itself: " ++ show other)
 
 testSortedOpaqueSort :: Either String ()
