@@ -81,7 +81,14 @@ The equality API exposes three outcomes: definitionally equal, requires explicit
 
 - Proof-relevant dependent indices are structured `RefTerm` values rather than strings. The represented Phase 0 term forms include variables, Nat/UInt/Bool literals, field projection, `len`, explicit `toNat`, addition, guarded natural subtraction, literal scaling, and opaque term leaves.
 - Propositions are structured over those terms: equality/inequality/order, membership/disjointness, conjunction/disjunction/negation, and named claim atoms.
+- The executable refinement sort language distinguishes `Bool`, `Nat`, `UInt[w]`, `Enum[E]`, `FiniteSeq[T]`, `FiniteSet[T]`, `StableId[K]`, and explicitly opaque elaborated sorts.
+- Proof-relevant field projections and opaque semantic leaves carry the sort established by elaboration. `TyOpaqueSorted` lets an otherwise opaque runtime type expose a declared refinement sort for variables such as finite collections, enum values, or stable identities without encoding that fact into a string.
+- Equality and inequality require identical sorts; ordered comparisons accept `Nat` or equal-width `UInt`; membership requires a finite collection with the matching element sort; disjointness requires matching finite-collection sorts. Stable identities therefore compare only within the same identity kind.
+- Named claim arguments must each be individually well-sorted. Claim declaration lookup, arity checking, and signature matching remain assigned to executable `Σ` handling in focusing/elaboration rather than being guessed by this slice.
 - Canonical normalization evaluates literal UInt-to-Nat coercions and simple arithmetic/propositional structure without introducing modular arithmetic or truncated natural subtraction.
+- Every proof-relevant `Nat` subtraction is inspected before proposition normalization and generates the side requirement `rhs <= lhs`; a surrounding equality or other simplification cannot erase that requirement.
+- Subtraction side requirements use the same explicit disposition machinery as other refinement obligations: they may discharge definitionally, use matching evidence, or—only through `checkValueWithResidual`—become deterministic child obligations such as `<parent>.nat-sub.1` with inherited origin/scope/required-point metadata.
+- A subtraction precondition already known false is fatal and cannot be residualized. Carried evidence for a refined value's main proposition likewise does not bypass embedded subtraction side conditions.
 - `Bytes[...]` indices now use structured terms. Definitionally equal normalized indices compare equal; distinct indices in the same family still require explicit equality evidence.
 - Structured term substitution instantiates refinement binders with the checked semantic value. A value whose refinement proposition mentions its binder must expose a refinement-visible term.
 - Refined value checking first checks the base type, then discharges the instantiated proposition by definitional normalization or exact matching reusable evidence in `Γ`.
@@ -99,7 +106,7 @@ The equality API exposes three outcomes: definitionally equal, requires explicit
 - Transport to a refined target is fail-closed; refinement proof discharge remains a separate explicit step.
 - Because proof-relevant indices are now structured, definitional equality uses a paired binder environment to compare refinement/session binders alpha-equivalently while respecting nested shadowing and avoiding variable capture.
 
-This slice deliberately does not add a general solver, transparent-claim expansion registry, runtime-validator insertion, or a `prove` surface construct. Deterministic claim expansion/solver invocation belong to focusing/elaboration; runtime enforcement remains architecture-declared rather than inferred from a failed static proof.
+This slice deliberately does not add a general solver, transparent-claim expansion registry, executable claim-signature registry in `Σ`, runtime-validator insertion, or a `prove` surface construct. Deterministic claim expansion/signature lookup/solver invocation belong to focusing/elaboration; runtime enforcement remains architecture-declared rather than inferred from a failed static proof.
 
 ## Next checker slices
 
@@ -110,4 +117,4 @@ This slice deliberately does not add a general solver, transparent-claim expansi
 
 ## Explicit current non-goals
 
-The checker still does not claim source-level Phil conformance. In particular it does not parse Phil syntax, project dependent session types from a global protocol, substitute communicated semantic values into all dependent continuations, execute grammar recognizers, expand transparent claim declarations, invoke a certificate-checkable refinement solver, insert runtime validators, validate return values against a provider signature, validate the upload protocol end-to-end, or lower to systems/LLVM IR. Transport-acquisition failure for `receiveFrame` is still represented by the accepted primitive contract rather than simulated inside the structural checker.
+The checker still does not claim source-level Phil conformance. In particular it does not parse Phil syntax, project dependent session types from a global protocol, substitute communicated semantic values into all dependent continuations, execute grammar recognizers, expand transparent claim declarations, validate named claims against an executable `Σ` signature registry, invoke a certificate-checkable refinement solver, insert runtime validators, validate return values against a provider signature, validate the upload protocol end-to-end, or lower to systems/LLVM IR. Transport-acquisition failure for `receiveFrame` is still represented by the accepted primitive contract rather than simulated inside the structural checker.
