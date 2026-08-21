@@ -29,17 +29,30 @@ This file tracks the executable checker against the accepted Phase 0 Core judgme
 
 The session step API is deliberately **not** a complete source-level checking judgment yet. It exposes the message or branch payload specification but does not itself establish that a sent/received value inhabits that type, substitute a communicated semantic value into a dependent continuation, perform grammar recognition, or prove offer exhaustiveness. Those responsibilities remain assigned to the later value/evidence, recognition, and process/control slices.
 
+## Implemented in the process/control slice
+
+- Process paths carry one of `Continue`, `Return`, `Closed`, or `Failed` together with their checker state.
+- Sequential composition advances only `Continue` paths. `Return`, `Closed`, and `Failed` paths do not execute later statements.
+- `Return` preserves its residual affine/linear resources for the eventual return/interface boundary but cannot let a shared loan escape.
+- `Closed` and `Failed` are terminal: they are accepted only after all linear resources and active loans on that path have been explicitly discharged.
+- Local branch checking preserves separate path results internally rather than collapsing mixed `Return`/`Continue`/terminal outcomes into a single invented state.
+- Continuing branch paths are checked with the existing structural join rule: linear residue must match, unrestricted residue must match, and affine residue is conservatively weakened.
+- Terminal `Closed`/`Failed` paths are excluded from the continuing resource join and therefore do not manufacture dummy endpoints merely to rejoin control flow.
+- Mixed `Return`/`Continue` branches preserve the return path's residual resources while independently normalizing the continuing path residue.
+- Branch-local residual obligations remain path-sensitive across exclusive branches. The process layer does not turn obligations from mutually exclusive arms into unconditional obligations.
+
+This path-set representation is an internal checker device for preserving the normative per-path judgment. Later return-value/interface checking may validate and reconcile `Return` paths without changing the rule that declared/fatal terminal paths carry no continuing linear residue.
+
 ## Next checker slices
 
-1. Process/control outcomes: `Continue`, `Return`, `Closed`, and `Failed`, including terminal-path linear-resource rules.
-2. Grammar-backed receive with `PendingRecv`, scoped raw-byte loans, recognition, and commit.
-3. Bidirectional value checking and explicit definitional/propositional equality boundary.
-4. Refinements, evidence matching, explicit transport, and stable residual obligation generation.
-5. Deterministic focusing/elaboration rules.
-6. Parser and surface-to-Core elaboration.
-7. Conformance harness over the accepted/rejected `.phil` corpus.
-8. Assurance-ledger handoff and manifest verification.
+1. Grammar-backed receive with `PendingRecv`, scoped raw-byte loans, recognition, and commit.
+2. Bidirectional value checking and explicit definitional/propositional equality boundary.
+3. Refinements, evidence matching, explicit transport, and stable residual obligation generation.
+4. Deterministic focusing/elaboration rules.
+5. Parser and surface-to-Core elaboration.
+6. Conformance harness over the accepted/rejected `.phil` corpus.
+7. Assurance-ledger handoff and manifest verification.
 
 ## Explicit current non-goals
 
-The checker still does not claim source-level Phil conformance. In particular it does not parse Phil syntax, project dependent session types from a global protocol, perform dependent value substitution, gate grammar-backed receives on complete recognition, solve refinements, validate the upload protocol end-to-end, or lower to systems/LLVM IR. Those claims remain premature until the corresponding checker competence exists.
+The checker still does not claim source-level Phil conformance. In particular it does not parse Phil syntax, project dependent session types from a global protocol, perform dependent value substitution, gate grammar-backed receives on complete recognition, solve refinements, validate return values against a provider signature, validate the upload protocol end-to-end, or lower to systems/LLVM IR. Those claims remain premature until the corresponding checker competence exists.
