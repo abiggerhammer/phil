@@ -322,6 +322,8 @@ equalTy env left right =
           leftProp
           rightProp
     (TyOpaque leftName, TyOpaque rightName) -> leftName == rightName
+    (TyOpaqueSorted leftName leftSort, TyOpaqueSorted rightName rightSort) ->
+      leftName == rightName && leftSort == rightSort
     _ -> False
 
 equalSession
