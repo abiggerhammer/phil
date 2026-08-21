@@ -16,6 +16,11 @@ Definition Name := string.
 Definition Outcome := string.
 Parameter Ty : Type.
 
+Inductive Mode : Type :=
+| Unrestricted : Mode
+| Affine : Mode
+| Linear : Mode.
+
 Inductive Session : Type :=
 | Send : Name -> Ty -> Session -> Session
 | Receive : Name -> Ty -> Session -> Session
