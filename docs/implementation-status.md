@@ -107,15 +107,32 @@ The equality API exposes three outcomes: definitionally equal, requires explicit
 - Transport to a refined target is fail-closed; refinement proof discharge remains a separate explicit step.
 - Because proof-relevant indices are now structured, definitional equality uses a paired binder environment to compare refinement/session binders alpha-equivalently while respecting nested shadowing and avoiding variable capture.
 
-This slice deliberately does not add a general solver, transparent-claim expansion registry, executable claim-signature registry in `Σ`, runtime-validator insertion, or a `prove` surface construct. Deterministic claim expansion/signature lookup/solver invocation belong to focusing/elaboration; runtime enforcement remains architecture-declared rather than inferred from a failed static proof.
+## Implemented in the deterministic-focusing slice
+
+- `StaticContext` now represents the claim-relevant executable portion of `Σ`: named claims have ordered parameter names/sorts and are declared either transparent with a proposition body or opaque with no solver-visible body.
+- Claim declaration rejects duplicate claim names, duplicate parameter binders, and invalid parameter sorts.
+- `validateStaticContext` checks transparent definitions before use. Definitions must be sort-correct under exactly their declared parameters, may refer only to declared claims, and may not contain direct or mutual transparent recursion.
+- Claim applications are checked against `Σ` for existence, arity, and parameter sort. The checker does not infer claim signatures from printed atom text.
+- Transparent claim expansion is deterministic and transitive. Expansion produces explicit focusing trace entries and is followed by refinement sort checking and canonical normalization.
+- Opaque claims never expand. After matching in-scope evidence is considered, an unresolved opaque proposition stops at `FocusNeedsExplicitMechanism`; it is never routed to the transparent decision-procedure boundary.
+- Canonical elaboration inserts the total `UInt[w] -> Nat` coercion explicitly in known `Nat` contexts, including Nat arithmetic, mixed UInt/Nat ordering, and claim parameters declared as `Nat`. The reverse `Nat -> UInt[w]` direction remains non-implicit.
+- `elaborateRefTermAs ... SortNat` is the deterministic Core-facing mechanism the later source/type elaborator uses for proof-relevant Nat indices such as `Bytes[begin.length]`.
+- Proposition focusing preserves the pre-normalization natural-subtraction prerequisites implemented in the prior slice. A main proposition may normalize to `true` only after its generated subtraction requirements have been retained in the focus plan.
+- Matching unrestricted evidence is resolved modulo deterministic transparent expansion and proposition normalization, so evidence for a named transparent claim can match its canonical expanded goal.
+- A focused requirement has exactly one current pre-solver disposition: definitionally discharged, discharged by matching in-scope evidence, requires the configured transparent decision procedure, or requires an explicit non-solver mechanism because opaque structure remains.
+- A proposition already normalized to `false` with no matching evidence is rejected before solver dispatch.
+- Structural-mode lookup, guarded session-head exposure, and exact branch-exhaustiveness checking are executable deterministic focusing operations. Branch handlers must cover exactly the unique labels declared by the session choice.
+- Focusing does not choose protocol labels, validators, assumptions, or escalation boundaries. Those remain explicit program/architecture decisions as required by the normative focusing rule.
+
+This slice deliberately stops before the certificate-checkable transparent decision procedure. `FocusNeedsDecisionProcedure` is a typed boundary, not a successful proof result and not a trusted Boolean callback. Likewise `FocusNeedsExplicitMechanism` records that deterministic local focusing has exhausted its competence; it does not authorize runtime validation, escalation, assumption, or opaque acceptance by itself.
 
 ## Next checker slices
 
-1. Deterministic focusing/elaboration rules.
+1. Certificate-checkable transparent decision procedure and required-point disposition orchestration.
 2. Parser and surface-to-Core elaboration.
 3. Conformance harness over the accepted/rejected `.phil` corpus.
 4. Assurance-ledger handoff and manifest verification.
 
 ## Explicit current non-goals
 
-The checker still does not claim source-level Phil conformance. In particular it does not parse Phil syntax, project dependent session types from a global protocol, substitute communicated semantic values into all dependent continuations, execute grammar recognizers, expand transparent claim declarations, validate named claims against an executable `Σ` signature registry, invoke a certificate-checkable refinement solver, insert runtime validators, validate return values against a provider signature, validate the upload protocol end-to-end, or lower to systems/LLVM IR. Transport-acquisition failure for `receiveFrame` is still represented by the accepted primitive contract rather than simulated inside the structural checker.
+The checker still does not claim source-level Phil conformance. In particular it does not parse Phil syntax, project dependent session types from a global protocol, substitute communicated semantic values into all dependent continuations, execute grammar recognizers, invoke a certificate-checkable refinement solver, choose or insert runtime validators, cross obligation boundaries without explicit architecture, validate return values against a provider signature, validate the upload protocol end-to-end, or lower to systems/LLVM IR. Transport-acquisition failure for `receiveFrame` is still represented by the accepted primitive contract rather than simulated inside the structural checker.
