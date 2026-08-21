@@ -270,37 +270,22 @@ Proof.
                        as HpendingPreserved.
                      destruct HpendingPreserved as
                        [HpendingU [HpendingA HpendingLinearPreserved]].
-                     split.
-                     + exact Howner.
-                     + split.
-                       * exact Hgrammar.
-                       * split.
-                         -- exact Hframe.
-                         -- split.
-                           ++ exact HpendingSuccessor.
-                           ++ split.
-                             ** exact HsourceSuccessor.
-                             ** split.
-                               --- exact HcapOwned.
-                               --- split.
-                                 +++ rewrite HpendingLinearPreserved.
-                                     exact HpendingGone.
-                                 +++ split.
-                                   *** exact HsuccessorInstalled.
-                                   *** split.
-                                     ---- intros other HotherPending HotherSuccessor.
-                                          pose proof
-                                            (HconsumeOther other HotherPending)
-                                            as HconsumePreserved.
-                                          pose proof
-                                            (HinsertOther other HotherSuccessor)
-                                            as HinsertPreserved.
-                                          destruct HinsertPreserved as
-                                            [HotherU [HotherA HinsertLinearPreserved]].
-                                          rewrite HinsertLinearPreserved.
-                                          exact HconsumePreserved.
-                                     ---- rewrite HinsertLoans.
-                                          exact HconsumeLoans.
+                     repeat split; try assumption.
+                     { rewrite HpendingLinearPreserved.
+                       exact HpendingGone. }
+                     { intros other HotherPending HotherSuccessor.
+                       pose proof
+                         (HconsumeOther other HotherPending)
+                         as HconsumePreserved.
+                       pose proof
+                         (HinsertOther other HotherSuccessor)
+                         as HinsertPreserved.
+                       destruct HinsertPreserved as
+                         [HotherU [HotherA HinsertLinearPreserved]].
+                       rewrite HinsertLinearPreserved.
+                       exact HconsumePreserved. }
+                     { rewrite HinsertLoans.
+                       exact HconsumeLoans. }
       * discriminate.
     + discriminate.
   - discriminate.
@@ -371,19 +356,7 @@ Proof.
            destruct HconsumeExact as
              [HconsumeOwned
                [HpendingGone [Hother [HU [HA Hloans]]]]].
-           split.
-           ++ exact Howner.
-           ++ split.
-              ** exact Hgrammar.
-              ** split.
-                 --- exact Hframe.
-                 --- split.
-                     +++ exact HcapOwned.
-                     +++ split.
-                         *** exact HpendingGone.
-                         *** split.
-                             ---- exact Hother.
-                             ---- exact Hloans.
+           repeat split; assumption.
       * discriminate.
     + discriminate.
   - discriminate.
