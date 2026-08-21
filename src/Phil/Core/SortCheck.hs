@@ -50,6 +50,7 @@ refSortOfTy ty =
     TyFrame _ -> Just (SortOpaque "Frame")
     TyRefined _ base _ -> refSortOfTy base
     TyOpaque name -> Just (SortOpaque name)
+    TyOpaqueSorted _ sort -> Just sort
     _ -> Nothing
 
 sortOfRefTerm :: CheckState -> RefTerm -> Either SortError RefSort
