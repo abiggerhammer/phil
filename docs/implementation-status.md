@@ -72,7 +72,7 @@ The trusted-recognition result functions model the assurance boundary where a Ph
 - `checkValue` implements the checker-side `⇐` judgment by synthesis plus an explicit equality-boundary classification.
 - Exact structure and guarded recursive session unfolding are definitional equality in the represented Phase 0 subset; choice label order is irrelevant.
 - Different indices of the same dependent `Bytes[...]` family are classified as requiring explicit propositional equality/transport, never silently coerced.
-- Unrelated types remain incompatible; there is no implicit subtyping.
+- Unrelated base families remain incompatible; a refined value may canonically forget refinements only when its underlying base type is definitionally equal to the expected type.
 - Fixed-width unsigned literals are checked against mathematical range (`0 <= n < 2^w`) and therefore do not introduce modular wraparound semantics.
 
 The equality API exposes three outcomes: definitionally equal, requires explicit propositional equality, or incompatible. The following slice supplies the evidence/transport machinery for the middle case.
@@ -85,16 +85,19 @@ The equality API exposes three outcomes: definitionally equal, requires explicit
 - `Bytes[...]` indices now use structured terms. Definitionally equal normalized indices compare equal; distinct indices in the same family still require explicit equality evidence.
 - Structured term substitution instantiates refinement binders with the checked semantic value. A value whose refinement proposition mentions its binder must expose a refinement-visible term.
 - Refined value checking first checks the base type, then discharges the instantiated proposition by definitional normalization or exact matching reusable evidence in `Γ`.
+- Refined values canonically eliminate to their definitionally equal base type without losing or duplicating resource ownership.
+- An unrestricted refined binding itself entails its instantiated refinement proposition, so later checks may use the fact already carried by that binding; the proposition remains subject-specific.
 - Generic `Proof[P]` evidence and `TyValidated claim context subject` evidence are reusable only from `Γ`; validation evidence entails exactly the claim/context/subject proposition it names.
 - Stale policy contexts and wrong subjects therefore do not match merely because the claim name is the same.
 - Named claim atoms, including opaque claims such as `DigestMatches`, are never self-proved by this layer. They require matching evidence or an explicit residual disposition.
 - `checkValueUsing` validates an explicitly supplied evidence binding against the exact required proposition.
 - `checkValueWithResidual` is the only path in this layer that may residualize an otherwise-undischarged refinement. It requires an explicit stable obligation ID plus origin, scope, and required point.
+- A proposition already known definitionally false cannot be residualized as a runtime/export obligation merely to evade static rejection.
 - `Obligation` now records scope as required by the accepted ADR-006 checker-to-ledger handoff shape. Reusing a stable obligation ID for different metadata/proposition remains an error.
 - `VTransport` / `transportValue` implement explicit propositional transport for the current dependent `Bytes[index]` family. The required proof is `Proof[sourceIndex == targetIndex]`; no implicit symmetry or coercion is invented.
 - Transport preserves structural ownership: a linear source occurrence is consumed once, one target-typed result emerges, and unrestricted equality evidence remains reusable.
 - Transport to a refined target is fail-closed; refinement proof discharge remains a separate explicit step.
-- Because proof-relevant indices are now structured, definitional equality handles alpha-renaming of refinement/session message binders by capture-avoiding structured substitution rather than requiring identical binder spellings.
+- Because proof-relevant indices are now structured, definitional equality uses a paired binder environment to compare refinement/session binders alpha-equivalently while respecting nested shadowing and avoiding variable capture.
 
 This slice deliberately does not add a general solver, transparent-claim expansion registry, runtime-validator insertion, or a `prove` surface construct. Deterministic claim expansion/solver invocation belong to focusing/elaboration; runtime enforcement remains architecture-declared rather than inferred from a failed static proof.
 
