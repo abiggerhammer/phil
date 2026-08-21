@@ -3,7 +3,6 @@
 module Main (main) where
 
 import Control.Monad (unless)
-import qualified Data.Map.Strict as Map
 import Data.Text (Text)
 import Phil.Core.Checker (CheckState (..), emptyCheckState)
 import Phil.Core.Context (insertBinding)
@@ -22,7 +21,8 @@ import Phil.Core.Focusing
   , validateStaticContext
   )
 import Phil.Core.Static
-  ( StaticError (..)
+  ( StaticContext
+  , StaticError (..)
   , declareOpaqueClaim
   , declareTransparentClaim
   , emptyStaticContext
@@ -85,7 +85,7 @@ test label result =
     Right () -> putStrLn ("PASS: " ++ label) >> pure True
     Left message -> putStrLn ("FAIL: " ++ label ++ " -- " ++ message) >> pure False
 
-underLimitContext :: Either String Phil.Core.Static.StaticContext
+underLimitContext :: Either String StaticContext
 underLimitContext =
   mapLeft show $
     declareTransparentClaim
@@ -354,7 +354,7 @@ testDuplicateDeclaredBranch =
       Left (DuplicateDeclaredBranchLabel "same") -> Right ()
       other -> Left ("duplicate declared branch was accepted: " ++ show other)
 
-digestContext :: Either String Phil.Core.Static.StaticContext
+digestContext :: Either String StaticContext
 digestContext =
   mapLeft show $
     declareOpaqueClaim
