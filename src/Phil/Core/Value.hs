@@ -35,7 +35,7 @@ import Phil.Core.Refinement
   , substituteProposition
   )
 import Phil.Core.Session (exposeSessionHead)
-import Phil.Core.SortCheck (checkTypeSorts)
+import Phil.Core.SortCheck (SortError, checkTypeSorts)
 import Phil.Core.Syntax
   ( Branch (..)
   , Mode
@@ -464,7 +464,7 @@ equalProposition env left right =
         && and (zipWith (equalRefTerm env) leftArgs rightArgs)
     _ -> False
 
-valueSortError :: Phil.Core.SortCheck.SortError -> ValueError
+valueSortError :: SortError -> ValueError
 valueSortError = ValueRefinementError . RefinementSortError
 
 mapLeft :: (a -> b) -> Either a c -> Either b c
