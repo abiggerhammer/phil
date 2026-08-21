@@ -150,7 +150,7 @@ Proof.
       eqn:Hfind.
     + inversion Hselect; subst.
       split.
-      * exact Hunique.
+      * reflexivity.
       * pose proof
           (uniqueLabelsb_count_at_most_one target branches Hunique)
           as HatMostOne.
