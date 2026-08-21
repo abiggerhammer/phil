@@ -1,3 +1,5 @@
+{-# LANGUAGE OverloadedStrings #-}
+
 module Phil.Core.Refinement
   ( EvidenceUse (..)
   , ResidualSpec (..)
@@ -320,7 +322,7 @@ residualizeProposition spec required state = do
 prepareProposition :: Proposition -> CheckState -> Either RefinementError [Proposition]
 prepareProposition required state = do
   mapLeft RefinementSortError (checkPropositionSorts state required)
-  let sideConditions = map normalizeProposition (propositionSideConditions required)
+  let sideConditions = propositionSideConditions required
   mapM_ (mapLeft RefinementSortError . checkPropositionSorts state) sideConditions
   pure sideConditions
 
