@@ -1,0 +1,3 @@
+-Q proof/Phil Phil
+proof/Phil/Core/Syntax.v
+proof/Phil/Core/Session.v
