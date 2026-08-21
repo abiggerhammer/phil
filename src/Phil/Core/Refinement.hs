@@ -16,6 +16,7 @@ module Phil.Core.Refinement
   ) where
 
 import qualified Data.Map.Strict as Map
+import qualified Data.Text as Text
 import Data.Text (Text)
 import Phil.Core.Checker
   ( CheckState (..)
@@ -27,10 +28,15 @@ import Phil.Core.Context
   , ResourceContext (..)
   , useUnrestricted
   )
+import Phil.Core.SortCheck
+  ( SortError
+  , checkPropositionSorts
+  , propositionSideConditions
+  )
 import Phil.Core.Syntax
   ( Name
   , Obligation (..)
-  , ObligationId
+  , ObligationId (..)
   , Proposition (..)
   , RefTerm (..)
   , Ty (..)
@@ -52,6 +58,7 @@ data ResidualSpec = ResidualSpec
 
 data RefinementError
   = RefinementResourceError CheckError
+  | RefinementSortError SortError
   | NotEvidenceBinding Name Ty
   | EvidenceDoesNotMatch Name Proposition Proposition
   | MissingEvidence Proposition
@@ -62,7 +69,7 @@ data RefinementError
 normalizeRefTerm :: RefTerm -> RefTerm
 normalizeRefTerm term =
   case term of
-    RefField base field -> RefField (normalizeRefTerm base) field
+    RefField base field sort -> RefField (normalizeRefTerm base) field sort
     RefLen value -> RefLen (normalizeRefTerm value)
     RefToNat value ->
       case normalizeRefTerm value of
@@ -170,7 +177,7 @@ substituteRefTerm target replacement term =
     RefVar variable
       | variable == target -> replacement
       | otherwise -> term
-    RefField base field -> RefField (substituteRefTerm target replacement base) field
+    RefField base field sort -> RefField (substituteRefTerm target replacement base) field sort
     RefLen value -> RefLen (substituteRefTerm target replacement value)
     RefToNat value -> RefToNat (substituteRefTerm target replacement value)
     RefAdd left right ->
@@ -219,7 +226,7 @@ termMentions :: Name -> RefTerm -> Bool
 termMentions target term =
   case term of
     RefVar variable -> variable == target
-    RefField base _ -> termMentions target base
+    RefField base _ _ -> termMentions target base
     RefLen value -> termMentions target value
     RefToNat value -> termMentions target value
     RefAdd left right -> termMentions target left || termMentions target right
@@ -262,24 +269,62 @@ findMatchingEvidence required state =
           [] -> Nothing
           match : _ -> Just match
 
-dischargeProposition :: Proposition -> CheckState -> Either RefinementError EvidenceUse
-dischargeProposition required state =
-  let normalized = normalizeProposition required
-  in case normalized of
-    Truth -> Right (EvidenceByDefinition required)
-    _ ->
-      case findMatchingEvidence normalized state of
-        Just evidenceName -> Right (EvidenceByBinding evidenceName normalized)
-        Nothing
-          | normalized == Falsehood -> Left (StaticallyFalse required)
-          | otherwise -> Left (MissingEvidence normalized)
+dischargeProposition
+  :: Proposition
+  -> CheckState
+  -> Either RefinementError [EvidenceUse]
+dischargeProposition required state = do
+  sideConditions <- prepareProposition required state
+  sideUses <- mapM (`directDischarge` state) sideConditions
+  mainUse <- directDischarge required state
+  pure (deduplicateEvidence (sideUses ++ [mainUse]))
 
 dischargePropositionUsing
   :: Name
   -> Proposition
   -> CheckState
-  -> Either RefinementError EvidenceUse
+  -> Either RefinementError [EvidenceUse]
 dischargePropositionUsing evidenceName required state = do
+  sideConditions <- prepareProposition required state
+  sideUses <- mapM (`directDischarge` state) sideConditions
+  mainUse <- directDischargeUsing evidenceName required state
+  pure (deduplicateEvidence (sideUses ++ [mainUse]))
+
+residualizeProposition
+  :: ResidualSpec
+  -> Proposition
+  -> CheckState
+  -> Either RefinementError ([EvidenceUse], CheckState)
+residualizeProposition spec required state = do
+  sideConditions <- prepareProposition required state
+  (sideUses, afterSides) <- residualizeSides spec sideConditions state
+  (mainUse, finalState) <- residualizeDirect spec required afterSides
+  pure (deduplicateEvidence (sideUses ++ [mainUse]), finalState)
+
+prepareProposition :: Proposition -> CheckState -> Either RefinementError [Proposition]
+prepareProposition required state = do
+  mapLeft RefinementSortError (checkPropositionSorts state required)
+  let sideConditions = map normalizeProposition (propositionSideConditions required)
+  mapM_ (mapLeft RefinementSortError . checkPropositionSorts state) sideConditions
+  pure sideConditions
+
+directDischarge :: Proposition -> CheckState -> Either RefinementError EvidenceUse
+directDischarge required state =
+  let normalized = normalizeProposition required
+  in case normalized of
+    Truth -> Right (EvidenceByDefinition required)
+    Falsehood -> Left (StaticallyFalse required)
+    _ ->
+      case findMatchingEvidence normalized state of
+        Just evidenceName -> Right (EvidenceByBinding evidenceName normalized)
+        Nothing -> Left (MissingEvidence normalized)
+
+directDischargeUsing
+  :: Name
+  -> Proposition
+  -> CheckState
+  -> Either RefinementError EvidenceUse
+directDischargeUsing evidenceName required state = do
   (evidenceTy, _) <- mapLeft RefinementResourceError $
     useUnrestricted evidenceName (resourceContext state)
   actual <-
@@ -287,17 +332,32 @@ dischargePropositionUsing evidenceName required state = do
       Just proposition -> Right (normalizeProposition proposition)
       Nothing -> Left (NotEvidenceBinding evidenceName evidenceTy)
   let expected = normalizeProposition required
-  if actual == expected
-    then Right (EvidenceByBinding evidenceName expected)
-    else Left (EvidenceDoesNotMatch evidenceName actual expected)
+  case expected of
+    Falsehood -> Left (StaticallyFalse required)
+    _
+      | actual == expected -> Right (EvidenceByBinding evidenceName expected)
+      | otherwise -> Left (EvidenceDoesNotMatch evidenceName actual expected)
 
-residualizeProposition
+residualizeSides
+  :: ResidualSpec
+  -> [Proposition]
+  -> CheckState
+  -> Either RefinementError ([EvidenceUse], CheckState)
+residualizeSides spec sideConditions initial = go 1 [] initial sideConditions
+  where
+    go _ uses state [] = Right (reverse uses, state)
+    go index uses state (side : rest) = do
+      let sideSpec = subtractionResidualSpec spec index
+      (use, next) <- residualizeDirect sideSpec side state
+      go (index + 1) (use : uses) next rest
+
+residualizeDirect
   :: ResidualSpec
   -> Proposition
   -> CheckState
   -> Either RefinementError (EvidenceUse, CheckState)
-residualizeProposition spec required state =
-  case dischargeProposition required state of
+residualizeDirect spec required state =
+  case directDischarge required state of
     Right evidenceUse -> Right (evidenceUse, state)
     Left (MissingEvidence normalized) -> do
       let obligation = Obligation
@@ -313,6 +373,20 @@ residualizeProposition spec required state =
         , next
         )
     Left other -> Left other
+
+subtractionResidualSpec :: ResidualSpec -> Int -> ResidualSpec
+subtractionResidualSpec parent index =
+  parent
+    { residualObligationId = ObligationId
+        (unObligationId (residualObligationId parent)
+          <> ".nat-sub."
+          <> Text.pack (show index))
+    }
+
+deduplicateEvidence :: [EvidenceUse] -> [EvidenceUse]
+deduplicateEvidence [] = []
+deduplicateEvidence (first : rest) =
+  first : deduplicateEvidence (filter (/= first) rest)
 
 mapLeft :: (a -> b) -> Either a c -> Either b c
 mapLeft f = either (Left . f) Right
