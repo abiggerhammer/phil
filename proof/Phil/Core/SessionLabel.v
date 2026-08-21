@@ -90,12 +90,10 @@ Proof.
     destruct (String.eqb target label) eqn:Heq.
     + apply String.eqb_eq in Heq.
       subst target.
-      rewrite String.eqb_refl.
       pose proof (containsLabel_false_count_zero label rest Hfresh) as Hzero.
       rewrite Hzero.
       lia.
-    + rewrite Heq.
-      apply IH.
+    + apply IH.
       exact HrestUnique.
 Qed.
 
@@ -112,10 +110,8 @@ Proof.
     destruct (String.eqb target label) eqn:Heq.
     + intros payload continuation Hfind.
       inversion Hfind; subst.
-      rewrite Heq.
       lia.
     + intros payload continuation Hfind.
-      rewrite Heq.
       eapply IH.
       exact Hfind.
 Qed.
