@@ -77,6 +77,7 @@ data Ty
   | TyEndpoint Session
   | TyRefined Name Ty Proposition
   | TyOpaque Text
+  | TyOpaqueSorted Text RefSort
   deriving (Eq, Ord, Show)
 
 data Value
