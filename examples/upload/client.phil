@@ -1,0 +1,65 @@
+component UploadClient provides Client[Upload] {
+    let versions = supported_versions()
+    prove len(versions) > 0
+
+    let hello = construct Hello {
+        versions = versions
+    }
+    let session1 = send hello on session0
+
+    offer session1 {
+        unsupported => {
+            close failure
+        }
+
+        version(selected) => {
+            // The refined branch payload establishes locally:
+            // Proof[member(selected, hello.versions)]
+
+            let declaredDigest = borrow payload as payloadView {
+                sha256(payloadView)
+            }
+
+            let begin = construct Begin {
+                length = payload.length,
+                kind = payload.kind,
+                digestAlg = sha256,
+                digest = declaredDigest
+            }
+            let session2 = send begin on session1
+
+            offer session2 {
+                reject(reason) => {
+                    close failure
+                }
+
+                proceed => {
+                    // `proceed` changes the session state, but does not bind a
+                    // reusable Validated[BeginPolicy, policyContext, begin].
+                    decide should_cancel_upload() {
+                        true => {
+                            let session3 = select cancel on session2
+                            close cancelled
+                        }
+
+                        false => {
+                            let session3 = select payload on session2
+                            let session4 = send_exact payload on session3
+
+                            offer session4 {
+                                rejected(reason) => {
+                                    close failure
+                                }
+
+                                accepted(id) => {
+                                    record_upload_id(id)
+                                    close success
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+        }
+    }
+}

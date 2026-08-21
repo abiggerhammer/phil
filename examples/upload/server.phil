@@ -1,0 +1,116 @@
+component UploadServer provides Server[Upload] {
+    let pendingHello = receive_frame(session0)
+        or fail transport
+
+    let helloRecognition = borrow pendingHello as rawHello {
+        recognize Hello from rawHello
+    }
+
+    decide helloRecognition {
+        rejected(reason) => {
+            fail recognition(reason) on pendingHello
+        }
+
+        accepted(parsedHello) => {
+            let hello = parsedHello.value
+            let session1 = commit_receive pendingHello using parsedHello
+
+            decide validate HelloPolicy at policyContext on hello {
+                rejected(reason) => {
+                    fail validation(reason) on session1
+                }
+
+                accepted(helloPolicy) => {
+                    decide choose_supported(serverSupported, hello.versions) {
+                        none(noCommon) => {
+                            // noCommon : Proof[disjoint(serverSupported, hello.versions)]
+                            let session2 = select unsupported on session1
+                                using noCommon
+                            close failure
+                        }
+
+                        some(version, offered, supported) => {
+                            // offered   : Proof[member(version, hello.versions)]
+                            // supported : Proof[member(version, serverSupported)]
+                            let session2 = select version(version) on session1
+                                using offered
+
+                            let pendingBegin = receive_frame(session2)
+                                or fail transport
+
+                            let beginRecognition = borrow pendingBegin as rawBegin {
+                                recognize Begin from rawBegin
+                            }
+
+                            decide beginRecognition {
+                                rejected(reason) => {
+                                    fail recognition(reason) on pendingBegin
+                                }
+
+                                accepted(parsedBegin) => {
+                                    let begin = parsedBegin.value
+                                    let session3 = commit_receive pendingBegin using parsedBegin
+
+                                    decide validate BeginPolicy at policyContext on begin {
+                                        rejected(reason) => {
+                                            let session4 = select reject(reason) on session3
+                                            close failure
+                                        }
+
+                                        accepted(beginPolicy) => {
+                                            // beginPolicy : Validated[BeginPolicy, policyContext, begin]
+                                            let session4 = select proceed on session3
+                                                using beginPolicy
+
+                                            offer session4 {
+                                                payload => {
+                                                    let (session5, payload) =
+                                                        receive_exact begin.length on session4
+                                                            using beginPolicy
+                                                            or fail transport
+
+                                                    let digestResult = borrow payload as payloadView {
+                                                        validate DigestMatches on (begin, payloadView)
+                                                        // DigestMatches is opaque: only this declared
+                                                        // validator may produce matching evidence.
+                                                    }
+
+                                                    decide digestResult {
+                                                        rejected(reason) => {
+                                                            release payload
+                                                            let session6 = select rejected(reason) on session5
+                                                            close failure
+                                                        }
+
+                                                        accepted(digestEvidence) => {
+                                                            decide store(payload) {
+                                                                failure(err) => {
+                                                                    // store consumes/releases payload on failure
+                                                                    fail internal(err) on session5
+                                                                }
+
+                                                                success(id) => {
+                                                                    let session6 = select accepted(id) on session5
+                                                                        using digestEvidence
+                                                                    close success
+                                                                }
+                                                            }
+                                                        }
+                                                    }
+                                                }
+
+                                                cancel => {
+                                                    close cancelled
+                                                }
+                                            }
+                                        }
+                                    }
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+        }
+    }
+}
