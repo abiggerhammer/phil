@@ -10,6 +10,8 @@ module Phil.Core.Refinement
   , evidenceProposition
   , bindingEvidencePropositions
   , findMatchingEvidence
+  , dischargeSideConditions
+  , residualizeSideConditions
   , dischargeProposition
   , dischargePropositionUsing
   , residualizeProposition
@@ -269,13 +271,29 @@ findMatchingEvidence required state =
           [] -> Nothing
           match : _ -> Just match
 
+dischargeSideConditions
+  :: Proposition
+  -> CheckState
+  -> Either RefinementError [EvidenceUse]
+dischargeSideConditions required state = do
+  sideConditions <- prepareProposition required state
+  mapM (`directDischarge` state) sideConditions
+
+residualizeSideConditions
+  :: ResidualSpec
+  -> Proposition
+  -> CheckState
+  -> Either RefinementError ([EvidenceUse], CheckState)
+residualizeSideConditions spec required state = do
+  sideConditions <- prepareProposition required state
+  residualizeSides spec sideConditions state
+
 dischargeProposition
   :: Proposition
   -> CheckState
   -> Either RefinementError [EvidenceUse]
 dischargeProposition required state = do
-  sideConditions <- prepareProposition required state
-  sideUses <- mapM (`directDischarge` state) sideConditions
+  sideUses <- dischargeSideConditions required state
   mainUse <- directDischarge required state
   pure (deduplicateEvidence (sideUses ++ [mainUse]))
 
@@ -285,8 +303,7 @@ dischargePropositionUsing
   -> CheckState
   -> Either RefinementError [EvidenceUse]
 dischargePropositionUsing evidenceName required state = do
-  sideConditions <- prepareProposition required state
-  sideUses <- mapM (`directDischarge` state) sideConditions
+  sideUses <- dischargeSideConditions required state
   mainUse <- directDischargeUsing evidenceName required state
   pure (deduplicateEvidence (sideUses ++ [mainUse]))
 
@@ -296,8 +313,7 @@ residualizeProposition
   -> CheckState
   -> Either RefinementError ([EvidenceUse], CheckState)
 residualizeProposition spec required state = do
-  sideConditions <- prepareProposition required state
-  (sideUses, afterSides) <- residualizeSides spec sideConditions state
+  (sideUses, afterSides) <- residualizeSideConditions spec required state
   (mainUse, finalState) <- residualizeDirect spec required afterSides
   pure (deduplicateEvidence (sideUses ++ [mainUse]), finalState)
 
