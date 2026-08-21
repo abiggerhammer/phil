@@ -177,11 +177,11 @@ testSendProgression = do
 testReceiveProgression :: Either String ()
 testReceiveProgression = do
   let cancelled = Outcome "cancelled"
-      session = Receive (name "msg") (nty "Frame[Message]") (End cancelled)
+      session = Receive (name "selected") (nty "U16") (End cancelled)
   context <- endpointContext (name "e0") session
   step <- mapLeft show $ receiveEndpoint (name "e0") (name "e1") context
   assert
-    (stepMessage step == Just (MessageSpec (name "msg") (nty "Frame[Message]")))
+    (stepMessage step == Just (MessageSpec (name "selected") (nty "U16")))
     "receive did not expose its message binder/type"
   assert
     (stepSuccessor step == Just (name "e1", End cancelled))
