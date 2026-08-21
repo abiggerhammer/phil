@@ -3,6 +3,7 @@ module Phil.Core.Context
   , CheckError (..)
   , emptyContext
   , insertBinding
+  , useBinding
   , useUnrestricted
   , consumeAffine
   , consumeLinear
@@ -51,6 +52,20 @@ insertBinding mode name ty context
       Unrestricted -> context { unrestrictedBindings = Map.insert name ty (unrestrictedBindings context) }
       Affine -> context { affineBindings = Map.insert name ty (affineBindings context) }
       Linear -> context { linearBindings = Map.insert name ty (linearBindings context) }
+
+useBinding :: Name -> ResourceContext -> Either CheckError (Mode, Ty, ResourceContext)
+useBinding name context =
+  case Map.lookup name (unrestrictedBindings context) of
+    Just ty -> Right (Unrestricted, ty, context)
+    Nothing -> case Map.lookup name (affineBindings context) of
+      Just _ -> do
+        (ty, next) <- consumeAffine name context
+        Right (Affine, ty, next)
+      Nothing -> case Map.lookup name (linearBindings context) of
+        Just _ -> do
+          (ty, next) <- consumeLinear name context
+          Right (Linear, ty, next)
+        Nothing -> Left (UnknownBinding name)
 
 useUnrestricted :: Name -> ResourceContext -> Either CheckError (Ty, ResourceContext)
 useUnrestricted name context =
