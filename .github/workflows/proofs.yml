@@ -22,6 +22,7 @@ jobs:
     runs-on: ubuntu-latest
     container:
       image: rocq/rocq-prover:9.2.0
+      options: --user root
     steps:
       - name: Check out repository
         uses: actions/checkout@v4
