@@ -74,6 +74,7 @@ data RecognitionError
   = RecognitionResourceError CheckError
   | RecognitionSessionError SessionError
   | ExpectedGrammarBackedReceive Name Ty
+  | RefinedGrammarReceiveRequiresValueChecking GrammarId
   | UnexpectedReceiveFrameHead Session
   | PendingReusesSourceEndpoint Name
   | ExpectedPendingReceive Name Ty
@@ -133,24 +134,25 @@ receiveFrame endpoint pendingName frameId context
             mapLeft RecognitionSessionError (exposeSessionHead endpointSession)
           other -> Left (ExpectedGrammarBackedReceive endpoint other)
       case session of
-        Receive binder messageTy continuation ->
-          case frameGrammar messageTy of
-            Nothing -> Left (ExpectedGrammarBackedReceive endpoint messageTy)
-            Just grammar -> do
-              let pending = PendingRecvSpec
-                    { pendingSourceEndpoint = endpoint
-                    , pendingGrammar = grammar
-                    , pendingFrame = frameId
-                    , pendingBinder = binder
-                    , pendingContinuation = continuation
-                    }
-              withPending <- mapLeft RecognitionResourceError $
-                insertBinding Linear pendingName (TyPendingRecv pending) consumed
-              pure ReceiveFrameStep
-                { receivePendingName = pendingName
-                , receivePendingSpec = pending
-                , receiveFrameContext = withPending
+        Receive binder (TyFrame grammar) continuation -> do
+          let pending = PendingRecvSpec
+                { pendingSourceEndpoint = endpoint
+                , pendingGrammar = grammar
+                , pendingFrame = frameId
+                , pendingBinder = binder
+                , pendingContinuation = continuation
                 }
+          withPending <- mapLeft RecognitionResourceError $
+            insertBinding Linear pendingName (TyPendingRecv pending) consumed
+          pure ReceiveFrameStep
+            { receivePendingName = pendingName
+            , receivePendingSpec = pending
+            , receiveFrameContext = withPending
+            }
+        Receive _ messageTy _
+          | Just grammar <- frameGrammar messageTy ->
+              Left (RefinedGrammarReceiveRequiresValueChecking grammar)
+        Receive _ messageTy _ -> Left (ExpectedGrammarBackedReceive endpoint messageTy)
         other -> Left (UnexpectedReceiveFrameHead other)
 
 beginRawLoan

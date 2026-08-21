@@ -49,6 +49,7 @@ This path-set representation is an internal checker device for preserving the no
 - `receiveFrame` consumes `Endpoint[?(x : Frame[G]).S]` and produces a unique linear `TyPendingRecv` owner containing source-endpoint identity, grammar identity, frame identity, binder, and continuation.
 - No semantic successor endpoint exists while the pending receive is unresolved.
 - Generic `receiveEndpoint` rejects both direct and refined `Frame[G]` receives, closing the structural bypass around recognition gating.
+- `receiveFrame` accepts only exact `Frame[G]` messages. An outer refinement such as `{x : Frame[G] | P}` remains fail-closed until the value/refinement checker can establish `P` rather than silently discarding it.
 - External-choice payloads that are grammar-backed fail closed until an equivalent pending-state protocol is implemented for that shape.
 - A pending owner may be inspected only through a scoped shared raw-view loan. The loan blocks both `commitReceive` and fatal pending destruction.
 - Raw-view tokens become unusable for recognition after the shared loan ends.

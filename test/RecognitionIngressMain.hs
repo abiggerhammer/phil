@@ -46,6 +46,7 @@ main = do
   results <- sequence
     [ test "generic receive rejects grammar-backed messages" testGenericReceiveRejectsFrame
     , test "generic receive rejects refined grammar-backed messages" testGenericReceiveRejectsRefinedFrame
+    , test "receive_frame leaves refined frames to value checking" testReceiveFrameRejectsRefinedFrame
     , test "external-choice frame payloads fail closed" testOfferFramePayloadFailsClosed
     , test "receive_frame consumes endpoint and creates only PendingRecv" testReceiveFrameCreatesPending
     , test "receive_frame rejects ordinary receives" testReceiveFrameRejectsOrdinaryReceive
@@ -96,6 +97,17 @@ testGenericReceiveRejectsRefinedFrame = do
     Left (GrammarBackedReceiveRequiresRecognition actual) ->
       assert (actual == g) "wrong refined-frame grammar reported"
     other -> Left ("refined grammar-backed receive bypassed recognition: " ++ show other)
+
+testReceiveFrameRejectsRefinedFrame :: Either String ()
+testReceiveFrameRejectsRefinedFrame = do
+  let g = grammar "Hello"
+      messageTy = TyRefined (name "hello") (TyFrame g) Truth
+      session = Receive (name "hello") messageTy (End success)
+  context <- endpointContext (name "e0") session
+  case receiveFrame (name "e0") (name "pending") (frame "hello") context of
+    Left (RefinedGrammarReceiveRequiresValueChecking actual) ->
+      assert (actual == g) "wrong refined-frame grammar reported"
+    other -> Left ("receive_frame discarded an outer refinement: " ++ show other)
 
 testOfferFramePayloadFailsClosed :: Either String ()
 testOfferFramePayloadFailsClosed = do
