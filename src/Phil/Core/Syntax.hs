@@ -2,11 +2,14 @@
 
 module Phil.Core.Syntax
   ( Name (..)
+  , GrammarId (..)
+  , FrameId (..)
   , Mode (..)
   , Ty (..)
   , Proposition (..)
   , Outcome (..)
   , Branch (..)
+  , PendingRecvSpec (..)
   , Session (..)
   , Control (..)
   , ObligationId (..)
@@ -16,6 +19,12 @@ module Phil.Core.Syntax
 import Data.Text (Text)
 
 newtype Name = Name { unName :: Text }
+  deriving (Eq, Ord, Show)
+
+newtype GrammarId = GrammarId { unGrammarId :: Text }
+  deriving (Eq, Ord, Show)
+
+newtype FrameId = FrameId { unFrameId :: Text }
   deriving (Eq, Ord, Show)
 
 data Mode
@@ -29,6 +38,8 @@ data Ty
   | TyBool
   | TyUInt Int
   | TyBytes Text
+  | TyFrame GrammarId
+  | TyPendingRecv PendingRecvSpec
   | TyProof Proposition
   | TyEndpoint Session
   | TyRefined Name Ty Proposition
@@ -49,6 +60,15 @@ data Branch = Branch
   { branchLabel :: Text
   , branchPayload :: Maybe (Name, Ty)
   , branchContinuation :: Session
+  }
+  deriving (Eq, Ord, Show)
+
+data PendingRecvSpec = PendingRecvSpec
+  { pendingSourceEndpoint :: Name
+  , pendingGrammar :: GrammarId
+  , pendingFrame :: FrameId
+  , pendingBinder :: Name
+  , pendingContinuation :: Session
   }
   deriving (Eq, Ord, Show)
 

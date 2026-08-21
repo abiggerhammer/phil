@@ -22,6 +22,7 @@ library
       Phil.Core.Checker
       Phil.Core.Session
       Phil.Core.Process
+      Phil.Core.Recognition
   build-depends:
       base >=4.17 && <5,
       containers >=0.6 && <0.8,
@@ -63,6 +64,39 @@ test-suite phil-process-integration-tests
   type:               exitcode-stdio-1.0
   hs-source-dirs:     test
   main-is:            ProcessIntegrationMain.hs
+  build-depends:
+      base >=4.17 && <5,
+      containers >=0.6 && <0.8,
+      phil-core,
+      text >=2.0 && <2.2
+
+test-suite phil-recognition-ingress-tests
+  import:             common-settings
+  type:               exitcode-stdio-1.0
+  hs-source-dirs:     test
+  main-is:            RecognitionIngressMain.hs
+  build-depends:
+      base >=4.17 && <5,
+      containers >=0.6 && <0.8,
+      phil-core,
+      text >=2.0 && <2.2
+
+test-suite phil-recognition-evidence-tests
+  import:             common-settings
+  type:               exitcode-stdio-1.0
+  hs-source-dirs:     test
+  main-is:            RecognitionEvidenceMain.hs
+  build-depends:
+      base >=4.17 && <5,
+      containers >=0.6 && <0.8,
+      phil-core,
+      text >=2.0 && <2.2
+
+test-suite phil-recognition-integration-tests
+  import:             common-settings
+  type:               exitcode-stdio-1.0
+  hs-source-dirs:     test
+  main-is:            RecognitionIntegrationMain.hs
   build-depends:
       base >=4.17 && <5,
       containers >=0.6 && <0.8,
