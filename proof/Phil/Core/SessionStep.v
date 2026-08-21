@@ -100,7 +100,7 @@ Proof.
         destruct HendpointPreserved as
           [HendpointU [HendpointA HendpointLinearPreserved]].
         split.
-        -- exact Hdistinct.
+        -- reflexivity.
         -- split.
            ++ exists consumedTy. exact Howned.
            ++ split.
