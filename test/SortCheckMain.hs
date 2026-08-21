@@ -3,10 +3,10 @@
 module Main (main) where
 
 import Control.Monad (unless)
-import Data.Text (Text)
 import qualified Data.Text as Text
 import Phil.Core.Checker (CheckState (..), emptyCheckState)
 import Phil.Core.Context (insertBinding)
+import Phil.Core.Refinement (RefinementError (RefinementSortError))
 import Phil.Core.SortCheck
   ( SortError (..)
   , checkPropositionSorts
@@ -21,7 +21,11 @@ import Phil.Core.Syntax
   , Ty (..)
   , Value (VVar)
   )
-import Phil.Core.Value (ValueResult (..), checkValue)
+import Phil.Core.Value
+  ( ValueError (ValueRefinementError)
+  , ValueResult (..)
+  , checkValue
+  )
 import System.Exit (exitFailure)
 
 main :: IO ()
@@ -31,6 +35,7 @@ main = do
     , test "stable-ID variables preserve identity kinds" testStableIdVariables
     , test "sorted opaque values check against their declared type" testSortedOpaqueValueType
     , test "sorted opaque variables expose their declared refinement sort" testSortedOpaqueSort
+    , test "dependent Bytes indices must have Nat sort" testBytesIndexSort
     ]
   unless (and results) exitFailure
 
@@ -82,6 +87,14 @@ testSortedOpaqueSort = do
   state <- withUnrestricted (name "alg") ty emptyCheckState
   actual <- mapLeft show $ sortOfRefTerm state (RefVar (name "alg"))
   assert (actual == sort) "sorted opaque variable exposed the wrong refinement sort"
+
+testBytesIndexSort :: Either String ()
+testBytesIndexSort = do
+  let malformed = TyBytes (RefBool True)
+  state <- withUnrestricted (name "payload") malformed emptyCheckState
+  case checkValue (VVar (name "payload")) malformed state of
+    Left (ValueRefinementError (RefinementSortError (InvalidBytesIndexSort (RefBool True) SortBool))) -> Right ()
+    other -> Left ("ill-sorted Bytes index was accepted: " ++ show other)
 
 withUnrestricted :: Name -> Ty -> CheckState -> Either String CheckState
 withUnrestricted binding ty state = do
