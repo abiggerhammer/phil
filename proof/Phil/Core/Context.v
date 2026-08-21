@@ -111,78 +111,61 @@ Theorem insertBinding_success_exact :
 Proof.
   intros mode name ty context next Hinsert.
   unfold insertBinding, bindingExists, bindingPresent in Hinsert.
-  destruct (unrestrictedBindings context name) as [unrestrictedTy |] eqn:Hunrestricted;
-  destruct (affineBindings context name) as [affineTy |] eqn:Haffine;
-  destruct (linearBindings context name) as [linearTy |] eqn:Hlinear;
+  destruct (unrestrictedBindings context name) as [unrestrictedTy |];
+  destruct (affineBindings context name) as [affineTy |];
+  destruct (linearBindings context name) as [linearTy |];
   simpl in Hinsert; try discriminate.
   destruct mode.
   - inversion Hinsert; subst next; clear Hinsert.
+    split; [reflexivity |].
+    split; [reflexivity |].
+    split; [reflexivity |].
     split.
-    + exact Hunrestricted.
+    + simpl.
+      split.
+      * unfold insertBindingMap. now rewrite String.eqb_refl.
+      * split; reflexivity.
     + split.
-      * exact Haffine.
-      * split.
-        -- exact Hlinear.
-        -- split.
-           ++ simpl.
-              split.
-              ** unfold insertBindingMap. now rewrite String.eqb_refl.
-              ** split.
-                 --- exact Haffine.
-                 --- exact Hlinear.
-           ++ split.
-              ** intros other Hother.
-                 simpl.
-                 split.
-                 --- unfold insertBindingMap. now rewrite Hother.
-                 --- split; reflexivity.
-              ** reflexivity.
+      * intros other Hother.
+        simpl.
+        split.
+        -- unfold insertBindingMap. now rewrite Hother.
+        -- split; reflexivity.
+      * reflexivity.
   - inversion Hinsert; subst next; clear Hinsert.
+    split; [reflexivity |].
+    split; [reflexivity |].
+    split; [reflexivity |].
     split.
-    + exact Hunrestricted.
+    + simpl.
+      split; [reflexivity |].
+      split.
+      * unfold insertBindingMap. now rewrite String.eqb_refl.
+      * reflexivity.
     + split.
-      * exact Haffine.
-      * split.
-        -- exact Hlinear.
-        -- split.
-           ++ simpl.
-              split.
-              ** exact Hunrestricted.
-              ** split.
-                 --- unfold insertBindingMap. now rewrite String.eqb_refl.
-                 --- exact Hlinear.
-           ++ split.
-              ** intros other Hother.
-                 simpl.
-                 split.
-                 --- reflexivity.
-                 --- split.
-                     +++ unfold insertBindingMap. now rewrite Hother.
-                     +++ reflexivity.
-              ** reflexivity.
+      * intros other Hother.
+        simpl.
+        split; [reflexivity |].
+        split.
+        -- unfold insertBindingMap. now rewrite Hother.
+        -- reflexivity.
+      * reflexivity.
   - inversion Hinsert; subst next; clear Hinsert.
+    split; [reflexivity |].
+    split; [reflexivity |].
+    split; [reflexivity |].
     split.
-    + exact Hunrestricted.
+    + simpl.
+      split; [reflexivity |].
+      split; [reflexivity |].
+      unfold insertBindingMap. now rewrite String.eqb_refl.
     + split.
-      * exact Haffine.
-      * split.
-        -- exact Hlinear.
-        -- split.
-           ++ simpl.
-              split.
-              ** exact Hunrestricted.
-              ** split.
-                 --- exact Haffine.
-                 --- unfold insertBindingMap. now rewrite String.eqb_refl.
-           ++ split.
-              ** intros other Hother.
-                 simpl.
-                 split.
-                 --- reflexivity.
-                 --- split.
-                     +++ reflexivity.
-                     +++ unfold insertBindingMap. now rewrite Hother.
-              ** reflexivity.
+      * intros other Hother.
+        simpl.
+        split; [reflexivity |].
+        split; [reflexivity |].
+        unfold insertBindingMap. now rewrite Hother.
+      * reflexivity.
 Qed.
 
 Corollary insertBinding_success_name_was_fresh :
