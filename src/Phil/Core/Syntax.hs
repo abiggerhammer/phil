@@ -5,6 +5,7 @@ module Phil.Core.Syntax
   , GrammarId (..)
   , FrameId (..)
   , Mode (..)
+  , RefSort (..)
   , RefTerm (..)
   , Ty (..)
   , Value (..)
@@ -35,21 +36,33 @@ data Mode
   | Linear
   deriving (Eq, Ord, Show)
 
+data RefSort
+  = SortBool
+  | SortNat
+  | SortUInt Int
+  | SortEnum Text
+  | SortFiniteSeq RefSort
+  | SortFiniteSet RefSort
+  | SortStableId Text
+  | SortOpaque Text
+  deriving (Eq, Ord, Show)
+
 -- | Structured terms in the Phase 0 refinement fragment. These are semantic
--- terms, not source syntax. In particular, UInt values remain distinct from
--- Nat until an explicit/canonical RefToNat node is present.
+-- terms, not source syntax. UInt values remain distinct from Nat until an
+-- explicit/canonical RefToNat node is present. Field/opaque leaves carry the
+-- sort established by elaboration so Core never has to infer it from spelling.
 data RefTerm
   = RefVar Name
   | RefNat Integer
   | RefUInt Int Integer
   | RefBool Bool
-  | RefField RefTerm Text
+  | RefField RefTerm Text RefSort
   | RefLen RefTerm
   | RefToNat RefTerm
   | RefAdd RefTerm RefTerm
   | RefSub RefTerm RefTerm
   | RefScale Integer RefTerm
-  | RefOpaque Text
+  | RefOpaque RefSort Text
   deriving (Eq, Ord, Show)
 
 data Ty
