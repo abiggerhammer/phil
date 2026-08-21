@@ -29,5 +29,6 @@ jobs:
 
       - name: Check session proofs
         run: |
+          export PATH="/home/rocq/.opam/${COMPILER}/bin:$PATH"
           rocq c -Q proof/Phil Phil proof/Phil/Core/Syntax.v
           rocq c -Q proof/Phil Phil proof/Phil/Core/Session.v
