@@ -117,26 +117,72 @@ Proof.
   simpl in Hinsert; try discriminate.
   destruct mode.
   - inversion Hinsert; subst next; clear Hinsert.
-    simpl.
-    repeat split; try reflexivity.
-    + unfold insertBindingMap. now rewrite String.eqb_refl.
-    + intros other Hother.
-      unfold insertBindingMap. rewrite Hother.
-      repeat split; reflexivity.
+    split.
+    + exact Hunrestricted.
+    + split.
+      * exact Haffine.
+      * split.
+        -- exact Hlinear.
+        -- split.
+           ++ simpl.
+              split.
+              ** unfold insertBindingMap. now rewrite String.eqb_refl.
+              ** split.
+                 --- exact Haffine.
+                 --- exact Hlinear.
+           ++ split.
+              ** intros other Hother.
+                 simpl.
+                 split.
+                 --- unfold insertBindingMap. now rewrite Hother.
+                 --- split; reflexivity.
+              ** reflexivity.
   - inversion Hinsert; subst next; clear Hinsert.
-    simpl.
-    repeat split; try reflexivity.
-    + unfold insertBindingMap. now rewrite String.eqb_refl.
-    + intros other Hother.
-      unfold insertBindingMap. rewrite Hother.
-      repeat split; reflexivity.
+    split.
+    + exact Hunrestricted.
+    + split.
+      * exact Haffine.
+      * split.
+        -- exact Hlinear.
+        -- split.
+           ++ simpl.
+              split.
+              ** exact Hunrestricted.
+              ** split.
+                 --- unfold insertBindingMap. now rewrite String.eqb_refl.
+                 --- exact Hlinear.
+           ++ split.
+              ** intros other Hother.
+                 simpl.
+                 split.
+                 --- reflexivity.
+                 --- split.
+                     +++ unfold insertBindingMap. now rewrite Hother.
+                     +++ reflexivity.
+              ** reflexivity.
   - inversion Hinsert; subst next; clear Hinsert.
-    simpl.
-    repeat split; try reflexivity.
-    + unfold insertBindingMap. now rewrite String.eqb_refl.
-    + intros other Hother.
-      unfold insertBindingMap. rewrite Hother.
-      repeat split; reflexivity.
+    split.
+    + exact Hunrestricted.
+    + split.
+      * exact Haffine.
+      * split.
+        -- exact Hlinear.
+        -- split.
+           ++ simpl.
+              split.
+              ** exact Hunrestricted.
+              ** split.
+                 --- exact Haffine.
+                 --- unfold insertBindingMap. now rewrite String.eqb_refl.
+           ++ split.
+              ** intros other Hother.
+                 simpl.
+                 split.
+                 --- reflexivity.
+                 --- split.
+                     +++ reflexivity.
+                     +++ unfold insertBindingMap. now rewrite Hother.
+              ** reflexivity.
 Qed.
 
 Corollary insertBinding_success_name_was_fresh :
