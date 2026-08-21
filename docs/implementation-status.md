@@ -64,7 +64,7 @@ The trusted-recognition result functions model the assurance boundary where a Ph
 
 ## Implemented in the bidirectional-value slice
 
-- Core values now represent variables, unit, booleans, width-indexed unsigned literals, and explicit type ascription.
+- Core values represent variables, unit, booleans, width-indexed unsigned literals, and explicit type ascription.
 - `synthValue` implements the checker-side `⇒` judgment over full `CheckState`, preserving residual obligations while updating affine/linear resource residue.
 - Variable synthesis automatically respects structural mode: `Γ` remains reusable, `A` is consumed at most once, and `Δ` is consumed exactly once when the value occurrence transfers ownership.
 - A shared-borrowed affine/linear owner cannot be consumed by value synthesis.
@@ -72,21 +72,50 @@ The trusted-recognition result functions model the assurance boundary where a Ph
 - `checkValue` implements the checker-side `⇐` judgment by synthesis plus an explicit equality-boundary classification.
 - Exact structure and guarded recursive session unfolding are definitional equality in the represented Phase 0 subset; choice label order is irrelevant.
 - Different indices of the same dependent `Bytes[...]` family are classified as requiring explicit propositional equality/transport, never silently coerced.
-- Unrelated types remain incompatible; there is no implicit subtyping.
-- Refined expected types and refined ascriptions fail closed in this slice rather than dropping their propositions. Their base-type/evidence handling belongs to the following refinement/evidence slice.
+- Unrelated base families remain incompatible; a refined value may canonically forget refinements only when its underlying base type is definitionally equal to the expected type.
 - Fixed-width unsigned literals are checked against mathematical range (`0 <= n < 2^w`) and therefore do not introduce modular wraparound semantics.
-- Definitional equality is deliberately conservative where the current representation is still textual: communication/refinement binders must match exactly when alpha-renaming would require rewriting textual dependent indices. Structured refinement terms will remove that limitation later.
 
-The equality API exposes three outcomes: definitionally equal, requires explicit propositional equality, or incompatible. It does not attempt to prove the middle case; that is the explicit boundary to the following evidence/transport slice.
+The equality API exposes three outcomes: definitionally equal, requires explicit propositional equality, or incompatible. The following slice supplies the evidence/transport machinery for the middle case.
+
+## Implemented in the refinement/evidence/transport slice
+
+- Proof-relevant dependent indices are structured `RefTerm` values rather than strings. The represented Phase 0 term forms include variables, Nat/UInt/Bool literals, field projection, `len`, explicit `toNat`, addition, guarded natural subtraction, literal scaling, and opaque term leaves.
+- Propositions are structured over those terms: equality/inequality/order, membership/disjointness, conjunction/disjunction/negation, and named claim atoms.
+- The executable refinement sort language distinguishes `Bool`, `Nat`, `UInt[w]`, `Enum[E]`, `FiniteSeq[T]`, `FiniteSet[T]`, `StableId[K]`, and explicitly opaque elaborated sorts.
+- Proof-relevant field projections and opaque semantic leaves carry the sort established by elaboration. `TyOpaqueSorted` lets an otherwise opaque runtime type expose a declared refinement sort for variables such as finite collections, enum values, or stable identities without encoding that fact into a string.
+- Value synthesis/checking and explicit transport validate proof-relevant type indices before type comparison. In particular, `Bytes[index]` requires `index : Nat`, invalid `UInt` widths are rejected, and invalid declared sorted-opaque sorts cannot cross the value-checking boundary merely because their runtime types otherwise match.
+- Equality and inequality require identical sorts; ordered comparisons accept `Nat` or equal-width `UInt`; membership requires a finite collection with the matching element sort; disjointness requires matching finite-collection sorts. Stable identities therefore compare only within the same identity kind.
+- Named claim arguments must each be individually well-sorted. Claim declaration lookup, arity checking, and signature matching remain assigned to executable `Σ` handling in focusing/elaboration rather than being guessed by this slice.
+- Canonical normalization evaluates literal UInt-to-Nat coercions and simple arithmetic/propositional structure without introducing modular arithmetic or truncated natural subtraction.
+- Every proof-relevant `Nat` subtraction is inspected before proposition normalization and generates the side requirement `rhs <= lhs`; a surrounding equality or other simplification cannot erase that requirement.
+- Subtraction side requirements use the same explicit disposition machinery as other refinement obligations: they may discharge definitionally, use matching evidence, or—only through `checkValueWithResidual`—become deterministic child obligations such as `<parent>.nat-sub.1` with inherited origin/scope/required-point metadata.
+- A subtraction precondition already known false is fatal and cannot be residualized. Carried evidence for a refined value's main proposition likewise does not bypass embedded subtraction side conditions.
+- `Bytes[...]` indices now use structured terms. Definitionally equal normalized indices compare equal; distinct indices in the same family still require explicit equality evidence.
+- Structured term substitution instantiates refinement binders with the checked semantic value. A value whose refinement proposition mentions its binder must expose a refinement-visible term.
+- Refined value checking first checks the base type, then discharges the instantiated proposition by definitional normalization or exact matching reusable evidence in `Γ`.
+- Refined values canonically eliminate to their definitionally equal base type without losing or duplicating resource ownership.
+- An unrestricted refined binding itself entails its instantiated refinement proposition, so later checks may use the fact already carried by that binding; the proposition remains subject-specific.
+- Generic `Proof[P]` evidence and `TyValidated claim context subject` evidence are reusable only from `Γ`; validation evidence entails exactly the claim/context/subject proposition it names.
+- Stale policy contexts and wrong subjects therefore do not match merely because the claim name is the same.
+- Named claim atoms, including opaque claims such as `DigestMatches`, are never self-proved by this layer. They require matching evidence or an explicit residual disposition.
+- `checkValueUsing` validates an explicitly supplied evidence binding against the exact required proposition.
+- `checkValueWithResidual` is the only path in this layer that may residualize an otherwise-undischarged refinement. It requires an explicit stable obligation ID plus origin, scope, and required point.
+- A proposition already known definitionally false cannot be residualized as a runtime/export obligation merely to evade static rejection.
+- `Obligation` now records scope as required by the accepted ADR-006 checker-to-ledger handoff shape. Reusing a stable obligation ID for different metadata/proposition remains an error.
+- `VTransport` / `transportValue` implement explicit propositional transport for the current dependent `Bytes[index]` family. The required proof is `Proof[sourceIndex == targetIndex]`; no implicit symmetry or coercion is invented.
+- Transport preserves structural ownership: a linear source occurrence is consumed once, one target-typed result emerges, and unrestricted equality evidence remains reusable.
+- Transport to a refined target is fail-closed; refinement proof discharge remains a separate explicit step.
+- Because proof-relevant indices are now structured, definitional equality uses a paired binder environment to compare refinement/session binders alpha-equivalently while respecting nested shadowing and avoiding variable capture.
+
+This slice deliberately does not add a general solver, transparent-claim expansion registry, executable claim-signature registry in `Σ`, runtime-validator insertion, or a `prove` surface construct. Deterministic claim expansion/signature lookup/solver invocation belong to focusing/elaboration; runtime enforcement remains architecture-declared rather than inferred from a failed static proof.
 
 ## Next checker slices
 
-1. Refinements, evidence matching, explicit transport, and stable residual obligation generation.
-2. Deterministic focusing/elaboration rules.
-3. Parser and surface-to-Core elaboration.
-4. Conformance harness over the accepted/rejected `.phil` corpus.
-5. Assurance-ledger handoff and manifest verification.
+1. Deterministic focusing/elaboration rules.
+2. Parser and surface-to-Core elaboration.
+3. Conformance harness over the accepted/rejected `.phil` corpus.
+4. Assurance-ledger handoff and manifest verification.
 
 ## Explicit current non-goals
 
-The checker still does not claim source-level Phil conformance. In particular it does not parse Phil syntax, project dependent session types from a global protocol, substitute communicated semantic values into dependent continuations, execute grammar recognizers, solve refinements, consume proposition/evidence terms, perform explicit propositional transport, validate return values against a provider signature, validate the upload protocol end-to-end, or lower to systems/LLVM IR. Transport-acquisition failure for `receiveFrame` is still represented by the accepted primitive contract rather than simulated inside the structural checker.
+The checker still does not claim source-level Phil conformance. In particular it does not parse Phil syntax, project dependent session types from a global protocol, substitute communicated semantic values into all dependent continuations, execute grammar recognizers, expand transparent claim declarations, validate named claims against an executable `Σ` signature registry, invoke a certificate-checkable refinement solver, insert runtime validators, validate return values against a provider signature, validate the upload protocol end-to-end, or lower to systems/LLVM IR. Transport-acquisition failure for `receiveFrame` is still represented by the accepted primitive contract rather than simulated inside the structural checker.

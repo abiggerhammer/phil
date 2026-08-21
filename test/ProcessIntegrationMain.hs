@@ -61,11 +61,13 @@ testSequentialObligationUnion = do
         (ObligationId "sequence.first")
         (Atom "FirstClaim" [])
         "first"
+        "process-sequence"
         "sequence"
       second = Obligation
         (ObligationId "sequence.second")
         (Atom "SecondClaim" [])
         "second"
+        "process-sequence"
         "sequence"
   state1 <- mapLeft show $ emitObligation first emptyCheckState
   flow <- mapLeft show $ sequenceFlow (continueFlow state1) $ \state -> do

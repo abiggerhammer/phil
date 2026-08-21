@@ -200,11 +200,13 @@ testPathSensitiveObligations = do
         (ObligationId "branch.left")
         (Atom "LeftClaim" [])
         "left"
+        "branch-test"
         "branch"
       rightObligation = Obligation
         (ObligationId "branch.right")
         (Atom "RightClaim" [])
         "right"
+        "branch-test"
         "branch"
   leftState <- mapLeft show $ emitObligation leftObligation emptyCheckState
   rightState <- mapLeft show $ emitObligation rightObligation emptyCheckState

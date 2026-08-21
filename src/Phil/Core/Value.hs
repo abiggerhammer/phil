@@ -4,24 +4,45 @@ module Phil.Core.Value
   , ValueError (..)
   , synthValue
   , checkValue
+  , checkValueUsing
+  , checkValueWithResidual
+  , transportValue
   , compareTypes
   , definitionallyEqualTy
   , definitionallyEqualSession
   ) where
 
-import Data.List (sortOn)
+import Data.List (findIndex, sortOn)
 import qualified Data.Set as Set
 import Phil.Core.Checker (CheckState (..))
 import Phil.Core.Context
   ( CheckError
   , useBinding
   )
+import Phil.Core.Refinement
+  ( EvidenceUse (..)
+  , RefinementError (..)
+  , ResidualSpec
+  , bindingEvidencePropositions
+  , dischargeProposition
+  , dischargePropositionUsing
+  , dischargeSideConditions
+  , normalizeProposition
+  , normalizeRefTerm
+  , propositionMentions
+  , residualizeProposition
+  , residualizeSideConditions
+  , substituteProposition
+  )
 import Phil.Core.Session (exposeSessionHead)
+import Phil.Core.SortCheck (SortError, checkTypeSorts)
 import Phil.Core.Syntax
   ( Branch (..)
   , Mode
   , Name
   , PendingRecvSpec (..)
+  , Proposition (..)
+  , RefTerm (..)
   , Session (..)
   , Ty (..)
   , Value (..)
@@ -30,6 +51,8 @@ import Phil.Core.Syntax
 data ValueResult = ValueResult
   { valueResultType :: Ty
   , valueResultMode :: Maybe Mode
+  , valueResultTerm :: Maybe RefTerm
+  , valueResultEvidence :: [EvidenceUse]
   , valueResultState :: CheckState
   }
   deriving (Eq, Show)
@@ -42,11 +65,15 @@ data EqualityBoundary
 
 data ValueError
   = ValueResourceError CheckError
+  | ValueRefinementError RefinementError
   | InternalResourceNotValue Name Ty
   | InvalidUIntWidth Int
   | UIntLiteralOutOfRange Int Integer
-  | RefinementEvidenceRequired Ty
+  | RefinementSubjectNotVisible Name
   | ExplicitTransportRequired Ty Ty
+  | TransportNotRequired Ty
+  | UnsupportedTransport Ty Ty
+  | TransportTargetRefined Ty
   | ValueTypeMismatch Ty Ty
   deriving (Eq, Show)
 
@@ -56,40 +83,197 @@ synthValue value state =
     VVar name -> do
       (mode, ty, nextContext) <- mapLeft ValueResourceError $
         useBinding name (resourceContext state)
+      mapLeft valueSortError (checkTypeSorts state ty)
       case ty of
         TyPendingRecv _ -> Left (InternalResourceNotValue name ty)
         _ -> pure ValueResult
           { valueResultType = ty
           , valueResultMode = Just mode
+          , valueResultTerm = Just (RefVar name)
+          , valueResultEvidence =
+              map (EvidenceByBinding name . normalizeProposition)
+                (bindingEvidencePropositions name ty)
           , valueResultState = state { resourceContext = nextContext }
           }
-    VUnit -> pureLiteral TyUnit
-    VBool _ -> pureLiteral TyBool
+    VUnit -> pureLiteral TyUnit Nothing
+    VBool literal -> pureLiteral TyBool (Just (RefBool literal))
     VUInt width literal
       | width <= 0 -> Left (InvalidUIntWidth width)
       | literal < 0 || literal >= (2 ^ width) -> Left (UIntLiteralOutOfRange width literal)
-      | otherwise -> pureLiteral (TyUInt width)
+      | otherwise -> pureLiteral (TyUInt width) (Just (RefUInt width literal))
     VAscribe inner annotatedTy -> do
       checked <- checkValue inner annotatedTy state
       pure checked { valueResultType = annotatedTy }
+    VTransport inner proofName targetTy ->
+      transportValue inner proofName targetTy state
   where
-    pureLiteral ty = Right ValueResult
+    pureLiteral ty term = Right ValueResult
       { valueResultType = ty
       , valueResultMode = Nothing
+      , valueResultTerm = term
+      , valueResultEvidence = []
       , valueResultState = state
       }
 
 checkValue :: Value -> Ty -> CheckState -> Either ValueError ValueResult
 checkValue value expected state =
+  checkValueInternal Nothing Nothing value expected state
+
+checkValueUsing
+  :: Name
+  -> Value
+  -> Ty
+  -> CheckState
+  -> Either ValueError ValueResult
+checkValueUsing evidenceName value expected state =
+  checkValueInternal (Just evidenceName) Nothing value expected state
+
+checkValueWithResidual
+  :: ResidualSpec
+  -> Value
+  -> Ty
+  -> CheckState
+  -> Either ValueError ValueResult
+checkValueWithResidual residualSpec value expected state =
+  checkValueInternal Nothing (Just residualSpec) value expected state
+
+checkValueInternal
+  :: Maybe Name
+  -> Maybe ResidualSpec
+  -> Value
+  -> Ty
+  -> CheckState
+  -> Either ValueError ValueResult
+checkValueInternal explicitEvidence residualSpec value expected state =
   case expected of
-    TyRefined _ _ _ -> Left (RefinementEvidenceRequired expected)
+    TyRefined binder base proposition -> do
+      baseResult <- checkValue value base state
+      required <- instantiateRefinement binder proposition baseResult
+      case matchingCarriedEvidence required (valueResultEvidence baseResult) of
+        Just carried -> do
+          (sideUses, nextState) <-
+            case residualSpec of
+              Just spec -> mapLeft ValueRefinementError $
+                residualizeSideConditions spec required (valueResultState baseResult)
+              Nothing -> do
+                uses <- mapLeft ValueRefinementError $
+                  dischargeSideConditions required (valueResultState baseResult)
+                Right (uses, valueResultState baseResult)
+          Right baseResult
+            { valueResultType = expected
+            , valueResultEvidence = appendEvidenceList
+                (sideUses ++ [carried])
+                (valueResultEvidence baseResult)
+            , valueResultState = nextState
+            }
+        Nothing -> do
+          (evidenceUses, nextState) <-
+            case (explicitEvidence, residualSpec) of
+              (Just evidenceName, _) -> do
+                uses <- mapLeft ValueRefinementError $
+                  dischargePropositionUsing evidenceName required (valueResultState baseResult)
+                Right (uses, valueResultState baseResult)
+              (Nothing, Just spec) ->
+                mapLeft ValueRefinementError $
+                  residualizeProposition spec required (valueResultState baseResult)
+              (Nothing, Nothing) -> do
+                uses <- mapLeft ValueRefinementError $
+                  dischargeProposition required (valueResultState baseResult)
+                Right (uses, valueResultState baseResult)
+          Right baseResult
+            { valueResultType = expected
+            , valueResultEvidence = appendEvidenceList evidenceUses (valueResultEvidence baseResult)
+            , valueResultState = nextState
+            }
     _ -> do
+      mapLeft valueSortError (checkTypeSorts state expected)
       synthesized <- synthValue value state
       let actual = valueResultType synthesized
       case compareTypes actual expected of
         DefinitionallyEqual -> Right synthesized { valueResultType = expected }
         RequiresPropositionalEquality -> Left (ExplicitTransportRequired actual expected)
-        IncompatibleTypes -> Left (ValueTypeMismatch actual expected)
+        IncompatibleTypes
+          | refinementErasesTo actual expected ->
+              Right synthesized { valueResultType = expected }
+          | otherwise -> Left (ValueTypeMismatch actual expected)
+
+matchingCarriedEvidence :: Proposition -> [EvidenceUse] -> Maybe EvidenceUse
+matchingCarriedEvidence required = go
+  where
+    normalizedRequired = normalizeProposition required
+    go [] = Nothing
+    go (evidenceUse : rest) =
+      case evidenceUse of
+        EvidenceByDefinition proposition
+          | normalizeProposition proposition == normalizedRequired -> Just evidenceUse
+        EvidenceByBinding _ proposition
+          | normalizeProposition proposition == normalizedRequired -> Just evidenceUse
+        _ -> go rest
+
+appendEvidenceList :: [EvidenceUse] -> [EvidenceUse] -> [EvidenceUse]
+appendEvidenceList additions existing =
+  foldl (flip appendEvidence) existing additions
+  where
+    appendEvidence evidenceUse accumulated
+      | evidenceUse `elem` accumulated = accumulated
+      | otherwise = accumulated ++ [evidenceUse]
+
+refinementErasesTo :: Ty -> Ty -> Bool
+refinementErasesTo actual expected =
+  case actual of
+    TyRefined _ base _ ->
+      definitionallyEqualTy base expected || refinementErasesTo base expected
+    _ -> False
+
+instantiateRefinement
+  :: Name
+  -> Proposition
+  -> ValueResult
+  -> Either ValueError Proposition
+instantiateRefinement binder proposition result
+  | not (propositionMentions binder proposition) = Right proposition
+  | otherwise =
+      case valueResultTerm result of
+        Just term -> Right (substituteProposition binder term proposition)
+        Nothing -> Left (RefinementSubjectNotVisible binder)
+
+transportValue
+  :: Value
+  -> Name
+  -> Ty
+  -> CheckState
+  -> Either ValueError ValueResult
+transportValue value proofName targetTy state = do
+  source <- synthValue value state
+  let sourceTy = valueResultType source
+  case targetTy of
+    TyRefined _ _ _ -> Left (TransportTargetRefined targetTy)
+    _ -> do
+      mapLeft valueSortError (checkTypeSorts state targetTy)
+      case transportRequirement sourceTy targetTy of
+        TransportDefinitionallyEqual -> Left (TransportNotRequired sourceTy)
+        TransportUnsupported -> Left (UnsupportedTransport sourceTy targetTy)
+        TransportRequires proposition -> do
+          evidenceUses <- mapLeft ValueRefinementError $
+            dischargePropositionUsing proofName proposition (valueResultState source)
+          Right source
+            { valueResultType = targetTy
+            , valueResultEvidence = appendEvidenceList evidenceUses (valueResultEvidence source)
+            }
+
+data TransportRequirement
+  = TransportDefinitionallyEqual
+  | TransportRequires Proposition
+  | TransportUnsupported
+
+transportRequirement :: Ty -> Ty -> TransportRequirement
+transportRequirement source target
+  | definitionallyEqualTy source target = TransportDefinitionallyEqual
+  | otherwise =
+      case (source, target) of
+        (TyBytes sourceIndex, TyBytes targetIndex) ->
+          TransportRequires (Equal sourceIndex targetIndex)
+        _ -> TransportUnsupported
 
 compareTypes :: Ty -> Ty -> EqualityBoundary
 compareTypes actual expected
@@ -103,71 +287,185 @@ sameDependentFamily left right =
     (TyBytes _, TyBytes _) -> True
     _ -> False
 
+type BinderEnv = [(Name, Name)]
+
 definitionallyEqualTy :: Ty -> Ty -> Bool
-definitionallyEqualTy left right =
+definitionallyEqualTy = equalTy []
+
+definitionallyEqualSession :: Session -> Session -> Bool
+definitionallyEqualSession = equalSession [] Set.empty
+
+equalTy :: BinderEnv -> Ty -> Ty -> Bool
+equalTy env left right =
   case (left, right) of
+    (TyUnit, TyUnit) -> True
+    (TyBool, TyBool) -> True
+    (TyUInt leftWidth, TyUInt rightWidth) -> leftWidth == rightWidth
+    (TyBytes leftIndex, TyBytes rightIndex) -> equalRefTerm env leftIndex rightIndex
+    (TyFrame leftGrammar, TyFrame rightGrammar) -> leftGrammar == rightGrammar
+    (TyProof leftProp, TyProof rightProp) -> equalProposition env leftProp rightProp
+    (TyValidated leftClaim leftContext leftSubject, TyValidated rightClaim rightContext rightSubject) ->
+      leftClaim == rightClaim
+        && equalReferencedName env leftContext rightContext
+        && equalReferencedName env leftSubject rightSubject
     (TyEndpoint leftSession, TyEndpoint rightSession) ->
-      definitionallyEqualSession leftSession rightSession
+      equalSession env Set.empty leftSession rightSession
     (TyPendingRecv leftPending, TyPendingRecv rightPending) ->
-      pendingMetadataEqual leftPending rightPending
-        && definitionallyEqualSession
+      pendingSourceEndpoint leftPending == pendingSourceEndpoint rightPending
+        && pendingGrammar leftPending == pendingGrammar rightPending
+        && pendingFrame leftPending == pendingFrame rightPending
+        && equalSession
+          (extendBinder (pendingBinder leftPending) (pendingBinder rightPending) env)
+          Set.empty
           (pendingContinuation leftPending)
           (pendingContinuation rightPending)
     (TyRefined leftBinder leftBase leftProp, TyRefined rightBinder rightBase rightProp) ->
-      leftBinder == rightBinder
-        && leftProp == rightProp
-        && definitionallyEqualTy leftBase rightBase
-    _ -> left == right
+      equalTy env leftBase rightBase
+        && equalProposition
+          (extendBinder leftBinder rightBinder env)
+          leftProp
+          rightProp
+    (TyOpaque leftName, TyOpaque rightName) -> leftName == rightName
+    (TyOpaqueSorted leftName leftSort, TyOpaqueSorted rightName rightSort) ->
+      leftName == rightName && leftSort == rightSort
+    _ -> False
 
-pendingMetadataEqual :: PendingRecvSpec -> PendingRecvSpec -> Bool
-pendingMetadataEqual left right =
-  pendingSourceEndpoint left == pendingSourceEndpoint right
-    && pendingGrammar left == pendingGrammar right
-    && pendingFrame left == pendingFrame right
-    && pendingBinder left == pendingBinder right
-
-definitionallyEqualSession :: Session -> Session -> Bool
-definitionallyEqualSession = go Set.empty
-  where
-    go seen left right
-      | left == right = True
-      | Set.member (left, right) seen = True
-      | otherwise =
-          let seen' = Set.insert (left, right) seen
-          in case (exposeSessionHead left, exposeSessionHead right) of
-            (Right leftHead, Right rightHead) -> compareHeads seen' leftHead rightHead
-            _ -> False
-
-    compareHeads seen left right =
-      case (left, right) of
-        (Send leftBinder leftTy leftNext, Send rightBinder rightTy rightNext) ->
-          leftBinder == rightBinder
-            && definitionallyEqualTy leftTy rightTy
-            && go seen leftNext rightNext
-        (Receive leftBinder leftTy leftNext, Receive rightBinder rightTy rightNext) ->
-          leftBinder == rightBinder
-            && definitionallyEqualTy leftTy rightTy
-            && go seen leftNext rightNext
-        (Select leftBranches, Select rightBranches) -> compareBranches seen leftBranches rightBranches
-        (Offer leftBranches, Offer rightBranches) -> compareBranches seen leftBranches rightBranches
-        (End leftOutcome, End rightOutcome) -> leftOutcome == rightOutcome
+equalSession
+  :: BinderEnv
+  -> Set.Set (BinderEnv, Session, Session)
+  -> Session
+  -> Session
+  -> Bool
+equalSession env seen left right
+  | Set.member (env, left, right) seen = True
+  | otherwise =
+      let seen' = Set.insert (env, left, right) seen
+      in case (exposeSessionHead left, exposeSessionHead right) of
+        (Right leftHead, Right rightHead) -> compareHeads env seen' leftHead rightHead
         _ -> False
 
-    compareBranches seen leftBranches rightBranches =
-      let leftSorted = sortOn branchLabel leftBranches
-          rightSorted = sortOn branchLabel rightBranches
-      in length leftSorted == length rightSorted
-        && and (zipWith (compareBranch seen) leftSorted rightSorted)
+compareHeads
+  :: BinderEnv
+  -> Set.Set (BinderEnv, Session, Session)
+  -> Session
+  -> Session
+  -> Bool
+compareHeads env seen left right =
+  case (left, right) of
+    (Send leftBinder leftTy leftNext, Send rightBinder rightTy rightNext) ->
+      equalTy env leftTy rightTy
+        && equalSession (extendBinder leftBinder rightBinder env) seen leftNext rightNext
+    (Receive leftBinder leftTy leftNext, Receive rightBinder rightTy rightNext) ->
+      equalTy env leftTy rightTy
+        && equalSession (extendBinder leftBinder rightBinder env) seen leftNext rightNext
+    (Select leftBranches, Select rightBranches) -> compareBranches env seen leftBranches rightBranches
+    (Offer leftBranches, Offer rightBranches) -> compareBranches env seen leftBranches rightBranches
+    (End leftOutcome, End rightOutcome) -> leftOutcome == rightOutcome
+    _ -> False
 
-    compareBranch seen left right =
-      branchLabel left == branchLabel right
-        && comparePayload (branchPayload left) (branchPayload right)
-        && go seen (branchContinuation left) (branchContinuation right)
+compareBranches
+  :: BinderEnv
+  -> Set.Set (BinderEnv, Session, Session)
+  -> [Branch]
+  -> [Branch]
+  -> Bool
+compareBranches env seen leftBranches rightBranches =
+  let leftSorted = sortOn branchLabel leftBranches
+      rightSorted = sortOn branchLabel rightBranches
+  in length leftSorted == length rightSorted
+    && and (zipWith (compareBranch env seen) leftSorted rightSorted)
 
-    comparePayload Nothing Nothing = True
-    comparePayload (Just (leftBinder, leftTy)) (Just (rightBinder, rightTy)) =
-      leftBinder == rightBinder && definitionallyEqualTy leftTy rightTy
-    comparePayload _ _ = False
+compareBranch
+  :: BinderEnv
+  -> Set.Set (BinderEnv, Session, Session)
+  -> Branch
+  -> Branch
+  -> Bool
+compareBranch env seen left right =
+  branchLabel left == branchLabel right
+    && case (branchPayload left, branchPayload right) of
+      (Nothing, Nothing) ->
+        equalSession env seen (branchContinuation left) (branchContinuation right)
+      (Just (leftBinder, leftTy), Just (rightBinder, rightTy)) ->
+        equalTy env leftTy rightTy
+          && equalSession
+            (extendBinder leftBinder rightBinder env)
+            seen
+            (branchContinuation left)
+            (branchContinuation right)
+      _ -> False
+
+extendBinder :: Name -> Name -> BinderEnv -> BinderEnv
+extendBinder left right env =
+  (left, right) : filter notShadowed env
+  where
+    notShadowed (existingLeft, existingRight) =
+      existingLeft /= left && existingRight /= right
+
+equalReferencedName :: BinderEnv -> Name -> Name -> Bool
+equalReferencedName env left right =
+  case (bindingDepth fst left env, bindingDepth snd right env) of
+    (Nothing, Nothing) -> left == right
+    (Just leftDepth, Just rightDepth) -> leftDepth == rightDepth
+    _ -> False
+
+bindingDepth :: ((Name, Name) -> Name) -> Name -> BinderEnv -> Maybe Int
+bindingDepth project target = findIndex ((== target) . project)
+
+equalRefTerm :: BinderEnv -> RefTerm -> RefTerm -> Bool
+equalRefTerm env left right =
+  case (normalizeRefTerm left, normalizeRefTerm right) of
+    (RefVar leftName, RefVar rightName) -> equalReferencedName env leftName rightName
+    (RefNat leftValue, RefNat rightValue) -> leftValue == rightValue
+    (RefUInt leftWidth leftValue, RefUInt rightWidth rightValue) ->
+      leftWidth == rightWidth && leftValue == rightValue
+    (RefBool leftValue, RefBool rightValue) -> leftValue == rightValue
+    (RefField leftBase leftField leftSort, RefField rightBase rightField rightSort) ->
+      leftField == rightField
+        && leftSort == rightSort
+        && equalRefTerm env leftBase rightBase
+    (RefLen leftValue, RefLen rightValue) -> equalRefTerm env leftValue rightValue
+    (RefToNat leftValue, RefToNat rightValue) -> equalRefTerm env leftValue rightValue
+    (RefAdd leftA leftB, RefAdd rightA rightB) ->
+      equalRefTerm env leftA rightA && equalRefTerm env leftB rightB
+    (RefSub leftA leftB, RefSub rightA rightB) ->
+      equalRefTerm env leftA rightA && equalRefTerm env leftB rightB
+    (RefScale leftCoefficient leftValue, RefScale rightCoefficient rightValue) ->
+      leftCoefficient == rightCoefficient && equalRefTerm env leftValue rightValue
+    (RefOpaque leftSort leftText, RefOpaque rightSort rightText) ->
+      leftSort == rightSort && leftText == rightText
+    _ -> False
+
+equalProposition :: BinderEnv -> Proposition -> Proposition -> Bool
+equalProposition env left right =
+  case (normalizeProposition left, normalizeProposition right) of
+    (Truth, Truth) -> True
+    (Falsehood, Falsehood) -> True
+    (Equal leftA leftB, Equal rightA rightB) ->
+      equalRefTerm env leftA rightA && equalRefTerm env leftB rightB
+    (NotEqual leftA leftB, NotEqual rightA rightB) ->
+      equalRefTerm env leftA rightA && equalRefTerm env leftB rightB
+    (LessThan leftA leftB, LessThan rightA rightB) ->
+      equalRefTerm env leftA rightA && equalRefTerm env leftB rightB
+    (LessEqual leftA leftB, LessEqual rightA rightB) ->
+      equalRefTerm env leftA rightA && equalRefTerm env leftB rightB
+    (Member leftValue leftCollection, Member rightValue rightCollection) ->
+      equalRefTerm env leftValue rightValue && equalRefTerm env leftCollection rightCollection
+    (Disjoint leftA leftB, Disjoint rightA rightB) ->
+      equalRefTerm env leftA rightA && equalRefTerm env leftB rightB
+    (Conjunction leftA leftB, Conjunction rightA rightB) ->
+      equalProposition env leftA rightA && equalProposition env leftB rightB
+    (Disjunction leftA leftB, Disjunction rightA rightB) ->
+      equalProposition env leftA rightA && equalProposition env leftB rightB
+    (Negation leftInner, Negation rightInner) -> equalProposition env leftInner rightInner
+    (Atom leftClaim leftArgs, Atom rightClaim rightArgs) ->
+      leftClaim == rightClaim
+        && length leftArgs == length rightArgs
+        && and (zipWith (equalRefTerm env) leftArgs rightArgs)
+    _ -> False
+
+valueSortError :: SortError -> ValueError
+valueSortError = ValueRefinementError . RefinementSortError
 
 mapLeft :: (a -> b) -> Either a c -> Either b c
 mapLeft f = either (Left . f) Right

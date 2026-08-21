@@ -5,6 +5,8 @@ module Phil.Core.Syntax
   , GrammarId (..)
   , FrameId (..)
   , Mode (..)
+  , RefSort (..)
+  , RefTerm (..)
   , Ty (..)
   , Value (..)
   , Proposition (..)
@@ -34,17 +36,48 @@ data Mode
   | Linear
   deriving (Eq, Ord, Show)
 
+data RefSort
+  = SortBool
+  | SortNat
+  | SortUInt Int
+  | SortEnum Text
+  | SortFiniteSeq RefSort
+  | SortFiniteSet RefSort
+  | SortStableId Text
+  | SortOpaque Text
+  deriving (Eq, Ord, Show)
+
+-- | Structured terms in the Phase 0 refinement fragment. These are semantic
+-- terms, not source syntax. UInt values remain distinct from Nat until an
+-- explicit/canonical RefToNat node is present. Field/opaque leaves carry the
+-- sort established by elaboration so Core never has to infer it from spelling.
+data RefTerm
+  = RefVar Name
+  | RefNat Integer
+  | RefUInt Int Integer
+  | RefBool Bool
+  | RefField RefTerm Text RefSort
+  | RefLen RefTerm
+  | RefToNat RefTerm
+  | RefAdd RefTerm RefTerm
+  | RefSub RefTerm RefTerm
+  | RefScale Integer RefTerm
+  | RefOpaque RefSort Text
+  deriving (Eq, Ord, Show)
+
 data Ty
   = TyUnit
   | TyBool
   | TyUInt Int
-  | TyBytes Text
+  | TyBytes RefTerm
   | TyFrame GrammarId
   | TyPendingRecv PendingRecvSpec
   | TyProof Proposition
+  | TyValidated Text Name Name
   | TyEndpoint Session
   | TyRefined Name Ty Proposition
   | TyOpaque Text
+  | TyOpaqueSorted Text RefSort
   deriving (Eq, Ord, Show)
 
 data Value
@@ -53,13 +86,22 @@ data Value
   | VBool Bool
   | VUInt Int Integer
   | VAscribe Value Ty
+  | VTransport Value Name Ty
   deriving (Eq, Ord, Show)
 
 data Proposition
   = Truth
-  | Atom Text [Text]
-  | Equal Text Text
+  | Falsehood
+  | Equal RefTerm RefTerm
+  | NotEqual RefTerm RefTerm
+  | LessThan RefTerm RefTerm
+  | LessEqual RefTerm RefTerm
+  | Member RefTerm RefTerm
+  | Disjoint RefTerm RefTerm
   | Conjunction Proposition Proposition
+  | Disjunction Proposition Proposition
+  | Negation Proposition
+  | Atom Text [RefTerm]
   deriving (Eq, Ord, Show)
 
 newtype Outcome = Outcome { unOutcome :: Text }
@@ -105,6 +147,7 @@ data Obligation = Obligation
   { obligationId :: ObligationId
   , obligationProposition :: Proposition
   , obligationOrigin :: Text
+  , obligationScope :: Text
   , obligationRequiredPoint :: Text
   }
   deriving (Eq, Ord, Show)
