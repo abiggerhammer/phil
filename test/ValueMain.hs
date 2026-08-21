@@ -28,6 +28,7 @@ import Phil.Core.Syntax
   , Outcome (Outcome)
   , PendingRecvSpec (PendingRecvSpec)
   , Proposition (Atom)
+  , RefSort (..)
   , RefTerm (..)
   , Session (..)
   , Ty (..)
@@ -75,6 +76,9 @@ name = Name
 
 var :: Text -> RefTerm
 var = RefVar . name
+
+versionsField :: RefTerm
+versionsField = RefField (var "hello") "versions" (SortFiniteSeq (SortUInt 16))
 
 test :: String -> Either String () -> IO Bool
 test label result =
@@ -179,7 +183,7 @@ testCheckExact = do
 testExplicitTransportBoundary :: Either String ()
 testExplicitTransportBoundary = do
   let sourceTy = TyBytes (RefNat 4096)
-      targetTy = TyBytes (RefToNat (RefField (var "begin") "length"))
+      targetTy = TyBytes (RefToNat (RefField (var "begin") "length" (SortUInt 32)))
   context <- mapLeft show $ insertBinding Linear (name "payload") sourceTy (resourceContext emptyCheckState)
   case checkValue (VVar (name "payload")) targetTy (emptyCheckState { resourceContext = context }) of
     Left (ExplicitTransportRequired actual expected) ->
@@ -194,24 +198,28 @@ testTypeMismatch =
 
 testRefinedExpected :: Either String ()
 testRefinedExpected = do
-  let refined = TyRefined
+  context <- mapLeft show $ insertBinding Unrestricted (name "hello") (TyOpaque "Hello") (resourceContext emptyCheckState)
+  let state = emptyCheckState { resourceContext = context }
+      refined = TyRefined
         (name "v")
         (TyUInt 16)
-        (Atom "member" [var "v", RefField (var "hello") "versions"])
-  case checkValue (VUInt 16 1) refined emptyCheckState of
+        (Atom "member" [var "v", versionsField])
+  case checkValue (VUInt 16 1) refined state of
     Left (ValueRefinementError (MissingEvidence required)) ->
       assert
-        (required == Atom "member" [RefUInt 16 1, RefField (var "hello") "versions"])
+        (required == Atom "member" [RefUInt 16 1, versionsField])
         "wrong instantiated refinement reported"
     other -> Left ("refined check bypassed evidence handling: " ++ show other)
 
 testRefinedAscription :: Either String ()
 testRefinedAscription = do
-  let refined = TyRefined
+  context <- mapLeft show $ insertBinding Unrestricted (name "hello") (TyOpaque "Hello") (resourceContext emptyCheckState)
+  let state = emptyCheckState { resourceContext = context }
+      refined = TyRefined
         (name "v")
         (TyUInt 16)
-        (Atom "member" [var "v", RefField (var "hello") "versions"])
-  case synthValue (VAscribe (VUInt 16 1) refined) emptyCheckState of
+        (Atom "member" [var "v", versionsField])
+  case synthValue (VAscribe (VUInt 16 1) refined) state of
     Left (ValueRefinementError (MissingEvidence _)) -> Right ()
     other -> Left ("refined ascription bypassed evidence handling: " ++ show other)
 
