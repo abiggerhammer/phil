@@ -23,9 +23,11 @@ import Phil.Core.Context
   )
 import Phil.Core.Syntax
   ( Branch (..)
+  , GrammarId
   , Mode (Linear)
   , Name
   , Outcome
+  , PendingRecvSpec (..)
   , Session (..)
   , Ty (..)
   )
@@ -56,6 +58,8 @@ data SessionError
   = SessionResourceError CheckError
   | ExpectedLinearEndpoint Name Ty
   | UnexpectedSessionAction SessionAction Session
+  | GrammarBackedReceiveRequiresRecognition GrammarId
+  | GrammarBackedOfferPayloadRequiresRecognition Text GrammarId
   | UnknownSessionLabel Text [Text]
   | DuplicateSessionLabel Text
   | CloseOutcomeMismatch Outcome Outcome
@@ -91,6 +95,9 @@ receiveEndpoint :: Name -> Name -> ResourceContext -> Either SessionError Sessio
 receiveEndpoint endpoint successor context = do
   (headSession, consumed) <- consumeEndpoint endpoint context
   case headSession of
+    Receive _ messageTy _
+      | Just grammar <- frameGrammar messageTy ->
+          Left (GrammarBackedReceiveRequiresRecognition grammar)
     Receive binder messageTy continuation ->
       continueWith endpoint successor ReceiveAction (Just (MessageSpec binder messageTy)) continuation consumed
     _ -> Left (UnexpectedSessionAction ReceiveAction headSession)
@@ -116,13 +123,16 @@ offerEndpoint endpoint successor label context = do
   case headSession of
     Offer branches -> do
       branch <- selectBranch label branches
-      continueWith
-        endpoint
-        successor
-        (OfferAction label)
-        (branchMessage branch)
-        (branchContinuation branch)
-        consumed
+      case branchPayload branch >>= (frameGrammar . snd) of
+        Just grammar -> Left (GrammarBackedOfferPayloadRequiresRecognition label grammar)
+        Nothing ->
+          continueWith
+            endpoint
+            successor
+            (OfferAction label)
+            (branchMessage branch)
+            (branchContinuation branch)
+            consumed
     _ -> Left (UnexpectedSessionAction (OfferAction label) headSession)
 
 closeEndpoint :: Name -> Outcome -> ResourceContext -> Either SessionError SessionStep
@@ -192,6 +202,13 @@ branchMessage :: Branch -> Maybe MessageSpec
 branchMessage branch =
   fmap (uncurry MessageSpec) (branchPayload branch)
 
+frameGrammar :: Ty -> Maybe GrammarId
+frameGrammar ty =
+  case ty of
+    TyFrame grammar -> Just grammar
+    TyRefined _ inner _ -> frameGrammar inner
+    _ -> Nothing
+
 dualSession :: Session -> Session
 dualSession session =
   case session of
@@ -236,6 +253,10 @@ substituteTy :: Name -> Session -> Ty -> Ty
 substituteTy target replacement ty =
   case ty of
     TyEndpoint session -> TyEndpoint (substituteSessionVar target replacement session)
+    TyPendingRecv pending ->
+      TyPendingRecv (pending
+        { pendingContinuation = substituteSessionVar target replacement (pendingContinuation pending)
+        })
     TyRefined binder inner proposition -> TyRefined binder (substituteTy target replacement inner) proposition
     other -> other
 

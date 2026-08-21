@@ -20,14 +20,14 @@ This file tracks the executable checker against the accepted Phase 0 Core judgme
 - Session heads represent `!`, `?`, `⊕`, `&`, `end[o]`, guarded recursion, and recursion variables.
 - `⊕`/`&` branches carry an optional payload binder/type as required by ADR-003 rather than only a label and continuation.
 - A successful structural session step consumes the current linear endpoint and creates at most one explicitly fresh successor endpoint at the declared continuation.
-- Send and receive expose their declared message binder/type to the next checker layer.
+- Send and ordinary non-grammar receive expose their declared message binder/type to the next checker layer.
 - Internal selection and external offer reject the wrong polarity and reject undeclared labels.
 - Branch selection exposes the branch payload specification and exact continuation.
 - Declared close consumes an `end[o]` endpoint only when the requested outcome exactly matches.
 - Guarded recursive heads are unfolded only enough to expose a communication head; unguarded self-recursion and unbound session variables are rejected.
 - Structural duality is executable and involutive over the represented session forms.
 
-The session step API is deliberately **not** a complete source-level checking judgment yet. It exposes the message or branch payload specification but does not itself establish that a sent/received value inhabits that type, substitute a communicated semantic value into a dependent continuation, perform grammar recognition, or prove offer exhaustiveness. Those responsibilities remain assigned to the later value/evidence, recognition, and process/control slices.
+The generic session API deliberately refuses grammar-backed receive progression. `Frame[G]` receive semantics belong to the recognition-gated ingress layer below rather than to ordinary `receiveEndpoint`.
 
 ## Implemented in the process/control slice
 
@@ -43,16 +43,34 @@ The session step API is deliberately **not** a complete source-level checking ju
 
 This path-set representation is an internal checker device for preserving the normative per-path judgment. Later return-value/interface checking may validate and reconcile `Return` paths without changing the rule that declared/fatal terminal paths carry no continuing linear residue.
 
+## Implemented in the recognition-gated receive slice
+
+- Grammar-backed session messages have an explicit `TyFrame GrammarId` representation rather than relying on opaque type-name strings.
+- `receiveFrame` consumes `Endpoint[?(x : Frame[G]).S]` and produces a unique linear `TyPendingRecv` owner containing source-endpoint identity, grammar identity, frame identity, binder, and continuation.
+- No semantic successor endpoint exists while the pending receive is unresolved.
+- Generic `receiveEndpoint` rejects both direct and refined `Frame[G]` receives, closing the structural bypass around recognition gating.
+- `receiveFrame` accepts only exact `Frame[G]` messages. An outer refinement such as `{x : Frame[G] | P}` remains fail-closed until the value/refinement checker can establish `P` rather than silently discarding it.
+- External-choice payloads that are grammar-backed fail closed until an equivalent pending-state protocol is implemented for that shape.
+- A pending owner may be inspected only through a scoped shared raw-view loan. The loan blocks both `commitReceive` and fatal pending destruction.
+- Raw-view tokens become unusable for recognition after the shared loan ends.
+- Trusted recognition success constructs an opaque `ParsedWitness` carrying pending-owner, grammar, frame, and semantic-value identity. Its constructor and provenance fields cannot be rewritten outside `Phil.Core.Recognition`.
+- Trusted recognition failure carries matching pending-owner, grammar, frame, and failure detail but constructs no parsed witness.
+- `commitReceive` requires parsed evidence matching the exact pending owner, grammar, and frame; consumes the pending owner; and creates exactly the declared successor endpoint.
+- `commitReceive` refuses to reuse either the pending identity or the already-consumed source endpoint identity.
+- Recognition failure may consume the pending owner only after the raw loan ends and only with matching failure provenance; it creates no successor endpoint.
+- An unresolved `PendingRecv` remains an ordinary live linear resource and therefore prevents component completion.
+
+The trusted-recognition result functions model the assurance boundary where a Phil-generated recognizer or audited extension reports success/failure. This slice does not pretend to implement a grammar runtime: complete consumption, determinism, and byte-to-value interpretation remain responsibilities of that trusted recognizer boundary and later executable grammar tooling.
+
 ## Next checker slices
 
-1. Grammar-backed receive with `PendingRecv`, scoped raw-byte loans, recognition, and commit.
-2. Bidirectional value checking and explicit definitional/propositional equality boundary.
-3. Refinements, evidence matching, explicit transport, and stable residual obligation generation.
-4. Deterministic focusing/elaboration rules.
-5. Parser and surface-to-Core elaboration.
-6. Conformance harness over the accepted/rejected `.phil` corpus.
-7. Assurance-ledger handoff and manifest verification.
+1. Bidirectional value checking and explicit definitional/propositional equality boundary.
+2. Refinements, evidence matching, explicit transport, and stable residual obligation generation.
+3. Deterministic focusing/elaboration rules.
+4. Parser and surface-to-Core elaboration.
+5. Conformance harness over the accepted/rejected `.phil` corpus.
+6. Assurance-ledger handoff and manifest verification.
 
 ## Explicit current non-goals
 
-The checker still does not claim source-level Phil conformance. In particular it does not parse Phil syntax, project dependent session types from a global protocol, perform dependent value substitution, gate grammar-backed receives on complete recognition, solve refinements, validate return values against a provider signature, validate the upload protocol end-to-end, or lower to systems/LLVM IR. Those claims remain premature until the corresponding checker competence exists.
+The checker still does not claim source-level Phil conformance. In particular it does not parse Phil syntax, project dependent session types from a global protocol, perform dependent value substitution, execute grammar recognizers, solve refinements, validate return values against a provider signature, validate the upload protocol end-to-end, or lower to systems/LLVM IR. Transport-acquisition failure for `receiveFrame` is still represented by the accepted primitive contract rather than simulated inside the structural checker.
