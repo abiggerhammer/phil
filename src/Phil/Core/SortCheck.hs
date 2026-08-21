@@ -1,6 +1,5 @@
 module Phil.Core.SortCheck
-  ( RefSort (..)
-  , SortError (..)
+  ( SortError (..)
   , refSortOfTy
   , sortOfRefTerm
   , checkPropositionSorts
@@ -14,20 +13,10 @@ import Phil.Core.Context (ResourceContext (..))
 import Phil.Core.Syntax
   ( Name
   , Proposition (..)
+  , RefSort (..)
   , RefTerm (..)
   , Ty (..)
   )
-
-data RefSort
-  = SortBool
-  | SortNat
-  | SortUInt Int
-  | SortEnum Text
-  | SortFiniteSeq RefSort
-  | SortFiniteSet RefSort
-  | SortStableId Text
-  | SortOpaque Text
-  deriving (Eq, Ord, Show)
 
 data SortError
   = UnknownRefinementVariable Name
