@@ -111,9 +111,9 @@ Theorem insertBinding_success_exact :
 Proof.
   intros mode name ty context next Hinsert.
   unfold insertBinding, bindingExists, bindingPresent in Hinsert.
-  destruct (unrestrictedBindings context name) as [unrestrictedTy |];
-  destruct (affineBindings context name) as [affineTy |];
-  destruct (linearBindings context name) as [linearTy |];
+  destruct (unrestrictedBindings context name) as [unrestrictedTy |] eqn:Hunrestricted;
+  destruct (affineBindings context name) as [affineTy |] eqn:Haffine;
+  destruct (linearBindings context name) as [linearTy |] eqn:Hlinear;
   simpl in Hinsert; try discriminate.
   destruct mode.
   - inversion Hinsert; subst next; clear Hinsert.
@@ -124,7 +124,9 @@ Proof.
     + simpl.
       split.
       * unfold insertBindingMap. now rewrite String.eqb_refl.
-      * split; reflexivity.
+      * split.
+        -- exact Haffine.
+        -- exact Hlinear.
     + split.
       * intros other Hother.
         simpl.
@@ -138,10 +140,11 @@ Proof.
     split; [reflexivity |].
     split.
     + simpl.
-      split; [reflexivity |].
       split.
-      * unfold insertBindingMap. now rewrite String.eqb_refl.
-      * reflexivity.
+      * exact Hunrestricted.
+      * split.
+        -- unfold insertBindingMap. now rewrite String.eqb_refl.
+        -- exact Hlinear.
     + split.
       * intros other Hother.
         simpl.
@@ -156,9 +159,11 @@ Proof.
     split; [reflexivity |].
     split.
     + simpl.
-      split; [reflexivity |].
-      split; [reflexivity |].
-      unfold insertBindingMap. now rewrite String.eqb_refl.
+      split.
+      * exact Hunrestricted.
+      * split.
+        -- exact Haffine.
+        -- unfold insertBindingMap. now rewrite String.eqb_refl.
     + split.
       * intros other Hother.
         simpl.
