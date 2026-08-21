@@ -3,6 +3,7 @@
 module Phil.Core.SortCheck
   ( SortError (..)
   , refSortOfTy
+  , validateRefSort
   , sortOfRefTerm
   , checkTypeSorts
   , checkPropositionSorts
@@ -69,7 +70,7 @@ checkTypeSorts state ty =
         else Left (InvalidBytesIndexSort index indexSort)
     TyProof proposition -> checkPropositionSorts state proposition
     TyRefined _ base _ -> checkTypeSorts state base
-    TyOpaqueSorted _ sort -> ensureValidSort sort
+    TyOpaqueSorted _ sort -> validateRefSort sort
     _ -> Right ()
 
 sortOfRefTerm :: CheckState -> RefTerm -> Either SortError RefSort
@@ -87,7 +88,7 @@ sortOfRefTerm state = go
           | otherwise -> Right (SortUInt width)
         RefBool _ -> Right SortBool
         RefField base field resultSort -> do
-          ensureValidSort resultSort
+          validateRefSort resultSort
           baseSort <- go base
           case baseSort of
             SortOpaque _ -> Right resultSort
@@ -112,7 +113,7 @@ sortOfRefTerm state = go
               if valueSort == SortNat
                 then Right SortNat
                 else Left (ExpectedNatOperand value valueSort)
-        RefOpaque sort _ -> ensureValidSort sort >> Right sort
+        RefOpaque sort _ -> validateRefSort sort >> Right sort
 
     natBinary left right = do
       leftSort <- go left
@@ -225,13 +226,13 @@ lookupBinding name context =
     <|> Map.lookup name (affineBindings context)
     <|> Map.lookup name (linearBindings context)
 
-ensureValidSort :: RefSort -> Either SortError ()
-ensureValidSort sort =
+validateRefSort :: RefSort -> Either SortError ()
+validateRefSort sort =
   case sort of
     SortUInt width
       | width <= 0 -> Left (InvalidAnnotatedSort sort)
-    SortFiniteSeq elementSort -> ensureValidSort elementSort
-    SortFiniteSet elementSort -> ensureValidSort elementSort
+    SortFiniteSeq elementSort -> validateRefSort elementSort
+    SortFiniteSet elementSort -> validateRefSort elementSort
     _ -> Right ()
 
 infixr 3 <|>
