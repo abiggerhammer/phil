@@ -20,6 +20,7 @@ library
       Phil.Core.Syntax
       Phil.Core.Context
       Phil.Core.Checker
+      Phil.Core.Session
   build-depends:
       base >=4.17 && <5,
       containers >=0.6 && <0.8,

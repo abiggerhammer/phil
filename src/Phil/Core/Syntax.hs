@@ -6,6 +6,7 @@ module Phil.Core.Syntax
   , Ty (..)
   , Proposition (..)
   , Outcome (..)
+  , Branch (..)
   , Session (..)
   , Control (..)
   , ObligationId (..)
@@ -44,11 +45,18 @@ data Proposition
 newtype Outcome = Outcome { unOutcome :: Text }
   deriving (Eq, Ord, Show)
 
+data Branch = Branch
+  { branchLabel :: Text
+  , branchPayload :: Maybe (Name, Ty)
+  , branchContinuation :: Session
+  }
+  deriving (Eq, Ord, Show)
+
 data Session
   = Send Name Ty Session
   | Receive Name Ty Session
-  | Select [(Text, Session)]
-  | Offer [(Text, Session)]
+  | Select [Branch]
+  | Offer [Branch]
   | End Outcome
   | Rec Name Session
   | SessionVar Name
