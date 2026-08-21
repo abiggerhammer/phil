@@ -4,12 +4,12 @@ From Coq Require Import Init.Datatypes.
 Open Scope string_scope.
 
 (*
-  Proof-oriented model of the session fragment of Phil.Core.Syntax.
+  Proof-oriented model of the currently needed Phil.Core.Syntax fragments.
 
-  Message types are opaque in this first slice because session duality preserves
-  them unchanged. Branch lists are represented by a mutually inductive spine so
-  that structural recursion follows the same protocol structure as the Haskell
-  [Session] / [Branch] representation.
+  Message types are opaque in the session-duality slice because dualSession
+  preserves them unchanged. Branch lists are represented by a mutually
+  inductive spine so structural recursion follows the same protocol structure
+  as the Haskell Session / Branch representation.
 *)
 
 Definition Name := string.
@@ -33,3 +33,9 @@ with Branches_ind' := Induction for Branches Sort Prop.
 
 Combined Scheme Session_Branches_mutind
   from Session_ind', Branches_ind'.
+
+Inductive Control : Type :=
+| Continue : Control
+| Return : Ty -> Control
+| Closed : Outcome -> Control
+| Failed : string -> string -> Control.
