@@ -26,10 +26,12 @@ import Phil.Core.Refinement
   , bindingEvidencePropositions
   , dischargeProposition
   , dischargePropositionUsing
+  , dischargeSideConditions
   , normalizeProposition
   , normalizeRefTerm
   , propositionMentions
   , residualizeProposition
+  , residualizeSideConditions
   , substituteProposition
   )
 import Phil.Core.Session (exposeSessionHead)
@@ -145,29 +147,42 @@ checkValueInternal explicitEvidence residualSpec value expected state =
     TyRefined binder base proposition -> do
       baseResult <- checkValue value base state
       required <- instantiateRefinement binder proposition baseResult
-      (evidenceUse, nextState) <-
-        case matchingCarriedEvidence required (valueResultEvidence baseResult) of
-          Just carried -> Right (carried, valueResultState baseResult)
-          Nothing ->
+      case matchingCarriedEvidence required (valueResultEvidence baseResult) of
+        Just carried -> do
+          (sideUses, nextState) <-
+            case residualSpec of
+              Just spec -> mapLeft ValueRefinementError $
+                residualizeSideConditions spec required (valueResultState baseResult)
+              Nothing -> do
+                uses <- mapLeft ValueRefinementError $
+                  dischargeSideConditions required (valueResultState baseResult)
+                Right (uses, valueResultState baseResult)
+          Right baseResult
+            { valueResultType = expected
+            , valueResultEvidence = appendEvidenceList
+                (sideUses ++ [carried])
+                (valueResultEvidence baseResult)
+            , valueResultState = nextState
+            }
+        Nothing -> do
+          (evidenceUses, nextState) <-
             case (explicitEvidence, residualSpec) of
-              (_, _) | normalizeProposition required == Truth ->
-                Right (EvidenceByDefinition required, valueResultState baseResult)
               (Just evidenceName, _) -> do
-                use <- mapLeft ValueRefinementError $
+                uses <- mapLeft ValueRefinementError $
                   dischargePropositionUsing evidenceName required (valueResultState baseResult)
-                Right (use, valueResultState baseResult)
+                Right (uses, valueResultState baseResult)
               (Nothing, Just spec) ->
                 mapLeft ValueRefinementError $
                   residualizeProposition spec required (valueResultState baseResult)
               (Nothing, Nothing) -> do
-                use <- mapLeft ValueRefinementError $
+                uses <- mapLeft ValueRefinementError $
                   dischargeProposition required (valueResultState baseResult)
-                Right (use, valueResultState baseResult)
-      Right baseResult
-        { valueResultType = expected
-        , valueResultEvidence = appendEvidence evidenceUse (valueResultEvidence baseResult)
-        , valueResultState = nextState
-        }
+                Right (uses, valueResultState baseResult)
+          Right baseResult
+            { valueResultType = expected
+            , valueResultEvidence = appendEvidenceList evidenceUses (valueResultEvidence baseResult)
+            , valueResultState = nextState
+            }
     _ -> do
       synthesized <- synthValue value state
       let actual = valueResultType synthesized
@@ -192,10 +207,12 @@ matchingCarriedEvidence required = go
           | normalizeProposition proposition == normalizedRequired -> Just evidenceUse
         _ -> go rest
 
-appendEvidence :: EvidenceUse -> [EvidenceUse] -> [EvidenceUse]
-appendEvidence evidenceUse existing
-  | evidenceUse `elem` existing = existing
-  | otherwise = existing ++ [evidenceUse]
+appendEvidenceList :: [EvidenceUse] -> [EvidenceUse] -> [EvidenceUse]
+appendEvidenceList additions = foldl (flip appendEvidence) 
+  where
+    appendEvidence evidenceUse existing
+      | evidenceUse `elem` existing = existing
+      | otherwise = existing ++ [evidenceUse]
 
 refinementErasesTo :: Ty -> Ty -> Bool
 refinementErasesTo actual expected =
@@ -210,11 +227,10 @@ instantiateRefinement
   -> ValueResult
   -> Either ValueError Proposition
 instantiateRefinement binder proposition result
-  | not (propositionMentions binder proposition) =
-      Right (normalizeProposition proposition)
+  | not (propositionMentions binder proposition) = Right proposition
   | otherwise =
       case valueResultTerm result of
-        Just term -> Right (normalizeProposition (substituteProposition binder term proposition))
+        Just term -> Right (substituteProposition binder term proposition)
         Nothing -> Left (RefinementSubjectNotVisible binder)
 
 transportValue
@@ -233,11 +249,11 @@ transportValue value proofName targetTy state = do
         TransportDefinitionallyEqual -> Left (TransportNotRequired sourceTy)
         TransportUnsupported -> Left (UnsupportedTransport sourceTy targetTy)
         TransportRequires proposition -> do
-          evidenceUse <- mapLeft ValueRefinementError $
+          evidenceUses <- mapLeft ValueRefinementError $
             dischargePropositionUsing proofName proposition (valueResultState source)
           Right source
             { valueResultType = targetTy
-            , valueResultEvidence = appendEvidence evidenceUse (valueResultEvidence source)
+            , valueResultEvidence = appendEvidenceList evidenceUses (valueResultEvidence source)
             }
 
 data TransportRequirement
@@ -251,7 +267,7 @@ transportRequirement source target
   | otherwise =
       case (source, target) of
         (TyBytes sourceIndex, TyBytes targetIndex) ->
-          TransportRequires (Equal (normalizeRefTerm sourceIndex) (normalizeRefTerm targetIndex))
+          TransportRequires (Equal sourceIndex targetIndex)
         _ -> TransportUnsupported
 
 compareTypes :: Ty -> Ty -> EqualityBoundary
@@ -397,8 +413,10 @@ equalRefTerm env left right =
     (RefUInt leftWidth leftValue, RefUInt rightWidth rightValue) ->
       leftWidth == rightWidth && leftValue == rightValue
     (RefBool leftValue, RefBool rightValue) -> leftValue == rightValue
-    (RefField leftBase leftField, RefField rightBase rightField) ->
-      leftField == rightField && equalRefTerm env leftBase rightBase
+    (RefField leftBase leftField leftSort, RefField rightBase rightField rightSort) ->
+      leftField == rightField
+        && leftSort == rightSort
+        && equalRefTerm env leftBase rightBase
     (RefLen leftValue, RefLen rightValue) -> equalRefTerm env leftValue rightValue
     (RefToNat leftValue, RefToNat rightValue) -> equalRefTerm env leftValue rightValue
     (RefAdd leftA leftB, RefAdd rightA rightB) ->
@@ -407,7 +425,8 @@ equalRefTerm env left right =
       equalRefTerm env leftA rightA && equalRefTerm env leftB rightB
     (RefScale leftCoefficient leftValue, RefScale rightCoefficient rightValue) ->
       leftCoefficient == rightCoefficient && equalRefTerm env leftValue rightValue
-    (RefOpaque leftText, RefOpaque rightText) -> leftText == rightText
+    (RefOpaque leftSort leftText, RefOpaque rightSort rightText) ->
+      leftSort == rightSort && leftText == rightText
     _ -> False
 
 equalProposition :: BinderEnv -> Proposition -> Proposition -> Bool
