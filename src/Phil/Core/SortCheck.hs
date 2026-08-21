@@ -1,3 +1,5 @@
+{-# LANGUAGE OverloadedStrings #-}
+
 module Phil.Core.SortCheck
   ( SortError (..)
   , refSortOfTy
