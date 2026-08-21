@@ -21,7 +21,7 @@ import Phil.Core.Context
   )
 import Phil.Core.Refinement
   ( EvidenceUse (..)
-  , RefinementError
+  , RefinementError (..)
   , ResidualSpec
   , bindingEvidencePropositions
   , dischargeProposition
@@ -35,6 +35,7 @@ import Phil.Core.Refinement
   , substituteProposition
   )
 import Phil.Core.Session (exposeSessionHead)
+import Phil.Core.SortCheck (checkTypeSorts)
 import Phil.Core.Syntax
   ( Branch (..)
   , Mode
@@ -82,6 +83,7 @@ synthValue value state =
     VVar name -> do
       (mode, ty, nextContext) <- mapLeft ValueResourceError $
         useBinding name (resourceContext state)
+      mapLeft valueSortError (checkTypeSorts state ty)
       case ty of
         TyPendingRecv _ -> Left (InternalResourceNotValue name ty)
         _ -> pure ValueResult
@@ -184,6 +186,7 @@ checkValueInternal explicitEvidence residualSpec value expected state =
             , valueResultState = nextState
             }
     _ -> do
+      mapLeft valueSortError (checkTypeSorts state expected)
       synthesized <- synthValue value state
       let actual = valueResultType synthesized
       case compareTypes actual expected of
@@ -245,7 +248,8 @@ transportValue value proofName targetTy state = do
   let sourceTy = valueResultType source
   case targetTy of
     TyRefined _ _ _ -> Left (TransportTargetRefined targetTy)
-    _ ->
+    _ -> do
+      mapLeft valueSortError (checkTypeSorts state targetTy)
       case transportRequirement sourceTy targetTy of
         TransportDefinitionallyEqual -> Left (TransportNotRequired sourceTy)
         TransportUnsupported -> Left (UnsupportedTransport sourceTy targetTy)
@@ -459,6 +463,9 @@ equalProposition env left right =
         && length leftArgs == length rightArgs
         && and (zipWith (equalRefTerm env) leftArgs rightArgs)
     _ -> False
+
+valueSortError :: Phil.Core.SortCheck.SortError -> ValueError
+valueSortError = ValueRefinementError . RefinementSortError
 
 mapLeft :: (a -> b) -> Either a c -> Either b c
 mapLeft f = either (Left . f) Right
