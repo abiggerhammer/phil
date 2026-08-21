@@ -175,7 +175,7 @@ Proof.
   - destruct (findBranch target branches) as [[foundPayload foundContinuation] |]
       eqn:Hfind.
     + inversion Hselect; subst.
-      exact Hfind.
+      reflexivity.
     + discriminate.
   - discriminate.
 Qed.
