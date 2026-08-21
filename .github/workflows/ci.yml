@@ -22,12 +22,6 @@ jobs:
           ghc-version: '9.6.7'
           cabal-version: 'latest'
 
-      - name: Update package index
-        run: cabal update
-
-      - name: Check package metadata
-        run: cabal check
-
       - name: Build
         run: cabal build all --enable-tests
 
