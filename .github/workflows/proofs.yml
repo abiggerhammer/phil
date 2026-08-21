@@ -35,3 +35,4 @@ jobs:
           rocq c -Q proof/Phil Phil proof/Phil/Core/Context.v
           rocq c -Q proof/Phil Phil proof/Phil/Core/Process.v
           rocq c -Q proof/Phil Phil proof/Phil/Core/SessionLabel.v
+          rocq c -Q proof/Phil Phil proof/Phil/Core/SessionStep.v
