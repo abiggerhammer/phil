@@ -69,7 +69,7 @@ Proof.
   - destruct (linearBindings context name) as [found |] eqn:Hfound.
     + inversion Hconsume; subst; clear Hconsume.
       split.
-      * exact Hfound.
+      * reflexivity.
       * split.
         -- simpl. unfold deleteBinding. now rewrite String.eqb_refl.
         -- split.
