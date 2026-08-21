@@ -184,8 +184,9 @@ testExplicitTransportBoundary :: Either String ()
 testExplicitTransportBoundary = do
   let sourceTy = TyBytes (RefNat 4096)
       targetTy = TyBytes (RefToNat (RefField (var "begin") "length" (SortUInt 32)))
-  context <- mapLeft show $ insertBinding Linear (name "payload") sourceTy (resourceContext emptyCheckState)
-  case checkValue (VVar (name "payload")) targetTy (emptyCheckState { resourceContext = context }) of
+  context0 <- mapLeft show $ insertBinding Linear (name "payload") sourceTy (resourceContext emptyCheckState)
+  context1 <- mapLeft show $ insertBinding Unrestricted (name "begin") (TyOpaque "Begin") context0
+  case checkValue (VVar (name "payload")) targetTy (emptyCheckState { resourceContext = context1 }) of
     Left (ExplicitTransportRequired actual expected) ->
       assert (actual == sourceTy && expected == targetTy) "transport boundary reported the wrong types"
     other -> Left ("dependent mismatch did not demand explicit transport: " ++ show other)
