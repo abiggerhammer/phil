@@ -4,6 +4,7 @@ module Phil.Core.SortCheck
   ( SortError (..)
   , refSortOfTy
   , sortOfRefTerm
+  , checkTypeSorts
   , checkPropositionSorts
   , propositionSideConditions
   ) where
@@ -25,7 +26,9 @@ data SortError
   | NonRefinementVisibleVariable Name Ty
   | InvalidNatLiteral Integer
   | InvalidUIntLiteral Int Integer
+  | InvalidUIntTypeWidth Int
   | InvalidAnnotatedSort RefSort
+  | InvalidBytesIndexSort RefTerm RefSort
   | InvalidFieldProjection RefTerm RefSort Text
   | InvalidLengthOperand RefTerm RefSort
   | InvalidToNatOperand RefTerm RefSort
@@ -52,6 +55,22 @@ refSortOfTy ty =
     TyOpaque name -> Just (SortOpaque name)
     TyOpaqueSorted _ sort -> Just sort
     _ -> Nothing
+
+checkTypeSorts :: CheckState -> Ty -> Either SortError ()
+checkTypeSorts state ty =
+  case ty of
+    TyUInt width
+      | width <= 0 -> Left (InvalidUIntTypeWidth width)
+      | otherwise -> Right ()
+    TyBytes index -> do
+      indexSort <- sortOfRefTerm state index
+      if indexSort == SortNat
+        then Right ()
+        else Left (InvalidBytesIndexSort index indexSort)
+    TyProof proposition -> checkPropositionSorts state proposition
+    TyRefined _ base _ -> checkTypeSorts state base
+    TyOpaqueSorted _ sort -> ensureValidSort sort
+    _ -> Right ()
 
 sortOfRefTerm :: CheckState -> RefTerm -> Either SortError RefSort
 sortOfRefTerm state = go
