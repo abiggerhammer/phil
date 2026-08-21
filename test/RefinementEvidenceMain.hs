@@ -21,6 +21,10 @@ import Phil.Core.Refinement
   , normalizeProposition
   , normalizeRefTerm
   )
+import Phil.Core.SortCheck
+  ( SortError (..)
+  , checkPropositionSorts
+  )
 import Phil.Core.Syntax
   ( Mode (..)
   , Name (Name)
@@ -28,6 +32,7 @@ import Phil.Core.Syntax
   , ObligationId (ObligationId)
   , Outcome (Outcome)
   , Proposition (..)
+  , RefSort (..)
   , RefTerm (..)
   , Session (..)
   , Ty (..)
@@ -51,6 +56,16 @@ main = do
   results <- sequence
     [ test "refinement terms normalize canonical UInt-to-Nat arithmetic" testTermNormalization
     , test "natural subtraction never silently truncates" testNaturalSubtraction
+    , test "refinement equality rejects mismatched sorts" testEqualitySortMismatch
+    , test "stable identity equality requires the same identity kind" testStableIdSortMismatch
+    , test "membership checks collection element sorts" testMembershipSortMismatch
+    , test "field projections require an opaque record-like base" testFieldProjectionSort
+    , test "named claim arguments must each be well-sorted" testClaimArgumentSorts
+    , test "safe Nat subtraction discharges its side condition definitionally" testSafeSubtraction
+    , test "unsafe Nat subtraction cannot hide behind proposition normalization" testUnsafeSubtraction
+    , test "symbolic Nat subtraction requires side-condition evidence" testSymbolicSubtractionNeedsEvidence
+    , test "matching evidence discharges a symbolic subtraction side condition" testSymbolicSubtractionEvidence
+    , test "explicit residualization gives subtraction a stable child obligation" testSubtractionResidual
     , test "refined literal can discharge proposition definitionally" testDefinitionalRefinement
     , test "matching Proof evidence discharges a refined value" testMatchingProof
     , test "missing evidence rejects a refined value" testMissingEvidence
@@ -86,6 +101,15 @@ name = Name
 var :: Text -> RefTerm
 var = RefVar . name
 
+natSymbol :: Text -> RefTerm
+natSymbol = RefOpaque SortNat
+
+versionsField :: RefTerm
+versionsField = RefField (var "hello") "versions" (SortFiniteSeq (SortUInt 16))
+
+lengthField :: RefTerm
+lengthField = RefField (var "begin") "length" (SortUInt 32)
+
 test :: String -> Either String () -> IO Bool
 test label result =
   case result of
@@ -104,6 +128,105 @@ testNaturalSubtraction =
     (normalizeRefTerm (RefSub (RefNat 3) (RefNat 5)) == RefSub (RefNat 3) (RefNat 5))
     "Nat subtraction truncated without the required side condition"
 
+testEqualitySortMismatch :: Either String ()
+testEqualitySortMismatch =
+  case checkPropositionSorts emptyCheckState (Equal (RefNat 1) (RefBool True)) of
+    Left (EqualitySortMismatch SortNat SortBool) -> Right ()
+    other -> Left ("mismatched equality sorts were not rejected: " ++ show other)
+
+testStableIdSortMismatch :: Either String ()
+testStableIdSortMismatch =
+  case checkPropositionSorts emptyCheckState
+    (Equal
+      (RefOpaque (SortStableId "Frame") "id-1")
+      (RefOpaque (SortStableId "PolicySnapshot") "id-1")) of
+    Left (EqualitySortMismatch (SortStableId "Frame") (SortStableId "PolicySnapshot")) -> Right ()
+    other -> Left ("stable identity kinds were conflated: " ++ show other)
+
+testMembershipSortMismatch :: Either String ()
+testMembershipSortMismatch =
+  case checkPropositionSorts emptyCheckState
+    (Member
+      (RefUInt 16 7)
+      (RefOpaque (SortFiniteSeq (SortUInt 8)) "bytes")) of
+    Left (MembershipElementMismatch (SortUInt 16) (SortUInt 8)) -> Right ()
+    other -> Left ("membership accepted the wrong element sort: " ++ show other)
+
+testFieldProjectionSort :: Either String ()
+testFieldProjectionSort =
+  case checkPropositionSorts emptyCheckState
+    (Equal
+      (RefField (RefNat 1) "length" SortNat)
+      (RefNat 1)) of
+    Left (InvalidFieldProjection _ SortNat "length") -> Right ()
+    other -> Left ("field projection accepted a non-record base: " ++ show other)
+
+testClaimArgumentSorts :: Either String ()
+testClaimArgumentSorts =
+  mapLeft show $ checkPropositionSorts emptyCheckState
+    (Atom "OpaqueClaim"
+      [ RefOpaque (SortStableId "Context") "ctx"
+      , RefUInt 16 7
+      , RefBool True
+      ])
+
+testSafeSubtraction :: Either String ()
+testSafeSubtraction = do
+  let difference = RefSub (RefNat 5) (RefNat 3)
+      refined = TyRefined (name "unit") TyUnit (Equal difference (RefNat 2))
+  result <- mapLeft show $ checkValue VUnit refined emptyCheckState
+  assert
+    (EvidenceByDefinition (LessEqual (RefNat 3) (RefNat 5)) `elem` valueResultEvidence result)
+    "safe subtraction did not record its definitional side-condition discharge"
+
+testUnsafeSubtraction :: Either String ()
+testUnsafeSubtraction = do
+  let bad = RefSub (RefNat 3) (RefNat 5)
+      refined = TyRefined (name "unit") TyUnit (Equal bad bad)
+  case checkValue VUnit refined emptyCheckState of
+    Left (ValueRefinementError (StaticallyFalse _)) -> Right ()
+    other -> Left ("unsafe subtraction was erased by proposition normalization: " ++ show other)
+
+testSymbolicSubtractionNeedsEvidence :: Either String ()
+testSymbolicSubtractionNeedsEvidence = do
+  let a = natSymbol "a"
+      b = natSymbol "b"
+      difference = RefSub a b
+      refined = TyRefined (name "unit") TyUnit (Equal difference difference)
+  case checkValue VUnit refined emptyCheckState of
+    Left (ValueRefinementError (MissingEvidence required)) ->
+      assert (required == LessEqual b a) "wrong subtraction side condition was requested"
+    other -> Left ("symbolic subtraction did not require evidence: " ++ show other)
+
+testSymbolicSubtractionEvidence :: Either String ()
+testSymbolicSubtractionEvidence = do
+  let a = natSymbol "a"
+      b = natSymbol "b"
+      sideCondition = LessEqual b a
+      difference = RefSub a b
+      refined = TyRefined (name "unit") TyUnit (Equal difference difference)
+  state <- withUnrestricted (name "subSafe") (TyProof sideCondition) emptyCheckState
+  result <- mapLeft show $ checkValue VUnit refined state
+  assert
+    (EvidenceByBinding (name "subSafe") sideCondition `elem` valueResultEvidence result)
+    "subtraction side-condition proof was not consumed as evidence"
+
+testSubtractionResidual :: Either String ()
+testSubtractionResidual = do
+  let a = natSymbol "a"
+      b = natSymbol "b"
+      difference = RefSub a b
+      refined = TyRefined (name "unit") TyUnit (Equal difference difference)
+      spec = ResidualSpec (ObligationId "calc.safe") "calc" "component" "before arithmetic"
+  result <- mapLeft show $ checkValueWithResidual spec VUnit refined emptyCheckState
+  let obligations = residualObligations (valueResultState result)
+      childId = ObligationId "calc.safe.nat-sub.1"
+  assert (Map.size obligations == 1) "subtraction residualization emitted the wrong obligation count"
+  case Map.lookup childId obligations of
+    Just obligation ->
+      assert (obligationProposition obligation == LessEqual b a) "wrong subtraction child proposition"
+    Nothing -> Left "subtraction side condition did not receive its stable child obligation ID"
+
 testDefinitionalRefinement :: Either String ()
 testDefinitionalRefinement = do
   let refined = TyRefined
@@ -118,12 +241,13 @@ testDefinitionalRefinement = do
 
 testMatchingProof :: Either String ()
 testMatchingProof = do
-  let required = Member (RefUInt 16 7) (RefField (var "hello") "versions")
+  let required = Member (RefUInt 16 7) versionsField
       refined = TyRefined
         (name "v")
         (TyUInt 16)
-        (Member (var "v") (RefField (var "hello") "versions"))
-  state <- withUnrestricted (name "offered") (TyProof required) emptyCheckState
+        (Member (var "v") versionsField)
+  state0 <- withUnrestricted (name "hello") (TyOpaque "Hello") emptyCheckState
+  state <- withUnrestricted (name "offered") (TyProof required) state0
   result <- mapLeft show $ checkValue (VUInt 16 7) refined state
   assert
     (EvidenceByBinding (name "offered") (normalizeProposition required) `elem` valueResultEvidence result)
@@ -149,15 +273,16 @@ testExplicitEvidenceMismatch = do
 testValidatedEvidence :: Either String ()
 testValidatedEvidence = do
   state0 <- withUnrestricted (name "begin") (TyOpaque "Begin") emptyCheckState
-  state1 <- withUnrestricted
+  state1 <- withUnrestricted (name "κ1") (TyOpaque "PolicySnapshot") state0
+  state2 <- withUnrestricted
     (name "beginPolicy")
     (TyValidated "BeginPolicy" (name "κ1") (name "begin"))
-    state0
+    state1
   let refined = TyRefined
         (name "x")
         (TyOpaque "Begin")
         (Atom "BeginPolicy" [var "κ1", var "x"])
-  result <- mapLeft show $ checkValue (VVar (name "begin")) refined state1
+  result <- mapLeft show $ checkValue (VVar (name "begin")) refined state2
   assert
     (EvidenceByBinding
       (name "beginPolicy")
@@ -168,15 +293,17 @@ testValidatedEvidence = do
 testStaleValidationContext :: Either String ()
 testStaleValidationContext = do
   state0 <- withUnrestricted (name "begin") (TyOpaque "Begin") emptyCheckState
-  state1 <- withUnrestricted
+  state1 <- withUnrestricted (name "κ1") (TyOpaque "PolicySnapshot") state0
+  state2 <- withUnrestricted (name "κ2") (TyOpaque "PolicySnapshot") state1
+  state3 <- withUnrestricted
     (name "stale")
     (TyValidated "BeginPolicy" (name "κ1") (name "begin"))
-    state0
+    state2
   let refined = TyRefined
         (name "x")
         (TyOpaque "Begin")
         (Atom "BeginPolicy" [var "κ2", var "x"])
-  case checkValue (VVar (name "begin")) refined state1 of
+  case checkValue (VVar (name "begin")) refined state3 of
     Left (ValueRefinementError (MissingEvidence required)) ->
       assert
         (required == Atom "BeginPolicy" [var "κ2", var "begin"])
@@ -186,15 +313,16 @@ testStaleValidationContext = do
 testWrongValidationSubject :: Either String ()
 testWrongValidationSubject = do
   state0 <- withUnrestricted (name "begin2") (TyOpaque "Begin") emptyCheckState
-  state1 <- withUnrestricted
+  state1 <- withUnrestricted (name "κ1") (TyOpaque "PolicySnapshot") state0
+  state2 <- withUnrestricted
     (name "wrongSubject")
     (TyValidated "BeginPolicy" (name "κ1") (name "begin1"))
-    state0
+    state1
   let refined = TyRefined
         (name "x")
         (TyOpaque "Begin")
         (Atom "BeginPolicy" [var "κ1", var "x"])
-  case checkValue (VVar (name "begin2")) refined state1 of
+  case checkValue (VVar (name "begin2")) refined state2 of
     Left (ValueRefinementError (MissingEvidence required)) ->
       assert
         (required == Atom "BeginPolicy" [var "κ1", var "begin2"])
@@ -203,7 +331,8 @@ testWrongValidationSubject = do
 
 testOpaqueClaimRequiresEvidence :: Either String ()
 testOpaqueClaimRequiresEvidence = do
-  state <- withUnrestricted (name "payload") (TyOpaque "Payload") emptyCheckState
+  state0 <- withUnrestricted (name "begin") (TyOpaque "Begin") emptyCheckState
+  state <- withUnrestricted (name "payload") (TyOpaque "Payload") state0
   let refined = TyRefined
         (name "x")
         (TyOpaque "Payload")
@@ -217,16 +346,17 @@ testOpaqueClaimRequiresEvidence = do
 
 testOpaqueClaimEvidence :: Either String ()
 testOpaqueClaimEvidence = do
-  state0 <- withUnrestricted (name "payload") (TyOpaque "Payload") emptyCheckState
-  state1 <- withUnrestricted
+  state0 <- withUnrestricted (name "begin") (TyOpaque "Begin") emptyCheckState
+  state1 <- withUnrestricted (name "payload") (TyOpaque "Payload") state0
+  state2 <- withUnrestricted
     (name "digestEvidence")
     (TyProof (Atom "DigestMatches" [var "begin", var "payload"]))
-    state0
+    state1
   let refined = TyRefined
         (name "x")
         (TyOpaque "Payload")
         (Atom "DigestMatches" [var "begin", var "x"])
-  _ <- mapLeft show $ checkValue (VVar (name "payload")) refined state1
+  _ <- mapLeft show $ checkValue (VVar (name "payload")) refined state2
   Right ()
 
 testResidualObligation :: Either String ()
@@ -282,12 +412,13 @@ testFalseCannotResidualize = do
 testLinearTransport :: Either String ()
 testLinearTransport = do
   let sourceTy = TyBytes (RefNat 4096)
-      targetIndex = RefToNat (RefField (var "begin") "length")
+      targetIndex = RefToNat lengthField
       targetTy = TyBytes targetIndex
       proofTy = TyProof (Equal (RefNat 4096) targetIndex)
   context0 <- mapLeft show $ insertBinding Linear (name "payload") sourceTy (resourceContext emptyCheckState)
-  context1 <- mapLeft show $ insertBinding Unrestricted (name "lengthEq") proofTy context0
-  let state = emptyCheckState { resourceContext = context1 }
+  context1 <- mapLeft show $ insertBinding Unrestricted (name "begin") (TyOpaque "Begin") context0
+  context2 <- mapLeft show $ insertBinding Unrestricted (name "lengthEq") proofTy context1
+  let state = emptyCheckState { resourceContext = context2 }
   result <- mapLeft show $ synthValue (VTransport (VVar (name "payload")) (name "lengthEq") targetTy) state
   assert (valueResultType result == targetTy) "transport produced the wrong target type"
   assert (valueResultMode result == Just Linear) "transport lost linear ownership mode"
@@ -298,8 +429,8 @@ testLinearTransport = do
 testTransportWrongProof :: Either String ()
 testTransportWrongProof = do
   let sourceTy = TyBytes (RefNat 4096)
-      targetTy = TyBytes (var "n")
-      wrong = TyProof (Equal (RefNat 4096) (var "m"))
+      targetTy = TyBytes (natSymbol "n")
+      wrong = TyProof (Equal (RefNat 4096) (natSymbol "m"))
   state0 <- withLinear (name "payload") sourceTy emptyCheckState
   state1 <- withUnrestricted (name "wrong") wrong state0
   case synthValue (VTransport (VVar (name "payload")) (name "wrong") targetTy) state1 of
@@ -309,8 +440,8 @@ testTransportWrongProof = do
 testTransportWrongDirection :: Either String ()
 testTransportWrongDirection = do
   let sourceTy = TyBytes (RefNat 4096)
-      targetTy = TyBytes (var "n")
-      reversed = TyProof (Equal (var "n") (RefNat 4096))
+      targetTy = TyBytes (natSymbol "n")
+      reversed = TyProof (Equal (natSymbol "n") (RefNat 4096))
   state0 <- withLinear (name "payload") sourceTy emptyCheckState
   state1 <- withUnrestricted (name "reversed") reversed state0
   case synthValue (VTransport (VVar (name "payload")) (name "reversed") targetTy) state1 of
