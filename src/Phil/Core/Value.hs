@@ -208,11 +208,12 @@ matchingCarriedEvidence required = go
         _ -> go rest
 
 appendEvidenceList :: [EvidenceUse] -> [EvidenceUse] -> [EvidenceUse]
-appendEvidenceList additions = foldl (flip appendEvidence) 
+appendEvidenceList additions existing =
+  foldl (flip appendEvidence) existing additions
   where
-    appendEvidence evidenceUse existing
-      | evidenceUse `elem` existing = existing
-      | otherwise = existing ++ [evidenceUse]
+    appendEvidence evidenceUse accumulated
+      | evidenceUse `elem` accumulated = accumulated
+      | otherwise = accumulated ++ [evidenceUse]
 
 refinementErasesTo :: Ty -> Ty -> Bool
 refinementErasesTo actual expected =
