@@ -88,7 +88,8 @@ Corollary consumeLinear_success_consumes_owner :
 Proof.
   intros name context next ty Hconsume.
   pose proof (consumeLinear_success_exact name context next ty Hconsume) as H.
-  tauto.
+  destruct H as [_ [Hconsumed _]].
+  exact Hconsumed.
 Qed.
 
 Corollary consumeLinear_success_preserves_other_linear :
@@ -99,5 +100,7 @@ Corollary consumeLinear_success_preserves_other_linear :
 Proof.
   intros name other context next ty Hconsume Hother.
   pose proof (consumeLinear_success_exact name context next ty Hconsume) as H.
-  tauto.
+  destruct H as [_ [_ [Hpreserved _]]].
+  apply Hpreserved.
+  exact Hother.
 Qed.
