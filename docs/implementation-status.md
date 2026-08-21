@@ -62,15 +62,31 @@ This path-set representation is an internal checker device for preserving the no
 
 The trusted-recognition result functions model the assurance boundary where a Phil-generated recognizer or audited extension reports success/failure. This slice does not pretend to implement a grammar runtime: complete consumption, determinism, and byte-to-value interpretation remain responsibilities of that trusted recognizer boundary and later executable grammar tooling.
 
+## Implemented in the bidirectional-value slice
+
+- Core values now represent variables, unit, booleans, width-indexed unsigned literals, and explicit type ascription.
+- `synthValue` implements the checker-side `⇒` judgment over full `CheckState`, preserving residual obligations while updating affine/linear resource residue.
+- Variable synthesis automatically respects structural mode: `Γ` remains reusable, `A` is consumed at most once, and `Δ` is consumed exactly once when the value occurrence transfers ownership.
+- A shared-borrowed affine/linear owner cannot be consumed by value synthesis.
+- Internal `PendingRecv` resources are explicitly not ordinary values and cannot be discharged by evaluating their variable; only recognition commit/fatal operations may consume them.
+- `checkValue` implements the checker-side `⇐` judgment by synthesis plus an explicit equality-boundary classification.
+- Exact structure and guarded recursive session unfolding are definitional equality in the represented Phase 0 subset; choice label order is irrelevant.
+- Different indices of the same dependent `Bytes[...]` family are classified as requiring explicit propositional equality/transport, never silently coerced.
+- Unrelated types remain incompatible; there is no implicit subtyping.
+- Refined expected types and refined ascriptions fail closed in this slice rather than dropping their propositions. Their base-type/evidence handling belongs to the following refinement/evidence slice.
+- Fixed-width unsigned literals are checked against mathematical range (`0 <= n < 2^w`) and therefore do not introduce modular wraparound semantics.
+- Definitional equality is deliberately conservative where the current representation is still textual: communication/refinement binders must match exactly when alpha-renaming would require rewriting textual dependent indices. Structured refinement terms will remove that limitation later.
+
+The equality API exposes three outcomes: definitionally equal, requires explicit propositional equality, or incompatible. It does not attempt to prove the middle case; that is the explicit boundary to the following evidence/transport slice.
+
 ## Next checker slices
 
-1. Bidirectional value checking and explicit definitional/propositional equality boundary.
-2. Refinements, evidence matching, explicit transport, and stable residual obligation generation.
-3. Deterministic focusing/elaboration rules.
-4. Parser and surface-to-Core elaboration.
-5. Conformance harness over the accepted/rejected `.phil` corpus.
-6. Assurance-ledger handoff and manifest verification.
+1. Refinements, evidence matching, explicit transport, and stable residual obligation generation.
+2. Deterministic focusing/elaboration rules.
+3. Parser and surface-to-Core elaboration.
+4. Conformance harness over the accepted/rejected `.phil` corpus.
+5. Assurance-ledger handoff and manifest verification.
 
 ## Explicit current non-goals
 
-The checker still does not claim source-level Phil conformance. In particular it does not parse Phil syntax, project dependent session types from a global protocol, perform dependent value substitution, execute grammar recognizers, solve refinements, validate return values against a provider signature, validate the upload protocol end-to-end, or lower to systems/LLVM IR. Transport-acquisition failure for `receiveFrame` is still represented by the accepted primitive contract rather than simulated inside the structural checker.
+The checker still does not claim source-level Phil conformance. In particular it does not parse Phil syntax, project dependent session types from a global protocol, substitute communicated semantic values into dependent continuations, execute grammar recognizers, solve refinements, consume proposition/evidence terms, perform explicit propositional transport, validate return values against a provider signature, validate the upload protocol end-to-end, or lower to systems/LLVM IR. Transport-acquisition failure for `receiveFrame` is still represented by the accepted primitive contract rather than simulated inside the structural checker.

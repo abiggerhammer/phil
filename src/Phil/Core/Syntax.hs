@@ -6,6 +6,7 @@ module Phil.Core.Syntax
   , FrameId (..)
   , Mode (..)
   , Ty (..)
+  , Value (..)
   , Proposition (..)
   , Outcome (..)
   , Branch (..)
@@ -44,6 +45,14 @@ data Ty
   | TyEndpoint Session
   | TyRefined Name Ty Proposition
   | TyOpaque Text
+  deriving (Eq, Ord, Show)
+
+data Value
+  = VVar Name
+  | VUnit
+  | VBool Bool
+  | VUInt Int Integer
+  | VAscribe Value Ty
   deriving (Eq, Ord, Show)
 
 data Proposition
