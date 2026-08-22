@@ -98,6 +98,7 @@ operationDefinitions operation = case operation of
 operationUses :: SystemsOp -> [ValueId]
 operationUses operation = case operation of
   OpRuntimeCall { runtimeCallInputs = inputs } -> inputs
+  OpSessionSelect { sessionSelectPayload = Just payload } -> [payload]
   OpCopy { copySource = source } -> [source]
   _ -> []
 
