@@ -115,7 +115,7 @@ Proof.
       rewrite Hsub in Hin.
       simpl in Hin. contradiction.
   - intros target replacement name Hin. simpl in Hin. contradiction.
-  - intros label payload continuation rest IHcontinuation IHrest target replacement name Hin.
+  - intros label payload continuation IHcontinuation rest IHrest target replacement name Hin.
     simpl in Hin.
     apply in_app_or in Hin.
     destruct Hin as [Hcontinuation | Hrest].
