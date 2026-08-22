@@ -25,6 +25,9 @@ jobs:
       - name: Build
         run: cabal build all --enable-tests
 
+      - name: Haskell lint
+        run: cabal build all --enable-tests --project-file=cabal.project.ci
+
       - name: Test
         run: cabal test all --test-show-details=direct
 
