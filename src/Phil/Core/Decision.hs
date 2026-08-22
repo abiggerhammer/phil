@@ -317,6 +317,7 @@ basisRelation state assumptions basis =
         , relation
         )
     BasisNatLower term -> do
+      ensurePartialOperationPrerequisites assumptions (Equal term term)
       sort <- mapLeft CertificateSortError (sortOfRefTerm state term)
       if sort == SortNat
         then do
