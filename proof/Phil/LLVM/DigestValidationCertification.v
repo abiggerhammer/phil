@@ -69,10 +69,11 @@ Theorem digest_validation_certification_requires_aligned_semantic_authorities :
       digestCertificationSystemsModel model.
 Proof.
   intros model H.
-  repeat split.
+  split.
   - exact (digest_certification_systems_success model H).
-  - exact (digest_certification_llvm_success model H).
-  - exact (digest_certification_models_align model H).
+  - split.
+    + exact (digest_certification_llvm_success model H).
+    + exact (digest_certification_models_align model H).
 Qed.
 
 Theorem digest_validation_certification_requires_exact_artifact_authority :
