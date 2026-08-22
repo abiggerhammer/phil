@@ -5,6 +5,7 @@ on:
   push:
     branches:
       - main
+      - steve/architecture-sketch
 
 permissions:
   contents: read
@@ -95,3 +96,17 @@ jobs:
           echo "direct and bound scalar Phil programs returned 42 successfully"
           "$LLVM_AS" --version | head -n 1
           "$CLANG" --version | head -n 1
+
+      - name: Parse Steve surface corpus
+        if: github.ref == 'refs/heads/steve/architecture-sketch' || github.head_ref == 'steve/architecture-sketch'
+        shell: bash
+        run: |
+          set -euo pipefail
+          while IFS= read -r file; do
+            echo "Parsing ${file}"
+            cabal run phil-core -- parse "${file}"
+          done < <(find examples/steve -type f -name '*.phil' | sort)
+
+      - name: Check Steve opaque-proof semantic rejection
+        if: github.ref == 'refs/heads/steve/architecture-sketch' || github.head_ref == 'steve/architecture-sketch'
+        run: cabal test phil-steve-surface-semantic-tests --test-show-details=direct
