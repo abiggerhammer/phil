@@ -9,6 +9,7 @@ import Paths_phil_core (getDataFileName)
 import Phil.Surface.Parser
   ( ParseDiagnostic
   , parseSurfaceFile
+  , parseSurfaceType
   )
 import Phil.Surface.Syntax
   ( Block (..)
@@ -27,6 +28,7 @@ main = do
     , testPure "source spans preserve file, line, column, and offset" testSourceSpans
     , testPure "parser requires complete input consumption" testTrailingGarbage
     , testPure "unterminated blocks are syntax errors" testUnterminatedBlock
+    , testPure "unrepresentable UInt widths reject instead of wrapping" testUIntWidthOverflow
     ]
   unless (and results) exitFailure
 
@@ -116,6 +118,13 @@ testUnterminatedBlock =
   case parseSurfaceFile "unterminated.phil" "component A { let x = foo()" of
     Left _ -> Right ()
     Right _ -> Left "parser accepted an unterminated component block"
+
+testUIntWidthOverflow :: Either String ()
+testUIntWidthOverflow =
+  let absurdWidth = "U" <> Text.replicate 100 "9"
+  in case parseSurfaceType "width.phil" absurdWidth of
+      Left _ -> Right ()
+      Right parsed -> Left ("parser wrapped an unrepresentable width: " ++ show parsed)
 
 showDiagnostic :: ParseDiagnostic -> String
 showDiagnostic = show
