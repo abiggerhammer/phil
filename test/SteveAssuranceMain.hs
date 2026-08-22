@@ -12,6 +12,10 @@ import System.Exit (exitFailure)
 
 main :: IO ()
 main = do
+  unless (length revisions == 12) $ do
+    putStrLn "FAIL: Steve obligation set drifted from the twelve-row matrix"
+    exitFailure
+
   expectPass "Steve 0 provisional assurance manifest" steveManifest
 
   -- Collision resistance is intentionally disclosed but not used to justify
@@ -513,7 +517,7 @@ installBorrowAssumed = assumedEvidence
 digestIdentityKernel :: EvidenceEntry
 digestIdentityKernel = kernelEvidence
   "evidence.steve.digest_identity.kernel" digestEvidenceIdentity "stable_identity_contract"
-  "Phil evidence/borrrow checker" []
+  "Phil evidence/borrow checker" []
 
 digestIdentityAssumed :: EvidenceEntry
 digestIdentityAssumed = assumedEvidence
@@ -638,12 +642,3 @@ steveVerificationContext = emptyVerificationContext
   , verificationKnownCostRefs = Set.fromList runtimeCostRefs
   , verificationValidityContext = validityContext
   }
-
--- Keep a tiny structural sanity check close to the executable witness: all
--- twelve matrix obligations must be represented exactly once.
-_obligationCountSanity :: Bool
-_obligationCountSanity = length revisions == 12
-
-_unusedSanityReference :: ()
-_unusedSanityReference =
-  unless _obligationCountSanity (error "Steve obligation set drifted from matrix")
