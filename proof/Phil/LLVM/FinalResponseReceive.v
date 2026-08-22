@@ -7,10 +7,11 @@ From Phil.LLVM Require Import RejectedResponse RuntimeSymbolIdentity.
 
   The model preserves the exact client transport and accepted/rejected
   continuations, materializes the accepted UploadId through a caller-owned
-  out-slot, loads that exact handle only in the accepted binder block, passes it
-  explicitly to record_upload_id, erases the unobserved DigestFailure only for
-  this exact program, preserves the already-materialized server responses, and
-  invents no malformed-response CFG edge.
+  out-slot, loads that exact handle from that slot only in the accepted binder
+  block, passes it explicitly to record_upload_id, preserves its runtime-owned
+  opaque/non-owning representation through that call, erases the unobserved
+  DigestFailure only for this exact program, preserves the already-materialized
+  server responses, and invents no malformed-response CFG edge.
 *)
 
 Definition FinalOperandId := nat.
@@ -43,10 +44,13 @@ Record FinalResponseReceiveLLVMModel : Type := mkFinalResponseReceiveLLVMModel {
   llvmFinalDecoderReturnsChoiceI1 : bool;
 
   llvmFinalAcceptedPayloadLoadedOnlyInBinder : bool;
+  llvmFinalAcceptedPayloadLoadedFromDecoderOutSlot : bool;
   llvmFinalRecordUploadIdCount : nat;
   llvmFinalUploadIdOpaque : bool;
+  llvmFinalUploadIdNonOwning : bool;
   llvmFinalUploadIdReleasedByGeneratedCode : bool;
   llvmFinalUploadIdRetainedByGeneratedCode : bool;
+  llvmFinalUploadIdMutatedByGeneratedCode : bool;
   llvmFinalUploadIdLayoutAccessPresent : bool;
   llvmFinalUnauthorizedPointerStrengtheningPresent : bool;
   llvmFinalUploadIdLifetimeThroughRecord : bool;
@@ -121,14 +125,20 @@ Record FinalResponseReceiveLLVMVerificationSuccess
 
     llvm_final_success_load_local :
       llvmFinalAcceptedPayloadLoadedOnlyInBinder model = true;
+    llvm_final_success_load_from_out_slot :
+      llvmFinalAcceptedPayloadLoadedFromDecoderOutSlot model = true;
     llvm_final_success_record_once :
       llvmFinalRecordUploadIdCount model = 1;
     llvm_final_success_upload_id_opaque :
       llvmFinalUploadIdOpaque model = true;
+    llvm_final_success_upload_id_non_owning :
+      llvmFinalUploadIdNonOwning model = true;
     llvm_final_success_no_release :
       llvmFinalUploadIdReleasedByGeneratedCode model = false;
     llvm_final_success_no_retain :
       llvmFinalUploadIdRetainedByGeneratedCode model = false;
+    llvm_final_success_no_mutation :
+      llvmFinalUploadIdMutatedByGeneratedCode model = false;
     llvm_final_success_no_layout :
       llvmFinalUploadIdLayoutAccessPresent model = false;
     llvm_final_success_no_strengthening :
@@ -214,6 +224,7 @@ Theorem verified_llvm_final_response_binds_and_records_accepted_upload_id :
     llvmFinalRecordUploadIdOperand model =
       llvmFinalActualLoadedUploadId model /\
     llvmFinalAcceptedPayloadLoadedOnlyInBinder model = true /\
+    llvmFinalAcceptedPayloadLoadedFromDecoderOutSlot model = true /\
     llvmFinalRecordUploadIdCount model = 1 /\
     llvmFinalUploadIdLifetimeThroughRecord model = true.
 Proof.
@@ -222,6 +233,7 @@ Proof.
     exact (llvm_final_success_expected_upload_id model H).
   - exact (llvm_final_success_record_operand model H).
   - exact (llvm_final_success_load_local model H).
+  - exact (llvm_final_success_load_from_out_slot model H).
   - exact (llvm_final_success_record_once model H).
   - exact (llvm_final_success_lifetime model H).
 Qed.
@@ -230,15 +242,19 @@ Theorem verified_llvm_final_response_preserves_upload_id_opacity :
   forall model,
     FinalResponseReceiveLLVMVerificationSuccess model ->
     llvmFinalUploadIdOpaque model = true /\
+    llvmFinalUploadIdNonOwning model = true /\
     llvmFinalUploadIdReleasedByGeneratedCode model = false /\
     llvmFinalUploadIdRetainedByGeneratedCode model = false /\
+    llvmFinalUploadIdMutatedByGeneratedCode model = false /\
     llvmFinalUploadIdLayoutAccessPresent model = false /\
     llvmFinalUnauthorizedPointerStrengtheningPresent model = false.
 Proof.
   intros model H; repeat split.
   - exact (llvm_final_success_upload_id_opaque model H).
+  - exact (llvm_final_success_upload_id_non_owning model H).
   - exact (llvm_final_success_no_release model H).
   - exact (llvm_final_success_no_retain model H).
+  - exact (llvm_final_success_no_mutation model H).
   - exact (llvm_final_success_no_layout model H).
   - exact (llvm_final_success_no_strengthening model H).
 Qed.
@@ -317,15 +333,17 @@ Theorem llvm_final_response_upload_id_dataflow_drift_is_rejected :
     llvmFinalRecordUploadIdOperand model <>
       llvmFinalActualLoadedUploadId model \/
     llvmFinalAcceptedPayloadLoadedOnlyInBinder model = false \/
+    llvmFinalAcceptedPayloadLoadedFromDecoderOutSlot model = false \/
     llvmFinalRecordUploadIdCount model <> 1 \/
     llvmFinalUploadIdLifetimeThroughRecord model = false ->
     ~ FinalResponseReceiveLLVMVerificationSuccess model.
 Proof.
   intros model Hbad H.
-  destruct Hbad as [Hl | [Hr | [Hlocal | [Hc | Hlife]]]].
+  destruct Hbad as [Hl | [Hr | [Hlocal | [Hslot | [Hc | Hlife]]]]].
   - apply Hl. exact (llvm_final_success_loaded_upload_id model H).
   - apply Hr. exact (llvm_final_success_record_operand model H).
   - rewrite (llvm_final_success_load_local model H) in Hlocal. discriminate.
+  - rewrite (llvm_final_success_load_from_out_slot model H) in Hslot. discriminate.
   - apply Hc. exact (llvm_final_success_record_once model H).
   - rewrite (llvm_final_success_lifetime model H) in Hlife. discriminate.
 Qed.
@@ -339,15 +357,17 @@ Theorem llvm_final_response_erasure_ambient_or_malformed_drift_is_rejected :
     llvmFinalAmbientFinalResponseStatePresent model = true \/
     llvmFinalAmbientUploadIdStatePresent model = true \/
     llvmFinalMalformedCFGBranchPresent model = true \/
+    llvmFinalUploadIdNonOwning model = false \/
     llvmFinalUploadIdReleasedByGeneratedCode model = true \/
     llvmFinalUploadIdRetainedByGeneratedCode model = true \/
+    llvmFinalUploadIdMutatedByGeneratedCode model = true \/
     llvmFinalUploadIdLayoutAccessPresent model = true \/
     llvmFinalUnauthorizedPointerStrengtheningPresent model = true ->
     ~ FinalResponseReceiveLLVMVerificationSuccess model.
 Proof.
   intros model Hbad H.
   destruct Hbad as
-    [Hd | [Hw | [Hgr | [Hgc | [Har | [Hau | [Hm | [Hrel | [Hret | [Hlay | Hstr]]]]]]]]]].
+    [Hd | [Hw | [Hgr | [Hgc | [Har | [Hau | [Hm | [Hown | [Hrel | [Hret | [Hmut | [Hlay | Hstr]]]]]]]]]]]].
   - rewrite (llvm_final_success_no_digest_rep model H) in Hd. discriminate.
   - rewrite (llvm_final_success_digest_erasure_witness model H) in Hw. discriminate.
   - rewrite (llvm_final_success_no_generic_receive model H) in Hgr. discriminate.
@@ -355,8 +375,10 @@ Proof.
   - rewrite (llvm_final_success_no_ambient_response model H) in Har. discriminate.
   - rewrite (llvm_final_success_no_ambient_upload model H) in Hau. discriminate.
   - rewrite (llvm_final_success_no_malformed_branch model H) in Hm. discriminate.
+  - rewrite (llvm_final_success_upload_id_non_owning model H) in Hown. discriminate.
   - rewrite (llvm_final_success_no_release model H) in Hrel. discriminate.
   - rewrite (llvm_final_success_no_retain model H) in Hret. discriminate.
+  - rewrite (llvm_final_success_no_mutation model H) in Hmut. discriminate.
   - rewrite (llvm_final_success_no_layout model H) in Hlay. discriminate.
   - rewrite (llvm_final_success_no_strengthening model H) in Hstr. discriminate.
 Qed.
