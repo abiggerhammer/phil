@@ -39,6 +39,10 @@ library
       Phil.Surface.Elaborate
       Phil.Surface.Check
       Phil.Surface.Phase0
+  other-modules:
+      Phil.Surface.Check.Types
+      Phil.Surface.Check.Support
+      Phil.Surface.Check.Engine
   build-depends:
       base >=4.17 && <5,
       containers >=0.6 && <0.8,
