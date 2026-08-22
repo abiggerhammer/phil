@@ -133,20 +133,20 @@ Proof.
         simpl in Hinstalled.
         destruct Hinstalled as [HreboundU [HreboundA HreboundLinear]].
 
-        repeat split.
-        -- exact HendpointTemp.
-        -- exact HendpointOwned.
-        -- exact HstagedEndpoint.
-        -- exact HstagedTemp.
-        -- reflexivity.
-        -- exact HextractedEndpoint.
-        -- exact HextractedTemp.
-        -- exact HfreshU.
-        -- exact HfreshA.
-        -- exact HfreshL.
-        -- exact HreboundU.
-        -- exact HreboundA.
-        -- exact HreboundLinear.
+        split; [exact HendpointTemp |].
+        split; [exact HendpointOwned |].
+        split; [exact HstagedEndpoint |].
+        split; [exact HstagedTemp |].
+        split; [reflexivity |].
+        split; [exact HextractedEndpoint |].
+        split; [exact HextractedTemp |].
+        split; [exact HfreshU |].
+        split; [exact HfreshA |].
+        split; [exact HfreshL |].
+        split; [exact HreboundU |].
+        split; [exact HreboundA |].
+        split; [exact HreboundLinear |].
+        split.
         -- intro HtempSurface.
            pose proof (HinsertOther temp HtempSurface) as HtempPreserved.
            destruct HtempPreserved as [_ [_ HtempLinear]].
