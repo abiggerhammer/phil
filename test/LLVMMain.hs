@@ -15,6 +15,8 @@ main :: IO ()
 main = do
   results <- sequence
     [ test "Phase 0 conservative LLVM emission verifies" referencePasses
+    , test "runtime validator results directly guard LLVM branches" runtimeResultGuardsBranch
+    , test "declared LLVM entry block is emitted first" entryBlockEmittedFirst
     , test "LLVM artifact text is content-bound" textTamperRejects
     , test "systems source identity is content-bound" sourceDigestRejects
     , test "target triple cannot drift without a new target profile" targetTripleRejects
@@ -32,6 +34,16 @@ main = do
 referencePasses :: Bool
 referencePasses =
   verifyLLVMEmission phase0LLVMVerificationContext phase0SystemsArtifact phase0LLVMArtifact == Right ()
+
+runtimeResultGuardsBranch :: Bool
+runtimeResultGuardsBranch =
+  let rendered = llvmArtifactText phase0LLVMArtifact
+  in Text.isInfixOf "%phil_runtime_cond_server_digest = call i1" rendered
+      && Text.isInfixOf "br i1 %phil_runtime_cond_server_digest" rendered
+
+entryBlockEmittedFirst :: Bool
+entryBlockEmittedFirst =
+  Text.isInfixOf "define i32 @UploadServer() {\nserver_entry:" (llvmArtifactText phase0LLVMArtifact)
 
 textTamperRejects :: Bool
 textTamperRejects =
@@ -52,8 +64,9 @@ sourceDigestRejects =
 targetTripleRejects :: Bool
 targetTripleRejects =
   let moduleValue = llvmArtifactModule phase0LLVMArtifact
-      bad = rebindLLVMArtifact phase0LLVMArtifact
+      changed = phase0LLVMArtifact
         { llvmArtifactModule = moduleValue { llvmTargetTriple = "aarch64-unknown-linux-gnu" } }
+      bad = rebindLLVMArtifact changed
   in case verifyLLVMEmission phase0LLVMVerificationContext phase0SystemsArtifact bad of
       Left LLVMTargetTripleMismatch {} -> True
       _ -> False
@@ -61,16 +74,10 @@ targetTripleRejects =
 missingRuntimeRejects :: Bool
 missingRuntimeRejects =
   let bad = rebindLLVMArtifact $
-        adjustLLVMBlock "UploadServer" "server.digest"
-          (\blockValue -> blockValue
-            { llvmBlockOps = filter (not . isRuntime) (llvmBlockOps blockValue) })
-          phase0LLVMArtifact
+        adjustLLVMBlock "UploadServer" "server.digest" dropRuntimeBranch phase0LLVMArtifact
   in case verifyLLVMEmission phase0LLVMVerificationContext phase0SystemsArtifact bad of
       Left LLVMRuntimeCoverageMismatch {} -> True
       _ -> False
-  where
-    isRuntime LLVMRuntime {} = True
-    isRuntime _ = False
 
 unwitnessedEdgeRejects :: Bool
 unwitnessedEdgeRejects =
@@ -85,9 +92,9 @@ unwitnessedEdgeRejects =
 
 unauthorizedNoWrapRejects :: Bool
 unauthorizedNoWrapRejects =
-  let (authority, strengthening) = strengtheningFixture LLVMNoUnsignedWrap "llvm.upload.payload_length.no_unsigned_wrap"
+  let (_, strengthening) = strengtheningFixture LLVMNoUnsignedWrap "llvm.upload.payload_length.no_unsigned_wrap"
       bad = rebindLLVMArtifact (addStrengthening strengthening phase0LLVMArtifact)
-  in authority `seq` case verifyLLVMEmission phase0LLVMVerificationContext phase0SystemsArtifact bad of
+  in case verifyLLVMEmission phase0LLVMVerificationContext phase0SystemsArtifact bad of
       Left LLVMUnauthorizedStrengthening {} -> True
       _ -> False
 
@@ -104,7 +111,7 @@ authorizedInBoundsPasses =
 
 assumeReplacementRejects :: Bool
 assumeReplacementRejects =
-  let site = firstSourceRuntimeSite
+  let site = phase0RuntimeBranchSite "UploadServer" "server.begin.commit"
       authority = LLVMObligation (runtimeSiteRevision site)
       strengthening = LLVMStrengthening
         { llvmStrengtheningId = LLVMStrengtheningId "test.assume.begin_policy"
@@ -115,9 +122,7 @@ assumeReplacementRejects =
         , llvmStrengtheningBlock = LLVMBlockId "server.begin.commit"
         }
       withoutRuntime = adjustLLVMBlock "UploadServer" "server.begin.commit"
-        (\blockValue -> blockValue
-          { llvmBlockOps = filter (not . isRuntime) (llvmBlockOps blockValue) })
-        phase0LLVMArtifact
+        dropRuntimeBranch phase0LLVMArtifact
       artifact = rebindLLVMArtifact (addStrengthening strengthening withoutRuntime)
       context = phase0LLVMVerificationContext
         { llvmAuthorizedStrengthenings = Map.singleton
@@ -127,9 +132,6 @@ assumeReplacementRejects =
   in case verifyLLVMEmission context phase0SystemsArtifact artifact of
       Left LLVMRuntimeCoverageMismatch {} -> True
       _ -> False
-  where
-    isRuntime LLVMRuntime {} = True
-    isRuntime _ = False
 
 unjustifiedUnreachableRejects :: Bool
 unjustifiedUnreachableRejects =
@@ -198,12 +200,23 @@ addStrengthening strengthening artifact = artifact
           })
         artifact
 
-firstSourceRuntimeSite :: RuntimeSiteRef
-firstSourceRuntimeSite =
-  case concatMap runtimeSites
-      (Map.elems (systemsProgramFunctions (systemsArtifactProgram phase0SystemsArtifact))) of
-    firstSite : _ -> firstSite
-    [] -> error "Phase 0 systems witness unexpectedly has no runtime site"
+phase0RuntimeBranchSite :: Text -> Text -> RuntimeSiteRef
+phase0RuntimeBranchSite functionName blockName =
+  case lookupLLVMBlock functionName blockName phase0LLVMArtifact of
+    Just blockValue -> case llvmBlockTerminator blockValue of
+      LLVMRuntimeBranch site _ _ _ -> site
+      _ -> error "expected Phase 0 LLVM runtime branch"
+    Nothing -> error "missing Phase 0 LLVM block"
+
+dropRuntimeBranch :: LLVMBlock -> LLVMBlock
+dropRuntimeBranch blockValue = case llvmBlockTerminator blockValue of
+  LLVMRuntimeBranch _ _ yes no -> blockValue { llvmBlockTerminator = LLVMBranch yes no }
+  _ -> blockValue
+
+lookupLLVMBlock :: Text -> Text -> LLVMArtifact -> Maybe LLVMBlock
+lookupLLVMBlock functionName blockName artifact = do
+  functionValue <- Map.lookup functionName (llvmFunctions (llvmArtifactModule artifact))
+  Map.lookup (LLVMBlockId blockName) (llvmFunctionBlocks functionValue)
 
 rebindLLVMArtifact :: LLVMArtifact -> LLVMArtifact
 rebindLLVMArtifact artifact = artifact
