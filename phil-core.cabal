@@ -57,6 +57,7 @@ library
       Phil.Systems.IR
       Phil.Systems.Verify
       Phil.Systems.Phase0
+      Phil.Systems.Dataflow
       Phil.Systems.FieldProjection
       Phil.LLVM.IR
       Phil.LLVM.Lower
