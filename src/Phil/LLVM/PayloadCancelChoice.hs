@@ -29,7 +29,6 @@ import Phil.LLVM.SessionOffer
 import Phil.LLVM.Verify
 import Phil.Systems.IR
 import Phil.Systems.PayloadCancelChoice
-import Phil.Systems.SessionChoice
 
 data PayloadCancelChoiceLLVMError
   = PayloadCancelChoiceSystemsError PayloadCancelChoiceError
