@@ -31,6 +31,7 @@ jobs:
         run: |
           export PATH="/home/rocq/.opam/${COMPILER}/bin:$PATH"
           rocq c -Q proof/Phil Phil proof/Phil/Core/Syntax.v
+          rocq c -Q proof/Phil Phil proof/Phil/Core/Scalar.v
           rocq c -Q proof/Phil Phil proof/Phil/Core/Session.v
           rocq c -Q proof/Phil Phil proof/Phil/Core/Context.v
           rocq c -Q proof/Phil Phil proof/Phil/Core/Process.v
@@ -55,7 +56,9 @@ jobs:
           rocq c -Q proof/Phil Phil proof/Phil/Systems/FactDisposition.v
           rocq c -Q proof/Phil Phil proof/Phil/Systems/Ownership.v
           rocq c -Q proof/Phil Phil proof/Phil/Systems/Runtime.v
+          rocq c -Q proof/Phil Phil proof/Phil/Systems/Scalar.v
           rocq c -Q proof/Phil Phil proof/Phil/LLVM/Identity.v
           rocq c -Q proof/Phil Phil proof/Phil/LLVM/Preservation.v
           rocq c -Q proof/Phil Phil proof/Phil/LLVM/Strengthening.v
           rocq c -Q proof/Phil Phil proof/Phil/LLVM/Certification.v
+          rocq c -Q proof/Phil Phil proof/Phil/LLVM/Scalar.v
