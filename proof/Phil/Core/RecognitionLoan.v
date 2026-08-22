@@ -1,6 +1,6 @@
 From Stdlib Require Import Strings.String.
 
-From Phil.Core Require Import Context Recognition.
+From Phil.Core Require Import Syntax Context Recognition.
 
 (*
   The Haskell recognition API permits trusted recognition only while a shared
