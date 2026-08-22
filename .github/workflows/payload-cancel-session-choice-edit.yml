@@ -1,0 +1,99 @@
+name: Payload Cancel Session Choice Edit
+
+on:
+  push:
+    branches:
+      - payload-cancel-session-choice
+    paths:
+      - '.github/workflows/payload-cancel-session-choice-edit.yml'
+
+permissions:
+  contents: write
+
+jobs:
+  apply:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: payload-cancel-session-choice
+          fetch-depth: 0
+      - name: Apply Systems session-choice normalization
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 - <<'PY'
+          from pathlib import Path
+
+          def replace_once(path, old, new):
+              p = Path(path)
+              text = p.read_text()
+              if text.count(old) != 1:
+                  raise SystemExit(f"{path}: expected exactly one match, found {text.count(old)}")
+              p.write_text(text.replace(old, new, 1))
+
+          replace_once(
+              'src/Phil/Systems/IR.hs',
+              '''  | OpRuntimeCall\n      { runtimeCallName :: Text\n      , runtimeCallInputs :: [ValueId]\n      , runtimeCallOutputs :: [ValueId]\n      , runtimeCallSite :: Maybe RuntimeSiteRef\n      , runtimeCallDecision :: DecisionId\n      }\n  | OpCopy\n''',
+              '''  | OpRuntimeCall\n      { runtimeCallName :: Text\n      , runtimeCallInputs :: [ValueId]\n      , runtimeCallOutputs :: [ValueId]\n      , runtimeCallSite :: Maybe RuntimeSiteRef\n      , runtimeCallDecision :: DecisionId\n      }\n  | OpSessionSelect\n      { sessionSelectTransport :: ValueId\n      , sessionSelectLabel :: Text\n      , sessionSelectPayload :: Maybe ValueId\n      , sessionSelectDecision :: DecisionId\n      }\n  | OpCopy\n''')
+
+          replace_once(
+              'src/Phil/Systems/IR.hs',
+              '''  OpRuntimeCall name inputs outputs site lowering -> tag "runtime-call"\n    [ name\n    , renderList unValueId inputs\n    , renderList unValueId outputs\n    , maybe "none" renderRuntimeSite site\n    , unDecisionId lowering\n    ]\n  OpCopy source target lowering -> tag "copy"\n''',
+              '''  OpRuntimeCall name inputs outputs site lowering -> tag "runtime-call"\n    [ name\n    , renderList unValueId inputs\n    , renderList unValueId outputs\n    , maybe "none" renderRuntimeSite site\n    , unDecisionId lowering\n    ]\n  OpSessionSelect transport label payload lowering -> tag "session-select"\n    [ unValueId transport\n    , label\n    , maybe "none" unValueId payload\n    , unDecisionId lowering\n    ]\n  OpCopy source target lowering -> tag "copy"\n''')
+
+          replace_once(
+              'src/Phil/Systems/Verify.hs',
+              '''  | SessionOfferPayloadTargetNotDedicated Text BlockId Text BlockId [BlockId]\n  | CopyWithoutCopyDecision Text BlockId DecisionId\n''',
+              '''  | SessionOfferPayloadTargetNotDedicated Text BlockId Text BlockId [BlockId]\n  | SessionSelectTransportMissing Text BlockId ValueId\n  | SessionSelectTransportRoleMismatch Text BlockId ValueId SystemsValueRole\n  | SessionSelectEmptyLabel Text BlockId\n  | SessionSelectPayloadMissing Text BlockId Text ValueId\n  | CopyWithoutCopyDecision Text BlockId DecisionId\n''')
+
+          replace_once(
+              'src/Phil/Systems/Verify.hs',
+              '''  OpRuntimeCall { runtimeCallDecision = lowering } -> Just lowering\n  OpCopy { copyDecision = lowering } -> Just lowering\n''',
+              '''  OpRuntimeCall { runtimeCallDecision = lowering } -> Just lowering\n  OpSessionSelect { sessionSelectDecision = lowering } -> Just lowering\n  OpCopy { copyDecision = lowering } -> Just lowering\n''')
+
+          replace_once(
+              'src/Phil/Systems/Verify.hs',
+              '''    OpCommitIngress pending _ _ ->\n      case Map.lookup pending recognitionTargets of\n        Just (successBlock, _) | successBlock == blockKey -> pure ()\n        _ -> Left (OrphanCommitIngress functionKey blockKey pending)\n    OpDestroyPending pending _ _ ->\n''',
+              '''    OpCommitIngress pending _ _ ->\n      case Map.lookup pending recognitionTargets of\n        Just (successBlock, _) | successBlock == blockKey -> pure ()\n        _ -> Left (OrphanCommitIngress functionKey blockKey pending)\n    OpSessionSelect transport label payload _ -> do\n      case Map.lookup transport (systemsFunctionValues function) of\n        Nothing -> Left (SessionSelectTransportMissing functionKey blockKey transport)\n        Just SystemsValue { systemsValueRole = TransportHandle } -> pure ()\n        Just value -> Left (SessionSelectTransportRoleMismatch\n          functionKey blockKey transport (systemsValueRole value))\n      when (Text.null label) $\n        Left (SessionSelectEmptyLabel functionKey blockKey)\n      forM_ payload $ \\payloadId ->\n        unless (Map.member payloadId (systemsFunctionValues function)) $\n          Left (SessionSelectPayloadMissing functionKey blockKey label payloadId)\n    OpDestroyPending pending _ _ ->\n''')
+
+          replace_once(
+              'src/Phil/Systems/Verify.hs',
+              '''  OpCommitIngress {} -> True\n  OpRuntimeCall { runtimeCallInputs = inputs } -> not (null inputs)\n  _ -> False\n''',
+              '''  OpCommitIngress {} -> True\n  OpRuntimeCall { runtimeCallInputs = inputs } -> not (null inputs)\n  OpSessionSelect {} -> True\n  _ -> False\n''')
+
+          replace_once(
+              'src/Phil/LLVM/Lower.hs',
+              '''          | otherwise -> [LLVMCall name]\n  OpCopy {} -> [LLVMCall "copy"]\n''',
+              '''          | otherwise -> [LLVMCall name]\n  OpSessionSelect { sessionSelectLabel = label } ->\n    [LLVMPoison ("unlowered-session-select:" <> label)]\n  OpCopy {} -> [LLVMCall "copy"]\n''')
+
+          replace_once(
+              'src/Phil/Systems/SessionChoice.hs',
+              '''  OpRuntimeCall _ inputs _ _ _ -> inputs\n  OpCopy source target _ -> [source, target]\n''',
+              '''  OpRuntimeCall _ inputs _ _ _ -> inputs\n  OpSessionSelect transport _ payload _ -> transport : maybe [] pure payload\n  OpCopy source target _ -> [source, target]\n''')
+
+          replace_once(
+              'src/Phil/Systems.hs',
+              '''  , module Phil.Systems.SessionChoice\n  ) where\n''',
+              '''  , module Phil.Systems.SessionChoice\n  , module Phil.Systems.PayloadCancelChoice\n  ) where\n''')
+          replace_once(
+              'src/Phil/Systems.hs',
+              '''import Phil.Systems.Phase0\nimport Phil.Systems.RecognizedRecord\n''',
+              '''import Phil.Systems.Phase0\nimport Phil.Systems.PayloadCancelChoice\nimport Phil.Systems.RecognizedRecord\n''')
+
+          replace_once(
+              'phil-core.cabal',
+              '''      Phil.Systems.RejectedResponse\n      Phil.Systems.SessionChoice\n      Phil.LLVM.IR\n''',
+              '''      Phil.Systems.RejectedResponse\n      Phil.Systems.SessionChoice\n      Phil.Systems.PayloadCancelChoice\n      Phil.LLVM.IR\n''')
+          replace_once(
+              'phil-core.cabal',
+              '''test-suite phil-final-response-receive-tests\n  import:             common-settings\n''',
+              '''test-suite phil-payload-cancel-choice-tests\n  import:             common-settings\n  type:               exitcode-stdio-1.0\n  hs-source-dirs:     test\n  main-is:            PayloadCancelChoiceMain.hs\n  build-depends:\n      base >=4.17 && <5,\n      containers >=0.6 && <0.8,\n      phil-core,\n      text >=2.0 && <2.2\n\ntest-suite phil-final-response-receive-tests\n  import:             common-settings\n''')
+
+          git diff --check
+          git config user.name "phil-payload-cancel-bot"
+          git config user.email "actions@users.noreply.github.com"
+          git add src/Phil/Systems/IR.hs src/Phil/Systems/Verify.hs src/Phil/LLVM/Lower.hs src/Phil/Systems/SessionChoice.hs src/Phil/Systems.hs phil-core.cabal
+          git commit -m "Add explicit outgoing session select to Systems IR"
+          git push origin HEAD:payload-cancel-session-choice
+          PY
