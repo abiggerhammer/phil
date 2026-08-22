@@ -3,6 +3,7 @@
 module Main (main) where
 
 import qualified Data.Map.Strict as Map
+import Data.Text (Text)
 import Phil.Systems
 import System.Exit (exitFailure)
 
@@ -160,10 +161,10 @@ localDecisionDriftRejects = withBundle $ \bundle ->
 
 selectAt
   :: PayloadCancelChoiceBundle
-  -> StringLike
+  -> Text
   -> BlockId
   -> ValueId
-  -> StringLike
+  -> Text
   -> DecisionId
   -> Bool
 selectAt bundle functionName blockId transport label decisionId =
@@ -176,8 +177,6 @@ selectAt bundle functionName blockId transport label decisionId =
       _ -> False
     Nothing -> False
 
-type StringLike = Data.Text.Text
-
 withBundle :: (PayloadCancelChoiceBundle -> Bool) -> Bool
 withBundle action = case phase0PayloadCancelChoiceBundle of
   Left _ -> False
@@ -185,7 +184,7 @@ withBundle action = case phase0PayloadCancelChoiceBundle of
 
 lookupBlock
   :: PayloadCancelChoiceBundle
-  -> Data.Text.Text
+  -> Text
   -> BlockId
   -> Maybe SystemsBlock
 lookupBlock bundle functionName blockId = do
@@ -196,7 +195,7 @@ lookupBlock bundle functionName blockId = do
 
 mapBlock
   :: PayloadCancelChoiceBundle
-  -> Data.Text.Text
+  -> Text
   -> BlockId
   -> (SystemsBlock -> SystemsBlock)
   -> SystemsArtifact
