@@ -207,6 +207,7 @@ ordinaryOps = filter isOrdinary
       LLVMCall _ -> True
       LLVMRuntime _ _ -> True
       LLVMCleanup _ -> True
+      LLVMBufferRelease _ -> True
       LLVMPlain _ -> True
       LLVMScalarLiteral _ _ -> True
       LLVMFieldProjection {} -> True
