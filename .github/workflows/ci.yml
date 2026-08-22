@@ -97,6 +97,33 @@ jobs:
 
           "$CLANG" --target=x86_64-unknown-linux-gnu \
             -std=c11 -Wall -Wextra -Wpedantic -Werror \
+            -Iruntime/phase0 -S -emit-llvm \
+            runtime/phase0/recognized_record_v1_fd_transport.c \
+            -o recognized-record-fd-transport.ll
+          python3 scripts/check_runtime_abi.py \
+            phase0-upload-recognized-record.ll \
+            recognized-record-fd-transport.ll
+          "$LLVM_AS" recognized-record-fd-transport.ll \
+            -o recognized-record-fd-transport.bc
+
+          "$CLANG" --target=x86_64-unknown-linux-gnu \
+            -std=c11 -Wall -Wextra -Wpedantic -Werror \
+            -Iruntime/phase0 -emit-llvm -c \
+            runtime/phase0/recognized_record_v1_fd_transport_main.c \
+            -o recognized-record-fd-transport-main.bc
+
+          "$LLVM_LINK" \
+            phase0-upload-recognized-record.bc \
+            recognized-record-fd-transport.bc \
+            recognized-record-fd-transport-main.bc \
+            -o phase0-upload-recognized-record-fd-transport-linked.bc
+          "$CLANG" --target=x86_64-unknown-linux-gnu \
+            phase0-upload-recognized-record-fd-transport-linked.bc \
+            -o phase0-upload-recognized-record-fd-transport
+          ./phase0-upload-recognized-record-fd-transport
+
+          "$CLANG" --target=x86_64-unknown-linux-gnu \
+            -std=c11 -Wall -Wextra -Wpedantic -Werror \
             -S -emit-llvm \
             runtime/phase0/recognized_record_v1_bad_accessor.c \
             -o recognized-record-bad-accessor.ll
@@ -141,6 +168,7 @@ jobs:
 
           echo "Phase 0 reference and recognized-record LLVM assembled successfully"
           echo "recognized-record runtime signatures verified, linked, and executed successfully"
+          echo "exact payload fd transport consumed exactly or failed closed on short input"
           echo "direct and bound scalar Phil programs returned 42 successfully"
           "$LLVM_AS" --version | head -n 1
           "$CLANG" --version | head -n 1
