@@ -2,6 +2,7 @@
 
 module Main (main) where
 
+import Control.Exception (evaluate)
 import Control.Monad (forM, unless)
 import qualified Data.Text as Text
 import qualified Data.Text.IO as TextIO
@@ -18,6 +19,7 @@ import Phil.Surface.Phase0
   )
 import Phil.Surface.Syntax (SurfaceFile (..))
 import System.Exit (exitFailure)
+import System.Timeout (timeout)
 
 main :: IO ()
 main = do
@@ -34,24 +36,34 @@ checkFixture relativePath = do
     (Just expectation, Right environment) ->
       case parseSurfaceFile (Text.pack relativePath) source of
         Left diagnostic -> failCase ("parse failure: " ++ show diagnostic)
-        Right (SurfaceFile [component]) ->
-          case (expectation, checkSurfaceComponent environment component) of
-            (FixtureAccept, Right _) -> passCase
-            (FixtureAccept, Left errorValue) ->
-              failCase ("expected acceptance, got " ++ show errorValue)
-            (FixtureReject expectedClass, Left errorValue)
-              | surfaceErrorClass errorValue == expectedClass -> passCase
-              | otherwise -> failCase
-                  ("expected rejection class " ++ show expectedClass
-                    ++ ", got " ++ show (surfaceErrorClass errorValue)
-                    ++ ": " ++ Text.unpack (surfaceErrorDetail errorValue))
-            (FixtureReject expectedClass, Right _) ->
-              failCase ("expected rejection class " ++ show expectedClass ++ ", but checker accepted")
+        Right (SurfaceFile [component]) -> do
+          checked <- timeout fixtureTimeoutMicros $
+            evaluate (checkSurfaceComponent environment component)
+          case checked of
+            Nothing -> failCase "checker did not terminate within the per-fixture limit"
+            Just result -> compareResult expectation result
         Right (SurfaceFile components) ->
           failCase ("unexpected component count: " ++ show (length components))
   where
+    compareResult expectation result =
+      case (expectation, result) of
+        (FixtureAccept, Right _) -> passCase
+        (FixtureAccept, Left errorValue) ->
+          failCase ("expected acceptance, got " ++ show errorValue)
+        (FixtureReject expectedClass, Left errorValue)
+          | surfaceErrorClass errorValue == expectedClass -> passCase
+          | otherwise -> failCase
+              ("expected rejection class " ++ show expectedClass
+                ++ ", got " ++ show (surfaceErrorClass errorValue)
+                ++ ": " ++ Text.unpack (surfaceErrorDetail errorValue))
+        (FixtureReject expectedClass, Right _) ->
+          failCase ("expected rejection class " ++ show expectedClass ++ ", but checker accepted")
+
     passCase = putStrLn ("PASS: " ++ relativePath) >> pure True
     failCase message = putStrLn ("FAIL: " ++ relativePath ++ " -- " ++ message) >> pure False
+
+fixtureTimeoutMicros :: Int
+fixtureTimeoutMicros = 2000000
 
 fixturePaths :: [FilePath]
 fixturePaths =
