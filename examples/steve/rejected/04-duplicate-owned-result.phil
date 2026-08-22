@@ -1,0 +1,10 @@
+// reject: one OwnedBytes owner cannot be transferred into two result fields.
+component BadDuplicateOwned(
+    n : Nat,
+    bytes : OwnedBytes[n]
+) provides DuplicateOwnedResult {
+    return construct DuplicateOwned {
+        left = bytes,
+        right = bytes
+    }
+}
