@@ -202,7 +202,11 @@ verifyLoweringLedger context artifact = do
       Left (CopyDecisionMissingByteCost key)
     when (loweringAction lowering == Erase && null (loweringAssuranceUses lowering)) $
       Left (ErasureDecisionMissingUse key)
-    when (loweringAction lowering == Erase && null (loweringInvariantsTransferred lowering)) $
+    when
+      ( loweringAction lowering == Erase
+      && null (loweringInvariantsTransferred lowering)
+      && null (loweringDerivedObligations lowering)
+      ) $
       Left (ErasureWithoutFactTransfer key)
     when (loweringAction lowering == RemoveCheck) $
       forM_ (loweringAssuranceEntries lowering) $ \entryId ->
