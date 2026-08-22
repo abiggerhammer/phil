@@ -6,6 +6,7 @@ module Phil.LLVM.Lower
   , lowerSystemsExactReceive
   , lowerSystemsDigestValidation
   , lowerSystemsStorage
+  , lowerSystemsAcceptedResponse
   ) where
 
 import qualified Data.Map.Strict as Map
@@ -20,6 +21,7 @@ data LoweringMode
   | ExactReceiveMode
   | DigestValidationMode
   | StorageMode
+  | AcceptedResponseMode
   deriving (Eq, Show)
 
 lowerSystemsConservative :: LLVMTargetProfile -> SystemsArtifact -> LLVMArtifact
@@ -36,6 +38,9 @@ lowerSystemsDigestValidation = lowerSystemsWith DigestValidationMode
 
 lowerSystemsStorage :: LLVMTargetProfile -> SystemsArtifact -> LLVMArtifact
 lowerSystemsStorage = lowerSystemsWith StorageMode
+
+lowerSystemsAcceptedResponse :: LLVMTargetProfile -> SystemsArtifact -> LLVMArtifact
+lowerSystemsAcceptedResponse = lowerSystemsWith AcceptedResponseMode
 
 lowerSystemsWith
   :: LoweringMode
@@ -87,7 +92,7 @@ lowerFunction mode functionValue = LLVMFunction
 
 lowerParameters :: LoweringMode -> SystemsFunction -> [LLVMParameter]
 lowerParameters mode functionValue
-  | mode `elem` [ExactReceiveMode, DigestValidationMode, StorageMode] =
+  | mode `elem` [ExactReceiveMode, DigestValidationMode, StorageMode, AcceptedResponseMode] =
       [ LLVMParameter (unValueId valueId) LLVMPointerParameter
       | (valueId, SystemsValue { systemsValueRole = TransportHandle }) <-
           Map.toAscList (systemsFunctionValues functionValue)
@@ -130,6 +135,9 @@ lowerOp mode functionValue operation = case operation of
           | mode /= ConservativeMode
           , Just projection <- recordProjection functionValue name inputs outputs ->
               [projection]
+          | mode == AcceptedResponseMode
+          , Just (transport, uploadId) <- acceptedResponseOperands functionValue name inputs outputs ->
+              [LLVMAcceptedResponse (unValueId transport) (unValueId uploadId)]
           | otherwise -> [LLVMCall name]
   OpCopy {} -> [LLVMCall "copy"]
   OpEraseFact {} -> [LLVMMetadata "proof/typestate fact erased before LLVM"]
@@ -166,7 +174,7 @@ lowerTerminator mode functionValue terminator = case terminator of
     , checkSuccess = yes
     , checkFailure = no
     }
-    | mode `elem` [DigestValidationMode, StorageMode]
+    | mode `elem` [DigestValidationMode, StorageMode, AcceptedResponseMode]
         && runtimeSiteKind site == DigestBoundary ->
         case digestOperands functionValue inputs of
           Just (recordValue, payloadOwner) ->
@@ -186,7 +194,7 @@ lowerTerminator mode functionValue terminator = case terminator of
     , exactSuccess = yes
     , exactFailure = no
     }
-    | mode `elem` [ExactReceiveMode, DigestValidationMode, StorageMode] ->
+    | mode `elem` [ExactReceiveMode, DigestValidationMode, StorageMode, AcceptedResponseMode] ->
         case
           ( transportRoleOf functionValue transportValue
           , scalarTypeOf functionValue lengthValue
@@ -222,7 +230,7 @@ lowerTerminator mode functionValue terminator = case terminator of
     , storeSuccess = yes
     , storeFailure = no
     }
-    | mode == StorageMode
+    | mode `elem` [StorageMode, AcceptedResponseMode]
         && payloadRoleOf functionValue ownerValue
         && uploadIdRoleOf functionValue resultValue ->
         LLVMStore
@@ -306,6 +314,19 @@ recordProjection functionValue name inputs outputs =
         scalarType)
     _ -> Nothing
 
+acceptedResponseOperands
+  :: SystemsFunction
+  -> Text
+  -> [ValueId]
+  -> [ValueId]
+  -> Maybe (ValueId, ValueId)
+acceptedResponseOperands functionValue name inputs outputs =
+  case (name, inputs, outputs) of
+    ("select accepted", [transport, uploadId], [])
+      | transportRoleOf functionValue transport
+          && uploadIdRoleOf functionValue uploadId -> Just (transport, uploadId)
+    _ -> Nothing
+
 digestOperands :: SystemsFunction -> [ValueId] -> Maybe (ValueId, ValueId)
 digestOperands functionValue inputs = case inputs of
   [recordValue, viewValue] -> do
@@ -345,7 +366,8 @@ isExactReceivePayload functionValue owner = any blockOwnsPayload
       _ -> False
 
 concretePayloadMode :: LoweringMode -> Bool
-concretePayloadMode mode = mode `elem` [ExactReceiveMode, DigestValidationMode, StorageMode]
+concretePayloadMode mode = mode `elem`
+  [ExactReceiveMode, DigestValidationMode, StorageMode, AcceptedResponseMode]
 
 payloadSSAName :: ValueId -> Text
 payloadSSAName valueId = unValueId valueId <> ".owner"
