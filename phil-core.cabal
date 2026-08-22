@@ -55,6 +55,7 @@ library
       Phil.Assurance.Verify
       Phil.Assurance.Phase0
       Phil.Assurance.Rocq
+      Phil.Assurance.RocqRecognizedRecord
       Phil.Systems.IR
       Phil.Systems.Verify
       Phil.Systems.Phase0
@@ -67,6 +68,7 @@ library
       Phil.LLVM.Phase0
       Phil.LLVM.RecognizedRecord
       Phil.LLVM.RecognizedRecordCertification
+      Phil.LLVM.RecognizedRecordProofCertification
   build-depends:
       base >=4.17 && <5,
       bytestring >=0.11 && <0.13,
@@ -115,6 +117,16 @@ executable phil-certify-core-scalar
   import:             common-settings
   hs-source-dirs:     app
   main-is:            RocqScalarCertificationMain.hs
+  build-depends:
+      base >=4.17 && <5,
+      bytestring >=0.11 && <0.13,
+      phil-core,
+      text >=2.0 && <2.2
+
+executable phil-certify-recognized-record
+  import:             common-settings
+  hs-source-dirs:     app
+  main-is:            RecognizedRecordProofCertificationMain.hs
   build-depends:
       base >=4.17 && <5,
       bytestring >=0.11 && <0.13,
