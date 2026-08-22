@@ -44,6 +44,7 @@ main = do
     , test "checker requires subtraction prerequisites before normalization" testSubtractionPrerequisiteBeforeNormalization
     , test "checker accepts subtraction after the prerequisite is established" testSubtractionPrerequisiteEstablished
     , test "checker rejects definitionally false subtraction prerequisites" testFalseSubtractionPrerequisite
+    , test "checker rejects circular Nat lower bounds on partial subtraction" testCircularNatLowerBound
     , test "equality assumptions may be used symmetrically by certificate" testEqualitySymmetry
     , test "producer remains unknown for unsupported symbolic Nat order" testSolverUnknown
     ]
@@ -247,6 +248,18 @@ testFalseSubtractionPrerequisite = do
     Left (FalsePartialOperationPrerequisite prerequisite)
       | prerequisite == LessEqual (RefNat 5) (RefNat 3) -> Right ()
     other -> Left ("known-false subtraction prerequisite was accepted: " ++ show other)
+
+testCircularNatLowerBound :: Either String ()
+testCircularNatLowerBound = do
+  state <- withNats ["a", "b"]
+  let difference = RefSub (var "a") (var "b")
+      prerequisite = LessEqual (var "b") (var "a")
+      forged = CertificateLinear $ LinearCertificate
+        [(BasisNatLower difference, 1)] 0
+  case checkDecisionCertificate state [] prerequisite forged of
+    Left (MissingPartialOperationPrerequisite actual)
+      | actual == prerequisite -> Right ()
+    other -> Left ("partial Nat lower bound proved its own precondition: " ++ show other)
 
 testEqualitySymmetry :: Either String ()
 testEqualitySymmetry = do
