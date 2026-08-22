@@ -24,6 +24,7 @@ jobs:
           set -euo pipefail
           sed -n '/^          set -euo pipefail$/,$p' .github/workflows/session-offer-lowering-edit.yml \
             | sed 's/^          //' \
+            | sed '/^git config user.name/i rm -f .github/workflows/final-response-receive-runtime.yml' \
             | sed '/^git config user.name/i rm -f .github/workflows/session-offer-lowering-pr-trigger.yml' \
             > /tmp/apply-final-session-offer.sh
           bash /tmp/apply-final-session-offer.sh
