@@ -9,9 +9,11 @@ module Phil.LLVM
   , module Phil.LLVM.ExactReceive
   , module Phil.LLVM.ExactReceiveCertification
   , module Phil.LLVM.DigestValidation
+  , module Phil.LLVM.DigestValidationCertification
   ) where
 
 import Phil.LLVM.DigestValidation
+import Phil.LLVM.DigestValidationCertification
 import Phil.LLVM.ExactReceive
 import Phil.LLVM.ExactReceiveCertification
 import Phil.LLVM.IR
