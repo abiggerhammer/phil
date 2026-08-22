@@ -9,7 +9,8 @@ import Phil.LLVM
 import System.Exit (exitFailure)
 import qualified System.IO as IO
 
-main :: IO () = case verifyPhase0ExactReceiveLLVM of
+main :: IO ()
+main = case verifyPhase0ExactReceiveLLVM of
   Left verificationError -> do
     IO.hPutStrLn IO.stderr $
       "Phase 0 transport exact-receive LLVM verification failed: " <> show verificationError
