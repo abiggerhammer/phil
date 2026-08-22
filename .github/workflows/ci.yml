@@ -43,6 +43,15 @@ jobs:
             exit 1
           fi
 
+          if command -v llvm-link-18 >/dev/null 2>&1; then
+            LLVM_LINK=llvm-link-18
+          elif command -v llvm-link >/dev/null 2>&1 && llvm-link --version | head -n 1 | grep -Eq 'LLVM version 18([.]|$)'; then
+            LLVM_LINK=llvm-link
+          else
+            echo "LLVM 18 llvm-link is required by the Phase 0 runtime ABI conformance gate" >&2
+            exit 1
+          fi
+
           if command -v clang-18 >/dev/null 2>&1; then
             CLANG=clang-18
           elif command -v clang >/dev/null 2>&1 && clang --version | head -n 1 | grep -Eq 'clang version 18([.]|$)'; then
@@ -58,7 +67,28 @@ jobs:
 
           RECOGNIZED_RECORD_EMITTER="$(cabal list-bin phil-llvm-phase0-recognized-record)"
           "$RECOGNIZED_RECORD_EMITTER" > phase0-upload-recognized-record.ll
-          "$LLVM_AS" phase0-upload-recognized-record.ll -o /dev/null
+          "$LLVM_AS" phase0-upload-recognized-record.ll -o phase0-upload-recognized-record.bc
+
+          "$CLANG" --target=x86_64-unknown-linux-gnu \
+            -std=c11 -Wall -Wextra -Wpedantic -Werror \
+            -Iruntime/phase0 -emit-llvm -c \
+            runtime/phase0/recognized_record_v1_smoke.c \
+            -o recognized-record-runtime.bc
+          "$CLANG" --target=x86_64-unknown-linux-gnu \
+            -std=c11 -Wall -Wextra -Wpedantic -Werror \
+            -Iruntime/phase0 -emit-llvm -c \
+            runtime/phase0/recognized_record_v1_smoke_main.c \
+            -o recognized-record-smoke-main.bc
+
+          "$LLVM_LINK" \
+            phase0-upload-recognized-record.bc \
+            recognized-record-runtime.bc \
+            recognized-record-smoke-main.bc \
+            -o phase0-upload-recognized-record-linked.bc
+          "$CLANG" --target=x86_64-unknown-linux-gnu \
+            phase0-upload-recognized-record-linked.bc \
+            -o phase0-upload-recognized-record-smoke
+          ./phase0-upload-recognized-record-smoke
 
           PHILC="$(cabal list-bin philc)"
 
@@ -92,6 +122,7 @@ jobs:
           fi
 
           echo "Phase 0 reference and recognized-record LLVM assembled successfully"
+          echo "recognized-record LLVM and Clang runtime bitcode linked and executed successfully"
           echo "direct and bound scalar Phil programs returned 42 successfully"
           "$LLVM_AS" --version | head -n 1
           "$CLANG" --version | head -n 1
