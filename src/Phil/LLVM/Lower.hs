@@ -33,7 +33,7 @@ lowerSystemsConservative target systemsArtifact = artifact
     contract = LLVMEmissionContract
       { llvmContractSourceDigest = systemsArtifactDigest systemsArtifact
       , llvmContractTargetDigest = llvmModuleDigest moduleValue
-      , llvmContractEdgeWitnesses = map directEdgeWitness (stageRequiredEdges sourceContract)
+      , llvmContractEdgeWitnesses = allEdgeWitnesses program
       , llvmContractTraceRelation = stageTraceRelation sourceContract
       , llvmContractResourceFailureRelation = stageResourceFailureRelation sourceContract
       }
@@ -100,14 +100,19 @@ lowerTerminator terminator = case terminator of
 siteName :: RuntimeSiteRef -> Text
 siteName site = Text.pack (show (runtimeSiteKind site))
 
-directEdgeWitness :: RequiredControlEdge -> LLVMEdgeWitness
-directEdgeWitness edge = LLVMEdgeWitness
-  { llvmEdgeSourceFunction = requiredEdgeFunction edge
-  , llvmEdgeSourceFrom = requiredEdgeFrom edge
-  , llvmEdgeSourceTo = requiredEdgeTo edge
-  , llvmEdgeTargetFunction = requiredEdgeFunction edge
-  , llvmEdgeTargetPath = [lowerBlockId (requiredEdgeFrom edge), lowerBlockId (requiredEdgeTo edge)]
-  }
+allEdgeWitnesses :: SystemsProgram -> [LLVMEdgeWitness]
+allEdgeWitnesses program =
+  [ LLVMEdgeWitness
+      { llvmEdgeSourceFunction = systemsFunctionName functionValue
+      , llvmEdgeSourceFrom = systemsBlockId blockValue
+      , llvmEdgeSourceTo = target
+      , llvmEdgeTargetFunction = systemsFunctionName functionValue
+      , llvmEdgeTargetPath = [lowerBlockId (systemsBlockId blockValue), lowerBlockId target]
+      }
+  | functionValue <- Map.elems (systemsProgramFunctions program)
+  , blockValue <- Map.elems (systemsFunctionBlocks functionValue)
+  , target <- blockSuccessors blockValue
+  ]
 
 lowerBlockId :: BlockId -> LLVMBlockId
 lowerBlockId = LLVMBlockId . unBlockId
