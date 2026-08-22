@@ -1,0 +1,29 @@
+// reject: a successful get may not return owned bytes without DigestMatches evidence.
+component BadGetUnverified(
+    blobs : BlobProvider,
+    id : ContentId[SHA256]
+) provides GetResult[SHA256] {
+    let readResult = blob_read(blobs, id)
+
+    decide readResult {
+        not_found => {
+            return construct GetNotFound {
+                id = id
+            }
+        }
+
+        storage_failure(err) => {
+            return construct GetStorageFailure {
+                id = id,
+                error = err
+            }
+        }
+
+        found(bytes) => {
+            return construct GetOk {
+                id = id,
+                bytes = bytes
+            }
+        }
+    }
+}
