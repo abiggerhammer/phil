@@ -68,10 +68,22 @@ jobs:
           SCALAR_STATUS=$?
           set -e
           if [ "$SCALAR_STATUS" -ne 42 ]; then
-            echo "expected typed U32 Phil program to exit 42; got $SCALAR_STATUS" >&2
+            echo "expected direct U32 Phil program to exit 42; got $SCALAR_STATUS" >&2
             exit 1
           fi
 
-          echo "typed scalar Phil program returned 42 successfully"
+          "$PHILC" emit-llvm examples/run/scalar-binding-42.phil > scalar-binding-42.ll
+          "$LLVM_AS" scalar-binding-42.ll -o scalar-binding-42.bc
+          "$CLANG" scalar-binding-42.bc -o scalar-binding-42
+          set +e
+          ./scalar-binding-42
+          BINDING_STATUS=$?
+          set -e
+          if [ "$BINDING_STATUS" -ne 42 ]; then
+            echo "expected scalar-binding Phil program to exit 42; got $BINDING_STATUS" >&2
+            exit 1
+          fi
+
+          echo "direct and bound scalar Phil programs returned 42 successfully"
           "$LLVM_AS" --version | head -n 1
           "$CLANG" --version | head -n 1
