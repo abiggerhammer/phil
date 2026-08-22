@@ -9,6 +9,7 @@ module Phil.Systems
   , module Phil.Systems.Storage
   , module Phil.Systems.AcceptedResponse
   , module Phil.Systems.RejectedResponse
+  , module Phil.Systems.SessionChoice
   ) where
 
 import Phil.Systems.AcceptedResponse
@@ -19,5 +20,6 @@ import Phil.Systems.IR
 import Phil.Systems.Phase0
 import Phil.Systems.RecognizedRecord
 import Phil.Systems.RejectedResponse
+import Phil.Systems.SessionChoice
 import Phil.Systems.Storage
 import Phil.Systems.Verify

@@ -68,6 +68,11 @@ data SystemsVerificationError
   | ScalarReturnUnknownValue Text BlockId ValueId
   | ScalarReturnValueNotScalar Text BlockId ValueId
   | ScalarReturnTypeMismatch Text ScalarType ScalarType
+  | SessionOfferTransportMissing Text BlockId ValueId
+  | SessionOfferTransportRoleMismatch Text BlockId ValueId SystemsValueRole
+  | SessionOfferEmptyArms Text BlockId
+  | SessionOfferPayloadMissing Text BlockId Text ValueId
+  | SessionOfferPayloadTargetNotDedicated Text BlockId Text BlockId [BlockId]
   | CopyWithoutCopyDecision Text BlockId DecisionId
   | BorrowWithoutBorrowDecision Text BlockId DecisionId
   | OperationReferencesUnknownDecision Text BlockId DecisionId
@@ -390,6 +395,25 @@ verifyTerminatorShape functionKey function blockKey terminator =
         Left (RecognitionCommitNotFirstUse functionKey blockKey pending success)
       unless (blockContainsDestroy function failure pending) $
         Left (RecognitionFailureMissingDestroy functionKey blockKey pending failure)
+    TermSessionOffer transport arms -> do
+      case Map.lookup transport (systemsFunctionValues function) of
+        Nothing -> Left (SessionOfferTransportMissing functionKey blockKey transport)
+        Just SystemsValue { systemsValueRole = TransportHandle } -> pure ()
+        Just value -> Left (SessionOfferTransportRoleMismatch
+          functionKey blockKey transport (systemsValueRole value))
+      when (Map.null arms) $
+        Left (SessionOfferEmptyArms functionKey blockKey)
+      forM_ (Map.toAscList arms) $ \(label, arm) ->
+        case choiceArmPayloadBinding arm of
+          Nothing -> pure ()
+          Just payload -> do
+            unless (Map.member payload (systemsFunctionValues function)) $
+              Left (SessionOfferPayloadMissing functionKey blockKey label payload)
+            let target = choiceArmTarget arm
+                predecessors = predecessorsOf function target
+            unless (predecessors == [blockKey]) $
+              Left (SessionOfferPayloadTargetNotDedicated
+                functionKey blockKey label target predecessors)
     TermReturnScalar valueId ->
       case Map.lookup valueId (systemsFunctionValues function) of
         Nothing -> Left (ScalarReturnUnknownValue functionKey blockKey valueId)
@@ -471,6 +495,13 @@ blockContainsDestroy function blockId pending =
   where
     isDestroy OpDestroyPending { destroyPending = candidate } = candidate == pending
     isDestroy _ = False
+
+predecessorsOf :: SystemsFunction -> BlockId -> [BlockId]
+predecessorsOf function target =
+  [ systemsBlockId blockValue
+  | blockValue <- Map.elems (systemsFunctionBlocks function)
+  , target `elem` blockSuccessors blockValue
+  ]
 
 collectRecognitionTargets :: SystemsFunction -> Map ValueId (BlockId, BlockId)
 collectRecognitionTargets function = Map.fromList

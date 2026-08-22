@@ -13,6 +13,7 @@ module Phil.Systems.IR
   , RuntimeSiteKind (..)
   , RuntimeSiteRef (..)
   , SystemsOp (..)
+  , SystemsChoiceArm (..)
   , SystemsTerminator (..)
   , SystemsBlock (..)
   , SystemsFunction (..)
@@ -172,6 +173,12 @@ data SystemsOp
   | OpTraceEvent Text
   deriving (Eq, Ord, Show)
 
+data SystemsChoiceArm = SystemsChoiceArm
+  { choiceArmPayloadBinding :: Maybe ValueId
+  , choiceArmTarget :: BlockId
+  }
+  deriving (Eq, Ord, Show)
+
 data SystemsTerminator
   = TermJump BlockId
   | TermBranch ValueId BlockId BlockId
@@ -209,6 +216,10 @@ data SystemsTerminator
       , storeSite :: RuntimeSiteRef
       , storeSuccess :: BlockId
       , storeFailure :: BlockId
+      }
+  | TermSessionOffer
+      { sessionOfferTransport :: ValueId
+      , sessionOfferArms :: Map Text SystemsChoiceArm
       }
   | TermReturnScalar ValueId
   | TermEnd Text
@@ -477,6 +488,8 @@ blockSuccessors blockValue = case systemsBlockTerminator blockValue of
   TermReceiveExact { exactSuccess = yes, exactFailure = no } -> [yes, no]
   TermSendExact { sendExactSuccess = yes, sendExactFailure = no } -> [yes, no]
   TermStore { storeSuccess = yes, storeFailure = no } -> [yes, no]
+  TermSessionOffer { sessionOfferArms = arms } ->
+    map (choiceArmTarget . snd) (Map.toAscList arms)
   TermReturnScalar _ -> []
   TermEnd _ -> []
   TermFatal _ -> []
@@ -595,11 +608,20 @@ renderTerminator terminator = case terminator of
     [unValueId transport, unValueId owner, renderRuntimeSite site, unBlockId yes, unBlockId no]
   TermStore owner result site yes no -> tag "store"
     [unValueId owner, unValueId result, renderRuntimeSite site, unBlockId yes, unBlockId no]
+  TermSessionOffer transport arms -> tag "session-offer"
+    [unValueId transport, renderList renderChoiceArm (Map.toAscList arms)]
   TermReturnScalar value -> tag "return-scalar" [unValueId value]
   TermEnd outcome -> tag "end" [outcome]
   TermFatal failure -> tag "fatal" [failure]
   where
     tag name fields = name <> renderList id fields
+
+renderChoiceArm :: (Text, SystemsChoiceArm) -> Text
+renderChoiceArm (label, arm) = Text.intercalate ";"
+  [ field "label" label
+  , field "payload" (maybe "none" unValueId (choiceArmPayloadBinding arm))
+  , field "target" (unBlockId (choiceArmTarget arm))
+  ]
 
 renderLoweringAction :: LoweringAction -> Text
 renderLoweringAction action = case action of
