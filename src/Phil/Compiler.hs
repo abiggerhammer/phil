@@ -77,7 +77,7 @@ compileRunnableUnit :: Text -> Text -> Either RunnableCompileError RunnableProgr
 compileRunnableUnit sourceName source = do
   surfaceFile <- mapLeft RunnableParseError (parseSurfaceFile sourceName source)
   component <- requireSingleComponent surfaceFile
-  mapLeft RunnableSurfaceCheckError $
+  _ <- mapLeft RunnableSurfaceCheckError $
     checkSurfaceComponent runnableSurfaceEnvironment component
   requireRunnableUnitShape component
   let sourceDigest = digestText source
