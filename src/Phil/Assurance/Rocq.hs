@@ -11,12 +11,15 @@ module Phil.Assurance.Rocq
   ) where
 
 import Control.Monad (unless)
+import qualified Crypto.Hash.SHA256 as SHA256
+import Data.Bits ((.&.), shiftR)
 import qualified Data.ByteString as ByteString
 import qualified Data.Map.Strict as Map
 import qualified Data.Set as Set
 import Data.Text (Text)
 import qualified Data.Text as Text
 import qualified Data.Text.Encoding as TextEncoding
+import Data.Word (Word8)
 import Phil.Assurance.Types
 import Phil.Assurance.Verify (ManifestError, verifyManifest)
 import Phil.Core.Syntax (ObligationId (..))
@@ -176,8 +179,8 @@ certifyCoreScalarRocqProof sourceBytes compiledBytes = do
     Left (RocqObligationMarkerMissing marker)
   mapM_ (requireTheorem sourceText) coreScalarTheorems
 
-  let sourceArtifact = ArtifactIdentity sourceRef (digestBytes sourceBytes)
-      compiledArtifact = ArtifactIdentity compiledRef (digestBytes compiledBytes)
+  let sourceArtifact = ArtifactIdentity sourceRef (digestRawBytes sourceBytes)
+      compiledArtifact = ArtifactIdentity compiledRef (digestRawBytes compiledBytes)
       certificate = RocqProofCertificate
         { rocqCertificateObligation = revisionObligationId coreScalarRevision
         , rocqCertificateRevision = revisionId coreScalarRevision
@@ -238,3 +241,15 @@ certifyCoreScalarRocqProof sourceBytes compiledBytes = do
     requireTheorem sourceText theoremName =
       unless (("Theorem " <> theoremName) `Text.isInfixOf` sourceText) $
         Left (RocqExpectedTheoremMissing theoremName)
+
+digestRawBytes :: ByteString.ByteString -> Digest
+digestRawBytes value = Digest . Text.pack . concatMap hexByte . ByteString.unpack $
+  SHA256.hash value
+  where
+    hexByte :: Word8 -> String
+    hexByte byte = [hexDigit (byte `shiftR` 4), hexDigit (byte .&. 0x0f)]
+
+    hexDigit :: Word8 -> Char
+    hexDigit nibble
+      | nibble < 10 = toEnum (fromEnum '0' + fromIntegral nibble)
+      | otherwise = toEnum (fromEnum 'a' + fromIntegral nibble - 10)
