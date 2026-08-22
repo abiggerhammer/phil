@@ -7,15 +7,12 @@ Open Scope Q_scope.
   Mathematical kernel beneath Phil.Core.Decision.checkLinearCertificate.
 
   The Haskell checker reduces normalized arithmetic propositions and bases to
-  affine rational forms.  At that point a basis denotes either an equality
-  (value = 0) or an inequality (value >= 0).  The certificate supplies rational
-  weights and slack.  This file proves the ordered-field fact that makes the
+  affine rational forms. At that point a basis denotes either an equality
+  (value = 0) or an inequality (value >= 0). The certificate supplies rational
+  weights and slack. This file proves the ordered-field fact that makes the
   checker trustworthy: arbitrary linear combinations of equalities remain zero,
   while inequalities may contribute only with nonnegative weights and
   nonnegative slack.
-
-  RefTerm normalization, sort checking, and the concrete Map-based affine
-  representation are correspondence boundaries, not axioms of this theorem.
 *)
 
 Inductive GoalKind : Type :=
@@ -85,8 +82,7 @@ Proof.
   destruct basis as [kind value].
   destruct kind; simpl in *.
   - destruct Hvalid as [Hvalue _].
-    unfold weightedTermValue. simpl.
-    setoid_rewrite Hvalue.
+    setoid_replace value with 0 by exact Hvalue.
     ring.
   - destruct Hvalid as [_ Hfalse]. contradiction.
 Qed.
@@ -100,11 +96,9 @@ Proof.
   destruct basis as [kind value].
   destruct kind; simpl in *.
   - destruct Hvalid as [Hvalue _].
-    unfold weightedTermValue. simpl.
-    setoid_rewrite Hvalue.
+    setoid_replace value with 0 by exact Hvalue.
     apply Qle_refl.
   - destruct Hvalid as [Hvalue Hcoefficient].
-    unfold weightedTermValue. simpl.
     apply Qmult_le_0_compat; assumption.
 Qed.
 
@@ -119,8 +113,8 @@ Proof.
     simpl.
     pose proof (equality_term_is_zero term Hterm) as Hzero.
     pose proof (IH Hrest) as HrestZero.
-    setoid_rewrite Hzero.
-    setoid_rewrite HrestZero.
+    setoid_replace (weightedTermValue term) with 0 by exact Hzero.
+    setoid_replace (weightedSum rest) with 0 by exact HrestZero.
     ring.
 Qed.
 
@@ -138,13 +132,7 @@ Proof.
     lra.
 Qed.
 
-(*
-  PHIL-DECISION-LINEAR-001.
-
-  The checker restrictions are sufficient for semantic soundness of the final
-  linear combination.  This is intentionally not a completeness theorem for
-  the built-in certificate producer.
-*)
+(* PHIL-DECISION-LINEAR-001 *)
 Theorem accepted_linear_certificate_is_sound :
   forall goal terms slack target,
     CertificateAccepted goal terms slack target ->
@@ -155,20 +143,18 @@ Proof.
   destruct goal.
   - simpl in *.
     pose proof (equality_weighted_sum_is_zero terms Hterms) as Hsum.
-    setoid_rewrite Hsum in Htarget.
-    setoid_rewrite Hslack in Htarget.
-    lra.
+    eapply Qeq_trans.
+    + exact Htarget.
+    + setoid_replace (weightedSum terms) with 0 by exact Hsum.
+      setoid_replace slack with 0 by exact Hslack.
+      ring.
   - simpl in *.
     pose proof (inequality_weighted_sum_is_nonnegative terms Hterms) as Hsum.
-    setoid_rewrite Htarget.
-    lra.
+    setoid_replace target with (weightedSum terms + slack).
+    + lra.
+    + exact Htarget.
 Qed.
 
-(*
-  Partial operations such as Nat subtraction are checked before a certificate is
-  accepted.  We keep the prerequisite objects abstract here and prove that the
-  accepted judgment cannot erase this gate.
-*)
 Parameter Prerequisite : Type.
 
 Definition PrerequisitesSatisfied
