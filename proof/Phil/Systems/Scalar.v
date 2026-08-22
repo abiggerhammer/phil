@@ -84,7 +84,10 @@ Proof.
   intros model leftSite rightSite leftValue rightValue leftType rightType
     Hverified HleftReturn HrightReturn HleftType HrightType.
   destruct Hverified as [_ [_ Hconsistent]].
-  eapply Hconsistent; eauto.
+  exact
+    (Hconsistent
+      leftSite rightSite leftValue rightValue leftType rightType
+      HleftReturn HrightReturn HleftType HrightType).
 Qed.
 
 Theorem missing_scalar_literal_output_is_rejected :
@@ -160,5 +163,8 @@ Proof.
   intros model leftSite rightSite leftValue rightValue leftType rightType
     HleftReturn HrightReturn HleftType HrightType Hmismatch Hverified.
   apply Hmismatch.
-  eapply verified_systems_scalar_returns_have_one_type; eauto.
+  exact
+    (verified_systems_scalar_returns_have_one_type
+      model leftSite rightSite leftValue rightValue leftType rightType
+      Hverified HleftReturn HrightReturn HleftType HrightType).
 Qed.
