@@ -18,3 +18,4 @@ proof/Phil/Surface/Elaboration.v
 proof/Phil/Surface/Checking.v
 proof/Phil/Surface/ScopeJoin.v
 proof/Phil/Surface/FreshOwnership.v
+proof/Phil/Assurance/Manifest.v
