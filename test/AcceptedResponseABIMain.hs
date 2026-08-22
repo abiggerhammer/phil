@@ -24,6 +24,8 @@ main = do
     , test "duplicate Systems accepted UploadId use is rejected" duplicateSystemsUseRejects
     , test "wrong LLVM accepted transport is rejected" wrongLLVMTransportRejects
     , test "wrong LLVM accepted UploadId is rejected" wrongLLVMUploadIdRejects
+    , test "accepted response rechecks storage status==1" inheritedStorageStatusRejects
+    , test "accepted response rechecks post-store owner consumption" inheritedPostStoreReleaseRejects
     , test "generic nullary accepted call is rejected" genericAcceptedCallRejects
     , test "generated UploadId layout access is rejected" uploadIdLayoutRejects
     ]
@@ -138,6 +140,36 @@ wrongLLVMUploadIdRejects = withAcceptedLLVM $ \bundle artifact ->
     Left AcceptedResponseLLVMOperationMismatch {} -> True
     _ -> False
 
+inheritedStorageStatusRejects :: Bool
+inheritedStorageStatusRejects = withAcceptedLLVM $ \bundle artifact ->
+  let storeWitness = storageWitness (acceptedResponseStorageBundle bundle)
+      blockSymbol = symbolish (unBlockId (storageBlock storeWitness))
+      good = "%phil_store_ok_" <> blockSymbol
+        <> " = icmp eq i8 %phil_store_status_" <> blockSymbol <> ", 1"
+      bad = "%phil_store_ok_" <> blockSymbol
+        <> " = icmp eq i8 %phil_store_status_" <> blockSymbol <> ", 2"
+      badArtifact = artifact
+        { llvmArtifactText = Text.replace good bad (llvmArtifactText artifact) }
+  in case verifyAcceptedResponseTranslation bundle badArtifact of
+    Left AcceptedResponseLLVMStorageRenderedMismatch {} -> True
+    _ -> False
+
+inheritedPostStoreReleaseRejects :: Bool
+inheritedPostStoreReleaseRejects = withAcceptedLLVM $ \bundle artifact ->
+  let witness = acceptedResponseWitness bundle
+      storeWitness = storageWitness (acceptedResponseStorageBundle bundle)
+      payloadName = unValueId (storageOwner storeWitness) <> ".owner"
+      failureBlock = LLVMBlockId (unBlockId (storageFailure storeWitness))
+      badArtifact = mapLLVMBlock
+        (acceptedResponseFunction witness)
+        failureBlock
+        (\blockValue -> blockValue
+          { llvmBlockOps = LLVMBufferRelease payloadName : llvmBlockOps blockValue })
+        artifact
+  in case verifyAcceptedResponseTranslation bundle badArtifact of
+    Left AcceptedResponseLLVMPostStoreReleaseDetected {} -> True
+    _ -> False
+
 genericAcceptedCallRejects :: Bool
 genericAcceptedCallRejects = withAcceptedLLVM $ \bundle artifact ->
   let badArtifact = artifact
@@ -232,6 +264,14 @@ mapLLVMBlock functionName blockId transform artifact = artifact
   }
   where
     moduleValue = llvmArtifactModule artifact
+
+symbolish :: Text -> Text
+symbolish = Text.map (\character -> if isSymbolChar character then character else '_')
+  where
+    isSymbolChar character =
+      ('a' <= character && character <= 'z')
+      || ('A' <= character && character <= 'Z')
+      || ('0' <= character && character <= '9')
 
 test :: String -> Bool -> IO Bool
 test label passed = do
