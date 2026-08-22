@@ -1,8 +1,6 @@
 From Stdlib Require Import Lists.List Bool.Bool.
 Import ListNotations.
 
-From Phil.Core Require Import Focusing.
-
 (*
   Proof-oriented model of Phil.Surface.Elaborate.
 
@@ -19,13 +17,20 @@ From Phil.Core Require Import Focusing.
   - expected-Nat elaboration for dependent indices.
 
   In the Haskell implementation those are supplied by Phil.Core.Focusing.  The
-  corresponding authority boundary is discharged by the PHIL-FOCUS-* proofs in
-  proof/Phil/Core/Focusing.v.
+  corresponding authority boundary is discharged separately by PHIL-FOCUS-*.
+  Keeping that dependency explicit also prevents accidental theorem coupling
+  through a shared proof namespace.
 *)
 
 (* -------------------------------------------------------------------------- *)
 (* Surface refinement expressions -> Core refinement terms.                    *)
 (* -------------------------------------------------------------------------- *)
+
+Inductive ProjectionSort : Type :=
+| ProjectionNat : ProjectionSort
+| ProjectionUInt : nat -> ProjectionSort
+| ProjectionBool : ProjectionSort
+| ProjectionOther : nat -> ProjectionSort.
 
 Inductive BinaryOperator : Type :=
 | SurfaceAdd : BinaryOperator
@@ -43,16 +48,16 @@ Inductive SurfaceExpression : Type :=
 | SurfaceBoolean : bool -> SurfaceExpression
 | SurfaceUnit : SurfaceExpression
 | SurfaceField : SurfaceExpression -> nat -> SurfaceExpression
-| SurfaceCall : CallKind -> list SurfaceExpression -> SurfaceExpression
+| SurfaceCall : CallKind -> option SurfaceExpression -> SurfaceExpression
 | SurfaceBinary : BinaryOperator -> SurfaceExpression -> SurfaceExpression -> SurfaceExpression
-| SurfaceTuple : list SurfaceExpression -> SurfaceExpression
+| SurfaceTuple : nat -> SurfaceExpression
 | SurfaceUnsupported : nat -> SurfaceExpression.
 
 Inductive CoreTerm : Type :=
 | CoreVar : nat -> CoreTerm
 | CoreNat : nat -> CoreTerm
 | CoreBool : bool -> CoreTerm
-| CoreField : CoreTerm -> nat -> RefinementSort -> CoreTerm
+| CoreField : CoreTerm -> nat -> ProjectionSort -> CoreTerm
 | CoreLen : CoreTerm -> CoreTerm
 | CoreToNat : CoreTerm -> CoreTerm
 | CoreAdd : CoreTerm -> CoreTerm -> CoreTerm
@@ -70,7 +75,7 @@ Fixpoint projectionPath (expression : SurfaceExpression) : option (list nat) :=
   | _ => None
   end.
 
-Definition ProjectionEnvironment := list nat -> option RefinementSort.
+Definition ProjectionEnvironment := list nat -> option ProjectionSort.
 
 Definition integerLiteral (expression : SurfaceExpression) : option nat :=
   match expression with
@@ -87,47 +92,47 @@ Fixpoint elaborateRefTerm
   | SurfaceBoolean value => Some (CoreBool value)
   | SurfaceUnit => None
   | SurfaceField base field =>
-      match elaborateRefTerm projections base, projectionPath expression with
-      | Some baseTerm, Some path =>
-          match projections path with
+      match elaborateRefTerm projections base, projectionPath base with
+      | Some baseTerm, Some basePath =>
+          match projections (basePath ++ [field]) with
           | Some resultSort => Some (CoreField baseTerm field resultSort)
           | None => None
           end
       | _, _ => None
       end
-  | SurfaceCall LenCall [value] =>
+  | SurfaceCall LenCall (Some value) =>
       match elaborateRefTerm projections value with
       | Some value' => Some (CoreLen value')
       | None => None
       end
-  | SurfaceCall ToNatCall [value] =>
+  | SurfaceCall ToNatCall (Some value) =>
       match elaborateRefTerm projections value with
       | Some value' => Some (CoreToNat value')
       | None => None
       end
   | SurfaceCall _ _ => None
-  | SurfaceBinary SurfaceAdd left right =>
-      match elaborateRefTerm projections left,
-            elaborateRefTerm projections right with
-      | Some left', Some right' => Some (CoreAdd left' right')
+  | SurfaceBinary SurfaceAdd lhs rhs =>
+      match elaborateRefTerm projections lhs,
+            elaborateRefTerm projections rhs with
+      | Some lhs', Some rhs' => Some (CoreAdd lhs' rhs')
       | _, _ => None
       end
-  | SurfaceBinary SurfaceSubtract left right =>
-      match elaborateRefTerm projections left,
-            elaborateRefTerm projections right with
-      | Some left', Some right' => Some (CoreSub left' right')
+  | SurfaceBinary SurfaceSubtract lhs rhs =>
+      match elaborateRefTerm projections lhs,
+            elaborateRefTerm projections rhs with
+      | Some lhs', Some rhs' => Some (CoreSub lhs' rhs')
       | _, _ => None
       end
-  | SurfaceBinary SurfaceMultiply left right =>
-      match integerLiteral left, integerLiteral right with
+  | SurfaceBinary SurfaceMultiply lhs rhs =>
+      match integerLiteral lhs, integerLiteral rhs with
       | Some coefficient, _ =>
-          match elaborateRefTerm projections right with
-          | Some right' => Some (CoreScale coefficient right')
+          match elaborateRefTerm projections rhs with
+          | Some rhs' => Some (CoreScale coefficient rhs')
           | None => None
           end
       | None, Some coefficient =>
-          match elaborateRefTerm projections left with
-          | Some left' => Some (CoreScale coefficient left')
+          match elaborateRefTerm projections lhs with
+          | Some lhs' => Some (CoreScale coefficient lhs')
           | None => None
           end
       | None, None => None
@@ -148,60 +153,60 @@ Theorem boolean_elaborates_exactly :
 Proof. reflexivity. Qed.
 
 Theorem addition_elaborates_exactly :
-  forall projections left right left' right',
-    elaborateRefTerm projections left = Some left' ->
-    elaborateRefTerm projections right = Some right' ->
-    elaborateRefTerm projections (SurfaceBinary SurfaceAdd left right) =
-      Some (CoreAdd left' right').
+  forall projections lhs rhs lhs' rhs',
+    elaborateRefTerm projections lhs = Some lhs' ->
+    elaborateRefTerm projections rhs = Some rhs' ->
+    elaborateRefTerm projections (SurfaceBinary SurfaceAdd lhs rhs) =
+      Some (CoreAdd lhs' rhs').
 Proof.
-  intros projections left right left' right' Hleft Hright.
-  simpl. rewrite Hleft, Hright. reflexivity.
+  intros projections lhs rhs lhs' rhs' Hlhs Hrhs.
+  simpl. rewrite Hlhs, Hrhs. reflexivity.
 Qed.
 
 Theorem field_elaboration_uses_exact_declared_projection_sort :
-  forall projections base field base' path resultSort,
+  forall projections base field base' basePath resultSort,
     elaborateRefTerm projections base = Some base' ->
-    projectionPath (SurfaceField base field) = Some path ->
-    projections path = Some resultSort ->
+    projectionPath base = Some basePath ->
+    projections (basePath ++ [field]) = Some resultSort ->
     elaborateRefTerm projections (SurfaceField base field) =
       Some (CoreField base' field resultSort).
 Proof.
-  intros projections base field base' path resultSort Hbase Hpath Hsort.
+  intros projections base field base' basePath resultSort Hbase Hpath Hsort.
   simpl. rewrite Hbase, Hpath, Hsort. reflexivity.
 Qed.
 
 Theorem literal_left_multiplication_is_exact_scale :
-  forall projections coefficient right right',
-    elaborateRefTerm projections right = Some right' ->
+  forall projections coefficient rhs rhs',
+    elaborateRefTerm projections rhs = Some rhs' ->
     elaborateRefTerm projections
-      (SurfaceBinary SurfaceMultiply (SurfaceInteger coefficient) right) =
-      Some (CoreScale coefficient right').
+      (SurfaceBinary SurfaceMultiply (SurfaceInteger coefficient) rhs) =
+      Some (CoreScale coefficient rhs').
 Proof.
-  intros projections coefficient right right' Hright.
-  simpl. rewrite Hright. reflexivity.
+  intros projections coefficient rhs rhs' Hrhs.
+  simpl. rewrite Hrhs. reflexivity.
 Qed.
 
 (* PHIL-SURFACE-FAIL-001: no projection sort means no guessed Core field sort. *)
 Theorem unknown_projection_sort_rejects :
-  forall projections base field base' path,
+  forall projections base field base' basePath,
     elaborateRefTerm projections base = Some base' ->
-    projectionPath (SurfaceField base field) = Some path ->
-    projections path = None ->
+    projectionPath base = Some basePath ->
+    projections (basePath ++ [field]) = None ->
     elaborateRefTerm projections (SurfaceField base field) = None.
 Proof.
-  intros projections base field base' path Hbase Hpath Hmissing.
+  intros projections base field base' basePath Hbase Hpath Hmissing.
   simpl. rewrite Hbase, Hpath, Hmissing. reflexivity.
 Qed.
 
 (* PHIL-SURFACE-FAIL-001: Phase 0 multiplication cannot invent bilinear meaning. *)
 Theorem symbolic_multiplication_rejects :
-  forall projections left right,
-    integerLiteral left = None ->
-    integerLiteral right = None ->
-    elaborateRefTerm projections (SurfaceBinary SurfaceMultiply left right) = None.
+  forall projections lhs rhs,
+    integerLiteral lhs = None ->
+    integerLiteral rhs = None ->
+    elaborateRefTerm projections (SurfaceBinary SurfaceMultiply lhs rhs) = None.
 Proof.
-  intros projections left right Hleft Hright.
-  simpl. rewrite Hleft, Hright. reflexivity.
+  intros projections lhs rhs Hlhs Hrhs.
+  simpl. rewrite Hlhs, Hrhs. reflexivity.
 Qed.
 
 (* -------------------------------------------------------------------------- *)
@@ -257,34 +262,34 @@ Fixpoint rawElaborateProposition
   match proposition with
   | SurfaceTruth => Some CoreTruth
   | SurfaceFalsehood => Some CoreFalsehood
-  | SurfaceEqual left right =>
-      match elaborateRefTerm projections left, elaborateRefTerm projections right with
-      | Some left', Some right' => Some (CoreEqual left' right')
+  | SurfaceEqual lhs rhs =>
+      match elaborateRefTerm projections lhs, elaborateRefTerm projections rhs with
+      | Some lhs', Some rhs' => Some (CoreEqual lhs' rhs')
       | _, _ => None
       end
-  | SurfaceNotEqual left right =>
-      match elaborateRefTerm projections left, elaborateRefTerm projections right with
-      | Some left', Some right' => Some (CoreNotEqual left' right')
+  | SurfaceNotEqual lhs rhs =>
+      match elaborateRefTerm projections lhs, elaborateRefTerm projections rhs with
+      | Some lhs', Some rhs' => Some (CoreNotEqual lhs' rhs')
       | _, _ => None
       end
-  | SurfaceLessThan left right =>
-      match elaborateRefTerm projections left, elaborateRefTerm projections right with
-      | Some left', Some right' => Some (CoreLessThan left' right')
+  | SurfaceLessThan lhs rhs =>
+      match elaborateRefTerm projections lhs, elaborateRefTerm projections rhs with
+      | Some lhs', Some rhs' => Some (CoreLessThan lhs' rhs')
       | _, _ => None
       end
-  | SurfaceLessEqual left right =>
-      match elaborateRefTerm projections left, elaborateRefTerm projections right with
-      | Some left', Some right' => Some (CoreLessEqual left' right')
+  | SurfaceLessEqual lhs rhs =>
+      match elaborateRefTerm projections lhs, elaborateRefTerm projections rhs with
+      | Some lhs', Some rhs' => Some (CoreLessEqual lhs' rhs')
       | _, _ => None
       end
-  | SurfaceGreaterThan left right =>
-      match elaborateRefTerm projections left, elaborateRefTerm projections right with
-      | Some left', Some right' => Some (CoreLessThan right' left')
+  | SurfaceGreaterThan lhs rhs =>
+      match elaborateRefTerm projections lhs, elaborateRefTerm projections rhs with
+      | Some lhs', Some rhs' => Some (CoreLessThan rhs' lhs')
       | _, _ => None
       end
-  | SurfaceGreaterEqual left right =>
-      match elaborateRefTerm projections left, elaborateRefTerm projections right with
-      | Some left', Some right' => Some (CoreLessEqual right' left')
+  | SurfaceGreaterEqual lhs rhs =>
+      match elaborateRefTerm projections lhs, elaborateRefTerm projections rhs with
+      | Some lhs', Some rhs' => Some (CoreLessEqual rhs' lhs')
       | _, _ => None
       end
   | SurfaceMember value collection =>
@@ -293,9 +298,9 @@ Fixpoint rawElaborateProposition
       | Some value', Some collection' => Some (CoreMember value' collection')
       | _, _ => None
       end
-  | SurfaceDisjoint left right =>
-      match elaborateRefTerm projections left, elaborateRefTerm projections right with
-      | Some left', Some right' => Some (CoreDisjoint left' right')
+  | SurfaceDisjoint lhs rhs =>
+      match elaborateRefTerm projections lhs, elaborateRefTerm projections rhs with
+      | Some lhs', Some rhs' => Some (CoreDisjoint lhs' rhs')
       | _, _ => None
       end
   | SurfaceAtom claim arguments =>
@@ -303,16 +308,16 @@ Fixpoint rawElaborateProposition
       | Some arguments' => Some (CoreAtom claim arguments')
       | None => None
       end
-  | SurfaceConjunction left right =>
-      match rawElaborateProposition projections left,
-            rawElaborateProposition projections right with
-      | Some left', Some right' => Some (CoreConjunction left' right')
+  | SurfaceConjunction lhs rhs =>
+      match rawElaborateProposition projections lhs,
+            rawElaborateProposition projections rhs with
+      | Some lhs', Some rhs' => Some (CoreConjunction lhs' rhs')
       | _, _ => None
       end
-  | SurfaceDisjunction left right =>
-      match rawElaborateProposition projections left,
-            rawElaborateProposition projections right with
-      | Some left', Some right' => Some (CoreDisjunction left' right')
+  | SurfaceDisjunction lhs rhs =>
+      match rawElaborateProposition projections lhs,
+            rawElaborateProposition projections rhs with
+      | Some lhs', Some rhs' => Some (CoreDisjunction lhs' rhs')
       | _, _ => None
       end
   | SurfaceNegation inner =>
@@ -345,14 +350,14 @@ Proof.
 Qed.
 
 Theorem greater_than_has_designated_core_orientation :
-  forall projections left right left' right',
-    elaborateRefTerm projections left = Some left' ->
-    elaborateRefTerm projections right = Some right' ->
-    rawElaborateProposition projections (SurfaceGreaterThan left right) =
-      Some (CoreLessThan right' left').
+  forall projections lhs rhs lhs' rhs',
+    elaborateRefTerm projections lhs = Some lhs' ->
+    elaborateRefTerm projections rhs = Some rhs' ->
+    rawElaborateProposition projections (SurfaceGreaterThan lhs rhs) =
+      Some (CoreLessThan rhs' lhs').
 Proof.
-  intros projections left right left' right' Hleft Hright.
-  simpl. rewrite Hleft, Hright. reflexivity.
+  intros projections lhs rhs lhs' rhs' Hlhs Hrhs.
+  simpl. rewrite Hlhs, Hrhs. reflexivity.
 Qed.
 
 (* -------------------------------------------------------------------------- *)
@@ -545,11 +550,17 @@ Inductive CoreValue : Type :=
 | CoreValueUnit : CoreValue
 | CoreValueUInt : nat -> nat -> CoreValue.
 
-Fixpoint expectedUIntWidth (expected : option CoreType) : option nat :=
+Fixpoint expectedUIntWidthType (expected : CoreType) : option nat :=
   match expected with
-  | Some (CoreUIntType width) => Some width
-  | Some (CoreRefinedType _ base) => expectedUIntWidth (Some base)
+  | CoreUIntType width => Some width
+  | CoreRefinedType _ base => expectedUIntWidthType base
   | _ => None
+  end.
+
+Definition expectedUIntWidth (expected : option CoreType) : option nat :=
+  match expected with
+  | Some expectedType => expectedUIntWidthType expectedType
+  | None => None
   end.
 
 Definition elaborateValue
