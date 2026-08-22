@@ -1,0 +1,166 @@
+// Steve 0: content-addressed byte-store architecture pressure test.
+//
+// The intended architecture is a Store provider with put/get operations.
+// The current Phase 0 surface has no source-level provider-interface or member
+// declaration syntax, so this sketch represents those operations as separate
+// components. Provider authority is nevertheless explicit in the component
+// parameters; provider operations are written as primitive calls that take the
+// corresponding authority value explicitly.
+//
+// This file is intended first as a surface-language witness. It deliberately
+// asks the semantic checker for abstractions that are not yet registered in the
+// Phase 0 upload environment.
+
+component StevePut(
+    digest : DigestProvider[SHA256],
+    blobs : BlobProvider,
+    n : Nat,
+    bytes : OwnedBytes[n]
+) provides PutResult[SHA256] {
+    // Computing the ID is observational: Steve retains ownership of `bytes`.
+    let (id, candidateDigestEvidence) = borrow bytes as candidateForDigest {
+        digest_compute(digest, candidateForDigest)
+    }
+
+    // Publication is likewise through a read-only view. This is important:
+    // AlreadyExists must not consume the candidate before Steve can compare it
+    // with the object already present under `id`.
+    let installResult = borrow bytes as candidateForInstall {
+        blob_install_if_absent(blobs, id, candidateForInstall)
+    }
+
+    decide installResult {
+        installed => {
+            release bytes
+            return construct PutOk {
+                id = id,
+                evidence = candidateDigestEvidence
+            }
+        }
+
+        already_exists => {
+            let readResult = blob_read(blobs, id)
+
+            decide readResult {
+                not_found => {
+                    release bytes
+                    return construct PutStorageFailure {
+                        error = inconsistent_existing_object()
+                    }
+                }
+
+                storage_failure(err) => {
+                    release bytes
+                    return construct PutStorageFailure {
+                        error = err
+                    }
+                }
+
+                found(existing) => {
+                    // First distinguish corruption from an actual digest
+                    // collision. Different bytes under an ID whose digest does
+                    // not match the ID are corrupt storage, not a collision.
+                    let existingDigestResult = borrow existing as existingView {
+                        digest_check(digest, id, existingView)
+                    }
+
+                    decide existingDigestResult {
+                        rejected(reason) => {
+                            release bytes
+                            release existing
+                            return construct PutExistingObjectCorrupt {
+                                id = id,
+                                reason = reason
+                            }
+                        }
+
+                        accepted(existingDigestEvidence) => {
+                            let sameBytes = borrow bytes as candidateView {
+                                borrow existing as existingView {
+                                    bytes_equal(candidateView, existingView)
+                                }
+                            }
+
+                            decide sameBytes {
+                                true => {
+                                    release bytes
+                                    release existing
+                                    return construct PutOk {
+                                        id = id,
+                                        evidence = candidateDigestEvidence
+                                    }
+                                }
+
+                                false => {
+                                    release bytes
+                                    release existing
+                                    return construct PutDigestCollision {
+                                        id = id,
+                                        existingEvidence = existingDigestEvidence,
+                                        candidateEvidence = candidateDigestEvidence
+                                    }
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+        }
+
+        storage_failure(err) => {
+            release bytes
+            return construct PutStorageFailure {
+                error = err
+            }
+        }
+    }
+}
+
+component SteveGet(
+    digest : DigestProvider[SHA256],
+    blobs : BlobProvider,
+    id : ContentId[SHA256]
+) provides GetResult[SHA256] {
+    let readResult = blob_read(blobs, id)
+
+    decide readResult {
+        not_found => {
+            return construct GetNotFound {
+                id = id
+            }
+        }
+
+        storage_failure(err) => {
+            return construct GetStorageFailure {
+                id = id,
+                error = err
+            }
+        }
+
+        found(bytes) => {
+            let digestResult = borrow bytes as bytesView {
+                digest_check(digest, id, bytesView)
+            }
+
+            decide digestResult {
+                rejected(reason) => {
+                    release bytes
+                    return construct GetIntegrityFailure {
+                        id = id,
+                        reason = reason
+                    }
+                }
+
+                accepted(digestEvidence) => {
+                    // The successful result transfers the owned bytes together
+                    // with evidence that they match the requested ContentId.
+                    return construct GetOk {
+                        id = id,
+                        bytes = bytes,
+                        evidence = digestEvidence
+                    }
+                }
+            }
+        }
+    }
+}
