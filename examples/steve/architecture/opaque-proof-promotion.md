@@ -1,14 +1,14 @@
-# Steve checker promotion target: opaque digest proof
+# Steve checker promotion: opaque digest proof
 
-Status: checker-facing target, not implementation
+Status: promoted to branch-local semantic CI
 
-This note fixes the smallest architecture/static environment required to promote `../rejected/02-prove-opaque-digest.phil` from a parser-valid negative witness to an executable semantic rejection.
+`../rejected/02-prove-opaque-digest.phil` is now Steve's first executable checker-level negative witness. The branch-local harness `test/SteveSurfaceSemanticMain.hs` supplies the smallest generic static environment required by the source and requires the existing surface checker to reject the program with exactly `OpaqueProof`.
 
-The intended result is exactly `OpaqueProof`. The fixture must not be accepted, and it must not fail earlier because a Steve primitive, type alias, constructor, or provider interface is unknown.
+No Steve-specific Core rule, filename switch, primitive, provider implementation, or result-constructor semantics were added for this promotion.
 
 ## Why the witness is deliberately tiny
 
-The fixture now uses:
+The fixture uses:
 
 ```phil
 component BadProveDigest(
@@ -20,20 +20,11 @@ component BadProveDigest(
 }
 ```
 
-The fixed byte count avoids needing a `Nat` architecture alias just to type the witness. The `bytes.id` projection reuses the checker’s existing `OwnedBytesShape` stable identity, so no `owned_bytes_identity` primitive is needed. The code after `prove` is intentionally irrelevant to this promotion: a correct checker stops at the opaque-proof error before reaching the result constructor.
+The fixed byte count avoids needing a `Nat` architecture alias just to type the witness. The `bytes.id` projection reuses the checker's existing `OwnedBytesShape` stable identity, so no `owned_bytes_identity` primitive is needed. The code after `prove` is intentionally irrelevant: a correct checker stops at the opaque-proof error before reaching the result constructor.
 
-## Required static declaration
+## Static declaration supplied by the harness
 
-The environment needs exactly one semantic declaration beyond an empty surface environment:
-
-```haskell
-DigestMatches(
-  id     : SortOpaque "ContentId[SHA256]",
-  object : SortStableId "OwnedBytes"
-) : opaque claim
-```
-
-Equivalently, with the current Core API, the target construction is conceptually:
+The environment contains exactly one semantic declaration beyond an empty surface environment:
 
 ```haskell
 static <- declareOpaqueClaim
@@ -46,41 +37,41 @@ static <- declareOpaqueClaim
 environment = emptySurfaceEnvironment static
 ```
 
-No `surfacePrimitives`, `surfaceInitialBindings`, `surfaceTypeAliases`, select requirements, terminal allowances, or expected-provides override are required for the intended earliest rejection.
+No `surfacePrimitives`, `surfaceInitialBindings`, `surfaceTypeAliases`, select requirements, terminal allowances, or expected-provides override are supplied.
 
 ## Why those sorts are exact
 
-`ContentId[SHA256]` currently elaborates as the ordinary opaque type `TyOpaque "ContentId[SHA256]"`; `refSortOfTy` therefore exposes it to propositions as `SortOpaque "ContentId[SHA256]"`.
+`ContentId[SHA256]` elaborates as the ordinary opaque type `TyOpaque "ContentId[SHA256]"`; `refSortOfTy` therefore exposes it to propositions as `SortOpaque "ContentId[SHA256]"`.
 
-`OwnedBytes[0]` resolves through the existing special `OwnedBytes` surface rule to a linear `TyBytes 0` with `OwnedBytesShape`. The surface elaboration environment already declares the projection `bytes.id` to have sort `SortStableId "OwnedBytes"`.
+`OwnedBytes[0]` resolves through the existing special `OwnedBytes` surface rule to a linear byte owner with `OwnedBytesShape`. The elaboration environment exposes `bytes.id` as `SortStableId "OwnedBytes"`.
 
-The claim signature therefore matches the two proposition arguments without any Steve-specific elaboration rule.
+The claim signature therefore matches the two proposition arguments without a Steve-specific elaboration rule.
 
-## Expected checker path
+## Checked path
 
-Once a general environment hook can supply the declaration above, this fixture should follow the existing generic path:
+The semantic test exercises the generic path:
 
 1. Source parameters initialize `id` and linear `bytes` from their explicit source types.
 2. `DigestMatches(id, bytes.id)` elaborates and sort-checks against the declared opaque claim signature.
-3. `focusProposition` classifies the unresolved opaque claim as `FocusNeedsExplicitMechanism`.
-4. Generic `prove` rejects it as `OpaqueProof` with the existing diagnostic `opaque claim cannot be introduced by generic prove`.
-5. The harness compares the resulting stable rejection class with the fixture expectation `FixtureReject OpaqueProof`.
+3. `focusProposition` classifies the unresolved opaque claim as requiring an explicit mechanism.
+4. Generic `prove` rejects it as `OpaqueProof` with the existing opaque-claim diagnostic.
+5. The harness fails unless the observed stable rejection class is exactly `OpaqueProof`.
 
-Nothing in that path requires a Steve-specific Core rule.
+The ordinary branch CI still parses the entire Steve surface corpus separately, so this promotion adds semantic specificity without replacing the parser gate.
 
-## Promotion acceptance criteria
+## What this promotion establishes
 
-Promotion is complete only when all of the following are true:
+This witness establishes one narrow negative rule: **declaring a claim opaque does not grant source code authority to manufacture evidence for it.**
 
-- the fixture still parses through `phil-core -- parse`;
-- a general checker harness supplies the static declaration without filename-specific logic in the checker;
-- checking reaches `prove`, rather than failing on an unrelated unknown type/primitive;
-- the observed rejection class is exactly `OpaqueProof`;
-- the existing Phase 0 upload conformance corpus remains unchanged and green;
-- no new Phil ADR is introduced merely to support this fixture.
+It does not establish executable `DigestMatches` validation, DigestProvider or BlobProvider semantics, generic result variants, ownership-bearing result constructors, or a complete Steve semantic environment. Those remain later promotion targets.
 
-## Explicit non-goals
+## Regression requirements
 
-This promotion does not require `DigestProvider`, `BlobProvider`, generic result variants, ownership-bearing result constructors, provider member syntax, or executable `DigestMatches` validation. Those belong to later Steve promotions.
+Keep the promotion only while all of the following remain true:
 
-In particular, this fixture tests only the negative rule: declaring a claim opaque does not grant source code authority to manufacture evidence for it.
+- the fixture parses;
+- the harness constructs the environment through the public generic Core/surface APIs;
+- checking reaches `prove` rather than failing on unrelated unknown machinery;
+- the rejection class is exactly `OpaqueProof`;
+- the Phase 0 upload conformance corpus remains unchanged and green;
+- no Phil ADR or Steve-specific checker branch is introduced for this witness.
