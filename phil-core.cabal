@@ -70,6 +70,8 @@ library
       Phil.LLVM.RecognizedRecord
       Phil.LLVM.RecognizedRecordCertification
       Phil.LLVM.RecognizedRecordProofCertification
+      Phil.LLVM.ExactReceive
+      Phil.LLVM.ExactReceiveCertification
   build-depends:
       base >=4.17 && <5,
       bytestring >=0.11 && <0.13,
@@ -100,6 +102,15 @@ executable phil-llvm-phase0-recognized-record
   import:             common-settings
   hs-source-dirs:     app
   main-is:            LLVMRecognizedRecordMain.hs
+  build-depends:
+      base >=4.17 && <5,
+      phil-core,
+      text >=2.0 && <2.2
+
+executable phil-llvm-phase0-exact-receive
+  import:             common-settings
+  hs-source-dirs:     app
+  main-is:            LLVMExactReceiveMain.hs
   build-depends:
       base >=4.17 && <5,
       phil-core,
