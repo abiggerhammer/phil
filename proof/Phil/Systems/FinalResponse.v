@@ -57,7 +57,7 @@ Record SystemsFinalResponseModel : Type := mkSystemsFinalResponseModel {
 Record SystemsFinalResponseVerificationSuccess
   (model : SystemsFinalResponseModel) : Prop :=
   mkSystemsFinalResponseVerificationSuccess {
-    systems_final_success_rejected_predecessor :
+    systems_final_success_rejected_authority :
       SystemsRejectedResponseVerificationSuccess
         (systemsFinalRejectedPredecessor model);
 
@@ -97,7 +97,7 @@ Record SystemsFinalResponseVerificationSuccess
       systemsFinalAcceptedSoleOfferPredecessor model = true;
     systems_final_success_rejected_binder :
       systemsFinalRejectedDedicatedBinder model = true;
-    systems_final_success_rejected_predecessor :
+    systems_final_success_rejected_binder_predecessor :
       systemsFinalRejectedSoleOfferPredecessor model = true;
 
     systems_final_success_record_exact :
@@ -129,7 +129,7 @@ Theorem verified_systems_final_response_reuses_rejected_authority :
       (systemsFinalRejectedPredecessor model).
 Proof.
   intros model H.
-  exact (systems_final_success_rejected_predecessor model H).
+  exact (systems_final_success_rejected_authority model H).
 Qed.
 
 Theorem verified_systems_final_response_preserves_exact_offer :
@@ -186,7 +186,7 @@ Proof.
   - exact (systems_final_success_accepted_binder model H).
   - exact (systems_final_success_accepted_predecessor model H).
   - exact (systems_final_success_rejected_binder model H).
-  - exact (systems_final_success_rejected_predecessor model H).
+  - exact (systems_final_success_rejected_binder_predecessor model H).
   - exact (systems_final_success_no_accepted_escape model H).
   - exact (systems_final_success_no_rejected_escape model H).
 Qed.
