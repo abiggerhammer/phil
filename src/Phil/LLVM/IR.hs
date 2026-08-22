@@ -37,7 +37,6 @@ import Phil.Assurance.Types
 import Phil.Core.Scalar
   ( ScalarLiteral (..)
   , ScalarType (..)
-  , scalarLiteralType
   )
 import Phil.Systems.IR
   ( BlockId
