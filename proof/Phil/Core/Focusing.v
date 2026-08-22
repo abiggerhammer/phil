@@ -3,24 +3,12 @@ Import ListNotations.
 
 (*
   Proof-oriented model of the deterministic pre-solver focusing boundary in
-  Phil.Core.Focusing.
-
-  This file isolates the pieces of focusing that carry authority or create
-  proof-relevant structure:
-
-  - the only implicit refinement coercion is UInt[w] -> Nat;
-  - claim expansion is authorized by a declaration and a recursion stack;
-  - partial-operation prerequisites survive focus-plan assembly;
-  - mechanism classification has a closed, precedence-sensitive result set;
-  - branch success means duplicate-free exact label coverage.
-
-  Concrete Map/Set representation, refinement sort inference, normalization,
-  and capture-avoiding substitution are implementation correspondences rather
-  than hidden axioms in these theorems.
+  Phil.Core.Focusing.  Theorems below constrain authority-bearing behavior;
+  implementation representation correspondences are documented in proof/README.
 *)
 
 (* -------------------------------------------------------------------------- *)
-(* Canonical one-way refinement coercion.                                      *)
+(* PHIL-FOCUS-COERCE-001: canonical one-way refinement coercion.              *)
 (* -------------------------------------------------------------------------- *)
 
 Inductive RefinementSort : Type :=
@@ -32,7 +20,7 @@ Inductive RefinementSort : Type :=
 Definition refinementSort_eq_dec :
   forall left right : RefinementSort, {left = right} + {left <> right}.
 Proof.
-  decide equality.
+  decide equality; apply Nat.eq_dec.
 Defined.
 
 Inductive RefinementTerm : Type :=
@@ -84,7 +72,6 @@ Proof.
   - contradiction.
 Qed.
 
-(* PHIL-FOCUS-COERCE-001 *)
 Theorem elaborate_uint_as_nat_is_exact :
   forall width term,
     termSort term = SortUInt width ->
@@ -99,7 +86,6 @@ Proof.
   - reflexivity.
 Qed.
 
-(* PHIL-FOCUS-COERCE-001 *)
 Theorem elaborate_nat_as_uint_rejects :
   forall width term,
     termSort term = SortNat ->
@@ -120,13 +106,12 @@ Theorem successful_elaboration_has_expected_sort :
 Proof.
   intros expected term result steps Helaborated.
   unfold elaborateAs in Helaborated.
-  remember (termSort term) as actual eqn:Hactual.
-  destruct (refinementSort_eq_dec actual expected) as [Hequal | Hdifferent].
+  destruct (refinementSort_eq_dec (termSort term) expected) as [Hequal | Hdifferent].
   - inversion Helaborated; subst.
-    rewrite Hactual.
     exact Hequal.
-  - destruct expected; destruct actual; try discriminate;
-      inversion Helaborated; reflexivity.
+  - destruct expected; destruct (termSort term) eqn:Hactual;
+      try discriminate;
+      inversion Helaborated; subst; reflexivity.
 Qed.
 
 Fixpoint elaborateArguments
@@ -144,7 +129,7 @@ Fixpoint elaborateArguments
   end.
 
 (* -------------------------------------------------------------------------- *)
-(* Claim declaration and expansion competence.                                *)
+(* PHIL-FOCUS-CLAIM-001: declaration-authorized claim expansion/rejection.     *)
 (* -------------------------------------------------------------------------- *)
 
 Definition ClaimId := nat.
@@ -193,22 +178,18 @@ Definition focusClaim
                   ClaimFocusRejected
                 else
                   ExpandedTransparentClaim (body arguments')
-              else
-                ClaimFocusRejected
+              else ClaimFocusRejected
           end
       end
   end.
 
-(* PHIL-FOCUS-CLAIM-001 *)
 Theorem unknown_claim_rejects :
   forall environment stack claim arguments,
     environment claim = None ->
     focusClaim environment stack claim arguments = ClaimFocusRejected.
 Proof.
   intros environment stack claim arguments Hunknown.
-  unfold focusClaim.
-  rewrite Hunknown.
-  reflexivity.
+  unfold focusClaim. rewrite Hunknown. reflexivity.
 Qed.
 
 Theorem invalid_claim_arguments_reject :
@@ -218,12 +199,9 @@ Theorem invalid_claim_arguments_reject :
     focusClaim environment stack claim arguments = ClaimFocusRejected.
 Proof.
   intros environment stack claim arguments declaration Hdecl Harguments.
-  unfold focusClaim.
-  rewrite Hdecl, Harguments.
-  reflexivity.
+  unfold focusClaim. rewrite Hdecl, Harguments. reflexivity.
 Qed.
 
-(* PHIL-FOCUS-CLAIM-001 *)
 Theorem opaque_claim_preserves_declared_identity :
   forall environment stack claim arguments declaration arguments',
     environment claim = Some declaration ->
@@ -231,13 +209,11 @@ Theorem opaque_claim_preserves_declared_identity :
     elaborateArguments (claimParameterSorts declaration) arguments = Some arguments' ->
     focusClaim environment stack claim arguments = FocusedOpaqueClaim arguments'.
 Proof.
-  intros environment stack claim arguments declaration arguments' Hdecl Hopaque Harguments.
-  unfold focusClaim.
-  rewrite Hdecl, Harguments, Hopaque.
-  reflexivity.
+  intros environment stack claim arguments declaration arguments'
+    Hdecl Hopaque Harguments.
+  unfold focusClaim. rewrite Hdecl, Harguments, Hopaque. reflexivity.
 Qed.
 
-(* PHIL-FOCUS-CLAIM-001 *)
 Theorem transparent_claim_expands_exact_declared_body :
   forall environment stack claim arguments declaration arguments' body,
     environment claim = Some declaration ->
@@ -257,7 +233,6 @@ Proof.
   - reflexivity.
 Qed.
 
-(* PHIL-FOCUS-CLAIM-001 *)
 Theorem recursive_transparent_claim_rejects :
   forall environment stack claim arguments declaration arguments' body,
     environment claim = Some declaration ->
@@ -276,7 +251,6 @@ Proof.
   - contradiction.
 Qed.
 
-(* PHIL-FOCUS-CLAIM-001 *)
 Theorem ill_scoped_transparent_claim_rejects :
   forall environment stack claim arguments declaration arguments' body,
     environment claim = Some declaration ->
@@ -287,13 +261,12 @@ Theorem ill_scoped_transparent_claim_rejects :
 Proof.
   intros environment stack claim arguments declaration arguments' body
     Hdecl Htransparent Hscoped Harguments.
-  unfold focusClaim.
-  rewrite Hdecl, Harguments, Htransparent, Hscoped.
+  unfold focusClaim. rewrite Hdecl, Harguments, Htransparent, Hscoped.
   reflexivity.
 Qed.
 
 (* -------------------------------------------------------------------------- *)
-(* Partial-operation prerequisites survive focus-plan assembly.                *)
+(* PHIL-FOCUS-PREREQ-001: side conditions survive focus-plan assembly.         *)
 (* -------------------------------------------------------------------------- *)
 
 Inductive FocusMechanism : Type :=
@@ -334,15 +307,10 @@ Proof.
   - contradiction.
   - simpl in Hin.
     destruct Hin as [Hequal | Hin].
-    + subst head.
-      simpl.
-      apply in_or_app.
-      right.
-      simpl. left. reflexivity.
+    + subst head. simpl.
+      apply in_or_app. right. simpl. left. reflexivity.
     + simpl.
-      apply in_or_app.
-      right.
-      simpl. right.
+      apply in_or_app. right. simpl. right.
       apply IH. exact Hin.
 Qed.
 
@@ -356,20 +324,14 @@ Proof.
   - contradiction.
   - simpl in Hplan.
     destruct Hplan as [Hequal | Hplan].
-    + subst head.
-      simpl.
-      apply in_or_app.
-      left.
-      apply in_map.
-      exact Hprerequisite.
+    + subst head. simpl.
+      apply in_or_app. left.
+      apply in_map. exact Hprerequisite.
     + simpl.
-      apply in_or_app.
-      right.
-      simpl. right.
+      apply in_or_app. right. simpl. right.
       eapply IH; eauto.
 Qed.
 
-(* PHIL-FOCUS-PREREQ-001 *)
 Theorem side_goal_survives_deduplicated_assembly :
   forall plans plan,
     In plan plans ->
@@ -383,7 +345,6 @@ Proof.
   now apply side_goal_is_collected with (plan := plan).
 Qed.
 
-(* PHIL-FOCUS-PREREQ-001 *)
 Theorem nested_side_prerequisite_survives_deduplicated_assembly :
   forall plans plan prerequisite,
     In plan plans ->
@@ -399,7 +360,7 @@ Proof.
 Qed.
 
 (* -------------------------------------------------------------------------- *)
-(* Closed mechanism classification / authority boundary.                       *)
+(* PHIL-FOCUS-MECH-001: closed authority/mechanism classification.             *)
 (* -------------------------------------------------------------------------- *)
 
 Inductive CanonicalGoal : Type :=
@@ -426,7 +387,6 @@ Definition classifyRequirement
       end
   end.
 
-(* PHIL-FOCUS-MECH-001 *)
 Theorem truth_is_definitionally_discharged :
   forall evidence,
     classifyRequirement CanonicalTruth evidence = FocusByDefinition.
@@ -434,7 +394,6 @@ Proof.
   intros evidence. reflexivity.
 Qed.
 
-(* PHIL-FOCUS-MECH-001 *)
 Theorem matching_evidence_precedes_later_boundaries :
   forall goal evidence,
     goal <> CanonicalTruth ->
@@ -448,31 +407,22 @@ Proof.
   - reflexivity.
 Qed.
 
-(* PHIL-FOCUS-MECH-001 *)
 Theorem falsehood_without_evidence_rejects :
   classifyRequirement CanonicalFalsehood None = FocusStaticallyFalse.
-Proof.
-  reflexivity.
-Qed.
+Proof. reflexivity. Qed.
 
-(* PHIL-FOCUS-MECH-001 *)
 Theorem unresolved_opaque_goal_needs_explicit_mechanism :
   forall claim,
     classifyRequirement (CanonicalOpaque claim) None = FocusNeedsExplicitMechanism.
-Proof.
-  intros claim. reflexivity.
-Qed.
+Proof. intros claim. reflexivity. Qed.
 
-(* PHIL-FOCUS-MECH-001 *)
 Theorem unresolved_transparent_goal_stops_at_decision_boundary :
   forall claim,
     classifyRequirement (CanonicalTransparent claim) None = FocusNeedsDecisionProcedure.
-Proof.
-  intros claim. reflexivity.
-Qed.
+Proof. intros claim. reflexivity. Qed.
 
 (* -------------------------------------------------------------------------- *)
-(* Exact branch coverage.                                                      *)
+(* PHIL-FOCUS-BRANCH-001: duplicate-free exact branch coverage.                *)
 (* -------------------------------------------------------------------------- *)
 
 Definition Label := nat.
@@ -491,39 +441,32 @@ Definition ExtraHandler
   (declared handlers : list Label) (label : Label) : Prop :=
   In label handlers /\ ~ In label declared.
 
-(* PHIL-FOCUS-BRANCH-001 *)
 Theorem successful_branch_check_is_exact :
   forall declared handlers,
     BranchCheckSuccess declared handlers ->
     NoDup declared /\ NoDup handlers /\ SameLabelSet declared handlers.
 Proof.
-  intros declared handlers Hsuccess.
-  exact Hsuccess.
+  intros declared handlers Hsuccess. exact Hsuccess.
 Qed.
 
-(* PHIL-FOCUS-BRANCH-001 *)
 Theorem duplicate_declared_label_prevents_success :
   forall declared handlers,
     ~ NoDup declared ->
     ~ BranchCheckSuccess declared handlers.
 Proof.
   intros declared handlers Hduplicate Hsuccess.
-  apply Hduplicate.
-  exact (proj1 Hsuccess).
+  apply Hduplicate. exact (proj1 Hsuccess).
 Qed.
 
-(* PHIL-FOCUS-BRANCH-001 *)
 Theorem duplicate_handler_label_prevents_success :
   forall declared handlers,
     ~ NoDup handlers ->
     ~ BranchCheckSuccess declared handlers.
 Proof.
   intros declared handlers Hduplicate Hsuccess.
-  apply Hduplicate.
-  exact (proj1 (proj2 Hsuccess)).
+  apply Hduplicate. exact (proj1 (proj2 Hsuccess)).
 Qed.
 
-(* PHIL-FOCUS-BRANCH-001 *)
 Theorem missing_handler_prevents_success :
   forall declared handlers label,
     MissingHandler declared handlers label ->
@@ -531,12 +474,9 @@ Theorem missing_handler_prevents_success :
 Proof.
   intros declared handlers label [Hdeclared Hmissing] Hsuccess.
   destruct Hsuccess as [_ [_ Hsame]].
-  apply Hmissing.
-  apply (proj1 (Hsame label)).
-  exact Hdeclared.
+  apply Hmissing. apply (proj1 (Hsame label)). exact Hdeclared.
 Qed.
 
-(* PHIL-FOCUS-BRANCH-001 *)
 Theorem extra_handler_prevents_success :
   forall declared handlers label,
     ExtraHandler declared handlers label ->
@@ -544,9 +484,7 @@ Theorem extra_handler_prevents_success :
 Proof.
   intros declared handlers label [Hhandler Hextra] Hsuccess.
   destruct Hsuccess as [_ [_ Hsame]].
-  apply Hextra.
-  apply (proj2 (Hsame label)).
-  exact Hhandler.
+  apply Hextra. apply (proj2 (Hsame label)). exact Hhandler.
 Qed.
 
 Theorem exact_duplicate_free_coverage_is_success :
