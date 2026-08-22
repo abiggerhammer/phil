@@ -68,7 +68,7 @@ Theorem verified_systems_return_names_scalar_value :
 Proof.
   intros model site value Hverified Hreturn.
   destruct Hverified as [_ [Hreturns _]].
-  apply Hreturns.
+  eapply Hreturns.
   exact Hreturn.
 Qed.
 
