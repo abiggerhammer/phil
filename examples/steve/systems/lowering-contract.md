@@ -17,6 +17,14 @@ The initial systems target should use `CertifiedRelease` and two functions:
 
 Provider calls remain runtime operations. Compile-time proof/evidence wrappers may disappear only through explicit ADR-010 `ErasureUse` records. Runtime digest computation, digest validation, and exact byte comparison remain visible and cost-linked.
 
+## Execution-topology scope
+
+Steve 0 deliberately selects the ordinary host/CPU execution topology for its first Systems artifact. The control-flow sketches below therefore use sequential CFG blocks, host-visible provider/runtime operations, and ordinary owned/borrowed byte values. Those are valid target choices for Steve 0, not generic definitions imposed on Phil Systems IR.
+
+ADR-012 requires the generic Systems representation to remain valid when another selected execution topology has distinct address spaces/storage classes, explicit placement and transfer edges, synchronization, parallel decomposition, different runtime representations, or non-passive observation. In such a target, the same architectural Steve computation could require explicit transfer, staging, synchronization, or representation-refinement obligations and costs before a digest/storage mechanism is realized.
+
+Accordingly, the four Steve runtime sites described below are **host-target physical Systems sites**. For the current host/LLVM ABI, a retained runtime site may specialize to one runtime call. `RuntimeSiteRef` itself must not be defined as a call instruction, linker symbol, host pointer, or assumption of one coherent address space.
+
 ## Value representation
 
 The current `Phil.Systems` vocabulary is sufficient for a first structural sketch:
@@ -41,13 +49,13 @@ The current `Phil.Systems` vocabulary is sufficient for a first structural sketc
 - `get.blob_provider` — `RuntimeRecord "BlobProvider"`
 - `get.content_id` — `RuntimeScalar "ContentId[SHA256]"`
 - `get.read_result` — `RuntimeScalar "BlobReadResult"`
-- `get.bytes` — `OwnedBuffer "OwnedBytes[stored]"`
+- `get.bytes` — `OwnedBuffer "OwnedBytes[stored]"`, owning one storage identity
 - `get.bytes_view` — `BorrowedSlice get.bytes`
 - result/failure discriminants — ordinary runtime scalars/records
 
 `RuntimeRecord` is only a representation placeholder for provider handles. It does **not** by itself encode provider authority. The source/static architecture remains responsible for saying that Steve receives read/install-if-absent authority and no overwrite/delete authority.
 
-Stable byte-object identities should be carried by systems metadata such as `systemsStorageIdentity`, not by the ephemeral `BorrowedSlice` value. This preserves the Steve rule that persistent evidence names the owner/snapshot identity rather than a loan token.
+Stable byte-object identities should be carried by systems metadata such as `systemsStorageIdentity`, not by the ephemeral `BorrowedSlice` value. This preserves the Steve rule that persistent evidence names the owner/snapshot identity rather than a loan token. Under ADR-012, that stable identity is semantic object/storage identity rather than a machine address, execution-domain placement, storage class, or one target layout. If a selected target migrates or converts the physical representation while preserving the same assurance subject, the lowering must carry an explicit checked correspondence and account for transfer/conversion obligations and costs.
 
 ## `StevePut` control-flow sketch
 
@@ -89,6 +97,8 @@ A faithful CFG should make the compare-before-rehash optimization visible:
 
 The systems CFG does not need a new multiway terminator merely for Steve. Provider result variants can be lowered to runtime discriminants followed by ordinary binary `TermBranch` nodes.
 
+The sequential CFG above is the selected host/CPU execution topology. It must not be used as evidence that every future Systems target has one scalar sequential thread of control; ADR-012 requires any alternate decomposition/synchronization topology to be represented and justified explicitly.
+
 ## `SteveGet` control-flow sketch
 
 1. `get.entry`
@@ -107,7 +117,7 @@ No successful `GetOk` path exists that bypasses the digest-check success edge.
 
 ## Retained runtime sites
 
-The current Steve assurance graph contains five `RetainedRuntimeUse` records over three cost identities. Four distinct physical runtime mechanisms are expected in the systems CFG:
+The current Steve assurance graph contains five `RetainedRuntimeUse` records over three cost identities. Four distinct host-target physical runtime mechanisms are expected in the systems CFG:
 
 | Physical site | Kind | Obligation/evidence | Cost ref | Dynamic condition |
 | --- | --- | --- | --- | --- |
@@ -118,9 +128,11 @@ The current Steve assurance graph contains five `RetainedRuntimeUse` records ove
 
 `STEVE-CORRUPTION-FAILS` is also backed by `evidence.steve.corruption.runtime` and `use.steve.corruption_digest`, but corruption rejection is not a fifth physical digest computation. It is a logical property of the existing digest-check sites above. This exposes a systems-IR generalization described below; we should not invent a duplicate runtime check just to satisfy a one-evidence-per-site representation.
 
-The names in the first column are **physical program-site identities**, not runtime primitive or linker-symbol identities. In particular, `put.existing.digest_check` and `get.digest_check` may legitimately invoke the same digest-validation primitive/signature while remaining two distinct physical sites because they occur at different program locations and under different dynamic conditions. Conversely, each one remains a single physical site even when its exact assurance claim set contains more than one logical obligation. Runtime primitive/signature identity, physical site identity, and assurance claim identity must therefore remain separately represented and separately checked.
+The names in the first column are **physical Systems-site identities in Steve 0's selected host execution topology**, not runtime primitive, linker-symbol, instruction-address, or pointer identities. In particular, `put.existing.digest_check` and `get.digest_check` may legitimately use the same digest-validation primitive/signature while remaining two distinct physical sites because they occur at different program locations and under different dynamic conditions. Conversely, each one remains a single assurance/cost-bearing site even when its exact assurance claim set contains more than one logical obligation. Runtime primitive/execution-profile identity, physical site identity, and assurance claim identity must therefore remain separately represented and separately checked.
 
-Following PR #43, any eventual runtime symbol for such a primitive must be derived from the physical operation family and ABI-relevant signature/profile, not from `RevisionId`, `EvidenceEntryId`, `AssuranceUseId`, or claim-set cardinality/order. Adding a corruption-rejection claim to an existing digest site must not rename the primitive, create an alias per claim, or induce a second digest execution/cost.
+Following PR #43, any host runtime symbol for such a primitive must be derived from the physical operation family and ABI-relevant signature/profile, not from `RevisionId`, `EvidenceEntryId`, `AssuranceUseId`, or claim-set cardinality/order. Adding a corruption-rejection claim to an existing digest site must not rename the primitive, create an alias per claim, or induce a second digest execution/cost.
+
+For the current host/LLVM target, PR #44 demonstrates the specialization in code: physical-operation-oriented runtime symbols and independent translation validation preserve the selected runtime mechanism without using assurance evidence as the linker identity. That one-site/one-call relation is a property of this host target. A heterogeneous backend may use another explicit target realization relation, including a composite realization below Systems, provided the whole realization remains bound to the exact site/claim/cost relation and any transfer/synchronization/conversion costs remain visible.
 
 ## Stage facts
 
@@ -138,7 +150,7 @@ The initial `systemsExpectedSourceFacts` should correspond one-for-one with the 
 | `steve.no_delete` | structural authority/call-surface fact; no runtime delete capability or operation |
 | `steve.crash_state` | BlobProvider crash-semantics assumption boundary remains live |
 | `steve.install_borrow_scope` | transferred into `InvariantBorrowAliases` for the candidate plus provider copied-publication assumption |
-| `steve.digest_evidence_identity` | stable owner/storage identity survives; temporary borrow does not become the proposition identity |
+| `steve.digest_evidence_identity` | stable semantic owner/storage identity survives; temporary borrow, physical address, placement, and layout do not become proposition identity |
 | `steve.byte_equality_evidence` | exact comparison remains runtime; evidence wrapper may erase into branch control |
 
 Facts that depend only on a provider TCB must not be mislabeled `FactRuntimeRetained`: `RuntimeSiteRef` is specifically for selected `RuntimeEnforced` evidence, whereas the provider boundaries in the Steve manifest are explicitly `Assumed`.
@@ -155,6 +167,8 @@ The current systems invariant vocabulary already gives Steve several useful chec
 
 Steve does not need transport-handle or ingress-recognition invariants.
 
+These current invariants are host-target sufficient for the first Steve artifact; they are not a complete ADR-012 execution-topology model. A later non-host target would additionally need explicit placement/transfer/synchronization/representation invariants where required by its selected execution domain.
+
 ## Lowering decisions and cost attribution
 
 The first Steve lowering ledger should include at least these decisions:
@@ -165,7 +179,7 @@ The first Steve lowering ledger should include at least these decisions:
 - class: `SemanticRequired`
 - before: owning candidate bytes
 - after: owner plus non-owning slice
-- cost: expected `0` bytes copied
+- cost: expected `0` bytes copied on the selected host representation
 - invariant: view aliases candidate owner
 
 ### `steve.lower.digest_compute`
@@ -216,7 +230,7 @@ The first Steve lowering ledger should include at least these decisions:
 
 The important performance property is explicit in the ledger: the equality path pays `bytes_compare` but does not pay a second `digest_check`. The existing-object SHA-256 cost is conditional on witnessed inequality.
 
-Storage I/O costs may later receive their own lowering decisions, but they should not be smuggled into `steve.runtime.digest_*` or `steve.runtime.bytes_compare` assurance-cost identities.
+Storage I/O costs may later receive their own lowering decisions, but they should not be smuggled into `steve.runtime.digest_*` or `steve.runtime.bytes_compare` assurance-cost identities. Likewise, if a future selected execution topology introduces transfer, staging, synchronization, or representation-conversion costs, ADR-011/012 require those costs to remain separately attributable rather than disappearing inside a vendor/backend operation.
 
 ## Proof/evidence erasure plan
 
@@ -251,11 +265,11 @@ Duplicating the physical check would falsify the cost model. Picking only one ev
 
 The required generalization is now sharper than merely replacing the singleton evidence field with a list. The model must distinguish:
 
-> runtime primitive/signature identity != physical program-site identity != assurance claim identity
+> runtime primitive/execution-profile identity != physical Systems-site identity != assurance claim identity
 
-One physical site should carry a nonempty set/list of exact `(RevisionId, EvidenceEntryId, subject...)` assurance claims plus one physical cost reference and an independently identified runtime primitive/signature. Multiple sites may invoke the same primitive. One site may carry multiple claims. Neither relationship licenses collapsing or duplicating physical execution.
+One physical site should carry a nonempty set/list of exact `(RevisionId, EvidenceEntryId, subject...)` assurance claims plus one physical cost reference and an independently identified runtime primitive/execution profile. Multiple sites may use the same primitive. One site may carry multiple claims. Neither relationship licenses collapsing or duplicating the assurance/cost-bearing mechanism.
 
-PR #43 has already applied this lesson outside Steve: recognized-record ABI v1 now forbids deriving runtime primitive symbols from evidence/revision/use IDs or claim-set shape. That change prevents the old singleton assurance representation from being frozen into a linker-visible ABI before the generalized Systems model lands.
+PR #43 applied this lesson outside Steve: recognized-record ABI v1 forbids deriving host runtime primitive symbols from evidence/revision/use IDs or claim-set shape. PR #44 then demonstrated the host specialization in the implemented/validated ABI candidate. ADR-012 constrains the generic form further: the site cannot itself mean “LLVM call”; other targets may use different explicit realization relations below Systems.
 
 ### 3. Provider authority needs a checked systems invariant
 
@@ -263,33 +277,39 @@ Steve's no-clobber/no-delete claims are architectural authority claims: the targ
 
 Likely systems generalization: a provider/capability invariant that can say which operations a systems function may invoke through a provider handle, with negative authority made checkable rather than prose.
 
+ADR-012's execution-domain capability model is adjacent but distinct: provider capability constrains external/provider authority, while execution-domain capability constrains placement, representation, synchronization, numerical/resource behavior, and target feasibility. The generic Systems model should keep those authority surfaces explicit rather than collapsing either one into backend convention.
+
 ### 4. Stable evidence identity is only partially represented
 
-`systemsStorageIdentity` plus `BorrowedSlice owner` correctly separates owner identity from loan identity, and `InvariantBorrowAliases` checks aliasing/no-copy. But the systems verifier cannot yet state that the persistent evidence attached to a digest site is about the owner's stable identity and **not** the borrow value.
+`systemsStorageIdentity` plus `BorrowedSlice owner` correctly separates owner identity from loan identity, and `InvariantBorrowAliases` checks aliasing/no-copy. But the systems verifier cannot yet state that the persistent evidence attached to a digest site is about the owner's stable semantic identity and **not** the borrow value.
 
-Likely systems generalization: an invariant or runtime-site subject binding that links an assurance claim to a stable systems value/storage identity while recording the borrowed view only as the observation mechanism.
+ADR-012 also means that stable subject identity cannot be defined by physical address, current execution-domain placement, storage class, or one runtime layout. A target may preserve a semantic assurance subject across an explicit transfer/migration/representation refinement, but that continuity must be checked rather than inferred from pointer equality, equal bytes, or target convention.
+
+Likely systems generalization: an invariant or runtime-site subject binding that links an assurance claim to a stable semantic systems value/storage identity while recording borrowed views and target representations only as observation/realization mechanisms, plus explicit correspondence for any placement/representation change that preserves the subject.
 
 ## Classification
 
-These findings do not currently justify a new Phil ADR. They are representation/verifier generalizations required to carry already-accepted decisions through ADR-007/010/011:
+These findings do not currently justify a new Steve-specific Phil ADR. They are representation/verifier generalizations required to carry already-accepted decisions through the Systems boundary:
 
 - ADR-001/002/005 define authority, ownership, loans, and per-arm resource behavior;
 - ADR-006 defines opaque claims/evidence and competent runtime producers;
 - ADR-007 requires property-directed systems representations;
-- ADR-010 already makes assumptions/evidence/uses content-addressed and explicit;
-- ADR-011 requires runtime residue and cost attribution to remain explicit.
+- ADR-010 makes assumptions/evidence/uses content-addressed and explicit;
+- ADR-011 requires runtime residue and cost attribution to remain explicit;
+- ADR-012 requires execution placement, data movement, synchronization, representation, and target capability to become explicit at the Systems boundary, while forbidding generic assumptions of one coherent address space, one scalar sequential control model, invisible/free transfer, or one canonical runtime representation.
 
-Steve is doing its intended job here: the upload witness established the first systems vocabulary, and the first independent program is showing exactly where that vocabulary was still upload-shaped. PR #43 is concrete evidence that the pressure test is also catching cross-layer leaks early: Generalization 2 changed a runtime ABI rule before the first recognized-record implementation/certification artifact existed.
+Steve is doing its intended job here: the upload witness established the first systems vocabulary, and the first independent program is showing exactly where that vocabulary was still upload-shaped. PR #43 is concrete evidence that the pressure test is also catching cross-layer leaks early: Generalization 2 changed a runtime ABI rule before the first recognized-record implementation/certification artifact existed. ADR-012 ensures that the resulting fix remains a genuine Systems abstraction rather than merely a cleaner host ABI.
 
 ## Executable-promotion criteria
 
 A branch-local executable Steve systems fixture should be added only after the representation can say these things without lying:
 
 1. provider assumption-bound facts remain first-class and selected;
-2. one physical digest check can carry all of its exact assurance claims without duplicating runtime cost, while runtime primitive/signature identity remains independent of both physical site identity and claim-set identity and distinct sites do not collapse merely because they invoke the same primitive;
-3. no-clobber/no-delete authority is checkable at the systems provider boundary;
-4. stable evidence subjects are bound to owner/storage identity rather than the borrow token;
-5. Steve's assurance graph is extended with any required erasure uses before proof wrappers disappear;
-6. the systems verifier accepts the positive Steve artifact and rejects mutations for duplicate ownership, hidden copy, missing digest check, equality-path rehash, collision-as-success, corruption laundering, missing cleanup, provider authority widening, assumption loss, primitive/site/claim identity conflation, and lowering/cost-root tampering.
+2. one physical digest site can carry all of its exact assurance claims without duplicating runtime cost, while runtime primitive/execution-profile identity remains independent of both physical site identity and claim-set identity and distinct sites do not collapse merely because they use the same primitive;
+3. the generic physical-site representation is not defined by a host call, linker symbol, pointer/address identity, coherent address space, or universal sequential control model; the first Steve artifact may select those host simplifications only as its execution topology;
+4. no-clobber/no-delete authority is checkable at the systems provider boundary;
+5. stable evidence subjects are bound to semantic owner/storage identity rather than borrow token, physical address, placement, or one target representation, with explicit checked correspondence for any subject-preserving transfer/representation change;
+6. Steve's assurance graph is extended with any required erasure uses before proof wrappers disappear;
+7. the systems verifier accepts the positive Steve artifact and rejects mutations for duplicate ownership, hidden copy, missing digest check, equality-path rehash, collision-as-success, corruption laundering, missing cleanup, provider authority widening, assumption loss, primitive/site/claim identity conflation, unaccounted target transfer/representation change, and lowering/cost-root tampering.
 
 Until then this document is the systems-IR handoff target, not a claim that Steve already has a certified systems lowering.
