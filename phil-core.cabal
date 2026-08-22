@@ -4,6 +4,10 @@ version:            0.0.1.0
 synopsis:           Bootstrap executable kernel for the Phil Core checker
 build-type:          Simple
 
+data-files:
+    examples/upload/*.phil
+    examples/rejected/*.phil
+
 common common-settings
   default-language: GHC2021
   ghc-options:
@@ -30,9 +34,13 @@ library
       Phil.Core.Decision
       Phil.Core.Discharge
       Phil.Core.Value
+      Phil.Surface.Syntax
+      Phil.Surface.Parser
+      Phil.Surface.Elaborate
   build-depends:
       base >=4.17 && <5,
       containers >=0.6 && <0.8,
+      megaparsec >=9.6 && <10,
       text >=2.0 && <2.2
 
 executable phil-core
@@ -175,3 +183,22 @@ test-suite phil-discharge-tests
       containers >=0.6 && <0.8,
       phil-core,
       text >=2.0 && <2.2
+
+test-suite phil-surface-parser-tests
+  import:             common-settings
+  type:               exitcode-stdio-1.0
+  hs-source-dirs:     test
+  main-is:            SurfaceParserMain.hs
+  build-depends:
+      base >=4.17 && <5,
+      phil-core,
+      text >=2.0 && <2.2
+
+test-suite phil-surface-elaboration-tests
+  import:             common-settings
+  type:               exitcode-stdio-1.0
+  hs-source-dirs:     test
+  main-is:            SurfaceElaborationMain.hs
+  build-depends:
+      base >=4.17 && <5,
+      phil-core
