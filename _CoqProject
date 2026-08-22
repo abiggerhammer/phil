@@ -24,3 +24,6 @@ proof/Phil/Systems/Identity.v
 proof/Phil/Systems/FactDisposition.v
 proof/Phil/Systems/Ownership.v
 proof/Phil/Systems/Runtime.v
+proof/Phil/LLVM/Identity.v
+proof/Phil/LLVM/Preservation.v
+proof/Phil/LLVM/Strengthening.v
