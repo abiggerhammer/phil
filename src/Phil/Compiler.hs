@@ -2,14 +2,16 @@
 
 module Phil.Compiler
   ( RunnableCompileError (..)
+  , SourceProjectionError (..)
   , RunnableResult (..)
   , RunnableProgram (..)
   , compileRunnable
   , compileRunnableUnit
+  , verifyRunnableSourceProjection
   , renderRunnableCompileError
   ) where
 
-import Control.Monad (unless)
+import Control.Monad (forM_, unless, when)
 import qualified Data.Map.Strict as Map
 import qualified Data.Set as Set
 import Data.Text (Text)
@@ -20,6 +22,7 @@ import Phil.Core.Scalar
   , ScalarType (..)
   , renderScalarType
   , scalarLiteralInRange
+  , scalarLiteralType
   )
 import Phil.Core.Static (emptyStaticContext)
 import Phil.Core.Syntax (Ty (TyUInt, TyUnit))
@@ -79,7 +82,21 @@ data RunnableCompileError
   | RunnableFragmentError Text
   | RunnableSystemsVerificationError SystemsVerificationError
   | RunnableScalarDataflowError ScalarDataflowError
+  | RunnableSourceProjectionError SourceProjectionError
   | RunnableLLVMVerificationError LLVMVerificationError
+  deriving (Eq, Show)
+
+data SourceProjectionError
+  = SourceProjectionFunctionSetMismatch [Text]
+  | SourceProjectionBlockSetMismatch [BlockId]
+  | SourceProjectionNamedLiteralMismatch ValueId ScalarLiteral (Maybe ScalarLiteral)
+  | SourceProjectionUnexpectedLiteralDefinition ValueId ScalarLiteral
+  | SourceProjectionScalarValueSetMismatch [ValueId] [ValueId]
+  | SourceProjectionScalarTypeMismatch ValueId ScalarType (Maybe ScalarType)
+  | SourceProjectionReturnTargetMismatch ValueId SystemsTerminator
+  | SourceProjectionReturnLiteralMismatch ScalarLiteral SystemsTerminator
+  | SourceProjectionUnitTerminatorMismatch SystemsTerminator
+  | SourceProjectionUnsupportedSource Text
   deriving (Eq, Show)
 
 data RunnableResult
@@ -109,6 +126,17 @@ data ScalarLowerState = ScalarLowerState
   , scalarSyntheticIndex :: Int
   }
 
+data ExpectedScalarReturn
+  = ExpectedReturnValue ValueId
+  | ExpectedReturnLiteral ScalarLiteral
+  deriving (Eq, Show)
+
+data ExpectedScalarProjection = ExpectedScalarProjection
+  { expectedNamedLiterals :: Map.Map ValueId ScalarLiteral
+  , expectedScalarReturn :: ExpectedScalarReturn
+  }
+  deriving (Eq, Show)
+
 compileRunnable :: Text -> Text -> Either RunnableCompileError RunnableProgram
 compileRunnable sourceName source = do
   surfaceFile <- mapLeft RunnableParseError (parseSurfaceFile sourceName source)
@@ -122,6 +150,8 @@ compileRunnable sourceName source = do
     verifySystemsArtifact systemsContext systemsArtifact
   mapLeft RunnableScalarDataflowError $
     verifyScalarDataflow systemsArtifact
+  mapLeft RunnableSourceProjectionError $
+    verifySourceProjection result component systemsArtifact
   let llvmArtifact = lowerSystemsConservative phase0LLVMTarget systemsArtifact
       llvmContext = runnableLLVMContext systemsContext phase0LLVMTarget
   mapLeft RunnableLLVMVerificationError $
@@ -140,6 +170,22 @@ compileRunnableUnit sourceName source = do
     RunnableUnit -> Right runnable
     RunnableScalar _ ->
       Left (RunnableFragmentError "Unit-only compiler entry point received a scalar program")
+
+verifyRunnableSourceProjection
+  :: Text
+  -> Text
+  -> SystemsArtifact
+  -> Either RunnableCompileError ()
+verifyRunnableSourceProjection sourceName source systemsArtifact = do
+  surfaceFile <- mapLeft RunnableParseError (parseSurfaceFile sourceName source)
+  component <- requireSingleComponent surfaceFile
+  result <- requireRunnableHeader component
+  _ <- mapLeft RunnableSurfaceCheckError $
+    checkSurfaceComponent (runnableSurfaceEnvironment result) component
+  mapLeft RunnableScalarDataflowError $
+    verifyScalarDataflow systemsArtifact
+  mapLeft RunnableSourceProjectionError $
+    verifySourceProjection result component systemsArtifact
 
 renderRunnableCompileError :: RunnableCompileError -> Text
 renderRunnableCompileError compileError = case compileError of
@@ -180,8 +226,6 @@ requireRunnableHeader locatedComponent = do
             <> Text.pack (show width))
       _ -> fragment "runnable main currently requires `provides Unit` or `provides U32`"
     Nothing -> fragment "runnable main requires an explicit provides type"
-  where
-    fragment = Left . RunnableFragmentError
 
 buildRunnableSystems
   :: Digest
@@ -284,8 +328,6 @@ lowerUnitBody locatedBlock =
             }
       _ -> fragment "Unit runnable main body must be exactly `return unit`"
     _ -> fragment "Unit runnable main body must be exactly `return unit`"
-  where
-    fragment = Left . RunnableFragmentError
 
 lowerScalarBody
   :: ScalarType
@@ -385,7 +427,7 @@ scalarIntegerLiteral scalarType value =
       let literal = ScalarUIntLiteral width value
       unless (scalarLiteralInRange literal) $
         fragment
-          (renderScalarType scalarType <> " return literal is outside its mathematical range")
+          (renderScalarType scalarType <> " scalar literal is outside its mathematical range")
       Right literal
     ScalarBool -> fragment "boolean scalar lowering does not accept integer literals"
 
@@ -406,8 +448,8 @@ defineSyntheticScalar
   -> Either RunnableCompileError (ScalarLowerState, ValueId)
 defineSyntheticScalar literal state =
   let (valueId, nextIndex) = freshSyntheticValue state
-      next = appendScalarDefinition "" valueId literal state
-        { scalarSyntheticIndex = nextIndex }
+      advanced = state { scalarSyntheticIndex = nextIndex }
+      next = appendScalarDefinition "" valueId literal advanced
   in Right (next, valueId)
 
 freshSyntheticValue :: ScalarLowerState -> (ValueId, Int)
@@ -434,14 +476,182 @@ appendScalarDefinition sourceName valueId literal state = state
   , scalarOperations = scalarOperations state <> [OpScalarLiteral valueId literal]
   }
   where
-    scalarType = case literal of
-      ScalarBoolLiteral _ -> ScalarBool
-      ScalarUIntLiteral width _ -> ScalarUInt width
     scalarValue = SystemsValue
       { systemsValueId = valueId
-      , systemsValueRole = TypedScalar scalarType
+      , systemsValueRole = TypedScalar (scalarLiteralType literal)
       , systemsStorageIdentity = Nothing
       }
+
+verifySourceProjection
+  :: RunnableResult
+  -> Located Component
+  -> SystemsArtifact
+  -> Either SourceProjectionError ()
+verifySourceProjection result locatedComponent artifact = do
+  function <- requireProjectionMain artifact
+  blockValue <- requireProjectionEntryBlock function
+  case result of
+    RunnableUnit -> verifyUnitProjection function blockValue
+    RunnableScalar scalarType -> do
+      expected <- expectedScalarProjection
+        scalarType
+        (blockStatements (locatedValue (componentBody (locatedValue locatedComponent))))
+      verifyScalarProjection scalarType expected function blockValue
+
+requireProjectionMain :: SystemsArtifact -> Either SourceProjectionError SystemsFunction
+requireProjectionMain artifact =
+  case Map.toAscList (systemsProgramFunctions (systemsArtifactProgram artifact)) of
+    [("main", function)] -> Right function
+    entries -> Left (SourceProjectionFunctionSetMismatch (map fst entries))
+
+requireProjectionEntryBlock :: SystemsFunction -> Either SourceProjectionError SystemsBlock
+requireProjectionEntryBlock function =
+  case Map.toAscList (systemsFunctionBlocks function) of
+    [(blockId, blockValue)]
+      | blockId == systemsFunctionEntry function -> Right blockValue
+    entries -> Left (SourceProjectionBlockSetMismatch (map fst entries))
+
+verifyUnitProjection
+  :: SystemsFunction
+  -> SystemsBlock
+  -> Either SourceProjectionError ()
+verifyUnitProjection function blockValue = do
+  let scalarIds =
+        [ valueId
+        | (valueId, value) <- Map.toAscList (systemsFunctionValues function)
+        , TypedScalar _ <- [systemsValueRole value]
+        ]
+      definitions = scalarLiteralDefinitions blockValue
+  unless (null scalarIds && Map.null definitions) $
+    Left (SourceProjectionScalarValueSetMismatch [] scalarIds)
+  unless (systemsBlockTerminator blockValue == TermEnd "return-unit") $
+    Left (SourceProjectionUnitTerminatorMismatch (systemsBlockTerminator blockValue))
+
+verifyScalarProjection
+  :: ScalarType
+  -> ExpectedScalarProjection
+  -> SystemsFunction
+  -> SystemsBlock
+  -> Either SourceProjectionError ()
+verifyScalarProjection scalarType expected function blockValue = do
+  let definitions = scalarLiteralDefinitions blockValue
+      typedValues = Map.fromList
+        [ (valueId, actualType)
+        | (valueId, value) <- Map.toAscList (systemsFunctionValues function)
+        , TypedScalar actualType <- [systemsValueRole value]
+        ]
+      definitionIds = Map.keysSet definitions
+      typedIds = Map.keysSet typedValues
+  unless (definitionIds == typedIds) $
+    Left (SourceProjectionScalarValueSetMismatch
+      (Set.toAscList definitionIds)
+      (Set.toAscList typedIds))
+  forM_ (Map.toAscList typedValues) $ \(valueId, actualType) ->
+    unless (actualType == scalarType) $
+      Left (SourceProjectionScalarTypeMismatch valueId scalarType (Just actualType))
+  forM_ (Map.toAscList (expectedNamedLiterals expected)) $ \(valueId, expectedLiteral) ->
+    case Map.lookup valueId definitions of
+      Just actualLiteral | actualLiteral == expectedLiteral -> pure ()
+      actual -> Left (SourceProjectionNamedLiteralMismatch valueId expectedLiteral actual)
+  case expectedScalarReturn expected of
+    ExpectedReturnValue expectedValue -> do
+      unless (systemsBlockTerminator blockValue == TermReturnScalar expectedValue) $
+        Left (SourceProjectionReturnTargetMismatch
+          expectedValue
+          (systemsBlockTerminator blockValue))
+      rejectUnexpectedDefinitions
+        (Map.keysSet (expectedNamedLiterals expected))
+        definitions
+    ExpectedReturnLiteral expectedLiteral ->
+      case systemsBlockTerminator blockValue of
+        TermReturnScalar returnedValue -> do
+          case Map.lookup returnedValue definitions of
+            Just actualLiteral | actualLiteral == expectedLiteral -> pure ()
+            _ -> Left (SourceProjectionReturnLiteralMismatch
+              expectedLiteral
+              (systemsBlockTerminator blockValue))
+          let allowed = Set.insert returnedValue
+                (Map.keysSet (expectedNamedLiterals expected))
+          rejectUnexpectedDefinitions allowed definitions
+        other -> Left (SourceProjectionReturnLiteralMismatch expectedLiteral other)
+  where
+    rejectUnexpectedDefinitions allowed definitions =
+      case
+        [ (valueId, literal)
+        | (valueId, literal) <- Map.toAscList definitions
+        , Set.notMember valueId allowed
+        ] of
+          [] -> pure ()
+          (valueId, literal) : _ ->
+            Left (SourceProjectionUnexpectedLiteralDefinition valueId literal)
+
+scalarLiteralDefinitions :: SystemsBlock -> Map.Map ValueId ScalarLiteral
+scalarLiteralDefinitions blockValue = Map.fromList
+  [ (output, literal)
+  | OpScalarLiteral output literal <- systemsBlockOps blockValue
+  ]
+
+expectedScalarProjection
+  :: ScalarType
+  -> [Located Statement]
+  -> Either SourceProjectionError ExpectedScalarProjection
+expectedScalarProjection scalarType = go Map.empty Map.empty
+  where
+    go _ _ [] = unsupported "scalar source projection has no return"
+    go bindings definitions (statement : rest) =
+      case locatedValue statement of
+        LetStatement patternValue expression ->
+          case locatedValue patternValue of
+            TuplePattern _ -> unsupported "scalar source projection does not support tuple bindings"
+            BindPattern name -> do
+              when (Map.member name bindings) $
+                unsupported ("duplicate scalar source binding: " <> name)
+              case locatedValue expression of
+                IntegerExpression value -> do
+                  literal <- projectionIntegerLiteral scalarType value
+                  let valueId = ValueId name
+                  go
+                    (Map.insert name valueId bindings)
+                    (Map.insert valueId literal definitions)
+                    rest
+                VariableExpression source ->
+                  case Map.lookup source bindings of
+                    Nothing -> unsupported ("unknown scalar source alias: " <> source)
+                    Just sourceValue ->
+                      go (Map.insert name sourceValue bindings) definitions rest
+                _ -> unsupported "unsupported scalar source binding expression"
+        ReturnStatement expression -> do
+          unless (null rest) $
+            unsupported "scalar source return is not final"
+          expectedReturn <- case locatedValue expression of
+            VariableExpression name ->
+              case Map.lookup name bindings of
+                Nothing -> unsupported ("unknown scalar source return: " <> name)
+                Just valueId -> Right (ExpectedReturnValue valueId)
+            IntegerExpression value ->
+              ExpectedReturnLiteral <$> projectionIntegerLiteral scalarType value
+            _ -> unsupported "unsupported scalar source return expression"
+          Right ExpectedScalarProjection
+            { expectedNamedLiterals = definitions
+            , expectedScalarReturn = expectedReturn
+            }
+        ExpressionStatement _ ->
+          unsupported "unsupported scalar source expression statement"
+
+projectionIntegerLiteral
+  :: ScalarType
+  -> Integer
+  -> Either SourceProjectionError ScalarLiteral
+projectionIntegerLiteral scalarType value = case scalarType of
+  ScalarUInt width ->
+    let literal = ScalarUIntLiteral width value
+    in if scalarLiteralInRange literal
+        then Right literal
+        else unsupported "scalar source literal is outside its mathematical range"
+  ScalarBool -> unsupported "boolean source projection does not accept integer literals"
+
+unsupported :: Text -> Either SourceProjectionError a
+unsupported = Left . SourceProjectionUnsupportedSource
 
 runnableLLVMContext
   :: SystemsVerificationContext
