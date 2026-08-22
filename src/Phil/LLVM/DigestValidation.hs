@@ -55,6 +55,7 @@ digestValidationABIDescriptor = Text.unlines
   , "digest-subjects=recognized-record+borrowed-payload-view"
   , "borrow-erasure=BorrowedSlice(owner)->same-owner-ptr-no-copy"
   , "digest-validator=phil_runtime_digest_validate(ptr,ptr)->i1"
+  , "digest-mechanism=SHA-256"
   , "digest-record-operand=exact-recognized-record-handle"
   , "digest-payload-operand=exact-borrow-owner-handle"
   , "digest-success=true,digest-failure=false"
