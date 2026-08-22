@@ -120,9 +120,14 @@ Proof.
   pose proof
     (verified_llvm_rechecks_source_systems_artifact
       (certificationPreservation model) Hpreservation) as HsourceReverified.
-  pose proof
-    (verified_llvm_preserves_runtime_site_multiplicity
-      (certificationPreservation model) Hpreservation) as HruntimeSites.
+  assert (HruntimeSites : forall site,
+    preservationSourceRuntimeCount (certificationPreservation model) site =
+    preservationTargetRuntimeCount (certificationPreservation model) site).
+  {
+    intro site.
+    eapply verified_llvm_preserves_runtime_site_multiplicity.
+    exact Hpreservation.
+  }
   pose proof
     (verified_llvm_preserves_contract_relations
       (certificationPreservation model) Hpreservation) as Hrelations.
