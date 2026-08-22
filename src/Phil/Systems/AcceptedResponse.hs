@@ -131,7 +131,7 @@ verifyAcceptedResponseWitness artifact storeWitness witness = do
 
   storeBlockValue <- lookupBlock functionName function (storageBlock storeWitness)
   case systemsBlockTerminator storeBlockValue of
-    term@TermStore { storeResult = resultValue, storeSuccess = yes }
+    TermStore { storeResult = resultValue, storeSuccess = yes }
       | resultValue == acceptedResponseUploadId witness
           && yes == acceptedResponseBlock witness -> pure ()
     other -> Left (AcceptedResponseStoragePredecessorMismatch
