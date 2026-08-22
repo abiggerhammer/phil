@@ -48,7 +48,7 @@ Inductive SurfaceExpression : Type :=
 | SurfaceBoolean : bool -> SurfaceExpression
 | SurfaceUnit : SurfaceExpression
 | SurfaceField : SurfaceExpression -> nat -> SurfaceExpression
-| SurfaceCall : CallKind -> option SurfaceExpression -> SurfaceExpression
+| SurfaceCall : CallKind -> SurfaceExpression -> SurfaceExpression
 | SurfaceBinary : BinaryOperator -> SurfaceExpression -> SurfaceExpression -> SurfaceExpression
 | SurfaceTuple : nat -> SurfaceExpression
 | SurfaceUnsupported : nat -> SurfaceExpression.
@@ -100,17 +100,17 @@ Fixpoint elaborateRefTerm
           end
       | _, _ => None
       end
-  | SurfaceCall LenCall (Some value) =>
+  | SurfaceCall LenCall value =>
       match elaborateRefTerm projections value with
       | Some value' => Some (CoreLen value')
       | None => None
       end
-  | SurfaceCall ToNatCall (Some value) =>
+  | SurfaceCall ToNatCall value =>
       match elaborateRefTerm projections value with
       | Some value' => Some (CoreToNat value')
       | None => None
       end
-  | SurfaceCall _ _ => None
+  | SurfaceCall (OtherCall _) _ => None
   | SurfaceBinary SurfaceAdd lhs rhs =>
       match elaborateRefTerm projections lhs,
             elaborateRefTerm projections rhs with
