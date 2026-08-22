@@ -20,7 +20,11 @@ main = do
     , test "runtime copy must point to a copy-class lowering decision" hiddenCopyRejects
     , test "runtime-bound validator cannot disappear after certification" missingRuntimeSiteRejects
     , test "certified release cannot retain defensive diagnostic state" certifiedDiagnosticRejects
+    , test "checked-runtime diagnostics require defensive cost classification" checkedRuntimeDiagnosticClassRejects
+    , test "erasure cannot precede transfer of its surviving invariant" erasureWithoutTransferRejects
     , test "erasure operation requires a selected ADR-010 erasure use" unknownErasureUseRejects
+    , test "stage source identity is content-bound" sourceIdentityRejects
+    , test "systems target identity is content-bound" targetIdentityRejects
     , test "lowering ledger root is content-bound" loweringRootTamperRejects
     , test "lowering decisions carry independently checked digests" decisionDigestTamperRejects
     ]
@@ -35,17 +39,18 @@ missingFactRejects =
   let contract = systemsArtifactStageContract phase0SystemsArtifact
       bad = phase0SystemsArtifact
         { systemsArtifactStageContract = contract { stageFacts = drop 1 (stageFacts contract) } }
-  in case verifySystemsArtifact phase0SystemsVerificationContext bad of
+  in case verifyRebound bad of
       Left StageFactSetMismatch {} -> True
       _ -> False
 
 missingCommitRejects :: Bool
 missingCommitRejects =
-  let bad = adjustBlock "UploadServer" "server.hello.commit"
+  let bad0 = adjustBlock "UploadServer" "server.hello.commit"
         (\block -> block
           { systemsBlockOps = filter (not . isHelloCommit) (systemsBlockOps block) })
         phase0SystemsArtifact
-  in case verifySystemsArtifact phase0SystemsVerificationContext bad of
+      bad = rebindArtifact bad0
+  in case verifyRebound bad of
       Left RecognitionSuccessMissingCommit {} -> True
       _ -> False
   where
@@ -54,8 +59,9 @@ missingCommitRejects =
 
 recognitionClassRejects :: Bool
 recognitionClassRejects =
-  let bad = adjustBlock "UploadServer" "server.entry" change phase0SystemsArtifact
-  in case verifySystemsArtifact phase0SystemsVerificationContext bad of
+  let bad0 = adjustBlock "UploadServer" "server.entry" change phase0SystemsArtifact
+      bad = rebindArtifact bad0
+  in case verifyRebound bad of
       Left RuntimeSiteKindMismatch {} -> True
       _ -> False
   where
@@ -67,8 +73,9 @@ recognitionClassRejects =
 
 wrongDigestEdgeRejects :: Bool
 wrongDigestEdgeRejects =
-  let bad = adjustBlock "UploadServer" "server.digest" change phase0SystemsArtifact
-  in case verifySystemsArtifact phase0SystemsVerificationContext bad of
+  let bad0 = adjustBlock "UploadServer" "server.digest" change phase0SystemsArtifact
+      bad = rebindArtifact bad0
+  in case verifyRebound bad of
       Left StageRequiredEdgeMissing {} -> True
       _ -> False
   where
@@ -79,8 +86,9 @@ wrongDigestEdgeRejects =
 
 duplicateOwnerRejects :: Bool
 duplicateOwnerRejects =
-  let bad = adjustFunction "UploadClient" addDuplicate phase0SystemsArtifact
-  in case verifySystemsArtifact phase0SystemsVerificationContext bad of
+  let bad0 = adjustFunction "UploadClient" addDuplicate phase0SystemsArtifact
+      bad = rebindArtifact bad0
+  in case verifyRebound bad of
       Left DuplicateOwningStorage {} -> True
       _ -> False
   where
@@ -92,8 +100,9 @@ duplicateOwnerRejects =
 hiddenCopyRejects :: Bool
 hiddenCopyRejects =
   let bad0 = adjustFunction "UploadClient" addTarget phase0SystemsArtifact
-      bad = adjustBlock "UploadClient" "client.entry" addCopy bad0
-  in case verifySystemsArtifact phase0SystemsVerificationContext bad of
+      bad1 = adjustBlock "UploadClient" "client.entry" addCopy bad0
+      bad = rebindArtifact bad1
+  in case verifyRebound bad of
       Left CopyWithoutCopyDecision {} -> True
       _ -> False
   where
@@ -111,28 +120,60 @@ hiddenCopyRejects =
 
 missingRuntimeSiteRejects :: Bool
 missingRuntimeSiteRejects =
-  let bad = adjustBlock "UploadServer" "server.hello.commit"
+  let bad0 = adjustBlock "UploadServer" "server.hello.commit"
         (\block -> block { systemsBlockTerminator = TermJump (BlockId "server.version.choose") })
         phase0SystemsArtifact
-  in case verifySystemsArtifact phase0SystemsVerificationContext bad of
+      bad = rebindArtifact bad0
+  in case verifyRebound bad of
       Left RetainedRuntimeUseMissingSite {} -> True
       _ -> False
 
 certifiedDiagnosticRejects :: Bool
 certifiedDiagnosticRejects =
-  let bad = adjustBlock "UploadClient" "client.entry"
+  let bad0 = adjustBlock "UploadClient" "client.entry"
         (\block -> block
           { systemsBlockOps = OpDiagnostic "session-state" (DecisionId "lower.runtime.semantic_call")
               : systemsBlockOps block })
         phase0SystemsArtifact
-  in case verifySystemsArtifact phase0SystemsVerificationContext bad of
+      bad = rebindArtifact bad0
+  in case verifyRebound bad of
       Left DiagnosticInCertifiedRelease {} -> True
       _ -> False
 
+checkedRuntimeDiagnosticClassRejects :: Bool
+checkedRuntimeDiagnosticClassRejects =
+  let withDiagnostic = adjustBlock "UploadClient" "client.entry"
+        (\block -> block
+          { systemsBlockOps = OpDiagnostic "session-state" (DecisionId "lower.runtime.semantic_call")
+              : systemsBlockOps block })
+        phase0SystemsArtifact
+      program = systemsArtifactProgram withDiagnostic
+      bad0 = withDiagnostic
+        { systemsArtifactProgram = program { systemsProgramProfile = CheckedRuntime } }
+      bad = rebindArtifact bad0
+  in case verifyRebound bad of
+      Left DiagnosticDecisionNotDefensive {} -> True
+      _ -> False
+
+erasureWithoutTransferRejects :: Bool
+erasureWithoutTransferRejects =
+  let ledger = systemsArtifactLoweringLedger phase0SystemsArtifact
+      decisionId = DecisionId "lower.erase.digest_proof"
+      decisions = Map.adjust removeTransfer decisionId (loweringLedgerDecisions ledger)
+      changedLedger = LoweringLedger decisions (deriveLoweringLedgerRoot decisions)
+      bad = phase0SystemsArtifact { systemsArtifactLoweringLedger = changedLedger }
+  in case verifyRebound bad of
+      Left ErasureWithoutFactTransfer {} -> True
+      _ -> False
+  where
+    removeTransfer lowering = resealDecision lowering
+      { loweringInvariantsTransferred = [] }
+
 unknownErasureUseRejects :: Bool
 unknownErasureUseRejects =
-  let bad = adjustBlock "UploadServer" "server.digest" change phase0SystemsArtifact
-  in case verifySystemsArtifact phase0SystemsVerificationContext bad of
+  let bad0 = adjustBlock "UploadServer" "server.hello.commit" change phase0SystemsArtifact
+      bad = rebindArtifact bad0
+  in case verifyRebound bad of
       Left ErasureOperationMissingUse {} -> True
       _ -> False
   where
@@ -141,12 +182,32 @@ unknownErasureUseRejects =
     rewrite op@OpEraseFact {} = op { erasedByUse = AssuranceUseId "use.systems.missing" }
     rewrite op = op
 
+sourceIdentityRejects :: Bool
+sourceIdentityRejects =
+  let contract = systemsArtifactStageContract phase0SystemsArtifact
+      bad = phase0SystemsArtifact
+        { systemsArtifactStageContract = contract
+            { stageSourceArtifactDigest = digestText "wrong source artifact" }
+        }
+  in case verifyRebound bad of
+      Left SourceArtifactDigestMismatch {} -> True
+      _ -> False
+
+targetIdentityRejects :: Bool
+targetIdentityRejects =
+  let bad = adjustBlock "UploadClient" "client.entry"
+        (\block -> block { systemsBlockOps = OpTraceEvent "identity drift" : systemsBlockOps block })
+        phase0SystemsArtifact
+  in case verifyRebound bad of
+      Left TargetArtifactDigestMismatch {} -> True
+      _ -> False
+
 loweringRootTamperRejects :: Bool
 loweringRootTamperRejects =
   let ledger = systemsArtifactLoweringLedger phase0SystemsArtifact
       bad = phase0SystemsArtifact
         { systemsArtifactLoweringLedger = ledger { loweringLedgerRoot = digestText "tampered" } }
-  in case verifySystemsArtifact phase0SystemsVerificationContext bad of
+  in case verifyRebound bad of
       Left LoweringLedgerRootMismatch {} -> True
       _ -> False
 
@@ -155,27 +216,61 @@ decisionDigestTamperRejects =
   let ledger = systemsArtifactLoweringLedger phase0SystemsArtifact
       decisionId = DecisionId "lower.payload.digest_borrow"
       decisions = Map.adjust
-        (\decision -> decision { loweringDecisionDigest = digestText "tampered decision" })
+        (\lowering -> lowering { loweringDecisionDigest = digestText "tampered decision" })
         decisionId
         (loweringLedgerDecisions ledger)
       changedLedger = LoweringLedger decisions (deriveLoweringLedgerRoot decisions)
-      badArtifact = phase0SystemsArtifact { systemsArtifactLoweringLedger = changedLedger }
-      changedManifest0 = (systemsAssuranceManifest phase0SystemsVerificationContext)
-        { manifestLoweringLedgerRoot = loweringLedgerRoot changedLedger }
-      changedManifest = changedManifest0
-        { manifestId = deriveManifestId
-            (systemsAssuranceLedger phase0SystemsVerificationContext)
-            changedManifest0
-        }
-      changedAssuranceContext = (systemsAssuranceVerificationContext phase0SystemsVerificationContext)
-        { verificationLoweringLedgerRoot = loweringLedgerRoot changedLedger }
-      changedContext = phase0SystemsVerificationContext
-        { systemsAssuranceManifest = changedManifest
-        , systemsAssuranceVerificationContext = changedAssuranceContext
-        }
-  in case verifySystemsArtifact changedContext badArtifact of
+      bad = phase0SystemsArtifact { systemsArtifactLoweringLedger = changedLedger }
+  in case verifyRebound bad of
       Left DecisionDigestMismatch {} -> True
       _ -> False
+
+verifyRebound :: SystemsArtifact -> Either SystemsVerificationError ()
+verifyRebound artifact = verifySystemsArtifact (contextForArtifact artifact) artifact
+
+contextForArtifact :: SystemsArtifact -> SystemsVerificationContext
+contextForArtifact artifact = base
+  { systemsAssuranceManifest = manifest
+  , systemsAssuranceVerificationContext = assuranceContext
+  }
+  where
+    base = phase0SystemsVerificationContext
+    ledger = systemsAssuranceLedger base
+    loweringRoot = loweringLedgerRoot (systemsArtifactLoweringLedger artifact)
+    implementationDigest = systemsArtifactDigest artifact
+    manifest0 = (systemsAssuranceManifest base)
+      { manifestImplementationDigest = implementationDigest
+      , manifestLoweringLedgerRoot = loweringRoot
+      }
+    manifest = manifest0 { manifestId = deriveManifestId ledger manifest0 }
+    assuranceContext = (systemsAssuranceVerificationContext base)
+      { verificationImplementationDigest = implementationDigest
+      , verificationLoweringLedgerRoot = loweringRoot
+      }
+
+rebindArtifact :: SystemsArtifact -> SystemsArtifact
+rebindArtifact artifact = artifact
+  { systemsArtifactStageContract = contract
+  , systemsArtifactLoweringLedger = LoweringLedger decisions (deriveLoweringLedgerRoot decisions)
+  }
+  where
+    program = systemsArtifactProgram artifact
+    oldContract = systemsArtifactStageContract artifact
+    sourceDigest = stageSourceArtifactDigest oldContract
+    targetDigest = systemsProgramDigest program
+    contract = oldContract { stageTargetArtifactDigest = targetDigest }
+    decisions = Map.map rebindDecision
+      (loweringLedgerDecisions (systemsArtifactLoweringLedger artifact))
+    rebindDecision lowering = resealDecision lowering
+      { loweringSourceArtifactDigest = sourceDigest
+      , loweringTargetArtifactDigest = targetDigest
+      }
+
+resealDecision :: LoweringDecision -> LoweringDecision
+resealDecision lowering = provisional
+  { loweringDecisionDigest = deriveLoweringDecisionDigest provisional }
+  where
+    provisional = lowering { loweringDecisionDigest = Digest "" }
 
 adjustFunction
   :: Text
