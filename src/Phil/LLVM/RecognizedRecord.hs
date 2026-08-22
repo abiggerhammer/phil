@@ -86,9 +86,9 @@ phase0RecognizedRecordLLVMVerificationContext bundle = LLVMVerificationContext
   }
 
 -- | Validate the recognized-record relation independently of the lowering
--- producer's pattern matching.  The generic LLVM verifier still checks the
--- complete artifact; these checks specifically bind the target record handle,
--- field accessor and exact-receive scalar argument back to the Systems witness.
+-- producer's pattern matching.  Witness-specific checks run before the generic
+-- artifact checker so ambiguity and identity drift fail at this boundary rather
+-- than being hidden behind a downstream digest mismatch.
 verifyRecognizedRecordTranslation
   :: RecognizedRecordBundle
   -> LLVMArtifact
@@ -96,14 +96,14 @@ verifyRecognizedRecordTranslation
 verifyRecognizedRecordTranslation bundle llvmArtifact = do
   let systemsArtifact = recognizedRecordArtifact bundle
       context = phase0RecognizedRecordLLVMVerificationContext bundle
+  forM_ (recognizedRecordWitnesses bundle) $ \witness ->
+    verifyWitnessTranslation systemsArtifact llvmArtifact witness
   mapLeft RecognizedRecordLLVMVerificationError $
     verifyLLVMEmissionWith
       lowerSystemsRecognizedRecord
       context
       systemsArtifact
       llvmArtifact
-  forM_ (recognizedRecordWitnesses bundle) $ \witness ->
-    verifyWitnessTranslation systemsArtifact llvmArtifact witness
 
 verifyWitnessTranslation
   :: SystemsArtifact
