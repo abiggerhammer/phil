@@ -96,7 +96,7 @@ noneArmUseRejects = withBundle $ \bundle ->
               } : systemsBlockOps blockValue
           }
   in case verifyScalarDataflow mutated of
-      Left ScalarUseBeforeDefinition {} -> True
+      Left (ScalarUseBeforeDefinition _ _ _ _ _ _) -> True
       _ -> False
 
 llvmFailClosed :: Bool
