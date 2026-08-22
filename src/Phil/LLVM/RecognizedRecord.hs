@@ -11,10 +11,11 @@ module Phil.LLVM.RecognizedRecord
   ) where
 
 import Control.Monad (forM_, unless)
+import Data.Char (isAlphaNum)
 import qualified Data.Map.Strict as Map
 import Data.Text (Text)
 import qualified Data.Text as Text
-import Phil.Assurance.Types (digestText)
+import Phil.Assurance.Types (digestText, unEvidenceEntryId)
 import Phil.LLVM.IR
 import Phil.LLVM.Lower (lowerSystemsRecognizedRecord)
 import Phil.LLVM.Phase0 (phase0LLVMTarget)
@@ -45,7 +46,8 @@ data RecognizedRecordLLVMError
 recognizedRecordABIDescriptor :: Text
 recognizedRecordABIDescriptor = Text.unlines
   [ "phil-runtime/phase0/recognized-record-v1"
-  , "target=x86_64-unknown-linux-gnu"
+  , "target=" <> llvmTargetTripleName phase0LLVMTarget
+  , "data-layout=" <> llvmTargetDataLayout phase0LLVMTarget
   , "recognition-result={i8,ptr}"
   , "recognition-status=0-failure,1-success,other-fail-closed"
   , "recognition-failure-record=null"
@@ -185,8 +187,8 @@ verifyWitnessTranslation systemsArtifact llvmArtifact witness = do
     Just value -> Right value
   let projections =
         [ operation
-        | operation@(LLVMFieldProjection _ _ _ _ _) <- llvmBlockOps llvmSuccessBlock
-        , projectionTouchesWitness witness operation
+        | operation@(LLVMFieldProjection output _ _ _ _) <- llvmBlockOps llvmSuccessBlock
+        , output == unValueId (recognizedRecordProjectionOutput witness)
         ]
       expectedProjection = LLVMFieldProjection
         (unValueId (recognizedRecordProjectionOutput witness))
@@ -246,6 +248,11 @@ verifyWitnessTranslation systemsArtifact llvmArtifact witness = do
         "icmp eq i8 %phil_recognition_status_"
           <> symbolish (unBlockId (recognizedRecordRecognitionBlock witness))
           <> ", 1"
+      evidenceNamedSymbols =
+        [ "@phil_runtime_" <> symbolish (unEvidenceEntryId (runtimeSiteEvidence site))
+        | functionValue <- Map.elems (systemsProgramFunctions systemsProgram)
+        , site <- runtimeSites functionValue
+        ]
   unless (Text.isInfixOf recognitionStatusNeedle rendered) $
     Left (RecognizedRecordLLVMFailClosedStatusMissing functionName)
   unless
@@ -259,7 +266,7 @@ verifyWitnessTranslation systemsArtifact llvmArtifact witness = do
     && Text.isInfixOf
         ("@phil_runtime_" <> symbolish expectedPrimitive)
         rendered
-    && not (Text.isInfixOf "@phil_runtime_evidence_" rendered)
+    && all (not . (`Text.isInfixOf` rendered)) evidenceNamedSymbols
     && not (Text.isInfixOf "@phil_current_" rendered)
     ) $
     Left (RecognizedRecordLLVMPhysicalSymbolMismatch functionName)
@@ -282,14 +289,6 @@ recognizedMaterializations function blockValue =
   , name == "materialize recognized " <> grammar
   ]
 
-projectionTouchesWitness :: RecognizedRecordWitness -> LLVMOp -> Bool
-projectionTouchesWitness witness operation = case operation of
-  LLVMFieldProjection output record grammar _ _ ->
-    output == unValueId (recognizedRecordProjectionOutput witness)
-      || record == unValueId (recognizedRecordValue witness)
-      || grammar == recognizedRecordGrammar witness
-  _ -> False
-
 scalarSuffix :: ScalarType -> Text
 scalarSuffix scalarType = case scalarType of
   ScalarBool -> "bool"
@@ -298,10 +297,7 @@ scalarSuffix scalarType = case scalarType of
 -- Keep this deliberately local to the ABI validator so checks of rendered
 -- linker-visible names do not depend on the producer's private renderer helper.
 symbolish :: Text -> Text
-symbolish = Text.map (\character ->
-  if character == '.' || character == '-' || character == ' '
-    then '_'
-    else character)
+symbolish = Text.map (\character -> if isAlphaNum character then character else '_')
 
 verifyPhase0RecognizedRecordLLVM
   :: Either RecognizedRecordLLVMError ()
