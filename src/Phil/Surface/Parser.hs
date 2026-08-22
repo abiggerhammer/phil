@@ -21,6 +21,7 @@ import qualified Text.Megaparsec as MP
 import Text.Megaparsec ((<|>))
 import qualified Text.Megaparsec.Char as MPC
 import qualified Text.Megaparsec.Char.Lexer as Lexer
+import Text.Read (readMaybe)
 
 type Parser = MP.Parsec Void Text
 
@@ -29,6 +30,11 @@ data ParseDiagnostic = ParseDiagnostic
   , parseDiagnosticMessage :: Text
   }
   deriving (Eq, Show)
+
+data ParsedUIntName
+  = NotUIntName
+  | ParsedUIntWidth Int
+  | UIntWidthOutOfRange
 
 parseSurfaceFile :: Text -> Text -> Either ParseDiagnostic SurfaceFile
 parseSurfaceFile source = runSurfaceParser source $ do
@@ -224,8 +230,9 @@ pType :: Parser (Located SurfaceType)
 pType = locatedParser $ do
   name <- rawIdentifier
   case parseUIntName name of
-    Just width -> pure (SurfaceUIntType width)
-    Nothing -> case name of
+    ParsedUIntWidth width -> pure (SurfaceUIntType width)
+    UIntWidthOutOfRange -> fail "fixed-width unsigned type exceeds the Core width representation"
+    NotUIntName -> case name of
       "Unit" -> pure SurfaceUnitType
       "Bool" -> pure SurfaceBoolType
       "Bytes" -> SurfaceBytesType <$> brackets pExpression
@@ -242,12 +249,16 @@ pType = locatedParser $ do
         arguments <- optional (brackets (pExpression `MP.sepBy` symbol ","))
         pure (SurfaceNamedType name (maybe [] id arguments))
 
-parseUIntName :: Text -> Maybe Int
-parseUIntName name = do
-  digits <- Text.stripPrefix "U" name
-  if Text.null digits || not (Text.all isDigit digits)
-    then Nothing
-    else Just (read (Text.unpack digits))
+parseUIntName :: Text -> ParsedUIntName
+parseUIntName name =
+  case Text.stripPrefix "U" name of
+    Just digits
+      | not (Text.null digits) && Text.all isDigit digits ->
+          case readMaybe (Text.unpack digits) :: Maybe Integer of
+            Just width
+              | width <= toInteger (maxBound :: Int) -> ParsedUIntWidth (fromInteger width)
+            _ -> UIntWidthOutOfRange
+    _ -> NotUIntName
 
 pExpression :: Parser (Located SurfaceExpression)
 pExpression = do
