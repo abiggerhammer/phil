@@ -15,8 +15,9 @@ import qualified Data.Map.Strict as Map
 import Data.Text (Text)
 import Phil.Systems.DigestValidation
 import Phil.Systems.IR
+import Phil.Systems.Verify (SystemsVerificationContext)
 
--- Storage is already explicit in the digest-validation Systems artifact.  This
+-- Storage is already explicit in the digest-validation Systems artifact. This
 -- layer does not mutate that artifact; it names and verifies the storage
 -- boundary so the next target representation can be certified independently.
 data StorageWitness = StorageWitness
@@ -31,7 +32,7 @@ data StorageWitness = StorageWitness
 
 data StorageBundle = StorageBundle
   { storageArtifact :: SystemsArtifact
-  , storageContext :: Phil.Systems.Verify.SystemsVerificationContext
+  , storageContext :: SystemsVerificationContext
   , storageDigestValidationBundle :: DigestValidationBundle
   , storageWitness :: StorageWitness
   }
@@ -131,7 +132,7 @@ verifyStorageWitness artifact digestWitness witness = do
 
   digestBlockValue <- lookupBlock functionName function (digestValidationBlock digestWitness)
   case systemsBlockTerminator digestBlockValue of
-    term@TermRuntimeCheck
+    TermRuntimeCheck
       { checkInputs = inputs
       , checkSite = site
       , checkSuccess = yes
@@ -171,8 +172,8 @@ rejectRelease functionName function owner blockId = do
         [ ()
         | operation <- systemsBlockOps blockValue
         , case operation of
-            OpReleaseOwner released -> released == owner
-            OpCleanupPartial released -> released == owner
+            OpReleaseOwner released _ -> released == owner
+            OpCleanupPartial released _ -> released == owner
             _ -> False
         ]
   unless (null releases) $
@@ -180,5 +181,3 @@ rejectRelease functionName function owner blockId = do
 
 mapLeft :: (left -> mapped) -> Either left right -> Either mapped right
 mapLeft transform = either (Left . transform) Right
-
-import qualified Phil.Systems.Verify
