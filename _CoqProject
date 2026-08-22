@@ -1,5 +1,6 @@
 -Q proof/Phil Phil
 proof/Phil/Core/Syntax.v
+proof/Phil/Core/Scalar.v
 proof/Phil/Core/Session.v
 proof/Phil/Core/Context.v
 proof/Phil/Core/Process.v
@@ -24,7 +25,9 @@ proof/Phil/Systems/Identity.v
 proof/Phil/Systems/FactDisposition.v
 proof/Phil/Systems/Ownership.v
 proof/Phil/Systems/Runtime.v
+proof/Phil/Systems/Scalar.v
 proof/Phil/LLVM/Identity.v
 proof/Phil/LLVM/Preservation.v
 proof/Phil/LLVM/Strengthening.v
 proof/Phil/LLVM/Certification.v
+proof/Phil/LLVM/Scalar.v
