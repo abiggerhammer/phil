@@ -14,8 +14,12 @@ module Phil.LLVM
   , module Phil.LLVM.DigestValidationProofCertification
   , module Phil.LLVM.Storage
   , module Phil.LLVM.StorageCertification
+  , module Phil.LLVM.AcceptedResponse
+  , module Phil.LLVM.AcceptedResponseCertification
   ) where
 
+import Phil.LLVM.AcceptedResponse
+import Phil.LLVM.AcceptedResponseCertification
 import Phil.LLVM.DigestValidation
 import Phil.LLVM.DigestValidationCertification
 import Phil.LLVM.DigestValidationProofCertification

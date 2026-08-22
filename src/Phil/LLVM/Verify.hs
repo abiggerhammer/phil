@@ -211,6 +211,7 @@ ordinaryOps = filter isOrdinary
       LLVMPlain _ -> True
       LLVMScalarLiteral _ _ -> True
       LLVMFieldProjection {} -> True
+      LLVMAcceptedResponse {} -> True
       LLVMStrengtheningOp _ _ -> False
       LLVMPoison _ -> False
       LLVMUndef _ -> False

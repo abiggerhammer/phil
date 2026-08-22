@@ -97,6 +97,7 @@ data LLVMOp
   | LLVMPlain Text
   | LLVMScalarLiteral Text ScalarLiteral
   | LLVMFieldProjection Text Text Text Text ScalarType
+  | LLVMAcceptedResponse Text Text
   | LLVMStrengtheningOp LLVMStrengtheningId Text
   | LLVMPoison Text
   | LLVMUndef Text
@@ -263,6 +264,7 @@ renderLLVMModule moduleValue = Text.unlines $
       , "phil-runtime/phase0/transport-exact-receive-v1"
       , "phil-runtime/phase0/digest-validation-v1"
       , "phil-runtime/phase0/storage-v1"
+      , "phil-runtime/phase0/accepted-response-v1"
       ]
 
     header =
@@ -300,6 +302,7 @@ renderLLVMModule moduleValue = Text.unlines $
       <> assumeDeclaration
       <> digestValidationDeclaration
       <> storageDeclaration
+      <> acceptedResponseDeclaration
       <> map renderCallDeclaration (Set.toAscList callNames)
       <> runtimeDeclarations
       <> map renderFieldProjectionDeclaration (Set.toAscList fieldProjectionSignatures)
@@ -336,6 +339,11 @@ renderLLVMModule moduleValue = Text.unlines $
     storageDeclaration =
       if any hasStorage allBlocks
         then ["declare { i8, ptr } @phil_runtime_store(ptr)"]
+        else []
+
+    acceptedResponseDeclaration =
+      if any hasAcceptedResponse allBlocks
+        then ["declare void @phil_runtime_select_accepted(ptr, ptr)"]
         else []
 
     callNames = Set.fromList
@@ -416,6 +424,10 @@ renderLLVMModule moduleValue = Text.unlines $
       LLVMStore {} -> True
       _ -> False
 
+    hasAcceptedResponse blockValue = any isAcceptedResponse (llvmBlockOps blockValue)
+    isAcceptedResponse LLVMAcceptedResponse {} = True
+    isAcceptedResponse _ = False
+
     renderCallDeclaration name = "declare void @phil_call_" <> symbol name <> "()"
     renderRuntimeEvidenceDeclaration evidence =
       "declare i1 @phil_runtime_" <> symbol evidence <> "()"
@@ -483,6 +495,10 @@ renderLLVMModule moduleValue = Text.unlines $
         [ "%" <> symbol output <> " = call " <> renderScalarType scalarType
             <> " @phil_record_" <> symbol grammar <> "_get_" <> symbol fieldName
             <> "(ptr %" <> symbol record <> ")"
+        ]
+      LLVMAcceptedResponse transport uploadId ->
+        [ "call void @phil_runtime_select_accepted(ptr %" <> symbol transport
+            <> ", ptr %" <> symbol uploadId <> ")"
         ]
       LLVMStrengtheningOp strengtheningId description ->
         renderStrengthening strengtheningId description

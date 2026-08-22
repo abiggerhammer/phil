@@ -1,0 +1,141 @@
+name: Accepted Response Runtime
+
+on:
+  pull_request:
+    paths:
+      - 'src/Phil/Systems/AcceptedResponse.hs'
+      - 'src/Phil/Systems/Storage.hs'
+      - 'src/Phil/Systems.hs'
+      - 'src/Phil/LLVM/IR.hs'
+      - 'src/Phil/LLVM/Lower.hs'
+      - 'src/Phil/LLVM/Verify.hs'
+      - 'src/Phil/LLVM/AcceptedResponse.hs'
+      - 'src/Phil/LLVM/AcceptedResponseCertification.hs'
+      - 'src/Phil/LLVM/Storage.hs'
+      - 'src/Phil/LLVM.hs'
+      - 'app/LLVMAcceptedResponseMain.hs'
+      - 'runtime/phase0/accepted_response_v1*'
+      - 'scripts/check_runtime_abi.py'
+      - 'test/AcceptedResponseABIMain.hs'
+      - 'phil-core.cabal'
+      - '.github/workflows/accepted-response-runtime.yml'
+  push:
+    branches:
+      - main
+    paths:
+      - 'src/Phil/Systems/AcceptedResponse.hs'
+      - 'src/Phil/Systems/Storage.hs'
+      - 'src/Phil/Systems.hs'
+      - 'src/Phil/LLVM/IR.hs'
+      - 'src/Phil/LLVM/Lower.hs'
+      - 'src/Phil/LLVM/Verify.hs'
+      - 'src/Phil/LLVM/AcceptedResponse.hs'
+      - 'src/Phil/LLVM/AcceptedResponseCertification.hs'
+      - 'src/Phil/LLVM/Storage.hs'
+      - 'src/Phil/LLVM.hs'
+      - 'app/LLVMAcceptedResponseMain.hs'
+      - 'runtime/phase0/accepted_response_v1*'
+      - 'scripts/check_runtime_abi.py'
+      - 'test/AcceptedResponseABIMain.hs'
+      - 'phil-core.cabal'
+      - '.github/workflows/accepted-response-runtime.yml'
+
+permissions:
+  contents: read
+
+jobs:
+  accepted-response-runtime:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v4
+
+      - name: Set up Haskell
+        uses: haskell-actions/setup@v2
+        with:
+          ghc-version: '9.6.7'
+          cabal-version: 'latest'
+
+      - name: Build accepted-response emitter and tests
+        run: cabal build phil-llvm-phase0-accepted-response phil-accepted-response-abi-tests
+
+      - name: Verify accepted-response ABI and exact wire payload
+        shell: bash
+        run: |
+          set -euo pipefail
+
+          if command -v llvm-as-18 >/dev/null 2>&1; then
+            LLVM_AS=llvm-as-18
+          elif command -v llvm-as >/dev/null 2>&1 && llvm-as --version | head -n 1 | grep -Eq 'LLVM version 18([.]|$)'; then
+            LLVM_AS=llvm-as
+          else
+            echo "LLVM 18 llvm-as is required by accepted-response-v1" >&2
+            exit 1
+          fi
+
+          if command -v llvm-link-18 >/dev/null 2>&1; then
+            LLVM_LINK=llvm-link-18
+          elif command -v llvm-link >/dev/null 2>&1 && llvm-link --version | head -n 1 | grep -Eq 'LLVM version 18([.]|$)'; then
+            LLVM_LINK=llvm-link
+          else
+            echo "LLVM 18 llvm-link is required by accepted-response-v1" >&2
+            exit 1
+          fi
+
+          if command -v clang-18 >/dev/null 2>&1; then
+            CLANG=clang-18
+          elif command -v clang >/dev/null 2>&1 && clang --version | head -n 1 | grep -Eq 'clang version 18([.]|$)'; then
+            CLANG=clang
+          else
+            echo "Clang 18 is required by accepted-response-v1" >&2
+            exit 1
+          fi
+
+          EMITTER="$(cabal list-bin phil-llvm-phase0-accepted-response)"
+          "$EMITTER" > phase0-upload-accepted-response.ll
+          "$LLVM_AS" phase0-upload-accepted-response.ll -o phase0-upload-accepted-response.bc
+
+          "$CLANG" --target=x86_64-unknown-linux-gnu \
+            -std=c11 -Wall -Wextra -Wpedantic -Werror \
+            -Iruntime/phase0 -S -emit-llvm \
+            runtime/phase0/accepted_response_v1_smoke.c \
+            -o accepted-response-runtime.ll
+
+          python3 scripts/check_runtime_abi.py \
+            phase0-upload-accepted-response.ll \
+            accepted-response-runtime.ll
+          "$LLVM_AS" accepted-response-runtime.ll -o accepted-response-runtime.bc
+
+          "$CLANG" --target=x86_64-unknown-linux-gnu \
+            -std=c11 -Wall -Wextra -Wpedantic -Werror \
+            -Iruntime/phase0 -emit-llvm -c \
+            runtime/phase0/accepted_response_v1_smoke_main.c \
+            -o accepted-response-smoke-main.bc
+
+          "$LLVM_LINK" \
+            phase0-upload-accepted-response.bc \
+            accepted-response-runtime.bc \
+            accepted-response-smoke-main.bc \
+            -o phase0-upload-accepted-response-linked.bc
+
+          "$CLANG" --target=x86_64-unknown-linux-gnu \
+            phase0-upload-accepted-response-linked.bc \
+            -lcrypto \
+            -o phase0-upload-accepted-response-smoke
+          ./phase0-upload-accepted-response-smoke
+
+          "$CLANG" --target=x86_64-unknown-linux-gnu \
+            -std=c11 -Wall -Wextra -Wpedantic -Werror \
+            -S -emit-llvm \
+            runtime/phase0/accepted_response_v1_bad_ambient.c \
+            -o accepted-response-bad-ambient.ll
+          if python3 scripts/check_runtime_abi.py --partial \
+              phase0-upload-accepted-response.ll \
+              accepted-response-bad-ambient.ll; then
+            echo "expected ABI checker to reject nullary accepted-response provider" >&2
+            exit 1
+          fi
+          echo "PASS: runtime ABI checker rejects ambient nullary accepted-response encoding"
+
+          "$LLVM_AS" --version | head -n 1
+          "$CLANG" --version | head -n 1
