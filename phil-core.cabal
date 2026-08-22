@@ -336,5 +336,6 @@ test-suite phil-steve-surface-semantic-tests
   other-modules:      Paths_phil_core
   build-depends:
       base >=4.17 && <5,
+      containers >=0.6 && <0.8,
       phil-core,
       text >=2.0 && <2.2
