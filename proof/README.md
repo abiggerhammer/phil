@@ -14,7 +14,7 @@ The human-facing logic ledger lives in Drive. The repository is authoritative fo
 
 ## Existing discharged slices
 
-The checked corpus includes session duality, exact binding insertion and linear consumption, session progression resources, label selection, process sequencing, recognition provenance/gating, branch convergence, terminal-state resource completeness, assurance disposition, linear-certificate soundness, and finite session-head exposure. See the stable obligation IDs in the individual proof files and the Drive logic ledger for the authoritative claim registry.
+The checked corpus includes session duality, exact binding insertion and linear consumption, session progression resources, label selection, process sequencing, recognition provenance/gating, branch convergence, terminal-state resource completeness, assurance disposition, linear-certificate soundness, finite session-head exposure, and deterministic focusing competence. See the stable obligation IDs in the individual proof files and the Drive logic ledger for the authoritative claim registry.
 
 ## Assurance-disposition slice
 
@@ -81,3 +81,17 @@ Evidence search itself is abstracted to the result of canonical evidence matchin
 ### PHIL-FOCUS-BRANCH-001 — exact branch coverage
 
 Successful branch checking is the conjunction of duplicate-free declared labels, duplicate-free handler labels, and extensional equality of the two label sets. Any duplicate, missing handler, or extra handler excludes success. The proof models label sets extensionally; the implementation's deterministic ordering of missing/extra diagnostic lists remains covered by the Haskell conformance suite.
+
+## Surface elaboration competence slice
+
+`proof/Phil/Surface/Elaboration.v` models the proof-relevant competence boundary of `Phil.Surface.Elaborate`. Parsed surface nodes are inputs: this file does not pretend to verify Megaparsec. The proof instead constrains what the elaborator may construct once a surface fragment has been accepted syntactically.
+
+### PHIL-SURFACE-ELAB-001 — canonical supported elaboration
+
+Supported refinement expressions map structurally to the designated Core constructors: variables, literals, Boolean terms, projections carrying the exact declared projection sort, `len`, explicit `toNat`, Nat addition/subtraction, and literal scaling. Greater-than/greater-equal propositions lower to the corresponding reversed Core less-than/less-equal form. Proof propositions delegate exactly once to the supplied canonicalization boundary. `Bytes[...]` delegates its already-elaborated raw index exactly once to the supplied expected-Nat boundary. In the implementation both supplied boundaries are `Phil.Core.Focusing`, whose authority properties are independently discharged by the `PHIL-FOCUS-*` slice.
+
+The theorem models opaque named-type arguments by a canonical structural key rather than reproducing the concrete Text rendering. Correspondence between those keys and `renderNamedType` string serialization remains an implementation/tested representation obligation; no injectivity claim about arbitrary Text serialization is smuggled into this proof.
+
+### PHIL-SURFACE-FAIL-001 — no proof-relevant guessing
+
+The proof model has no successful path for an unknown projection sort, symbolic-by-symbolic multiplication outside the Phase 0 refinement fragment, a non-name validation context/subject identity, an unsupported opaque type argument, or an integer literal with no expected UInt width. These are competence-boundary failures rather than defaults. Source-span precision and the exact Haskell error constructor are implementation-level tested properties.

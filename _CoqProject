@@ -14,3 +14,4 @@ proof/Phil/Core/Discharge.v
 proof/Phil/Core/DecisionSound.v
 proof/Phil/Core/SessionRec.v
 proof/Phil/Core/Focusing.v
+proof/Phil/Surface/Elaboration.v
