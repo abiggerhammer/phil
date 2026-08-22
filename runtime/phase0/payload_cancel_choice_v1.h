@@ -44,6 +44,7 @@ void phil_call_should_cancel_upload(void);
 
 void *phil_smoke_configure_client(bool cancel_upload, const uint8_t *final_bytes, size_t final_length);
 void *phil_smoke_configure_server(uint8_t incoming_choice);
+void *phil_smoke_configure_server_empty(void);
 bool phil_smoke_client_choice_observed(uint8_t expected_choice);
 bool phil_smoke_server_choice_observed(uint8_t expected_choice);
 
