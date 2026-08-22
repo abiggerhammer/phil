@@ -86,6 +86,7 @@ data LLVMOp
 data LLVMTerminator
   = LLVMJump LLVMBlockId
   | LLVMBranch LLVMBlockId LLVMBlockId
+  | LLVMRuntimeBranch RuntimeSiteRef Text LLVMBlockId LLVMBlockId
   | LLVMReturn Text
   | LLVMUnreachable (Maybe LLVMStrengtheningId)
   deriving (Eq, Ord, Show)
@@ -157,6 +158,7 @@ llvmBlockSuccessors :: LLVMBlock -> [LLVMBlockId]
 llvmBlockSuccessors blockValue = case llvmBlockTerminator blockValue of
   LLVMJump target -> [target]
   LLVMBranch yes no -> [yes, no]
+  LLVMRuntimeBranch _ _ yes no -> [yes, no]
   LLVMReturn _ -> []
   LLVMUnreachable _ -> []
 
@@ -164,12 +166,18 @@ llvmModuleDigest :: LLVMModule -> Digest
 llvmModuleDigest = digestText . renderLLVMModule
 
 llvmRuntimeSites :: LLVMModule -> [RuntimeSiteRef]
-llvmRuntimeSites moduleValue =
-  [ site
+llvmRuntimeSites moduleValue = concat
+  [ blockRuntimeSites blockValue
   | function <- Map.elems (llvmFunctions moduleValue)
   , blockValue <- Map.elems (llvmFunctionBlocks function)
-  , LLVMRuntime site _ <- llvmBlockOps blockValue
   ]
+  where
+    blockRuntimeSites blockValue =
+      [ site
+      | LLVMRuntime site _ <- llvmBlockOps blockValue
+      ] <> case llvmBlockTerminator blockValue of
+        LLVMRuntimeBranch site _ _ _ -> [site]
+        _ -> []
 
 llvmStrengtheningUses :: LLVMModule -> [LLVMStrengtheningId]
 llvmStrengtheningUses moduleValue = concat
@@ -212,7 +220,7 @@ renderLLVMModule moduleValue = Text.unlines $
       ]
 
     branchDeclaration =
-      if any isBranch allBlocks then ["declare i1 @phil_branch_condition()"] else []
+      if any isGenericBranch allBlocks then ["declare i1 @phil_branch_condition()"] else []
 
     cleanupDeclaration =
       if any hasCleanup allBlocks then ["declare void @phil_cleanup()"] else []
@@ -229,12 +237,17 @@ renderLLVMModule moduleValue = Text.unlines $
       ]
 
     runtimeEvidence = Set.fromList
-      [ unEvidenceEntryId (runtimeSiteEvidence site)
-      | blockValue <- allBlocks
-      , LLVMRuntime site _ <- llvmBlockOps blockValue
-      ]
+      ( [ unEvidenceEntryId (runtimeSiteEvidence site)
+        | blockValue <- allBlocks
+        , LLVMRuntime site _ <- llvmBlockOps blockValue
+        ]
+        <> [ unEvidenceEntryId (runtimeSiteEvidence site)
+           | blockValue <- allBlocks
+           , LLVMRuntimeBranch site _ _ _ <- [llvmBlockTerminator blockValue]
+           ]
+      )
 
-    isBranch blockValue = case llvmBlockTerminator blockValue of
+    isGenericBranch blockValue = case llvmBlockTerminator blockValue of
       LLVMBranch _ _ -> True
       _ -> False
 
@@ -243,7 +256,7 @@ renderLLVMModule moduleValue = Text.unlines $
     isCleanup _ = False
 
     renderCallDeclaration name = "declare void @phil_call_" <> symbol name <> "()"
-    renderRuntimeDeclaration evidence = "declare void @phil_runtime_" <> symbol evidence <> "()"
+    renderRuntimeDeclaration evidence = "declare i1 @phil_runtime_" <> symbol evidence <> "()"
 
     renderFunction (functionKey, function) =
       [ "define i32 @" <> symbol functionKey <> "() {" ]
@@ -267,7 +280,7 @@ renderLLVMModule moduleValue = Text.unlines $
       LLVMCall name -> ["call void @phil_call_" <> symbol name <> "()"]
       LLVMRuntime site name ->
         [ "; runtime " <> oneLine name
-        , "call void @phil_runtime_" <> symbol (unEvidenceEntryId (runtimeSiteEvidence site)) <> "()"
+        , "call i1 @phil_runtime_" <> symbol (unEvidenceEntryId (runtimeSiteEvidence site)) <> "()"
         ]
       LLVMCleanup name ->
         ["; cleanup " <> oneLine name, "call void @phil_cleanup()"]
@@ -309,6 +322,14 @@ renderLLVMModule moduleValue = Text.unlines $
         [ "%phil_cond_" <> symbol (unLLVMBlockId (llvmBlockId blockValue))
             <> " = call i1 @phil_branch_condition()"
         , "br i1 %phil_cond_" <> symbol (unLLVMBlockId (llvmBlockId blockValue))
+            <> ", label %" <> symbol (unLLVMBlockId yes)
+            <> ", label %" <> symbol (unLLVMBlockId no)
+        ]
+      LLVMRuntimeBranch site name yes no ->
+        [ "; runtime-branch " <> oneLine name
+        , "%phil_runtime_cond_" <> symbol (unLLVMBlockId (llvmBlockId blockValue))
+            <> " = call i1 @phil_runtime_" <> symbol (unEvidenceEntryId (runtimeSiteEvidence site)) <> "()"
+        , "br i1 %phil_runtime_cond_" <> symbol (unLLVMBlockId (llvmBlockId blockValue))
             <> ", label %" <> symbol (unLLVMBlockId yes)
             <> ", label %" <> symbol (unLLVMBlockId no)
         ]
