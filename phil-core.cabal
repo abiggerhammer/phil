@@ -39,14 +39,20 @@ library
       Phil.Surface.Elaborate
       Phil.Surface.Check
       Phil.Surface.Phase0
+      Phil.Assurance
   other-modules:
       Phil.Surface.Check.Types
       Phil.Surface.Check.Support
       Phil.Surface.Check.Preflight
       Phil.Surface.Check.Engine
+      Phil.Assurance.Types
+      Phil.Assurance.Verify
+      Phil.Assurance.Phase0
   build-depends:
       base >=4.17 && <5,
+      bytestring >=0.11 && <0.13,
       containers >=0.6 && <0.8,
+      cryptohash-sha256 >=0.11 && <0.12,
       megaparsec >=9.6 && <10,
       text >=2.0 && <2.2
 
@@ -221,5 +227,16 @@ test-suite phil-surface-conformance-tests
   other-modules:      Paths_phil_core
   build-depends:
       base >=4.17 && <5,
+      phil-core,
+      text >=2.0 && <2.2
+
+test-suite phil-assurance-tests
+  import:             common-settings
+  type:               exitcode-stdio-1.0
+  hs-source-dirs:     test
+  main-is:            AssuranceMain.hs
+  build-depends:
+      base >=4.17 && <5,
+      containers >=0.6 && <0.8,
       phil-core,
       text >=2.0 && <2.2
