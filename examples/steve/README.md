@@ -83,6 +83,12 @@ The manifest deliberately records SHA-256 collision resistance as a disclosed pr
 
 This is a semantic/provisional manifest rather than a native build certificate: provider assumptions remain assumptions, build/lowering identities are placeholders, and `.phil` whole-component semantic acceptance remains future work.
 
+## Systems IR / lowering pressure test
+
+`systems/lowering-contract.md` maps Steve onto the ADR-007/011 systems IR introduced by PR #26. It sketches `StevePut`/`SteveGet` CFGs, owning/borrowed value representation, retained runtime sites, stage facts, lowering decisions, proof-erasure prerequisites, and exact cost behavior—including the rule that an idempotent equal-byte retry does not pay for a second digest.
+
+That pass also exposes four current systems-IR generalization points: assumption-bound stage facts are not first-class, one physical runtime site cannot yet carry several assurance claims, provider authority/no-delete/no-clobber is not a checked systems invariant, and stable evidence subject identity is only partially represented. These are classified as representation/verifier gaps under accepted ADR-001/002/005/006/007/010/011, not as evidence for a new Phil ADR.
+
 ## Steve 0 claims exercised by the sketch
 
 - successful `put` returns an ID matching the stable identity of the candidate bytes;
