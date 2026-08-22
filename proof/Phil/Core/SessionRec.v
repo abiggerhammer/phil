@@ -195,10 +195,16 @@ Proof.
       simpl in Hin. destruct Hin as [Heq | Hin].
       - subst name. exact HnamePool.
       - apply HseenPool. exact Hin. }
-    assert (HnextNamesPool : incl (recursionNames nextSession) pool).
+    assert (HnextNamesPool :
+      incl
+        (recursionNames
+          (substituteSessionVar recursionName (Rec recursionName body) body))
+        pool).
     { unfold incl. intros name Hin.
       apply HnamesPool.
-      eapply exposure_step_names_subset; eauto. }
+      eapply exposure_step_names_subset.
+      - constructor. exact Hfresh.
+      - exact Hin. }
     specialize (IH HnextNoDup HnextSeenPool HnextNamesPool).
     destruct IH as [HfinalNoDup [HfinalPool [HfinalNames Hlength]]].
     repeat split; try assumption.
