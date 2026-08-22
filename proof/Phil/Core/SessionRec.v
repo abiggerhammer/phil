@@ -8,9 +8,9 @@ Open Scope string_scope.
 (*
   Proof-oriented mirror of Phil.Core.Session.exposeSessionHead.
 
-  Haskell can express the seen-set loop directly.  Rocq needs structurally
+  Haskell can express the seen-set loop directly. Rocq needs structurally
   evident termination, so we give the mirror explicit fuel derived from the
-  finite set of recursion binder names in the initial session.  The proof below
+  finite set of recursion binder names in the initial session. The proof below
   establishes that substitution cannot invent recursion binders, every fresh
   unfolding strictly grows the seen set, and therefore the derived fuel can
   never be exhausted.
@@ -84,8 +84,9 @@ Proof.
   - intros recursionName body IH target replacement name Hin.
     simpl.
     destruct (String.eqb recursionName target) eqn:Heq.
-    + simpl in Hin. left. exact Hin.
-    + simpl in Hin.
+    + rewrite Heq in Hin. simpl in Hin.
+      left. exact Hin.
+    + rewrite Heq in Hin. simpl in Hin.
       destruct Hin as [Hname | Hbody].
       * left. simpl. left. exact Hname.
       * apply IH in Hbody.
@@ -95,8 +96,9 @@ Proof.
   - intros variable target replacement name Hin.
     simpl.
     destruct (String.eqb variable target) eqn:Heq.
-    + right. exact Hin.
-    + simpl in Hin. contradiction.
+    + rewrite Heq in Hin. simpl in Hin.
+      right. exact Hin.
+    + rewrite Heq in Hin. simpl in Hin. contradiction.
   - intros target replacement name Hin. simpl in Hin. contradiction.
   - intros label payload continuation rest IHcontinuation IHrest target replacement name Hin.
     simpl in Hin.
@@ -280,7 +282,7 @@ Proof.
       * exact Htrace.
 Qed.
 
-(* PHIL-SESSION-REC-001: the finite seen-set mirror cannot exhaust its bound. *)
+(* PHIL-SESSION-REC-001 *)
 Theorem exposeSessionHeadModel_never_exhausts :
   forall session,
     exposeSessionHeadModel session <> ExposureFuelExhausted.
@@ -330,13 +332,6 @@ Proof.
     + discriminate.
 Qed.
 
-(*
-  PHIL-SESSION-REC-001.
-
-  Every modeled call terminates in exactly one of the implemented observable
-  classes: a non-recursive head, repeated unguarded recursion, or an unbound
-  session variable.  Fuel exhaustion has been ruled out above.
-*)
 Theorem exposeSessionHeadModel_classifies :
   forall session,
     match exposeSessionHeadModel session with
