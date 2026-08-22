@@ -53,6 +53,7 @@ import Phil.Core.Session
   ( MessageSpec (..)
   , SessionStep (..)
   , closeEndpoint
+  , exposeSessionHead
   , offerEndpoint
   , receiveEndpoint
   , selectEndpoint
@@ -69,6 +70,7 @@ import Phil.Core.Syntax
   , Proposition (..)
   , RefSort (..)
   , RefTerm (..)
+  , Session (..)
   , Ty (..)
   , Value (..)
   )
@@ -669,7 +671,7 @@ evalReceiveExact environment state located count endpointExpression explicitEvid
     receiveEndpoint (Name endpoint) temp (resourceContext (stateCore state1))
   let state2 = applySessionContext endpoint (stepContext step) state1
   (successor, state3) <- extractLinearTemp (locatedSpan located) temp state2
-      
+
   let payload = ScalarValue Linear (TyBytes expectedIndex) (OwnedBytesShape expectedIndex)
   Right
     [ valuePath state3
@@ -1170,14 +1172,11 @@ resolveCloseTarget state target = case locatedValue target of
   VariableExpression name -> do
     meta <- lookupMeta target name state
     case bindingType meta of
-      TyEndpoint session -> case stripRefinement (TyEndpoint session) of
-        TyEndpoint endpointSession -> do
-          headSession <- mapSession target $
-            Phil.Core.Session.exposeSessionHead endpointSession
-          case headSession of
-            Phil.Core.Syntax.End outcome -> Right (name, outcome)
-            _ -> throw target SessionAction "endpoint is not at an end state"
-        _ -> throw target SessionAction "close requires an endpoint"
+      TyEndpoint session -> do
+        headSession <- mapSession target (exposeSessionHead session)
+        case headSession of
+          End outcome -> Right (name, outcome)
+          _ -> throw target SessionAction "endpoint is not at an end state"
       _ -> throw target SessionAction "close requires an endpoint or terminal outcome"
   _ -> throw target SessionAction "close target must be a name"
 
