@@ -33,7 +33,7 @@ data StorageLLVMError
   | StorageLLVMFunctionMissing Text
   | StorageTransportParameterMismatch Text [LLVMParameter]
   | StorageLLVMBlockMissing Text LLVMBlockId
-  | StorageTerminatorMismatch Text LLVMBlockId LLVMTerminator
+  | StorageLLVMTerminatorMismatch Text LLVMBlockId LLVMTerminator
   | StorageRenderedCallMismatch Text
   | StorageRenderedStatusMismatch Text
   | StorageAmbientStateDetected Text
@@ -139,7 +139,7 @@ verifyWitness bundle llvmArtifact = do
           && result == storageResult witness
           && runtimeSiteKind siteValue == StorageBoundary -> Right (siteValue, yesValue, noValue)
     other -> Left (StorageSystemsCandidateError
-      (StorageTerminatorMismatch functionName (storageBlock witness) other))
+      (Phil.Systems.Storage.StorageTerminatorMismatch functionName (storageBlock witness) other))
 
   llvmFunction <- lookupLLVMFunction llvmModule functionName
   llvmBlock <- lookupLLVMBlock functionName llvmFunction blockId
@@ -150,7 +150,7 @@ verifyWitness bundle llvmArtifact = do
         (LLVMBlockId (unBlockId yes))
         (LLVMBlockId (unBlockId no))
   unless (llvmBlockTerminator llvmBlock == expected) $
-    Left (StorageTerminatorMismatch functionName blockId (llvmBlockTerminator llvmBlock))
+    Left (StorageLLVMTerminatorMismatch functionName blockId (llvmBlockTerminator llvmBlock))
 
   mapM_ (rejectPayloadRelease functionName llvmFunction payloadName)
     [ blockId
