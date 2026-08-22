@@ -128,6 +128,7 @@ Proof.
   intros model factId revision Hverified Hlookup Hrequired.
   destruct Hverified as [_ [_ Hvalid]].
   pose proof (Hvalid factId (mkFactRecord revision FactConsumed) Hlookup) as Hdisposition.
+  unfold FactDispositionValid in Hdisposition.
   simpl in Hdisposition.
   rewrite Hrequired in Hdisposition.
   discriminate.
@@ -144,6 +145,8 @@ Proof.
   destruct Hverified as [_ [_ Hvalid]].
   pose proof (Hvalid factId
     (mkFactRecord revision (FactTransferred invariantId)) Hlookup) as Hdisposition.
+  unfold FactDispositionValid in Hdisposition.
+  simpl in Hdisposition.
   exact Hdisposition.
 Qed.
 
@@ -163,6 +166,8 @@ Proof.
   destruct Hverified as [_ [_ Hvalid]].
   pose proof (Hvalid factId
     (mkFactRecord sourceRevision (FactErased useId)) Hlookup) as Hdisposition.
+  unfold FactDispositionValid in Hdisposition.
+  simpl in Hdisposition.
   exact Hdisposition.
 Qed.
 
@@ -177,6 +182,7 @@ Proof.
   destruct Hverified as [_ [_ Hvalid]].
   pose proof (Hvalid factId
     (mkFactRecord sourceRevision (FactRuntimeRetained evidenceId)) Hlookup) as Hdisposition.
+  unfold FactDispositionValid in Hdisposition.
   simpl in Hdisposition.
   destruct Hdisposition as [Hselected _].
   exact Hselected.
@@ -193,6 +199,7 @@ Proof.
   destruct Hverified as [_ [_ Hvalid]].
   pose proof (Hvalid factId
     (mkFactRecord (Some revision) (FactRuntimeRetained evidenceId)) Hlookup) as Hdisposition.
+  unfold FactDispositionValid in Hdisposition.
   simpl in Hdisposition.
   destruct Hdisposition as [_ Haligned].
   exact Haligned.
@@ -209,6 +216,8 @@ Proof.
   destruct Hverified as [_ [_ Hvalid]].
   pose proof (Hvalid factId
     (mkFactRecord sourceRevision (FactDerived revision)) Hlookup) as Hdisposition.
+  unfold FactDispositionValid in Hdisposition.
+  simpl in Hdisposition.
   exact Hdisposition.
 Qed.
 
