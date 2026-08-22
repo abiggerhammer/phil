@@ -100,11 +100,11 @@ lowerOp mode functionValue operation = case operation of
   OpDestroyPending {} -> [LLVMCleanup "destroy pending ingress/frame"]
   OpReleaseOwner { releaseOwner = owner }
     | mode == ExactReceiveMode && isExactReceivePayload functionValue owner ->
-        [LLVMBufferRelease (unValueId owner)]
+        [LLVMBufferRelease (payloadSSAName owner)]
     | otherwise -> [LLVMCleanup "release owner"]
   OpCleanupPartial { cleanupOwner = owner }
     | mode == ExactReceiveMode && isExactReceivePayload functionValue owner ->
-        [LLVMBufferRelease (unValueId owner)]
+        [LLVMBufferRelease (payloadSSAName owner)]
     | otherwise -> [LLVMCleanup "cleanup partial owner"]
   OpRuntimeCall
     { runtimeCallName = name
@@ -173,7 +173,7 @@ lowerTerminator mode functionValue terminator = case terminator of
               (unValueId transportValue)
               (unValueId lengthValue)
               scalarType
-              (unValueId payloadValue)
+              (payloadSSAName payloadValue)
               (lowerBlockId yes)
               (lowerBlockId no)
             _ -> runtimeBranch site yes no
@@ -285,6 +285,9 @@ isExactReceivePayload functionValue owner = any blockOwnsPayload
     blockOwnsPayload blockValue = case systemsBlockTerminator blockValue of
       TermReceiveExact { exactPayloadOwner = payload } -> payload == owner
       _ -> False
+
+payloadSSAName :: ValueId -> Text
+payloadSSAName valueId = unValueId valueId <> ".owner"
 
 scalarTypeOf :: SystemsFunction -> ValueId -> Maybe ScalarType
 scalarTypeOf functionValue valueId = do
