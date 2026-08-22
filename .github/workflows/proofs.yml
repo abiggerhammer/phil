@@ -38,3 +38,5 @@ jobs:
           rocq c -Q proof/Phil Phil proof/Phil/Core/SessionStep.v
           rocq c -Q proof/Phil Phil proof/Phil/Core/Recognition.v
           rocq c -Q proof/Phil Phil proof/Phil/Core/RecognitionLoan.v
+          rocq c -Q proof/Phil Phil proof/Phil/Core/ContextJoin.v
+          rocq c -Q proof/Phil Phil proof/Phil/Core/ProcessJoin.v
