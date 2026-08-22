@@ -1,4 +1,4 @@
-From Phil.Systems Require Import DigestValidation.
+From Phil.Systems Require Import ScalarDataflow DigestValidation.
 From Phil.LLVM Require Import ExactReceive RuntimeSymbolIdentity.
 
 (*
