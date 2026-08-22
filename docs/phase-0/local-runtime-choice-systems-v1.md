@@ -69,6 +69,26 @@ The same branch-edge rule is also applicable to future typed `TermSessionOffer` 
 
 For Phase 0, payload-bearing choice targets remain dedicated binder blocks with the choice block as their sole predecessor. General phi-like joins remain a future explicit representation problem.
 
+## Stage-invariant transfer
+
+The predecessor stage contract transfers `endpoint.typestate` through the stable invariant ID:
+
+```text
+invariant.version.selection_branch
+```
+
+Historically that ID named an `InvariantBranchTargets` claim over the Boolean `TermBranch`. Replacing the terminator without replacing the claim correctly caused the successor artifact to fail with `StageInvariantControlMismatch`.
+
+The successor therefore retains the **same invariant ID** but transfers it to an exact `InvariantRuntimeChoice` claim binding:
+
+- function `UploadServer`;
+- block `server.version.choose`;
+- chooser name `choose_supported`;
+- constructor `none` with no payload and target `server.unsupported`;
+- constructor `some` with payload `server.selected_version` and target `server.version`.
+
+The lowering decision records this invariant in `loweringInvariantsTransferred`. This is a representation change of the same positive semantic obligation, not a weakening of the old verifier.
+
 ## Proof values
 
 The source arms also mention:
