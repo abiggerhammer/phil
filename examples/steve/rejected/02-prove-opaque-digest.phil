@@ -1,17 +1,13 @@
 // reject: DigestMatches is opaque; generic `prove` cannot manufacture it.
 //
-// This witness is intentionally minimal. It uses a fixed byte count and the
-// existing stable `OwnedBytes.id` projection so that the intended OpaqueProof
-// rejection needs only one architecture/static declaration: DigestMatches is
-// an opaque claim over ContentId[SHA256] and a stable OwnedBytes identity.
+// This witness is intentionally minimal. The stable byte-object identity is an
+// architecture-supplied binding so the test exercises only the generic opaque-
+// proof rule; it does not depend on any Steve-specific field projection or
+// provider primitive.
 component BadProveDigest(
     id : ContentId[SHA256],
-    bytes : OwnedBytes[0]
-) provides PutResult[SHA256] {
-    let digestEvidence = prove DigestMatches(id, bytes.id)
-    release bytes
-    return construct PutOk {
-        id = id,
-        evidence = digestEvidence
-    }
+    object
+) provides Unit {
+    let digestEvidence = prove DigestMatches(id, object)
+    return unit
 }
