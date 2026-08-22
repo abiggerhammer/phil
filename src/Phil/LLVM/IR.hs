@@ -99,6 +99,7 @@ data LLVMOp
   | LLVMFieldProjection Text Text Text Text ScalarType
   | LLVMAcceptedResponse Text Text
   | LLVMRejectedResponse Text Int
+  | LLVMPayloadCancelSelect Text Int
   | LLVMFinalResponsePayloadBinding Text
   | LLVMRecordUploadId Text
   | LLVMStrengtheningOp LLVMStrengtheningId Text
@@ -137,6 +138,10 @@ data LLVMTerminator
       LLVMBlockId
   | LLVMFinalResponseOffer
       Text
+      Text
+      LLVMBlockId
+      LLVMBlockId
+  | LLVMPayloadCancelOffer
       Text
       LLVMBlockId
       LLVMBlockId
@@ -220,6 +225,7 @@ llvmBlockSuccessors blockValue = case llvmBlockTerminator blockValue of
   LLVMDigestValidate _ _ _ yes no -> [yes, no]
   LLVMStore _ _ _ yes no -> [yes, no]
   LLVMFinalResponseOffer _ _ yes no -> [yes, no]
+  LLVMPayloadCancelOffer _ payloadTarget cancelTarget -> [payloadTarget, cancelTarget]
   LLVMReturnScalar _ _ -> []
   LLVMReturn _ -> []
   LLVMUnreachable _ -> []
@@ -276,6 +282,7 @@ renderLLVMModule moduleValue = Text.unlines $
       , "phil-runtime/phase0/accepted-response-v1"
       , "phil-runtime/phase0/rejected-response-v1"
       , "phil-runtime/phase0/final-response-receive-v1"
+      , "phil-runtime/phase0/payload-cancel-choice-v1"
       ]
 
     header =
@@ -317,6 +324,8 @@ renderLLVMModule moduleValue = Text.unlines $
       <> rejectedResponseDeclaration
       <> finalResponseReceiveDeclaration
       <> recordUploadIdDeclaration
+      <> payloadCancelSelectDeclaration
+      <> payloadCancelReceiveDeclaration
       <> map renderCallDeclaration (Set.toAscList callNames)
       <> runtimeDeclarations
       <> map renderFieldProjectionDeclaration (Set.toAscList fieldProjectionSignatures)
@@ -373,6 +382,16 @@ renderLLVMModule moduleValue = Text.unlines $
     recordUploadIdDeclaration =
       if any hasRecordUploadId allBlocks
         then ["declare void @phil_runtime_record_upload_id(ptr)"]
+        else []
+
+    payloadCancelSelectDeclaration =
+      if any hasPayloadCancelSelect allBlocks
+        then ["declare void @phil_runtime_select_payload_cancel(ptr, i8)"]
+        else []
+
+    payloadCancelReceiveDeclaration =
+      if any hasPayloadCancelOffer allBlocks
+        then ["declare i1 @phil_runtime_receive_payload_cancel(ptr)"]
         else []
 
     callNames = Set.fromList
@@ -469,6 +488,14 @@ renderLLVMModule moduleValue = Text.unlines $
     isRecordUploadId LLVMRecordUploadId {} = True
     isRecordUploadId _ = False
 
+    hasPayloadCancelSelect blockValue = any isPayloadCancelSelect (llvmBlockOps blockValue)
+    isPayloadCancelSelect LLVMPayloadCancelSelect {} = True
+    isPayloadCancelSelect _ = False
+
+    hasPayloadCancelOffer blockValue = case llvmBlockTerminator blockValue of
+      LLVMPayloadCancelOffer {} -> True
+      _ -> False
+
     renderCallDeclaration name = "declare void @phil_call_" <> symbol name <> "()"
     renderRuntimeEvidenceDeclaration evidence =
       "declare i1 @phil_runtime_" <> symbol evidence <> "()"
@@ -544,6 +571,10 @@ renderLLVMModule moduleValue = Text.unlines $
       LLVMRejectedResponse transport reasonCode ->
         [ "call void @phil_runtime_select_rejected(ptr %" <> symbol transport
             <> ", i8 " <> Text.pack (show reasonCode) <> ")"
+        ]
+      LLVMPayloadCancelSelect transport choiceCode ->
+        [ "call void @phil_runtime_select_payload_cancel(ptr %" <> symbol transport
+            <> ", i8 " <> Text.pack (show choiceCode) <> ")"
         ]
       LLVMFinalResponsePayloadBinding uploadId ->
         [ "%" <> symbol uploadId <> " = load ptr, ptr %phil_final_response_upload_id_slot_"
@@ -689,6 +720,16 @@ renderLLVMModule moduleValue = Text.unlines $
           , "br i1 " <> acceptedName
               <> ", label %" <> symbol (unLLVMBlockId yes)
               <> ", label %" <> symbol (unLLVMBlockId no)
+          ]
+      LLVMPayloadCancelOffer transportName payloadTarget cancelTarget ->
+        let blockSymbol = symbol (unLLVMBlockId (llvmBlockId blockValue))
+            payloadName = "%phil_payload_cancel_is_payload_" <> blockSymbol
+        in
+          [ payloadName <> " = call i1 @phil_runtime_receive_payload_cancel(ptr %"
+              <> symbol transportName <> ")"
+          , "br i1 " <> payloadName
+              <> ", label %" <> symbol (unLLVMBlockId payloadTarget)
+              <> ", label %" <> symbol (unLLVMBlockId cancelTarget)
           ]
       LLVMReturnScalar name scalarType ->
         ["ret " <> renderScalarType scalarType <> " %" <> symbol name]
