@@ -1,0 +1,947 @@
+name: Final Session Offer Lowering Edit
+
+on:
+  push:
+    branches:
+      - lower-final-session-offer
+    paths:
+      - '.github/workflows/session-offer-lowering-edit.yml'
+
+permissions:
+  contents: write
+
+jobs:
+  apply:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check out feature branch
+        uses: actions/checkout@v4
+        with:
+          ref: lower-final-session-offer
+          fetch-depth: 0
+
+      - name: Apply lowering slice
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 - <<'PY'
+          from pathlib import Path
+
+          def replace_once(path, old, new):
+              p = Path(path)
+              text = p.read_text()
+              count = text.count(old)
+              if count != 1:
+                  raise SystemExit(f"{path}: expected one occurrence, found {count}: {old[:100]!r}")
+              p.write_text(text.replace(old, new, 1))
+
+          # LLVM IR vocabulary: explicit final-response decoder, accepted-arm payload bind,
+          # and application sink. The target still carries no DigestFailure object.
+          replace_once(
+              "src/Phil/LLVM/IR.hs",
+              "  | LLVMAcceptedResponse Text Text\n  | LLVMRejectedResponse Text Int\n  | LLVMStrengtheningOp LLVMStrengtheningId Text\n",
+              "  | LLVMAcceptedResponse Text Text\n  | LLVMRejectedResponse Text Int\n  | LLVMFinalResponsePayloadBinding Text\n  | LLVMRecordUploadId Text\n  | LLVMStrengtheningOp LLVMStrengtheningId Text\n",
+          )
+          replace_once(
+              "src/Phil/LLVM/IR.hs",
+              "  | LLVMStore\n      RuntimeSiteRef\n      Text\n      Text\n      LLVMBlockId\n      LLVMBlockId\n  | LLVMReturnScalar Text ScalarType\n",
+              "  | LLVMStore\n      RuntimeSiteRef\n      Text\n      Text\n      LLVMBlockId\n      LLVMBlockId\n  | LLVMFinalResponseOffer\n      Text\n      Text\n      LLVMBlockId\n      LLVMBlockId\n  | LLVMReturnScalar Text ScalarType\n",
+          )
+          replace_once(
+              "src/Phil/LLVM/IR.hs",
+              "  LLVMStore _ _ _ yes no -> [yes, no]\n  LLVMReturnScalar _ _ -> []\n",
+              "  LLVMStore _ _ _ yes no -> [yes, no]\n  LLVMFinalResponseOffer _ _ yes no -> [yes, no]\n  LLVMReturnScalar _ _ -> []\n",
+          )
+          replace_once(
+              "src/Phil/LLVM/IR.hs",
+              "      , \"phil-runtime/phase0/rejected-response-v1\"\n      ]\n",
+              "      , \"phil-runtime/phase0/rejected-response-v1\"\n      , \"phil-runtime/phase0/final-response-receive-v1\"\n      ]\n",
+          )
+          replace_once(
+              "src/Phil/LLVM/IR.hs",
+              "      <> acceptedResponseDeclaration\n      <> rejectedResponseDeclaration\n      <> map renderCallDeclaration",
+              "      <> acceptedResponseDeclaration\n      <> rejectedResponseDeclaration\n      <> finalResponseReceiveDeclaration\n      <> recordUploadIdDeclaration\n      <> map renderCallDeclaration",
+          )
+          replace_once(
+              "src/Phil/LLVM/IR.hs",
+              "    rejectedResponseDeclaration =\n      if any hasRejectedResponse allBlocks\n        then [\"declare void @phil_runtime_select_rejected(ptr, i8)\"]\n        else []\n\n    callNames = Set.fromList\n",
+              "    rejectedResponseDeclaration =\n      if any hasRejectedResponse allBlocks\n        then [\"declare void @phil_runtime_select_rejected(ptr, i8)\"]\n        else []\n\n    finalResponseReceiveDeclaration =\n      if any hasFinalResponseOffer allBlocks\n        then [\"declare i1 @phil_runtime_receive_final_response(ptr, ptr)\"]\n        else []\n\n    recordUploadIdDeclaration =\n      if any hasRecordUploadId allBlocks\n        then [\"declare void @phil_runtime_record_upload_id(ptr)\"]\n        else []\n\n    callNames = Set.fromList\n",
+          )
+          replace_once(
+              "src/Phil/LLVM/IR.hs",
+              "    hasRejectedResponse blockValue = any isRejectedResponse (llvmBlockOps blockValue)\n    isRejectedResponse LLVMRejectedResponse {} = True\n    isRejectedResponse _ = False\n\n    renderCallDeclaration name",
+              "    hasRejectedResponse blockValue = any isRejectedResponse (llvmBlockOps blockValue)\n    isRejectedResponse LLVMRejectedResponse {} = True\n    isRejectedResponse _ = False\n\n    hasFinalResponseOffer blockValue = case llvmBlockTerminator blockValue of\n      LLVMFinalResponseOffer {} -> True\n      _ -> False\n\n    hasRecordUploadId blockValue = any isRecordUploadId (llvmBlockOps blockValue)\n    isRecordUploadId LLVMRecordUploadId {} = True\n    isRecordUploadId _ = False\n\n    renderCallDeclaration name",
+          )
+          replace_once(
+              "src/Phil/LLVM/IR.hs",
+              "      LLVMRejectedResponse transport reasonCode ->\n        [ \"call void @phil_runtime_select_rejected(ptr %\" <> symbol transport\n            <> \", i8 \" <> Text.pack (show reasonCode) <> \")\"\n        ]\n      LLVMStrengtheningOp strengtheningId description ->\n",
+              "      LLVMRejectedResponse transport reasonCode ->\n        [ \"call void @phil_runtime_select_rejected(ptr %\" <> symbol transport\n            <> \", i8 \" <> Text.pack (show reasonCode) <> \")\"\n        ]\n      LLVMFinalResponsePayloadBinding uploadId ->\n        [ \"%\" <> symbol uploadId <> \" = load ptr, ptr %phil_final_response_upload_id_slot_\"\n            <> symbol uploadId\n        ]\n      LLVMRecordUploadId uploadId ->\n        [ \"call void @phil_runtime_record_upload_id(ptr %\" <> symbol uploadId <> \")\" ]\n      LLVMStrengtheningOp strengtheningId description ->\n",
+          )
+          replace_once(
+              "src/Phil/LLVM/IR.hs",
+              "      LLVMStore _ payloadName uploadIdName yes no ->\n        let blockSymbol = symbol (unLLVMBlockId (llvmBlockId blockValue))\n            resultType = \"{ i8, ptr }\"\n            resultName = \"%phil_store_result_\" <> blockSymbol\n            statusName = \"%phil_store_status_\" <> blockSymbol\n            okName = \"%phil_store_ok_\" <> blockSymbol\n        in\n          [ resultName <> \" = call \" <> resultType\n              <> \" @phil_runtime_store(ptr %\" <> symbol payloadName <> \")\"\n          , statusName <> \" = extractvalue \" <> resultType <> \" \" <> resultName <> \", 0\"\n          , \"%\" <> symbol uploadIdName <> \" = extractvalue \" <> resultType <> \" \" <> resultName <> \", 1\"\n          , okName <> \" = icmp eq i8 \" <> statusName <> \", 1\"\n          , \"br i1 \" <> okName\n              <> \", label %\" <> symbol (unLLVMBlockId yes)\n              <> \", label %\" <> symbol (unLLVMBlockId no)\n          ]\n      LLVMReturnScalar name scalarType ->\n",
+              "      LLVMStore _ payloadName uploadIdName yes no ->\n        let blockSymbol = symbol (unLLVMBlockId (llvmBlockId blockValue))\n            resultType = \"{ i8, ptr }\"\n            resultName = \"%phil_store_result_\" <> blockSymbol\n            statusName = \"%phil_store_status_\" <> blockSymbol\n            okName = \"%phil_store_ok_\" <> blockSymbol\n        in\n          [ resultName <> \" = call \" <> resultType\n              <> \" @phil_runtime_store(ptr %\" <> symbol payloadName <> \")\"\n          , statusName <> \" = extractvalue \" <> resultType <> \" \" <> resultName <> \", 0\"\n          , \"%\" <> symbol uploadIdName <> \" = extractvalue \" <> resultType <> \" \" <> resultName <> \", 1\"\n          , okName <> \" = icmp eq i8 \" <> statusName <> \", 1\"\n          , \"br i1 \" <> okName\n              <> \", label %\" <> symbol (unLLVMBlockId yes)\n              <> \", label %\" <> symbol (unLLVMBlockId no)\n          ]\n      LLVMFinalResponseOffer transportName uploadIdName yes no ->\n        let blockSymbol = symbol (unLLVMBlockId (llvmBlockId blockValue))\n            slotName = \"%phil_final_response_upload_id_slot_\" <> symbol uploadIdName\n            acceptedName = \"%phil_final_response_accepted_\" <> blockSymbol\n        in\n          [ slotName <> \" = alloca ptr\"\n          , acceptedName <> \" = call i1 @phil_runtime_receive_final_response(ptr %\"\n              <> symbol transportName <> \", ptr \" <> slotName <> \")\"\n          , \"br i1 \" <> acceptedName\n              <> \", label %\" <> symbol (unLLVMBlockId yes)\n              <> \", label %\" <> symbol (unLLVMBlockId no)\n          ]\n      LLVMReturnScalar name scalarType ->\n",
+          )
+
+          # Generic LLVM verifier treats the new physical operations as ordinary target structure.
+          replace_once(
+              "src/Phil/LLVM/Verify.hs",
+              "      LLVMAcceptedResponse {} -> True\n      LLVMRejectedResponse {} -> True\n      LLVMStrengtheningOp _ _ -> False\n",
+              "      LLVMAcceptedResponse {} -> True\n      LLVMRejectedResponse {} -> True\n      LLVMFinalResponsePayloadBinding {} -> True\n      LLVMRecordUploadId {} -> True\n      LLVMStrengtheningOp _ _ -> False\n",
+          )
+
+          # Public exports.
+          replace_once(
+              "src/Phil/LLVM.hs",
+              "  , module Phil.LLVM.RejectedResponseCertification\n  ) where\n",
+              "  , module Phil.LLVM.RejectedResponseCertification\n  , module Phil.LLVM.SessionOffer\n  ) where\n",
+          )
+          replace_once(
+              "src/Phil/LLVM.hs",
+              "import Phil.LLVM.RejectedResponseCertification\nimport Phil.LLVM.Storage\n",
+              "import Phil.LLVM.RejectedResponseCertification\nimport Phil.LLVM.SessionOffer\nimport Phil.LLVM.Storage\n",
+          )
+
+          # Cabal registration.
+          replace_once(
+              "phil-core.cabal",
+              "      Phil.LLVM.RejectedResponse\n      Phil.LLVM.RejectedResponseCertification\n  build-depends:\n",
+              "      Phil.LLVM.RejectedResponse\n      Phil.LLVM.RejectedResponseCertification\n      Phil.LLVM.SessionOffer\n  build-depends:\n",
+          )
+          replace_once(
+              "phil-core.cabal",
+              "executable phil-llvm-phase0-rejected-response\n  import:             common-settings\n  hs-source-dirs:     app\n  main-is:            LLVMRejectedResponseMain.hs\n  build-depends:\n      base >=4.17 && <5,\n      phil-core,\n      text >=2.0 && <2.2\n\nexecutable philc\n",
+              "executable phil-llvm-phase0-rejected-response\n  import:             common-settings\n  hs-source-dirs:     app\n  main-is:            LLVMRejectedResponseMain.hs\n  build-depends:\n      base >=4.17 && <5,\n      phil-core,\n      text >=2.0 && <2.2\n\nexecutable phil-llvm-phase0-final-response-receive\n  import:             common-settings\n  hs-source-dirs:     app\n  main-is:            LLVMFinalResponseReceiveMain.hs\n  build-depends:\n      base >=4.17 && <5,\n      phil-core,\n      text >=2.0 && <2.2\n\nexecutable philc\n",
+          )
+          replace_once(
+              "phil-core.cabal",
+              "test-suite phil-session-choice-tests\n  import:             common-settings\n  type:               exitcode-stdio-1.0\n  hs-source-dirs:     test\n  main-is:            SessionChoiceMain.hs\n  build-depends:\n      base >=4.17 && <5,\n      containers >=0.6 && <0.8,\n      phil-core,\n      text >=2.0 && <2.2\n\n",
+              "test-suite phil-session-choice-tests\n  import:             common-settings\n  type:               exitcode-stdio-1.0\n  hs-source-dirs:     test\n  main-is:            SessionChoiceMain.hs\n  build-depends:\n      base >=4.17 && <5,\n      containers >=0.6 && <0.8,\n      phil-core,\n      text >=2.0 && <2.2\n\ntest-suite phil-final-response-receive-tests\n  import:             common-settings\n  type:               exitcode-stdio-1.0\n  hs-source-dirs:     test\n  main-is:            FinalResponseReceiveMain.hs\n  build-depends:\n      base >=4.17 && <5,\n      containers >=0.6 && <0.8,\n      phil-core,\n      text >=2.0 && <2.2\n\n",
+          )
+
+          session_offer = r'''{-# LANGUAGE OverloadedStrings #-}
+
+module Phil.LLVM.SessionOffer
+  ( FinalResponseReceiveLLVMError (..)
+  , finalResponseReceiveABIDescriptor
+  , phase0FinalResponseReceiveLLVMTarget
+  , phase0FinalResponseReceiveLLVMArtifact
+  , phase0FinalResponseReceiveLLVMVerificationContext
+  , lowerSystemsFinalResponseReceive
+  , verifyFinalResponseReceiveWitness
+  , verifyFinalResponseReceiveTranslation
+  , verifyPhase0FinalResponseReceiveLLVM
+  ) where
+
+import Control.Monad (forM_, unless)
+import Data.Char (isAlphaNum)
+import qualified Data.Map.Strict as Map
+import Data.Text (Text)
+import qualified Data.Text as Text
+import Phil.Assurance.Types (digestText, unDigest)
+import Phil.LLVM.AcceptedResponse (acceptedResponseWitness)
+import Phil.LLVM.IR
+import Phil.LLVM.RejectedResponse
+  ( rejectedResponseABIDescriptor
+  , lowerSystemsRejectedResponse
+  , phase0RejectedResponseLLVMTarget
+  )
+import Phil.LLVM.Verify
+import Phil.Systems.AcceptedResponse
+import Phil.Systems.IR
+import Phil.Systems.RejectedResponse
+import Phil.Systems.SessionChoice
+
+data FinalResponseReceiveLLVMError
+  = FinalResponseReceiveSystemsError SessionChoiceError
+  | FinalResponseReceiveLLVMVerificationError LLVMVerificationError
+  | FinalResponseReceiveFunctionMissing Text
+  | FinalResponseReceiveBlockMissing Text LLVMBlockId
+  | FinalResponseReceiveTransportParameterMismatch Text [LLVMParameter]
+  | FinalResponseReceiveOfferMismatch Text LLVMBlockId LLVMTerminator
+  | FinalResponseReceiveAcceptedOpsMismatch Text LLVMBlockId [LLVMOp]
+  | FinalResponseReceiveRejectedOpsMismatch Text LLVMBlockId [LLVMOp]
+  | FinalResponseReceiveAcceptedOutcomeMismatch Text LLVMBlockId LLVMTerminator
+  | FinalResponseReceiveRejectedOutcomeMismatch Text LLVMBlockId LLVMTerminator
+  | FinalResponseReceiveServerAcceptedRegression Text LLVMBlockId [LLVMOp]
+  | FinalResponseReceiveServerRejectedRegression Text LLVMBlockId [LLVMOp]
+  | FinalResponseReceiveRenderedCallMissing Text
+  | FinalResponseReceiveGenericCallDetected Text
+  | FinalResponseReceiveAmbientStateDetected Text
+  | FinalResponseReceiveDigestFailureLeaked Text
+  deriving (Eq, Show)
+
+finalResponseReceiveABIDescriptor :: Text
+finalResponseReceiveABIDescriptor = Text.unlines
+  [ "phil-runtime/phase0/final-response-receive-v1"
+  , "base-rejected-response-abi-digest=" <> unDigest (digestText rejectedResponseABIDescriptor)
+  , "target=" <> llvmTargetTripleName phase0RejectedResponseLLVMTarget
+  , "data-layout=" <> llvmTargetDataLayout phase0RejectedResponseLLVMTarget
+  , "receive-final-response=phil_runtime_receive_final_response(ptr,ptr)->i1"
+  , "receive-transport-operand=exact-client-transport-handle"
+  , "accepted-out-operand=caller-owned-pointer-slot-for-opaque-UploadId-handle"
+  , "accepted-return=true"
+  , "rejected-return=false"
+  , "accepted-wire=exactly-0x01||UploadIdToken[16]"
+  , "rejected-wire=exactly-0x00||0x01"
+  , "accepted-token-materialization=runtime-private-opaque-UploadId-handle"
+  , "rejected-DigestFailure-representation=erased-after-exact-program-no-use-witness"
+  , "record-upload-id=phil_runtime_record_upload_id(ptr)->void"
+  , "malformed-truncated-reserved-response=runtime-must-not-return-normally"
+  , "malformed-response-generated-branch=none"
+  , "outer-framing=not-defined-by-this-profile"
+  , "ambient-final-response-state=forbidden"
+  , "ambient-upload-id-state=forbidden"
+  , "runtime-symbol-identity=physical-primitive-and-signature"
+  , "pointer-strengthening=none-by-default"
+  ]
+
+phase0FinalResponseReceiveLLVMTarget :: LLVMTargetProfile
+phase0FinalResponseReceiveLLVMTarget = phase0RejectedResponseLLVMTarget
+  { llvmTargetRuntimeABIDigest = digestText finalResponseReceiveABIDescriptor
+  , llvmTargetRuntimeABIProfile = "phil-runtime/phase0/final-response-receive-v1"
+  }
+
+phase0FinalResponseReceiveLLVMArtifact :: Either SessionChoiceError LLVMArtifact
+phase0FinalResponseReceiveLLVMArtifact = do
+  bundle <- phase0SessionChoiceBundle
+  pure (lowerSystemsFinalResponseReceive
+    phase0FinalResponseReceiveLLVMTarget
+    (sessionChoiceArtifact bundle))
+
+lowerSystemsFinalResponseReceive :: LLVMTargetProfile -> SystemsArtifact -> LLVMArtifact
+lowerSystemsFinalResponseReceive target systemsArtifact = artifact
+  where
+    base = lowerSystemsRejectedResponse target systemsArtifact
+    witness = phase0FinalResponseChoiceWitness
+    module0 = llvmArtifactModule base
+    module1 = module0
+      { llvmFunctions = Map.adjust rewriteFunction
+          (sessionChoiceFunction witness)
+          (llvmFunctions module0)
+      }
+    rewriteFunction function = function
+      { llvmFunctionBlocks = Map.adjust rewriteAcceptedBlock acceptedBlockId $
+          Map.adjust rewriteOfferBlock offerBlockId (llvmFunctionBlocks function)
+      }
+    offerBlockId = LLVMBlockId (unBlockId (sessionChoiceOfferBlock witness))
+    acceptedBlockId = LLVMBlockId (unBlockId (sessionChoiceAcceptedTarget witness))
+    rejectedBlockId = LLVMBlockId (unBlockId (sessionChoiceRejectedTarget witness))
+    rewriteOfferBlock blockValue = blockValue
+      { llvmBlockTerminator = LLVMFinalResponseOffer
+          (unValueId (sessionChoiceTransport witness))
+          (unValueId (sessionChoiceAcceptedPayload witness))
+          acceptedBlockId
+          rejectedBlockId
+      }
+    rewriteAcceptedBlock blockValue = blockValue
+      { llvmBlockOps = concatMap rewriteAcceptedOp (llvmBlockOps blockValue) }
+    rewriteAcceptedOp operation = case operation of
+      LLVMCall name | name == sessionChoiceRecordOperation witness ->
+        [ LLVMFinalResponsePayloadBinding (unValueId (sessionChoiceAcceptedPayload witness))
+        , LLVMRecordUploadId (unValueId (sessionChoiceAcceptedPayload witness))
+        ]
+      other -> [other]
+    contract0 = llvmArtifactContract base
+    contract1 = contract0 { llvmContractTargetDigest = llvmModuleDigest module1 }
+    artifact = base
+      { llvmArtifactModule = module1
+      , llvmArtifactText = renderLLVMModule module1
+      , llvmArtifactContract = contract1
+      }
+
+phase0FinalResponseReceiveLLVMVerificationContext
+  :: SessionChoiceBundle
+  -> LLVMVerificationContext
+phase0FinalResponseReceiveLLVMVerificationContext bundle = LLVMVerificationContext
+  { llvmSystemsContext = sessionChoiceContext bundle
+  , llvmExpectedLanguageVersion = llvmTargetLanguageVersion phase0FinalResponseReceiveLLVMTarget
+  , llvmExpectedToolVersion = llvmTargetToolVersion phase0FinalResponseReceiveLLVMTarget
+  , llvmExpectedTargetTriple = llvmTargetTripleName phase0FinalResponseReceiveLLVMTarget
+  , llvmExpectedDataLayout = llvmTargetDataLayout phase0FinalResponseReceiveLLVMTarget
+  , llvmExpectedRuntimeABIDigest = llvmTargetRuntimeABIDigest phase0FinalResponseReceiveLLVMTarget
+  , llvmExpectedRuntimeABIProfile = llvmTargetRuntimeABIProfile phase0FinalResponseReceiveLLVMTarget
+  , llvmAuthorizedStrengthenings = mempty
+  }
+
+verifyFinalResponseReceiveTranslation
+  :: SessionChoiceBundle
+  -> LLVMArtifact
+  -> Either FinalResponseReceiveLLVMError ()
+verifyFinalResponseReceiveTranslation bundle llvmArtifact = do
+  mapLeft FinalResponseReceiveSystemsError $ verifySessionChoiceBundle bundle
+  let systemsArtifact = sessionChoiceArtifact bundle
+      systemsProgram = systemsArtifactProgram systemsArtifact
+      llvmModule = llvmArtifactModule llvmArtifact
+      context = phase0FinalResponseReceiveLLVMVerificationContext bundle
+  forM_ (Map.toAscList (systemsProgramFunctions systemsProgram)) $
+    \(functionName, systemsFunction) -> do
+      llvmFunction <- lookupLLVMFunction llvmModule functionName
+      let expectedParameters =
+            [ LLVMParameter (unValueId valueId) LLVMPointerParameter
+            | (valueId, SystemsValue { systemsValueRole = TransportHandle }) <-
+                Map.toAscList (systemsFunctionValues systemsFunction)
+            ]
+      unless (llvmFunctionParameters llvmFunction == expectedParameters) $
+        Left (FinalResponseReceiveTransportParameterMismatch
+          functionName (llvmFunctionParameters llvmFunction))
+  verifyFinalResponseReceiveWitness bundle llvmArtifact
+  mapLeft FinalResponseReceiveLLVMVerificationError $
+    verifyLLVMEmissionWith
+      lowerSystemsFinalResponseReceive
+      context
+      systemsArtifact
+      llvmArtifact
+
+verifyFinalResponseReceiveWitness
+  :: SessionChoiceBundle
+  -> LLVMArtifact
+  -> Either FinalResponseReceiveLLVMError ()
+verifyFinalResponseReceiveWitness bundle llvmArtifact = do
+  let witness = sessionChoiceWitness bundle
+      predecessor = sessionChoicePredecessor bundle
+      rejectedWitness = rejectedResponseWitness predecessor
+      acceptedWitness = acceptedResponseWitness (rejectedResponseAcceptedBundle predecessor)
+      moduleValue = llvmArtifactModule llvmArtifact
+      clientFunctionName = sessionChoiceFunction witness
+      offerBlockId = LLVMBlockId (unBlockId (sessionChoiceOfferBlock witness))
+      acceptedBlockId = LLVMBlockId (unBlockId (sessionChoiceAcceptedTarget witness))
+      rejectedBlockId = LLVMBlockId (unBlockId (sessionChoiceRejectedTarget witness))
+      uploadIdName = unValueId (sessionChoiceAcceptedPayload witness)
+      transportName = unValueId (sessionChoiceTransport witness)
+  clientFunction <- lookupLLVMFunction moduleValue clientFunctionName
+  offerBlock <- lookupLLVMBlock clientFunctionName clientFunction offerBlockId
+  unless
+    (llvmBlockTerminator offerBlock == LLVMFinalResponseOffer
+      transportName uploadIdName acceptedBlockId rejectedBlockId) $
+    Left (FinalResponseReceiveOfferMismatch
+      clientFunctionName offerBlockId (llvmBlockTerminator offerBlock))
+
+  acceptedBlock <- lookupLLVMBlock clientFunctionName clientFunction acceptedBlockId
+  unless
+    (llvmBlockOps acceptedBlock ==
+      [LLVMFinalResponsePayloadBinding uploadIdName, LLVMRecordUploadId uploadIdName]) $
+    Left (FinalResponseReceiveAcceptedOpsMismatch
+      clientFunctionName acceptedBlockId (llvmBlockOps acceptedBlock))
+  unless (llvmBlockTerminator acceptedBlock == LLVMReturn "success") $
+    Left (FinalResponseReceiveAcceptedOutcomeMismatch
+      clientFunctionName acceptedBlockId (llvmBlockTerminator acceptedBlock))
+
+  rejectedBlock <- lookupLLVMBlock clientFunctionName clientFunction rejectedBlockId
+  unless (null (llvmBlockOps rejectedBlock)) $
+    Left (FinalResponseReceiveRejectedOpsMismatch
+      clientFunctionName rejectedBlockId (llvmBlockOps rejectedBlock))
+  unless (llvmBlockTerminator rejectedBlock == LLVMReturn "failure") $
+    Left (FinalResponseReceiveRejectedOutcomeMismatch
+      clientFunctionName rejectedBlockId (llvmBlockTerminator rejectedBlock))
+
+  serverFunction <- lookupLLVMFunction moduleValue (rejectedResponseFunction rejectedWitness)
+  let serverAcceptedBlockId = LLVMBlockId (unBlockId (acceptedResponseBlock acceptedWitness))
+      serverRejectedBlockId = LLVMBlockId (unBlockId (rejectedResponseBlock rejectedWitness))
+  serverAcceptedBlock <- lookupLLVMBlock
+    (rejectedResponseFunction rejectedWitness) serverFunction serverAcceptedBlockId
+  unless
+    (llvmBlockOps serverAcceptedBlock ==
+      [ LLVMAcceptedResponse
+          (unValueId (acceptedResponseTransport acceptedWitness))
+          (unValueId (acceptedResponseUploadId acceptedWitness))
+      ]) $
+    Left (FinalResponseReceiveServerAcceptedRegression
+      (rejectedResponseFunction rejectedWitness)
+      serverAcceptedBlockId
+      (llvmBlockOps serverAcceptedBlock))
+  serverRejectedBlock <- lookupLLVMBlock
+    (rejectedResponseFunction rejectedWitness) serverFunction serverRejectedBlockId
+  case llvmBlockOps serverRejectedBlock of
+    [LLVMBufferRelease _, LLVMRejectedResponse _ _] -> pure ()
+    operations -> Left (FinalResponseReceiveServerRejectedRegression
+      (rejectedResponseFunction rejectedWitness) serverRejectedBlockId operations)
+
+  let rendered = llvmArtifactText llvmArtifact
+      receiveNeedle = "@phil_runtime_receive_final_response(ptr %"
+        <> symbolish transportName <> ", ptr %phil_final_response_upload_id_slot_"
+        <> symbolish uploadIdName <> ")"
+      loadNeedle = "%" <> symbolish uploadIdName
+        <> " = load ptr, ptr %phil_final_response_upload_id_slot_" <> symbolish uploadIdName
+      recordNeedle = "@phil_runtime_record_upload_id(ptr %" <> symbolish uploadIdName <> ")"
+  unless (Text.isInfixOf receiveNeedle rendered
+      && Text.isInfixOf loadNeedle rendered
+      && Text.isInfixOf recordNeedle rendered) $
+    Left (FinalResponseReceiveRenderedCallMissing clientFunctionName)
+  unless
+    ( not (Text.isInfixOf "@phil_call_receive_accepted_rejected_label" rendered)
+    && not (Text.isInfixOf "@phil_call_record_upload_id" rendered)
+    ) $
+    Left (FinalResponseReceiveGenericCallDetected clientFunctionName)
+  unless
+    ( not (Text.isInfixOf "@phil_current_final_response" rendered)
+    && not (Text.isInfixOf "@phil_current_upload_id" rendered)
+    && not (Text.isInfixOf "@phil_last_response" rendered)
+    ) $
+    Left (FinalResponseReceiveAmbientStateDetected clientFunctionName)
+  unless (not (Text.isInfixOf "client_digest_failure" rendered)) $
+    Left (FinalResponseReceiveDigestFailureLeaked clientFunctionName)
+
+lookupLLVMFunction
+  :: LLVMModule
+  -> Text
+  -> Either FinalResponseReceiveLLVMError LLVMFunction
+lookupLLVMFunction moduleValue functionName =
+  case Map.lookup functionName (llvmFunctions moduleValue) of
+    Nothing -> Left (FinalResponseReceiveFunctionMissing functionName)
+    Just value -> Right value
+
+lookupLLVMBlock
+  :: Text
+  -> LLVMFunction
+  -> LLVMBlockId
+  -> Either FinalResponseReceiveLLVMError LLVMBlock
+lookupLLVMBlock functionName function blockId =
+  case Map.lookup blockId (llvmFunctionBlocks function) of
+    Nothing -> Left (FinalResponseReceiveBlockMissing functionName blockId)
+    Just value -> Right value
+
+symbolish :: Text -> Text
+symbolish = Text.map (\character -> if isAlphaNum character then character else '_')
+
+verifyPhase0FinalResponseReceiveLLVM :: Either FinalResponseReceiveLLVMError ()
+verifyPhase0FinalResponseReceiveLLVM = do
+  bundle <- mapLeft FinalResponseReceiveSystemsError phase0SessionChoiceBundle
+  let llvmArtifact = lowerSystemsFinalResponseReceive
+        phase0FinalResponseReceiveLLVMTarget
+        (sessionChoiceArtifact bundle)
+  verifyFinalResponseReceiveTranslation bundle llvmArtifact
+
+mapLeft :: (left -> mapped) -> Either left right -> Either mapped right
+mapLeft transform = either (Left . transform) Right
+'''
+          Path("src/Phil/LLVM/SessionOffer.hs").write_text(session_offer)
+
+          emitter = r'''module Main (main) where
+
+import qualified Data.Text.IO as TextIO
+import Phil.LLVM
+  ( llvmArtifactText
+  , phase0FinalResponseReceiveLLVMArtifact
+  , verifyPhase0FinalResponseReceiveLLVM
+  )
+import System.Exit (exitFailure)
+import qualified System.IO as IO
+
+main :: IO () = case (verifyPhase0FinalResponseReceiveLLVM, phase0FinalResponseReceiveLLVMArtifact) of
+  (Left verificationError, _) -> do
+    IO.hPutStrLn IO.stderr $
+      "Phase 0 final-response receive LLVM verification failed: " <> show verificationError
+    exitFailure
+  (_, Left systemsError) -> do
+    IO.hPutStrLn IO.stderr $
+      "Phase 0 final-response Systems candidate failed: " <> show systemsError
+    exitFailure
+  (Right (), Right artifact) -> TextIO.putStr (llvmArtifactText artifact)
+'''
+          Path("app/LLVMFinalResponseReceiveMain.hs").write_text(emitter)
+
+          tests = r'''{-# LANGUAGE OverloadedStrings #-}
+
+module Main (main) where
+
+import qualified Data.Map.Strict as Map
+import qualified Data.Text as Text
+import Phil.LLVM
+import Phil.Systems
+import System.Exit (exitFailure)
+
+main :: IO ()
+main = do
+  results <- sequence
+    [ test "final-response receive translation verifies" translationPasses
+    , test "offer lowers to exact decoder operands and targets" exactOffer
+    , test "accepted payload binds then reaches record_upload_id" exactAcceptedPayloadUse
+    , test "rejected DigestFailure has no target representation" rejectedReasonErased
+    , test "legacy generic final-response calls are absent" noLegacyCalls
+    , test "wrong accepted target is rejected" wrongAcceptedTargetRejects
+    , test "missing accepted payload binding is rejected" missingBindingRejects
+    ]
+  if and results then pure () else exitFailure
+
+translationPasses :: Bool
+translationPasses = case phase0SessionChoiceBundle of
+  Left _ -> False
+  Right bundle -> case verifyFinalResponseReceiveTranslation bundle (artifactFor bundle) of
+    Right () -> True
+    Left _ -> False
+
+exactOffer :: Bool
+exactOffer = withBundle $ \bundle artifact ->
+  let witness = sessionChoiceWitness bundle
+      expected = LLVMFinalResponseOffer
+        (unValueId (sessionChoiceTransport witness))
+        (unValueId (sessionChoiceAcceptedPayload witness))
+        (LLVMBlockId (unBlockId (sessionChoiceAcceptedTarget witness)))
+        (LLVMBlockId (unBlockId (sessionChoiceRejectedTarget witness)))
+  in case lookupBlock artifact (sessionChoiceFunction witness) (sessionChoiceOfferBlock witness) of
+      Just blockValue -> llvmBlockTerminator blockValue == expected
+      Nothing -> False
+
+exactAcceptedPayloadUse :: Bool
+exactAcceptedPayloadUse = withBundle $ \bundle artifact ->
+  let witness = sessionChoiceWitness bundle
+      uploadId = unValueId (sessionChoiceAcceptedPayload witness)
+  in case lookupBlock artifact (sessionChoiceFunction witness) (sessionChoiceAcceptedTarget witness) of
+      Just blockValue -> llvmBlockOps blockValue
+        == [LLVMFinalResponsePayloadBinding uploadId, LLVMRecordUploadId uploadId]
+      Nothing -> False
+
+rejectedReasonErased :: Bool
+rejectedReasonErased = withBundle $ \_ artifact ->
+  not (Text.isInfixOf "client_digest_failure" (llvmArtifactText artifact))
+
+noLegacyCalls :: Bool
+noLegacyCalls = withBundle $ \_ artifact ->
+  let rendered = llvmArtifactText artifact
+  in not (Text.isInfixOf "phil_call_receive_accepted_rejected_label" rendered)
+      && not (Text.isInfixOf "phil_call_record_upload_id" rendered)
+
+wrongAcceptedTargetRejects :: Bool
+wrongAcceptedTargetRejects = withBundle $ \bundle artifact ->
+  let witness = sessionChoiceWitness bundle
+      mutated = mapBlock artifact (sessionChoiceFunction witness) (sessionChoiceOfferBlock witness) $ \blockValue ->
+        blockValue { llvmBlockTerminator = case llvmBlockTerminator blockValue of
+          LLVMFinalResponseOffer transport uploadId _ rejected ->
+            LLVMFinalResponseOffer transport uploadId rejected rejected
+          other -> other
+        }
+  in case verifyFinalResponseReceiveWitness bundle mutated of
+      Left FinalResponseReceiveOfferMismatch {} -> True
+      _ -> False
+
+missingBindingRejects :: Bool
+missingBindingRejects = withBundle $ \bundle artifact ->
+  let witness = sessionChoiceWitness bundle
+      mutated = mapBlock artifact (sessionChoiceFunction witness) (sessionChoiceAcceptedTarget witness) $ \blockValue ->
+        blockValue { llvmBlockOps = [LLVMRecordUploadId (unValueId (sessionChoiceAcceptedPayload witness))] }
+  in case verifyFinalResponseReceiveWitness bundle mutated of
+      Left FinalResponseReceiveAcceptedOpsMismatch {} -> True
+      _ -> False
+
+withBundle :: (SessionChoiceBundle -> LLVMArtifact -> Bool) -> Bool
+withBundle action = case phase0SessionChoiceBundle of
+  Left _ -> False
+  Right bundle -> action bundle (artifactFor bundle)
+
+artifactFor :: SessionChoiceBundle -> LLVMArtifact
+artifactFor bundle = lowerSystemsFinalResponseReceive
+  phase0FinalResponseReceiveLLVMTarget
+  (sessionChoiceArtifact bundle)
+
+lookupBlock :: LLVMArtifact -> Text.Text -> BlockId -> Maybe LLVMBlock
+lookupBlock artifact functionName blockId = do
+  function <- Map.lookup functionName (llvmFunctions (llvmArtifactModule artifact))
+  Map.lookup (LLVMBlockId (unBlockId blockId)) (llvmFunctionBlocks function)
+
+mapBlock
+  :: LLVMArtifact
+  -> Text.Text
+  -> BlockId
+  -> (LLVMBlock -> LLVMBlock)
+  -> LLVMArtifact
+mapBlock artifact functionName blockId transform =
+  let moduleValue = llvmArtifactModule artifact
+      functions = llvmFunctions moduleValue
+      functions' = Map.adjust
+        (\function -> function
+          { llvmFunctionBlocks = Map.adjust transform
+              (LLVMBlockId (unBlockId blockId))
+              (llvmFunctionBlocks function)
+          })
+        functionName
+        functions
+      moduleValue' = moduleValue { llvmFunctions = functions' }
+  in artifact
+      { llvmArtifactModule = moduleValue'
+      , llvmArtifactText = renderLLVMModule moduleValue'
+      }
+
+test :: String -> Bool -> IO Bool
+test label passed = do
+  putStrLn ((if passed then "PASS: " else "FAIL: ") <> label)
+  pure passed
+'''
+          Path("test/FinalResponseReceiveMain.hs").write_text(tests)
+
+          docs = r'''# Phase 0 final-response receive ABI v1
+
+Status: implementation candidate
+
+This target profile lowers the semantic `TermSessionOffer` introduced by the Systems session-choice slice for the final client upload response. It preserves the exact `accepted(id)` / `rejected(reason)` control relation while allowing target-specific physical decoding.
+
+## Runtime ABI
+
+```llvm
+declare i1 @phil_runtime_receive_final_response(ptr %transport, ptr %upload_id_out)
+declare void @phil_runtime_record_upload_id(ptr %upload_id)
+```
+
+The decoder receives the exact client transport handle. The second operand points to a caller-owned slot for one opaque runtime-managed `UploadId` handle.
+
+- `true`: the response is exactly `0x01 || UploadIdToken[16]`; the runtime materializes the token into its private `UploadId` representation and writes that opaque handle to `%upload_id_out`.
+- `false`: the response is exactly `0x00 || 0x01` (`DigestMismatch`). The out slot is not read by generated code on this branch.
+- malformed, truncated, overlong, reserved-tag, or reserved-reason responses must not cause this function to return normally. How the provider terminates/fails the transport remains outside the source CFG because the current source `offer` has no malformed-response arm.
+
+Generated LLVM allocates the pointer slot at the offer site, branches on the runtime's `i1`, and loads the opaque handle only in the accepted binder block before calling `phil_runtime_record_upload_id`.
+
+## Representation decisions
+
+The 16-octet wire token is not the client `UploadId` representation. Only the runtime decoder may interpret/materialize it. Generated code receives an opaque pointer and does not dereference, infer layout, mutate, release, or strengthen it.
+
+The semantic `DigestFailure` binding from Systems has no physical target object in this exact profile because the frozen client never observes it. This is an exact-program erasure justified by the Systems session-choice witness, not a global claim that `DigestFailure` is representation-free.
+
+No ambient current response, current UploadId, or last-response state is permitted.
+
+## Certification boundary
+
+This slice translation-validates the exact Systems label/payload/continuation relation into the explicit runtime decoder call, branch-local accepted payload load, exact `record_upload_id(id)` use, and preserved server accepted/rejected response operations. Provider parsing correctness, malformed-input termination, LLVM implementation correctness, linking, and native execution remain independent external gates.
+'''
+          Path("docs/phase-0/final-response-receive-abi-v1.md").write_text(docs)
+
+          header = r'''#ifndef PHIL_PHASE0_FINAL_RESPONSE_RECEIVE_V1_H
+#define PHIL_PHASE0_FINAL_RESPONSE_RECEIVE_V1_H
+
+#include <stdbool.h>
+#include <stddef.h>
+#include <stdint.h>
+
+struct phil_recognized_record_result { uint8_t status; void *record; };
+struct phil_exact_receive_result { uint8_t status; void *payload; };
+struct phil_store_result { uint8_t status; void *upload_id; };
+
+bool phil_runtime_recognize_Hello(void);
+struct phil_recognized_record_result phil_runtime_recognize_Begin(void);
+bool phil_runtime_validate_HelloPolicy(void);
+bool phil_runtime_validate_BeginPolicy(void);
+bool phil_runtime_refine_selected_version(void);
+struct phil_exact_receive_result phil_runtime_receive_exact_u64(void *transport, uint64_t length);
+bool phil_runtime_send_exact(void);
+bool phil_runtime_digest_validate(void *begin_record, void *payload);
+struct phil_store_result phil_runtime_store(void *payload);
+void phil_runtime_select_accepted(void *transport, void *upload_id);
+void phil_runtime_select_rejected(void *transport, uint8_t reason);
+uint64_t phil_record_Begin_get_length(void *record);
+void phil_buffer_release(void *payload);
+
+bool phil_runtime_receive_final_response(void *transport, void *upload_id_out);
+void phil_runtime_record_upload_id(void *upload_id);
+
+bool phil_branch_condition(void);
+void phil_cleanup(void);
+void phil_call_receive_frame_Hello(void);
+void phil_call_choose_supported(void);
+void phil_call_select_unsupported(void);
+void phil_call_select_version(void);
+void phil_call_receive_frame_Begin(void);
+void phil_call_select_reject(void);
+void phil_call_select_proceed(void);
+void phil_call_receive_payload_cancel_label(void);
+void phil_call_send_Hello(void);
+void phil_call_receive_version_unsupported_label(void);
+void phil_call_send_Begin(void);
+void phil_call_receive_proceed_reject_label(void);
+void phil_call_should_cancel_upload(void);
+void phil_call_select_cancel(void);
+void phil_call_select_payload(void);
+
+void *phil_smoke_configure_final_response(const uint8_t *bytes, size_t length);
+bool phil_smoke_accepted_observed(const uint8_t token[16]);
+bool phil_smoke_rejected_observed(void);
+
+#endif
+'''
+          Path("runtime/phase0/final_response_receive_v1.h").write_text(header)
+
+          smoke = r'''#include "final_response_receive_v1.h"
+
+#include <stdlib.h>
+#include <string.h>
+
+#define PHIL_ACCEPTED_BYTES 17u
+#define PHIL_REJECTED_BYTES 2u
+#define PHIL_UPLOAD_ID_BYTES 16u
+
+struct phil_transport_impl {
+  uint8_t bytes[32];
+  size_t length;
+};
+
+struct phil_upload_id_impl {
+  uint8_t token[PHIL_UPLOAD_ID_BYTES];
+};
+
+struct phil_smoke_state {
+  struct phil_transport_impl transport;
+  struct phil_upload_id_impl upload_id;
+  uint8_t recorded_token[PHIL_UPLOAD_ID_BYTES];
+  unsigned branch_calls;
+  unsigned receive_calls;
+  unsigned record_calls;
+  unsigned accepted_decodes;
+  unsigned rejected_decodes;
+};
+
+static struct phil_smoke_state smoke_state;
+
+void *phil_smoke_configure_final_response(const uint8_t *bytes, size_t length) {
+  if (length > sizeof(smoke_state.transport.bytes)) abort();
+  memset(&smoke_state, 0, sizeof(smoke_state));
+  if (length != 0) memcpy(smoke_state.transport.bytes, bytes, length);
+  smoke_state.transport.length = length;
+  return &smoke_state.transport;
+}
+
+bool phil_smoke_accepted_observed(const uint8_t token[16]) {
+  return smoke_state.branch_calls == 3
+      && smoke_state.receive_calls == 1
+      && smoke_state.record_calls == 1
+      && smoke_state.accepted_decodes == 1
+      && smoke_state.rejected_decodes == 0
+      && memcmp(smoke_state.recorded_token, token, PHIL_UPLOAD_ID_BYTES) == 0;
+}
+
+bool phil_smoke_rejected_observed(void) {
+  return smoke_state.branch_calls == 3
+      && smoke_state.receive_calls == 1
+      && smoke_state.record_calls == 0
+      && smoke_state.accepted_decodes == 0
+      && smoke_state.rejected_decodes == 1;
+}
+
+bool phil_runtime_receive_final_response(void *transport, void *upload_id_out) {
+  struct phil_transport_impl *source = transport;
+  void **out = upload_id_out;
+  smoke_state.receive_calls += 1;
+  if (source != &smoke_state.transport || out == NULL) abort();
+  if (source->length == PHIL_ACCEPTED_BYTES && source->bytes[0] == 0x01u) {
+    memcpy(smoke_state.upload_id.token, source->bytes + 1, PHIL_UPLOAD_ID_BYTES);
+    *out = &smoke_state.upload_id;
+    smoke_state.accepted_decodes += 1;
+    return true;
+  }
+  if (source->length == PHIL_REJECTED_BYTES
+      && source->bytes[0] == 0x00u
+      && source->bytes[1] == 0x01u) {
+    smoke_state.rejected_decodes += 1;
+    return false;
+  }
+  abort();
+}
+
+void phil_runtime_record_upload_id(void *upload_id) {
+  struct phil_upload_id_impl *value = upload_id;
+  if (value != &smoke_state.upload_id) abort();
+  memcpy(smoke_state.recorded_token, value->token, PHIL_UPLOAD_ID_BYTES);
+  smoke_state.record_calls += 1;
+}
+
+bool phil_branch_condition(void) {
+  static const bool decisions[3] = { true, true, false };
+  unsigned index = smoke_state.branch_calls;
+  smoke_state.branch_calls += 1;
+  if (index >= 3) abort();
+  return decisions[index];
+}
+
+bool phil_runtime_recognize_Hello(void) { return true; }
+struct phil_recognized_record_result phil_runtime_recognize_Begin(void) {
+  struct phil_recognized_record_result result = { 1u, NULL };
+  return result;
+}
+bool phil_runtime_validate_HelloPolicy(void) { return true; }
+bool phil_runtime_validate_BeginPolicy(void) { return true; }
+bool phil_runtime_refine_selected_version(void) { return true; }
+struct phil_exact_receive_result phil_runtime_receive_exact_u64(void *transport, uint64_t length) {
+  (void) transport; (void) length;
+  { struct phil_exact_receive_result result = { 0u, NULL }; return result; }
+}
+bool phil_runtime_send_exact(void) { return true; }
+bool phil_runtime_digest_validate(void *begin_record, void *payload) {
+  (void) begin_record; (void) payload; return true;
+}
+struct phil_store_result phil_runtime_store(void *payload) {
+  (void) payload;
+  { struct phil_store_result result = { 0u, NULL }; return result; }
+}
+void phil_runtime_select_accepted(void *transport, void *upload_id) { (void) transport; (void) upload_id; }
+void phil_runtime_select_rejected(void *transport, uint8_t reason) { (void) transport; (void) reason; }
+uint64_t phil_record_Begin_get_length(void *record) { (void) record; return 0; }
+void phil_buffer_release(void *payload) { (void) payload; }
+void phil_cleanup(void) {}
+
+#define PHIL_NOOP_CALL(name) void name(void) {}
+PHIL_NOOP_CALL(phil_call_receive_frame_Hello)
+PHIL_NOOP_CALL(phil_call_choose_supported)
+PHIL_NOOP_CALL(phil_call_select_unsupported)
+PHIL_NOOP_CALL(phil_call_select_version)
+PHIL_NOOP_CALL(phil_call_receive_frame_Begin)
+PHIL_NOOP_CALL(phil_call_select_reject)
+PHIL_NOOP_CALL(phil_call_select_proceed)
+PHIL_NOOP_CALL(phil_call_receive_payload_cancel_label)
+PHIL_NOOP_CALL(phil_call_send_Hello)
+PHIL_NOOP_CALL(phil_call_receive_version_unsupported_label)
+PHIL_NOOP_CALL(phil_call_send_Begin)
+PHIL_NOOP_CALL(phil_call_receive_proceed_reject_label)
+PHIL_NOOP_CALL(phil_call_should_cancel_upload)
+PHIL_NOOP_CALL(phil_call_select_cancel)
+PHIL_NOOP_CALL(phil_call_select_payload)
+'''
+          Path("runtime/phase0/final_response_receive_v1_smoke.c").write_text(smoke)
+
+          smoke_main = r'''#include "final_response_receive_v1.h"
+
+#include <signal.h>
+#include <stdbool.h>
+#include <stdint.h>
+#include <stdlib.h>
+#include <sys/types.h>
+#include <sys/wait.h>
+#include <unistd.h>
+
+int UploadClient(void *transport);
+
+static bool malformed_aborts(const uint8_t *bytes, size_t length) {
+  pid_t child;
+  int status = 0;
+  void *transport = phil_smoke_configure_final_response(bytes, length);
+  child = fork();
+  if (child < 0) abort();
+  if (child == 0) {
+    (void) UploadClient(transport);
+    _exit(0);
+  }
+  if (waitpid(child, &status, 0) != child) abort();
+  return WIFSIGNALED(status) && WTERMSIG(status) == SIGABRT;
+}
+
+int main(void) {
+  uint8_t accepted[17];
+  uint8_t rejected[2] = {0x00u, 0x01u};
+  uint8_t reserved_reason[2] = {0x00u, 0x02u};
+  uint8_t truncated_accepted[1] = {0x01u};
+  uint8_t token[16];
+  size_t index;
+  void *transport;
+
+  accepted[0] = 0x01u;
+  for (index = 0; index < 16u; ++index) {
+    token[index] = (uint8_t) (0xb0u + index);
+    accepted[index + 1u] = token[index];
+  }
+
+  transport = phil_smoke_configure_final_response(accepted, sizeof(accepted));
+  (void) UploadClient(transport);
+  if (!phil_smoke_accepted_observed(token)) return 1;
+
+  transport = phil_smoke_configure_final_response(rejected, sizeof(rejected));
+  (void) UploadClient(transport);
+  if (!phil_smoke_rejected_observed()) return 2;
+
+  if (!malformed_aborts(reserved_reason, sizeof(reserved_reason))) return 3;
+  if (!malformed_aborts(truncated_accepted, sizeof(truncated_accepted))) return 4;
+  return 0;
+}
+'''
+          Path("runtime/phase0/final_response_receive_v1_smoke_main.c").write_text(smoke_main)
+
+          bad = r'''#include <stdbool.h>
+bool phil_runtime_receive_final_response(void) { return false; }
+'''
+          Path("runtime/phase0/final_response_receive_v1_bad_ambient.c").write_text(bad)
+
+          runtime_workflow = r'''name: Final Response Receive Runtime
+
+on:
+  pull_request:
+    paths:
+      - 'src/Phil/Systems/SessionChoice.hs'
+      - 'src/Phil/LLVM/IR.hs'
+      - 'src/Phil/LLVM/Verify.hs'
+      - 'src/Phil/LLVM/SessionOffer.hs'
+      - 'src/Phil/LLVM.hs'
+      - 'app/LLVMFinalResponseReceiveMain.hs'
+      - 'runtime/phase0/final_response_receive_v1*'
+      - 'scripts/check_runtime_abi.py'
+      - 'test/FinalResponseReceiveMain.hs'
+      - 'phil-core.cabal'
+      - '.github/workflows/final-response-receive-runtime.yml'
+  push:
+    branches:
+      - main
+    paths:
+      - 'src/Phil/Systems/SessionChoice.hs'
+      - 'src/Phil/LLVM/IR.hs'
+      - 'src/Phil/LLVM/Verify.hs'
+      - 'src/Phil/LLVM/SessionOffer.hs'
+      - 'src/Phil/LLVM.hs'
+      - 'app/LLVMFinalResponseReceiveMain.hs'
+      - 'runtime/phase0/final_response_receive_v1*'
+      - 'scripts/check_runtime_abi.py'
+      - 'test/FinalResponseReceiveMain.hs'
+      - 'phil-core.cabal'
+      - '.github/workflows/final-response-receive-runtime.yml'
+
+permissions:
+  contents: read
+
+jobs:
+  final-response-receive-runtime:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: haskell-actions/setup@v2
+        with:
+          ghc-version: '9.6.7'
+          cabal-version: 'latest'
+      - name: Build emitter and focused tests
+        run: cabal build phil-llvm-phase0-final-response-receive phil-final-response-receive-tests
+      - name: Verify ABI and execute accepted/rejected/malformed paths
+        shell: bash
+        run: |
+          set -euo pipefail
+          LLVM_AS=llvm-as-18
+          LLVM_LINK=llvm-link-18
+          CLANG=clang-18
+          EMITTER="$(cabal list-bin phil-llvm-phase0-final-response-receive)"
+          "$EMITTER" > phase0-final-response-receive.ll
+          "$LLVM_AS" phase0-final-response-receive.ll -o phase0-final-response-receive.bc
+          "$CLANG" --target=x86_64-unknown-linux-gnu -std=c11 -Wall -Wextra -Wpedantic -Werror \
+            -Iruntime/phase0 -S -emit-llvm runtime/phase0/final_response_receive_v1_smoke.c \
+            -o final-response-runtime.ll
+          python3 scripts/check_runtime_abi.py phase0-final-response-receive.ll final-response-runtime.ll
+          "$LLVM_AS" final-response-runtime.ll -o final-response-runtime.bc
+          "$CLANG" --target=x86_64-unknown-linux-gnu -std=c11 -Wall -Wextra -Wpedantic -Werror \
+            -Iruntime/phase0 -emit-llvm -c runtime/phase0/final_response_receive_v1_smoke_main.c \
+            -o final-response-smoke-main.bc
+          "$LLVM_LINK" phase0-final-response-receive.bc final-response-runtime.bc final-response-smoke-main.bc \
+            -o phase0-final-response-linked.bc
+          "$CLANG" --target=x86_64-unknown-linux-gnu phase0-final-response-linked.bc \
+            -o phase0-final-response-smoke
+          ./phase0-final-response-smoke
+          "$CLANG" --target=x86_64-unknown-linux-gnu -std=c11 -Wall -Wextra -Wpedantic -Werror \
+            -S -emit-llvm runtime/phase0/final_response_receive_v1_bad_ambient.c \
+            -o final-response-bad-ambient.ll
+          if python3 scripts/check_runtime_abi.py --partial \
+              phase0-final-response-receive.ll final-response-bad-ambient.ll; then
+            echo "expected ABI checker to reject ambient/nullary final-response decoder" >&2
+            exit 1
+          fi
+          cabal test phil-final-response-receive-tests
+'''
+          Path(".github/workflows/final-response-receive-runtime.yml").write_text(runtime_workflow)
+
+          # Remove this one-shot editor from the resulting implementation commit.
+          Path(".github/workflows/session-offer-lowering-edit.yml").unlink()
+          PY
+
+          git config user.name "phil-session-offer-bot"
+          git config user.email "actions@users.noreply.github.com"
+          git add -A
+          git commit -m "Lower final TermSessionOffer through runtime decoder"
+          git push origin HEAD:lower-final-session-offer
