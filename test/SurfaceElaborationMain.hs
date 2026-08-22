@@ -17,7 +17,8 @@ import Phil.Core.Syntax
   , Value (..)
   )
 import Phil.Surface.Elaborate
-  ( ElaborationError (..)
+  ( ElaborationEnv
+  , ElaborationError (..)
   , ElaborationIssue (..)
   , elaborateProposition
   , elaborateRefTerm
@@ -64,7 +65,7 @@ stateWith bindings = foldM add emptyCheckState bindings
         insertBinding Unrestricted name ty (resourceContext state)
       Right state { resourceContext = context }
 
-environmentWith :: [(Name, Ty)] -> Either String Phil.Surface.Elaborate.ElaborationEnv
+environmentWith :: [(Name, Ty)] -> Either String ElaborationEnv
 environmentWith bindings = do
   state <- stateWith bindings
   Right (emptyElaborationEnv emptyStaticContext state)
