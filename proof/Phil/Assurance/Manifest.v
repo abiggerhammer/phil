@@ -154,11 +154,12 @@ Theorem selected_evidence_cannot_depend_on_exported_revision_as_truth :
     False.
 Proof.
   intros model evidence revision boundary Hclosure Hselected Hdepends Hexported.
-  destruct Hclosure as [_ [_ [_ [_ Hdependency]]]].
+  destruct Hclosure as [_ [Hsubset [Hlocal [_ Hdependency]]]].
   pose proof (Hdependency evidence revision Hselected Hdepends) as Hscope.
-  pose proof (in_scope_revision_is_not_exported
-    model revision boundary Hclosure Hscope) as HnotExported.
-  contradiction.
+  pose proof (Hsubset revision Hscope) as Hmanifest.
+  pose proof (Hlocal revision Hmanifest Hscope) as Haccepted.
+  rewrite Haccepted in Hexported.
+  discriminate.
 Qed.
 
 (* -------------------------------------------------------------------------- *)
