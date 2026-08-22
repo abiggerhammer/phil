@@ -68,7 +68,9 @@ Proof.
   destruct (proposeCertificate proposition) as [proposed |] eqn:Hpropose.
   - destruct (checkCertificate proposition proposed) eqn:Hcheck.
     + inversion Hstage; subst proposed.
-      split; assumption.
+      split.
+      * exact Hpropose.
+      * exact Hcheck.
     + discriminate.
   - discriminate.
 Qed.
