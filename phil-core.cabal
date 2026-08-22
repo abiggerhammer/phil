@@ -23,6 +23,7 @@ library
   hs-source-dirs:     src
   exposed-modules:
       Phil.Core.Syntax
+      Phil.Core.Scalar
       Phil.Core.Context
       Phil.Core.Checker
       Phil.Core.Session
