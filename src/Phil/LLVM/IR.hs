@@ -42,6 +42,7 @@ import Phil.Systems.IR
   ( BlockId
   , CompilationProfile (..)
   , InvariantId (..)
+  , RuntimeSiteKind (..)
   , RuntimeSiteRef (..)
   )
 
@@ -207,6 +208,8 @@ renderLLVMModule moduleValue = Text.unlines $
   <> declarations
   <> concatMap renderFunction (Map.toAscList (llvmFunctions moduleValue))
   where
+    abiV1 = llvmRuntimeABIProfile moduleValue == recognizedRecordABIProfile
+
     header =
       [ "; Phil canonical pre-optimization LLVM artifact"
       , "; llvm-language=" <> oneLine (llvmLanguageVersion moduleValue)
@@ -240,7 +243,7 @@ renderLLVMModule moduleValue = Text.unlines $
       <> cleanupDeclaration
       <> assumeDeclaration
       <> map renderCallDeclaration (Set.toAscList callNames)
-      <> map renderRuntimeDeclaration (Set.toAscList runtimeEvidence)
+      <> runtimeDeclarations
       <> [""]
 
     allBlocks =
@@ -266,16 +269,19 @@ renderLLVMModule moduleValue = Text.unlines $
       , LLVMCall name <- llvmBlockOps blockValue
       ]
 
-    runtimeEvidence = Set.fromList
-      ( [ unEvidenceEntryId (runtimeSiteEvidence site)
-        | blockValue <- allBlocks
-        , LLVMRuntime site _ <- llvmBlockOps blockValue
-        ]
-        <> [ unEvidenceEntryId (runtimeSiteEvidence site)
+    runtimeCalls =
+      [ (site, name)
+      | blockValue <- allBlocks
+      , LLVMRuntime site name <- llvmBlockOps blockValue
+      ] <> [ (site, name)
            | blockValue <- allBlocks
-           , LLVMRuntimeBranch site _ _ _ <- [llvmBlockTerminator blockValue]
+           , LLVMRuntimeBranch site name _ _ <- [llvmBlockTerminator blockValue]
            ]
-      )
+
+    runtimeDeclarations
+      | abiV1 = Set.toAscList . Set.fromList $ map renderRuntimeDeclarationV1 runtimeCalls
+      | otherwise = map renderRuntimeEvidenceDeclaration . Set.toAscList . Set.fromList $
+          [ unEvidenceEntryId (runtimeSiteEvidence site) | (site, _) <- runtimeCalls ]
 
     isGenericBranch blockValue = case llvmBlockTerminator blockValue of
       LLVMBranch _ _ -> True
@@ -285,8 +291,20 @@ renderLLVMModule moduleValue = Text.unlines $
     isCleanup LLVMCleanup {} = True
     isCleanup _ = False
 
-    renderCallDeclaration name = "declare void @phil_call_" <> symbol name <> "()"
-    renderRuntimeDeclaration evidence = "declare i1 @phil_runtime_" <> symbol evidence <> "()"
+    renderCallDeclaration name = case parseFieldAccessor name of
+      Just (grammar, fieldName, _, _, width) ->
+        "declare i" <> width <> " @phil_record_" <> symbol grammar
+          <> "_get_" <> symbol fieldName <> "(ptr)"
+      Nothing -> "declare void @phil_call_" <> symbol name <> "()"
+
+    renderRuntimeEvidenceDeclaration evidence =
+      "declare i1 @phil_runtime_" <> symbol evidence <> "()"
+
+    renderRuntimeDeclarationV1 (site, name) = case parseRecognitionRuntime name of
+      Just _ -> "declare { i8, ptr } @" <> runtimePrimitiveSymbol site <> "()"
+      Nothing -> case parseReceiveExactU64Runtime name of
+        Just _ -> "declare i1 @" <> runtimePrimitiveSymbol site <> "(i64)"
+        Nothing -> "declare i1 @" <> runtimePrimitiveSymbol site <> "()"
 
     renderFunction (functionKey, function) =
       [ "define " <> renderFunctionReturnType function <> " @" <> symbol functionKey <> "() {" ]
@@ -316,10 +334,18 @@ renderLLVMModule moduleValue = Text.unlines $
       <> map ("  " <>) (renderTerminator blockValue)
 
     renderOp operation = case operation of
-      LLVMCall name -> ["call void @phil_call_" <> symbol name <> "()"]
+      LLVMCall name -> case parseFieldAccessor name of
+        Just (grammar, fieldName, recordName, outputName, width) ->
+          [ "%" <> symbol outputName <> " = call i" <> width
+              <> " @phil_record_" <> symbol grammar <> "_get_" <> symbol fieldName
+              <> "(ptr %" <> symbol recordName <> ")"
+          ]
+        Nothing -> ["call void @phil_call_" <> symbol name <> "()"]
       LLVMRuntime site name ->
         [ "; runtime " <> oneLine name
-        , "call i1 @phil_runtime_" <> symbol (unEvidenceEntryId (runtimeSiteEvidence site)) <> "()"
+        , if abiV1
+            then "call i1 @" <> runtimePrimitiveSymbol site <> "()"
+            else "call i1 @phil_runtime_" <> symbol (unEvidenceEntryId (runtimeSiteEvidence site)) <> "()"
         ]
       LLVMCleanup name ->
         ["; cleanup " <> oneLine name, "call void @phil_cleanup()"]
@@ -373,18 +399,79 @@ renderLLVMModule moduleValue = Text.unlines $
             <> ", label %" <> symbol (unLLVMBlockId yes)
             <> ", label %" <> symbol (unLLVMBlockId no)
         ]
-      LLVMRuntimeBranch site name yes no ->
-        [ "; runtime-branch " <> oneLine name
-        , "%phil_runtime_cond_" <> symbol (unLLVMBlockId (llvmBlockId blockValue))
-            <> " = call i1 @phil_runtime_" <> symbol (unEvidenceEntryId (runtimeSiteEvidence site)) <> "()"
-        , "br i1 %phil_runtime_cond_" <> symbol (unLLVMBlockId (llvmBlockId blockValue))
-            <> ", label %" <> symbol (unLLVMBlockId yes)
-            <> ", label %" <> symbol (unLLVMBlockId no)
-        ]
+      LLVMRuntimeBranch site name yes no
+        | abiV1
+        , Just (_, recordName) <- parseRecognitionRuntime name ->
+            let blockName = symbol (unLLVMBlockId (llvmBlockId blockValue))
+                resultName = "phil_recognition_result_" <> blockName
+                statusName = "phil_recognition_status_" <> blockName
+                okName = "phil_recognition_ok_" <> blockName
+            in [ "; runtime-branch " <> oneLine name
+               , "%" <> resultName <> " = call { i8, ptr } @" <> runtimePrimitiveSymbol site <> "()"
+               , "%" <> statusName <> " = extractvalue { i8, ptr } %" <> resultName <> ", 0"
+               , "%" <> symbol recordName <> " = extractvalue { i8, ptr } %" <> resultName <> ", 1"
+               , "%" <> okName <> " = icmp eq i8 %" <> statusName <> ", 1"
+               , "br i1 %" <> okName
+                    <> ", label %" <> symbol (unLLVMBlockId yes)
+                    <> ", label %" <> symbol (unLLVMBlockId no)
+               ]
+        | abiV1
+        , Just lengthName <- parseReceiveExactU64Runtime name ->
+            let condName = "phil_runtime_cond_" <> symbol (unLLVMBlockId (llvmBlockId blockValue))
+            in [ "; runtime-branch " <> oneLine name
+               , "%" <> condName <> " = call i1 @" <> runtimePrimitiveSymbol site
+                    <> "(i64 %" <> symbol lengthName <> ")"
+               , "br i1 %" <> condName
+                    <> ", label %" <> symbol (unLLVMBlockId yes)
+                    <> ", label %" <> symbol (unLLVMBlockId no)
+               ]
+        | otherwise ->
+            [ "; runtime-branch " <> oneLine name
+            , "%phil_runtime_cond_" <> symbol (unLLVMBlockId (llvmBlockId blockValue))
+                <> " = call i1 @" <> runtimeBranchSymbol abiV1 site <> "()"
+            , "br i1 %phil_runtime_cond_" <> symbol (unLLVMBlockId (llvmBlockId blockValue))
+                <> ", label %" <> symbol (unLLVMBlockId yes)
+                <> ", label %" <> symbol (unLLVMBlockId no)
+            ]
       LLVMReturnScalar name scalarType ->
         ["ret " <> renderScalarType scalarType <> " %" <> symbol name]
       LLVMReturn outcome -> ["ret i32 0 ; " <> oneLine outcome]
       LLVMUnreachable _ -> ["unreachable"]
+
+runtimeBranchSymbol :: Bool -> RuntimeSiteRef -> Text
+runtimeBranchSymbol abiV1 site
+  | abiV1 = runtimePrimitiveSymbol site
+  | otherwise = "phil_runtime_" <> symbol (unEvidenceEntryId (runtimeSiteEvidence site))
+
+recognizedRecordABIProfile :: Text
+recognizedRecordABIProfile = "phil-runtime/phase0/recognized-record-v1"
+
+runtimePrimitiveSymbol :: RuntimeSiteRef -> Text
+runtimePrimitiveSymbol site = case runtimeSiteKind site of
+  RecognitionBoundary grammar -> "phil_runtime_recognize_" <> symbol grammar
+  ValidationBoundary name -> "phil_runtime_validate_" <> symbol name
+  BranchRefinementBoundary name -> "phil_runtime_refine_" <> symbol name
+  ExactReceiveBoundary -> "phil_runtime_receive_exact_u64"
+  ExactSendBoundary -> "phil_runtime_send_exact"
+  DigestBoundary -> "phil_runtime_digest"
+  StorageBoundary -> "phil_runtime_store"
+  SourceSemanticRuntime name -> "phil_runtime_" <> symbol name
+
+parseFieldAccessor :: Text -> Maybe (Text, Text, Text, Text, Text)
+parseFieldAccessor value = case Text.splitOn ":" value of
+  ["abi-v1", "field", grammar, fieldName, recordName, outputName, width] ->
+    Just (grammar, fieldName, recordName, outputName, width)
+  _ -> Nothing
+
+parseRecognitionRuntime :: Text -> Maybe (Text, Text)
+parseRecognitionRuntime value = case Text.splitOn ":" value of
+  ["abi-v1", "recognize", grammar, recordName] -> Just (grammar, recordName)
+  _ -> Nothing
+
+parseReceiveExactU64Runtime :: Text -> Maybe Text
+parseReceiveExactU64Runtime value = case Text.splitOn ":" value of
+  ["abi-v1", "receive-exact-u64", lengthName] -> Just lengthName
+  _ -> Nothing
 
 renderScalarType :: ScalarType -> Text
 renderScalarType scalarType = case scalarType of
