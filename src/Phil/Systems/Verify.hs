@@ -15,7 +15,7 @@ import Data.Set (Set)
 import Data.Text (Text)
 import qualified Data.Text as Text
 import Phil.Assurance.Types
-import Phil.Assurance.Verify (VerificationError, verifyManifest)
+import Phil.Assurance.Verify (ManifestError, verifyManifest)
 import Phil.Systems.IR
 
 data SystemsVerificationContext = SystemsVerificationContext
@@ -28,7 +28,7 @@ data SystemsVerificationContext = SystemsVerificationContext
   deriving (Eq, Show)
 
 data SystemsVerificationError
-  = SystemsAssuranceError VerificationError
+  = SystemsAssuranceError ManifestError
   | LoweringLedgerRootMismatch Digest Digest
   | ManifestLoweringRootMismatch Digest Digest
   | DecisionMapKeyMismatch DecisionId DecisionId
@@ -166,7 +166,7 @@ verifyProgram
   :: SystemsVerificationContext
   -> SystemsArtifact
   -> Either SystemsVerificationError ()
-verifyProgram context artifact = do
+verifyProgram _context artifact = do
   let program = systemsArtifactProgram artifact
       decisions = loweringLedgerDecisions (systemsArtifactLoweringLedger artifact)
   forM_ (Map.toAscList (systemsProgramFunctions program)) $ \(functionKey, function) -> do
@@ -285,17 +285,10 @@ verifyOperationShape program functionKey function blockKey recognitionTargets op
       case Map.lookup pending recognitionTargets of
         Just (_, failureBlock) | failureBlock == blockKey -> pure ()
         _ -> Left (OrphanDestroyPending functionKey blockKey pending)
-    OpDiagnostic _ decisionId -> do
+    OpDiagnostic _ _ ->
       when (systemsProgramProfile program == CertifiedRelease) $
         Left (DiagnosticInCertifiedRelease functionKey blockKey)
-      case Map.lookup decisionId (loweringLedgerDecisions placeholderLedger) of
-        _ -> pure ()
     _ -> pure ()
-  where
-    -- The real decision/profile check for diagnostics is performed in
-    -- verifyProgramWithDiagnosticCosts below via the artifact ledger.  This
-    -- placeholder keeps operation-shape checking independent of that map.
-    placeholderLedger = LoweringLedger Map.empty (Digest "")
 
 verifyTerminatorShape
   :: Text
