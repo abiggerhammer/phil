@@ -241,3 +241,13 @@ test-suite phil-assurance-tests
       containers >=0.6 && <0.8,
       phil-core,
       text >=2.0 && <2.2
+
+test-suite phil-assurance-handoff-tests
+  import:             common-settings
+  type:               exitcode-stdio-1.0
+  hs-source-dirs:     test
+  main-is:            AssuranceHandoffMain.hs
+  build-depends:
+      base >=4.17 && <5,
+      phil-core,
+      text >=2.0 && <2.2
