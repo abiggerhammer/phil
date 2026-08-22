@@ -31,7 +31,7 @@ A conforming failure result returns a null UploadId pointer. The runtime smoke f
 
 ## UploadId representation
 
-`UploadId` remains semantically opaque in Phase 0. The physical v1 representation is an opaque, runtime-managed, non-owning pointer handle returned only on storage success.
+`UploadId` remains semantically opaque in Phase 0. The physical v1 representation is an opaque, runtime-managed, non-owning pointer handle returned only on storage success. A successful handle remains valid through the return of the calling Phil component; the runtime owns its storage throughout that interval.
 
 Generated Phil code may carry the handle by SSA identity, but it must not:
 
@@ -39,6 +39,7 @@ Generated Phil code may carry the handle by SSA identity, but it must not:
 - infer or depend on a concrete layout;
 - mutate it;
 - free/release it;
+- retain it beyond the calling component return under this ABI revision;
 - add `nonnull`, `dereferenceable`, `align`, `noalias`, `noundef`, or similar strengthening without separate authority.
 
 The wire representation of `UploadId` is deliberately deferred to the later accepted-response encoding slice.
