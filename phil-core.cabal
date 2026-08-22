@@ -46,6 +46,7 @@ library
       Phil.Surface.Check.Preflight
       Phil.Surface.Check.Engine
       Phil.Assurance.Types
+      Phil.Assurance.Handoff
       Phil.Assurance.Verify
       Phil.Assurance.Phase0
   build-depends:
