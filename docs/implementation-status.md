@@ -147,12 +147,29 @@ The equality API exposes three outcomes: definitionally equal, requires explicit
 
 This slice does not yet implement the complete ADR-010 append-only assurance graph, immutable revision/artifact digests, acceptance-rule/acyclicity verification, a validator declaration registry with artifact identity, external proof-adapter verification, or certified manifest closure. Runtime/export records here are checker-to-ledger dispositions whose later ledger entries still require those assurance checks.
 
+## Implemented in the surface parser/elaboration slice
+
+- `Phil.Surface.Syntax` represents Phase 0 source components, parameters, blocks, statements, branch arms, expressions, propositions, and types with explicit source spans carrying file, line, column, and absolute offset information.
+- `Phil.Surface.Parser` is a full-consumption Megaparsec parser. Non-comment trailing input and unterminated blocks are syntax errors rather than silently ignored input.
+- The parser accepts the surface constructs exercised by the accepted upload client/server and all twenty semantically rejected Phase 0 witnesses, including tuple bindings, typed parameters, `provides`, projections/calls/arithmetic, construction, session actions, `using`, split recognition/commit, validation, `or fail`/`or reject`, scoped `borrow`, `decide`, `offer`, fatal failure, close/release/return, `accept ... as`, and `prove`.
+- All twenty rejected witnesses are now repository fixtures under `examples/rejected/`. Parser conformance deliberately requires them to parse: resource/session/evidence mistakes belong to later competent semantic layers, not to syntax rejection.
+- Surface propositions and types include the Phase 0 `Bytes[...]`, `Frame[...]`, `Proof[...]`, `Validated[...]`, fixed-width unsigned, and generic named/indexed forms required by the witness language.
+- `Phil.Surface.Elaborate` canonically lowers the already-executable refinement/type/value subset into existing Core representations. It does not invent whole-process Core semantics for primitives whose contracts are not yet represented in executable `Σ`.
+- Proof-relevant field projections require an elaboration-provided sort; the front end never guesses a field sort from spelling.
+- Dependent `Bytes[...]` indices use the existing focusing elaborator and therefore insert the canonical total `UInt[w] -> Nat` coercion when required.
+- Ambiguous integer values require an expected fixed-width unsigned type rather than receiving a guessed width.
+- Symbolic multiplication remains outside the Phase 0 refinement fragment; only literal scaling elaborates.
+- Generic opaque indexed types are serialized only when every index expression has a canonical supported rendering. Unsupported index syntax fails closed instead of collapsing multiple source expressions to one placeholder type identity.
+- Fixed-width surface type widths are range-checked before conversion to the host `Int`, preventing absurd source numerals from wrapping through the implementation representation.
+- `phil-core parse FILE` exposes the trusted parser directly and reports source-positioned syntax errors. A successful parse explicitly reports that it is parse-only and does not claim semantic acceptance.
+
+Whole-component process elaboration/checking is deliberately not part of this slice. A syntactically valid component may still fail at resource, session, recognition, evidence, obligation, or provider-interface checking.
+
 ## Next checker slices
 
-1. Parser and surface-to-Core elaboration.
-2. Conformance harness over the accepted/rejected `.phil` corpus.
-3. Assurance-ledger handoff and manifest verification.
+1. Conformance harness over the accepted/rejected `.phil` corpus, including whole-component surface-to-Core checking.
+2. Assurance-ledger handoff and manifest verification.
 
 ## Explicit current non-goals
 
-The checker still does not claim source-level Phil conformance. In particular it does not parse Phil syntax, project dependent session types from a global protocol, substitute communicated semantic values into all dependent continuations, execute grammar recognizers, provide a complete decision procedure for every transparent proposition, validate runtime-validator artifact identities, synthesize assumptions, cross obligation boundaries without explicit architecture, validate return values against a provider signature, validate the upload protocol end-to-end, verify a closed ADR-010 build manifest, or lower to systems/LLVM IR. Transport-acquisition failure for `receiveFrame` is still represented by the accepted primitive contract rather than simulated inside the structural checker.
+The checker still does not claim end-to-end source-level Phil conformance. In particular it does not yet project dependent session types from a global protocol, elaborate/check every parsed process construct into executable Core, substitute communicated semantic values into all dependent continuations, execute grammar recognizers, provide a complete decision procedure for every transparent proposition, validate runtime-validator artifact identities, synthesize assumptions, cross obligation boundaries without explicit architecture, validate return values against a provider signature, validate the upload protocol end-to-end, verify a closed ADR-010 build manifest, or lower to systems/LLVM IR. Transport-acquisition failure for `receiveFrame` is still represented by the accepted primitive contract rather than simulated inside the structural checker.
