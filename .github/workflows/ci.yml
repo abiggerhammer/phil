@@ -90,6 +90,20 @@ jobs:
             -o phase0-upload-recognized-record-smoke
           ./phase0-upload-recognized-record-smoke
 
+          "$CLANG" --target=x86_64-unknown-linux-gnu \
+            -std=c11 -Wall -Wextra -Wpedantic -Werror \
+            -emit-llvm -c \
+            runtime/phase0/recognized_record_v1_bad_accessor.c \
+            -o recognized-record-bad-accessor.bc
+          if "$LLVM_LINK" \
+              phase0-upload-recognized-record.bc \
+              recognized-record-bad-accessor.bc \
+              -o /dev/null 2> recognized-record-bad-accessor.log; then
+            echo "expected llvm-link to reject ptr -> i32 Begin.length accessor" >&2
+            exit 1
+          fi
+          echo "PASS: LLVM runtime ABI gate rejects i64 -> i32 accessor width drift"
+
           PHILC="$(cabal list-bin philc)"
 
           "$PHILC" emit-llvm examples/run/return-unit.phil > return-unit.ll
