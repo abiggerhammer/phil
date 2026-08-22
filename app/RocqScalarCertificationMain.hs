@@ -18,7 +18,7 @@ main = do
     [sourcePath, compiledPath, outputPath] ->
       certifyWith coreScalarCertificationSpec sourcePath compiledPath outputPath
     [profileText, sourcePath, compiledPath, outputPath] ->
-      case knownRocqCertificationSpec (Text.pack profileText) of
+      case certificationSpecFor (Text.pack profileText) of
         Nothing -> do
           hPutStrLn stderr ("unknown Rocq certification profile: " <> profileText)
           exitFailure
@@ -27,6 +27,12 @@ main = do
       hPutStrLn stderr
         "usage: phil-certify-core-scalar [PROFILE] SOURCE.v COMPILED.vo OUTPUT.cert"
       exitFailure
+
+certificationSpecFor :: Text.Text -> Maybe RocqCertificationSpec
+certificationSpecFor profile =
+  case knownRocqCertificationSpec profile of
+    Just spec -> Just spec
+    Nothing -> knownRecognizedRecordRocqCertificationSpec profile
 
 certifyWith :: RocqCertificationSpec -> FilePath -> FilePath -> FilePath -> IO ()
 certifyWith spec sourcePath compiledPath outputPath = do

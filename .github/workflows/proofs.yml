@@ -7,7 +7,9 @@ on:
       - '_CoqProject'
       - 'src/Phil/Assurance/**'
       - 'src/Phil/Assurance.hs'
+      - 'src/Phil/LLVM/RecognizedRecordProofCertification.hs'
       - 'app/RocqScalarCertificationMain.hs'
+      - 'app/RecognizedRecordProofCertificationMain.hs'
       - 'test/RocqCertificationMain.hs'
       - 'phil-core.cabal'
       - '.github/workflows/proofs.yml'
@@ -19,7 +21,9 @@ on:
       - '_CoqProject'
       - 'src/Phil/Assurance/**'
       - 'src/Phil/Assurance.hs'
+      - 'src/Phil/LLVM/RecognizedRecordProofCertification.hs'
       - 'app/RocqScalarCertificationMain.hs'
+      - 'app/RecognizedRecordProofCertificationMain.hs'
       - 'test/RocqCertificationMain.hs'
       - 'phil-core.cabal'
       - '.github/workflows/proofs.yml'
@@ -70,24 +74,37 @@ jobs:
           rocq c -Q proof/Phil Phil proof/Phil/Systems/Scalar.v
           rocq c -Q proof/Phil Phil proof/Phil/Systems/ScalarDataflow.v
           rocq c -Q proof/Phil Phil proof/Phil/Systems/FieldProjection.v
+          rocq c -Q proof/Phil Phil proof/Phil/Systems/RecognizedRecord.v
           rocq c -Q proof/Phil Phil proof/Phil/LLVM/Identity.v
           rocq c -Q proof/Phil Phil proof/Phil/LLVM/Preservation.v
           rocq c -Q proof/Phil Phil proof/Phil/LLVM/FieldProjection.v
           rocq c -Q proof/Phil Phil proof/Phil/LLVM/Strengthening.v
           rocq c -Q proof/Phil Phil proof/Phil/LLVM/Certification.v
           rocq c -Q proof/Phil Phil proof/Phil/LLVM/Scalar.v
+          rocq c -Q proof/Phil Phil proof/Phil/LLVM/RecognizedRecordABI.v
+          rocq c -Q proof/Phil Phil proof/Phil/LLVM/RuntimeSymbolIdentity.v
+          rocq c -Q proof/Phil Phil proof/Phil/LLVM/RecognizedRecordCertification.v
 
       - name: Stage checked Rocq proof objects
         run: |
           mkdir -p rocq-checked/core-scalar
           mkdir -p rocq-checked/systems-field-projection
           mkdir -p rocq-checked/llvm-field-projection
+          mkdir -p rocq-checked/systems-recognized-record
+          mkdir -p rocq-checked/llvm-recognized-record-abi
+          mkdir -p rocq-checked/llvm-runtime-symbol-identity
           cp proof/Phil/Core/Scalar.v rocq-checked/core-scalar/Scalar.v
           cp proof/Phil/Core/Scalar.vo rocq-checked/core-scalar/Scalar.vo
           cp proof/Phil/Systems/FieldProjection.v rocq-checked/systems-field-projection/FieldProjection.v
           cp proof/Phil/Systems/FieldProjection.vo rocq-checked/systems-field-projection/FieldProjection.vo
           cp proof/Phil/LLVM/FieldProjection.v rocq-checked/llvm-field-projection/FieldProjection.v
           cp proof/Phil/LLVM/FieldProjection.vo rocq-checked/llvm-field-projection/FieldProjection.vo
+          cp proof/Phil/Systems/RecognizedRecord.v rocq-checked/systems-recognized-record/RecognizedRecord.v
+          cp proof/Phil/Systems/RecognizedRecord.vo rocq-checked/systems-recognized-record/RecognizedRecord.vo
+          cp proof/Phil/LLVM/RecognizedRecordABI.v rocq-checked/llvm-recognized-record-abi/RecognizedRecordABI.v
+          cp proof/Phil/LLVM/RecognizedRecordABI.vo rocq-checked/llvm-recognized-record-abi/RecognizedRecordABI.vo
+          cp proof/Phil/LLVM/RuntimeSymbolIdentity.v rocq-checked/llvm-runtime-symbol-identity/RuntimeSymbolIdentity.v
+          cp proof/Phil/LLVM/RuntimeSymbolIdentity.vo rocq-checked/llvm-runtime-symbol-identity/RuntimeSymbolIdentity.vo
 
       - name: Upload checked Rocq proof objects
         uses: actions/upload-artifact@v4
@@ -184,5 +201,59 @@ jobs:
         with:
           name: phil-field-projection-rocq-certificates
           path: proof-certificates/*.rocq.cert
+          if-no-files-found: error
+          retention-days: 30
+
+  certify-recognized-record:
+    needs: rocq
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v4
+
+      - name: Set up Haskell
+        uses: haskell-actions/setup@v2
+        with:
+          ghc-version: '9.6.7'
+          cabal-version: 'latest'
+
+      - name: Download checked Rocq proof objects
+        uses: actions/download-artifact@v4
+        with:
+          name: rocq-checked-proof-objects
+          path: rocq-checked
+
+      - name: Build proof-bound certification adapter
+        run: cabal build phil-certify-recognized-record
+
+      - name: Produce recognized-record proof and final certificates
+        run: |
+          mkdir -p recognized-record-certificates
+          CERTIFIER="$(cabal list-bin phil-certify-recognized-record)"
+          "$CERTIFIER" \
+            rocq-checked/systems-recognized-record/RecognizedRecord.v \
+            rocq-checked/systems-recognized-record/RecognizedRecord.vo \
+            rocq-checked/llvm-recognized-record-abi/RecognizedRecordABI.v \
+            rocq-checked/llvm-recognized-record-abi/RecognizedRecordABI.vo \
+            rocq-checked/llvm-runtime-symbol-identity/RuntimeSymbolIdentity.v \
+            rocq-checked/llvm-runtime-symbol-identity/RuntimeSymbolIdentity.vo \
+            recognized-record-certificates/PHIL-SYS-RECORD-001.rocq.cert \
+            recognized-record-certificates/PHIL-LLVM-REC-ABI-001.rocq.cert \
+            recognized-record-certificates/PHIL-LLVM-RUNTIME-SYM-001.rocq.cert \
+            recognized-record-certificates/PHIL-LLVM-CERT-002.cert
+          cat recognized-record-certificates/PHIL-SYS-RECORD-001.rocq.cert
+          sha256sum recognized-record-certificates/PHIL-SYS-RECORD-001.rocq.cert
+          cat recognized-record-certificates/PHIL-LLVM-REC-ABI-001.rocq.cert
+          sha256sum recognized-record-certificates/PHIL-LLVM-REC-ABI-001.rocq.cert
+          cat recognized-record-certificates/PHIL-LLVM-RUNTIME-SYM-001.rocq.cert
+          sha256sum recognized-record-certificates/PHIL-LLVM-RUNTIME-SYM-001.rocq.cert
+          cat recognized-record-certificates/PHIL-LLVM-CERT-002.cert
+          sha256sum recognized-record-certificates/PHIL-LLVM-CERT-002.cert
+
+      - name: Upload recognized-record certification artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: phil-recognized-record-proof-bound-certification
+          path: recognized-record-certificates/*
           if-no-files-found: error
           retention-days: 30
