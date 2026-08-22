@@ -12,8 +12,11 @@ on:
       - 'src/Phil/Systems/SessionChoice.hs'
       - 'src/Phil/Systems/PayloadCancelChoice.hs'
       - 'src/Phil/LLVM/SessionOffer.hs'
+      - 'src/Phil/LLVM/SessionOfferCertification.hs'
       - 'src/Phil/LLVM/PayloadCancelChoice.hs'
       - 'src/Phil/LLVM/PayloadCancelChoiceCertification.hs'
+      - 'src/Phil/LLVM/PayloadCancelChoiceProofCertification.hs'
+      - 'app/PayloadCancelChoiceProofCertificationMain.hs'
       - '.github/workflows/payload-cancel-choice-proofs.yml'
   push:
     branches:
@@ -28,8 +31,11 @@ on:
       - 'src/Phil/Systems/SessionChoice.hs'
       - 'src/Phil/Systems/PayloadCancelChoice.hs'
       - 'src/Phil/LLVM/SessionOffer.hs'
+      - 'src/Phil/LLVM/SessionOfferCertification.hs'
       - 'src/Phil/LLVM/PayloadCancelChoice.hs'
       - 'src/Phil/LLVM/PayloadCancelChoiceCertification.hs'
+      - 'src/Phil/LLVM/PayloadCancelChoiceProofCertification.hs'
+      - 'app/PayloadCancelChoiceProofCertificationMain.hs'
       - '.github/workflows/payload-cancel-choice-proofs.yml'
 
 permissions:
@@ -109,22 +115,168 @@ jobs:
           rocq c -Q proof/Phil Phil proof/Phil/LLVM/PayloadCancelChoice.v
           rocq c -Q proof/Phil Phil proof/Phil/LLVM/PayloadCancelChoiceCertification.v
 
-      - name: Stage exact checked payload/cancel proof objects
+      - name: Stage exact checked proof objects
         run: |
           mkdir -p rocq-payload-cancel/systems-payload-cancel
           mkdir -p rocq-payload-cancel/llvm-payload-cancel
           mkdir -p rocq-payload-cancel/llvm-payload-cancel-certification
+          mkdir -p rocq-payload-cancel/systems-final-response
+          mkdir -p rocq-payload-cancel/llvm-final-response
+          mkdir -p rocq-payload-cancel/systems-rejected-response
+          mkdir -p rocq-payload-cancel/llvm-rejected-response
+          mkdir -p rocq-payload-cancel/systems-accepted-response
+          mkdir -p rocq-payload-cancel/llvm-accepted-response
+          mkdir -p rocq-payload-cancel/systems-storage
+          mkdir -p rocq-payload-cancel/llvm-storage
+          mkdir -p rocq-payload-cancel/systems-digest-validation
+          mkdir -p rocq-payload-cancel/llvm-digest-validation
+          mkdir -p rocq-payload-cancel/systems-recognized-record
+          mkdir -p rocq-payload-cancel/llvm-exact-receive
+          mkdir -p rocq-payload-cancel/llvm-recognized-record-abi
+          mkdir -p rocq-payload-cancel/llvm-runtime-symbol-identity
+
           cp proof/Phil/Systems/PayloadCancelChoice.v rocq-payload-cancel/systems-payload-cancel/PayloadCancelChoice.v
           cp proof/Phil/Systems/PayloadCancelChoice.vo rocq-payload-cancel/systems-payload-cancel/PayloadCancelChoice.vo
           cp proof/Phil/LLVM/PayloadCancelChoice.v rocq-payload-cancel/llvm-payload-cancel/PayloadCancelChoice.v
           cp proof/Phil/LLVM/PayloadCancelChoice.vo rocq-payload-cancel/llvm-payload-cancel/PayloadCancelChoice.vo
           cp proof/Phil/LLVM/PayloadCancelChoiceCertification.v rocq-payload-cancel/llvm-payload-cancel-certification/PayloadCancelChoiceCertification.v
           cp proof/Phil/LLVM/PayloadCancelChoiceCertification.vo rocq-payload-cancel/llvm-payload-cancel-certification/PayloadCancelChoiceCertification.vo
+          cp proof/Phil/Systems/FinalResponse.v rocq-payload-cancel/systems-final-response/FinalResponse.v
+          cp proof/Phil/Systems/FinalResponse.vo rocq-payload-cancel/systems-final-response/FinalResponse.vo
+          cp proof/Phil/LLVM/FinalResponseReceive.v rocq-payload-cancel/llvm-final-response/FinalResponseReceive.v
+          cp proof/Phil/LLVM/FinalResponseReceive.vo rocq-payload-cancel/llvm-final-response/FinalResponseReceive.vo
+          cp proof/Phil/Systems/RejectedResponse.v rocq-payload-cancel/systems-rejected-response/RejectedResponse.v
+          cp proof/Phil/Systems/RejectedResponse.vo rocq-payload-cancel/systems-rejected-response/RejectedResponse.vo
+          cp proof/Phil/LLVM/RejectedResponse.v rocq-payload-cancel/llvm-rejected-response/RejectedResponse.v
+          cp proof/Phil/LLVM/RejectedResponse.vo rocq-payload-cancel/llvm-rejected-response/RejectedResponse.vo
+          cp proof/Phil/Systems/AcceptedResponse.v rocq-payload-cancel/systems-accepted-response/AcceptedResponse.v
+          cp proof/Phil/Systems/AcceptedResponse.vo rocq-payload-cancel/systems-accepted-response/AcceptedResponse.vo
+          cp proof/Phil/LLVM/AcceptedResponse.v rocq-payload-cancel/llvm-accepted-response/AcceptedResponse.v
+          cp proof/Phil/LLVM/AcceptedResponse.vo rocq-payload-cancel/llvm-accepted-response/AcceptedResponse.vo
+          cp proof/Phil/Systems/Storage.v rocq-payload-cancel/systems-storage/Storage.v
+          cp proof/Phil/Systems/Storage.vo rocq-payload-cancel/systems-storage/Storage.vo
+          cp proof/Phil/LLVM/Storage.v rocq-payload-cancel/llvm-storage/Storage.v
+          cp proof/Phil/LLVM/Storage.vo rocq-payload-cancel/llvm-storage/Storage.vo
+          cp proof/Phil/Systems/DigestValidation.v rocq-payload-cancel/systems-digest-validation/DigestValidation.v
+          cp proof/Phil/Systems/DigestValidation.vo rocq-payload-cancel/systems-digest-validation/DigestValidation.vo
+          cp proof/Phil/LLVM/DigestValidation.v rocq-payload-cancel/llvm-digest-validation/DigestValidation.v
+          cp proof/Phil/LLVM/DigestValidation.vo rocq-payload-cancel/llvm-digest-validation/DigestValidation.vo
+          cp proof/Phil/Systems/RecognizedRecord.v rocq-payload-cancel/systems-recognized-record/RecognizedRecord.v
+          cp proof/Phil/Systems/RecognizedRecord.vo rocq-payload-cancel/systems-recognized-record/RecognizedRecord.vo
+          cp proof/Phil/LLVM/ExactReceive.v rocq-payload-cancel/llvm-exact-receive/ExactReceive.v
+          cp proof/Phil/LLVM/ExactReceive.vo rocq-payload-cancel/llvm-exact-receive/ExactReceive.vo
+          cp proof/Phil/LLVM/RecognizedRecordABI.v rocq-payload-cancel/llvm-recognized-record-abi/RecognizedRecordABI.v
+          cp proof/Phil/LLVM/RecognizedRecordABI.vo rocq-payload-cancel/llvm-recognized-record-abi/RecognizedRecordABI.vo
+          cp proof/Phil/LLVM/RuntimeSymbolIdentity.v rocq-payload-cancel/llvm-runtime-symbol-identity/RuntimeSymbolIdentity.v
+          cp proof/Phil/LLVM/RuntimeSymbolIdentity.vo rocq-payload-cancel/llvm-runtime-symbol-identity/RuntimeSymbolIdentity.vo
 
-      - name: Upload exact checked payload/cancel proof objects
+      - name: Upload exact checked proof objects
         uses: actions/upload-artifact@v4
         with:
           name: rocq-payload-cancel-choice-checked-proof-objects
           path: rocq-payload-cancel/
           if-no-files-found: error
           retention-days: 14
+
+  certify-payload-cancel-choice:
+    needs: rocq-payload-cancel-choice
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v4
+
+      - name: Set up Haskell
+        uses: haskell-actions/setup@v2
+        with:
+          ghc-version: '9.6.7'
+          cabal-version: 'latest'
+
+      - name: Download exact checked proof objects
+        uses: actions/download-artifact@v4
+        with:
+          name: rocq-payload-cancel-choice-checked-proof-objects
+          path: rocq-payload-cancel
+
+      - name: Build project dependencies
+        run: cabal build lib:phil-core
+
+      - name: Typecheck proof-bound certifier with warnings as errors
+        run: |
+          cabal exec -- ghc \
+            -Wall -Wcompat -Wincomplete-record-updates -Wincomplete-uni-patterns -Wredundant-constraints -Werror \
+            -isrc -iapp -fno-code app/PayloadCancelChoiceProofCertificationMain.hs
+
+      - name: Build proof-bound payload/cancel certifier
+        run: |
+          cabal exec -- ghc \
+            -O0 -isrc -iapp \
+            app/PayloadCancelChoiceProofCertificationMain.hs \
+            -o phil-certify-payload-cancel-choice
+
+      - name: Produce payload/cancel proof and final certificates
+        run: |
+          mkdir -p payload-cancel-certificates
+          ./phil-certify-payload-cancel-choice \
+            rocq-payload-cancel/systems-payload-cancel/PayloadCancelChoice.v \
+            rocq-payload-cancel/systems-payload-cancel/PayloadCancelChoice.vo \
+            rocq-payload-cancel/llvm-payload-cancel/PayloadCancelChoice.v \
+            rocq-payload-cancel/llvm-payload-cancel/PayloadCancelChoice.vo \
+            rocq-payload-cancel/systems-final-response/FinalResponse.v \
+            rocq-payload-cancel/systems-final-response/FinalResponse.vo \
+            rocq-payload-cancel/llvm-final-response/FinalResponseReceive.v \
+            rocq-payload-cancel/llvm-final-response/FinalResponseReceive.vo \
+            rocq-payload-cancel/systems-rejected-response/RejectedResponse.v \
+            rocq-payload-cancel/systems-rejected-response/RejectedResponse.vo \
+            rocq-payload-cancel/llvm-rejected-response/RejectedResponse.v \
+            rocq-payload-cancel/llvm-rejected-response/RejectedResponse.vo \
+            rocq-payload-cancel/systems-accepted-response/AcceptedResponse.v \
+            rocq-payload-cancel/systems-accepted-response/AcceptedResponse.vo \
+            rocq-payload-cancel/llvm-accepted-response/AcceptedResponse.v \
+            rocq-payload-cancel/llvm-accepted-response/AcceptedResponse.vo \
+            rocq-payload-cancel/systems-storage/Storage.v \
+            rocq-payload-cancel/systems-storage/Storage.vo \
+            rocq-payload-cancel/llvm-storage/Storage.v \
+            rocq-payload-cancel/llvm-storage/Storage.vo \
+            rocq-payload-cancel/systems-digest-validation/DigestValidation.v \
+            rocq-payload-cancel/systems-digest-validation/DigestValidation.vo \
+            rocq-payload-cancel/llvm-digest-validation/DigestValidation.v \
+            rocq-payload-cancel/llvm-digest-validation/DigestValidation.vo \
+            rocq-payload-cancel/systems-recognized-record/RecognizedRecord.v \
+            rocq-payload-cancel/systems-recognized-record/RecognizedRecord.vo \
+            rocq-payload-cancel/llvm-exact-receive/ExactReceive.v \
+            rocq-payload-cancel/llvm-exact-receive/ExactReceive.vo \
+            rocq-payload-cancel/llvm-recognized-record-abi/RecognizedRecordABI.v \
+            rocq-payload-cancel/llvm-recognized-record-abi/RecognizedRecordABI.vo \
+            rocq-payload-cancel/llvm-runtime-symbol-identity/RuntimeSymbolIdentity.v \
+            rocq-payload-cancel/llvm-runtime-symbol-identity/RuntimeSymbolIdentity.vo \
+            payload-cancel-certificates/PHIL-SYS-PAYLOAD-CANCEL-001.rocq.cert \
+            payload-cancel-certificates/PHIL-LLVM-PAYLOAD-CANCEL-001.rocq.cert \
+            payload-cancel-certificates/PHIL-SYS-FINAL-RESPONSE-001.rocq.cert \
+            payload-cancel-certificates/PHIL-LLVM-FINAL-RESPONSE-001.rocq.cert \
+            payload-cancel-certificates/PHIL-SYS-REJECTED-001.rocq.cert \
+            payload-cancel-certificates/PHIL-LLVM-REJECTED-001.rocq.cert \
+            payload-cancel-certificates/PHIL-SYS-ACCEPTED-001.rocq.cert \
+            payload-cancel-certificates/PHIL-LLVM-ACCEPTED-001.rocq.cert \
+            payload-cancel-certificates/PHIL-SYS-STORAGE-001.rocq.cert \
+            payload-cancel-certificates/PHIL-LLVM-STORAGE-001.rocq.cert \
+            payload-cancel-certificates/PHIL-SYS-DIGEST-001.rocq.cert \
+            payload-cancel-certificates/PHIL-LLVM-DIGEST-001.rocq.cert \
+            payload-cancel-certificates/PHIL-SYS-RECORD-001.rocq.cert \
+            payload-cancel-certificates/PHIL-LLVM-EXACT-RECV-001.rocq.cert \
+            payload-cancel-certificates/PHIL-LLVM-REC-ABI-001.rocq.cert \
+            payload-cancel-certificates/PHIL-LLVM-RUNTIME-SYM-001.rocq.cert \
+            payload-cancel-certificates/PHIL-LLVM-CERT-008.cert \
+            payload-cancel-certificates/PHIL-LLVM-CERT-009.cert
+          for certificate in payload-cancel-certificates/*; do
+            echo "===== ${certificate} ====="
+            cat "${certificate}"
+            sha256sum "${certificate}"
+          done
+
+      - name: Upload payload/cancel proof-bound certification artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: phil-payload-cancel-choice-proof-bound-certification
+          path: payload-cancel-certificates/*
+          if-no-files-found: error
+          retention-days: 30
