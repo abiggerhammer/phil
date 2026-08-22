@@ -101,4 +101,4 @@ jobs:
 
       - name: Check Steve opaque-proof semantic rejection
         if: github.ref == 'refs/heads/steve/architecture-sketch' || github.head_ref == 'steve/architecture-sketch'
-        run: cabal exec -- runghc -package phil-core test/SteveSurfaceSemanticMain.hs
+        run: cabal test phil-steve-surface-semantic-tests --test-show-details=direct

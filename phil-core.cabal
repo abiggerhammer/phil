@@ -8,6 +8,7 @@ data-files:
     examples/upload/*.phil
     examples/rejected/*.phil
     examples/run/*.phil
+    examples/steve/rejected/*.phil
 
 common common-settings
   default-language: GHC2021
@@ -323,5 +324,17 @@ test-suite phil-steve-assurance-tests
   build-depends:
       base >=4.17 && <5,
       containers >=0.6 && <0.8,
+      phil-core,
+      text >=2.0 && <2.2
+
+test-suite phil-steve-surface-semantic-tests
+  import:             common-settings
+  type:               exitcode-stdio-1.0
+  hs-source-dirs:     test
+  main-is:            SteveSurfaceSemanticMain.hs
+  autogen-modules:    Paths_phil_core
+  other-modules:      Paths_phil_core
+  build-depends:
+      base >=4.17 && <5,
       phil-core,
       text >=2.0 && <2.2

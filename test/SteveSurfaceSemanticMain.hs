@@ -4,6 +4,7 @@ module Main (main) where
 
 import qualified Data.Text as Text
 import qualified Data.Text.IO as TextIO
+import Paths_phil_core (getDataFileName)
 import Phil.Core.Static
   ( declareOpaqueClaim
   , emptyStaticContext
@@ -24,7 +25,8 @@ import System.Exit (exitFailure)
 
 main :: IO ()
 main = do
-  source <- TextIO.readFile fixturePath
+  path <- getDataFileName fixturePath
+  source <- TextIO.readFile path
   case buildEnvironment of
     Left detail -> failCase ("could not build Steve static environment: " <> detail)
     Right environment ->
