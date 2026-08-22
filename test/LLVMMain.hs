@@ -30,6 +30,10 @@ main = do
     , test "modeled failure cannot become unjustified unreachable" unjustifiedUnreachableRejects
     , test "accidental poison is rejected" poisonRejects
     , test "contract trace relation is preserved" traceRelationRejects
+    , test "Begin.length field projection candidate verifies" fieldProjectionCandidatePasses
+    , test "Begin.length is typed U64 and feeds exact receive" fieldProjectionFeedsExactReceive
+    , test "Begin.length projection survives ordinary LLVM lowering" fieldProjectionSurvivesLLVM
+    , test "field projection schema drift is rejected" fieldProjectionSchemaDriftRejects
     ]
   if and results then pure () else exitFailure
 
@@ -195,6 +199,56 @@ traceRelationRejects =
         { llvmArtifactContract = contract { llvmContractTraceRelation = ["invented trace relation"] } }
   in case verifyLLVMEmission phase0LLVMVerificationContext phase0SystemsArtifact bad of
       Left LLVMTraceRelationMismatch -> True
+      _ -> False
+
+fieldProjectionCandidatePasses :: Bool
+fieldProjectionCandidatePasses = case phase0FieldProjectionBundle of
+  Left _ -> False
+  Right bundle -> verifyFieldProjectionBundle bundle == Right ()
+
+fieldProjectionFeedsExactReceive :: Bool
+fieldProjectionFeedsExactReceive = case phase0FieldProjectionBundle of
+  Left _ -> False
+  Right bundle -> doCheck (fieldProjectionArtifact bundle)
+  where
+    doCheck artifact =
+      case Map.lookup "UploadServer" (systemsProgramFunctions (systemsArtifactProgram artifact)) of
+        Nothing -> False
+        Just function ->
+          let output = ValueId "server.begin_length"
+              typed = case Map.lookup output (systemsFunctionValues function) of
+                Just SystemsValue { systemsValueRole = TypedScalar (ScalarUInt 64) } -> True
+                _ -> False
+              consumed = any
+                (\blockValue -> case systemsBlockTerminator blockValue of
+                  TermReceiveExact { exactLength = candidate } -> candidate == output
+                  _ -> False)
+                (Map.elems (systemsFunctionBlocks function))
+          in typed && consumed
+
+fieldProjectionSurvivesLLVM :: Bool
+fieldProjectionSurvivesLLVM = case phase0FieldProjectionBundle of
+  Left _ -> False
+  Right bundle ->
+    let systemsArtifact = fieldProjectionArtifact bundle
+        llvmArtifact = lowerSystemsConservative phase0LLVMTarget systemsArtifact
+        context = phase0LLVMVerificationContext
+          { llvmSystemsContext = fieldProjectionContext bundle }
+        rendered = llvmArtifactText llvmArtifact
+    in verifyLLVMEmission context systemsArtifact llvmArtifact == Right ()
+        && Text.isInfixOf
+          "call void @phil_call_project_recognized_Begin_length()"
+          rendered
+
+fieldProjectionSchemaDriftRejects :: Bool
+fieldProjectionSchemaDriftRejects = case phase0FieldProjectionBundle of
+  Left _ -> False
+  Right bundle ->
+    let badWitness = phase0BeginLengthProjection { fieldProjectionField = "kind" }
+    in case verifyFieldProjectionWitnesses
+        (fieldProjectionArtifact bundle)
+        [badWitness] of
+      Left FieldProjectionSchemaMismatch {} -> True
       _ -> False
 
 strengtheningFixture :: LLVMStrengtheningKind -> Text -> (LLVMAuthority, LLVMStrengthening)
