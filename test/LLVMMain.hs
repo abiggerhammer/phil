@@ -22,8 +22,10 @@ main = do
     , test "target triple cannot drift without a new target profile" targetTripleRejects
     , test "runtime-bound checks cannot disappear before LLVM" missingRuntimeRejects
     , test "unwitnessed LLVM control edges reject" unwitnessedEdgeRejects
+    , test "invented ordinary LLVM calls reject" inventedCallRejects
     , test "nuw cannot be emitted without explicit strengthening authority" unauthorizedNoWrapRejects
     , test "evidence-backed inbounds strengthening is accepted" authorizedInBoundsPasses
+    , test "strengthening authority is tied to the exact emitted block" strengtheningLocationRejects
     , test "llvm.assume cannot replace a runtime-bound validator" assumeReplacementRejects
     , test "modeled failure cannot become unjustified unreachable" unjustifiedUnreachableRejects
     , test "accidental poison is rejected" poisonRejects
@@ -90,6 +92,17 @@ unwitnessedEdgeRejects =
       Left LLVMUnwitnessedTargetEdge {} -> True
       _ -> False
 
+inventedCallRejects :: Bool
+inventedCallRejects =
+  let bad = rebindLLVMArtifact $
+        adjustLLVMBlock "UploadServer" "server.digest"
+          (\blockValue -> blockValue
+            { llvmBlockOps = LLVMCall "invented accepted side effect" : llvmBlockOps blockValue })
+          phase0LLVMArtifact
+  in case verifyLLVMEmission phase0LLVMVerificationContext phase0SystemsArtifact bad of
+      Left LLVMOrdinaryOperationMismatch {} -> True
+      _ -> False
+
 unauthorizedNoWrapRejects :: Bool
 unauthorizedNoWrapRejects =
   let (_, strengthening) = strengtheningFixture LLVMNoUnsignedWrap "llvm.upload.payload_length.no_unsigned_wrap"
@@ -108,6 +121,28 @@ authorizedInBoundsPasses =
             (Set.singleton authority)
         }
   in verifyLLVMEmission context phase0SystemsArtifact artifact == Right ()
+
+strengtheningLocationRejects :: Bool
+strengtheningLocationRejects =
+  let (authority, strengthening) = strengtheningFixture LLVMInBounds "llvm.upload.location.bound"
+      inserted = addStrengthening strengthening phase0LLVMArtifact
+      moduleValue = llvmArtifactModule inserted
+      moved = strengthening { llvmStrengtheningBlock = LLVMBlockId "server.digest" }
+      changedModule = moduleValue
+        { llvmStrengthenings = Map.insert
+            (llvmStrengtheningId strengthening)
+            moved
+            (llvmStrengthenings moduleValue)
+        }
+      artifact = rebindLLVMArtifact inserted { llvmArtifactModule = changedModule }
+      context = phase0LLVMVerificationContext
+        { llvmAuthorizedStrengthenings = Map.singleton
+            (llvmStrengtheningClaim moved)
+            (Set.singleton authority)
+        }
+  in case verifyLLVMEmission context phase0SystemsArtifact artifact of
+      Left LLVMStrengtheningUseLocationMismatch {} -> True
+      _ -> False
 
 assumeReplacementRejects :: Bool
 assumeReplacementRejects =
