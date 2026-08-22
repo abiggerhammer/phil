@@ -15,6 +15,7 @@ import Data.Text (Text)
 import qualified Data.Text as Text
 import Phil.Assurance.Types
 import Phil.LLVM.IR
+import Phil.LLVM.Lower (lowerSystemsConservative)
 import Phil.Systems.IR
 import Phil.Systems.Verify
   ( SystemsVerificationContext (..)
@@ -53,6 +54,8 @@ data LLVMVerificationError
   | LLVMBlockMapKeyMismatch Text LLVMBlockId LLVMBlockId
   | LLVMUnknownControlTarget Text LLVMBlockId LLVMBlockId
   | LLVMRuntimeCoverageMismatch [RuntimeSiteRef] [RuntimeSiteRef]
+  | LLVMOrdinaryOperationMismatch Text LLVMBlockId [LLVMOp] [LLVMOp]
+  | LLVMOrdinaryTerminatorMismatch Text LLVMBlockId LLVMTerminator LLVMTerminator
   | LLVMEdgeWitnessSetMismatch
   | LLVMDuplicateEdgeWitness Text BlockId BlockId
   | LLVMEdgeWitnessPathTooShort Text BlockId BlockId
@@ -67,6 +70,7 @@ data LLVMVerificationError
   | LLVMStrengtheningLocationMissing LLVMStrengtheningId
   | LLVMStrengtheningUseCount LLVMStrengtheningId Int
   | LLVMStrengtheningUseMissing LLVMStrengtheningId
+  | LLVMStrengtheningUseLocationMismatch LLVMStrengtheningId Text LLVMBlockId Text LLVMBlockId
   | LLVMStrengtheningKindUseMismatch LLVMStrengtheningId
   | LLVMUnauthorizedStrengthening LLVMStrengtheningId Text LLVMAuthority
   | LLVMStrengtheningAuthorityMissing LLVMStrengtheningId LLVMAuthority
@@ -89,8 +93,9 @@ verifyLLVMEmission context systemsArtifact artifact = do
   verifyRuntimeCoverage systemsArtifact (llvmArtifactModule artifact)
   verifyEdgeWitnesses systemsArtifact artifact
   verifyContractRelations systemsArtifact (llvmArtifactContract artifact)
-  verifyStrengthenings context systemsArtifact (llvmArtifactModule artifact)
   verifyDefinedExecutionDiscipline (llvmArtifactModule artifact)
+  verifyOrdinaryProjection context systemsArtifact (llvmArtifactModule artifact)
+  verifyStrengthenings context systemsArtifact (llvmArtifactModule artifact)
 
 verifyIdentity
   :: LLVMVerificationContext
@@ -154,6 +159,62 @@ verifyRuntimeCoverage systemsArtifact moduleValue =
   in unless (counts sourceSites == counts targetSites) $
       Left (LLVMRuntimeCoverageMismatch sourceSites targetSites)
 
+verifyOrdinaryProjection
+  :: LLVMVerificationContext
+  -> SystemsArtifact
+  -> LLVMModule
+  -> Either LLVMVerificationError ()
+verifyOrdinaryProjection context systemsArtifact actualModule = do
+  let expectedArtifact = lowerSystemsConservative (targetProfileFromContext context) systemsArtifact
+      expectedModule = llvmArtifactModule expectedArtifact
+  forM_ (Map.toAscList (llvmFunctions expectedModule)) $ \(functionName, expectedFunction) ->
+    case Map.lookup functionName (llvmFunctions actualModule) of
+      Nothing -> Left (LLVMFunctionMissing functionName)
+      Just actualFunction ->
+        forM_ (Map.toAscList (llvmFunctionBlocks expectedFunction)) $ \(blockId, expectedBlock) ->
+          case Map.lookup blockId (llvmFunctionBlocks actualFunction) of
+            Nothing -> Left (LLVMEdgeWitnessBlockMissing functionName blockId)
+            Just actualBlock -> do
+              let expectedOps = ordinaryOps (llvmBlockOps expectedBlock)
+                  actualOps = ordinaryOps (llvmBlockOps actualBlock)
+              unless (actualOps == expectedOps) $
+                Left (LLVMOrdinaryOperationMismatch functionName blockId expectedOps actualOps)
+              unless (ordinaryTerminatorCompatible
+                        (llvmBlockTerminator expectedBlock)
+                        (llvmBlockTerminator actualBlock)) $
+                Left (LLVMOrdinaryTerminatorMismatch
+                  functionName
+                  blockId
+                  (llvmBlockTerminator expectedBlock)
+                  (llvmBlockTerminator actualBlock))
+
+ordinaryOps :: [LLVMOp] -> [LLVMOp]
+ordinaryOps = filter isOrdinary
+  where
+    isOrdinary operation = case operation of
+      LLVMCall _ -> True
+      LLVMRuntime _ _ -> True
+      LLVMCleanup _ -> True
+      LLVMPlain _ -> True
+      LLVMStrengtheningOp _ _ -> False
+      LLVMPoison _ -> False
+      LLVMUndef _ -> False
+      LLVMFreeze _ -> False
+      LLVMMetadata _ -> False
+
+ordinaryTerminatorCompatible :: LLVMTerminator -> LLVMTerminator -> Bool
+ordinaryTerminatorCompatible expected actual = expected == actual
+
+targetProfileFromContext :: LLVMVerificationContext -> LLVMTargetProfile
+targetProfileFromContext context = LLVMTargetProfile
+  { llvmTargetLanguageVersion = llvmExpectedLanguageVersion context
+  , llvmTargetToolVersion = llvmExpectedToolVersion context
+  , llvmTargetTripleName = llvmExpectedTargetTriple context
+  , llvmTargetDataLayout = llvmExpectedDataLayout context
+  , llvmTargetRuntimeABIDigest = llvmExpectedRuntimeABIDigest context
+  , llvmTargetRuntimeABIProfile = llvmExpectedRuntimeABIProfile context
+  }
+
 verifyEdgeWitnesses
   :: SystemsArtifact
   -> LLVMArtifact
@@ -215,8 +276,8 @@ verifyStrengthenings
   -> Either LLVMVerificationError ()
 verifyStrengthenings context systemsArtifact moduleValue = do
   let strengthenings = llvmStrengthenings moduleValue
-      uses = llvmStrengtheningUses moduleValue
-  forM_ uses $ \strengtheningId ->
+      useIds = llvmStrengtheningUses moduleValue
+  forM_ useIds $ \strengtheningId ->
     unless (Map.member strengtheningId strengthenings) $
       Left (LLVMStrengtheningUseMissing strengtheningId)
   forM_ (Map.toAscList strengthenings) $ \(key, strengthening) -> do
@@ -225,11 +286,24 @@ verifyStrengthenings context systemsArtifact moduleValue = do
     when (Text.null (llvmStrengtheningClaim strengthening)) $
       Left (LLVMEmptyStrengtheningClaim key)
     verifyStrengtheningLocation moduleValue strengthening
-    let useCount = length (filter (== key) uses)
-    unless (useCount == 1) $
-      Left (LLVMStrengtheningUseCount key useCount)
-    unless (useKindMatches moduleValue strengthening) $
-      Left (LLVMStrengtheningKindUseMismatch key)
+    let locations = strengtheningUseLocations moduleValue key
+    unless (length locations == 1) $
+      Left (LLVMStrengtheningUseCount key (length locations))
+    case locations of
+      [(actualFunction, actualBlock, inTerminator)] -> do
+        unless
+          ( actualFunction == llvmStrengtheningFunction strengthening
+          && actualBlock == llvmStrengtheningBlock strengthening
+          ) $
+          Left (LLVMStrengtheningUseLocationMismatch
+            key
+            (llvmStrengtheningFunction strengthening)
+            (llvmStrengtheningBlock strengthening)
+            actualFunction
+            actualBlock)
+        unless (kindMatchesLocation inTerminator (llvmStrengtheningKind strengthening)) $
+          Left (LLVMStrengtheningKindUseMismatch key)
+      _ -> pure ()
     verifyAuthority context systemsArtifact strengthening
 
 verifyStrengtheningLocation :: LLVMModule -> LLVMStrengthening -> Either LLVMVerificationError ()
@@ -238,6 +312,31 @@ verifyStrengtheningLocation moduleValue strengthening =
       Map.lookup (llvmStrengtheningBlock strengthening) (llvmFunctionBlocks functionValue) of
     Nothing -> Left (LLVMStrengtheningLocationMissing (llvmStrengtheningId strengthening))
     Just _ -> Right ()
+
+strengtheningUseLocations
+  :: LLVMModule
+  -> LLVMStrengtheningId
+  -> [(Text, LLVMBlockId, Bool)]
+strengtheningUseLocations moduleValue strengtheningId =
+  concat
+    [ blockLocations (llvmFunctionName functionValue) blockValue
+    | functionValue <- Map.elems (llvmFunctions moduleValue)
+    , blockValue <- Map.elems (llvmFunctionBlocks functionValue)
+    ]
+  where
+    blockLocations functionName blockValue =
+      [ (functionName, llvmBlockId blockValue, False)
+      | LLVMStrengtheningOp candidate _ <- llvmBlockOps blockValue
+      , candidate == strengtheningId
+      ] <> case llvmBlockTerminator blockValue of
+        LLVMUnreachable (Just candidate) | candidate == strengtheningId ->
+          [(functionName, llvmBlockId blockValue, True)]
+        _ -> []
+
+kindMatchesLocation :: Bool -> LLVMStrengtheningKind -> Bool
+kindMatchesLocation inTerminator kind
+  | inTerminator = kind == LLVMUnreachableFact
+  | otherwise = kind /= LLVMUnreachableFact
 
 verifyAuthority
   :: LLVMVerificationContext
@@ -264,33 +363,6 @@ authorityExists context systemsArtifact authority = case authority of
     Set.member revision (manifestObligationRevisions manifest)
   where
     manifest = systemsAssuranceManifest (llvmSystemsContext context)
-
-useKindMatches :: LLVMModule -> LLVMStrengthening -> Bool
-useKindMatches moduleValue strengthening =
-  case lookupStrengtheningUse moduleValue (llvmStrengtheningId strengthening) of
-    Just (Left _) -> llvmStrengtheningKind strengthening /= LLVMUnreachableFact
-    Just (Right _) -> llvmStrengtheningKind strengthening == LLVMUnreachableFact
-    Nothing -> False
-
-lookupStrengtheningUse
-  :: LLVMModule
-  -> LLVMStrengtheningId
-  -> Maybe (Either LLVMBlockId LLVMBlockId)
-lookupStrengtheningUse moduleValue strengtheningId =
-  firstJust
-    [ blockUse blockValue
-    | functionValue <- Map.elems (llvmFunctions moduleValue)
-    , blockValue <- Map.elems (llvmFunctionBlocks functionValue)
-    ]
-  where
-    blockUse blockValue
-      | any isOpUse (llvmBlockOps blockValue) = Just (Left (llvmBlockId blockValue))
-      | otherwise = case llvmBlockTerminator blockValue of
-          LLVMUnreachable (Just candidate) | candidate == strengtheningId ->
-            Just (Right (llvmBlockId blockValue))
-          _ -> Nothing
-    isOpUse (LLVMStrengtheningOp candidate _) = candidate == strengtheningId
-    isOpUse _ = False
 
 verifyDefinedExecutionDiscipline :: LLVMModule -> Either LLVMVerificationError ()
 verifyDefinedExecutionDiscipline moduleValue =
@@ -349,12 +421,6 @@ firstDuplicate = go Set.empty
     go seen (value : rest)
       | Set.member value seen = Just value
       | otherwise = go (Set.insert value seen) rest
-
-firstJust :: [Maybe a] -> Maybe a
-firstJust [] = Nothing
-firstJust (value : rest) = case value of
-  Just result -> Just result
-  Nothing -> firstJust rest
 
 mapLeft :: (a -> b) -> Either a c -> Either b c
 mapLeft transform = either (Left . transform) Right
