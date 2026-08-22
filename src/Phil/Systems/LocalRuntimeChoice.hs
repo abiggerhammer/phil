@@ -207,11 +207,11 @@ blockUses value blockValue = any opUses (systemsBlockOps blockValue) || termUses
     opUses OpSessionSelect { sessionSelectPayload = payload } = payload == Just value
     opUses OpCopy { copySource = source } = source == value
     opUses _ = False
-    termUses TermBranch condition _ _ = condition == value
+    termUses (TermBranch condition _ _) = condition == value
     termUses TermRuntimeCheck { checkInputs = inputs } = value `elem` inputs
     termUses TermReceiveExact { exactLength = lengthValue } = lengthValue == value
     termUses TermRuntimeChoice { runtimeChoiceInputs = inputs } = value `elem` inputs
-    termUses TermReturnScalar returned = returned == value
+    termUses (TermReturnScalar returned) = returned == value
     termUses _ = False
 
 needFunction :: LocalRuntimeChoiceWitness -> SystemsProgram -> Either LocalRuntimeChoiceError SystemsFunction
