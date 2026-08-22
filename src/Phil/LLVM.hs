@@ -11,6 +11,7 @@ module Phil.LLVM
   , module Phil.LLVM.ExactReceiveProofCertification
   , module Phil.LLVM.DigestValidation
   , module Phil.LLVM.DigestValidationCertification
+  , module Phil.LLVM.DigestValidationProofCertification
   , module Phil.LLVM.Storage
   , module Phil.LLVM.StorageCertification
   , module Phil.LLVM.AcceptedResponse
@@ -21,6 +22,7 @@ import Phil.LLVM.AcceptedResponse
 import Phil.LLVM.AcceptedResponseCertification
 import Phil.LLVM.DigestValidation
 import Phil.LLVM.DigestValidationCertification
+import Phil.LLVM.DigestValidationProofCertification
 import Phil.LLVM.ExactReceive
 import Phil.LLVM.ExactReceiveCertification
 import Phil.LLVM.ExactReceiveProofCertification

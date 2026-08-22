@@ -28,6 +28,10 @@ main = do
         (certificateCloses llvmRuntimeSymbolCertificationSpec)
     , test "LLVM exact-receive Rocq certificate closes its manifest"
         (certificateCloses llvmExactReceiveCertificationSpec)
+    , test "Systems digest-validation Rocq certificate closes its manifest"
+        (certificateCloses systemsDigestValidationCertificationSpec)
+    , test "LLVM digest-validation Rocq certificate closes its manifest"
+        (certificateCloses llvmDigestValidationCertificationSpec)
     , test "known Rocq certification profiles resolve" knownProfilesResolve
     , test "proof-bound recognized-record certification closes"
         recognizedRecordProofCertificationCloses
@@ -37,6 +41,10 @@ main = do
         exactReceiveProofCertificationCloses
     , test "proof-bound exact-receive certification checks proof artifact digests"
         exactReceiveProofArtifactTamperRejects
+    , test "proof-bound digest-validation certification closes"
+        digestValidationProofCertificationCloses
+    , test "proof-bound digest-validation certification checks proof artifact digests"
+        digestValidationProofArtifactTamperRejects
     , test "missing expected theorem rejects certification" missingTheoremRejects
     , test "cross-profile obligation marker rejects certification" wrongMarkerRejects
     , test "compiled proof object is content-bound" compiledObjectIsBound
@@ -68,11 +76,17 @@ knownProfilesResolve =
   && knownExactReceiveRocqCertificationSpec
       (rocqSpecProfile llvmExactReceiveCertificationSpec)
       == Just llvmExactReceiveCertificationSpec
+  && all resolvesDigest
+    [ systemsDigestValidationCertificationSpec
+    , llvmDigestValidationCertificationSpec
+    ]
   where
     resolvesLegacy spec =
       knownRocqCertificationSpec (rocqSpecProfile spec) == Just spec
     resolvesRecognizedRecord spec =
       knownRecognizedRecordRocqCertificationSpec (rocqSpecProfile spec) == Just spec
+    resolvesDigest spec =
+      knownDigestValidationRocqCertificationSpec (rocqSpecProfile spec) == Just spec
 
 recognizedRecordProofCertificationCloses :: Bool
 recognizedRecordProofCertificationCloses =
@@ -155,6 +169,69 @@ exactReceiveProofCandidates = do
   symbolProof <- either (const Nothing) Just
     (candidate llvmRuntimeSymbolCertificationSpec "symbol-compiled")
   pure (exactProof, abiProof, symbolProof)
+
+digestValidationProofCertificationCloses :: Bool
+digestValidationProofCertificationCloses =
+  case digestValidationProofCandidates of
+    Just (systemsDigestProof, llvmDigestProof, systemsRecordProof, exactProof, abiProof, symbolProof) ->
+      verifyPhase0DigestValidationProofCertification
+        systemsDigestProof llvmDigestProof systemsRecordProof exactProof abiProof symbolProof == Right ()
+    Nothing -> False
+
+digestValidationProofArtifactTamperRejects :: Bool
+digestValidationProofArtifactTamperRejects =
+  case digestValidationProofCandidates of
+    Nothing -> False
+    Just (systemsDigestProof, llvmDigestProof, systemsRecordProof, exactProof, abiProof, symbolProof) ->
+      case phase0DigestValidationProofCertification
+          systemsDigestProof llvmDigestProof systemsRecordProof exactProof abiProof symbolProof of
+        Left _ -> False
+        Right bundle ->
+          let artifact = rocqBundleCertificateArtifact systemsDigestProof
+              context0 = digestValidationProofCertificationContext bundle
+              context = context0
+                { verificationAvailableArtifacts = Map.insert
+                    (artifactReference artifact)
+                    (digestText "tampered-systems-digest-proof-certificate")
+                    (verificationAvailableArtifacts context0)
+                }
+          in case verifyManifest
+              context
+              (digestValidationProofCertificationLedger bundle)
+              (digestValidationProofCertificationManifest bundle) of
+              Left ArtifactDigestMismatch {} -> True
+              _ -> False
+
+digestValidationProofCandidates
+  :: Maybe
+      ( RocqCertificationBundle
+      , RocqCertificationBundle
+      , RocqCertificationBundle
+      , RocqCertificationBundle
+      , RocqCertificationBundle
+      , RocqCertificationBundle
+      )
+digestValidationProofCandidates = do
+  systemsDigestProof <- either (const Nothing) Just
+    (candidate systemsDigestValidationCertificationSpec "systems-digest-compiled")
+  llvmDigestProof <- either (const Nothing) Just
+    (candidate llvmDigestValidationCertificationSpec "llvm-digest-compiled")
+  systemsRecordProof <- either (const Nothing) Just
+    (candidate systemsRecognizedRecordCertificationSpec "systems-record-compiled")
+  exactProof <- either (const Nothing) Just
+    (candidate llvmExactReceiveCertificationSpec "exact-receive-compiled")
+  abiProof <- either (const Nothing) Just
+    (candidate llvmRecognizedRecordABICertificationSpec "abi-compiled")
+  symbolProof <- either (const Nothing) Just
+    (candidate llvmRuntimeSymbolCertificationSpec "symbol-compiled")
+  pure
+    ( systemsDigestProof
+    , llvmDigestProof
+    , systemsRecordProof
+    , exactProof
+    , abiProof
+    , symbolProof
+    )
 
 missingTheoremRejects :: Bool
 missingTheoremRejects =
