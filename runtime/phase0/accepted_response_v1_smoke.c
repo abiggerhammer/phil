@@ -121,6 +121,7 @@ bool phil_smoke_accepted_response_success_observed(
     const uint8_t *expected_response,
     size_t response_length) {
   return common_store_observation(payload_length)
+      && smoke_state.configured_store_status == 1
       && smoke_state.accepted_calls == 1
       && smoke_state.last_returned_upload_id == &smoke_state.upload_id
       && smoke_state.stored_length == payload_length
@@ -131,9 +132,21 @@ bool phil_smoke_accepted_response_success_observed(
       && memcmp(smoke_state.transport.output, expected_response, response_length) == 0;
 }
 
-bool phil_smoke_accepted_response_not_sent_observed(size_t payload_length) {
+bool phil_smoke_accepted_response_failure_observed(size_t payload_length) {
   return common_store_observation(payload_length)
+      && smoke_state.configured_store_status == 0
       && smoke_state.accepted_calls == 0
+      && smoke_state.last_returned_upload_id == NULL
+      && smoke_state.stored_length == 0
+      && smoke_state.transport.output_length == 0;
+}
+
+bool phil_smoke_accepted_response_reserved_status_observed(size_t payload_length) {
+  return common_store_observation(payload_length)
+      && smoke_state.configured_store_status == 2
+      && smoke_state.accepted_calls == 0
+      && smoke_state.last_returned_upload_id == &smoke_state.upload_id
+      && smoke_state.stored_length == 0
       && smoke_state.transport.output_length == 0;
 }
 
