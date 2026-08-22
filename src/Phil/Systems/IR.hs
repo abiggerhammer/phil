@@ -21,6 +21,8 @@ module Phil.Systems.IR
   , FactDisposition (..)
   , FactTransfer (..)
   , RequiredControlEdge (..)
+  , InvariantClaim (..)
+  , StageInvariant (..)
   , StageContract (..)
   , SystemsProgram (..)
   , LoweringLedger (..)
@@ -29,6 +31,8 @@ module Phil.Systems.IR
   , deriveLoweringDecisionDigest
   , deriveLoweringLedgerRoot
   , systemsProgramDigest
+  , stageContractDigest
+  , systemsArtifactDigest
   , blockSuccessors
   , runtimeSites
   ) where
@@ -179,6 +183,13 @@ data SystemsTerminator
       , exactSuccess :: BlockId
       , exactFailure :: BlockId
       }
+  | TermSendExact
+      { sendExactTransport :: ValueId
+      , sendExactOwner :: ValueId
+      , sendExactSite :: RuntimeSiteRef
+      , sendExactSuccess :: BlockId
+      , sendExactFailure :: BlockId
+      }
   | TermStore
       { storeOwner :: ValueId
       , storeResult :: ValueId
@@ -259,6 +270,8 @@ data LoweringAction
 data LoweringDecision = LoweringDecision
   { loweringDecisionId :: DecisionId
   , loweringDecisionDigest :: Digest
+  , loweringSourceArtifactDigest :: Digest
+  , loweringTargetArtifactDigest :: Digest
   , loweringSourceRepresentation :: Text
   , loweringTargetRepresentation :: Text
   , loweringSemanticEntities :: [Text]
@@ -282,7 +295,7 @@ data LoweringDecision = LoweringDecision
 
 data FactDisposition
   = FactConsumed Text
-  | FactTransferred InvariantId
+  | FactTransferred [InvariantId]
   | FactErased AssuranceUseId
   | FactRuntimeRetained EvidenceEntryId
   | FactDerived RevisionId
@@ -303,11 +316,30 @@ data RequiredControlEdge = RequiredControlEdge
   }
   deriving (Eq, Ord, Show)
 
+data InvariantClaim
+  = InvariantSingleTransportHandle Text ValueId
+  | InvariantBorrowAliases Text ValueId ValueId
+  | InvariantRecognitionGate Text BlockId ValueId BlockId BlockId
+  | InvariantBranchTargets Text BlockId BlockId BlockId
+  | InvariantExactReceive Text BlockId ValueId BlockId BlockId
+  | InvariantExactSend Text BlockId ValueId BlockId BlockId
+  | InvariantRequiredEdge RequiredControlEdge
+  | InvariantFatalTerminal Text BlockId
+  | InvariantCleanupOwners Text BlockId [ValueId]
+  deriving (Eq, Ord, Show)
+
+data StageInvariant = StageInvariant
+  { stageInvariantId :: InvariantId
+  , stageInvariantClaim :: InvariantClaim
+  }
+  deriving (Eq, Ord, Show)
+
 data StageContract = StageContract
   { stageContractId :: Text
   , stageSourceArtifactDigest :: Digest
+  , stageTargetArtifactDigest :: Digest
   , stageFacts :: [FactTransfer]
-  , stageInvariants :: Map InvariantId Text
+  , stageInvariants :: Map InvariantId StageInvariant
   , stageRequiredEdges :: [RequiredControlEdge]
   , stageDerivedObligations :: [RevisionId]
   , stageAssumptions :: [Text]
@@ -337,83 +369,99 @@ data SystemsArtifact = SystemsArtifact
   deriving (Eq, Show)
 
 deriveLoweringDecisionDigest :: LoweringDecision -> Digest
-deriveLoweringDecisionDigest decision = digestText (Text.intercalate "|"
-  [ field "source" (loweringSourceRepresentation decision)
-  , field "target" (loweringTargetRepresentation decision)
-  , field "semantic" (renderTexts (loweringSemanticEntities decision))
-  , field "obligations" (renderTexts (map unRevisionId (loweringObligationRevisions decision)))
-  , field "evidence" (renderTexts (map unEvidenceEntryId (loweringAssuranceEntries decision)))
-  , field "uses" (renderTexts (map unAssuranceUseId (loweringAssuranceUses decision)))
-  , field "action" (Text.pack (show (loweringAction decision)))
-  , field "before" (loweringRepresentationBefore decision)
-  , field "after" (loweringRepresentationAfter decision)
-  , field "preserved" (renderTexts (loweringInvariantsPreserved decision))
-  , field "transferred" (renderTexts (map unInvariantId (loweringInvariantsTransferred decision)))
-  , field "residue" (renderTexts (loweringRuntimeResidue decision))
-  , field "cost_class" (maybe "" (Text.pack . show) (loweringCostClass decision))
-  , field "cost_shape" (renderCostShape (loweringCostShape decision))
-  , field "target_preconditions" (renderTexts (loweringTargetPreconditions decision))
-  , field "assumptions" (renderTexts (loweringAssumptions decision))
-  , field "derived" (renderTexts (map unRevisionId (loweringDerivedObligations decision)))
-  , field "inspection" (renderTexts (loweringInspectionPlan decision))
+deriveLoweringDecisionDigest lowering = digestText (Text.intercalate "|"
+  [ field "source_artifact" (unDigest (loweringSourceArtifactDigest lowering))
+  , field "target_artifact" (unDigest (loweringTargetArtifactDigest lowering))
+  , field "source" (loweringSourceRepresentation lowering)
+  , field "target" (loweringTargetRepresentation lowering)
+  , field "semantic" (renderTexts (loweringSemanticEntities lowering))
+  , field "obligations" (renderTexts (map unRevisionId (loweringObligationRevisions lowering)))
+  , field "evidence" (renderTexts (map unEvidenceEntryId (loweringAssuranceEntries lowering)))
+  , field "uses" (renderTexts (map unAssuranceUseId (loweringAssuranceUses lowering)))
+  , field "action" (renderLoweringAction (loweringAction lowering))
+  , field "before" (loweringRepresentationBefore lowering)
+  , field "after" (loweringRepresentationAfter lowering)
+  , field "preserved" (renderTexts (loweringInvariantsPreserved lowering))
+  , field "transferred" (renderTexts (map unInvariantId (loweringInvariantsTransferred lowering)))
+  , field "residue" (renderTexts (loweringRuntimeResidue lowering))
+  , field "cost_class" (maybe "none" renderCostClass (loweringCostClass lowering))
+  , field "cost_shape" (renderCostShape (loweringCostShape lowering))
+  , field "target_preconditions" (renderTexts (loweringTargetPreconditions lowering))
+  , field "assumptions" (renderTexts (loweringAssumptions lowering))
+  , field "derived" (renderTexts (map unRevisionId (loweringDerivedObligations lowering)))
+  , field "inspection" (renderTexts (loweringInspectionPlan lowering))
   ])
-  where
-    field key value = key <> "=" <> atom value
-
-    atom value = Text.pack (show (Text.length value)) <> ":" <> value
-
-    renderTexts values = "[" <> Text.intercalate "," (map atom (sort values)) <> "]"
-
-    renderCostShape shape = renderTexts
-      [ "compile_time=" <> maybeText (costCompileTime shape)
-      , "code_size=" <> maybeText (costCodeSize shape)
-      , "allocation_count=" <> maybeText (costAllocationCount shape)
-      , "peak_live_memory=" <> maybeText (costPeakLiveMemory shape)
-      , "bytes_copied=" <> maybeText (costBytesCopied shape)
-      , "dynamic_check_count=" <> maybeText (costDynamicCheckCount shape)
-      , "branch_or_dispatch=" <> maybeText (costBranchOrDispatch shape)
-      , "hash_or_crypto_work=" <> maybeText (costHashOrCryptoWork shape)
-      , "synchronization=" <> maybeText (costSynchronization shape)
-      , "frequency=" <> maybeText (costFrequency shape)
-      ]
-
-    maybeText = maybe "" id
 
 deriveLoweringLedgerRoot :: Map DecisionId LoweringDecision -> Digest
 deriveLoweringLedgerRoot decisions = digestText . Text.intercalate "|" $
-  [ unDecisionId key <> "=" <> unDigest (loweringDecisionDigest decision)
-  | (key, decision) <- Map.toAscList decisions
+  [ unDecisionId key <> "=" <> unDigest (loweringDecisionDigest lowering)
+  | (key, lowering) <- Map.toAscList decisions
   ]
 
 systemsProgramDigest :: SystemsProgram -> Digest
 systemsProgramDigest program = digestText (Text.intercalate "|"
-  [ systemsProgramName program
-  , Text.pack (show (systemsProgramProfile program))
-  , Text.intercalate ";" (map renderFunction (Map.toAscList (systemsProgramFunctions program)))
+  [ field "name" (systemsProgramName program)
+  , field "profile" (renderProfile (systemsProgramProfile program))
+  , field "functions" (renderList renderFunction (Map.toAscList (systemsProgramFunctions program)))
   ])
   where
-    renderFunction (name, function) = Text.intercalate ":"
-      [ name
-      , unBlockId (systemsFunctionEntry function)
-      , Text.intercalate "," (map renderValue (Map.toAscList (systemsFunctionValues function)))
-      , Text.intercalate "," (map renderBlock (Map.toAscList (systemsFunctionBlocks function)))
+    renderFunction (name, function) = Text.intercalate ";"
+      [ field "key" name
+      , field "name" (systemsFunctionName function)
+      , field "entry" (unBlockId (systemsFunctionEntry function))
+      , field "values" (renderList renderValue (Map.toAscList (systemsFunctionValues function)))
+      , field "blocks" (renderList renderBlock (Map.toAscList (systemsFunctionBlocks function)))
       ]
 
-    renderValue (valueId, value) =
-      unValueId valueId <> "=" <> Text.pack (show (systemsValueRole value))
-        <> "@" <> maybe "" id (systemsStorageIdentity value)
+    renderValue (key, value) = Text.intercalate ";"
+      [ field "key" (unValueId key)
+      , field "id" (unValueId (systemsValueId value))
+      , field "role" (renderValueRole (systemsValueRole value))
+      , field "storage" (maybe "none" id (systemsStorageIdentity value))
+      ]
 
-    renderBlock (blockId, block) =
-      unBlockId blockId <> "{" <> Text.pack (show (systemsBlockOps block))
-        <> ";" <> Text.pack (show (systemsBlockTerminator block)) <> "}"
+    renderBlock (key, blockValue) = Text.intercalate ";"
+      [ field "key" (unBlockId key)
+      , field "id" (unBlockId (systemsBlockId blockValue))
+      , field "ops" (renderList renderOp (systemsBlockOps blockValue))
+      , field "term" (renderTerminator (systemsBlockTerminator blockValue))
+      ]
+
+stageContractDigest :: StageContract -> Digest
+stageContractDigest contract = digestText (Text.intercalate "|"
+  [ field "id" (stageContractId contract)
+  , field "source" (unDigest (stageSourceArtifactDigest contract))
+  , field "target" (unDigest (stageTargetArtifactDigest contract))
+  , field "facts" (renderList renderFactTransfer (stageFacts contract))
+  , field "invariants" (renderList renderInvariantEntry (Map.toAscList (stageInvariants contract)))
+  , field "edges" (renderList renderEdge (stageRequiredEdges contract))
+  , field "derived" (renderTexts (map unRevisionId (stageDerivedObligations contract)))
+  , field "assumptions" (renderTexts (stageAssumptions contract))
+  , field "trace" (renderTexts (stageTraceRelation contract))
+  , field "resource_failure" (renderTexts (stageResourceFailureRelation contract))
+  ])
+  where
+    renderInvariantEntry (key, invariantValue) = Text.intercalate ";"
+      [ field "key" (unInvariantId key)
+      , field "id" (unInvariantId (stageInvariantId invariantValue))
+      , field "claim" (renderInvariantClaim (stageInvariantClaim invariantValue))
+      ]
+
+systemsArtifactDigest :: SystemsArtifact -> Digest
+systemsArtifactDigest artifact = digestText (Text.intercalate "|"
+  [ field "program" (unDigest (systemsProgramDigest (systemsArtifactProgram artifact)))
+  , field "stage_contract" (unDigest (stageContractDigest (systemsArtifactStageContract artifact)))
+  , field "lowering_ledger" (unDigest (loweringLedgerRoot (systemsArtifactLoweringLedger artifact)))
+  ])
 
 blockSuccessors :: SystemsBlock -> [BlockId]
-blockSuccessors block = case systemsBlockTerminator block of
+blockSuccessors blockValue = case systemsBlockTerminator blockValue of
   TermJump target -> [target]
   TermBranch _ yes no -> [yes, no]
   TermRecognize { recognizeSuccess = yes, recognizeFailure = no } -> [yes, no]
   TermRuntimeCheck { checkSuccess = yes, checkFailure = no } -> [yes, no]
   TermReceiveExact { exactSuccess = yes, exactFailure = no } -> [yes, no]
+  TermSendExact { sendExactSuccess = yes, sendExactFailure = no } -> [yes, no]
   TermStore { storeSuccess = yes, storeFailure = no } -> [yes, no]
   TermEnd _ -> []
   TermFatal _ -> []
@@ -421,7 +469,7 @@ blockSuccessors block = case systemsBlockTerminator block of
 runtimeSites :: SystemsFunction -> [RuntimeSiteRef]
 runtimeSites function = concatMap blockSites (Map.elems (systemsFunctionBlocks function))
   where
-    blockSites block = opSites (systemsBlockOps block) <> termSites (systemsBlockTerminator block)
+    blockSites blockValue = opSites (systemsBlockOps blockValue) <> termSites (systemsBlockTerminator blockValue)
 
     opSites operations =
       [ site
@@ -432,5 +480,188 @@ runtimeSites function = concatMap blockSites (Map.elems (systemsFunctionBlocks f
       TermRecognize { recognizeSite = site } -> [site]
       TermRuntimeCheck { checkSite = site } -> [site]
       TermReceiveExact { exactSite = site } -> [site]
+      TermSendExact { sendExactSite = site } -> [site]
       TermStore { storeSite = site } -> [site]
       _ -> []
+
+field :: Text -> Text -> Text
+field key value = key <> "=" <> atom value
+
+atom :: Text -> Text
+atom value = Text.pack (show (Text.length value)) <> ":" <> value
+
+renderTexts :: [Text] -> Text
+renderTexts values = renderList id (sort values)
+
+renderList :: (a -> Text) -> [a] -> Text
+renderList render values = "[" <> Text.intercalate "," (map (atom . render) values) <> "]"
+
+renderProfile :: CompilationProfile -> Text
+renderProfile profile = case profile of
+  CheckedRuntime -> "checked-runtime"
+  CertifiedRelease -> "certified-release"
+
+renderValueRole :: SystemsValueRole -> Text
+renderValueRole role = case role of
+  TransportHandle -> "transport-handle"
+  PendingIngress grammar -> "pending(" <> atom grammar <> ")"
+  FrameOwner grammar -> "frame-owner(" <> atom grammar <> ")"
+  OwnedBuffer description -> "owned-buffer(" <> atom description <> ")"
+  BorrowedSlice owner -> "borrowed-slice(" <> atom (unValueId owner) <> ")"
+  RuntimeScalar description -> "runtime-scalar(" <> atom description <> ")"
+  RuntimeRecord description -> "runtime-record(" <> atom description <> ")"
+  DiagnosticState description -> "diagnostic-state(" <> atom description <> ")"
+
+renderRuntimeSiteKind :: RuntimeSiteKind -> Text
+renderRuntimeSiteKind kind = case kind of
+  RecognitionBoundary grammar -> "recognition(" <> atom grammar <> ")"
+  ValidationBoundary claim -> "validation(" <> atom claim <> ")"
+  BranchRefinementBoundary claim -> "branch-refinement(" <> atom claim <> ")"
+  ExactReceiveBoundary -> "exact-receive"
+  ExactSendBoundary -> "exact-send"
+  DigestBoundary -> "digest"
+  StorageBoundary -> "storage"
+  SourceSemanticRuntime name -> "source-runtime(" <> atom name <> ")"
+
+renderRuntimeSite :: RuntimeSiteRef -> Text
+renderRuntimeSite site = Text.intercalate ";"
+  [ field "kind" (renderRuntimeSiteKind (runtimeSiteKind site))
+  , field "revision" (unRevisionId (runtimeSiteRevision site))
+  , field "evidence" (unEvidenceEntryId (runtimeSiteEvidence site))
+  , field "cost" (runtimeSiteCostRef site)
+  ]
+
+renderOp :: SystemsOp -> Text
+renderOp operation = case operation of
+  OpReceiveFrame pending frame transport grammar lowering -> tag "receive-frame"
+    [unValueId pending, unValueId frame, unValueId transport, grammar, unDecisionId lowering]
+  OpBorrowView view owner lowering -> tag "borrow-view"
+    [unValueId view, unValueId owner, unDecisionId lowering]
+  OpCommitIngress pending transport lowering -> tag "commit-ingress"
+    [unValueId pending, unValueId transport, unDecisionId lowering]
+  OpDestroyPending pending frame lowering -> tag "destroy-pending"
+    [unValueId pending, unValueId frame, unDecisionId lowering]
+  OpReleaseOwner owner lowering -> tag "release-owner"
+    [unValueId owner, unDecisionId lowering]
+  OpCleanupPartial owner lowering -> tag "cleanup-partial"
+    [unValueId owner, unDecisionId lowering]
+  OpRuntimeCall name inputs outputs site lowering -> tag "runtime-call"
+    [ name
+    , renderList unValueId inputs
+    , renderList unValueId outputs
+    , maybe "none" renderRuntimeSite site
+    , unDecisionId lowering
+    ]
+  OpCopy source target lowering -> tag "copy"
+    [unValueId source, unValueId target, unDecisionId lowering]
+  OpEraseFact revision useId lowering -> tag "erase-fact"
+    [unRevisionId revision, unAssuranceUseId useId, unDecisionId lowering]
+  OpDiagnostic name lowering -> tag "diagnostic" [name, unDecisionId lowering]
+  OpTraceEvent name -> tag "trace" [name]
+  where
+    tag name fields = name <> renderList id fields
+
+renderTerminator :: SystemsTerminator -> Text
+renderTerminator terminator = case terminator of
+  TermJump target -> tag "jump" [unBlockId target]
+  TermBranch condition yes no -> tag "branch" [unValueId condition, unBlockId yes, unBlockId no]
+  TermRecognize pending rawView site yes no -> tag "recognize"
+    [unValueId pending, unValueId rawView, renderRuntimeSite site, unBlockId yes, unBlockId no]
+  TermRuntimeCheck inputs site yes no -> tag "runtime-check"
+    [renderList unValueId inputs, renderRuntimeSite site, unBlockId yes, unBlockId no]
+  TermReceiveExact transport lengthValue owner site yes no -> tag "receive-exact"
+    [ unValueId transport, unValueId lengthValue, unValueId owner, renderRuntimeSite site
+    , unBlockId yes, unBlockId no
+    ]
+  TermSendExact transport owner site yes no -> tag "send-exact"
+    [unValueId transport, unValueId owner, renderRuntimeSite site, unBlockId yes, unBlockId no]
+  TermStore owner result site yes no -> tag "store"
+    [unValueId owner, unValueId result, renderRuntimeSite site, unBlockId yes, unBlockId no]
+  TermEnd outcome -> tag "end" [outcome]
+  TermFatal failure -> tag "fatal" [failure]
+  where
+    tag name fields = name <> renderList id fields
+
+renderLoweringAction :: LoweringAction -> Text
+renderLoweringAction action = case action of
+  Retain -> "retain"
+  Materialize -> "materialize"
+  Erase -> "erase"
+  Fuse -> "fuse"
+  Specialize -> "specialize"
+  Copy -> "copy"
+  Borrow -> "borrow"
+  ChooseLayout -> "choose-layout"
+  InsertCheck -> "insert-check"
+  RemoveCheck -> "remove-check"
+  RepresentAsControlFlow -> "represent-as-control-flow"
+  Cleanup -> "cleanup"
+
+renderCostClass :: CostClass -> Text
+renderCostClass costClass = case costClass of
+  SemanticRequired -> "semantic-required"
+  RuntimeAssuranceRequired -> "runtime-assurance-required"
+  TargetRequired -> "target-required"
+  DefensiveProfile -> "defensive-profile"
+  ConservativeLowering -> "conservative-lowering"
+
+renderCostShape :: CostShape -> Text
+renderCostShape shape = renderTexts
+  [ "compile_time=" <> maybeText (costCompileTime shape)
+  , "code_size=" <> maybeText (costCodeSize shape)
+  , "allocation_count=" <> maybeText (costAllocationCount shape)
+  , "peak_live_memory=" <> maybeText (costPeakLiveMemory shape)
+  , "bytes_copied=" <> maybeText (costBytesCopied shape)
+  , "dynamic_check_count=" <> maybeText (costDynamicCheckCount shape)
+  , "branch_or_dispatch=" <> maybeText (costBranchOrDispatch shape)
+  , "hash_or_crypto_work=" <> maybeText (costHashOrCryptoWork shape)
+  , "synchronization=" <> maybeText (costSynchronization shape)
+  , "frequency=" <> maybeText (costFrequency shape)
+  ]
+  where
+    maybeText = maybe "" id
+
+renderFactTransfer :: FactTransfer -> Text
+renderFactTransfer transfer = Text.intercalate ";"
+  [ field "id" (factTransferId transfer)
+  , field "revision" (maybe "none" unRevisionId (factSourceRevision transfer))
+  , field "disposition" (renderFactDisposition (factDisposition transfer))
+  ]
+
+renderFactDisposition :: FactDisposition -> Text
+renderFactDisposition disposition = case disposition of
+  FactConsumed reason -> "consumed(" <> atom reason <> ")"
+  FactTransferred invariants -> "transferred" <> renderList unInvariantId invariants
+  FactErased useId -> "erased(" <> atom (unAssuranceUseId useId) <> ")"
+  FactRuntimeRetained entry -> "runtime(" <> atom (unEvidenceEntryId entry) <> ")"
+  FactDerived revision -> "derived(" <> atom (unRevisionId revision) <> ")"
+
+renderEdge :: RequiredControlEdge -> Text
+renderEdge edge = Text.intercalate ";"
+  [ field "function" (requiredEdgeFunction edge)
+  , field "from" (unBlockId (requiredEdgeFrom edge))
+  , field "to" (unBlockId (requiredEdgeTo edge))
+  , field "reason" (requiredEdgeReason edge)
+  ]
+
+renderInvariantClaim :: InvariantClaim -> Text
+renderInvariantClaim claim = case claim of
+  InvariantSingleTransportHandle functionName handle ->
+    tag "single-transport" [functionName, unValueId handle]
+  InvariantBorrowAliases functionName view owner ->
+    tag "borrow-aliases" [functionName, unValueId view, unValueId owner]
+  InvariantRecognitionGate functionName blockId pending yes no ->
+    tag "recognition-gate" [functionName, unBlockId blockId, unValueId pending, unBlockId yes, unBlockId no]
+  InvariantBranchTargets functionName blockId yes no ->
+    tag "branch-targets" [functionName, unBlockId blockId, unBlockId yes, unBlockId no]
+  InvariantExactReceive functionName blockId owner yes no ->
+    tag "exact-receive" [functionName, unBlockId blockId, unValueId owner, unBlockId yes, unBlockId no]
+  InvariantExactSend functionName blockId owner yes no ->
+    tag "exact-send" [functionName, unBlockId blockId, unValueId owner, unBlockId yes, unBlockId no]
+  InvariantRequiredEdge edge -> "required-edge(" <> atom (renderEdge edge) <> ")"
+  InvariantFatalTerminal functionName blockId ->
+    tag "fatal-terminal" [functionName, unBlockId blockId]
+  InvariantCleanupOwners functionName blockId owners ->
+    tag "cleanup-owners" [functionName, unBlockId blockId, renderList unValueId owners]
+  where
+    tag name fields = name <> renderList id fields
