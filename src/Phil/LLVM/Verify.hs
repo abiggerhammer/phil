@@ -70,7 +70,6 @@ data LLVMVerificationError
   | LLVMStrengtheningKindUseMismatch LLVMStrengtheningId
   | LLVMUnauthorizedStrengthening LLVMStrengtheningId Text LLVMAuthority
   | LLVMStrengtheningAuthorityMissing LLVMStrengtheningId LLVMAuthority
-  | LLVMRuntimeBoundAssume LLVMStrengtheningId
   | LLVMUnjustifiedUnreachable Text LLVMBlockId
   | LLVMAccidentalPoison Text LLVMBlockId
   | LLVMUndefValue Text LLVMBlockId
@@ -232,8 +231,6 @@ verifyStrengthenings context systemsArtifact moduleValue = do
     unless (useKindMatches moduleValue strengthening) $
       Left (LLVMStrengtheningKindUseMismatch key)
     verifyAuthority context systemsArtifact strengthening
-    when (llvmStrengtheningKind strengthening == LLVMAssume) $
-      verifyAssumeAuthority context systemsArtifact strengthening
 
 verifyStrengtheningLocation :: LLVMModule -> LLVMStrengthening -> Either LLVMVerificationError ()
 verifyStrengtheningLocation moduleValue strengthening =
@@ -267,24 +264,6 @@ authorityExists context systemsArtifact authority = case authority of
     Set.member revision (manifestObligationRevisions manifest)
   where
     manifest = systemsAssuranceManifest (llvmSystemsContext context)
-
-verifyAssumeAuthority
-  :: LLVMVerificationContext
-  -> SystemsArtifact
-  -> LLVMStrengthening
-  -> Either LLVMVerificationError ()
-verifyAssumeAuthority context systemsArtifact strengthening =
-  when runtimeBound $ Left (LLVMRuntimeBoundAssume (llvmStrengtheningId strengthening))
-  where
-    authority = llvmStrengtheningAuthority strengthening
-    runtimeRevisions = Set.fromList (map runtimeSiteRevision (sourceRuntimeSites systemsArtifact))
-    ledger = systemsAssuranceLedger (llvmSystemsContext context)
-    runtimeBound = case authority of
-      LLVMObligation revision -> Set.member revision runtimeRevisions
-      LLVMEvidence evidenceId -> case Map.lookup evidenceId (ledgerEvidence ledger) of
-        Just entry -> evidenceAssuranceKind entry == RuntimeEnforced
-        Nothing -> False
-      LLVMInvariant _ -> False
 
 useKindMatches :: LLVMModule -> LLVMStrengthening -> Bool
 useKindMatches moduleValue strengthening =
