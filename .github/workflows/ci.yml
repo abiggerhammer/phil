@@ -86,3 +86,7 @@ jobs:
             echo "Parsing ${file}"
             cabal run phil-core -- parse "${file}"
           done < <(find examples/steve -type f -name '*.phil' | sort)
+
+      - name: Check Steve opaque-proof semantic rejection
+        if: github.ref == 'refs/heads/steve/architecture-sketch' || github.head_ref == 'steve/architecture-sketch'
+        run: cabal exec -- runghc -package phil-core test/SteveSurfaceSemanticMain.hs
