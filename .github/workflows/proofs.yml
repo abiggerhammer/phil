@@ -69,23 +69,31 @@ jobs:
           rocq c -Q proof/Phil Phil proof/Phil/Systems/Runtime.v
           rocq c -Q proof/Phil Phil proof/Phil/Systems/Scalar.v
           rocq c -Q proof/Phil Phil proof/Phil/Systems/ScalarDataflow.v
+          rocq c -Q proof/Phil Phil proof/Phil/Systems/FieldProjection.v
           rocq c -Q proof/Phil Phil proof/Phil/LLVM/Identity.v
           rocq c -Q proof/Phil Phil proof/Phil/LLVM/Preservation.v
+          rocq c -Q proof/Phil Phil proof/Phil/LLVM/FieldProjection.v
           rocq c -Q proof/Phil Phil proof/Phil/LLVM/Strengthening.v
           rocq c -Q proof/Phil Phil proof/Phil/LLVM/Certification.v
           rocq c -Q proof/Phil Phil proof/Phil/LLVM/Scalar.v
 
-      - name: Stage first certified Rocq proof object
+      - name: Stage checked Rocq proof objects
         run: |
-          mkdir -p rocq-core-scalar
-          cp proof/Phil/Core/Scalar.v rocq-core-scalar/Scalar.v
-          cp proof/Phil/Core/Scalar.vo rocq-core-scalar/Scalar.vo
+          mkdir -p rocq-checked/core-scalar
+          mkdir -p rocq-checked/systems-field-projection
+          mkdir -p rocq-checked/llvm-field-projection
+          cp proof/Phil/Core/Scalar.v rocq-checked/core-scalar/Scalar.v
+          cp proof/Phil/Core/Scalar.vo rocq-checked/core-scalar/Scalar.vo
+          cp proof/Phil/Systems/FieldProjection.v rocq-checked/systems-field-projection/FieldProjection.v
+          cp proof/Phil/Systems/FieldProjection.vo rocq-checked/systems-field-projection/FieldProjection.vo
+          cp proof/Phil/LLVM/FieldProjection.v rocq-checked/llvm-field-projection/FieldProjection.v
+          cp proof/Phil/LLVM/FieldProjection.vo rocq-checked/llvm-field-projection/FieldProjection.vo
 
-      - name: Upload checked Rocq proof object
+      - name: Upload checked Rocq proof objects
         uses: actions/upload-artifact@v4
         with:
-          name: rocq-core-scalar-checked
-          path: rocq-core-scalar/
+          name: rocq-checked-proof-objects
+          path: rocq-checked/
           if-no-files-found: error
           retention-days: 14
 
@@ -102,11 +110,11 @@ jobs:
           ghc-version: '9.6.7'
           cabal-version: 'latest'
 
-      - name: Download checked Rocq proof object
+      - name: Download checked Rocq proof objects
         uses: actions/download-artifact@v4
         with:
-          name: rocq-core-scalar-checked
-          path: rocq-core-scalar
+          name: rocq-checked-proof-objects
+          path: rocq-checked
 
       - name: Build certification adapter
         run: cabal build phil-certify-core-scalar
@@ -116,16 +124,65 @@ jobs:
           mkdir -p proof-certificates
           CERTIFIER="$(cabal list-bin phil-certify-core-scalar)"
           "$CERTIFIER" \
-            rocq-core-scalar/Scalar.v \
-            rocq-core-scalar/Scalar.vo \
+            rocq-checked/core-scalar/Scalar.v \
+            rocq-checked/core-scalar/Scalar.vo \
             proof-certificates/PHIL-CORE-SCALAR-001.rocq.cert
           cat proof-certificates/PHIL-CORE-SCALAR-001.rocq.cert
           sha256sum proof-certificates/PHIL-CORE-SCALAR-001.rocq.cert
 
-      - name: Upload Phil Rocq proof certificate
+      - name: Upload Phil core scalar Rocq proof certificate
         uses: actions/upload-artifact@v4
         with:
           name: phil-core-scalar-rocq-certificate
           path: proof-certificates/PHIL-CORE-SCALAR-001.rocq.cert
+          if-no-files-found: error
+          retention-days: 30
+
+  certify-field-projections:
+    needs: rocq
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v4
+
+      - name: Set up Haskell
+        uses: haskell-actions/setup@v2
+        with:
+          ghc-version: '9.6.7'
+          cabal-version: 'latest'
+
+      - name: Download checked Rocq proof objects
+        uses: actions/download-artifact@v4
+        with:
+          name: rocq-checked-proof-objects
+          path: rocq-checked
+
+      - name: Build certification adapter
+        run: cabal build phil-certify-core-scalar
+
+      - name: Produce and verify field projection certificates
+        run: |
+          mkdir -p proof-certificates
+          CERTIFIER="$(cabal list-bin phil-certify-core-scalar)"
+          "$CERTIFIER" \
+            systems-field-projection \
+            rocq-checked/systems-field-projection/FieldProjection.v \
+            rocq-checked/systems-field-projection/FieldProjection.vo \
+            proof-certificates/PHIL-SYS-FIELD-PROJ-001.rocq.cert
+          "$CERTIFIER" \
+            llvm-field-projection \
+            rocq-checked/llvm-field-projection/FieldProjection.v \
+            rocq-checked/llvm-field-projection/FieldProjection.vo \
+            proof-certificates/PHIL-LLVM-FIELD-PROJ-001.rocq.cert
+          cat proof-certificates/PHIL-SYS-FIELD-PROJ-001.rocq.cert
+          sha256sum proof-certificates/PHIL-SYS-FIELD-PROJ-001.rocq.cert
+          cat proof-certificates/PHIL-LLVM-FIELD-PROJ-001.rocq.cert
+          sha256sum proof-certificates/PHIL-LLVM-FIELD-PROJ-001.rocq.cert
+
+      - name: Upload Phil field projection Rocq proof certificates
+        uses: actions/upload-artifact@v4
+        with:
+          name: phil-field-projection-rocq-certificates
+          path: proof-certificates/*.rocq.cert
           if-no-files-found: error
           retention-days: 30
