@@ -14,6 +14,7 @@ main = do
     [ test "recognized-record certification closes" certificationPasses
     , test "competing recognized record materialization is rejected" competingMaterializationRejects
     , test "transport exact-receive candidate verifies" exactReceivePasses
+    , test "transport exact-receive certification closes" exactReceiveCertificationPasses
     , test "wrong transport parameter identity is rejected" wrongTransportParameterRejects
     , test "wrong exact-receive transport operand is rejected" wrongTransportOperandRejects
     , test "wrong exact-receive payload identity is rejected" wrongPayloadIdentityRejects
@@ -38,6 +39,9 @@ competingMaterializationRejects = case phase0RecognizedRecordBundle of
 
 exactReceivePasses :: Bool
 exactReceivePasses = verifyPhase0ExactReceiveLLVM == Right ()
+
+exactReceiveCertificationPasses :: Bool
+exactReceiveCertificationPasses = verifyPhase0ExactReceiveLLVMCertification == Right ()
 
 wrongTransportParameterRejects :: Bool
 wrongTransportParameterRejects = withExactReceive $ \bundle artifact ->
