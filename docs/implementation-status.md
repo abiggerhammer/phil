@@ -163,13 +163,30 @@ This slice does not yet implement the complete ADR-010 append-only assurance gra
 - Fixed-width surface type widths are range-checked before conversion to the host `Int`, preventing absurd source numerals from wrapping through the implementation representation.
 - `phil-core parse FILE` exposes the trusted parser directly and reports source-positioned syntax errors. A successful parse explicitly reports that it is parse-only and does not claim semantic acceptance.
 
-Whole-component process elaboration/checking is deliberately not part of this slice. A syntactically valid component may still fail at resource, session, recognition, evidence, obligation, or provider-interface checking.
+## Implemented in the Phase 0 surface-conformance slice
+
+- `Phil.Surface.Check` now checks whole Phase 0 components rather than stopping at fragment elaboration. It is a small facade over a narrow source preflight pass and a Core-backed process engine.
+- `SurfaceEnvironment` makes the architecture boundary explicit: immutable Core claim declarations, initial resource bindings, primitive contracts, surface type aliases, selection prerequisites, dependent receive prerequisites, provider expectations, and the legacy split-ingress fixture mode are supplied as data rather than inferred from names.
+- Surface aliases such as `Client[Upload]` and `Server[Upload]` resolve to the exact projected endpoint types supplied by the Phase 0 architecture environment. Typed component parameters are checked against those resolved architecture bindings rather than accepted by spelling alone.
+- Source endpoint names use SSA-like elaboration internally: each session action receives a fresh Core successor owner, while branch-local surface code can deterministically rebind the programmer-visible endpoint name to that successor.
+- `decide` evaluates its scrutinee exactly once and carries the resulting resource state into each arm. Calls, validation, recognition, and storage decisions therefore cannot be treated as inert read-only terms.
+- External offers require exact declared label coverage before arm checking. Continuing branches rejoin through the existing Core `joinContinuing` resource rule, while terminal paths do not manufacture a fake continuation.
+- Grammar-backed receive, raw borrowing, recognition evidence, `commit_receive`, and recognition failure reuse the existing `PendingRecv`/provenance Core boundary rather than a separate surface-only ownership model.
+- Dependent byte counts, explicit `using` evidence, refined branch payloads, opaque claims, checked arithmetic proof attempts, and explicit transport requirements reuse the existing elaboration/value/focusing/decision APIs.
+- Semantic projection aliases are rewritten with explicit cycle/fixed-point detection. A canonical self projection such as `begin.length` terminates rather than recursively rewriting forever.
+- A narrow preflight layer rejects source text that explicitly continues after an unconditional terminal statement and reports lexically absent arguments to evidence-consuming primitives as `MissingEvidence`. It does not replace Core resource/session checking for ordinary uses.
+- The Phase 0 conformance harness supplies the frozen projected upload sessions and primitive contracts independently of its expected-result table. The checker derives acceptance/rejection first; the harness compares the resulting stable rejection class afterward.
+- Both accepted upload role programs check end to end against their projected local sessions. The client explicitly releases its linear payload on `unsupported`, server `reject`, and client `cancel`; the payload path transfers ownership through `send_exact`. No terminal ownership allowance is used to make the positive witness pass.
+- All twenty repository negative witnesses are required to fail in their declared earliest semantic rejection class, covering structural reuse/drop, protocol order, branch exhaustiveness, raw/semantic separation, missing/stale evidence, explicit transport, incompatible branch residues, terminal continuation, recognition provenance, borrow escape, opaque proof, and unchecked machine arithmetic.
+- The conformance suite gives every source fixture an execution timeout. Checker nontermination is therefore an explicit conformance failure naming the responsible `.phil` witness rather than a whole-workflow hang.
+
+This slice establishes end-to-end semantic checking for the frozen Phase 0 upload witness language and negative corpus. It does not claim that every future Phil surface construct or architecture declaration is already generalized.
 
 ## Next checker slices
 
-1. Conformance harness over the accepted/rejected `.phil` corpus, including whole-component surface-to-Core checking.
-2. Assurance-ledger handoff and manifest verification.
+1. Assurance-ledger handoff and manifest verification.
+2. Generalize the declaration/architecture environment beyond the frozen Phase 0 witness only where later examples require it.
 
 ## Explicit current non-goals
 
-The checker still does not claim end-to-end source-level Phil conformance. In particular it does not yet project dependent session types from a global protocol, elaborate/check every parsed process construct into executable Core, substitute communicated semantic values into all dependent continuations, execute grammar recognizers, provide a complete decision procedure for every transparent proposition, validate runtime-validator artifact identities, synthesize assumptions, cross obligation boundaries without explicit architecture, validate return values against a provider signature, validate the upload protocol end-to-end, verify a closed ADR-010 build manifest, or lower to systems/LLVM IR. Transport-acquisition failure for `receiveFrame` is still represented by the accepted primitive contract rather than simulated inside the structural checker.
+The checker still does not claim general end-to-end source-level Phil conformance beyond the frozen Phase 0 witness language. In particular it does not yet project dependent session types from a parsed global protocol, provide a general source declaration system for primitive contracts/type aliases/validator artifacts, execute grammar recognizers, provide a complete decision procedure for every transparent proposition, validate runtime-validator artifact identities, synthesize assumptions, cross obligation boundaries without explicit architecture, verify a closed ADR-010 build manifest, or lower to systems/LLVM IR. Return/provider checking is currently limited to the represented component/provider forms used by the witness. Transport-acquisition failure for `receiveFrame` remains represented by the accepted primitive contract rather than simulated inside the structural checker.
