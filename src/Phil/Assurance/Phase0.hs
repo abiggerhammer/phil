@@ -22,7 +22,7 @@ phase0UploadLedger = emptyLedger
 
 phase0UploadManifest :: AssuranceManifest
 phase0UploadManifest = provisionalManifest
-  { manifestId = deriveManifestId provisionalManifest }
+  { manifestId = deriveManifestId phase0UploadLedger provisionalManifest }
 
 phase0UploadVerificationContext :: VerificationContext
 phase0UploadVerificationContext = emptyVerificationContext
@@ -191,12 +191,13 @@ revisions =
   , storageSuccess
   ]
 
-mkAssumption :: Text -> Text -> Assumption
-mkAssumption statement owner = provisional
-  { assumptionId = deriveAssumptionId provisional }
+mkAssumption :: Text -> Text -> Text -> Assumption
+mkAssumption stableId statement owner = provisional
+  { assumptionDigest = deriveAssumptionDigest provisional }
   where
     provisional = Assumption
-      { assumptionId = AssumptionId ""
+      { assumptionId = AssumptionId stableId
+      , assumptionDigest = Digest ""
       , assumptionStatement = statement
       , assumptionScope = "upload.phase0.reference"
       , assumptionOwnerBoundary = owner
@@ -206,21 +207,25 @@ mkAssumption statement owner = provisional
 
 receiveExactAssumption :: Assumption
 receiveExactAssumption = mkAssumption
+  "assumption.runtime.receive_exact_contract"
   "runtime receive_exact obeys its declared success/failure and cleanup contract"
   "runtime primitives / TCB"
 
 frameReceiveAssumption :: Assumption
 frameReceiveAssumption = mkAssumption
+  "assumption.runtime.frame_receive_contract"
   "runtime frame acquisition preserves complete-frame bytes and PendingRecv lifecycle as declared"
   "runtime primitives / TCB"
 
 digestImplementationAssumption :: Assumption
 digestImplementationAssumption = mkAssumption
+  "assumption.runtime.digest_implementation"
   "configured digest implementation realizes the declared SHA-256 semantics for the bytes presented to it"
   "crypto/runtime implementation"
 
 storageContractAssumption :: Assumption
 storageContractAssumption = mkAssumption
+  "assumption.runtime.storage_contract"
   "store consumes/releases OwnedBytes on both success and failure and returns UploadId only on successful storage"
   "storage primitive / runtime"
 
@@ -233,7 +238,8 @@ assumptions =
   ]
 
 mkEvidence
-  :: ObligationRevision
+  :: Text
+  -> ObligationRevision
   -> AssuranceKind
   -> Text
   -> Text
@@ -244,11 +250,12 @@ mkEvidence
   -> [Text]
   -> [Text]
   -> EvidenceEntry
-mkEvidence revision kind roleName producer checker assumptionIds dependencies runtime residue costRefs =
-  provisional { evidenceEntryId = deriveEvidenceEntryId provisional }
+mkEvidence stableId revision kind roleName producer checker assumptionIds dependencies runtimeMechanism residue costRefs =
+  provisional { evidenceEntryDigest = deriveEvidenceEntryDigest provisional }
   where
     provisional = EvidenceEntry
-      { evidenceEntryId = EvidenceEntryId ""
+      { evidenceEntryId = EvidenceEntryId stableId
+      , evidenceEntryDigest = Digest ""
       , evidenceObligationRevision = revisionId revision
       , evidenceAssuranceKind = kind
       , evidenceRole = role roleName
@@ -261,7 +268,7 @@ mkEvidence revision kind roleName producer checker assumptionIds dependencies ru
       , evidenceValidityScope = if kind == RuntimeEnforced then runtimeScope else unscoped
       , evidenceResult = EvidenceAccepted
       , evidenceJustifies = []
-      , evidenceRuntimeMechanism = runtime
+      , evidenceRuntimeMechanism = runtimeMechanism
       , evidenceRuntimeResidue = residue
       , evidenceCostRefs = costRefs
       }
@@ -281,12 +288,16 @@ runtime name point success failure = RuntimeMechanism
   }
 
 helloIngressKernel :: EvidenceEntry
-helloIngressKernel = mkEvidence helloIngress KernelChecked "establishes"
+helloIngressKernel = mkEvidence
+  "evidence.upload.ingress.hello.kernel"
+  helloIngress KernelChecked "establishes"
   "Phil Core recognition checker" "Phil Core"
   [] [] Nothing [] []
 
 helloIngressRuntime :: EvidenceEntry
-helloIngressRuntime = mkEvidence helloIngress RuntimeEnforced "runtime_enforces"
+helloIngressRuntime = mkEvidence
+  "evidence.upload.ingress.hello.runtime"
+  helloIngress RuntimeEnforced "runtime_enforces"
   "receive_frame + Hello recognizer + commit_receive" "declared ingress boundary"
   [assumptionId frameReceiveAssumption] []
   (Just (runtime
@@ -298,12 +309,16 @@ helloIngressRuntime = mkEvidence helloIngress RuntimeEnforced "runtime_enforces"
   ["upload.runtime.frame_receive"]
 
 beginIngressKernel :: EvidenceEntry
-beginIngressKernel = mkEvidence beginIngress KernelChecked "establishes"
+beginIngressKernel = mkEvidence
+  "evidence.upload.ingress.begin.kernel"
+  beginIngress KernelChecked "establishes"
   "Phil Core recognition checker" "Phil Core"
   [] [] Nothing [] []
 
 beginIngressRuntime :: EvidenceEntry
-beginIngressRuntime = mkEvidence beginIngress RuntimeEnforced "runtime_enforces"
+beginIngressRuntime = mkEvidence
+  "evidence.upload.ingress.begin.runtime"
+  beginIngress RuntimeEnforced "runtime_enforces"
   "receive_frame + Begin recognizer + commit_receive" "declared ingress boundary"
   [assumptionId frameReceiveAssumption] []
   (Just (runtime
@@ -315,12 +330,16 @@ beginIngressRuntime = mkEvidence beginIngress RuntimeEnforced "runtime_enforces"
   ["upload.runtime.frame_receive"]
 
 helloPolicyKernel :: EvidenceEntry
-helloPolicyKernel = mkEvidence helloPolicy KernelChecked "checks_evidence_identity"
+helloPolicyKernel = mkEvidence
+  "evidence.upload.hello_policy.kernel"
+  helloPolicy KernelChecked "checks_evidence_identity"
   "Phil surface/Core checker" "Phil Core"
   [] [] Nothing [] []
 
 helloPolicyRuntime :: EvidenceEntry
-helloPolicyRuntime = mkEvidence helloPolicy RuntimeEnforced "runtime_enforces"
+helloPolicyRuntime = mkEvidence
+  "evidence.upload.hello_policy.runtime"
+  helloPolicy RuntimeEnforced "runtime_enforces"
   "HelloPolicy validator" "declared validator boundary"
   [] []
   (Just (runtime
@@ -332,12 +351,16 @@ helloPolicyRuntime = mkEvidence helloPolicy RuntimeEnforced "runtime_enforces"
   ["upload.runtime.hello_policy"]
 
 versionServerKernel :: EvidenceEntry
-versionServerKernel = mkEvidence versionServer KernelChecked "establishes"
+versionServerKernel = mkEvidence
+  "evidence.upload.version.server.kernel"
+  versionServer KernelChecked "establishes"
   "choose_supported primitive contract" "Phil Core"
   [] [] Nothing [] []
 
 versionClientRuntime :: EvidenceEntry
-versionClientRuntime = mkEvidence versionClient RuntimeEnforced "boundary_establishes"
+versionClientRuntime = mkEvidence
+  "evidence.upload.version.client.runtime"
+  versionClient RuntimeEnforced "boundary_establishes"
   "refined branch-message boundary adapter" "declared session boundary"
   [] []
   (Just (runtime
@@ -349,17 +372,23 @@ versionClientRuntime = mkEvidence versionClient RuntimeEnforced "boundary_establ
   ["upload.runtime.branch_refinement"]
 
 unsupportedKernel :: EvidenceEntry
-unsupportedKernel = mkEvidence unsupportedDisjoint KernelChecked "establishes"
+unsupportedKernel = mkEvidence
+  "evidence.upload.version.unsupported.kernel"
+  unsupportedDisjoint KernelChecked "establishes"
   "choose_supported primitive contract" "Phil Core"
   [] [] Nothing [] []
 
 beginPolicyKernel :: EvidenceEntry
-beginPolicyKernel = mkEvidence beginPolicy KernelChecked "checks_evidence_identity"
+beginPolicyKernel = mkEvidence
+  "evidence.upload.begin_policy.kernel"
+  beginPolicy KernelChecked "checks_evidence_identity"
   "Phil surface/Core checker" "Phil Core"
   [] [] Nothing [] []
 
 beginPolicyRuntime :: EvidenceEntry
-beginPolicyRuntime = mkEvidence beginPolicy RuntimeEnforced "runtime_enforces"
+beginPolicyRuntime = mkEvidence
+  "evidence.upload.begin_policy.runtime"
+  beginPolicy RuntimeEnforced "runtime_enforces"
   "BeginPolicy validator" "declared validator boundary"
   [] []
   (Just (runtime
@@ -371,17 +400,23 @@ beginPolicyRuntime = mkEvidence beginPolicy RuntimeEnforced "runtime_enforces"
   ["upload.runtime.begin_policy"]
 
 receiveContractEvidence :: EvidenceEntry
-receiveContractEvidence = mkEvidence payloadExactReceive KernelChecked "primitive_contract"
+receiveContractEvidence = mkEvidence
+  "evidence.upload.payload.receive_contract.kernel"
+  payloadExactReceive KernelChecked "primitive_contract"
   "receive_exact primitive declaration" "Phil Core"
   [] [] Nothing [] []
 
 payloadReceiveKernel :: EvidenceEntry
-payloadReceiveKernel = mkEvidence payloadExactReceive KernelChecked "establishes_result_type"
+payloadReceiveKernel = mkEvidence
+  "evidence.upload.payload.receive.kernel"
+  payloadExactReceive KernelChecked "establishes_result_type"
   "receive_exact dependent result type" "Phil Core"
   [] [DependsOnEvidence (evidenceEntryId receiveContractEvidence)] Nothing [] []
 
 payloadReceiveRuntime :: EvidenceEntry
-payloadReceiveRuntime = mkEvidence payloadExactReceive RuntimeEnforced "runtime_enforces"
+payloadReceiveRuntime = mkEvidence
+  "evidence.upload.payload.receive.runtime"
+  payloadExactReceive RuntimeEnforced "runtime_enforces"
   "receive_exact" "declared runtime primitive boundary"
   [assumptionId receiveExactAssumption] []
   (Just (runtime
@@ -393,12 +428,16 @@ payloadReceiveRuntime = mkEvidence payloadExactReceive RuntimeEnforced "runtime_
   ["upload.runtime.receive_exact"]
 
 payloadSendKernel :: EvidenceEntry
-payloadSendKernel = mkEvidence payloadExactSend KernelChecked "checks_message_index"
+payloadSendKernel = mkEvidence
+  "evidence.upload.payload.send.kernel"
+  payloadExactSend KernelChecked "checks_message_index"
   "Phil session/value checker" "Phil Core"
   [] [] Nothing [] []
 
 payloadSendRuntime :: EvidenceEntry
-payloadSendRuntime = mkEvidence payloadExactSend RuntimeEnforced "runtime_transfer"
+payloadSendRuntime = mkEvidence
+  "evidence.upload.payload.send.runtime"
+  payloadExactSend RuntimeEnforced "runtime_transfer"
   "send_exact" "declared transport boundary"
   [] []
   (Just (runtime
@@ -410,12 +449,16 @@ payloadSendRuntime = mkEvidence payloadExactSend RuntimeEnforced "runtime_transf
   ["upload.runtime.send_exact"]
 
 digestKernel :: EvidenceEntry
-digestKernel = mkEvidence digestMatches KernelChecked "checks_evidence_identity"
+digestKernel = mkEvidence
+  "evidence.upload.digest.kernel"
+  digestMatches KernelChecked "checks_evidence_identity"
   "Phil selection/evidence checker" "Phil Core"
   [] [] Nothing [] []
 
 digestRuntime :: EvidenceEntry
-digestRuntime = mkEvidence digestMatches RuntimeEnforced "runtime_enforces"
+digestRuntime = mkEvidence
+  "evidence.upload.digest.runtime"
+  digestMatches RuntimeEnforced "runtime_enforces"
   "digest validator" "declared digest-validator boundary"
   [assumptionId digestImplementationAssumption] []
   (Just (runtime
@@ -427,12 +470,16 @@ digestRuntime = mkEvidence digestMatches RuntimeEnforced "runtime_enforces"
   ["upload.runtime.digest"]
 
 storageKernel :: EvidenceEntry
-storageKernel = mkEvidence storageSuccess KernelChecked "control_flow"
+storageKernel = mkEvidence
+  "evidence.upload.storage.kernel"
+  storageSuccess KernelChecked "control_flow"
   "Phil process/session checker" "Phil Core"
   [] [DependsOnObligation (revisionId digestMatches)] Nothing [] []
 
 storageRuntime :: EvidenceEntry
-storageRuntime = mkEvidence storageSuccess RuntimeEnforced "runtime_operation"
+storageRuntime = mkEvidence
+  "evidence.upload.storage.runtime"
+  storageSuccess RuntimeEnforced "runtime_operation"
   "store" "declared storage primitive boundary"
   [assumptionId storageContractAssumption]
   [DependsOnObligation (revisionId digestMatches)]
@@ -481,12 +528,16 @@ runtimeCostRefs =
   ]
 
 mkRuntimeUse :: Text -> ObligationRevision -> EvidenceEntry -> Text -> AssuranceUse
-mkRuntimeUse useName revision entry costRef = RetainedRuntimeUse
-  { assuranceUseId = AssuranceUseId useName
-  , useObligationRevision = revisionId revision
-  , useRuntimeEvidence = evidenceEntryId entry
-  , useCostRef = costRef
-  }
+mkRuntimeUse stableId revision entry costRef = provisional
+  { assuranceUseDigest = deriveAssuranceUseDigest provisional }
+  where
+    provisional = RetainedRuntimeUse
+      { assuranceUseId = AssuranceUseId stableId
+      , assuranceUseDigest = Digest ""
+      , useObligationRevision = revisionId revision
+      , useRuntimeEvidence = evidenceEntryId entry
+      , useCostRef = costRef
+      }
 
 assuranceUses :: [AssuranceUse]
 assuranceUses =
