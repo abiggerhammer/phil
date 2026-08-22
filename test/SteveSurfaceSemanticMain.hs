@@ -2,6 +2,7 @@
 
 module Main (main) where
 
+import qualified Data.Map.Strict as Map
 import qualified Data.Text as Text
 import qualified Data.Text.IO as TextIO
 import Paths_phil_core (getDataFileName)
@@ -10,12 +11,17 @@ import Phil.Core.Static
   , emptyStaticContext
   )
 import Phil.Core.Syntax
-  ( Name (..)
+  ( Mode (Unrestricted)
+  , Name (..)
   , RefSort (..)
+  , Ty (TyOpaqueSorted)
   )
 import Phil.Surface.Check
-  ( RejectionClass (OpaqueProof)
+  ( InitialBinding (..)
+  , RejectionClass (OpaqueProof)
   , SurfaceCheckError (..)
+  , SurfaceEnvironment (..)
+  , SurfaceShape (PlainShape)
   , checkSurfaceComponent
   , emptySurfaceEnvironment
   )
@@ -51,6 +57,7 @@ main = do
 fixturePath :: FilePath
 fixturePath = "examples/steve/rejected/02-prove-opaque-digest.phil"
 
+buildEnvironment :: Either String SurfaceEnvironment
 buildEnvironment =
   case declareOpaqueClaim
       "DigestMatches"
@@ -59,7 +66,18 @@ buildEnvironment =
       ]
       emptyStaticContext of
     Left staticError -> Left (show staticError)
-    Right staticContext -> Right (emptySurfaceEnvironment staticContext)
+    Right staticContext -> Right
+      (emptySurfaceEnvironment staticContext)
+        { surfaceInitialBindings = Map.singleton
+            "object"
+            InitialBinding
+              { initialMode = Unrestricted
+              , initialType = TyOpaqueSorted
+                  "OwnedBytesIdentity"
+                  (SortStableId "OwnedBytes")
+              , initialShape = PlainShape
+              }
+        }
 
 failCase :: String -> IO ()
 failCase detail = do
