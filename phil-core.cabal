@@ -60,6 +60,7 @@ library
       Phil.Systems.Phase0
       Phil.Systems.Dataflow
       Phil.Systems.FieldProjection
+      Phil.Systems.RecognizedRecord
       Phil.LLVM.IR
       Phil.LLVM.Lower
       Phil.LLVM.Verify
