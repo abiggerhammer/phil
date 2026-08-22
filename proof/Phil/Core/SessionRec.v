@@ -82,11 +82,20 @@ Proof.
     simpl in *. apply IH in Hin. exact Hin.
   - intros outcome target replacement name Hin. simpl in Hin. contradiction.
   - intros recursionName body IH target replacement name Hin.
-    simpl.
     destruct (String.eqb recursionName target) eqn:Heq.
-    + simpl in Hin.
+    + assert (Hsub :
+        substituteSessionVar target replacement (Rec recursionName body) =
+          Rec recursionName body).
+      { cbn [substituteSessionVar]. rewrite Heq. reflexivity. }
+      rewrite Hsub in Hin.
+      simpl in Hin.
       left. exact Hin.
-    + simpl in Hin.
+    + assert (Hsub :
+        substituteSessionVar target replacement (Rec recursionName body) =
+          Rec recursionName (substituteSessionVar target replacement body)).
+      { cbn [substituteSessionVar]. rewrite Heq. reflexivity. }
+      rewrite Hsub in Hin.
+      simpl in Hin.
       destruct Hin as [Hname | Hbody].
       * left. simpl. left. exact Hname.
       * apply IH in Hbody.
@@ -94,10 +103,17 @@ Proof.
         -- left. simpl. right. exact Hbody.
         -- right. exact Hreplacement.
   - intros variable target replacement name Hin.
-    simpl.
     destruct (String.eqb variable target) eqn:Heq.
-    + right. exact Hin.
-    + simpl in Hin. contradiction.
+    + assert (Hsub :
+        substituteSessionVar target replacement (SessionVar variable) = replacement).
+      { cbn [substituteSessionVar]. rewrite Heq. reflexivity. }
+      rewrite Hsub in Hin.
+      right. exact Hin.
+    + assert (Hsub :
+        substituteSessionVar target replacement (SessionVar variable) = SessionVar variable).
+      { cbn [substituteSessionVar]. rewrite Heq. reflexivity. }
+      rewrite Hsub in Hin.
+      simpl in Hin. contradiction.
   - intros target replacement name Hin. simpl in Hin. contradiction.
   - intros label payload continuation rest IHcontinuation IHrest target replacement name Hin.
     simpl in Hin.
