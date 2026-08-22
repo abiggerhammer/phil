@@ -3,8 +3,11 @@
 module Main (main) where
 
 import qualified Data.Text.IO as Text
-import Phil.LLVM.IR (llvmArtifactText)
-import Phil.LLVM.StorageCertification
+import Phil.LLVM
+  ( llvmArtifactText
+  , phase0StorageLLVMCertification
+  , storageCertificationLLVM
+  )
 import System.Exit (exitFailure)
 import System.IO (hPutStrLn, stderr)
 
