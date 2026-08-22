@@ -69,6 +69,12 @@ The right next implementation target is thus a more general architecture/static-
 
 `rejected/` contains parser-valid programs that must eventually fail semantic checking for stated reasons. The initial corpus covers unverified `get`, attempted proof of opaque digest claims, dropped and duplicated owned bytes, collision-as-success, integrity-failure laundering, and evidence illegally indexed by an ephemeral borrow. See `rejected/README.md` for intended rejection classes.
 
+## First semantic promotion target
+
+`architecture/opaque-proof-promotion.md` fixes the smallest environment needed to turn `rejected/02-prove-opaque-digest.phil` into an executable semantic rejection. The witness has been reduced so that it needs no Steve primitive semantics or type aliases before reaching `prove`: the general harness need only supply one opaque `DigestMatches` claim declaration with the current `ContentId[SHA256]` and stable `OwnedBytes` identity sorts.
+
+The expected result is exactly `OpaqueProof`. This is deliberately a checker-harness target, not Steve-specific checker implementation.
+
 ## Provisional assurance manifest
 
 `assurance/README.md` documents the executable branch-only ADR-010 witness in `test/SteveAssuranceMain.hs`. The test instantiates the current public `Phil.Assurance` graph/manifest API for all twelve Steve obligations and verifies the result with `verifyManifest`; it adds no Steve-specific checker semantics.
