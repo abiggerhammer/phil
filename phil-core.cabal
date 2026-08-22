@@ -189,6 +189,7 @@ test-suite phil-surface-parser-tests
   type:               exitcode-stdio-1.0
   hs-source-dirs:     test
   main-is:            SurfaceParserMain.hs
+  autogen-modules:    Paths_phil_core
   build-depends:
       base >=4.17 && <5,
       phil-core,
