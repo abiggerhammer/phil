@@ -9,7 +9,6 @@ module Phil.Surface.Phase0
   ) where
 
 import qualified Data.Map.Strict as Map
-import qualified Data.Set as Set
 import Data.Text (Text)
 import qualified Data.Text as Text
 import Phil.Core.Session (dualSession)
@@ -136,6 +135,10 @@ commonEnvironment staticContext = (emptySurfaceEnvironment staticContext)
       , ("continue_with_common_state", PrimitiveContinueCommonState)
       , ("handle_payload", PrimitiveHandlePayload)
       ]
+  , surfaceTypeAliases = Map.fromList
+      [ ("Client[Upload]", TyEndpoint clientUploadSession)
+      , ("Server[Upload]", TyEndpoint serverUploadSession)
+      ]
   }
 
 clientEnvironment :: SurfaceEnvironment -> SurfaceEnvironment
@@ -145,11 +148,7 @@ clientEnvironment base = base
       , ("payload", ownedPayload "payload")
       , ("sha256", unrestricted (TyOpaque "DigestAlgorithm") PlainShape)
       ]
-  , surfaceExpectedProvides = Just (TyOpaque "Client[Upload]")
-  , surfaceTerminalAllowances = Map.fromList
-      [ (Outcome "failure", Set.singleton "payload")
-      , (Outcome "cancelled", Set.singleton "payload")
-      ]
+  , surfaceExpectedProvides = Just (TyEndpoint clientUploadSession)
   }
 
 serverEnvironment :: SurfaceEnvironment -> SurfaceEnvironment
@@ -159,7 +158,7 @@ serverEnvironment base = base
       , ("policyContext", unrestricted (TyOpaqueSorted "PolicyContext" (SortStableId "Policy")) PlainShape)
       , ("serverSupported", unrestricted (TyOpaqueSorted "SupportedVersions" versionSetSort) PlainShape)
       ]
-  , surfaceExpectedProvides = Just (TyOpaque "Server[Upload]")
+  , surfaceExpectedProvides = Just (TyEndpoint serverUploadSession)
   , surfaceSelectRequirements = uploadSelectRequirements
   , surfaceReceiveExactRequirement = Just beginPolicyProposition
   }
