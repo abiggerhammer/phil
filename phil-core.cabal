@@ -56,6 +56,7 @@ library
       Phil.Assurance.Phase0
       Phil.Assurance.Rocq
       Phil.Assurance.RocqRecognizedRecord
+      Phil.Assurance.RocqExactReceive
       Phil.Systems.IR
       Phil.Systems.Verify
       Phil.Systems.Phase0
@@ -71,6 +72,7 @@ library
       Phil.LLVM.RecognizedRecordProofCertification
       Phil.LLVM.ExactReceive
       Phil.LLVM.ExactReceiveCertification
+      Phil.LLVM.ExactReceiveProofCertification
   build-depends:
       base >=4.17 && <5,
       bytestring >=0.11 && <0.13,
@@ -138,6 +140,16 @@ executable phil-certify-recognized-record
   import:             common-settings
   hs-source-dirs:     app
   main-is:            RecognizedRecordProofCertificationMain.hs
+  build-depends:
+      base >=4.17 && <5,
+      bytestring >=0.11 && <0.13,
+      phil-core,
+      text >=2.0 && <2.2
+
+executable phil-certify-exact-receive
+  import:             common-settings
+  hs-source-dirs:     app
+  main-is:            ExactReceiveProofCertificationMain.hs
   build-depends:
       base >=4.17 && <5,
       bytestring >=0.11 && <0.13,
