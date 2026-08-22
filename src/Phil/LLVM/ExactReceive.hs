@@ -59,6 +59,7 @@ exactReceiveABIDescriptor = Text.unlines
   , "exact-receive-u64=phil_runtime_receive_exact_u64(ptr,i64)->{i8,ptr}"
   , "exact-receive-status=0-early-eof,1-success,other-fail-closed"
   , "exact-receive-payload=opaque-runtime-owned-buffer"
+  , "payload-ssa-name=systems-value-id+.owner"
   , "partial-buffer-release=phil_buffer_release(ptr)"
   , "runtime-symbol-identity=physical-primitive-and-signature"
   , "ambient-transport=forbidden"
@@ -192,6 +193,7 @@ verifyWitness systemsArtifact llvmArtifact witness = do
       many -> Left (ExactReceiveSystemsReceiveMultiple functionName (length many))
 
   let receiveBlockId = LLVMBlockId (unBlockId (systemsBlockId sourceBlock))
+      payloadName = payloadSSAName payloadValue
   receiveBlock <- case Map.lookup receiveBlockId (llvmFunctionBlocks llvmFunction) of
     Nothing -> Left (ExactReceiveLLVMBlockMissing functionName receiveBlockId)
     Just value -> Right value
@@ -201,7 +203,7 @@ verifyWitness systemsArtifact llvmArtifact witness = do
         (unValueId transportValue)
         (unValueId lengthValue)
         (recognizedRecordProjectionType witness)
-        (unValueId payloadValue)
+        payloadName
         (LLVMBlockId (unBlockId yes))
         (LLVMBlockId (unBlockId no))
   unless (llvmBlockTerminator receiveBlock == expectedTerminator) $
@@ -215,9 +217,9 @@ verifyWitness systemsArtifact llvmArtifact witness = do
   let releases =
         [ operation
         | operation@(LLVMBufferRelease owner) <- llvmBlockOps failureBlock
-        , owner == unValueId payloadValue
+        , owner == payloadName
         ]
-  unless (releases == [LLVMBufferRelease (unValueId payloadValue)]) $
+  unless (releases == [LLVMBufferRelease payloadName]) $
     Left (ExactReceiveFailureCleanupMismatch
       functionName failureBlockId (llvmBlockOps failureBlock))
 
@@ -231,7 +233,7 @@ verifyWitness systemsArtifact llvmArtifact witness = do
           <> ", " <> renderScalarTypeLocal (recognizedRecordProjectionType witness)
           <> " %" <> symbolish (unValueId lengthValue) <> ")"
       releaseNeedle =
-        "@phil_buffer_release(ptr %" <> symbolish (unValueId payloadValue) <> ")"
+        "@phil_buffer_release(ptr %" <> symbolish payloadName <> ")"
       evidenceNamedSymbols =
         [ "@phil_runtime_" <> symbolish (unEvidenceEntryId (runtimeSiteEvidence runtimeSite))
         | sourceFunction <- Map.elems (systemsProgramFunctions systemsProgram)
@@ -251,6 +253,9 @@ verifyWitness systemsArtifact llvmArtifact witness = do
     && not (Text.isInfixOf "@phil_runtime_receive_exact_u64(i64" rendered)
     ) $
     Left (ExactReceiveAmbientStateDetected functionName)
+
+payloadSSAName :: ValueId -> Text
+payloadSSAName valueId = unValueId valueId <> ".owner"
 
 scalarSuffix :: ScalarType -> Text
 scalarSuffix scalarType = case scalarType of
