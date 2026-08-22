@@ -63,7 +63,7 @@ wrongStoreOwnerRejects = withStorageBundle $ \bundle ->
           })
         artifact
   in case verifyStorageWitness badArtifact digestWitness witness of
-    Left StorageTerminatorMismatch {} -> True
+    Left (StorageTerminatorMismatch _ _ _) -> True
     _ -> False
 
 wrongUploadIdRoleRejects :: Bool
@@ -81,7 +81,7 @@ wrongUploadIdRoleRejects = withStorageBundle $ \bundle ->
           })
         artifact
   in case verifyStorageWitness badArtifact digestWitness witness of
-    Left StorageResultRoleMismatch {} -> True
+    Left (StorageResultRoleMismatch _ _ _) -> True
     _ -> False
 
 wrongLLVMStoreOwnerRejects :: Bool
@@ -94,7 +94,7 @@ wrongLLVMStoreOwnerRejects = withStorageLLVM $ \bundle artifact ->
           LLVMStore site "server.wrong_payload.owner" uploadId yes no)
         artifact
   in case verifyStorageTranslation bundle badArtifact of
-    Left StorageLLVMTerminatorMismatch {} -> True
+    Left (StorageLLVMTerminatorMismatch _ _ _) -> True
     _ -> False
 
 wrongLLVMUploadIdRejects :: Bool
@@ -107,7 +107,7 @@ wrongLLVMUploadIdRejects = withStorageLLVM $ \bundle artifact ->
           LLVMStore site owner "server.wrong_upload_id" yes no)
         artifact
   in case verifyStorageTranslation bundle badArtifact of
-    Left StorageLLVMTerminatorMismatch {} -> True
+    Left (StorageLLVMTerminatorMismatch _ _ _) -> True
     _ -> False
 
 wrongRenderedStatusRejects :: Bool
@@ -133,7 +133,7 @@ postTransferReleaseRejects = withStorageLLVM $ \bundle artifact ->
           { llvmBlockOps = LLVMBufferRelease "server.payload.owner" : llvmBlockOps blockValue })
         artifact
   in case verifyStorageTranslation bundle badArtifact of
-    Left StoragePostTransferReleaseDetected {} -> True
+    Left (StoragePostTransferReleaseDetected _ _ _) -> True
     _ -> False
 
 withStorageBundle :: (StorageBundle -> Bool) -> Bool
