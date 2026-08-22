@@ -17,7 +17,7 @@ Any implementation should preserve these constraints:
 
 1. Existing Phase 0/upload Systems artifacts remain valid singleton cases of the generalized representation.
 2. No generic Systems/LLVM module contains Steve-specific names, filename switches, obligation IDs, or provider names.
-3. A physical runtime operation is represented once. Multiple logical claims must not force duplicated calls, branches, or cost.
+3. A physical runtime operation is represented once. Runtime primitive/signature identity, physical program-site identity, and assurance claim identity are distinct; multiple logical claims must not force duplicated calls, branches, linker symbols, or cost.
 4. Assumptions remain content-addressed assurance nodes with explicit validity scope; they are never collapsed to prose such as `"delegated to provider"`.
 5. Negative authority claims are about what capability is possessed, not merely about which calls happen to appear in one program.
 6. Persistent assurance subjects bind to stable owner/storage identity. Borrowed views may be observation mechanisms but must not silently become persistent identities.
@@ -110,9 +110,15 @@ Duplicating a digest operation to satisfy the representation would make the cost
 
 ### Target representation
 
-Represent a physical site once, with one physical kind/cost identity and a nonempty exact claim set. Conceptually:
+Represent a physical site once, with an explicit physical site identity, one physical primitive/signature identity, one physical kind/cost identity, and a nonempty exact claim set. Conceptually:
 
 ```haskell
+data RuntimePrimitiveRef = RuntimePrimitiveRef
+  { runtimePrimitiveOperation :: Text
+  , runtimePrimitiveABIProfile :: Text
+  , runtimePrimitiveSignature :: RuntimeSignature
+  }
+
 data RuntimeSiteClaim = RuntimeSiteClaim
   { runtimeClaimRevision :: RevisionId
   , runtimeClaimEvidence :: EvidenceEntryId
@@ -120,13 +126,33 @@ data RuntimeSiteClaim = RuntimeSiteClaim
   }
 
 data RuntimeSiteRef = RuntimeSiteRef
-  { runtimeSiteKind :: RuntimeSiteKind
+  { runtimeSiteId :: RuntimeSiteId
+  , runtimeSitePrimitive :: RuntimePrimitiveRef
+  , runtimeSiteKind :: RuntimeSiteKind
   , runtimeSiteClaims :: NonEmpty RuntimeSiteClaim
   , runtimeSiteCostRef :: Text
   }
 ```
 
-`runtimeClaimSubjects` is described under Generalization 4; it may be introduced in the same tranche or immediately after the multi-claim shape.
+The exact Haskell spelling is not normative. `runtimeClaimSubjects` is described under Generalization 4; it may be introduced in the same tranche or immediately after the multi-claim shape.
+
+### Identity separation
+
+PR #43 exposed a cross-layer consequence of this generalization before the first recognized-record ABI implementation artifact existed. The generalized model must preserve three independent identities:
+
+> runtime primitive/signature identity != physical program-site identity != assurance claim identity
+
+A runtime primitive identifies the semantic/physical operation family together with its ABI-relevant signature/profile. A physical site identifies one program invocation site and carries its physical cost attribution. The claim set identifies the exact logical assurance bindings justified at that site. None is derivable from either of the others.
+
+Therefore:
+
+- multiple distinct physical sites may invoke the same runtime primitive symbol;
+- one physical site may justify multiple exact assurance claims;
+- adding, removing, or reordering assurance claims must not by itself rename the runtime primitive or duplicate physical execution/cost;
+- changing the primitive ABI signature/profile must change the bound primitive/profile identity even when the claim set is unchanged;
+- linker-visible runtime symbols must not be derived from `RevisionId`, `EvidenceEntryId`, `AssuranceUseId`, or claim-set cardinality/order.
+
+This is not merely a symbol-naming convention. It is the representation boundary that prevents a contingent assurance decomposition from becoming a physical ABI commitment. Semantic operation names such as a schema field accessor may still appear in a symbol when they describe the operation actually being performed; assurance bookkeeping identities may not.
 
 ### Verifier requirements
 
@@ -137,7 +163,10 @@ For each physical site:
 - every evidence entry exists, is `RuntimeEnforced`, and names the exact revision;
 - the physical cost ref is authorized by each claim's selected runtime evidence where the claim asserts that physical mechanism;
 - expected runtime-site kind checks remain exact;
-- no claim may be added merely because an evidence entry happens to share a cost string.
+- no claim may be added merely because an evidence entry happens to share a cost string;
+- the physical site identity remains distinct from the primitive identity, so two sites invoking the same primitive cannot collapse into one site;
+- the primitive identity is determined by operation/signature/profile rather than assurance IDs or claim-set shape;
+- changing only the exact claim set cannot by itself change the primitive/symbol identity or multiply the physical site.
 
 For retained-runtime uses, generalize the PR #31 rule from "one use -> one matching singleton site" to:
 
@@ -149,9 +178,16 @@ Several distinct uses may map to the same physical site. The reverse relation is
 
 Generalize `proof/Phil/Systems/Runtime.v` to model physical sites with claim sets. The key theorem should preserve per-use uniqueness while allowing multiple uses to inhabit one site. Existing singleton Phase 0 sites should prove the generalized theorem directly.
 
+The normalized model should not identify sites merely because they share a primitive/signature, nor identify primitive identity with any assurance claim. If symbol construction is modeled, its inputs should be the primitive operation/profile/signature rather than evidence/revision/use identity.
+
 ### Downstream LLVM consequence
 
-PR #33/#35 now make runtime-site preservation part of the LLVM translation-validation/certification chain. The LLVM boundary must preserve **physical site multiplicity and the exact claim set**, not expand one physical Systems site into one LLVM call per logical claim.
+PR #33/#35 make runtime-site preservation part of the LLVM translation-validation/certification chain, and PR #43 makes the identity split explicit at the ABI boundary. The LLVM boundary must preserve **physical site multiplicity and the exact claim set** without using assurance IDs to determine the runtime linker symbol.
+
+Translation validation should therefore check two distinct properties:
+
+1. **physical operation preservation** — each Systems physical site maps to exactly one corresponding LLVM call site with the expected primitive/signature/profile and physical cost identity; distinct Systems sites remain distinct even when they invoke the same primitive symbol;
+2. **claim-set preservation** — every exact `(revision,evidence,subject...)` binding attached to that Systems site survives in the LLVM-side verification relation, without manufacturing extra calls or changing the primitive symbol merely because the claim set changed.
 
 If the normalized `PHIL-LLVM-PRESERVE-001` model counts runtime sites, generalize it so the count remains a count of physical mechanisms and claim-set identity is checked separately. The concrete Phase 0 certification should remain green as a singleton instance.
 
@@ -166,12 +202,18 @@ Reject at least:
 - retained use appearing in two physical sites;
 - shared physical site split into duplicate calls solely to satisfy two claims;
 - physical cost ref inconsistent with one of the claims;
-- LLVM target that preserves the calls but drops or mutates one claim binding.
+- LLVM target that preserves the calls but drops or mutates one claim binding;
+- changing a runtime primitive symbol solely because a second assurance claim is attached;
+- encoding an evidence/revision/use ID into a runtime primitive symbol;
+- collapsing two distinct physical sites merely because they invoke the same primitive/signature;
+- changing the primitive ABI signature without changing the bound runtime ABI/profile identity.
 
 Steve acceptance examples:
 
 - `get.digest_check`: one physical SHA-256 validation site carrying `STEVE-GET-DIGEST` and `STEVE-CORRUPTION-FAILS` claims;
 - `put.existing.digest_check`: one physical SHA-256 validation site carrying `STEVE-COLLISION-FAILS` and the relevant corruption-rejection claim.
+
+Those two sites may legitimately invoke the same digest-validation primitive/signature while remaining distinct physical sites because they occur at different program locations and under different dynamic conditions. Conversely, each site remains one physical execution even when its claim set contains multiple logical obligations.
 
 ## Generalization 3: checked provider capability possession and use
 
@@ -306,6 +348,7 @@ The first positive artifact should preserve these physical facts exactly:
 - every failure path disposes of every owned buffer exactly once;
 - BlobProvider authority is read + atomic no-replace install-if-absent, with no replace/delete capability;
 - persistent digest evidence names stable byte-object identity, not borrow identity;
+- runtime primitive/signature identity remains independent of both physical site identity and exact assurance claim-set identity;
 - no proof/evidence wrapper is erased until Steve's assurance graph contains exact selected `ErasureUse` authority.
 
 Then add adversarial mutations covering:
@@ -313,6 +356,8 @@ Then add adversarial mutations covering:
 - omitted/wrong/stale assumption;
 - missing one claim from a shared physical runtime site;
 - duplicated physical site/cost for a second logical claim;
+- evidence/revision/use identity leaking into a runtime primitive symbol;
+- two distinct physical sites collapsed because they share a primitive/signature;
 - widened BlobProvider authority or invented replace/delete call;
 - digest subject rebound to borrowed view or wrong owner;
 - equality path rehash;
@@ -336,7 +381,7 @@ Until the four representation points are implemented and the positive/adversaria
 
 This handoff is satisfied when all of the following are true on `main` without Steve-specific generic code:
 
-1. the generalized Systems IR can represent all four points above faithfully;
+1. the generalized Systems IR can represent all four points above faithfully, including the separation of runtime primitive/signature, physical site, and exact assurance claim identities;
 2. the Haskell verifier rejects the listed generic adversarial cases;
 3. Rocq proofs cover the generalized fact-assumption, runtime-site, provider-authority, and stable-subject rules;
 4. existing Phase 0 Systems/LLVM fixtures and concrete PR #35 certification remain green;
