@@ -99,6 +99,8 @@ data LLVMOp
   | LLVMFieldProjection Text Text Text Text ScalarType
   | LLVMAcceptedResponse Text Text
   | LLVMRejectedResponse Text Int
+  | LLVMFinalResponsePayloadBinding Text
+  | LLVMRecordUploadId Text
   | LLVMStrengtheningOp LLVMStrengtheningId Text
   | LLVMPoison Text
   | LLVMUndef Text
@@ -129,6 +131,11 @@ data LLVMTerminator
       LLVMBlockId
   | LLVMStore
       RuntimeSiteRef
+      Text
+      Text
+      LLVMBlockId
+      LLVMBlockId
+  | LLVMFinalResponseOffer
       Text
       Text
       LLVMBlockId
@@ -212,6 +219,7 @@ llvmBlockSuccessors blockValue = case llvmBlockTerminator blockValue of
   LLVMExactReceive _ _ _ _ _ _ yes no -> [yes, no]
   LLVMDigestValidate _ _ _ yes no -> [yes, no]
   LLVMStore _ _ _ yes no -> [yes, no]
+  LLVMFinalResponseOffer _ _ yes no -> [yes, no]
   LLVMReturnScalar _ _ -> []
   LLVMReturn _ -> []
   LLVMUnreachable _ -> []
@@ -267,6 +275,7 @@ renderLLVMModule moduleValue = Text.unlines $
       , "phil-runtime/phase0/storage-v1"
       , "phil-runtime/phase0/accepted-response-v1"
       , "phil-runtime/phase0/rejected-response-v1"
+      , "phil-runtime/phase0/final-response-receive-v1"
       ]
 
     header =
@@ -306,6 +315,8 @@ renderLLVMModule moduleValue = Text.unlines $
       <> storageDeclaration
       <> acceptedResponseDeclaration
       <> rejectedResponseDeclaration
+      <> finalResponseReceiveDeclaration
+      <> recordUploadIdDeclaration
       <> map renderCallDeclaration (Set.toAscList callNames)
       <> runtimeDeclarations
       <> map renderFieldProjectionDeclaration (Set.toAscList fieldProjectionSignatures)
@@ -352,6 +363,16 @@ renderLLVMModule moduleValue = Text.unlines $
     rejectedResponseDeclaration =
       if any hasRejectedResponse allBlocks
         then ["declare void @phil_runtime_select_rejected(ptr, i8)"]
+        else []
+
+    finalResponseReceiveDeclaration =
+      if any hasFinalResponseOffer allBlocks
+        then ["declare i1 @phil_runtime_receive_final_response(ptr, ptr)"]
+        else []
+
+    recordUploadIdDeclaration =
+      if any hasRecordUploadId allBlocks
+        then ["declare void @phil_runtime_record_upload_id(ptr)"]
         else []
 
     callNames = Set.fromList
@@ -440,6 +461,14 @@ renderLLVMModule moduleValue = Text.unlines $
     isRejectedResponse LLVMRejectedResponse {} = True
     isRejectedResponse _ = False
 
+    hasFinalResponseOffer blockValue = case llvmBlockTerminator blockValue of
+      LLVMFinalResponseOffer {} -> True
+      _ -> False
+
+    hasRecordUploadId blockValue = any isRecordUploadId (llvmBlockOps blockValue)
+    isRecordUploadId LLVMRecordUploadId {} = True
+    isRecordUploadId _ = False
+
     renderCallDeclaration name = "declare void @phil_call_" <> symbol name <> "()"
     renderRuntimeEvidenceDeclaration evidence =
       "declare i1 @phil_runtime_" <> symbol evidence <> "()"
@@ -516,6 +545,12 @@ renderLLVMModule moduleValue = Text.unlines $
         [ "call void @phil_runtime_select_rejected(ptr %" <> symbol transport
             <> ", i8 " <> Text.pack (show reasonCode) <> ")"
         ]
+      LLVMFinalResponsePayloadBinding uploadId ->
+        [ "%" <> symbol uploadId <> " = load ptr, ptr %phil_final_response_upload_id_slot_"
+            <> symbol uploadId
+        ]
+      LLVMRecordUploadId uploadId ->
+        [ "call void @phil_runtime_record_upload_id(ptr %" <> symbol uploadId <> ")" ]
       LLVMStrengtheningOp strengtheningId description ->
         renderStrengthening strengtheningId description
       LLVMPoison description ->
@@ -640,6 +675,18 @@ renderLLVMModule moduleValue = Text.unlines $
           , "%" <> symbol uploadIdName <> " = extractvalue " <> resultType <> " " <> resultName <> ", 1"
           , okName <> " = icmp eq i8 " <> statusName <> ", 1"
           , "br i1 " <> okName
+              <> ", label %" <> symbol (unLLVMBlockId yes)
+              <> ", label %" <> symbol (unLLVMBlockId no)
+          ]
+      LLVMFinalResponseOffer transportName uploadIdName yes no ->
+        let blockSymbol = symbol (unLLVMBlockId (llvmBlockId blockValue))
+            slotName = "%phil_final_response_upload_id_slot_" <> symbol uploadIdName
+            acceptedName = "%phil_final_response_accepted_" <> blockSymbol
+        in
+          [ slotName <> " = alloca ptr"
+          , acceptedName <> " = call i1 @phil_runtime_receive_final_response(ptr %"
+              <> symbol transportName <> ", ptr " <> slotName <> ")"
+          , "br i1 " <> acceptedName
               <> ", label %" <> symbol (unLLVMBlockId yes)
               <> ", label %" <> symbol (unLLVMBlockId no)
           ]

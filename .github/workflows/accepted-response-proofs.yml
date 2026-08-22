@@ -4,16 +4,26 @@ on:
   pull_request:
     paths:
       - 'proof/**'
+      - 'src/Phil/LLVM/IR.hs'
+      - 'src/Phil/LLVM/Verify.hs'
+      - 'src/Phil/LLVM/AcceptedResponse.hs'
       - 'src/Phil/LLVM/AcceptedResponseCertification.hs'
+      - 'src/Phil/Systems/AcceptedResponse.hs'
       - 'app/StorageProofCertificationMain.hs'
+      - 'phil-core.cabal'
       - '.github/workflows/accepted-response-proofs.yml'
   push:
     branches:
       - main
     paths:
       - 'proof/**'
+      - 'src/Phil/LLVM/IR.hs'
+      - 'src/Phil/LLVM/Verify.hs'
+      - 'src/Phil/LLVM/AcceptedResponse.hs'
       - 'src/Phil/LLVM/AcceptedResponseCertification.hs'
+      - 'src/Phil/Systems/AcceptedResponse.hs'
       - 'app/StorageProofCertificationMain.hs'
+      - 'phil-core.cabal'
       - '.github/workflows/accepted-response-proofs.yml'
 
 permissions:

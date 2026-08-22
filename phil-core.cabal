@@ -90,6 +90,8 @@ library
       Phil.LLVM.AcceptedResponseCertification
       Phil.LLVM.RejectedResponse
       Phil.LLVM.RejectedResponseCertification
+      Phil.LLVM.SessionOffer
+      Phil.LLVM.SessionOfferCertification
   build-depends:
       base >=4.17 && <5,
       bytestring >=0.11 && <0.13,
@@ -165,6 +167,15 @@ executable phil-llvm-phase0-rejected-response
   import:             common-settings
   hs-source-dirs:     app
   main-is:            LLVMRejectedResponseMain.hs
+  build-depends:
+      base >=4.17 && <5,
+      phil-core,
+      text >=2.0 && <2.2
+
+executable phil-llvm-phase0-final-response-receive
+  import:             common-settings
+  hs-source-dirs:     app
+  main-is:            LLVMFinalResponseReceiveMain.hs
   build-depends:
       base >=4.17 && <5,
       phil-core,
@@ -509,6 +520,17 @@ test-suite phil-session-choice-tests
   type:               exitcode-stdio-1.0
   hs-source-dirs:     test
   main-is:            SessionChoiceMain.hs
+  build-depends:
+      base >=4.17 && <5,
+      containers >=0.6 && <0.8,
+      phil-core,
+      text >=2.0 && <2.2
+
+test-suite phil-final-response-receive-tests
+  import:             common-settings
+  type:               exitcode-stdio-1.0
+  hs-source-dirs:     test
+  main-is:            FinalResponseReceiveMain.hs
   build-depends:
       base >=4.17 && <5,
       containers >=0.6 && <0.8,
