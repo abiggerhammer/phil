@@ -55,6 +55,7 @@ library
       Phil.Assurance.Handoff
       Phil.Assurance.Verify
       Phil.Assurance.Phase0
+      Phil.Assurance.Rocq
       Phil.Systems.IR
       Phil.Systems.Verify
       Phil.Systems.Phase0
@@ -94,6 +95,16 @@ executable philc
   main-is:            PhilcMain.hs
   build-depends:
       base >=4.17 && <5,
+      phil-core,
+      text >=2.0 && <2.2
+
+executable phil-certify-core-scalar
+  import:             common-settings
+  hs-source-dirs:     app
+  main-is:            RocqScalarCertificationMain.hs
+  build-depends:
+      base >=4.17 && <5,
+      bytestring >=0.11 && <0.13,
       phil-core,
       text >=2.0 && <2.2
 
@@ -280,6 +291,18 @@ test-suite phil-assurance-handoff-tests
   main-is:            AssuranceHandoffMain.hs
   build-depends:
       base >=4.17 && <5,
+      phil-core,
+      text >=2.0 && <2.2
+
+test-suite phil-rocq-certification-tests
+  import:             common-settings
+  type:               exitcode-stdio-1.0
+  hs-source-dirs:     test
+  main-is:            RocqCertificationMain.hs
+  build-depends:
+      base >=4.17 && <5,
+      bytestring >=0.11 && <0.13,
+      containers >=0.6 && <0.8,
       phil-core,
       text >=2.0 && <2.2
 

@@ -5,6 +5,11 @@ on:
     paths:
       - 'proof/**'
       - '_CoqProject'
+      - 'src/Phil/Assurance/**'
+      - 'src/Phil/Assurance.hs'
+      - 'app/RocqScalarCertificationMain.hs'
+      - 'test/RocqCertificationMain.hs'
+      - 'phil-core.cabal'
       - '.github/workflows/proofs.yml'
   push:
     branches:
@@ -12,6 +17,11 @@ on:
     paths:
       - 'proof/**'
       - '_CoqProject'
+      - 'src/Phil/Assurance/**'
+      - 'src/Phil/Assurance.hs'
+      - 'app/RocqScalarCertificationMain.hs'
+      - 'test/RocqCertificationMain.hs'
+      - 'phil-core.cabal'
       - '.github/workflows/proofs.yml'
 
 permissions:
@@ -64,3 +74,58 @@ jobs:
           rocq c -Q proof/Phil Phil proof/Phil/LLVM/Strengthening.v
           rocq c -Q proof/Phil Phil proof/Phil/LLVM/Certification.v
           rocq c -Q proof/Phil Phil proof/Phil/LLVM/Scalar.v
+
+      - name: Stage first certified Rocq proof object
+        run: |
+          mkdir -p rocq-core-scalar
+          cp proof/Phil/Core/Scalar.v rocq-core-scalar/Scalar.v
+          cp proof/Phil/Core/Scalar.vo rocq-core-scalar/Scalar.vo
+
+      - name: Upload checked Rocq proof object
+        uses: actions/upload-artifact@v4
+        with:
+          name: rocq-core-scalar-checked
+          path: rocq-core-scalar/
+          if-no-files-found: error
+          retention-days: 14
+
+  certify-core-scalar:
+    needs: rocq
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v4
+
+      - name: Set up Haskell
+        uses: haskell-actions/setup@v2
+        with:
+          ghc-version: '9.6.7'
+          cabal-version: 'latest'
+
+      - name: Download checked Rocq proof object
+        uses: actions/download-artifact@v4
+        with:
+          name: rocq-core-scalar-checked
+          path: rocq-core-scalar
+
+      - name: Build certification adapter
+        run: cabal build phil-certify-core-scalar
+
+      - name: Produce and verify PHIL-CORE-SCALAR-001 certificate
+        run: |
+          mkdir -p proof-certificates
+          CERTIFIER="$(cabal list-bin phil-certify-core-scalar)"
+          "$CERTIFIER" \
+            rocq-core-scalar/Scalar.v \
+            rocq-core-scalar/Scalar.vo \
+            proof-certificates/PHIL-CORE-SCALAR-001.rocq.cert
+          cat proof-certificates/PHIL-CORE-SCALAR-001.rocq.cert
+          sha256sum proof-certificates/PHIL-CORE-SCALAR-001.rocq.cert
+
+      - name: Upload Phil Rocq proof certificate
+        uses: actions/upload-artifact@v4
+        with:
+          name: phil-core-scalar-rocq-certificate
+          path: proof-certificates/PHIL-CORE-SCALAR-001.rocq.cert
+          if-no-files-found: error
+          retention-days: 30
