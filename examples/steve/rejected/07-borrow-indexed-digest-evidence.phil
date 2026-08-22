@@ -1,0 +1,12 @@
+// reject: persistent evidence may not be indexed by an ephemeral borrow token.
+component BadBorrowIndexedEvidence(
+    digest : DigestProvider[SHA256],
+    n : Nat,
+    bytes : OwnedBytes[n]
+) {
+    let digestEvidence = borrow bytes as bytesView {
+        digest_compute_view_indexed(digest, bytesView)
+    }
+    release bytes
+    return digestEvidence
+}
