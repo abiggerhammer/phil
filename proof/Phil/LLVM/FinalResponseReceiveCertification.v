@@ -65,10 +65,12 @@ Theorem final_response_certification_requires_aligned_semantic_authorities :
   FinalResponseReceiveLLVMVerificationSuccess (finalCertificationLLVMModel model) /\
   llvmFinalSystems (finalCertificationLLVMModel model) = finalCertificationSystemsModel model.
 Proof.
-  intros model H; repeat split.
+  intros model H.
+  split.
   - exact (final_certification_systems_success model H).
-  - exact (final_certification_llvm_success model H).
-  - exact (final_certification_models_align model H).
+  - split.
+    + exact (final_certification_llvm_success model H).
+    + exact (final_certification_models_align model H).
 Qed.
 
 Theorem final_response_certification_requires_exact_artifact_authority :

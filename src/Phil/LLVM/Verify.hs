@@ -213,6 +213,7 @@ ordinaryOps = filter isOrdinary
       LLVMFieldProjection {} -> True
       LLVMAcceptedResponse {} -> True
       LLVMRejectedResponse {} -> True
+      LLVMPayloadCancelSelect {} -> True
       LLVMFinalResponsePayloadBinding {} -> True
       LLVMRecordUploadId {} -> True
       LLVMStrengtheningOp _ _ -> False

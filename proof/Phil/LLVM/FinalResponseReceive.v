@@ -176,11 +176,14 @@ Theorem verified_llvm_final_response_reuses_semantic_and_predecessor_authority :
     llvmRejectedSystems (llvmFinalRejectedPredecessor model) =
       systemsFinalRejectedPredecessor (llvmFinalSystems model).
 Proof.
-  intros model H; repeat split.
+  intros model H.
+  split.
   - exact (llvm_final_success_systems model H).
-  - exact (llvm_final_success_rejected_predecessor model H).
-  - exact (llvm_final_success_runtime_symbols model H).
-  - exact (llvm_final_success_rejected_systems_align model H).
+  - split.
+    + exact (llvm_final_success_rejected_predecessor model H).
+    + split.
+      * exact (llvm_final_success_runtime_symbols model H).
+      * exact (llvm_final_success_rejected_systems_align model H).
 Qed.
 
 Theorem verified_llvm_final_response_preserves_decoder_boundary :

@@ -1,0 +1,82 @@
+name: Payload Cancel Choice Runtime
+
+on:
+  pull_request:
+    paths:
+      - 'src/Phil/Systems/PayloadCancelChoice.hs'
+      - 'src/Phil/LLVM/IR.hs'
+      - 'src/Phil/LLVM/Verify.hs'
+      - 'src/Phil/LLVM/PayloadCancelChoice.hs'
+      - 'src/Phil/LLVM/PayloadCancelChoiceCertification.hs'
+      - 'src/Phil/LLVM/SessionOffer.hs'
+      - 'src/Phil/LLVM.hs'
+      - 'app/LLVMPayloadCancelChoiceMain.hs'
+      - 'runtime/phase0/payload_cancel_choice_v1*'
+      - 'scripts/check_runtime_abi.py'
+      - 'test/PayloadCancelChoiceABIMain.hs'
+      - 'phil-core.cabal'
+      - '.github/workflows/payload-cancel-choice-runtime.yml'
+  push:
+    branches:
+      - main
+    paths:
+      - 'src/Phil/Systems/PayloadCancelChoice.hs'
+      - 'src/Phil/LLVM/IR.hs'
+      - 'src/Phil/LLVM/Verify.hs'
+      - 'src/Phil/LLVM/PayloadCancelChoice.hs'
+      - 'src/Phil/LLVM/PayloadCancelChoiceCertification.hs'
+      - 'src/Phil/LLVM/SessionOffer.hs'
+      - 'src/Phil/LLVM.hs'
+      - 'app/LLVMPayloadCancelChoiceMain.hs'
+      - 'runtime/phase0/payload_cancel_choice_v1*'
+      - 'scripts/check_runtime_abi.py'
+      - 'test/PayloadCancelChoiceABIMain.hs'
+      - 'phil-core.cabal'
+      - '.github/workflows/payload-cancel-choice-runtime.yml'
+
+permissions:
+  contents: read
+
+jobs:
+  payload-cancel-choice-runtime:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: haskell-actions/setup@v2
+        with:
+          ghc-version: '9.6.7'
+          cabal-version: 'latest'
+      - name: Build emitter and focused tests
+        run: cabal build phil-llvm-phase0-payload-cancel-choice phil-payload-cancel-choice-abi-tests
+      - name: Verify ABI and execute payload/cancel paths
+        shell: bash
+        run: |
+          set -euo pipefail
+          LLVM_AS=llvm-as-18
+          LLVM_LINK=llvm-link-18
+          CLANG=clang-18
+          EMITTER="$(cabal list-bin phil-llvm-phase0-payload-cancel-choice)"
+          "$EMITTER" > phase0-payload-cancel-choice.ll
+          "$LLVM_AS" phase0-payload-cancel-choice.ll -o phase0-payload-cancel-choice.bc
+          "$CLANG" --target=x86_64-unknown-linux-gnu -std=c11 -Wall -Wextra -Wpedantic -Werror \
+            -Iruntime/phase0 -S -emit-llvm runtime/phase0/payload_cancel_choice_v1_smoke.c \
+            -o payload-cancel-runtime.ll
+          python3 scripts/check_runtime_abi.py phase0-payload-cancel-choice.ll payload-cancel-runtime.ll
+          "$LLVM_AS" payload-cancel-runtime.ll -o payload-cancel-runtime.bc
+          "$CLANG" --target=x86_64-unknown-linux-gnu -std=c11 -Wall -Wextra -Wpedantic -Werror \
+            -Iruntime/phase0 -emit-llvm -c runtime/phase0/payload_cancel_choice_v1_smoke_main.c \
+            -o payload-cancel-smoke-main.bc
+          "$LLVM_LINK" phase0-payload-cancel-choice.bc payload-cancel-runtime.bc payload-cancel-smoke-main.bc \
+            -o phase0-payload-cancel-linked.bc
+          "$CLANG" --target=x86_64-unknown-linux-gnu phase0-payload-cancel-linked.bc \
+            -o phase0-payload-cancel-smoke
+          ./phase0-payload-cancel-smoke
+          "$CLANG" --target=x86_64-unknown-linux-gnu -std=c11 -Wall -Wextra -Wpedantic -Werror \
+            -S -emit-llvm runtime/phase0/payload_cancel_choice_v1_bad_ambient.c \
+            -o payload-cancel-bad-ambient.ll
+          if python3 scripts/check_runtime_abi.py --partial \
+              phase0-payload-cancel-choice.ll payload-cancel-bad-ambient.ll; then
+            echo "expected ABI checker to reject ambient/nullary payload-cancel provider" >&2
+            exit 1
+          fi
+          cabal test phil-payload-cancel-choice-abi-tests

@@ -4,6 +4,11 @@ on:
   pull_request:
     paths:
       - 'proof/**'
+      - 'phil-core.cabal'
+      - 'src/Phil/LLVM.hs'
+      - 'src/Phil/LLVM/IR.hs'
+      - 'src/Phil/LLVM/Lower.hs'
+      - 'src/Phil/LLVM/Verify.hs'
       - 'src/Phil/Systems/SessionChoice.hs'
       - 'src/Phil/LLVM/SessionOffer.hs'
       - 'src/Phil/LLVM/SessionOfferCertification.hs'
@@ -14,6 +19,11 @@ on:
       - main
     paths:
       - 'proof/**'
+      - 'phil-core.cabal'
+      - 'src/Phil/LLVM.hs'
+      - 'src/Phil/LLVM/IR.hs'
+      - 'src/Phil/LLVM/Lower.hs'
+      - 'src/Phil/LLVM/Verify.hs'
       - 'src/Phil/Systems/SessionChoice.hs'
       - 'src/Phil/LLVM/SessionOffer.hs'
       - 'src/Phil/LLVM/SessionOfferCertification.hs'
