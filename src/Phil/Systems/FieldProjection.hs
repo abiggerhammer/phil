@@ -14,6 +14,7 @@ import Control.Monad (forM_, unless)
 import qualified Data.Map.Strict as Map
 import Data.Text (Text)
 import Phil.Assurance.Types
+import Phil.Systems.Dataflow
 import Phil.Systems.IR
 import Phil.Systems.Phase0
 import Phil.Systems.Verify
@@ -40,6 +41,7 @@ data FieldProjectionBundle = FieldProjectionBundle
 
 data FieldProjectionError
   = FieldProjectionSystemsError SystemsVerificationError
+  | FieldProjectionScalarDataflowError ScalarDataflowError
   | FieldProjectionFunctionMissing Text
   | FieldProjectionRecognitionBlockMissing Text BlockId
   | FieldProjectionSuccessBlockMissing Text BlockId
@@ -135,6 +137,8 @@ verifyFieldProjectionBundle bundle = do
     verifySystemsArtifact
       (fieldProjectionContext bundle)
       (fieldProjectionArtifact bundle)
+  mapLeft FieldProjectionScalarDataflowError $
+    verifyScalarDataflow (fieldProjectionArtifact bundle)
   verifyFieldProjectionWitnesses
     (fieldProjectionArtifact bundle)
     (fieldProjectionWitnesses bundle)
