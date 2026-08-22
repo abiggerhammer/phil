@@ -261,11 +261,11 @@ Proof.
   - left.
     exists invariantId.
     split.
-    + exact Hcarrier.
+    + reflexivity.
     + exact Hverified.
   - right.
     exists revision.
     split.
-    + exact Hcarrier.
+    + reflexivity.
     + exact Hverified.
 Qed.
