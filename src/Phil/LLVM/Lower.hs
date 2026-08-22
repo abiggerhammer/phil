@@ -5,6 +5,7 @@ module Phil.LLVM.Lower
   , lowerSystemsRecognizedRecord
   , lowerSystemsExactReceive
   , lowerSystemsDigestValidation
+  , lowerSystemsStorage
   ) where
 
 import qualified Data.Map.Strict as Map
@@ -18,6 +19,7 @@ data LoweringMode
   | RecognizedRecordMode
   | ExactReceiveMode
   | DigestValidationMode
+  | StorageMode
   deriving (Eq, Show)
 
 lowerSystemsConservative :: LLVMTargetProfile -> SystemsArtifact -> LLVMArtifact
@@ -31,6 +33,9 @@ lowerSystemsExactReceive = lowerSystemsWith ExactReceiveMode
 
 lowerSystemsDigestValidation :: LLVMTargetProfile -> SystemsArtifact -> LLVMArtifact
 lowerSystemsDigestValidation = lowerSystemsWith DigestValidationMode
+
+lowerSystemsStorage :: LLVMTargetProfile -> SystemsArtifact -> LLVMArtifact
+lowerSystemsStorage = lowerSystemsWith StorageMode
 
 lowerSystemsWith
   :: LoweringMode
@@ -82,7 +87,7 @@ lowerFunction mode functionValue = LLVMFunction
 
 lowerParameters :: LoweringMode -> SystemsFunction -> [LLVMParameter]
 lowerParameters mode functionValue
-  | mode `elem` [ExactReceiveMode, DigestValidationMode] =
+  | mode `elem` [ExactReceiveMode, DigestValidationMode, StorageMode] =
       [ LLVMParameter (unValueId valueId) LLVMPointerParameter
       | (valueId, SystemsValue { systemsValueRole = TransportHandle }) <-
           Map.toAscList (systemsFunctionValues functionValue)
@@ -161,7 +166,7 @@ lowerTerminator mode functionValue terminator = case terminator of
     , checkSuccess = yes
     , checkFailure = no
     }
-    | mode == DigestValidationMode
+    | mode `elem` [DigestValidationMode, StorageMode]
         && runtimeSiteKind site == DigestBoundary ->
         case digestOperands functionValue inputs of
           Just (recordValue, payloadOwner) ->
@@ -181,7 +186,7 @@ lowerTerminator mode functionValue terminator = case terminator of
     , exactSuccess = yes
     , exactFailure = no
     }
-    | mode `elem` [ExactReceiveMode, DigestValidationMode] ->
+    | mode `elem` [ExactReceiveMode, DigestValidationMode, StorageMode] ->
         case
           ( transportRoleOf functionValue transportValue
           , scalarTypeOf functionValue lengthValue
@@ -210,8 +215,23 @@ lowerTerminator mode functionValue terminator = case terminator of
     | otherwise -> runtimeBranch site yes no
   TermSendExact { sendExactSite = site, sendExactSuccess = yes, sendExactFailure = no } ->
     runtimeBranch site yes no
-  TermStore { storeSite = site, storeSuccess = yes, storeFailure = no } ->
-    runtimeBranch site yes no
+  TermStore
+    { storeOwner = ownerValue
+    , storeResult = resultValue
+    , storeSite = site
+    , storeSuccess = yes
+    , storeFailure = no
+    }
+    | mode == StorageMode
+        && payloadRoleOf functionValue ownerValue
+        && uploadIdRoleOf functionValue resultValue ->
+        LLVMStore
+          site
+          (payloadSSAName ownerValue)
+          (unValueId resultValue)
+          (lowerBlockId yes)
+          (lowerBlockId no)
+    | otherwise -> runtimeBranch site yes no
   TermReturnScalar valueId ->
     case Map.lookup valueId (systemsFunctionValues functionValue) of
       Just SystemsValue { systemsValueRole = TypedScalar scalarType } ->
@@ -310,6 +330,12 @@ payloadRoleOf functionValue valueId =
     Just SystemsValue { systemsValueRole = OwnedBuffer _ } -> True
     _ -> False
 
+uploadIdRoleOf :: SystemsFunction -> ValueId -> Bool
+uploadIdRoleOf functionValue valueId =
+  case Map.lookup valueId (systemsFunctionValues functionValue) of
+    Just SystemsValue { systemsValueRole = RuntimeScalar "UploadId" } -> True
+    _ -> False
+
 isExactReceivePayload :: SystemsFunction -> ValueId -> Bool
 isExactReceivePayload functionValue owner = any blockOwnsPayload
   (Map.elems (systemsFunctionBlocks functionValue))
@@ -319,7 +345,7 @@ isExactReceivePayload functionValue owner = any blockOwnsPayload
       _ -> False
 
 concretePayloadMode :: LoweringMode -> Bool
-concretePayloadMode mode = mode `elem` [ExactReceiveMode, DigestValidationMode]
+concretePayloadMode mode = mode `elem` [ExactReceiveMode, DigestValidationMode, StorageMode]
 
 payloadSSAName :: ValueId -> Text
 payloadSSAName valueId = unValueId valueId <> ".owner"
