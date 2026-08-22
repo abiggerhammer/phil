@@ -243,6 +243,7 @@ lowerTerminator mode functionValue terminator = case terminator of
           (lowerBlockId no)
     | otherwise -> runtimeBranch site yes no
   TermSessionOffer {} -> LLVMUnreachable Nothing
+  TermRuntimeChoice {} -> LLVMUnreachable Nothing
   TermReturnScalar valueId ->
     case Map.lookup valueId (systemsFunctionValues functionValue) of
       Just SystemsValue { systemsValueRole = TypedScalar scalarType } ->
