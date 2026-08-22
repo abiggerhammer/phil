@@ -1,0 +1,71 @@
+// reject: different byte objects that both match one ContentId must not produce PutOk.
+component BadCollisionSuccess(
+    digest : DigestProvider[SHA256],
+    id : ContentId[SHA256],
+    n : Nat,
+    candidate : OwnedBytes[n],
+    m : Nat,
+    existing : OwnedBytes[m]
+) provides PutResult[SHA256] {
+    let candidateObject = owned_bytes_identity(candidate)
+    let existingObject = owned_bytes_identity(existing)
+
+    let candidateDigest = borrow candidate as candidateView {
+        digest_check(digest, id, candidateObject, candidateView)
+    }
+    let existingDigest = borrow existing as existingView {
+        digest_check(digest, id, existingObject, existingView)
+    }
+    let comparison = borrow candidate as candidateView {
+        borrow existing as existingView {
+            bytes_compare(candidateObject, candidateView, existingObject, existingView)
+        }
+    }
+
+    decide candidateDigest {
+        rejected(reason) => {
+            release candidate
+            release existing
+            return construct PutExistingObjectCorrupt {
+                id = id,
+                reason = reason
+            }
+        }
+
+        accepted(candidateEvidence) => {
+            decide existingDigest {
+                rejected(reason) => {
+                    release candidate
+                    release existing
+                    return construct PutExistingObjectCorrupt {
+                        id = id,
+                        reason = reason
+                    }
+                }
+
+                accepted(existingEvidence) => {
+                    decide comparison {
+                        equal(equalEvidence) => {
+                            release candidate
+                            release existing
+                            return construct PutOk {
+                                id = id,
+                                evidence = candidateEvidence
+                            }
+                        }
+
+                        different(differentEvidence) => {
+                            release candidate
+                            release existing
+                            // Wrong: this arm has witnessed a digest collision.
+                            return construct PutOk {
+                                id = id,
+                                evidence = candidateEvidence
+                            }
+                        }
+                    }
+                }
+            }
+        }
+    }
+}
