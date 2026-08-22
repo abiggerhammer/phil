@@ -1,0 +1,8 @@
+component BadPendingDrop(s0 : Server[Upload]) {
+    let pending = receive_frame(s0)
+        or fail transport
+
+    return unit
+    // reject: PendingRecv is linear and must be committed with matching
+    // recognition evidence or consumed by a fatal transition
+}

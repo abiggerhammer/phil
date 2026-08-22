@@ -1,0 +1,7 @@
+component BadPolicyContext(begin, oldPolicy, session) {
+    // oldPolicy : Validated[BeginPolicy, κ1, begin]
+    // current operation requires BeginPolicy(κ2, begin)
+    select proceed on session using oldPolicy
+    // reject: context identity does not match; evidence for κ1 cannot
+    // discharge an obligation under κ2 without checked relation evidence
+}

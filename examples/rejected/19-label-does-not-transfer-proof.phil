@@ -1,0 +1,10 @@
+component BadLabelProof(begin, session) {
+    offer session {
+        proceed => {
+            consume_begin_policy_evidence(beginPolicy)
+            // reject: receiving the bare proceed label enters its continuation
+            // but does not bind or manufacture server-local BeginPolicy evidence
+        }
+        reject(reason) => close failure
+    }
+}

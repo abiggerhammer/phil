@@ -1,0 +1,6 @@
+component BadOffer {
+    offer s0 {
+        payload => handle_payload()
+        // reject: cancel branch omitted from the declared payload/cancel offer
+    }
+}

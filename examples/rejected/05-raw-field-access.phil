@@ -1,0 +1,4 @@
+component BadRawAccess {
+    let (s1, raw) = receive_frame(s0)
+    let n = raw.length_field   // reject: RawBytes has no structured fields
+}

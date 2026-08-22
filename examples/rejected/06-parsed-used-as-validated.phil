@@ -1,0 +1,7 @@
+component BadValidationBypass {
+    let begin = recognize Begin from raw
+    let declared = begin.length    // legal: Parsed fields may be inspected
+    receive_exact declared on s0
+    // reject: using the declared length for this resource operation requires
+    // evidence that BeginPolicy holds for begin in the current policy context
+}

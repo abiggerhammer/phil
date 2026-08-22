@@ -1,0 +1,4 @@
+component BadDrop {
+    let (s1, hello) = receive Hello on s0
+    return hello         // reject: s1 remains live and unconsumed
+}

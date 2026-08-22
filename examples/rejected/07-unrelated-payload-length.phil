@@ -1,0 +1,7 @@
+component BadLength(begin, beginPolicy, s0) {
+    // beginPolicy : Validated[BeginPolicy, κ, begin]
+    let (s1, payload) = receive_exact 4096 on s0
+    accept payload as Bytes[begin.length]
+    // reject: no evidence establishes 4096 == toNat(begin.length).
+    // BeginPolicy bounds begin.length; it does not equate it with 4096.
+}

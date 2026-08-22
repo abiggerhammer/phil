@@ -1,0 +1,6 @@
+component BadWraparound(a : U32, b : U32) {
+    let r = unchecked_u32_add(a, b)
+    prove toNat(r) == toNat(a) + toNat(b)
+    // reject: unchecked machine addition may wrap; a proof-relevant equality
+    // requires checked arithmetic success evidence or a prior no-overflow proof
+}

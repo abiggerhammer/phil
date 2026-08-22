@@ -1,0 +1,9 @@
+component BadBorrowEscape(payload : OwnedBytes[1024]) {
+    let escaped = borrow payload as view {
+        view
+    }
+
+    release payload
+    inspect escaped
+    // reject: shared loan escaped its scope / would outlive the owner
+}

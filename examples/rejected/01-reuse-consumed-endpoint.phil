@@ -1,0 +1,5 @@
+component BadReuse {
+    let (s1, hello) = receive Hello on s0
+    send Ack on s0      // reject: s0 was consumed by receive
+    close s1
+}
