@@ -21,7 +21,6 @@ import Phil.Core.Discharge
   )
 import Phil.Core.Static
   ( declareOpaqueClaim
-  , declareTransparentClaim
   , emptyStaticContext
   )
 import Phil.Core.Syntax
