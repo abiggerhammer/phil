@@ -62,6 +62,7 @@ data ElaborationIssue
   | ValidatedIdentityMustBeName Text
   | AmbiguousIntegerLiteral Integer
   | ValueExpressionNotSupported SurfaceExpression
+  | UnsupportedOpaqueTypeArgument SurfaceExpression
   deriving (Eq, Show)
 
 data ElaborationError = ElaborationError
@@ -181,7 +182,7 @@ elaborateType environment locatedType = do
         subjectName <- identityName "validation subject" subject
         Right (TyValidated claim contextName subjectName)
       SurfaceNamedType name arguments ->
-        Right (TyOpaque (renderNamedType name arguments))
+        TyOpaque <$> renderNamedType name arguments
   mapSort (locatedSpan locatedType) $
     checkTypeSorts (elaborationCheckState environment) result
   Right result
@@ -196,7 +197,7 @@ elaborateValue
   -> Maybe Ty
   -> Located SurfaceExpression
   -> Either ElaborationError Value
-elaborateValue environment expected locatedExpression =
+elaborateValue _environment expected locatedExpression =
   case locatedValue locatedExpression of
     VariableExpression name -> Right (VVar (Name name))
     BooleanExpression value -> Right (VBool value)
@@ -212,8 +213,6 @@ elaborateValue environment expected locatedExpression =
       (ElaborationError
         (locatedSpan locatedExpression)
         (ValueExpressionNotSupported other))
-  where
-    _ = environment
 
 expectedUIntWidth :: Maybe Ty -> Maybe Int
 expectedUIntWidth expected =
@@ -235,25 +234,41 @@ integerLiteral expression =
     IntegerExpression literal -> Just literal
     _ -> Nothing
 
-renderNamedType :: Text -> [Located SurfaceExpression] -> Text
-renderNamedType name [] = name
-renderNamedType name arguments =
-  name <> "[" <> Text.intercalate "," (map renderExpression arguments) <> "]"
+renderNamedType
+  :: Text
+  -> [Located SurfaceExpression]
+  -> Either ElaborationError Text
+renderNamedType name [] = Right name
+renderNamedType name arguments = do
+  rendered <- mapM renderTypeArgument arguments
+  Right (name <> "[" <> Text.intercalate "," rendered <> "]")
 
-renderExpression :: Located SurfaceExpression -> Text
-renderExpression expression =
+renderTypeArgument :: Located SurfaceExpression -> Either ElaborationError Text
+renderTypeArgument expression =
   case locatedValue expression of
-    VariableExpression name -> name
-    IntegerExpression literal -> Text.pack (show literal)
-    BooleanExpression True -> "true"
-    BooleanExpression False -> "false"
-    UnitExpression -> "unit"
-    FieldExpression base field -> renderExpression base <> "." <> field
-    CallExpression name arguments ->
-      name <> "(" <> Text.intercalate "," (map renderExpression arguments) <> ")"
-    BinaryExpression operation left right ->
-      renderExpression left <> renderOperator operation <> renderExpression right
-    _ -> "<surface-expression>"
+    VariableExpression name -> Right name
+    IntegerExpression literal -> Right (Text.pack (show literal))
+    BooleanExpression True -> Right "true"
+    BooleanExpression False -> Right "false"
+    UnitExpression -> Right "unit"
+    TupleExpression values -> do
+      rendered <- mapM renderTypeArgument values
+      Right ("(" <> Text.intercalate "," rendered <> ")")
+    FieldExpression base field -> do
+      renderedBase <- renderTypeArgument base
+      Right (renderedBase <> "." <> field)
+    CallExpression name arguments -> do
+      rendered <- mapM renderTypeArgument arguments
+      Right (name <> "(" <> Text.intercalate "," rendered <> ")")
+    BinaryExpression operation left right -> do
+      renderedLeft <- renderTypeArgument left
+      renderedRight <- renderTypeArgument right
+      Right
+        ("(" <> renderedLeft <> renderOperator operation <> renderedRight <> ")")
+    other -> Left
+      (ElaborationError
+        (locatedSpan expression)
+        (UnsupportedOpaqueTypeArgument other))
   where
     renderOperator Add = "+"
     renderOperator Subtract = "-"
