@@ -1,0 +1,13 @@
+component BadPendingCommit(s0 : Server[Upload]) {
+    let pendingHello = receive_frame(s0)
+        or fail transport
+
+    let otherRaw = fixture_bytes()
+    let parsedOther = recognize Hello from otherRaw
+        or reject fixture_invalid
+
+    commit_receive pendingHello using parsedOther
+    // reject: PendingRecv is tied to its own frame_id, but parsedOther proves
+    // recognition of unrelated bytes; unrestricted proof reuse cannot
+    // discharge the wrong linear pending resource
+}

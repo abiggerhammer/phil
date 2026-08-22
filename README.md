@@ -28,37 +28,26 @@ Phil is part of the broader Logics to Order research program. It starts from sys
 
 ## Current implementation slice
 
-Phase 0 is complete as a design snapshot. The first executable implementation target is a small Phil Core checker over the accepted residual-resource contexts:
+Phase 0 is complete as a design snapshot. The executable implementation has grown from the original resource kernel through sessions, recognition, refinements/evidence, focusing, checked decision certificates, obligation disposition, and now the first trusted Phil source front end.
 
-```text
-Σ ; Γ ; A ; Δ
-```
-
-This repository begins with the resource kernel that later checking judgments depend on:
-
-- unrestricted (`Γ`), affine (`A`), and linear (`Δ`) bindings;
-- exact affine/linear consumption;
-- scoped shared loans over affine and linear owners;
-- continuing-branch residue joins;
-- detection of unconsumed linear resources;
-- stable obligation IDs and conflict detection.
-
-The parser, surface elaborator, session-head rules, recognition/validation boundary, refinement discharge, assurance-ledger verifier, and lowering pipeline are intentionally not faked in the bootstrap commit. They will be added against the accepted Phase 0 semantics.
+The exact implemented/non-goal boundary is maintained in `docs/implementation-status.md`. The parser now accepts the accepted upload witnesses and all twenty intentionally rejected Phase 0 programs as syntax; semantic rejection remains assigned to the competent later checker layer.
 
 ## Repository map
 
-- `src/Phil/Core/` — executable checker kernel
-- `app/` — tiny checker bootstrap executable
-- `test/` — conformance tests for the implemented kernel slice
+- `src/Phil/Core/` — executable Phil Core checker kernel
+- `src/Phil/Surface/` — location-preserving Phase 0 parser and deterministic fragment elaborator
+- `app/` — checker/bootstrap executable and parse-only CLI entry point
+- `test/` — conformance tests for the implemented checker/front-end slices
 - `docs/implementation-status.md` — implemented vs. still-open checker surface
 - `docs/phase-0/` — checker-facing Phase 0 snapshot imported from the durable research corpus
 - `examples/upload/` — successful upload demonstrator source sketches
+- `examples/rejected/` — semantically rejected Phase 0 source witnesses
 
 The complete Phase 0 design corpus remains in the durable research archive while it is migrated into Git history. For live implementation state, this repository is intended to become the source of truth.
 
 ## Build
 
-The bootstrap is a Cabal package:
+The implementation is a Cabal package:
 
 ```sh
 cabal build all
@@ -66,7 +55,13 @@ cabal test all
 cabal run phil-core
 ```
 
-The package currently has no parser and does not accept `.phil` source on stdin. `phil-core` is a smoke-test executable for the Core resource kernel.
+The trusted surface parser can be exercised directly without claiming semantic acceptance:
+
+```sh
+cabal run phil-core -- parse examples/upload/client.phil
+```
+
+A successful `parse` command means only that the complete input is syntactically valid Phil and that source locations were recorded. Whole-component semantic checking of parsed source is the next slice.
 
 ## Naming
 

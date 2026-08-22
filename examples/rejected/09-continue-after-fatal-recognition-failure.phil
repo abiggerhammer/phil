@@ -1,0 +1,19 @@
+component BadFailureReuse {
+    let (pending, raw) = receive_frame(s0)
+        or fail transport
+
+    decide recognize Begin from raw {
+        success(parsedBegin) => {
+            let begin = parsedBegin.value
+            let s1 = commit_receive pending using parsedBegin
+            use(begin, s1)
+        }
+
+        failure(err) => {
+            fail recognition(err) on pending
+            commit_receive pending using forgedParsedBegin
+            // reject: fatal recognition handling consumed pending;
+            // no semantic successor endpoint can be constructed afterward
+        }
+    }
+}

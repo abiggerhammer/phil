@@ -1,0 +1,9 @@
+component BadCapabilityCopy(cap : StoreCap[artifact]) {
+    // StoreCap is declared affine by its capability type.
+    let cap2 = cap
+    let cap3 = cap
+    // reject: the first move consumes the affine authority binding;
+    // contraction would manufacture a second store/delegation capability
+    authorize_store(cap2)
+    delegate(cap3)
+}

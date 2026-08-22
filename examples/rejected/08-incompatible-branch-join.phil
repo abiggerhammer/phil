@@ -1,0 +1,11 @@
+component BadJoin {
+    // assume s0 : select { left : SLeft, right : SRight }
+    // with SLeft not definitionally equal to SRight
+    let s1 = decide condition {
+        true  => select left on s0
+        false => select right on s0
+    }
+    continue_with_common_state(s1)
+    // reject: both arms are individually legal, but their continuing
+    // endpoint residues have incompatible session types and cannot rejoin
+}

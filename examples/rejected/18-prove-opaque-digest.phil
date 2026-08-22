@@ -1,0 +1,6 @@
+component BadOpaqueProof(begin, payload) {
+    let digestEvidence = prove DigestMatches(begin, payload.id)
+    // reject: DigestMatches is opaque in Phase 0; the refinement solver
+    // cannot construct this evidence. Use the declared digest validator.
+    return digestEvidence
+}

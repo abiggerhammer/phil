@@ -1,0 +1,13 @@
+component BadPrematureAcceptance(begin, beginPolicy, s0) {
+    let (s1, payload) = receive_exact begin.length on s0
+        using beginPolicy
+
+    decide store(payload) {
+        failure(err) => fail internal(err) on s1
+        success(id) => {
+            select accepted(id) on s1
+            // reject: accepted requires matching DigestMatches evidence.
+            // Storage success does not establish the opaque integrity claim.
+        }
+    }
+}

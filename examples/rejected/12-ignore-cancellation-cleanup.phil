@@ -1,0 +1,9 @@
+component BadCancellationCleanup {
+    let (scope, cancel) = new_cancellation_scope()
+    let buffer = allocate_linear_buffer(1024)
+
+    return unit
+    // reject: CancelCap is affine and may be unused, but the linear
+    // cancellation scope and owned buffer still have unresolved cleanup.
+    // Losing cancellation authority does not discharge either obligation.
+}
