@@ -1,4 +1,4 @@
-From Phil.Systems Require Import ScalarDataflow Storage.
+From Phil.Systems Require Import ScalarDataflow DigestValidation Storage.
 From Phil.LLVM Require Import DigestValidation RuntimeSymbolIdentity.
 
 (*
