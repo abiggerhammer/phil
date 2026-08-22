@@ -5,12 +5,13 @@
 
 #define PHIL_FINAL_BYTES_MAX 32u
 #define PHIL_UPLOAD_ID_BYTES 16u
+#define PHIL_CHOICE_BYTES 1u
 
 struct phil_transport_impl {
-  bool has_choice;
-  uint8_t incoming_choice;
-  bool selected;
-  uint8_t selected_choice;
+  uint8_t incoming_choice[PHIL_CHOICE_BYTES];
+  size_t incoming_choice_length;
+  uint8_t outgoing_choice[PHIL_CHOICE_BYTES];
+  size_t outgoing_choice_length;
   uint8_t final_bytes[PHIL_FINAL_BYTES_MAX];
   size_t final_length;
 };
@@ -61,48 +62,52 @@ void *phil_smoke_configure_client(
 void *phil_smoke_configure_server(uint8_t incoming_choice) {
   reset_state();
   smoke_state.mode = PHIL_SMOKE_SERVER;
-  smoke_state.server_transport.has_choice = true;
-  smoke_state.server_transport.incoming_choice = incoming_choice;
+  smoke_state.server_transport.incoming_choice[0] = incoming_choice;
+  smoke_state.server_transport.incoming_choice_length = PHIL_CHOICE_BYTES;
   return &smoke_state.server_transport;
 }
 
 void *phil_smoke_configure_server_empty(void) {
   reset_state();
   smoke_state.mode = PHIL_SMOKE_SERVER;
-  smoke_state.server_transport.has_choice = false;
+  smoke_state.server_transport.incoming_choice_length = 0u;
   return &smoke_state.server_transport;
 }
 
 bool phil_smoke_client_choice_observed(uint8_t expected_choice) {
   return smoke_state.mode == PHIL_SMOKE_CLIENT
       && smoke_state.select_choice_calls == 1u
-      && smoke_state.client_transport.selected
-      && smoke_state.client_transport.selected_choice == expected_choice;
+      && smoke_state.client_transport.outgoing_choice_length == PHIL_CHOICE_BYTES
+      && smoke_state.client_transport.outgoing_choice[0] == expected_choice;
 }
 
 bool phil_smoke_server_choice_observed(uint8_t expected_choice) {
   return smoke_state.mode == PHIL_SMOKE_SERVER
       && smoke_state.receive_choice_calls == 1u
-      && smoke_state.server_transport.has_choice
-      && smoke_state.server_transport.incoming_choice == expected_choice;
+      && smoke_state.server_transport.incoming_choice_length == PHIL_CHOICE_BYTES
+      && smoke_state.server_transport.incoming_choice[0] == expected_choice;
 }
 
 void phil_runtime_select_payload_cancel(void *transport, uint8_t choice) {
   struct phil_transport_impl *target = transport;
   if (target != &smoke_state.client_transport) abort();
   if (choice != 0x00u && choice != 0x01u) abort();
-  target->selected = true;
-  target->selected_choice = choice;
+  if (target->outgoing_choice_length != 0u) abort();
+  target->outgoing_choice[0] = choice;
+  target->outgoing_choice_length = PHIL_CHOICE_BYTES;
   smoke_state.select_choice_calls += 1u;
 }
 
 bool phil_runtime_receive_payload_cancel(void *transport) {
   struct phil_transport_impl *source = transport;
+  uint8_t choice;
   if (source != &smoke_state.server_transport) abort();
   smoke_state.receive_choice_calls += 1u;
-  if (!source->has_choice) abort();
-  if (source->incoming_choice == 0x01u) return true;
-  if (source->incoming_choice == 0x00u) return false;
+  if (source->incoming_choice_length != PHIL_CHOICE_BYTES) abort();
+  choice = source->incoming_choice[0];
+  source->incoming_choice_length = 0u;
+  if (choice == 0x01u) return true;
+  if (choice == 0x00u) return false;
   abort();
 }
 
