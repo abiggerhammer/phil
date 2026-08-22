@@ -73,6 +73,10 @@ data SystemsVerificationError
   | SessionOfferEmptyArms Text BlockId
   | SessionOfferPayloadMissing Text BlockId Text ValueId
   | SessionOfferPayloadTargetNotDedicated Text BlockId Text BlockId [BlockId]
+  | SessionSelectTransportMissing Text BlockId ValueId
+  | SessionSelectTransportRoleMismatch Text BlockId ValueId SystemsValueRole
+  | SessionSelectEmptyLabel Text BlockId
+  | SessionSelectPayloadMissing Text BlockId Text ValueId
   | CopyWithoutCopyDecision Text BlockId DecisionId
   | BorrowWithoutBorrowDecision Text BlockId DecisionId
   | OperationReferencesUnknownDecision Text BlockId DecisionId
@@ -317,6 +321,7 @@ operationDecision operation = case operation of
   OpReleaseOwner { releaseDecision = lowering } -> Just lowering
   OpCleanupPartial { cleanupDecision = lowering } -> Just lowering
   OpRuntimeCall { runtimeCallDecision = lowering } -> Just lowering
+  OpSessionSelect { sessionSelectDecision = lowering } -> Just lowering
   OpCopy { copyDecision = lowering } -> Just lowering
   OpEraseFact { eraseDecision = lowering } -> Just lowering
   OpDiagnostic { diagnosticDecision = lowering } -> Just lowering
@@ -346,6 +351,17 @@ verifyOperationShape program functionKey function blockKey recognitionTargets op
       case Map.lookup pending recognitionTargets of
         Just (successBlock, _) | successBlock == blockKey -> pure ()
         _ -> Left (OrphanCommitIngress functionKey blockKey pending)
+    OpSessionSelect transport label payload _ -> do
+      case Map.lookup transport (systemsFunctionValues function) of
+        Nothing -> Left (SessionSelectTransportMissing functionKey blockKey transport)
+        Just SystemsValue { systemsValueRole = TransportHandle } -> pure ()
+        Just value -> Left (SessionSelectTransportRoleMismatch
+          functionKey blockKey transport (systemsValueRole value))
+      when (Text.null label) $
+        Left (SessionSelectEmptyLabel functionKey blockKey)
+      forM_ payload $ \payloadId ->
+        unless (Map.member payloadId (systemsFunctionValues function)) $
+          Left (SessionSelectPayloadMissing functionKey blockKey label payloadId)
     OpDestroyPending pending _ _ ->
       case Map.lookup pending recognitionTargets of
         Just (_, failureBlock) | failureBlock == blockKey -> pure ()
@@ -485,6 +501,7 @@ operationUsesTransport operation = case operation of
   OpReceiveFrame {} -> True
   OpCommitIngress {} -> True
   OpRuntimeCall { runtimeCallInputs = inputs } -> not (null inputs)
+  OpSessionSelect {} -> True
   _ -> False
 
 blockContainsDestroy :: SystemsFunction -> BlockId -> ValueId -> Bool
