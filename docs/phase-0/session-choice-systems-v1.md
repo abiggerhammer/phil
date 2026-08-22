@@ -4,6 +4,8 @@ Status: implementation candidate
 
 This slice corrects a Systems-layer information loss in the final client response. Phil Core already represents session branches as a semantic label, optional payload binder/type, and continuation. The historical Phase 0 Systems graph collapsed the final external choice to an anonymous runtime Boolean and therefore lost both branch payloads.
 
+The historical Phase 0 and already-certified server/runtime artifacts are not mutated in place; this is a successor Systems candidate derived from the merged rejected-response/storage lineage.
+
 ## Systems commitment
 
 Systems represents session choice by semantic labels, branch-local payload identity, and continuation control flow. Discriminator representation and payload layout are target decisions.
