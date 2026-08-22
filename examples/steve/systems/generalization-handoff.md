@@ -11,18 +11,21 @@ Baseline for this handoff:
 
 This document turns the four gaps identified in `lowering-contract.md` into a concrete Haskell/Rocq handoff. The goal is not to make the existing verifier accept Steve by special case. The goal is to generalize the current property-directed Systems representation so that Steve can be expressed without lying about assumptions, physical runtime cost, authority, or evidence subject identity.
 
+ADR-012 is now an accepted cross-cutting constraint on this work. The host/CPU and LLVM call shapes used in the current Phase 0 examples are target-specific realizations, not definitions of the generic Systems abstractions. Execution placement, data movement, synchronization, representation changes, and execution-domain capabilities must remain explicit where a selected execution topology requires them.
+
 ## Invariants for the generalization
 
 Any implementation should preserve these constraints:
 
 1. Existing Phase 0/upload Systems artifacts remain valid singleton cases of the generalized representation.
 2. No generic Systems/LLVM module contains Steve-specific names, filename switches, obligation IDs, or provider names.
-3. A physical runtime operation is represented once. Runtime primitive/signature identity, physical program-site identity, and assurance claim identity are distinct; multiple logical claims must not force duplicated calls, branches, linker symbols, or cost.
+3. A Systems physical runtime mechanism is represented once as an assurance- and cost-bearing site. Runtime primitive/signature identity, physical site identity, and assurance claim identity are distinct; multiple logical claims must not force duplicated physical mechanisms or cost. The backend realization of a site is target-specific and need not generically be a single function call.
 4. Assumptions remain content-addressed assurance nodes with explicit validity scope; they are never collapsed to prose such as `"delegated to provider"`.
 5. Negative authority claims are about what capability is possessed, not merely about which calls happen to appear in one program.
-6. Persistent assurance subjects bind to stable owner/storage identity. Borrowed views may be observation mechanisms but must not silently become persistent identities.
+6. Persistent assurance subjects bind to stable semantic owner/object identity, not to a borrow token, machine address, execution-domain placement, or one runtime representation. Borrowed views and target representations may be observation mechanisms but must not silently become persistent identities.
 7. Existing ADR-010 erasure discipline remains unchanged: no `OpEraseFact` without an exact selected erasure use and surviving semantic carrier.
-8. Current Systems and LLVM proof obligations should be generalized monotonically: the existing one-claim/singleton cases should follow as special cases rather than being replaced by unrelated theorems.
+8. Current Systems and LLVM proof obligations should be generalized monotonically: the existing one-claim/singleton host cases should follow as special cases rather than being replaced by unrelated theorems.
+9. The generic representation must not require one coherent address space, one sequential control thread, invisible/cost-free transfer, or a canonical runtime representation. Any such simplification belongs to a selected execution topology or target-specific lowering after the ADR-012 boundary.
 
 ## Generalization 1: first-class assumption dependencies on stage facts
 
@@ -134,25 +137,37 @@ data RuntimeSiteRef = RuntimeSiteRef
   }
 ```
 
-The exact Haskell spelling is not normative. `runtimeClaimSubjects` is described under Generalization 4; it may be introduced in the same tranche or immediately after the multi-claim shape.
+The exact Haskell spelling is not normative. In particular, `RuntimePrimitiveRef` must not imply a linker symbol, C ABI call, coherent host address space, or single-instruction backend realization; it denotes the selected Systems execution-topology mechanism/operation and the target-relevant profile needed to validate its realization. `runtimeClaimSubjects` is described under Generalization 4; it may be introduced in the same tranche or immediately after the multi-claim shape.
 
 ### Identity separation
 
 PR #43 exposed a cross-layer consequence of this generalization before the first recognized-record ABI implementation artifact existed. The generalized model must preserve three independent identities:
 
-> runtime primitive/signature identity != physical program-site identity != assurance claim identity
+> runtime primitive/signature identity != physical Systems-site identity != assurance claim identity
 
-A runtime primitive identifies the semantic/physical operation family together with its ABI-relevant signature/profile. A physical site identifies one program invocation site and carries its physical cost attribution. The claim set identifies the exact logical assurance bindings justified at that site. None is derivable from either of the others.
+A runtime primitive identifies the semantic/physical operation family together with the selected execution-domain/ABI-relevant profile. A physical site identifies one assurance- and cost-bearing mechanism in the chosen Systems execution topology. The claim set identifies the exact logical assurance bindings justified at that site. None is derivable from either of the others.
 
 Therefore:
 
-- multiple distinct physical sites may invoke the same runtime primitive symbol;
+- multiple distinct physical sites may use the same runtime primitive/mechanism profile;
 - one physical site may justify multiple exact assurance claims;
 - adding, removing, or reordering assurance claims must not by itself rename the runtime primitive or duplicate physical execution/cost;
-- changing the primitive ABI signature/profile must change the bound primitive/profile identity even when the claim set is unchanged;
-- linker-visible runtime symbols must not be derived from `RevisionId`, `EvidenceEntryId`, `AssuranceUseId`, or claim-set cardinality/order.
+- changing the primitive ABI/execution profile must change the bound primitive/profile identity even when the claim set is unchanged;
+- linker-visible runtime symbols, when a target has them, must not be derived from `RevisionId`, `EvidenceEntryId`, `AssuranceUseId`, or claim-set cardinality/order.
 
-This is not merely a symbol-naming convention. It is the representation boundary that prevents a contingent assurance decomposition from becoming a physical ABI commitment. Semantic operation names such as a schema field accessor may still appear in a symbol when they describe the operation actually being performed; assurance bookkeeping identities may not.
+This is not merely a symbol-naming convention. It is the representation boundary that prevents a contingent assurance decomposition from becoming a physical ABI or execution-topology commitment. Semantic operation names such as a schema field accessor may still appear in a symbol when they describe the operation actually being performed; assurance bookkeeping identities may not.
+
+### ADR-012 execution-topology constraint
+
+The generic meaning of a physical site must remain execution-topology-neutral. ADR-012 makes the Systems IR the layer where a chosen execution topology becomes explicit, but it does not define physical mechanisms as host function calls. Depending on the selected domain, a mechanism may be realized below Systems as a host runtime call, accelerator operation, kernel/graph node, pipeline stage, synchronization-delimited region, or another target-specific construct.
+
+The required invariant is therefore not globally “one Systems site equals one backend call instruction.” It is:
+
+> one Systems site remains one exact assurance/cost-bearing mechanism in the selected execution topology, and the target lowering provides an explicit realization relation for that site without manufacturing or losing claim authority or attributable cost.
+
+A target realization may be structurally composite below the Systems boundary. If it is, the lowering/certification relation must identify the whole realization with the exact Systems site and account for any target-required transfers, synchronization, staging, representation conversion, or other costs. Claim multiplicity must never be used as a reason to duplicate that realization.
+
+For the current Phase 0 host/LLVM target, the selected ABI specializes this rule to one Systems runtime site -> one corresponding LLVM runtime call site. That host specialization must not leak back into the generic `RuntimeSiteRef` ontology or Rocq theorem statement.
 
 ### Verifier requirements
 
@@ -164,9 +179,11 @@ For each physical site:
 - the physical cost ref is authorized by each claim's selected runtime evidence where the claim asserts that physical mechanism;
 - expected runtime-site kind checks remain exact;
 - no claim may be added merely because an evidence entry happens to share a cost string;
-- the physical site identity remains distinct from the primitive identity, so two sites invoking the same primitive cannot collapse into one site;
-- the primitive identity is determined by operation/signature/profile rather than assurance IDs or claim-set shape;
-- changing only the exact claim set cannot by itself change the primitive/symbol identity or multiply the physical site.
+- the physical site identity remains distinct from the primitive identity, so two sites using the same primitive cannot collapse into one site;
+- the primitive identity is determined by operation/execution profile/signature rather than assurance IDs or claim-set shape;
+- changing only the exact claim set cannot by itself change the primitive identity or multiply the physical site;
+- site identity is not derived from a backend instruction address, linker symbol, host pointer, or other target-local representation artifact;
+- when target lowering represents one site with a composite backend realization, the exact realization relation and total attributable cost remain bound to that one site.
 
 For retained-runtime uses, generalize the PR #31 rule from "one use -> one matching singleton site" to:
 
@@ -178,18 +195,18 @@ Several distinct uses may map to the same physical site. The reverse relation is
 
 Generalize `proof/Phil/Systems/Runtime.v` to model physical sites with claim sets. The key theorem should preserve per-use uniqueness while allowing multiple uses to inhabit one site. Existing singleton Phase 0 sites should prove the generalized theorem directly.
 
-The normalized model should not identify sites merely because they share a primitive/signature, nor identify primitive identity with any assurance claim. If symbol construction is modeled, its inputs should be the primitive operation/profile/signature rather than evidence/revision/use identity.
+The normalized Systems theorem should be phrased in terms of site/mechanism identity, claims, and cost rather than host call instructions. A separate target-preservation theorem may specialize the relation to one LLVM call for the current host ABI. The normalized model should not identify sites merely because they share a primitive/signature, nor identify primitive identity with any assurance claim. If symbol construction is modeled, its inputs should be the primitive operation/profile/signature rather than evidence/revision/use identity.
 
-### Downstream LLVM consequence
+### Downstream target-lowering consequence
 
-PR #33/#35 make runtime-site preservation part of the LLVM translation-validation/certification chain, and PR #43 makes the identity split explicit at the ABI boundary. The LLVM boundary must preserve **physical site multiplicity and the exact claim set** without using assurance IDs to determine the runtime linker symbol.
+PR #33/#35 make runtime-site preservation part of the LLVM translation-validation/certification chain, and PR #43 makes the identity split explicit at the ABI boundary. ADR-012 requires the generic target relation to preserve the Systems physical mechanism without making host call structure universal.
 
-Translation validation should therefore check two distinct properties:
+At the target boundary, validation should check two distinct properties:
 
-1. **physical operation preservation** — each Systems physical site maps to exactly one corresponding LLVM call site with the expected primitive/signature/profile and physical cost identity; distinct Systems sites remain distinct even when they invoke the same primitive symbol;
-2. **claim-set preservation** — every exact `(revision,evidence,subject...)` binding attached to that Systems site survives in the LLVM-side verification relation, without manufacturing extra calls or changing the primitive symbol merely because the claim set changed.
+1. **physical mechanism preservation** — the exact Systems site has one declared target realization with the expected primitive/execution profile and attributable cost; distinct Systems sites remain distinct even when they use the same primitive/profile, and any composite target realization is explicitly bound as one site's realization;
+2. **claim-set preservation** — every exact `(revision,evidence,subject...)` binding attached to that Systems site survives in the target-side verification relation, without manufacturing extra mechanisms or changing target primitive identity merely because the claim set changed.
 
-If the normalized `PHIL-LLVM-PRESERVE-001` model counts runtime sites, generalize it so the count remains a count of physical mechanisms and claim-set identity is checked separately. The concrete Phase 0 certification should remain green as a singleton instance.
+For the current host/LLVM target, physical-mechanism preservation specializes further: each Systems runtime site maps to exactly one corresponding LLVM runtime call site with the expected primitive/signature/profile and physical cost identity. If the normalized `PHIL-LLVM-PRESERVE-001` model counts runtime sites, the count remains a count of Systems physical mechanisms and claim-set identity is checked separately. The concrete Phase 0 certifications should remain green as singleton host instances.
 
 ### Adversarial tests
 
@@ -200,20 +217,22 @@ Reject at least:
 - duplicate `(revision,evidence)` within one site;
 - retained use missing from every physical site's claim set;
 - retained use appearing in two physical sites;
-- shared physical site split into duplicate calls solely to satisfy two claims;
+- shared physical site split into duplicate target mechanisms solely to satisfy two claims;
 - physical cost ref inconsistent with one of the claims;
-- LLVM target that preserves the calls but drops or mutates one claim binding;
+- target artifact that preserves the mechanism but drops or mutates one claim binding;
 - changing a runtime primitive symbol solely because a second assurance claim is attached;
 - encoding an evidence/revision/use ID into a runtime primitive symbol;
-- collapsing two distinct physical sites merely because they invoke the same primitive/signature;
-- changing the primitive ABI signature without changing the bound runtime ABI/profile identity.
+- collapsing two distinct physical sites merely because they use the same primitive/signature/profile;
+- changing the primitive ABI/execution profile without changing the bound target profile identity;
+- treating a backend call address, symbol, instruction ID, or pointer as the generic physical-site identity;
+- using a composite target realization without an explicit relation tying the whole realization and its total attributable cost back to the exact Systems site.
 
 Steve acceptance examples:
 
 - `get.digest_check`: one physical SHA-256 validation site carrying `STEVE-GET-DIGEST` and `STEVE-CORRUPTION-FAILS` claims;
 - `put.existing.digest_check`: one physical SHA-256 validation site carrying `STEVE-COLLISION-FAILS` and the relevant corruption-rejection claim.
 
-Those two sites may legitimately invoke the same digest-validation primitive/signature while remaining distinct physical sites because they occur at different program locations and under different dynamic conditions. Conversely, each site remains one physical execution even when its claim set contains multiple logical obligations.
+For Steve 0's selected host/CPU execution topology, those two sites may legitimately invoke the same digest-validation runtime primitive/signature while remaining distinct physical sites because they occur at different program locations and under different dynamic conditions. Conversely, each site remains one physical execution/cost-bearing mechanism even when its claim set contains multiple logical obligations.
 
 ## Generalization 3: checked provider capability possession and use
 
@@ -257,6 +276,8 @@ Do not make this a Steve-specific enum of `read/install/delete`. Generic text or
 
 For Steve the accepted BlobProvider capability must expose exactly the operations needed by Steve 0 (`read`, atomic no-replace `install-if-absent`) and no replace/delete authority. DigestProvider should similarly expose only the declared digest/check surface.
 
+ADR-012 introduces execution-domain capability as a neighboring Systems concept, but provider authority and execution-domain capability must not be conflated. A provider contract answers which external/provider operations the program may perform; an execution-domain capability answers which placements, representations, synchronization mechanisms, numerical modes, and resources a selected target can support. Both must be explicit when they carry correctness authority.
+
 ### Rocq target
 
 Add a normalized authority/call-surface model proving that successful Systems verification implies every provider operation is authorized by the exact capability possessed at that boundary, and that widening the capability or invoking an unauthorized operation makes verification impossible.
@@ -281,6 +302,8 @@ Reject at least:
 
 That distinction is central to `STEVE-DIGEST-EVIDENCE-IDENTITY`: a digest claim must survive the borrow scope and therefore cannot be indexed by the ephemeral view token.
 
+ADR-012 sharpens the requirement further: a stable assurance subject must also survive permitted execution-placement, address-space, and representation changes. Stable subject identity is semantic identity, not pointer/address identity and not a claim that the bytes must forever inhabit one storage class or layout.
+
 ### Target representation
 
 Add an explicit correspondence from assurance-level subject IDs to stable Systems values. Conceptually:
@@ -292,22 +315,28 @@ data AssuranceSubjectBinding = AssuranceSubjectBinding
   }
 ```
 
-The verifier should derive/check the stable storage identity from `assuranceSubjectOwner`; do not accept a free text storage ID with no owning value behind it.
+The verifier should derive/check the stable semantic storage/object identity from `assuranceSubjectOwner`; do not accept a free text storage ID with no owning value behind it. The identity must not be defined by the owner's current machine address, execution domain, storage class, or target representation.
 
 Runtime operation inputs remain the observation mechanism. A digest call may consume/read `BorrowedSlice owner`, while the `RuntimeSiteClaim` binds the persistent assurance subject to `owner` and its `systemsStorageIdentity`.
+
+If a selected execution topology transfers, migrates, stages, or converts the owner's physical representation, that change must be represented by an explicit checked correspondence/refinement showing what semantic subject survives the change. ADR-011/012 costs for transfer, synchronization, staging, or representation conversion remain attributable; equal bytes, pointer reuse, or backend convention alone do not establish subject continuity.
 
 ### Verifier requirements
 
 - the semantic subject ID occurs in the exact selected obligation revision's `revisionSubjectIds`;
 - the bound Systems value exists and is an owning/stable-identity-bearing role where required;
-- the owner has a stable `systemsStorageIdentity`;
+- the owner has a stable semantic `systemsStorageIdentity`;
 - if the runtime mechanism observes through a `BorrowedSlice`, that view aliases the same owner;
 - a borrowed view itself cannot be accepted as the persistent subject of the claim;
-- hidden copies cannot silently change the subject while preserving only equal bytes.
+- hidden copies cannot silently change the subject while preserving only equal bytes;
+- stable subject identity is not inferred from machine address, pointer equality, placement, storage class, or target layout;
+- if placement or representation changes while the assurance subject is preserved, an explicit checked transfer/correspondence relation ties the pre- and post-change values to that same subject and accounts for any live obligations and attributable costs.
 
 ### Rocq target
 
-Extend the ownership/runtime normalized models with a subject-correspondence relation: persistent claim subject -> stable owner/storage identity, with borrow -> owner as an observation relation. Prove that successful verification cannot bind persistent evidence to the borrow token or to an unrelated owner.
+Extend the ownership/runtime normalized models with a subject-correspondence relation: persistent claim subject -> stable semantic owner/object identity, with borrow -> owner as an observation relation. Prove that successful verification cannot bind persistent evidence to the borrow token, to an unrelated owner, or merely to a coincident backend address/representation.
+
+The relation should permit an explicitly witnessed target transfer/representation refinement to preserve the same semantic subject without requiring the physical address, execution domain, storage class, or layout to remain unchanged.
 
 ### Adversarial tests
 
@@ -318,7 +347,10 @@ Reject at least:
 - subject ID absent from the selected revision;
 - observation view aliases a different owner;
 - hidden copy used as the subject while the revision names the original object;
-- correct owner/value but mismatched stable storage identity after target mutation.
+- correct owner/value but mismatched stable storage identity after target mutation;
+- target migration/representation conversion that claims subject continuity without an explicit checked correspondence;
+- pointer/address reuse accepted as proof that two target representations denote the same persistent assurance subject;
+- a transfer or representation conversion whose required ADR-011/012 cost/obligation residue disappears from the lowering account.
 
 ## Cross-layer implementation order
 
@@ -326,29 +358,32 @@ The least disruptive order is:
 
 1. land/finish the generic scalar SSA/dataflow work of PR #36 independently;
 2. generalize Systems fact/assumption representation and `FactDisposition.v`;
-3. generalize physical runtime sites and `Runtime.v`;
+3. generalize physical runtime sites and `Runtime.v`, keeping site/mechanism identity target-neutral and host-call shape target-specific;
 4. add provider capability possession/use plus its normalized authority proof;
-5. add stable assurance-subject binding, preferably integrated with runtime-site claims;
-6. update Systems digests/renderers and all Phase 0 constructors/tests so current artifacts are unchanged semantically;
-7. update LLVM projection/verification and `Preservation.v` only where the generalized Systems metadata crosses that boundary;
-8. re-run the concrete Phase 0 LLVM certification from PR #35 and keep it a singleton instance of the generalized model.
+5. add stable assurance-subject binding, preferably integrated with runtime-site claims and explicitly independent of physical address/placement/representation;
+6. review the generalized datatypes/verifier against ADR-012's no-single-address-space/no-universal-sequential-control/no-free-transfer constraints before freezing their content identities;
+7. update Systems digests/renderers and all Phase 0 constructors/tests so current artifacts are unchanged semantically;
+8. update LLVM projection/verification and `Preservation.v` only where the generalized Systems metadata crosses that boundary, keeping the one-site/one-call rule explicitly scoped to the current host ABI;
+9. re-run the concrete Phase 0 LLVM certifications and keep them singleton host instances of the generalized model.
 
-These may be rearranged if implementation dependencies demand it, but do not use Steve-specific wrappers to avoid touching the generic proof/model layer.
+These may be rearranged if implementation dependencies demand it, but do not use Steve-specific wrappers or host-only representation assumptions to avoid touching the generic proof/model layer.
 
 ## Steve executable Systems promotion after the generalizations land
 
 Only then add a branch-local positive `SystemsArtifact` for the control flow specified in `lowering-contract.md`.
 
+Steve 0 deliberately selects the host/CPU execution topology. Its first positive artifact therefore has host-visible sequential CFG blocks and four host-target physical runtime mechanisms. That selection is a valid ADR-012 target instance, not a definition of generic Systems runtime-site semantics.
+
 The first positive artifact should preserve these physical facts exactly:
 
-- four physical runtime mechanisms, not five;
+- four host-target physical runtime mechanisms, not five;
 - equal-byte retry performs exact byte comparison but no second SHA-256 digest;
 - existing-object SHA-256 validation occurs only after witnessed byte inequality;
 - `GetOk` is reachable only through digest-check acceptance;
 - every failure path disposes of every owned buffer exactly once;
 - BlobProvider authority is read + atomic no-replace install-if-absent, with no replace/delete capability;
-- persistent digest evidence names stable byte-object identity, not borrow identity;
-- runtime primitive/signature identity remains independent of both physical site identity and exact assurance claim-set identity;
+- persistent digest evidence names stable semantic byte-object identity, not borrow identity, pointer/address identity, or one physical placement/layout;
+- runtime primitive/execution-profile identity remains independent of both physical site identity and exact assurance claim-set identity;
 - no proof/evidence wrapper is erased until Steve's assurance graph contains exact selected `ErasureUse` authority.
 
 Then add adversarial mutations covering:
@@ -357,9 +392,11 @@ Then add adversarial mutations covering:
 - missing one claim from a shared physical runtime site;
 - duplicated physical site/cost for a second logical claim;
 - evidence/revision/use identity leaking into a runtime primitive symbol;
-- two distinct physical sites collapsed because they share a primitive/signature;
+- two distinct physical sites collapsed because they share a primitive/signature/profile;
+- backend call/pointer identity substituted for generic site identity;
 - widened BlobProvider authority or invented replace/delete call;
 - digest subject rebound to borrowed view or wrong owner;
+- subject continuity inferred from address/placement/representation without a checked correspondence;
 - equality path rehash;
 - inequality path bypassing existing-object digest validation;
 - get success bypassing digest validation;
@@ -374,17 +411,32 @@ Until the four representation points are implemented and the positive/adversaria
 
 - Steve does not have a certified Systems lowering;
 - Steve does not have an LLVM artifact or native implementation produced by `philc`;
-- PR #35 certifies only the exact canonical Phase 0 Systems -> LLVM pair, not arbitrary Phil programs and not Steve;
-- the branch-local Steve assurance manifest remains a provisional semantic assurance case, not native provider implementation evidence.
+- the existing Phase 0 LLVM certifications bind only their exact canonical source/target/runtime-ABI tuples, not arbitrary Phil programs and not Steve;
+- the branch-local Steve assurance manifest remains a provisional semantic assurance case, not native provider implementation evidence;
+- the current host/CPU sketch does not establish a generic GPU/NPU/FPGA or other heterogeneous execution model for Steve; it only requires the generic Systems abstractions not to preclude those ADR-012 target instances.
+
+## Classification
+
+These findings still do not require a new Steve-specific Phil ADR. They are representation/verifier generalizations required to carry already-accepted Phil decisions through the Systems boundary:
+
+- ADR-001/002/005 define authority, ownership, loans, and per-arm resource behavior;
+- ADR-006 defines opaque claims/evidence and competent runtime producers;
+- ADR-007 requires property-directed Systems representations;
+- ADR-010 makes assumptions/evidence/uses content-addressed and explicit;
+- ADR-011 requires runtime residue and cost attribution to remain explicit;
+- ADR-012 requires execution placement, data movement, synchronization, representation, and target capability to remain explicit at the Systems boundary and forbids generic assumptions of one address space, one sequential control model, or free/passive transfer.
+
+Steve is doing its intended job here: the upload witness established the first Systems vocabulary, and the first independent program is showing exactly where that vocabulary was still upload-shaped. PR #43 is concrete evidence that the pressure test also catches cross-layer leaks early: Generalization 2 changed a runtime ABI rule before the first recognized-record implementation/certification artifact existed. ADR-012 now prevents the fix itself from hardening into a host-only definition of physical-site identity.
 
 ## Definition of done for this handoff
 
 This handoff is satisfied when all of the following are true on `main` without Steve-specific generic code:
 
-1. the generalized Systems IR can represent all four points above faithfully, including the separation of runtime primitive/signature, physical site, and exact assurance claim identities;
+1. the generalized Systems IR can represent all four points above faithfully, including separation of runtime primitive/execution profile, physical Systems site, and exact assurance claim identities without defining site identity as a host call/address artifact;
 2. the Haskell verifier rejects the listed generic adversarial cases;
-3. Rocq proofs cover the generalized fact-assumption, runtime-site, provider-authority, and stable-subject rules;
-4. existing Phase 0 Systems/LLVM fixtures and concrete PR #35 certification remain green;
-5. the Steve branch can construct one honest positive Systems artifact with four physical runtime sites and twelve source obligation facts, and the Steve mutation suite fails closed.
+3. Rocq proofs cover the generalized fact-assumption, runtime-site, provider-authority, and stable-subject rules with the host one-call and fixed-address cases only as specializations where selected;
+4. existing Phase 0 Systems/LLVM fixtures and exact certifications remain green;
+5. the generic representation satisfies ADR-012's heterogeneous-execution constraint: no required coherent address space, universal sequential control, invisible/free transfer, or canonical physical representation;
+6. the Steve branch can construct one honest host/CPU positive Systems artifact with four physical runtime sites and twelve source obligation facts, and the Steve mutation suite fails closed.
 
 At that point Steve stops being only a design pressure test at the Systems boundary and becomes the first independent application exercising the generalized property-directed lowering model.
