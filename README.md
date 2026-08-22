@@ -1,8 +1,8 @@
 # Phil
 
-**Phil is a systems language in which architecture is executable and implementation is replaceable.**
+**Phil** is a systems language in which architecture is executable and implementation is replaceable.
 
-Phil is part of the broader Logics to Order research program. It starts from system boundaries, protocols, authority, and proof obligations, then lowers those meanings toward executable implementations without making one implementation the definition of the system.
+It is part of the broader Logics to Order research program. Phil starts from system boundaries, protocols, authority, and proof obligations, then makes those architectural facts executable and checkable rather than treating a particular implementation as the definition of the system.
 
 ## Core formulations
 
@@ -14,7 +14,7 @@ Phil is part of the broader Logics to Order research program. It starts from sys
 
 > **Phil constructs software top-down from boundaries, protocols, and obligations.**
 
-**Development model**
+**How Phil is used**
 
 > **Prototype → verify → rewrite → certify.**
 
@@ -22,57 +22,36 @@ Phil is part of the broader Logics to Order research program. It starts from sys
 
 > **Phil makes the cost of assurance explicit and erases assurance machinery that has completed its work.**
 
-**Cost placement**
-
 > **Proof should cost at compile time; uncertainty should cost at runtime.**
 
-## Current implementation slice
+## Repository status
 
-Phase 0 is complete as a design snapshot. The first executable implementation target is a small Phil Core checker over the accepted residual-resource contexts:
+This repository currently contains the executable Phase 0 Phil Core checker, the accepted upload witnesses, the rejected conformance corpus, the Rocq proof corpus, and the first trusted Phil source front end.
+
+The source front end parses the Phase 0 witness language with source locations and full-input consumption, then canonically elaborates the refinement/type/value subset whose Core meaning is already executable. Whole-component semantic checking of parsed source is the next slice.
+
+To exercise the parser directly:
 
 ```text
-Σ ; Γ ; A ; Δ
+cabal run phil-core -- parse examples/upload/client.phil
 ```
 
-This repository begins with the resource kernel that later checking judgments depend on:
+A successful `parse` command means only that the file is syntactically valid Phil. It deliberately does **not** claim semantic acceptance.
 
-- unrestricted (`Γ`), affine (`A`), and linear (`Δ`) bindings;
-- exact affine/linear consumption;
-- scoped shared loans over affine and linear owners;
-- continuing-branch residue joins;
-- detection of unconsumed linear resources;
-- stable obligation IDs and conflict detection.
+## Current implementation layers
 
-The parser, surface elaborator, session-head rules, recognition/validation boundary, refinement discharge, assurance-ledger verifier, and lowering pipeline are intentionally not faked in the bootstrap commit. They will be added against the accepted Phase 0 semantics.
+The checker currently has executable support for:
 
-## Repository map
+- unrestricted, affine, and linear resource contexts;
+- scoped shared loans;
+- binary session progression and guarded recursion;
+- path-sensitive process/control checking;
+- recognition-gated grammar-backed receives;
+- bidirectional value checking;
+- restricted refinements, evidence, explicit transport, and sort checking;
+- deterministic focusing and claim elaboration;
+- certificate-checked transparent decision procedures;
+- named obligation disposition at required points;
+- a location-preserving Phase 0 surface parser and deterministic fragment elaborator.
 
-- `src/Phil/Core/` — executable checker kernel
-- `app/` — tiny checker bootstrap executable
-- `test/` — conformance tests for the implemented kernel slice
-- `docs/implementation-status.md` — implemented vs. still-open checker surface
-- `docs/phase-0/` — checker-facing Phase 0 snapshot imported from the durable research corpus
-- `examples/upload/` — successful upload demonstrator source sketches
-
-The complete Phase 0 design corpus remains in the durable research archive while it is migrated into Git history. For live implementation state, this repository is intended to become the source of truth.
-
-## Build
-
-The bootstrap is a Cabal package:
-
-```sh
-cabal build all
-cabal test all
-cabal run phil-core
-```
-
-The package currently has no parser and does not accept `.phil` source on stdin. `phil-core` is a smoke-test executable for the Core resource kernel.
-
-## Naming
-
-- Language: **Phil**
-- Source extension: `.phil`
-- Logical kernel: **Phil Core**
-- `Phil` is a proper name, not an acronym or backronym.
-
-Tool names beyond the bootstrap executable remain provisional.
+See `docs/implementation-status.md` for the exact implemented/non-goal boundary. The Drive design package remains normative for accepted Phase 0 semantics; repository code and proofs are the executable evidence against that design.
