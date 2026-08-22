@@ -141,7 +141,7 @@ Proof.
   intros aliases name result Hresolve Hnondefault.
   unfold resolveNamedType in Hresolve.
   destruct (aliases name) as [aliased |] eqn:Halias.
-  - inversion Hresolve; subst result. exact Halias.
+  - inversion Hresolve; subst result. reflexivity.
   - inversion Hresolve; subst result. contradiction.
 Qed.
 
