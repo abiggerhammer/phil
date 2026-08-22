@@ -26,11 +26,17 @@ main = do
         (certificateCloses llvmRecognizedRecordABICertificationSpec)
     , test "LLVM runtime-symbol Rocq certificate closes its manifest"
         (certificateCloses llvmRuntimeSymbolCertificationSpec)
+    , test "LLVM exact-receive Rocq certificate closes its manifest"
+        (certificateCloses llvmExactReceiveCertificationSpec)
     , test "known Rocq certification profiles resolve" knownProfilesResolve
     , test "proof-bound recognized-record certification closes"
         recognizedRecordProofCertificationCloses
-    , test "proof-bound certification checks proof artifact digests"
+    , test "proof-bound recognized-record certification checks proof artifact digests"
         recognizedRecordProofArtifactTamperRejects
+    , test "proof-bound exact-receive certification closes"
+        exactReceiveProofCertificationCloses
+    , test "proof-bound exact-receive certification checks proof artifact digests"
+        exactReceiveProofArtifactTamperRejects
     , test "missing expected theorem rejects certification" missingTheoremRejects
     , test "cross-profile obligation marker rejects certification" wrongMarkerRejects
     , test "compiled proof object is content-bound" compiledObjectIsBound
@@ -59,6 +65,9 @@ knownProfilesResolve =
     , llvmRecognizedRecordABICertificationSpec
     , llvmRuntimeSymbolCertificationSpec
     ]
+  && knownExactReceiveRocqCertificationSpec
+      (rocqSpecProfile llvmExactReceiveCertificationSpec)
+      == Just llvmExactReceiveCertificationSpec
   where
     resolvesLegacy spec =
       knownRocqCertificationSpec (rocqSpecProfile spec) == Just spec
@@ -105,6 +114,47 @@ recognizedRecordProofCandidates = do
   symbolProof <- either (const Nothing) Just
     (candidate llvmRuntimeSymbolCertificationSpec "symbol-compiled")
   pure (systemsProof, abiProof, symbolProof)
+
+exactReceiveProofCertificationCloses :: Bool
+exactReceiveProofCertificationCloses =
+  case exactReceiveProofCandidates of
+    Just (exactProof, abiProof, symbolProof) ->
+      verifyPhase0ExactReceiveProofCertification exactProof abiProof symbolProof == Right ()
+    Nothing -> False
+
+exactReceiveProofArtifactTamperRejects :: Bool
+exactReceiveProofArtifactTamperRejects =
+  case exactReceiveProofCandidates of
+    Nothing -> False
+    Just (exactProof, abiProof, symbolProof) ->
+      case phase0ExactReceiveProofCertification exactProof abiProof symbolProof of
+        Left _ -> False
+        Right bundle ->
+          let artifact = rocqBundleCertificateArtifact exactProof
+              context0 = exactReceiveProofCertificationContext bundle
+              context = context0
+                { verificationAvailableArtifacts = Map.insert
+                    (artifactReference artifact)
+                    (digestText "tampered-exact-receive-proof-certificate")
+                    (verificationAvailableArtifacts context0)
+                }
+          in case verifyManifest
+              context
+              (exactReceiveProofCertificationLedger bundle)
+              (exactReceiveProofCertificationManifest bundle) of
+              Left ArtifactDigestMismatch {} -> True
+              _ -> False
+
+exactReceiveProofCandidates
+  :: Maybe (RocqCertificationBundle, RocqCertificationBundle, RocqCertificationBundle)
+exactReceiveProofCandidates = do
+  exactProof <- either (const Nothing) Just
+    (candidate llvmExactReceiveCertificationSpec "exact-receive-compiled")
+  abiProof <- either (const Nothing) Just
+    (candidate llvmRecognizedRecordABICertificationSpec "abi-compiled")
+  symbolProof <- either (const Nothing) Just
+    (candidate llvmRuntimeSymbolCertificationSpec "symbol-compiled")
+  pure (exactProof, abiProof, symbolProof)
 
 missingTheoremRejects :: Bool
 missingTheoremRejects =
