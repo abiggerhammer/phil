@@ -14,6 +14,7 @@ import Phil.Core.Syntax
   ( Obligation (..)
   , ObligationId (..)
   , Proposition (..)
+  , RefTerm (..)
   , Ty (..)
   )
 import System.Exit (exitFailure)
@@ -32,7 +33,7 @@ runtimeDispositionPreserved =
   case handoffResolvedObligation handoffConfig runtimeResolved of
     parent : _ ->
       handoffDisposition parent == RuntimeBound runtimeBinding
-        && handoffCanonicalProposition parent == EqualRef
+        && handoffCanonicalProposition parent == equalRef
         && revisionGeneratedFrom (handoffRevision parent) == []
     [] -> False
 
@@ -66,7 +67,7 @@ handoffConfig = HandoffConfig
 runtimeResolved :: ResolvedObligation
 runtimeResolved = ResolvedObligation
   { resolvedObligation = parentObligation
-  , resolvedCanonicalProposition = EqualRef
+  , resolvedCanonicalProposition = equalRef
   , resolvedPrerequisites = [childResolved]
   , resolvedDisposition = RuntimeBound runtimeBinding
   }
@@ -117,10 +118,10 @@ exportObligation = Obligation
 runtimeBinding :: RuntimeBinding
 runtimeBinding = RuntimeBinding
   { runtimeObligationId = obligationId parentObligation
-  , runtimeProposition = EqualRef
+  , runtimeProposition = equalRef
   , runtimeRequiredPoint = obligationRequiredPoint parentObligation
   , runtimeValidator = "test-validator"
-  , runtimeSuccessEvidence = TyProof EqualRef
+  , runtimeSuccessEvidence = TyProof equalRef
   , runtimeFailureClass = "ValidationFailure"
   , runtimeResourceContract = "no ownership change"
   , runtimeCostRef = "test.runtime.cost"
@@ -134,10 +135,8 @@ exportBinding = ExportBinding
   , exportBoundary = "parent.component"
   }
 
--- Keep this proposition nontrivial so the test distinguishes the canonical
--- proposition from the source obligation proposition.
-pattern EqualRef :: Proposition
-pattern EqualRef = Equal (RefNat 1) (RefNat 1)
+equalRef :: Proposition
+equalRef = Equal (RefNat 1) (RefNat 1)
 
 test :: String -> Bool -> IO Bool
 test label passed = do
