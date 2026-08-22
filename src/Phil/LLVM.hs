@@ -11,6 +11,8 @@ module Phil.LLVM
   , module Phil.LLVM.ExactReceiveProofCertification
   , module Phil.LLVM.DigestValidation
   , module Phil.LLVM.DigestValidationCertification
+  , module Phil.LLVM.Storage
+  , module Phil.LLVM.StorageCertification
   ) where
 
 import Phil.LLVM.DigestValidation
@@ -24,4 +26,6 @@ import Phil.LLVM.Phase0
 import Phil.LLVM.RecognizedRecord
 import Phil.LLVM.RecognizedRecordCertification
 import Phil.LLVM.RecognizedRecordProofCertification
+import Phil.LLVM.Storage
+import Phil.LLVM.StorageCertification
 import Phil.LLVM.Verify
