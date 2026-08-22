@@ -13,7 +13,6 @@ module Phil.Systems.PayloadCancelChoice
 import Control.Monad (unless)
 import qualified Data.Map.Strict as Map
 import Data.Text (Text)
-import qualified Data.Text as Text
 import Phil.Assurance.Types
 import Phil.Systems.IR
 import Phil.Systems.SessionChoice
