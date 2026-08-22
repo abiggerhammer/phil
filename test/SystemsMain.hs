@@ -4,7 +4,7 @@ module Main (main) where
 
 import qualified Data.Map.Strict as Map
 import Data.Text (Text)
-import Phil.Assurance
+import Phil.Assurance hiding (LoweringLedgerRootMismatch)
 import Phil.Systems
 import System.Exit (exitFailure)
 
@@ -15,7 +15,7 @@ main = do
     , test "live source fact cannot disappear from stage contract" missingFactRejects
     , test "recognition success cannot expose transport before commit" missingCommitRejects
     , test "recognition cannot be reclassified as validation" recognitionClassRejects
-    , test "wrong protocol edge rejects despite locally well-formed blocks" wrongDigestEdgeRejects
+    , test "wrong protocol edge rejects despite locally well-formed blocks" wrongProtocolEdgeRejects
     , test "systems IR cannot invent a second owner for the same storage" duplicateOwnerRejects
     , test "runtime copy must point to a copy-class lowering decision" hiddenCopyRejects
     , test "runtime-bound validator cannot disappear after certification" missingRuntimeSiteRejects
@@ -71,9 +71,9 @@ recognitionClassRejects =
           { recognizeSite = site { runtimeSiteKind = ValidationBoundary "HelloPolicy" } } }
       _ -> block
 
-wrongDigestEdgeRejects :: Bool
-wrongDigestEdgeRejects =
-  let bad0 = adjustBlock "UploadServer" "server.digest" change phase0SystemsArtifact
+wrongProtocolEdgeRejects :: Bool
+wrongProtocolEdgeRejects =
+  let bad0 = adjustBlock "UploadServer" "server.begin.commit" change phase0SystemsArtifact
       bad = rebindArtifact bad0
   in case verifyRebound bad of
       Left StageRequiredEdgeMissing {} -> True
