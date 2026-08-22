@@ -1,5 +1,5 @@
-From Coq Require Import Strings.String.
-From Coq Require Import Init.Datatypes.
+From Stdlib Require Import Strings.String.
+From Stdlib Require Import Init.Datatypes.
 
 Open Scope string_scope.
 
