@@ -28,8 +28,10 @@ proof/Phil/Systems/Ownership.v
 proof/Phil/Systems/Runtime.v
 proof/Phil/Systems/Scalar.v
 proof/Phil/Systems/ScalarDataflow.v
+proof/Phil/Systems/FieldProjection.v
 proof/Phil/LLVM/Identity.v
 proof/Phil/LLVM/Preservation.v
+proof/Phil/LLVM/FieldProjection.v
 proof/Phil/LLVM/Strengthening.v
 proof/Phil/LLVM/Certification.v
 proof/Phil/LLVM/Scalar.v
