@@ -1,4 +1,4 @@
-From Phil.Systems Require Import Storage.
+From Phil.Systems Require Import Identity Storage.
 From Phil.LLVM Require Import DigestValidation RuntimeSymbolIdentity.
 
 (*
