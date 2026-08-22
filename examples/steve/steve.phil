@@ -17,9 +17,13 @@ component StevePut(
     n : Nat,
     bytes : OwnedBytes[n]
 ) provides PutResult[SHA256] {
+    // Persistent evidence names the stable identity of the owned byte object,
+    // never the temporary borrow used to inspect it.
+    let candidateObject = owned_bytes_identity(bytes)
+
     // Computing the ID is observational: Steve retains ownership of `bytes`.
     let (id, candidateDigestEvidence) = borrow bytes as candidateForDigest {
-        digest_compute(digest, candidateForDigest)
+        digest_compute(digest, candidateObject, candidateForDigest)
     }
 
     // Publication is likewise through a read-only view. This is important:
@@ -57,45 +61,62 @@ component StevePut(
                 }
 
                 found(existing) => {
-                    // First distinguish corruption from an actual digest
-                    // collision. Different bytes under an ID whose digest does
-                    // not match the ID are corrupt storage, not a collision.
-                    let existingDigestResult = borrow existing as existingView {
-                        digest_check(digest, id, existingView)
+                    let existingObject = owned_bytes_identity(existing)
+
+                    // Compare exact bytes first. The ordinary idempotent retry
+                    // path therefore does not pay for a second digest.
+                    let comparison = borrow bytes as candidateView {
+                        borrow existing as existingView {
+                            bytes_compare(
+                                candidateObject,
+                                candidateView,
+                                existingObject,
+                                existingView
+                            )
+                        }
                     }
 
-                    decide existingDigestResult {
-                        rejected(reason) => {
+                    decide comparison {
+                        equal(equalEvidence) => {
+                            // equalEvidence establishes exact byte equality for
+                            // the two stable byte-object identities.
                             release bytes
                             release existing
-                            return construct PutExistingObjectCorrupt {
+                            return construct PutOk {
                                 id = id,
-                                reason = reason
+                                evidence = candidateDigestEvidence
                             }
                         }
 
-                        accepted(existingDigestEvidence) => {
-                            let sameBytes = borrow bytes as candidateView {
-                                borrow existing as existingView {
-                                    bytes_equal(candidateView, existingView)
-                                }
+                        different(differentEvidence) => {
+                            // Only differing bytes need a digest check. If the
+                            // existing object fails it, storage is corrupt. If
+                            // it passes too, we have observed a real collision.
+                            let existingDigestResult = borrow existing as existingView {
+                                digest_check(
+                                    digest,
+                                    id,
+                                    existingObject,
+                                    existingView
+                                )
                             }
 
-                            decide sameBytes {
-                                true => {
+                            decide existingDigestResult {
+                                rejected(reason) => {
                                     release bytes
                                     release existing
-                                    return construct PutOk {
+                                    return construct PutExistingObjectCorrupt {
                                         id = id,
-                                        evidence = candidateDigestEvidence
+                                        reason = reason
                                     }
                                 }
 
-                                false => {
+                                accepted(existingDigestEvidence) => {
                                     release bytes
                                     release existing
                                     return construct PutDigestCollision {
                                         id = id,
+                                        inequality = differentEvidence,
                                         existingEvidence = existingDigestEvidence,
                                         candidateEvidence = candidateDigestEvidence
                                     }
@@ -138,8 +159,9 @@ component SteveGet(
         }
 
         found(bytes) => {
+            let byteObject = owned_bytes_identity(bytes)
             let digestResult = borrow bytes as bytesView {
-                digest_check(digest, id, bytesView)
+                digest_check(digest, id, byteObject, bytesView)
             }
 
             decide digestResult {
@@ -153,9 +175,11 @@ component SteveGet(
 
                 accepted(digestEvidence) => {
                     // The successful result transfers the owned bytes together
-                    // with evidence that they match the requested ContentId.
+                    // with evidence about their stable object identity. The
+                    // ephemeral `bytesView` cannot escape its borrow scope.
                     return construct GetOk {
                         id = id,
+                        object = byteObject,
                         bytes = bytes,
                         evidence = digestEvidence
                     }
