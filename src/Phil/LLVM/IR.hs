@@ -42,6 +42,7 @@ import Phil.Systems.IR
   ( BlockId
   , CompilationProfile (..)
   , InvariantId (..)
+  , RuntimeSiteKind (..)
   , RuntimeSiteRef (..)
   )
 
@@ -81,6 +82,7 @@ data LLVMOp
   | LLVMCleanup Text
   | LLVMPlain Text
   | LLVMScalarLiteral Text ScalarLiteral
+  | LLVMFieldProjection Text Text Text Text ScalarType
   | LLVMStrengtheningOp LLVMStrengtheningId Text
   | LLVMPoison Text
   | LLVMUndef Text
@@ -92,6 +94,8 @@ data LLVMTerminator
   = LLVMJump LLVMBlockId
   | LLVMBranch LLVMBlockId LLVMBlockId
   | LLVMRuntimeBranch RuntimeSiteRef Text LLVMBlockId LLVMBlockId
+  | LLVMRecognizeRecord RuntimeSiteRef Text Text LLVMBlockId LLVMBlockId
+  | LLVMRuntimeScalarBranch RuntimeSiteRef Text Text ScalarType LLVMBlockId LLVMBlockId
   | LLVMReturnScalar Text ScalarType
   | LLVMReturn Text
   | LLVMUnreachable (Maybe LLVMStrengtheningId)
@@ -165,6 +169,8 @@ llvmBlockSuccessors blockValue = case llvmBlockTerminator blockValue of
   LLVMJump target -> [target]
   LLVMBranch yes no -> [yes, no]
   LLVMRuntimeBranch _ _ yes no -> [yes, no]
+  LLVMRecognizeRecord _ _ _ yes no -> [yes, no]
+  LLVMRuntimeScalarBranch _ _ _ _ yes no -> [yes, no]
   LLVMReturnScalar _ _ -> []
   LLVMReturn _ -> []
   LLVMUnreachable _ -> []
@@ -184,6 +190,8 @@ llvmRuntimeSites moduleValue = concat
       | LLVMRuntime site _ <- llvmBlockOps blockValue
       ] <> case llvmBlockTerminator blockValue of
         LLVMRuntimeBranch site _ _ _ -> [site]
+        LLVMRecognizeRecord site _ _ _ _ -> [site]
+        LLVMRuntimeScalarBranch site _ _ _ _ _ -> [site]
         _ -> []
 
 llvmStrengtheningUses :: LLVMModule -> [LLVMStrengtheningId]
@@ -207,6 +215,9 @@ renderLLVMModule moduleValue = Text.unlines $
   <> declarations
   <> concatMap renderFunction (Map.toAscList (llvmFunctions moduleValue))
   where
+    recognizedRecordABI =
+      llvmRuntimeABIProfile moduleValue == "phil-runtime/phase0/recognized-record-v1"
+
     header =
       [ "; Phil canonical pre-optimization LLVM artifact"
       , "; llvm-language=" <> oneLine (llvmLanguageVersion moduleValue)
@@ -240,7 +251,10 @@ renderLLVMModule moduleValue = Text.unlines $
       <> cleanupDeclaration
       <> assumeDeclaration
       <> map renderCallDeclaration (Set.toAscList callNames)
-      <> map renderRuntimeDeclaration (Set.toAscList runtimeEvidence)
+      <> runtimeDeclarations
+      <> map renderFieldProjectionDeclaration (Set.toAscList fieldProjectionSignatures)
+      <> map renderRecognitionDeclaration (Set.toAscList recognitionGrammars)
+      <> map renderScalarRuntimeDeclaration (Set.toAscList scalarRuntimeSignatures)
       <> [""]
 
     allBlocks =
@@ -266,6 +280,12 @@ renderLLVMModule moduleValue = Text.unlines $
       , LLVMCall name <- llvmBlockOps blockValue
       ]
 
+    runtimeDeclarations
+      | recognizedRecordABI =
+          map renderPrimitiveRuntimeDeclaration (Set.toAscList runtimePrimitives)
+      | otherwise =
+          map renderRuntimeEvidenceDeclaration (Set.toAscList runtimeEvidence)
+
     runtimeEvidence = Set.fromList
       ( [ unEvidenceEntryId (runtimeSiteEvidence site)
         | blockValue <- allBlocks
@@ -277,6 +297,35 @@ renderLLVMModule moduleValue = Text.unlines $
            ]
       )
 
+    runtimePrimitives = Set.fromList
+      ( [ runtimePrimitiveSymbol site name
+        | blockValue <- allBlocks
+        , LLVMRuntime site name <- llvmBlockOps blockValue
+        ]
+        <> [ runtimePrimitiveSymbol site name
+           | blockValue <- allBlocks
+           , LLVMRuntimeBranch site name _ _ <- [llvmBlockTerminator blockValue]
+           ]
+      )
+
+    fieldProjectionSignatures = Set.fromList
+      [ (grammar, fieldName, scalarType)
+      | blockValue <- allBlocks
+      , LLVMFieldProjection _ _ grammar fieldName scalarType <- llvmBlockOps blockValue
+      ]
+
+    recognitionGrammars = Set.fromList
+      [ grammar
+      | blockValue <- allBlocks
+      , LLVMRecognizeRecord _ grammar _ _ _ <- [llvmBlockTerminator blockValue]
+      ]
+
+    scalarRuntimeSignatures = Set.fromList
+      [ (primitive, scalarType)
+      | blockValue <- allBlocks
+      , LLVMRuntimeScalarBranch _ primitive _ scalarType _ _ <- [llvmBlockTerminator blockValue]
+      ]
+
     isGenericBranch blockValue = case llvmBlockTerminator blockValue of
       LLVMBranch _ _ -> True
       _ -> False
@@ -286,7 +335,18 @@ renderLLVMModule moduleValue = Text.unlines $
     isCleanup _ = False
 
     renderCallDeclaration name = "declare void @phil_call_" <> symbol name <> "()"
-    renderRuntimeDeclaration evidence = "declare i1 @phil_runtime_" <> symbol evidence <> "()"
+    renderRuntimeEvidenceDeclaration evidence =
+      "declare i1 @phil_runtime_" <> symbol evidence <> "()"
+    renderPrimitiveRuntimeDeclaration primitive =
+      "declare i1 @phil_runtime_" <> symbol primitive <> "()"
+    renderFieldProjectionDeclaration (grammar, fieldName, scalarType) =
+      "declare " <> renderScalarType scalarType
+        <> " @phil_record_" <> symbol grammar <> "_get_" <> symbol fieldName <> "(ptr)"
+    renderRecognitionDeclaration grammar =
+      "declare { i8, ptr } @phil_runtime_recognize_" <> symbol grammar <> "()"
+    renderScalarRuntimeDeclaration (primitive, scalarType) =
+      "declare i1 @phil_runtime_" <> symbol primitive
+        <> "(" <> renderScalarType scalarType <> ")"
 
     renderFunction (functionKey, function) =
       [ "define " <> renderFunctionReturnType function <> " @" <> symbol functionKey <> "() {" ]
@@ -319,12 +379,17 @@ renderLLVMModule moduleValue = Text.unlines $
       LLVMCall name -> ["call void @phil_call_" <> symbol name <> "()"]
       LLVMRuntime site name ->
         [ "; runtime " <> oneLine name
-        , "call i1 @phil_runtime_" <> symbol (unEvidenceEntryId (runtimeSiteEvidence site)) <> "()"
+        , "call i1 @phil_runtime_" <> runtimeCallSymbol site name <> "()"
         ]
       LLVMCleanup name ->
         ["; cleanup " <> oneLine name, "call void @phil_cleanup()"]
       LLVMPlain description -> ["; plain " <> oneLine description]
       LLVMScalarLiteral name literal -> [renderScalarLiteralInstruction name literal]
+      LLVMFieldProjection output record grammar fieldName scalarType ->
+        [ "%" <> symbol output <> " = call " <> renderScalarType scalarType
+            <> " @phil_record_" <> symbol grammar <> "_get_" <> symbol fieldName
+            <> "(ptr %" <> symbol record <> ")"
+        ]
       LLVMStrengtheningOp strengtheningId description ->
         renderStrengthening strengtheningId description
       LLVMPoison description ->
@@ -334,6 +399,10 @@ renderLLVMModule moduleValue = Text.unlines $
       LLVMFreeze description ->
         [ "%phil_freeze_" <> symbol description <> " = freeze i1 undef" ]
       LLVMMetadata description -> ["; !phil " <> oneLine description]
+
+    runtimeCallSymbol site name
+      | recognizedRecordABI = symbol (runtimePrimitiveSymbol site name)
+      | otherwise = symbol (unEvidenceEntryId (runtimeSiteEvidence site))
 
     renderScalarLiteralInstruction name literal =
       case literal of
@@ -376,7 +445,31 @@ renderLLVMModule moduleValue = Text.unlines $
       LLVMRuntimeBranch site name yes no ->
         [ "; runtime-branch " <> oneLine name
         , "%phil_runtime_cond_" <> symbol (unLLVMBlockId (llvmBlockId blockValue))
-            <> " = call i1 @phil_runtime_" <> symbol (unEvidenceEntryId (runtimeSiteEvidence site)) <> "()"
+            <> " = call i1 @phil_runtime_" <> runtimeCallSymbol site name <> "()"
+        , "br i1 %phil_runtime_cond_" <> symbol (unLLVMBlockId (llvmBlockId blockValue))
+            <> ", label %" <> symbol (unLLVMBlockId yes)
+            <> ", label %" <> symbol (unLLVMBlockId no)
+        ]
+      LLVMRecognizeRecord _ grammar record yes no ->
+        let blockSymbol = symbol (unLLVMBlockId (llvmBlockId blockValue))
+            resultName = "%phil_recognition_result_" <> blockSymbol
+            statusName = "%phil_recognition_status_" <> blockSymbol
+            okName = "%phil_recognition_ok_" <> blockSymbol
+            resultType = "{ i8, ptr }"
+        in
+          [ resultName <> " = call " <> resultType
+              <> " @phil_runtime_recognize_" <> symbol grammar <> "()"
+          , statusName <> " = extractvalue " <> resultType <> " " <> resultName <> ", 0"
+          , "%" <> symbol record <> " = extractvalue " <> resultType <> " " <> resultName <> ", 1"
+          , okName <> " = icmp eq i8 " <> statusName <> ", 1"
+          , "br i1 " <> okName
+              <> ", label %" <> symbol (unLLVMBlockId yes)
+              <> ", label %" <> symbol (unLLVMBlockId no)
+          ]
+      LLVMRuntimeScalarBranch _ primitive scalarName scalarType yes no ->
+        [ "%phil_runtime_cond_" <> symbol (unLLVMBlockId (llvmBlockId blockValue))
+            <> " = call i1 @phil_runtime_" <> symbol primitive
+            <> "(" <> renderScalarType scalarType <> " %" <> symbol scalarName <> ")"
         , "br i1 %phil_runtime_cond_" <> symbol (unLLVMBlockId (llvmBlockId blockValue))
             <> ", label %" <> symbol (unLLVMBlockId yes)
             <> ", label %" <> symbol (unLLVMBlockId no)
@@ -385,6 +478,19 @@ renderLLVMModule moduleValue = Text.unlines $
         ["ret " <> renderScalarType scalarType <> " %" <> symbol name]
       LLVMReturn outcome -> ["ret i32 0 ; " <> oneLine outcome]
       LLVMUnreachable _ -> ["unreachable"]
+
+runtimePrimitiveSymbol :: RuntimeSiteRef -> Text -> Text
+runtimePrimitiveSymbol site fallback = case runtimeSiteKind site of
+  RecognitionBoundary grammar -> "recognize_" <> grammar
+  ValidationBoundary claim -> "validate_" <> claim
+  BranchRefinementBoundary claim -> "refine_" <> claim
+  ExactReceiveBoundary -> "receive_exact"
+  ExactSendBoundary -> "send_exact"
+  DigestBoundary -> "digest_validate"
+  StorageBoundary -> "store"
+  SourceSemanticRuntime name
+    | Text.null name -> fallback
+    | otherwise -> name
 
 renderScalarType :: ScalarType -> Text
 renderScalarType scalarType = case scalarType of
