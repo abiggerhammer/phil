@@ -19,6 +19,8 @@ module Phil.LLVM
   , module Phil.LLVM.AcceptedResponseCertification
   , module Phil.LLVM.RejectedResponse
   , module Phil.LLVM.RejectedResponseCertification
+  , module Phil.LLVM.SessionOffer
+  , module Phil.LLVM.SessionOfferCertification
   ) where
 
 import Phil.LLVM.AcceptedResponse
@@ -37,6 +39,8 @@ import Phil.LLVM.RecognizedRecordCertification
 import Phil.LLVM.RecognizedRecordProofCertification
 import Phil.LLVM.RejectedResponse
 import Phil.LLVM.RejectedResponseCertification
+import Phil.LLVM.SessionOffer
+import Phil.LLVM.SessionOfferCertification
 import Phil.LLVM.Storage
 import Phil.LLVM.StorageCertification
 import Phil.LLVM.StorageProofCertification
