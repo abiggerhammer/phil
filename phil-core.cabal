@@ -69,6 +69,7 @@ library
       Phil.Systems.Storage
       Phil.Systems.AcceptedResponse
       Phil.Systems.RejectedResponse
+      Phil.Systems.SessionChoice
       Phil.LLVM.IR
       Phil.LLVM.Lower
       Phil.LLVM.Verify
@@ -497,6 +498,17 @@ test-suite phil-rejected-response-abi-tests
   type:               exitcode-stdio-1.0
   hs-source-dirs:     test
   main-is:            RejectedResponseABIMain.hs
+  build-depends:
+      base >=4.17 && <5,
+      containers >=0.6 && <0.8,
+      phil-core,
+      text >=2.0 && <2.2
+
+test-suite phil-session-choice-tests
+  import:             common-settings
+  type:               exitcode-stdio-1.0
+  hs-source-dirs:     test
+  main-is:            SessionChoiceMain.hs
   build-depends:
       base >=4.17 && <5,
       containers >=0.6 && <0.8,
