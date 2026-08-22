@@ -8,10 +8,12 @@ module Phil.LLVM
   , module Phil.LLVM.RecognizedRecordProofCertification
   , module Phil.LLVM.ExactReceive
   , module Phil.LLVM.ExactReceiveCertification
+  , module Phil.LLVM.ExactReceiveProofCertification
   ) where
 
 import Phil.LLVM.ExactReceive
 import Phil.LLVM.ExactReceiveCertification
+import Phil.LLVM.ExactReceiveProofCertification
 import Phil.LLVM.IR
 import Phil.LLVM.Lower
 import Phil.LLVM.Phase0
