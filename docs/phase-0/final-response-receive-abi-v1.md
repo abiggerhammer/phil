@@ -27,6 +27,10 @@ The semantic `DigestFailure` binding from Systems has no physical target object 
 
 No ambient current response, current UploadId, or last-response state is permitted.
 
-## Certification boundary
+## Translation certification — PHIL-LLVM-CERT-008
 
-This slice translation-validates the exact Systems label/payload/continuation relation into the explicit runtime decoder call, branch-local accepted payload load, exact `record_upload_id(id)` use, and preserved server accepted/rejected response operations. Provider parsing correctness, malformed-input termination, LLVM implementation correctness, linking, and native execution remain independent external gates.
+`PHIL-LLVM-CERT-008` content-binds the exact session-choice Systems artifact, canonical pre-optimization LLVM module/text, target/tool identity, and `final-response-receive-v1` ABI digest.
+
+Its `TranslationValidated` evidence covers the exact client transport operand, accepted/rejected continuation mapping, accepted branch-local `UploadId` load, exact `record_upload_id(id)` use, exact-program erasure of the unused `DigestFailure`, elimination of the old generic final-response calls, absence of ambient response/UploadId state, preservation of the server accepted/rejected operations, and the fact that no malformed-response CFG edge is invented.
+
+Provider parsing correctness, exact wire-token-to-private-UploadId materialization, malformed-input non-return, provider ABI conformance, LLVM implementation correctness, linking, and native execution remain independent external gates rather than claims of `CERT-008`.
