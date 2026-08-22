@@ -1,0 +1,113 @@
+name: Final Response Proofs
+
+on:
+  pull_request:
+    paths:
+      - 'proof/**'
+      - 'src/Phil/Systems/SessionChoice.hs'
+      - 'src/Phil/LLVM/SessionOffer.hs'
+      - 'src/Phil/LLVM/SessionOfferCertification.hs'
+      - '.github/workflows/final-response-proofs.yml'
+  push:
+    branches:
+      - main
+    paths:
+      - 'proof/**'
+      - 'src/Phil/Systems/SessionChoice.hs'
+      - 'src/Phil/LLVM/SessionOffer.hs'
+      - 'src/Phil/LLVM/SessionOfferCertification.hs'
+      - '.github/workflows/final-response-proofs.yml'
+
+permissions:
+  contents: read
+
+jobs:
+  rocq-final-response:
+    runs-on: ubuntu-latest
+    container:
+      image: rocq/rocq-prover:9.2.0
+      options: --user root
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v4
+
+      - name: Check complete proof corpus including final response
+        run: |
+          export PATH="/home/rocq/.opam/${COMPILER}/bin:$PATH"
+          rocq c -Q proof/Phil Phil proof/Phil/Core/Syntax.v
+          rocq c -Q proof/Phil Phil proof/Phil/Core/Scalar.v
+          rocq c -Q proof/Phil Phil proof/Phil/Core/Session.v
+          rocq c -Q proof/Phil Phil proof/Phil/Core/Context.v
+          rocq c -Q proof/Phil Phil proof/Phil/Core/Process.v
+          rocq c -Q proof/Phil Phil proof/Phil/Core/SessionLabel.v
+          rocq c -Q proof/Phil Phil proof/Phil/Core/SessionStep.v
+          rocq c -Q proof/Phil Phil proof/Phil/Core/Recognition.v
+          rocq c -Q proof/Phil Phil proof/Phil/Core/RecognitionLoan.v
+          rocq c -Q proof/Phil Phil proof/Phil/Core/ContextJoin.v
+          rocq c -Q proof/Phil Phil proof/Phil/Core/ProcessJoin.v
+          rocq c -Q proof/Phil Phil proof/Phil/Core/ProcessTerminal.v
+          rocq c -Q proof/Phil Phil proof/Phil/Core/Discharge.v
+          rocq c -Q proof/Phil Phil proof/Phil/Core/DecisionSound.v
+          rocq c -Q proof/Phil Phil proof/Phil/Core/SessionRec.v
+          rocq c -Q proof/Phil Phil proof/Phil/Core/Focusing.v
+          rocq c -Q proof/Phil Phil proof/Phil/Surface/Elaboration.v
+          rocq c -Q proof/Phil Phil proof/Phil/Surface/Checking.v
+          rocq c -Q proof/Phil Phil proof/Phil/Surface/ScopeJoin.v
+          rocq c -Q proof/Phil Phil proof/Phil/Surface/FreshOwnership.v
+          rocq c -Q proof/Phil Phil proof/Phil/Surface/SystemsProjection.v
+          rocq c -Q proof/Phil Phil proof/Phil/Assurance/Manifest.v
+          rocq c -Q proof/Phil Phil proof/Phil/Assurance/EvidenceUse.v
+          rocq c -Q proof/Phil Phil proof/Phil/Systems/Identity.v
+          rocq c -Q proof/Phil Phil proof/Phil/Systems/FactDisposition.v
+          rocq c -Q proof/Phil Phil proof/Phil/Systems/Ownership.v
+          rocq c -Q proof/Phil Phil proof/Phil/Systems/Runtime.v
+          rocq c -Q proof/Phil Phil proof/Phil/Systems/Scalar.v
+          rocq c -Q proof/Phil Phil proof/Phil/Systems/ScalarDataflow.v
+          rocq c -Q proof/Phil Phil proof/Phil/Systems/FieldProjection.v
+          rocq c -Q proof/Phil Phil proof/Phil/Systems/RecognizedRecord.v
+          rocq c -Q proof/Phil Phil proof/Phil/Systems/DigestValidation.v
+          rocq c -Q proof/Phil Phil proof/Phil/Systems/Storage.v
+          rocq c -Q proof/Phil Phil proof/Phil/Systems/AcceptedResponse.v
+          rocq c -Q proof/Phil Phil proof/Phil/Systems/RejectedResponse.v
+          rocq c -Q proof/Phil Phil proof/Phil/Systems/FinalResponse.v
+          rocq c -Q proof/Phil Phil proof/Phil/LLVM/Identity.v
+          rocq c -Q proof/Phil Phil proof/Phil/LLVM/Preservation.v
+          rocq c -Q proof/Phil Phil proof/Phil/LLVM/FieldProjection.v
+          rocq c -Q proof/Phil Phil proof/Phil/LLVM/Strengthening.v
+          rocq c -Q proof/Phil Phil proof/Phil/LLVM/Certification.v
+          rocq c -Q proof/Phil Phil proof/Phil/LLVM/Scalar.v
+          rocq c -Q proof/Phil Phil proof/Phil/LLVM/RecognizedRecordABI.v
+          rocq c -Q proof/Phil Phil proof/Phil/LLVM/RuntimeSymbolIdentity.v
+          rocq c -Q proof/Phil Phil proof/Phil/LLVM/RecognizedRecordCertification.v
+          rocq c -Q proof/Phil Phil proof/Phil/LLVM/ExactReceive.v
+          rocq c -Q proof/Phil Phil proof/Phil/LLVM/ExactReceiveCertification.v
+          rocq c -Q proof/Phil Phil proof/Phil/LLVM/DigestValidation.v
+          rocq c -Q proof/Phil Phil proof/Phil/LLVM/DigestValidationCertification.v
+          rocq c -Q proof/Phil Phil proof/Phil/LLVM/Storage.v
+          rocq c -Q proof/Phil Phil proof/Phil/LLVM/StorageCertification.v
+          rocq c -Q proof/Phil Phil proof/Phil/LLVM/AcceptedResponse.v
+          rocq c -Q proof/Phil Phil proof/Phil/LLVM/AcceptedResponseCertification.v
+          rocq c -Q proof/Phil Phil proof/Phil/LLVM/RejectedResponse.v
+          rocq c -Q proof/Phil Phil proof/Phil/LLVM/RejectedResponseCertification.v
+          rocq c -Q proof/Phil Phil proof/Phil/LLVM/FinalResponseReceive.v
+          rocq c -Q proof/Phil Phil proof/Phil/LLVM/FinalResponseReceiveCertification.v
+
+      - name: Stage exact checked proof objects
+        run: |
+          mkdir -p rocq-final/systems-final-response
+          mkdir -p rocq-final/llvm-final-response
+          mkdir -p rocq-final/llvm-final-response-certification
+          cp proof/Phil/Systems/FinalResponse.v rocq-final/systems-final-response/FinalResponse.v
+          cp proof/Phil/Systems/FinalResponse.vo rocq-final/systems-final-response/FinalResponse.vo
+          cp proof/Phil/LLVM/FinalResponseReceive.v rocq-final/llvm-final-response/FinalResponseReceive.v
+          cp proof/Phil/LLVM/FinalResponseReceive.vo rocq-final/llvm-final-response/FinalResponseReceive.vo
+          cp proof/Phil/LLVM/FinalResponseReceiveCertification.v rocq-final/llvm-final-response-certification/FinalResponseReceiveCertification.v
+          cp proof/Phil/LLVM/FinalResponseReceiveCertification.vo rocq-final/llvm-final-response-certification/FinalResponseReceiveCertification.vo
+
+      - name: Upload exact checked proof objects
+        uses: actions/upload-artifact@v4
+        with:
+          name: rocq-final-response-checked-proof-objects
+          path: rocq-final/
+          if-no-files-found: error
+          retention-days: 14
