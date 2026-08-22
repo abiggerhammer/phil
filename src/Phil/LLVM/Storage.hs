@@ -37,6 +37,7 @@ data StorageLLVMError
   | StorageRenderedStatusMismatch Text
   | StorageAmbientStateDetected Text
   | StoragePostTransferReleaseDetected Text LLVMBlockId Text
+  | StorageUploadIdRepresentationViolation Text
   | StorageEvidenceSymbolDetected Text
   deriving (Eq, Show)
 
@@ -157,11 +158,13 @@ verifyWitness bundle llvmArtifact = do
     , LLVMBlockId (unBlockId (storageSuccess witness))
     , LLVMBlockId (unBlockId (storageFailure witness))
     ]
+  rejectUploadIdRelease llvmModule uploadIdName
 
   let rendered = llvmArtifactText llvmArtifact
       blockSymbol = symbolish (unBlockId (storageBlock witness))
+      uploadSymbol = "%" <> symbolish uploadIdName
       callNeedle = "@phil_runtime_store(ptr %" <> symbolish payloadName <> ")"
-      uploadNeedle = "%" <> symbolish uploadIdName
+      uploadNeedle = uploadSymbol
         <> " = extractvalue { i8, ptr } %phil_store_result_" <> blockSymbol <> ", 1"
       statusNeedle = "%phil_store_ok_" <> blockSymbol
         <> " = icmp eq i8 %phil_store_status_" <> blockSymbol <> ", 1"
@@ -170,10 +173,22 @@ verifyWitness bundle llvmArtifact = do
         | sourceFunction <- Map.elems (systemsProgramFunctions systemsProgram)
         , runtimeSite <- runtimeSites sourceFunction
         ]
+      uploadIdLines = filter (Text.isInfixOf uploadSymbol) (Text.lines rendered)
+      forbiddenUploadIdTokens =
+        [ "getelementptr"
+        , "load "
+        , "@phil_buffer_release"
+        , "nonnull"
+        , "noundef"
+        , "dereferenceable"
+        , "noalias"
+        ]
   unless (Text.isInfixOf callNeedle rendered && Text.isInfixOf uploadNeedle rendered) $
     Left (StorageRenderedCallMismatch functionName)
   unless (Text.isInfixOf statusNeedle rendered) $
     Left (StorageRenderedStatusMismatch functionName)
+  unless (all (\line -> all (not . (`Text.isInfixOf` line)) forbiddenUploadIdTokens) uploadIdLines) $
+    Left (StorageUploadIdRepresentationViolation functionName)
   unless
     ( not (Text.isInfixOf "@phil_runtime_store()" rendered)
     && not (Text.isInfixOf "@phil_current_payload" rendered)
@@ -215,6 +230,18 @@ rejectPayloadRelease functionName function payloadName blockId = do
   case bad of
     owner : _ -> Left (StoragePostTransferReleaseDetected functionName blockId owner)
     [] -> Right ()
+
+rejectUploadIdRelease :: LLVMModule -> Text -> Either StorageLLVMError ()
+rejectUploadIdRelease moduleValue uploadIdName =
+  unless (null releases) (Left (StorageUploadIdRepresentationViolation uploadIdName))
+  where
+    releases =
+      [ ()
+      | function <- Map.elems (llvmFunctions moduleValue)
+      , blockValue <- Map.elems (llvmFunctionBlocks function)
+      , LLVMBufferRelease owner <- llvmBlockOps blockValue
+      , owner == uploadIdName
+      ]
 
 payloadSSAName :: ValueId -> Text
 payloadSSAName valueId = unValueId valueId <> ".owner"
