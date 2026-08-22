@@ -331,19 +331,19 @@ renderRefTerm term = case term of
   RefUInt width value ->
     "uint(" <> Text.pack (show width) <> "," <> Text.pack (show value) <> ")"
   RefBool value -> if value then "bool(true)" else "bool(false)"
-  RefField base field sort ->
-    "field(" <> renderRefTerm base <> "," <> atomText field <> "," <> renderSort sort <> ")"
+  RefField base field fieldSort ->
+    "field(" <> renderRefTerm base <> "," <> atomText field <> "," <> renderSort fieldSort <> ")"
   RefLen value -> "len(" <> renderRefTerm value <> ")"
   RefToNat value -> "toNat(" <> renderRefTerm value <> ")"
   RefAdd left right -> "add(" <> renderRefTerm left <> "," <> renderRefTerm right <> ")"
   RefSub left right -> "sub(" <> renderRefTerm left <> "," <> renderRefTerm right <> ")"
   RefScale coefficient value ->
     "scale(" <> Text.pack (show coefficient) <> "," <> renderRefTerm value <> ")"
-  RefOpaque sort value ->
-    "opaque(" <> renderSort sort <> "," <> atomText value <> ")"
+  RefOpaque opaqueSort value ->
+    "opaque(" <> renderSort opaqueSort <> "," <> atomText value <> ")"
 
 renderSort :: RefSort -> Text
-renderSort sort = case sort of
+renderSort sortValue = case sortValue of
   SortBool -> "Bool"
   SortNat -> "Nat"
   SortUInt width -> "UInt(" <> Text.pack (show width) <> ")"
