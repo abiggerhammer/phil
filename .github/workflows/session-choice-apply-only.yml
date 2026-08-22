@@ -1,0 +1,42 @@
+name: Session Choice Apply Only
+
+on:
+  pull_request:
+    types: [synchronize]
+
+permissions:
+  contents: write
+
+jobs:
+  apply:
+    if: github.event.pull_request.head.repo.full_name == github.repository && github.event.pull_request.head.ref == 'systems-session-choice'
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check out feature branch
+        uses: actions/checkout@v4
+        with:
+          ref: systems-session-choice
+          fetch-depth: 0
+
+      - name: Apply staged edit and commit
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 - <<'PY'
+          from pathlib import Path
+          source = Path('.github/workflows/session-choice-edit.yml').read_text()
+          marker = "          python3 - <<'PY'\n"
+          start = source.index(marker) + len(marker)
+          end = source.index("\n          PY\n", start)
+          lines = source[start:end].splitlines()
+          script = "\n".join(line[10:] if line.startswith("          ") else line for line in lines)
+          exec(compile(script, '<session-choice-edit>', 'exec'), {})
+          PY
+          git config user.name "phil-session-choice-bot"
+          git config user.email "actions@users.noreply.github.com"
+          git rm .github/workflows/session-choice-edit.yml \
+                 .github/workflows/session-choice-pr-edit.yml \
+                 .github/workflows/session-choice-apply-only.yml
+          git add -A
+          git commit -m "Materialize semantic session choice in Systems"
+          git push origin HEAD:systems-session-choice
