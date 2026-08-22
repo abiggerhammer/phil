@@ -366,7 +366,8 @@ Proof.
   remember (exposeSessionHeadModel session) as result eqn:Hresult.
   destruct result as [head | recursionName | variable |].
   - eapply exposed_result_is_nonrecursive_head.
-    exact Hresult.
+    unfold exposeSessionHeadModel.
+    symmetry. exact Hresult.
   - exact I.
   - exact I.
   - exfalso.
