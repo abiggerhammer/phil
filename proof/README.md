@@ -79,15 +79,3 @@ The trusted recognizer itself remains outside this theorem; the theorem begins f
 ### PHIL-RECOG-FAIL-001 — provenance-bound failure
 
 Failure evidence must match the same pending owner, grammar, and frame before it can consume the pending capability. A successful failure transition consumes the pending linear owner, preserves every unrelated linear resource and active loan, and constructs no successor. Failure-detail text is intentionally not part of provenance matching, matching the implementation.
-
-## Current proof slice: branch convergence
-
-### PHIL-CTX-JOIN-001 — resource-context convergence
-
-`proof/Phil/Core/ContextJoin.v` models `joinContinuing` over the same extensional binding maps used by `Context.v`. Successful join requires every continuing branch to be loan-free; unrestricted and linear maps converge pointwise to the same view; and affine state follows the actual left-fold intersection semantics. A candidate affine binding survives only while every visited branch retains the same type, disappears permanently when a branch omits it, and has no successful transition on a type mismatch while still live. The proof characterizes every retained affine binding as common to all branches at exactly one type.
-
-This deliberately models semantic observations rather than `Data.Map` representation. In particular, it preserves the implementation's subtle behavior that type differences stop mattering after an affine name has already fallen out of the accumulated intersection.
-
-### PHIL-PROC-JOIN-001 — process branch normalization
-
-`proof/Phil/Core/ProcessJoin.v` treats the non-resource portion of `CheckState` as an opaque payload. It models the exact shape of `joinBranches`: flatten branch paths, collect only continuing resource contexts, join those contexts when any exist, and map a normalization over the flattened paths. The proof establishes that an empty branch set cannot succeed, path count is preserved, every non-`Continue` path survives unchanged, and every continuing path is represented with exactly the single joined resource context while its opaque checker-state payload is preserved.
