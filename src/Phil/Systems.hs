@@ -5,9 +5,11 @@ module Phil.Systems
   , module Phil.Systems.Dataflow
   , module Phil.Systems.FieldProjection
   , module Phil.Systems.RecognizedRecord
+  , module Phil.Systems.DigestValidation
   ) where
 
 import Phil.Systems.Dataflow
+import Phil.Systems.DigestValidation
 import Phil.Systems.FieldProjection
 import Phil.Systems.IR
 import Phil.Systems.Phase0
