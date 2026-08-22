@@ -246,8 +246,6 @@ renderLLVMModule moduleValue = Text.unlines $
       [ "phil-runtime/phase0/recognized-record-v1"
       , "phil-runtime/phase0/transport-exact-receive-v1"
       ]
-    transportExactReceiveABI =
-      runtimeProfile == "phil-runtime/phase0/transport-exact-receive-v1"
 
     header =
       [ "; Phil canonical pre-optimization LLVM artifact"
@@ -307,7 +305,7 @@ renderLLVMModule moduleValue = Text.unlines $
 
     assumeDeclaration =
       if any ((== LLVMAssume) . llvmStrengtheningKind) (Map.elems (llvmStrengthenings moduleValue))
-        then ["declare void @llvm.assume(i1 true)"]
+        then ["declare void @llvm.assume(i1)"]
         else []
 
     callNames = Set.fromList
