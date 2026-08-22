@@ -4,6 +4,7 @@ module Phil.LLVM.Verify
   ( LLVMVerificationContext (..)
   , LLVMVerificationError (..)
   , verifyLLVMEmission
+  , verifyLLVMEmissionWith
   ) where
 
 import Control.Monad (forM_, unless, when)
@@ -80,12 +81,22 @@ data LLVMVerificationError
   | LLVMFreezeValue Text LLVMBlockId
   deriving (Eq, Show)
 
+type LLVMLowerer = LLVMTargetProfile -> SystemsArtifact -> LLVMArtifact
+
 verifyLLVMEmission
   :: LLVMVerificationContext
   -> SystemsArtifact
   -> LLVMArtifact
   -> Either LLVMVerificationError ()
-verifyLLVMEmission context systemsArtifact artifact = do
+verifyLLVMEmission = verifyLLVMEmissionWith lowerSystemsConservative
+
+verifyLLVMEmissionWith
+  :: LLVMLowerer
+  -> LLVMVerificationContext
+  -> SystemsArtifact
+  -> LLVMArtifact
+  -> Either LLVMVerificationError ()
+verifyLLVMEmissionWith lowerer context systemsArtifact artifact = do
   mapLeft LLVMSystemsError $
     verifySystemsArtifact (llvmSystemsContext context) systemsArtifact
   verifyIdentity context systemsArtifact artifact
@@ -94,7 +105,7 @@ verifyLLVMEmission context systemsArtifact artifact = do
   verifyEdgeWitnesses systemsArtifact artifact
   verifyContractRelations systemsArtifact (llvmArtifactContract artifact)
   verifyDefinedExecutionDiscipline (llvmArtifactModule artifact)
-  verifyOrdinaryProjection context systemsArtifact (llvmArtifactModule artifact)
+  verifyOrdinaryProjectionWith lowerer context systemsArtifact (llvmArtifactModule artifact)
   verifyStrengthenings context systemsArtifact (llvmArtifactModule artifact)
 
 verifyIdentity
@@ -159,13 +170,14 @@ verifyRuntimeCoverage systemsArtifact moduleValue =
   in unless (counts sourceSites == counts targetSites) $
       Left (LLVMRuntimeCoverageMismatch sourceSites targetSites)
 
-verifyOrdinaryProjection
-  :: LLVMVerificationContext
+verifyOrdinaryProjectionWith
+  :: LLVMLowerer
+  -> LLVMVerificationContext
   -> SystemsArtifact
   -> LLVMModule
   -> Either LLVMVerificationError ()
-verifyOrdinaryProjection context systemsArtifact actualModule = do
-  let expectedArtifact = lowerSystemsConservative (targetProfileFromContext context) systemsArtifact
+verifyOrdinaryProjectionWith lowerer context systemsArtifact actualModule = do
+  let expectedArtifact = lowerer (targetProfileFromContext context) systemsArtifact
       expectedModule = llvmArtifactModule expectedArtifact
   forM_ (Map.toAscList (llvmFunctions expectedModule)) $ \(functionName, expectedFunction) ->
     case Map.lookup functionName (llvmFunctions actualModule) of
@@ -197,6 +209,7 @@ ordinaryOps = filter isOrdinary
       LLVMCleanup _ -> True
       LLVMPlain _ -> True
       LLVMScalarLiteral _ _ -> True
+      LLVMFieldProjection {} -> True
       LLVMStrengtheningOp _ _ -> False
       LLVMPoison _ -> False
       LLVMUndef _ -> False

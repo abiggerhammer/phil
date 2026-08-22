@@ -34,6 +34,14 @@ main = do
     , test "Begin.length is typed U64 and feeds exact receive" fieldProjectionFeedsExactReceive
     , test "Begin.length projection survives ordinary LLVM lowering" fieldProjectionSurvivesLLVM
     , test "field projection schema drift is rejected" fieldProjectionSchemaDriftRejects
+    , test "recognized Begin record candidate verifies" recognizedRecordCandidatePasses
+    , test "recognized-record ABI LLVM candidate verifies" recognizedRecordLLVMVerifies
+    , test "recognized-record ABI emits explicit ptr -> i64 -> receive dependency" recognizedRecordABIShape
+    , test "recognized-record witness rejects the wrong record identity" recognizedRecordWitnessDriftRejects
+    , test "LLVM field accessor record drift is rejected" recognizedRecordLLVMRecordDriftRejects
+    , test "LLVM field accessor width drift is rejected" recognizedRecordLLVMWidthDriftRejects
+    , test "LLVM exact receive consumer drift is rejected" recognizedRecordLLVMConsumerDriftRejects
+    , test "recognized-record ABI uses physical runtime symbols" recognizedRecordPhysicalSymbols
     ]
   if and results then pure () else exitFailure
 
@@ -251,6 +259,128 @@ fieldProjectionSchemaDriftRejects = case phase0FieldProjectionBundle of
       Left FieldProjectionSchemaMismatch {} -> True
       _ -> False
 
+recognizedRecordCandidatePasses :: Bool
+recognizedRecordCandidatePasses = case phase0RecognizedRecordBundle of
+  Left _ -> False
+  Right bundle -> verifyRecognizedRecordBundle bundle == Right ()
+
+recognizedRecordLLVMVerifies :: Bool
+recognizedRecordLLVMVerifies = verifyPhase0RecognizedRecordLLVM == Right ()
+
+recognizedRecordABIShape :: Bool
+recognizedRecordABIShape = case phase0RecognizedRecordLLVMArtifact of
+  Left _ -> False
+  Right artifact ->
+    let rendered = llvmArtifactText artifact
+    in and
+      [ Text.isInfixOf "declare { i8, ptr } @phil_runtime_recognize_Begin()" rendered
+      , Text.isInfixOf "%server_begin = extractvalue { i8, ptr }" rendered
+      , Text.isInfixOf "icmp eq i8 %phil_recognition_status_server_version, 1" rendered
+      , Text.isInfixOf "declare i64 @phil_record_Begin_get_length(ptr)" rendered
+      , Text.isInfixOf
+          "%server_begin_length = call i64 @phil_record_Begin_get_length(ptr %server_begin)"
+          rendered
+      , Text.isInfixOf "declare i1 @phil_runtime_receive_exact_u64(i64)" rendered
+      , Text.isInfixOf
+          "call i1 @phil_runtime_receive_exact_u64(i64 %server_begin_length)"
+          rendered
+      , not (Text.isInfixOf "@phil_call_materialize_recognized_Begin" rendered)
+      , not (Text.isInfixOf "@phil_call_project_recognized_Begin_length" rendered)
+      ]
+
+recognizedRecordWitnessDriftRejects :: Bool
+recognizedRecordWitnessDriftRejects = case phase0RecognizedRecordBundle of
+  Left _ -> False
+  Right bundle ->
+    let badWitness = phase0BeginRecordWitness
+          { recognizedRecordValue = ValueId "server.frame.begin" }
+    in case verifyRecognizedRecordWitnesses
+        (recognizedRecordArtifact bundle)
+        [badWitness] of
+      Left RecognizedRecordValueRoleMismatch {} -> True
+      _ -> False
+
+recognizedRecordLLVMRecordDriftRejects :: Bool
+recognizedRecordLLVMRecordDriftRejects = case recognizedRecordFixture of
+  Nothing -> False
+  Just (bundle, artifact, context) ->
+    let bad = rebindLLVMArtifact $
+          adjustLLVMBlock "UploadServer" "server.begin.commit"
+            (mapLLVMOps driftRecord)
+            artifact
+    in case verifyLLVMEmissionWith
+        lowerSystemsRecognizedRecord
+        context
+        (recognizedRecordArtifact bundle)
+        bad of
+      Left LLVMOrdinaryOperationMismatch {} -> True
+      _ -> False
+  where
+    driftRecord operation = case operation of
+      LLVMFieldProjection output _ grammar fieldName scalarType ->
+        LLVMFieldProjection output "server.frame.begin" grammar fieldName scalarType
+      _ -> operation
+
+recognizedRecordLLVMWidthDriftRejects :: Bool
+recognizedRecordLLVMWidthDriftRejects = case recognizedRecordFixture of
+  Nothing -> False
+  Just (bundle, artifact, context) ->
+    let bad = rebindLLVMArtifact $
+          adjustLLVMBlock "UploadServer" "server.begin.commit"
+            (mapLLVMOps driftWidth)
+            artifact
+    in case verifyLLVMEmissionWith
+        lowerSystemsRecognizedRecord
+        context
+        (recognizedRecordArtifact bundle)
+        bad of
+      Left LLVMOrdinaryOperationMismatch {} -> True
+      _ -> False
+  where
+    driftWidth operation = case operation of
+      LLVMFieldProjection output record grammar fieldName _ ->
+        LLVMFieldProjection output record grammar fieldName (ScalarUInt 32)
+      _ -> operation
+
+recognizedRecordLLVMConsumerDriftRejects :: Bool
+recognizedRecordLLVMConsumerDriftRejects = case recognizedRecordFixture of
+  Nothing -> False
+  Just (bundle, artifact, context) ->
+    let bad = rebindLLVMArtifact $
+          adjustLLVMBlock "UploadServer" "server.payload" driftConsumer artifact
+    in case verifyLLVMEmissionWith
+        lowerSystemsRecognizedRecord
+        context
+        (recognizedRecordArtifact bundle)
+        bad of
+      Left LLVMOrdinaryTerminatorMismatch {} -> True
+      _ -> False
+  where
+    driftConsumer blockValue = case llvmBlockTerminator blockValue of
+      LLVMRuntimeScalarBranch site primitive _ scalarType yes no -> blockValue
+        { llvmBlockTerminator = LLVMRuntimeScalarBranch
+            site primitive "server.begin_length_other" scalarType yes no
+        }
+      _ -> blockValue
+
+recognizedRecordPhysicalSymbols :: Bool
+recognizedRecordPhysicalSymbols = case phase0RecognizedRecordLLVMArtifact of
+  Left _ -> False
+  Right artifact ->
+    let rendered = llvmArtifactText artifact
+    in Text.isInfixOf "@phil_runtime_recognize_Begin" rendered
+        && Text.isInfixOf "@phil_runtime_receive_exact_u64" rendered
+        && Text.isInfixOf "@phil_runtime_digest_validate" rendered
+        && not (Text.isInfixOf "@phil_runtime_evidence_" rendered)
+
+recognizedRecordFixture
+  :: Maybe (RecognizedRecordBundle, LLVMArtifact, LLVMVerificationContext)
+recognizedRecordFixture = do
+  bundle <- either (const Nothing) Just phase0RecognizedRecordBundle
+  artifact <- either (const Nothing) Just phase0RecognizedRecordLLVMArtifact
+  let context = phase0RecognizedRecordLLVMVerificationContext bundle
+  pure (bundle, artifact, context)
+
 strengtheningFixture :: LLVMStrengtheningKind -> Text -> (LLVMAuthority, LLVMStrengthening)
 strengtheningFixture kind claim = (authority, strengthening)
   where
@@ -301,6 +431,10 @@ dropRuntimeBranch :: LLVMBlock -> LLVMBlock
 dropRuntimeBranch blockValue = case llvmBlockTerminator blockValue of
   LLVMRuntimeBranch _ _ yes no -> blockValue { llvmBlockTerminator = LLVMBranch yes no }
   _ -> blockValue
+
+mapLLVMOps :: (LLVMOp -> LLVMOp) -> LLVMBlock -> LLVMBlock
+mapLLVMOps transform blockValue = blockValue
+  { llvmBlockOps = map transform (llvmBlockOps blockValue) }
 
 lookupLLVMBlock :: Text -> Text -> LLVMArtifact -> Maybe LLVMBlock
 lookupLLVMBlock functionName blockName artifact = do

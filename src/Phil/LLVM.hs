@@ -3,9 +3,13 @@ module Phil.LLVM
   , module Phil.LLVM.Lower
   , module Phil.LLVM.Verify
   , module Phil.LLVM.Phase0
+  , module Phil.LLVM.RecognizedRecord
+  , module Phil.LLVM.RecognizedRecordCertification
   ) where
 
 import Phil.LLVM.IR
 import Phil.LLVM.Lower
 import Phil.LLVM.Phase0
+import Phil.LLVM.RecognizedRecord
+import Phil.LLVM.RecognizedRecordCertification
 import Phil.LLVM.Verify
