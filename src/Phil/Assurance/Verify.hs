@@ -71,6 +71,7 @@ data ManifestError
   | AcceptanceRuleUnsatisfied RevisionId
   | MissingAssuranceUse AssuranceUseId
   | AssuranceUseMapKeyMismatch AssuranceUseId AssuranceUseId
+  | AssuranceUseIdentityMismatch AssuranceUseId AssuranceUseId
   | AssuranceUseOutsideScope AssuranceUseId RevisionId
   | ErasureWithoutEvidence AssuranceUseId
   | AssuranceUseMissingEvidence AssuranceUseId EvidenceEntryId
@@ -298,6 +299,9 @@ verifyManifest context ledger manifest = do
     verifyUse evidence (key, assuranceUse) = do
       unless (key == assuranceUseId assuranceUse) $
         Left (AssuranceUseMapKeyMismatch key (assuranceUseId assuranceUse))
+      let expectedId = deriveAssuranceUseId assuranceUse
+      unless (assuranceUseId assuranceUse == expectedId) $
+        Left (AssuranceUseIdentityMismatch expectedId (assuranceUseId assuranceUse))
       let revision = useObligationRevision assuranceUse
       unless (Set.member revision (manifestCertificationScope manifest)) $
         Left (AssuranceUseOutsideScope key revision)
