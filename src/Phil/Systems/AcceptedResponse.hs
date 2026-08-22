@@ -173,6 +173,7 @@ operationInputs operation = case operation of
   OpReleaseOwner owner _ -> [owner]
   OpCleanupPartial owner _ -> [owner]
   OpRuntimeCall _ inputs _ _ _ -> inputs
+  OpSessionSelect transport _ payload _ -> transport : maybe [] pure payload
   OpCopy source target _ -> [source, target]
   OpEraseFact {} -> []
   OpDiagnostic {} -> []
