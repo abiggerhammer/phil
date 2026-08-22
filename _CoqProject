@@ -16,3 +16,5 @@ proof/Phil/Core/SessionRec.v
 proof/Phil/Core/Focusing.v
 proof/Phil/Surface/Elaboration.v
 proof/Phil/Surface/Checking.v
+proof/Phil/Surface/ScopeJoin.v
+proof/Phil/Surface/FreshOwnership.v
