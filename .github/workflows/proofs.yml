@@ -50,3 +50,4 @@ jobs:
           rocq c -Q proof/Phil Phil proof/Phil/Surface/ScopeJoin.v
           rocq c -Q proof/Phil Phil proof/Phil/Surface/FreshOwnership.v
           rocq c -Q proof/Phil Phil proof/Phil/Assurance/Manifest.v
+          rocq c -Q proof/Phil Phil proof/Phil/Assurance/EvidenceUse.v
