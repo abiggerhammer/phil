@@ -20,3 +20,5 @@ proof/Phil/Surface/ScopeJoin.v
 proof/Phil/Surface/FreshOwnership.v
 proof/Phil/Assurance/Manifest.v
 proof/Phil/Assurance/EvidenceUse.v
+proof/Phil/Systems/Identity.v
+proof/Phil/Systems/FactDisposition.v

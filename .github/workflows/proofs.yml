@@ -51,3 +51,5 @@ jobs:
           rocq c -Q proof/Phil Phil proof/Phil/Surface/FreshOwnership.v
           rocq c -Q proof/Phil Phil proof/Phil/Assurance/Manifest.v
           rocq c -Q proof/Phil Phil proof/Phil/Assurance/EvidenceUse.v
+          rocq c -Q proof/Phil Phil proof/Phil/Systems/Identity.v
+          rocq c -Q proof/Phil Phil proof/Phil/Systems/FactDisposition.v
