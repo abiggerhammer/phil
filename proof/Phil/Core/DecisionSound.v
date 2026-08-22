@@ -3,18 +3,6 @@ Import ListNotations.
 
 Open Scope Q_scope.
 
-(*
-  Mathematical kernel beneath Phil.Core.Decision.checkLinearCertificate.
-
-  The Haskell checker reduces normalized arithmetic propositions and bases to
-  affine rational forms. At that point a basis denotes either an equality
-  (value = 0) or an inequality (value >= 0). The certificate supplies rational
-  weights and slack. This file proves the ordered-field fact that makes the
-  checker trustworthy: arbitrary linear combinations of equalities remain zero,
-  while inequalities may contribute only with nonnegative weights and
-  nonnegative slack.
-*)
-
 Inductive GoalKind : Type :=
 | EqualityGoal : GoalKind
 | InequalityGoal : GoalKind.
@@ -97,7 +85,7 @@ Proof.
   destruct kind; simpl in *.
   - destruct Hvalid as [Hvalue _].
     setoid_replace value with 0 by exact Hvalue.
-    apply Qle_refl.
+    lra.
   - destruct Hvalid as [Hvalue Hcoefficient].
     apply Qmult_le_0_compat; assumption.
 Qed.
