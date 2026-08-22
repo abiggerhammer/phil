@@ -2,29 +2,31 @@
 
 Status: promoted to branch-local semantic CI
 
-`../rejected/02-prove-opaque-digest.phil` is now Steve's first executable checker-level negative witness. The branch-local harness `test/SteveSurfaceSemanticMain.hs` supplies the smallest generic static environment required by the source and requires the existing surface checker to reject the program with exactly `OpaqueProof`.
+`../rejected/02-prove-opaque-digest.phil` is Steve's first executable checker-level negative witness. The branch-local harness `test/SteveSurfaceSemanticMain.hs` supplies a generic architecture environment and requires the existing surface checker to reject the program with exactly `OpaqueProof`.
 
-No Steve-specific Core rule, filename switch, primitive, provider implementation, or result-constructor semantics were added for this promotion.
+No Steve-specific Core rule, filename switch, primitive, provider implementation, or result-constructor semantics are involved.
 
 ## Why the witness is deliberately tiny
 
-The fixture uses:
+The promoted fixture is:
 
 ```phil
 component BadProveDigest(
     id : ContentId[SHA256],
-    bytes : OwnedBytes[0]
-) provides PutResult[SHA256] {
-    let digestEvidence = prove DigestMatches(id, bytes.id)
-    ...
+    object
+) provides Unit {
+    let digestEvidence = prove DigestMatches(id, object)
+    return unit
 }
 ```
 
-The fixed byte count avoids needing a `Nat` architecture alias just to type the witness. The `bytes.id` projection reuses the checker's existing `OwnedBytesShape` stable identity, so no `owned_bytes_identity` primitive is needed. The code after `prove` is intentionally irrelevant: a correct checker stops at the opaque-proof error before reaching the result constructor.
+`id` uses an ordinary source type. `object` is intentionally untyped in source and supplied by the architecture environment as a stable byte-object identity. That keeps this test focused on the generic opaque-proof rule rather than depending on any Steve-specific source representation for stable identities.
 
-## Static declaration supplied by the harness
+An earlier draft used `bytes.id` from `OwnedBytes[0]`. CI correctly rejected that before focusing: `OwnedBytes` elaborates to a finite byte sequence, and `.id` is not currently a legal generic refinement projection on that representation. The promotion therefore makes the stable identity explicit at the architecture boundary instead of inventing a projection rule merely to make the fixture pass.
 
-The environment contains exactly one semantic declaration beyond an empty surface environment:
+## Generic environment supplied by the harness
+
+The static context declares one opaque claim:
 
 ```haskell
 static <- declareOpaqueClaim
@@ -33,29 +35,35 @@ static <- declareOpaqueClaim
   , (Name "object", SortStableId "OwnedBytes")
   ]
   emptyStaticContext
-
-environment = emptySurfaceEnvironment static
 ```
 
-No `surfacePrimitives`, `surfaceInitialBindings`, `surfaceTypeAliases`, select requirements, terminal allowances, or expected-provides override are supplied.
+The surface environment also supplies the untyped `object` parameter as an unrestricted sorted opaque value whose refinement sort is that stable identity sort:
 
-## Why those sorts are exact
+```haskell
+environment =
+  (emptySurfaceEnvironment static)
+    { surfaceInitialBindings = Map.singleton
+        "object"
+        InitialBinding
+          { initialMode = Unrestricted
+          , initialType = TyOpaqueSorted
+              "OwnedBytesIdentity"
+              (SortStableId "OwnedBytes")
+          , initialShape = PlainShape
+          }
+    }
+```
 
-`ContentId[SHA256]` elaborates as the ordinary opaque type `TyOpaque "ContentId[SHA256]"`; `refSortOfTy` therefore exposes it to propositions as `SortOpaque "ContentId[SHA256]"`.
-
-`OwnedBytes[0]` resolves through the existing special `OwnedBytes` surface rule to a linear byte owner with `OwnedBytesShape`. The elaboration environment exposes `bytes.id` as `SortStableId "OwnedBytes"`.
-
-The claim signature therefore matches the two proposition arguments without a Steve-specific elaboration rule.
+This remains generic architecture data. The checker itself knows nothing about Steve or this filename.
 
 ## Checked path
 
-The semantic test exercises the generic path:
-
-1. Source parameters initialize `id` and linear `bytes` from their explicit source types.
-2. `DigestMatches(id, bytes.id)` elaborates and sort-checks against the declared opaque claim signature.
-3. `focusProposition` classifies the unresolved opaque claim as requiring an explicit mechanism.
-4. Generic `prove` rejects it as `OpaqueProof` with the existing opaque-claim diagnostic.
-5. The harness fails unless the observed stable rejection class is exactly `OpaqueProof`.
+1. `id` elaborates to the opaque refinement sort `ContentId[SHA256]`.
+2. The untyped `object` parameter resolves against the architecture-supplied stable-ID binding.
+3. `DigestMatches(id, object)` elaborates and sort-checks against the opaque claim signature.
+4. `focusProposition` classifies the unresolved opaque claim as requiring an explicit mechanism.
+5. Generic `prove` rejects it as `OpaqueProof`.
+6. The harness fails unless the observed stable rejection class is exactly `OpaqueProof`.
 
 The ordinary branch CI still parses the entire Steve surface corpus separately, so this promotion adds semantic specificity without replacing the parser gate.
 
@@ -70,7 +78,7 @@ It does not establish executable `DigestMatches` validation, DigestProvider or B
 Keep the promotion only while all of the following remain true:
 
 - the fixture parses;
-- the harness constructs the environment through the public generic Core/surface APIs;
+- the harness constructs the environment through public generic Core/surface APIs;
 - checking reaches `prove` rather than failing on unrelated unknown machinery;
 - the rejection class is exactly `OpaqueProof`;
 - the Phase 0 upload conformance corpus remains unchanged and green;
