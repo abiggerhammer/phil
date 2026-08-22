@@ -221,7 +221,7 @@ Proof.
   intros session.
   unfold recursionPool, incl.
   intros name Hin.
-  apply (proj2 (nodup_In (recursionNames session) name)).
+  apply (proj2 (nodup_In string_dec (recursionNames session) name)).
   exact Hin.
 Qed.
 
