@@ -1,0 +1,4 @@
+component main provides U32 {
+    let answer = 42
+    return answer
+}
