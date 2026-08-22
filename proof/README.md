@@ -14,7 +14,7 @@ The human-facing logic ledger lives in Drive. The repository is authoritative fo
 
 ## Existing discharged slices
 
-The checked corpus includes session duality, exact binding insertion and linear consumption, session progression resources, label selection, process sequencing, recognition provenance/gating, branch convergence, and terminal-state resource completeness. See the stable obligation IDs in the individual proof files and the Drive logic ledger for the authoritative claim registry.
+The checked corpus includes session duality, exact binding insertion and linear consumption, session progression resources, label selection, process sequencing, recognition provenance/gating, branch convergence, terminal-state resource completeness, assurance disposition, linear-certificate soundness, and finite session-head exposure. See the stable obligation IDs in the individual proof files and the Drive logic ledger for the authoritative claim registry.
 
 ## Assurance-disposition slice
 
@@ -49,3 +49,35 @@ The same checked judgment carries partial-operation prerequisites explicitly, so
 `proof/Phil/Core/SessionRec.v` gives a structurally terminating Rocq mirror of `exposeSessionHead`. It proves that session substitution cannot invent recursion binder names at the session-structure level, each fresh unfolding strictly enlarges the seen set, and every unfolding trace is bounded by the number of distinct recursion names in the initial session. The derived fuel therefore cannot be exhausted. Every result is a non-recursive head, an unguarded repeated recursion result, or an unbound session variable.
 
 Message types remain opaque in this slice because head exposure never inspects them; substitution inside endpoint/message types cannot create a new top-level head during the operation. This theorem proves the implemented finite seen-set behavior, not a stronger global guarded-recursion property.
+
+## Focusing competence slice
+
+`proof/Phil/Core/Focusing.v` formalizes the deterministic pre-solver competence boundary introduced by `Phil.Core.Focusing`. The proof is intentionally about what focusing is authorized to construct or classify; it does not turn the later decision procedure or an explicit runtime/export mechanism into an implicit source of truth.
+
+### PHIL-FOCUS-COERCE-001 — one-way canonical coercion
+
+The proof-side elaborator has exactly one implicit cross-sort success case: a term already known to have `UInt[w]` sort may be elaborated in a Nat context only as explicit `toNat(term)`, with the insertion recorded. Already matching sorts are identity elaborations. A Nat term presented to a `UInt[w]` context rejects. Every successful elaboration has the requested result sort.
+
+Concrete Haskell sort inference is outside this theorem: the proof takes the inferred source sort as the competence-boundary input and proves what focusing may do with it.
+
+### PHIL-FOCUS-CLAIM-001 — declared claim expansion only
+
+A claim focus step first requires an actual declaration and successfully elaborated arguments. Opaque declarations preserve the same claim identity and only the elaborated arguments. A well-scoped transparent declaration expands to exactly its declared instantiated body. A transparent claim already present on the expansion stack rejects, as does a declaration already known to be ill-scoped. Thus the focusing layer has no successful path that invents an unknown claim body or treats recursive transparent expansion as authority.
+
+The proof represents a transparent declaration body as its capture-avoiding parameter-instantiation function. Correspondence with the concrete substitution implementation and Map lookup remains explicit rather than assumed as a logical theorem.
+
+### PHIL-FOCUS-PREREQ-001 — side conditions survive assembly
+
+Side-condition focus plans contribute both their own prerequisites and their focused goals to the parent prerequisite set. Canonical-key deduplication may merge duplicates but cannot remove the final representative of any side goal or nested prerequisite. This is the structural reason a partial-operation side condition cannot disappear merely because normalization later simplifies the parent proposition.
+
+The side-condition extractor and proposition normalizer are deterministic implementation inputs to this slice; the theorem covers focus-plan assembly and deduplication rather than re-proving arithmetic normalization.
+
+### PHIL-FOCUS-MECH-001 — closed mechanism classification
+
+Mechanism selection is modeled with the same precedence as the implementation. Canonical Truth is definitionally discharged. For every non-Truth goal, matching evidence wins before later boundaries. Without matching evidence, Falsehood is statically rejected, an unresolved opaque goal requires an explicit mechanism, and every other unresolved transparent goal stops at the decision-procedure boundary. There is no additional constructor that can silently authorize a goal.
+
+Evidence search itself is abstracted to the result of canonical evidence matching; the theorem proves the authority-bearing classification once that deterministic search result is known.
+
+### PHIL-FOCUS-BRANCH-001 — exact branch coverage
+
+Successful branch checking is the conjunction of duplicate-free declared labels, duplicate-free handler labels, and extensional equality of the two label sets. Any duplicate, missing handler, or extra handler excludes success. The proof models label sets extensionally; the implementation's deterministic ordering of missing/extra diagnostic lists remains covered by the Haskell conformance suite.
