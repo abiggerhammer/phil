@@ -62,6 +62,7 @@ library
       Phil.Systems.Dataflow
       Phil.Systems.FieldProjection
       Phil.Systems.RecognizedRecord
+      Phil.Systems.DigestValidation
       Phil.LLVM.IR
       Phil.LLVM.Lower
       Phil.LLVM.Verify
@@ -71,6 +72,7 @@ library
       Phil.LLVM.RecognizedRecordProofCertification
       Phil.LLVM.ExactReceive
       Phil.LLVM.ExactReceiveCertification
+      Phil.LLVM.DigestValidation
   build-depends:
       base >=4.17 && <5,
       bytestring >=0.11 && <0.13,
@@ -110,6 +112,15 @@ executable phil-llvm-phase0-exact-receive
   import:             common-settings
   hs-source-dirs:     app
   main-is:            LLVMExactReceiveMain.hs
+  build-depends:
+      base >=4.17 && <5,
+      phil-core,
+      text >=2.0 && <2.2
+
+executable phil-llvm-phase0-digest-validation
+  import:             common-settings
+  hs-source-dirs:     app
+  main-is:            LLVMDigestValidationMain.hs
   build-depends:
       base >=4.17 && <5,
       phil-core,
