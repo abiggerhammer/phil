@@ -273,7 +273,7 @@ resolveFocusedRequirement staticContext state policy obligation assumptions prer
                   , staticCertificateChecker = certificateCheckerId
                   , staticCertificate = certificate
                   }
-                Left error -> Left (ProducedInvalidCertificate error)
+                Left certificateError -> Left (ProducedInvalidCertificate certificateError)
             Nothing -> resolveExplicitThenArchitecture staticContext state policy obligation requirement
         FocusNeedsExplicitMechanism ->
           resolveExplicitThenArchitecture staticContext state policy obligation requirement
