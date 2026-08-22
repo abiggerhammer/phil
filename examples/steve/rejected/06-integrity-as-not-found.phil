@@ -1,0 +1,49 @@
+// reject: detected integrity failure is semantically distinct from NotFound.
+component BadHideIntegrityFailure(
+    digest : DigestProvider[SHA256],
+    blobs : BlobProvider,
+    id : ContentId[SHA256]
+) provides GetResult[SHA256] {
+    let readResult = blob_read(blobs, id)
+
+    decide readResult {
+        not_found => {
+            return construct GetNotFound {
+                id = id
+            }
+        }
+
+        storage_failure(err) => {
+            return construct GetStorageFailure {
+                id = id,
+                error = err
+            }
+        }
+
+        found(bytes) => {
+            let object = owned_bytes_identity(bytes)
+            let digestResult = borrow bytes as bytesView {
+                digest_check(digest, id, object, bytesView)
+            }
+
+            decide digestResult {
+                rejected(reason) => {
+                    release bytes
+                    // Wrong: corruption/integrity failure is being hidden as absence.
+                    return construct GetNotFound {
+                        id = id
+                    }
+                }
+
+                accepted(digestEvidence) => {
+                    return construct GetOk {
+                        id = id,
+                        object = object,
+                        bytes = bytes,
+                        evidence = digestEvidence
+                    }
+                }
+            }
+        }
+    }
+}
