@@ -139,6 +139,8 @@ lowerOp mode functionValue operation = case operation of
           , Just (transport, uploadId) <- acceptedResponseOperands functionValue name inputs outputs ->
               [LLVMAcceptedResponse (unValueId transport) (unValueId uploadId)]
           | otherwise -> [LLVMCall name]
+  OpSessionSelect { sessionSelectLabel = label } ->
+    [LLVMPoison ("unlowered-session-select:" <> label)]
   OpCopy {} -> [LLVMCall "copy"]
   OpEraseFact {} -> [LLVMMetadata "proof/typestate fact erased before LLVM"]
   OpDiagnostic { diagnosticName = name } -> [LLVMMetadata ("diagnostic " <> name)]

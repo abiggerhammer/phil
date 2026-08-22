@@ -1,4 +1,4 @@
-From Phil.Systems Require Import RejectedResponse.
+From Phil.Systems Require Import ScalarDataflow RejectedResponse.
 
 (*
   PHIL-SYS-FINAL-RESPONSE-001 — normalized proof model for the Phase 0
