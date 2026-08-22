@@ -91,6 +91,7 @@ library
       Phil.LLVM.RejectedResponse
       Phil.LLVM.RejectedResponseCertification
       Phil.LLVM.SessionOffer
+      Phil.LLVM.SessionOfferCertification
   build-depends:
       base >=4.17 && <5,
       bytestring >=0.11 && <0.13,
