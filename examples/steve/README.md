@@ -69,6 +69,14 @@ The right next implementation target is thus a more general architecture/static-
 
 `rejected/` contains parser-valid programs that must eventually fail semantic checking for stated reasons. The initial corpus covers unverified `get`, attempted proof of opaque digest claims, dropped and duplicated owned bytes, collision-as-success, integrity-failure laundering, and evidence illegally indexed by an ephemeral borrow. See `rejected/README.md` for intended rejection classes.
 
+## Provisional assurance manifest
+
+`assurance/README.md` documents the executable branch-only ADR-010 witness in `test/SteveAssuranceMain.hs`. The test instantiates the current public `Phil.Assurance` graph/manifest API for all twelve Steve obligations and verifies the result with `verifyManifest`; it adds no Steve-specific checker semantics.
+
+The manifest deliberately records SHA-256 collision resistance as a disclosed practical-identity assumption that is **not** in the safety dependency closure. Its tests require the manifest to remain valid when that assumption is removed, while removing either the `DigestProvider` or `BlobProvider` TCB assumption must make verification fail. Retained runtime assurance is separately cost-linked for digest computation, digest checking, and exact byte comparison.
+
+This is a semantic/provisional manifest rather than a native build certificate: provider assumptions remain assumptions, build/lowering identities are placeholders, and `.phil` whole-component semantic acceptance remains future work.
+
 ## Steve 0 claims exercised by the sketch
 
 - successful `put` returns an ID matching the stable identity of the candidate bytes;
