@@ -4,6 +4,7 @@
 #include <stdbool.h>
 #include <stdint.h>
 #include <stdlib.h>
+#include <string.h>
 #include <sys/types.h>
 #include <sys/wait.h>
 #include <unistd.h>
@@ -26,8 +27,10 @@ static bool malformed_aborts(const uint8_t *bytes, size_t length) {
 
 int main(void) {
   uint8_t accepted[17];
+  uint8_t overlong_accepted[18];
   uint8_t rejected[2] = {0x00u, 0x01u};
   uint8_t reserved_reason[2] = {0x00u, 0x02u};
+  uint8_t reserved_tag[2] = {0x02u, 0x01u};
   uint8_t truncated_accepted[1] = {0x01u};
   uint8_t token[16];
   size_t index;
@@ -38,6 +41,8 @@ int main(void) {
     token[index] = (uint8_t) (0xb0u + index);
     accepted[index + 1u] = token[index];
   }
+  memcpy(overlong_accepted, accepted, sizeof(accepted));
+  overlong_accepted[17] = 0x00u;
 
   transport = phil_smoke_configure_final_response(accepted, sizeof(accepted));
   (void) UploadClient(transport);
@@ -49,5 +54,7 @@ int main(void) {
 
   if (!malformed_aborts(reserved_reason, sizeof(reserved_reason))) return 3;
   if (!malformed_aborts(truncated_accepted, sizeof(truncated_accepted))) return 4;
+  if (!malformed_aborts(reserved_tag, sizeof(reserved_tag))) return 5;
+  if (!malformed_aborts(overlong_accepted, sizeof(overlong_accepted))) return 6;
   return 0;
 }
