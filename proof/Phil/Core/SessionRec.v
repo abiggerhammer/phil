@@ -84,9 +84,9 @@ Proof.
   - intros recursionName body IH target replacement name Hin.
     simpl.
     destruct (String.eqb recursionName target) eqn:Heq.
-    + rewrite Heq in Hin. simpl in Hin.
+    + simpl in Hin.
       left. exact Hin.
-    + rewrite Heq in Hin. simpl in Hin.
+    + simpl in Hin.
       destruct Hin as [Hname | Hbody].
       * left. simpl. left. exact Hname.
       * apply IH in Hbody.
@@ -96,9 +96,8 @@ Proof.
   - intros variable target replacement name Hin.
     simpl.
     destruct (String.eqb variable target) eqn:Heq.
-    + rewrite Heq in Hin. simpl in Hin.
-      right. exact Hin.
-    + rewrite Heq in Hin. simpl in Hin. contradiction.
+    + right. exact Hin.
+    + simpl in Hin. contradiction.
   - intros target replacement name Hin. simpl in Hin. contradiction.
   - intros label payload continuation rest IHcontinuation IHrest target replacement name Hin.
     simpl in Hin.
