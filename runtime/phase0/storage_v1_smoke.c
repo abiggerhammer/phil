@@ -33,6 +33,7 @@ struct phil_smoke_state {
   struct phil_begin_record_impl begin_record;
   struct phil_upload_id_impl upload_id;
   struct phil_payload_impl *last_payload;
+  void *last_returned_upload_id;
   uint8_t stored_bytes[PHIL_SMOKE_CAPACITY];
   size_t stored_length;
   size_t last_payload_length;
@@ -103,6 +104,7 @@ static bool common_store_observation(size_t expected_length) {
 bool phil_smoke_storage_success_observed(const uint8_t *expected, size_t length) {
   return common_store_observation(length)
       && smoke_state.accepted_calls == 1
+      && smoke_state.last_returned_upload_id == &smoke_state.upload_id
       && smoke_state.stored_length == length
       && (length == 0 || memcmp(smoke_state.stored_bytes, expected, length) == 0);
 }
@@ -110,12 +112,14 @@ bool phil_smoke_storage_success_observed(const uint8_t *expected, size_t length)
 bool phil_smoke_storage_failure_observed(size_t length) {
   return common_store_observation(length)
       && smoke_state.accepted_calls == 0
+      && smoke_state.last_returned_upload_id == NULL
       && smoke_state.stored_length == 0;
 }
 
 bool phil_smoke_storage_reserved_status_observed(size_t length) {
   return common_store_observation(length)
       && smoke_state.accepted_calls == 0
+      && smoke_state.last_returned_upload_id == &smoke_state.upload_id
       && smoke_state.stored_length == 0;
 }
 
@@ -228,6 +232,7 @@ struct phil_store_result phil_runtime_store(void *payload_handle) {
     smoke_state.invalid_store_owner_calls += 1;
     result.status = 0;
     result.upload_id = NULL;
+    smoke_state.last_returned_upload_id = result.upload_id;
     return result;
   }
 
@@ -254,6 +259,7 @@ struct phil_store_result phil_runtime_store(void *payload_handle) {
   } else {
     result.upload_id = NULL;
   }
+  smoke_state.last_returned_upload_id = result.upload_id;
   return result;
 }
 
