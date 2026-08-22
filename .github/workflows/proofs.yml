@@ -47,3 +47,5 @@ jobs:
           rocq c -Q proof/Phil Phil proof/Phil/Core/Focusing.v
           rocq c -Q proof/Phil Phil proof/Phil/Surface/Elaboration.v
           rocq c -Q proof/Phil Phil proof/Phil/Surface/Checking.v
+          rocq c -Q proof/Phil Phil proof/Phil/Surface/ScopeJoin.v
+          rocq c -Q proof/Phil Phil proof/Phil/Surface/FreshOwnership.v
