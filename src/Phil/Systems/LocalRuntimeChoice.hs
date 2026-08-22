@@ -159,6 +159,13 @@ verifyLocalRuntimeChoiceWitness artifact witness = do
         ]
   unless (systemsBlockTerminator choiceBlock == TermRuntimeChoice (localChoiceName witness) [] Nothing expectedArms) $
     Left (LocalRuntimeChoiceMismatch "local runtime choice shape drifted")
+  let somePredecessors =
+        [ systemsBlockId blockValue
+        | blockValue <- Map.elems (systemsFunctionBlocks function)
+        , localChoiceSomeTarget witness `elem` blockSuccessors blockValue
+        ]
+  unless (somePredecessors == [localChoiceBlock witness]) $
+    Left (LocalRuntimeChoiceMismatch "some-arm payload binder target must have choice block as sole predecessor")
   case Map.lookup (localChoiceInvariant witness)
       (stageInvariants (systemsArtifactStageContract artifact)) of
     Just StageInvariant
