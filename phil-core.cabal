@@ -75,6 +75,15 @@ executable phil-core
       phil-core,
       text >=2.0 && <2.2
 
+executable phil-llvm-phase0
+  import:             common-settings
+  hs-source-dirs:     app
+  main-is:            LLVMPhase0Main.hs
+  build-depends:
+      base >=4.17 && <5,
+      phil-core,
+      text >=2.0 && <2.2
+
 test-suite phil-core-tests
   import:             common-settings
   type:               exitcode-stdio-1.0
