@@ -36,6 +36,8 @@ data AcceptedResponseLLVMError
   | AcceptedResponseLLVMOperationMismatch Text LLVMBlockId [LLVMOp]
   | AcceptedResponseLLVMTerminationMismatch Text LLVMBlockId LLVMTerminator
   | AcceptedResponseLLVMStoreMismatch Text LLVMBlockId LLVMTerminator
+  | AcceptedResponseLLVMStorageRenderedMismatch Text
+  | AcceptedResponseLLVMPostStoreReleaseDetected Text LLVMBlockId Text
   | AcceptedResponseRenderedCallMismatch Text
   | AcceptedResponseGenericCallDetected Text
   | AcceptedResponseAmbientStateDetected Text
@@ -142,8 +144,32 @@ verifyWitness bundle llvmArtifact = do
       llvmModule = llvmArtifactModule llvmArtifact
       acceptedBlockId = LLVMBlockId (unBlockId (acceptedResponseBlock witness))
       storeBlockId = LLVMBlockId (unBlockId (storageBlock storeWitness))
+      storeFailureBlockId = LLVMBlockId (unBlockId (storageFailure storeWitness))
       expectedTransport = unValueId (acceptedResponseTransport witness)
       expectedUploadId = unValueId (acceptedResponseUploadId witness)
+      expectedPayload = unValueId (storageOwner storeWitness) <> ".owner"
+
+  systemsFunction <- case Map.lookup functionName (systemsProgramFunctions systemsProgram) of
+    Nothing -> Left (AcceptedResponseLLVMFunctionMissing functionName)
+    Just value -> Right value
+  sourceStoreBlock <- case Map.lookup (storageBlock storeWitness) (systemsFunctionBlocks systemsFunction) of
+    Nothing -> Left (AcceptedResponseLLVMBlockMissing functionName storeBlockId)
+    Just value -> Right value
+  (storeSite, sourceStoreFailure) <- case systemsBlockTerminator sourceStoreBlock of
+    TermStore
+      { storeOwner = owner
+      , storeResult = uploadId
+      , storeSite = site
+      , storeSuccess = yes
+      , storeFailure = no
+      }
+      | owner == storageOwner storeWitness
+          && uploadId == acceptedResponseUploadId witness
+          && yes == acceptedResponseBlock witness
+          && no == storageFailure storeWitness -> Right (site, no)
+    other -> Left (AcceptedResponseSystemsCandidateError
+      (AcceptedResponseStoragePredecessorMismatch
+        functionName (storageBlock storeWitness) other))
 
   llvmFunction <- lookupLLVMFunction llvmModule functionName
   acceptedBlock <- lookupLLVMBlock functionName llvmFunction acceptedBlockId
@@ -155,10 +181,26 @@ verifyWitness bundle llvmArtifact = do
       functionName acceptedBlockId (llvmBlockTerminator acceptedBlock))
 
   storeBlock <- lookupLLVMBlock functionName llvmFunction storeBlockId
-  case llvmBlockTerminator storeBlock of
-    LLVMStore _ _ uploadId yes _
-      | uploadId == expectedUploadId && yes == acceptedBlockId -> pure ()
-    other -> Left (AcceptedResponseLLVMStoreMismatch functionName storeBlockId other)
+  let expectedStore = LLVMStore
+        storeSite
+        expectedPayload
+        expectedUploadId
+        acceptedBlockId
+        (LLVMBlockId (unBlockId sourceStoreFailure))
+  unless (llvmBlockTerminator storeBlock == expectedStore) $
+    Left (AcceptedResponseLLVMStoreMismatch
+      functionName storeBlockId (llvmBlockTerminator storeBlock))
+
+  forM_ [storeBlockId, acceptedBlockId, storeFailureBlockId] $ \blockId -> do
+    blockValue <- lookupLLVMBlock functionName llvmFunction blockId
+    case
+      [ owner
+      | LLVMBufferRelease owner <- llvmBlockOps blockValue
+      , owner == expectedPayload
+      ] of
+      owner : _ -> Left (AcceptedResponseLLVMPostStoreReleaseDetected
+        functionName blockId owner)
+      [] -> pure ()
 
   let rendered = llvmArtifactText llvmArtifact
       callNeedle = "@phil_runtime_select_accepted(ptr %"
@@ -174,11 +216,20 @@ verifyWitness bundle llvmArtifact = do
         , "dereferenceable"
         , "noalias"
         ]
+      storeBlockSymbol = symbolish (unBlockId (storageBlock storeWitness))
+      storeCallNeedle = "@phil_runtime_store(ptr %" <> symbolish expectedPayload <> ")"
+      storeStatusNeedle = "%phil_store_ok_" <> storeBlockSymbol
+        <> " = icmp eq i8 %phil_store_status_" <> storeBlockSymbol <> ", 1"
       evidenceNamedSymbols =
         [ "@phil_runtime_" <> symbolish (unEvidenceEntryId (runtimeSiteEvidence runtimeSite))
         | sourceFunction <- Map.elems (systemsProgramFunctions systemsProgram)
         , runtimeSite <- runtimeSites sourceFunction
         ]
+  unless
+    ( Text.isInfixOf storeCallNeedle rendered
+    && Text.isInfixOf storeStatusNeedle rendered
+    ) $
+    Left (AcceptedResponseLLVMStorageRenderedMismatch functionName)
   unless (Text.isInfixOf callNeedle rendered) $
     Left (AcceptedResponseRenderedCallMismatch functionName)
   unless (not (Text.isInfixOf "@phil_call_select_accepted()" rendered)) $
