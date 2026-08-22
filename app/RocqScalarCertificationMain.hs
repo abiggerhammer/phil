@@ -32,7 +32,9 @@ certificationSpecFor :: Text.Text -> Maybe RocqCertificationSpec
 certificationSpecFor profile =
   case knownRocqCertificationSpec profile of
     Just spec -> Just spec
-    Nothing -> knownRecognizedRecordRocqCertificationSpec profile
+    Nothing -> case knownRecognizedRecordRocqCertificationSpec profile of
+      Just spec -> Just spec
+      Nothing -> knownExactReceiveRocqCertificationSpec profile
 
 certifyWith :: RocqCertificationSpec -> FilePath -> FilePath -> FilePath -> IO ()
 certifyWith spec sourcePath compiledPath outputPath = do
