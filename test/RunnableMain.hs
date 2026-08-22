@@ -7,7 +7,10 @@ import qualified Data.Map.Strict as Map
 import Data.Text (Text)
 import qualified Data.Text as Text
 import Phil.Compiler
-import Phil.Core.Scalar (ScalarType (ScalarUInt))
+import Phil.Core.Scalar
+  ( ScalarLiteral (ScalarUIntLiteral)
+  , ScalarType (ScalarUInt)
+  )
 import Phil.LLVM (llvmArtifactText)
 import Phil.Systems
   ( BlockId (..)
@@ -39,6 +42,8 @@ main = do
     , test "scalar SSA verifier rejects a missing definition" missingScalarDefinitionRejects
     , test "scalar SSA verifier rejects multiple definitions" duplicateScalarDefinitionRejects
     , test "scalar SSA verifier rejects a non-dominating definition" nonDominatingScalarDefinitionRejects
+    , test "Surface projection rejects scalar literal drift" sourceLiteralDriftRejects
+    , test "Surface projection rejects return-target drift" sourceReturnTargetDriftRejects
     , test "runnable source identity is content-bound" sourceIdentityIsContentBound
     , test "Unit-only compatibility entry point rejects scalar programs" unitEntryRejectsScalar
     , test "runnable fragment requires main component" nonMainRejects
@@ -81,6 +86,15 @@ aliasSource = Text.unlines
   [ "component main provides U32 {"
   , "    let original = 42"
   , "    let answer = original"
+  , "    return answer"
+  , "}"
+  ]
+
+returnChoiceSource :: Text
+returnChoiceSource = Text.unlines
+  [ "component main provides U32 {"
+  , "    let answer = 42"
+  , "    let wrong = 7"
   , "    return answer"
   , "}"
   ]
@@ -205,6 +219,36 @@ nonDominatingScalarDefinitionRejects =
               in case verifyScalarDataflow bad of
                   Left ScalarUseBeforeDefinition {} -> True
                   _ -> False
+
+sourceLiteralDriftRejects :: Bool
+sourceLiteralDriftRejects =
+  case compileRunnable "binding.phil" bindingSource of
+    Left _ -> False
+    Right runnable ->
+      let bad = adjustEntryBlock changeLiteral (runnableSystemsArtifact runnable)
+      in case verifyRunnableSourceProjection "binding.phil" bindingSource bad of
+          Left (RunnableSourceProjectionError SourceProjectionNamedLiteralMismatch {}) -> True
+          _ -> False
+  where
+    changeLiteral blockValue = blockValue
+      { systemsBlockOps = map rewrite (systemsBlockOps blockValue) }
+    rewrite operation = case operation of
+      OpScalarLiteral (ValueId "answer") _ ->
+        OpScalarLiteral (ValueId "answer") (ScalarUIntLiteral 32 43)
+      _ -> operation
+
+sourceReturnTargetDriftRejects :: Bool
+sourceReturnTargetDriftRejects =
+  case compileRunnable "return-choice.phil" returnChoiceSource of
+    Left _ -> False
+    Right runnable ->
+      let bad = adjustEntryBlock
+            (\blockValue -> blockValue
+              { systemsBlockTerminator = TermReturnScalar (ValueId "wrong") })
+            (runnableSystemsArtifact runnable)
+      in case verifyRunnableSourceProjection "return-choice.phil" returnChoiceSource bad of
+          Left (RunnableSourceProjectionError SourceProjectionReturnTargetMismatch {}) -> True
+          _ -> False
 
 sourceIdentityIsContentBound :: Bool
 sourceIdentityIsContentBound =
