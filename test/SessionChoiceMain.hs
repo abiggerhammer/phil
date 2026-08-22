@@ -30,15 +30,15 @@ exactOfferPresent = withBundle $ \bundle ->
   in case lookupBlockFrom bundle (sessionChoiceOfferBlock witness) of
       Just blockValue -> case systemsBlockTerminator blockValue of
         TermSessionOffer transport arms ->
-transport == sessionChoiceTransport witness
-  && Map.lookup (sessionChoiceAcceptedLabel witness) arms
-    == Just (SystemsChoiceArm
-        (Just (sessionChoiceAcceptedPayload witness))
-        (sessionChoiceAcceptedTarget witness))
-  && Map.lookup (sessionChoiceRejectedLabel witness) arms
-    == Just (SystemsChoiceArm
-        (Just (sessionChoiceRejectedPayload witness))
-        (sessionChoiceRejectedTarget witness))
+          transport == sessionChoiceTransport witness
+            && Map.lookup (sessionChoiceAcceptedLabel witness) arms
+              == Just (SystemsChoiceArm
+                  (Just (sessionChoiceAcceptedPayload witness))
+                  (sessionChoiceAcceptedTarget witness))
+            && Map.lookup (sessionChoiceRejectedLabel witness) arms
+              == Just (SystemsChoiceArm
+                  (Just (sessionChoiceRejectedPayload witness))
+                  (sessionChoiceRejectedTarget witness))
         _ -> False
       Nothing -> False
 
@@ -57,12 +57,12 @@ acceptedPayloadRecorded = withBundle $ \bundle ->
   in case lookupBlockFrom bundle (sessionChoiceAcceptedTarget witness) of
       Just SystemsBlock
         { systemsBlockOps =
-  [OpRuntimeCall name inputs [] Nothing decisionId]
+            [OpRuntimeCall name inputs [] Nothing decisionId]
         , systemsBlockTerminator = TermEnd "success"
         } ->
-name == sessionChoiceRecordOperation witness
-  && inputs == [sessionChoiceAcceptedPayload witness]
-  && decisionId == sessionChoiceRecordDecision witness
+          name == sessionChoiceRecordOperation witness
+            && inputs == [sessionChoiceAcceptedPayload witness]
+            && decisionId == sessionChoiceRecordDecision witness
       _ -> False
 
 wrongAcceptedTargetRejects :: Bool
@@ -70,14 +70,14 @@ wrongAcceptedTargetRejects = withBundle $ \bundle ->
   let witness = sessionChoiceWitness bundle
       artifact = mapOffer bundle $ \blockValue ->
         blockValue
-{ systemsBlockTerminator = case systemsBlockTerminator blockValue of
-    TermSessionOffer transport arms -> TermSessionOffer transport
-      (Map.adjust
-        (\arm -> arm { choiceArmTarget = sessionChoiceRejectedTarget witness })
-        (sessionChoiceAcceptedLabel witness)
-        arms)
-    other -> other
-}
+          { systemsBlockTerminator = case systemsBlockTerminator blockValue of
+              TermSessionOffer transport arms -> TermSessionOffer transport
+                (Map.adjust
+                  (\arm -> arm { choiceArmTarget = sessionChoiceRejectedTarget witness })
+                  (sessionChoiceAcceptedLabel witness)
+                  arms)
+              other -> other
+          }
   in case verifySessionChoiceWitness artifact witness of
       Left SessionChoiceOfferMismatch {} -> True
       _ -> False
@@ -102,10 +102,15 @@ payloadEscapeRejects = withBundle $ \bundle ->
   let witness = sessionChoiceWitness bundle
       artifact = mapBlock bundle (sessionChoiceRejectedTarget witness) $ \blockValue ->
         blockValue
-{ systemsBlockOps =
-    [OpRuntimeCall "inspect" [sessionChoiceAcceptedPayload witness] [] Nothing
-      (sessionChoiceRecordDecision witness)]
-}
+          { systemsBlockOps =
+              [ OpRuntimeCall
+                  "inspect"
+                  [sessionChoiceAcceptedPayload witness]
+                  []
+                  Nothing
+                  (sessionChoiceRecordDecision witness)
+              ]
+          }
   in case verifySessionChoiceWitness artifact witness of
       Left SessionChoicePayloadUseEscapes {} -> True
       _ -> False
@@ -131,7 +136,8 @@ mapOffer
   :: SessionChoiceBundle
   -> (SystemsBlock -> SystemsBlock)
   -> SystemsArtifact
-mapOffer bundle = mapBlock bundle (sessionChoiceOfferBlock (sessionChoiceWitness bundle))
+mapOffer bundle =
+  mapBlock bundle (sessionChoiceOfferBlock (sessionChoiceWitness bundle))
 
 mapBlock
   :: SessionChoiceBundle
@@ -145,7 +151,11 @@ mapBlock bundle blockId transform =
       functions = systemsProgramFunctions program
       functions' = Map.adjust
         (\function -> function
-{ systemsFunctionBlocks = Map.adjust transform blockId (systemsFunctionBlocks function) })
+          { systemsFunctionBlocks = Map.adjust
+              transform
+              blockId
+              (systemsFunctionBlocks function)
+          })
         (sessionChoiceFunction witness)
         functions
   in artifact
