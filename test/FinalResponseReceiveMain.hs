@@ -62,12 +62,16 @@ noLegacyCalls = withBundle $ \_ artifact ->
 wrongAcceptedTargetRejects :: Bool
 wrongAcceptedTargetRejects = withBundle $ \bundle artifact ->
   let witness = sessionChoiceWitness bundle
-      mutated = mapBlock artifact (sessionChoiceFunction witness) (sessionChoiceOfferBlock witness) $ \blockValue ->
-        blockValue { llvmBlockTerminator = case llvmBlockTerminator blockValue of
-LLVMFinalResponseOffer transport uploadId _ rejected ->
-  LLVMFinalResponseOffer transport uploadId rejected rejected
-other -> other
-        }
+      mutated = mapBlock
+        artifact
+        (sessionChoiceFunction witness)
+        (sessionChoiceOfferBlock witness) $ \blockValue ->
+          blockValue
+            { llvmBlockTerminator = case llvmBlockTerminator blockValue of
+                LLVMFinalResponseOffer transport uploadId _ rejected ->
+                  LLVMFinalResponseOffer transport uploadId rejected rejected
+                other -> other
+            }
   in case verifyFinalResponseReceiveWitness bundle mutated of
       Left FinalResponseReceiveOfferMismatch {} -> True
       _ -> False
@@ -75,8 +79,14 @@ other -> other
 missingBindingRejects :: Bool
 missingBindingRejects = withBundle $ \bundle artifact ->
   let witness = sessionChoiceWitness bundle
-      mutated = mapBlock artifact (sessionChoiceFunction witness) (sessionChoiceAcceptedTarget witness) $ \blockValue ->
-        blockValue { llvmBlockOps = [LLVMRecordUploadId (unValueId (sessionChoiceAcceptedPayload witness))] }
+      mutated = mapBlock
+        artifact
+        (sessionChoiceFunction witness)
+        (sessionChoiceAcceptedTarget witness) $ \blockValue ->
+          blockValue
+            { llvmBlockOps =
+                [LLVMRecordUploadId (unValueId (sessionChoiceAcceptedPayload witness))]
+            }
   in case verifyFinalResponseReceiveWitness bundle mutated of
       Left FinalResponseReceiveAcceptedOpsMismatch {} -> True
       _ -> False
@@ -107,10 +117,11 @@ mapBlock artifact functionName blockId transform =
       functions = llvmFunctions moduleValue
       functions' = Map.adjust
         (\function -> function
-{ llvmFunctionBlocks = Map.adjust transform
-    (LLVMBlockId (unBlockId blockId))
-    (llvmFunctionBlocks function)
-})
+          { llvmFunctionBlocks = Map.adjust
+              transform
+              (LLVMBlockId (unBlockId blockId))
+              (llvmFunctionBlocks function)
+          })
         functionName
         functions
       moduleValue' = moduleValue { llvmFunctions = functions' }
