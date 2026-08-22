@@ -36,17 +36,17 @@ int main(void) {
   transport = phil_smoke_configure_accepted_response(
     payload, sizeof(payload), sizeof(payload), sha256_abc, 0);
   (void) UploadServer(transport);
-  if (!phil_smoke_accepted_response_not_sent_observed(sizeof(payload))) {
-    fputs("storage failure emitted an accepted response\n", stderr);
+  if (!phil_smoke_accepted_response_failure_observed(sizeof(payload))) {
+    fputs("storage failure accepted-response assertion failed\n", stderr);
     return 1;
   }
-  puts("PASS: conforming storage failure emits no accepted response");
+  puts("PASS: conforming storage failure returns null UploadId and emits no accepted response");
 
   transport = phil_smoke_configure_accepted_response(
     payload, sizeof(payload), sizeof(payload), sha256_abc, 2);
   (void) UploadServer(transport);
-  if (!phil_smoke_accepted_response_not_sent_observed(sizeof(payload))) {
-    fputs("reserved storage status emitted an accepted response\n", stderr);
+  if (!phil_smoke_accepted_response_reserved_status_observed(sizeof(payload))) {
+    fputs("reserved storage status accepted-response assertion failed\n", stderr);
     return 1;
   }
   puts("PASS: reserved storage status with a non-null UploadId still emits no accepted response");
