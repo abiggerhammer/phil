@@ -15,6 +15,7 @@ import qualified Data.Set as Set
 import Data.Text (Text)
 import qualified Data.Text as Text
 import Phil.Assurance.Types
+import Phil.Core.Syntax (ObligationId (..))
 
 
 data GraphNode
@@ -29,6 +30,7 @@ data ManifestError
   | ValidityContextMismatch
   | ExpectedObligationSetMismatch (Set RevisionId) (Set RevisionId)
   | CertificationScopeOutsideManifest RevisionId
+  | EmptyStableId Text
   | MissingRevision RevisionId
   | RevisionMapKeyMismatch RevisionId RevisionId
   | RevisionStatementDigestMismatch RevisionId Digest Digest
@@ -36,17 +38,17 @@ data ManifestError
   | InvalidAcceptanceRule RevisionId
   | MissingEvidenceEntry EvidenceEntryId
   | EvidenceMapKeyMismatch EvidenceEntryId EvidenceEntryId
-  | EvidenceIdentityMismatch EvidenceEntryId EvidenceEntryId
+  | EvidenceDigestMismatch EvidenceEntryId Digest Digest
   | EvidenceOutsideManifestObligation EvidenceEntryId RevisionId
   | SelectedRejectedEvidence EvidenceEntryId Text
   | MissingAssumption AssumptionId
   | AssumptionMapKeyMismatch AssumptionId AssumptionId
-  | AssumptionIdentityMismatch AssumptionId AssumptionId
+  | AssumptionDigestMismatch AssumptionId Digest Digest
   | UnpermittedAssumption AssumptionId
   | UnselectedAssumptionDependency EvidenceEntryId AssumptionId
   | MissingExport ExportId
   | ExportMapKeyMismatch ExportId ExportId
-  | ExportIdentityMismatch ExportId ExportId
+  | ExportDigestMismatch ExportId Digest Digest
   | UnpermittedExportBoundary ExportId Text
   | InScopeObligationExported RevisionId
   | OutOfScopeObligationNotExported RevisionId
@@ -71,7 +73,7 @@ data ManifestError
   | AcceptanceRuleUnsatisfied RevisionId
   | MissingAssuranceUse AssuranceUseId
   | AssuranceUseMapKeyMismatch AssuranceUseId AssuranceUseId
-  | AssuranceUseIdentityMismatch AssuranceUseId AssuranceUseId
+  | AssuranceUseDigestMismatch AssuranceUseId Digest Digest
   | AssuranceUseOutsideScope AssuranceUseId RevisionId
   | ErasureWithoutEvidence AssuranceUseId
   | AssuranceUseMissingEvidence AssuranceUseId EvidenceEntryId
@@ -112,17 +114,18 @@ verifyManifest
   -> Either ManifestError ()
 verifyManifest context ledger manifest = do
   verifyBuildIdentity
-  verifyManifestIdentity
   verifyManifestSets
   revisions <- loadRevisions
   evidence <- loadEvidence
   assumptions <- loadAssumptions
   exports <- loadExports
   uses <- loadUses
+  verifyManifestIdentity
   mapM_ verifyRevision (Map.toList revisions)
   mapM_ (verifyEvidence assumptions) (Map.toList evidence)
   mapM_ verifyAssumption (Map.toList assumptions)
   mapM_ verifyExport (Map.toList exports)
+  mapM_ verifyUseDigest (Map.toList uses)
   verifyDependencies evidence
   verifyAcyclic evidence
   mapM_ (verifyObligationClosure evidence exports) (Set.toAscList (manifestObligationRevisions manifest))
@@ -152,7 +155,7 @@ verifyManifest context ledger manifest = do
         Left ValidityContextMismatch
 
     verifyManifestIdentity =
-      let expected = deriveManifestId manifest
+      let expected = deriveManifestId ledger manifest
       in unless (manifestId manifest == expected) $
           Left (ManifestIdentityMismatch expected (manifestId manifest))
 
@@ -198,6 +201,8 @@ verifyManifest context ledger manifest = do
           Just value -> Right (key, value)
 
     verifyRevision (key, revision) = do
+      requireTextId "obligation" (unObligationId (revisionObligationId revision))
+      requireTextId "revision" (unRevisionId key)
       unless (key == revisionId revision) $
         Left (RevisionMapKeyMismatch key (revisionId revision))
       let expectedDigest = digestText (revisionStatement revision)
@@ -215,11 +220,12 @@ verifyManifest context ledger manifest = do
             Left (MissingObligationDependency (EvidenceEntryId "<revision-lineage>") parent)
 
     verifyEvidence assumptions (key, entry) = do
+      requireTextId "evidence" (unEvidenceEntryId key)
       unless (key == evidenceEntryId entry) $
         Left (EvidenceMapKeyMismatch key (evidenceEntryId entry))
-      let expectedId = deriveEvidenceEntryId entry
-      unless (evidenceEntryId entry == expectedId) $
-        Left (EvidenceIdentityMismatch expectedId (evidenceEntryId entry))
+      let expectedDigest = deriveEvidenceEntryDigest entry
+      unless (evidenceEntryDigest entry == expectedDigest) $
+        Left (EvidenceDigestMismatch key expectedDigest (evidenceEntryDigest entry))
       unless (Set.member (evidenceObligationRevision entry) (manifestObligationRevisions manifest)) $
         Left (EvidenceOutsideManifestObligation key (evidenceObligationRevision entry))
       case evidenceResult entry of
@@ -241,22 +247,24 @@ verifyManifest context ledger manifest = do
         Left (UnpermittedAssumption assumptionKey)
 
     verifyAssumption (key, assumption) = do
+      requireTextId "assumption" (unAssumptionId key)
       unless (key == assumptionId assumption) $
         Left (AssumptionMapKeyMismatch key (assumptionId assumption))
-      let expectedId = deriveAssumptionId assumption
-      unless (assumptionId assumption == expectedId) $
-        Left (AssumptionIdentityMismatch expectedId (assumptionId assumption))
+      let expectedDigest = deriveAssumptionDigest assumption
+      unless (assumptionDigest assumption == expectedDigest) $
+        Left (AssumptionDigestMismatch key expectedDigest (assumptionDigest assumption))
       unless (Set.member key (verificationPermittedAssumptions context)) $
         Left (UnpermittedAssumption key)
       unless (scopeMatches (assumptionValidityScope assumption)) $
         Left (AssumptionValidityScopeMismatch key)
 
     verifyExport (key, export) = do
+      requireTextId "export" (unExportId key)
       unless (key == exportId export) $
         Left (ExportMapKeyMismatch key (exportId export))
-      let expectedId = deriveExportId export
-      unless (exportId export == expectedId) $
-        Left (ExportIdentityMismatch expectedId (exportId export))
+      let expectedDigest = deriveExportDigest export
+      unless (exportDigest export == expectedDigest) $
+        Left (ExportDigestMismatch key expectedDigest (exportDigest export))
       unless (Set.member (exportObligationRevision export) (manifestObligationRevisions manifest)) $
         Left (ExportOutsideManifestObligation key (exportObligationRevision export))
       when (Set.member (exportObligationRevision export) (manifestCertificationScope manifest)) $
@@ -265,6 +273,14 @@ verifyManifest context ledger manifest = do
         Left (UnpermittedExportBoundary key (exportDestinationBoundary export))
       unless (scopeMatches (exportValidityScope export)) $
         Left (ExportValidityScopeMismatch key)
+
+    verifyUseDigest (key, assuranceUse) = do
+      requireTextId "assurance use" (unAssuranceUseId key)
+      unless (key == assuranceUseId assuranceUse) $
+        Left (AssuranceUseMapKeyMismatch key (assuranceUseId assuranceUse))
+      let expectedDigest = deriveAssuranceUseDigest assuranceUse
+      unless (assuranceUseDigest assuranceUse == expectedDigest) $
+        Left (AssuranceUseDigestMismatch key expectedDigest (assuranceUseDigest assuranceUse))
 
     verifyDependencies evidence = mapM_ checkEntry (Map.elems evidence)
       where
@@ -280,7 +296,7 @@ verifyManifest context ledger manifest = do
               Left (DependencyOnExportedObligation owner required)
 
     verifyAcyclic evidence =
-      case findCycle (graphEdges evidence manifest) of
+      case findCycle (graphEdges ledger evidence manifest) of
         Nothing -> Right ()
         Just cyclePath -> Left (JustificationCycle cyclePath)
 
@@ -297,21 +313,16 @@ verifyManifest context ledger manifest = do
             _ -> Left (MultipleExportsForObligation revision)
 
     verifyUse evidence (key, assuranceUse) = do
-      unless (key == assuranceUseId assuranceUse) $
-        Left (AssuranceUseMapKeyMismatch key (assuranceUseId assuranceUse))
-      let expectedId = deriveAssuranceUseId assuranceUse
-      unless (assuranceUseId assuranceUse == expectedId) $
-        Left (AssuranceUseIdentityMismatch expectedId (assuranceUseId assuranceUse))
       let revision = useObligationRevision assuranceUse
       unless (Set.member revision (manifestCertificationScope manifest)) $
         Left (AssuranceUseOutsideScope key revision)
       accepted <- obligationAccepted evidence Set.empty revision
       unless accepted (Left (AcceptanceRuleUnsatisfied revision))
       case assuranceUse of
-        ErasureUse _ _ entries -> do
+        ErasureUse _ _ _ entries -> do
           when (null entries) (Left (ErasureWithoutEvidence key))
           mapM_ (verifyUseEvidence key revision evidence) entries
-        RetainedRuntimeUse _ _ entryId costRef -> do
+        RetainedRuntimeUse _ _ _ entryId costRef -> do
           verifyUseEvidence key revision evidence entryId
           entry <- case Map.lookup entryId evidence of
             Nothing -> Left (AssuranceUseMissingEvidence key entryId)
@@ -436,20 +447,34 @@ verifyManifest context ledger manifest = do
       unless (Set.member costRef (verificationKnownCostRefs context)) $
         Left (MissingCostReference entryId costRef)
 
+    requireTextId label value =
+      when (Text.null value) (Left (EmptyStableId label))
+
 validAcceptanceRule :: AcceptanceRule -> Bool
 validAcceptanceRule rule = case rule of
   AcceptEntry _ (EvidenceRole roleName) -> not (Text.null roleName)
   AcceptAll rules -> not (null rules) && all validAcceptanceRule rules
   AcceptAny rules -> not (null rules) && all validAcceptanceRule rules
 
-graphEdges :: Map EvidenceEntryId EvidenceEntry -> AssuranceManifest -> Map GraphNode [GraphNode]
-graphEdges evidence manifest = Map.fromListWith (<>) (obligationEdges <> evidenceEdges)
+graphEdges
+  :: AssuranceLedger
+  -> Map EvidenceEntryId EvidenceEntry
+  -> AssuranceManifest
+  -> Map GraphNode [GraphNode]
+graphEdges ledger evidence manifest = Map.fromListWith (<>)
+  (obligationEvidenceEdges <> lineageEdges <> evidenceEdges)
   where
-    obligationEdges =
+    obligationEvidenceEdges =
       [ (ObligationNode revision, [EvidenceNode entryId])
       | revision <- Set.toList (manifestObligationRevisions manifest)
       , (entryId, entry) <- Map.toList evidence
       , evidenceObligationRevision entry == revision
+      ]
+
+    lineageEdges =
+      [ (ObligationNode revision, map ObligationNode (revisionGeneratedFrom obligationRevision))
+      | revision <- Set.toList (manifestObligationRevisions manifest)
+      , Just obligationRevision <- [Map.lookup revision (ledgerRevisions ledger)]
       ]
 
     evidenceEdges =
