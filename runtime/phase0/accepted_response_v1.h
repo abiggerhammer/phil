@@ -67,6 +67,7 @@ bool phil_smoke_accepted_response_success_observed(
   size_t payload_length,
   const uint8_t *expected_response,
   size_t response_length);
-bool phil_smoke_accepted_response_not_sent_observed(size_t payload_length);
+bool phil_smoke_accepted_response_failure_observed(size_t payload_length);
+bool phil_smoke_accepted_response_reserved_status_observed(size_t payload_length);
 
 #endif
