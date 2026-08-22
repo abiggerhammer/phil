@@ -29,6 +29,12 @@ phase0SystemsArtifact = SystemsArtifact
   , systemsArtifactLoweringLedger = phase0LoweringLedger
   }
 
+phase0SourceArtifactDigest :: Digest
+phase0SourceArtifactDigest = digestText "Phase 0 upload protocol/boundary semantic graph"
+
+phase0TargetArtifactDigest :: Digest
+phase0TargetArtifactDigest = systemsProgramDigest phase0Program
+
 phase0SystemsAssuranceLedger :: AssuranceLedger
 phase0SystemsAssuranceLedger = phase0UploadLedger
   { ledgerUses = Map.union systemsErasureUses (ledgerUses phase0UploadLedger) }
@@ -38,14 +44,16 @@ phase0SystemsAssuranceManifest = provisional
   { manifestId = deriveManifestId phase0SystemsAssuranceLedger provisional }
   where
     provisional = phase0UploadManifest
-      { manifestAssuranceUses = Map.keysSet (ledgerUses phase0SystemsAssuranceLedger)
+      { manifestImplementationDigest = systemsArtifactDigest phase0SystemsArtifact
+      , manifestAssuranceUses = Map.keysSet (ledgerUses phase0SystemsAssuranceLedger)
       , manifestLoweringLedgerRoot = loweringLedgerRoot phase0LoweringLedger
       , manifestCompilationProfile = "systems/certified-release/reference"
       }
 
 phase0SystemsAssuranceContext :: VerificationContext
 phase0SystemsAssuranceContext = phase0UploadVerificationContext
-  { verificationCompilationProfile = manifestCompilationProfile phase0SystemsAssuranceManifest
+  { verificationImplementationDigest = systemsArtifactDigest phase0SystemsArtifact
+  , verificationCompilationProfile = manifestCompilationProfile phase0SystemsAssuranceManifest
   , verificationLoweringLedgerRoot = loweringLedgerRoot phase0LoweringLedger
   }
 
@@ -54,6 +62,7 @@ phase0SystemsVerificationContext = SystemsVerificationContext
   { systemsAssuranceLedger = phase0SystemsAssuranceLedger
   , systemsAssuranceManifest = phase0SystemsAssuranceManifest
   , systemsAssuranceVerificationContext = phase0SystemsAssuranceContext
+  , systemsExpectedSourceArtifactDigest = phase0SourceArtifactDigest
   , systemsExpectedRuntimeKinds = runtimeKinds
   , systemsExpectedSourceFacts = Set.fromList
       [ "hello.complete_recognition"
@@ -70,6 +79,11 @@ phase0SystemsVerificationContext = SystemsVerificationContext
       , "fatal.cleanup"
       , "payload.index_proof"
       , "digest.proof_wrapper"
+      ]
+  , systemsFactsRequiringTransfer = Set.fromList
+      [ "endpoint.typestate"
+      , "digest.shared_borrow"
+      , "fatal.cleanup"
       ]
   }
 
@@ -258,7 +272,8 @@ clientBlocks =
 phase0StageContract :: StageContract
 phase0StageContract = StageContract
   { stageContractId = "phase0.protocol-boundary-to-systems.v1"
-  , stageSourceArtifactDigest = digestText "Phase 0 upload protocol/boundary semantic graph"
+  , stageSourceArtifactDigest = phase0SourceArtifactDigest
+  , stageTargetArtifactDigest = phase0TargetArtifactDigest
   , stageFacts =
       [ runtimeFact "hello.complete_recognition" revHelloIngress evHelloIngressRuntime
       , runtimeFact "begin.complete_recognition" revBeginIngress evBeginIngressRuntime
@@ -269,17 +284,49 @@ phase0StageContract = StageContract
       , runtimeFact "payload.exact_send" revPayloadSend evPayloadSendRuntime
       , runtimeFact "digest.matches" revDigest evDigestRuntime
       , runtimeFact "storage.success" revStorage evStorageRuntime
-      , FactTransfer "endpoint.typestate" Nothing (FactTransferred invSessionControl)
-      , FactTransfer "digest.shared_borrow" Nothing (FactTransferred invPayloadBorrow)
-      , FactTransfer "fatal.cleanup" Nothing (FactTransferred invFatalCleanup)
+      , FactTransfer "endpoint.typestate" Nothing
+          (FactTransferred [invServerTransport, invClientTransport, invHelloGate, invBeginGate, invVersionSelection])
+      , FactTransfer "digest.shared_borrow" Nothing (FactTransferred [invPayloadBorrow])
+      , FactTransfer "fatal.cleanup" Nothing
+          (FactTransferred [invHelloCleanup, invBeginCleanup, invEarlyEofCleanup, invDigestMismatchCleanup])
       , FactTransfer "payload.index_proof" (Just revPayloadReceive) (FactErased useErasePayloadIndex)
       , FactTransfer "digest.proof_wrapper" (Just revDigest) (FactErased useEraseDigestProof)
       ]
   , stageInvariants = Map.fromList
-      [ (invSessionControl, "one physical handle; permitted protocol state is represented by CFG reachability")
-      , (invPayloadBorrow, "digest view is non-owning and aliases the unique payload owner without copying")
-      , (invFatalCleanup, "fatal ingress/transport/storage exits expose no normal successor and perform required cleanup")
-      , (invExactLength, "successful receive_exact edge owns exactly begin.length bytes")
+      [ stageInvariant invServerTransport
+          (InvariantSingleTransportHandle "UploadServer" (v "server.transport"))
+      , stageInvariant invClientTransport
+          (InvariantSingleTransportHandle "UploadClient" (v "client.transport"))
+      , stageInvariant invHelloGate
+          (InvariantRecognitionGate "UploadServer" (b "server.entry") (v "server.pending.hello")
+            (b "server.hello.commit") (b "server.hello.recognition_failure"))
+      , stageInvariant invBeginGate
+          (InvariantRecognitionGate "UploadServer" (b "server.version") (v "server.pending.begin")
+            (b "server.begin.commit") (b "server.begin.recognition_failure"))
+      , stageInvariant invVersionSelection
+          (InvariantBranchTargets "UploadServer" (b "server.version.choose")
+            (b "server.version") (b "server.unsupported"))
+      , stageInvariant invPayloadBorrow
+          (InvariantBorrowAliases "UploadServer" (v "server.payload_view") (v "server.payload"))
+      , stageInvariant invExactLength
+          (InvariantExactReceive "UploadServer" (b "server.payload") (v "server.payload")
+            (b "server.digest") (b "server.early_eof"))
+      , stageInvariant invDigestGate
+          (InvariantRequiredEdge (edge "UploadServer" "server.digest" "server.store"
+            "digest success gates storage"))
+      , stageInvariant invStorageGate
+          (InvariantRequiredEdge (edge "UploadServer" "server.store" "server.accepted"
+            "accepted requires storage success"))
+      , stageInvariant invHelloCleanup
+          (InvariantCleanupOwners "UploadServer" (b "server.hello.recognition_failure")
+            [v "server.pending.hello", v "server.frame.hello"])
+      , stageInvariant invBeginCleanup
+          (InvariantCleanupOwners "UploadServer" (b "server.begin.recognition_failure")
+            [v "server.pending.begin", v "server.frame.begin"])
+      , stageInvariant invEarlyEofCleanup
+          (InvariantCleanupOwners "UploadServer" (b "server.early_eof") [v "server.payload"])
+      , stageInvariant invDigestMismatchCleanup
+          (InvariantCleanupOwners "UploadServer" (b "server.digest_mismatch") [v "server.payload"])
       ]
   , stageRequiredEdges =
       [ edge "UploadServer" "server.entry" "server.hello.commit" "recognition success reaches commit"
@@ -312,14 +359,15 @@ phase0StageContract = StageContract
 phase0LoweringLedger :: LoweringLedger
 phase0LoweringLedger = LoweringLedger decisions (deriveLoweringLedgerRoot decisions)
   where
-    decisions = Map.fromList [(loweringDecisionId decision, decision) | decision <- loweringDecisions]
+    decisions = Map.fromList [(loweringDecisionId lowering, lowering) | lowering <- loweringDecisions]
 
 loweringDecisions :: [LoweringDecision]
 loweringDecisions =
   [ decision dSessionControl RepresentAsControlFlow (Just SemanticRequired)
       "Endpoint[S] / Endpoint[S']" "transport handle + CFG state"
       ["session typestate"] [] [] []
-      ["stale session state is unreachable by CFG"] [invSessionControl]
+      ["stale session state is unreachable by CFG"]
+      [invServerTransport, invClientTransport, invHelloGate, invBeginGate, invVersionSelection]
       [] (emptyCostShape { costBranchOrDispatch = Just "ordinary CFG only" })
   , decision dFrame Materialize (Just SemanticRequired)
       "grammar-backed ingress" "transport frame-buffer owner + pending lifecycle"
@@ -356,7 +404,8 @@ loweringDecisions =
   , decision dReceiveExact InsertCheck (Just RuntimeAssuranceRequired)
       "Bytes[toNat(begin.length)] receive" "receive_exact + EarlyEOF edge"
       ["exact payload length"] [revPayloadReceive] [evPayloadReceiveRuntime] []
-      ["success owns exactly requested byte count", "failure cleans partial buffer"] [invExactLength, invFatalCleanup]
+      ["success owns exactly requested byte count", "failure cleans partial buffer"]
+      [invExactLength, invEarlyEofCleanup]
       ["receive_exact completeness check"]
       (checkCost { costAllocationCount = Just "one payload buffer", costFrequency = Just "per payload" })
   , decision dSendExact Retain (Just SemanticRequired)
@@ -367,27 +416,28 @@ loweringDecisions =
   , decision dDigestCheck InsertCheck (Just SemanticRequired)
       "DigestMatches runtime obligation" "SHA-256 computation + comparison branch"
       ["digest match"] [revDigest] [evDigestRuntime] []
-      ["mismatch cannot reach storage/accepted"] [] ["SHA-256 digest validator"]
+      ["mismatch cannot reach storage/accepted"] [invDigestGate] ["SHA-256 digest validator"]
       (emptyCostShape { costHashOrCryptoWork = Just "SHA-256 over payload bytes", costDynamicCheckCount = Just "1 comparison", costFrequency = Just "per payload" })
   , decision dStorage Retain (Just SemanticRequired)
       "storage-success obligation" "store runtime call + success/failure branch"
       ["accepted requires storage success"] [revStorage] [evStorageRuntime] []
-      ["store consumes payload on both arms"] [invFatalCleanup] ["store"]
+      ["store consumes payload on both arms"] [invStorageGate] ["store"]
       (emptyCostShape { costFrequency = Just "per accepted-digest payload", costBranchOrDispatch = Just "success/failure" })
   , decision dCleanup Cleanup (Just SemanticRequired)
       "linear/fatal resource effects" "explicit release/destroy/cleanup paths"
       ["ADR-005 cleanup"] [] [] []
-      ["no normal successor after fatal cleanup"] [invFatalCleanup] []
-      (emptyCostShape { costFrequency = Just "failure/terminal path" })
+      ["no normal successor after fatal cleanup"]
+      [invHelloCleanup, invBeginCleanup, invEarlyEofCleanup, invDigestMismatchCleanup]
+      [] (emptyCostShape { costFrequency = Just "failure/terminal path" })
   , decision dEraseIngress Erase (Just SemanticRequired)
       "PendingRecv proof/typestate wrapper" "frame owner + CFG lifecycle"
       ["pending ingress semantic wrapper"] [revHelloIngress, revBeginIngress]
       [evHelloIngressKernel, evBeginIngressKernel] [useEraseHelloPending, useEraseBeginPending]
-      ["runtime ingress mechanism remains"] [invSessionControl] [] emptyCostShape
+      ["runtime ingress mechanism remains"] [invHelloGate, invBeginGate] [] emptyCostShape
   , decision dEraseStatic Erase (Just SemanticRequired)
       "static branch-selection proof" "no runtime proof object"
       ["version selection evidence"] [revVersionServer] [evVersionServerKernel] [useEraseVersionProof]
-      ["branch choice already constrained by checked Core"] [] [] emptyCostShape
+      ["branch choice already constrained by checked Core"] [invVersionSelection] [] emptyCostShape
   , decision dErasePayloadIndex Erase (Just SemanticRequired)
       "dependent Bytes index proof" "payload owner + exact-length control invariant"
       ["payload exact-length proof"] [revPayloadReceive] [evPayloadReceiveKernel] [useErasePayloadIndex]
@@ -395,7 +445,7 @@ loweringDecisions =
   , decision dEraseDigestProof Erase (Just SemanticRequired)
       "Proof[DigestMatches] wrapper" "digest-success control edge"
       ["digest evidence wrapper"] [revDigest] [evDigestKernel, evDigestRuntime] [useEraseDigestProof]
-      ["runtime digest check remains and success edge gates storage"] [] [] emptyCostShape
+      ["runtime digest check remains and success edge gates storage"] [invDigestGate] [] emptyCostShape
   , decision dSemanticCall Retain (Just SemanticRequired)
       "source/protocol runtime operation" "ordinary runtime call/control flow"
       ["protocol/application operation"] [] [] [] [] [] []
@@ -456,6 +506,9 @@ site = RuntimeSiteRef
 runtimeFact :: Text -> RevisionId -> EvidenceEntryId -> FactTransfer
 runtimeFact name revision evidence = FactTransfer name (Just revision) (FactRuntimeRetained evidence)
 
+stageInvariant :: InvariantId -> InvariantClaim -> (InvariantId, StageInvariant)
+stageInvariant invariantId claim = (invariantId, StageInvariant invariantId claim)
+
 edge :: Text -> Text -> Text -> Text -> RequiredControlEdge
 edge functionName from to reason = RequiredControlEdge functionName (b from) (b to) reason
 
@@ -478,6 +531,8 @@ decision decisionId action costClass source target entities revisions evidence u
   seal LoweringDecision
     { loweringDecisionId = decisionId
     , loweringDecisionDigest = Digest ""
+    , loweringSourceArtifactDigest = phase0SourceArtifactDigest
+    , loweringTargetArtifactDigest = phase0TargetArtifactDigest
     , loweringSourceRepresentation = source
     , loweringTargetRepresentation = target
     , loweringSemanticEntities = entities
@@ -548,11 +603,22 @@ dErasePayloadIndex = d "lower.erase.payload_index"
 dEraseDigestProof = d "lower.erase.digest_proof"
 dSemanticCall = d "lower.runtime.semantic_call"
 
-invSessionControl, invPayloadBorrow, invFatalCleanup, invExactLength :: InvariantId
-invSessionControl = inv "invariant.session.control_flow"
+invServerTransport, invClientTransport, invHelloGate, invBeginGate, invVersionSelection :: InvariantId
+invPayloadBorrow, invExactLength, invDigestGate, invStorageGate :: InvariantId
+invHelloCleanup, invBeginCleanup, invEarlyEofCleanup, invDigestMismatchCleanup :: InvariantId
+invServerTransport = inv "invariant.session.server_single_transport"
+invClientTransport = inv "invariant.session.client_single_transport"
+invHelloGate = inv "invariant.ingress.hello_recognition_gate"
+invBeginGate = inv "invariant.ingress.begin_recognition_gate"
+invVersionSelection = inv "invariant.version.selection_branch"
 invPayloadBorrow = inv "invariant.payload.borrow_no_copy"
-invFatalCleanup = inv "invariant.failure.cleanup"
 invExactLength = inv "invariant.payload.exact_length"
+invDigestGate = inv "invariant.digest.success_gates_storage"
+invStorageGate = inv "invariant.storage.success_gates_accepted"
+invHelloCleanup = inv "invariant.failure.hello_cleanup"
+invBeginCleanup = inv "invariant.failure.begin_cleanup"
+invEarlyEofCleanup = inv "invariant.failure.early_eof_cleanup"
+invDigestMismatchCleanup = inv "invariant.failure.digest_mismatch_cleanup"
 
 useEraseHelloPending, useEraseBeginPending, useEraseVersionProof :: AssuranceUseId
 useErasePayloadIndex, useEraseDigestProof :: AssuranceUseId
