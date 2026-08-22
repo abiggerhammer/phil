@@ -1,5 +1,4 @@
-From Stdlib Require Import Lists.List Arith.PeanoNat Bool.Bool.
-Import ListNotations.
+From Stdlib Require Import Arith.PeanoNat Bool.Bool.
 
 (*
   Proof-oriented model of the authority-bearing core of Phil.Assurance.Verify.
@@ -178,23 +177,54 @@ Inductive AssuranceKind : Type :=
 
 Definition EvidenceRole := nat.
 
+(*
+  Verify.hs represents conjunction/disjunction as nonempty lists after
+  validAcceptanceRule has rejected empty lists.  The proof-side representation
+  normalizes those validated nonempty lists to binary trees.  This removes
+  container representation from the authority theorem: there is no constructor
+  for a vacuous all/any rule, while arbitrary nonempty Haskell lists correspond
+  to repeated AcceptAllOf/AcceptAnyOf nodes.
+*)
 Inductive AcceptanceRule : Type :=
 | AcceptEntry : AssuranceKind -> EvidenceRole -> AcceptanceRule
-| AcceptAll : list AcceptanceRule -> AcceptanceRule
-| AcceptAny : list AcceptanceRule -> AcceptanceRule.
+| AcceptAllOf : AcceptanceRule -> AcceptanceRule -> AcceptanceRule
+| AcceptAnyOf : AcceptanceRule -> AcceptanceRule -> AcceptanceRule.
 
 Inductive ValidAcceptanceRule : AcceptanceRule -> Prop :=
 | ValidEntry : forall kind role,
     role <> 0 ->
     ValidAcceptanceRule (AcceptEntry kind role)
-| ValidAll : forall rules,
-    rules <> [] ->
-    Forall ValidAcceptanceRule rules ->
-    ValidAcceptanceRule (AcceptAll rules)
-| ValidAny : forall rules,
-    rules <> [] ->
-    Forall ValidAcceptanceRule rules ->
-    ValidAcceptanceRule (AcceptAny rules).
+| ValidAllOf : forall left right,
+    ValidAcceptanceRule left ->
+    ValidAcceptanceRule right ->
+    ValidAcceptanceRule (AcceptAllOf left right)
+| ValidAnyOf : forall left right,
+    ValidAcceptanceRule left ->
+    ValidAcceptanceRule right ->
+    ValidAcceptanceRule (AcceptAnyOf left right).
+
+(* The two invalid raw shapes model the Haskell AcceptAll [] / AcceptAny []
+   boundary before nonempty rules are normalized to the binary tree above. *)
+Inductive RawAcceptanceBoundary : Type :=
+| RawValidatedRule : AcceptanceRule -> RawAcceptanceBoundary
+| RawEmptyAll
+| RawEmptyAny.
+
+Definition validateRawAcceptance
+  (raw : RawAcceptanceBoundary) : option AcceptanceRule :=
+  match raw with
+  | RawValidatedRule rule => Some rule
+  | RawEmptyAll => None
+  | RawEmptyAny => None
+  end.
+
+Theorem empty_all_acceptance_rule_is_rejected :
+  validateRawAcceptance RawEmptyAll = None.
+Proof. reflexivity. Qed.
+
+Theorem empty_any_acceptance_rule_is_rejected :
+  validateRawAcceptance RawEmptyAny = None.
+Proof. reflexivity. Qed.
 
 Record EvidenceEntry : Type := mkEvidenceEntry {
   entryRevision : RevisionId;
@@ -228,15 +258,16 @@ Inductive RuleSatisfied
 | SatisfiedEntry : forall kind role evidence,
     MatchingUsableEvidence environment revision kind role evidence ->
     RuleSatisfied environment revision (AcceptEntry kind role)
-| SatisfiedAll : forall rules,
-    rules <> [] ->
-    Forall (RuleSatisfied environment revision) rules ->
-    RuleSatisfied environment revision (AcceptAll rules)
-| SatisfiedAny : forall rules rule,
-    rules <> [] ->
-    In rule rules ->
-    RuleSatisfied environment revision rule ->
-    RuleSatisfied environment revision (AcceptAny rules).
+| SatisfiedAllOf : forall left right,
+    RuleSatisfied environment revision left ->
+    RuleSatisfied environment revision right ->
+    RuleSatisfied environment revision (AcceptAllOf left right)
+| SatisfiedAnyLeft : forall left right,
+    RuleSatisfied environment revision left ->
+    RuleSatisfied environment revision (AcceptAnyOf left right)
+| SatisfiedAnyRight : forall left right,
+    RuleSatisfied environment revision right ->
+    RuleSatisfied environment revision (AcceptAnyOf left right).
 
 Definition AcceptanceCheckSuccess
   (environment : EvidenceEnvironment)
@@ -244,22 +275,6 @@ Definition AcceptanceCheckSuccess
   (rule : AcceptanceRule) : Prop :=
   ValidAcceptanceRule rule /\
   RuleSatisfied environment revision rule.
-
-Theorem empty_all_acceptance_rule_is_invalid :
-  ~ ValidAcceptanceRule (AcceptAll []).
-Proof.
-  intro Hvalid.
-  inversion Hvalid.
-  contradiction.
-Qed.
-
-Theorem empty_any_acceptance_rule_is_invalid :
-  ~ ValidAcceptanceRule (AcceptAny []).
-Proof.
-  intro Hvalid.
-  inversion Hvalid.
-  contradiction.
-Qed.
 
 Theorem accepted_entry_requires_selected_exact_usable_evidence :
   forall environment revision kind role,
@@ -273,6 +288,29 @@ Proof.
   inversion Hsatisfied; subst.
   exists evidence.
   assumption.
+Qed.
+
+Theorem accepted_all_requires_both_children :
+  forall environment revision left right,
+    RuleSatisfied environment revision (AcceptAllOf left right) ->
+    RuleSatisfied environment revision left /\
+    RuleSatisfied environment revision right.
+Proof.
+  intros environment revision left right Hsatisfied.
+  inversion Hsatisfied; subst.
+  split; assumption.
+Qed.
+
+Theorem accepted_any_requires_one_child :
+  forall environment revision left right,
+    RuleSatisfied environment revision (AcceptAnyOf left right) ->
+    RuleSatisfied environment revision left \/
+    RuleSatisfied environment revision right.
+Proof.
+  intros environment revision left right Hsatisfied.
+  inversion Hsatisfied; subst.
+  - left. assumption.
+  - right. assumption.
 Qed.
 
 Theorem matching_evidence_is_selected :
