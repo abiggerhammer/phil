@@ -16,6 +16,7 @@ import Data.Text (Text)
 import qualified Data.Text as Text
 import Phil.Assurance.Types
 import Phil.Assurance.Verify (ManifestError, verifyManifest)
+import Phil.Core.Scalar (scalarLiteralInRange, scalarLiteralType)
 import Phil.Systems.IR
 
 data SystemsVerificationContext = SystemsVerificationContext
@@ -60,6 +61,13 @@ data SystemsVerificationError
   | BorrowedViewUnknownOwner Text ValueId ValueId
   | BorrowedViewOwnerNotOwning Text ValueId ValueId
   | DuplicateOwningStorage Text Text [ValueId]
+  | ScalarLiteralOutputMissing Text BlockId ValueId
+  | ScalarLiteralOutputNotScalar Text BlockId ValueId
+  | ScalarLiteralTypeMismatch Text BlockId ValueId ScalarType ScalarType
+  | ScalarLiteralOutOfRange Text BlockId ScalarLiteral
+  | ScalarReturnUnknownValue Text BlockId ValueId
+  | ScalarReturnValueNotScalar Text BlockId ValueId
+  | ScalarReturnTypeMismatch Text ScalarType ScalarType
   | CopyWithoutCopyDecision Text BlockId DecisionId
   | BorrowWithoutBorrowDecision Text BlockId DecisionId
   | OperationReferencesUnknownDecision Text BlockId DecisionId
@@ -237,6 +245,7 @@ verifyProgram artifact = do
         verifyOperationDecision functionKey blockKey decisions operation
         verifyOperationShape program functionKey function blockKey recognitionTargets operation
       verifyTerminatorShape functionKey function blockKey (systemsBlockTerminator blockValue)
+    verifyScalarReturnTypes functionKey function
 
 verifyValues :: Text -> SystemsFunction -> Either SystemsVerificationError ()
 verifyValues functionKey function =
@@ -306,6 +315,7 @@ operationDecision operation = case operation of
   OpCopy { copyDecision = lowering } -> Just lowering
   OpEraseFact { eraseDecision = lowering } -> Just lowering
   OpDiagnostic { diagnosticDecision = lowering } -> Just lowering
+  OpScalarLiteral {} -> Nothing
   OpTraceEvent _ -> Nothing
 
 verifyOperationShape
@@ -338,6 +348,16 @@ verifyOperationShape program functionKey function blockKey recognitionTargets op
     OpDiagnostic _ _ ->
       when (systemsProgramProfile program == CertifiedRelease) $
         Left (DiagnosticInCertifiedRelease functionKey blockKey)
+    OpScalarLiteral output literal -> do
+      unless (scalarLiteralInRange literal) $
+        Left (ScalarLiteralOutOfRange functionKey blockKey literal)
+      case Map.lookup output (systemsFunctionValues function) of
+        Nothing -> Left (ScalarLiteralOutputMissing functionKey blockKey output)
+        Just SystemsValue { systemsValueRole = TypedScalar actualType } ->
+          let expectedType = scalarLiteralType literal
+          in unless (actualType == expectedType) $
+              Left (ScalarLiteralTypeMismatch functionKey blockKey output expectedType actualType)
+        Just _ -> Left (ScalarLiteralOutputNotScalar functionKey blockKey output)
     _ -> pure ()
 
 verifyTerminatorShape
@@ -370,6 +390,11 @@ verifyTerminatorShape functionKey function blockKey terminator =
         Left (RecognitionCommitNotFirstUse functionKey blockKey pending success)
       unless (blockContainsDestroy function failure pending) $
         Left (RecognitionFailureMissingDestroy functionKey blockKey pending failure)
+    TermReturnScalar valueId ->
+      case Map.lookup valueId (systemsFunctionValues function) of
+        Nothing -> Left (ScalarReturnUnknownValue functionKey blockKey valueId)
+        Just SystemsValue { systemsValueRole = TypedScalar _ } -> pure ()
+        Just _ -> Left (ScalarReturnValueNotScalar functionKey blockKey valueId)
     _ -> pure ()
   where
     receivesPending pending OpReceiveFrame { receivePending = candidate } = candidate == pending
@@ -377,6 +402,23 @@ verifyTerminatorShape functionKey function blockKey terminator =
     borrowsView view owner OpBorrowView { borrowView = candidateView, borrowOwner = candidateOwner } =
       view == candidateView && owner == candidateOwner
     borrowsView _ _ _ = False
+
+verifyScalarReturnTypes :: Text -> SystemsFunction -> Either SystemsVerificationError ()
+verifyScalarReturnTypes functionKey function =
+  case scalarTypes of
+    [] -> pure ()
+    firstType : rest ->
+      case filter (/= firstType) rest of
+        [] -> pure ()
+        mismatched : _ -> Left (ScalarReturnTypeMismatch functionKey firstType mismatched)
+  where
+    scalarTypes =
+      [ scalarType
+      | blockValue <- Map.elems (systemsFunctionBlocks function)
+      , TermReturnScalar valueId <- [systemsBlockTerminator blockValue]
+      , Just SystemsValue { systemsValueRole = TypedScalar scalarType } <-
+          [Map.lookup valueId (systemsFunctionValues function)]
+      ]
 
 findFrameOwnerForPending
   :: SystemsFunction

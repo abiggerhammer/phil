@@ -6,6 +6,8 @@ module Phil.Systems.IR
   , BlockId (..)
   , DecisionId (..)
   , InvariantId (..)
+  , ScalarType (..)
+  , ScalarLiteral (..)
   , SystemsValueRole (..)
   , SystemsValue (..)
   , RuntimeSiteKind (..)
@@ -49,6 +51,12 @@ import Phil.Assurance.Types
   , RevisionId (..)
   , digestText
   )
+import Phil.Core.Scalar
+  ( ScalarLiteral (..)
+  , ScalarType (..)
+  , renderScalarLiteral
+  , renderScalarType
+  )
 
 newtype ValueId = ValueId { unValueId :: Text }
   deriving (Eq, Ord, Show)
@@ -74,6 +82,7 @@ data SystemsValueRole
   | OwnedBuffer Text
   | BorrowedSlice ValueId
   | RuntimeScalar Text
+  | TypedScalar ScalarType
   | RuntimeRecord Text
   | DiagnosticState Text
   deriving (Eq, Ord, Show)
@@ -156,6 +165,10 @@ data SystemsOp
       { diagnosticName :: Text
       , diagnosticDecision :: DecisionId
       }
+  | OpScalarLiteral
+      { scalarLiteralOutput :: ValueId
+      , scalarLiteralValue :: ScalarLiteral
+      }
   | OpTraceEvent Text
   deriving (Eq, Ord, Show)
 
@@ -197,6 +210,7 @@ data SystemsTerminator
       , storeSuccess :: BlockId
       , storeFailure :: BlockId
       }
+  | TermReturnScalar ValueId
   | TermEnd Text
   | TermFatal Text
   deriving (Eq, Ord, Show)
@@ -463,6 +477,7 @@ blockSuccessors blockValue = case systemsBlockTerminator blockValue of
   TermReceiveExact { exactSuccess = yes, exactFailure = no } -> [yes, no]
   TermSendExact { sendExactSuccess = yes, sendExactFailure = no } -> [yes, no]
   TermStore { storeSuccess = yes, storeFailure = no } -> [yes, no]
+  TermReturnScalar _ -> []
   TermEnd _ -> []
   TermFatal _ -> []
 
@@ -509,6 +524,7 @@ renderValueRole role = case role of
   OwnedBuffer description -> "owned-buffer(" <> atom description <> ")"
   BorrowedSlice owner -> "borrowed-slice(" <> atom (unValueId owner) <> ")"
   RuntimeScalar description -> "runtime-scalar(" <> atom description <> ")"
+  TypedScalar scalarType -> "typed-scalar(" <> atom (renderScalarType scalarType) <> ")"
   RuntimeRecord description -> "runtime-record(" <> atom description <> ")"
   DiagnosticState description -> "diagnostic-state(" <> atom description <> ")"
 
@@ -557,6 +573,8 @@ renderOp operation = case operation of
   OpEraseFact revision useId lowering -> tag "erase-fact"
     [unRevisionId revision, unAssuranceUseId useId, unDecisionId lowering]
   OpDiagnostic name lowering -> tag "diagnostic" [name, unDecisionId lowering]
+  OpScalarLiteral output literal -> tag "scalar-literal"
+    [unValueId output, renderScalarLiteral literal]
   OpTraceEvent name -> tag "trace" [name]
   where
     tag name fields = name <> renderList id fields
@@ -577,6 +595,7 @@ renderTerminator terminator = case terminator of
     [unValueId transport, unValueId owner, renderRuntimeSite site, unBlockId yes, unBlockId no]
   TermStore owner result site yes no -> tag "store"
     [unValueId owner, unValueId result, renderRuntimeSite site, unBlockId yes, unBlockId no]
+  TermReturnScalar value -> tag "return-scalar" [unValueId value]
   TermEnd outcome -> tag "end" [outcome]
   TermFatal failure -> tag "fatal" [failure]
   where

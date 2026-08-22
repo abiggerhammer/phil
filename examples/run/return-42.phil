@@ -1,0 +1,3 @@
+component main provides U32 {
+    return 42
+}
