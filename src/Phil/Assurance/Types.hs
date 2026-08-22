@@ -31,10 +31,10 @@ module Phil.Assurance.Types
   , renderPropositionCanonical
   , deriveRevisionId
   , revisionFromCoreObligation
-  , deriveEvidenceEntryId
-  , deriveAssumptionId
-  , deriveExportId
-  , deriveAssuranceUseId
+  , deriveEvidenceEntryDigest
+  , deriveAssumptionDigest
+  , deriveExportDigest
+  , deriveAssuranceUseDigest
   , deriveManifestId
   ) where
 
@@ -149,6 +149,7 @@ data RuntimeMechanism = RuntimeMechanism
 
 data EvidenceEntry = EvidenceEntry
   { evidenceEntryId :: EvidenceEntryId
+  , evidenceEntryDigest :: Digest
   , evidenceObligationRevision :: RevisionId
   , evidenceAssuranceKind :: AssuranceKind
   , evidenceRole :: EvidenceRole
@@ -169,6 +170,7 @@ data EvidenceEntry = EvidenceEntry
 
 data Assumption = Assumption
   { assumptionId :: AssumptionId
+  , assumptionDigest :: Digest
   , assumptionStatement :: Text
   , assumptionScope :: Text
   , assumptionOwnerBoundary :: Text
@@ -179,6 +181,7 @@ data Assumption = Assumption
 
 data ExportEntry = ExportEntry
   { exportId :: ExportId
+  , exportDigest :: Digest
   , exportObligationRevision :: RevisionId
   , exportDestinationBoundary :: Text
   , exportDerivedObligationId :: ObligationId
@@ -189,11 +192,13 @@ data ExportEntry = ExportEntry
 data AssuranceUse
   = ErasureUse
       { assuranceUseId :: AssuranceUseId
+      , assuranceUseDigest :: Digest
       , useObligationRevision :: RevisionId
       , useEvidenceEntries :: [EvidenceEntryId]
       }
   | RetainedRuntimeUse
       { assuranceUseId :: AssuranceUseId
+      , assuranceUseDigest :: Digest
       , useObligationRevision :: RevisionId
       , useRuntimeEvidence :: EvidenceEntryId
       , useCostRef :: Text
@@ -415,27 +420,25 @@ revisionFromCoreObligation obligation kind representation subjects contexts acce
         }
   in provisional { revisionId = deriveRevisionId provisional }
 
-deriveEvidenceEntryId :: EvidenceEntry -> EvidenceEntryId
-deriveEvidenceEntryId entry = EvidenceEntryId ("evidence.sha256." <> unDigest (digestText payload))
+deriveEvidenceEntryDigest :: EvidenceEntry -> Digest
+deriveEvidenceEntryDigest entry = digestText (canonicalFields
+  [ ("revision", unRevisionId (evidenceObligationRevision entry))
+  , ("kind", Text.pack (show (evidenceAssuranceKind entry)))
+  , ("role", unEvidenceRole (evidenceRole entry))
+  , ("producer", evidenceProducer entry)
+  , ("checker", evidenceChecker entry)
+  , ("artifact", maybe "" renderArtifact (evidenceArtifact entry))
+  , ("inputs", listText (sort (map unDigest (evidenceInputDigests entry))))
+  , ("assumptions", listText (sort (map unAssumptionId (evidenceAssumptions entry))))
+  , ("depends", listText (sort (map renderDependency (evidenceDependsOn entry))))
+  , ("validity", renderValidityScope (evidenceValidityScope entry))
+  , ("result", renderResult (evidenceResult entry))
+  , ("justifies", listText (sort (evidenceJustifies entry)))
+  , ("runtime", maybe "" renderRuntime (evidenceRuntimeMechanism entry))
+  , ("residue", listText (sort (evidenceRuntimeResidue entry)))
+  , ("cost", listText (sort (evidenceCostRefs entry)))
+  ])
   where
-    payload = canonicalFields
-      [ ("revision", unRevisionId (evidenceObligationRevision entry))
-      , ("kind", Text.pack (show (evidenceAssuranceKind entry)))
-      , ("role", unEvidenceRole (evidenceRole entry))
-      , ("producer", evidenceProducer entry)
-      , ("checker", evidenceChecker entry)
-      , ("artifact", maybe "" renderArtifact (evidenceArtifact entry))
-      , ("inputs", listText (sort (map unDigest (evidenceInputDigests entry))))
-      , ("assumptions", listText (sort (map unAssumptionId (evidenceAssumptions entry))))
-      , ("depends", listText (sort (map renderDependency (evidenceDependsOn entry))))
-      , ("validity", renderValidityScope (evidenceValidityScope entry))
-      , ("result", renderResult (evidenceResult entry))
-      , ("justifies", listText (sort (evidenceJustifies entry)))
-      , ("runtime", maybe "" renderRuntime (evidenceRuntimeMechanism entry))
-      , ("residue", listText (sort (evidenceRuntimeResidue entry)))
-      , ("cost", listText (sort (evidenceCostRefs entry)))
-      ]
-
     renderArtifact artifact =
       unArtifactRef (artifactReference artifact) <> "@" <> unDigest (artifactDigest artifact)
 
@@ -455,45 +458,41 @@ deriveEvidenceEntryId entry = EvidenceEntryId ("evidence.sha256." <> unDigest (d
       , ("implementation", maybe "" renderArtifact (runtimeImplementation runtime))
       ]
 
-deriveAssumptionId :: Assumption -> AssumptionId
-deriveAssumptionId assumption = AssumptionId ("assumption.sha256." <> unDigest (digestText payload))
-  where
-    payload = canonicalFields
-      [ ("statement", assumptionStatement assumption)
-      , ("scope", assumptionScope assumption)
-      , ("owner", assumptionOwnerBoundary assumption)
-      , ("rationale", assumptionRationale assumption)
-      , ("validity", renderValidityScope (assumptionValidityScope assumption))
-      ]
+deriveAssumptionDigest :: Assumption -> Digest
+deriveAssumptionDigest assumption = digestText (canonicalFields
+  [ ("statement", assumptionStatement assumption)
+  , ("scope", assumptionScope assumption)
+  , ("owner", assumptionOwnerBoundary assumption)
+  , ("rationale", assumptionRationale assumption)
+  , ("validity", renderValidityScope (assumptionValidityScope assumption))
+  ])
 
-deriveExportId :: ExportEntry -> ExportId
-deriveExportId export = ExportId ("export.sha256." <> unDigest (digestText payload))
-  where
-    payload = canonicalFields
-      [ ("revision", unRevisionId (exportObligationRevision export))
-      , ("destination", exportDestinationBoundary export)
-      , ("derived", unObligationId (exportDerivedObligationId export))
-      , ("validity", renderValidityScope (exportValidityScope export))
-      ]
+deriveExportDigest :: ExportEntry -> Digest
+deriveExportDigest export = digestText (canonicalFields
+  [ ("revision", unRevisionId (exportObligationRevision export))
+  , ("destination", exportDestinationBoundary export)
+  , ("derived", unObligationId (exportDerivedObligationId export))
+  , ("validity", renderValidityScope (exportValidityScope export))
+  ])
 
-deriveAssuranceUseId :: AssuranceUse -> AssuranceUseId
-deriveAssuranceUseId assuranceUse = AssuranceUseId ("use.sha256." <> unDigest (digestText payload))
+deriveAssuranceUseDigest :: AssuranceUse -> Digest
+deriveAssuranceUseDigest assuranceUse = digestText payload
   where
     payload = case assuranceUse of
-      ErasureUse _ revision entries -> canonicalFields
+      ErasureUse _ _ revision entries -> canonicalFields
         [ ("kind", "erasure")
         , ("revision", unRevisionId revision)
         , ("evidence", listText (sort (map unEvidenceEntryId entries)))
         ]
-      RetainedRuntimeUse _ revision entry costRef -> canonicalFields
+      RetainedRuntimeUse _ _ revision entry costRef -> canonicalFields
         [ ("kind", "retained_runtime")
         , ("revision", unRevisionId revision)
         , ("evidence", unEvidenceEntryId entry)
         , ("cost", costRef)
         ]
 
-deriveManifestId :: AssuranceManifest -> Digest
-deriveManifestId manifest = digestText (canonicalFields
+deriveManifestId :: AssuranceLedger -> AssuranceManifest -> Digest
+deriveManifestId ledger manifest = digestText (canonicalFields
   [ ("architecture", unDigest (manifestArchitectureDigest manifest))
   , ("core", unDigest (manifestPhilCoreDigest manifest))
   , ("implementation", unDigest (manifestImplementationDigest manifest))
@@ -501,12 +500,32 @@ deriveManifestId manifest = digestText (canonicalFields
   , ("profile", manifestCompilationProfile manifest)
   , ("obligations", renderSet unRevisionId (manifestObligationRevisions manifest))
   , ("scope", renderSet unRevisionId (manifestCertificationScope manifest))
-  , ("evidence", renderSet unEvidenceEntryId (manifestEvidenceEntries manifest))
-  , ("assumptions", renderSet unAssumptionId (manifestAssumptionNodes manifest))
-  , ("exports", renderSet unExportId (manifestExports manifest))
-  , ("uses", renderSet unAssuranceUseId (manifestAssuranceUses manifest))
+  , ("evidence", renderEvidenceSet)
+  , ("assumptions", renderAssumptionSet)
+  , ("exports", renderExportSet)
+  , ("uses", renderUseSet)
   , ("lowering", unDigest (manifestLoweringLedgerRoot manifest))
   , ("validity", canonicalFields (Map.toAscList (manifestValidityContext manifest)))
   ])
   where
     renderSet render = listText . sort . map render . Set.toList
+
+    renderEvidenceSet = listText . sort $
+      [ unEvidenceEntryId entryId <> "@" <> maybe "<missing>" (unDigest . evidenceEntryDigest) (Map.lookup entryId (ledgerEvidence ledger))
+      | entryId <- Set.toList (manifestEvidenceEntries manifest)
+      ]
+
+    renderAssumptionSet = listText . sort $
+      [ unAssumptionId assumptionKey <> "@" <> maybe "<missing>" (unDigest . assumptionDigest) (Map.lookup assumptionKey (ledgerAssumptions ledger))
+      | assumptionKey <- Set.toList (manifestAssumptionNodes manifest)
+      ]
+
+    renderExportSet = listText . sort $
+      [ unExportId exportKey <> "@" <> maybe "<missing>" (unDigest . exportDigest) (Map.lookup exportKey (ledgerExports ledger))
+      | exportKey <- Set.toList (manifestExports manifest)
+      ]
+
+    renderUseSet = listText . sort $
+      [ unAssuranceUseId useKey <> "@" <> maybe "<missing>" (unDigest . assuranceUseDigest) (Map.lookup useKey (ledgerUses ledger))
+      | useKey <- Set.toList (manifestAssuranceUses manifest)
+      ]
