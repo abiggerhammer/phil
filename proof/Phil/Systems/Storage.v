@@ -1,4 +1,4 @@
-From Phil.Systems Require Import DigestValidation.
+From Phil.Systems Require Import Identity DigestValidation.
 
 (*
   PHIL-SYS-STORAGE-001 — normalized proof model for the Phase 0 storage
