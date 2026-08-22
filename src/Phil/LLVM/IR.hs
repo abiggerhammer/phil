@@ -38,7 +38,7 @@ import Phil.Systems.IR
   ( BlockId
   , CompilationProfile
   , InvariantId
-  , RuntimeSiteRef
+  , RuntimeSiteRef (..)
   )
 
 newtype LLVMBlockId = LLVMBlockId { unLLVMBlockId :: Text }
@@ -247,13 +247,13 @@ renderLLVMModule moduleValue = Text.unlines $
 
     renderFunction (functionKey, function) =
       [ "define i32 @" <> symbol functionKey <> "() {" ]
-      <> concatMap (renderBlock function) (Map.toAscList (llvmFunctionBlocks function))
+      <> concatMap renderBlock (Map.toAscList (llvmFunctionBlocks function))
       <> ["}", ""]
 
-    renderBlock function (blockKey, blockValue) =
+    renderBlock (blockKey, blockValue) =
       [ symbol (unLLVMBlockId blockKey) <> ":" ]
       <> map ("  " <>) (concatMap renderOp (llvmBlockOps blockValue))
-      <> map ("  " <>) (renderTerminator function blockValue)
+      <> map ("  " <>) (renderTerminator blockValue)
 
     renderOp operation = case operation of
       LLVMCall name -> ["call void @phil_call_" <> symbol name <> "()"]
@@ -295,7 +295,7 @@ renderLLVMModule moduleValue = Text.unlines $
           LLVMUnreachableFact ->
             [ "; unreachable authority " <> oneLine description ]
 
-    renderTerminator _ blockValue = case llvmBlockTerminator blockValue of
+    renderTerminator blockValue = case llvmBlockTerminator blockValue of
       LLVMJump target -> ["br label %" <> symbol (unLLVMBlockId target)]
       LLVMBranch yes no ->
         [ "%phil_cond_" <> symbol (unLLVMBlockId (llvmBlockId blockValue))
