@@ -27,3 +27,21 @@ jobs:
 
       - name: Test
         run: cabal test all --test-show-details=direct
+
+      - name: Verify Phase 0 LLVM locally
+        shell: bash
+        run: |
+          cabal run phil-llvm-phase0 > phase0-upload.ll
+          LLVM_AS=""
+          for candidate in llvm-as-20 llvm-as-19 llvm-as-18 llvm-as-17 llvm-as; do
+            if command -v "$candidate" >/dev/null 2>&1; then
+              LLVM_AS="$candidate"
+              break
+            fi
+          done
+          if [ -z "$LLVM_AS" ]; then
+            echo "No llvm-as found on runner" >&2
+            exit 1
+          fi
+          "$LLVM_AS" phase0-upload.ll -o /dev/null
+          "$LLVM_AS" --version | head -n 1
