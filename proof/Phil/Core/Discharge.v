@@ -155,9 +155,18 @@ Proof.
     | obligation binding Hexact ].
   - left. reflexivity.
   - right. left. exists evidenceName. reflexivity.
-  - right. right. left. exists certificate. split; assumption.
-  - right. right. right. left. exists binding. split; assumption.
-  - right. right. right. right. exists binding. split; assumption.
+  - right. right. left.
+    exists certificate. split.
+    + reflexivity.
+    + exact Hcheck.
+  - right. right. right. left.
+    exists binding. split.
+    + reflexivity.
+    + exact Hexact.
+  - right. right. right. right.
+    exists binding. split.
+    + reflexivity.
+    + exact Hexact.
 Qed.
 
 Theorem runtime_resolution_requires_exact_identity :
