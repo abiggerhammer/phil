@@ -498,7 +498,7 @@ deriveManifestId ledger manifest = digestText (canonicalFields
   , ("implementation", unDigest (manifestImplementationDigest manifest))
   , ("target", manifestTarget manifest)
   , ("profile", manifestCompilationProfile manifest)
-  , ("obligations", renderSet unRevisionId (manifestObligationRevisions manifest))
+  , ("obligations", renderRevisionSet)
   , ("scope", renderSet unRevisionId (manifestCertificationScope manifest))
   , ("evidence", renderEvidenceSet)
   , ("assumptions", renderAssumptionSet)
@@ -509,6 +509,15 @@ deriveManifestId ledger manifest = digestText (canonicalFields
   ])
   where
     renderSet render = listText . sort . map render . Set.toList
+
+    renderRevisionSet = listText . sort $
+      [ unRevisionId revisionKey <> "@" <> maybe "<missing>" renderRevisionLineage
+          (Map.lookup revisionKey (ledgerRevisions ledger))
+      | revisionKey <- Set.toList (manifestObligationRevisions manifest)
+      ]
+
+    renderRevisionLineage revision = listText . sort $
+      map unRevisionId (revisionGeneratedFrom revision)
 
     renderEvidenceSet = listText . sort $
       [ unEvidenceEntryId entryId <> "@" <> maybe "<missing>" (unDigest . evidenceEntryDigest) (Map.lookup entryId (ledgerEvidence ledger))
