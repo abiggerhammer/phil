@@ -33,6 +33,8 @@ struct phil_smoke_state {
   struct phil_transport_impl server_transport;
   struct phil_upload_id_impl upload_id;
   uint8_t payload_storage;
+  bool received_choice_valid;
+  uint8_t received_choice;
   unsigned branch_calls;
   unsigned select_choice_calls;
   unsigned receive_choice_calls;
@@ -84,8 +86,9 @@ bool phil_smoke_client_choice_observed(uint8_t expected_choice) {
 bool phil_smoke_server_choice_observed(uint8_t expected_choice) {
   return smoke_state.mode == PHIL_SMOKE_SERVER
       && smoke_state.receive_choice_calls == 1u
-      && smoke_state.server_transport.incoming_choice_length == PHIL_CHOICE_BYTES
-      && smoke_state.server_transport.incoming_choice[0] == expected_choice;
+      && smoke_state.server_transport.incoming_choice_length == 0u
+      && smoke_state.received_choice_valid
+      && smoke_state.received_choice == expected_choice;
 }
 
 void phil_runtime_select_payload_cancel(void *transport, uint8_t choice) {
@@ -106,6 +109,8 @@ bool phil_runtime_receive_payload_cancel(void *transport) {
   if (source->incoming_choice_length != PHIL_CHOICE_BYTES) abort();
   choice = source->incoming_choice[0];
   source->incoming_choice_length = 0u;
+  smoke_state.received_choice = choice;
+  smoke_state.received_choice_valid = true;
   if (choice == 0x01u) return true;
   if (choice == 0x00u) return false;
   abort();
