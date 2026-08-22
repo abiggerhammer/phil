@@ -118,6 +118,10 @@ The current Steve assurance graph contains five `RetainedRuntimeUse` records ove
 
 `STEVE-CORRUPTION-FAILS` is also backed by `evidence.steve.corruption.runtime` and `use.steve.corruption_digest`, but corruption rejection is not a fifth physical digest computation. It is a logical property of the existing digest-check sites above. This exposes a systems-IR generalization described below; we should not invent a duplicate runtime check just to satisfy a one-evidence-per-site representation.
 
+The names in the first column are **physical program-site identities**, not runtime primitive or linker-symbol identities. In particular, `put.existing.digest_check` and `get.digest_check` may legitimately invoke the same digest-validation primitive/signature while remaining two distinct physical sites because they occur at different program locations and under different dynamic conditions. Conversely, each one remains a single physical site even when its exact assurance claim set contains more than one logical obligation. Runtime primitive/signature identity, physical site identity, and assurance claim identity must therefore remain separately represented and separately checked.
+
+Following PR #43, any eventual runtime symbol for such a primitive must be derived from the physical operation family and ABI-relevant signature/profile, not from `RevisionId`, `EvidenceEntryId`, `AssuranceUseId`, or claim-set cardinality/order. Adding a corruption-rejection claim to an existing digest site must not rename the primitive, create an alias per claim, or induce a second digest execution/cost.
+
 ## Stage facts
 
 The initial `systemsExpectedSourceFacts` should correspond one-for-one with the twelve Steve obligations rather than inventing systems-only pseudo-obligations:
@@ -245,7 +249,13 @@ Likely systems generalization: a first-class assumption-bound disposition such a
 
 Duplicating the physical check would falsify the cost model. Picking only one evidence entry would understate the assurance relation.
 
-Likely systems generalization: one physical site with a nonempty set/list of exact `(RevisionId, EvidenceEntryId)` assurance claims plus one physical cost reference.
+The required generalization is now sharper than merely replacing the singleton evidence field with a list. The model must distinguish:
+
+> runtime primitive/signature identity != physical program-site identity != assurance claim identity
+
+One physical site should carry a nonempty set/list of exact `(RevisionId, EvidenceEntryId, subject...)` assurance claims plus one physical cost reference and an independently identified runtime primitive/signature. Multiple sites may invoke the same primitive. One site may carry multiple claims. Neither relationship licenses collapsing or duplicating physical execution.
+
+PR #43 has already applied this lesson outside Steve: recognized-record ABI v1 now forbids deriving runtime primitive symbols from evidence/revision/use IDs or claim-set shape. That change prevents the old singleton assurance representation from being frozen into a linker-visible ABI before the generalized Systems model lands.
 
 ### 3. Provider authority needs a checked systems invariant
 
@@ -269,17 +279,17 @@ These findings do not currently justify a new Phil ADR. They are representation/
 - ADR-010 already makes assumptions/evidence/uses content-addressed and explicit;
 - ADR-011 requires runtime residue and cost attribution to remain explicit.
 
-Steve is doing its intended job here: the upload witness established the first systems vocabulary, and the first independent program is showing exactly where that vocabulary was still upload-shaped.
+Steve is doing its intended job here: the upload witness established the first systems vocabulary, and the first independent program is showing exactly where that vocabulary was still upload-shaped. PR #43 is concrete evidence that the pressure test is also catching cross-layer leaks early: Generalization 2 changed a runtime ABI rule before the first recognized-record implementation/certification artifact existed.
 
 ## Executable-promotion criteria
 
 A branch-local executable Steve systems fixture should be added only after the representation can say these things without lying:
 
 1. provider assumption-bound facts remain first-class and selected;
-2. one physical digest check can carry all of its exact assurance claims without duplicating runtime cost;
+2. one physical digest check can carry all of its exact assurance claims without duplicating runtime cost, while runtime primitive/signature identity remains independent of both physical site identity and claim-set identity and distinct sites do not collapse merely because they invoke the same primitive;
 3. no-clobber/no-delete authority is checkable at the systems provider boundary;
 4. stable evidence subjects are bound to owner/storage identity rather than the borrow token;
 5. Steve's assurance graph is extended with any required erasure uses before proof wrappers disappear;
-6. the systems verifier accepts the positive Steve artifact and rejects mutations for duplicate ownership, hidden copy, missing digest check, equality-path rehash, collision-as-success, corruption laundering, missing cleanup, provider authority widening, assumption loss, and lowering/cost-root tampering.
+6. the systems verifier accepts the positive Steve artifact and rejects mutations for duplicate ownership, hidden copy, missing digest check, equality-path rehash, collision-as-success, corruption laundering, missing cleanup, provider authority widening, assumption loss, primitive/site/claim identity conflation, and lowering/cost-root tampering.
 
 Until then this document is the systems-IR handoff target, not a claim that Steve already has a certified systems lowering.
