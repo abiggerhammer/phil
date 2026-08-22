@@ -45,3 +45,4 @@ jobs:
           rocq c -Q proof/Phil Phil proof/Phil/Core/DecisionSound.v
           rocq c -Q proof/Phil Phil proof/Phil/Core/SessionRec.v
           rocq c -Q proof/Phil Phil proof/Phil/Core/Focusing.v
+          rocq c -Q proof/Phil Phil proof/Phil/Surface/Elaboration.v
