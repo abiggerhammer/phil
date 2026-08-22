@@ -67,6 +67,7 @@ library
       Phil.Systems.DigestValidation
       Phil.Systems.Storage
       Phil.Systems.AcceptedResponse
+      Phil.Systems.RejectedResponse
       Phil.LLVM.IR
       Phil.LLVM.Lower
       Phil.LLVM.Verify
@@ -84,6 +85,8 @@ library
       Phil.LLVM.StorageCertification
       Phil.LLVM.AcceptedResponse
       Phil.LLVM.AcceptedResponseCertification
+      Phil.LLVM.RejectedResponse
+      Phil.LLVM.RejectedResponseCertification
   build-depends:
       base >=4.17 && <5,
       bytestring >=0.11 && <0.13,
@@ -150,6 +153,15 @@ executable phil-llvm-phase0-accepted-response
   import:             common-settings
   hs-source-dirs:     app
   main-is:            LLVMAcceptedResponseMain.hs
+  build-depends:
+      base >=4.17 && <5,
+      phil-core,
+      text >=2.0 && <2.2
+
+executable phil-llvm-phase0-rejected-response
+  import:             common-settings
+  hs-source-dirs:     app
+  main-is:            LLVMRejectedResponseMain.hs
   build-depends:
       base >=4.17 && <5,
       phil-core,
@@ -462,6 +474,17 @@ test-suite phil-accepted-response-abi-tests
   type:               exitcode-stdio-1.0
   hs-source-dirs:     test
   main-is:            AcceptedResponseABIMain.hs
+  build-depends:
+      base >=4.17 && <5,
+      containers >=0.6 && <0.8,
+      phil-core,
+      text >=2.0 && <2.2
+
+test-suite phil-rejected-response-abi-tests
+  import:             common-settings
+  type:               exitcode-stdio-1.0
+  hs-source-dirs:     test
+  main-is:            RejectedResponseABIMain.hs
   build-depends:
       base >=4.17 && <5,
       containers >=0.6 && <0.8,
