@@ -4,6 +4,12 @@ Steve is the first independently motivated non-upload pressure test for the Phil
 
 The normative Steve design material lives in the durable research corpus. This directory is intentionally checker-facing: it records the smallest plausible `.phil` witness we can write against the current language and makes any mismatch between that witness and the implemented checker concrete.
 
+## Branch policy
+
+Steve remains on the `steve/architecture-sketch` branch while the design and checker-facing witness mature. Do not merge it to `main` or open a handoff PR merely to expose intermediate work. The branch should periodically incorporate relevant `main` changes from the independently advancing Haskell implementation and Rocq proof tracks, and its CI should remain green against the code it actually contains.
+
+The intended external handoff point is a coherent Steve package: design notes and obligations agree with the checker-facing witness, the witness parses in CI, known semantic checker gaps are explicitly classified, and the material is ready to present rather than merely ready to discuss.
+
 ## Intended architectural boundary
 
 Steve depends on two authorities:
@@ -18,6 +24,14 @@ The important ownership choice exposed by the first sketch is that `blob_install
 ## What the current sketch is testing
 
 `steve.phil` deliberately uses only syntax already accepted by the Phase 0 parser: components, typed parameters, named opaque types, `OwnedBytes[n]`, borrowing, primitive calls, decisions, construction, release, and return.
+
+Branch CI runs:
+
+```text
+cabal run phil-core -- parse examples/steve/steve.phil
+```
+
+This is intentionally only a syntax gate. It must not be described as semantic acceptance of Steve.
 
 It is not yet expected to pass whole-component semantic checking. In particular it exposes these pressure points:
 
