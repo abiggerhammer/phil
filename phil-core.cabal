@@ -311,5 +311,6 @@ test-suite phil-runnable-tests
   main-is:            RunnableMain.hs
   build-depends:
       base >=4.17 && <5,
+      containers >=0.6 && <0.8,
       phil-core,
       text >=2.0 && <2.2
