@@ -6,6 +6,8 @@ module Phil.LLVM.IR
   , LLVMStrengtheningKind (..)
   , LLVMAuthority (..)
   , LLVMStrengthening (..)
+  , LLVMParameterType (..)
+  , LLVMParameter (..)
   , LLVMOp (..)
   , LLVMTerminator (..)
   , LLVMBlock (..)
@@ -76,10 +78,22 @@ data LLVMStrengthening = LLVMStrengthening
   }
   deriving (Eq, Ord, Show)
 
+data LLVMParameterType
+  = LLVMPointerParameter
+  | LLVMScalarParameter ScalarType
+  deriving (Eq, Ord, Show)
+
+data LLVMParameter = LLVMParameter
+  { llvmParameterName :: Text
+  , llvmParameterType :: LLVMParameterType
+  }
+  deriving (Eq, Ord, Show)
+
 data LLVMOp
   = LLVMCall Text
   | LLVMRuntime RuntimeSiteRef Text
   | LLVMCleanup Text
+  | LLVMBufferRelease Text
   | LLVMPlain Text
   | LLVMScalarLiteral Text ScalarLiteral
   | LLVMFieldProjection Text Text Text Text ScalarType
@@ -96,6 +110,15 @@ data LLVMTerminator
   | LLVMRuntimeBranch RuntimeSiteRef Text LLVMBlockId LLVMBlockId
   | LLVMRecognizeRecord RuntimeSiteRef Text Text LLVMBlockId LLVMBlockId
   | LLVMRuntimeScalarBranch RuntimeSiteRef Text Text ScalarType LLVMBlockId LLVMBlockId
+  | LLVMExactReceive
+      RuntimeSiteRef
+      Text
+      Text
+      Text
+      ScalarType
+      Text
+      LLVMBlockId
+      LLVMBlockId
   | LLVMReturnScalar Text ScalarType
   | LLVMReturn Text
   | LLVMUnreachable (Maybe LLVMStrengtheningId)
@@ -110,6 +133,7 @@ data LLVMBlock = LLVMBlock
 
 data LLVMFunction = LLVMFunction
   { llvmFunctionName :: Text
+  , llvmFunctionParameters :: [LLVMParameter]
   , llvmFunctionEntry :: LLVMBlockId
   , llvmFunctionBlocks :: Map LLVMBlockId LLVMBlock
   }
@@ -171,6 +195,7 @@ llvmBlockSuccessors blockValue = case llvmBlockTerminator blockValue of
   LLVMRuntimeBranch _ _ yes no -> [yes, no]
   LLVMRecognizeRecord _ _ _ yes no -> [yes, no]
   LLVMRuntimeScalarBranch _ _ _ _ yes no -> [yes, no]
+  LLVMExactReceive _ _ _ _ _ _ yes no -> [yes, no]
   LLVMReturnScalar _ _ -> []
   LLVMReturn _ -> []
   LLVMUnreachable _ -> []
@@ -192,6 +217,7 @@ llvmRuntimeSites moduleValue = concat
         LLVMRuntimeBranch site _ _ _ -> [site]
         LLVMRecognizeRecord site _ _ _ _ -> [site]
         LLVMRuntimeScalarBranch site _ _ _ _ _ -> [site]
+        LLVMExactReceive site _ _ _ _ _ _ _ -> [site]
         _ -> []
 
 llvmStrengtheningUses :: LLVMModule -> [LLVMStrengtheningId]
@@ -215,8 +241,13 @@ renderLLVMModule moduleValue = Text.unlines $
   <> declarations
   <> concatMap renderFunction (Map.toAscList (llvmFunctions moduleValue))
   where
-    recognizedRecordABI =
-      llvmRuntimeABIProfile moduleValue == "phil-runtime/phase0/recognized-record-v1"
+    runtimeProfile = llvmRuntimeABIProfile moduleValue
+    recognizedRecordABI = runtimeProfile `elem`
+      [ "phil-runtime/phase0/recognized-record-v1"
+      , "phil-runtime/phase0/transport-exact-receive-v1"
+      ]
+    transportExactReceiveABI =
+      runtimeProfile == "phil-runtime/phase0/transport-exact-receive-v1"
 
     header =
       [ "; Phil canonical pre-optimization LLVM artifact"
@@ -249,12 +280,14 @@ renderLLVMModule moduleValue = Text.unlines $
     declarations =
       branchDeclaration
       <> cleanupDeclaration
+      <> bufferReleaseDeclaration
       <> assumeDeclaration
       <> map renderCallDeclaration (Set.toAscList callNames)
       <> runtimeDeclarations
       <> map renderFieldProjectionDeclaration (Set.toAscList fieldProjectionSignatures)
       <> map renderRecognitionDeclaration (Set.toAscList recognitionGrammars)
       <> map renderScalarRuntimeDeclaration (Set.toAscList scalarRuntimeSignatures)
+      <> map renderExactReceiveDeclaration (Set.toAscList exactReceiveSignatures)
       <> [""]
 
     allBlocks =
@@ -269,9 +302,12 @@ renderLLVMModule moduleValue = Text.unlines $
     cleanupDeclaration =
       if any hasCleanup allBlocks then ["declare void @phil_cleanup()"] else []
 
+    bufferReleaseDeclaration =
+      if any hasBufferRelease allBlocks then ["declare void @phil_buffer_release(ptr)"] else []
+
     assumeDeclaration =
       if any ((== LLVMAssume) . llvmStrengtheningKind) (Map.elems (llvmStrengthenings moduleValue))
-        then ["declare void @llvm.assume(i1)"]
+        then ["declare void @llvm.assume(i1 true)"]
         else []
 
     callNames = Set.fromList
@@ -326,6 +362,12 @@ renderLLVMModule moduleValue = Text.unlines $
       , LLVMRuntimeScalarBranch _ primitive _ scalarType _ _ <- [llvmBlockTerminator blockValue]
       ]
 
+    exactReceiveSignatures = Set.fromList
+      [ (primitive, scalarType)
+      | blockValue <- allBlocks
+      , LLVMExactReceive _ primitive _ _ scalarType _ _ _ <- [llvmBlockTerminator blockValue]
+      ]
+
     isGenericBranch blockValue = case llvmBlockTerminator blockValue of
       LLVMBranch _ _ -> True
       _ -> False
@@ -333,6 +375,10 @@ renderLLVMModule moduleValue = Text.unlines $
     hasCleanup blockValue = any isCleanup (llvmBlockOps blockValue)
     isCleanup LLVMCleanup {} = True
     isCleanup _ = False
+
+    hasBufferRelease blockValue = any isBufferRelease (llvmBlockOps blockValue)
+    isBufferRelease LLVMBufferRelease {} = True
+    isBufferRelease _ = False
 
     renderCallDeclaration name = "declare void @phil_call_" <> symbol name <> "()"
     renderRuntimeEvidenceDeclaration evidence =
@@ -347,11 +393,21 @@ renderLLVMModule moduleValue = Text.unlines $
     renderScalarRuntimeDeclaration (primitive, scalarType) =
       "declare i1 @phil_runtime_" <> symbol primitive
         <> "(" <> renderScalarType scalarType <> ")"
+    renderExactReceiveDeclaration (primitive, scalarType) =
+      "declare { i8, ptr } @phil_runtime_" <> symbol primitive
+        <> "(ptr, " <> renderScalarType scalarType <> ")"
 
     renderFunction (functionKey, function) =
-      [ "define " <> renderFunctionReturnType function <> " @" <> symbol functionKey <> "() {" ]
+      [ "define " <> renderFunctionReturnType function <> " @" <> symbol functionKey
+          <> "(" <> Text.intercalate ", " (map renderParameter (llvmFunctionParameters function)) <> ") {"
+      ]
       <> concatMap renderBlock (orderedBlocks function)
       <> ["}", ""]
+
+    renderParameter parameter = case llvmParameterType parameter of
+      LLVMPointerParameter -> "ptr %" <> symbol (llvmParameterName parameter)
+      LLVMScalarParameter scalarType ->
+        renderScalarType scalarType <> " %" <> symbol (llvmParameterName parameter)
 
     renderFunctionReturnType function =
       case
@@ -383,6 +439,8 @@ renderLLVMModule moduleValue = Text.unlines $
         ]
       LLVMCleanup name ->
         ["; cleanup " <> oneLine name, "call void @phil_cleanup()"]
+      LLVMBufferRelease owner ->
+        ["call void @phil_buffer_release(ptr %" <> symbol owner <> ")"]
       LLVMPlain description -> ["; plain " <> oneLine description]
       LLVMScalarLiteral name literal -> [renderScalarLiteralInstruction name literal]
       LLVMFieldProjection output record grammar fieldName scalarType ->
@@ -474,6 +532,23 @@ renderLLVMModule moduleValue = Text.unlines $
             <> ", label %" <> symbol (unLLVMBlockId yes)
             <> ", label %" <> symbol (unLLVMBlockId no)
         ]
+      LLVMExactReceive _ primitive transportName scalarName scalarType payloadName yes no ->
+        let blockSymbol = symbol (unLLVMBlockId (llvmBlockId blockValue))
+            resultType = "{ i8, ptr }"
+            resultName = "%phil_exact_receive_result_" <> blockSymbol
+            statusName = "%phil_exact_receive_status_" <> blockSymbol
+            okName = "%phil_exact_receive_ok_" <> blockSymbol
+        in
+          [ resultName <> " = call " <> resultType <> " @phil_runtime_" <> symbol primitive
+              <> "(ptr %" <> symbol transportName <> ", "
+              <> renderScalarType scalarType <> " %" <> symbol scalarName <> ")"
+          , statusName <> " = extractvalue " <> resultType <> " " <> resultName <> ", 0"
+          , "%" <> symbol payloadName <> " = extractvalue " <> resultType <> " " <> resultName <> ", 1"
+          , okName <> " = icmp eq i8 " <> statusName <> ", 1"
+          , "br i1 " <> okName
+              <> ", label %" <> symbol (unLLVMBlockId yes)
+              <> ", label %" <> symbol (unLLVMBlockId no)
+          ]
       LLVMReturnScalar name scalarType ->
         ["ret " <> renderScalarType scalarType <> " %" <> symbol name]
       LLVMReturn outcome -> ["ret i32 0 ; " <> oneLine outcome]
