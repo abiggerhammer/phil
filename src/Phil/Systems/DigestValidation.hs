@@ -7,6 +7,7 @@ module Phil.Systems.DigestValidation
   , phase0DigestValidationWitness
   , phase0DigestValidationBundle
   , verifyDigestValidationBundle
+  , verifyDigestValidationWitness
   ) where
 
 import Control.Monad (unless)
@@ -129,15 +130,15 @@ verifyDigestValidationBundle bundle = do
       (digestValidationArtifact bundle)
   mapLeft DigestValidationRecognizedRecordError $
     verifyRecognizedRecordBundle (digestValidationRecognizedRecordBundle bundle)
-  verifyWitness
+  verifyDigestValidationWitness
     (digestValidationArtifact bundle)
     (digestValidationWitness bundle)
 
-verifyWitness
+verifyDigestValidationWitness
   :: SystemsArtifact
   -> DigestValidationWitness
   -> Either DigestValidationError ()
-verifyWitness artifact witness = do
+verifyDigestValidationWitness artifact witness = do
   let program = systemsArtifactProgram artifact
       functionName = digestValidationFunction witness
   function <- case Map.lookup functionName (systemsProgramFunctions program) of
