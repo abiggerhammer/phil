@@ -63,10 +63,11 @@ Theorem recognized_record_certification_requires_all_semantic_authorities :
       (recognizedCertificationSymbolModel model).
 Proof.
   intros model H.
-  repeat split.
+  split.
   - exact (recognized_certification_systems_success model H).
-  - exact (recognized_certification_abi_success model H).
-  - exact (recognized_certification_symbol_success model H).
+  - split.
+    + exact (recognized_certification_abi_success model H).
+    + exact (recognized_certification_symbol_success model H).
 Qed.
 
 Theorem recognized_record_certification_requires_exact_artifact_authority :
