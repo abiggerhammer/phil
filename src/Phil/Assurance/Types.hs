@@ -34,6 +34,7 @@ module Phil.Assurance.Types
   , deriveEvidenceEntryId
   , deriveAssumptionId
   , deriveExportId
+  , deriveAssuranceUseId
   , deriveManifestId
   ) where
 
@@ -47,7 +48,7 @@ import Data.Set (Set)
 import qualified Data.Set as Set
 import Data.Text (Text)
 import qualified Data.Text as Text
-import qualified Data.Text.Encoding as Text
+import qualified Data.Text.Encoding as TextEncoding
 import Data.Word (Word8)
 import Phil.Core.Syntax
   ( Name (..)
@@ -287,7 +288,7 @@ emptyVerificationContext = VerificationContext
 
 digestText :: Text -> Digest
 digestText value = Digest . Text.pack . concatMap hexByte . ByteString.unpack $
-  SHA256.hash (Text.encodeUtf8 value)
+  SHA256.hash (TextEncoding.encodeUtf8 value)
   where
     hexByte :: Word8 -> String
     hexByte byte = [hexDigit (byte `shiftR` 4), hexDigit (byte .&. 0x0f)]
@@ -474,6 +475,22 @@ deriveExportId export = ExportId ("export.sha256." <> unDigest (digestText paylo
       , ("derived", unObligationId (exportDerivedObligationId export))
       , ("validity", renderValidityScope (exportValidityScope export))
       ]
+
+deriveAssuranceUseId :: AssuranceUse -> AssuranceUseId
+deriveAssuranceUseId assuranceUse = AssuranceUseId ("use.sha256." <> unDigest (digestText payload))
+  where
+    payload = case assuranceUse of
+      ErasureUse _ revision entries -> canonicalFields
+        [ ("kind", "erasure")
+        , ("revision", unRevisionId revision)
+        , ("evidence", listText (sort (map unEvidenceEntryId entries)))
+        ]
+      RetainedRuntimeUse _ revision entry costRef -> canonicalFields
+        [ ("kind", "retained_runtime")
+        , ("revision", unRevisionId revision)
+        , ("evidence", unEvidenceEntryId entry)
+        , ("cost", costRef)
+        ]
 
 deriveManifestId :: AssuranceManifest -> Digest
 deriveManifestId manifest = digestText (canonicalFields
