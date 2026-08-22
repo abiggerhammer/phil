@@ -31,7 +31,8 @@ jobs:
       - name: Verify Phase 0 LLVM locally
         shell: bash
         run: |
-          cabal run phil-llvm-phase0 > phase0-upload.ll
+          LLVM_EMITTER="$(cabal list-bin phil-llvm-phase0)"
+          "$LLVM_EMITTER" > phase0-upload.ll
           if command -v llvm-as-18 >/dev/null 2>&1; then
             LLVM_AS=llvm-as-18
           elif command -v llvm-as >/dev/null 2>&1 && llvm-as --version | head -n 1 | grep -Eq 'LLVM version 18([.]|$)'; then
