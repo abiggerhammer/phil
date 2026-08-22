@@ -29,6 +29,12 @@ jobs:
       - name: Test
         run: cabal test all --test-show-details=direct
 
-      - name: Parse Steve surface sketch
+      - name: Parse Steve surface corpus
         if: github.ref == 'refs/heads/steve/architecture-sketch' || github.head_ref == 'steve/architecture-sketch'
-        run: cabal run phil-core -- parse examples/steve/steve.phil
+        shell: bash
+        run: |
+          set -euo pipefail
+          while IFS= read -r file; do
+            echo "Parsing ${file}"
+            cabal run phil-core -- parse "${file}"
+          done < <(find examples/steve -type f -name '*.phil' | sort)
