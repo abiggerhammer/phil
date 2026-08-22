@@ -63,21 +63,18 @@ phase0DigestValidationProofCertification
   verifyProof "llvm-recognized-record-abi" llvmRecognizedRecordABICertificationSpec abiProof
   verifyProof "llvm-runtime-symbol-identity" llvmRuntimeSymbolCertificationSpec symbolProof
 
+  -- Reproduce the proof-bound predecessor certificate from the same exact proof
+  -- inputs, but do not import its translation evidence into this manifest. The
+  -- predecessor evidence is scoped to transport-exact-receive-v1, whereas this
+  -- certification is scoped to digest-validation-v1. Its exact certificate
+  -- digest is content-bound below while compatible proof authorities are
+  -- selected directly.
   predecessor <- mapLeft DigestValidationProofCertificationPredecessorError $
     phase0ExactReceiveProofCertification exactProof abiProof symbolProof
   base <- mapLeft DigestValidationProofCertificationBaseError
     phase0DigestValidationLLVMCertification
 
-  let predecessorLedger = exactReceiveProofCertificationLedger predecessor
-      newProofBundles = [systemsDigestProof, llvmDigestProof, systemsRecordProof]
-      newProofLedgers = map rocqBundleLedger newProofBundles
-      semanticRevisions = Map.unions $
-        ledgerRevisions predecessorLedger : map ledgerRevisions newProofLedgers
-      semanticEvidence = Map.unions $
-        ledgerEvidence predecessorLedger : map ledgerEvidence newProofLedgers
-      semanticRevisionIds = Map.keysSet semanticRevisions
-      semanticEvidenceIds = Map.keysSet semanticEvidence
-      explicitProofBundles =
+  let explicitProofBundles =
         [ systemsDigestProof
         , llvmDigestProof
         , systemsRecordProof
@@ -85,6 +82,11 @@ phase0DigestValidationProofCertification
         , abiProof
         , symbolProof
         ]
+      proofLedgers = map rocqBundleLedger explicitProofBundles
+      semanticRevisions = Map.unions (map ledgerRevisions proofLedgers)
+      semanticEvidence = Map.unions (map ledgerEvidence proofLedgers)
+      semanticRevisionIds = Map.keysSet semanticRevisions
+      semanticEvidenceIds = Map.keysSet semanticEvidence
       proofArtifacts = map rocqBundleCertificateArtifact explicitProofBundles
       proofDigests = map artifactDigest proofArtifacts
       predecessorArtifact = exactReceiveProofCertificationArtifact predecessor
@@ -132,7 +134,7 @@ phase0DigestValidationProofCertification
         Map.insert "target" certificationTarget $
         Map.insert "compilation_profile" certificationProfile validityContext
       revisionStatement =
-        "The digest-validation-v1 Systems -> canonical pre-optimization LLVM pair may be labeled Certified only when its exact source/target/text digests, lowering root, target/runtime-ABI/tool identities, exact Systems digest-subject/borrow proof, exact LLVM digest-lowering proof, predecessor exact-receive proof authority, recognized-record and runtime-symbol authorities, and translation-validation result are content-bound; SHA-256 is selected by ABI identity while LLVM 18, provider ABI conformance, and concrete libcrypto SHA-256 match/mismatch execution remain explicit external gates; and the assurance manifest closes over all selected evidence."
+        "The digest-validation-v1 Systems -> canonical pre-optimization LLVM pair may be labeled Certified only when its exact source/target/text digests, lowering root, target/runtime-ABI/tool identities, exact Systems digest-subject/borrow proof, exact LLVM digest-lowering proof, exact-receive, recognized-record, and runtime-symbol proof authorities, and translation-validation result are content-bound; the proof-bound CERT-003 predecessor is exactly reproducible from the selected predecessor proofs and its certificate digest is bound without importing evidence outside its validity scope; SHA-256 is selected by ABI identity while LLVM 18, provider ABI conformance, and concrete libcrypto SHA-256 match/mismatch execution remain explicit external gates; and the assurance manifest closes over all selected evidence."
       provisionalRevision = ObligationRevision
         { revisionObligationId = ObligationId "PHIL-LLVM-CERT-004"
         , revisionId = RevisionId ""
@@ -201,7 +203,7 @@ phase0DigestValidationProofCertification
             , "SHA-256 selected in runtime ABI identity"
             , "absence of ambient digest subject recovery"
             , "physical runtime symbol identity"
-            , "proof-bound predecessor exact-receive authority"
+            , "content-bound reproduction of proof-bound predecessor authority"
             ]
         , evidenceRuntimeMechanism = Nothing
         , evidenceRuntimeResidue = []
@@ -262,12 +264,9 @@ phase0DigestValidationProofCertification
       manifest = provisionalManifest
         { manifestId = deriveManifestId ledger provisionalManifest }
       explicitArtifacts = translationArtifact : certificationArtifact : predecessorArtifact : proofArtifacts
-      availableArtifacts = Map.unions
-        [ Map.fromList
-            [ (artifactReference artifact, artifactDigest artifact)
-            | artifact <- explicitArtifacts
-            ]
-        , verificationAvailableArtifacts (exactReceiveProofCertificationContext predecessor)
+      availableArtifacts = Map.fromList
+        [ (artifactReference artifact, artifactDigest artifact)
+        | artifact <- explicitArtifacts
         ]
       verificationContext = emptyVerificationContext
         { verificationArchitectureDigest = manifestArchitectureDigest systemsManifest
