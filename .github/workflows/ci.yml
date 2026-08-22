@@ -32,15 +32,12 @@ jobs:
         shell: bash
         run: |
           cabal run phil-llvm-phase0 > phase0-upload.ll
-          LLVM_AS=""
-          for candidate in llvm-as-20 llvm-as-19 llvm-as-18 llvm-as-17 llvm-as; do
-            if command -v "$candidate" >/dev/null 2>&1; then
-              LLVM_AS="$candidate"
-              break
-            fi
-          done
-          if [ -z "$LLVM_AS" ]; then
-            echo "No llvm-as found on runner" >&2
+          if command -v llvm-as-18 >/dev/null 2>&1; then
+            LLVM_AS=llvm-as-18
+          elif command -v llvm-as >/dev/null 2>&1 && llvm-as --version | head -n 1 | grep -Eq 'LLVM version 18([.]|$)'; then
+            LLVM_AS=llvm-as
+          else
+            echo "LLVM 18 llvm-as is required by the Phase 0 target profile" >&2
             exit 1
           fi
           "$LLVM_AS" phase0-upload.ll -o /dev/null
