@@ -4,6 +4,7 @@ module Main (main) where
 
 import qualified Data.Map.Strict as Map
 import Data.Text (Text)
+import qualified Data.Text as Text
 import Phil.LLVM
 import Phil.Systems
 import System.Exit (exitFailure)
@@ -14,6 +15,7 @@ main = do
     [ test "digest-validation Systems candidate verifies" systemsCandidatePasses
     , test "digest-validation LLVM candidate verifies" llvmCandidatePasses
     , test "digest-validation certification closes" certificationPasses
+    , test "digest ABI identity binds SHA-256 mechanism" digestMechanismIsBound
     , test "missing Begin digest subject is rejected" missingBeginSubjectRejects
     , test "wrong payload borrow owner is rejected" wrongBorrowOwnerRejects
     , test "swapped digest LLVM operands are rejected" swappedOperandsRejects
@@ -32,6 +34,10 @@ llvmCandidatePasses = verifyPhase0DigestValidationLLVM == Right ()
 
 certificationPasses :: Bool
 certificationPasses = verifyPhase0DigestValidationLLVMCertification == Right ()
+
+digestMechanismIsBound :: Bool
+digestMechanismIsBound =
+  "digest-mechanism=SHA-256" `Text.isInfixOf` digestValidationABIDescriptor
 
 missingBeginSubjectRejects :: Bool
 missingBeginSubjectRejects = withDigestBundle $ \bundle ->
