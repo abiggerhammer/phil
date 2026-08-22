@@ -23,6 +23,7 @@ main = do
     , test "wrong LLVM UploadId identity is rejected" wrongLLVMUploadIdRejects
     , test "reserved storage status cannot become success" wrongRenderedStatusRejects
     , test "post-transfer payload release is rejected" postTransferReleaseRejects
+    , test "opaque UploadId cannot be released" uploadIdReleaseRejects
     ]
   if and results then pure () else exitFailure
 
@@ -135,6 +136,20 @@ postTransferReleaseRejects = withStorageLLVM $ \bundle artifact ->
         artifact
   in case verifyStorageTranslation bundle badArtifact of
     Left (StoragePostTransferReleaseDetected _ _ _) -> True
+    _ -> False
+
+uploadIdReleaseRejects :: Bool
+uploadIdReleaseRejects = withStorageLLVM $ \bundle artifact ->
+  let witness = storageWitness bundle
+      successBlock = LLVMBlockId (unBlockId (storageSuccess witness))
+      badArtifact = mapLLVMBlock
+        (storageFunction witness)
+        successBlock
+        (\blockValue -> blockValue
+          { llvmBlockOps = LLVMBufferRelease "server.upload_id" : llvmBlockOps blockValue })
+        artifact
+  in case verifyStorageTranslation bundle badArtifact of
+    Left (StorageUploadIdRepresentationViolation _) -> True
     _ -> False
 
 withStorageBundle :: (StorageBundle -> Bool) -> Bool
