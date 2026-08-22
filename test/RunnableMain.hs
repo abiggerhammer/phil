@@ -2,6 +2,7 @@
 
 module Main (main) where
 
+import Data.Foldable (toList)
 import Data.Text (Text)
 import qualified Data.Text as Text
 import Phil.Compiler
@@ -14,7 +15,6 @@ import Phil.Systems
   , SystemsValue (systemsValueRole)
   , SystemsValueRole (TypedScalar)
   )
-import qualified Data.Map.Strict as Map
 import System.Exit (exitFailure)
 
 main :: IO ()
@@ -70,12 +70,12 @@ u32TypeSurvivesSystems :: Bool
 u32TypeSurvivesSystems = case compileRunnable "u32.phil" u32Source of
   Left _ -> False
   Right runnable ->
-    case Map.lookup "main"
+    case toList
         (systemsProgramFunctions (systemsArtifactProgram (runnableSystemsArtifact runnable))) of
-      Nothing -> False
-      Just functionValue ->
+      [functionValue] ->
         any ((== TypedScalar (ScalarUInt 32)) . systemsValueRole)
-          (Map.elems (systemsFunctionValues functionValue))
+          (toList (systemsFunctionValues functionValue))
+      _ -> False
 
 u32ValueSurvivesLLVM :: Bool
 u32ValueSurvivesLLVM = case compileRunnable "u32.phil" u32Source of
