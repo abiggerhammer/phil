@@ -9,6 +9,7 @@ component UploadClient provides Client[Upload] {
 
     offer session1 {
         unsupported => {
+            release payload
             close failure
         }
 
@@ -30,6 +31,7 @@ component UploadClient provides Client[Upload] {
 
             offer session2 {
                 reject(reason) => {
+                    release payload
                     close failure
                 }
 
@@ -39,6 +41,7 @@ component UploadClient provides Client[Upload] {
                     decide should_cancel_upload() {
                         true => {
                             let session3 = select cancel on session2
+                            release payload
                             close cancelled
                         }
 
