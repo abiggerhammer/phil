@@ -76,7 +76,8 @@ phase0BeginLengthProjection = FieldProjectionWitness
 -- | Candidate next Phase 0 artifact. The exact Phase 0 artifact already bound by
 -- PHIL-LLVM-CERT-001 is deliberately left untouched. This candidate makes the
 -- source-level `begin.length` dependency explicit while the concrete runtime
--- record layout remains undecided.
+-- record layout remains undecided. Promoting it therefore requires a new
+-- certification revision rather than reusing the old artifact-bound claim.
 phase0FieldProjectionBundle :: Either FieldProjectionError FieldProjectionBundle
 phase0FieldProjectionBundle = do
   program <- materializeFieldProjectionProgram
