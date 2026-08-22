@@ -1,0 +1,89 @@
+name: Local Runtime Choice Invariant Fix
+
+on:
+  pull_request:
+    paths:
+      - '.github/workflows/local-runtime-choice-invariant-fix.yml'
+
+permissions:
+  contents: write
+
+jobs:
+  apply:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: systems-local-runtime-choice
+          fetch-depth: 0
+      - name: Transfer version-selection invariant to runtime-choice representation
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 - <<'PY'
+          from pathlib import Path
+
+          def replace_once(path, old, new):
+              p = Path(path)
+              text = p.read_text()
+              count = text.count(old)
+              if count != 1:
+                  raise SystemExit(f"{path}: expected one match, found {count}: {old!r}")
+              p.write_text(text.replace(old, new, 1))
+
+          replace_once(
+              'src/Phil/Systems/IR.hs',
+              '  | InvariantBranchTargets Text BlockId BlockId BlockId\n  | InvariantExactReceive Text BlockId ValueId BlockId BlockId\n',
+              '  | InvariantBranchTargets Text BlockId BlockId BlockId\n  | InvariantRuntimeChoice Text BlockId Text (Map Text SystemsRuntimeChoiceArm)\n  | InvariantExactReceive Text BlockId ValueId BlockId BlockId\n')
+
+          replace_once(
+              'src/Phil/Systems/IR.hs',
+              '  InvariantBranchTargets functionName blockId yes no ->\n    tag "branch-targets" [functionName, unBlockId blockId, unBlockId yes, unBlockId no]\n  InvariantExactReceive functionName blockId owner yes no ->\n',
+              '  InvariantBranchTargets functionName blockId yes no ->\n    tag "branch-targets" [functionName, unBlockId blockId, unBlockId yes, unBlockId no]\n  InvariantRuntimeChoice functionName blockId name arms ->\n    tag "runtime-choice"\n      [ functionName\n      , unBlockId blockId\n      , name\n      , renderList renderRuntimeChoiceArm (Map.toAscList arms)\n      ]\n  InvariantExactReceive functionName blockId owner yes no ->\n')
+
+          replace_once(
+              'src/Phil/Systems/Verify.hs',
+              '  InvariantBranchTargets functionName blockId yes no -> do\n    function <- requireFunction invariantId functionName program\n    blockValue <- requireInvariantBlock invariantId function blockId\n    case systemsBlockTerminator blockValue of\n      TermBranch _ actualYes actualNo | actualYes == yes && actualNo == no -> pure ()\n      _ -> Left (StageInvariantControlMismatch invariantId)\n  InvariantExactReceive functionName blockId owner yes no -> do\n',
+              '  InvariantBranchTargets functionName blockId yes no -> do\n    function <- requireFunction invariantId functionName program\n    blockValue <- requireInvariantBlock invariantId function blockId\n    case systemsBlockTerminator blockValue of\n      TermBranch _ actualYes actualNo | actualYes == yes && actualNo == no -> pure ()\n      _ -> Left (StageInvariantControlMismatch invariantId)\n  InvariantRuntimeChoice functionName blockId name arms -> do\n    function <- requireFunction invariantId functionName program\n    blockValue <- requireInvariantBlock invariantId function blockId\n    case systemsBlockTerminator blockValue of\n      TermRuntimeChoice actualName _ _ actualArms\n        | actualName == name && actualArms == arms -> pure ()\n      _ -> Left (StageInvariantControlMismatch invariantId)\n  InvariantExactReceive functionName blockId owner yes no -> do\n')
+
+          replace_once(
+              'src/Phil/Systems/LocalRuntimeChoice.hs',
+              '  , localChoiceServerTransport :: ValueId\n  , localChoiceLoweringDecision :: DecisionId\n',
+              '  , localChoiceServerTransport :: ValueId\n  , localChoiceInvariant :: InvariantId\n  , localChoiceLoweringDecision :: DecisionId\n')
+
+          replace_once(
+              'src/Phil/Systems/LocalRuntimeChoice.hs',
+              '  , localChoiceServerTransport = ValueId "server.transport"\n  , localChoiceLoweringDecision = DecisionId "lower.local.choose_supported"\n',
+              '  , localChoiceServerTransport = ValueId "server.transport"\n  , localChoiceInvariant = InvariantId "invariant.version.selection_branch"\n  , localChoiceLoweringDecision = DecisionId "lower.local.choose_supported"\n')
+
+          replace_once(
+              'src/Phil/Systems/LocalRuntimeChoice.hs',
+              '  let baseContract = systemsArtifactStageContract baseArtifact\n      targetDigest = systemsProgramDigest program\n      contract = baseContract\n        { stageTargetArtifactDigest = targetDigest\n        , stageTraceRelation = stageTraceRelation baseContract <>\n',
+              '  let baseContract = systemsArtifactStageContract baseArtifact\n      expectedArms = Map.fromList\n        [ ("none", SystemsRuntimeChoiceArm Nothing (localChoiceNoneTarget witness))\n        , ("some", SystemsRuntimeChoiceArm (Just (localChoiceSelectedVersion witness)) (localChoiceSomeTarget witness))\n        ]\n      expectedOldInvariant = InvariantBranchTargets\n        (localChoiceFunction witness)\n        (localChoiceBlock witness)\n        (localChoiceSomeTarget witness)\n        (localChoiceNoneTarget witness)\n  case Map.lookup (localChoiceInvariant witness) (stageInvariants baseContract) of\n    Just StageInvariant { stageInvariantClaim = actual }\n      | actual == expectedOldInvariant -> pure ()\n    _ -> Left (LocalRuntimeChoiceMismatch "predecessor version-selection invariant drifted")\n  let targetDigest = systemsProgramDigest program\n      transferredInvariant = StageInvariant\n        (localChoiceInvariant witness)\n        (InvariantRuntimeChoice\n          (localChoiceFunction witness)\n          (localChoiceBlock witness)\n          (localChoiceName witness)\n          expectedArms)\n      contract = baseContract\n        { stageTargetArtifactDigest = targetDigest\n        , stageInvariants = Map.insert\n            (localChoiceInvariant witness)\n            transferredInvariant\n            (stageInvariants baseContract)\n        , stageTraceRelation = stageTraceRelation baseContract <>\n')
+
+          replace_once(
+              'src/Phil/Systems/LocalRuntimeChoice.hs',
+              '  unless (systemsBlockTerminator choiceBlock == TermRuntimeChoice (localChoiceName witness) [] Nothing expectedArms) $\n    Left (LocalRuntimeChoiceMismatch "local runtime choice shape drifted")\n  versionBlock <- needBlock witness function (localChoiceVersionSelectBlock witness)\n',
+              '  unless (systemsBlockTerminator choiceBlock == TermRuntimeChoice (localChoiceName witness) [] Nothing expectedArms) $\n    Left (LocalRuntimeChoiceMismatch "local runtime choice shape drifted")\n  case Map.lookup (localChoiceInvariant witness)\n      (stageInvariants (systemsArtifactStageContract artifact)) of\n    Just StageInvariant\n      { stageInvariantClaim = InvariantRuntimeChoice functionName blockId name arms\n      }\n        | functionName == localChoiceFunction witness\n            && blockId == localChoiceBlock witness\n            && name == localChoiceName witness\n            && arms == expectedArms -> pure ()\n    _ -> Left (LocalRuntimeChoiceMismatch "version-selection invariant was not transferred")\n  versionBlock <- needBlock witness function (localChoiceVersionSelectBlock witness)\n')
+
+          replace_once(
+              'src/Phil/Systems/LocalRuntimeChoice.hs',
+              '        , loweringInvariantsTransferred = []\n',
+              '        , loweringInvariantsTransferred = [localChoiceInvariant witness]\n')
+
+          replace_once(
+              'test/LocalRuntimeChoiceMain.hs',
+              '    , test "choose_supported has exact none/some branch payload" exactChoice\n    , test "legacy has_version Bool is absent" legacyBoolAbsent\n',
+              '    , test "choose_supported has exact none/some branch payload" exactChoice\n    , test "version-selection stage invariant transfers to runtime choice" invariantTransferred\n    , test "legacy has_version Bool is absent" legacyBoolAbsent\n')
+
+          replace_once(
+              'test/LocalRuntimeChoiceMain.hs',
+              'legacyBoolAbsent :: Bool\nlegacyBoolAbsent = withBundle $ \\bundle ->\n',
+              'invariantTransferred :: Bool\ninvariantTransferred = withBundle $ \\bundle ->\n  let witness = localRuntimeChoiceWitness bundle\n      expectedArms = Map.fromList\n        [ ("none", SystemsRuntimeChoiceArm Nothing (localChoiceNoneTarget witness))\n        , ("some", SystemsRuntimeChoiceArm\n            (Just (localChoiceSelectedVersion witness))\n            (localChoiceSomeTarget witness))\n        ]\n      contract = systemsArtifactStageContract (localRuntimeChoiceArtifact bundle)\n  in case Map.lookup (localChoiceInvariant witness) (stageInvariants contract) of\n      Just StageInvariant\n        { stageInvariantClaim = InvariantRuntimeChoice functionName blockId name arms\n        } -> functionName == localChoiceFunction witness\n          && blockId == localChoiceBlock witness\n          && name == localChoiceName witness\n          && arms == expectedArms\n      _ -> False\n\nlegacyBoolAbsent :: Bool\nlegacyBoolAbsent = withBundle $ \\bundle ->\n')
+          PY
+          git diff --check
+          git config user.name "phil-local-choice-invariant-bot"
+          git config user.email "actions@users.noreply.github.com"
+          git add src/Phil/Systems/IR.hs src/Phil/Systems/Verify.hs src/Phil/Systems/LocalRuntimeChoice.hs test/LocalRuntimeChoiceMain.hs
+          git commit -m "Transfer version selection invariant"
+          git push origin HEAD:systems-local-runtime-choice
