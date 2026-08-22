@@ -57,6 +57,7 @@ library
       Phil.Assurance.Rocq
       Phil.Assurance.RocqRecognizedRecord
       Phil.Assurance.RocqExactReceive
+      Phil.Assurance.RocqDigestValidation
       Phil.Systems.IR
       Phil.Systems.Verify
       Phil.Systems.Phase0
@@ -78,6 +79,7 @@ library
       Phil.LLVM.ExactReceiveProofCertification
       Phil.LLVM.DigestValidation
       Phil.LLVM.DigestValidationCertification
+      Phil.LLVM.DigestValidationProofCertification
       Phil.LLVM.Storage
       Phil.LLVM.StorageCertification
       Phil.LLVM.AcceptedResponse
@@ -186,6 +188,16 @@ executable phil-certify-exact-receive
   import:             common-settings
   hs-source-dirs:     app
   main-is:            ExactReceiveProofCertificationMain.hs
+  build-depends:
+      base >=4.17 && <5,
+      bytestring >=0.11 && <0.13,
+      phil-core,
+      text >=2.0 && <2.2
+
+executable phil-certify-digest-validation
+  import:             common-settings
+  hs-source-dirs:     app
+  main-is:            DigestValidationProofCertificationMain.hs
   build-depends:
       base >=4.17 && <5,
       bytestring >=0.11 && <0.13,
