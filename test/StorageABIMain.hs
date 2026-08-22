@@ -16,7 +16,7 @@ main = do
     , test "storage LLVM candidate verifies" llvmCandidatePasses
     , test "storage certification closes" certificationPasses
     , test "storage ABI binds owner consumption" ownershipDescriptorBound
-    , test "storage ABI keeps UploadId opaque" uploadIdDescriptorBound
+    , test "storage ABI keeps UploadId opaque with bounded lifetime" uploadIdDescriptorBound
     , test "wrong storage owner is rejected" wrongStoreOwnerRejects
     , test "wrong UploadId semantic role is rejected" wrongUploadIdRoleRejects
     , test "wrong LLVM storage owner is rejected" wrongLLVMStoreOwnerRejects
@@ -45,6 +45,7 @@ ownershipDescriptorBound =
 uploadIdDescriptorBound :: Bool
 uploadIdDescriptorBound =
   Text.isInfixOf "upload-id-handle=opaque-runtime-managed-nonowning" storageABIDescriptor
+  && Text.isInfixOf "upload-id-lifetime=valid-through-calling-component-return" storageABIDescriptor
   && Text.isInfixOf "upload-id-layout-access=forbidden" storageABIDescriptor
   && Text.isInfixOf "upload-id-release=forbidden" storageABIDescriptor
 
