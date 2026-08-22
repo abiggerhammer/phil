@@ -8,8 +8,10 @@ module Phil.LLVM
   , module Phil.LLVM.RecognizedRecordProofCertification
   , module Phil.LLVM.ExactReceive
   , module Phil.LLVM.ExactReceiveCertification
+  , module Phil.LLVM.DigestValidation
   ) where
 
+import Phil.LLVM.DigestValidation
 import Phil.LLVM.ExactReceive
 import Phil.LLVM.ExactReceiveCertification
 import Phil.LLVM.IR
