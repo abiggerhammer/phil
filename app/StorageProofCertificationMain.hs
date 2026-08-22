@@ -5,14 +5,8 @@ module Main (main) where
 import qualified Data.ByteString as ByteString
 import qualified Data.Text as Text
 import qualified Data.Text.Encoding as TextEncoding
-import Phil.Assurance.Rocq
-import Phil.Assurance.RocqDigestValidation
-import Phil.Assurance.RocqExactReceive
-import Phil.Assurance.RocqRecognizedRecord
-import Phil.Assurance.RocqStorage
-import Phil.Assurance.Types
-import Phil.LLVM.DigestValidationProofCertification
-import Phil.LLVM.StorageProofCertification
+import Phil.Assurance
+import Phil.LLVM
 import System.Environment (getArgs)
 import System.Exit (exitFailure)
 import System.IO (hPutStrLn, stderr)
