@@ -18,7 +18,6 @@ import qualified Data.Map.Strict as Map
 import Data.Text (Text)
 import qualified Data.Text as Text
 import Phil.Assurance.Types (digestText, unDigest)
-import Phil.LLVM.AcceptedResponse (acceptedResponseWitness)
 import Phil.LLVM.IR
 import Phil.LLVM.RejectedResponse
   ( rejectedResponseABIDescriptor
@@ -95,23 +94,24 @@ lowerSystemsFinalResponseReceive target systemsArtifact = artifact
     witness = phase0FinalResponseChoiceWitness
     module0 = llvmArtifactModule base
     module1 = module0
-      { llvmFunctions = Map.adjust rewriteFunction
-(sessionChoiceFunction witness)
-(llvmFunctions module0)
+      { llvmFunctions = Map.adjust
+          rewriteFunction
+          (sessionChoiceFunction witness)
+          (llvmFunctions module0)
       }
     rewriteFunction function = function
       { llvmFunctionBlocks = Map.adjust rewriteAcceptedBlock acceptedBlockId $
-Map.adjust rewriteOfferBlock offerBlockId (llvmFunctionBlocks function)
+          Map.adjust rewriteOfferBlock offerBlockId (llvmFunctionBlocks function)
       }
     offerBlockId = LLVMBlockId (unBlockId (sessionChoiceOfferBlock witness))
     acceptedBlockId = LLVMBlockId (unBlockId (sessionChoiceAcceptedTarget witness))
     rejectedBlockId = LLVMBlockId (unBlockId (sessionChoiceRejectedTarget witness))
     rewriteOfferBlock blockValue = blockValue
       { llvmBlockTerminator = LLVMFinalResponseOffer
-(unValueId (sessionChoiceTransport witness))
-(unValueId (sessionChoiceAcceptedPayload witness))
-acceptedBlockId
-rejectedBlockId
+          (unValueId (sessionChoiceTransport witness))
+          (unValueId (sessionChoiceAcceptedPayload witness))
+          acceptedBlockId
+          rejectedBlockId
       }
     rewriteAcceptedBlock blockValue = blockValue
       { llvmBlockOps = concatMap rewriteAcceptedOp (llvmBlockOps blockValue) }
@@ -157,13 +157,13 @@ verifyFinalResponseReceiveTranslation bundle llvmArtifact = do
     \(functionName, systemsFunction) -> do
       llvmFunction <- lookupLLVMFunction llvmModule functionName
       let expectedParameters =
-  [ LLVMParameter (unValueId valueId) LLVMPointerParameter
-  | (valueId, SystemsValue { systemsValueRole = TransportHandle }) <-
-      Map.toAscList (systemsFunctionValues systemsFunction)
-  ]
+            [ LLVMParameter (unValueId valueId) LLVMPointerParameter
+            | (valueId, SystemsValue { systemsValueRole = TransportHandle }) <-
+                Map.toAscList (systemsFunctionValues systemsFunction)
+            ]
       unless (llvmFunctionParameters llvmFunction == expectedParameters) $
         Left (FinalResponseReceiveTransportParameterMismatch
-functionName (llvmFunctionParameters llvmFunction))
+          functionName (llvmFunctionParameters llvmFunction))
   verifyFinalResponseReceiveWitness bundle llvmArtifact
   mapLeft FinalResponseReceiveLLVMVerificationError $
     verifyLLVMEmissionWith
@@ -222,8 +222,8 @@ verifyFinalResponseReceiveWitness bundle llvmArtifact = do
   unless
     (llvmBlockOps serverAcceptedBlock ==
       [ LLVMAcceptedResponse
-(unValueId (acceptedResponseTransport acceptedWitness))
-(unValueId (acceptedResponseUploadId acceptedWitness))
+          (unValueId (acceptedResponseTransport acceptedWitness))
+          (unValueId (acceptedResponseUploadId acceptedWitness))
       ]) $
     Left (FinalResponseReceiveServerAcceptedRegression
       (rejectedResponseFunction rejectedWitness)
