@@ -3,6 +3,7 @@
 module Main (main) where
 
 import qualified Data.Map.Strict as Map
+import Data.Text (Text)
 import Phil.LLVM
 import Phil.Systems
 import System.Exit (exitFailure)
@@ -52,7 +53,7 @@ wrongTransportParameterRejects = withExactReceive $ \bundle artifact ->
 
 wrongTransportOperandRejects :: Bool
 wrongTransportOperandRejects = withExactReceive $ \bundle artifact ->
-  let badArtifact = mapLLVMBlock "UploadServer" "server.payload"
+  let badArtifact = mapLLVMBlock "UploadServer" (LLVMBlockId "server.payload")
         (mapExactReceive $ \site primitive _ lengthName scalarType payload yes no ->
           LLVMExactReceive site primitive "server.wrong_transport"
             lengthName scalarType payload yes no)
@@ -63,7 +64,7 @@ wrongTransportOperandRejects = withExactReceive $ \bundle artifact ->
 
 wrongPayloadIdentityRejects :: Bool
 wrongPayloadIdentityRejects = withExactReceive $ \bundle artifact ->
-  let badArtifact = mapLLVMBlock "UploadServer" "server.payload"
+  let badArtifact = mapLLVMBlock "UploadServer" (LLVMBlockId "server.payload")
         (mapExactReceive $ \site primitive transport lengthName scalarType _ yes no ->
           LLVMExactReceive site primitive transport
             lengthName scalarType "server.wrong_payload" yes no)
@@ -74,7 +75,7 @@ wrongPayloadIdentityRejects = withExactReceive $ \bundle artifact ->
 
 wrongFailureReleaseRejects :: Bool
 wrongFailureReleaseRejects = withExactReceive $ \bundle artifact ->
-  let badArtifact = mapLLVMBlock "UploadServer" "server.early_eof"
+  let badArtifact = mapLLVMBlock "UploadServer" (LLVMBlockId "server.early_eof")
         (\blockValue -> blockValue
           { llvmBlockOps = map replaceRelease (llvmBlockOps blockValue) })
         artifact
