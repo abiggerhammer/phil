@@ -258,8 +258,11 @@ resolveSurfaceType environment state surfaceTy =
     SurfaceNamedType "CancelScope" _ -> opaque Linear
     SurfaceNamedType "CancelCap" _ -> opaque Affine
     _ -> do
-      ty <- mapElaboration surfaceTy $
+      elaborated <- mapElaboration surfaceTy $
         elaborateType (elaborationEnv environment state) surfaceTy
+      let ty = case elaborated of
+            TyOpaque alias -> Map.findWithDefault elaborated alias (surfaceTypeAliases environment)
+            _ -> elaborated
       Right (defaultMode ty, ty, shapeForType ty)
   where
     opaque mode = do
@@ -362,9 +365,6 @@ rewriteProposition state proposition = case proposition of
   where
     term = rewriteRefTerm state
 
--- | Resolve semantic aliases without assuming that an alias graph is acyclic.
--- Self projections such as begin.length are legitimate canonical terms, so a
--- fixed point is a normal stopping condition rather than a recursive rewrite.
 rewriteRefTerm :: SurfaceState -> RefTerm -> RefTerm
 rewriteRefTerm state = go Set.empty
   where
@@ -390,9 +390,6 @@ rewriteRefTerm state = go Set.empty
 fieldAliasFor :: Text -> BindingMeta -> Maybe RefTerm
 fieldAliasFor field meta = case bindingShape meta of
   RecordShape _ fields -> Map.lookup field fields >>= fieldAlias
-  -- Owned-byte projections are already canonical in the surface variable's
-  -- identity.  Rewriting them through a synthetic placeholder would destroy
-  -- the equality between payload.length and a Begin field constructed from it.
   OwnedBytesShape _ -> Nothing
   _ -> Nothing
 
