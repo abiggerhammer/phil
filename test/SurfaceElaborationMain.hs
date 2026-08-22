@@ -43,6 +43,7 @@ main = do
     , test "Validated keeps exact context and subject identities" testValidatedType
     , test "Frame elaborates to a grammar-indexed Core type" testFrameType
     , test "unknown surface types elaborate opaquely and stably" testOpaqueNamedType
+    , test "opaque type arguments never collapse unsupported syntax" testOpaqueArgumentFailClosed
     , test "unknown projection sorts fail at the projection span" testUnknownProjection
     , test "symbolic multiplication is outside the Phase 0 refinement fragment" testSymbolicMultiply
     , test "integer values require an expected UInt width" testIntegerValueWidth
@@ -132,6 +133,15 @@ testOpaqueNamedType = do
   actualServer <- mapLeft show $ elaborateType environment server
   actualOwned <- mapLeft show $ elaborateType environment owned
   expectEqual (TyOpaque "Server[Upload]", TyOpaque "OwnedBytes[1024]") (actualServer, actualOwned)
+
+testOpaqueArgumentFailClosed :: Either String ()
+testOpaqueArgumentFailClosed = do
+  let environment = emptyElaborationEnv emptyStaticContext emptyCheckState
+  surface <- mapLeft show $
+    parseSurfaceType "opaque-error.phil" "Weird[send x on session]"
+  case elaborateType environment surface of
+    Left (ElaborationError _ (UnsupportedOpaqueTypeArgument _)) -> Right ()
+    other -> Left ("unsupported opaque argument did not fail closed: " ++ show other)
 
 testUnknownProjection :: Either String ()
 testUnknownProjection = do
