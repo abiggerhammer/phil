@@ -70,6 +70,7 @@ library
       Phil.LLVM.RecognizedRecordCertification
       Phil.LLVM.RecognizedRecordProofCertification
       Phil.LLVM.ExactReceive
+      Phil.LLVM.ExactReceiveCertification
   build-depends:
       base >=4.17 && <5,
       bytestring >=0.11 && <0.13,
