@@ -196,6 +196,7 @@ ordinaryOps = filter isOrdinary
       LLVMRuntime _ _ -> True
       LLVMCleanup _ -> True
       LLVMPlain _ -> True
+      LLVMScalarLiteral _ _ -> True
       LLVMStrengtheningOp _ _ -> False
       LLVMPoison _ -> False
       LLVMUndef _ -> False

@@ -34,6 +34,10 @@ import Phil.Assurance.Types
   , RevisionId (..)
   , digestText
   )
+import Phil.Core.Scalar
+  ( ScalarLiteral (..)
+  , ScalarType (..)
+  )
 import Phil.Systems.IR
   ( BlockId
   , CompilationProfile (..)
@@ -76,6 +80,7 @@ data LLVMOp
   | LLVMRuntime RuntimeSiteRef Text
   | LLVMCleanup Text
   | LLVMPlain Text
+  | LLVMScalarLiteral Text ScalarLiteral
   | LLVMStrengtheningOp LLVMStrengtheningId Text
   | LLVMPoison Text
   | LLVMUndef Text
@@ -87,6 +92,7 @@ data LLVMTerminator
   = LLVMJump LLVMBlockId
   | LLVMBranch LLVMBlockId LLVMBlockId
   | LLVMRuntimeBranch RuntimeSiteRef Text LLVMBlockId LLVMBlockId
+  | LLVMReturnScalar Text ScalarType
   | LLVMReturn Text
   | LLVMUnreachable (Maybe LLVMStrengtheningId)
   deriving (Eq, Ord, Show)
@@ -159,6 +165,7 @@ llvmBlockSuccessors blockValue = case llvmBlockTerminator blockValue of
   LLVMJump target -> [target]
   LLVMBranch yes no -> [yes, no]
   LLVMRuntimeBranch _ _ yes no -> [yes, no]
+  LLVMReturnScalar _ _ -> []
   LLVMReturn _ -> []
   LLVMUnreachable _ -> []
 
@@ -282,9 +289,18 @@ renderLLVMModule moduleValue = Text.unlines $
     renderRuntimeDeclaration evidence = "declare i1 @phil_runtime_" <> symbol evidence <> "()"
 
     renderFunction (functionKey, function) =
-      [ "define i32 @" <> symbol functionKey <> "() {" ]
+      [ "define " <> renderFunctionReturnType function <> " @" <> symbol functionKey <> "() {" ]
       <> concatMap renderBlock (orderedBlocks function)
       <> ["}", ""]
+
+    renderFunctionReturnType function =
+      case
+        [ scalarType
+        | blockValue <- Map.elems (llvmFunctionBlocks function)
+        , LLVMReturnScalar _ scalarType <- [llvmBlockTerminator blockValue]
+        ] of
+          scalarType : _ -> renderScalarType scalarType
+          [] -> "i32"
 
     orderedBlocks function =
       case Map.lookup (llvmFunctionEntry function) (llvmFunctionBlocks function) of
@@ -308,6 +324,7 @@ renderLLVMModule moduleValue = Text.unlines $
       LLVMCleanup name ->
         ["; cleanup " <> oneLine name, "call void @phil_cleanup()"]
       LLVMPlain description -> ["; plain " <> oneLine description]
+      LLVMScalarLiteral name literal -> [renderScalarLiteralInstruction name literal]
       LLVMStrengtheningOp strengtheningId description ->
         renderStrengthening strengtheningId description
       LLVMPoison description ->
@@ -317,6 +334,14 @@ renderLLVMModule moduleValue = Text.unlines $
       LLVMFreeze description ->
         [ "%phil_freeze_" <> symbol description <> " = freeze i1 undef" ]
       LLVMMetadata description -> ["; !phil " <> oneLine description]
+
+    renderScalarLiteralInstruction name literal =
+      case literal of
+        ScalarBoolLiteral value ->
+          "%" <> symbol name <> " = or i1 false, " <> if value then "true" else "false"
+        ScalarUIntLiteral width value ->
+          "%" <> symbol name <> " = add i" <> Text.pack (show width)
+            <> " 0, " <> Text.pack (show value)
 
     renderStrengthening strengtheningId description =
       case Map.lookup strengtheningId (llvmStrengthenings moduleValue) of
@@ -356,8 +381,15 @@ renderLLVMModule moduleValue = Text.unlines $
             <> ", label %" <> symbol (unLLVMBlockId yes)
             <> ", label %" <> symbol (unLLVMBlockId no)
         ]
+      LLVMReturnScalar name scalarType ->
+        ["ret " <> renderScalarType scalarType <> " %" <> symbol name]
       LLVMReturn outcome -> ["ret i32 0 ; " <> oneLine outcome]
       LLVMUnreachable _ -> ["unreachable"]
+
+renderScalarType :: ScalarType -> Text
+renderScalarType scalarType = case scalarType of
+  ScalarBool -> "i1"
+  ScalarUInt width -> "i" <> Text.pack (show width)
 
 renderCompilationProfile :: CompilationProfile -> Text
 renderCompilationProfile profile = case profile of

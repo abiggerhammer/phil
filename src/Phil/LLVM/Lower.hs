@@ -48,16 +48,16 @@ lowerFunction functionValue = LLVMFunction
   { llvmFunctionName = systemsFunctionName functionValue
   , llvmFunctionEntry = lowerBlockId (systemsFunctionEntry functionValue)
   , llvmFunctionBlocks = Map.fromList
-      [ (lowerBlockId blockKey, lowerBlock blockValue)
+      [ (lowerBlockId blockKey, lowerBlock functionValue blockValue)
       | (blockKey, blockValue) <- Map.toAscList (systemsFunctionBlocks functionValue)
       ]
   }
 
-lowerBlock :: SystemsBlock -> LLVMBlock
-lowerBlock blockValue = LLVMBlock
+lowerBlock :: SystemsFunction -> SystemsBlock -> LLVMBlock
+lowerBlock functionValue blockValue = LLVMBlock
   { llvmBlockId = lowerBlockId (systemsBlockId blockValue)
   , llvmBlockOps = concatMap lowerOp (systemsBlockOps blockValue)
-  , llvmBlockTerminator = lowerTerminator (systemsBlockTerminator blockValue)
+  , llvmBlockTerminator = lowerTerminator functionValue (systemsBlockTerminator blockValue)
   }
 
 lowerOp :: SystemsOp -> [LLVMOp]
@@ -76,10 +76,12 @@ lowerOp operation = case operation of
   OpCopy {} -> [LLVMCall "copy"]
   OpEraseFact {} -> [LLVMMetadata "proof/typestate fact erased before LLVM"]
   OpDiagnostic { diagnosticName = name } -> [LLVMMetadata ("diagnostic " <> name)]
+  OpScalarLiteral { scalarLiteralOutput = output, scalarLiteralValue = literal } ->
+    [LLVMScalarLiteral (unValueId output) literal]
   OpTraceEvent name -> [LLVMMetadata ("trace " <> name)]
 
-lowerTerminator :: SystemsTerminator -> LLVMTerminator
-lowerTerminator terminator = case terminator of
+lowerTerminator :: SystemsFunction -> SystemsTerminator -> LLVMTerminator
+lowerTerminator functionValue terminator = case terminator of
   TermJump target -> LLVMJump (lowerBlockId target)
   TermBranch _ yes no -> LLVMBranch (lowerBlockId yes) (lowerBlockId no)
   TermRecognize { recognizeSite = site, recognizeSuccess = yes, recognizeFailure = no } ->
@@ -92,6 +94,11 @@ lowerTerminator terminator = case terminator of
     runtimeBranch site yes no
   TermStore { storeSite = site, storeSuccess = yes, storeFailure = no } ->
     runtimeBranch site yes no
+  TermReturnScalar valueId ->
+    case Map.lookup valueId (systemsFunctionValues functionValue) of
+      Just SystemsValue { systemsValueRole = TypedScalar scalarType } ->
+        LLVMReturnScalar (unValueId valueId) scalarType
+      _ -> LLVMReturn ("invalid-scalar-return:" <> unValueId valueId)
   TermEnd outcome -> LLVMReturn outcome
   TermFatal failure -> LLVMReturn ("fatal:" <> failure)
 

@@ -18,6 +18,9 @@ main = do
     , test "wrong protocol edge rejects despite locally well-formed blocks" wrongProtocolEdgeRejects
     , test "systems IR cannot invent a second owner for the same storage" duplicateOwnerRejects
     , test "runtime copy must point to a copy-class lowering decision" hiddenCopyRejects
+    , test "scalar literal width must match its typed Systems value" scalarLiteralTypeMismatchRejects
+    , test "scalar literal must fit its declared width" scalarLiteralOutOfRangeRejects
+    , test "scalar return cannot reference a non-scalar value" scalarReturnRoleRejects
     , test "runtime-bound validator cannot disappear after certification" missingRuntimeSiteRejects
     , test "certified release cannot retain defensive diagnostic state" certifiedDiagnosticRejects
     , test "checked-runtime diagnostics require defensive cost classification" checkedRuntimeDiagnosticClassRejects
@@ -118,6 +121,59 @@ hiddenCopyRejects =
           (ValueId "client.payload") targetId (DecisionId "lower.runtime.semantic_call")
           : systemsBlockOps block
       }
+
+scalarLiteralTypeMismatchRejects :: Bool
+scalarLiteralTypeMismatchRejects =
+  let scalarId = ValueId "client.scalar.mismatched"
+      withValue = adjustFunction "UploadClient"
+        (\function -> function
+          { systemsFunctionValues = Map.insert scalarId
+              (SystemsValue scalarId (TypedScalar (ScalarUInt 32)) Nothing)
+              (systemsFunctionValues function)
+          })
+        phase0SystemsArtifact
+      withLiteral = adjustBlock "UploadClient" "client.entry"
+        (\block -> block
+          { systemsBlockOps = OpScalarLiteral scalarId (ScalarUIntLiteral 16 42)
+              : systemsBlockOps block
+          })
+        withValue
+      bad = rebindArtifact withLiteral
+  in case verifyRebound bad of
+      Left ScalarLiteralTypeMismatch {} -> True
+      _ -> False
+
+scalarLiteralOutOfRangeRejects :: Bool
+scalarLiteralOutOfRangeRejects =
+  let scalarId = ValueId "client.scalar.overflow"
+      withValue = adjustFunction "UploadClient"
+        (\function -> function
+          { systemsFunctionValues = Map.insert scalarId
+              (SystemsValue scalarId (TypedScalar (ScalarUInt 32)) Nothing)
+              (systemsFunctionValues function)
+          })
+        phase0SystemsArtifact
+      withLiteral = adjustBlock "UploadClient" "client.entry"
+        (\block -> block
+          { systemsBlockOps = OpScalarLiteral scalarId (ScalarUIntLiteral 32 4294967296)
+              : systemsBlockOps block
+          })
+        withValue
+      bad = rebindArtifact withLiteral
+  in case verifyRebound bad of
+      Left ScalarLiteralOutOfRange {} -> True
+      _ -> False
+
+scalarReturnRoleRejects :: Bool
+scalarReturnRoleRejects =
+  let bad0 = adjustBlock "UploadClient" "client.entry"
+        (\block -> block
+          { systemsBlockTerminator = TermReturnScalar (ValueId "client.payload") })
+        phase0SystemsArtifact
+      bad = rebindArtifact bad0
+  in case verifyRebound bad of
+      Left ScalarReturnValueNotScalar {} -> True
+      _ -> False
 
 missingRuntimeSiteRejects :: Bool
 missingRuntimeSiteRejects =

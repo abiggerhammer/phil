@@ -29,11 +29,9 @@ jobs:
       - name: Test
         run: cabal test all --test-show-details=direct
 
-      - name: Verify Phase 0 LLVM locally
+      - name: Verify LLVM and run Phil programs
         shell: bash
         run: |
-          LLVM_EMITTER="$(cabal list-bin phil-llvm-phase0)"
-          "$LLVM_EMITTER" > phase0-upload.ll
           if command -v llvm-as-18 >/dev/null 2>&1; then
             LLVM_AS=llvm-as-18
           elif command -v llvm-as >/dev/null 2>&1 && llvm-as --version | head -n 1 | grep -Eq 'LLVM version 18([.]|$)'; then
@@ -42,8 +40,42 @@ jobs:
             echo "LLVM 18 llvm-as is required by the Phase 0 target profile" >&2
             exit 1
           fi
+
+          if command -v clang-18 >/dev/null 2>&1; then
+            CLANG=clang-18
+          elif command -v clang >/dev/null 2>&1 && clang --version | head -n 1 | grep -Eq 'clang version 18([.]|$)'; then
+            CLANG=clang
+          else
+            echo "Clang 18 is required to link runnable Phil programs" >&2
+            exit 1
+          fi
+
+          LLVM_EMITTER="$(cabal list-bin phil-llvm-phase0)"
+          "$LLVM_EMITTER" > phase0-upload.ll
           "$LLVM_AS" phase0-upload.ll -o /dev/null
+
+          PHILC="$(cabal list-bin philc)"
+
+          "$PHILC" emit-llvm examples/run/return-unit.phil > return-unit.ll
+          "$LLVM_AS" return-unit.ll -o return-unit.bc
+          "$CLANG" return-unit.bc -o return-unit
+          ./return-unit
+
+          "$PHILC" emit-llvm examples/run/return-42.phil > return-42.ll
+          "$LLVM_AS" return-42.ll -o return-42.bc
+          "$CLANG" return-42.bc -o return-42
+          set +e
+          ./return-42
+          SCALAR_STATUS=$?
+          set -e
+          if [ "$SCALAR_STATUS" -ne 42 ]; then
+            echo "expected typed U32 Phil program to exit 42; got $SCALAR_STATUS" >&2
+            exit 1
+          fi
+
+          echo "typed scalar Phil program returned 42 successfully"
           "$LLVM_AS" --version | head -n 1
+          "$CLANG" --version | head -n 1
 
       - name: Parse Steve surface corpus
         if: github.ref == 'refs/heads/steve/architecture-sketch' || github.head_ref == 'steve/architecture-sketch'
