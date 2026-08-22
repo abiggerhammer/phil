@@ -256,7 +256,16 @@ Theorem verified_erasure_has_surviving_semantic_carrier :
       erasureSelectedRevision decision revision = true).
 Proof.
   intros decision Hverified.
+  unfold EraseDecisionVerificationSuccess in Hverified.
   destruct (erasureCarrier decision) as [invariantId | revision] eqn:Hcarrier.
-  - left. exists invariantId. split; assumption.
-  - right. exists revision. split; assumption.
+  - left.
+    exists invariantId.
+    split.
+    + exact Hcarrier.
+    + exact Hverified.
+  - right.
+    exists revision.
+    split.
+    + exact Hcarrier.
+    + exact Hverified.
 Qed.
