@@ -1,0 +1,797 @@
+name: Session Choice Edit
+
+on:
+  push:
+    branches:
+      - systems-session-choice
+
+permissions:
+  contents: write
+
+jobs:
+  edit-and-test:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check out branch
+        uses: actions/checkout@v4
+        with:
+          ref: systems-session-choice
+          fetch-depth: 0
+
+      - name: Set up Haskell
+        uses: haskell-actions/setup@v2
+        with:
+          ghc-version: '9.6.7'
+          cabal-version: 'latest'
+
+      - name: Apply session-choice slice
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 - <<'PY'
+          from pathlib import Path
+
+          def replace_once(path, old, new):
+              p = Path(path)
+              text = p.read_text()
+              count = text.count(old)
+              if count != 1:
+                  raise SystemExit(f"{path}: expected one occurrence, found {count}: {old[:80]!r}")
+              p.write_text(text.replace(old, new, 1))
+
+          # Systems IR: semantic session choice retains labels, branch-local payload bindings,
+          # and continuation targets without choosing a target discriminator representation.
+          replace_once(
+              "src/Phil/Systems/IR.hs",
+              "  , SystemsOp (..)\n  , SystemsTerminator (..)\n",
+              "  , SystemsOp (..)\n  , SystemsChoiceArm (..)\n  , SystemsTerminator (..)\n",
+          )
+          replace_once(
+              "src/Phil/Systems/IR.hs",
+              "  deriving (Eq, Ord, Show)\n\ndata SystemsTerminator\n",
+              "  deriving (Eq, Ord, Show)\n\ndata SystemsChoiceArm = SystemsChoiceArm\n  { choiceArmPayloadBinding :: Maybe ValueId\n  , choiceArmTarget :: BlockId\n  }\n  deriving (Eq, Ord, Show)\n\ndata SystemsTerminator\n",
+          )
+          replace_once(
+              "src/Phil/Systems/IR.hs",
+              "  | TermStore\n      { storeOwner :: ValueId\n      , storeResult :: ValueId\n      , storeSite :: RuntimeSiteRef\n      , storeSuccess :: BlockId\n      , storeFailure :: BlockId\n      }\n  | TermReturnScalar ValueId\n",
+              "  | TermStore\n      { storeOwner :: ValueId\n      , storeResult :: ValueId\n      , storeSite :: RuntimeSiteRef\n      , storeSuccess :: BlockId\n      , storeFailure :: BlockId\n      }\n  | TermSessionOffer\n      { sessionOfferTransport :: ValueId\n      , sessionOfferArms :: Map Text SystemsChoiceArm\n      }\n  | TermReturnScalar ValueId\n",
+          )
+          replace_once(
+              "src/Phil/Systems/IR.hs",
+              "  TermStore { storeSuccess = yes, storeFailure = no } -> [yes, no]\n  TermReturnScalar _ -> []\n",
+              "  TermStore { storeSuccess = yes, storeFailure = no } -> [yes, no]\n  TermSessionOffer { sessionOfferArms = arms } ->\n    map (choiceArmTarget . snd) (Map.toAscList arms)\n  TermReturnScalar _ -> []\n",
+          )
+          replace_once(
+              "src/Phil/Systems/IR.hs",
+              "  TermStore owner result site yes no -> tag \"store\"\n    [unValueId owner, unValueId result, renderRuntimeSite site, unBlockId yes, unBlockId no]\n  TermReturnScalar value -> tag \"return-scalar\" [unValueId value]\n",
+              "  TermStore owner result site yes no -> tag \"store\"\n    [unValueId owner, unValueId result, renderRuntimeSite site, unBlockId yes, unBlockId no]\n  TermSessionOffer transport arms -> tag \"session-offer\"\n    [unValueId transport, renderList renderChoiceArm (Map.toAscList arms)]\n  TermReturnScalar value -> tag \"return-scalar\" [unValueId value]\n",
+          )
+          replace_once(
+              "src/Phil/Systems/IR.hs",
+              "renderLoweringAction :: LoweringAction -> Text\n",
+              "renderChoiceArm :: (Text, SystemsChoiceArm) -> Text\nrenderChoiceArm (label, arm) = Text.intercalate \";\"\n  [ field \"label\" label\n  , field \"payload\" (maybe \"none\" unValueId (choiceArmPayloadBinding arm))\n  , field \"target\" (unBlockId (choiceArmTarget arm))\n  ]\n\nrenderLoweringAction :: LoweringAction -> Text\n",
+          )
+
+          # Generic Systems verifier: a session offer is semantically valid only with an exact
+          # transport and branch-local payload binder blocks. Richer type/usage checks live in
+          # the concrete SessionChoice witness below.
+          replace_once(
+              "src/Phil/Systems/Verify.hs",
+              "  | ScalarReturnTypeMismatch Text ScalarType ScalarType\n",
+              "  | ScalarReturnTypeMismatch Text ScalarType ScalarType\n  | SessionOfferTransportMissing Text BlockId ValueId\n  | SessionOfferTransportRoleMismatch Text BlockId ValueId SystemsValueRole\n  | SessionOfferEmptyArms Text BlockId\n  | SessionOfferPayloadMissing Text BlockId Text ValueId\n  | SessionOfferPayloadTargetNotDedicated Text BlockId Text BlockId [BlockId]\n",
+          )
+          replace_once(
+              "src/Phil/Systems/Verify.hs",
+              "    TermReturnScalar valueId ->\n      case Map.lookup valueId (systemsFunctionValues function) of\n",
+              "    TermSessionOffer transport arms -> do\n      case Map.lookup transport (systemsFunctionValues function) of\n        Nothing -> Left (SessionOfferTransportMissing functionKey blockKey transport)\n        Just SystemsValue { systemsValueRole = TransportHandle } -> pure ()\n        Just value -> Left (SessionOfferTransportRoleMismatch\n          functionKey blockKey transport (systemsValueRole value))\n      when (Map.null arms) $\n        Left (SessionOfferEmptyArms functionKey blockKey)\n      forM_ (Map.toAscList arms) $ \\(label, arm) ->\n        case choiceArmPayloadBinding arm of\n          Nothing -> pure ()\n          Just payload -> do\n            unless (Map.member payload (systemsFunctionValues function)) $\n              Left (SessionOfferPayloadMissing functionKey blockKey label payload)\n            let target = choiceArmTarget arm\n                predecessors = predecessorsOf function target\n            unless (predecessors == [blockKey]) $\n              Left (SessionOfferPayloadTargetNotDedicated\n                functionKey blockKey label target predecessors)\n    TermReturnScalar valueId ->\n      case Map.lookup valueId (systemsFunctionValues function) of\n",
+          )
+          replace_once(
+              "src/Phil/Systems/Verify.hs",
+              "collectRecognitionTargets :: SystemsFunction -> Map ValueId (BlockId, BlockId)\n",
+              "predecessorsOf :: SystemsFunction -> BlockId -> [BlockId]\npredecessorsOf function target =\n  [ systemsBlockId blockValue\n  | blockValue <- Map.elems (systemsFunctionBlocks function)\n  , target `elem` blockSuccessors blockValue\n  ]\n\ncollectRecognitionTargets :: SystemsFunction -> Map ValueId (BlockId, BlockId)\n",
+          )
+
+          # The existing LLVM lowerer is intentionally not competent for TermSessionOffer yet.
+          # Fail closed rather than silently inventing a discriminator or discarding payloads.
+          replace_once(
+              "src/Phil/LLVM/Lower.hs",
+              "  TermReturnScalar valueId ->\n",
+              "  TermSessionOffer {} -> LLVMUnreachable Nothing\n  TermReturnScalar valueId ->\n",
+          )
+
+          # Top-level exports.
+          replace_once(
+              "src/Phil/Systems.hs",
+              "  , module Phil.Systems.RejectedResponse\n",
+              "  , module Phil.Systems.RejectedResponse\n  , module Phil.Systems.SessionChoice\n",
+          )
+          replace_once(
+              "src/Phil/Systems.hs",
+              "import Phil.Systems.RejectedResponse\nimport Phil.Systems.Storage\n",
+              "import Phil.Systems.RejectedResponse\nimport Phil.Systems.SessionChoice\nimport Phil.Systems.Storage\n",
+          )
+
+          session_choice = r'''{-# LANGUAGE OverloadedStrings #-}
+
+module Phil.Systems.SessionChoice
+  ( SessionChoiceWitness (..)
+  , SessionChoiceBundle (..)
+  , SessionChoiceError (..)
+  , phase0FinalResponseChoiceWitness
+  , phase0SessionChoiceBundle
+  , verifySessionChoiceBundle
+  , verifySessionChoiceWitness
+  ) where
+
+import Control.Monad (unless)
+import qualified Data.Map.Strict as Map
+import Data.Text (Text)
+import Phil.Assurance.Types
+import Phil.Systems.IR
+import Phil.Systems.RejectedResponse
+import Phil.Systems.Verify
+
+data SessionChoiceWitness = SessionChoiceWitness
+  { sessionChoiceFunction :: Text
+  , sessionChoiceOfferBlock :: BlockId
+  , sessionChoiceTransport :: ValueId
+  , sessionChoiceAcceptedLabel :: Text
+  , sessionChoiceAcceptedPayload :: ValueId
+  , sessionChoiceAcceptedTarget :: BlockId
+  , sessionChoiceRejectedLabel :: Text
+  , sessionChoiceRejectedPayload :: ValueId
+  , sessionChoiceRejectedTarget :: BlockId
+  , sessionChoiceLegacyDiscriminator :: ValueId
+  , sessionChoiceLegacyReceiveCall :: Text
+  , sessionChoiceRecordOperation :: Text
+  , sessionChoiceRecordDecision :: DecisionId
+  , sessionChoiceLoweringDecision :: DecisionId
+  }
+  deriving (Eq, Show)
+
+data SessionChoiceBundle = SessionChoiceBundle
+  { sessionChoiceArtifact :: SystemsArtifact
+  , sessionChoiceContext :: SystemsVerificationContext
+  , sessionChoicePredecessor :: RejectedResponseBundle
+  , sessionChoiceWitness :: SessionChoiceWitness
+  }
+  deriving (Eq, Show)
+
+data SessionChoiceError
+  = SessionChoiceRejectedResponseError RejectedResponseError
+  | SessionChoiceSystemsError SystemsVerificationError
+  | SessionChoiceFunctionMissing Text
+  | SessionChoiceBlockMissing Text BlockId
+  | SessionChoiceValueMissing Text ValueId
+  | SessionChoiceValueRoleMismatch Text ValueId SystemsValueRole
+  | SessionChoiceLegacyDiscriminatorPresent Text ValueId
+  | SessionChoiceLegacyReceivePresent Text BlockId Text
+  | SessionChoiceOfferMismatch Text BlockId SystemsTerminator
+  | SessionChoiceAcceptedOperationMismatch Text BlockId [SystemsOp]
+  | SessionChoiceAcceptedOutcomeMismatch Text BlockId SystemsTerminator
+  | SessionChoiceRejectedOutcomeMismatch Text BlockId SystemsTerminator
+  | SessionChoicePayloadUseEscapes Text ValueId BlockId [BlockId]
+  | SessionChoiceDecisionMissing DecisionId
+  | SessionChoiceDecisionMismatch DecisionId
+  deriving (Eq, Show)
+
+phase0FinalResponseChoiceWitness :: SessionChoiceWitness
+phase0FinalResponseChoiceWitness = SessionChoiceWitness
+  { sessionChoiceFunction = "UploadClient"
+  , sessionChoiceOfferBlock = BlockId "client.payload"
+  , sessionChoiceTransport = ValueId "client.transport"
+  , sessionChoiceAcceptedLabel = "accepted"
+  , sessionChoiceAcceptedPayload = ValueId "client.upload_id"
+  , sessionChoiceAcceptedTarget = BlockId "client.accepted"
+  , sessionChoiceRejectedLabel = "rejected"
+  , sessionChoiceRejectedPayload = ValueId "client.digest_failure"
+  , sessionChoiceRejectedTarget = BlockId "client.rejected"
+  , sessionChoiceLegacyDiscriminator = ValueId "client.result_branch"
+  , sessionChoiceLegacyReceiveCall = "receive accepted/rejected label"
+  , sessionChoiceRecordOperation = "record_upload_id"
+  , sessionChoiceRecordDecision = DecisionId "lower.runtime.semantic_call"
+  , sessionChoiceLoweringDecision = DecisionId "lower.session.final_response_offer"
+  }
+
+phase0SessionChoiceBundle :: Either SessionChoiceError SessionChoiceBundle
+phase0SessionChoiceBundle = do
+  predecessor <- mapLeft SessionChoiceRejectedResponseError phase0RejectedResponseBundle
+  let baseArtifact = rejectedResponseArtifact predecessor
+      baseContext = rejectedResponseContext predecessor
+      witness = phase0FinalResponseChoiceWitness
+  program <- materializeFinalResponseChoice witness (systemsArtifactProgram baseArtifact)
+  let baseContract = systemsArtifactStageContract baseArtifact
+      targetDigest = systemsProgramDigest program
+      contract = baseContract
+        { stageTargetArtifactDigest = targetDigest
+        , stageTraceRelation = stageTraceRelation baseContract <>
+            [ "client final external choice preserves label -> branch-local payload -> continuation identity"
+            ]
+        }
+      sourceDigest = stageSourceArtifactDigest contract
+      predecessorDecisions = loweringLedgerDecisions (systemsArtifactLoweringLedger baseArtifact)
+      rebound = Map.map (rebindDecisionTarget targetDigest) predecessorDecisions
+      choiceDecision = deriveSessionChoiceDecision sourceDigest targetDigest witness
+      decisions = Map.insert (sessionChoiceLoweringDecision witness) choiceDecision rebound
+      loweringRoot = deriveLoweringLedgerRoot decisions
+      loweringLedger = LoweringLedger decisions loweringRoot
+      artifact = SystemsArtifact program contract loweringLedger
+      assuranceLedger = systemsAssuranceLedger baseContext
+      baseManifest = systemsAssuranceManifest baseContext
+      provisionalManifest = baseManifest
+        { manifestImplementationDigest = systemsArtifactDigest artifact
+        , manifestLoweringLedgerRoot = loweringRoot
+        }
+      manifest = provisionalManifest
+        { manifestId = deriveManifestId assuranceLedger provisionalManifest }
+      baseAssuranceContext = systemsAssuranceVerificationContext baseContext
+      assuranceContext = baseAssuranceContext
+        { verificationImplementationDigest = systemsArtifactDigest artifact
+        , verificationLoweringLedgerRoot = loweringRoot
+        }
+      context = baseContext
+        { systemsAssuranceManifest = manifest
+        , systemsAssuranceVerificationContext = assuranceContext
+        }
+      bundle = SessionChoiceBundle artifact context predecessor witness
+  verifySessionChoiceBundle bundle
+  pure bundle
+
+verifySessionChoiceBundle :: SessionChoiceBundle -> Either SessionChoiceError ()
+verifySessionChoiceBundle bundle = do
+  mapLeft SessionChoiceRejectedResponseError $
+    verifyRejectedResponseBundle (sessionChoicePredecessor bundle)
+  mapLeft SessionChoiceSystemsError $
+    verifySystemsArtifact (sessionChoiceContext bundle) (sessionChoiceArtifact bundle)
+  verifySessionChoiceWitness (sessionChoiceArtifact bundle) (sessionChoiceWitness bundle)
+
+verifySessionChoiceWitness
+  :: SystemsArtifact
+  -> SessionChoiceWitness
+  -> Either SessionChoiceError ()
+verifySessionChoiceWitness artifact witness = do
+  let program = systemsArtifactProgram artifact
+      functionName = sessionChoiceFunction witness
+  function <- lookupFunction functionName program
+
+  transport <- lookupValue functionName function (sessionChoiceTransport witness)
+  case systemsValueRole transport of
+    TransportHandle -> pure ()
+    other -> Left (SessionChoiceValueRoleMismatch
+      functionName (sessionChoiceTransport witness) other)
+
+  acceptedPayload <- lookupValue functionName function (sessionChoiceAcceptedPayload witness)
+  case systemsValueRole acceptedPayload of
+    RuntimeScalar "UploadId" -> pure ()
+    other -> Left (SessionChoiceValueRoleMismatch
+      functionName (sessionChoiceAcceptedPayload witness) other)
+
+  rejectedPayload <- lookupValue functionName function (sessionChoiceRejectedPayload witness)
+  case systemsValueRole rejectedPayload of
+    RuntimeScalar "DigestFailure" -> pure ()
+    other -> Left (SessionChoiceValueRoleMismatch
+      functionName (sessionChoiceRejectedPayload witness) other)
+
+  case Map.lookup (sessionChoiceLegacyDiscriminator witness) (systemsFunctionValues function) of
+    Nothing -> pure ()
+    Just _ -> Left (SessionChoiceLegacyDiscriminatorPresent
+      functionName (sessionChoiceLegacyDiscriminator witness))
+
+  offerBlock <- lookupBlock functionName function (sessionChoiceOfferBlock witness)
+  unless (not (any isLegacyReceive (systemsBlockOps offerBlock))) $
+    Left (SessionChoiceLegacyReceivePresent
+      functionName (sessionChoiceOfferBlock witness) (sessionChoiceLegacyReceiveCall witness))
+
+  let expectedArms = Map.fromList
+        [ ( sessionChoiceAcceptedLabel witness
+          , SystemsChoiceArm
+              (Just (sessionChoiceAcceptedPayload witness))
+              (sessionChoiceAcceptedTarget witness)
+          )
+        , ( sessionChoiceRejectedLabel witness
+          , SystemsChoiceArm
+              (Just (sessionChoiceRejectedPayload witness))
+              (sessionChoiceRejectedTarget witness)
+          )
+        ]
+  case systemsBlockTerminator offerBlock of
+    TermSessionOffer transportId arms
+      | transportId == sessionChoiceTransport witness
+          && arms == expectedArms -> pure ()
+    other -> Left (SessionChoiceOfferMismatch
+      functionName (sessionChoiceOfferBlock witness) other)
+
+  acceptedBlock <- lookupBlock functionName function (sessionChoiceAcceptedTarget witness)
+  case systemsBlockOps acceptedBlock of
+    [ OpRuntimeCall
+        { runtimeCallName = name
+        , runtimeCallInputs = inputs
+        , runtimeCallOutputs = outputs
+        , runtimeCallSite = site
+        , runtimeCallDecision = decisionId
+        }
+      ]
+      | name == sessionChoiceRecordOperation witness
+          && inputs == [sessionChoiceAcceptedPayload witness]
+          && null outputs
+          && site == Nothing
+          && decisionId == sessionChoiceRecordDecision witness -> pure ()
+    operations -> Left (SessionChoiceAcceptedOperationMismatch
+      functionName (sessionChoiceAcceptedTarget witness) operations)
+  case systemsBlockTerminator acceptedBlock of
+    TermEnd "success" -> pure ()
+    other -> Left (SessionChoiceAcceptedOutcomeMismatch
+      functionName (sessionChoiceAcceptedTarget witness) other)
+
+  rejectedBlock <- lookupBlock functionName function (sessionChoiceRejectedTarget witness)
+  case systemsBlockTerminator rejectedBlock of
+    TermEnd "failure" -> pure ()
+    other -> Left (SessionChoiceRejectedOutcomeMismatch
+      functionName (sessionChoiceRejectedTarget witness) other)
+
+  verifyPayloadUses functionName function
+    (sessionChoiceAcceptedPayload witness)
+    (sessionChoiceAcceptedTarget witness)
+    True
+  verifyPayloadUses functionName function
+    (sessionChoiceRejectedPayload witness)
+    (sessionChoiceRejectedTarget witness)
+    False
+
+  let decisions = loweringLedgerDecisions (systemsArtifactLoweringLedger artifact)
+      sourceDigest = stageSourceArtifactDigest (systemsArtifactStageContract artifact)
+      targetDigest = systemsProgramDigest program
+      expectedDecision = deriveSessionChoiceDecision sourceDigest targetDigest witness
+  case Map.lookup (sessionChoiceLoweringDecision witness) decisions of
+    Nothing -> Left (SessionChoiceDecisionMissing (sessionChoiceLoweringDecision witness))
+    Just actual -> unless (actual == expectedDecision) $
+      Left (SessionChoiceDecisionMismatch (sessionChoiceLoweringDecision witness))
+  where
+    isLegacyReceive operation = case operation of
+      OpRuntimeCall { runtimeCallName = name } -> name == sessionChoiceLegacyReceiveCall witness
+      _ -> False
+
+verifyPayloadUses
+  :: Text
+  -> SystemsFunction
+  -> ValueId
+  -> BlockId
+  -> Bool
+  -> Either SessionChoiceError ()
+verifyPayloadUses functionName function payload target requireUse = do
+  let blocks = valueUseBlocks function payload
+      escaped = filter (/= target) blocks
+  unless (null escaped) $
+    Left (SessionChoicePayloadUseEscapes functionName payload target escaped)
+  if requireUse
+    then unless (blocks == [target]) $
+      Left (SessionChoicePayloadUseEscapes functionName payload target blocks)
+    else pure ()
+
+valueUseBlocks :: SystemsFunction -> ValueId -> [BlockId]
+valueUseBlocks function payload =
+  [ systemsBlockId blockValue
+  | blockValue <- Map.elems (systemsFunctionBlocks function)
+  , payload `elem` concatMap operationInputs (systemsBlockOps blockValue)
+  ]
+
+operationInputs :: SystemsOp -> [ValueId]
+operationInputs operation = case operation of
+  OpReceiveFrame pending frame transport _ _ -> [pending, frame, transport]
+  OpBorrowView view owner _ -> [view, owner]
+  OpCommitIngress pending transport _ -> [pending, transport]
+  OpDestroyPending pending owner _ -> [pending, owner]
+  OpReleaseOwner owner _ -> [owner]
+  OpCleanupPartial owner _ -> [owner]
+  OpRuntimeCall _ inputs _ _ _ -> inputs
+  OpCopy source target _ -> [source, target]
+  OpEraseFact {} -> []
+  OpDiagnostic {} -> []
+  OpScalarLiteral output _ -> [output]
+  OpTraceEvent _ -> []
+
+materializeFinalResponseChoice
+  :: SessionChoiceWitness
+  -> SystemsProgram
+  -> Either SessionChoiceError SystemsProgram
+materializeFinalResponseChoice witness program = do
+  let functionName = sessionChoiceFunction witness
+  function <- lookupFunction functionName program
+  offerBlock <- lookupBlock functionName function (sessionChoiceOfferBlock witness)
+  acceptedBlock <- lookupBlock functionName function (sessionChoiceAcceptedTarget witness)
+  _ <- lookupBlock functionName function (sessionChoiceRejectedTarget witness)
+
+  let acceptedValue = SystemsValue
+        (sessionChoiceAcceptedPayload witness)
+        (RuntimeScalar "UploadId")
+        Nothing
+      rejectedValue = SystemsValue
+        (sessionChoiceRejectedPayload witness)
+        (RuntimeScalar "DigestFailure")
+        Nothing
+      values = Map.insert
+        (sessionChoiceRejectedPayload witness)
+        rejectedValue $
+        Map.insert
+          (sessionChoiceAcceptedPayload witness)
+          acceptedValue $
+          Map.delete
+            (sessionChoiceLegacyDiscriminator witness)
+            (systemsFunctionValues function)
+      offerOps = filter (not . isLegacyReceive) (systemsBlockOps offerBlock)
+      arms = Map.fromList
+        [ ( sessionChoiceAcceptedLabel witness
+          , SystemsChoiceArm
+              (Just (sessionChoiceAcceptedPayload witness))
+              (sessionChoiceAcceptedTarget witness)
+          )
+        , ( sessionChoiceRejectedLabel witness
+          , SystemsChoiceArm
+              (Just (sessionChoiceRejectedPayload witness))
+              (sessionChoiceRejectedTarget witness)
+          )
+        ]
+      offerBlock' = offerBlock
+        { systemsBlockOps = offerOps
+        , systemsBlockTerminator = TermSessionOffer (sessionChoiceTransport witness) arms
+        }
+      recordOperation = OpRuntimeCall
+        { runtimeCallName = sessionChoiceRecordOperation witness
+        , runtimeCallInputs = [sessionChoiceAcceptedPayload witness]
+        , runtimeCallOutputs = []
+        , runtimeCallSite = Nothing
+        , runtimeCallDecision = sessionChoiceRecordDecision witness
+        }
+      acceptedBlock' = acceptedBlock
+        { systemsBlockOps = systemsBlockOps acceptedBlock <> [recordOperation] }
+      blocks = Map.insert
+        (sessionChoiceAcceptedTarget witness)
+        acceptedBlock' $
+        Map.insert
+          (sessionChoiceOfferBlock witness)
+          offerBlock'
+          (systemsFunctionBlocks function)
+      function' = function
+        { systemsFunctionValues = values
+        , systemsFunctionBlocks = blocks
+        }
+  pure program
+    { systemsProgramFunctions = Map.insert functionName function' (systemsProgramFunctions program) }
+  where
+    isLegacyReceive operation = case operation of
+      OpRuntimeCall { runtimeCallName = name } -> name == sessionChoiceLegacyReceiveCall witness
+      _ -> False
+
+lookupFunction :: Text -> SystemsProgram -> Either SessionChoiceError SystemsFunction
+lookupFunction functionName program =
+  case Map.lookup functionName (systemsProgramFunctions program) of
+    Nothing -> Left (SessionChoiceFunctionMissing functionName)
+    Just value -> Right value
+
+lookupValue :: Text -> SystemsFunction -> ValueId -> Either SessionChoiceError SystemsValue
+lookupValue functionName function valueId =
+  case Map.lookup valueId (systemsFunctionValues function) of
+    Nothing -> Left (SessionChoiceValueMissing functionName valueId)
+    Just value -> Right value
+
+lookupBlock :: Text -> SystemsFunction -> BlockId -> Either SessionChoiceError SystemsBlock
+lookupBlock functionName function blockId =
+  case Map.lookup blockId (systemsFunctionBlocks function) of
+    Nothing -> Left (SessionChoiceBlockMissing functionName blockId)
+    Just value -> Right value
+
+rebindDecisionTarget :: Digest -> LoweringDecision -> LoweringDecision
+rebindDecisionTarget targetDigest lowering =
+  let rebound = lowering { loweringTargetArtifactDigest = targetDigest }
+  in rebound { loweringDecisionDigest = deriveLoweringDecisionDigest rebound }
+
+deriveSessionChoiceDecision
+  :: Digest
+  -> Digest
+  -> SessionChoiceWitness
+  -> LoweringDecision
+deriveSessionChoiceDecision sourceDigest targetDigest witness =
+  let provisional = LoweringDecision
+        { loweringDecisionId = sessionChoiceLoweringDecision witness
+        , loweringDecisionDigest = Digest ""
+        , loweringSourceArtifactDigest = sourceDigest
+        , loweringTargetArtifactDigest = targetDigest
+        , loweringSourceRepresentation =
+            "client final Offer accepted(id)/rejected(reason) session semantics"
+        , loweringTargetRepresentation =
+            "TermSessionOffer label -> branch-local payload binding -> target"
+        , loweringSemanticEntities =
+            [ "client final external choice"
+            , "accepted(id : UploadId)"
+            , "rejected(reason : DigestFailure)"
+            ]
+        , loweringObligationRevisions = []
+        , loweringAssuranceEntries = []
+        , loweringAssuranceUses = []
+        , loweringAction = Materialize
+        , loweringRepresentationBefore =
+            "anonymous runtime Bool discriminator plus payload-erasing TermBranch"
+        , loweringRepresentationAfter =
+            "semantic labels with edge-defined payload identities and continuations"
+        , loweringInvariantsPreserved =
+            [ "choice labels remain protocol identities"
+            , "accepted UploadId reaches only accepted continuation"
+            , "rejected DigestFailure belongs only to rejected continuation"
+            , "no target discriminator or payload layout is chosen in Systems"
+            ]
+        , loweringInvariantsTransferred = []
+        , loweringRuntimeResidue =
+            [ "peer-selected branch remains runtime work"
+            , "physical response decoding is deferred to a target profile"
+            ]
+        , loweringCostClass = Just SemanticRequired
+        , loweringCostShape = emptyCostShape
+            { costBranchOrDispatch = Just "one peer-selected session branch"
+            , costFrequency = Just "per final upload response"
+            }
+        , loweringTargetPreconditions =
+            [ "backend must explicitly lower TermSessionOffer before LLVM certification" ]
+        , loweringAssumptions = []
+        , loweringDerivedObligations = []
+        , loweringInspectionPlan =
+            [ "inspect exact label/payload/target map"
+            , "reject legacy anonymous result discriminator"
+            , "reject payload use outside its branch-local target"
+            ]
+        }
+  in provisional { loweringDecisionDigest = deriveLoweringDecisionDigest provisional }
+
+mapLeft :: (left -> mapped) -> Either left right -> Either mapped right
+mapLeft transform = either (Left . transform) Right
+'''
+          Path("src/Phil/Systems/SessionChoice.hs").write_text(session_choice)
+
+          test = r'''{-# LANGUAGE OverloadedStrings #-}
+
+module Main (main) where
+
+import qualified Data.Map.Strict as Map
+import Phil.Systems
+import System.Exit (exitFailure)
+
+main :: IO ()
+main = do
+  results <- sequence
+    [ test "session-choice candidate verifies" candidatePasses
+    , test "final response uses semantic session offer" exactOfferPresent
+    , test "legacy result Bool is removed" legacyDiscriminatorRemoved
+    , test "accepted UploadId is recorded on accepted arm" acceptedPayloadRecorded
+    , test "wrong accepted payload target is rejected" wrongAcceptedTargetRejects
+    , test "legacy generic final-response receive is rejected" legacyReceiveRejects
+    , test "accepted payload escaping to rejected arm is rejected" payloadEscapeRejects
+    ]
+  if and results then pure () else exitFailure
+
+candidatePasses :: Bool
+candidatePasses = case phase0SessionChoiceBundle of
+  Right _ -> True
+  Left _ -> False
+
+exactOfferPresent :: Bool
+exactOfferPresent = withBundle $ \bundle ->
+  let witness = sessionChoiceWitness bundle
+  in case lookupBlockFrom bundle (sessionChoiceOfferBlock witness) of
+      Just blockValue -> case systemsBlockTerminator blockValue of
+        TermSessionOffer transport arms ->
+          transport == sessionChoiceTransport witness
+            && Map.lookup (sessionChoiceAcceptedLabel witness) arms
+              == Just (SystemsChoiceArm
+                  (Just (sessionChoiceAcceptedPayload witness))
+                  (sessionChoiceAcceptedTarget witness))
+            && Map.lookup (sessionChoiceRejectedLabel witness) arms
+              == Just (SystemsChoiceArm
+                  (Just (sessionChoiceRejectedPayload witness))
+                  (sessionChoiceRejectedTarget witness))
+        _ -> False
+      Nothing -> False
+
+legacyDiscriminatorRemoved :: Bool
+legacyDiscriminatorRemoved = withBundle $ \bundle ->
+  let witness = sessionChoiceWitness bundle
+  in case lookupFunctionFrom bundle of
+      Just function -> not (Map.member
+        (sessionChoiceLegacyDiscriminator witness)
+        (systemsFunctionValues function))
+      Nothing -> False
+
+acceptedPayloadRecorded :: Bool
+acceptedPayloadRecorded = withBundle $ \bundle ->
+  let witness = sessionChoiceWitness bundle
+  in case lookupBlockFrom bundle (sessionChoiceAcceptedTarget witness) of
+      Just SystemsBlock
+        { systemsBlockOps =
+            [OpRuntimeCall name inputs [] Nothing decisionId]
+        , systemsBlockTerminator = TermEnd "success"
+        } ->
+          name == sessionChoiceRecordOperation witness
+            && inputs == [sessionChoiceAcceptedPayload witness]
+            && decisionId == sessionChoiceRecordDecision witness
+      _ -> False
+
+wrongAcceptedTargetRejects :: Bool
+wrongAcceptedTargetRejects = withBundle $ \bundle ->
+  let witness = sessionChoiceWitness bundle
+      artifact = mapOffer bundle $ \blockValue ->
+        blockValue
+          { systemsBlockTerminator = case systemsBlockTerminator blockValue of
+              TermSessionOffer transport arms -> TermSessionOffer transport
+                (Map.adjust
+                  (\arm -> arm { choiceArmTarget = sessionChoiceRejectedTarget witness })
+                  (sessionChoiceAcceptedLabel witness)
+                  arms)
+              other -> other
+          }
+  in case verifySessionChoiceWitness artifact witness of
+      Left SessionChoiceOfferMismatch {} -> True
+      _ -> False
+
+legacyReceiveRejects :: Bool
+legacyReceiveRejects = withBundle $ \bundle ->
+  let witness = sessionChoiceWitness bundle
+      legacy = OpRuntimeCall
+        (sessionChoiceLegacyReceiveCall witness)
+        [sessionChoiceTransport witness]
+        [sessionChoiceLegacyDiscriminator witness]
+        Nothing
+        (sessionChoiceRecordDecision witness)
+      artifact = mapOffer bundle $ \blockValue ->
+        blockValue { systemsBlockOps = systemsBlockOps blockValue <> [legacy] }
+  in case verifySessionChoiceWitness artifact witness of
+      Left SessionChoiceLegacyReceivePresent {} -> True
+      _ -> False
+
+payloadEscapeRejects :: Bool
+payloadEscapeRejects = withBundle $ \bundle ->
+  let witness = sessionChoiceWitness bundle
+      artifact = mapBlock bundle (sessionChoiceRejectedTarget witness) $ \blockValue ->
+        blockValue
+          { systemsBlockOps =
+              [OpRuntimeCall "inspect" [sessionChoiceAcceptedPayload witness] [] Nothing
+                (sessionChoiceRecordDecision witness)]
+          }
+  in case verifySessionChoiceWitness artifact witness of
+      Left SessionChoicePayloadUseEscapes {} -> True
+      _ -> False
+
+withBundle :: (SessionChoiceBundle -> Bool) -> Bool
+withBundle action = case phase0SessionChoiceBundle of
+  Left _ -> False
+  Right bundle -> action bundle
+
+lookupFunctionFrom :: SessionChoiceBundle -> Maybe SystemsFunction
+lookupFunctionFrom bundle =
+  let witness = sessionChoiceWitness bundle
+  in Map.lookup
+      (sessionChoiceFunction witness)
+      (systemsProgramFunctions (systemsArtifactProgram (sessionChoiceArtifact bundle)))
+
+lookupBlockFrom :: SessionChoiceBundle -> BlockId -> Maybe SystemsBlock
+lookupBlockFrom bundle blockId = do
+  function <- lookupFunctionFrom bundle
+  Map.lookup blockId (systemsFunctionBlocks function)
+
+mapOffer
+  :: SessionChoiceBundle
+  -> (SystemsBlock -> SystemsBlock)
+  -> SystemsArtifact
+mapOffer bundle = mapBlock bundle (sessionChoiceOfferBlock (sessionChoiceWitness bundle))
+
+mapBlock
+  :: SessionChoiceBundle
+  -> BlockId
+  -> (SystemsBlock -> SystemsBlock)
+  -> SystemsArtifact
+mapBlock bundle blockId transform =
+  let artifact = sessionChoiceArtifact bundle
+      witness = sessionChoiceWitness bundle
+      program = systemsArtifactProgram artifact
+      functions = systemsProgramFunctions program
+      functions' = Map.adjust
+        (\function -> function
+          { systemsFunctionBlocks = Map.adjust transform blockId (systemsFunctionBlocks function) })
+        (sessionChoiceFunction witness)
+        functions
+  in artifact
+      { systemsArtifactProgram = program { systemsProgramFunctions = functions' } }
+
+test :: String -> Bool -> IO Bool
+test label passed = do
+  putStrLn ((if passed then "PASS: " else "FAIL: ") <> label)
+  pure passed
+'''
+          Path("test/SessionChoiceMain.hs").write_text(test)
+
+          doc = r'''# Phase 0 Systems session-choice representation v1
+
+Status: implementation candidate
+
+This slice corrects a Systems-layer information loss in the final client response. Phil Core already represents session branches as a semantic label, optional payload binder/type, and continuation. The historical Phase 0 Systems graph collapsed the final external choice to an anonymous runtime Boolean and therefore lost both branch payloads.
+
+## Systems commitment
+
+Systems represents session choice by semantic labels, branch-local payload identity, and continuation control flow. Discriminator representation and payload layout are target decisions.
+
+The new terminator is conceptually:
+
+```text
+TermSessionOffer transport {
+  label -> (optional branch-local payload binding, target block)
+}
+```
+
+Labels are stored in a canonical map, so source enumeration order is not semantic identity.
+
+A payload binding is defined on its branch edge and becomes live at the target block. In this Phase 0 representation, every payload-bearing target must be a dedicated binder block whose sole predecessor is the corresponding offer block. A branch-local payload may not be used from another arm. General cross-branch joins/phi-like payload transport remain a future explicit representation problem rather than an implicit escape hatch.
+
+## Final-response witness
+
+The corrected client boundary is:
+
+```text
+client.payload:
+  select payload
+  send_exact payload
+  offer on client.transport {
+    accepted -> bind client.upload_id : UploadId -> client.accepted
+    rejected -> bind client.digest_failure : DigestFailure -> client.rejected
+  }
+
+client.accepted:
+  record_upload_id(client.upload_id)
+  end success
+
+client.rejected:
+  end failure
+```
+
+The old `client.result_branch : Bool` and generic `receive accepted/rejected label` operation are absent from this candidate.
+
+The `DigestFailure` binding is retained even though the current client does not inspect it. Any later target may erase its runtime representation only after establishing that the value has no observable use in the exact program/profile.
+
+## Backend competence boundary
+
+This slice deliberately does not choose a physical final-response decoder, numeric discriminator, switch layout, wire buffering strategy, or UploadId client representation. Existing LLVM lowerers therefore fail closed on `TermSessionOffer` rather than silently recreating the old Boolean approximation. A later target slice must explicitly lower this terminator and validate the label/payload/continuation relation.
+
+## Follow-on normalization
+
+The final response is the first concrete use. The same representation can later replace the earlier payload-erasing incoming choices (`version(selected)`, `reject(reason)`, and other branch payloads). Outgoing `select` operations remain represented by the historical generic runtime call in this slice; a later normalization can introduce the dual explicit Systems select operation without disturbing the current accepted/rejected proof harvest.
+'''
+          Path("docs/phase-0/session-choice-systems-v1.md").write_text(doc)
+
+          # Register the new module and test without rewriting the entire cabal file.
+          replace_once(
+              "phil-core.cabal",
+              "      Phil.Systems.RejectedResponse\n",
+              "      Phil.Systems.RejectedResponse\n      Phil.Systems.SessionChoice\n",
+          )
+          replace_once(
+              "phil-core.cabal",
+              "test-suite phil-runnable-tests\n",
+              "test-suite phil-session-choice-tests\n  import:             common-settings\n  type:               exitcode-stdio-1.0\n  hs-source-dirs:     test\n  main-is:            SessionChoiceMain.hs\n  build-depends:\n      base >=4.17 && <5,\n      containers >=0.6 && <0.8,\n      phil-core,\n      text >=2.0 && <2.2\n\ntest-suite phil-runnable-tests\n",
+          )
+          PY
+
+      - name: Build with warnings as errors
+        run: cabal build all --ghc-options=-Werror
+
+      - name: Run session-choice tests
+        run: cabal test phil-session-choice-tests
+
+      - name: Run complete Haskell test suite
+        run: cabal test all
+
+      - name: Commit implementation
+        shell: bash
+        run: |
+          set -euo pipefail
+          git config user.name "phil-session-choice-bot"
+          git config user.email "actions@users.noreply.github.com"
+          git rm .github/workflows/session-choice-edit.yml
+          git add -A
+          git commit -m "Materialize semantic session choice in Systems"
+          git push origin HEAD:systems-session-choice
