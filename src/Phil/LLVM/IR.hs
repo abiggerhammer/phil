@@ -119,6 +119,12 @@ data LLVMTerminator
       Text
       LLVMBlockId
       LLVMBlockId
+  | LLVMDigestValidate
+      RuntimeSiteRef
+      Text
+      Text
+      LLVMBlockId
+      LLVMBlockId
   | LLVMReturnScalar Text ScalarType
   | LLVMReturn Text
   | LLVMUnreachable (Maybe LLVMStrengtheningId)
@@ -196,6 +202,7 @@ llvmBlockSuccessors blockValue = case llvmBlockTerminator blockValue of
   LLVMRecognizeRecord _ _ _ yes no -> [yes, no]
   LLVMRuntimeScalarBranch _ _ _ _ yes no -> [yes, no]
   LLVMExactReceive _ _ _ _ _ _ yes no -> [yes, no]
+  LLVMDigestValidate _ _ _ yes no -> [yes, no]
   LLVMReturnScalar _ _ -> []
   LLVMReturn _ -> []
   LLVMUnreachable _ -> []
@@ -218,6 +225,7 @@ llvmRuntimeSites moduleValue = concat
         LLVMRecognizeRecord site _ _ _ _ -> [site]
         LLVMRuntimeScalarBranch site _ _ _ _ _ -> [site]
         LLVMExactReceive site _ _ _ _ _ _ _ -> [site]
+        LLVMDigestValidate site _ _ _ _ -> [site]
         _ -> []
 
 llvmStrengtheningUses :: LLVMModule -> [LLVMStrengtheningId]
@@ -245,6 +253,7 @@ renderLLVMModule moduleValue = Text.unlines $
     recognizedRecordABI = runtimeProfile `elem`
       [ "phil-runtime/phase0/recognized-record-v1"
       , "phil-runtime/phase0/transport-exact-receive-v1"
+      , "phil-runtime/phase0/digest-validation-v1"
       ]
 
     header =
@@ -280,6 +289,7 @@ renderLLVMModule moduleValue = Text.unlines $
       <> cleanupDeclaration
       <> bufferReleaseDeclaration
       <> assumeDeclaration
+      <> digestValidationDeclaration
       <> map renderCallDeclaration (Set.toAscList callNames)
       <> runtimeDeclarations
       <> map renderFieldProjectionDeclaration (Set.toAscList fieldProjectionSignatures)
@@ -306,6 +316,11 @@ renderLLVMModule moduleValue = Text.unlines $
     assumeDeclaration =
       if any ((== LLVMAssume) . llvmStrengtheningKind) (Map.elems (llvmStrengthenings moduleValue))
         then ["declare void @llvm.assume(i1)"]
+        else []
+
+    digestValidationDeclaration =
+      if any hasDigestValidation allBlocks
+        then ["declare i1 @phil_runtime_digest_validate(ptr, ptr)"]
         else []
 
     callNames = Set.fromList
@@ -377,6 +392,10 @@ renderLLVMModule moduleValue = Text.unlines $
     hasBufferRelease blockValue = any isBufferRelease (llvmBlockOps blockValue)
     isBufferRelease LLVMBufferRelease {} = True
     isBufferRelease _ = False
+
+    hasDigestValidation blockValue = case llvmBlockTerminator blockValue of
+      LLVMDigestValidate {} -> True
+      _ -> False
 
     renderCallDeclaration name = "declare void @phil_call_" <> symbol name <> "()"
     renderRuntimeEvidenceDeclaration evidence =
@@ -544,6 +563,16 @@ renderLLVMModule moduleValue = Text.unlines $
           , "%" <> symbol payloadName <> " = extractvalue " <> resultType <> " " <> resultName <> ", 1"
           , okName <> " = icmp eq i8 " <> statusName <> ", 1"
           , "br i1 " <> okName
+              <> ", label %" <> symbol (unLLVMBlockId yes)
+              <> ", label %" <> symbol (unLLVMBlockId no)
+          ]
+      LLVMDigestValidate _ recordName payloadName yes no ->
+        let blockSymbol = symbol (unLLVMBlockId (llvmBlockId blockValue))
+            conditionName = "%phil_digest_ok_" <> blockSymbol
+        in
+          [ conditionName <> " = call i1 @phil_runtime_digest_validate("
+              <> "ptr %" <> symbol recordName <> ", ptr %" <> symbol payloadName <> ")"
+          , "br i1 " <> conditionName
               <> ", label %" <> symbol (unLLVMBlockId yes)
               <> ", label %" <> symbol (unLLVMBlockId no)
           ]
