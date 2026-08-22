@@ -23,7 +23,6 @@ import Phil.LLVM.DigestValidation
 import Phil.LLVM.IR
 import Phil.LLVM.Lower (lowerSystemsStorage)
 import Phil.LLVM.Verify
-import Phil.Systems.DigestValidation
 import Phil.Systems.IR
 import Phil.Systems.Storage
 
