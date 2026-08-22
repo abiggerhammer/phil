@@ -2,14 +2,26 @@
 
 These files are intentionally parser-valid Phil surface programs that must eventually fail semantic checking for a stated Steve/Phil reason. Until the general Steve checker environment exists, CI asserts only that they remain syntactically valid witnesses.
 
-| File | Intended rejection | Why |
-| --- | --- | --- |
-| `01-return-unverified-bytes.phil` | Missing evidence / result contract | `GetOk` transfers bytes without `DigestMatches`. |
-| `02-prove-opaque-digest.phil` | Opaque proof | `DigestMatches` cannot be manufactured by generic `prove`. |
-| `03-drop-owned-read-result.phil` | Linear completion | The `found(bytes)` arm drops its `OwnedBytes`. |
-| `04-duplicate-owned-result.phil` | Structural use | One linear byte owner is transferred twice. |
-| `05-collision-as-success.phil` | Result/obligation contract | The program observes unequal bytes that both match one `ContentId` and nevertheless returns `PutOk`. |
-| `06-integrity-as-not-found.phil` | Typed failure/result contract | Detected integrity failure is hidden as absence. |
-| `07-borrow-indexed-digest-evidence.phil` | Borrow escape / invalid evidence contract | Persistent digest evidence is indexed by an ephemeral loan instead of the stable byte-object identity. |
+| File | Intended rejection | Why | Existing checker machinery | Remaining Steve wiring |
+| --- | --- | --- | --- | --- |
+| `01-return-unverified-bytes.phil` | Missing evidence / result contract | `GetOk` transfers bytes without `DigestMatches`. | Exact evidence matching and `MissingEvidence` rejection already exist. | Declare Steve's `DigestMatches(ContentId, ByteObjectId)` producer/requirement and general ownership-bearing result contracts. |
+| `02-prove-opaque-digest.phil` | Opaque proof | `DigestMatches` cannot be manufactured by generic `prove`. | `OpaqueProof` is already executable in the Phase 0 checker and exercised by upload fixture 18. | Register the Steve opaque claim in a Steve static environment. This is the closest fixture to executable promotion. |
+| `03-drop-owned-read-result.phil` | Linear completion | The `found(bytes)` arm drops its `OwnedBytes`. | Linear completion checking is already executable. | Give `blob_read` a generic result shape whose `found` arm introduces a linear `OwnedBytes` owner. |
+| `04-duplicate-owned-result.phil` | Structural use | One linear byte owner is transferred twice. | Linear/affine use-after-consumption rejection is already executable. | General result constructors must transfer ownership rather than collapse constructed results to opaque unrestricted scalars. |
+| `05-collision-as-success.phil` | Result/obligation contract | The program observes unequal bytes that both match one `ContentId` and nevertheless returns `PutOk`. | Exact evidence identity and branch-sensitive checking exist. | Declare evidence-bearing `bytes_compare` results plus the Steve success obligation/result contract that forbids success after witnessed inequality plus two matching digests. |
+| `06-integrity-as-not-found.phil` | Typed failure/result contract | Detected integrity failure is hidden as absence. | Branch-sensitive terminal/result checking exists in the generic surface checker. | Declare Steve result variants and the operation contract distinguishing `GetIntegrityFailure` from `GetNotFound`. |
+| `07-borrow-indexed-digest-evidence.phil` | Borrow escape / invalid evidence contract | Persistent digest evidence is indexed by an ephemeral loan instead of the stable byte-object identity. | Shared-loan scope and `BorrowEscape` are executable; stable identities in propositions are already part of Phil's accepted semantics. | Generalize evidence-producer contracts so the checker can require a stable owner/snapshot identity and reject a proof whose proposition names the ephemeral view token. |
 
-The rejection labels are design targets, not claims about the current upload-specialized checker. As generic result shapes, declared evidence producers, and architecture/static-signature checking land, each fixture should gain an executable expected-rejection assertion.
+## Promotion order
+
+The first semantic promotions should require as little Steve-specific checker machinery as possible:
+
+1. `02-prove-opaque-digest.phil` once a Steve static claim environment can be supplied.
+2. `03-drop-owned-read-result.phil` once generic decision arms can introduce owning values.
+3. `04-duplicate-owned-result.phil` once constructed result values preserve ownership transfer.
+4. `01-return-unverified-bytes.phil` once result postconditions can require Steve evidence.
+5. `06-integrity-as-not-found.phil` once result/failure distinctions are architecture-declared.
+6. `05-collision-as-success.phil` once evidence-bearing byte comparison and the full put-success contract are wired.
+7. `07-borrow-indexed-digest-evidence.phil` once stable-identity requirements on evidence producers are executable at the general architecture boundary.
+
+The ordering is a readiness estimate, not a semantic priority. A fixture should graduate only when the checker rejects it for its stated reason rather than because an unrelated Steve primitive or type is unknown.
