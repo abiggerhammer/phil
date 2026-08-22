@@ -12,6 +12,7 @@ main = do
   results <- sequence
     [ test "local runtime choice candidate verifies" candidateVerifies
     , test "choose_supported has exact none/some branch payload" exactChoice
+    , test "version-selection stage invariant transfers to runtime choice" invariantTransferred
     , test "legacy has_version Bool is absent" legacyBoolAbsent
     , test "selected version reaches select version" selectedVersionFlows
     , test "payload/cancel semantic choice remains valid" payloadCancelPreserved
@@ -39,6 +40,25 @@ exactChoice = withBundle $ \bundle ->
       Just blockValue -> systemsBlockTerminator blockValue
         == TermRuntimeChoice (localChoiceName witness) [] Nothing expected
       Nothing -> False
+
+invariantTransferred :: Bool
+invariantTransferred = withBundle $ \bundle ->
+  let witness = localRuntimeChoiceWitness bundle
+      expectedArms = Map.fromList
+        [ ("none", SystemsRuntimeChoiceArm Nothing (localChoiceNoneTarget witness))
+        , ("some", SystemsRuntimeChoiceArm
+            (Just (localChoiceSelectedVersion witness))
+            (localChoiceSomeTarget witness))
+        ]
+      contract = systemsArtifactStageContract (localRuntimeChoiceArtifact bundle)
+  in case Map.lookup (localChoiceInvariant witness) (stageInvariants contract) of
+      Just StageInvariant
+        { stageInvariantClaim = InvariantRuntimeChoice functionName blockId name arms
+        } -> functionName == localChoiceFunction witness
+          && blockId == localChoiceBlock witness
+          && name == localChoiceName witness
+          && arms == expectedArms
+      _ -> False
 
 legacyBoolAbsent :: Bool
 legacyBoolAbsent = withBundle $ \bundle ->

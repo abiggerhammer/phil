@@ -365,6 +365,7 @@ data InvariantClaim
   | InvariantBorrowAliases Text ValueId ValueId
   | InvariantRecognitionGate Text BlockId ValueId BlockId BlockId
   | InvariantBranchTargets Text BlockId BlockId BlockId
+  | InvariantRuntimeChoice Text BlockId Text (Map Text SystemsRuntimeChoiceArm)
   | InvariantExactReceive Text BlockId ValueId BlockId BlockId
   | InvariantExactSend Text BlockId ValueId BlockId BlockId
   | InvariantRequiredEdge RequiredControlEdge
@@ -736,6 +737,13 @@ renderInvariantClaim claim = case claim of
     tag "recognition-gate" [functionName, unBlockId blockId, unValueId pending, unBlockId yes, unBlockId no]
   InvariantBranchTargets functionName blockId yes no ->
     tag "branch-targets" [functionName, unBlockId blockId, unBlockId yes, unBlockId no]
+  InvariantRuntimeChoice functionName blockId name arms ->
+    tag "runtime-choice"
+      [ functionName
+      , unBlockId blockId
+      , name
+      , renderList renderRuntimeChoiceArm (Map.toAscList arms)
+      ]
   InvariantExactReceive functionName blockId owner yes no ->
     tag "exact-receive" [functionName, unBlockId blockId, unValueId owner, unBlockId yes, unBlockId no]
   InvariantExactSend functionName blockId owner yes no ->

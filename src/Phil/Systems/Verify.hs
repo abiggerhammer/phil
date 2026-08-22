@@ -751,6 +751,13 @@ verifyInvariantClaim program invariantId claim = case claim of
     case systemsBlockTerminator blockValue of
       TermBranch _ actualYes actualNo | actualYes == yes && actualNo == no -> pure ()
       _ -> Left (StageInvariantControlMismatch invariantId)
+  InvariantRuntimeChoice functionName blockId name arms -> do
+    function <- requireFunction invariantId functionName program
+    blockValue <- requireInvariantBlock invariantId function blockId
+    case systemsBlockTerminator blockValue of
+      TermRuntimeChoice actualName _ _ actualArms
+        | actualName == name && actualArms == arms -> pure ()
+      _ -> Left (StageInvariantControlMismatch invariantId)
   InvariantExactReceive functionName blockId owner yes no -> do
     function <- requireFunction invariantId functionName program
     blockValue <- requireInvariantBlock invariantId function blockId

@@ -29,6 +29,7 @@ data LocalRuntimeChoiceWitness = LocalRuntimeChoiceWitness
   , localChoiceLegacyDiscriminator :: ValueId
   , localChoiceVersionSelectBlock :: BlockId
   , localChoiceServerTransport :: ValueId
+  , localChoiceInvariant :: InvariantId
   , localChoiceLoweringDecision :: DecisionId
   }
   deriving (Eq, Show)
@@ -59,6 +60,7 @@ phase0LocalRuntimeChoiceWitness = LocalRuntimeChoiceWitness
   , localChoiceLegacyDiscriminator = ValueId "server.has_version"
   , localChoiceVersionSelectBlock = BlockId "server.version"
   , localChoiceServerTransport = ValueId "server.transport"
+  , localChoiceInvariant = InvariantId "invariant.version.selection_branch"
   , localChoiceLoweringDecision = DecisionId "lower.local.choose_supported"
   }
 
@@ -70,9 +72,33 @@ phase0LocalRuntimeChoiceBundle = do
       witness = phase0LocalRuntimeChoiceWitness
   program <- materialize witness (systemsArtifactProgram baseArtifact)
   let baseContract = systemsArtifactStageContract baseArtifact
-      targetDigest = systemsProgramDigest program
+      expectedArms = Map.fromList
+        [ ("none", SystemsRuntimeChoiceArm Nothing (localChoiceNoneTarget witness))
+        , ("some", SystemsRuntimeChoiceArm (Just (localChoiceSelectedVersion witness)) (localChoiceSomeTarget witness))
+        ]
+      expectedOldInvariant = InvariantBranchTargets
+        (localChoiceFunction witness)
+        (localChoiceBlock witness)
+        (localChoiceSomeTarget witness)
+        (localChoiceNoneTarget witness)
+  case Map.lookup (localChoiceInvariant witness) (stageInvariants baseContract) of
+    Just StageInvariant { stageInvariantClaim = actual }
+      | actual == expectedOldInvariant -> pure ()
+    _ -> Left (LocalRuntimeChoiceMismatch "predecessor version-selection invariant drifted")
+  let targetDigest = systemsProgramDigest program
+      transferredInvariant = StageInvariant
+        (localChoiceInvariant witness)
+        (InvariantRuntimeChoice
+          (localChoiceFunction witness)
+          (localChoiceBlock witness)
+          (localChoiceName witness)
+          expectedArms)
       contract = baseContract
         { stageTargetArtifactDigest = targetDigest
+        , stageInvariants = Map.insert
+            (localChoiceInvariant witness)
+            transferredInvariant
+            (stageInvariants baseContract)
         , stageTraceRelation = stageTraceRelation baseContract <>
             [ "choose_supported preserves none/some identity and branch-local selected UInt16"
             , "selected version reaches select version while proof witnesses remain compile-time assurance"
@@ -133,6 +159,16 @@ verifyLocalRuntimeChoiceWitness artifact witness = do
         ]
   unless (systemsBlockTerminator choiceBlock == TermRuntimeChoice (localChoiceName witness) [] Nothing expectedArms) $
     Left (LocalRuntimeChoiceMismatch "local runtime choice shape drifted")
+  case Map.lookup (localChoiceInvariant witness)
+      (stageInvariants (systemsArtifactStageContract artifact)) of
+    Just StageInvariant
+      { stageInvariantClaim = InvariantRuntimeChoice functionName blockId name arms
+      }
+        | functionName == localChoiceFunction witness
+            && blockId == localChoiceBlock witness
+            && name == localChoiceName witness
+            && arms == expectedArms -> pure ()
+    _ -> Left (LocalRuntimeChoiceMismatch "version-selection invariant was not transferred")
   versionBlock <- needBlock witness function (localChoiceVersionSelectBlock witness)
   unless (any exactVersionSelect (systemsBlockOps versionBlock)) $
     Left (LocalRuntimeChoiceMismatch "select version does not consume selected_version")
@@ -248,7 +284,7 @@ deriveDecision sourceDigest targetDigest witness =
         , loweringRepresentationBefore = "anonymous Bool; selected version discarded"
         , loweringRepresentationAfter = "local sum constructor plus branch-local selected version; proof witnesses remain compile-time assurance"
         , loweringInvariantsPreserved = ["none -> server.unsupported", "some -> server.version", "selected version only on some continuation"]
-        , loweringInvariantsTransferred = []
+        , loweringInvariantsTransferred = [localChoiceInvariant witness]
         , loweringRuntimeResidue = ["choose_supported"]
         , loweringCostClass = Just SemanticRequired
         , loweringCostShape = emptyCostShape { costBranchOrDispatch = Just "one local none/some dispatch", costFrequency = Just "once per Hello negotiation" }
