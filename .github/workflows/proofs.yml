@@ -58,3 +58,4 @@ jobs:
           rocq c -Q proof/Phil Phil proof/Phil/LLVM/Identity.v
           rocq c -Q proof/Phil Phil proof/Phil/LLVM/Preservation.v
           rocq c -Q proof/Phil Phil proof/Phil/LLVM/Strengthening.v
+          rocq c -Q proof/Phil Phil proof/Phil/LLVM/Certification.v
