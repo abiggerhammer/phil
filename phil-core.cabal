@@ -92,6 +92,15 @@ executable phil-llvm-phase0
       phil-core,
       text >=2.0 && <2.2
 
+executable phil-llvm-recognized-record
+  import:             common-settings
+  hs-source-dirs:     app
+  main-is:            LLVMRecognizedRecordMain.hs
+  build-depends:
+      base >=4.17 && <5,
+      phil-core,
+      text >=2.0 && <2.2
+
 executable philc
   import:             common-settings
   hs-source-dirs:     app
@@ -325,6 +334,17 @@ test-suite phil-llvm-tests
   type:               exitcode-stdio-1.0
   hs-source-dirs:     test
   main-is:            LLVMMain.hs
+  build-depends:
+      base >=4.17 && <5,
+      containers >=0.6 && <0.8,
+      phil-core,
+      text >=2.0 && <2.2
+
+test-suite phil-recognized-record-abi-tests
+  import:             common-settings
+  type:               exitcode-stdio-1.0
+  hs-source-dirs:     test
+  main-is:            RecognizedRecordABIMain.hs
   build-depends:
       base >=4.17 && <5,
       containers >=0.6 && <0.8,
