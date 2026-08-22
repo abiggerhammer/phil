@@ -1,0 +1,130 @@
+name: Payload Cancel Choice Proofs
+
+on:
+  pull_request:
+    paths:
+      - 'proof/**'
+      - 'phil-core.cabal'
+      - 'src/Phil/LLVM.hs'
+      - 'src/Phil/LLVM/IR.hs'
+      - 'src/Phil/LLVM/Lower.hs'
+      - 'src/Phil/LLVM/Verify.hs'
+      - 'src/Phil/Systems/SessionChoice.hs'
+      - 'src/Phil/Systems/PayloadCancelChoice.hs'
+      - 'src/Phil/LLVM/SessionOffer.hs'
+      - 'src/Phil/LLVM/PayloadCancelChoice.hs'
+      - 'src/Phil/LLVM/PayloadCancelChoiceCertification.hs'
+      - '.github/workflows/payload-cancel-choice-proofs.yml'
+  push:
+    branches:
+      - main
+    paths:
+      - 'proof/**'
+      - 'phil-core.cabal'
+      - 'src/Phil/LLVM.hs'
+      - 'src/Phil/LLVM/IR.hs'
+      - 'src/Phil/LLVM/Lower.hs'
+      - 'src/Phil/LLVM/Verify.hs'
+      - 'src/Phil/Systems/SessionChoice.hs'
+      - 'src/Phil/Systems/PayloadCancelChoice.hs'
+      - 'src/Phil/LLVM/SessionOffer.hs'
+      - 'src/Phil/LLVM/PayloadCancelChoice.hs'
+      - 'src/Phil/LLVM/PayloadCancelChoiceCertification.hs'
+      - '.github/workflows/payload-cancel-choice-proofs.yml'
+
+permissions:
+  contents: read
+
+jobs:
+  rocq-payload-cancel-choice:
+    runs-on: ubuntu-latest
+    container:
+      image: rocq/rocq-prover:9.2.0
+      options: --user root
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v4
+
+      - name: Check complete proof corpus including payload/cancel choice
+        run: |
+          export PATH="/home/rocq/.opam/${COMPILER}/bin:$PATH"
+          rocq c -Q proof/Phil Phil proof/Phil/Core/Syntax.v
+          rocq c -Q proof/Phil Phil proof/Phil/Core/Scalar.v
+          rocq c -Q proof/Phil Phil proof/Phil/Core/Session.v
+          rocq c -Q proof/Phil Phil proof/Phil/Core/Context.v
+          rocq c -Q proof/Phil Phil proof/Phil/Core/Process.v
+          rocq c -Q proof/Phil Phil proof/Phil/Core/SessionLabel.v
+          rocq c -Q proof/Phil Phil proof/Phil/Core/SessionStep.v
+          rocq c -Q proof/Phil Phil proof/Phil/Core/Recognition.v
+          rocq c -Q proof/Phil Phil proof/Phil/Core/RecognitionLoan.v
+          rocq c -Q proof/Phil Phil proof/Phil/Core/ContextJoin.v
+          rocq c -Q proof/Phil Phil proof/Phil/Core/ProcessJoin.v
+          rocq c -Q proof/Phil Phil proof/Phil/Core/ProcessTerminal.v
+          rocq c -Q proof/Phil Phil proof/Phil/Core/Discharge.v
+          rocq c -Q proof/Phil Phil proof/Phil/Core/DecisionSound.v
+          rocq c -Q proof/Phil Phil proof/Phil/Core/SessionRec.v
+          rocq c -Q proof/Phil Phil proof/Phil/Core/Focusing.v
+          rocq c -Q proof/Phil Phil proof/Phil/Surface/Elaboration.v
+          rocq c -Q proof/Phil Phil proof/Phil/Surface/Checking.v
+          rocq c -Q proof/Phil Phil proof/Phil/Surface/ScopeJoin.v
+          rocq c -Q proof/Phil Phil proof/Phil/Surface/FreshOwnership.v
+          rocq c -Q proof/Phil Phil proof/Phil/Surface/SystemsProjection.v
+          rocq c -Q proof/Phil Phil proof/Phil/Assurance/Manifest.v
+          rocq c -Q proof/Phil Phil proof/Phil/Assurance/EvidenceUse.v
+          rocq c -Q proof/Phil Phil proof/Phil/Systems/Identity.v
+          rocq c -Q proof/Phil Phil proof/Phil/Systems/FactDisposition.v
+          rocq c -Q proof/Phil Phil proof/Phil/Systems/Ownership.v
+          rocq c -Q proof/Phil Phil proof/Phil/Systems/Runtime.v
+          rocq c -Q proof/Phil Phil proof/Phil/Systems/Scalar.v
+          rocq c -Q proof/Phil Phil proof/Phil/Systems/ScalarDataflow.v
+          rocq c -Q proof/Phil Phil proof/Phil/Systems/FieldProjection.v
+          rocq c -Q proof/Phil Phil proof/Phil/Systems/RecognizedRecord.v
+          rocq c -Q proof/Phil Phil proof/Phil/Systems/DigestValidation.v
+          rocq c -Q proof/Phil Phil proof/Phil/Systems/Storage.v
+          rocq c -Q proof/Phil Phil proof/Phil/Systems/AcceptedResponse.v
+          rocq c -Q proof/Phil Phil proof/Phil/Systems/RejectedResponse.v
+          rocq c -Q proof/Phil Phil proof/Phil/Systems/FinalResponse.v
+          rocq c -Q proof/Phil Phil proof/Phil/Systems/PayloadCancelChoice.v
+          rocq c -Q proof/Phil Phil proof/Phil/LLVM/Identity.v
+          rocq c -Q proof/Phil Phil proof/Phil/LLVM/Preservation.v
+          rocq c -Q proof/Phil Phil proof/Phil/LLVM/FieldProjection.v
+          rocq c -Q proof/Phil Phil proof/Phil/LLVM/Strengthening.v
+          rocq c -Q proof/Phil Phil proof/Phil/LLVM/Certification.v
+          rocq c -Q proof/Phil Phil proof/Phil/LLVM/Scalar.v
+          rocq c -Q proof/Phil Phil proof/Phil/LLVM/RecognizedRecordABI.v
+          rocq c -Q proof/Phil Phil proof/Phil/LLVM/RuntimeSymbolIdentity.v
+          rocq c -Q proof/Phil Phil proof/Phil/LLVM/RecognizedRecordCertification.v
+          rocq c -Q proof/Phil Phil proof/Phil/LLVM/ExactReceive.v
+          rocq c -Q proof/Phil Phil proof/Phil/LLVM/ExactReceiveCertification.v
+          rocq c -Q proof/Phil Phil proof/Phil/LLVM/DigestValidation.v
+          rocq c -Q proof/Phil Phil proof/Phil/LLVM/DigestValidationCertification.v
+          rocq c -Q proof/Phil Phil proof/Phil/LLVM/Storage.v
+          rocq c -Q proof/Phil Phil proof/Phil/LLVM/StorageCertification.v
+          rocq c -Q proof/Phil Phil proof/Phil/LLVM/AcceptedResponse.v
+          rocq c -Q proof/Phil Phil proof/Phil/LLVM/AcceptedResponseCertification.v
+          rocq c -Q proof/Phil Phil proof/Phil/LLVM/RejectedResponse.v
+          rocq c -Q proof/Phil Phil proof/Phil/LLVM/RejectedResponseCertification.v
+          rocq c -Q proof/Phil Phil proof/Phil/LLVM/FinalResponseReceive.v
+          rocq c -Q proof/Phil Phil proof/Phil/LLVM/FinalResponseReceiveCertification.v
+          rocq c -Q proof/Phil Phil proof/Phil/LLVM/PayloadCancelChoice.v
+          rocq c -Q proof/Phil Phil proof/Phil/LLVM/PayloadCancelChoiceCertification.v
+
+      - name: Stage exact checked payload/cancel proof objects
+        run: |
+          mkdir -p rocq-payload-cancel/systems-payload-cancel
+          mkdir -p rocq-payload-cancel/llvm-payload-cancel
+          mkdir -p rocq-payload-cancel/llvm-payload-cancel-certification
+          cp proof/Phil/Systems/PayloadCancelChoice.v rocq-payload-cancel/systems-payload-cancel/PayloadCancelChoice.v
+          cp proof/Phil/Systems/PayloadCancelChoice.vo rocq-payload-cancel/systems-payload-cancel/PayloadCancelChoice.vo
+          cp proof/Phil/LLVM/PayloadCancelChoice.v rocq-payload-cancel/llvm-payload-cancel/PayloadCancelChoice.v
+          cp proof/Phil/LLVM/PayloadCancelChoice.vo rocq-payload-cancel/llvm-payload-cancel/PayloadCancelChoice.vo
+          cp proof/Phil/LLVM/PayloadCancelChoiceCertification.v rocq-payload-cancel/llvm-payload-cancel-certification/PayloadCancelChoiceCertification.v
+          cp proof/Phil/LLVM/PayloadCancelChoiceCertification.vo rocq-payload-cancel/llvm-payload-cancel-certification/PayloadCancelChoiceCertification.vo
+
+      - name: Upload exact checked payload/cancel proof objects
+        uses: actions/upload-artifact@v4
+        with:
+          name: rocq-payload-cancel-choice-checked-proof-objects
+          path: rocq-payload-cancel/
+          if-no-files-found: error
+          retention-days: 14
