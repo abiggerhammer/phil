@@ -1,4 +1,4 @@
-From Phil.Systems Require Import RecognizedRecord.
+From Phil.Systems Require Import ScalarDataflow RecognizedRecord.
 
 (*
   PHIL-SYS-DIGEST-001 — normalized proof model for the explicit
