@@ -152,8 +152,9 @@ Proof.
     (verified_llvm_uint_preserves_exact_width_and_value
       model value sourceWidth number Hverified Hsource) as Hexact.
   rewrite Htarget in Hexact.
-  inversion Hexact.
-  contradiction.
+  inversion Hexact; subst.
+  apply Hwidth.
+  reflexivity.
 Qed.
 
 Theorem scalar_value_drift_is_rejected :
@@ -171,8 +172,9 @@ Proof.
     (verified_llvm_uint_preserves_exact_width_and_value
       model value width sourceValue Hverified Hsource) as Hexact.
   rewrite Htarget in Hexact.
-  inversion Hexact.
-  contradiction.
+  inversion Hexact; subst.
+  apply Hvalue.
+  reflexivity.
 Qed.
 
 Theorem scalar_return_identity_drift_is_rejected :
@@ -191,8 +193,9 @@ Proof.
     as Hexact.
   destruct Hexact as [Hidentity _].
   rewrite HtargetReturn in Hidentity.
-  inversion Hidentity.
-  contradiction.
+  inversion Hidentity; subst.
+  apply Hmismatch.
+  reflexivity.
 Qed.
 
 Theorem scalar_return_type_drift_is_rejected :
@@ -211,6 +214,7 @@ Proof.
     as Hexact.
   destruct Hexact as [_ Htype].
   rewrite HtargetType in Htype.
-  inversion Htype.
-  contradiction.
+  inversion Htype; subst.
+  apply Hmismatch.
+  reflexivity.
 Qed.
