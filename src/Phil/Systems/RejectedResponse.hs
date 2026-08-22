@@ -16,7 +16,6 @@ import qualified Data.Map.Strict as Map
 import Data.Text (Text)
 import Phil.Systems.AcceptedResponse
 import Phil.Systems.IR
-import Phil.Systems.Storage
 import Phil.Systems.Verify (SystemsVerificationContext)
 
 data RejectedResponseWitness = RejectedResponseWitness
