@@ -1,0 +1,32 @@
+name: Payload Cancel Session Choice PR Trigger
+
+on:
+  pull_request:
+    paths:
+      - '.github/workflows/payload-cancel-session-choice-pr-trigger.yml'
+      - '.github/workflows/payload-cancel-session-choice-edit.yml'
+
+permissions:
+  contents: write
+
+jobs:
+  apply:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: payload-cancel-session-choice
+          fetch-depth: 0
+      - name: Run staged edit workflow body
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 - <<'PY'
+          from pathlib import Path
+          workflow = Path('.github/workflows/payload-cancel-session-choice-edit.yml').read_text().splitlines()
+          start = next(i for i, line in enumerate(workflow) if line == '          python3 - <<\'PY\'')
+          end = next(i for i in range(start + 1, len(workflow)) if workflow[i] == '          PY')
+          script = '\n'.join(line[10:] if line.startswith('          ') else line for line in workflow[start + 1:end]) + '\n'
+          Path('/tmp/apply.py').write_text(script)
+          PY
+          python3 /tmp/apply.py
