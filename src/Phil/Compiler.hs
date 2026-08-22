@@ -136,15 +136,16 @@ buildRunnableSystems
 buildRunnableSystems sourceDigest = (artifact, systemsContext)
   where
     entryBlock = BlockId "entry"
+    blockValue = SystemsBlock
+      { systemsBlockId = entryBlock
+      , systemsBlockOps = []
+      , systemsBlockTerminator = TermEnd "return-unit"
+      }
     function = SystemsFunction
       { systemsFunctionName = "main"
       , systemsFunctionEntry = entryBlock
       , systemsFunctionValues = Map.empty
-      , systemsFunctionBlocks = Map.singleton entryBlock SystemsBlock
-          { systemsBlockId = entryBlock
-          , systemsBlockOps = []
-          , systemsBlockTerminator = TermEnd "return-unit"
-          }
+      , systemsFunctionBlocks = Map.singleton entryBlock blockValue
       }
     program = SystemsProgram
       { systemsProgramName = "runnable-unit"
