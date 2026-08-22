@@ -1,4 +1,4 @@
-From Coq Require Import Lists.List.
+From Stdlib Require Import Lists.List.
 Import ListNotations.
 
 From Phil.Core Require Import Syntax.

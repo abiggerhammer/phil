@@ -12,70 +12,40 @@ The human-facing logic ledger lives in Drive. The repository is authoritative fo
 - Small proof models may abstract implementation details that are irrelevant to the theorem, but those abstractions must be stated explicitly and tightened before stronger claims depend on them.
 - Proofs should follow the implementation slices closely enough that semantic drift is visible in review.
 
-## Discharged slices
+## Existing discharged slices
 
-### PHIL-SESSION-DUAL-001 — session duality
+The checked corpus includes session duality, exact binding insertion and linear consumption, session progression resources, label selection, process sequencing, recognition provenance/gating, branch convergence, and terminal-state resource completeness. See the stable obligation IDs in the individual proof files and the Drive logic ledger for the authoritative claim registry.
 
-`proof/Phil/Core/Session.v` establishes that session duality is involutive. Message types are opaque in this slice because `dualSession` preserves them unchanged; the theorem is about the session protocol structure implemented by `src/Phil/Core/Session.hs`.
+## Assurance-disposition slice
 
-### PHIL-CTX-LIN-001 — exact linear consumption
+`proof/Phil/Core/Discharge.v` formalizes the checker-to-ledger authority boundary introduced by `Phil.Core.Discharge`.
 
-`proof/Phil/Core/Context.v` models binding maps and the active-loan set extensionally as lookup functions. On every successful `consumeLinear`, it proves that:
+### PHIL-DISCH-CERT-001 — producer/checker separation
 
-- the consumed owner was bound to the returned type before the step;
-- the requested linear owner is absent afterward;
-- every other linear lookup is unchanged; and
-- unrestricted bindings, affine bindings, and the loan set are unchanged.
+The certificate producer is represented separately from the checker. A producer result becomes a static certificate discharge only when the checker accepts that exact certificate for the exact canonical proposition. No proposal falls through to an explicit mechanism; a rejected produced certificate is an error rather than proof.
 
-The success theorem deliberately abstracts the implementation's error-classification details (`WrongStructuralMode` versus unknown binding), because those branches cannot occur under the theorem's successful-result premise. Finite-map representation details remain outside this slice.
+### PHIL-DISCH-BOUNDARY-001 — exact disposition authority
 
-### PHIL-PROC-SEQ-001 — process sequencing
+Successful resolution has only the implemented explicit forms: definition, matching evidence, checked certificate, exact runtime binding, or exact export binding. Runtime and export bindings carry exact obligation identity, canonical proposition, and required point. There is deliberately no local `Assumed` constructor.
 
-`proof/Phil/Core/Process.v` mirrors the `Either`-style failure behavior of `sequenceFlow` while treating `CheckState` as opaque. It proves that `Continue` is exactly the control case delegated to the continuation and that every non-`Continue` path (`Return`, `Closed`, or `Failed`) occurs unchanged in every successful sequencing result.
+The proof treats proposition canonicalization as the equality boundary already established by the checker. Full ADR-010 artifact identity and closed-manifest validation remain later assurance obligations.
 
-The proof uses a structurally recursive presentation equivalent to the implementation's `mapM` plus concatenation; list order and multiplicity are preserved.
+### PHIL-DISCH-PREREQ-001 — export is not truth
 
-### PHIL-SESSION-LABEL-001 — session label selection
+An exported prerequisite produces no local assumption. If any prerequisite is exported, the parent is not locally resolvable in this model and must itself take an explicit boundary disposition. This is the mechanized form of the policy: transferring an obligation is not satisfying it.
 
-`proof/Phil/Core/SessionLabel.v` models the current `ensureUniqueLabels` / `selectBranch` boundary. The Haskell implementation uses `Data.Set`; the proof checks uniqueness structurally over the proof-oriented branch spine. The mechanized claims are that duplicate-label branch sets are rejected before lookup, absent requested labels are rejected, every successful lookup occurs only in a globally unique branch set where the requested label occurs exactly once, and the successful payload/continuation is exactly the result of the requested-label lookup. Payload types and continuations are carried through unchanged and are not inspected by this theorem.
+## Linear-certificate semantic slice
 
-### PHIL-CTX-BIND-001 — exact fresh binding insertion
+### PHIL-DECISION-LINEAR-001 — linear combination soundness
 
-`proof/Phil/Core/Context.v` also models `insertBinding`. A successful insertion proves that the inserted name was absent from all three structural binding maps, appears afterward in exactly the selected mode, leaves every unrelated lookup unchanged, and preserves the active-loan set. The proof uses the same extensional binding-map abstraction as `PHIL-CTX-LIN-001`; finite-map representation details and the concrete `DuplicateBinding` diagnostic payload remain outside the successful-result claim.
+`proof/Phil/Core/DecisionSound.v` proves the mathematical kernel beneath `phil-core-linear-certificate-v1`. Equality bases denote zero and may be combined with arbitrary rational coefficients. Inequality bases denote nonnegative quantities and may contribute to inequality goals only with nonnegative coefficients; inequality slack is nonnegative, while equality slack is exactly zero. Under those checker restrictions, an accepted affine combination semantically satisfies its target relation.
 
-### PHIL-SESSION-STEP-001 — session progression resource discipline
+The same checked judgment carries partial-operation prerequisites explicitly, so certificate acceptance cannot erase Nat-subtraction or similar definedness requirements. The correspondence from Haskell `RefTerm` normalization/sort checking and the concrete affine map representation to the proof-side rational denotation remains explicit rather than being smuggled into the theorem.
 
-`proof/Phil/Core/SessionStep.v` composes the binding-insertion and linear-consumption results around the common resource effects of `Phil.Core.Session`. For non-close progression it models the successful `consumeEndpoint`/`continueWith` path: the old linear endpoint is consumed, endpoint-name reuse is rejected, a fresh linear successor carrying the continuation is installed, unrelated linear lookups are unchanged, and active loans are preserved. For close it proves the old endpoint is consumed, no successor is installed, unrelated linear lookups are unchanged, and active loans are preserved.
+## Session recursion slice
 
-This theorem deliberately isolates resource effects from session-head/action matching. The concrete Haskell `TyEndpoint` constructor is represented by an opaque proof-side `endpointType : Session -> Ty`; the theorem does not inspect endpoint payload types. Grammar-gated recognition and action correctness remain separate obligations rather than assumptions smuggled into the resource proof.
+### PHIL-SESSION-REC-001 — finite head exposure
 
-## Current proof slice: recognition boundary
+`proof/Phil/Core/SessionRec.v` gives a structurally terminating Rocq mirror of `exposeSessionHead`. It proves that session substitution cannot invent recursion binder names at the session-structure level, each fresh unfolding strictly enlarges the seen set, and every unfolding trace is bounded by the number of distinct recursion names in the initial session. The derived fuel therefore cannot be exhausted. Every result is a non-recursive head, an unguarded repeated recursion result, or an unbound session variable.
 
-`proof/Phil/Core/Recognition.v` formalizes the boundary implemented jointly by `Phil.Core.Session` and `Phil.Core.Recognition`.
-
-### PHIL-RECOG-GATE-001 — fail-closed grammar ingress
-
-General Phil `Ty` remains opaque to the existing corpus. The recognition proof introduces only its grammar-relevant projection: ordinary, frame, and recursively refined. It proves that generic receive rejects every message whose projection contains a frame grammar, including frames beneath refinement, and that generic external-choice offer rejects grammar-backed branch payloads rather than advancing them.
-
-### PHIL-RECOG-REFINE-001 — deferred refined-frame safety
-
-The same grammar projection models the current `receiveFrame` distinction between a direct `TyFrame` and a grammar hidden beneath `TyRefined`. A direct frame is recognition-ready; a refined grammar frame is classified as requiring value checking, never as a successfully recognized value. This records the current deliberate limitation and should be revised when refinement-value checking lands.
-
-### PHIL-RECOG-COMMIT-001 — provenance-bound commit
-
-A proof-side `PendingCapability` represents the successful result of the implementation's `pendingSpecFor` dynamic check: a particular linear owner has been identified as the pending receive carrying a particular source endpoint, grammar, frame, binder, and continuation. `pendingType : PendingSpec -> Ty` is the opaque embedding of `TyPendingRecv` into the existing proof-side type abstraction.
-
-Against that typed boundary, successful commit proves all of the following together:
-
-- parsed evidence names the exact pending owner, grammar, and frame;
-- the successor is distinct from both the pending owner and the original source endpoint;
-- the pending linear capability is consumed;
-- exactly the recorded continuation endpoint is installed under the successor;
-- unrelated linear resources are preserved; and
-- active loans are preserved.
-
-The trusted recognizer itself remains outside this theorem; the theorem begins from the `ParsedWitness` it produced and proves that unrelated or stale provenance cannot authorize continuation.
-
-### PHIL-RECOG-FAIL-001 — provenance-bound failure
-
-Failure evidence must match the same pending owner, grammar, and frame before it can consume the pending capability. A successful failure transition consumes the pending linear owner, preserves every unrelated linear resource and active loan, and constructs no successor. Failure-detail text is intentionally not part of provenance matching, matching the implementation.
+Message types remain opaque in this slice because head exposure never inspects them; substitution inside endpoint/message types cannot create a new top-level head during the operation. This theorem proves the implemented finite seen-set behavior, not a stronger global guarded-recursion property.

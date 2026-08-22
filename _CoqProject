@@ -10,3 +10,6 @@ proof/Phil/Core/RecognitionLoan.v
 proof/Phil/Core/ContextJoin.v
 proof/Phil/Core/ProcessJoin.v
 proof/Phil/Core/ProcessTerminal.v
+proof/Phil/Core/Discharge.v
+proof/Phil/Core/DecisionSound.v
+proof/Phil/Core/SessionRec.v

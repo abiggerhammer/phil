@@ -138,7 +138,7 @@ Proof.
   intros flows output Hjoin.
   destruct Hjoin.
   - reflexivity.
-  - apply map_length.
+  - apply length_map.
 Qed.
 
 (*
