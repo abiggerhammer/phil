@@ -90,11 +90,7 @@ import Phil.Core.Syntax
   , Session (..)
   , Ty (..)
   )
-import Phil.Core.Value
-  ( EqualityBoundary (..)
-  , ValueError (..)
-  , compareTypes
-  )
+import Phil.Core.Value (ValueError (..))
 import Phil.Surface.Check.Types
 import Phil.Surface.Elaborate
   ( ElaborationEnv
@@ -105,8 +101,7 @@ import Phil.Surface.Elaborate
   , withProjectionSort
   )
 import Phil.Surface.Syntax
-  ( BinaryOperator (..)
-  , Located (..)
+  ( Located (..)
   , SourcePoint (..)
   , SourceSpan (..)
   , SurfaceExpression (..)
