@@ -23,6 +23,8 @@ Generated LLVM allocates the pointer slot at the offer site, branches on the run
 
 The 16-octet wire token is not the client `UploadId` representation. Only the runtime decoder may interpret/materialize it. Generated code receives an opaque pointer and does not dereference, infer layout, mutate, release, or strengthen it.
 
+The decoded `UploadId` handle is runtime-owned and non-owning from generated code's perspective. Its guaranteed lifetime extends through the exact `phil_runtime_record_upload_id` call. If the application needs the ID afterward, that runtime operation must persist or copy the necessary state before the handle's guaranteed lifetime ends; generated code does not acquire ownership merely by carrying the handle.
+
 The semantic `DigestFailure` binding from Systems has no physical target object in this exact profile because the frozen client never observes it. This is an exact-program erasure justified by the Systems session-choice witness, not a global claim that `DigestFailure` is representation-free.
 
 No ambient current response, current UploadId, or last-response state is permitted.
