@@ -77,6 +77,12 @@ data SystemsVerificationError
   | SessionSelectTransportRoleMismatch Text BlockId ValueId SystemsValueRole
   | SessionSelectEmptyLabel Text BlockId
   | SessionSelectPayloadMissing Text BlockId Text ValueId
+  | RuntimeChoiceEmptyName Text BlockId
+  | RuntimeChoiceInputMissing Text BlockId ValueId
+  | RuntimeChoiceEmptyArms Text BlockId
+  | RuntimeChoiceEmptyLabel Text BlockId
+  | RuntimeChoicePayloadMissing Text BlockId Text ValueId
+  | RuntimeChoicePayloadTargetNotDedicated Text BlockId Text BlockId [BlockId]
   | CopyWithoutCopyDecision Text BlockId DecisionId
   | BorrowWithoutBorrowDecision Text BlockId DecisionId
   | OperationReferencesUnknownDecision Text BlockId DecisionId
@@ -411,6 +417,27 @@ verifyTerminatorShape functionKey function blockKey terminator =
         Left (RecognitionCommitNotFirstUse functionKey blockKey pending success)
       unless (blockContainsDestroy function failure pending) $
         Left (RecognitionFailureMissingDestroy functionKey blockKey pending failure)
+    TermRuntimeChoice name inputs _ arms -> do
+      when (Text.null name) $
+        Left (RuntimeChoiceEmptyName functionKey blockKey)
+      forM_ inputs $ \input ->
+        unless (Map.member input (systemsFunctionValues function)) $
+          Left (RuntimeChoiceInputMissing functionKey blockKey input)
+      when (Map.null arms) $
+        Left (RuntimeChoiceEmptyArms functionKey blockKey)
+      forM_ (Map.toAscList arms) $ \(label, arm) -> do
+        when (Text.null label) $
+          Left (RuntimeChoiceEmptyLabel functionKey blockKey)
+        case runtimeChoiceArmPayloadBinding arm of
+          Nothing -> pure ()
+          Just payload -> do
+            unless (Map.member payload (systemsFunctionValues function)) $
+              Left (RuntimeChoicePayloadMissing functionKey blockKey label payload)
+            let target = runtimeChoiceArmTarget arm
+                predecessors = predecessorsOf function target
+            unless (predecessors == [blockKey]) $
+              Left (RuntimeChoicePayloadTargetNotDedicated
+                functionKey blockKey label target predecessors)
     TermSessionOffer transport arms -> do
       case Map.lookup transport (systemsFunctionValues function) of
         Nothing -> Left (SessionOfferTransportMissing functionKey blockKey transport)

@@ -14,6 +14,7 @@ module Phil.Systems.IR
   , RuntimeSiteRef (..)
   , SystemsOp (..)
   , SystemsChoiceArm (..)
+  , SystemsRuntimeChoiceArm (..)
   , SystemsTerminator (..)
   , SystemsBlock (..)
   , SystemsFunction (..)
@@ -185,6 +186,12 @@ data SystemsChoiceArm = SystemsChoiceArm
   }
   deriving (Eq, Ord, Show)
 
+data SystemsRuntimeChoiceArm = SystemsRuntimeChoiceArm
+  { runtimeChoiceArmPayloadBinding :: Maybe ValueId
+  , runtimeChoiceArmTarget :: BlockId
+  }
+  deriving (Eq, Ord, Show)
+
 data SystemsTerminator
   = TermJump BlockId
   | TermBranch ValueId BlockId BlockId
@@ -226,6 +233,12 @@ data SystemsTerminator
   | TermSessionOffer
       { sessionOfferTransport :: ValueId
       , sessionOfferArms :: Map Text SystemsChoiceArm
+      }
+  | TermRuntimeChoice
+      { runtimeChoiceName :: Text
+      , runtimeChoiceInputs :: [ValueId]
+      , runtimeChoiceSite :: Maybe RuntimeSiteRef
+      , runtimeChoiceArms :: Map Text SystemsRuntimeChoiceArm
       }
   | TermReturnScalar ValueId
   | TermEnd Text
@@ -496,6 +509,8 @@ blockSuccessors blockValue = case systemsBlockTerminator blockValue of
   TermStore { storeSuccess = yes, storeFailure = no } -> [yes, no]
   TermSessionOffer { sessionOfferArms = arms } ->
     map (choiceArmTarget . snd) (Map.toAscList arms)
+  TermRuntimeChoice { runtimeChoiceArms = arms } ->
+    map (runtimeChoiceArmTarget . snd) (Map.toAscList arms)
   TermReturnScalar _ -> []
   TermEnd _ -> []
   TermFatal _ -> []
@@ -516,6 +531,7 @@ runtimeSites function = concatMap blockSites (Map.elems (systemsFunctionBlocks f
       TermReceiveExact { exactSite = site } -> [site]
       TermSendExact { sendExactSite = site } -> [site]
       TermStore { storeSite = site } -> [site]
+      TermRuntimeChoice { runtimeChoiceSite = Just site } -> [site]
       _ -> []
 
 field :: Text -> Text -> Text
@@ -622,6 +638,12 @@ renderTerminator terminator = case terminator of
     [unValueId owner, unValueId result, renderRuntimeSite site, unBlockId yes, unBlockId no]
   TermSessionOffer transport arms -> tag "session-offer"
     [unValueId transport, renderList renderChoiceArm (Map.toAscList arms)]
+  TermRuntimeChoice name inputs site arms -> tag "runtime-choice"
+    [ name
+    , renderList unValueId inputs
+    , maybe "none" renderRuntimeSite site
+    , renderList renderRuntimeChoiceArm (Map.toAscList arms)
+    ]
   TermReturnScalar value -> tag "return-scalar" [unValueId value]
   TermEnd outcome -> tag "end" [outcome]
   TermFatal failure -> tag "fatal" [failure]
@@ -633,6 +655,13 @@ renderChoiceArm (label, arm) = Text.intercalate ";"
   [ field "label" label
   , field "payload" (maybe "none" unValueId (choiceArmPayloadBinding arm))
   , field "target" (unBlockId (choiceArmTarget arm))
+  ]
+
+renderRuntimeChoiceArm :: (Text, SystemsRuntimeChoiceArm) -> Text
+renderRuntimeChoiceArm (label, arm) = Text.intercalate ";"
+  [ field "label" label
+  , field "payload" (maybe "none" unValueId (runtimeChoiceArmPayloadBinding arm))
+  , field "target" (unBlockId (runtimeChoiceArmTarget arm))
   ]
 
 renderLoweringAction :: LoweringAction -> Text
