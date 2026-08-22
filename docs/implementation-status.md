@@ -124,15 +124,35 @@ The equality API exposes three outcomes: definitionally equal, requires explicit
 - Structural-mode lookup, guarded session-head exposure, and exact branch-exhaustiveness checking are executable deterministic focusing operations. Branch handlers must cover exactly the unique labels declared by the session choice.
 - Focusing does not choose protocol labels, validators, assumptions, or escalation boundaries. Those remain explicit program/architecture decisions as required by the normative focusing rule.
 
-This slice deliberately stops before the certificate-checkable transparent decision procedure. `FocusNeedsDecisionProcedure` is a typed boundary, not a successful proof result and not a trusted Boolean callback. Likewise `FocusNeedsExplicitMechanism` records that deterministic local focusing has exhausted its competence; it does not authorize runtime validation, escalation, assumption, or opaque acceptance by itself.
+## Implemented in the checked-decision/disposition slice
+
+- `Phil.Core.Decision` separates certificate production from certificate checking. The built-in arithmetic engine proposes `DecisionCertificate` values; `checkDecisionCertificate` independently reconstructs the requested proposition from the certificate and its supplied checked facts before the result may count as static evidence.
+- The certificate language covers the represented Phase 0 linear-arithmetic core over `Nat` and the mathematical values of `UInt[w]`: exact linear equalities, non-strict and strict order, conjunction/disjunction, and disequality established by a strict order in either direction.
+- Linear certificates may cite exact supplied evidence, the semantic lower bound of a total `Nat`, and the lower/upper mathematical bounds of a `UInt[w]` or its explicit `toNat` image.
+- Inequality premises may only be combined with nonnegative rational weights. Equality premises may be used with either sign. Equality goals cannot cite inequality bases, inequality slack must be nonnegative, and equality slack must be zero.
+- The certificate checker validates UInt widths rather than trusting a bound label. A forged `UInt[8]` upper-bound certificate attached to a `Nat` term is rejected.
+- Finite-collection and other non-arithmetic atoms remain uninterpreted to the arithmetic producer. An exact atom may be consumed when it is already supplied as checked evidence; the producer never invents collection membership/disjointness facts.
+- Natural-subtraction definedness is checked on the pre-normalized proposition before the solver form is constructed, so an identity such as `(a-b) == (a-b)` cannot erase its required `b <= a` premise.
+- Certificate-invented `Nat >= 0` bases are subject to the same definedness rule. A forged proof cannot circularly establish `b <= a` by citing the nonnegativity of the partial term `a-b` before `b <= a` is known.
+- The current built-in producer is intentionally sound but incomplete. It deterministically handles normalization identities, Nat/UInt domain bounds, short linear-inequality chains, simple equality combinations, propositional conjunction/disjunction, and inequality-derived disequality. Unsupported transparent goals return `unknown`; `unknown` is never interpreted as proof or truth.
+- `Phil.Core.Discharge` applies the ADR-006 required-point order to a named `Obligation` while preserving its stable ID, canonical proposition, origin, scope, and required point.
+- A resolved obligation records one explicit disposition: static discharge by definition, matching in-scope evidence, or independently checked certificate; an exact architecture-declared runtime binding; or an exact architecture-declared export boundary.
+- Explicitly supplied evidence is checked against the canonical required proposition and must be unrestricted evidence in `Γ`.
+- Runtime bindings must match the exact obligation ID, canonical proposition, and required point. Their declared success evidence must itself entail the exact canonical proposition; a mismatched validator result type cannot close the obligation.
+- Export bindings likewise match exact obligation identity, canonical proposition, and required point. Export is local closure of responsibility, not a proof of the proposition.
+- Natural-subtraction prerequisites become deterministic child obligations such as `<parent>.nat-sub.1`, inheriting the parent's origin/scope/required point. A statically or runtime-established child may become a checked fact on the success continuation.
+- An exported prerequisite is never reused as a local solver assumption. If a parent still depends on an exported prerequisite, the parent must itself cross an explicit export boundary rather than pretending that the prerequisite became true locally.
+- Runtime disposition precedes export when both are explicitly configured, following ADR-006's canonical order. With no successful static, explicit-evidence, runtime, or export disposition, the obligation is rejected as unresolved.
+- `Assumed` is deliberately absent from ordinary required-point resolution. ADR-010 assumptions remain explicit architecture/manifest trust boundaries rather than a fallback that source checking can synthesize after failed proof search.
+
+This slice does not yet implement the complete ADR-010 append-only assurance graph, immutable revision/artifact digests, acceptance-rule/acyclicity verification, a validator declaration registry with artifact identity, external proof-adapter verification, or certified manifest closure. Runtime/export records here are checker-to-ledger dispositions whose later ledger entries still require those assurance checks.
 
 ## Next checker slices
 
-1. Certificate-checkable transparent decision procedure and required-point disposition orchestration.
-2. Parser and surface-to-Core elaboration.
-3. Conformance harness over the accepted/rejected `.phil` corpus.
-4. Assurance-ledger handoff and manifest verification.
+1. Parser and surface-to-Core elaboration.
+2. Conformance harness over the accepted/rejected `.phil` corpus.
+3. Assurance-ledger handoff and manifest verification.
 
 ## Explicit current non-goals
 
-The checker still does not claim source-level Phil conformance. In particular it does not parse Phil syntax, project dependent session types from a global protocol, substitute communicated semantic values into all dependent continuations, execute grammar recognizers, invoke a certificate-checkable refinement solver, choose or insert runtime validators, cross obligation boundaries without explicit architecture, validate return values against a provider signature, validate the upload protocol end-to-end, or lower to systems/LLVM IR. Transport-acquisition failure for `receiveFrame` is still represented by the accepted primitive contract rather than simulated inside the structural checker.
+The checker still does not claim source-level Phil conformance. In particular it does not parse Phil syntax, project dependent session types from a global protocol, substitute communicated semantic values into all dependent continuations, execute grammar recognizers, provide a complete decision procedure for every transparent proposition, validate runtime-validator artifact identities, synthesize assumptions, cross obligation boundaries without explicit architecture, validate return values against a provider signature, validate the upload protocol end-to-end, verify a closed ADR-010 build manifest, or lower to systems/LLVM IR. Transport-acquisition failure for `receiveFrame` is still represented by the accepted primitive contract rather than simulated inside the structural checker.

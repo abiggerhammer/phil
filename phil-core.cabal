@@ -27,6 +27,8 @@ library
       Phil.Core.Static
       Phil.Core.Refinement
       Phil.Core.Focusing
+      Phil.Core.Decision
+      Phil.Core.Discharge
       Phil.Core.Value
   build-depends:
       base >=4.17 && <5,
@@ -146,6 +148,28 @@ test-suite phil-focusing-tests
   type:               exitcode-stdio-1.0
   hs-source-dirs:     test
   main-is:            FocusingMain.hs
+  build-depends:
+      base >=4.17 && <5,
+      containers >=0.6 && <0.8,
+      phil-core,
+      text >=2.0 && <2.2
+
+test-suite phil-decision-tests
+  import:             common-settings
+  type:               exitcode-stdio-1.0
+  hs-source-dirs:     test
+  main-is:            DecisionMain.hs
+  build-depends:
+      base >=4.17 && <5,
+      containers >=0.6 && <0.8,
+      phil-core,
+      text >=2.0 && <2.2
+
+test-suite phil-discharge-tests
+  import:             common-settings
+  type:               exitcode-stdio-1.0
+  hs-source-dirs:     test
+  main-is:            DischargeMain.hs
   build-depends:
       base >=4.17 && <5,
       containers >=0.6 && <0.8,
