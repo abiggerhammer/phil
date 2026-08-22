@@ -232,7 +232,7 @@ verifyFieldProjectionWitness artifact witness = do
   let operations = systemsBlockOps successBlock
       commitIndices =
         [ index
-        | (index, OpCommitIngress { commitPending = pending }) <- zip [0 ..] operations
+        | (index, OpCommitIngress { commitPending = pending }) <- zip [0 :: Int ..] operations
         , pending == fieldProjectionPending witness
         ]
       projectionIndices =
@@ -243,7 +243,7 @@ verifyFieldProjectionWitness artifact witness = do
             , runtimeCallOutputs = outputs
             , runtimeCallSite = Nothing
             , runtimeCallDecision = decisionId
-            }) <- zip [0 ..] operations
+            }) <- zip [0 :: Int ..] operations
         , name == fieldProjectionRuntimeCallName witness
         , null inputs
         , outputs == [fieldProjectionOutput witness]
