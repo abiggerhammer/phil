@@ -58,6 +58,7 @@ library
       Phil.Assurance.RocqRecognizedRecord
       Phil.Assurance.RocqExactReceive
       Phil.Assurance.RocqDigestValidation
+      Phil.Assurance.RocqStorage
       Phil.Systems.IR
       Phil.Systems.Verify
       Phil.Systems.Phase0
@@ -82,6 +83,7 @@ library
       Phil.LLVM.DigestValidationProofCertification
       Phil.LLVM.Storage
       Phil.LLVM.StorageCertification
+      Phil.LLVM.StorageProofCertification
       Phil.LLVM.AcceptedResponse
       Phil.LLVM.AcceptedResponseCertification
   build-depends:
@@ -198,6 +200,16 @@ executable phil-certify-digest-validation
   import:             common-settings
   hs-source-dirs:     app
   main-is:            DigestValidationProofCertificationMain.hs
+  build-depends:
+      base >=4.17 && <5,
+      bytestring >=0.11 && <0.13,
+      phil-core,
+      text >=2.0 && <2.2
+
+executable phil-certify-storage
+  import:             common-settings
+  hs-source-dirs:     app
+  main-is:            StorageProofCertificationMain.hs
   build-depends:
       base >=4.17 && <5,
       bytestring >=0.11 && <0.13,

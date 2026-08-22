@@ -14,6 +14,7 @@ module Phil.LLVM
   , module Phil.LLVM.DigestValidationProofCertification
   , module Phil.LLVM.Storage
   , module Phil.LLVM.StorageCertification
+  , module Phil.LLVM.StorageProofCertification
   , module Phil.LLVM.AcceptedResponse
   , module Phil.LLVM.AcceptedResponseCertification
   ) where
@@ -34,4 +35,5 @@ import Phil.LLVM.RecognizedRecordCertification
 import Phil.LLVM.RecognizedRecordProofCertification
 import Phil.LLVM.Storage
 import Phil.LLVM.StorageCertification
+import Phil.LLVM.StorageProofCertification
 import Phil.LLVM.Verify
