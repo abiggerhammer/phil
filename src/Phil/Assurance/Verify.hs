@@ -8,12 +8,12 @@ module Phil.Assurance.Verify
   ) where
 
 import Control.Monad (foldM, unless, when)
-import Data.List (sort)
 import Data.Map.Strict (Map)
 import qualified Data.Map.Strict as Map
 import Data.Set (Set)
 import qualified Data.Set as Set
 import Data.Text (Text)
+import qualified Data.Text as Text
 import Phil.Assurance.Types
 
 
@@ -201,8 +201,7 @@ verifyManifest context ledger manifest = do
         Left (RevisionMapKeyMismatch key (revisionId revision))
       let expectedDigest = digestText (revisionStatement revision)
       unless (revisionStatementDigest revision == expectedDigest) $
-        Left (RevisionStatementDigestMismatch
-          key expectedDigest (revisionStatementDigest revision))
+        Left (RevisionStatementDigestMismatch key expectedDigest (revisionStatementDigest revision))
       let expectedId = deriveRevisionId revision
       unless (revisionId revision == expectedId) $
         Left (RevisionIdentityMismatch expectedId (revisionId revision))
@@ -261,15 +260,12 @@ verifyManifest context ledger manifest = do
         Left (ExportOutsideManifestObligation key (exportObligationRevision export))
       when (Set.member (exportObligationRevision export) (manifestCertificationScope manifest)) $
         Left (InScopeObligationExported (exportObligationRevision export))
-      unless (Set.member
-          (exportDestinationBoundary export)
-          (verificationPermittedExportBoundaries context)) $
+      unless (Set.member (exportDestinationBoundary export) (verificationPermittedExportBoundaries context)) $
         Left (UnpermittedExportBoundary key (exportDestinationBoundary export))
       unless (scopeMatches (exportValidityScope export)) $
         Left (ExportValidityScopeMismatch key)
 
-    verifyDependencies evidence =
-      mapM_ checkEntry (Map.elems evidence)
+    verifyDependencies evidence = mapM_ checkEntry (Map.elems evidence)
       where
         checkEntry entry = mapM_ (checkDependency (evidenceEntryId entry)) (evidenceDependsOn entry)
         checkDependency owner dependency = case dependency of
@@ -283,7 +279,7 @@ verifyManifest context ledger manifest = do
               Left (DependencyOnExportedObligation owner required)
 
     verifyAcyclic evidence =
-      case findCycle (graphEdges evidence) of
+      case findCycle (graphEdges evidence manifest) of
         Nothing -> Right ()
         Just cyclePath -> Left (JustificationCycle cyclePath)
 
@@ -337,19 +333,20 @@ verifyManifest context ledger manifest = do
       | otherwise = case Map.lookup revision (ledgerRevisions ledger) of
           Nothing -> Left (MissingRevision revision)
           Just obligationRevision ->
-            evaluateRule evidence (Set.insert (ObligationNode revision) visiting)
+            evaluateRule evidence
+              (Set.insert (ObligationNode revision) visiting)
               revision
               (revisionAcceptanceRule obligationRevision)
 
     evaluateRule evidence visiting revision rule = case rule of
-      AcceptEntry kind role -> do
+      AcceptEntry kind expectedRole -> do
         candidates <- mapM candidate
           [ entryId
           | entryId <- Set.toAscList (manifestEvidenceEntries manifest)
           , Just entry <- [Map.lookup entryId evidence]
           , evidenceObligationRevision entry == revision
           , evidenceAssuranceKind entry == kind
-          , evidenceRole entry == role
+          , evidenceRole entry == expectedRole
           ]
         Right (or candidates)
       AcceptAll rules -> and <$> mapM (evaluateRule evidence visiting revision) rules
@@ -407,16 +404,16 @@ verifyManifest context ledger manifest = do
       Just _ -> Right ()
 
     verifyRuntime entry = do
-      runtime <- case evidenceRuntimeMechanism entry of
+      runtimeMechanism <- case evidenceRuntimeMechanism entry of
         Nothing -> Left (RuntimeEvidenceMissingMechanism (evidenceEntryId entry))
         Just value -> Right value
       when (null (evidenceRuntimeResidue entry)) $
         Left (RuntimeEvidenceMissingResidue (evidenceEntryId entry))
       when (null (evidenceCostRefs entry)) $
         Left (RuntimeEvidenceMissingCostRef (evidenceEntryId entry))
-      unless (runtimeComplete runtime) $
+      unless (runtimeComplete runtimeMechanism) $
         Left (RuntimeMechanismIncomplete (evidenceEntryId entry))
-      mapM_ verifyArtifact (runtimeImplementation runtime)
+      mapM_ verifyArtifact (runtimeImplementation runtimeMechanism)
 
     verifyAssumed entry = do
       when (null (evidenceAssumptions entry)) $
@@ -424,11 +421,11 @@ verifyManifest context ledger manifest = do
       unless (evidenceRole entry == EvidenceRole "assumption_boundary") $
         Left (AssumedEvidenceMissingBoundary (evidenceEntryId entry))
 
-    runtimeComplete runtime = all (not . Text.null)
-      [ runtimeMechanismName runtime
-      , runtimeExecutionPoint runtime
-      , runtimeSuccessEvidenceType runtime
-      , runtimeFailureContract runtime
+    runtimeComplete runtimeMechanism = all (not . Text.null)
+      [ runtimeMechanismName runtimeMechanism
+      , runtimeExecutionPoint runtimeMechanism
+      , runtimeSuccessEvidenceType runtimeMechanism
+      , runtimeFailureContract runtimeMechanism
       ]
 
     verifyCostRef entryId costRef =
@@ -437,18 +434,9 @@ verifyManifest context ledger manifest = do
 
 validAcceptanceRule :: AcceptanceRule -> Bool
 validAcceptanceRule rule = case rule of
-  AcceptEntry _ (EvidenceRole role) -> not (Text.null role)
+  AcceptEntry _ (EvidenceRole roleName) -> not (Text.null roleName)
   AcceptAll rules -> not (null rules) && all validAcceptanceRule rules
   AcceptAny rules -> not (null rules) && all validAcceptanceRule rules
-
-requiresArtifact :: AssuranceKind -> Bool
-requiresArtifact kind = kind `elem`
-  [ ProofAssistantTheorem
-  , CertificateChecked
-  , TranslationValidated
-  , DifferentialTested
-  , PropertyTested
-  ]
 
 graphEdges :: Map EvidenceEntryId EvidenceEntry -> AssuranceManifest -> Map GraphNode [GraphNode]
 graphEdges evidence manifest = Map.fromListWith (<>) (obligationEdges <> evidenceEdges)
