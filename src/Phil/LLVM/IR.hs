@@ -247,8 +247,16 @@ renderLLVMModule moduleValue = Text.unlines $
 
     renderFunction (functionKey, function) =
       [ "define i32 @" <> symbol functionKey <> "() {" ]
-      <> concatMap renderBlock (Map.toAscList (llvmFunctionBlocks function))
+      <> concatMap renderBlock (orderedBlocks function)
       <> ["}", ""]
+
+    orderedBlocks function =
+      case Map.lookup (llvmFunctionEntry function) (llvmFunctionBlocks function) of
+        Nothing -> Map.toAscList (llvmFunctionBlocks function)
+        Just entryBlock ->
+          (llvmFunctionEntry function, entryBlock)
+          : filter ((/= llvmFunctionEntry function) . fst)
+              (Map.toAscList (llvmFunctionBlocks function))
 
     renderBlock (blockKey, blockValue) =
       [ symbol (unLLVMBlockId blockKey) <> ":" ]
