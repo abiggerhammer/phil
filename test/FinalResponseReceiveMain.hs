@@ -12,6 +12,7 @@ main :: IO ()
 main = do
   results <- sequence
     [ test "final-response receive translation verifies" translationPasses
+    , test "PHIL-LLVM-CERT-008 closes" certificationPasses
     , test "offer lowers to exact decoder operands and targets" exactOffer
     , test "accepted payload binds then reaches record_upload_id" exactAcceptedPayloadUse
     , test "rejected DigestFailure has no target representation" rejectedReasonErased
@@ -27,6 +28,11 @@ translationPasses = case phase0SessionChoiceBundle of
   Right bundle -> case verifyFinalResponseReceiveTranslation bundle (artifactFor bundle) of
     Right () -> True
     Left _ -> False
+
+certificationPasses :: Bool
+certificationPasses = case verifyPhase0FinalResponseReceiveLLVMCertification of
+  Right () -> True
+  Left _ -> False
 
 exactOffer :: Bool
 exactOffer = withBundle $ \bundle artifact ->
