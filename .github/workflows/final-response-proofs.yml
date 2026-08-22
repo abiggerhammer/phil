@@ -1,0 +1,246 @@
+name: Final Response Proofs
+
+on:
+  pull_request:
+    paths:
+      - 'proof/**'
+      - 'phil-core.cabal'
+      - 'src/Phil/LLVM.hs'
+      - 'src/Phil/LLVM/IR.hs'
+      - 'src/Phil/LLVM/Lower.hs'
+      - 'src/Phil/LLVM/Verify.hs'
+      - 'src/Phil/Systems/SessionChoice.hs'
+      - 'src/Phil/LLVM/SessionOffer.hs'
+      - 'src/Phil/LLVM/SessionOfferCertification.hs'
+      - 'app/StorageProofCertificationMain.hs'
+      - '.github/workflows/final-response-proofs.yml'
+  push:
+    branches:
+      - main
+    paths:
+      - 'proof/**'
+      - 'phil-core.cabal'
+      - 'src/Phil/LLVM.hs'
+      - 'src/Phil/LLVM/IR.hs'
+      - 'src/Phil/LLVM/Lower.hs'
+      - 'src/Phil/LLVM/Verify.hs'
+      - 'src/Phil/Systems/SessionChoice.hs'
+      - 'src/Phil/LLVM/SessionOffer.hs'
+      - 'src/Phil/LLVM/SessionOfferCertification.hs'
+      - 'app/StorageProofCertificationMain.hs'
+      - '.github/workflows/final-response-proofs.yml'
+
+permissions:
+  contents: read
+
+jobs:
+  rocq-final-response:
+    runs-on: ubuntu-latest
+    container:
+      image: rocq/rocq-prover:9.2.0
+      options: --user root
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v4
+
+      - name: Check complete proof corpus including final response
+        run: |
+          export PATH="/home/rocq/.opam/${COMPILER}/bin:$PATH"
+          rocq c -Q proof/Phil Phil proof/Phil/Core/Syntax.v
+          rocq c -Q proof/Phil Phil proof/Phil/Core/Scalar.v
+          rocq c -Q proof/Phil Phil proof/Phil/Core/Session.v
+          rocq c -Q proof/Phil Phil proof/Phil/Core/Context.v
+          rocq c -Q proof/Phil Phil proof/Phil/Core/Process.v
+          rocq c -Q proof/Phil Phil proof/Phil/Core/SessionLabel.v
+          rocq c -Q proof/Phil Phil proof/Phil/Core/SessionStep.v
+          rocq c -Q proof/Phil Phil proof/Phil/Core/Recognition.v
+          rocq c -Q proof/Phil Phil proof/Phil/Core/RecognitionLoan.v
+          rocq c -Q proof/Phil Phil proof/Phil/Core/ContextJoin.v
+          rocq c -Q proof/Phil Phil proof/Phil/Core/ProcessJoin.v
+          rocq c -Q proof/Phil Phil proof/Phil/Core/ProcessTerminal.v
+          rocq c -Q proof/Phil Phil proof/Phil/Core/Discharge.v
+          rocq c -Q proof/Phil Phil proof/Phil/Core/DecisionSound.v
+          rocq c -Q proof/Phil Phil proof/Phil/Core/SessionRec.v
+          rocq c -Q proof/Phil Phil proof/Phil/Core/Focusing.v
+          rocq c -Q proof/Phil Phil proof/Phil/Surface/Elaboration.v
+          rocq c -Q proof/Phil Phil proof/Phil/Surface/Checking.v
+          rocq c -Q proof/Phil Phil proof/Phil/Surface/ScopeJoin.v
+          rocq c -Q proof/Phil Phil proof/Phil/Surface/FreshOwnership.v
+          rocq c -Q proof/Phil Phil proof/Phil/Surface/SystemsProjection.v
+          rocq c -Q proof/Phil Phil proof/Phil/Assurance/Manifest.v
+          rocq c -Q proof/Phil Phil proof/Phil/Assurance/EvidenceUse.v
+          rocq c -Q proof/Phil Phil proof/Phil/Systems/Identity.v
+          rocq c -Q proof/Phil Phil proof/Phil/Systems/FactDisposition.v
+          rocq c -Q proof/Phil Phil proof/Phil/Systems/Ownership.v
+          rocq c -Q proof/Phil Phil proof/Phil/Systems/Runtime.v
+          rocq c -Q proof/Phil Phil proof/Phil/Systems/Scalar.v
+          rocq c -Q proof/Phil Phil proof/Phil/Systems/ScalarDataflow.v
+          rocq c -Q proof/Phil Phil proof/Phil/Systems/FieldProjection.v
+          rocq c -Q proof/Phil Phil proof/Phil/Systems/RecognizedRecord.v
+          rocq c -Q proof/Phil Phil proof/Phil/Systems/DigestValidation.v
+          rocq c -Q proof/Phil Phil proof/Phil/Systems/Storage.v
+          rocq c -Q proof/Phil Phil proof/Phil/Systems/AcceptedResponse.v
+          rocq c -Q proof/Phil Phil proof/Phil/Systems/RejectedResponse.v
+          rocq c -Q proof/Phil Phil proof/Phil/Systems/FinalResponse.v
+          rocq c -Q proof/Phil Phil proof/Phil/LLVM/Identity.v
+          rocq c -Q proof/Phil Phil proof/Phil/LLVM/Preservation.v
+          rocq c -Q proof/Phil Phil proof/Phil/LLVM/FieldProjection.v
+          rocq c -Q proof/Phil Phil proof/Phil/LLVM/Strengthening.v
+          rocq c -Q proof/Phil Phil proof/Phil/LLVM/Certification.v
+          rocq c -Q proof/Phil Phil proof/Phil/LLVM/Scalar.v
+          rocq c -Q proof/Phil Phil proof/Phil/LLVM/RecognizedRecordABI.v
+          rocq c -Q proof/Phil Phil proof/Phil/LLVM/RuntimeSymbolIdentity.v
+          rocq c -Q proof/Phil Phil proof/Phil/LLVM/RecognizedRecordCertification.v
+          rocq c -Q proof/Phil Phil proof/Phil/LLVM/ExactReceive.v
+          rocq c -Q proof/Phil Phil proof/Phil/LLVM/ExactReceiveCertification.v
+          rocq c -Q proof/Phil Phil proof/Phil/LLVM/DigestValidation.v
+          rocq c -Q proof/Phil Phil proof/Phil/LLVM/DigestValidationCertification.v
+          rocq c -Q proof/Phil Phil proof/Phil/LLVM/Storage.v
+          rocq c -Q proof/Phil Phil proof/Phil/LLVM/StorageCertification.v
+          rocq c -Q proof/Phil Phil proof/Phil/LLVM/AcceptedResponse.v
+          rocq c -Q proof/Phil Phil proof/Phil/LLVM/AcceptedResponseCertification.v
+          rocq c -Q proof/Phil Phil proof/Phil/LLVM/RejectedResponse.v
+          rocq c -Q proof/Phil Phil proof/Phil/LLVM/RejectedResponseCertification.v
+          rocq c -Q proof/Phil Phil proof/Phil/LLVM/FinalResponseReceive.v
+          rocq c -Q proof/Phil Phil proof/Phil/LLVM/FinalResponseReceiveCertification.v
+
+      - name: Stage exact checked proof objects
+        run: |
+          mkdir -p rocq-final/systems-final-response
+          mkdir -p rocq-final/llvm-final-response
+          mkdir -p rocq-final/llvm-final-response-certification
+          mkdir -p rocq-final/systems-rejected-response
+          mkdir -p rocq-final/llvm-rejected-response
+          mkdir -p rocq-final/systems-accepted-response
+          mkdir -p rocq-final/llvm-accepted-response
+          mkdir -p rocq-final/systems-storage
+          mkdir -p rocq-final/llvm-storage
+          mkdir -p rocq-final/systems-digest-validation
+          mkdir -p rocq-final/llvm-digest-validation
+          mkdir -p rocq-final/systems-recognized-record
+          mkdir -p rocq-final/llvm-exact-receive
+          mkdir -p rocq-final/llvm-recognized-record-abi
+          mkdir -p rocq-final/llvm-runtime-symbol-identity
+          cp proof/Phil/Systems/FinalResponse.v rocq-final/systems-final-response/FinalResponse.v
+          cp proof/Phil/Systems/FinalResponse.vo rocq-final/systems-final-response/FinalResponse.vo
+          cp proof/Phil/LLVM/FinalResponseReceive.v rocq-final/llvm-final-response/FinalResponseReceive.v
+          cp proof/Phil/LLVM/FinalResponseReceive.vo rocq-final/llvm-final-response/FinalResponseReceive.vo
+          cp proof/Phil/LLVM/FinalResponseReceiveCertification.v rocq-final/llvm-final-response-certification/FinalResponseReceiveCertification.v
+          cp proof/Phil/LLVM/FinalResponseReceiveCertification.vo rocq-final/llvm-final-response-certification/FinalResponseReceiveCertification.vo
+          cp proof/Phil/Systems/RejectedResponse.v rocq-final/systems-rejected-response/RejectedResponse.v
+          cp proof/Phil/Systems/RejectedResponse.vo rocq-final/systems-rejected-response/RejectedResponse.vo
+          cp proof/Phil/LLVM/RejectedResponse.v rocq-final/llvm-rejected-response/RejectedResponse.v
+          cp proof/Phil/LLVM/RejectedResponse.vo rocq-final/llvm-rejected-response/RejectedResponse.vo
+          cp proof/Phil/Systems/AcceptedResponse.v rocq-final/systems-accepted-response/AcceptedResponse.v
+          cp proof/Phil/Systems/AcceptedResponse.vo rocq-final/systems-accepted-response/AcceptedResponse.vo
+          cp proof/Phil/LLVM/AcceptedResponse.v rocq-final/llvm-accepted-response/AcceptedResponse.v
+          cp proof/Phil/LLVM/AcceptedResponse.vo rocq-final/llvm-accepted-response/AcceptedResponse.vo
+          cp proof/Phil/Systems/Storage.v rocq-final/systems-storage/Storage.v
+          cp proof/Phil/Systems/Storage.vo rocq-final/systems-storage/Storage.vo
+          cp proof/Phil/LLVM/Storage.v rocq-final/llvm-storage/Storage.v
+          cp proof/Phil/LLVM/Storage.vo rocq-final/llvm-storage/Storage.vo
+          cp proof/Phil/Systems/DigestValidation.v rocq-final/systems-digest-validation/DigestValidation.v
+          cp proof/Phil/Systems/DigestValidation.vo rocq-final/systems-digest-validation/DigestValidation.vo
+          cp proof/Phil/LLVM/DigestValidation.v rocq-final/llvm-digest-validation/DigestValidation.v
+          cp proof/Phil/LLVM/DigestValidation.vo rocq-final/llvm-digest-validation/DigestValidation.vo
+          cp proof/Phil/Systems/RecognizedRecord.v rocq-final/systems-recognized-record/RecognizedRecord.v
+          cp proof/Phil/Systems/RecognizedRecord.vo rocq-final/systems-recognized-record/RecognizedRecord.vo
+          cp proof/Phil/LLVM/ExactReceive.v rocq-final/llvm-exact-receive/ExactReceive.v
+          cp proof/Phil/LLVM/ExactReceive.vo rocq-final/llvm-exact-receive/ExactReceive.vo
+          cp proof/Phil/LLVM/RecognizedRecordABI.v rocq-final/llvm-recognized-record-abi/RecognizedRecordABI.v
+          cp proof/Phil/LLVM/RecognizedRecordABI.vo rocq-final/llvm-recognized-record-abi/RecognizedRecordABI.vo
+          cp proof/Phil/LLVM/RuntimeSymbolIdentity.v rocq-final/llvm-runtime-symbol-identity/RuntimeSymbolIdentity.v
+          cp proof/Phil/LLVM/RuntimeSymbolIdentity.vo rocq-final/llvm-runtime-symbol-identity/RuntimeSymbolIdentity.vo
+
+      - name: Upload exact checked proof objects
+        uses: actions/upload-artifact@v4
+        with:
+          name: rocq-final-response-checked-proof-objects
+          path: rocq-final/
+          if-no-files-found: error
+          retention-days: 14
+
+  certify-final-response:
+    needs: rocq-final-response
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v4
+
+      - name: Set up Haskell
+        uses: haskell-actions/setup@v2
+        with:
+          ghc-version: '9.6.7'
+          cabal-version: 'latest'
+
+      - name: Download exact checked proof objects
+        uses: actions/download-artifact@v4
+        with:
+          name: rocq-final-response-checked-proof-objects
+          path: rocq-final
+
+      - name: Build proof-bound final-response certifier
+        run: cabal build phil-certify-storage
+
+      - name: Produce final-response proof and final certificates
+        run: |
+          mkdir -p final-response-certificates
+          CERTIFIER="$(cabal list-bin phil-certify-storage)"
+          "$CERTIFIER" \
+            rocq-final/systems-final-response/FinalResponse.v \
+            rocq-final/systems-final-response/FinalResponse.vo \
+            rocq-final/llvm-final-response/FinalResponseReceive.v \
+            rocq-final/llvm-final-response/FinalResponseReceive.vo \
+            rocq-final/systems-rejected-response/RejectedResponse.v \
+            rocq-final/systems-rejected-response/RejectedResponse.vo \
+            rocq-final/llvm-rejected-response/RejectedResponse.v \
+            rocq-final/llvm-rejected-response/RejectedResponse.vo \
+            rocq-final/systems-accepted-response/AcceptedResponse.v \
+            rocq-final/systems-accepted-response/AcceptedResponse.vo \
+            rocq-final/llvm-accepted-response/AcceptedResponse.v \
+            rocq-final/llvm-accepted-response/AcceptedResponse.vo \
+            rocq-final/systems-storage/Storage.v \
+            rocq-final/systems-storage/Storage.vo \
+            rocq-final/llvm-storage/Storage.v \
+            rocq-final/llvm-storage/Storage.vo \
+            rocq-final/systems-digest-validation/DigestValidation.v \
+            rocq-final/systems-digest-validation/DigestValidation.vo \
+            rocq-final/llvm-digest-validation/DigestValidation.v \
+            rocq-final/llvm-digest-validation/DigestValidation.vo \
+            rocq-final/systems-recognized-record/RecognizedRecord.v \
+            rocq-final/systems-recognized-record/RecognizedRecord.vo \
+            rocq-final/llvm-exact-receive/ExactReceive.v \
+            rocq-final/llvm-exact-receive/ExactReceive.vo \
+            rocq-final/llvm-recognized-record-abi/RecognizedRecordABI.v \
+            rocq-final/llvm-recognized-record-abi/RecognizedRecordABI.vo \
+            rocq-final/llvm-runtime-symbol-identity/RuntimeSymbolIdentity.v \
+            rocq-final/llvm-runtime-symbol-identity/RuntimeSymbolIdentity.vo \
+            final-response-certificates/PHIL-SYS-FINAL-RESPONSE-001.rocq.cert \
+            final-response-certificates/PHIL-LLVM-FINAL-RESPONSE-001.rocq.cert \
+            final-response-certificates/PHIL-SYS-REJECTED-001.rocq.cert \
+            final-response-certificates/PHIL-LLVM-REJECTED-001.rocq.cert \
+            final-response-certificates/PHIL-SYS-ACCEPTED-001.rocq.cert \
+            final-response-certificates/PHIL-LLVM-ACCEPTED-001.rocq.cert \
+            final-response-certificates/PHIL-SYS-STORAGE-001.rocq.cert \
+            final-response-certificates/PHIL-LLVM-STORAGE-001.rocq.cert \
+            final-response-certificates/PHIL-SYS-DIGEST-001.rocq.cert \
+            final-response-certificates/PHIL-LLVM-DIGEST-001.rocq.cert \
+            final-response-certificates/PHIL-SYS-RECORD-001.rocq.cert \
+            final-response-certificates/PHIL-LLVM-EXACT-RECV-001.rocq.cert \
+            final-response-certificates/PHIL-LLVM-REC-ABI-001.rocq.cert \
+            final-response-certificates/PHIL-LLVM-RUNTIME-SYM-001.rocq.cert \
+            final-response-certificates/PHIL-LLVM-CERT-007.cert \
+            final-response-certificates/PHIL-LLVM-CERT-008.cert
+          for certificate in final-response-certificates/*; do
+            echo "===== ${certificate} ====="
+            cat "${certificate}"
+            sha256sum "${certificate}"
+          done
+
+      - name: Upload final-response certification artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: phil-final-response-proof-bound-certification
+          path: final-response-certificates/*
+          if-no-files-found: error
+          retention-days: 30

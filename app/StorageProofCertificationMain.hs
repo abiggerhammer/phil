@@ -14,79 +14,181 @@ import System.IO (hPutStrLn, stderr)
 main :: IO ()
 main = do
   args <- getArgs
-  if length args == 38
-    then certifyRejectedResponse args
-    else case args of
-      [ systemsAcceptedSource, systemsAcceptedObject
-        , llvmAcceptedSource, llvmAcceptedObject
-        , systemsStorageSource, systemsStorageObject
-        , llvmStorageSource, llvmStorageObject
-        , systemsDigestSource, systemsDigestObject
-        , llvmDigestSource, llvmDigestObject
-        , systemsRecordSource, systemsRecordObject
-        , exactSource, exactObject
-        , abiSource, abiObject
-        , symbolSource, symbolObject
-        , systemsAcceptedCertificatePath, llvmAcceptedCertificatePath
-        , systemsStorageCertificatePath, llvmStorageCertificatePath
-        , systemsDigestCertificatePath, llvmDigestCertificatePath
-        , systemsRecordCertificatePath, exactCertificatePath
-        , abiCertificatePath, symbolCertificatePath
-        , predecessorCertificatePath, finalCertificatePath
-        ] -> certifyAcceptedResponse
-          systemsAcceptedSource systemsAcceptedObject
-          llvmAcceptedSource llvmAcceptedObject
-          systemsStorageSource systemsStorageObject
-          llvmStorageSource llvmStorageObject
-          systemsDigestSource systemsDigestObject
-          llvmDigestSource llvmDigestObject
-          systemsRecordSource systemsRecordObject
-          exactSource exactObject
-          abiSource abiObject
-          symbolSource symbolObject
-          systemsAcceptedCertificatePath llvmAcceptedCertificatePath
-          systemsStorageCertificatePath llvmStorageCertificatePath
-          systemsDigestCertificatePath llvmDigestCertificatePath
-          systemsRecordCertificatePath exactCertificatePath
-          abiCertificatePath symbolCertificatePath
-          predecessorCertificatePath finalCertificatePath
+  if length args == 44
+    then certifyFinalResponse args
+    else if length args == 38
+      then certifyRejectedResponse args
+      else case args of
+        [ systemsAcceptedSource, systemsAcceptedObject
+          , llvmAcceptedSource, llvmAcceptedObject
+          , systemsStorageSource, systemsStorageObject
+          , llvmStorageSource, llvmStorageObject
+          , systemsDigestSource, systemsDigestObject
+          , llvmDigestSource, llvmDigestObject
+          , systemsRecordSource, systemsRecordObject
+          , exactSource, exactObject
+          , abiSource, abiObject
+          , symbolSource, symbolObject
+          , systemsAcceptedCertificatePath, llvmAcceptedCertificatePath
+          , systemsStorageCertificatePath, llvmStorageCertificatePath
+          , systemsDigestCertificatePath, llvmDigestCertificatePath
+          , systemsRecordCertificatePath, exactCertificatePath
+          , abiCertificatePath, symbolCertificatePath
+          , predecessorCertificatePath, finalCertificatePath
+          ] -> certifyAcceptedResponse
+            systemsAcceptedSource systemsAcceptedObject
+            llvmAcceptedSource llvmAcceptedObject
+            systemsStorageSource systemsStorageObject
+            llvmStorageSource llvmStorageObject
+            systemsDigestSource systemsDigestObject
+            llvmDigestSource llvmDigestObject
+            systemsRecordSource systemsRecordObject
+            exactSource exactObject
+            abiSource abiObject
+            symbolSource symbolObject
+            systemsAcceptedCertificatePath llvmAcceptedCertificatePath
+            systemsStorageCertificatePath llvmStorageCertificatePath
+            systemsDigestCertificatePath llvmDigestCertificatePath
+            systemsRecordCertificatePath exactCertificatePath
+            abiCertificatePath symbolCertificatePath
+            predecessorCertificatePath finalCertificatePath
 
-      [ systemsStorageSource, systemsStorageObject
-        , llvmStorageSource, llvmStorageObject
-        , systemsDigestSource, systemsDigestObject
-        , llvmDigestSource, llvmDigestObject
-        , systemsRecordSource, systemsRecordObject
-        , exactSource, exactObject
-        , abiSource, abiObject
-        , symbolSource, symbolObject
-        , systemsStorageCertificatePath, llvmStorageCertificatePath
-        , systemsDigestCertificatePath, llvmDigestCertificatePath
-        , systemsRecordCertificatePath, exactCertificatePath
-        , abiCertificatePath, symbolCertificatePath
-        , predecessorCertificatePath, finalCertificatePath
-        ] -> certifyStorage
-          systemsStorageSource systemsStorageObject
-          llvmStorageSource llvmStorageObject
-          systemsDigestSource systemsDigestObject
-          llvmDigestSource llvmDigestObject
-          systemsRecordSource systemsRecordObject
-          exactSource exactObject
-          abiSource abiObject
-          symbolSource symbolObject
-          systemsStorageCertificatePath llvmStorageCertificatePath
-          systemsDigestCertificatePath llvmDigestCertificatePath
-          systemsRecordCertificatePath exactCertificatePath
-          abiCertificatePath symbolCertificatePath
-          predecessorCertificatePath finalCertificatePath
+        [ systemsStorageSource, systemsStorageObject
+          , llvmStorageSource, llvmStorageObject
+          , systemsDigestSource, systemsDigestObject
+          , llvmDigestSource, llvmDigestObject
+          , systemsRecordSource, systemsRecordObject
+          , exactSource, exactObject
+          , abiSource, abiObject
+          , symbolSource, symbolObject
+          , systemsStorageCertificatePath, llvmStorageCertificatePath
+          , systemsDigestCertificatePath, llvmDigestCertificatePath
+          , systemsRecordCertificatePath, exactCertificatePath
+          , abiCertificatePath, symbolCertificatePath
+          , predecessorCertificatePath, finalCertificatePath
+          ] -> certifyStorage
+            systemsStorageSource systemsStorageObject
+            llvmStorageSource llvmStorageObject
+            systemsDigestSource systemsDigestObject
+            llvmDigestSource llvmDigestObject
+            systemsRecordSource systemsRecordObject
+            exactSource exactObject
+            abiSource abiObject
+            symbolSource symbolObject
+            systemsStorageCertificatePath llvmStorageCertificatePath
+            systemsDigestCertificatePath llvmDigestCertificatePath
+            systemsRecordCertificatePath exactCertificatePath
+            abiCertificatePath symbolCertificatePath
+            predecessorCertificatePath finalCertificatePath
 
-      _ -> usage
+        _ -> usage
 
 usage :: IO a
 usage = failWith $ unlines
   [ "usage (storage): phil-certify-storage SYS_STORAGE.v SYS_STORAGE.vo LLVM_STORAGE.v LLVM_STORAGE.vo SYS_DIGEST.v SYS_DIGEST.vo LLVM_DIGEST.v LLVM_DIGEST.vo SYS_RECORD.v SYS_RECORD.vo EXACT.v EXACT.vo ABI.v ABI.vo SYMBOL.v SYMBOL.vo SYS_STORAGE.cert LLVM_STORAGE.cert SYS_DIGEST.cert LLVM_DIGEST.cert SYS_RECORD.cert EXACT.cert ABI.cert SYMBOL.cert CERT004.cert CERT005.cert"
   , "usage (accepted): phil-certify-storage SYS_ACCEPTED.v SYS_ACCEPTED.vo LLVM_ACCEPTED.v LLVM_ACCEPTED.vo SYS_STORAGE.v SYS_STORAGE.vo LLVM_STORAGE.v LLVM_STORAGE.vo SYS_DIGEST.v SYS_DIGEST.vo LLVM_DIGEST.v LLVM_DIGEST.vo SYS_RECORD.v SYS_RECORD.vo EXACT.v EXACT.vo ABI.v ABI.vo SYMBOL.v SYMBOL.vo SYS_ACCEPTED.cert LLVM_ACCEPTED.cert SYS_STORAGE.cert LLVM_STORAGE.cert SYS_DIGEST.cert LLVM_DIGEST.cert SYS_RECORD.cert EXACT.cert ABI.cert SYMBOL.cert CERT005.cert CERT006.cert"
   , "usage (rejected): phil-certify-storage SYS_REJECTED.v SYS_REJECTED.vo LLVM_REJECTED.v LLVM_REJECTED.vo SYS_ACCEPTED.v SYS_ACCEPTED.vo LLVM_ACCEPTED.v LLVM_ACCEPTED.vo SYS_STORAGE.v SYS_STORAGE.vo LLVM_STORAGE.v LLVM_STORAGE.vo SYS_DIGEST.v SYS_DIGEST.vo LLVM_DIGEST.v LLVM_DIGEST.vo SYS_RECORD.v SYS_RECORD.vo EXACT.v EXACT.vo ABI.v ABI.vo SYMBOL.v SYMBOL.vo SYS_REJECTED.cert LLVM_REJECTED.cert SYS_ACCEPTED.cert LLVM_ACCEPTED.cert SYS_STORAGE.cert LLVM_STORAGE.cert SYS_DIGEST.cert LLVM_DIGEST.cert SYS_RECORD.cert EXACT.cert ABI.cert SYMBOL.cert CERT006.cert CERT007.cert"
+  , "usage (final-response): phil-certify-storage SYS_FINAL.v SYS_FINAL.vo LLVM_FINAL.v LLVM_FINAL.vo SYS_REJECTED.v SYS_REJECTED.vo LLVM_REJECTED.v LLVM_REJECTED.vo SYS_ACCEPTED.v SYS_ACCEPTED.vo LLVM_ACCEPTED.v LLVM_ACCEPTED.vo SYS_STORAGE.v SYS_STORAGE.vo LLVM_STORAGE.v LLVM_STORAGE.vo SYS_DIGEST.v SYS_DIGEST.vo LLVM_DIGEST.v LLVM_DIGEST.vo SYS_RECORD.v SYS_RECORD.vo EXACT.v EXACT.vo ABI.v ABI.vo SYMBOL.v SYMBOL.vo SYS_FINAL.cert LLVM_FINAL.cert SYS_REJECTED.cert LLVM_REJECTED.cert SYS_ACCEPTED.cert LLVM_ACCEPTED.cert SYS_STORAGE.cert LLVM_STORAGE.cert SYS_DIGEST.cert LLVM_DIGEST.cert SYS_RECORD.cert EXACT.cert ABI.cert SYMBOL.cert CERT007.cert CERT008.cert"
   ]
+
+certifyFinalResponse :: [FilePath] -> IO ()
+certifyFinalResponse args = case args of
+  [ systemsFinalSource, systemsFinalObject
+    , llvmFinalSource, llvmFinalObject
+    , systemsRejectedSource, systemsRejectedObject
+    , llvmRejectedSource, llvmRejectedObject
+    , systemsAcceptedSource, systemsAcceptedObject
+    , llvmAcceptedSource, llvmAcceptedObject
+    , systemsStorageSource, systemsStorageObject
+    , llvmStorageSource, llvmStorageObject
+    , systemsDigestSource, systemsDigestObject
+    , llvmDigestSource, llvmDigestObject
+    , systemsRecordSource, systemsRecordObject
+    , exactSource, exactObject
+    , abiSource, abiObject
+    , symbolSource, symbolObject
+    , systemsFinalCertificatePath, llvmFinalCertificatePath
+    , systemsRejectedCertificatePath, llvmRejectedCertificatePath
+    , systemsAcceptedCertificatePath, llvmAcceptedCertificatePath
+    , systemsStorageCertificatePath, llvmStorageCertificatePath
+    , systemsDigestCertificatePath, llvmDigestCertificatePath
+    , systemsRecordCertificatePath, exactCertificatePath
+    , abiCertificatePath, symbolCertificatePath
+    , predecessorCertificatePath, finalCertificatePath
+    ] -> do
+      systemsFinalProof <- certify
+        systemsFinalResponseCertificationSpec systemsFinalSource systemsFinalObject
+      llvmFinalProof <- certify
+        llvmFinalResponseCertificationSpec llvmFinalSource llvmFinalObject
+      systemsRejectedProof <- certify
+        systemsRejectedResponseCertificationSpec systemsRejectedSource systemsRejectedObject
+      llvmRejectedProof <- certify
+        llvmRejectedResponseCertificationSpec llvmRejectedSource llvmRejectedObject
+      systemsAcceptedProof <- certify
+        systemsAcceptedResponseCertificationSpec systemsAcceptedSource systemsAcceptedObject
+      llvmAcceptedProof <- certify
+        llvmAcceptedResponseCertificationSpec llvmAcceptedSource llvmAcceptedObject
+      systemsStorageProof <- certify
+        systemsStorageCertificationSpec systemsStorageSource systemsStorageObject
+      llvmStorageProof <- certify
+        llvmStorageCertificationSpec llvmStorageSource llvmStorageObject
+      systemsDigestProof <- certify
+        systemsDigestValidationCertificationSpec systemsDigestSource systemsDigestObject
+      llvmDigestProof <- certify
+        llvmDigestValidationCertificationSpec llvmDigestSource llvmDigestObject
+      systemsRecordProof <- certify
+        systemsRecognizedRecordCertificationSpec systemsRecordSource systemsRecordObject
+      exactProof <- certify
+        llvmExactReceiveCertificationSpec exactSource exactObject
+      abiProof <- certify
+        llvmRecognizedRecordABICertificationSpec abiSource abiObject
+      symbolProof <- certify
+        llvmRuntimeSymbolCertificationSpec symbolSource symbolObject
+
+      writeProofCertificate systemsFinalCertificatePath systemsFinalProof
+      writeProofCertificate llvmFinalCertificatePath llvmFinalProof
+      writeProofCertificate systemsRejectedCertificatePath systemsRejectedProof
+      writeProofCertificate llvmRejectedCertificatePath llvmRejectedProof
+      writeProofCertificate systemsAcceptedCertificatePath systemsAcceptedProof
+      writeProofCertificate llvmAcceptedCertificatePath llvmAcceptedProof
+      writeProofCertificate systemsStorageCertificatePath systemsStorageProof
+      writeProofCertificate llvmStorageCertificatePath llvmStorageProof
+      writeProofCertificate systemsDigestCertificatePath systemsDigestProof
+      writeProofCertificate llvmDigestCertificatePath llvmDigestProof
+      writeProofCertificate systemsRecordCertificatePath systemsRecordProof
+      writeProofCertificate exactCertificatePath exactProof
+      writeProofCertificate abiCertificatePath abiProof
+      writeProofCertificate symbolCertificatePath symbolProof
+
+      case phase0FinalResponseReceiveProofCertification
+          systemsFinalProof llvmFinalProof
+          systemsRejectedProof llvmRejectedProof
+          systemsAcceptedProof llvmAcceptedProof
+          systemsStorageProof llvmStorageProof
+          systemsDigestProof llvmDigestProof systemsRecordProof exactProof abiProof symbolProof of
+        Left err -> failWith ("final-response proof certification failed: " <> show err)
+        Right bundle -> do
+          let predecessor = finalResponseReceiveProofCertificationPredecessor bundle
+              predecessorText = renderRejectedResponseProofCertification predecessor
+              finalText = renderFinalResponseReceiveProofCertification bundle
+              finalArtifact = finalResponseReceiveProofCertificationArtifact bundle
+          ByteString.writeFile predecessorCertificatePath
+            (TextEncoding.encodeUtf8 predecessorText)
+          ByteString.writeFile finalCertificatePath
+            (TextEncoding.encodeUtf8 finalText)
+          putStrLn "reproduced proof-bound PHIL-LLVM-CERT-007 predecessor authority"
+          putStrLn
+            ("predecessor certificate sha256: " <>
+              Text.unpack (unDigest (artifactDigest
+                (rejectedResponseProofCertificationArtifact predecessor))))
+          putStrLn "certified PHIL-LLVM-CERT-008 with proof-bound final-response authority"
+          putStrLn
+            ("certificate artifact: " <>
+              Text.unpack (unArtifactRef (artifactReference finalArtifact)))
+          putStrLn
+            ("certificate sha256: " <>
+              Text.unpack (unDigest (artifactDigest finalArtifact)))
+  _ -> usage
 
 certifyRejectedResponse :: [FilePath] -> IO ()
 certifyRejectedResponse args = case args of
