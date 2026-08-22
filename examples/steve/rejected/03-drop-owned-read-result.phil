@@ -1,0 +1,29 @@
+// reject: the found(bytes) arm drops a linear OwnedBytes value.
+component BadDropFound(
+    blobs : BlobProvider,
+    id : ContentId[SHA256]
+) provides GetResult[SHA256] {
+    let readResult = blob_read(blobs, id)
+
+    decide readResult {
+        not_found => {
+            return construct GetNotFound {
+                id = id
+            }
+        }
+
+        storage_failure(err) => {
+            return construct GetStorageFailure {
+                id = id,
+                error = err
+            }
+        }
+
+        found(bytes) => {
+            return construct GetStorageFailure {
+                id = id,
+                error = pretend_storage_failure()
+            }
+        }
+    }
+}
