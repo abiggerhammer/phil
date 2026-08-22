@@ -152,6 +152,12 @@ data SystemsOp
       , runtimeCallSite :: Maybe RuntimeSiteRef
       , runtimeCallDecision :: DecisionId
       }
+  | OpSessionSelect
+      { sessionSelectTransport :: ValueId
+      , sessionSelectLabel :: Text
+      , sessionSelectPayload :: Maybe ValueId
+      , sessionSelectDecision :: DecisionId
+      }
   | OpCopy
       { copySource :: ValueId
       , copyTarget :: ValueId
@@ -579,6 +585,12 @@ renderOp operation = case operation of
     , renderList unValueId inputs
     , renderList unValueId outputs
     , maybe "none" renderRuntimeSite site
+    , unDecisionId lowering
+    ]
+  OpSessionSelect transport label payload lowering -> tag "session-select"
+    [ unValueId transport
+    , label
+    , maybe "none" unValueId payload
     , unDecisionId lowering
     ]
   OpCopy source target lowering -> tag "copy"
