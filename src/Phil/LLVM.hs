@@ -16,6 +16,8 @@ module Phil.LLVM
   , module Phil.LLVM.StorageCertification
   , module Phil.LLVM.AcceptedResponse
   , module Phil.LLVM.AcceptedResponseCertification
+  , module Phil.LLVM.RejectedResponse
+  , module Phil.LLVM.RejectedResponseCertification
   ) where
 
 import Phil.LLVM.AcceptedResponse
@@ -32,6 +34,8 @@ import Phil.LLVM.Phase0
 import Phil.LLVM.RecognizedRecord
 import Phil.LLVM.RecognizedRecordCertification
 import Phil.LLVM.RecognizedRecordProofCertification
+import Phil.LLVM.RejectedResponse
+import Phil.LLVM.RejectedResponseCertification
 import Phil.LLVM.Storage
 import Phil.LLVM.StorageCertification
 import Phil.LLVM.Verify
