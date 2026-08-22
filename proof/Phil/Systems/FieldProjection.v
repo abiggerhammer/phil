@@ -56,7 +56,8 @@ Definition FieldProjectionVerificationSuccess
   (model : FieldProjectionModel) : Prop :=
   projectionActualPending model = projectionWitnessPending model /\
   projectionActualGrammar model = projectionWitnessGrammar model /\
-  projectionRecognitionSuccess model = projectionWitnessSuccess model /\\n  projectionActualField model = projectionWitnessField model /\
+  projectionRecognitionSuccess model = projectionWitnessSuccess model /\
+  projectionActualField model = projectionWitnessField model /\
   projectionSchemaType model
     (projectionWitnessGrammar model)
     (projectionWitnessField model) = Some (projectionWitnessType model) /\
