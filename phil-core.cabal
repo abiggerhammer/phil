@@ -37,6 +37,13 @@ library
       Phil.Surface.Syntax
       Phil.Surface.Parser
       Phil.Surface.Elaborate
+      Phil.Surface.Check
+      Phil.Surface.Phase0
+  other-modules:
+      Phil.Surface.Check.Types
+      Phil.Surface.Check.Support
+      Phil.Surface.Check.Preflight
+      Phil.Surface.Check.Engine
   build-depends:
       base >=4.17 && <5,
       containers >=0.6 && <0.8,
@@ -204,3 +211,15 @@ test-suite phil-surface-elaboration-tests
   build-depends:
       base >=4.17 && <5,
       phil-core
+
+test-suite phil-surface-conformance-tests
+  import:             common-settings
+  type:               exitcode-stdio-1.0
+  hs-source-dirs:     test
+  main-is:            SurfaceConformanceMain.hs
+  autogen-modules:    Paths_phil_core
+  other-modules:      Paths_phil_core
+  build-depends:
+      base >=4.17 && <5,
+      phil-core,
+      text >=2.0 && <2.2
