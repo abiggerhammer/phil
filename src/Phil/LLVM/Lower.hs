@@ -56,11 +56,9 @@ lowerFunction functionValue = LLVMFunction
 lowerBlock :: SystemsBlock -> LLVMBlock
 lowerBlock blockValue = LLVMBlock
   { llvmBlockId = lowerBlockId (systemsBlockId blockValue)
-  , llvmBlockOps = concatMap lowerOp (systemsBlockOps blockValue) <> terminatorOps
-  , llvmBlockTerminator = loweredTerminator
+  , llvmBlockOps = concatMap lowerOp (systemsBlockOps blockValue)
+  , llvmBlockTerminator = lowerTerminator (systemsBlockTerminator blockValue)
   }
-  where
-    (terminatorOps, loweredTerminator) = lowerTerminator (systemsBlockTerminator blockValue)
 
 lowerOp :: SystemsOp -> [LLVMOp]
 lowerOp operation = case operation of
@@ -80,22 +78,26 @@ lowerOp operation = case operation of
   OpDiagnostic { diagnosticName = name } -> [LLVMMetadata ("diagnostic " <> name)]
   OpTraceEvent name -> [LLVMMetadata ("trace " <> name)]
 
-lowerTerminator :: SystemsTerminator -> ([LLVMOp], LLVMTerminator)
+lowerTerminator :: SystemsTerminator -> LLVMTerminator
 lowerTerminator terminator = case terminator of
-  TermJump target -> ([], LLVMJump (lowerBlockId target))
-  TermBranch _ yes no -> ([], LLVMBranch (lowerBlockId yes) (lowerBlockId no))
+  TermJump target -> LLVMJump (lowerBlockId target)
+  TermBranch _ yes no -> LLVMBranch (lowerBlockId yes) (lowerBlockId no)
   TermRecognize { recognizeSite = site, recognizeSuccess = yes, recognizeFailure = no } ->
-    ([LLVMRuntime site (siteName site)], LLVMBranch (lowerBlockId yes) (lowerBlockId no))
+    runtimeBranch site yes no
   TermRuntimeCheck { checkSite = site, checkSuccess = yes, checkFailure = no } ->
-    ([LLVMRuntime site (siteName site)], LLVMBranch (lowerBlockId yes) (lowerBlockId no))
+    runtimeBranch site yes no
   TermReceiveExact { exactSite = site, exactSuccess = yes, exactFailure = no } ->
-    ([LLVMRuntime site (siteName site)], LLVMBranch (lowerBlockId yes) (lowerBlockId no))
+    runtimeBranch site yes no
   TermSendExact { sendExactSite = site, sendExactSuccess = yes, sendExactFailure = no } ->
-    ([LLVMRuntime site (siteName site)], LLVMBranch (lowerBlockId yes) (lowerBlockId no))
+    runtimeBranch site yes no
   TermStore { storeSite = site, storeSuccess = yes, storeFailure = no } ->
-    ([LLVMRuntime site (siteName site)], LLVMBranch (lowerBlockId yes) (lowerBlockId no))
-  TermEnd outcome -> ([], LLVMReturn outcome)
-  TermFatal failure -> ([], LLVMReturn ("fatal:" <> failure))
+    runtimeBranch site yes no
+  TermEnd outcome -> LLVMReturn outcome
+  TermFatal failure -> LLVMReturn ("fatal:" <> failure)
+
+runtimeBranch :: RuntimeSiteRef -> BlockId -> BlockId -> LLVMTerminator
+runtimeBranch site yes no =
+  LLVMRuntimeBranch site (siteName site) (lowerBlockId yes) (lowerBlockId no)
 
 siteName :: RuntimeSiteRef -> Text
 siteName site = Text.pack (show (runtimeSiteKind site))
