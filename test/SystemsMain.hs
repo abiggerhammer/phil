@@ -22,6 +22,7 @@ main = do
     , test "certified release cannot retain defensive diagnostic state" certifiedDiagnosticRejects
     , test "checked-runtime diagnostics require defensive cost classification" checkedRuntimeDiagnosticClassRejects
     , test "erasure cannot precede transfer of its surviving invariant" erasureWithoutTransferRejects
+    , test "erasure may transfer through a selected derived lowering obligation" erasureWithDerivedObligationPasses
     , test "erasure operation requires a selected ADR-010 erasure use" unknownErasureUseRejects
     , test "stage source identity is content-bound" sourceIdentityRejects
     , test "systems target identity is content-bound" targetIdentityRejects
@@ -168,6 +169,23 @@ erasureWithoutTransferRejects =
   where
     removeTransfer lowering = resealDecision lowering
       { loweringInvariantsTransferred = [] }
+
+erasureWithDerivedObligationPasses :: Bool
+erasureWithDerivedObligationPasses =
+  let ledger = systemsArtifactLoweringLedger phase0SystemsArtifact
+      decisionId = DecisionId "lower.erase.digest_proof"
+      decisions = Map.adjust deriveTransfer decisionId (loweringLedgerDecisions ledger)
+      changedLedger = LoweringLedger decisions (deriveLoweringLedgerRoot decisions)
+      artifact = phase0SystemsArtifact { systemsArtifactLoweringLedger = changedLedger }
+  in verifyRebound artifact == Right ()
+  where
+    deriveTransfer lowering =
+      case loweringObligationRevisions lowering of
+        revision : _ -> resealDecision lowering
+          { loweringInvariantsTransferred = []
+          , loweringDerivedObligations = [revision]
+          }
+        [] -> lowering
 
 unknownErasureUseRejects :: Bool
 unknownErasureUseRejects =
