@@ -27,7 +27,17 @@ It is not yet expected to pass whole-component semantic checking. In particular 
 4. **Linear ownership inside result constructors needs a general rule.** `GetOk` transfers owned bytes to the caller. The checker must preserve that ownership through a sum/record result rather than treating the constructed value as an opaque unrestricted scalar.
 5. **Opaque claim/validator bindings are still architecture-environment data.** Steve needs `DigestMatches(ContentId, byte-view)` tied specifically to `DigestProvider`, without granting arbitrary code authority to manufacture that evidence.
 
-None of these observations by itself requires a new Phil ADR. The immediate task is to determine which are missing implementations of already-accepted architecture and which, if any, force a new language-level decision.
+## Classification against accepted Phil decisions
+
+The first pass does **not** reveal a need for Phil ADR-012.
+
+- The borrowed candidate rule is already covered by ADR-002 shared loans and ADR-005's requirement that operation arms state their resource transitions. Steve ADR-002 merely specializes those semantics to `BlobProvider.installIfAbsent`.
+- Provider operation contracts already belong in ADR-001's immutable static signature `Σ`. Source-level provider/member declarations are therefore an elaboration/surface implementation gap, not a new Core semantic decision.
+- ADR-001 already permits a component to provide an ordinary result type or another declared interface. A multi-operation `Store` interface therefore needs source/checker realization, not a new semantic foundation.
+- ADR-001 explicitly says that returning an owning value transfers its ownership into the declared result, while ADR-005 requires per-arm resource accounting. Generic sum/record results carrying linear fields are therefore missing checker machinery, not an unresolved ownership rule.
+- ADR-006 already defines opaque claims and declared competent evidence producers, including runtime validators over shared loans. Generalizing `DigestMatches` beyond the upload-specific environment is implementation of that accepted decision.
+
+The right next implementation target is thus a more general architecture/static-signature surface and generic checked result shapes. A new Phil ADR should be proposed only if implementing those accepted rules forces an actual choice not already fixed by ADR-001/002/005/006.
 
 ## Steve 0 claims exercised by the sketch
 
