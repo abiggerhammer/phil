@@ -74,3 +74,5 @@ jobs:
           git add src/Phil/Systems.hs test/VersionSessionChoiceMain.hs phil-core.cabal
           git commit -m "Wire version session choice slice"
           git push origin HEAD:version-session-choice
+
+# retrigger package wiring on PR synchronize
