@@ -7,6 +7,7 @@ build-type:          Simple
 data-files:
     examples/upload/*.phil
     examples/rejected/*.phil
+    examples/run/*.phil
 
 common common-settings
   default-language: GHC2021
@@ -42,6 +43,7 @@ library
       Phil.Assurance
       Phil.Systems
       Phil.LLVM
+      Phil.Compiler
   other-modules:
       Phil.Surface.Check.Types
       Phil.Surface.Check.Support
@@ -79,6 +81,15 @@ executable phil-llvm-phase0
   import:             common-settings
   hs-source-dirs:     app
   main-is:            LLVMPhase0Main.hs
+  build-depends:
+      base >=4.17 && <5,
+      phil-core,
+      text >=2.0 && <2.2
+
+executable philc
+  import:             common-settings
+  hs-source-dirs:     app
+  main-is:            PhilcMain.hs
   build-depends:
       base >=4.17 && <5,
       phil-core,
@@ -289,5 +300,15 @@ test-suite phil-llvm-tests
   build-depends:
       base >=4.17 && <5,
       containers >=0.6 && <0.8,
+      phil-core,
+      text >=2.0 && <2.2
+
+test-suite phil-runnable-tests
+  import:             common-settings
+  type:               exitcode-stdio-1.0
+  hs-source-dirs:     test
+  main-is:            RunnableMain.hs
+  build-depends:
+      base >=4.17 && <5,
       phil-core,
       text >=2.0 && <2.2

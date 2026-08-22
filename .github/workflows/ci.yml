@@ -28,11 +28,9 @@ jobs:
       - name: Test
         run: cabal test all --test-show-details=direct
 
-      - name: Verify Phase 0 LLVM locally
+      - name: Verify LLVM and run first Phil program
         shell: bash
         run: |
-          LLVM_EMITTER="$(cabal list-bin phil-llvm-phase0)"
-          "$LLVM_EMITTER" > phase0-upload.ll
           if command -v llvm-as-18 >/dev/null 2>&1; then
             LLVM_AS=llvm-as-18
           elif command -v llvm-as >/dev/null 2>&1 && llvm-as --version | head -n 1 | grep -Eq 'LLVM version 18([.]|$)'; then
@@ -41,5 +39,26 @@ jobs:
             echo "LLVM 18 llvm-as is required by the Phase 0 target profile" >&2
             exit 1
           fi
+
+          if command -v clang-18 >/dev/null 2>&1; then
+            CLANG=clang-18
+          elif command -v clang >/dev/null 2>&1 && clang --version | head -n 1 | grep -Eq 'clang version 18([.]|$)'; then
+            CLANG=clang
+          else
+            echo "Clang 18 is required to link the first runnable Phil program" >&2
+            exit 1
+          fi
+
+          LLVM_EMITTER="$(cabal list-bin phil-llvm-phase0)"
+          "$LLVM_EMITTER" > phase0-upload.ll
           "$LLVM_AS" phase0-upload.ll -o /dev/null
+
+          PHILC="$(cabal list-bin philc)"
+          "$PHILC" emit-llvm examples/run/return-unit.phil > return-unit.ll
+          "$LLVM_AS" return-unit.ll -o return-unit.bc
+          "$CLANG" return-unit.bc -o return-unit
+          ./return-unit
+
+          echo "first Phil program completed successfully"
           "$LLVM_AS" --version | head -n 1
+          "$CLANG" --version | head -n 1
