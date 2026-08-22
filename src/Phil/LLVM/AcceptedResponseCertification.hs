@@ -100,7 +100,7 @@ phase0AcceptedResponseLLVMCertification = do
         , revisionScope = "llvm.phase0.preopt.accepted-response.translation"
         , revisionRequiredAt = "certification"
         , revisionRepresentation =
-            "storage-certified SystemsArtifact -> operand-explicit accepted-response canonical pre-optimization LLVMArtifact"
+            "storage-witnessed SystemsArtifact -> operand-explicit accepted-response canonical pre-optimization LLVMArtifact"
         , revisionSubjectIds =
             [ "systems:" <> unDigest sourceDigest
             , "llvm:" <> unDigest targetDigest
