@@ -1,5 +1,5 @@
 From Phil.Systems Require Import ScalarDataflow DigestValidation.
-From Phil.LLVM Require Import ExactReceive RuntimeSymbolIdentity.
+From Phil.LLVM Require Import RecognizedRecordABI ExactReceive RuntimeSymbolIdentity.
 
 (*
   PHIL-LLVM-DIGEST-001 — normalized proof model for the concrete
