@@ -47,7 +47,7 @@ A call is lowered structurally as:
   ptr %server_transport,
   i64 %server_begin_length)
 %status = extractvalue { i8, ptr } %r, 0
-%server_payload = extractvalue { i8, ptr } %r, 1
+%server_payload_owner = extractvalue { i8, ptr } %r, 1
 %ok = icmp eq i8 %status, 1
 br i1 %ok, label %server_digest, label %server_early_eof
 ```
@@ -59,9 +59,13 @@ The elements are:
 
 Generated code compares the status with exactly `1`. Other values are reserved and take the failure edge. As elsewhere in the runtime TCB, a provider that violates the ABI may invalidate assumptions about the other fields; the fail-closed comparison is not a claim of memory safety against an arbitrarily malicious ABI provider.
 
-## Payload ownership
+## Payload ownership and LLVM identity
 
 On success, the returned handle owns exactly the requested byte count and is the physical representative of `server.payload : OwnedBuffer "Bytes[begin.length]"`.
+
+The Systems identity remains `server.payload`. Its Phase 0 LLVM SSA spelling is deterministically derived as `server.payload.owner`, rendered as `%server_payload_owner`. The suffix is required because LLVM local SSA names and basic-block labels share a namespace, while this program already has a `server.payload` basic block. Renaming historical blocks would change previously certified LLVM text, so the new profile disambiguates the newly materialized owner instead.
+
+Translation validation binds `%server_payload_owner` back to the exact Systems `server.payload` owner; it is not an unrelated runtime temporary.
 
 On ordinary early EOF (`status == 0`), the returned handle represents the partial payload owner required by the existing Systems failure path. That owner must be valid for explicit release by the generated cleanup path.
 
@@ -73,10 +77,10 @@ The exact-receive failure path lowers the existing Systems `OpCleanupPartial ser
 
 ```llvm
 declare void @phil_buffer_release(ptr)
-call void @phil_buffer_release(ptr %server_payload)
+call void @phil_buffer_release(ptr %server_payload_owner)
 ```
 
-The same primitive may be used for a later ordinary owner release when the corresponding owner has a concrete buffer-handle representation. This slice requires at minimum that the exact-receive partial owner be released by identity on the EarlyEOF path.
+The same primitive is also used when a later ordinary `OpReleaseOwner server.payload` releases the concrete exact-receive owner. This slice requires that both paths preserve exact owner identity.
 
 ## In-memory transport fixture
 
@@ -97,10 +101,11 @@ The new LLVM candidate must be rejected if any of the following drift occurs:
 - the Systems transport identity is not the LLVM transport parameter consumed by exact receive;
 - the length is not the exact `Begin.length : U64` SSA value;
 - the runtime argument width changes from `i64`;
-- the exact-receive result payload is bound to any value other than the Systems `exactPayloadOwner`;
+- the exact-receive result payload is not the deterministic LLVM representative of the Systems `exactPayloadOwner`;
 - the success/failure edges change;
 - the status test ceases to be exact `== 1`;
 - the EarlyEOF cleanup releases any payload other than the returned exact-receive owner;
+- an ordinary later release of that owner is substituted with a different handle;
 - transport or payload is recovered from ambient runtime state;
 - linker-visible runtime symbols become assurance-evidence identities.
 
@@ -122,7 +127,8 @@ Its canonical descriptor binds at least:
 - exact-receive signature `ptr,i64 -> {i8,ptr}`;
 - exact status semantics;
 - payload-owner handle semantics;
-- explicit partial-owner release `phil_buffer_release(ptr)`;
+- deterministic Systems-owner-to-LLVM-SSA naming for the newly materialized payload;
+- explicit owner release `phil_buffer_release(ptr)`;
 - physical runtime-symbol convention;
 - absence of default pointer-strengthening attributes.
 
