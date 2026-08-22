@@ -48,7 +48,7 @@ jobs:
           elif command -v llvm-link >/dev/null 2>&1 && llvm-link --version | head -n 1 | grep -Eq 'LLVM version 18([.]|$)'; then
             LLVM_LINK=llvm-link
           else
-            echo "LLVM 18 llvm-link is required by the Phase 0 runtime ABI conformance gate" >&2
+            echo "LLVM 18 llvm-link is required by the Phase 0 runtime composition gate" >&2
             exit 1
           fi
 
@@ -71,9 +71,14 @@ jobs:
 
           "$CLANG" --target=x86_64-unknown-linux-gnu \
             -std=c11 -Wall -Wextra -Wpedantic -Werror \
-            -Iruntime/phase0 -emit-llvm -c \
+            -Iruntime/phase0 -S -emit-llvm \
             runtime/phase0/recognized_record_v1_smoke.c \
-            -o recognized-record-runtime.bc
+            -o recognized-record-runtime.ll
+          python3 scripts/check_runtime_abi.py \
+            phase0-upload-recognized-record.ll \
+            recognized-record-runtime.ll
+          "$LLVM_AS" recognized-record-runtime.ll -o recognized-record-runtime.bc
+
           "$CLANG" --target=x86_64-unknown-linux-gnu \
             -std=c11 -Wall -Wextra -Wpedantic -Werror \
             -Iruntime/phase0 -emit-llvm -c \
@@ -92,17 +97,16 @@ jobs:
 
           "$CLANG" --target=x86_64-unknown-linux-gnu \
             -std=c11 -Wall -Wextra -Wpedantic -Werror \
-            -emit-llvm -c \
+            -S -emit-llvm \
             runtime/phase0/recognized_record_v1_bad_accessor.c \
-            -o recognized-record-bad-accessor.bc
-          if "$LLVM_LINK" \
-              phase0-upload-recognized-record.bc \
-              recognized-record-bad-accessor.bc \
-              -o /dev/null 2> recognized-record-bad-accessor.log; then
-            echo "expected llvm-link to reject ptr -> i32 Begin.length accessor" >&2
+            -o recognized-record-bad-accessor.ll
+          if python3 scripts/check_runtime_abi.py --partial \
+              phase0-upload-recognized-record.ll \
+              recognized-record-bad-accessor.ll; then
+            echo "expected ABI checker to reject ptr -> i32 Begin.length accessor" >&2
             exit 1
           fi
-          echo "PASS: LLVM runtime ABI gate rejects i64 -> i32 accessor width drift"
+          echo "PASS: runtime ABI checker rejects i64 -> i32 accessor width drift"
 
           PHILC="$(cabal list-bin philc)"
 
@@ -136,7 +140,7 @@ jobs:
           fi
 
           echo "Phase 0 reference and recognized-record LLVM assembled successfully"
-          echo "recognized-record LLVM and Clang runtime bitcode linked and executed successfully"
+          echo "recognized-record runtime signatures verified, linked, and executed successfully"
           echo "direct and bound scalar Phil programs returned 42 successfully"
           "$LLVM_AS" --version | head -n 1
           "$CLANG" --version | head -n 1
