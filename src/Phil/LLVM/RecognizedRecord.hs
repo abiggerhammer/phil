@@ -185,8 +185,7 @@ verifyWitnessTranslation systemsArtifact llvmArtifact witness = do
     Just value -> Right value
   let projections =
         [ operation
-        | operation@LLVMFieldProjection
-            { } <- llvmBlockOps llvmSuccessBlock
+        | operation@(LLVMFieldProjection _ _ _ _ _) <- llvmBlockOps llvmSuccessBlock
         , projectionTouchesWitness witness operation
         ]
       expectedProjection = LLVMFieldProjection
@@ -199,17 +198,17 @@ verifyWitnessTranslation systemsArtifact llvmArtifact witness = do
     Left (RecognizedRecordLLVMProjectionMismatch
       functionName llvmSuccessBlockId projections)
 
-  exactReceives <- pure
-    [ (blockValue, site, yes, no)
-    | blockValue <- Map.elems (systemsFunctionBlocks systemsFunction)
-    , TermReceiveExact
-        { exactLength = lengthValue
-        , exactSite = site
-        , exactSuccess = yes
-        , exactFailure = no
-        } <- [systemsBlockTerminator blockValue]
-    , lengthValue == recognizedRecordProjectionOutput witness
-    ]
+  let exactReceives =
+        [ (blockValue, site, yes, no)
+        | blockValue <- Map.elems (systemsFunctionBlocks systemsFunction)
+        , TermReceiveExact
+            { exactLength = lengthValue
+            , exactSite = site
+            , exactSuccess = yes
+            , exactFailure = no
+            } <- [systemsBlockTerminator blockValue]
+        , lengthValue == recognizedRecordProjectionOutput witness
+        ]
   (sourceReceiveBlock, receiveSite, receiveSuccess, receiveFailure) <-
     case exactReceives of
       [] -> Left (RecognizedRecordSystemsExactReceiveMissing
