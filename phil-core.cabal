@@ -42,6 +42,7 @@ library
   other-modules:
       Phil.Surface.Check.Types
       Phil.Surface.Check.Support
+      Phil.Surface.Check.Preflight
       Phil.Surface.Check.Engine
   build-depends:
       base >=4.17 && <5,
