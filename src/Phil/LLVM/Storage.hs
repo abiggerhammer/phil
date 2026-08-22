@@ -53,6 +53,7 @@ storageABIDescriptor = Text.unlines
   , "store-status=1-success,other-failure"
   , "store-failure-upload-id=null"
   , "upload-id-handle=opaque-runtime-managed-nonowning"
+  , "upload-id-lifetime=valid-through-calling-component-return"
   , "upload-id-layout-access=forbidden"
   , "upload-id-release=forbidden"
   , "ambient-storage-payload=forbidden"
