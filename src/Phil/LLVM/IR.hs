@@ -29,15 +29,15 @@ import qualified Data.Set as Set
 import Data.Text (Text)
 import qualified Data.Text as Text
 import Phil.Assurance.Types
-  ( Digest
+  ( Digest (..)
   , EvidenceEntryId (..)
-  , RevisionId
+  , RevisionId (..)
   , digestText
   )
 import Phil.Systems.IR
   ( BlockId
-  , CompilationProfile
-  , InvariantId
+  , CompilationProfile (..)
+  , InvariantId (..)
   , RuntimeSiteRef (..)
   )
 
@@ -195,16 +195,39 @@ llvmStrengtheningUses moduleValue = concat
 
 renderLLVMModule :: LLVMModule -> Text
 renderLLVMModule moduleValue = Text.unlines $
-  [ "; Phil canonical pre-optimization LLVM artifact"
-  , "; llvm-language=" <> oneLine (llvmLanguageVersion moduleValue)
-  , "; llvm-tool=" <> oneLine (llvmToolVersion moduleValue)
-  , "; runtime-abi=" <> oneLine (llvmRuntimeABIProfile moduleValue)
-  , "source_filename = \"" <> escapeString (llvmModuleName moduleValue) <> "\""
-  , "target datalayout = \"" <> escapeString (llvmDataLayout moduleValue) <> "\""
-  , "target triple = \"" <> escapeString (llvmTargetTriple moduleValue) <> "\""
-  , ""
-  ] <> declarations <> concatMap renderFunction (Map.toAscList (llvmFunctions moduleValue))
+  header
+  <> strengtheningRecords
+  <> declarations
+  <> concatMap renderFunction (Map.toAscList (llvmFunctions moduleValue))
   where
+    header =
+      [ "; Phil canonical pre-optimization LLVM artifact"
+      , "; llvm-language=" <> oneLine (llvmLanguageVersion moduleValue)
+      , "; llvm-tool=" <> oneLine (llvmToolVersion moduleValue)
+      , "; compilation-profile=" <> renderCompilationProfile (llvmCompilationProfile moduleValue)
+      , "; runtime-abi-profile=" <> oneLine (llvmRuntimeABIProfile moduleValue)
+      , "; runtime-abi-digest=" <> oneLine (unDigest (llvmRuntimeABIDigest moduleValue))
+      , "source_filename = \"" <> escapeString (llvmModuleName moduleValue) <> "\""
+      , "target datalayout = \"" <> escapeString (llvmDataLayout moduleValue) <> "\""
+      , "target triple = \"" <> escapeString (llvmTargetTriple moduleValue) <> "\""
+      , ""
+      ]
+
+    strengtheningRecords =
+      map renderStrengtheningRecord (Map.toAscList (llvmStrengthenings moduleValue))
+      <> if Map.null (llvmStrengthenings moduleValue) then [] else [""]
+
+    renderStrengtheningRecord (key, strengthening) = Text.intercalate " "
+      [ "; phil-strengthening"
+      , "key=" <> oneLine (unLLVMStrengtheningId key)
+      , "id=" <> oneLine (unLLVMStrengtheningId (llvmStrengtheningId strengthening))
+      , "kind=" <> renderStrengtheningKind (llvmStrengtheningKind strengthening)
+      , "authority=" <> renderAuthority (llvmStrengtheningAuthority strengthening)
+      , "function=" <> oneLine (llvmStrengtheningFunction strengthening)
+      , "block=" <> oneLine (unLLVMBlockId (llvmStrengtheningBlock strengthening))
+      , "claim=" <> oneLine (llvmStrengtheningClaim strengthening)
+      ]
+
     declarations =
       branchDeclaration
       <> cleanupDeclaration
@@ -335,6 +358,25 @@ renderLLVMModule moduleValue = Text.unlines $
         ]
       LLVMReturn outcome -> ["ret i32 0 ; " <> oneLine outcome]
       LLVMUnreachable _ -> ["unreachable"]
+
+renderCompilationProfile :: CompilationProfile -> Text
+renderCompilationProfile profile = case profile of
+  CheckedRuntime -> "checked-runtime"
+  CertifiedRelease -> "certified-release"
+
+renderStrengtheningKind :: LLVMStrengtheningKind -> Text
+renderStrengtheningKind kind = case kind of
+  LLVMNoUnsignedWrap -> "nuw"
+  LLVMNoSignedWrap -> "nsw"
+  LLVMInBounds -> "inbounds"
+  LLVMAssume -> "llvm.assume"
+  LLVMUnreachableFact -> "unreachable"
+
+renderAuthority :: LLVMAuthority -> Text
+renderAuthority authority = case authority of
+  LLVMInvariant invariantId -> "invariant:" <> oneLine (unInvariantId invariantId)
+  LLVMEvidence evidenceId -> "evidence:" <> oneLine (unEvidenceEntryId evidenceId)
+  LLVMObligation revision -> "obligation:" <> oneLine (unRevisionId revision)
 
 symbol :: Text -> Text
 symbol value =
