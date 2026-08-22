@@ -44,3 +44,4 @@ jobs:
           rocq c -Q proof/Phil Phil proof/Phil/Core/Discharge.v
           rocq c -Q proof/Phil Phil proof/Phil/Core/DecisionSound.v
           rocq c -Q proof/Phil Phil proof/Phil/Core/SessionRec.v
+          rocq c -Q proof/Phil Phil proof/Phil/Core/Focusing.v
