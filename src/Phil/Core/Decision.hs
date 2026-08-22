@@ -15,7 +15,6 @@ module Phil.Core.Decision
 
 import Data.List (find)
 import qualified Data.Map.Strict as Map
-import Data.Ratio (Rational)
 import Data.Text (Text)
 import Phil.Core.Checker (CheckState)
 import Phil.Core.Refinement
@@ -101,8 +100,8 @@ checkDecisionCertificate
   -> DecisionCertificate
   -> Either CertificateError ()
 checkDecisionCertificate state assumptions proposition certificate = do
+  ensurePartialOperationPrerequisites assumptions proposition
   let goal = decisionForm proposition
-  ensurePartialOperationPrerequisites assumptions goal
   checkCertificate state assumptions goal certificate
 
 proposeDecisionCertificate
@@ -110,10 +109,9 @@ proposeDecisionCertificate
   -> [SolverAssumption]
   -> Proposition
   -> Maybe DecisionCertificate
-proposeDecisionCertificate state assumptions proposition = do
-  let goal = decisionForm proposition
-  if prerequisitesAvailable assumptions goal
-    then propose state assumptions goal
+proposeDecisionCertificate state assumptions proposition =
+  if prerequisitesAvailable assumptions proposition
+    then propose state assumptions (decisionForm proposition)
     else Nothing
 
 checkCertificate
