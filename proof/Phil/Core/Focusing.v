@@ -435,5 +435,9 @@ Theorem exact_duplicate_free_coverage_is_success :
     BranchCheckSuccess declared handlers.
 Proof.
   intros declared handlers Hdeclared Hhandlers Hsame.
-  repeat split; assumption.
+  split.
+  - exact Hdeclared.
+  - split.
+    + exact Hhandlers.
+    + exact Hsame.
 Qed.
