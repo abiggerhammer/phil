@@ -32,7 +32,8 @@ import Phil.Core.Syntax
   , Ty (..)
   )
 import Phil.Surface.Check
-  ( InitialBinding (..)
+  ( FieldInfo (..)
+  , InitialBinding (..)
   , PrimitiveSemantics (..)
   , RejectionClass (..)
   , SurfaceEnvironment (..)
@@ -77,9 +78,8 @@ phase0ExpectationFor path =
 phase0EnvironmentFor :: FilePath -> Either Text SurfaceEnvironment
 phase0EnvironmentFor path = do
   staticContext <- phase0StaticContext
-  let base = (commonEnvironment staticContext)
-      named = fileName path
-  case named of
+  let base = commonEnvironment staticContext
+  case fileName path of
     "client.phil" -> Right (clientEnvironment base)
     "server.phil" -> Right (serverEnvironment base)
     "01-reuse-consumed-endpoint.phil" -> Right (simpleReceiveEnvironment base)
@@ -209,7 +209,7 @@ unrelatedLengthEnvironment base = base
 incompatibleJoinEnvironment :: SurfaceEnvironment -> SurfaceEnvironment
 incompatibleJoinEnvironment base = base
   { surfaceInitialBindings = Map.fromList
-      [ ("condition", unrestricted TyBool (DecisionShapePlaceholder))
+      [ ("condition", unrestricted TyBool PlainShape)
       , ("s0", endpoint (Select
           [ branch "left" Nothing (End (Outcome "left"))
           , branch "right" Nothing (End (Outcome "right"))
@@ -260,7 +260,8 @@ opaqueProofEnvironment :: SurfaceEnvironment -> SurfaceEnvironment
 opaqueProofEnvironment base = base
   { surfaceInitialBindings = Map.fromList
       [ ("begin", unrestricted (TyFrame (GrammarId "Begin")) (recordBegin "begin"))
-      , ("payload", InitialBinding Linear (TyOpaqueSorted "OwnedPayload" (SortOpaque "OwnedPayload"))
+      , ("payload", InitialBinding Linear
+          (TyOpaqueSorted "OwnedPayload" (SortOpaque "OwnedPayload"))
           (OwnedBytesShape (RefNat 0)))
       ]
   }
@@ -363,18 +364,11 @@ ownedPayload name =
 
 recordBegin :: Text -> SurfaceShape
 recordBegin name = RecordShape "Begin" (Map.fromList
-  [ ("length", FieldInfoPlaceholder (TyUInt 64) (SortUInt 64)
-      (RefField (RefVar (Name name)) "length" (SortUInt 64)))
+  [ ("length", FieldInfo
+      (TyUInt 64)
+      (SortUInt 64)
+      (Just (RefField (RefVar (Name name)) "length" (SortUInt 64))))
   ])
-
--- The checker fills canonical record metadata for grammar values; this
--- placeholder is represented with the same public FieldInfo constructor in
--- the generated environment below.
-pattern FieldInfoPlaceholder :: Ty -> RefSort -> RefTerm -> Phil.Surface.Check.FieldInfo
-pattern FieldInfoPlaceholder ty sort alias = Phil.Surface.Check.FieldInfo ty sort (Just alias)
-
-pattern DecisionShapePlaceholder :: SurfaceShape
-pattern DecisionShapePlaceholder = PlainShape
 
 fileName :: FilePath -> FilePath
 fileName = reverse . takeWhile (/= '/') . reverse
