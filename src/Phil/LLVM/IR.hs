@@ -98,6 +98,7 @@ data LLVMOp
   | LLVMScalarLiteral Text ScalarLiteral
   | LLVMFieldProjection Text Text Text Text ScalarType
   | LLVMAcceptedResponse Text Text
+  | LLVMRejectedResponse Text Int
   | LLVMStrengtheningOp LLVMStrengtheningId Text
   | LLVMPoison Text
   | LLVMUndef Text
@@ -265,6 +266,7 @@ renderLLVMModule moduleValue = Text.unlines $
       , "phil-runtime/phase0/digest-validation-v1"
       , "phil-runtime/phase0/storage-v1"
       , "phil-runtime/phase0/accepted-response-v1"
+      , "phil-runtime/phase0/rejected-response-v1"
       ]
 
     header =
@@ -303,6 +305,7 @@ renderLLVMModule moduleValue = Text.unlines $
       <> digestValidationDeclaration
       <> storageDeclaration
       <> acceptedResponseDeclaration
+      <> rejectedResponseDeclaration
       <> map renderCallDeclaration (Set.toAscList callNames)
       <> runtimeDeclarations
       <> map renderFieldProjectionDeclaration (Set.toAscList fieldProjectionSignatures)
@@ -344,6 +347,11 @@ renderLLVMModule moduleValue = Text.unlines $
     acceptedResponseDeclaration =
       if any hasAcceptedResponse allBlocks
         then ["declare void @phil_runtime_select_accepted(ptr, ptr)"]
+        else []
+
+    rejectedResponseDeclaration =
+      if any hasRejectedResponse allBlocks
+        then ["declare void @phil_runtime_select_rejected(ptr, i8)"]
         else []
 
     callNames = Set.fromList
@@ -428,6 +436,10 @@ renderLLVMModule moduleValue = Text.unlines $
     isAcceptedResponse LLVMAcceptedResponse {} = True
     isAcceptedResponse _ = False
 
+    hasRejectedResponse blockValue = any isRejectedResponse (llvmBlockOps blockValue)
+    isRejectedResponse LLVMRejectedResponse {} = True
+    isRejectedResponse _ = False
+
     renderCallDeclaration name = "declare void @phil_call_" <> symbol name <> "()"
     renderRuntimeEvidenceDeclaration evidence =
       "declare i1 @phil_runtime_" <> symbol evidence <> "()"
@@ -499,6 +511,10 @@ renderLLVMModule moduleValue = Text.unlines $
       LLVMAcceptedResponse transport uploadId ->
         [ "call void @phil_runtime_select_accepted(ptr %" <> symbol transport
             <> ", ptr %" <> symbol uploadId <> ")"
+        ]
+      LLVMRejectedResponse transport reasonCode ->
+        [ "call void @phil_runtime_select_rejected(ptr %" <> symbol transport
+            <> ", i8 " <> Text.pack (show reasonCode) <> ")"
         ]
       LLVMStrengtheningOp strengtheningId description ->
         renderStrengthening strengtheningId description
