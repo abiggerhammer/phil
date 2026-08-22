@@ -33,23 +33,38 @@ The handle therefore makes the runtime ABI concrete while keeping recognition im
 A recognition boundary that materializes a semantic record returns a fully defined aggregate:
 
 ```llvm
-{ i1, ptr }
+{ i8, ptr }
 ```
 
 The elements are:
 
-1. `i1 accepted` — whether complete recognition succeeded;
+1. `i8 status` — `1` means complete recognition succeeded and `0` means recognition failed;
 2. `ptr record` — opaque handle to the recognized semantic record.
+
+Values other than `0` and `1` are reserved. Generated Phil code checks for **exactly** `1`, so an out-of-contract status follows the failure branch rather than being interpreted as success.
+
+This shape is intentionally compatible with the x86_64 SysV lowering of a C-like runtime result such as:
+
+```c
+struct phil_recognition_result {
+    uint8_t status;
+    void *record;
+};
+```
+
+The ABI commitment is the target-level `{ i8, ptr }` signature and its semantics, not the spelling of a particular runtime implementation language.
 
 For example, the Phase 0 `Begin` recognition boundary is lowered structurally as:
 
 ```llvm
 %phil_recognition_result_server_version =
-  call { i1, ptr } @phil_runtime_<begin-recognition-evidence>()
-%phil_recognition_ok_server_version =
-  extractvalue { i1, ptr } %phil_recognition_result_server_version, 0
+  call { i8, ptr } @phil_runtime_<begin-recognition-evidence>()
+%phil_recognition_status_server_version =
+  extractvalue { i8, ptr } %phil_recognition_result_server_version, 0
 %server_begin =
-  extractvalue { i1, ptr } %phil_recognition_result_server_version, 1
+  extractvalue { i8, ptr } %phil_recognition_result_server_version, 1
+%phil_recognition_ok_server_version =
+  icmp eq i8 %phil_recognition_status_server_version, 1
 br i1 %phil_recognition_ok_server_version,
    label %server_begin_commit,
    label %server_begin_recognition_failure
@@ -224,7 +239,8 @@ phil-runtime/phase0/recognized-record-v1
 
 Its digest should be derived from a canonical ABI descriptor that includes at least:
 
-- recognition result shape `{ i1, ptr }`;
+- recognition result shape `{ i8, ptr }`;
+- recognition status `0 = failure`, `1 = success`, other values reserved/fail-closed;
 - failure record value `null`;
 - opaque/runtime-owned record handle semantics;
 - typed scalar accessor convention;
@@ -263,6 +279,7 @@ The implementation slice should reject at least:
 - LLVM accessor input drifts to another record SSA value;
 - LLVM accessor return width drifts from the Systems scalar type;
 - the accessor is replaced by a nullary ambient-state call;
+- recognition status is treated as success for a value other than exactly `1`;
 - the runtime ABI digest/profile is changed without changing the target identity;
 - pointer-strengthening attributes appear without explicit authority.
 
