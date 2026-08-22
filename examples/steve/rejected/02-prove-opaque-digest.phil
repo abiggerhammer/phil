@@ -1,0 +1,14 @@
+// reject: DigestMatches is opaque; generic `prove` cannot manufacture it.
+component BadProveDigest(
+    id : ContentId[SHA256],
+    n : Nat,
+    bytes : OwnedBytes[n]
+) provides PutResult[SHA256] {
+    let object = owned_bytes_identity(bytes)
+    let digestEvidence = prove DigestMatches(id, object)
+    release bytes
+    return construct PutOk {
+        id = id,
+        evidence = digestEvidence
+    }
+}
