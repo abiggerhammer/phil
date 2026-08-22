@@ -3,17 +3,6 @@ Import ListNotations.
 
 Open Scope string_scope.
 
-(*
-  Proof-oriented model of the authority boundary in Phil.Core.Discharge.
-
-  The implementation's proposition canonicalizer, evidence lookup, runtime
-  registry, and export registry are intentionally abstracted here.  This slice
-  proves the control/authority facts that matter after those checks have
-  produced their canonical observations: a producer cannot certify its own
-  output, runtime/export dispositions must exactly identify the obligation they
-  close, and export never becomes a local proof assumption.
-*)
-
 Definition ObligationId := string.
 Definition CanonicalProp := string.
 Definition RequiredPoint := string.
@@ -56,7 +45,7 @@ Definition decisionStage (proposition : CanonicalProp) : DecisionOutcome :=
         DecisionInvalidProducedCertificate certificate
   end.
 
-(* PHIL-DISCH-CERT-001: the producer never certifies its own output. *)
+(* PHIL-DISCH-CERT-001 *)
 Theorem static_certificate_requires_checker_acceptance :
   forall proposition certificate,
     decisionStage proposition = DecisionStaticCertificate certificate ->
@@ -69,13 +58,12 @@ Proof.
   - destruct (checkCertificate proposition proposed) eqn:Hcheck.
     + inversion Hstage; subst proposed.
       split.
-      * exact Hpropose.
+      * reflexivity.
       * exact Hcheck.
     + discriminate.
   - discriminate.
 Qed.
 
-(* PHIL-DISCH-CERT-001: absence of a proposal is not proof. *)
 Theorem no_proposal_requires_explicit_mechanism :
   forall proposition,
     proposeCertificate proposition = None ->
@@ -86,7 +74,6 @@ Proof.
   now rewrite Hnone.
 Qed.
 
-(* PHIL-DISCH-CERT-001: a rejected producer result is an error, not evidence. *)
 Theorem rejected_proposal_never_static :
   forall proposition certificate,
     proposeCertificate proposition = Some certificate ->
@@ -120,11 +107,6 @@ Definition ExactExportBinding
   exportProp binding = obligationProp obligation /\
   exportPoint binding = obligationPoint obligation.
 
-(*
-  Successful checker-to-ledger resolution.  There is deliberately no Assumed
-  constructor: assumptions are architecture/manifest trust boundaries, not a
-  local fallback after failed proof search.
-*)
 Inductive ResolutionSuccess : Obligation -> ObligationDisposition -> Prop :=
 | Resolution_definition :
     forall obligation,
@@ -147,7 +129,7 @@ Inductive ResolutionSuccess : Obligation -> ObligationDisposition -> Prop :=
       ExactExportBinding obligation binding ->
       ResolutionSuccess obligation (Exported binding).
 
-(* PHIL-DISCH-BOUNDARY-001: every successful disposition is one explicit case. *)
+(* PHIL-DISCH-BOUNDARY-001 *)
 Theorem resolution_disposition_exact :
   forall obligation disposition,
     ResolutionSuccess obligation disposition ->
@@ -178,7 +160,6 @@ Proof.
   - right. right. right. right. exists binding. split; assumption.
 Qed.
 
-(* PHIL-DISCH-BOUNDARY-001: runtime authority is exact, never approximate. *)
 Theorem runtime_resolution_requires_exact_identity :
   forall obligation binding,
     ResolutionSuccess obligation (RuntimeBound binding) ->
@@ -188,7 +169,6 @@ Proof.
   inversion Hresolution; subst; assumption.
 Qed.
 
-(* PHIL-DISCH-BOUNDARY-001: export authority is exact, never approximate. *)
 Theorem export_resolution_requires_exact_identity :
   forall obligation binding,
     ResolutionSuccess obligation (Exported binding) ->
@@ -221,7 +201,7 @@ Definition ParentLocallyResolvable
   (dispositions : list PrerequisiteDisposition) : Prop :=
   allPrerequisitesLocal dispositions = true.
 
-(* PHIL-DISCH-PREREQ-001: transferring responsibility does not create truth. *)
+(* PHIL-DISCH-PREREQ-001 *)
 Theorem exported_prerequisite_is_not_local_assumption :
   forall proposition,
     prerequisiteAssumption (PrerequisiteExported proposition) = None.
@@ -251,10 +231,6 @@ Proof.
       * reflexivity.
 Qed.
 
-(*
-  PHIL-DISCH-PREREQ-001: any exported prerequisite prevents local parent
-  discharge.  The parent must therefore take the explicit export-only path.
-*)
 Theorem exported_prerequisite_blocks_local_parent :
   forall dispositions proposition,
     In (PrerequisiteExported proposition) dispositions ->
