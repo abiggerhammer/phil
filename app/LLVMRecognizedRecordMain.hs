@@ -3,21 +3,24 @@ module Main (main) where
 import qualified Data.Text.IO as TextIO
 import Phil.LLVM
   ( llvmArtifactText
-  , phase0RecognizedRecordLLVMArtifact
-  , verifyPhase0RecognizedRecordLLVM
+  , phase0RecognizedRecordLLVMCertification
+  , recognizedRecordCertificationLLVM
+  , verifyPhase0RecognizedRecordLLVMCertification
   )
 import System.Exit (exitFailure)
 import qualified System.IO as IO
 
 main :: IO ()
-main = case verifyPhase0RecognizedRecordLLVM of
-  Left verificationError -> do
+main = case verifyPhase0RecognizedRecordLLVMCertification of
+  Left certificationError -> do
     IO.hPutStrLn IO.stderr $
-      "Phase 0 recognized-record LLVM verification failed: " <> show verificationError
+      "Phase 0 recognized-record LLVM certification failed: " <> show certificationError
     exitFailure
-  Right () -> case phase0RecognizedRecordLLVMArtifact of
-    Left systemsError -> do
+  Right () -> case phase0RecognizedRecordLLVMCertification of
+    Left certificationError -> do
       IO.hPutStrLn IO.stderr $
-        "Phase 0 recognized-record Systems candidate failed: " <> show systemsError
+        "Phase 0 recognized-record certification construction failed: "
+          <> show certificationError
       exitFailure
-    Right artifact -> TextIO.putStr (llvmArtifactText artifact)
+    Right bundle ->
+      TextIO.putStr (llvmArtifactText (recognizedRecordCertificationLLVM bundle))
