@@ -8,6 +8,7 @@ module Phil.Systems
   , module Phil.Systems.DigestValidation
   , module Phil.Systems.Storage
   , module Phil.Systems.AcceptedResponse
+  , module Phil.Systems.RejectedResponse
   ) where
 
 import Phil.Systems.AcceptedResponse
@@ -17,5 +18,6 @@ import Phil.Systems.FieldProjection
 import Phil.Systems.IR
 import Phil.Systems.Phase0
 import Phil.Systems.RecognizedRecord
+import Phil.Systems.RejectedResponse
 import Phil.Systems.Storage
 import Phil.Systems.Verify
