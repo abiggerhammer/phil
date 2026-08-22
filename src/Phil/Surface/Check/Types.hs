@@ -125,6 +125,7 @@ data SurfaceEnvironment = SurfaceEnvironment
   { surfaceStaticContext :: StaticContext
   , surfaceInitialBindings :: Map Text InitialBinding
   , surfacePrimitives :: Map Text PrimitiveSemantics
+  , surfaceTypeAliases :: Map Text Ty
   , surfaceSelectRequirements :: Map Text [Proposition]
   , surfaceReceiveExactRequirement :: Maybe Proposition
   , surfaceTerminalAllowances :: Map Outcome (Set Text)
@@ -144,6 +145,7 @@ emptySurfaceEnvironment staticContext = SurfaceEnvironment
   { surfaceStaticContext = staticContext
   , surfaceInitialBindings = Map.empty
   , surfacePrimitives = Map.empty
+  , surfaceTypeAliases = Map.empty
   , surfaceSelectRequirements = Map.empty
   , surfaceReceiveExactRequirement = Nothing
   , surfaceTerminalAllowances = Map.empty
