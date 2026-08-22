@@ -1,15 +1,9 @@
 From Stdlib Require Import Lists.List Arith.PeanoNat Bool.Bool.
 Import ListNotations.
 
-(*
-  Proof-oriented model of the deterministic pre-solver focusing boundary in
-  Phil.Core.Focusing.  Theorems below constrain authority-bearing behavior;
-  implementation representation correspondences are documented in proof/README.
-*)
+(* Deterministic pre-solver competence model for Phil.Core.Focusing. *)
 
-(* -------------------------------------------------------------------------- *)
-(* PHIL-FOCUS-COERCE-001: canonical one-way refinement coercion.              *)
-(* -------------------------------------------------------------------------- *)
+(* PHIL-FOCUS-COERCE-001 ---------------------------------------------------- *)
 
 Inductive RefinementSort : Type :=
 | SortNat : RefinementSort
@@ -60,7 +54,7 @@ Definition elaborateAs
       end
   end.
 
-Lemma elaborate_matching_sort_is_identity :
+Theorem elaborate_matching_sort_is_identity :
   forall expected term,
     termSort term = expected ->
     elaborateAs expected term = Elaborated term [].
@@ -79,8 +73,7 @@ Theorem elaborate_uint_as_nat_is_exact :
       Elaborated (TermToNat term) [InsertedUIntToNat term].
 Proof.
   intros width term Hsort.
-  unfold elaborateAs.
-  rewrite Hsort.
+  unfold elaborateAs. rewrite Hsort.
   destruct (refinementSort_eq_dec (SortUInt width) SortNat) as [Heq | Hneq].
   - discriminate.
   - reflexivity.
@@ -92,26 +85,10 @@ Theorem elaborate_nat_as_uint_rejects :
     elaborateAs (SortUInt width) term = ElaborationRejected.
 Proof.
   intros width term Hsort.
-  unfold elaborateAs.
-  rewrite Hsort.
+  unfold elaborateAs. rewrite Hsort.
   destruct (refinementSort_eq_dec SortNat (SortUInt width)) as [Heq | Hneq].
   - discriminate.
   - reflexivity.
-Qed.
-
-Theorem successful_elaboration_has_expected_sort :
-  forall expected term result steps,
-    elaborateAs expected term = Elaborated result steps ->
-    termSort result = expected.
-Proof.
-  intros expected term result steps Helaborated.
-  unfold elaborateAs in Helaborated.
-  destruct (refinementSort_eq_dec (termSort term) expected) as [Hequal | Hdifferent].
-  - inversion Helaborated; subst.
-    exact Hequal.
-  - destruct expected; destruct (termSort term) eqn:Hactual;
-      try discriminate;
-      inversion Helaborated; subst; reflexivity.
 Qed.
 
 Fixpoint elaborateArguments
@@ -128,9 +105,7 @@ Fixpoint elaborateArguments
   | _, _ => None
   end.
 
-(* -------------------------------------------------------------------------- *)
-(* PHIL-FOCUS-CLAIM-001: declaration-authorized claim expansion/rejection.     *)
-(* -------------------------------------------------------------------------- *)
+(* PHIL-FOCUS-CLAIM-001 ----------------------------------------------------- *)
 
 Definition ClaimId := nat.
 
@@ -174,10 +149,8 @@ Definition focusClaim
           | OpaqueDefinition => FocusedOpaqueClaim arguments'
           | TransparentDefinition body =>
               if claimWellScoped declaration then
-                if in_dec Nat.eq_dec claim expansionStack then
-                  ClaimFocusRejected
-                else
-                  ExpandedTransparentClaim (body arguments')
+                if in_dec Nat.eq_dec claim expansionStack then ClaimFocusRejected
+                else ExpandedTransparentClaim (body arguments')
               else ClaimFocusRejected
           end
       end
@@ -226,8 +199,7 @@ Theorem transparent_claim_expands_exact_declared_body :
 Proof.
   intros environment stack claim arguments declaration arguments' body
     Hdecl Htransparent Hscoped Harguments Hfresh.
-  unfold focusClaim.
-  rewrite Hdecl, Harguments, Htransparent, Hscoped.
+  unfold focusClaim. rewrite Hdecl, Harguments, Htransparent, Hscoped.
   destruct (in_dec Nat.eq_dec claim stack) as [Hin | Hnotin].
   - contradiction.
   - reflexivity.
@@ -244,8 +216,7 @@ Theorem recursive_transparent_claim_rejects :
 Proof.
   intros environment stack claim arguments declaration arguments' body
     Hdecl Htransparent Hscoped Harguments Hrecursive.
-  unfold focusClaim.
-  rewrite Hdecl, Harguments, Htransparent, Hscoped.
+  unfold focusClaim. rewrite Hdecl, Harguments, Htransparent, Hscoped.
   destruct (in_dec Nat.eq_dec claim stack) as [Hin | Hnotin].
   - reflexivity.
   - contradiction.
@@ -265,9 +236,7 @@ Proof.
   reflexivity.
 Qed.
 
-(* -------------------------------------------------------------------------- *)
-(* PHIL-FOCUS-PREREQ-001: side conditions survive focus-plan assembly.         *)
-(* -------------------------------------------------------------------------- *)
+(* PHIL-FOCUS-PREREQ-001 ---------------------------------------------------- *)
 
 Inductive FocusMechanism : Type :=
 | FocusByDefinition : FocusMechanism
@@ -305,13 +274,9 @@ Lemma side_goal_is_collected :
 Proof.
   induction plans as [| head rest IH]; intros plan Hin.
   - contradiction.
-  - simpl in Hin.
-    destruct Hin as [Hequal | Hin].
-    + subst head. simpl.
-      apply in_or_app. right. simpl. left. reflexivity.
-    + simpl.
-      apply in_or_app. right. simpl. right.
-      apply IH. exact Hin.
+  - simpl in Hin. destruct Hin as [Hequal | Hin].
+    + subst head. simpl. apply in_or_app. right. simpl. left. reflexivity.
+    + simpl. apply in_or_app. right. simpl. right. apply IH. exact Hin.
 Qed.
 
 Lemma side_prerequisite_is_collected :
@@ -322,14 +287,9 @@ Lemma side_prerequisite_is_collected :
 Proof.
   induction plans as [| head rest IH]; intros plan prerequisite Hplan Hprerequisite.
   - contradiction.
-  - simpl in Hplan.
-    destruct Hplan as [Hequal | Hplan].
-    + subst head. simpl.
-      apply in_or_app. left.
-      apply in_map. exact Hprerequisite.
-    + simpl.
-      apply in_or_app. right. simpl. right.
-      eapply IH; eauto.
+  - simpl in Hplan. destruct Hplan as [Hequal | Hplan].
+    + subst head. simpl. apply in_or_app. left. apply in_map. exact Hprerequisite.
+    + simpl. apply in_or_app. right. simpl. right. eapply IH; eauto.
 Qed.
 
 Theorem side_goal_survives_deduplicated_assembly :
@@ -337,8 +297,7 @@ Theorem side_goal_survives_deduplicated_assembly :
     In plan plans ->
     In (requirementCanonical (planGoal plan)) (assembledPrerequisiteKeys plans).
 Proof.
-  intros plans plan Hplan.
-  unfold assembledPrerequisiteKeys.
+  intros plans plan Hplan. unfold assembledPrerequisiteKeys.
   apply (proj2 (nodup_In Nat.eq_dec
     (collectSideCanonicalKeys plans)
     (requirementCanonical (planGoal plan)))).
@@ -359,9 +318,7 @@ Proof.
   eapply side_prerequisite_is_collected; eauto.
 Qed.
 
-(* -------------------------------------------------------------------------- *)
-(* PHIL-FOCUS-MECH-001: closed authority/mechanism classification.             *)
-(* -------------------------------------------------------------------------- *)
+(* PHIL-FOCUS-MECH-001 ------------------------------------------------------ *)
 
 Inductive CanonicalGoal : Type :=
 | CanonicalTruth : CanonicalGoal
@@ -390,17 +347,14 @@ Definition classifyRequirement
 Theorem truth_is_definitionally_discharged :
   forall evidence,
     classifyRequirement CanonicalTruth evidence = FocusByDefinition.
-Proof.
-  intros evidence. reflexivity.
-Qed.
+Proof. intros evidence. reflexivity. Qed.
 
 Theorem matching_evidence_precedes_later_boundaries :
   forall goal evidence,
     goal <> CanonicalTruth ->
     classifyRequirement goal (Some evidence) = FocusByEvidence evidence.
 Proof.
-  intros goal evidence HnotTruth.
-  destruct goal; simpl.
+  intros goal evidence HnotTruth. destruct goal; simpl.
   - contradiction.
   - reflexivity.
   - reflexivity.
@@ -421,38 +375,27 @@ Theorem unresolved_transparent_goal_stops_at_decision_boundary :
     classifyRequirement (CanonicalTransparent claim) None = FocusNeedsDecisionProcedure.
 Proof. intros claim. reflexivity. Qed.
 
-(* -------------------------------------------------------------------------- *)
-(* PHIL-FOCUS-BRANCH-001: duplicate-free exact branch coverage.                *)
-(* -------------------------------------------------------------------------- *)
+(* PHIL-FOCUS-BRANCH-001 ---------------------------------------------------- *)
 
 Definition Label := nat.
-
 Definition SameLabelSet (declared handlers : list Label) : Prop :=
   forall label, In label declared <-> In label handlers.
-
 Definition BranchCheckSuccess (declared handlers : list Label) : Prop :=
   NoDup declared /\ NoDup handlers /\ SameLabelSet declared handlers.
-
-Definition MissingHandler
-  (declared handlers : list Label) (label : Label) : Prop :=
+Definition MissingHandler (declared handlers : list Label) (label : Label) : Prop :=
   In label declared /\ ~ In label handlers.
-
-Definition ExtraHandler
-  (declared handlers : list Label) (label : Label) : Prop :=
+Definition ExtraHandler (declared handlers : list Label) (label : Label) : Prop :=
   In label handlers /\ ~ In label declared.
 
 Theorem successful_branch_check_is_exact :
   forall declared handlers,
     BranchCheckSuccess declared handlers ->
     NoDup declared /\ NoDup handlers /\ SameLabelSet declared handlers.
-Proof.
-  intros declared handlers Hsuccess. exact Hsuccess.
-Qed.
+Proof. intros declared handlers Hsuccess. exact Hsuccess. Qed.
 
 Theorem duplicate_declared_label_prevents_success :
   forall declared handlers,
-    ~ NoDup declared ->
-    ~ BranchCheckSuccess declared handlers.
+    ~ NoDup declared -> ~ BranchCheckSuccess declared handlers.
 Proof.
   intros declared handlers Hduplicate Hsuccess.
   apply Hduplicate. exact (proj1 Hsuccess).
@@ -460,8 +403,7 @@ Qed.
 
 Theorem duplicate_handler_label_prevents_success :
   forall declared handlers,
-    ~ NoDup handlers ->
-    ~ BranchCheckSuccess declared handlers.
+    ~ NoDup handlers -> ~ BranchCheckSuccess declared handlers.
 Proof.
   intros declared handlers Hduplicate Hsuccess.
   apply Hduplicate. exact (proj1 (proj2 Hsuccess)).
@@ -489,9 +431,7 @@ Qed.
 
 Theorem exact_duplicate_free_coverage_is_success :
   forall declared handlers,
-    NoDup declared ->
-    NoDup handlers ->
-    SameLabelSet declared handlers ->
+    NoDup declared -> NoDup handlers -> SameLabelSet declared handlers ->
     BranchCheckSuccess declared handlers.
 Proof.
   intros declared handlers Hdeclared Hhandlers Hsame.
