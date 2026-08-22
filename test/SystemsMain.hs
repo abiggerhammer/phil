@@ -3,6 +3,7 @@
 module Main (main) where
 
 import qualified Data.Map.Strict as Map
+import Data.Text (Text)
 import Phil.Assurance.Types
 import Phil.Systems
 import System.Exit (exitFailure)
