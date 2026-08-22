@@ -92,8 +92,7 @@ phase0SessionChoiceBundle = do
       contract = baseContract
         { stageTargetArtifactDigest = targetDigest
         , stageTraceRelation = stageTraceRelation baseContract <>
-  [ "client final external choice preserves label -> branch-local payload -> continuation identity"
-  ]
+            [ "client final external choice preserves label -> branch-local payload -> continuation identity" ]
         }
       sourceDigest = stageSourceArtifactDigest contract
       predecessorDecisions = loweringLedgerDecisions (systemsArtifactLoweringLedger baseArtifact)
@@ -167,24 +166,26 @@ verifySessionChoiceWitness artifact witness = do
   offerBlock <- lookupBlock functionName function (sessionChoiceOfferBlock witness)
   unless (not (any isLegacyReceive (systemsBlockOps offerBlock))) $
     Left (SessionChoiceLegacyReceivePresent
-      functionName (sessionChoiceOfferBlock witness) (sessionChoiceLegacyReceiveCall witness))
+      functionName
+      (sessionChoiceOfferBlock witness)
+      (sessionChoiceLegacyReceiveCall witness))
 
   let expectedArms = Map.fromList
         [ ( sessionChoiceAcceptedLabel witness
-, SystemsChoiceArm
-    (Just (sessionChoiceAcceptedPayload witness))
-    (sessionChoiceAcceptedTarget witness)
-)
+          , SystemsChoiceArm
+              (Just (sessionChoiceAcceptedPayload witness))
+              (sessionChoiceAcceptedTarget witness)
+          )
         , ( sessionChoiceRejectedLabel witness
-, SystemsChoiceArm
-    (Just (sessionChoiceRejectedPayload witness))
-    (sessionChoiceRejectedTarget witness)
-)
+          , SystemsChoiceArm
+              (Just (sessionChoiceRejectedPayload witness))
+              (sessionChoiceRejectedTarget witness)
+          )
         ]
   case systemsBlockTerminator offerBlock of
     TermSessionOffer transportId arms
       | transportId == sessionChoiceTransport witness
-&& arms == expectedArms -> pure ()
+          && arms == expectedArms -> pure ()
     other -> Left (SessionChoiceOfferMismatch
       functionName (sessionChoiceOfferBlock witness) other)
 
@@ -199,10 +200,10 @@ verifySessionChoiceWitness artifact witness = do
         }
       ]
       | name == sessionChoiceRecordOperation witness
-&& inputs == [sessionChoiceAcceptedPayload witness]
-&& null outputs
-&& site == Nothing
-&& decisionId == sessionChoiceRecordDecision witness -> pure ()
+          && inputs == [sessionChoiceAcceptedPayload witness]
+          && null outputs
+          && site == Nothing
+          && decisionId == sessionChoiceRecordDecision witness -> pure ()
     operations -> Left (SessionChoiceAcceptedOperationMismatch
       functionName (sessionChoiceAcceptedTarget witness) operations)
   case systemsBlockTerminator acceptedBlock of
@@ -216,11 +217,15 @@ verifySessionChoiceWitness artifact witness = do
     other -> Left (SessionChoiceRejectedOutcomeMismatch
       functionName (sessionChoiceRejectedTarget witness) other)
 
-  verifyPayloadUses functionName function
+  verifyPayloadUses
+    functionName
+    function
     (sessionChoiceAcceptedPayload witness)
     (sessionChoiceAcceptedTarget witness)
     True
-  verifyPayloadUses functionName function
+  verifyPayloadUses
+    functionName
+    function
     (sessionChoiceRejectedPayload witness)
     (sessionChoiceRejectedTarget witness)
     False
@@ -235,7 +240,8 @@ verifySessionChoiceWitness artifact witness = do
       Left (SessionChoiceDecisionMismatch (sessionChoiceLoweringDecision witness))
   where
     isLegacyReceive operation = case operation of
-      OpRuntimeCall { runtimeCallName = name } -> name == sessionChoiceLegacyReceiveCall witness
+      OpRuntimeCall { runtimeCallName = name } ->
+        name == sessionChoiceLegacyReceiveCall witness
       _ -> False
 
 verifyPayloadUses
@@ -300,23 +306,23 @@ materializeFinalResponseChoice witness program = do
         (sessionChoiceRejectedPayload witness)
         rejectedValue $
         Map.insert
-(sessionChoiceAcceptedPayload witness)
-acceptedValue $
-Map.delete
-  (sessionChoiceLegacyDiscriminator witness)
-  (systemsFunctionValues function)
+          (sessionChoiceAcceptedPayload witness)
+          acceptedValue $
+          Map.delete
+            (sessionChoiceLegacyDiscriminator witness)
+            (systemsFunctionValues function)
       offerOps = filter (not . isLegacyReceive) (systemsBlockOps offerBlock)
       arms = Map.fromList
         [ ( sessionChoiceAcceptedLabel witness
-, SystemsChoiceArm
-    (Just (sessionChoiceAcceptedPayload witness))
-    (sessionChoiceAcceptedTarget witness)
-)
+          , SystemsChoiceArm
+              (Just (sessionChoiceAcceptedPayload witness))
+              (sessionChoiceAcceptedTarget witness)
+          )
         , ( sessionChoiceRejectedLabel witness
-, SystemsChoiceArm
-    (Just (sessionChoiceRejectedPayload witness))
-    (sessionChoiceRejectedTarget witness)
-)
+          , SystemsChoiceArm
+              (Just (sessionChoiceRejectedPayload witness))
+              (sessionChoiceRejectedTarget witness)
+          )
         ]
       offerBlock' = offerBlock
         { systemsBlockOps = offerOps
@@ -335,18 +341,23 @@ Map.delete
         (sessionChoiceAcceptedTarget witness)
         acceptedBlock' $
         Map.insert
-(sessionChoiceOfferBlock witness)
-offerBlock'
-(systemsFunctionBlocks function)
+          (sessionChoiceOfferBlock witness)
+          offerBlock'
+          (systemsFunctionBlocks function)
       function' = function
         { systemsFunctionValues = values
         , systemsFunctionBlocks = blocks
         }
   pure program
-    { systemsProgramFunctions = Map.insert functionName function' (systemsProgramFunctions program) }
+    { systemsProgramFunctions = Map.insert
+        functionName
+        function'
+        (systemsProgramFunctions program)
+    }
   where
     isLegacyReceive operation = case operation of
-      OpRuntimeCall { runtimeCallName = name } -> name == sessionChoiceLegacyReceiveCall witness
+      OpRuntimeCall { runtimeCallName = name } ->
+        name == sessionChoiceLegacyReceiveCall witness
       _ -> False
 
 lookupFunction :: Text -> SystemsProgram -> Either SessionChoiceError SystemsFunction
@@ -384,47 +395,47 @@ deriveSessionChoiceDecision sourceDigest targetDigest witness =
         , loweringSourceArtifactDigest = sourceDigest
         , loweringTargetArtifactDigest = targetDigest
         , loweringSourceRepresentation =
-  "client final Offer accepted(id)/rejected(reason) session semantics"
+            "client final Offer accepted(id)/rejected(reason) session semantics"
         , loweringTargetRepresentation =
-  "TermSessionOffer label -> branch-local payload binding -> target"
+            "TermSessionOffer label -> branch-local payload binding -> target"
         , loweringSemanticEntities =
-  [ "client final external choice"
-  , "accepted(id : UploadId)"
-  , "rejected(reason : DigestFailure)"
-  ]
+            [ "client final external choice"
+            , "accepted(id : UploadId)"
+            , "rejected(reason : DigestFailure)"
+            ]
         , loweringObligationRevisions = []
         , loweringAssuranceEntries = []
         , loweringAssuranceUses = []
         , loweringAction = Materialize
         , loweringRepresentationBefore =
-  "anonymous runtime Bool discriminator plus payload-erasing TermBranch"
+            "anonymous runtime Bool discriminator plus payload-erasing TermBranch"
         , loweringRepresentationAfter =
-  "semantic labels with edge-defined payload identities and continuations"
+            "semantic labels with edge-defined payload identities and continuations"
         , loweringInvariantsPreserved =
-  [ "choice labels remain protocol identities"
-  , "accepted UploadId reaches only accepted continuation"
-  , "rejected DigestFailure belongs only to rejected continuation"
-  , "no target discriminator or payload layout is chosen in Systems"
-  ]
+            [ "choice labels remain protocol identities"
+            , "accepted UploadId reaches only accepted continuation"
+            , "rejected DigestFailure belongs only to rejected continuation"
+            , "no target discriminator or payload layout is chosen in Systems"
+            ]
         , loweringInvariantsTransferred = []
         , loweringRuntimeResidue =
-  [ "peer-selected branch remains runtime work"
-  , "physical response decoding is deferred to a target profile"
-  ]
+            [ "peer-selected branch remains runtime work"
+            , "physical response decoding is deferred to a target profile"
+            ]
         , loweringCostClass = Just SemanticRequired
         , loweringCostShape = emptyCostShape
-  { costBranchOrDispatch = Just "one peer-selected session branch"
-  , costFrequency = Just "per final upload response"
-  }
+            { costBranchOrDispatch = Just "one peer-selected session branch"
+            , costFrequency = Just "per final upload response"
+            }
         , loweringTargetPreconditions =
-  [ "backend must explicitly lower TermSessionOffer before LLVM certification" ]
+            [ "backend must explicitly lower TermSessionOffer before LLVM certification" ]
         , loweringAssumptions = []
         , loweringDerivedObligations = []
         , loweringInspectionPlan =
-  [ "inspect exact label/payload/target map"
-  , "reject legacy anonymous result discriminator"
-  , "reject payload use outside its branch-local target"
-  ]
+            [ "inspect exact label/payload/target map"
+            , "reject legacy anonymous result discriminator"
+            , "reject payload use outside its branch-local target"
+            ]
         }
   in provisional { loweringDecisionDigest = deriveLoweringDecisionDigest provisional }
 
