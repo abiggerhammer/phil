@@ -74,6 +74,7 @@ phase0StorageLLVMCertification = do
         , ("storage_ownership", "store consumes payload on success and failure")
         , ("storage_status", "only i8 status 1 is success; all other values fail closed")
         , ("upload_id_representation", "opaque runtime-managed nonowning ptr; no generated layout access/release")
+        , ("upload_id_lifetime", "valid through calling component return")
         , ("storage_failure_upload_id", "null for conforming provider")
         , ("ambient_storage_state", "forbidden")
         , ("runtime_symbol_identity", "physical primitive/signature")
@@ -84,7 +85,7 @@ phase0StorageLLVMCertification = do
         Map.insert "target" certificationTarget $
         Map.insert "compilation_profile" certificationProfile validityContext
       revisionStatement =
-        "The canonical Phase 0 storage Systems -> pre-optimization LLVM pair is certified only for the exact source, target, target text, target profile, and phil-runtime/phase0/storage-v1 ABI bound by this revision; independent Phil translation validation establishes exact payload-owner transfer, opaque UploadId result identity, fail-closed storage status, and absence of post-transfer release or ambient storage state, while provider conformance, persistence behavior, LLVM 18 acceptance, linking, and execution remain external certification gates."
+        "The canonical Phase 0 storage Systems -> pre-optimization LLVM pair is certified only for the exact source, target, target text, target profile, and phil-runtime/phase0/storage-v1 ABI bound by this revision; independent Phil translation validation establishes exact payload-owner transfer, opaque UploadId result identity and bounded lifetime, fail-closed storage status, and absence of post-transfer release or ambient storage state, while provider conformance, persistence behavior, LLVM 18 acceptance, linking, and execution remain external certification gates."
       provisionalRevision = ObligationRevision
         { revisionObligationId = ObligationId "PHIL-LLVM-CERT-005"
         , revisionId = RevisionId ""
@@ -165,7 +166,7 @@ phase0StorageLLVMCertification = do
             , "only status 1 selects storage success"
             , "storage success/failure edges are exact"
             , "no generated post-transfer payload release"
-            , "opaque UploadId has no generated layout access or release"
+            , "opaque UploadId has no generated layout access or release and is only relied on through component return"
             , "absence of ambient storage payload/UploadId state"
             , "physical runtime symbol identity"
             ]
