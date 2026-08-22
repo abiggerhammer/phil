@@ -1,3 +1,5 @@
+{-# LANGUAGE OverloadedStrings #-}
+
 module Phil.Systems
   ( module Phil.Systems.IR
   , module Phil.Systems.Verify
@@ -541,6 +543,12 @@ terminatorUses terminator = case terminator of
   _ -> []
 
 definitionPrecedesUse :: SystemsFunction -> ScalarSite -> ScalarSite -> Bool
+definitionPrecedesUse function definitionSite useSite
+  | scalarSiteBlock definitionSite == scalarSiteBlock useSite =
+      scalarSiteIndex definitionSite < scalarSiteIndex useSite
+  | otherwise = blockDominates function (scalarSiteBlock definitionSite) (scalarSiteBlock useSite)
+
+blockDominates :: SystemsFunction -> BlockId -> BlockId -> Bool
 definitionPrecedesUse function definitionSite useSite
   | scalarSiteBlock definitionSite == scalarSiteBlock useSite =
       scalarSiteIndex definitionSite < scalarSiteIndex useSite
