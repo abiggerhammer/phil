@@ -6,7 +6,7 @@ import qualified Data.Text as Text
 import qualified Data.Text.IO as TextIO
 import Phil.Compiler
   ( RunnableProgram (runnableLLVMArtifact)
-  , compileRunnableUnit
+  , compileRunnable
   , renderRunnableCompileError
   )
 import Phil.LLVM (llvmArtifactText)
@@ -26,7 +26,7 @@ main = do
 emitLLVM :: FilePath -> IO ()
 emitLLVM path = do
   source <- TextIO.readFile path
-  case compileRunnableUnit (Text.pack path) source of
+  case compileRunnable (Text.pack path) source of
     Left compileError -> do
       TextIO.hPutStrLn stderr (renderRunnableCompileError compileError)
       exitFailure
