@@ -237,8 +237,7 @@ prematureAcceptanceEnvironment base = base
 
 pendingCommitEnvironment :: SurfaceEnvironment -> SurfaceEnvironment
 pendingCommitEnvironment base = base
-  { surfaceInitialBindings = Map.singleton "s0"
-      (endpoint (Receive (Name "hello") (TyFrame (GrammarId "Hello")) (End (Outcome "success"))))
+  { surfaceInitialBindings = Map.singleton "s0" (endpoint serverUploadSession)
   }
 
 pendingDropEnvironment :: SurfaceEnvironment -> SurfaceEnvironment
