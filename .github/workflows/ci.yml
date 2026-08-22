@@ -53,6 +53,10 @@ jobs:
           "$LLVM_EMITTER" > phase0-upload.ll
           "$LLVM_AS" phase0-upload.ll -o /dev/null
 
+          RECOGNIZED_RECORD_EMITTER="$(cabal list-bin phil-llvm-phase0-recognized-record)"
+          "$RECOGNIZED_RECORD_EMITTER" > phase0-upload-recognized-record.ll
+          "$LLVM_AS" phase0-upload-recognized-record.ll -o /dev/null
+
           PHILC="$(cabal list-bin philc)"
 
           "$PHILC" emit-llvm examples/run/return-unit.phil > return-unit.ll
@@ -84,6 +88,7 @@ jobs:
             exit 1
           fi
 
+          echo "Phase 0 reference and recognized-record LLVM assembled successfully"
           echo "direct and bound scalar Phil programs returned 42 successfully"
           "$LLVM_AS" --version | head -n 1
           "$CLANG" --version | head -n 1
