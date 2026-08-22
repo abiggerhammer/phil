@@ -1,0 +1,52 @@
+name: Local Runtime Choice Fix
+
+on:
+  pull_request:
+    paths:
+      - '.github/workflows/local-runtime-choice-fix.yml'
+
+permissions:
+  contents: write
+
+jobs:
+  apply:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: systems-local-runtime-choice
+          fetch-depth: 0
+      - name: Apply compiler fixes
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 - <<'PY'
+          from pathlib import Path
+
+          def replace_once(path, old, new):
+              p = Path(path)
+              text = p.read_text()
+              count = text.count(old)
+              if count != 1:
+                  raise SystemExit(f"{path}: expected one match, found {count}: {old!r}")
+              p.write_text(text.replace(old, new, 1))
+
+          replace_once(
+              'src/Phil/Systems/LocalRuntimeChoice.hs',
+              '    termUses TermBranch condition _ _ = condition == value\n',
+              '    termUses (TermBranch condition _ _) = condition == value\n')
+          replace_once(
+              'src/Phil/Systems/LocalRuntimeChoice.hs',
+              '    termUses TermReturnScalar returned = returned == value\n',
+              '    termUses (TermReturnScalar returned) = returned == value\n')
+          replace_once(
+              'src/Phil/Systems/AcceptedResponse.hs',
+              '  OpRuntimeCall _ inputs _ _ _ -> inputs\n  OpCopy source target _ -> [source, target]\n',
+              '  OpRuntimeCall _ inputs _ _ _ -> inputs\n  OpSessionSelect transport _ payload _ -> transport : maybe [] pure payload\n  OpCopy source target _ -> [source, target]\n')
+          PY
+          git diff --check
+          git config user.name "phil-local-choice-fix-bot"
+          git config user.email "actions@users.noreply.github.com"
+          git add src/Phil/Systems/LocalRuntimeChoice.hs src/Phil/Systems/AcceptedResponse.hs
+          git commit -m "Fix local choice compile patterns"
+          git push origin HEAD:systems-local-runtime-choice
