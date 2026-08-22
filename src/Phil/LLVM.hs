@@ -21,6 +21,8 @@ module Phil.LLVM
   , module Phil.LLVM.RejectedResponseCertification
   , module Phil.LLVM.SessionOffer
   , module Phil.LLVM.SessionOfferCertification
+  , module Phil.LLVM.PayloadCancelChoice
+  , module Phil.LLVM.PayloadCancelChoiceCertification
   ) where
 
 import Phil.LLVM.AcceptedResponse
@@ -33,6 +35,8 @@ import Phil.LLVM.ExactReceiveCertification
 import Phil.LLVM.ExactReceiveProofCertification
 import Phil.LLVM.IR
 import Phil.LLVM.Lower
+import Phil.LLVM.PayloadCancelChoice
+import Phil.LLVM.PayloadCancelChoiceCertification
 import Phil.LLVM.Phase0
 import Phil.LLVM.RecognizedRecord
 import Phil.LLVM.RecognizedRecordCertification
