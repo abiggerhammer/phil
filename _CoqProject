@@ -19,6 +19,7 @@ proof/Phil/Surface/Elaboration.v
 proof/Phil/Surface/Checking.v
 proof/Phil/Surface/ScopeJoin.v
 proof/Phil/Surface/FreshOwnership.v
+proof/Phil/Surface/SystemsProjection.v
 proof/Phil/Assurance/Manifest.v
 proof/Phil/Assurance/EvidenceUse.v
 proof/Phil/Systems/Identity.v
@@ -26,6 +27,7 @@ proof/Phil/Systems/FactDisposition.v
 proof/Phil/Systems/Ownership.v
 proof/Phil/Systems/Runtime.v
 proof/Phil/Systems/Scalar.v
+proof/Phil/Systems/ScalarDataflow.v
 proof/Phil/LLVM/Identity.v
 proof/Phil/LLVM/Preservation.v
 proof/Phil/LLVM/Strengthening.v
