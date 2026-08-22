@@ -41,3 +41,6 @@ jobs:
           rocq c -Q proof/Phil Phil proof/Phil/Core/ContextJoin.v
           rocq c -Q proof/Phil Phil proof/Phil/Core/ProcessJoin.v
           rocq c -Q proof/Phil Phil proof/Phil/Core/ProcessTerminal.v
+          rocq c -Q proof/Phil Phil proof/Phil/Core/Discharge.v
+          rocq c -Q proof/Phil Phil proof/Phil/Core/DecisionSound.v
+          rocq c -Q proof/Phil Phil proof/Phil/Core/SessionRec.v
