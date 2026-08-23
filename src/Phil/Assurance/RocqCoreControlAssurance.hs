@@ -4,6 +4,7 @@ module Phil.Assurance.RocqCoreControlAssurance
   ( coreControlAssuranceCertificationSpecs
   ) where
 
+import qualified Data.Text
 import Phil.Assurance.Rocq (RocqCertificationSpec (..))
 import Phil.Assurance.Types (ArtifactRef (..), EvidenceEntryId (..))
 import Phil.Core.Syntax (ObligationId (..))
