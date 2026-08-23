@@ -21,75 +21,9 @@ on:
       - '.github/workflows/begin-policy-session-choice.yml'
 
 permissions:
-  contents: write
+  contents: read
 
 jobs:
-  fix-predecessor-shape:
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@v4
-        with:
-          ref: begin-policy-session-choice
-          fetch-depth: 0
-      - name: Reuse established Begin record
-        shell: bash
-        run: |
-          set -euo pipefail
-          python3 - <<'PY'
-          from pathlib import Path
-          p = Path('src/Phil/Systems/BeginPolicySessionChoice.hs')
-          lines = p.read_text().splitlines()
-          def one_index(line):
-              hits = [i for i, value in enumerate(lines) if value == line]
-              if len(hits) != 1:
-                  raise SystemExit(f'expected one {line!r}, found {len(hits)}')
-              return hits[0]
-          def remove_line(line):
-              del lines[one_index(line)]
-          def replace_line(old, new):
-              lines[one_index(old)] = new
-          def insert_after(line, additions):
-              i = one_index(line)
-              lines[i + 1:i + 1] = additions
-          def replace_range(start_line, end_line, replacement):
-              start = one_index(start_line)
-              end = one_index(end_line)
-              if end <= start:
-                  raise SystemExit(f'invalid range {start_line!r} .. {end_line!r}')
-              lines[start:end] = replacement
-          insert_after('import Phil.Systems.IR', ['import Phil.Systems.RecognizedRecord'])
-          remove_line('  , beginPolicyPendingBegin :: ValueId')
-          remove_line('  , beginPolicyMaterializeCall :: Text')
-          insert_after('  | BeginPolicyVersionRegression VersionChoiceOperandsError', ['  | BeginPolicyRecognizedRecordRegression RecognizedRecordError'])
-          remove_line('  | BeginPolicyMaterializationMismatch Text BlockId [SystemsOp]')
-          remove_line('  | BeginPolicyMaterializationBeforeCommit Text BlockId')
-          remove_line('  , beginPolicyPendingBegin = ValueId "server.pending.begin"')
-          remove_line('  , beginPolicyMaterializeCall = "materialize recognized Begin"')
-          replace_line('            , "recognized Begin and policyContext become explicit validator operands without selecting their physical representation"', '            , "the established recognized Begin value and a new explicit policyContext become validator operands without selecting new physical representation"')
-          insert_after('      phase0VersionChoiceOperandsWitness', ['  mapLeft BeginPolicyRecognizedRecordRegression $', '    verifyRecognizedRecordWitnesses', '      (beginPolicySessionChoiceArtifact bundle)', '      [phase0BeginRecordWitness]'])
-          remove_line('  verifyMaterialization witness commitBlock')
-          replace_range('verifyMaterialization', 'verifyServerSelect', [])
-          replace_range('  mapM_ (requireAbsent (beginPolicyServerFunction witness) server)', '  requireAbsent', ['  verifyRole (beginPolicyServerFunction witness) server', '    (beginPolicyBeginRecord witness) (RuntimeRecord "Begin")', '  mapM_ (requireAbsent (beginPolicyServerFunction witness) server)', '    [ beginPolicyPolicyContext witness', '    , beginPolicyServerRejectReason witness', '    ]'])
-          new_let = ['  let commitBlock\' = commitBlock', '        { systemsBlockTerminator = TermRuntimeChoice', '            (beginPolicyRuntimeChoiceName witness)', '            [beginPolicyPolicyContext witness, beginPolicyBeginRecord witness]', '            (Just site)', '            (expectedRuntimeArms witness)', '        }', '      serverValues = Map.insert', '        (beginPolicyServerRejectReason witness)', '        (SystemsValue', '          (beginPolicyServerRejectReason witness)', '          (RuntimeOpaque "ValidationReason[BeginPolicy]")', '          Nothing) $', '        Map.insert', '          (beginPolicyPolicyContext witness)', '          (SystemsValue', '            (beginPolicyPolicyContext witness)', '            (RuntimeInput "PolicyContext")', '            Nothing)', '          (systemsFunctionValues server)']
-          replace_range('  let materialize = OpRuntimeCall', '      server\' = server', new_let)
-          replace_range('insertAfterCommit :: SystemsOp -> [SystemsOp] -> [SystemsOp]', 'verifyRole', [])
-          replace_line('    (before, operation : after)', '    (before, _ : after)')
-          replace_line('          "explicit Begin/PolicyContext operands + accepted/rejected(reason) local runtime choice + reject(reason)/proceed semantic session choice"', '          "established Begin record + explicit PolicyContext operand + accepted/rejected(reason) local runtime choice + reject(reason)/proceed semantic session choice"')
-          replace_line('          [ "Begin record representation remains target-selected"', '          [ "existing Begin record representation and provenance are preserved from the recognized-record predecessor"')
-          replace_line('          { costCodeSize = Just "explicit record/input identities plus local/session choice structure"', '          { costCodeSize = Just "explicit policy input/reason identities plus local/session choice structure"')
-          replace_line('          [ "recognized Begin is committed before record materialization and validation"', '          [ "recognized Begin record materialization/projection from the predecessor remains valid before validation"')
-          i = one_index('          [ "verify exact BeginPolicy RuntimeSiteRef is preserved"')
-          lines.insert(i, '          [ "verify the predecessor recognized Begin witness still holds exactly"')
-          lines[i + 1] = '          , "verify exact BeginPolicy RuntimeSiteRef is preserved"'
-          p.write_text('\n'.join(lines) + '\n')
-          PY
-          git diff --check
-          git config user.name "phil-begin-policy-bot"
-          git config user.email "actions@users.noreply.github.com"
-          git add src/Phil/Systems/BeginPolicySessionChoice.hs
-          git commit -m "Reuse established Begin record in BeginPolicy choice"
-          git push origin HEAD:begin-policy-session-choice
-
   begin-policy-session-choice:
     runs-on: ubuntu-latest
     steps:
