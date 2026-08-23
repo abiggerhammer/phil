@@ -1,4 +1,4 @@
-From Phil.Systems Require Import LocalRuntimeChoice.
+From Phil.Systems Require Import ScalarDataflow LocalRuntimeChoice.
 
 (*
   PHIL-SYS-VERSION-SESSION-CHOICE-001 — normalized proof model for the
