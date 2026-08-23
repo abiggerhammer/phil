@@ -1,0 +1,35 @@
+{
+  "source_revision": "<frozen-git-revision>",
+  "objects": [
+    {
+      "name": "phase0-source-archive",
+      "kind": "source",
+      "path": "artifacts/phase0-source.tar"
+    },
+    {
+      "name": "phase0-systems-artifact",
+      "kind": "systems-artifact",
+      "path": "artifacts/phase0.systems"
+    },
+    {
+      "name": "phase0-llvm-artifact",
+      "kind": "llvm-artifact",
+      "path": "artifacts/phase0.ll"
+    },
+    {
+      "name": "phase0-assurance-manifest",
+      "kind": "assurance-manifest",
+      "path": "artifacts/phase0.assurance.json"
+    },
+    {
+      "name": "phase0-proof-certificates",
+      "kind": "proof-certificate-bundle",
+      "path": "artifacts/phase0-proof-certificates.tar"
+    },
+    {
+      "name": "phase0-runtime-evidence",
+      "kind": "runtime-evidence-bundle",
+      "path": "artifacts/phase0-runtime-evidence.tar"
+    }
+  ]
+}
