@@ -87,7 +87,11 @@ Proof.
   intros model revision Haccepted.
   destruct Haccepted as [evidence [Hselected [Hresult [Hexact _]]]].
   exists evidence.
-  repeat split; assumption.
+  split.
+  - exact Hselected.
+  - split.
+    + exact Hresult.
+    + exact Hexact.
 Qed.
 
 Theorem ancestor_evidence_cannot_satisfy_distinct_child :
@@ -231,18 +235,23 @@ Theorem exported_historical_ancestor_can_coexist_with_child_authority :
   modelCertificationScope HistoricalLineageModel 0 = false /\
   RevisionAccepted HistoricalLineageModel 1.
 Proof.
-  repeat split.
+  split.
   - reflexivity.
-  - reflexivity.
-  - reflexivity.
-  - exists 10.
-    repeat split.
+  - split.
     + reflexivity.
-    + reflexivity.
-    + reflexivity.
-    + intros parent Hdependency.
-      simpl in Hdependency.
-      discriminate.
+    + split.
+      * reflexivity.
+      * exists 10.
+        unfold EvidenceUsableFor.
+        split.
+        -- reflexivity.
+        -- split.
+           ++ reflexivity.
+           ++ split.
+              ** reflexivity.
+              ** intros parent Hdependency.
+                 simpl in Hdependency.
+                 discriminate.
 Qed.
 
 (* Conversely, explicit justification can be usable without any generated-from
@@ -293,15 +302,19 @@ Theorem explicit_justification_does_not_require_lineage :
   modelDependsOnObligation ExplicitDependencyModel 10 0 = true /\
   EvidenceUsableFor ExplicitDependencyModel 1 10.
 Proof.
-  repeat split.
+  split.
   - reflexivity.
-  - reflexivity.
-  - repeat split.
+  - split.
     + reflexivity.
-    + reflexivity.
-    + reflexivity.
-    + intros parent Hdependency.
-      destruct parent; simpl in *.
-      * split; reflexivity.
-      * discriminate.
+    + unfold EvidenceUsableFor.
+      split.
+      * reflexivity.
+      * split.
+        -- reflexivity.
+        -- split.
+           ++ reflexivity.
+           ++ intros parent Hdependency.
+              destruct parent; simpl in *.
+              ** split; reflexivity.
+              ** discriminate.
 Qed.
