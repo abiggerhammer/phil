@@ -1,0 +1,100 @@
+name: Lineage Authority Proofs
+
+on:
+  pull_request:
+    paths:
+      - 'proof/Phil/Assurance/LineageAuthority.v'
+      - 'src/Phil/Assurance/RocqLineageAuthority.hs'
+      - 'app/LineageAuthorityProofCorrespondenceMain.hs'
+      - 'app/LineageAuthorityProofCertificationMain.hs'
+      - 'src/Phil/Assurance/Verify.hs'
+      - 'src/Phil/Assurance/Types.hs'
+      - '.github/workflows/lineage-authority-proofs.yml'
+  push:
+    branches:
+      - main
+    paths:
+      - 'proof/Phil/Assurance/LineageAuthority.v'
+      - 'src/Phil/Assurance/RocqLineageAuthority.hs'
+      - 'app/LineageAuthorityProofCorrespondenceMain.hs'
+      - 'app/LineageAuthorityProofCertificationMain.hs'
+      - 'src/Phil/Assurance/Verify.hs'
+      - 'src/Phil/Assurance/Types.hs'
+      - '.github/workflows/lineage-authority-proofs.yml'
+
+permissions:
+  contents: read
+
+jobs:
+  rocq-lineage-authority:
+    runs-on: ubuntu-latest
+    container:
+      image: rocq/rocq-prover:9.2.0
+      options: --user root
+    steps:
+      - uses: actions/checkout@v4
+      - name: Check lineage/authority theorem
+        run: |
+          export PATH="/home/rocq/.opam/${COMPILER}/bin:$PATH"
+          rocq c -Q proof/Phil Phil proof/Phil/Assurance/LineageAuthority.v
+      - name: Stage checked lineage/authority proof
+        run: |
+          mkdir -p checked/proof/Phil/Assurance
+          cp proof/Phil/Assurance/LineageAuthority.v checked/proof/Phil/Assurance/
+          cp proof/Phil/Assurance/LineageAuthority.vo checked/proof/Phil/Assurance/
+      - uses: actions/upload-artifact@v4
+        with:
+          name: lineage-authority-checked-proof
+          path: checked/
+          if-no-files-found: error
+          retention-days: 14
+
+  certify-lineage-authority:
+    needs: rocq-lineage-authority
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: haskell-actions/setup@v2
+        with:
+          ghc-version: '9.6.7'
+          cabal-version: 'latest'
+      - uses: actions/download-artifact@v4
+        with:
+          name: lineage-authority-checked-proof
+          path: checked
+      - name: Build Phil assurance library
+        run: cabal build lib:phil-core
+      - name: Typecheck proof correspondence and certifier
+        run: |
+          cabal exec -- ghc \
+            -Wall -Wcompat -Wincomplete-record-updates -Wincomplete-uni-patterns -Wredundant-constraints -Werror \
+            -isrc -iapp -fno-code app/LineageAuthorityProofCorrespondenceMain.hs
+          cabal exec -- ghc \
+            -Wall -Wcompat -Wincomplete-record-updates -Wincomplete-uni-patterns -Wredundant-constraints -Werror \
+            -isrc -iapp -fno-code app/LineageAuthorityProofCertificationMain.hs
+      - name: Run lineage/authority correspondence regressions
+        run: |
+          cabal exec -- ghc -O0 -isrc -iapp \
+            app/LineageAuthorityProofCorrespondenceMain.hs \
+            -o phil-check-lineage-authority-correspondence
+          ./phil-check-lineage-authority-correspondence
+      - name: Build lineage/authority proof certifier
+        run: |
+          cabal exec -- ghc -O0 -isrc -iapp \
+            app/LineageAuthorityProofCertificationMain.hs \
+            -o phil-certify-lineage-authority
+      - name: Produce PHIL-ASSURE-LINEAGE-001 certificate
+        run: |
+          mkdir -p lineage-authority-certificates
+          ./phil-certify-lineage-authority \
+            checked/proof/Phil/Assurance/LineageAuthority.v \
+            checked/proof/Phil/Assurance/LineageAuthority.vo \
+            lineage-authority-certificates/PHIL-ASSURE-LINEAGE-001.rocq.cert
+          cat lineage-authority-certificates/PHIL-ASSURE-LINEAGE-001.rocq.cert
+          sha256sum lineage-authority-certificates/PHIL-ASSURE-LINEAGE-001.rocq.cert
+      - uses: actions/upload-artifact@v4
+        with:
+          name: phil-lineage-authority-proof-certificate
+          path: lineage-authority-certificates/PHIL-ASSURE-LINEAGE-001.rocq.cert
+          if-no-files-found: error
+          retention-days: 30
