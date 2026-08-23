@@ -5,7 +5,6 @@ on:
   push:
     branches:
       - main
-      - steve/architecture-sketch
 
 permissions:
   contents: read
@@ -152,6 +151,50 @@ jobs:
           fi
           echo "PASS: runtime ABI checker rejects ambient length-only exact receive"
 
+          DIGEST_VALIDATION_EMITTER="$(cabal list-bin phil-llvm-phase0-digest-validation)"
+          "$DIGEST_VALIDATION_EMITTER" > phase0-upload-digest-validation.ll
+          "$LLVM_AS" phase0-upload-digest-validation.ll -o phase0-upload-digest-validation.bc
+
+          "$CLANG" --target=x86_64-unknown-linux-gnu \
+            -std=c11 -Wall -Wextra -Wpedantic -Werror \
+            -Iruntime/phase0 -S -emit-llvm \
+            runtime/phase0/digest_validation_v1_smoke.c \
+            -o digest-validation-runtime.ll
+          python3 scripts/check_runtime_abi.py \
+            phase0-upload-digest-validation.ll \
+            digest-validation-runtime.ll
+          "$LLVM_AS" digest-validation-runtime.ll -o digest-validation-runtime.bc
+
+          "$CLANG" --target=x86_64-unknown-linux-gnu \
+            -std=c11 -Wall -Wextra -Wpedantic -Werror \
+            -Iruntime/phase0 -emit-llvm -c \
+            runtime/phase0/digest_validation_v1_smoke_main.c \
+            -o digest-validation-smoke-main.bc
+
+          "$LLVM_LINK" \
+            phase0-upload-digest-validation.bc \
+            digest-validation-runtime.bc \
+            digest-validation-smoke-main.bc \
+            -o phase0-upload-digest-validation-linked.bc
+          "$CLANG" --target=x86_64-unknown-linux-gnu \
+            phase0-upload-digest-validation-linked.bc \
+            -lcrypto \
+            -o phase0-upload-digest-validation-smoke
+          ./phase0-upload-digest-validation-smoke
+
+          "$CLANG" --target=x86_64-unknown-linux-gnu \
+            -std=c11 -Wall -Wextra -Wpedantic -Werror \
+            -S -emit-llvm \
+            runtime/phase0/digest_validation_v1_bad_ambient.c \
+            -o digest-validation-bad-ambient.ll
+          if python3 scripts/check_runtime_abi.py --partial \
+              phase0-upload-digest-validation.ll \
+              digest-validation-bad-ambient.ll; then
+            echo "expected ABI checker to reject nullary digest validation" >&2
+            exit 1
+          fi
+          echo "PASS: runtime ABI checker rejects ambient nullary digest validation"
+
           PHILC="$(cabal list-bin philc)"
 
           "$PHILC" emit-llvm examples/run/return-unit.phil > return-unit.ll
@@ -183,23 +226,10 @@ jobs:
             exit 1
           fi
 
-          echo "Phase 0 reference, recognized-record, and transport exact-receive LLVM assembled successfully"
+          echo "Phase 0 reference, recognized-record, exact-receive, and digest-validation LLVM assembled successfully"
           echo "recognized-record runtime signatures verified, linked, and executed successfully"
           echo "transport exact-receive runtime signatures verified, linked, and executed successfully"
+          echo "SHA-256 digest-validation runtime signatures verified, linked, and executed successfully"
           echo "direct and bound scalar Phil programs returned 42 successfully"
           "$LLVM_AS" --version | head -n 1
           "$CLANG" --version | head -n 1
-
-      - name: Parse Steve surface corpus
-        if: github.ref == 'refs/heads/steve/architecture-sketch' || github.head_ref == 'steve/architecture-sketch'
-        shell: bash
-        run: |
-          set -euo pipefail
-          while IFS= read -r file; do
-            echo "Parsing ${file}"
-            cabal run phil-core -- parse "${file}"
-          done < <(find examples/steve -type f -name '*.phil' | sort)
-
-      - name: Check Steve opaque-proof semantic rejection
-        if: github.ref == 'refs/heads/steve/architecture-sketch' || github.head_ref == 'steve/architecture-sketch'
-        run: cabal test phil-steve-surface-semantic-tests --test-show-details=direct

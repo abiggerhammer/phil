@@ -13,6 +13,8 @@ module Phil.Systems.IR
   , RuntimeSiteKind (..)
   , RuntimeSiteRef (..)
   , SystemsOp (..)
+  , SystemsChoiceArm (..)
+  , SystemsRuntimeChoiceArm (..)
   , SystemsTerminator (..)
   , SystemsBlock (..)
   , SystemsFunction (..)
@@ -82,6 +84,8 @@ data SystemsValueRole
   | OwnedBuffer Text
   | BorrowedSlice ValueId
   | RuntimeScalar Text
+  | RuntimeInput Text
+  | RuntimeOpaque Text
   | TypedScalar ScalarType
   | RuntimeRecord Text
   | DiagnosticState Text
@@ -151,6 +155,12 @@ data SystemsOp
       , runtimeCallSite :: Maybe RuntimeSiteRef
       , runtimeCallDecision :: DecisionId
       }
+  | OpSessionSelect
+      { sessionSelectTransport :: ValueId
+      , sessionSelectLabel :: Text
+      , sessionSelectPayload :: Maybe ValueId
+      , sessionSelectDecision :: DecisionId
+      }
   | OpCopy
       { copySource :: ValueId
       , copyTarget :: ValueId
@@ -170,6 +180,18 @@ data SystemsOp
       , scalarLiteralValue :: ScalarLiteral
       }
   | OpTraceEvent Text
+  deriving (Eq, Ord, Show)
+
+data SystemsChoiceArm = SystemsChoiceArm
+  { choiceArmPayloadBinding :: Maybe ValueId
+  , choiceArmTarget :: BlockId
+  }
+  deriving (Eq, Ord, Show)
+
+data SystemsRuntimeChoiceArm = SystemsRuntimeChoiceArm
+  { runtimeChoiceArmPayloadBinding :: Maybe ValueId
+  , runtimeChoiceArmTarget :: BlockId
+  }
   deriving (Eq, Ord, Show)
 
 data SystemsTerminator
@@ -209,6 +231,16 @@ data SystemsTerminator
       , storeSite :: RuntimeSiteRef
       , storeSuccess :: BlockId
       , storeFailure :: BlockId
+      }
+  | TermSessionOffer
+      { sessionOfferTransport :: ValueId
+      , sessionOfferArms :: Map Text SystemsChoiceArm
+      }
+  | TermRuntimeChoice
+      { runtimeChoiceName :: Text
+      , runtimeChoiceInputs :: [ValueId]
+      , runtimeChoiceSite :: Maybe RuntimeSiteRef
+      , runtimeChoiceArms :: Map Text SystemsRuntimeChoiceArm
       }
   | TermReturnScalar ValueId
   | TermEnd Text
@@ -335,6 +367,7 @@ data InvariantClaim
   | InvariantBorrowAliases Text ValueId ValueId
   | InvariantRecognitionGate Text BlockId ValueId BlockId BlockId
   | InvariantBranchTargets Text BlockId BlockId BlockId
+  | InvariantRuntimeChoice Text BlockId Text (Map Text SystemsRuntimeChoiceArm)
   | InvariantExactReceive Text BlockId ValueId BlockId BlockId
   | InvariantExactSend Text BlockId ValueId BlockId BlockId
   | InvariantRequiredEdge RequiredControlEdge
@@ -477,6 +510,10 @@ blockSuccessors blockValue = case systemsBlockTerminator blockValue of
   TermReceiveExact { exactSuccess = yes, exactFailure = no } -> [yes, no]
   TermSendExact { sendExactSuccess = yes, sendExactFailure = no } -> [yes, no]
   TermStore { storeSuccess = yes, storeFailure = no } -> [yes, no]
+  TermSessionOffer { sessionOfferArms = arms } ->
+    map (choiceArmTarget . snd) (Map.toAscList arms)
+  TermRuntimeChoice { runtimeChoiceArms = arms } ->
+    map (runtimeChoiceArmTarget . snd) (Map.toAscList arms)
   TermReturnScalar _ -> []
   TermEnd _ -> []
   TermFatal _ -> []
@@ -497,6 +534,7 @@ runtimeSites function = concatMap blockSites (Map.elems (systemsFunctionBlocks f
       TermReceiveExact { exactSite = site } -> [site]
       TermSendExact { sendExactSite = site } -> [site]
       TermStore { storeSite = site } -> [site]
+      TermRuntimeChoice { runtimeChoiceSite = Just site } -> [site]
       _ -> []
 
 field :: Text -> Text -> Text
@@ -524,6 +562,8 @@ renderValueRole role = case role of
   OwnedBuffer description -> "owned-buffer(" <> atom description <> ")"
   BorrowedSlice owner -> "borrowed-slice(" <> atom (unValueId owner) <> ")"
   RuntimeScalar description -> "runtime-scalar(" <> atom description <> ")"
+  RuntimeInput description -> "runtime-input(" <> atom description <> ")"
+  RuntimeOpaque description -> "runtime-opaque(" <> atom description <> ")"
   TypedScalar scalarType -> "typed-scalar(" <> atom (renderScalarType scalarType) <> ")"
   RuntimeRecord description -> "runtime-record(" <> atom description <> ")"
   DiagnosticState description -> "diagnostic-state(" <> atom description <> ")"
@@ -568,6 +608,12 @@ renderOp operation = case operation of
     , maybe "none" renderRuntimeSite site
     , unDecisionId lowering
     ]
+  OpSessionSelect transport label payload lowering -> tag "session-select"
+    [ unValueId transport
+    , label
+    , maybe "none" unValueId payload
+    , unDecisionId lowering
+    ]
   OpCopy source target lowering -> tag "copy"
     [unValueId source, unValueId target, unDecisionId lowering]
   OpEraseFact revision useId lowering -> tag "erase-fact"
@@ -595,11 +641,33 @@ renderTerminator terminator = case terminator of
     [unValueId transport, unValueId owner, renderRuntimeSite site, unBlockId yes, unBlockId no]
   TermStore owner result site yes no -> tag "store"
     [unValueId owner, unValueId result, renderRuntimeSite site, unBlockId yes, unBlockId no]
+  TermSessionOffer transport arms -> tag "session-offer"
+    [unValueId transport, renderList renderChoiceArm (Map.toAscList arms)]
+  TermRuntimeChoice name inputs site arms -> tag "runtime-choice"
+    [ name
+    , renderList unValueId inputs
+    , maybe "none" renderRuntimeSite site
+    , renderList renderRuntimeChoiceArm (Map.toAscList arms)
+    ]
   TermReturnScalar value -> tag "return-scalar" [unValueId value]
   TermEnd outcome -> tag "end" [outcome]
   TermFatal failure -> tag "fatal" [failure]
   where
     tag name fields = name <> renderList id fields
+
+renderChoiceArm :: (Text, SystemsChoiceArm) -> Text
+renderChoiceArm (label, arm) = Text.intercalate ";"
+  [ field "label" label
+  , field "payload" (maybe "none" unValueId (choiceArmPayloadBinding arm))
+  , field "target" (unBlockId (choiceArmTarget arm))
+  ]
+
+renderRuntimeChoiceArm :: (Text, SystemsRuntimeChoiceArm) -> Text
+renderRuntimeChoiceArm (label, arm) = Text.intercalate ";"
+  [ field "label" label
+  , field "payload" (maybe "none" unValueId (runtimeChoiceArmPayloadBinding arm))
+  , field "target" (unBlockId (runtimeChoiceArmTarget arm))
+  ]
 
 renderLoweringAction :: LoweringAction -> Text
 renderLoweringAction action = case action of
@@ -673,6 +741,13 @@ renderInvariantClaim claim = case claim of
     tag "recognition-gate" [functionName, unBlockId blockId, unValueId pending, unBlockId yes, unBlockId no]
   InvariantBranchTargets functionName blockId yes no ->
     tag "branch-targets" [functionName, unBlockId blockId, unBlockId yes, unBlockId no]
+  InvariantRuntimeChoice functionName blockId name arms ->
+    tag "runtime-choice"
+      [ functionName
+      , unBlockId blockId
+      , name
+      , renderList renderRuntimeChoiceArm (Map.toAscList arms)
+      ]
   InvariantExactReceive functionName blockId owner yes no ->
     tag "exact-receive" [functionName, unBlockId blockId, unValueId owner, unBlockId yes, unBlockId no]
   InvariantExactSend functionName blockId owner yes no ->

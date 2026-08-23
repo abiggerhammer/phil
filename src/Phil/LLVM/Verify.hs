@@ -211,6 +211,20 @@ ordinaryOps = filter isOrdinary
       LLVMPlain _ -> True
       LLVMScalarLiteral _ _ -> True
       LLVMFieldProjection {} -> True
+      LLVMOpaqueFieldProjection {} -> True
+      LLVMChooseSupportedPayloadBinding {} -> True
+      LLVMUnsupportedSelect {} -> True
+      LLVMVersionSelect {} -> True
+      LLVMVersionChoicePayloadBinding {} -> True
+      LLVMBeginPolicyValidationReasonBinding {} -> True
+      LLVMBeginPolicyRejectSelect {} -> True
+      LLVMBeginPolicyProceedSelect {} -> True
+      LLVMBeginPolicyChoiceReasonBinding {} -> True
+      LLVMAcceptedResponse {} -> True
+      LLVMRejectedResponse {} -> True
+      LLVMPayloadCancelSelect {} -> True
+      LLVMFinalResponsePayloadBinding {} -> True
+      LLVMRecordUploadId {} -> True
       LLVMStrengtheningOp _ _ -> False
       LLVMPoison _ -> False
       LLVMUndef _ -> False

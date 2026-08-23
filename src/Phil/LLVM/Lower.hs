@@ -4,6 +4,9 @@ module Phil.LLVM.Lower
   ( lowerSystemsConservative
   , lowerSystemsRecognizedRecord
   , lowerSystemsExactReceive
+  , lowerSystemsDigestValidation
+  , lowerSystemsStorage
+  , lowerSystemsAcceptedResponse
   ) where
 
 import qualified Data.Map.Strict as Map
@@ -16,6 +19,9 @@ data LoweringMode
   = ConservativeMode
   | RecognizedRecordMode
   | ExactReceiveMode
+  | DigestValidationMode
+  | StorageMode
+  | AcceptedResponseMode
   deriving (Eq, Show)
 
 lowerSystemsConservative :: LLVMTargetProfile -> SystemsArtifact -> LLVMArtifact
@@ -26,6 +32,15 @@ lowerSystemsRecognizedRecord = lowerSystemsWith RecognizedRecordMode
 
 lowerSystemsExactReceive :: LLVMTargetProfile -> SystemsArtifact -> LLVMArtifact
 lowerSystemsExactReceive = lowerSystemsWith ExactReceiveMode
+
+lowerSystemsDigestValidation :: LLVMTargetProfile -> SystemsArtifact -> LLVMArtifact
+lowerSystemsDigestValidation = lowerSystemsWith DigestValidationMode
+
+lowerSystemsStorage :: LLVMTargetProfile -> SystemsArtifact -> LLVMArtifact
+lowerSystemsStorage = lowerSystemsWith StorageMode
+
+lowerSystemsAcceptedResponse :: LLVMTargetProfile -> SystemsArtifact -> LLVMArtifact
+lowerSystemsAcceptedResponse = lowerSystemsWith AcceptedResponseMode
 
 lowerSystemsWith
   :: LoweringMode
@@ -76,13 +91,14 @@ lowerFunction mode functionValue = LLVMFunction
   }
 
 lowerParameters :: LoweringMode -> SystemsFunction -> [LLVMParameter]
-lowerParameters mode functionValue = case mode of
-  ExactReceiveMode ->
-    [ LLVMParameter (unValueId valueId) LLVMPointerParameter
-    | (valueId, SystemsValue { systemsValueRole = TransportHandle }) <-
-        Map.toAscList (systemsFunctionValues functionValue)
-    ]
-  _ -> []
+lowerParameters mode functionValue
+  | mode `elem` [ExactReceiveMode, DigestValidationMode, StorageMode, AcceptedResponseMode] =
+      [ LLVMParameter (unValueId valueId) LLVMPointerParameter
+      | (valueId, SystemsValue { systemsValueRole = role }) <-
+          Map.toAscList (systemsFunctionValues functionValue)
+      , isPointerParameterRole role
+      ]
+  | otherwise = []
 
 lowerBlock :: LoweringMode -> SystemsFunction -> SystemsBlock -> LLVMBlock
 lowerBlock mode functionValue blockValue = LLVMBlock
@@ -99,11 +115,11 @@ lowerOp mode functionValue operation = case operation of
   OpCommitIngress {} -> [LLVMPlain "commit recognized ingress into CFG typestate"]
   OpDestroyPending {} -> [LLVMCleanup "destroy pending ingress/frame"]
   OpReleaseOwner { releaseOwner = owner }
-    | mode == ExactReceiveMode && isExactReceivePayload functionValue owner ->
+    | concretePayloadMode mode && isExactReceivePayload functionValue owner ->
         [LLVMBufferRelease (payloadSSAName owner)]
     | otherwise -> [LLVMCleanup "release owner"]
   OpCleanupPartial { cleanupOwner = owner }
-    | mode == ExactReceiveMode && isExactReceivePayload functionValue owner ->
+    | concretePayloadMode mode && isExactReceivePayload functionValue owner ->
         [LLVMBufferRelease (payloadSSAName owner)]
     | otherwise -> [LLVMCleanup "cleanup partial owner"]
   OpRuntimeCall
@@ -120,7 +136,15 @@ lowerOp mode functionValue operation = case operation of
           | mode /= ConservativeMode
           , Just projection <- recordProjection functionValue name inputs outputs ->
               [projection]
+          | mode /= ConservativeMode
+          , Just projection <- recordOpaqueProjection functionValue name inputs outputs ->
+              [projection]
+          | mode == AcceptedResponseMode
+          , Just (transport, uploadId) <- acceptedResponseOperands functionValue name inputs outputs ->
+              [LLVMAcceptedResponse (unValueId transport) (unValueId uploadId)]
           | otherwise -> [LLVMCall name]
+  OpSessionSelect { sessionSelectLabel = label } ->
+    [LLVMPoison ("unlowered-session-select:" <> label)]
   OpCopy {} -> [LLVMCall "copy"]
   OpEraseFact {} -> [LLVMMetadata "proof/typestate fact erased before LLVM"]
   OpDiagnostic { diagnosticName = name } -> [LLVMMetadata ("diagnostic " <> name)]
@@ -150,8 +174,24 @@ lowerTerminator mode functionValue terminator = case terminator of
                 (lowerBlockId yes)
                 (lowerBlockId no)
             Nothing -> runtimeBranch site yes no
-  TermRuntimeCheck { checkSite = site, checkSuccess = yes, checkFailure = no } ->
-    runtimeBranch site yes no
+  TermRuntimeCheck
+    { checkInputs = inputs
+    , checkSite = site
+    , checkSuccess = yes
+    , checkFailure = no
+    }
+    | mode `elem` [DigestValidationMode, StorageMode, AcceptedResponseMode]
+        && runtimeSiteKind site == DigestBoundary ->
+        case digestOperands functionValue inputs of
+          Just (recordValue, payloadOwner) ->
+            LLVMDigestValidate
+              site
+              (unValueId recordValue)
+              (payloadSSAName payloadOwner)
+              (lowerBlockId yes)
+              (lowerBlockId no)
+          Nothing -> runtimeBranch site yes no
+    | otherwise -> runtimeBranch site yes no
   TermReceiveExact
     { exactTransport = transportValue
     , exactLength = lengthValue
@@ -159,39 +199,55 @@ lowerTerminator mode functionValue terminator = case terminator of
     , exactSite = site
     , exactSuccess = yes
     , exactFailure = no
-    } ->
-      case mode of
-        ExactReceiveMode ->
-          case
-            ( transportRoleOf functionValue transportValue
-            , scalarTypeOf functionValue lengthValue
-            , payloadRoleOf functionValue payloadValue
-            ) of
-            (True, Just scalarType, True) -> LLVMExactReceive
-              site
-              ("receive_exact_" <> scalarSuffix scalarType)
-              (unValueId transportValue)
-              (unValueId lengthValue)
-              scalarType
-              (payloadSSAName payloadValue)
-              (lowerBlockId yes)
-              (lowerBlockId no)
-            _ -> runtimeBranch site yes no
-        RecognizedRecordMode ->
-          case scalarTypeOf functionValue lengthValue of
-            Just scalarType -> LLVMRuntimeScalarBranch
-              site
-              ("receive_exact_" <> scalarSuffix scalarType)
-              (unValueId lengthValue)
-              scalarType
-              (lowerBlockId yes)
-              (lowerBlockId no)
-            Nothing -> runtimeBranch site yes no
-        ConservativeMode -> runtimeBranch site yes no
+    }
+    | mode `elem` [ExactReceiveMode, DigestValidationMode, StorageMode, AcceptedResponseMode] ->
+        case
+          ( transportRoleOf functionValue transportValue
+          , scalarTypeOf functionValue lengthValue
+          , payloadRoleOf functionValue payloadValue
+          ) of
+          (True, Just scalarType, True) -> LLVMExactReceive
+            site
+            ("receive_exact_" <> scalarSuffix scalarType)
+            (unValueId transportValue)
+            (unValueId lengthValue)
+            scalarType
+            (payloadSSAName payloadValue)
+            (lowerBlockId yes)
+            (lowerBlockId no)
+          _ -> runtimeBranch site yes no
+    | mode == RecognizedRecordMode ->
+        case scalarTypeOf functionValue lengthValue of
+          Just scalarType -> LLVMRuntimeScalarBranch
+            site
+            ("receive_exact_" <> scalarSuffix scalarType)
+            (unValueId lengthValue)
+            scalarType
+            (lowerBlockId yes)
+            (lowerBlockId no)
+          Nothing -> runtimeBranch site yes no
+    | otherwise -> runtimeBranch site yes no
   TermSendExact { sendExactSite = site, sendExactSuccess = yes, sendExactFailure = no } ->
     runtimeBranch site yes no
-  TermStore { storeSite = site, storeSuccess = yes, storeFailure = no } ->
-    runtimeBranch site yes no
+  TermStore
+    { storeOwner = ownerValue
+    , storeResult = resultValue
+    , storeSite = site
+    , storeSuccess = yes
+    , storeFailure = no
+    }
+    | mode `elem` [StorageMode, AcceptedResponseMode]
+        && payloadRoleOf functionValue ownerValue
+        && uploadIdRoleOf functionValue resultValue ->
+        LLVMStore
+          site
+          (payloadSSAName ownerValue)
+          (unValueId resultValue)
+          (lowerBlockId yes)
+          (lowerBlockId no)
+    | otherwise -> runtimeBranch site yes no
+  TermSessionOffer {} -> LLVMUnreachable Nothing
+  TermRuntimeChoice {} -> LLVMUnreachable Nothing
   TermReturnScalar valueId ->
     case Map.lookup valueId (systemsFunctionValues functionValue) of
       Just SystemsValue { systemsValueRole = TypedScalar scalarType } ->
@@ -266,6 +322,58 @@ recordProjection functionValue name inputs outputs =
         scalarType)
     _ -> Nothing
 
+recordOpaqueProjection
+  :: SystemsFunction
+  -> Text
+  -> [ValueId]
+  -> [ValueId]
+  -> Maybe LLVMOp
+recordOpaqueProjection functionValue name inputs outputs =
+  case (inputs, outputs) of
+    ([recordValue], [outputValue]) -> do
+      SystemsValue { systemsValueRole = RuntimeRecord grammar } <-
+        Map.lookup recordValue (systemsFunctionValues functionValue)
+      SystemsValue { systemsValueRole = RuntimeOpaque _ } <-
+        Map.lookup outputValue (systemsFunctionValues functionValue)
+      fieldName <- Text.stripPrefix ("project recognized " <> grammar <> ".") name
+      pure (LLVMOpaqueFieldProjection
+        (unValueId outputValue)
+        (unValueId recordValue)
+        grammar
+        fieldName)
+    _ -> Nothing
+
+isPointerParameterRole :: SystemsValueRole -> Bool
+isPointerParameterRole role = case role of
+  TransportHandle -> True
+  RuntimeInput _ -> True
+  _ -> False
+
+acceptedResponseOperands
+  :: SystemsFunction
+  -> Text
+  -> [ValueId]
+  -> [ValueId]
+  -> Maybe (ValueId, ValueId)
+acceptedResponseOperands functionValue name inputs outputs =
+  case (name, inputs, outputs) of
+    ("select accepted", [transport, uploadId], [])
+      | transportRoleOf functionValue transport
+          && uploadIdRoleOf functionValue uploadId -> Just (transport, uploadId)
+    _ -> Nothing
+
+digestOperands :: SystemsFunction -> [ValueId] -> Maybe (ValueId, ValueId)
+digestOperands functionValue inputs = case inputs of
+  [recordValue, viewValue] -> do
+    SystemsValue { systemsValueRole = RuntimeRecord _ } <-
+      Map.lookup recordValue (systemsFunctionValues functionValue)
+    SystemsValue { systemsValueRole = BorrowedSlice ownerValue } <-
+      Map.lookup viewValue (systemsFunctionValues functionValue)
+    SystemsValue { systemsValueRole = OwnedBuffer _ } <-
+      Map.lookup ownerValue (systemsFunctionValues functionValue)
+    pure (recordValue, ownerValue)
+  _ -> Nothing
+
 transportRoleOf :: SystemsFunction -> ValueId -> Bool
 transportRoleOf functionValue valueId =
   case Map.lookup valueId (systemsFunctionValues functionValue) of
@@ -278,6 +386,12 @@ payloadRoleOf functionValue valueId =
     Just SystemsValue { systemsValueRole = OwnedBuffer _ } -> True
     _ -> False
 
+uploadIdRoleOf :: SystemsFunction -> ValueId -> Bool
+uploadIdRoleOf functionValue valueId =
+  case Map.lookup valueId (systemsFunctionValues functionValue) of
+    Just SystemsValue { systemsValueRole = RuntimeScalar "UploadId" } -> True
+    _ -> False
+
 isExactReceivePayload :: SystemsFunction -> ValueId -> Bool
 isExactReceivePayload functionValue owner = any blockOwnsPayload
   (Map.elems (systemsFunctionBlocks functionValue))
@@ -285,6 +399,10 @@ isExactReceivePayload functionValue owner = any blockOwnsPayload
     blockOwnsPayload blockValue = case systemsBlockTerminator blockValue of
       TermReceiveExact { exactPayloadOwner = payload } -> payload == owner
       _ -> False
+
+concretePayloadMode :: LoweringMode -> Bool
+concretePayloadMode mode = mode `elem`
+  [ExactReceiveMode, DigestValidationMode, StorageMode, AcceptedResponseMode]
 
 payloadSSAName :: ValueId -> Text
 payloadSSAName valueId = unValueId valueId <> ".owner"

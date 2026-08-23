@@ -1,0 +1,100 @@
+name: Validity Scope Proofs
+
+on:
+  pull_request:
+    paths:
+      - 'proof/Phil/Assurance/ValidityScope.v'
+      - 'src/Phil/Assurance/RocqValidityScope.hs'
+      - 'app/ValidityScopeProofCorrespondenceMain.hs'
+      - 'app/ValidityScopeProofCertificationMain.hs'
+      - 'src/Phil/Assurance/Verify.hs'
+      - 'src/Phil/Assurance/Types.hs'
+      - '.github/workflows/validity-scope-proofs.yml'
+  push:
+    branches:
+      - main
+    paths:
+      - 'proof/Phil/Assurance/ValidityScope.v'
+      - 'src/Phil/Assurance/RocqValidityScope.hs'
+      - 'app/ValidityScopeProofCorrespondenceMain.hs'
+      - 'app/ValidityScopeProofCertificationMain.hs'
+      - 'src/Phil/Assurance/Verify.hs'
+      - 'src/Phil/Assurance/Types.hs'
+      - '.github/workflows/validity-scope-proofs.yml'
+
+permissions:
+  contents: read
+
+jobs:
+  rocq-validity-scope:
+    runs-on: ubuntu-latest
+    container:
+      image: rocq/rocq-prover:9.2.0
+      options: --user root
+    steps:
+      - uses: actions/checkout@v4
+      - name: Check validity-scope theorem
+        run: |
+          export PATH="/home/rocq/.opam/${COMPILER}/bin:$PATH"
+          rocq c -Q proof/Phil Phil proof/Phil/Assurance/ValidityScope.v
+      - name: Stage checked validity-scope proof
+        run: |
+          mkdir -p checked/proof/Phil/Assurance
+          cp proof/Phil/Assurance/ValidityScope.v checked/proof/Phil/Assurance/
+          cp proof/Phil/Assurance/ValidityScope.vo checked/proof/Phil/Assurance/
+      - uses: actions/upload-artifact@v4
+        with:
+          name: validity-scope-checked-proof
+          path: checked/
+          if-no-files-found: error
+          retention-days: 14
+
+  certify-validity-scope:
+    needs: rocq-validity-scope
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: haskell-actions/setup@v2
+        with:
+          ghc-version: '9.6.7'
+          cabal-version: 'latest'
+      - uses: actions/download-artifact@v4
+        with:
+          name: validity-scope-checked-proof
+          path: checked
+      - name: Build Phil assurance library
+        run: cabal build lib:phil-core
+      - name: Typecheck proof correspondence and certifier
+        run: |
+          cabal exec -- ghc \
+            -Wall -Wcompat -Wincomplete-record-updates -Wincomplete-uni-patterns -Wredundant-constraints -Werror \
+            -isrc -iapp -fno-code app/ValidityScopeProofCorrespondenceMain.hs
+          cabal exec -- ghc \
+            -Wall -Wcompat -Wincomplete-record-updates -Wincomplete-uni-patterns -Wredundant-constraints -Werror \
+            -isrc -iapp -fno-code app/ValidityScopeProofCertificationMain.hs
+      - name: Run scopeMatches correspondence regressions
+        run: |
+          cabal exec -- ghc -O0 -isrc -iapp \
+            app/ValidityScopeProofCorrespondenceMain.hs \
+            -o phil-check-validity-scope-correspondence
+          ./phil-check-validity-scope-correspondence
+      - name: Build validity-scope proof certifier
+        run: |
+          cabal exec -- ghc -O0 -isrc -iapp \
+            app/ValidityScopeProofCertificationMain.hs \
+            -o phil-certify-validity-scope
+      - name: Produce PHIL-ASSURE-VALIDITY-001 certificate
+        run: |
+          mkdir -p validity-scope-certificates
+          ./phil-certify-validity-scope \
+            checked/proof/Phil/Assurance/ValidityScope.v \
+            checked/proof/Phil/Assurance/ValidityScope.vo \
+            validity-scope-certificates/PHIL-ASSURE-VALIDITY-001.rocq.cert
+          cat validity-scope-certificates/PHIL-ASSURE-VALIDITY-001.rocq.cert
+          sha256sum validity-scope-certificates/PHIL-ASSURE-VALIDITY-001.rocq.cert
+      - uses: actions/upload-artifact@v4
+        with:
+          name: phil-validity-scope-proof-certificate
+          path: validity-scope-certificates/PHIL-ASSURE-VALIDITY-001.rocq.cert
+          if-no-files-found: error
+          retention-days: 30

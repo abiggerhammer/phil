@@ -342,8 +342,11 @@ certifyRocqProof spec sourceBytes compiledBytes = do
       }
   where
     requireTheorem sourceText theoremName =
-      unless (("Theorem " <> theoremName) `Text.isInfixOf` sourceText) $
+      unless (any hasDeclaration ["Theorem", "Lemma", "Corollary"]) $
         Left (RocqExpectedTheoremMissing theoremName)
+      where
+        hasDeclaration keyword =
+          (keyword <> " " <> theoremName) `Text.isInfixOf` sourceText
 
 certifyCoreScalarRocqProof
   :: ByteString.ByteString

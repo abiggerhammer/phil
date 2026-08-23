@@ -60,12 +60,30 @@ collectDefinitions
   -> Set.Set ValueId
   -> Map.Map ValueId [ScalarSite]
 collectDefinitions function typedScalars = Map.fromListWith (<>)
-  [ (valueId, [ScalarSite (systemsBlockId blockValue) operationIndex])
-  | blockValue <- Map.elems (systemsFunctionBlocks function)
-  , (operationIndex, operation) <- zip [0 ..] (systemsBlockOps blockValue)
-  , valueId <- operationDefinitions operation
-  , Set.member valueId typedScalars
-  ]
+  ( operationSites <> branchSites )
+  where
+    operationSites =
+      [ (valueId, [ScalarSite (systemsBlockId blockValue) operationIndex])
+      | blockValue <- Map.elems (systemsFunctionBlocks function)
+      , (operationIndex, operation) <- zip [0 ..] (systemsBlockOps blockValue)
+      , valueId <- operationDefinitions operation
+      , Set.member valueId typedScalars
+      ]
+    branchSites = concatMap branchDefinitions (Map.elems (systemsFunctionBlocks function))
+    branchDefinitions blockValue = case systemsBlockTerminator blockValue of
+      TermRuntimeChoice { runtimeChoiceArms = arms } ->
+        [ (valueId, [ScalarSite (runtimeChoiceArmTarget arm) (-1)])
+        | arm <- Map.elems arms
+        , Just valueId <- [runtimeChoiceArmPayloadBinding arm]
+        , Set.member valueId typedScalars
+        ]
+      TermSessionOffer { sessionOfferArms = arms } ->
+        [ (valueId, [ScalarSite (choiceArmTarget arm) (-1)])
+        | arm <- Map.elems arms
+        , Just valueId <- [choiceArmPayloadBinding arm]
+        , Set.member valueId typedScalars
+        ]
+      _ -> []
 
 collectUses
   :: SystemsFunction
@@ -98,6 +116,7 @@ operationDefinitions operation = case operation of
 operationUses :: SystemsOp -> [ValueId]
 operationUses operation = case operation of
   OpRuntimeCall { runtimeCallInputs = inputs } -> inputs
+  OpSessionSelect { sessionSelectPayload = Just payload } -> [payload]
   OpCopy { copySource = source } -> [source]
   _ -> []
 
@@ -106,6 +125,7 @@ terminatorUses terminator = case terminator of
   TermBranch condition _ _ -> [condition]
   TermRuntimeCheck { checkInputs = inputs } -> inputs
   TermReceiveExact { exactLength = lengthValue } -> [lengthValue]
+  TermRuntimeChoice { runtimeChoiceInputs = inputs } -> inputs
   TermReturnScalar valueId -> [valueId]
   _ -> []
 

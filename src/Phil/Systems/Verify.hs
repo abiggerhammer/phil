@@ -68,6 +68,21 @@ data SystemsVerificationError
   | ScalarReturnUnknownValue Text BlockId ValueId
   | ScalarReturnValueNotScalar Text BlockId ValueId
   | ScalarReturnTypeMismatch Text ScalarType ScalarType
+  | SessionOfferTransportMissing Text BlockId ValueId
+  | SessionOfferTransportRoleMismatch Text BlockId ValueId SystemsValueRole
+  | SessionOfferEmptyArms Text BlockId
+  | SessionOfferPayloadMissing Text BlockId Text ValueId
+  | SessionOfferPayloadTargetNotDedicated Text BlockId Text BlockId [BlockId]
+  | SessionSelectTransportMissing Text BlockId ValueId
+  | SessionSelectTransportRoleMismatch Text BlockId ValueId SystemsValueRole
+  | SessionSelectEmptyLabel Text BlockId
+  | SessionSelectPayloadMissing Text BlockId Text ValueId
+  | RuntimeChoiceEmptyName Text BlockId
+  | RuntimeChoiceInputMissing Text BlockId ValueId
+  | RuntimeChoiceEmptyArms Text BlockId
+  | RuntimeChoiceEmptyLabel Text BlockId
+  | RuntimeChoicePayloadMissing Text BlockId Text ValueId
+  | RuntimeChoicePayloadTargetNotDedicated Text BlockId Text BlockId [BlockId]
   | CopyWithoutCopyDecision Text BlockId DecisionId
   | BorrowWithoutBorrowDecision Text BlockId DecisionId
   | OperationReferencesUnknownDecision Text BlockId DecisionId
@@ -312,6 +327,7 @@ operationDecision operation = case operation of
   OpReleaseOwner { releaseDecision = lowering } -> Just lowering
   OpCleanupPartial { cleanupDecision = lowering } -> Just lowering
   OpRuntimeCall { runtimeCallDecision = lowering } -> Just lowering
+  OpSessionSelect { sessionSelectDecision = lowering } -> Just lowering
   OpCopy { copyDecision = lowering } -> Just lowering
   OpEraseFact { eraseDecision = lowering } -> Just lowering
   OpDiagnostic { diagnosticDecision = lowering } -> Just lowering
@@ -341,6 +357,17 @@ verifyOperationShape program functionKey function blockKey recognitionTargets op
       case Map.lookup pending recognitionTargets of
         Just (successBlock, _) | successBlock == blockKey -> pure ()
         _ -> Left (OrphanCommitIngress functionKey blockKey pending)
+    OpSessionSelect transport label payload _ -> do
+      case Map.lookup transport (systemsFunctionValues function) of
+        Nothing -> Left (SessionSelectTransportMissing functionKey blockKey transport)
+        Just SystemsValue { systemsValueRole = TransportHandle } -> pure ()
+        Just value -> Left (SessionSelectTransportRoleMismatch
+          functionKey blockKey transport (systemsValueRole value))
+      when (Text.null label) $
+        Left (SessionSelectEmptyLabel functionKey blockKey)
+      forM_ payload $ \payloadId ->
+        unless (Map.member payloadId (systemsFunctionValues function)) $
+          Left (SessionSelectPayloadMissing functionKey blockKey label payloadId)
     OpDestroyPending pending _ _ ->
       case Map.lookup pending recognitionTargets of
         Just (_, failureBlock) | failureBlock == blockKey -> pure ()
@@ -390,6 +417,46 @@ verifyTerminatorShape functionKey function blockKey terminator =
         Left (RecognitionCommitNotFirstUse functionKey blockKey pending success)
       unless (blockContainsDestroy function failure pending) $
         Left (RecognitionFailureMissingDestroy functionKey blockKey pending failure)
+    TermRuntimeChoice name inputs _ arms -> do
+      when (Text.null name) $
+        Left (RuntimeChoiceEmptyName functionKey blockKey)
+      forM_ inputs $ \input ->
+        unless (Map.member input (systemsFunctionValues function)) $
+          Left (RuntimeChoiceInputMissing functionKey blockKey input)
+      when (Map.null arms) $
+        Left (RuntimeChoiceEmptyArms functionKey blockKey)
+      forM_ (Map.toAscList arms) $ \(label, arm) -> do
+        when (Text.null label) $
+          Left (RuntimeChoiceEmptyLabel functionKey blockKey)
+        case runtimeChoiceArmPayloadBinding arm of
+          Nothing -> pure ()
+          Just payload -> do
+            unless (Map.member payload (systemsFunctionValues function)) $
+              Left (RuntimeChoicePayloadMissing functionKey blockKey label payload)
+            let target = runtimeChoiceArmTarget arm
+                predecessors = predecessorsOf function target
+            unless (predecessors == [blockKey]) $
+              Left (RuntimeChoicePayloadTargetNotDedicated
+                functionKey blockKey label target predecessors)
+    TermSessionOffer transport arms -> do
+      case Map.lookup transport (systemsFunctionValues function) of
+        Nothing -> Left (SessionOfferTransportMissing functionKey blockKey transport)
+        Just SystemsValue { systemsValueRole = TransportHandle } -> pure ()
+        Just value -> Left (SessionOfferTransportRoleMismatch
+          functionKey blockKey transport (systemsValueRole value))
+      when (Map.null arms) $
+        Left (SessionOfferEmptyArms functionKey blockKey)
+      forM_ (Map.toAscList arms) $ \(label, arm) ->
+        case choiceArmPayloadBinding arm of
+          Nothing -> pure ()
+          Just payload -> do
+            unless (Map.member payload (systemsFunctionValues function)) $
+              Left (SessionOfferPayloadMissing functionKey blockKey label payload)
+            let target = choiceArmTarget arm
+                predecessors = predecessorsOf function target
+            unless (predecessors == [blockKey]) $
+              Left (SessionOfferPayloadTargetNotDedicated
+                functionKey blockKey label target predecessors)
     TermReturnScalar valueId ->
       case Map.lookup valueId (systemsFunctionValues function) of
         Nothing -> Left (ScalarReturnUnknownValue functionKey blockKey valueId)
@@ -461,6 +528,7 @@ operationUsesTransport operation = case operation of
   OpReceiveFrame {} -> True
   OpCommitIngress {} -> True
   OpRuntimeCall { runtimeCallInputs = inputs } -> not (null inputs)
+  OpSessionSelect {} -> True
   _ -> False
 
 blockContainsDestroy :: SystemsFunction -> BlockId -> ValueId -> Bool
@@ -471,6 +539,13 @@ blockContainsDestroy function blockId pending =
   where
     isDestroy OpDestroyPending { destroyPending = candidate } = candidate == pending
     isDestroy _ = False
+
+predecessorsOf :: SystemsFunction -> BlockId -> [BlockId]
+predecessorsOf function target =
+  [ systemsBlockId blockValue
+  | blockValue <- Map.elems (systemsFunctionBlocks function)
+  , target `elem` blockSuccessors blockValue
+  ]
 
 collectRecognitionTargets :: SystemsFunction -> Map ValueId (BlockId, BlockId)
 collectRecognitionTargets function = Map.fromList
@@ -675,6 +750,13 @@ verifyInvariantClaim program invariantId claim = case claim of
     blockValue <- requireInvariantBlock invariantId function blockId
     case systemsBlockTerminator blockValue of
       TermBranch _ actualYes actualNo | actualYes == yes && actualNo == no -> pure ()
+      _ -> Left (StageInvariantControlMismatch invariantId)
+  InvariantRuntimeChoice functionName blockId name arms -> do
+    function <- requireFunction invariantId functionName program
+    blockValue <- requireInvariantBlock invariantId function blockId
+    case systemsBlockTerminator blockValue of
+      TermRuntimeChoice actualName _ _ actualArms
+        | actualName == name && actualArms == arms -> pure ()
       _ -> Left (StageInvariantControlMismatch invariantId)
   InvariantExactReceive functionName blockId owner yes no -> do
     function <- requireFunction invariantId functionName program

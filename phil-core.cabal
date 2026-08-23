@@ -8,7 +8,6 @@ data-files:
     examples/upload/*.phil
     examples/rejected/*.phil
     examples/run/*.phil
-    examples/steve/rejected/*.phil
 
 common common-settings
   default-language: GHC2021
@@ -58,12 +57,24 @@ library
       Phil.Assurance.Rocq
       Phil.Assurance.RocqRecognizedRecord
       Phil.Assurance.RocqExactReceive
+      Phil.Assurance.RocqDigestValidation
+      Phil.Assurance.RocqStorage
       Phil.Systems.IR
       Phil.Systems.Verify
       Phil.Systems.Phase0
       Phil.Systems.Dataflow
       Phil.Systems.FieldProjection
       Phil.Systems.RecognizedRecord
+      Phil.Systems.DigestValidation
+      Phil.Systems.Storage
+      Phil.Systems.AcceptedResponse
+      Phil.Systems.RejectedResponse
+      Phil.Systems.SessionChoice
+      Phil.Systems.PayloadCancelChoice
+      Phil.Systems.LocalRuntimeChoice
+      Phil.Systems.VersionSessionChoice
+      Phil.Systems.VersionChoiceOperands
+      Phil.Systems.BeginPolicySessionChoice
       Phil.LLVM.IR
       Phil.LLVM.Lower
       Phil.LLVM.Verify
@@ -74,6 +85,24 @@ library
       Phil.LLVM.ExactReceive
       Phil.LLVM.ExactReceiveCertification
       Phil.LLVM.ExactReceiveProofCertification
+      Phil.LLVM.DigestValidation
+      Phil.LLVM.DigestValidationCertification
+      Phil.LLVM.DigestValidationProofCertification
+      Phil.LLVM.Storage
+      Phil.LLVM.StorageCertification
+      Phil.LLVM.StorageProofCertification
+      Phil.LLVM.AcceptedResponse
+      Phil.LLVM.AcceptedResponseCertification
+      Phil.LLVM.RejectedResponse
+      Phil.LLVM.RejectedResponseCertification
+      Phil.LLVM.SessionOffer
+      Phil.LLVM.SessionOfferCertification
+      Phil.LLVM.PayloadCancelChoice
+      Phil.LLVM.PayloadCancelChoiceCertification
+      Phil.LLVM.VersionSessionChoice
+      Phil.LLVM.VersionSessionChoiceCertification
+      Phil.LLVM.BeginPolicyChoice
+      Phil.LLVM.BeginPolicyChoiceCertification
   build-depends:
       base >=4.17 && <5,
       bytestring >=0.11 && <0.13,
@@ -118,6 +147,78 @@ executable phil-llvm-phase0-exact-receive
       phil-core,
       text >=2.0 && <2.2
 
+executable phil-llvm-phase0-digest-validation
+  import:             common-settings
+  hs-source-dirs:     app
+  main-is:            LLVMDigestValidationMain.hs
+  build-depends:
+      base >=4.17 && <5,
+      phil-core,
+      text >=2.0 && <2.2
+
+executable phil-llvm-phase0-storage
+  import:             common-settings
+  hs-source-dirs:     app
+  main-is:            LLVMStorageMain.hs
+  build-depends:
+      base >=4.17 && <5,
+      phil-core,
+      text >=2.0 && <2.2
+
+executable phil-llvm-phase0-accepted-response
+  import:             common-settings
+  hs-source-dirs:     app
+  main-is:            LLVMAcceptedResponseMain.hs
+  build-depends:
+      base >=4.17 && <5,
+      phil-core,
+      text >=2.0 && <2.2
+
+executable phil-llvm-phase0-rejected-response
+  import:             common-settings
+  hs-source-dirs:     app
+  main-is:            LLVMRejectedResponseMain.hs
+  build-depends:
+      base >=4.17 && <5,
+      phil-core,
+      text >=2.0 && <2.2
+
+executable phil-llvm-phase0-final-response-receive
+  import:             common-settings
+  hs-source-dirs:     app
+  main-is:            LLVMFinalResponseReceiveMain.hs
+  build-depends:
+      base >=4.17 && <5,
+      phil-core,
+      text >=2.0 && <2.2
+
+executable phil-llvm-phase0-payload-cancel-choice
+  import:             common-settings
+  hs-source-dirs:     app
+  main-is:            LLVMPayloadCancelChoiceMain.hs
+  build-depends:
+      base >=4.17 && <5,
+      phil-core,
+      text >=2.0 && <2.2
+
+executable phil-llvm-phase0-version-session-choice
+  import:             common-settings
+  hs-source-dirs:     app
+  main-is:            LLVMVersionSessionChoiceMain.hs
+  build-depends:
+      base >=4.17 && <5,
+      phil-core,
+      text >=2.0 && <2.2
+
+executable phil-llvm-phase0-begin-policy-choice
+  import:             common-settings
+  hs-source-dirs:     app
+  main-is:            LLVMBeginPolicyChoiceMain.hs
+  build-depends:
+      base >=4.17 && <5,
+      phil-core,
+      text >=2.0 && <2.2
+
 executable philc
   import:             common-settings
   hs-source-dirs:     app
@@ -151,6 +252,26 @@ executable phil-certify-exact-receive
   import:             common-settings
   hs-source-dirs:     app
   main-is:            ExactReceiveProofCertificationMain.hs
+  build-depends:
+      base >=4.17 && <5,
+      bytestring >=0.11 && <0.13,
+      phil-core,
+      text >=2.0 && <2.2
+
+executable phil-certify-digest-validation
+  import:             common-settings
+  hs-source-dirs:     app
+  main-is:            DigestValidationProofCertificationMain.hs
+  build-depends:
+      base >=4.17 && <5,
+      bytestring >=0.11 && <0.13,
+      phil-core,
+      text >=2.0 && <2.2
+
+executable phil-certify-storage
+  import:             common-settings
+  hs-source-dirs:     app
+  main-is:            StorageProofCertificationMain.hs
   build-depends:
       base >=4.17 && <5,
       bytestring >=0.11 && <0.13,
@@ -388,6 +509,127 @@ test-suite phil-recognized-record-abi-tests
       phil-core,
       text >=2.0 && <2.2
 
+test-suite phil-digest-validation-abi-tests
+  import:             common-settings
+  type:               exitcode-stdio-1.0
+  hs-source-dirs:     test
+  main-is:            DigestValidationABIMain.hs
+  build-depends:
+      base >=4.17 && <5,
+      containers >=0.6 && <0.8,
+      phil-core,
+      text >=2.0 && <2.2
+
+test-suite phil-storage-abi-tests
+  import:             common-settings
+  type:               exitcode-stdio-1.0
+  hs-source-dirs:     test
+  main-is:            StorageABIMain.hs
+  build-depends:
+      base >=4.17 && <5,
+      containers >=0.6 && <0.8,
+      phil-core,
+      text >=2.0 && <2.2
+
+test-suite phil-accepted-response-abi-tests
+  import:             common-settings
+  type:               exitcode-stdio-1.0
+  hs-source-dirs:     test
+  main-is:            AcceptedResponseABIMain.hs
+  build-depends:
+      base >=4.17 && <5,
+      containers >=0.6 && <0.8,
+      phil-core,
+      text >=2.0 && <2.2
+
+test-suite phil-rejected-response-abi-tests
+  import:             common-settings
+  type:               exitcode-stdio-1.0
+  hs-source-dirs:     test
+  main-is:            RejectedResponseABIMain.hs
+  build-depends:
+      base >=4.17 && <5,
+      containers >=0.6 && <0.8,
+      phil-core,
+      text >=2.0 && <2.2
+
+test-suite phil-session-choice-tests
+  import:             common-settings
+  type:               exitcode-stdio-1.0
+  hs-source-dirs:     test
+  main-is:            SessionChoiceMain.hs
+  build-depends:
+      base >=4.17 && <5,
+      containers >=0.6 && <0.8,
+      phil-core,
+      text >=2.0 && <2.2
+
+test-suite phil-payload-cancel-choice-tests
+  import:             common-settings
+  type:               exitcode-stdio-1.0
+  hs-source-dirs:     test
+  main-is:            PayloadCancelChoiceMain.hs
+  build-depends:
+      base >=4.17 && <5,
+      containers >=0.6 && <0.8,
+      phil-core,
+      text >=2.0 && <2.2
+
+test-suite phil-local-runtime-choice-tests
+  import:             common-settings
+  type:               exitcode-stdio-1.0
+  hs-source-dirs:     test
+  main-is:            LocalRuntimeChoiceMain.hs
+  build-depends:
+      base >=4.17 && <5,
+      containers >=0.6 && <0.8,
+      phil-core,
+      text >=2.0 && <2.2
+
+test-suite phil-version-session-choice-tests
+  import:             common-settings
+  type:               exitcode-stdio-1.0
+  hs-source-dirs:     test
+  main-is:            VersionSessionChoiceMain.hs
+  build-depends:
+      base >=4.17 && <5,
+      containers >=0.6 && <0.8,
+      phil-core,
+      text >=2.0 && <2.2
+
+test-suite phil-version-session-choice-abi-tests
+  import:             common-settings
+  type:               exitcode-stdio-1.0
+  hs-source-dirs:     test
+  main-is:            VersionSessionChoiceABIMain.hs
+  build-depends:
+      base >=4.17 && <5,
+      containers >=0.6 && <0.8,
+      phil-core,
+      text >=2.0 && <2.2
+
+test-suite phil-payload-cancel-choice-abi-tests
+  import:             common-settings
+  type:               exitcode-stdio-1.0
+  hs-source-dirs:     test
+  main-is:            PayloadCancelChoiceABIMain.hs
+  build-depends:
+      base >=4.17 && <5,
+      containers >=0.6 && <0.8,
+      phil-core,
+      text >=2.0 && <2.2
+
+test-suite phil-final-response-receive-tests
+  import:             common-settings
+  type:               exitcode-stdio-1.0
+  hs-source-dirs:     test
+  main-is:            FinalResponseReceiveMain.hs
+  build-depends:
+      base >=4.17 && <5,
+      containers >=0.6 && <0.8,
+      phil-core,
+      text >=2.0 && <2.2
+
 test-suite phil-runnable-tests
   import:             common-settings
   type:               exitcode-stdio-1.0
@@ -399,24 +641,22 @@ test-suite phil-runnable-tests
       phil-core,
       text >=2.0 && <2.2
 
-test-suite phil-steve-assurance-tests
+test-suite phil-begin-policy-session-choice-tests
   import:             common-settings
   type:               exitcode-stdio-1.0
   hs-source-dirs:     test
-  main-is:            SteveAssuranceMain.hs
+  main-is:            BeginPolicySessionChoiceMain.hs
   build-depends:
       base >=4.17 && <5,
       containers >=0.6 && <0.8,
       phil-core,
       text >=2.0 && <2.2
 
-test-suite phil-steve-surface-semantic-tests
+test-suite phil-begin-policy-choice-abi-tests
   import:             common-settings
   type:               exitcode-stdio-1.0
   hs-source-dirs:     test
-  main-is:            SteveSurfaceSemanticMain.hs
-  autogen-modules:    Paths_phil_core
-  other-modules:      Paths_phil_core
+  main-is:            BeginPolicyChoiceABIMain.hs
   build-depends:
       base >=4.17 && <5,
       containers >=0.6 && <0.8,
