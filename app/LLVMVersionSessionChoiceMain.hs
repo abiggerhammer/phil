@@ -1,8 +1,7 @@
 module Main (main) where
 
 import qualified Data.Text.IO as Text
-import Phil.LLVM.IR (llvmArtifactText)
-import Phil.LLVM.VersionSessionChoice
+import Phil.LLVM (llvmArtifactText, phase0VersionSessionChoiceLLVMArtifact)
 
 main :: IO ()
 main =
