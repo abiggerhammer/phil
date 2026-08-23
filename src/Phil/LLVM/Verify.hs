@@ -222,6 +222,7 @@ ordinaryOps = filter isOrdinary
       LLVMBeginPolicyChoiceReasonBinding {} -> True
       LLVMHelloPolicyValidationReasonBinding {} -> True
       LLVMHelloPolicyFailure {} -> True
+      LLVMExactSend {} -> True
       LLVMAcceptedResponse {} -> True
       LLVMRejectedResponse {} -> True
       LLVMPayloadCancelSelect {} -> True

@@ -108,6 +108,7 @@ data LLVMOp
   | LLVMBeginPolicyChoiceReasonBinding Text
   | LLVMHelloPolicyValidationReasonBinding Text
   | LLVMHelloPolicyFailure Text Text
+  | LLVMExactSend RuntimeSiteRef Text Text
   | LLVMAcceptedResponse Text Text
   | LLVMRejectedResponse Text Int
   | LLVMPayloadCancelSelect Text Int
@@ -296,7 +297,9 @@ llvmRuntimeSites moduleValue = concat
     blockRuntimeSites blockValue =
       [ site
       | LLVMRuntime site _ <- llvmBlockOps blockValue
-      ] <> case llvmBlockTerminator blockValue of
+      ] <> [ site
+           | LLVMExactSend site _ _ <- llvmBlockOps blockValue
+           ] <> case llvmBlockTerminator blockValue of
         LLVMRuntimeBranch site _ _ _ -> [site]
         LLVMRecognizeRecord site _ _ _ _ -> [site]
         LLVMRuntimeScalarBranch site _ _ _ _ _ -> [site]
@@ -342,6 +345,7 @@ renderLLVMModule moduleValue = Text.unlines $
       , "phil-runtime/phase0/version-session-choice-v1"
       , "phil-runtime/phase0/begin-policy-choice-v1"
       , "phil-runtime/phase0/hello-policy-validation-v1"
+      , "phil-runtime/phase0/transport-exact-send-v1"
       ]
 
     header =
@@ -396,6 +400,7 @@ renderLLVMModule moduleValue = Text.unlines $
       <> beginPolicyChoiceReceiveDeclaration
       <> helloPolicyValidationDeclaration
       <> helloPolicyFailureDeclaration
+      <> exactSendDeclaration
       <> map renderCallDeclaration (Set.toAscList callNames)
       <> runtimeDeclarations
       <> map renderFieldProjectionDeclaration (Set.toAscList fieldProjectionSignatures)
@@ -518,6 +523,11 @@ renderLLVMModule moduleValue = Text.unlines $
     helloPolicyFailureDeclaration =
       if any hasHelloPolicyFailure allBlocks
         then ["declare void @phil_runtime_fail_hello_policy(ptr, ptr)"]
+        else []
+
+    exactSendDeclaration =
+      if any hasExactSend allBlocks
+        then ["declare void @phil_runtime_send_exact(ptr, ptr)"]
         else []
 
     callNames = Set.fromList
@@ -672,6 +682,10 @@ renderLLVMModule moduleValue = Text.unlines $
     isHelloPolicyFailure LLVMHelloPolicyFailure {} = True
     isHelloPolicyFailure _ = False
 
+    hasExactSend blockValue = any isExactSend (llvmBlockOps blockValue)
+    isExactSend LLVMExactSend {} = True
+    isExactSend _ = False
+
     renderCallDeclaration name = "declare void @phil_call_" <> symbol name <> "()"
     renderRuntimeEvidenceDeclaration evidence =
       "declare i1 @phil_runtime_" <> symbol evidence <> "()"
@@ -783,6 +797,10 @@ renderLLVMModule moduleValue = Text.unlines $
       LLVMHelloPolicyFailure transport reason ->
         [ "call void @phil_runtime_fail_hello_policy(ptr %" <> symbol transport
             <> ", ptr %" <> symbol reason <> ")"
+        ]
+      LLVMExactSend _ transport payload ->
+        [ "call void @phil_runtime_send_exact(ptr %" <> symbol transport
+            <> ", ptr %" <> symbol payload <> ")"
         ]
       LLVMAcceptedResponse transport uploadId ->
         [ "call void @phil_runtime_select_accepted(ptr %" <> symbol transport

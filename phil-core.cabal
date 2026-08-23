@@ -106,6 +106,8 @@ library
       Phil.LLVM.BeginPolicyChoiceCertification
       Phil.LLVM.HelloPolicyValidation
       Phil.LLVM.HelloPolicyValidationCertification
+      Phil.LLVM.ExactSend
+      Phil.LLVM.ExactSendCertification
   build-depends:
       base >=4.17 && <5,
       bytestring >=0.11 && <0.13,
@@ -226,6 +228,15 @@ executable phil-llvm-phase0-hello-policy-validation
   import:             common-settings
   hs-source-dirs:     app
   main-is:            LLVMHelloPolicyValidationMain.hs
+  build-depends:
+      base >=4.17 && <5,
+      phil-core,
+      text >=2.0 && <2.2
+
+executable phil-llvm-phase0-exact-send
+  import:             common-settings
+  hs-source-dirs:     app
+  main-is:            LLVMExactSendMain.hs
   build-depends:
       base >=4.17 && <5,
       phil-core,
@@ -691,6 +702,17 @@ test-suite phil-hello-policy-validation-abi-tests
   type:               exitcode-stdio-1.0
   hs-source-dirs:     test
   main-is:            HelloPolicyValidationABIMain.hs
+  build-depends:
+      base >=4.17 && <5,
+      containers >=0.6 && <0.8,
+      phil-core,
+      text >=2.0 && <2.2
+
+test-suite phil-exact-send-abi-tests
+  import:             common-settings
+  type:               exitcode-stdio-1.0
+  hs-source-dirs:     test
+  main-is:            ExactSendABIMain.hs
   build-depends:
       base >=4.17 && <5,
       containers >=0.6 && <0.8,
