@@ -41,7 +41,7 @@ on:
       - '.github/workflows/version-session-choice-runtime.yml'
 
 permissions:
-  contents: write
+  contents: read
 
 jobs:
   version-session-choice-runtime:
@@ -91,49 +91,3 @@ jobs:
           fi
 
           cabal test phil-version-session-choice-abi-tests
-
-  fix-version-refinement-verifier-indent:
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@v4
-        with:
-          ref: lower-version-session-choice
-          fetch-depth: 0
-      - name: Fix verifier indentation
-        shell: bash
-        run: |
-          set -euo pipefail
-          python3 - <<'PY'
-          from pathlib import Path
-          p = Path('src/Phil/LLVM/VersionSessionChoice.hs')
-          lines = p.read_text().splitlines()
-          marker = '    LLVMVersionRefinement _ transport selected yes no'
-          hits = [i for i, line in enumerate(lines) if line == marker]
-          if len(hits) != 1:
-              raise SystemExit(f'expected one verifier refinement marker, found {len(hits)}')
-          i = hits[0]
-          expected = [
-              marker,
-              '      | transport == clientTransport',
-              '&& selected == clientSelected',
-              '&& yes == LLVMBlockId (unBlockId (versionChoiceClientVersionSuccess versionWitness))',
-              '&& no == LLVMBlockId (unBlockId (versionChoiceClientVersionFailure versionWitness)) -> pure ()',
-          ]
-          if lines[i:i + len(expected)] != expected:
-              raise SystemExit('verifier refinement block no longer matches known malformed form')
-          replacement = [
-              marker,
-              '      | transport == clientTransport',
-              '          && selected == clientSelected',
-              '          && yes == LLVMBlockId (unBlockId (versionChoiceClientVersionSuccess versionWitness))',
-              '          && no == LLVMBlockId (unBlockId (versionChoiceClientVersionFailure versionWitness)) -> pure ()',
-          ]
-          lines[i:i + len(expected)] = replacement
-          p.write_text('\n'.join(lines) + '\n')
-          PY
-          git diff --check
-          git config user.name "phil-version-lowering-bot"
-          git config user.email "actions@users.noreply.github.com"
-          git add src/Phil/LLVM/VersionSessionChoice.hs
-          git commit -m "Fix version refinement verifier indentation"
-          git push origin HEAD:lower-version-session-choice
