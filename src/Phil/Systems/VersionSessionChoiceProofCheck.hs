@@ -3,6 +3,7 @@
 module Phil.Systems.VersionSessionChoiceProofCheck
   ( VersionSessionChoiceProofCheckError (..)
   , verifyVersionSessionChoiceProofWitness
+  , verifyVersionSessionChoiceExactShape
   ) where
 
 import qualified Data.Map.Strict as Map
@@ -28,6 +29,13 @@ verifyVersionSessionChoiceProofWitness
 verifyVersionSessionChoiceProofWitness artifact witness = do
   mapLeft VersionSessionChoiceBaseError $
     verifyVersionSessionChoiceWitness artifact witness
+  verifyVersionSessionChoiceExactShape artifact witness
+
+verifyVersionSessionChoiceExactShape
+  :: SystemsArtifact
+  -> VersionSessionChoiceWitness
+  -> Either VersionSessionChoiceProofCheckError ()
+verifyVersionSessionChoiceExactShape artifact witness = do
   let program = systemsArtifactProgram artifact
   server <- needFunction (versionChoiceServerFunction witness) program
   client <- needFunction (versionChoiceClientFunction witness) program
