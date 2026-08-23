@@ -49,6 +49,7 @@ jobs:
     steps:
       - uses: actions/checkout@v4
       - name: Check predecessor and BeginPolicy proof corpus
+        shell: bash
         run: |
           set -euo pipefail
           export PATH="/home/rocq/.opam/${COMPILER}/bin:$PATH"
