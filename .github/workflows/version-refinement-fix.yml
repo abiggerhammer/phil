@@ -31,26 +31,26 @@ jobs:
                   raise SystemExit(f"{path}: expected one match, found {count}: {old!r}")
               p.write_text(text.replace(old, new, 1))
 
-          # LLVM IR: explicit transport-scoped selected-version refinement.
+          # LLVM IR: transport-scoped selected-version refinement.
           replace_once('src/Phil/LLVM/IR.hs',
           '''  | LLVMVersionChoiceOffer
-              Text
-              Text
-              LLVMBlockId
-              LLVMBlockId
+                Text
+                Text
+                LLVMBlockId
+                LLVMBlockId
             | LLVMReturnScalar Text ScalarType
           ''',
           '''  | LLVMVersionChoiceOffer
-              Text
-              Text
-              LLVMBlockId
-              LLVMBlockId
+                Text
+                Text
+                LLVMBlockId
+                LLVMBlockId
             | LLVMVersionRefinement
-              RuntimeSiteRef
-              Text
-              Text
-              LLVMBlockId
-              LLVMBlockId
+                RuntimeSiteRef
+                Text
+                Text
+                LLVMBlockId
+                LLVMBlockId
             | LLVMReturnScalar Text ScalarType
           ''')
           replace_once('src/Phil/LLVM/IR.hs',
@@ -105,46 +105,24 @@ jobs:
                 _ -> False
           ''')
           replace_once('src/Phil/LLVM/IR.hs',
-          '''      LLVMVersionChoiceOffer transport selected versionTarget unsupportedTarget ->
-                let blockSymbol = symbol (unLLVMBlockId (llvmBlockId blockValue))
-                    slotName = "%phil_version_choice_slot_" <> symbol selected
-                    versionName = "%phil_version_choice_is_version_" <> blockSymbol
-                in
-                  [ slotName <> " = alloca i16"
-                  , versionName <> " = call i1 @phil_runtime_receive_version_choice(ptr %"
-                      <> symbol transport <> ", ptr " <> slotName <> ")"
-                  , "br i1 " <> versionName
-                      <> ", label %" <> symbol (unLLVMBlockId versionTarget)
-                      <> ", label %" <> symbol (unLLVMBlockId unsupportedTarget)
-                  ]
-                LLVMReturnScalar name scalarType ->
+          '''      LLVMReturnScalar name scalarType ->
+                ["ret " <> renderScalarType scalarType <> " %" <> symbol name]
           ''',
-          '''      LLVMVersionChoiceOffer transport selected versionTarget unsupportedTarget ->
+          '''      LLVMVersionRefinement _ transport selected yes no ->
                 let blockSymbol = symbol (unLLVMBlockId (llvmBlockId blockValue))
-                    slotName = "%phil_version_choice_slot_" <> symbol selected
-                    versionName = "%phil_version_choice_is_version_" <> blockSymbol
+                    validName = "%phil_version_refinement_ok_" <> blockSymbol
                 in
-                  [ slotName <> " = alloca i16"
-                  , versionName <> " = call i1 @phil_runtime_receive_version_choice(ptr %"
-                      <> symbol transport <> ", ptr " <> slotName <> ")"
-                  , "br i1 " <> versionName
-                      <> ", label %" <> symbol (unLLVMBlockId versionTarget)
-                      <> ", label %" <> symbol (unLLVMBlockId unsupportedTarget)
+                  [ validName <> " = call i1 @phil_runtime_refine_selected_version(ptr %"
+                      <> symbol transport <> ", i16 %" <> symbol selected <> ")"
+                  , "br i1 " <> validName
+                      <> ", label %" <> symbol (unLLVMBlockId yes)
+                      <> ", label %" <> symbol (unLLVMBlockId no)
                   ]
-                LLVMVersionRefinement _ transport selected yes no ->
-                  let blockSymbol = symbol (unLLVMBlockId (llvmBlockId blockValue))
-                      validName = "%phil_version_refinement_ok_" <> blockSymbol
-                  in
-                    [ validName <> " = call i1 @phil_runtime_refine_selected_version(ptr %"
-                        <> symbol transport <> ", i16 %" <> symbol selected <> ")"
-                    , "br i1 " <> validName
-                        <> ", label %" <> symbol (unLLVMBlockId yes)
-                        <> ", label %" <> symbol (unLLVMBlockId no)
-                    ]
-                LLVMReturnScalar name scalarType ->
+              LLVMReturnScalar name scalarType ->
+                ["ret " <> renderScalarType scalarType <> " %" <> symbol name]
           ''')
 
-          # Target-specific lowerer and validator.
+          # Profile lowerer and translation validator.
           replace_once('src/Phil/LLVM/VersionSessionChoice.hs',
           '''  | VersionChoiceLLVMClientBindingMismatch Text LLVMBlockId [LLVMOp]
             | VersionChoiceLLVMPayloadCancelRegression Text
@@ -208,31 +186,26 @@ jobs:
           ''',
           '''    && Text.isInfixOf "declare i1 @phil_runtime_receive_version_choice(ptr, ptr)" rendered
                 && Text.isInfixOf "declare i1 @phil_runtime_refine_selected_version(ptr, i16)" rendered
-                && Text.isInfixOf ("@phil_runtime_refine_selected_version(ptr %" <> symbolish clientTransport
-                    <> ", i16 %" <> symbolish clientSelected <> ")") rendered
                 ) $
           ''')
           replace_once('src/Phil/LLVM/VersionSessionChoice.hs',
-          '''mapLeft :: (a -> b) -> Either a c -> Either b c
+          '''    && not (Text.isInfixOf "@phil_call_receive_version_unsupported_label" rendered)
+                ) $
           ''',
-          '''symbolish :: Text -> Text
-              symbolish = Text.map (\character -> if isSymbol character then character else '_')
-                where
-                  isSymbol character =
-                    (character >= 'a' && character <= 'z')
-                      || (character >= 'A' && character <= 'Z')
-                      || (character >= '0' && character <= '9')
-
-              mapLeft :: (a -> b) -> Either a c -> Either b c
+          '''    && not (Text.isInfixOf "@phil_call_receive_version_unsupported_label" rendered)
+                && not (Text.isInfixOf "@phil_runtime_refine_selected_version()" rendered)
+                ) $
           ''')
 
-          # Translation certificate explicitly binds refinement and its residual provider association.
+          # Translation-only CERT-010 names the residual transport/Hello association.
           replace_once('src/Phil/LLVM/VersionSessionChoiceCertification.hs',
-          '''-- choose_supported set semantics, opaque version-set representation, concrete
+          '''-- Translation-only authority for version-session-choice-v1. The provider's
+          -- choose_supported set semantics, opaque version-set representation, concrete
           -- byte I/O, malformed-input non-return, physical write success, LLVM 18,
           -- linking, and native execution remain independent gates.
           ''',
-          '''-- choose_supported set semantics, transport-local client offered-version
+          '''-- Translation-only authority for version-session-choice-v1. The provider's
+          -- choose_supported set semantics, transport-local client offered-version
           -- association, opaque version-set representation, concrete byte I/O,
           -- malformed-input non-return, physical write success, LLVM 18, linking,
           -- and native execution remain independent gates.
@@ -260,7 +233,7 @@ jobs:
                 , "payload/cancel and final-response physical lowerings remain intact"
           ''')
 
-          # Runtime ABI and fixture.
+          # Runtime provider API and focused fixture.
           replace_once('runtime/phase0/version_session_choice_v1.h',
           '''bool phil_runtime_receive_version_choice(
               void *transport,
@@ -338,7 +311,7 @@ jobs:
           }
           ''')
 
-          # Focused Haskell test checks the physical refinement terminator/call.
+          # Focused Haskell test binds the target refinement structurally.
           replace_once('test/VersionSessionChoiceABIMain.hs',
           '''      let expectedTerm = LLVMVersionChoiceOffer
                     (unValueId (versionChoiceClientTransport witness))
@@ -377,11 +350,20 @@ jobs:
                 ]
           ''')
 
-          # ABI note: make the residual association explicit.
           p = Path('docs/phase-0/version-session-choice-abi-v1.md')
           text = p.read_text()
           marker = "## Malformed input and failure behavior\n"
-          insert = '''## Client selected-version refinement\n\nAfter decoding `version(selected)`, the client refinement is a physical runtime boundary:\n\n```llvm\ndeclare i1 @phil_runtime_refine_selected_version(ptr %transport, i16 %selected)\n```\n\nThe transport operand is explicit and identifies the session-local state. The runtime provider must associate that transport with the exact versions placed in the client's prior `Hello`; this association is an external provider obligation in the translation-only `PHIL-LLVM-CERT-010` tranche. No global/current selected-version or offered-version slot is permitted.\n\n'''
+          insert = """## Client selected-version refinement
+
+After decoding `version(selected)`, the client refinement is a physical runtime boundary:
+
+```llvm
+declare i1 @phil_runtime_refine_selected_version(ptr %transport, i16 %selected)
+```
+
+The transport operand is explicit and identifies the session-local state. The runtime provider must associate that transport with the exact versions placed in the client's prior `Hello`; this association is an external provider obligation in the translation-only `PHIL-LLVM-CERT-010` tranche. No global/current selected-version or offered-version slot is permitted.
+
+"""
           if text.count(marker) != 1:
               raise SystemExit('ABI note malformed-input heading anchor mismatch')
           p.write_text(text.replace(marker, insert + marker, 1))
