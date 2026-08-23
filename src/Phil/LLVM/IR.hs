@@ -861,14 +861,14 @@ renderLLVMModule moduleValue = Text.unlines $
           ]
       LLVMVersionRefinement _ transport selected yes no ->
         let blockSymbol = symbol (unLLVMBlockId (llvmBlockId blockValue))
-  validName = "%phil_version_refinement_ok_" <> blockSymbol
+            validName = "%phil_version_refinement_ok_" <> blockSymbol
         in
-[ validName <> " = call i1 @phil_runtime_refine_selected_version(ptr %"
-    <> symbol transport <> ", i16 %" <> symbol selected <> ")"
-, "br i1 " <> validName
-    <> ", label %" <> symbol (unLLVMBlockId yes)
-    <> ", label %" <> symbol (unLLVMBlockId no)
-]
+          [ validName <> " = call i1 @phil_runtime_refine_selected_version(ptr %"
+              <> symbol transport <> ", i16 %" <> symbol selected <> ")"
+          , "br i1 " <> validName
+              <> ", label %" <> symbol (unLLVMBlockId yes)
+              <> ", label %" <> symbol (unLLVMBlockId no)
+          ]
       LLVMReturnScalar name scalarType ->
         ["ret " <> renderScalarType scalarType <> " %" <> symbol name]
       LLVMReturn outcome -> ["ret i32 0 ; " <> oneLine outcome]
