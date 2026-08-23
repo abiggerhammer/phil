@@ -64,7 +64,6 @@ jobs:
           EMITTER="$(cabal list-bin phil-llvm-phase0-version-session-choice)"
           "$EMITTER" > phase0-version-session-choice.ll
           "$LLVM_AS" phase0-version-session-choice.ll -o phase0-version-session-choice.bc
-
           "$CLANG" --target=x86_64-unknown-linux-gnu -std=c11 -Wall -Wextra -Wpedantic -Werror \
             -Iruntime/phase0 -S -emit-llvm runtime/phase0/version_session_choice_v1_smoke.c \
             -o version-session-runtime.ll
@@ -73,14 +72,12 @@ jobs:
           "$LLVM_AS" version-session-runtime.ll -o version-session-runtime.bc
           "$LLVM_LINK" phase0-version-session-choice.bc version-session-runtime.bc \
             -o phase0-version-session-choice-partially-linked.bc
-
           "$CLANG" --target=x86_64-unknown-linux-gnu -std=c11 -Wall -Wextra -Wpedantic -Werror \
             -Iruntime/phase0 \
             runtime/phase0/version_session_choice_v1_smoke.c \
             runtime/phase0/version_session_choice_v1_smoke_main.c \
             -o version-session-choice-smoke
           ./version-session-choice-smoke
-
           "$CLANG" --target=x86_64-unknown-linux-gnu -std=c11 -Wall -Wextra -Wpedantic -Werror \
             -S -emit-llvm runtime/phase0/version_session_choice_v1_bad_ambient.c \
             -o version-session-bad-ambient.ll
@@ -89,7 +86,6 @@ jobs:
             echo "expected ABI checker to reject ambient/nullary version-choice provider" >&2
             exit 1
           fi
-
           cabal test phil-version-session-choice-abi-tests
 
   fix-refinement-indent:
@@ -106,32 +102,40 @@ jobs:
           python3 - <<'PY'
           from pathlib import Path
           p = Path('src/Phil/LLVM/IR.hs')
-          text = p.read_text()
-          old = '''      LLVMVersionRefinement _ transport selected yes no ->
-        let blockSymbol = symbol (unLLVMBlockId (llvmBlockId blockValue))
-  validName = "%phil_version_refinement_ok_" <> blockSymbol
-        in
-[ validName <> " = call i1 @phil_runtime_refine_selected_version(ptr %"
-    <> symbol transport <> ", i16 %" <> symbol selected <> ")"
-, "br i1 " <> validName
-    <> ", label %" <> symbol (unLLVMBlockId yes)
-    <> ", label %" <> symbol (unLLVMBlockId no)
-]
-'''
-          new = '''      LLVMVersionRefinement _ transport selected yes no ->
-        let blockSymbol = symbol (unLLVMBlockId (llvmBlockId blockValue))
-            validName = "%phil_version_refinement_ok_" <> blockSymbol
-        in
-          [ validName <> " = call i1 @phil_runtime_refine_selected_version(ptr %"
-              <> symbol transport <> ", i16 %" <> symbol selected <> ")"
-          , "br i1 " <> validName
-              <> ", label %" <> symbol (unLLVMBlockId yes)
-              <> ", label %" <> symbol (unLLVMBlockId no)
+          lines = p.read_text().splitlines()
+          marker = '      LLVMVersionRefinement _ transport selected yes no ->'
+          indices = [i for i, line in enumerate(lines) if line == marker]
+          if len(indices) != 1:
+              raise SystemExit(f'expected one refinement renderer marker, found {len(indices)}')
+          i = indices[0]
+          expected = [
+              marker,
+              '        let blockSymbol = symbol (unLLVMBlockId (llvmBlockId blockValue))',
+              '  validName = "%phil_version_refinement_ok_" <> blockSymbol',
+              '        in',
+              '[ validName <> " = call i1 @phil_runtime_refine_selected_version(ptr %"',
+              '    <> symbol transport <> ", i16 %" <> symbol selected <> ")"',
+              ', "br i1 " <> validName',
+              '    <> ", label %" <> symbol (unLLVMBlockId yes)',
+              '    <> ", label %" <> symbol (unLLVMBlockId no)',
+              ']',
           ]
-'''
-          if text.count(old) != 1:
-              raise SystemExit(f'expected one malformed renderer block, found {text.count(old)}')
-          p.write_text(text.replace(old, new, 1))
+          if lines[i:i + len(expected)] != expected:
+              raise SystemExit('refinement renderer no longer matches the known malformed block')
+          replacement = [
+              marker,
+              '        let blockSymbol = symbol (unLLVMBlockId (llvmBlockId blockValue))',
+              '            validName = "%phil_version_refinement_ok_" <> blockSymbol',
+              '        in',
+              '          [ validName <> " = call i1 @phil_runtime_refine_selected_version(ptr %"',
+              '              <> symbol transport <> ", i16 %" <> symbol selected <> ")"',
+              '          , "br i1 " <> validName',
+              '              <> ", label %" <> symbol (unLLVMBlockId yes)',
+              '              <> ", label %" <> symbol (unLLVMBlockId no)',
+              '          ]',
+          ]
+          lines[i:i + len(expected)] = replacement
+          p.write_text('\n'.join(lines) + '\n')
           PY
           git diff --check
           git config user.name "phil-version-lowering-bot"
