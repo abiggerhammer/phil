@@ -41,7 +41,7 @@ on:
       - '.github/workflows/version-session-choice-runtime.yml'
 
 permissions:
-  contents: read
+  contents: write
 
 jobs:
   version-session-choice-runtime:
@@ -91,3 +91,57 @@ jobs:
           fi
 
           cabal test phil-version-session-choice-abi-tests
+
+  fix-version-refinement-test-indent:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: lower-version-session-choice
+          fetch-depth: 0
+      - name: Fix focused test indentation
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 - <<'PY'
+          from pathlib import Path
+          p = Path('test/VersionSessionChoiceABIMain.hs')
+          lines = p.read_text().splitlines()
+          marker = '        expectedBinding = LLVMVersionChoicePayloadBinding'
+          hits = [i for i, line in enumerate(lines) if line == marker]
+          if len(hits) != 1:
+              raise SystemExit(f'expected one malformed expectedBinding marker, found {len(hits)}')
+          i = hits[0]
+          expected = [
+              marker,
+              '(unValueId (versionChoiceClientSelectedVersion witness))',
+              '        refinementOkay = case llvmBlockTerminator target of',
+              'LLVMVersionRefinement _ transport selected yes no ->',
+              '  transport == unValueId (versionChoiceClientTransport witness)',
+              '    && selected == unValueId (versionChoiceClientSelectedVersion witness)',
+              '    && yes == LLVMBlockId (unBlockId (versionChoiceClientVersionSuccess witness))',
+              '    && no == LLVMBlockId (unBlockId (versionChoiceClientVersionFailure witness))',
+              '_ -> False',
+          ]
+          if lines[i:i + len(expected)] != expected:
+              raise SystemExit('focused test refinement block no longer matches known malformed form')
+          replacement = [
+              '          expectedBinding = LLVMVersionChoicePayloadBinding',
+              '            (unValueId (versionChoiceClientSelectedVersion witness))',
+              '          refinementOkay = case llvmBlockTerminator target of',
+              '            LLVMVersionRefinement _ transport selected yes no ->',
+              '              transport == unValueId (versionChoiceClientTransport witness)',
+              '                && selected == unValueId (versionChoiceClientSelectedVersion witness)',
+              '                && yes == LLVMBlockId (unBlockId (versionChoiceClientVersionSuccess witness))',
+              '                && no == LLVMBlockId (unBlockId (versionChoiceClientVersionFailure witness))',
+              '            _ -> False',
+          ]
+          lines[i:i + len(expected)] = replacement
+          p.write_text('\n'.join(lines) + '\n')
+          PY
+          git diff --check
+          git config user.name "phil-version-lowering-bot"
+          git config user.email "actions@users.noreply.github.com"
+          git add test/VersionSessionChoiceABIMain.hs
+          git commit -m "Fix version refinement ABI test indentation"
+          git push origin HEAD:lower-version-session-choice
