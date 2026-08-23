@@ -1,0 +1,49 @@
+name: Recognition Failure Detail
+
+on:
+  pull_request:
+    paths:
+      - 'src/Phil/Systems/RecognitionFailure.hs'
+      - 'src/Phil/Systems/ClientOutbound.hs'
+      - 'src/Phil/Systems/IR.hs'
+      - 'src/Phil/Systems/Verify.hs'
+      - 'src/Phil/Systems.hs'
+      - 'test/RecognitionFailureMain.hs'
+      - 'docs/phase-0/recognition-failure-detail-v1.md'
+      - 'phil-core.cabal'
+      - '.github/workflows/recognition-failure-detail.yml'
+  push:
+    branches:
+      - main
+    paths:
+      - 'src/Phil/Systems/RecognitionFailure.hs'
+      - 'src/Phil/Systems/ClientOutbound.hs'
+      - 'src/Phil/Systems/IR.hs'
+      - 'src/Phil/Systems/Verify.hs'
+      - 'src/Phil/Systems.hs'
+      - 'test/RecognitionFailureMain.hs'
+      - 'docs/phase-0/recognition-failure-detail-v1.md'
+      - 'phil-core.cabal'
+      - '.github/workflows/recognition-failure-detail.yml'
+
+permissions:
+  contents: read
+
+jobs:
+  recognition-failure-detail:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v4
+
+      - name: Set up Haskell
+        uses: haskell-actions/setup@v2
+        with:
+          ghc-version: '9.6.7'
+          cabal-version: 'latest'
+
+      - name: Build focused semantic test
+        run: cabal build phil-recognition-failure-detail-tests
+
+      - name: Verify recognition failure semantic candidate
+        run: cabal test phil-recognition-failure-detail-tests --test-show-details=direct
