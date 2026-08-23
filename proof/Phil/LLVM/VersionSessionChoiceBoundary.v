@@ -116,10 +116,12 @@ Theorem verified_llvm_version_choice_boundary_reuses_semantic_and_local_authorit
     llvmLocalChoiceSystems (llvmVersionChoiceLocalBoundaryPredecessor model) =
       systemsVersionChoiceLocalPredecessor (llvmVersionChoiceSystems model).
 Proof.
-  intros model H; repeat split.
+  intros model H.
+  split.
   - exact (llvm_version_choice_boundary_success_systems model H).
-  - exact (llvm_version_choice_boundary_success_local_predecessor model H).
-  - exact (llvm_version_choice_boundary_success_local_alignment model H).
+  - split.
+    + exact (llvm_version_choice_boundary_success_local_predecessor model H).
+    + exact (llvm_version_choice_boundary_success_local_alignment model H).
 Qed.
 
 Theorem verified_llvm_version_choice_boundary_marks_exact_server_selects_unlowered :
