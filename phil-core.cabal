@@ -101,6 +101,8 @@ library
       Phil.LLVM.PayloadCancelChoiceCertification
       Phil.LLVM.VersionSessionChoice
       Phil.LLVM.VersionSessionChoiceCertification
+      Phil.LLVM.BeginPolicyChoice
+      Phil.LLVM.BeginPolicyChoiceCertification
   build-depends:
       base >=4.17 && <5,
       bytestring >=0.11 && <0.13,
@@ -203,6 +205,15 @@ executable phil-llvm-phase0-version-session-choice
   import:             common-settings
   hs-source-dirs:     app
   main-is:            LLVMVersionSessionChoiceMain.hs
+  build-depends:
+      base >=4.17 && <5,
+      phil-core,
+      text >=2.0 && <2.2
+
+executable phil-llvm-phase0-begin-policy-choice
+  import:             common-settings
+  hs-source-dirs:     app
+  main-is:            LLVMBeginPolicyChoiceMain.hs
   build-depends:
       base >=4.17 && <5,
       phil-core,
@@ -635,6 +646,17 @@ test-suite phil-begin-policy-session-choice-tests
   type:               exitcode-stdio-1.0
   hs-source-dirs:     test
   main-is:            BeginPolicySessionChoiceMain.hs
+  build-depends:
+      base >=4.17 && <5,
+      containers >=0.6 && <0.8,
+      phil-core,
+      text >=2.0 && <2.2
+
+test-suite phil-begin-policy-choice-abi-tests
+  import:             common-settings
+  type:               exitcode-stdio-1.0
+  hs-source-dirs:     test
+  main-is:            BeginPolicyChoiceABIMain.hs
   build-depends:
       base >=4.17 && <5,
       containers >=0.6 && <0.8,
