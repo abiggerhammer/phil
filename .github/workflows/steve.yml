@@ -57,4 +57,4 @@ jobs:
           ./steve-surface-semantic
 
       - name: Test Phase 0 evidence bundler
-        run: python3 -m unittest -v test/test_steve_phase0_bundle.py
+        run: python3 test/test_steve_phase0_bundle.py -v
