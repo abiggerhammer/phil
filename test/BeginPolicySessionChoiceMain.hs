@@ -16,7 +16,7 @@ main = do
     , test "server emits semantic reject(reason)/proceed selects" exactServerSelects
     , test "client offers reject(reason)/proceed" exactClientOffer
     , test "legacy client BeginPolicy Bool and receive call are absent" legacyClientChoiceAbsent
-    , test "Begin record materialization follows ingress commit" materializationAfterCommit
+    , test "recognized Begin predecessor witness remains valid" recognizedBeginPreserved
     , test "version-choice semantics and operands remain valid" versionChoicePreserved
     , test "missing local rejection payload is rejected" missingLocalReasonRejects
     , test "producing architecture policyContext internally is rejected" producedPolicyContextRejects
@@ -106,30 +106,13 @@ legacyClientChoiceAbsent = withBundle $ \bundle ->
               Nothing -> False
               Just blockValue -> not (any (isLegacyReceive witness) (systemsBlockOps blockValue))
 
-materializationAfterCommit :: Bool
-materializationAfterCommit = withBundle $ \bundle ->
-  let witness = beginPolicySessionChoiceWitness bundle
-  in case lookupServerBlock bundle (beginPolicyCommitBlock witness) of
-      Nothing -> False
-      Just blockValue ->
-        let operations = systemsBlockOps blockValue
-            commits =
-              [ index
-              | (index, OpCommitIngress { commitPending = pending }) <- zip [0 :: Int ..] operations
-              , pending == beginPolicyPendingBegin witness
-              ]
-            materializations =
-              [ index
-              | (index, OpRuntimeCall name inputs outputs site decisionId) <- zip [0 :: Int ..] operations
-              , name == beginPolicyMaterializeCall witness
-              , null inputs
-              , outputs == [beginPolicyBeginRecord witness]
-              , site == Nothing
-              , decisionId == beginPolicyLoweringDecision witness
-              ]
-        in case (commits, materializations) of
-            (commitIndex : _, [materializeIndex]) -> materializeIndex > commitIndex
-            _ -> False
+recognizedBeginPreserved :: Bool
+recognizedBeginPreserved = withBundle $ \bundle ->
+  case verifyRecognizedRecordWitnesses
+    (beginPolicySessionChoiceArtifact bundle)
+    [phase0BeginRecordWitness] of
+      Right () -> True
+      Left _ -> False
 
 versionChoicePreserved :: Bool
 versionChoicePreserved = withBundle $ \bundle ->
