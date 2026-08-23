@@ -16,13 +16,13 @@ import Data.Text (Text)
 import Phil.Assurance.Types
 import Phil.Systems.Dataflow
 import Phil.Systems.IR
+import Phil.Systems.RecognizedRecord
 import Phil.Systems.Verify
 import Phil.Systems.VersionChoiceOperands
 
 data BeginPolicySessionChoiceWitness = BeginPolicySessionChoiceWitness
   { beginPolicyServerFunction :: Text
   , beginPolicyServerTransport :: ValueId
-  , beginPolicyPendingBegin :: ValueId
   , beginPolicyCommitBlock :: BlockId
   , beginPolicyBeginRecord :: ValueId
   , beginPolicyPolicyContext :: ValueId
@@ -30,7 +30,6 @@ data BeginPolicySessionChoiceWitness = BeginPolicySessionChoiceWitness
   , beginPolicyRuntimeChoiceName :: Text
   , beginPolicyAcceptedArm :: Text
   , beginPolicyRejectedArm :: Text
-  , beginPolicyMaterializeCall :: Text
   , beginPolicyServerRejectBlock :: BlockId
   , beginPolicyServerProceedBlock :: BlockId
   , beginPolicyRejectLabel :: Text
@@ -60,6 +59,7 @@ data BeginPolicySessionChoiceError
   | BeginPolicySystemsError SystemsVerificationError
   | BeginPolicyDataflowError ScalarDataflowError
   | BeginPolicyVersionRegression VersionChoiceOperandsError
+  | BeginPolicyRecognizedRecordRegression RecognizedRecordError
   | BeginPolicyFunctionMissing Text
   | BeginPolicyBlockMissing Text BlockId
   | BeginPolicyValueMissing Text ValueId
@@ -68,8 +68,6 @@ data BeginPolicySessionChoiceError
   | BeginPolicyLegacyDiscriminatorPresent Text ValueId
   | BeginPolicyLegacyReceivePresent Text BlockId Text
   | BeginPolicyInputHasProducer Text ValueId
-  | BeginPolicyMaterializationMismatch Text BlockId [SystemsOp]
-  | BeginPolicyMaterializationBeforeCommit Text BlockId
   | BeginPolicyRuntimeChoiceMismatch Text BlockId SystemsTerminator
   | BeginPolicyRuntimeSiteChanged RuntimeSiteRef RuntimeSiteRef
   | BeginPolicyServerSelectMismatch Text BlockId [SystemsOp]
@@ -83,7 +81,6 @@ phase0BeginPolicySessionChoiceWitness :: BeginPolicySessionChoiceWitness
 phase0BeginPolicySessionChoiceWitness = BeginPolicySessionChoiceWitness
   { beginPolicyServerFunction = "UploadServer"
   , beginPolicyServerTransport = ValueId "server.transport"
-  , beginPolicyPendingBegin = ValueId "server.pending.begin"
   , beginPolicyCommitBlock = BlockId "server.begin.commit"
   , beginPolicyBeginRecord = ValueId "server.begin"
   , beginPolicyPolicyContext = ValueId "server.policy_context"
@@ -91,7 +88,6 @@ phase0BeginPolicySessionChoiceWitness = BeginPolicySessionChoiceWitness
   , beginPolicyRuntimeChoiceName = "validate BeginPolicy"
   , beginPolicyAcceptedArm = "accepted"
   , beginPolicyRejectedArm = "rejected"
-  , beginPolicyMaterializeCall = "materialize recognized Begin"
   , beginPolicyServerRejectBlock = BlockId "server.reject"
   , beginPolicyServerProceedBlock = BlockId "server.proceed"
   , beginPolicyRejectLabel = "reject"
@@ -126,7 +122,7 @@ phase0BeginPolicySessionChoiceBundle = do
         , stageTraceRelation = stageTraceRelation baseContract <>
             [ "BeginPolicy validation preserves the exact runtime site while exposing accepted/rejected(reason) as a local semantic choice"
             , "reject(reason)/proceed is a peer-visible session choice with branch-local reason identity"
-            , "recognized Begin and policyContext become explicit validator operands without selecting their physical representation"
+            , "the established recognized Begin value and a new explicit policyContext become validator operands without selecting new physical representation"
             ]
         }
       sourceDigest = stageSourceArtifactDigest contract
@@ -172,6 +168,10 @@ verifyBeginPolicySessionChoiceBundle bundle = do
     verifyVersionChoiceOperandsWitness
       (beginPolicySessionChoiceArtifact bundle)
       phase0VersionChoiceOperandsWitness
+  mapLeft BeginPolicyRecognizedRecordRegression $
+    verifyRecognizedRecordWitnesses
+      (beginPolicySessionChoiceArtifact bundle)
+      [phase0BeginRecordWitness]
   let witness = beginPolicySessionChoiceWitness bundle
   predecessorSite <- extractPredecessorRuntimeSite
     (versionChoiceOperandsArtifact (beginPolicySessionChoicePredecessor bundle))
@@ -222,7 +222,6 @@ verifyBeginPolicySessionChoiceWitness artifact witness = do
     (beginPolicyServerFunction witness)
     server
     (beginPolicyCommitBlock witness)
-  verifyMaterialization witness commitBlock
   case systemsBlockTerminator commitBlock of
     TermRuntimeChoice name inputs (Just site) arms
       | name == beginPolicyRuntimeChoiceName witness
@@ -273,43 +272,6 @@ verifyBeginPolicySessionChoiceWitness artifact witness = do
     Just actual -> unless (actual == expectedDecision) $
       Left (BeginPolicyDecisionMismatch (beginPolicyLoweringDecision witness))
 
-verifyMaterialization
-  :: BeginPolicySessionChoiceWitness
-  -> SystemsBlock
-  -> Either BeginPolicySessionChoiceError ()
-verifyMaterialization witness blockValue = do
-  let operations = systemsBlockOps blockValue
-      commitIndices =
-        [ index
-        | (index, OpCommitIngress { commitPending = pending }) <- zip [0 :: Int ..] operations
-        , pending == beginPolicyPendingBegin witness
-        ]
-      materializeIndices =
-        [ index
-        | (index, OpRuntimeCall name inputs outputs site decisionId) <- zip [0 :: Int ..] operations
-        , name == beginPolicyMaterializeCall witness
-        , null inputs
-        , outputs == [beginPolicyBeginRecord witness]
-        , site == Nothing
-        , decisionId == beginPolicyLoweringDecision witness
-        ]
-  commitIndex <- case commitIndices of
-    firstIndex : _ -> Right firstIndex
-    [] -> Left (BeginPolicyMaterializationMismatch
-      (beginPolicyServerFunction witness)
-      (beginPolicyCommitBlock witness)
-      operations)
-  materializeIndex <- case materializeIndices of
-    [index] -> Right index
-    _ -> Left (BeginPolicyMaterializationMismatch
-      (beginPolicyServerFunction witness)
-      (beginPolicyCommitBlock witness)
-      operations)
-  unless (materializeIndex > commitIndex) $
-    Left (BeginPolicyMaterializationBeforeCommit
-      (beginPolicyServerFunction witness)
-      (beginPolicyCommitBlock witness))
-
 verifyServerSelect
   :: BeginPolicySessionChoiceWitness
   -> SystemsFunction
@@ -351,9 +313,10 @@ materializeBeginPolicySessionChoice witness program = do
   clientOffer <- lookupBlock
     (beginPolicyClientFunction witness) client (beginPolicyClientOfferBlock witness)
 
+  verifyRole (beginPolicyServerFunction witness) server
+    (beginPolicyBeginRecord witness) (RuntimeRecord "Begin")
   mapM_ (requireAbsent (beginPolicyServerFunction witness) server)
-    [ beginPolicyBeginRecord witness
-    , beginPolicyPolicyContext witness
+    [ beginPolicyPolicyContext witness
     , beginPolicyServerRejectReason witness
     ]
   requireAbsent
@@ -389,15 +352,8 @@ materializeBeginPolicySessionChoice witness program = do
     Nothing
   clientOps <- stripLegacyReceive witness (systemsBlockOps clientOffer)
 
-  let materialize = OpRuntimeCall
-        (beginPolicyMaterializeCall witness)
-        []
-        [beginPolicyBeginRecord witness]
-        Nothing
-        (beginPolicyLoweringDecision witness)
-      commitBlock' = commitBlock
-        { systemsBlockOps = insertAfterCommit materialize (systemsBlockOps commitBlock)
-        , systemsBlockTerminator = TermRuntimeChoice
+  let commitBlock' = commitBlock
+        { systemsBlockTerminator = TermRuntimeChoice
             (beginPolicyRuntimeChoiceName witness)
             [beginPolicyPolicyContext witness, beginPolicyBeginRecord witness]
             (Just site)
@@ -414,14 +370,8 @@ materializeBeginPolicySessionChoice witness program = do
           (SystemsValue
             (beginPolicyPolicyContext witness)
             (RuntimeInput "PolicyContext")
-            Nothing) $
-          Map.insert
-            (beginPolicyBeginRecord witness)
-            (SystemsValue
-              (beginPolicyBeginRecord witness)
-              (RuntimeRecord "Begin")
-              Nothing)
-            (systemsFunctionValues server)
+            Nothing)
+          (systemsFunctionValues server)
       server' = server
         { systemsFunctionValues = serverValues
         , systemsFunctionBlocks = Map.insert
@@ -542,7 +492,7 @@ replaceLegacySelect
   -> Either BeginPolicySessionChoiceError SystemsBlock
 replaceLegacySelect witness blockValue label payload =
   case break isLegacy (systemsBlockOps blockValue) of
-    (before, operation : after)
+    (before, _ : after)
       | not (any isLegacy after) -> Right blockValue
           { systemsBlockOps = before <>
               [ OpSessionSelect
@@ -587,11 +537,6 @@ isLegacyReceive witness operation = case operation of
       && outputs == [beginPolicyClientLegacyDiscriminator witness]
       && site == Nothing
   _ -> False
-
-insertAfterCommit :: SystemsOp -> [SystemsOp] -> [SystemsOp]
-insertAfterCommit inserted operations = case operations of
-  commit@OpCommitIngress {} : rest -> commit : inserted : rest
-  _ -> operations
 
 verifyRole
   :: Text
@@ -675,7 +620,7 @@ deriveBeginPolicyDecision sourceDigest targetDigest site witness = provisional
       , loweringSourceRepresentation =
           "implicit BeginPolicy runtime-check operands/result + generic reject/proceed calls + client Bool discriminator"
       , loweringTargetRepresentation =
-          "explicit Begin/PolicyContext operands + accepted/rejected(reason) local runtime choice + reject(reason)/proceed semantic session choice"
+          "established Begin record + explicit PolicyContext operand + accepted/rejected(reason) local runtime choice + reject(reason)/proceed semantic session choice"
       , loweringSemanticEntities =
           [ "validation:BeginPolicy"
           , "record:Begin"
@@ -701,7 +646,7 @@ deriveBeginPolicyDecision sourceDigest targetDigest site witness = provisional
           ]
       , loweringInvariantsTransferred = []
       , loweringRuntimeResidue =
-          [ "Begin record representation remains target-selected"
+          [ "existing Begin record representation and provenance are preserved from the recognized-record predecessor"
           , "PolicyContext representation remains target-selected"
           , "validation implementation remains the retained BeginPolicy runtime site"
           , "reject reason representation, code space, and wire encoding are deliberately unselected"
@@ -709,19 +654,20 @@ deriveBeginPolicyDecision sourceDigest targetDigest site witness = provisional
           ]
       , loweringCostClass = Just SemanticRequired
       , loweringCostShape = emptyCostShape
-          { costCodeSize = Just "explicit record/input identities plus local/session choice structure"
+          { costCodeSize = Just "explicit policy input/reason identities plus local/session choice structure"
           , costDynamicCheckCount = Just "no new check; the existing BeginPolicy runtime validation is retained"
           , costBranchOrDispatch = Just "same validation branch plus semantic peer-choice dispatch"
           , costFrequency = Just "once per successfully recognized Begin"
           }
       , loweringTargetPreconditions =
-          [ "recognized Begin is committed before record materialization and validation"
+          [ "recognized Begin record materialization/projection from the predecessor remains valid before validation"
           , "rejected and reject payload targets are dedicated single-predecessor blocks"
           ]
       , loweringAssumptions = []
       , loweringDerivedObligations = []
       , loweringInspectionPlan =
-          [ "verify exact BeginPolicy RuntimeSiteRef is preserved"
+          [ "verify the predecessor recognized Begin witness still holds exactly"
+          , "verify exact BeginPolicy RuntimeSiteRef is preserved"
           , "verify server reject selects exactly the local rejection reason"
           , "verify client reject binds a distinct peer-received reason identity"
           , "verify generic LLVM remains fail-closed until a reject/proceed physical profile is selected"
