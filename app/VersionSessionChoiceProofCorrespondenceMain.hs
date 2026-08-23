@@ -3,6 +3,7 @@
 module Main (main) where
 
 import qualified Data.Map.Strict as Map
+import qualified Data.Text as Text
 import Phil.Systems
 import Phil.Systems.VersionSessionChoiceProofCheck
 import System.Exit (exitFailure)
@@ -106,13 +107,10 @@ mapFunctionBlock bundle functionName blockId transform =
       functions' = Map.adjust
         (\function -> function
           { systemsFunctionBlocks = Map.adjust transform blockId (systemsFunctionBlocks function) })
-        (fromString functionName)
+        (Text.pack functionName)
         functions
       program' = program { systemsProgramFunctions = functions' }
   in artifact { systemsArtifactProgram = program' }
-
-fromString :: String -> Data.Text.Text
-fromString = Data.Text.pack
 
 test :: String -> Bool -> IO Bool
 test label passed = do
