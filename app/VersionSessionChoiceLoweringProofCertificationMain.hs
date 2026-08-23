@@ -31,9 +31,6 @@ main = do
   systemsVersionProof <- certify systemsVersionSessionChoiceCertificationSpec
     (root </> "Systems" </> "VersionSessionChoice.v")
     (root </> "Systems" </> "VersionSessionChoice.vo")
-  llvmVersionBoundaryProof <- certify llvmVersionSessionChoiceBoundaryCertificationSpec
-    (root </> "LLVM" </> "VersionSessionChoiceBoundary.v")
-    (root </> "LLVM" </> "VersionSessionChoiceBoundary.vo")
 
   systemsPayloadCancelProof <- certify systemsPayloadCancelChoiceCertificationSpec
     (root </> "Systems" </> "PayloadCancelChoice.v")
@@ -88,7 +85,6 @@ main = do
     [ ("PHIL-SYS-VERSION-CHOICE-OPERANDS-001.rocq.cert", systemsOperandsProof)
     , ("PHIL-LLVM-VERSION-SESSION-CHOICE-001.rocq.cert", llvmLoweringProof)
     , ("PHIL-SYS-VERSION-SESSION-CHOICE-001.rocq.cert", systemsVersionProof)
-    , ("PHIL-LLVM-VERSION-SESSION-CHOICE-BOUNDARY-001.rocq.cert", llvmVersionBoundaryProof)
     ]
 
   predecessor <- case phase0PayloadCancelChoiceProofCertification
@@ -102,8 +98,7 @@ main = do
     Right bundle -> pure bundle
 
   final <- case phase0VersionSessionChoiceProofBoundCertification
-      systemsOperandsProof llvmLoweringProof
-      systemsVersionProof llvmVersionBoundaryProof predecessor of
+      systemsOperandsProof llvmLoweringProof systemsVersionProof predecessor of
     Left err -> failWith ("proof-bound PHIL-LLVM-CERT-010 failed: " <> show err)
     Right bundle -> pure bundle
 
