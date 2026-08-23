@@ -11,16 +11,13 @@ import Phil.LLVM.PayloadCancelChoiceProofCertification
 import Phil.LLVM.VersionSessionChoiceLoweringProofCertification
 import Phil.LLVM.VersionSessionChoiceProofBoundCertification
 import Phil.LLVM.VersionSessionChoiceProofCertification
-import System.Directory (createDirectoryIfMissing)
 import System.Exit (exitFailure)
-import System.FilePath ((</>))
 import System.IO (hPutStrLn, stderr)
 
 main :: IO ()
 main = do
   let root = "rocq-version-choice-lowering" </> "proof" </> "Phil"
       output = "version-choice-lowering-certificates"
-  createDirectoryIfMissing True output
 
   systemsOperandsProof <- certify systemsVersionChoiceOperandsCertificationSpec
     (root </> "Systems" </> "VersionChoiceOperands.v")
@@ -137,6 +134,9 @@ writeProofCertificate output name bundle = do
     ("proof certificate: " <>
       Text.unpack (unArtifactRef (artifactReference artifact)) <>
       " sha256=" <> Text.unpack (unDigest (artifactDigest artifact)))
+
+(</>) :: FilePath -> FilePath -> FilePath
+left </> right = left <> "/" <> right
 
 failWith :: String -> IO a
 failWith message = do
