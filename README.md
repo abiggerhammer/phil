@@ -28,22 +28,27 @@ Phil is part of the broader Logics to Order research program. It starts from sys
 
 ## Current implementation slice
 
-Phase 0 is complete as a design snapshot. The executable implementation has grown from the original resource kernel through sessions, recognition, refinements/evidence, focusing, checked decision certificates, obligation disposition, and now the first trusted Phil source front end.
+Phase 0 is complete as a design snapshot. The executable implementation now spans the resource/session/recognition kernel, deterministic focusing and checked decision certificates, whole-component surface checking, Systems IR and verification, Assurance manifests and proof certificates, and explicit LLVM/runtime lowering slices through the current Phase 0 protocol frontier.
 
-The exact implemented/non-goal boundary is maintained in `docs/implementation-status.md`. The parser now accepts the accepted upload witnesses and all twenty intentionally rejected Phase 0 programs as syntax; semantic rejection remains assigned to the competent later checker layer.
+The exact implemented/non-goal boundary is maintained in `docs/implementation-status.md`. The current proof-certification state is summarized separately in `docs/phase-0/assurance-status.md`; the checked proof corpus and mechanically verified assurance artifacts remain authoritative over prose summaries.
 
 ## Repository map
 
 - `src/Phil/Core/` — executable Phil Core checker kernel
-- `src/Phil/Surface/` — location-preserving Phase 0 parser and deterministic fragment elaborator
-- `app/` — checker/bootstrap executable and parse-only CLI entry point
-- `test/` — conformance tests for the implemented checker/front-end slices
+- `src/Phil/Surface/` — location-preserving parser, elaborator, and whole-component checker
+- `src/Phil/Systems/` — explicit Systems IR, lowering decisions, and verifier
+- `src/Phil/Assurance/` — content-bound assurance ledger, manifest, and proof-certificate machinery
+- `src/Phil/LLVM/` — explicit LLVM IR/lowering and target-specific verification
+- `proof/Phil/` — Rocq proof corpus
+- `app/` — checker, certification, and bootstrap executables
+- `test/` — conformance and correspondence tests
 - `docs/implementation-status.md` — implemented vs. still-open checker surface
-- `docs/phase-0/` — checker-facing Phase 0 snapshot imported from the durable research corpus
+- `docs/phase-0/assurance-status.md` — current Phase 0 proof-certification snapshot
+- `docs/phase-0/` — checker-facing Phase 0 design/ABI snapshot imported from the durable research corpus
 - `examples/upload/` — successful upload demonstrator source sketches
 - `examples/rejected/` — semantically rejected Phase 0 source witnesses
 
-The complete Phase 0 design corpus remains in the durable research archive while it is migrated into Git history. For live implementation state, this repository is intended to become the source of truth.
+The complete Phase 0 design corpus remains in the durable research archive while it is migrated into Git history. For live implementation and checked proof state, this repository is intended to become the source of truth.
 
 ## Build
 
@@ -55,13 +60,13 @@ cabal test all
 cabal run phil-core
 ```
 
-The trusted surface parser can be exercised directly without claiming semantic acceptance:
+The surface parser can also be exercised directly:
 
 ```sh
 cabal run phil-core -- parse examples/upload/client.phil
 ```
 
-A successful `parse` command means only that the complete input is syntactically valid Phil and that source locations were recorded. Whole-component semantic checking of parsed source is the next slice.
+A successful `parse` command still means only syntactic acceptance and source-location recovery; semantic acceptance belongs to whole-component checking and later competent lowering/verification stages.
 
 ## Naming
 
