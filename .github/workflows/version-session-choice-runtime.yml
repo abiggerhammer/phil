@@ -41,7 +41,7 @@ on:
       - '.github/workflows/version-session-choice-runtime.yml'
 
 permissions:
-  contents: read
+  contents: write
 
 jobs:
   version-session-choice-runtime:
@@ -91,3 +91,51 @@ jobs:
           fi
 
           cabal test phil-version-session-choice-abi-tests
+
+  fix-refinement-indent:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: lower-version-session-choice
+          fetch-depth: 0
+      - name: Fix renderer indentation
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 - <<'PY'
+          from pathlib import Path
+          p = Path('src/Phil/LLVM/IR.hs')
+          text = p.read_text()
+          old = '''      LLVMVersionRefinement _ transport selected yes no ->
+        let blockSymbol = symbol (unLLVMBlockId (llvmBlockId blockValue))
+  validName = "%phil_version_refinement_ok_" <> blockSymbol
+        in
+[ validName <> " = call i1 @phil_runtime_refine_selected_version(ptr %"
+    <> symbol transport <> ", i16 %" <> symbol selected <> ")"
+, "br i1 " <> validName
+    <> ", label %" <> symbol (unLLVMBlockId yes)
+    <> ", label %" <> symbol (unLLVMBlockId no)
+]
+'''
+          new = '''      LLVMVersionRefinement _ transport selected yes no ->
+        let blockSymbol = symbol (unLLVMBlockId (llvmBlockId blockValue))
+            validName = "%phil_version_refinement_ok_" <> blockSymbol
+        in
+          [ validName <> " = call i1 @phil_runtime_refine_selected_version(ptr %"
+              <> symbol transport <> ", i16 %" <> symbol selected <> ")"
+          , "br i1 " <> validName
+              <> ", label %" <> symbol (unLLVMBlockId yes)
+              <> ", label %" <> symbol (unLLVMBlockId no)
+          ]
+'''
+          if text.count(old) != 1:
+              raise SystemExit(f'expected one malformed renderer block, found {text.count(old)}')
+          p.write_text(text.replace(old, new, 1))
+          PY
+          git diff --check
+          git config user.name "phil-version-lowering-bot"
+          git config user.email "actions@users.noreply.github.com"
+          git add src/Phil/LLVM/IR.hs
+          git commit -m "Fix version refinement renderer indentation"
+          git push origin HEAD:lower-version-session-choice
