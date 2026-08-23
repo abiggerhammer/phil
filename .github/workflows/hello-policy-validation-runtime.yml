@@ -1,0 +1,95 @@
+name: Hello Policy Validation Runtime
+
+on:
+  pull_request:
+    paths:
+      - 'src/Phil/Systems/HelloPolicyValidation.hs'
+      - 'src/Phil/Systems/BeginPolicySessionChoice.hs'
+      - 'src/Phil/Systems/VersionChoiceOperands.hs'
+      - 'src/Phil/Systems.hs'
+      - 'src/Phil/LLVM/IR.hs'
+      - 'src/Phil/LLVM/Verify.hs'
+      - 'src/Phil/LLVM/BeginPolicyChoice.hs'
+      - 'src/Phil/LLVM/HelloPolicyValidation.hs'
+      - 'src/Phil/LLVM/HelloPolicyValidationCertification.hs'
+      - 'src/Phil/LLVM.hs'
+      - 'app/LLVMHelloPolicyValidationMain.hs'
+      - 'runtime/phase0/hello_policy_validation_v1*'
+      - 'scripts/check_runtime_abi.py'
+      - 'test/HelloPolicyValidationABIMain.hs'
+      - 'docs/phase-0/hello-policy-validation-abi-v1.md'
+      - 'phil-core.cabal'
+      - '.github/workflows/hello-policy-validation-runtime.yml'
+  push:
+    branches:
+      - main
+    paths:
+      - 'src/Phil/Systems/HelloPolicyValidation.hs'
+      - 'src/Phil/Systems/BeginPolicySessionChoice.hs'
+      - 'src/Phil/Systems/VersionChoiceOperands.hs'
+      - 'src/Phil/Systems.hs'
+      - 'src/Phil/LLVM/IR.hs'
+      - 'src/Phil/LLVM/Verify.hs'
+      - 'src/Phil/LLVM/BeginPolicyChoice.hs'
+      - 'src/Phil/LLVM/HelloPolicyValidation.hs'
+      - 'src/Phil/LLVM/HelloPolicyValidationCertification.hs'
+      - 'src/Phil/LLVM.hs'
+      - 'app/LLVMHelloPolicyValidationMain.hs'
+      - 'runtime/phase0/hello_policy_validation_v1*'
+      - 'scripts/check_runtime_abi.py'
+      - 'test/HelloPolicyValidationABIMain.hs'
+      - 'docs/phase-0/hello-policy-validation-abi-v1.md'
+      - 'phil-core.cabal'
+      - '.github/workflows/hello-policy-validation-runtime.yml'
+
+permissions:
+  contents: read
+
+jobs:
+  hello-policy-validation-runtime:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: haskell-actions/setup@v2
+        with:
+          ghc-version: '9.6.7'
+          cabal-version: 'latest'
+      - name: Build emitter and focused tests
+        run: cabal build phil-llvm-phase0-hello-policy-validation phil-hello-policy-validation-abi-tests
+      - name: Verify ABI and execute HelloPolicy runtime primitives
+        shell: bash
+        run: |
+          set -euo pipefail
+          LLVM_AS=llvm-as-18
+          LLVM_LINK=llvm-link-18
+          CLANG=clang-18
+          EMITTER="$(cabal list-bin phil-llvm-phase0-hello-policy-validation)"
+          "$EMITTER" > phase0-hello-policy-validation.ll
+          "$LLVM_AS" phase0-hello-policy-validation.ll -o phase0-hello-policy-validation.bc
+
+          "$CLANG" --target=x86_64-unknown-linux-gnu -std=c11 -Wall -Wextra -Wpedantic -Werror \
+            -Iruntime/phase0 -S -emit-llvm runtime/phase0/hello_policy_validation_v1_smoke.c \
+            -o hello-policy-runtime.ll
+          python3 scripts/check_runtime_abi.py --partial \
+            phase0-hello-policy-validation.ll hello-policy-runtime.ll
+          "$LLVM_AS" hello-policy-runtime.ll -o hello-policy-runtime.bc
+          "$LLVM_LINK" phase0-hello-policy-validation.bc hello-policy-runtime.bc \
+            -o phase0-hello-policy-validation-partially-linked.bc
+
+          "$CLANG" --target=x86_64-unknown-linux-gnu -std=c11 -Wall -Wextra -Wpedantic -Werror \
+            -Iruntime/phase0 \
+            runtime/phase0/hello_policy_validation_v1_smoke.c \
+            runtime/phase0/hello_policy_validation_v1_smoke_main.c \
+            -o hello-policy-validation-smoke
+          ./hello-policy-validation-smoke
+
+          "$CLANG" --target=x86_64-unknown-linux-gnu -std=c11 -Wall -Wextra -Wpedantic -Werror \
+            -S -emit-llvm runtime/phase0/hello_policy_validation_v1_bad_ambient.c \
+            -o hello-policy-bad-ambient.ll
+          if python3 scripts/check_runtime_abi.py --partial \
+              phase0-hello-policy-validation.ll hello-policy-bad-ambient.ll; then
+            echo "expected ABI checker to reject ambient/nullary HelloPolicy provider" >&2
+            exit 1
+          fi
+
+          cabal test phil-hello-policy-validation-abi-tests
