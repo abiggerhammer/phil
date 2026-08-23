@@ -1,0 +1,60 @@
+name: Steve Branch
+
+on:
+  push:
+    branches:
+      - steve/architecture-sketch
+  pull_request:
+    branches:
+      - steve/architecture-sketch
+
+permissions:
+  contents: read
+
+jobs:
+  steve:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v4
+
+      - name: Set up Haskell
+        uses: haskell-actions/setup@v2
+        with:
+          ghc-version: '9.6.7'
+          cabal-version: 'latest'
+
+      - name: Build contemporary Phil library and parser
+        run: cabal build lib:phil-core exe:phil-core
+
+      - name: Parse Steve surface corpus
+        shell: bash
+        run: |
+          set -euo pipefail
+          while IFS= read -r file; do
+            echo "Parsing ${file}"
+            cabal run phil-core -- parse "${file}"
+          done < <(find examples/steve -type f -name '*.phil' | sort)
+
+      - name: Compile and run Steve assurance witness
+        shell: bash
+        run: |
+          set -euo pipefail
+          cabal exec -- ghc \
+            -Wall -Wcompat -Wincomplete-record-updates -Wincomplete-uni-patterns \
+            -Wredundant-constraints -Werror \
+            -isrc test/SteveAssuranceMain.hs -o steve-assurance
+          ./steve-assurance
+
+      - name: Compile and run Steve opaque-proof rejection witness
+        shell: bash
+        run: |
+          set -euo pipefail
+          cabal exec -- ghc \
+            -Wall -Wcompat -Wincomplete-record-updates -Wincomplete-uni-patterns \
+            -Wredundant-constraints -Werror \
+            -isrc test/SteveSurfaceSemanticMain.hs -o steve-surface-semantic
+          ./steve-surface-semantic
+
+      - name: Test Phase 0 evidence bundler
+        run: python3 -m unittest -v test/test_steve_phase0_bundle.py
