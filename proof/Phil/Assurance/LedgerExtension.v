@@ -97,11 +97,13 @@ Theorem ledger_extension_chain_collapses :
     LedgerExtension first last.
 Proof.
   intros first last Hchain.
-  induction Hchain.
+  induction Hchain as
+    [ledger
+    | first middle last Hstep Hrest IH].
   - apply ledger_extension_reflexive.
   - eapply ledger_extension_transitive.
-    + exact H.
-    + exact IHHchain.
+    + exact Hstep.
+    + exact IH.
 Qed.
 
 Theorem verified_extension_chain_preserves_every_ancestor_node :
