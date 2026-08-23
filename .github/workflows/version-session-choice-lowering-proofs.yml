@@ -220,6 +220,7 @@ jobs:
 
       - name: Produce proof certificates and proof-bound CERT-010
         run: |
+          mkdir -p version-choice-lowering-certificates
           ./phil-certify-version-choice-lowering
           for certificate in version-choice-lowering-certificates/*; do
             echo "===== ${certificate} ====="
