@@ -1,0 +1,109 @@
+name: Core Control Assurance Back-Certification
+
+on:
+  pull_request:
+    paths:
+      - 'proof/Phil/Core/Syntax.v'
+      - 'proof/Phil/Core/Context.v'
+      - 'proof/Phil/Core/ContextJoin.v'
+      - 'proof/Phil/Core/SessionRec.v'
+      - 'proof/Phil/Core/Process.v'
+      - 'proof/Phil/Core/ProcessJoin.v'
+      - 'proof/Phil/Core/ProcessTerminal.v'
+      - 'proof/Phil/Core/Discharge.v'
+      - 'proof/Phil/Core/DecisionSound.v'
+      - 'src/Phil/Assurance/Rocq.hs'
+      - 'src/Phil/Assurance/RocqCoreControlAssurance.hs'
+      - 'app/CoreControlAssuranceBackCertificationMain.hs'
+      - '.github/workflows/core-control-assurance-back-certification.yml'
+  push:
+    branches: [main]
+    paths:
+      - 'proof/Phil/Core/Syntax.v'
+      - 'proof/Phil/Core/Context.v'
+      - 'proof/Phil/Core/ContextJoin.v'
+      - 'proof/Phil/Core/SessionRec.v'
+      - 'proof/Phil/Core/Process.v'
+      - 'proof/Phil/Core/ProcessJoin.v'
+      - 'proof/Phil/Core/ProcessTerminal.v'
+      - 'proof/Phil/Core/Discharge.v'
+      - 'proof/Phil/Core/DecisionSound.v'
+      - 'src/Phil/Assurance/Rocq.hs'
+      - 'src/Phil/Assurance/RocqCoreControlAssurance.hs'
+      - 'app/CoreControlAssuranceBackCertificationMain.hs'
+      - '.github/workflows/core-control-assurance-back-certification.yml'
+
+permissions:
+  contents: read
+
+jobs:
+  check-core-control-assurance:
+    runs-on: ubuntu-latest
+    container:
+      image: rocq/rocq-prover:9.2.0
+      options: --user root
+    steps:
+      - uses: actions/checkout@v4
+      - name: Check Core control and assurance proof corpus
+        run: |
+          export PATH="/home/rocq/.opam/${COMPILER}/bin:$PATH"
+          rocq c -Q proof/Phil Phil proof/Phil/Core/Syntax.v
+          rocq c -Q proof/Phil Phil proof/Phil/Core/Context.v
+          rocq c -Q proof/Phil Phil proof/Phil/Core/ContextJoin.v
+          rocq c -Q proof/Phil Phil proof/Phil/Core/SessionRec.v
+          rocq c -Q proof/Phil Phil proof/Phil/Core/Process.v
+          rocq c -Q proof/Phil Phil proof/Phil/Core/ProcessJoin.v
+          rocq c -Q proof/Phil Phil proof/Phil/Core/ProcessTerminal.v
+          rocq c -Q proof/Phil Phil proof/Phil/Core/Discharge.v
+          rocq c -Q proof/Phil Phil proof/Phil/Core/DecisionSound.v
+      - name: Stage checked proof sources and objects
+        run: |
+          mkdir -p checked/proof/Phil/Core
+          for proof in SessionRec Process ProcessJoin ProcessTerminal Discharge DecisionSound; do
+            cp "proof/Phil/Core/${proof}.v" checked/proof/Phil/Core/
+            cp "proof/Phil/Core/${proof}.vo" checked/proof/Phil/Core/
+          done
+      - uses: actions/upload-artifact@v4
+        with:
+          name: core-control-assurance-checked-proofs
+          path: checked/
+          if-no-files-found: error
+          retention-days: 14
+
+  certify-core-control-assurance:
+    needs: check-core-control-assurance
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: haskell-actions/setup@v2
+        with:
+          ghc-version: '9.6.7'
+          cabal-version: 'latest'
+      - uses: actions/download-artifact@v4
+        with:
+          name: core-control-assurance-checked-proofs
+          path: checked
+      - name: Build Phil assurance library
+        run: cabal build lib:phil-core
+      - name: Typecheck back-certification metadata and certifier
+        run: |
+          cabal exec -- ghc -Wall -Wcompat -Wincomplete-record-updates -Wincomplete-uni-patterns -Wredundant-constraints -Werror \
+            -isrc -iapp -fno-code src/Phil/Assurance/RocqCoreControlAssurance.hs
+          cabal exec -- ghc -Wall -Wcompat -Wincomplete-record-updates -Wincomplete-uni-patterns -Wredundant-constraints -Werror \
+            -isrc -iapp -fno-code app/CoreControlAssuranceBackCertificationMain.hs
+      - name: Build back-certifier
+        run: |
+          cabal exec -- ghc -O0 -isrc -iapp app/CoreControlAssuranceBackCertificationMain.hs \
+            -o phil-certify-core-control-assurance
+      - name: Produce eight proof-assistant certificates
+        run: |
+          mkdir -p core-control-assurance-certificates
+          ./phil-certify-core-control-assurance checked core-control-assurance-certificates
+          test "$(find core-control-assurance-certificates -type f -name '*.rocq.cert' | wc -l)" -eq 8
+          sha256sum core-control-assurance-certificates/*.rocq.cert
+      - uses: actions/upload-artifact@v4
+        with:
+          name: phil-core-control-assurance-proof-certificates
+          path: core-control-assurance-certificates/
+          if-no-files-found: error
+          retention-days: 30
