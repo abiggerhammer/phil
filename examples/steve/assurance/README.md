@@ -49,6 +49,6 @@ Five `RetainedRuntimeUse` nodes bind those costs to the put digest, get digest, 
 
 ## What this proves today
 
-A green `phil-steve-assurance-tests` means the Steve design can be represented as a closed, internally consistent graph accepted by the current assurance-manifest verifier, including assumption selection, obligation dependencies, runtime mechanisms, cost references, stable IDs/digests, and manifest identity.
+A green Steve assurance-witness step in the branch-only **Steve Branch** workflow means the Steve design can be represented as a closed, internally consistent graph accepted by the current assurance-manifest verifier, including assumption selection, obligation dependencies, runtime mechanisms, cost references, stable IDs/digests, and manifest identity.
 
 It does **not** mean the `.phil` Steve witness has passed whole-component semantic checking, the filesystem provider is implemented, the provider assumptions are discharged, or the runtime cost references have concrete lowering measurements yet. Those are later promotion points.
