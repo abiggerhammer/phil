@@ -3,6 +3,7 @@
 module Main (main) where
 
 import qualified Data.Map.Strict as Map
+import Data.Text (Text)
 import Phil.LLVM
 import Phil.LLVM.VersionSessionChoiceLoweringProofCheck
 import Phil.Systems
