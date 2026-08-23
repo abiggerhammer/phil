@@ -21,9 +21,179 @@ on:
       - '.github/workflows/begin-policy-session-choice.yml'
 
 permissions:
-  contents: read
+  contents: write
 
 jobs:
+  fix-predecessor-shape:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: begin-policy-session-choice
+          fetch-depth: 0
+      - name: Reuse established Begin record
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 - <<'PY'
+          from pathlib import Path
+          import re
+
+          p = Path('src/Phil/Systems/BeginPolicySessionChoice.hs')
+          text = p.read_text()
+
+          def replace_once(old, new, label):
+              global text
+              count = text.count(old)
+              if count != 1:
+                  raise SystemExit(f'{label}: expected one match, found {count}')
+              text = text.replace(old, new, 1)
+
+          replace_once(
+              'import Phil.Systems.IR\nimport Phil.Systems.Verify\n',
+              'import Phil.Systems.IR\nimport Phil.Systems.RecognizedRecord\nimport Phil.Systems.Verify\n',
+              'recognized-record import')
+          replace_once(
+              '  , beginPolicyPendingBegin :: ValueId\n',
+              '',
+              'pending witness field')
+          replace_once(
+              '  , beginPolicyMaterializeCall :: Text\n',
+              '',
+              'materialize witness field')
+          replace_once(
+              '  | BeginPolicyVersionRegression VersionChoiceOperandsError\n',
+              '  | BeginPolicyVersionRegression VersionChoiceOperandsError\n  | BeginPolicyRecognizedRecordRegression RecognizedRecordError\n',
+              'recognized-record error')
+          replace_once(
+              '  | BeginPolicyMaterializationMismatch Text BlockId [SystemsOp]\n  | BeginPolicyMaterializationBeforeCommit Text BlockId\n',
+              '',
+              'old materialization errors')
+          replace_once(
+              '  , beginPolicyPendingBegin = ValueId "server.pending.begin"\n',
+              '',
+              'pending witness value')
+          replace_once(
+              '  , beginPolicyMaterializeCall = "materialize recognized Begin"\n',
+              '',
+              'materialize witness value')
+          replace_once(
+              '            , "recognized Begin and policyContext become explicit validator operands without selecting their physical representation"\n',
+              '            , "the established recognized Begin value and a new explicit policyContext become validator operands without selecting new physical representation"\n',
+              'trace relation')
+          replace_once(
+              '  mapLeft BeginPolicyVersionRegression $\n    verifyVersionChoiceOperandsWitness\n      (beginPolicySessionChoiceArtifact bundle)\n      phase0VersionChoiceOperandsWitness\n',
+              '  mapLeft BeginPolicyVersionRegression $\n    verifyVersionChoiceOperandsWitness\n      (beginPolicySessionChoiceArtifact bundle)\n      phase0VersionChoiceOperandsWitness\n  mapLeft BeginPolicyRecognizedRecordRegression $\n    verifyRecognizedRecordWitnesses\n      (beginPolicySessionChoiceArtifact bundle)\n      [phase0BeginRecordWitness]\n',
+              'recognized-record regression')
+          replace_once(
+              '  verifyMaterialization witness commitBlock\n',
+              '',
+              'old materialization verification call')
+
+          start = text.index('verifyMaterialization\n  :: BeginPolicySessionChoiceWitness\n')
+          end = text.index('verifyServerSelect\n  :: BeginPolicySessionChoiceWitness\n', start)
+          text = text[:start] + text[end:]
+
+          replace_once(
+              '  mapM_ (requireAbsent (beginPolicyServerFunction witness) server)\n    [ beginPolicyBeginRecord witness\n    , beginPolicyPolicyContext witness\n    , beginPolicyServerRejectReason witness\n    ]\n',
+              '  verifyRole (beginPolicyServerFunction witness) server\n    (beginPolicyBeginRecord witness) (RuntimeRecord "Begin")\n  mapM_ (requireAbsent (beginPolicyServerFunction witness) server)\n    [ beginPolicyPolicyContext witness\n    , beginPolicyServerRejectReason witness\n    ]\n',
+              'predecessor Begin reuse')
+
+          old = '''  let materialize = OpRuntimeCall
+        (beginPolicyMaterializeCall witness)
+        []
+        [beginPolicyBeginRecord witness]
+        Nothing
+        (beginPolicyLoweringDecision witness)
+      commitBlock' = commitBlock
+        { systemsBlockOps = insertAfterCommit materialize (systemsBlockOps commitBlock)
+        , systemsBlockTerminator = TermRuntimeChoice
+            (beginPolicyRuntimeChoiceName witness)
+            [beginPolicyPolicyContext witness, beginPolicyBeginRecord witness]
+            (Just site)
+            (expectedRuntimeArms witness)
+        }
+      serverValues = Map.insert
+        (beginPolicyServerRejectReason witness)
+        (SystemsValue
+          (beginPolicyServerRejectReason witness)
+          (RuntimeOpaque "ValidationReason[BeginPolicy]")
+          Nothing) $
+        Map.insert
+          (beginPolicyPolicyContext witness)
+          (SystemsValue
+            (beginPolicyPolicyContext witness)
+            (RuntimeInput "PolicyContext")
+            Nothing) $
+          Map.insert
+            (beginPolicyBeginRecord witness)
+            (SystemsValue
+              (beginPolicyBeginRecord witness)
+              (RuntimeRecord "Begin")
+              Nothing)
+            (systemsFunctionValues server)
+'''
+          new = '''  let commitBlock' = commitBlock
+        { systemsBlockTerminator = TermRuntimeChoice
+            (beginPolicyRuntimeChoiceName witness)
+            [beginPolicyPolicyContext witness, beginPolicyBeginRecord witness]
+            (Just site)
+            (expectedRuntimeArms witness)
+        }
+      serverValues = Map.insert
+        (beginPolicyServerRejectReason witness)
+        (SystemsValue
+          (beginPolicyServerRejectReason witness)
+          (RuntimeOpaque "ValidationReason[BeginPolicy]")
+          Nothing) $
+        Map.insert
+          (beginPolicyPolicyContext witness)
+          (SystemsValue
+            (beginPolicyPolicyContext witness)
+            (RuntimeInput "PolicyContext")
+            Nothing)
+          (systemsFunctionValues server)
+'''
+          replace_once(old, new, 'commit/value rewrite')
+
+          start = text.index('insertAfterCommit :: SystemsOp -> [SystemsOp] -> [SystemsOp]\n')
+          end = text.index('verifyRole\n  :: Text\n', start)
+          text = text[:start] + text[end:]
+
+          replace_once(
+              '    (before, operation : after)\n',
+              '    (before, _ : after)\n',
+              'unused matched operation')
+          replace_once(
+              '          "explicit Begin/PolicyContext operands + accepted/rejected(reason) local runtime choice + reject(reason)/proceed semantic session choice"\n',
+              '          "established Begin record + explicit PolicyContext operand + accepted/rejected(reason) local runtime choice + reject(reason)/proceed semantic session choice"\n',
+              'target representation')
+          replace_once(
+              '          [ "Begin record representation remains target-selected"\n          , "PolicyContext representation remains target-selected"\n',
+              '          [ "existing Begin record representation and provenance are preserved from the recognized-record predecessor"\n          , "PolicyContext representation remains target-selected"\n',
+              'runtime residue')
+          replace_once(
+              '          { costCodeSize = Just "explicit record/input identities plus local/session choice structure"\n',
+              '          { costCodeSize = Just "explicit policy input/reason identities plus local/session choice structure"\n',
+              'cost shape')
+          replace_once(
+              '          [ "recognized Begin is committed before record materialization and validation"\n',
+              '          [ "recognized Begin record materialization/projection from the predecessor remains valid before validation"\n',
+              'target precondition')
+          replace_once(
+              '          [ "verify exact BeginPolicy RuntimeSiteRef is preserved"\n',
+              '          [ "verify the predecessor recognized Begin witness still holds exactly"\n          , "verify exact BeginPolicy RuntimeSiteRef is preserved"\n',
+              'inspection plan')
+
+          p.write_text(text)
+          PY
+          git diff --check
+          git config user.name "phil-begin-policy-bot"
+          git config user.email "actions@users.noreply.github.com"
+          git add src/Phil/Systems/BeginPolicySessionChoice.hs
+          git commit -m "Reuse established Begin record in BeginPolicy choice"
+          git push origin HEAD:begin-policy-session-choice
+
   begin-policy-session-choice:
     runs-on: ubuntu-latest
     steps:
