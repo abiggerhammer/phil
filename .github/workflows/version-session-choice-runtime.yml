@@ -41,7 +41,7 @@ on:
       - '.github/workflows/version-session-choice-runtime.yml'
 
 permissions:
-  contents: write
+  contents: read
 
 jobs:
   version-session-choice-runtime:
@@ -64,6 +64,7 @@ jobs:
           EMITTER="$(cabal list-bin phil-llvm-phase0-version-session-choice)"
           "$EMITTER" > phase0-version-session-choice.ll
           "$LLVM_AS" phase0-version-session-choice.ll -o phase0-version-session-choice.bc
+
           "$CLANG" --target=x86_64-unknown-linux-gnu -std=c11 -Wall -Wextra -Wpedantic -Werror \
             -Iruntime/phase0 -S -emit-llvm runtime/phase0/version_session_choice_v1_smoke.c \
             -o version-session-runtime.ll
@@ -72,12 +73,14 @@ jobs:
           "$LLVM_AS" version-session-runtime.ll -o version-session-runtime.bc
           "$LLVM_LINK" phase0-version-session-choice.bc version-session-runtime.bc \
             -o phase0-version-session-choice-partially-linked.bc
+
           "$CLANG" --target=x86_64-unknown-linux-gnu -std=c11 -Wall -Wextra -Wpedantic -Werror \
             -Iruntime/phase0 \
             runtime/phase0/version_session_choice_v1_smoke.c \
             runtime/phase0/version_session_choice_v1_smoke_main.c \
             -o version-session-choice-smoke
           ./version-session-choice-smoke
+
           "$CLANG" --target=x86_64-unknown-linux-gnu -std=c11 -Wall -Wextra -Wpedantic -Werror \
             -S -emit-llvm runtime/phase0/version_session_choice_v1_bad_ambient.c \
             -o version-session-bad-ambient.ll
@@ -86,60 +89,5 @@ jobs:
             echo "expected ABI checker to reject ambient/nullary version-choice provider" >&2
             exit 1
           fi
-          cabal test phil-version-session-choice-abi-tests
 
-  fix-refinement-indent:
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@v4
-        with:
-          ref: lower-version-session-choice
-          fetch-depth: 0
-      - name: Fix renderer indentation
-        shell: bash
-        run: |
-          set -euo pipefail
-          python3 - <<'PY'
-          from pathlib import Path
-          p = Path('src/Phil/LLVM/IR.hs')
-          lines = p.read_text().splitlines()
-          marker = '      LLVMVersionRefinement _ transport selected yes no ->'
-          indices = [i for i, line in enumerate(lines) if line == marker]
-          if len(indices) != 1:
-              raise SystemExit(f'expected one refinement renderer marker, found {len(indices)}')
-          i = indices[0]
-          expected = [
-              marker,
-              '        let blockSymbol = symbol (unLLVMBlockId (llvmBlockId blockValue))',
-              '  validName = "%phil_version_refinement_ok_" <> blockSymbol',
-              '        in',
-              '[ validName <> " = call i1 @phil_runtime_refine_selected_version(ptr %"',
-              '    <> symbol transport <> ", i16 %" <> symbol selected <> ")"',
-              ', "br i1 " <> validName',
-              '    <> ", label %" <> symbol (unLLVMBlockId yes)',
-              '    <> ", label %" <> symbol (unLLVMBlockId no)',
-              ']',
-          ]
-          if lines[i:i + len(expected)] != expected:
-              raise SystemExit('refinement renderer no longer matches the known malformed block')
-          replacement = [
-              marker,
-              '        let blockSymbol = symbol (unLLVMBlockId (llvmBlockId blockValue))',
-              '            validName = "%phil_version_refinement_ok_" <> blockSymbol',
-              '        in',
-              '          [ validName <> " = call i1 @phil_runtime_refine_selected_version(ptr %"',
-              '              <> symbol transport <> ", i16 %" <> symbol selected <> ")"',
-              '          , "br i1 " <> validName',
-              '              <> ", label %" <> symbol (unLLVMBlockId yes)',
-              '              <> ", label %" <> symbol (unLLVMBlockId no)',
-              '          ]',
-          ]
-          lines[i:i + len(expected)] = replacement
-          p.write_text('\n'.join(lines) + '\n')
-          PY
-          git diff --check
-          git config user.name "phil-version-lowering-bot"
-          git config user.email "actions@users.noreply.github.com"
-          git add src/Phil/LLVM/IR.hs
-          git commit -m "Fix version refinement renderer indentation"
-          git push origin HEAD:lower-version-session-choice
+          cabal test phil-version-session-choice-abi-tests
