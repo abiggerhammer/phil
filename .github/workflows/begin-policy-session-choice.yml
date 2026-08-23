@@ -21,9 +21,43 @@ on:
       - '.github/workflows/begin-policy-session-choice.yml'
 
 permissions:
-  contents: read
+  contents: write
 
 jobs:
+  register-package:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: begin-policy-session-choice
+          fetch-depth: 0
+      - name: Register BeginPolicy semantic slice
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 - <<'PY'
+          from pathlib import Path
+          p = Path('phil-core.cabal')
+          text = p.read_text()
+          module_anchor = '      Phil.Systems.VersionChoiceOperands\n'
+          module_insert = module_anchor + '      Phil.Systems.BeginPolicySessionChoice\n'
+          if text.count(module_anchor) != 1:
+              raise SystemExit(f'expected one module anchor, found {text.count(module_anchor)}')
+          if '      Phil.Systems.BeginPolicySessionChoice\n' in text:
+              raise SystemExit('BeginPolicy module already registered')
+          text = text.replace(module_anchor, module_insert, 1)
+          suite = '''\n\ntest-suite phil-begin-policy-session-choice-tests\n  import:             common-settings\n  type:               exitcode-stdio-1.0\n  hs-source-dirs:     test\n  main-is:            BeginPolicySessionChoiceMain.hs\n  build-depends:\n      base >=4.17 && <5,\n      containers >=0.6 && <0.8,\n      phil-core,\n      text >=2.0 && <2.2\n'''
+          if 'test-suite phil-begin-policy-session-choice-tests' in text:
+              raise SystemExit('BeginPolicy test suite already registered')
+          p.write_text(text.rstrip() + suite)
+          PY
+          git diff --check
+          git config user.name "phil-begin-policy-bot"
+          git config user.email "actions@users.noreply.github.com"
+          git add phil-core.cabal
+          git commit -m "Register BeginPolicy semantic choice tests"
+          git push origin HEAD:begin-policy-session-choice
+
   begin-policy-session-choice:
     runs-on: ubuntu-latest
     steps:
