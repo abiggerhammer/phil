@@ -307,9 +307,9 @@ verifyVersionSessionChoiceLLVMWitness bundle llvmArtifact = do
   case llvmBlockTerminator clientVersion of
     LLVMVersionRefinement _ transport selected yes no
       | transport == clientTransport
-&& selected == clientSelected
-&& yes == LLVMBlockId (unBlockId (versionChoiceClientVersionSuccess versionWitness))
-&& no == LLVMBlockId (unBlockId (versionChoiceClientVersionFailure versionWitness)) -> pure ()
+          && selected == clientSelected
+          && yes == LLVMBlockId (unBlockId (versionChoiceClientVersionSuccess versionWitness))
+          && no == LLVMBlockId (unBlockId (versionChoiceClientVersionFailure versionWitness)) -> pure ()
     other -> Left (VersionChoiceLLVMClientRefinementMismatch
       clientName clientVersionTargetId other)
 
