@@ -23,6 +23,8 @@ module Phil.LLVM
   , module Phil.LLVM.SessionOfferCertification
   , module Phil.LLVM.PayloadCancelChoice
   , module Phil.LLVM.PayloadCancelChoiceCertification
+  , module Phil.LLVM.VersionSessionChoice
+  , module Phil.LLVM.VersionSessionChoiceCertification
   ) where
 
 import Phil.LLVM.AcceptedResponse
@@ -48,4 +50,6 @@ import Phil.LLVM.SessionOfferCertification
 import Phil.LLVM.Storage
 import Phil.LLVM.StorageCertification
 import Phil.LLVM.StorageProofCertification
+import Phil.LLVM.VersionSessionChoice
+import Phil.LLVM.VersionSessionChoiceCertification
 import Phil.LLVM.Verify

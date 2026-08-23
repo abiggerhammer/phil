@@ -97,6 +97,11 @@ data LLVMOp
   | LLVMPlain Text
   | LLVMScalarLiteral Text ScalarLiteral
   | LLVMFieldProjection Text Text Text Text ScalarType
+  | LLVMOpaqueFieldProjection Text Text Text Text
+  | LLVMChooseSupportedPayloadBinding Text
+  | LLVMUnsupportedSelect Text
+  | LLVMVersionSelect Text Text
+  | LLVMVersionChoicePayloadBinding Text
   | LLVMAcceptedResponse Text Text
   | LLVMRejectedResponse Text Int
   | LLVMPayloadCancelSelect Text Int
@@ -142,6 +147,23 @@ data LLVMTerminator
       LLVMBlockId
       LLVMBlockId
   | LLVMPayloadCancelOffer
+      Text
+      LLVMBlockId
+      LLVMBlockId
+  | LLVMChooseSupported
+      Text
+      Text
+      Text
+      LLVMBlockId
+      LLVMBlockId
+  | LLVMVersionChoiceOffer
+      Text
+      Text
+      LLVMBlockId
+      LLVMBlockId
+  | LLVMVersionRefinement
+      RuntimeSiteRef
+      Text
       Text
       LLVMBlockId
       LLVMBlockId
@@ -226,6 +248,9 @@ llvmBlockSuccessors blockValue = case llvmBlockTerminator blockValue of
   LLVMStore _ _ _ yes no -> [yes, no]
   LLVMFinalResponseOffer _ _ yes no -> [yes, no]
   LLVMPayloadCancelOffer _ payloadTarget cancelTarget -> [payloadTarget, cancelTarget]
+  LLVMChooseSupported _ _ _ someTarget noneTarget -> [someTarget, noneTarget]
+  LLVMVersionChoiceOffer _ _ versionTarget unsupportedTarget -> [versionTarget, unsupportedTarget]
+  LLVMVersionRefinement _ _ _ yes no -> [yes, no]
   LLVMReturnScalar _ _ -> []
   LLVMReturn _ -> []
   LLVMUnreachable _ -> []
@@ -250,6 +275,7 @@ llvmRuntimeSites moduleValue = concat
         LLVMExactReceive site _ _ _ _ _ _ _ -> [site]
         LLVMDigestValidate site _ _ _ _ -> [site]
         LLVMStore site _ _ _ _ -> [site]
+        LLVMVersionRefinement site _ _ _ _ -> [site]
         _ -> []
 
 llvmStrengtheningUses :: LLVMModule -> [LLVMStrengtheningId]
@@ -283,6 +309,7 @@ renderLLVMModule moduleValue = Text.unlines $
       , "phil-runtime/phase0/rejected-response-v1"
       , "phil-runtime/phase0/final-response-receive-v1"
       , "phil-runtime/phase0/payload-cancel-choice-v1"
+      , "phil-runtime/phase0/version-session-choice-v1"
       ]
 
     header =
@@ -326,9 +353,15 @@ renderLLVMModule moduleValue = Text.unlines $
       <> recordUploadIdDeclaration
       <> payloadCancelSelectDeclaration
       <> payloadCancelReceiveDeclaration
+      <> chooseSupportedDeclaration
+      <> unsupportedSelectDeclaration
+      <> versionSelectDeclaration
+      <> versionChoiceReceiveDeclaration
+      <> versionRefinementDeclaration
       <> map renderCallDeclaration (Set.toAscList callNames)
       <> runtimeDeclarations
       <> map renderFieldProjectionDeclaration (Set.toAscList fieldProjectionSignatures)
+      <> map renderOpaqueFieldProjectionDeclaration (Set.toAscList opaqueFieldProjectionSignatures)
       <> map renderRecognitionDeclaration (Set.toAscList recognitionGrammars)
       <> map renderScalarRuntimeDeclaration (Set.toAscList scalarRuntimeSignatures)
       <> map renderExactReceiveDeclaration (Set.toAscList exactReceiveSignatures)
@@ -394,6 +427,31 @@ renderLLVMModule moduleValue = Text.unlines $
         then ["declare i1 @phil_runtime_receive_payload_cancel(ptr)"]
         else []
 
+    chooseSupportedDeclaration =
+      if any hasChooseSupported allBlocks
+        then ["declare i1 @phil_runtime_choose_supported(ptr, ptr, ptr)"]
+        else []
+
+    unsupportedSelectDeclaration =
+      if any hasUnsupportedSelect allBlocks
+        then ["declare void @phil_runtime_select_unsupported(ptr)"]
+        else []
+
+    versionSelectDeclaration =
+      if any hasVersionSelect allBlocks
+        then ["declare void @phil_runtime_select_version(ptr, i16)"]
+        else []
+
+    versionChoiceReceiveDeclaration =
+      if any hasVersionChoiceOffer allBlocks
+        then ["declare i1 @phil_runtime_receive_version_choice(ptr, ptr)"]
+        else []
+
+    versionRefinementDeclaration =
+      if any hasVersionRefinement allBlocks
+        then ["declare i1 @phil_runtime_refine_selected_version(ptr, i16)"]
+        else []
+
     callNames = Set.fromList
       [ name
       | blockValue <- allBlocks
@@ -432,6 +490,12 @@ renderLLVMModule moduleValue = Text.unlines $
       [ (grammar, fieldName, scalarType)
       | blockValue <- allBlocks
       , LLVMFieldProjection _ _ grammar fieldName scalarType <- llvmBlockOps blockValue
+      ]
+
+    opaqueFieldProjectionSignatures = Set.fromList
+      [ (grammar, fieldName)
+      | blockValue <- allBlocks
+      , LLVMOpaqueFieldProjection _ _ grammar fieldName <- llvmBlockOps blockValue
       ]
 
     recognitionGrammars = Set.fromList
@@ -496,6 +560,26 @@ renderLLVMModule moduleValue = Text.unlines $
       LLVMPayloadCancelOffer {} -> True
       _ -> False
 
+    hasChooseSupported blockValue = case llvmBlockTerminator blockValue of
+      LLVMChooseSupported {} -> True
+      _ -> False
+
+    hasUnsupportedSelect blockValue = any isUnsupportedSelect (llvmBlockOps blockValue)
+    isUnsupportedSelect LLVMUnsupportedSelect {} = True
+    isUnsupportedSelect _ = False
+
+    hasVersionSelect blockValue = any isVersionSelect (llvmBlockOps blockValue)
+    isVersionSelect LLVMVersionSelect {} = True
+    isVersionSelect _ = False
+
+    hasVersionChoiceOffer blockValue = case llvmBlockTerminator blockValue of
+      LLVMVersionChoiceOffer {} -> True
+      _ -> False
+
+    hasVersionRefinement blockValue = case llvmBlockTerminator blockValue of
+      LLVMVersionRefinement {} -> True
+      _ -> False
+
     renderCallDeclaration name = "declare void @phil_call_" <> symbol name <> "()"
     renderRuntimeEvidenceDeclaration evidence =
       "declare i1 @phil_runtime_" <> symbol evidence <> "()"
@@ -504,6 +588,8 @@ renderLLVMModule moduleValue = Text.unlines $
     renderFieldProjectionDeclaration (grammar, fieldName, scalarType) =
       "declare " <> renderScalarType scalarType
         <> " @phil_record_" <> symbol grammar <> "_get_" <> symbol fieldName <> "(ptr)"
+    renderOpaqueFieldProjectionDeclaration (grammar, fieldName) =
+      "declare ptr @phil_record_" <> symbol grammar <> "_get_" <> symbol fieldName <> "(ptr)"
     renderRecognitionDeclaration grammar =
       "declare { i8, ptr } @phil_runtime_recognize_" <> symbol grammar <> "()"
     renderScalarRuntimeDeclaration (primitive, scalarType) =
@@ -563,6 +649,24 @@ renderLLVMModule moduleValue = Text.unlines $
         [ "%" <> symbol output <> " = call " <> renderScalarType scalarType
             <> " @phil_record_" <> symbol grammar <> "_get_" <> symbol fieldName
             <> "(ptr %" <> symbol record <> ")"
+        ]
+      LLVMOpaqueFieldProjection output record grammar fieldName ->
+        [ "%" <> symbol output <> " = call ptr @phil_record_" <> symbol grammar
+            <> "_get_" <> symbol fieldName <> "(ptr %" <> symbol record <> ")"
+        ]
+      LLVMChooseSupportedPayloadBinding selected ->
+        [ "%" <> symbol selected <> " = load i16, ptr %phil_choose_supported_slot_"
+            <> symbol selected
+        ]
+      LLVMUnsupportedSelect transport ->
+        [ "call void @phil_runtime_select_unsupported(ptr %" <> symbol transport <> ")" ]
+      LLVMVersionSelect transport selected ->
+        [ "call void @phil_runtime_select_version(ptr %" <> symbol transport
+            <> ", i16 %" <> symbol selected <> ")"
+        ]
+      LLVMVersionChoicePayloadBinding selected ->
+        [ "%" <> symbol selected <> " = load i16, ptr %phil_version_choice_slot_"
+            <> symbol selected
         ]
       LLVMAcceptedResponse transport uploadId ->
         [ "call void @phil_runtime_select_accepted(ptr %" <> symbol transport
@@ -730,6 +834,40 @@ renderLLVMModule moduleValue = Text.unlines $
           , "br i1 " <> payloadName
               <> ", label %" <> symbol (unLLVMBlockId payloadTarget)
               <> ", label %" <> symbol (unLLVMBlockId cancelTarget)
+          ]
+      LLVMChooseSupported supported offered selected someTarget noneTarget ->
+        let blockSymbol = symbol (unLLVMBlockId (llvmBlockId blockValue))
+            slotName = "%phil_choose_supported_slot_" <> symbol selected
+            someName = "%phil_choose_supported_some_" <> blockSymbol
+        in
+          [ slotName <> " = alloca i16"
+          , someName <> " = call i1 @phil_runtime_choose_supported(ptr %"
+              <> symbol supported <> ", ptr %" <> symbol offered <> ", ptr " <> slotName <> ")"
+          , "br i1 " <> someName
+              <> ", label %" <> symbol (unLLVMBlockId someTarget)
+              <> ", label %" <> symbol (unLLVMBlockId noneTarget)
+          ]
+      LLVMVersionChoiceOffer transport selected versionTarget unsupportedTarget ->
+        let blockSymbol = symbol (unLLVMBlockId (llvmBlockId blockValue))
+            slotName = "%phil_version_choice_slot_" <> symbol selected
+            versionName = "%phil_version_choice_is_version_" <> blockSymbol
+        in
+          [ slotName <> " = alloca i16"
+          , versionName <> " = call i1 @phil_runtime_receive_version_choice(ptr %"
+              <> symbol transport <> ", ptr " <> slotName <> ")"
+          , "br i1 " <> versionName
+              <> ", label %" <> symbol (unLLVMBlockId versionTarget)
+              <> ", label %" <> symbol (unLLVMBlockId unsupportedTarget)
+          ]
+      LLVMVersionRefinement _ transport selected yes no ->
+        let blockSymbol = symbol (unLLVMBlockId (llvmBlockId blockValue))
+            validName = "%phil_version_refinement_ok_" <> blockSymbol
+        in
+          [ validName <> " = call i1 @phil_runtime_refine_selected_version(ptr %"
+              <> symbol transport <> ", i16 %" <> symbol selected <> ")"
+          , "br i1 " <> validName
+              <> ", label %" <> symbol (unLLVMBlockId yes)
+              <> ", label %" <> symbol (unLLVMBlockId no)
           ]
       LLVMReturnScalar name scalarType ->
         ["ret " <> renderScalarType scalarType <> " %" <> symbol name]

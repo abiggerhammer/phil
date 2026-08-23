@@ -13,6 +13,7 @@ module Phil.Systems
   , module Phil.Systems.PayloadCancelChoice
   , module Phil.Systems.LocalRuntimeChoice
   , module Phil.Systems.VersionSessionChoice
+  , module Phil.Systems.VersionChoiceOperands
   ) where
 
 import Phil.Systems.AcceptedResponse
@@ -27,5 +28,6 @@ import Phil.Systems.RecognizedRecord
 import Phil.Systems.RejectedResponse
 import Phil.Systems.SessionChoice
 import Phil.Systems.Storage
+import Phil.Systems.VersionChoiceOperands
 import Phil.Systems.VersionSessionChoice
 import Phil.Systems.Verify

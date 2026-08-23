@@ -84,6 +84,8 @@ data SystemsValueRole
   | OwnedBuffer Text
   | BorrowedSlice ValueId
   | RuntimeScalar Text
+  | RuntimeInput Text
+  | RuntimeOpaque Text
   | TypedScalar ScalarType
   | RuntimeRecord Text
   | DiagnosticState Text
@@ -560,6 +562,8 @@ renderValueRole role = case role of
   OwnedBuffer description -> "owned-buffer(" <> atom description <> ")"
   BorrowedSlice owner -> "borrowed-slice(" <> atom (unValueId owner) <> ")"
   RuntimeScalar description -> "runtime-scalar(" <> atom description <> ")"
+  RuntimeInput description -> "runtime-input(" <> atom description <> ")"
+  RuntimeOpaque description -> "runtime-opaque(" <> atom description <> ")"
   TypedScalar scalarType -> "typed-scalar(" <> atom (renderScalarType scalarType) <> ")"
   RuntimeRecord description -> "runtime-record(" <> atom description <> ")"
   DiagnosticState description -> "diagnostic-state(" <> atom description <> ")"
