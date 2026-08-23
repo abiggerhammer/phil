@@ -1,0 +1,104 @@
+name: Ledger Extension Proofs
+
+on:
+  pull_request:
+    paths:
+      - 'proof/Phil/Assurance/EvidenceUse.v'
+      - 'proof/Phil/Assurance/LedgerExtension.v'
+      - 'src/Phil/Assurance/RocqLedgerExtension.hs'
+      - 'app/LedgerExtensionProofCorrespondenceMain.hs'
+      - 'app/LedgerExtensionProofCertificationMain.hs'
+      - 'src/Phil/Assurance/Verify.hs'
+      - 'src/Phil/Assurance/Types.hs'
+      - '.github/workflows/ledger-extension-proofs.yml'
+  push:
+    branches:
+      - main
+    paths:
+      - 'proof/Phil/Assurance/EvidenceUse.v'
+      - 'proof/Phil/Assurance/LedgerExtension.v'
+      - 'src/Phil/Assurance/RocqLedgerExtension.hs'
+      - 'app/LedgerExtensionProofCorrespondenceMain.hs'
+      - 'app/LedgerExtensionProofCertificationMain.hs'
+      - 'src/Phil/Assurance/Verify.hs'
+      - 'src/Phil/Assurance/Types.hs'
+      - '.github/workflows/ledger-extension-proofs.yml'
+
+permissions:
+  contents: read
+
+jobs:
+  rocq-ledger-extension:
+    runs-on: ubuntu-latest
+    container:
+      image: rocq/rocq-prover:9.2.0
+      options: --user root
+    steps:
+      - uses: actions/checkout@v4
+      - name: Check ledger extension theorem
+        run: |
+          export PATH="/home/rocq/.opam/${COMPILER}/bin:$PATH"
+          rocq c -Q proof/Phil Phil proof/Phil/Assurance/Manifest.v
+          rocq c -Q proof/Phil Phil proof/Phil/Assurance/EvidenceUse.v
+          rocq c -Q proof/Phil Phil proof/Phil/Assurance/LedgerExtension.v
+      - name: Stage checked ledger extension proof
+        run: |
+          mkdir -p checked/proof/Phil/Assurance
+          cp proof/Phil/Assurance/LedgerExtension.v checked/proof/Phil/Assurance/
+          cp proof/Phil/Assurance/LedgerExtension.vo checked/proof/Phil/Assurance/
+      - uses: actions/upload-artifact@v4
+        with:
+          name: ledger-extension-checked-proof
+          path: checked/
+          if-no-files-found: error
+          retention-days: 14
+
+  certify-ledger-extension:
+    needs: rocq-ledger-extension
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: haskell-actions/setup@v2
+        with:
+          ghc-version: '9.6.7'
+          cabal-version: 'latest'
+      - uses: actions/download-artifact@v4
+        with:
+          name: ledger-extension-checked-proof
+          path: checked
+      - name: Build Phil assurance library
+        run: cabal build lib:phil-core
+      - name: Typecheck proof correspondence and certifier
+        run: |
+          cabal exec -- ghc \
+            -Wall -Wcompat -Wincomplete-record-updates -Wincomplete-uni-patterns -Wredundant-constraints -Werror \
+            -isrc -iapp -fno-code app/LedgerExtensionProofCorrespondenceMain.hs
+          cabal exec -- ghc \
+            -Wall -Wcompat -Wincomplete-record-updates -Wincomplete-uni-patterns -Wredundant-constraints -Werror \
+            -isrc -iapp -fno-code app/LedgerExtensionProofCertificationMain.hs
+      - name: Run ledger extension correspondence regressions
+        run: |
+          cabal exec -- ghc -O0 -isrc -iapp \
+            app/LedgerExtensionProofCorrespondenceMain.hs \
+            -o phil-check-ledger-extension-correspondence
+          ./phil-check-ledger-extension-correspondence
+      - name: Build ledger extension proof certifier
+        run: |
+          cabal exec -- ghc -O0 -isrc -iapp \
+            app/LedgerExtensionProofCertificationMain.hs \
+            -o phil-certify-ledger-extension
+      - name: Produce PHIL-ASSURE-LEDGER-EXT-001 certificate
+        run: |
+          mkdir -p ledger-extension-certificates
+          ./phil-certify-ledger-extension \
+            checked/proof/Phil/Assurance/LedgerExtension.v \
+            checked/proof/Phil/Assurance/LedgerExtension.vo \
+            ledger-extension-certificates/PHIL-ASSURE-LEDGER-EXT-001.rocq.cert
+          cat ledger-extension-certificates/PHIL-ASSURE-LEDGER-EXT-001.rocq.cert
+          sha256sum ledger-extension-certificates/PHIL-ASSURE-LEDGER-EXT-001.rocq.cert
+      - uses: actions/upload-artifact@v4
+        with:
+          name: phil-ledger-extension-proof-certificate
+          path: ledger-extension-certificates/PHIL-ASSURE-LEDGER-EXT-001.rocq.cert
+          if-no-files-found: error
+          retention-days: 30
