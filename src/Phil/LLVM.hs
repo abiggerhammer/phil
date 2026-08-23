@@ -25,9 +25,13 @@ module Phil.LLVM
   , module Phil.LLVM.PayloadCancelChoiceCertification
   , module Phil.LLVM.VersionSessionChoice
   , module Phil.LLVM.VersionSessionChoiceCertification
+  , module Phil.LLVM.BeginPolicyChoice
+  , module Phil.LLVM.BeginPolicyChoiceCertification
   ) where
 
 import Phil.LLVM.AcceptedResponse
+import Phil.LLVM.BeginPolicyChoice
+import Phil.LLVM.BeginPolicyChoiceCertification
 import Phil.LLVM.AcceptedResponseCertification
 import Phil.LLVM.DigestValidation
 import Phil.LLVM.DigestValidationCertification

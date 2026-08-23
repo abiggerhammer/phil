@@ -216,6 +216,10 @@ ordinaryOps = filter isOrdinary
       LLVMUnsupportedSelect {} -> True
       LLVMVersionSelect {} -> True
       LLVMVersionChoicePayloadBinding {} -> True
+      LLVMBeginPolicyValidationReasonBinding {} -> True
+      LLVMBeginPolicyRejectSelect {} -> True
+      LLVMBeginPolicyProceedSelect {} -> True
+      LLVMBeginPolicyChoiceReasonBinding {} -> True
       LLVMAcceptedResponse {} -> True
       LLVMRejectedResponse {} -> True
       LLVMPayloadCancelSelect {} -> True

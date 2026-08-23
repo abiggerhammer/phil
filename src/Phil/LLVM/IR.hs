@@ -102,6 +102,10 @@ data LLVMOp
   | LLVMUnsupportedSelect Text
   | LLVMVersionSelect Text Text
   | LLVMVersionChoicePayloadBinding Text
+  | LLVMBeginPolicyValidationReasonBinding Text
+  | LLVMBeginPolicyRejectSelect Text Text
+  | LLVMBeginPolicyProceedSelect Text
+  | LLVMBeginPolicyChoiceReasonBinding Text
   | LLVMAcceptedResponse Text Text
   | LLVMRejectedResponse Text Int
   | LLVMPayloadCancelSelect Text Int
@@ -163,6 +167,18 @@ data LLVMTerminator
       LLVMBlockId
   | LLVMVersionRefinement
       RuntimeSiteRef
+      Text
+      Text
+      LLVMBlockId
+      LLVMBlockId
+  | LLVMBeginPolicyValidate
+      RuntimeSiteRef
+      Text
+      Text
+      Text
+      LLVMBlockId
+      LLVMBlockId
+  | LLVMBeginPolicyChoiceOffer
       Text
       Text
       LLVMBlockId
@@ -251,6 +267,8 @@ llvmBlockSuccessors blockValue = case llvmBlockTerminator blockValue of
   LLVMChooseSupported _ _ _ someTarget noneTarget -> [someTarget, noneTarget]
   LLVMVersionChoiceOffer _ _ versionTarget unsupportedTarget -> [versionTarget, unsupportedTarget]
   LLVMVersionRefinement _ _ _ yes no -> [yes, no]
+  LLVMBeginPolicyValidate _ _ _ _ accepted rejected -> [accepted, rejected]
+  LLVMBeginPolicyChoiceOffer _ _ proceedTarget rejectTarget -> [proceedTarget, rejectTarget]
   LLVMReturnScalar _ _ -> []
   LLVMReturn _ -> []
   LLVMUnreachable _ -> []
@@ -276,6 +294,7 @@ llvmRuntimeSites moduleValue = concat
         LLVMDigestValidate site _ _ _ _ -> [site]
         LLVMStore site _ _ _ _ -> [site]
         LLVMVersionRefinement site _ _ _ _ -> [site]
+        LLVMBeginPolicyValidate site _ _ _ _ _ -> [site]
         _ -> []
 
 llvmStrengtheningUses :: LLVMModule -> [LLVMStrengtheningId]
@@ -310,6 +329,7 @@ renderLLVMModule moduleValue = Text.unlines $
       , "phil-runtime/phase0/final-response-receive-v1"
       , "phil-runtime/phase0/payload-cancel-choice-v1"
       , "phil-runtime/phase0/version-session-choice-v1"
+      , "phil-runtime/phase0/begin-policy-choice-v1"
       ]
 
     header =
@@ -358,6 +378,10 @@ renderLLVMModule moduleValue = Text.unlines $
       <> versionSelectDeclaration
       <> versionChoiceReceiveDeclaration
       <> versionRefinementDeclaration
+      <> beginPolicyValidationDeclaration
+      <> beginPolicyRejectSelectDeclaration
+      <> beginPolicyProceedSelectDeclaration
+      <> beginPolicyChoiceReceiveDeclaration
       <> map renderCallDeclaration (Set.toAscList callNames)
       <> runtimeDeclarations
       <> map renderFieldProjectionDeclaration (Set.toAscList fieldProjectionSignatures)
@@ -450,6 +474,26 @@ renderLLVMModule moduleValue = Text.unlines $
     versionRefinementDeclaration =
       if any hasVersionRefinement allBlocks
         then ["declare i1 @phil_runtime_refine_selected_version(ptr, i16)"]
+        else []
+
+    beginPolicyValidationDeclaration =
+      if any hasBeginPolicyValidation allBlocks
+        then ["declare i1 @phil_runtime_validate_begin_policy(ptr, ptr, ptr)"]
+        else []
+
+    beginPolicyRejectSelectDeclaration =
+      if any hasBeginPolicyRejectSelect allBlocks
+        then ["declare void @phil_runtime_select_begin_policy_reject(ptr, i8)"]
+        else []
+
+    beginPolicyProceedSelectDeclaration =
+      if any hasBeginPolicyProceedSelect allBlocks
+        then ["declare void @phil_runtime_select_begin_policy_proceed(ptr)"]
+        else []
+
+    beginPolicyChoiceReceiveDeclaration =
+      if any hasBeginPolicyChoiceOffer allBlocks
+        then ["declare i1 @phil_runtime_receive_begin_policy_choice(ptr, ptr)"]
         else []
 
     callNames = Set.fromList
@@ -580,6 +624,22 @@ renderLLVMModule moduleValue = Text.unlines $
       LLVMVersionRefinement {} -> True
       _ -> False
 
+    hasBeginPolicyValidation blockValue = case llvmBlockTerminator blockValue of
+      LLVMBeginPolicyValidate {} -> True
+      _ -> False
+
+    hasBeginPolicyRejectSelect blockValue = any isBeginPolicyRejectSelect (llvmBlockOps blockValue)
+    isBeginPolicyRejectSelect LLVMBeginPolicyRejectSelect {} = True
+    isBeginPolicyRejectSelect _ = False
+
+    hasBeginPolicyProceedSelect blockValue = any isBeginPolicyProceedSelect (llvmBlockOps blockValue)
+    isBeginPolicyProceedSelect LLVMBeginPolicyProceedSelect {} = True
+    isBeginPolicyProceedSelect _ = False
+
+    hasBeginPolicyChoiceOffer blockValue = case llvmBlockTerminator blockValue of
+      LLVMBeginPolicyChoiceOffer {} -> True
+      _ -> False
+
     renderCallDeclaration name = "declare void @phil_call_" <> symbol name <> "()"
     renderRuntimeEvidenceDeclaration evidence =
       "declare i1 @phil_runtime_" <> symbol evidence <> "()"
@@ -667,6 +727,22 @@ renderLLVMModule moduleValue = Text.unlines $
       LLVMVersionChoicePayloadBinding selected ->
         [ "%" <> symbol selected <> " = load i16, ptr %phil_version_choice_slot_"
             <> symbol selected
+        ]
+      LLVMBeginPolicyValidationReasonBinding reason ->
+        [ "%" <> symbol reason <> " = load i8, ptr %phil_begin_policy_validation_reason_slot_"
+            <> symbol reason
+        ]
+      LLVMBeginPolicyRejectSelect transport reason ->
+        [ "call void @phil_runtime_select_begin_policy_reject(ptr %" <> symbol transport
+            <> ", i8 %" <> symbol reason <> ")"
+        ]
+      LLVMBeginPolicyProceedSelect transport ->
+        [ "call void @phil_runtime_select_begin_policy_proceed(ptr %"
+            <> symbol transport <> ")"
+        ]
+      LLVMBeginPolicyChoiceReasonBinding reason ->
+        [ "%" <> symbol reason <> " = load i8, ptr %phil_begin_policy_choice_reason_slot_"
+            <> symbol reason
         ]
       LLVMAcceptedResponse transport uploadId ->
         [ "call void @phil_runtime_select_accepted(ptr %" <> symbol transport
@@ -868,6 +944,31 @@ renderLLVMModule moduleValue = Text.unlines $
           , "br i1 " <> validName
               <> ", label %" <> symbol (unLLVMBlockId yes)
               <> ", label %" <> symbol (unLLVMBlockId no)
+          ]
+      LLVMBeginPolicyValidate _ policyContext beginRecord reason accepted rejected ->
+        let blockSymbol = symbol (unLLVMBlockId (llvmBlockId blockValue))
+            slotName = "%phil_begin_policy_validation_reason_slot_" <> symbol reason
+            acceptedName = "%phil_begin_policy_accepted_" <> blockSymbol
+        in
+          [ slotName <> " = alloca i8"
+          , acceptedName <> " = call i1 @phil_runtime_validate_begin_policy(ptr %"
+              <> symbol policyContext <> ", ptr %" <> symbol beginRecord
+              <> ", ptr " <> slotName <> ")"
+          , "br i1 " <> acceptedName
+              <> ", label %" <> symbol (unLLVMBlockId accepted)
+              <> ", label %" <> symbol (unLLVMBlockId rejected)
+          ]
+      LLVMBeginPolicyChoiceOffer transport reason proceedTarget rejectTarget ->
+        let blockSymbol = symbol (unLLVMBlockId (llvmBlockId blockValue))
+            slotName = "%phil_begin_policy_choice_reason_slot_" <> symbol reason
+            proceedName = "%phil_begin_policy_proceed_" <> blockSymbol
+        in
+          [ slotName <> " = alloca i8"
+          , proceedName <> " = call i1 @phil_runtime_receive_begin_policy_choice(ptr %"
+              <> symbol transport <> ", ptr " <> slotName <> ")"
+          , "br i1 " <> proceedName
+              <> ", label %" <> symbol (unLLVMBlockId proceedTarget)
+              <> ", label %" <> symbol (unLLVMBlockId rejectTarget)
           ]
       LLVMReturnScalar name scalarType ->
         ["ret " <> renderScalarType scalarType <> " %" <> symbol name]
