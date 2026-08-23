@@ -36,7 +36,9 @@ certificationSpecFor profile =
       Just spec -> Just spec
       Nothing -> case knownExactReceiveRocqCertificationSpec profile of
         Just spec -> Just spec
-        Nothing -> knownDigestValidationRocqCertificationSpec profile
+        Nothing -> case knownDigestValidationRocqCertificationSpec profile of
+          Just spec -> Just spec
+          Nothing -> knownValidityScopeRocqCertificationSpec profile
 
 certifyWith :: RocqCertificationSpec -> FilePath -> FilePath -> FilePath -> IO ()
 certifyWith spec sourcePath compiledPath outputPath = do
