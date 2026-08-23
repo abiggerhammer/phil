@@ -1,0 +1,88 @@
+name: Assurance Foundations Back-Certification
+
+on:
+  pull_request:
+    paths:
+      - 'proof/Phil/Assurance/Manifest.v'
+      - 'proof/Phil/Assurance/EvidenceUse.v'
+      - 'src/Phil/Assurance/Rocq.hs'
+      - 'src/Phil/Assurance/RocqAssuranceFoundations.hs'
+      - 'app/AssuranceFoundationsBackCertificationMain.hs'
+      - '.github/workflows/assurance-foundations-back-certification.yml'
+  push:
+    branches: [main]
+    paths:
+      - 'proof/Phil/Assurance/Manifest.v'
+      - 'proof/Phil/Assurance/EvidenceUse.v'
+      - 'src/Phil/Assurance/Rocq.hs'
+      - 'src/Phil/Assurance/RocqAssuranceFoundations.hs'
+      - 'app/AssuranceFoundationsBackCertificationMain.hs'
+      - '.github/workflows/assurance-foundations-back-certification.yml'
+
+permissions:
+  contents: read
+
+jobs:
+  check-assurance-foundations:
+    runs-on: ubuntu-latest
+    container:
+      image: rocq/rocq-prover:9.2.0
+      options: --user root
+    steps:
+      - uses: actions/checkout@v4
+      - name: Check Assurance foundation theorem corpus
+        run: |
+          export PATH="/home/rocq/.opam/${COMPILER}/bin:$PATH"
+          rocq c -Q proof/Phil Phil proof/Phil/Assurance/Manifest.v
+          rocq c -Q proof/Phil Phil proof/Phil/Assurance/EvidenceUse.v
+      - name: Stage checked proof sources and objects
+        run: |
+          mkdir -p checked/proof/Phil/Assurance
+          for proof in Manifest EvidenceUse; do
+            cp "proof/Phil/Assurance/${proof}.v" checked/proof/Phil/Assurance/
+            cp "proof/Phil/Assurance/${proof}.vo" checked/proof/Phil/Assurance/
+          done
+      - uses: actions/upload-artifact@v4
+        with:
+          name: assurance-foundations-checked-proofs
+          path: checked/
+          if-no-files-found: error
+          retention-days: 14
+
+  certify-assurance-foundations:
+    needs: check-assurance-foundations
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: haskell-actions/setup@v2
+        with:
+          ghc-version: '9.6.7'
+          cabal-version: 'latest'
+      - uses: actions/download-artifact@v4
+        with:
+          name: assurance-foundations-checked-proofs
+          path: checked
+      - name: Build Phil assurance library
+        run: cabal build lib:phil-core
+      - name: Typecheck back-certification metadata and certifier
+        run: |
+          cabal exec -- ghc -Wall -Wcompat -Wincomplete-record-updates -Wincomplete-uni-patterns -Wredundant-constraints -Werror \
+            -isrc -iapp -fno-code src/Phil/Assurance/RocqAssuranceFoundations.hs
+          cabal exec -- ghc -Wall -Wcompat -Wincomplete-record-updates -Wincomplete-uni-patterns -Wredundant-constraints -Werror \
+            -isrc -iapp -fno-code app/AssuranceFoundationsBackCertificationMain.hs
+      - name: Build back-certifier
+        run: |
+          cabal exec -- ghc -O0 -isrc -iapp app/AssuranceFoundationsBackCertificationMain.hs \
+            -o phil-certify-assurance-foundations
+      - name: Produce six proof-assistant certificates
+        run: |
+          mkdir -p assurance-foundations-certificates
+          ./phil-certify-assurance-foundations checked assurance-foundations-certificates
+          test "$(find assurance-foundations-certificates -type f -name '*.rocq.cert' | wc -l)" -eq 6
+          sha256sum assurance-foundations-certificates/*.rocq.cert
+      - uses: actions/upload-artifact@v4
+        with:
+          name: phil-assurance-foundations-proof-certificates
+          path: assurance-foundations-certificates/
+          if-no-files-found: error
+          retention-days: 30
