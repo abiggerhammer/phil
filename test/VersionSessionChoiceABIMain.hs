@@ -127,15 +127,15 @@ exactClientOffer = withLLVM $ \_ artifact ->
             (unValueId (versionChoiceClientSelectedVersion witness))
             (LLVMBlockId (unBlockId (versionChoiceClientVersionTarget witness)))
             (LLVMBlockId (unBlockId (versionChoiceClientUnsupportedTarget witness)))
-        expectedBinding = LLVMVersionChoicePayloadBinding
-(unValueId (versionChoiceClientSelectedVersion witness))
-        refinementOkay = case llvmBlockTerminator target of
-LLVMVersionRefinement _ transport selected yes no ->
-  transport == unValueId (versionChoiceClientTransport witness)
-    && selected == unValueId (versionChoiceClientSelectedVersion witness)
-    && yes == LLVMBlockId (unBlockId (versionChoiceClientVersionSuccess witness))
-    && no == LLVMBlockId (unBlockId (versionChoiceClientVersionFailure witness))
-_ -> False
+          expectedBinding = LLVMVersionChoicePayloadBinding
+            (unValueId (versionChoiceClientSelectedVersion witness))
+          refinementOkay = case llvmBlockTerminator target of
+            LLVMVersionRefinement _ transport selected yes no ->
+              transport == unValueId (versionChoiceClientTransport witness)
+                && selected == unValueId (versionChoiceClientSelectedVersion witness)
+                && yes == LLVMBlockId (unBlockId (versionChoiceClientVersionSuccess witness))
+                && no == LLVMBlockId (unBlockId (versionChoiceClientVersionFailure witness))
+            _ -> False
       pure (llvmBlockTerminator offer == expectedTerm
         && expectedBinding `elem` llvmBlockOps target
         && refinementOkay)
