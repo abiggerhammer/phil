@@ -75,6 +75,7 @@ library
       Phil.Systems.VersionSessionChoice
       Phil.Systems.VersionChoiceOperands
       Phil.Systems.BeginPolicySessionChoice
+      Phil.Systems.HelloPolicyValidation
       Phil.LLVM.IR
       Phil.LLVM.Lower
       Phil.LLVM.Verify
@@ -657,6 +658,17 @@ test-suite phil-begin-policy-choice-abi-tests
   type:               exitcode-stdio-1.0
   hs-source-dirs:     test
   main-is:            BeginPolicyChoiceABIMain.hs
+  build-depends:
+      base >=4.17 && <5,
+      containers >=0.6 && <0.8,
+      phil-core,
+      text >=2.0 && <2.2
+
+test-suite phil-hello-policy-validation-tests
+  import:             common-settings
+  type:               exitcode-stdio-1.0
+  hs-source-dirs:     test
+  main-is:            HelloPolicyValidationMain.hs
   build-depends:
       base >=4.17 && <5,
       containers >=0.6 && <0.8,
