@@ -127,6 +127,7 @@ priorLLVMTargetFailsClosed = withBundle $ \bundle ->
   let systemsArtifact = helloPolicyValidationArtifact bundle
       target = phase0BeginPolicyChoiceLLVMTarget
       llvmArtifact = lowerSystemsBeginPolicyChoice target systemsArtifact
+      moduleValue = llvmArtifactModule llvmArtifact
       context = LLVMVerificationContext
         { llvmSystemsContext = helloPolicyValidationContext bundle
         , llvmExpectedLanguageVersion = llvmTargetLanguageVersion target
@@ -137,11 +138,15 @@ priorLLVMTargetFailsClosed = withBundle $ \bundle ->
         , llvmExpectedRuntimeABIProfile = llvmTargetRuntimeABIProfile target
         , llvmAuthorizedStrengthenings = mempty
         }
-  in case verifyLLVMEmissionWith lowerSystemsBeginPolicyChoice context systemsArtifact llvmArtifact of
-      Left (LLVMUnjustifiedUnreachable functionName blockId) ->
-        functionName == "UploadServer" && blockId == LLVMBlockId "server.hello.commit"
-      Left _ -> False
-      Right () -> False
+      exactUnloweredShape = doBool $ do
+        server <- Map.lookup "UploadServer" (llvmFunctions moduleValue)
+        commitBlock <- Map.lookup
+          (LLVMBlockId "server.hello.commit")
+          (llvmFunctionBlocks server)
+        pure (llvmBlockTerminator commitBlock == LLVMUnreachable Nothing)
+      verificationRejects =
+        isLeft (verifyLLVMEmissionWith lowerSystemsBeginPolicyChoice context systemsArtifact llvmArtifact)
+  in exactUnloweredShape && verificationRejects
 
 rebindArtifact :: HelloPolicyValidationBundle -> SystemsProgram -> SystemsArtifact
 rebindArtifact bundle program =
