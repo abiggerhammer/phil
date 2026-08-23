@@ -4,13 +4,8 @@ module Main (main) where
 
 import qualified Data.Map.Strict as Map
 import qualified Data.Text as Text
-import Phil.LLVM.IR
-import Phil.LLVM.VersionSessionChoice
-import Phil.LLVM.VersionSessionChoiceCertification
-import Phil.Systems.IR
-import Phil.Systems.LocalRuntimeChoice
-import Phil.Systems.VersionChoiceOperands
-import Phil.Systems.VersionSessionChoice
+import Phil.LLVM
+import Phil.Systems
 import System.Exit (exitFailure)
 
 main :: IO ()
@@ -67,7 +62,8 @@ exactChooserOperands = withBundle $ \bundle ->
       helloBlock <- Map.lookup (versionOperandsHelloCommitBlock witness) (systemsFunctionBlocks function)
       choiceBlock <- Map.lookup (versionOperandsChoiceBlock witness) (systemsFunctionBlocks function)
       let helloOpsOkay = case systemsBlockOps helloBlock of
-            OpRuntimeCall "materialize recognized Hello" [] [helloRecord] Nothing _
+            OpCommitIngress {} :
+              OpRuntimeCall "materialize recognized Hello" [] [helloRecord] Nothing _
               : OpRuntimeCall "project recognized Hello.versions" [projectionInput] [helloVersions] Nothing _
               : _ -> helloRecord == versionOperandsHelloRecord witness
                   && projectionInput == versionOperandsHelloRecord witness
