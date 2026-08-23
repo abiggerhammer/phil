@@ -32,7 +32,7 @@ duplicateUnsupportedRejects = withBundle $ \bundle ->
       mutated = mapServerBlock bundle (versionChoiceServerUnsupportedBlock witness) $ \blockValue ->
         blockValue
           { systemsBlockOps = duplicateFirstSessionSelect (systemsBlockOps blockValue) }
-  in case verifyVersionSessionChoiceProofWitness mutated witness of
+  in case verifyVersionSessionChoiceExactShape mutated witness of
       Left (VersionSessionChoiceServerSelectMultiplicity _ _ 2) -> True
       _ -> False
 
@@ -42,7 +42,7 @@ duplicateVersionRejects = withBundle $ \bundle ->
       mutated = mapServerBlock bundle (versionChoiceServerVersionBlock witness) $ \blockValue ->
         blockValue
           { systemsBlockOps = duplicateFirstSessionSelect (systemsBlockOps blockValue) }
-  in case verifyVersionSessionChoiceProofWitness mutated witness of
+  in case verifyVersionSessionChoiceExactShape mutated witness of
       Left (VersionSessionChoiceServerSelectMultiplicity _ _ 2) -> True
       _ -> False
 
@@ -51,7 +51,7 @@ serverBinderAlternatePredecessorRejects = withBundle $ \bundle ->
   let witness = versionSessionChoiceWitness bundle
       mutated = mapServerBlock bundle (versionChoiceServerUnsupportedBlock witness) $ \blockValue ->
         blockValue { systemsBlockTerminator = TermJump (versionChoiceServerVersionBlock witness) }
-  in case verifyVersionSessionChoiceProofWitness mutated witness of
+  in case verifyVersionSessionChoiceExactShape mutated witness of
       Left (VersionSessionChoiceServerBinderPredecessors _) -> True
       _ -> False
 
@@ -60,7 +60,7 @@ clientBinderAlternatePredecessorRejects = withBundle $ \bundle ->
   let witness = versionSessionChoiceWitness bundle
       mutated = mapClientBlock bundle (versionChoiceClientUnsupportedTarget witness) $ \blockValue ->
         blockValue { systemsBlockTerminator = TermJump (versionChoiceClientVersionTarget witness) }
-  in case verifyVersionSessionChoiceProofWitness mutated witness of
+  in case verifyVersionSessionChoiceExactShape mutated witness of
       Left (VersionSessionChoiceClientBinderPredecessors _) -> True
       _ -> False
 
