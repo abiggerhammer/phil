@@ -27,11 +27,15 @@ module Phil.LLVM
   , module Phil.LLVM.VersionSessionChoiceCertification
   , module Phil.LLVM.BeginPolicyChoice
   , module Phil.LLVM.BeginPolicyChoiceCertification
+  , module Phil.LLVM.HelloPolicyValidation
+  , module Phil.LLVM.HelloPolicyValidationCertification
   ) where
 
 import Phil.LLVM.AcceptedResponse
 import Phil.LLVM.BeginPolicyChoice
 import Phil.LLVM.BeginPolicyChoiceCertification
+import Phil.LLVM.HelloPolicyValidation
+import Phil.LLVM.HelloPolicyValidationCertification
 import Phil.LLVM.AcceptedResponseCertification
 import Phil.LLVM.DigestValidation
 import Phil.LLVM.DigestValidationCertification
