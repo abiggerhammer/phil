@@ -1,0 +1,112 @@
+name: Surface Foundations Back-Certification
+
+on:
+  pull_request:
+    paths:
+      - 'proof/Phil/Core/Syntax.v'
+      - 'proof/Phil/Core/Context.v'
+      - 'proof/Phil/Core/ContextJoin.v'
+      - 'proof/Phil/Core/SessionStep.v'
+      - 'proof/Phil/Core/Scalar.v'
+      - 'proof/Phil/Surface/Elaboration.v'
+      - 'proof/Phil/Surface/Checking.v'
+      - 'proof/Phil/Surface/ScopeJoin.v'
+      - 'proof/Phil/Surface/FreshOwnership.v'
+      - 'proof/Phil/Surface/SystemsProjection.v'
+      - 'src/Phil/Assurance/Rocq.hs'
+      - 'src/Phil/Assurance/RocqSurfaceFoundations.hs'
+      - 'app/SurfaceFoundationsBackCertificationMain.hs'
+      - '.github/workflows/surface-foundations-back-certification.yml'
+  push:
+    branches: [main]
+    paths:
+      - 'proof/Phil/Core/Syntax.v'
+      - 'proof/Phil/Core/Context.v'
+      - 'proof/Phil/Core/ContextJoin.v'
+      - 'proof/Phil/Core/SessionStep.v'
+      - 'proof/Phil/Core/Scalar.v'
+      - 'proof/Phil/Surface/Elaboration.v'
+      - 'proof/Phil/Surface/Checking.v'
+      - 'proof/Phil/Surface/ScopeJoin.v'
+      - 'proof/Phil/Surface/FreshOwnership.v'
+      - 'proof/Phil/Surface/SystemsProjection.v'
+      - 'src/Phil/Assurance/Rocq.hs'
+      - 'src/Phil/Assurance/RocqSurfaceFoundations.hs'
+      - 'app/SurfaceFoundationsBackCertificationMain.hs'
+      - '.github/workflows/surface-foundations-back-certification.yml'
+
+permissions:
+  contents: read
+
+jobs:
+  check-surface-foundations:
+    runs-on: ubuntu-latest
+    container:
+      image: rocq/rocq-prover:9.2.0
+      options: --user root
+    steps:
+      - uses: actions/checkout@v4
+      - name: Check Surface foundation theorem corpus
+        run: |
+          export PATH="/home/rocq/.opam/${COMPILER}/bin:$PATH"
+          rocq c -Q proof/Phil Phil proof/Phil/Core/Syntax.v
+          rocq c -Q proof/Phil Phil proof/Phil/Core/Context.v
+          rocq c -Q proof/Phil Phil proof/Phil/Core/ContextJoin.v
+          rocq c -Q proof/Phil Phil proof/Phil/Core/SessionStep.v
+          rocq c -Q proof/Phil Phil proof/Phil/Core/Scalar.v
+          rocq c -Q proof/Phil Phil proof/Phil/Surface/Elaboration.v
+          rocq c -Q proof/Phil Phil proof/Phil/Surface/Checking.v
+          rocq c -Q proof/Phil Phil proof/Phil/Surface/ScopeJoin.v
+          rocq c -Q proof/Phil Phil proof/Phil/Surface/FreshOwnership.v
+          rocq c -Q proof/Phil Phil proof/Phil/Surface/SystemsProjection.v
+      - name: Stage checked proof sources and objects
+        run: |
+          mkdir -p checked/proof/Phil/Surface
+          for proof in Elaboration Checking ScopeJoin FreshOwnership SystemsProjection; do
+            cp "proof/Phil/Surface/${proof}.v" checked/proof/Phil/Surface/
+            cp "proof/Phil/Surface/${proof}.vo" checked/proof/Phil/Surface/
+          done
+      - uses: actions/upload-artifact@v4
+        with:
+          name: surface-foundations-checked-proofs
+          path: checked/
+          if-no-files-found: error
+          retention-days: 14
+
+  certify-surface-foundations:
+    needs: check-surface-foundations
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: haskell-actions/setup@v2
+        with:
+          ghc-version: '9.6.7'
+          cabal-version: 'latest'
+      - uses: actions/download-artifact@v4
+        with:
+          name: surface-foundations-checked-proofs
+          path: checked
+      - name: Build Phil assurance library
+        run: cabal build lib:phil-core
+      - name: Typecheck back-certification metadata and certifier
+        run: |
+          cabal exec -- ghc -Wall -Wcompat -Wincomplete-record-updates -Wincomplete-uni-patterns -Wredundant-constraints -Werror \
+            -isrc -iapp -fno-code src/Phil/Assurance/RocqSurfaceFoundations.hs
+          cabal exec -- ghc -Wall -Wcompat -Wincomplete-record-updates -Wincomplete-uni-patterns -Wredundant-constraints -Werror \
+            -isrc -iapp -fno-code app/SurfaceFoundationsBackCertificationMain.hs
+      - name: Build back-certifier
+        run: |
+          cabal exec -- ghc -O0 -isrc -iapp app/SurfaceFoundationsBackCertificationMain.hs \
+            -o phil-certify-surface-foundations
+      - name: Produce seven proof-assistant certificates
+        run: |
+          mkdir -p surface-foundations-certificates
+          ./phil-certify-surface-foundations checked surface-foundations-certificates
+          test "$(find surface-foundations-certificates -type f -name '*.rocq.cert' | wc -l)" -eq 7
+          sha256sum surface-foundations-certificates/*.rocq.cert
+      - uses: actions/upload-artifact@v4
+        with:
+          name: phil-surface-foundations-proof-certificates
+          path: surface-foundations-certificates/
+          if-no-files-found: error
+          retention-days: 30
