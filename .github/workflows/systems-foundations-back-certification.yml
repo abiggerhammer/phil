@@ -1,0 +1,103 @@
+name: Systems Foundations Back-Certification
+
+on:
+  pull_request:
+    paths:
+      - 'proof/Phil/Core/Scalar.v'
+      - 'proof/Phil/Systems/Identity.v'
+      - 'proof/Phil/Systems/Ownership.v'
+      - 'proof/Phil/Systems/FactDisposition.v'
+      - 'proof/Phil/Systems/Runtime.v'
+      - 'proof/Phil/Systems/Scalar.v'
+      - 'proof/Phil/Systems/ScalarDataflow.v'
+      - 'src/Phil/Assurance/Rocq.hs'
+      - 'src/Phil/Assurance/RocqSystemsFoundations.hs'
+      - 'app/SystemsFoundationsBackCertificationMain.hs'
+      - '.github/workflows/systems-foundations-back-certification.yml'
+  push:
+    branches: [main]
+    paths:
+      - 'proof/Phil/Core/Scalar.v'
+      - 'proof/Phil/Systems/Identity.v'
+      - 'proof/Phil/Systems/Ownership.v'
+      - 'proof/Phil/Systems/FactDisposition.v'
+      - 'proof/Phil/Systems/Runtime.v'
+      - 'proof/Phil/Systems/Scalar.v'
+      - 'proof/Phil/Systems/ScalarDataflow.v'
+      - 'src/Phil/Assurance/Rocq.hs'
+      - 'src/Phil/Assurance/RocqSystemsFoundations.hs'
+      - 'app/SystemsFoundationsBackCertificationMain.hs'
+      - '.github/workflows/systems-foundations-back-certification.yml'
+
+permissions:
+  contents: read
+
+jobs:
+  check-systems-foundations:
+    runs-on: ubuntu-latest
+    container:
+      image: rocq/rocq-prover:9.2.0
+      options: --user root
+    steps:
+      - uses: actions/checkout@v4
+      - name: Check Systems foundation theorem corpus
+        run: |
+          export PATH="/home/rocq/.opam/${COMPILER}/bin:$PATH"
+          rocq c -Q proof/Phil Phil proof/Phil/Core/Scalar.v
+          rocq c -Q proof/Phil Phil proof/Phil/Systems/Identity.v
+          rocq c -Q proof/Phil Phil proof/Phil/Systems/Ownership.v
+          rocq c -Q proof/Phil Phil proof/Phil/Systems/FactDisposition.v
+          rocq c -Q proof/Phil Phil proof/Phil/Systems/Runtime.v
+          rocq c -Q proof/Phil Phil proof/Phil/Systems/Scalar.v
+          rocq c -Q proof/Phil Phil proof/Phil/Systems/ScalarDataflow.v
+      - name: Stage checked proof sources and objects
+        run: |
+          mkdir -p checked/proof/Phil/Systems
+          for proof in Identity Ownership FactDisposition Runtime Scalar ScalarDataflow; do
+            cp "proof/Phil/Systems/${proof}.v" checked/proof/Phil/Systems/
+            cp "proof/Phil/Systems/${proof}.vo" checked/proof/Phil/Systems/
+          done
+      - uses: actions/upload-artifact@v4
+        with:
+          name: systems-foundations-checked-proofs
+          path: checked/
+          if-no-files-found: error
+          retention-days: 14
+
+  certify-systems-foundations:
+    needs: check-systems-foundations
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: haskell-actions/setup@v2
+        with:
+          ghc-version: '9.6.7'
+          cabal-version: 'latest'
+      - uses: actions/download-artifact@v4
+        with:
+          name: systems-foundations-checked-proofs
+          path: checked
+      - name: Build Phil assurance library
+        run: cabal build lib:phil-core
+      - name: Typecheck back-certification metadata and certifier
+        run: |
+          cabal exec -- ghc -Wall -Wcompat -Wincomplete-record-updates -Wincomplete-uni-patterns -Wredundant-constraints -Werror \
+            -isrc -iapp -fno-code src/Phil/Assurance/RocqSystemsFoundations.hs
+          cabal exec -- ghc -Wall -Wcompat -Wincomplete-record-updates -Wincomplete-uni-patterns -Wredundant-constraints -Werror \
+            -isrc -iapp -fno-code app/SystemsFoundationsBackCertificationMain.hs
+      - name: Build back-certifier
+        run: |
+          cabal exec -- ghc -O0 -isrc -iapp app/SystemsFoundationsBackCertificationMain.hs \
+            -o phil-certify-systems-foundations
+      - name: Produce six proof-assistant certificates
+        run: |
+          mkdir -p systems-foundations-certificates
+          ./phil-certify-systems-foundations checked systems-foundations-certificates
+          test "$(find systems-foundations-certificates -type f -name '*.rocq.cert' | wc -l)" -eq 6
+          sha256sum systems-foundations-certificates/*.rocq.cert
+      - uses: actions/upload-artifact@v4
+        with:
+          name: phil-systems-foundations-proof-certificates
+          path: systems-foundations-certificates/
+          if-no-files-found: error
+          retention-days: 30
