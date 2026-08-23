@@ -167,7 +167,8 @@ verifyVersionChoiceOperandsWitness artifact witness = do
     server
     (versionOperandsHelloCommitBlock witness)
   case systemsBlockOps helloBlock of
-    OpRuntimeCall materializeName [] [helloRecord] Nothing materializeDecision
+    OpCommitIngress {} :
+      OpRuntimeCall materializeName [] [helloRecord] Nothing materializeDecision
       : OpRuntimeCall projectionName [projectionInput] [helloVersions] Nothing projectionDecision
       : _
         | materializeName == versionOperandsMaterializeCall witness
@@ -361,7 +362,8 @@ materializeVersionChoiceOperands witness program = do
             Nothing
             (versionOperandsLoweringDecision witness)
         ]
-      helloBlock' = helloBlock { systemsBlockOps = prefix <> systemsBlockOps helloBlock }
+      helloBlock' = helloBlock
+        { systemsBlockOps = insertAfterCommit prefix (systemsBlockOps helloBlock) }
       choiceBlock' = choiceBlock
         { systemsBlockTerminator = TermRuntimeChoice
             (localChoiceName localWitness)
@@ -387,6 +389,11 @@ materializeVersionChoiceOperands witness program = do
         server'
         (systemsProgramFunctions program)
     }
+
+insertAfterCommit :: [SystemsOp] -> [SystemsOp] -> [SystemsOp]
+insertAfterCommit inserted operations = case operations of
+  commit@OpCommitIngress {} : rest -> commit : inserted <> rest
+  _ -> operations
 
 requireAbsent :: SystemsFunction -> ValueId -> Either VersionChoiceOperandsError ()
 requireAbsent function valueId =
