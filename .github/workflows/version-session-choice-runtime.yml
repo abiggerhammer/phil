@@ -131,6 +131,11 @@ jobs:
               "      pure (llvmBlockTerminator offer == expectedTerm\n        && expectedBinding `elem` llvmBlockOps target\n        && refinementOkay)",
               1,
           )
+          code = code.replace(
+              "marker = '## Malformed input and failure behavior\\n'",
+              "marker = '## Ambient state prohibition\\n'",
+              1,
+          )
           exec(compile(code, 'version-refinement-fix-v2', 'exec'))
           PY
           git diff --check
