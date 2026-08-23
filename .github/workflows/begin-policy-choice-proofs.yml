@@ -1,0 +1,223 @@
+name: Begin Policy Choice Proofs
+
+on:
+  pull_request:
+    paths:
+      - 'proof/**'
+      - 'src/Phil/Systems/BeginPolicySessionChoice.hs'
+      - 'src/Phil/Systems/VersionChoiceOperands.hs'
+      - 'src/Phil/LLVM/BeginPolicyChoice.hs'
+      - 'src/Phil/LLVM/BeginPolicyChoiceCertification.hs'
+      - 'src/Phil/LLVM/BeginPolicyChoiceProofCertification.hs'
+      - 'src/Phil/LLVM/VersionSessionChoiceProofBoundCertification.hs'
+      - 'app/BeginPolicyChoiceProofCorrespondenceMain.hs'
+      - 'app/BeginPolicyChoiceProofCertificationMain.hs'
+      - 'runtime/phase0/begin_policy_choice_v1*'
+      - 'scripts/check_runtime_abi.py'
+      - 'test/BeginPolicySessionChoiceMain.hs'
+      - 'test/BeginPolicyChoiceABIMain.hs'
+      - 'phil-core.cabal'
+      - '.github/workflows/begin-policy-choice-proofs.yml'
+  push:
+    branches: [main]
+    paths:
+      - 'proof/**'
+      - 'src/Phil/Systems/BeginPolicySessionChoice.hs'
+      - 'src/Phil/Systems/VersionChoiceOperands.hs'
+      - 'src/Phil/LLVM/BeginPolicyChoice.hs'
+      - 'src/Phil/LLVM/BeginPolicyChoiceCertification.hs'
+      - 'src/Phil/LLVM/BeginPolicyChoiceProofCertification.hs'
+      - 'src/Phil/LLVM/VersionSessionChoiceProofBoundCertification.hs'
+      - 'app/BeginPolicyChoiceProofCorrespondenceMain.hs'
+      - 'app/BeginPolicyChoiceProofCertificationMain.hs'
+      - 'runtime/phase0/begin_policy_choice_v1*'
+      - 'scripts/check_runtime_abi.py'
+      - 'test/BeginPolicySessionChoiceMain.hs'
+      - 'test/BeginPolicyChoiceABIMain.hs'
+      - 'phil-core.cabal'
+      - '.github/workflows/begin-policy-choice-proofs.yml'
+
+permissions:
+  contents: read
+
+jobs:
+  rocq-begin-policy-choice:
+    runs-on: ubuntu-latest
+    container:
+      image: rocq/rocq-prover:9.2.0
+      options: --user root
+    steps:
+      - uses: actions/checkout@v4
+      - name: Check predecessor and BeginPolicy proof corpus
+        run: |
+          set -euo pipefail
+          export PATH="/home/rocq/.opam/${COMPILER}/bin:$PATH"
+          rocq c -Q proof/Phil Phil proof/Phil/Core/Syntax.v
+          rocq c -Q proof/Phil Phil proof/Phil/Core/Scalar.v
+          rocq c -Q proof/Phil Phil proof/Phil/Core/Session.v
+          rocq c -Q proof/Phil Phil proof/Phil/Core/Context.v
+          rocq c -Q proof/Phil Phil proof/Phil/Core/Process.v
+          rocq c -Q proof/Phil Phil proof/Phil/Core/SessionLabel.v
+          rocq c -Q proof/Phil Phil proof/Phil/Core/SessionStep.v
+          rocq c -Q proof/Phil Phil proof/Phil/Core/Recognition.v
+          rocq c -Q proof/Phil Phil proof/Phil/Core/RecognitionLoan.v
+          rocq c -Q proof/Phil Phil proof/Phil/Core/ContextJoin.v
+          rocq c -Q proof/Phil Phil proof/Phil/Core/ProcessJoin.v
+          rocq c -Q proof/Phil Phil proof/Phil/Core/ProcessTerminal.v
+          rocq c -Q proof/Phil Phil proof/Phil/Core/Discharge.v
+          rocq c -Q proof/Phil Phil proof/Phil/Core/DecisionSound.v
+          rocq c -Q proof/Phil Phil proof/Phil/Core/SessionRec.v
+          rocq c -Q proof/Phil Phil proof/Phil/Core/Focusing.v
+          rocq c -Q proof/Phil Phil proof/Phil/Surface/Elaboration.v
+          rocq c -Q proof/Phil Phil proof/Phil/Surface/Checking.v
+          rocq c -Q proof/Phil Phil proof/Phil/Surface/ScopeJoin.v
+          rocq c -Q proof/Phil Phil proof/Phil/Surface/FreshOwnership.v
+          rocq c -Q proof/Phil Phil proof/Phil/Surface/SystemsProjection.v
+          rocq c -Q proof/Phil Phil proof/Phil/Assurance/Manifest.v
+          rocq c -Q proof/Phil Phil proof/Phil/Assurance/EvidenceUse.v
+          rocq c -Q proof/Phil Phil proof/Phil/Systems/Identity.v
+          rocq c -Q proof/Phil Phil proof/Phil/Systems/FactDisposition.v
+          rocq c -Q proof/Phil Phil proof/Phil/Systems/Ownership.v
+          rocq c -Q proof/Phil Phil proof/Phil/Systems/Runtime.v
+          rocq c -Q proof/Phil Phil proof/Phil/Systems/Scalar.v
+          rocq c -Q proof/Phil Phil proof/Phil/Systems/ScalarDataflow.v
+          rocq c -Q proof/Phil Phil proof/Phil/Systems/FieldProjection.v
+          rocq c -Q proof/Phil Phil proof/Phil/Systems/RecognizedRecord.v
+          rocq c -Q proof/Phil Phil proof/Phil/Systems/DigestValidation.v
+          rocq c -Q proof/Phil Phil proof/Phil/Systems/Storage.v
+          rocq c -Q proof/Phil Phil proof/Phil/Systems/AcceptedResponse.v
+          rocq c -Q proof/Phil Phil proof/Phil/Systems/RejectedResponse.v
+          rocq c -Q proof/Phil Phil proof/Phil/Systems/FinalResponse.v
+          rocq c -Q proof/Phil Phil proof/Phil/Systems/PayloadCancelChoice.v
+          rocq c -Q proof/Phil Phil proof/Phil/Systems/LocalRuntimeChoice.v
+          rocq c -Q proof/Phil Phil proof/Phil/Systems/VersionSessionChoice.v
+          rocq c -Q proof/Phil Phil proof/Phil/Systems/VersionChoiceOperands.v
+          rocq c -Q proof/Phil Phil proof/Phil/Systems/BeginPolicySessionChoice.v
+          rocq c -Q proof/Phil Phil proof/Phil/LLVM/Identity.v
+          rocq c -Q proof/Phil Phil proof/Phil/LLVM/Preservation.v
+          rocq c -Q proof/Phil Phil proof/Phil/LLVM/FieldProjection.v
+          rocq c -Q proof/Phil Phil proof/Phil/LLVM/Strengthening.v
+          rocq c -Q proof/Phil Phil proof/Phil/LLVM/Certification.v
+          rocq c -Q proof/Phil Phil proof/Phil/LLVM/Scalar.v
+          rocq c -Q proof/Phil Phil proof/Phil/LLVM/RecognizedRecordABI.v
+          rocq c -Q proof/Phil Phil proof/Phil/LLVM/RuntimeSymbolIdentity.v
+          rocq c -Q proof/Phil Phil proof/Phil/LLVM/RecognizedRecordCertification.v
+          rocq c -Q proof/Phil Phil proof/Phil/LLVM/ExactReceive.v
+          rocq c -Q proof/Phil Phil proof/Phil/LLVM/ExactReceiveCertification.v
+          rocq c -Q proof/Phil Phil proof/Phil/LLVM/DigestValidation.v
+          rocq c -Q proof/Phil Phil proof/Phil/LLVM/DigestValidationCertification.v
+          rocq c -Q proof/Phil Phil proof/Phil/LLVM/Storage.v
+          rocq c -Q proof/Phil Phil proof/Phil/LLVM/StorageCertification.v
+          rocq c -Q proof/Phil Phil proof/Phil/LLVM/AcceptedResponse.v
+          rocq c -Q proof/Phil Phil proof/Phil/LLVM/AcceptedResponseCertification.v
+          rocq c -Q proof/Phil Phil proof/Phil/LLVM/RejectedResponse.v
+          rocq c -Q proof/Phil Phil proof/Phil/LLVM/RejectedResponseCertification.v
+          rocq c -Q proof/Phil Phil proof/Phil/LLVM/FinalResponseReceive.v
+          rocq c -Q proof/Phil Phil proof/Phil/LLVM/FinalResponseReceiveCertification.v
+          rocq c -Q proof/Phil Phil proof/Phil/LLVM/PayloadCancelChoice.v
+          rocq c -Q proof/Phil Phil proof/Phil/LLVM/PayloadCancelChoiceCertification.v
+          rocq c -Q proof/Phil Phil proof/Phil/LLVM/LocalRuntimeChoiceBoundary.v
+          rocq c -Q proof/Phil Phil proof/Phil/LLVM/VersionSessionChoiceBoundary.v
+          rocq c -Q proof/Phil Phil proof/Phil/LLVM/VersionSessionChoiceLowering.v
+          rocq c -Q proof/Phil Phil proof/Phil/LLVM/BeginPolicyChoice.v
+      - name: Stage checked proof corpus
+        run: |
+          mkdir -p rocq-begin-policy-choice
+          find proof/Phil -type f \( -name '*.v' -o -name '*.vo' \) -print0 \
+            | tar --null -T - -cf - \
+            | tar -C rocq-begin-policy-choice -xf -
+      - uses: actions/upload-artifact@v4
+        with:
+          name: rocq-begin-policy-choice-checked-proof-objects
+          path: rocq-begin-policy-choice/
+          if-no-files-found: error
+          retention-days: 14
+
+  certify-begin-policy-choice:
+    needs: rocq-begin-policy-choice
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: haskell-actions/setup@v2
+        with:
+          ghc-version: '9.6.7'
+          cabal-version: 'latest'
+      - uses: actions/download-artifact@v4
+        with:
+          name: rocq-begin-policy-choice-checked-proof-objects
+          path: rocq-begin-policy-choice
+      - name: Build project, emitter, and focused tests
+        run: |
+          cabal build lib:phil-core phil-llvm-phase0-begin-policy-choice \
+            phil-begin-policy-session-choice-tests phil-begin-policy-choice-abi-tests
+      - name: Run existing BeginPolicy semantic and ABI suites
+        run: |
+          cabal test phil-begin-policy-session-choice-tests
+          cabal test phil-begin-policy-choice-abi-tests
+      - name: Typecheck proof support with warnings as errors
+        run: |
+          cabal exec -- ghc -Wall -Wcompat -Wincomplete-record-updates -Wincomplete-uni-patterns -Wredundant-constraints -Werror \
+            -isrc -iapp -fno-code src/Phil/LLVM/BeginPolicyChoiceProofCertification.hs
+          cabal exec -- ghc -Wall -Wcompat -Wincomplete-record-updates -Wincomplete-uni-patterns -Wredundant-constraints -Werror \
+            -isrc -iapp -fno-code app/BeginPolicyChoiceProofCorrespondenceMain.hs
+          cabal exec -- ghc -Wall -Wcompat -Wincomplete-record-updates -Wincomplete-uni-patterns -Wredundant-constraints -Werror \
+            -isrc -iapp -fno-code app/BeginPolicyChoiceProofCertificationMain.hs
+      - name: Run exact-final-candidate correspondence checker
+        run: |
+          cabal exec -- ghc -O0 -isrc -iapp app/BeginPolicyChoiceProofCorrespondenceMain.hs \
+            -o phil-check-begin-policy-proof-correspondence
+          ./phil-check-begin-policy-proof-correspondence
+      - name: Re-run external LLVM, ABI, and runtime gates
+        shell: bash
+        run: |
+          set -euo pipefail
+          LLVM_AS=llvm-as-18
+          LLVM_LINK=llvm-link-18
+          CLANG=clang-18
+          EMITTER="$(cabal list-bin phil-llvm-phase0-begin-policy-choice)"
+          "$EMITTER" > phase0-begin-policy-choice.ll
+          "$LLVM_AS" phase0-begin-policy-choice.ll -o phase0-begin-policy-choice.bc
+
+          "$CLANG" --target=x86_64-unknown-linux-gnu -std=c11 -Wall -Wextra -Wpedantic -Werror \
+            -Iruntime/phase0 -S -emit-llvm runtime/phase0/begin_policy_choice_v1_smoke.c \
+            -o begin-policy-runtime.ll
+          python3 scripts/check_runtime_abi.py --partial \
+            phase0-begin-policy-choice.ll begin-policy-runtime.ll
+          "$LLVM_AS" begin-policy-runtime.ll -o begin-policy-runtime.bc
+          "$LLVM_LINK" phase0-begin-policy-choice.bc begin-policy-runtime.bc \
+            -o phase0-begin-policy-choice-partially-linked.bc
+
+          "$CLANG" --target=x86_64-unknown-linux-gnu -std=c11 -Wall -Wextra -Wpedantic -Werror \
+            -Iruntime/phase0 \
+            runtime/phase0/begin_policy_choice_v1_smoke.c \
+            runtime/phase0/begin_policy_choice_v1_smoke_main.c \
+            -o begin-policy-choice-smoke
+          ./begin-policy-choice-smoke
+
+          "$CLANG" --target=x86_64-unknown-linux-gnu -std=c11 -Wall -Wextra -Wpedantic -Werror \
+            -S -emit-llvm runtime/phase0/begin_policy_choice_v1_bad_ambient.c \
+            -o begin-policy-bad-ambient.ll
+          if python3 scripts/check_runtime_abi.py --partial \
+              phase0-begin-policy-choice.ll begin-policy-bad-ambient.ll; then
+            echo "expected ABI checker to reject ambient/nullary BeginPolicy provider" >&2
+            exit 1
+          fi
+      - name: Build proof-bound CERT-011 certifier
+        run: |
+          cabal exec -- ghc -O0 -isrc -iapp app/BeginPolicyChoiceProofCertificationMain.hs \
+            -o phil-certify-begin-policy-choice
+      - name: Produce proof certificates and proof-bound CERT-011
+        run: |
+          mkdir -p begin-policy-choice-certificates
+          ./phil-certify-begin-policy-choice
+          for certificate in begin-policy-choice-certificates/*; do
+            echo "===== ${certificate} ====="
+            cat "${certificate}"
+            sha256sum "${certificate}"
+          done
+      - uses: actions/upload-artifact@v4
+        with:
+          name: phil-begin-policy-choice-proof-certification
+          path: begin-policy-choice-certificates/*
+          if-no-files-found: error
+          retention-days: 30
