@@ -116,6 +116,21 @@ jobs:
               line[10:] if line.startswith("          ") else line
               for line in raw.splitlines()
           )
+          code = code.replace(
+              "'        expectedBinding = LLVMVersionChoicePayloadBinding\\n          (unValueId (versionChoiceClientSelectedVersion witness))\\n    pure (llvmBlockTerminator offer == expectedTerm\\n      && expectedBinding `elem` llvmBlockOps target)\\n'",
+              "'          expectedBinding = LLVMVersionChoicePayloadBinding\\n            (unValueId (versionChoiceClientSelectedVersion witness))\\n      pure (llvmBlockTerminator offer == expectedTerm\\n        && expectedBinding `elem` llvmBlockOps target)\\n'",
+              1,
+          )
+          code = code.replace(
+              "'''        expectedBinding = LLVMVersionChoicePayloadBinding\n          (unValueId (versionChoiceClientSelectedVersion witness))\n        refinementOkay = case llvmBlockTerminator target of",
+              "'''          expectedBinding = LLVMVersionChoicePayloadBinding\n            (unValueId (versionChoiceClientSelectedVersion witness))\n          refinementOkay = case llvmBlockTerminator target of",
+              1,
+          )
+          code = code.replace(
+              "    pure (llvmBlockTerminator offer == expectedTerm\n      && expectedBinding `elem` llvmBlockOps target\n      && refinementOkay)",
+              "      pure (llvmBlockTerminator offer == expectedTerm\n        && expectedBinding `elem` llvmBlockOps target\n        && refinementOkay)",
+              1,
+          )
           exec(compile(code, 'version-refinement-fix-v2', 'exec'))
           PY
           git diff --check
