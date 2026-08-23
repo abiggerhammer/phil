@@ -7,6 +7,7 @@ module Phil.LLVM.BeginPolicyChoice
   , phase0BeginPolicyChoiceLLVMArtifact
   , phase0BeginPolicyChoiceLLVMVerificationContext
   , lowerSystemsBeginPolicyChoice
+  , verifyBeginPolicyReasonUseShape
   , verifyBeginPolicyChoiceLLVMWitness
   , verifyBeginPolicyChoiceTranslation
   , verifyPhase0BeginPolicyChoiceLLVM
@@ -39,6 +40,7 @@ data BeginPolicyChoiceLLVMError
   | BeginPolicyChoiceLLVMServerProceedMismatch Text LLVMBlockId [LLVMOp]
   | BeginPolicyChoiceLLVMClientOfferMismatch Text LLVMBlockId LLVMTerminator
   | BeginPolicyChoiceLLVMClientBindingMismatch Text LLVMBlockId [LLVMOp]
+  | BeginPolicyChoiceLLVMReasonUseMismatch Text ValueId Int Int
   | BeginPolicyChoiceLLVMVersionRegression Text
   | BeginPolicyChoiceLLVMRenderedCallMissing Text
   | BeginPolicyChoiceLLVMGenericCallDetected Text
@@ -65,6 +67,7 @@ beginPolicyChoiceABIDescriptor = Text.unlines
   , "validate-provider-obligation=return-true-iff-BeginPolicy-accepts;on-false-write-canonical-observable-reason"
   , "reason-physical-representation=i8-boundary-code"
   , "reason-observable-equivalence=exact-frozen-program-does-not-inspect-ValidationFailure[BeginPolicy]"
+  , "reason-observation-gate=server-reason-exactly-one-forwarding-use;client-reason-zero-uses"
   , "reason-code-0x01=BeginPolicyRejected"
   , "reason-codes-other-than-0x01=reserved-v1"
   , "select-reject=phil_runtime_select_begin_policy_reject(ptr,i8)->void"
@@ -204,6 +207,27 @@ phase0BeginPolicyChoiceLLVMVerificationContext bundle = LLVMVerificationContext
   , llvmAuthorizedStrengthenings = mempty
   }
 
+verifyBeginPolicyReasonUseShape
+  :: BeginPolicySessionChoiceBundle
+  -> Either BeginPolicyChoiceLLVMError ()
+verifyBeginPolicyReasonUseShape bundle = do
+  let witness = beginPolicySessionChoiceWitness bundle
+      program = systemsArtifactProgram (beginPolicySessionChoiceArtifact bundle)
+      serverName = beginPolicyServerFunction witness
+      clientName = beginPolicyClientFunction witness
+      serverReason = beginPolicyServerRejectReason witness
+      clientReason = beginPolicyClientRejectReason witness
+  server <- lookupSystemsFunction program serverName
+  client <- lookupSystemsFunction program clientName
+  let serverUses = valueUseCount serverReason server
+      clientUses = valueUseCount clientReason client
+  unless (serverUses == 1) $
+    Left (BeginPolicyChoiceLLVMReasonUseMismatch
+      serverName serverReason 1 serverUses)
+  unless (clientUses == 0) $
+    Left (BeginPolicyChoiceLLVMReasonUseMismatch
+      clientName clientReason 0 clientUses)
+
 verifyBeginPolicyChoiceTranslation
   :: BeginPolicySessionChoiceBundle
   -> LLVMArtifact
@@ -211,6 +235,7 @@ verifyBeginPolicyChoiceTranslation
 verifyBeginPolicyChoiceTranslation bundle llvmArtifact = do
   mapLeft BeginPolicyChoiceLLVMSystemsError $
     verifyBeginPolicySessionChoiceBundle bundle
+  verifyBeginPolicyReasonUseShape bundle
   let systemsArtifact = beginPolicySessionChoiceArtifact bundle
       systemsProgram = systemsArtifactProgram systemsArtifact
       moduleValue = llvmArtifactModule llvmArtifact
@@ -351,6 +376,54 @@ verifyPhase0BeginPolicyChoiceLLVM = do
         (beginPolicySessionChoiceArtifact bundle)
   verifyBeginPolicyChoiceTranslation bundle artifact
 
+valueUseCount :: ValueId -> SystemsFunction -> Int
+valueUseCount valueId functionValue = sum
+  [ sum (map (operationUseCount valueId) (systemsBlockOps blockValue))
+      + terminatorUseCount valueId (systemsBlockTerminator blockValue)
+  | blockValue <- Map.elems (systemsFunctionBlocks functionValue)
+  ]
+
+operationUseCount :: ValueId -> SystemsOp -> Int
+operationUseCount valueId operation = length (filter (== valueId) inputs)
+  where
+    inputs = case operation of
+      OpReceiveFrame { receiveTransport = transport } -> [transport]
+      OpBorrowView { borrowOwner = owner } -> [owner]
+      OpCommitIngress { commitPending = pending, commitTransport = transport } ->
+        [pending, transport]
+      OpDestroyPending { destroyPending = pending, destroyFrameOwner = owner } ->
+        [pending, owner]
+      OpReleaseOwner { releaseOwner = owner } -> [owner]
+      OpCleanupPartial { cleanupOwner = owner } -> [owner]
+      OpRuntimeCall { runtimeCallInputs = runtimeInputs } -> runtimeInputs
+      OpSessionSelect { sessionSelectTransport = transport, sessionSelectPayload = payload } ->
+        transport : maybe [] pure payload
+      OpCopy { copySource = source } -> [source]
+      OpEraseFact {} -> []
+      OpDiagnostic {} -> []
+      OpScalarLiteral {} -> []
+      OpTraceEvent {} -> []
+
+terminatorUseCount :: ValueId -> SystemsTerminator -> Int
+terminatorUseCount valueId terminator = length (filter (== valueId) inputs)
+  where
+    inputs = case terminator of
+      TermJump {} -> []
+      TermBranch condition _ _ -> [condition]
+      TermRecognize { recognizePending = pending, recognizeRawView = rawView } ->
+        [pending, rawView]
+      TermRuntimeCheck { checkInputs = checkValues } -> checkValues
+      TermReceiveExact { exactTransport = transport, exactLength = lengthValue } ->
+        [transport, lengthValue]
+      TermSendExact { sendExactTransport = transport, sendExactOwner = owner } ->
+        [transport, owner]
+      TermStore { storeOwner = owner } -> [owner]
+      TermSessionOffer { sessionOfferTransport = transport } -> [transport]
+      TermRuntimeChoice { runtimeChoiceInputs = choiceInputs } -> choiceInputs
+      TermReturnScalar result -> [result]
+      TermEnd {} -> []
+      TermFatal {} -> []
+
 beginPolicyRuntimeSite
   :: SystemsArtifact
   -> BeginPolicySessionChoiceWitness
@@ -368,6 +441,15 @@ beginPolicyRuntimeSite artifact witness = do
           && inputs == [beginPolicyPolicyContext witness, beginPolicyBeginRecord witness]
           && runtimeSiteKind site == ValidationBoundary "BeginPolicy" -> Just site
     _ -> Nothing
+
+lookupSystemsFunction
+  :: SystemsProgram
+  -> Text
+  -> Either BeginPolicyChoiceLLVMError SystemsFunction
+lookupSystemsFunction program functionName =
+  case Map.lookup functionName (systemsProgramFunctions program) of
+    Nothing -> Left (BeginPolicyChoiceLLVMFunctionMissing functionName)
+    Just functionValue -> Right functionValue
 
 lookupLLVMFunction
   :: LLVMModule

@@ -51,7 +51,7 @@ ValidationFailure[BeginPolicy]
 
 The frozen Phase 0 client binds that value and immediately releases its owned payload and closes failure; it never branches on, compares, projects, stores, or otherwise observes the reason. The server uses the value only as the payload of `reject(reason)`.
 
-For this exact closed program, all `BeginPolicy` rejection values are therefore equivalent at the peer-visible boundary. This target profile chooses one canonical boundary code:
+For this exact closed program, all `BeginPolicy` rejection values are therefore equivalent at the peer-visible boundary. The translation verifier mechanically requires exactly one semantic use of the server reason—the `reject(reason)` forwarding use—and zero semantic uses of the client reason. Mutation regressions reject either premise drifting. This target profile chooses one canonical boundary code:
 
 ```text
 0x01 = BeginPolicyRejected
@@ -132,6 +132,7 @@ Translation-only `PHIL-LLVM-CERT-011` binds:
 - exact canonical pre-optimization LLVM module and text;
 - explicit policy-context and recognized-Begin validator operands;
 - exact accepted/rejected control mapping;
+- exact frozen-program reason-use premise for the target quotient;
 - rejected-arm reason materialization;
 - exact server reject/proceed selectors and transport operands;
 - exact client receiver, branch mapping, and rejected-arm reason binding;
@@ -143,7 +144,7 @@ Translation-only `PHIL-LLVM-CERT-011` binds:
 It deliberately does not claim:
 
 - correctness of the runtime BeginPolicy validator;
-- correctness of the exact-program observational quotient itself beyond the separately checked frozen-program use shape;
+- semantic adequacy of the chosen observational quotient for any program other than this exact frozen candidate;
 - concrete provider byte-I/O correctness;
 - malformed-input non-return correctness;
 - physical selector write success;

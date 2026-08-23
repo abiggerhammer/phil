@@ -20,6 +20,8 @@ main = do
     , test "client physical offer binds rejection reason only on reject" exactClientOffer
     , test "wire ABI declarations are exact" exactRenderedABI
     , test "canonical BeginPolicy target has no generic or poison residue" noBeginPolicyResidue
+    , test "extra server observation invalidates reason quotient" extraServerReasonUseRejects
+    , test "client observation invalidates reason quotient" clientReasonUseRejects
     ]
   if and results then pure () else exitFailure
 
@@ -140,6 +142,61 @@ noBeginPolicyResidue = withLLVM $ \_ artifact ->
       , "current_begin_policy_reason"
       , "last_begin_policy_reason"
       ]
+
+extraServerReasonUseRejects :: Bool
+extraServerReasonUseRejects = withBundle $ \bundle ->
+  let witness = beginPolicySessionChoiceWitness bundle
+      mutated = addReasonUse
+        bundle
+        (beginPolicyServerFunction witness)
+        (beginPolicyServerRejectBlock witness)
+        (beginPolicyServerTransport witness)
+        (beginPolicyServerRejectReason witness)
+  in case verifyBeginPolicyReasonUseShape mutated of
+      Left BeginPolicyChoiceLLVMReasonUseMismatch {} -> True
+      _ -> False
+
+clientReasonUseRejects :: Bool
+clientReasonUseRejects = withBundle $ \bundle ->
+  let witness = beginPolicySessionChoiceWitness bundle
+      mutated = addReasonUse
+        bundle
+        (beginPolicyClientFunction witness)
+        (beginPolicyClientRejectTarget witness)
+        (beginPolicyClientTransport witness)
+        (beginPolicyClientRejectReason witness)
+  in case verifyBeginPolicyReasonUseShape mutated of
+      Left BeginPolicyChoiceLLVMReasonUseMismatch {} -> True
+      _ -> False
+
+addReasonUse
+  :: BeginPolicySessionChoiceBundle
+  -> Text.Text
+  -> BlockId
+  -> ValueId
+  -> ValueId
+  -> BeginPolicySessionChoiceBundle
+addReasonUse bundle functionName blockId transport reason =
+  bundle { beginPolicySessionChoiceArtifact = artifact' }
+  where
+    witness = beginPolicySessionChoiceWitness bundle
+    artifact = beginPolicySessionChoiceArtifact bundle
+    program = systemsArtifactProgram artifact
+    functions = systemsProgramFunctions program
+    functionValue = functions Map.! functionName
+    blocks = systemsFunctionBlocks functionValue
+    blockValue = blocks Map.! blockId
+    extra = OpSessionSelect
+      transport
+      "mutation-observe-reason"
+      (Just reason)
+      (beginPolicyLoweringDecision witness)
+    block' = blockValue { systemsBlockOps = systemsBlockOps blockValue <> [extra] }
+    function' = functionValue
+      { systemsFunctionBlocks = Map.insert blockId block' blocks }
+    program' = program
+      { systemsProgramFunctions = Map.insert functionName function' functions }
+    artifact' = artifact { systemsArtifactProgram = program' }
 
 withBundle :: (BeginPolicySessionChoiceBundle -> Bool) -> Bool
 withBundle action = case phase0BeginPolicySessionChoiceBundle of
