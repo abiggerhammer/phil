@@ -105,14 +105,17 @@ jobs:
           set -euo pipefail
           python3 - <<'PY'
           from pathlib import Path
-          import textwrap
 
           workflow = Path('.github/workflows/version-refinement-fix-v2.yml').read_text()
           start_marker = "          python3 - <<'PY'\n"
           end_marker = "\n          PY\n"
           start = workflow.index(start_marker) + len(start_marker)
           end = workflow.index(end_marker, start)
-          code = textwrap.dedent(workflow[start:end])
+          raw = workflow[start:end]
+          code = "\n".join(
+              line[10:] if line.startswith("          ") else line
+              for line in raw.splitlines()
+          )
           exec(compile(code, 'version-refinement-fix-v2', 'exec'))
           PY
           git diff --check
