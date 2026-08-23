@@ -3,6 +3,7 @@
 module Main (main) where
 
 import qualified Data.Map.Strict as Map
+import Data.Text (Text)
 import Phil.LLVM
 import Phil.Systems
 import System.Exit (exitFailure)
@@ -196,7 +197,7 @@ hasExactSelect
   :: SystemsFunction
   -> BlockId
   -> ValueId
-  -> Data.Text.Text
+  -> Text
   -> Maybe ValueId
   -> DecisionId
   -> Bool
