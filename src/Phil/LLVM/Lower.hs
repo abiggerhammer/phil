@@ -94,8 +94,9 @@ lowerParameters :: LoweringMode -> SystemsFunction -> [LLVMParameter]
 lowerParameters mode functionValue
   | mode `elem` [ExactReceiveMode, DigestValidationMode, StorageMode, AcceptedResponseMode] =
       [ LLVMParameter (unValueId valueId) LLVMPointerParameter
-      | (valueId, SystemsValue { systemsValueRole = TransportHandle }) <-
+      | (valueId, SystemsValue { systemsValueRole = role }) <-
           Map.toAscList (systemsFunctionValues functionValue)
+      , isPointerParameterRole role
       ]
   | otherwise = []
 
@@ -134,6 +135,9 @@ lowerOp mode functionValue operation = case operation of
           , isRecordMaterialization functionValue name inputs outputs -> []
           | mode /= ConservativeMode
           , Just projection <- recordProjection functionValue name inputs outputs ->
+              [projection]
+          | mode /= ConservativeMode
+          , Just projection <- recordOpaqueProjection functionValue name inputs outputs ->
               [projection]
           | mode == AcceptedResponseMode
           , Just (transport, uploadId) <- acceptedResponseOperands functionValue name inputs outputs ->
@@ -317,6 +321,33 @@ recordProjection functionValue name inputs outputs =
         fieldName
         scalarType)
     _ -> Nothing
+
+recordOpaqueProjection
+  :: SystemsFunction
+  -> Text
+  -> [ValueId]
+  -> [ValueId]
+  -> Maybe LLVMOp
+recordOpaqueProjection functionValue name inputs outputs =
+  case (inputs, outputs) of
+    ([recordValue], [outputValue]) -> do
+      SystemsValue { systemsValueRole = RuntimeRecord grammar } <-
+        Map.lookup recordValue (systemsFunctionValues functionValue)
+      SystemsValue { systemsValueRole = RuntimeOpaque _ } <-
+        Map.lookup outputValue (systemsFunctionValues functionValue)
+      fieldName <- Text.stripPrefix ("project recognized " <> grammar <> ".") name
+      pure (LLVMOpaqueFieldProjection
+        (unValueId outputValue)
+        (unValueId recordValue)
+        grammar
+        fieldName)
+    _ -> Nothing
+
+isPointerParameterRole :: SystemsValueRole -> Bool
+isPointerParameterRole role = case role of
+  TransportHandle -> True
+  RuntimeInput _ -> True
+  _ -> False
 
 acceptedResponseOperands
   :: SystemsFunction

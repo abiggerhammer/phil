@@ -73,6 +73,7 @@ library
       Phil.Systems.PayloadCancelChoice
       Phil.Systems.LocalRuntimeChoice
       Phil.Systems.VersionSessionChoice
+      Phil.Systems.VersionChoiceOperands
       Phil.LLVM.IR
       Phil.LLVM.Lower
       Phil.LLVM.Verify
@@ -97,6 +98,8 @@ library
       Phil.LLVM.SessionOfferCertification
       Phil.LLVM.PayloadCancelChoice
       Phil.LLVM.PayloadCancelChoiceCertification
+      Phil.LLVM.VersionSessionChoice
+      Phil.LLVM.VersionSessionChoiceCertification
   build-depends:
       base >=4.17 && <5,
       bytestring >=0.11 && <0.13,
@@ -190,6 +193,15 @@ executable phil-llvm-phase0-payload-cancel-choice
   import:             common-settings
   hs-source-dirs:     app
   main-is:            LLVMPayloadCancelChoiceMain.hs
+  build-depends:
+      base >=4.17 && <5,
+      phil-core,
+      text >=2.0 && <2.2
+
+executable phil-llvm-phase0-version-session-choice
+  import:             common-settings
+  hs-source-dirs:     app
+  main-is:            LLVMVersionSessionChoiceMain.hs
   build-depends:
       base >=4.17 && <5,
       phil-core,
@@ -567,6 +579,17 @@ test-suite phil-version-session-choice-tests
   type:               exitcode-stdio-1.0
   hs-source-dirs:     test
   main-is:            VersionSessionChoiceMain.hs
+  build-depends:
+      base >=4.17 && <5,
+      containers >=0.6 && <0.8,
+      phil-core,
+      text >=2.0 && <2.2
+
+test-suite phil-version-session-choice-abi-tests
+  import:             common-settings
+  type:               exitcode-stdio-1.0
+  hs-source-dirs:     test
+  main-is:            VersionSessionChoiceABIMain.hs
   build-depends:
       base >=4.17 && <5,
       containers >=0.6 && <0.8,
