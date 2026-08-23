@@ -37,9 +37,10 @@ data VersionSessionChoiceCertificationBundle = VersionSessionChoiceCertification
 -- PHIL-LLVM-CERT-010
 --
 -- Translation-only authority for version-session-choice-v1. The provider's
--- choose_supported set semantics, opaque version-set representation, concrete
--- byte I/O, malformed-input non-return, physical write success, LLVM 18,
--- linking, and native execution remain independent gates.
+-- choose_supported set semantics, transport-local client offered-version
+-- association, opaque version-set representation, concrete byte I/O,
+-- malformed-input non-return, physical write success, LLVM 18, linking,
+-- and native execution remain independent gates.
 phase0VersionSessionChoiceLLVMCertification
   :: Either VersionSessionChoiceCertificationError VersionSessionChoiceCertificationBundle
 phase0VersionSessionChoiceLLVMCertification = do
@@ -79,6 +80,8 @@ phase0VersionSessionChoiceLLVMCertification = do
         , ("unsupported_selector", "phil_runtime_select_unsupported(ptr)->void")
         , ("version_selector", "phil_runtime_select_version(ptr,i16)->void")
         , ("receiver", "phil_runtime_receive_version_choice(ptr,ptr)->i1")
+        , ("client_refinement", "phil_runtime_refine_selected_version(ptr,i16)->i1")
+        , ("client_refinement_transport_state", "external provider must bind transport-local offered set to exact prior Hello")
         , ("wire_unsupported", "0x00")
         , ("wire_version", "0x01 followed by UInt16 big-endian")
         , ("malformed_input", "tag EOF, reserved tag, or truncated UInt16 must not return normally")
@@ -93,7 +96,7 @@ phase0VersionSessionChoiceLLVMCertification = do
         Map.insert "target" certificationTarget $
         Map.insert "compilation_profile" certificationProfile validityContext
       revisionStatement =
-        "The canonical Phase 0 version/unsupported Systems -> pre-optimization LLVM pair is certified only for the exact source, target, target text, target profile, and phil-runtime/phase0/version-session-choice-v1 ABI bound by this revision; Phil translation validation establishes explicit serverSupported and recognized Hello.versions operand identity, exact choose_supported input/output flow, exact server selectors, exact client receiver and branch-local UInt16 binding, preservation of payload/cancel physical lowering, and absence of ambient choice/version/transport state, while provider set-selection semantics, opaque version-set representation, concrete byte I/O, malformed-input non-return, physical write success, provider conformance, LLVM 18, linking, and native execution remain external gates."
+        "The canonical Phase 0 version/unsupported Systems -> pre-optimization LLVM pair is certified only for the exact source, target, target text, target profile, and phil-runtime/phase0/version-session-choice-v1 ABI bound by this revision; Phil translation validation establishes explicit serverSupported and recognized Hello.versions operand identity, exact choose_supported input/output flow, exact server selectors, exact client receiver and branch-local UInt16 binding, explicit transport-scoped client refinement of the decoded UInt16, preservation of payload/cancel physical lowering, and absence of global ambient choice/version/transport state, while provider set-selection semantics, exact transport-local association with the versions sent in the prior Hello, opaque version-set representation, concrete byte I/O, malformed-input non-return, physical write success, provider conformance, LLVM 18, linking, and native execution remain external gates."
       provisionalRevision = ObligationRevision
         { revisionObligationId = ObligationId "PHIL-LLVM-CERT-010"
         , revisionId = RevisionId ""
@@ -167,6 +170,7 @@ phase0VersionSessionChoiceLLVMCertification = do
             , "server unsupported select uses exact transport and no payload"
             , "server version select uses exact transport and selected UInt16"
             , "client receiver maps false->unsupported true->version and binds selected UInt16 only on version"
+            , "client refinement consumes exact transport plus decoded selected UInt16"
             , "payload/cancel and final-response physical lowerings remain intact"
             , "generic version/unsupported select/receive machinery is eliminated"
             , "ambient supported/offered/selected-version and transport state is absent"

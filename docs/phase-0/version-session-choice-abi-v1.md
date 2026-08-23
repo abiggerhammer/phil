@@ -146,6 +146,16 @@ The runtime must not return normally for:
 
 No malformed-input branch is invented in the Phil CFG.
 
+## Client selected-version refinement
+
+After decoding `version(selected)`, the client refinement is a physical runtime boundary:
+
+```llvm
+declare i1 @phil_runtime_refine_selected_version(ptr %transport, i16 %selected)
+```
+
+The transport operand is explicit and identifies the session-local state. The runtime provider must associate that transport with the exact versions placed in the client's prior `Hello`; this association is an external provider obligation in the translation-only `PHIL-LLVM-CERT-010` tranche. No global/current selected-version or offered-version slot is permitted.
+
 ## Ambient state prohibition
 
 The generated artifact must not depend on ambient/current variables or nullary runtime accessors for:

@@ -17,6 +17,7 @@ struct phil_test_hello_record {
 };
 
 struct phil_test_choice_transport {
+    const struct phil_test_version_set *offered_versions;
     uint8_t input[PHIL_TEST_WIRE_CAPACITY];
     size_t input_length;
     size_t input_offset;

@@ -127,10 +127,18 @@ exactClientOffer = withLLVM $ \_ artifact ->
             (unValueId (versionChoiceClientSelectedVersion witness))
             (LLVMBlockId (unBlockId (versionChoiceClientVersionTarget witness)))
             (LLVMBlockId (unBlockId (versionChoiceClientUnsupportedTarget witness)))
-          expectedBinding = LLVMVersionChoicePayloadBinding
-            (unValueId (versionChoiceClientSelectedVersion witness))
+        expectedBinding = LLVMVersionChoicePayloadBinding
+(unValueId (versionChoiceClientSelectedVersion witness))
+        refinementOkay = case llvmBlockTerminator target of
+LLVMVersionRefinement _ transport selected yes no ->
+  transport == unValueId (versionChoiceClientTransport witness)
+    && selected == unValueId (versionChoiceClientSelectedVersion witness)
+    && yes == LLVMBlockId (unBlockId (versionChoiceClientVersionSuccess witness))
+    && no == LLVMBlockId (unBlockId (versionChoiceClientVersionFailure witness))
+_ -> False
       pure (llvmBlockTerminator offer == expectedTerm
-        && expectedBinding `elem` llvmBlockOps target)
+        && expectedBinding `elem` llvmBlockOps target
+        && refinementOkay)
 
 exactRenderedABI :: Bool
 exactRenderedABI = withLLVM $ \_ artifact ->
@@ -141,6 +149,7 @@ exactRenderedABI = withLLVM $ \_ artifact ->
       , "declare void @phil_runtime_select_unsupported(ptr)"
       , "declare void @phil_runtime_select_version(ptr, i16)"
       , "declare i1 @phil_runtime_receive_version_choice(ptr, ptr)"
+      , "declare i1 @phil_runtime_refine_selected_version(ptr, i16)"
       ]
 
 noVersionPoison :: Bool

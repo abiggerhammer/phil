@@ -141,6 +141,14 @@ int main(void) {
     }
 
     reset_transport(&transport);
+    transport.offered_versions = &hello.versions;
+    if (!phil_runtime_refine_selected_version(&transport, 2u)
+        || phil_runtime_refine_selected_version(&transport, 9u)) {
+        fputs("selected-version refinement mismatch\n", stderr);
+        return 1;
+    }
+
+    reset_transport(&transport);
     transport.input[0] = 0x00u;
     transport.input_length = 1;
     selected = 0x55aau;

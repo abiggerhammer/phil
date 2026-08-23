@@ -80,6 +80,23 @@ void phil_runtime_select_version(void *transport_value, uint16_t selected_versio
     write_octet(transport, (uint8_t) (selected_version & 0xffu));
 }
 
+bool phil_runtime_refine_selected_version(
+    void *transport_value,
+    uint16_t selected_version) {
+    struct phil_test_choice_transport *transport = as_transport(transport_value);
+    size_t i;
+    if (transport->offered_versions == NULL
+        || transport->offered_versions->length > PHIL_TEST_VERSION_CAPACITY) {
+        abort();
+    }
+    for (i = 0; i < transport->offered_versions->length; ++i) {
+        if (transport->offered_versions->values[i] == selected_version) {
+  return true;
+        }
+    }
+    return false;
+}
+
 bool phil_runtime_receive_version_choice(
     void *transport_value,
     uint16_t *selected_version_out) {

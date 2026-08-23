@@ -12,3 +12,7 @@ bool phil_runtime_receive_version_choice(uint16_t *selected_version_out) {
     (void) selected_version_out;
     return false;
 }
+bool phil_runtime_refine_selected_version(uint16_t selected_version) {
+    (void) selected_version;
+    return false;
+}

@@ -14,5 +14,8 @@ void phil_runtime_select_version(void *transport, uint16_t selected_version);
 bool phil_runtime_receive_version_choice(
     void *transport,
     uint16_t *selected_version_out);
+bool phil_runtime_refine_selected_version(
+    void *transport,
+    uint16_t selected_version);
 
 #endif

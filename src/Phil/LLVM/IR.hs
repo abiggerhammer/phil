@@ -161,6 +161,12 @@ data LLVMTerminator
       Text
       LLVMBlockId
       LLVMBlockId
+  | LLVMVersionRefinement
+      RuntimeSiteRef
+      Text
+      Text
+      LLVMBlockId
+      LLVMBlockId
   | LLVMReturnScalar Text ScalarType
   | LLVMReturn Text
   | LLVMUnreachable (Maybe LLVMStrengtheningId)
@@ -244,6 +250,7 @@ llvmBlockSuccessors blockValue = case llvmBlockTerminator blockValue of
   LLVMPayloadCancelOffer _ payloadTarget cancelTarget -> [payloadTarget, cancelTarget]
   LLVMChooseSupported _ _ _ someTarget noneTarget -> [someTarget, noneTarget]
   LLVMVersionChoiceOffer _ _ versionTarget unsupportedTarget -> [versionTarget, unsupportedTarget]
+  LLVMVersionRefinement _ _ _ yes no -> [yes, no]
   LLVMReturnScalar _ _ -> []
   LLVMReturn _ -> []
   LLVMUnreachable _ -> []
@@ -268,6 +275,7 @@ llvmRuntimeSites moduleValue = concat
         LLVMExactReceive site _ _ _ _ _ _ _ -> [site]
         LLVMDigestValidate site _ _ _ _ -> [site]
         LLVMStore site _ _ _ _ -> [site]
+        LLVMVersionRefinement site _ _ _ _ -> [site]
         _ -> []
 
 llvmStrengtheningUses :: LLVMModule -> [LLVMStrengtheningId]
@@ -349,6 +357,7 @@ renderLLVMModule moduleValue = Text.unlines $
       <> unsupportedSelectDeclaration
       <> versionSelectDeclaration
       <> versionChoiceReceiveDeclaration
+      <> versionRefinementDeclaration
       <> map renderCallDeclaration (Set.toAscList callNames)
       <> runtimeDeclarations
       <> map renderFieldProjectionDeclaration (Set.toAscList fieldProjectionSignatures)
@@ -436,6 +445,11 @@ renderLLVMModule moduleValue = Text.unlines $
     versionChoiceReceiveDeclaration =
       if any hasVersionChoiceOffer allBlocks
         then ["declare i1 @phil_runtime_receive_version_choice(ptr, ptr)"]
+        else []
+
+    versionRefinementDeclaration =
+      if any hasVersionRefinement allBlocks
+        then ["declare i1 @phil_runtime_refine_selected_version(ptr, i16)"]
         else []
 
     callNames = Set.fromList
@@ -560,6 +574,10 @@ renderLLVMModule moduleValue = Text.unlines $
 
     hasVersionChoiceOffer blockValue = case llvmBlockTerminator blockValue of
       LLVMVersionChoiceOffer {} -> True
+      _ -> False
+
+    hasVersionRefinement blockValue = case llvmBlockTerminator blockValue of
+      LLVMVersionRefinement {} -> True
       _ -> False
 
     renderCallDeclaration name = "declare void @phil_call_" <> symbol name <> "()"
@@ -841,6 +859,16 @@ renderLLVMModule moduleValue = Text.unlines $
               <> ", label %" <> symbol (unLLVMBlockId versionTarget)
               <> ", label %" <> symbol (unLLVMBlockId unsupportedTarget)
           ]
+      LLVMVersionRefinement _ transport selected yes no ->
+        let blockSymbol = symbol (unLLVMBlockId (llvmBlockId blockValue))
+  validName = "%phil_version_refinement_ok_" <> blockSymbol
+        in
+[ validName <> " = call i1 @phil_runtime_refine_selected_version(ptr %"
+    <> symbol transport <> ", i16 %" <> symbol selected <> ")"
+, "br i1 " <> validName
+    <> ", label %" <> symbol (unLLVMBlockId yes)
+    <> ", label %" <> symbol (unLLVMBlockId no)
+]
       LLVMReturnScalar name scalarType ->
         ["ret " <> renderScalarType scalarType <> " %" <> symbol name]
       LLVMReturn outcome -> ["ret i32 0 ; " <> oneLine outcome]

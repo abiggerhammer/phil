@@ -41,6 +41,7 @@ data VersionSessionChoiceLLVMError
   | VersionChoiceLLVMServerSelectMismatch Text LLVMBlockId [LLVMOp]
   | VersionChoiceLLVMClientOfferMismatch Text LLVMBlockId LLVMTerminator
   | VersionChoiceLLVMClientBindingMismatch Text LLVMBlockId [LLVMOp]
+  | VersionChoiceLLVMClientRefinementMismatch Text LLVMBlockId LLVMTerminator
   | VersionChoiceLLVMPayloadCancelRegression Text
   | VersionChoiceLLVMRenderedCallMissing Text
   | VersionChoiceLLVMGenericCallDetected Text
@@ -69,6 +70,10 @@ versionSessionChoiceABIDescriptor = Text.unlines
   , "select-version=phil_runtime_select_version(ptr,i16)->void"
   , "receive=phil_runtime_receive_version_choice(ptr,ptr)->i1"
   , "receive-out=pointer-to-i16-selected-version-slot"
+  , "client-refine=phil_runtime_refine_selected_version(ptr,i16)->i1"
+  , "client-refine-arg0=exact-client-transport-handle"
+  , "client-refine-arg1=decoded-selected-version"
+  , "client-refine-provider-obligation=transport-local-offered-set-is-exact-set-sent-in-prior-Hello"
   , "wire-unsupported=0x00"
   , "wire-version=0x01 || selected-version-u16-big-endian"
   , "wire-version-size=3-octets"
@@ -161,6 +166,14 @@ lowerSystemsVersionSessionChoice target systemsArtifact = artifact
       { llvmBlockOps = LLVMVersionChoicePayloadBinding
           (unValueId (versionChoiceClientSelectedVersion versionWitness))
           : llvmBlockOps blockValue
+      , llvmBlockTerminator = case llvmBlockTerminator blockValue of
+          LLVMRuntimeBranch site _ yes no -> LLVMVersionRefinement
+            site
+            (unValueId (versionChoiceClientTransport versionWitness))
+            (unValueId (versionChoiceClientSelectedVersion versionWitness))
+            yes
+            no
+          other -> other
       }
 
     isUnloweredSelect label operation = case operation of
@@ -291,6 +304,14 @@ verifyVersionSessionChoiceLLVMWitness bundle llvmArtifact = do
   unless (LLVMVersionChoicePayloadBinding clientSelected `elem` llvmBlockOps clientVersion) $
     Left (VersionChoiceLLVMClientBindingMismatch
       clientName clientVersionTargetId (llvmBlockOps clientVersion))
+  case llvmBlockTerminator clientVersion of
+    LLVMVersionRefinement _ transport selected yes no
+      | transport == clientTransport
+&& selected == clientSelected
+&& yes == LLVMBlockId (unBlockId (versionChoiceClientVersionSuccess versionWitness))
+&& no == LLVMBlockId (unBlockId (versionChoiceClientVersionFailure versionWitness)) -> pure ()
+    other -> Left (VersionChoiceLLVMClientRefinementMismatch
+      clientName clientVersionTargetId other)
 
   let versionPredecessor = versionChoiceOperandsPredecessor bundle
       localPredecessor = versionSessionChoicePredecessor versionPredecessor
@@ -306,12 +327,14 @@ verifyVersionSessionChoiceLLVMWitness bundle llvmArtifact = do
     && Text.isInfixOf "declare void @phil_runtime_select_unsupported(ptr)" rendered
     && Text.isInfixOf "declare void @phil_runtime_select_version(ptr, i16)" rendered
     && Text.isInfixOf "declare i1 @phil_runtime_receive_version_choice(ptr, ptr)" rendered
+    && Text.isInfixOf "declare i1 @phil_runtime_refine_selected_version(ptr, i16)" rendered
     ) $
     Left (VersionChoiceLLVMRenderedCallMissing "version-choice declarations")
   unless
     ( not (Text.isInfixOf "@phil_call_select_unsupported" rendered)
     && not (Text.isInfixOf "@phil_call_select_version" rendered)
     && not (Text.isInfixOf "@phil_call_receive_version_unsupported_label" rendered)
+    && not (Text.isInfixOf "@phil_runtime_refine_selected_version()" rendered)
     ) $
     Left (VersionChoiceLLVMGenericCallDetected "version choice")
   unless

@@ -41,7 +41,7 @@ on:
       - '.github/workflows/version-session-choice-runtime.yml'
 
 permissions:
-  contents: write
+  contents: read
 
 jobs:
   version-session-choice-runtime:
@@ -91,69 +91,3 @@ jobs:
           fi
 
           cabal test phil-version-session-choice-abi-tests
-
-  apply-refinement:
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@v4
-        with:
-          ref: lower-version-session-choice
-          fetch-depth: 0
-      - name: Apply staged refinement patch and clean helpers
-        shell: bash
-        run: |
-          set -euo pipefail
-          python3 - <<'PY'
-          from pathlib import Path
-
-          workflow = Path('.github/workflows/version-refinement-fix-v2.yml').read_text()
-          start_marker = "          python3 - <<'PY'\n"
-          end_marker = "\n          PY\n"
-          start = workflow.index(start_marker) + len(start_marker)
-          end = workflow.index(end_marker, start)
-          raw = workflow[start:end]
-          code = "\n".join(
-              line[10:] if line.startswith("          ") else line
-              for line in raw.splitlines()
-          )
-          code = code.replace(
-              "'        expectedBinding = LLVMVersionChoicePayloadBinding\\n          (unValueId (versionChoiceClientSelectedVersion witness))\\n    pure (llvmBlockTerminator offer == expectedTerm\\n      && expectedBinding `elem` llvmBlockOps target)\\n'",
-              "'          expectedBinding = LLVMVersionChoicePayloadBinding\\n            (unValueId (versionChoiceClientSelectedVersion witness))\\n      pure (llvmBlockTerminator offer == expectedTerm\\n        && expectedBinding `elem` llvmBlockOps target)\\n'",
-              1,
-          )
-          code = code.replace(
-              "'''        expectedBinding = LLVMVersionChoicePayloadBinding\n          (unValueId (versionChoiceClientSelectedVersion witness))\n        refinementOkay = case llvmBlockTerminator target of",
-              "'''          expectedBinding = LLVMVersionChoicePayloadBinding\n            (unValueId (versionChoiceClientSelectedVersion witness))\n          refinementOkay = case llvmBlockTerminator target of",
-              1,
-          )
-          code = code.replace(
-              "    pure (llvmBlockTerminator offer == expectedTerm\n      && expectedBinding `elem` llvmBlockOps target\n      && refinementOkay)",
-              "      pure (llvmBlockTerminator offer == expectedTerm\n        && expectedBinding `elem` llvmBlockOps target\n        && refinementOkay)",
-              1,
-          )
-          code = code.replace(
-              "marker = '## Malformed input and failure behavior\\n'",
-              "marker = '## Ambient state prohibition\\n'",
-              1,
-          )
-          exec(compile(code, 'version-refinement-fix-v2', 'exec'))
-          PY
-          git diff --check
-          git rm .github/workflows/version-refinement-fix.yml .github/workflows/version-refinement-fix-v2.yml
-          git show HEAD^:.github/workflows/version-session-choice-runtime.yml > .github/workflows/version-session-choice-runtime.yml
-          git config user.name "phil-version-lowering-bot"
-          git config user.email "actions@users.noreply.github.com"
-          git add \
-            .github/workflows/version-session-choice-runtime.yml \
-            src/Phil/LLVM/IR.hs \
-            src/Phil/LLVM/VersionSessionChoice.hs \
-            src/Phil/LLVM/VersionSessionChoiceCertification.hs \
-            runtime/phase0/version_session_choice_v1.h \
-            runtime/phase0/version_session_choice_v1_smoke_fixture.h \
-            runtime/phase0/version_session_choice_v1_smoke.c \
-            runtime/phase0/version_session_choice_v1_smoke_main.c \
-            runtime/phase0/version_session_choice_v1_bad_ambient.c \
-            test/VersionSessionChoiceABIMain.hs \
-            docs/phase-0/version-session-choice-abi-v1.md
-          git commit -m "Make client version refinement explicit"
-          git push origin HEAD:lower-version-session-choice
