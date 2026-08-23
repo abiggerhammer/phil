@@ -16,10 +16,12 @@ module Phil.Systems
   , module Phil.Systems.VersionChoiceOperands
   , module Phil.Systems.BeginPolicySessionChoice
   , module Phil.Systems.HelloPolicyValidation
+  , module Phil.Systems.ClientOutbound
   ) where
 
 import Phil.Systems.AcceptedResponse
 import Phil.Systems.BeginPolicySessionChoice
+import Phil.Systems.ClientOutbound
 import Phil.Systems.Dataflow
 import Phil.Systems.HelloPolicyValidation
 import Phil.Systems.DigestValidation

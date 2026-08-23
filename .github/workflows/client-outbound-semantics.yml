@@ -1,0 +1,51 @@
+name: Client Outbound Semantics
+
+on:
+  pull_request:
+    paths:
+      - 'src/Phil/Systems/ClientOutbound.hs'
+      - 'src/Phil/Systems/HelloPolicyValidation.hs'
+      - 'src/Phil/Systems/BeginPolicySessionChoice.hs'
+      - 'src/Phil/Systems/VersionChoiceOperands.hs'
+      - 'src/Phil/Systems.hs'
+      - 'src/Phil/LLVM/ExactSendCertification.hs'
+      - 'test/ClientOutboundMain.hs'
+      - 'docs/phase-0/client-outbound-semantics-v1.md'
+      - 'phil-core.cabal'
+      - '.github/workflows/client-outbound-semantics.yml'
+  push:
+    branches:
+      - main
+    paths:
+      - 'src/Phil/Systems/ClientOutbound.hs'
+      - 'src/Phil/Systems/HelloPolicyValidation.hs'
+      - 'src/Phil/Systems/BeginPolicySessionChoice.hs'
+      - 'src/Phil/Systems/VersionChoiceOperands.hs'
+      - 'src/Phil/Systems.hs'
+      - 'src/Phil/LLVM/ExactSendCertification.hs'
+      - 'test/ClientOutboundMain.hs'
+      - 'docs/phase-0/client-outbound-semantics-v1.md'
+      - 'phil-core.cabal'
+      - '.github/workflows/client-outbound-semantics.yml'
+
+permissions:
+  contents: read
+
+jobs:
+  client-outbound-semantics:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v4
+
+      - name: Set up Haskell
+        uses: haskell-actions/setup@v2
+        with:
+          ghc-version: '9.6.7'
+          cabal-version: 'latest'
+
+      - name: Build focused semantic test
+        run: cabal build phil-client-outbound-semantics-tests
+
+      - name: Verify client outbound semantic candidate
+        run: cabal test phil-client-outbound-semantics-tests --test-show-details=direct
