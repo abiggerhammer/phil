@@ -18,6 +18,7 @@ main = do
     , test "payload/cancel semantic choice remains valid" payloadCancelPreserved
     , test "wrong some payload is rejected" wrongSomePayloadRejects
     , test "some payload cannot be used on none arm" noneArmUseRejects
+    , test "some payload binder rejects alternate predecessor" alternateSomePredecessorRejects
     , test "generic LLVM remains fail-closed on local runtime choice" llvmFailClosed
     ]
   if and results then pure () else exitFailure
@@ -117,6 +118,15 @@ noneArmUseRejects = withBundle $ \bundle ->
           }
   in case verifyScalarDataflow mutated of
       Left (ScalarUseBeforeDefinition _ _ _ _ _ _) -> True
+      _ -> False
+
+alternateSomePredecessorRejects :: Bool
+alternateSomePredecessorRejects = withBundle $ \bundle ->
+  let witness = localRuntimeChoiceWitness bundle
+      mutated = mapSystemsBlock bundle (localChoiceNoneTarget witness) $ \blockValue ->
+        blockValue { systemsBlockTerminator = TermJump (localChoiceSomeTarget witness) }
+  in case verifyLocalRuntimeChoiceWitness mutated witness of
+      Left (LocalRuntimeChoiceMismatch _) -> True
       _ -> False
 
 llvmFailClosed :: Bool
