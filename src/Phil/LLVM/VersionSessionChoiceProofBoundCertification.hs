@@ -49,29 +49,27 @@ phase0VersionSessionChoiceProofBoundCertification
   :: RocqCertificationBundle
   -> RocqCertificationBundle
   -> RocqCertificationBundle
-  -> RocqCertificationBundle
   -> PayloadCancelChoiceProofCertificationBundle
   -> Either VersionSessionChoiceProofBoundCertificationError VersionSessionChoiceProofBoundCertificationBundle
 phase0VersionSessionChoiceProofBoundCertification
-    systemsOperandsProof llvmLoweringProof
-    systemsVersionProof llvmVersionBoundaryProof
-    predecessor = do
+    systemsOperandsProof llvmLoweringProof systemsVersionProof predecessor = do
   verifyProof "systems-version-operands"
     systemsVersionChoiceOperandsCertificationSpec systemsOperandsProof
   verifyProof "llvm-version-lowering"
     llvmVersionSessionChoiceLoweringCertificationSpec llvmLoweringProof
   verifyProof "systems-version-session-choice"
     systemsVersionSessionChoiceCertificationSpec systemsVersionProof
-  verifyProof "llvm-version-session-choice-boundary"
-    llvmVersionSessionChoiceBoundaryCertificationSpec llvmVersionBoundaryProof
 
   base <- mapLeft VersionProofBoundBaseError phase0VersionSessionChoiceLLVMCertification
 
-  let explicitProofBundles =
+  let -- Only authorities compatible with the final physical artifact are direct
+      -- dependencies. The #70 LLVM boundary theorem deliberately says that no
+      -- physical version-choice representation exists, so it remains historical
+      -- predecessor-stage evidence and is not imported into this validity scope.
+      explicitProofBundles =
         [ systemsOperandsProof
         , llvmLoweringProof
         , systemsVersionProof
-        , llvmVersionBoundaryProof
         ]
       proofLedgers = map rocqBundleLedger explicitProofBundles
       semanticRevisions = Map.unions (map ledgerRevisions proofLedgers)
@@ -136,7 +134,7 @@ phase0VersionSessionChoiceProofBoundCertification
         Map.insert "target" certificationTarget $
         Map.insert "compilation_profile" certificationProfile validityContext
       revisionStatement =
-        "The version-session-choice-v1 Systems -> canonical pre-optimization LLVM pair may be labeled Certified only when exact source/target/text digests, Systems lowering root, target/runtime-ABI/tool identities, proof-bound unsupported/version semantic authority, explicit version-choice operand/provenance proof, concrete LLVM chooser/select/receive/refinement proof, proof-bound payload/cancel predecessor certification, and translation-validation result are content-bound. Proof-bound PHIL-LLVM-CERT-009 is regenerated and digest-bound rather than importing predecessor translation evidence outside its validity scope. Provider choose_supported set semantics, exact transport-local association with versions sent in the prior client Hello, concrete byte I/O, malformed-input non-return, physical write success, provider ABI conformance, LLVM implementation correctness, whole-program linking, and native execution remain explicit external gates."
+        "The version-session-choice-v1 Systems -> canonical pre-optimization LLVM pair may be labeled Certified only when exact source/target/text digests, Systems lowering root, target/runtime-ABI/tool identities, compatible proof-bound unsupported/version Systems semantic authority, explicit version-choice operand/provenance proof, concrete LLVM chooser/select/receive/refinement proof, proof-bound payload/cancel predecessor certification, and translation-validation result are content-bound. The #70 pre-lowering LLVM competence-boundary theorem is deliberately not imported because its no-physical-representation claim does not hold for this successor artifact. Proof-bound PHIL-LLVM-CERT-009 is regenerated and digest-bound rather than importing predecessor translation evidence outside its validity scope. Provider choose_supported set semantics, exact transport-local association with versions sent in the prior client Hello, concrete byte I/O, malformed-input non-return, physical write success, provider ABI conformance, LLVM implementation correctness, whole-program linking, and native execution remain explicit external gates."
       provisionalRevision = ObligationRevision
         { revisionObligationId = ObligationId "PHIL-LLVM-CERT-010"
         , revisionId = RevisionId ""
@@ -225,7 +223,8 @@ phase0VersionSessionChoiceProofBoundCertification
         , "translation-artifact=" <> renderArtifact translationArtifact
         , "predecessor-certification=" <> renderArtifact predecessorArtifact
         ] <> map renderProofArtifact explicitProofBundles <>
-        [ "external-provider-choose-gate=membership/disjointness semantics required"
+        [ "historical-predecessor-note=PHIL-LLVM-VERSION-SESSION-CHOICE-BOUNDARY-001 is intentionally not a final-artifact dependency"
+        , "external-provider-choose-gate=membership/disjointness semantics required"
         , "external-transport-offered-set-gate=exact prior-Hello association required"
         , "external-runtime-abi-gate=six-symbol provider signature conformance required"
         , "external-runtime-execution-gate=chooser/encoding/decoding/refinement native smoke required"
@@ -303,13 +302,12 @@ verifyPhase0VersionSessionChoiceProofBoundCertification
   :: RocqCertificationBundle
   -> RocqCertificationBundle
   -> RocqCertificationBundle
-  -> RocqCertificationBundle
   -> PayloadCancelChoiceProofCertificationBundle
   -> Either VersionSessionChoiceProofBoundCertificationError ()
 verifyPhase0VersionSessionChoiceProofBoundCertification
-    systemsOperandsProof llvmLoweringProof systemsVersionProof llvmVersionBoundaryProof predecessor = do
+    systemsOperandsProof llvmLoweringProof systemsVersionProof predecessor = do
   bundle <- phase0VersionSessionChoiceProofBoundCertification
-    systemsOperandsProof llvmLoweringProof systemsVersionProof llvmVersionBoundaryProof predecessor
+    systemsOperandsProof llvmLoweringProof systemsVersionProof predecessor
   mapLeft VersionProofBoundManifestError $
     verifyManifest
       (versionProofBoundContext bundle)
