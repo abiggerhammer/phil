@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-PROFILE="${1:?usage: phase0-protocol-runtime.sh <client-control-send|server-framed-ingress|final-response-receive|storage-failure-detail>}"
+PROFILE="${1:?usage: phase0-protocol-runtime.sh <client-control-send|server-framed-ingress|final-response-receive|storage-failure-detail|control-codec>}"
 PHIL_LLVM18_TOOLS="llvm-as llvm-link clang"
 source scripts/ci/resolve-llvm18.sh
 unset PHIL_LLVM18_TOOLS
@@ -112,6 +112,29 @@ case "$PROFILE" in
       echo "expected ABI checker to reject ambient/nullary storage failure provider" >&2
       exit 1
     fi
+    ;;
+
+  control-codec)
+    cabal build phil-llvm-phase0-control-codec phil-control-codec-abi-tests
+    cabal test phil-control-codec-abi-tests --test-show-details=direct
+    cabal test phil-storage-failure-detail-abi-tests --test-show-details=direct
+    cabal test phil-server-framed-ingress-abi-tests --test-show-details=direct
+    cabal test phil-client-control-send-abi-tests --test-show-details=direct
+    EMITTER="$(cabal list-bin phil-llvm-phase0-control-codec)"
+    "$EMITTER" > phase0-control-codec.ll
+    "$LLVM_AS" phase0-control-codec.ll -o phase0-control-codec.bc
+    "$CLANG" --target=x86_64-unknown-linux-gnu -std=c11 -Wall -Wextra -Wpedantic -Werror \
+      -Iruntime/phase0 -S -emit-llvm runtime/phase0/control_codec_v1.c \
+      -o control-codec-runtime.ll
+    python3 scripts/check_runtime_abi.py --partial phase0-control-codec.ll control-codec-runtime.ll
+    "$LLVM_AS" control-codec-runtime.ll -o control-codec-runtime.bc
+    "$LLVM_LINK" phase0-control-codec.bc control-codec-runtime.bc \
+      -o phase0-control-codec-partially-linked.bc
+    "$CLANG" --target=x86_64-unknown-linux-gnu -std=c11 -Wall -Wextra -Wpedantic -Werror \
+      -Iruntime/phase0 runtime/phase0/control_codec_v1.c \
+      runtime/phase0/control_codec_v1_smoke.c runtime/phase0/control_codec_v1_smoke_main.c \
+      -o control-codec-smoke
+    ./control-codec-smoke
     ;;
 
   *)

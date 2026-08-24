@@ -1,3 +1,4 @@
+# CI normalization equivalence witness; execution semantics unchanged.
 name: Control Codec Runtime
 
 on:
@@ -13,6 +14,7 @@ on:
       - 'test/ControlCodecABIMain.hs'
       - 'docs/phase-0/control-codec-v1.md'
       - 'phil-core.cabal'
+      - '.github/workflows/control-codec-runtime.yml'
   push:
     branches: [main]
     paths:
@@ -26,6 +28,7 @@ on:
       - 'test/ControlCodecABIMain.hs'
       - 'docs/phase-0/control-codec-v1.md'
       - 'phil-core.cabal'
+      - '.github/workflows/control-codec-runtime.yml'
 
 permissions:
   contents: read

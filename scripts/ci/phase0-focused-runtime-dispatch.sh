@@ -10,7 +10,7 @@ case "$PROFILE" in
   hello-policy-validation|begin-policy-choice|version-session-choice|payload-cancel-choice)
     exec bash scripts/ci/phase0-control-runtime.sh "$PROFILE"
     ;;
-  client-control-send|server-framed-ingress|final-response-receive|storage-failure-detail)
+  client-control-send|server-framed-ingress|final-response-receive|storage-failure-detail|control-codec)
     exec bash scripts/ci/phase0-protocol-runtime.sh "$PROFILE"
     ;;
   *)

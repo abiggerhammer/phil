@@ -1,5 +1,5 @@
 # Active consolidated runtime gate after legacy witness retirement.
-# Twelve-profile owner after protocol-runtime witness retirement.
+# Thirteen-profile candidate while control-codec witness remains present.
 name: Phase 0 Focused Runtime
 
 on:
@@ -19,6 +19,7 @@ on:
       - 'app/LLVMServerFramedIngressMain.hs'
       - 'app/LLVMFinalResponseReceiveMain.hs'
       - 'app/LLVMStorageFailureDetailMain.hs'
+      - 'app/LLVMControlCodecMain.hs'
       - 'runtime/phase0/storage_v1*'
       - 'runtime/phase0/accepted_response_v1*'
       - 'runtime/phase0/rejected_response_v1*'
@@ -31,6 +32,7 @@ on:
       - 'runtime/phase0/server_framed_ingress_v1*'
       - 'runtime/phase0/final_response_receive_v1*'
       - 'runtime/phase0/storage_failure_detail_v1*'
+      - 'runtime/phase0/control_codec_v1*'
       - 'scripts/check_runtime_abi.py'
       - 'scripts/ci/phase0-focused-runtime.sh'
       - 'scripts/ci/phase0-control-runtime.sh'
@@ -49,6 +51,7 @@ on:
       - 'test/ServerFramedIngressABIMain.hs'
       - 'test/FinalResponseReceiveMain.hs'
       - 'test/StorageFailureDetailABIMain.hs'
+      - 'test/ControlCodecABIMain.hs'
       - 'phil-core.cabal'
       - '.github/workflows/phase0-focused-runtime.yml'
   push:
@@ -68,6 +71,7 @@ on:
       - 'app/LLVMServerFramedIngressMain.hs'
       - 'app/LLVMFinalResponseReceiveMain.hs'
       - 'app/LLVMStorageFailureDetailMain.hs'
+      - 'app/LLVMControlCodecMain.hs'
       - 'runtime/phase0/storage_v1*'
       - 'runtime/phase0/accepted_response_v1*'
       - 'runtime/phase0/rejected_response_v1*'
@@ -80,6 +84,7 @@ on:
       - 'runtime/phase0/server_framed_ingress_v1*'
       - 'runtime/phase0/final_response_receive_v1*'
       - 'runtime/phase0/storage_failure_detail_v1*'
+      - 'runtime/phase0/control_codec_v1*'
       - 'scripts/check_runtime_abi.py'
       - 'scripts/ci/phase0-focused-runtime.sh'
       - 'scripts/ci/phase0-control-runtime.sh'
@@ -98,6 +103,7 @@ on:
       - 'test/ServerFramedIngressABIMain.hs'
       - 'test/FinalResponseReceiveMain.hs'
       - 'test/StorageFailureDetailABIMain.hs'
+      - 'test/ControlCodecABIMain.hs'
       - 'phil-core.cabal'
       - '.github/workflows/phase0-focused-runtime.yml'
 
@@ -124,6 +130,7 @@ jobs:
           - server-framed-ingress
           - final-response-receive
           - storage-failure-detail
+          - control-codec
     steps:
       - uses: actions/checkout@v4
       - uses: haskell-actions/setup@v2
