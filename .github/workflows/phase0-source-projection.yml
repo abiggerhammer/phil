@@ -1,0 +1,58 @@
+name: Phase 0 Source Projection
+
+on:
+  pull_request:
+    paths:
+      - 'examples/upload/client.phil'
+      - 'examples/upload/server.phil'
+      - 'src/Phil/Compiler/Phase0UploadProjection.hs'
+      - 'src/Phil/Surface/**'
+      - 'src/Phil/Systems/**'
+      - 'src/Phil/LLVM/ControlCodec.hs'
+      - 'src/Phil/LLVM/Verify.hs'
+      - 'app/Phase0UploadProjectionMain.hs'
+      - 'test/Phase0UploadProjectionMain.hs'
+      - 'docs/phase-0/source-to-systems-projection-v1.md'
+      - 'phil-core.cabal'
+      - '.github/workflows/phase0-source-projection.yml'
+  push:
+    branches: [main]
+    paths:
+      - 'examples/upload/client.phil'
+      - 'examples/upload/server.phil'
+      - 'src/Phil/Compiler/Phase0UploadProjection.hs'
+      - 'src/Phil/Surface/**'
+      - 'src/Phil/Systems/**'
+      - 'src/Phil/LLVM/ControlCodec.hs'
+      - 'src/Phil/LLVM/Verify.hs'
+      - 'app/Phase0UploadProjectionMain.hs'
+      - 'test/Phase0UploadProjectionMain.hs'
+      - 'docs/phase-0/source-to-systems-projection-v1.md'
+      - 'phil-core.cabal'
+      - '.github/workflows/phase0-source-projection.yml'
+
+permissions:
+  contents: read
+
+jobs:
+  phase0-source-projection:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: haskell-actions/setup@v2
+        with:
+          ghc-version: '9.6.7'
+          cabal-version: 'latest'
+
+      - name: Build projection bridge and focused tests
+        run: |
+          cabal build lib:phil-core \
+            phil-phase0-upload-projection \
+            phil-phase0-upload-projection-tests \
+            --ghc-options=-Werror
+
+      - name: Run source-to-Systems projection tests
+        run: cabal test phil-phase0-upload-projection-tests --test-show-details=direct
+
+      - name: Project canonical Phase 0 sources
+        run: cabal run phil-phase0-upload-projection
