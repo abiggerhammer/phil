@@ -1,0 +1,88 @@
+name: Client Control Send Runtime
+
+on:
+  pull_request:
+    paths:
+      - 'src/Phil/Systems/**'
+      - 'src/Phil/LLVM/IR.hs'
+      - 'src/Phil/LLVM/Verify.hs'
+      - 'src/Phil/LLVM/VersionSessionChoice.hs'
+      - 'src/Phil/LLVM/ExactSend.hs'
+      - 'src/Phil/LLVM/ClientControlSend.hs'
+      - 'src/Phil/LLVM.hs'
+      - 'app/LLVMClientControlSendMain.hs'
+      - 'runtime/phase0/client_control_send_v1*'
+      - 'scripts/check_runtime_abi.py'
+      - 'test/ClientControlSendABIMain.hs'
+      - 'docs/phase-0/client-control-send-abi-v1.md'
+      - 'phil-core.cabal'
+      - '.github/workflows/client-control-send-runtime.yml'
+  push:
+    branches: [main]
+    paths:
+      - 'src/Phil/Systems/**'
+      - 'src/Phil/LLVM/IR.hs'
+      - 'src/Phil/LLVM/Verify.hs'
+      - 'src/Phil/LLVM/VersionSessionChoice.hs'
+      - 'src/Phil/LLVM/ExactSend.hs'
+      - 'src/Phil/LLVM/ClientControlSend.hs'
+      - 'src/Phil/LLVM.hs'
+      - 'app/LLVMClientControlSendMain.hs'
+      - 'runtime/phase0/client_control_send_v1*'
+      - 'scripts/check_runtime_abi.py'
+      - 'test/ClientControlSendABIMain.hs'
+      - 'docs/phase-0/client-control-send-abi-v1.md'
+      - 'phil-core.cabal'
+      - '.github/workflows/client-control-send-runtime.yml'
+
+permissions:
+  contents: read
+
+jobs:
+  client-control-send-runtime:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: haskell-actions/setup@v2
+        with:
+          ghc-version: '9.6.7'
+          cabal-version: 'latest'
+      - name: Build emitter and focused tests
+        run: cabal build phil-llvm-phase0-client-control-send phil-client-control-send-abi-tests
+      - name: Verify ABI and execute client control-send runtime primitives
+        shell: bash
+        run: |
+          set -euo pipefail
+          LLVM_AS=llvm-as-18
+          LLVM_LINK=llvm-link-18
+          CLANG=clang-18
+          EMITTER="$(cabal list-bin phil-llvm-phase0-client-control-send)"
+          "$EMITTER" > phase0-client-control-send.ll
+          "$LLVM_AS" phase0-client-control-send.ll -o phase0-client-control-send.bc
+
+          "$CLANG" --target=x86_64-unknown-linux-gnu -std=c11 -Wall -Wextra -Wpedantic -Werror \
+            -Iruntime/phase0 -S -emit-llvm runtime/phase0/client_control_send_v1_smoke.c \
+            -o client-control-send-runtime.ll
+          python3 scripts/check_runtime_abi.py --partial \
+            phase0-client-control-send.ll client-control-send-runtime.ll
+          "$LLVM_AS" client-control-send-runtime.ll -o client-control-send-runtime.bc
+          "$LLVM_LINK" phase0-client-control-send.bc client-control-send-runtime.bc \
+            -o phase0-client-control-send-partially-linked.bc
+
+          "$CLANG" --target=x86_64-unknown-linux-gnu -std=c11 -Wall -Wextra -Wpedantic -Werror \
+            -Iruntime/phase0 \
+            runtime/phase0/client_control_send_v1_smoke.c \
+            runtime/phase0/client_control_send_v1_smoke_main.c \
+            -o client-control-send-smoke
+          ./client-control-send-smoke
+
+          "$CLANG" --target=x86_64-unknown-linux-gnu -std=c11 -Wall -Wextra -Wpedantic -Werror \
+            -S -emit-llvm runtime/phase0/client_control_send_v1_bad_ambient.c \
+            -o client-control-send-bad-ambient.ll
+          if python3 scripts/check_runtime_abi.py --partial \
+              phase0-client-control-send.ll client-control-send-bad-ambient.ll; then
+            echo "expected ABI checker to reject ambient/nullary client control-send provider" >&2
+            exit 1
+          fi
+
+          cabal test phil-client-control-send-abi-tests --test-show-details=direct
