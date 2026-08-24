@@ -82,7 +82,8 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
-          cabal run phil-phase0-upload-llvm > phase0-source-bound.ll
+          EMITTER="$(cabal list-bin exe:phil-phase0-upload-llvm)"
+          "$EMITTER" > phase0-source-bound.ll
           grep -q '^; phase0-source-pair-digest=' phase0-source-bound.ll
           grep -q '^; phase0-source-projection=surface-to-systems/phase0-upload/v1$' phase0-source-bound.ll
           grep -q '^; runtime-abi-profile=phil-runtime/phase0/control-codec-v1$' phase0-source-bound.ll
