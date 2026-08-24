@@ -1,0 +1,104 @@
+name: Phase 0 Assurance Meta-Proofs
+
+on:
+  pull_request:
+    paths:
+      - 'proof/Phil/Assurance/Manifest.v'
+      - 'proof/Phil/Assurance/EvidenceUse.v'
+      - 'proof/Phil/Assurance/LedgerExtension.v'
+      - 'proof/Phil/Assurance/LineageAuthority.v'
+      - 'proof/Phil/Assurance/ValidityScope.v'
+      - 'src/Phil/Assurance/RocqLedgerExtension.hs'
+      - 'src/Phil/Assurance/RocqLineageAuthority.hs'
+      - 'src/Phil/Assurance/RocqValidityScope.hs'
+      - 'app/LedgerExtensionProofCorrespondenceMain.hs'
+      - 'app/LedgerExtensionProofCertificationMain.hs'
+      - 'app/LineageAuthorityProofCorrespondenceMain.hs'
+      - 'app/LineageAuthorityProofCertificationMain.hs'
+      - 'app/ValidityScopeProofCorrespondenceMain.hs'
+      - 'app/ValidityScopeProofCertificationMain.hs'
+      - 'src/Phil/Assurance/Verify.hs'
+      - 'src/Phil/Assurance/Types.hs'
+      - 'scripts/ci/phase0-assurance-meta-rocq.sh'
+      - 'scripts/ci/phase0-assurance-meta-certify.sh'
+      - '.github/workflows/phase0-assurance-meta-proofs.yml'
+  push:
+    branches: [main]
+    paths:
+      - 'proof/Phil/Assurance/Manifest.v'
+      - 'proof/Phil/Assurance/EvidenceUse.v'
+      - 'proof/Phil/Assurance/LedgerExtension.v'
+      - 'proof/Phil/Assurance/LineageAuthority.v'
+      - 'proof/Phil/Assurance/ValidityScope.v'
+      - 'src/Phil/Assurance/RocqLedgerExtension.hs'
+      - 'src/Phil/Assurance/RocqLineageAuthority.hs'
+      - 'src/Phil/Assurance/RocqValidityScope.hs'
+      - 'app/LedgerExtensionProofCorrespondenceMain.hs'
+      - 'app/LedgerExtensionProofCertificationMain.hs'
+      - 'app/LineageAuthorityProofCorrespondenceMain.hs'
+      - 'app/LineageAuthorityProofCertificationMain.hs'
+      - 'app/ValidityScopeProofCorrespondenceMain.hs'
+      - 'app/ValidityScopeProofCertificationMain.hs'
+      - 'src/Phil/Assurance/Verify.hs'
+      - 'src/Phil/Assurance/Types.hs'
+      - 'scripts/ci/phase0-assurance-meta-rocq.sh'
+      - 'scripts/ci/phase0-assurance-meta-certify.sh'
+      - '.github/workflows/phase0-assurance-meta-proofs.yml'
+
+permissions:
+  contents: read
+
+jobs:
+  rocq:
+    name: Rocq / ${{ matrix.profile }}
+    runs-on: ubuntu-latest
+    container:
+      image: rocq/rocq-prover:9.2.0
+      options: --user root
+    strategy:
+      fail-fast: false
+      matrix:
+        profile:
+          - ledger-extension
+          - lineage-authority
+          - validity-scope
+    steps:
+      - uses: actions/checkout@v4
+      - name: Check and stage assurance meta-proof
+        run: bash scripts/ci/phase0-assurance-meta-rocq.sh '${{ matrix.profile }}'
+      - uses: actions/upload-artifact@v4
+        with:
+          name: phase0-assurance-meta-${{ matrix.profile }}-checked
+          path: checked/
+          if-no-files-found: error
+          retention-days: 14
+
+  certify:
+    name: Certificate / ${{ matrix.profile }}
+    needs: rocq
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        profile:
+          - ledger-extension
+          - lineage-authority
+          - validity-scope
+    steps:
+      - uses: actions/checkout@v4
+      - uses: haskell-actions/setup@v2
+        with:
+          ghc-version: '9.6.7'
+          cabal-version: 'latest'
+      - uses: actions/download-artifact@v4
+        with:
+          name: phase0-assurance-meta-${{ matrix.profile }}-checked
+          path: checked
+      - name: Check correspondence and produce assurance certificate
+        run: bash scripts/ci/phase0-assurance-meta-certify.sh '${{ matrix.profile }}'
+      - uses: actions/upload-artifact@v4
+        with:
+          name: phase0-assurance-meta-${{ matrix.profile }}-certificate
+          path: '*-certificates/'
+          if-no-files-found: error
+          retention-days: 30
