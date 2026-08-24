@@ -112,6 +112,12 @@ The next focused-runtime tranche adds four adjacent protocol/runtime profiles to
 
 PR #132 established equivalence twice. On both its bring-up tree and clean one-commit recomposition, the twelve-profile consolidated workflow, all four historical protocol/runtime workflows, ordinary CI, and Phase 0 Baseline were green together. The historical `client-control-send-runtime.yml`, `server-framed-ingress-runtime.yml`, `final-response-receive-runtime.yml`, and `storage-failure-detail-runtime.yml` workflows are therefore retired from `main`; their execution history remains preserved in Git, while `phase0-focused-runtime.yml` plus the dispatcher and repo-local runners are now the active regression surface for all twelve profiles.
 
+#### Control-codec runtime consolidation
+
+The final ordinary runtime tranche adds `control-codec` as the thirteenth focused runtime profile. It stays on `scripts/ci/phase0-protocol-runtime.sh` because its evidence shape is the same LLVM/C runtime family, while preserving its own predecessor-regression set exactly: the control-codec ABI suite plus storage-failure-detail, server-framed-ingress, and client-control-send ABI suites, followed by partial ABI comparison, partial linking, and native shared-codec smoke execution.
+
+The historical `control-codec-runtime.yml` workflow remains present as an equivalence witness until the thirteen-profile consolidated workflow and legacy control-codec gate are green together on both bring-up and clean recomposed heads.
+
 ## Rule for the refactor
 
 This is orchestration cleanup, not assurance redesign.
