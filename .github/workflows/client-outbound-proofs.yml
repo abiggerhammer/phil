@@ -1,0 +1,115 @@
+name: Client Outbound Proofs
+
+on:
+  pull_request:
+    paths:
+      - 'proof/Phil/Systems/ClientOutbound.v'
+      - 'src/Phil/Systems/ClientOutbound.hs'
+      - 'src/Phil/Systems/RecognitionFailure.hs'
+      - 'src/Phil/Systems/ClientOutboundProofCertification.hs'
+      - 'app/ClientOutboundProofCorrespondenceMain.hs'
+      - 'app/ClientOutboundProofCertificationMain.hs'
+      - 'test/ClientOutboundMain.hs'
+      - 'test/RecognitionFailureMain.hs'
+      - '.github/workflows/client-outbound-proofs.yml'
+  push:
+    branches: [main]
+    paths:
+      - 'proof/Phil/Systems/ClientOutbound.v'
+      - 'src/Phil/Systems/ClientOutbound.hs'
+      - 'src/Phil/Systems/RecognitionFailure.hs'
+      - 'src/Phil/Systems/ClientOutboundProofCertification.hs'
+      - 'app/ClientOutboundProofCorrespondenceMain.hs'
+      - 'app/ClientOutboundProofCertificationMain.hs'
+      - 'test/ClientOutboundMain.hs'
+      - 'test/RecognitionFailureMain.hs'
+      - '.github/workflows/client-outbound-proofs.yml'
+
+permissions:
+  contents: read
+
+jobs:
+  rocq-client-outbound:
+    runs-on: ubuntu-latest
+    container:
+      image: rocq/rocq-prover:9.2.0
+      options: --user root
+    steps:
+      - uses: actions/checkout@v4
+      - name: Check Client Outbound proof
+        shell: bash
+        run: |
+          set -euo pipefail
+          export PATH="/home/rocq/.opam/${COMPILER}/bin:$PATH"
+          rocq c -Q proof/Phil Phil proof/Phil/Systems/ClientOutbound.v
+      - name: Stage checked Client Outbound proof
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p rocq-client-outbound/proof/Phil/Systems
+          cp proof/Phil/Systems/ClientOutbound.v \
+             proof/Phil/Systems/ClientOutbound.vo \
+             rocq-client-outbound/proof/Phil/Systems/
+      - uses: actions/upload-artifact@v4
+        with:
+          name: rocq-client-outbound-checked-proof-objects
+          path: rocq-client-outbound/
+          if-no-files-found: error
+          retention-days: 14
+
+  certify-client-outbound:
+    needs: rocq-client-outbound
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: haskell-actions/setup@v2
+        with:
+          ghc-version: '9.6.7'
+          cabal-version: 'latest'
+      - uses: actions/download-artifact@v4
+        with:
+          name: rocq-client-outbound-checked-proof-objects
+          path: rocq-client-outbound
+      - name: Build current semantic regressions
+        run: |
+          cabal build lib:phil-core \
+            phil-client-outbound-semantics-tests \
+            phil-recognition-failure-detail-tests
+      - name: Run current semantic regressions
+        run: |
+          cabal test phil-client-outbound-semantics-tests --test-show-details=direct
+          cabal test phil-recognition-failure-detail-tests --test-show-details=direct
+      - name: Typecheck proof support with warnings as errors
+        run: |
+          cabal exec -- ghc -Wall -Wcompat -Wincomplete-record-updates -Wincomplete-uni-patterns -Wredundant-constraints -Werror \
+            -isrc -iapp -fno-code src/Phil/Systems/ClientOutboundProofCertification.hs
+          cabal exec -- ghc -Wall -Wcompat -Wincomplete-record-updates -Wincomplete-uni-patterns -Wredundant-constraints -Werror \
+            -isrc -iapp -fno-code app/ClientOutboundProofCorrespondenceMain.hs
+          cabal exec -- ghc -Wall -Wcompat -Wincomplete-record-updates -Wincomplete-uni-patterns -Wredundant-constraints -Werror \
+            -isrc -iapp -fno-code app/ClientOutboundProofCertificationMain.hs
+      - name: Run exact current-successor correspondence checker
+        run: |
+          cabal exec -- ghc -O0 -isrc -iapp app/ClientOutboundProofCorrespondenceMain.hs \
+            -o phil-check-client-outbound-proof-correspondence
+          ./phil-check-client-outbound-proof-correspondence
+      - name: Build Client Outbound proof certifier
+        run: |
+          cabal exec -- ghc -O0 -isrc -iapp app/ClientOutboundProofCertificationMain.hs \
+            -o phil-certify-client-outbound
+      - name: Produce Client Outbound proof certificate
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p client-outbound-certificates
+          ./phil-certify-client-outbound
+          for certificate in client-outbound-certificates/*; do
+            echo "===== ${certificate} ====="
+            cat "${certificate}"
+            sha256sum "${certificate}"
+          done
+      - uses: actions/upload-artifact@v4
+        with:
+          name: phil-client-outbound-proof-certification
+          path: client-outbound-certificates/*
+          if-no-files-found: error
+          retention-days: 30
