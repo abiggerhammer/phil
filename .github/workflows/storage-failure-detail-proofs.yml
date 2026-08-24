@@ -1,0 +1,119 @@
+name: Storage Failure Detail Proofs
+
+on:
+  pull_request:
+    paths:
+      - 'proof/Phil/Systems/StorageFailureDetail.v'
+      - 'src/Phil/Systems/StorageFailure.hs'
+      - 'src/Phil/Systems/RecognitionFailure.hs'
+      - 'src/Phil/Systems/StorageFailureProofCertification.hs'
+      - 'app/StorageFailureProofCorrespondenceMain.hs'
+      - 'app/StorageFailureProofCertificationMain.hs'
+      - 'test/StorageFailureMain.hs'
+      - 'test/RecognitionFailureMain.hs'
+      - 'test/ClientOutboundMain.hs'
+      - '.github/workflows/storage-failure-detail-proofs.yml'
+  push:
+    branches: [main]
+    paths:
+      - 'proof/Phil/Systems/StorageFailureDetail.v'
+      - 'src/Phil/Systems/StorageFailure.hs'
+      - 'src/Phil/Systems/RecognitionFailure.hs'
+      - 'src/Phil/Systems/StorageFailureProofCertification.hs'
+      - 'app/StorageFailureProofCorrespondenceMain.hs'
+      - 'app/StorageFailureProofCertificationMain.hs'
+      - 'test/StorageFailureMain.hs'
+      - 'test/RecognitionFailureMain.hs'
+      - 'test/ClientOutboundMain.hs'
+      - '.github/workflows/storage-failure-detail-proofs.yml'
+
+permissions:
+  contents: read
+
+jobs:
+  rocq-storage-failure-detail:
+    runs-on: ubuntu-latest
+    container:
+      image: rocq/rocq-prover:9.2.0
+      options: --user root
+    steps:
+      - uses: actions/checkout@v4
+      - name: Check Storage Failure Detail proof
+        shell: bash
+        run: |
+          set -euo pipefail
+          export PATH="/home/rocq/.opam/${COMPILER}/bin:$PATH"
+          rocq c -Q proof/Phil Phil proof/Phil/Systems/StorageFailureDetail.v
+      - name: Stage checked Storage Failure Detail proof
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p rocq-storage-failure-detail/proof/Phil/Systems
+          cp proof/Phil/Systems/StorageFailureDetail.v \
+             proof/Phil/Systems/StorageFailureDetail.vo \
+             rocq-storage-failure-detail/proof/Phil/Systems/
+      - uses: actions/upload-artifact@v4
+        with:
+          name: rocq-storage-failure-detail-checked-proof-objects
+          path: rocq-storage-failure-detail/
+          if-no-files-found: error
+          retention-days: 14
+
+  certify-storage-failure-detail:
+    needs: rocq-storage-failure-detail
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: haskell-actions/setup@v2
+        with:
+          ghc-version: '9.6.7'
+          cabal-version: 'latest'
+      - uses: actions/download-artifact@v4
+        with:
+          name: rocq-storage-failure-detail-checked-proof-objects
+          path: rocq-storage-failure-detail
+      - name: Build current semantic regressions
+        run: |
+          cabal build lib:phil-core \
+            phil-client-outbound-semantics-tests \
+            phil-recognition-failure-detail-tests \
+            phil-storage-failure-detail-tests
+      - name: Run current semantic regressions
+        run: |
+          cabal test phil-client-outbound-semantics-tests --test-show-details=direct
+          cabal test phil-recognition-failure-detail-tests --test-show-details=direct
+          cabal test phil-storage-failure-detail-tests --test-show-details=direct
+      - name: Typecheck proof support with warnings as errors
+        run: |
+          cabal exec -- ghc -Wall -Wcompat -Wincomplete-record-updates -Wincomplete-uni-patterns -Wredundant-constraints -Werror \
+            -isrc -iapp -fno-code src/Phil/Systems/StorageFailureProofCertification.hs
+          cabal exec -- ghc -Wall -Wcompat -Wincomplete-record-updates -Wincomplete-uni-patterns -Wredundant-constraints -Werror \
+            -isrc -iapp -fno-code app/StorageFailureProofCorrespondenceMain.hs
+          cabal exec -- ghc -Wall -Wcompat -Wincomplete-record-updates -Wincomplete-uni-patterns -Wredundant-constraints -Werror \
+            -isrc -iapp -fno-code app/StorageFailureProofCertificationMain.hs
+      - name: Run exact current-successor correspondence checker
+        run: |
+          cabal exec -- ghc -O0 -isrc -iapp app/StorageFailureProofCorrespondenceMain.hs \
+            -o phil-check-storage-failure-proof-correspondence
+          ./phil-check-storage-failure-proof-correspondence
+      - name: Build Storage Failure Detail proof certifier
+        run: |
+          cabal exec -- ghc -O0 -isrc -iapp app/StorageFailureProofCertificationMain.hs \
+            -o phil-certify-storage-failure-detail
+      - name: Produce Storage Failure Detail proof certificate
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p storage-failure-detail-certificates
+          ./phil-certify-storage-failure-detail
+          for certificate in storage-failure-detail-certificates/*; do
+            echo "===== ${certificate} ====="
+            cat "${certificate}"
+            sha256sum "${certificate}"
+          done
+      - uses: actions/upload-artifact@v4
+        with:
+          name: phil-storage-failure-detail-proof-certification
+          path: storage-failure-detail-certificates/*
+          if-no-files-found: error
+          retention-days: 30
