@@ -115,6 +115,11 @@ data LLVMOp
   | LLVMClientSHA256 Text Text
   | LLVMClientSendHello Text Text
   | LLVMClientSendBegin Text Text Text Text
+  | LLVMServerReceiveFrame Text Text Text Text
+  | LLVMServerBorrowFrameView Text Text Text
+  | LLVMServerCommitIngress Text Text Text
+  | LLVMServerFailRecognition Text Text Text
+  | LLVMServerDestroyPending Text Text Text
   | LLVMAcceptedResponse Text Text
   | LLVMRejectedResponse Text Int
   | LLVMPayloadCancelSelect Text Int
@@ -132,6 +137,8 @@ data LLVMTerminator
   | LLVMBranch LLVMBlockId LLVMBlockId
   | LLVMRuntimeBranch RuntimeSiteRef Text LLVMBlockId LLVMBlockId
   | LLVMRecognizeRecord RuntimeSiteRef Text Text LLVMBlockId LLVMBlockId
+  | LLVMRecognizeRecordDetailed
+      RuntimeSiteRef Text Text Text Text Text LLVMBlockId LLVMBlockId
   | LLVMRuntimeScalarBranch RuntimeSiteRef Text Text ScalarType LLVMBlockId LLVMBlockId
   | LLVMExactReceive
       RuntimeSiteRef
@@ -281,6 +288,7 @@ llvmBlockSuccessors blockValue = case llvmBlockTerminator blockValue of
   LLVMBranch yes no -> [yes, no]
   LLVMRuntimeBranch _ _ yes no -> [yes, no]
   LLVMRecognizeRecord _ _ _ yes no -> [yes, no]
+  LLVMRecognizeRecordDetailed _ _ _ _ _ _ yes no -> [yes, no]
   LLVMRuntimeScalarBranch _ _ _ _ yes no -> [yes, no]
   LLVMExactReceive _ _ _ _ _ _ yes no -> [yes, no]
   LLVMDigestValidate _ _ _ yes no -> [yes, no]
@@ -316,6 +324,7 @@ llvmRuntimeSites moduleValue = concat
            ] <> case llvmBlockTerminator blockValue of
         LLVMRuntimeBranch site _ _ _ -> [site]
         LLVMRecognizeRecord site _ _ _ _ -> [site]
+        LLVMRecognizeRecordDetailed site _ _ _ _ _ _ _ -> [site]
         LLVMRuntimeScalarBranch site _ _ _ _ _ -> [site]
         LLVMExactReceive site _ _ _ _ _ _ _ -> [site]
         LLVMDigestValidate site _ _ _ _ -> [site]
@@ -362,6 +371,7 @@ renderLLVMModule moduleValue = Text.unlines $
       , "phil-runtime/phase0/hello-policy-validation-v1"
       , "phil-runtime/phase0/transport-exact-send-v1"
       , "phil-runtime/phase0/client-control-send-v1"
+      , "phil-runtime/phase0/server-framed-ingress-v1"
       ]
 
     header =
@@ -422,6 +432,7 @@ renderLLVMModule moduleValue = Text.unlines $
       <> runtimeDeclarations
       <> map renderFieldProjectionDeclaration (Set.toAscList fieldProjectionSignatures)
       <> map renderOpaqueFieldProjectionDeclaration (Set.toAscList opaqueFieldProjectionSignatures)
+      <> serverFramedIngressDeclarations
       <> map renderRecognitionDeclaration (Set.toAscList recognitionGrammars)
       <> map renderScalarRuntimeDeclaration (Set.toAscList scalarRuntimeSignatures)
       <> map renderExactReceiveDeclaration (Set.toAscList exactReceiveSignatures)
@@ -543,7 +554,10 @@ renderLLVMModule moduleValue = Text.unlines $
         else []
 
     clientControlSendDeclarations =
-      if runtimeProfile == "phil-runtime/phase0/client-control-send-v1"
+      if runtimeProfile `elem`
+          [ "phil-runtime/phase0/client-control-send-v1"
+          , "phil-runtime/phase0/server-framed-ingress-v1"
+          ]
         then
           [ "declare ptr @phil_runtime_supported_versions()"
           , "declare i64 @phil_runtime_payload_length(ptr)"
@@ -554,6 +568,26 @@ renderLLVMModule moduleValue = Text.unlines $
           , "declare i1 @phil_runtime_refine_selected_version_with_set(ptr, ptr, i16)"
           ]
         else []
+
+    serverIngressGrammars = Set.fromList
+      [ grammar
+      | blockValue <- allBlocks
+      , LLVMRecognizeRecordDetailed _ grammar _ _ _ _ _ _ <- [llvmBlockTerminator blockValue]
+      ]
+
+    serverFramedIngressDeclarations =
+      if runtimeProfile == "phil-runtime/phase0/server-framed-ingress-v1"
+        then concatMap renderServerIngressDeclarations (Set.toAscList serverIngressGrammars)
+        else []
+
+    renderServerIngressDeclarations grammar =
+      [ "declare void @phil_runtime_receive_frame_" <> symbol grammar <> "(ptr, ptr, ptr)"
+      , "declare ptr @phil_runtime_frame_borrow_view_" <> symbol grammar <> "(ptr)"
+      , "declare i8 @phil_runtime_recognize_" <> symbol grammar <> "(ptr, ptr, ptr, ptr)"
+      , "declare void @phil_runtime_commit_ingress_" <> symbol grammar <> "(ptr, ptr)"
+      , "declare void @phil_runtime_fail_recognition_" <> symbol grammar <> "(ptr, ptr)"
+      , "declare void @phil_runtime_destroy_pending_" <> symbol grammar <> "(ptr, ptr)"
+      ]
 
     exactSendDeclaration =
       if any hasExactSend allBlocks
@@ -856,6 +890,34 @@ renderLLVMModule moduleValue = Text.unlines $
             <> ", ptr %" <> symbol payloadKind
             <> ", ptr %" <> symbol digest <> ")"
         ]
+      LLVMServerReceiveFrame grammar pending frame transport ->
+        let pendingSlot = "%phil_pending_slot_" <> symbol pending
+            frameSlot = "%phil_frame_slot_" <> symbol frame
+        in
+          [ pendingSlot <> " = alloca ptr"
+          , frameSlot <> " = alloca ptr"
+          , "call void @phil_runtime_receive_frame_" <> symbol grammar
+              <> "(ptr %" <> symbol transport <> ", ptr " <> pendingSlot
+              <> ", ptr " <> frameSlot <> ")"
+          , "%" <> symbol pending <> " = load ptr, ptr " <> pendingSlot
+          , "%" <> symbol frame <> " = load ptr, ptr " <> frameSlot
+          ]
+      LLVMServerBorrowFrameView grammar raw frame ->
+        [ "%" <> symbol raw <> " = call ptr @phil_runtime_frame_borrow_view_"
+            <> symbol grammar <> "(ptr %" <> symbol frame <> ")"
+        ]
+      LLVMServerCommitIngress grammar transport pending ->
+        [ "call void @phil_runtime_commit_ingress_" <> symbol grammar
+            <> "(ptr %" <> symbol transport <> ", ptr %" <> symbol pending <> ")"
+        ]
+      LLVMServerFailRecognition grammar pending reason ->
+        [ "call void @phil_runtime_fail_recognition_" <> symbol grammar
+            <> "(ptr %" <> symbol pending <> ", ptr %" <> symbol reason <> ")"
+        ]
+      LLVMServerDestroyPending grammar pending frame ->
+        [ "call void @phil_runtime_destroy_pending_" <> symbol grammar
+            <> "(ptr %" <> symbol pending <> ", ptr %" <> symbol frame <> ")"
+        ]
       LLVMAcceptedResponse transport uploadId ->
         [ "call void @phil_runtime_select_accepted(ptr %" <> symbol transport
             <> ", ptr %" <> symbol uploadId <> ")"
@@ -945,6 +1007,25 @@ renderLLVMModule moduleValue = Text.unlines $
               <> " @phil_runtime_recognize_" <> symbol grammar <> "()"
           , statusName <> " = extractvalue " <> resultType <> " " <> resultName <> ", 0"
           , "%" <> symbol record <> " = extractvalue " <> resultType <> " " <> resultName <> ", 1"
+          , okName <> " = icmp eq i8 " <> statusName <> ", 1"
+          , "br i1 " <> okName
+              <> ", label %" <> symbol (unLLVMBlockId yes)
+              <> ", label %" <> symbol (unLLVMBlockId no)
+          ]
+      LLVMRecognizeRecordDetailed _ grammar pending raw record reason yes no ->
+        let blockSymbol = symbol (unLLVMBlockId (llvmBlockId blockValue))
+            recordSlot = "%phil_recognition_record_slot_" <> symbol record
+            reasonSlot = "%phil_recognition_reason_slot_" <> symbol reason
+            statusName = "%phil_recognition_status_" <> blockSymbol
+            okName = "%phil_recognition_ok_" <> blockSymbol
+        in
+          [ recordSlot <> " = alloca ptr"
+          , reasonSlot <> " = alloca ptr"
+          , statusName <> " = call i8 @phil_runtime_recognize_" <> symbol grammar
+              <> "(ptr %" <> symbol pending <> ", ptr %" <> symbol raw
+              <> ", ptr " <> recordSlot <> ", ptr " <> reasonSlot <> ")"
+          , "%" <> symbol record <> " = load ptr, ptr " <> recordSlot
+          , "%" <> symbol reason <> " = load ptr, ptr " <> reasonSlot
           , okName <> " = icmp eq i8 " <> statusName <> ", 1"
           , "br i1 " <> okName
               <> ", label %" <> symbol (unLLVMBlockId yes)
