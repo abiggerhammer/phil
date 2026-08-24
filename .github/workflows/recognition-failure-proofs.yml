@@ -1,0 +1,119 @@
+name: Recognition Failure Detail Proofs
+
+on:
+  pull_request:
+    paths:
+      - 'proof/Phil/Systems/RecognitionFailureDetail.v'
+      - 'src/Phil/Systems/RecognitionFailure.hs'
+      - 'src/Phil/Systems/StorageFailure.hs'
+      - 'src/Phil/Systems/RecognitionFailureProofCertification.hs'
+      - 'app/RecognitionFailureProofCorrespondenceMain.hs'
+      - 'app/RecognitionFailureProofCertificationMain.hs'
+      - 'test/RecognitionFailureMain.hs'
+      - 'test/StorageFailureMain.hs'
+      - 'test/ClientOutboundMain.hs'
+      - '.github/workflows/recognition-failure-proofs.yml'
+  push:
+    branches: [main]
+    paths:
+      - 'proof/Phil/Systems/RecognitionFailureDetail.v'
+      - 'src/Phil/Systems/RecognitionFailure.hs'
+      - 'src/Phil/Systems/StorageFailure.hs'
+      - 'src/Phil/Systems/RecognitionFailureProofCertification.hs'
+      - 'app/RecognitionFailureProofCorrespondenceMain.hs'
+      - 'app/RecognitionFailureProofCertificationMain.hs'
+      - 'test/RecognitionFailureMain.hs'
+      - 'test/StorageFailureMain.hs'
+      - 'test/ClientOutboundMain.hs'
+      - '.github/workflows/recognition-failure-proofs.yml'
+
+permissions:
+  contents: read
+
+jobs:
+  rocq-recognition-failure:
+    runs-on: ubuntu-latest
+    container:
+      image: rocq/rocq-prover:9.2.0
+      options: --user root
+    steps:
+      - uses: actions/checkout@v4
+      - name: Check Recognition Failure Detail proof
+        shell: bash
+        run: |
+          set -euo pipefail
+          export PATH="/home/rocq/.opam/${COMPILER}/bin:$PATH"
+          rocq c -Q proof/Phil Phil proof/Phil/Systems/RecognitionFailureDetail.v
+      - name: Stage checked Recognition Failure Detail proof
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p rocq-recognition-failure/proof/Phil/Systems
+          cp proof/Phil/Systems/RecognitionFailureDetail.v \
+             proof/Phil/Systems/RecognitionFailureDetail.vo \
+             rocq-recognition-failure/proof/Phil/Systems/
+      - uses: actions/upload-artifact@v4
+        with:
+          name: rocq-recognition-failure-checked-proof-objects
+          path: rocq-recognition-failure/
+          if-no-files-found: error
+          retention-days: 14
+
+  certify-recognition-failure:
+    needs: rocq-recognition-failure
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: haskell-actions/setup@v2
+        with:
+          ghc-version: '9.6.7'
+          cabal-version: 'latest'
+      - uses: actions/download-artifact@v4
+        with:
+          name: rocq-recognition-failure-checked-proof-objects
+          path: rocq-recognition-failure
+      - name: Build current semantic regressions
+        run: |
+          cabal build lib:phil-core \
+            phil-client-outbound-semantics-tests \
+            phil-recognition-failure-detail-tests \
+            phil-storage-failure-detail-tests
+      - name: Run current semantic regressions
+        run: |
+          cabal test phil-client-outbound-semantics-tests --test-show-details=direct
+          cabal test phil-recognition-failure-detail-tests --test-show-details=direct
+          cabal test phil-storage-failure-detail-tests --test-show-details=direct
+      - name: Typecheck proof support with warnings as errors
+        run: |
+          cabal exec -- ghc -Wall -Wcompat -Wincomplete-record-updates -Wincomplete-uni-patterns -Wredundant-constraints -Werror \
+            -isrc -iapp -fno-code src/Phil/Systems/RecognitionFailureProofCertification.hs
+          cabal exec -- ghc -Wall -Wcompat -Wincomplete-record-updates -Wincomplete-uni-patterns -Wredundant-constraints -Werror \
+            -isrc -iapp -fno-code app/RecognitionFailureProofCorrespondenceMain.hs
+          cabal exec -- ghc -Wall -Wcompat -Wincomplete-record-updates -Wincomplete-uni-patterns -Wredundant-constraints -Werror \
+            -isrc -iapp -fno-code app/RecognitionFailureProofCertificationMain.hs
+      - name: Run exact current-successor correspondence checker
+        run: |
+          cabal exec -- ghc -O0 -isrc -iapp app/RecognitionFailureProofCorrespondenceMain.hs \
+            -o phil-check-recognition-failure-proof-correspondence
+          ./phil-check-recognition-failure-proof-correspondence
+      - name: Build Recognition Failure Detail proof certifier
+        run: |
+          cabal exec -- ghc -O0 -isrc -iapp app/RecognitionFailureProofCertificationMain.hs \
+            -o phil-certify-recognition-failure
+      - name: Produce Recognition Failure Detail proof certificate
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p recognition-failure-certificates
+          ./phil-certify-recognition-failure
+          for certificate in recognition-failure-certificates/*; do
+            echo "===== ${certificate} ====="
+            cat "${certificate}"
+            sha256sum "${certificate}"
+          done
+      - uses: actions/upload-artifact@v4
+        with:
+          name: phil-recognition-failure-proof-certification
+          path: recognition-failure-certificates/*
+          if-no-files-found: error
+          retention-days: 30
