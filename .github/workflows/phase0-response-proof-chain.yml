@@ -1,0 +1,106 @@
+name: Phase 0 Response Proof Chain
+
+on:
+  pull_request:
+    paths:
+      - 'proof/**'
+      - 'src/Phil/LLVM/IR.hs'
+      - 'src/Phil/LLVM/Verify.hs'
+      - 'src/Phil/LLVM/AcceptedResponse.hs'
+      - 'src/Phil/LLVM/AcceptedResponseCertification.hs'
+      - 'src/Phil/LLVM/RejectedResponseCertification.hs'
+      - 'src/Phil/Systems/AcceptedResponse.hs'
+      - 'src/Phil/LLVM.hs'
+      - 'src/Phil/LLVM/Lower.hs'
+      - 'src/Phil/Systems/SessionChoice.hs'
+      - 'src/Phil/LLVM/SessionOffer.hs'
+      - 'src/Phil/LLVM/SessionOfferCertification.hs'
+      - 'app/StorageProofCertificationMain.hs'
+      - 'phil-core.cabal'
+      - 'scripts/ci/phase0-response-chain-rocq.sh'
+      - 'scripts/ci/phase0-response-chain-certify.sh'
+      - '.github/workflows/phase0-response-proof-chain.yml'
+  push:
+    branches: [main]
+    paths:
+      - 'proof/**'
+      - 'src/Phil/LLVM/IR.hs'
+      - 'src/Phil/LLVM/Verify.hs'
+      - 'src/Phil/LLVM/AcceptedResponse.hs'
+      - 'src/Phil/LLVM/AcceptedResponseCertification.hs'
+      - 'src/Phil/LLVM/RejectedResponseCertification.hs'
+      - 'src/Phil/Systems/AcceptedResponse.hs'
+      - 'src/Phil/LLVM.hs'
+      - 'src/Phil/LLVM/Lower.hs'
+      - 'src/Phil/Systems/SessionChoice.hs'
+      - 'src/Phil/LLVM/SessionOffer.hs'
+      - 'src/Phil/LLVM/SessionOfferCertification.hs'
+      - 'app/StorageProofCertificationMain.hs'
+      - 'phil-core.cabal'
+      - 'scripts/ci/phase0-response-chain-rocq.sh'
+      - 'scripts/ci/phase0-response-chain-certify.sh'
+      - '.github/workflows/phase0-response-proof-chain.yml'
+
+permissions:
+  contents: read
+
+jobs:
+  rocq:
+    name: Rocq / ${{ matrix.profile }}
+    runs-on: ubuntu-latest
+    container:
+      image: rocq/rocq-prover:9.2.0
+      options: --user root
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - profile: accepted-response
+            stage_dir: rocq-accepted
+          - profile: rejected-response
+            stage_dir: rocq-rejected
+          - profile: final-response
+            stage_dir: rocq-final
+    steps:
+      - uses: actions/checkout@v4
+      - name: Check and stage response proof chain
+        run: bash scripts/ci/phase0-response-chain-rocq.sh '${{ matrix.profile }}'
+      - uses: actions/upload-artifact@v4
+        with:
+          name: phase0-response-${{ matrix.profile }}-checked
+          path: ${{ matrix.stage_dir }}/
+          if-no-files-found: error
+          retention-days: 14
+
+  certify:
+    name: Certificate / ${{ matrix.profile }}
+    needs: rocq
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - profile: accepted-response
+            stage_dir: rocq-accepted
+          - profile: rejected-response
+            stage_dir: rocq-rejected
+          - profile: final-response
+            stage_dir: rocq-final
+    steps:
+      - uses: actions/checkout@v4
+      - uses: haskell-actions/setup@v2
+        with:
+          ghc-version: '9.6.7'
+          cabal-version: 'latest'
+      - uses: actions/download-artifact@v4
+        with:
+          name: phase0-response-${{ matrix.profile }}-checked
+          path: ${{ matrix.stage_dir }}
+      - name: Produce proof-bound response certificates
+        run: bash scripts/ci/phase0-response-chain-certify.sh '${{ matrix.profile }}'
+      - uses: actions/upload-artifact@v4
+        with:
+          name: phase0-response-${{ matrix.profile }}-certification
+          path: '*-response-certificates/*'
+          if-no-files-found: error
+          retention-days: 30
