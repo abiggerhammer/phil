@@ -118,6 +118,14 @@ The final ordinary runtime tranche adds `control-codec` as the thirteenth focuse
 
 PR #135 established equivalence twice. On both its bring-up tree and clean one-commit recomposition, the thirteen-profile consolidated workflow, the historical Control Codec Runtime workflow, ordinary CI, and Phase 0 Baseline were green together. The historical `control-codec-runtime.yml` workflow is therefore retired from `main`; its execution history remains preserved in Git, while `phase0-focused-runtime.yml` plus the dispatcher and repo-local runners are now the active ordinary runtime regression surface for all thirteen profiles.
 
+#### Historical back-certification consolidation
+
+The first assurance-side tranche consolidates the nine historical `ProofAssistantTheorem` back-certification workflows into one separately attributable matrix with two explicit stages per profile: Rocq checking/staging, then Haskell certificate production. The profiles are `assurance-foundations`, `core-foundations`, `core-control-assurance`, `focusing-foundations`, `llvm-foundations`, `recognition-bundle`, `recognition-gates`, `surface-foundations`, and `systems-foundations`.
+
+`scripts/ci/phase0-back-certification-rocq.sh` preserves each historical theorem compile order and the exact proof sources/objects staged for certificate binding. `scripts/ci/phase0-back-certification-certify.sh` preserves each metadata/certifier pairing and expected certificate count. Recognition Bundle remains a special profile and still typechecks and executes its proof-bundle correspondence regression before producing four proof-part certificates.
+
+The nine historical workflows remain present as comment-only equivalence witnesses until the consolidated back-certification matrix and all nine legacy workflows are green together on both a bring-up tree and a clean one-commit recomposition. This tranche changes orchestration and artifact naming only; theorem statements, checked proof objects, Haskell correspondence metadata, certificate formats, certificate counts, and certificate-producing programs remain unchanged.
+
 ## Rule for the refactor
 
 This is orchestration cleanup, not assurance redesign.

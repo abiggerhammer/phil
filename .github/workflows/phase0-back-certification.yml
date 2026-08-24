@@ -1,0 +1,96 @@
+name: Phase 0 Back-Certification
+
+on:
+  pull_request:
+    paths:
+      - 'proof/**'
+      - 'src/Phil/Assurance/Rocq*.hs'
+      - 'src/Phil/Assurance/RocqBundle.hs'
+      - 'app/*BackCertificationMain.hs'
+      - 'app/RecognitionBundleCorrespondenceMain.hs'
+      - 'scripts/ci/phase0-back-certification-rocq.sh'
+      - 'scripts/ci/phase0-back-certification-certify.sh'
+      - 'phil-core.cabal'
+      - '.github/workflows/phase0-back-certification.yml'
+  push:
+    branches: [main]
+    paths:
+      - 'proof/**'
+      - 'src/Phil/Assurance/Rocq*.hs'
+      - 'src/Phil/Assurance/RocqBundle.hs'
+      - 'app/*BackCertificationMain.hs'
+      - 'app/RecognitionBundleCorrespondenceMain.hs'
+      - 'scripts/ci/phase0-back-certification-rocq.sh'
+      - 'scripts/ci/phase0-back-certification-certify.sh'
+      - 'phil-core.cabal'
+      - '.github/workflows/phase0-back-certification.yml'
+
+permissions:
+  contents: read
+
+jobs:
+  rocq:
+    name: Rocq / ${{ matrix.profile }}
+    runs-on: ubuntu-latest
+    container:
+      image: rocq/rocq-prover:9.2.0
+      options: --user root
+    strategy:
+      fail-fast: false
+      matrix:
+        profile:
+          - assurance-foundations
+          - core-foundations
+          - core-control-assurance
+          - focusing-foundations
+          - llvm-foundations
+          - recognition-bundle
+          - recognition-gates
+          - surface-foundations
+          - systems-foundations
+    steps:
+      - uses: actions/checkout@v4
+      - name: Check and stage historical theorem group
+        run: bash scripts/ci/phase0-back-certification-rocq.sh '${{ matrix.profile }}'
+      - uses: actions/upload-artifact@v4
+        with:
+          name: phase0-back-cert-${{ matrix.profile }}-checked
+          path: checked/
+          if-no-files-found: error
+          retention-days: 14
+
+  certify:
+    name: Certificates / ${{ matrix.profile }}
+    needs: rocq
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        profile:
+          - assurance-foundations
+          - core-foundations
+          - core-control-assurance
+          - focusing-foundations
+          - llvm-foundations
+          - recognition-bundle
+          - recognition-gates
+          - surface-foundations
+          - systems-foundations
+    steps:
+      - uses: actions/checkout@v4
+      - uses: haskell-actions/setup@v2
+        with:
+          ghc-version: '9.6.7'
+          cabal-version: 'latest'
+      - uses: actions/download-artifact@v4
+        with:
+          name: phase0-back-cert-${{ matrix.profile }}-checked
+          path: checked
+      - name: Produce and verify historical proof certificates
+        run: bash scripts/ci/phase0-back-certification-certify.sh '${{ matrix.profile }}'
+      - uses: actions/upload-artifact@v4
+        with:
+          name: phase0-back-cert-${{ matrix.profile }}-certificates
+          path: '*-certificates/'
+          if-no-files-found: error
+          retention-days: 30
