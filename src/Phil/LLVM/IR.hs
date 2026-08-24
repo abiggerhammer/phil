@@ -109,6 +109,12 @@ data LLVMOp
   | LLVMHelloPolicyValidationReasonBinding Text
   | LLVMHelloPolicyFailure Text Text
   | LLVMExactSend RuntimeSiteRef Text Text
+  | LLVMClientSupportedVersions Text
+  | LLVMClientPayloadLength Text Text
+  | LLVMClientPayloadKind Text Text
+  | LLVMClientSHA256 Text Text
+  | LLVMClientSendHello Text Text
+  | LLVMClientSendBegin Text Text Text Text
   | LLVMAcceptedResponse Text Text
   | LLVMRejectedResponse Text Int
   | LLVMPayloadCancelSelect Text Int
@@ -170,6 +176,13 @@ data LLVMTerminator
       LLVMBlockId
   | LLVMVersionRefinement
       RuntimeSiteRef
+      Text
+      Text
+      LLVMBlockId
+      LLVMBlockId
+  | LLVMVersionRefinementWithSet
+      RuntimeSiteRef
+      Text
       Text
       Text
       LLVMBlockId
@@ -277,6 +290,7 @@ llvmBlockSuccessors blockValue = case llvmBlockTerminator blockValue of
   LLVMChooseSupported _ _ _ someTarget noneTarget -> [someTarget, noneTarget]
   LLVMVersionChoiceOffer _ _ versionTarget unsupportedTarget -> [versionTarget, unsupportedTarget]
   LLVMVersionRefinement _ _ _ yes no -> [yes, no]
+  LLVMVersionRefinementWithSet _ _ _ _ yes no -> [yes, no]
   LLVMBeginPolicyValidate _ _ _ _ accepted rejected -> [accepted, rejected]
   LLVMBeginPolicyChoiceOffer _ _ proceedTarget rejectTarget -> [proceedTarget, rejectTarget]
   LLVMHelloPolicyValidate _ _ _ _ accepted rejected -> [accepted, rejected]
@@ -307,6 +321,7 @@ llvmRuntimeSites moduleValue = concat
         LLVMDigestValidate site _ _ _ _ -> [site]
         LLVMStore site _ _ _ _ -> [site]
         LLVMVersionRefinement site _ _ _ _ -> [site]
+        LLVMVersionRefinementWithSet site _ _ _ _ _ -> [site]
         LLVMBeginPolicyValidate site _ _ _ _ _ -> [site]
         LLVMHelloPolicyValidate site _ _ _ _ _ -> [site]
         _ -> []
@@ -346,6 +361,7 @@ renderLLVMModule moduleValue = Text.unlines $
       , "phil-runtime/phase0/begin-policy-choice-v1"
       , "phil-runtime/phase0/hello-policy-validation-v1"
       , "phil-runtime/phase0/transport-exact-send-v1"
+      , "phil-runtime/phase0/client-control-send-v1"
       ]
 
     header =
@@ -400,6 +416,7 @@ renderLLVMModule moduleValue = Text.unlines $
       <> beginPolicyChoiceReceiveDeclaration
       <> helloPolicyValidationDeclaration
       <> helloPolicyFailureDeclaration
+      <> clientControlSendDeclarations
       <> exactSendDeclaration
       <> map renderCallDeclaration (Set.toAscList callNames)
       <> runtimeDeclarations
@@ -523,6 +540,19 @@ renderLLVMModule moduleValue = Text.unlines $
     helloPolicyFailureDeclaration =
       if any hasHelloPolicyFailure allBlocks
         then ["declare void @phil_runtime_fail_hello_policy(ptr, ptr)"]
+        else []
+
+    clientControlSendDeclarations =
+      if runtimeProfile == "phil-runtime/phase0/client-control-send-v1"
+        then
+          [ "declare ptr @phil_runtime_supported_versions()"
+          , "declare i64 @phil_runtime_payload_length(ptr)"
+          , "declare ptr @phil_runtime_payload_kind(ptr)"
+          , "declare ptr @phil_runtime_sha256(ptr)"
+          , "declare void @phil_runtime_send_hello(ptr, ptr)"
+          , "declare void @phil_runtime_send_begin_sha256(ptr, i64, ptr, ptr)"
+          , "declare i1 @phil_runtime_refine_selected_version_with_set(ptr, ptr, i16)"
+          ]
         else []
 
     exactSendDeclaration =
@@ -802,6 +832,30 @@ renderLLVMModule moduleValue = Text.unlines $
         [ "call void @phil_runtime_send_exact(ptr %" <> symbol transport
             <> ", ptr %" <> symbol payload <> ")"
         ]
+      LLVMClientSupportedVersions output ->
+        [ "%" <> symbol output <> " = call ptr @phil_runtime_supported_versions()" ]
+      LLVMClientPayloadLength output payload ->
+        [ "%" <> symbol output <> " = call i64 @phil_runtime_payload_length(ptr %"
+            <> symbol payload <> ")"
+        ]
+      LLVMClientPayloadKind output payload ->
+        [ "%" <> symbol output <> " = call ptr @phil_runtime_payload_kind(ptr %"
+            <> symbol payload <> ")"
+        ]
+      LLVMClientSHA256 output payload ->
+        [ "%" <> symbol output <> " = call ptr @phil_runtime_sha256(ptr %"
+            <> symbol payload <> ")"
+        ]
+      LLVMClientSendHello transport versions ->
+        [ "call void @phil_runtime_send_hello(ptr %" <> symbol transport
+            <> ", ptr %" <> symbol versions <> ")"
+        ]
+      LLVMClientSendBegin transport payloadLength payloadKind digest ->
+        [ "call void @phil_runtime_send_begin_sha256(ptr %" <> symbol transport
+            <> ", i64 %" <> symbol payloadLength
+            <> ", ptr %" <> symbol payloadKind
+            <> ", ptr %" <> symbol digest <> ")"
+        ]
       LLVMAcceptedResponse transport uploadId ->
         [ "call void @phil_runtime_select_accepted(ptr %" <> symbol transport
             <> ", ptr %" <> symbol uploadId <> ")"
@@ -999,6 +1053,17 @@ renderLLVMModule moduleValue = Text.unlines $
         in
           [ validName <> " = call i1 @phil_runtime_refine_selected_version(ptr %"
               <> symbol transport <> ", i16 %" <> symbol selected <> ")"
+          , "br i1 " <> validName
+              <> ", label %" <> symbol (unLLVMBlockId yes)
+              <> ", label %" <> symbol (unLLVMBlockId no)
+          ]
+      LLVMVersionRefinementWithSet _ transport versions selected yes no ->
+        let blockSymbol = symbol (unLLVMBlockId (llvmBlockId blockValue))
+            validName = "%phil_version_refinement_ok_" <> blockSymbol
+        in
+          [ validName <> " = call i1 @phil_runtime_refine_selected_version_with_set(ptr %"
+              <> symbol transport <> ", ptr %" <> symbol versions
+              <> ", i16 %" <> symbol selected <> ")"
           , "br i1 " <> validName
               <> ", label %" <> symbol (unLLVMBlockId yes)
               <> ", label %" <> symbol (unLLVMBlockId no)

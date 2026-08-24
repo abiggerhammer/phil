@@ -223,6 +223,12 @@ ordinaryOps = filter isOrdinary
       LLVMHelloPolicyValidationReasonBinding {} -> True
       LLVMHelloPolicyFailure {} -> True
       LLVMExactSend {} -> True
+      LLVMClientSupportedVersions {} -> True
+      LLVMClientPayloadLength {} -> True
+      LLVMClientPayloadKind {} -> True
+      LLVMClientSHA256 {} -> True
+      LLVMClientSendHello {} -> True
+      LLVMClientSendBegin {} -> True
       LLVMAcceptedResponse {} -> True
       LLVMRejectedResponse {} -> True
       LLVMPayloadCancelSelect {} -> True
