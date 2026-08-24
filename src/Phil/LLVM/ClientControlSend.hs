@@ -17,7 +17,6 @@ import qualified Data.Map.Strict as Map
 import Data.Text (Text)
 import qualified Data.Text as Text
 import Phil.Assurance.Types (digestText, unDigest)
-import Phil.Core.Scalar (ScalarType (..))
 import Phil.LLVM.ExactSend
   ( exactSendABIDescriptor
   , lowerSystemsExactSend
@@ -179,18 +178,7 @@ lowerSystemsClientControlSend target systemsArtifact = artifact
     declaredDigest = unValueId (clientOutboundDeclaredDigest outbound)
 
     contract0 = llvmArtifactContract base
-    contract1 = contract0
-      { llvmContractTargetDigest = llvmModuleDigest module1
-      , llvmContractTraceRelation = llvmContractTraceRelation contract0 <>
-          [ "client supported_versions() -> explicit opaque version-set handle -> fused Hello serializer/send"
-          , "the same version-set handle sent in Hello -> explicit selected-version refinement input"
-          , "client payload borrow -> same physical payload-owner handle -> SHA-256, length, and kind extraction"
-          , "semantic Begin construction with static sha256 -> fused Begin serializer/send with exact length, kind, and digest operands"
-          ]
-      , llvmContractResourceFailureRelation = llvmContractResourceFailureRelation contract0 <>
-          [ "Hello and Begin source sends expose no recoverable failure continuation; serializer/send primitives must not return normally on failure"
-          ]
-      }
+    contract1 = contract0 { llvmContractTargetDigest = llvmModuleDigest module1 }
     artifact = base
       { llvmArtifactModule = module1
       , llvmArtifactText = renderLLVMModule module1

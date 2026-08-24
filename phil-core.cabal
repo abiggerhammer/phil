@@ -110,6 +110,7 @@ library
       Phil.LLVM.HelloPolicyValidationCertification
       Phil.LLVM.ExactSend
       Phil.LLVM.ExactSendCertification
+      Phil.LLVM.ClientControlSend
   build-depends:
       base >=4.17 && <5,
       bytestring >=0.11 && <0.13,
@@ -239,6 +240,15 @@ executable phil-llvm-phase0-exact-send
   import:             common-settings
   hs-source-dirs:     app
   main-is:            LLVMExactSendMain.hs
+  build-depends:
+      base >=4.17 && <5,
+      phil-core,
+      text >=2.0 && <2.2
+
+executable phil-llvm-phase0-client-control-send
+  import:   common-settings
+  hs-source-dirs:     app
+  main-is:  LLVMClientControlSendMain.hs
   build-depends:
       base >=4.17 && <5,
       phil-core,
@@ -715,6 +725,17 @@ test-suite phil-recognition-failure-detail-tests
   type:               exitcode-stdio-1.0
   hs-source-dirs:     test
   main-is:            RecognitionFailureMain.hs
+  build-depends:
+      base >=4.17 && <5,
+      containers >=0.6 && <0.8,
+      phil-core,
+      text >=2.0 && <2.2
+
+test-suite phil-client-control-send-abi-tests
+  import:   common-settings
+  type:     exitcode-stdio-1.0
+  hs-source-dirs:     test
+  main-is:  ClientControlSendABIMain.hs
   build-depends:
       base >=4.17 && <5,
       containers >=0.6 && <0.8,

@@ -31,6 +31,7 @@ module Phil.LLVM
   , module Phil.LLVM.HelloPolicyValidationCertification
   , module Phil.LLVM.ExactSend
   , module Phil.LLVM.ExactSendCertification
+  , module Phil.LLVM.ClientControlSend
   ) where
 
 import Phil.LLVM.AcceptedResponse
@@ -40,6 +41,7 @@ import Phil.LLVM.HelloPolicyValidation
 import Phil.LLVM.HelloPolicyValidationCertification
 import Phil.LLVM.ExactSend
 import Phil.LLVM.ExactSendCertification
+import Phil.LLVM.ClientControlSend
 import Phil.LLVM.AcceptedResponseCertification
 import Phil.LLVM.DigestValidation
 import Phil.LLVM.DigestValidationCertification
