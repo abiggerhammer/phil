@@ -1,4 +1,5 @@
 # Active consolidated runtime gate after legacy witness retirement.
+# Eight-profile owner after control-choice witness retirement.
 name: Phase 0 Focused Runtime
 
 on:
