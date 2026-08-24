@@ -73,6 +73,19 @@ The extracted runner preserves the existing Phase 0 reference LLVM assembly, rec
 
 The shared `resolve-llvm18.sh` helper now accepts an optional `PHIL_LLVM18_TOOLS` list so callers do not acquire new tool requirements when reusing it. Its default remains `llvm-as llvm-link llvm-dis clang`, preserving the already-landed source-bound integrated-native runner behavior.
 
+#### Focused runtime consolidation pilot
+
+The first focused-runtime consolidation groups four adjacent physical gates under one workflow while preserving each as a separately named matrix job:
+
+- `storage`;
+- `accepted-response`;
+- `rejected-response`;
+- `exact-send`.
+
+`scripts/ci/phase0-focused-runtime.sh` reproduces the substantive commands from those four historical workflows: emitter/test builds, LLVM assembly and partial/full ABI checks as originally used, C provider compilation with warnings-as-errors, partial linking where applicable, native smoke execution, the corresponding ambient/bad-provider rejection, and Exact Send's explicit focused Cabal ABI test run.
+
+The historical workflows remain present during this pilot. A comment-only edit marks each as an equivalence witness and causes the old jobs to run on the same candidate head as the new consolidated workflow. They may be retired only after old and new jobs are green together on both bring-up and clean recomposed heads.
+
 ## Rule for the refactor
 
 This is orchestration cleanup, not assurance redesign.
