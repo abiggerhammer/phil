@@ -1,3 +1,4 @@
+# CI normalization equivalence witness; execution semantics unchanged.
 name: Storage Failure Detail Runtime
 
 on:
@@ -15,6 +16,7 @@ on:
       - 'test/StorageFailureDetailABIMain.hs'
       - 'docs/phase-0/storage-failure-detail-abi-v1.md'
       - 'phil-core.cabal'
+      - '.github/workflows/storage-failure-detail-runtime.yml'
   push:
     branches: [main]
     paths:
@@ -30,6 +32,7 @@ on:
       - 'test/StorageFailureDetailABIMain.hs'
       - 'docs/phase-0/storage-failure-detail-abi-v1.md'
       - 'phil-core.cabal'
+      - '.github/workflows/storage-failure-detail-runtime.yml'
 
 permissions:
   contents: read

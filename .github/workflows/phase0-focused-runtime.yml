@@ -1,5 +1,5 @@
 # Active consolidated runtime gate after legacy witness retirement.
-# Eight-profile owner after control-choice witness retirement.
+# Twelve-profile candidate while protocol-runtime witnesses remain present.
 name: Phase 0 Focused Runtime
 
 on:
@@ -15,6 +15,10 @@ on:
       - 'app/LLVMBeginPolicyChoiceMain.hs'
       - 'app/LLVMVersionSessionChoiceMain.hs'
       - 'app/LLVMPayloadCancelChoiceMain.hs'
+      - 'app/LLVMClientControlSendMain.hs'
+      - 'app/LLVMServerFramedIngressMain.hs'
+      - 'app/LLVMFinalResponseReceiveMain.hs'
+      - 'app/LLVMStorageFailureDetailMain.hs'
       - 'runtime/phase0/storage_v1*'
       - 'runtime/phase0/accepted_response_v1*'
       - 'runtime/phase0/rejected_response_v1*'
@@ -23,9 +27,14 @@ on:
       - 'runtime/phase0/begin_policy_choice_v1*'
       - 'runtime/phase0/version_session_choice_v1*'
       - 'runtime/phase0/payload_cancel_choice_v1*'
+      - 'runtime/phase0/client_control_send_v1*'
+      - 'runtime/phase0/server_framed_ingress_v1*'
+      - 'runtime/phase0/final_response_receive_v1*'
+      - 'runtime/phase0/storage_failure_detail_v1*'
       - 'scripts/check_runtime_abi.py'
       - 'scripts/ci/phase0-focused-runtime.sh'
       - 'scripts/ci/phase0-control-runtime.sh'
+      - 'scripts/ci/phase0-protocol-runtime.sh'
       - 'scripts/ci/phase0-focused-runtime-dispatch.sh'
       - 'scripts/ci/resolve-llvm18.sh'
       - 'test/StorageABIMain.hs'
@@ -36,6 +45,10 @@ on:
       - 'test/BeginPolicyChoiceABIMain.hs'
       - 'test/VersionSessionChoiceABIMain.hs'
       - 'test/PayloadCancelChoiceABIMain.hs'
+      - 'test/ClientControlSendABIMain.hs'
+      - 'test/ServerFramedIngressABIMain.hs'
+      - 'test/FinalResponseReceiveMain.hs'
+      - 'test/StorageFailureDetailABIMain.hs'
       - 'phil-core.cabal'
       - '.github/workflows/phase0-focused-runtime.yml'
   push:
@@ -51,6 +64,10 @@ on:
       - 'app/LLVMBeginPolicyChoiceMain.hs'
       - 'app/LLVMVersionSessionChoiceMain.hs'
       - 'app/LLVMPayloadCancelChoiceMain.hs'
+      - 'app/LLVMClientControlSendMain.hs'
+      - 'app/LLVMServerFramedIngressMain.hs'
+      - 'app/LLVMFinalResponseReceiveMain.hs'
+      - 'app/LLVMStorageFailureDetailMain.hs'
       - 'runtime/phase0/storage_v1*'
       - 'runtime/phase0/accepted_response_v1*'
       - 'runtime/phase0/rejected_response_v1*'
@@ -59,9 +76,14 @@ on:
       - 'runtime/phase0/begin_policy_choice_v1*'
       - 'runtime/phase0/version_session_choice_v1*'
       - 'runtime/phase0/payload_cancel_choice_v1*'
+      - 'runtime/phase0/client_control_send_v1*'
+      - 'runtime/phase0/server_framed_ingress_v1*'
+      - 'runtime/phase0/final_response_receive_v1*'
+      - 'runtime/phase0/storage_failure_detail_v1*'
       - 'scripts/check_runtime_abi.py'
       - 'scripts/ci/phase0-focused-runtime.sh'
       - 'scripts/ci/phase0-control-runtime.sh'
+      - 'scripts/ci/phase0-protocol-runtime.sh'
       - 'scripts/ci/phase0-focused-runtime-dispatch.sh'
       - 'scripts/ci/resolve-llvm18.sh'
       - 'test/StorageABIMain.hs'
@@ -72,6 +94,10 @@ on:
       - 'test/BeginPolicyChoiceABIMain.hs'
       - 'test/VersionSessionChoiceABIMain.hs'
       - 'test/PayloadCancelChoiceABIMain.hs'
+      - 'test/ClientControlSendABIMain.hs'
+      - 'test/ServerFramedIngressABIMain.hs'
+      - 'test/FinalResponseReceiveMain.hs'
+      - 'test/StorageFailureDetailABIMain.hs'
       - 'phil-core.cabal'
       - '.github/workflows/phase0-focused-runtime.yml'
 
@@ -94,6 +120,10 @@ jobs:
           - begin-policy-choice
           - version-session-choice
           - payload-cancel-choice
+          - client-control-send
+          - server-framed-ingress
+          - final-response-receive
+          - storage-failure-detail
     steps:
       - uses: actions/checkout@v4
       - uses: haskell-actions/setup@v2

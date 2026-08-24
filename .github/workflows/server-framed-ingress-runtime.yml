@@ -1,3 +1,4 @@
+# CI normalization equivalence witness; execution semantics unchanged.
 name: Server Framed Ingress Runtime
 
 on:

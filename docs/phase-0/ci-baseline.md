@@ -99,6 +99,19 @@ The next focused-runtime tranche adds four control/choice profiles to the same c
 
 PR #130 established equivalence twice. On both its bring-up tree and clean one-commit recomposition, the expanded eight-profile consolidated workflow, all four historical control/choice runtime workflows, ordinary CI, and Phase 0 Baseline were green together. The historical `hello-policy-validation-runtime.yml`, `begin-policy-choice-runtime.yml`, `version-session-choice-runtime.yml`, and `payload-cancel-choice-runtime.yml` workflows are therefore retired from `main`; their execution history remains preserved in Git, while `phase0-focused-runtime.yml` plus the dispatcher and repo-local runners are now the active regression surface for all eight profiles.
 
+#### Protocol/runtime consolidation
+
+The next focused-runtime tranche adds four adjacent protocol/runtime profiles to the consolidated workflow:
+
+- `client-control-send`;
+- `server-framed-ingress`;
+- `final-response-receive`;
+- `storage-failure-detail`.
+
+`scripts/ci/phase0-protocol-runtime.sh` reproduces each historical gate without normalizing away profile-specific evidence. Client control-send and server framed-ingress retain partial ABI comparison, native smoke execution, bad ambient-provider rejection, and focused ABI tests. Final-response receive retains its full ABI comparison, linked native accepted/rejected/malformed smoke, bad ambient decoder rejection, and focused receive tests. Storage-failure detail retains its focused ABI suite plus the predecessor server-framed-ingress ABI suite and semantic storage-failure-detail suite before its partial ABI/native/bad-provider checks.
+
+The four historical protocol/runtime workflows remain present as equivalence witnesses until the twelve-profile consolidated workflow and all four legacy jobs are green together on both bring-up and clean recomposed heads.
+
 ## Rule for the refactor
 
 This is orchestration cleanup, not assurance redesign.
