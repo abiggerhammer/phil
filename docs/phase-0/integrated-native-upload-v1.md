@@ -73,3 +73,7 @@ This slice claims that:
 - accepted, digest-rejected, and cancelled executions complete natively with the expected resource/effect observations.
 
 It does **not** claim production networking, socket behavior, crash durability, remote receipt, filesystem persistence, or a general-purpose runtime implementation.
+
+## CI regression entrypoint
+
+This document remains normative for the integrated-native boundary. The post-freeze CI normalization adds `scripts/ci/phase0-integrated-native.sh` only as a repo-local orchestration entrypoint for reproducing the existing source-bound LLVM, full ABI, link, and native scenario gate. The runner additionally pins the frozen source-pair digest already content-bound by Phase 0 closure certification; it does not broaden the claims above.

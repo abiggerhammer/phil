@@ -1,0 +1,60 @@
+name: Phase 0 Baseline
+
+on:
+  pull_request:
+    paths:
+      - 'examples/upload/**'
+      - 'phase0-projection/**'
+      - 'src/Phil/Surface/**'
+      - 'src/Phil/Systems/**'
+      - 'src/Phil/LLVM/**'
+      - 'runtime/phase0/control_codec_v1.*'
+      - 'runtime/phase0/integrated_upload_v1*'
+      - 'scripts/check_runtime_abi.py'
+      - 'scripts/ci/**'
+      - 'docs/phase-0/**'
+      - 'cabal.project'
+      - '.github/workflows/phase0-baseline.yml'
+  push:
+    branches: [main]
+    paths:
+      - 'examples/upload/**'
+      - 'phase0-projection/**'
+      - 'src/Phil/Surface/**'
+      - 'src/Phil/Systems/**'
+      - 'src/Phil/LLVM/**'
+      - 'runtime/phase0/control_codec_v1.*'
+      - 'runtime/phase0/integrated_upload_v1*'
+      - 'scripts/check_runtime_abi.py'
+      - 'scripts/ci/**'
+      - 'docs/phase-0/**'
+      - 'cabal.project'
+      - '.github/workflows/phase0-baseline.yml'
+
+permissions:
+  contents: read
+
+jobs:
+  source-projection:
+    name: Source projection
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: haskell-actions/setup@v2
+        with:
+          ghc-version: '9.6.7'
+          cabal-version: 'latest'
+      - name: Run frozen source-to-Systems regression
+        run: bash scripts/ci/phase0-source-projection.sh
+
+  integrated-native:
+    name: Integrated native
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: haskell-actions/setup@v2
+        with:
+          ghc-version: '9.6.7'
+          cabal-version: 'latest'
+      - name: Run frozen end-to-end native regression
+        run: bash scripts/ci/phase0-integrated-native.sh

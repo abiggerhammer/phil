@@ -80,4 +80,8 @@ It does **not** claim:
 - operating-system I/O; or
 - the final integrated native upload demonstrator.
 
-The integrated native demonstrator is the remaining Phase 0 implementation convergence slice.
+The integrated native demonstrator and its closure certification have since landed as the final Phase 0 implementation and assurance tranches.
+
+## CI regression entrypoint
+
+This document remains normative for the projection boundary. The post-freeze CI normalization adds `scripts/ci/phase0-source-projection.sh` only as a repo-local orchestration entrypoint for reproducing the existing projection gate; it does not change this contract or its authority.
