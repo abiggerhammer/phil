@@ -8,6 +8,13 @@ on:
       - 'examples/steve/**'
       - 'experiments/steve-vs-frozen-phase0/**'
       - '.github/workflows/steve-vs-frozen-phase0.yml'
+  pull_request:
+    branches:
+      - phase1/frozen-phase0-baseline
+    paths:
+      - 'examples/steve/**'
+      - 'experiments/steve-vs-frozen-phase0/**'
+      - '.github/workflows/steve-vs-frozen-phase0.yml'
   workflow_dispatch:
 
 permissions:
