@@ -97,7 +97,7 @@ The next focused-runtime tranche adds four control/choice profiles to the same c
 
 `scripts/ci/phase0-control-runtime.sh` reproduces their historical emitter/test builds, LLVM 18 assembly/linking, partial or full ABI comparison as originally used, C provider compilation with warnings-as-errors, native smoke execution, bad ambient/nullary provider rejection, and focused Cabal ABI test runs. `scripts/ci/phase0-focused-runtime-dispatch.sh` keeps the original four physical profiles on their already-validated runner and routes only these new control/choice profiles to the new runner.
 
-The four historical control/choice runtime workflows remain present as equivalence witnesses until the expanded eight-profile consolidated workflow and all four legacy jobs are green together on both bring-up and clean recomposed heads.
+PR #130 established equivalence twice. On both its bring-up tree and clean one-commit recomposition, the expanded eight-profile consolidated workflow, all four historical control/choice runtime workflows, ordinary CI, and Phase 0 Baseline were green together. The historical `hello-policy-validation-runtime.yml`, `begin-policy-choice-runtime.yml`, `version-session-choice-runtime.yml`, and `payload-cancel-choice-runtime.yml` workflows are therefore retired from `main`; their execution history remains preserved in Git, while `phase0-focused-runtime.yml` plus the dispatcher and repo-local runners are now the active regression surface for all eight profiles.
 
 ## Rule for the refactor
 
