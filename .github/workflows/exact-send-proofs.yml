@@ -156,10 +156,10 @@ jobs:
       - name: Build project and focused regressions
         run: |
           cabal build lib:phil-core phil-llvm-phase0-exact-send \
-            phil-client-outbound-tests phil-exact-send-abi-tests
+            phil-client-outbound-semantics-tests phil-exact-send-abi-tests
       - name: Run client-outbound and historical Exact Send suites
         run: |
-          cabal test phil-client-outbound-tests
+          cabal test phil-client-outbound-semantics-tests
           cabal test phil-exact-send-abi-tests
       - name: Typecheck proof support with warnings as errors
         run: |
