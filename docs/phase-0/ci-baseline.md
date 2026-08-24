@@ -126,6 +126,14 @@ The first assurance-side tranche consolidates the nine historical `ProofAssistan
 
 PR #137 established equivalence twice. On both its bring-up tree and clean one-commit recomposition, the consolidated 18-job back-certification workflow, all nine historical back-certification workflows, ordinary CI, and Phase 0 Baseline were green together. The historical `assurance-foundations-back-certification.yml`, `core-foundations-back-certification.yml`, `core-control-assurance-back-certification.yml`, `focusing-foundations-back-certification.yml`, `llvm-foundations-back-certification.yml`, `recognition-bundle-back-certification.yml`, `recognition-gates-back-certification.yml`, `surface-foundations-back-certification.yml`, and `systems-foundations-back-certification.yml` workflows are therefore retired from `main`; their execution history remains preserved in Git, while `phase0-back-certification.yml` and the two repo-local runners are now the active historical back-certification regression surface.
 
+#### Assurance meta-proof consolidation pilot
+
+The first modern proof tranche groups three narrow assurance theorems with the same authority shape: `ledger-extension`, `lineage-authority`, and `validity-scope`. Each profile checks its theorem in Rocq, stages the exact checked `.v`/`.vo` pair, typechecks and executes its Haskell correspondence regression, and produces the same single proof-bound assurance certificate as its historical workflow. Ledger Extension retains its explicit `Manifest.v` and `EvidenceUse.v` Rocq predecessors.
+
+`scripts/ci/phase0-assurance-meta-rocq.sh` preserves theorem compile/staging behavior, while `scripts/ci/phase0-assurance-meta-certify.sh` preserves the correspondence program, certifier program, certificate ID, and certificate input object for each profile. The three historical workflows remain present with comment-only witness edits until the consolidated six-job workflow and all three legacy gates are green together on both a bring-up tree and a clean one-commit recomposition.
+
+This pilot intentionally excludes compiler/lowering proof chains and content-bound closure certification. It changes orchestration and artifact naming only; theorem statements, checked proof objects, correspondence logic, certificate formats, certificate IDs, validity scopes, and certificate-producing programs remain unchanged.
+
 ## Rule for the refactor
 
 This is orchestration cleanup, not assurance redesign.
