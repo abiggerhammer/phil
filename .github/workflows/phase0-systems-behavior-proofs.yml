@@ -1,0 +1,108 @@
+name: Phase 0 Systems Behavior Proofs
+
+on:
+  pull_request:
+    paths:
+      - 'proof/Phil/Systems/ClientOutbound.v'
+      - 'proof/Phil/Systems/RecognitionFailureDetail.v'
+      - 'proof/Phil/Systems/StorageFailureDetail.v'
+      - 'src/Phil/Systems/ClientOutbound.hs'
+      - 'src/Phil/Systems/RecognitionFailure.hs'
+      - 'src/Phil/Systems/StorageFailure.hs'
+      - 'src/Phil/Systems/ClientOutboundProofCertification.hs'
+      - 'src/Phil/Systems/RecognitionFailureProofCertification.hs'
+      - 'src/Phil/Systems/StorageFailureProofCertification.hs'
+      - 'app/ClientOutboundProofCorrespondenceMain.hs'
+      - 'app/ClientOutboundProofCertificationMain.hs'
+      - 'app/RecognitionFailureProofCorrespondenceMain.hs'
+      - 'app/RecognitionFailureProofCertificationMain.hs'
+      - 'app/StorageFailureProofCorrespondenceMain.hs'
+      - 'app/StorageFailureProofCertificationMain.hs'
+      - 'test/ClientOutboundMain.hs'
+      - 'test/RecognitionFailureMain.hs'
+      - 'test/StorageFailureMain.hs'
+      - 'scripts/ci/phase0-systems-behavior-rocq.sh'
+      - 'scripts/ci/phase0-systems-behavior-certify.sh'
+      - '.github/workflows/phase0-systems-behavior-proofs.yml'
+  push:
+    branches: [main]
+    paths:
+      - 'proof/Phil/Systems/ClientOutbound.v'
+      - 'proof/Phil/Systems/RecognitionFailureDetail.v'
+      - 'proof/Phil/Systems/StorageFailureDetail.v'
+      - 'src/Phil/Systems/ClientOutbound.hs'
+      - 'src/Phil/Systems/RecognitionFailure.hs'
+      - 'src/Phil/Systems/StorageFailure.hs'
+      - 'src/Phil/Systems/ClientOutboundProofCertification.hs'
+      - 'src/Phil/Systems/RecognitionFailureProofCertification.hs'
+      - 'src/Phil/Systems/StorageFailureProofCertification.hs'
+      - 'app/ClientOutboundProofCorrespondenceMain.hs'
+      - 'app/ClientOutboundProofCertificationMain.hs'
+      - 'app/RecognitionFailureProofCorrespondenceMain.hs'
+      - 'app/RecognitionFailureProofCertificationMain.hs'
+      - 'app/StorageFailureProofCorrespondenceMain.hs'
+      - 'app/StorageFailureProofCertificationMain.hs'
+      - 'test/ClientOutboundMain.hs'
+      - 'test/RecognitionFailureMain.hs'
+      - 'test/StorageFailureMain.hs'
+      - 'scripts/ci/phase0-systems-behavior-rocq.sh'
+      - 'scripts/ci/phase0-systems-behavior-certify.sh'
+      - '.github/workflows/phase0-systems-behavior-proofs.yml'
+
+permissions:
+  contents: read
+
+jobs:
+  rocq:
+    name: Rocq / ${{ matrix.profile }}
+    runs-on: ubuntu-latest
+    container:
+      image: rocq/rocq-prover:9.2.0
+      options: --user root
+    strategy:
+      fail-fast: false
+      matrix:
+        profile:
+          - client-outbound
+          - recognition-failure
+          - storage-failure-detail
+    steps:
+      - uses: actions/checkout@v4
+      - name: Check and stage systems-behavior proof
+        run: bash scripts/ci/phase0-systems-behavior-rocq.sh '${{ matrix.profile }}'
+      - uses: actions/upload-artifact@v4
+        with:
+          name: phase0-systems-behavior-${{ matrix.profile }}-checked
+          path: rocq-${{ matrix.profile }}/
+          if-no-files-found: error
+          retention-days: 14
+
+  certify:
+    name: Certificate / ${{ matrix.profile }}
+    needs: rocq
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        profile:
+          - client-outbound
+          - recognition-failure
+          - storage-failure-detail
+    steps:
+      - uses: actions/checkout@v4
+      - uses: haskell-actions/setup@v2
+        with:
+          ghc-version: '9.6.7'
+          cabal-version: 'latest'
+      - uses: actions/download-artifact@v4
+        with:
+          name: phase0-systems-behavior-${{ matrix.profile }}-checked
+          path: rocq-${{ matrix.profile }}
+      - name: Run semantic regressions, correspondence, and certification
+        run: bash scripts/ci/phase0-systems-behavior-certify.sh '${{ matrix.profile }}'
+      - uses: actions/upload-artifact@v4
+        with:
+          name: phase0-systems-behavior-${{ matrix.profile }}-certification
+          path: '*-certificates/'
+          if-no-files-found: error
+          retention-days: 30
