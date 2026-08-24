@@ -65,6 +65,14 @@ Each retired workflow did only two substantive things: build one named Cabal tes
 
 Focused runtime, proof, back-certification, and content-bound certification workflows are not included in this retirement. They remain until their distinct checks are explicitly consolidated and equivalence is demonstrated.
 
+#### Generic LLVM/runtime runner extraction
+
+The next Tranche B cut moves the generic LLVM/runtime smoke sequence out of `.github/workflows/ci.yml` into `scripts/ci/phase0-llvm-runtime-smoke.sh`. The GitHub workflow retains the same order: build, warnings-as-errors lint build, all Cabal tests, then the LLVM/runtime smoke sequence.
+
+The extracted runner preserves the existing Phase 0 reference LLVM assembly, recognized-record ABI/native smoke and width-drift rejection, exact-receive ABI/native smoke and ambient-provider rejection, digest-validation ABI/native smoke and nullary-provider rejection, and the runnable `return-unit`, `return-42`, and `scalar-binding-42` Phil programs. Only orchestration location changes.
+
+The shared `resolve-llvm18.sh` helper now accepts an optional `PHIL_LLVM18_TOOLS` list so callers do not acquire new tool requirements when reusing it. Its default remains `llvm-as llvm-link llvm-dis clang`, preserving the already-landed source-bound integrated-native runner behavior.
+
 ## Rule for the refactor
 
 This is orchestration cleanup, not assurance redesign.
