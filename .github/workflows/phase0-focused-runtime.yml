@@ -1,5 +1,5 @@
 # Active consolidated runtime gate after legacy witness retirement.
-# Thirteen-profile candidate while control-codec witness remains present.
+# Thirteen-profile owner after control-codec witness retirement.
 name: Phase 0 Focused Runtime
 
 on:
