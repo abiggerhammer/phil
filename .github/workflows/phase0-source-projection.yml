@@ -32,13 +32,73 @@ on:
       - '.github/workflows/phase0-source-projection.yml'
 
 permissions:
-  contents: read
+  contents: write
 
 jobs:
   phase0-source-projection:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
+        with:
+          ref: phase0-source-projection
+          fetch-depth: 0
+
+      - name: Register projection components for bring-up
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 - <<'PY'
+          from pathlib import Path
+
+          path = Path('phil-core.cabal')
+          text = path.read_text()
+
+          def replace_once(old, new, label):
+              global text
+              if new in text:
+                  return
+              if old not in text:
+                  raise SystemExit(f'{label}: marker missing')
+              text = text.replace(old, new, 1)
+
+          replace_once(
+              '      Phil.Compiler\n',
+              '      Phil.Compiler\n      Phil.Compiler.Phase0UploadProjection\n',
+              'projection library module')
+          replace_once(
+              'executable philc\n',
+              '''executable phil-phase0-upload-projection
+  import:   common-settings
+  hs-source-dirs:     app
+  main-is:  Phase0UploadProjectionMain.hs
+  build-depends:
+      base >=4.17 && <5,
+      phil-core,
+      text >=2.0 && <2.2
+
+executable philc
+''',
+              'projection executable')
+          replace_once(
+              'test-suite phil-hello-policy-validation-abi-tests\n',
+              '''test-suite phil-phase0-upload-projection-tests
+  import:   common-settings
+  type:     exitcode-stdio-1.0
+  hs-source-dirs:     test
+  main-is:  Phase0UploadProjectionMain.hs
+  autogen-modules:    Paths_phil_core
+  other-modules:      Paths_phil_core
+  build-depends:
+      base >=4.17 && <5,
+      phil-core,
+      text >=2.0 && <2.2
+
+test-suite phil-hello-policy-validation-abi-tests
+''',
+              'projection test suite')
+          path.write_text(text)
+          PY
+
       - uses: haskell-actions/setup@v2
         with:
           ghc-version: '9.6.7'
@@ -56,3 +116,18 @@ jobs:
 
       - name: Project canonical Phase 0 sources
         run: cabal run phil-phase0-upload-projection
+
+      - name: Persist validated Cabal registration
+        if: success()
+        shell: bash
+        run: |
+          set -euo pipefail
+          git config user.name phil-source-projection-register
+          git config user.email github-actions[bot]@users.noreply.github.com
+          git add phil-core.cabal
+          if git diff --cached --quiet; then
+            echo 'projection components already registered'
+            exit 0
+          fi
+          git commit -m 'Register Phase 0 source projection components'
+          git push origin HEAD:phase0-source-projection
