@@ -1,0 +1,200 @@
+name: Test Evidence Certification
+
+on:
+  pull_request:
+    paths:
+      - 'src/Phil/Assurance/TestEvidenceCertification.hs'
+      - 'src/Phil/Assurance/TestEvidenceProfiles.hs'
+      - 'app/TestEvidenceCertificationMain.hs'
+      - 'app/TestEvidenceCertificationRegressionMain.hs'
+      - 'src/Phil/Assurance/Types.hs'
+      - 'src/Phil/Assurance/Verify.hs'
+      - 'src/Phil/Surface/**'
+      - 'src/Phil/LLVM/**'
+      - 'test/SurfaceConformanceMain.hs'
+      - 'examples/upload/**'
+      - 'examples/rejected/**'
+      - 'runtime/phase0/recognized_record_v1*'
+      - 'scripts/check_runtime_abi.py'
+      - 'phil-core.cabal'
+      - '.github/workflows/test-evidence-certification.yml'
+  push:
+    branches:
+      - main
+    paths:
+      - 'src/Phil/Assurance/TestEvidenceCertification.hs'
+      - 'src/Phil/Assurance/TestEvidenceProfiles.hs'
+      - 'app/TestEvidenceCertificationMain.hs'
+      - 'app/TestEvidenceCertificationRegressionMain.hs'
+      - 'src/Phil/Assurance/Types.hs'
+      - 'src/Phil/Assurance/Verify.hs'
+      - 'src/Phil/Surface/**'
+      - 'src/Phil/LLVM/**'
+      - 'test/SurfaceConformanceMain.hs'
+      - 'examples/upload/**'
+      - 'examples/rejected/**'
+      - 'runtime/phase0/recognized_record_v1*'
+      - 'scripts/check_runtime_abi.py'
+      - 'phil-core.cabal'
+      - '.github/workflows/test-evidence-certification.yml'
+
+permissions:
+  contents: read
+
+jobs:
+  certify-test-evidence:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: haskell-actions/setup@v2
+        with:
+          ghc-version: '9.6.7'
+          cabal-version: 'latest'
+
+      - name: Build assurance, Surface conformance, and recognized-record emitter
+        run: |
+          cabal build \
+            lib:phil-core \
+            test:phil-surface-conformance-tests \
+            exe:phil-llvm-phase0-recognized-record
+
+      - name: Capture exact frozen-corpus conformance result
+        shell: bash
+        run: |
+          set -euo pipefail
+          cabal test phil-surface-conformance-tests --test-show-details=direct 2>&1 | tee surface-conformance.log
+
+      - name: Typecheck reusable certifier, profiles, and regressions
+        run: |
+          cabal exec -- ghc \
+            -Wall -Wcompat -Wincomplete-record-updates -Wincomplete-uni-patterns -Wredundant-constraints -Werror \
+            -isrc -iapp -fno-code src/Phil/Assurance/TestEvidenceCertification.hs
+          cabal exec -- ghc \
+            -Wall -Wcompat -Wincomplete-record-updates -Wincomplete-uni-patterns -Wredundant-constraints -Werror \
+            -isrc -iapp -fno-code src/Phil/Assurance/TestEvidenceProfiles.hs
+          cabal exec -- ghc \
+            -Wall -Wcompat -Wincomplete-record-updates -Wincomplete-uni-patterns -Wredundant-constraints -Werror \
+            -isrc -iapp -fno-code app/TestEvidenceCertificationRegressionMain.hs
+          cabal exec -- ghc \
+            -Wall -Wcompat -Wincomplete-record-updates -Wincomplete-uni-patterns -Wredundant-constraints -Werror \
+            -isrc -iapp -fno-code app/TestEvidenceCertificationMain.hs
+
+      - name: Run test-evidence mechanism regressions
+        run: |
+          cabal exec -- ghc -O0 -isrc -iapp \
+            app/TestEvidenceCertificationRegressionMain.hs \
+            -o phil-test-evidence-certification-regressions
+          ./phil-test-evidence-certification-regressions
+
+      - name: Build test-evidence certifier
+        run: |
+          cabal exec -- ghc -O0 -isrc -iapp \
+            app/TestEvidenceCertificationMain.hs \
+            -o phil-certify-test-evidence
+
+      - name: Produce PHIL-SURFACE-CONF-001 DifferentialTested certificate
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p test-evidence-certificates
+          ./phil-certify-test-evidence \
+            surface-conformance \
+            surface-conformance.log \
+            test-evidence-certificates/PHIL-SURFACE-CONF-001.test.cert
+          cat test-evidence-certificates/PHIL-SURFACE-CONF-001.test.cert
+          sha256sum test-evidence-certificates/PHIL-SURFACE-CONF-001.test.cert
+
+      - name: Capture exact recognized-record runtime ABI evidence
+        shell: bash
+        run: |
+          set -euo pipefail
+          if command -v llvm-as-18 >/dev/null 2>&1; then
+            LLVM_AS=llvm-as-18
+          else
+            LLVM_AS=llvm-as
+          fi
+          if command -v llvm-link-18 >/dev/null 2>&1; then
+            LLVM_LINK=llvm-link-18
+          else
+            LLVM_LINK=llvm-link
+          fi
+          if command -v clang-18 >/dev/null 2>&1; then
+            CLANG=clang-18
+          else
+            CLANG=clang
+          fi
+
+          EMITTER="$(cabal list-bin exe:phil-llvm-phase0-recognized-record)"
+          "$EMITTER" > phase0-upload-recognized-record.ll
+          "$LLVM_AS" phase0-upload-recognized-record.ll -o phase0-upload-recognized-record.bc
+
+          "$CLANG" --target=x86_64-unknown-linux-gnu \
+            -std=c11 -Wall -Wextra -Wpedantic -Werror \
+            -Iruntime/phase0 -S -emit-llvm \
+            runtime/phase0/recognized_record_v1_smoke.c \
+            -o recognized-record-runtime.ll
+
+          {
+            python3 scripts/check_runtime_abi.py \
+              phase0-upload-recognized-record.ll \
+              recognized-record-runtime.ll
+
+            "$CLANG" --target=x86_64-unknown-linux-gnu \
+              -std=c11 -Wall -Wextra -Wpedantic -Werror \
+              -S -emit-llvm \
+              runtime/phase0/recognized_record_v1_bad_accessor.c \
+              -o recognized-record-bad-accessor.ll
+            if python3 scripts/check_runtime_abi.py --partial \
+                phase0-upload-recognized-record.ll \
+                recognized-record-bad-accessor.ll; then
+              echo "expected ABI checker to reject ptr -> i32 Begin.length accessor" >&2
+              exit 1
+            fi
+            echo "PASS: runtime ABI checker rejects i64 -> i32 accessor width drift"
+          } 2>&1 | tee runtime-abi.log
+
+          "$LLVM_AS" recognized-record-runtime.ll -o recognized-record-runtime.bc
+          "$CLANG" --target=x86_64-unknown-linux-gnu \
+            -std=c11 -Wall -Wextra -Wpedantic -Werror \
+            -Iruntime/phase0 -emit-llvm -c \
+            runtime/phase0/recognized_record_v1_smoke_main.c \
+            -o recognized-record-smoke-main.bc
+          "$LLVM_LINK" \
+            phase0-upload-recognized-record.bc \
+            recognized-record-runtime.bc \
+            recognized-record-smoke-main.bc \
+            -o phase0-upload-recognized-record-linked.bc
+          "$CLANG" --target=x86_64-unknown-linux-gnu \
+            phase0-upload-recognized-record-linked.bc \
+            -o phase0-upload-recognized-record-smoke
+
+      - name: Certify PHIL-RUNTIME-ABI-001
+        shell: bash
+        run: |
+          set -euo pipefail
+          ./phil-certify-test-evidence \
+            runtime-abi \
+            runtime-abi.log \
+            test-evidence-certificates/PHIL-RUNTIME-ABI-001.test.cert
+          cat test-evidence-certificates/PHIL-RUNTIME-ABI-001.test.cert
+          sha256sum test-evidence-certificates/PHIL-RUNTIME-ABI-001.test.cert
+
+      - name: Capture and certify PHIL-RUNTIME-SMOKE-001
+        shell: bash
+        run: |
+          set -euo pipefail
+          ./phase0-upload-recognized-record-smoke 2>&1 | tee runtime-smoke.log
+          ./phil-certify-test-evidence \
+            runtime-smoke \
+            runtime-smoke.log \
+            test-evidence-certificates/PHIL-RUNTIME-SMOKE-001.test.cert
+          cat test-evidence-certificates/PHIL-RUNTIME-SMOKE-001.test.cert
+          sha256sum test-evidence-certificates/PHIL-RUNTIME-SMOKE-001.test.cert
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: phil-test-evidence-certificates
+          path: test-evidence-certificates/*.test.cert
+          if-no-files-found: error
+          retention-days: 30
