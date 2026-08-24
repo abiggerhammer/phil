@@ -120,6 +120,7 @@ data LLVMOp
   | LLVMServerCommitIngress Text Text Text
   | LLVMServerFailRecognition Text Text Text
   | LLVMServerDestroyPending Text Text Text
+  | LLVMStorageFailureEffect Text Text
   | LLVMAcceptedResponse Text Text
   | LLVMRejectedResponse Text Int
   | LLVMPayloadCancelSelect Text Int
@@ -157,6 +158,13 @@ data LLVMTerminator
       LLVMBlockId
   | LLVMStore
       RuntimeSiteRef
+      Text
+      Text
+      LLVMBlockId
+      LLVMBlockId
+  | LLVMStoreDetailed
+      RuntimeSiteRef
+      Text
       Text
       Text
       LLVMBlockId
@@ -293,6 +301,7 @@ llvmBlockSuccessors blockValue = case llvmBlockTerminator blockValue of
   LLVMExactReceive _ _ _ _ _ _ yes no -> [yes, no]
   LLVMDigestValidate _ _ _ yes no -> [yes, no]
   LLVMStore _ _ _ yes no -> [yes, no]
+  LLVMStoreDetailed _ _ _ _ yes no -> [yes, no]
   LLVMFinalResponseOffer _ _ yes no -> [yes, no]
   LLVMPayloadCancelOffer _ payloadTarget cancelTarget -> [payloadTarget, cancelTarget]
   LLVMChooseSupported _ _ _ someTarget noneTarget -> [someTarget, noneTarget]
@@ -328,6 +337,7 @@ llvmRuntimeSites moduleValue = concat
         LLVMRuntimeScalarBranch site _ _ _ _ _ -> [site]
         LLVMExactReceive site _ _ _ _ _ _ _ -> [site]
         LLVMDigestValidate site _ _ _ _ -> [site]
+        LLVMStoreDetailed site _ _ _ _ _ -> [site]
         LLVMStore site _ _ _ _ -> [site]
         LLVMVersionRefinement site _ _ _ _ -> [site]
         LLVMVersionRefinementWithSet site _ _ _ _ _ -> [site]
@@ -372,6 +382,7 @@ renderLLVMModule moduleValue = Text.unlines $
       , "phil-runtime/phase0/transport-exact-send-v1"
       , "phil-runtime/phase0/client-control-send-v1"
       , "phil-runtime/phase0/server-framed-ingress-v1"
+      , "phil-runtime/phase0/storage-failure-detail-v1"
       ]
 
     header =
@@ -409,6 +420,7 @@ renderLLVMModule moduleValue = Text.unlines $
       <> assumeDeclaration
       <> digestValidationDeclaration
       <> storageDeclaration
+      <> storageFailureDetailDeclaration
       <> acceptedResponseDeclaration
       <> rejectedResponseDeclaration
       <> finalResponseReceiveDeclaration
@@ -466,6 +478,14 @@ renderLLVMModule moduleValue = Text.unlines $
     storageDeclaration =
       if any hasStorage allBlocks
         then ["declare { i8, ptr } @phil_runtime_store(ptr)"]
+        else []
+
+    storageFailureDetailDeclaration =
+      if any hasDetailedStorage allBlocks
+        then
+          [ "declare i8 @phil_runtime_store_with_error(ptr, ptr, ptr)"
+          , "declare void @phil_runtime_fail_storage(ptr, ptr)"
+          ]
         else []
 
     acceptedResponseDeclaration =
@@ -557,6 +577,7 @@ renderLLVMModule moduleValue = Text.unlines $
       if runtimeProfile `elem`
           [ "phil-runtime/phase0/client-control-send-v1"
           , "phil-runtime/phase0/server-framed-ingress-v1"
+          , "phil-runtime/phase0/storage-failure-detail-v1"
           ]
         then
           [ "declare ptr @phil_runtime_supported_versions()"
@@ -576,7 +597,10 @@ renderLLVMModule moduleValue = Text.unlines $
       ]
 
     serverFramedIngressDeclarations =
-      if runtimeProfile == "phil-runtime/phase0/server-framed-ingress-v1"
+      if runtimeProfile `elem`
+          [ "phil-runtime/phase0/server-framed-ingress-v1"
+          , "phil-runtime/phase0/storage-failure-detail-v1"
+          ]
         then concatMap renderServerIngressDeclarations (Set.toAscList serverIngressGrammars)
         else []
 
@@ -676,6 +700,10 @@ renderLLVMModule moduleValue = Text.unlines $
 
     hasStorage blockValue = case llvmBlockTerminator blockValue of
       LLVMStore {} -> True
+      _ -> False
+
+    hasDetailedStorage blockValue = case llvmBlockTerminator blockValue of
+      LLVMStoreDetailed {} -> True
       _ -> False
 
     hasAcceptedResponse blockValue = any isAcceptedResponse (llvmBlockOps blockValue)
@@ -918,6 +946,10 @@ renderLLVMModule moduleValue = Text.unlines $
         [ "call void @phil_runtime_destroy_pending_" <> symbol grammar
             <> "(ptr %" <> symbol pending <> ", ptr %" <> symbol frame <> ")"
         ]
+      LLVMStorageFailureEffect transport storageError ->
+        [ "call void @phil_runtime_fail_storage(ptr %" <> symbol transport
+            <> ", ptr %" <> symbol storageError <> ")"
+        ]
       LLVMAcceptedResponse transport uploadId ->
         [ "call void @phil_runtime_select_accepted(ptr %" <> symbol transport
             <> ", ptr %" <> symbol uploadId <> ")"
@@ -1077,6 +1109,26 @@ renderLLVMModule moduleValue = Text.unlines $
               <> " @phil_runtime_store(ptr %" <> symbol payloadName <> ")"
           , statusName <> " = extractvalue " <> resultType <> " " <> resultName <> ", 0"
           , "%" <> symbol uploadIdName <> " = extractvalue " <> resultType <> " " <> resultName <> ", 1"
+          , okName <> " = icmp eq i8 " <> statusName <> ", 1"
+          , "br i1 " <> okName
+              <> ", label %" <> symbol (unLLVMBlockId yes)
+              <> ", label %" <> symbol (unLLVMBlockId no)
+          ]
+      LLVMStoreDetailed _ payloadName uploadIdName storageErrorName yes no ->
+        let blockSymbol = symbol (unLLVMBlockId (llvmBlockId blockValue))
+            uploadSlot = "%phil_store_upload_slot_" <> symbol uploadIdName
+            errorSlot = "%phil_store_error_slot_" <> symbol storageErrorName
+            statusName = "%phil_store_status_" <> blockSymbol
+            okName = "%phil_store_ok_" <> blockSymbol
+        in
+          [ uploadSlot <> " = alloca ptr"
+          , errorSlot <> " = alloca ptr"
+          , "store ptr null, ptr " <> uploadSlot
+          , "store ptr null, ptr " <> errorSlot
+          , statusName <> " = call i8 @phil_runtime_store_with_error(ptr %"
+              <> symbol payloadName <> ", ptr " <> uploadSlot <> ", ptr " <> errorSlot <> ")"
+          , "%" <> symbol uploadIdName <> " = load ptr, ptr " <> uploadSlot
+          , "%" <> symbol storageErrorName <> " = load ptr, ptr " <> errorSlot
           , okName <> " = icmp eq i8 " <> statusName <> ", 1"
           , "br i1 " <> okName
               <> ", label %" <> symbol (unLLVMBlockId yes)

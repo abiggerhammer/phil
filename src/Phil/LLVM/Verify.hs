@@ -234,6 +234,7 @@ ordinaryOps = filter isOrdinary
       LLVMServerCommitIngress {} -> True
       LLVMServerFailRecognition {} -> True
       LLVMServerDestroyPending {} -> True
+      LLVMStorageFailureEffect {} -> True
       LLVMAcceptedResponse {} -> True
       LLVMRejectedResponse {} -> True
       LLVMPayloadCancelSelect {} -> True
