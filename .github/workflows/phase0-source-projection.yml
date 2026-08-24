@@ -3,29 +3,33 @@ name: Phase 0 Source Projection
 on:
   pull_request:
     paths:
+      - 'proof/Phil/Surface/Phase0UploadProjection.v'
       - 'examples/upload/client.phil'
       - 'examples/upload/server.phil'
       - 'phase0-projection/**'
       - 'src/Phil/Surface/**'
       - 'src/Phil/Systems/**'
-      - 'src/Phil/LLVM/ControlCodec.hs'
-      - 'src/Phil/LLVM/Verify.hs'
+      - 'src/Phil/LLVM/**'
+      - 'src/Phil/Assurance/**'
       - 'docs/phase-0/source-to-systems-projection-v1.md'
       - 'cabal.project'
       - '.github/workflows/phase0-source-projection.yml'
+      - '.github/workflows/phase0-source-projection-proofs.yml'
   push:
     branches: [main]
     paths:
+      - 'proof/Phil/Surface/Phase0UploadProjection.v'
       - 'examples/upload/client.phil'
       - 'examples/upload/server.phil'
       - 'phase0-projection/**'
       - 'src/Phil/Surface/**'
       - 'src/Phil/Systems/**'
-      - 'src/Phil/LLVM/ControlCodec.hs'
-      - 'src/Phil/LLVM/Verify.hs'
+      - 'src/Phil/LLVM/**'
+      - 'src/Phil/Assurance/**'
       - 'docs/phase-0/source-to-systems-projection-v1.md'
       - 'cabal.project'
       - '.github/workflows/phase0-source-projection.yml'
+      - '.github/workflows/phase0-source-projection-proofs.yml'
 
 permissions:
   contents: read
@@ -53,3 +57,114 @@ jobs:
 
       - name: Project canonical Phase 0 sources
         run: cabal run phil-phase0-upload-projection
+
+  rocq-phase0-source-projection:
+    runs-on: ubuntu-latest
+    container:
+      image: rocq/rocq-prover:9.2.0
+      options: --user root
+    steps:
+      - uses: actions/checkout@v4
+      - name: Check Phase 0 source projection proof
+        shell: bash
+        run: |
+          set -euo pipefail
+          export PATH="/home/rocq/.opam/${COMPILER}/bin:$PATH"
+          rocq c -Q proof/Phil Phil proof/Phil/Surface/Phase0UploadProjection.v
+      - name: Stage checked source projection proof
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p rocq-phase0-source-projection/proof/Phil/Surface
+          cp proof/Phil/Surface/Phase0UploadProjection.v \
+             proof/Phil/Surface/Phase0UploadProjection.vo \
+             rocq-phase0-source-projection/proof/Phil/Surface/
+      - uses: actions/upload-artifact@v4
+        with:
+          name: rocq-phase0-source-projection-checked-proof-objects
+          path: rocq-phase0-source-projection/
+          if-no-files-found: error
+          retention-days: 14
+
+  certify-phase0-source-projection:
+    needs: rocq-phase0-source-projection
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: haskell-actions/setup@v2
+        with:
+          ghc-version: '9.6.7'
+          cabal-version: 'latest'
+      - uses: actions/download-artifact@v4
+        with:
+          name: rocq-phase0-source-projection-checked-proof-objects
+          path: rocq-phase0-source-projection
+
+      - name: Build projection package and focused regression
+        run: |
+          cabal build all
+          cabal test phil-phase0-projection:projection-tests --test-show-details=direct
+
+      - name: Typecheck proof/certification support with warnings as errors
+        run: |
+          FLAGS='-Wall -Wcompat -Wincomplete-record-updates -Wincomplete-uni-patterns -Wredundant-constraints -Werror'
+          cabal exec -- ghc $FLAGS -isrc -iphase0-projection/src -fno-code \
+            phase0-projection/src/Phil/Phase0UploadProjectionProofCertification.hs
+          cabal exec -- ghc $FLAGS -isrc -iphase0-projection/src -iphase0-projection/app -fno-code \
+            phase0-projection/app/ProjectionProofCorrespondenceMain.hs
+          cabal exec -- ghc $FLAGS -isrc -iphase0-projection/src -iphase0-projection/app -fno-code \
+            phase0-projection/app/SourceBoundLLVMMain.hs
+          cabal exec -- ghc $FLAGS -isrc -iphase0-projection/src -iphase0-projection/app -fno-code \
+            phase0-projection/app/ProjectionProofCertificationMain.hs
+
+      - name: Run exact correspondence and drift checks
+        run: |
+          cabal exec -- ghc -O0 -isrc -iphase0-projection/src \
+            phase0-projection/app/ProjectionProofCorrespondenceMain.hs \
+            -o phil-check-phase0-source-projection-proof-correspondence
+          ./phil-check-phase0-source-projection-proof-correspondence
+
+      - name: Assemble and ABI-check exact source-bound control-codec LLVM
+        shell: bash
+        run: |
+          set -euo pipefail
+          LLVM_AS=llvm-as-18
+          CLANG=clang-18
+          cabal exec -- ghc -O0 -isrc -iphase0-projection/src \
+            phase0-projection/app/SourceBoundLLVMMain.hs \
+            -o phil-emit-source-bound-control-codec
+          ./phil-emit-source-bound-control-codec > phase0-source-bound-control-codec.ll
+          "$LLVM_AS" phase0-source-bound-control-codec.ll \
+            -o phase0-source-bound-control-codec.bc
+          "$CLANG" --target=x86_64-unknown-linux-gnu -std=c11 \
+            -Wall -Wextra -Wpedantic -Werror -Iruntime/phase0 \
+            -S -emit-llvm runtime/phase0/control_codec_v1.c \
+            -o source-bound-control-codec-runtime.ll
+          python3 scripts/check_runtime_abi.py --partial \
+            phase0-source-bound-control-codec.ll \
+            source-bound-control-codec-runtime.ll
+
+      - name: Build source projection proof certifier
+        run: |
+          cabal exec -- ghc -O0 -isrc -iphase0-projection/src \
+            phase0-projection/app/ProjectionProofCertificationMain.hs \
+            -o phil-certify-phase0-source-projection
+
+      - name: Produce projection proof and proof-bound CERT-018
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p phase0-source-projection-certificates
+          ./phil-certify-phase0-source-projection
+          for certificate in phase0-source-projection-certificates/*; do
+            echo "===== ${certificate} ====="
+            cat "${certificate}"
+            sha256sum "${certificate}"
+          done
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: phil-phase0-source-projection-proof-certification
+          path: phase0-source-projection-certificates/*
+          if-no-files-found: error
+          retention-days: 30
