@@ -134,6 +134,14 @@ The first modern proof tranche groups three narrow assurance theorems with the s
 
 This pilot intentionally excludes compiler/lowering proof chains and content-bound closure certification. It changes orchestration and artifact naming only; theorem statements, checked proof objects, correspondence logic, certificate formats, certificate IDs, validity scopes, and certificate-producing programs remain unchanged.
 
+#### Systems-behavior proof consolidation
+
+The next modern proof tranche groups three adjacent Systems proofs whose proof certification is intentionally coupled to current semantic regressions: `client-outbound`, `recognition-failure`, and `storage-failure-detail`. Each profile checks and stages the same exact Systems theorem object, runs the same current semantic test set as its historical workflow, typechecks and executes the same current-successor correspondence checker, and runs the same proof certifier.
+
+`scripts/ci/phase0-systems-behavior-rocq.sh` preserves each theorem and historical staging prefix. `scripts/ci/phase0-systems-behavior-certify.sh` preserves the asymmetric regression sets: Client Outbound runs the client-outbound and recognition-failure suites, while Recognition Failure and Storage Failure each run client-outbound, recognition-failure, and storage-failure suites. It also preserves each proof-support module, correspondence program, certifier program, and certificate directory. The three historical workflows remain present with comment-only witness edits until old-vs-new equivalence is established on both a bring-up tree and a clean one-commit recomposition.
+
+This tranche does not fold those semantic regressions into ordinary proof compilation or factor them away as redundant. They remain part of the proof-certification authority because the historical certifiers bind the current successor semantics, not only a checked Rocq theorem.
+
 ## Rule for the refactor
 
 This is orchestration cleanup, not assurance redesign.
