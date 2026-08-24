@@ -88,3 +88,5 @@ jobs:
           git add -A
           git commit -m 'Compose storage and recognition failure semantics'
           git push origin HEAD:storage-failure-detail-temp
+
+# trigger composition after workflow registration
