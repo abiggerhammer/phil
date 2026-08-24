@@ -17,6 +17,7 @@ module Phil.Systems
   , module Phil.Systems.BeginPolicySessionChoice
   , module Phil.Systems.HelloPolicyValidation
   , module Phil.Systems.ClientOutbound
+  , module Phil.Systems.RecognitionFailure
   ) where
 
 import Phil.Systems.AcceptedResponse
@@ -31,6 +32,7 @@ import Phil.Systems.LocalRuntimeChoice
 import Phil.Systems.Phase0
 import Phil.Systems.PayloadCancelChoice
 import Phil.Systems.RecognizedRecord
+import Phil.Systems.RecognitionFailure
 import Phil.Systems.RejectedResponse
 import Phil.Systems.SessionChoice
 import Phil.Systems.Storage
