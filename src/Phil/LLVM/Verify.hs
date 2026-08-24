@@ -229,6 +229,11 @@ ordinaryOps = filter isOrdinary
       LLVMClientSHA256 {} -> True
       LLVMClientSendHello {} -> True
       LLVMClientSendBegin {} -> True
+      LLVMServerReceiveFrame {} -> True
+      LLVMServerBorrowFrameView {} -> True
+      LLVMServerCommitIngress {} -> True
+      LLVMServerFailRecognition {} -> True
+      LLVMServerDestroyPending {} -> True
       LLVMAcceptedResponse {} -> True
       LLVMRejectedResponse {} -> True
       LLVMPayloadCancelSelect {} -> True
