@@ -26,7 +26,6 @@ import Phil.LLVM.HelloPolicyValidationProofCertification
 import Phil.LLVM.IR
 import Phil.LLVM.Verify
 import Phil.Systems.ClientOutbound
-import Phil.Systems.HelloPolicyValidation
 import Phil.Systems.IR
 import Phil.Systems.Verify (SystemsVerificationContext (..))
 
