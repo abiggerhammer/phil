@@ -1,3 +1,4 @@
+# Retirement validation marker: rerun the consolidated historical back-certification owner after legacy workflow deletion.
 name: Phase 0 Back-Certification
 
 on:
