@@ -2,7 +2,6 @@
 
 module Main (main) where
 
-import qualified Data.Text as Text
 import qualified Data.Text.IO as TextIO
 import Phil.Assurance (unDigest)
 import Phil.LLVM
@@ -14,10 +13,7 @@ import Phil.LLVM
   , verifyLLVMEmissionWith
   )
 import Phil.Phase0UploadProjection
-import Phil.Systems
-  ( phase0StorageFailureBundle
-  , storageFailureContext
-  )
+import Phil.Systems (phase0StorageFailureBundle)
 import System.Directory (doesFileExist)
 
 main :: IO ()
