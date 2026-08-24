@@ -18,6 +18,7 @@ module Phil.Systems
   , module Phil.Systems.HelloPolicyValidation
   , module Phil.Systems.ClientOutbound
   , module Phil.Systems.RecognitionFailure
+  , module Phil.Systems.StorageFailure
   ) where
 
 import Phil.Systems.AcceptedResponse
@@ -36,6 +37,7 @@ import Phil.Systems.RecognitionFailure
 import Phil.Systems.RejectedResponse
 import Phil.Systems.SessionChoice
 import Phil.Systems.Storage
+import Phil.Systems.StorageFailure
 import Phil.Systems.VersionChoiceOperands
 import Phil.Systems.VersionSessionChoice
 import Phil.Systems.Verify

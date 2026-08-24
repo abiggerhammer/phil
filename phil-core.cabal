@@ -78,6 +78,7 @@ library
       Phil.Systems.HelloPolicyValidation
       Phil.Systems.ClientOutbound
       Phil.Systems.RecognitionFailure
+      Phil.Systems.StorageFailure
       Phil.LLVM.IR
       Phil.LLVM.Lower
       Phil.LLVM.Verify
@@ -715,6 +716,17 @@ test-suite phil-recognition-failure-detail-tests
   type:               exitcode-stdio-1.0
   hs-source-dirs:     test
   main-is:            RecognitionFailureMain.hs
+  build-depends:
+      base >=4.17 && <5,
+      containers >=0.6 && <0.8,
+      phil-core,
+      text >=2.0 && <2.2
+
+test-suite phil-storage-failure-detail-tests
+  import:             common-settings
+  type:               exitcode-stdio-1.0
+  hs-source-dirs:     test
+  main-is:            StorageFailureMain.hs
   build-depends:
       base >=4.17 && <5,
       containers >=0.6 && <0.8,
