@@ -1,0 +1,80 @@
+name: Phase 0 Source Projection Register
+
+on:
+  push:
+    branches: [phase0-source-projection]
+    paths:
+      - '.github/phase0-source-projection-register.trigger'
+
+permissions:
+  contents: write
+
+jobs:
+  register:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: phase0-source-projection
+          fetch-depth: 0
+      - name: Register projection components
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 - <<'PY'
+          from pathlib import Path
+
+          path = Path('phil-core.cabal')
+          text = path.read_text()
+
+          def replace_once(old, new, label):
+              global text
+              if new in text:
+                  return
+              if old not in text:
+                  raise SystemExit(f'{label}: marker missing')
+              text = text.replace(old, new, 1)
+
+          replace_once(
+              '      Phil.Compiler\n',
+              '      Phil.Compiler\n      Phil.Compiler.Phase0UploadProjection\n',
+              'projection library module')
+
+          replace_once(
+              'executable philc\n',
+              '''executable phil-phase0-upload-projection
+  import:   common-settings
+  hs-source-dirs:     app
+  main-is:  Phase0UploadProjectionMain.hs
+  build-depends:
+      base >=4.17 && <5,
+      phil-core,
+      text >=2.0 && <2.2
+
+executable philc
+''',
+              'projection executable')
+
+          replace_once(
+              'test-suite phil-hello-policy-validation-abi-tests\n',
+              '''test-suite phil-phase0-upload-projection-tests
+  import:   common-settings
+  type:     exitcode-stdio-1.0
+  hs-source-dirs:     test
+  main-is:  Phase0UploadProjectionMain.hs
+  build-depends:
+      base >=4.17 && <5,
+      phil-core,
+      text >=2.0 && <2.2
+
+test-suite phil-hello-policy-validation-abi-tests
+''',
+              'projection test suite')
+
+          path.write_text(text)
+          PY
+          git config user.name phil-source-projection-register
+          git config user.email github-actions[bot]@users.noreply.github.com
+          git add phil-core.cabal
+          git commit -m 'Register Phase 0 source projection components'
+          git push origin HEAD:phase0-source-projection
