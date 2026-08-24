@@ -10,17 +10,31 @@ on:
       - 'app/LLVMAcceptedResponseMain.hs'
       - 'app/LLVMRejectedResponseMain.hs'
       - 'app/LLVMExactSendMain.hs'
+      - 'app/LLVMHelloPolicyValidationMain.hs'
+      - 'app/LLVMBeginPolicyChoiceMain.hs'
+      - 'app/LLVMVersionSessionChoiceMain.hs'
+      - 'app/LLVMPayloadCancelChoiceMain.hs'
       - 'runtime/phase0/storage_v1*'
       - 'runtime/phase0/accepted_response_v1*'
       - 'runtime/phase0/rejected_response_v1*'
       - 'runtime/phase0/exact_send_v1*'
+      - 'runtime/phase0/hello_policy_validation_v1*'
+      - 'runtime/phase0/begin_policy_choice_v1*'
+      - 'runtime/phase0/version_session_choice_v1*'
+      - 'runtime/phase0/payload_cancel_choice_v1*'
       - 'scripts/check_runtime_abi.py'
       - 'scripts/ci/phase0-focused-runtime.sh'
+      - 'scripts/ci/phase0-control-runtime.sh'
+      - 'scripts/ci/phase0-focused-runtime-dispatch.sh'
       - 'scripts/ci/resolve-llvm18.sh'
       - 'test/StorageABIMain.hs'
       - 'test/AcceptedResponseABIMain.hs'
       - 'test/RejectedResponseABIMain.hs'
       - 'test/ExactSendABIMain.hs'
+      - 'test/HelloPolicyValidationABIMain.hs'
+      - 'test/BeginPolicyChoiceABIMain.hs'
+      - 'test/VersionSessionChoiceABIMain.hs'
+      - 'test/PayloadCancelChoiceABIMain.hs'
       - 'phil-core.cabal'
       - '.github/workflows/phase0-focused-runtime.yml'
   push:
@@ -32,17 +46,31 @@ on:
       - 'app/LLVMAcceptedResponseMain.hs'
       - 'app/LLVMRejectedResponseMain.hs'
       - 'app/LLVMExactSendMain.hs'
+      - 'app/LLVMHelloPolicyValidationMain.hs'
+      - 'app/LLVMBeginPolicyChoiceMain.hs'
+      - 'app/LLVMVersionSessionChoiceMain.hs'
+      - 'app/LLVMPayloadCancelChoiceMain.hs'
       - 'runtime/phase0/storage_v1*'
       - 'runtime/phase0/accepted_response_v1*'
       - 'runtime/phase0/rejected_response_v1*'
       - 'runtime/phase0/exact_send_v1*'
+      - 'runtime/phase0/hello_policy_validation_v1*'
+      - 'runtime/phase0/begin_policy_choice_v1*'
+      - 'runtime/phase0/version_session_choice_v1*'
+      - 'runtime/phase0/payload_cancel_choice_v1*'
       - 'scripts/check_runtime_abi.py'
       - 'scripts/ci/phase0-focused-runtime.sh'
+      - 'scripts/ci/phase0-control-runtime.sh'
+      - 'scripts/ci/phase0-focused-runtime-dispatch.sh'
       - 'scripts/ci/resolve-llvm18.sh'
       - 'test/StorageABIMain.hs'
       - 'test/AcceptedResponseABIMain.hs'
       - 'test/RejectedResponseABIMain.hs'
       - 'test/ExactSendABIMain.hs'
+      - 'test/HelloPolicyValidationABIMain.hs'
+      - 'test/BeginPolicyChoiceABIMain.hs'
+      - 'test/VersionSessionChoiceABIMain.hs'
+      - 'test/PayloadCancelChoiceABIMain.hs'
       - 'phil-core.cabal'
       - '.github/workflows/phase0-focused-runtime.yml'
 
@@ -61,6 +89,10 @@ jobs:
           - accepted-response
           - rejected-response
           - exact-send
+          - hello-policy-validation
+          - begin-policy-choice
+          - version-session-choice
+          - payload-cancel-choice
     steps:
       - uses: actions/checkout@v4
       - uses: haskell-actions/setup@v2
@@ -68,4 +100,4 @@ jobs:
           ghc-version: '9.6.7'
           cabal-version: 'latest'
       - name: Run focused runtime regression
-        run: bash scripts/ci/phase0-focused-runtime.sh '${{ matrix.profile }}'
+        run: bash scripts/ci/phase0-focused-runtime-dispatch.sh '${{ matrix.profile }}'
