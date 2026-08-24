@@ -1,0 +1,175 @@
+name: Control Codec Proofs
+
+on:
+  pull_request:
+    paths:
+      - 'proof/Phil/LLVM/ControlCodec.v'
+      - 'src/Phil/LLVM/ControlCodec.hs'
+      - 'src/Phil/LLVM/ControlCodecProofCertification.hs'
+      - 'src/Phil/Assurance/ControlCodecTestEvidence.hs'
+      - 'src/Phil/Assurance/TestEvidenceCertification.hs'
+      - 'src/Phil/Assurance/Verify.hs'
+      - 'src/Phil/LLVM/StorageFailureDetail.hs'
+      - 'src/Phil/LLVM/IR.hs'
+      - 'src/Phil/Systems/StorageFailure.hs'
+      - 'app/ControlCodecProofCorrespondenceMain.hs'
+      - 'app/ControlCodecProofCertificationMain.hs'
+      - 'app/LLVMControlCodecMain.hs'
+      - 'runtime/phase0/control_codec_v1*'
+      - 'scripts/check_runtime_abi.py'
+      - 'test/ControlCodecABIMain.hs'
+      - 'docs/phase-0/control-codec-v1.md'
+      - '.github/workflows/control-codec-proofs.yml'
+  push:
+    branches: [main]
+    paths:
+      - 'proof/Phil/LLVM/ControlCodec.v'
+      - 'src/Phil/LLVM/ControlCodec.hs'
+      - 'src/Phil/LLVM/ControlCodecProofCertification.hs'
+      - 'src/Phil/Assurance/ControlCodecTestEvidence.hs'
+      - 'src/Phil/Assurance/TestEvidenceCertification.hs'
+      - 'src/Phil/Assurance/Verify.hs'
+      - 'src/Phil/LLVM/StorageFailureDetail.hs'
+      - 'src/Phil/LLVM/IR.hs'
+      - 'src/Phil/Systems/StorageFailure.hs'
+      - 'app/ControlCodecProofCorrespondenceMain.hs'
+      - 'app/ControlCodecProofCertificationMain.hs'
+      - 'app/LLVMControlCodecMain.hs'
+      - 'runtime/phase0/control_codec_v1*'
+      - 'scripts/check_runtime_abi.py'
+      - 'test/ControlCodecABIMain.hs'
+      - 'docs/phase-0/control-codec-v1.md'
+      - '.github/workflows/control-codec-proofs.yml'
+
+permissions:
+  contents: read
+
+jobs:
+  rocq-control-codec:
+    runs-on: ubuntu-latest
+    container:
+      image: rocq/rocq-prover:9.2.0
+      options: --user root
+    steps:
+      - uses: actions/checkout@v4
+      - name: Check Control Codec proof
+        shell: bash
+        run: |
+          set -euo pipefail
+          export PATH="/home/rocq/.opam/${COMPILER}/bin:$PATH"
+          rocq c -Q proof/Phil Phil proof/Phil/LLVM/ControlCodec.v
+      - name: Stage checked Control Codec proof
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p rocq-control-codec/proof/Phil/LLVM
+          cp proof/Phil/LLVM/ControlCodec.v \
+             proof/Phil/LLVM/ControlCodec.vo \
+             rocq-control-codec/proof/Phil/LLVM/
+      - uses: actions/upload-artifact@v4
+        with:
+          name: rocq-control-codec-checked-proof-objects
+          path: rocq-control-codec/
+          if-no-files-found: error
+          retention-days: 14
+
+  certify-control-codec:
+    needs: rocq-control-codec
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: haskell-actions/setup@v2
+        with:
+          ghc-version: '9.6.7'
+          cabal-version: 'latest'
+      - uses: actions/download-artifact@v4
+        with:
+          name: rocq-control-codec-checked-proof-objects
+          path: rocq-control-codec
+
+      - name: Build target and focused regressions
+        run: |
+          cabal build lib:phil-core \
+            phil-llvm-phase0-control-codec \
+            phil-control-codec-abi-tests
+          cabal test phil-control-codec-abi-tests --test-show-details=direct
+          cabal test phil-storage-failure-detail-abi-tests --test-show-details=direct
+          cabal test phil-server-framed-ingress-abi-tests --test-show-details=direct
+
+      - name: Typecheck proof and test-evidence support with warnings as errors
+        run: |
+          cabal exec -- ghc -Wall -Wcompat -Wincomplete-record-updates -Wincomplete-uni-patterns -Wredundant-constraints -Werror \
+            -isrc -iapp -fno-code src/Phil/Assurance/ControlCodecTestEvidence.hs
+          cabal exec -- ghc -Wall -Wcompat -Wincomplete-record-updates -Wincomplete-uni-patterns -Wredundant-constraints -Werror \
+            -isrc -iapp -fno-code src/Phil/LLVM/ControlCodecProofCertification.hs
+          cabal exec -- ghc -Wall -Wcompat -Wincomplete-record-updates -Wincomplete-uni-patterns -Wredundant-constraints -Werror \
+            -isrc -iapp -fno-code app/ControlCodecProofCorrespondenceMain.hs
+          cabal exec -- ghc -Wall -Wcompat -Wincomplete-record-updates -Wincomplete-uni-patterns -Wredundant-constraints -Werror \
+            -isrc -iapp -fno-code app/ControlCodecProofCertificationMain.hs
+
+      - name: Run exact correspondence and drift checks
+        run: |
+          cabal exec -- ghc -O0 -isrc -iapp app/ControlCodecProofCorrespondenceMain.hs \
+            -o phil-check-control-codec-proof-correspondence
+          ./phil-check-control-codec-proof-correspondence
+
+      - name: Re-run LLVM ABI and exact native codec fixtures
+        shell: bash
+        run: |
+          set -euo pipefail
+          LLVM_AS=llvm-as-18
+          LLVM_LINK=llvm-link-18
+          CLANG=clang-18
+          EMITTER="$(cabal list-bin phil-llvm-phase0-control-codec)"
+
+          "$EMITTER" > phase0-control-codec.ll
+          "$LLVM_AS" phase0-control-codec.ll -o phase0-control-codec.bc
+
+          "$CLANG" --target=x86_64-unknown-linux-gnu -std=c11 -Wall -Wextra -Wpedantic -Werror \
+            -Iruntime/phase0 -S -emit-llvm runtime/phase0/control_codec_v1.c \
+            -o control-codec-runtime.ll
+          python3 scripts/check_runtime_abi.py --partial \
+            phase0-control-codec.ll control-codec-runtime.ll \
+            | tee control-codec-test-evidence.log
+          "$LLVM_AS" control-codec-runtime.ll -o control-codec-runtime.bc
+          "$LLVM_LINK" phase0-control-codec.bc control-codec-runtime.bc \
+            -o phase0-control-codec-partially-linked.bc
+
+          "$CLANG" --target=x86_64-unknown-linux-gnu -std=c11 -Wall -Wextra -Wpedantic -Werror \
+            -Iruntime/phase0 \
+            runtime/phase0/control_codec_v1.c \
+            runtime/phase0/control_codec_v1_smoke.c \
+            runtime/phase0/control_codec_v1_smoke_main.c \
+            -o control-codec-smoke
+          if ./control-codec-smoke; then
+            echo "PASS: control-codec-v1 native fixture suite" \
+              | tee -a control-codec-test-evidence.log
+          else
+            echo "FAIL: expected control codec fixture suite to pass" \
+              | tee -a control-codec-test-evidence.log
+            exit 1
+          fi
+
+      - name: Build combined proof/runtime-evidence certifier
+        run: |
+          cabal exec -- ghc -O0 -isrc -iapp app/ControlCodecProofCertificationMain.hs \
+            -o phil-certify-control-codec
+
+      - name: Produce runtime, proof, and proof-bound CERT-017 certificates
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p control-codec-certificates
+          ./phil-certify-control-codec
+          for certificate in control-codec-certificates/*; do
+            echo "===== ${certificate} ====="
+            cat "${certificate}"
+            sha256sum "${certificate}"
+          done
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: phil-control-codec-proof-certification
+          path: control-codec-certificates/*
+          if-no-files-found: error
+          retention-days: 30
