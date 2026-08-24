@@ -5,6 +5,8 @@ module Main (main) where
 import qualified Data.ByteString as ByteString
 import qualified Data.Text as Text
 import qualified Data.Text.IO as TextIO
+import Phil.Assurance.RemainingRuntimeTestEvidenceProfiles
+  ( knownRemainingRuntimeTestEvidenceCertificationSpec )
 import Phil.Assurance.TestEvidenceCertification
 import Phil.Assurance.TestEvidenceProfiles (knownPhase0TestEvidenceCertificationSpec)
 import Phil.Assurance.Types (ArtifactRef (..), unArtifactRef)
@@ -20,7 +22,7 @@ main = do
 
 certify :: String -> FilePath -> FilePath -> IO ()
 certify profile resultPath outputPath =
-  case knownPhase0TestEvidenceCertificationSpec (Text.pack profile) of
+  case lookupSpec (Text.pack profile) of
     Nothing -> die ("unknown test-evidence certification profile: " ++ profile)
     Just spec -> do
       checkerBytes <- ByteString.readFile (artifactPath (testSpecCheckerRef spec))
@@ -37,6 +39,12 @@ certify profile resultPath outputPath =
     readInput ref = do
       bytes <- ByteString.readFile (artifactPath ref)
       pure (ref, bytes)
+
+lookupSpec :: Text.Text -> Maybe TestEvidenceCertificationSpec
+lookupSpec profile =
+  case knownPhase0TestEvidenceCertificationSpec profile of
+    Just spec -> Just spec
+    Nothing -> knownRemainingRuntimeTestEvidenceCertificationSpec profile
 
 artifactPath :: ArtifactRef -> FilePath
 artifactPath = Text.unpack . unArtifactRef
