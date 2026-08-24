@@ -1,0 +1,395 @@
+name: Client Control Send Bootstrap
+
+on:
+  push:
+    branches:
+      - client-control-send-abi
+    paths:
+      - '.github/workflows/client-control-send-bootstrap.yml'
+
+permissions:
+  contents: write
+
+jobs:
+  bootstrap:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: client-control-send-abi
+          fetch-depth: 0
+      - uses: haskell-actions/setup@v2
+        with:
+          ghc-version: '9.6.7'
+          cabal-version: 'latest'
+
+      - name: Register target and physical LLVM operations
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 - <<'PY'
+          from pathlib import Path
+
+          def replace_once(text, old, new, label):
+              if new in text:
+                  return text
+              if old not in text:
+                  raise SystemExit(f'{label}: insertion marker missing')
+              return text.replace(old, new, 1)
+
+          ir_path = Path('src/Phil/LLVM/IR.hs')
+          ir = ir_path.read_text()
+
+          ir = replace_once(
+              ir,
+              '  | LLVMExactSend RuntimeSiteRef Text Text\n  | LLVMAcceptedResponse Text Text',
+              '  | LLVMExactSend RuntimeSiteRef Text Text\n'
+              '  | LLVMClientSupportedVersions Text\n'
+              '  | LLVMClientPayloadLength Text Text\n'
+              '  | LLVMClientPayloadKind Text Text\n'
+              '  | LLVMClientSHA256 Text Text\n'
+              '  | LLVMClientSendHello Text Text\n'
+              '  | LLVMClientSendBegin Text Text Text Text\n'
+              '  | LLVMAcceptedResponse Text Text',
+              'LLVM client control-send op constructors')
+
+          old_term = '''  | LLVMVersionRefinement
+              RuntimeSiteRef
+              Text
+              Text
+              LLVMBlockId
+              LLVMBlockId
+            | LLVMBeginPolicyValidate'''.replace('          ', '')
+          new_term = '''  | LLVMVersionRefinement
+              RuntimeSiteRef
+              Text
+              Text
+              LLVMBlockId
+              LLVMBlockId
+            | LLVMVersionRefinementWithSet
+              RuntimeSiteRef
+              Text
+              Text
+              Text
+              LLVMBlockId
+              LLVMBlockId
+            | LLVMBeginPolicyValidate'''.replace('          ', '')
+          ir = replace_once(ir, old_term, new_term, 'explicit version-set refinement constructor')
+
+          ir = replace_once(
+              ir,
+              '  LLVMVersionRefinement _ _ _ yes no -> [yes, no]\n  LLVMBeginPolicyValidate',
+              '  LLVMVersionRefinement _ _ _ yes no -> [yes, no]\n'
+              '  LLVMVersionRefinementWithSet _ _ _ _ yes no -> [yes, no]\n'
+              '  LLVMBeginPolicyValidate',
+              'version-set refinement successors')
+
+          ir = replace_once(
+              ir,
+              '        LLVMVersionRefinement site _ _ _ _ -> [site]\n        LLVMBeginPolicyValidate',
+              '        LLVMVersionRefinement site _ _ _ _ -> [site]\n'
+              '        LLVMVersionRefinementWithSet site _ _ _ _ _ -> [site]\n'
+              '        LLVMBeginPolicyValidate',
+              'version-set refinement runtime site')
+
+          ir = replace_once(
+              ir,
+              '      , "phil-runtime/phase0/transport-exact-send-v1"\n      ]',
+              '      , "phil-runtime/phase0/transport-exact-send-v1"\n'
+              '      , "phil-runtime/phase0/client-control-send-v1"\n'
+              '      ]',
+              'client control-send runtime profile')
+
+          ir = replace_once(
+              ir,
+              '      <> helloPolicyFailureDeclaration\n      <> exactSendDeclaration',
+              '      <> helloPolicyFailureDeclaration\n'
+              '      <> clientControlSendDeclarations\n'
+              '      <> exactSendDeclaration',
+              'client control-send declarations hook')
+
+          exact_decl = '''    exactSendDeclaration =
+              if any hasExactSend allBlocks
+                then ["declare void @phil_runtime_send_exact(ptr, ptr)"]
+                else []'''.replace('          ', '')
+          client_decl = '''    clientControlSendDeclarations =
+              if runtimeProfile == "phil-runtime/phase0/client-control-send-v1"
+                then
+                  [ "declare ptr @phil_runtime_supported_versions()"
+                  , "declare i64 @phil_runtime_payload_length(ptr)"
+                  , "declare ptr @phil_runtime_payload_kind(ptr)"
+                  , "declare ptr @phil_runtime_sha256(ptr)"
+                  , "declare void @phil_runtime_send_hello(ptr, ptr)"
+                  , "declare void @phil_runtime_send_begin_sha256(ptr, i64, ptr, ptr)"
+                  , "declare i1 @phil_runtime_refine_selected_version_with_set(ptr, ptr, i16)"
+                  ]
+                else []
+
+            exactSendDeclaration =
+              if any hasExactSend allBlocks
+                then ["declare void @phil_runtime_send_exact(ptr, ptr)"]
+                else []'''.replace('          ', '')
+          ir = replace_once(ir, exact_decl, client_decl, 'client control-send declaration definitions')
+
+          old_exact_render = '''      LLVMExactSend _ transport payload ->
+                [ "call void @phil_runtime_send_exact(ptr %" <> symbol transport
+                    <> ", ptr %" <> symbol payload <> ")"
+                ]
+              LLVMAcceptedResponse'''.replace('          ', '')
+          new_exact_render = '''      LLVMExactSend _ transport payload ->
+                [ "call void @phil_runtime_send_exact(ptr %" <> symbol transport
+                    <> ", ptr %" <> symbol payload <> ")"
+                ]
+              LLVMClientSupportedVersions output ->
+                [ "%" <> symbol output <> " = call ptr @phil_runtime_supported_versions()" ]
+              LLVMClientPayloadLength output payload ->
+                [ "%" <> symbol output <> " = call i64 @phil_runtime_payload_length(ptr %"
+                    <> symbol payload <> ")"
+                ]
+              LLVMClientPayloadKind output payload ->
+                [ "%" <> symbol output <> " = call ptr @phil_runtime_payload_kind(ptr %"
+                    <> symbol payload <> ")"
+                ]
+              LLVMClientSHA256 output payload ->
+                [ "%" <> symbol output <> " = call ptr @phil_runtime_sha256(ptr %"
+                    <> symbol payload <> ")"
+                ]
+              LLVMClientSendHello transport versions ->
+                [ "call void @phil_runtime_send_hello(ptr %" <> symbol transport
+                    <> ", ptr %" <> symbol versions <> ")"
+                ]
+              LLVMClientSendBegin transport payloadLength payloadKind digest ->
+                [ "call void @phil_runtime_send_begin_sha256(ptr %" <> symbol transport
+                    <> ", i64 %" <> symbol payloadLength
+                    <> ", ptr %" <> symbol payloadKind
+                    <> ", ptr %" <> symbol digest <> ")"
+                ]
+              LLVMAcceptedResponse'''.replace('          ', '')
+          ir = replace_once(ir, old_exact_render, new_exact_render, 'client control-send op rendering')
+
+          old_refine_render = '''      LLVMVersionRefinement _ transport selected yes no ->
+                let blockSymbol = symbol (unLLVMBlockId (llvmBlockId blockValue))
+                    validName = "%phil_version_refinement_ok_" <> blockSymbol
+                in
+                  [ validName <> " = call i1 @phil_runtime_refine_selected_version(ptr %"
+                      <> symbol transport <> ", i16 %" <> symbol selected <> ")"
+                  , "br i1 " <> validName
+                      <> ", label %" <> symbol (unLLVMBlockId yes)
+                      <> ", label %" <> symbol (unLLVMBlockId no)
+                  ]
+              LLVMBeginPolicyValidate'''.replace('          ', '')
+          new_refine_render = '''      LLVMVersionRefinement _ transport selected yes no ->
+                let blockSymbol = symbol (unLLVMBlockId (llvmBlockId blockValue))
+                    validName = "%phil_version_refinement_ok_" <> blockSymbol
+                in
+                  [ validName <> " = call i1 @phil_runtime_refine_selected_version(ptr %"
+                      <> symbol transport <> ", i16 %" <> symbol selected <> ")"
+                  , "br i1 " <> validName
+                      <> ", label %" <> symbol (unLLVMBlockId yes)
+                      <> ", label %" <> symbol (unLLVMBlockId no)
+                  ]
+              LLVMVersionRefinementWithSet _ transport versions selected yes no ->
+                let blockSymbol = symbol (unLLVMBlockId (llvmBlockId blockValue))
+                    validName = "%phil_version_refinement_ok_" <> blockSymbol
+                in
+                  [ validName <> " = call i1 @phil_runtime_refine_selected_version_with_set(ptr %"
+                      <> symbol transport <> ", ptr %" <> symbol versions
+                      <> ", i16 %" <> symbol selected <> ")"
+                  , "br i1 " <> validName
+                      <> ", label %" <> symbol (unLLVMBlockId yes)
+                      <> ", label %" <> symbol (unLLVMBlockId no)
+                  ]
+              LLVMBeginPolicyValidate'''.replace('          ', '')
+          ir = replace_once(ir, old_refine_render, new_refine_render, 'explicit version-set refinement rendering')
+          ir_path.write_text(ir)
+
+          version_path = Path('src/Phil/LLVM/VersionSessionChoice.hs')
+          version = version_path.read_text()
+          old_case = '''  case llvmBlockTerminator clientVersion of
+              LLVMVersionRefinement _ transport selected yes no
+                | transport == clientTransport
+                    && selected == clientSelected
+                    && yes == LLVMBlockId (unBlockId (versionChoiceClientVersionSuccess versionWitness))
+                    && no == LLVMBlockId (unBlockId (versionChoiceClientVersionFailure versionWitness)) -> pure ()
+              other -> Left (VersionChoiceLLVMClientRefinementMismatch
+                clientName clientVersionTargetId other)'''.replace('          ', '')
+          new_case = '''  case llvmBlockTerminator clientVersion of
+              LLVMVersionRefinement _ transport selected yes no
+                | transport == clientTransport
+                    && selected == clientSelected
+                    && yes == LLVMBlockId (unBlockId (versionChoiceClientVersionSuccess versionWitness))
+                    && no == LLVMBlockId (unBlockId (versionChoiceClientVersionFailure versionWitness)) -> pure ()
+              LLVMVersionRefinementWithSet _ transport _offered selected yes no
+                | transport == clientTransport
+                    && selected == clientSelected
+                    && yes == LLVMBlockId (unBlockId (versionChoiceClientVersionSuccess versionWitness))
+                    && no == LLVMBlockId (unBlockId (versionChoiceClientVersionFailure versionWitness)) -> pure ()
+              other -> Left (VersionChoiceLLVMClientRefinementMismatch
+                clientName clientVersionTargetId other)'''.replace('          ', '')
+          version = replace_once(version, old_case, new_case, 'version regression stronger refinement case')
+
+          old_render_check = '''  let rendered = llvmArtifactText llvmArtifact
+            unless
+              ( Text.isInfixOf "declare ptr @phil_record_Hello_get_versions(ptr)" rendered
+              && Text.isInfixOf "declare i1 @phil_runtime_choose_supported(ptr, ptr, ptr)" rendered
+              && Text.isInfixOf "declare void @phil_runtime_select_unsupported(ptr)" rendered
+              && Text.isInfixOf "declare void @phil_runtime_select_version(ptr, i16)" rendered
+              && Text.isInfixOf "declare i1 @phil_runtime_receive_version_choice(ptr, ptr)" rendered
+              && Text.isInfixOf "declare i1 @phil_runtime_refine_selected_version(ptr, i16)" rendered
+              ) $'''.replace('          ', '')
+          new_render_check = '''  let rendered = llvmArtifactText llvmArtifact
+              refinementDeclarationPresent =
+                Text.isInfixOf "declare i1 @phil_runtime_refine_selected_version(ptr, i16)" rendered
+                  || Text.isInfixOf "declare i1 @phil_runtime_refine_selected_version_with_set(ptr, ptr, i16)" rendered
+            unless
+              ( Text.isInfixOf "declare ptr @phil_record_Hello_get_versions(ptr)" rendered
+              && Text.isInfixOf "declare i1 @phil_runtime_choose_supported(ptr, ptr, ptr)" rendered
+              && Text.isInfixOf "declare void @phil_runtime_select_unsupported(ptr)" rendered
+              && Text.isInfixOf "declare void @phil_runtime_select_version(ptr, i16)" rendered
+              && Text.isInfixOf "declare i1 @phil_runtime_receive_version_choice(ptr, ptr)" rendered
+              && refinementDeclarationPresent
+              ) $'''.replace('          ', '')
+          version = replace_once(version, old_render_check, new_render_check, 'version regression refinement declaration')
+          version_path.write_text(version)
+
+          llvm_path = Path('src/Phil/LLVM.hs')
+          llvm = llvm_path.read_text()
+          llvm = replace_once(
+              llvm,
+              '  , module Phil.LLVM.ExactSendCertification\n  ) where',
+              '  , module Phil.LLVM.ExactSendCertification\n'
+              '  , module Phil.LLVM.ClientControlSend\n'
+              '  ) where',
+              'Phil.LLVM export')
+          llvm = replace_once(
+              llvm,
+              'import Phil.LLVM.ExactSendCertification\nimport Phil.LLVM.AcceptedResponseCertification',
+              'import Phil.LLVM.ExactSendCertification\n'
+              'import Phil.LLVM.ClientControlSend\n'
+              'import Phil.LLVM.AcceptedResponseCertification',
+              'Phil.LLVM import')
+          llvm_path.write_text(llvm)
+
+          module_path = Path('src/Phil/LLVM/ClientControlSend.hs')
+          module_text = module_path.read_text().replace(
+              'import Phil.Core.Scalar (ScalarType (..))\n', '')
+          module_path.write_text(module_text)
+
+          cabal_path = Path('phil-core.cabal')
+          cabal = cabal_path.read_text()
+          cabal = replace_once(
+              cabal,
+              '      Phil.LLVM.ExactSend\n      Phil.LLVM.ExactSendCertification\n  build-depends:',
+              '      Phil.LLVM.ExactSend\n'
+              '      Phil.LLVM.ExactSendCertification\n'
+              '      Phil.LLVM.ClientControlSend\n'
+              '  build-depends:',
+              'Cabal client control-send module')
+
+          exact_exe = '''executable phil-llvm-phase0-exact-send
+            import:             common-settings
+            hs-source-dirs:     app
+            main-is:            LLVMExactSendMain.hs
+            build-depends:
+                base >=4.17 && <5,
+                phil-core,
+                text >=2.0 && <2.2
+
+          executable philc'''.replace('          ', '')
+          control_exe = '''executable phil-llvm-phase0-exact-send
+            import:             common-settings
+            hs-source-dirs:     app
+            main-is:            LLVMExactSendMain.hs
+            build-depends:
+                base >=4.17 && <5,
+                phil-core,
+                text >=2.0 && <2.2
+
+          executable phil-llvm-phase0-client-control-send
+            import:             common-settings
+            hs-source-dirs:     app
+            main-is:            LLVMClientControlSendMain.hs
+            build-depends:
+                base >=4.17 && <5,
+                phil-core,
+                text >=2.0 && <2.2
+
+          executable philc'''.replace('          ', '')
+          cabal = replace_once(cabal, exact_exe, control_exe, 'Cabal client control-send emitter')
+
+          exact_test = '''test-suite phil-exact-send-abi-tests
+            import:             common-settings
+            type:               exitcode-stdio-1.0
+            hs-source-dirs:     test
+            main-is:            ExactSendABIMain.hs
+            build-depends:
+                base >=4.17 && <5,
+                containers >=0.6 && <0.8,
+                phil-core,
+                text >=2.0 && <2.2'''.replace('          ', '')
+          control_test = exact_test + '''
+
+          test-suite phil-client-control-send-abi-tests
+            import:             common-settings
+            type:               exitcode-stdio-1.0
+            hs-source-dirs:     test
+            main-is:            ClientControlSendABIMain.hs
+            build-depends:
+                base >=4.17 && <5,
+                containers >=0.6 && <0.8,
+                phil-core,
+                text >=2.0 && <2.2'''.replace('          ', '')
+          cabal = replace_once(cabal, exact_test, control_test, 'Cabal client control-send test')
+          cabal_path.write_text(cabal)
+          PY
+
+      - name: Build and verify focused target
+        shell: bash
+        run: |
+          set -euo pipefail
+          cabal build phil-llvm-phase0-client-control-send phil-client-control-send-abi-tests
+          cabal test phil-client-control-send-abi-tests --test-show-details=direct
+
+          LLVM_AS=llvm-as-18
+          LLVM_LINK=llvm-link-18
+          CLANG=clang-18
+          EMITTER="$(cabal list-bin phil-llvm-phase0-client-control-send)"
+          "$EMITTER" > phase0-client-control-send.ll
+          "$LLVM_AS" phase0-client-control-send.ll -o phase0-client-control-send.bc
+
+          "$CLANG" --target=x86_64-unknown-linux-gnu -std=c11 -Wall -Wextra -Wpedantic -Werror \
+            -Iruntime/phase0 -S -emit-llvm runtime/phase0/client_control_send_v1_smoke.c \
+            -o client-control-send-runtime.ll
+          python3 scripts/check_runtime_abi.py --partial \
+            phase0-client-control-send.ll client-control-send-runtime.ll
+          "$LLVM_AS" client-control-send-runtime.ll -o client-control-send-runtime.bc
+          "$LLVM_LINK" phase0-client-control-send.bc client-control-send-runtime.bc \
+            -o phase0-client-control-send-partially-linked.bc
+
+          "$CLANG" --target=x86_64-unknown-linux-gnu -std=c11 -Wall -Wextra -Wpedantic -Werror \
+            -Iruntime/phase0 \
+            runtime/phase0/client_control_send_v1_smoke.c \
+            runtime/phase0/client_control_send_v1_smoke_main.c \
+            -o client-control-send-smoke
+          ./client-control-send-smoke
+
+          "$CLANG" --target=x86_64-unknown-linux-gnu -std=c11 -Wall -Wextra -Wpedantic -Werror \
+            -S -emit-llvm runtime/phase0/client_control_send_v1_bad_ambient.c \
+            -o client-control-send-bad-ambient.ll
+          if python3 scripts/check_runtime_abi.py --partial \
+              phase0-client-control-send.ll client-control-send-bad-ambient.ll; then
+            echo "expected ABI checker to reject ambient/nullary client control-send provider" >&2
+            exit 1
+          fi
+
+      - name: Commit validated registration and remove bootstrap
+        shell: bash
+        run: |
+          set -euo pipefail
+          git config user.name phil-client-control-send-bootstrap
+          git config user.email github-actions[bot]@users.noreply.github.com
+          git rm .github/workflows/client-control-send-bootstrap.yml
+          git add src/Phil/LLVM/IR.hs src/Phil/LLVM/VersionSessionChoice.hs \
+            src/Phil/LLVM/ClientControlSend.hs src/Phil/LLVM.hs phil-core.cabal
+          git commit -m 'Register client control-send physical lowering'
+          git push origin HEAD:client-control-send-abi
