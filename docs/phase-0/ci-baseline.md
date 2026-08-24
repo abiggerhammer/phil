@@ -86,6 +86,19 @@ The first focused-runtime consolidation groups four adjacent physical gates unde
 
 PR #127 established equivalence twice. On both its bring-up tree and its clean one-commit recomposition, the consolidated four-profile workflow, all four historical runtime workflows, ordinary CI, and the Phase 0 baseline were green together. The historical `storage-runtime.yml`, `accepted-response-runtime.yml`, `rejected-response-runtime.yml`, and `exact-send-runtime.yml` workflows are therefore retired from `main`; their execution history remains preserved in Git, while `phase0-focused-runtime.yml` and `scripts/ci/phase0-focused-runtime.sh` are now the active regression surface for those four profiles.
 
+#### Control-choice runtime consolidation
+
+The next focused-runtime tranche adds four control/choice profiles to the same consolidated workflow:
+
+- `hello-policy-validation`;
+- `begin-policy-choice`;
+- `version-session-choice`;
+- `payload-cancel-choice`.
+
+`scripts/ci/phase0-control-runtime.sh` reproduces their historical emitter/test builds, LLVM 18 assembly/linking, partial or full ABI comparison as originally used, C provider compilation with warnings-as-errors, native smoke execution, bad ambient/nullary provider rejection, and focused Cabal ABI test runs. `scripts/ci/phase0-focused-runtime-dispatch.sh` keeps the original four physical profiles on their already-validated runner and routes only these new control/choice profiles to the new runner.
+
+The four historical control/choice runtime workflows remain present as equivalence witnesses until the expanded eight-profile consolidated workflow and all four legacy jobs are green together on both bring-up and clean recomposed heads.
+
 ## Rule for the refactor
 
 This is orchestration cleanup, not assurance redesign.
