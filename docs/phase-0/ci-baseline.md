@@ -84,7 +84,7 @@ The first focused-runtime consolidation groups four adjacent physical gates unde
 
 `scripts/ci/phase0-focused-runtime.sh` reproduces the substantive commands from those four historical workflows: emitter/test builds, LLVM assembly and partial/full ABI checks as originally used, C provider compilation with warnings-as-errors, partial linking where applicable, native smoke execution, the corresponding ambient/bad-provider rejection, and Exact Send's explicit focused Cabal ABI test run.
 
-The historical workflows remain present during this pilot. A comment-only edit marks each as an equivalence witness and causes the old jobs to run on the same candidate head as the new consolidated workflow. They may be retired only after old and new jobs are green together on both bring-up and clean recomposed heads.
+PR #127 established equivalence twice. On both its bring-up tree and its clean one-commit recomposition, the consolidated four-profile workflow, all four historical runtime workflows, ordinary CI, and the Phase 0 baseline were green together. The historical `storage-runtime.yml`, `accepted-response-runtime.yml`, `rejected-response-runtime.yml`, and `exact-send-runtime.yml` workflows are therefore retired from `main`; their execution history remains preserved in Git, while `phase0-focused-runtime.yml` and `scripts/ci/phase0-focused-runtime.sh` are now the active regression surface for those four profiles.
 
 ## Rule for the refactor
 
