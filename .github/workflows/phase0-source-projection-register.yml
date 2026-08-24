@@ -1,10 +1,11 @@
 name: Phase 0 Source Projection Register
 
 on:
-  push:
-    branches: [phase0-source-projection]
+  pull_request:
+    types: [opened, synchronize, reopened]
     paths:
-      - '.github/phase0-source-projection-register.trigger'
+      - 'src/Phil/Compiler/Phase0UploadProjection.hs'
+      - '.github/workflows/phase0-source-projection-register.yml'
 
 permissions:
   contents: write
@@ -62,6 +63,8 @@ executable philc
   type:     exitcode-stdio-1.0
   hs-source-dirs:     test
   main-is:  Phase0UploadProjectionMain.hs
+  autogen-modules:    Paths_phil_core
+  other-modules:      Paths_phil_core
   build-depends:
       base >=4.17 && <5,
       phil-core,
@@ -76,5 +79,9 @@ test-suite phil-hello-policy-validation-abi-tests
           git config user.name phil-source-projection-register
           git config user.email github-actions[bot]@users.noreply.github.com
           git add phil-core.cabal
+          if git diff --cached --quiet; then
+            echo 'projection components already registered'
+            exit 0
+          fi
           git commit -m 'Register Phase 0 source projection components'
           git push origin HEAD:phase0-source-projection
