@@ -1,0 +1,48 @@
+cabal-version:      3.0
+name:               phil-phase0-projection
+version:            0.0.1.0
+synopsis:           Template-directed Phase 0 upload source-to-Systems projection
+build-type:          Simple
+
+common common-settings
+  default-language: GHC2021
+  ghc-options:
+      -Wall
+      -Wcompat
+      -Wincomplete-record-updates
+      -Wincomplete-uni-patterns
+      -Wredundant-constraints
+
+library
+  import:             common-settings
+  hs-source-dirs:     src
+  exposed-modules:
+      Phil.Phase0UploadProjection
+  build-depends:
+      base >=4.17 && <5,
+      containers >=0.6 && <0.8,
+      phil-core,
+      text >=2.0 && <2.2
+
+executable phil-phase0-upload-projection
+  import:             common-settings
+  hs-source-dirs:     app
+  main-is:            Main.hs
+  build-depends:
+      base >=4.17 && <5,
+      directory >=1.3 && <1.4,
+      phil-core,
+      phil-phase0-projection,
+      text >=2.0 && <2.2
+
+test-suite projection-tests
+  import:             common-settings
+  type:               exitcode-stdio-1.0
+  hs-source-dirs:     test
+  main-is:            Main.hs
+  build-depends:
+      base >=4.17 && <5,
+      directory >=1.3 && <1.4,
+      phil-core,
+      phil-phase0-projection,
+      text >=2.0 && <2.2
