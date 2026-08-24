@@ -1,0 +1,144 @@
+name: Phase 0 LLVM Boundary Proofs
+
+on:
+  pull_request:
+    paths:
+      - 'proof/Phil/LLVM/ClientControlSend.v'
+      - 'proof/Phil/LLVM/ServerFramedIngress.v'
+      - 'proof/Phil/LLVM/StorageFailureDetail.v'
+      - 'src/Phil/LLVM/ClientControlSend.hs'
+      - 'src/Phil/LLVM/ClientControlSendProofCertification.hs'
+      - 'src/Phil/LLVM/ServerFramedIngress.hs'
+      - 'src/Phil/LLVM/ServerFramedIngressProofCertification.hs'
+      - 'src/Phil/LLVM/StorageFailureDetail.hs'
+      - 'src/Phil/LLVM/StorageFailureDetailProofCertification.hs'
+      - 'src/Phil/LLVM/ExactSend.hs'
+      - 'src/Phil/LLVM/IR.hs'
+      - 'src/Phil/LLVM/Verify.hs'
+      - 'src/Phil/Systems/ClientOutbound.hs'
+      - 'src/Phil/Systems/RecognitionFailure.hs'
+      - 'src/Phil/Systems/StorageFailure.hs'
+      - 'app/ClientControlSendProofCorrespondenceMain.hs'
+      - 'app/ClientControlSendProofCertificationMain.hs'
+      - 'app/LLVMClientControlSendMain.hs'
+      - 'app/ServerFramedIngressProofCorrespondenceMain.hs'
+      - 'app/ServerFramedIngressProofCertificationMain.hs'
+      - 'app/LLVMServerFramedIngressMain.hs'
+      - 'app/StorageFailureDetailProofCorrespondenceMain.hs'
+      - 'app/StorageFailureDetailProofCertificationMain.hs'
+      - 'app/LLVMStorageFailureDetailMain.hs'
+      - 'runtime/phase0/client_control_send_v1*'
+      - 'runtime/phase0/server_framed_ingress_v1*'
+      - 'runtime/phase0/storage_failure_detail_v1*'
+      - 'scripts/check_runtime_abi.py'
+      - 'scripts/ci/phase0-llvm-boundary-rocq.sh'
+      - 'scripts/ci/phase0-llvm-boundary-certify.sh'
+      - 'test/ClientControlSendABIMain.hs'
+      - 'test/ServerFramedIngressABIMain.hs'
+      - 'test/StorageFailureDetailABIMain.hs'
+      - 'test/StorageFailureMain.hs'
+      - 'docs/phase-0/client-control-send-abi-v1.md'
+      - 'docs/phase-0/server-framed-ingress-v1.md'
+      - 'docs/phase-0/storage-failure-detail-abi-v1.md'
+      - 'phil-core.cabal'
+      - '.github/workflows/phase0-llvm-boundary-proofs.yml'
+  push:
+    branches: [main]
+    paths:
+      - 'proof/Phil/LLVM/ClientControlSend.v'
+      - 'proof/Phil/LLVM/ServerFramedIngress.v'
+      - 'proof/Phil/LLVM/StorageFailureDetail.v'
+      - 'src/Phil/LLVM/ClientControlSend.hs'
+      - 'src/Phil/LLVM/ClientControlSendProofCertification.hs'
+      - 'src/Phil/LLVM/ServerFramedIngress.hs'
+      - 'src/Phil/LLVM/ServerFramedIngressProofCertification.hs'
+      - 'src/Phil/LLVM/StorageFailureDetail.hs'
+      - 'src/Phil/LLVM/StorageFailureDetailProofCertification.hs'
+      - 'src/Phil/LLVM/ExactSend.hs'
+      - 'src/Phil/LLVM/IR.hs'
+      - 'src/Phil/LLVM/Verify.hs'
+      - 'src/Phil/Systems/ClientOutbound.hs'
+      - 'src/Phil/Systems/RecognitionFailure.hs'
+      - 'src/Phil/Systems/StorageFailure.hs'
+      - 'app/ClientControlSendProofCorrespondenceMain.hs'
+      - 'app/ClientControlSendProofCertificationMain.hs'
+      - 'app/LLVMClientControlSendMain.hs'
+      - 'app/ServerFramedIngressProofCorrespondenceMain.hs'
+      - 'app/ServerFramedIngressProofCertificationMain.hs'
+      - 'app/LLVMServerFramedIngressMain.hs'
+      - 'app/StorageFailureDetailProofCorrespondenceMain.hs'
+      - 'app/StorageFailureDetailProofCertificationMain.hs'
+      - 'app/LLVMStorageFailureDetailMain.hs'
+      - 'runtime/phase0/client_control_send_v1*'
+      - 'runtime/phase0/server_framed_ingress_v1*'
+      - 'runtime/phase0/storage_failure_detail_v1*'
+      - 'scripts/check_runtime_abi.py'
+      - 'scripts/ci/phase0-llvm-boundary-rocq.sh'
+      - 'scripts/ci/phase0-llvm-boundary-certify.sh'
+      - 'test/ClientControlSendABIMain.hs'
+      - 'test/ServerFramedIngressABIMain.hs'
+      - 'test/StorageFailureDetailABIMain.hs'
+      - 'test/StorageFailureMain.hs'
+      - 'docs/phase-0/client-control-send-abi-v1.md'
+      - 'docs/phase-0/server-framed-ingress-v1.md'
+      - 'docs/phase-0/storage-failure-detail-abi-v1.md'
+      - 'phil-core.cabal'
+      - '.github/workflows/phase0-llvm-boundary-proofs.yml'
+
+permissions:
+  contents: read
+
+jobs:
+  rocq:
+    name: Rocq / ${{ matrix.profile }}
+    runs-on: ubuntu-latest
+    container:
+      image: rocq/rocq-prover:9.2.0
+      options: --user root
+    strategy:
+      fail-fast: false
+      matrix:
+        profile:
+          - client-control-send
+          - server-framed-ingress
+          - storage-failure-detail-lowering
+    steps:
+      - uses: actions/checkout@v4
+      - name: Check and stage LLVM boundary proof
+        run: bash scripts/ci/phase0-llvm-boundary-rocq.sh '${{ matrix.profile }}'
+      - uses: actions/upload-artifact@v4
+        with:
+          name: phase0-llvm-boundary-${{ matrix.profile }}-checked
+          path: rocq-${{ matrix.profile }}/
+          if-no-files-found: error
+          retention-days: 14
+
+  certify:
+    name: Certificate / ${{ matrix.profile }}
+    needs: rocq
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        profile:
+          - client-control-send
+          - server-framed-ingress
+          - storage-failure-detail-lowering
+    steps:
+      - uses: actions/checkout@v4
+      - uses: haskell-actions/setup@v2
+        with:
+          ghc-version: '9.6.7'
+          cabal-version: 'latest'
+      - uses: actions/download-artifact@v4
+        with:
+          name: phase0-llvm-boundary-${{ matrix.profile }}-checked
+          path: rocq-${{ matrix.profile }}
+      - name: Run focused regressions, correspondence, runtime gates, and certification
+        run: bash scripts/ci/phase0-llvm-boundary-certify.sh '${{ matrix.profile }}'
+      - uses: actions/upload-artifact@v4
+        with:
+          name: phase0-llvm-boundary-${{ matrix.profile }}-certification
+          path: '*-certificates/*'
+          if-no-files-found: error
+          retention-days: 30

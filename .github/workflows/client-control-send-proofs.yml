@@ -1,3 +1,4 @@
+# Equivalence witness for Phase 0 LLVM boundary proof consolidation.
 name: Client Control Send Proofs
 
 on:
