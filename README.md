@@ -4,6 +4,12 @@
 
 Phil is part of the broader Logics to Order research program. It starts from system boundaries, protocols, authority, and proof obligations, then lowers those meanings toward executable implementations without making one implementation the definition of the system.
 
+## Start here
+
+New to Phil? Read **[A Tour of Phil — Phase 0](docs/tutorials/tour-phase0.md)**. It follows the frozen Phase 0 upload program from its client/server conversation through recognition, validation, evidence, ownership, native execution, and certification, while defining the terminology as it goes.
+
+The Tour is intentionally scoped to the Phase 0 reference program. Phase 0 demonstrates one architecture end to end; Phase 1 generalizes that machinery into a language for architectures.
+
 ## Core formulations
 
 **What Phil is**
@@ -42,6 +48,7 @@ The exact implemented/non-goal boundary is maintained in `docs/implementation-st
 - `proof/Phil/` — Rocq proof corpus
 - `app/` — checker, certification, and bootstrap executables
 - `test/` — conformance and correspondence tests
+- `docs/tutorials/tour-phase0.md` — beginner-facing tour of the frozen Phase 0 reference program
 - `docs/implementation-status.md` — implemented vs. still-open checker surface
 - `docs/phase-0/assurance-status.md` — current Phase 0 proof-certification snapshot
 - `docs/phase-0/` — checker-facing Phase 0 design/ABI snapshot imported from the durable research corpus
