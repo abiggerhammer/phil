@@ -1,0 +1,28 @@
+name: Steve vs frozen Phase 0
+
+on:
+  push:
+    branches:
+      - phase1/steve-vs-frozen-phase0
+    paths:
+      - 'examples/steve/**'
+      - 'experiments/steve-vs-frozen-phase0/**'
+      - '.github/workflows/steve-vs-frozen-phase0.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  baseline:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: haskell-actions/setup@v2
+        with:
+          ghc-version: '9.6.7'
+          cabal-version: 'latest'
+      - name: Build frozen Phase 0 library
+        run: cabal build lib:phil-core --ghc-options=-Werror
+      - name: Probe Steve against frozen Phase 0
+        run: cabal exec -- runghc -isrc experiments/steve-vs-frozen-phase0/Probe.hs
