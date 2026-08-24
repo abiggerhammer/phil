@@ -10,6 +10,6 @@ The consolidated Rocq runner preserves each historical workflow's exact cumulati
 
 Profile-specific staging asymmetries are retained. In particular, Final Response still checks and stages `FinalResponseReceiveCertification.v/.vo` even though the historical certificate invocation does not consume that staged pair.
 
-The three historical workflows remain present with comment-only witness edits during equivalence. No theorem statement, checked proof object, certificate-producing program, certificate format, certificate ID, validity scope, or predecessor relation changes in this tranche.
+PR #145 established equivalence twice. On both its bring-up tree and clean one-commit recomposition, the consolidated six-job Response Proof Chain workflow, all three historical response workflows, ordinary CI, and Phase 0 Baseline were green together. The historical `accepted-response-proofs.yml`, `rejected-response-proofs.yml`, and `final-response-proofs.yml` workflows are therefore retired from `main`; their execution history remains preserved in Git, while `phase0-response-proof-chain.yml` and the two repo-local runners are now the active regression surface for the `CERT-005` through `CERT-008` response chain.
 
-The historical workflows may be retired only after the consolidated six-job workflow, all three historical witnesses, ordinary CI, and Phase 0 Baseline are green together on both the bring-up tree and a clean one-commit recomposition.
+No theorem statement, checked proof object, certificate-producing program, certificate format, certificate ID, validity scope, or predecessor relation changes in this tranche.
