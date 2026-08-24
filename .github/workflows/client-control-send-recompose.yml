@@ -1,0 +1,172 @@
+name: Client Control Send Recompose
+
+on:
+  push:
+    branches:
+      - client-control-send-recompose
+    paths:
+      - '.github/client-control-send-recompose.trigger'
+
+permissions:
+  contents: write
+
+jobs:
+  recompose:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: client-control-send-recompose
+          fetch-depth: 0
+      - uses: haskell-actions/setup@v2
+        with:
+          ghc-version: '9.6.7'
+          cabal-version: 'latest'
+
+      - name: Recompose validated backend onto current main
+        shell: bash
+        run: |
+          set -euo pipefail
+          BASE=837379921df6d3c7b8d11fb9843ac3913a541e38
+          BACKEND=db20c1ac566afccaa13ae6ab396491841014face
+
+          git config user.name phil-client-control-send-recompose
+          git config user.email github-actions[bot]@users.noreply.github.com
+
+          if ! git cherry-pick "$BACKEND"; then
+            conflicts="$(git diff --name-only --diff-filter=U)"
+            if [ "$conflicts" != "phil-core.cabal" ]; then
+              echo "unexpected cherry-pick conflicts:" >&2
+              printf '%s\n' "$conflicts" >&2
+              exit 1
+            fi
+            git checkout --ours phil-core.cabal
+            python3 - <<'PY'
+          from pathlib import Path
+          path = Path('phil-core.cabal')
+          text = path.read_text()
+
+          def insert_after(text, marker, insertion, label):
+              if insertion.strip() in text:
+                  return text
+              if marker not in text:
+                  raise SystemExit(f'{label}: marker missing')
+              return text.replace(marker, marker + insertion, 1)
+
+          def insert_before(text, marker, insertion, label):
+              if insertion.strip() in text:
+                  return text
+              if marker not in text:
+                  raise SystemExit(f'{label}: marker missing')
+              return text.replace(marker, insertion + marker, 1)
+
+          text = insert_after(
+              text,
+              '      Phil.LLVM.ExactSendCertification\n',
+              '      Phil.LLVM.ClientControlSend\n',
+              'library registration')
+          text = insert_before(
+              text,
+              'executable philc\n',
+              '''executable phil-llvm-phase0-client-control-send
+            import:   common-settings
+            hs-source-dirs:     app
+            main-is:  LLVMClientControlSendMain.hs
+            build-depends:
+                base >=4.17 && <5,
+                phil-core,
+                text >=2.0 && <2.2
+
+          ''',
+              'emitter registration')
+          text = insert_before(
+              text,
+              'test-suite phil-hello-policy-validation-abi-tests\n',
+              '''test-suite phil-client-control-send-abi-tests
+            import:   common-settings
+            type:     exitcode-stdio-1.0
+            hs-source-dirs:     test
+            main-is:  ClientControlSendABIMain.hs
+            build-depends:
+                base >=4.17 && <5,
+                containers >=0.6 && <0.8,
+                phil-core,
+                text >=2.0 && <2.2
+
+          ''',
+              'focused test registration')
+          path.write_text(text)
+          PY
+            git add phil-core.cabal
+            git cherry-pick --continue
+          fi
+
+          python3 - <<'PY'
+          from pathlib import Path
+          path = Path('docs/phase-0/client-control-send-abi-v1.md')
+          text = path.read_text()
+          marker = '## Supported versions\n'
+          note = '''## Source authority after #98
+
+          This backend profile remains deliberately content-bound to the `client-outbound-semantics-v1` Systems artifact introduced by #94. Repository `main` now also contains the later recognition-failure and storage-failure semantic successors from #96 and #98, plus the proof harvest landed in #97, but those later Systems source digests are **not** claimed by this target.
+
+          That separation is intentional. The client-control-send profile is competent for the explicit client `Hello`/`Begin` construction, serializer/send operands, explicit offered-version identity, and exact payload send. It is not yet competent to lower the new server-side recognition-reason or storage-error identities. Those remain for later physical ABI tranches before an integrated whole-program target can be certified against the latest Systems artifact.
+
+          Merging this implementation onto current repository history therefore adds a coexisting content-bound backend target; it does not replace, regress, or broaden the authority of the latest Systems candidate or the proof-bound exact-send artifacts from #97.
+
+          '''
+          if '## Source authority after #98' not in text:
+              if marker not in text:
+                  raise SystemExit('authority note marker missing')
+              text = text.replace(marker, note + marker, 1)
+              path.write_text(text)
+          PY
+
+      - name: Validate recomposed physical target
+        shell: bash
+        run: |
+          set -euo pipefail
+          cabal build phil-llvm-phase0-client-control-send phil-client-control-send-abi-tests
+          cabal test phil-client-control-send-abi-tests --test-show-details=direct
+
+          LLVM_AS=llvm-as-18
+          LLVM_LINK=llvm-link-18
+          CLANG=clang-18
+          EMITTER="$(cabal list-bin phil-llvm-phase0-client-control-send)"
+          "$EMITTER" > phase0-client-control-send.ll
+          "$LLVM_AS" phase0-client-control-send.ll -o phase0-client-control-send.bc
+
+          "$CLANG" --target=x86_64-unknown-linux-gnu -std=c11 -Wall -Wextra -Wpedantic -Werror \
+            -Iruntime/phase0 -S -emit-llvm runtime/phase0/client_control_send_v1_smoke.c \
+            -o client-control-send-runtime.ll
+          python3 scripts/check_runtime_abi.py --partial phase0-client-control-send.ll client-control-send-runtime.ll
+          "$LLVM_AS" client-control-send-runtime.ll -o client-control-send-runtime.bc
+          "$LLVM_LINK" phase0-client-control-send.bc client-control-send-runtime.bc -o phase0-client-control-send-partially-linked.bc
+
+          "$CLANG" --target=x86_64-unknown-linux-gnu -std=c11 -Wall -Wextra -Wpedantic -Werror \
+            -Iruntime/phase0 runtime/phase0/client_control_send_v1_smoke.c runtime/phase0/client_control_send_v1_smoke_main.c \
+            -o client-control-send-smoke
+          ./client-control-send-smoke
+
+          "$CLANG" --target=x86_64-unknown-linux-gnu -std=c11 -Wall -Wextra -Wpedantic -Werror \
+            -S -emit-llvm runtime/phase0/client_control_send_v1_bad_ambient.c -o client-control-send-bad-ambient.ll
+          if python3 scripts/check_runtime_abi.py --partial phase0-client-control-send.ll client-control-send-bad-ambient.ll; then
+            echo "expected ABI checker to reject ambient/nullary client control-send provider" >&2
+            exit 1
+          fi
+
+      - name: Publish clean exact head to PR branch
+        shell: bash
+        run: |
+          set -euo pipefail
+          BASE=837379921df6d3c7b8d11fb9843ac3913a541e38
+
+          # Remove every untracked/ignored validation product before constructing
+          # the permanent commit. Keep only repository source changes.
+          git clean -fdx
+          rm -f .github/client-control-send-recompose.trigger
+          git rm .github/workflows/client-control-send-recompose.yml
+          git add -A
+          git reset --soft "$BASE"
+          git commit -m 'Lower client control-message sends explicitly'
+          git push --force origin HEAD:client-control-send-compose
