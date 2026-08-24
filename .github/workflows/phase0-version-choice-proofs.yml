@@ -1,46 +1,241 @@
-# CI normalization equivalence witness; execution semantics unchanged.
-name: Version Session Choice Lowering Proofs
+name: Phase 0 Version Choice Proofs
 
 on:
   pull_request:
     paths:
       - 'proof/**'
+      - 'src/Phil/Systems/IR.hs'
+      - 'src/Phil/Systems/Dataflow.hs'
+      - 'src/Phil/Systems/Verify.hs'
+      - 'src/Phil/Systems/LocalRuntimeChoice.hs'
+      - 'src/Phil/Systems/VersionSessionChoice.hs'
+      - 'src/Phil/Systems/VersionSessionChoiceProofCheck.hs'
       - 'src/Phil/Systems/VersionChoiceOperands.hs'
+      - 'src/Phil/LLVM/Lower.hs'
       - 'src/Phil/LLVM/VersionSessionChoice.hs'
       - 'src/Phil/LLVM/VersionSessionChoiceCertification.hs'
+      - 'src/Phil/LLVM/VersionSessionChoiceProofCertification.hs'
       - 'src/Phil/LLVM/VersionSessionChoiceLoweringProofCheck.hs'
       - 'src/Phil/LLVM/VersionSessionChoiceLoweringProofCertification.hs'
       - 'src/Phil/LLVM/VersionSessionChoiceProofBoundCertification.hs'
+      - 'app/VersionSessionChoiceProofCorrespondenceMain.hs'
+      - 'app/VersionSessionChoiceProofCertificationMain.hs'
       - 'app/VersionSessionChoiceLoweringProofCorrespondenceMain.hs'
       - 'app/VersionSessionChoiceLoweringProofCertificationMain.hs'
       - 'runtime/phase0/version_session_choice_v1*'
       - 'scripts/check_runtime_abi.py'
+      - 'test/VersionSessionChoiceMain.hs'
       - 'test/VersionSessionChoiceABIMain.hs'
       - 'phil-core.cabal'
+      - '.github/workflows/version-session-choice-proofs.yml'
       - '.github/workflows/version-session-choice-lowering-proofs.yml'
+      - '.github/workflows/phase0-version-choice-proofs.yml'
   push:
     branches:
       - main
     paths:
       - 'proof/**'
+      - 'src/Phil/Systems/IR.hs'
+      - 'src/Phil/Systems/Dataflow.hs'
+      - 'src/Phil/Systems/Verify.hs'
+      - 'src/Phil/Systems/LocalRuntimeChoice.hs'
+      - 'src/Phil/Systems/VersionSessionChoice.hs'
+      - 'src/Phil/Systems/VersionSessionChoiceProofCheck.hs'
       - 'src/Phil/Systems/VersionChoiceOperands.hs'
+      - 'src/Phil/LLVM/Lower.hs'
       - 'src/Phil/LLVM/VersionSessionChoice.hs'
       - 'src/Phil/LLVM/VersionSessionChoiceCertification.hs'
+      - 'src/Phil/LLVM/VersionSessionChoiceProofCertification.hs'
       - 'src/Phil/LLVM/VersionSessionChoiceLoweringProofCheck.hs'
       - 'src/Phil/LLVM/VersionSessionChoiceLoweringProofCertification.hs'
       - 'src/Phil/LLVM/VersionSessionChoiceProofBoundCertification.hs'
+      - 'app/VersionSessionChoiceProofCorrespondenceMain.hs'
+      - 'app/VersionSessionChoiceProofCertificationMain.hs'
       - 'app/VersionSessionChoiceLoweringProofCorrespondenceMain.hs'
       - 'app/VersionSessionChoiceLoweringProofCertificationMain.hs'
       - 'runtime/phase0/version_session_choice_v1*'
       - 'scripts/check_runtime_abi.py'
+      - 'test/VersionSessionChoiceMain.hs'
       - 'test/VersionSessionChoiceABIMain.hs'
       - 'phil-core.cabal'
+      - '.github/workflows/version-session-choice-proofs.yml'
       - '.github/workflows/version-session-choice-lowering-proofs.yml'
+      - '.github/workflows/phase0-version-choice-proofs.yml'
 
 permissions:
   contents: read
 
 jobs:
+  rocq-version-session-choice:
+    runs-on: ubuntu-latest
+    container:
+      image: rocq/rocq-prover:9.2.0
+      options: --user root
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v4
+
+      - name: Check complete proof corpus including version session choice
+        run: |
+          export PATH="/home/rocq/.opam/${COMPILER}/bin:$PATH"
+          rocq c -Q proof/Phil Phil proof/Phil/Core/Syntax.v
+          rocq c -Q proof/Phil Phil proof/Phil/Core/Scalar.v
+          rocq c -Q proof/Phil Phil proof/Phil/Core/Session.v
+          rocq c -Q proof/Phil Phil proof/Phil/Core/Context.v
+          rocq c -Q proof/Phil Phil proof/Phil/Core/Process.v
+          rocq c -Q proof/Phil Phil proof/Phil/Core/SessionLabel.v
+          rocq c -Q proof/Phil Phil proof/Phil/Core/SessionStep.v
+          rocq c -Q proof/Phil Phil proof/Phil/Core/Recognition.v
+          rocq c -Q proof/Phil Phil proof/Phil/Core/RecognitionLoan.v
+          rocq c -Q proof/Phil Phil proof/Phil/Core/ContextJoin.v
+          rocq c -Q proof/Phil Phil proof/Phil/Core/ProcessJoin.v
+          rocq c -Q proof/Phil Phil proof/Phil/Core/ProcessTerminal.v
+          rocq c -Q proof/Phil Phil proof/Phil/Core/Discharge.v
+          rocq c -Q proof/Phil Phil proof/Phil/Core/DecisionSound.v
+          rocq c -Q proof/Phil Phil proof/Phil/Core/SessionRec.v
+          rocq c -Q proof/Phil Phil proof/Phil/Core/Focusing.v
+          rocq c -Q proof/Phil Phil proof/Phil/Surface/Elaboration.v
+          rocq c -Q proof/Phil Phil proof/Phil/Surface/Checking.v
+          rocq c -Q proof/Phil Phil proof/Phil/Surface/ScopeJoin.v
+          rocq c -Q proof/Phil Phil proof/Phil/Surface/FreshOwnership.v
+          rocq c -Q proof/Phil Phil proof/Phil/Surface/SystemsProjection.v
+          rocq c -Q proof/Phil Phil proof/Phil/Assurance/Manifest.v
+          rocq c -Q proof/Phil Phil proof/Phil/Assurance/EvidenceUse.v
+          rocq c -Q proof/Phil Phil proof/Phil/Systems/Identity.v
+          rocq c -Q proof/Phil Phil proof/Phil/Systems/FactDisposition.v
+          rocq c -Q proof/Phil Phil proof/Phil/Systems/Ownership.v
+          rocq c -Q proof/Phil Phil proof/Phil/Systems/Runtime.v
+          rocq c -Q proof/Phil Phil proof/Phil/Systems/Scalar.v
+          rocq c -Q proof/Phil Phil proof/Phil/Systems/ScalarDataflow.v
+          rocq c -Q proof/Phil Phil proof/Phil/Systems/FieldProjection.v
+          rocq c -Q proof/Phil Phil proof/Phil/Systems/RecognizedRecord.v
+          rocq c -Q proof/Phil Phil proof/Phil/Systems/DigestValidation.v
+          rocq c -Q proof/Phil Phil proof/Phil/Systems/Storage.v
+          rocq c -Q proof/Phil Phil proof/Phil/Systems/AcceptedResponse.v
+          rocq c -Q proof/Phil Phil proof/Phil/Systems/RejectedResponse.v
+          rocq c -Q proof/Phil Phil proof/Phil/Systems/FinalResponse.v
+          rocq c -Q proof/Phil Phil proof/Phil/Systems/PayloadCancelChoice.v
+          rocq c -Q proof/Phil Phil proof/Phil/Systems/LocalRuntimeChoice.v
+          rocq c -Q proof/Phil Phil proof/Phil/Systems/VersionSessionChoice.v
+          rocq c -Q proof/Phil Phil proof/Phil/LLVM/Identity.v
+          rocq c -Q proof/Phil Phil proof/Phil/LLVM/Preservation.v
+          rocq c -Q proof/Phil Phil proof/Phil/LLVM/FieldProjection.v
+          rocq c -Q proof/Phil Phil proof/Phil/LLVM/Strengthening.v
+          rocq c -Q proof/Phil Phil proof/Phil/LLVM/Certification.v
+          rocq c -Q proof/Phil Phil proof/Phil/LLVM/Scalar.v
+          rocq c -Q proof/Phil Phil proof/Phil/LLVM/RecognizedRecordABI.v
+          rocq c -Q proof/Phil Phil proof/Phil/LLVM/RuntimeSymbolIdentity.v
+          rocq c -Q proof/Phil Phil proof/Phil/LLVM/RecognizedRecordCertification.v
+          rocq c -Q proof/Phil Phil proof/Phil/LLVM/ExactReceive.v
+          rocq c -Q proof/Phil Phil proof/Phil/LLVM/ExactReceiveCertification.v
+          rocq c -Q proof/Phil Phil proof/Phil/LLVM/DigestValidation.v
+          rocq c -Q proof/Phil Phil proof/Phil/LLVM/DigestValidationCertification.v
+          rocq c -Q proof/Phil Phil proof/Phil/LLVM/Storage.v
+          rocq c -Q proof/Phil Phil proof/Phil/LLVM/StorageCertification.v
+          rocq c -Q proof/Phil Phil proof/Phil/LLVM/AcceptedResponse.v
+          rocq c -Q proof/Phil Phil proof/Phil/LLVM/AcceptedResponseCertification.v
+          rocq c -Q proof/Phil Phil proof/Phil/LLVM/RejectedResponse.v
+          rocq c -Q proof/Phil Phil proof/Phil/LLVM/RejectedResponseCertification.v
+          rocq c -Q proof/Phil Phil proof/Phil/LLVM/FinalResponseReceive.v
+          rocq c -Q proof/Phil Phil proof/Phil/LLVM/FinalResponseReceiveCertification.v
+          rocq c -Q proof/Phil Phil proof/Phil/LLVM/PayloadCancelChoice.v
+          rocq c -Q proof/Phil Phil proof/Phil/LLVM/PayloadCancelChoiceCertification.v
+          rocq c -Q proof/Phil Phil proof/Phil/LLVM/LocalRuntimeChoiceBoundary.v
+          rocq c -Q proof/Phil Phil proof/Phil/LLVM/VersionSessionChoiceBoundary.v
+
+      - name: Stage exact checked version-choice proof objects
+        run: |
+          mkdir -p rocq-version-session-choice/systems
+          mkdir -p rocq-version-session-choice/llvm-boundary
+          cp proof/Phil/Systems/VersionSessionChoice.v rocq-version-session-choice/systems/VersionSessionChoice.v
+          cp proof/Phil/Systems/VersionSessionChoice.vo rocq-version-session-choice/systems/VersionSessionChoice.vo
+          cp proof/Phil/LLVM/VersionSessionChoiceBoundary.v rocq-version-session-choice/llvm-boundary/VersionSessionChoiceBoundary.v
+          cp proof/Phil/LLVM/VersionSessionChoiceBoundary.vo rocq-version-session-choice/llvm-boundary/VersionSessionChoiceBoundary.vo
+
+      - name: Upload exact checked version-choice proof objects
+        uses: actions/upload-artifact@v4
+        with:
+          name: rocq-version-session-choice-checked-proof-objects
+          path: rocq-version-session-choice/
+          if-no-files-found: error
+          retention-days: 14
+
+  certify-version-session-choice:
+    needs: rocq-version-session-choice
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v4
+
+      - name: Set up Haskell
+        uses: haskell-actions/setup@v2
+        with:
+          ghc-version: '9.6.7'
+          cabal-version: 'latest'
+
+      - name: Download exact checked proof objects
+        uses: actions/download-artifact@v4
+        with:
+          name: rocq-version-session-choice-checked-proof-objects
+          path: rocq-version-session-choice
+
+      - name: Build project and version-choice suite
+        run: cabal build lib:phil-core phil-version-session-choice-tests
+
+      - name: Run original version-choice regression suite
+        run: cabal test phil-version-session-choice-tests
+
+      - name: Typecheck exact-candidate correspondence checker with warnings as errors
+        run: |
+          cabal exec -- ghc \
+            -Wall -Wcompat -Wincomplete-record-updates -Wincomplete-uni-patterns -Wredundant-constraints -Werror \
+            -isrc -iapp -fno-code app/VersionSessionChoiceProofCorrespondenceMain.hs
+
+      - name: Build and run exact-candidate correspondence checker
+        run: |
+          cabal exec -- ghc \
+            -O0 -isrc -iapp \
+            app/VersionSessionChoiceProofCorrespondenceMain.hs \
+            -o phil-check-version-session-choice-proof-correspondence
+          ./phil-check-version-session-choice-proof-correspondence
+
+      - name: Typecheck proof certifier with warnings as errors
+        run: |
+          cabal exec -- ghc \
+            -Wall -Wcompat -Wincomplete-record-updates -Wincomplete-uni-patterns -Wredundant-constraints -Werror \
+            -isrc -iapp -fno-code app/VersionSessionChoiceProofCertificationMain.hs
+
+      - name: Build version-choice proof certifier
+        run: |
+          cabal exec -- ghc \
+            -O0 -isrc -iapp \
+            app/VersionSessionChoiceProofCertificationMain.hs \
+            -o phil-certify-version-session-choice
+
+      - name: Produce version-choice proof certificates
+        run: |
+          mkdir -p version-session-choice-certificates
+          ./phil-certify-version-session-choice \
+            rocq-version-session-choice/systems/VersionSessionChoice.v \
+            rocq-version-session-choice/systems/VersionSessionChoice.vo \
+            rocq-version-session-choice/llvm-boundary/VersionSessionChoiceBoundary.v \
+            rocq-version-session-choice/llvm-boundary/VersionSessionChoiceBoundary.vo \
+            version-session-choice-certificates/PHIL-SYS-VERSION-SESSION-CHOICE-001.rocq.cert \
+            version-session-choice-certificates/PHIL-LLVM-VERSION-SESSION-CHOICE-BOUNDARY-001.rocq.cert
+          for certificate in version-session-choice-certificates/*; do
+            echo "===== ${certificate} ====="
+            cat "${certificate}"
+            sha256sum "${certificate}"
+          done
+
+      - name: Upload version-choice proof certification artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: phil-version-session-choice-proof-certification
+          path: version-session-choice-certificates/*
+          if-no-files-found: error
+          retention-days: 30
+
   rocq-version-choice-lowering:
     runs-on: ubuntu-latest
     container:
