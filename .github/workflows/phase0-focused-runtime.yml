@@ -1,5 +1,5 @@
 # Active consolidated runtime gate after legacy witness retirement.
-# Twelve-profile candidate while protocol-runtime witnesses remain present.
+# Twelve-profile owner after protocol-runtime witness retirement.
 name: Phase 0 Focused Runtime
 
 on:
