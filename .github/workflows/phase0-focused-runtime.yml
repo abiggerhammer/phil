@@ -1,0 +1,70 @@
+name: Phase 0 Focused Runtime
+
+on:
+  pull_request:
+    paths:
+      - 'src/Phil/Systems/**'
+      - 'src/Phil/LLVM/**'
+      - 'app/LLVMStorageMain.hs'
+      - 'app/LLVMAcceptedResponseMain.hs'
+      - 'app/LLVMRejectedResponseMain.hs'
+      - 'app/LLVMExactSendMain.hs'
+      - 'runtime/phase0/storage_v1*'
+      - 'runtime/phase0/accepted_response_v1*'
+      - 'runtime/phase0/rejected_response_v1*'
+      - 'runtime/phase0/exact_send_v1*'
+      - 'scripts/check_runtime_abi.py'
+      - 'scripts/ci/phase0-focused-runtime.sh'
+      - 'scripts/ci/resolve-llvm18.sh'
+      - 'test/StorageABIMain.hs'
+      - 'test/AcceptedResponseABIMain.hs'
+      - 'test/RejectedResponseABIMain.hs'
+      - 'test/ExactSendABIMain.hs'
+      - 'phil-core.cabal'
+      - '.github/workflows/phase0-focused-runtime.yml'
+  push:
+    branches: [main]
+    paths:
+      - 'src/Phil/Systems/**'
+      - 'src/Phil/LLVM/**'
+      - 'app/LLVMStorageMain.hs'
+      - 'app/LLVMAcceptedResponseMain.hs'
+      - 'app/LLVMRejectedResponseMain.hs'
+      - 'app/LLVMExactSendMain.hs'
+      - 'runtime/phase0/storage_v1*'
+      - 'runtime/phase0/accepted_response_v1*'
+      - 'runtime/phase0/rejected_response_v1*'
+      - 'runtime/phase0/exact_send_v1*'
+      - 'scripts/check_runtime_abi.py'
+      - 'scripts/ci/phase0-focused-runtime.sh'
+      - 'scripts/ci/resolve-llvm18.sh'
+      - 'test/StorageABIMain.hs'
+      - 'test/AcceptedResponseABIMain.hs'
+      - 'test/RejectedResponseABIMain.hs'
+      - 'test/ExactSendABIMain.hs'
+      - 'phil-core.cabal'
+      - '.github/workflows/phase0-focused-runtime.yml'
+
+permissions:
+  contents: read
+
+jobs:
+  runtime:
+    name: Runtime / ${{ matrix.profile }}
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        profile:
+          - storage
+          - accepted-response
+          - rejected-response
+          - exact-send
+    steps:
+      - uses: actions/checkout@v4
+      - uses: haskell-actions/setup@v2
+        with:
+          ghc-version: '9.6.7'
+          cabal-version: 'latest'
+      - name: Run focused runtime regression
+        run: bash scripts/ci/phase0-focused-runtime.sh '${{ matrix.profile }}'
