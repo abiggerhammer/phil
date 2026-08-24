@@ -113,6 +113,7 @@ library
       Phil.LLVM.ExactSendCertification
       Phil.LLVM.ClientControlSend
       Phil.LLVM.ServerFramedIngress
+      Phil.LLVM.StorageFailureDetail
   build-depends:
       base >=4.17 && <5,
       bytestring >=0.11 && <0.13,
@@ -260,6 +261,15 @@ executable phil-llvm-phase0-server-framed-ingress
   import:   common-settings
   hs-source-dirs:     app
   main-is:  LLVMServerFramedIngressMain.hs
+  build-depends:
+      base >=4.17 && <5,
+      phil-core,
+      text >=2.0 && <2.2
+
+executable phil-llvm-phase0-storage-failure-detail
+  import:   common-settings
+  hs-source-dirs:     app
+  main-is:  LLVMStorageFailureDetailMain.hs
   build-depends:
       base >=4.17 && <5,
       phil-core,
@@ -769,6 +779,17 @@ test-suite phil-server-framed-ingress-abi-tests
   type:     exitcode-stdio-1.0
   hs-source-dirs:     test
   main-is:  ServerFramedIngressABIMain.hs
+  build-depends:
+      base >=4.17 && <5,
+      containers >=0.6 && <0.8,
+      phil-core,
+      text >=2.0 && <2.2
+
+test-suite phil-storage-failure-detail-abi-tests
+  import:   common-settings
+  type:     exitcode-stdio-1.0
+  hs-source-dirs:     test
+  main-is:  StorageFailureDetailABIMain.hs
   build-depends:
       base >=4.17 && <5,
       containers >=0.6 && <0.8,
