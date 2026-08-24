@@ -37,6 +37,8 @@ No theorem statement, obligation ID, certificate format, runtime profile, test f
 
 The old and new gates must be green on the same tree before any legacy workflow is retired.
 
+Tranche A landed in PR #124 after both an incremental bring-up tree and its clean one-commit recomposition passed ordinary CI, the consolidated Phase 0 baseline, legacy source projection, source-projection proof/certification, legacy integrated-native execution, and Phase 0 closure certification together.
+
 ### Tranche B: normalization
 
 After equivalence is established:
@@ -46,6 +48,22 @@ After equivalence is established:
 3. retain the consolidated frozen Phase 0 regression gate;
 4. retain content-bound certification as a separately attributable, path-filtered gate;
 5. retire redundant per-slice construction workflows from `main` while preserving them permanently in Git history at the Phase 0 freeze.
+
+#### Semantic-suite retirement
+
+The first Tranche B cut retires seven focused semantic workflows:
+
+- `begin-policy-session-choice.yml`;
+- `client-outbound-semantics.yml`;
+- `hello-policy-validation.yml`;
+- `local-runtime-choice.yml`;
+- `recognition-failure-detail.yml`;
+- `storage-failure-detail.yml`;
+- `version-session-choice.yml`.
+
+Each retired workflow did only two substantive things: build one named Cabal test suite and run that same suite. All seven suites remain registered in `phil-core.cabal`, and ordinary CI already executes `cabal build all --enable-tests` followed by `cabal test all --test-show-details=direct`. Their test code, test names, inputs, assertions, and failure behavior are unchanged; only duplicate GitHub Actions scheduling is removed.
+
+Focused runtime, proof, back-certification, and content-bound certification workflows are not included in this retirement. They remain until their distinct checks are explicitly consolidated and equivalence is demonstrated.
 
 ## Rule for the refactor
 
