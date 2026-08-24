@@ -383,6 +383,7 @@ renderLLVMModule moduleValue = Text.unlines $
       , "phil-runtime/phase0/client-control-send-v1"
       , "phil-runtime/phase0/server-framed-ingress-v1"
       , "phil-runtime/phase0/storage-failure-detail-v1"
+      , "phil-runtime/phase0/control-codec-v1"
       ]
 
     header =
@@ -578,6 +579,7 @@ renderLLVMModule moduleValue = Text.unlines $
           [ "phil-runtime/phase0/client-control-send-v1"
           , "phil-runtime/phase0/server-framed-ingress-v1"
           , "phil-runtime/phase0/storage-failure-detail-v1"
+          , "phil-runtime/phase0/control-codec-v1"
           ]
         then
           [ "declare ptr @phil_runtime_supported_versions()"
@@ -600,6 +602,7 @@ renderLLVMModule moduleValue = Text.unlines $
       if runtimeProfile `elem`
           [ "phil-runtime/phase0/server-framed-ingress-v1"
           , "phil-runtime/phase0/storage-failure-detail-v1"
+          , "phil-runtime/phase0/control-codec-v1"
           ]
         then concatMap renderServerIngressDeclarations (Set.toAscList serverIngressGrammars)
         else []

@@ -34,6 +34,7 @@ module Phil.LLVM
   , module Phil.LLVM.ClientControlSend
   , module Phil.LLVM.ServerFramedIngress
   , module Phil.LLVM.StorageFailureDetail
+  , module Phil.LLVM.ControlCodec
   ) where
 
 import Phil.LLVM.AcceptedResponse
@@ -46,6 +47,7 @@ import Phil.LLVM.ExactSendCertification
 import Phil.LLVM.ClientControlSend
 import Phil.LLVM.ServerFramedIngress
 import Phil.LLVM.StorageFailureDetail
+import Phil.LLVM.ControlCodec
 import Phil.LLVM.AcceptedResponseCertification
 import Phil.LLVM.DigestValidation
 import Phil.LLVM.DigestValidationCertification
