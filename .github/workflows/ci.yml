@@ -112,5 +112,8 @@ jobs:
       - name: Phase 1 provider admission applicability conformance
         run: cabal exec -- runghc -isrc test/Phase1ProviderQualificationApplicabilityMain.hs
 
+      - name: Phase 1 provider replacement qualification conformance
+        run: cabal exec -- runghc -isrc test/Phase1ProviderReplacementQualificationMain.hs
+
       - name: Verify LLVM and run Phil programs
         run: bash scripts/ci/phase0-llvm-runtime-smoke.sh
