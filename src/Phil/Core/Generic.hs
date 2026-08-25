@@ -13,6 +13,9 @@ module Phil.Core.Generic
   , GenericInstantiationPolicy (..)
   , GenericInstantiationRecord (..)
   , GenericInstantiationError (..)
+  , GenericApplicationIdentity (..)
+  , GenericApplicationIdentityError (..)
+  , GenericDischargeLineage (..)
   , strictGenericInstantiationPolicy
   , inferGenericStructuralRequirements
   , checkGenericStructuralInterface
@@ -20,12 +23,20 @@ module Phil.Core.Generic
   , modeAllowsStructuralPermission
   , checkGenericStructuralActual
   , checkGenericInstantiation
+  , deriveGenericApplicationIdentity
+  , genericApplicationSemanticForm
+  , deriveGenericDischargeLineage
   ) where
 
 import qualified Data.Map.Strict as Map
 import qualified Data.Set as Set
 import Data.Text (Text)
-import Phil.Core.Static (InterfaceRevision)
+import Phil.Core.Static
+  ( DeclarationKey (..)
+  , DefinitionRevision
+  , InterfaceRevision (..)
+  , SemanticForm (..)
+  )
 import Phil.Core.Syntax (Mode (..), Proposition)
 
 -- | Stable checked identity for one abstract value parameter in the bounded
@@ -127,7 +138,7 @@ data GenericEvidence = GenericEvidence
 
 -- | Requirement-discharge metadata. These dispositions explain why one exact
 -- public requirement is closed in the current context; they do not redefine
--- requirement identity and are not yet generic semantic-application identity.
+-- requirement identity and are not generic semantic-application identity.
 data GenericRequirementDisposition
   = GenericSatisfiedByStructuralMode Mode
   | GenericSatisfiedByExactProvider InterfaceRevision
@@ -177,6 +188,34 @@ data GenericInstantiationError
   | GenericAssumptionNotPermitted GenericRequirement
   | GenericExportNotPermitted GenericRequirement
   | GenericStructuralInstantiationError GenericStructuralError
+  deriving (Eq, Ord, Show)
+
+-- | Ordinary generic application is applicative/canonical over the exact
+-- semantic generic interface and exact identity-bearing semantic actuals.
+-- DefinitionRevision and requirement-discharge evidence are deliberately not
+-- fields here: they belong to implementation/assurance lineage rather than the
+-- semantic applied interface unless passed explicitly as semantic arguments.
+data GenericApplicationIdentity = GenericApplicationIdentity
+  { genericApplicationDeclarationKey :: DeclarationKey
+  , genericApplicationInterfaceRevision :: InterfaceRevision
+  , genericApplicationSemanticArguments
+      :: Map.Map GenericStaticParameterKey SemanticForm
+  }
+  deriving (Eq, Ord, Show)
+
+data GenericApplicationIdentityError
+  = DuplicateGenericSemanticArgument GenericStaticParameterKey
+  deriving (Eq, Ord, Show)
+
+-- | Assurance/discharge lineage for one accepted use of a semantic generic
+-- application. Replacing evidence or the selected checked definition may change
+-- this lineage while preserving GenericApplicationIdentity.
+data GenericDischargeLineage = GenericDischargeLineage
+  { genericDischargeApplicationIdentity :: GenericApplicationIdentity
+  , genericDischargeDefinitionRevision :: DefinitionRevision
+  , genericDischargeDispositions
+      :: Map.Map GenericRequirement GenericRequirementDisposition
+  }
   deriving (Eq, Ord, Show)
 
 -- | Infer the canonical minimum structural requirements induced by the checked
@@ -299,6 +338,53 @@ checkGenericInstantiation policy requirements dispositionEntries = do
     (Map.toAscList dispositions)
   Right (GenericInstantiationRecord dispositions)
 
+-- | Derive an applicative semantic application identity. Argument source order
+-- is nonsemantic; duplicate semantic parameter keys reject rather than silently
+-- choosing one value.
+deriveGenericApplicationIdentity
+  :: DeclarationKey
+  -> InterfaceRevision
+  -> [(GenericStaticParameterKey, SemanticForm)]
+  -> Either GenericApplicationIdentityError GenericApplicationIdentity
+deriveGenericApplicationIdentity declarationKey interfaceRevision arguments = do
+  argumentMap <- normalizeGenericSemanticArguments arguments
+  Right GenericApplicationIdentity
+    { genericApplicationDeclarationKey = declarationKey
+    , genericApplicationInterfaceRevision = interfaceRevision
+    , genericApplicationSemanticArguments = argumentMap
+    }
+
+-- | Canonical target-abstract semantic form suitable for embedding a generic
+-- application as an architecture static binding. Architecture occurrence
+-- identity remains separately generative under ArchitectureInstance semantics.
+genericApplicationSemanticForm :: GenericApplicationIdentity -> SemanticForm
+genericApplicationSemanticForm identity = SemanticRecord (Map.fromList
+  [ ("declaration_key", SemanticAtom
+      (unDeclarationKey (genericApplicationDeclarationKey identity)))
+  , ("interface_revision", SemanticAtom
+      (unInterfaceRevision (genericApplicationInterfaceRevision identity)))
+  , ("arguments", SemanticRecord (Map.fromList
+      [ (unGenericStaticParameterKey key, value)
+      | (key, value) <- Map.toAscList
+          (genericApplicationSemanticArguments identity)
+      ]))
+  ])
+
+-- | Bind implementation/discharge lineage to an already-derived semantic
+-- application. Evidence identity is retained here, so replacing a proof for the
+-- same exact requirement changes lineage but not semantic application identity.
+deriveGenericDischargeLineage
+  :: GenericApplicationIdentity
+  -> DefinitionRevision
+  -> GenericInstantiationRecord
+  -> GenericDischargeLineage
+deriveGenericDischargeLineage application definitionRevision instantiation =
+  GenericDischargeLineage
+    { genericDischargeApplicationIdentity = application
+    , genericDischargeDefinitionRevision = definitionRevision
+    , genericDischargeDispositions = genericInstantiationDispositions instantiation
+    }
+
 normalizeDispositions
   :: [(GenericRequirement, GenericRequirementDisposition)]
   -> Either GenericInstantiationError
@@ -310,6 +396,17 @@ normalizeDispositions = go Map.empty
       | Map.member requirement result =
           Left (DuplicateGenericRequirementDisposition requirement)
       | otherwise = go (Map.insert requirement disposition result) rest
+
+normalizeGenericSemanticArguments
+  :: [(GenericStaticParameterKey, SemanticForm)]
+  -> Either GenericApplicationIdentityError
+      (Map.Map GenericStaticParameterKey SemanticForm)
+normalizeGenericSemanticArguments = go Map.empty
+  where
+    go result [] = Right result
+    go result ((key, value) : rest)
+      | Map.member key result = Left (DuplicateGenericSemanticArgument key)
+      | otherwise = go (Map.insert key value result) rest
 
 checkRequirementDisposition
   :: GenericInstantiationPolicy
