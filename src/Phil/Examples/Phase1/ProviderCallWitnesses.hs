@@ -102,6 +102,8 @@ selectionFromSteveArtifact artifact = SelectedProviderAdmission
       providerContractInterfaceRevision (steveProviderContract artifact)
   , selectedProviderSubject =
       qualificationClaimSubject (steveProviderIdentityClaim artifact)
+  , selectedProviderClaimInput = steveProviderIdentityClaim artifact
+  , selectedProviderAdmissionInput = steveProviderIdentityAdmission artifact
   , selectedProviderCheckedAdmission = steveProviderCheckedAdmission artifact
   , selectedProviderOperationEntries = Map.map
       checkedProviderImplementationEntry
@@ -118,6 +120,8 @@ uploadStorageSelection = do
     { selectedProviderOccurrence = "upload.storage-provider"
     , selectedProviderRequiredInterface = uploadStorageInterface
     , selectedProviderSubject = OpaqueProviderBoundary "phase0.upload.storage.runtime-boundary"
+    , selectedProviderClaimInput = uploadStorageClaim
+    , selectedProviderAdmissionInput = uploadStorageAdmission
     , selectedProviderCheckedAdmission = checked
     , selectedProviderOperationEntries = Map.singleton
         (ProviderOperationKey "upload.store")
