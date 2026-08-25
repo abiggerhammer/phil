@@ -2,6 +2,7 @@
 
 module Main (main) where
 
+import qualified Data.Map.Strict as Map
 import qualified Data.Set as Set
 import Phil.Core.Generic
 import Phil.Core.Static (InterfaceRevision (..))
@@ -166,7 +167,7 @@ explicitPermittedAssumptionAccepts = do
     [(lawRequirement, GenericAssumptionDependent "deployment-assumption-A")]
   assert
     (genericInstantiationDispositions record
-      == singletonDisposition lawRequirement (GenericAssumptionDependent "deployment-assumption-A"))
+      == Map.singleton lawRequirement (GenericAssumptionDependent "deployment-assumption-A"))
     "explicit assumption disposition was not retained exactly"
 
 exportRequiresPolicy :: Either String ()
@@ -174,7 +175,7 @@ exportRequiresPolicy =
   case checkGenericInstantiation
       strictGenericInstantiationPolicy
       (Set.singleton lawRequirement)
-      [(lawRequirement, GenericExported "outer-architecture") ] of
+      [(lawRequirement, GenericExported "outer-architecture")] of
     Left (GenericExportNotPermitted requirement) ->
       assert (requirement == lawRequirement)
         "export rejection named the wrong requirement"
@@ -275,12 +276,6 @@ assumptionPolicy :: GenericInstantiationPolicy
 assumptionPolicy = strictGenericInstantiationPolicy
   { genericPolicyAllowsAssumptions = True
   }
-
-singletonDisposition
-  :: GenericRequirement
-  -> GenericRequirementDisposition
-  -> Data.Map.Strict.Map GenericRequirement GenericRequirementDisposition
-singletonDisposition = Data.Map.Strict.singleton
 
 assert :: Bool -> String -> Either String ()
 assert condition detail
