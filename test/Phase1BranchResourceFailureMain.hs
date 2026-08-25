@@ -4,6 +4,7 @@ module Main (main) where
 
 import qualified Data.Map.Strict as Map
 import qualified Data.Set as Set
+import qualified Data.Text as Text
 import Phil.Examples.Phase1.BranchResourceWitnesses
 import Phil.Systems.BranchResourceFailure
 import Phil.Systems.IR (ValueId (..))
@@ -215,16 +216,13 @@ lookupOutcome :: String -> BranchSiteContract -> Either String BranchOutcomeCont
 lookupOutcome label site = maybe
   (Left ("missing branch outcome: " <> label))
   Right
-  (Map.lookup (fromString label) (branchSiteOutcomes site))
+  (Map.lookup (Text.pack label) (branchSiteOutcomes site))
 
 uploadBundle :: Either String BranchResourceStageBundle
 uploadBundle = uploadBranchResourceStageBundle
 
 steveBundle :: Either String BranchResourceStageBundle
 steveBundle = steveBranchResourceStageBundle
-
-fromString :: String -> Data.Text.Text
-fromString = Data.Text.pack
 
 assert :: Bool -> String -> Either String ()
 assert condition detail
