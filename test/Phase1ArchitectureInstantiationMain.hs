@@ -69,7 +69,7 @@ distinctEqualLookingOccurrences = do
       /= identityInstanceRevision (checkedArchitectureIdentity backup))
     "distinct occurrence keys did not induce distinct InstanceRevisions"
   where
-    root = emptyNode rootDeclaration
+    root = (emptyNode rootDeclaration)
       { architectureNodeChildren =
           [ ArchitectureChildSpec primarySlot (emptyNode providerDeclaration)
           , ArchitectureChildSpec backupSlot (emptyNode providerDeclaration)
@@ -87,7 +87,7 @@ explicitReferenceShares = do
     "explicit reference did not preserve the existing InstanceKey"
   where
     primaryKey = scopedInstanceKey rootKey primarySlot
-    root = emptyNode rootDeclaration
+    root = (emptyNode rootDeclaration)
       { architectureNodeChildren =
           [ArchitectureChildSpec primarySlot (emptyNode providerDeclaration)]
       , architectureNodeReferences =
