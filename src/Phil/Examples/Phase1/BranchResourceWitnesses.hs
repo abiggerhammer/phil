@@ -11,6 +11,7 @@ module Phil.Examples.Phase1.BranchResourceWitnesses
 
 import qualified Data.Map.Strict as Map
 import qualified Data.Set as Set
+import Data.Text (Text)
 import Phil.Examples.Phase1.AuthorityEffectWitnesses
   ( steveAuthorityEffectStageBundle
   , uploadAuthorityEffectStageBundle
@@ -115,16 +116,13 @@ steveBlobInstallContract = BranchSiteContract
   }
 
 outcome
-  :: String
+  :: Text
   -> ValueId
   -> BranchOwnerFate
   -> BranchControlClass
   -> BranchOutcomeContract
 outcome semanticRef owner fate control = BranchOutcomeContract
-  { branchOutcomeSemanticRef = fromString semanticRef
+  { branchOutcomeSemanticRef = semanticRef
   , branchOutcomeOwnerFates = Map.singleton owner fate
   , branchOutcomeControlClass = control
   }
-
-fromString :: String -> Data.Text.Text
-fromString = Data.Text.pack
