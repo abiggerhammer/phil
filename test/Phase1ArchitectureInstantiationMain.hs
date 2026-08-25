@@ -200,7 +200,7 @@ explicitProviderBindingChecksInterface = do
     (architectureRequirementDisposition requirement == Just (RequirementBoundTo providerKey))
     "explicit provider binding was not preserved"
   case instantiateArchitecture rootKey invalidRoot of
-    Left ArchitectureBindingInterfaceMismatch {} -> Right ()
+    Left (ArchitectureBindingInterfaceMismatch _ _ _ _) -> Right ()
     other -> Left ("wrong provider interface was not rejected: " <> show other)
   where
     providerKey = scopedInstanceKey rootKey primarySlot
