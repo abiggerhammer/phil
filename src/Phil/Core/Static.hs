@@ -144,7 +144,6 @@ data ArchitectureInstanceDescriptor = ArchitectureInstanceDescriptor
   , architectureParentInstanceKey :: Maybe InstanceKey
   , architectureDeclarationIdentity :: DeclarationIdentity
   , architectureStaticBindings :: Map.Map Text SemanticForm
-  , architectureSemanticBindings :: Map.Map Text SemanticForm
   }
   deriving (Eq, Ord, Show)
 
@@ -315,8 +314,7 @@ deriveArchitectureInstanceIdentity descriptor = ArchitectureInstanceIdentity
               (unInterfaceRevision (identityInterfaceRevision declarationIdentity)))
           , ("definition_revision", SemanticAtom
               (unDefinitionRevision (identityDefinitionRevision declarationIdentity)))
-          , ("static_bindings", SemanticRecord (architectureStaticBindings descriptor))
-          , ("semantic_bindings", SemanticRecord (architectureSemanticBindings descriptor))
+          , ("bindings", SemanticRecord (architectureStaticBindings descriptor))
           ])))
   }
   where
@@ -399,9 +397,8 @@ buildArchitectureNode instanceKey parentKey spec = do
         , architectureParentInstanceKey = parentKey
         , architectureDeclarationIdentity = architectureNodeDeclaration spec
         , architectureStaticBindings = architectureNodeStaticBindings spec
-        , architectureSemanticBindings = semanticBindings
         }
-      identity = deriveArchitectureInstanceIdentity descriptor
+      identity = deriveGraphInstanceIdentity descriptor semanticBindings
       node = CheckedArchitectureInstance
         { checkedArchitectureIdentity = identity
         , checkedArchitectureDescriptor = descriptor
@@ -417,6 +414,23 @@ buildArchitectureNode instanceKey parentKey spec = do
       [ ("key", SemanticAtom (unInstanceKey (identityInstanceKey childIdentity)))
       , ("revision", SemanticAtom (unInstanceRevision (identityInstanceRevision childIdentity)))
       ])
+
+deriveGraphInstanceIdentity
+  :: ArchitectureInstanceDescriptor
+  -> Map.Map Text SemanticForm
+  -> ArchitectureInstanceIdentity
+deriveGraphInstanceIdentity descriptor semanticBindings = ArchitectureInstanceIdentity
+  { identityInstanceKey = identityInstanceKey baseIdentity
+  , identityInstanceRevision = InstanceRevision
+      ("phil.instance.graph.canonical.v1:"
+        <> canonicalSemanticForm (SemanticRecord (Map.fromList
+          [ ("base_revision", SemanticAtom
+              (unInstanceRevision (identityInstanceRevision baseIdentity)))
+          , ("semantic_bindings", SemanticRecord semanticBindings)
+          ])))
+  }
+  where
+    baseIdentity = deriveArchitectureInstanceIdentity descriptor
 
 buildChildren
   :: InstanceKey
