@@ -92,7 +92,8 @@ data CallableCheckError
 
 -- | Normalize closure capture ownership. Repeated unrestricted mentions collapse
 -- to one canonical free-variable capture; affine/linear capture must be an exact
--- ownership move and may occur at most once.
+-- ownership move and may occur at most once. If the same stable occurrence is
+-- described inconsistently and either description is restricted, fail closed.
 checkClosureCaptures
   :: [ClosureCapture]
   -> Either CallableCheckError ClosureCaptureSummary
@@ -114,18 +115,18 @@ checkClosureCaptures captures = do
       result <- accumulated
       let key = closureCaptureOccurrence capture
           mode = closureCaptureStructuralMode capture
-      case mode of
-        Unrestricted ->
-          Right (Map.insertWith keepExisting key capture result)
-        _
-          | closureCaptureTransfer capture /= MoveCapture ->
-              Left (RestrictedCaptureMustMove key mode)
-          | Map.member key result ->
+      case Map.lookup key result of
+        Just previous
+          | mode /= Unrestricted
+              || closureCaptureStructuralMode previous /= Unrestricted ->
               Left (DuplicateRestrictedCapture key mode)
-          | otherwise ->
-              Right (Map.insert key capture result)
-
-    keepExisting _new old = old
+          | otherwise -> Right result
+        Nothing -> case mode of
+          Unrestricted -> Right (Map.insert key capture result)
+          _
+            | closureCaptureTransfer capture /= MoveCapture ->
+                Left (RestrictedCaptureMustMove key mode)
+            | otherwise -> Right (Map.insert key capture result)
 
 -- | Closure structural mode is the least upper bound of the modes of values it
 -- owns: unrestricted < affine < linear.
