@@ -29,7 +29,7 @@ import Phil.Core.ProviderQualificationIdentity
   , ProviderQualificationClaimIdentityInput (..)
   , ProviderQualificationSubject (..)
   , QualificationAdmissionRevision (..)
-  , QualificationClaimRevision
+  , QualificationClaimRevision (..)
   , deriveQualificationAdmissionRevision
   , deriveQualificationClaimRevision
   )
