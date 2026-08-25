@@ -387,10 +387,22 @@ buildArchitectureNode instanceKey parentKey spec = do
   referenceMap <- normalizeReferences instanceKey (architectureNodeReferences spec)
   childSpecs <- normalizeChildren instanceKey (architectureNodeChildren spec)
   (childIdentities, descendantNodes) <- buildChildren instanceKey childSpecs
-  let semanticBindings = Map.fromList
-        [ ("requirements", SemanticRecord (Map.map requirementSemantic requirementMap))
-        , ("children", SemanticRecord (Map.map childSemantic childIdentities))
-        , ("references", SemanticRecord (Map.map (SemanticAtom . unInstanceKey) referenceMap))
+  let requirementBindings = SemanticRecord (Map.fromList
+        [ (unRequirementKey key, requirementSemantic requirement)
+        | (key, requirement) <- Map.toAscList requirementMap
+        ])
+      childBindings = SemanticRecord (Map.fromList
+        [ (unOccurrenceSlotKey slot, childSemantic childIdentity)
+        | (slot, childIdentity) <- Map.toAscList childIdentities
+        ])
+      referenceBindings = SemanticRecord (Map.fromList
+        [ (unReferenceKey key, SemanticAtom (unInstanceKey target))
+        | (key, target) <- Map.toAscList referenceMap
+        ])
+      semanticBindings = Map.fromList
+        [ ("requirements", requirementBindings)
+        , ("children", childBindings)
+        , ("references", referenceBindings)
         ]
       descriptor = ArchitectureInstanceDescriptor
         { architectureInstanceKey = instanceKey
