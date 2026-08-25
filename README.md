@@ -75,6 +75,12 @@ cabal run phil-core -- parse examples/upload/client.phil
 
 A successful `parse` command still means only syntactic acceptance and source-location recovery; semantic acceptance belongs to whole-component checking and later competent lowering/verification stages.
 
+## License
+
+Phil's source code, proofs, examples, and repository documentation are licensed under the **Apache License 2.0**. See [`LICENSE`](LICENSE).
+
+Project names, logos, mascots, and other visual identity assets are not granted additional trademark or branding rights by the software license.
+
 ## Naming
 
 - Language: **Phil**
