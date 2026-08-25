@@ -121,5 +121,8 @@ jobs:
       - name: Phase 1 generic Systems/StageContract conformance
         run: cabal exec -- runghc -isrc test/Phase1GenericSystemsStageMain.hs
 
+      - name: Phase 1 Systems semantic subject correspondence
+        run: cabal exec -- runghc -isrc test/Phase1SubjectCorrespondenceMain.hs
+
       - name: Verify LLVM and run Phil programs
         run: bash scripts/ci/phase0-llvm-runtime-smoke.sh
