@@ -55,5 +55,8 @@ jobs:
       - name: Phase 1 callable transition conformance
         run: cabal exec -- runghc -isrc test/Phase1CallableTransitionsMain.hs
 
+      - name: Phase 1 callable effect bound conformance
+        run: cabal exec -- runghc -isrc test/Phase1CallableEffectBoundMain.hs
+
       - name: Verify LLVM and run Phil programs
         run: bash scripts/ci/phase0-llvm-runtime-smoke.sh
