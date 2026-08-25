@@ -4,6 +4,7 @@ module Main (main) where
 
 import qualified Data.Map.Strict as Map
 import qualified Data.Set as Set
+import Data.Text (Text)
 import Phil.Core.ProviderQualificationIdentity
 import Phil.Core.Static
   ( DefinitionRevision (..)
@@ -211,8 +212,8 @@ mismatchedAdmissionEvidenceRejected = do
       evidence = evidenceBundleA claimRevision
       evidenceRevision = deriveQualificationEvidenceRevision evidence
       wrongEvidence = QualificationEvidenceRevision "evidence:wrong"
-      admission = (admissionInput claimRevision wrongEvidence
-        "assurance.policy.v1" QualificationAdmitted)
+      admission = admissionInput claimRevision wrongEvidence
+        "assurance.policy.v1" QualificationAdmitted
   case checkQualificationAdmissionIdentity baseClaim evidence admission of
     Left (QualificationAdmissionEvidenceRevisionMismatch expected actual) -> do
       assert (expected == evidenceRevision) "wrong expected evidence revision"
@@ -281,7 +282,7 @@ evidenceBundleB claimRevision = (evidenceBundleA claimRevision)
 admissionInput
   :: QualificationClaimRevision
   -> QualificationEvidenceRevision
-  -> String
+  -> Text
   -> ProviderQualificationAdmissionDecision
   -> ProviderQualificationAdmissionIdentityInput
 admissionInput claimRevision evidenceRevision policy decision =
@@ -291,7 +292,7 @@ admissionInput claimRevision evidenceRevision policy decision =
     , qualificationAdmissionProviderOccurrence = "architecture.provider.blob.001"
     , qualificationAdmissionRequiredInterface = providerInterface
     , qualificationAdmissionRealizationContextRevision = "realization-context.host.v1"
-    , qualificationAdmissionAssurancePolicyRevision = fromString policy
+    , qualificationAdmissionAssurancePolicyRevision = policy
     , qualificationAdmissionConditionDispositions = Map.fromList
         [ ("filesystem.no-out-of-band-mutation", SemanticAtom "accepted")
         , ("runtime.sha256-profile-v1", SemanticAtom "accepted")
@@ -308,9 +309,6 @@ providerInterface = InterfaceRevision "provider.blob.v1"
 
 providerDefinition :: DefinitionRevision
 providerDefinition = DefinitionRevision "provider.blob.impl.v1"
-
-fromString :: String -> Data.Text.Text
-fromString = Data.Text.pack
 
 assert :: Bool -> String -> Either String ()
 assert condition detail
