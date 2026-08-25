@@ -4,6 +4,7 @@ module Main (main) where
 
 import qualified Data.Map.Strict as Map
 import qualified Data.Set as Set
+import qualified Data.Text as Text
 import Phil.Core.Generic
 import Phil.Core.Static
   ( ArchitectureChildSpec (..)
@@ -140,7 +141,7 @@ instantiationWithEvidence evidenceId =
     [ ( lawRequirement
       , GenericSatisfiedByEvidence GenericEvidence
           { genericEvidenceProposition = orderingLaw
-          , genericEvidenceIdentity = fromString evidenceId
+          , genericEvidenceIdentity = Text.pack evidenceId
           }
       )
     ]
@@ -211,8 +212,6 @@ orderingLaw = Atom "StrictWeakOrdering" []
 
 lawRequirement :: GenericRequirement
 lawRequirement = GenericPropositionRequirement orderingLaw
-
-fromString = Data.Text.pack
 
 assert :: Bool -> String -> Either String ()
 assert condition detail
