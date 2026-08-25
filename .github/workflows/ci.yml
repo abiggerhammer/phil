@@ -94,5 +94,8 @@ jobs:
       - name: Phase 1 provider lifecycle conformance
         run: cabal exec -- runghc -isrc test/Phase1ProviderLifecycleQualificationMain.hs
 
+      - name: Phase 1 provider authority confinement conformance
+        run: cabal exec -- runghc -isrc test/Phase1ProviderAuthorityQualificationMain.hs
+
       - name: Verify LLVM and run Phil programs
         run: bash scripts/ci/phase0-llvm-runtime-smoke.sh
