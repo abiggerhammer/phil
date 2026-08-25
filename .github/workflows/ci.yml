@@ -124,5 +124,8 @@ jobs:
       - name: Phase 1 Systems semantic subject correspondence
         run: cabal exec -- runghc -isrc test/Phase1SubjectCorrespondenceMain.hs
 
+      - name: Phase 1 Systems provider call correspondence
+        run: cabal exec -- runghc -isrc test/Phase1ProviderCallCorrespondenceMain.hs
+
       - name: Verify LLVM and run Phil programs
         run: bash scripts/ci/phase0-llvm-runtime-smoke.sh
