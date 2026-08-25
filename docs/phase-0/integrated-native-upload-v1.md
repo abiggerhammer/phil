@@ -77,3 +77,7 @@ It does **not** claim production networking, socket behavior, crash durability, 
 ## CI regression entrypoint
 
 This document remains normative for the integrated-native boundary. The post-freeze CI normalization adds `scripts/ci/phase0-integrated-native.sh` only as a repo-local orchestration entrypoint for reproducing the existing source-bound LLVM, full ABI, link, and native scenario gate. The runner additionally pins the frozen source-pair digest already content-bound by Phase 0 closure certification; it does not broaden the claims above.
+
+## CI normalization
+
+The integrated-native execution and certification workflows are being consolidated under `phase0-integrated-native-certification.yml` as separately attributable jobs. The execution and certification authorities remain distinct; this is orchestration cleanup only.

@@ -18,6 +18,7 @@ on:
       - 'scripts/check_runtime_abi.py'
       - 'docs/phase-0/integrated-native-upload-v1.md'
       - 'cabal.project'
+      - '.github/workflows/phase0-integrated-native-upload.yml'
       - '.github/workflows/phase0-integrated-native-certification.yml'
   push:
     branches: [main]
@@ -37,12 +38,117 @@ on:
       - 'scripts/check_runtime_abi.py'
       - 'docs/phase-0/integrated-native-upload-v1.md'
       - 'cabal.project'
+      - '.github/workflows/phase0-integrated-native-upload.yml'
       - '.github/workflows/phase0-integrated-native-certification.yml'
 
 permissions:
   contents: read
 
 jobs:
+  phase0-integrated-native-upload:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: haskell-actions/setup@v2
+        with:
+          ghc-version: '9.6.7'
+          cabal-version: 'latest'
+
+      - name: Resolve LLVM 18 tools
+        shell: bash
+        run: |
+          set -euo pipefail
+          if command -v llvm-as-18 >/dev/null 2>&1; then
+            echo 'LLVM_AS=llvm-as-18' >> "$GITHUB_ENV"
+            echo 'LLVM_LINK=llvm-link-18' >> "$GITHUB_ENV"
+            echo 'LLVM_DIS=llvm-dis-18' >> "$GITHUB_ENV"
+          elif command -v llvm-as >/dev/null 2>&1 && llvm-as --version | head -n 1 | grep -Eq 'LLVM version 18([.]|$)'; then
+            echo 'LLVM_AS=llvm-as' >> "$GITHUB_ENV"
+            echo 'LLVM_LINK=llvm-link' >> "$GITHUB_ENV"
+            echo 'LLVM_DIS=llvm-dis' >> "$GITHUB_ENV"
+          else
+            echo 'LLVM 18 tools are required' >&2
+            exit 1
+          fi
+          if command -v clang-18 >/dev/null 2>&1; then
+            echo 'CLANG=clang-18' >> "$GITHUB_ENV"
+          elif command -v clang >/dev/null 2>&1 && clang --version | head -n 1 | grep -Eq 'clang version 18([.]|$)'; then
+            echo 'CLANG=clang' >> "$GITHUB_ENV"
+          else
+            echo 'Clang 18 is required' >&2
+            exit 1
+          fi
+
+      - name: Build source projection and native LLVM emitter
+        run: |
+          cabal build \
+            lib:phil-phase0-projection \
+            exe:phil-phase0-upload-llvm \
+            test:projection-tests \
+            --ghc-options=-Werror
+
+      - name: Re-run source projection tests
+        run: cabal test projection-tests --test-show-details=direct
+
+      - name: Emit source-bound control-codec LLVM
+        shell: bash
+        run: |
+          set -euo pipefail
+          EMITTER="$(cabal list-bin exe:phil-phase0-upload-llvm)"
+          "$EMITTER" > phase0-source-bound.ll
+          grep -q '^; phase0-source-pair-digest=' phase0-source-bound.ll
+          grep -q '^; phase0-source-projection=surface-to-systems/phase0-upload/v1$' phase0-source-bound.ll
+          grep -q '^; runtime-abi-profile=phil-runtime/phase0/control-codec-v1$' phase0-source-bound.ll
+          grep -Fq 'define i32 @UploadClient(ptr %client_transport, ptr %client_payload_owner)' phase0-source-bound.ll
+          grep -Fq 'define i32 @UploadServer(ptr %server_policy_context, ptr %server_supported_versions, ptr %server_transport)' phase0-source-bound.ll
+          "$LLVM_AS" phase0-source-bound.ll -o phase0-source-bound.bc
+
+      - name: Compile integrated runtime provider
+        shell: bash
+        run: |
+          set -euo pipefail
+          "$CLANG" --target=x86_64-unknown-linux-gnu \
+            -std=c11 -Wall -Wextra -Wpedantic -Werror \
+            -Iruntime/phase0 -S -emit-llvm \
+            runtime/phase0/control_codec_v1.c \
+            -o control-codec-provider.ll
+          "$CLANG" --target=x86_64-unknown-linux-gnu \
+            -std=c11 -Wall -Wextra -Wpedantic -Werror -pthread \
+            -Iruntime/phase0 -S -emit-llvm \
+            runtime/phase0/integrated_upload_v1.c \
+            -o integrated-upload-provider.ll
+          "$CLANG" --target=x86_64-unknown-linux-gnu \
+            -std=c11 -Wall -Wextra -Wpedantic -Werror -pthread \
+            -Iruntime/phase0 -S -emit-llvm \
+            runtime/phase0/integrated_upload_v1_main.c \
+            -o integrated-upload-main.ll
+          "$LLVM_AS" control-codec-provider.ll -o control-codec-provider.bc
+          "$LLVM_AS" integrated-upload-provider.ll -o integrated-upload-provider.bc
+          "$LLVM_AS" integrated-upload-main.ll -o integrated-upload-main.bc
+          "$LLVM_LINK" \
+            control-codec-provider.bc \
+            integrated-upload-provider.bc \
+            -o integrated-provider.bc
+          "$LLVM_DIS" integrated-provider.bc -o integrated-provider.ll
+
+      - name: Verify complete generated/runtime ABI
+        run: python3 scripts/check_runtime_abi.py phase0-source-bound.ll integrated-provider.ll
+
+      - name: Link and run compiled Phil endpoints
+        shell: bash
+        run: |
+          set -euo pipefail
+          "$LLVM_LINK" \
+            phase0-source-bound.bc \
+            integrated-provider.bc \
+            integrated-upload-main.bc \
+            -o phase0-integrated-upload.bc
+          "$CLANG" --target=x86_64-unknown-linux-gnu \
+            phase0-integrated-upload.bc \
+            -lcrypto -pthread \
+            -o phase0-integrated-upload
+          ./phase0-integrated-upload
+
   certify-phase0-integrated-native-upload:
     runs-on: ubuntu-latest
     steps:
