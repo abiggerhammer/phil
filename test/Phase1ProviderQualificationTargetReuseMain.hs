@@ -4,6 +4,7 @@ module Main (main) where
 
 import qualified Data.Map.Strict as Map
 import qualified Data.Set as Set
+import Data.Text (Text)
 import Phil.Core.ProviderQualificationIdentity
 import Phil.Core.ProviderQualificationTargetReuse
 import Phil.Core.Static
@@ -179,24 +180,24 @@ wasmEvidence = targetEvidence
   (Set.singleton "assumption:wasi-filesystem-profile:v1")
 
 targetEvidence
-  :: String
-  -> String
-  -> String
-  -> String
-  -> Set.Set String
-  -> Set.Set String
+  :: Text
+  -> Text
+  -> Text
+  -> Text
+  -> Set.Set Text
+  -> Set.Set Text
   -> ProviderTargetRealizationEvidence
 targetEvidence target artifact abi realization translations assumptions =
   ProviderTargetRealizationEvidence
     { targetEvidenceClaimRevision = semanticClaimRevision
     , targetEvidenceRequiredInterface = providerInterface
     , targetEvidenceSemanticImplementation = providerDefinition
-    , targetEvidenceTargetProfileRevision = text target
-    , targetEvidenceArtifactRevision = text artifact
-    , targetEvidenceRuntimeAbiRevision = text abi
-    , targetEvidenceRealizationRelationRevision = text realization
-    , targetEvidenceTranslationValidationRefs = Set.map text translations
-    , targetEvidenceTargetAssumptions = Set.map text assumptions
+    , targetEvidenceTargetProfileRevision = target
+    , targetEvidenceArtifactRevision = artifact
+    , targetEvidenceRuntimeAbiRevision = abi
+    , targetEvidenceRealizationRelationRevision = realization
+    , targetEvidenceTranslationValidationRefs = translations
+    , targetEvidenceTargetAssumptions = assumptions
     }
 
 providerInterface :: InterfaceRevision
@@ -204,9 +205,6 @@ providerInterface = InterfaceRevision "provider.blob.v1"
 
 providerDefinition :: DefinitionRevision
 providerDefinition = DefinitionRevision "provider.blob.impl.v1"
-
-text :: String -> Data.Text.Text
-text = Data.Text.pack
 
 assert :: Bool -> String -> Either String ()
 assert condition detail
