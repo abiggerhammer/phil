@@ -3,8 +3,10 @@ module Phil.Core.Generic
   , StructuralPermission (..)
   , GenericStructuralUse (..)
   , GenericStructuralRequirements (..)
+  , CheckedGenericStructuralInterface (..)
   , GenericStructuralError (..)
   , inferGenericStructuralRequirements
+  , checkGenericStructuralInterface
   , modeAllowsStructuralPermission
   , checkGenericStructuralActual
   ) where
@@ -43,9 +45,26 @@ newtype GenericStructuralRequirements = GenericStructuralRequirements
   }
   deriving (Eq, Ord, Show)
 
+-- | The two requirement views that Phase 1 must keep distinct. The induced set
+-- is the minimum justified by the current checked body. The published set is
+-- the stable interface contract callers must satisfy. Published requirements
+-- may deliberately be stronger, but never weaker, than the induced set.
+data CheckedGenericStructuralInterface = CheckedGenericStructuralInterface
+  { genericInducedStructuralRequirements
+      :: Map.Map GenericValueParameterKey GenericStructuralRequirements
+  , genericPublishedStructuralRequirements
+      :: Map.Map GenericValueParameterKey GenericStructuralRequirements
+  }
+  deriving (Eq, Ord, Show)
+
 data GenericStructuralError
   = DuplicateGenericValueParameter GenericValueParameterKey
   | UnknownGenericValueParameter GenericValueParameterKey
+  | DuplicatePublishedStructuralRequirement GenericValueParameterKey
+  | UnknownPublishedGenericValueParameter GenericValueParameterKey
+  | PublishedStructuralRequirementTooWeak
+      GenericValueParameterKey
+      StructuralPermission
   | MissingStructuralPermission
       GenericValueParameterKey
       StructuralPermission
@@ -81,6 +100,27 @@ inferGenericStructuralRequirements parameters uses = do
               (Set.insert required (genericStructuralPermissions existing))
       Right (Map.insert key updated current)
 
+-- | Check the current body-induced minimum against an optional explicitly
+-- stabilized public contract. With no explicit declaration, the public
+-- requirement set is exactly the inferred minimum. With an explicit contract,
+-- omitted parameters mean an empty published set; declared requirements may be
+-- stronger than the current body but cannot omit any induced permission.
+checkGenericStructuralInterface
+  :: [GenericValueParameterKey]
+  -> [GenericStructuralUse]
+  -> Maybe [(GenericValueParameterKey, GenericStructuralRequirements)]
+  -> Either GenericStructuralError CheckedGenericStructuralInterface
+checkGenericStructuralInterface parameters uses explicitPublished = do
+  induced <- inferGenericStructuralRequirements parameters uses
+  published <- case explicitPublished of
+    Nothing -> Right induced
+    Just declarations -> normalizePublishedRequirements parameters declarations
+  ensurePublishedCoversInduced induced published
+  Right CheckedGenericStructuralInterface
+    { genericInducedStructuralRequirements = induced
+    , genericPublishedStructuralRequirements = published
+    }
+
 -- | Structural mode satisfaction relation inherited directly from ADR-002:
 -- unrestricted permits contraction and weakening, affine permits weakening,
 -- and linear permits neither.
@@ -91,8 +131,9 @@ modeAllowsStructuralPermission mode permission = case (mode, permission) of
   (Affine, ContractionPermission) -> False
   (Linear, _) -> False
 
--- | Check one concrete actual against the exact inferred structural requirement
--- set. Failure identifies the first missing canonical permission.
+-- | Check one concrete actual against the exact inferred or published
+-- structural requirement set supplied by the caller. Failure identifies the
+-- first missing canonical permission.
 checkGenericStructuralActual
   :: GenericValueParameterKey
   -> Mode
@@ -120,6 +161,44 @@ initialRequirements = go Set.empty Map.empty
           (Set.insert key seen)
           (Map.insert key (GenericStructuralRequirements Set.empty) result)
           rest
+
+normalizePublishedRequirements
+  :: [GenericValueParameterKey]
+  -> [(GenericValueParameterKey, GenericStructuralRequirements)]
+  -> Either GenericStructuralError
+      (Map.Map GenericValueParameterKey GenericStructuralRequirements)
+normalizePublishedRequirements parameters declarations = do
+  initial <- initialRequirements parameters
+  go Set.empty initial declarations
+  where
+    go _ result [] = Right result
+    go seen result ((key, requirements) : rest)
+      | Set.member key seen = Left (DuplicatePublishedStructuralRequirement key)
+      | not (Map.member key result) = Left (UnknownPublishedGenericValueParameter key)
+      | otherwise = go
+          (Set.insert key seen)
+          (Map.insert key requirements result)
+          rest
+
+ensurePublishedCoversInduced
+  :: Map.Map GenericValueParameterKey GenericStructuralRequirements
+  -> Map.Map GenericValueParameterKey GenericStructuralRequirements
+  -> Either GenericStructuralError ()
+ensurePublishedCoversInduced induced published =
+  mapM_ checkOne (Map.toAscList induced)
+  where
+    checkOne (key, inducedRequirements) =
+      let publishedRequirements = Map.findWithDefault
+            (GenericStructuralRequirements Set.empty)
+            key
+            published
+          missing = Set.difference
+            (genericStructuralPermissions inducedRequirements)
+            (genericStructuralPermissions publishedRequirements)
+      in case Set.toAscList missing of
+          [] -> Right ()
+          permission : _ -> Left
+            (PublishedStructuralRequirementTooWeak key permission)
 
 useParameter :: GenericStructuralUse -> GenericValueParameterKey
 useParameter use = case use of
