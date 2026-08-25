@@ -64,5 +64,8 @@ jobs:
       - name: Phase 1 callable refinement conformance
         run: cabal exec -- runghc -isrc test/Phase1CallableRefinementMain.hs
 
+      - name: Phase 1 callable recursion conformance
+        run: cabal exec -- runghc -isrc test/Phase1CallableRecursionMain.hs
+
       - name: Verify LLVM and run Phil programs
         run: bash scripts/ci/phase0-llvm-runtime-smoke.sh
