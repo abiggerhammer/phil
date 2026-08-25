@@ -4,6 +4,7 @@ module Main (main) where
 
 import Control.Monad (unless)
 import qualified Data.Map.Strict as Map
+import qualified Data.Set as Set
 import Data.Text (Text)
 import Phil.Core.Checker
   ( CheckState (..)
@@ -37,6 +38,22 @@ import Phil.Core.Session
   , receiveEndpoint
   , selectEndpoint
   , sendEndpoint
+  )
+import Phil.Core.Static
+  ( ArchitectureInstanceDescriptor (..)
+  , ArchitectureInstanceIdentity (..)
+  , ArchitectureRealizationDescriptor (..)
+  , ArchitectureRealizationIdentity (..)
+  , DeclarationDescriptor (..)
+  , DeclarationIdentity (..)
+  , DeclarationKey (..)
+  , DeclarationPresentation (..)
+  , InstanceKey (..)
+  , SemanticForm (..)
+  , canonicalSemanticForm
+  , deriveArchitectureInstanceIdentity
+  , deriveArchitectureRealizationIdentity
+  , deriveDeclarationIdentity
   )
 import Phil.Core.Syntax
   ( Branch (..)
@@ -75,6 +92,14 @@ main = do
     , test "guarded recursion exposes one communication head" testGuardedRecursion
     , test "unguarded recursion is rejected" testUnguardedRecursion
     , test "session duality is involutive" testDuality
+    , test "canonical semantic records ignore insertion order" testCanonicalRecordOrder
+    , test "canonical semantic sets ignore insertion order" testCanonicalSetOrder
+    , test "declaration rename and module move preserve semantic identity" testPresentationDoesNotIdentify
+    , test "public contract changes revise interface and definition" testInterfaceChangeRevises
+    , test "definition replacement may preserve the public interface" testDefinitionChangePreservesInterface
+    , test "equal-looking architecture occurrences remain distinct" testDistinctArchitectureOccurrences
+    , test "unrelated sibling edits do not rekey an unaffected child" testSiblingEditDoesNotRekeyChild
+    , test "realization replacement preserves instance identity" testRealizationReplacement
     ]
   unless (and results) exitFailure
 
@@ -319,6 +344,197 @@ testDuality = do
           , Branch "version" (Just (name "selected", nty "U16")) (End (Outcome "success"))
           ])
   assert (dualSession (dualSession session) == session) "dual . dual changed the session type"
+
+testCanonicalRecordOrder :: Either String ()
+testCanonicalRecordOrder =
+  let left = SemanticRecord (Map.fromList
+        [ ("provider", SemanticAtom "BlobProvider")
+        , ("authority", SemanticAtom "write")
+        ])
+      right = SemanticRecord (Map.fromList
+        [ ("authority", SemanticAtom "write")
+        , ("provider", SemanticAtom "BlobProvider")
+        ])
+  in assert
+      (canonicalSemanticForm left == canonicalSemanticForm right)
+      "record insertion order changed the canonical semantic form"
+
+testCanonicalSetOrder :: Either String ()
+testCanonicalSetOrder =
+  let left = SemanticUnordered (Set.fromList
+        [ SemanticAtom "read"
+        , SemanticAtom "write"
+        ])
+      right = SemanticUnordered (Set.fromList
+        [ SemanticAtom "write"
+        , SemanticAtom "read"
+        ])
+  in assert
+      (canonicalSemanticForm left == canonicalSemanticForm right)
+      "set insertion order changed the canonical semantic form"
+
+testPresentationDoesNotIdentify :: Either String ()
+testPresentationDoesNotIdentify =
+  let first = deriveDeclarationIdentity
+        (baseDeclaration (DeclarationPresentation "blob" ["Steve"]))
+      renamed = deriveDeclarationIdentity
+        (baseDeclaration (DeclarationPresentation "object_store" ["Storage", "Steve"]))
+  in assert
+      (first == renamed)
+      "human rename or module move changed declaration semantic identity"
+
+testInterfaceChangeRevises :: Either String ()
+testInterfaceChangeRevises =
+  let original = deriveDeclarationIdentity
+        (baseDeclaration (DeclarationPresentation "blob" ["Steve"]))
+      changedDescriptor =
+        (baseDeclaration (DeclarationPresentation "blob" ["Steve"]))
+          { declarationInterfaceSemantics = SemanticRecord (Map.fromList
+              [ ("provider", SemanticAtom "BlobProvider")
+              , ("authority", SemanticAtom "read-write")
+              , ("failure", SemanticAtom "explicit")
+              ])
+          }
+      changed = deriveDeclarationIdentity changedDescriptor
+  in do
+    assert
+      (identityDeclarationKey original == identityDeclarationKey changed)
+      "public contract revision changed stable declaration lineage"
+    assert
+      (identityInterfaceRevision original /= identityInterfaceRevision changed)
+      "public contract change did not revise InterfaceRevision"
+    assert
+      (identityDefinitionRevision original /= identityDefinitionRevision changed)
+      "public contract change did not revise DefinitionRevision"
+
+testDefinitionChangePreservesInterface :: Either String ()
+testDefinitionChangePreservesInterface =
+  let originalDescriptor = baseDeclaration (DeclarationPresentation "blob" ["Steve"])
+      replacementDescriptor = originalDescriptor
+        { declarationDefinitionSemantics = SemanticRecord (Map.fromList
+            [ ("algorithm", SemanticAtom "install-if-absent-v2")
+            , ("cleanup", SemanticAtom "release-on-all-failures")
+            ])
+        }
+      original = deriveDeclarationIdentity originalDescriptor
+      replacement = deriveDeclarationIdentity replacementDescriptor
+  in do
+    assert
+      (identityInterfaceRevision original == identityInterfaceRevision replacement)
+      "definition-only rewrite changed the public interface revision"
+    assert
+      (identityDefinitionRevision original /= identityDefinitionRevision replacement)
+      "definition-only rewrite failed to change DefinitionRevision"
+
+testDistinctArchitectureOccurrences :: Either String ()
+testDistinctArchitectureOccurrences =
+  let declarationIdentity = deriveDeclarationIdentity
+        (baseDeclaration (DeclarationPresentation "blob" ["Steve"]))
+      primary = deriveArchitectureInstanceIdentity
+        (baseInstance declarationIdentity (InstanceKey "steve.primary-store"))
+      backup = deriveArchitectureInstanceIdentity
+        (baseInstance declarationIdentity (InstanceKey "steve.backup-store"))
+  in do
+    assert
+      (identityInstanceKey primary /= identityInstanceKey backup)
+      "equal-looking occurrences collapsed to one InstanceKey"
+    assert
+      (identityInstanceRevision primary /= identityInstanceRevision backup)
+      "equal-looking occurrences collapsed to one InstanceRevision"
+
+testSiblingEditDoesNotRekeyChild :: Either String ()
+testSiblingEditDoesNotRekeyChild =
+  let parentPresentation = DeclarationPresentation "steve" ["Steve"]
+      parentBefore = deriveDeclarationIdentity DeclarationDescriptor
+        { declarationPresentation = parentPresentation
+        , declarationKey = DeclarationKey "architecture.steve"
+        , declarationInterfaceSemantics = SemanticAtom "SteveArchitecture"
+        , declarationDefinitionSemantics = SemanticRecord (Map.fromList
+            [ ("store", SemanticAtom "v1")
+            , ("metrics", SemanticAtom "v1")
+            ])
+        }
+      parentAfter = deriveDeclarationIdentity DeclarationDescriptor
+        { declarationPresentation = parentPresentation
+        , declarationKey = DeclarationKey "architecture.steve"
+        , declarationInterfaceSemantics = SemanticAtom "SteveArchitecture"
+        , declarationDefinitionSemantics = SemanticRecord (Map.fromList
+            [ ("store", SemanticAtom "v1")
+            , ("metrics", SemanticAtom "v2")
+            ])
+        }
+      childDeclaration = deriveDeclarationIdentity
+        (baseDeclaration (DeclarationPresentation "store" ["Steve"]))
+      childBefore = deriveArchitectureInstanceIdentity
+        (baseInstance childDeclaration (InstanceKey "steve.store"))
+      childAfter = deriveArchitectureInstanceIdentity
+        (baseInstance childDeclaration (InstanceKey "steve.store"))
+  in do
+    assert
+      (identityDefinitionRevision parentBefore /= identityDefinitionRevision parentAfter)
+      "sibling edit fixture did not revise the containing architecture definition"
+    assert
+      (childBefore == childAfter)
+      "containing architecture revision recursively rekeyed an unaffected child"
+
+testRealizationReplacement :: Either String ()
+testRealizationReplacement =
+  let declarationIdentity = deriveDeclarationIdentity
+        (baseDeclaration (DeclarationPresentation "blob" ["Steve"]))
+      instanceIdentity = deriveArchitectureInstanceIdentity
+        (baseInstance declarationIdentity (InstanceKey "steve.store"))
+      first = deriveArchitectureRealizationIdentity ArchitectureRealizationDescriptor
+        { realizationInstanceIdentity = instanceIdentity
+        , realizationSemantics = SemanticRecord (Map.fromList
+            [ ("implementation", SemanticAtom "filesystem-v1")
+            , ("target", SemanticAtom "host")
+            ])
+        }
+      replacement = deriveArchitectureRealizationIdentity ArchitectureRealizationDescriptor
+        { realizationInstanceIdentity = instanceIdentity
+        , realizationSemantics = SemanticRecord (Map.fromList
+            [ ("implementation", SemanticAtom "object-store-v1")
+            , ("target", SemanticAtom "host")
+            ])
+        }
+  in do
+    assert
+      (identityRealizationRevision first /= identityRealizationRevision replacement)
+      "provider realization replacement did not revise RealizationRevision"
+    assert
+      (realizationInstanceIdentity ArchitectureRealizationDescriptor
+        { realizationInstanceIdentity = instanceIdentity
+        , realizationSemantics = SemanticAtom "unused"
+        } == instanceIdentity)
+      "realization construction changed the abstract ArchitectureInstance identity"
+
+baseDeclaration :: DeclarationPresentation -> DeclarationDescriptor
+baseDeclaration presentation = DeclarationDescriptor
+  { declarationPresentation = presentation
+  , declarationKey = DeclarationKey "provider.blob"
+  , declarationInterfaceSemantics = SemanticRecord (Map.fromList
+      [ ("provider", SemanticAtom "BlobProvider")
+      , ("authority", SemanticAtom "read-write")
+      ])
+  , declarationDefinitionSemantics = SemanticRecord (Map.fromList
+      [ ("algorithm", SemanticAtom "install-if-absent-v1")
+      , ("cleanup", SemanticAtom "release-on-failure")
+      ])
+  }
+
+baseInstance
+  :: DeclarationIdentity
+  -> InstanceKey
+  -> ArchitectureInstanceDescriptor
+baseInstance declarationIdentity instanceKey = ArchitectureInstanceDescriptor
+  { architectureInstanceKey = instanceKey
+  , architectureParentInstanceKey = Just (InstanceKey "architecture.steve")
+  , architectureDeclarationIdentity = declarationIdentity
+  , architectureStaticBindings = Map.fromList
+      [ ("contract", SemanticAtom "BlobProvider")
+      , ("mode", SemanticAtom "read-write")
+      ]
+  }
 
 endpointContext :: Name -> Session -> Either String ResourceContext
 endpointContext endpoint session =
