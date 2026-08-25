@@ -25,8 +25,13 @@ import Phil.Core.ProviderQualification
 import Phil.Core.ProviderQualificationIdentity
   ( CheckedProviderQualificationAdmissionIdentity (..)
   , ProviderQualificationAdmissionDecision (..)
+  , ProviderQualificationAdmissionIdentityInput (..)
+  , ProviderQualificationClaimIdentityInput (..)
   , ProviderQualificationSubject (..)
   , QualificationAdmissionRevision (..)
+  , QualificationClaimRevision
+  , deriveQualificationAdmissionRevision
+  , deriveQualificationClaimRevision
   )
 import Phil.Core.Static
   ( DefinitionRevision (..)
@@ -54,6 +59,8 @@ data SelectedProviderAdmission = SelectedProviderAdmission
   { selectedProviderOccurrence :: Text
   , selectedProviderRequiredInterface :: InterfaceRevision
   , selectedProviderSubject :: ProviderQualificationSubject
+  , selectedProviderClaimInput :: ProviderQualificationClaimIdentityInput
+  , selectedProviderAdmissionInput :: ProviderQualificationAdmissionIdentityInput
   , selectedProviderCheckedAdmission :: CheckedProviderQualificationAdmissionIdentity
   , selectedProviderOperationEntries
       :: Map ProviderOperationKey ProviderImplementationEntryKey
@@ -94,6 +101,16 @@ data ProviderCallStageVerificationError
   | ProviderSelectionMapKeyMismatch Text Text
   | ProviderSelectionAdmissionRejected Text
   | ProviderSelectionEmptyOccurrence
+  | ProviderSelectionClaimRevisionMismatch
+      Text QualificationClaimRevision QualificationClaimRevision
+  | ProviderSelectionAdmissionRevisionMismatch
+      Text QualificationAdmissionRevision QualificationAdmissionRevision
+  | ProviderSelectionOccurrenceInputMismatch Text Text
+  | ProviderSelectionInterfaceInputMismatch Text InterfaceRevision InterfaceRevision
+  | ProviderSelectionSubjectInputMismatch
+      Text ProviderQualificationSubject ProviderQualificationSubject
+  | ProviderSelectionDecisionInputMismatch
+      Text ProviderQualificationAdmissionDecision ProviderQualificationAdmissionDecision
   | ProviderSelectionEmptyOperationMap Text
   | ProviderCallSiteUnknown (Set SystemsMechanismKey)
   | ProviderCallLinkDomainMismatch (Set SystemsMechanismKey) (Set SystemsMechanismKey)
@@ -177,6 +194,30 @@ verifyProviderCallStageBundle bundle = do
           (selectedProviderCheckedAdmission selection) of
         QualificationAdmitted -> Right ()
         QualificationRejected _ -> Left (ProviderSelectionAdmissionRejected key)
+      let claimInput = selectedProviderClaimInput selection
+          admissionInput = selectedProviderAdmissionInput selection
+          checked = selectedProviderCheckedAdmission selection
+          expectedClaim = deriveQualificationClaimRevision claimInput
+          actualClaim = checkedQualificationAdmissionClaimRevision checked
+          expectedAdmission = deriveQualificationAdmissionRevision admissionInput
+          actualAdmission = checkedQualificationAdmissionRevision checked
+          inputOccurrence = qualificationAdmissionProviderOccurrence admissionInput
+          inputInterface = qualificationAdmissionRequiredInterface admissionInput
+          inputSubject = qualificationClaimSubject claimInput
+          inputDecision = qualificationAdmissionDecision admissionInput
+          actualDecision = checkedQualificationAdmissionDecision checked
+      requireEqual (ProviderSelectionClaimRevisionMismatch key)
+        expectedClaim actualClaim
+      requireEqual (ProviderSelectionAdmissionRevisionMismatch key)
+        expectedAdmission actualAdmission
+      requireEqual ProviderSelectionOccurrenceInputMismatch
+        key inputOccurrence
+      requireEqual (ProviderSelectionInterfaceInputMismatch key)
+        (selectedProviderRequiredInterface selection) inputInterface
+      requireEqual (ProviderSelectionSubjectInputMismatch key)
+        (selectedProviderSubject selection) inputSubject
+      requireEqual (ProviderSelectionDecisionInputMismatch key)
+        inputDecision actualDecision
       if Map.null (selectedProviderOperationEntries selection)
         then Left (ProviderSelectionEmptyOperationMap key)
         else Right ()
@@ -210,6 +251,9 @@ semanticSelection selection = SemanticRecord (Map.fromList
   , ("interface", SemanticAtom
       (interfaceText (selectedProviderRequiredInterface selection)))
   , ("subject", semanticSubject (selectedProviderSubject selection))
+  , ("claim_revision", SemanticAtom
+      (claimText (checkedQualificationAdmissionClaimRevision
+        (selectedProviderCheckedAdmission selection))))
   , ("admission", SemanticAtom
       (admissionText (checkedQualificationAdmissionRevision
         (selectedProviderCheckedAdmission selection))))
@@ -278,6 +322,9 @@ interfaceText (InterfaceRevision value) = value
 
 definitionText :: DefinitionRevision -> Text
 definitionText (DefinitionRevision value) = value
+
+claimText :: QualificationClaimRevision -> Text
+claimText = unQualificationClaimRevision
 
 admissionText :: QualificationAdmissionRevision -> Text
 admissionText (QualificationAdmissionRevision value) = value
