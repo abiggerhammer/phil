@@ -32,6 +32,8 @@ certificationSpecFor :: Text.Text -> Maybe RocqCertificationSpec
 certificationSpecFor profile
   | profile == rocqSpecProfile phase1ArchImportCertificationSpec =
       Just phase1ArchImportCertificationSpec
+  | profile == rocqSpecProfile phase1GenericStructuralCertificationSpec =
+      Just phase1GenericStructuralCertificationSpec
   | otherwise =
       case knownRocqCertificationSpec profile of
         Just spec -> Just spec
@@ -81,6 +83,57 @@ phase1ArchImportCertificationSpec = RocqCertificationSpec
   , rocqSpecEvidenceId = EvidenceEntryId "evidence.PHIL-ARCH-IMPORT-001.rocq.v1"
   , rocqSpecResidualBoundary =
       "Rocq kernel/toolchain correctness and the reviewed correspondence from Phil.Surface.Check's concrete Text/Map/fold/module-table resolver to the normalized proof model remain explicit trust boundaries. Final Phil import syntax, package/version solving, repository provenance, and declaration-checking soundness are outside this theorem family."
+  }
+
+phase1GenericStructuralCertificationSpec :: RocqCertificationSpec
+phase1GenericStructuralCertificationSpec = RocqCertificationSpec
+  { rocqSpecProfile = "phase1-generic-structural"
+  , rocqSpecObligation = ObligationId "PHIL-GEN-STRUCT-001"
+  , rocqSpecClaim =
+      "A generic may transfer an abstract value without copy/drop authority. Duplicating an abstract value induces contraction/copy requirements; discarding it induces weakening/drop requirements. Instantiation succeeds only when the actual structural mode satisfies the induced requirements."
+  , rocqSpecKind = "Generic structural polymorphism"
+  , rocqSpecOrigin =
+      "src/Phil/Core/Generic.hs::{inferGenericStructuralRequirements,modeAllowsStructuralPermission,checkGenericStructuralActual}; test/Phase1GenericStructuralMain.hs; proof/Phil/Core/GenericStructural.v"
+  , rocqSpecScope =
+      "Phase 1 bounded generic structural checker over already resolved abstract value parameters"
+  , rocqSpecRepresentation =
+      "normalized weakening/contraction requirement set and unrestricted/affine/linear mode satisfaction algebra"
+  , rocqSpecSubjects =
+      [ "GenericStructuralUse"
+      , "GenericStructuralRequirements"
+      , "StructuralPermission"
+      , "Mode"
+      ]
+  , rocqSpecTheorems =
+      [ "transfer_requires_no_structural_permission"
+      , "discard_induces_weakening"
+      , "duplication_induces_contraction"
+      , "transfer_only_has_empty_requirements"
+      , "linear_actual_satisfies_pure_transfer"
+      , "discard_requires_exactly_weakening_from_empty"
+      , "unrestricted_satisfies_weakening"
+      , "affine_satisfies_weakening"
+      , "linear_rejects_weakening"
+      , "duplication_requires_exactly_contraction_from_empty"
+      , "unrestricted_satisfies_contraction"
+      , "affine_rejects_contraction"
+      , "linear_rejects_contraction"
+      , "duplicate_and_discard_require_both_permissions"
+      , "unrestricted_satisfies_both_permissions"
+      , "affine_rejects_both_permissions"
+      , "linear_rejects_both_permissions"
+      , "structural_use_accumulation_commutes"
+      , "two_use_inference_is_order_independent"
+      , "unrestricted_satisfies_every_structural_requirement"
+      , "linear_satisfies_only_empty_structural_requirements"
+      , "affine_satisfaction_excludes_contraction"
+      ]
+  , rocqSpecSourceRef = ArtifactRef "proof/Phil/Core/GenericStructural.v"
+  , rocqSpecCompiledRef = ArtifactRef "proof/Phil/Core/GenericStructural.vo"
+  , rocqSpecCertificateRef = ArtifactRef "certificate:rocq:PHIL-GEN-STRUCT-001:v1"
+  , rocqSpecEvidenceId = EvidenceEntryId "evidence.PHIL-GEN-STRUCT-001.rocq.v1"
+  , rocqSpecResidualBoundary =
+      "Rocq kernel/toolchain correctness and reviewed correspondence from Phil.Core.Generic's concrete GenericValueParameterKey/Text, Map/Set normalization and checked use-event traversal to the normalized proof model remain explicit trust boundaries. Full generic binder representation and resource-context plumbing are outside this theorem family."
   }
 
 certifyWith :: RocqCertificationSpec -> FilePath -> FilePath -> FilePath -> IO ()
