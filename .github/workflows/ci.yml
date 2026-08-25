@@ -46,5 +46,8 @@ jobs:
       - name: Phase 1 generic instantiation conformance
         run: cabal exec -- runghc -isrc test/Phase1GenericInstantiationMain.hs
 
+      - name: Phase 1 generic identity conformance
+        run: cabal exec -- runghc -isrc test/Phase1GenericIdentityMain.hs
+
       - name: Verify LLVM and run Phil programs
         run: bash scripts/ci/phase0-llvm-runtime-smoke.sh
