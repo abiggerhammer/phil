@@ -91,7 +91,7 @@ argumentOrderIsNonsemantic = do
 duplicateArgumentRejects :: Either String ()
 duplicateArgumentRejects =
   case deriveGenericApplicationIdentity
-      declarationKey
+      genericDeclarationKey
       interfaceRevision
       [ (typeParameter, SemanticAtom "Blob")
       , (typeParameter, SemanticAtom "Blob")
@@ -131,7 +131,7 @@ applicationIdentity
   -> Either String GenericApplicationIdentity
 applicationIdentity arguments =
   mapLeft show $ deriveGenericApplicationIdentity
-    declarationKey
+    genericDeclarationKey
     interfaceRevision
     arguments
 
@@ -189,8 +189,8 @@ primarySlot, backupSlot :: OccurrenceSlotKey
 primarySlot = OccurrenceSlotKey "primary"
 backupSlot = OccurrenceSlotKey "backup"
 
-declarationKey :: DeclarationKey
-declarationKey = DeclarationKey "generic.map"
+genericDeclarationKey :: DeclarationKey
+genericDeclarationKey = DeclarationKey "generic.map"
 
 interfaceRevision :: InterfaceRevision
 interfaceRevision = InterfaceRevision "generic.map.interface.v1"
