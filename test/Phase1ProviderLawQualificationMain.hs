@@ -46,8 +46,6 @@ validHistoryAccepted = do
 repeatedInstallRejected :: Either String ()
 repeatedInstallRejected = do
   qualified <- qualifiedProvider
-  -- Both implementation events are individually admitted by the exact
-  -- PROV-001--005 operation qualification. Only their sequence is illegal.
   _ <- mapLeft show $ checkProviderLawTrace qualified noReplaceLaw [installInstalledEvent]
   case checkProviderLawTrace qualified noReplaceLaw
       [installInstalledEvent, installInstalledEvent] of
@@ -147,7 +145,7 @@ providerContract = ProviderContract
   { providerContractInterfaceRevision = InterfaceRevision "provider.blob.v1"
   , providerContractOperations = Map.fromList
       [ (installOperation, ProviderOperationContract
-          { providerOperationCallableContract = callableSurface "call.install.contract.v1"
+          { providerOperationCallableContract = callableSurface (InterfaceRevision "call.install.contract.v1")
           , providerOperationPreconditions = Set.empty
           , providerOperationOutcomeResidues = Map.fromList
               [ (installedOutcome, emptyResidue)
@@ -155,7 +153,7 @@ providerContract = ProviderContract
               ]
           })
       , (readOperation, ProviderOperationContract
-          { providerOperationCallableContract = callableSurface "call.read.contract.v1"
+          { providerOperationCallableContract = callableSurface (InterfaceRevision "call.read.contract.v1")
           , providerOperationPreconditions = Set.empty
           , providerOperationOutcomeResidues = Map.fromList
               [ (foundOutcome, emptyResidue)
@@ -170,7 +168,7 @@ providerImplementation = ProviderImplementation
   { providerImplementationDefinitionRevision = DefinitionRevision "provider.blob.impl.v1"
   , providerImplementationEntries = Map.fromList
       [ (installEntry, ProviderImplementationOperation
-          { providerImplementationCallable = callableSurface "call.install.impl.v1"
+          { providerImplementationCallable = callableSurface (InterfaceRevision "call.install.impl.v1")
           , providerImplementationPreconditions = Set.empty
           , providerImplementationOutcomeResidues = Map.fromList
               [ (implInstalledOutcome, emptyResidue)
@@ -178,7 +176,7 @@ providerImplementation = ProviderImplementation
               ]
           })
       , (readEntry, ProviderImplementationOperation
-          { providerImplementationCallable = callableSurface "call.read.impl.v1"
+          { providerImplementationCallable = callableSurface (InterfaceRevision "call.read.impl.v1")
           , providerImplementationPreconditions = Set.empty
           , providerImplementationOutcomeResidues = Map.fromList
               [ (implFoundOutcome, emptyResidue)
