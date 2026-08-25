@@ -4,6 +4,7 @@ module Main (main) where
 
 import qualified Data.Map.Strict as Map
 import qualified Data.Set as Set
+import Data.Text (Text)
 import Phil.Core.Callable
 import Phil.Core.CallableQualification
 import Phil.Core.CallableRefinement
@@ -184,12 +185,8 @@ strongerAuthorityArtifact = ForeignCallableArtifact
   strongerAuthorityArtifactKey strongerAuthoritySurface
 fatalArtifact = ForeignCallableArtifact fatalArtifactKey fatalSurface
 
-completeEvidence :: Map.Map ForeignCallableEvidenceKind String
-completeEvidence = error "completeEvidence text-specialized below"
-
--- Keep evidence values as Text while retaining a compact fixture declaration.
-completeEvidenceText :: Map.Map ForeignCallableEvidenceKind Data.Text.Text
-completeEvidenceText = Map.fromList
+completeEvidence :: Map.Map ForeignCallableEvidenceKind Text
+completeEvidence = Map.fromList
   [ (ForeignCallableAbiCorrespondence, "abi-cert")
   , (ForeignCallableResourceLifecycle, "resource-cert")
   , (ForeignCallableEffectConfinement, "effect-cert")
@@ -197,19 +194,19 @@ completeEvidenceText = Map.fromList
   , (ForeignCallableFailureBehavior, "failure-cert")
   ]
 
-abiOnlyEvidence :: Map.Map ForeignCallableEvidenceKind Data.Text.Text
+abiOnlyEvidence :: Map.Map ForeignCallableEvidenceKind Text
 abiOnlyEvidence = Map.singleton ForeignCallableAbiCorrespondence "abi-cert"
 
 matchingQualification, widerEffectQualification,
   strongerAuthorityQualification, fatalQualification :: ForeignCallableQualification
 matchingQualification = ForeignCallableQualification
-  matchingArtifactKey matchingSurface completeEvidenceText
+  matchingArtifactKey matchingSurface completeEvidence
 widerEffectQualification = ForeignCallableQualification
-  widerEffectArtifactKey widerEffectSurface completeEvidenceText
+  widerEffectArtifactKey widerEffectSurface completeEvidence
 strongerAuthorityQualification = ForeignCallableQualification
-  strongerAuthorityArtifactKey strongerAuthoritySurface completeEvidenceText
+  strongerAuthorityArtifactKey strongerAuthoritySurface completeEvidence
 fatalQualification = ForeignCallableQualification
-  fatalArtifactKey fatalSurface completeEvidenceText
+  fatalArtifactKey fatalSurface completeEvidence
 
 assert :: Bool -> String -> Either String ()
 assert condition detail
