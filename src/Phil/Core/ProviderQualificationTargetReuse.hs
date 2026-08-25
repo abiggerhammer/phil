@@ -16,7 +16,7 @@ import Phil.Core.ProviderQualificationIdentity
   ( ProviderQualificationClaimIdentityInput (..)
   , ProviderQualificationLayer (..)
   , ProviderQualificationSubject (..)
-  , QualificationClaimRevision
+  , QualificationClaimRevision (..)
   , deriveQualificationClaimRevision
   )
 import Phil.Core.Static
@@ -74,7 +74,7 @@ deriveTargetRealizationEvidenceRevision evidence = TargetRealizationEvidenceRevi
   ("phil.provider-qualification.target-evidence.canonical.v1:"
     <> canonicalSemanticForm (SemanticRecord (Map.fromList
       [ ("claim_revision", SemanticAtom
-          (showClaimRevision (targetEvidenceClaimRevision evidence)))
+          (unQualificationClaimRevision (targetEvidenceClaimRevision evidence)))
       , ("required_interface", SemanticAtom
           (unInterfaceRevision (targetEvidenceRequiredInterface evidence)))
       , ("semantic_implementation", SemanticAtom
@@ -89,15 +89,6 @@ deriveTargetRealizationEvidenceRevision evidence = TargetRealizationEvidenceRevi
       , ("target_assumptions", SemanticUnordered
           (Set.map SemanticAtom (targetEvidenceTargetAssumptions evidence)))
       ])))
-  where
-    showClaimRevision = \revision -> case show revision of
-      rendered -> fromStringShow rendered
-
-    -- QualificationClaimRevision deliberately keeps its constructor field
-    -- abstract from this module's import list. Show is stable only for this
-    -- inspectable Phase 1 identity substrate; compact serialization remains
-    -- deferred and must preserve the same equality relation.
-    fromStringShow = Data.Text.pack
 
 checkProviderCrossTargetSemanticReuse
   :: ProviderQualificationClaimIdentityInput
@@ -114,21 +105,18 @@ checkProviderCrossTargetSemanticReuse claim priorEvidence newEvidence = do
       targetEvidenceTargetProfileRevision newEvidence
     then Left (TargetReuseRequiresDistinctTarget
       (targetEvidenceTargetProfileRevision newEvidence))
-    else if Set.null (targetEvidenceTranslationValidationRefs newEvidence)
-      then Left (TargetReuseMissingTranslationEvidence
-        (targetEvidenceTargetProfileRevision newEvidence))
-      else Right CheckedProviderCrossTargetReuse
-        { checkedCrossTargetClaimRevision = claimRevision
-        , checkedCrossTargetSemanticImplementation = implementation
-        , checkedCrossTargetPriorEvidenceRevision =
-            deriveTargetRealizationEvidenceRevision priorEvidence
-        , checkedCrossTargetNewEvidenceRevision =
-            deriveTargetRealizationEvidenceRevision newEvidence
-        , checkedCrossTargetPriorTargetProfile =
-            targetEvidenceTargetProfileRevision priorEvidence
-        , checkedCrossTargetNewTargetProfile =
-            targetEvidenceTargetProfileRevision newEvidence
-        }
+    else Right CheckedProviderCrossTargetReuse
+      { checkedCrossTargetClaimRevision = claimRevision
+      , checkedCrossTargetSemanticImplementation = implementation
+      , checkedCrossTargetPriorEvidenceRevision =
+          deriveTargetRealizationEvidenceRevision priorEvidence
+      , checkedCrossTargetNewEvidenceRevision =
+          deriveTargetRealizationEvidenceRevision newEvidence
+      , checkedCrossTargetPriorTargetProfile =
+          targetEvidenceTargetProfileRevision priorEvidence
+      , checkedCrossTargetNewTargetProfile =
+          targetEvidenceTargetProfileRevision newEvidence
+      }
   where
     semanticImplementation = case
       (qualificationClaimLayer claim, qualificationClaimSubject claim) of
