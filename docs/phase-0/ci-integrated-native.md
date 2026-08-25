@@ -6,6 +6,6 @@ The `phase0-integrated-native-upload` job reproduces the historical native execu
 
 The `certify-phase0-integrated-native-upload` job remains the certification authority: it pins the frozen source-pair digest, captures exact ABI/native evidence, typechecks the certification support, and emits the existing integrated-native certificates.
 
-The historical `.github/workflows/phase0-integrated-native-upload.yml` remains present until old-vs-new equivalence is demonstrated on both the bring-up tree and a clean one-commit recomposition.
+PR #151 established old-vs-new equivalence on both its bring-up tree and a clean one-commit recomposition. The historical `.github/workflows/phase0-integrated-native-upload.yml` workflow is therefore retired from `main`; its execution history remains preserved in Git, while `.github/workflows/phase0-integrated-native-certification.yml` is now the sole workflow owner for both separately attributable integrated-native jobs.
 
 No implementation, source digest, runtime ABI, fixture behavior, test assertion, evidence format, certificate format, certificate ID, or validity scope changes in this tranche.
