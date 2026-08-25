@@ -103,12 +103,14 @@ duplicateArgumentRejects =
 architectureRepetitionRemainsGenerative :: Either String ()
 architectureRepetitionRemainsGenerative = do
   application <- applicationIdentity baseArguments
-  graph <- mapLeft show $ instantiateArchitecture rootInstance rootNode
-    { architectureNodeChildren =
-        [ ArchitectureChildSpec primarySlot (childNode application)
-        , ArchitectureChildSpec backupSlot (childNode application)
-        ]
-    }
+  graph <- mapLeft show $ instantiateArchitecture
+    rootInstance
+    (rootNode
+      { architectureNodeChildren =
+          [ ArchitectureChildSpec primarySlot (childNode application)
+          , ArchitectureChildSpec backupSlot (childNode application)
+          ]
+      })
   root <- maybe
     (Left "root architecture occurrence missing")
     Right
