@@ -4,6 +4,7 @@ module Main (main) where
 
 import qualified Data.Map.Strict as Map
 import qualified Data.Set as Set
+import qualified Data.Text as Text
 import Phil.Core.ProviderQualification
   ( ProviderImplementationEntryKey (..)
   , ProviderOperationKey (..)
@@ -12,6 +13,7 @@ import Phil.Core.ProviderQualificationIdentity
   ( CheckedProviderQualificationAdmissionIdentity (..)
   , ProviderQualificationAdmissionDecision (..)
   , ProviderQualificationSubject (..)
+  , QualificationAdmissionRevision
   )
 import Phil.Core.Static (InterfaceRevision (..))
 import Phil.Examples.Phase1.ProviderCallWitnesses
@@ -254,22 +256,22 @@ lookupLink key bundle = maybe
   (Map.lookup key (providerCallStageLinks bundle))
 
 lookupSelection
-  :: String
+  :: Text.Text
   -> ProviderCallStageBundle
   -> Either String SelectedProviderAdmission
 lookupSelection occurrence bundle = maybe
-  (Left ("missing provider selection: " <> occurrence))
+  (Left ("missing provider selection: " <> Text.unpack occurrence))
   Right
-  (Map.lookup (fromString occurrence) (providerCallStageSelections bundle))
+  (Map.lookup occurrence (providerCallStageSelections bundle))
 
 otherSelection
-  :: String
+  :: Text.Text
   -> ProviderCallStageBundle
   -> Either String SelectedProviderAdmission
 otherSelection occurrence bundle = case
   [ selection
   | (key, selection) <- Map.toAscList (providerCallStageSelections bundle)
-  , key /= fromString occurrence
+  , key /= occurrence
   ] of
     selection : _ -> Right selection
     [] -> Left "no alternate provider selection in fixture"
@@ -281,10 +283,10 @@ singleSelection bundle = case Map.elems (providerCallStageSelections bundle) of
 
 exactBasis
   :: ProviderCallLink
-  -> Either String (String, QualificationAdmissionRevision, InterfaceRevision, ProviderOperationKey, ProviderImplementationEntryKey)
+  -> Either String (Text.Text, QualificationAdmissionRevision, InterfaceRevision, ProviderOperationKey, ProviderImplementationEntryKey)
 exactBasis link = case providerCallBindingBasis link of
   ExactProviderCallBinding occurrence admission interface operation entry ->
-    Right (toString occurrence, admission, interface, operation, entry)
+    Right (occurrence, admission, interface, operation, entry)
   other -> Left ("expected exact provider binding, got " <> show other)
 
 uploadBundle :: Either String ProviderCallStageBundle
@@ -296,12 +298,6 @@ steveBundle = steveProviderCallStageBundle
 digestComputeSite :: SystemsMechanismKey
 digestComputeSite = SystemsMechanismKey
   "StevePut:put.entry:term.runtime-choice.DigestProvider.compute"
-
-fromString :: String -> Data.Text.Text
-fromString = Data.Text.pack
-
-toString :: Data.Text.Text -> String
-toString = Data.Text.unpack
 
 assert :: Bool -> String -> Either String ()
 assert condition detail
