@@ -15,7 +15,7 @@ main = do
     , test "CALL-006 preserved linear closure may be invoked repeatedly" preserveLinearRepeatedly
     , test "CALL-007 PreserveCallee rejects missing restricted capture residue" preserveRejectsConsumedCapture
     , test "CALL-007 PreserveCallee rejects an invented successor" preserveRejectsSuccessor
-    , test "CALL-008 ConsumeCallee removes one-shot occurrence" consumeRemovesOccurrence
+    , test "CALL-008 ConsumeCallee removes one-shot restricted occurrence" consumeRemovesOccurrence
     , test "CALL-008 consumed predecessor cannot be invoked again" consumeRejectsReuse
     , test "CALL-008 ConsumeCallee rejects an undeclared successor" consumeRejectsSuccessor
     , test "CALL-009 ReplaceCallee installs exact distinct successor" replaceInstallsSuccessor
@@ -82,6 +82,9 @@ preserveRejectsSuccessor =
 
 consumeRemovesOccurrence :: Either String ()
 consumeRemovesOccurrence = do
+  assert
+    (closureMinimumStructuralMode (callableOccurrenceCaptures oneShotOccurrence) == Linear)
+    "one-shot fixture was not structurally restricted"
   after <- mapLeft show $ invokeCallableOccurrence
     oneShotKey
     emptyBody
@@ -265,7 +268,7 @@ linearPreservedOccurrence = CallableOccurrence
 oneShotOccurrence = CallableOccurrence
   { callableOccurrenceKey = oneShotKey
   , callableOccurrenceContract = oneShotContract
-  , callableOccurrenceCaptures = emptyCaptureSummary
+  , callableOccurrenceCaptures = linearCaptureSummary
   , callableOccurrenceStateKey = Nothing
   }
 
