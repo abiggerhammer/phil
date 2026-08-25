@@ -4,6 +4,7 @@ module Main (main) where
 
 import qualified Data.Map.Strict as Map
 import qualified Data.Set as Set
+import Data.Text (Text)
 import Phil.Core.ProviderQualificationDependency
 import Phil.Core.ProviderQualificationIdentity
   ( ProviderQualificationAdmissionDecision (..)
@@ -173,7 +174,8 @@ registryOrderingIsCanonical = do
 unknownRootRejected :: Either String ()
 unknownRootRejected = do
   let missing = QualificationAdmissionRevision "admission:root-missing"
-  case checkProviderQualificationDependencyGraph (graph [nodeA Set.empty (Set.singleton proofGroundKey)] [proofGround] [missing]) of
+  case checkProviderQualificationDependencyGraph
+      (graph [nodeA Set.empty (Set.singleton proofGroundKey)] [proofGround] [missing]) of
     Left (QualificationDependencyUnknownRoot root) ->
       assert (root == missing) "wrong unknown root diagnostic"
     other -> Left ("unknown selected root was accepted: " <> show other)
@@ -229,17 +231,14 @@ runtimeGround = acceptedGround runtimeGroundKey RuntimeEnforcementGround "runtim
 externalGround = acceptedGround externalGroundKey ExternalEvidenceGround "external:v1"
 assumptionGround = acceptedGround assumptionGroundKey AssumptionGround "assumption:v1"
 
-acceptedGround :: QualificationGroundKey -> QualificationGroundKind -> String -> QualificationGround
+acceptedGround :: QualificationGroundKey -> QualificationGroundKind -> Text -> QualificationGround
 acceptedGround key kind revision = QualificationGround
   { qualificationGroundKey = key
   , qualificationGroundKind = kind
-  , qualificationGroundRevision = fromString revision
+  , qualificationGroundRevision = revision
   , qualificationGroundValidityScope = "phase1-test-scope"
   , qualificationGroundDisposition = QualificationGroundAccepted
   }
-
-fromString :: String -> Data.Text.Text
-fromString = Data.Text.pack
 
 assert :: Bool -> String -> Either String ()
 assert condition detail
