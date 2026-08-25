@@ -1,0 +1,209 @@
+{-# LANGUAGE OverloadedStrings #-}
+
+module Phil.Core.ProviderQualificationDependency
+  ( QualificationGroundKey (..)
+  , QualificationGroundKind (..)
+  , QualificationGroundDisposition (..)
+  , QualificationGround (..)
+  , ProviderQualificationDependencyNode (..)
+  , ProviderQualificationDependencyGraph (..)
+  , CheckedProviderQualificationDependencyGraph (..)
+  , ProviderQualificationDependencyError (..)
+  , checkProviderQualificationDependencyGraph
+  ) where
+
+import qualified Data.Map.Strict as Map
+import qualified Data.Set as Set
+import Data.Text (Text)
+import Phil.Core.ProviderQualificationIdentity
+  ( ProviderQualificationAdmissionDecision (..)
+  , QualificationAdmissionRevision
+  )
+
+newtype QualificationGroundKey = QualificationGroundKey
+  { unQualificationGroundKey :: Text
+  }
+  deriving (Eq, Ord, Show)
+
+data QualificationGroundKind
+  = ProofGround
+  | RuntimeEnforcementGround
+  | ExternalEvidenceGround
+  | AssumptionGround
+  | TrustedComputingBaseGround
+  deriving (Eq, Ord, Show)
+
+data QualificationGroundDisposition
+  = QualificationGroundAccepted
+  | QualificationGroundRejected (Set.Set Text)
+  deriving (Eq, Ord, Show)
+
+-- | One independently evaluated grounding fact. An accepted assumption or TCB
+-- boundary is still conditional grounding rather than proof of the environment;
+-- the important property here is that it does not derive its validity from the
+-- provider qualifications being closed by this graph.
+data QualificationGround = QualificationGround
+  { qualificationGroundKey :: QualificationGroundKey
+  , qualificationGroundKind :: QualificationGroundKind
+  , qualificationGroundRevision :: Text
+  , qualificationGroundValidityScope :: Text
+  , qualificationGroundDisposition :: QualificationGroundDisposition
+  }
+  deriving (Eq, Ord, Show)
+
+-- | Dependency facts for one exact provider admission revision. Dependencies on
+-- other admissions are allowed, but they do not independently ground this node.
+-- Ground references are the only leaves in this bounded closure graph.
+data ProviderQualificationDependencyNode = ProviderQualificationDependencyNode
+  { qualificationDependencyAdmissionRevision :: QualificationAdmissionRevision
+  , qualificationDependencyAdmissionDecision :: ProviderQualificationAdmissionDecision
+  , qualificationDependencyAdmissions :: Set.Set QualificationAdmissionRevision
+  , qualificationDependencyGrounds :: Set.Set QualificationGroundKey
+  }
+  deriving (Eq, Ord, Show)
+
+data ProviderQualificationDependencyGraph = ProviderQualificationDependencyGraph
+  { qualificationDependencyRoots :: Set.Set QualificationAdmissionRevision
+  , qualificationDependencyNodes
+      :: Map.Map QualificationAdmissionRevision ProviderQualificationDependencyNode
+  , qualificationDependencyGroundRegistry
+      :: Map.Map QualificationGroundKey QualificationGround
+  }
+  deriving (Eq, Ord, Show)
+
+data CheckedProviderQualificationDependencyGraph =
+  CheckedProviderQualificationDependencyGraph
+    { checkedQualificationDependencyRoots :: Set.Set QualificationAdmissionRevision
+    , checkedQualificationDependencyGroundsByAdmission
+        :: Map.Map QualificationAdmissionRevision (Set.Set QualificationGroundKey)
+    , checkedQualificationDependencyGroundRegistry
+        :: Map.Map QualificationGroundKey QualificationGround
+    }
+  deriving (Eq, Ord, Show)
+
+data ProviderQualificationDependencyError
+  = QualificationDependencyNodeKeyMismatch
+      QualificationAdmissionRevision QualificationAdmissionRevision
+  | QualificationGroundRegistryKeyMismatch
+      QualificationGroundKey QualificationGroundKey
+  | QualificationDependencyUnknownRoot QualificationAdmissionRevision
+  | QualificationDependencyUnknownAdmission
+      QualificationAdmissionRevision QualificationAdmissionRevision
+  | QualificationDependencyUnknownGround
+      QualificationAdmissionRevision QualificationGroundKey
+  | QualificationDependencyRejectedAdmission
+      QualificationAdmissionRevision (Set.Set Text)
+  | QualificationDependencyRejectedGround
+      QualificationAdmissionRevision QualificationGroundKey (Set.Set Text)
+  | QualificationDependencyUngrounded
+      (Set.Set QualificationAdmissionRevision)
+  deriving (Eq, Ord, Show)
+
+-- | Close the PROV-012 dependency graph. Qualification-to-qualification edges
+-- may form cycles, but every node reachable from a selected root must eventually
+-- inherit at least one independently accepted ground. A cycle that only points
+-- to itself/its peers therefore remains empty under the least fixed point and is
+-- rejected as circular self-endorsement.
+checkProviderQualificationDependencyGraph
+  :: ProviderQualificationDependencyGraph
+  -> Either ProviderQualificationDependencyError CheckedProviderQualificationDependencyGraph
+checkProviderQualificationDependencyGraph graph = do
+  validateRegistryKeys
+  validateRoots
+  validateNodes
+  let reachable = reachableAdmissions
+      initialGrounds = Map.fromSet directAcceptedGrounds reachable
+      closedGrounds = closeGrounds reachable initialGrounds
+      ungrounded = Set.filter
+        (maybe True Set.null . (`Map.lookup` closedGrounds)) reachable
+  if not (Set.null ungrounded)
+    then Left (QualificationDependencyUngrounded ungrounded)
+    else Right CheckedProviderQualificationDependencyGraph
+      { checkedQualificationDependencyRoots = qualificationDependencyRoots graph
+      , checkedQualificationDependencyGroundsByAdmission = closedGrounds
+      , checkedQualificationDependencyGroundRegistry =
+          qualificationDependencyGroundRegistry graph
+      }
+  where
+    nodes = qualificationDependencyNodes graph
+    grounds = qualificationDependencyGroundRegistry graph
+
+    validateRegistryKeys = do
+      mapM_ validateNodeKey (Map.toAscList nodes)
+      mapM_ validateGroundKey (Map.toAscList grounds)
+
+    validateNodeKey (key, node)
+      | key == qualificationDependencyAdmissionRevision node = Right ()
+      | otherwise = Left (QualificationDependencyNodeKeyMismatch
+          key (qualificationDependencyAdmissionRevision node))
+
+    validateGroundKey (key, ground)
+      | key == qualificationGroundKey ground = Right ()
+      | otherwise = Left (QualificationGroundRegistryKeyMismatch
+          key (qualificationGroundKey ground))
+
+    validateRoots = mapM_ validateRoot
+      (Set.toAscList (qualificationDependencyRoots graph))
+
+    validateRoot root
+      | Map.member root nodes = Right ()
+      | otherwise = Left (QualificationDependencyUnknownRoot root)
+
+    validateNodes = mapM_ validateNode (Map.elems nodes)
+
+    validateNode node = do
+      let owner = qualificationDependencyAdmissionRevision node
+      case qualificationDependencyAdmissionDecision node of
+        QualificationAdmitted -> Right ()
+        QualificationRejected reasons ->
+          Left (QualificationDependencyRejectedAdmission owner reasons)
+      mapM_ (validateAdmissionDependency owner)
+        (Set.toAscList (qualificationDependencyAdmissions node))
+      mapM_ (validateGroundDependency owner)
+        (Set.toAscList (qualificationDependencyGrounds node))
+
+    validateAdmissionDependency owner dependency
+      | Map.member dependency nodes = Right ()
+      | otherwise = Left (QualificationDependencyUnknownAdmission owner dependency)
+
+    validateGroundDependency owner groundKey = case Map.lookup groundKey grounds of
+      Nothing -> Left (QualificationDependencyUnknownGround owner groundKey)
+      Just ground -> case qualificationGroundDisposition ground of
+        QualificationGroundAccepted -> Right ()
+        QualificationGroundRejected reasons ->
+          Left (QualificationDependencyRejectedGround owner groundKey reasons)
+
+    reachableAdmissions = go Set.empty
+      (Set.toAscList (qualificationDependencyRoots graph))
+      where
+        go seen [] = seen
+        go seen (current : rest)
+          | Set.member current seen = go seen rest
+          | otherwise = case Map.lookup current nodes of
+              Nothing -> go (Set.insert current seen) rest
+              Just node -> go
+                (Set.insert current seen)
+                (Set.toAscList (qualificationDependencyAdmissions node) <> rest)
+
+    directAcceptedGrounds admission = case Map.lookup admission nodes of
+      Nothing -> Set.empty
+      Just node -> Set.filter isAcceptedGround (qualificationDependencyGrounds node)
+
+    isAcceptedGround key = case Map.lookup key grounds of
+      Just ground -> qualificationGroundDisposition ground == QualificationGroundAccepted
+      Nothing -> False
+
+    closeGrounds reachable current =
+      let next = Set.foldl' propagate current reachable
+      in if next == current then current else closeGrounds reachable next
+
+    propagate accumulated admission = case Map.lookup admission nodes of
+      Nothing -> accumulated
+      Just node ->
+        let inherited = Set.unions
+              [ Map.findWithDefault Set.empty dependency accumulated
+              | dependency <- Set.toAscList (qualificationDependencyAdmissions node)
+              , Set.member dependency reachable
+              ]
+            own = Map.findWithDefault Set.empty admission accumulated
+        in Map.insert admission (Set.union own inherited) accumulated
