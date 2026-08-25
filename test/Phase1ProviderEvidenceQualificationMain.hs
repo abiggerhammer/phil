@@ -17,11 +17,13 @@ main :: IO ()
 main = do
   results <- sequence
     [ test "PROV-010 scoped borrow maps to stable proof subject" scopedBorrowAccepted
+    , test "PROV-010 proposition parameters remain distinct from stable subject" parameterizedPropositionAccepted
     , test "PROV-010 temporary borrow token cannot substitute for owner subject" borrowTokenSubjectRejected
     , test "PROV-010 checked mapping must target exact stable subject" wrongMappingTargetRejected
     , test "PROV-010 direct mapping is illegal for scoped borrow" directBorrowMappingRejected
     , test "PROV-010 runtime coincidence is not subject competence" runtimeCoincidenceRejected
     , test "PROV-010 exact proposition family is required" wrongFamilyRejected
+    , test "PROV-010 exact proposition parameters are required" wrongParametersRejected
     , test "PROV-010 evidence operation must already be provider-qualified" unqualifiedOperationRejected
     , test "PROV-010 exact validity contract is preserved" wrongValidityRejected
     , test "PROV-010 stable subject may be observed directly" stableObservationAccepted
@@ -39,17 +41,31 @@ scopedBorrowAccepted :: Either String ()
 scopedBorrowAccepted = do
   qualified <- qualifiedDigestProvider
   checked <- mapLeft show $ checkProviderEvidenceProducerCompetence
-    qualified digestRequirement (borrowClaim borrowObservationA ownerSubject)
+    qualified digestRequirement (borrowClaim [] borrowObservationA ownerSubject)
   assert (checkedProviderEvidenceSubject checked == ownerSubject)
     "checked competence lost stable owner subject"
   assert (checkedProviderEvidenceProposition checked == expectedDigestProposition)
     "checked competence materialized wrong proposition"
 
+parameterizedPropositionAccepted :: Either String ()
+parameterizedPropositionAccepted = do
+  qualified <- qualifiedDigestProvider
+  let requirementValue = requirement [digestIdTerm] ownerSubject
+      claim = borrowClaim [digestIdTerm] borrowObservationA ownerSubject
+  checked <- mapLeft show $ checkProviderEvidenceProducerCompetence
+    qualified requirementValue claim
+  assert
+    (checkedProviderEvidenceProposition checked == parameterizedDigestProposition)
+    "proposition parameter was lost or confused with stable subject"
+  assert
+    (checkedProviderEvidencePropositionParameters checked == [digestIdTerm])
+    "checked competence lost proposition parameters"
+
 borrowTokenSubjectRejected :: Either String ()
 borrowTokenSubjectRejected = do
   qualified <- qualifiedDigestProvider
   let loanAsSubject = ProviderEvidenceSubjectKey "loan.digest.a"
-      claim = (borrowClaim borrowObservationA ownerSubject)
+      claim = (borrowClaim [] borrowObservationA ownerSubject)
         { providerEvidenceClaimPropositionSubject = loanAsSubject
         , providerEvidenceClaimSubjectMapping = CheckedObservationToStableSubject
             mappingRevision borrowObservationA loanAsSubject
@@ -64,7 +80,7 @@ wrongMappingTargetRejected :: Either String ()
 wrongMappingTargetRejected = do
   qualified <- qualifiedDigestProvider
   let otherOwner = ProviderEvidenceSubjectKey "bytes.object.other"
-      claim = (borrowClaim borrowObservationA ownerSubject)
+      claim = (borrowClaim [] borrowObservationA ownerSubject)
         { providerEvidenceClaimSubjectMapping = CheckedObservationToStableSubject
             mappingRevision borrowObservationA otherOwner
         }
@@ -77,7 +93,7 @@ wrongMappingTargetRejected = do
 directBorrowMappingRejected :: Either String ()
 directBorrowMappingRejected = do
   qualified <- qualifiedDigestProvider
-  let claim = (borrowClaim borrowObservationA ownerSubject)
+  let claim = (borrowClaim [] borrowObservationA ownerSubject)
         { providerEvidenceClaimSubjectMapping = DirectStableEvidenceSubject ownerSubject }
   case checkProviderEvidenceProducerCompetence qualified digestRequirement claim of
     Left (ProviderEvidenceDirectMappingRequiresStableObservation observation subject) -> do
@@ -88,7 +104,7 @@ directBorrowMappingRejected = do
 runtimeCoincidenceRejected :: Either String ()
 runtimeCoincidenceRejected = do
   qualified <- qualifiedDigestProvider
-  let claim = (borrowClaim borrowObservationA ownerSubject)
+  let claim = (borrowClaim [] borrowObservationA ownerSubject)
         { providerEvidenceClaimSubjectMapping =
             RuntimeCoincidenceSubjectMapping "same pointer / same bytes" }
   case checkProviderEvidenceProducerCompetence qualified digestRequirement claim of
@@ -99,7 +115,7 @@ wrongFamilyRejected :: Either String ()
 wrongFamilyRejected = do
   qualified <- qualifiedDigestProvider
   let wrongFamily = ProviderPropositionFamilyKey "OtherDigestClaim"
-      claim = (borrowClaim borrowObservationA ownerSubject)
+      claim = (borrowClaim [] borrowObservationA ownerSubject)
         { providerEvidenceClaimFamily = wrongFamily }
   case checkProviderEvidenceProducerCompetence qualified digestRequirement claim of
     Left (ProviderEvidenceFamilyMismatch expected actual) -> do
@@ -107,14 +123,26 @@ wrongFamilyRejected = do
       assert (actual == wrongFamily) "wrong rejected proposition family"
     other -> Left ("wrong proposition family was accepted: " <> show other)
 
+wrongParametersRejected :: Either String ()
+wrongParametersRejected = do
+  qualified <- qualifiedDigestProvider
+  let requirementValue = requirement [digestIdTerm] ownerSubject
+      wrongTerm = RefOpaque (SortStableId "content-id:sha256") "id.sha256.other"
+      claim = borrowClaim [wrongTerm] borrowObservationA ownerSubject
+  case checkProviderEvidenceProducerCompetence qualified requirementValue claim of
+    Left (ProviderEvidencePropositionParametersMismatch expected actual) -> do
+      assert (expected == [digestIdTerm]) "wrong expected proposition parameters"
+      assert (actual == [wrongTerm]) "wrong rejected proposition parameters"
+    other -> Left ("wrong proposition parameters were accepted: " <> show other)
+
 unqualifiedOperationRejected :: Either String ()
 unqualifiedOperationRejected = do
   qualified <- qualifiedDigestProvider
   let unknownOperation = ProviderOperationKey "provider.op.sign"
-      requirement = digestRequirement { providerEvidenceRequiredOperation = unknownOperation }
-      claim = (borrowClaim borrowObservationA ownerSubject)
+      requirementValue = digestRequirement { providerEvidenceRequiredOperation = unknownOperation }
+      claim = (borrowClaim [] borrowObservationA ownerSubject)
         { providerEvidenceClaimOperation = unknownOperation }
-  case checkProviderEvidenceProducerCompetence qualified requirement claim of
+  case checkProviderEvidenceProducerCompetence qualified requirementValue claim of
     Left (ProviderEvidenceOperationNotQualified operation) ->
       assert (operation == unknownOperation) "wrong unqualified operation diagnostic"
     other -> Left ("unqualified evidence-producing operation was accepted: " <> show other)
@@ -123,7 +151,7 @@ wrongValidityRejected :: Either String ()
 wrongValidityRejected = do
   qualified <- qualifiedDigestProvider
   let wrongValidity = EvidenceValidityContractKey "validity.loan-only.v1"
-      claim = (borrowClaim borrowObservationA ownerSubject)
+      claim = (borrowClaim [] borrowObservationA ownerSubject)
         { providerEvidenceClaimValidity = wrongValidity }
   case checkProviderEvidenceProducerCompetence qualified digestRequirement claim of
     Left (ProviderEvidenceValidityMismatch expected actual) -> do
@@ -137,6 +165,7 @@ stableObservationAccepted = do
   let claim = ProviderEvidenceProducerCompetenceClaim
         { providerEvidenceClaimOperation = digestOperation
         , providerEvidenceClaimFamily = digestFamily
+        , providerEvidenceClaimPropositionParameters = []
         , providerEvidenceClaimObservation = StableEvidenceObservation ownerSubject
         , providerEvidenceClaimPropositionSubject = ownerSubject
         , providerEvidenceClaimSubjectMapping = DirectStableEvidenceSubject ownerSubject
@@ -151,9 +180,9 @@ borrowIdentityIsNonsemantic :: Either String ()
 borrowIdentityIsNonsemantic = do
   qualified <- qualifiedDigestProvider
   checkedA <- mapLeft show $ checkProviderEvidenceProducerCompetence
-    qualified digestRequirement (borrowClaim borrowObservationA ownerSubject)
+    qualified digestRequirement (borrowClaim [] borrowObservationA ownerSubject)
   checkedB <- mapLeft show $ checkProviderEvidenceProducerCompetence
-    qualified digestRequirement (borrowClaim borrowObservationB ownerSubject)
+    qualified digestRequirement (borrowClaim [] borrowObservationB ownerSubject)
   assert
     (checkedProviderEvidenceObservation checkedA /= checkedProviderEvidenceObservation checkedB)
     "fixture borrows unexpectedly share observation identity"
@@ -165,7 +194,7 @@ providerLineageRetained :: Either String ()
 providerLineageRetained = do
   qualified <- qualifiedDigestProvider
   checked <- mapLeft show $ checkProviderEvidenceProducerCompetence
-    qualified digestRequirement (borrowClaim borrowObservationA ownerSubject)
+    qualified digestRequirement (borrowClaim [] borrowObservationA ownerSubject)
   assert
     (checkedProviderEvidenceContractRevision checked == digestProviderInterface)
     "provider contract revision not retained"
@@ -222,12 +251,14 @@ callableSurface revision = CallableRefinementSurface
   }
 
 borrowClaim
-  :: ProviderEvidenceObservation
+  :: [RefTerm]
+  -> ProviderEvidenceObservation
   -> ProviderEvidenceSubjectKey
   -> ProviderEvidenceProducerCompetenceClaim
-borrowClaim observation subject = ProviderEvidenceProducerCompetenceClaim
+borrowClaim parameters observation subject = ProviderEvidenceProducerCompetenceClaim
   { providerEvidenceClaimOperation = digestOperation
   , providerEvidenceClaimFamily = digestFamily
+  , providerEvidenceClaimPropositionParameters = parameters
   , providerEvidenceClaimObservation = observation
   , providerEvidenceClaimPropositionSubject = subject
   , providerEvidenceClaimSubjectMapping = CheckedObservationToStableSubject
@@ -235,17 +266,30 @@ borrowClaim observation subject = ProviderEvidenceProducerCompetenceClaim
   , providerEvidenceClaimValidity = persistentValidity
   }
 
-digestRequirement :: ProviderEvidenceProducerRequirement
-digestRequirement = ProviderEvidenceProducerRequirement
+requirement :: [RefTerm] -> ProviderEvidenceSubjectKey -> ProviderEvidenceProducerRequirement
+requirement parameters subject = ProviderEvidenceProducerRequirement
   { providerEvidenceRequiredOperation = digestOperation
   , providerEvidenceRequiredFamily = digestFamily
-  , providerEvidenceRequiredStableSubject = ownerSubject
+  , providerEvidenceRequiredPropositionParameters = parameters
+  , providerEvidenceRequiredStableSubject = subject
   , providerEvidenceRequiredValidity = persistentValidity
   }
+
+digestRequirement :: ProviderEvidenceProducerRequirement
+digestRequirement = requirement [] ownerSubject
 
 expectedDigestProposition :: Proposition
 expectedDigestProposition = Atom "DigestMatches"
   [RefOpaque (SortStableId "provider-evidence-subject") "bytes.object.001"]
+
+parameterizedDigestProposition :: Proposition
+parameterizedDigestProposition = Atom "DigestMatches"
+  [ digestIdTerm
+  , RefOpaque (SortStableId "provider-evidence-subject") "bytes.object.001"
+  ]
+
+digestIdTerm :: RefTerm
+digestIdTerm = RefOpaque (SortStableId "content-id:sha256") "id.sha256.001"
 
 digestFamily :: ProviderPropositionFamilyKey
 digestFamily = ProviderPropositionFamilyKey "DigestMatches"
