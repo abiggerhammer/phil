@@ -1,0 +1,109 @@
+name: Phase 1 Generic Requirements Proofs
+
+on:
+  pull_request:
+    paths:
+      - 'src/Phil/Core/Generic.hs'
+      - 'test/Phase1GenericRequirementsMain.hs'
+      - 'docs/phase-1/generic-requirements-v1.md'
+      - 'proof/Phil/Core/GenericStructural.v'
+      - 'proof/Phil/Core/GenericRequirements.v'
+      - 'app/RocqScalarCertificationMain.hs'
+      - '.github/workflows/phase1-generic-requirements-proofs.yml'
+  push:
+    branches: [main]
+    paths:
+      - 'src/Phil/Core/Generic.hs'
+      - 'test/Phase1GenericRequirementsMain.hs'
+      - 'docs/phase-1/generic-requirements-v1.md'
+      - 'proof/Phil/Core/GenericStructural.v'
+      - 'proof/Phil/Core/GenericRequirements.v'
+      - 'app/RocqScalarCertificationMain.hs'
+      - '.github/workflows/phase1-generic-requirements-proofs.yml'
+
+permissions:
+  contents: read
+
+jobs:
+  rocq-phase1-generic-requirements:
+    runs-on: ubuntu-latest
+    container:
+      image: rocq/rocq-prover:9.2.0
+      options: --user root
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Check PHIL-GEN-STRUCT-001 dependency and PHIL-GEN-REQ-001 in Rocq
+        shell: bash
+        run: |
+          set -euo pipefail
+          export PATH="/home/rocq/.opam/${COMPILER}/bin:$PATH"
+          rocq c -Q proof/Phil Phil proof/Phil/Core/GenericStructural.v
+          rocq c -Q proof/Phil Phil proof/Phil/Core/GenericRequirements.v
+          test -f proof/Phil/Core/GenericRequirements.vo
+          mkdir -p phase1-generic-requirements-proof
+          cp proof/Phil/Core/GenericRequirements.v phase1-generic-requirements-proof/
+          cp proof/Phil/Core/GenericRequirements.vo phase1-generic-requirements-proof/
+          sha256sum \
+            proof/Phil/Core/GenericStructural.v \
+            proof/Phil/Core/GenericStructural.vo \
+            phase1-generic-requirements-proof/GenericRequirements.v \
+            phase1-generic-requirements-proof/GenericRequirements.vo
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: rocq-phase1-generic-requirements-proof
+          path: phase1-generic-requirements-proof
+          if-no-files-found: error
+
+  certify-phase1-generic-requirements:
+    needs: rocq-phase1-generic-requirements
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: haskell-actions/setup@v2
+        with:
+          ghc-version: '9.6.7'
+          cabal-version: 'latest'
+
+      - name: Build proof certifier with warnings as errors
+        run: cabal build exe:phil-certify-core-scalar --ghc-options=-Werror
+
+      - name: Re-run exact GEN-004 through GEN-006 correspondence cases
+        run: cabal exec -- runghc -isrc test/Phase1GenericRequirementsMain.hs
+
+      - uses: actions/download-artifact@v4
+        with:
+          name: rocq-phase1-generic-requirements-proof
+          path: phase1-generic-requirements-proof
+
+      - name: Emit PHIL-GEN-REQ-001 proof certificate
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p phase1-generic-requirements-certification
+          CERTIFIER="$(cabal list-bin exe:phil-certify-core-scalar)"
+          "$CERTIFIER" \
+            phase1-generic-requirements \
+            phase1-generic-requirements-proof/GenericRequirements.v \
+            phase1-generic-requirements-proof/GenericRequirements.vo \
+            phase1-generic-requirements-certification/PHIL-GEN-REQ-001.rocq.cert
+
+          sha256sum \
+            src/Phil/Core/Generic.hs \
+            test/Phase1GenericRequirementsMain.hs \
+            docs/phase-1/generic-requirements-v1.md \
+            proof/Phil/Core/GenericStructural.v \
+            proof/Phil/Core/GenericRequirements.v \
+            app/RocqScalarCertificationMain.hs \
+            > phase1-generic-requirements-certification/PHIL-GEN-REQ-001.correspondence.sha256
+
+          cat phase1-generic-requirements-certification/PHIL-GEN-REQ-001.rocq.cert
+          sha256sum phase1-generic-requirements-certification/PHIL-GEN-REQ-001.rocq.cert
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: phil-phase1-generic-requirements-proof-certification
+          path: phase1-generic-requirements-certification
+          if-no-files-found: error

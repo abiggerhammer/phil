@@ -34,6 +34,8 @@ certificationSpecFor profile
       Just phase1ArchImportCertificationSpec
   | profile == rocqSpecProfile phase1GenericStructuralCertificationSpec =
       Just phase1GenericStructuralCertificationSpec
+  | profile == rocqSpecProfile phase1GenericRequirementsCertificationSpec =
+      Just phase1GenericRequirementsCertificationSpec
   | otherwise =
       case knownRocqCertificationSpec profile of
         Just spec -> Just spec
@@ -134,6 +136,48 @@ phase1GenericStructuralCertificationSpec = RocqCertificationSpec
   , rocqSpecEvidenceId = EvidenceEntryId "evidence.PHIL-GEN-STRUCT-001.rocq.v1"
   , rocqSpecResidualBoundary =
       "Rocq kernel/toolchain correctness and reviewed correspondence from Phil.Core.Generic's concrete GenericValueParameterKey/Text, Map/Set normalization and checked use-event traversal to the normalized proof model remain explicit trust boundaries. Full generic binder representation and resource-context plumbing are outside this theorem family."
+  }
+
+phase1GenericRequirementsCertificationSpec :: RocqCertificationSpec
+phase1GenericRequirementsCertificationSpec = RocqCertificationSpec
+  { rocqSpecProfile = "phase1-generic-requirements"
+  , rocqSpecObligation = ObligationId "PHIL-GEN-REQ-001"
+  , rocqSpecClaim =
+      "The checked body-induced generic structural requirement set is the minimum public requirement set when no explicit public contract is supplied. An explicit public contract may be stronger, but must cover every body-induced permission. Body revisions may change the inferred minimum while preserving a stable public contract only while the revised minimum remains covered; omitted explicit permissions are empty and body growth beyond the published contract rejects."
+  , rocqSpecKind = "Stable generic public structural requirements"
+  , rocqSpecOrigin =
+      "src/Phil/Core/Generic.hs::{checkGenericStructuralInterface,normalizePublishedRequirements,ensurePublishedCoversInduced}; test/Phase1GenericRequirementsMain.hs; proof/Phil/Core/GenericStructural.v; proof/Phil/Core/GenericRequirements.v"
+  , rocqSpecScope =
+      "Phase 1 bounded structural portion of generic public requirements over already resolved abstract value parameters"
+  , rocqSpecRepresentation =
+      "normalized weakening/contraction minimum and published requirement sets with componentwise coverage"
+  , rocqSpecSubjects =
+      [ "CheckedGenericStructuralInterface"
+      , "GenericStructuralRequirements"
+      , "published structural contract"
+      , "body-induced minimum"
+      ]
+  , rocqSpecTheorems =
+      [ "implicit_public_contract_is_exact_inferred_minimum"
+      , "explicit_public_contract_is_preserved_when_it_covers_body"
+      , "published_contract_may_be_stronger_than_body"
+      , "body_evolution_within_stable_weakening_contract_is_accepted"
+      , "body_evolution_within_stable_full_contract_is_accepted"
+      , "body_cannot_outgrow_published_weakening_contract"
+      , "omitted_explicit_permission_is_semantically_empty"
+      , "published_contract_acceptance_means_componentwise_coverage"
+      , "accepted_published_contract_contains_induced_weakening"
+      , "accepted_published_contract_contains_induced_contraction"
+      , "accepted_contract_remains_stable_across_covered_body_revision"
+      , "structural_inference_order_independence_preserves_publication"
+      , "unrestricted_actual_satisfies_any_accepted_public_contract"
+      ]
+  , rocqSpecSourceRef = ArtifactRef "proof/Phil/Core/GenericRequirements.v"
+  , rocqSpecCompiledRef = ArtifactRef "proof/Phil/Core/GenericRequirements.vo"
+  , rocqSpecCertificateRef = ArtifactRef "certificate:rocq:PHIL-GEN-REQ-001:v1"
+  , rocqSpecEvidenceId = EvidenceEntryId "evidence.PHIL-GEN-REQ-001.rocq.v1"
+  , rocqSpecResidualBoundary =
+      "PHIL-GEN-STRUCT-001 supplies the imported structural algebra. Rocq kernel/toolchain correctness and reviewed correspondence from Phil.Core.Generic's concrete parameter-key maps, Set normalization, explicit-vs-implicit published-list normalization, and duplicate/unknown-key checks to the normalized proof model remain explicit trust boundaries. Provider/callable/proposition requirements and final generic syntax are outside this theorem family."
   }
 
 certifyWith :: RocqCertificationSpec -> FilePath -> FilePath -> FilePath -> IO ()
