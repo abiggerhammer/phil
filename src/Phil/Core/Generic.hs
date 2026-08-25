@@ -1,3 +1,5 @@
+{-# LANGUAGE OverloadedStrings #-}
+
 module Phil.Core.Generic
   ( GenericValueParameterKey (..)
   , GenericStaticParameterKey (..)
@@ -39,32 +41,21 @@ import Phil.Core.Static
   )
 import Phil.Core.Syntax (Mode (..), Proposition)
 
--- | Stable checked identity for one abstract value parameter in the bounded
--- Phase 1 generic structural checker. Surface spelling is deliberately absent.
 newtype GenericValueParameterKey = GenericValueParameterKey
   { unGenericValueParameterKey :: Text
   }
   deriving (Eq, Ord, Show)
 
--- | Stable checked identity for a non-term static generic parameter such as an
--- abstract provider contract. This is semantic parameter identity, not the
--- human-facing source spelling used to locate it.
 newtype GenericStaticParameterKey = GenericStaticParameterKey
   { unGenericStaticParameterKey :: Text
   }
   deriving (Eq, Ord, Show)
 
--- | ADR-002 structural permissions induced by a generic body. These are not a
--- parallel Copy/Drop trait system: they are the existing structural rules made
--- explicit as generic requirements.
 data StructuralPermission
   = WeakeningPermission
   | ContractionPermission
   deriving (Eq, Ord, Show)
 
--- | Checked semantic use events emitted by generic body checking. A transfer
--- moves the unique occurrence and needs no extra structural permission.
--- Discarding requires weakening; duplicating requires contraction.
 data GenericStructuralUse
   = TransferGenericValue GenericValueParameterKey
   | DiscardGenericValue GenericValueParameterKey
@@ -76,10 +67,6 @@ newtype GenericStructuralRequirements = GenericStructuralRequirements
   }
   deriving (Eq, Ord, Show)
 
--- | The two requirement views that Phase 1 must keep distinct. The induced set
--- is the minimum justified by the current checked body. The published set is
--- the stable interface contract callers must satisfy. Published requirements
--- may deliberately be stronger, but never weaker, than the induced set.
 data CheckedGenericStructuralInterface = CheckedGenericStructuralInterface
   { genericInducedStructuralRequirements
       :: Map.Map GenericValueParameterKey GenericStructuralRequirements
@@ -102,10 +89,6 @@ data GenericStructuralError
       Mode
   deriving (Eq, Ord, Show)
 
--- | Canonical public requirement forms for the first Phase 1 instantiation
--- tranche. Provider and proposition requirements are exact semantic objects;
--- nominal operation supersets or merely available operations do not satisfy
--- them without an explicit checked relation/evidence disposition.
 data GenericRequirement
   = GenericStructuralRequirement
       GenericValueParameterKey
@@ -116,10 +99,6 @@ data GenericRequirement
   | GenericPropositionRequirement Proposition
   deriving (Eq, Ord, Show)
 
--- | An already checked provider refinement/projection supplied by the competent
--- provider layer. This checker verifies that it connects the exact actual and
--- required interface revisions; proving the refinement itself remains an
--- ADR-021/provider-qualification responsibility.
 data CheckedProviderRefinement = CheckedProviderRefinement
   { checkedProviderRefinementActual :: InterfaceRevision
   , checkedProviderRefinementRequired :: InterfaceRevision
@@ -127,18 +106,12 @@ data CheckedProviderRefinement = CheckedProviderRefinement
   }
   deriving (Eq, Ord, Show)
 
--- | Exact proposition evidence accepted by the assurance layer. The bounded
--- tranche records the proposition and evidence lineage identity; wider
--- subject/context validity remains the assurance checker's competence boundary.
 data GenericEvidence = GenericEvidence
   { genericEvidenceProposition :: Proposition
   , genericEvidenceIdentity :: Text
   }
   deriving (Eq, Ord, Show)
 
--- | Requirement-discharge metadata. These dispositions explain why one exact
--- public requirement is closed in the current context; they do not redefine
--- requirement identity and are not generic semantic-application identity.
 data GenericRequirementDisposition
   = GenericSatisfiedByStructuralMode Mode
   | GenericSatisfiedByExactProvider InterfaceRevision
@@ -148,8 +121,6 @@ data GenericRequirementDisposition
   | GenericExported Text
   deriving (Eq, Ord, Show)
 
--- | Boundary policy controls whether explicit assumption/export dispositions
--- are admissible here. Missing requirements never become assumptions by default.
 data GenericInstantiationPolicy = GenericInstantiationPolicy
   { genericPolicyAllowsAssumptions :: Bool
   , genericPolicyAllowsExports :: Bool
@@ -190,11 +161,6 @@ data GenericInstantiationError
   | GenericStructuralInstantiationError GenericStructuralError
   deriving (Eq, Ord, Show)
 
--- | Ordinary generic application is applicative/canonical over the exact
--- semantic generic interface and exact identity-bearing semantic actuals.
--- DefinitionRevision and requirement-discharge evidence are deliberately not
--- fields here: they belong to implementation/assurance lineage rather than the
--- semantic applied interface unless passed explicitly as semantic arguments.
 data GenericApplicationIdentity = GenericApplicationIdentity
   { genericApplicationDeclarationKey :: DeclarationKey
   , genericApplicationInterfaceRevision :: InterfaceRevision
@@ -207,9 +173,6 @@ data GenericApplicationIdentityError
   = DuplicateGenericSemanticArgument GenericStaticParameterKey
   deriving (Eq, Ord, Show)
 
--- | Assurance/discharge lineage for one accepted use of a semantic generic
--- application. Replacing evidence or the selected checked definition may change
--- this lineage while preserving GenericApplicationIdentity.
 data GenericDischargeLineage = GenericDischargeLineage
   { genericDischargeApplicationIdentity :: GenericApplicationIdentity
   , genericDischargeDefinitionRevision :: DefinitionRevision
@@ -218,9 +181,6 @@ data GenericDischargeLineage = GenericDischargeLineage
   }
   deriving (Eq, Ord, Show)
 
--- | Infer the canonical minimum structural requirements induced by the checked
--- use events for every declared abstract value parameter. The resulting map
--- contains every parameter, including those with the empty requirement set.
 inferGenericStructuralRequirements
   :: [GenericValueParameterKey]
   -> [GenericStructuralUse]
@@ -247,11 +207,6 @@ inferGenericStructuralRequirements parameters uses = do
               (Set.insert required (genericStructuralPermissions existing))
       Right (Map.insert key updated current)
 
--- | Check the current body-induced minimum against an optional explicitly
--- stabilized public contract. With no explicit declaration, the public
--- requirement set is exactly the inferred minimum. With an explicit contract,
--- omitted parameters mean an empty published set; declared requirements may be
--- stronger than the current body but cannot omit any induced permission.
 checkGenericStructuralInterface
   :: [GenericValueParameterKey]
   -> [GenericStructuralUse]
@@ -268,9 +223,6 @@ checkGenericStructuralInterface parameters uses explicitPublished = do
     , genericPublishedStructuralRequirements = published
     }
 
--- | Lift the stabilized structural interface into the canonical generic
--- requirement vocabulary used by instantiation. Empty per-parameter requirement
--- sets contribute no external requirement.
 publishedStructuralRequirements
   :: CheckedGenericStructuralInterface
   -> Set.Set GenericRequirement
@@ -281,9 +233,6 @@ publishedStructuralRequirements interface = Set.fromList
   , permission <- Set.toAscList (genericStructuralPermissions requirements)
   ]
 
--- | Structural mode satisfaction relation inherited directly from ADR-002:
--- unrestricted permits contraction and weakening, affine permits weakening,
--- and linear permits neither.
 modeAllowsStructuralPermission :: Mode -> StructuralPermission -> Bool
 modeAllowsStructuralPermission mode permission = case (mode, permission) of
   (Unrestricted, _) -> True
@@ -291,9 +240,6 @@ modeAllowsStructuralPermission mode permission = case (mode, permission) of
   (Affine, ContractionPermission) -> False
   (Linear, _) -> False
 
--- | Check one concrete actual against the exact inferred or published
--- structural requirement set supplied by the caller. Failure identifies the
--- first missing canonical permission.
 checkGenericStructuralActual
   :: GenericValueParameterKey
   -> Mode
@@ -308,10 +254,6 @@ checkGenericStructuralActual key mode requirements =
       [] -> Right ()
       permission : _ -> Left (MissingStructuralPermission key permission mode)
 
--- | Check exact public requirement discharge for one generic instantiation.
--- Requirements are canonicalized as a set; duplicate disposition entries fail
--- closed, every requirement needs exactly one explicit disposition, and extra
--- dispositions for requirements the generic interface did not expose reject.
 checkGenericInstantiation
   :: GenericInstantiationPolicy
   -> Set.Set GenericRequirement
@@ -338,9 +280,6 @@ checkGenericInstantiation policy requirements dispositionEntries = do
     (Map.toAscList dispositions)
   Right (GenericInstantiationRecord dispositions)
 
--- | Derive an applicative semantic application identity. Argument source order
--- is nonsemantic; duplicate semantic parameter keys reject rather than silently
--- choosing one value.
 deriveGenericApplicationIdentity
   :: DeclarationKey
   -> InterfaceRevision
@@ -354,9 +293,6 @@ deriveGenericApplicationIdentity declarationKey interfaceRevision arguments = do
     , genericApplicationSemanticArguments = argumentMap
     }
 
--- | Canonical target-abstract semantic form suitable for embedding a generic
--- application as an architecture static binding. Architecture occurrence
--- identity remains separately generative under ArchitectureInstance semantics.
 genericApplicationSemanticForm :: GenericApplicationIdentity -> SemanticForm
 genericApplicationSemanticForm identity = SemanticRecord (Map.fromList
   [ ("declaration_key", SemanticAtom
@@ -370,9 +306,6 @@ genericApplicationSemanticForm identity = SemanticRecord (Map.fromList
       ]))
   ])
 
--- | Bind implementation/discharge lineage to an already-derived semantic
--- application. Evidence identity is retained here, so replacing a proof for the
--- same exact requirement changes lineage but not semantic application identity.
 deriveGenericDischargeLineage
   :: GenericApplicationIdentity
   -> DefinitionRevision
