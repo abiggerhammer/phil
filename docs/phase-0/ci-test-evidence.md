@@ -6,6 +6,6 @@ The existing `certify-test-evidence` job remains unchanged in substance. It capt
 
 The added `certify-remaining-runtime-test-evidence` job reproduces the historical remaining-runtime evidence gate. It builds the same digest-validation, exact-receive, storage, accepted-response, and rejected-response emitters, typechecks the same profiles and dispatcher, uses the same test-evidence certifier, runs the same fixture-certification script, and uploads the same certificate family.
 
-The historical `.github/workflows/remaining-runtime-test-evidence.yml` remains present with a comment-only witness edit until the consolidated two-job workflow, that historical witness, ordinary CI, and Phase 0 Baseline are green together on both the bring-up tree and a clean one-commit recomposition.
+Old-vs-new equivalence was demonstrated on both the bring-up tree and a clean one-commit recomposition in PR #153. The historical `.github/workflows/remaining-runtime-test-evidence.yml` is therefore retired; its history remains available in Git.
 
 The consolidated path filter is the union of the two historical ownership surfaces. No fixture behavior, runtime ABI, evidence profile, test assertion, certifier source, certificate format, certificate ID, or validity scope changes in this tranche.
