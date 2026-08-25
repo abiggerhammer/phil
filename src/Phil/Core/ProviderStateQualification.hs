@@ -22,6 +22,7 @@ import Phil.Core.ProviderQualification
   , ProviderOperationKey
   , ProviderOutcomeKey
   )
+import Phil.Core.Static (DefinitionRevision, InterfaceRevision)
 
 -- | Stable identity of one abstract/concrete provider-state relation.  The
 -- checker does not prescribe a theorem language for this relation; it checks
@@ -89,8 +90,9 @@ data ProviderStateRefinement = ProviderStateRefinement
   deriving (Eq, Ord, Show)
 
 data CheckedProviderStateQualification = CheckedProviderStateQualification
-  { checkedProviderStateRelationRevision :: ProviderStateRelationRevision
-  , checkedProviderStateContractRevisionMatches :: Bool
+  { checkedProviderStateContractRevision :: InterfaceRevision
+  , checkedProviderStateImplementationRevision :: DefinitionRevision
+  , checkedProviderStateRelationRevision :: ProviderStateRelationRevision
   , checkedProviderStateInitialization
       :: Map.Map ProviderImplementationStateKey ProviderAbstractStateKey
   , checkedProviderStateImplementationTransitions
@@ -132,8 +134,9 @@ checkProviderStateSimulation qualified refinement = do
   mapM_ checkImplementationTransition
     (Set.toAscList (providerStateImplementationTransitions refinement))
   Right CheckedProviderStateQualification
-    { checkedProviderStateRelationRevision = providerStateRelationRevision refinement
-    , checkedProviderStateContractRevisionMatches = True
+    { checkedProviderStateContractRevision = checkedProviderContractRevision qualified
+    , checkedProviderStateImplementationRevision = checkedProviderImplementationRevision qualified
+    , checkedProviderStateRelationRevision = providerStateRelationRevision refinement
     , checkedProviderStateInitialization = providerStateInitialCorrespondence refinement
     , checkedProviderStateImplementationTransitions =
         providerStateImplementationTransitions refinement
