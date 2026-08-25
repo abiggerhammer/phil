@@ -100,5 +100,8 @@ jobs:
       - name: Phase 1 provider evidence competence conformance
         run: cabal exec -- runghc -isrc test/Phase1ProviderEvidenceQualificationMain.hs
 
+      - name: Phase 1 provider qualification identity conformance
+        run: cabal exec -- runghc -isrc test/Phase1ProviderQualificationIdentityMain.hs
+
       - name: Verify LLVM and run Phil programs
         run: bash scripts/ci/phase0-llvm-runtime-smoke.sh
