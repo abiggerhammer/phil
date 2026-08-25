@@ -4,6 +4,7 @@ module Main (main) where
 
 import qualified Data.Map.Strict as Map
 import qualified Data.Set as Set
+import Data.Text (Text)
 import Phil.Core.Callable
 import Phil.Core.CallableRefinement
 import Phil.Core.CallableScope (LoanScopeKey (..))
@@ -314,7 +315,7 @@ sourceFacts = SourceCallableLoweringFacts
   , sourceCallableLiveLoans = sourceLoans
   }
 
-allocatorAssumption, runtimeAssumption, environmentCarrier, helperCarrier :: String
+allocatorAssumption, runtimeAssumption, environmentCarrier, helperCarrier :: Text
 allocatorAssumption = "allocator.available"
 runtimeAssumption = "runtime.helper.available"
 environmentCarrier = "closure-environment-pointer"
@@ -343,8 +344,8 @@ targetFacts = TargetCallableLoweringFacts
   , targetCallableLiveLoans = sourceLoans
   , targetCallableIntroducedEffects = Set.singleton allocationEffect
   , targetCallableIntroducedFailures = Set.empty
-  , targetCallableIntroducedAssumptions = Set.singleton "allocator.available"
-  , targetCallableIntroducedCarriers = Set.singleton "closure-environment-pointer"
+  , targetCallableIntroducedAssumptions = Set.singleton allocatorAssumption
+  , targetCallableIntroducedCarriers = Set.singleton environmentCarrier
   , targetCallableIntroducedCost = allocationCost
   }
 
@@ -352,8 +353,8 @@ accounting :: CallableRealizationAccounting
 accounting = CallableRealizationAccounting
   { accountedCallableEffects = Set.singleton allocationEffect
   , accountedCallableFailures = Set.empty
-  , accountedCallableAssumptions = Set.singleton "allocator.available"
-  , accountedCallableCarriers = Set.singleton "closure-environment-pointer"
+  , accountedCallableAssumptions = Set.singleton allocatorAssumption
+  , accountedCallableCarriers = Set.singleton environmentCarrier
   , accountedCallableCost = allocationCost
   }
 
