@@ -1,0 +1,128 @@
+name: Phase 1 Authority Attenuation Proofs
+
+on:
+  pull_request:
+    paths:
+      - 'src/Phil/Core/Authority.hs'
+      - 'src/Phil/Core/AuthorityAttenuation.hs'
+      - 'test/Phase1AuthorityPossessionMain.hs'
+      - 'test/Phase1AuthorityAttenuationMain.hs'
+      - 'docs/phase-1/authority-possession-v1.md'
+      - 'docs/phase-1/authority-attenuation-v1.md'
+      - 'proof/Phil/Core/GenericStructural.v'
+      - 'proof/Phil/Core/AuthorityPossession.v'
+      - 'proof/Phil/Core/AuthorityAttenuation.v'
+      - 'app/Phase1AuthorityAttenuationCertificationMain.hs'
+      - '.github/workflows/phase1-authority-attenuation-proofs.yml'
+  push:
+    branches: [main]
+    paths:
+      - 'src/Phil/Core/Authority.hs'
+      - 'src/Phil/Core/AuthorityAttenuation.hs'
+      - 'test/Phase1AuthorityPossessionMain.hs'
+      - 'test/Phase1AuthorityAttenuationMain.hs'
+      - 'docs/phase-1/authority-possession-v1.md'
+      - 'docs/phase-1/authority-attenuation-v1.md'
+      - 'proof/Phil/Core/GenericStructural.v'
+      - 'proof/Phil/Core/AuthorityPossession.v'
+      - 'proof/Phil/Core/AuthorityAttenuation.v'
+      - 'app/Phase1AuthorityAttenuationCertificationMain.hs'
+      - '.github/workflows/phase1-authority-attenuation-proofs.yml'
+
+permissions:
+  contents: read
+
+jobs:
+  rocq-phase1-authority-attenuation:
+    runs-on: ubuntu-latest
+    container:
+      image: rocq/rocq-prover:9.2.0
+      options: --user root
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Check authority proof chain and PHIL-AUTH-ATTEN-001
+        shell: bash
+        run: |
+          set -euo pipefail
+          export PATH="/home/rocq/.opam/${COMPILER}/bin:$PATH"
+          rocq c -Q proof/Phil Phil proof/Phil/Core/GenericStructural.v
+          rocq c -Q proof/Phil Phil proof/Phil/Core/AuthorityPossession.v
+          rocq c -Q proof/Phil Phil proof/Phil/Core/AuthorityAttenuation.v
+          test -f proof/Phil/Core/AuthorityAttenuation.vo
+          mkdir -p phase1-authority-attenuation-proof
+          cp proof/Phil/Core/AuthorityAttenuation.v phase1-authority-attenuation-proof/
+          cp proof/Phil/Core/AuthorityAttenuation.vo phase1-authority-attenuation-proof/
+          sha256sum \
+            proof/Phil/Core/GenericStructural.v \
+            proof/Phil/Core/GenericStructural.vo \
+            proof/Phil/Core/AuthorityPossession.v \
+            proof/Phil/Core/AuthorityPossession.vo \
+            phase1-authority-attenuation-proof/AuthorityAttenuation.v \
+            phase1-authority-attenuation-proof/AuthorityAttenuation.vo
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: rocq-phase1-authority-attenuation-proof
+          path: phase1-authority-attenuation-proof
+          if-no-files-found: error
+
+  certify-phase1-authority-attenuation:
+    needs: rocq-phase1-authority-attenuation
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: haskell-actions/setup@v2
+        with:
+          ghc-version: '9.6.7'
+          cabal-version: 'latest'
+
+      - name: Build existing proof certifier with warnings as errors
+        run: cabal build exe:phil-certify-core-scalar --ghc-options=-Werror
+
+      - name: Typecheck dedicated authority attenuation certifier with warnings as errors
+        run: cabal exec -- ghc -isrc -Wall -Werror -fno-code app/Phase1AuthorityAttenuationCertificationMain.hs
+
+      - name: Re-run authority possession dependency correspondence
+        run: cabal exec -- runghc -isrc test/Phase1AuthorityPossessionMain.hs
+
+      - name: Re-run exact AUTH-003 attenuation correspondence cases
+        run: cabal exec -- runghc -isrc test/Phase1AuthorityAttenuationMain.hs
+
+      - uses: actions/download-artifact@v4
+        with:
+          name: rocq-phase1-authority-attenuation-proof
+          path: phase1-authority-attenuation-proof
+
+      - name: Emit PHIL-AUTH-ATTEN-001 proof certificate
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p phase1-authority-attenuation-certification
+          cabal exec -- runghc -isrc app/Phase1AuthorityAttenuationCertificationMain.hs \
+            phase1-authority-attenuation-proof/AuthorityAttenuation.v \
+            phase1-authority-attenuation-proof/AuthorityAttenuation.vo \
+            phase1-authority-attenuation-certification/PHIL-AUTH-ATTEN-001.rocq.cert
+
+          sha256sum \
+            src/Phil/Core/Authority.hs \
+            src/Phil/Core/AuthorityAttenuation.hs \
+            test/Phase1AuthorityPossessionMain.hs \
+            test/Phase1AuthorityAttenuationMain.hs \
+            docs/phase-1/authority-possession-v1.md \
+            docs/phase-1/authority-attenuation-v1.md \
+            proof/Phil/Core/GenericStructural.v \
+            proof/Phil/Core/AuthorityPossession.v \
+            proof/Phil/Core/AuthorityAttenuation.v \
+            app/Phase1AuthorityAttenuationCertificationMain.hs \
+            > phase1-authority-attenuation-certification/PHIL-AUTH-ATTEN-001.correspondence.sha256
+
+          cat phase1-authority-attenuation-certification/PHIL-AUTH-ATTEN-001.rocq.cert
+          sha256sum phase1-authority-attenuation-certification/PHIL-AUTH-ATTEN-001.rocq.cert
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: phil-phase1-authority-attenuation-proof-certification
+          path: phase1-authority-attenuation-certification
+          if-no-files-found: error
