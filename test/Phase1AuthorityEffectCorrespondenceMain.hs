@@ -4,6 +4,7 @@ module Main (main) where
 
 import qualified Data.Map.Strict as Map
 import qualified Data.Set as Set
+import Data.Text (Text)
 import Phil.Core.Authority
   ( AuthorityOperationKey (..)
   , AuthoritySubjectKey (..)
@@ -14,6 +15,7 @@ import Phil.Core.ProviderAuthorityQualification
   ( ProviderAuthorityAssumptionKey (..)
   , ProviderExtraAuthorityDisposition (..)
   )
+import Phil.Core.ProviderQualification (ProviderOperationKey (..))
 import Phil.Examples.Phase1.AuthorityEffectWitnesses
 import Phil.Systems.AuthorityEffectCorrespondence
 import Phil.Systems.Phase1Stage (SystemsMechanismKey (..))
@@ -187,7 +189,7 @@ deterministicIdentity = do
 
 rebuild
   :: AuthorityEffectStageBundle
-  -> Map.Map String ProviderSemanticSurfaceBasis
+  -> Map.Map Text ProviderSemanticSurfaceBasis
   -> Map.Map SystemsMechanismKey SystemsProviderUse
   -> AuthorityEffectStageBundle
 rebuild bundle surfaces uses = makeAuthorityEffectStageBundle
@@ -214,8 +216,8 @@ digestCompute = SystemsMechanismKey
 blobInstall = SystemsMechanismKey
   "StevePut:put.install:term.runtime-choice.BlobProvider.install-if-absent"
 
-blobReadOperation :: Phil.Core.ProviderQualification.ProviderOperationKey
-blobReadOperation = Phil.Core.ProviderQualification.ProviderOperationKey "blob.read"
+blobReadOperation :: ProviderOperationKey
+blobReadOperation = ProviderOperationKey "blob.read"
 
 blobReadAuthority, blobDeleteAuthority :: AuthorityUse
 blobReadAuthority = AuthorityUse
