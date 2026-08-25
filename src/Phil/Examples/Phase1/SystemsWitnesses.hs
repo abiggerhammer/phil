@@ -13,6 +13,7 @@ import Data.Text (Text)
 import Phil.Assurance.Types (digestText)
 import Phil.Core.ProviderQualificationIdentity
   ( CheckedProviderQualificationAdmissionIdentity (..)
+  , ProviderQualificationEvidenceIdentityInput (..)
   , QualificationAdmissionRevision (..)
   )
 import Phil.Core.Static (InstanceRevision (..), RealizationRevision (..))
