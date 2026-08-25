@@ -10,6 +10,7 @@ module Phil.Core.Callable
   , CalleeTransition (..)
   , SemanticEffect (..)
   , CallableContract (..)
+  , CheckedCallableEffects (..)
   , CallableOccurrence (..)
   , CallableResourceState (..)
   , CallableInvocationBodySummary (..)
@@ -18,6 +19,7 @@ module Phil.Core.Callable
   , checkClosureCaptures
   , closureStructuralMode
   , inferReachableCallableEffects
+  , checkCallableEffectBound
   , singletonCallableResourceState
   , lookupCallableOccurrence
   , invokeCallableOccurrence
@@ -95,6 +97,16 @@ data CallableContract = CallableContract
   }
   deriving (Eq, Ord, Show)
 
+-- | Successful comparison of one checked implementation footprint with its
+-- stabilized public may-effect bound. The two sets remain separate because a
+-- narrower current body does not silently narrow the public callable interface.
+data CheckedCallableEffects = CheckedCallableEffects
+  { checkedCallableInterfaceRevision :: InterfaceRevision
+  , checkedCallableInferredEffects :: Set.Set SemanticEffect
+  , checkedCallablePublicEffectBound :: Set.Set SemanticEffect
+  }
+  deriving (Eq, Ord, Show)
+
 -- | One exact runtime/term-level callable ownership occurrence. Equal contracts
 -- do not identify equal callable occurrences.
 data CallableOccurrence = CallableOccurrence
@@ -134,6 +146,10 @@ data CallableUse
 data CallableCheckError
   = RestrictedCaptureMustMove CaptureOccurrenceKey Mode
   | DuplicateRestrictedCapture CaptureOccurrenceKey Mode
+  | CallableEffectBoundExceeded
+      InterfaceRevision
+      (Set.Set SemanticEffect)
+      (Set.Set SemanticEffect)
   | UnavailableCallableOccurrence CallableOccurrenceKey
   | PreserveCalleeRestrictedStateMismatch
       CallableOccurrenceKey
@@ -211,6 +227,27 @@ inferReachableCallableEffects = foldl addUse Set.empty
       PassCallable _ -> effects
       StoreCallable _ -> effects
       ReturnCallable _ -> effects
+
+-- | Check one implementation's inferred reachable semantic effects against the
+-- stabilized public may-effect bound. A narrower implementation is valid and the
+-- wider public bound is retained. Any undeclared wider effect rejects rather than
+-- silently revising the public interface.
+checkCallableEffectBound
+  :: CallableContract
+  -> Set.Set SemanticEffect
+  -> Either CallableCheckError CheckedCallableEffects
+checkCallableEffectBound contract inferred
+  | inferred `Set.isSubsetOf` publicBound = Right CheckedCallableEffects
+      { checkedCallableInterfaceRevision = callableContractInterfaceRevision contract
+      , checkedCallableInferredEffects = inferred
+      , checkedCallablePublicEffectBound = publicBound
+      }
+  | otherwise = Left (CallableEffectBoundExceeded
+      (callableContractInterfaceRevision contract)
+      (Set.difference inferred publicBound)
+      publicBound)
+  where
+    publicBound = callableContractEffectBound contract
 
 singletonCallableResourceState :: CallableOccurrence -> CallableResourceState
 singletonCallableResourceState occurrence = CallableResourceState
