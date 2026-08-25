@@ -199,10 +199,10 @@ checkProviderQualificationDependencyGraph graph = do
       Nothing -> False
 
     closeGrounds reachable current =
-      let next = Set.foldl' propagate current reachable
+      let next = Set.foldl' (propagate reachable) current reachable
       in if next == current then current else closeGrounds reachable next
 
-    propagate accumulated admission = case Map.lookup admission nodes of
+    propagate reachable accumulated admission = case Map.lookup admission nodes of
       Nothing -> accumulated
       Just node ->
         let inherited = Set.unions
