@@ -85,5 +85,8 @@ jobs:
       - name: Phase 1 provider semantic qualification conformance
         run: cabal exec -- runghc -isrc test/Phase1ProviderQualificationMain.hs
 
+      - name: Phase 1 provider state simulation conformance
+        run: cabal exec -- runghc -isrc test/Phase1ProviderStateQualificationMain.hs
+
       - name: Verify LLVM and run Phil programs
         run: bash scripts/ci/phase0-llvm-runtime-smoke.sh
