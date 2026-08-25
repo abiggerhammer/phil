@@ -35,7 +35,8 @@ import Phil.Core.Static
   , canonicalSemanticForm
   )
 import Phil.Systems.Phase1Stage
-  ( SystemsMechanismKey (..)
+  ( Phase1StageBundle (..)
+  , SystemsMechanismKey (..)
   )
 import Phil.Systems.SubjectCorrespondence
   ( SubjectStageBundle (..)
@@ -49,9 +50,6 @@ newtype ProviderCallStageRevision = ProviderCallStageRevision
   }
   deriving (Eq, Ord, Show)
 
--- | One provider choice already accepted by provider qualification/admission and
--- selected for this realization. SYS-005 consumes this object; it does not rerun
--- the whole PROV stack at each call site.
 data SelectedProviderAdmission = SelectedProviderAdmission
   { selectedProviderOccurrence :: Text
   , selectedProviderRequiredInterface :: InterfaceRevision
@@ -63,9 +61,6 @@ data SelectedProviderAdmission = SelectedProviderAdmission
   }
   deriving (Eq, Ord, Show)
 
--- | Exact semantic binding is the only accepted basis. Runtime-symbol inference
--- is represented explicitly so the verifier can reject it rather than letting a
--- symbol/signature accident masquerade as a provider correspondence.
 data ProviderCallBindingBasis
   = ExactProviderCallBinding
       Text
@@ -76,8 +71,6 @@ data ProviderCallBindingBasis
   | RuntimeSymbolOnlyProviderCall Text Text
   deriving (Eq, Ord, Show)
 
--- | One Systems provider-call site. Runtime symbol/signature remain metadata and
--- are deliberately excluded from semantic matching when an exact binding exists.
 data ProviderCallLink = ProviderCallLink
   { providerCallMechanism :: SystemsMechanismKey
   , providerCallBindingBasis :: ProviderCallBindingBasis
@@ -86,9 +79,6 @@ data ProviderCallLink = ProviderCallLink
   }
   deriving (Eq, Ord, Show)
 
--- | Compositional SYS-005 relation layer. It binds the exact SYS-004 stage to the
--- selected provider registry, the exact provider-call site set, and one exact
--- semantic link for every such site.
 data ProviderCallStageBundle = ProviderCallStageBundle
   { providerCallStageBase :: SubjectStageBundle
   , providerCallStageRevision :: ProviderCallStageRevision
