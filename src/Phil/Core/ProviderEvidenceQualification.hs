@@ -30,53 +30,37 @@ import Phil.Core.Syntax
   , RefTerm (..)
   )
 
--- | Stable identity of one proposition family a provider operation may establish.
--- The family key is semantic; source function names and backend symbols are not.
 newtype ProviderPropositionFamilyKey = ProviderPropositionFamilyKey
   { unProviderPropositionFamilyKey :: Text
   }
   deriving (Eq, Ord, Show)
 
--- | Stable semantic subject named by a persistent provider-produced proposition.
--- This is deliberately a different type from an observation handle or loan token.
 newtype ProviderEvidenceSubjectKey = ProviderEvidenceSubjectKey
   { unProviderEvidenceSubjectKey :: Text
   }
   deriving (Eq, Ord, Show)
 
--- | Identity of one observation mechanism or transient observed view.
 newtype ProviderObservationKey = ProviderObservationKey
   { unProviderObservationKey :: Text
   }
   deriving (Eq, Ord, Show)
 
--- | Exact accepted relation that maps a non-stable observation to a stable
--- semantic evidence subject. Truth of the relation is an assurance input; this
--- checker validates exact binding and subject correspondence.
 newtype EvidenceSubjectMappingRevision = EvidenceSubjectMappingRevision
   { unEvidenceSubjectMappingRevision :: Text
   }
   deriving (Eq, Ord, Show)
 
--- | Public validity contract for one evidence-producing competence. Concrete
--- proof/certificate validity evidence remains a later qualification-closure input.
 newtype EvidenceValidityContractKey = EvidenceValidityContractKey
   { unEvidenceValidityContractKey :: Text
   }
   deriving (Eq, Ord, Show)
 
--- | Observation identity is not automatically proposition-subject identity.
--- A scoped borrow in particular is temporary even when the resulting evidence
--- is intentionally persistent and names the stable owner object.
 data ProviderEvidenceObservation
   = StableEvidenceObservation ProviderEvidenceSubjectKey
   | ScopedBorrowEvidenceObservation ProviderObservationKey LoanScopeKey
   | OpaqueEvidenceObservation ProviderObservationKey
   deriving (Eq, Ord, Show)
 
--- | Exact subject mapping used by one competence claim. Direct identity is only
--- legal for an observation already expressed as the same stable semantic subject.
--- Pointer/handle/byte coincidence is represented explicitly so it can fail closed.
 data EvidenceSubjectMapping
   = DirectStableEvidenceSubject ProviderEvidenceSubjectKey
   | CheckedObservationToStableSubject
@@ -87,19 +71,22 @@ data EvidenceSubjectMapping
   deriving (Eq, Ord, Show)
 
 -- | Public provider requirement for one evidence-producing operation occurrence.
+-- Proposition parameters are semantic arguments distinct from the stable subject.
+-- For example, DigestMatches(id, object) carries id here while object remains the
+-- separately checked stable evidence subject.
 data ProviderEvidenceProducerRequirement = ProviderEvidenceProducerRequirement
   { providerEvidenceRequiredOperation :: ProviderOperationKey
   , providerEvidenceRequiredFamily :: ProviderPropositionFamilyKey
+  , providerEvidenceRequiredPropositionParameters :: [RefTerm]
   , providerEvidenceRequiredStableSubject :: ProviderEvidenceSubjectKey
   , providerEvidenceRequiredValidity :: EvidenceValidityContractKey
   }
   deriving (Eq, Ord, Show)
 
--- | Provider-qualification competence claim. The proposition subject is stated
--- explicitly rather than inferred from what happened to be observed at runtime.
 data ProviderEvidenceProducerCompetenceClaim = ProviderEvidenceProducerCompetenceClaim
   { providerEvidenceClaimOperation :: ProviderOperationKey
   , providerEvidenceClaimFamily :: ProviderPropositionFamilyKey
+  , providerEvidenceClaimPropositionParameters :: [RefTerm]
   , providerEvidenceClaimObservation :: ProviderEvidenceObservation
   , providerEvidenceClaimPropositionSubject :: ProviderEvidenceSubjectKey
   , providerEvidenceClaimSubjectMapping :: EvidenceSubjectMapping
@@ -112,6 +99,7 @@ data CheckedProviderEvidenceProducerCompetence = CheckedProviderEvidenceProducer
   , checkedProviderEvidenceImplementationRevision :: DefinitionRevision
   , checkedProviderEvidenceOperation :: ProviderOperationKey
   , checkedProviderEvidenceFamily :: ProviderPropositionFamilyKey
+  , checkedProviderEvidencePropositionParameters :: [RefTerm]
   , checkedProviderEvidenceObservation :: ProviderEvidenceObservation
   , checkedProviderEvidenceSubject :: ProviderEvidenceSubjectKey
   , checkedProviderEvidenceMapping :: EvidenceSubjectMapping
@@ -125,6 +113,7 @@ data ProviderEvidenceQualificationError
   | ProviderEvidenceOperationMismatch ProviderOperationKey ProviderOperationKey
   | ProviderEvidenceFamilyMismatch
       ProviderPropositionFamilyKey ProviderPropositionFamilyKey
+  | ProviderEvidencePropositionParametersMismatch [RefTerm] [RefTerm]
   | ProviderEvidenceStableSubjectMismatch
       ProviderEvidenceSubjectKey ProviderEvidenceSubjectKey
   | ProviderEvidenceValidityMismatch
@@ -138,25 +127,20 @@ data ProviderEvidenceQualificationError
   | ProviderEvidenceRuntimeCoincidenceInsufficient Text
   deriving (Eq, Ord, Show)
 
--- | Materialize the bounded Core proposition established by one checked provider
--- competence. The exact stable subject is embedded as a stable-id refinement term;
--- observation/loan identity is intentionally absent.
 instantiateProviderEvidenceProposition
   :: ProviderPropositionFamilyKey
+  -> [RefTerm]
   -> ProviderEvidenceSubjectKey
   -> Proposition
-instantiateProviderEvidenceProposition family subject =
+instantiateProviderEvidenceProposition family parameters subject =
   Atom
     (unProviderPropositionFamilyKey family)
-    [ RefOpaque
-        (SortStableId "provider-evidence-subject")
-        (unProviderEvidenceSubjectKey subject)
-    ]
+    (parameters <>
+      [ RefOpaque
+          (SortStableId "provider-evidence-subject")
+          (unProviderEvidenceSubjectKey subject)
+      ])
 
--- | Check PROV-010 over an already accepted provider semantic qualification.
--- This establishes exact operation/family/subject/mapping/validity correspondence;
--- it does not by itself prove the truth of an external observation mapping or the
--- proposition family. Those remain ordinary qualification evidence obligations.
 checkProviderEvidenceProducerCompetence
   :: CheckedProviderSemanticQualification
   -> ProviderEvidenceProducerRequirement
@@ -167,6 +151,8 @@ checkProviderEvidenceProducerCompetence qualified requirement claim = do
       claimedOperation = providerEvidenceClaimOperation claim
       requiredFamily = providerEvidenceRequiredFamily requirement
       claimedFamily = providerEvidenceClaimFamily claim
+      requiredParameters = providerEvidenceRequiredPropositionParameters requirement
+      claimedParameters = providerEvidenceClaimPropositionParameters claim
       requiredSubject = providerEvidenceRequiredStableSubject requirement
       claimedSubject = providerEvidenceClaimPropositionSubject claim
       requiredValidity = providerEvidenceRequiredValidity requirement
@@ -177,27 +163,32 @@ checkProviderEvidenceProducerCompetence qualified requirement claim = do
       then Left (ProviderEvidenceOperationMismatch requiredOperation claimedOperation)
       else if claimedFamily /= requiredFamily
         then Left (ProviderEvidenceFamilyMismatch requiredFamily claimedFamily)
-        else if claimedSubject /= requiredSubject
-          then Left (ProviderEvidenceStableSubjectMismatch requiredSubject claimedSubject)
-          else if claimedValidity /= requiredValidity
-            then Left (ProviderEvidenceValidityMismatch requiredValidity claimedValidity)
-            else do
-              checkSubjectMapping
-                (providerEvidenceClaimObservation claim)
-                claimedSubject
-                (providerEvidenceClaimSubjectMapping claim)
-              Right CheckedProviderEvidenceProducerCompetence
-                { checkedProviderEvidenceContractRevision = checkedProviderContractRevision qualified
-                , checkedProviderEvidenceImplementationRevision = checkedProviderImplementationRevision qualified
-                , checkedProviderEvidenceOperation = requiredOperation
-                , checkedProviderEvidenceFamily = requiredFamily
-                , checkedProviderEvidenceObservation = providerEvidenceClaimObservation claim
-                , checkedProviderEvidenceSubject = claimedSubject
-                , checkedProviderEvidenceMapping = providerEvidenceClaimSubjectMapping claim
-                , checkedProviderEvidenceValidity = claimedValidity
-                , checkedProviderEvidenceProposition =
-                    instantiateProviderEvidenceProposition requiredFamily claimedSubject
-                }
+        else if claimedParameters /= requiredParameters
+          then Left (ProviderEvidencePropositionParametersMismatch
+            requiredParameters claimedParameters)
+          else if claimedSubject /= requiredSubject
+            then Left (ProviderEvidenceStableSubjectMismatch requiredSubject claimedSubject)
+            else if claimedValidity /= requiredValidity
+              then Left (ProviderEvidenceValidityMismatch requiredValidity claimedValidity)
+              else do
+                checkSubjectMapping
+                  (providerEvidenceClaimObservation claim)
+                  claimedSubject
+                  (providerEvidenceClaimSubjectMapping claim)
+                Right CheckedProviderEvidenceProducerCompetence
+                  { checkedProviderEvidenceContractRevision = checkedProviderContractRevision qualified
+                  , checkedProviderEvidenceImplementationRevision = checkedProviderImplementationRevision qualified
+                  , checkedProviderEvidenceOperation = requiredOperation
+                  , checkedProviderEvidenceFamily = requiredFamily
+                  , checkedProviderEvidencePropositionParameters = requiredParameters
+                  , checkedProviderEvidenceObservation = providerEvidenceClaimObservation claim
+                  , checkedProviderEvidenceSubject = claimedSubject
+                  , checkedProviderEvidenceMapping = providerEvidenceClaimSubjectMapping claim
+                  , checkedProviderEvidenceValidity = claimedValidity
+                  , checkedProviderEvidenceProposition =
+                      instantiateProviderEvidenceProposition
+                        requiredFamily requiredParameters claimedSubject
+                  }
   where
     checkSubjectMapping observation subject mapping = case mapping of
       DirectStableEvidenceSubject mappedSubject
