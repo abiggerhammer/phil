@@ -110,7 +110,7 @@ checkProviderQualificationDependencyGraph
 checkProviderQualificationDependencyGraph graph = do
   validateRegistryKeys
   validateRoots
-  validateNodes
+  validateReachableNodes
   let reachable = reachableAdmissions
       initialGrounds = Map.fromSet directAcceptedGrounds reachable
       closedGrounds = closeGrounds reachable initialGrounds
@@ -149,7 +149,12 @@ checkProviderQualificationDependencyGraph graph = do
       | Map.member root nodes = Right ()
       | otherwise = Left (QualificationDependencyUnknownRoot root)
 
-    validateNodes = mapM_ validateNode (Map.elems nodes)
+    validateReachableNodes = mapM_ validateReachable
+      (Set.toAscList reachableAdmissions)
+
+    validateReachable admission = case Map.lookup admission nodes of
+      Nothing -> Right ()
+      Just node -> validateNode node
 
     validateNode node = do
       let owner = qualificationDependencyAdmissionRevision node
