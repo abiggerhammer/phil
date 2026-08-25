@@ -70,5 +70,8 @@ jobs:
       - name: Phase 1 foreign callable qualification conformance
         run: cabal exec -- runghc -isrc test/Phase1ForeignCallableQualificationMain.hs
 
+      - name: Phase 1 callable lowering conformance
+        run: cabal exec -- runghc -isrc test/Phase1CallableLoweringMain.hs
+
       - name: Verify LLVM and run Phil programs
         run: bash scripts/ci/phase0-llvm-runtime-smoke.sh
