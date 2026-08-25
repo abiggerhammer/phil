@@ -238,7 +238,7 @@ data ArchitectureNodeSpec = ArchitectureNodeSpec
 data CheckedArchitectureInstance = CheckedArchitectureInstance
   { checkedArchitectureIdentity :: ArchitectureInstanceIdentity
   , checkedArchitectureDescriptor :: ArchitectureInstanceDescriptor
-  , checkedArchitectureRequirements :: Map.Map RequirementKey ArchitectureRequirementDisposition
+  , checkedArchitectureRequirements :: Map.Map RequirementKey ArchitectureRequirement
   , checkedArchitectureChildren :: Map.Map OccurrenceSlotKey InstanceKey
   , checkedArchitectureReferences :: Map.Map ReferenceKey InstanceKey
   }
@@ -405,7 +405,7 @@ buildArchitectureNode instanceKey parentKey spec = do
       node = CheckedArchitectureInstance
         { checkedArchitectureIdentity = identity
         , checkedArchitectureDescriptor = descriptor
-        , checkedArchitectureRequirements = Map.mapMaybe architectureRequirementDisposition requirementMap
+        , checkedArchitectureRequirements = requirementMap
         , checkedArchitectureChildren = Map.map identityInstanceKey childIdentities
         , checkedArchitectureReferences = referenceMap
         }
@@ -525,7 +525,7 @@ validateArchitectureGraph graph =
       validateReferences node
 
     validateRequirements node =
-      mapM_ (validateRequirement node) (architectureNodeRequirementsFromChecked node)
+      mapM_ (validateRequirement node) (Map.elems (checkedArchitectureRequirements node))
 
     validateRequirement node requirement =
       case architectureRequirementDisposition requirement of
@@ -563,26 +563,6 @@ validateArchitectureGraph graph =
             Just _ -> Right ()
             Nothing -> Left (UnknownArchitectureReferenceTarget
               ownerKey referenceKey target)
-
--- The checked node stores only resolved requirement dispositions.  The exact
--- requirement declarations remain recoverable from the descriptor's canonical
--- semantic bindings, but validation needs their expected interfaces as well;
--- rebuild them from the originating semantic form is intentionally avoided.
--- We therefore carry the original requirements transiently by reconstructing
--- them from the node descriptor is not sound.  This helper is replaced below by
--- a direct map embedded during construction.
-architectureNodeRequirementsFromChecked
-  :: CheckedArchitectureInstance
-  -> [ArchitectureRequirement]
-architectureNodeRequirementsFromChecked node =
-  [ ArchitectureRequirement
-      { architectureRequirementKey = key
-      , architectureRequirementKind = BoundaryRequirement
-      , architectureRequirementExpectedInterface = Nothing
-      , architectureRequirementDisposition = Just disposition
-      }
-  | (key, disposition) <- Map.toList (checkedArchitectureRequirements node)
-  ]
 
 emptyStaticContext :: StaticContext
 emptyStaticContext = StaticContext Map.empty
