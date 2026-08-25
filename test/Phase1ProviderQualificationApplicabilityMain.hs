@@ -3,6 +3,7 @@
 module Main (main) where
 
 import qualified Data.Set as Set
+import Data.Text (Text)
 import Phil.Core.ProviderQualificationApplicability
 import Phil.Core.ProviderQualificationIdentity
 import Phil.Core.ProviderQualificationTargetReuse
@@ -233,7 +234,7 @@ interfaceRevision = InterfaceRevision "provider.blob:v1"
 implementationRevision :: DefinitionRevision
 implementationRevision = DefinitionRevision "provider.blob.impl:v1"
 
-targetProfile, artifactRevision, runtimeAbi :: String
+targetProfile, artifactRevision, runtimeAbi :: Text
 targetProfile = "target.host-linux-x86_64:v1"
 artifactRevision = "artifact:blob-host:v1"
 runtimeAbi = "abi:host-sysv-x86_64:v1"
