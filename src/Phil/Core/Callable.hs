@@ -5,14 +5,22 @@ module Phil.Core.Callable
   , CaptureTransfer (..)
   , ClosureCapture (..)
   , ClosureCaptureSummary (..)
+  , CallableOccurrenceKey (..)
+  , CallableStateKey (..)
   , CalleeTransition (..)
   , SemanticEffect (..)
   , CallableContract (..)
+  , CallableOccurrence (..)
+  , CallableResourceState (..)
+  , CallableInvocationBodySummary (..)
   , CallableUse (..)
   , CallableCheckError (..)
   , checkClosureCaptures
   , closureStructuralMode
   , inferReachableCallableEffects
+  , singletonCallableResourceState
+  , lookupCallableOccurrence
+  , invokeCallableOccurrence
   ) where
 
 import qualified Data.Map.Strict as Map
@@ -52,13 +60,25 @@ data ClosureCaptureSummary = ClosureCaptureSummary
   }
   deriving (Eq, Ord, Show)
 
--- | Normative callee-transition distinctions from the callable contract. Only
--- PreserveCallee is exercised by CALL-001--005; the other constructors reserve
--- the semantic vocabulary for later resource-state slices.
+-- | Stable ownership occurrence for one first-class callable value.
+newtype CallableOccurrenceKey = CallableOccurrenceKey
+  { unCallableOccurrenceKey :: Text
+  }
+  deriving (Eq, Ord, Show)
+
+-- | Explicit source-semantic state carried by a state-indexed callable when the
+-- public transition needs more than the callable interface revision itself.
+newtype CallableStateKey = CallableStateKey
+  { unCallableStateKey :: Text
+  }
+  deriving (Eq, Ord, Show)
+
+-- | Normative callee-transition distinctions. ReplaceCallee names both the exact
+-- successor callable interface and its explicit state index, if one is present.
 data CalleeTransition
   = PreserveCallee
   | ConsumeCallee
-  | ReplaceCallee InterfaceRevision
+  | ReplaceCallee InterfaceRevision (Maybe CallableStateKey)
   deriving (Eq, Ord, Show)
 
 newtype SemanticEffect = SemanticEffect
@@ -66,12 +86,38 @@ newtype SemanticEffect = SemanticEffect
   }
   deriving (Eq, Ord, Show)
 
--- | Bounded callable contract surface needed by the initial closure/effect
--- tranche. Effect bound is a may-effect upper bound for invocation.
+-- | Bounded callable contract surface. Effect bound is a may-effect upper bound
+-- for invocation; callee transition describes the callable owner's own residue.
 data CallableContract = CallableContract
   { callableContractInterfaceRevision :: InterfaceRevision
   , callableContractCalleeTransition :: CalleeTransition
   , callableContractEffectBound :: Set.Set SemanticEffect
+  }
+  deriving (Eq, Ord, Show)
+
+-- | One exact runtime/term-level callable ownership occurrence. Equal contracts
+-- do not identify equal callable occurrences.
+data CallableOccurrence = CallableOccurrence
+  { callableOccurrenceKey :: CallableOccurrenceKey
+  , callableOccurrenceContract :: CallableContract
+  , callableOccurrenceCaptures :: ClosureCaptureSummary
+  , callableOccurrenceStateKey :: Maybe CallableStateKey
+  }
+  deriving (Eq, Ord, Show)
+
+-- | Ordinary resource-state view of currently available callable occurrences.
+newtype CallableResourceState = CallableResourceState
+  { callableResourceOccurrences :: Map.Map CallableOccurrenceKey CallableOccurrence
+  }
+  deriving (Eq, Ord, Show)
+
+-- | Result supplied by checked callable-body/resource analysis to the callee
+-- transition checker. For PreserveCallee, the exact restricted capture residue
+-- must be present after the body. For ReplaceCallee, the successor occurrence
+-- carries the replacement capture/state lineage.
+data CallableInvocationBodySummary = CallableInvocationBodySummary
+  { invocationRestrictedCaptureResidue :: Set.Set CaptureOccurrenceKey
+  , invocationSuccessorCallable :: Maybe CallableOccurrence
   }
   deriving (Eq, Ord, Show)
 
@@ -88,6 +134,20 @@ data CallableUse
 data CallableCheckError
   = RestrictedCaptureMustMove CaptureOccurrenceKey Mode
   | DuplicateRestrictedCapture CaptureOccurrenceKey Mode
+  | UnavailableCallableOccurrence CallableOccurrenceKey
+  | PreserveCalleeRestrictedStateMismatch
+      CallableOccurrenceKey
+      (Set.Set CaptureOccurrenceKey)
+      (Set.Set CaptureOccurrenceKey)
+  | PreserveCalleeProducedSuccessor CallableOccurrenceKey CallableOccurrenceKey
+  | ConsumeCalleeRetainedRestrictedState CallableOccurrenceKey (Set.Set CaptureOccurrenceKey)
+  | ConsumeCalleeProducedSuccessor CallableOccurrenceKey CallableOccurrenceKey
+  | ReplaceCalleeRetainedPredecessorState CallableOccurrenceKey (Set.Set CaptureOccurrenceKey)
+  | ReplaceCalleeMissingSuccessor CallableOccurrenceKey
+  | ReplaceCalleeReusedPredecessorKey CallableOccurrenceKey
+  | ReplaceCalleeSuccessorAlreadyAvailable CallableOccurrenceKey
+  | ReplaceCalleeInterfaceMismatch InterfaceRevision InterfaceRevision
+  | ReplaceCalleeStateMismatch (Maybe CallableStateKey) (Maybe CallableStateKey)
   deriving (Eq, Ord, Show)
 
 -- | Normalize closure capture ownership. Repeated unrestricted mentions collapse
@@ -151,3 +211,78 @@ inferReachableCallableEffects = foldl addUse Set.empty
       PassCallable _ -> effects
       StoreCallable _ -> effects
       ReturnCallable _ -> effects
+
+singletonCallableResourceState :: CallableOccurrence -> CallableResourceState
+singletonCallableResourceState occurrence = CallableResourceState
+  (Map.singleton (callableOccurrenceKey occurrence) occurrence)
+
+lookupCallableOccurrence
+  :: CallableOccurrenceKey
+  -> CallableResourceState
+  -> Maybe CallableOccurrence
+lookupCallableOccurrence key = Map.lookup key . callableResourceOccurrences
+
+-- | Apply the callable owner's declared transition to ordinary resource state.
+-- This function deliberately keys availability by exact ownership occurrence:
+-- a successor with an equal contract never makes the predecessor live again.
+invokeCallableOccurrence
+  :: CallableOccurrenceKey
+  -> CallableInvocationBodySummary
+  -> CallableResourceState
+  -> Either CallableCheckError CallableResourceState
+invokeCallableOccurrence predecessorKey body state = do
+  predecessor <- maybe
+    (Left (UnavailableCallableOccurrence predecessorKey))
+    Right
+    (lookupCallableOccurrence predecessorKey state)
+  case callableContractCalleeTransition (callableOccurrenceContract predecessor) of
+    PreserveCallee -> preserve predecessor
+    ConsumeCallee -> consume predecessor
+    ReplaceCallee expectedInterface expectedState ->
+      replace predecessor expectedInterface expectedState
+  where
+    occurrences = callableResourceOccurrences state
+
+    preserve predecessor = do
+      let expected = closureMovedRestrictedOccurrences
+            (callableOccurrenceCaptures predecessor)
+          actual = invocationRestrictedCaptureResidue body
+      if actual /= expected
+        then Left (PreserveCalleeRestrictedStateMismatch predecessorKey expected actual)
+        else case invocationSuccessorCallable body of
+          Nothing -> Right state
+          Just successor -> Left
+            (PreserveCalleeProducedSuccessor predecessorKey (callableOccurrenceKey successor))
+
+    consume _predecessor
+      | not (Set.null (invocationRestrictedCaptureResidue body)) =
+          Left (ConsumeCalleeRetainedRestrictedState
+            predecessorKey
+            (invocationRestrictedCaptureResidue body))
+      | otherwise = case invocationSuccessorCallable body of
+          Just successor -> Left
+            (ConsumeCalleeProducedSuccessor predecessorKey (callableOccurrenceKey successor))
+          Nothing -> Right (CallableResourceState (Map.delete predecessorKey occurrences))
+
+    replace _predecessor expectedInterface expectedState
+      | not (Set.null (invocationRestrictedCaptureResidue body)) =
+          Left (ReplaceCalleeRetainedPredecessorState
+            predecessorKey
+            (invocationRestrictedCaptureResidue body))
+      | otherwise = case invocationSuccessorCallable body of
+          Nothing -> Left (ReplaceCalleeMissingSuccessor predecessorKey)
+          Just successor -> do
+            let successorKey = callableOccurrenceKey successor
+                actualInterface = callableContractInterfaceRevision
+                  (callableOccurrenceContract successor)
+                actualState = callableOccurrenceStateKey successor
+            if successorKey == predecessorKey
+              then Left (ReplaceCalleeReusedPredecessorKey predecessorKey)
+              else if Map.member successorKey occurrences
+                then Left (ReplaceCalleeSuccessorAlreadyAvailable successorKey)
+                else if actualInterface /= expectedInterface
+                  then Left (ReplaceCalleeInterfaceMismatch expectedInterface actualInterface)
+                  else if actualState /= expectedState
+                    then Left (ReplaceCalleeStateMismatch expectedState actualState)
+                    else Right (CallableResourceState
+                      (Map.insert successorKey successor (Map.delete predecessorKey occurrences)))

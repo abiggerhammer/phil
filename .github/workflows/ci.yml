@@ -52,5 +52,8 @@ jobs:
       - name: Phase 1 callable capture and effect conformance
         run: cabal exec -- runghc -isrc test/Phase1CallableCaptureEffectsMain.hs
 
+      - name: Phase 1 callable transition conformance
+        run: cabal exec -- runghc -isrc test/Phase1CallableTransitionsMain.hs
+
       - name: Verify LLVM and run Phil programs
         run: bash scripts/ci/phase0-llvm-runtime-smoke.sh
