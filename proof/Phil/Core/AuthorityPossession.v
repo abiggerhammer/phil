@@ -96,6 +96,7 @@ Proof.
   unfold authorityExerciseAllowed, capabilityMatchesRequirement.
   simpl.
   apply Nat.eqb_neq in Hneq.
+  rewrite Nat.eqb_sym in Hneq.
   rewrite Hneq.
   reflexivity.
 Qed.
@@ -113,6 +114,7 @@ Proof.
   simpl.
   rewrite Nat.eqb_refl.
   apply Nat.eqb_neq in Hneq.
+  rewrite Nat.eqb_sym in Hneq.
   rewrite Hneq.
   reflexivity.
 Qed.
