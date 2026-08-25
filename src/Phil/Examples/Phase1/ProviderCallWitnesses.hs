@@ -6,10 +6,9 @@ module Phil.Examples.Phase1.ProviderCallWitnesses
   ) where
 
 import qualified Data.Map.Strict as Map
-import Data.Map.Strict (Map)
 import qualified Data.Set as Set
-import Data.Set (Set)
 import Data.Text (Text)
+import qualified Data.Text as Text
 import Phil.Core.ProviderQualification
   ( CheckedProviderOperationQualification (..)
   , CheckedProviderSemanticQualification (..)
@@ -26,9 +25,9 @@ import Phil.Core.ProviderQualificationIdentity
   , ProviderQualificationEvidenceIdentityInput (..)
   , ProviderQualificationLayer (..)
   , ProviderQualificationSubject (..)
+  , checkQualificationAdmissionIdentity
   , deriveQualificationClaimRevision
   , deriveQualificationEvidenceRevision
-  , checkQualificationAdmissionIdentity
   )
 import Phil.Core.Static
   ( InterfaceRevision (..)
@@ -111,10 +110,6 @@ selectionFromSteveArtifact artifact = SelectedProviderAdmission
       providerImplementationSymbols (steveProviderImplementation artifact)
   }
 
--- | Bounded migration descriptor for the already-certified Phase-0 upload
--- storage boundary. This is intentionally a collapsed opaque qualification: it
--- claims only the exact storage-success operation already backed by the Phase-0
--- runtime assurance entry, not unmodeled provider state/lifecycle semantics.
 uploadStorageSelection :: Either String SelectedProviderAdmission
 uploadStorageSelection = do
   checked <- mapLeft show $ checkQualificationAdmissionIdentity
