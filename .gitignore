@@ -10,3 +10,6 @@ cabal.sandbox.config
 *.hp
 *.eventlog
 .DS_Store
+
+# Deterministically derived from grammar/phase1-surface.ebnf.
+proof/Phil/Surface/Grammar.v
