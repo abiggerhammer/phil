@@ -79,7 +79,7 @@ Proof.
     inversion Hstable; subst environment.
     unfold publicProjection in *; cbn.
     f_equal.
-    eapply IH. exact Htail.
+    eapply IH. reflexivity.
 Qed.
 
 Theorem stabilize_public_success_implies_unique_keys :
@@ -106,7 +106,7 @@ Proof.
         (key_occursb_true_iff_in D Key eqKey keyOf Heq
           (keyOf definition) rest) Hin) as Htrue.
       rewrite Hoccurs in Htrue. discriminate.
-    + eapply IH. exact Htail.
+    + eapply IH. reflexivity.
 Qed.
 
 Theorem unique_keys_imply_stabilize_public_success :
