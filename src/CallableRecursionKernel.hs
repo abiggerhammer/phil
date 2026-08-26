@@ -57,3 +57,4 @@ decideRecursiveLookup eqKey key revisionMatches environment =
      Prelude.True -> RecursiveLookupAccepted surface;
      Prelude.False -> RecursiveLookupRevisionMismatch surface};
    Prelude.Nothing -> RecursiveLookupUnknown}
+
