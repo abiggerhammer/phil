@@ -21,6 +21,7 @@ module Phil.Examples.Phase1.ProtocolStateWitnesses
   ) where
 
 import qualified Data.Map.Strict as Map
+import Data.Text (Text)
 import Phil.Examples.Phase1.BranchResourceWitnesses
   ( uploadBranchResourceStageBundle
   )
@@ -67,14 +68,14 @@ endpointRegistry = Map.fromList
   , endpoint serverEp6 "upload.server.session.await-final-result"
   ]
 
-endpoint :: EndpointOccurrenceKey -> LocalSessionRevision -> (EndpointOccurrenceKey, ProtocolEndpointState)
+endpoint :: EndpointOccurrenceKey -> Text -> (EndpointOccurrenceKey, ProtocolEndpointState)
 endpoint occurrence session =
   ( occurrence
   , ProtocolEndpointState
       { protocolEndpointOccurrence = occurrence
       , protocolEndpointInstance = uploadProtocolInstance
       , protocolEndpointRole = uploadServerRole
-      , protocolEndpointSession = session
+      , protocolEndpointSession = LocalSessionRevision session
       }
   )
 
@@ -160,24 +161,18 @@ receivePayloadTransition = ProtocolTransitionBinding
   }
 
 opaqueTransition
-  :: ProtocolTransitionKey
+  :: Text
   -> EndpointOccurrenceKey
   -> ProtocolTargetSite
-  -> Map.Map String ProtocolTransitionOutcome
-  -> String
+  -> Map.Map Text ProtocolTransitionOutcome
+  -> Text
   -> ProtocolTransitionBinding
 opaqueTransition key predecessor site outcomes evidence = ProtocolTransitionBinding
-  { protocolTransitionKey = key
+  { protocolTransitionKey = ProtocolTransitionKey key
   , protocolTransitionPredecessor = predecessor
-  , protocolTransitionAction = ProtocolOpaqueAction (unProtocolTransitionKey key)
+  , protocolTransitionAction = ProtocolOpaqueAction key
   , protocolTransitionTargetSite = site
   , protocolTransitionTransport = uploadServerTransport
-  , protocolTransitionOutcomes = Map.fromList
-      [ (fromString label, outcome)
-      | (label, outcome) <- Map.toList outcomes
-      ]
-  , protocolTransitionBasis = CheckedLegacyOpaqueProtocolBridge (fromString evidence)
+  , protocolTransitionOutcomes = outcomes
+  , protocolTransitionBasis = CheckedLegacyOpaqueProtocolBridge evidence
   }
-
-fromString :: String -> Data.Text.Text
-fromString = Data.Text.pack
