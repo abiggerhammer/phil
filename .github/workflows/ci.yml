@@ -133,5 +133,8 @@ jobs:
       - name: Phase 1 Systems branch resource/failure correspondence
         run: cabal exec -- runghc -isrc test/Phase1BranchResourceFailureMain.hs
 
+      - name: Phase 1 Systems control-state projection
+        run: cabal exec -- runghc -isrc test/Phase1ControlStateProjectionMain.hs
+
       - name: Verify LLVM and run Phil programs
         run: bash scripts/ci/phase0-llvm-runtime-smoke.sh
