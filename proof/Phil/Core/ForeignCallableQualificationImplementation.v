@@ -1,29 +1,48 @@
-From Stdlib Require Import Bool.Bool.
+From Stdlib Require Import Bool.Bool Lists.List.
+Import ListNotations.
 
 From Phil.Core Require Import ForeignCallableQualification.
 
-(*
-  PHIL-CALL-FOREIGN-IMPL-001 — executable production correspondence for CALL-015.
+(* PHIL-CALL-FOREIGN-IMPL-001 — executable production correspondence. *)
 
-  The extracted gate handles qualification presence and every finite admission
-  condition.  The production Haskell adapter supplies only exact equality and
-  evidence-presence predicates.  Semantic callable non-widening remains a
-  separate second-stage decision and is composed with the already
-  Implementation Refined CALL-012 production checker.
-*)
+Definition qualificationBits {Qualification : Type}
+  (artifactMatches : Qualification -> bool)
+  (surfaceMatches : Qualification -> bool)
+  (hasAbiEvidence : Qualification -> bool)
+  (hasResourceLifecycleEvidence : Qualification -> bool)
+  (hasEffectConfinementEvidence : Qualification -> bool)
+  (hasAuthorityConfinementEvidence : Qualification -> bool)
+  (hasFailureBehaviorEvidence : Qualification -> bool)
+  (qualification : Qualification) : list bool :=
+  [ artifactMatches qualification
+  ; surfaceMatches qualification
+  ; hasAbiEvidence qualification
+  ; hasResourceLifecycleEvidence qualification
+  ; hasEffectConfinementEvidence qualification
+  ; hasAuthorityConfinementEvidence qualification
+  ; hasFailureBehaviorEvidence qualification
+  ].
 
-Inductive ForeignQualificationDecision (Qualification : Type) : Type :=
-| ForeignQualificationAccepted (qualification : Qualification)
-| ForeignQualificationMissing
-| ForeignQualificationArtifactMismatch (qualification : Qualification)
-| ForeignQualificationSurfaceMismatch (qualification : Qualification)
-| ForeignQualificationEvidenceMissing (qualification : Qualification).
+Fixpoint allQualificationBits (bits : list bool) : Prop :=
+  match bits with
+  | nil => True
+  | bit :: rest => bit = true /\ allQualificationBits rest
+  end.
 
-Arguments ForeignQualificationAccepted {Qualification} _.
-Arguments ForeignQualificationMissing {Qualification}.
-Arguments ForeignQualificationArtifactMismatch {Qualification} _.
-Arguments ForeignQualificationSurfaceMismatch {Qualification} _.
-Arguments ForeignQualificationEvidenceMissing {Qualification} _.
+Fixpoint allQualificationBitsb (bits : list bool) : bool :=
+  match bits with
+  | nil => true
+  | bit :: rest => bit && allQualificationBitsb rest
+  end.
+
+Lemma all_qualification_bitsb_true_iff :
+  forall bits,
+    allQualificationBitsb bits = true <-> allQualificationBits bits.
+Proof.
+  induction bits as [| bit rest IH].
+  - cbn. tauto.
+  - cbn. rewrite andb_true_iff, IH. tauto.
+Qed.
 
 Definition decideForeignQualification {Qualification : Type}
   (maybeQualification : option Qualification)
@@ -33,26 +52,16 @@ Definition decideForeignQualification {Qualification : Type}
   (hasResourceLifecycleEvidence : Qualification -> bool)
   (hasEffectConfinementEvidence : Qualification -> bool)
   (hasAuthorityConfinementEvidence : Qualification -> bool)
-  (hasFailureBehaviorEvidence : Qualification -> bool)
-  : ForeignQualificationDecision Qualification :=
+  (hasFailureBehaviorEvidence : Qualification -> bool) : bool :=
   match maybeQualification with
-  | None => ForeignQualificationMissing
+  | None => false
   | Some qualification =>
-      if artifactMatches qualification then
-        if surfaceMatches qualification then
-          if hasAbiEvidence qualification then
-            if hasResourceLifecycleEvidence qualification then
-              if hasEffectConfinementEvidence qualification then
-                if hasAuthorityConfinementEvidence qualification then
-                  if hasFailureBehaviorEvidence qualification then
-                    ForeignQualificationAccepted qualification
-                  else ForeignQualificationEvidenceMissing qualification
-                else ForeignQualificationEvidenceMissing qualification
-              else ForeignQualificationEvidenceMissing qualification
-            else ForeignQualificationEvidenceMissing qualification
-          else ForeignQualificationEvidenceMissing qualification
-        else ForeignQualificationSurfaceMismatch qualification
-      else ForeignQualificationArtifactMismatch qualification
+      allQualificationBitsb
+        (qualificationBits
+          artifactMatches surfaceMatches
+          hasAbiEvidence hasResourceLifecycleEvidence
+          hasEffectConfinementEvidence hasAuthorityConfinementEvidence
+          hasFailureBehaviorEvidence qualification)
   end.
 
 Definition ForeignQualificationProjectionAccepts {Qualification : Type}
@@ -66,66 +75,60 @@ Definition ForeignQualificationProjectionAccepts {Qualification : Type}
   (hasFailureBehaviorEvidence : Qualification -> bool)
   (qualification : Qualification) : Prop :=
   maybeQualification = Some qualification /\
-  artifactMatches qualification = true /\
-  surfaceMatches qualification = true /\
-  hasAbiEvidence qualification = true /\
-  hasResourceLifecycleEvidence qualification = true /\
-  hasEffectConfinementEvidence qualification = true /\
-  hasAuthorityConfinementEvidence qualification = true /\
-  hasFailureBehaviorEvidence qualification = true.
-
-Theorem accepted_foreign_decision_iff_projection :
-  forall (Qualification : Type)
-      (maybeQualification : option Qualification)
+  allQualificationBits
+    (qualificationBits
       artifactMatches surfaceMatches
       hasAbiEvidence hasResourceLifecycleEvidence
       hasEffectConfinementEvidence hasAuthorityConfinementEvidence
-      hasFailureBehaviorEvidence qualification,
-    decideForeignQualification
-      maybeQualification artifactMatches surfaceMatches
+      hasFailureBehaviorEvidence qualification).
+
+Theorem foreign_decision_true_for_exact_qualification_iff :
+  forall (Qualification : Type)
+      (qualification : Qualification)
+      artifactMatches surfaceMatches
       hasAbiEvidence hasResourceLifecycleEvidence
       hasEffectConfinementEvidence hasAuthorityConfinementEvidence
-      hasFailureBehaviorEvidence = ForeignQualificationAccepted qualification <->
+      hasFailureBehaviorEvidence,
+    decideForeignQualification
+      (Some qualification)
+      artifactMatches surfaceMatches
+      hasAbiEvidence hasResourceLifecycleEvidence
+      hasEffectConfinementEvidence hasAuthorityConfinementEvidence
+      hasFailureBehaviorEvidence = true <->
     ForeignQualificationProjectionAccepts
-      maybeQualification artifactMatches surfaceMatches
+      (Some qualification)
+      artifactMatches surfaceMatches
       hasAbiEvidence hasResourceLifecycleEvidence
       hasEffectConfinementEvidence hasAuthorityConfinementEvidence
       hasFailureBehaviorEvidence qualification.
 Proof.
-  intros Qualification maybeQualification artifactMatches surfaceMatches
+  intros Qualification qualification
+    artifactMatches surfaceMatches
     hasAbiEvidence hasResourceLifecycleEvidence
     hasEffectConfinementEvidence hasAuthorityConfinementEvidence
-    hasFailureBehaviorEvidence qualification.
-  destruct maybeQualification as [candidate|].
-  - cbn.
-    destruct (artifactMatches candidate) eqn:Hartifact.
-    + destruct (surfaceMatches candidate) eqn:Hsurface.
-      * destruct (hasAbiEvidence candidate) eqn:Habi.
-        -- destruct (hasResourceLifecycleEvidence candidate) eqn:Hresource.
-           ++ destruct (hasEffectConfinementEvidence candidate) eqn:Heffect.
-              ** destruct (hasAuthorityConfinementEvidence candidate) eqn:Hauthority.
-                 --- destruct (hasFailureBehaviorEvidence candidate) eqn:Hfailure.
-                     +++ split; intro H.
-                         *** inversion H; subst candidate.
-                             repeat split; assumption.
-                         *** destruct H as [Hsome [Ha [Hs [Hab [Hr [He [Hau Hf]]]]]]].
-                             inversion Hsome; subst candidate.
-                             rewrite Ha, Hs, Hab, Hr, He, Hau, Hf.
-                             reflexivity.
-                     +++ split; intro H; [discriminate | destruct H as [_ [_ [_ [_ [_ [_ [_ Hf]]]]]]]; rewrite Hfailure in Hf; discriminate].
-                 --- split; intro H; [discriminate | destruct H as [_ [_ [_ [_ [_ [_ [Hau _]]]]]]]; rewrite Hauthority in Hau; discriminate].
-              ** split; intro H; [discriminate | destruct H as [_ [_ [_ [_ [_ [He _]]]]]]; rewrite Heffect in He; discriminate].
-           ++ split; intro H; [discriminate | destruct H as [_ [_ [_ [_ [Hr _]]]]]; rewrite Hresource in Hr; discriminate].
-        -- split; intro H; [discriminate | destruct H as [_ [_ [_ [Hab _]]]]; rewrite Habi in Hab; discriminate].
-      * split; intro H; [discriminate | destruct H as [_ [_ [Hs _]]]; rewrite Hsurface in Hs; discriminate].
-    + split; intro H; [discriminate | destruct H as [_ [Ha _]]; rewrite Hartifact in Ha; discriminate].
-  - cbn. split; intro H.
-    + discriminate.
-    + destruct H as [Hsome _]. discriminate.
+    hasFailureBehaviorEvidence.
+  unfold decideForeignQualification, ForeignQualificationProjectionAccepts.
+  cbn.
+  rewrite all_qualification_bitsb_true_iff.
+  tauto.
 Qed.
 
+Theorem absent_foreign_qualification_rejects :
+  forall (Qualification : Type)
+      artifactMatches surfaceMatches
+      hasAbiEvidence hasResourceLifecycleEvidence
+      hasEffectConfinementEvidence hasAuthorityConfinementEvidence
+      hasFailureBehaviorEvidence,
+    decideForeignQualification
+      (None : option Qualification)
+      artifactMatches surfaceMatches
+      hasAbiEvidence hasResourceLifecycleEvidence
+      hasEffectConfinementEvidence hasAuthorityConfinementEvidence
+      hasFailureBehaviorEvidence = false.
+Proof. reflexivity. Qed.
+
 Theorem accepted_production_qualification_refines_call015 :
-  forall expected artifact maybeQualification qualification
+  forall expected artifact qualification
       artifactMatches surfaceMatches
       hasAbiEvidence hasResourceLifecycleEvidence
       hasEffectConfinementEvidence hasAuthorityConfinementEvidence
@@ -150,13 +153,14 @@ Theorem accepted_production_qualification_refines_call015 :
         qualificationEvidence qualification EvidenceFailureBehavior = Some evidence) ->
     callableRefines expected (qualificationSurface qualification) ->
     decideForeignQualification
-      maybeQualification artifactMatches surfaceMatches
+      (Some qualification)
+      artifactMatches surfaceMatches
       hasAbiEvidence hasResourceLifecycleEvidence
       hasEffectConfinementEvidence hasAuthorityConfinementEvidence
-      hasFailureBehaviorEvidence = ForeignQualificationAccepted qualification ->
+      hasFailureBehaviorEvidence = true ->
     ForeignQualificationAccepts expected artifact qualification.
 Proof.
-  intros expected artifact maybeQualification qualification
+  intros expected artifact qualification
     artifactMatches surfaceMatches
     hasAbiEvidence hasResourceLifecycleEvidence
     hasEffectConfinementEvidence hasAuthorityConfinementEvidence
@@ -165,21 +169,22 @@ Proof.
     HabiBridge HresourceBridge HeffectBridge HauthorityBridge HfailureBridge
     Hrefines Hdecision.
   pose proof (proj1
-    (accepted_foreign_decision_iff_projection
-      ForeignQualification maybeQualification
+    (foreign_decision_true_for_exact_qualification_iff
+      ForeignQualification qualification
       artifactMatches surfaceMatches
       hasAbiEvidence hasResourceLifecycleEvidence
       hasEffectConfinementEvidence hasAuthorityConfinementEvidence
-      hasFailureBehaviorEvidence qualification) Hdecision)
-    as [Hsome [Hartifact [Hsurface [Habi [Hresource [Heffect [Hauthority Hfailure]]]]]]].
+      hasFailureBehaviorEvidence) Hdecision) as [_ Hbits].
+  cbn in Hbits.
+  destruct Hbits as
+    [Hartifact [Hsurface [Habi [Hresource [Heffect [Hauthority [Hfailure _]]]]]]].
   unfold ForeignQualificationAccepts.
   split.
   - apply HartifactBridge. exact Hartifact.
   - split.
     + apply HsurfaceBridge. exact Hsurface.
     + split.
-      * intro kind.
-        destruct kind.
+      * intro kind. destruct kind.
         -- apply HabiBridge. exact Habi.
         -- apply HresourceBridge. exact Hresource.
         -- apply HeffectBridge. exact Heffect.
