@@ -141,13 +141,13 @@ verifyBranchResourceStageBundle bundle = do
   requireEqual BranchResourceStageRevisionMismatch
     (deriveBranchResourceStageRevision bundle)
     (branchResourceStageRevision bundle)
-  mapM_ (checkSite bundle) (Map.toAscList (branchResourceStageSites bundle))
+  mapM_ (checkBranchSite bundle) (Map.toAscList (branchResourceStageSites bundle))
 
-checkSite
+checkBranchSite
   :: BranchResourceStageBundle
   -> (SystemsMechanismKey, BranchSiteContract)
   -> Either BranchResourceStageVerificationError ()
-checkSite bundle (key, site) = do
+checkBranchSite bundle (key, site) = do
   requireEqual BranchResourceSiteMapKeyMismatch key (branchSiteMechanism site)
   let baseStage = subjectStageBase
         (providerCallStageBase
