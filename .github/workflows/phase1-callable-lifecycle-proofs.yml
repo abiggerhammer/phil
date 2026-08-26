@@ -1,0 +1,96 @@
+name: Phase 1 Callable Lifecycle Proofs
+
+on:
+  pull_request:
+    paths:
+      - 'src/Phil/Core/Callable.hs'
+      - 'test/Phase1CallableTransitionsMain.hs'
+      - 'docs/phase-1/callable-transitions-v1.md'
+      - 'proof/Phil/Core/GenericStructural.v'
+      - 'proof/Phil/Core/CallableMode.v'
+      - 'proof/Phil/Core/CallableLifecycle.v'
+      - 'app/Phase1CallableLifecycleCertificationMain.hs'
+      - '.github/workflows/phase1-callable-lifecycle-proofs.yml'
+  push:
+    branches: [main]
+    paths:
+      - 'src/Phil/Core/Callable.hs'
+      - 'test/Phase1CallableTransitionsMain.hs'
+      - 'docs/phase-1/callable-transitions-v1.md'
+      - 'proof/Phil/Core/GenericStructural.v'
+      - 'proof/Phil/Core/CallableMode.v'
+      - 'proof/Phil/Core/CallableLifecycle.v'
+      - 'app/Phase1CallableLifecycleCertificationMain.hs'
+      - '.github/workflows/phase1-callable-lifecycle-proofs.yml'
+
+permissions:
+  contents: read
+
+jobs:
+  rocq-phase1-callable-lifecycle:
+    runs-on: ubuntu-latest
+    container:
+      image: rocq/rocq-prover:9.2.0
+      options: --user root
+    steps:
+      - uses: actions/checkout@v4
+      - name: Compile PHIL-CALL-LIFE-001
+        shell: bash
+        run: |
+          set -euo pipefail
+          export PATH="/home/rocq/.opam/${COMPILER}/bin:$PATH"
+          rocq c -Q proof/Phil Phil proof/Phil/Core/GenericStructural.v
+          rocq c -Q proof/Phil Phil proof/Phil/Core/CallableMode.v
+          rocq c -Q proof/Phil Phil proof/Phil/Core/CallableLifecycle.v
+          mkdir -p phase1-callable-lifecycle-proof
+          cp proof/Phil/Core/CallableLifecycle.v proof/Phil/Core/CallableLifecycle.vo phase1-callable-lifecycle-proof/
+      - uses: actions/upload-artifact@v4
+        with:
+          name: rocq-phase1-callable-lifecycle-proof
+          path: phase1-callable-lifecycle-proof
+          if-no-files-found: error
+
+  certify-phase1-callable-lifecycle:
+    needs: rocq-phase1-callable-lifecycle
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: haskell-actions/setup@v2
+        with:
+          ghc-version: '9.6.7'
+          cabal-version: 'latest'
+      - name: Build existing proof certifier with warnings as errors
+        run: cabal build exe:phil-certify-core-scalar --ghc-options=-Werror
+      - name: Typecheck certifier
+        run: cabal exec -- ghc -isrc -Wall -Werror -fno-code app/Phase1CallableLifecycleCertificationMain.hs
+      - name: Re-run CALL-006 through CALL-009 correspondence
+        run: cabal exec -- runghc -isrc test/Phase1CallableTransitionsMain.hs
+      - uses: actions/download-artifact@v4
+        with:
+          name: rocq-phase1-callable-lifecycle-proof
+          path: phase1-callable-lifecycle-proof
+      - name: Emit PHIL-CALL-LIFE-001 certificate
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p phase1-callable-lifecycle-certification
+          cabal exec -- runghc -isrc app/Phase1CallableLifecycleCertificationMain.hs \
+            phase1-callable-lifecycle-proof/CallableLifecycle.v \
+            phase1-callable-lifecycle-proof/CallableLifecycle.vo \
+            phase1-callable-lifecycle-certification/PHIL-CALL-LIFE-001.rocq.cert
+          sha256sum \
+            src/Phil/Core/Callable.hs \
+            test/Phase1CallableTransitionsMain.hs \
+            docs/phase-1/callable-transitions-v1.md \
+            proof/Phil/Core/GenericStructural.v \
+            proof/Phil/Core/CallableMode.v \
+            proof/Phil/Core/CallableLifecycle.v \
+            app/Phase1CallableLifecycleCertificationMain.hs \
+            > phase1-callable-lifecycle-certification/PHIL-CALL-LIFE-001.correspondence.sha256
+          cat phase1-callable-lifecycle-certification/PHIL-CALL-LIFE-001.rocq.cert
+          sha256sum phase1-callable-lifecycle-certification/PHIL-CALL-LIFE-001.rocq.cert
+      - uses: actions/upload-artifact@v4
+        with:
+          name: phil-phase1-callable-lifecycle-proof-certification
+          path: phase1-callable-lifecycle-certification
+          if-no-files-found: error
