@@ -4,6 +4,7 @@ module Main (main) where
 
 import qualified Data.Map.Strict as Map
 import qualified Data.Set as Set
+import qualified Data.Text as Text
 import Phil.Core.Callable (CaptureOccurrenceKey (..))
 import Phil.Core.Syntax (Mode (..))
 import Phil.Examples.Phase1.ControlStateWitnesses
@@ -264,8 +265,8 @@ linearCapture subject = CallableCaptureSemantic
   , callableCaptureSemanticAuthority = Set.empty
   }
 
-text :: String -> Data.Text.Text
-text = Data.Text.pack
+text :: String -> Text.Text
+text = Text.pack
 
 assert :: Bool -> String -> Either String ()
 assert condition detail
