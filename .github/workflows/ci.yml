@@ -148,5 +148,8 @@ jobs:
       - name: Phase 1 Systems evidence erasure
         run: cabal exec -- runghc -isrc test/Phase1EvidenceErasureMain.hs
 
+      - name: Phase 1 Systems assumption dependency
+        run: cabal exec -- runghc -isrc test/Phase1AssumptionDependencyMain.hs
+
       - name: Verify LLVM and run Phil programs
         run: bash scripts/ci/phase0-llvm-runtime-smoke.sh
