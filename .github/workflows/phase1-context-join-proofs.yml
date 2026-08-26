@@ -1,0 +1,97 @@
+name: Phase 1 Context Join Proofs
+
+on:
+  pull_request:
+    paths:
+      - 'src/Phil/Core/Context.hs'
+      - 'test/Main.hs'
+      - 'proof/Phil/Core/Syntax.v'
+      - 'proof/Phil/Core/Context.v'
+      - 'proof/Phil/Core/ContextJoin.v'
+      - 'proof/Phil/Core/ContextJoinCertification.v'
+      - 'app/Phase1ContextJoinCertificationMain.hs'
+      - '.github/workflows/phase1-context-join-proofs.yml'
+  push:
+    branches: [main]
+    paths:
+      - 'src/Phil/Core/Context.hs'
+      - 'test/Main.hs'
+      - 'proof/Phil/Core/Syntax.v'
+      - 'proof/Phil/Core/Context.v'
+      - 'proof/Phil/Core/ContextJoin.v'
+      - 'proof/Phil/Core/ContextJoinCertification.v'
+      - 'app/Phase1ContextJoinCertificationMain.hs'
+      - '.github/workflows/phase1-context-join-proofs.yml'
+
+permissions:
+  contents: read
+
+jobs:
+  rocq-phase1-context-join:
+    runs-on: ubuntu-latest
+    container:
+      image: rocq/rocq-prover:9.2.0
+      options: --user root
+    steps:
+      - uses: actions/checkout@v4
+      - name: Compile PHIL-CTX-JOIN-001
+        shell: bash
+        run: |
+          set -euo pipefail
+          export PATH="/home/rocq/.opam/${COMPILER}/bin:$PATH"
+          rocq c -Q proof/Phil Phil proof/Phil/Core/Syntax.v
+          rocq c -Q proof/Phil Phil proof/Phil/Core/Context.v
+          rocq c -Q proof/Phil Phil proof/Phil/Core/ContextJoin.v
+          rocq c -Q proof/Phil Phil proof/Phil/Core/ContextJoinCertification.v
+          mkdir -p phase1-context-join-proof
+          cp proof/Phil/Core/ContextJoinCertification.v proof/Phil/Core/ContextJoinCertification.vo phase1-context-join-proof/
+      - uses: actions/upload-artifact@v4
+        with:
+          name: rocq-phase1-context-join-proof
+          path: phase1-context-join-proof
+          if-no-files-found: error
+
+  certify-phase1-context-join:
+    needs: rocq-phase1-context-join
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: haskell-actions/setup@v2
+        with:
+          ghc-version: '9.6.7'
+          cabal-version: 'latest'
+      - name: Build existing proof certifier with warnings as errors
+        run: cabal build exe:phil-certify-core-scalar --ghc-options=-Werror
+      - name: Typecheck certifier
+        run: cabal exec -- ghc -isrc -Wall -Werror -fno-code app/Phase1ContextJoinCertificationMain.hs
+      - name: Re-run context join correspondence
+        run: cabal exec -- runghc -isrc test/Main.hs
+      - uses: actions/download-artifact@v4
+        with:
+          name: rocq-phase1-context-join-proof
+          path: phase1-context-join-proof
+      - name: Emit PHIL-CTX-JOIN-001 certificate
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p phase1-context-join-certification
+          cabal exec -- runghc -isrc app/Phase1ContextJoinCertificationMain.hs \
+            phase1-context-join-proof/ContextJoinCertification.v \
+            phase1-context-join-proof/ContextJoinCertification.vo \
+            phase1-context-join-certification/PHIL-CTX-JOIN-001.rocq.cert
+          sha256sum \
+            src/Phil/Core/Context.hs \
+            test/Main.hs \
+            proof/Phil/Core/Syntax.v \
+            proof/Phil/Core/Context.v \
+            proof/Phil/Core/ContextJoin.v \
+            proof/Phil/Core/ContextJoinCertification.v \
+            app/Phase1ContextJoinCertificationMain.hs \
+            > phase1-context-join-certification/PHIL-CTX-JOIN-001.correspondence.sha256
+          cat phase1-context-join-certification/PHIL-CTX-JOIN-001.rocq.cert
+          sha256sum phase1-context-join-certification/PHIL-CTX-JOIN-001.rocq.cert
+      - uses: actions/upload-artifact@v4
+        with:
+          name: phil-phase1-context-join-proof-certification
+          path: phase1-context-join-certification
+          if-no-files-found: error
