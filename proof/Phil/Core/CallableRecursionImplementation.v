@@ -192,8 +192,10 @@ Definition decideRecursiveLookup {Key Surface : Type}
 Lemma lookup_public_some_is_member :
   forall (Key Surface : Type)
       (eqKey : Key -> Key -> bool),
-    (forall first second, eqKey first second = true <-> first = second) ->
-    forall key environment surface,
+    (forall first second : Key, eqKey first second = true <-> first = second) ->
+    forall (key : Key)
+        (environment : list (Key * Surface))
+        (surface : Surface),
       lookupPublic eqKey key environment = Some surface ->
       In (key, surface) environment.
 Proof.
@@ -212,8 +214,11 @@ Qed.
 Theorem accepted_recursive_lookup_has_exact_public_member :
   forall (Key Surface : Type)
       (eqKey : Key -> Key -> bool),
-    (forall first second, eqKey first second = true <-> first = second) ->
-    forall key revisionMatches environment surface,
+    (forall first second : Key, eqKey first second = true <-> first = second) ->
+    forall (key : Key)
+        (revisionMatches : Surface -> bool)
+        (environment : list (Key * Surface))
+        (surface : Surface),
       decideRecursiveLookup eqKey key revisionMatches environment =
         RecursiveLookupAccepted surface ->
       In (key, surface) environment /\ revisionMatches surface = true.
