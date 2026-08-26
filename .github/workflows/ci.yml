@@ -163,5 +163,8 @@ jobs:
       - name: Phase 1 Systems staging effects
         run: cabal exec -- runghc -isrc test/Phase1StagingEffectMain.hs
 
+      - name: Phase 1 Systems cost attribution
+        run: cabal exec -- runghc -isrc test/Phase1CostAttributionMain.hs
+
       - name: Verify LLVM and run Phil programs
         run: bash scripts/ci/phase0-llvm-runtime-smoke.sh
