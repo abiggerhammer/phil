@@ -108,8 +108,8 @@ Proof.
     hasEffectConfinementEvidence hasAuthorityConfinementEvidence
     hasFailureBehaviorEvidence.
   unfold decideForeignQualification, ForeignQualificationProjectionAccepts.
-  cbn.
   rewrite all_qualification_bitsb_true_iff.
+  cbn.
   tauto.
 Qed.
 
