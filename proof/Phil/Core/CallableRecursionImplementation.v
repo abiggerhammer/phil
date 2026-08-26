@@ -270,8 +270,10 @@ Proof.
     as [Hmember HrevisionMatch].
   unfold RecursiveLookup.
   split.
-  - unfold StabilizedLookup, publicViews, publicView.
-    unfold publicProjection in Henvironment.
-    rewrite <- Henvironment. exact Hmember.
+  - unfold StabilizedLookup.
+    change (In (key, surface)
+      (publicProjection definitionKey definitionPublicSurface definitions)).
+    rewrite <- Henvironment.
+    exact Hmember.
   - apply Hrevision. exact HrevisionMatch.
 Qed.
