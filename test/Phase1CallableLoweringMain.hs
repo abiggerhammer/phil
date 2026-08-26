@@ -311,7 +311,6 @@ capturedOwnerSemantic = CallableCaptureSemantic
   , callableCaptureSemanticSubject = Just "blob.001"
   , callableCaptureSemanticAuthority = internalAuthority
   }
-  deriving (Eq, Ord, Show)
 
 sourceCaptures :: Map.Map CaptureOccurrenceKey CallableCaptureSemantic
 sourceCaptures = Map.singleton capturedOwner capturedOwnerSemantic
