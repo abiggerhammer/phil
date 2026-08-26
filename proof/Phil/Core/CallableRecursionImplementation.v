@@ -3,38 +3,30 @@ Import ListNotations.
 
 From Phil.Core Require Import CallableRecursion.
 
-(*
-  PHIL-CALL-REC-IMPL-001 — executable production correspondence for CALL-013.
+(* PHIL-CALL-REC-IMPL-001 — executable production correspondence for CALL-013. *)
 
-  The extracted stabilizer is deliberately polymorphic in the concrete Haskell
-  definition type.  It can inspect a definition only through keyOf and
-  surfaceOf, so private DefinitionRevision/current-body facts are absent from
-  the executable semantic path by construction.
-*)
-
-Fixpoint keyOccursb {Definition Key : Type}
+Fixpoint keyOccursb {D Key : Type}
   (eqKey : Key -> Key -> bool)
-  (keyOf : Definition -> Key)
+  (keyOf : D -> Key)
   (key : Key)
-  (definitions : list Definition) : bool :=
+  (definitions : list D) : bool :=
   match definitions with
   | nil => false
   | definition :: rest =>
-      eqKey key (keyOf definition) ||
-      keyOccursb eqKey keyOf key rest
+      eqKey key (keyOf definition) || keyOccursb eqKey keyOf key rest
   end.
 
-Definition publicProjection {Definition Key Surface : Type}
-  (keyOf : Definition -> Key)
-  (surfaceOf : Definition -> Surface)
-  (definitions : list Definition) : list (Key * Surface) :=
+Definition publicProjection {D Key Surface : Type}
+  (keyOf : D -> Key)
+  (surfaceOf : D -> Surface)
+  (definitions : list D) : list (Key * Surface) :=
   map (fun definition => (keyOf definition, surfaceOf definition)) definitions.
 
-Fixpoint stabilizePublic {Definition Key Surface : Type}
+Fixpoint stabilizePublic {D Key Surface : Type}
   (eqKey : Key -> Key -> bool)
-  (keyOf : Definition -> Key)
-  (surfaceOf : Definition -> Surface)
-  (definitions : list Definition) : option (list (Key * Surface)) :=
+  (keyOf : D -> Key)
+  (surfaceOf : D -> Surface)
+  (definitions : list D) : option (list (Key * Surface)) :=
   match definitions with
   | nil => Some nil
   | definition :: rest =>
@@ -48,36 +40,30 @@ Fixpoint stabilizePublic {Definition Key Surface : Type}
   end.
 
 Lemma key_occursb_true_iff_in :
-  forall (Definition Key : Type)
+  forall (D Key : Type)
       (eqKey : Key -> Key -> bool)
-      (keyOf : Definition -> Key),
-    (forall first second,
-      eqKey first second = true <-> first = second) ->
+      (keyOf : D -> Key),
+    (forall first second, eqKey first second = true <-> first = second) ->
     forall key definitions,
       keyOccursb eqKey keyOf key definitions = true <->
       In key (map keyOf definitions).
 Proof.
-  intros Definition Key eqKey keyOf Heq.
-  intros key definitions.
+  intros D Key eqKey keyOf Heq key definitions.
   induction definitions as [| definition rest IH].
   - cbn. split; intro H; [discriminate | contradiction].
-  - cbn.
-    rewrite orb_true_iff.
-    rewrite Heq.
-    rewrite IH.
-    reflexivity.
+  - cbn. rewrite orb_true_iff, Heq, IH. reflexivity.
 Qed.
 
 Theorem stabilize_public_output_is_exact_projection :
-  forall (Definition Key Surface : Type)
+  forall (D Key Surface : Type)
       (eqKey : Key -> Key -> bool)
-      (keyOf : Definition -> Key)
-      (surfaceOf : Definition -> Surface)
+      (keyOf : D -> Key)
+      (surfaceOf : D -> Surface)
       definitions environment,
     stabilizePublic eqKey keyOf surfaceOf definitions = Some environment ->
     environment = publicProjection keyOf surfaceOf definitions.
 Proof.
-  intros Definition Key Surface eqKey keyOf surfaceOf definitions.
+  intros D Key Surface eqKey keyOf surfaceOf definitions.
   induction definitions as [| definition rest IH]; intros environment Hstable.
   - cbn in Hstable. inversion Hstable. reflexivity.
   - cbn in Hstable.
@@ -86,26 +72,22 @@ Proof.
     destruct (stabilizePublic eqKey keyOf surfaceOf rest) as [tailEnvironment|]
       eqn:Htail; try discriminate.
     inversion Hstable; subst environment.
-    unfold publicProjection in *.
-    cbn.
+    unfold publicProjection in *; cbn.
     f_equal.
-    apply IH with (environment := tailEnvironment).
-    exact Htail.
+    eapply IH. exact Htail.
 Qed.
 
 Theorem stabilize_public_success_implies_unique_keys :
-  forall (Definition Key Surface : Type)
+  forall (D Key Surface : Type)
       (eqKey : Key -> Key -> bool)
-      (keyOf : Definition -> Key)
-      (surfaceOf : Definition -> Surface),
-    (forall first second,
-      eqKey first second = true <-> first = second) ->
+      (keyOf : D -> Key)
+      (surfaceOf : D -> Surface),
+    (forall first second, eqKey first second = true <-> first = second) ->
     forall definitions environment,
       stabilizePublic eqKey keyOf surfaceOf definitions = Some environment ->
       NoDup (map keyOf definitions).
 Proof.
-  intros Definition Key Surface eqKey keyOf surfaceOf Heq.
-  intros definitions.
+  intros D Key Surface eqKey keyOf surfaceOf Heq definitions.
   induction definitions as [| definition rest IH]; intros environment Hstable.
   - constructor.
   - cbn in Hstable.
@@ -116,65 +98,53 @@ Proof.
     constructor.
     + intro Hin.
       pose proof (proj2
-        (key_occursb_true_iff_in Definition Key eqKey keyOf Heq
+        (key_occursb_true_iff_in D Key eqKey keyOf Heq
           (keyOf definition) rest) Hin) as Htrue.
-      rewrite Hoccurs in Htrue.
-      discriminate.
-    + apply IH with (environment := tailEnvironment).
-      exact Htail.
+      rewrite Hoccurs in Htrue. discriminate.
+    + eapply IH. exact Htail.
 Qed.
 
 Theorem unique_keys_imply_stabilize_public_success :
-  forall (Definition Key Surface : Type)
+  forall (D Key Surface : Type)
       (eqKey : Key -> Key -> bool)
-      (keyOf : Definition -> Key)
-      (surfaceOf : Definition -> Surface),
-    (forall first second,
-      eqKey first second = true <-> first = second) ->
+      (keyOf : D -> Key)
+      (surfaceOf : D -> Surface),
+    (forall first second, eqKey first second = true <-> first = second) ->
     forall definitions,
       NoDup (map keyOf definitions) ->
       exists environment,
         stabilizePublic eqKey keyOf surfaceOf definitions = Some environment.
 Proof.
-  intros Definition Key Surface eqKey keyOf surfaceOf Heq.
-  intros definitions Hunique.
+  intros D Key Surface eqKey keyOf surfaceOf Heq definitions Hunique.
   induction definitions as [| definition rest IH].
   - exists nil. reflexivity.
-  - cbn in Hunique.
-    inversion Hunique as [| head tail Hnotin Htail].
-    assert (Hoccurs :
-      keyOccursb eqKey keyOf (keyOf definition) rest = false).
+  - inversion Hunique as [| head tail Hnotin Htail].
+    assert (Hoccurs : keyOccursb eqKey keyOf (keyOf definition) rest = false).
     {
       destruct (keyOccursb eqKey keyOf (keyOf definition) rest) eqn:Hvalue.
-      - exfalso.
-        apply Hnotin.
+      - exfalso. apply Hnotin.
         apply (proj1
-          (key_occursb_true_iff_in Definition Key eqKey keyOf Heq
-            (keyOf definition) rest)).
-        exact Hvalue.
+          (key_occursb_true_iff_in D Key eqKey keyOf Heq
+            (keyOf definition) rest)). exact Hvalue.
       - reflexivity.
     }
     destruct (IH Htail) as [tailEnvironment Hstable].
-    cbn.
-    rewrite Hoccurs.
-    rewrite Hstable.
-    eexists.
-    reflexivity.
+    cbn. rewrite Hoccurs, Hstable.
+    eexists. reflexivity.
 Qed.
 
 Theorem stabilize_public_success_iff_unique_keys :
-  forall (Definition Key Surface : Type)
+  forall (D Key Surface : Type)
       (eqKey : Key -> Key -> bool)
-      (keyOf : Definition -> Key)
-      (surfaceOf : Definition -> Surface),
-    (forall first second,
-      eqKey first second = true <-> first = second) ->
+      (keyOf : D -> Key)
+      (surfaceOf : D -> Surface),
+    (forall first second, eqKey first second = true <-> first = second) ->
     forall definitions,
       (exists environment,
         stabilizePublic eqKey keyOf surfaceOf definitions = Some environment) <->
       NoDup (map keyOf definitions).
 Proof.
-  intros Definition Key Surface eqKey keyOf surfaceOf Heq definitions.
+  intros D Key Surface eqKey keyOf surfaceOf Heq definitions.
   split.
   - intros [environment Hstable].
     eapply stabilize_public_success_implies_unique_keys; eauto.
@@ -189,8 +159,7 @@ Fixpoint lookupPublic {Key Surface : Type}
   match environment with
   | nil => None
   | (entryKey, surface) :: rest =>
-      if eqKey key entryKey then Some surface
-      else lookupPublic eqKey key rest
+      if eqKey key entryKey then Some surface else lookupPublic eqKey key rest
   end.
 
 Inductive RecursiveLookupDecision (Surface : Type) : Type :=
@@ -218,8 +187,7 @@ Definition decideRecursiveLookup {Key Surface : Type}
 Lemma lookup_public_some_is_member :
   forall (Key Surface : Type)
       (eqKey : Key -> Key -> bool),
-    (forall first second,
-      eqKey first second = true <-> first = second) ->
+    (forall first second, eqKey first second = true <-> first = second) ->
     forall key environment surface,
       lookupPublic eqKey key environment = Some surface ->
       In (key, surface) environment.
@@ -231,25 +199,19 @@ Proof.
   - cbn in Hlookup.
     destruct (eqKey key entryKey) eqn:Hkey.
     + inversion Hlookup; subst surface.
-      left.
-      apply (proj1 (Heq key entryKey)) in Hkey.
-      subst entryKey.
-      reflexivity.
-    + right.
-      apply IH.
-      exact Hlookup.
+      left. apply (proj1 (Heq key entryKey)) in Hkey.
+      subst entryKey. reflexivity.
+    + right. apply IH. exact Hlookup.
 Qed.
 
 Theorem accepted_recursive_lookup_has_exact_public_member :
   forall (Key Surface : Type)
       (eqKey : Key -> Key -> bool),
-    (forall first second,
-      eqKey first second = true <-> first = second) ->
+    (forall first second, eqKey first second = true <-> first = second) ->
     forall key revisionMatches environment surface,
       decideRecursiveLookup eqKey key revisionMatches environment =
         RecursiveLookupAccepted surface ->
-      In (key, surface) environment /\
-      revisionMatches surface = true.
+      In (key, surface) environment /\ revisionMatches surface = true.
 Proof.
   intros Key Surface eqKey Heq key revisionMatches environment surface Hdecision.
   unfold decideRecursiveLookup in Hdecision.
@@ -264,11 +226,9 @@ Qed.
 
 Theorem successful_production_stabilization_refines_call013 :
   forall (eqKey : NamedCallableKey -> NamedCallableKey -> bool),
-    (forall first second,
-      eqKey first second = true <-> first = second) ->
+    (forall first second, eqKey first second = true <-> first = second) ->
     forall definitions environment,
-      stabilizePublic
-        eqKey definitionKey definitionPublicSurface definitions = Some environment ->
+      stabilizePublic eqKey definitionKey definitionPublicSurface definitions = Some environment ->
       StabilizationAccepted definitions.
 Proof.
   intros eqKey Heq definitions environment Hstable.
@@ -278,11 +238,9 @@ Qed.
 
 Theorem accepted_production_lookup_refines_call013 :
   forall (eqKey : NamedCallableKey -> NamedCallableKey -> bool),
-    (forall first second,
-      eqKey first second = true <-> first = second) ->
+    (forall first second, eqKey first second = true <-> first = second) ->
     forall definitions environment key expectedRevision revisionMatches surface,
-      stabilizePublic
-        eqKey definitionKey definitionPublicSurface definitions = Some environment ->
+      stabilizePublic eqKey definitionKey definitionPublicSurface definitions = Some environment ->
       (forall candidate,
         revisionMatches candidate = true ->
         surfaceInterfaceRevision candidate = expectedRevision) ->
@@ -304,8 +262,6 @@ Proof.
   split.
   - unfold StabilizedLookup, publicViews, publicView.
     unfold publicProjection in Henvironment.
-    rewrite <- Henvironment.
-    exact Hmember.
-  - apply Hrevision.
-    exact HrevisionMatch.
+    rewrite <- Henvironment. exact Hmember.
+  - apply Hrevision. exact HrevisionMatch.
 Qed.
