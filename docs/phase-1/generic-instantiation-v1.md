@@ -1,5 +1,7 @@
 # Phase 1 generic instantiation v1
 
+> **Historical slice note:** This document records the scope and status of one Phase 1 implementation slice when it landed. “Not yet,” “deferred,” and similar status statements below are historical; see the [Phase 1 implementation notes](README.md) for current status ownership.
+
 This tranche begins logic-ledger obligation `PHIL-GEN-INST-001` and conformance cases `GEN-007`, `GEN-008`, and `GEN-012`.
 
 The checked public requirement vocabulary now includes exact structural permissions, provider interface revisions, and propositions. Instantiation supplies one explicit disposition for every exact public requirement and rejects missing, duplicate, or unrelated dispositions.

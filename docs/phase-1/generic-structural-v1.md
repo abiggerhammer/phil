@@ -1,5 +1,7 @@
 # Phase 1 generic structural requirements v1
 
+> **Historical slice note:** This document records the scope and status of one Phase 1 implementation slice when it landed. “Not yet,” “deferred,” and similar status statements below are historical; see the [Phase 1 implementation notes](README.md) for current status ownership.
+
 This tranche begins logic-ledger obligation `PHIL-GEN-STRUCT-001` and conformance cases `GEN-001`–`GEN-003`.
 
 The bounded semantic rule is inherited directly from Phil's existing structural modes:

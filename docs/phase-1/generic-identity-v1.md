@@ -1,5 +1,7 @@
 # Phase 1 generic application identity v1
 
+> **Historical slice note:** This document records the scope and status of one Phase 1 implementation slice when it landed. “Not yet,” “deferred,” and similar status statements below are historical; see the [Phase 1 implementation notes](README.md) for current status ownership.
+
 This tranche advances `PHIL-GEN-ID-001` through conformance cases `GEN-009` and `GEN-010`.
 
 It establishes two distinct checked objects:

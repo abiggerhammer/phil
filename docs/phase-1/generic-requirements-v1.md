@@ -1,5 +1,7 @@
 # Phase 1 generic requirement stability v1
 
+> **Historical slice note:** This document records the scope and status of one Phase 1 implementation slice when it landed. “Not yet,” “deferred,” and similar status statements below are historical; see the [Phase 1 implementation notes](README.md) for current status ownership.
+
 This slice begins logic-ledger obligation `PHIL-GEN-REQ-001` and conformance cases `GEN-004`–`GEN-006`.
 
 It distinguishes two structural requirement views for a checked generic definition:

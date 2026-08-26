@@ -1,5 +1,7 @@
 # Phase 1 provider-wide laws v1
 
+> **Historical slice note:** This document records the scope and status of one Phase 1 implementation slice when it landed. “Not yet,” “deferred,” and similar status statements below are historical; see the [Phase 1 implementation notes](README.md) for current status ownership.
+
 This slice advances `PHIL-PROV-QUAL-001` with conformance case `PROV-007` from the Provider Qualification Checking and Schema Contract.
 
 ## Why this layer exists
