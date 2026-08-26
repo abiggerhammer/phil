@@ -42,7 +42,7 @@ Definition keysOf {Key A : Type} (entries : list (Key * A)) : list Key :=
   map fst entries.
 
 Lemma all_finiteb_true_iff :
-  forall (A : Type) (predicate : A -> bool) values,
+  forall (A : Type) (predicate : A -> bool) (values : list A),
     allFiniteb predicate values = true <->
     Forall (fun value => predicate value = true) values.
 Proof.
@@ -58,7 +58,8 @@ Qed.
 Theorem same_key_domainb_true_implies_equal_length :
   forall (Key A B : Type)
       (eqKey : Key -> Key -> bool)
-      first second,
+      (first : list (Key * A))
+      (second : list (Key * B)),
     sameKeyDomainb eqKey first second = true ->
     length first = length second.
 Proof.
@@ -74,8 +75,8 @@ Qed.
 Theorem same_key_domainb_true_implies_pairwise_keys :
   forall (Key A B : Type)
       (eqKey : Key -> Key -> bool),
-    (forall first second, eqKey first second = true <-> first = second) ->
-    forall first second,
+    (forall first second : Key, eqKey first second = true <-> first = second) ->
+    forall (first : list (Key * A)) (second : list (Key * B)),
       sameKeyDomainb eqKey first second = true ->
       keysOf first = keysOf second.
 Proof.
@@ -94,8 +95,8 @@ Qed.
 Theorem equal_pairwise_keys_imply_same_key_domainb :
   forall (Key A B : Type)
       (eqKey : Key -> Key -> bool),
-    (forall first second, eqKey first second = true <-> first = second) ->
-    forall first second,
+    (forall first second : Key, eqKey first second = true <-> first = second) ->
+    forall (first : list (Key * A)) (second : list (Key * B)),
       keysOf first = keysOf second ->
       sameKeyDomainb eqKey first second = true.
 Proof.
@@ -117,8 +118,8 @@ Qed.
 Theorem same_key_domainb_true_iff_keys_equal :
   forall (Key A B : Type)
       (eqKey : Key -> Key -> bool),
-    (forall first second, eqKey first second = true <-> first = second) ->
-    forall first second,
+    (forall first second : Key, eqKey first second = true <-> first = second) ->
+    forall (first : list (Key * A)) (second : list (Key * B)),
       sameKeyDomainb eqKey first second = true <->
       keysOf first = keysOf second.
 Proof.
@@ -131,8 +132,8 @@ Qed.
 Theorem lookup_assoc_some_is_member :
   forall (Key A : Type)
       (eqKey : Key -> Key -> bool),
-    (forall first second, eqKey first second = true <-> first = second) ->
-    forall key entries value,
+    (forall first second : Key, eqKey first second = true <-> first = second) ->
+    forall (key : Key) (entries : list (Key * A)) (value : A),
       lookupAssoc eqKey key entries = Some value ->
       In (key, value) entries.
 Proof.
@@ -150,8 +151,8 @@ Qed.
 Theorem member_with_unique_key_is_lookup_result :
   forall (Key A : Type)
       (eqKey : Key -> Key -> bool),
-    (forall first second, eqKey first second = true <-> first = second) ->
-    forall key value entries,
+    (forall first second : Key, eqKey first second = true <-> first = second) ->
+    forall (key : Key) (value : A) (entries : list (Key * A)),
       NoDup (keysOf entries) ->
       In (key, value) entries ->
       lookupAssoc eqKey key entries = Some value.
