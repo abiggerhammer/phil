@@ -20,6 +20,7 @@ module Phil.Systems.ProtocolStateCorrespondence
   , verifyProtocolStateStageBundle
   ) where
 
+import Control.Monad (foldM)
 import qualified Data.Map.Strict as Map
 import Data.Map.Strict (Map)
 import qualified Data.Set as Set
@@ -479,45 +480,28 @@ checkAcyclicLineage
   :: Map EndpointOccurrenceKey ProtocolEndpointState
   -> Map ProtocolTransitionKey ProtocolTransitionBinding
   -> Either ProtocolStateVerificationError ()
-checkAcyclicLineage endpoints transitions =
-  case topologicalRemainder nodes edges of
-    [] -> Right ()
-    endpoint : _ -> Left (ProtocolEndpointLineageCycle endpoint)
+checkAcyclicLineage endpoints transitions = do
+  _ <- foldM visitRoot Set.empty (Map.keys endpoints)
+  Right ()
   where
-    nodes = Map.keysSet endpoints
     edges = Map.fromListWith Set.union
       [ (protocolTransitionPredecessor transition, Set.singleton successor)
       | transition <- Map.elems transitions
       , ProtocolSuccessor successor <- Map.elems (protocolTransitionOutcomes transition)
       ]
 
-topologicalRemainder
-  :: Set EndpointOccurrenceKey
-  -> Map EndpointOccurrenceKey (Set EndpointOccurrenceKey)
-  -> [EndpointOccurrenceKey]
-topologicalRemainder nodes edges =
-  go initialIndegree initialZero
-  where
-    initialIndegree = Set.foldl' (\acc node -> Map.insert node 0 acc) Map.empty nodes
-    indegree = Map.foldlWithKey' addEdges initialIndegree edges
-    addEdges acc _ successors = Set.foldl' (\m successor -> Map.insertWith (+) successor 1 m) acc successors
-    initialZero = [node | (node, degree) <- Map.toAscList indegree, degree == 0]
+    visitRoot done node
+      | Set.member node done = Right done
+      | otherwise = visit Set.empty done node
 
-    go current [] = [node | (node, degree) <- Map.toAscList current, degree > 0]
-    go current (node : queue) =
-      let successors = Map.findWithDefault Set.empty node edges
-          (next, newlyZero) = Set.foldl' decrement (Map.delete node current, []) successors
-      in go next (queue <> reverse newlyZero)
-
-    decrement (current, newlyZero) successor =
-      case Map.lookup successor current of
-        Nothing -> (current, newlyZero)
-        Just degree ->
-          let degree' = degree - 1
-              current' = Map.insert successor degree' current
-          in if degree' == 0
-              then (current', successor : newlyZero)
-              else (current', newlyZero)
+    visit active done node
+      | Set.member node active = Left (ProtocolEndpointLineageCycle node)
+      | Set.member node done = Right done
+      | otherwise = do
+          let active' = Set.insert node active
+              successors = Set.toAscList (Map.findWithDefault Set.empty node edges)
+          done' <- foldM (visit active') done successors
+          Right (Set.insert node done')
 
 lookupFunction
   :: ProtocolTransitionKey
