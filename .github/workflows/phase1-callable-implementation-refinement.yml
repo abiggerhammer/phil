@@ -1,0 +1,107 @@
+name: Phase 1 Callable Implementation Refinement
+
+on:
+  pull_request:
+    paths:
+      - 'src/CallableRefinementKernel.hs'
+      - 'src/Phil/Core/CallableRefinement.hs'
+      - 'test/Phase1CallableRefinementMain.hs'
+      - 'proof/Phil/Core/CallableRefinement.v'
+      - 'proof/Phil/Core/CallableRefinementImplementation.v'
+      - 'proof/Phil/Core/CallableRefinementImplementationBridge.v'
+      - 'proof/Phil/Core/CallableRefinementImplementationExtraction.v'
+      - 'docs/phase-1/callable-implementation-refinement-v1.md'
+      - '.github/workflows/phase1-callable-implementation-refinement.yml'
+  push:
+    branches: [main]
+    paths:
+      - 'src/CallableRefinementKernel.hs'
+      - 'src/Phil/Core/CallableRefinement.hs'
+      - 'test/Phase1CallableRefinementMain.hs'
+      - 'proof/Phil/Core/CallableRefinement.v'
+      - 'proof/Phil/Core/CallableRefinementImplementation.v'
+      - 'proof/Phil/Core/CallableRefinementImplementationBridge.v'
+      - 'proof/Phil/Core/CallableRefinementImplementationExtraction.v'
+      - 'docs/phase-1/callable-implementation-refinement-v1.md'
+      - '.github/workflows/phase1-callable-implementation-refinement.yml'
+
+permissions:
+  contents: read
+
+jobs:
+  rocq-callable-implementation-refinement:
+    runs-on: ubuntu-latest
+    container:
+      image: rocq/rocq-prover:9.2.0
+      options: --user root
+    steps:
+      - uses: actions/checkout@v4
+      - name: Compile CALL-012 implementation-refinement proof
+        shell: bash
+        run: |
+          set -euo pipefail
+          export PATH="/home/rocq/.opam/${COMPILER}/bin:$PATH"
+          rocq c -Q proof/Phil Phil proof/Phil/Core/GenericStructural.v
+          rocq c -Q proof/Phil Phil proof/Phil/Core/CallableMode.v
+          rocq c -Q proof/Phil Phil proof/Phil/Core/CallableEffects.v
+          rocq c -Q proof/Phil Phil proof/Phil/Core/CallableLifecycle.v
+          rocq c -Q proof/Phil Phil proof/Phil/Core/CallableRefinement.v
+          rocq c -Q proof/Phil Phil proof/Phil/Core/CallableRefinementImplementation.v
+          rocq c -Q proof/Phil Phil proof/Phil/Core/CallableRefinementImplementationBridge.v
+      - name: Regenerate and bind proved Haskell decision kernel
+        shell: bash
+        run: |
+          set -euo pipefail
+          export PATH="/home/rocq/.opam/${COMPILER}/bin:$PATH"
+          rm -f CallableRefinementKernel.hs
+          rocq c -Q proof/Phil Phil proof/Phil/Core/CallableRefinementImplementationExtraction.v
+          test -s CallableRefinementKernel.hs
+          grep -q '^module CallableRefinementKernel where' CallableRefinementKernel.hs
+          grep -q '^incidenceVector ::' CallableRefinementKernel.hs
+          if ! cmp -s CallableRefinementKernel.hs src/CallableRefinementKernel.hs; then
+            echo 'checked-in CALL-012 kernel differs from fresh Rocq extraction' >&2
+            diff -u src/CallableRefinementKernel.hs CallableRefinementKernel.hs || true
+            exit 1
+          fi
+          sha256sum CallableRefinementKernel.hs src/CallableRefinementKernel.hs
+          mkdir -p callable-implementation-refinement-proof
+          cp \
+            proof/Phil/Core/CallableRefinementImplementation.v \
+            proof/Phil/Core/CallableRefinementImplementation.vo \
+            proof/Phil/Core/CallableRefinementImplementationBridge.v \
+            proof/Phil/Core/CallableRefinementImplementationBridge.vo \
+            proof/Phil/Core/CallableRefinementImplementationExtraction.v \
+            CallableRefinementKernel.hs \
+            callable-implementation-refinement-proof/
+      - uses: actions/upload-artifact@v4
+        with:
+          name: rocq-callable-implementation-refinement
+          path: callable-implementation-refinement-proof
+          if-no-files-found: error
+
+  verify-production-callable-refinement:
+    needs: rocq-callable-implementation-refinement
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: haskell-actions/setup@v2
+        with:
+          ghc-version: '9.6.7'
+          cabal-version: 'latest'
+      - uses: actions/download-artifact@v4
+        with:
+          name: rocq-callable-implementation-refinement
+          path: callable-implementation-refinement-proof
+      - name: Typecheck extracted and checked-in kernel
+        run: |
+          set -euo pipefail
+          cmp -s \
+            callable-implementation-refinement-proof/CallableRefinementKernel.hs \
+            src/CallableRefinementKernel.hs
+          ghc -Wall -Werror -fno-code src/CallableRefinementKernel.hs
+          ghc -isrc -Wall -Werror -fno-code src/Phil/Core/CallableRefinement.hs
+      - name: Exercise production CALL-012 path through extracted kernel
+        run: |
+          set -euo pipefail
+          cabal build exe:phil-certify-core-scalar --ghc-options=-Werror
+          cabal exec -- runghc -isrc test/Phase1CallableRefinementMain.hs

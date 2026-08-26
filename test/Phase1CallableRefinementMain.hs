@@ -18,6 +18,7 @@ main = do
     , test "CALL-012 matching machine shape is insufficient for wider effects" widerEffectsReject
     , test "CALL-012 matching machine shape is insufficient for extra fatal outcomes" extraFatalRejects
     , test "CALL-012 incompatible callee transitions reject" incompatibleTransitionRejects
+    , test "CALL-012 replace payload mismatch rejects even with the same transition kind" replacePayloadMismatchRejects
     , test "CALL-012 semantically narrower actual is accepted" narrowerActualAccepts
     , test "CALL-012 machine-shape mismatch still rejects" machineShapeMismatchRejects
     , test "CALL-012 widening diagnostics are canonical under set ordering" wideningDiagnosticsAreCanonical
@@ -79,6 +80,18 @@ incompatibleTransitionRejects =
       assert (actual == ConsumeCallee) "wrong actual callee transition"
     other -> Left ("incompatible callee transition did not reject: " <> show other)
 
+replacePayloadMismatchRejects :: Either String ()
+replacePayloadMismatchRejects =
+  case checkCallableRefinement replaceExpectedSurface replaceActualSurface of
+    Left (CallableCalleeTransitionIncompatible expected actual) -> do
+      assert
+        (expected == ReplaceCallee successorRevision (Just successorStateA))
+        "wrong expected replacement payload"
+      assert
+        (actual == ReplaceCallee successorRevision (Just successorStateB))
+        "wrong actual replacement payload"
+    other -> Left ("replace payload mismatch did not reject: " <> show other)
+
 narrowerActualAccepts :: Either String ()
 narrowerActualAccepts = do
   _ <- mapLeft show $ checkCallableRefinement richExpectedSurface narrowActualSurface
@@ -128,8 +141,15 @@ notFoundFailure = CallableTypedNegative (Outcome "not-found")
 terminalShutdown = CallableDeclaredTerminal (Outcome "shutdown")
 fatalAbort = CallableFatal "abort"
 
-expectedContract, exactActualContract, richExpectedContract, narrowActualContract
-  :: CallableContract
+successorRevision :: InterfaceRevision
+successorRevision = InterfaceRevision "callable.successor.v1"
+
+successorStateA, successorStateB :: CallableStateKey
+successorStateA = CallableStateKey "state-a"
+successorStateB = CallableStateKey "state-b"
+
+expectedContract, exactActualContract, richExpectedContract, narrowActualContract,
+  replaceExpectedContract, replaceActualContract :: CallableContract
 expectedContract = CallableContract
   { callableContractInterfaceRevision = InterfaceRevision "callable.expected.v1"
   , callableContractCalleeTransition = PreserveCallee
@@ -154,7 +174,18 @@ narrowActualContract = CallableContract
   , callableContractEffectBound = Set.singleton readEffect
   }
 
-expectedSurface, exactActualSurface, richerFailureSurface :: CallableRefinementSurface
+replaceExpectedContract = exactActualContract
+  { callableContractCalleeTransition =
+      ReplaceCallee successorRevision (Just successorStateA)
+  }
+
+replaceActualContract = exactActualContract
+  { callableContractCalleeTransition =
+      ReplaceCallee successorRevision (Just successorStateB)
+  }
+
+expectedSurface, exactActualSurface, richerFailureSurface,
+  replaceExpectedSurface, replaceActualSurface :: CallableRefinementSurface
 expectedSurface = CallableRefinementSurface
   { callableRefinementMachineShape = byteCallableShape
   , callableRefinementContract = expectedContract
@@ -171,6 +202,12 @@ exactActualSurface = CallableRefinementSurface
 
 richerFailureSurface = expectedSurface
   { callableRefinementFailures = Set.fromList [notFoundFailure, terminalShutdown] }
+
+replaceExpectedSurface = exactActualSurface
+  { callableRefinementContract = replaceExpectedContract }
+
+replaceActualSurface = exactActualSurface
+  { callableRefinementContract = replaceActualContract }
 
 strongerAuthorityActual, widerEffectActual, fatalActual, consumingActual,
   wrongShapeActual, richExpectedSurface, narrowActualSurface :: CallableRefinementSurface
