@@ -2,9 +2,9 @@
 """Derive the Rocq Phase 1 surface grammar from canonical EBNF.
 
 The canonical authority is grammar/phase1-surface.ebnf. This script accepts a
-small, documented EBNF dialect and lowers option/repetition constructs to plain
-BNF productions. The checked-in Rocq file is generated output; edit the EBNF,
-not the Rocq grammar.
+small, documented EBNF dialect and emits a Rocq value representing that grammar
+as a typed EBNF syntax tree. The checked-in Rocq file is generated output; edit
+the EBNF, not the Rocq grammar.
 """
 
 from __future__ import annotations
@@ -240,60 +240,6 @@ class Parser:
         )
 
 
-@dataclasses.dataclass(frozen=True)
-class Symbol:
-    kind: str
-    value: str
-
-
-class Lowerer:
-    def __init__(self) -> None:
-        self.counter = 0
-        self.generated: list[tuple[str, list[list[Symbol]]]] = []
-
-    def fresh(self, owner: str, suffix: str) -> str:
-        self.counter += 1
-        return f"__{owner}_{suffix}_{self.counter:04d}"
-
-    def lower(self, node: Node, owner: str) -> list[list[Symbol]]:
-        if isinstance(node, Literal):
-            return [[Symbol("literal", node.value)]]
-        if isinstance(node, LexicalClass):
-            return [[Symbol("class", node.name)]]
-        if isinstance(node, Reference):
-            return [[Symbol("nonterminal", node.name)]]
-        if isinstance(node, Alternative):
-            result: list[list[Symbol]] = []
-            for item in node.items:
-                result.extend(self.lower(item, owner))
-            return result
-        if isinstance(node, Sequence):
-            choices: list[list[Symbol]] = [[]]
-            for item in node.items:
-                next_choices: list[list[Symbol]] = []
-                for prefix in choices:
-                    for suffix in self.lower(item, owner):
-                        next_choices.append(prefix + suffix)
-                choices = next_choices
-            return choices
-        if isinstance(node, OptionalNode):
-            name = self.fresh(owner, "opt")
-            body = self.lower(node.item, name)
-            self.generated.append((name, [[]] + body))
-            return [[Symbol("nonterminal", name)]]
-        if isinstance(node, Repeat):
-            name = self.fresh(owner, "star")
-            body = self.lower(node.item, name)
-            productions = [[]]
-            productions.extend(
-                alternative + [Symbol("nonterminal", name)]
-                for alternative in body
-            )
-            self.generated.append((name, productions))
-            return [[Symbol("nonterminal", name)]]
-        raise TypeError(f"unsupported grammar node {node!r}")
-
-
 def references(node: Node) -> Iterable[str]:
     if isinstance(node, Reference):
         yield node.name
@@ -347,28 +293,29 @@ def coq_string(value: str) -> str:
     return f'"{value}"'
 
 
-def render_symbol(symbol: Symbol) -> str:
-    constructor = {
-        "literal": "TerminalLiteral",
-        "class": "TerminalClass",
-        "nonterminal": "Nonterminal",
-    }[symbol.kind]
-    return f"{constructor} {coq_string(symbol.value)}"
-
-
 def render_list(items: list[str]) -> str:
     return "[" + "; ".join(items) + "]"
 
 
-def render_rocq(source_text: str, rules: list[tuple[str, Node]]) -> str:
-    lowerer = Lowerer()
-    productions: list[tuple[str, list[Symbol]]] = []
-    for name, node in rules:
-        alternatives = lowerer.lower(node, name)
-        productions.extend((name, alternative) for alternative in alternatives)
-    for name, alternatives in lowerer.generated:
-        productions.extend((name, alternative) for alternative in alternatives)
+def render_node(node: Node) -> str:
+    if isinstance(node, Literal):
+        return f"ELiteral {coq_string(node.value)}"
+    if isinstance(node, LexicalClass):
+        return f"ELexicalClass {coq_string(node.name)}"
+    if isinstance(node, Reference):
+        return f"ENonterminal {coq_string(node.name)}"
+    if isinstance(node, Sequence):
+        return "ESequence " + render_list([render_node(item) for item in node.items])
+    if isinstance(node, Alternative):
+        return "EAlternative " + render_list([render_node(item) for item in node.items])
+    if isinstance(node, OptionalNode):
+        return f"EOptional ({render_node(node.item)})"
+    if isinstance(node, Repeat):
+        return f"ERepetition ({render_node(node.item)})"
+    raise TypeError(f"unsupported grammar node {node!r}")
 
+
+def render_rocq(source_text: str, rules: list[tuple[str, Node]]) -> str:
     keywords = sorted(
         {
             literal
@@ -389,16 +336,20 @@ def render_rocq(source_text: str, rules: list[tuple[str, Node]]) -> str:
         f"   Source SHA-256: {digest}",
         "   Regenerate with: python3 scripts/derive_phase1_surface_grammar.py --write",
         "",
-        "   This is the mechanically derived plain-BNF representation of the",
+        "   This is the mechanically derived typed EBNF representation of the",
         "   canonical Phase 1 concrete grammar. Semantic acceptance remains",
         "   governed by the checked Phil declaration/Core contracts. *)",
         "",
-        "Inductive GrammarSymbol : Type :=",
-        "| TerminalLiteral : string -> GrammarSymbol",
-        "| TerminalClass : string -> GrammarSymbol",
-        "| Nonterminal : string -> GrammarSymbol.",
+        "Inductive EbnfExpression : Type :=",
+        "| ELiteral : string -> EbnfExpression",
+        "| ELexicalClass : string -> EbnfExpression",
+        "| ENonterminal : string -> EbnfExpression",
+        "| ESequence : list EbnfExpression -> EbnfExpression",
+        "| EAlternative : list EbnfExpression -> EbnfExpression",
+        "| EOptional : EbnfExpression -> EbnfExpression",
+        "| ERepetition : EbnfExpression -> EbnfExpression.",
         "",
-        "Definition Production : Type := (string * list GrammarSymbol)%type.",
+        "Definition GrammarRule : Type := (string * EbnfExpression)%type.",
         "",
         f"Definition phase1_surface_grammar_source_sha256 : string := {coq_string(digest)}.",
         'Definition phase1_surface_start : string := "source_file".',
@@ -406,21 +357,14 @@ def render_rocq(source_text: str, rules: list[tuple[str, Node]]) -> str:
         "Definition phase1_surface_keywords : list string :=",
         "  " + render_list([coq_string(keyword) for keyword in keywords]) + ".",
         "",
-        "Definition phase1_surface_productions : list Production := [",
+        "Definition phase1_surface_rules : list GrammarRule := [",
     ]
-    for index, (name, rhs) in enumerate(productions):
-        separator = ";" if index != len(productions) - 1 else ""
-        rendered_rhs = render_list([render_symbol(symbol) for symbol in rhs])
-        lines.append(f"  ({coq_string(name)}, {rendered_rhs}){separator}")
-    lines.extend(
-        [
-            "].",
-            "",
-            "(* Option and repetition nodes in the EBNF are lowered to generated",
-            '   right-recursive nonterminals whose names begin with "__". *)',
-            "",
-        ]
-    )
+    for index, (name, node) in enumerate(rules):
+        separator = ";" if index != len(rules) - 1 else ""
+        lines.append(
+            f"  ({coq_string(name)}, {render_node(node)}){separator}"
+        )
+    lines.extend(["].", ""])
     return "\n".join(lines)
 
 
@@ -473,7 +417,7 @@ def main() -> int:
         )
         return 1
 
-    print("phase1 surface grammar: canonical EBNF and Rocq BNF agree")
+    print("phase1 surface grammar: canonical EBNF and Rocq grammar agree")
     return 0
 
 
