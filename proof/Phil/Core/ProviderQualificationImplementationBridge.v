@@ -108,7 +108,7 @@ Proof.
   - destruct second as [| [secondKey secondValue] secondRest].
     + discriminate Hkeys.
     + unfold keysOf in Hkeys; cbn in Hkeys.
-      inversion Hkeys as [Hhead Htail].
+      injection Hkeys as Hhead Htail.
       cbn.
       apply andb_true_iff. split.
       * apply (proj2 (Heq firstKey secondKey)). exact Hhead.
