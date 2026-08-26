@@ -63,7 +63,15 @@ jobs:
           name: phase1-surface-grammar-rocq
           path: proof/Phil/Surface
 
-      - name: Compile formal grammar
+      - name: Compile formal grammar warning-clean
         run: |
           export PATH="/home/rocq/.opam/${COMPILER}/bin:$PATH"
-          rocq c -Q proof/Phil Phil proof/Phil/Surface/Grammar.v
+          if ! rocq c -Q proof/Phil Phil proof/Phil/Surface/Grammar.v > /tmp/rocq-grammar.log 2>&1; then
+            cat /tmp/rocq-grammar.log
+            exit 1
+          fi
+          cat /tmp/rocq-grammar.log
+          if grep -q 'Warning:' /tmp/rocq-grammar.log; then
+            echo 'Rocq emitted warnings while compiling the derived Phase 1 grammar.' >&2
+            exit 1
+          fi
