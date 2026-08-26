@@ -9,6 +9,7 @@ on:
       - '.github/workflows/phase1-callable-recursion-implementation-refinement.yml'
       - 'src/CallableRecursionKernel.hs'
       - 'src/Phil/Core/CallableRecursion.hs'
+      - 'src/Phil/Core/CallableRecursion/Bound.hs'
       - 'test/Phase1CallableRecursionMain.hs'
   push:
     branches: [main]
@@ -19,6 +20,7 @@ on:
       - '.github/workflows/phase1-callable-recursion-implementation-refinement.yml'
       - 'src/CallableRecursionKernel.hs'
       - 'src/Phil/Core/CallableRecursion.hs'
+      - 'src/Phil/Core/CallableRecursion/Bound.hs'
       - 'test/Phase1CallableRecursionMain.hs'
 
 permissions:
@@ -44,7 +46,7 @@ jobs:
           rocq c -Q proof/Phil Phil proof/Phil/Core/CallableRefinement.v
           rocq c -Q proof/Phil Phil proof/Phil/Core/CallableRecursion.v
           rocq c -Q proof/Phil Phil proof/Phil/Core/CallableRecursionImplementation.v
-      - name: Extract CALL-013 production kernel
+      - name: Regenerate and bind proved CALL-013 kernel
         shell: bash
         run: |
           set -euo pipefail
@@ -55,6 +57,12 @@ jobs:
           grep -q '^module CallableRecursionKernel where' CallableRecursionKernel.hs
           grep -q '^stabilizePublic ::' CallableRecursionKernel.hs
           grep -q '^decideRecursiveLookup ::' CallableRecursionKernel.hs
+          if ! cmp -s CallableRecursionKernel.hs src/CallableRecursionKernel.hs; then
+            echo 'checked-in CALL-013 kernel differs from fresh Rocq extraction' >&2
+            diff -u src/CallableRecursionKernel.hs CallableRecursionKernel.hs || true
+            exit 1
+          fi
+          sha256sum CallableRecursionKernel.hs src/CallableRecursionKernel.hs
           mkdir -p callable-recursion-implementation-refinement-proof
           cp \
             proof/Phil/Core/CallableRecursionImplementation.v \
@@ -62,14 +70,13 @@ jobs:
             proof/Phil/Core/CallableRecursionImplementationExtraction.v \
             CallableRecursionKernel.hs \
             callable-recursion-implementation-refinement-proof/
-          sha256sum callable-recursion-implementation-refinement-proof/*
       - uses: actions/upload-artifact@v4
         with:
           name: rocq-callable-recursion-implementation-refinement
           path: callable-recursion-implementation-refinement-proof
           if-no-files-found: error
 
-  verify-extracted-callable-recursion-kernel:
+  verify-production-callable-recursion:
     needs: rocq-callable-recursion-implementation-refinement
     runs-on: ubuntu-latest
     steps:
@@ -82,12 +89,15 @@ jobs:
         with:
           name: rocq-callable-recursion-implementation-refinement
           path: callable-recursion-implementation-refinement-proof
-      - name: Typecheck extracted kernel
+      - name: Typecheck extracted and checked-in kernel
         run: |
           set -euo pipefail
-          ghc -Wall -Werror -fno-code \
-            callable-recursion-implementation-refinement-proof/CallableRecursionKernel.hs
-      - name: Preserve existing CALL-013 behavior before production binding
+          cmp -s \
+            callable-recursion-implementation-refinement-proof/CallableRecursionKernel.hs \
+            src/CallableRecursionKernel.hs
+          ghc -Wall -Werror -fno-code src/CallableRecursionKernel.hs
+          ghc -isrc -Wall -Werror -fno-code src/Phil/Core/CallableRecursion.hs
+      - name: Exercise production CALL-013 path through extracted kernel
         run: |
           set -euo pipefail
           cabal build exe:phil-certify-core-scalar --ghc-options=-Werror
