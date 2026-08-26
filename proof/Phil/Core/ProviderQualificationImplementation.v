@@ -162,7 +162,9 @@ Proof.
     as [implementationProjection|] eqn:Hlookup.
   - rewrite andb_true_iff, decide_outcome_traversal_true_iff.
     reflexivity.
-  - cbn. tauto.
+  - split.
+    + intro H. discriminate.
+    + intro H. contradiction.
 Qed.
 
 Definition decideOperationAt
@@ -239,7 +241,9 @@ Proof.
   destruct (lookupAssoc eqOperation (fst operation) correspondences)
     as [correspondence|] eqn:Hlookup.
   - apply decide_operation_traversal_true_iff.
-  - cbn. tauto.
+  - split.
+    + intro H. discriminate.
+    + intro H. contradiction.
 Qed.
 
 Lemma all_operation_at_true_iff :
