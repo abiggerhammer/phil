@@ -157,5 +157,8 @@ jobs:
       - name: Phase 1 Systems runtime claim binding
         run: cabal exec -- runghc -isrc test/Phase1RuntimeClaimBindingMain.hs
 
+      - name: Phase 1 Systems primitive reuse
+        run: cabal exec -- runghc -isrc test/Phase1RuntimePrimitiveReuseMain.hs
+
       - name: Verify LLVM and run Phil programs
         run: bash scripts/ci/phase0-llvm-runtime-smoke.sh
