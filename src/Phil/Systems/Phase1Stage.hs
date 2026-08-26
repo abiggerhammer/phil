@@ -9,6 +9,7 @@ module Phil.Systems.Phase1Stage
   , SystemsJustification (..)
   , Phase1StageBundle (..)
   , Phase1StageVerificationError (..)
+  , normalizePhase1SystemsArtifact
   , deriveSystemsArtifactRevision
   , derivePhase1StageContractRevision
   , collectSourceFacts
@@ -17,6 +18,7 @@ module Phil.Systems.Phase1Stage
   , verifyPhase1StageBundle
   ) where
 
+import Data.List (sort)
 import qualified Data.Map.Strict as Map
 import Data.Map.Strict (Map)
 import qualified Data.Set as Set
@@ -104,9 +106,35 @@ data Phase1StageVerificationError
   | Phase1StageEmptyVerifierProfile
   deriving (Eq, Show)
 
+-- | Phase 0 keeps its frozen byte-level digest semantics.  Phase 1 needs the
+-- stronger ADR-019 identity rule: canonical logical content determines the
+-- Systems revision, while diagnostic labels, inspection prose, and enumeration
+-- order do not.  We therefore normalize only for Phase-1 identity derivation and
+-- then reuse the mature legacy digest over that normalized logical artifact.
+normalizePhase1SystemsArtifact :: SystemsArtifact -> SystemsArtifact
+normalizePhase1SystemsArtifact artifact = SystemsArtifact
+  { systemsArtifactProgram = program
+  , systemsArtifactStageContract = contract
+  , systemsArtifactLoweringLedger = ledger
+  }
+  where
+    program = normalizeProgram (systemsArtifactProgram artifact)
+    targetDigest = systemsProgramDigest program
+    contract = normalizeStageContract targetDigest
+      (systemsArtifactStageContract artifact)
+    decisions = Map.map (normalizeLoweringDecision targetDigest)
+      (loweringLedgerDecisions (systemsArtifactLoweringLedger artifact))
+    ledger = LoweringLedger
+      { loweringLedgerDecisions = decisions
+      , loweringLedgerRoot = deriveLoweringLedgerRoot decisions
+      }
+
 deriveSystemsArtifactRevision :: SystemsArtifact -> SystemsArtifactRevision
-deriveSystemsArtifactRevision artifact =
-  SystemsArtifactRevision (unDigest (systemsArtifactDigest artifact))
+deriveSystemsArtifactRevision =
+  SystemsArtifactRevision
+    . unDigest
+    . systemsArtifactDigest
+    . normalizePhase1SystemsArtifact
 
 derivePhase1StageContractRevision :: Phase1StageBundle -> Phase1StageContractRevision
 derivePhase1StageContractRevision bundle =
@@ -140,8 +168,8 @@ collectSourceFacts artifact = Set.fromList
   ]
 
 -- | SYS-001 conservatively treats every logical operation and terminator in the
--- Systems graph as semantically significant.  Later schemas can classify some
--- objects as incidental only at an explicit competence boundary.
+-- Systems graph as semantically significant.  Diagnostic presence remains a
+-- mechanism occurrence, but its display label is deliberately not identity.
 collectSystemsMechanisms :: SystemsArtifact -> Set SystemsMechanismKey
 collectSystemsMechanisms artifact = Set.fromList
   (concatMap functionMechanisms (Map.toAscList functions))
@@ -256,6 +284,87 @@ checkJustification sourceFacts (mechanismKey, justification) = do
       then Left (Phase1StageMechanismUnjustified mechanismKey)
       else Right ()
 
+normalizeProgram :: SystemsProgram -> SystemsProgram
+normalizeProgram program = program
+  { systemsProgramFunctions = Map.map normalizeFunction
+      (systemsProgramFunctions program)
+  }
+
+normalizeFunction :: SystemsFunction -> SystemsFunction
+normalizeFunction function = function
+  { systemsFunctionValues = Map.map normalizeValue
+      (systemsFunctionValues function)
+  , systemsFunctionBlocks = Map.map normalizeBlock
+      (systemsFunctionBlocks function)
+  }
+
+normalizeValue :: SystemsValue -> SystemsValue
+normalizeValue value = value
+  { systemsValueRole = case systemsValueRole value of
+      DiagnosticState _ -> DiagnosticState "diagnostic-state"
+      role -> role
+  }
+
+normalizeBlock :: SystemsBlock -> SystemsBlock
+normalizeBlock blockValue = blockValue
+  { systemsBlockOps = map normalizeOperation (systemsBlockOps blockValue)
+  }
+
+normalizeOperation :: SystemsOp -> SystemsOp
+normalizeOperation operation = case operation of
+  OpDiagnostic {} -> operation { diagnosticName = "diagnostic" }
+  _ -> operation
+
+normalizeStageContract :: Digest -> StageContract -> StageContract
+normalizeStageContract targetDigest contract = contract
+  { stageTargetArtifactDigest = targetDigest
+  , stageFacts = sort (map normalizeFactTransfer (stageFacts contract))
+  , stageInvariants = Map.map normalizeInvariant (stageInvariants contract)
+  , stageRequiredEdges = sort (stageRequiredEdges contract)
+  , stageDerivedObligations = sort (stageDerivedObligations contract)
+  , stageAssumptions = sort (stageAssumptions contract)
+  , stageTraceRelation = sort (stageTraceRelation contract)
+  , stageResourceFailureRelation = sort (stageResourceFailureRelation contract)
+  }
+
+normalizeFactTransfer :: FactTransfer -> FactTransfer
+normalizeFactTransfer fact = fact
+  { factDisposition = case factDisposition fact of
+      FactTransferred refs -> FactTransferred (sort refs)
+      disposition -> disposition
+  }
+
+normalizeInvariant :: StageInvariant -> StageInvariant
+normalizeInvariant invariantValue = invariantValue
+  { stageInvariantClaim = normalizeInvariantClaim
+      (stageInvariantClaim invariantValue)
+  }
+
+normalizeInvariantClaim :: InvariantClaim -> InvariantClaim
+normalizeInvariantClaim claim = case claim of
+  InvariantCleanupOwners label blockId owners ->
+    InvariantCleanupOwners label blockId (sort owners)
+  other -> other
+
+normalizeLoweringDecision :: Digest -> LoweringDecision -> LoweringDecision
+normalizeLoweringDecision targetDigest decision = normalized
+  { loweringDecisionDigest = deriveLoweringDecisionDigest normalized }
+  where
+    normalized = decision
+      { loweringTargetArtifactDigest = targetDigest
+      , loweringSemanticEntities = sort (loweringSemanticEntities decision)
+      , loweringObligationRevisions = sort (loweringObligationRevisions decision)
+      , loweringAssuranceEntries = sort (loweringAssuranceEntries decision)
+      , loweringAssuranceUses = sort (loweringAssuranceUses decision)
+      , loweringInvariantsPreserved = sort (loweringInvariantsPreserved decision)
+      , loweringInvariantsTransferred = sort (loweringInvariantsTransferred decision)
+      , loweringRuntimeResidue = sort (loweringRuntimeResidue decision)
+      , loweringTargetPreconditions = sort (loweringTargetPreconditions decision)
+      , loweringAssumptions = sort (loweringAssumptions decision)
+      , loweringDerivedObligations = sort (loweringDerivedObligations decision)
+      , loweringInspectionPlan = []
+      }
+
 semanticDisposition :: Phase1FactDisposition -> SemanticForm
 semanticDisposition disposition = case disposition of
   Phase1FactRealized refs -> tagged "realized" (semanticMechanismSet refs)
@@ -302,7 +411,7 @@ operationKind operation = case operation of
   OpSessionSelect { sessionSelectLabel = label } -> "session-select." <> label
   OpCopy {} -> "copy"
   OpEraseFact {} -> "erase-fact"
-  OpDiagnostic { diagnosticName = name } -> "diagnostic." <> name
+  OpDiagnostic {} -> "diagnostic"
   OpScalarLiteral {} -> "scalar-literal"
   OpTraceEvent event -> "trace." <> event
 

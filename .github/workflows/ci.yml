@@ -169,5 +169,8 @@ jobs:
       - name: Phase 1 Systems next-stage requirements
         run: cabal exec -- runghc -isrc test/Phase1NextStageRequirementMain.hs
 
+      - name: Phase 1 Systems final revision closure
+        run: cabal exec -- runghc -isrc test/Phase1StageClosureMain.hs
+
       - name: Verify LLVM and run Phil programs
         run: bash scripts/ci/phase0-llvm-runtime-smoke.sh
