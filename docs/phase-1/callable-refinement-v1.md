@@ -1,5 +1,7 @@
 # Phase 1 callable refinement boundary v1
 
+> **Historical slice note:** This document records the scope and status of one Phase 1 implementation slice when it landed. “Not yet,” “deferred,” and similar status statements below are historical; see the [Phase 1 implementation notes](README.md) for current status ownership.
+
 Status: implementation note for the CALL-012 tranche.
 
 This slice begins `PHIL-CALL-REFINE-001` with the bounded higher-order substitution case from the Callable and Closure Checking Contract.
