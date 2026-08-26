@@ -142,5 +142,8 @@ jobs:
       - name: Phase 1 Systems boundary owner/length/commit correspondence
         run: cabal exec -- runghc -isrc test/Phase1BoundaryCommitCorrespondenceMain.hs
 
+      - name: Phase 1 Systems evidence subject transfer
+        run: cabal exec -- runghc -isrc test/Phase1EvidenceSubjectTransferMain.hs
+
       - name: Verify LLVM and run Phil programs
         run: bash scripts/ci/phase0-llvm-runtime-smoke.sh
