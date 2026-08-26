@@ -1,0 +1,94 @@
+name: Phase 1 Foreign Callable Implementation Refinement
+
+on:
+  pull_request:
+    paths:
+      - 'proof/Phil/Core/ForeignCallableQualificationImplementation.v'
+      - 'proof/Phil/Core/ForeignCallableQualificationImplementationExtraction.v'
+      - 'docs/phase-1/foreign-callable-implementation-refinement-v1.md'
+      - '.github/workflows/phase1-foreign-callable-implementation-refinement.yml'
+      - 'src/ForeignCallableQualificationKernel.hs'
+      - 'src/Phil/Core/CallableQualification.hs'
+      - 'test/Phase1ForeignCallableQualificationMain.hs'
+  push:
+    branches: [main]
+    paths:
+      - 'proof/Phil/Core/ForeignCallableQualificationImplementation.v'
+      - 'proof/Phil/Core/ForeignCallableQualificationImplementationExtraction.v'
+      - 'docs/phase-1/foreign-callable-implementation-refinement-v1.md'
+      - '.github/workflows/phase1-foreign-callable-implementation-refinement.yml'
+      - 'src/ForeignCallableQualificationKernel.hs'
+      - 'src/Phil/Core/CallableQualification.hs'
+      - 'test/Phase1ForeignCallableQualificationMain.hs'
+
+permissions:
+  contents: read
+
+jobs:
+  rocq-foreign-callable-implementation-refinement:
+    runs-on: ubuntu-latest
+    container:
+      image: rocq/rocq-prover:9.2.0
+      options: --user root
+    steps:
+      - uses: actions/checkout@v4
+      - name: Compile CALL-015 implementation-refinement proof
+        shell: bash
+        run: |
+          set -euo pipefail
+          export PATH="/home/rocq/.opam/${COMPILER}/bin:$PATH"
+          rocq c -Q proof/Phil Phil proof/Phil/Core/GenericStructural.v
+          rocq c -Q proof/Phil Phil proof/Phil/Core/CallableMode.v
+          rocq c -Q proof/Phil Phil proof/Phil/Core/CallableEffects.v
+          rocq c -Q proof/Phil Phil proof/Phil/Core/CallableLifecycle.v
+          rocq c -Q proof/Phil Phil proof/Phil/Core/CallableRefinement.v
+          rocq c -Q proof/Phil Phil proof/Phil/Core/ForeignCallableQualification.v
+          rocq c -Q proof/Phil Phil proof/Phil/Core/ForeignCallableQualificationImplementation.v
+      - name: Extract CALL-015 qualification kernel
+        shell: bash
+        run: |
+          set -euo pipefail
+          export PATH="/home/rocq/.opam/${COMPILER}/bin:$PATH"
+          rm -f ForeignCallableQualificationKernel.hs
+          rocq c -Q proof/Phil Phil proof/Phil/Core/ForeignCallableQualificationImplementationExtraction.v
+          test -s ForeignCallableQualificationKernel.hs
+          grep -q '^module ForeignCallableQualificationKernel where' ForeignCallableQualificationKernel.hs
+          grep -q '^decideForeignQualification ::' ForeignCallableQualificationKernel.hs
+          mkdir -p foreign-callable-implementation-refinement-proof
+          cp \
+            proof/Phil/Core/ForeignCallableQualificationImplementation.v \
+            proof/Phil/Core/ForeignCallableQualificationImplementation.vo \
+            proof/Phil/Core/ForeignCallableQualificationImplementationExtraction.v \
+            ForeignCallableQualificationKernel.hs \
+            foreign-callable-implementation-refinement-proof/
+          sha256sum foreign-callable-implementation-refinement-proof/*
+      - uses: actions/upload-artifact@v4
+        with:
+          name: rocq-foreign-callable-implementation-refinement
+          path: foreign-callable-implementation-refinement-proof
+          if-no-files-found: error
+
+  verify-extracted-foreign-callable-kernel:
+    needs: rocq-foreign-callable-implementation-refinement
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: haskell-actions/setup@v2
+        with:
+          ghc-version: '9.6.7'
+          cabal-version: 'latest'
+      - uses: actions/download-artifact@v4
+        with:
+          name: rocq-foreign-callable-implementation-refinement
+          path: foreign-callable-implementation-refinement-proof
+      - name: Typecheck extracted qualification kernel
+        run: |
+          set -euo pipefail
+          ghc -Wall -Werror -fno-code \
+            foreign-callable-implementation-refinement-proof/ForeignCallableQualificationKernel.hs
+      - name: Preserve existing CALL-015 behavior before production binding
+        run: |
+          set -euo pipefail
+          cabal build exe:phil-certify-core-scalar --ghc-options=-Werror
+          cabal exec -- runghc -isrc test/Phase1CallableRefinementMain.hs
+          cabal exec -- runghc -isrc test/Phase1ForeignCallableQualificationMain.hs
