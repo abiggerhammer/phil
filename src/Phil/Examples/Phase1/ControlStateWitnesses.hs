@@ -8,7 +8,7 @@ module Phil.Examples.Phase1.ControlStateWitnesses
   ) where
 
 import qualified Data.Map.Strict as Map
-import qualified Data.Set as Set
+import Data.Text (Text)
 import Phil.Core.Syntax (Mode (..))
 import Phil.Examples.Phase1.BranchResourceWitnesses
   ( steveBranchResourceStageBundle
@@ -62,16 +62,13 @@ stevePutAlreadyExistsProjection :: StateProjection
 stevePutAlreadyExistsProjection = putOkProjection
   "steve.put.ok.already-exists" "already-exists"
 
-putOkProjection :: String -> String -> StateProjection
+putOkProjection :: Text -> Text -> StateProjection
 putOkProjection projectionName edgeLabel = StateProjection
-  { stateProjectionKey = StateProjectionKey (fromString projectionName)
+  { stateProjectionKey = StateProjectionKey projectionName
   , stateProjectionKind = OrdinaryJoinPredecessor
   , stateProjectionBoundary = stevePutOkBoundaryKey
   , stateProjectionFromBlock = BlockId "put.install"
-  , stateProjectionEdgeLabel = fromString edgeLabel
+  , stateProjectionEdgeLabel = edgeLabel
   , stateProjectionIncomingRestricted = Map.singleton steveCandidateRef Linear
   , stateProjectionBindings = Map.singleton steveCandidateSlot steveCandidateRef
   }
-
-fromString :: String -> Data.Text.Text
-fromString = Data.Text.pack
