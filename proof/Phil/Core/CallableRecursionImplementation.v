@@ -1,7 +1,7 @@
 From Stdlib Require Import Bool.Bool Lists.List.
 Import ListNotations.
 
-From Phil.Core Require Import CallableRecursion.
+From Phil.Core Require Import CallableRefinement CallableRecursion.
 
 (* PHIL-CALL-REC-IMPL-001 — executable production correspondence for CALL-013. *)
 
