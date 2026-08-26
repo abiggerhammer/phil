@@ -168,6 +168,9 @@ Proof.
       destruct (eqKey key entryKey) eqn:Hkey.
       * apply (proj1 (Heq key entryKey)) in Hkey. subst entryKey.
         exfalso. apply Hnotin.
-        unfold keysOf. apply in_map. exact Hrest.
+        unfold keysOf. apply in_map_iff.
+        exists (key, value). split.
+        -- cbn. exact Hkey.
+        -- exact Hrest.
       * apply IH; assumption.
 Qed.
