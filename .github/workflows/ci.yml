@@ -154,5 +154,8 @@ jobs:
       - name: Phase 1 Systems target strengthening
         run: cabal exec -- runghc -isrc test/Phase1TargetStrengtheningMain.hs
 
+      - name: Phase 1 Systems runtime claim binding
+        run: cabal exec -- runghc -isrc test/Phase1RuntimeClaimBindingMain.hs
+
       - name: Verify LLVM and run Phil programs
         run: bash scripts/ci/phase0-llvm-runtime-smoke.sh
