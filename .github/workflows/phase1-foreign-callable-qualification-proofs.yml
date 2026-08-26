@@ -1,0 +1,110 @@
+name: Phase 1 Foreign Callable Qualification Proofs
+
+on:
+  pull_request:
+    paths:
+      - 'src/Phil/Core/CallableQualification.hs'
+      - 'test/Phase1ForeignCallableQualificationMain.hs'
+      - 'test/Phase1CallableRefinementMain.hs'
+      - 'docs/phase-1/foreign-callable-qualification-v1.md'
+      - 'proof/Phil/Core/GenericStructural.v'
+      - 'proof/Phil/Core/CallableMode.v'
+      - 'proof/Phil/Core/CallableEffects.v'
+      - 'proof/Phil/Core/CallableLifecycle.v'
+      - 'proof/Phil/Core/CallableRefinement.v'
+      - 'proof/Phil/Core/ForeignCallableQualification.v'
+      - 'app/Phase1ForeignCallableQualificationCertificationMain.hs'
+      - '.github/workflows/phase1-foreign-callable-qualification-proofs.yml'
+  push:
+    branches: [main]
+    paths:
+      - 'src/Phil/Core/CallableQualification.hs'
+      - 'test/Phase1ForeignCallableQualificationMain.hs'
+      - 'test/Phase1CallableRefinementMain.hs'
+      - 'docs/phase-1/foreign-callable-qualification-v1.md'
+      - 'proof/Phil/Core/GenericStructural.v'
+      - 'proof/Phil/Core/CallableMode.v'
+      - 'proof/Phil/Core/CallableEffects.v'
+      - 'proof/Phil/Core/CallableLifecycle.v'
+      - 'proof/Phil/Core/CallableRefinement.v'
+      - 'proof/Phil/Core/ForeignCallableQualification.v'
+      - 'app/Phase1ForeignCallableQualificationCertificationMain.hs'
+      - '.github/workflows/phase1-foreign-callable-qualification-proofs.yml'
+
+permissions:
+  contents: read
+
+jobs:
+  rocq-phase1-foreign-callable-qualification:
+    runs-on: ubuntu-latest
+    container:
+      image: rocq/rocq-prover:9.2.0
+      options: --user root
+    steps:
+      - uses: actions/checkout@v4
+      - name: Compile PHIL-CALL-FOREIGN-001
+        shell: bash
+        run: |
+          set -euo pipefail
+          export PATH="/home/rocq/.opam/${COMPILER}/bin:$PATH"
+          rocq c -Q proof/Phil Phil proof/Phil/Core/GenericStructural.v
+          rocq c -Q proof/Phil Phil proof/Phil/Core/CallableMode.v
+          rocq c -Q proof/Phil Phil proof/Phil/Core/CallableEffects.v
+          rocq c -Q proof/Phil Phil proof/Phil/Core/CallableLifecycle.v
+          rocq c -Q proof/Phil Phil proof/Phil/Core/CallableRefinement.v
+          rocq c -Q proof/Phil Phil proof/Phil/Core/ForeignCallableQualification.v
+          mkdir -p phase1-foreign-callable-qualification-proof
+          cp proof/Phil/Core/ForeignCallableQualification.v proof/Phil/Core/ForeignCallableQualification.vo phase1-foreign-callable-qualification-proof/
+      - uses: actions/upload-artifact@v4
+        with:
+          name: rocq-phase1-foreign-callable-qualification-proof
+          path: phase1-foreign-callable-qualification-proof
+          if-no-files-found: error
+
+  certify-phase1-foreign-callable-qualification:
+    needs: rocq-phase1-foreign-callable-qualification
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: haskell-actions/setup@v2
+        with:
+          ghc-version: '9.6.7'
+          cabal-version: 'latest'
+      - name: Build existing proof certifier with warnings as errors
+        run: cabal build exe:phil-certify-core-scalar --ghc-options=-Werror
+      - name: Typecheck certifier
+        run: cabal exec -- ghc -isrc -Wall -Werror -fno-code app/Phase1ForeignCallableQualificationCertificationMain.hs
+      - name: Re-run foreign callable qualification correspondence
+        run: |
+          set -euo pipefail
+          cabal exec -- runghc -isrc test/Phase1CallableRefinementMain.hs
+          cabal exec -- runghc -isrc test/Phase1ForeignCallableQualificationMain.hs
+      - uses: actions/download-artifact@v4
+        with:
+          name: rocq-phase1-foreign-callable-qualification-proof
+          path: phase1-foreign-callable-qualification-proof
+      - name: Emit PHIL-CALL-FOREIGN-001 certificate
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p phase1-foreign-callable-qualification-certification
+          cabal exec -- runghc -isrc app/Phase1ForeignCallableQualificationCertificationMain.hs \
+            phase1-foreign-callable-qualification-proof/ForeignCallableQualification.v \
+            phase1-foreign-callable-qualification-proof/ForeignCallableQualification.vo \
+            phase1-foreign-callable-qualification-certification/PHIL-CALL-FOREIGN-001.rocq.cert
+          sha256sum \
+            src/Phil/Core/CallableQualification.hs \
+            test/Phase1CallableRefinementMain.hs \
+            test/Phase1ForeignCallableQualificationMain.hs \
+            docs/phase-1/foreign-callable-qualification-v1.md \
+            proof/Phil/Core/CallableRefinement.v \
+            proof/Phil/Core/ForeignCallableQualification.v \
+            app/Phase1ForeignCallableQualificationCertificationMain.hs \
+            > phase1-foreign-callable-qualification-certification/PHIL-CALL-FOREIGN-001.correspondence.sha256
+          cat phase1-foreign-callable-qualification-certification/PHIL-CALL-FOREIGN-001.rocq.cert
+          sha256sum phase1-foreign-callable-qualification-certification/PHIL-CALL-FOREIGN-001.rocq.cert
+      - uses: actions/upload-artifact@v4
+        with:
+          name: phil-phase1-foreign-callable-qualification-proof-certification
+          path: phase1-foreign-callable-qualification-certification
+          if-no-files-found: error
