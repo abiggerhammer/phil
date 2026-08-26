@@ -1,0 +1,134 @@
+name: Phase 1 Provider Qualification Proofs
+
+on:
+  pull_request:
+    paths:
+      - 'src/Phil/Core/ProviderQualification.hs'
+      - 'test/Phase1ProviderQualificationMain.hs'
+      - 'test/Phase1CallableRefinementMain.hs'
+      - 'test/Main.hs'
+      - 'test/ProcessMain.hs'
+      - 'docs/phase-1/provider-semantic-qualification-v1.md'
+      - 'proof/Phil/Core/GenericStructural.v'
+      - 'proof/Phil/Core/CallableMode.v'
+      - 'proof/Phil/Core/CallableEffects.v'
+      - 'proof/Phil/Core/CallableLifecycle.v'
+      - 'proof/Phil/Core/CallableRefinement.v'
+      - 'proof/Phil/Core/Syntax.v'
+      - 'proof/Phil/Core/Context.v'
+      - 'proof/Phil/Core/ContextJoin.v'
+      - 'proof/Phil/Core/ProcessJoin.v'
+      - 'proof/Phil/Core/ResourceJoin.v'
+      - 'proof/Phil/Core/ProviderQualification.v'
+      - 'app/Phase1ProviderQualificationCertificationMain.hs'
+      - '.github/workflows/phase1-provider-qualification-proofs.yml'
+  push:
+    branches: [main]
+    paths:
+      - 'src/Phil/Core/ProviderQualification.hs'
+      - 'test/Phase1ProviderQualificationMain.hs'
+      - 'test/Phase1CallableRefinementMain.hs'
+      - 'test/Main.hs'
+      - 'test/ProcessMain.hs'
+      - 'docs/phase-1/provider-semantic-qualification-v1.md'
+      - 'proof/Phil/Core/GenericStructural.v'
+      - 'proof/Phil/Core/CallableMode.v'
+      - 'proof/Phil/Core/CallableEffects.v'
+      - 'proof/Phil/Core/CallableLifecycle.v'
+      - 'proof/Phil/Core/CallableRefinement.v'
+      - 'proof/Phil/Core/Syntax.v'
+      - 'proof/Phil/Core/Context.v'
+      - 'proof/Phil/Core/ContextJoin.v'
+      - 'proof/Phil/Core/ProcessJoin.v'
+      - 'proof/Phil/Core/ResourceJoin.v'
+      - 'proof/Phil/Core/ProviderQualification.v'
+      - 'app/Phase1ProviderQualificationCertificationMain.hs'
+      - '.github/workflows/phase1-provider-qualification-proofs.yml'
+
+permissions:
+  contents: read
+
+jobs:
+  rocq-phase1-provider-qualification:
+    runs-on: ubuntu-latest
+    container:
+      image: rocq/rocq-prover:9.2.0
+      options: --user root
+    steps:
+      - uses: actions/checkout@v4
+      - name: Compile PHIL-PROV-QUAL-001
+        shell: bash
+        run: |
+          set -euo pipefail
+          export PATH="/home/rocq/.opam/${COMPILER}/bin:$PATH"
+          rocq c -Q proof/Phil Phil proof/Phil/Core/GenericStructural.v
+          rocq c -Q proof/Phil Phil proof/Phil/Core/CallableMode.v
+          rocq c -Q proof/Phil Phil proof/Phil/Core/CallableEffects.v
+          rocq c -Q proof/Phil Phil proof/Phil/Core/CallableLifecycle.v
+          rocq c -Q proof/Phil Phil proof/Phil/Core/CallableRefinement.v
+          rocq c -Q proof/Phil Phil proof/Phil/Core/Syntax.v
+          rocq c -Q proof/Phil Phil proof/Phil/Core/Context.v
+          rocq c -Q proof/Phil Phil proof/Phil/Core/ContextJoin.v
+          rocq c -Q proof/Phil Phil proof/Phil/Core/ProcessJoin.v
+          rocq c -Q proof/Phil Phil proof/Phil/Core/ResourceJoin.v
+          rocq c -Q proof/Phil Phil proof/Phil/Core/ProviderQualification.v
+          mkdir -p phase1-provider-qualification-proof
+          cp proof/Phil/Core/ProviderQualification.v proof/Phil/Core/ProviderQualification.vo phase1-provider-qualification-proof/
+      - uses: actions/upload-artifact@v4
+        with:
+          name: rocq-phase1-provider-qualification-proof
+          path: phase1-provider-qualification-proof
+          if-no-files-found: error
+
+  certify-phase1-provider-qualification:
+    needs: rocq-phase1-provider-qualification
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: haskell-actions/setup@v2
+        with:
+          ghc-version: '9.6.7'
+          cabal-version: 'latest'
+      - name: Build existing proof certifier with warnings as errors
+        run: cabal build exe:phil-certify-core-scalar --ghc-options=-Werror
+      - name: Typecheck certifier
+        run: cabal exec -- ghc -isrc -Wall -Werror -fno-code app/Phase1ProviderQualificationCertificationMain.hs
+      - name: Re-run provider qualification correspondence
+        run: |
+          set -euo pipefail
+          cabal exec -- runghc -isrc test/Phase1CallableRefinementMain.hs
+          cabal exec -- runghc -isrc test/Main.hs
+          cabal exec -- runghc -isrc test/ProcessMain.hs
+          cabal exec -- runghc -isrc test/Phase1ProviderQualificationMain.hs
+      - uses: actions/download-artifact@v4
+        with:
+          name: rocq-phase1-provider-qualification-proof
+          path: phase1-provider-qualification-proof
+      - name: Emit PHIL-PROV-QUAL-001 certificate
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p phase1-provider-qualification-certification
+          cabal exec -- runghc -isrc app/Phase1ProviderQualificationCertificationMain.hs \
+            phase1-provider-qualification-proof/ProviderQualification.v \
+            phase1-provider-qualification-proof/ProviderQualification.vo \
+            phase1-provider-qualification-certification/PHIL-PROV-QUAL-001.rocq.cert
+          sha256sum \
+            src/Phil/Core/ProviderQualification.hs \
+            test/Phase1ProviderQualificationMain.hs \
+            test/Phase1CallableRefinementMain.hs \
+            test/Main.hs \
+            test/ProcessMain.hs \
+            docs/phase-1/provider-semantic-qualification-v1.md \
+            proof/Phil/Core/CallableRefinement.v \
+            proof/Phil/Core/ResourceJoin.v \
+            proof/Phil/Core/ProviderQualification.v \
+            app/Phase1ProviderQualificationCertificationMain.hs \
+            > phase1-provider-qualification-certification/PHIL-PROV-QUAL-001.correspondence.sha256
+          cat phase1-provider-qualification-certification/PHIL-PROV-QUAL-001.rocq.cert
+          sha256sum phase1-provider-qualification-certification/PHIL-PROV-QUAL-001.rocq.cert
+      - uses: actions/upload-artifact@v4
+        with:
+          name: phil-phase1-provider-qualification-proof-certification
+          path: phase1-provider-qualification-certification
+          if-no-files-found: error
