@@ -1,0 +1,69 @@
+name: Phase 1 surface grammar
+
+on:
+  pull_request:
+    paths:
+      - 'grammar/phase1-surface.ebnf'
+      - 'scripts/derive_phase1_surface_grammar.py'
+      - 'docs/phase-1/surface-grammar-v1.md'
+      - '.github/workflows/phase1-surface-grammar.yml'
+  push:
+    branches:
+      - main
+    paths:
+      - 'grammar/phase1-surface.ebnf'
+      - 'scripts/derive_phase1_surface_grammar.py'
+      - 'docs/phase-1/surface-grammar-v1.md'
+      - '.github/workflows/phase1-surface-grammar.yml'
+
+permissions:
+  contents: read
+
+jobs:
+  derive:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v4
+
+      - name: Check derivation tool
+        run: python3 -m py_compile scripts/derive_phase1_surface_grammar.py
+
+      - name: Derive typed Rocq grammar
+        run: python3 scripts/derive_phase1_surface_grammar.py --write
+
+      - name: Check deterministic derivation
+        run: |
+          cp proof/Phil/Surface/Grammar.v /tmp/Grammar.first.v
+          python3 scripts/derive_phase1_surface_grammar.py --write
+          cmp /tmp/Grammar.first.v proof/Phil/Surface/Grammar.v
+          python3 scripts/derive_phase1_surface_grammar.py --check
+
+      - name: Upload derived grammar
+        uses: actions/upload-artifact@v4
+        with:
+          name: phase1-surface-grammar-rocq
+          path: proof/Phil/Surface/Grammar.v
+          if-no-files-found: error
+          retention-days: 7
+
+  rocq:
+    needs: derive
+    runs-on: ubuntu-latest
+    container:
+      image: rocq/rocq-prover:9.2.0
+      options: --user root
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v4
+
+      - name: Download derived grammar
+        uses: actions/download-artifact@v4
+        with:
+          name: phase1-surface-grammar-rocq
+          path: proof/Phil/Surface
+
+      - name: Compile formal grammar
+        run: |
+          export PATH="/home/rocq/.opam/${COMPILER}/bin:$PATH"
+          rocq c -Q proof/Phil Phil proof/Phil/Surface/Grammar.v
