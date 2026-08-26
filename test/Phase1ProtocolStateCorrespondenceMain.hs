@@ -4,6 +4,7 @@ module Main (main) where
 
 import qualified Data.Map.Strict as Map
 import qualified Data.Set as Set
+import Data.Text (Text)
 import Phil.Examples.Phase1.ProtocolStateWitnesses
 import Phil.Systems.IR (BlockId (..))
 import Phil.Systems.ProtocolStateCorrespondence
@@ -157,15 +158,15 @@ lineageCycleRejected = do
     other -> Left ("cyclic endpoint lineage was accepted: " <> show other)
 
 cycleTransition
-  :: ProtocolTransitionKey
+  :: Text
   -> EndpointOccurrenceKey
   -> EndpointOccurrenceKey
   -> ProtocolTargetSite
   -> ProtocolTransitionBinding
 cycleTransition key predecessor successor site = ProtocolTransitionBinding
-  { protocolTransitionKey = key
+  { protocolTransitionKey = ProtocolTransitionKey key
   , protocolTransitionPredecessor = predecessor
-  , protocolTransitionAction = ProtocolOpaqueAction (unProtocolTransitionKey key)
+  , protocolTransitionAction = ProtocolOpaqueAction key
   , protocolTransitionTargetSite = site
   , protocolTransitionTransport = uploadServerTransport
   , protocolTransitionOutcomes = Map.singleton "success" (ProtocolSuccessor successor)
