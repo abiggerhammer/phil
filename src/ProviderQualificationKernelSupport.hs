@@ -43,3 +43,4 @@ allFiniteb predicate values =
   case values of {
    [] -> Prelude.True;
    (:) value rest -> andb (predicate value) (allFiniteb predicate rest)}
+
