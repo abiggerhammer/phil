@@ -340,6 +340,8 @@ def render_rocq(source_text: str, rules: list[tuple[str, Node]]) -> str:
         "   canonical Phase 1 concrete grammar. Semantic acceptance remains",
         "   governed by the checked Phil declaration/Core contracts. *)",
         "",
+        "Scheme All for list.",
+        "",
         "Inductive EbnfExpression : Type :=",
         "| ELiteral : string -> EbnfExpression",
         "| ELexicalClass : string -> EbnfExpression",
