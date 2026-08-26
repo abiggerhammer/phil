@@ -166,5 +166,8 @@ jobs:
       - name: Phase 1 Systems cost attribution
         run: cabal exec -- runghc -isrc test/Phase1CostAttributionMain.hs
 
+      - name: Phase 1 Systems next-stage requirements
+        run: cabal exec -- runghc -isrc test/Phase1NextStageRequirementMain.hs
+
       - name: Verify LLVM and run Phil programs
         run: bash scripts/ci/phase0-llvm-runtime-smoke.sh
