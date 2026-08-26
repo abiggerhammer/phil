@@ -4,6 +4,7 @@ module Phil.Examples.Phase1.SubjectWitnesses
   ( uploadSubjectStageBundle
   , steveSubjectStageBundle
   , uploadPayloadSubject
+  , uploadClientPayloadSubject
   , steveCandidateSubject
   , steveReadSubject
   ) where
@@ -17,8 +18,9 @@ import Phil.Examples.Phase1.SystemsWitnesses
 import Phil.Systems.IR (ValueId (..))
 import Phil.Systems.SubjectCorrespondence
 
-uploadPayloadSubject :: SourceSubjectKey
+uploadPayloadSubject, uploadClientPayloadSubject :: SourceSubjectKey
 uploadPayloadSubject = SourceSubjectKey "upload.payload.server"
+uploadClientPayloadSubject = SourceSubjectKey "upload.payload.client"
 
 steveCandidateSubject, steveReadSubject :: SourceSubjectKey
 steveCandidateSubject = SourceSubjectKey "steve.bytes.candidate"
@@ -27,7 +29,10 @@ steveReadSubject = SourceSubjectKey "steve.bytes.read-result"
 uploadSubjectStageBundle :: SubjectStageBundle
 uploadSubjectStageBundle = makeSubjectStageBundle
   uploadPhase1StageBundle
-  (Map.singleton uploadPayloadSubject uploadPayloadCorrespondence)
+  (Map.fromList
+    [ (uploadPayloadSubject, uploadPayloadCorrespondence)
+    , (uploadClientPayloadSubject, uploadClientPayloadCorrespondence)
+    ])
 
 steveSubjectStageBundle :: Either String SubjectStageBundle
 steveSubjectStageBundle = do
@@ -52,6 +57,18 @@ uploadPayloadCorrespondence = SubjectCorrespondence
       [ "digest.shared_borrow"
       , "payload.exact_receive"
       ]
+  }
+
+uploadClientPayloadCorrespondence :: SubjectCorrespondence
+uploadClientPayloadCorrespondence = SubjectCorrespondence
+  { subjectCorrespondenceSource = uploadClientPayloadSubject
+  , subjectCorrespondenceSystemsValues = Set.singleton
+      (SystemsValueRef "UploadClient" (ValueId "client.payload"))
+  , subjectCorrespondenceBasis = CheckedSubjectRelation
+      (SubjectRelationRevision "subject.upload.client-payload.owner.v1")
+  , subjectCorrespondenceValidityScope = SubjectValidityScopeRevision
+      "scope.upload.client-payload.owner-live.v1"
+  , subjectCorrespondenceEvidenceRefs = Set.singleton "payload.exact_send"
   }
 
 steveCandidateCorrespondence :: SubjectCorrespondence
