@@ -1,0 +1,106 @@
+name: Phase 1 Callable Lowering Proofs
+
+on:
+  pull_request:
+    paths:
+      - 'src/Phil/Systems/CallableLowering.hs'
+      - 'test/Phase1CallableLoweringMain.hs'
+      - 'docs/phase-1/callable-lowering-v1.md'
+      - 'proof/Phil/Core/GenericStructural.v'
+      - 'proof/Phil/Core/CallableMode.v'
+      - 'proof/Phil/Core/CallableEffects.v'
+      - 'proof/Phil/Core/CallableLifecycle.v'
+      - 'proof/Phil/Core/CallableRefinement.v'
+      - 'proof/Phil/Core/CallableLowering.v'
+      - 'app/Phase1CallableLoweringCertificationMain.hs'
+      - '.github/workflows/phase1-callable-lowering-proofs.yml'
+  push:
+    branches: [main]
+    paths:
+      - 'src/Phil/Systems/CallableLowering.hs'
+      - 'test/Phase1CallableLoweringMain.hs'
+      - 'docs/phase-1/callable-lowering-v1.md'
+      - 'proof/Phil/Core/GenericStructural.v'
+      - 'proof/Phil/Core/CallableMode.v'
+      - 'proof/Phil/Core/CallableEffects.v'
+      - 'proof/Phil/Core/CallableLifecycle.v'
+      - 'proof/Phil/Core/CallableRefinement.v'
+      - 'proof/Phil/Core/CallableLowering.v'
+      - 'app/Phase1CallableLoweringCertificationMain.hs'
+      - '.github/workflows/phase1-callable-lowering-proofs.yml'
+
+permissions:
+  contents: read
+
+jobs:
+  rocq-phase1-callable-lowering:
+    runs-on: ubuntu-latest
+    container:
+      image: rocq/rocq-prover:9.2.0
+      options: --user root
+    steps:
+      - uses: actions/checkout@v4
+      - name: Compile PHIL-CALL-LOWER-001
+        shell: bash
+        run: |
+          set -euo pipefail
+          export PATH="/home/rocq/.opam/${COMPILER}/bin:$PATH"
+          rocq c -Q proof/Phil Phil proof/Phil/Core/GenericStructural.v
+          rocq c -Q proof/Phil Phil proof/Phil/Core/CallableMode.v
+          rocq c -Q proof/Phil Phil proof/Phil/Core/CallableEffects.v
+          rocq c -Q proof/Phil Phil proof/Phil/Core/CallableLifecycle.v
+          rocq c -Q proof/Phil Phil proof/Phil/Core/CallableRefinement.v
+          rocq c -Q proof/Phil Phil proof/Phil/Core/CallableLowering.v
+          mkdir -p phase1-callable-lowering-proof
+          cp proof/Phil/Core/CallableLowering.v proof/Phil/Core/CallableLowering.vo phase1-callable-lowering-proof/
+      - uses: actions/upload-artifact@v4
+        with:
+          name: rocq-phase1-callable-lowering-proof
+          path: phase1-callable-lowering-proof
+          if-no-files-found: error
+
+  certify-phase1-callable-lowering:
+    needs: rocq-phase1-callable-lowering
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: haskell-actions/setup@v2
+        with:
+          ghc-version: '9.6.7'
+          cabal-version: 'latest'
+      - name: Build existing proof certifier with warnings as errors
+        run: cabal build exe:phil-certify-core-scalar --ghc-options=-Werror
+      - name: Typecheck certifier
+        run: cabal exec -- ghc -isrc -Wall -Werror -fno-code app/Phase1CallableLoweringCertificationMain.hs
+      - name: Re-run callable lowering correspondence
+        run: |
+          set -euo pipefail
+          cabal exec -- runghc -isrc test/Phase1CallableLoweringMain.hs
+      - uses: actions/download-artifact@v4
+        with:
+          name: rocq-phase1-callable-lowering-proof
+          path: phase1-callable-lowering-proof
+      - name: Emit PHIL-CALL-LOWER-001 certificate
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p phase1-callable-lowering-certification
+          cabal exec -- runghc -isrc app/Phase1CallableLoweringCertificationMain.hs \
+            phase1-callable-lowering-proof/CallableLowering.v \
+            phase1-callable-lowering-proof/CallableLowering.vo \
+            phase1-callable-lowering-certification/PHIL-CALL-LOWER-001.rocq.cert
+          sha256sum \
+            src/Phil/Systems/CallableLowering.hs \
+            test/Phase1CallableLoweringMain.hs \
+            docs/phase-1/callable-lowering-v1.md \
+            proof/Phil/Core/CallableRefinement.v \
+            proof/Phil/Core/CallableLowering.v \
+            app/Phase1CallableLoweringCertificationMain.hs \
+            > phase1-callable-lowering-certification/PHIL-CALL-LOWER-001.correspondence.sha256
+          cat phase1-callable-lowering-certification/PHIL-CALL-LOWER-001.rocq.cert
+          sha256sum phase1-callable-lowering-certification/PHIL-CALL-LOWER-001.rocq.cert
+      - uses: actions/upload-artifact@v4
+        with:
+          name: phil-phase1-callable-lowering-proof-certification
+          path: phase1-callable-lowering-certification
+          if-no-files-found: error
