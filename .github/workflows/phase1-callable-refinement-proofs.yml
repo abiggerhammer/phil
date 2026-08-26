@@ -1,0 +1,127 @@
+name: Phase 1 Callable Refinement Proofs
+
+on:
+  pull_request:
+    paths:
+      - 'src/Phil/Core/CallableRefinement.hs'
+      - 'test/Phase1CallableCaptureEffectsMain.hs'
+      - 'test/Phase1CallableEffectBoundMain.hs'
+      - 'test/Phase1CallableTransitionsMain.hs'
+      - 'test/Phase1CallableRefinementMain.hs'
+      - 'docs/phase-1/callable-capture-effects-v1.md'
+      - 'docs/phase-1/callable-effect-bound-v1.md'
+      - 'docs/phase-1/callable-transitions-v1.md'
+      - 'docs/phase-1/callable-refinement-v1.md'
+      - 'proof/Phil/Core/GenericStructural.v'
+      - 'proof/Phil/Core/CallableMode.v'
+      - 'proof/Phil/Core/CallableEffects.v'
+      - 'proof/Phil/Core/CallableLifecycle.v'
+      - 'proof/Phil/Core/CallableRefinement.v'
+      - 'app/Phase1CallableRefinementCertificationMain.hs'
+      - '.github/workflows/phase1-callable-refinement-proofs.yml'
+  push:
+    branches: [main]
+    paths:
+      - 'src/Phil/Core/CallableRefinement.hs'
+      - 'test/Phase1CallableCaptureEffectsMain.hs'
+      - 'test/Phase1CallableEffectBoundMain.hs'
+      - 'test/Phase1CallableTransitionsMain.hs'
+      - 'test/Phase1CallableRefinementMain.hs'
+      - 'docs/phase-1/callable-capture-effects-v1.md'
+      - 'docs/phase-1/callable-effect-bound-v1.md'
+      - 'docs/phase-1/callable-transitions-v1.md'
+      - 'docs/phase-1/callable-refinement-v1.md'
+      - 'proof/Phil/Core/GenericStructural.v'
+      - 'proof/Phil/Core/CallableMode.v'
+      - 'proof/Phil/Core/CallableEffects.v'
+      - 'proof/Phil/Core/CallableLifecycle.v'
+      - 'proof/Phil/Core/CallableRefinement.v'
+      - 'app/Phase1CallableRefinementCertificationMain.hs'
+      - '.github/workflows/phase1-callable-refinement-proofs.yml'
+
+permissions:
+  contents: read
+
+jobs:
+  rocq-phase1-callable-refinement:
+    runs-on: ubuntu-latest
+    container:
+      image: rocq/rocq-prover:9.2.0
+      options: --user root
+    steps:
+      - uses: actions/checkout@v4
+      - name: Compile PHIL-CALL-REFINE-001
+        shell: bash
+        run: |
+          set -euo pipefail
+          export PATH="/home/rocq/.opam/${COMPILER}/bin:$PATH"
+          rocq c -Q proof/Phil Phil proof/Phil/Core/GenericStructural.v
+          rocq c -Q proof/Phil Phil proof/Phil/Core/CallableMode.v
+          rocq c -Q proof/Phil Phil proof/Phil/Core/CallableEffects.v
+          rocq c -Q proof/Phil Phil proof/Phil/Core/CallableLifecycle.v
+          rocq c -Q proof/Phil Phil proof/Phil/Core/CallableRefinement.v
+          mkdir -p phase1-callable-refinement-proof
+          cp proof/Phil/Core/CallableRefinement.v proof/Phil/Core/CallableRefinement.vo phase1-callable-refinement-proof/
+      - uses: actions/upload-artifact@v4
+        with:
+          name: rocq-phase1-callable-refinement-proof
+          path: phase1-callable-refinement-proof
+          if-no-files-found: error
+
+  certify-phase1-callable-refinement:
+    needs: rocq-phase1-callable-refinement
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: haskell-actions/setup@v2
+        with:
+          ghc-version: '9.6.7'
+          cabal-version: 'latest'
+      - name: Build existing proof certifier with warnings as errors
+        run: cabal build exe:phil-certify-core-scalar --ghc-options=-Werror
+      - name: Typecheck certifier
+        run: cabal exec -- ghc -isrc -Wall -Werror -fno-code app/Phase1CallableRefinementCertificationMain.hs
+      - name: Re-run callable refinement correspondence
+        run: |
+          set -euo pipefail
+          cabal exec -- runghc -isrc test/Phase1CallableCaptureEffectsMain.hs
+          cabal exec -- runghc -isrc test/Phase1CallableEffectBoundMain.hs
+          cabal exec -- runghc -isrc test/Phase1CallableTransitionsMain.hs
+          cabal exec -- runghc -isrc test/Phase1CallableRefinementMain.hs
+      - uses: actions/download-artifact@v4
+        with:
+          name: rocq-phase1-callable-refinement-proof
+          path: phase1-callable-refinement-proof
+      - name: Emit PHIL-CALL-REFINE-001 certificate
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p phase1-callable-refinement-certification
+          cabal exec -- runghc -isrc app/Phase1CallableRefinementCertificationMain.hs \
+            phase1-callable-refinement-proof/CallableRefinement.v \
+            phase1-callable-refinement-proof/CallableRefinement.vo \
+            phase1-callable-refinement-certification/PHIL-CALL-REFINE-001.rocq.cert
+          sha256sum \
+            src/Phil/Core/CallableRefinement.hs \
+            test/Phase1CallableCaptureEffectsMain.hs \
+            test/Phase1CallableEffectBoundMain.hs \
+            test/Phase1CallableTransitionsMain.hs \
+            test/Phase1CallableRefinementMain.hs \
+            docs/phase-1/callable-capture-effects-v1.md \
+            docs/phase-1/callable-effect-bound-v1.md \
+            docs/phase-1/callable-transitions-v1.md \
+            docs/phase-1/callable-refinement-v1.md \
+            proof/Phil/Core/GenericStructural.v \
+            proof/Phil/Core/CallableMode.v \
+            proof/Phil/Core/CallableEffects.v \
+            proof/Phil/Core/CallableLifecycle.v \
+            proof/Phil/Core/CallableRefinement.v \
+            app/Phase1CallableRefinementCertificationMain.hs \
+            > phase1-callable-refinement-certification/PHIL-CALL-REFINE-001.correspondence.sha256
+          cat phase1-callable-refinement-certification/PHIL-CALL-REFINE-001.rocq.cert
+          sha256sum phase1-callable-refinement-certification/PHIL-CALL-REFINE-001.rocq.cert
+      - uses: actions/upload-artifact@v4
+        with:
+          name: phil-phase1-callable-refinement-proof-certification
+          path: phase1-callable-refinement-certification
+          if-no-files-found: error
