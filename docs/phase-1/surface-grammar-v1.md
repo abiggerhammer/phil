@@ -55,6 +55,8 @@ Phase 1 v1 fixes the following surface conventions:
 - ordinary term statements retain the semicolon-free Phase 0 style;
 - generic/static parameters use `[...]`; runtime parameters and arguments use `(...)`;
 - generic requirements use an explicit `requires { ... }` block;
+- generic effect-set parameters use the `Effects` kind and may be bounded by an `effects E within ...;` requirement;
+- callable contracts state latent may-effects with an `effects ...;` clause;
 - attributes use `@name("value")`, including semantic-key annotations such as `@key(...)` and `@instance_key(...)` when admitted by the semantic checker;
 - records, sums, aliases, claims, callable contracts, functions, providers, protocols, capabilities, boundary representations, architectures, components, and program roots are all ordinary top-level declaration forms;
 - the Phase 1 protocol surface is explicitly binary: a protocol declaration contains exactly two role-local session declarations; distinct role names and duality remain semantic checks;
@@ -65,6 +67,36 @@ Phase 1 v1 fixes the following surface conventions:
 
 These choices freeze spelling and punctuation for Phase 1 v1. They do not freeze a formatter or whitespace layout policy.
 
+## Effect syntax
+
+Grammar v1 represents source-level may-effects explicitly without committing Phil to algebraic effect handlers or a target-runtime effect language.
+
+An effect label is a qualified name optionally applied to term arguments. This permits both unindexed labels and semantic-subject-indexed labels:
+
+```phil
+effects { log.Flush, storage.Write(blob_store), network.Send(endpoint) };
+```
+
+An effect set may also be named by a generic/static effect-set parameter:
+
+```phil
+callable Forward[E : Effects](x : Bytes[n]) -> Unit {
+  effects E;
+}
+```
+
+A generic requirement may place an upper bound on such a parameter:
+
+```phil
+requires {
+  effects E within { storage.Read(source), storage.Write(destination) };
+}
+```
+
+`within` is syntax for a semantic subeffect bound: the checker, not the parser, determines effect identity, subject identity, set inclusion, and whether an effect is legal in the surrounding contract. Effect-set literals may also appear as static arguments where the expected generic kind is `Effects`; ordinary generic-kind checking remains semantic.
+
+This is deliberately source-semantic syntax. Backend calls, copies, staging operations, or other target-introduced machinery do not become source effects merely because they execute. Their additional effects belong to realization/StageContract accounting.
+
 ## Semantic rejection remains competent
 
 The grammar intentionally accepts some forms whose legality depends on semantic information. Examples include whether a named static argument denotes a type or value in the expected parameter position, whether an unsigned width is supported, whether a protocol's two roles are distinct and dual, whether a provider implementation satisfies its exact contract revision, and whether a target-independent architecture binding is valid.
@@ -73,7 +105,7 @@ Those cases belong to elaboration/checking, not to ad hoc parser rejection. Conv
 
 ## Versioning
 
-“v1” names this Phase 1 concrete-syntax epoch. Git history and the embedded source SHA-256 identify exact grammar revisions within it.
+“v1” names this Phase 1 concrete-syntax epoch. Git history and the embedded source SHA-256 identify exact grammar revisions within it. The epoch may still receive deliberate Phase 1 revisions before the canonical source front end is frozen; each such revision changes the exact grammar digest and therefore the identity to which parser-conformance evidence must bind.
 
 A future incompatible concrete-syntax change must be explicit rather than silently changing parser behavior. Whether such a change becomes a new Phase 1 grammar revision or a later language-surface version is a compatibility decision, not parser discretion.
 

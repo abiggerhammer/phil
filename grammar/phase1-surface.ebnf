@@ -31,6 +31,14 @@
 # - semicolons terminate static declaration/configuration items;
 # - ordinary term statements retain the Phase 0 semicolon-free surface.
 #
+# Effects:
+# - effect labels are qualified names optionally applied to term arguments;
+# - effect sets are explicit brace-delimited sets of effect labels;
+# - generic effect-set parameters have kind Effects and may be bounded with
+#   an effects ... within ... requirement;
+# - effect meaning, subject identity, subeffecting, and authority requirements
+#   are semantic checks, not parser responsibilities.
+#
 # A source parser must consume the entire source file.
 
 source_file = [ module_decl ], { import_decl }, { top_level_decl } ;
@@ -73,6 +81,7 @@ generic_kind =
   | "Nat"
   | "Session"
   | "Message"
+  | "Effects"
   | "provider", type_expression
   | "callable", type_expression
   | "boundary", type_expression
@@ -87,6 +96,7 @@ generic_requirement =
   | "callable", identifier, ":", type_expression, ";"
   | "boundary", identifier, ":", type_expression, ";"
   | "architecture", identifier, ":", type_expression, ";"
+  | "effects", identifier, "within", effect_set_expression, ";"
   ;
 
 term_params = "(", [ term_param, { ",", term_param } ], ")" ;
@@ -104,7 +114,12 @@ type_expression =
   ;
 
 named_type = qualified_name, [ static_arguments ] ;
-static_arguments = "[", [ expression, { ",", expression } ], "]" ;
+static_arguments =
+  "[", [ static_argument, { ",", static_argument } ], "]" ;
+static_argument =
+    expression
+  | effect_set_literal
+  ;
 term_arguments = "(", [ expression, { ",", expression } ], ")" ;
 
 record_decl =
@@ -139,7 +154,7 @@ callable_clause =
   | "consumes", name_set, ";"
   | "borrows", name_set, ";"
   | "authority", type_set, ";"
-  | "effects", name_set, ";"
+  | "effects", effect_set_expression, ";"
   | "outcomes", type_set, ";"
   | "ensures", proposition, ";"
   | "assumes", proposition, ";"
@@ -150,6 +165,15 @@ callable_clause =
 callee_transition = "preserve" | "consume" | "replace" ;
 name_set = "{", [ qualified_name, { ",", qualified_name } ], "}" ;
 type_set = "{", [ type_expression, { ",", type_expression } ], "}" ;
+
+effect_set_expression =
+    effect_set_literal
+  | qualified_name
+  ;
+effect_set_literal =
+  "{", [ effect_expression, { ",", effect_expression } ], "}" ;
+effect_expression =
+  qualified_name, [ term_arguments ] ;
 
 function_decl =
   [ "recursive" ], "fn", identifier,
