@@ -51,7 +51,12 @@ Proof.
   intros D Key eqKey keyOf Heq key definitions.
   induction definitions as [| definition rest IH].
   - cbn. split; intro H; [discriminate | contradiction].
-  - cbn. rewrite orb_true_iff, Heq, IH. reflexivity.
+  - cbn. rewrite orb_true_iff, Heq, IH.
+    split; intros [Hhead | Hrest].
+    + left. symmetry. exact Hhead.
+    + right. exact Hrest.
+    + left. symmetry. exact Hhead.
+    + right. exact Hrest.
 Qed.
 
 Theorem stabilize_public_output_is_exact_projection :
