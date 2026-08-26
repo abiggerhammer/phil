@@ -9,6 +9,7 @@ on:
       - '.github/workflows/phase1-foreign-callable-implementation-refinement.yml'
       - 'src/ForeignCallableQualificationKernel.hs'
       - 'src/Phil/Core/CallableQualification.hs'
+      - 'src/Phil/Core/CallableQualification/Bound.hs'
       - 'test/Phase1ForeignCallableQualificationMain.hs'
   push:
     branches: [main]
@@ -19,6 +20,7 @@ on:
       - '.github/workflows/phase1-foreign-callable-implementation-refinement.yml'
       - 'src/ForeignCallableQualificationKernel.hs'
       - 'src/Phil/Core/CallableQualification.hs'
+      - 'src/Phil/Core/CallableQualification/Bound.hs'
       - 'test/Phase1ForeignCallableQualificationMain.hs'
 
 permissions:
@@ -44,7 +46,7 @@ jobs:
           rocq c -Q proof/Phil Phil proof/Phil/Core/CallableRefinement.v
           rocq c -Q proof/Phil Phil proof/Phil/Core/ForeignCallableQualification.v
           rocq c -Q proof/Phil Phil proof/Phil/Core/ForeignCallableQualificationImplementation.v
-      - name: Extract CALL-015 qualification kernel
+      - name: Regenerate and bind proved CALL-015 qualification kernel
         shell: bash
         run: |
           set -euo pipefail
@@ -54,6 +56,12 @@ jobs:
           test -s ForeignCallableQualificationKernel.hs
           grep -q '^module ForeignCallableQualificationKernel where' ForeignCallableQualificationKernel.hs
           grep -q '^decideForeignQualification ::' ForeignCallableQualificationKernel.hs
+          if ! cmp -s ForeignCallableQualificationKernel.hs src/ForeignCallableQualificationKernel.hs; then
+            echo 'checked-in CALL-015 kernel differs from fresh Rocq extraction' >&2
+            diff -u src/ForeignCallableQualificationKernel.hs ForeignCallableQualificationKernel.hs || true
+            exit 1
+          fi
+          sha256sum ForeignCallableQualificationKernel.hs src/ForeignCallableQualificationKernel.hs
           mkdir -p foreign-callable-implementation-refinement-proof
           cp \
             proof/Phil/Core/ForeignCallableQualificationImplementation.v \
@@ -61,14 +69,13 @@ jobs:
             proof/Phil/Core/ForeignCallableQualificationImplementationExtraction.v \
             ForeignCallableQualificationKernel.hs \
             foreign-callable-implementation-refinement-proof/
-          sha256sum foreign-callable-implementation-refinement-proof/*
       - uses: actions/upload-artifact@v4
         with:
           name: rocq-foreign-callable-implementation-refinement
           path: foreign-callable-implementation-refinement-proof
           if-no-files-found: error
 
-  verify-extracted-foreign-callable-kernel:
+  verify-production-foreign-callable:
     needs: rocq-foreign-callable-implementation-refinement
     runs-on: ubuntu-latest
     steps:
@@ -81,12 +88,15 @@ jobs:
         with:
           name: rocq-foreign-callable-implementation-refinement
           path: foreign-callable-implementation-refinement-proof
-      - name: Typecheck extracted qualification kernel
+      - name: Typecheck extracted and checked-in qualification kernel
         run: |
           set -euo pipefail
-          ghc -Wall -Werror -fno-code \
-            foreign-callable-implementation-refinement-proof/ForeignCallableQualificationKernel.hs
-      - name: Preserve existing CALL-015 behavior before production binding
+          cmp -s \
+            foreign-callable-implementation-refinement-proof/ForeignCallableQualificationKernel.hs \
+            src/ForeignCallableQualificationKernel.hs
+          ghc -Wall -Werror -fno-code src/ForeignCallableQualificationKernel.hs
+          ghc -isrc -Wall -Werror -fno-code src/Phil/Core/CallableQualification.hs
+      - name: Exercise production CALL-015 path through extracted gate and CALL-012
         run: |
           set -euo pipefail
           cabal build exe:phil-certify-core-scalar --ghc-options=-Werror
