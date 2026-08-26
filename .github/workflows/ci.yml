@@ -136,5 +136,8 @@ jobs:
       - name: Phase 1 Systems control-state projection
         run: cabal exec -- runghc -isrc test/Phase1ControlStateProjectionMain.hs
 
+      - name: Phase 1 Systems protocol state correspondence
+        run: cabal exec -- runghc -isrc test/Phase1ProtocolStateCorrespondenceMain.hs
+
       - name: Verify LLVM and run Phil programs
         run: bash scripts/ci/phase0-llvm-runtime-smoke.sh
