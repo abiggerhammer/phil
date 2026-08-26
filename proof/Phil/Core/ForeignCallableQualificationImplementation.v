@@ -1,7 +1,7 @@
 From Stdlib Require Import Bool.Bool Lists.List.
 Import ListNotations.
 
-From Phil.Core Require Import ForeignCallableQualification.
+From Phil.Core Require Import CallableRefinement ForeignCallableQualification.
 
 (* PHIL-CALL-FOREIGN-IMPL-001 — executable production correspondence. *)
 
