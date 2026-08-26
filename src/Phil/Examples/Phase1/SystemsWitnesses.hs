@@ -3,6 +3,9 @@
 module Phil.Examples.Phase1.SystemsWitnesses
   ( uploadPhase1StageBundle
   , stevePhase1StageBundle
+  , steveHostAbiDecisionId
+  , steveHostAbiTargetPrecondition
+  , steveHostAbiObligationRevision
   ) where
 
 import qualified Data.Map.Strict as Map
@@ -10,7 +13,7 @@ import Data.Map.Strict (Map)
 import qualified Data.Set as Set
 import Data.Set (Set)
 import Data.Text (Text)
-import Phil.Assurance.Types (digestText)
+import Phil.Assurance.Types (RevisionId (..), digestText)
 import Phil.Core.ProviderQualificationIdentity
   ( CheckedProviderQualificationAdmissionIdentity (..)
   , ProviderQualificationEvidenceIdentityInput (..)
@@ -105,11 +108,22 @@ admissionText :: CheckedProviderQualificationAdmissionIdentity -> Text
 admissionText checked = case checkedQualificationAdmissionRevision checked of
   QualificationAdmissionRevision value -> value
 
+steveHostAbiDecisionId :: DecisionId
+steveHostAbiDecisionId = DecisionId "lower.steve.host-abi"
+
+steveHostAbiTargetPrecondition :: Text
+steveHostAbiTargetPrecondition =
+  "host BlobProvider byte-slice ABI preserves pointer/length pairing and length range"
+
+steveHostAbiObligationRevision :: RevisionId
+steveHostAbiObligationRevision =
+  RevisionId "obligation.phase1.steve.host-abi.v1"
+
 steveSystemsArtifact :: SystemsArtifact
 steveSystemsArtifact = SystemsArtifact
   { systemsArtifactProgram = steveProgram
   , systemsArtifactStageContract = steveStageContract
-  , systemsArtifactLoweringLedger = emptyLedger
+  , systemsArtifactLoweringLedger = steveLoweringLedger
   }
 
 steveProgram :: SystemsProgram
@@ -176,11 +190,16 @@ steveGetFunction = SystemsFunction
       ]
   }
 
+steveSourceArtifactDigest =
+  digestText "Steve Phase 1 architecture/provider semantic source"
+
+steveTargetArtifactDigest = systemsProgramDigest steveProgram
+
 steveStageContract :: StageContract
 steveStageContract = StageContract
   { stageContractId = "phase1.steve.provider-to-systems.v1"
-  , stageSourceArtifactDigest = digestText "Steve Phase 1 architecture/provider semantic source"
-  , stageTargetArtifactDigest = systemsProgramDigest steveProgram
+  , stageSourceArtifactDigest = steveSourceArtifactDigest
+  , stageTargetArtifactDigest = steveTargetArtifactDigest
   , stageFacts = map sourceFact
       [ "steve.digest.stable-subject"
       , "steve.digest.sha256-profile"
@@ -192,7 +211,7 @@ steveStageContract = StageContract
       ]
   , stageInvariants = Map.empty
   , stageRequiredEdges = []
-  , stageDerivedObligations = []
+  , stageDerivedObligations = [steveHostAbiObligationRevision]
   , stageAssumptions =
       [ "sha256.semantic-profile.v1"
       , "blob.no-out-of-band-mutation.v1"
@@ -216,11 +235,45 @@ sourceFact key = FactTransfer
   , factDisposition = FactConsumed "indexed by Phase1Stage bidirectional accounting"
   }
 
-emptyLedger :: LoweringLedger
-emptyLedger = LoweringLedger
-  { loweringLedgerDecisions = Map.empty
-  , loweringLedgerRoot = deriveLoweringLedgerRoot Map.empty
+steveLoweringLedger :: LoweringLedger
+steveLoweringLedger = LoweringLedger
+  { loweringLedgerDecisions = decisions
+  , loweringLedgerRoot = deriveLoweringLedgerRoot decisions
   }
+  where
+    decisions = Map.singleton steveHostAbiDecisionId steveHostAbiDecision
+
+steveHostAbiDecision :: LoweringDecision
+steveHostAbiDecision = provisional
+  { loweringDecisionDigest = deriveLoweringDecisionDigest provisional }
+  where
+    provisional = LoweringDecision
+      { loweringDecisionId = steveHostAbiDecisionId
+      , loweringDecisionDigest = digestText "pending"
+      , loweringSourceArtifactDigest = steveSourceArtifactDigest
+      , loweringTargetArtifactDigest = steveTargetArtifactDigest
+      , loweringSourceRepresentation = "Steve BlobProvider semantic byte slice"
+      , loweringTargetRepresentation = "host pointer/length byte-slice ABI"
+      , loweringSemanticEntities = ["steve.blob.byte-slice"]
+      , loweringObligationRevisions = []
+      , loweringAssuranceEntries = []
+      , loweringAssuranceUses = []
+      , loweringAction = ChooseLayout
+      , loweringRepresentationBefore = "OwnedBytes / shared semantic byte view"
+      , loweringRepresentationAfter = "host pointer + length pair"
+      , loweringInvariantsPreserved = []
+      , loweringInvariantsTransferred = []
+      , loweringRuntimeResidue = []
+      , loweringCostClass = Just TargetRequired
+      , loweringCostShape = emptyCostShape
+      , loweringTargetPreconditions = [steveHostAbiTargetPrecondition]
+      , loweringAssumptions = []
+      , loweringDerivedObligations = [steveHostAbiObligationRevision]
+      , loweringInspectionPlan =
+          [ "verify selected host ABI preserves pointer/length pairing"
+          , "verify host length representation covers the semantic byte length range"
+          ]
+      }
 
 runtimeChoice :: Text -> [Text] -> [(Text, Text)] -> SystemsTerminator
 runtimeChoice name inputs arms = TermRuntimeChoice
