@@ -1,0 +1,104 @@
+name: Phase 1 Process Join Proofs
+
+on:
+  pull_request:
+    paths:
+      - 'src/Phil/Core/Process.hs'
+      - 'src/Phil/Core/Context.hs'
+      - 'test/ProcessMain.hs'
+      - 'proof/Phil/Core/Syntax.v'
+      - 'proof/Phil/Core/Context.v'
+      - 'proof/Phil/Core/ContextJoin.v'
+      - 'proof/Phil/Core/ProcessJoin.v'
+      - 'proof/Phil/Core/ProcessJoinCertification.v'
+      - 'app/Phase1ProcessJoinCertificationMain.hs'
+      - '.github/workflows/phase1-process-join-proofs.yml'
+  push:
+    branches: [main]
+    paths:
+      - 'src/Phil/Core/Process.hs'
+      - 'src/Phil/Core/Context.hs'
+      - 'test/ProcessMain.hs'
+      - 'proof/Phil/Core/Syntax.v'
+      - 'proof/Phil/Core/Context.v'
+      - 'proof/Phil/Core/ContextJoin.v'
+      - 'proof/Phil/Core/ProcessJoin.v'
+      - 'proof/Phil/Core/ProcessJoinCertification.v'
+      - 'app/Phase1ProcessJoinCertificationMain.hs'
+      - '.github/workflows/phase1-process-join-proofs.yml'
+
+permissions:
+  contents: read
+
+jobs:
+  rocq-phase1-process-join:
+    runs-on: ubuntu-latest
+    container:
+      image: rocq/rocq-prover:9.2.0
+      options: --user root
+    steps:
+      - uses: actions/checkout@v4
+      - name: Compile PHIL-PROC-JOIN-001
+        shell: bash
+        run: |
+          set -euo pipefail
+          export PATH="/home/rocq/.opam/${COMPILER}/bin:$PATH"
+          rocq c -Q proof/Phil Phil proof/Phil/Core/Syntax.v
+          rocq c -Q proof/Phil Phil proof/Phil/Core/Context.v
+          rocq c -Q proof/Phil Phil proof/Phil/Core/ContextJoin.v
+          rocq c -Q proof/Phil Phil proof/Phil/Core/ProcessJoin.v
+          rocq c -Q proof/Phil Phil proof/Phil/Core/ProcessJoinCertification.v
+          mkdir -p phase1-process-join-proof
+          cp proof/Phil/Core/ProcessJoinCertification.v proof/Phil/Core/ProcessJoinCertification.vo phase1-process-join-proof/
+      - uses: actions/upload-artifact@v4
+        with:
+          name: rocq-phase1-process-join-proof
+          path: phase1-process-join-proof
+          if-no-files-found: error
+
+  certify-phase1-process-join:
+    needs: rocq-phase1-process-join
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: haskell-actions/setup@v2
+        with:
+          ghc-version: '9.6.7'
+          cabal-version: 'latest'
+      - name: Build existing proof certifier with warnings as errors
+        run: cabal build exe:phil-certify-core-scalar --ghc-options=-Werror
+      - name: Typecheck certifier
+        run: cabal exec -- ghc -isrc -Wall -Werror -fno-code app/Phase1ProcessJoinCertificationMain.hs
+      - name: Re-run process join correspondence
+        run: cabal exec -- runghc -isrc test/ProcessMain.hs
+      - uses: actions/download-artifact@v4
+        with:
+          name: rocq-phase1-process-join-proof
+          path: phase1-process-join-proof
+      - name: Emit PHIL-PROC-JOIN-001 certificate
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p phase1-process-join-certification
+          cabal exec -- runghc -isrc app/Phase1ProcessJoinCertificationMain.hs \
+            phase1-process-join-proof/ProcessJoinCertification.v \
+            phase1-process-join-proof/ProcessJoinCertification.vo \
+            phase1-process-join-certification/PHIL-PROC-JOIN-001.rocq.cert
+          sha256sum \
+            src/Phil/Core/Process.hs \
+            src/Phil/Core/Context.hs \
+            test/ProcessMain.hs \
+            proof/Phil/Core/Syntax.v \
+            proof/Phil/Core/Context.v \
+            proof/Phil/Core/ContextJoin.v \
+            proof/Phil/Core/ProcessJoin.v \
+            proof/Phil/Core/ProcessJoinCertification.v \
+            app/Phase1ProcessJoinCertificationMain.hs \
+            > phase1-process-join-certification/PHIL-PROC-JOIN-001.correspondence.sha256
+          cat phase1-process-join-certification/PHIL-PROC-JOIN-001.rocq.cert
+          sha256sum phase1-process-join-certification/PHIL-PROC-JOIN-001.rocq.cert
+      - uses: actions/upload-artifact@v4
+        with:
+          name: phil-phase1-process-join-proof-certification
+          path: phase1-process-join-certification
+          if-no-files-found: error
