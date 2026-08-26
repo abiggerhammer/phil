@@ -4,21 +4,29 @@ on:
   pull_request:
     paths:
       - 'proof/Phil/Core/ProviderQualificationImplementationBridge.v'
+      - 'proof/Phil/Core/ProviderQualificationImplementation.v'
       - 'proof/Phil/Core/ProviderQualificationImplementationExtraction.v'
+      - 'proof/Phil/Core/ProviderQualificationProductionExtraction.v'
       - 'docs/phase-1/provider-qualification-implementation-refinement-v1.md'
       - '.github/workflows/phase1-provider-qualification-implementation-refinement.yml'
       - 'src/ProviderQualificationKernelSupport.hs'
+      - 'src/ProviderQualificationKernel.hs'
       - 'src/Phil/Core/ProviderQualification.hs'
+      - 'src/Phil/Core/ProviderQualification/Bound.hs'
       - 'test/Phase1ProviderQualificationMain.hs'
   push:
     branches: [main]
     paths:
       - 'proof/Phil/Core/ProviderQualificationImplementationBridge.v'
+      - 'proof/Phil/Core/ProviderQualificationImplementation.v'
       - 'proof/Phil/Core/ProviderQualificationImplementationExtraction.v'
+      - 'proof/Phil/Core/ProviderQualificationProductionExtraction.v'
       - 'docs/phase-1/provider-qualification-implementation-refinement-v1.md'
       - '.github/workflows/phase1-provider-qualification-implementation-refinement.yml'
       - 'src/ProviderQualificationKernelSupport.hs'
+      - 'src/ProviderQualificationKernel.hs'
       - 'src/Phil/Core/ProviderQualification.hs'
+      - 'src/Phil/Core/ProviderQualification/Bound.hs'
       - 'test/Phase1ProviderQualificationMain.hs'
 
 permissions:
@@ -32,30 +40,45 @@ jobs:
       options: --user root
     steps:
       - uses: actions/checkout@v4
-      - name: Compile reusable provider finite-map bridge
+      - name: Compile provider finite-map bridge and nested traversal
         shell: bash
         run: |
           set -euo pipefail
           export PATH="/home/rocq/.opam/${COMPILER}/bin:$PATH"
           rocq c -Q proof/Phil Phil proof/Phil/Core/ProviderQualificationImplementationBridge.v
-      - name: Extract provider qualification support kernel
+          rocq c -Q proof/Phil Phil proof/Phil/Core/ProviderQualificationImplementation.v
+      - name: Regenerate bound support kernel and extract provider traversal
         shell: bash
         run: |
           set -euo pipefail
           export PATH="/home/rocq/.opam/${COMPILER}/bin:$PATH"
-          rm -f ProviderQualificationKernelSupport.hs
+          rm -f ProviderQualificationKernelSupport.hs ProviderQualificationKernel.hs
           rocq c -Q proof/Phil Phil proof/Phil/Core/ProviderQualificationImplementationExtraction.v
           test -s ProviderQualificationKernelSupport.hs
           grep -q '^module ProviderQualificationKernelSupport where' ProviderQualificationKernelSupport.hs
           grep -q '^sameKeyDomainb ::' ProviderQualificationKernelSupport.hs
           grep -q '^lookupAssoc ::' ProviderQualificationKernelSupport.hs
           grep -q '^allFiniteb ::' ProviderQualificationKernelSupport.hs
+          if ! cmp -s ProviderQualificationKernelSupport.hs src/ProviderQualificationKernelSupport.hs; then
+            echo 'checked-in provider support kernel differs from fresh Rocq extraction' >&2
+            diff -u src/ProviderQualificationKernelSupport.hs ProviderQualificationKernelSupport.hs || true
+            exit 1
+          fi
+          rocq c -Q proof/Phil Phil proof/Phil/Core/ProviderQualificationProductionExtraction.v
+          test -s ProviderQualificationKernel.hs
+          grep -q '^module ProviderQualificationKernel where' ProviderQualificationKernel.hs
+          grep -q '^decideOutcomeTraversal ::' ProviderQualificationKernel.hs
+          grep -q '^decideProviderQualification ::' ProviderQualificationKernel.hs
           mkdir -p provider-qualification-implementation-refinement-proof
           cp \
             proof/Phil/Core/ProviderQualificationImplementationBridge.v \
             proof/Phil/Core/ProviderQualificationImplementationBridge.vo \
+            proof/Phil/Core/ProviderQualificationImplementation.v \
+            proof/Phil/Core/ProviderQualificationImplementation.vo \
             proof/Phil/Core/ProviderQualificationImplementationExtraction.v \
+            proof/Phil/Core/ProviderQualificationProductionExtraction.v \
             ProviderQualificationKernelSupport.hs \
+            ProviderQualificationKernel.hs \
             provider-qualification-implementation-refinement-proof/
           sha256sum provider-qualification-implementation-refinement-proof/*
       - uses: actions/upload-artifact@v4
@@ -64,7 +87,7 @@ jobs:
           path: provider-qualification-implementation-refinement-proof
           if-no-files-found: error
 
-  verify-extracted-provider-support-kernel:
+  verify-extracted-provider-kernels:
     needs: rocq-provider-qualification-implementation-refinement
     runs-on: ubuntu-latest
     steps:
@@ -77,12 +100,16 @@ jobs:
         with:
           name: rocq-provider-qualification-implementation-refinement
           path: provider-qualification-implementation-refinement-proof
-      - name: Typecheck extracted provider support kernel
+      - name: Typecheck provider support and nested traversal kernels
         run: |
           set -euo pipefail
+          cmp -s \
+            provider-qualification-implementation-refinement-proof/ProviderQualificationKernelSupport.hs \
+            src/ProviderQualificationKernelSupport.hs
+          ghc -Wall -Werror -fno-code src/ProviderQualificationKernelSupport.hs
           ghc -Wall -Werror -fno-code \
-            provider-qualification-implementation-refinement-proof/ProviderQualificationKernelSupport.hs
-      - name: Preserve existing PROV-001–005 behavior before production binding
+            provider-qualification-implementation-refinement-proof/ProviderQualificationKernel.hs
+      - name: Preserve existing PROV-001–005 behavior before final binding
         run: |
           set -euo pipefail
           cabal build exe:phil-certify-core-scalar --ghc-options=-Werror
