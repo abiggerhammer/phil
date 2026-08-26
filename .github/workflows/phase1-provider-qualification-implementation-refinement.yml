@@ -1,0 +1,90 @@
+name: Phase 1 Provider Qualification Implementation Refinement
+
+on:
+  pull_request:
+    paths:
+      - 'proof/Phil/Core/ProviderQualificationImplementationBridge.v'
+      - 'proof/Phil/Core/ProviderQualificationImplementationExtraction.v'
+      - 'docs/phase-1/provider-qualification-implementation-refinement-v1.md'
+      - '.github/workflows/phase1-provider-qualification-implementation-refinement.yml'
+      - 'src/ProviderQualificationKernelSupport.hs'
+      - 'src/Phil/Core/ProviderQualification.hs'
+      - 'test/Phase1ProviderQualificationMain.hs'
+  push:
+    branches: [main]
+    paths:
+      - 'proof/Phil/Core/ProviderQualificationImplementationBridge.v'
+      - 'proof/Phil/Core/ProviderQualificationImplementationExtraction.v'
+      - 'docs/phase-1/provider-qualification-implementation-refinement-v1.md'
+      - '.github/workflows/phase1-provider-qualification-implementation-refinement.yml'
+      - 'src/ProviderQualificationKernelSupport.hs'
+      - 'src/Phil/Core/ProviderQualification.hs'
+      - 'test/Phase1ProviderQualificationMain.hs'
+
+permissions:
+  contents: read
+
+jobs:
+  rocq-provider-qualification-implementation-refinement:
+    runs-on: ubuntu-latest
+    container:
+      image: rocq/rocq-prover:9.2.0
+      options: --user root
+    steps:
+      - uses: actions/checkout@v4
+      - name: Compile reusable provider finite-map bridge
+        shell: bash
+        run: |
+          set -euo pipefail
+          export PATH="/home/rocq/.opam/${COMPILER}/bin:$PATH"
+          rocq c -Q proof/Phil Phil proof/Phil/Core/ProviderQualificationImplementationBridge.v
+      - name: Extract provider qualification support kernel
+        shell: bash
+        run: |
+          set -euo pipefail
+          export PATH="/home/rocq/.opam/${COMPILER}/bin:$PATH"
+          rm -f ProviderQualificationKernelSupport.hs
+          rocq c -Q proof/Phil Phil proof/Phil/Core/ProviderQualificationImplementationExtraction.v
+          test -s ProviderQualificationKernelSupport.hs
+          grep -q '^module ProviderQualificationKernelSupport where' ProviderQualificationKernelSupport.hs
+          grep -q '^sameKeyDomainb ::' ProviderQualificationKernelSupport.hs
+          grep -q '^lookupAssoc ::' ProviderQualificationKernelSupport.hs
+          grep -q '^allFiniteb ::' ProviderQualificationKernelSupport.hs
+          mkdir -p provider-qualification-implementation-refinement-proof
+          cp \
+            proof/Phil/Core/ProviderQualificationImplementationBridge.v \
+            proof/Phil/Core/ProviderQualificationImplementationBridge.vo \
+            proof/Phil/Core/ProviderQualificationImplementationExtraction.v \
+            ProviderQualificationKernelSupport.hs \
+            provider-qualification-implementation-refinement-proof/
+          sha256sum provider-qualification-implementation-refinement-proof/*
+      - uses: actions/upload-artifact@v4
+        with:
+          name: rocq-provider-qualification-implementation-refinement
+          path: provider-qualification-implementation-refinement-proof
+          if-no-files-found: error
+
+  verify-extracted-provider-support-kernel:
+    needs: rocq-provider-qualification-implementation-refinement
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: haskell-actions/setup@v2
+        with:
+          ghc-version: '9.6.7'
+          cabal-version: 'latest'
+      - uses: actions/download-artifact@v4
+        with:
+          name: rocq-provider-qualification-implementation-refinement
+          path: provider-qualification-implementation-refinement-proof
+      - name: Typecheck extracted provider support kernel
+        run: |
+          set -euo pipefail
+          ghc -Wall -Werror -fno-code \
+            provider-qualification-implementation-refinement-proof/ProviderQualificationKernelSupport.hs
+      - name: Preserve existing PROV-001–005 behavior before production binding
+        run: |
+          set -euo pipefail
+          cabal build exe:phil-certify-core-scalar --ghc-options=-Werror
+          cabal exec -- runghc -isrc test/Phase1CallableRefinementMain.hs
+          cabal exec -- runghc -isrc test/Phase1ProviderQualificationMain.hs
