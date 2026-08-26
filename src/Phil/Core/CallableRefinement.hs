@@ -10,6 +10,7 @@ module Phil.Core.CallableRefinement
   , checkCallableRefinement
   ) where
 
+import qualified CallableRefinementKernel as Kernel
 import qualified Data.Set as Set
 import Data.Text (Text)
 import Phil.Core.Callable
@@ -71,36 +72,79 @@ data CallableRefinementError
   | CallableFailureSetTooWide
       (Set.Set CallableFailure)
   | CallableCalleeTransitionIncompatible CalleeTransition CalleeTransition
+  | CallableRefinementRepresentationBridgeMismatch Text
   deriving (Eq, Ord, Show)
 
 -- | Check whether an actual callable may be supplied where an expected callable
--- contract is required. The first Phase 1 relation is deliberately asymmetric:
--- the actual may require less authority, permit fewer effects/failures, and use
--- the same callee lifecycle, but it may not demand or expose anything wider.
+-- contract is required. Acceptance is decided by the Rocq-extracted CALL-012
+-- kernel. Haskell constructs the finite projection and diagnostic payloads, but
+-- it is deliberately unable to turn a kernel rejection into acceptance.
 --
--- Exact machine-shape equality is checked first but is never sufficient by
--- itself. Callee transitions are conservative/exact in v1; any nontrivial
--- preserving/consuming/replacing adaptation must become an explicit checked
--- refinement rather than an implicit coercion.
+-- Set projections use a finite ascending domain for the union of actual and
+-- expected elements. The incidence encoder itself is extracted from the proved
+-- bridge model. Runtime round-trip checks fail closed if the concrete Data.Set
+-- view does not reconstruct the exact source sets for this comparison.
 checkCallableRefinement
   :: CallableRefinementSurface
   -> CallableRefinementSurface
   -> Either CallableRefinementError CheckedCallableRefinement
-checkCallableRefinement expected actual
-  | actualShape /= expectedShape =
-      Left (CallableMachineShapeMismatch expectedShape actualShape)
-  | not (Set.null excessAuthority) =
-      Left (CallableAuthorityRequirementTooStrong excessAuthority)
-  | not (Set.null excessEffects) =
-      Left (CallableEffectBoundTooWide excessEffects)
-  | not (Set.null excessFailures) =
-      Left (CallableFailureSetTooWide excessFailures)
-  | actualTransition /= expectedTransition =
-      Left (CallableCalleeTransitionIncompatible expectedTransition actualTransition)
-  | otherwise = Right CheckedCallableRefinement
-      { checkedCallableRefinementExpected = expected
-      , checkedCallableRefinementActual = actual
-      }
+checkCallableRefinement expected actual = do
+  (actualAuthorityBits, expectedAuthorityBits) <-
+    incidencePair
+      "caller-authority"
+      (callableRefinementCallerAuthority actual)
+      (callableRefinementCallerAuthority expected)
+  (actualEffectBits, expectedEffectBits) <-
+    incidencePair
+      "effect-bound"
+      (callableContractEffectBound actualContract)
+      (callableContractEffectBound expectedContract)
+  (actualFailureBits, expectedFailureBits) <-
+    incidencePair
+      "failure-set"
+      (callableRefinementFailures actual)
+      (callableRefinementFailures expected)
+  let projection = Kernel.MkRefinementProjection
+        (actualShape == expectedShape)
+        actualAuthorityBits
+        expectedAuthorityBits
+        actualEffectBits
+        expectedEffectBits
+        actualFailureBits
+        expectedFailureBits
+        (actualTransition == expectedTransition)
+  case Kernel.decideCallableRefinement projection of
+    Kernel.RefinementAccepted
+      | actualShape == expectedShape
+          && Set.null excessAuthority
+          && Set.null excessEffects
+          && Set.null excessFailures
+          && actualTransition == expectedTransition ->
+          Right CheckedCallableRefinement
+            { checkedCallableRefinementExpected = expected
+            , checkedCallableRefinementActual = actual
+            }
+      | otherwise -> bridgeMismatch "kernel acceptance disagreed with concrete diagnostics"
+    Kernel.RefinementMachineShapeMismatch
+      | actualShape /= expectedShape ->
+          Left (CallableMachineShapeMismatch expectedShape actualShape)
+      | otherwise -> bridgeMismatch "machine-shape decision disagreed with equality projection"
+    Kernel.RefinementAuthorityTooStrong
+      | not (Set.null excessAuthority) ->
+          Left (CallableAuthorityRequirementTooStrong excessAuthority)
+      | otherwise -> bridgeMismatch "authority rejection had no concrete excess"
+    Kernel.RefinementEffectsTooWide
+      | not (Set.null excessEffects) ->
+          Left (CallableEffectBoundTooWide excessEffects)
+      | otherwise -> bridgeMismatch "effect rejection had no concrete excess"
+    Kernel.RefinementFailuresTooWide
+      | not (Set.null excessFailures) ->
+          Left (CallableFailureSetTooWide excessFailures)
+      | otherwise -> bridgeMismatch "failure rejection had no concrete excess"
+    Kernel.RefinementTransitionMismatch
+      | actualTransition /= expectedTransition ->
+          Left (CallableCalleeTransitionIncompatible expectedTransition actualTransition)
+      | otherwise -> bridgeMismatch "callee-transition decision disagreed with equality projection"
   where
     expectedShape = callableRefinementMachineShape expected
     actualShape = callableRefinementMachineShape actual
@@ -117,3 +161,33 @@ checkCallableRefinement expected actual
       (callableRefinementFailures expected)
     expectedTransition = callableContractCalleeTransition expectedContract
     actualTransition = callableContractCalleeTransition actualContract
+
+incidencePair
+  :: Ord a
+  => Text
+  -> Set.Set a
+  -> Set.Set a
+  -> Either CallableRefinementError ([Bool], [Bool])
+incidencePair label actual expected
+  | domainSet /= Set.union actual expected =
+      bridgeMismatch (label <> ": finite domain did not round-trip")
+  | length actualBits /= length domain || length expectedBits /= length domain =
+      bridgeMismatch (label <> ": extracted incidence length mismatch")
+  | reconstruct actualBits /= actual =
+      bridgeMismatch (label <> ": actual incidence projection did not round-trip")
+  | reconstruct expectedBits /= expected =
+      bridgeMismatch (label <> ": expected incidence projection did not round-trip")
+  | otherwise = Right (actualBits, expectedBits)
+  where
+    domain = Set.toAscList (Set.union actual expected)
+    domainSet = Set.fromList domain
+    actualBits = Kernel.incidenceVector domain (\element -> Set.member element actual)
+    expectedBits = Kernel.incidenceVector domain (\element -> Set.member element expected)
+    reconstruct bits = Set.fromList
+      [ element
+      | (element, present) <- zip domain bits
+      , present
+      ]
+
+bridgeMismatch :: Text -> Either CallableRefinementError a
+bridgeMismatch = Left . CallableRefinementRepresentationBridgeMismatch
