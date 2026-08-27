@@ -16,13 +16,14 @@ module Phil.Core.ProviderLifecycleQualification
   , checkProviderLifecycleQualification
   ) where
 
+import qualified ProviderLifecycleQualificationKernel as Kernel
 import qualified Data.Map.Strict as Map
 import qualified Data.Set as Set
 import Data.Text (Text)
 import Phil.Core.ProviderQualification
   ( CheckedProviderSemanticQualification (..)
   , ProviderOperationKey
-  , ProviderResourceResidue
+  , ProviderResourceResidue (..)
   )
 import Phil.Core.Static (DefinitionRevision, InterfaceRevision)
 
@@ -122,18 +123,41 @@ data ProviderLifecycleQualificationError
       ProviderLifecyclePoint ProviderResourceResidue
   | ProviderLifecycleForbiddenRetryDisposition
       ProviderLifecyclePoint ProviderRetryDisposition
+  | ProviderLifecycleQualificationRepresentationMismatch Text
   deriving (Eq, Ord, Show)
 
 -- | Check PROV-008 over an already accepted provider semantic qualification.
 -- Ordinary returns are irrelevant here: every modeled interruption observation
 -- at the declared public boundary must lie inside the lifecycle contract's
--- allowed state/cleanup/retry relation.
+-- allowed state/cleanup/retry relation. The extracted kernel owns acceptance;
+-- the detailed traversal below is retained only for diagnostics/result
+-- reconstruction and must agree with that decision.
 checkProviderLifecycleQualification
   :: CheckedProviderSemanticQualification
   -> ProviderLifecycleContract
   -> ProviderLifecycleModel
   -> Either ProviderLifecycleQualificationError CheckedProviderLifecycleQualification
 checkProviderLifecycleQualification qualified contract model
+  | not (providerLifecycleProjectionRoundTrips qualified contract model) =
+      Left (ProviderLifecycleQualificationRepresentationMismatch
+        "provider lifecycle Map/Set projection failed canonical round-trip")
+  | providerLifecycleKernelAccepts qualified contract model =
+      case checkProviderLifecycleQualificationDetailed qualified contract model of
+        Right checked -> Right checked
+        Left _ -> Left (ProviderLifecycleQualificationRepresentationMismatch
+          "extracted provider lifecycle kernel accepted while diagnostic reconstruction rejected")
+  | otherwise =
+      case checkProviderLifecycleQualificationDetailed qualified contract model of
+        Left err -> Left err
+        Right _ -> Left (ProviderLifecycleQualificationRepresentationMismatch
+          "extracted provider lifecycle kernel rejected while diagnostic reconstruction accepted")
+
+checkProviderLifecycleQualificationDetailed
+  :: CheckedProviderSemanticQualification
+  -> ProviderLifecycleContract
+  -> ProviderLifecycleModel
+  -> Either ProviderLifecycleQualificationError CheckedProviderLifecycleQualification
+checkProviderLifecycleQualificationDetailed qualified contract model
   | not (Set.null missingPoints) =
       Left (ProviderLifecycleMissingInterruptionPoints missingPoints)
   | not (Set.null unexpectedPoints) =
@@ -185,3 +209,103 @@ checkProviderLifecycleQualification qualified contract model
           Left (ProviderLifecycleForbiddenRetryDisposition
             point (providerInterruptionRetryDisposition observation))
       | otherwise = Right ()
+
+providerLifecycleKernelAccepts
+  :: CheckedProviderSemanticQualification
+  -> ProviderLifecycleContract
+  -> ProviderLifecycleModel
+  -> Bool
+providerLifecycleKernelAccepts qualified contract model =
+  Kernel.decideProviderLifecycleQualification
+    (==)
+    (==)
+    (==)
+    (==)
+    (==)
+    (==)
+    qualifiedOperations
+    (providerLifecycleObservationBoundary contract)
+    allowanceProjection
+    observationProjection
+  where
+    qualifiedOperations = Map.keys (checkedProviderOperations qualified)
+    allowanceProjection =
+      [ ( lifecyclePointProjection point
+        , ( Set.toAscList (providerLifecycleAllowedObservableStates allowance)
+          , ( Set.toAscList (providerLifecycleAllowedCleanupResidues allowance)
+            , Set.toAscList (providerLifecycleAllowedRetryDispositions allowance)
+            )
+          )
+        )
+      | (point, allowance) <- Map.toAscList (providerLifecycleAllowances contract)
+      ]
+    observationProjection =
+      [ ( lifecyclePointProjection point
+        , [ ( providerInterruptionObservationBoundary observation
+            , ( providerInterruptionObservableState observation
+              , ( providerInterruptionCleanupResidue observation
+                , providerInterruptionRetryDisposition observation
+                )
+              )
+            )
+          | observation <- Set.toAscList pointObservations
+          ]
+        )
+      | (point, pointObservations) <-
+          Map.toAscList (providerLifecycleImplementationObservations model)
+      ]
+
+lifecyclePointProjection
+  :: ProviderLifecyclePoint
+  -> (ProviderOperationKey, ProviderInterruptionPointKey)
+lifecyclePointProjection point =
+  ( providerLifecyclePointOperation point
+  , providerLifecyclePointInterruption point
+  )
+
+providerLifecycleProjectionRoundTrips
+  :: CheckedProviderSemanticQualification
+  -> ProviderLifecycleContract
+  -> ProviderLifecycleModel
+  -> Bool
+providerLifecycleProjectionRoundTrips qualified contract model =
+  and
+    [ mapRoundTrips (checkedProviderOperations qualified)
+    , mapRoundTrips allowances
+    , all allowanceRoundTrips (Map.elems allowances)
+    , mapRoundTrips observations
+    , all observationSetRoundTrips (Map.elems observations)
+    ]
+  where
+    allowances = providerLifecycleAllowances contract
+    observations = providerLifecycleImplementationObservations model
+
+    allowanceRoundTrips allowance = and
+      [ setRoundTrips (providerLifecycleAllowedObservableStates allowance)
+      , setRoundTrips (providerLifecycleAllowedCleanupResidues allowance)
+      , all residueRoundTrips
+          (Set.toAscList (providerLifecycleAllowedCleanupResidues allowance))
+      , setRoundTrips (providerLifecycleAllowedRetryDispositions allowance)
+      ]
+
+    observationSetRoundTrips pointObservations =
+      setRoundTrips pointObservations &&
+      all observationRoundTrips (Set.toAscList pointObservations)
+
+    observationRoundTrips observation =
+      residueRoundTrips (providerInterruptionCleanupResidue observation)
+
+residueRoundTrips :: ProviderResourceResidue -> Bool
+residueRoundTrips residue = and
+  [ setRoundTrips (providerResidueBorrowedInputs residue)
+  , setRoundTrips (providerResidueConsumedInputs residue)
+  , setRoundTrips (providerResidueReturnedPredecessors residue)
+  , setRoundTrips (providerResidueSuccessors residue)
+  , setRoundTrips (providerResidueProducedResources residue)
+  ]
+
+mapRoundTrips :: (Ord key, Eq value) => Map.Map key value -> Bool
+mapRoundTrips values = Map.fromAscList (Map.toAscList values) == values
+
+setRoundTrips :: Ord value => Set.Set value -> Bool
+setRoundTrips values = Set.fromAscList (Set.toAscList values) == values
