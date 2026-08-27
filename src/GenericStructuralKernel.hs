@@ -106,3 +106,4 @@ decideGenericStructuralActual mode requirements =
            (negb (modeAllowsStructuralPermission mode ContractionPermission)) of {
      Prelude.True -> GenericStructuralActualMissingContraction;
      Prelude.False -> GenericStructuralActualAccepted}}
+
