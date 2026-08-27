@@ -33,3 +33,6 @@ jobs:
 
       - name: RES-007 scoped loan boundary conformance
         run: cabal exec -- runghc -Wall -Werror -isrc test/Phase1ScopedLoanBoundaryMain.hs
+
+      - name: RES-008 terminal arm exclusion conformance
+        run: cabal exec -- runghc -Wall -Werror -isrc test/Phase1TerminalArmExclusionMain.hs
