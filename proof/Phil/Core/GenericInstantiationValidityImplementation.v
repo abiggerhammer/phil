@@ -1,6 +1,6 @@
 From Stdlib Require Import Bool.Bool Arith.PeanoNat.
 
-From Phil.Core Require Import GenericInstantiation.
+From Phil.Core Require Import GenericStructural GenericInstantiation.
 
 (*
   PHIL-GEN-INST-IMPL-001, tranche B — executable per-disposition validity.
