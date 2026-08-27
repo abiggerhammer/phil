@@ -25,3 +25,5 @@ jobs:
         run: cabal exec -- runghc -Wall -Werror -isrc test/Phase1LinearRecordConstructionMain.hs
       - name: DATA-003 duplicate restricted field conformance
         run: cabal exec -- runghc -Wall -Werror -isrc test/Phase1DuplicateRestrictedFieldMain.hs
+      - name: DATA-004 consuming record destruction conformance
+        run: cabal exec -- runghc -Wall -Werror -isrc test/Phase1ConsumingRecordDestructionMain.hs
