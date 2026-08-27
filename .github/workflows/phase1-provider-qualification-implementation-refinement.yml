@@ -12,7 +12,6 @@ on:
       - 'src/ProviderQualificationKernelSupport.hs'
       - 'src/ProviderQualificationKernel.hs'
       - 'src/Phil/Core/ProviderQualification.hs'
-      - 'src/Phil/Core/ProviderQualification/Bound.hs'
       - 'test/Phase1ProviderQualificationMain.hs'
   push:
     branches: [main]
@@ -26,7 +25,6 @@ on:
       - 'src/ProviderQualificationKernelSupport.hs'
       - 'src/ProviderQualificationKernel.hs'
       - 'src/Phil/Core/ProviderQualification.hs'
-      - 'src/Phil/Core/ProviderQualification/Bound.hs'
       - 'test/Phase1ProviderQualificationMain.hs'
 
 permissions:
@@ -47,7 +45,7 @@ jobs:
           export PATH="/home/rocq/.opam/${COMPILER}/bin:$PATH"
           rocq c -Q proof/Phil Phil proof/Phil/Core/ProviderQualificationImplementationBridge.v
           rocq c -Q proof/Phil Phil proof/Phil/Core/ProviderQualificationImplementation.v
-      - name: Regenerate bound support kernel and extract provider traversal
+      - name: Regenerate and bind provider qualification kernels
         shell: bash
         run: |
           set -euo pipefail
@@ -69,6 +67,16 @@ jobs:
           grep -q '^module ProviderQualificationKernel where' ProviderQualificationKernel.hs
           grep -q '^decideOutcomeTraversal ::' ProviderQualificationKernel.hs
           grep -q '^decideProviderQualification ::' ProviderQualificationKernel.hs
+          if ! cmp -s ProviderQualificationKernel.hs src/ProviderQualificationKernel.hs; then
+            echo 'checked-in provider traversal kernel differs from fresh Rocq extraction' >&2
+            diff -u src/ProviderQualificationKernel.hs ProviderQualificationKernel.hs || true
+            exit 1
+          fi
+          sha256sum \
+            ProviderQualificationKernelSupport.hs \
+            src/ProviderQualificationKernelSupport.hs \
+            ProviderQualificationKernel.hs \
+            src/ProviderQualificationKernel.hs
           mkdir -p provider-qualification-implementation-refinement-proof
           cp \
             proof/Phil/Core/ProviderQualificationImplementationBridge.v \
@@ -80,14 +88,13 @@ jobs:
             ProviderQualificationKernelSupport.hs \
             ProviderQualificationKernel.hs \
             provider-qualification-implementation-refinement-proof/
-          sha256sum provider-qualification-implementation-refinement-proof/*
       - uses: actions/upload-artifact@v4
         with:
           name: rocq-provider-qualification-implementation-refinement
           path: provider-qualification-implementation-refinement-proof
           if-no-files-found: error
 
-  verify-extracted-provider-kernels:
+  verify-production-provider-qualification:
     needs: rocq-provider-qualification-implementation-refinement
     runs-on: ubuntu-latest
     steps:
@@ -100,18 +107,22 @@ jobs:
         with:
           name: rocq-provider-qualification-implementation-refinement
           path: provider-qualification-implementation-refinement-proof
-      - name: Typecheck provider support and nested traversal kernels
+      - name: Typecheck extracted, checked-in, and production provider paths
         run: |
           set -euo pipefail
           cmp -s \
             provider-qualification-implementation-refinement-proof/ProviderQualificationKernelSupport.hs \
             src/ProviderQualificationKernelSupport.hs
+          cmp -s \
+            provider-qualification-implementation-refinement-proof/ProviderQualificationKernel.hs \
+            src/ProviderQualificationKernel.hs
           ghc -Wall -Werror -fno-code src/ProviderQualificationKernelSupport.hs
-          ghc -Wall -Werror -fno-code \
-            provider-qualification-implementation-refinement-proof/ProviderQualificationKernel.hs
-      - name: Preserve existing PROV-001–005 behavior before final binding
+          ghc -Wall -Werror -fno-code src/ProviderQualificationKernel.hs
+          cabal build exe:phil-certify-core-scalar --ghc-options=-Werror
+          cabal exec -- ghc -isrc -Wall -Werror -fno-code \
+            src/Phil/Core/ProviderQualification.hs
+      - name: Exercise production PROV-001–005 path through extracted traversal
         run: |
           set -euo pipefail
-          cabal build exe:phil-certify-core-scalar --ghc-options=-Werror
           cabal exec -- runghc -isrc test/Phase1CallableRefinementMain.hs
           cabal exec -- runghc -isrc test/Phase1ProviderQualificationMain.hs
