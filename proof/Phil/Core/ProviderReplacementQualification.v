@@ -21,7 +21,6 @@ Definition QualificationClaimRevision := nat.
 Definition QualificationEvidenceRevision := nat.
 Definition QualificationAdmissionRevision := nat.
 Definition EvidenceReference := nat.
-Definition ValidityScopeRevision := nat.
 
 Record ProviderReplacementSide : Type := mkProviderReplacementSide {
   replacementSideInterface : InterfaceRevision;
@@ -107,8 +106,8 @@ Theorem prior_side_is_independently_admitted :
     ValidProviderReplacement prior replacement reuseWitness ->
     replacementSideAdmitted prior = true.
 Proof.
-  intros prior replacement reuseWitness H.
-  destruct H; assumption.
+  intros prior replacement reuseWitness Hvalid.
+  exact (replacement_prior_admitted prior replacement reuseWitness Hvalid).
 Qed.
 
 Theorem replacement_side_is_independently_admitted :
@@ -116,8 +115,8 @@ Theorem replacement_side_is_independently_admitted :
     ValidProviderReplacement prior replacement reuseWitness ->
     replacementSideAdmitted replacement = true.
 Proof.
-  intros prior replacement reuseWitness H.
-  destruct H; assumption.
+  intros prior replacement reuseWitness Hvalid.
+  exact (replacement_new_admitted prior replacement reuseWitness Hvalid).
 Qed.
 
 Theorem replacement_preserves_public_interface :
@@ -125,8 +124,8 @@ Theorem replacement_preserves_public_interface :
     ValidProviderReplacement prior replacement reuseWitness ->
     replacementSideInterface prior = replacementSideInterface replacement.
 Proof.
-  intros prior replacement reuseWitness H.
-  destruct H; assumption.
+  intros prior replacement reuseWitness Hvalid.
+  exact (replacement_interface_fixed prior replacement reuseWitness Hvalid).
 Qed.
 
 Theorem replacement_preserves_provider_occurrence :
@@ -134,8 +133,8 @@ Theorem replacement_preserves_provider_occurrence :
     ValidProviderReplacement prior replacement reuseWitness ->
     replacementSideOccurrence prior = replacementSideOccurrence replacement.
 Proof.
-  intros prior replacement reuseWitness H.
-  destruct H; assumption.
+  intros prior replacement reuseWitness Hvalid.
+  exact (replacement_occurrence_fixed prior replacement reuseWitness Hvalid).
 Qed.
 
 Theorem replacement_preserves_architecture_instance :
@@ -143,8 +142,8 @@ Theorem replacement_preserves_architecture_instance :
     ValidProviderReplacement prior replacement reuseWitness ->
     replacementSideInstance prior = replacementSideInstance replacement.
 Proof.
-  intros prior replacement reuseWitness H.
-  destruct H; assumption.
+  intros prior replacement reuseWitness Hvalid.
+  exact (replacement_instance_fixed prior replacement reuseWitness Hvalid).
 Qed.
 
 Theorem replacement_requires_distinct_subject :
@@ -152,8 +151,8 @@ Theorem replacement_requires_distinct_subject :
     ValidProviderReplacement prior replacement reuseWitness ->
     replacementSideSubject prior <> replacementSideSubject replacement.
 Proof.
-  intros prior replacement reuseWitness H.
-  destruct H; assumption.
+  intros prior replacement reuseWitness Hvalid.
+  exact (replacement_subject_changes prior replacement reuseWitness Hvalid).
 Qed.
 
 Theorem replacement_requires_new_realization_revision :
@@ -161,8 +160,8 @@ Theorem replacement_requires_new_realization_revision :
     ValidProviderReplacement prior replacement reuseWitness ->
     replacementSideRealization prior <> replacementSideRealization replacement.
 Proof.
-  intros prior replacement reuseWitness H.
-  destruct H; assumption.
+  intros prior replacement reuseWitness Hvalid.
+  exact (replacement_realization_changes prior replacement reuseWitness Hvalid).
 Qed.
 
 Theorem replacement_requires_new_claim_lineage :
@@ -170,8 +169,8 @@ Theorem replacement_requires_new_claim_lineage :
     ValidProviderReplacement prior replacement reuseWitness ->
     replacementSideClaim prior <> replacementSideClaim replacement.
 Proof.
-  intros prior replacement reuseWitness H.
-  destruct H; assumption.
+  intros prior replacement reuseWitness Hvalid.
+  exact (replacement_claim_changes prior replacement reuseWitness Hvalid).
 Qed.
 
 Theorem replacement_requires_new_evidence_lineage :
@@ -179,8 +178,8 @@ Theorem replacement_requires_new_evidence_lineage :
     ValidProviderReplacement prior replacement reuseWitness ->
     replacementSideEvidence prior <> replacementSideEvidence replacement.
 Proof.
-  intros prior replacement reuseWitness H.
-  destruct H; assumption.
+  intros prior replacement reuseWitness Hvalid.
+  exact (replacement_evidence_changes prior replacement reuseWitness Hvalid).
 Qed.
 
 Theorem replacement_requires_new_admission_lineage :
@@ -188,8 +187,8 @@ Theorem replacement_requires_new_admission_lineage :
     ValidProviderReplacement prior replacement reuseWitness ->
     replacementSideAdmission prior <> replacementSideAdmission replacement.
 Proof.
-  intros prior replacement reuseWitness H.
-  destruct H; assumption.
+  intros prior replacement reuseWitness Hvalid.
+  exact (replacement_admission_changes prior replacement reuseWitness Hvalid).
 Qed.
 
 Theorem same_subject_cannot_be_replacement :
@@ -198,8 +197,8 @@ Theorem same_subject_cannot_be_replacement :
     ~ ValidProviderReplacement prior replacement reuseWitness.
 Proof.
   intros prior replacement reuseWitness Hsame Hvalid.
-  destruct Hvalid as [_ _ _ _ _ Hdistinct].
-  apply Hdistinct; exact Hsame.
+  apply (replacement_subject_changes prior replacement reuseWitness Hvalid).
+  exact Hsame.
 Qed.
 
 Theorem unchanged_realization_cannot_be_replacement :
@@ -208,8 +207,8 @@ Theorem unchanged_realization_cannot_be_replacement :
     ~ ValidProviderReplacement prior replacement reuseWitness.
 Proof.
   intros prior replacement reuseWitness Hsame Hvalid.
-  destruct Hvalid as [_ _ _ _ _ _ Hdistinct].
-  apply Hdistinct; exact Hsame.
+  apply (replacement_realization_changes prior replacement reuseWitness Hvalid).
+  exact Hsame.
 Qed.
 
 Theorem inherited_claim_lineage_cannot_be_replacement :
@@ -218,8 +217,8 @@ Theorem inherited_claim_lineage_cannot_be_replacement :
     ~ ValidProviderReplacement prior replacement reuseWitness.
 Proof.
   intros prior replacement reuseWitness Hsame Hvalid.
-  destruct Hvalid as [_ _ _ _ _ _ _ Hdistinct].
-  apply Hdistinct; exact Hsame.
+  apply (replacement_claim_changes prior replacement reuseWitness Hvalid).
+  exact Hsame.
 Qed.
 
 Theorem inherited_evidence_lineage_cannot_be_replacement :
@@ -228,8 +227,8 @@ Theorem inherited_evidence_lineage_cannot_be_replacement :
     ~ ValidProviderReplacement prior replacement reuseWitness.
 Proof.
   intros prior replacement reuseWitness Hsame Hvalid.
-  destruct Hvalid as [_ _ _ _ _ _ _ _ Hdistinct].
-  apply Hdistinct; exact Hsame.
+  apply (replacement_evidence_changes prior replacement reuseWitness Hvalid).
+  exact Hsame.
 Qed.
 
 Theorem inherited_admission_lineage_cannot_be_replacement :
@@ -238,8 +237,8 @@ Theorem inherited_admission_lineage_cannot_be_replacement :
     ~ ValidProviderReplacement prior replacement reuseWitness.
 Proof.
   intros prior replacement reuseWitness Hsame Hvalid.
-  destruct Hvalid as [_ _ _ _ _ _ _ _ _ Hdistinct].
-  apply Hdistinct; exact Hsame.
+  apply (replacement_admission_changes prior replacement reuseWitness Hvalid).
+  exact Hsame.
 Qed.
 
 Theorem rejected_replacement_cannot_be_selected :
@@ -248,7 +247,8 @@ Theorem rejected_replacement_cannot_be_selected :
     ~ ValidProviderReplacement prior replacement reuseWitness.
 Proof.
   intros prior replacement reuseWitness Hrejected Hvalid.
-  destruct Hvalid as [_ Hadmitted].
+  pose proof (replacement_new_admitted prior replacement reuseWitness Hvalid)
+    as Hadmitted.
   rewrite Hrejected in Hadmitted.
   discriminate.
 Qed.
@@ -263,8 +263,9 @@ Theorem shared_evidence_requires_explicit_reuse :
       ValidEvidenceReuse prior replacement reuse.
 Proof.
   intros prior replacement reuseWitness reference Hvalid Hshared.
-  destruct Hvalid as [_ _ _ _ _ _ _ _ _ _ Hscope].
-  apply Hscope; exact Hshared.
+  apply (replacement_shared_evidence_scoped
+    prior replacement reuseWitness Hvalid reference).
+  exact Hshared.
 Qed.
 
 Theorem shared_evidence_without_reuse_rejects :
@@ -287,7 +288,7 @@ Theorem reuse_requires_nonempty_validity_scope :
     replacementReuseHasValidityScope reuse = true.
 Proof.
   intros prior replacement reuse Hreuse.
-  destruct Hreuse; assumption.
+  exact (valid_reuse_scope_present prior replacement reuse Hreuse).
 Qed.
 
 Theorem reuse_binds_exact_claim_pair :
@@ -297,8 +298,9 @@ Theorem reuse_binds_exact_claim_pair :
     replacementReuseNewClaim reuse = replacementSideClaim replacement.
 Proof.
   intros prior replacement reuse Hreuse.
-  destruct Hreuse as [_ _ Hprior Hnew _].
-  split; assumption.
+  split.
+  - exact (valid_reuse_prior_claim_exact prior replacement reuse Hreuse).
+  - exact (valid_reuse_new_claim_exact prior replacement reuse Hreuse).
 Qed.
 
 Theorem reuse_justification_names_actually_shared_evidence :
@@ -307,8 +309,9 @@ Theorem reuse_justification_names_actually_shared_evidence :
     SharedEvidence prior replacement (replacementReuseReference reuse).
 Proof.
   intros prior replacement reuse Hreuse.
-  destruct Hreuse as [Hprior Hnew].
-  split; assumption.
+  split.
+  - exact (valid_reuse_prior_has_reference prior replacement reuse Hreuse).
+  - exact (valid_reuse_new_has_reference prior replacement reuse Hreuse).
 Qed.
 
 Theorem unexpected_reuse_justification_cannot_validate :
@@ -318,14 +321,15 @@ Theorem unexpected_reuse_justification_cannot_validate :
     ~ ValidProviderReplacement prior replacement reuseWitness.
 Proof.
   intros prior replacement reuseWitness reference reuse Hlookup HnotShared Hvalid.
-  destruct Hvalid as [_ _ _ _ _ _ _ _ _ _ _ HnoSpurious].
-  pose proof (HnoSpurious reference reuse Hlookup) as [_ Hreuse].
-  pose proof (reuse_justification_names_actually_shared_evidence prior replacement reuse Hreuse)
-    as HsharedReuse.
+  pose proof (replacement_no_spurious_reuse
+    prior replacement reuseWitness Hvalid reference reuse Hlookup)
+    as Hvalidated.
+  destruct Hvalidated as [Href Hreuse].
+  pose proof (reuse_justification_names_actually_shared_evidence
+    prior replacement reuse Hreuse) as HsharedReuse.
   destruct HsharedReuse as [Hprior Hnew].
-  destruct (HnoSpurious reference reuse Hlookup) as [Href _].
-  unfold SharedEvidence in HnotShared.
   apply HnotShared.
+  unfold SharedEvidence.
   rewrite <- Href.
   split; assumption.
 Qed.
