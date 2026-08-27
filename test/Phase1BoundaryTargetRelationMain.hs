@@ -13,6 +13,7 @@ import Phil.Examples.Phase1.TargetStrengtheningWitnesses
 import Phil.Systems.BoundaryTargetRelation
 import Phil.Systems.TargetStrengthening
   ( TargetStrengtheningStageBundle (targetStrengtheningStageRevision)
+  , TargetStrengtheningStageRevision (TargetStrengtheningStageRevision)
   )
 import System.Exit (exitFailure)
 
@@ -48,13 +49,10 @@ staleStageRejects :: Either String ()
 staleStageRejects =
   case verifyBoundaryTargetRealization uploadTargetStrengtheningStage
       (CheckedZeroCopy completeRelation
-        { zeroCopyTargetStageRevision = errorRevision
+        { zeroCopyTargetStageRevision = TargetStrengtheningStageRevision "stale-target-stage"
         }) of
     Left (BoundaryTargetStageRevisionMismatch _ _) -> Right ()
     other -> Left ("stale target-stage relation did not reject exactly: " <> show other)
-  where
-    errorRevision = case targetStrengtheningStageRevision uploadTargetStrengtheningStage of
-      revision -> revision { unTargetStrengtheningStageRevision = "stale-target-stage" }
 
 pointerReinterpretationRejects :: Either String ()
 pointerReinterpretationRejects =
