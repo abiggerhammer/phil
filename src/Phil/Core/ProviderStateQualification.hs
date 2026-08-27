@@ -23,6 +23,7 @@ import Phil.Core.ProviderQualification
   , ProviderOutcomeKey
   )
 import Phil.Core.Static (DefinitionRevision, InterfaceRevision)
+import qualified ProviderStateQualificationKernel as Kernel
 
 -- | Stable identity of one abstract/concrete provider-state relation.  The
 -- checker does not prescribe a theorem language for this relation; it checks
@@ -118,18 +119,104 @@ data ProviderStateQualificationError
       ProviderImplementationStateTransition
       ProviderAbstractStateKey
       ProviderOutcomeKey
+  | ProviderStateQualificationRepresentationMismatch Text
   deriving (Eq, Ord, Show)
 
 -- | Check PROV-006 over an already accepted PROV-001--005 semantic provider
--- qualification.  The simulation is asymmetric: an implementation may realize
--- fewer abstract transitions, but every reachable implementation transition
--- from every related abstract pre-state must map to an allowed contract outcome
--- and end in a related abstract successor state.
+-- qualification.  The extracted kernel owns acceptance.  The handwritten
+-- traversal remains only for diagnostics and construction of the checked result;
+-- any projection failure or disagreement between the two paths fails closed.
 checkProviderStateSimulation
   :: CheckedProviderSemanticQualification
   -> ProviderStateRefinement
   -> Either ProviderStateQualificationError CheckedProviderStateQualification
-checkProviderStateSimulation qualified refinement = do
+checkProviderStateSimulation qualified refinement
+  | not (providerStateProjectionRoundTrips qualified refinement) =
+      Left (ProviderStateQualificationRepresentationMismatch
+        "provider state Map/Set projection failed canonical round-trip")
+  | providerStateKernelAccepts qualified refinement =
+      case checkProviderStateSimulationDetailed qualified refinement of
+        Right checked -> Right checked
+        Left _ -> Left (ProviderStateQualificationRepresentationMismatch
+          "extracted provider state kernel accepted while diagnostic reconstruction rejected")
+  | otherwise =
+      case checkProviderStateSimulationDetailed qualified refinement of
+        Left err -> Left err
+        Right _ -> Left (ProviderStateQualificationRepresentationMismatch
+          "extracted provider state kernel rejected while diagnostic reconstruction accepted")
+
+providerStateKernelAccepts
+  :: CheckedProviderSemanticQualification
+  -> ProviderStateRefinement
+  -> Bool
+providerStateKernelAccepts qualified refinement =
+  Kernel.decideProviderStateSimulation
+    (==)
+    (==)
+    (==)
+    (==)
+    (Set.toAscList (providerStateVisibleInitialImplementationStates refinement))
+    (Set.toAscList (providerStateAdmissibleInitialAbstractStates refinement))
+    (Map.toAscList (providerStateInitialCorrespondence refinement))
+    qualifiedOutcomeProjection
+    relatedPairProjection
+    implementationTransitionProjection
+    contractTransitionProjection
+  where
+    qualifiedOutcomeProjection =
+      [ (operationKey, Map.toAscList
+          (checkedProviderOutcomeCorrespondence operationQualification))
+      | (operationKey, operationQualification) <-
+          Map.toAscList (checkedProviderOperations qualified)
+      ]
+
+    relatedPairProjection =
+      [ Kernel.MkStatePair implementationState abstractState
+      | ProviderStatePair implementationState abstractState <-
+          Set.toAscList (providerStateRelatedPairs refinement)
+      ]
+
+    implementationTransitionProjection =
+      [ Kernel.MkStateImplementationTransition operationKey fromState outcomeKey toState
+      | ProviderImplementationStateTransition operationKey fromState outcomeKey toState <-
+          Set.toAscList (providerStateImplementationTransitions refinement)
+      ]
+
+    contractTransitionProjection =
+      [ Kernel.MkStateContractTransition operationKey fromState outcomeKey toState
+      | ProviderContractStateTransition operationKey fromState outcomeKey toState <-
+          Set.toAscList (providerStateContractTransitions refinement)
+      ]
+
+providerStateProjectionRoundTrips
+  :: CheckedProviderSemanticQualification
+  -> ProviderStateRefinement
+  -> Bool
+providerStateProjectionRoundTrips qualified refinement =
+  mapRoundTrips (checkedProviderOperations qualified)
+    && all
+      (mapRoundTrips . checkedProviderOutcomeCorrespondence . snd)
+      (Map.toAscList (checkedProviderOperations qualified))
+    && setRoundTrips (providerStateVisibleInitialImplementationStates refinement)
+    && setRoundTrips (providerStateAdmissibleInitialAbstractStates refinement)
+    && mapRoundTrips (providerStateInitialCorrespondence refinement)
+    && setRoundTrips (providerStateRelatedPairs refinement)
+    && setRoundTrips (providerStateImplementationTransitions refinement)
+    && setRoundTrips (providerStateContractTransitions refinement)
+
+mapRoundTrips :: (Ord key, Eq value) => Map.Map key value -> Bool
+mapRoundTrips values = Map.fromAscList (Map.toAscList values) == values
+
+setRoundTrips :: Ord value => Set.Set value -> Bool
+setRoundTrips values = Set.fromAscList (Set.toAscList values) == values
+
+-- | Diagnostic/result reconstruction corresponding to the bounded PROV-006
+-- kernel.  This function does not own acceptance.
+checkProviderStateSimulationDetailed
+  :: CheckedProviderSemanticQualification
+  -> ProviderStateRefinement
+  -> Either ProviderStateQualificationError CheckedProviderStateQualification
+checkProviderStateSimulationDetailed qualified refinement = do
   checkInitialization
   mapM_ checkImplementationTransition
     (Set.toAscList (providerStateImplementationTransitions refinement))
