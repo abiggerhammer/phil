@@ -33,6 +33,7 @@ module Phil.Core.Generic
 import qualified Data.Map.Strict as Map
 import qualified Data.Set as Set
 import Data.Text (Text)
+import qualified GenericStructuralKernel as Kernel
 import Phil.Core.Static
   ( DeclarationKey (..)
   , DefinitionRevision
@@ -87,6 +88,7 @@ data GenericStructuralError
       GenericValueParameterKey
       StructuralPermission
       Mode
+  | GenericStructuralKernelBridgeMismatch GenericValueParameterKey
   deriving (Eq, Ord, Show)
 
 data GenericRequirement
@@ -187,25 +189,20 @@ inferGenericStructuralRequirements
   -> Either GenericStructuralError
       (Map.Map GenericValueParameterKey GenericStructuralRequirements)
 inferGenericStructuralRequirements parameters uses = do
-  requirements <- initialRequirements parameters
-  foldl addUse (Right requirements) uses
+  initial <- initialRequirements parameters
+  grouped <- foldl groupUse (Right (Map.map (const []) initial)) uses
+  Map.traverseWithKey materialize grouped
   where
-    addUse accumulated use = do
+    groupUse accumulated use = do
       current <- accumulated
       let key = useParameter use
-      existing <- maybe
-        (Left (UnknownGenericValueParameter key))
-        Right
-        (Map.lookup key current)
-      let permission = case use of
-            TransferGenericValue _ -> Nothing
-            DiscardGenericValue _ -> Just WeakeningPermission
-            DuplicateGenericValue _ -> Just ContractionPermission
-          updated = case permission of
-            Nothing -> existing
-            Just required -> GenericStructuralRequirements
-              (Set.insert required (genericStructuralPermissions existing))
-      Right (Map.insert key updated current)
+      if Map.member key current
+        then Right (Map.adjust (toKernelUse use :) key current)
+        else Left (UnknownGenericValueParameter key)
+
+    materialize key reversedUses =
+      requirementsFromKernel key
+        (Kernel.inferGenericStructuralRequirements (reverse reversedUses))
 
 checkGenericStructuralInterface
   :: [GenericValueParameterKey]
@@ -234,25 +231,25 @@ publishedStructuralRequirements interface = Set.fromList
   ]
 
 modeAllowsStructuralPermission :: Mode -> StructuralPermission -> Bool
-modeAllowsStructuralPermission mode permission = case (mode, permission) of
-  (Unrestricted, _) -> True
-  (Affine, WeakeningPermission) -> True
-  (Affine, ContractionPermission) -> False
-  (Linear, _) -> False
+modeAllowsStructuralPermission mode permission =
+  Kernel.modeAllowsStructuralPermission
+    (toKernelMode mode)
+    (toKernelPermission permission)
 
 checkGenericStructuralActual
   :: GenericValueParameterKey
   -> Mode
   -> GenericStructuralRequirements
   -> Either GenericStructuralError ()
-checkGenericStructuralActual key mode requirements =
-  case
-    [ permission
-    | permission <- Set.toAscList (genericStructuralPermissions requirements)
-    , not (modeAllowsStructuralPermission mode permission)
-    ] of
-      [] -> Right ()
-      permission : _ -> Left (MissingStructuralPermission key permission mode)
+checkGenericStructuralActual key mode requirements = do
+  kernelRequirements <- requirementsToKernel key requirements
+  case Kernel.decideGenericStructuralActual
+      (toKernelMode mode) kernelRequirements of
+    Kernel.GenericStructuralActualAccepted -> Right ()
+    Kernel.GenericStructuralActualMissingWeakening ->
+      Left (MissingStructuralPermission key WeakeningPermission mode)
+    Kernel.GenericStructuralActualMissingContraction ->
+      Left (MissingStructuralPermission key ContractionPermission mode)
 
 checkGenericInstantiation
   :: GenericInstantiationPolicy
@@ -446,6 +443,74 @@ useParameter use = case use of
   TransferGenericValue key -> key
   DiscardGenericValue key -> key
   DuplicateGenericValue key -> key
+
+toKernelUse :: GenericStructuralUse -> Kernel.GenericStructuralUse
+toKernelUse use = case use of
+  TransferGenericValue _ -> Kernel.TransferGenericValue
+  DiscardGenericValue _ -> Kernel.DiscardGenericValue
+  DuplicateGenericValue _ -> Kernel.DuplicateGenericValue
+
+toKernelMode :: Mode -> Kernel.Mode
+toKernelMode mode = case mode of
+  Unrestricted -> Kernel.Unrestricted
+  Affine -> Kernel.Affine
+  Linear -> Kernel.Linear
+
+toKernelPermission :: StructuralPermission -> Kernel.StructuralPermission
+toKernelPermission permission = case permission of
+  WeakeningPermission -> Kernel.WeakeningPermission
+  ContractionPermission -> Kernel.ContractionPermission
+
+toKernelRequirements
+  :: GenericStructuralRequirements
+  -> Kernel.GenericStructuralRequirements
+toKernelRequirements requirements = Kernel.MkRequirements
+  (Set.member WeakeningPermission permissions)
+  (Set.member ContractionPermission permissions)
+  where
+    permissions = genericStructuralPermissions requirements
+
+fromKernelRequirements
+  :: Kernel.GenericStructuralRequirements
+  -> GenericStructuralRequirements
+fromKernelRequirements kernelRequirements =
+  case kernelRequirements of
+    Kernel.MkRequirements weakening contraction ->
+      GenericStructuralRequirements (Set.fromList
+        ([WeakeningPermission | weakening]
+          ++ [ContractionPermission | contraction]))
+
+sameKernelRequirements
+  :: Kernel.GenericStructuralRequirements
+  -> Kernel.GenericStructuralRequirements
+  -> Bool
+sameKernelRequirements left right =
+  case (left, right) of
+    (Kernel.MkRequirements leftWeakening leftContraction,
+     Kernel.MkRequirements rightWeakening rightContraction) ->
+      leftWeakening == rightWeakening
+        && leftContraction == rightContraction
+
+requirementsToKernel
+  :: GenericValueParameterKey
+  -> GenericStructuralRequirements
+  -> Either GenericStructuralError Kernel.GenericStructuralRequirements
+requirementsToKernel key requirements =
+  let kernelRequirements = toKernelRequirements requirements
+  in if fromKernelRequirements kernelRequirements == requirements
+      then Right kernelRequirements
+      else Left (GenericStructuralKernelBridgeMismatch key)
+
+requirementsFromKernel
+  :: GenericValueParameterKey
+  -> Kernel.GenericStructuralRequirements
+  -> Either GenericStructuralError GenericStructuralRequirements
+requirementsFromKernel key kernelRequirements =
+  let requirements = fromKernelRequirements kernelRequirements
+      roundTrip = toKernelRequirements requirements
+  in if sameKernelRequirements roundTrip kernelRequirements
+      then Right requirements
+      else Left (GenericStructuralKernelBridgeMismatch key)
 
 mapLeft :: (a -> b) -> Either a c -> Either b c
 mapLeft f = either (Left . f) Right

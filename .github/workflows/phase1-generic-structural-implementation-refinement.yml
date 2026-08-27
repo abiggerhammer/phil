@@ -7,8 +7,10 @@ on:
       - 'proof/Phil/Core/GenericStructuralImplementation.v'
       - 'proof/Phil/Core/GenericStructuralImplementationExtraction.v'
       - 'docs/phase-1/generic-structural-implementation-refinement-v1.md'
+      - 'src/GenericStructuralKernel.hs'
       - 'src/Phil/Core/Generic.hs'
       - 'test/Phase1GenericStructuralMain.hs'
+      - 'test/Phase1GenericRequirementsMain.hs'
       - '.github/workflows/phase1-generic-structural-implementation-refinement.yml'
   push:
     branches: [main]
@@ -17,8 +19,10 @@ on:
       - 'proof/Phil/Core/GenericStructuralImplementation.v'
       - 'proof/Phil/Core/GenericStructuralImplementationExtraction.v'
       - 'docs/phase-1/generic-structural-implementation-refinement-v1.md'
+      - 'src/GenericStructuralKernel.hs'
       - 'src/Phil/Core/Generic.hs'
       - 'test/Phase1GenericStructuralMain.hs'
+      - 'test/Phase1GenericRequirementsMain.hs'
       - '.github/workflows/phase1-generic-structural-implementation-refinement.yml'
 
 permissions:
@@ -39,7 +43,7 @@ jobs:
           export PATH="/home/rocq/.opam/${COMPILER}/bin:$PATH"
           rocq c -Q proof/Phil Phil proof/Phil/Core/GenericStructural.v
           rocq c -Q proof/Phil Phil proof/Phil/Core/GenericStructuralImplementation.v
-      - name: Extract generic structural kernel
+      - name: Regenerate and bind generic structural kernel
         shell: bash
         run: |
           set -euo pipefail
@@ -50,9 +54,15 @@ jobs:
           grep -q '^module GenericStructuralKernel where' GenericStructuralKernel.hs
           grep -q '^addStructuralUse ::' GenericStructuralKernel.hs
           grep -q '^inferGenericStructuralRequirements ::' GenericStructuralKernel.hs
+          grep -q '^modeAllowsStructuralPermission ::' GenericStructuralKernel.hs
           grep -q '^modeSatisfiesRequirements ::' GenericStructuralKernel.hs
           grep -q '^decideGenericStructuralActual ::' GenericStructuralKernel.hs
-          sha256sum GenericStructuralKernel.hs
+          if ! cmp -s GenericStructuralKernel.hs src/GenericStructuralKernel.hs; then
+            echo 'checked-in generic structural kernel differs from fresh Rocq extraction' >&2
+            diff -u src/GenericStructuralKernel.hs GenericStructuralKernel.hs || true
+            exit 1
+          fi
+          sha256sum GenericStructuralKernel.hs src/GenericStructuralKernel.hs
           mkdir -p generic-structural-implementation-refinement-proof
           cp \
             proof/Phil/Core/GenericStructural.v \
@@ -81,16 +91,22 @@ jobs:
         with:
           name: rocq-generic-structural-implementation-refinement
           path: generic-structural-implementation-refinement-proof
-      - name: Typecheck extracted and production GEN-001-003 paths
+      - name: Typecheck extracted, checked-in, and production GEN-001-003 paths
         run: |
           set -euo pipefail
-          ghc -Wall -Werror -fno-code \
-            generic-structural-implementation-refinement-proof/GenericStructuralKernel.hs
+          cmp -s \
+            generic-structural-implementation-refinement-proof/GenericStructuralKernel.hs \
+            src/GenericStructuralKernel.hs
+          ghc -Wall -Werror -fno-code src/GenericStructuralKernel.hs
           cabal build exe:phil-certify-core-scalar --ghc-options=-Werror
           cabal exec -- ghc -isrc -Wall -Werror -fno-code \
             src/Phil/Core/Generic.hs \
             test/Phase1GenericStructuralMain.hs
-      - name: Re-run GEN-001-003 production correspondence corpus
+          cabal exec -- ghc -isrc -Wall -Werror -fno-code \
+            src/Phil/Core/Generic.hs \
+            test/Phase1GenericRequirementsMain.hs
+      - name: Exercise production structural path through extracted kernel
         run: |
           set -euo pipefail
           cabal exec -- runghc -isrc test/Phase1GenericStructuralMain.hs
+          cabal exec -- runghc -isrc test/Phase1GenericRequirementsMain.hs
