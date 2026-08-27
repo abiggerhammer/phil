@@ -67,6 +67,9 @@ jobs:
       - name: Phase 1 protocol stale endpoint conformance
         run: cabal exec -- runghc -Wall -Werror -isrc test/Phase1ProtocolStaleEndpointMain.hs
 
+      - name: Phase 1 protocol guarded transition conformance
+        run: cabal exec -- runghc -Wall -Werror -isrc test/Phase1ProtocolGuardedTransitionMain.hs
+
       - name: Phase 1 generic structural conformance
         run: cabal exec -- runghc -isrc test/Phase1GenericStructuralMain.hs
 
