@@ -52,9 +52,11 @@
 # - parsing a mode never proves that the declaration/value satisfies these rules.
 #
 # Static arguments and generic requirements:
-# - static actual syntax admits types, sessions, values/contracts, and effect sets;
-# - overlapping name-shaped static actuals are interpreted by the expected
-#   generic parameter kind during elaboration, never by parser alternative order;
+# - static actual syntax admits structured types, structured sessions, static
+#   values/references, and effect sets;
+# - a name-shaped actual such as T, S, Provider[X], or Contract[Y] has one
+#   concrete static-reference parse; its expected generic kind determines its
+#   semantic category during elaboration, never parser alternative order;
 # - source positions that name parameterizable static contracts use static_reference
 #   so an exact generic contract application can be named rather than inferred;
 # - stabilized generic requirements preserve semantic category for structural,
@@ -153,6 +155,11 @@ term_params = "(", [ term_param, { ",", term_param } ], ")" ;
 term_param = identifier, ":", type_expression ;
 
 type_expression =
+    nonreference_type_expression
+  | named_type
+  ;
+
+nonreference_type_expression =
     "Unit"
   | "Bool"
   | uint_type
@@ -162,7 +169,6 @@ type_expression =
   | "Validated", "[", static_reference, ",", expression, ",", expression, "]"
   | refinement_type
   | tuple_type
-  | named_type
   ;
 
 refinement_type =
@@ -172,15 +178,33 @@ tuple_type =
   "(", type_expression, ",", type_expression,
   { ",", type_expression }, ")" ;
 
-named_type = qualified_name, [ static_arguments ] ;
+named_type = static_reference ;
 static_arguments =
   "[", [ static_argument, { ",", static_argument } ], "]" ;
 static_argument =
-    type_expression
-  | session_expression
-  | expression
+    nonreference_type_expression
+  | nonreference_session_expression
+  | static_value_expression
   | effect_set_literal
   ;
+
+static_value_expression = static_additive_expression ;
+static_additive_expression =
+  static_multiplicative_expression,
+  { ( "+" | "-" ), static_multiplicative_expression } ;
+static_multiplicative_expression =
+  static_postfix_expression, { "*", static_postfix_expression } ;
+static_postfix_expression =
+  static_primary_expression, { ".", identifier } ;
+static_primary_expression =
+    "true"
+  | "false"
+  | "unit"
+  | integer_literal
+  | static_reference
+  | "(", static_value_expression, ")"
+  ;
+
 term_arguments = "(", [ expression, { ",", expression } ], ")" ;
 
 record_decl =
@@ -252,7 +276,7 @@ type_set = "{", [ type_expression, { ",", type_expression } ], "}" ;
 
 effect_set_expression =
     effect_set_literal
-  | qualified_name
+  | static_reference
   ;
 effect_set_literal =
   "{", [ effect_expression, { ",", effect_expression } ], "}" ;
@@ -299,6 +323,11 @@ protocol_decl =
 role_session_decl = "role", identifier, "=", session_expression, ";" ;
 
 session_expression =
+    nonreference_session_expression
+  | static_reference
+  ;
+
+nonreference_session_expression =
     "send", "(", term_param, ")", [ "using", static_reference ],
       [ "when", proposition ], "then", session_expression
   | "receive", "(", term_param, ")", [ "using", static_reference ],
@@ -308,7 +337,6 @@ session_expression =
   | "end", identifier
   | "recursive", identifier, "=", session_expression
   | "continue", identifier
-  | static_reference
   ;
 
 session_branch =
