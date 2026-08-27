@@ -1,0 +1,103 @@
+name: Phase 1 Callable Mode Implementation Refinement
+
+on:
+  pull_request:
+    paths:
+      - 'proof/Phil/Core/GenericStructural.v'
+      - 'proof/Phil/Core/CallableMode.v'
+      - 'proof/Phil/Core/CallableModeImplementation.v'
+      - 'proof/Phil/Core/CallableModeImplementationExtraction.v'
+      - 'src/Phil/Core/Callable.hs'
+      - 'test/Phase1CallableCaptureEffectsMain.hs'
+      - 'docs/phase-1/callable-mode-implementation-refinement-v1.md'
+      - '.github/workflows/phase1-callable-mode-implementation-refinement.yml'
+  push:
+    branches: [main]
+    paths:
+      - 'proof/Phil/Core/GenericStructural.v'
+      - 'proof/Phil/Core/CallableMode.v'
+      - 'proof/Phil/Core/CallableModeImplementation.v'
+      - 'proof/Phil/Core/CallableModeImplementationExtraction.v'
+      - 'src/Phil/Core/Callable.hs'
+      - 'test/Phase1CallableCaptureEffectsMain.hs'
+      - 'docs/phase-1/callable-mode-implementation-refinement-v1.md'
+      - '.github/workflows/phase1-callable-mode-implementation-refinement.yml'
+
+permissions:
+  contents: read
+
+jobs:
+  rocq-callable-mode-implementation-refinement:
+    runs-on: ubuntu-latest
+    container:
+      image: rocq/rocq-prover:9.2.0
+      options: --user root
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Compile certified CALL-MODE model and executable correspondence
+        shell: bash
+        run: |
+          set -euo pipefail
+          export PATH="/home/rocq/.opam/${COMPILER}/bin:$PATH"
+          rocq c -Q proof/Phil Phil proof/Phil/Core/GenericStructural.v
+          rocq c -Q proof/Phil Phil proof/Phil/Core/CallableMode.v
+          rocq c -Q proof/Phil Phil proof/Phil/Core/CallableModeImplementation.v
+
+      - name: Extract callable mode kernel
+        shell: bash
+        run: |
+          set -euo pipefail
+          export PATH="/home/rocq/.opam/${COMPILER}/bin:$PATH"
+          rm -f CallableModeKernel.hs
+          rocq c -Q proof/Phil Phil proof/Phil/Core/CallableModeImplementationExtraction.v
+          test -s CallableModeKernel.hs
+          grep -q 'decideCallableCaptureTransfer' CallableModeKernel.hs
+          grep -q 'captureMovedRestrictedByMode' CallableModeKernel.hs
+          grep -q 'decideCallableDuplicateCapture' CallableModeKernel.hs
+          grep -q 'closureStructuralModeFromModes' CallableModeKernel.hs
+          sha256sum CallableModeKernel.hs
+          mkdir -p callable-mode-implementation-refinement-proof
+          cp \
+            proof/Phil/Core/CallableMode.v \
+            proof/Phil/Core/CallableModeImplementation.v \
+            proof/Phil/Core/CallableModeImplementation.vo \
+            CallableModeKernel.hs \
+            callable-mode-implementation-refinement-proof/
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: rocq-callable-mode-implementation-refinement
+          path: callable-mode-implementation-refinement-proof
+          if-no-files-found: error
+
+  verify-callable-mode-correspondence:
+    needs: rocq-callable-mode-implementation-refinement
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/download-artifact@v4
+        with:
+          name: rocq-callable-mode-implementation-refinement
+          path: callable-mode-implementation-refinement-proof
+
+      - uses: haskell-actions/setup@v2
+        with:
+          ghc-version: '9.6.7'
+          cabal-version: 'latest'
+
+      - name: Typecheck extracted kernel and existing callable production path
+        run: |
+          set -euo pipefail
+          ghc -Wall -Werror -fno-code \
+            callable-mode-implementation-refinement-proof/CallableModeKernel.hs
+          cabal build exe:phil-certify-core-scalar --ghc-options=-Werror
+          cabal exec -- ghc -isrc -Wall -Werror -fno-code \
+            src/Phil/Core/Callable.hs \
+            test/Phase1CallableCaptureEffectsMain.hs
+
+      - name: Re-run CALL-001 through CALL-005 production correspondence corpus
+        run: |
+          set -euo pipefail
+          cabal exec -- runghc -isrc test/Phase1CallableCaptureEffectsMain.hs
