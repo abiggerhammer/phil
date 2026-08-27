@@ -26,7 +26,7 @@ test label result = case result of
 
 hiddenMaybePossessionRejects :: Either String ()
 hiddenMaybePossessionRejects =
-  let right = affineProjection "affine.right" (BlockId "right")
+  let right = (affineProjection "affine.right" (BlockId "right"))
         { stateProjectionBindings = Map.empty
         , stateProjectionIncomingRestricted = Map.empty
         }
