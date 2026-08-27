@@ -39,6 +39,21 @@
 # - effect meaning, subject identity, subeffecting, and authority requirements
 #   are semantic checks, not parser responsibilities.
 #
+# Static reasoning surface:
+# - refinement types use { x : T | P } and bind x only in P;
+# - non-definitional equality transport is explicit as
+#     transport value to TargetType using equality_evidence;
+# - finite-collection membership and disjointness are native infix proposition
+#   forms using "in" and "disjoint" rather than being encoded as opaque claims;
+# - parsing these forms never proves the proposition, validates evidence, or
+#   establishes collection/refinement sorts; those remain checker obligations.
+#
+# Callable outcomes:
+# - outcomes names the public outcome/failure set;
+# - outcome T { ... } supplies branch-sensitive post-state/callee facts for T;
+# - replace callee transitions name the exact successor callable contract and,
+#   when required, an explicit successor state expression.
+#
 # A source parser must consume the entire source file.
 
 source_file = [ module_decl ], { import_decl }, { top_level_decl } ;
@@ -110,8 +125,12 @@ type_expression =
   | "Frame", "[", qualified_name, "]"
   | "Proof", "[", proposition, "]"
   | "Validated", "[", qualified_name, ",", expression, ",", expression, "]"
+  | refinement_type
   | named_type
   ;
+
+refinement_type =
+  "{", identifier, ":", type_expression, "|", proposition, "}" ;
 
 named_type = qualified_name, [ static_arguments ] ;
 static_arguments =
@@ -156,13 +175,26 @@ callable_clause =
   | "authority", type_set, ";"
   | "effects", effect_set_expression, ";"
   | "outcomes", type_set, ";"
+  | outcome_residue
   | "ensures", proposition, ";"
   | "assumes", proposition, ";"
   | "cost", expression, ";"
   | "callee", callee_transition, ";"
   ;
 
-callee_transition = "preserve" | "consume" | "replace" ;
+outcome_residue =
+  "outcome", type_expression, "{", { outcome_residue_clause }, "}" ;
+outcome_residue_clause =
+    "state", "(", [ state_slot, { ",", state_slot } ], ")", ";"
+  | "callee", callee_transition, ";"
+  | "ensures", proposition, ";"
+  ;
+
+callee_transition =
+    "preserve"
+  | "consume"
+  | "replace", "with", static_reference, [ "state", expression ]
+  ;
 name_set = "{", [ qualified_name, { ",", qualified_name } ], "}" ;
 type_set = "{", [ type_expression, { ",", type_expression } ], "}" ;
 
@@ -342,10 +374,12 @@ primary_expression =
   | send_exact_expression
   | send_expression
   | select_expression
+  | offer_expression
   | commit_receive_expression
   | fail_expression
   | close_expression
   | release_expression
+  | transport_expression
   | accept_expression
   | prove_expression
   | parenthesized_expression
@@ -435,6 +469,10 @@ select_expression =
   "select", branch_value, "on", additive_expression,
   [ "using", additive_expression ] ;
 
+offer_expression =
+  "offer", additive_expression,
+  "{", match_arm, { match_arm }, "}" ;
+
 branch_value =
   qualified_name, [ term_arguments ] ;
 
@@ -449,6 +487,10 @@ failure_target =
 
 close_expression = "close", additive_expression ;
 release_expression = "release", additive_expression ;
+
+transport_expression =
+  "transport", additive_expression, "to", type_expression,
+  "using", additive_expression ;
 
 accept_expression =
   "accept", additive_expression, "as", type_expression ;
@@ -467,17 +509,26 @@ proposition_not =
   "not", proposition_not | proposition_atom ;
 
 proposition_atom =
-    comparison_proposition
+    relation_proposition
   | "(", proposition, ")"
   | "true"
   | "false"
   | claim_application
   ;
 
-comparison_proposition =
-  additive_expression, comparison_operator, additive_expression ;
+relation_proposition =
+  additive_expression, relation_operator, additive_expression ;
 
-comparison_operator = "==" | "!=" | "<=" | ">=" | "<" | ">" ;
+relation_operator =
+    "=="
+  | "!="
+  | "<="
+  | ">="
+  | "<"
+  | ">"
+  | "in"
+  | "disjoint"
+  ;
 
 claim_application =
   qualified_name, "(", [ expression, { ",", expression } ], ")" ;
