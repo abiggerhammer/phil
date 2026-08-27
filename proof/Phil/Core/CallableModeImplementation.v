@@ -1,6 +1,6 @@
 From Stdlib Require Import Bool.Bool Lists.List.
 
-From Phil.Core Require Import CallableMode.
+From Phil.Core Require Import GenericStructural CallableMode.
 
 Import ListNotations.
 
