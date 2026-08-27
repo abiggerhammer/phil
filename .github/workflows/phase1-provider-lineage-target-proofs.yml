@@ -1,0 +1,103 @@
+name: Phase 1 Provider Lineage Target Proofs
+
+on:
+  pull_request:
+    paths:
+      - 'src/Phil/Core/ProviderQualificationTargetReuse.hs'
+      - 'src/Phil/Core/ProviderQualificationApplicability.hs'
+      - 'test/Phase1ProviderQualificationTargetReuseMain.hs'
+      - 'test/Phase1ProviderQualificationApplicabilityMain.hs'
+      - 'docs/phase-1/provider-cross-target-reuse-v1.md'
+      - 'docs/phase-1/provider-admission-applicability-v1.md'
+      - 'proof/Phil/Core/ProviderQualificationLineageTarget.v'
+      - 'app/Phase1ProviderLineageTargetCertificationMain.hs'
+      - '.github/workflows/phase1-provider-lineage-target-proofs.yml'
+  push:
+    branches: [main]
+    paths:
+      - 'src/Phil/Core/ProviderQualificationTargetReuse.hs'
+      - 'src/Phil/Core/ProviderQualificationApplicability.hs'
+      - 'test/Phase1ProviderQualificationTargetReuseMain.hs'
+      - 'test/Phase1ProviderQualificationApplicabilityMain.hs'
+      - 'docs/phase-1/provider-cross-target-reuse-v1.md'
+      - 'docs/phase-1/provider-admission-applicability-v1.md'
+      - 'proof/Phil/Core/ProviderQualificationLineageTarget.v'
+      - 'app/Phase1ProviderLineageTargetCertificationMain.hs'
+      - '.github/workflows/phase1-provider-lineage-target-proofs.yml'
+
+permissions:
+  contents: read
+
+jobs:
+  rocq-phase1-provider-lineage-target:
+    runs-on: ubuntu-latest
+    container:
+      image: rocq/rocq-prover:9.2.0
+      options: --user root
+    steps:
+      - uses: actions/checkout@v4
+      - name: Compile PHIL-PROV-LINEAGE-TARGET-001
+        shell: bash
+        run: |
+          set -euo pipefail
+          export PATH="/home/rocq/.opam/${COMPILER}/bin:$PATH"
+          rocq c -Q proof/Phil Phil proof/Phil/Core/ProviderQualificationLineageTarget.v
+          mkdir -p phase1-provider-lineage-target-proof
+          cp \
+            proof/Phil/Core/ProviderQualificationLineageTarget.v \
+            proof/Phil/Core/ProviderQualificationLineageTarget.vo \
+            phase1-provider-lineage-target-proof/
+      - uses: actions/upload-artifact@v4
+        with:
+          name: rocq-phase1-provider-lineage-target-proof
+          path: phase1-provider-lineage-target-proof
+          if-no-files-found: error
+
+  certify-phase1-provider-lineage-target:
+    needs: rocq-phase1-provider-lineage-target
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: haskell-actions/setup@v2
+        with:
+          ghc-version: '9.6.7'
+          cabal-version: 'latest'
+      - name: Build existing proof certifier substrate with warnings as errors
+        run: cabal build exe:phil-certify-core-scalar --ghc-options=-Werror
+      - name: Typecheck certifier
+        run: cabal exec -- ghc -isrc -Wall -Werror -fno-code app/Phase1ProviderLineageTargetCertificationMain.hs
+      - name: Re-run PROV-013 and PROV-014 correspondence
+        run: |
+          set -euo pipefail
+          cabal exec -- runghc -isrc test/Phase1ProviderQualificationTargetReuseMain.hs
+          cabal exec -- runghc -isrc test/Phase1ProviderQualificationApplicabilityMain.hs
+      - uses: actions/download-artifact@v4
+        with:
+          name: rocq-phase1-provider-lineage-target-proof
+          path: phase1-provider-lineage-target-proof
+      - name: Emit PHIL-PROV-LINEAGE-TARGET-001 certificate
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p phase1-provider-lineage-target-certification
+          cabal exec -- runghc -isrc app/Phase1ProviderLineageTargetCertificationMain.hs \
+            phase1-provider-lineage-target-proof/ProviderQualificationLineageTarget.v \
+            phase1-provider-lineage-target-proof/ProviderQualificationLineageTarget.vo \
+            phase1-provider-lineage-target-certification/PHIL-PROV-LINEAGE-TARGET-001.rocq.cert
+          sha256sum \
+            src/Phil/Core/ProviderQualificationTargetReuse.hs \
+            src/Phil/Core/ProviderQualificationApplicability.hs \
+            test/Phase1ProviderQualificationTargetReuseMain.hs \
+            test/Phase1ProviderQualificationApplicabilityMain.hs \
+            docs/phase-1/provider-cross-target-reuse-v1.md \
+            docs/phase-1/provider-admission-applicability-v1.md \
+            proof/Phil/Core/ProviderQualificationLineageTarget.v \
+            app/Phase1ProviderLineageTargetCertificationMain.hs \
+            > phase1-provider-lineage-target-certification/PHIL-PROV-LINEAGE-TARGET-001.correspondence.sha256
+          cat phase1-provider-lineage-target-certification/PHIL-PROV-LINEAGE-TARGET-001.rocq.cert
+          sha256sum phase1-provider-lineage-target-certification/PHIL-PROV-LINEAGE-TARGET-001.rocq.cert
+      - uses: actions/upload-artifact@v4
+        with:
+          name: phil-phase1-provider-lineage-target-proof-certification
+          path: phase1-provider-lineage-target-certification
+          if-no-files-found: error
