@@ -32,7 +32,7 @@
 # - ordinary term statements retain the Phase 0 semicolon-free surface.
 #
 # Effects:
-# - effect labels are qualified names optionally applied to term arguments;
+# - effect labels are static references optionally applied to term arguments;
 # - effect sets are explicit brace-delimited sets of effect labels;
 # - generic effect-set parameters have kind Effects and may be bounded with
 #   an effects ... within ... requirement;
@@ -55,6 +55,8 @@
 # - static actual syntax admits types, sessions, values/contracts, and effect sets;
 # - overlapping name-shaped static actuals are interpreted by the expected
 #   generic parameter kind during elaboration, never by parser alternative order;
+# - source positions that name parameterizable static contracts use static_reference
+#   so an exact generic contract application can be named rather than inferred;
 # - stabilized generic requirements preserve semantic category for structural,
 #   proposition, provider, callable, boundary, architecture, effects, authority,
 #   boundary-representation, representation/placement, cost, and environment facts.
@@ -155,9 +157,9 @@ type_expression =
   | "Bool"
   | uint_type
   | "Bytes", "[", expression, "]"
-  | "Frame", "[", qualified_name, "]"
+  | "Frame", "[", static_reference, "]"
   | "Proof", "[", proposition, "]"
-  | "Validated", "[", qualified_name, ",", expression, ",", expression, "]"
+  | "Validated", "[", static_reference, ",", expression, ",", expression, "]"
   | refinement_type
   | tuple_type
   | named_type
@@ -255,7 +257,7 @@ effect_set_expression =
 effect_set_literal =
   "{", [ effect_expression, { ",", effect_expression } ], "}" ;
 effect_expression =
-  qualified_name, [ term_arguments ] ;
+  static_reference, [ term_arguments ] ;
 
 function_decl =
   [ "recursive" ], "fn", identifier,
@@ -297,20 +299,21 @@ protocol_decl =
 role_session_decl = "role", identifier, "=", session_expression, ";" ;
 
 session_expression =
-    "send", "(", term_param, ")", [ "using", qualified_name ],
+    "send", "(", term_param, ")", [ "using", static_reference ],
       [ "when", proposition ], "then", session_expression
-  | "receive", "(", term_param, ")", [ "using", qualified_name ],
+  | "receive", "(", term_param, ")", [ "using", static_reference ],
       [ "when", proposition ], "then", session_expression
   | "select", "{", session_branch, { "|", session_branch }, "}"
   | "offer", "{", session_branch, { "|", session_branch }, "}"
   | "end", identifier
   | "recursive", identifier, "=", session_expression
   | "continue", identifier
+  | static_reference
   ;
 
 session_branch =
   identifier, [ "(", [ term_param, { ",", term_param } ], ")" ],
-  [ "using", qualified_name ], [ "when", proposition ],
+  [ "using", static_reference ], [ "when", proposition ],
   "=>", session_expression ;
 
 capability_decl =
@@ -319,7 +322,7 @@ capability_decl =
   "{", { capability_item }, "}" ;
 
 capability_item =
-    "permits", qualified_name, ";"
+    "permits", static_reference, ";"
   | "requires", proposition, ";"
   | "law", identifier, ":", proposition, ";"
   ;
@@ -329,8 +332,8 @@ boundary_decl =
   ":", type_expression, "{", { boundary_item }, "}" ;
 
 boundary_item =
-    "receive", "using", qualified_name, ";"
-  | "send", "using", qualified_name, ";"
+    "receive", "using", static_reference, ";"
+  | "send", "using", static_reference, ";"
   | "correspondence", proposition, ";"
   | "canonical", ";"
   | "failure", type_expression, ";"
@@ -395,7 +398,7 @@ record_pattern =
 field_pattern = identifier, [ "=", pattern ] ;
 
 expression = additive_expression, [ "or", fallback ] ;
-fallback = "fail", qualified_name | "reject", additive_expression ;
+fallback = "fail", failure_target | "reject", additive_expression ;
 
 additive_expression =
   multiplicative_expression,
@@ -447,7 +450,7 @@ name_expression =
   qualified_name, [ static_arguments ], [ term_arguments ] ;
 
 construct_expression =
-  "construct", qualified_name,
+  "construct", static_reference,
   "{", [ field_assignment, { ",", field_assignment }, [ "," ] ], "}" ;
 field_assignment = identifier, "=", expression ;
 
@@ -509,10 +512,10 @@ receive_expression =
   "receive", type_expression, "on", additive_expression ;
 
 recognize_expression =
-  "recognize", qualified_name, "from", additive_expression ;
+  "recognize", static_reference, "from", additive_expression ;
 
 validate_expression =
-  "validate", qualified_name,
+  "validate", static_reference,
   [ "at", additive_expression ], "on", additive_expression ;
 
 send_exact_expression =
@@ -542,7 +545,7 @@ fail_expression =
   "fail", failure_target, "on", additive_expression ;
 
 failure_target =
-  qualified_name, [ term_arguments ] ;
+  static_reference, [ term_arguments ] ;
 
 close_expression = "close", additive_expression ;
 release_expression = "release", additive_expression ;
@@ -593,4 +596,4 @@ relation_operator =
   ;
 
 claim_application =
-  qualified_name, "(", [ expression, { ",", expression } ], ")" ;
+  static_reference, "(", [ expression, { ",", expression } ], ")" ;
