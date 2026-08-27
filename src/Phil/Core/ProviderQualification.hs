@@ -19,6 +19,7 @@ module Phil.Core.ProviderQualification
   , checkProviderSemanticQualification
   ) where
 
+import qualified ProviderQualificationKernel as Kernel
 import qualified Data.Map.Strict as Map
 import qualified Data.Set as Set
 import Data.Text (Text)
@@ -55,9 +56,6 @@ newtype ProviderResourceKey = ProviderResourceKey
   }
   deriving (Eq, Ord, Show)
 
--- | Exact continuing/outcome-specific resource behavior visible at one provider
--- operation boundary. These categories stay distinct so a nominally equal
--- result cannot hide a borrow/consume/return/successor mismatch.
 data ProviderResourceResidue = ProviderResourceResidue
   { providerResidueBorrowedInputs :: Set.Set ProviderResourceKey
   , providerResidueConsumedInputs :: Set.Set ProviderResourceKey
@@ -97,9 +95,6 @@ data ProviderImplementation = ProviderImplementation
   }
   deriving (Eq, Ord, Show)
 
--- | Explicit semantic operation relation. Runtime/source symbol identity is not
--- part of the relation. Every implementation outcome is mapped explicitly to
--- one public contract outcome so residue checking stays branch-sensitive.
 data ProviderOperationCorrespondence = ProviderOperationCorrespondence
   { providerCorrespondenceImplementationEntry :: ProviderImplementationEntryKey
   , providerCorrespondenceOutcomes :: Map.Map ProviderOutcomeKey ProviderOutcomeKey
@@ -150,18 +145,35 @@ data ProviderQualificationError
   | ProviderQualificationResourceResidueMismatch
       ProviderOperationKey ProviderOutcomeKey ProviderOutcomeKey
       ProviderResourceResidue ProviderResourceResidue
+  | ProviderQualificationRepresentationMismatch Text
   deriving (Eq, Ord, Show)
 
--- | Close the stateless semantic core of one pure-Phil provider qualification.
--- Whole-provider state/laws/lifecycle/authority/evidence obligations are later
--- layers; this checker establishes the exact total operation correspondence and
--- per-operation semantic refinement they depend on.
 checkProviderSemanticQualification
   :: ProviderContract
   -> ProviderImplementation
   -> ProviderQualificationClaim
   -> Either ProviderQualificationError CheckedProviderSemanticQualification
 checkProviderSemanticQualification contract implementation claim
+  | not (providerProjectionRoundTrips contract implementation claim) =
+      Left (ProviderQualificationRepresentationMismatch
+        "provider Map/Set projection failed canonical round-trip")
+  | providerKernelAccepts contract implementation claim =
+      case checkProviderSemanticQualificationDetailed contract implementation claim of
+        Right checked -> Right checked
+        Left _ -> Left (ProviderQualificationRepresentationMismatch
+          "extracted provider kernel accepted while diagnostic reconstruction rejected")
+  | otherwise =
+      case checkProviderSemanticQualificationDetailed contract implementation claim of
+        Left err -> Left err
+        Right _ -> Left (ProviderQualificationRepresentationMismatch
+          "extracted provider kernel rejected while diagnostic reconstruction accepted")
+
+checkProviderSemanticQualificationDetailed
+  :: ProviderContract
+  -> ProviderImplementation
+  -> ProviderQualificationClaim
+  -> Either ProviderQualificationError CheckedProviderSemanticQualification
+checkProviderSemanticQualificationDetailed contract implementation claim
   | providerQualificationRequiredInterface claim /= providerContractInterfaceRevision contract =
       Left (ProviderQualificationContractRevisionMismatch
         (providerContractInterfaceRevision contract)
@@ -249,3 +261,103 @@ checkProviderSemanticQualification contract implementation claim
         else Left (ProviderQualificationResourceResidueMismatch
           operationKey implementationOutcomeKey contractOutcomeKey
           contractResidue implementationResidue)
+
+providerKernelAccepts
+  :: ProviderContract
+  -> ProviderImplementation
+  -> ProviderQualificationClaim
+  -> Bool
+providerKernelAccepts contract implementation claim =
+  Kernel.decideProviderQualification
+    (==)
+    (==)
+    (==)
+    (==)
+    operationAccepts
+    (providerQualificationRequiredInterface claim ==
+      providerContractInterfaceRevision contract)
+    (providerQualificationImplementationRevision claim ==
+      providerImplementationDefinitionRevision implementation)
+    contractProjection
+    correspondenceProjection
+    implementationProjection
+  where
+    contractProjection =
+      [ (operationKey,
+          ( operationContract
+          , Map.toAscList (providerOperationOutcomeResidues operationContract)
+          ))
+      | (operationKey, operationContract) <-
+          Map.toAscList (providerContractOperations contract)
+      ]
+    correspondenceProjection =
+      [ (operationKey,
+          ( providerCorrespondenceImplementationEntry correspondence
+          , Map.toAscList (providerCorrespondenceOutcomes correspondence)
+          ))
+      | (operationKey, correspondence) <-
+          Map.toAscList (providerQualificationOperationCorrespondences claim)
+      ]
+    implementationProjection =
+      [ (entryKey,
+          ( implementationOperation
+          , Map.toAscList
+              (providerImplementationOutcomeResidues implementationOperation)
+          ))
+      | (entryKey, implementationOperation) <-
+          Map.toAscList (providerImplementationEntries implementation)
+      ]
+    operationAccepts operationContract implementationOperation =
+      case checkCallableRefinement
+          (providerOperationCallableContract operationContract)
+          (providerImplementationCallable implementationOperation) of
+        Left _ -> False
+        Right _ -> Set.isSubsetOf
+          (providerImplementationPreconditions implementationOperation)
+          (providerOperationPreconditions operationContract)
+
+providerProjectionRoundTrips
+  :: ProviderContract
+  -> ProviderImplementation
+  -> ProviderQualificationClaim
+  -> Bool
+providerProjectionRoundTrips contract implementation claim =
+  and
+    [ mapRoundTrips (providerContractOperations contract)
+    , all contractOperationRoundTrips
+        (Map.elems (providerContractOperations contract))
+    , mapRoundTrips (providerImplementationEntries implementation)
+    , all implementationOperationRoundTrips
+        (Map.elems (providerImplementationEntries implementation))
+    , mapRoundTrips (providerQualificationOperationCorrespondences claim)
+    , all correspondenceRoundTrips
+        (Map.elems (providerQualificationOperationCorrespondences claim))
+    ]
+  where
+    contractOperationRoundTrips operation =
+      setRoundTrips (providerOperationPreconditions operation) &&
+      mapRoundTrips (providerOperationOutcomeResidues operation) &&
+      all residueRoundTrips
+        (Map.elems (providerOperationOutcomeResidues operation))
+    implementationOperationRoundTrips operation =
+      setRoundTrips (providerImplementationPreconditions operation) &&
+      mapRoundTrips (providerImplementationOutcomeResidues operation) &&
+      all residueRoundTrips
+        (Map.elems (providerImplementationOutcomeResidues operation))
+    correspondenceRoundTrips correspondence =
+      mapRoundTrips (providerCorrespondenceOutcomes correspondence)
+
+residueRoundTrips :: ProviderResourceResidue -> Bool
+residueRoundTrips residue = and
+  [ setRoundTrips (providerResidueBorrowedInputs residue)
+  , setRoundTrips (providerResidueConsumedInputs residue)
+  , setRoundTrips (providerResidueReturnedPredecessors residue)
+  , setRoundTrips (providerResidueSuccessors residue)
+  , setRoundTrips (providerResidueProducedResources residue)
+  ]
+
+mapRoundTrips :: (Ord key, Eq value) => Map.Map key value -> Bool
+mapRoundTrips values = Map.fromAscList (Map.toAscList values) == values
+
+setRoundTrips :: Ord value => Set.Set value -> Bool
+setRoundTrips values = Set.fromAscList (Set.toAscList values) == values
