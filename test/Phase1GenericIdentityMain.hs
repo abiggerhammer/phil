@@ -10,6 +10,7 @@ import Phil.Core.Static
   ( ArchitectureChildSpec (..)
   , ArchitectureNodeSpec (..)
   , DeclarationDescriptor (..)
+  , DeclarationIdentity
   , DeclarationKey (..)
   , DeclarationPresentation (..)
   , DefinitionRevision (..)
@@ -168,6 +169,7 @@ rootNode = ArchitectureNodeSpec
   , architectureNodeReferences = []
   }
 
+rootDeclarationIdentity :: DeclarationIdentity
 rootDeclarationIdentity = deriveDeclarationIdentity DeclarationDescriptor
   { declarationPresentation = DeclarationPresentation "Root" ["phase1"]
   , declarationKey = DeclarationKey "decl.root"
@@ -175,6 +177,7 @@ rootDeclarationIdentity = deriveDeclarationIdentity DeclarationDescriptor
   , declarationDefinitionSemantics = SemanticAtom "root-definition"
   }
 
+childDeclarationIdentity :: DeclarationIdentity
 childDeclarationIdentity = deriveDeclarationIdentity DeclarationDescriptor
   { declarationPresentation = DeclarationPresentation "Worker" ["phase1"]
   , declarationKey = DeclarationKey "decl.worker"
