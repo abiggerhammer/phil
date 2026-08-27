@@ -83,10 +83,5 @@ pathContainingObligation flow =
     [] -> Left "unresolved obligation disappeared at reconvergence"
     states -> Left ("unresolved obligation duplicated across paths: " <> show (length states))
 
-assert :: Bool -> String -> Either String ()
-assert condition detail
-  | condition = Right ()
-  | otherwise = Left detail
-
 mapLeft :: (a -> b) -> Either a c -> Either b c
 mapLeft f = either (Left . f) Right
