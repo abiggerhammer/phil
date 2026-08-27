@@ -210,7 +210,7 @@ Proof.
   - reflexivity.
   - exists outcomeMap.
     split.
-    + exact Hoperation.
+    + reflexivity.
     + cbn. exact Houtcome.
 Qed.
 
