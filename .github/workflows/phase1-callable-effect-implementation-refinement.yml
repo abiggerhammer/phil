@@ -1,0 +1,107 @@
+name: Phase 1 Callable Effect Implementation Refinement
+
+on:
+  pull_request:
+    paths:
+      - 'proof/Phil/Core/CallableEffects.v'
+      - 'proof/Phil/Core/CallableEffectsImplementation.v'
+      - 'proof/Phil/Core/CallableEffectsImplementationExtraction.v'
+      - 'src/CallableModeKernel.hs'
+      - 'src/Phil/Core/Callable.hs'
+      - 'test/Phase1CallableCaptureEffectsMain.hs'
+      - 'test/Phase1CallableEffectBoundMain.hs'
+      - 'docs/phase-1/callable-effect-implementation-refinement-v1.md'
+      - '.github/workflows/phase1-callable-effect-implementation-refinement.yml'
+  push:
+    branches: [main]
+    paths:
+      - 'proof/Phil/Core/CallableEffects.v'
+      - 'proof/Phil/Core/CallableEffectsImplementation.v'
+      - 'proof/Phil/Core/CallableEffectsImplementationExtraction.v'
+      - 'src/CallableModeKernel.hs'
+      - 'src/Phil/Core/Callable.hs'
+      - 'test/Phase1CallableCaptureEffectsMain.hs'
+      - 'test/Phase1CallableEffectBoundMain.hs'
+      - 'docs/phase-1/callable-effect-implementation-refinement-v1.md'
+      - '.github/workflows/phase1-callable-effect-implementation-refinement.yml'
+
+permissions:
+  contents: read
+
+jobs:
+  rocq-callable-effect-implementation-refinement:
+    runs-on: ubuntu-latest
+    container:
+      image: rocq/rocq-prover:9.2.0
+      options: --user root
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Compile certified CALL-EFFECT model and executable correspondence
+        shell: bash
+        run: |
+          set -euo pipefail
+          export PATH="/home/rocq/.opam/${COMPILER}/bin:$PATH"
+          rocq c -Q proof/Phil Phil proof/Phil/Core/CallableEffects.v
+          rocq c -Q proof/Phil Phil proof/Phil/Core/CallableEffectsImplementation.v
+
+      - name: Extract callable effect kernel
+        shell: bash
+        run: |
+          set -euo pipefail
+          export PATH="/home/rocq/.opam/${COMPILER}/bin:$PATH"
+          rm -f CallableEffectKernel.hs
+          rocq c -Q proof/Phil Phil proof/Phil/Core/CallableEffectsImplementationExtraction.v
+          test -s CallableEffectKernel.hs
+          grep -q 'callableUseEffectKindContributesPublicBound' CallableEffectKernel.hs
+          grep -q 'decideCallableEffectBound' CallableEffectKernel.hs
+          grep -q 'effectDeltaBit' CallableEffectKernel.hs
+          sha256sum CallableEffectKernel.hs
+          mkdir -p callable-effect-implementation-refinement-proof
+          cp \
+            proof/Phil/Core/CallableEffects.v \
+            proof/Phil/Core/CallableEffectsImplementation.v \
+            proof/Phil/Core/CallableEffectsImplementation.vo \
+            CallableEffectKernel.hs \
+            callable-effect-implementation-refinement-proof/
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: rocq-callable-effect-implementation-refinement
+          path: callable-effect-implementation-refinement-proof
+          if-no-files-found: error
+
+  verify-callable-effect-correspondence:
+    needs: rocq-callable-effect-implementation-refinement
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/download-artifact@v4
+        with:
+          name: rocq-callable-effect-implementation-refinement
+          path: callable-effect-implementation-refinement-proof
+
+      - uses: haskell-actions/setup@v2
+        with:
+          ghc-version: '9.6.7'
+          cabal-version: 'latest'
+
+      - name: Typecheck extracted kernel and existing callable production path
+        run: |
+          set -euo pipefail
+          ghc -Wall -Werror -fno-code \
+            callable-effect-implementation-refinement-proof/CallableEffectKernel.hs
+          cabal build exe:phil-certify-core-scalar --ghc-options=-Werror
+          cabal exec -- ghc -isrc -Wall -Werror -fno-code \
+            src/Phil/Core/Callable.hs \
+            test/Phase1CallableCaptureEffectsMain.hs
+          cabal exec -- ghc -isrc -Wall -Werror -fno-code \
+            src/Phil/Core/Callable.hs \
+            test/Phase1CallableEffectBoundMain.hs
+
+      - name: Re-run CALL-EFFECT production correspondence corpora
+        run: |
+          set -euo pipefail
+          cabal exec -- runghc -isrc test/Phase1CallableCaptureEffectsMain.hs
+          cabal exec -- runghc -isrc test/Phase1CallableEffectBoundMain.hs
