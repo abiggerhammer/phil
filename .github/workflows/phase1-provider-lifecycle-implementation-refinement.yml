@@ -7,6 +7,7 @@ on:
       - 'proof/Phil/Core/ProviderLifecycleQualificationImplementation.v'
       - 'proof/Phil/Core/ProviderLifecycleQualificationImplementationExtraction.v'
       - 'docs/phase-1/provider-lifecycle-implementation-refinement-v1.md'
+      - 'src/ProviderLifecycleQualificationKernel.hs'
       - 'src/Phil/Core/ProviderLifecycleQualification.hs'
       - 'test/Phase1ProviderQualificationMain.hs'
       - 'test/Phase1ProviderStateQualificationMain.hs'
@@ -20,6 +21,7 @@ on:
       - 'proof/Phil/Core/ProviderLifecycleQualificationImplementation.v'
       - 'proof/Phil/Core/ProviderLifecycleQualificationImplementationExtraction.v'
       - 'docs/phase-1/provider-lifecycle-implementation-refinement-v1.md'
+      - 'src/ProviderLifecycleQualificationKernel.hs'
       - 'src/Phil/Core/ProviderLifecycleQualification.hs'
       - 'test/Phase1ProviderQualificationMain.hs'
       - 'test/Phase1ProviderStateQualificationMain.hs'
@@ -45,7 +47,7 @@ jobs:
           export PATH="/home/rocq/.opam/${COMPILER}/bin:$PATH"
           rocq c -Q proof/Phil Phil proof/Phil/Core/ProviderQualificationImplementationBridge.v
           rocq c -Q proof/Phil Phil proof/Phil/Core/ProviderLifecycleQualificationImplementation.v
-      - name: Extract provider lifecycle kernel
+      - name: Regenerate and bind provider lifecycle kernel
         shell: bash
         run: |
           set -euo pipefail
@@ -59,7 +61,14 @@ jobs:
           grep -q '^checkProviderLifecycleObservation ::' ProviderLifecycleQualificationKernel.hs
           grep -q '^checkProviderLifecyclePoint ::' ProviderLifecycleQualificationKernel.hs
           grep -q '^decideProviderLifecycleQualification ::' ProviderLifecycleQualificationKernel.hs
-          sha256sum ProviderLifecycleQualificationKernel.hs
+          if ! cmp -s ProviderLifecycleQualificationKernel.hs src/ProviderLifecycleQualificationKernel.hs; then
+            echo 'checked-in provider lifecycle kernel differs from fresh Rocq extraction' >&2
+            diff -u src/ProviderLifecycleQualificationKernel.hs ProviderLifecycleQualificationKernel.hs || true
+            exit 1
+          fi
+          sha256sum \
+            ProviderLifecycleQualificationKernel.hs \
+            src/ProviderLifecycleQualificationKernel.hs
           mkdir -p provider-lifecycle-implementation-refinement-proof
           cp \
             proof/Phil/Core/ProviderQualificationImplementationBridge.v \
@@ -75,7 +84,7 @@ jobs:
           path: provider-lifecycle-implementation-refinement-proof
           if-no-files-found: error
 
-  verify-provider-lifecycle-correspondence:
+  verify-production-provider-lifecycle:
     needs: rocq-provider-lifecycle-implementation-refinement
     runs-on: ubuntu-latest
     steps:
@@ -88,15 +97,19 @@ jobs:
         with:
           name: rocq-provider-lifecycle-implementation-refinement
           path: provider-lifecycle-implementation-refinement-proof
-      - name: Typecheck extracted PROV-008 kernel
+      - name: Typecheck extracted, checked-in, and production lifecycle paths
         run: |
           set -euo pipefail
-          ghc -Wall -Werror -fno-code \
-            provider-lifecycle-implementation-refinement-proof/ProviderLifecycleQualificationKernel.hs
-      - name: Re-run PROV-001 through PROV-008 correspondence
-        run: |
-          set -euo pipefail
+          cmp -s \
+            provider-lifecycle-implementation-refinement-proof/ProviderLifecycleQualificationKernel.hs \
+            src/ProviderLifecycleQualificationKernel.hs
+          ghc -Wall -Werror -fno-code src/ProviderLifecycleQualificationKernel.hs
           cabal build exe:phil-certify-core-scalar --ghc-options=-Werror
+          cabal exec -- ghc -isrc -Wall -Werror -fno-code \
+            src/Phil/Core/ProviderLifecycleQualification.hs
+      - name: Exercise production PROV-001 through PROV-008 path
+        run: |
+          set -euo pipefail
           cabal exec -- runghc -isrc test/Phase1ProviderQualificationMain.hs
           cabal exec -- runghc -isrc test/Phase1ProviderStateQualificationMain.hs
           cabal exec -- runghc -isrc test/Phase1ProviderLawQualificationMain.hs
