@@ -25,6 +25,7 @@ module Phil.Core.Callable
   , invokeCallableOccurrence
   ) where
 
+import qualified CallableModeKernel as CallableModeKernel
 import qualified Data.Map.Strict as Map
 import qualified Data.Set as Set
 import Data.Text (Text)
@@ -146,6 +147,7 @@ data CallableUse
 data CallableCheckError
   = RestrictedCaptureMustMove CaptureOccurrenceKey Mode
   | DuplicateRestrictedCapture CaptureOccurrenceKey Mode
+  | CallableModeKernelBridgeMismatch
   | CallableEffectBoundExceeded
       InterfaceRevision
       (Set.Set SemanticEffect)
@@ -178,8 +180,9 @@ checkClosureCaptures captures = do
   let movedRestricted = Set.fromList
         [ key
         | (key, capture) <- Map.toAscList normalized
-        , closureCaptureTransfer capture == MoveCapture
-        , closureCaptureStructuralMode capture /= Unrestricted
+        , CallableModeKernel.captureMovedRestrictedByMode
+            (toCallableModeKernelMode (closureCaptureStructuralMode capture))
+            (toCallableModeKernelTransfer (closureCaptureTransfer capture))
         ]
   Right ClosureCaptureSummary
     { closureCapturesByOccurrence = normalized
@@ -191,29 +194,39 @@ checkClosureCaptures captures = do
       result <- accumulated
       let key = closureCaptureOccurrence capture
           mode = closureCaptureStructuralMode capture
+          kernelMode = toCallableModeKernelMode mode
+          kernelTransfer = toCallableModeKernelTransfer
+            (closureCaptureTransfer capture)
       case Map.lookup key result of
-        Just previous
-          | mode /= Unrestricted
-              || closureCaptureStructuralMode previous /= Unrestricted ->
-              Left (DuplicateRestrictedCapture key mode)
-          | otherwise -> Right result
-        Nothing -> case mode of
-          Unrestricted -> Right (Map.insert key capture result)
-          _
-            | closureCaptureTransfer capture /= MoveCapture ->
-                Left (RestrictedCaptureMustMove key mode)
-            | otherwise -> Right (Map.insert key capture result)
+        Just previous ->
+          let sameOccurrence = key == closureCaptureOccurrence previous
+              duplicateDecision = CallableModeKernel.decideCallableDuplicateCapture
+                sameOccurrence
+                kernelMode
+                (toCallableModeKernelMode
+                  (closureCaptureStructuralMode previous))
+          in if not sameOccurrence
+              then Left CallableModeKernelBridgeMismatch
+              else case duplicateDecision of
+                CallableModeKernel.CallableDuplicateCaptureAccepted -> Right result
+                CallableModeKernel.CallableDuplicateRestrictedCapture ->
+                  Left (DuplicateRestrictedCapture key mode)
+        Nothing ->
+          case CallableModeKernel.decideCallableCaptureTransfer
+              kernelMode kernelTransfer of
+            CallableModeKernel.CallableCaptureTransferAccepted ->
+              Right (Map.insert key capture result)
+            CallableModeKernel.CallableRestrictedCaptureMustMove ->
+              Left (RestrictedCaptureMustMove key mode)
 
 -- | Closure structural mode is the least upper bound of the modes of values it
 -- owns: unrestricted < affine < linear.
 closureStructuralMode :: [ClosureCapture] -> Mode
-closureStructuralMode = foldl joinMode Unrestricted . map closureCaptureStructuralMode
-  where
-    joinMode Linear _ = Linear
-    joinMode _ Linear = Linear
-    joinMode Affine _ = Affine
-    joinMode _ Affine = Affine
-    joinMode Unrestricted Unrestricted = Unrestricted
+closureStructuralMode captures =
+  fromCallableModeKernelMode
+    (CallableModeKernel.closureStructuralModeFromModes
+      (toCallableModeKernelModeList
+        (map closureCaptureStructuralMode captures)))
 
 -- | Infer effects from reachable checked callable uses. Merely possessing,
 -- passing, storing, or returning a callable does not import its invocation
@@ -323,3 +336,27 @@ invokeCallableOccurrence predecessorKey body state = do
                     then Left (ReplaceCalleeStateMismatch expectedState actualState)
                     else Right (CallableResourceState
                       (Map.insert successorKey successor (Map.delete predecessorKey occurrences)))
+
+toCallableModeKernelMode :: Mode -> CallableModeKernel.Mode
+toCallableModeKernelMode mode = case mode of
+  Unrestricted -> CallableModeKernel.Unrestricted
+  Affine -> CallableModeKernel.Affine
+  Linear -> CallableModeKernel.Linear
+
+fromCallableModeKernelMode :: CallableModeKernel.Mode -> Mode
+fromCallableModeKernelMode mode = case mode of
+  CallableModeKernel.Unrestricted -> Unrestricted
+  CallableModeKernel.Affine -> Affine
+  CallableModeKernel.Linear -> Linear
+
+toCallableModeKernelTransfer :: CaptureTransfer -> CallableModeKernel.CaptureTransfer
+toCallableModeKernelTransfer transfer = case transfer of
+  CopyCapture -> CallableModeKernel.CopyCapture
+  MoveCapture -> CallableModeKernel.MoveCapture
+
+toCallableModeKernelModeList :: [Mode] -> CallableModeKernel.List CallableModeKernel.Mode
+toCallableModeKernelModeList modes = case modes of
+  [] -> CallableModeKernel.Nil
+  mode : rest -> CallableModeKernel.Cons
+    (toCallableModeKernelMode mode)
+    (toCallableModeKernelModeList rest)
