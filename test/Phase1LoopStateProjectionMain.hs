@@ -63,8 +63,8 @@ boundary = StateBoundaryContract
   }
 
 initialProjection, backedgeProjection :: StateProjection
-initialProjection = projection "loop.initial" LoopInitialEntry (BlockId "loop.entry") ownerRef
-backedgeProjection = projection "loop.backedge" LoopBackedge (BlockId "loop.body") ownerRef
+initialProjection = projection (StateProjectionKey "loop.initial") LoopInitialEntry (BlockId "loop.entry") ownerRef
+backedgeProjection = projection (StateProjectionKey "loop.backedge") LoopBackedge (BlockId "loop.body") ownerRef
 
 projection :: StateProjectionKey -> StateProjectionKind -> BlockId -> SystemsValueRef -> StateProjection
 projection key kind fromBlock ref = StateProjection
