@@ -27,3 +27,5 @@ jobs:
         run: cabal exec -- runghc -Wall -Werror -isrc test/Phase1MalformedRecognitionMain.hs
       - name: BND-004 exact boundary mapping conformance
         run: cabal exec -- runghc -Wall -Werror -isrc test/Phase1BoundaryMappingMain.hs
+      - name: BND-005 boundary mapping failure classification
+        run: cabal exec -- runghc -Wall -Werror -isrc test/Phase1BoundaryMappingFailureMain.hs
