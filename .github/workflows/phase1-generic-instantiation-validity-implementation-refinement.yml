@@ -1,0 +1,109 @@
+name: Phase 1 Generic Instantiation Validity Implementation Refinement
+
+on:
+  pull_request:
+    paths:
+      - 'proof/Phil/Core/GenericStructural.v'
+      - 'proof/Phil/Core/GenericRequirements.v'
+      - 'proof/Phil/Core/GenericInstantiation.v'
+      - 'proof/Phil/Core/GenericInstantiationDomainImplementation.v'
+      - 'proof/Phil/Core/GenericInstantiationValidityImplementation.v'
+      - 'proof/Phil/Core/GenericInstantiationValidityImplementationExtraction.v'
+      - 'docs/phase-1/generic-instantiation-validity-implementation-refinement-v1.md'
+      - 'src/Phil/Core/Generic.hs'
+      - 'test/Phase1GenericInstantiationMain.hs'
+      - '.github/workflows/phase1-generic-instantiation-validity-implementation-refinement.yml'
+  push:
+    branches: [main]
+    paths:
+      - 'proof/Phil/Core/GenericStructural.v'
+      - 'proof/Phil/Core/GenericRequirements.v'
+      - 'proof/Phil/Core/GenericInstantiation.v'
+      - 'proof/Phil/Core/GenericInstantiationDomainImplementation.v'
+      - 'proof/Phil/Core/GenericInstantiationValidityImplementation.v'
+      - 'proof/Phil/Core/GenericInstantiationValidityImplementationExtraction.v'
+      - 'docs/phase-1/generic-instantiation-validity-implementation-refinement-v1.md'
+      - 'src/Phil/Core/Generic.hs'
+      - 'test/Phase1GenericInstantiationMain.hs'
+      - '.github/workflows/phase1-generic-instantiation-validity-implementation-refinement.yml'
+
+permissions:
+  contents: read
+
+jobs:
+  rocq-generic-instantiation-validity-implementation-refinement:
+    runs-on: ubuntu-latest
+    container:
+      image: rocq/rocq-prover:9.2.0
+      options: --user root
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Compile certified GEN-INST model and executable validity decision
+        shell: bash
+        run: |
+          set -euo pipefail
+          export PATH="/home/rocq/.opam/${COMPILER}/bin:$PATH"
+          rocq c -Q proof/Phil Phil proof/Phil/Core/GenericStructural.v
+          rocq c -Q proof/Phil Phil proof/Phil/Core/GenericRequirements.v
+          rocq c -Q proof/Phil Phil proof/Phil/Core/GenericInstantiation.v
+          rocq c -Q proof/Phil Phil proof/Phil/Core/GenericInstantiationDomainImplementation.v
+          rocq c -Q proof/Phil Phil proof/Phil/Core/GenericInstantiationValidityImplementation.v
+
+      - name: Extract generic instantiation validity kernel
+        shell: bash
+        run: |
+          set -euo pipefail
+          export PATH="/home/rocq/.opam/${COMPILER}/bin:$PATH"
+          rm -f GenericInstantiationValidityKernel.hs
+          rocq c -Q proof/Phil Phil proof/Phil/Core/GenericInstantiationValidityImplementationExtraction.v
+          test -s GenericInstantiationValidityKernel.hs
+          grep -q '^module GenericInstantiationValidityKernel where' GenericInstantiationValidityKernel.hs
+          grep -q '^decideGenericDispositionValidity ::' GenericInstantiationValidityKernel.hs
+          sha256sum GenericInstantiationValidityKernel.hs
+          mkdir -p generic-instantiation-validity-implementation-refinement-proof
+          cp \
+            proof/Phil/Core/GenericInstantiation.v \
+            proof/Phil/Core/GenericInstantiation.vo \
+            proof/Phil/Core/GenericInstantiationValidityImplementation.v \
+            proof/Phil/Core/GenericInstantiationValidityImplementation.vo \
+            proof/Phil/Core/GenericInstantiationValidityImplementationExtraction.v \
+            GenericInstantiationValidityKernel.hs \
+            generic-instantiation-validity-implementation-refinement-proof/
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: rocq-generic-instantiation-validity-implementation-refinement
+          path: generic-instantiation-validity-implementation-refinement-proof
+          if-no-files-found: error
+
+  verify-generic-instantiation-validity-correspondence:
+    needs: rocq-generic-instantiation-validity-implementation-refinement
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: haskell-actions/setup@v2
+        with:
+          ghc-version: '9.6.7'
+          cabal-version: 'latest'
+
+      - uses: actions/download-artifact@v4
+        with:
+          name: rocq-generic-instantiation-validity-implementation-refinement
+          path: generic-instantiation-validity-implementation-refinement-proof
+
+      - name: Typecheck extracted and existing production GEN-INST paths
+        run: |
+          set -euo pipefail
+          ghc -Wall -Werror -fno-code \
+            generic-instantiation-validity-implementation-refinement-proof/GenericInstantiationValidityKernel.hs
+          cabal build exe:phil-certify-core-scalar --ghc-options=-Werror
+          cabal exec -- ghc -isrc -Wall -Werror -fno-code \
+            src/Phil/Core/Generic.hs \
+            test/Phase1GenericInstantiationMain.hs
+
+      - name: Re-run GEN-007, GEN-008, and GEN-012 production correspondence corpus
+        run: |
+          set -euo pipefail
+          cabal exec -- runghc -isrc test/Phase1GenericInstantiationMain.hs
