@@ -30,3 +30,6 @@ jobs:
 
       - name: RES-006 affine branch asymmetry conformance
         run: cabal exec -- runghc -Wall -Werror -isrc test/Phase1AffineBranchAsymmetryMain.hs
+
+      - name: RES-007 scoped loan boundary conformance
+        run: cabal exec -- runghc -Wall -Werror -isrc test/Phase1ScopedLoanBoundaryMain.hs
