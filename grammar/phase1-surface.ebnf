@@ -39,6 +39,16 @@
 # - effect meaning, subject identity, subeffecting, and authority requirements
 #   are semantic checks, not parser responsibilities.
 #
+# Structural modes:
+# - every inhabited value type has a checked unrestricted/affine/linear mode;
+# - ordinary term bindings inherit the mode of their type; there is no
+#   binding-local structural-mode annotation;
+# - ordinary records/sums derive mode from owned contents when mode is omitted;
+# - an explicit record/sum mode may only strengthen that derived minimum;
+# - capability declarations state mode explicitly because authority and
+#   structural copy/drop discipline are orthogonal semantic choices;
+# - parsing a mode never proves that the declaration satisfies these rules.
+#
 # Static reasoning surface:
 # - refinement types use { x : T | P } and bind x only in P;
 # - non-definitional equality transport is explicit as
@@ -88,6 +98,7 @@ identifier = <IDENTIFIER> ;
 integer_literal = <DECIMAL_INTEGER> ;
 uint_type = <UINT_TYPE> ;
 string_literal = <STRING_LITERAL> ;
+structural_mode = "unrestricted" | "affine" | "linear" ;
 
 generic_params = "[", generic_param, { ",", generic_param }, "]" ;
 generic_param = identifier, ":", generic_kind ;
@@ -142,12 +153,14 @@ static_argument =
 term_arguments = "(", [ expression, { ",", expression } ], ")" ;
 
 record_decl =
-  "record", identifier, [ generic_params ], [ generic_requirements ],
+  "record", identifier, [ generic_params ], [ "mode", structural_mode ],
+  [ generic_requirements ],
   "{", [ field_decl, { ",", field_decl }, [ "," ] ], "}" ;
 field_decl = identifier, ":", type_expression ;
 
 data_decl =
-  "data", identifier, [ generic_params ], [ generic_requirements ],
+  "data", identifier, [ generic_params ], [ "mode", structural_mode ],
+  [ generic_requirements ],
   "=", variant_decl, { "|", variant_decl }, ";" ;
 variant_decl = identifier, [ variant_payload ] ;
 variant_payload =
@@ -264,7 +277,8 @@ session_branch =
   "=>", session_expression ;
 
 capability_decl =
-  "capability", identifier, [ generic_params ], [ generic_requirements ],
+  "capability", identifier, [ generic_params ], "mode", structural_mode,
+  [ generic_requirements ],
   "{", { capability_item }, "}" ;
 
 capability_item =
