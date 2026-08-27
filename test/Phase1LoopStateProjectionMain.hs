@@ -4,6 +4,7 @@ module Main (main) where
 
 import qualified Data.Map.Strict as Map
 import qualified Data.Set as Set
+import Data.Text (Text)
 import Phil.Core.Syntax (Mode (..))
 import Phil.Systems.ControlStateProjection
 import Phil.Systems.IR
@@ -107,10 +108,10 @@ function = SystemsFunction
       ]
   }
 
-valueEntry :: Data.Text.Text -> SystemsValueRole -> (ValueId, SystemsValue)
+valueEntry :: Text -> SystemsValueRole -> (ValueId, SystemsValue)
 valueEntry key role = let valueId = ValueId key in (valueId, SystemsValue valueId role Nothing)
 
-blockEntry :: Data.Text.Text -> SystemsTerminator -> (BlockId, SystemsBlock)
+blockEntry :: Text -> SystemsTerminator -> (BlockId, SystemsBlock)
 blockEntry key terminator = let blockId = BlockId key in (blockId, SystemsBlock blockId [] terminator)
 
 assert :: Bool -> String -> Either String ()
