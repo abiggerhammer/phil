@@ -139,3 +139,4 @@ decideProviderQualification eqOperation eqEntry eqOutcome residueEqual operation
           (decideOperationAt eqOperation eqEntry eqOutcome residueEqual
             operationAccepts correspondences implementationEntries)
           contractOperations)))
+
