@@ -21,3 +21,5 @@ jobs:
         run: cabal build all --enable-tests
       - name: BND-001 complete recognition success conformance
         run: cabal exec -- runghc -Wall -Werror -isrc test/Phase1CompleteRecognitionMain.hs
+      - name: BND-002 trailing bytes inside frame rejection conformance
+        run: cabal exec -- runghc -Wall -Werror -isrc test/Phase1TrailingBytesMain.hs
