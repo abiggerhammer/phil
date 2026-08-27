@@ -33,6 +33,7 @@ module Phil.Core.Generic
 import qualified Data.Map.Strict as Map
 import qualified Data.Set as Set
 import Data.Text (Text)
+import qualified GenericRequirementsKernel as RequirementsKernel
 import qualified GenericStructuralKernel as Kernel
 import Phil.Core.Static
   ( DeclarationKey (..)
@@ -89,6 +90,7 @@ data GenericStructuralError
       StructuralPermission
       Mode
   | GenericStructuralKernelBridgeMismatch GenericValueParameterKey
+  | GenericRequirementsKernelBridgeMismatch GenericValueParameterKey
   deriving (Eq, Ord, Show)
 
 data GenericRequirement
@@ -425,18 +427,20 @@ ensurePublishedCoversInduced
 ensurePublishedCoversInduced induced published =
   mapM_ checkOne (Map.toAscList induced)
   where
-    checkOne (key, inducedRequirements) =
+    checkOne (key, inducedRequirements) = do
       let publishedRequirements = Map.findWithDefault
             (GenericStructuralRequirements Set.empty)
             key
             published
-          missing = Set.difference
-            (genericStructuralPermissions inducedRequirements)
-            (genericStructuralPermissions publishedRequirements)
-      in case Set.toAscList missing of
-          [] -> Right ()
-          permission : _ -> Left
-            (PublishedStructuralRequirementTooWeak key permission)
+      publishedKernel <- requirementsToCoverageKernel key publishedRequirements
+      inducedKernel <- requirementsToCoverageKernel key inducedRequirements
+      case RequirementsKernel.decideGenericRequirementsCoverage
+          publishedKernel inducedKernel of
+        RequirementsKernel.GenericRequirementsCoverageAccepted -> Right ()
+        RequirementsKernel.GenericRequirementsCoverageMissingWeakening ->
+          Left (PublishedStructuralRequirementTooWeak key WeakeningPermission)
+        RequirementsKernel.GenericRequirementsCoverageMissingContraction ->
+          Left (PublishedStructuralRequirementTooWeak key ContractionPermission)
 
 useParameter :: GenericStructuralUse -> GenericValueParameterKey
 useParameter use = case use of
@@ -511,6 +515,35 @@ requirementsFromKernel key kernelRequirements =
   in if sameKernelRequirements roundTrip kernelRequirements
       then Right requirements
       else Left (GenericStructuralKernelBridgeMismatch key)
+
+toRequirementsKernelRequirements
+  :: GenericStructuralRequirements
+  -> RequirementsKernel.GenericStructuralRequirements
+toRequirementsKernelRequirements requirements = RequirementsKernel.MkRequirements
+  (Set.member WeakeningPermission permissions)
+  (Set.member ContractionPermission permissions)
+  where
+    permissions = genericStructuralPermissions requirements
+
+fromRequirementsKernelRequirements
+  :: RequirementsKernel.GenericStructuralRequirements
+  -> GenericStructuralRequirements
+fromRequirementsKernelRequirements kernelRequirements =
+  case kernelRequirements of
+    RequirementsKernel.MkRequirements weakening contraction ->
+      GenericStructuralRequirements (Set.fromList
+        ([WeakeningPermission | weakening]
+          ++ [ContractionPermission | contraction]))
+
+requirementsToCoverageKernel
+  :: GenericValueParameterKey
+  -> GenericStructuralRequirements
+  -> Either GenericStructuralError RequirementsKernel.GenericStructuralRequirements
+requirementsToCoverageKernel key requirements =
+  let kernelRequirements = toRequirementsKernelRequirements requirements
+  in if fromRequirementsKernelRequirements kernelRequirements == requirements
+      then Right kernelRequirements
+      else Left (GenericRequirementsKernelBridgeMismatch key)
 
 mapLeft :: (a -> b) -> Either a c -> Either b c
 mapLeft f = either (Left . f) Right
