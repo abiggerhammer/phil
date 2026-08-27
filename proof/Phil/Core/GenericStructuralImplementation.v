@@ -1,5 +1,7 @@
 From Stdlib Require Import Bool.Bool Lists.List.
 
+Import ListNotations.
+
 From Phil.Core Require Import GenericStructural.
 
 (*
