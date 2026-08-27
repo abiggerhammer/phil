@@ -1,0 +1,100 @@
+name: Phase 1 Generic Identity Equality Implementation Refinement
+
+on:
+  pull_request:
+    paths:
+      - 'proof/Phil/Core/GenericIdentity.v'
+      - 'proof/Phil/Core/GenericIdentityEqualityImplementation.v'
+      - 'proof/Phil/Core/GenericIdentityEqualityImplementationExtraction.v'
+      - 'docs/phase-1/generic-identity-equality-implementation-refinement-v1.md'
+      - 'src/Phil/Core/Generic.hs'
+      - 'test/Phase1GenericIdentityMain.hs'
+      - '.github/workflows/phase1-generic-identity-equality-implementation-refinement.yml'
+  push:
+    branches: [main]
+    paths:
+      - 'proof/Phil/Core/GenericIdentity.v'
+      - 'proof/Phil/Core/GenericIdentityEqualityImplementation.v'
+      - 'proof/Phil/Core/GenericIdentityEqualityImplementationExtraction.v'
+      - 'docs/phase-1/generic-identity-equality-implementation-refinement-v1.md'
+      - 'src/Phil/Core/Generic.hs'
+      - 'test/Phase1GenericIdentityMain.hs'
+      - '.github/workflows/phase1-generic-identity-equality-implementation-refinement.yml'
+
+permissions:
+  contents: read
+
+jobs:
+  rocq-generic-identity-equality-implementation-refinement:
+    runs-on: ubuntu-latest
+    container:
+      image: rocq/rocq-prover:9.2.0
+      options: --user root
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Compile certified GEN-ID model and equality correspondence
+        shell: bash
+        run: |
+          set -euo pipefail
+          export PATH="/home/rocq/.opam/${COMPILER}/bin:$PATH"
+          rocq c -Q proof/Phil Phil proof/Phil/Core/GenericStructural.v
+          rocq c -Q proof/Phil Phil proof/Phil/Core/GenericRequirements.v
+          rocq c -Q proof/Phil Phil proof/Phil/Core/GenericInstantiation.v
+          rocq c -Q proof/Phil Phil proof/Phil/Core/GenericIdentity.v
+          rocq c -Q proof/Phil Phil proof/Phil/Core/GenericIdentityEqualityImplementation.v
+
+      - name: Extract equality kernel
+        shell: bash
+        run: |
+          set -euo pipefail
+          export PATH="/home/rocq/.opam/${COMPILER}/bin:$PATH"
+          rm -f GenericIdentityEqualityKernel.hs
+          rocq c -Q proof/Phil Phil proof/Phil/Core/GenericIdentityEqualityImplementationExtraction.v
+          test -s GenericIdentityEqualityKernel.hs
+          grep -q 'decideGenericApplicationEquality' GenericIdentityEqualityKernel.hs
+          grep -q 'decideGenericDischargeLineageEquality' GenericIdentityEqualityKernel.hs
+          sha256sum GenericIdentityEqualityKernel.hs
+          mkdir -p generic-identity-equality-implementation-refinement-proof
+          cp \
+            proof/Phil/Core/GenericIdentity.v \
+            proof/Phil/Core/GenericIdentityEqualityImplementation.v \
+            proof/Phil/Core/GenericIdentityEqualityImplementation.vo \
+            GenericIdentityEqualityKernel.hs \
+            generic-identity-equality-implementation-refinement-proof/
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: rocq-generic-identity-equality-implementation-refinement
+          path: generic-identity-equality-implementation-refinement-proof
+          if-no-files-found: error
+
+  verify-generic-identity-equality-correspondence:
+    needs: rocq-generic-identity-equality-implementation-refinement
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/download-artifact@v4
+        with:
+          name: rocq-generic-identity-equality-implementation-refinement
+          path: extracted-generic-identity-equality
+
+      - uses: haskell-actions/setup@v2
+        with:
+          ghc-version: '9.6.7'
+          cabal-version: 'latest'
+
+      - name: Typecheck extracted equality kernel and existing GEN-ID production paths
+        run: |
+          set -euo pipefail
+          ghc -Wall -Werror -fno-code extracted-generic-identity-equality/GenericIdentityEqualityKernel.hs
+          cabal build exe:phil-certify-core-scalar --ghc-options=-Werror
+          cabal exec -- ghc -isrc -Wall -Werror -fno-code \
+            src/Phil/Core/Generic.hs \
+            test/Phase1GenericIdentityMain.hs
+
+      - name: Re-run GEN-009 and GEN-010 production correspondence corpus
+        run: |
+          set -euo pipefail
+          cabal exec -- runghc -isrc test/Phase1GenericIdentityMain.hs
