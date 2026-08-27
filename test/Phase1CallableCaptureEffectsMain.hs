@@ -2,7 +2,6 @@
 
 module Main (main) where
 
-import qualified Data.Map.Strict as Map
 import qualified Data.Set as Set
 import Phil.Core.Callable
 import Phil.Core.Static (InterfaceRevision (..))
