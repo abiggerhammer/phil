@@ -224,8 +224,15 @@ Proof.
   intros left right.
   destruct left as [leftPermission | leftInterface | leftProposition];
     destruct right as [rightPermission | rightInterface | rightProposition]; cbn.
-  - destruct leftPermission, rightPermission; cbn; split; intro H;
-      try reflexivity; discriminate.
+  - split.
+    + intro H.
+      apply structural_permission_eqb_true_iff in H.
+      subst rightPermission.
+      reflexivity.
+    + intro H.
+      inversion H.
+      apply (proj2 (structural_permission_eqb_true_iff leftPermission leftPermission)).
+      reflexivity.
   - split; intro H; discriminate.
   - split; intro H; discriminate.
   - split; intro H; discriminate.
@@ -251,7 +258,8 @@ Proof.
 Qed.
 
 Lemma in_disposition_keys_iff :
-  forall requirement dispositions,
+  forall (requirement : GenericRequirement)
+    (dispositions : list (GenericRequirement * GenericRequirementDisposition)),
     In requirement (map fst dispositions) <->
     exists disposition, In (requirement, disposition) dispositions.
 Proof.
