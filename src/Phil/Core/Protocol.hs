@@ -4,6 +4,7 @@ module Phil.Core.Protocol
   ( ProtocolInstanceRevision (..)
   , ProtocolRoleKey (..)
   , ProtocolEndpointBinding (..)
+  , ProtocolEndpointContract (..)
   , ProtocolContext (..)
   , ProtocolActionRequest (..)
   , CheckedProtocolStep (..)
@@ -11,6 +12,9 @@ module Phil.Core.Protocol
   , emptyProtocolContext
   , insertProtocolEndpoint
   , lookupProtocolEndpoint
+  , protocolEndpointContract
+  , checkProtocolEndpointSubstitution
+  , checkProtocolEndpointJoin
   , checkProtocolAction
   ) where
 
@@ -66,6 +70,16 @@ data ProtocolEndpointBinding = ProtocolEndpointBinding
   }
   deriving (Eq, Ord, Show)
 
+-- | The exact static contract of an endpoint occurrence, excluding the local
+-- occurrence name. Different branch-local names may inhabit the same contract,
+-- but equal Session syntax alone never establishes contract equality.
+data ProtocolEndpointContract = ProtocolEndpointContract
+  { protocolContractInstance :: ProtocolInstanceRevision
+  , protocolContractRole :: ProtocolRoleKey
+  , protocolContractSession :: Session
+  }
+  deriving (Eq, Ord, Show)
+
 -- | Checked protocol metadata plus the ordinary structural resource context.
 -- Both representations name the same live endpoint session and are checked for
 -- agreement before any communication action is admitted.
@@ -116,6 +130,11 @@ data ProtocolCheckError
   | ProtocolEndpointResourceTypeMismatch Name Ty
   | ProtocolEndpointSessionMismatch Name Session Session
   | ProtocolEndpointMetadataConflict Name
+  | ProtocolEndpointContractInstanceMismatch
+      ProtocolInstanceRevision ProtocolInstanceRevision
+  | ProtocolEndpointContractRoleMismatch ProtocolRoleKey ProtocolRoleKey
+  | ProtocolEndpointContractSessionMismatch Session Session
+  | ProtocolEndpointJoinEmpty
   | ProtocolSessionError SessionError
   deriving (Eq, Show)
 
@@ -155,6 +174,37 @@ insertProtocolEndpoint name instanceRevision role session context
 
 lookupProtocolEndpoint :: Name -> ProtocolContext -> Maybe ProtocolEndpointBinding
 lookupProtocolEndpoint name = Map.lookup name . protocolEndpoints
+
+protocolEndpointContract :: ProtocolEndpointBinding -> ProtocolEndpointContract
+protocolEndpointContract binding = ProtocolEndpointContract
+  { protocolContractInstance = protocolEndpointInstance binding
+  , protocolContractRole = protocolEndpointRole binding
+  , protocolContractSession = protocolEndpointSession binding
+  }
+
+-- | Check whether one endpoint occurrence may inhabit a position expecting the
+-- other's exact endpoint contract. Occurrence names are intentionally ignored;
+-- protocol instance, role, and local state are all identity-bearing.
+checkProtocolEndpointSubstitution
+  :: ProtocolEndpointBinding
+  -> ProtocolEndpointBinding
+  -> Either ProtocolCheckError ()
+checkProtocolEndpointSubstitution expected actual =
+  checkEndpointContract
+    (protocolEndpointContract expected)
+    (protocolEndpointContract actual)
+
+-- | Join branch-local endpoint occurrences into one post-join endpoint contract.
+-- Different occurrence names are allowed, but every branch must agree on exact
+-- protocol instance, role, and local session state.
+checkProtocolEndpointJoin
+  :: [ProtocolEndpointBinding]
+  -> Either ProtocolCheckError ProtocolEndpointContract
+checkProtocolEndpointJoin [] = Left ProtocolEndpointJoinEmpty
+checkProtocolEndpointJoin (firstBinding : rest) = do
+  let expected = protocolEndpointContract firstBinding
+  mapM_ (checkEndpointContract expected . protocolEndpointContract) rest
+  Right expected
 
 checkProtocolAction
   :: ProtocolActionRequest
@@ -279,6 +329,24 @@ advanceMetadata predecessor binding sessionStep context =
                   , protocolEndpoints = Map.insert successorName successorBinding remaining
                   }
               )
+
+checkEndpointContract
+  :: ProtocolEndpointContract
+  -> ProtocolEndpointContract
+  -> Either ProtocolCheckError ()
+checkEndpointContract expected actual = do
+  requireEqual
+    ProtocolEndpointContractInstanceMismatch
+    (protocolContractInstance expected)
+    (protocolContractInstance actual)
+  requireEqual
+    ProtocolEndpointContractRoleMismatch
+    (protocolContractRole expected)
+    (protocolContractRole actual)
+  requireEqual
+    ProtocolEndpointContractSessionMismatch
+    (protocolContractSession expected)
+    (protocolContractSession actual)
 
 requireEqual :: Eq a => (a -> a -> e) -> a -> a -> Either e ()
 requireEqual constructor expected actual
