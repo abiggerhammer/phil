@@ -359,7 +359,9 @@ Proof.
     (stateImplementationFrom _ _ _ transition)
     relatedPairs) as [| abstractPre rest] eqn:Hrelated; try discriminate.
   exists outcomeMap, contractOutcome.
-  split; reflexivity.
+  split.
+  - reflexivity.
+  - exact Houtcome.
 Qed.
 
 Theorem accepted_state_transition_has_related_prestate :
@@ -458,7 +460,7 @@ Proof.
   split.
   - reflexivity.
   - split.
-    + reflexivity.
+    + exact Houtcome.
     + apply (proj1
         (all_finiteb_true_iff
           AbstractState
