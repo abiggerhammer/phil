@@ -6,8 +6,10 @@ module Phil.Core.BoundaryMapping
   , BoundaryRepresentation (..)
   , BoundaryMappingRequest (..)
   , CorrespondenceEvidence (..)
+  , BoundaryMappingDisposition (..)
   , BoundaryMappingError (..)
   , mapRecognizedBoundary
+  , mapRecognizedBoundaryWithDisposition
   ) where
 
 import Data.Text (Text)
@@ -49,12 +51,18 @@ data CorrespondenceEvidence = CorrespondenceEvidence
   }
   deriving (Eq, Show)
 
+data BoundaryMappingDisposition
+  = MappingAccepted
+  | MappingRejected Text
+  deriving (Eq, Show)
+
 data BoundaryMappingError
   = BoundaryRepresentationMismatch BoundaryRepresentationId BoundaryRepresentationId
   | BoundaryGrammarMismatch GrammarId GrammarId
   | BoundaryValueTypeMismatch ValueTypeRevision ValueTypeRevision
   | RecognizedGrammarMismatch GrammarId GrammarId
   | RecognizedValueMismatch Name Name
+  | BoundaryMappingFailure BoundaryRepresentationId Name Text
   deriving (Eq, Show)
 
 mapRecognizedBoundary
@@ -62,7 +70,16 @@ mapRecognizedBoundary
   -> ParsedWitness
   -> BoundaryMappingRequest
   -> Either BoundaryMappingError CorrespondenceEvidence
-mapRecognizedBoundary representation parsed request
+mapRecognizedBoundary representation parsed request =
+  mapRecognizedBoundaryWithDisposition representation parsed request MappingAccepted
+
+mapRecognizedBoundaryWithDisposition
+  :: BoundaryRepresentation
+  -> ParsedWitness
+  -> BoundaryMappingRequest
+  -> BoundaryMappingDisposition
+  -> Either BoundaryMappingError CorrespondenceEvidence
+mapRecognizedBoundaryWithDisposition representation parsed request disposition
   | requestedRepresentation request /= representationId representation =
       Left (BoundaryRepresentationMismatch (representationId representation) (requestedRepresentation request))
   | requestedGrammar request /= representationGrammar representation =
@@ -73,6 +90,11 @@ mapRecognizedBoundary representation parsed request
       Left (RecognizedGrammarMismatch (representationGrammar representation) (parsedGrammarId parsed))
   | parsedValueName parsed /= requestedGrammarValue request =
       Left (RecognizedValueMismatch (parsedValueName parsed) (requestedGrammarValue request))
+  | MappingRejected detail <- disposition =
+      Left (BoundaryMappingFailure
+        (representationId representation)
+        (requestedGrammarValue request)
+        detail)
   | otherwise = Right CorrespondenceEvidence
       { correspondenceRepresentation = representationId representation
       , correspondenceGrammar = representationGrammar representation
