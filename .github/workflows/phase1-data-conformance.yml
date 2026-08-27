@@ -39,3 +39,5 @@ jobs:
         run: cabal exec -- runghc -Wall -Werror -isrc test/Phase1GenericModePropagationMain.hs
       - name: DATA-010 nominal identity and transparent alias conformance
         run: cabal exec -- runghc -Wall -Werror -isrc test/Phase1DataIdentityMain.hs
+      - name: DATA-011 explicit operation contract conformance
+        run: cabal exec -- runghc -Wall -Werror -isrc test/Phase1DataOperationContractMain.hs
