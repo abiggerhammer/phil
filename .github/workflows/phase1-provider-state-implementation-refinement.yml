@@ -1,0 +1,96 @@
+name: Phase 1 Provider State Implementation Refinement
+
+on:
+  pull_request:
+    paths:
+      - 'proof/Phil/Core/ProviderQualificationImplementationBridge.v'
+      - 'proof/Phil/Core/ProviderStateQualificationImplementation.v'
+      - 'proof/Phil/Core/ProviderStateQualificationImplementationExtraction.v'
+      - 'docs/phase-1/provider-state-implementation-refinement-v1.md'
+      - 'src/Phil/Core/ProviderStateQualification.hs'
+      - 'test/Phase1ProviderQualificationMain.hs'
+      - 'test/Phase1ProviderStateQualificationMain.hs'
+      - '.github/workflows/phase1-provider-state-implementation-refinement.yml'
+  push:
+    branches: [main]
+    paths:
+      - 'proof/Phil/Core/ProviderQualificationImplementationBridge.v'
+      - 'proof/Phil/Core/ProviderStateQualificationImplementation.v'
+      - 'proof/Phil/Core/ProviderStateQualificationImplementationExtraction.v'
+      - 'docs/phase-1/provider-state-implementation-refinement-v1.md'
+      - 'src/Phil/Core/ProviderStateQualification.hs'
+      - 'test/Phase1ProviderQualificationMain.hs'
+      - 'test/Phase1ProviderStateQualificationMain.hs'
+      - '.github/workflows/phase1-provider-state-implementation-refinement.yml'
+
+permissions:
+  contents: read
+
+jobs:
+  rocq-provider-state-implementation-refinement:
+    runs-on: ubuntu-latest
+    container:
+      image: rocq/rocq-prover:9.2.0
+      options: --user root
+    steps:
+      - uses: actions/checkout@v4
+      - name: Compile finite association bridge and PROV-006 traversal
+        shell: bash
+        run: |
+          set -euo pipefail
+          export PATH="/home/rocq/.opam/${COMPILER}/bin:$PATH"
+          rocq c -Q proof/Phil Phil proof/Phil/Core/ProviderQualificationImplementationBridge.v
+          rocq c -Q proof/Phil Phil proof/Phil/Core/ProviderStateQualificationImplementation.v
+      - name: Extract provider state simulation kernel
+        shell: bash
+        run: |
+          set -euo pipefail
+          export PATH="/home/rocq/.opam/${COMPILER}/bin:$PATH"
+          rm -f ProviderStateQualificationKernel.hs
+          rocq c -Q proof/Phil Phil proof/Phil/Core/ProviderStateQualificationImplementationExtraction.v
+          test -s ProviderStateQualificationKernel.hs
+          grep -q '^module ProviderStateQualificationKernel where' ProviderStateQualificationKernel.hs
+          grep -q '^sameInitialDomainb ::' ProviderStateQualificationKernel.hs
+          grep -q '^decideInitialPair ::' ProviderStateQualificationKernel.hs
+          grep -q '^decideStateTransition ::' ProviderStateQualificationKernel.hs
+          grep -q '^decideProviderStateSimulation ::' ProviderStateQualificationKernel.hs
+          sha256sum ProviderStateQualificationKernel.hs
+          mkdir -p provider-state-implementation-refinement-proof
+          cp \
+            proof/Phil/Core/ProviderQualificationImplementationBridge.v \
+            proof/Phil/Core/ProviderQualificationImplementationBridge.vo \
+            proof/Phil/Core/ProviderStateQualificationImplementation.v \
+            proof/Phil/Core/ProviderStateQualificationImplementation.vo \
+            proof/Phil/Core/ProviderStateQualificationImplementationExtraction.v \
+            ProviderStateQualificationKernel.hs \
+            provider-state-implementation-refinement-proof/
+      - uses: actions/upload-artifact@v4
+        with:
+          name: rocq-provider-state-implementation-refinement
+          path: provider-state-implementation-refinement-proof
+          if-no-files-found: error
+
+  verify-provider-state-correspondence:
+    needs: rocq-provider-state-implementation-refinement
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: haskell-actions/setup@v2
+        with:
+          ghc-version: '9.6.7'
+          cabal-version: 'latest'
+      - uses: actions/download-artifact@v4
+        with:
+          name: rocq-provider-state-implementation-refinement
+          path: provider-state-implementation-refinement-proof
+      - name: Typecheck extracted PROV-006 kernel
+        run: |
+          set -euo pipefail
+          ghc -Wall -Werror -fno-code \
+            provider-state-implementation-refinement-proof/ProviderStateQualificationKernel.hs
+      - name: Re-run provider semantic and state correspondence corpora
+        run: |
+          set -euo pipefail
+          cabal build exe:phil-certify-core-scalar --ghc-options=-Werror
+          cabal exec -- runghc -isrc test/Phase1ProviderQualificationMain.hs
+          cabal exec -- runghc -isrc test/Phase1ProviderStateQualificationMain.hs
