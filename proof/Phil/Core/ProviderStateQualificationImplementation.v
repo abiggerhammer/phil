@@ -104,11 +104,11 @@ Fixpoint relatedAbstractStates
   : list AbstractState :=
   match relatedPairs with
   | [] => []
-  | pair :: rest =>
+  | statePair :: rest =>
       if eqImplementationState
           implementationState
-          (statePairImplementation _ _ pair)
-      then statePairAbstract _ _ pair ::
+          (statePairImplementation _ _ statePair)
+      then statePairAbstract _ _ statePair ::
            relatedAbstractStates eqImplementationState implementationState rest
       else relatedAbstractStates eqImplementationState implementationState rest
   end.
