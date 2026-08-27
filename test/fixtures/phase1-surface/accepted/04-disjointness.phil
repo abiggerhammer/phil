@@ -1,0 +1,4 @@
+module corpus.disjointness;
+
+type U32Set = SetOfU32;
+claim Separate(left : U32Set, right : U32Set) = left disjoint right;

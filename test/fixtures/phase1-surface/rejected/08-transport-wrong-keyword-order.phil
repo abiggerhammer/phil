@@ -1,0 +1,5 @@
+module corpus.bad_transport_order;
+
+component Bad[n : Nat, m : Nat](value : Bytes[n], equality : Proof[n == m]) {
+  transport value using equality to Bytes[m]
+}

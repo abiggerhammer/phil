@@ -1,0 +1,3 @@
+module corpus.bad_disjointness;
+
+claim Bad(left : U32Set) = left disjoint ;

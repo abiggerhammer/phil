@@ -1,0 +1,7 @@
+module corpus.refinement;
+
+claim Positive(x : U32) = x > 0;
+
+callable KeepPositive(x : {v : U32 | v > 0}) -> U32 {
+  ensures x > 0;
+}

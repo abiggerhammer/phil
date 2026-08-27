@@ -1,0 +1,14 @@
+module corpus.outcomes;
+
+callable Read(blob : Blob) -> ReadResult {
+  outcomes { ReadOk, ReadFailure };
+  outcome ReadOk {
+    state (blob_next : Blob);
+    ensures true;
+  }
+  outcome ReadFailure {
+    state ();
+    ensures true;
+  }
+  callee preserve;
+}

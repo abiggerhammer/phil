@@ -1,0 +1,14 @@
+module corpus.outcome_refinement;
+
+callable Decode[n : Nat](input : Blob) -> DecodeResult {
+  outcomes { DecodeOk, DecodeError };
+  outcome DecodeOk {
+    state (payload : {b : Bytes[n] | n > 0});
+    ensures true;
+  }
+  outcome DecodeError {
+    state ();
+    ensures true;
+  }
+  callee preserve;
+}
