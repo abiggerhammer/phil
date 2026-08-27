@@ -31,3 +31,5 @@ jobs:
         run: cabal exec -- runghc -Wall -Werror -isrc test/Phase1BoundaryMappingFailureMain.hs
       - name: BND-006 transforming boundary mapping conformance
         run: cabal exec -- runghc -Wall -Werror -isrc test/Phase1TransformingBoundaryMappingMain.hs
+      - name: BND-007 boundary direction enforcement
+        run: cabal exec -- runghc -Wall -Werror -isrc test/Phase1BoundaryDirectionMain.hs
