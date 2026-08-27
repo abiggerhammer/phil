@@ -1,0 +1,103 @@
+name: Phase 1 Provider Lifecycle Implementation Refinement
+
+on:
+  pull_request:
+    paths:
+      - 'proof/Phil/Core/ProviderQualificationImplementationBridge.v'
+      - 'proof/Phil/Core/ProviderLifecycleQualificationImplementation.v'
+      - 'proof/Phil/Core/ProviderLifecycleQualificationImplementationExtraction.v'
+      - 'docs/phase-1/provider-lifecycle-implementation-refinement-v1.md'
+      - 'src/Phil/Core/ProviderLifecycleQualification.hs'
+      - 'test/Phase1ProviderQualificationMain.hs'
+      - 'test/Phase1ProviderStateQualificationMain.hs'
+      - 'test/Phase1ProviderLawQualificationMain.hs'
+      - 'test/Phase1ProviderLifecycleQualificationMain.hs'
+      - '.github/workflows/phase1-provider-lifecycle-implementation-refinement.yml'
+  push:
+    branches: [main]
+    paths:
+      - 'proof/Phil/Core/ProviderQualificationImplementationBridge.v'
+      - 'proof/Phil/Core/ProviderLifecycleQualificationImplementation.v'
+      - 'proof/Phil/Core/ProviderLifecycleQualificationImplementationExtraction.v'
+      - 'docs/phase-1/provider-lifecycle-implementation-refinement-v1.md'
+      - 'src/Phil/Core/ProviderLifecycleQualification.hs'
+      - 'test/Phase1ProviderQualificationMain.hs'
+      - 'test/Phase1ProviderStateQualificationMain.hs'
+      - 'test/Phase1ProviderLawQualificationMain.hs'
+      - 'test/Phase1ProviderLifecycleQualificationMain.hs'
+      - '.github/workflows/phase1-provider-lifecycle-implementation-refinement.yml'
+
+permissions:
+  contents: read
+
+jobs:
+  rocq-provider-lifecycle-implementation-refinement:
+    runs-on: ubuntu-latest
+    container:
+      image: rocq/rocq-prover:9.2.0
+      options: --user root
+    steps:
+      - uses: actions/checkout@v4
+      - name: Compile finite association bridge and PROV-008 traversal
+        shell: bash
+        run: |
+          set -euo pipefail
+          export PATH="/home/rocq/.opam/${COMPILER}/bin:$PATH"
+          rocq c -Q proof/Phil Phil proof/Phil/Core/ProviderQualificationImplementationBridge.v
+          rocq c -Q proof/Phil Phil proof/Phil/Core/ProviderLifecycleQualificationImplementation.v
+      - name: Extract provider lifecycle kernel
+        shell: bash
+        run: |
+          set -euo pipefail
+          export PATH="/home/rocq/.opam/${COMPILER}/bin:$PATH"
+          rm -f ProviderLifecycleQualificationKernel.hs
+          rocq c -Q proof/Phil Phil proof/Phil/Core/ProviderLifecycleQualificationImplementationExtraction.v
+          test -s ProviderLifecycleQualificationKernel.hs
+          grep -q '^module ProviderLifecycleQualificationKernel where' ProviderLifecycleQualificationKernel.hs
+          grep -q '^memberb ::' ProviderLifecycleQualificationKernel.hs
+          grep -q '^lifecyclePointEqualb ::' ProviderLifecycleQualificationKernel.hs
+          grep -q '^checkProviderLifecycleObservation ::' ProviderLifecycleQualificationKernel.hs
+          grep -q '^checkProviderLifecyclePoint ::' ProviderLifecycleQualificationKernel.hs
+          grep -q '^decideProviderLifecycleQualification ::' ProviderLifecycleQualificationKernel.hs
+          sha256sum ProviderLifecycleQualificationKernel.hs
+          mkdir -p provider-lifecycle-implementation-refinement-proof
+          cp \
+            proof/Phil/Core/ProviderQualificationImplementationBridge.v \
+            proof/Phil/Core/ProviderQualificationImplementationBridge.vo \
+            proof/Phil/Core/ProviderLifecycleQualificationImplementation.v \
+            proof/Phil/Core/ProviderLifecycleQualificationImplementation.vo \
+            proof/Phil/Core/ProviderLifecycleQualificationImplementationExtraction.v \
+            ProviderLifecycleQualificationKernel.hs \
+            provider-lifecycle-implementation-refinement-proof/
+      - uses: actions/upload-artifact@v4
+        with:
+          name: rocq-provider-lifecycle-implementation-refinement
+          path: provider-lifecycle-implementation-refinement-proof
+          if-no-files-found: error
+
+  verify-provider-lifecycle-correspondence:
+    needs: rocq-provider-lifecycle-implementation-refinement
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: haskell-actions/setup@v2
+        with:
+          ghc-version: '9.6.7'
+          cabal-version: 'latest'
+      - uses: actions/download-artifact@v4
+        with:
+          name: rocq-provider-lifecycle-implementation-refinement
+          path: provider-lifecycle-implementation-refinement-proof
+      - name: Typecheck extracted PROV-008 kernel
+        run: |
+          set -euo pipefail
+          ghc -Wall -Werror -fno-code \
+            provider-lifecycle-implementation-refinement-proof/ProviderLifecycleQualificationKernel.hs
+      - name: Re-run PROV-001 through PROV-008 correspondence
+        run: |
+          set -euo pipefail
+          cabal build exe:phil-certify-core-scalar --ghc-options=-Werror
+          cabal exec -- runghc -isrc test/Phase1ProviderQualificationMain.hs
+          cabal exec -- runghc -isrc test/Phase1ProviderStateQualificationMain.hs
+          cabal exec -- runghc -isrc test/Phase1ProviderLawQualificationMain.hs
+          cabal exec -- runghc -isrc test/Phase1ProviderLifecycleQualificationMain.hs
