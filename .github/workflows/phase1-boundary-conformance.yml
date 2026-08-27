@@ -33,3 +33,5 @@ jobs:
         run: cabal exec -- runghc -Wall -Werror -isrc test/Phase1TransformingBoundaryMappingMain.hs
       - name: BND-007 boundary direction enforcement
         run: cabal exec -- runghc -Wall -Werror -isrc test/Phase1BoundaryDirectionMain.hs
+      - name: BND-008 qualified exact encoding conformance
+        run: cabal exec -- runghc -Wall -Werror -isrc test/Phase1QualifiedEncodingMain.hs
