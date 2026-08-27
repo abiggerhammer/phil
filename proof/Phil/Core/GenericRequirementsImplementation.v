@@ -1,6 +1,8 @@
 From Stdlib Require Import Bool.Bool.
 
-From Phil.Core Require Import GenericRequirements.
+From Phil.Core Require Import
+  GenericStructural
+  GenericRequirements.
 
 (*
   PHIL-GEN-REQ-IMPL-001 — executable GEN-004–006 publication decision.
