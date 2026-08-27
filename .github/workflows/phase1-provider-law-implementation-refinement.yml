@@ -7,6 +7,7 @@ on:
       - 'proof/Phil/Core/ProviderLawQualificationImplementation.v'
       - 'proof/Phil/Core/ProviderLawQualificationImplementationExtraction.v'
       - 'docs/phase-1/provider-law-implementation-refinement-v1.md'
+      - 'src/ProviderLawQualificationKernel.hs'
       - 'src/Phil/Core/ProviderLawQualification.hs'
       - 'test/Phase1ProviderQualificationMain.hs'
       - 'test/Phase1ProviderLawQualificationMain.hs'
@@ -18,6 +19,7 @@ on:
       - 'proof/Phil/Core/ProviderLawQualificationImplementation.v'
       - 'proof/Phil/Core/ProviderLawQualificationImplementationExtraction.v'
       - 'docs/phase-1/provider-law-implementation-refinement-v1.md'
+      - 'src/ProviderLawQualificationKernel.hs'
       - 'src/Phil/Core/ProviderLawQualification.hs'
       - 'test/Phase1ProviderQualificationMain.hs'
       - 'test/Phase1ProviderLawQualificationMain.hs'
@@ -41,7 +43,7 @@ jobs:
           export PATH="/home/rocq/.opam/${COMPILER}/bin:$PATH"
           rocq c -Q proof/Phil Phil proof/Phil/Core/ProviderQualificationImplementationBridge.v
           rocq c -Q proof/Phil Phil proof/Phil/Core/ProviderLawQualificationImplementation.v
-      - name: Extract provider law kernel
+      - name: Regenerate and bind provider law kernel
         shell: bash
         run: |
           set -euo pipefail
@@ -54,7 +56,14 @@ jobs:
           grep -q '^translateProviderLawTrace ::' ProviderLawQualificationKernel.hs
           grep -q '^runProviderLawKernel ::' ProviderLawQualificationKernel.hs
           grep -q '^decideProviderLawTrace ::' ProviderLawQualificationKernel.hs
-          sha256sum ProviderLawQualificationKernel.hs
+          if ! cmp -s ProviderLawQualificationKernel.hs src/ProviderLawQualificationKernel.hs; then
+            echo 'checked-in provider law kernel differs from fresh Rocq extraction' >&2
+            diff -u src/ProviderLawQualificationKernel.hs ProviderLawQualificationKernel.hs || true
+            exit 1
+          fi
+          sha256sum \
+            ProviderLawQualificationKernel.hs \
+            src/ProviderLawQualificationKernel.hs
           mkdir -p provider-law-implementation-refinement-proof
           cp \
             proof/Phil/Core/ProviderQualificationImplementationBridge.v \
@@ -70,7 +79,7 @@ jobs:
           path: provider-law-implementation-refinement-proof
           if-no-files-found: error
 
-  verify-provider-law-correspondence:
+  verify-production-provider-law:
     needs: rocq-provider-law-implementation-refinement
     runs-on: ubuntu-latest
     steps:
@@ -83,14 +92,18 @@ jobs:
         with:
           name: rocq-provider-law-implementation-refinement
           path: provider-law-implementation-refinement-proof
-      - name: Typecheck extracted PROV-007 kernel
+      - name: Typecheck extracted, checked-in, and production provider-law paths
         run: |
           set -euo pipefail
-          ghc -Wall -Werror -fno-code \
-            provider-law-implementation-refinement-proof/ProviderLawQualificationKernel.hs
-      - name: Re-run provider semantic and law correspondence corpora
-        run: |
-          set -euo pipefail
+          cmp -s \
+            provider-law-implementation-refinement-proof/ProviderLawQualificationKernel.hs \
+            src/ProviderLawQualificationKernel.hs
+          ghc -Wall -Werror -fno-code src/ProviderLawQualificationKernel.hs
           cabal build exe:phil-certify-core-scalar --ghc-options=-Werror
+          cabal exec -- ghc -isrc -Wall -Werror -fno-code \
+            src/Phil/Core/ProviderLawQualification.hs
+      - name: Exercise production provider semantic and PROV-007 law paths
+        run: |
+          set -euo pipefail
           cabal exec -- runghc -isrc test/Phase1ProviderQualificationMain.hs
           cabal exec -- runghc -isrc test/Phase1ProviderLawQualificationMain.hs
