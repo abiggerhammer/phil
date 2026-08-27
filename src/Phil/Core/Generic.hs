@@ -33,6 +33,8 @@ module Phil.Core.Generic
 import qualified Data.Map.Strict as Map
 import qualified Data.Set as Set
 import Data.Text (Text)
+import qualified GenericInstantiationDomainKernel as InstantiationDomainKernel
+import qualified GenericInstantiationValidityKernel as InstantiationValidityKernel
 import qualified GenericRequirementsKernel as RequirementsKernel
 import qualified GenericStructuralKernel as Kernel
 import Phil.Core.Static
@@ -163,6 +165,7 @@ data GenericInstantiationError
   | GenericAssumptionNotPermitted GenericRequirement
   | GenericExportNotPermitted GenericRequirement
   | GenericStructuralInstantiationError GenericStructuralError
+  | GenericInstantiationKernelBridgeMismatch
   deriving (Eq, Ord, Show)
 
 data GenericApplicationIdentity = GenericApplicationIdentity
@@ -258,26 +261,24 @@ checkGenericInstantiation
   -> Set.Set GenericRequirement
   -> [(GenericRequirement, GenericRequirementDisposition)]
   -> Either GenericInstantiationError GenericInstantiationRecord
-checkGenericInstantiation policy requirements dispositionEntries = do
-  dispositions <- normalizeDispositions dispositionEntries
-  case
-    [ requirement
-    | requirement <- Set.toAscList requirements
-    , not (Map.member requirement dispositions)
-    ] of
-      requirement : _ -> Left (MissingGenericRequirementDisposition requirement)
-      [] -> pure ()
-  case
-    [ requirement
-    | requirement <- Map.keys dispositions
-    , not (Set.member requirement requirements)
-    ] of
-      requirement : _ -> Left (UnexpectedGenericRequirementDisposition requirement)
-      [] -> pure ()
-  mapM_
-    (checkRequirementDisposition policy)
-    (Map.toAscList dispositions)
-  Right (GenericInstantiationRecord dispositions)
+checkGenericInstantiation policy requirements dispositionEntries =
+  case InstantiationDomainKernel.decideExactKeyDomain
+      (==)
+      (Set.toAscList requirements)
+      (map fst dispositionEntries) of
+    InstantiationDomainKernel.GenericDispositionDomainRejected ->
+      Left (diagnoseGenericInstantiationDomain requirements dispositionEntries)
+    InstantiationDomainKernel.GenericDispositionDomainAccepted -> do
+      dispositions <- case normalizeDispositions dispositionEntries of
+        Left _ -> Left GenericInstantiationKernelBridgeMismatch
+        Right normalized -> Right normalized
+      if Map.keysSet dispositions /= requirements
+        then Left GenericInstantiationKernelBridgeMismatch
+        else do
+          mapM_
+            (checkRequirementDisposition policy)
+            (Map.toAscList dispositions)
+          Right (GenericInstantiationRecord dispositions)
 
 deriveGenericApplicationIdentity
   :: DeclarationKey
@@ -329,6 +330,28 @@ normalizeDispositions = go Map.empty
           Left (DuplicateGenericRequirementDisposition requirement)
       | otherwise = go (Map.insert requirement disposition result) rest
 
+diagnoseGenericInstantiationDomain
+  :: Set.Set GenericRequirement
+  -> [(GenericRequirement, GenericRequirementDisposition)]
+  -> GenericInstantiationError
+diagnoseGenericInstantiationDomain requirements dispositionEntries =
+  case normalizeDispositions dispositionEntries of
+    Left duplicateError -> duplicateError
+    Right dispositions ->
+      case
+        [ requirement
+        | requirement <- Set.toAscList requirements
+        , not (Map.member requirement dispositions)
+        ] of
+          requirement : _ -> MissingGenericRequirementDisposition requirement
+          [] -> case
+            [ requirement
+            | requirement <- Map.keys dispositions
+            , not (Set.member requirement requirements)
+            ] of
+              requirement : _ -> UnexpectedGenericRequirementDisposition requirement
+              [] -> GenericInstantiationKernelBridgeMismatch
+
 normalizeGenericSemanticArguments
   :: [(GenericStaticParameterKey, SemanticForm)]
   -> Either GenericApplicationIdentityError
@@ -345,48 +368,132 @@ checkRequirementDisposition
   -> (GenericRequirement, GenericRequirementDisposition)
   -> Either GenericInstantiationError ()
 checkRequirementDisposition policy (requirement, disposition) =
-  case disposition of
-    GenericAssumptionDependent _
-      | not (genericPolicyAllowsAssumptions policy) ->
+  case InstantiationValidityKernel.decideGenericDispositionValidity
+      (genericDispositionValidityFacts policy requirement disposition) of
+    InstantiationValidityKernel.GenericDispositionValidityAccepted -> Right ()
+    InstantiationValidityKernel.GenericDispositionValidityStructuralRejected ->
+      case (requirement, disposition) of
+        ( GenericStructuralRequirement key permission
+          , GenericSatisfiedByStructuralMode mode ) ->
+            Left (GenericStructuralInstantiationError
+              (MissingStructuralPermission key permission mode))
+        _ -> Left GenericInstantiationKernelBridgeMismatch
+    InstantiationValidityKernel.GenericDispositionValidityProviderInterfaceMismatch ->
+      case (requirement, disposition) of
+        ( GenericProviderContractRequirement key required
+          , GenericSatisfiedByExactProvider actual ) ->
+            Left (GenericProviderInterfaceMismatch key required actual)
+        _ -> Left GenericInstantiationKernelBridgeMismatch
+    InstantiationValidityKernel.GenericDispositionValidityProviderRefinementMismatch ->
+      case (requirement, disposition) of
+        ( GenericProviderContractRequirement key required
+          , GenericSatisfiedByCheckedProviderRefinement refinement ) ->
+            Left (GenericProviderRefinementMismatch
+              key
+              required
+              (checkedProviderRefinementActual refinement)
+              (checkedProviderRefinementRequired refinement))
+        _ -> Left GenericInstantiationKernelBridgeMismatch
+    InstantiationValidityKernel.GenericDispositionValidityPropositionEvidenceMismatch ->
+      case (requirement, disposition) of
+        ( GenericPropositionRequirement expected
+          , GenericSatisfiedByEvidence evidence ) ->
+            Left (GenericPropositionEvidenceMismatch
+              expected
+              (genericEvidenceProposition evidence))
+        _ -> Left GenericInstantiationKernelBridgeMismatch
+    InstantiationValidityKernel.GenericDispositionValidityAssumptionNotPermitted ->
+      case disposition of
+        GenericAssumptionDependent _ ->
           Left (GenericAssumptionNotPermitted requirement)
-    GenericExported _
-      | not (genericPolicyAllowsExports policy) ->
-          Left (GenericExportNotPermitted requirement)
-    _ -> checkRequirementSpecific requirement disposition
+        _ -> Left GenericInstantiationKernelBridgeMismatch
+    InstantiationValidityKernel.GenericDispositionValidityExportNotPermitted ->
+      case disposition of
+        GenericExported _ -> Left (GenericExportNotPermitted requirement)
+        _ -> Left GenericInstantiationKernelBridgeMismatch
+    InstantiationValidityKernel.GenericDispositionValidityKindMismatch ->
+      Left (GenericRequirementDispositionKindMismatch requirement disposition)
 
-checkRequirementSpecific
+genericDispositionValidityFacts
+  :: GenericInstantiationPolicy
+  -> GenericRequirement
+  -> GenericRequirementDisposition
+  -> InstantiationValidityKernel.GenericDispositionValidityFacts
+genericDispositionValidityFacts policy requirement disposition =
+  InstantiationValidityKernel.MkGenericDispositionValidityFacts
+    (toValidityRequirementKind requirement)
+    (toValidityDispositionKind disposition)
+    (structuralModeAllowsFact requirement disposition)
+    (exactProviderMatchesFact requirement disposition)
+    (providerRefinementTargetsFact requirement disposition)
+    (propositionEvidenceMatchesFact requirement disposition)
+    (genericPolicyAllowsAssumptions policy)
+    (genericPolicyAllowsExports policy)
+
+toValidityRequirementKind
+  :: GenericRequirement
+  -> InstantiationValidityKernel.GenericRequirementKind
+toValidityRequirementKind requirement = case requirement of
+  GenericStructuralRequirement _ _ ->
+    InstantiationValidityKernel.GenericStructuralRequirementKind
+  GenericProviderContractRequirement _ _ ->
+    InstantiationValidityKernel.GenericProviderRequirementKind
+  GenericPropositionRequirement _ ->
+    InstantiationValidityKernel.GenericPropositionRequirementKind
+
+toValidityDispositionKind
+  :: GenericRequirementDisposition
+  -> InstantiationValidityKernel.GenericDispositionKind
+toValidityDispositionKind disposition = case disposition of
+  GenericSatisfiedByStructuralMode _ ->
+    InstantiationValidityKernel.GenericStructuralModeDispositionKind
+  GenericSatisfiedByExactProvider _ ->
+    InstantiationValidityKernel.GenericExactProviderDispositionKind
+  GenericSatisfiedByCheckedProviderRefinement _ ->
+    InstantiationValidityKernel.GenericProviderRefinementDispositionKind
+  GenericSatisfiedByEvidence _ ->
+    InstantiationValidityKernel.GenericEvidenceDispositionKind
+  GenericAssumptionDependent _ ->
+    InstantiationValidityKernel.GenericAssumptionDispositionKind
+  GenericExported _ ->
+    InstantiationValidityKernel.GenericExportDispositionKind
+
+structuralModeAllowsFact
   :: GenericRequirement
   -> GenericRequirementDisposition
-  -> Either GenericInstantiationError ()
-checkRequirementSpecific requirement disposition = case (requirement, disposition) of
-  (GenericStructuralRequirement key permission, GenericSatisfiedByStructuralMode mode) ->
-    mapLeft GenericStructuralInstantiationError
-      (checkGenericStructuralActual
-        key
-        mode
-        (GenericStructuralRequirements (Set.singleton permission)))
-  ( GenericProviderContractRequirement key required
-    , GenericSatisfiedByExactProvider actual )
-      | actual == required -> Right ()
-      | otherwise -> Left (GenericProviderInterfaceMismatch key required actual)
-  ( GenericProviderContractRequirement key required
-    , GenericSatisfiedByCheckedProviderRefinement refinement )
-      | checkedProviderRefinementRequired refinement == required -> Right ()
-      | otherwise -> Left
-          (GenericProviderRefinementMismatch
-            key
-            required
-            (checkedProviderRefinementActual refinement)
-            (checkedProviderRefinementRequired refinement))
-  (GenericPropositionRequirement expected, GenericSatisfiedByEvidence evidence)
-      | genericEvidenceProposition evidence == expected -> Right ()
-      | otherwise -> Left
-          (GenericPropositionEvidenceMismatch
-            expected
-            (genericEvidenceProposition evidence))
-  (_, GenericAssumptionDependent _) -> Right ()
-  (_, GenericExported _) -> Right ()
-  _ -> Left (GenericRequirementDispositionKindMismatch requirement disposition)
+  -> Bool
+structuralModeAllowsFact requirement disposition = case (requirement, disposition) of
+  (GenericStructuralRequirement _ permission, GenericSatisfiedByStructuralMode mode) ->
+    modeAllowsStructuralPermission mode permission
+  _ -> False
+
+exactProviderMatchesFact
+  :: GenericRequirement
+  -> GenericRequirementDisposition
+  -> Bool
+exactProviderMatchesFact requirement disposition = case (requirement, disposition) of
+  ( GenericProviderContractRequirement _ required
+    , GenericSatisfiedByExactProvider actual ) -> actual == required
+  _ -> False
+
+providerRefinementTargetsFact
+  :: GenericRequirement
+  -> GenericRequirementDisposition
+  -> Bool
+providerRefinementTargetsFact requirement disposition = case (requirement, disposition) of
+  ( GenericProviderContractRequirement _ required
+    , GenericSatisfiedByCheckedProviderRefinement refinement ) ->
+      checkedProviderRefinementRequired refinement == required
+  _ -> False
+
+propositionEvidenceMatchesFact
+  :: GenericRequirement
+  -> GenericRequirementDisposition
+  -> Bool
+propositionEvidenceMatchesFact requirement disposition = case (requirement, disposition) of
+  (GenericPropositionRequirement expected, GenericSatisfiedByEvidence evidence) ->
+    genericEvidenceProposition evidence == expected
+  _ -> False
 
 initialRequirements
   :: [GenericValueParameterKey]
@@ -544,6 +651,3 @@ requirementsToCoverageKernel key requirements =
   in if fromRequirementsKernelRequirements kernelRequirements == requirements
       then Right kernelRequirements
       else Left (GenericRequirementsKernelBridgeMismatch key)
-
-mapLeft :: (a -> b) -> Either a c -> Either b c
-mapLeft f = either (Left . f) Right
