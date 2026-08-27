@@ -1,0 +1,5 @@
+module corpus.bad_capability_mode;
+
+capability Bad mode shared {
+  permits storage.Read;
+}

@@ -1,0 +1,8 @@
+module corpus.offer;
+
+component Offer(endpoint : Endpoint) {
+  offer endpoint {
+    Left => { return unit }
+    Right(value) => { return value }
+  }
+}

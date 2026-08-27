@@ -5,7 +5,10 @@ on:
     paths:
       - 'grammar/phase1-surface.ebnf'
       - 'scripts/derive_phase1_surface_grammar.py'
+      - 'scripts/check_phase1_surface_corpus.py'
+      - 'test/fixtures/phase1-surface/**'
       - 'docs/phase-1/surface-grammar-v1.md'
+      - 'docs/phase-1/surface-parser-production-corpus-v1.md'
       - '.github/workflows/phase1-surface-grammar.yml'
   push:
     branches:
@@ -13,7 +16,10 @@ on:
     paths:
       - 'grammar/phase1-surface.ebnf'
       - 'scripts/derive_phase1_surface_grammar.py'
+      - 'scripts/check_phase1_surface_corpus.py'
+      - 'test/fixtures/phase1-surface/**'
       - 'docs/phase-1/surface-grammar-v1.md'
+      - 'docs/phase-1/surface-parser-production-corpus-v1.md'
       - '.github/workflows/phase1-surface-grammar.yml'
 
 permissions:
@@ -26,8 +32,13 @@ jobs:
       - name: Check out repository
         uses: actions/checkout@v4
 
-      - name: Check derivation tool
-        run: python3 -m py_compile scripts/derive_phase1_surface_grammar.py
+      - name: Check derivation and corpus tools
+        run: |
+          python3 -m py_compile scripts/derive_phase1_surface_grammar.py
+          python3 -m py_compile scripts/check_phase1_surface_corpus.py
+
+      - name: Check surface production corpus integrity
+        run: python3 scripts/check_phase1_surface_corpus.py
 
       - name: Derive typed Rocq grammar
         run: python3 scripts/derive_phase1_surface_grammar.py --write
