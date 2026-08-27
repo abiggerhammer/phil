@@ -43,6 +43,9 @@ jobs:
       - name: Phase 1 architecture interface validity conformance
         run: cabal exec -- runghc -isrc test/Phase1ArchitectureInterfaceValidityMain.hs
 
+      - name: Phase 1 architecture definition replacement conformance
+        run: cabal exec -- runghc -isrc test/Phase1ArchitectureDefinitionReplacementMain.hs
+
       - name: Phase 1 generic structural conformance
         run: cabal exec -- runghc -isrc test/Phase1GenericStructuralMain.hs
 
