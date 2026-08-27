@@ -101,7 +101,9 @@ jobs:
           cabal build exe:phil-certify-core-scalar --ghc-options=-Werror
           cabal exec -- ghc -isrc -Wall -Werror -fno-code \
             src/Phil/Core/Generic.hs \
-            test/Phase1GenericStructuralMain.hs \
+            test/Phase1GenericStructuralMain.hs
+          cabal exec -- ghc -isrc -Wall -Werror -fno-code \
+            src/Phil/Core/Generic.hs \
             test/Phase1GenericRequirementsMain.hs
       - name: Exercise production structural path through extracted kernel
         run: |
