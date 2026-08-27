@@ -4,6 +4,7 @@ module Main (main) where
 
 import qualified Data.Map.Strict as Map
 import qualified Data.Set as Set
+import Data.Text (Text)
 import Phil.Core.Checker (CheckState (..), emptyCheckState)
 import Phil.Core.Context (ResourceContext (..), insertBinding)
 import Phil.Core.Syntax
@@ -36,9 +37,9 @@ test label result = case result of
 
 implicitRewriteRejects :: Either String ()
 implicitRewriteRejects =
-  let badLeft = projection "join.left" (BlockId "left") sourceRef
+  let badLeft = projection (StateProjectionKey "join.left") (BlockId "left") sourceRef
   in case checkStateBoundaryProjections systemsProgram subjectIndex boundary
-      [badLeft, projection "join.right" (BlockId "right") transportedRef] of
+      [badLeft, projection (StateProjectionKey "join.right") (BlockId "right") transportedRef] of
     Left (StateProjectionFixedSubjectMismatch key slot subject ref) -> do
       assert (key == stateProjectionKey badLeft) "wrong implicit-rewrite projection"
       assert (slot == ownerSlot) "wrong implicit-rewrite slot"
@@ -56,8 +57,8 @@ explicitTransportAccepts = do
   assert (Map.member equalityName (unrestrictedBindings residual)) "core transport consumed reusable equality evidence"
   mapLeft show $
     checkStateBoundaryProjections systemsProgram subjectIndex boundary
-      [ projection "join.left" (BlockId "left") transportedRef
-      , projection "join.right" (BlockId "right") transportedRef
+      [ projection (StateProjectionKey "join.left") (BlockId "left") transportedRef
+      , projection (StateProjectionKey "join.right") (BlockId "right") transportedRef
       ]
 
 checkedCoreTransport :: Either String ValueResult
@@ -139,11 +140,15 @@ systemsFunction = SystemsFunction
       ]
   }
 
-valueEntry :: ValueId -> SystemsValueRole -> (ValueId, SystemsValue)
-valueEntry valueId role = (valueId, SystemsValue valueId role Nothing)
+valueEntry :: Text -> SystemsValueRole -> (ValueId, SystemsValue)
+valueEntry key role =
+  let valueId = ValueId key
+  in (valueId, SystemsValue valueId role Nothing)
 
-blockEntry :: BlockId -> SystemsTerminator -> (BlockId, SystemsBlock)
-blockEntry blockId terminator = (blockId, SystemsBlock blockId [] terminator)
+blockEntry :: Text -> SystemsTerminator -> (BlockId, SystemsBlock)
+blockEntry key terminator =
+  let blockId = BlockId key
+  in (blockId, SystemsBlock blockId [] terminator)
 
 assert :: Bool -> String -> Either String ()
 assert condition detail
