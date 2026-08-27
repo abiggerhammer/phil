@@ -176,7 +176,7 @@ makeAssumptionDependencyStageBundle
   -> Map AssumptionConsumer (Map StageAssumptionKey AssumptionValidityScopeRevision)
   -> Map StageAssumptionKey (Set AssumptionConsumer)
   -> AssumptionDependencyStageBundle
-makeAssumptionDependencyStageBundle base assumptions forward reverse = provisional
+makeAssumptionDependencyStageBundle base assumptions forward reverseDependencies = provisional
   { assumptionDependencyStageRevision =
       deriveAssumptionDependencyStageRevision provisional }
   where
@@ -185,7 +185,7 @@ makeAssumptionDependencyStageBundle base assumptions forward reverse = provision
       , assumptionDependencyStageRevision = AssumptionDependencyStageRevision "pending"
       , assumptionDependencyStageAssumptions = assumptions
       , assumptionDependencyStageForward = forward
-      , assumptionDependencyStageReverse = reverse
+      , assumptionDependencyStageReverse = reverseDependencies
       }
 
 verifyAssumptionDependencyStageBundle
