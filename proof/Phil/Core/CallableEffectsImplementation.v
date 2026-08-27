@@ -80,7 +80,7 @@ Proof.
   - intro Hdecision.
     destruct subsetFact eqn:Hsubset; cbn in Hdecision.
     + apply (proj1 Hreflect).
-      exact Hsubset.
+      reflexivity.
     + discriminate.
   - intro Hsubset.
     assert (Hfact : subsetFact = true).
