@@ -33,3 +33,5 @@ jobs:
         run: cabal exec -- runghc -Wall -Werror -isrc test/Phase1AffineOmissionMain.hs
       - name: DATA-007 conservative sum mode conformance
         run: cabal exec -- runghc -Wall -Werror -isrc test/Phase1ConservativeSumModeMain.hs
+      - name: DATA-008 consuming sum match conformance
+        run: cabal exec -- runghc -Wall -Werror -isrc test/Phase1ConsumingSumMatchMain.hs
