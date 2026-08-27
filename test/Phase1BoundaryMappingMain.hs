@@ -5,7 +5,8 @@ module Main (main) where
 import Phil.Core.BoundaryMapping
 import Phil.Core.Context (ResourceContext, emptyContext, insertBinding)
 import Phil.Core.Recognition
-  ( beginRawLoan
+  ( ParsedWitness
+  , beginRawLoan
   , receiveFrame
   , receiveFrameContext
   , trustedRecognitionSuccess
@@ -67,7 +68,7 @@ wrongTypeRejects = do
     Left (BoundaryValueTypeMismatch _ _) -> Right ()
     other -> Left ("wrong value type did not reject exactly: " <> show other)
 
-recognized :: Either String Phil.Core.Recognition.ParsedWitness
+recognized :: Either String ParsedWitness
 recognized = do
   context <- receiveContext
   (raw, borrowed) <- mapLeft show $ beginRawLoan pendingName context
