@@ -1,0 +1,134 @@
+name: Phase 1 Provider State Laws Lifecycle Proofs
+
+on:
+  pull_request:
+    paths:
+      - 'src/Phil/Core/ProviderQualification.hs'
+      - 'src/Phil/Core/ProviderStateQualification.hs'
+      - 'src/Phil/Core/ProviderLawQualification.hs'
+      - 'src/Phil/Core/ProviderLifecycleQualification.hs'
+      - 'test/Phase1ProviderQualificationMain.hs'
+      - 'test/Phase1ProviderStateQualificationMain.hs'
+      - 'test/Phase1ProviderLawQualificationMain.hs'
+      - 'test/Phase1ProviderLifecycleQualificationMain.hs'
+      - 'docs/phase-1/provider-state-simulation-v1.md'
+      - 'docs/phase-1/provider-wide-laws-v1.md'
+      - 'docs/phase-1/provider-lifecycle-v1.md'
+      - 'proof/Phil/Core/ProviderQualification.v'
+      - 'proof/Phil/Core/ProviderStateQualification.v'
+      - 'app/Phase1ProviderStateCertificationMain.hs'
+      - '.github/workflows/phase1-provider-state-proofs.yml'
+  push:
+    branches: [main]
+    paths:
+      - 'src/Phil/Core/ProviderQualification.hs'
+      - 'src/Phil/Core/ProviderStateQualification.hs'
+      - 'src/Phil/Core/ProviderLawQualification.hs'
+      - 'src/Phil/Core/ProviderLifecycleQualification.hs'
+      - 'test/Phase1ProviderQualificationMain.hs'
+      - 'test/Phase1ProviderStateQualificationMain.hs'
+      - 'test/Phase1ProviderLawQualificationMain.hs'
+      - 'test/Phase1ProviderLifecycleQualificationMain.hs'
+      - 'docs/phase-1/provider-state-simulation-v1.md'
+      - 'docs/phase-1/provider-wide-laws-v1.md'
+      - 'docs/phase-1/provider-lifecycle-v1.md'
+      - 'proof/Phil/Core/ProviderQualification.v'
+      - 'proof/Phil/Core/ProviderStateQualification.v'
+      - 'app/Phase1ProviderStateCertificationMain.hs'
+      - '.github/workflows/phase1-provider-state-proofs.yml'
+
+permissions:
+  contents: read
+
+jobs:
+  rocq-phase1-provider-state:
+    runs-on: ubuntu-latest
+    container:
+      image: rocq/rocq-prover:9.2.0
+      options: --user root
+    steps:
+      - uses: actions/checkout@v4
+      - name: Compile PHIL-PROV-STATE-001
+        shell: bash
+        run: |
+          set -euo pipefail
+          export PATH="/home/rocq/.opam/${COMPILER}/bin:$PATH"
+          rocq c -Q proof/Phil Phil proof/Phil/Core/GenericStructural.v
+          rocq c -Q proof/Phil Phil proof/Phil/Core/CallableMode.v
+          rocq c -Q proof/Phil Phil proof/Phil/Core/CallableEffects.v
+          rocq c -Q proof/Phil Phil proof/Phil/Core/CallableLifecycle.v
+          rocq c -Q proof/Phil Phil proof/Phil/Core/CallableRefinement.v
+          rocq c -Q proof/Phil Phil proof/Phil/Core/Syntax.v
+          rocq c -Q proof/Phil Phil proof/Phil/Core/Context.v
+          rocq c -Q proof/Phil Phil proof/Phil/Core/ContextJoin.v
+          rocq c -Q proof/Phil Phil proof/Phil/Core/ProcessJoin.v
+          rocq c -Q proof/Phil Phil proof/Phil/Core/ResourceJoin.v
+          rocq c -Q proof/Phil Phil proof/Phil/Core/ProviderQualification.v
+          rocq c -Q proof/Phil Phil proof/Phil/Core/ProviderStateQualification.v
+          mkdir -p phase1-provider-state-proof
+          cp \
+            proof/Phil/Core/ProviderStateQualification.v \
+            proof/Phil/Core/ProviderStateQualification.vo \
+            phase1-provider-state-proof/
+      - uses: actions/upload-artifact@v4
+        with:
+          name: rocq-phase1-provider-state-proof
+          path: phase1-provider-state-proof
+          if-no-files-found: error
+
+  certify-phase1-provider-state:
+    needs: rocq-phase1-provider-state
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: haskell-actions/setup@v2
+        with:
+          ghc-version: '9.6.7'
+          cabal-version: 'latest'
+      - name: Build existing proof certifier substrate with warnings as errors
+        run: cabal build exe:phil-certify-core-scalar --ghc-options=-Werror
+      - name: Typecheck certifier
+        run: cabal exec -- ghc -isrc -Wall -Werror -fno-code app/Phase1ProviderStateCertificationMain.hs
+      - name: Re-run PROV-001 through PROV-008 correspondence
+        run: |
+          set -euo pipefail
+          cabal exec -- runghc -isrc test/Phase1ProviderQualificationMain.hs
+          cabal exec -- runghc -isrc test/Phase1ProviderStateQualificationMain.hs
+          cabal exec -- runghc -isrc test/Phase1ProviderLawQualificationMain.hs
+          cabal exec -- runghc -isrc test/Phase1ProviderLifecycleQualificationMain.hs
+      - uses: actions/download-artifact@v4
+        with:
+          name: rocq-phase1-provider-state-proof
+          path: phase1-provider-state-proof
+      - name: Emit PHIL-PROV-STATE-001 certificate
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p phase1-provider-state-certification
+          cabal exec -- runghc -isrc app/Phase1ProviderStateCertificationMain.hs \
+            phase1-provider-state-proof/ProviderStateQualification.v \
+            phase1-provider-state-proof/ProviderStateQualification.vo \
+            phase1-provider-state-certification/PHIL-PROV-STATE-001.rocq.cert
+          sha256sum \
+            src/Phil/Core/ProviderQualification.hs \
+            src/Phil/Core/ProviderStateQualification.hs \
+            src/Phil/Core/ProviderLawQualification.hs \
+            src/Phil/Core/ProviderLifecycleQualification.hs \
+            test/Phase1ProviderQualificationMain.hs \
+            test/Phase1ProviderStateQualificationMain.hs \
+            test/Phase1ProviderLawQualificationMain.hs \
+            test/Phase1ProviderLifecycleQualificationMain.hs \
+            docs/phase-1/provider-state-simulation-v1.md \
+            docs/phase-1/provider-wide-laws-v1.md \
+            docs/phase-1/provider-lifecycle-v1.md \
+            proof/Phil/Core/ProviderQualification.v \
+            proof/Phil/Core/ProviderStateQualification.v \
+            app/Phase1ProviderStateCertificationMain.hs \
+            > phase1-provider-state-certification/PHIL-PROV-STATE-001.correspondence.sha256
+          cat phase1-provider-state-certification/PHIL-PROV-STATE-001.rocq.cert
+          sha256sum phase1-provider-state-certification/PHIL-PROV-STATE-001.rocq.cert
+      - uses: actions/upload-artifact@v4
+        with:
+          name: phil-phase1-provider-state-proof-certification
+          path: phase1-provider-state-certification
+          if-no-files-found: error
