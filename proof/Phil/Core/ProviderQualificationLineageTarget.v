@@ -37,7 +37,8 @@ Inductive ProviderQualificationLayer : Type :=
 
 Inductive ProviderQualificationSubject : Type :=
 | SemanticProviderImplementation : DefinitionRevision -> ProviderQualificationSubject
-| ConcreteProviderRealization : DefinitionRevision -> ArtifactRevision -> ProviderQualificationSubject
+| ConcreteProviderRealization :
+    DefinitionRevision -> ArtifactRevision -> ProviderQualificationSubject
 | OpaqueProviderBoundary : OpaqueBoundaryKey -> ProviderQualificationSubject.
 
 Record ProviderQualificationClaim : Type := mkProviderQualificationClaim {
@@ -48,18 +49,19 @@ Record ProviderQualificationClaim : Type := mkProviderQualificationClaim {
   targetClaimSemanticImplementation : DefinitionRevision
 }.
 
-Record ProviderTargetRealizationEvidence : Type := mkProviderTargetRealizationEvidence {
-  targetEvidenceRevision : TargetRealizationEvidenceRevision;
-  targetEvidenceClaimRevision : QualificationClaimRevision;
-  targetEvidenceRequiredInterface : InterfaceRevision;
-  targetEvidenceSemanticImplementation : DefinitionRevision;
-  targetEvidenceTargetProfile : TargetProfileRevision;
-  targetEvidenceArtifact : ArtifactRevision;
-  targetEvidenceRuntimeAbi : RuntimeAbiRevision;
-  targetEvidenceRealizationRelation : RealizationRelationRevision;
-  targetEvidenceHasTranslationEvidence : bool;
-  targetEvidenceAssumptionTag : TargetAssumptionTag
-}.
+Record ProviderTargetRealizationEvidence : Type :=
+  mkProviderTargetRealizationEvidence {
+    targetEvidenceRevision : TargetRealizationEvidenceRevision;
+    targetEvidenceClaimRevision : QualificationClaimRevision;
+    targetEvidenceRequiredInterface : InterfaceRevision;
+    targetEvidenceSemanticImplementation : DefinitionRevision;
+    targetEvidenceTargetProfile : TargetProfileRevision;
+    targetEvidenceArtifact : ArtifactRevision;
+    targetEvidenceRuntimeAbi : RuntimeAbiRevision;
+    targetEvidenceRealizationRelation : RealizationRelationRevision;
+    targetEvidenceHasTranslationEvidence : bool;
+    targetEvidenceAssumptionTag : TargetAssumptionTag
+  }.
 
 Record TargetEvidenceMatches
   (claim : ProviderQualificationClaim)
@@ -98,7 +100,8 @@ Theorem target_evidence_binds_exact_claim_revision :
     targetEvidenceClaimRevision evidence = targetClaimRevision claim.
 Proof.
   intros claim evidence Hmatches.
-  exact (target_match_claim_revision claim evidence Hmatches).
+  destruct Hmatches as [Hclaim _ _ _].
+  exact Hclaim.
 Qed.
 
 Theorem target_evidence_binds_exact_required_interface :
@@ -107,7 +110,8 @@ Theorem target_evidence_binds_exact_required_interface :
     targetEvidenceRequiredInterface evidence = targetClaimRequiredInterface claim.
 Proof.
   intros claim evidence Hmatches.
-  exact (target_match_required_interface claim evidence Hmatches).
+  destruct Hmatches as [_ Hinterface _ _].
+  exact Hinterface.
 Qed.
 
 Theorem target_evidence_binds_exact_semantic_implementation :
@@ -117,7 +121,8 @@ Theorem target_evidence_binds_exact_semantic_implementation :
       targetClaimSemanticImplementation claim.
 Proof.
   intros claim evidence Hmatches.
-  exact (target_match_semantic_implementation claim evidence Hmatches).
+  destruct Hmatches as [_ _ Himplementation _].
+  exact Himplementation.
 Qed.
 
 Theorem target_evidence_requires_translation_evidence :
@@ -126,7 +131,8 @@ Theorem target_evidence_requires_translation_evidence :
     targetEvidenceHasTranslationEvidence evidence = true.
 Proof.
   intros claim evidence Hmatches.
-  exact (target_match_translation_evidence claim evidence Hmatches).
+  destruct Hmatches as [_ _ _ Htranslation].
+  exact Htranslation.
 Qed.
 
 Theorem cross_target_reuse_requires_semantic_layer :
@@ -135,7 +141,8 @@ Theorem cross_target_reuse_requires_semantic_layer :
     targetClaimLayer claim = SemanticImplementationQualification.
 Proof.
   intros claim priorEvidence newEvidence Hreuse.
-  exact (cross_target_semantic_layer claim priorEvidence newEvidence Hreuse).
+  destruct Hreuse as [Hlayer _ _ _ _].
+  exact Hlayer.
 Qed.
 
 Theorem cross_target_reuse_requires_semantic_subject :
@@ -145,7 +152,8 @@ Theorem cross_target_reuse_requires_semantic_subject :
       SemanticProviderImplementation (targetClaimSemanticImplementation claim).
 Proof.
   intros claim priorEvidence newEvidence Hreuse.
-  exact (cross_target_semantic_subject claim priorEvidence newEvidence Hreuse).
+  destruct Hreuse as [_ Hsubject _ _ _].
+  exact Hsubject.
 Qed.
 
 Theorem cross_target_reuse_preserves_exact_claim_revision :
@@ -155,11 +163,10 @@ Theorem cross_target_reuse_preserves_exact_claim_revision :
     targetEvidenceClaimRevision newEvidence = targetClaimRevision claim.
 Proof.
   intros claim priorEvidence newEvidence Hreuse.
-  split.
-  - apply target_evidence_binds_exact_claim_revision.
-    exact (cross_target_prior_matches claim priorEvidence newEvidence Hreuse).
-  - apply target_evidence_binds_exact_claim_revision.
-    exact (cross_target_new_matches claim priorEvidence newEvidence Hreuse).
+  destruct Hreuse as [_ _ Hprior Hnew _].
+  destruct Hprior as [HpriorClaim _ _ _].
+  destruct Hnew as [HnewClaim _ _ _].
+  split; assumption.
 Qed.
 
 Theorem cross_target_reuse_preserves_exact_interface :
@@ -169,11 +176,10 @@ Theorem cross_target_reuse_preserves_exact_interface :
     targetEvidenceRequiredInterface newEvidence = targetClaimRequiredInterface claim.
 Proof.
   intros claim priorEvidence newEvidence Hreuse.
-  split.
-  - apply target_evidence_binds_exact_required_interface.
-    exact (cross_target_prior_matches claim priorEvidence newEvidence Hreuse).
-  - apply target_evidence_binds_exact_required_interface.
-    exact (cross_target_new_matches claim priorEvidence newEvidence Hreuse).
+  destruct Hreuse as [_ _ Hprior Hnew _].
+  destruct Hprior as [_ HpriorInterface _ _].
+  destruct Hnew as [_ HnewInterface _ _].
+  split; assumption.
 Qed.
 
 Theorem cross_target_reuse_preserves_exact_implementation :
@@ -185,11 +191,10 @@ Theorem cross_target_reuse_preserves_exact_implementation :
       targetClaimSemanticImplementation claim.
 Proof.
   intros claim priorEvidence newEvidence Hreuse.
-  split.
-  - apply target_evidence_binds_exact_semantic_implementation.
-    exact (cross_target_prior_matches claim priorEvidence newEvidence Hreuse).
-  - apply target_evidence_binds_exact_semantic_implementation.
-    exact (cross_target_new_matches claim priorEvidence newEvidence Hreuse).
+  destruct Hreuse as [_ _ Hprior Hnew _].
+  destruct Hprior as [_ _ HpriorImplementation _].
+  destruct Hnew as [_ _ HnewImplementation _].
+  split; assumption.
 Qed.
 
 Theorem cross_target_reuse_requires_fresh_translation_bindings :
@@ -199,11 +204,10 @@ Theorem cross_target_reuse_requires_fresh_translation_bindings :
     targetEvidenceHasTranslationEvidence newEvidence = true.
 Proof.
   intros claim priorEvidence newEvidence Hreuse.
-  split.
-  - apply target_evidence_requires_translation_evidence.
-    exact (cross_target_prior_matches claim priorEvidence newEvidence Hreuse).
-  - apply target_evidence_requires_translation_evidence.
-    exact (cross_target_new_matches claim priorEvidence newEvidence Hreuse).
+  destruct Hreuse as [_ _ Hprior Hnew _].
+  destruct Hprior as [_ _ _ HpriorTranslation].
+  destruct Hnew as [_ _ _ HnewTranslation].
+  split; assumption.
 Qed.
 
 Theorem cross_target_reuse_requires_distinct_profiles :
@@ -213,7 +217,8 @@ Theorem cross_target_reuse_requires_distinct_profiles :
       targetEvidenceTargetProfile newEvidence.
 Proof.
   intros claim priorEvidence newEvidence Hreuse.
-  exact (cross_target_distinct_profiles claim priorEvidence newEvidence Hreuse).
+  destruct Hreuse as [_ _ _ _ Hdistinct].
+  exact Hdistinct.
 Qed.
 
 Theorem same_target_is_not_cross_target_reuse :
@@ -223,7 +228,8 @@ Theorem same_target_is_not_cross_target_reuse :
     ~ CrossTargetSemanticReuse claim priorEvidence newEvidence.
 Proof.
   intros claim priorEvidence newEvidence Hsame Hreuse.
-  apply (cross_target_distinct_profiles claim priorEvidence newEvidence Hreuse).
+  destruct Hreuse as [_ _ _ _ Hdistinct].
+  apply Hdistinct.
   exact Hsame.
 Qed.
 
@@ -233,8 +239,7 @@ Theorem concrete_claim_cannot_masquerade_as_semantic_reuse :
     ~ CrossTargetSemanticReuse claim priorEvidence newEvidence.
 Proof.
   intros claim priorEvidence newEvidence Hconcrete Hreuse.
-  pose proof (cross_target_semantic_layer claim priorEvidence newEvidence Hreuse)
-    as Hsemantic.
+  destruct Hreuse as [Hsemantic _ _ _ _].
   rewrite Hconcrete in Hsemantic.
   discriminate.
 Qed.
@@ -245,17 +250,16 @@ Theorem missing_new_target_translation_evidence_rejects :
     ~ CrossTargetSemanticReuse claim priorEvidence newEvidence.
 Proof.
   intros claim priorEvidence newEvidence Hmissing Hreuse.
-  pose proof (cross_target_new_matches claim priorEvidence newEvidence Hreuse)
-    as Hmatches.
-  pose proof (target_match_translation_evidence claim newEvidence Hmatches)
-    as Hpresent.
-  rewrite Hmissing in Hpresent.
+  destruct Hreuse as [_ _ _ Hnew _].
+  destruct Hnew as [_ _ _ Htranslation].
+  rewrite Hmissing in Htranslation.
   discriminate.
 Qed.
 
 Definition withTargetAssumptionTag
   (tag : TargetAssumptionTag)
-  (evidence : ProviderTargetRealizationEvidence) : ProviderTargetRealizationEvidence :=
+  (evidence : ProviderTargetRealizationEvidence) :
+  ProviderTargetRealizationEvidence :=
   mkProviderTargetRealizationEvidence
     (targetEvidenceRevision evidence)
     (targetEvidenceClaimRevision evidence)
@@ -305,20 +309,19 @@ Record ProviderConcreteAdmissionApplicability : Type :=
     applicabilityExportedSymbols : ExportedSymbolMetadata
   }.
 
-Record SelectedProviderRealization : Type :=
-  mkSelectedProviderRealization {
-    selectedAdmissionRevision : QualificationAdmissionRevision;
-    selectedTargetEvidenceRevision : TargetRealizationEvidenceRevision;
-    selectedRequirementOccurrence : ProviderRequirementOccurrenceKey;
-    selectedInstanceRevision : InstanceRevision;
-    selectedRealizationRevision : RealizationRevision;
-    selectedRequiredInterface : InterfaceRevision;
-    selectedImplementationDefinition : DefinitionRevision;
-    selectedTargetProfile : TargetProfileRevision;
-    selectedArtifact : ArtifactRevision;
-    selectedRuntimeAbi : RuntimeAbiRevision;
-    selectedExportedSymbols : ExportedSymbolMetadata
-  }.
+Record SelectedProviderRealization : Type := mkSelectedProviderRealization {
+  selectedAdmissionRevision : QualificationAdmissionRevision;
+  selectedTargetEvidenceRevision : TargetRealizationEvidenceRevision;
+  selectedRequirementOccurrence : ProviderRequirementOccurrenceKey;
+  selectedInstanceRevision : InstanceRevision;
+  selectedRealizationRevision : RealizationRevision;
+  selectedRequiredInterface : InterfaceRevision;
+  selectedImplementationDefinition : DefinitionRevision;
+  selectedTargetProfile : TargetProfileRevision;
+  selectedArtifact : ArtifactRevision;
+  selectedRuntimeAbi : RuntimeAbiRevision;
+  selectedExportedSymbols : ExportedSymbolMetadata
+}.
 
 Record AdmissionApplicable
   (admission : CheckedProviderQualificationAdmission)
@@ -377,7 +380,8 @@ Theorem applicability_requires_admitted_qualification :
     checkedAdmissionDecision admission = QualificationAdmitted.
 Proof.
   intros admission evidence applicability selected Happlicable.
-  exact (applicable_admission_is_admitted admission evidence applicability selected Happlicable).
+  destruct Happlicable as [Hadmitted _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _].
+  exact Hadmitted.
 Qed.
 
 Theorem applicability_binds_exact_admission_and_claim :
@@ -387,9 +391,8 @@ Theorem applicability_binds_exact_admission_and_claim :
     applicabilityClaimRevision applicability = checkedAdmissionClaimRevision admission.
 Proof.
   intros admission evidence applicability selected Happlicable.
-  split.
-  - exact (applicable_admission_revision_exact admission evidence applicability selected Happlicable).
-  - exact (applicable_claim_revision_exact admission evidence applicability selected Happlicable).
+  destruct Happlicable as [_ Hadmission Hclaim _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _].
+  split; assumption.
 Qed.
 
 Theorem applicability_binds_exact_target_evidence :
@@ -399,9 +402,8 @@ Theorem applicability_binds_exact_target_evidence :
     targetEvidenceClaimRevision evidence = checkedAdmissionClaimRevision admission.
 Proof.
   intros admission evidence applicability selected Happlicable.
-  split.
-  - exact (applicable_target_evidence_revision_exact admission evidence applicability selected Happlicable).
-  - exact (applicable_target_evidence_claim_exact admission evidence applicability selected Happlicable).
+  destruct Happlicable as [_ _ _ Hevidence HevidenceClaim _ _ _ _ _ _ _ _ _ _ _ _ _ _ _].
+  split; assumption.
 Qed.
 
 Theorem applicability_binds_exact_interface_implementation_target :
@@ -413,10 +415,8 @@ Theorem applicability_binds_exact_interface_implementation_target :
     applicabilityTargetProfile applicability = targetEvidenceTargetProfile evidence.
 Proof.
   intros admission evidence applicability selected Happlicable.
-  repeat split.
-  - exact (applicable_interface_matches_evidence admission evidence applicability selected Happlicable).
-  - exact (applicable_implementation_matches_evidence admission evidence applicability selected Happlicable).
-  - exact (applicable_target_matches_evidence admission evidence applicability selected Happlicable).
+  destruct Happlicable as [_ _ _ _ _ Hinterface Himplementation Htarget _ _ _ _ _ _ _ _ _ _ _ _].
+  repeat split; assumption.
 Qed.
 
 Theorem applicability_binds_exact_artifact_and_abi :
@@ -426,9 +426,8 @@ Theorem applicability_binds_exact_artifact_and_abi :
     applicabilityRuntimeAbi applicability = targetEvidenceRuntimeAbi evidence.
 Proof.
   intros admission evidence applicability selected Happlicable.
-  split.
-  - exact (applicable_artifact_matches_evidence admission evidence applicability selected Happlicable).
-  - exact (applicable_abi_matches_evidence admission evidence applicability selected Happlicable).
+  destruct Happlicable as [_ _ _ _ _ _ _ _ Hartifact Habi _ _ _ _ _ _ _ _ _ _].
+  split; assumption.
 Qed.
 
 Theorem selected_realization_binds_exact_lineage :
@@ -439,10 +438,8 @@ Theorem selected_realization_binds_exact_lineage :
     selectedRequirementOccurrence selected = applicabilityRequirementOccurrence applicability.
 Proof.
   intros admission evidence applicability selected Happlicable.
-  repeat split.
-  - exact (selected_admission_exact admission evidence applicability selected Happlicable).
-  - exact (selected_target_evidence_exact admission evidence applicability selected Happlicable).
-  - exact (selected_occurrence_exact admission evidence applicability selected Happlicable).
+  destruct Happlicable as [_ _ _ _ _ _ _ _ _ _ Hadmission Hevidence Hoccurrence _ _ _ _ _ _ _].
+  repeat split; assumption.
 Qed.
 
 Theorem selected_realization_binds_exact_architecture :
@@ -452,9 +449,8 @@ Theorem selected_realization_binds_exact_architecture :
     selectedRealizationRevision selected = applicabilityRealizationRevision applicability.
 Proof.
   intros admission evidence applicability selected Happlicable.
-  split.
-  - exact (selected_instance_exact admission evidence applicability selected Happlicable).
-  - exact (selected_realization_exact admission evidence applicability selected Happlicable).
+  destruct Happlicable as [_ _ _ _ _ _ _ _ _ _ _ _ _ Hinstance Hrealization _ _ _ _ _].
+  split; assumption.
 Qed.
 
 Theorem selected_realization_binds_exact_provider_target :
@@ -466,10 +462,8 @@ Theorem selected_realization_binds_exact_provider_target :
     selectedTargetProfile selected = applicabilityTargetProfile applicability.
 Proof.
   intros admission evidence applicability selected Happlicable.
-  repeat split.
-  - exact (selected_interface_exact admission evidence applicability selected Happlicable).
-  - exact (selected_implementation_exact admission evidence applicability selected Happlicable).
-  - exact (selected_target_exact admission evidence applicability selected Happlicable).
+  destruct Happlicable as [_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ Hinterface Himplementation Htarget _ _].
+  repeat split; assumption.
 Qed.
 
 Theorem selected_realization_binds_exact_artifact_abi :
@@ -479,9 +473,8 @@ Theorem selected_realization_binds_exact_artifact_abi :
     selectedRuntimeAbi selected = applicabilityRuntimeAbi applicability.
 Proof.
   intros admission evidence applicability selected Happlicable.
-  split.
-  - exact (selected_artifact_exact admission evidence applicability selected Happlicable).
-  - exact (selected_runtime_abi_exact admission evidence applicability selected Happlicable).
+  destruct Happlicable as [_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ Hartifact Habi].
+  split; assumption.
 Qed.
 
 Theorem rejected_admission_cannot_justify_realization :
@@ -490,17 +483,15 @@ Theorem rejected_admission_cannot_justify_realization :
     ~ AdmissionApplicable admission evidence applicability selected.
 Proof.
   intros admission evidence applicability selected Hrejected Happlicable.
-  pose proof
-    (applicable_admission_is_admitted admission evidence applicability selected Happlicable)
-    as Hadmitted.
+  destruct Happlicable as [Hadmitted _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _].
   rewrite Hrejected in Hadmitted.
   discriminate.
 Qed.
 
 Definition withApplicabilitySymbols
   (symbols : ExportedSymbolMetadata)
-  (applicability : ProviderConcreteAdmissionApplicability)
-  : ProviderConcreteAdmissionApplicability :=
+  (applicability : ProviderConcreteAdmissionApplicability) :
+  ProviderConcreteAdmissionApplicability :=
   mkProviderConcreteAdmissionApplicability
     (applicabilityAdmissionRevision applicability)
     (applicabilityClaimRevision applicability)
@@ -540,6 +531,10 @@ Theorem exported_symbol_rename_is_nonsemantic_to_applicability :
       (withSelectedSymbols selectedSymbols selected).
 Proof.
   intros admission evidence applicability selected applicabilitySymbols selectedSymbols Happlicable.
-  destruct Happlicable.
+  destruct Happlicable as
+    [Hadmitted Hadmission Hclaim Hevidence HevidenceClaim Hinterface Himplementation
+     Htarget Hartifact Habi HselectedAdmission HselectedEvidence Hoccurrence Hinstance
+     Hrealization HselectedInterface HselectedImplementation HselectedTarget
+     HselectedArtifact HselectedAbi].
   constructor; simpl; assumption.
 Qed.
