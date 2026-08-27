@@ -7,7 +7,7 @@ From Phil.Core Require Import ProviderQualification.
   PHIL-PROV-EVIDENCE-001 — bounded PROV-010 evidence-producer competence.
 
   The normalized model keeps temporary observation identity separate from the
-  stable semantic subject carried by persistent evidence.  Exact proposition
+  stable semantic subject carried by persistent evidence. Exact proposition
   family/parameters, exact stable subject, exact validity contract, and an
   admissible observation-to-subject mapping are all required independently.
 *)
@@ -131,7 +131,13 @@ Proof.
     as [correspondence [implementationOperation
       [Hcorrespondence [Hentry Hqualified]]]].
   exists operationContract, correspondence, implementationOperation.
-  repeat split; assumption.
+  split.
+  - exact Hoperation.
+  - split.
+    + exact Hcorrespondence.
+    + split.
+      * exact Hentry.
+      * exact Hqualified.
 Qed.
 
 Theorem competence_requires_exact_evidence_operation :
@@ -283,7 +289,8 @@ Proof.
 Qed.
 
 Theorem temporary_observation_identity_is_nonsemantic_to_proposition :
-  forall family parameters subject firstObservation secondObservation,
+  forall family parameters subject
+      (firstObservation secondObservation : ProviderEvidenceObservation),
     instantiateProviderEvidenceProposition family parameters subject =
     instantiateProviderEvidenceProposition family parameters subject.
 Proof.
