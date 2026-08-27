@@ -224,7 +224,8 @@ Proof.
   intros left right.
   destruct left as [leftPermission | leftInterface | leftProposition];
     destruct right as [rightPermission | rightInterface | rightProposition]; cbn.
-  - apply structural_permission_eqb_true_iff.
+  - destruct leftPermission, rightPermission; cbn; split; intro H;
+      try reflexivity; discriminate.
   - split; intro H; discriminate.
   - split; intro H; discriminate.
   - split; intro H; discriminate.
