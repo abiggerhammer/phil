@@ -1,0 +1,129 @@
+name: Phase 1 Generic Identity Implementation Refinement
+
+on:
+  pull_request:
+    paths:
+      - 'proof/Phil/Core/GenericIdentity.v'
+      - 'proof/Phil/Core/GenericInstantiationDomainImplementation.v'
+      - 'proof/Phil/Core/GenericIdentityDomainImplementation.v'
+      - 'proof/Phil/Core/GenericIdentityEqualityImplementation.v'
+      - 'proof/Phil/Core/GenericIdentityEqualityImplementationExtraction.v'
+      - 'src/GenericInstantiationDomainKernel.hs'
+      - 'src/GenericIdentityEqualityKernel.hs'
+      - 'src/Phil/Core/Generic.hs'
+      - 'test/Phase1GenericIdentityMain.hs'
+      - 'test/Phase1GenericIdentityEqualityBindingMain.hs'
+      - 'docs/phase-1/generic-identity-implementation-refinement-v1.md'
+      - '.github/workflows/phase1-generic-identity-implementation-refinement.yml'
+  push:
+    branches: [main]
+    paths:
+      - 'proof/Phil/Core/GenericIdentity.v'
+      - 'proof/Phil/Core/GenericInstantiationDomainImplementation.v'
+      - 'proof/Phil/Core/GenericIdentityDomainImplementation.v'
+      - 'proof/Phil/Core/GenericIdentityEqualityImplementation.v'
+      - 'proof/Phil/Core/GenericIdentityEqualityImplementationExtraction.v'
+      - 'src/GenericInstantiationDomainKernel.hs'
+      - 'src/GenericIdentityEqualityKernel.hs'
+      - 'src/Phil/Core/Generic.hs'
+      - 'test/Phase1GenericIdentityMain.hs'
+      - 'test/Phase1GenericIdentityEqualityBindingMain.hs'
+      - 'docs/phase-1/generic-identity-implementation-refinement-v1.md'
+      - '.github/workflows/phase1-generic-identity-implementation-refinement.yml'
+
+permissions:
+  contents: read
+
+jobs:
+  rocq-generic-identity-implementation-refinement:
+    runs-on: ubuntu-latest
+    container:
+      image: rocq/rocq-prover:9.2.0
+      options: --user root
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Compile certified GEN-ID implementation correspondence
+        shell: bash
+        run: |
+          set -euo pipefail
+          export PATH="/home/rocq/.opam/${COMPILER}/bin:$PATH"
+          rocq c -Q proof/Phil Phil proof/Phil/Core/GenericStructural.v
+          rocq c -Q proof/Phil Phil proof/Phil/Core/GenericRequirements.v
+          rocq c -Q proof/Phil Phil proof/Phil/Core/GenericInstantiation.v
+          rocq c -Q proof/Phil Phil proof/Phil/Core/GenericInstantiationDomainImplementation.v
+          rocq c -Q proof/Phil Phil proof/Phil/Core/GenericIdentity.v
+          rocq c -Q proof/Phil Phil proof/Phil/Core/GenericIdentityDomainImplementation.v
+          rocq c -Q proof/Phil Phil proof/Phil/Core/GenericIdentityEqualityImplementation.v
+
+      - name: Fresh-extract and compare generic identity equality kernel
+        shell: bash
+        run: |
+          set -euo pipefail
+          export PATH="/home/rocq/.opam/${COMPILER}/bin:$PATH"
+          rm -f GenericIdentityEqualityKernel.hs
+          rocq c -Q proof/Phil Phil proof/Phil/Core/GenericIdentityEqualityImplementationExtraction.v
+          test -s GenericIdentityEqualityKernel.hs
+          cmp GenericIdentityEqualityKernel.hs src/GenericIdentityEqualityKernel.hs
+          sha256sum GenericIdentityEqualityKernel.hs
+          mkdir -p generic-identity-implementation-refinement-proof
+          cp \
+            proof/Phil/Core/GenericIdentity.v \
+            proof/Phil/Core/GenericIdentityDomainImplementation.v \
+            proof/Phil/Core/GenericIdentityDomainImplementation.vo \
+            proof/Phil/Core/GenericIdentityEqualityImplementation.v \
+            proof/Phil/Core/GenericIdentityEqualityImplementation.vo \
+            GenericIdentityEqualityKernel.hs \
+            generic-identity-implementation-refinement-proof/
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: rocq-generic-identity-implementation-refinement
+          path: generic-identity-implementation-refinement-proof
+          if-no-files-found: error
+
+  verify-generic-identity-production-binding:
+    needs: rocq-generic-identity-implementation-refinement
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: haskell-actions/setup@v2
+        with:
+          ghc-version: '9.6.7'
+          cabal-version: 'latest'
+
+      - name: Typecheck exact kernels and bound GEN-ID production path
+        run: |
+          set -euo pipefail
+          ghc -isrc -Wall -Werror -fno-code src/GenericInstantiationDomainKernel.hs
+          ghc -isrc -Wall -Werror -fno-code src/GenericIdentityEqualityKernel.hs
+          cabal build exe:phil-certify-core-scalar --ghc-options=-Werror
+          cabal exec -- ghc -isrc -Wall -Werror -fno-code \
+            src/Phil/Core/Generic.hs \
+            test/Phase1GenericIdentityMain.hs \
+            test/Phase1GenericIdentityEqualityBindingMain.hs
+
+      - name: Run bound GEN-009 and GEN-010 correspondence corpora
+        run: |
+          set -euo pipefail
+          cabal exec -- runghc -isrc test/Phase1GenericIdentityMain.hs
+          cabal exec -- runghc -isrc test/Phase1GenericIdentityEqualityBindingMain.hs
+
+      - name: Record production closeout identities
+        run: |
+          set -euo pipefail
+          mkdir -p generic-identity-production-binding
+          sha256sum \
+            src/GenericInstantiationDomainKernel.hs \
+            src/GenericIdentityEqualityKernel.hs \
+            src/Phil/Core/Generic.hs \
+            test/Phase1GenericIdentityMain.hs \
+            test/Phase1GenericIdentityEqualityBindingMain.hs \
+            > generic-identity-production-binding/PHIL-GEN-ID-IMPL-001.correspondence.sha256
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: phil-generic-identity-production-binding
+          path: generic-identity-production-binding
+          if-no-files-found: error
