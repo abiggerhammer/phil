@@ -101,7 +101,9 @@ jobs:
           cabal build exe:phil-certify-core-scalar --ghc-options=-Werror
           cabal exec -- ghc -isrc -Wall -Werror -fno-code \
             src/Phil/Core/Generic.hs \
-            test/Phase1GenericIdentityMain.hs \
+            test/Phase1GenericIdentityMain.hs
+          cabal exec -- ghc -isrc -Wall -Werror -fno-code \
+            src/Phil/Core/Generic.hs \
             test/Phase1GenericIdentityEqualityBindingMain.hs
 
       - name: Run bound GEN-009 and GEN-010 correspondence corpora
