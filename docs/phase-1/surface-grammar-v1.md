@@ -59,6 +59,9 @@ Phase 1 v1 fixes the following surface conventions:
 - callable contracts state latent may-effects with an `effects ...;` clause;
 - callable contracts may state branch-sensitive resource/callee postconditions with `outcome T { ... }` blocks;
 - callee replacement names its exact successor contract with `replace with ...`, plus an explicit state expression where required;
+- ordinary owning bindings inherit structural mode from their checked type rather than carrying a binder-local mode annotation;
+- records and sums may use a declaration-level `mode unrestricted|affine|linear` only to state a mode at least as restrictive as the minimum derived from owned contents;
+- capability declarations state `mode unrestricted|affine|linear` explicitly because authority and structural copy/drop discipline are distinct semantic facts;
 - refinement types use `{x : T | P}`;
 - non-definitional equality transport uses `transport value to T using evidence`;
 - native finite-collection relations use infix `in` and `disjoint` propositions;
@@ -71,6 +74,60 @@ Phase 1 v1 fixes the following surface conventions:
 - Phase 0 boundary/session term forms remain syntactically available, including term-level `offer`, while Phase 1 adds functions/closures, records/sums, `if`, `match`, explicit join-state annotations, and loop state/invariants.
 
 These choices freeze spelling and punctuation for Phase 1 v1. They do not freeze a formatter or whitespace layout policy.
+
+## Structural mode syntax
+
+Structural mode is a checked property of a value type/resource contract. Once elaboration establishes that an owning binding has type `T`, the binding enters the unrestricted, affine, or linear context according to `mode(T)`. Term parameters, `let` bindings, and owning pattern binders therefore do not carry independent `linear`/`affine` qualifiers.
+
+For transparent records and sums, omission of a mode clause means ordinary ADR-023 derivation from owned contents. A declaration may explicitly strengthen that result:
+
+```phil
+record FireOnceToken mode linear {
+  id : U64
+}
+
+data MaybeLease mode affine =
+    NoLease
+  | LeaseId(U64);
+```
+
+If `d` is the minimum mode derived from owned contents and `m` is the explicit declared mode, semantic checking requires `d <= m` under:
+
+```text
+unrestricted < affine < linear
+```
+
+and the checked type mode is `m`. The grammar intentionally still parses a declaration whose explicit mode is too weak; semantic checking rejects it. For example:
+
+```phil
+record BadWrapper mode unrestricted {
+  payload : OwnedBytes[n]
+}
+```
+
+cannot semantically launder a linear owned field into an unrestricted wrapper.
+
+Capabilities do not have transparent owned fields from which their copy/drop discipline can be derived. ADR-014 also makes their authority contract orthogonal to structural mode, so a capability declaration states the mode explicitly:
+
+```phil
+capability BlobRead mode unrestricted {
+  permits storage.Read;
+}
+
+capability Lease mode affine {
+  permits storage.Use;
+}
+
+capability LifecycleToken mode linear {
+  permits lifecycle.Finish;
+}
+```
+
+The capability mode governs possession. It does not by itself say that exercising the authority is one-shot; consuming operation/state-transition semantics remain separate.
+
+Transparent `type` aliases do not accept a `mode` clause and inherit the aliased type's mode. Generic aggregate and closure modes remain derived from admitted parameter/capture modes. Shared loans remain scoped non-owning relations, not a fourth structural mode.
+
+The detailed competence boundary and rationale are recorded in `structural-mode-surface-reconciliation-v1.md`.
 
 ## Refinement, relation, and transport syntax
 
@@ -180,7 +237,7 @@ The branch set, payload binders, exact protocol instance/role/session state, gua
 
 ## Semantic rejection remains competent
 
-The grammar intentionally accepts some forms whose legality depends on semantic information. Examples include whether a named static argument denotes a type or value in the expected parameter position, whether an unsigned width is supported, whether a refinement proposition is sort-correct, whether transport evidence proves the exact required relation, whether finite-collection relation operands have compatible sorts, whether a callable outcome residue matches the public outcome contract, whether a replacement callee names a compatible exact successor, whether a protocol's two roles are distinct and dual, whether a provider implementation satisfies its exact contract revision, and whether a target-independent architecture binding is valid.
+The grammar intentionally accepts some forms whose legality depends on semantic information. Examples include whether a named static argument denotes a type or value in the expected parameter position, whether an unsigned width is supported, whether an explicit record/sum mode is at least as restrictive as the derived owned-content minimum, whether a declared capability mode is valid for the checked capability interface, whether a refinement proposition is sort-correct, whether transport evidence proves the exact required relation, whether finite-collection relation operands have compatible sorts, whether a callable outcome residue matches the public outcome contract, whether a replacement callee names a compatible exact successor, whether a protocol's two roles are distinct and dual, whether a provider implementation satisfies its exact contract revision, and whether a target-independent architecture binding is valid.
 
 Those cases belong to elaboration/checking, not to ad hoc parser rejection. Conversely, malformed concrete syntax is rejected by the parser before semantic checking begins.
 
@@ -188,7 +245,7 @@ Those cases belong to elaboration/checking, not to ad hoc parser rejection. Conv
 
 “v1” names this Phase 1 concrete-syntax epoch. Git history and the embedded source SHA-256 identify exact grammar revisions within it. The epoch may still receive deliberate Phase 1 revisions before the canonical source front end is frozen; each such revision changes the exact grammar digest and therefore the identity to which parser-conformance evidence must bind.
 
-The type-system reconciliation revision adds refinement types, explicit transport, native finite membership/disjointness, branch-sensitive callable outcome residues, exact replacement-callee syntax, and the previously omitted term-level `offer`. These are surface realizations of already-admitted semantics rather than a new semantic epoch.
+The type-system reconciliation revision adds refinement types, explicit transport, native finite membership/disjointness, branch-sensitive callable outcome residues, exact replacement-callee syntax, and the previously omitted term-level `offer`. The structural-mode reconciliation adds declaration-level mode spelling for stricter nominal records/sums and explicit capability possession modes while preserving type-derived mode for ordinary bindings. These are surface realizations of already-admitted semantics rather than new semantic epochs.
 
 A future incompatible concrete-syntax change must be explicit rather than silently changing parser behavior. Whether such a change becomes a new Phase 1 grammar revision or a later language-surface version is a compatibility decision, not parser discretion.
 
