@@ -350,6 +350,19 @@ Definition withReplacementLayer
     (replacementSideAdmitted side)
     (replacementSideHasEvidence side).
 
+Lemma valid_evidence_reuse_survives_layer_change :
+  forall prior replacement reuse priorLayer replacementLayer,
+    ValidEvidenceReuse prior replacement reuse ->
+    ValidEvidenceReuse
+      (withReplacementLayer priorLayer prior)
+      (withReplacementLayer replacementLayer replacement)
+      reuse.
+Proof.
+  intros prior replacement reuse priorLayer replacementLayer Hreuse.
+  destruct Hreuse as [Hprior Hnew HpriorClaim HnewClaim Hscope].
+  constructor; simpl; assumption.
+Qed.
+
 Theorem qualification_layer_is_not_a_replacement_invariant :
   forall prior replacement reuseWitness priorLayer replacementLayer,
     ValidProviderReplacement prior replacement reuseWitness ->
@@ -362,11 +375,20 @@ Proof.
   destruct Hvalid as
     [HpriorAdmitted HnewAdmitted Hinterface Hoccurrence Hinstance Hsubject
      Hrealization Hclaim Hevidence Hadmission Hshared Hreuse].
-  constructor; simpl in *; try assumption.
+  constructor; simpl; try assumption.
   - intros reference Hshared'.
-    apply Hshared.
-    exact Hshared'.
+    assert (HsharedOriginal : SharedEvidence prior replacement reference).
+    { unfold SharedEvidence in *; simpl in Hshared'. exact Hshared'. }
+    destruct (Hshared reference HsharedOriginal) as
+      [reuse [Hlookup [Href HvalidReuse]]].
+    exists reuse.
+    split; [exact Hlookup |].
+    split; [exact Href |].
+    apply valid_evidence_reuse_survives_layer_change.
+    exact HvalidReuse.
   - intros reference reuse Hlookup.
-    apply Hreuse.
-    exact Hlookup.
+    destruct (Hreuse reference reuse Hlookup) as [Href HvalidReuse].
+    split; [exact Href |].
+    apply valid_evidence_reuse_survives_layer_change.
+    exact HvalidReuse.
 Qed.
