@@ -35,3 +35,5 @@ jobs:
         run: cabal exec -- runghc -Wall -Werror -isrc test/Phase1ConservativeSumModeMain.hs
       - name: DATA-008 consuming sum match conformance
         run: cabal exec -- runghc -Wall -Werror -isrc test/Phase1ConsumingSumMatchMain.hs
+      - name: DATA-009 generic mode propagation conformance
+        run: cabal exec -- runghc -Wall -Werror -isrc test/Phase1GenericModePropagationMain.hs
