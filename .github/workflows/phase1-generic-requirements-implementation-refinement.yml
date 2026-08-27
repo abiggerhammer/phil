@@ -7,6 +7,7 @@ on:
       - 'proof/Phil/Core/GenericRequirementsImplementation.v'
       - 'proof/Phil/Core/GenericRequirementsImplementationExtraction.v'
       - 'docs/phase-1/generic-requirements-implementation-refinement-v1.md'
+      - 'src/GenericRequirementsKernel.hs'
       - 'src/Phil/Core/Generic.hs'
       - 'test/Phase1GenericRequirementsMain.hs'
       - '.github/workflows/phase1-generic-requirements-implementation-refinement.yml'
@@ -17,6 +18,7 @@ on:
       - 'proof/Phil/Core/GenericRequirementsImplementation.v'
       - 'proof/Phil/Core/GenericRequirementsImplementationExtraction.v'
       - 'docs/phase-1/generic-requirements-implementation-refinement-v1.md'
+      - 'src/GenericRequirementsKernel.hs'
       - 'src/Phil/Core/Generic.hs'
       - 'test/Phase1GenericRequirementsMain.hs'
       - '.github/workflows/phase1-generic-requirements-implementation-refinement.yml'
@@ -40,7 +42,7 @@ jobs:
           rocq c -Q proof/Phil Phil proof/Phil/Core/GenericStructural.v
           rocq c -Q proof/Phil Phil proof/Phil/Core/GenericRequirements.v
           rocq c -Q proof/Phil Phil proof/Phil/Core/GenericRequirementsImplementation.v
-      - name: Extract generic requirements kernel
+      - name: Regenerate and bind generic requirements kernel
         shell: bash
         run: |
           set -euo pipefail
@@ -51,7 +53,12 @@ jobs:
           grep -q '^module GenericRequirementsKernel where' GenericRequirementsKernel.hs
           grep -q '^requirementsCover ::' GenericRequirementsKernel.hs
           grep -q '^decideGenericRequirementsCoverage ::' GenericRequirementsKernel.hs
-          sha256sum GenericRequirementsKernel.hs
+          if ! cmp -s GenericRequirementsKernel.hs src/GenericRequirementsKernel.hs; then
+            echo 'checked-in generic requirements kernel differs from fresh Rocq extraction' >&2
+            diff -u src/GenericRequirementsKernel.hs GenericRequirementsKernel.hs || true
+            exit 1
+          fi
+          sha256sum GenericRequirementsKernel.hs src/GenericRequirementsKernel.hs
           mkdir -p generic-requirements-implementation-refinement-proof
           cp \
             proof/Phil/Core/GenericRequirements.v \
@@ -80,16 +87,18 @@ jobs:
         with:
           name: rocq-generic-requirements-implementation-refinement
           path: generic-requirements-implementation-refinement-proof
-      - name: Typecheck extracted and production GEN-004-006 paths
+      - name: Typecheck extracted, checked-in, and production GEN-004-006 paths
         run: |
           set -euo pipefail
-          ghc -Wall -Werror -fno-code \
-            generic-requirements-implementation-refinement-proof/GenericRequirementsKernel.hs
+          cmp -s \
+            generic-requirements-implementation-refinement-proof/GenericRequirementsKernel.hs \
+            src/GenericRequirementsKernel.hs
+          ghc -Wall -Werror -fno-code src/GenericRequirementsKernel.hs
           cabal build exe:phil-certify-core-scalar --ghc-options=-Werror
           cabal exec -- ghc -isrc -Wall -Werror -fno-code \
             src/Phil/Core/Generic.hs \
             test/Phase1GenericRequirementsMain.hs
-      - name: Re-run GEN-004-006 production correspondence corpus
+      - name: Exercise production requirements path through extracted kernel
         run: |
           set -euo pipefail
           cabal exec -- runghc -isrc test/Phase1GenericRequirementsMain.hs
