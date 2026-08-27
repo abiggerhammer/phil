@@ -23,3 +23,5 @@ jobs:
         run: cabal exec -- runghc -Wall -Werror -isrc test/Phase1CompleteRecognitionMain.hs
       - name: BND-002 trailing bytes inside frame rejection conformance
         run: cabal exec -- runghc -Wall -Werror -isrc test/Phase1TrailingBytesMain.hs
+      - name: BND-003 malformed input creates no success artifacts
+        run: cabal exec -- runghc -Wall -Werror -isrc test/Phase1MalformedRecognitionMain.hs
