@@ -44,7 +44,7 @@ jobs:
           rocq c -Q proof/Phil Phil proof/Phil/Core/CallableRefinement.v
           rocq c -Q proof/Phil Phil proof/Phil/Core/CallableLowering.v
           rocq c -Q proof/Phil Phil proof/Phil/Core/CallableLoweringImplementation.v
-      - name: Extract CALL-016 decision kernel
+      - name: Regenerate and bind proved CALL-016 kernel
         shell: bash
         run: |
           set -euo pipefail
@@ -54,6 +54,12 @@ jobs:
           test -s CallableLoweringKernel.hs
           grep -q '^module CallableLoweringKernel where' CallableLoweringKernel.hs
           grep -q '^decideCallableLowering ::' CallableLoweringKernel.hs
+          if ! cmp -s CallableLoweringKernel.hs src/CallableLoweringKernel.hs; then
+            echo 'checked-in CALL-016 kernel differs from fresh Rocq extraction' >&2
+            diff -u src/CallableLoweringKernel.hs CallableLoweringKernel.hs || true
+            exit 1
+          fi
+          sha256sum CallableLoweringKernel.hs src/CallableLoweringKernel.hs
           mkdir -p callable-lowering-implementation-refinement-proof
           cp \
             proof/Phil/Core/CallableLoweringImplementation.v \
@@ -61,14 +67,13 @@ jobs:
             proof/Phil/Core/CallableLoweringImplementationExtraction.v \
             CallableLoweringKernel.hs \
             callable-lowering-implementation-refinement-proof/
-          sha256sum callable-lowering-implementation-refinement-proof/*
       - uses: actions/upload-artifact@v4
         with:
           name: rocq-callable-lowering-implementation-refinement
           path: callable-lowering-implementation-refinement-proof
           if-no-files-found: error
 
-  verify-extracted-callable-lowering-kernel:
+  verify-production-callable-lowering:
     needs: rocq-callable-lowering-implementation-refinement
     runs-on: ubuntu-latest
     steps:
@@ -81,13 +86,16 @@ jobs:
         with:
           name: rocq-callable-lowering-implementation-refinement
           path: callable-lowering-implementation-refinement-proof
-      - name: Typecheck extracted lowering kernel
+      - name: Typecheck extracted, checked-in, and production CALL-016 path
         run: |
           set -euo pipefail
-          ghc -Wall -Werror -fno-code \
-            callable-lowering-implementation-refinement-proof/CallableLoweringKernel.hs
-      - name: Preserve existing CALL-016 behavior before strengthened production binding
-        run: |
-          set -euo pipefail
+          cmp -s \
+            callable-lowering-implementation-refinement-proof/CallableLoweringKernel.hs \
+            src/CallableLoweringKernel.hs
+          ghc -Wall -Werror -fno-code src/CallableLoweringKernel.hs
           cabal build exe:phil-certify-core-scalar --ghc-options=-Werror
+          cabal exec -- ghc -isrc -Wall -Werror -fno-code src/Phil/Systems/CallableLowering.hs
+      - name: Exercise production CALL-016 path through extracted kernel
+        run: |
+          set -euo pipefail
           cabal exec -- runghc -isrc test/Phase1CallableLoweringMain.hs

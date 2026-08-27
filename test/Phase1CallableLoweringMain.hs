@@ -21,6 +21,7 @@ main = do
     , test "CALL-016 representation identity is nonsemantic" representationIdentityIsNonsemantic
     , test "CALL-016 representation choice is nonsemantic" representationChoiceIsNonsemantic
     , test "CALL-016 raw pointer coincidence does not repair contract mismatch" pointerCannotRepairContractMismatch
+    , test "CALL-016 callable machine shape is preserved" machineShapeMismatchRejects
     , test "CALL-016 callable occurrence identity is preserved" occurrenceMismatchRejects
     , test "CALL-016 closure structural mode is preserved" structuralModeMismatchRejects
     , test "CALL-016 captured subject and authority relation is preserved" captureSubjectMismatchRejects
@@ -75,6 +76,15 @@ pointerCannotRepairContractMismatch =
       assert (expected == contractRevision) "wrong expected contract revision"
       assert (actual == InterfaceRevision "callable.other.v1") "wrong actual contract revision"
     other -> Left ("raw pointer coincidence repaired contract mismatch: " <> show other)
+
+machineShapeMismatchRejects :: Either String ()
+machineShapeMismatchRejects =
+  case checkCallableLoweringCorrespondence sourceFacts
+      (targetFacts { targetCallableMachineShape = otherMachineShape }) accounting of
+    Left (CallableLoweringMachineShapeMismatch expected actual) -> do
+      assert (expected == machineShape) "wrong expected callable machine shape"
+      assert (actual == otherMachineShape) "wrong actual callable machine shape"
+    other -> Left ("callable machine-shape mismatch did not reject: " <> show other)
 
 occurrenceMismatchRejects :: Either String ()
 occurrenceMismatchRejects =
@@ -261,6 +271,10 @@ assertAccepts source target account =
 contractRevision :: InterfaceRevision
 contractRevision = InterfaceRevision "callable.read-closure.v1"
 
+machineShape, otherMachineShape :: CallableMachineShape
+machineShape = CallableMachineShape "fn(blob)->bytes"
+otherMachineShape = CallableMachineShape "fn(blob)->status"
+
 callableOccurrence, otherCallableOccurrence :: CallableOccurrenceKey
 callableOccurrence = CallableOccurrenceKey "closure.read.001"
 otherCallableOccurrence = CallableOccurrenceKey "closure.read.002"
@@ -304,6 +318,7 @@ sourceCaptures = Map.singleton capturedOwner capturedOwnerSemantic
 sourceFacts :: SourceCallableLoweringFacts
 sourceFacts = SourceCallableLoweringFacts
   { sourceCallableContractRevision = contractRevision
+  , sourceCallableMachineShape = machineShape
   , sourceCallableOccurrence = Just callableOccurrence
   , sourceCallableStructuralMode = Linear
   , sourceCallableCaptures = sourceCaptures
@@ -333,6 +348,7 @@ targetFacts = TargetCallableLoweringFacts
   { targetCallableRepresentation = CodePointerEnvironment
   , targetCallableRepresentationIdentity = Just "ptr:0x1234"
   , targetCallableContractRevision = contractRevision
+  , targetCallableMachineShape = machineShape
   , targetCallableOccurrence = Just callableOccurrence
   , targetCallableStructuralMode = Linear
   , targetCallableCaptures = sourceCaptures

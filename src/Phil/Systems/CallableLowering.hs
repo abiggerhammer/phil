@@ -11,6 +11,7 @@ module Phil.Systems.CallableLowering
   , checkCallableLoweringCorrespondence
   ) where
 
+import qualified CallableLoweringKernel as Kernel
 import qualified Data.Map.Strict as Map
 import qualified Data.Set as Set
 import Data.Text (Text)
@@ -23,6 +24,7 @@ import Phil.Core.Callable
 import Phil.Core.CallableRefinement
   ( CallableAuthorityRequirement
   , CallableFailure
+  , CallableMachineShape
   )
 import Phil.Core.CallableScope (LoanScopeKey)
 import Phil.Core.Static (InterfaceRevision)
@@ -52,8 +54,11 @@ data CallableCaptureSemantic = CallableCaptureSemantic
   deriving (Eq, Ord, Show)
 
 -- | Source callable facts that CALL-016 requires target lowering to preserve.
+-- Machine shape is an explicit semantic coordinate: it was present in the
+-- certified CALL-016 model and is now carried by production as well.
 data SourceCallableLoweringFacts = SourceCallableLoweringFacts
   { sourceCallableContractRevision :: InterfaceRevision
+  , sourceCallableMachineShape :: CallableMachineShape
   , sourceCallableOccurrence :: Maybe CallableOccurrenceKey
   , sourceCallableStructuralMode :: Mode
   , sourceCallableCaptures
@@ -76,6 +81,7 @@ data TargetCallableLoweringFacts = TargetCallableLoweringFacts
   { targetCallableRepresentation :: TargetCallableRepresentation
   , targetCallableRepresentationIdentity :: Maybe Text
   , targetCallableContractRevision :: InterfaceRevision
+  , targetCallableMachineShape :: CallableMachineShape
   , targetCallableOccurrence :: Maybe CallableOccurrenceKey
   , targetCallableStructuralMode :: Mode
   , targetCallableCaptures
@@ -119,6 +125,8 @@ data CheckedCallableLowering = CheckedCallableLowering
 data CallableLoweringError
   = CallableLoweringContractRevisionMismatch
       InterfaceRevision InterfaceRevision
+  | CallableLoweringMachineShapeMismatch
+      CallableMachineShape CallableMachineShape
   | CallableLoweringOccurrenceMismatch
       (Maybe CallableOccurrenceKey) (Maybe CallableOccurrenceKey)
   | CallableLoweringStructuralModeMismatch Mode Mode
@@ -148,80 +156,193 @@ data CallableLoweringError
   | CallableLoweringCarrierAccountingMismatch
       (Set.Set Text) (Set.Set Text)
   | CallableLoweringCostAccountingMismatch CostShape CostShape
+  | CallableLoweringRepresentationBridgeMismatch Text
   deriving (Eq, Ord, Show)
 
--- | Verify CALL-016 at the StageContract boundary. Representation choice and
--- representation identity are intentionally unconstrained; all source semantic
--- facts must remain exact in this first Phase 1 relation, while every
--- target-introduced realization consequence must be explicitly accounted.
+-- | Verify CALL-016 at the StageContract boundary. The Rocq-extracted kernel
+-- owns the ordered acceptance decision over all sixteen exact coordinates.
+-- Representation choice and representation identity are deliberately absent
+-- from that projection. Haskell reconstructs diagnostics and can only fail
+-- closed if a kernel decision disagrees with its concrete equality facts.
 checkCallableLoweringCorrespondence
   :: SourceCallableLoweringFacts
   -> TargetCallableLoweringFacts
   -> CallableRealizationAccounting
   -> Either CallableLoweringError CheckedCallableLowering
-checkCallableLoweringCorrespondence source target accounting
-  | targetCallableContractRevision target /= sourceCallableContractRevision source =
-      Left (CallableLoweringContractRevisionMismatch
-        (sourceCallableContractRevision source)
-        (targetCallableContractRevision target))
-  | targetCallableOccurrence target /= sourceCallableOccurrence source =
-      Left (CallableLoweringOccurrenceMismatch
-        (sourceCallableOccurrence source)
-        (targetCallableOccurrence target))
-  | targetCallableStructuralMode target /= sourceCallableStructuralMode source =
-      Left (CallableLoweringStructuralModeMismatch
-        (sourceCallableStructuralMode source)
-        (targetCallableStructuralMode target))
-  | targetCallableCaptures target /= sourceCallableCaptures source =
-      Left (CallableLoweringCaptureMismatch
-        (sourceCallableCaptures source)
-        (targetCallableCaptures target))
-  | targetCallableCalleeTransition target /= sourceCallableCalleeTransition source =
-      Left (CallableLoweringCalleeTransitionMismatch
-        (sourceCallableCalleeTransition source)
-        (targetCallableCalleeTransition target))
-  | targetCallableCallerAuthority target /= sourceCallableCallerAuthority source =
-      Left (CallableLoweringCallerAuthorityMismatch
-        (sourceCallableCallerAuthority source)
-        (targetCallableCallerAuthority target))
-  | targetCallableInternalAuthority target /= sourceCallableInternalAuthority source =
-      Left (CallableLoweringInternalAuthorityMismatch
-        (sourceCallableInternalAuthority source)
-        (targetCallableInternalAuthority target))
-  | targetCallableEffectBound target /= sourceCallableEffectBound source =
-      Left (CallableLoweringEffectBoundMismatch
-        (sourceCallableEffectBound source)
-        (targetCallableEffectBound target))
-  | targetCallableFailures target /= sourceCallableFailures source =
-      Left (CallableLoweringFailureMismatch
-        (sourceCallableFailures source)
-        (targetCallableFailures target))
-  | targetCallableLiveLoans target /= sourceCallableLiveLoans source =
-      Left (CallableLoweringLoanScopeMismatch
-        (sourceCallableLiveLoans source)
-        (targetCallableLiveLoans target))
-  | accountedCallableEffects accounting /= targetCallableIntroducedEffects target =
-      Left (CallableLoweringEffectAccountingMismatch
-        (targetCallableIntroducedEffects target)
-        (accountedCallableEffects accounting))
-  | accountedCallableFailures accounting /= targetCallableIntroducedFailures target =
-      Left (CallableLoweringFailureAccountingMismatch
-        (targetCallableIntroducedFailures target)
-        (accountedCallableFailures accounting))
-  | accountedCallableAssumptions accounting /= targetCallableIntroducedAssumptions target =
-      Left (CallableLoweringAssumptionAccountingMismatch
-        (targetCallableIntroducedAssumptions target)
-        (accountedCallableAssumptions accounting))
-  | accountedCallableCarriers accounting /= targetCallableIntroducedCarriers target =
-      Left (CallableLoweringCarrierAccountingMismatch
-        (targetCallableIntroducedCarriers target)
-        (accountedCallableCarriers accounting))
-  | accountedCallableCost accounting /= targetCallableIntroducedCost target =
-      Left (CallableLoweringCostAccountingMismatch
-        (targetCallableIntroducedCost target)
-        (accountedCallableCost accounting))
-  | otherwise = Right CheckedCallableLowering
-      { checkedCallableLoweringSource = source
-      , checkedCallableLoweringTarget = target
-      , checkedCallableLoweringAccounting = accounting
-      }
+checkCallableLoweringCorrespondence source target accounting =
+  case Kernel.decideCallableLowering projection of
+    Kernel.CallableLoweringAccepted
+      | allCoordinatesMatch -> Right CheckedCallableLowering
+          { checkedCallableLoweringSource = source
+          , checkedCallableLoweringTarget = target
+          , checkedCallableLoweringAccounting = accounting
+          }
+      | otherwise -> bridgeMismatch
+          "kernel acceptance disagreed with concrete CALL-016 equality projection"
+    Kernel.CallableLoweringContractRevisionMismatch
+      | not contractRevisionEqual -> Left (CallableLoweringContractRevisionMismatch
+          (sourceCallableContractRevision source)
+          (targetCallableContractRevision target))
+      | otherwise -> bridgeMismatch
+          "contract-revision rejection disagreed with equality projection"
+    Kernel.CallableLoweringMachineShapeMismatch
+      | not machineShapeEqual -> Left (CallableLoweringMachineShapeMismatch
+          (sourceCallableMachineShape source)
+          (targetCallableMachineShape target))
+      | otherwise -> bridgeMismatch
+          "machine-shape rejection disagreed with equality projection"
+    Kernel.CallableLoweringOccurrenceMismatch
+      | not occurrenceEqual -> Left (CallableLoweringOccurrenceMismatch
+          (sourceCallableOccurrence source)
+          (targetCallableOccurrence target))
+      | otherwise -> bridgeMismatch
+          "occurrence rejection disagreed with equality projection"
+    Kernel.CallableLoweringStructuralModeMismatch
+      | not structuralModeEqual -> Left (CallableLoweringStructuralModeMismatch
+          (sourceCallableStructuralMode source)
+          (targetCallableStructuralMode target))
+      | otherwise -> bridgeMismatch
+          "structural-mode rejection disagreed with equality projection"
+    Kernel.CallableLoweringCaptureMismatch
+      | not capturesEqual -> Left (CallableLoweringCaptureMismatch
+          (sourceCallableCaptures source)
+          (targetCallableCaptures target))
+      | otherwise -> bridgeMismatch
+          "capture rejection disagreed with equality projection"
+    Kernel.CallableLoweringCalleeTransitionMismatch
+      | not calleeTransitionEqual -> Left (CallableLoweringCalleeTransitionMismatch
+          (sourceCallableCalleeTransition source)
+          (targetCallableCalleeTransition target))
+      | otherwise -> bridgeMismatch
+          "callee-transition rejection disagreed with equality projection"
+    Kernel.CallableLoweringCallerAuthorityMismatch
+      | not callerAuthorityEqual -> Left (CallableLoweringCallerAuthorityMismatch
+          (sourceCallableCallerAuthority source)
+          (targetCallableCallerAuthority target))
+      | otherwise -> bridgeMismatch
+          "caller-authority rejection disagreed with equality projection"
+    Kernel.CallableLoweringInternalAuthorityMismatch
+      | not internalAuthorityEqual -> Left (CallableLoweringInternalAuthorityMismatch
+          (sourceCallableInternalAuthority source)
+          (targetCallableInternalAuthority target))
+      | otherwise -> bridgeMismatch
+          "internal-authority rejection disagreed with equality projection"
+    Kernel.CallableLoweringEffectBoundMismatch
+      | not effectBoundEqual -> Left (CallableLoweringEffectBoundMismatch
+          (sourceCallableEffectBound source)
+          (targetCallableEffectBound target))
+      | otherwise -> bridgeMismatch
+          "effect-bound rejection disagreed with equality projection"
+    Kernel.CallableLoweringFailureMismatch
+      | not failuresEqual -> Left (CallableLoweringFailureMismatch
+          (sourceCallableFailures source)
+          (targetCallableFailures target))
+      | otherwise -> bridgeMismatch
+          "failure-surface rejection disagreed with equality projection"
+    Kernel.CallableLoweringLoanScopeMismatch
+      | not loanScopesEqual -> Left (CallableLoweringLoanScopeMismatch
+          (sourceCallableLiveLoans source)
+          (targetCallableLiveLoans target))
+      | otherwise -> bridgeMismatch
+          "loan-scope rejection disagreed with equality projection"
+    Kernel.CallableLoweringEffectAccountingMismatch
+      | not effectAccountingEqual -> Left (CallableLoweringEffectAccountingMismatch
+          (targetCallableIntroducedEffects target)
+          (accountedCallableEffects accounting))
+      | otherwise -> bridgeMismatch
+          "effect-accounting rejection disagreed with equality projection"
+    Kernel.CallableLoweringFailureAccountingMismatch
+      | not failureAccountingEqual -> Left (CallableLoweringFailureAccountingMismatch
+          (targetCallableIntroducedFailures target)
+          (accountedCallableFailures accounting))
+      | otherwise -> bridgeMismatch
+          "failure-accounting rejection disagreed with equality projection"
+    Kernel.CallableLoweringAssumptionAccountingMismatch
+      | not assumptionAccountingEqual -> Left (CallableLoweringAssumptionAccountingMismatch
+          (targetCallableIntroducedAssumptions target)
+          (accountedCallableAssumptions accounting))
+      | otherwise -> bridgeMismatch
+          "assumption-accounting rejection disagreed with equality projection"
+    Kernel.CallableLoweringCarrierAccountingMismatch
+      | not carrierAccountingEqual -> Left (CallableLoweringCarrierAccountingMismatch
+          (targetCallableIntroducedCarriers target)
+          (accountedCallableCarriers accounting))
+      | otherwise -> bridgeMismatch
+          "carrier-accounting rejection disagreed with equality projection"
+    Kernel.CallableLoweringCostAccountingMismatch
+      | not costAccountingEqual -> Left (CallableLoweringCostAccountingMismatch
+          (targetCallableIntroducedCost target)
+          (accountedCallableCost accounting))
+      | otherwise -> bridgeMismatch
+          "cost-accounting rejection disagreed with equality projection"
+  where
+    contractRevisionEqual =
+      targetCallableContractRevision target == sourceCallableContractRevision source
+    machineShapeEqual =
+      targetCallableMachineShape target == sourceCallableMachineShape source
+    occurrenceEqual =
+      targetCallableOccurrence target == sourceCallableOccurrence source
+    structuralModeEqual =
+      targetCallableStructuralMode target == sourceCallableStructuralMode source
+    capturesEqual =
+      targetCallableCaptures target == sourceCallableCaptures source
+    calleeTransitionEqual =
+      targetCallableCalleeTransition target == sourceCallableCalleeTransition source
+    callerAuthorityEqual =
+      targetCallableCallerAuthority target == sourceCallableCallerAuthority source
+    internalAuthorityEqual =
+      targetCallableInternalAuthority target == sourceCallableInternalAuthority source
+    effectBoundEqual =
+      targetCallableEffectBound target == sourceCallableEffectBound source
+    failuresEqual =
+      targetCallableFailures target == sourceCallableFailures source
+    loanScopesEqual =
+      targetCallableLiveLoans target == sourceCallableLiveLoans source
+    effectAccountingEqual =
+      accountedCallableEffects accounting == targetCallableIntroducedEffects target
+    failureAccountingEqual =
+      accountedCallableFailures accounting == targetCallableIntroducedFailures target
+    assumptionAccountingEqual =
+      accountedCallableAssumptions accounting == targetCallableIntroducedAssumptions target
+    carrierAccountingEqual =
+      accountedCallableCarriers accounting == targetCallableIntroducedCarriers target
+    costAccountingEqual =
+      accountedCallableCost accounting == targetCallableIntroducedCost target
+    projection = Kernel.MkCallableLoweringProjection
+      contractRevisionEqual
+      machineShapeEqual
+      occurrenceEqual
+      structuralModeEqual
+      capturesEqual
+      calleeTransitionEqual
+      callerAuthorityEqual
+      internalAuthorityEqual
+      effectBoundEqual
+      failuresEqual
+      loanScopesEqual
+      effectAccountingEqual
+      failureAccountingEqual
+      assumptionAccountingEqual
+      carrierAccountingEqual
+      costAccountingEqual
+    allCoordinatesMatch = and
+      [ contractRevisionEqual
+      , machineShapeEqual
+      , occurrenceEqual
+      , structuralModeEqual
+      , capturesEqual
+      , calleeTransitionEqual
+      , callerAuthorityEqual
+      , internalAuthorityEqual
+      , effectBoundEqual
+      , failuresEqual
+      , loanScopesEqual
+      , effectAccountingEqual
+      , failureAccountingEqual
+      , assumptionAccountingEqual
+      , carrierAccountingEqual
+      , costAccountingEqual
+      ]
+
+bridgeMismatch :: Text -> Either CallableLoweringError a
+bridgeMismatch = Left . CallableLoweringRepresentationBridgeMismatch
