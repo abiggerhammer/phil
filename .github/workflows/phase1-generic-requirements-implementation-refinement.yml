@@ -1,0 +1,95 @@
+name: Phase 1 Generic Requirements Implementation Refinement
+
+on:
+  pull_request:
+    paths:
+      - 'proof/Phil/Core/GenericRequirements.v'
+      - 'proof/Phil/Core/GenericRequirementsImplementation.v'
+      - 'proof/Phil/Core/GenericRequirementsImplementationExtraction.v'
+      - 'docs/phase-1/generic-requirements-implementation-refinement-v1.md'
+      - 'src/Phil/Core/Generic.hs'
+      - 'test/Phase1GenericRequirementsMain.hs'
+      - '.github/workflows/phase1-generic-requirements-implementation-refinement.yml'
+  push:
+    branches: [main]
+    paths:
+      - 'proof/Phil/Core/GenericRequirements.v'
+      - 'proof/Phil/Core/GenericRequirementsImplementation.v'
+      - 'proof/Phil/Core/GenericRequirementsImplementationExtraction.v'
+      - 'docs/phase-1/generic-requirements-implementation-refinement-v1.md'
+      - 'src/Phil/Core/Generic.hs'
+      - 'test/Phase1GenericRequirementsMain.hs'
+      - '.github/workflows/phase1-generic-requirements-implementation-refinement.yml'
+
+permissions:
+  contents: read
+
+jobs:
+  rocq-generic-requirements-implementation-refinement:
+    runs-on: ubuntu-latest
+    container:
+      image: rocq/rocq-prover:9.2.0
+      options: --user root
+    steps:
+      - uses: actions/checkout@v4
+      - name: Compile certified GEN-004-006 model and executable coverage decision
+        shell: bash
+        run: |
+          set -euo pipefail
+          export PATH="/home/rocq/.opam/${COMPILER}/bin:$PATH"
+          rocq c -Q proof/Phil Phil proof/Phil/Core/GenericStructural.v
+          rocq c -Q proof/Phil Phil proof/Phil/Core/GenericRequirements.v
+          rocq c -Q proof/Phil Phil proof/Phil/Core/GenericRequirementsImplementation.v
+      - name: Extract generic requirements kernel
+        shell: bash
+        run: |
+          set -euo pipefail
+          export PATH="/home/rocq/.opam/${COMPILER}/bin:$PATH"
+          rm -f GenericRequirementsKernel.hs
+          rocq c -Q proof/Phil Phil proof/Phil/Core/GenericRequirementsImplementationExtraction.v
+          test -s GenericRequirementsKernel.hs
+          grep -q '^module GenericRequirementsKernel where' GenericRequirementsKernel.hs
+          grep -q '^requirementsCover ::' GenericRequirementsKernel.hs
+          grep -q '^decideGenericRequirementsCoverage ::' GenericRequirementsKernel.hs
+          sha256sum GenericRequirementsKernel.hs
+          mkdir -p generic-requirements-implementation-refinement-proof
+          cp \
+            proof/Phil/Core/GenericRequirements.v \
+            proof/Phil/Core/GenericRequirements.vo \
+            proof/Phil/Core/GenericRequirementsImplementation.v \
+            proof/Phil/Core/GenericRequirementsImplementation.vo \
+            proof/Phil/Core/GenericRequirementsImplementationExtraction.v \
+            GenericRequirementsKernel.hs \
+            generic-requirements-implementation-refinement-proof/
+      - uses: actions/upload-artifact@v4
+        with:
+          name: rocq-generic-requirements-implementation-refinement
+          path: generic-requirements-implementation-refinement-proof
+          if-no-files-found: error
+
+  verify-generic-requirements-correspondence:
+    needs: rocq-generic-requirements-implementation-refinement
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: haskell-actions/setup@v2
+        with:
+          ghc-version: '9.6.7'
+          cabal-version: 'latest'
+      - uses: actions/download-artifact@v4
+        with:
+          name: rocq-generic-requirements-implementation-refinement
+          path: generic-requirements-implementation-refinement-proof
+      - name: Typecheck extracted and production GEN-004-006 paths
+        run: |
+          set -euo pipefail
+          ghc -Wall -Werror -fno-code \
+            generic-requirements-implementation-refinement-proof/GenericRequirementsKernel.hs
+          cabal build exe:phil-certify-core-scalar --ghc-options=-Werror
+          cabal exec -- ghc -isrc -Wall -Werror -fno-code \
+            src/Phil/Core/Generic.hs \
+            test/Phase1GenericRequirementsMain.hs
+      - name: Re-run GEN-004-006 production correspondence corpus
+        run: |
+          set -euo pipefail
+          cabal exec -- runghc -isrc test/Phase1GenericRequirementsMain.hs
