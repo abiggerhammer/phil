@@ -104,8 +104,8 @@ Proof.
   intros keys.
   induction keys as [| head rest IH]; cbn.
   - split.
-    + intro _. constructor.
-    + intro _. reflexivity.
+    + intro Hempty. constructor.
+    + intro Hnodup. reflexivity.
   - rewrite Bool.andb_true_iff.
     rewrite Bool.negb_true_iff.
     rewrite key_in_false_iff.
@@ -127,8 +127,8 @@ Proof.
   intros required available.
   induction required as [| head rest IH]; cbn.
   - split.
-    + intros _ key Hin. contradiction.
-    + intro _. reflexivity.
+    + intros Hempty key Hin. contradiction.
+    + intro Hall. reflexivity.
   - rewrite Bool.andb_true_iff.
     split.
     + intros [Hhead Hrest] key Hin.
@@ -347,10 +347,10 @@ Proof.
     (exactKeyDomainb genericRequirementEqb requirements (map fst dispositions))
     eqn:Hdomain; cbn.
   - split.
-    + intro _.
+    + intro Haccepted.
       apply (proj1 (exact_disposition_domainb_true_iff requirements dispositions)).
       exact Hdomain.
-    + intro _.
+    + intro Hexact.
       reflexivity.
   - split.
     + intro H. discriminate.
@@ -383,12 +383,12 @@ Proof.
       apply (proj1 (exact_disposition_domainb_true_iff requirements dispositions)).
       exact Hdomain.
   - split.
-    + intro _ Hexact.
+    + intros Hrejected Hexact.
       apply (proj2 (exact_disposition_domainb_true_iff requirements dispositions))
         in Hexact.
       unfold exactDispositionDomainb in Hexact.
       rewrite Hdomain in Hexact.
       discriminate.
-    + intro _.
+    + intro Hnot.
       reflexivity.
 Qed.
