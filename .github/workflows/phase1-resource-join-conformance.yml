@@ -27,3 +27,6 @@ jobs:
 
       - name: RES-005 branch-local linear leak conformance
         run: cabal exec -- runghc -Wall -Werror -isrc test/Phase1BranchLocalLinearLeakMain.hs
+
+      - name: RES-006 affine branch asymmetry conformance
+        run: cabal exec -- runghc -Wall -Werror -isrc test/Phase1AffineBranchAsymmetryMain.hs
