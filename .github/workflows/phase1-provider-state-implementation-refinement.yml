@@ -7,6 +7,7 @@ on:
       - 'proof/Phil/Core/ProviderStateQualificationImplementation.v'
       - 'proof/Phil/Core/ProviderStateQualificationImplementationExtraction.v'
       - 'docs/phase-1/provider-state-implementation-refinement-v1.md'
+      - 'src/ProviderStateQualificationKernel.hs'
       - 'src/Phil/Core/ProviderStateQualification.hs'
       - 'test/Phase1ProviderQualificationMain.hs'
       - 'test/Phase1ProviderStateQualificationMain.hs'
@@ -18,6 +19,7 @@ on:
       - 'proof/Phil/Core/ProviderStateQualificationImplementation.v'
       - 'proof/Phil/Core/ProviderStateQualificationImplementationExtraction.v'
       - 'docs/phase-1/provider-state-implementation-refinement-v1.md'
+      - 'src/ProviderStateQualificationKernel.hs'
       - 'src/Phil/Core/ProviderStateQualification.hs'
       - 'test/Phase1ProviderQualificationMain.hs'
       - 'test/Phase1ProviderStateQualificationMain.hs'
@@ -41,7 +43,7 @@ jobs:
           export PATH="/home/rocq/.opam/${COMPILER}/bin:$PATH"
           rocq c -Q proof/Phil Phil proof/Phil/Core/ProviderQualificationImplementationBridge.v
           rocq c -Q proof/Phil Phil proof/Phil/Core/ProviderStateQualificationImplementation.v
-      - name: Extract provider state simulation kernel
+      - name: Regenerate and bind provider state simulation kernel
         shell: bash
         run: |
           set -euo pipefail
@@ -54,7 +56,14 @@ jobs:
           grep -q '^decideInitialPair ::' ProviderStateQualificationKernel.hs
           grep -q '^decideStateTransition ::' ProviderStateQualificationKernel.hs
           grep -q '^decideProviderStateSimulation ::' ProviderStateQualificationKernel.hs
-          sha256sum ProviderStateQualificationKernel.hs
+          if ! cmp -s ProviderStateQualificationKernel.hs src/ProviderStateQualificationKernel.hs; then
+            echo 'checked-in provider state kernel differs from fresh Rocq extraction' >&2
+            diff -u src/ProviderStateQualificationKernel.hs ProviderStateQualificationKernel.hs || true
+            exit 1
+          fi
+          sha256sum \
+            ProviderStateQualificationKernel.hs \
+            src/ProviderStateQualificationKernel.hs
           mkdir -p provider-state-implementation-refinement-proof
           cp \
             proof/Phil/Core/ProviderQualificationImplementationBridge.v \
@@ -83,14 +92,18 @@ jobs:
         with:
           name: rocq-provider-state-implementation-refinement
           path: provider-state-implementation-refinement-proof
-      - name: Typecheck extracted PROV-006 kernel
+      - name: Typecheck extracted, checked-in, and production PROV-006 paths
         run: |
           set -euo pipefail
-          ghc -Wall -Werror -fno-code \
-            provider-state-implementation-refinement-proof/ProviderStateQualificationKernel.hs
-      - name: Re-run provider semantic and state correspondence corpora
-        run: |
-          set -euo pipefail
+          cmp -s \
+            provider-state-implementation-refinement-proof/ProviderStateQualificationKernel.hs \
+            src/ProviderStateQualificationKernel.hs
+          ghc -Wall -Werror -fno-code src/ProviderStateQualificationKernel.hs
           cabal build exe:phil-certify-core-scalar --ghc-options=-Werror
+          cabal exec -- ghc -isrc -Wall -Werror -fno-code \
+            src/Phil/Core/ProviderStateQualification.hs
+      - name: Exercise production PROV-006 path through extracted traversal
+        run: |
+          set -euo pipefail
           cabal exec -- runghc -isrc test/Phase1ProviderQualificationMain.hs
           cabal exec -- runghc -isrc test/Phase1ProviderStateQualificationMain.hs
