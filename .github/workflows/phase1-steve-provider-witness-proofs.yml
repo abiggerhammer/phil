@@ -1,0 +1,93 @@
+name: Phase 1 Steve Provider Witness Proofs
+
+on:
+  pull_request:
+    paths:
+      - 'src/Phil/Examples/Steve/ProviderQualifications.hs'
+      - 'test/Phase1SteveProviderQualificationMain.hs'
+      - 'docs/phase-1/steve-provider-qualifications-v1.md'
+      - 'proof/Phil/Core/SteveProviderQualificationWitness.v'
+      - 'app/Phase1SteveProviderWitnessCertificationMain.hs'
+      - '.github/workflows/phase1-steve-provider-witness-proofs.yml'
+  push:
+    branches: [main]
+    paths:
+      - 'src/Phil/Examples/Steve/ProviderQualifications.hs'
+      - 'test/Phase1SteveProviderQualificationMain.hs'
+      - 'docs/phase-1/steve-provider-qualifications-v1.md'
+      - 'proof/Phil/Core/SteveProviderQualificationWitness.v'
+      - 'app/Phase1SteveProviderWitnessCertificationMain.hs'
+      - '.github/workflows/phase1-steve-provider-witness-proofs.yml'
+
+permissions:
+  contents: read
+
+jobs:
+  rocq-phase1-steve-provider-witness:
+    runs-on: ubuntu-latest
+    container:
+      image: rocq/rocq-prover:9.2.0
+      options: --user root
+    steps:
+      - uses: actions/checkout@v4
+      - name: Compile PHIL-PROV-STEVE-WITNESS-001
+        shell: bash
+        run: |
+          set -euo pipefail
+          export PATH="/home/rocq/.opam/${COMPILER}/bin:$PATH"
+          rocq c -Q proof/Phil Phil proof/Phil/Core/SteveProviderQualificationWitness.v
+          mkdir -p phase1-steve-provider-witness-proof
+          cp \
+            proof/Phil/Core/SteveProviderQualificationWitness.v \
+            proof/Phil/Core/SteveProviderQualificationWitness.vo \
+            phase1-steve-provider-witness-proof/
+      - uses: actions/upload-artifact@v4
+        with:
+          name: rocq-phase1-steve-provider-witness-proof
+          path: phase1-steve-provider-witness-proof
+          if-no-files-found: error
+
+  certify-phase1-steve-provider-witness:
+    needs: rocq-phase1-steve-provider-witness
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: haskell-actions/setup@v2
+        with:
+          ghc-version: '9.6.7'
+          cabal-version: 'latest'
+      - name: Build existing proof certifier substrate with warnings as errors
+        run: cabal build exe:phil-certify-core-scalar --ghc-options=-Werror
+      - name: Typecheck certifier
+        run: cabal exec -- ghc -isrc -Wall -Werror -fno-code app/Phase1SteveProviderWitnessCertificationMain.hs
+      - name: Re-run PROV-016 correspondence
+        run: |
+          set -euo pipefail
+          cabal exec -- runghc -isrc test/Phase1SteveProviderQualificationMain.hs
+      - uses: actions/download-artifact@v4
+        with:
+          name: rocq-phase1-steve-provider-witness-proof
+          path: phase1-steve-provider-witness-proof
+      - name: Emit PHIL-PROV-STEVE-WITNESS-001 certificate
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p phase1-steve-provider-witness-certification
+          cabal exec -- runghc -isrc app/Phase1SteveProviderWitnessCertificationMain.hs \
+            phase1-steve-provider-witness-proof/SteveProviderQualificationWitness.v \
+            phase1-steve-provider-witness-proof/SteveProviderQualificationWitness.vo \
+            phase1-steve-provider-witness-certification/PHIL-PROV-STEVE-WITNESS-001.rocq.cert
+          sha256sum \
+            src/Phil/Examples/Steve/ProviderQualifications.hs \
+            test/Phase1SteveProviderQualificationMain.hs \
+            docs/phase-1/steve-provider-qualifications-v1.md \
+            proof/Phil/Core/SteveProviderQualificationWitness.v \
+            app/Phase1SteveProviderWitnessCertificationMain.hs \
+            > phase1-steve-provider-witness-certification/PHIL-PROV-STEVE-WITNESS-001.correspondence.sha256
+          cat phase1-steve-provider-witness-certification/PHIL-PROV-STEVE-WITNESS-001.rocq.cert
+          sha256sum phase1-steve-provider-witness-certification/PHIL-PROV-STEVE-WITNESS-001.rocq.cert
+      - uses: actions/upload-artifact@v4
+        with:
+          name: phil-phase1-steve-provider-witness-proof-certification
+          path: phase1-steve-provider-witness-certification
+          if-no-files-found: error
