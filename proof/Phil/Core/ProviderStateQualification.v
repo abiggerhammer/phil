@@ -309,9 +309,7 @@ Proof.
   injection Htranslated as Hpublic.
   subst publicEvent.
   exists outcomeMap.
-  split.
-  - exact Hoperation.
-  - cbn. exact Houtcome.
+  split; reflexivity.
 Qed.
 
 Theorem unqualified_first_provider_event_rejects :
