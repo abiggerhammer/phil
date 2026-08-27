@@ -35,3 +35,5 @@ jobs:
         run: cabal exec -- runghc -Wall -Werror -isrc test/Phase1BoundaryDirectionMain.hs
       - name: BND-008 qualified exact encoding conformance
         run: cabal exec -- runghc -Wall -Werror -isrc test/Phase1QualifiedEncodingMain.hs
+      - name: BND-009 explicit canonicality conformance
+        run: cabal exec -- runghc -Wall -Werror -isrc test/Phase1EncodingCanonicalityMain.hs
