@@ -45,3 +45,6 @@ jobs:
 
       - name: RES-011 obligation reconvergence conformance
         run: cabal exec -- runghc -Wall -Werror -isrc test/Phase1ObligationReconvergenceMain.hs
+
+      - name: RES-012 checked binding mode conformance
+        run: cabal exec -- runghc -Wall -Werror -isrc test/Phase1CheckedBindingModeMain.hs
