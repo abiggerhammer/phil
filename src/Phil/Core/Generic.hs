@@ -33,6 +33,7 @@ module Phil.Core.Generic
 import qualified Data.Map.Strict as Map
 import qualified Data.Set as Set
 import Data.Text (Text)
+import qualified GenericIdentityEqualityKernel as IdentityEqualityKernel
 import qualified GenericInstantiationDomainKernel as InstantiationDomainKernel
 import qualified GenericInstantiationValidityKernel as InstantiationValidityKernel
 import qualified GenericRequirementsKernel as RequirementsKernel
@@ -174,7 +175,7 @@ data GenericApplicationIdentity = GenericApplicationIdentity
   , genericApplicationSemanticArguments
       :: Map.Map GenericStaticParameterKey SemanticForm
   }
-  deriving (Eq, Ord, Show)
+  deriving (Ord, Show)
 
 data GenericApplicationIdentityError
   = DuplicateGenericSemanticArgument GenericStaticParameterKey
@@ -187,7 +188,33 @@ data GenericDischargeLineage = GenericDischargeLineage
   , genericDischargeDispositions
       :: Map.Map GenericRequirement GenericRequirementDisposition
   }
-  deriving (Eq, Ord, Show)
+  deriving (Ord, Show)
+
+instance Eq GenericApplicationIdentity where
+  left == right =
+    case IdentityEqualityKernel.decideGenericApplicationEquality
+        (IdentityEqualityKernel.MkGenericApplicationEqualityFacts
+          (genericApplicationDeclarationKey left
+            == genericApplicationDeclarationKey right)
+          (genericApplicationInterfaceRevision left
+            == genericApplicationInterfaceRevision right)
+          (genericApplicationSemanticArguments left
+            == genericApplicationSemanticArguments right)) of
+      IdentityEqualityKernel.GenericApplicationEqual -> True
+      IdentityEqualityKernel.GenericApplicationDifferent -> False
+
+instance Eq GenericDischargeLineage where
+  left == right =
+    case IdentityEqualityKernel.decideGenericDischargeLineageEquality
+        (IdentityEqualityKernel.MkGenericDischargeLineageEqualityFacts
+          (genericDischargeApplicationIdentity left
+            == genericDischargeApplicationIdentity right)
+          (genericDischargeDefinitionRevision left
+            == genericDischargeDefinitionRevision right)
+          (genericDischargeDispositions left
+            == genericDischargeDispositions right)) of
+      IdentityEqualityKernel.GenericDischargeLineageEqual -> True
+      IdentityEqualityKernel.GenericDischargeLineageDifferent -> False
 
 inferGenericStructuralRequirements
   :: [GenericValueParameterKey]
