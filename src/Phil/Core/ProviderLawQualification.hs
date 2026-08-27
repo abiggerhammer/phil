@@ -14,6 +14,7 @@ module Phil.Core.ProviderLawQualification
   , checkProviderLawCorpus
   ) where
 
+import qualified ProviderLawQualificationKernel as Kernel
 import qualified Data.Map.Strict as Map
 import Data.Text (Text)
 import Phil.Core.ProviderQualification
@@ -90,19 +91,40 @@ data ProviderLawQualificationError
       Int
       ProviderLawStateKey
       ProviderPublicEvent
+  | ProviderLawQualificationRepresentationMismatch Text
   deriving (Eq, Ord, Show)
 
 -- | Check one implementation history against one provider-wide public law.
 -- Every implementation event is first translated through the already-qualified
 -- operation/outcome correspondence, then evaluated by the public law monitor.
--- This is precisely the layer that can reject a sequence even when every event
--- is independently valid under per-operation callable refinement.
+-- The extracted kernel owns acceptance; the detailed traversal below is retained
+-- only for result/error reconstruction and must agree with that decision.
 checkProviderLawTrace
   :: CheckedProviderSemanticQualification
   -> ProviderLaw
   -> [ProviderImplementationEvent]
   -> Either ProviderLawQualificationError CheckedProviderLawTrace
-checkProviderLawTrace qualified law implementationTrace = do
+checkProviderLawTrace qualified law implementationTrace
+  | not (providerLawProjectionRoundTrips qualified law) =
+      Left (ProviderLawQualificationRepresentationMismatch
+        "provider law Map projection failed canonical round-trip")
+  | providerLawKernelAccepts qualified law implementationTrace =
+      case checkProviderLawTraceDetailed qualified law implementationTrace of
+        Right checked -> Right checked
+        Left _ -> Left (ProviderLawQualificationRepresentationMismatch
+          "extracted provider law kernel accepted while diagnostic reconstruction rejected")
+  | otherwise =
+      case checkProviderLawTraceDetailed qualified law implementationTrace of
+        Left err -> Left err
+        Right _ -> Left (ProviderLawQualificationRepresentationMismatch
+          "extracted provider law kernel rejected while diagnostic reconstruction accepted")
+
+checkProviderLawTraceDetailed
+  :: CheckedProviderSemanticQualification
+  -> ProviderLaw
+  -> [ProviderImplementationEvent]
+  -> Either ProviderLawQualificationError CheckedProviderLawTrace
+checkProviderLawTraceDetailed qualified law implementationTrace = do
   publicTrace <- mapM translateEvent implementationTrace
   finalState <- runLaw 0 (providerLawInitialState law) publicTrace
   Right CheckedProviderLawTrace
@@ -139,6 +161,63 @@ checkProviderLawTrace qualified law implementationTrace = do
           index
           state
           event)
+
+providerLawKernelAccepts
+  :: CheckedProviderSemanticQualification
+  -> ProviderLaw
+  -> [ProviderImplementationEvent]
+  -> Bool
+providerLawKernelAccepts qualified law implementationTrace =
+  Kernel.decideProviderLawTrace
+    (==)
+    (==)
+    (==)
+    qualifiedOutcomes
+    transitionProjection
+    (providerLawInitialState law)
+    traceProjection
+  where
+    qualifiedOutcomes =
+      [ (operationKey,
+          Map.toAscList
+            (checkedProviderOutcomeCorrespondence operationQualification))
+      | (operationKey, operationQualification) <-
+          Map.toAscList (checkedProviderOperations qualified)
+      ]
+    transitionProjection =
+      [ ( (state,
+            ( providerPublicEventOperation event
+            , providerPublicEventOutcome event
+            ))
+        , nextState
+        )
+      | ((state, event), nextState) <-
+          Map.toAscList (providerLawTransitions law)
+      ]
+    traceProjection =
+      [ ( providerImplementationEventOperation event
+        , providerImplementationEventOutcome event
+        )
+      | event <- implementationTrace
+      ]
+
+providerLawProjectionRoundTrips
+  :: CheckedProviderSemanticQualification
+  -> ProviderLaw
+  -> Bool
+providerLawProjectionRoundTrips qualified law =
+  and
+    [ mapRoundTrips (checkedProviderOperations qualified)
+    , all operationQualificationRoundTrips
+        (Map.elems (checkedProviderOperations qualified))
+    , mapRoundTrips (providerLawTransitions law)
+    ]
+  where
+    operationQualificationRoundTrips operationQualification =
+      mapRoundTrips (checkedProviderOutcomeCorrespondence operationQualification)
+
+mapRoundTrips :: (Ord key, Eq value) => Map.Map key value -> Bool
+mapRoundTrips values = Map.fromAscList (Map.toAscList values) == values
 
 -- | Check a canonically keyed law-evidence corpus. Completeness of the corpus or
 -- a proof/model-checking argument that it covers all reachable histories is a
