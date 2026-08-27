@@ -1,0 +1,96 @@
+name: Phase 1 Generic Structural Implementation Refinement
+
+on:
+  pull_request:
+    paths:
+      - 'proof/Phil/Core/GenericStructural.v'
+      - 'proof/Phil/Core/GenericStructuralImplementation.v'
+      - 'proof/Phil/Core/GenericStructuralImplementationExtraction.v'
+      - 'docs/phase-1/generic-structural-implementation-refinement-v1.md'
+      - 'src/Phil/Core/Generic.hs'
+      - 'test/Phase1GenericStructuralMain.hs'
+      - '.github/workflows/phase1-generic-structural-implementation-refinement.yml'
+  push:
+    branches: [main]
+    paths:
+      - 'proof/Phil/Core/GenericStructural.v'
+      - 'proof/Phil/Core/GenericStructuralImplementation.v'
+      - 'proof/Phil/Core/GenericStructuralImplementationExtraction.v'
+      - 'docs/phase-1/generic-structural-implementation-refinement-v1.md'
+      - 'src/Phil/Core/Generic.hs'
+      - 'test/Phase1GenericStructuralMain.hs'
+      - '.github/workflows/phase1-generic-structural-implementation-refinement.yml'
+
+permissions:
+  contents: read
+
+jobs:
+  rocq-generic-structural-implementation-refinement:
+    runs-on: ubuntu-latest
+    container:
+      image: rocq/rocq-prover:9.2.0
+      options: --user root
+    steps:
+      - uses: actions/checkout@v4
+      - name: Compile certified GEN-001-003 model and executable decision
+        shell: bash
+        run: |
+          set -euo pipefail
+          export PATH="/home/rocq/.opam/${COMPILER}/bin:$PATH"
+          rocq c -Q proof/Phil Phil proof/Phil/Core/GenericStructural.v
+          rocq c -Q proof/Phil Phil proof/Phil/Core/GenericStructuralImplementation.v
+      - name: Extract generic structural kernel
+        shell: bash
+        run: |
+          set -euo pipefail
+          export PATH="/home/rocq/.opam/${COMPILER}/bin:$PATH"
+          rm -f GenericStructuralKernel.hs
+          rocq c -Q proof/Phil Phil proof/Phil/Core/GenericStructuralImplementationExtraction.v
+          test -s GenericStructuralKernel.hs
+          grep -q '^module GenericStructuralKernel where' GenericStructuralKernel.hs
+          grep -q '^addStructuralUse ::' GenericStructuralKernel.hs
+          grep -q '^inferGenericStructuralRequirements ::' GenericStructuralKernel.hs
+          grep -q '^modeSatisfiesRequirements ::' GenericStructuralKernel.hs
+          grep -q '^decideGenericStructuralActual ::' GenericStructuralKernel.hs
+          sha256sum GenericStructuralKernel.hs
+          mkdir -p generic-structural-implementation-refinement-proof
+          cp \
+            proof/Phil/Core/GenericStructural.v \
+            proof/Phil/Core/GenericStructural.vo \
+            proof/Phil/Core/GenericStructuralImplementation.v \
+            proof/Phil/Core/GenericStructuralImplementation.vo \
+            proof/Phil/Core/GenericStructuralImplementationExtraction.v \
+            GenericStructuralKernel.hs \
+            generic-structural-implementation-refinement-proof/
+      - uses: actions/upload-artifact@v4
+        with:
+          name: rocq-generic-structural-implementation-refinement
+          path: generic-structural-implementation-refinement-proof
+          if-no-files-found: error
+
+  verify-generic-structural-correspondence:
+    needs: rocq-generic-structural-implementation-refinement
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: haskell-actions/setup@v2
+        with:
+          ghc-version: '9.6.7'
+          cabal-version: 'latest'
+      - uses: actions/download-artifact@v4
+        with:
+          name: rocq-generic-structural-implementation-refinement
+          path: generic-structural-implementation-refinement-proof
+      - name: Typecheck extracted and production GEN-001-003 paths
+        run: |
+          set -euo pipefail
+          ghc -Wall -Werror -fno-code \
+            generic-structural-implementation-refinement-proof/GenericStructuralKernel.hs
+          cabal build exe:phil-certify-core-scalar --ghc-options=-Werror
+          cabal exec -- ghc -isrc -Wall -Werror -fno-code \
+            src/Phil/Core/Generic.hs \
+            test/Phase1GenericStructuralMain.hs
+      - name: Re-run GEN-001-003 production correspondence corpus
+        run: |
+          set -euo pipefail
+          cabal exec -- runghc -isrc test/Phase1GenericStructuralMain.hs
