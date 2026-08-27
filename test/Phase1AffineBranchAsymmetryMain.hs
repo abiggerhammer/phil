@@ -8,7 +8,7 @@ import Data.Text (Text)
 import Phil.Core.Syntax (Mode (..))
 import Phil.Systems.ControlStateProjection
 import Phil.Systems.IR
-import Phil.Systems.SubjectCorrespondence (SourceSubjectKey, SystemsValueRef (..))
+import Phil.Systems.SubjectCorrespondence (SystemsValueRef (..))
 import System.Exit (exitFailure)
 
 main :: IO ()
