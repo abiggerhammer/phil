@@ -1,0 +1,4 @@
+module corpus.membership;
+
+type U32Set = SetOfU32;
+claim Contains(x : U32, xs : U32Set) = x in xs;

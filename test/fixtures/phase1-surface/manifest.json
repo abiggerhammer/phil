@@ -1,0 +1,27 @@
+{
+  "corpus": "phase1-surface-production-v1",
+  "authority": "grammar/phase1-surface.ebnf",
+  "entry_rule": "source_file",
+  "semantic_acceptance_asserted": false,
+  "fixtures": [
+    {"id":"SURF-PROD-001","path":"accepted/01-refinement-type.phil","expect":"parse","covers":["type_expression","refinement_type"],"semantic":"deferred"},
+    {"id":"SURF-PROD-002","path":"accepted/02-explicit-transport.phil","expect":"parse","covers":["primary_expression","transport_expression"],"semantic":"deferred"},
+    {"id":"SURF-PROD-003","path":"accepted/03-membership.phil","expect":"parse","covers":["relation_proposition","relation_operator:in"],"semantic":"deferred"},
+    {"id":"SURF-PROD-004","path":"accepted/04-disjointness.phil","expect":"parse","covers":["relation_proposition","relation_operator:disjoint"],"semantic":"deferred"},
+    {"id":"SURF-PROD-005","path":"accepted/05-term-offer.phil","expect":"parse","covers":["primary_expression","offer_expression","match_arm"],"semantic":"deferred"},
+    {"id":"SURF-PROD-006","path":"accepted/06-outcome-residues.phil","expect":"parse","covers":["callable_clause","outcome_residue","outcome_residue_clause"],"semantic":"deferred"},
+    {"id":"SURF-PROD-007","path":"accepted/07-exact-replace-callee.phil","expect":"parse","covers":["callee_transition:replace"],"semantic":"deferred"},
+    {"id":"SURF-PROD-008","path":"accepted/08-refinement-transport-composition.phil","expect":"parse","covers":["refinement_type","transport_expression"],"semantic":"deferred"},
+    {"id":"SURF-PROD-009","path":"accepted/09-offer-transport-composition.phil","expect":"parse","covers":["offer_expression","transport_expression","match_arm"],"semantic":"deferred"},
+    {"id":"SURF-PROD-010","path":"accepted/10-outcome-refinement-composition.phil","expect":"parse","covers":["outcome_residue","refinement_type"],"semantic":"deferred"},
+    {"id":"SURF-PROD-R001","path":"rejected/01-refinement-missing-bar.phil","expect":"reject-syntax","covers":["refinement_type"],"required_failure_layer":"syntax"},
+    {"id":"SURF-PROD-R002","path":"rejected/02-transport-missing-using.phil","expect":"reject-syntax","covers":["transport_expression"],"required_failure_layer":"syntax"},
+    {"id":"SURF-PROD-R003","path":"rejected/03-membership-missing-rhs.phil","expect":"reject-syntax","covers":["relation_operator:in"],"required_failure_layer":"syntax"},
+    {"id":"SURF-PROD-R004","path":"rejected/04-disjointness-missing-rhs.phil","expect":"reject-syntax","covers":["relation_operator:disjoint"],"required_failure_layer":"syntax"},
+    {"id":"SURF-PROD-R005","path":"rejected/05-offer-missing-body-braces.phil","expect":"reject-syntax","covers":["offer_expression"],"required_failure_layer":"syntax"},
+    {"id":"SURF-PROD-R006","path":"rejected/06-outcome-state-missing-semicolon.phil","expect":"reject-syntax","covers":["outcome_residue_clause"],"required_failure_layer":"syntax"},
+    {"id":"SURF-PROD-R007","path":"rejected/07-replace-callee-missing-with.phil","expect":"reject-syntax","covers":["callee_transition:replace"],"required_failure_layer":"syntax"},
+    {"id":"SURF-PROD-R008","path":"rejected/08-transport-wrong-keyword-order.phil","expect":"reject-syntax","covers":["transport_expression"],"required_failure_layer":"syntax"},
+    {"id":"SURF-PROD-R009","path":"rejected/09-outcome-missing-block.phil","expect":"reject-syntax","covers":["outcome_residue"],"required_failure_layer":"syntax"}
+  ]
+}
