@@ -62,3 +62,4 @@ decideExactKeyDomain keyEqb requirements dispositionKeys =
   case exactKeyDomainb keyEqb requirements dispositionKeys of {
    Prelude.True -> GenericDispositionDomainAccepted;
    Prelude.False -> GenericDispositionDomainRejected}
+
