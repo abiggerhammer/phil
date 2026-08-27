@@ -49,6 +49,9 @@ jobs:
       - name: Phase 1 architecture sibling noninterference conformance
         run: cabal exec -- runghc -isrc test/Phase1ArchitectureSiblingNoninterferenceMain.hs
 
+      - name: Phase 1 architecture provider replacement conformance
+        run: cabal exec -- runghc -isrc test/Phase1ArchitectureProviderReplacementMain.hs
+
       - name: Phase 1 generic structural conformance
         run: cabal exec -- runghc -isrc test/Phase1GenericStructuralMain.hs
 
