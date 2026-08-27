@@ -7,13 +7,15 @@ import Phil.Core.BoundaryProgression
 import Phil.Core.Context (ResourceContext, emptyContext, insertBinding)
 import Phil.Core.QualifiedEncoding
 import Phil.Core.Recognition
-  ( ParsedWitness
+  ( CommitReceiveStep (..)
+  , ParsedWitness
   , beginRawLoan
   , endRawLoan
   , receiveFrame
   , receiveFrameContext
   , trustedRecognitionSuccess
   )
+import Phil.Core.Session (SessionStep (..))
 import Phil.Core.Syntax
   ( FrameId (FrameId)
   , GrammarId (GrammarId)
