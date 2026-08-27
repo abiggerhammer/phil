@@ -23,8 +23,8 @@ A source-choice item with no spelling is a reconciliation defect. A non-source i
 
 | Semantic choice already admitted by Phase 1 | Previous surface gap | Grammar-v1 repair |
 | --- | --- | --- |
-| Type actual for `T : Type` | `static_argument` admitted only term expressions/effect sets | `static_argument` admits `type_expression` |
-| Static session actual and abstract `S : Session` use | session parameters could be declared but not used as role-local sessions | `static_argument` admits sessions and `session_expression` admits a `static_reference` |
+| Type actual for `T : Type` | generic application could not denote every admitted type actual | structured type actuals have direct syntax; name-shaped type actuals use the single `static_reference` parse and are resolved as `Type` by the expected parameter kind |
+| Static session actual and abstract `S : Session` use | session parameters could be declared but not used as role-local sessions | structured session actuals have direct syntax; name-shaped session actuals/use sites use the same single `static_reference` parse and are resolved as `Session` by the expected kind |
 | Exact specialized static contract identity | several contract-bearing positions accepted only a bare qualified name | contract-bearing positions use `static_reference` |
 | Authority requirement | canonical generic requirement kind had no spelling | `authority T;` requirement |
 | Boundary-representation requirement | semantic requirement had no dedicated spelling | `boundary representation T;` requirement |
@@ -40,6 +40,8 @@ A source-choice item with no spelling is a reconciliation defect. A non-source i
 | Dependent typed loop state | LoopContract state telescope can carry types, syntax exposed only initial values | `loop state (x : T = e, ...)` |
 | Standalone typed-negative control | typed-negative rejection exists independently of fatal failure | `reject e` expression; `fail ... on ...` remains fatal/resource-consuming |
 
+The static-actual factoring is deliberately kind-neutral for name-shaped actuals. `Foo`, `Foo[T]`, and similar static references receive one concrete parse; elaboration uses the already-known generic parameter kind to determine whether that reference denotes a type, session, provider/callable/boundary/architecture contract, index/static value, or other admitted static object. Parser alternative order therefore cannot choose semantics.
+
 The earlier reconciliation remains in force for refinement types, explicit transport, finite `in`/`disjoint`, term-level `offer`, branch-sensitive outcome residues, exact replacement callees, and declaration-level structural modes.
 
 ## Source-expressible semantic categories after reconciliation
@@ -47,7 +49,7 @@ The earlier reconciliation remains in force for refinement types, explicit trans
 Grammar v1 now provides a route for the Phase 1 source-level categories exercised by the accepted semantic contracts:
 
 - **declarations and identity-bearing public contracts:** modules/imports, records, sums, aliases, claims, callables, functions, providers/implementations, protocols, capabilities, boundary representations, architectures, components, and program roots;
-- **generic/static abstraction:** type/index/session/message/effect/provider/callable/boundary/architecture parameters, static actuals, exact static contract references, and the admitted public requirement categories;
+- **generic/static abstraction:** type/index/session/message/effect/provider/callable/boundary/architecture parameters, kind-neutral name-shaped static references plus structured static actuals, exact static contract references, and the admitted public requirement categories;
 - **types/data:** intrinsic and named types, refinements, products, record/sum construction and matching, declaration-level mode strengthening, evidence and dependent indices;
 - **callables/resources:** preconditions, consume/borrow/authority/effect contracts, classified outcomes, branch residues, postconditions, residual obligations, assumptions, costs, and callee preserve/consume/replace transitions;
 - **authority:** explicit capability contracts and possession modes, architecture origin/grant flow, callable authority requirements, and ordinary value-flow attenuation through checked constructors/callables;
@@ -81,6 +83,7 @@ Any Phase 1 semantic extension or reconciliation should answer these questions b
 3. If no, which of canonical elaboration, assurance/build input, or realization/internal state owns it?
 4. Can two semantically distinct source choices collapse to one spelling and thereby erase a competence distinction?
 5. Can syntax accidentally create evidence, authority, identity, qualification, or realization choice that belongs to a later competent layer?
+6. When one spelling is valid at several static kinds, does it have one concrete parse with expected-kind elaboration rather than several competing parses whose order could choose semantics?
 
 The target property is not constructor-for-constructor syntax coverage. It is **source-semantic surjectivity onto the admitted author-controlled Phase 1 semantics, with explicit competence boundaries for everything else**.
 
