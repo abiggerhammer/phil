@@ -37,6 +37,9 @@ jobs:
       - name: Phase 1 architecture instantiation conformance
         run: cabal exec -- runghc -isrc test/Phase1ArchitectureInstantiationMain.hs
 
+      - name: Phase 1 architecture rename identity conformance
+        run: cabal exec -- runghc -isrc test/Phase1ArchitectureRenameIdentityMain.hs
+
       - name: Phase 1 generic structural conformance
         run: cabal exec -- runghc -isrc test/Phase1GenericStructuralMain.hs
 
