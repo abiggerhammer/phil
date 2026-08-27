@@ -58,6 +58,9 @@ jobs:
       - name: Phase 1 protocol identity separation conformance
         run: cabal exec -- runghc -Wall -Werror -isrc test/Phase1ProtocolIdentitySeparationMain.hs
 
+      - name: Phase 1 protocol generic endpoint conformance
+        run: cabal exec -- runghc -Wall -Werror -isrc test/Phase1ProtocolGenericEndpointMain.hs
+
       - name: Phase 1 generic structural conformance
         run: cabal exec -- runghc -isrc test/Phase1GenericStructuralMain.hs
 
