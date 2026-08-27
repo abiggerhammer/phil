@@ -1,0 +1,5 @@
+module corpus.bad_outcome_unclassified;
+
+callable Bad() -> R {
+  outcomes { Ok, Err };
+}

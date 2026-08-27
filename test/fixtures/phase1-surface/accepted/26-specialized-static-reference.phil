@@ -1,0 +1,9 @@
+module corpus.specialized_static_reference;
+
+claim Good[T : Type](x : U32) = true;
+
+boundary Wire[T : Type] : T {
+  receive using Decoder[T];
+  send using Encoder[T];
+  correspondence Good[T](1);
+}

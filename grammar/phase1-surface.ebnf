@@ -32,7 +32,7 @@
 # - ordinary term statements retain the Phase 0 semicolon-free surface.
 #
 # Effects:
-# - effect labels are qualified names optionally applied to term arguments;
+# - effect labels are static references optionally applied to term arguments;
 # - effect sets are explicit brace-delimited sets of effect labels;
 # - generic effect-set parameters have kind Effects and may be bounded with
 #   an effects ... within ... requirement;
@@ -47,7 +47,21 @@
 # - an explicit record/sum mode may only strengthen that derived minimum;
 # - capability declarations state mode explicitly because authority and
 #   structural copy/drop discipline are orthogonal semantic choices;
-# - parsing a mode never proves that the declaration satisfies these rules.
+# - a closure may state an explicit stronger value mode when that restriction is
+#   part of its checked callable/lifecycle contract; it may never weaken captures;
+# - parsing a mode never proves that the declaration/value satisfies these rules.
+#
+# Static arguments and generic requirements:
+# - static actual syntax admits structured types, structured sessions, static
+#   values/references, and effect sets;
+# - a name-shaped actual such as T, S, Provider[X], or Contract[Y] has one
+#   concrete static-reference parse; its expected generic kind determines its
+#   semantic category during elaboration, never parser alternative order;
+# - source positions that name parameterizable static contracts use static_reference
+#   so an exact generic contract application can be named rather than inferred;
+# - stabilized generic requirements preserve semantic category for structural,
+#   proposition, provider, callable, boundary, architecture, effects, authority,
+#   boundary-representation, representation/placement, cost, and environment facts.
 #
 # Static reasoning surface:
 # - refinement types use { x : T | P } and bind x only in P;
@@ -59,10 +73,16 @@
 #   establishes collection/refinement sorts; those remain checker obligations.
 #
 # Callable outcomes:
-# - outcomes names the public outcome/failure set;
-# - outcome T { ... } supplies branch-sensitive post-state/callee facts for T;
+# - outcomes names each public outcome together with its semantic kind;
+# - outcome kind T { ... } supplies branch-sensitive post-state/callee facts;
+# - callable and outcome blocks may expose residual obligations explicitly;
 # - replace callee transitions name the exact successor callable contract and,
 #   when required, an explicit successor state expression.
+#
+# Control-state contracts:
+# - joins may state both their post-join state telescope and invariant;
+# - loop state initializers may carry explicit types, preserving dependent state;
+# - standalone reject is typed-negative control flow; fail remains fatal control.
 #
 # A source parser must consume the entire source file.
 
@@ -123,33 +143,68 @@ generic_requirement =
   | "boundary", identifier, ":", type_expression, ";"
   | "architecture", identifier, ":", type_expression, ";"
   | "effects", identifier, "within", effect_set_expression, ";"
+  | "authority", type_expression, ";"
+  | "boundary", "representation", type_expression, ";"
+  | "representation", proposition, ";"
+  | "placement", proposition, ";"
+  | "cost", proposition, ";"
+  | "environment", proposition, ";"
   ;
 
 term_params = "(", [ term_param, { ",", term_param } ], ")" ;
 term_param = identifier, ":", type_expression ;
 
 type_expression =
+    nonreference_type_expression
+  | named_type
+  ;
+
+nonreference_type_expression =
     "Unit"
   | "Bool"
   | uint_type
   | "Bytes", "[", expression, "]"
-  | "Frame", "[", qualified_name, "]"
+  | "Frame", "[", static_reference, "]"
   | "Proof", "[", proposition, "]"
-  | "Validated", "[", qualified_name, ",", expression, ",", expression, "]"
+  | "Validated", "[", static_reference, ",", expression, ",", expression, "]"
   | refinement_type
-  | named_type
+  | tuple_type
   ;
 
 refinement_type =
   "{", identifier, ":", type_expression, "|", proposition, "}" ;
 
-named_type = qualified_name, [ static_arguments ] ;
+tuple_type =
+  "(", type_expression, ",", type_expression,
+  { ",", type_expression }, ")" ;
+
+named_type = static_reference ;
 static_arguments =
   "[", [ static_argument, { ",", static_argument } ], "]" ;
 static_argument =
-    expression
+    nonreference_type_expression
+  | nonreference_session_expression
+  | static_value_expression
   | effect_set_literal
   ;
+
+static_value_expression = static_additive_expression ;
+static_additive_expression =
+  static_multiplicative_expression,
+  { ( "+" | "-" ), static_multiplicative_expression } ;
+static_multiplicative_expression =
+  static_postfix_expression, { "*", static_postfix_expression } ;
+static_postfix_expression =
+  static_primary_expression, { ".", identifier } ;
+static_primary_expression =
+    "true"
+  | "false"
+  | "unit"
+  | integer_literal
+  | static_reference
+  | "(", static_value_expression, ")"
+  ;
+
 term_arguments = "(", [ expression, { ",", expression } ], ")" ;
 
 record_decl =
@@ -187,20 +242,28 @@ callable_clause =
   | "borrows", name_set, ";"
   | "authority", type_set, ";"
   | "effects", effect_set_expression, ";"
-  | "outcomes", type_set, ";"
+  | "outcomes", outcome_set, ";"
   | outcome_residue
   | "ensures", proposition, ";"
+  | "obligation", proposition, ";"
   | "assumes", proposition, ";"
   | "cost", expression, ";"
   | "callee", callee_transition, ";"
   ;
 
+outcome_kind = "success" | "negative" | "terminal" | "fatal" ;
+outcome_set =
+  "{", [ outcome_spec, { ",", outcome_spec } ], "}" ;
+outcome_spec = outcome_kind, type_expression ;
+
 outcome_residue =
-  "outcome", type_expression, "{", { outcome_residue_clause }, "}" ;
+  "outcome", outcome_kind, type_expression,
+  "{", { outcome_residue_clause }, "}" ;
 outcome_residue_clause =
     "state", "(", [ state_slot, { ",", state_slot } ], ")", ";"
   | "callee", callee_transition, ";"
   | "ensures", proposition, ";"
+  | "obligation", proposition, ";"
   ;
 
 callee_transition =
@@ -213,12 +276,12 @@ type_set = "{", [ type_expression, { ",", type_expression } ], "}" ;
 
 effect_set_expression =
     effect_set_literal
-  | qualified_name
+  | static_reference
   ;
 effect_set_literal =
   "{", [ effect_expression, { ",", effect_expression } ], "}" ;
 effect_expression =
-  qualified_name, [ term_arguments ] ;
+  static_reference, [ term_arguments ] ;
 
 function_decl =
   [ "recursive" ], "fn", identifier,
@@ -260,9 +323,14 @@ protocol_decl =
 role_session_decl = "role", identifier, "=", session_expression, ";" ;
 
 session_expression =
-    "send", "(", term_param, ")", [ "using", qualified_name ],
+    nonreference_session_expression
+  | static_reference
+  ;
+
+nonreference_session_expression =
+    "send", "(", term_param, ")", [ "using", static_reference ],
       [ "when", proposition ], "then", session_expression
-  | "receive", "(", term_param, ")", [ "using", qualified_name ],
+  | "receive", "(", term_param, ")", [ "using", static_reference ],
       [ "when", proposition ], "then", session_expression
   | "select", "{", session_branch, { "|", session_branch }, "}"
   | "offer", "{", session_branch, { "|", session_branch }, "}"
@@ -273,7 +341,7 @@ session_expression =
 
 session_branch =
   identifier, [ "(", [ term_param, { ",", term_param } ], ")" ],
-  [ "using", qualified_name ], [ "when", proposition ],
+  [ "using", static_reference ], [ "when", proposition ],
   "=>", session_expression ;
 
 capability_decl =
@@ -282,7 +350,7 @@ capability_decl =
   "{", { capability_item }, "}" ;
 
 capability_item =
-    "permits", qualified_name, ";"
+    "permits", static_reference, ";"
   | "requires", proposition, ";"
   | "law", identifier, ":", proposition, ";"
   ;
@@ -292,8 +360,8 @@ boundary_decl =
   ":", type_expression, "{", { boundary_item }, "}" ;
 
 boundary_item =
-    "receive", "using", qualified_name, ";"
-  | "send", "using", qualified_name, ";"
+    "receive", "using", static_reference, ";"
+  | "send", "using", static_reference, ";"
   | "correspondence", proposition, ";"
   | "canonical", ";"
   | "failure", type_expression, ";"
@@ -358,7 +426,7 @@ record_pattern =
 field_pattern = identifier, [ "=", pattern ] ;
 
 expression = additive_expression, [ "or", fallback ] ;
-fallback = "fail", qualified_name | "reject", additive_expression ;
+fallback = "fail", failure_target | "reject", additive_expression ;
 
 additive_expression =
   multiplicative_expression,
@@ -390,12 +458,14 @@ primary_expression =
   | select_expression
   | offer_expression
   | commit_receive_expression
+  | reject_expression
   | fail_expression
   | close_expression
   | release_expression
   | transport_expression
   | accept_expression
   | prove_expression
+  | tuple_expression
   | parenthesized_expression
   | "true"
   | "false"
@@ -408,7 +478,7 @@ name_expression =
   qualified_name, [ static_arguments ], [ term_arguments ] ;
 
 construct_expression =
-  "construct", qualified_name,
+  "construct", static_reference,
   "{", [ field_assignment, { ",", field_assignment }, [ "," ] ], "}" ;
 field_assignment = identifier, "=", expression ;
 
@@ -416,7 +486,8 @@ borrow_expression =
   "borrow", additive_expression, "as", identifier, block ;
 
 join_clause =
-  "join", "state", "(", [ state_slot, { ",", state_slot } ], ")" ;
+  "join", "state", "(", [ state_slot, { ",", state_slot } ], ")",
+  [ "invariant", proposition ] ;
 state_slot = identifier, ":", type_expression ;
 
 if_expression =
@@ -440,7 +511,8 @@ decide_expression =
   "{", match_arm, { match_arm }, "}" ;
 
 closure_expression =
-  "closure", term_params, "satisfies", type_expression,
+  "closure", [ "mode", structural_mode ],
+  term_params, "satisfies", type_expression,
   [ "captures", "(", [ identifier_list ], ")" ], block ;
 
 loop_expression =
@@ -448,7 +520,8 @@ loop_expression =
   [ "state", "(", [ state_binding, { ",", state_binding } ], ")" ],
   [ "invariant", proposition ],
   block ;
-state_binding = identifier, "=", expression ;
+state_binding =
+  identifier, [ ":", type_expression ], "=", expression ;
 
 continue_expression =
   "continue", [ "(", [ expression, { ",", expression } ], ")" ] ;
@@ -467,10 +540,10 @@ receive_expression =
   "receive", type_expression, "on", additive_expression ;
 
 recognize_expression =
-  "recognize", qualified_name, "from", additive_expression ;
+  "recognize", static_reference, "from", additive_expression ;
 
 validate_expression =
-  "validate", qualified_name,
+  "validate", static_reference,
   [ "at", additive_expression ], "on", additive_expression ;
 
 send_exact_expression =
@@ -493,11 +566,14 @@ branch_value =
 commit_receive_expression =
   "commit_receive", additive_expression, "using", additive_expression ;
 
+reject_expression =
+  "reject", additive_expression ;
+
 fail_expression =
   "fail", failure_target, "on", additive_expression ;
 
 failure_target =
-  qualified_name, [ term_arguments ] ;
+  static_reference, [ term_arguments ] ;
 
 close_expression = "close", additive_expression ;
 release_expression = "release", additive_expression ;
@@ -511,8 +587,11 @@ accept_expression =
 
 prove_expression = "prove", proposition ;
 
+tuple_expression =
+  "(", expression, ",", expression, { ",", expression }, ")" ;
+
 parenthesized_expression =
-  "(", [ expression, { ",", expression } ], ")" ;
+  "(", expression, ")" ;
 
 proposition = proposition_or ;
 proposition_or =
@@ -545,4 +624,4 @@ relation_operator =
   ;
 
 claim_application =
-  qualified_name, "(", [ expression, { ",", expression } ], ")" ;
+  static_reference, "(", [ expression, { ",", expression } ], ")" ;

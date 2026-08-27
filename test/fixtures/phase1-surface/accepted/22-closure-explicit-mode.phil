@@ -1,0 +1,15 @@
+module corpus.closure_explicit_mode;
+
+callable OneShot(x : U32) -> U32 {
+  outcomes { success U32 };
+  outcome success U32 {
+    state ();
+    callee consume;
+  }
+}
+
+component Demo() {
+  let f = closure mode linear (x : U32) satisfies OneShot captures () {
+    return x
+  }
+}

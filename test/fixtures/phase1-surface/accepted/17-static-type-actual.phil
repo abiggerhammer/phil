@@ -1,0 +1,4 @@
+module corpus.static_type_actual;
+
+type Boxed[T : Type] = T;
+type Word = Boxed[U32];

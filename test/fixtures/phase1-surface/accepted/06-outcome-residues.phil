@@ -1,12 +1,12 @@
 module corpus.outcomes;
 
 callable Read(blob : Blob) -> ReadResult {
-  outcomes { ReadOk, ReadFailure };
-  outcome ReadOk {
+  outcomes { success ReadOk, negative ReadFailure };
+  outcome success ReadOk {
     state (blob_next : Blob);
     ensures true;
   }
-  outcome ReadFailure {
+  outcome negative ReadFailure {
     state ();
     ensures true;
   }

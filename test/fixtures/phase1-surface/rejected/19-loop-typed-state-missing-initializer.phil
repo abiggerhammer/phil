@@ -1,0 +1,7 @@
+module corpus.bad_loop_state;
+
+component Bad() {
+  loop state (i : U32) {
+    unit
+  }
+}

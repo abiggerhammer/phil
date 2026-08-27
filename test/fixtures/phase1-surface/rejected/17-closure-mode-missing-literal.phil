@@ -1,0 +1,7 @@
+module corpus.bad_closure_mode;
+
+component Bad() {
+  closure mode (x : U32) satisfies C {
+    return x
+  }
+}

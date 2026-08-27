@@ -1,0 +1,7 @@
+module corpus.bad_join_invariant;
+
+component Bad() {
+  if true join state () invariant {
+    unit
+  }
+}

@@ -1,0 +1,27 @@
+module corpus.outcome_kinds_obligations;
+
+callable Run(x : U32) -> RunResult {
+  outcomes { success Done, negative Retry, terminal Closed, fatal Crashed };
+  obligation Ready(x);
+
+  outcome success Done {
+    state (x_next : U32);
+    obligation Preserved(x_next);
+    callee preserve;
+  }
+
+  outcome negative Retry {
+    state (x_retry : U32);
+    callee preserve;
+  }
+
+  outcome terminal Closed {
+    state ();
+    callee consume;
+  }
+
+  outcome fatal Crashed {
+    state ();
+    callee consume;
+  }
+}

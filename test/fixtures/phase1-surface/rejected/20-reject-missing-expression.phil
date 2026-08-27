@@ -1,0 +1,5 @@
+module corpus.bad_reject;
+
+component Bad() {
+  reject
+}

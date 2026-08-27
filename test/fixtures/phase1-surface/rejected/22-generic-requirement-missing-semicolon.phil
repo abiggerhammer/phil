@@ -1,0 +1,7 @@
+module corpus.bad_requirement;
+
+record Bad[T : Type] requires {
+  authority BlobRead
+} {
+  value : T
+}
