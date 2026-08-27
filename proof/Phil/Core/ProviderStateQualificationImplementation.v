@@ -359,7 +359,7 @@ Proof.
     (stateImplementationFrom _ _ _ transition)
     relatedPairs) as [| abstractPre rest] eqn:Hrelated; try discriminate.
   exists outcomeMap, contractOutcome.
-  split; assumption.
+  split; reflexivity.
 Qed.
 
 Theorem accepted_state_transition_has_related_prestate :
@@ -401,7 +401,6 @@ Proof.
     (stateImplementationFrom _ _ _ transition)
     relatedPairs) as [| abstractPre rest] eqn:Hrelated; try discriminate.
   exists abstractPre.
-  rewrite Hrelated.
   left. reflexivity.
 Qed.
 
@@ -456,14 +455,16 @@ Proof.
     (stateImplementationFrom _ _ _ transition)
     relatedPairs) as [| abstractPre rest] eqn:Hrelated; try discriminate.
   exists outcomeMap, contractOutcome.
-  repeat split; try assumption.
-  rewrite Hrelated.
-  apply (proj1
-    (all_finiteb_true_iff
-      AbstractState
-      (decideRelatedPrestate
-        eqOperation eqAbstractState eqOutcome eqImplementationState
-        relatedPairs contractTransitions transition contractOutcome)
-      (abstractPre :: rest))).
-  exact Haccepted.
+  split.
+  - reflexivity.
+  - split.
+    + reflexivity.
+    + apply (proj1
+        (all_finiteb_true_iff
+          AbstractState
+          (decideRelatedPrestate
+            eqOperation eqAbstractState eqOutcome eqImplementationState
+            relatedPairs contractTransitions transition contractOutcome)
+          (abstractPre :: rest))).
+      exact Haccepted.
 Qed.
