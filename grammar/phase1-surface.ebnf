@@ -47,7 +47,17 @@
 # - an explicit record/sum mode may only strengthen that derived minimum;
 # - capability declarations state mode explicitly because authority and
 #   structural copy/drop discipline are orthogonal semantic choices;
-# - parsing a mode never proves that the declaration satisfies these rules.
+# - a closure may state an explicit stronger value mode when that restriction is
+#   part of its checked callable/lifecycle contract; it may never weaken captures;
+# - parsing a mode never proves that the declaration/value satisfies these rules.
+#
+# Static arguments and generic requirements:
+# - static actual syntax admits types, sessions, values/contracts, and effect sets;
+# - overlapping name-shaped static actuals are interpreted by the expected
+#   generic parameter kind during elaboration, never by parser alternative order;
+# - stabilized generic requirements preserve semantic category for structural,
+#   proposition, provider, callable, boundary, architecture, effects, authority,
+#   boundary-representation, representation/placement, cost, and environment facts.
 #
 # Static reasoning surface:
 # - refinement types use { x : T | P } and bind x only in P;
@@ -59,10 +69,16 @@
 #   establishes collection/refinement sorts; those remain checker obligations.
 #
 # Callable outcomes:
-# - outcomes names the public outcome/failure set;
-# - outcome T { ... } supplies branch-sensitive post-state/callee facts for T;
+# - outcomes names each public outcome together with its semantic kind;
+# - outcome kind T { ... } supplies branch-sensitive post-state/callee facts;
+# - callable and outcome blocks may expose residual obligations explicitly;
 # - replace callee transitions name the exact successor callable contract and,
 #   when required, an explicit successor state expression.
+#
+# Control-state contracts:
+# - joins may state both their post-join state telescope and invariant;
+# - loop state initializers may carry explicit types, preserving dependent state;
+# - standalone reject is typed-negative control flow; fail remains fatal control.
 #
 # A source parser must consume the entire source file.
 
@@ -123,6 +139,12 @@ generic_requirement =
   | "boundary", identifier, ":", type_expression, ";"
   | "architecture", identifier, ":", type_expression, ";"
   | "effects", identifier, "within", effect_set_expression, ";"
+  | "authority", type_expression, ";"
+  | "boundary", "representation", type_expression, ";"
+  | "representation", proposition, ";"
+  | "placement", proposition, ";"
+  | "cost", proposition, ";"
+  | "environment", proposition, ";"
   ;
 
 term_params = "(", [ term_param, { ",", term_param } ], ")" ;
@@ -137,17 +159,24 @@ type_expression =
   | "Proof", "[", proposition, "]"
   | "Validated", "[", qualified_name, ",", expression, ",", expression, "]"
   | refinement_type
+  | tuple_type
   | named_type
   ;
 
 refinement_type =
   "{", identifier, ":", type_expression, "|", proposition, "}" ;
 
+tuple_type =
+  "(", type_expression, ",", type_expression,
+  { ",", type_expression }, ")" ;
+
 named_type = qualified_name, [ static_arguments ] ;
 static_arguments =
   "[", [ static_argument, { ",", static_argument } ], "]" ;
 static_argument =
-    expression
+    type_expression
+  | session_expression
+  | expression
   | effect_set_literal
   ;
 term_arguments = "(", [ expression, { ",", expression } ], ")" ;
@@ -187,20 +216,28 @@ callable_clause =
   | "borrows", name_set, ";"
   | "authority", type_set, ";"
   | "effects", effect_set_expression, ";"
-  | "outcomes", type_set, ";"
+  | "outcomes", outcome_set, ";"
   | outcome_residue
   | "ensures", proposition, ";"
+  | "obligation", proposition, ";"
   | "assumes", proposition, ";"
   | "cost", expression, ";"
   | "callee", callee_transition, ";"
   ;
 
+outcome_kind = "success" | "negative" | "terminal" | "fatal" ;
+outcome_set =
+  "{", [ outcome_spec, { ",", outcome_spec } ], "}" ;
+outcome_spec = outcome_kind, type_expression ;
+
 outcome_residue =
-  "outcome", type_expression, "{", { outcome_residue_clause }, "}" ;
+  "outcome", outcome_kind, type_expression,
+  "{", { outcome_residue_clause }, "}" ;
 outcome_residue_clause =
     "state", "(", [ state_slot, { ",", state_slot } ], ")", ";"
   | "callee", callee_transition, ";"
   | "ensures", proposition, ";"
+  | "obligation", proposition, ";"
   ;
 
 callee_transition =
@@ -390,12 +427,14 @@ primary_expression =
   | select_expression
   | offer_expression
   | commit_receive_expression
+  | reject_expression
   | fail_expression
   | close_expression
   | release_expression
   | transport_expression
   | accept_expression
   | prove_expression
+  | tuple_expression
   | parenthesized_expression
   | "true"
   | "false"
@@ -416,7 +455,8 @@ borrow_expression =
   "borrow", additive_expression, "as", identifier, block ;
 
 join_clause =
-  "join", "state", "(", [ state_slot, { ",", state_slot } ], ")" ;
+  "join", "state", "(", [ state_slot, { ",", state_slot } ], ")",
+  [ "invariant", proposition ] ;
 state_slot = identifier, ":", type_expression ;
 
 if_expression =
@@ -440,7 +480,8 @@ decide_expression =
   "{", match_arm, { match_arm }, "}" ;
 
 closure_expression =
-  "closure", term_params, "satisfies", type_expression,
+  "closure", [ "mode", structural_mode ],
+  term_params, "satisfies", type_expression,
   [ "captures", "(", [ identifier_list ], ")" ], block ;
 
 loop_expression =
@@ -448,7 +489,8 @@ loop_expression =
   [ "state", "(", [ state_binding, { ",", state_binding } ], ")" ],
   [ "invariant", proposition ],
   block ;
-state_binding = identifier, "=", expression ;
+state_binding =
+  identifier, [ ":", type_expression ], "=", expression ;
 
 continue_expression =
   "continue", [ "(", [ expression, { ",", expression } ], ")" ] ;
@@ -493,6 +535,9 @@ branch_value =
 commit_receive_expression =
   "commit_receive", additive_expression, "using", additive_expression ;
 
+reject_expression =
+  "reject", additive_expression ;
+
 fail_expression =
   "fail", failure_target, "on", additive_expression ;
 
@@ -511,8 +556,11 @@ accept_expression =
 
 prove_expression = "prove", proposition ;
 
+tuple_expression =
+  "(", expression, ",", expression, { ",", expression }, ")" ;
+
 parenthesized_expression =
-  "(", [ expression, { ",", expression } ], ")" ;
+  "(", expression, ")" ;
 
 proposition = proposition_or ;
 proposition_or =
