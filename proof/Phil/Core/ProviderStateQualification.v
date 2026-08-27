@@ -144,7 +144,9 @@ Proof.
   destruct (proj2 (proj2 Hqualified) transition Htransition)
     as [outcomeMap [contractOutcome [Hoperation [Houtcome _]]]].
   exists outcomeMap, contractOutcome.
-  split; assumption.
+  split.
+  - exact Hoperation.
+  - exact Houtcome.
 Qed.
 
 Theorem provider_state_transition_starts_inside_relation :
@@ -285,7 +287,8 @@ Proof.
     as [outcomeMap |] eqn:Hoperation; try discriminate.
   destruct (outcomeMap (lawImplementationEventOutcome event))
     as [publicOutcome |] eqn:Houtcome; try discriminate.
-  inversion Htranslated.
+  injection Htranslated as Hpublic.
+  subst publicEvent.
   reflexivity.
 Qed.
 
@@ -303,9 +306,12 @@ Proof.
     as [outcomeMap |] eqn:Hoperation; try discriminate.
   destruct (outcomeMap (lawImplementationEventOutcome event))
     as [publicOutcome |] eqn:Houtcome; try discriminate.
-  inversion Htranslated; subst.
+  injection Htranslated as Hpublic.
+  subst publicEvent.
   exists outcomeMap.
-  split; assumption.
+  split.
+  - exact Hoperation.
+  - cbn. exact Houtcome.
 Qed.
 
 Theorem unqualified_first_provider_event_rejects :
@@ -354,8 +360,8 @@ Theorem provider_law_run_is_deterministic :
 Proof.
   intros law state trace first second Hfirst Hsecond.
   rewrite Hfirst in Hsecond.
-  inversion Hsecond.
-  reflexivity.
+  injection Hsecond.
+  trivial.
 Qed.
 
 (* PROV-008: lifecycle/crash/interruption qualification. *)
@@ -425,10 +431,10 @@ Theorem missing_provider_lifecycle_point_rejects :
     ~ ProviderLifecycleQualifies qualifiedOperation contract model.
 Proof.
   intros qualifiedOperation contract model point allowance Hallowance Hmissing Hqualified.
-  destruct Hqualified as [Hcoverage Hunexpected].
-  destruct (Hcoverage point allowance Hallowance)
-    as [observations [Hmodel [Hoperation Hobservations]]].
-  rewrite Hmissing in Hmodel.
+  destruct Hqualified as [Htotal Hunexpected].
+  destruct (Htotal point allowance Hallowance)
+    as [observations [Hobservations _]].
+  rewrite Hmissing in Hobservations.
   discriminate.
 Qed.
 
@@ -438,9 +444,9 @@ Theorem unexpected_provider_lifecycle_point_rejects :
     lifecycleImplementationObservations model point = Some observations ->
     ~ ProviderLifecycleQualifies qualifiedOperation contract model.
 Proof.
-  intros qualifiedOperation contract model point observations Hmissing Hmodel Hqualified.
-  destruct Hqualified as [Hcoverage Hunexpected].
-  destruct (Hunexpected point observations Hmodel) as [allowance Hallowance].
+  intros qualifiedOperation contract model point observations Hmissing Hobservations Hqualified.
+  destruct Hqualified as [Htotal Hunexpected].
+  destruct (Hunexpected point observations Hobservations) as [allowance Hallowance].
   rewrite Hmissing in Hallowance.
   discriminate.
 Qed.
@@ -452,9 +458,9 @@ Theorem qualified_provider_lifecycle_point_uses_qualified_operation :
     qualifiedOperation (lifecyclePointOperation point).
 Proof.
   intros qualifiedOperation contract model point allowance Hqualified Hallowance.
-  destruct Hqualified as [Hcoverage Hunexpected].
-  destruct (Hcoverage point allowance Hallowance)
-    as [observations [Hmodel [Hoperation Hobservations]]].
+  destruct Hqualified as [Htotal Hunexpected].
+  destruct (Htotal point allowance Hallowance)
+    as [observations [Hobservations [Hoperation Hall]]].
   exact Hoperation.
 Qed.
 
@@ -474,13 +480,14 @@ Theorem qualified_provider_lifecycle_observation_is_exact :
       (lifecycleRetryDisposition observation).
 Proof.
   intros qualifiedOperation contract model point allowance observations observation
-    Hqualified Hallowance Hmodel Hobserved.
-  destruct Hqualified as [Hcoverage Hunexpected].
-  destruct (Hcoverage point allowance Hallowance)
-    as [coveredObservations [Hcovered [Hoperation Hchecks]]].
-  rewrite Hmodel in Hcovered.
-  inversion Hcovered; subst coveredObservations.
-  exact (Hchecks observation Hobserved).
+    Hqualified Hallowance Hobservations Hobserved.
+  destruct Hqualified as [Htotal Hunexpected].
+  destruct (Htotal point allowance Hallowance)
+    as [expectedObservations [Hexpected [Hoperation Hall]]].
+  rewrite Hobservations in Hexpected.
+  injection Hexpected as Heq.
+  subst expectedObservations.
+  exact (Hall observation Hobserved).
 Qed.
 
 Theorem forbidden_provider_observable_state_rejects :
@@ -493,11 +500,11 @@ Theorem forbidden_provider_observable_state_rejects :
     ~ ProviderLifecycleQualifies qualifiedOperation contract model.
 Proof.
   intros qualifiedOperation contract model point allowance observations observation
-    Hallowance Hmodel Hobserved Hforbidden Hqualified.
+    Hallowance Hobservations Hobserved Hforbidden Hqualified.
   pose proof (qualified_provider_lifecycle_observation_is_exact
     qualifiedOperation contract model point allowance observations observation
-    Hqualified Hallowance Hmodel Hobserved) as Hchecked.
-  destruct Hchecked as [Hboundary [Hstate [Hcleanup Hretry]]].
+    Hqualified Hallowance Hobservations Hobserved) as Hexact.
+  destruct Hexact as [Hboundary [Hstate [Hcleanup Hretry]]].
   contradiction.
 Qed.
 
@@ -511,11 +518,11 @@ Theorem forbidden_provider_cleanup_residue_rejects :
     ~ ProviderLifecycleQualifies qualifiedOperation contract model.
 Proof.
   intros qualifiedOperation contract model point allowance observations observation
-    Hallowance Hmodel Hobserved Hforbidden Hqualified.
+    Hallowance Hobservations Hobserved Hforbidden Hqualified.
   pose proof (qualified_provider_lifecycle_observation_is_exact
     qualifiedOperation contract model point allowance observations observation
-    Hqualified Hallowance Hmodel Hobserved) as Hchecked.
-  destruct Hchecked as [Hboundary [Hstate [Hcleanup Hretry]]].
+    Hqualified Hallowance Hobservations Hobserved) as Hexact.
+  destruct Hexact as [Hboundary [Hstate [Hcleanup Hretry]]].
   contradiction.
 Qed.
 
@@ -529,10 +536,10 @@ Theorem forbidden_provider_retry_disposition_rejects :
     ~ ProviderLifecycleQualifies qualifiedOperation contract model.
 Proof.
   intros qualifiedOperation contract model point allowance observations observation
-    Hallowance Hmodel Hobserved Hforbidden Hqualified.
+    Hallowance Hobservations Hobserved Hforbidden Hqualified.
   pose proof (qualified_provider_lifecycle_observation_is_exact
     qualifiedOperation contract model point allowance observations observation
-    Hqualified Hallowance Hmodel Hobserved) as Hchecked.
-  destruct Hchecked as [Hboundary [Hstate [Hcleanup Hretry]]].
+    Hqualified Hallowance Hobservations Hobserved) as Hexact.
+  destruct Hexact as [Hboundary [Hstate [Hcleanup Hretry]]].
   contradiction.
 Qed.
