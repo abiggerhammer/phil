@@ -29,3 +29,5 @@ jobs:
         run: cabal exec -- runghc -Wall -Werror -isrc test/Phase1ConsumingRecordDestructionMain.hs
       - name: DATA-005 missing linear field disposition conformance
         run: cabal exec -- runghc -Wall -Werror -isrc test/Phase1MissingLinearFieldDispositionMain.hs
+      - name: DATA-006 legal affine omission conformance
+        run: cabal exec -- runghc -Wall -Werror -isrc test/Phase1AffineOmissionMain.hs
