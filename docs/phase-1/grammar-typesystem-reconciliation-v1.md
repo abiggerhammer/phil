@@ -129,7 +129,7 @@ The same callee-transition syntax is available in an outcome residue block, allo
 
 ## Things deliberately not added
 
-This pass does **not** add surface annotations for unrestricted/affine/linear structural mode. Phase 1 already commits to deriving mode from owned contents and declared contracts where the result is deterministic.
+This pass did **not** add binding-local annotations for unrestricted/affine/linear structural mode. Phase 1 already commits to deriving an ordinary owning binding's mode from its checked type and deriving aggregate/closure mode from owned contents where deterministic. The later `structural-mode-surface-reconciliation-v1.md` adds only the declaration-level `mode` clauses needed for already-admitted stricter nominal data modes and explicit capability possession modes; it does not turn structural mode into a per-variable annotation system.
 
 It does **not** add explicit `toNat` source syntax merely because Core has a refinement-term coercion node. Canonical lossless coercion insertion remains an elaboration/focusing responsibility where the target sort uniquely determines it.
 
@@ -156,7 +156,7 @@ SURF-004 lexical-priority coverage automatically gains the new literal keywords 
 
 SURF-005 determinate-interpretation analysis must cover the new brace-delimited refinement and outcome forms and the relation operators, rather than relying on parser alternative order.
 
-Semantic conformance remains owned by the corresponding Core/resource/callable/refinement cases; grammar tests establish syntax only.
+Semantic conformance remains owned by the corresponding Core/resource/callable/refinement cases; grammar tests establish syntax only. Declaration-level structural-mode coverage added later is specified by `structural-mode-surface-reconciliation-v1.md`.
 
 ## Exit condition for this reconciliation slice
 
