@@ -663,7 +663,7 @@ requirementsFromKernel key kernelRequirements =
   let requirements = fromKernelRequirements kernelRequirements
       roundTrip = toKernelRequirements requirements
   in if sameKernelRequirements roundTrip kernelRequirements
-      then Right kernelRequirements `seq` requirements
+      then Right requirements
       else Left (GenericStructuralKernelBridgeMismatch key)
 
 toRequirementsKernelRequirements
