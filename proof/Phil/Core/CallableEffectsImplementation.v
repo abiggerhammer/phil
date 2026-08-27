@@ -134,7 +134,7 @@ Proof.
 Qed.
 
 Theorem effect_delta_bit_true_iff_undeclared :
-  forall inferred public effect,
+  forall (inferred public : EffectSet) (effect : nat),
     effectDeltaBit (inferred effect) (public effect) = true <->
     inferred effect = true /\ public effect = false.
 Proof.
