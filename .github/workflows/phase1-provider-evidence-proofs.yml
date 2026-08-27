@@ -1,0 +1,141 @@
+name: Phase 1 Provider Evidence Proofs
+
+on:
+  pull_request:
+    paths:
+      - 'src/Phil/Core/ProviderQualification.hs'
+      - 'src/Phil/Core/ProviderEvidenceQualification.hs'
+      - 'src/Phil/Examples/Steve/ProviderQualifications.hs'
+      - 'test/Phase1ProviderQualificationMain.hs'
+      - 'test/Phase1ProviderEvidenceQualificationMain.hs'
+      - 'test/Phase1SteveProviderQualificationMain.hs'
+      - 'docs/phase-1/provider-evidence-competence-v1.md'
+      - 'proof/Phil/Core/GenericStructural.v'
+      - 'proof/Phil/Core/CallableMode.v'
+      - 'proof/Phil/Core/CallableEffects.v'
+      - 'proof/Phil/Core/CallableLifecycle.v'
+      - 'proof/Phil/Core/CallableRefinement.v'
+      - 'proof/Phil/Core/Syntax.v'
+      - 'proof/Phil/Core/Context.v'
+      - 'proof/Phil/Core/ContextJoin.v'
+      - 'proof/Phil/Core/ProcessJoin.v'
+      - 'proof/Phil/Core/ResourceJoin.v'
+      - 'proof/Phil/Core/ProviderQualification.v'
+      - 'proof/Phil/Core/ProviderEvidenceQualification.v'
+      - 'app/Phase1ProviderEvidenceCertificationMain.hs'
+      - '.github/workflows/phase1-provider-evidence-proofs.yml'
+  push:
+    branches: [main]
+    paths:
+      - 'src/Phil/Core/ProviderQualification.hs'
+      - 'src/Phil/Core/ProviderEvidenceQualification.hs'
+      - 'src/Phil/Examples/Steve/ProviderQualifications.hs'
+      - 'test/Phase1ProviderQualificationMain.hs'
+      - 'test/Phase1ProviderEvidenceQualificationMain.hs'
+      - 'test/Phase1SteveProviderQualificationMain.hs'
+      - 'docs/phase-1/provider-evidence-competence-v1.md'
+      - 'proof/Phil/Core/GenericStructural.v'
+      - 'proof/Phil/Core/CallableMode.v'
+      - 'proof/Phil/Core/CallableEffects.v'
+      - 'proof/Phil/Core/CallableLifecycle.v'
+      - 'proof/Phil/Core/CallableRefinement.v'
+      - 'proof/Phil/Core/Syntax.v'
+      - 'proof/Phil/Core/Context.v'
+      - 'proof/Phil/Core/ContextJoin.v'
+      - 'proof/Phil/Core/ProcessJoin.v'
+      - 'proof/Phil/Core/ResourceJoin.v'
+      - 'proof/Phil/Core/ProviderQualification.v'
+      - 'proof/Phil/Core/ProviderEvidenceQualification.v'
+      - 'app/Phase1ProviderEvidenceCertificationMain.hs'
+      - '.github/workflows/phase1-provider-evidence-proofs.yml'
+
+permissions:
+  contents: read
+
+jobs:
+  rocq-phase1-provider-evidence:
+    runs-on: ubuntu-latest
+    container:
+      image: rocq/rocq-prover:9.2.0
+      options: --user root
+    steps:
+      - uses: actions/checkout@v4
+      - name: Compile PHIL-PROV-EVIDENCE-001
+        shell: bash
+        run: |
+          set -euo pipefail
+          export PATH="/home/rocq/.opam/${COMPILER}/bin:$PATH"
+          rocq c -Q proof/Phil Phil proof/Phil/Core/GenericStructural.v
+          rocq c -Q proof/Phil Phil proof/Phil/Core/CallableMode.v
+          rocq c -Q proof/Phil Phil proof/Phil/Core/CallableEffects.v
+          rocq c -Q proof/Phil Phil proof/Phil/Core/CallableLifecycle.v
+          rocq c -Q proof/Phil Phil proof/Phil/Core/CallableRefinement.v
+          rocq c -Q proof/Phil Phil proof/Phil/Core/Syntax.v
+          rocq c -Q proof/Phil Phil proof/Phil/Core/Context.v
+          rocq c -Q proof/Phil Phil proof/Phil/Core/ContextJoin.v
+          rocq c -Q proof/Phil Phil proof/Phil/Core/ProcessJoin.v
+          rocq c -Q proof/Phil Phil proof/Phil/Core/ResourceJoin.v
+          rocq c -Q proof/Phil Phil proof/Phil/Core/ProviderQualification.v
+          rocq c -Q proof/Phil Phil proof/Phil/Core/ProviderEvidenceQualification.v
+          mkdir -p phase1-provider-evidence-proof
+          cp \
+            proof/Phil/Core/ProviderEvidenceQualification.v \
+            proof/Phil/Core/ProviderEvidenceQualification.vo \
+            phase1-provider-evidence-proof/
+      - uses: actions/upload-artifact@v4
+        with:
+          name: rocq-phase1-provider-evidence-proof
+          path: phase1-provider-evidence-proof
+          if-no-files-found: error
+
+  certify-phase1-provider-evidence:
+    needs: rocq-phase1-provider-evidence
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: haskell-actions/setup@v2
+        with:
+          ghc-version: '9.6.7'
+          cabal-version: 'latest'
+      - name: Build existing proof certifier substrate with warnings as errors
+        run: cabal build exe:phil-certify-core-scalar --ghc-options=-Werror
+      - name: Typecheck certifier
+        run: cabal exec -- ghc -isrc -Wall -Werror -fno-code app/Phase1ProviderEvidenceCertificationMain.hs
+      - name: Re-run PROV-010 and Steve correspondence
+        run: |
+          set -euo pipefail
+          cabal exec -- runghc -isrc test/Phase1ProviderQualificationMain.hs
+          cabal exec -- runghc -isrc test/Phase1ProviderEvidenceQualificationMain.hs
+          cabal exec -- runghc -isrc test/Phase1SteveProviderQualificationMain.hs
+      - uses: actions/download-artifact@v4
+        with:
+          name: rocq-phase1-provider-evidence-proof
+          path: phase1-provider-evidence-proof
+      - name: Emit PHIL-PROV-EVIDENCE-001 certificate
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p phase1-provider-evidence-certification
+          cabal exec -- runghc -isrc app/Phase1ProviderEvidenceCertificationMain.hs \
+            phase1-provider-evidence-proof/ProviderEvidenceQualification.v \
+            phase1-provider-evidence-proof/ProviderEvidenceQualification.vo \
+            phase1-provider-evidence-certification/PHIL-PROV-EVIDENCE-001.rocq.cert
+          sha256sum \
+            src/Phil/Core/ProviderQualification.hs \
+            src/Phil/Core/ProviderEvidenceQualification.hs \
+            src/Phil/Examples/Steve/ProviderQualifications.hs \
+            test/Phase1ProviderQualificationMain.hs \
+            test/Phase1ProviderEvidenceQualificationMain.hs \
+            test/Phase1SteveProviderQualificationMain.hs \
+            docs/phase-1/provider-evidence-competence-v1.md \
+            proof/Phil/Core/ProviderQualification.v \
+            proof/Phil/Core/ProviderEvidenceQualification.v \
+            app/Phase1ProviderEvidenceCertificationMain.hs \
+            > phase1-provider-evidence-certification/PHIL-PROV-EVIDENCE-001.correspondence.sha256
+          cat phase1-provider-evidence-certification/PHIL-PROV-EVIDENCE-001.rocq.cert
+          sha256sum phase1-provider-evidence-certification/PHIL-PROV-EVIDENCE-001.rocq.cert
+      - uses: actions/upload-artifact@v4
+        with:
+          name: phil-phase1-provider-evidence-proof-certification
+          path: phase1-provider-evidence-certification
+          if-no-files-found: error
