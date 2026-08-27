@@ -1,0 +1,3 @@
+module corpus.bad_static_argument;
+
+type Bad = Box[U32;

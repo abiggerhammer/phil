@@ -14,24 +14,33 @@ A `rejected` fixture is deliberately malformed so rejection belongs at the synta
 
 ## Coverage
 
-The corpus covers the six grammar/type-system reconciliation areas independently:
+The original grammar/type-system reconciliation cases cover refinement types, explicit transport, native finite membership/disjointness, term-level `offer`, branch-sensitive callable residues, exact replacement callees, and composition among those forms.
 
-1. refinement types `{x : T | P}`;
-2. explicit transport `transport e to T using p`;
-3. native finite membership and disjointness propositions;
-4. term-level `offer`;
-5. branch-sensitive callable `outcome T { ... }` residue blocks; and
-6. exact `replace with ... [state ...]` callee transitions.
+The structural-mode reconciliation covers declaration-level mode spelling for records/sums, all three explicit capability possession modes, ordinary type-derived binding mode, and syntax-negative attempts to put mode in the wrong place.
 
-It also includes three positive composition cases so parser coverage is not limited to isolated productions: refinement plus transport, offer plus transport, and outcome residues carrying a refinement type.
+The broader syntax/semantics completeness pass adds parser pressure for:
 
-The structural-mode reconciliation is covered separately at the declaration boundary. Positive syntax cases include an explicitly linear record, an explicitly affine sum, capabilities using each of `unrestricted`, `affine`, and `linear`, and ordinary owning bindings with no binder-local mode qualifier. Syntax-negative cases cover a missing mode literal, an unknown mode literal, an illegal binder-local mode spelling, and an illegal mode clause on a transparent type alias. These fixtures assert syntax only; strengthening/no-weakening and binding-zone behavior remain semantic checker obligations.
+- `Type` static actuals;
+- static `Session` parameters/actuals and named session references;
+- the full admitted generic requirement categories for authority, boundary representation, representation, placement, cost, and environment;
+- specialized static contract references in contract-bearing positions;
+- product/tuple types and tuple values, distinct from grouping;
+- explicit callable outcome classification (`success`, `negative`, `terminal`, `fatal`);
+- callable-wide and per-outcome residual `obligation` clauses;
+- explicit stricter closure mode;
+- join invariants;
+- typed loop-state initializers;
+- standalone typed-negative `reject`.
+
+Each repaired boundary has at least one positive parser fixture and a nearby syntax-negative case where a useful malformed form exists. Semantic no-weakening, kind/sort correctness, outcome compatibility, obligation disposition, resource projection, session duality, authority possession, and assurance validity remain checker obligations.
 
 ## Manifest
 
 `manifest.json` is the machine-readable integration point for the future canonical Haskell parser harness. Each row has a stable corpus ID, relative path, parse expectation, grammar productions exercised, and whether semantic checking is deferred.
 
 SURF-002 implementation should consume this manifest rather than duplicating the fixture list in Haskell. Whole-file consumption is mandatory. The harness should report the fixture ID and path on disagreement.
+
+The integrity checker requires every `.phil` fixture on disk to appear exactly once in the manifest, so adding an untracked example or leaving a stale manifest row fails CI.
 
 ## Deliberate non-goals
 
@@ -44,4 +53,4 @@ This corpus does not:
 - add parser recovery behavior; or
 - claim parser/grammar soundness or completeness by testing alone.
 
-The later parser-correspondence proof/certificate remains responsible for the stronger SURF obligation. The corpus is executable pressure and regression evidence for that work.
+The semantic-to-surface classification is recorded in `syntax-semantics-completeness-v1.md`. The later parser-correspondence proof/certificate remains responsible for the stronger SURF obligation. The corpus is executable pressure and regression evidence for that work.

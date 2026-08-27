@@ -1,0 +1,12 @@
+module corpus.generic_requirement_kinds;
+
+record Constrained[T : Type] requires {
+  authority BlobRead;
+  boundary representation WireRep;
+  representation true;
+  placement true;
+  cost true;
+  environment true;
+} {
+  value : T
+}

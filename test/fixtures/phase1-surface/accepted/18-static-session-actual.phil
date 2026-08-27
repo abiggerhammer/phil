@@ -1,0 +1,6 @@
+module corpus.static_session_actual;
+
+protocol Mirror[S : Session] {
+  role left = S;
+  role right = S;
+}

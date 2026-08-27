@@ -6,259 +6,225 @@
 
 The grammar fixes what token sequences constitute Phase 1 surface syntax. It does **not** make syntactic acceptance semantic acceptance. Declaration checking, identity, authority, resource/session legality, assurance, and lowering remain governed by their checked semantic contracts.
 
-In particular:
-
 > **The grammar determines what can be parsed; the checker determines what it means and whether it is admissible.**
 
 The current Haskell `Phil.Surface.Parser` began as the Phase 0 parser and is not made normative by this decision. Phase 1 parser work must establish correspondence to the canonical grammar rather than treating implementation behavior as specification.
 
 ## One source of truth
 
-The canonical EBNF is deliberately not duplicated by a hand-maintained Rocq grammar.
+The canonical EBNF is deliberately not duplicated by a hand-maintained Rocq grammar. `scripts/derive_phase1_surface_grammar.py --write` derives the proof-facing Rocq EBNF syntax tree, rule set, start symbol, reserved keywords, and canonical EBNF SHA-256. CI derives it twice for determinism and compiles the generated Rocq artifact.
 
-Run:
+## Surface completeness criterion
 
-```sh
-python3 scripts/derive_phase1_surface_grammar.py --write
+Grammar v1 is required to expose every **source-author-controlled semantic choice** admitted by the stabilized Phase 1 semantic contracts. It is not required to expose deterministic elaboration products, assurance/build artifacts, or target/internal realization state.
+
+The detailed classification and audit are recorded in `syntax-semantics-completeness-v1.md`. In short:
+
+- if a programmer may choose it as part of ordinary Phil source semantics, Grammar v1 needs a spelling;
+- if the checker derives it canonically, another spelling would create a false choice;
+- if it is proof/qualification/admission metadata, ordinary source may depend on it but may not self-assert it;
+- if it belongs to Systems/target realization or compiler/runtime bookkeeping, it is not source syntax.
+
+This is why Grammar v1 exposes explicit transport, outcome class, residual obligations, join/loop contracts, authority requirements, and exact static contract references, but does not expose `PendingRecv`, provider-qualification evidence records, `StageContract`, or backend ABI objects as user-authored terms.
+
+## Canonical lexical and structural choices
+
+The EBNF header owns the lexical contract: Unicode whitespace and `//` comments are trivia; identifiers use the stated Unicode identifier class; decimal integers are ASCII digits; `U<digits>` is a syntactic unsigned-width type token; strings use the small explicit escape set; and parsing consumes the entire file.
+
+Phase 1 v1 uses `[...]` for static/generic parameters and arguments and `(...)` for runtime arguments/products. Static declaration/configuration items use semicolon terminators; ordinary term statements retain the Phase 0 semicolon-free style.
+
+Attributes use `@name("value")`. Records, sums, aliases, claims, callable contracts, functions, providers, protocols, capabilities, boundary representations, architectures, components, and program roots are all ordinary top-level declaration forms. Architecture occurrence creation uses `instance`; deliberate sharing uses `ref`; a program root says `program ... = instantiate ...`.
+
+## Static arguments, contracts, and requirements
+
+The static parameter telescope includes the bounded Phase 1 kinds `Type`, `Nat`, `Session`, `Message`, `Effects`, and exact provider/callable/boundary/architecture contract kinds.
+
+A static actual may therefore be a type, a session description/reference, an ordinary static expression, or an effect-set literal as demanded by the expected parameter kind. This matters for forms such as:
+
+```phil
+type WordBox = Box[U32];
+
+protocol Wrapper[S : Session] {
+  role left = S;
+  role right = S;
+}
 ```
 
-to derive `proof/Phil/Surface/Grammar.v`. The generated file is ignored by Git. It contains:
+Kind checking is semantic. The parser does not decide whether one ambiguous-looking static form inhabits the expected kind.
 
-- a typed Rocq EBNF syntax tree;
-- the exact grammar rule set;
-- the start symbol `source_file`;
-- the reserved keyword set derived from literal grammar terminals; and
-- the SHA-256 digest of the canonical EBNF source.
+Contract-bearing positions use `static_reference`, not merely a bare name, where the semantic contract may itself be specialized. Thus a boundary may say `receive using Decoder[T];`, a protocol transition may say `using FrameCodec[Message]`, and a claim application may name an exact generic claim family.
 
-CI derives the Rocq artifact from a clean checkout, derives it a second time to check determinism, and asks Rocq to compile the result. Thus the proof-facing grammar is mechanically downstream of the EBNF instead of being a second editable specification.
+The explicit public generic requirement block preserves the admitted requirement categories rather than collapsing them:
 
-## Canonical lexical rules
+```phil
+requires {
+  structural T : duplicate;
+  proposition Ordered(x);
+  provider P : BlobProvider;
+  callable F : Reader;
+  boundary B : Wire;
+  architecture A : StorageArchitecture;
+  effects E within { storage.Read(store) };
+  authority BlobRead;
+  boundary representation WireRep;
+  representation HostIndependent(T);
+  placement SameDomain(x, y);
+  cost BoundedCost(x);
+  environment StableClock;
+}
+```
 
-The EBNF header owns the lexical contract. In summary:
-
-- Unicode whitespace and `//` line comments are trivia between tokens;
-- identifiers begin with a Unicode letter or `_` and continue with Unicode alphanumerics, `_`, or `'`;
-- identifiers exclude the keyword literals appearing in the grammar;
-- decimal integer syntax is ASCII decimal digits;
-- `U` followed by decimal digits is a syntactic unsigned-width type token, while supported widths are checked semantically;
-- string literals are UTF-8 double-quoted strings with the small escape set stated in the grammar; and
-- parsing consumes the entire source file.
-
-Keyword and `U<digits>` recognition take precedence over ordinary identifiers.
-
-## Canonical structural choices
-
-Phase 1 v1 fixes the following surface conventions:
-
-- a source file has an optional `module`, then imports, then declarations;
-- module/import and static declaration/configuration items use semicolon terminators;
-- ordinary term statements retain the semicolon-free Phase 0 style;
-- generic/static parameters use `[...]`; runtime parameters and arguments use `(...)`;
-- generic requirements use an explicit `requires { ... }` block;
-- generic effect-set parameters use the `Effects` kind and may be bounded by an `effects E within ...;` requirement;
-- callable contracts state latent may-effects with an `effects ...;` clause;
-- callable contracts may state branch-sensitive resource/callee postconditions with `outcome T { ... }` blocks;
-- callee replacement names its exact successor contract with `replace with ...`, plus an explicit state expression where required;
-- ordinary owning bindings inherit structural mode from their checked type rather than carrying a binder-local mode annotation;
-- records and sums may use a declaration-level `mode unrestricted|affine|linear` only to state a mode at least as restrictive as the minimum derived from owned contents;
-- capability declarations state `mode unrestricted|affine|linear` explicitly because authority and structural copy/drop discipline are distinct semantic facts;
-- refinement types use `{x : T | P}`;
-- non-definitional equality transport uses `transport value to T using evidence`;
-- native finite-collection relations use infix `in` and `disjoint` propositions;
-- attributes use `@name("value")`, including semantic-key annotations such as `@key(...)` and `@instance_key(...)` when admitted by the semantic checker;
-- records, sums, aliases, claims, callable contracts, functions, providers, protocols, capabilities, boundary representations, architectures, components, and program roots are all ordinary top-level declaration forms;
-- the Phase 1 protocol surface is explicitly binary: a protocol declaration contains exactly two role-local session declarations; distinct role names and duality remain semantic checks;
-- architecture occurrence creation uses `instance`; deliberate sharing uses `ref`;
-- a program root explicitly says `program ... = instantiate ...`;
-- expression and proposition precedence are fixed by the grammar rather than parser implementation order;
-- Phase 0 boundary/session term forms remain syntactically available, including term-level `offer`, while Phase 1 adds functions/closures, records/sums, `if`, `match`, explicit join-state annotations, and loop state/invariants.
-
-These choices freeze spelling and punctuation for Phase 1 v1. They do not freeze a formatter or whitespace layout policy.
+The exact semantic identity, admissibility, evidence, and discharge path of each requirement remain checker/assurance responsibilities.
 
 ## Structural mode syntax
 
-Structural mode is a checked property of a value type/resource contract. Once elaboration establishes that an owning binding has type `T`, the binding enters the unrestricted, affine, or linear context according to `mode(T)`. Term parameters, `let` bindings, and owning pattern binders therefore do not carry independent `linear`/`affine` qualifiers.
+Structural mode is a checked property of the value type/resource contract. Ordinary owning bindings inherit `mode(T)` and do not carry binder-local `linear`/`affine` qualifiers.
 
-For transparent records and sums, omission of a mode clause means ordinary ADR-023 derivation from owned contents. A declaration may explicitly strengthen that result:
+Transparent records and sums derive a minimum mode from owned contents. A nominal declaration may explicitly strengthen it with `mode unrestricted|affine|linear`; checking requires the declaration not to weaken the derived minimum. Capabilities state possession mode explicitly because authority and copy/drop discipline are distinct semantic facts. Transparent aliases inherit the target mode.
 
-```phil
-record FireOnceToken mode linear {
-  id : U64
-}
-
-data MaybeLease mode affine =
-    NoLease
-  | LeaseId(U64);
-```
-
-If `d` is the minimum mode derived from owned contents and `m` is the explicit declared mode, semantic checking requires `d <= m` under:
-
-```text
-unrestricted < affine < linear
-```
-
-and the checked type mode is `m`. The grammar intentionally still parses a declaration whose explicit mode is too weak; semantic checking rejects it. For example:
+Closures normally derive their minimum mode from owned captures. Where the callable/lifecycle contract intentionally makes the callable value stricter than that minimum, Grammar v1 also permits:
 
 ```phil
-record BadWrapper mode unrestricted {
-  payload : OwnedBytes[n]
-}
+closure mode linear (x : U32) satisfies OneShot { ... }
 ```
 
-cannot semantically launder a linear owned field into an unrestricted wrapper.
+The explicit closure mode may not weaken capture-derived mode and does not by itself prove one-shot invocation behavior; callee transition semantics remains separate.
 
-Capabilities do not have transparent owned fields from which their copy/drop discipline can be derived. ADR-014 also makes their authority contract orthogonal to structural mode, so a capability declaration states the mode explicitly:
+## Types, refinement, products, and transport
 
-```phil
-capability BlobRead mode unrestricted {
-  permits storage.Read;
-}
-
-capability Lease mode affine {
-  permits storage.Use;
-}
-
-capability LifecycleToken mode linear {
-  permits lifecycle.Finish;
-}
-```
-
-The capability mode governs possession. It does not by itself say that exercising the authority is one-shot; consuming operation/state-transition semantics remain separate.
-
-Transparent `type` aliases do not accept a `mode` clause and inherit the aliased type's mode. Generic aggregate and closure modes remain derived from admitted parameter/capture modes. Shared loans remain scoped non-owning relations, not a fourth structural mode.
-
-The detailed competence boundary and rationale are recorded in `structural-mode-surface-reconciliation-v1.md`.
-
-## Refinement, relation, and transport syntax
-
-Grammar v1 exposes the bounded dependent/refinement machinery already admitted by Phil Core without making the parser a proof engine.
-
-A refinement type binds one value in one proposition:
-
-```phil
-{x : U32 | x <= limit}
-{payload : Bytes[n] | DigestMatches(id, payload)}
-```
-
-The binder scope is the proposition inside the same refinement type. Sort checking, definitional equality, structural/resource legality, and proposition discharge remain semantic checks.
-
-Finite membership and disjointness are native proposition relations:
-
-```phil
-candidate in allowed
-left disjoint right
-```
-
-They are not syntax sugar for opaque claim declarations. The checker establishes whether the operands have compatible finite-collection sorts.
-
-When two types/indices/subjects are not definitionally equal, a source program may explicitly choose a checked transport:
+Refinement types use `{x : T | P}`. Finite membership and disjointness use infix `in` and `disjoint`. Non-definitional transport is explicit:
 
 ```phil
 transport payload to Bytes[n] using length_equal
 ```
 
-The `using` expression must supply evidence competent for the exact required equality or transport relation. No symmetry, subject retargeting, succession relation, or proof competence is inferred by parsing.
+`accept value as T` remains distinct: it asks ordinary checking/refinement machinery to establish `T`; it is not evidence-bearing transport.
 
-`accept value as T` remains a separate operation: it asks ordinary checking/refinement machinery to establish `T`; it is not a substitute for evidence-bearing non-definitional transport.
+Ordinary finite products are source-expressible. Product types use two or more comma-separated elements:
+
+```phil
+(U32, Bool)
+(U32, Bool, ContentId)
+```
+
+Tuple values use the same arity rule:
+
+```phil
+(1, true)
+(id, payload, proof)
+```
+
+A single parenthesized expression `(x)` is grouping, not a one-element tuple. Tuple patterns continue to destructure products. Product structural mode follows owned contents under ordinary resource rules.
 
 ## Effect syntax
 
-Grammar v1 represents source-level may-effects explicitly without committing Phil to algebraic effect handlers or a target-runtime effect language.
+Source-level may-effects are explicit semantic labels, optionally indexed by semantic term arguments. Effect sets can be literals or named effect-set parameters. A generic `Effects` parameter may be bounded with `effects E within ...;`.
 
-An effect label is a qualified name optionally applied to term arguments. This permits both unindexed labels and semantic-subject-indexed labels:
+Backend calls, copies, staging operations, synchronization, or other target-introduced work do not become source effects merely because they execute. Their additional effects belong to realization/StageContract accounting.
+
+## Callable outcomes, obligations, and callee transitions
+
+Callable outcome class is source semantic information. Grammar v1 does not permit a plain unclassified outcome set because ADR-005 distinguishes successful continuation, typed-negative recoverable control, declared terminal completion, and fatal failure.
+
+Canonical spelling is:
 
 ```phil
-effects { log.Flush, storage.Write(blob_store), network.Send(endpoint) };
+outcomes {
+  success Stored,
+  negative StoreFailure,
+  terminal Closed,
+  fatal Crashed
+};
 ```
 
-An effect set may also be named by a generic/static effect-set parameter:
+A branch-sensitive residue repeats the class:
 
 ```phil
-callable Forward[E : Effects](x : Bytes[n]) -> Unit {
-  effects E;
+outcome negative StoreFailure {
+  state (x : OwnedBytes[n]);
+  obligation RetryPolicy(x);
+  callee preserve;
 }
 ```
 
-A generic requirement may place an upper bound on such a parameter:
+`state (...)` is the checked result/resource telescope for that outcome. `ensures P;` states a guarantee established by the outcome. `obligation P;` states a residual obligation that remains live at that boundary. `assumes P;` remains a conditional dependency on the callable contract, not a residual obligation and not a proof.
+
+Callable-wide residual obligations may likewise be declared with `obligation P;`.
+
+Callee transition spelling is `preserve`, `consume`, or `replace with ExactSuccessor[args...] [state e]`. Outcome-specific callee residue is allowed where invocation behavior differs by branch.
+
+Parsing does not decide whether outcome classifications, state residues, obligations, or callee transitions are mutually consistent. Those are callable/resource/failure/assurance checks.
+
+## Protocol choice and static session syntax
+
+Protocol families remain binary in the Phase 1 executable profile. Session syntax includes send/receive/select/offer/end/guarded recursion and `continue`. A role-local session may also be an exact static session reference, enabling ordinary abstraction over `S : Session`.
+
+Term-level `offer` is present alongside `select`, `send`, `receive`, and `close`. The exact protocol instance, role, state, branch set, guard evidence, and endpoint succession remain semantic checks.
+
+## Control-state contracts
+
+Join and loop syntax now exposes the state facts already admitted by the resource/control semantics.
+
+A join may state both its post-join state telescope and invariant:
 
 ```phil
-requires {
-  effects E within { storage.Read(source), storage.Write(destination) };
+if cond join state (x : T, y : U) invariant Compatible(x, y) {
+  ...
+} else {
+  ...
 }
 ```
 
-`within` is syntax for a semantic subeffect bound: the checker, not the parser, determines effect identity, subject identity, set inclusion, and whether an effect is legal in the surrounding contract. Effect-set literals may also appear as static arguments where the expected generic kind is `Effects`; ordinary generic-kind checking remains semantic.
+The state telescope does not manufacture owners or evidence; every continuing predecessor must project into it through the ordinary checked join relation.
 
-This is deliberately source-semantic syntax. Backend calls, copies, staging operations, or other target-introduced machinery do not become source effects merely because they execute. Their additional effects belong to realization/StageContract accounting.
-
-## Callable outcomes and callee transitions
-
-`outcomes { ... };` names the public callable outcome/failure set. When the resource or callable residue differs by outcome, Grammar v1 exposes that branch sensitivity directly:
+Loop state may carry explicit dependent types together with initial values:
 
 ```phil
-callable Store(x : OwnedBytes[n]) -> Result {
-  outcomes { Stored, StoreFailure };
-
-  outcome Stored {
-    state (id : ContentId);
-    callee preserve;
-    ensures StoredAt(id);
-  }
-
-  outcome StoreFailure {
-    state (x : OwnedBytes[n]);
-    callee preserve;
-  }
+loop state (i : U32 = start, owner : OwnedBytes[n] = bytes)
+     invariant Valid(i, owner) {
+  ...
+  continue (i_next, owner_next)
 }
 ```
 
-`state (...)` is a checked post-outcome telescope. Parsing does not decide structural modes, stable-subject continuity, succession evidence, or whether the state is legal for that outcome. An outcome-residue block must correspond to the stabilized public outcome set; duplicate, missing, or contradictory semantic facts remain checker errors.
+Initial entry and every `continue` edge must re-establish the same loop-state contract. Untyped `x = e` remains available when the exact state type is unambiguously inferred.
 
-Callee replacement is exact rather than nominal:
-
-```phil
-callee replace with NextCallable[args...] state next_state;
-```
-
-The state suffix is optional when the successor contract does not carry a distinct state index. `callee preserve;` and `callee consume;` remain the other two canonical forms. The same transition syntax may occur inside an outcome block when callable ownership differs by public outcome.
-
-## Protocol choice terms
-
-Session declarations already distinguish internal `select` from external `offer`. Grammar v1 also includes the corresponding term forms. The canonical external-choice term is:
+Typed-negative control is also a first-class expression:
 
 ```phil
-offer endpoint {
-  Payload(x) => { ... }
-  Cancel => { ... }
-}
+reject reason
 ```
 
-The branch set, payload binders, exact protocol instance/role/session state, guard evidence, and endpoint succession are semantic checks. This restores a Phase 0 surface operation that had been accidentally omitted from the first canonical EBNF even though the semantic operation and parser support already existed.
+This is distinct from fatal `fail FailureClass(...) on live_resource`, which performs the declared fatal resource transition. The existing `e or reject reason` fallback remains an ergonomic exhaustive-control form over a declared negative result.
+
+## Boundary and architecture syntax
+
+Boundary declarations expose direction-specific receive/send roles, correspondence, canonicality, failure types, and laws. Recognition, validation, encoding, and protocol boundary use may name specialized exact static contracts.
+
+Architecture declarations expose author-controlled source semantics: occurrence creation/references, provider/protocol/role/boundary bindings, authority origins and grants, entries, assumptions, exported obligations, observables, and constraints.
+
+Concrete provider admission, target/ABI selection, runtime-site binding, carrier choice, and StageContract construction remain later competent-layer decisions, not architecture-source syntax.
 
 ## Semantic rejection remains competent
 
-The grammar intentionally accepts some forms whose legality depends on semantic information. Examples include whether a named static argument denotes a type or value in the expected parameter position, whether an unsigned width is supported, whether an explicit record/sum mode is at least as restrictive as the derived owned-content minimum, whether a declared capability mode is valid for the checked capability interface, whether a refinement proposition is sort-correct, whether transport evidence proves the exact required relation, whether finite-collection relation operands have compatible sorts, whether a callable outcome residue matches the public outcome contract, whether a replacement callee names a compatible exact successor, whether a protocol's two roles are distinct and dual, whether a provider implementation satisfies its exact contract revision, and whether a target-independent architecture binding is valid.
+The grammar intentionally parses forms whose legality depends on semantic information. Examples include static-argument kind, supported integer width, structural-mode strengthening, refinement sort correctness, transport evidence competence, finite-collection sorts, outcome-set/residue consistency, residual-obligation disposition, exact replacement-callee compatibility, session duality, provider refinement, authority possession, join/loop state projection, and architecture binding validity.
 
-Those cases belong to elaboration/checking, not to ad hoc parser rejection. Conversely, malformed concrete syntax is rejected by the parser before semantic checking begins.
+Malformed syntax is rejected by the parser. Semantically illegal but well-formed syntax is rejected by the competent semantic checker.
+
+## Production corpus
+
+`test/fixtures/phase1-surface/manifest.json` is the declarative parser-production corpus. Positive fixtures assert whole-file syntactic acceptance only; negative fixtures are malformed forms that must fail at the syntax layer. `surface-parser-production-corpus-v1.md` describes its integration contract.
+
+The broader semantic-to-surface audit that motivated the latest cases is recorded in `syntax-semantics-completeness-v1.md`.
 
 ## Versioning
 
-“v1” names this Phase 1 concrete-syntax epoch. Git history and the embedded source SHA-256 identify exact grammar revisions within it. The epoch may still receive deliberate Phase 1 revisions before the canonical source front end is frozen; each such revision changes the exact grammar digest and therefore the identity to which parser-conformance evidence must bind.
+“v1” names this Phase 1 concrete-syntax epoch. Git history and the embedded EBNF SHA-256 identify exact revisions inside the epoch. Deliberate Phase 1 reconciliations may extend the epoch before the canonical source front end is frozen; every such change invalidates parser-conformance evidence tied to the prior grammar digest.
 
-The type-system reconciliation revision adds refinement types, explicit transport, native finite membership/disjointness, branch-sensitive callable outcome residues, exact replacement-callee syntax, and the previously omitted term-level `offer`. The structural-mode reconciliation adds declaration-level mode spelling for stricter nominal records/sums and explicit capability possession modes while preserving type-derived mode for ordinary bindings. These are surface realizations of already-admitted semantics rather than new semantic epochs.
+The current sequence of reconciliations exposed already-admitted semantics rather than introducing new semantic epochs: refinement/transport/finite relations/outcome residues/offer; declaration-level structural modes; and the broader static-actual/requirement/product/outcome-class/obligation/control-state completeness repairs.
 
-A future incompatible concrete-syntax change must be explicit rather than silently changing parser behavior. Whether such a change becomes a new Phase 1 grammar revision or a later language-surface version is a compatibility decision, not parser discretion.
+A future incompatible syntax change must be explicit rather than silently changing parser behavior.
 
 ## Deliberate non-goals
 
-This grammar does not define:
-
-- semantic elaboration or Core meaning;
-- a formatter or canonical whitespace style;
-- target/backend syntax or target realization;
-- multiparty/asynchronous protocol semantics;
-- macro systems or arbitrary compile-time metaprogramming;
-- user-written quantifiers, unrestricted existentials, or arbitrary type-level computation; or
-- proof that the current Haskell parser already implements all Phase 1 productions.
-
-Parser/grammar correspondence is an implementation and assurance obligation to discharge as the Phase 1 front end catches up with the now-canonical surface.
+Grammar v1 does not define semantic elaboration, a formatter, target/backend syntax, multiparty/asynchronous protocol semantics, macros/general compile-time metaprogramming, user-written quantifiers/unrestricted existentials, arbitrary type-level computation, proof/certificate formats, provider qualification artifacts, StageContract syntax, or proof that the current Haskell parser already implements every production.

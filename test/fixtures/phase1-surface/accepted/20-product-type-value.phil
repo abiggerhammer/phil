@@ -1,0 +1,13 @@
+module corpus.product_type_value;
+
+callable MakePair() -> (U32, Bool) {
+  outcomes { success (U32, Bool) };
+  outcome success (U32, Bool) {
+    state ();
+    callee preserve;
+  }
+}
+
+fn make_pair() -> (U32, Bool) satisfies MakePair {
+  return (1, true)
+}

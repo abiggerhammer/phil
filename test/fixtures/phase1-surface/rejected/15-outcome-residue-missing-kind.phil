@@ -1,0 +1,8 @@
+module corpus.bad_outcome_residue_kind;
+
+callable Bad() -> R {
+  outcomes { success Ok };
+  outcome Ok {
+    state ();
+  }
+}

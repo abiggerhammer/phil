@@ -1,0 +1,3 @@
+module corpus.bad_tuple_type;
+
+type Bad = (U32,);
