@@ -13,7 +13,7 @@ import Data.Map.Strict (Map)
 import qualified Data.Set as Set
 import Data.Set (Set)
 import Data.Text (Text)
-import Phil.Assurance.Types (RevisionId (..), digestText)
+import Phil.Assurance.Types (Digest, RevisionId (..), digestText)
 import Phil.Core.ProviderQualificationIdentity
   ( CheckedProviderQualificationAdmissionIdentity (..)
   , ProviderQualificationEvidenceIdentityInput (..)
@@ -190,9 +190,11 @@ steveGetFunction = SystemsFunction
       ]
   }
 
+steveSourceArtifactDigest :: Digest
 steveSourceArtifactDigest =
   digestText "Steve Phase 1 architecture/provider semantic source"
 
+steveTargetArtifactDigest :: Digest
 steveTargetArtifactDigest = systemsProgramDigest steveProgram
 
 steveStageContract :: StageContract

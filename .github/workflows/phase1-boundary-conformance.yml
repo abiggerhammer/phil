@@ -41,3 +41,5 @@ jobs:
         run: cabal exec -- runghc -Wall -Werror -isrc test/Phase1BoundarySerializationMain.hs
       - name: BND-011 typed receive and send progression gating
         run: cabal exec -- runghc -Wall -Werror -isrc test/Phase1BoundaryProgressionMain.hs
+      - name: BND-013 zero-copy target relation conformance
+        run: cabal exec -- runghc -Wall -Werror -isrc test/Phase1BoundaryTargetRelationMain.hs
