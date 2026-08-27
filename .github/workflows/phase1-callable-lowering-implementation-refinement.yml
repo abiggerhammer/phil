@@ -93,9 +93,9 @@ jobs:
             callable-lowering-implementation-refinement-proof/CallableLoweringKernel.hs \
             src/CallableLoweringKernel.hs
           ghc -Wall -Werror -fno-code src/CallableLoweringKernel.hs
-          ghc -isrc -Wall -Werror -fno-code src/Phil/Systems/CallableLowering.hs
+          cabal build exe:phil-certify-core-scalar --ghc-options=-Werror
+          cabal exec -- ghc -isrc -Wall -Werror -fno-code src/Phil/Systems/CallableLowering.hs
       - name: Exercise production CALL-016 path through extracted kernel
         run: |
           set -euo pipefail
-          cabal build exe:phil-certify-core-scalar --ghc-options=-Werror
           cabal exec -- runghc -isrc test/Phase1CallableLoweringMain.hs
