@@ -42,3 +42,6 @@ jobs:
 
       - name: RES-010 propositional state transport conformance
         run: cabal exec -- runghc -Wall -Werror -isrc test/Phase1PropositionalStateTransportMain.hs
+
+      - name: RES-011 obligation reconvergence conformance
+        run: cabal exec -- runghc -Wall -Werror -isrc test/Phase1ObligationReconvergenceMain.hs
