@@ -1,0 +1,113 @@
+name: Phase 1 Generic Identity Domain Production Binding
+
+on:
+  pull_request:
+    paths:
+      - 'proof/Phil/Core/GenericIdentity.v'
+      - 'proof/Phil/Core/GenericInstantiationDomainImplementation.v'
+      - 'proof/Phil/Core/GenericInstantiationDomainImplementationExtraction.v'
+      - 'proof/Phil/Core/GenericIdentityDomainImplementation.v'
+      - 'docs/phase-1/generic-identity-domain-production-binding-v1.md'
+      - 'src/GenericInstantiationDomainKernel.hs'
+      - 'src/Phil/Core/Generic.hs'
+      - 'test/Phase1GenericIdentityMain.hs'
+      - '.github/workflows/phase1-generic-identity-domain-production-binding.yml'
+  push:
+    branches: [main]
+    paths:
+      - 'proof/Phil/Core/GenericIdentity.v'
+      - 'proof/Phil/Core/GenericInstantiationDomainImplementation.v'
+      - 'proof/Phil/Core/GenericInstantiationDomainImplementationExtraction.v'
+      - 'proof/Phil/Core/GenericIdentityDomainImplementation.v'
+      - 'docs/phase-1/generic-identity-domain-production-binding-v1.md'
+      - 'src/GenericInstantiationDomainKernel.hs'
+      - 'src/Phil/Core/Generic.hs'
+      - 'test/Phase1GenericIdentityMain.hs'
+      - '.github/workflows/phase1-generic-identity-domain-production-binding.yml'
+
+permissions:
+  contents: read
+
+jobs:
+  rocq-generic-identity-domain-production-binding:
+    runs-on: ubuntu-latest
+    container:
+      image: rocq/rocq-prover:9.2.0
+      options: --user root
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Compile certified GEN-ID domain correspondence
+        shell: bash
+        run: |
+          set -euo pipefail
+          export PATH="/home/rocq/.opam/${COMPILER}/bin:$PATH"
+          rocq c -Q proof/Phil Phil proof/Phil/Core/GenericStructural.v
+          rocq c -Q proof/Phil Phil proof/Phil/Core/GenericRequirements.v
+          rocq c -Q proof/Phil Phil proof/Phil/Core/GenericInstantiation.v
+          rocq c -Q proof/Phil Phil proof/Phil/Core/GenericInstantiationDomainImplementation.v
+          rocq c -Q proof/Phil Phil proof/Phil/Core/GenericIdentity.v
+          rocq c -Q proof/Phil Phil proof/Phil/Core/GenericIdentityDomainImplementation.v
+
+      - name: Fresh-extract and compare reused key-domain kernel
+        shell: bash
+        run: |
+          set -euo pipefail
+          export PATH="/home/rocq/.opam/${COMPILER}/bin:$PATH"
+          rm -f GenericInstantiationDomainKernel.hs
+          rocq c -Q proof/Phil Phil proof/Phil/Core/GenericInstantiationDomainImplementationExtraction.v
+          cmp GenericInstantiationDomainKernel.hs src/GenericInstantiationDomainKernel.hs
+          sha256sum GenericInstantiationDomainKernel.hs src/GenericInstantiationDomainKernel.hs
+          mkdir -p generic-identity-domain-production-binding-proof
+          cp \
+            proof/Phil/Core/GenericIdentity.v \
+            proof/Phil/Core/GenericIdentityDomainImplementation.v \
+            GenericInstantiationDomainKernel.hs \
+            generic-identity-domain-production-binding-proof/
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: rocq-generic-identity-domain-production-binding
+          path: generic-identity-domain-production-binding-proof
+          if-no-files-found: error
+
+  verify-generic-identity-domain-production-binding:
+    needs: rocq-generic-identity-domain-production-binding
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: haskell-actions/setup@v2
+        with:
+          ghc-version: '9.6.7'
+          cabal-version: 'latest'
+
+      - name: Typecheck bound GEN-ID production path
+        run: |
+          set -euo pipefail
+          ghc -isrc -Wall -Werror -fno-code src/GenericInstantiationDomainKernel.hs
+          cabal build exe:phil-certify-core-scalar --ghc-options=-Werror
+          cabal exec -- ghc -isrc -Wall -Werror -fno-code \
+            src/Phil/Core/Generic.hs \
+            test/Phase1GenericIdentityMain.hs
+
+      - name: Run bound GEN-009 and GEN-010 correspondence corpus
+        run: |
+          set -euo pipefail
+          cabal exec -- runghc -isrc test/Phase1GenericIdentityMain.hs
+
+      - name: Record production-binding correspondence identities
+        run: |
+          set -euo pipefail
+          mkdir -p generic-identity-domain-production-binding
+          sha256sum \
+            src/GenericInstantiationDomainKernel.hs \
+            src/Phil/Core/Generic.hs \
+            test/Phase1GenericIdentityMain.hs \
+            > generic-identity-domain-production-binding/PHIL-GEN-ID-IMPL-001-domain.correspondence.sha256
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: phil-generic-identity-domain-production-binding
+          path: generic-identity-domain-production-binding
+          if-no-files-found: error
