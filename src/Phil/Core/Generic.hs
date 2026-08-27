@@ -178,6 +178,7 @@ data GenericApplicationIdentity = GenericApplicationIdentity
 
 data GenericApplicationIdentityError
   = DuplicateGenericSemanticArgument GenericStaticParameterKey
+  | GenericApplicationIdentityKernelBridgeMismatch
   deriving (Eq, Ord, Show)
 
 data GenericDischargeLineage = GenericDischargeLineage
@@ -285,13 +286,20 @@ deriveGenericApplicationIdentity
   -> InterfaceRevision
   -> [(GenericStaticParameterKey, SemanticForm)]
   -> Either GenericApplicationIdentityError GenericApplicationIdentity
-deriveGenericApplicationIdentity declarationKey interfaceRevision arguments = do
-  argumentMap <- normalizeGenericSemanticArguments arguments
-  Right GenericApplicationIdentity
-    { genericApplicationDeclarationKey = declarationKey
-    , genericApplicationInterfaceRevision = interfaceRevision
-    , genericApplicationSemanticArguments = argumentMap
-    }
+deriveGenericApplicationIdentity declarationKey interfaceRevision arguments =
+  case InstantiationDomainKernel.keyListNoDupb (==) (map fst arguments) of
+    False -> Left (diagnoseGenericSemanticArgumentDomain arguments)
+    True -> do
+      argumentMap <- case normalizeGenericSemanticArguments arguments of
+        Left _ -> Left GenericApplicationIdentityKernelBridgeMismatch
+        Right normalized -> Right normalized
+      if Map.size argumentMap /= length arguments
+        then Left GenericApplicationIdentityKernelBridgeMismatch
+        else Right GenericApplicationIdentity
+          { genericApplicationDeclarationKey = declarationKey
+          , genericApplicationInterfaceRevision = interfaceRevision
+          , genericApplicationSemanticArguments = argumentMap
+          }
 
 genericApplicationSemanticForm :: GenericApplicationIdentity -> SemanticForm
 genericApplicationSemanticForm identity = SemanticRecord (Map.fromList
@@ -362,6 +370,14 @@ normalizeGenericSemanticArguments = go Map.empty
     go result ((key, value) : rest)
       | Map.member key result = Left (DuplicateGenericSemanticArgument key)
       | otherwise = go (Map.insert key value result) rest
+
+diagnoseGenericSemanticArgumentDomain
+  :: [(GenericStaticParameterKey, SemanticForm)]
+  -> GenericApplicationIdentityError
+diagnoseGenericSemanticArgumentDomain arguments =
+  case normalizeGenericSemanticArguments arguments of
+    Left duplicateError -> duplicateError
+    Right _ -> GenericApplicationIdentityKernelBridgeMismatch
 
 checkRequirementDisposition
   :: GenericInstantiationPolicy
