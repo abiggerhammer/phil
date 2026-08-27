@@ -39,3 +39,5 @@ jobs:
         run: cabal exec -- runghc -Wall -Werror -isrc test/Phase1EncodingCanonicalityMain.hs
       - name: BND-010 raw-memory and matching-struct serialization rejection
         run: cabal exec -- runghc -Wall -Werror -isrc test/Phase1BoundarySerializationMain.hs
+      - name: BND-011 typed receive and send progression gating
+        run: cabal exec -- runghc -Wall -Werror -isrc test/Phase1BoundaryProgressionMain.hs
