@@ -1,0 +1,86 @@
+name: Phase 1 Generic Identity Domain Implementation Refinement
+
+on:
+  pull_request:
+    paths:
+      - 'proof/Phil/Core/GenericIdentity.v'
+      - 'proof/Phil/Core/GenericInstantiationDomainImplementation.v'
+      - 'proof/Phil/Core/GenericIdentityDomainImplementation.v'
+      - 'docs/phase-1/generic-identity-domain-implementation-refinement-v1.md'
+      - 'src/GenericInstantiationDomainKernel.hs'
+      - 'src/Phil/Core/Generic.hs'
+      - 'test/Phase1GenericIdentityMain.hs'
+      - '.github/workflows/phase1-generic-identity-domain-implementation-refinement.yml'
+  push:
+    branches: [main]
+    paths:
+      - 'proof/Phil/Core/GenericIdentity.v'
+      - 'proof/Phil/Core/GenericInstantiationDomainImplementation.v'
+      - 'proof/Phil/Core/GenericIdentityDomainImplementation.v'
+      - 'docs/phase-1/generic-identity-domain-implementation-refinement-v1.md'
+      - 'src/GenericInstantiationDomainKernel.hs'
+      - 'src/Phil/Core/Generic.hs'
+      - 'test/Phase1GenericIdentityMain.hs'
+      - '.github/workflows/phase1-generic-identity-domain-implementation-refinement.yml'
+
+permissions:
+  contents: read
+
+jobs:
+  rocq-generic-identity-domain-implementation-refinement:
+    runs-on: ubuntu-latest
+    container:
+      image: rocq/rocq-prover:9.2.0
+      options: --user root
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Compile certified GEN-ID model and executable domain specialization
+        shell: bash
+        run: |
+          set -euo pipefail
+          export PATH="/home/rocq/.opam/${COMPILER}/bin:$PATH"
+          rocq c -Q proof/Phil Phil proof/Phil/Core/GenericStructural.v
+          rocq c -Q proof/Phil Phil proof/Phil/Core/GenericRequirements.v
+          rocq c -Q proof/Phil Phil proof/Phil/Core/GenericInstantiation.v
+          rocq c -Q proof/Phil Phil proof/Phil/Core/GenericInstantiationDomainImplementation.v
+          rocq c -Q proof/Phil Phil proof/Phil/Core/GenericIdentity.v
+          rocq c -Q proof/Phil Phil proof/Phil/Core/GenericIdentityDomainImplementation.v
+          mkdir -p generic-identity-domain-implementation-refinement-proof
+          cp \
+            proof/Phil/Core/GenericIdentity.v \
+            proof/Phil/Core/GenericIdentity.vo \
+            proof/Phil/Core/GenericIdentityDomainImplementation.v \
+            proof/Phil/Core/GenericIdentityDomainImplementation.vo \
+            generic-identity-domain-implementation-refinement-proof/
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: rocq-generic-identity-domain-implementation-refinement
+          path: generic-identity-domain-implementation-refinement-proof
+          if-no-files-found: error
+
+  verify-generic-identity-domain-correspondence:
+    needs: rocq-generic-identity-domain-implementation-refinement
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: haskell-actions/setup@v2
+        with:
+          ghc-version: '9.6.7'
+          cabal-version: 'latest'
+
+      - name: Typecheck reused extracted domain kernel and existing GEN-ID production paths
+        run: |
+          set -euo pipefail
+          ghc -isrc -Wall -Werror -fno-code src/GenericInstantiationDomainKernel.hs
+          cabal build exe:phil-certify-core-scalar --ghc-options=-Werror
+          cabal exec -- ghc -isrc -Wall -Werror -fno-code \
+            src/Phil/Core/Generic.hs \
+            test/Phase1GenericIdentityMain.hs
+
+      - name: Re-run GEN-009 and GEN-010 production correspondence corpus
+        run: |
+          set -euo pipefail
+          cabal exec -- runghc -isrc test/Phase1GenericIdentityMain.hs
