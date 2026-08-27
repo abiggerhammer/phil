@@ -61,17 +61,17 @@ initialMetadataSumContext = mapLeft show $ insertBinding Linear sumName sumTy em
 
 matchLinearConstructor :: ResourceContext -> Either String ResourceContext
 matchLinearConstructor context = do
-  (_, afterConsume) <- mapLeft show $ useBinding sumName context
+  (_, _, afterConsume) <- mapLeft show $ useBinding sumName context
   mapLeft show $ insertBinding Linear payloadName payloadTy afterConsume
 
 matchEmptyConstructor :: ResourceContext -> Either String ResourceContext
 matchEmptyConstructor context = do
-  (_, afterConsume) <- mapLeft show $ useBinding sumName context
+  (_, _, afterConsume) <- mapLeft show $ useBinding sumName context
   pure afterConsume
 
 matchMetadataConstructor :: ResourceContext -> Either String ResourceContext
 matchMetadataConstructor context = do
-  (_, afterConsume) <- mapLeft show $ useBinding sumName context
+  (_, _, afterConsume) <- mapLeft show $ useBinding sumName context
   mapLeft show $ insertBinding Unrestricted metadataName metadataTy afterConsume
 
 sumName, payloadName, metadataName :: Name
