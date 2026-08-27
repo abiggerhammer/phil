@@ -1,0 +1,5 @@
+module corpus.replace;
+
+callable Step() -> Unit {
+  callee replace with NextCallable state next_state;
+}

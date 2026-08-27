@@ -1,0 +1,5 @@
+module corpus.bad_replace;
+
+callable Bad() -> Unit {
+  callee replace NextCallable;
+}

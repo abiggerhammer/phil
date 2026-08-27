@@ -1,0 +1,5 @@
+module corpus.capability_unrestricted;
+
+capability BlobRead mode unrestricted {
+  permits storage.Read;
+}

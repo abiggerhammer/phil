@@ -1,0 +1,5 @@
+module corpus.bad_refinement;
+
+callable Bad(x : {v : U32 v > 0}) -> U32 {
+  ensures true;
+}
