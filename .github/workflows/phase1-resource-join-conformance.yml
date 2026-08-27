@@ -39,3 +39,6 @@ jobs:
 
       - name: RES-009 loop state projection conformance
         run: cabal exec -- runghc -Wall -Werror -isrc test/Phase1LoopStateProjectionMain.hs
+
+      - name: RES-010 propositional state transport conformance
+        run: cabal exec -- runghc -Wall -Werror -isrc test/Phase1PropositionalStateTransportMain.hs
