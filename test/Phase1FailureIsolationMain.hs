@@ -5,8 +5,7 @@ module Main (main) where
 import qualified Data.Map.Strict as Map
 import Data.Text (Text)
 import Phil.Core.Context
-  ( ResourceContext (..)
-  , emptyContext
+  ( emptyContext
   , insertBinding
   )
 import Phil.Core.Process
