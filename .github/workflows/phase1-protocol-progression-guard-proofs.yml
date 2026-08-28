@@ -1,0 +1,108 @@
+name: Phase 1 Protocol Progression Guard Proofs
+
+on:
+  pull_request:
+    paths:
+      - 'proof/Phil/Core/ProtocolProgressionGuard.v'
+      - 'proof/Phil/Core/ProtocolIdentity.v'
+      - 'src/Phil/Core/Protocol.hs'
+      - 'src/Phil/Assurance/ProtocolGuard.hs'
+      - 'test/Phase1ProtocolStaleEndpointMain.hs'
+      - 'test/Phase1ProtocolGuardedTransitionMain.hs'
+      - 'docs/phase-1/protocol-stale-endpoint-v1.md'
+      - 'docs/phase-1/protocol-guarded-transition-v1.md'
+      - 'docs/phase-1/protocol-progression-guard-proof-v1.md'
+      - '.github/workflows/phase1-protocol-progression-guard-proofs.yml'
+  push:
+    branches: [main]
+    paths:
+      - 'proof/Phil/Core/ProtocolProgressionGuard.v'
+      - 'proof/Phil/Core/ProtocolIdentity.v'
+      - 'src/Phil/Core/Protocol.hs'
+      - 'src/Phil/Assurance/ProtocolGuard.hs'
+      - 'test/Phase1ProtocolStaleEndpointMain.hs'
+      - 'test/Phase1ProtocolGuardedTransitionMain.hs'
+      - 'docs/phase-1/protocol-stale-endpoint-v1.md'
+      - 'docs/phase-1/protocol-guarded-transition-v1.md'
+      - 'docs/phase-1/protocol-progression-guard-proof-v1.md'
+      - '.github/workflows/phase1-protocol-progression-guard-proofs.yml'
+
+permissions:
+  contents: read
+
+jobs:
+  rocq-protocol-progression-guard-proof:
+    runs-on: ubuntu-latest
+    container:
+      image: rocq/rocq-prover:9.2.0
+      options: --user root
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Compile PHIL-PROT-STEP-001 proof
+        shell: bash
+        run: |
+          set -euo pipefail
+          export PATH="/home/rocq/.opam/${COMPILER}/bin:$PATH"
+          rocq c -Q proof/Phil Phil proof/Phil/Core/Syntax.v
+          rocq c -Q proof/Phil Phil proof/Phil/Core/ProtocolIdentity.v
+          rocq c -Q proof/Phil Phil proof/Phil/Core/ProtocolProgressionGuard.v
+
+      - name: Record proof identities
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p protocol-progression-guard-proof
+          cp \
+            proof/Phil/Core/ProtocolProgressionGuard.v \
+            proof/Phil/Core/ProtocolProgressionGuard.vo \
+            protocol-progression-guard-proof/
+          sha256sum \
+            proof/Phil/Core/ProtocolProgressionGuard.v \
+            proof/Phil/Core/ProtocolProgressionGuard.vo \
+            > protocol-progression-guard-proof/PHIL-PROT-STEP-001.proof.sha256
+          {
+            printf '%s\n' 'obligation=PHIL-PROT-STEP-001'
+            printf '%s\n' 'evidence=Rocq-9.2.0'
+            cat protocol-progression-guard-proof/PHIL-PROT-STEP-001.proof.sha256
+          } > protocol-progression-guard-proof/PHIL-PROT-STEP-001.proof-certificate.txt
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: rocq-protocol-progression-guard-proof
+          path: protocol-progression-guard-proof
+          if-no-files-found: error
+
+  verify-protocol-progression-guard-correspondence:
+    needs: rocq-protocol-progression-guard-proof
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: haskell-actions/setup@v2
+        with:
+          ghc-version: '9.6.7'
+          cabal-version: 'latest'
+
+      - name: Typecheck protocol progression and guard implementation paths
+        run: |
+          set -euo pipefail
+          cabal build exe:phil-certify-core-scalar --ghc-options=-Werror
+          cabal exec -- ghc -isrc -Wall -Werror -fno-code src/Phil/Core/Protocol.hs
+          cabal exec -- ghc -isrc -Wall -Werror -fno-code src/Phil/Assurance/ProtocolGuard.hs
+          for test_main in \
+            test/Phase1ProtocolStaleEndpointMain.hs \
+            test/Phase1ProtocolGuardedTransitionMain.hs
+          do
+            cabal exec -- ghc -isrc -Wall -Werror -fno-code "$test_main"
+          done
+
+      - name: Re-run PROT-005 and PROT-006 pressure corpora
+        run: |
+          set -euo pipefail
+          for test_main in \
+            test/Phase1ProtocolStaleEndpointMain.hs \
+            test/Phase1ProtocolGuardedTransitionMain.hs
+          do
+            cabal exec -- runghc -isrc "$test_main"
+          done
