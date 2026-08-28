@@ -1,0 +1,118 @@
+name: Phase 1 Architecture Revision Construction Implementation Refinement
+
+on:
+  pull_request:
+    paths:
+      - 'proof/Phil/Core/ArchitectureIdentity.v'
+      - 'proof/Phil/Core/ArchitectureRevisionConstructionImplementation.v'
+      - 'proof/Phil/Core/ArchitectureRevisionConstructionImplementationExtraction.v'
+      - 'docs/phase-1/architecture-revision-construction-implementation-refinement-v1.md'
+      - 'src/Phil/Core/Static.hs'
+      - 'test/Phase1ArchitectureRenameIdentityMain.hs'
+      - 'test/Phase1ArchitectureInterfaceValidityMain.hs'
+      - 'test/Phase1ArchitectureDefinitionReplacementMain.hs'
+      - 'test/Phase1ArchitectureSiblingNoninterferenceMain.hs'
+      - '.github/workflows/phase1-architecture-revision-construction-implementation-refinement.yml'
+  push:
+    branches: [main]
+    paths:
+      - 'proof/Phil/Core/ArchitectureIdentity.v'
+      - 'proof/Phil/Core/ArchitectureRevisionConstructionImplementation.v'
+      - 'proof/Phil/Core/ArchitectureRevisionConstructionImplementationExtraction.v'
+      - 'docs/phase-1/architecture-revision-construction-implementation-refinement-v1.md'
+      - 'src/Phil/Core/Static.hs'
+      - 'test/Phase1ArchitectureRenameIdentityMain.hs'
+      - 'test/Phase1ArchitectureInterfaceValidityMain.hs'
+      - 'test/Phase1ArchitectureDefinitionReplacementMain.hs'
+      - 'test/Phase1ArchitectureSiblingNoninterferenceMain.hs'
+      - '.github/workflows/phase1-architecture-revision-construction-implementation-refinement.yml'
+
+permissions:
+  contents: read
+
+jobs:
+  rocq-architecture-revision-construction-refinement:
+    runs-on: ubuntu-latest
+    container:
+      image: rocq/rocq-prover:9.2.0
+      options: --user root
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Compile certified ARCH-ID model and revision-construction correspondence
+        shell: bash
+        run: |
+          set -euo pipefail
+          export PATH="/home/rocq/.opam/${COMPILER}/bin:$PATH"
+          rocq c -Q proof/Phil Phil proof/Phil/Core/ArchitectureIdentity.v
+          rocq c -Q proof/Phil Phil proof/Phil/Core/ArchitectureRevisionConstructionImplementation.v
+
+      - name: Extract architecture revision-construction kernel
+        shell: bash
+        run: |
+          set -euo pipefail
+          export PATH="/home/rocq/.opam/${COMPILER}/bin:$PATH"
+          rm -f ArchitectureRevisionConstructionKernel.hs
+          rocq c -Q proof/Phil Phil proof/Phil/Core/ArchitectureRevisionConstructionImplementationExtraction.v
+          test -s ArchitectureRevisionConstructionKernel.hs
+          grep -q 'planInterfaceRevision' ArchitectureRevisionConstructionKernel.hs
+          grep -q 'planDefinitionRevision' ArchitectureRevisionConstructionKernel.hs
+          grep -q 'planScopedInstanceKey' ArchitectureRevisionConstructionKernel.hs
+          grep -q 'planInstanceRevision' ArchitectureRevisionConstructionKernel.hs
+          sha256sum ArchitectureRevisionConstructionKernel.hs
+          mkdir -p architecture-revision-construction-refinement-proof
+          cp \
+            proof/Phil/Core/ArchitectureIdentity.v \
+            proof/Phil/Core/ArchitectureRevisionConstructionImplementation.v \
+            proof/Phil/Core/ArchitectureRevisionConstructionImplementation.vo \
+            ArchitectureRevisionConstructionKernel.hs \
+            architecture-revision-construction-refinement-proof/
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: rocq-architecture-revision-construction-refinement
+          path: architecture-revision-construction-refinement-proof
+          if-no-files-found: error
+
+  verify-architecture-revision-construction-correspondence:
+    needs: rocq-architecture-revision-construction-refinement
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/download-artifact@v4
+        with:
+          name: rocq-architecture-revision-construction-refinement
+          path: extracted-architecture-revision-construction
+
+      - uses: haskell-actions/setup@v2
+        with:
+          ghc-version: '9.6.7'
+          cabal-version: 'latest'
+
+      - name: Typecheck extracted plan kernel and unchanged architecture path
+        run: |
+          set -euo pipefail
+          ghc -Wall -Werror -fno-code extracted-architecture-revision-construction/ArchitectureRevisionConstructionKernel.hs
+          cabal build exe:phil-certify-core-scalar --ghc-options=-Werror
+          cabal exec -- ghc -isrc -Wall -Werror -fno-code src/Phil/Core/Static.hs
+          for test_main in \
+            test/Phase1ArchitectureRenameIdentityMain.hs \
+            test/Phase1ArchitectureInterfaceValidityMain.hs \
+            test/Phase1ArchitectureDefinitionReplacementMain.hs \
+            test/Phase1ArchitectureSiblingNoninterferenceMain.hs
+          do
+            cabal exec -- ghc -isrc -Wall -Werror -fno-code "$test_main"
+          done
+
+      - name: Re-run unchanged ARCH-002, ARCH-003, ARCH-004, and ARCH-007 corpora
+        run: |
+          set -euo pipefail
+          for test_main in \
+            test/Phase1ArchitectureRenameIdentityMain.hs \
+            test/Phase1ArchitectureInterfaceValidityMain.hs \
+            test/Phase1ArchitectureDefinitionReplacementMain.hs \
+            test/Phase1ArchitectureSiblingNoninterferenceMain.hs
+          do
+            cabal exec -- runghc -isrc "$test_main"
+          done
