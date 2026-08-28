@@ -204,6 +204,7 @@ activationBinding occurrence name mode ty origin = ActivationBinding
   , activationLocalName = name
   , activationCheckedTypeMode = CheckedTypeMode ty mode
   , activationBindingOrigin = origin
+  , activationReachability = DirectStatefulReachability occurrence
   , activationStartsSharedLoan = False
   }
 
