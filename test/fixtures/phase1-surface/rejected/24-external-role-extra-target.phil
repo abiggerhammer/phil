@@ -1,0 +1,11 @@
+protocol Ping {
+    role Client = send (x : U8) then end Done;
+    role Server = receive (x : U8) then end Done;
+}
+
+architecture BadExternalRole {
+    protocol ping = Ping;
+    role ping.Server = external peer;
+}
+
+program main = instantiate BadExternalRole;

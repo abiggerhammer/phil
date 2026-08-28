@@ -32,7 +32,18 @@ The broader syntax/semantics completeness pass adds parser pressure for:
 - typed loop-state initializers;
 - standalone typed-negative `reject`.
 
-Each repaired boundary has at least one positive parser fixture and a nearby syntax-negative case where a useful malformed form exists. Semantic no-weakening, kind/sort correctness, outcome compatibility, obligation disposition, resource projection, session duality, authority possession, and assurance validity remain checker obligations.
+ADR-024 adds parser pressure for the bounded static CSP architecture surface:
+
+- `process p = worker;` creates a process/activation site referring to an already-created executable occurrence;
+- `role P.r = worker;` retains an explicit internal architecture-occurrence target;
+- `role P.r = external;` explicitly classifies a role as outside the Phil process population;
+- malformed attempts to attach a second target to `external` fail at syntax rather than becoming an accidental boundary/transport notation.
+
+The `external` marker is intentionally only participant classification. Parseability does not select or establish a `BoundaryRepresentation`, transport, entry resource, authority source, assumption/export, endpoint realization, or deployment fact; those remain separate semantic obligations.
+
+Each repaired boundary has at least one positive parser fixture and a nearby syntax-negative case where a useful malformed form exists. Semantic no-weakening, kind/sort correctness, outcome compatibility, obligation disposition, resource projection, session duality, authority possession, process target validity, internal-role activation, external-boundary closure, ownership partition, and assurance validity remain checker obligations.
+
+The current manifest contains 52 fixtures: 28 accepted whole-file examples and 24 syntax-negative examples.
 
 ## Manifest
 

@@ -31,6 +31,7 @@
     {"id":"SURF-PROD-025","path":"accepted/25-standalone-reject.phil","expect":"parse","covers":["reject_expression"],"semantic":"deferred"},
     {"id":"SURF-PROD-026","path":"accepted/26-specialized-static-reference.phil","expect":"parse","covers":["static_reference","boundary_item","claim_application"],"semantic":"deferred"},
     {"id":"SURF-PROD-027","path":"accepted/27-static-process-network.phil","expect":"parse","covers":["architecture_item:process","architecture_decl","program_decl"],"semantic":"deferred"},
+    {"id":"SURF-PROD-028","path":"accepted/28-external-protocol-participant.phil","expect":"parse","covers":["architecture_item:role","role_target:external","architecture_item:process","protocol_decl"],"semantic":"deferred"},
     {"id":"SURF-PROD-R001","path":"rejected/01-refinement-missing-bar.phil","expect":"reject-syntax","covers":["refinement_type"],"required_failure_layer":"syntax"},
     {"id":"SURF-PROD-R002","path":"rejected/02-transport-missing-using.phil","expect":"reject-syntax","covers":["transport_expression"],"required_failure_layer":"syntax"},
     {"id":"SURF-PROD-R003","path":"rejected/03-membership-missing-rhs.phil","expect":"reject-syntax","covers":["relation_operator:in"],"required_failure_layer":"syntax"},
@@ -53,6 +54,7 @@
     {"id":"SURF-PROD-R020","path":"rejected/20-reject-missing-expression.phil","expect":"reject-syntax","covers":["reject_expression"],"required_failure_layer":"syntax"},
     {"id":"SURF-PROD-R021","path":"rejected/21-static-argument-unclosed.phil","expect":"reject-syntax","covers":["static_arguments"],"required_failure_layer":"syntax"},
     {"id":"SURF-PROD-R022","path":"rejected/22-generic-requirement-missing-semicolon.phil","expect":"reject-syntax","covers":["generic_requirement"],"required_failure_layer":"syntax"},
-    {"id":"SURF-PROD-R023","path":"rejected/23-process-missing-target.phil","expect":"reject-syntax","covers":["architecture_item:process"],"required_failure_layer":"syntax"}
+    {"id":"SURF-PROD-R023","path":"rejected/23-process-missing-target.phil","expect":"reject-syntax","covers":["architecture_item:process"],"required_failure_layer":"syntax"},
+    {"id":"SURF-PROD-R024","path":"rejected/24-external-role-extra-target.phil","expect":"reject-syntax","covers":["architecture_item:role","role_target:external"],"required_failure_layer":"syntax"}
   ]
 }
