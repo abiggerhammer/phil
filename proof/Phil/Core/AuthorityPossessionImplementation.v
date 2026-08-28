@@ -55,24 +55,33 @@ Theorem authority_exercise_decision_accept_iff_certified :
     authorityExerciseAllowed requirement source capability = true.
 Proof.
   intros requirement source capability.
-  destruct source;
-    cbn [authorityExerciseDecision sourceIsPossessed
-         decideAuthorityExerciseFacts authorityExerciseAllowed
-         capabilityMatchesRequirement].
-  - destruct (Nat.eqb (capabilityContract capability)
+  destruct source.
+  - unfold authorityExerciseDecision, sourceIsPossessed,
+      decideAuthorityExerciseFacts, authorityExerciseAllowed,
+      capabilityMatchesRequirement.
+    simpl.
+    destruct (Nat.eqb (capabilityContract capability)
               (requiredContract requirement));
-      cbn;
       destruct (Nat.eqb (capabilitySubject capability)
                 (requiredSubject requirement));
-      cbn;
       destruct (permitsOperation capability (requiredOperation requirement));
-      cbn;
+      simpl;
       split; intro H; try discriminate; reflexivity.
-  - split; intro H; discriminate.
-  - split; intro H; discriminate.
-  - split; intro H; discriminate.
-  - split; intro H; discriminate.
-  - split; intro H; discriminate.
+  - cbn [authorityExerciseDecision sourceIsPossessed
+         decideAuthorityExerciseFacts authorityExerciseAllowed].
+    split; intro H; discriminate.
+  - cbn [authorityExerciseDecision sourceIsPossessed
+         decideAuthorityExerciseFacts authorityExerciseAllowed].
+    split; intro H; discriminate.
+  - cbn [authorityExerciseDecision sourceIsPossessed
+         decideAuthorityExerciseFacts authorityExerciseAllowed].
+    split; intro H; discriminate.
+  - cbn [authorityExerciseDecision sourceIsPossessed
+         decideAuthorityExerciseFacts authorityExerciseAllowed].
+    split; intro H; discriminate.
+  - cbn [authorityExerciseDecision sourceIsPossessed
+         decideAuthorityExerciseFacts authorityExerciseAllowed].
+    split; intro H; discriminate.
 Qed.
 
 Theorem authority_exercise_source_rejection_precedes_semantic_facts :
