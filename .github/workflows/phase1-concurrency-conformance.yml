@@ -29,3 +29,5 @@ jobs:
         run: cabal exec -- runghc -Wall -Werror -isrc test/Phase1ExactProcessRendezvousMain.hs
       - name: CONC-005 exact restricted message ownership transfer
         run: cabal exec -- runghc -Wall -Werror -isrc test/Phase1RestrictedMessageTransferMain.hs
+      - name: CONC-006 scheduler-independent source partial order
+        run: cabal exec -- runghc -Wall -Werror -isrc test/Phase1SchedulerIndependentOrderMain.hs
