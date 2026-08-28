@@ -4,7 +4,6 @@ module Main (main) where
 
 import Control.Monad (unless)
 import qualified Data.Map.Strict as Map
-import Data.Text (Text)
 import Phil.Core.Static
   ( ArchitectureInstanceDescriptor (..)
   , ArchitectureInstanceIdentity
