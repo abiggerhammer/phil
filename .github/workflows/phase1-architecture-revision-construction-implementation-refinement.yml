@@ -93,7 +93,11 @@ jobs:
       - name: Typecheck extracted plan kernel and unchanged architecture path
         run: |
           set -euo pipefail
-          ghc -Wall -Werror -fno-code extracted-architecture-revision-construction/ArchitectureRevisionConstructionKernel.hs
+          # Rocq's Haskell extractor emits a qualified Prelude import even when
+          # this purely polymorphic generated kernel has no Prelude references.
+          # Suppress only that generator-owned redundancy; every other warning
+          # here and all warnings in handwritten production/test paths remain errors.
+          ghc -Wall -Werror -Wno-unused-imports -fno-code extracted-architecture-revision-construction/ArchitectureRevisionConstructionKernel.hs
           cabal build exe:phil-certify-core-scalar --ghc-options=-Werror
           cabal exec -- ghc -isrc -Wall -Werror -fno-code src/Phil/Core/Static.hs
           for test_main in \
