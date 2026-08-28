@@ -1,0 +1,116 @@
+name: Phase 1 Architecture Identity Proofs
+
+on:
+  pull_request:
+    paths:
+      - 'proof/Phil/Core/ArchitectureIdentity.v'
+      - 'src/Phil/Core/Static.hs'
+      - 'src/Phil/Assurance/ArchitectureIdentity.hs'
+      - 'test/Phase1ArchitectureRenameIdentityMain.hs'
+      - 'test/Phase1ArchitectureInterfaceValidityMain.hs'
+      - 'test/Phase1ArchitectureDefinitionReplacementMain.hs'
+      - 'test/Phase1ArchitectureSiblingNoninterferenceMain.hs'
+      - 'docs/phase-1/architecture-identity-v1.md'
+      - 'docs/phase-1/architecture-rename-identity-v1.md'
+      - 'docs/phase-1/architecture-interface-validity-v1.md'
+      - 'docs/phase-1/architecture-definition-replacement-v1.md'
+      - 'docs/phase-1/architecture-sibling-noninterference-v1.md'
+      - 'docs/phase-1/architecture-identity-proof-v1.md'
+      - '.github/workflows/phase1-architecture-identity-proofs.yml'
+  push:
+    branches: [main]
+    paths:
+      - 'proof/Phil/Core/ArchitectureIdentity.v'
+      - 'src/Phil/Core/Static.hs'
+      - 'src/Phil/Assurance/ArchitectureIdentity.hs'
+      - 'test/Phase1ArchitectureRenameIdentityMain.hs'
+      - 'test/Phase1ArchitectureInterfaceValidityMain.hs'
+      - 'test/Phase1ArchitectureDefinitionReplacementMain.hs'
+      - 'test/Phase1ArchitectureSiblingNoninterferenceMain.hs'
+      - 'docs/phase-1/architecture-identity-v1.md'
+      - 'docs/phase-1/architecture-rename-identity-v1.md'
+      - 'docs/phase-1/architecture-interface-validity-v1.md'
+      - 'docs/phase-1/architecture-definition-replacement-v1.md'
+      - 'docs/phase-1/architecture-sibling-noninterference-v1.md'
+      - 'docs/phase-1/architecture-identity-proof-v1.md'
+      - '.github/workflows/phase1-architecture-identity-proofs.yml'
+
+permissions:
+  contents: read
+
+jobs:
+  rocq-architecture-identity-proof:
+    runs-on: ubuntu-latest
+    container:
+      image: rocq/rocq-prover:9.2.0
+      options: --user root
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Compile PHIL-ARCH-ID-001 proof
+        shell: bash
+        run: |
+          set -euo pipefail
+          export PATH="/home/rocq/.opam/${COMPILER}/bin:$PATH"
+          rocq c -Q proof/Phil Phil proof/Phil/Core/ArchitectureIdentity.v
+
+      - name: Record proof identities
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p architecture-identity-proof
+          cp \
+            proof/Phil/Core/ArchitectureIdentity.v \
+            proof/Phil/Core/ArchitectureIdentity.vo \
+            architecture-identity-proof/
+          sha256sum \
+            proof/Phil/Core/ArchitectureIdentity.v \
+            proof/Phil/Core/ArchitectureIdentity.vo \
+            > architecture-identity-proof/PHIL-ARCH-ID-001.proof.sha256
+          {
+            printf '%s\n' 'obligation=PHIL-ARCH-ID-001'
+            printf '%s\n' 'evidence=Rocq-9.2.0'
+            cat architecture-identity-proof/PHIL-ARCH-ID-001.proof.sha256
+          } > architecture-identity-proof/PHIL-ARCH-ID-001.proof-certificate.txt
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: rocq-architecture-identity-proof
+          path: architecture-identity-proof
+          if-no-files-found: error
+
+  verify-architecture-identity-correspondence:
+    needs: rocq-architecture-identity-proof
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: haskell-actions/setup@v2
+        with:
+          ghc-version: '9.6.7'
+          cabal-version: 'latest'
+
+      - name: Typecheck architecture identity implementation paths
+        run: |
+          set -euo pipefail
+          cabal build exe:phil-certify-core-scalar --ghc-options=-Werror
+          for test_main in \
+            test/Phase1ArchitectureRenameIdentityMain.hs \
+            test/Phase1ArchitectureInterfaceValidityMain.hs \
+            test/Phase1ArchitectureDefinitionReplacementMain.hs \
+            test/Phase1ArchitectureSiblingNoninterferenceMain.hs
+          do
+            cabal exec -- ghc -isrc -Wall -Werror -fno-code "$test_main"
+          done
+
+      - name: Re-run ARCH-002, ARCH-003, ARCH-004, and ARCH-007 corpora
+        run: |
+          set -euo pipefail
+          for test_main in \
+            test/Phase1ArchitectureRenameIdentityMain.hs \
+            test/Phase1ArchitectureInterfaceValidityMain.hs \
+            test/Phase1ArchitectureDefinitionReplacementMain.hs \
+            test/Phase1ArchitectureSiblingNoninterferenceMain.hs
+          do
+            cabal exec -- runghc -isrc "$test_main"
+          done
