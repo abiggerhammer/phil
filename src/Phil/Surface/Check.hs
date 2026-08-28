@@ -5,6 +5,13 @@ module Phil.Surface.Check
   , SurfaceShape (..)
   , InitialBinding (..)
   , PrimitiveSemantics (..)
+  , ReleaseRequirement (..)
+  , ReleaseSemanticAccount (..)
+  , ReleaseTransitionOutcome (..)
+  , ReleaseResidue (..)
+  , ReleaseTransitionContract (..)
+  , ReleaseSelectionError (..)
+  , selectReleaseTransition
   , SurfaceEnvironment (..)
   , SurfaceCheckResult (..)
   , ModuleName (..)

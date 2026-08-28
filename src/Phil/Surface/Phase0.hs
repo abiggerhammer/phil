@@ -9,6 +9,7 @@ module Phil.Surface.Phase0
   ) where
 
 import qualified Data.Map.Strict as Map
+import qualified Data.Set as Set
 import Data.Text (Text)
 import qualified Data.Text as Text
 import Phil.Core.Session (dualSession)
@@ -35,6 +36,10 @@ import Phil.Surface.Check
   , InitialBinding (..)
   , PrimitiveSemantics (..)
   , RejectionClass (..)
+  , ReleaseResidue (..)
+  , ReleaseSemanticAccount (..)
+  , ReleaseTransitionContract (..)
+  , ReleaseTransitionOutcome (..)
   , SurfaceEnvironment (..)
   , SurfaceShape (..)
   , emptySurfaceEnvironment
@@ -149,6 +154,7 @@ clientEnvironment base = base
       , ("sha256", unrestricted (TyOpaque "DigestAlgorithm") PlainShape)
       ]
   , surfaceExpectedProvides = Just (TyEndpoint clientUploadSession)
+  , surfaceReleaseTransitions = [payloadReleaseTransition]
   }
 
 serverEnvironment :: SurfaceEnvironment -> SurfaceEnvironment
@@ -359,6 +365,23 @@ ownedPayload name =
   let lengthUInt = RefField (RefVar (Name name)) "length" (SortUInt 64)
       index = RefToNat lengthUInt
   in InitialBinding Linear (TyBytes index) (OwnedBytesShape index)
+
+payloadReleaseTransition :: ReleaseTransitionContract
+payloadReleaseTransition = ReleaseTransitionContract
+  { releaseTransitionKey = "upload.payload.release.v1"
+  , releaseTransitionOwnerType = initialType (ownedPayload "payload")
+  , releaseTransitionRequirements = Set.empty
+  , releaseTransitionSemanticAccount = ReleaseSemanticAccount
+      { releaseAccountAuthorityRefs = Set.empty
+      , releaseAccountEvidenceRefs = Set.empty
+      , releaseAccountEffectRefs = Set.empty
+      , releaseAccountAssumptionRefs = Set.empty
+      , releaseAccountCostRefs = Set.empty
+      , releaseAccountSubjectRef = "upload.payload"
+      }
+  , releaseTransitionOutcome = ReleaseContinuesUnit
+  , releaseTransitionResidue = ReleaseConsumesOwner
+  }
 
 recordBegin :: Text -> SurfaceShape
 recordBegin name = RecordShape "Begin" (Map.fromList

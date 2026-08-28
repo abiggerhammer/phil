@@ -324,7 +324,7 @@ evalExpression environment state locatedExpression =
     CloseExpression target ->
       evalClose environment state locatedExpression target
     ReleaseExpression owner ->
-      evalRelease state locatedExpression owner
+      evalRelease environment state locatedExpression owner
     AcceptExpression value targetTy ->
       evalAccept environment state locatedExpression value targetTy
     ProveExpression proposition ->
@@ -1181,22 +1181,37 @@ resolveCloseTarget state target = case locatedValue target of
   _ -> throw target SessionAction "close target must be a name"
 
 evalRelease
-  :: SurfaceState
+  :: SurfaceEnvironment
+  -> SurfaceState
   -> Located SurfaceExpression
   -> Located SurfaceExpression
   -> Either SurfaceCheckError [SurfacePath]
-evalRelease state located ownerExpression = do
-  name <- namedExpression StructuralUse ownerExpression
+evalRelease environment state located ownerExpression = do
+  name <- namedExpression ReleaseCompetence ownerExpression
   meta <- lookupMeta ownerExpression (unName name) state
-  unless (bindingMode meta == Linear) $
-    throw ownerExpression StructuralUse "release requires a linear owner"
-  (_, context) <- mapCore (locatedSpan located) StructuralUse $
-    consumeLinear name (resourceContext (stateCore state))
-  Right
-    [ valuePath
-        (applySessionContext (unName name) context state)
-        RuntimeUnit
-    ]
+  when (bindingMode meta == Unrestricted) $
+    throw ownerExpression ReleaseCompetence
+      "release requires an owning affine or linear resource"
+  transition <- case selectReleaseTransition environment (bindingType meta) of
+    Left selectionError ->
+      throw ownerExpression ReleaseCompetence (Text.pack (show selectionError))
+    Right selected -> Right selected
+  (_, next) <- moveVariable ownerExpression (unName name) state
+  case releaseTransitionOutcome transition of
+    ReleaseContinuesUnit -> Right [valuePath next RuntimeUnit]
+    ReleaseTerminates outcome -> do
+      ensureTerminalState environment (locatedSpan located) (Just outcome) next
+      Right [SurfacePath (PathClosed outcome) next Nothing]
+    ReleaseFails failureClass detail -> do
+      ensureTerminalState environment
+        (locatedSpan located)
+        (Just (Outcome "failure"))
+        next
+      Right [SurfacePath (PathFailed failureClass detail) next Nothing]
+    ReleaseBranchSensitive outcomes ->
+      throw ownerExpression ReleaseCompetence
+        ("branch-sensitive release escaped competence selection: "
+          <> Text.pack (show outcomes))
 
 evalAccept
   :: SurfaceEnvironment
