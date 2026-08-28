@@ -1,7 +1,8 @@
 {-# LANGUAGE OverloadedStrings #-}
 
 module Phil.Core.Protocol.Family
-  ( ProtocolTypeTemplate (..)
+  ( module Phil.Core.Protocol.MessageAdmissibility
+  , ProtocolTypeTemplate (..)
   , ProtocolBranchTemplate (..)
   , ProtocolSessionTemplate (..)
   , BinaryProtocolFamily (..)
@@ -36,6 +37,7 @@ import Phil.Core.Protocol
   ( ProtocolInstanceRevision (..)
   , ProtocolRoleKey (..)
   )
+import Phil.Core.Protocol.MessageAdmissibility
 import Phil.Core.Session (dualSession)
 import Phil.Core.Static
   ( DeclarationKey
@@ -52,7 +54,9 @@ import Phil.Core.Syntax
   )
 
 -- | A protocol-family message position is either concrete or supplied by one
--- exact generic static parameter at instantiation time.
+-- exact generic static parameter at instantiation time. Bare concrete messages
+-- are limited to intrinsically admissible types; ownership-sensitive messages
+-- use ProtocolParameterType with an exact BoundaryMessageContract on the actual.
 data ProtocolTypeTemplate
   = ProtocolConcreteType Ty
   | ProtocolParameterType GenericStaticParameterKey
@@ -90,14 +94,15 @@ data BinaryProtocolFamily = BinaryProtocolFamily
   }
   deriving (Eq, Ord, Show)
 
--- | One exact static message argument.  The semantic form is identity-bearing;
--- the type is what is substituted into the local session template.  Their
--- correspondence belongs to the ordinary generic/boundary admissibility layer,
--- not to the projection relation itself.
+-- | One exact static message argument. The semantic form is identity-bearing;
+-- the type is substituted into the local session template. The exact boundary
+-- contract is checked first, before generic discharge, session substitution, or
+-- any later resource/rendezvous ownership rule may see the value as a Message.
 data ProtocolMessageArgument = ProtocolMessageArgument
   { protocolMessageArgumentKey :: GenericStaticParameterKey
   , protocolMessageArgumentType :: Ty
   , protocolMessageArgumentSemantics :: SemanticForm
+  , protocolMessageArgumentBoundaryContract :: BoundaryMessageContract
   }
   deriving (Eq, Ord, Show)
 
@@ -110,7 +115,7 @@ data BinaryProtocolInstance = BinaryProtocolInstance
   deriving (Eq, Ord, Show)
 
 -- | Checked projection evidence is tied to one exact protocol instance, role,
--- and local session.  Equal local session syntax in another instance does not
+-- and local session. Equal local session syntax in another instance does not
 -- make the evidence transferable.
 data ProtocolProjectionEvidence = ProtocolProjectionEvidence
   { protocolProjectionInstance :: ProtocolInstanceRevision
@@ -124,6 +129,9 @@ data ProtocolFamilyError
   | ProtocolFamilyDuplicateRoles ProtocolRoleKey
   | DuplicateProtocolMessageArgument GenericStaticParameterKey
   | MissingProtocolMessageArgument GenericStaticParameterKey
+  | ProtocolMessageArgumentAdmissibilityError
+      GenericStaticParameterKey BoundaryMessageError
+  | ProtocolConcreteMessageRequiresBoundaryContract Ty
   | ProtocolGenericInstantiationError GenericInstantiationError
   | ProtocolGenericApplicationIdentityError GenericApplicationIdentityError
   | UnknownProtocolProjectionRole ProtocolRoleKey [ProtocolRoleKey]
@@ -140,6 +148,8 @@ instantiateBinaryProtocol
 instantiateBinaryProtocol policy family argumentEntries dispositions = do
   validateRoles family
   arguments <- normalizeArguments argumentEntries
+  mapM_ checkMessageArgumentAdmissibility (Map.toAscList arguments)
+  checkTemplateMessageAdmissibility (protocolFamilyPrimarySession family)
   mapM_ (requireArgument arguments) (Set.toAscList (templateParameters (protocolFamilyPrimarySession family)))
   genericDischarge <- mapLeft ProtocolGenericInstantiationError $
     checkGenericInstantiation policy (protocolFamilyRequirements family) dispositions
@@ -220,6 +230,53 @@ normalizeArguments = go Map.empty
       | otherwise = go (Map.insert key argument result) rest
       where
         key = protocolMessageArgumentKey argument
+
+checkMessageArgumentAdmissibility
+  :: (GenericStaticParameterKey, ProtocolMessageArgument)
+  -> Either ProtocolFamilyError ()
+checkMessageArgumentAdmissibility (key, argument) =
+  mapLeft (ProtocolMessageArgumentAdmissibilityError key) $
+    checkBoundaryMessageContract
+      (protocolMessageArgumentType argument)
+      (protocolMessageArgumentSemantics argument)
+      (protocolMessageArgumentBoundaryContract argument)
+
+-- Bare concrete types are intentionally a small intrinsic subset. Anything
+-- whose Message competence depends on ownership/evidence/authority provenance
+-- must use a parameterized argument with an exact BoundaryMessageContract.
+checkTemplateMessageAdmissibility
+  :: ProtocolSessionTemplate
+  -> Either ProtocolFamilyError ()
+checkTemplateMessageAdmissibility template = case template of
+  ProtocolTemplateSend _ message continuation -> do
+    checkTypeTemplateAdmissibility message
+    checkTemplateMessageAdmissibility continuation
+  ProtocolTemplateReceive _ message continuation -> do
+    checkTypeTemplateAdmissibility message
+    checkTemplateMessageAdmissibility continuation
+  ProtocolTemplateSelect branches -> mapM_ checkBranchAdmissibility branches
+  ProtocolTemplateOffer branches -> mapM_ checkBranchAdmissibility branches
+  ProtocolTemplateEnd _ -> Right ()
+  ProtocolTemplateRec _ body -> checkTemplateMessageAdmissibility body
+  ProtocolTemplateVar _ -> Right ()
+
+checkBranchAdmissibility
+  :: ProtocolBranchTemplate
+  -> Either ProtocolFamilyError ()
+checkBranchAdmissibility branch = do
+  case protocolTemplateBranchPayload branch of
+    Nothing -> Right ()
+    Just (_, message) -> checkTypeTemplateAdmissibility message
+  checkTemplateMessageAdmissibility (protocolTemplateBranchContinuation branch)
+
+checkTypeTemplateAdmissibility
+  :: ProtocolTypeTemplate
+  -> Either ProtocolFamilyError ()
+checkTypeTemplateAdmissibility message = case message of
+  ProtocolParameterType _ -> Right ()
+  ProtocolConcreteType ty
+    | intrinsicBoundaryMessageType ty -> Right ()
+    | otherwise -> Left (ProtocolConcreteMessageRequiresBoundaryContract ty)
 
 requireArgument
   :: Map GenericStaticParameterKey ProtocolMessageArgument

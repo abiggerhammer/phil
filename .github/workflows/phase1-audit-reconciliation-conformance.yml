@@ -27,5 +27,7 @@ jobs:
         run: cabal exec -- runghc -Wall -Werror -isrc test/Phase1ExplicitClosureModeMain.hs
       - name: CALL-018 outcome classification and residual-obligation fidelity
         run: cabal exec -- runghc -Wall -Werror -isrc test/Phase1CallableOutcomeFidelityMain.hs
+      - name: PROT-008 Message admissibility before ownership transfer
+        run: cabal exec -- runghc -Wall -Werror -isrc test/Phase1ProtocolMessageAdmissibilityMain.hs
       - name: DEP-002 RuntimeBound carrier coverage across process/domain transfer
         run: cabal exec -- runghc -Wall -Werror -isrc test/Phase1RuntimeCarrierCoverageMain.hs

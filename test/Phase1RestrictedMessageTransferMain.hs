@@ -11,7 +11,10 @@ import Phil.Core.Context
   , ResourceContext (..)
   , insertBinding
   )
-import Phil.Core.Generic (strictGenericInstantiationPolicy)
+import Phil.Core.Generic
+  ( GenericStaticParameterKey (..)
+  , strictGenericInstantiationPolicy
+  )
 import Phil.Core.Process
 import Phil.Core.ProcessActivation
 import Phil.Core.ProcessRendezvous
@@ -212,7 +215,7 @@ protocolInstance :: Either String BinaryProtocolInstance
 protocolInstance = mapLeft show $ instantiateBinaryProtocol
   strictGenericInstantiationPolicy
   transferFamily
-  []
+  [payloadArgument]
   []
 
 transferFamily :: BinaryProtocolFamily
@@ -224,9 +227,29 @@ transferFamily = BinaryProtocolFamily
   , protocolFamilyPeerRole = serverRole
   , protocolFamilyPrimarySession = ProtocolTemplateSend
       receivedPayload
-      (ProtocolConcreteType payloadTy)
+      (ProtocolParameterType payloadParameter)
       (ProtocolTemplateEnd doneOutcome)
   }
+
+payloadParameter :: GenericStaticParameterKey
+payloadParameter = GenericStaticParameterKey "Payload"
+
+payloadArgument :: ProtocolMessageArgument
+payloadArgument = ProtocolMessageArgument
+  { protocolMessageArgumentKey = payloadParameter
+  , protocolMessageArgumentType = payloadTy
+  , protocolMessageArgumentSemantics = payloadMessageSemantics
+  , protocolMessageArgumentBoundaryContract = BoundaryMessageContract
+      { boundaryMessageContractRevision = "boundary.message.conc005.owned.v1"
+      , boundaryMessageContractType = payloadTy
+      , boundaryMessageContractSemantics = payloadMessageSemantics
+      , boundaryMessageContractShape =
+          BoundaryMessageAdmittedLeaf "owned-restricted-message"
+      }
+  }
+
+payloadMessageSemantics :: SemanticForm
+payloadMessageSemantics = SemanticAtom "message.conc005.owned-payload"
 
 exactRequest
   :: BinaryProtocolInstance
