@@ -149,10 +149,10 @@ checkAuthorityExercise requirement source state = case source of
           (requiredAuthorityOperation requirement)
           (authorityCapabilityOperations capability)
         decision = AuthorityPossessionKernel.decideAuthorityExerciseFacts
-          AuthorityPossessionKernel.True
-          (toAuthorityPossessionKernelBool contractMatches)
-          (toAuthorityPossessionKernelBool subjectMatches)
-          (toAuthorityPossessionKernelBool operationPermitted)
+          True
+          contractMatches
+          subjectMatches
+          operationPermitted
     case decision of
       AuthorityPossessionKernel.AuthorityExerciseAccepted
         | contractMatches && subjectMatches && operationPermitted ->
@@ -180,10 +180,7 @@ checkAuthorityExercise requirement source state = case source of
         Left AuthorityPossessionKernelBridgeMismatch
   _ ->
     case AuthorityPossessionKernel.decideAuthorityExerciseFacts
-        AuthorityPossessionKernel.False
-        AuthorityPossessionKernel.False
-        AuthorityPossessionKernel.False
-        AuthorityPossessionKernel.False of
+        False False False False of
       AuthorityPossessionKernel.AuthorityExerciseSourceRejected ->
         Left (AuthoritySourceIsNotPossession source)
       _ -> Left AuthorityPossessionKernelBridgeMismatch
@@ -242,11 +239,6 @@ dropAuthorityCapability key state = do
       | otherwise -> Left AuthorityPossessionKernelBridgeMismatch
   where
     capabilities = authorityStateCapabilities state
-
-toAuthorityPossessionKernelBool :: Bool -> AuthorityPossessionKernel.Bool
-toAuthorityPossessionKernelBool value = case value of
-  True -> AuthorityPossessionKernel.True
-  False -> AuthorityPossessionKernel.False
 
 toAuthorityPossessionKernelMode :: Mode -> AuthorityPossessionKernel.Mode
 toAuthorityPossessionKernelMode mode = case mode of
