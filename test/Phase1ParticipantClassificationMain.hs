@@ -3,11 +3,14 @@
 module Main (main) where
 
 import qualified Data.Map.Strict as Map
+import qualified Data.Set as Set
 import Data.Text (Text)
 import Phil.Core.Process
+import Phil.Core.ProcessLifecycle
 import Phil.Core.ProcessParticipants
 import Phil.Core.Protocol
 import Phil.Core.Static
+import Phil.Core.Syntax
 import System.Exit (exitFailure)
 
 main :: IO ()
@@ -19,6 +22,7 @@ main = do
     , test "CONC-010 unknown internal target rejects" unknownInternalTargetRejects
     , test "CONC-010 unactivated executable target rejects" unactivatedTargetRejects
     , test "CONC-010 inactive process target rejects" inactiveProcessRejects
+    , test "CONC-010 external failure does not synthesize internal terminality" externalFailureDoesNotSynthesizeTerminality
     ]
   if and results then pure () else exitFailure
 
@@ -123,12 +127,94 @@ inactiveProcessRejects = do
         "inactive-process rejection lost exact role/ProcessKey identity"
     other -> Left ("role bound to inactive process was accepted: " <> show other)
 
+-- Closure-audit CLOSURE-022 pressure: the external participant is not a hidden
+-- process and an external boundary/transport failure cannot synthesize an
+-- internal terminal fact or cleanup. The internal process remains stuck while
+-- its endpoint/obligation boundary is live; only an explicit local failure path
+-- after assurance disposition may consume the endpoint and close the process.
+externalFailureDoesNotSynthesizeTerminality :: Either String ()
+externalFailureDoesNotSynthesizeTerminality = do
+  graph <- mapLeft show rootGraph
+  network0 <- mapLeft show $ elaborateProcessNetwork graph [siteA]
+  network <- mapLeft show $ activateRootProcesses network0
+  checked <- mapLeft show $ checkParticipantClassifications
+    graph
+    network
+    [roleA, roleB]
+    [ ParticipantDeclaration roleA (InternalParticipantTarget targetA)
+    , ParticipantDeclaration roleB ExternalParticipantTarget
+    ]
+  assert (Map.size (processNetworkPopulation network) == 1)
+    "external role manufactured a hidden ProcessOccurrence"
+  case Map.lookup roleB (participantClassifications checked) of
+    Just (CheckedExternalParticipant _) -> Right ()
+    other -> Left ("external role lost explicit external classification: " <> show other)
+
+  let rootRevision = identityInstanceRevision (processNetworkRoot network)
+      processA = deriveProcessKey rootRevision (processSiteKey siteA)
+  context <- mapLeft show $ insertProtocolEndpoint
+    internalEndpoint
+    protocolInstance
+    (ProtocolRoleKey "client")
+    internalSession
+    emptyProtocolContext
+  runtime <- mapLeft show $ initializeProcessRuntimeWithObligations
+    network
+    (Map.singleton processA context)
+    (Map.singleton processA (Set.singleton openObligation))
+
+  disposition <- mapLeft show $ classifyProcessNetwork emptyRootClosure [] runtime
+  case disposition of
+    NetworkStuck blocked ->
+      assert (blocked == Set.singleton processA)
+        "external failure did not leave the exact internal process blocked"
+    other -> Left ("external failure was misclassified as process completion: " <> show other)
+  case Map.lookup processA (runtimeStatuses runtime) of
+    Just ProcessRunning -> Right ()
+    other -> Left ("external failure fabricated internal terminality: " <> show other)
+
+  let localFailure = FatalProcessTransition
+        { fatalTransitionProcess = processA
+        , fatalTransitionClass = "external.transport.failure"
+        , fatalTransitionDetail = "peer transport failed"
+        , fatalTransitionDisposals = [internalEndpoint]
+        }
+  case applyFatalProcessTransition localFailure runtime of
+    Left (FatalTerminalOpenObligations actualProcess actualObligations) ->
+      assert
+        (actualProcess == processA && actualObligations == Set.singleton openObligation)
+        "live-obligation rejection lost exact internal process/obligation identity"
+    other -> Left ("live internal obligation was silently cleaned up: " <> show other)
+
+  closedRuntime0 <- mapLeft show $ initializeProcessRuntime
+    network
+    (Map.singleton processA context)
+  closedRuntime <- mapLeft show $ applyFatalProcessTransition localFailure closedRuntime0
+  terminal <- mapLeft show $ classifyProcessNetwork emptyRootClosure [] closedRuntime
+  case terminal of
+    NetworkTerminal fact ->
+      assert (Map.keysSet (rootTerminalProcesses fact) == Set.singleton processA)
+        "explicit local closure did not preserve exact ProcessKey-indexed terminal fact"
+    other -> Left ("explicit local failure path did not close root: " <> show other)
+
 roleA, roleB :: ProtocolRoleOccurrence
 roleA = ProtocolRoleOccurrence protocolInstance (ProtocolRoleKey "client")
 roleB = ProtocolRoleOccurrence protocolInstance (ProtocolRoleKey "server")
 
 protocolInstance :: ProtocolInstanceRevision
 protocolInstance = ProtocolInstanceRevision "protocol.conc010.v1"
+
+internalEndpoint :: Name
+internalEndpoint = Name "client.endpoint"
+
+internalSession :: Session
+internalSession = Send (Name "message") TyUnit (End (Outcome "done"))
+
+openObligation :: ObligationId
+openObligation = ObligationId "obligation.external-failure"
+
+emptyRootClosure :: RootClosureState
+emptyRootClosure = RootClosureState Set.empty Set.empty Set.empty
 
 rootGraph :: Either ArchitectureInstantiationError ArchitectureInstanceGraph
 rootGraph = instantiateArchitecture rootKey rootSpec
