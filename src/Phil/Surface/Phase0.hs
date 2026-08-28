@@ -167,6 +167,7 @@ serverEnvironment base = base
   , surfaceExpectedProvides = Just (TyEndpoint serverUploadSession)
   , surfaceSelectRequirements = uploadSelectRequirements
   , surfaceReceiveExactRequirement = Just beginPolicyProposition
+  , surfaceReleaseTransitions = [serverPayloadReleaseTransition]
   }
 
 simpleReceiveEnvironment :: SurfaceEnvironment -> SurfaceEnvironment
@@ -378,6 +379,23 @@ payloadReleaseTransition = ReleaseTransitionContract
       , releaseAccountAssumptionRefs = Set.empty
       , releaseAccountCostRefs = Set.empty
       , releaseAccountSubjectRef = "upload.payload"
+      }
+  , releaseTransitionOutcome = ReleaseContinuesUnit
+  , releaseTransitionResidue = ReleaseConsumesOwner
+  }
+
+serverPayloadReleaseTransition :: ReleaseTransitionContract
+serverPayloadReleaseTransition = ReleaseTransitionContract
+  { releaseTransitionKey = "upload.server.payload.release.v1"
+  , releaseTransitionOwnerType = TyBytes beginLengthNat
+  , releaseTransitionRequirements = Set.empty
+  , releaseTransitionSemanticAccount = ReleaseSemanticAccount
+      { releaseAccountAuthorityRefs = Set.empty
+      , releaseAccountEvidenceRefs = Set.empty
+      , releaseAccountEffectRefs = Set.empty
+      , releaseAccountAssumptionRefs = Set.empty
+      , releaseAccountCostRefs = Set.empty
+      , releaseAccountSubjectRef = "upload.server.payload"
       }
   , releaseTransitionOutcome = ReleaseContinuesUnit
   , releaseTransitionResidue = ReleaseConsumesOwner
