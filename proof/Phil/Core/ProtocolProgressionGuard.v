@@ -110,7 +110,9 @@ Proof.
     + destruct (context successor) as [occupied |] eqn:Hsuccessor.
       * discriminate.
       * inversion Hstep; subst.
-        split; assumption.
+        split.
+        -- exact Hdistinct.
+        -- exact Hsuccessor.
   - discriminate.
 Qed.
 
