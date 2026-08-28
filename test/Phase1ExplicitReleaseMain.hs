@@ -126,7 +126,7 @@ semanticAccountRetained = do
 
 surfaceReleaseAccepts :: Either String ()
 surfaceReleaseAccepts = do
-  checked <- checkReleaseSource admittedEnvironment
+  checked <- mapLeft show $ checkReleaseSource admittedEnvironment
   assert (checkedTerminalControls checked == [Continue])
     "simple release did not leave the declared Unit-valued continuation"
 
@@ -201,8 +201,8 @@ admittedEnvironment = emptyOwnerEnvironment
 
 syntheticTestSpan :: SourceSpan
 syntheticTestSpan = SourceSpan
-  (SourcePoint "exec014" 1 1)
-  (SourcePoint "exec014" 1 1)
+  (SourcePoint "exec014" 1 1 0)
+  (SourcePoint "exec014" 1 1 0)
 
 fromString :: String -> Text
 fromString = Text.pack
