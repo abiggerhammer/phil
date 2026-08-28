@@ -33,3 +33,5 @@ jobs:
         run: cabal exec -- runghc -Wall -Werror -isrc test/Phase1SchedulerIndependentOrderMain.hs
       - name: CONC-007 fatal-process failure and cancellation isolation
         run: cabal exec -- runghc -Wall -Werror -isrc test/Phase1FailureIsolationMain.hs
+      - name: CONC-008 process and whole-program terminal closure
+        run: cabal exec -- runghc -Wall -Werror -isrc test/Phase1ProcessTerminalClosureMain.hs
