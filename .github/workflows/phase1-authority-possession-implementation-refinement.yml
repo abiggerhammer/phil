@@ -57,7 +57,10 @@ jobs:
           grep -q 'decideAuthorityExerciseFacts' AuthorityPossessionKernel.hs
           grep -q 'decideAuthorityCopy' AuthorityPossessionKernel.hs
           grep -q 'decideAuthorityDrop' AuthorityPossessionKernel.hs
-          cmp AuthorityPossessionKernel.hs src/AuthorityPossessionKernel.hs
+          if ! cmp -s AuthorityPossessionKernel.hs src/AuthorityPossessionKernel.hs; then
+            diff -u src/AuthorityPossessionKernel.hs AuthorityPossessionKernel.hs || true
+            exit 1
+          fi
           sha256sum AuthorityPossessionKernel.hs
           mkdir -p authority-possession-implementation-refinement-proof
           cp \
@@ -87,11 +90,7 @@ jobs:
       - name: Typecheck exact kernel and bound authority production path
         run: |
           set -euo pipefail
-          # Rocq emits a qualified Prelude import although this generated kernel
-          # uses its own extracted Bool. Suppress only that generator-owned
-          # redundancy while producing an interface for the strict handwritten
-          # typecheck below.
-          ghc -isrc -Wall -Werror -Wno-unused-imports -c src/AuthorityPossessionKernel.hs
+          ghc -isrc -Wall -Werror -c src/AuthorityPossessionKernel.hs
           cabal build exe:phil-certify-core-scalar --ghc-options=-Werror
           cabal exec -- ghc -isrc -Wall -Werror -fno-code \
             src/Phil/Core/Authority.hs \
