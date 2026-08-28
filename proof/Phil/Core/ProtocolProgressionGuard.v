@@ -406,7 +406,7 @@ Proof.
 Qed.
 
 Theorem duplicate_guard_requirements_are_not_nodup :
-  forall guard,
+  forall guard : ProtocolTransitionGuard,
     ~ NoDup [guard; guard].
 Proof.
   intros guard Hnodup.
