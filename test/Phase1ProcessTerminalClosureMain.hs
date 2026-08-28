@@ -7,7 +7,6 @@ import qualified Data.Set as Set
 import Data.Text (Text)
 import Phil.Core.Context
   ( CheckError (..)
-  , ResourceContext
   , emptyContext
   , insertBinding
   , startSharedLoan
