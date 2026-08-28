@@ -11,7 +11,8 @@ data StructuralPermission =
    WeakeningPermission
  | ContractionPermission
 
-modeAllowsStructuralPermission :: Mode -> StructuralPermission -> Prelude.Bool
+modeAllowsStructuralPermission :: Mode -> StructuralPermission ->
+                                  Prelude.Bool
 modeAllowsStructuralPermission mode permission =
   case mode of {
    Unrestricted -> Prelude.True;
@@ -36,8 +37,8 @@ data AuthorityExerciseDecision =
  | AuthorityExerciseOperationRejected
  | AuthorityExerciseAccepted
 
-decideAuthorityExerciseFacts :: Prelude.Bool -> Prelude.Bool -> Prelude.Bool -> Prelude.Bool ->
-                                AuthorityExerciseDecision
+decideAuthorityExerciseFacts :: Prelude.Bool -> Prelude.Bool -> Prelude.Bool ->
+                                Prelude.Bool -> AuthorityExerciseDecision
 decideAuthorityExerciseFacts sourcePossessed contractMatches subjectMatches operationPermitted =
   case sourcePossessed of {
    Prelude.True ->
