@@ -1,0 +1,106 @@
+name: Phase 1 Assurance Validity Scope Implementation Refinement
+
+on:
+  pull_request:
+    paths:
+      - 'proof/Phil/Assurance/ValidityScope.v'
+      - 'proof/Phil/Assurance/ValidityScopeImplementation.v'
+      - 'proof/Phil/Assurance/ValidityScopeImplementationExtraction.v'
+      - 'docs/phase-1/assurance-validity-scope-implementation-refinement-v1.md'
+      - 'src/Phil/Assurance/Verify.hs'
+      - 'src/Phil/Assurance/RocqValidityScope.hs'
+      - 'app/ValidityScopeProofCorrespondenceMain.hs'
+      - 'test/AssuranceMain.hs'
+      - '.github/workflows/phase1-assurance-validity-scope-implementation-refinement.yml'
+  push:
+    branches: [main]
+    paths:
+      - 'proof/Phil/Assurance/ValidityScope.v'
+      - 'proof/Phil/Assurance/ValidityScopeImplementation.v'
+      - 'proof/Phil/Assurance/ValidityScopeImplementationExtraction.v'
+      - 'docs/phase-1/assurance-validity-scope-implementation-refinement-v1.md'
+      - 'src/Phil/Assurance/Verify.hs'
+      - 'src/Phil/Assurance/RocqValidityScope.hs'
+      - 'app/ValidityScopeProofCorrespondenceMain.hs'
+      - 'test/AssuranceMain.hs'
+      - '.github/workflows/phase1-assurance-validity-scope-implementation-refinement.yml'
+
+permissions:
+  contents: read
+
+jobs:
+  rocq-assurance-validity-scope-implementation-refinement:
+    runs-on: ubuntu-latest
+    container:
+      image: rocq/rocq-prover:9.2.0
+      options: --user root
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Compile certified validity-scope model and executable correspondence
+        shell: bash
+        run: |
+          set -euo pipefail
+          export PATH="/home/rocq/.opam/${COMPILER}/bin:$PATH"
+          rocq c -Q proof/Phil Phil proof/Phil/Assurance/ValidityScope.v
+          rocq c -Q proof/Phil Phil proof/Phil/Assurance/ValidityScopeImplementation.v
+
+      - name: Extract assurance validity-scope kernel
+        shell: bash
+        run: |
+          set -euo pipefail
+          export PATH="/home/rocq/.opam/${COMPILER}/bin:$PATH"
+          rm -f AssuranceValidityScopeKernel.hs
+          rocq c -Q proof/Phil Phil proof/Phil/Assurance/ValidityScopeImplementationExtraction.v
+          test -s AssuranceValidityScopeKernel.hs
+          grep -q 'validityScopeFactsb' AssuranceValidityScopeKernel.hs
+          grep -q 'decideValidityScope' AssuranceValidityScopeKernel.hs
+          sha256sum AssuranceValidityScopeKernel.hs
+          mkdir -p assurance-validity-scope-implementation-refinement-proof
+          cp \
+            proof/Phil/Assurance/ValidityScope.v \
+            proof/Phil/Assurance/ValidityScopeImplementation.v \
+            proof/Phil/Assurance/ValidityScopeImplementation.vo \
+            AssuranceValidityScopeKernel.hs \
+            assurance-validity-scope-implementation-refinement-proof/
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: rocq-assurance-validity-scope-implementation-refinement
+          path: assurance-validity-scope-implementation-refinement-proof
+          if-no-files-found: error
+
+  verify-assurance-validity-scope-implementation-correspondence:
+    needs: rocq-assurance-validity-scope-implementation-refinement
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/download-artifact@v4
+        with:
+          name: rocq-assurance-validity-scope-implementation-refinement
+          path: extracted-assurance-validity-scope
+
+      - uses: haskell-actions/setup@v2
+        with:
+          ghc-version: '9.6.7'
+          cabal-version: 'latest'
+
+      - name: Typecheck extracted kernel and unchanged assurance validity paths
+        run: |
+          set -euo pipefail
+          ghc -Wall -Werror -fno-code extracted-assurance-validity-scope/AssuranceValidityScopeKernel.hs
+          cabal build exe:phil-certify-core-scalar --ghc-options=-Werror
+          cabal exec -- ghc -isrc -Wall -Werror -fno-code src/Phil/Assurance/Verify.hs
+          cabal exec -- ghc -isrc -Wall -Werror -fno-code src/Phil/Assurance/RocqValidityScope.hs
+          cabal exec -- ghc -isrc -Wall -Werror -fno-code app/ValidityScopeProofCorrespondenceMain.hs
+
+      - name: Re-run unchanged validity-scope correspondence corpus
+        run: |
+          set -euo pipefail
+          cabal exec -- runghc -isrc app/ValidityScopeProofCorrespondenceMain.hs
+
+      - name: Re-run ordinary assurance corpus
+        run: |
+          set -euo pipefail
+          cabal exec -- runghc -isrc test/AssuranceMain.hs
