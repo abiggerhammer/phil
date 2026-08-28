@@ -45,6 +45,7 @@ module Phil.Core.Static
   , lookupClaim
   ) where
 
+import qualified ArchitectureIdentityKernel as ArchitectureIdentityKernel
 import qualified Data.Map.Strict as Map
 import qualified Data.Set as Set
 import Data.Text (Text)
@@ -133,7 +134,17 @@ data DeclarationIdentity = DeclarationIdentity
   , identityInterfaceRevision :: InterfaceRevision
   , identityDefinitionRevision :: DefinitionRevision
   }
-  deriving (Eq, Ord, Show)
+  deriving (Ord, Show)
+
+instance Eq DeclarationIdentity where
+  left == right =
+    case ArchitectureIdentityKernel.decideDeclarationIdentityEquality
+      (ArchitectureIdentityKernel.MkDeclarationIdentityEqualityFacts
+        (identityDeclarationKey left == identityDeclarationKey right)
+        (identityInterfaceRevision left == identityInterfaceRevision right)
+        (identityDefinitionRevision left == identityDefinitionRevision right)) of
+      ArchitectureIdentityKernel.DeclarationIdentityEqual -> True
+      ArchitectureIdentityKernel.DeclarationIdentityDifferent -> False
 
 -- | One exact architecture occurrence.  Parent occurrence identity is stable
 -- lineage, not the complete parent revision, so an unrelated sibling edit does
@@ -151,7 +162,16 @@ data ArchitectureInstanceIdentity = ArchitectureInstanceIdentity
   { identityInstanceKey :: InstanceKey
   , identityInstanceRevision :: InstanceRevision
   }
-  deriving (Eq, Ord, Show)
+  deriving (Ord, Show)
+
+instance Eq ArchitectureInstanceIdentity where
+  left == right =
+    case ArchitectureIdentityKernel.decideArchitectureInstanceIdentityEquality
+      (ArchitectureIdentityKernel.MkArchitectureInstanceIdentityEqualityFacts
+        (identityInstanceKey left == identityInstanceKey right)
+        (identityInstanceRevision left == identityInstanceRevision right)) of
+      ArchitectureIdentityKernel.ArchitectureInstanceIdentityEqual -> True
+      ArchitectureIdentityKernel.ArchitectureInstanceIdentityDifferent -> False
 
 -- | Concrete realization choices are deliberately downstream of the abstract
 -- architecture occurrence.  Replacing one qualified implementation may change

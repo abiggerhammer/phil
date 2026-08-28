@@ -46,6 +46,7 @@ library
       Phil.LLVM
       Phil.Compiler
   other-modules:
+      ArchitectureIdentityKernel
       Phil.Surface.Check.Types
       Phil.Surface.Check.Support
       Phil.Surface.Check.Preflight
