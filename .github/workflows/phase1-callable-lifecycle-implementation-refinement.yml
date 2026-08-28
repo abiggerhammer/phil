@@ -1,0 +1,109 @@
+name: Phase 1 Callable Lifecycle Implementation Refinement
+
+on:
+  pull_request:
+    paths:
+      - 'proof/Phil/Core/GenericStructural.v'
+      - 'proof/Phil/Core/CallableMode.v'
+      - 'proof/Phil/Core/CallableLifecycle.v'
+      - 'proof/Phil/Core/CallableLifecycleImplementation.v'
+      - 'proof/Phil/Core/CallableLifecycleImplementationExtraction.v'
+      - 'src/CallableModeKernel.hs'
+      - 'src/CallableEffectKernel.hs'
+      - 'src/Phil/Core/Callable.hs'
+      - 'test/Phase1CallableTransitionsMain.hs'
+      - 'docs/phase-1/callable-lifecycle-implementation-refinement-v1.md'
+      - '.github/workflows/phase1-callable-lifecycle-implementation-refinement.yml'
+  push:
+    branches: [main]
+    paths:
+      - 'proof/Phil/Core/GenericStructural.v'
+      - 'proof/Phil/Core/CallableMode.v'
+      - 'proof/Phil/Core/CallableLifecycle.v'
+      - 'proof/Phil/Core/CallableLifecycleImplementation.v'
+      - 'proof/Phil/Core/CallableLifecycleImplementationExtraction.v'
+      - 'src/CallableModeKernel.hs'
+      - 'src/CallableEffectKernel.hs'
+      - 'src/Phil/Core/Callable.hs'
+      - 'test/Phase1CallableTransitionsMain.hs'
+      - 'docs/phase-1/callable-lifecycle-implementation-refinement-v1.md'
+      - '.github/workflows/phase1-callable-lifecycle-implementation-refinement.yml'
+
+permissions:
+  contents: read
+
+jobs:
+  rocq-callable-lifecycle-implementation-refinement:
+    runs-on: ubuntu-latest
+    container:
+      image: rocq/rocq-prover:9.2.0
+      options: --user root
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Compile certified CALL-LIFE model and executable correspondence
+        shell: bash
+        run: |
+          set -euo pipefail
+          export PATH="/home/rocq/.opam/${COMPILER}/bin:$PATH"
+          rocq c -Q proof/Phil Phil proof/Phil/Core/GenericStructural.v
+          rocq c -Q proof/Phil Phil proof/Phil/Core/CallableMode.v
+          rocq c -Q proof/Phil Phil proof/Phil/Core/CallableLifecycle.v
+          rocq c -Q proof/Phil Phil proof/Phil/Core/CallableLifecycleImplementation.v
+
+      - name: Extract callable lifecycle kernel
+        shell: bash
+        run: |
+          set -euo pipefail
+          export PATH="/home/rocq/.opam/${COMPILER}/bin:$PATH"
+          rm -f CallableLifecycleKernel.hs
+          rocq c -Q proof/Phil Phil proof/Phil/Core/CallableLifecycleImplementationExtraction.v
+          test -s CallableLifecycleKernel.hs
+          grep -q 'decideCallablePreserve' CallableLifecycleKernel.hs
+          grep -q 'decideCallableConsume' CallableLifecycleKernel.hs
+          grep -q 'decideCallableReplace' CallableLifecycleKernel.hs
+          sha256sum CallableLifecycleKernel.hs
+          mkdir -p callable-lifecycle-implementation-refinement-proof
+          cp \
+            proof/Phil/Core/CallableLifecycle.v \
+            proof/Phil/Core/CallableLifecycleImplementation.v \
+            proof/Phil/Core/CallableLifecycleImplementation.vo \
+            CallableLifecycleKernel.hs \
+            callable-lifecycle-implementation-refinement-proof/
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: rocq-callable-lifecycle-implementation-refinement
+          path: callable-lifecycle-implementation-refinement-proof
+          if-no-files-found: error
+
+  verify-callable-lifecycle-correspondence:
+    needs: rocq-callable-lifecycle-implementation-refinement
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/download-artifact@v4
+        with:
+          name: rocq-callable-lifecycle-implementation-refinement
+          path: callable-lifecycle-implementation-refinement-proof
+
+      - uses: haskell-actions/setup@v2
+        with:
+          ghc-version: '9.6.7'
+          cabal-version: 'latest'
+
+      - name: Typecheck extracted kernel and existing callable lifecycle path
+        run: |
+          set -euo pipefail
+          ghc -Wall -Werror -fno-code \
+            callable-lifecycle-implementation-refinement-proof/CallableLifecycleKernel.hs
+          cabal build exe:phil-certify-core-scalar --ghc-options=-Werror
+          cabal exec -- ghc -isrc -Wall -Werror -fno-code \
+            src/Phil/Core/Callable.hs \
+            test/Phase1CallableTransitionsMain.hs
+
+      - name: Re-run CALL-LIFE production correspondence corpus
+        run: |
+          set -euo pipefail
+          cabal exec -- runghc -isrc test/Phase1CallableTransitionsMain.hs
