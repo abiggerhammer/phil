@@ -1,0 +1,10 @@
+component Worker provides Unit {
+    return unit
+}
+
+architecture Bad {
+    instance worker = Worker;
+    process run = ;
+}
+
+program main = instantiate Bad;

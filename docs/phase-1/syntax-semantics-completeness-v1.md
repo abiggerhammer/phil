@@ -44,6 +44,29 @@ The static-actual factoring is deliberately kind-neutral for name-shaped actuals
 
 The earlier reconciliation remains in force for refinement types, explicit transport, finite `in`/`disjoint`, term-level `offer`, branch-sensitive outcome residues, exact replacement callees, and declaration-level structural modes.
 
+## ADR-024 concurrency extension
+
+ADR-024 subsequently added one bounded author-controlled semantic choice after the original reconciliation: **which already-created executable architecture occurrences are activated as members of the root static CSP process network**.
+
+Grammar v1 exposes that choice only as the architecture item:
+
+```phil
+process worker_run = worker;
+```
+
+The process site is generative process/activation identity; the right-hand side is a `qualified_name` referring to an already-created executable occurrence. It is deliberately not a `static_reference`, because process declaration does not instantiate or clone its target.
+
+Everything else needed to execute that choice is classified rather than surfaced:
+
+- **canonical elaboration:** finite transitive process-population enumeration from the selected root, ProcessKey derivation from the process occurrence site, and the initial process-network bookkeeping implied by explicit architecture bindings;
+- **ordinary checked semantics:** process target validity, exactly-once activation, global restricted-ownership partition, exact role/process binding, synchronous rendezvous, message ownership transfer, local/communication partial-order causality, local terminal closure, and whole-program terminal closure;
+- **assurance:** any claimed fairness, deadlock freedom, eventual response, deadline, or other liveness property;
+- **realization/internal state:** OS thread/task/PID/worker identities, scheduling, event loops, queueing/buffering, locks/atomics, IPC/device synchronization, placement, and target execution topology.
+
+There is therefore no Phase 1 term-level `spawn`, `await`, future, race combinator, scheduler directive, lock, or mailbox syntax. Those would represent additional semantic choices, not alternate spellings for ADR-024's static process network.
+
+The process production has a positive and malformed-syntax fixture in the production corpus. The semantic obligations are tracked separately as CONC-001–009 and by the Phase 1 concurrency logic-ledger family; parseability does not claim concurrency checking or realization preservation.
+
 ## Source-expressible semantic categories after reconciliation
 
 Grammar v1 now provides a route for the Phase 1 source-level categories exercised by the accepted semantic contracts:
@@ -56,7 +79,7 @@ Grammar v1 now provides a route for the Phase 1 source-level categories exercise
 - **protocols:** reusable families, exact static applications, role-local sessions, guarded send/receive/select/offer, recursion/continue, term-level communication actions, and exact specialized boundary/framing references;
 - **control/resource state:** conditionals/matches, explicit post-join state and invariant, loops with typed state/invariant, continue/break, scoped borrow, typed-negative reject, and fatal failure;
 - **boundary semantics:** boundary declarations, receive/send implementation roles, correspondence, canonicality, failures, laws, recognition/validation/encoding terms, and static specialized contract references;
-- **architecture:** occurrence creation versus references, protocol/role/binding edges, authority origins/grants, boundary bindings, entries, assumptions, exported obligations, observables, and constraints.
+- **architecture/concurrency:** occurrence creation versus references, explicit static process activation sites, protocol/role/binding edges, authority origins/grants, boundary bindings, entries, assumptions, exported obligations, observables, and constraints.
 
 This is an expressibility statement, not a claim that the current Haskell parser or checker has implemented every production.
 
@@ -64,11 +87,11 @@ This is an expressibility statement, not a claim that the current Haskell parser
 
 The following are intentionally not ordinary `.phil` author-controlled syntax in Phase 1:
 
-- **canonical elaboration products:** derived structural context zone `mode(T)`, canonical lossless coercions, normalized requirement ordering, declaration/interface/definition revisions, and deterministic projection/bookkeeping facts;
-- **generated occurrence identity:** architecture `InstanceKey` and similar exact occurrence keys derived from the declared occurrence site rather than hand-picked by source;
+- **canonical elaboration products:** derived structural context zone `mode(T)`, canonical lossless coercions, normalized requirement ordering, declaration/interface/definition revisions, deterministic process-population enumeration/ProcessKey derivation, and deterministic projection/bookkeeping facts;
+- **generated occurrence identity:** architecture `InstanceKey`, `ProcessKey`, and similar exact occurrence keys derived from the declared occurrence site rather than hand-picked by source;
 - **internal protocol/runtime state:** `PendingRecv` and other split-ingress implementation states, temporary loan tokens, checker residual-context representations, and machine/runtime handles;
-- **assurance artifacts:** proof/certificate bytes, generic requirement-discharge records, ProviderQualification claim/evidence/admission objects, assurance-policy decisions, and exact evidence revision metadata;
-- **realization artifacts:** ArchitectureRealization, SystemsArtifact, StageContract, runtime-site identities, target ABI/layout/placement choices, target-introduced effects/carriers, and concrete cost lineage.
+- **assurance artifacts:** proof/certificate bytes, generic requirement-discharge records, ProviderQualification claim/evidence/admission objects, assurance-policy decisions, liveness evidence, and exact evidence revision metadata;
+- **realization artifacts:** ArchitectureRealization, SystemsArtifact, StageContract, runtime-site identities, target thread/task/PID/worker identities, scheduling/placement/buffering/synchronization choices, target ABI/layout choices, target-introduced effects/carriers, and concrete cost lineage.
 
 Ordinary source may **refer to semantic propositions, requirements, provider implementations, architecture contracts, and source-visible target-independent constraints** that those artifacts later justify. It may not self-certify its own qualification or choose target realization by masquerading build metadata as source semantics.
 
@@ -89,4 +112,4 @@ The target property is not constructor-for-constructor syntax coverage. It is **
 
 ## Parser corpus
 
-`test/fixtures/phase1-surface/manifest.json` binds the repaired productions to positive whole-file examples and syntax-negative counterexamples. Positive fixtures assert only parseability; semantic acceptance remains deferred. The corpus now covers both the earlier local reconciliation defects and the broader semantic-completeness repairs in this pass.
+`test/fixtures/phase1-surface/manifest.json` binds the repaired and extended productions to positive whole-file examples and syntax-negative counterexamples. Positive fixtures assert only parseability; semantic acceptance remains deferred. The corpus covers the earlier local reconciliation defects, the broader semantic-completeness repairs, and ADR-024's static process activation form.

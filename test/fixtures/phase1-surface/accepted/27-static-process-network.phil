@@ -1,0 +1,12 @@
+component Worker provides Unit {
+    return unit
+}
+
+architecture Pair {
+    instance left = Worker;
+    instance right = Worker;
+    process left_run = left;
+    process right_run = right;
+}
+
+program main = instantiate Pair;
