@@ -5,7 +5,10 @@ module Phil.Core.ProcessActivation
   , ActivationBindingOrigin (..)
   , ActivationBinding (..)
   , ProcessActivationContract (..)
+  , RestrictedOwnerIndex
+  , ProcessActivationState (..)
   , ProcessActivationError (..)
+  , activateProcessState
   , activateProcessContexts
   ) where
 
@@ -62,6 +65,15 @@ data ProcessActivationContract = ProcessActivationContract
   }
   deriving (Eq, Show)
 
+type RestrictedOwnerIndex =
+  Map.Map ActivationOccurrenceKey (ProcessKey, Name)
+
+data ProcessActivationState = ProcessActivationState
+  { activationProcessContexts :: Map.Map ProcessKey ResourceContext
+  , activationRestrictedOwners :: RestrictedOwnerIndex
+  }
+  deriving (Eq, Show)
+
 data ProcessActivationError
   = DuplicateActivationContract ProcessKey
   | UnknownActivationProcess ProcessKey
@@ -79,20 +91,37 @@ data ProcessActivationError
   deriving (Eq, Show)
 
 -- | Close every initial process context from explicit architecture-owned
--- activation inputs, prove global restricted ownership is a partition, and
+-- activation inputs, retain the exact global restricted-owner partition, and
 -- only then perform the exactly-once root activation transition.
+activateProcessState
+  :: ProcessNetwork
+  -> [ProcessActivationContract]
+  -> Either ProcessActivationError (ProcessNetwork, ProcessActivationState)
+activateProcessState network contracts = do
+  contractMap <- normalizeActivationContracts network contracts
+  (contexts, restrictedOwners) <-
+    Map.foldlWithKey' buildProcessContext
+      (Right (Map.empty, Map.empty))
+      contractMap
+  activated <- mapLeft ProcessNetworkActivationError (activateRootProcesses network)
+  pure
+    ( activated
+    , ProcessActivationState
+        { activationProcessContexts = contexts
+        , activationRestrictedOwners = restrictedOwners
+        }
+    )
+
+-- | Backwards-compatible CONC-003 view for callers that only need the checked
+-- per-process resource contexts. CONC-005 and later ownership-sensitive slices
+-- should use 'activateProcessState' so exact occurrence identity is retained.
 activateProcessContexts
   :: ProcessNetwork
   -> [ProcessActivationContract]
   -> Either ProcessActivationError (ProcessNetwork, Map.Map ProcessKey ResourceContext)
 activateProcessContexts network contracts = do
-  contractMap <- normalizeActivationContracts network contracts
-  (contexts, _) <-
-    Map.foldlWithKey' buildProcessContext
-      (Right (Map.empty, Map.empty))
-      contractMap
-  activated <- mapLeft ProcessNetworkActivationError (activateRootProcesses network)
-  pure (activated, contexts)
+  (activated, state) <- activateProcessState network contracts
+  pure (activated, activationProcessContexts state)
 
 normalizeActivationContracts
   :: ProcessNetwork
@@ -119,16 +148,12 @@ normalizeActivationContracts network contracts = do
 buildProcessContext
   :: Either
       ProcessActivationError
-      ( Map.Map ProcessKey ResourceContext
-      , Map.Map ActivationOccurrenceKey (ProcessKey, Name)
-      )
+      (Map.Map ProcessKey ResourceContext, RestrictedOwnerIndex)
   -> ProcessKey
   -> ProcessActivationContract
   -> Either
       ProcessActivationError
-      ( Map.Map ProcessKey ResourceContext
-      , Map.Map ActivationOccurrenceKey (ProcessKey, Name)
-      )
+      (Map.Map ProcessKey ResourceContext, RestrictedOwnerIndex)
 buildProcessContext accumulated processKey contract = do
   (contexts, restrictedOwners) <- accumulated
   (context, nextOwners) <-
@@ -141,11 +166,11 @@ insertActivationBinding
   :: ProcessKey
   -> Either
       ProcessActivationError
-      (ResourceContext, Map.Map ActivationOccurrenceKey (ProcessKey, Name))
+      (ResourceContext, RestrictedOwnerIndex)
   -> ActivationBinding
   -> Either
       ProcessActivationError
-      (ResourceContext, Map.Map ActivationOccurrenceKey (ProcessKey, Name))
+      (ResourceContext, RestrictedOwnerIndex)
 insertActivationBinding processKey accumulated binding = do
   (context, restrictedOwners) <- accumulated
   ensureExplicitOrigin processKey binding
@@ -180,8 +205,8 @@ ensureExplicitOrigin processKey binding =
 reserveRestrictedOwner
   :: ProcessKey
   -> ActivationBinding
-  -> Map.Map ActivationOccurrenceKey (ProcessKey, Name)
-  -> Either ProcessActivationError (Map.Map ActivationOccurrenceKey (ProcessKey, Name))
+  -> RestrictedOwnerIndex
+  -> Either ProcessActivationError RestrictedOwnerIndex
 reserveRestrictedOwner processKey binding owners =
   case checkedBindingMode (activationCheckedTypeMode binding) of
     Unrestricted -> Right owners
