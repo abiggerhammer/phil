@@ -180,6 +180,7 @@ Proof.
       In (normalizeContinue joinedFirst path) (flattenBranches [firstOutput])).
   {
     simpl.
+    rewrite app_nil_r.
     exact HinFirst.
   }
   destruct
