@@ -31,7 +31,7 @@ test label result = case result of
 immutableCopyAccepted :: Either String ()
 immutableCopyAccepted = do
   network <- baseNetwork
-  let (_, clientA, clientB) = processKeys network
+  let (owner, clientA, clientB) = processKeys network
       sharedValue = ActivationOccurrenceKey "config-value"
       left = unrestrictedBinding
         sharedValue "config-a" (TyOpaque "ImmutableConfig")
@@ -40,7 +40,7 @@ immutableCopyAccepted = do
         sharedValue "config-b" (TyOpaque "ImmutableConfig")
         ExtensionalImmutableReachability
   (_, state) <- mapLeft show $ activateProcessState network
-    [ ProcessActivationContract ownerProcessKey []
+    [ ProcessActivationContract owner []
     , ProcessActivationContract clientA [left]
     , ProcessActivationContract clientB [right]
     ]
@@ -52,8 +52,6 @@ immutableCopyAccepted = do
     "client B did not receive immutable unrestricted copy"
   assert (Map.null (activationDirectStatefulReachability state))
     "immutable unrestricted copy was incorrectly classified as stateful reachability"
-  where
-    ownerProcessKey = let (owner, _, _) = processKeysFromRoot in owner
 
 hiddenSharedStateRejects :: Either String ()
 hiddenSharedStateRejects = do
@@ -194,19 +192,6 @@ processKeys network =
      , deriveProcessKey rootRevision (processSiteKey siteA)
      , deriveProcessKey rootRevision (processSiteKey siteB)
      )
-
-processKeysFromRoot :: (ProcessKey, ProcessKey, ProcessKey)
-processKeysFromRoot =
-  let rootRevision = identityInstanceRevision (architectureGraphRoot rootGraphValue)
-  in ( deriveProcessKey rootRevision (processSiteKey siteOwner)
-     , deriveProcessKey rootRevision (processSiteKey siteA)
-     , deriveProcessKey rootRevision (processSiteKey siteB)
-     )
-
-rootGraphValue :: ArchitectureInstanceGraph
-rootGraphValue = case rootGraph of
-  Right graph -> graph
-  Left err -> error (show err)
 
 rootGraph :: Either ArchitectureInstantiationError ArchitectureInstanceGraph
 rootGraph = instantiateArchitecture rootKey rootSpec
