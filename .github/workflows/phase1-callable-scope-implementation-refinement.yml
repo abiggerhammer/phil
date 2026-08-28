@@ -1,0 +1,98 @@
+name: Phase 1 Callable Scope Implementation Refinement
+
+on:
+  pull_request:
+    paths:
+      - 'proof/Phil/Core/CallableScope.v'
+      - 'proof/Phil/Core/CallableScopeImplementation.v'
+      - 'proof/Phil/Core/CallableScopeImplementationExtraction.v'
+      - 'src/Phil/Core/CallableScope.hs'
+      - 'test/Phase1CallableScopeMain.hs'
+      - 'docs/phase-1/callable-scope-implementation-refinement-v1.md'
+      - '.github/workflows/phase1-callable-scope-implementation-refinement.yml'
+  push:
+    branches: [main]
+    paths:
+      - 'proof/Phil/Core/CallableScope.v'
+      - 'proof/Phil/Core/CallableScopeImplementation.v'
+      - 'proof/Phil/Core/CallableScopeImplementationExtraction.v'
+      - 'src/Phil/Core/CallableScope.hs'
+      - 'test/Phase1CallableScopeMain.hs'
+      - 'docs/phase-1/callable-scope-implementation-refinement-v1.md'
+      - '.github/workflows/phase1-callable-scope-implementation-refinement.yml'
+
+permissions:
+  contents: read
+
+jobs:
+  rocq-callable-scope-implementation-refinement:
+    runs-on: ubuntu-latest
+    container:
+      image: rocq/rocq-prover:9.2.0
+      options: --user root
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Compile certified CALL-SCOPE model and executable correspondence
+        shell: bash
+        run: |
+          set -euo pipefail
+          export PATH="/home/rocq/.opam/${COMPILER}/bin:$PATH"
+          rocq c -Q proof/Phil Phil proof/Phil/Core/CallableScope.v
+          rocq c -Q proof/Phil Phil proof/Phil/Core/CallableScopeImplementation.v
+
+      - name: Extract callable scope kernel
+        shell: bash
+        run: |
+          set -euo pipefail
+          export PATH="/home/rocq/.opam/${COMPILER}/bin:$PATH"
+          rm -f CallableScopeKernel.hs
+          rocq c -Q proof/Phil Phil proof/Phil/Core/CallableScopeImplementationExtraction.v
+          test -s CallableScopeKernel.hs
+          grep -q 'decideScopeCaptureByFacts' CallableScopeKernel.hs
+          grep -q 'decideRecursiveClosureGraphFacts' CallableScopeKernel.hs
+          sha256sum CallableScopeKernel.hs
+          mkdir -p callable-scope-implementation-refinement-proof
+          cp \
+            proof/Phil/Core/CallableScope.v \
+            proof/Phil/Core/CallableScopeImplementation.v \
+            proof/Phil/Core/CallableScopeImplementation.vo \
+            CallableScopeKernel.hs \
+            callable-scope-implementation-refinement-proof/
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: rocq-callable-scope-implementation-refinement
+          path: callable-scope-implementation-refinement-proof
+          if-no-files-found: error
+
+  verify-callable-scope-correspondence:
+    needs: rocq-callable-scope-implementation-refinement
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/download-artifact@v4
+        with:
+          name: rocq-callable-scope-implementation-refinement
+          path: callable-scope-implementation-refinement-proof
+
+      - uses: haskell-actions/setup@v2
+        with:
+          ghc-version: '9.6.7'
+          cabal-version: 'latest'
+
+      - name: Typecheck extracted kernel and existing callable scope path
+        run: |
+          set -euo pipefail
+          ghc -Wall -Werror -fno-code \
+            callable-scope-implementation-refinement-proof/CallableScopeKernel.hs
+          cabal build exe:phil-certify-core-scalar --ghc-options=-Werror
+          cabal exec -- ghc -isrc -Wall -Werror -fno-code \
+            src/Phil/Core/CallableScope.hs \
+            test/Phase1CallableScopeMain.hs
+
+      - name: Re-run CALL-SCOPE production correspondence corpus
+        run: |
+          set -euo pipefail
+          cabal exec -- runghc -isrc test/Phase1CallableScopeMain.hs
