@@ -1,0 +1,23 @@
+name: Phase 1 Concurrency Conformance
+
+on:
+  pull_request:
+  push:
+    branches: [main]
+
+permissions:
+  contents: read
+
+jobs:
+  concurrency-conformance:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: haskell-actions/setup@v2
+        with:
+          ghc-version: '9.6.7'
+          cabal-version: 'latest'
+      - name: Build ordinary regression substrate
+        run: cabal build all --enable-tests
+      - name: CONC-001 static population and exactly-once activation
+        run: cabal exec -- runghc -Wall -Werror -isrc test/Phase1StaticProcessPopulationMain.hs
