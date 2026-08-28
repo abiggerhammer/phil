@@ -3,6 +3,8 @@
 module Main (main) where
 
 import qualified Data.Map.Strict as Map
+import Data.Text (Text)
+import qualified Data.Text as Text
 import Phil.Core.ProcessNetwork
 import Phil.Core.Static
 import System.Exit (exitFailure)
@@ -109,8 +111,8 @@ slotA, slotB :: OccurrenceSlotKey
 slotA = OccurrenceSlotKey "worker-a"
 slotB = OccurrenceSlotKey "worker-b"
 
-fromString :: String -> Data.Text.Text
-fromString = Data.Text.pack
+fromString :: String -> Text
+fromString = Text.pack
 
 assert :: Bool -> String -> Either String ()
 assert condition detail
