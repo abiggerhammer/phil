@@ -101,15 +101,41 @@ Suppose two provider operations lower to the same C symbol. They are not therefo
 
 Suppose two equal byte strings are stored in different ownership positions. Equality of their contents does not by itself make their owners interchangeable.
 
-Phil therefore treats names, source locations, pointers, handles, backend symbols, and allocation addresses as possible representations of an identity — not as the identity itself.
+Phil therefore treats display names, file paths, source positions, pointers, handles, backend symbols, and allocation addresses as possible representations of an identity — not as the identity itself.
 
-The architecture must have stable checked identities and revisions that survive harmless implementation changes.
+Phase 1 now makes another distinction here: **stable lineage** is not the same thing as a checked revision.
+
+An identity-bearing declaration or generative architecture/process occurrence has a stable lineage key. In the Phase 1 model, exact `DeclarationKey`, `InstanceKey`, and `ProcessKey` lineage is persisted with the source bundle. A top-level declaration may also carry its admitted `@key("...")` lineage attribute. Tooling may create a fresh key for a genuinely new site, but certifiable identity cannot be reconstructed later by hashing whatever file path, name, or source offset happens to exist today.
+
+That matters during ordinary editing.
+
+A lineage-preserving rename or move can keep the same stable key.
+
+Copying or independently recreating an occurrence normally creates a fresh key.
+
+Changing a public contract or implementation may change a checked revision even while the stable lineage remains the same.
+
+So Phil keeps apart:
+
+```text
+stable lineage identity
+≠
+current source spelling/location
+≠
+checked interface/definition/instance revision
+```
+
+The collection of source text plus exact persisted lineage and related source-level metadata is called a **SourceBundle**. It is an input to checking, not an ambient Haskell project object and not ordinary runtime program behavior.
 
 This principle will recur throughout the tour:
 
 > **Representation coincidence is not semantic identity.**
 
-> **Source example to add after the canonical front end lands:** two architecture occurrences with equal-looking types or representations but distinct semantic identities. One positive case should preserve the distinction; one negative case should try to substitute one occurrence for the other and fail at the competent identity/subject layer.
+And now we can add a second one:
+
+> **Stable identity is carried deliberately; it is not rediscovered from accidents of the current source tree.**
+
+> **Source example to add after the canonical front end lands:** two architecture occurrences with equal-looking types or representations but distinct semantic identities, plus a lineage-preserving rename/move case. A negative companion should try to substitute one occurrence for another or reuse copied-site lineage and fail at the competent identity/lineage layer.
 
 ## 3. Abstraction means saying what you actually need
 
@@ -176,7 +202,7 @@ Phase 0 already used three structural modes:
 - **affine** values may be discarded but not duplicated;
 - **linear** values may be neither duplicated nor discarded.
 
-Phase 1 keeps those rules when values become generic, get placed inside records, cross branches, enter loops, or are captured by closures.
+Phase 1 keeps those rules when values become generic, get placed inside records, cross branches, enter loops, are sent between processes, or are captured by closures.
 
 This matters because abstraction can otherwise become a laundering mechanism.
 
@@ -193,6 +219,8 @@ A record owning a linear field cannot become unrestricted merely because the rec
 A loop carrying a linear owner must account for that owner at the backedge.
 
 A branch join cannot invent a hidden “maybe the resource is here” representation merely to make two incompatible branches fit.
+
+And putting a stateful restricted occurrence behind an unrestricted wrapper does not make that occurrence safe to alias between processes. Structural permission belongs to the value being copied; it does not erase the identity and ownership of reachable state hidden behind it.
 
 The broad rule is:
 
@@ -215,7 +243,7 @@ A **callable contract** can describe several independent dimensions, including:
 - captured-resource mode;
 - authority the caller must supply;
 - possible effects;
-- modeled failure outcomes;
+- success, typed-negative, declared-terminal, and fatal outcomes;
 - postconditions and evidence;
 - residual obligations;
 - cost information where relevant.
@@ -224,15 +252,17 @@ This lets Phil state a useful refinement rule.
 
 Suppose a caller is prepared for a function that may read and write a store.
 
-An implementation that only reads is narrower. That is safe.
+An implementation that only reads is narrower. That can be safe.
 
 An implementation that may also send data over the network is wider. That is not silently substitutable.
 
 Likewise, an implementation that requires **less** caller authority can be a valid refinement, while one that requires new authority cannot be slipped in merely because its machine signature matches.
 
+Failure behavior matters too. A same-signature implementation that introduces a new fatal outcome or changes what resources remain on a branch is not automatically a refinement.
+
 So higher-order substitution is about semantic boundaries, not just ABI compatibility.
 
-> **Source example to add after the canonical front end lands:** one higher-order function receiving a callable under a public contract, one narrower accepted implementation, and one same-machine-shape implementation rejected because it widens either authority, effects, or failures.
+> **Source example to add after the canonical front end lands:** one higher-order function receiving a callable under a public contract, one narrower accepted implementation, and one same-machine-shape implementation rejected because it widens authority, effects, failures, or resource residue.
 
 ## 6. Effects say what a computation may do
 
@@ -418,11 +448,91 @@ Likewise, a generic function that accepts an endpoint at an unknown state does n
 
 The contract must establish the transition that is legal at that state.
 
-So Phase 1 gets reusable protocol abstraction without losing the exact state discipline that made Phase 0 useful.
+There is another boundary before transfer: a Phil value does not become a valid protocol `Message` merely because it can be moved or serialized somehow. Boundary-message admissibility is checked first. A scoped loan, live endpoint, or live authority-bearing occurrence cannot be smuggled through an ordinary aggregate and thereby acquire deferred remote-delegation semantics that Phase 1 never admitted.
 
-> **Source example to add after the canonical front end lands:** two instances of the same protocol family plus a negative cross-instance endpoint substitution; and a small endpoint-polymorphic callable that cannot perform an unconstrained communication action until its contract establishes the required state transition.
+So Phase 1 gets reusable protocol abstraction without losing the exact state and boundary discipline that made Phase 0 useful.
 
-## 11. Providers are contracts, not privileged libraries
+> **Source example to add after the canonical front end lands:** two instances of the same protocol family plus a negative cross-instance endpoint substitution; a small endpoint-polymorphic callable that cannot perform an unconstrained communication action; and a message-admissibility pair showing that “movable value” is not automatically “protocol message.”
+
+## 11. Processes are semantic; threads are not
+
+Protocols tell us which communications are legal. They do not, by themselves, tell us what the program's concurrent population is.
+
+Phase 1 therefore admits a deliberately small concurrency model: a **finite static process network** declared by the architecture.
+
+A process occurrence is a semantic member of that network. It has an exact stable `ProcessKey`, an executable target, and its own local Phil execution state.
+
+This is not the same thing as an operating-system process, thread, task, worker, coroutine, GPU lane, or event-loop callback.
+
+A realization may map:
+
+- one Phil process to one host thread;
+- one Phil process across several target stages;
+- several Phil processes onto one thread or event loop.
+
+Those mappings are implementation choices as long as the checked realization preserves the Phil process identities, ownership, communication causality, effects, failures, and terminal behavior.
+
+The governing distinction is:
+
+> **Process identity belongs to the architecture. Thread identity belongs to the realization.**
+
+The static process population is generative. Two distinct architecture occurrences of the same reusable definition can contain corresponding declaration-local process sites and still produce distinct process occurrences. A reference to an already-existing architecture occurrence does not clone its process population.
+
+Every restricted semantic occurrence is owned by exactly one process context at a time unless an existing Phil rule explicitly transfers it. Unrestricted immutable values or evidence may be copied only through their ordinary structural permission; an unrestricted wrapper is not permission to create shared mutable semantic state behind the checker's back.
+
+Internal communication is synchronous CSP-style rendezvous. An internal send/receive or branch action advances only as one joint transition over the exact dual endpoints of the same protocol instance and opposite roles. The transfer consumes the predecessor ownership and produces only the declared successors.
+
+Source declaration order is not a scheduler. Phil preserves each process's local program order and architecture/protocol causality. Independent events otherwise remain unordered unless some explicit semantic relation orders them.
+
+This leaves several properties deliberately outside the default semantics:
+
+- fairness;
+- eventual response;
+- deadlock freedom;
+- deadlines;
+- scheduling policy.
+
+Those may be obligations a program proves or assumes. They are not facts the concurrency checker gets for free.
+
+> **Source example to add after the canonical front end lands:** two static processes performing one exact rendezvous, plus a negative wrong-instance or unilateral progression; and a generativity example where two nested architecture occurrences contribute distinct ProcessKeys even though the declaration-local process site has the same spelling.
+
+## 12. External participants are explicit, and failure stays local
+
+Not every protocol participant has to be a Phil process.
+
+An architecture may explicitly classify a protocol role as **external**.
+
+That word is deliberately narrow. It says only:
+
+> this role lies outside the Phil process population.
+
+It does **not** automatically choose:
+
+- a transport;
+- a boundary representation;
+- an entry resource;
+- a capability or authority source;
+- an assumption;
+- a deployment relation;
+- a target realization.
+
+Those are separate competence questions.
+
+Missing internal ownership also does not mean “probably external.” Every executable protocol-role occurrence must be classified explicitly. An unresolved, ambiguous, inactive, or unactivated internal target rejects rather than falling back to externality.
+
+Failure obeys the same non-magic rule.
+
+If an external peer disappears, a Phil process waiting on it does not automatically become successfully terminal. The internal process may remain active and stuck with a live endpoint or obligation. Likewise, a fatal transition in one Phil process does not silently cancel its peers or clean up their resources.
+
+A local process reaches a terminal fact only when its own declared terminal transition has closed the exact local resource, endpoint, and obligation boundary required for that outcome.
+
+The whole network reaches successful terminal closure only when every static Phil process occurrence is terminal and the root architecture's remaining boundary/assurance obligations are closed.
+
+An active network with no enabled step is **stuck**. It is not successful termination.
+
+> **Source example to add after the canonical front end lands:** one internal role plus one explicit external role; a missing-classification rejection; and a failure example where the external side disappears but the internal process remains stuck until an explicit local failure/disposition path closes its own boundary.
+
+## 13. Providers are contracts, not privileged libraries
 
 Most useful systems depend on things whose implementation may vary:
 
@@ -475,17 +585,17 @@ Phase 2 will attack the bigger privileged implementation: the compiler/checker i
 
 > **Source example to add after the canonical front end lands:** one provider contract with two qualified implementations or materially distinct test realizations, plus an ABI-compatible but unqualified implementation that is rejected. The tutorial should explain qualification evidence without implying that tests alone prove arbitrary provider laws.
 
-## 12. Ordinary data and control must obey the same rules
+## 14. Ordinary data and control must obey the same rules
 
 A language for architectures also needs ordinary programming constructs.
 
-Records, sum types, branches, loops, and recursion cannot become escape hatches around the semantic model.
+Records, sum types, tuples, branches, loops, and recursion cannot become escape hatches around the semantic model.
 
-For records and sums, structural mode follows what the value owns.
+For records, sums, and products, structural mode follows what the value owns unless an admitted stricter declaration-level contract justifies strengthening it.
 
 For branches, continuing paths must agree on the resource state needed after reconvergence.
 
-For loops, the backedge must re-establish an explicit state contract.
+For loops, the initial edge and every backedge must re-establish the same explicit state contract and logical invariant.
 
 For recursion, a recursive callable is checked against a stabilized callable contract rather than by asking the compiler to unfold the program forever and discover what it does.
 
@@ -501,9 +611,53 @@ Likewise, Phil uses dependent types where they buy precision, but dependency is 
 
 The language can therefore be computationally powerful without making the compiler omniscient.
 
-> **Source example to add after the canonical front end lands:** one resource-carrying loop whose initial edge and backedge re-establish the same explicit state, one rejected backedge that loses or changes a linear owner, and one small record/sum example whose structural mode follows its contents.
+> **Source example to add after the canonical front end lands:** one resource-carrying loop whose initial edge and backedge re-establish the same explicit state, one rejected backedge that loses or changes a linear owner, and one small record/sum/product example whose structural mode follows its contents.
 
-## 13. The two witnesses should look different
+## 15. Ordinary execution has target-independent rules
+
+Once Phil admits ordinary runtime computation, “whatever Haskell or LLVM happens to do” cannot define its evaluation semantics.
+
+Within each Phil process, Phase 1 uses deterministic strict sequential evaluation.
+
+At the language level:
+
+- statements execute in textual order;
+- strict subexpressions and runtime arguments evaluate left to right;
+- conditions and scrutinees evaluate before branch selection;
+- untaken branches do not execute;
+- local bindings are initialized, lexical, and immutable;
+- Phase 1 rejects active lexical shadowing rather than letting a compiler's internal name map define binder identity.
+
+A target may reorder, fuse, inline, vectorize, or otherwise transform the implementation only when a checked refinement preserves the source effects, failures, ownership/evidence succession, authority, and observables.
+
+Arithmetic also has Phil semantics.
+
+A runtime `UInt[w]` literal must fit exactly in its width. Plain `+`, `-`, and `*` denote mathematical arithmetic together with the obligation that the result remains representable. They do not silently wrap, saturate, or gain a target-specific overflow trap.
+
+If overflow is genuinely runtime-contingent, the program uses an explicit checked arithmetic operation with explicit success/failure outcomes.
+
+This generalizes to target partiality.
+
+A valid Phil transition may not turn into target UB, poison, an undeclared trap, OOM, stack exhaustion, gas exhaustion, queue overflow, device-capacity failure, or another realization-only failure simply because the backend picked a partial mechanism.
+
+The target condition must instead be:
+
+- mapped to a declared source outcome;
+- proved satisfied or unreachable;
+- covered by an accepted runtime enforcement relation;
+- made dependent on an explicit admitted assumption;
+- exported as a deployment requirement;
+- or rejected as an invalid realization.
+
+There are two related negative rules worth remembering.
+
+First, legal affine weakening is just structural weakening. It does not secretly call a destructor, `close`, `free`, flush, finalizer, or provider operation. Effectful cleanup is an explicit resource-specific transition.
+
+Second, time, randomness, environment variables, host/process/thread identity, scheduler state, and similar observations are not ambient Phil inputs. They enter only through explicit providers, entries, capabilities, protocols, boundaries, or assumptions.
+
+> **Source example to add after the canonical front end lands:** left-to-right evaluation with one visible effect, exact `UInt` boundary cases, checked-overflow branching, a hidden-finalizer rejection, and a clock/random/environment access that succeeds only through an explicit provider or boundary.
+
+## 16. The two witnesses should look different
 
 The best test of a generalization is not whether the old example still works.
 
@@ -547,9 +701,9 @@ If both programs begin as ordinary `.phil` source and travel through the same se
 
 The compiler should not know either witness by name.
 
-> **Future Tour structure:** once both canonical source witnesses exist, this section should become the spine of the executable half of the tutorial. Follow one small slice of upload and one small slice of Steve side by side, showing how the same generic concepts — contracts, authority, effects, identities, providers, lowering — express genuinely different programs.
+> **Future Tour structure:** once both canonical source witnesses exist, this section should become the spine of the executable half of the tutorial. Follow one small slice of upload and one small slice of Steve side by side, showing how the same generic concepts — contracts, authority, effects, identities, processes, providers, lowering, verification — express genuinely different programs.
 
-## 14. Lowering is not where the compiler gets to improvise
+## 17. Lowering is not where the compiler gets to improvise
 
 Eventually source programs must become executable machine behavior.
 
@@ -569,9 +723,10 @@ For example, a target may:
 - inline a callable or keep a call boundary;
 - specialize a generic or pass an explicit provider;
 - stage bytes through a temporary buffer;
+- map processes to threads or an event loop;
 - choose one of several qualified providers;
 - use a runtime check or an accepted assurance carrier;
-- choose a target-specific representation.
+- choose a target-specific representation or placement.
 
 Those choices need not change the source architecture.
 
@@ -603,9 +758,9 @@ This is one of Phil's most important competence-boundary rules:
 
 > **A later stage may forget representation only after it has accounted for meaning.**
 
-> **Source/realization example to add later:** show one semantic source effect and one target-introduced staging operation. The tutorial should make clear that the staging operation is a realization effect with explicit authority/failure/cost accounting, not a retroactive claim that staging was part of the source semantics.
+> **Source/realization example to add later:** show one semantic source effect and one target-introduced staging operation, plus a process-to-worker mapping. Make clear that staging/threading are realization mechanisms with explicit authority/failure/cost/correspondence accounting, not retroactive source semantics.
 
-## 15. Source effects and machine events are different things
+## 18. Source effects and machine events are different things
 
 The effects section gave us source-level statements such as:
 
@@ -644,9 +799,9 @@ The implementation is free to change mechanisms as long as the checked refinemen
 
 This is how Phil can allow implementation diversity without defining semantics as “whatever the first compiler happened to emit.”
 
-## 16. Assurance follows the exact claim
+## 19. Assurance follows the exact claim
 
-Phase 1 does not invent a new assurance system for generics, providers, functions, protocols, or effects.
+Phase 1 does not invent a new assurance system for generics, providers, functions, protocols, processes, runtime checks, or effects.
 
 They all use the same basic idea Phase 0 introduced: **obligations and evidence stay attached to exact claims**.
 
@@ -666,6 +821,8 @@ Suppose a target introduces a stronger ABI requirement than the source ever clai
 
 The target cannot borrow authority from the more abstract source theorem. It needs an explicit derived obligation for the stronger fact.
 
+Evidence reuse follows declared validity dimensions. An unrelated edit should not gratuitously invalidate independently scoped evidence, but a change to the relevant proposition, subject, context, revision, qualification, or other declared dependency does invalidate it.
+
 Phil's assurance story therefore keeps asking the same questions:
 
 - What exact proposition or relationship is being claimed?
@@ -677,7 +834,56 @@ Phil's assurance story therefore keeps asking the same questions:
 
 A certificate is useful only when those answers remain inspectable.
 
-## 17. The checker is deliberately less powerful than the runtime language
+## 20. Verification is not the same thing as certification
+
+Phase 1 makes the programmer-facing verification boundary explicit.
+
+The first question is whether the program is intrinsically valid Phil.
+
+Some failures are simply language errors:
+
+- duplicating a linear owner;
+- performing an illegal session action;
+- using authority that is not possessed;
+- giving one restricted occurrence to two processes;
+- violating a required resource-state join.
+
+Those failures are rejected by the competent semantic checker. A permissive assurance policy cannot turn them into assumptions, runtime checks, exports, or “proof obligations to solve later.”
+
+Only claims that the language permits to remain live become **residual obligations**.
+
+For an accepted source bundle, application verification constructs a deterministic exact obligation/dependency graph. The inspectable object that records the source revisions, intrinsic result, obligations, dependencies, selected policy, and evidence references is a **VerificationBundle**.
+
+Proof discovery can then be replaceable. A prover, solver, test producer, or other automation may propose evidence. Its failure or timeout means only “no accepted evidence from this attempt.” It does not prove the proposition false and does not silently create an assumption.
+
+Likewise, source-level `prove P` is an evidence-introduction form, not an assertion escape hatch. It succeeds only through a competent local mechanism: definitional reasoning, exact in-scope evidence, or a certificate-producing decision procedure whose certificate is checked.
+
+Residual obligations may be closed only through dispositions the exact policy and architecture permit, such as:
+
+- accepted static evidence;
+- an exact runtime enforcement binding;
+- an explicit admitted assumption;
+- an explicit exported deployment/consumer obligation.
+
+And even a completely closed source VerificationBundle is not yet a certified executable artifact.
+
+A particular artifact also depends on its exact architecture realization, Systems representation, StageContract preservation relation, provider admissions, target-specific strengthenings, runtime carriers, deployment requirements, and any obligations introduced by lowering.
+
+So Phil separates two stages:
+
+```text
+source verification
+≠
+artifact certification
+```
+
+Final certification composes source closure with realization/StageContract closure and produces a scoped **AssuranceManifest** naming the accepted dispositions and the remaining trusted computing base.
+
+This prevents a common mistake: proving a good fact about the source and then silently assuming every compiler/backend choice preserved it.
+
+> **Verification example to add once the generic path is runnable:** one source obligation closed by reusable evidence, followed by two realizations: one whose StageContract preserves the source result and one that introduces a new target obligation. The same source proof should remain reusable while the second artifact remains uncertified until the new obligation closes.
+
+## 21. The checker is deliberately less powerful than the runtime language
 
 Phil is intended to permit general runtime computation, including loops and recursion.
 
@@ -720,12 +926,13 @@ When a program is rejected, Phil wants the rejection to name a competent reason:
 - an effect bound was widened;
 - evidence names the wrong subject;
 - a provider is unqualified;
+- a process role was left implicitly external;
 - a loop backedge failed its resource contract;
 - an assumption disappeared during lowering.
 
 It should not fail because theorem search wandered off indefinitely.
 
-## 18. The grammar is already normative; the front end is not finished
+## 22. The grammar is already normative; the front end is not finished
 
 Phase 1 now has one normative concrete-syntax authority:
 
@@ -735,25 +942,29 @@ grammar/phase1-surface.ebnf
 
 That file defines **Phase 1 Surface Grammar v1**.
 
-It fixes the lexical and concrete structure of the current syntax epoch, including the effect-set forms discussed earlier in this tour.
+It fixes the lexical and concrete structure of the current syntax epoch.
 
 But grammar acceptance is only the first layer.
 
-A source file still has to pass through:
+A Phase 1 compilation begins from more than raw text. The conceptual pipeline is now:
 
 ```text
-bytes / text
-→ lexical + grammar structure
+SourceBundle
+(source text + exact persisted lineage)
+→ lexical + Grammar-v1 structure
 → located surface form
-→ name/scope resolution
-→ elaboration
-→ Core/static checking
-→ architecture instantiation
-→ Systems realization
+→ name/scope/lineage resolution
+→ elaboration + Core/static checking
+→ ArchitectureInstance + static process network
+→ application VerificationBundle
+→ ArchitectureRealization / Systems / StageContract
+→ artifact AssuranceManifest
 → backend / target
 ```
 
-The canonical parser and elaborator must agree with the exact Grammar-v1 revision rather than defining an accidental second language through parser-library behavior.
+Some implementations may fuse or reorganize those passes internally. The competence boundaries and checked relationships are what matter.
+
+The canonical parser and elaborator must agree with the exact Grammar-v1 revision rather than defining an accidental second language through parser-library behavior. Likewise, lineage must come from the SourceBundle rather than being reconstructed from Haskell object identity or mutable source positions.
 
 That is why this draft contains no claimed executable Phase 1 `.phil` listings yet.
 
@@ -762,31 +973,34 @@ A tutorial example should eventually satisfy a stronger standard than “this lo
 Every source listing in the finished Phase 1 Tour should be:
 
 1. accepted by the canonical parser for the exact Grammar-v1 revision;
-2. accepted by the semantic layer it is intended to demonstrate;
-3. accompanied by a deliberately rejected companion where that distinction is pedagogically useful; and
-4. exercised in CI so documentation drift becomes a build failure.
+2. carried in the same portable SourceBundle path used by ordinary programs;
+3. accepted by the semantic layer it is intended to demonstrate;
+4. accompanied by a deliberately rejected companion where that distinction is pedagogically useful; and
+5. exercised in CI so documentation drift becomes a build failure.
 
 Until that front-end path exists, prose is safer than fake certainty.
 
-## 19. What this draft will gain as Phase 1 closes
+## 23. What this draft will gain as Phase 1 closes
 
 This version of the Tour is intentionally semantic-first.
 
-As Phase 1 implementation closes, it should gain executable source in roughly this order:
+As Phase 1 implementation closes, it should gain executable source and inspectable artifacts in roughly this order:
 
-1. **Canonical declarations and roots** — enough ordinary source to show that architecture comes from the program, not compiler-installed witness bindings.
+1. **Canonical declarations, roots, and SourceBundles** — enough ordinary source plus persisted lineage to show that architecture/identity comes from the program bundle, not compiler-installed witness state.
 2. **Generics and structural requirements** — linear identity, rejected discard, rejected duplication.
 3. **Callables, effects, and authority** — latent effect propagation, subject-indexed effects, missing-authority rejection, higher-order narrowing.
-4. **Protocol abstraction** — reusable family/instance identity and cross-instance rejection.
-5. **Provider qualification/replacement** — one contract, multiple realizations, unqualified replacement rejection.
-6. **Ordinary data and cyclic control** — records/sums plus explicit join/backedge resource state.
-7. **Upload and Steve source witnesses** — small end-to-end slices of both programs through the same front end.
-8. **Systems/assurance views** — show the checked realization facts, derived obligations, and exact evidence lineage for those source slices.
-9. **Runnable commands** — only once the repository can offer commands that exercise the canonical Phase 1 source path rather than a tutorial-only fixture.
+4. **Protocol abstraction and message admissibility** — reusable family/instance identity, cross-instance rejection, and the boundary between movable values and legal messages.
+5. **Static process networks** — explicit processes, internal/external role classification, exact rendezvous, local failure/terminality, and ProcessKey generativity.
+6. **Provider qualification/replacement** — one contract, multiple realizations, unqualified replacement rejection.
+7. **Ordinary data, cyclic control, and deterministic execution** — records/sums/products, explicit join/backedge state, evaluation order, and checked arithmetic.
+8. **Application verification** — one inspectable VerificationBundle with intrinsic rejection, residual obligations, policy dispositions, and reusable evidence.
+9. **Upload and Steve source witnesses** — small end-to-end slices of both programs through the same front end and verification path.
+10. **Systems/realization/assurance views** — show checked realization facts, derived obligations, process mappings, runtime carriers, exact evidence lineage, and the final AssuranceManifest.
+11. **Runnable commands** — only once the repository can offer commands that exercise the canonical Phase 1 source path rather than a tutorial-only fixture.
 
 At that point the Tour should receive the same readability pass as the Phase 0 edition: define jargon where it first becomes necessary, keep the main narrative concrete, and move implementation archaeology out of the reader's path.
 
-## 20. Where Phase 1 stops
+## 24. Where Phase 1 stops
 
 Phase 1 removes one privileged assumption:
 
@@ -803,11 +1017,21 @@ It does not require:
 - independently certified component composition;
 - a package ecosystem;
 - a mature standard library, formatter, or IDE;
+- dynamic process creation, term-level spawn/await, or scheduler-control syntax;
+- asynchronous mailbox/buffer semantics or multiparty protocols;
+- shared mutable-memory atomics as Phil source semantics;
 - arbitrary effect handlers;
-- multiparty or asynchronous protocol semantics;
 - unrestricted type-level theorem proving.
 
 Those are later pressures.
+
+But Phase 1 does have to leave Phase 2 a usable target.
+
+A second implementation should not have to reverse-engineer Haskell constructors, witness tables, source-position-derived identities, traversal order, or private test setup to discover what Phil means.
+
+The freeze handoff therefore needs portable, versioned artifacts sufficient to enumerate and replay the checked interfaces and conformance judgments: the exact Grammar-v1 corpus, SourceBundles and lineage, checked semantic/architecture outputs or reconstructible equivalents, VerificationBundles, evidence/policy inputs, realization/StageContract artifacts, final manifests, and positive/negative fixtures with their competent rejection layers.
+
+That handoff format is test and transition infrastructure. Phase 1 does not need to standardize the permanent ecosystem interchange format before it can finish.
 
 The roadmap has a useful rhythm:
 
@@ -822,25 +1046,31 @@ Phase 5 — Deploy: no privileged laboratory.
 
 Phase 1 is done when the upload demonstrator and Steve are no longer special things the compiler knows how to translate.
 
-They are simply programs in Phil.
+They are simply programs in Phil — and the specification/conformance handoff is precise enough that another implementation can agree about what those programs mean.
 
-## 21. The ideas to keep
+## 25. The ideas to keep
 
 If you remember only a few things from this Phase 1 tour, remember these:
 
 - **Phase 1 removes special cases.** The architecture must come from ordinary program declarations and checked contracts, not witness recognition inside the compiler.
 - **Semantic identity is not representation identity.** Equal pointers, symbols, handles, addresses, or bytes do not silently merge distinct architectural subjects.
+- **Stable lineage is explicit SourceBundle input.** Declaration, architecture-occurrence, and process identities are not recomputed from current names or source positions.
 - **Generic code receives no secret privileges.** If it copies, drops, calls, writes, assumes, or depends on something, that requirement belongs in its checked interface.
-- **Ownership survives abstraction.** Putting a linear thing inside a closure, record, generic, branch, or loop does not make the ownership obligation disappear.
+- **Ownership survives abstraction.** Putting a linear thing inside a closure, record, generic, branch, process, or loop does not make the ownership obligation disappear.
 - **Callables are semantic values, not just machine signatures.** Their contracts include resource, authority, effect, failure, and assurance boundaries.
 - **Effects are may-effect bounds.** Implementations may narrow them but may not silently widen them.
 - **Effects are not authority.** What a computation may do and what it is permitted to do are different facts.
 - **Higher-order effects are latent.** Passing a function that may write does not perform the write.
 - **An affordance is a kind of coeffect.** Contextual requirements describe what the surrounding world makes available; availability and permission still remain distinct.
 - **Protocols are reusable but instances stay exact.** Two conversations following the same protocol are still different sessions.
+- **Processes are semantic; threads are realization.** ProcessKey, ownership, rendezvous, causality, failure, and terminality must survive whatever execution mechanism the target chooses.
+- **External participation is explicit.** Missing internal ownership never silently becomes `external`, and external failure does not synthesize Phil process terminality.
 - **Providers are qualified against contracts.** Linkability and nominal resemblance do not establish semantic replacement.
+- **Ordinary execution has Phil semantics.** Evaluation order, immutable initialized bindings, exact UInt arithmetic, explicit ambient observation, and target partiality do not inherit arbitrary host behavior.
 - **Lowering is checked refinement.** It may choose representation and mechanism; it may not choose new source semantics.
 - **Assurance follows exact claims and subjects.** Evidence cannot be retargeted because two things happen to look alike.
+- **Intrinsic invalidity is not an assurance disposition.** A bad Phil program is rejected before proof/runtime/assumption/export choices are considered.
+- **Source verification is not artifact certification.** The realization and StageContract must close their own preservation and target-derived obligations.
 - **The runtime may be powerful without making the checker omniscient.** Automatic checking stays inside deliberately bounded competent procedures.
 - **Grammar and static semantics are separate.** Grammar v1 says what source has Phil's concrete shape; the canonical front end must still establish what that source means and whether it is allowed.
 
