@@ -29,11 +29,11 @@ jobs:
         run: cabal exec -- runghc -Wall -Werror -isrc test/Phase1ConsumingRecordDestructionMain.hs
       - name: DATA-005 missing linear field disposition conformance
         run: cabal exec -- runghc -Wall -Werror -isrc test/Phase1MissingLinearFieldDispositionMain.hs
-      - name: DATA-006 legal affine omission conformance
-        run: cabal exec -- runghc -Wall -Werror -isrc test/Phase1AffineOmissionMain.hs
+      - name: DATA-006 borrowed restricted aggregate inspection conformance
+        run: cabal exec -- runghc -Wall -Werror -isrc test/Phase1BorrowedAggregateInspectionMain.hs
       - name: DATA-007 conservative sum mode conformance
         run: cabal exec -- runghc -Wall -Werror -isrc test/Phase1ConservativeSumModeMain.hs
-      - name: DATA-008 consuming sum match conformance
+      - name: DATA-004/007 consuming sum payload restoration conformance
         run: cabal exec -- runghc -Wall -Werror -isrc test/Phase1ConsumingSumMatchMain.hs
       - name: DATA-009 generic mode propagation conformance
         run: cabal exec -- runghc -Wall -Werror -isrc test/Phase1GenericModePropagationMain.hs
@@ -43,3 +43,5 @@ jobs:
         run: cabal exec -- runghc -Wall -Werror -isrc test/Phase1DataOperationContractMain.hs
       - name: DATA-013 explicit branch-dependent resource sum conformance
         run: cabal exec -- runghc -Wall -Werror -isrc test/Phase1ExplicitBranchResourceSumMain.hs
+      - name: DATA-016 legal affine omission conformance
+        run: cabal exec -- runghc -Wall -Werror -isrc test/Phase1AffineOmissionMain.hs
