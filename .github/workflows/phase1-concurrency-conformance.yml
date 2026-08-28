@@ -23,3 +23,5 @@ jobs:
         run: cabal exec -- runghc -Wall -Werror -isrc test/Phase1StaticProcessPopulationMain.hs
       - name: CONC-002 semantic process identity and duplicate target activation
         run: cabal exec -- runghc -Wall -Werror -isrc test/Phase1ProcessIdentityMain.hs
+      - name: CONC-003 activation context closure and global ownership partition
+        run: cabal exec -- runghc -Wall -Werror -isrc test/Phase1ProcessActivationOwnershipMain.hs
