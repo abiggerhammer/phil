@@ -1,0 +1,103 @@
+name: Phase 1 Protocol Projection Proofs
+
+on:
+  pull_request:
+    paths:
+      - 'proof/Phil/Core/ProtocolProjection.v'
+      - 'proof/Phil/Core/ProtocolIdentity.v'
+      - 'proof/Phil/Core/Session.v'
+      - 'src/Phil/Core/Protocol/Generic.hs'
+      - 'src/Phil/Core/Protocol/Family.hs'
+      - 'test/Phase1ProtocolGenericEndpointMain.hs'
+      - 'test/Phase1ProtocolProjectionMain.hs'
+      - 'docs/phase-1/protocol-generic-endpoint-v1.md'
+      - 'docs/phase-1/protocol-projection-v1.md'
+      - 'docs/phase-1/protocol-projection-proof-v1.md'
+      - '.github/workflows/phase1-protocol-projection-proofs.yml'
+  push:
+    branches: [main]
+    paths:
+      - 'proof/Phil/Core/ProtocolProjection.v'
+      - 'proof/Phil/Core/ProtocolIdentity.v'
+      - 'proof/Phil/Core/Session.v'
+      - 'src/Phil/Core/Protocol/Generic.hs'
+      - 'src/Phil/Core/Protocol/Family.hs'
+      - 'test/Phase1ProtocolGenericEndpointMain.hs'
+      - 'test/Phase1ProtocolProjectionMain.hs'
+      - 'docs/phase-1/protocol-generic-endpoint-v1.md'
+      - 'docs/phase-1/protocol-projection-v1.md'
+      - 'docs/phase-1/protocol-projection-proof-v1.md'
+      - '.github/workflows/phase1-protocol-projection-proofs.yml'
+
+permissions:
+  contents: read
+
+jobs:
+  rocq-protocol-projection-proof:
+    runs-on: ubuntu-latest
+    container:
+      image: rocq/rocq-prover:9.2.0
+      options: --user root
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Compile PHIL-PROT-PROJ-001 proof
+        shell: bash
+        run: |
+          set -euo pipefail
+          export PATH="/home/rocq/.opam/${COMPILER}/bin:$PATH"
+          rocq c -Q proof/Phil Phil proof/Phil/Core/Syntax.v
+          rocq c -Q proof/Phil Phil proof/Phil/Core/Session.v
+          rocq c -Q proof/Phil Phil proof/Phil/Core/ProtocolIdentity.v
+          rocq c -Q proof/Phil Phil proof/Phil/Core/ProtocolProjection.v
+
+      - name: Record proof identities
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p protocol-projection-proof
+          cp \
+            proof/Phil/Core/ProtocolProjection.v \
+            proof/Phil/Core/ProtocolProjection.vo \
+            protocol-projection-proof/
+          sha256sum \
+            proof/Phil/Core/ProtocolProjection.v \
+            proof/Phil/Core/ProtocolProjection.vo \
+            > protocol-projection-proof/PHIL-PROT-PROJ-001.proof.sha256
+          {
+            printf '%s\n' 'obligation=PHIL-PROT-PROJ-001'
+            printf '%s\n' 'evidence=Rocq-9.2.0'
+            cat protocol-projection-proof/PHIL-PROT-PROJ-001.proof.sha256
+          } > protocol-projection-proof/PHIL-PROT-PROJ-001.proof-certificate.txt
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: rocq-protocol-projection-proof
+          path: protocol-projection-proof
+          if-no-files-found: error
+
+  verify-protocol-projection-correspondence:
+    needs: rocq-protocol-projection-proof
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: haskell-actions/setup@v2
+        with:
+          ghc-version: '9.6.7'
+          cabal-version: 'latest'
+
+      - name: Typecheck protocol projection implementation paths
+        run: |
+          set -euo pipefail
+          cabal build exe:phil-certify-core-scalar --ghc-options=-Werror
+          cabal exec -- ghc -isrc -Wall -Werror -fno-code src/Phil/Core/Protocol/Generic.hs
+          cabal exec -- ghc -isrc -Wall -Werror -fno-code src/Phil/Core/Protocol/Family.hs
+          cabal exec -- ghc -isrc -Wall -Werror -fno-code test/Phase1ProtocolGenericEndpointMain.hs
+          cabal exec -- ghc -isrc -Wall -Werror -fno-code test/Phase1ProtocolProjectionMain.hs
+
+      - name: Re-run PROT-003 and PROT-004 pressure corpora
+        run: |
+          set -euo pipefail
+          cabal exec -- runghc -isrc test/Phase1ProtocolGenericEndpointMain.hs
+          cabal exec -- runghc -isrc test/Phase1ProtocolProjectionMain.hs
