@@ -6,6 +6,7 @@ on:
       - 'proof/Phil/Core/CallableEffects.v'
       - 'proof/Phil/Core/CallableEffectsImplementation.v'
       - 'proof/Phil/Core/CallableEffectsImplementationExtraction.v'
+      - 'src/CallableEffectKernel.hs'
       - 'src/CallableModeKernel.hs'
       - 'src/Phil/Core/Callable.hs'
       - 'test/Phase1CallableCaptureEffectsMain.hs'
@@ -18,6 +19,7 @@ on:
       - 'proof/Phil/Core/CallableEffects.v'
       - 'proof/Phil/Core/CallableEffectsImplementation.v'
       - 'proof/Phil/Core/CallableEffectsImplementationExtraction.v'
+      - 'src/CallableEffectKernel.hs'
       - 'src/CallableModeKernel.hs'
       - 'src/Phil/Core/Callable.hs'
       - 'test/Phase1CallableCaptureEffectsMain.hs'
@@ -45,7 +47,7 @@ jobs:
           rocq c -Q proof/Phil Phil proof/Phil/Core/CallableEffects.v
           rocq c -Q proof/Phil Phil proof/Phil/Core/CallableEffectsImplementation.v
 
-      - name: Extract callable effect kernel
+      - name: Fresh-extract and compare callable effect kernel
         shell: bash
         run: |
           set -euo pipefail
@@ -56,7 +58,8 @@ jobs:
           grep -q 'callableUseEffectKindContributesPublicBound' CallableEffectKernel.hs
           grep -q 'decideCallableEffectBound' CallableEffectKernel.hs
           grep -q 'effectDeltaBit' CallableEffectKernel.hs
-          sha256sum CallableEffectKernel.hs
+          cmp CallableEffectKernel.hs src/CallableEffectKernel.hs
+          sha256sum CallableEffectKernel.hs src/CallableEffectKernel.hs
           mkdir -p callable-effect-implementation-refinement-proof
           cp \
             proof/Phil/Core/CallableEffects.v \
@@ -71,27 +74,21 @@ jobs:
           path: callable-effect-implementation-refinement-proof
           if-no-files-found: error
 
-  verify-callable-effect-correspondence:
+  verify-callable-effect-production-binding:
     needs: rocq-callable-effect-implementation-refinement
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
-
-      - uses: actions/download-artifact@v4
-        with:
-          name: rocq-callable-effect-implementation-refinement
-          path: callable-effect-implementation-refinement-proof
 
       - uses: haskell-actions/setup@v2
         with:
           ghc-version: '9.6.7'
           cabal-version: 'latest'
 
-      - name: Typecheck extracted kernel and existing callable production path
+      - name: Typecheck exact kernel and bound callable production path
         run: |
           set -euo pipefail
-          ghc -Wall -Werror -fno-code \
-            callable-effect-implementation-refinement-proof/CallableEffectKernel.hs
+          ghc -isrc -Wall -Werror -fno-code src/CallableEffectKernel.hs
           cabal build exe:phil-certify-core-scalar --ghc-options=-Werror
           cabal exec -- ghc -isrc -Wall -Werror -fno-code \
             src/Phil/Core/Callable.hs \
@@ -100,8 +97,25 @@ jobs:
             src/Phil/Core/Callable.hs \
             test/Phase1CallableEffectBoundMain.hs
 
-      - name: Re-run CALL-EFFECT production correspondence corpora
+      - name: Run bound CALL-EFFECT production correspondence corpora
         run: |
           set -euo pipefail
           cabal exec -- runghc -isrc test/Phase1CallableCaptureEffectsMain.hs
           cabal exec -- runghc -isrc test/Phase1CallableEffectBoundMain.hs
+
+      - name: Record production closeout identities
+        run: |
+          set -euo pipefail
+          mkdir -p callable-effect-production-binding
+          sha256sum \
+            src/CallableEffectKernel.hs \
+            src/Phil/Core/Callable.hs \
+            test/Phase1CallableCaptureEffectsMain.hs \
+            test/Phase1CallableEffectBoundMain.hs \
+            > callable-effect-production-binding/PHIL-CALL-EFFECT-IMPL-001.correspondence.sha256
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: phil-callable-effect-production-binding
+          path: callable-effect-production-binding
+          if-no-files-found: error
