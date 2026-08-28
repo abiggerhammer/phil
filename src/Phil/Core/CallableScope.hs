@@ -10,6 +10,7 @@ module Phil.Core.CallableScope
   , checkRestrictedRecursiveClosureCycles
   ) where
 
+import qualified CallableScopeKernel as CallableScopeKernel
 import Data.Graph (SCC (..), stronglyConnComp)
 import qualified Data.Map.Strict as Map
 import qualified Data.Set as Set
@@ -66,11 +67,12 @@ data CallableScopeError
   | RestrictedRecursiveClosureCycle
       (Set.Set CallableOccurrenceKey)
       (Set.Set CaptureOccurrenceKey)
+  | CallableScopeKernelBridgeMismatch
   deriving (Eq, Ord, Show)
 
--- | Enforce the bounded Phase 1 closure-loan rule. Escaping closures may not
--- capture scoped shared views. A non-escaping local closure is admitted only
--- when its declared containment scope exactly matches the loan validity scope.
+-- | Enforce the bounded Phase 1 closure-loan rule. Concrete key equality remains
+-- native, but the final accept/reject classification is owned by the exact
+-- extracted CALL-SCOPE kernel.
 checkClosureCaptureScope
   :: CallableOccurrenceKey
   -> ClosureExtent
@@ -78,35 +80,71 @@ checkClosureCaptureScope
   -> Either CallableScopeError ()
 checkClosureCaptureScope closureKey extent = mapM_ checkCapture
   where
-    checkCapture capture = case capture of
-      ScopeIndependentCapture _ -> Right ()
-      ScopedSharedLoanCapture captureKey loanScope -> case extent of
-        EscapingClosure -> Left
-          (EscapingClosureCapturesScopedLoan closureKey captureKey loanScope)
-        ClosureContainedIn closureScope
-          | closureScope == loanScope -> Right ()
-          | otherwise -> Left
+    checkCapture capture =
+      let isEscaping = case extent of
+            EscapingClosure -> True
+            ClosureContainedIn _ -> False
+          isScopedLoan = case capture of
+            ScopeIndependentCapture _ -> False
+            ScopedSharedLoanCapture _ _ -> True
+          sameScope = case (extent, capture) of
+            (ClosureContainedIn closureScope, ScopedSharedLoanCapture _ loanScope) ->
+              closureScope == loanScope
+            _ -> False
+          decision = CallableScopeKernel.decideScopeCaptureByFacts
+            isEscaping
+            isScopedLoan
+            sameScope
+      in case (decision, capture, extent) of
+          (CallableScopeKernel.ScopeCaptureAccepted, _, _) -> Right ()
+          ( CallableScopeKernel.ScopeCaptureEscapingLoan
+            , ScopedSharedLoanCapture captureKey loanScope
+            , EscapingClosure
+            ) -> Left
+              (EscapingClosureCapturesScopedLoan closureKey captureKey loanScope)
+          ( CallableScopeKernel.ScopeCaptureOutsideLoanValidity
+            , ScopedSharedLoanCapture captureKey loanScope
+            , ClosureContainedIn closureScope
+            ) -> Left
               (ClosureOutsideScopedLoanValidity
                 closureKey
                 captureKey
                 loanScope
                 closureScope)
+          _ -> Left CallableScopeKernelBridgeMismatch
 
--- | Reject closure-environment cycles that hide any restricted capture. Named
--- recursive callables with no cyclic restricted environment remain outside this
--- rejection: this graph is specifically the runtime closure-environment graph.
+-- | Reject closure-environment cycles that hide any restricted capture. Native
+-- Map/Set/SCC machinery discovers exact witness payloads; the extracted kernel
+-- owns the ordered duplicate -> unknown reference -> restricted cycle -> accept
+-- classification. Any category disagreement fails closed.
 checkRestrictedRecursiveClosureCycles
   :: [ClosureRecursionNode]
   -> Either CallableScopeError ()
-checkRestrictedRecursiveClosureCycles nodes = do
-  nodeMap <- foldl insertNode (Right Map.empty) nodes
-  mapM_ (validateReferences nodeMap) (Map.elems nodeMap)
-  mapM_ rejectRestrictedCycle
-    (stronglyConnComp
-      [ (node, key, Set.toAscList (closureRecursionReferences node))
-      | (key, node) <- Map.toAscList nodeMap
-      ])
+checkRestrictedRecursiveClosureCycles nodes =
+  case buildNodeMap nodes of
+    Left duplicateError ->
+      case CallableScopeKernel.decideRecursiveClosureGraphFacts False False False of
+        CallableScopeKernel.RecursiveClosureDuplicateNode -> Left duplicateError
+        _ -> Left CallableScopeKernelBridgeMismatch
+    Right nodeMap ->
+      case firstUnknownReference nodeMap of
+        Just unknownError ->
+          case CallableScopeKernel.decideRecursiveClosureGraphFacts True False False of
+            CallableScopeKernel.RecursiveClosureUnknownReference -> Left unknownError
+            _ -> Left CallableScopeKernelBridgeMismatch
+        Nothing ->
+          case firstRestrictedCycle nodeMap of
+            Just cycleError ->
+              case CallableScopeKernel.decideRecursiveClosureGraphFacts True True False of
+                CallableScopeKernel.RecursiveClosureRestrictedCycle -> Left cycleError
+                _ -> Left CallableScopeKernelBridgeMismatch
+            Nothing ->
+              case CallableScopeKernel.decideRecursiveClosureGraphFacts True True True of
+                CallableScopeKernel.RecursiveClosureGraphAccepted -> Right ()
+                _ -> Left CallableScopeKernelBridgeMismatch
   where
+    buildNodeMap = foldl insertNode (Right Map.empty)
+
     insertNode accumulated node = do
       result <- accumulated
       let key = closureRecursionOccurrence node
@@ -114,21 +152,34 @@ checkRestrictedRecursiveClosureCycles nodes = do
         then Left (DuplicateRecursiveClosureNode key)
         else Right (Map.insert key node result)
 
-    validateReferences nodeMap node =
-      mapM_ (validateReference nodeMap (closureRecursionOccurrence node))
-        (Set.toAscList (closureRecursionReferences node))
+    firstUnknownReference nodeMap = checkNodes (Map.elems nodeMap)
+      where
+        checkNodes [] = Nothing
+        checkNodes (node : rest) =
+          case checkReferences
+              (closureRecursionOccurrence node)
+              (Set.toAscList (closureRecursionReferences node)) of
+            Just err -> Just err
+            Nothing -> checkNodes rest
 
-    validateReference nodeMap source target
-      | Map.member target nodeMap = Right ()
-      | otherwise = Left (UnknownRecursiveClosureReference source target)
+        checkReferences _ [] = Nothing
+        checkReferences source (target : rest)
+          | Map.member target nodeMap = checkReferences source rest
+          | otherwise = Just (UnknownRecursiveClosureReference source target)
 
-    rejectRestrictedCycle scc = case scc of
-      AcyclicSCC _ -> Right ()
-      CyclicSCC members ->
-        let closureKeys = Set.fromList (map closureRecursionOccurrence members)
-            restrictedCaptures = Set.unions
-              (map closureRecursionRestrictedCaptures members)
-        in if Set.null restrictedCaptures
-            then Right ()
-            else Left
-              (RestrictedRecursiveClosureCycle closureKeys restrictedCaptures)
+    firstRestrictedCycle nodeMap = checkSccs
+      (stronglyConnComp
+        [ (node, key, Set.toAscList (closureRecursionReferences node))
+        | (key, node) <- Map.toAscList nodeMap
+        ])
+      where
+        checkSccs [] = Nothing
+        checkSccs (AcyclicSCC _ : rest) = checkSccs rest
+        checkSccs (CyclicSCC members : rest) =
+          let closureKeys = Set.fromList (map closureRecursionOccurrence members)
+              restrictedCaptures = Set.unions
+                (map closureRecursionRestrictedCaptures members)
+          in if Set.null restrictedCaptures
+              then checkSccs rest
+              else Just
+                (RestrictedRecursiveClosureCycle closureKeys restrictedCaptures)
