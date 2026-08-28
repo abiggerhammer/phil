@@ -10,6 +10,7 @@ on:
       - 'proof/Phil/Core/CallableLifecycleImplementationExtraction.v'
       - 'src/CallableModeKernel.hs'
       - 'src/CallableEffectKernel.hs'
+      - 'src/CallableLifecycleKernel.hs'
       - 'src/Phil/Core/Callable.hs'
       - 'test/Phase1CallableTransitionsMain.hs'
       - 'docs/phase-1/callable-lifecycle-implementation-refinement-v1.md'
@@ -24,6 +25,7 @@ on:
       - 'proof/Phil/Core/CallableLifecycleImplementationExtraction.v'
       - 'src/CallableModeKernel.hs'
       - 'src/CallableEffectKernel.hs'
+      - 'src/CallableLifecycleKernel.hs'
       - 'src/Phil/Core/Callable.hs'
       - 'test/Phase1CallableTransitionsMain.hs'
       - 'docs/phase-1/callable-lifecycle-implementation-refinement-v1.md'
@@ -51,7 +53,7 @@ jobs:
           rocq c -Q proof/Phil Phil proof/Phil/Core/CallableLifecycle.v
           rocq c -Q proof/Phil Phil proof/Phil/Core/CallableLifecycleImplementation.v
 
-      - name: Extract callable lifecycle kernel
+      - name: Fresh-extract and compare callable lifecycle kernel
         shell: bash
         run: |
           set -euo pipefail
@@ -62,7 +64,8 @@ jobs:
           grep -q 'decideCallablePreserve' CallableLifecycleKernel.hs
           grep -q 'decideCallableConsume' CallableLifecycleKernel.hs
           grep -q 'decideCallableReplace' CallableLifecycleKernel.hs
-          sha256sum CallableLifecycleKernel.hs
+          cmp CallableLifecycleKernel.hs src/CallableLifecycleKernel.hs
+          sha256sum CallableLifecycleKernel.hs src/CallableLifecycleKernel.hs
           mkdir -p callable-lifecycle-implementation-refinement-proof
           cp \
             proof/Phil/Core/CallableLifecycle.v \
@@ -77,33 +80,43 @@ jobs:
           path: callable-lifecycle-implementation-refinement-proof
           if-no-files-found: error
 
-  verify-callable-lifecycle-correspondence:
+  verify-callable-lifecycle-production-binding:
     needs: rocq-callable-lifecycle-implementation-refinement
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
-
-      - uses: actions/download-artifact@v4
-        with:
-          name: rocq-callable-lifecycle-implementation-refinement
-          path: callable-lifecycle-implementation-refinement-proof
 
       - uses: haskell-actions/setup@v2
         with:
           ghc-version: '9.6.7'
           cabal-version: 'latest'
 
-      - name: Typecheck extracted kernel and existing callable lifecycle path
+      - name: Typecheck exact kernel and bound callable lifecycle path
         run: |
           set -euo pipefail
-          ghc -Wall -Werror -fno-code \
-            callable-lifecycle-implementation-refinement-proof/CallableLifecycleKernel.hs
+          ghc -isrc -Wall -Werror -fno-code src/CallableLifecycleKernel.hs
           cabal build exe:phil-certify-core-scalar --ghc-options=-Werror
           cabal exec -- ghc -isrc -Wall -Werror -fno-code \
             src/Phil/Core/Callable.hs \
             test/Phase1CallableTransitionsMain.hs
 
-      - name: Re-run CALL-LIFE production correspondence corpus
+      - name: Run bound CALL-LIFE production correspondence corpus
         run: |
           set -euo pipefail
           cabal exec -- runghc -isrc test/Phase1CallableTransitionsMain.hs
+
+      - name: Record production closeout identities
+        run: |
+          set -euo pipefail
+          mkdir -p callable-lifecycle-production-binding
+          sha256sum \
+            src/CallableLifecycleKernel.hs \
+            src/Phil/Core/Callable.hs \
+            test/Phase1CallableTransitionsMain.hs \
+            > callable-lifecycle-production-binding/PHIL-CALL-LIFE-IMPL-001.correspondence.sha256
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: phil-callable-lifecycle-production-binding
+          path: callable-lifecycle-production-binding
+          if-no-files-found: error
