@@ -1,5 +1,7 @@
 From Phil.Core Require Import ArchitectureIdentity.
 
+Set Implicit Arguments.
+
 (*
   PHIL-ARCH-ID-IMPL-001 — representation-neutral revision-construction plans.
 
