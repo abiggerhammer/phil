@@ -112,6 +112,9 @@ data ProcessRendezvousError
   | RendezvousActivationResourceMismatch
       ProcessKey ResourceContext ResourceContext
   | RendezvousEndpointNotOwnedByProcess ProcessKey Name
+  | RendezvousEndpointOccurrenceUnknown ProcessKey Name
+  | RendezvousEndpointOccurrenceAmbiguous
+      ProcessKey Name [ActivationOccurrenceKey]
   | RendezvousProtocolInstanceMismatch
       ProcessKey ProtocolInstanceRevision ProtocolInstanceRevision
   | RendezvousProtocolRoleMismatch
@@ -184,8 +187,9 @@ checkProcessCommunication instanceValue network contexts attempt =
 
 -- | CONC-005: perform one exact send/receive rendezvous and move one exact
 -- affine/linear payload occurrence sender -> receiver in the same pure checked
--- transition. Endpoint progression, resource movement, and owner-index update
--- all succeed together or no successor state is returned.
+-- transition. Endpoint progression, endpoint occurrence identity, resource
+-- movement, and owner-index update all succeed together or no successor state
+-- is returned.
 checkRestrictedProcessRendezvous
   :: BinaryProtocolInstance
   -> ProcessNetwork
@@ -229,6 +233,9 @@ checkRestrictedProcessRendezvous instanceValue network state request transfer =
           (restrictedMessageReceiverName transfer)
           (restrictedMessageType transfer)
           (protocolResources receiverAfter)
+      endpointOwners1 <- advanceEndpointOwner
+        (communicationRestrictedOwners state) sender
+      endpointOwners2 <- advanceEndpointOwner endpointOwners1 receiver
       let senderUpdated = senderAfter { protocolResources = senderResources }
           receiverUpdated = receiverAfter { protocolResources = receiverResources }
           contextsUpdated =
@@ -237,7 +244,7 @@ checkRestrictedProcessRendezvous instanceValue network state request transfer =
           ownersUpdated = Map.insert
             (restrictedMessageOccurrence transfer)
             (rendezvousProcess receiver, restrictedMessageReceiverName transfer)
-            (communicationRestrictedOwners state)
+            endpointOwners2
       pure ProcessCommunicationState
         { communicationProtocolContexts = contextsUpdated
         , communicationRestrictedOwners = ownersUpdated
@@ -428,6 +435,27 @@ ensureExactSenderOwner owners sender transfer =
   where
     expectedProcess = rendezvousProcess sender
     expectedName = restrictedMessageSenderName transfer
+
+advanceEndpointOwner
+  :: RestrictedOwnerIndex
+  -> ProcessRendezvousSide
+  -> Either ProcessRendezvousError RestrictedOwnerIndex
+advanceEndpointOwner owners side =
+  case matchingKeys of
+    [] -> Left (RendezvousEndpointOccurrenceUnknown processKey predecessor)
+    [occurrenceKey] -> Right (Map.insert occurrenceKey
+      (processKey, rendezvousSuccessor side) owners)
+    _ -> Left (RendezvousEndpointOccurrenceAmbiguous
+      processKey predecessor matchingKeys)
+  where
+    processKey = rendezvousProcess side
+    predecessor = rendezvousEndpoint side
+    matchingKeys =
+      [ occurrenceKey
+      | (occurrenceKey, (ownerProcess, ownerName)) <- Map.toList owners
+      , ownerProcess == processKey
+      , ownerName == predecessor
+      ]
 
 consumeRestricted
   :: Mode
