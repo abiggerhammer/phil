@@ -145,8 +145,8 @@ trivialInvariantAccepts = mapLeft show $ checkStateBoundaryInvariant
     ])
 
 invariantContract :: StateBoundaryContract -> Proposition -> StateInvariantContract
-invariantContract boundary proposition = StateInvariantContract
-  { stateInvariantBoundary = stateBoundaryKey boundary
+invariantContract boundaryContract proposition = StateInvariantContract
+  { stateInvariantBoundary = stateBoundaryKey boundaryContract
   , stateInvariantBinders = Map.fromList
       [ (cursorSlot, cursorName)
       , (limitSlot, limitName)
@@ -160,8 +160,8 @@ predecessor
   -> RefTerm
   -> CheckState
   -> StateInvariantPredecessor
-predecessor projection cursorRef cursorTerm state = StateInvariantPredecessor
-  { stateInvariantPredecessorProjection = stateProjectionKey projection
+predecessor stateProjection cursorRef cursorTerm state = StateInvariantPredecessor
+  { stateInvariantPredecessorProjection = stateProjectionKey stateProjection
   , stateInvariantPredecessorSlots = Map.fromList
       [ (cursorSlot, StateInvariantSlotWitness cursorRef cursorTerm)
       , (limitSlot, StateInvariantSlotWitness limitRef limitTerm)
@@ -241,10 +241,10 @@ projection
   -> BlockId
   -> SystemsValueRef
   -> StateProjection
-projection key kind boundary fromBlock cursorRef = StateProjection
+projection key kind stateBoundary fromBlock cursorRef = StateProjection
   { stateProjectionKey = key
   , stateProjectionKind = kind
-  , stateProjectionBoundary = stateBoundaryKey boundary
+  , stateProjectionBoundary = stateBoundaryKey stateBoundary
   , stateProjectionFromBlock = fromBlock
   , stateProjectionEdgeLabel = "jump"
   , stateProjectionIncomingRestricted = Map.empty
