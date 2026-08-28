@@ -190,6 +190,10 @@ bindingFromKey occurrence name mode ty origin startsLoan = ActivationBinding
   , activationLocalName = Name name
   , activationCheckedTypeMode = CheckedTypeMode ty mode
   , activationBindingOrigin = origin
+  , activationReachability = case mode of
+      Unrestricted -> ExtensionalImmutableReachability
+      Affine -> DirectStatefulReachability occurrence
+      Linear -> DirectStatefulReachability occurrence
   , activationStartsSharedLoan = startsLoan
   }
 

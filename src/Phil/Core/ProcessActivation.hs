@@ -2,10 +2,12 @@
 
 module Phil.Core.ProcessActivation
   ( ActivationOccurrenceKey (..)
+  , ActivationReachability (..)
   , ActivationBindingOrigin (..)
   , ActivationBinding (..)
   , ProcessActivationContract (..)
   , RestrictedOwnerIndex
+  , DirectStatefulReachabilityIndex
   , ProcessActivationState (..)
   , ProcessActivationError (..)
   , activateProcessState
@@ -41,6 +43,17 @@ newtype ActivationOccurrenceKey = ActivationOccurrenceKey
   }
   deriving (Eq, Ord, Show)
 
+-- | Explicit source-semantic reachability classification for an activation
+-- binding. Structural mode and reachable state identity are independent:
+-- an unrestricted wrapper may still directly expose one identity-bearing
+-- mutable/provider-state occurrence and therefore may not be copied into two
+-- distinct process contexts in the Phase 1 fragment.
+data ActivationReachability
+  = ExtensionalImmutableReachability
+  | DirectStatefulReachability ActivationOccurrenceKey
+  | ProtocolMediatedReachability ActivationOccurrenceKey
+  deriving (Eq, Ord, Show)
+
 data ActivationBindingOrigin
   = TargetParameterOrigin Text
   | RootEntryOrigin Text
@@ -55,6 +68,7 @@ data ActivationBinding = ActivationBinding
   , activationLocalName :: Name
   , activationCheckedTypeMode :: CheckedTypeMode
   , activationBindingOrigin :: ActivationBindingOrigin
+  , activationReachability :: ActivationReachability
   , activationStartsSharedLoan :: Bool
   }
   deriving (Eq, Show)
@@ -68,9 +82,13 @@ data ProcessActivationContract = ProcessActivationContract
 type RestrictedOwnerIndex =
   Map.Map ActivationOccurrenceKey (ProcessKey, Name)
 
+type DirectStatefulReachabilityIndex =
+  Map.Map ActivationOccurrenceKey (ProcessKey, Name)
+
 data ProcessActivationState = ProcessActivationState
   { activationProcessContexts :: Map.Map ProcessKey ResourceContext
   , activationRestrictedOwners :: RestrictedOwnerIndex
+  , activationDirectStatefulReachability :: DirectStatefulReachabilityIndex
   }
   deriving (Eq, Show)
 
@@ -85,23 +103,30 @@ data ProcessActivationError
       Name
       ProcessKey
       Name
+  | CrossProcessDirectStatefulAlias
+      ActivationOccurrenceKey
+      ProcessKey
+      Name
+      ProcessKey
+      Name
   | ActivationBindingModeError ProcessKey CheckedBindingModeError
   | ActivationResourceError ProcessKey CheckError
   | ProcessNetworkActivationError ProcessNetworkError
   deriving (Eq, Show)
 
 -- | Close every initial process context from explicit architecture-owned
--- activation inputs, retain the exact global restricted-owner partition, and
--- only then perform the exactly-once root activation transition.
+-- activation inputs, retain the exact global restricted-owner partition and
+-- direct-stateful reachability partition, and only then perform the exactly-once
+-- root activation transition.
 activateProcessState
   :: ProcessNetwork
   -> [ProcessActivationContract]
   -> Either ProcessActivationError (ProcessNetwork, ProcessActivationState)
 activateProcessState network contracts = do
   contractMap <- normalizeActivationContracts network contracts
-  (contexts, restrictedOwners) <-
+  (contexts, restrictedOwners, directStateful) <-
     Map.foldlWithKey' buildProcessContext
-      (Right (Map.empty, Map.empty))
+      (Right (Map.empty, Map.empty, Map.empty))
       contractMap
   activated <- mapLeft ProcessNetworkActivationError (activateRootProcesses network)
   pure
@@ -109,6 +134,7 @@ activateProcessState network contracts = do
     , ProcessActivationState
         { activationProcessContexts = contexts
         , activationRestrictedOwners = restrictedOwners
+        , activationDirectStatefulReachability = directStateful
         }
     )
 
@@ -148,33 +174,45 @@ normalizeActivationContracts network contracts = do
 buildProcessContext
   :: Either
       ProcessActivationError
-      (Map.Map ProcessKey ResourceContext, RestrictedOwnerIndex)
+      ( Map.Map ProcessKey ResourceContext
+      , RestrictedOwnerIndex
+      , DirectStatefulReachabilityIndex
+      )
   -> ProcessKey
   -> ProcessActivationContract
   -> Either
       ProcessActivationError
-      (Map.Map ProcessKey ResourceContext, RestrictedOwnerIndex)
+      ( Map.Map ProcessKey ResourceContext
+      , RestrictedOwnerIndex
+      , DirectStatefulReachabilityIndex
+      )
 buildProcessContext accumulated processKey contract = do
-  (contexts, restrictedOwners) <- accumulated
-  (context, nextOwners) <-
+  (contexts, restrictedOwners, directStateful) <- accumulated
+  (context, nextOwners, nextDirectStateful) <-
     foldl' (insertActivationBinding processKey)
-      (Right (emptyContext, restrictedOwners))
+      (Right (emptyContext, restrictedOwners, directStateful))
       (activationContractBindings contract)
-  pure (Map.insert processKey context contexts, nextOwners)
+  pure
+    ( Map.insert processKey context contexts
+    , nextOwners
+    , nextDirectStateful
+    )
 
 insertActivationBinding
   :: ProcessKey
   -> Either
       ProcessActivationError
-      (ResourceContext, RestrictedOwnerIndex)
+      (ResourceContext, RestrictedOwnerIndex, DirectStatefulReachabilityIndex)
   -> ActivationBinding
   -> Either
       ProcessActivationError
-      (ResourceContext, RestrictedOwnerIndex)
+      (ResourceContext, RestrictedOwnerIndex, DirectStatefulReachabilityIndex)
 insertActivationBinding processKey accumulated binding = do
-  (context, restrictedOwners) <- accumulated
+  (context, restrictedOwners, directStateful) <- accumulated
   ensureExplicitOrigin processKey binding
   nextOwners <- reserveRestrictedOwner processKey binding restrictedOwners
+  nextDirectStateful <-
+    reserveDirectStatefulReachability processKey binding directStateful
   nextContext <- mapLeft (ActivationBindingModeError processKey) $
     insertCheckedBinding
       EntryValueBinding
@@ -188,7 +226,7 @@ insertActivationBinding processKey accumulated binding = do
       then mapLeft (ActivationResourceError processKey) $
         startSharedLoan (activationLocalName binding) nextContext
       else Right nextContext
-  pure (loanContext, nextOwners)
+  pure (loanContext, nextOwners, nextDirectStateful)
   where
     checked = activationCheckedTypeMode binding
 
@@ -221,6 +259,25 @@ reserveRestrictedOwner processKey binding owners =
           Left (DuplicateRestrictedActivationOccurrence
             occurrenceKey firstProcess firstName processKey localName)
         Nothing -> Right (Map.insert occurrenceKey (processKey, localName) owners)
+
+reserveDirectStatefulReachability
+  :: ProcessKey
+  -> ActivationBinding
+  -> DirectStatefulReachabilityIndex
+  -> Either ProcessActivationError DirectStatefulReachabilityIndex
+reserveDirectStatefulReachability processKey binding reachable =
+  case activationReachability binding of
+    ExtensionalImmutableReachability -> Right reachable
+    ProtocolMediatedReachability _ -> Right reachable
+    DirectStatefulReachability statefulKey ->
+      case Map.lookup statefulKey reachable of
+        Nothing -> Right (Map.insert statefulKey (processKey, localName) reachable)
+        Just (firstProcess, firstName)
+          | firstProcess == processKey -> Right reachable
+          | otherwise -> Left (CrossProcessDirectStatefulAlias
+              statefulKey firstProcess firstName processKey localName)
+  where
+    localName = activationLocalName binding
 
 mapLeft :: (a -> b) -> Either a c -> Either b c
 mapLeft f = either (Left . f) Right

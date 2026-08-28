@@ -39,3 +39,5 @@ jobs:
         run: cabal exec -- runghc -Wall -Werror -isrc test/Phase1ProcessExecutionRealizationMain.hs
       - name: CONC-010 explicit internal/external participant classification
         run: cabal exec -- runghc -Wall -Werror -isrc test/Phase1ParticipantClassificationMain.hs
+      - name: CONC-011 unrestricted wrapper reachable-state partition
+        run: cabal exec -- runghc -Wall -Werror -isrc test/Phase1UnrestrictedReachabilityMain.hs
