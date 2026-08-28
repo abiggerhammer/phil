@@ -2,10 +2,6 @@ module AuthorityPossessionKernel where
 
 import qualified Prelude
 
-data Bool =
-   True
- | False
-
 data Mode =
    Unrestricted
  | Affine
@@ -15,21 +11,21 @@ data StructuralPermission =
    WeakeningPermission
  | ContractionPermission
 
-modeAllowsStructuralPermission :: Mode -> StructuralPermission -> Bool
+modeAllowsStructuralPermission :: Mode -> StructuralPermission -> Prelude.Bool
 modeAllowsStructuralPermission mode permission =
   case mode of {
-   Unrestricted -> True;
+   Unrestricted -> Prelude.True;
    Affine ->
     case permission of {
-     WeakeningPermission -> True;
-     ContractionPermission -> False};
-   Linear -> False}
+     WeakeningPermission -> Prelude.True;
+     ContractionPermission -> Prelude.False};
+   Linear -> Prelude.False}
 
-capabilityCopyAllowed :: Mode -> Bool
+capabilityCopyAllowed :: Mode -> Prelude.Bool
 capabilityCopyAllowed mode =
   modeAllowsStructuralPermission mode ContractionPermission
 
-capabilityDropAllowed :: Mode -> Bool
+capabilityDropAllowed :: Mode -> Prelude.Bool
 capabilityDropAllowed mode =
   modeAllowsStructuralPermission mode WeakeningPermission
 
@@ -40,21 +36,21 @@ data AuthorityExerciseDecision =
  | AuthorityExerciseOperationRejected
  | AuthorityExerciseAccepted
 
-decideAuthorityExerciseFacts :: Bool -> Bool -> Bool -> Bool ->
+decideAuthorityExerciseFacts :: Prelude.Bool -> Prelude.Bool -> Prelude.Bool -> Prelude.Bool ->
                                 AuthorityExerciseDecision
 decideAuthorityExerciseFacts sourcePossessed contractMatches subjectMatches operationPermitted =
   case sourcePossessed of {
-   True ->
+   Prelude.True ->
     case contractMatches of {
-     True ->
+     Prelude.True ->
       case subjectMatches of {
-       True ->
+       Prelude.True ->
         case operationPermitted of {
-         True -> AuthorityExerciseAccepted;
-         False -> AuthorityExerciseOperationRejected};
-       False -> AuthorityExerciseSubjectRejected};
-     False -> AuthorityExerciseContractRejected};
-   False -> AuthorityExerciseSourceRejected}
+         Prelude.True -> AuthorityExerciseAccepted;
+         Prelude.False -> AuthorityExerciseOperationRejected};
+       Prelude.False -> AuthorityExerciseSubjectRejected};
+     Prelude.False -> AuthorityExerciseContractRejected};
+   Prelude.False -> AuthorityExerciseSourceRejected}
 
 data AuthorityCopyDecision =
    AuthorityCopyRejected
@@ -63,8 +59,8 @@ data AuthorityCopyDecision =
 decideAuthorityCopy :: Mode -> AuthorityCopyDecision
 decideAuthorityCopy mode =
   case capabilityCopyAllowed mode of {
-   True -> AuthorityCopyAccepted;
-   False -> AuthorityCopyRejected}
+   Prelude.True -> AuthorityCopyAccepted;
+   Prelude.False -> AuthorityCopyRejected}
 
 data AuthorityDropDecision =
    AuthorityDropRejected
@@ -73,5 +69,6 @@ data AuthorityDropDecision =
 decideAuthorityDrop :: Mode -> AuthorityDropDecision
 decideAuthorityDrop mode =
   case capabilityDropAllowed mode of {
-   True -> AuthorityDropAccepted;
-   False -> AuthorityDropRejected}
+   Prelude.True -> AuthorityDropAccepted;
+   Prelude.False -> AuthorityDropRejected}
+
