@@ -130,7 +130,7 @@ baseEnvironment = emptySurfaceEnvironment emptyStaticContext
 expectAccept :: SurfaceEnvironment -> Text -> Either String ()
 expectAccept environment source = do
   component <- parseOne source
-  mapLeft show $ checkSurfaceComponent environment component
+  _ <- mapLeft show $ checkSurfaceComponent environment component
   Right ()
 
 expectReject :: RejectionClass -> SurfaceEnvironment -> Text -> Either String ()
