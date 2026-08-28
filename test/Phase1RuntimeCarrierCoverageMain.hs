@@ -4,6 +4,7 @@ module Main (main) where
 
 import qualified Data.Map.Strict as Map
 import qualified Data.Set as Set
+import Data.Text (Text)
 import Phil.Assurance.Types (Digest (..), RevisionId (..))
 import Phil.Core.Process (ProcessKey (..))
 import Phil.Systems.IR (StageContract (..))
@@ -34,57 +35,42 @@ test label result = case result of
 preservedCarrierAccepts :: Either String ()
 preservedCarrierAccepts =
   mapLeft show $ checkRuntimeCarrierCoverage
-    checkedRuntimeProfile
-    stageContract
-    realization
+    checkedRuntimeProfile stageContract realization
     (Map.singleton carrierAllKey carrierAll)
-    usesWithSingleCarrier
-    [preserveTransition]
+    usesWithSingleCarrier [preserveTransition]
 
 replacementCarrierAccepts :: Either String ()
 replacementCarrierAccepts =
   mapLeft show $ checkRuntimeCarrierCoverage
-    checkedRuntimeProfile
-    stageContract
-    realization
+    checkedRuntimeProfile stageContract realization
     (Map.fromList
       [ (carrierCpuKey, carrierCpu)
       , (carrierAcceleratorKey, carrierAccelerator)
       ])
-    usesWithReplacement
-    [replaceTransition]
+    usesWithReplacement [replaceTransition]
 
 dischargedCarrierAccepts :: Either String ()
 dischargedCarrierAccepts =
   mapLeft show $ checkRuntimeCarrierCoverage
-    checkedRuntimeProfile
-    stageContract
-    realization
+    checkedRuntimeProfile stageContract realization
     (Map.singleton carrierCpuKey carrierCpu)
-    usesAfterClosure
-    [dischargeTransition]
+    usesAfterClosure [dischargeTransition]
 
 endedValidityAccepts :: Either String ()
 endedValidityAccepts =
   mapLeft show $ checkRuntimeCarrierCoverage
-    checkedRuntimeProfile
-    stageContract
-    realization
+    checkedRuntimeProfile stageContract realization
     (Map.singleton carrierCpuKey carrierCpu)
-    usesAfterClosure
-    [endValidityTransition]
+    usesAfterClosure [endValidityTransition]
 
 uncoveredAcceleratorRejects :: Either String ()
 uncoveredAcceleratorRejects =
   let incompleteCarrier = carrierAll
         { runtimeCarrierExecutions = Set.singleton sharedWorker }
   in case checkRuntimeCarrierCoverage
-      checkedRuntimeProfile
-      stageContract
-      realization
+      checkedRuntimeProfile stageContract realization
       (Map.singleton carrierAllKey incompleteCarrier)
-      usesWithSingleCarrier
-      [preserveTransition] of
+      usesWithSingleCarrier [preserveTransition] of
     Left (RuntimeCarrierUseExecutionUncovered useId key execution) ->
       assert
         ( useId == "use.a.accelerator"
@@ -106,12 +92,9 @@ sharedWorkerDoesNotTransferCarrier =
         }
       uses = [useAShared, useAAccelerator, foreignUse]
   in case checkRuntimeCarrierCoverage
-      checkedRuntimeProfile
-      stageContract
-      realization
+      checkedRuntimeProfile stageContract realization
       (Map.singleton carrierAllKey carrierAll)
-      uses
-      [preserveTransition] of
+      uses [preserveTransition] of
     Left (RuntimeCarrierUseProcessMismatch useId expected actual) ->
       assert
         (useId == "use.b.shared-worker" && expected == processA && actual == processB)
@@ -123,12 +106,9 @@ failureAttributionStaysLocal =
   let wrongFailureCarrier = carrierAll
         { runtimeCarrierFailureFactId = failureFactBId }
   in case checkRuntimeCarrierCoverage
-      checkedRuntimeProfile
-      stageContract
-      realization
+      checkedRuntimeProfile stageContract realization
       (Map.singleton carrierAllKey wrongFailureCarrier)
-      usesWithSingleCarrier
-      [preserveTransition] of
+      usesWithSingleCarrier [preserveTransition] of
     Left (RuntimeCarrierFailureFactProcessMismatch key factId expected actual) ->
       assert
         ( key == carrierAllKey
@@ -142,12 +122,9 @@ failureAttributionStaysLocal =
 forbiddenProfileRejects :: Either String ()
 forbiddenProfileRejects =
   case checkRuntimeCarrierCoverage
-      certifiedReleaseProfile
-      stageContract
-      realization
+      certifiedReleaseProfile stageContract realization
       (Map.singleton carrierAllKey carrierAll)
-      usesWithSingleCarrier
-      [preserveTransition] of
+      usesWithSingleCarrier [preserveTransition] of
     Left (RuntimeCarrierRuntimeBoundForbidden revision) ->
       assert (revision == "profile.certified-release.no-runtime-bound.v1")
         "profile rejection lost exact assurance-profile revision"
@@ -157,12 +134,9 @@ unknownStageObligationRejects :: Either String ()
 unknownStageObligationRejects =
   let contract = stageContract { stageDerivedObligations = [] }
   in case checkRuntimeCarrierCoverage
-      checkedRuntimeProfile
-      contract
-      realization
+      checkedRuntimeProfile contract realization
       (Map.singleton carrierAllKey carrierAll)
-      usesWithSingleCarrier
-      [preserveTransition] of
+      usesWithSingleCarrier [preserveTransition] of
     Left (RuntimeCarrierObligationNotDerived key obligation) ->
       assert (key == carrierAllKey && obligation == overflowObligation)
         "unknown-obligation rejection lost exact carrier/obligation identity"
@@ -263,11 +237,9 @@ baseTransition disposition = RuntimeCarrierTransition
 overflowObligation :: RevisionId
 overflowObligation = RevisionId "obligation.uint.checked-overflow.a.v1"
 
-failureFactAId, failureFactBId :: StringLike
+failureFactAId, failureFactBId :: Text
 failureFactAId = "process.failure.a.checked-overflow"
 failureFactBId = "process.failure.b.checked-overflow"
-
-type StringLike = Data.Text.Text
 
 processA, processB :: ProcessKey
 processA = ProcessKey "process.a"
