@@ -65,7 +65,7 @@ Definition planScopedInstanceKey {Parent Slot : Type}
      scopedInstanceKeyPlanSlot := slot |}.
 
 Record InstanceRevisionPlan
-  (Key Parent DeclarationKeyValue Interface Definition Bindings : Type)
+  (Key Parent DeclarationKeyValue Interface DefinitionValue Bindings : Type)
   : Type :=
   mkInstanceRevisionPlan {
     instanceRevisionPlanNamespace : ArchitectureRevisionNamespace;
@@ -73,20 +73,20 @@ Record InstanceRevisionPlan
     instanceRevisionPlanParent : Parent;
     instanceRevisionPlanDeclarationKey : DeclarationKeyValue;
     instanceRevisionPlanInterface : Interface;
-    instanceRevisionPlanDefinition : Definition;
+    instanceRevisionPlanDefinition : DefinitionValue;
     instanceRevisionPlanBindings : Bindings
   }.
 
 Definition planInstanceRevision
-  {Key Parent DeclarationKeyValue Interface Definition Bindings : Type}
+  {Key Parent DeclarationKeyValue Interface DefinitionValue Bindings : Type}
   (instanceKey : Key)
   (parent : Parent)
   (declarationKeyValue : DeclarationKeyValue)
   (interfaceRevision : Interface)
-  (definitionRevision : Definition)
+  (definitionRevision : DefinitionValue)
   (bindings : Bindings)
   : InstanceRevisionPlan
-      Key Parent DeclarationKeyValue Interface Definition Bindings :=
+      Key Parent DeclarationKeyValue Interface DefinitionValue Bindings :=
   {| instanceRevisionPlanNamespace := InstanceRevisionNamespace;
      instanceRevisionPlanKey := instanceKey;
      instanceRevisionPlanParent := parent;
@@ -207,12 +207,12 @@ Proof.
 Qed.
 
 Theorem instance_binding_difference_revises_construction_plan :
-  forall (Key Parent DeclarationKeyValue Interface Definition Bindings : Type)
+  forall (Key Parent DeclarationKeyValue Interface DefinitionValue Bindings : Type)
          (instanceKey : Key)
          (parent : Parent)
          (declarationKeyValue : DeclarationKeyValue)
          (interfaceRevision : Interface)
-         (definitionRevision : Definition)
+         (definitionRevision : DefinitionValue)
          (oldBindings newBindings : Bindings),
     oldBindings <> newBindings ->
     planInstanceRevision
@@ -220,7 +220,7 @@ Theorem instance_binding_difference_revises_construction_plan :
     planInstanceRevision
       instanceKey parent declarationKeyValue interfaceRevision definitionRevision newBindings.
 Proof.
-  intros Key Parent DeclarationKeyValue Interface Definition Bindings
+  intros Key Parent DeclarationKeyValue Interface DefinitionValue Bindings
     instanceKey parent declarationKeyValue interfaceRevision definitionRevision
     oldBindings newBindings Hneq Heq.
   apply Hneq.
@@ -228,12 +228,12 @@ Proof.
 Qed.
 
 Theorem instance_interface_difference_revises_construction_plan :
-  forall (Key Parent DeclarationKeyValue Interface Definition Bindings : Type)
+  forall (Key Parent DeclarationKeyValue Interface DefinitionValue Bindings : Type)
          (instanceKey : Key)
          (parent : Parent)
          (declarationKeyValue : DeclarationKeyValue)
          (oldInterface newInterface : Interface)
-         (definitionRevision : Definition)
+         (definitionRevision : DefinitionValue)
          (bindings : Bindings),
     oldInterface <> newInterface ->
     planInstanceRevision
@@ -241,7 +241,7 @@ Theorem instance_interface_difference_revises_construction_plan :
     planInstanceRevision
       instanceKey parent declarationKeyValue newInterface definitionRevision bindings.
 Proof.
-  intros Key Parent DeclarationKeyValue Interface Definition Bindings
+  intros Key Parent DeclarationKeyValue Interface DefinitionValue Bindings
     instanceKey parent declarationKeyValue oldInterface newInterface
     definitionRevision bindings Hneq Heq.
   apply Hneq.
