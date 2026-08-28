@@ -3,6 +3,7 @@
 module Main (main) where
 
 import qualified Data.Set as Set
+import Data.Text (Text)
 import Phil.Core.Generic (GenericStaticParameterKey (..))
 import Phil.Core.Generic.StaticActual
 import Phil.Core.Static (SemanticForm (..))
@@ -166,18 +167,15 @@ expectedForms =
   , SemanticAtom "architecture.worker"
   ]
 
-candidate :: String -> GenericStaticKind -> String -> GenericStaticReferenceCandidate
+candidate :: Text -> GenericStaticKind -> Text -> GenericStaticReferenceCandidate
 candidate name kind form = GenericStaticReferenceCandidate
-  { genericStaticReferenceName = fromStringText name
+  { genericStaticReferenceName = name
   , genericStaticReferenceKind = kind
-  , genericStaticReferenceSemanticForm = SemanticAtom (fromStringText form)
+  , genericStaticReferenceSemanticForm = SemanticAtom form
   }
 
-key :: String -> GenericStaticParameterKey
-key = GenericStaticParameterKey . fromStringText
-
-fromStringText :: String -> Data.Text.Text
-fromStringText = Data.Text.pack
+key :: Text -> GenericStaticParameterKey
+key = GenericStaticParameterKey
 
 assert :: Bool -> String -> Either String ()
 assert condition detail
