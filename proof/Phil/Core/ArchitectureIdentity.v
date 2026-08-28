@@ -305,7 +305,7 @@ Qed.
 
 Theorem unaffected_sibling_occurrence_ignores_parent_definition_revision :
   forall parentOccurrence slot childIdentity childBindings
-         parentDefinitionBefore parentDefinitionAfter,
+         (parentDefinitionBefore parentDefinitionAfter : nat),
     deriveArchitectureInstanceIdentity
       {| architectureInstanceKey := scopedInstanceKey parentOccurrence slot;
          architectureParentInstanceKey := Some parentOccurrence;
@@ -329,7 +329,7 @@ Proof.
 Qed.
 
 Theorem sibling_edit_preserves_unaffected_interface_validity_scope :
-  forall childIdentity parentDefinitionBefore parentDefinitionAfter,
+  forall childIdentity (parentDefinitionBefore parentDefinitionAfter : nat),
     interfaceValidityScope childIdentity = interfaceValidityScope childIdentity.
 Proof.
   reflexivity.
