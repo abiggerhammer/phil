@@ -1,0 +1,85 @@
+name: Phase 1 Resource Obligation Proofs
+
+on:
+  pull_request:
+    paths:
+      - 'proof/Phil/Core/ResourceObligation.v'
+      - 'docs/phase-1/resource-obligation-proof-v1.md'
+      - '.github/workflows/phase1-resource-obligation-proofs.yml'
+      - 'proof/Phil/Core/ProcessJoin.v'
+      - 'src/Phil/Core/Process.hs'
+      - 'src/Phil/Core/Checker.hs'
+      - 'test/Phase1ObligationReconvergenceMain.hs'
+  push:
+    branches: [main]
+    paths:
+      - 'proof/Phil/Core/ResourceObligation.v'
+      - 'docs/phase-1/resource-obligation-proof-v1.md'
+      - '.github/workflows/phase1-resource-obligation-proofs.yml'
+      - 'proof/Phil/Core/ProcessJoin.v'
+      - 'src/Phil/Core/Process.hs'
+      - 'src/Phil/Core/Checker.hs'
+      - 'test/Phase1ObligationReconvergenceMain.hs'
+
+permissions:
+  contents: read
+
+jobs:
+  rocq-resource-obligation-proof:
+    runs-on: ubuntu-latest
+    container:
+      image: rocq/rocq-prover:9.2.0
+      options: --user root
+    steps:
+      - uses: actions/checkout@v4
+      - name: Compile PHIL-RES-OBL-001 proof
+        shell: bash
+        run: |
+          set -euo pipefail
+          export PATH="/home/rocq/.opam/${COMPILER}/bin:$PATH"
+          rocq c -Q proof/Phil Phil proof/Phil/Core/Syntax.v
+          rocq c -Q proof/Phil Phil proof/Phil/Core/Context.v
+          rocq c -Q proof/Phil Phil proof/Phil/Core/ContextJoin.v
+          rocq c -Q proof/Phil Phil proof/Phil/Core/ProcessJoin.v
+          rocq c -Q proof/Phil Phil proof/Phil/Core/ResourceObligation.v
+      - name: Record proof identities
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p resource-obligation-proof
+          cp proof/Phil/Core/ResourceObligation.v proof/Phil/Core/ResourceObligation.vo resource-obligation-proof/
+          sha256sum \
+            proof/Phil/Core/ResourceObligation.v \
+            proof/Phil/Core/ResourceObligation.vo \
+            > resource-obligation-proof/PHIL-RES-OBL-001.proof.sha256
+          {
+            echo 'obligation=PHIL-RES-OBL-001'
+            echo 'evidence=Rocq-9.2.0'
+            cat resource-obligation-proof/PHIL-RES-OBL-001.proof.sha256
+          } > resource-obligation-proof/PHIL-RES-OBL-001.proof-certificate.txt
+          cat resource-obligation-proof/PHIL-RES-OBL-001.proof-certificate.txt
+      - uses: actions/upload-artifact@v4
+        with:
+          name: rocq-resource-obligation-proof
+          path: resource-obligation-proof
+          if-no-files-found: error
+
+  verify-resource-obligation-correspondence:
+    needs: rocq-resource-obligation-proof
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: haskell-actions/setup@v2
+        with:
+          ghc-version: '9.6.7'
+          cabal-version: 'latest'
+      - name: Build existing proof certifier with warnings as errors
+        run: cabal build exe:phil-certify-core-scalar --ghc-options=-Werror
+      - name: Typecheck unchanged RES-011 implementation path
+        run: |
+          set -euo pipefail
+          cabal exec -- ghc -isrc -Wall -Werror -fno-code test/Phase1ObligationReconvergenceMain.hs
+      - name: Re-run RES-011 correspondence corpus
+        run: |
+          set -euo pipefail
+          cabal exec -- runghc -Wall -Werror -isrc test/Phase1ObligationReconvergenceMain.hs
