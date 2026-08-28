@@ -7,8 +7,10 @@ on:
       - 'proof/Phil/Core/ArchitectureIdentityImplementation.v'
       - 'proof/Phil/Core/ArchitectureIdentityImplementationExtraction.v'
       - 'docs/phase-1/architecture-identity-implementation-refinement-v1.md'
+      - 'src/ArchitectureIdentityKernel.hs'
       - 'src/Phil/Core/Static.hs'
       - 'src/Phil/Assurance/ArchitectureIdentity.hs'
+      - 'test/Phase1ArchitectureIdentityBindingMain.hs'
       - 'test/Phase1ArchitectureRenameIdentityMain.hs'
       - 'test/Phase1ArchitectureInterfaceValidityMain.hs'
       - 'test/Phase1ArchitectureDefinitionReplacementMain.hs'
@@ -21,8 +23,10 @@ on:
       - 'proof/Phil/Core/ArchitectureIdentityImplementation.v'
       - 'proof/Phil/Core/ArchitectureIdentityImplementationExtraction.v'
       - 'docs/phase-1/architecture-identity-implementation-refinement-v1.md'
+      - 'src/ArchitectureIdentityKernel.hs'
       - 'src/Phil/Core/Static.hs'
       - 'src/Phil/Assurance/ArchitectureIdentity.hs'
+      - 'test/Phase1ArchitectureIdentityBindingMain.hs'
       - 'test/Phase1ArchitectureRenameIdentityMain.hs'
       - 'test/Phase1ArchitectureInterfaceValidityMain.hs'
       - 'test/Phase1ArchitectureDefinitionReplacementMain.hs'
@@ -91,13 +95,22 @@ jobs:
           ghc-version: '9.6.7'
           cabal-version: 'latest'
 
-      - name: Typecheck extracted kernel and unchanged architecture identity paths
+      - name: Require byte-identical checked-in architecture identity kernel
         run: |
           set -euo pipefail
-          ghc -Wall -Werror -fno-code extracted-architecture-identity/ArchitectureIdentityKernel.hs
+          cmp extracted-architecture-identity/ArchitectureIdentityKernel.hs src/ArchitectureIdentityKernel.hs
+          sha256sum \
+            extracted-architecture-identity/ArchitectureIdentityKernel.hs \
+            src/ArchitectureIdentityKernel.hs
+
+      - name: Typecheck bound architecture identity paths
+        run: |
+          set -euo pipefail
+          ghc -Wall -Werror -fno-code src/ArchitectureIdentityKernel.hs
           cabal build exe:phil-certify-core-scalar --ghc-options=-Werror
           cabal exec -- ghc -isrc -Wall -Werror -fno-code src/Phil/Core/Static.hs
           cabal exec -- ghc -isrc -Wall -Werror -fno-code src/Phil/Assurance/ArchitectureIdentity.hs
+          cabal exec -- ghc -isrc -Wall -Werror -fno-code test/Phase1ArchitectureIdentityBindingMain.hs
           for test_main in \
             test/Phase1ArchitectureRenameIdentityMain.hs \
             test/Phase1ArchitectureInterfaceValidityMain.hs \
@@ -118,3 +131,28 @@ jobs:
           do
             cabal exec -- runghc -isrc "$test_main"
           done
+
+      - name: Run direct architecture identity production-binding corpus
+        run: |
+          set -euo pipefail
+          cabal exec -- runghc -isrc test/Phase1ArchitectureIdentityBindingMain.hs
+
+      - name: Record production correspondence identities
+        run: |
+          set -euo pipefail
+          mkdir -p architecture-identity-production-correspondence
+          sha256sum \
+            src/ArchitectureIdentityKernel.hs \
+            src/Phil/Core/Static.hs \
+            test/Phase1ArchitectureIdentityBindingMain.hs \
+            test/Phase1ArchitectureRenameIdentityMain.hs \
+            test/Phase1ArchitectureInterfaceValidityMain.hs \
+            test/Phase1ArchitectureDefinitionReplacementMain.hs \
+            test/Phase1ArchitectureSiblingNoninterferenceMain.hs \
+            > architecture-identity-production-correspondence/PHIL-ARCH-ID-IMPL-001.production.sha256
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: architecture-identity-production-correspondence
+          path: architecture-identity-production-correspondence
+          if-no-files-found: error
