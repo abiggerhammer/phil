@@ -2,7 +2,7 @@ From Stdlib Require Import Lists.List Arith.PeanoNat.
 
 Import ListNotations.
 
-From Phil.Core Require Import ProtocolIdentity.
+From Phil.Core Require Import Syntax ProtocolIdentity.
 
 (*
   PHIL-PROT-STEP-001 — exact protocol progression and guarded-transition
