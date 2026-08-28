@@ -66,7 +66,9 @@ Proof.
     + exact I.
     + reflexivity.
   - destruct extent as [|closureScope]; cbn.
-    + split; intro H; contradiction.
+    + split.
+      * intro H. discriminate.
+      * intro H. contradiction.
     + destruct (Nat.eqb closureScope loanScope) eqn:Heq.
       * apply Nat.eqb_eq in Heq.
         subst loanScope.
