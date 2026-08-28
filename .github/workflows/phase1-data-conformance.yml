@@ -35,6 +35,8 @@ jobs:
         run: cabal exec -- runghc -Wall -Werror -isrc test/Phase1ConservativeSumModeMain.hs
       - name: DATA-004/007 consuming sum payload restoration conformance
         run: cabal exec -- runghc -Wall -Werror -isrc test/Phase1ConsumingSumMatchMain.hs
+      - name: DATA-008 continuing sum arm linear leak conformance
+        run: cabal exec -- runghc -Wall -Werror -isrc test/Phase1SumArmLinearLeakMain.hs
       - name: DATA-009 generic mode propagation conformance
         run: cabal exec -- runghc -Wall -Werror -isrc test/Phase1GenericModePropagationMain.hs
       - name: DATA-010 nominal identity and transparent alias conformance
