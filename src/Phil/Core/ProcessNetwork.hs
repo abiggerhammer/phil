@@ -1,3 +1,5 @@
+{-# LANGUAGE OverloadedStrings #-}
+
 module Phil.Core.ProcessNetwork
   ( ProcessSiteKey (..)
   , ProcessKey (..)
