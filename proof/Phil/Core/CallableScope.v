@@ -62,16 +62,19 @@ Theorem scope_capture_accept_iff_valid :
 Proof.
   intros extent capture.
   destruct capture as [capture|capture loanScope]; cbn.
-  - split; intro H; trivial.
+  - split; intro H.
+    + exact I.
+    + reflexivity.
   - destruct extent as [|closureScope]; cbn.
-    + split; intro H; discriminate.
+    + split; intro H; contradiction.
     + destruct (Nat.eqb closureScope loanScope) eqn:Heq.
-      * apply Nat.eqb_eq in Heq. subst loanScope.
+      * apply Nat.eqb_eq in Heq.
+        subst loanScope.
         split; intro H; reflexivity.
       * apply Nat.eqb_neq in Heq.
         split; intro H.
         -- discriminate.
-        -- contradiction.
+        -- exfalso. apply Heq. exact H.
 Qed.
 
 Theorem scope_independent_capture_may_escape :
@@ -114,9 +117,9 @@ Theorem mismatched_scope_scoped_loan_rejects :
 Proof.
   intros capture loanScope closureScope Hneq.
   cbn.
-  apply Nat.eqb_neq in Hneq.
-  rewrite Hneq.
-  reflexivity.
+  destruct (Nat.eqb closureScope loanScope) eqn:Heq.
+  - apply Nat.eqb_eq in Heq. contradiction.
+  - reflexivity.
 Qed.
 
 Record ClosureRecursionNode : Type := mkClosureRecursionNode {
@@ -225,7 +228,11 @@ Proof.
   apply HnoRestricted.
   apply closure_self_edge_is_cycle.
   exists node.
-  repeat split; assumption.
+  split.
+  - exact Hin.
+  - split.
+    + reflexivity.
+    + exact Hself.
 Qed.
 
 Theorem two_node_reference_cycle :
@@ -240,10 +247,18 @@ Proof.
   unfold cyclicClosureOccurrence.
   eapply ClosurePathStep with (middle := closureOccurrence second).
   - exists first.
-    repeat split; assumption.
+    split.
+    + exact Hfirst.
+    + split.
+      * reflexivity.
+      * exact HfirstRef.
   - apply ClosurePathEdge.
     exists second.
-    repeat split; assumption.
+    split.
+    + exact Hsecond.
+    + split.
+      * reflexivity.
+      * exact HsecondRef.
 Qed.
 
 Theorem restricted_mutual_recursive_environment_rejects :
