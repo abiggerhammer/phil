@@ -17,6 +17,7 @@ import Phil.Core.Static
 import Phil.Core.Syntax
   ( Mode (..)
   , Proposition (..)
+  , RefSort (..)
   , RefTerm (..)
   , Ty (..)
   )
@@ -92,7 +93,7 @@ opaqueProofRejects = do
 
 invalidCertificateRejects :: Either String ()
 invalidCertificateRejects =
-  let proposition = LessThan (RefNat 1) (RefNat 2)
+  let proposition = LessThan (RefOpaque SortNat "x") (RefNat 2)
   in case checkDecisionCertificate
       emptyCheckState
       []
