@@ -31,7 +31,7 @@ import Phil.Core.Process
   , ProcessNetworkError
   , activateRootProcesses
   )
-import Phil.Core.Syntax (Mode (..), Name, Ty)
+import Phil.Core.Syntax (Mode (..), Name)
 
 newtype ActivationOccurrenceKey = ActivationOccurrenceKey
   { unActivationOccurrenceKey :: Text
