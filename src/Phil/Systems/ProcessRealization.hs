@@ -39,8 +39,7 @@ import Phil.Core.ProcessLifecycle
   , ProcessTerminalFact
   )
 import Phil.Systems.IR
-  ( CostClass
-  , DecisionId (..)
+  ( DecisionId (..)
   , LoweringDecision (..)
   , LoweringLedger (..)
   , StageContract (..)
@@ -77,9 +76,6 @@ data ProcessSemanticFact = ProcessSemanticFact
   }
   deriving (Eq, Ord, Show)
 
--- | A target execution realization is intentionally many-to-many.  Source
--- ProcessKey identity remains the key of the correspondence while physical
--- workers/tasks/stages are replaceable realization identities.
 data ProcessExecutionRealization = ProcessExecutionRealization
   { realizationProcessExecutions :: Map.Map ProcessKey (Set PhysicalExecutionKey)
   , realizationEventExecutions :: Map.Map ProcessEventKey PhysicalEventKey
@@ -170,7 +166,7 @@ verifyProcessExecutionRealization network sourceOrder restrictedOwners sourceFac
               Left (RealizationDecisionMapKeyMismatch decisionId (loweringDecisionId decision))
             case loweringCostClass decision of
               Nothing -> Left (RealizationExecutionDecisionMissingCost executionKey decisionId)
-              Just (_ :: CostClass) -> pure ()
+              Just _ -> pure ()
             forM_ (loweringAssumptions decision) $ \assumption ->
               unless (Set.member assumption (Set.fromList (stageAssumptions contract))) $
                 Left (RealizationExecutionAssumptionUndeclared executionKey decisionId assumption)
