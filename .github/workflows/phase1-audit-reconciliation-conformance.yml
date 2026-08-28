@@ -29,5 +29,7 @@ jobs:
         run: cabal exec -- runghc -Wall -Werror -isrc test/Phase1CallableOutcomeFidelityMain.hs
       - name: PROT-008 Message admissibility before ownership transfer
         run: cabal exec -- runghc -Wall -Werror -isrc test/Phase1ProtocolMessageAdmissibilityMain.hs
+      - name: EXEC-014 resource-specific release competence
+        run: cabal exec -- runghc -Wall -Werror -isrc test/Phase1ExplicitReleaseMain.hs
       - name: DEP-002 RuntimeBound carrier coverage across process/domain transfer
         run: cabal exec -- runghc -Wall -Werror -isrc test/Phase1RuntimeCarrierCoverageMain.hs
