@@ -10,14 +10,15 @@ The converse is a different obligation: parsing a form does not make it semantic
 
 ## Completeness boundary
 
-The audit does **not** require every checker datatype, proof artifact, or lowering object to have source syntax. Every audited semantic object is classified into one of four classes:
+The audit does **not** require every checker datatype, proof artifact, or lowering object to have source syntax. Every audited semantic object is classified into one of five classes:
 
 1. **source choice** — controlled by the Phil source author; Grammar v1 must expose it;
-2. **canonical elaboration** — deterministically derived from source/checked context; exposing another spelling would create a false choice;
-3. **assurance/build input** — evidence, qualification, policy, or admission supplied through the assurance/build boundary rather than self-asserted by ordinary source;
-4. **realization/internal state** — compiler/runtime/checker state or target realization detail that is not source semantics.
+2. **persisted lineage/source-bundle input** — stable semantic identity input maintained by source tooling or explicit source metadata, but not ordinary runtime program behavior;
+3. **canonical elaboration** — deterministically derived from source/checked context; exposing another spelling would create a false choice;
+4. **assurance/build input** — evidence, qualification, policy, or admission supplied through the assurance/build boundary rather than self-asserted by ordinary source;
+5. **realization/internal state** — compiler/runtime/checker state or target realization detail that is not source semantics.
 
-A source-choice item with no spelling is a reconciliation defect. A non-source item gets explicit classification instead of fake syntax.
+A source-choice item with no spelling is a reconciliation defect. A persisted-lineage item must have a portable source-bundle carrier. A non-source item gets explicit classification instead of fake syntax.
 
 ## Confirmed defects repaired by this pass
 
@@ -44,6 +45,21 @@ The static-actual factoring is deliberately kind-neutral for name-shaped actuals
 
 The earlier reconciliation remains in force for refinement types, explicit transport, finite `in`/`disjoint`, term-level `offer`, branch-sensitive outcome residues, exact replacement callees, and declaration-level structural modes.
 
+## Persisted semantic lineage
+
+ADR-019 and the current Phase 1 Source and Declaration Surface Contract require stable semantic lineage to survive rename/move/refactor independently of current display names, file paths, source positions, and whole-definition revisions.
+
+The Phase 1 source-bundle rule is therefore:
+
+- top-level identity-bearing declarations have a persisted `DeclarationKey`, carried either by the closed semantic `@key("...")` attribute or by standardized source-bundle lineage metadata;
+- generative architecture occurrence sites have persisted `InstanceKey` lineage in source-bundle metadata;
+- process occurrence sites have persisted `ProcessKey` lineage in source-bundle metadata;
+- tooling may generate a fresh key for a new site in prototype/edit mode, but certification requires the key to have been persisted;
+- a lineage-preserving rename/move retains the persisted key, while copied/recreated independent sites receive fresh keys unless an explicit lineage-preserving refactor says otherwise;
+- `InterfaceRevision`, `DefinitionRevision`, and `InstanceRevision` remain canonical checked-semantic revisions and are not replaced by the stable lineage key.
+
+These keys are semantic identity inputs, but they are not ordinary runtime program choices. Phase 1 requires a portable implementation-independent `SourceBundle` fixture encoding that carries the relevant lineage attachments so a later implementation need not reverse-engineer Haskell-private project state.
+
 ## ADR-024 concurrency extension
 
 ADR-024 subsequently added two bounded author-controlled semantic choices after the original reconciliation:
@@ -57,7 +73,7 @@ Grammar v1 exposes process activation as the architecture item:
 process worker_run = worker;
 ```
 
-The process site is generative process/activation identity; the right-hand side is a `qualified_name` referring to an already-created executable occurrence. It is deliberately not a `static_reference`, because process declaration does not instantiate or clone its target.
+The process site is generative process/activation identity; the right-hand side is a `qualified_name` referring to an already-created executable occurrence. It is deliberately not a `static_reference`, because process declaration does not instantiate or clone its target. Its stable `ProcessKey` lineage is supplied by the persisted source-bundle identity layer described above rather than recomputed from the current source position.
 
 Protocol participation is explicit in the role target:
 
@@ -72,7 +88,8 @@ A qualified role target denotes an internal architecture occurrence. In an execu
 
 Everything else needed to execute those choices is classified rather than surfaced:
 
-- **canonical elaboration:** finite transitive process-population enumeration from the selected root, ProcessKey derivation from the process occurrence site, and the initial process-network bookkeeping implied by explicit architecture bindings;
+- **persisted lineage/source-bundle input:** exact `ProcessKey` lineage for each process occurrence site, plus exact `InstanceKey` lineage for its target occurrence when applicable;
+- **canonical elaboration:** finite transitive process-population enumeration from the selected root and the initial process-network bookkeeping implied by explicit architecture bindings and persisted identities;
 - **ordinary checked semantics:** process target validity, exactly-once activation, explicit internal/external participant classification, global restricted-ownership partition, exact role/process binding, synchronous rendezvous, message ownership transfer, local/communication partial-order causality, local terminal closure, external-boundary closure requirements where applicable, and whole-program terminal closure;
 - **assurance:** any claimed fairness, deadlock freedom, eventual response, deadline, or other liveness property;
 - **realization/internal state:** OS thread/task/PID/worker identities, scheduling, event loops, queueing/buffering, locks/atomics, IPC/device synchronization, placement, and target execution topology.
@@ -101,8 +118,8 @@ This is an expressibility statement, not a claim that the current Haskell parser
 
 The following are intentionally not ordinary `.phil` author-controlled syntax in Phase 1:
 
-- **canonical elaboration products:** derived structural context zone `mode(T)`, canonical lossless coercions, normalized requirement ordering, declaration/interface/definition revisions, deterministic process-population enumeration/ProcessKey derivation, and deterministic projection/bookkeeping facts;
-- **generated occurrence identity:** architecture `InstanceKey`, `ProcessKey`, and similar exact occurrence keys derived from the declared occurrence site rather than hand-picked by source;
+- **persisted lineage/source-bundle inputs:** exact `DeclarationKey`, `InstanceKey`, and `ProcessKey` lineage attachments required for stable semantic identity and certification; top-level `DeclarationKey` may be materialized with the admitted `@key` attribute, while occurrence keys are carried by standardized source-bundle metadata in Phase 1;
+- **canonical elaboration products:** derived structural context zone `mode(T)`, canonical lossless coercions, normalized requirement ordering, declaration/interface/definition/instance revisions, deterministic process-population enumeration, and deterministic projection/bookkeeping facts;
 - **internal protocol/runtime state:** `PendingRecv` and other split-ingress implementation states, temporary loan tokens, checker residual-context representations, and machine/runtime handles;
 - **assurance artifacts:** proof/certificate bytes, generic requirement-discharge records, ProviderQualification claim/evidence/admission objects, assurance-policy decisions, liveness evidence, and exact evidence revision metadata;
 - **realization artifacts:** ArchitectureRealization, SystemsArtifact, StageContract, runtime-site identities, target thread/task/PID/worker identities, scheduling/placement/buffering/synchronization choices, target ABI/layout choices, target-introduced effects/carriers, and concrete cost lineage.
@@ -117,10 +134,11 @@ Any Phase 1 semantic extension or reconciliation should answer these questions b
 
 1. Is this object/transition a source-author choice?
 2. If yes, what exact Grammar-v1 production denotes it, and what accepted/rejected corpus case protects that production?
-3. If no, which of canonical elaboration, assurance/build input, or realization/internal state owns it?
-4. Can two semantically distinct source choices collapse to one spelling and thereby erase a competence distinction?
-5. Can syntax accidentally create evidence, authority, identity, qualification, or realization choice that belongs to a later competent layer?
-6. When one spelling is valid at several static kinds, does it have one concrete parse with expected-kind elaboration rather than several competing parses whose order could choose semantics?
+3. If no, is it persisted lineage/source-bundle input, canonical elaboration, assurance/build input, or realization/internal state?
+4. If it is identity-bearing persisted lineage, what implementation-independent source-bundle carrier preserves it across rename/move and independent implementations?
+5. Can two semantically distinct source choices collapse to one spelling and thereby erase a competence distinction?
+6. Can syntax accidentally create evidence, authority, identity, qualification, or realization choice that belongs to a later competent layer?
+7. When one spelling is valid at several static kinds, does it have one concrete parse with expected-kind elaboration rather than several competing parses whose order could choose semantics?
 
 The target property is not constructor-for-constructor syntax coverage. It is **source-semantic surjectivity onto the admitted author-controlled Phase 1 semantics, with explicit competence boundaries for everything else**.
 
