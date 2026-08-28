@@ -4,6 +4,7 @@ module Main (main) where
 
 import qualified Data.Map.Strict as Map
 import qualified Data.Set as Set
+import qualified Data.Text as Text
 import Phil.Core.Callable (CalleeTransition (..))
 import Phil.Core.CallableOutcome
 import Phil.Core.CallableRefinement (CallableFailure (..))
@@ -47,7 +48,7 @@ exactOutcomeContractAccepts = do
 outcomeClassReclassificationRejects :: Either String ()
 outcomeClassReclassificationRejects =
   let actual = replaceBranch typedNegativeClass
-        (\branch -> branch
+        (\outcomeBranch -> outcomeBranch
           { callableOutcomeClass =
               CallableNonSuccessOutcome (CallableDeclaredTerminal notFoundOutcome)
           })
@@ -68,7 +69,8 @@ outcomeClassReclassificationRejects =
 branchStateMismatchRejects :: Either String ()
 branchStateMismatchRejects =
   let actual = replaceBranch typedNegativeClass
-        (\branch -> branch { callableOutcomeState = CallableOutcomeState "state.wrong" })
+        (\outcomeBranch -> outcomeBranch
+          { callableOutcomeState = CallableOutcomeState "state.wrong" })
         expectedOutcomes
   in case checkCallableOutcomeContract expectedOutcomes actual of
       Left (CallableOutcomeStateMismatch outcomeClass expected actualState) ->
@@ -83,7 +85,8 @@ branchStateMismatchRejects =
 calleeTransitionMismatchRejects :: Either String ()
 calleeTransitionMismatchRejects =
   let actual = replaceBranch typedNegativeClass
-        (\branch -> branch { callableOutcomeCalleeTransition = ConsumeCallee })
+        (\outcomeBranch -> outcomeBranch
+          { callableOutcomeCalleeTransition = ConsumeCallee })
         expectedOutcomes
   in case checkCallableOutcomeContract expectedOutcomes actual of
       Left (CallableOutcomeCalleeTransitionMismatch outcomeClass expected actualTransition) ->
@@ -98,7 +101,7 @@ calleeTransitionMismatchRejects =
 postconditionMismatchRejects :: Either String ()
 postconditionMismatchRejects =
   let actual = replaceBranch successClass
-        (\branch -> branch
+        (\outcomeBranch -> outcomeBranch
           { callableOutcomePostconditions = Set.singleton (atom "post.success.changed") })
         expectedOutcomes
   in case checkCallableOutcomeContract expectedOutcomes actual of
@@ -115,44 +118,44 @@ residualToPostconditionRejects :: Either String ()
 residualToPostconditionRejects =
   reclassificationRejects
     OutcomePostconditionBucket
-    (\branch -> branch
+    (\outcomeBranch -> outcomeBranch
       { callableOutcomeResidualObligations = Set.delete retryObligation
-          (callableOutcomeResidualObligations branch)
+          (callableOutcomeResidualObligations outcomeBranch)
       , callableOutcomePostconditions = Set.insert retryObligation
-          (callableOutcomePostconditions branch)
+          (callableOutcomePostconditions outcomeBranch)
       })
 
 residualToAssumptionRejects :: Either String ()
 residualToAssumptionRejects =
   reclassificationRejects
     OutcomeAssumptionBucket
-    (\branch -> branch
+    (\outcomeBranch -> outcomeBranch
       { callableOutcomeResidualObligations = Set.delete retryObligation
-          (callableOutcomeResidualObligations branch)
+          (callableOutcomeResidualObligations outcomeBranch)
       , callableOutcomeAssumptions = Set.insert retryObligation
-          (callableOutcomeAssumptions branch)
+          (callableOutcomeAssumptions outcomeBranch)
       })
 
 residualToEffectRejects :: Either String ()
 residualToEffectRejects =
   reclassificationRejects
     OutcomeEffectBucket
-    (\branch -> branch
+    (\outcomeBranch -> outcomeBranch
       { callableOutcomeResidualObligations = Set.delete retryObligation
-          (callableOutcomeResidualObligations branch)
+          (callableOutcomeResidualObligations outcomeBranch)
       , callableOutcomeEffects = Set.insert retryObligation
-          (callableOutcomeEffects branch)
+          (callableOutcomeEffects outcomeBranch)
       })
 
 residualToDischargedFactRejects :: Either String ()
 residualToDischargedFactRejects =
   reclassificationRejects
     OutcomeDischargedFactBucket
-    (\branch -> branch
+    (\outcomeBranch -> outcomeBranch
       { callableOutcomeResidualObligations = Set.delete retryObligation
-          (callableOutcomeResidualObligations branch)
+          (callableOutcomeResidualObligations outcomeBranch)
       , callableOutcomeDischargedFacts = Set.insert retryObligation
-          (callableOutcomeDischargedFacts branch)
+          (callableOutcomeDischargedFacts outcomeBranch)
       })
 
 reclassificationRejects
@@ -174,7 +177,7 @@ reclassificationRejects expectedBucket mutate =
 droppedResidualRejects :: Either String ()
 droppedResidualRejects =
   let actual = replaceBranch typedNegativeClass
-        (\branch -> branch
+        (\outcomeBranch -> outcomeBranch
           { callableOutcomeResidualObligations = Set.empty })
         expectedOutcomes
   in case checkCallableOutcomeContract expectedOutcomes actual of
@@ -194,9 +197,9 @@ replaceBranch
   -> [CallableOutcomeContract]
 replaceBranch target mutate = map replaceOne
   where
-    replaceOne branch
-      | callableOutcomeClass branch == target = mutate branch
-      | otherwise = branch
+    replaceOne outcomeBranch
+      | callableOutcomeClass outcomeBranch == target = mutate outcomeBranch
+      | otherwise = outcomeBranch
 
 expectedOutcomes :: [CallableOutcomeContract]
 expectedOutcomes =
@@ -216,7 +219,7 @@ declaredTerminalClass = CallableNonSuccessOutcome (CallableDeclaredTerminal done
 fatalClass = CallableNonSuccessOutcome (CallableFatal "storage.fatal")
 
 successBranch, typedNegativeBranch, declaredTerminalBranch, fatalBranch :: CallableOutcomeContract
-successBranch = branch
+successBranch = mkBranch
   successClass
   "state.ready"
   PreserveCallee
@@ -225,7 +228,7 @@ successBranch = branch
   []
   ["effect.storage.read"]
   ["fact.request.validated"]
-typedNegativeBranch = branch
+typedNegativeBranch = mkBranch
   typedNegativeClass
   "state.retryable"
   PreserveCallee
@@ -234,7 +237,7 @@ typedNegativeBranch = branch
   ["assumption.catalog-current"]
   ["effect.storage.read"]
   ["fact.request.validated"]
-declaredTerminalBranch = branch
+declaredTerminalBranch = mkBranch
   declaredTerminalClass
   "state.closed"
   ConsumeCallee
@@ -243,7 +246,7 @@ declaredTerminalBranch = branch
   []
   ["effect.session.close"]
   ["fact.close-authorized"]
-fatalBranch = branch
+fatalBranch = mkBranch
   fatalClass
   "state.failed"
   ConsumeCallee
@@ -253,7 +256,7 @@ fatalBranch = branch
   ["effect.diagnostic.emit"]
   []
 
-branch
+mkBranch
   :: CallableOutcomeClass
   -> String
   -> CalleeTransition
@@ -263,7 +266,7 @@ branch
   -> [String]
   -> [String]
   -> CallableOutcomeContract
-branch outcomeClass state transition postconditions residual assumptions effects discharged =
+mkBranch outcomeClass state transition postconditions residual assumptions effects discharged =
   CallableOutcomeContract
     { callableOutcomeClass = outcomeClass
     , callableOutcomeState = CallableOutcomeState (fromString state)
@@ -288,8 +291,8 @@ atoms = Set.fromList . map atom
 atom :: String -> CallableOutcomeAtom
 atom = CallableOutcomeAtom . fromString
 
-fromString :: String -> Data.Text.Text
-fromString = Data.Text.pack
+fromString :: String -> Text.Text
+fromString = Text.pack
 
 assert :: Bool -> String -> Either String ()
 assert condition detail
