@@ -1,0 +1,100 @@
+name: Phase 1 Authority Possession Implementation Refinement
+
+on:
+  pull_request:
+    paths:
+      - 'proof/Phil/Core/GenericStructural.v'
+      - 'proof/Phil/Core/AuthorityPossession.v'
+      - 'proof/Phil/Core/AuthorityPossessionImplementation.v'
+      - 'proof/Phil/Core/AuthorityPossessionImplementationExtraction.v'
+      - 'docs/phase-1/authority-possession-implementation-refinement-v1.md'
+      - 'src/Phil/Core/Authority.hs'
+      - 'test/Phase1AuthorityPossessionMain.hs'
+      - '.github/workflows/phase1-authority-possession-implementation-refinement.yml'
+  push:
+    branches: [main]
+    paths:
+      - 'proof/Phil/Core/GenericStructural.v'
+      - 'proof/Phil/Core/AuthorityPossession.v'
+      - 'proof/Phil/Core/AuthorityPossessionImplementation.v'
+      - 'proof/Phil/Core/AuthorityPossessionImplementationExtraction.v'
+      - 'docs/phase-1/authority-possession-implementation-refinement-v1.md'
+      - 'src/Phil/Core/Authority.hs'
+      - 'test/Phase1AuthorityPossessionMain.hs'
+      - '.github/workflows/phase1-authority-possession-implementation-refinement.yml'
+
+permissions:
+  contents: read
+
+jobs:
+  rocq-authority-possession-implementation-refinement:
+    runs-on: ubuntu-latest
+    container:
+      image: rocq/rocq-prover:9.2.0
+      options: --user root
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Compile certified authority model and executable correspondence
+        shell: bash
+        run: |
+          set -euo pipefail
+          export PATH="/home/rocq/.opam/${COMPILER}/bin:$PATH"
+          rocq c -Q proof/Phil Phil proof/Phil/Core/GenericStructural.v
+          rocq c -Q proof/Phil Phil proof/Phil/Core/AuthorityPossession.v
+          rocq c -Q proof/Phil Phil proof/Phil/Core/AuthorityPossessionImplementation.v
+
+      - name: Extract authority possession kernel
+        shell: bash
+        run: |
+          set -euo pipefail
+          export PATH="/home/rocq/.opam/${COMPILER}/bin:$PATH"
+          rm -f AuthorityPossessionKernel.hs
+          rocq c -Q proof/Phil Phil proof/Phil/Core/AuthorityPossessionImplementationExtraction.v
+          test -s AuthorityPossessionKernel.hs
+          grep -q 'decideAuthorityExerciseFacts' AuthorityPossessionKernel.hs
+          grep -q 'decideAuthorityCopy' AuthorityPossessionKernel.hs
+          grep -q 'decideAuthorityDrop' AuthorityPossessionKernel.hs
+          sha256sum AuthorityPossessionKernel.hs
+          mkdir -p authority-possession-implementation-refinement-proof
+          cp \
+            proof/Phil/Core/AuthorityPossession.v \
+            proof/Phil/Core/AuthorityPossessionImplementation.v \
+            proof/Phil/Core/AuthorityPossessionImplementation.vo \
+            AuthorityPossessionKernel.hs \
+            authority-possession-implementation-refinement-proof/
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: rocq-authority-possession-implementation-refinement
+          path: authority-possession-implementation-refinement-proof
+          if-no-files-found: error
+
+  verify-authority-possession-implementation-correspondence:
+    needs: rocq-authority-possession-implementation-refinement
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/download-artifact@v4
+        with:
+          name: rocq-authority-possession-implementation-refinement
+          path: extracted-authority-possession
+
+      - uses: haskell-actions/setup@v2
+        with:
+          ghc-version: '9.6.7'
+          cabal-version: 'latest'
+
+      - name: Typecheck extracted kernel and unchanged authority path
+        run: |
+          set -euo pipefail
+          ghc -Wall -Werror -Wno-unused-imports -fno-code extracted-authority-possession/AuthorityPossessionKernel.hs
+          cabal build exe:phil-certify-core-scalar --ghc-options=-Werror
+          cabal exec -- ghc -isrc -Wall -Werror -fno-code src/Phil/Core/Authority.hs
+          cabal exec -- ghc -isrc -Wall -Werror -fno-code test/Phase1AuthorityPossessionMain.hs
+
+      - name: Re-run unchanged AUTH-001, AUTH-002, and AUTH-005 corpus
+        run: |
+          set -euo pipefail
+          cabal exec -- runghc -isrc test/Phase1AuthorityPossessionMain.hs
