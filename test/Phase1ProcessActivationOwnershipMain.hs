@@ -148,7 +148,8 @@ missingActivationContractRejects = do
     other -> Left ("missing process activation contract did not reject: " <> show other)
 
 expectDuplicate
-  :: ProcessKey
+  :: Show a
+  => ProcessKey
   -> Name
   -> ProcessKey
   -> Name
