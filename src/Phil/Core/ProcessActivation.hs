@@ -100,12 +100,12 @@ normalizeActivationContracts
   -> Either ProcessActivationError (Map.Map ProcessKey ProcessActivationContract)
 normalizeActivationContracts network contracts = do
   normalized <- foldl' insertContract (Right Map.empty) contracts
+  let missingProcesses = populationKeys `Set.difference` Map.keysSet normalized
   case Set.lookupMin missingProcesses of
     Just processKey -> Left (MissingActivationContract processKey)
     Nothing -> Right normalized
   where
     populationKeys = Map.keysSet (processNetworkPopulation network)
-    missingProcesses = populationKeys `Set.difference` Map.keysSet normalized
 
     insertContract accumulated contract = do
       current <- accumulated
