@@ -1,0 +1,108 @@
+name: Phase 1 Protocol Identity Proofs
+
+on:
+  pull_request:
+    paths:
+      - 'proof/Phil/Core/ProtocolIdentity.v'
+      - 'src/Phil/Core/Protocol.hs'
+      - 'src/Phil/Systems/ProtocolStateCorrespondence.hs'
+      - 'test/Phase1ProtocolExactActionMain.hs'
+      - 'test/Phase1ProtocolIdentitySeparationMain.hs'
+      - 'test/Phase1ProtocolStateCorrespondenceMain.hs'
+      - 'docs/phase-1/protocol-exact-action-v1.md'
+      - 'docs/phase-1/protocol-identity-separation-v1.md'
+      - 'docs/phase-1/protocol-identity-proof-v1.md'
+      - '.github/workflows/phase1-protocol-identity-proofs.yml'
+  push:
+    branches: [main]
+    paths:
+      - 'proof/Phil/Core/ProtocolIdentity.v'
+      - 'src/Phil/Core/Protocol.hs'
+      - 'src/Phil/Systems/ProtocolStateCorrespondence.hs'
+      - 'test/Phase1ProtocolExactActionMain.hs'
+      - 'test/Phase1ProtocolIdentitySeparationMain.hs'
+      - 'test/Phase1ProtocolStateCorrespondenceMain.hs'
+      - 'docs/phase-1/protocol-exact-action-v1.md'
+      - 'docs/phase-1/protocol-identity-separation-v1.md'
+      - 'docs/phase-1/protocol-identity-proof-v1.md'
+      - '.github/workflows/phase1-protocol-identity-proofs.yml'
+
+permissions:
+  contents: read
+
+jobs:
+  rocq-protocol-identity-proof:
+    runs-on: ubuntu-latest
+    container:
+      image: rocq/rocq-prover:9.2.0
+      options: --user root
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Compile PHIL-PROT-ID-001 proof
+        shell: bash
+        run: |
+          set -euo pipefail
+          export PATH="/home/rocq/.opam/${COMPILER}/bin:$PATH"
+          rocq c -Q proof/Phil Phil proof/Phil/Core/ProtocolIdentity.v
+
+      - name: Record proof identities
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p protocol-identity-proof
+          cp \
+            proof/Phil/Core/ProtocolIdentity.v \
+            proof/Phil/Core/ProtocolIdentity.vo \
+            protocol-identity-proof/
+          sha256sum \
+            proof/Phil/Core/ProtocolIdentity.v \
+            proof/Phil/Core/ProtocolIdentity.vo \
+            > protocol-identity-proof/PHIL-PROT-ID-001.proof.sha256
+          {
+            printf '%s\n' 'obligation=PHIL-PROT-ID-001'
+            printf '%s\n' 'evidence=Rocq-9.2.0'
+            cat protocol-identity-proof/PHIL-PROT-ID-001.proof.sha256
+          } > protocol-identity-proof/PHIL-PROT-ID-001.proof-certificate.txt
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: rocq-protocol-identity-proof
+          path: protocol-identity-proof
+          if-no-files-found: error
+
+  verify-protocol-identity-correspondence:
+    needs: rocq-protocol-identity-proof
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: haskell-actions/setup@v2
+        with:
+          ghc-version: '9.6.7'
+          cabal-version: 'latest'
+
+      - name: Typecheck protocol identity implementation paths
+        run: |
+          set -euo pipefail
+          cabal build exe:phil-certify-core-scalar --ghc-options=-Werror
+          cabal exec -- ghc -isrc -Wall -Werror -fno-code src/Phil/Core/Protocol.hs
+          cabal exec -- ghc -isrc -Wall -Werror -fno-code src/Phil/Systems/ProtocolStateCorrespondence.hs
+          for test_main in \
+            test/Phase1ProtocolExactActionMain.hs \
+            test/Phase1ProtocolIdentitySeparationMain.hs \
+            test/Phase1ProtocolStateCorrespondenceMain.hs
+          do
+            cabal exec -- ghc -isrc -Wall -Werror -fno-code "$test_main"
+          done
+
+      - name: Re-run PROT-001, PROT-002, and SYS-009 pressure corpora
+        run: |
+          set -euo pipefail
+          for test_main in \
+            test/Phase1ProtocolExactActionMain.hs \
+            test/Phase1ProtocolIdentitySeparationMain.hs \
+            test/Phase1ProtocolStateCorrespondenceMain.hs
+          do
+            cabal exec -- runghc -isrc "$test_main"
+          done
