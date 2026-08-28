@@ -25,7 +25,7 @@ The detailed classification and audit are recorded in `syntax-semantics-complete
 - if it is proof/qualification/admission metadata, ordinary source may depend on it but may not self-assert it;
 - if it belongs to Systems/target realization or compiler/runtime bookkeeping, it is not source syntax.
 
-This is why Grammar v1 exposes explicit transport, outcome class, residual obligations, join/loop contracts, authority requirements, and exact static contract references, but does not expose `PendingRecv`, provider-qualification evidence records, `StageContract`, or backend ABI objects as user-authored terms.
+This is why Grammar v1 exposes explicit transport, outcome class, residual obligations, join/loop contracts, authority requirements, exact static contract references, and ADR-024 process activation sites, but does not expose `PendingRecv`, provider-qualification evidence records, scheduler/thread identities, `StageContract`, or backend ABI objects as user-authored terms.
 
 ## Canonical lexical and structural choices
 
@@ -33,7 +33,7 @@ The EBNF header owns the lexical contract: Unicode whitespace and `//` comments 
 
 Phase 1 v1 uses `[...]` for static/generic parameters and arguments and `(...)` for runtime arguments/products. Static declaration/configuration items use semicolon terminators; ordinary term statements retain the Phase 0 semicolon-free style.
 
-Attributes use `@name("value")`. Records, sums, aliases, claims, callable contracts, functions, providers, protocols, capabilities, boundary representations, architectures, components, and program roots are all ordinary top-level declaration forms. Architecture occurrence creation uses `instance`; deliberate sharing uses `ref`; a program root says `program ... = instantiate ...`.
+Attributes use `@name("value")`. Records, sums, aliases, claims, callable contracts, functions, providers, protocols, capabilities, boundary representations, architectures, components, and program roots are all ordinary top-level declaration forms. Architecture occurrence creation uses `instance`; deliberate sharing uses `ref`; static process activation uses `process`; a program root says `program ... = instantiate ...`.
 
 ## Static arguments, contracts, and requirements
 
@@ -197,17 +197,32 @@ reject reason
 
 This is distinct from fatal `fail FailureClass(...) on live_resource`, which performs the declared fatal resource transition. The existing `e or reject reason` fallback remains an ergonomic exhaustive-control form over a declared negative result.
 
-## Boundary and architecture syntax
+## Boundary, architecture, and static process syntax
 
 Boundary declarations expose direction-specific receive/send roles, correspondence, canonicality, failure types, and laws. Recognition, validation, encoding, and protocol boundary use may name specialized exact static contracts.
 
-Architecture declarations expose author-controlled source semantics: occurrence creation/references, provider/protocol/role/boundary bindings, authority origins and grants, entries, assumptions, exported obligations, observables, and constraints.
+Architecture declarations expose author-controlled source semantics: occurrence creation/references, provider/protocol/role/boundary bindings, authority origins and grants, entries, assumptions, exported obligations, observables, constraints, and ADR-024 process activation sites.
+
+A bounded Phase 1 process site is written:
+
+```phil
+architecture Pair {
+  instance left = Worker;
+  instance right = Worker;
+  process left_run = left;
+  process right_run = right;
+}
+```
+
+The right-hand side is deliberately a `qualified_name`, not a `static_reference`: `process` refers to an already-created executable architecture occurrence and creates stable process/activation identity; it does not instantiate or clone that target. Process population, target executability, exactly-once activation, ownership partition, protocol-role/process binding, rendezvous, terminal closure, and ProcessKey identity are semantic checks under ADR-024.
+
+There is no term-level process expression in Phase 1. Thread/task/PID/worker identity, scheduling, buffering, locks/atomics, execution placement, cancellation machinery, and other physical concurrency choices remain Systems/StageContract realization facts rather than source syntax.
 
 Concrete provider admission, target/ABI selection, runtime-site binding, carrier choice, and StageContract construction remain later competent-layer decisions, not architecture-source syntax.
 
 ## Semantic rejection remains competent
 
-The grammar intentionally parses forms whose legality depends on semantic information. Examples include static-argument kind, supported integer width, structural-mode strengthening, refinement sort correctness, transport evidence competence, finite-collection sorts, outcome-set/residue consistency, residual-obligation disposition, exact replacement-callee compatibility, session duality, provider refinement, authority possession, join/loop state projection, and architecture binding validity.
+The grammar intentionally parses forms whose legality depends on semantic information. Examples include static-argument kind, supported integer width, structural-mode strengthening, refinement sort correctness, transport evidence competence, finite-collection sorts, outcome-set/residue consistency, residual-obligation disposition, exact replacement-callee compatibility, session duality, provider refinement, authority possession, join/loop state projection, architecture binding validity, process target validity, process ownership partition, and process activation closure.
 
 Malformed syntax is rejected by the parser. Semantically illegal but well-formed syntax is rejected by the competent semantic checker.
 
@@ -215,16 +230,16 @@ Malformed syntax is rejected by the parser. Semantically illegal but well-formed
 
 `test/fixtures/phase1-surface/manifest.json` is the declarative parser-production corpus. Positive fixtures assert whole-file syntactic acceptance only; negative fixtures are malformed forms that must fail at the syntax layer. `surface-parser-production-corpus-v1.md` describes its integration contract.
 
-The broader semantic-to-surface audit that motivated the latest cases is recorded in `syntax-semantics-completeness-v1.md`.
+The broader semantic-to-surface audit that motivated the previous cases is recorded in `syntax-semantics-completeness-v1.md`. ADR-024 extends that completeness boundary with one new author-controlled architecture choice, protected by the process-production corpus cases; scheduler/realization choices remain deliberately non-surface.
 
 ## Versioning
 
 “v1” names this Phase 1 concrete-syntax epoch. Git history and the embedded EBNF SHA-256 identify exact revisions inside the epoch. Deliberate Phase 1 reconciliations may extend the epoch before the canonical source front end is frozen; every such change invalidates parser-conformance evidence tied to the prior grammar digest.
 
-The current sequence of reconciliations exposed already-admitted semantics rather than introducing new semantic epochs: refinement/transport/finite relations/outcome residues/offer; declaration-level structural modes; and the broader static-actual/requirement/product/outcome-class/obligation/control-state completeness repairs.
+The earlier reconciliation sequence exposed already-admitted semantics: refinement/transport/finite relations/outcome residues/offer; declaration-level structural modes; and the broader static-actual/requirement/product/outcome-class/obligation/control-state completeness repairs. ADR-024 is a deliberate bounded Phase 1 semantic extension: it adds only the architecture-level `process` activation form while keeping physical concurrency mechanisms outside source semantics.
 
 A future incompatible syntax change must be explicit rather than silently changing parser behavior.
 
 ## Deliberate non-goals
 
-Grammar v1 does not define semantic elaboration, a formatter, target/backend syntax, multiparty/asynchronous protocol semantics, macros/general compile-time metaprogramming, user-written quantifiers/unrestricted existentials, arbitrary type-level computation, proof/certificate formats, provider qualification artifacts, StageContract syntax, or proof that the current Haskell parser already implements every production.
+Grammar v1 does not define semantic elaboration, a formatter, target/backend syntax, dynamic process creation, term-level spawn/await, futures/race combinators, shared-memory synchronization/atomics, asynchronous mailboxes, multiparty protocol semantics, implicit cancellation/supervision, scheduler-control syntax, macros/general compile-time metaprogramming, user-written quantifiers/unrestricted existentials, arbitrary type-level computation, proof/certificate formats, provider qualification artifacts, StageContract syntax, or proof that the current Haskell parser already implements every production.

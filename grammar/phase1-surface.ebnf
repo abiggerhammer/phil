@@ -84,6 +84,14 @@
 # - loop state initializers may carry explicit types, preserving dependent state;
 # - standalone reject is typed-negative control flow; fail remains fatal control.
 #
+# Static CSP process networks:
+# - process declarations are architecture items that create stable process
+#   occurrence/activation identity for an already-created executable occurrence;
+# - the right-hand side is a qualified occurrence reference, not instantiation;
+# - process declarations introduce no term-level spawn/await/task semantics;
+# - activation, ownership partition, synchronous rendezvous, terminal closure,
+#   and execution-realization correspondence are semantic checks under ADR-024.
+#
 # A source parser must consume the entire source file.
 
 source_file = [ module_decl ], { import_decl }, { top_level_decl } ;
@@ -375,6 +383,7 @@ architecture_decl =
 architecture_item =
     "instance", identifier, "=", static_reference, ";"
   | "ref", identifier, "=", qualified_name, ";"
+  | "process", identifier, "=", qualified_name, ";"
   | "protocol", identifier, "=", static_reference, ";"
   | "role", qualified_name, "=", qualified_name, ";"
   | "bind", qualified_name, "=", qualified_name, ";"
