@@ -163,6 +163,7 @@ Proof.
   split.
   - exact Hdual.
   - rewrite Hdual.
+    symmetry.
     apply dualSession_involutive.
 Qed.
 
