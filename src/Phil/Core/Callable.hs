@@ -26,6 +26,7 @@ module Phil.Core.Callable
   ) where
 
 import qualified CallableEffectKernel as CallableEffectKernel
+import qualified CallableLifecycleKernel as CallableLifecycleKernel
 import qualified CallableModeKernel as CallableModeKernel
 import qualified Data.Map.Strict as Map
 import qualified Data.Set as Set
@@ -150,6 +151,7 @@ data CallableCheckError
   | DuplicateRestrictedCapture CaptureOccurrenceKey Mode
   | CallableModeKernelBridgeMismatch
   | CallableEffectKernelBridgeMismatch
+  | CallableLifecycleKernelBridgeMismatch
   | CallableEffectBoundExceeded
       InterfaceRevision
       (Set.Set SemanticEffect)
@@ -309,8 +311,8 @@ lookupCallableOccurrence
 lookupCallableOccurrence key = Map.lookup key . callableResourceOccurrences
 
 -- | Apply the callable owner's declared transition to ordinary resource state.
--- This function deliberately keys availability by exact ownership occurrence:
--- a successor with an equal contract never makes the predecessor live again.
+-- The extracted CALL-LIFE kernel owns transition acceptance/failure precedence;
+-- concrete Map/Set facts and state mutation remain the representation boundary.
 invokeCallableOccurrence
   :: CallableOccurrenceKey
   -> CallableInvocationBodySummary
@@ -329,49 +331,114 @@ invokeCallableOccurrence predecessorKey body state = do
   where
     occurrences = callableResourceOccurrences state
 
-    preserve predecessor = do
+    preserve predecessor =
       let expected = closureMovedRestrictedOccurrences
             (callableOccurrenceCaptures predecessor)
           actual = invocationRestrictedCaptureResidue body
-      if actual /= expected
-        then Left (PreserveCalleeRestrictedStateMismatch predecessorKey expected actual)
-        else case invocationSuccessorCallable body of
-          Nothing -> Right state
-          Just successor -> Left
-            (PreserveCalleeProducedSuccessor predecessorKey (callableOccurrenceKey successor))
+          successor = invocationSuccessorCallable body
+          successorAbsent = case successor of
+            Nothing -> True
+            Just _ -> False
+      in case CallableLifecycleKernel.decideCallablePreserve
+          (actual == expected) successorAbsent of
+        CallableLifecycleKernel.CallablePreserveAccepted -> Right state
+        CallableLifecycleKernel.CallablePreserveResidueMismatch ->
+          Left (PreserveCalleeRestrictedStateMismatch predecessorKey expected actual)
+        CallableLifecycleKernel.CallablePreserveProducedSuccessor ->
+          case successor of
+            Just replacement -> Left
+              (PreserveCalleeProducedSuccessor
+                predecessorKey
+                (callableOccurrenceKey replacement))
+            Nothing -> Left CallableLifecycleKernelBridgeMismatch
 
-    consume _predecessor
-      | not (Set.null (invocationRestrictedCaptureResidue body)) =
-          Left (ConsumeCalleeRetainedRestrictedState
-            predecessorKey
-            (invocationRestrictedCaptureResidue body))
-      | otherwise = case invocationSuccessorCallable body of
-          Just successor -> Left
-            (ConsumeCalleeProducedSuccessor predecessorKey (callableOccurrenceKey successor))
-          Nothing -> Right (CallableResourceState (Map.delete predecessorKey occurrences))
+    consume _predecessor =
+      let actual = invocationRestrictedCaptureResidue body
+          successor = invocationSuccessorCallable body
+          successorAbsent = case successor of
+            Nothing -> True
+            Just _ -> False
+      in case CallableLifecycleKernel.decideCallableConsume
+          (Set.null actual) successorAbsent of
+        CallableLifecycleKernel.CallableConsumeAccepted ->
+          Right (CallableResourceState (Map.delete predecessorKey occurrences))
+        CallableLifecycleKernel.CallableConsumeRetainedResidue ->
+          Left (ConsumeCalleeRetainedRestrictedState predecessorKey actual)
+        CallableLifecycleKernel.CallableConsumeProducedSuccessor ->
+          case successor of
+            Just replacement -> Left
+              (ConsumeCalleeProducedSuccessor
+                predecessorKey
+                (callableOccurrenceKey replacement))
+            Nothing -> Left CallableLifecycleKernelBridgeMismatch
 
-    replace _predecessor expectedInterface expectedState
-      | not (Set.null (invocationRestrictedCaptureResidue body)) =
-          Left (ReplaceCalleeRetainedPredecessorState
-            predecessorKey
-            (invocationRestrictedCaptureResidue body))
-      | otherwise = case invocationSuccessorCallable body of
-          Nothing -> Left (ReplaceCalleeMissingSuccessor predecessorKey)
-          Just successor -> do
-            let successorKey = callableOccurrenceKey successor
-                actualInterface = callableContractInterfaceRevision
-                  (callableOccurrenceContract successor)
-                actualState = callableOccurrenceStateKey successor
-            if successorKey == predecessorKey
-              then Left (ReplaceCalleeReusedPredecessorKey predecessorKey)
-              else if Map.member successorKey occurrences
-                then Left (ReplaceCalleeSuccessorAlreadyAvailable successorKey)
-                else if actualInterface /= expectedInterface
-                  then Left (ReplaceCalleeInterfaceMismatch expectedInterface actualInterface)
-                  else if actualState /= expectedState
-                    then Left (ReplaceCalleeStateMismatch expectedState actualState)
-                    else Right (CallableResourceState
-                      (Map.insert successorKey successor (Map.delete predecessorKey occurrences)))
+    replace _predecessor expectedInterface expectedState =
+      let actual = invocationRestrictedCaptureResidue body
+          successor = invocationSuccessorCallable body
+          residueEmpty = Set.null actual
+          ( successorPresent
+            , successorDistinct
+            , successorFresh
+            , interfaceMatches
+            , stateMatches
+            ) = case successor of
+              Nothing -> (False, False, False, False, False)
+              Just replacement ->
+                let successorKey = callableOccurrenceKey replacement
+                    actualInterface = callableContractInterfaceRevision
+                      (callableOccurrenceContract replacement)
+                    actualState = callableOccurrenceStateKey replacement
+                in ( True
+                   , successorKey /= predecessorKey
+                   , not (Map.member successorKey occurrences)
+                   , actualInterface == expectedInterface
+                   , actualState == expectedState
+                   )
+          decision = CallableLifecycleKernel.decideCallableReplace
+            residueEmpty
+            successorPresent
+            successorDistinct
+            successorFresh
+            interfaceMatches
+            stateMatches
+      in case decision of
+        CallableLifecycleKernel.CallableReplaceRetainedResidue ->
+          Left (ReplaceCalleeRetainedPredecessorState predecessorKey actual)
+        CallableLifecycleKernel.CallableReplaceMissingSuccessor ->
+          Left (ReplaceCalleeMissingSuccessor predecessorKey)
+        CallableLifecycleKernel.CallableReplaceReusedPredecessor ->
+          Left (ReplaceCalleeReusedPredecessorKey predecessorKey)
+        CallableLifecycleKernel.CallableReplaceSuccessorAlreadyAvailable ->
+          case successor of
+            Just replacement -> Left
+              (ReplaceCalleeSuccessorAlreadyAvailable
+                (callableOccurrenceKey replacement))
+            Nothing -> Left CallableLifecycleKernelBridgeMismatch
+        CallableLifecycleKernel.CallableReplaceInterfaceMismatch ->
+          case successor of
+            Just replacement -> Left
+              (ReplaceCalleeInterfaceMismatch
+                expectedInterface
+                (callableContractInterfaceRevision
+                  (callableOccurrenceContract replacement)))
+            Nothing -> Left CallableLifecycleKernelBridgeMismatch
+        CallableLifecycleKernel.CallableReplaceStateMismatch ->
+          case successor of
+            Just replacement -> Left
+              (ReplaceCalleeStateMismatch
+                expectedState
+                (callableOccurrenceStateKey replacement))
+            Nothing -> Left CallableLifecycleKernelBridgeMismatch
+        CallableLifecycleKernel.CallableReplaceAccepted ->
+          case successor of
+            Just replacement ->
+              let successorKey = callableOccurrenceKey replacement
+              in Right (CallableResourceState
+                (Map.insert
+                  successorKey
+                  replacement
+                  (Map.delete predecessorKey occurrences)))
+            Nothing -> Left CallableLifecycleKernelBridgeMismatch
 
 toCallableModeKernelMode :: Mode -> CallableModeKernel.Mode
 toCallableModeKernelMode mode = case mode of
