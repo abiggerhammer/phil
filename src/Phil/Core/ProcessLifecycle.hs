@@ -16,7 +16,6 @@ import qualified Data.Set as Set
 import Data.Text (Text)
 import Phil.Core.Context
   ( CheckError
-  , ResourceContext
   , ensureComplete
   , useBinding
   )
@@ -219,10 +218,10 @@ disposeExplicitly processKey names context = go Set.empty context names
         continue resources =
           go
             (Set.insert name seen)
-            current
+            (current
               { protocolResources = resources
               , protocolEndpoints = Map.delete name (protocolEndpoints current)
-              }
+              })
             rest
 
 mapLeft :: (a -> b) -> Either a c -> Either b c
