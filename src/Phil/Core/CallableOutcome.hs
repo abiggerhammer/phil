@@ -14,10 +14,8 @@ module Phil.Core.CallableOutcome
 import qualified Data.Map.Strict as Map
 import qualified Data.Set as Set
 import Data.Text (Text)
-import Phil.Core.Callable
-  ( CalleeTransition
-  , CallableFailure
-  )
+import Phil.Core.Callable (CalleeTransition)
+import Phil.Core.CallableRefinement (CallableFailure)
 
 -- | Exact caller-visible outcome class. Success is explicit here so the complete
 -- callable branch domain is checked rather than treating non-success cases as an
