@@ -56,8 +56,8 @@ Theorem authority_exercise_decision_accept_iff_certified :
 Proof.
   intros requirement source capability.
   destruct source;
-    cbn [authorityExerciseDecision, sourceIsPossessed,
-         decideAuthorityExerciseFacts, authorityExerciseAllowed,
+    cbn [authorityExerciseDecision sourceIsPossessed
+         decideAuthorityExerciseFacts authorityExerciseAllowed
          capabilityMatchesRequirement].
   - destruct (Nat.eqb (capabilityContract capability)
               (requiredContract requirement));
