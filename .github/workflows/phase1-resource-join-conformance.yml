@@ -48,3 +48,6 @@ jobs:
 
       - name: RES-012 checked binding mode conformance
         run: cabal exec -- runghc -Wall -Werror -isrc test/Phase1CheckedBindingModeMain.hs
+
+      - name: RES-013 join and loop logical invariant conformance
+        run: cabal exec -- runghc -Wall -Werror -isrc test/Phase1JoinLoopInvariantMain.hs
