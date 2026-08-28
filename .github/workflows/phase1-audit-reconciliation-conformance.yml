@@ -25,5 +25,7 @@ jobs:
         run: cabal exec -- runghc -Wall -Werror -isrc test/Phase1GenericRequirementCategoryMain.hs
       - name: CALL-017 explicit stricter closure mode
         run: cabal exec -- runghc -Wall -Werror -isrc test/Phase1ExplicitClosureModeMain.hs
+      - name: CALL-018 outcome classification and residual-obligation fidelity
+        run: cabal exec -- runghc -Wall -Werror -isrc test/Phase1CallableOutcomeFidelityMain.hs
       - name: DEP-002 RuntimeBound carrier coverage across process/domain transfer
         run: cabal exec -- runghc -Wall -Werror -isrc test/Phase1RuntimeCarrierCoverageMain.hs
