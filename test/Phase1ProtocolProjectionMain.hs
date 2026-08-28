@@ -189,30 +189,29 @@ serverRole = ProtocolRoleKey "server"
 auditorRole = ProtocolRoleKey "auditor"
 
 requestArgument32, requestArgument64, responseArgument16, variantArgumentA, variantArgumentB :: ProtocolMessageArgument
-requestArgument32 = ProtocolMessageArgument
-  { protocolMessageArgumentKey = requestParameter
-  , protocolMessageArgumentType = TyUInt 32
-  , protocolMessageArgumentSemantics = SemanticAtom "message.uint32"
-  }
-requestArgument64 = ProtocolMessageArgument
-  { protocolMessageArgumentKey = requestParameter
-  , protocolMessageArgumentType = TyUInt 64
-  , protocolMessageArgumentSemantics = SemanticAtom "message.uint64"
-  }
-responseArgument16 = ProtocolMessageArgument
-  { protocolMessageArgumentKey = responseParameter
-  , protocolMessageArgumentType = TyUInt 16
-  , protocolMessageArgumentSemantics = SemanticAtom "message.uint16"
-  }
-variantArgumentA = ProtocolMessageArgument
-  { protocolMessageArgumentKey = variantParameter
-  , protocolMessageArgumentType = TyUnit
-  , protocolMessageArgumentSemantics = SemanticAtom "variant.a"
-  }
-variantArgumentB = ProtocolMessageArgument
-  { protocolMessageArgumentKey = variantParameter
-  , protocolMessageArgumentType = TyUnit
-  , protocolMessageArgumentSemantics = SemanticAtom "variant.b"
+requestArgument32 = messageArgument requestParameter (TyUInt 32) (SemanticAtom "message.uint32")
+requestArgument64 = messageArgument requestParameter (TyUInt 64) (SemanticAtom "message.uint64")
+responseArgument16 = messageArgument responseParameter (TyUInt 16) (SemanticAtom "message.uint16")
+variantArgumentA = messageArgument variantParameter TyUnit (SemanticAtom "variant.a")
+variantArgumentB = messageArgument variantParameter TyUnit (SemanticAtom "variant.b")
+
+messageArgument
+  :: GenericStaticParameterKey
+  -> Ty
+  -> SemanticForm
+  -> ProtocolMessageArgument
+messageArgument key ty semantics = ProtocolMessageArgument
+  { protocolMessageArgumentKey = key
+  , protocolMessageArgumentType = ty
+  , protocolMessageArgumentSemantics = semantics
+  , protocolMessageArgumentBoundaryContract = BoundaryMessageContract
+      { boundaryMessageContractRevision =
+          "boundary.message.intrinsic-scalar.v1"
+      , boundaryMessageContractType = ty
+      , boundaryMessageContractSemantics = semantics
+      , boundaryMessageContractShape =
+          BoundaryMessageAdmittedLeaf "intrinsic-static-message"
+      }
   }
 
 argumentsA, argumentsB :: [ProtocolMessageArgument]
