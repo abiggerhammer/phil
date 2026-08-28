@@ -179,7 +179,10 @@ Theorem definition_body_difference_revises_construction_plan :
 Proof.
   intros Interface Body interfaceRevision oldBody newBody Hneq Heq.
   apply Hneq.
-  exact (f_equal definitionRevisionPlanBody Heq).
+  exact (f_equal
+    (fun plan : DefinitionRevisionPlan Interface Body =>
+      definitionRevisionPlanBody plan)
+    Heq).
 Qed.
 
 Theorem scoped_parent_difference_revises_construction_plan :
@@ -192,7 +195,10 @@ Theorem scoped_parent_difference_revises_construction_plan :
 Proof.
   intros Parent Slot oldParent newParent slot Hneq Heq.
   apply Hneq.
-  exact (f_equal scopedInstanceKeyPlanParent Heq).
+  exact (f_equal
+    (fun plan : ScopedInstanceKeyPlan Parent Slot =>
+      scopedInstanceKeyPlanParent plan)
+    Heq).
 Qed.
 
 Theorem scoped_slot_difference_revises_construction_plan :
@@ -205,7 +211,10 @@ Theorem scoped_slot_difference_revises_construction_plan :
 Proof.
   intros Parent Slot parent oldSlot newSlot Hneq Heq.
   apply Hneq.
-  exact (f_equal scopedInstanceKeyPlanSlot Heq).
+  exact (f_equal
+    (fun plan : ScopedInstanceKeyPlan Parent Slot =>
+      scopedInstanceKeyPlanSlot plan)
+    Heq).
 Qed.
 
 Theorem instance_binding_difference_revises_construction_plan :
@@ -226,7 +235,11 @@ Proof.
     instanceKey parent declarationKeyValue interfaceRevision definitionRevision
     oldBindings newBindings Hneq Heq.
   apply Hneq.
-  exact (f_equal instanceRevisionPlanBindings Heq).
+  exact (f_equal
+    (fun plan : InstanceRevisionPlan
+        Key Parent DeclarationKeyValue Interface DefinitionValue Bindings =>
+      instanceRevisionPlanBindings plan)
+    Heq).
 Qed.
 
 Theorem instance_interface_difference_revises_construction_plan :
@@ -247,5 +260,9 @@ Proof.
     instanceKey parent declarationKeyValue oldInterface newInterface
     definitionRevision bindings Hneq Heq.
   apply Hneq.
-  exact (f_equal instanceRevisionPlanInterface Heq).
+  exact (f_equal
+    (fun plan : InstanceRevisionPlan
+        Key Parent DeclarationKeyValue Interface DefinitionValue Bindings =>
+      instanceRevisionPlanInterface plan)
+    Heq).
 Qed.
