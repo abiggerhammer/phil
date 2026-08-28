@@ -27,3 +27,5 @@ jobs:
         run: cabal exec -- runghc -Wall -Werror -isrc test/Phase1ProcessActivationOwnershipMain.hs
       - name: CONC-004 exact synchronous process rendezvous
         run: cabal exec -- runghc -Wall -Werror -isrc test/Phase1ExactProcessRendezvousMain.hs
+      - name: CONC-005 exact restricted message ownership transfer
+        run: cabal exec -- runghc -Wall -Werror -isrc test/Phase1RestrictedMessageTransferMain.hs
