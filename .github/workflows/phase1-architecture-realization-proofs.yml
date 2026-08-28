@@ -1,0 +1,98 @@
+name: Phase 1 Architecture Realization Proofs
+
+on:
+  pull_request:
+    paths:
+      - 'proof/Phil/Core/ArchitectureIdentity.v'
+      - 'proof/Phil/Core/ArchitectureInstantiation.v'
+      - 'proof/Phil/Core/ProviderReplacementQualification.v'
+      - 'proof/Phil/Core/ArchitectureRealization.v'
+      - 'src/Phil/Core/Static.hs'
+      - 'src/Phil/Core/ProviderReplacementQualification.hs'
+      - 'test/Phase1ArchitectureProviderReplacementMain.hs'
+      - 'docs/phase-1/architecture-provider-replacement-v1.md'
+      - 'docs/phase-1/architecture-realization-proof-v1.md'
+      - '.github/workflows/phase1-architecture-realization-proofs.yml'
+  push:
+    branches: [main]
+    paths:
+      - 'proof/Phil/Core/ArchitectureIdentity.v'
+      - 'proof/Phil/Core/ArchitectureInstantiation.v'
+      - 'proof/Phil/Core/ProviderReplacementQualification.v'
+      - 'proof/Phil/Core/ArchitectureRealization.v'
+      - 'src/Phil/Core/Static.hs'
+      - 'src/Phil/Core/ProviderReplacementQualification.hs'
+      - 'test/Phase1ArchitectureProviderReplacementMain.hs'
+      - 'docs/phase-1/architecture-provider-replacement-v1.md'
+      - 'docs/phase-1/architecture-realization-proof-v1.md'
+      - '.github/workflows/phase1-architecture-realization-proofs.yml'
+
+permissions:
+  contents: read
+
+jobs:
+  rocq-architecture-realization-proof:
+    runs-on: ubuntu-latest
+    container:
+      image: rocq/rocq-prover:9.2.0
+      options: --user root
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Compile PHIL-ARCH-REALIZE-001 proof chain
+        shell: bash
+        run: |
+          set -euo pipefail
+          export PATH="/home/rocq/.opam/${COMPILER}/bin:$PATH"
+          rocq c -Q proof/Phil Phil proof/Phil/Core/ArchitectureIdentity.v
+          rocq c -Q proof/Phil Phil proof/Phil/Core/ArchitectureInstantiation.v
+          rocq c -Q proof/Phil Phil proof/Phil/Core/ProviderReplacementQualification.v
+          rocq c -Q proof/Phil Phil proof/Phil/Core/ArchitectureRealization.v
+
+      - name: Record proof identities
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p architecture-realization-proof
+          cp \
+            proof/Phil/Core/ArchitectureRealization.v \
+            proof/Phil/Core/ArchitectureRealization.vo \
+            architecture-realization-proof/
+          sha256sum \
+            proof/Phil/Core/ArchitectureRealization.v \
+            proof/Phil/Core/ArchitectureRealization.vo \
+            > architecture-realization-proof/PHIL-ARCH-REALIZE-001.proof.sha256
+          {
+            printf '%s\n' 'obligation=PHIL-ARCH-REALIZE-001'
+            printf '%s\n' 'evidence=Rocq-9.2.0'
+            cat architecture-realization-proof/PHIL-ARCH-REALIZE-001.proof.sha256
+          } > architecture-realization-proof/PHIL-ARCH-REALIZE-001.proof-certificate.txt
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: rocq-architecture-realization-proof
+          path: architecture-realization-proof
+          if-no-files-found: error
+
+  verify-architecture-realization-correspondence:
+    needs: rocq-architecture-realization-proof
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: haskell-actions/setup@v2
+        with:
+          ghc-version: '9.6.7'
+          cabal-version: 'latest'
+
+      - name: Typecheck architecture realization implementation path
+        run: |
+          set -euo pipefail
+          cabal build exe:phil-certify-core-scalar --ghc-options=-Werror
+          cabal exec -- ghc -isrc -Wall -Werror -fno-code \
+            test/Phase1ArchitectureProviderReplacementMain.hs
+
+      - name: Re-run unchanged ARCH-010 corpus
+        run: |
+          set -euo pipefail
+          cabal exec -- runghc -isrc test/Phase1ArchitectureProviderReplacementMain.hs
