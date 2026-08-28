@@ -37,8 +37,8 @@ data AuthorityExerciseDecision =
  | AuthorityExerciseOperationRejected
  | AuthorityExerciseAccepted
 
-decideAuthorityExerciseFacts :: Prelude.Bool -> Prelude.Bool -> Prelude.Bool ->
-                                Prelude.Bool -> AuthorityExerciseDecision
+decideAuthorityExerciseFacts :: Prelude.Bool -> Prelude.Bool -> Prelude.Bool
+                                -> Prelude.Bool -> AuthorityExerciseDecision
 decideAuthorityExerciseFacts sourcePossessed contractMatches subjectMatches operationPermitted =
   case sourcePossessed of {
    Prelude.True ->
