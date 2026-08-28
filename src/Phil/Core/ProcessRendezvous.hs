@@ -9,6 +9,7 @@ module Phil.Core.ProcessRendezvous
   ) where
 
 import qualified Data.Map.Strict as Map
+import Data.Text (Text)
 import Phil.Core.Process
   ( ActivationStatus (..)
   , ProcessKey
@@ -17,7 +18,6 @@ import Phil.Core.Process
   )
 import Phil.Core.Protocol
   ( CheckedProtocolStep (..)
-  , MessageSpec (..)
   , ProtocolActionRequest (..)
   , ProtocolCheckError
   , ProtocolContext
@@ -34,10 +34,11 @@ import Phil.Core.Protocol.Family
   , projectProtocolRole
   )
 import Phil.Core.Session
-  ( SessionStep (..)
+  ( MessageSpec (..)
+  , SessionStep (..)
   , dualSession
   )
-import Phil.Core.Syntax (Name, Ty)
+import Phil.Core.Syntax (Name, Session, Ty)
 
 data ProcessRendezvousSide = ProcessRendezvousSide
   { rendezvousProcess :: ProcessKey
@@ -55,7 +56,7 @@ data ProcessRendezvousRequest
   | SelectOfferRendezvous
       ProcessRendezvousSide
       ProcessRendezvousSide
-      String
+      Text
   deriving (Eq, Show)
 
 data ProcessCommunicationAttempt
@@ -74,7 +75,7 @@ data ProcessRendezvousError
       ProcessKey ProtocolInstanceRevision ProtocolInstanceRevision
   | RendezvousProtocolRoleMismatch
       ProcessKey ProtocolRoleKey ProtocolRoleKey
-  | RendezvousProjectionSessionMismatch ProcessKey Ty Ty
+  | RendezvousProjectionSessionMismatch ProcessKey Session Session
   | RendezvousSameRole ProtocolRoleKey
   | RendezvousNonDualSessions ProcessKey ProcessKey
   | RendezvousMessageTypeMismatch Ty Ty
@@ -161,18 +162,11 @@ validateSide instanceValue side context = do
     (protocolEndpointRole binding)
   projection <- mapLeft RendezvousProjectionError $
     projectProtocolRole instanceValue (rendezvousRole side)
-  let expectedTy = PhilEndpointTy (protocolProjectionSession projection)
-      actualTy = PhilEndpointTy (protocolEndpointSession binding)
   requireEqual
     (RendezvousProjectionSessionMismatch processKey)
-    expectedTy
-    actualTy
+    (protocolProjectionSession projection)
+    (protocolEndpointSession binding)
   pure binding
-
--- A local wrapper keeps the diagnostic constructor type concrete without
--- introducing another public endpoint representation.
-newtype PhilEndpointTy = PhilEndpointTy { unPhilEndpointTy :: Phil.Core.Syntax.Session }
-  deriving (Eq, Show)
 
 requireActive :: ProcessNetwork -> ProcessKey -> Either ProcessRendezvousError ()
 requireActive network processKey =
@@ -216,13 +210,13 @@ protocolRequests request =
           (rendezvousSuccessor selector)
           (rendezvousInstance selector)
           (rendezvousRole selector)
-          (fromString label)
+          label
       , ProtocolOfferRequest
           (rendezvousEndpoint offerer)
           (rendezvousSuccessor offerer)
           (rendezvousInstance offerer)
           (rendezvousRole offerer)
-          (fromString label)
+          label
       )
 
 checkJointMessage
@@ -232,10 +226,11 @@ checkJointMessage
   -> Either ProcessRendezvousError ()
 checkJointMessage leftStep rightStep request =
   case request of
-    SelectOfferRendezvous {} -> Right ()
-    SendReceiveRendezvous {} ->
-      case (stepMessage (checkedProtocolSessionStep leftStep),
-            stepMessage (checkedProtocolSessionStep rightStep)) of
+    SelectOfferRendezvous _ _ _ -> Right ()
+    SendReceiveRendezvous _ _ ->
+      case ( stepMessage (checkedProtocolSessionStep leftStep)
+           , stepMessage (checkedProtocolSessionStep rightStep)
+           ) of
         (Just leftMessage, Just rightMessage) ->
           requireEqual RendezvousMessageTypeMismatch
             (messageType leftMessage)
@@ -251,9 +246,6 @@ requestRight :: ProcessRendezvousRequest -> ProcessRendezvousSide
 requestRight request = case request of
   SendReceiveRendezvous _ right -> right
   SelectOfferRendezvous _ right _ -> right
-
-fromString :: String -> Data.Text.Text
-fromString = Data.Text.pack
 
 requireEqual :: Eq a => (a -> a -> e) -> a -> a -> Either e ()
 requireEqual constructor expected actual
