@@ -164,6 +164,7 @@ data ProcessNetwork = ProcessNetwork
 
 data ProcessNetworkError
   = DuplicateProcessSiteKey ProcessSiteKey
+  | DuplicateProcessTarget InstanceKey ProcessSiteKey ProcessSiteKey
   | UnknownProcessTarget ProcessSiteKey InstanceKey
   | DuplicateProcessKey ProcessKey
   | ProcessAlreadyActivated ProcessKey
@@ -211,16 +212,21 @@ elaborateProcessNetwork graph sites = do
 normalizeSites
   :: [ProcessDeclarationSite]
   -> Either ProcessNetworkError (Map.Map ProcessSiteKey InstanceKey)
-normalizeSites = go Set.empty Map.empty
+normalizeSites = go Set.empty Map.empty Map.empty
   where
-    go _ normalized [] = Right normalized
-    go seen normalized (site : rest)
-      | Set.member (processSiteKey site) seen =
-          Left (DuplicateProcessSiteKey (processSiteKey site))
+    go _ _ normalized [] = Right normalized
+    go seenSites seenTargets normalized (site : rest)
+      | Set.member siteKey seenSites = Left (DuplicateProcessSiteKey siteKey)
+      | Just previousSite <- Map.lookup targetKey seenTargets =
+          Left (DuplicateProcessTarget targetKey previousSite siteKey)
       | otherwise = go
-          (Set.insert (processSiteKey site) seen)
-          (Map.insert (processSiteKey site) (processTargetInstance site) normalized)
+          (Set.insert siteKey seenSites)
+          (Map.insert targetKey siteKey seenTargets)
+          (Map.insert siteKey targetKey normalized)
           rest
+      where
+        siteKey = processSiteKey site
+        targetKey = processTargetInstance site
 
 activateRootProcesses :: ProcessNetwork -> Either ProcessNetworkError ProcessNetwork
 activateRootProcesses network = do
