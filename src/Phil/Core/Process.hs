@@ -11,6 +11,7 @@ module Phil.Core.Process
   , failedFlow
   , sequenceFlow
   , joinBranches
+  , module Phil.Core.ProcessNetwork
   ) where
 
 import qualified Data.Set as Set
@@ -22,6 +23,7 @@ import Phil.Core.Context
   , ensureComplete
   , joinContinuing
   )
+import Phil.Core.ProcessNetwork
 import Phil.Core.Syntax (Control (..), Outcome, Ty)
 
 data FlowPath = FlowPath
