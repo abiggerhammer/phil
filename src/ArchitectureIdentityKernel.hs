@@ -120,3 +120,4 @@ decideArchitectureInstanceIdentityEquality facts =
   case architectureInstanceIdentityFactsb facts of {
    Prelude.True -> ArchitectureInstanceIdentityEqual;
    Prelude.False -> ArchitectureInstanceIdentityDifferent}
+
