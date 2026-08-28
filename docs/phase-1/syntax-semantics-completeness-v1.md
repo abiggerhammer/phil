@@ -46,9 +46,12 @@ The earlier reconciliation remains in force for refinement types, explicit trans
 
 ## ADR-024 concurrency extension
 
-ADR-024 subsequently added one bounded author-controlled semantic choice after the original reconciliation: **which already-created executable architecture occurrences are activated as members of the root static CSP process network**.
+ADR-024 subsequently added two bounded author-controlled semantic choices after the original reconciliation:
 
-Grammar v1 exposes that choice only as the architecture item:
+1. **which already-created executable architecture occurrences are activated as members of the root static CSP process network**; and
+2. **whether each protocol-role occurrence is internal to that Phil process population or is an external participant**.
+
+Grammar v1 exposes process activation as the architecture item:
 
 ```phil
 process worker_run = worker;
@@ -56,16 +59,27 @@ process worker_run = worker;
 
 The process site is generative process/activation identity; the right-hand side is a `qualified_name` referring to an already-created executable occurrence. It is deliberately not a `static_reference`, because process declaration does not instantiate or clone its target.
 
-Everything else needed to execute that choice is classified rather than surfaced:
+Protocol participation is explicit in the role target:
+
+```phil
+role p.client = worker;
+role p.server = external;
+```
+
+A qualified role target denotes an internal architecture occurrence. In an executable root, that target must resolve to an executable occurrence activated by exactly one `ProcessOccurrence`. The reserved literal `external` denotes only that the role lies outside the Phil process population. Missing or invalid internal ownership never falls back to externality.
+
+`external` is intentionally narrow. It does **not** name or choose a `BoundaryRepresentation`, transport, entry resource, capability/authority source, assumption/export, deployment object, or target realization. Those semantic dimensions remain independently explicit through their existing architecture, assurance, and realization relations. The audit specifically rejected an earlier candidate form that attached `external` to a boundary reference because it would have conflated participant classification with wire representation/transport competence.
+
+Everything else needed to execute those choices is classified rather than surfaced:
 
 - **canonical elaboration:** finite transitive process-population enumeration from the selected root, ProcessKey derivation from the process occurrence site, and the initial process-network bookkeeping implied by explicit architecture bindings;
-- **ordinary checked semantics:** process target validity, exactly-once activation, global restricted-ownership partition, exact role/process binding, synchronous rendezvous, message ownership transfer, local/communication partial-order causality, local terminal closure, and whole-program terminal closure;
+- **ordinary checked semantics:** process target validity, exactly-once activation, explicit internal/external participant classification, global restricted-ownership partition, exact role/process binding, synchronous rendezvous, message ownership transfer, local/communication partial-order causality, local terminal closure, external-boundary closure requirements where applicable, and whole-program terminal closure;
 - **assurance:** any claimed fairness, deadlock freedom, eventual response, deadline, or other liveness property;
 - **realization/internal state:** OS thread/task/PID/worker identities, scheduling, event loops, queueing/buffering, locks/atomics, IPC/device synchronization, placement, and target execution topology.
 
 There is therefore no Phase 1 term-level `spawn`, `await`, future, race combinator, scheduler directive, lock, or mailbox syntax. Those would represent additional semantic choices, not alternate spellings for ADR-024's static process network.
 
-The process production has a positive and malformed-syntax fixture in the production corpus. The semantic obligations are tracked separately as CONC-001–009 and by the Phase 1 concurrency logic-ledger family; parseability does not claim concurrency checking or realization preservation.
+The process production and the external-participant role target each have positive and malformed-syntax fixtures in the production corpus. The semantic obligations are tracked separately as CONC-001–010 and by the Phase 1 concurrency logic-ledger family; parseability does not claim process-network checking or realization preservation.
 
 ## Source-expressible semantic categories after reconciliation
 
@@ -76,10 +90,10 @@ Grammar v1 now provides a route for the Phase 1 source-level categories exercise
 - **types/data:** intrinsic and named types, refinements, products, record/sum construction and matching, declaration-level mode strengthening, evidence and dependent indices;
 - **callables/resources:** preconditions, consume/borrow/authority/effect contracts, classified outcomes, branch residues, postconditions, residual obligations, assumptions, costs, and callee preserve/consume/replace transitions;
 - **authority:** explicit capability contracts and possession modes, architecture origin/grant flow, callable authority requirements, and ordinary value-flow attenuation through checked constructors/callables;
-- **protocols:** reusable families, exact static applications, role-local sessions, guarded send/receive/select/offer, recursion/continue, term-level communication actions, and exact specialized boundary/framing references;
+- **protocols:** reusable families, exact static applications, role-local sessions, guarded send/receive/select/offer, recursion/continue, term-level communication actions, exact specialized boundary/framing references, and explicit architecture-role participation as internal or `external`;
 - **control/resource state:** conditionals/matches, explicit post-join state and invariant, loops with typed state/invariant, continue/break, scoped borrow, typed-negative reject, and fatal failure;
 - **boundary semantics:** boundary declarations, receive/send implementation roles, correspondence, canonicality, failures, laws, recognition/validation/encoding terms, and static specialized contract references;
-- **architecture/concurrency:** occurrence creation versus references, explicit static process activation sites, protocol/role/binding edges, authority origins/grants, boundary bindings, entries, assumptions, exported obligations, observables, and constraints.
+- **architecture/concurrency:** occurrence creation versus references, explicit static process activation sites, explicit internal/external role classification, protocol/binding edges, authority origins/grants, boundary bindings, entries, assumptions, exported obligations, observables, and constraints.
 
 This is an expressibility statement, not a claim that the current Haskell parser or checker has implemented every production.
 
@@ -112,4 +126,4 @@ The target property is not constructor-for-constructor syntax coverage. It is **
 
 ## Parser corpus
 
-`test/fixtures/phase1-surface/manifest.json` binds the repaired and extended productions to positive whole-file examples and syntax-negative counterexamples. Positive fixtures assert only parseability; semantic acceptance remains deferred. The corpus covers the earlier local reconciliation defects, the broader semantic-completeness repairs, and ADR-024's static process activation form.
+`test/fixtures/phase1-surface/manifest.json` binds the repaired and extended productions to positive whole-file examples and syntax-negative counterexamples. Positive fixtures assert only parseability; semantic acceptance remains deferred. The corpus covers the earlier local reconciliation defects, the broader semantic-completeness repairs, ADR-024's static process activation form, and explicit `external` participant classification.

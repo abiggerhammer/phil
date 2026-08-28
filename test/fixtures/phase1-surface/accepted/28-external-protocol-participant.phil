@@ -1,0 +1,18 @@
+protocol Ping {
+    role Client = send (x : U8) then end Done;
+    role Server = receive (x : U8) then end Done;
+}
+
+component ClientWorker provides Unit {
+    return unit
+}
+
+architecture ExternalPeer {
+    instance client = ClientWorker;
+    process client_run = client;
+    protocol ping = Ping;
+    role ping.Client = client;
+    role ping.Server = external;
+}
+
+program main = instantiate ExternalPeer;

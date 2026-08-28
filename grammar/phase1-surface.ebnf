@@ -88,6 +88,11 @@
 # - process declarations are architecture items that create stable process
 #   occurrence/activation identity for an already-created executable occurrence;
 # - the right-hand side is a qualified occurrence reference, not instantiation;
+# - architecture role bindings explicitly classify participation: a qualified
+#   occurrence target is internal, while the literal "external" marks the role
+#   as outside the Phil process population; absence never implies externality;
+# - "external" does not choose a boundary representation, transport, authority,
+#   entry resource, assumption, or realization mechanism;
 # - process declarations introduce no term-level spawn/await/task semantics;
 # - activation, ownership partition, synchronous rendezvous, terminal closure,
 #   and execution-realization correspondence are semantic checks under ADR-024.
@@ -385,7 +390,7 @@ architecture_item =
   | "ref", identifier, "=", qualified_name, ";"
   | "process", identifier, "=", qualified_name, ";"
   | "protocol", identifier, "=", static_reference, ";"
-  | "role", qualified_name, "=", qualified_name, ";"
+  | "role", qualified_name, "=", role_target, ";"
   | "bind", qualified_name, "=", qualified_name, ";"
   | "authority", identifier, ":", type_expression,
       "originates", "at", qualified_name, ";"
@@ -397,6 +402,8 @@ architecture_item =
   | "observable", qualified_name, ";"
   | "constraint", proposition, ";"
   ;
+
+role_target = qualified_name | "external" ;
 
 static_reference = qualified_name, [ static_arguments ] ;
 
