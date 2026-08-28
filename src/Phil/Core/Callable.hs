@@ -25,6 +25,7 @@ module Phil.Core.Callable
   , invokeCallableOccurrence
   ) where
 
+import qualified CallableEffectKernel as CallableEffectKernel
 import qualified CallableModeKernel as CallableModeKernel
 import qualified Data.Map.Strict as Map
 import qualified Data.Set as Set
@@ -148,6 +149,7 @@ data CallableCheckError
   = RestrictedCaptureMustMove CaptureOccurrenceKey Mode
   | DuplicateRestrictedCapture CaptureOccurrenceKey Mode
   | CallableModeKernelBridgeMismatch
+  | CallableEffectKernelBridgeMismatch
   | CallableEffectBoundExceeded
       InterfaceRevision
       (Set.Set SemanticEffect)
@@ -228,39 +230,73 @@ closureStructuralMode captures =
       (toCallableModeKernelModeList
         (map closureCaptureStructuralMode captures)))
 
--- | Infer effects from reachable checked callable uses. Merely possessing,
--- passing, storing, or returning a callable does not import its invocation
--- effects; an actual reachable invocation contributes the exact public bound.
+-- | Infer effects from reachable checked callable uses. The extracted CALL-EFFECT
+-- kernel owns the use-kind decision; native Set union remains the concrete finite
+-- effect-set representation.
 inferReachableCallableEffects :: [CallableUse] -> Set.Set SemanticEffect
 inferReachableCallableEffects = foldl addUse Set.empty
   where
-    addUse effects use = case use of
-      InvokeCallable contract -> Set.union effects (callableContractEffectBound contract)
-      PossessCallable _ -> effects
-      PassCallable _ -> effects
-      StoreCallable _ -> effects
-      ReturnCallable _ -> effects
+    addUse effects use =
+      let (kind, publicBound) = callableUseEffectKernelFacts use
+      in if CallableEffectKernel.callableUseEffectKindContributesPublicBound kind
+          then Set.union effects publicBound
+          else effects
 
 -- | Check one implementation's inferred reachable semantic effects against the
--- stabilized public may-effect bound. A narrower implementation is valid and the
--- wider public bound is retained. Any undeclared wider effect rejects rather than
--- silently revising the public interface.
+-- stabilized public may-effect bound. Native Set subset/difference supply finite
+-- representation facts, while the extracted kernel owns accept/reject and every
+-- undeclared-effect classification used in the widening diagnostic.
 checkCallableEffectBound
   :: CallableContract
   -> Set.Set SemanticEffect
   -> Either CallableCheckError CheckedCallableEffects
-checkCallableEffectBound contract inferred
-  | inferred `Set.isSubsetOf` publicBound = Right CheckedCallableEffects
+checkCallableEffectBound contract inferred =
+  case CallableEffectKernel.decideCallableEffectBound subsetFact of
+    CallableEffectKernel.CallableEffectBoundAccepted -> Right CheckedCallableEffects
       { checkedCallableInterfaceRevision = callableContractInterfaceRevision contract
       , checkedCallableInferredEffects = inferred
       , checkedCallablePublicEffectBound = publicBound
       }
-  | otherwise = Left (CallableEffectBoundExceeded
-      (callableContractInterfaceRevision contract)
-      (Set.difference inferred publicBound)
-      publicBound)
+    CallableEffectKernel.CallableEffectBoundExceeded ->
+      let extra = Set.difference inferred publicBound
+      in if callableEffectDeltaAgrees inferred publicBound extra
+          then Left (CallableEffectBoundExceeded
+            (callableContractInterfaceRevision contract)
+            extra
+            publicBound)
+          else Left CallableEffectKernelBridgeMismatch
   where
     publicBound = callableContractEffectBound contract
+    subsetFact = inferred `Set.isSubsetOf` publicBound
+
+callableUseEffectKernelFacts
+  :: CallableUse
+  -> (CallableEffectKernel.CallableUseEffectKind, Set.Set SemanticEffect)
+callableUseEffectKernelFacts use = case use of
+  PossessCallable contract ->
+    (CallableEffectKernel.PossessEffectUse, callableContractEffectBound contract)
+  PassCallable contract ->
+    (CallableEffectKernel.PassEffectUse, callableContractEffectBound contract)
+  StoreCallable contract ->
+    (CallableEffectKernel.StoreEffectUse, callableContractEffectBound contract)
+  ReturnCallable contract ->
+    (CallableEffectKernel.ReturnEffectUse, callableContractEffectBound contract)
+  InvokeCallable contract ->
+    (CallableEffectKernel.InvokeEffectUse, callableContractEffectBound contract)
+
+callableEffectDeltaAgrees
+  :: Set.Set SemanticEffect
+  -> Set.Set SemanticEffect
+  -> Set.Set SemanticEffect
+  -> Bool
+callableEffectDeltaAgrees inferred publicBound extra =
+  all effectAgrees (Set.toAscList (Set.union inferred publicBound))
+  where
+    effectAgrees effect =
+      Set.member effect extra
+        == CallableEffectKernel.effectDeltaBit
+          (Set.member effect inferred)
+          (Set.member effect publicBound)
 
 singletonCallableResourceState :: CallableOccurrence -> CallableResourceState
 singletonCallableResourceState occurrence = CallableResourceState
