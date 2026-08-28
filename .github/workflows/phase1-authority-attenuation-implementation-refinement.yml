@@ -1,0 +1,113 @@
+name: Phase 1 Authority Attenuation Implementation Refinement
+
+on:
+  pull_request:
+    paths:
+      - 'proof/Phil/Core/GenericStructural.v'
+      - 'proof/Phil/Core/AuthorityPossession.v'
+      - 'proof/Phil/Core/AuthorityAttenuation.v'
+      - 'proof/Phil/Core/AuthorityAttenuationImplementation.v'
+      - 'proof/Phil/Core/AuthorityAttenuationImplementationExtraction.v'
+      - 'docs/phase-1/authority-attenuation-implementation-refinement-v1.md'
+      - 'src/Phil/Core/Authority.hs'
+      - 'src/Phil/Core/AuthorityAttenuation.hs'
+      - 'test/Phase1AuthorityPossessionMain.hs'
+      - 'test/Phase1AuthorityAttenuationMain.hs'
+      - '.github/workflows/phase1-authority-attenuation-implementation-refinement.yml'
+  push:
+    branches: [main]
+    paths:
+      - 'proof/Phil/Core/GenericStructural.v'
+      - 'proof/Phil/Core/AuthorityPossession.v'
+      - 'proof/Phil/Core/AuthorityAttenuation.v'
+      - 'proof/Phil/Core/AuthorityAttenuationImplementation.v'
+      - 'proof/Phil/Core/AuthorityAttenuationImplementationExtraction.v'
+      - 'docs/phase-1/authority-attenuation-implementation-refinement-v1.md'
+      - 'src/Phil/Core/Authority.hs'
+      - 'src/Phil/Core/AuthorityAttenuation.hs'
+      - 'test/Phase1AuthorityPossessionMain.hs'
+      - 'test/Phase1AuthorityAttenuationMain.hs'
+      - '.github/workflows/phase1-authority-attenuation-implementation-refinement.yml'
+
+permissions:
+  contents: read
+
+jobs:
+  rocq-authority-attenuation-implementation-refinement:
+    runs-on: ubuntu-latest
+    container:
+      image: rocq/rocq-prover:9.2.0
+      options: --user root
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Compile certified authority attenuation and executable correspondence
+        shell: bash
+        run: |
+          set -euo pipefail
+          export PATH="/home/rocq/.opam/${COMPILER}/bin:$PATH"
+          rocq c -Q proof/Phil Phil proof/Phil/Core/GenericStructural.v
+          rocq c -Q proof/Phil Phil proof/Phil/Core/AuthorityPossession.v
+          rocq c -Q proof/Phil Phil proof/Phil/Core/AuthorityAttenuation.v
+          rocq c -Q proof/Phil Phil proof/Phil/Core/AuthorityAttenuationImplementation.v
+
+      - name: Extract authority attenuation kernel
+        shell: bash
+        run: |
+          set -euo pipefail
+          export PATH="/home/rocq/.opam/${COMPILER}/bin:$PATH"
+          rm -f AuthorityAttenuationKernel.hs
+          rocq c -Q proof/Phil Phil proof/Phil/Core/AuthorityAttenuationImplementationExtraction.v
+          test -s AuthorityAttenuationKernel.hs
+          grep -q 'decideExplicitAuthorityAttenuation' AuthorityAttenuationKernel.hs
+          grep -q 'decideAuthorityBoundary' AuthorityAttenuationKernel.hs
+          grep -q 'decideAuthorityJoin' AuthorityAttenuationKernel.hs
+          sha256sum AuthorityAttenuationKernel.hs
+          mkdir -p authority-attenuation-implementation-refinement-proof
+          cp \
+            proof/Phil/Core/AuthorityAttenuation.v \
+            proof/Phil/Core/AuthorityAttenuationImplementation.v \
+            proof/Phil/Core/AuthorityAttenuationImplementation.vo \
+            AuthorityAttenuationKernel.hs \
+            authority-attenuation-implementation-refinement-proof/
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: rocq-authority-attenuation-implementation-refinement
+          path: authority-attenuation-implementation-refinement-proof
+          if-no-files-found: error
+
+  verify-authority-attenuation-implementation-correspondence:
+    needs: rocq-authority-attenuation-implementation-refinement
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/download-artifact@v4
+        with:
+          name: rocq-authority-attenuation-implementation-refinement
+          path: extracted-authority-attenuation
+
+      - uses: haskell-actions/setup@v2
+        with:
+          ghc-version: '9.6.7'
+          cabal-version: 'latest'
+
+      - name: Typecheck extracted kernel and unchanged authority attenuation path
+        run: |
+          set -euo pipefail
+          ghc -Wall -Werror -Wno-unused-imports -fno-code extracted-authority-attenuation/AuthorityAttenuationKernel.hs
+          cabal build exe:phil-certify-core-scalar --ghc-options=-Werror
+          cabal exec -- ghc -isrc -Wall -Werror -fno-code src/Phil/Core/Authority.hs
+          cabal exec -- ghc -isrc -Wall -Werror -fno-code src/Phil/Core/AuthorityAttenuation.hs
+          cabal exec -- ghc -isrc -Wall -Werror -fno-code test/Phase1AuthorityAttenuationMain.hs
+
+      - name: Re-run unchanged authority possession dependency corpus
+        run: |
+          set -euo pipefail
+          cabal exec -- runghc -isrc test/Phase1AuthorityPossessionMain.hs
+
+      - name: Re-run unchanged AUTH-003 attenuation corpus
+        run: |
+          set -euo pipefail
+          cabal exec -- runghc -isrc test/Phase1AuthorityAttenuationMain.hs
