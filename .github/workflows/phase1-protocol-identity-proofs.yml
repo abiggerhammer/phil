@@ -44,6 +44,7 @@ jobs:
         run: |
           set -euo pipefail
           export PATH="/home/rocq/.opam/${COMPILER}/bin:$PATH"
+          rocq c -Q proof/Phil Phil proof/Phil/Core/Syntax.v
           rocq c -Q proof/Phil Phil proof/Phil/Core/ProtocolIdentity.v
 
       - name: Record proof identities
