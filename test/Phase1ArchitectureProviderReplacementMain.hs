@@ -17,6 +17,9 @@ main = do
     , test "ARCH-010 provider replacement preserves ArchitectureInstance" instancePreserved
     , test "ARCH-010 provider replacement changes ArchitectureRealization" realizationChanges
     , test "ARCH-010 derived replacement pair is accepted" replacementAccepts
+    , test "ARCH-010 shared assumption reuse requires exact scope" assumptionReuseAccepts
+    , test "ARCH-010 shared assumption without reuse scope rejects" assumptionReuseWithoutScopeRejects
+    , test "ARCH-010 assumption reuse scope binds both exact claims" assumptionReuseWrongClaimRejects
     , test "ARCH-010 checker reports exact derived instance and realization revisions" exactDerivedRevisions
     , test "ARCH-010 replacement changes qualification/evidence/admission lineage" lineageChanges
     , test "ARCH-010 identical selected realization rebuild is deterministic" deterministicRebuild
@@ -65,6 +68,37 @@ replacementAccepts = do
   assert
     (checkedProviderReplacementReusedEvidence result == Set.singleton sharedProviderContractRef)
     "shared provider-contract validity dependency was not explicitly reused"
+
+assumptionReuseAccepts :: Either String ()
+assumptionReuseAccepts = do
+  result <- mapLeft show $ checkProviderReplacementQualification
+    priorAssumptionSide replacementAssumptionSide assumptionReusePlan
+  assert
+    (checkedProviderReplacementReusedEvidence result == Set.singleton sharedAssumptionRef)
+    "shared assumption was not preserved as exact explicitly scoped reused evidence"
+
+assumptionReuseWithoutScopeRejects :: Either String ()
+assumptionReuseWithoutScopeRejects =
+  case checkProviderReplacementQualification
+      priorAssumptionSide replacementAssumptionSide Map.empty of
+    Left (ProviderReplacementSharedEvidenceWithoutScope references) ->
+      assert (references == Set.singleton sharedAssumptionRef)
+        "unscoped assumption reuse rejection lost the exact shared assumption reference"
+    other -> Left ("shared assumption was reused without explicit validity scope: " <> show other)
+
+assumptionReuseWrongClaimRejects :: Either String ()
+assumptionReuseWrongClaimRejects =
+  let wrongReuse = sharedAssumptionReuse
+        { providerReplacementReuseNewClaimRevision = deriveQualificationClaimRevision priorClaim }
+      wrongPlan = Map.singleton sharedAssumptionRef wrongReuse
+  in case checkProviderReplacementQualification
+      priorAssumptionSide replacementAssumptionSide wrongPlan of
+    Left (ProviderReplacementReuseNewClaimMismatch expected actual) -> do
+      assert (expected == deriveQualificationClaimRevision replacementClaim)
+        "assumption reuse rejection named the wrong replacement claim revision"
+      assert (actual == deriveQualificationClaimRevision priorClaim)
+        "assumption reuse rejection lost the incorrectly reused predecessor claim revision"
+    other -> Left ("assumption reuse scope was not tied to the exact replacement claim: " <> show other)
 
 exactDerivedRevisions :: Either String ()
 exactDerivedRevisions = do
@@ -223,6 +257,20 @@ evidenceFor claim proof = ProviderQualificationEvidenceIdentityInput
   , qualificationEvidenceValidityDependencies = Set.singleton sharedProviderContractDependency
   }
 
+priorAssumptionEvidence, replacementAssumptionEvidence :: ProviderQualificationEvidenceIdentityInput
+priorAssumptionEvidence = assumptionEvidenceFor priorClaim "proof:blob-filesystem:assumption-case:v1"
+replacementAssumptionEvidence = assumptionEvidenceFor replacementClaim "proof:blob-object-store:assumption-case:v1"
+
+assumptionEvidenceFor
+  :: ProviderQualificationClaimIdentityInput
+  -> Text
+  -> ProviderQualificationEvidenceIdentityInput
+assumptionEvidenceFor claim proof =
+  (evidenceFor claim proof)
+    { qualificationEvidenceAssumptionRefs = Set.singleton sharedAssumption
+    , qualificationEvidenceValidityDependencies = Set.empty
+    }
+
 sharedProviderContractDependency :: Text
 sharedProviderContractDependency = "provider-contract:v1"
 
@@ -245,9 +293,37 @@ sharedReusePlan
   :: Map.Map ProviderReplacementEvidenceReference ProviderReplacementEvidenceReuse
 sharedReusePlan = Map.singleton sharedProviderContractRef sharedProviderContractReuse
 
+sharedAssumption :: Text
+sharedAssumption = "assumption:provider-backend-durability:v1"
+
+sharedAssumptionRef :: ProviderReplacementEvidenceReference
+sharedAssumptionRef = ProviderReplacementEvidenceReference
+  { providerReplacementEvidenceReferenceKind = AssumptionReference
+  , providerReplacementEvidenceReferenceValue = sharedAssumption
+  }
+
+sharedAssumptionReuse :: ProviderReplacementEvidenceReuse
+sharedAssumptionReuse = ProviderReplacementEvidenceReuse
+  { providerReplacementReuseReference = sharedAssumptionRef
+  , providerReplacementReusePriorClaimRevision = deriveQualificationClaimRevision priorClaim
+  , providerReplacementReuseNewClaimRevision = deriveQualificationClaimRevision replacementClaim
+  , providerReplacementReuseValidityScopeRevision =
+      "validity:durability-assumption-covers-both-qualified-implementations:v1"
+  }
+
+assumptionReusePlan
+  :: Map.Map ProviderReplacementEvidenceReference ProviderReplacementEvidenceReuse
+assumptionReusePlan = Map.singleton sharedAssumptionRef sharedAssumptionReuse
+
 priorAdmission, replacementAdmission :: ProviderQualificationAdmissionIdentityInput
 priorAdmission = admissionFor priorClaim priorEvidence "artifact:blob:i1"
 replacementAdmission = admissionFor replacementClaim replacementEvidence "artifact:blob:i2"
+
+priorAssumptionAdmission, replacementAssumptionAdmission :: ProviderQualificationAdmissionIdentityInput
+priorAssumptionAdmission = admissionFor
+  priorClaim priorAssumptionEvidence "artifact:blob:i1:assumption-case"
+replacementAssumptionAdmission = admissionFor
+  replacementClaim replacementAssumptionEvidence "artifact:blob:i2:assumption-case"
 
 admissionFor
   :: ProviderQualificationClaimIdentityInput
@@ -273,6 +349,12 @@ admissionFor claim evidence artifact = ProviderQualificationAdmissionIdentityInp
 priorRealization, replacementRealization :: ArchitectureRealizationIdentity
 priorRealization = realizationFor storeInstance implementationOne priorClaim priorEvidence priorAdmission
 replacementRealization = realizationFor storeInstance implementationTwo replacementClaim replacementEvidence replacementAdmission
+
+priorAssumptionRealization, replacementAssumptionRealization :: ArchitectureRealizationIdentity
+priorAssumptionRealization = realizationFor
+  storeInstance implementationOne priorClaim priorAssumptionEvidence priorAssumptionAdmission
+replacementAssumptionRealization = realizationFor
+  storeInstance implementationTwo replacementClaim replacementAssumptionEvidence replacementAssumptionAdmission
 
 realizationFor
   :: ArchitectureInstanceIdentity
@@ -303,6 +385,12 @@ realizationFor instanceIdentity implementation claim evidence admission =
 priorSide, replacementSide :: ProviderReplacementSide
 priorSide = sideFor storeInstance priorRealization priorClaim priorEvidence priorAdmission
 replacementSide = sideFor storeInstance replacementRealization replacementClaim replacementEvidence replacementAdmission
+
+priorAssumptionSide, replacementAssumptionSide :: ProviderReplacementSide
+priorAssumptionSide = sideFor
+  storeInstance priorAssumptionRealization priorClaim priorAssumptionEvidence priorAssumptionAdmission
+replacementAssumptionSide = sideFor
+  storeInstance replacementAssumptionRealization replacementClaim replacementAssumptionEvidence replacementAssumptionAdmission
 
 sideFor
   :: ArchitectureInstanceIdentity
