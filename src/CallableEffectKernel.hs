@@ -41,3 +41,4 @@ decideCallableEffectBound subsetFact =
 effectDeltaBit :: Prelude.Bool -> Prelude.Bool -> Prelude.Bool
 effectDeltaBit inferredPresent publicPresent =
   andb inferredPresent (negb publicPresent)
+
