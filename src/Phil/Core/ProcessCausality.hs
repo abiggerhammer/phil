@@ -86,10 +86,12 @@ buildProcessPartialOrder eventEntries sequenceEntries architectureEdges = do
   events <- normalizeEvents eventEntries
   sequences <- normalizeSequences sequenceEntries
   validateSequenceMembership events sequences
-  localEdges <- deriveSequenceEdges events sequences
+  sequenceEdges <- deriveSequenceEdges events sequences
   explicitEdges <- mapM (validateArchitectureEdge events) architectureEdges
-  let edges = Set.fromList (localEdges <> explicitEdges)
-      order = ProcessPartialOrder events edges
+  let order = ProcessPartialOrder
+        { partialOrderEvents = events
+        , partialOrderEdges = Set.fromList (sequenceEdges <> explicitEdges)
+        }
   validateAcyclic order
   pure order
 
@@ -158,8 +160,8 @@ deriveSequenceEdges events sequences =
       mapM (mkEdge processKey) (zip keys (drop 1 keys))
 
     mkEdge processKey (before, after) = do
-      beforeEvent <- requireEvent before
-      afterEvent <- requireEvent after
+      beforeEvent <- requireEvent processKey before
+      afterEvent <- requireEvent processKey after
       let origin = sequenceEdgeOrigin processKey beforeEvent afterEvent
       if before == after
         then Left (SelfCausalEdge before origin)
@@ -169,8 +171,8 @@ deriveSequenceEdges events sequences =
           , causalOrigin = origin
           }
 
-    requireEvent key = maybe
-      (Left (UnknownSequenceEvent (error "validated process sequence") key))
+    requireEvent processKey key = maybe
+      (Left (UnknownSequenceEvent processKey key))
       Right
       (Map.lookup key events)
 
