@@ -5,6 +5,7 @@ module Phil.Core.Syntax
   , GrammarId (..)
   , FrameId (..)
   , Mode (..)
+  , ProductElementType (..)
   , RefSort (..)
   , RefTerm (..)
   , Ty (..)
@@ -34,6 +35,12 @@ data Mode
   = Unrestricted
   | Affine
   | Linear
+  deriving (Eq, Ord, Show)
+
+data ProductElementType = ProductElementType
+  { productElementMode :: Mode
+  , productElementType :: Ty
+  }
   deriving (Eq, Ord, Show)
 
 data RefSort
@@ -75,6 +82,7 @@ data Ty
   | TyProof Proposition
   | TyValidated Text Name Name
   | TyEndpoint Session
+  | TyProduct [ProductElementType]
   | TyRefined Name Ty Proposition
   | TyOpaque Text
   | TyOpaqueSorted Text RefSort
@@ -85,6 +93,7 @@ data Value
   | VUnit
   | VBool Bool
   | VUInt Int Integer
+  | VProduct [Value]
   | VAscribe Value Ty
   | VTransport Value Name Ty
   deriving (Eq, Ord, Show)
