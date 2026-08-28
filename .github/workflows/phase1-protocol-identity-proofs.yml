@@ -91,11 +91,12 @@ jobs:
           cabal exec -- ghc -isrc -Wall -Werror -Wno-name-shadowing -fno-code src/Phil/Systems/ProtocolStateCorrespondence.hs
           for test_main in \
             test/Phase1ProtocolExactActionMain.hs \
-            test/Phase1ProtocolIdentitySeparationMain.hs \
-            test/Phase1ProtocolStateCorrespondenceMain.hs
+            test/Phase1ProtocolIdentitySeparationMain.hs
           do
             cabal exec -- ghc -isrc -Wall -Werror -fno-code "$test_main"
           done
+          cabal exec -- ghc -isrc -Wall -Werror -Wno-name-shadowing -fno-code \
+            test/Phase1ProtocolStateCorrespondenceMain.hs
 
       - name: Re-run PROT-001, PROT-002, and SYS-009 pressure corpora
         run: |
