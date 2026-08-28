@@ -16,11 +16,15 @@ module Phil.Core.Process
   , ProcessSiteKey (..)
   , ProcessKey (..)
   , ProcessDeclarationSite (..)
+  , processSiteKey
+  , processSiteOwningInstance
+  , processTargetInstance
   , ActivationStatus (..)
   , ProcessOccurrence (..)
   , ProcessNetwork (..)
   , ProcessNetworkError (..)
   , deriveProcessKey
+  , deriveScopedProcessKey
   , elaborateProcessNetwork
   , activateRootProcesses
   ) where
@@ -137,11 +141,30 @@ newtype ProcessSiteKey = ProcessSiteKey { unProcessSiteKey :: Text }
 newtype ProcessKey = ProcessKey { unProcessKey :: Text }
   deriving (Eq, Ord, Show)
 
-data ProcessDeclarationSite = ProcessDeclarationSite
-  { processSiteKey :: ProcessSiteKey
-  , processTargetInstance :: InstanceKey
-  }
+-- | The two-argument constructor is the root-architecture shorthand used by
+-- the original CONC-001 implementation.  A process declaration instantiated
+-- inside a nested architecture occurrence uses 'ScopedProcessDeclarationSite'
+-- so the same declaration-local ProcessSiteKey can occur under distinct exact
+-- owning InstanceKeys without becoming a global-name collision.
+data ProcessDeclarationSite
+  = ProcessDeclarationSite ProcessSiteKey InstanceKey
+  | ScopedProcessDeclarationSite InstanceKey ProcessSiteKey InstanceKey
   deriving (Eq, Ord, Show)
+
+processSiteKey :: ProcessDeclarationSite -> ProcessSiteKey
+processSiteKey site = case site of
+  ProcessDeclarationSite key _ -> key
+  ScopedProcessDeclarationSite _ key _ -> key
+
+processSiteOwningInstance :: ProcessDeclarationSite -> Maybe InstanceKey
+processSiteOwningInstance site = case site of
+  ProcessDeclarationSite _ _ -> Nothing
+  ScopedProcessDeclarationSite owner _ _ -> Just owner
+
+processTargetInstance :: ProcessDeclarationSite -> InstanceKey
+processTargetInstance site = case site of
+  ProcessDeclarationSite _ target -> target
+  ScopedProcessDeclarationSite _ _ target -> target
 
 data ActivationStatus
   = NotActivated
@@ -151,6 +174,7 @@ data ActivationStatus
 data ProcessOccurrence = ProcessOccurrence
   { processOccurrenceKey :: ProcessKey
   , processOccurrenceRootRevision :: InstanceRevision
+  , processOccurrenceOwner :: ArchitectureInstanceIdentity
   , processOccurrenceTarget :: ArchitectureInstanceIdentity
   , processOccurrenceActivation :: ActivationStatus
   }
@@ -164,12 +188,22 @@ data ProcessNetwork = ProcessNetwork
 
 data ProcessNetworkError
   = DuplicateProcessSiteKey ProcessSiteKey
+  | DuplicateScopedProcessSiteKey InstanceKey ProcessSiteKey
   | DuplicateProcessTarget InstanceKey ProcessSiteKey ProcessSiteKey
+  | DuplicateScopedProcessTarget
+      InstanceKey
+      InstanceKey ProcessSiteKey
+      InstanceKey ProcessSiteKey
+  | UnknownProcessSiteOwner InstanceKey ProcessSiteKey
   | UnknownProcessTarget ProcessSiteKey InstanceKey
+  | UnknownScopedProcessTarget InstanceKey ProcessSiteKey InstanceKey
   | DuplicateProcessKey ProcessKey
   | ProcessAlreadyActivated ProcessKey
   deriving (Eq, Show)
 
+-- | Historical root-process key derivation.  Root sites continue to use the
+-- exact existing rule so this bounded repair does not churn already-landed
+-- ProcessKeys merely by introducing nested-instance competence.
 deriveProcessKey :: InstanceRevision -> ProcessSiteKey -> ProcessKey
 deriveProcessKey rootRevision siteKey = ProcessKey
   ("phil.process.scope.v1:"
@@ -178,30 +212,51 @@ deriveProcessKey rootRevision siteKey = ProcessKey
       , ("site", SemanticAtom (unProcessSiteKey siteKey))
       ])))
 
+-- | Nested process-site identity is scoped by the stable owning architecture
+-- occurrence.  The exact containing InstanceRevision remains available on the
+-- checked ProcessOccurrence; it is not substituted for the generative owner
+-- identity used to distinguish equal local sites in distinct occurrences.
+deriveScopedProcessKey :: InstanceKey -> ProcessSiteKey -> ProcessKey
+deriveScopedProcessKey ownerKey siteKey = ProcessKey
+  ("phil.process.instance-scope.v1:"
+    <> canonicalSemanticForm (SemanticRecord (Map.fromList
+      [ ("owner_instance", SemanticAtom (unInstanceKey ownerKey))
+      , ("site", SemanticAtom (unProcessSiteKey siteKey))
+      ])))
+
 elaborateProcessNetwork
   :: ArchitectureInstanceGraph
   -> [ProcessDeclarationSite]
   -> Either ProcessNetworkError ProcessNetwork
 elaborateProcessNetwork graph sites = do
-  uniqueSites <- normalizeSites sites
+  uniqueSites <- normalizeSites rootKey sites
   population <- Map.foldlWithKey' addSite (Right Map.empty) uniqueSites
   Right ProcessNetwork
-    { processNetworkRoot = architectureGraphRoot graph
+    { processNetworkRoot = rootIdentity
     , processNetworkPopulation = population
     }
   where
-    rootRevision = identityInstanceRevision (architectureGraphRoot graph)
+    rootIdentity = architectureGraphRoot graph
+    rootKey = identityInstanceKey rootIdentity
+    rootRevision = identityInstanceRevision rootIdentity
 
-    addSite accumulated siteKey targetKey = do
+    addSite accumulated (ownerKey, siteKey) targetKey = do
       current <- accumulated
+      ownerNode <- maybe
+        (Left (UnknownProcessSiteOwner ownerKey siteKey))
+        Right
+        (Map.lookup ownerKey (architectureGraphInstances graph))
       targetNode <- maybe
-        (Left (UnknownProcessTarget siteKey targetKey))
+        (Left (unknownTarget ownerKey siteKey targetKey))
         Right
         (Map.lookup targetKey (architectureGraphInstances graph))
-      let key = deriveProcessKey rootRevision siteKey
+      let key
+            | ownerKey == rootKey = deriveProcessKey rootRevision siteKey
+            | otherwise = deriveScopedProcessKey ownerKey siteKey
           occurrence = ProcessOccurrence
             { processOccurrenceKey = key
             , processOccurrenceRootRevision = rootRevision
+            , processOccurrenceOwner = checkedArchitectureIdentity ownerNode
             , processOccurrenceTarget = checkedArchitectureIdentity targetNode
             , processOccurrenceActivation = NotActivated
             }
@@ -209,24 +264,43 @@ elaborateProcessNetwork graph sites = do
         then Left (DuplicateProcessKey key)
         else Right (Map.insert key occurrence current)
 
+    unknownTarget ownerKey siteKey targetKey
+      | ownerKey == rootKey = UnknownProcessTarget siteKey targetKey
+      | otherwise = UnknownScopedProcessTarget ownerKey siteKey targetKey
+
 normalizeSites
-  :: [ProcessDeclarationSite]
-  -> Either ProcessNetworkError (Map.Map ProcessSiteKey InstanceKey)
-normalizeSites = go Set.empty Map.empty Map.empty
+  :: InstanceKey
+  -> [ProcessDeclarationSite]
+  -> Either ProcessNetworkError (Map.Map (InstanceKey, ProcessSiteKey) InstanceKey)
+normalizeSites rootKey = go Set.empty Map.empty Map.empty
   where
     go _ _ normalized [] = Right normalized
     go seenSites seenTargets normalized (site : rest)
-      | Set.member siteKey seenSites = Left (DuplicateProcessSiteKey siteKey)
-      | Just previousSite <- Map.lookup targetKey seenTargets =
-          Left (DuplicateProcessTarget targetKey previousSite siteKey)
+      | Set.member address seenSites = Left (duplicateSiteError ownerKey siteKey)
+      | Just previousAddress <- Map.lookup targetKey seenTargets =
+          Left (duplicateTargetError targetKey previousAddress address)
       | otherwise = go
-          (Set.insert siteKey seenSites)
-          (Map.insert targetKey siteKey seenTargets)
-          (Map.insert siteKey targetKey normalized)
+          (Set.insert address seenSites)
+          (Map.insert targetKey address seenTargets)
+          (Map.insert address targetKey normalized)
           rest
       where
+        ownerKey = case processSiteOwningInstance site of
+          Nothing -> rootKey
+          Just owner -> owner
         siteKey = processSiteKey site
         targetKey = processTargetInstance site
+        address = (ownerKey, siteKey)
+
+    duplicateSiteError ownerKey siteKey
+      | ownerKey == rootKey = DuplicateProcessSiteKey siteKey
+      | otherwise = DuplicateScopedProcessSiteKey ownerKey siteKey
+
+    duplicateTargetError targetKey (previousOwner, previousSite) (ownerKey, siteKey)
+      | previousOwner == rootKey && ownerKey == rootKey =
+          DuplicateProcessTarget targetKey previousSite siteKey
+      | otherwise = DuplicateScopedProcessTarget
+          targetKey previousOwner previousSite ownerKey siteKey
 
 activateRootProcesses :: ProcessNetwork -> Either ProcessNetworkError ProcessNetwork
 activateRootProcesses network = do
