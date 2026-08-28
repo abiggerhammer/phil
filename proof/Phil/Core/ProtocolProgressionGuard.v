@@ -340,7 +340,7 @@ Proof.
   intros guards request endpoint guard Hallowed Hin.
   unfold GuardedProtocolActionAllowed in Hallowed.
   destruct Hallowed as [_ [Hall _]].
-  apply Forall_forall in Hall.
+  rewrite Forall_forall in Hall.
   apply Hall.
   exact Hin.
 Qed.
