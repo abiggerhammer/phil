@@ -1,6 +1,6 @@
 # Phase 1 callable scope implementation refinement v1
 
-This note stages executable implementation correspondence for `PHIL-CALL-SCOPE-001` without changing production behavior.
+This note records production implementation correspondence for `PHIL-CALL-SCOPE-001`.
 
 ## Certified surface
 
@@ -28,7 +28,7 @@ The graph theorem is stated over semantic reachability, not over any particular 
 - scoped loan + contained closure + equal scope → accepted; and
 - scoped loan + contained closure + unequal scope → outside-validity rejection.
 
-The correspondence theorem proves that the reflected Boolean facts computed from the Certified model produce exactly `decideClosureScopeCapture`.
+Production derives only the concrete Boolean facts from `ClosureExtent`, `ClosureScopeCapture`, and native `LoanScopeKey` equality. The exact checked-in `src/CallableScopeKernel.hs` then owns the final acceptance/rejection category. A kernel category incompatible with the concrete capture/extent shape fails closed as `CallableScopeKernelBridgeMismatch`.
 
 ### Recursive closure graph
 
@@ -39,31 +39,37 @@ The correspondence theorem proves that the reflected Boolean facts computed from
 3. restricted recursive cycle; or
 4. accepted.
 
-Acceptance is proved equivalent to Certified `recursiveClosureGraphValid` whenever the three Boolean inputs faithfully reflect node uniqueness, reference resolution, and absence of restricted cycles. Separate theorems fix the same first-error precedence used by production.
+Production retains native deterministic witness discovery:
 
-## Production boundary
+- `Map` insertion finds the first duplicate node in input order;
+- ascending `Map`/`Set` traversal finds the first unresolved reference; and
+- `Data.Graph.stronglyConnComp` discovers SCCs and exact restricted-cycle payloads.
 
-The extracted kernel deliberately does not own concrete graph or identity machinery.
+Those concrete facts are supplied to the extracted kernel, which owns the final category. Production reconstructs the existing exact diagnostic only when the kernel selects the matching category; any disagreement fails closed as `CallableScopeKernelBridgeMismatch`.
 
-Production remains responsible for:
+## Representation boundary
 
-- `CallableOccurrenceKey`, `CaptureOccurrenceKey`, and `LoanScopeKey` equality;
-- concrete `Map`/`Set` construction and membership;
-- `Data.Graph.stronglyConnComp` and its SCC result;
-- deriving the Boolean facts supplied to the extracted decisions;
-- concrete diagnostic payloads; and
+The extracted kernel deliberately does not own:
+
+- `CallableOccurrenceKey`, `CaptureOccurrenceKey`, or `LoanScopeKey` equality;
+- concrete `Map`/`Set` construction, ordering, or membership;
+- `Data.Graph.stronglyConnComp` or SCC discovery correctness;
+- concrete diagnostic payload construction; or
 - source scope/lifetime inference.
 
-A later binding tranche should route final scope-capture and graph acceptance/rejection through the exact extracted kernel, while retaining native graph discovery and failing closed if reflected facts and concrete diagnostic shape disagree.
+These remain explicit representation/runtime foundations. In particular, the Rocq reachability theorem does not silently certify Haskell's SCC library.
 
-## Staging gate
+## Production gate
 
-`Phase 1 Callable Scope Implementation Refinement`:
+`Phase 1 Callable Scope Implementation Refinement` now:
 
 - recompiles the Certified CALL-SCOPE model and executable correspondence proof;
-- extracts `CallableScopeKernel.hs`;
-- typechecks the generated kernel under `-Wall -Werror`;
-- typechecks the unchanged `CallableScope.hs` production path; and
-- reruns the existing 11-case CALL-010/CALL-014 corpus unchanged.
+- fresh-extracts `CallableScopeKernel.hs`;
+- requires byte-for-byte equality between fresh extraction and `src/CallableScopeKernel.hs`;
+- typechecks both the generated kernel and bound production path under `-Wall -Werror`;
+- reruns the unchanged 11-case CALL-010/CALL-014 production corpus; and
+- uploads a production correspondence manifest binding the checked kernel, `CallableScope.hs`, and the corpus.
 
-General lifetime inference/subtyping, mutable/exclusive borrowing, arbitrary borrowed-closure escape, later explicit resource-carrying recursive closures, source syntax, target closure conversion, ABI details, and runtime enforcement remain separate obligations.
+The staging kernel established by #325 has SHA-256 `efd80bdf5a6e7420840afc0e8f14e028eadc7882da5825fa48f7760f5cab51a5`.
+
+General lifetime inference/subtyping, mutable/exclusive borrowing, arbitrary borrowed-closure escape, later explicit resource-carrying recursive closures, source elaboration, target closure conversion, ABI details, and runtime enforcement remain separate obligations.
