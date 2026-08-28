@@ -11,16 +11,11 @@ module Phil.Core.Generic.StaticActual
   ) where
 
 import Data.List (foldl')
-import qualified Data.Map.Strict as Map
 import qualified Data.Set as Set
 import Data.Text (Text)
 import Phil.Core.Generic (GenericStaticParameterKey)
 import Phil.Core.Static (SemanticForm)
 
--- | The exact semantic category of one Phase 1 static generic parameter.
--- Category-specific admissibility (for example Message communicability or
--- provider contract exactness) is deliberately checked by its competent layer
--- after this relation has established the unique kind of the actual.
 data GenericStaticKind
   = GenericTypeKind
   | GenericIndexKind
@@ -39,10 +34,9 @@ data GenericStaticParameter = GenericStaticParameter
   }
   deriving (Eq, Ord, Show)
 
--- | Surface parsing has already chosen one concrete actual form. A direct
--- actual carries its semantic category explicitly. A name-shaped static
--- reference remains one reference form and is resolved only through the kind
--- declared by its parameter; the checker never retries it under other kinds.
+-- | Parsing has already chosen one concrete actual form. A name-shaped static
+-- reference stays one reference and is interpreted only through the declared
+-- parameter kind; this checker never retries it under another category.
 data GenericStaticActual
   = DirectGenericStaticActual GenericStaticKind SemanticForm
   | ReferencedGenericStaticActual Text
