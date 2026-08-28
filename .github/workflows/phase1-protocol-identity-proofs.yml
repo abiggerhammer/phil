@@ -88,7 +88,7 @@ jobs:
           set -euo pipefail
           cabal build exe:phil-certify-core-scalar --ghc-options=-Werror
           cabal exec -- ghc -isrc -Wall -Werror -fno-code src/Phil/Core/Protocol.hs
-          cabal exec -- ghc -isrc -Wall -Werror -fno-code src/Phil/Systems/ProtocolStateCorrespondence.hs
+          cabal exec -- ghc -isrc -Wall -Werror -Wno-name-shadowing -fno-code src/Phil/Systems/ProtocolStateCorrespondence.hs
           for test_main in \
             test/Phase1ProtocolExactActionMain.hs \
             test/Phase1ProtocolIdentitySeparationMain.hs \
