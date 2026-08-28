@@ -5,7 +5,7 @@ module Main (main) where
 import qualified Data.Map.Strict as Map
 import Data.Text (Text)
 import qualified Data.Text as Text
-import Phil.Core.ProcessNetwork
+import Phil.Core.Process
 import Phil.Core.Static
 import System.Exit (exitFailure)
 
