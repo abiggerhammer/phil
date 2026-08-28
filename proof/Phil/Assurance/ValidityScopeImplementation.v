@@ -86,9 +86,11 @@ Proof.
       apply andb_true_iff in Hfacts.
       destruct Hfacts as [Hhead Htail].
       destruct Hin as [Heq | Hin].
-      * inversion Heq; subst.
-        apply (proj1 Hfact).
-        exact Hhead.
+      * pose proof (f_equal fst Heq) as Hdimension.
+        pose proof (f_equal snd Heq) as Hexpected.
+        cbn in Hdimension, Hexpected.
+        rewrite <- Hdimension, <- Hexpected.
+        exact (proj1 Hfact Hhead).
       * apply (proj1 IH Htail).
         exact Hin.
     + intros Hall.
