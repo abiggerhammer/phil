@@ -47,5 +47,7 @@ jobs:
         run: cabal exec -- runghc -Wall -Werror -isrc test/Phase1ExplicitBranchResourceSumMain.hs
       - name: DATA-014 explicit nominal mode strengthening conformance
         run: cabal exec -- runghc -Wall -Werror -isrc test/Phase1NominalModeStrengtheningMain.hs
+      - name: DATA-015 finite product resource conformance
+        run: cabal exec -- runghc -Wall -Werror -isrc test/Phase1FiniteProductMain.hs
       - name: DATA-016 legal affine omission conformance
         run: cabal exec -- runghc -Wall -Werror -isrc test/Phase1AffineOmissionMain.hs

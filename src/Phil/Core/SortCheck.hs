@@ -16,6 +16,7 @@ import Phil.Core.Checker (CheckState (..))
 import Phil.Core.Context (ResourceContext (..))
 import Phil.Core.Syntax
   ( Name
+  , ProductElementType (..)
   , Proposition (..)
   , RefSort (..)
   , RefTerm (..)
@@ -69,6 +70,7 @@ checkTypeSorts state ty =
         then Right ()
         else Left (InvalidBytesIndexSort index indexSort)
     TyProof proposition -> checkPropositionSorts state proposition
+    TyProduct elements -> mapM_ (checkTypeSorts state . productElementType) elements
     TyRefined _ base _ -> checkTypeSorts state base
     TyOpaqueSorted _ sort -> validateRefSort sort
     _ -> Right ()
