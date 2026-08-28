@@ -1,6 +1,6 @@
 From Stdlib Require Import Bool.Bool Arith.PeanoNat.
 
-From Phil.Core Require Import AuthorityPossession.
+From Phil.Core Require Import GenericStructural AuthorityPossession.
 
 (*
   PHIL-AUTH-POSSESS-IMPL-001 — executable correspondence for the bounded
