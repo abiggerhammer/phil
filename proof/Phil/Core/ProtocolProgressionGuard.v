@@ -156,7 +156,7 @@ Proof.
       * inversion Hstep; subst.
         exists predecessorContract.
         split.
-        -- exact Hpredecessor.
+        -- reflexivity.
         -- split.
            ++ unfold installOccurrence.
               rewrite Nat.eqb_refl.
