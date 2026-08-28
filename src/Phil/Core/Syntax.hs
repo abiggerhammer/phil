@@ -6,6 +6,7 @@ module Phil.Core.Syntax
   , FrameId (..)
   , Mode (..)
   , ProductElementType (..)
+  , ProductValue (..)
   , RefSort (..)
   , RefTerm (..)
   , Ty (..)
@@ -40,6 +41,11 @@ data Mode
 data ProductElementType = ProductElementType
   { productElementMode :: Mode
   , productElementType :: Ty
+  }
+  deriving (Eq, Ord, Show)
+
+newtype ProductValue = ProductValue
+  { productValueElements :: [ProductElementType]
   }
   deriving (Eq, Ord, Show)
 
@@ -93,7 +99,6 @@ data Value
   | VUnit
   | VBool Bool
   | VUInt Int Integer
-  | VProduct [Value]
   | VAscribe Value Ty
   | VTransport Value Name Ty
   deriving (Eq, Ord, Show)
