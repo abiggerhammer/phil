@@ -134,7 +134,10 @@ Theorem authority_copy_decision_accept_iff_certified :
     decideAuthorityCopy mode = AuthorityCopyAccepted <->
     capabilityCopyAllowed mode = true.
 Proof.
-  destruct mode; reflexivity.
+  destruct mode;
+    cbn [decideAuthorityCopy capabilityCopyAllowed
+         modeAllowsStructuralPermission];
+    split; intro H; try discriminate; reflexivity.
 Qed.
 
 Inductive AuthorityDropDecision : Type :=
@@ -150,5 +153,8 @@ Theorem authority_drop_decision_accept_iff_certified :
     decideAuthorityDrop mode = AuthorityDropAccepted <->
     capabilityDropAllowed mode = true.
 Proof.
-  destruct mode; reflexivity.
+  destruct mode;
+    cbn [decideAuthorityDrop capabilityDropAllowed
+         modeAllowsStructuralPermission];
+    split; intro H; try discriminate; reflexivity.
 Qed.
