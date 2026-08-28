@@ -1,10 +1,10 @@
 # Phase 1 callable effect implementation refinement v1
 
-This note stages executable implementation correspondence for `PHIL-CALL-EFFECT-001` without changing production behavior.
+This refinement mechanically connects the production callable-effect path to the Certified `PHIL-CALL-EFFECT-001` semantics.
 
 ## Certified surface
 
-`proof/Phil/Core/CallableEffects.v` already certifies three connected rules:
+`proof/Phil/Core/CallableEffects.v` certifies three connected rules:
 
 1. possessing, passing, storing, or returning a callable is invocation-effect neutral;
 2. reachable invocation contributes the callable contract's public may-effect bound; and
@@ -12,20 +12,22 @@ This note stages executable implementation correspondence for `PHIL-CALL-EFFECT-
 
 The Certified model is extensional: an effect set is a predicate over opaque semantic effect identities.
 
-## Executable seam
+## Extracted executable seam
 
-`CallableEffectsImplementation.v` extracts only representation-neutral decisions:
+`CallableEffectsImplementation.v` exposes only representation-neutral decisions:
 
 - `CallableUseEffectKind` classifies the five higher-order use forms;
 - `callableUseEffectKindContributesPublicBound` decides whether that use contributes the public invocation bound;
 - `decideCallableEffectBound subsetFact` owns acceptance/rejection once production supplies a native finite-set subset fact; and
 - `effectDeltaBit inferredPresent publicPresent` owns the per-effect undeclared-delta predicate.
 
+`proof/Phil/Core/CallableEffectsImplementationExtraction.v` extracts those decisions to `CallableEffectKernel.hs`. The checked-in `src/CallableEffectKernel.hs` must regenerate byte-identically in the dedicated closeout workflow.
+
 Concrete `SemanticEffect` values are `Text`-backed Haskell identities and never cross into Rocq. `Data.Set` membership, union, subset, difference, and canonicalization remain named representation/runtime foundations.
 
 ## Proved correspondence
 
-The staging proof shows:
+The correspondence proof shows:
 
 - the five-way use classifier agrees exactly with Certified `addCallableUse`;
 - if a supplied subset Boolean reflects Certified extensional `effectSubset`, the extracted bound decision accepts exactly the Certified subset cases;
@@ -33,13 +35,20 @@ The staging proof shows:
 - rejected decisions imply the implementation footprint is not a subset of the public bound; and
 - `effectDeltaBit` is exactly Certified `effectDelta`, including its iff characterization as inferred-present/public-absent.
 
-## Production boundary
+## Production binding
 
-This staging PR leaves `src/Phil/Core/Callable.hs` unchanged. A later production-binding tranche should:
+`src/Phil/Core/Callable.hs` now uses the exact extracted kernel as the semantic decision authority while retaining only concrete finite-set representation work:
 
-- route per-use contribution choice through the extracted classifier while retaining native `Set.union`;
-- route effect-bound acceptance through the extracted subset decision supplied by `Set.isSubsetOf`;
-- preserve the existing exact interface/public/inferred result and diagnostics; and
-- fail closed by validating every member of the finite `inferred ∪ public ∪ extra` universe against extracted `effectDeltaBit` before accepting a rejection delta.
+- `inferReachableCallableEffects` maps each concrete `CallableUse` to the corresponding extracted use kind; the kernel decides whether the public bound contributes, and native `Set.union` materializes that contribution;
+- `checkCallableEffectBound` supplies native `Set.isSubsetOf` as the reflected subset fact and follows the extracted accept/reject decision;
+- accepted checks preserve the exact existing interface revision, inferred footprint, and public bound;
+- rejected checks materialize `Set.difference inferred publicBound`, then validate every effect in the finite `inferred ∪ publicBound` universe against extracted `effectDeltaBit`; and
+- any disagreement between native finite-set representation and the extracted semantic predicate fails closed as `CallableEffectKernelBridgeMismatch`.
 
-Callable capture mode, lifecycle/resource transitions, scope/recursion, authority/evidence semantics, source reachability analysis, provider qualification, syntax, closure conversion, and target/runtime effect enforcement remain separate obligations.
+No effect identity is serialized into Rocq, and no richer target/runtime representation is made part of the theorem. Reachability itself remains a checked upstream fact: this refinement governs the semantics of already-reachable `CallableUse` observations rather than proving control-flow reachability.
+
+## Residual boundary
+
+Rocq extraction/toolchain correctness and the GHC/Haskell runtime remain trusted. Native `SemanticEffect`/`Text` identity, `Data.Set` equality/membership/union/subset/difference/canonicalization, `InterfaceRevision`, and the truth of checked reachability observations remain primitive representation/runtime foundations.
+
+Callable capture mode, lifecycle/resource transitions, scope/recursion, authority/evidence semantics, provider qualification, syntax, closure conversion, and target/runtime effect enforcement remain separate obligations.
