@@ -6,6 +6,7 @@ on:
       - 'proof/Phil/Core/CallableScope.v'
       - 'proof/Phil/Core/CallableScopeImplementation.v'
       - 'proof/Phil/Core/CallableScopeImplementationExtraction.v'
+      - 'src/CallableScopeKernel.hs'
       - 'src/Phil/Core/CallableScope.hs'
       - 'test/Phase1CallableScopeMain.hs'
       - 'docs/phase-1/callable-scope-implementation-refinement-v1.md'
@@ -16,6 +17,7 @@ on:
       - 'proof/Phil/Core/CallableScope.v'
       - 'proof/Phil/Core/CallableScopeImplementation.v'
       - 'proof/Phil/Core/CallableScopeImplementationExtraction.v'
+      - 'src/CallableScopeKernel.hs'
       - 'src/Phil/Core/CallableScope.hs'
       - 'test/Phase1CallableScopeMain.hs'
       - 'docs/phase-1/callable-scope-implementation-refinement-v1.md'
@@ -41,7 +43,7 @@ jobs:
           rocq c -Q proof/Phil Phil proof/Phil/Core/CallableScope.v
           rocq c -Q proof/Phil Phil proof/Phil/Core/CallableScopeImplementation.v
 
-      - name: Extract callable scope kernel
+      - name: Extract callable scope kernel and verify checked-in identity
         shell: bash
         run: |
           set -euo pipefail
@@ -51,7 +53,8 @@ jobs:
           test -s CallableScopeKernel.hs
           grep -q 'decideScopeCaptureByFacts' CallableScopeKernel.hs
           grep -q 'decideRecursiveClosureGraphFacts' CallableScopeKernel.hs
-          sha256sum CallableScopeKernel.hs
+          cmp CallableScopeKernel.hs src/CallableScopeKernel.hs
+          sha256sum CallableScopeKernel.hs src/CallableScopeKernel.hs
           mkdir -p callable-scope-implementation-refinement-proof
           cp \
             proof/Phil/Core/CallableScope.v \
@@ -82,13 +85,17 @@ jobs:
           ghc-version: '9.6.7'
           cabal-version: 'latest'
 
-      - name: Typecheck extracted kernel and existing callable scope path
+      - name: Typecheck extracted kernel and production binding
         run: |
           set -euo pipefail
+          cmp \
+            callable-scope-implementation-refinement-proof/CallableScopeKernel.hs \
+            src/CallableScopeKernel.hs
           ghc -Wall -Werror -fno-code \
             callable-scope-implementation-refinement-proof/CallableScopeKernel.hs
           cabal build exe:phil-certify-core-scalar --ghc-options=-Werror
           cabal exec -- ghc -isrc -Wall -Werror -fno-code \
+            src/CallableScopeKernel.hs \
             src/Phil/Core/CallableScope.hs \
             test/Phase1CallableScopeMain.hs
 
@@ -96,3 +103,19 @@ jobs:
         run: |
           set -euo pipefail
           cabal exec -- runghc -isrc test/Phase1CallableScopeMain.hs
+
+      - name: Record production correspondence identities
+        run: |
+          set -euo pipefail
+          mkdir -p callable-scope-production-binding
+          sha256sum \
+            src/CallableScopeKernel.hs \
+            src/Phil/Core/CallableScope.hs \
+            test/Phase1CallableScopeMain.hs \
+            > callable-scope-production-binding/PHIL-CALL-SCOPE-IMPL-001.production.sha256
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: phil-callable-scope-production-binding
+          path: callable-scope-production-binding
+          if-no-files-found: error
