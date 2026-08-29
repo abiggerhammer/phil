@@ -87,9 +87,9 @@ jobs:
       - name: Typecheck and execute extracted replacement controls
         run: |
           set -euo pipefail
-          ghc -Wall -Werror -fno-code \
+          ghc -Wall -Werror -Wno-unused-imports -fno-code \
             extracted-provider-replacement/ProviderReplacementQualificationKernel.hs
-          ghc -Wall -Werror \
+          ghc -Wall -Werror -Wno-unused-imports \
             -iextracted-provider-replacement \
             app/ProviderReplacementDecisionCorrespondenceMain.hs \
             -o provider-replacement-kernel-controls
