@@ -36,6 +36,8 @@ module Phil.Surface.GrammarV1.Parser
   , GrammarV1FunctionDecl (..)
   , GrammarV1CapabilityItem (..)
   , GrammarV1CapabilityDecl (..)
+  , GrammarV1BoundaryItem (..)
+  , GrammarV1BoundaryDecl (..)
   , GrammarV1SessionExpression (..)
   , GrammarV1RoleSessionDecl (..)
   , GrammarV1ProtocolDecl (..)
@@ -112,6 +114,7 @@ data GrammarV1Declaration
   | GrammarV1CallableContractDeclaration GrammarV1CallableContractDecl
   | GrammarV1FunctionDeclaration GrammarV1FunctionDecl
   | GrammarV1CapabilityDeclaration GrammarV1CapabilityDecl
+  | GrammarV1BoundaryDeclaration GrammarV1BoundaryDecl
   | GrammarV1ProtocolDeclaration GrammarV1ProtocolDecl
   | GrammarV1ComponentDeclaration GrammarV1ComponentDecl
   deriving (Eq, Show)
@@ -350,6 +353,24 @@ data GrammarV1CapabilityDecl = GrammarV1CapabilityDecl
   , grammarV1CapabilityMode :: GrammarV1StructuralMode
   , grammarV1CapabilityRequirements :: [Located GrammarV1GenericRequirement]
   , grammarV1CapabilityItems :: [Located GrammarV1CapabilityItem]
+  }
+  deriving (Eq, Show)
+
+data GrammarV1BoundaryItem
+  = GrammarV1BoundaryReceive (Located GrammarV1StaticReference)
+  | GrammarV1BoundarySend (Located GrammarV1StaticReference)
+  | GrammarV1BoundaryCorrespondence (Located GrammarV1Proposition)
+  | GrammarV1BoundaryCanonical
+  | GrammarV1BoundaryFailure (Located GrammarV1Type)
+  | GrammarV1BoundaryLaw (Located Text) (Located GrammarV1Proposition)
+  deriving (Eq, Show)
+
+data GrammarV1BoundaryDecl = GrammarV1BoundaryDecl
+  { grammarV1BoundaryName :: Located Text
+  , grammarV1BoundaryGenericParams :: [Located GrammarV1GenericParam]
+  , grammarV1BoundaryRequirements :: [Located GrammarV1GenericRequirement]
+  , grammarV1BoundaryType :: Located GrammarV1Type
+  , grammarV1BoundaryItems :: [Located GrammarV1BoundaryItem]
   }
   deriving (Eq, Show)
 
@@ -642,6 +663,7 @@ parseDeclaration = do
     Just (GrammarKeyword "fn") -> parseFunctionDeclaration
     Just (GrammarKeyword "recursive") -> parseFunctionDeclaration
     Just (GrammarKeyword "capability") -> parseCapabilityDeclaration
+    Just (GrammarKeyword "boundary") -> parseBoundaryDeclaration
     Just (GrammarKeyword "protocol") -> parseProtocolDeclaration
     Just (GrammarKeyword "component") -> parseComponentDeclaration
     Just other -> failParser $
@@ -1090,6 +1112,76 @@ parseCapabilityItem = do
           "SURF-002 production parser capability item not yet implemented: "
             <> renderToken (locatedValue value)
         Nothing -> failParser "unterminated capability declaration"
+
+parseBoundaryDeclaration :: Parser (Located GrammarV1Declaration)
+parseBoundaryDeclaration = do
+  start <- expectKeyword "boundary"
+  name <- expectIdentifier
+  params <- parseOptionalGenericParams
+  requirements <- parseOptionalGenericRequirements
+  _ <- expectSymbol ":"
+  boundaryType <- parseType
+  _ <- expectSymbol "{"
+  items <- parseBoundaryItems
+  end <- expectSymbol "}"
+  pure $ locatedBetween start end $ GrammarV1BoundaryDeclaration GrammarV1BoundaryDecl
+    { grammarV1BoundaryName = name
+    , grammarV1BoundaryGenericParams = params
+    , grammarV1BoundaryRequirements = requirements
+    , grammarV1BoundaryType = boundaryType
+    , grammarV1BoundaryItems = items
+    }
+
+parseBoundaryItems :: Parser [Located GrammarV1BoundaryItem]
+parseBoundaryItems = do
+  atEnd <- peekSymbol "}"
+  if atEnd
+    then pure []
+    else do
+      item <- parseBoundaryItem
+      rest <- parseBoundaryItems
+      pure (item : rest)
+
+parseBoundaryItem :: Parser (Located GrammarV1BoundaryItem)
+parseBoundaryItem = do
+  token <- peekToken
+  case fmap locatedValue token of
+    Just (GrammarKeyword "receive") -> do
+      start <- expectKeyword "receive"
+      _ <- expectKeyword "using"
+      reference <- parseStaticReference
+      end <- expectSymbol ";"
+      pure $ locatedBetween start end (GrammarV1BoundaryReceive reference)
+    Just (GrammarKeyword "send") -> do
+      start <- expectKeyword "send"
+      _ <- expectKeyword "using"
+      reference <- parseStaticReference
+      end <- expectSymbol ";"
+      pure $ locatedBetween start end (GrammarV1BoundarySend reference)
+    Just (GrammarKeyword "correspondence") -> do
+      start <- expectKeyword "correspondence"
+      proposition <- parseProposition
+      end <- expectSymbol ";"
+      pure $ locatedBetween start end (GrammarV1BoundaryCorrespondence proposition)
+    Just (GrammarKeyword "canonical") -> do
+      start <- expectKeyword "canonical"
+      end <- expectSymbol ";"
+      pure $ locatedBetween start end GrammarV1BoundaryCanonical
+    Just (GrammarKeyword "failure") -> do
+      start <- expectKeyword "failure"
+      failureType <- parseType
+      end <- expectSymbol ";"
+      pure $ locatedBetween start end (GrammarV1BoundaryFailure failureType)
+    Just (GrammarKeyword "law") -> do
+      start <- expectKeyword "law"
+      name <- expectIdentifier
+      _ <- expectSymbol ":"
+      proposition <- parseProposition
+      end <- expectSymbol ";"
+      pure $ locatedBetween start end (GrammarV1BoundaryLaw name proposition)
+    Just other -> failParser $
+      "expected boundary item; found " <> renderToken other
+    Nothing -> failParser "unterminated boundary declaration"
 
 parseProtocolDeclaration :: Parser (Located GrammarV1Declaration)
 parseProtocolDeclaration = do
