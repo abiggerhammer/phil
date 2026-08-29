@@ -6,6 +6,8 @@ on:
       - 'grammar/phase1-surface.ebnf'
       - 'scripts/derive_phase1_surface_grammar.py'
       - 'scripts/check_phase1_surface_corpus.py'
+      - 'src/Phil/Surface/GrammarV1/**'
+      - 'test/Phase1GrammarV1LexerMain.hs'
       - 'test/fixtures/phase1-surface/**'
       - 'docs/phase-1/surface-grammar-v1.md'
       - 'docs/phase-1/surface-parser-production-corpus-v1.md'
@@ -17,6 +19,8 @@ on:
       - 'grammar/phase1-surface.ebnf'
       - 'scripts/derive_phase1_surface_grammar.py'
       - 'scripts/check_phase1_surface_corpus.py'
+      - 'src/Phil/Surface/GrammarV1/**'
+      - 'test/Phase1GrammarV1LexerMain.hs'
       - 'test/fixtures/phase1-surface/**'
       - 'docs/phase-1/surface-grammar-v1.md'
       - 'docs/phase-1/surface-parser-production-corpus-v1.md'
@@ -31,6 +35,18 @@ jobs:
     steps:
       - name: Check out repository
         uses: actions/checkout@v4
+
+      - name: Set up Haskell
+        uses: haskell-actions/setup@v2
+        with:
+          ghc-version: '9.6.7'
+          cabal-version: 'latest'
+
+      - name: Build ordinary regression substrate
+        run: cabal build all --enable-tests
+
+      - name: Check Grammar-v1 lexical authority
+        run: cabal exec -- runghc -Wall -Werror -isrc test/Phase1GrammarV1LexerMain.hs
 
       - name: Check derivation and corpus tools
         run: |
