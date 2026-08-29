@@ -1,5 +1,5 @@
 module corpus.capability_linear;
 
 capability LifecycleToken mode linear {
-  permits lifecycle.Finish;
+  permits cleanup.Finish;
 }
