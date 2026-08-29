@@ -56,6 +56,7 @@ module Phil.Surface.GrammarV1.Parser
   , GrammarV1Block (..)
   , GrammarV1ComponentDecl (..)
   , GrammarV1ArchitectureItem (..)
+  , GrammarV1RoleTarget (..)
   , GrammarV1ArchitectureDecl (..)
   , GrammarV1ProgramDecl (..)
   , parseGrammarV1StructuralSource
@@ -379,9 +380,21 @@ data GrammarV1BoundaryDecl = GrammarV1BoundaryDecl
   }
   deriving (Eq, Show)
 
-newtype GrammarV1SessionExpression = GrammarV1SessionReference
-  { grammarV1SessionReference :: GrammarV1StaticReference
-  }
+data GrammarV1SessionExpression
+  = GrammarV1SessionReference
+      { grammarV1SessionReference :: GrammarV1StaticReference
+      }
+  | GrammarV1SessionSend
+      (Located GrammarV1TermParam)
+      (Maybe (Located GrammarV1StaticReference))
+      (Maybe (Located GrammarV1Proposition))
+      (Located GrammarV1SessionExpression)
+  | GrammarV1SessionReceive
+      (Located GrammarV1TermParam)
+      (Maybe (Located GrammarV1StaticReference))
+      (Maybe (Located GrammarV1Proposition))
+      (Located GrammarV1SessionExpression)
+  | GrammarV1SessionEnd (Located Text)
   deriving (Eq, Ord, Show)
 
 data GrammarV1RoleSessionDecl = GrammarV1RoleSessionDecl
@@ -515,6 +528,17 @@ data GrammarV1ArchitectureItem
   | GrammarV1ArchitectureProcess
       (Located Text)
       (Located GrammarV1QualifiedName)
+  | GrammarV1ArchitectureProtocol
+      (Located Text)
+      (Located GrammarV1StaticReference)
+  | GrammarV1ArchitectureRole
+      (Located GrammarV1QualifiedName)
+      (Located GrammarV1RoleTarget)
+  deriving (Eq, Show)
+
+data GrammarV1RoleTarget
+  = GrammarV1InternalRoleTarget (Located GrammarV1QualifiedName)
+  | GrammarV1ExternalRoleTarget
   deriving (Eq, Show)
 
 data GrammarV1ArchitectureDecl = GrammarV1ArchitectureDecl
@@ -1246,15 +1270,60 @@ parseSessionExpression :: Parser (Located GrammarV1SessionExpression)
 parseSessionExpression = do
   token <- peekToken
   case fmap locatedValue token of
+    Just (GrammarKeyword "send") ->
+      parseSessionTransfer "send" GrammarV1SessionSend
+    Just (GrammarKeyword "receive") ->
+      parseSessionTransfer "receive" GrammarV1SessionReceive
+    Just (GrammarKeyword "end") -> parseSessionEnd
     Just (GrammarIdentifier _) -> do
       reference <- parseStaticReference
       pure $ Located
         (locatedSpan reference)
         (GrammarV1SessionReference (locatedValue reference))
     Just other -> failParser $
-      "SURF-002 generic/static slice does not yet implement nonreference session_expression beginning with "
+      "SURF-002 external-participant slice does not yet implement session_expression beginning with "
         <> renderToken other
     Nothing -> failParser "expected session_expression at end of input"
+
+parseSessionTransfer
+  :: Text
+  -> ( Located GrammarV1TermParam
+       -> Maybe (Located GrammarV1StaticReference)
+       -> Maybe (Located GrammarV1Proposition)
+       -> Located GrammarV1SessionExpression
+       -> GrammarV1SessionExpression
+     )
+  -> Parser (Located GrammarV1SessionExpression)
+parseSessionTransfer keyword constructor = do
+  start <- expectKeyword keyword
+  _ <- expectSymbol "("
+  param <- parseTermParam
+  _ <- expectSymbol ")"
+  hasUsing <- peekKeyword "using"
+  boundary <- if hasUsing
+    then expectKeyword "using" >> Just <$> parseStaticReference
+    else pure Nothing
+  hasGuard <- peekKeyword "when"
+  guard <- if hasGuard
+    then expectKeyword "when" >> Just <$> parseProposition
+    else pure Nothing
+  _ <- expectKeyword "then"
+  continuation <- parseSessionExpression
+  pure $ Located
+    (SourceSpan
+      (sourceSpanStart (locatedSpan start))
+      (sourceSpanEnd (locatedSpan continuation)))
+    (constructor param boundary guard continuation)
+
+parseSessionEnd :: Parser (Located GrammarV1SessionExpression)
+parseSessionEnd = do
+  start <- expectKeyword "end"
+  label <- expectIdentifier
+  pure $ Located
+    (SourceSpan
+      (sourceSpanStart (locatedSpan start))
+      (sourceSpanEnd (locatedSpan label)))
+    (GrammarV1SessionEnd label)
 
 parseComponentDeclaration :: Parser (Located GrammarV1Declaration)
 parseComponentDeclaration = do
@@ -1323,10 +1392,40 @@ parseArchitectureItem = do
       target <- parseQualifiedName
       end <- expectSymbol ";"
       pure $ locatedBetween start end (GrammarV1ArchitectureProcess name target)
+    Just (GrammarKeyword "protocol") -> do
+      start <- expectKeyword "protocol"
+      name <- expectIdentifier
+      _ <- expectSymbol "="
+      target <- parseStaticReference
+      end <- expectSymbol ";"
+      pure $ locatedBetween start end (GrammarV1ArchitectureProtocol name target)
+    Just (GrammarKeyword "role") -> do
+      start <- expectKeyword "role"
+      role <- parseQualifiedName
+      _ <- expectSymbol "="
+      target <- parseRoleTarget
+      end <- expectSymbol ";"
+      pure $ locatedBetween start end (GrammarV1ArchitectureRole role target)
     Just other -> failParser $
       "SURF-002 static process-network slice does not yet implement architecture_item beginning with "
         <> renderToken other
     Nothing -> failParser "unterminated architecture declaration"
+
+parseRoleTarget :: Parser (Located GrammarV1RoleTarget)
+parseRoleTarget = do
+  token <- peekToken
+  case fmap locatedValue token of
+    Just (GrammarKeyword "external") -> do
+      external <- expectKeyword "external"
+      pure (Located (locatedSpan external) GrammarV1ExternalRoleTarget)
+    Just (GrammarIdentifier _) -> do
+      target <- parseQualifiedName
+      pure $ Located
+        (locatedSpan target)
+        (GrammarV1InternalRoleTarget target)
+    Just other -> failParser $
+      "expected role_target qualified_name or external; found " <> renderToken other
+    Nothing -> failParser "expected role_target at end of input"
 
 parseProgramDeclaration :: Parser (Located GrammarV1Declaration)
 parseProgramDeclaration = do

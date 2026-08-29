@@ -267,6 +267,7 @@ roleReferencesS (Located _ roleDecl) =
     GrammarV1SessionReference reference ->
       grammarV1QualifiedNameParts (grammarV1StaticReferenceName reference) == ["S"]
         && null (grammarV1StaticReferenceArguments reference)
+    _ -> False
 
 requirementTag :: GrammarV1GenericRequirement -> String
 requirementTag requirement = case requirement of
