@@ -227,6 +227,16 @@ Proof.
   contradiction.
 Qed.
 
+Theorem checked_explicit_transport_is_valid :
+  forall update evidence transport resultEvidence,
+    CheckedDataSubjectUpdate update evidence (Some transport) resultEvidence ->
+    TransportValid update evidence transport.
+Proof.
+  intros update evidence transport resultEvidence Hchecked.
+  inversion Hchecked; subst.
+  assumption.
+Qed.
+
 Theorem changed_subject_requires_exact_transport :
   forall update evidence maybeTransport resultEvidence,
     CheckedDataSubjectUpdate update evidence maybeTransport resultEvidence ->
@@ -248,13 +258,19 @@ Theorem changed_subject_requires_exact_transport :
         targetProposition update evidence.
 Proof.
   intros update evidence maybeTransport resultEvidence Hchecked Hdistinct.
-  inversion Hchecked; subst.
-  - contradiction.
-  - exists transport0.
+  destruct maybeTransport as [transport |].
+  - exists transport.
     split.
     + reflexivity.
-    + unfold TransportValid in H10.
-      exact H10.
+    + pose proof
+        (checked_explicit_transport_is_valid
+          update evidence transport resultEvidence Hchecked) as Hvalid.
+      unfold TransportValid in Hvalid.
+      exact Hvalid.
+  - exfalso.
+    eapply distinct_subject_without_transport_rejects.
+    + exact Hdistinct.
+    + exact Hchecked.
 Qed.
 
 Theorem same_subject_representation_change_is_nonsemantic :
