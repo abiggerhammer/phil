@@ -46,6 +46,7 @@ module Phil.Core.Static
   ) where
 
 import qualified ArchitectureIdentityKernel as ArchitectureIdentityKernel
+import qualified ArchitectureInstantiationKernel as ArchitectureInstantiationKernel
 import qualified ArchitectureRevisionConstructionKernel as ArchitectureRevisionConstructionKernel
 import qualified Data.Map.Strict as Map
 import qualified Data.Set as Set
@@ -304,6 +305,10 @@ canonicalSemanticForm semantic = case semantic of
 architectureRevisionConstructionKernelBridgeMismatch :: String -> a
 architectureRevisionConstructionKernelBridgeMismatch seam =
   error ("ArchitectureRevisionConstructionKernel bridge mismatch: " <> seam)
+
+architectureInstantiationKernelBridgeMismatch :: String -> a
+architectureInstantiationKernelBridgeMismatch seam =
+  error ("ArchitectureInstantiationKernel bridge mismatch: " <> seam)
 
 deriveDeclarationIdentity :: DeclarationDescriptor -> DeclarationIdentity
 deriveDeclarationIdentity descriptor = DeclarationIdentity
@@ -579,9 +584,12 @@ normalizeChildren owner = foldl step (Right Map.empty)
     step accumulated child = do
       children <- accumulated
       let slot = architectureChildSlot child
-      if Map.member slot children
-        then Left (DuplicateOccurrenceSlot owner slot)
-        else Right (Map.insert slot (architectureChildNode child) children)
+          slotFresh = not (Map.member slot children)
+      case ArchitectureInstantiationKernel.decideChildSlotByFacts slotFresh of
+        ArchitectureInstantiationKernel.ChildSlotAccepted ->
+          Right (Map.insert slot (architectureChildNode child) children)
+        ArchitectureInstantiationKernel.ChildSlotDuplicate ->
+          Left (DuplicateOccurrenceSlot owner slot)
 
 requirementSemantic :: ArchitectureRequirement -> SemanticForm
 requirementSemantic requirement = SemanticRecord (Map.fromList
@@ -627,41 +635,74 @@ validateArchitectureGraph graph =
       mapM_ (validateRequirement node) (Map.elems (checkedArchitectureRequirements node))
 
     validateRequirement node requirement =
-      case architectureRequirementDisposition requirement of
-        Nothing -> Left (UnresolvedArchitectureRequirement
-          ownerKey
-          (architectureRequirementKey requirement)
-          (architectureRequirementKind requirement))
-        Just disposition -> case disposition of
-          RequirementBoundTo target -> do
-            targetNode <- maybe
-              (Left (UnknownArchitectureBindingTarget
-                ownerKey (architectureRequirementKey requirement) target))
-              Right
-              (lookupArchitectureInstance target graph)
-            case architectureRequirementExpectedInterface requirement of
-              Nothing -> Right ()
-              Just expected ->
-                let actual = identityInterfaceRevision
-                      (architectureDeclarationIdentity
-                        (checkedArchitectureDescriptor targetNode))
-                in if actual == expected
-                    then Right ()
-                    else Left (ArchitectureBindingInterfaceMismatch
-                      ownerKey (architectureRequirementKey requirement) expected actual)
-          _ -> Right ()
+      case decision of
+        ArchitectureInstantiationKernel.ArchitectureRequirementAccepted ->
+          Right ()
+        ArchitectureInstantiationKernel.ArchitectureRequirementUnresolved ->
+          Left (UnresolvedArchitectureRequirement
+            ownerKey
+            requirementKey
+            (architectureRequirementKind requirement))
+        ArchitectureInstantiationKernel.ArchitectureRequirementMissingBindingTarget ->
+          case boundTarget of
+            Just target -> Left (UnknownArchitectureBindingTarget
+              ownerKey requirementKey target)
+            Nothing -> architectureInstantiationKernelBridgeMismatch
+              "missing binding target without RequirementBoundTo"
+        ArchitectureInstantiationKernel.ArchitectureRequirementInterfaceMismatch ->
+          case (boundTarget, expectedInterface, targetNode) of
+            (Just _, Just expected, Just matchedTargetNode) ->
+              let actual = targetInterface matchedTargetNode
+              in Left (ArchitectureBindingInterfaceMismatch
+                ownerKey requirementKey expected actual)
+            _ -> architectureInstantiationKernelBridgeMismatch
+              "interface mismatch without bound existing exact-interface target"
       where
         ownerKey = identityInstanceKey (checkedArchitectureIdentity node)
+        rootKey = identityInstanceKey (architectureGraphRoot graph)
+        requirementKey = architectureRequirementKey requirement
+        disposition = architectureRequirementDisposition requirement
+        hasExplicitDisposition = case disposition of
+          Just _ -> True
+          Nothing -> False
+        boundTarget = case disposition of
+          Just (RequirementBoundTo target) -> Just target
+          _ -> Nothing
+        isBoundTo = case boundTarget of
+          Just _ -> True
+          Nothing -> False
+        targetNode = boundTarget >>= (`lookupArchitectureInstance` graph)
+        targetExists = case targetNode of
+          Just _ -> True
+          Nothing -> False
+        expectedInterface = architectureRequirementExpectedInterface requirement
+        targetInterface target = identityInterfaceRevision
+          (architectureDeclarationIdentity (checkedArchitectureDescriptor target))
+        interfaceMatches = case expectedInterface of
+          Nothing -> True
+          Just expected -> case targetNode of
+            Just target -> targetInterface target == expected
+            Nothing -> False
+        decideRequirement
+          | ownerKey == rootKey =
+              ArchitectureInstantiationKernel.decideRootRequirementByFacts
+          | otherwise =
+              ArchitectureInstantiationKernel.decideArchitectureRequirementByFacts
+        decision = decideRequirement
+          hasExplicitDisposition isBoundTo targetExists interfaceMatches
 
     validateReferences node = mapM_ validateReference
       (Map.toList (checkedArchitectureReferences node))
       where
         ownerKey = identityInstanceKey (checkedArchitectureIdentity node)
         validateReference (referenceKey, target) =
-          case lookupArchitectureInstance target graph of
-            Just _ -> Right ()
-            Nothing -> Left (UnknownArchitectureReferenceTarget
-              ownerKey referenceKey target)
+          case ArchitectureInstantiationKernel.decideArchitectureReferenceByFacts
+            (Map.member target (architectureGraphInstances graph)) of
+            ArchitectureInstantiationKernel.ArchitectureReferenceAccepted ->
+              Right ()
+            ArchitectureInstantiationKernel.ArchitectureReferenceUnknownTarget ->
+              Left (UnknownArchitectureReferenceTarget
+                ownerKey referenceKey target)
 
 emptyStaticContext :: StaticContext
 emptyStaticContext = StaticContext Map.empty

@@ -1,0 +1,151 @@
+name: Phase 1 Architecture Instantiation Production Binding
+
+on:
+  pull_request:
+    paths:
+      - 'proof/Phil/Core/ArchitectureIdentity.v'
+      - 'proof/Phil/Core/ArchitectureInstantiation.v'
+      - 'proof/Phil/Core/ArchitectureInstantiationImplementation.v'
+      - 'proof/Phil/Core/ArchitectureInstantiationImplementationExtraction.v'
+      - 'docs/phase-1/architecture-instantiation-production-binding-v1.md'
+      - 'app/ArchitectureInstantiationDecisionCorrespondenceMain.hs'
+      - 'phil-core.cabal'
+      - 'src/ArchitectureInstantiationKernel.hs'
+      - 'src/Phil/Core/Static.hs'
+      - 'test/Phase1ArchitectureInstantiationMain.hs'
+      - '.github/workflows/phase1-architecture-instantiation-production-binding.yml'
+  push:
+    branches: [main]
+    paths:
+      - 'proof/Phil/Core/ArchitectureIdentity.v'
+      - 'proof/Phil/Core/ArchitectureInstantiation.v'
+      - 'proof/Phil/Core/ArchitectureInstantiationImplementation.v'
+      - 'proof/Phil/Core/ArchitectureInstantiationImplementationExtraction.v'
+      - 'docs/phase-1/architecture-instantiation-production-binding-v1.md'
+      - 'app/ArchitectureInstantiationDecisionCorrespondenceMain.hs'
+      - 'phil-core.cabal'
+      - 'src/ArchitectureInstantiationKernel.hs'
+      - 'src/Phil/Core/Static.hs'
+      - 'test/Phase1ArchitectureInstantiationMain.hs'
+      - '.github/workflows/phase1-architecture-instantiation-production-binding.yml'
+
+permissions:
+  contents: read
+
+jobs:
+  rocq-architecture-instantiation-production-binding:
+    runs-on: ubuntu-latest
+    container:
+      image: rocq/rocq-prover:9.2.0
+      options: --user root
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Compile Certified architecture instantiation and decision correspondence
+        shell: bash
+        run: |
+          set -euo pipefail
+          export PATH="/home/rocq/.opam/${COMPILER}/bin:$PATH"
+          rocq c -Q proof/Phil Phil proof/Phil/Core/ArchitectureIdentity.v
+          rocq c -Q proof/Phil Phil proof/Phil/Core/ArchitectureInstantiation.v
+          rocq c -Q proof/Phil Phil proof/Phil/Core/ArchitectureInstantiationImplementation.v
+
+      - name: Fresh-extract and compare architecture instantiation kernel
+        shell: bash
+        run: |
+          set -euo pipefail
+          export PATH="/home/rocq/.opam/${COMPILER}/bin:$PATH"
+          rm -f ArchitectureInstantiationKernel.hs
+          rocq c -Q proof/Phil Phil proof/Phil/Core/ArchitectureInstantiationImplementationExtraction.v
+          test -s ArchitectureInstantiationKernel.hs
+          grep -q 'decideChildSlotByFacts' ArchitectureInstantiationKernel.hs
+          grep -q 'decideArchitectureRequirementByFacts' ArchitectureInstantiationKernel.hs
+          grep -q 'decideRootRequirementByFacts' ArchitectureInstantiationKernel.hs
+          grep -q 'decideArchitectureReferenceByFacts' ArchitectureInstantiationKernel.hs
+          cmp ArchitectureInstantiationKernel.hs src/ArchitectureInstantiationKernel.hs
+          sha256sum ArchitectureInstantiationKernel.hs
+          mkdir -p architecture-instantiation-production-binding-proof
+          cp \
+            proof/Phil/Core/ArchitectureIdentity.v \
+            proof/Phil/Core/ArchitectureInstantiation.v \
+            proof/Phil/Core/ArchitectureInstantiationImplementation.v \
+            proof/Phil/Core/ArchitectureInstantiationImplementation.vo \
+            ArchitectureInstantiationKernel.hs \
+            architecture-instantiation-production-binding-proof/
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: rocq-architecture-instantiation-production-binding
+          path: architecture-instantiation-production-binding-proof
+          if-no-files-found: error
+
+  verify-architecture-instantiation-production-binding:
+    needs: rocq-architecture-instantiation-production-binding
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/download-artifact@v4
+        with:
+          name: rocq-architecture-instantiation-production-binding
+          path: extracted-architecture-instantiation
+
+      - uses: haskell-actions/setup@v2
+        with:
+          ghc-version: '9.6.7'
+          cabal-version: 'latest'
+
+      - name: Require exact kernel and execute direct controls
+        run: |
+          set -euo pipefail
+          cmp \
+            extracted-architecture-instantiation/ArchitectureInstantiationKernel.hs \
+            src/ArchitectureInstantiationKernel.hs
+          ghc -Wall -Werror -fno-code src/ArchitectureInstantiationKernel.hs
+          ghc -Wall -Werror \
+            -isrc \
+            app/ArchitectureInstantiationDecisionCorrespondenceMain.hs \
+            -o architecture-instantiation-kernel-controls
+          ./architecture-instantiation-kernel-controls
+
+      - name: Strict-build production-bound architecture instantiation
+        run: |
+          set -euo pipefail
+          cabal build \
+            lib:phil-core \
+            exe:phil-certify-core-scalar \
+            --ghc-options=-Werror
+          cabal exec -- ghc -isrc -Wall -Werror -fno-code src/Phil/Core/Static.hs
+          cabal exec -- ghc -isrc -Wall -Werror -fno-code \
+            test/Phase1ArchitectureInstantiationMain.hs
+
+      - name: Re-run unchanged architecture instantiation corpus
+        run: |
+          set -euo pipefail
+          cabal exec -- runghc -isrc test/Phase1ArchitectureInstantiationMain.hs
+
+      - name: Record production binding identities
+        run: |
+          set -euo pipefail
+          mkdir -p architecture-instantiation-production-binding
+          sha256sum \
+            src/ArchitectureInstantiationKernel.hs \
+            src/Phil/Core/Static.hs \
+            phil-core.cabal \
+            test/Phase1ArchitectureInstantiationMain.hs \
+            app/ArchitectureInstantiationDecisionCorrespondenceMain.hs \
+            > architecture-instantiation-production-binding/PHIL-ARCH-INST-IMPL-001.production.sha256
+          cp \
+            src/ArchitectureInstantiationKernel.hs \
+            src/Phil/Core/Static.hs \
+            phil-core.cabal \
+            test/Phase1ArchitectureInstantiationMain.hs \
+            app/ArchitectureInstantiationDecisionCorrespondenceMain.hs \
+            docs/phase-1/architecture-instantiation-production-binding-v1.md \
+            architecture-instantiation-production-binding/
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: architecture-instantiation-production-binding
+          path: architecture-instantiation-production-binding
+          if-no-files-found: error
