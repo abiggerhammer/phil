@@ -1,6 +1,6 @@
 # Authority confinement implementation refinement v1
 
-This staging tranche begins `PHIL-AUTH-CONFINE-IMPL-001`, mechanically connecting production AUTH-004 closure confinement and PROV-009/AUTH-006 provider-authority qualification to the already-Certified `PHIL-AUTH-CONFINE-001` semantics. Production behavior is unchanged in this tranche.
+`PHIL-AUTH-CONFINE-IMPL-001` mechanically connects production AUTH-004 closure confinement and PROV-009/AUTH-006 provider-authority qualification to the already-Certified `PHIL-AUTH-CONFINE-001` semantics. The exact Rocq-extracted kernel is checked in and production final acceptance is bound through it.
 
 ## Executable semantic seam
 
@@ -17,6 +17,14 @@ The Rocq-extracted kernel owns representation-neutral decisions over exact Boole
 
 The correspondence theorems are sound and complete for the corresponding Certified propositions under explicit reflection hypotheses connecting finite native facts to the representation-neutral relations.
 
+## Production binding
+
+`Phil.Core.AuthorityConfinement` reflects the native Set facts for public/reachable/exercised confinement into `decideClosureAuthorityConfinement`. Existing rejection precedence and checked-value construction remain native, but success requires the extracted decision to accept the same three facts. Negative-authority claims are decided by `decideNegativeAuthorityClaim` from the canonical checked reachable set; the retained reachability-origin diagnostics must agree with that set or the bridge fails closed.
+
+`Phil.Core.ProviderAuthorityQualification` maps native provider-subject, inventory-basis, and extra-authority-disposition constructors to the corresponding extracted kinds. It routes subject acceptance, inventory-basis acceptance, static-summary acceptance, per-extra disposition acceptance, and the final qualification conjunction through the kernel. The native `internal \\ clientVisible` set is additionally checked pointwise against `decideProviderExtraAuthority` before disposition-domain validation, so Set representation disagreement cannot silently reach a successful qualification.
+
+Both modules use explicit bridge-mismatch errors for impossible native/kernel disagreement. Handwritten code may therefore reject more conservatively on representation failure, but cannot turn an extracted-kernel rejection into success.
+
 ## Explicit representation boundary
 
 Production continues to own the concrete finite representations and diagnostics:
@@ -29,10 +37,12 @@ Production continues to own the concrete finite representations and diagnostics:
 - provider evidence/assumption/TCB payload preservation; and
 - exact rejection precedence, diagnostic payloads, and accepted checked-value construction.
 
-These facts must be reflected exactly. Handwritten bridge/diagnostic code may reject on disagreement but may not turn an extracted-kernel rejection into success. Coq `bool` is extracted directly to Haskell `Prelude.Bool`.
+These facts must be reflected exactly. Coq `bool` is extracted directly to Haskell `Prelude.Bool`, so there is no separate Boolean representation bridge.
 
 ## Validation
 
-The dedicated workflow recompiles the Certified authority proof chain and the new executable correspondence under Rocq 9.2.0, fresh-extracts `AuthorityConfinementKernel.hs`, typechecks the fresh kernel under GHC 9.6.7 with `-Wall -Werror`, typechecks the unchanged production confinement/provider-authority modules, and reruns the existing authority attenuation, AUTH-004 confinement, provider semantic qualification, and PROV-009/AUTH-006 provider-authority corpora.
+The dedicated workflow recompiles the Certified authority proof chain and executable correspondence under Rocq 9.2.0, fresh-extracts `AuthorityConfinementKernel.hs`, and requires byte-for-byte identity with the checked-in kernel. An exact mismatch prints a unified diff and fails.
 
-On an all-green exact head, harvest the exact kernel/proof artifact, record `PHIL-AUTH-CONFINE-IMPL-001` as `Active / Mechanized`, merge this staging tranche, then production-bind final acceptance through the checked-in exact extracted kernel with fail-closed native Set/Map/list/equality bridges.
+The production-binding job then typechecks the exact kernel, both bound production modules, and the direct binding corpus under GHC 9.6.7 with `-Wall -Werror`. It reruns the unchanged authority attenuation, AUTH-004 confinement, provider semantic qualification, and PROV-009/AUTH-006 provider-authority corpora, plus direct binding cases for closure acceptance/rejection, negative claims, semantic and foreign provider acceptance, revision mismatch, ABI rejection, and exact extra-disposition coverage. Final production correspondence hashes are uploaded as a separate closeout artifact.
+
+An all-green exact head closes `PHIL-AUTH-CONFINE-IMPL-001` as `Discharged / Implementation Refined`.
