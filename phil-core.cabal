@@ -57,6 +57,7 @@ library
       Phil.Compiler
   other-modules:
       ArchitectureIdentityKernel
+      ArchitectureInstantiationKernel
       ArchitectureRevisionConstructionKernel
       AssuranceValidityScopeKernel
       Phil.Surface.Check.Types
