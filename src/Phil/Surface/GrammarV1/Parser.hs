@@ -55,6 +55,9 @@ module Phil.Surface.GrammarV1.Parser
   , GrammarV1Statement (..)
   , GrammarV1Block (..)
   , GrammarV1ComponentDecl (..)
+  , GrammarV1ArchitectureItem (..)
+  , GrammarV1ArchitectureDecl (..)
+  , GrammarV1ProgramDecl (..)
   , parseGrammarV1StructuralSource
   ) where
 
@@ -117,6 +120,8 @@ data GrammarV1Declaration
   | GrammarV1BoundaryDeclaration GrammarV1BoundaryDecl
   | GrammarV1ProtocolDeclaration GrammarV1ProtocolDecl
   | GrammarV1ComponentDeclaration GrammarV1ComponentDecl
+  | GrammarV1ArchitectureDeclaration GrammarV1ArchitectureDecl
+  | GrammarV1ProgramDeclaration GrammarV1ProgramDecl
   deriving (Eq, Show)
 
 data GrammarV1StructuralMode
@@ -503,6 +508,29 @@ data GrammarV1ComponentDecl = GrammarV1ComponentDecl
   }
   deriving (Eq, Show)
 
+data GrammarV1ArchitectureItem
+  = GrammarV1ArchitectureInstance
+      (Located Text)
+      (Located GrammarV1StaticReference)
+  | GrammarV1ArchitectureProcess
+      (Located Text)
+      (Located GrammarV1QualifiedName)
+  deriving (Eq, Show)
+
+data GrammarV1ArchitectureDecl = GrammarV1ArchitectureDecl
+  { grammarV1ArchitectureName :: Located Text
+  , grammarV1ArchitectureGenericParams :: [Located GrammarV1GenericParam]
+  , grammarV1ArchitectureRequirements :: [Located GrammarV1GenericRequirement]
+  , grammarV1ArchitectureItems :: [Located GrammarV1ArchitectureItem]
+  }
+  deriving (Eq, Show)
+
+data GrammarV1ProgramDecl = GrammarV1ProgramDecl
+  { grammarV1ProgramName :: Located Text
+  , grammarV1ProgramTarget :: Located GrammarV1StaticReference
+  }
+  deriving (Eq, Show)
+
 type Tokens = [Located GrammarV1Token]
 
 newtype Parser a = Parser
@@ -666,6 +694,8 @@ parseDeclaration = do
     Just (GrammarKeyword "boundary") -> parseBoundaryDeclaration
     Just (GrammarKeyword "protocol") -> parseProtocolDeclaration
     Just (GrammarKeyword "component") -> parseComponentDeclaration
+    Just (GrammarKeyword "architecture") -> parseArchitectureDeclaration
+    Just (GrammarKeyword "program") -> parseProgramDeclaration
     Just other -> failParser $
       "SURF-002 production parser does not yet implement declaration production beginning with "
         <> renderToken other
@@ -1247,6 +1277,70 @@ parseComponentDeclaration = do
       , grammarV1ComponentProvides = provides
       , grammarV1ComponentBody = body
       })
+
+parseArchitectureDeclaration :: Parser (Located GrammarV1Declaration)
+parseArchitectureDeclaration = do
+  start <- expectKeyword "architecture"
+  name <- expectIdentifier
+  params <- parseOptionalGenericParams
+  requirements <- parseOptionalGenericRequirements
+  _ <- expectSymbol "{"
+  items <- parseArchitectureItems
+  end <- expectSymbol "}"
+  pure $ locatedBetween start end $
+    GrammarV1ArchitectureDeclaration GrammarV1ArchitectureDecl
+      { grammarV1ArchitectureName = name
+      , grammarV1ArchitectureGenericParams = params
+      , grammarV1ArchitectureRequirements = requirements
+      , grammarV1ArchitectureItems = items
+      }
+
+parseArchitectureItems :: Parser [Located GrammarV1ArchitectureItem]
+parseArchitectureItems = do
+  atEnd <- peekSymbol "}"
+  if atEnd
+    then pure []
+    else do
+      item <- parseArchitectureItem
+      rest <- parseArchitectureItems
+      pure (item : rest)
+
+parseArchitectureItem :: Parser (Located GrammarV1ArchitectureItem)
+parseArchitectureItem = do
+  token <- peekToken
+  case fmap locatedValue token of
+    Just (GrammarKeyword "instance") -> do
+      start <- expectKeyword "instance"
+      name <- expectIdentifier
+      _ <- expectSymbol "="
+      target <- parseStaticReference
+      end <- expectSymbol ";"
+      pure $ locatedBetween start end (GrammarV1ArchitectureInstance name target)
+    Just (GrammarKeyword "process") -> do
+      start <- expectKeyword "process"
+      name <- expectIdentifier
+      _ <- expectSymbol "="
+      target <- parseQualifiedName
+      end <- expectSymbol ";"
+      pure $ locatedBetween start end (GrammarV1ArchitectureProcess name target)
+    Just other -> failParser $
+      "SURF-002 static process-network slice does not yet implement architecture_item beginning with "
+        <> renderToken other
+    Nothing -> failParser "unterminated architecture declaration"
+
+parseProgramDeclaration :: Parser (Located GrammarV1Declaration)
+parseProgramDeclaration = do
+  start <- expectKeyword "program"
+  name <- expectIdentifier
+  _ <- expectSymbol "="
+  _ <- expectKeyword "instantiate"
+  target <- parseStaticReference
+  end <- expectSymbol ";"
+  pure $ locatedBetween start end $
+    GrammarV1ProgramDeclaration GrammarV1ProgramDecl
+      { grammarV1ProgramName = name
+      , grammarV1ProgramTarget = target
+      }
 
 parseOptionalTermParams :: Parser (Maybe [Located GrammarV1TermParam])
 parseOptionalTermParams = do

@@ -310,6 +310,8 @@ declarationMode declaration = case declaration of
   GrammarV1BoundaryDeclaration _ -> Nothing
   GrammarV1ProtocolDeclaration _ -> Nothing
   GrammarV1ComponentDeclaration _ -> Nothing
+  GrammarV1ArchitectureDeclaration _ -> Nothing
+  GrammarV1ProgramDeclaration _ -> Nothing
 
 nameShapedStaticActualPreserved :: Either String ()
 nameShapedStaticActualPreserved = do
