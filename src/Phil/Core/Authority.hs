@@ -19,6 +19,7 @@ module Phil.Core.Authority
   , dropAuthorityCapability
   ) where
 
+import qualified AuthorityPossessionKernel as AuthorityPossessionKernel
 import qualified Data.Map.Strict as Map
 import qualified Data.Set as Set
 import Data.Text (Text)
@@ -94,6 +95,7 @@ data AuthorityCheckError
   = DuplicateCapabilityOccurrence CapabilityOccurrenceKey
   | UnknownCapabilityOccurrence CapabilityOccurrenceKey
   | AuthoritySourceIsNotPossession AuthorityExerciseSource
+  | AuthorityPossessionKernelBridgeMismatch
   | AuthorityContractMismatch AuthorityContractKey AuthorityContractKey
   | AuthoritySubjectMismatch AuthoritySubjectKey AuthoritySubjectKey
   | AuthorityOperationNotPermitted AuthorityOperationKey
@@ -122,10 +124,12 @@ lookupAuthorityCapability
   -> Maybe AuthorityCapability
 lookupAuthorityCapability key = Map.lookup key . authorityStateCapabilities
 
--- | Establish permission to exercise one semantic authority operation. This
--- check establishes possession and exact contract/subject/operation agreement;
--- it does not by itself consume or transform the capability. Operation-specific
--- resource transitions are a separate semantic layer under ADR-014.
+-- | Establish permission to exercise one semantic authority operation. Concrete
+-- occurrence lookup and finite Set membership remain native representation
+-- facts; the extracted PHIL-AUTH-POSSESS-001 kernel owns final semantic
+-- rejection precedence and acceptance. Native facts are checked against the
+-- returned decision so a representation/kernel disagreement can only fail
+-- closed.
 checkAuthorityExercise
   :: AuthorityRequirement
   -> AuthorityExerciseSource
@@ -137,28 +141,53 @@ checkAuthorityExercise requirement source state = case source of
       (Left (UnknownCapabilityOccurrence occurrence))
       Right
       (lookupAuthorityCapability occurrence state)
-    if authorityCapabilityContract capability /= requiredAuthorityContract requirement
-      then Left (AuthorityContractMismatch
-        (requiredAuthorityContract requirement)
-        (authorityCapabilityContract capability))
-      else if authorityCapabilitySubject capability /= requiredAuthoritySubject requirement
-        then Left (AuthoritySubjectMismatch
-          (requiredAuthoritySubject requirement)
-          (authorityCapabilitySubject capability))
-        else if not (Set.member
-            (requiredAuthorityOperation requirement)
-            (authorityCapabilityOperations capability))
-          then Left (AuthorityOperationNotPermitted
-            (requiredAuthorityOperation requirement))
-          else Right CheckedAuthorityExercise
-            { checkedAuthorityRequirement = requirement
-            , checkedAuthorityCapability = capability
-            }
-  _ -> Left (AuthoritySourceIsNotPossession source)
+    let contractMatches =
+          authorityCapabilityContract capability == requiredAuthorityContract requirement
+        subjectMatches =
+          authorityCapabilitySubject capability == requiredAuthoritySubject requirement
+        operationPermitted = Set.member
+          (requiredAuthorityOperation requirement)
+          (authorityCapabilityOperations capability)
+        decision = AuthorityPossessionKernel.decideAuthorityExerciseFacts
+          True
+          contractMatches
+          subjectMatches
+          operationPermitted
+    case decision of
+      AuthorityPossessionKernel.AuthorityExerciseAccepted
+        | contractMatches && subjectMatches && operationPermitted ->
+            Right CheckedAuthorityExercise
+              { checkedAuthorityRequirement = requirement
+              , checkedAuthorityCapability = capability
+              }
+        | otherwise -> Left AuthorityPossessionKernelBridgeMismatch
+      AuthorityPossessionKernel.AuthorityExerciseContractRejected
+        | not contractMatches -> Left (AuthorityContractMismatch
+            (requiredAuthorityContract requirement)
+            (authorityCapabilityContract capability))
+        | otherwise -> Left AuthorityPossessionKernelBridgeMismatch
+      AuthorityPossessionKernel.AuthorityExerciseSubjectRejected
+        | contractMatches && not subjectMatches -> Left (AuthoritySubjectMismatch
+            (requiredAuthoritySubject requirement)
+            (authorityCapabilitySubject capability))
+        | otherwise -> Left AuthorityPossessionKernelBridgeMismatch
+      AuthorityPossessionKernel.AuthorityExerciseOperationRejected
+        | contractMatches && subjectMatches && not operationPermitted ->
+            Left (AuthorityOperationNotPermitted
+              (requiredAuthorityOperation requirement))
+        | otherwise -> Left AuthorityPossessionKernelBridgeMismatch
+      AuthorityPossessionKernel.AuthorityExerciseSourceRejected ->
+        Left AuthorityPossessionKernelBridgeMismatch
+  _ ->
+    case AuthorityPossessionKernel.decideAuthorityExerciseFacts
+        False False False False of
+      AuthorityPossessionKernel.AuthorityExerciseSourceRejected ->
+        Left (AuthoritySourceIsNotPossession source)
+      _ -> Left AuthorityPossessionKernelBridgeMismatch
 
--- | Ordinary contraction for an authority-bearing value. Unrestricted
--- authority may be copied into a fresh occurrence; affine/linear authority may
--- not. Copying does not widen the authority contract, subject, or operation set.
+-- | Ordinary contraction for an authority-bearing value. Concrete lookup and
+-- target freshness remain native; the extracted kernel decides structural copy
+-- legality from the exact bridged Mode. A kernel/native disagreement rejects.
 copyAuthorityCapability
   :: CapabilityOccurrenceKey
   -> CapabilityOccurrenceKey
@@ -171,18 +200,25 @@ copyAuthorityCapability sourceKey targetKey state = do
     (lookupAuthorityCapability sourceKey state)
   if Map.member targetKey capabilities
     then Left (CapabilityCopyTargetAlreadyExists targetKey)
-    else case authorityCapabilityMode source of
-      Unrestricted -> Right (AuthorityState
-        (Map.insert targetKey
-          (source { authorityCapabilityOccurrence = targetKey })
-          capabilities))
-      mode -> Left (RestrictedCapabilityCopy sourceKey mode)
+    else
+      let mode = authorityCapabilityMode source
+      in case AuthorityPossessionKernel.decideAuthorityCopy
+          (toAuthorityPossessionKernelMode mode) of
+        AuthorityPossessionKernel.AuthorityCopyAccepted
+          | mode == Unrestricted -> Right (AuthorityState
+              (Map.insert targetKey
+                (source { authorityCapabilityOccurrence = targetKey })
+                capabilities))
+          | otherwise -> Left AuthorityPossessionKernelBridgeMismatch
+        AuthorityPossessionKernel.AuthorityCopyRejected
+          | mode /= Unrestricted -> Left (RestrictedCapabilityCopy sourceKey mode)
+          | otherwise -> Left AuthorityPossessionKernelBridgeMismatch
   where
     capabilities = authorityStateCapabilities state
 
--- | Ordinary weakening for an authority-bearing value. Unrestricted and affine
--- capabilities may be dropped; linear capabilities retain their lifecycle
--- obligation independently of whether their authority was ever exercised.
+-- | Ordinary weakening for an authority-bearing value. Concrete lookup and
+-- state deletion remain native; the extracted kernel decides structural drop
+-- legality from the exact bridged Mode. A kernel/native disagreement rejects.
 dropAuthorityCapability
   :: CapabilityOccurrenceKey
   -> AuthorityState
@@ -192,8 +228,20 @@ dropAuthorityCapability key state = do
     (Left (UnknownCapabilityOccurrence key))
     Right
     (lookupAuthorityCapability key state)
-  case authorityCapabilityMode capability of
-    Linear -> Left (LinearCapabilityDrop key)
-    _ -> Right (AuthorityState (Map.delete key capabilities))
+  let mode = authorityCapabilityMode capability
+  case AuthorityPossessionKernel.decideAuthorityDrop
+      (toAuthorityPossessionKernelMode mode) of
+    AuthorityPossessionKernel.AuthorityDropAccepted
+      | mode /= Linear -> Right (AuthorityState (Map.delete key capabilities))
+      | otherwise -> Left AuthorityPossessionKernelBridgeMismatch
+    AuthorityPossessionKernel.AuthorityDropRejected
+      | mode == Linear -> Left (LinearCapabilityDrop key)
+      | otherwise -> Left AuthorityPossessionKernelBridgeMismatch
   where
     capabilities = authorityStateCapabilities state
+
+toAuthorityPossessionKernelMode :: Mode -> AuthorityPossessionKernel.Mode
+toAuthorityPossessionKernelMode mode = case mode of
+  Unrestricted -> AuthorityPossessionKernel.Unrestricted
+  Affine -> AuthorityPossessionKernel.Affine
+  Linear -> AuthorityPossessionKernel.Linear

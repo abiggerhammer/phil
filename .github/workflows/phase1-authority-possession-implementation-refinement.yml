@@ -8,6 +8,7 @@ on:
       - 'proof/Phil/Core/AuthorityPossessionImplementation.v'
       - 'proof/Phil/Core/AuthorityPossessionImplementationExtraction.v'
       - 'docs/phase-1/authority-possession-implementation-refinement-v1.md'
+      - 'src/AuthorityPossessionKernel.hs'
       - 'src/Phil/Core/Authority.hs'
       - 'test/Phase1AuthorityPossessionMain.hs'
       - '.github/workflows/phase1-authority-possession-implementation-refinement.yml'
@@ -19,6 +20,7 @@ on:
       - 'proof/Phil/Core/AuthorityPossessionImplementation.v'
       - 'proof/Phil/Core/AuthorityPossessionImplementationExtraction.v'
       - 'docs/phase-1/authority-possession-implementation-refinement-v1.md'
+      - 'src/AuthorityPossessionKernel.hs'
       - 'src/Phil/Core/Authority.hs'
       - 'test/Phase1AuthorityPossessionMain.hs'
       - '.github/workflows/phase1-authority-possession-implementation-refinement.yml'
@@ -44,7 +46,7 @@ jobs:
           rocq c -Q proof/Phil Phil proof/Phil/Core/AuthorityPossession.v
           rocq c -Q proof/Phil Phil proof/Phil/Core/AuthorityPossessionImplementation.v
 
-      - name: Extract authority possession kernel
+      - name: Fresh-extract and compare authority possession kernel
         shell: bash
         run: |
           set -euo pipefail
@@ -55,6 +57,10 @@ jobs:
           grep -q 'decideAuthorityExerciseFacts' AuthorityPossessionKernel.hs
           grep -q 'decideAuthorityCopy' AuthorityPossessionKernel.hs
           grep -q 'decideAuthorityDrop' AuthorityPossessionKernel.hs
+          if ! cmp -s AuthorityPossessionKernel.hs src/AuthorityPossessionKernel.hs; then
+            diff -u src/AuthorityPossessionKernel.hs AuthorityPossessionKernel.hs || true
+            exit 1
+          fi
           sha256sum AuthorityPossessionKernel.hs
           mkdir -p authority-possession-implementation-refinement-proof
           cp \
@@ -70,31 +76,44 @@ jobs:
           path: authority-possession-implementation-refinement-proof
           if-no-files-found: error
 
-  verify-authority-possession-implementation-correspondence:
+  verify-authority-possession-production-binding:
     needs: rocq-authority-possession-implementation-refinement
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
-
-      - uses: actions/download-artifact@v4
-        with:
-          name: rocq-authority-possession-implementation-refinement
-          path: extracted-authority-possession
 
       - uses: haskell-actions/setup@v2
         with:
           ghc-version: '9.6.7'
           cabal-version: 'latest'
 
-      - name: Typecheck extracted kernel and unchanged authority path
+      - name: Typecheck exact kernel and bound authority production path
         run: |
           set -euo pipefail
-          ghc -Wall -Werror -Wno-unused-imports -fno-code extracted-authority-possession/AuthorityPossessionKernel.hs
+          ghc -isrc -Wall -Werror -c src/AuthorityPossessionKernel.hs
           cabal build exe:phil-certify-core-scalar --ghc-options=-Werror
-          cabal exec -- ghc -isrc -Wall -Werror -fno-code src/Phil/Core/Authority.hs
-          cabal exec -- ghc -isrc -Wall -Werror -fno-code test/Phase1AuthorityPossessionMain.hs
+          cabal exec -- ghc -isrc -Wall -Werror -fno-code \
+            src/Phil/Core/Authority.hs \
+            test/Phase1AuthorityPossessionMain.hs
 
-      - name: Re-run unchanged AUTH-001, AUTH-002, and AUTH-005 corpus
+      - name: Run bound AUTH-001, AUTH-002, and AUTH-005 correspondence corpus
         run: |
           set -euo pipefail
           cabal exec -- runghc -isrc test/Phase1AuthorityPossessionMain.hs
+
+      - name: Record production closeout identities
+        run: |
+          set -euo pipefail
+          mkdir -p authority-possession-production-binding
+          sha256sum \
+            src/AuthorityPossessionKernel.hs \
+            src/Phil/Core/Authority.hs \
+            test/Phase1AuthorityPossessionMain.hs \
+            > authority-possession-production-binding/PHIL-AUTH-POSSESS-IMPL-001.correspondence.sha256
+          cat authority-possession-production-binding/PHIL-AUTH-POSSESS-IMPL-001.correspondence.sha256
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: phil-authority-possession-production-binding
+          path: authority-possession-production-binding
+          if-no-files-found: error
