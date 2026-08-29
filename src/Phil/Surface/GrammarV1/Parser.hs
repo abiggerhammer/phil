@@ -458,6 +458,7 @@ data GrammarV1Expression
       (Located GrammarV1Block)
   | GrammarV1ContinueExpression [Located GrammarV1Expression]
   | GrammarV1ClosureExpression GrammarV1Closure
+  | GrammarV1RejectExpression (Located GrammarV1Expression)
   deriving (Eq, Ord, Show)
 
 data GrammarV1Statement
@@ -1283,6 +1284,7 @@ parseExpression = do
     Just (GrammarKeyword "loop") -> parseLoopExpression
     Just (GrammarKeyword "continue") -> parseContinueExpression
     Just (GrammarKeyword "closure") -> parseClosureExpression
+    Just (GrammarKeyword "reject") -> parseRejectExpression
     Just (GrammarKeyword "true") -> do
       value <- expectKeyword "true"
       pure (Located (locatedSpan value) (GrammarV1BoolExpression True))
@@ -1627,6 +1629,16 @@ parseClosureCaptures = do
       rest <- parseCommaIdentifiers
       _ <- expectSymbol ")"
       pure (first : rest)
+
+parseRejectExpression :: Parser (Located GrammarV1Expression)
+parseRejectExpression = do
+  start <- expectKeyword "reject"
+  operand <- parseExpression
+  pure $ Located
+    (SourceSpan
+      (sourceSpanStart (locatedSpan start))
+      (sourceSpanEnd (locatedSpan operand)))
+    (GrammarV1RejectExpression operand)
 
 parseTupleOrParenthesizedExpression :: Parser (Located GrammarV1Expression)
 parseTupleOrParenthesizedExpression = do
