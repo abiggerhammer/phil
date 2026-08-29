@@ -124,20 +124,20 @@ checkExplicitAuthorityAttenuation source target witness =
           }
       | otherwise -> Left AuthorityAttenuationKernelBridgeMismatch
     False
-      | not subjectMatches = Left (AuthorityAttenuationSubjectMismatch
+      | not subjectMatches -> Left (AuthorityAttenuationSubjectMismatch
           (authoritySurfaceSubject source)
           (authoritySurfaceSubject target))
-      | not noWiden = Left (AuthorityAttenuationWouldWiden excess)
-      | not witnessSourceMatches = Left (AuthorityAttenuationWitnessSourceMismatch
+      | not noWiden -> Left (AuthorityAttenuationWouldWiden excess)
+      | not witnessSourceMatches -> Left (AuthorityAttenuationWitnessSourceMismatch
           (authoritySurfaceContract source)
           (authorityAttenuationSourceContract witness))
-      | not witnessTargetMatches = Left (AuthorityAttenuationWitnessTargetMismatch
+      | not witnessTargetMatches -> Left (AuthorityAttenuationWitnessTargetMismatch
           (authoritySurfaceContract target)
           (authorityAttenuationTargetContract witness))
-      | not witnessSubjectMatches = Left (AuthorityAttenuationWitnessSubjectMismatch
+      | not witnessSubjectMatches -> Left (AuthorityAttenuationWitnessSubjectMismatch
           (authoritySurfaceSubject target)
           (authorityAttenuationSubject witness))
-      | not witnessOperationsMatch = Left (AuthorityAttenuationWitnessOperationsMismatch
+      | not witnessOperationsMatch -> Left (AuthorityAttenuationWitnessOperationsMismatch
           (authoritySurfaceOperations target)
           (authorityAttenuationVisibleOperations witness))
       | otherwise -> Left AuthorityAttenuationKernelBridgeMismatch
@@ -206,11 +206,11 @@ checkAuthorityBoundary kind available visible maybeWitness =
           Nothing -> Left AuthorityAttenuationKernelBridgeMismatch
       | otherwise -> Left AuthorityAttenuationKernelBridgeMismatch
     False
-      | not subjectMatches = Left (AuthorityAttenuationSubjectMismatch
+      | not subjectMatches -> Left (AuthorityAttenuationSubjectMismatch
           (authoritySurfaceSubject available)
           (authoritySurfaceSubject visible))
-      | not noWiden = Left (AuthorityAttenuationWouldWiden excess)
-      | sameContract && not sameSurface =
+      | not noWiden -> Left (AuthorityAttenuationWouldWiden excess)
+      | sameContract && not sameSurface ->
           Left (AuthorityBoundarySameContractSurfaceMismatch
             kind
             (authoritySurfaceOperations available)
