@@ -184,10 +184,10 @@ Proof.
       * destruct (instantiateStrongest environment rest) as [tailMode |] eqn:Htail.
         -- inversion Hinst; subst aggregate.
            eapply modeLe_trans.
-           ++ eapply IH.
+           ++ eapply (IH parameter actual tailMode).
               ** exact Henv.
               ** exact Hin.
-              ** exact Htail.
+              ** reflexivity.
            ++ apply modeLub_right_upper.
         -- discriminate.
       * discriminate.
