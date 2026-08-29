@@ -34,11 +34,13 @@ statefulContract = LoopControlContract ["i", "payload"] ["result"]
 
 bareContinueZeroAccepts :: Either String ()
 bareContinueZeroAccepts =
-  expectActuals [] $ elaborateLoopControl ContinueControl zeroContract BareLoopControl
+  expectActuals ([] :: [Int]) $
+    elaborateLoopControl ContinueControl zeroContract BareLoopControl
 
 emptyContinueZeroAccepts :: Either String ()
 emptyContinueZeroAccepts =
-  expectActuals [] $ elaborateLoopControl ContinueControl zeroContract EmptyLoopControl
+  expectActuals ([] :: [Int]) $
+    elaborateLoopControl ContinueControl zeroContract EmptyLoopControl
 
 explicitContinueStateAccepts :: Either String ()
 explicitContinueStateAccepts =
@@ -57,11 +59,13 @@ emptyContinueStateRejects =
 
 bareBreakZeroAccepts :: Either String ()
 bareBreakZeroAccepts =
-  expectActuals [] $ elaborateLoopControl BreakControl zeroContract BareLoopControl
+  expectActuals ([] :: [Int]) $
+    elaborateLoopControl BreakControl zeroContract BareLoopControl
 
 emptyBreakZeroAccepts :: Either String ()
 emptyBreakZeroAccepts =
-  expectActuals [] $ elaborateLoopControl BreakControl zeroContract EmptyLoopControl
+  expectActuals ([] :: [Int]) $
+    elaborateLoopControl BreakControl zeroContract EmptyLoopControl
 
 explicitBreakExitAccepts :: Either String ()
 explicitBreakExitAccepts =
