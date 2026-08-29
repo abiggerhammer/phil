@@ -15,6 +15,7 @@ module Phil.Core.AuthorityConfinement
   , checkNegativeAuthorityClaim
   ) where
 
+import qualified AuthorityConfinementKernel as AuthorityConfinementKernel
 import qualified Data.Set as Set
 import Data.Text (Text)
 import Phil.Core.Authority
@@ -88,7 +89,8 @@ data CheckedNegativeAuthorityClaim = CheckedNegativeAuthorityClaim
   deriving (Eq, Ord, Show)
 
 data AuthorityConfinementError
-  = ClosurePublicAuthorityNotReachable (Set.Set AuthorityUse)
+  = AuthorityConfinementKernelBridgeMismatch
+  | ClosurePublicAuthorityNotReachable (Set.Set AuthorityUse)
   | ClosureExercisedAuthorityNotReachable (Set.Set AuthorityUse)
   | ClosureExercisedAuthorityExceedsPublic (Set.Set AuthorityUse)
   | NegativeAuthorityClaimFalse
@@ -111,26 +113,31 @@ reachableAuthorityUses = foldr
   (Set.union . authorityUsesForSurface . reachableAuthoritySurface)
   Set.empty
 
--- | Check the pure-Phil closure confinement relation. Broader internal authority
--- is legal when the checked body remains inside the public mediated authority.
--- A public authority promise must itself be realizable from the closure's exact
--- reachable environment in this bounded per-instance model.
+-- | Check the pure-Phil closure confinement relation. Native Set reflection
+-- supplies the three exact subset facts; the extracted PHIL-AUTH-CONFINE-001
+-- kernel owns final semantic acceptance. Native diagnostics retain the original
+-- rejection precedence and may only fail closed on disagreement.
 checkClosureAuthorityConfinement
   :: ClosureAuthorityConfinementSpec
   -> Either AuthorityConfinementError CheckedClosureAuthorityConfinement
-checkClosureAuthorityConfinement spec
-  | not (Set.null publicNotReachable) =
-      Left (ClosurePublicAuthorityNotReachable publicNotReachable)
-  | not (Set.null exercisedNotReachable) =
-      Left (ClosureExercisedAuthorityNotReachable exercisedNotReachable)
-  | not (Set.null exercisedOutsidePublic) =
-      Left (ClosureExercisedAuthorityExceedsPublic exercisedOutsidePublic)
-  | otherwise = Right CheckedClosureAuthorityConfinement
-      { checkedClosureReachableAuthority = reachable
-      , checkedClosurePublicMediatedAuthority = public
-      , checkedClosureExercisedAuthority = exercised
-      , checkedClosureAuthorityOrigins = closureReachableAuthority spec
-      }
+checkClosureAuthorityConfinement spec =
+  case decision of
+    True
+      | allFacts -> Right CheckedClosureAuthorityConfinement
+          { checkedClosureReachableAuthority = reachable
+          , checkedClosurePublicMediatedAuthority = public
+          , checkedClosureExercisedAuthority = exercised
+          , checkedClosureAuthorityOrigins = closureReachableAuthority spec
+          }
+      | otherwise -> Left AuthorityConfinementKernelBridgeMismatch
+    False
+      | not publicSubsetReachable ->
+          Left (ClosurePublicAuthorityNotReachable publicNotReachable)
+      | not exercisedSubsetReachable ->
+          Left (ClosureExercisedAuthorityNotReachable exercisedNotReachable)
+      | not exercisedSubsetPublic ->
+          Left (ClosureExercisedAuthorityExceedsPublic exercisedOutsidePublic)
+      | otherwise -> Left AuthorityConfinementKernelBridgeMismatch
   where
     reachable = reachableAuthorityUses (closureReachableAuthority spec)
     public = closurePublicMediatedAuthority spec
@@ -138,28 +145,47 @@ checkClosureAuthorityConfinement spec
     publicNotReachable = Set.difference public reachable
     exercisedNotReachable = Set.difference exercised reachable
     exercisedOutsidePublic = Set.difference exercised public
+    publicSubsetReachable = Set.null publicNotReachable
+    exercisedSubsetReachable = Set.null exercisedNotReachable
+    exercisedSubsetPublic = Set.null exercisedOutsidePublic
+    allFacts = and
+      [ publicSubsetReachable
+      , exercisedSubsetReachable
+      , exercisedSubsetPublic
+      ]
+    decision = AuthorityConfinementKernel.decideClosureAuthorityConfinement
+      publicSubsetReachable
+      exercisedSubsetReachable
+      exercisedSubsetPublic
 
 -- | Prove one negative reachable-authority claim from an already checked closure
--- summary. Narrow public behavior is not enough: the claim fails whenever any
--- captured capability or callable still makes the operation reachable for the
--- exact subject, even if checked body confinement proves that operation is not
--- exercised through the current public callable interface.
+-- summary. The extracted kernel decides absence from the canonical reachable set;
+-- retained origin diagnostics must agree with that set or the bridge fails closed.
 checkNegativeAuthorityClaim
   :: CheckedClosureAuthorityConfinement
   -> NegativeAuthorityClaim
   -> Either AuthorityConfinementError CheckedNegativeAuthorityClaim
-checkNegativeAuthorityClaim checked claim
-  | Set.null origins = Right CheckedNegativeAuthorityClaim
-      { checkedNegativeAuthorityClaim = claim
-      , checkedNegativeAuthorityReachableSet = checkedClosureReachableAuthority checked
-      }
-  | otherwise = Left (NegativeAuthorityClaimFalse claim origins)
+checkNegativeAuthorityClaim checked claim =
+  case decision of
+    True
+      | not authorityReachable && Set.null origins -> Right CheckedNegativeAuthorityClaim
+          { checkedNegativeAuthorityClaim = claim
+          , checkedNegativeAuthorityReachableSet = reachable
+          }
+      | otherwise -> Left AuthorityConfinementKernelBridgeMismatch
+    False
+      | authorityReachable && not (Set.null origins) ->
+          Left (NegativeAuthorityClaimFalse claim origins)
+      | otherwise -> Left AuthorityConfinementKernelBridgeMismatch
   where
+    reachable = checkedClosureReachableAuthority checked
     targetUse = AuthorityUse
       (negativeAuthoritySubject claim)
       (negativeAuthorityOperation claim)
+    authorityReachable = Set.member targetUse reachable
     origins = Set.fromList
       [ reachableAuthorityOrigin grant
       | grant <- checkedClosureAuthorityOrigins checked
       , Set.member targetUse (authorityUsesForSurface (reachableAuthoritySurface grant))
       ]
+    decision = AuthorityConfinementKernel.decideNegativeAuthorityClaim authorityReachable
