@@ -1,5 +1,5 @@
 module corpus.bad_outcome_block;
 
 callable Bad(blob : Blob) -> ReadResult {
-  outcome ReadOk state (blob_next : Blob);
+  outcome success ReadOk state (blob_next : Blob);
 }
