@@ -1,0 +1,136 @@
+name: Phase 1 Architecture Realization Implementation Refinement
+
+on:
+  pull_request:
+    paths:
+      - 'proof/Phil/Core/ArchitectureIdentity.v'
+      - 'proof/Phil/Core/ArchitectureInstantiation.v'
+      - 'proof/Phil/Core/ProviderReplacementQualification.v'
+      - 'proof/Phil/Core/ArchitectureRealization.v'
+      - 'proof/Phil/Core/ArchitectureRealizationImplementation.v'
+      - 'proof/Phil/Core/ArchitectureRealizationImplementationExtraction.v'
+      - 'docs/phase-1/architecture-realization-implementation-refinement-v1.md'
+      - 'app/ArchitectureRealizationPlanCorrespondenceMain.hs'
+      - 'src/Phil/Core/Static.hs'
+      - 'src/Phil/Core/ProviderReplacementQualification.hs'
+      - 'test/Phase1ArchitectureProviderReplacementMain.hs'
+      - '.github/workflows/phase1-architecture-realization-implementation-refinement.yml'
+  push:
+    branches: [main]
+    paths:
+      - 'proof/Phil/Core/ArchitectureIdentity.v'
+      - 'proof/Phil/Core/ArchitectureInstantiation.v'
+      - 'proof/Phil/Core/ProviderReplacementQualification.v'
+      - 'proof/Phil/Core/ArchitectureRealization.v'
+      - 'proof/Phil/Core/ArchitectureRealizationImplementation.v'
+      - 'proof/Phil/Core/ArchitectureRealizationImplementationExtraction.v'
+      - 'docs/phase-1/architecture-realization-implementation-refinement-v1.md'
+      - 'app/ArchitectureRealizationPlanCorrespondenceMain.hs'
+      - 'src/Phil/Core/Static.hs'
+      - 'src/Phil/Core/ProviderReplacementQualification.hs'
+      - 'test/Phase1ArchitectureProviderReplacementMain.hs'
+      - '.github/workflows/phase1-architecture-realization-implementation-refinement.yml'
+
+permissions:
+  contents: read
+
+jobs:
+  rocq-architecture-realization-implementation-refinement:
+    runs-on: ubuntu-latest
+    container:
+      image: rocq/rocq-prover:9.2.0
+      options: --user root
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Compile Certified realization chain and construction correspondence
+        shell: bash
+        run: |
+          set -euo pipefail
+          export PATH="/home/rocq/.opam/${COMPILER}/bin:$PATH"
+          rocq c -Q proof/Phil Phil proof/Phil/Core/ArchitectureIdentity.v
+          rocq c -Q proof/Phil Phil proof/Phil/Core/ArchitectureInstantiation.v
+          rocq c -Q proof/Phil Phil proof/Phil/Core/ProviderReplacementQualification.v
+          rocq c -Q proof/Phil Phil proof/Phil/Core/ArchitectureRealization.v
+          rocq c -Q proof/Phil Phil proof/Phil/Core/ArchitectureRealizationImplementation.v
+
+      - name: Fresh-extract architecture realization construction plan
+        shell: bash
+        run: |
+          set -euo pipefail
+          export PATH="/home/rocq/.opam/${COMPILER}/bin:$PATH"
+          rm -f ArchitectureRealizationKernel.hs
+          rocq c -Q proof/Phil Phil proof/Phil/Core/ArchitectureRealizationImplementationExtraction.v
+          test -s ArchitectureRealizationKernel.hs
+          grep -q 'planArchitectureRealization' ArchitectureRealizationKernel.hs
+          sha256sum ArchitectureRealizationKernel.hs
+          mkdir -p architecture-realization-refinement-proof
+          cp \
+            proof/Phil/Core/ArchitectureRealization.v \
+            proof/Phil/Core/ArchitectureRealizationImplementation.v \
+            proof/Phil/Core/ArchitectureRealizationImplementation.vo \
+            ArchitectureRealizationKernel.hs \
+            architecture-realization-refinement-proof/
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: rocq-architecture-realization-implementation-refinement
+          path: architecture-realization-refinement-proof
+          if-no-files-found: error
+
+  verify-architecture-realization-implementation-correspondence:
+    needs: rocq-architecture-realization-implementation-refinement
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/download-artifact@v4
+        with:
+          name: rocq-architecture-realization-implementation-refinement
+          path: extracted-architecture-realization
+
+      - uses: haskell-actions/setup@v2
+        with:
+          ghc-version: '9.6.7'
+          cabal-version: 'latest'
+
+      - name: Typecheck and execute extracted realization-plan controls
+        run: |
+          set -euo pipefail
+          ghc -Wall -Werror -Wno-unused-imports -fno-code \
+            extracted-architecture-realization/ArchitectureRealizationKernel.hs
+          ghc -Wall -Werror -Wno-unused-imports \
+            -iextracted-architecture-realization \
+            app/ArchitectureRealizationPlanCorrespondenceMain.hs \
+            -o architecture-realization-plan-controls
+          ./architecture-realization-plan-controls
+
+      - name: Strict-typecheck unchanged production and ARCH-010 corpus
+        run: |
+          set -euo pipefail
+          cabal build exe:phil-certify-core-scalar --ghc-options=-Werror
+          cabal exec -- ghc -isrc -Wall -Werror -fno-code src/Phil/Core/Static.hs
+          cabal exec -- ghc -isrc -Wall -Werror -fno-code \
+            test/Phase1ArchitectureProviderReplacementMain.hs
+
+      - name: Re-run unchanged ARCH-010 corpus
+        run: |
+          set -euo pipefail
+          cabal exec -- runghc -isrc test/Phase1ArchitectureProviderReplacementMain.hs
+
+      - name: Record staging identities
+        run: |
+          set -euo pipefail
+          mkdir -p architecture-realization-implementation-correspondence
+          sha256sum \
+            extracted-architecture-realization/ArchitectureRealizationKernel.hs \
+            src/Phil/Core/Static.hs \
+            test/Phase1ArchitectureProviderReplacementMain.hs \
+            app/ArchitectureRealizationPlanCorrespondenceMain.hs \
+            > architecture-realization-implementation-correspondence/PHIL-ARCH-REALIZE-001.staging.sha256
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: architecture-realization-implementation-correspondence
+          path: architecture-realization-implementation-correspondence
+          if-no-files-found: error
