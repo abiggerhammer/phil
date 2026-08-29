@@ -1,0 +1,104 @@
+name: Phase 1 Data Elimination Proofs
+
+on:
+  pull_request:
+    paths:
+      - 'proof/Phil/Core/DataElimination.v'
+      - 'docs/phase-1/data-elimination-proof-v1.md'
+      - '.github/workflows/phase1-data-elimination-proofs.yml'
+      - 'proof/Phil/Core/Context.v'
+      - 'src/Phil/Core/Context.hs'
+      - 'src/Phil/Core/DataDestruction.hs'
+      - 'src/Phil/Core/DataBorrow.hs'
+      - 'test/Phase1ConsumingRecordDestructionMain.hs'
+      - 'test/Phase1MissingLinearFieldDispositionMain.hs'
+      - 'test/Phase1ConsumingSumMatchMain.hs'
+      - 'test/Phase1BorrowedAggregateInspectionMain.hs'
+      - 'test/Phase1AffineOmissionMain.hs'
+  push:
+    branches: [main]
+    paths:
+      - 'proof/Phil/Core/DataElimination.v'
+      - 'docs/phase-1/data-elimination-proof-v1.md'
+      - '.github/workflows/phase1-data-elimination-proofs.yml'
+      - 'proof/Phil/Core/Context.v'
+      - 'src/Phil/Core/Context.hs'
+      - 'src/Phil/Core/DataDestruction.hs'
+      - 'src/Phil/Core/DataBorrow.hs'
+      - 'test/Phase1ConsumingRecordDestructionMain.hs'
+      - 'test/Phase1MissingLinearFieldDispositionMain.hs'
+      - 'test/Phase1ConsumingSumMatchMain.hs'
+      - 'test/Phase1BorrowedAggregateInspectionMain.hs'
+      - 'test/Phase1AffineOmissionMain.hs'
+
+permissions:
+  contents: read
+
+jobs:
+  rocq-data-elimination-proof:
+    runs-on: ubuntu-latest
+    container:
+      image: rocq/rocq-prover:9.2.0
+      options: --user root
+    steps:
+      - uses: actions/checkout@v4
+      - name: Compile PHIL-DATA-ELIM-001 proof
+        shell: bash
+        run: |
+          set -euo pipefail
+          export PATH="/home/rocq/.opam/${COMPILER}/bin:$PATH"
+          rocq c -Q proof/Phil Phil proof/Phil/Core/Syntax.v
+          rocq c -Q proof/Phil Phil proof/Phil/Core/Context.v
+          rocq c -Q proof/Phil Phil proof/Phil/Core/DataElimination.v
+      - name: Record proof identities
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p data-elimination-proof
+          cp proof/Phil/Core/DataElimination.v proof/Phil/Core/DataElimination.vo data-elimination-proof/
+          sha256sum \
+            proof/Phil/Core/DataElimination.v \
+            proof/Phil/Core/DataElimination.vo \
+            > data-elimination-proof/PHIL-DATA-ELIM-001.proof.sha256
+          {
+            echo 'obligation=PHIL-DATA-ELIM-001'
+            echo 'evidence=Rocq-9.2.0'
+            cat data-elimination-proof/PHIL-DATA-ELIM-001.proof.sha256
+          } > data-elimination-proof/PHIL-DATA-ELIM-001.proof-certificate.txt
+          cat data-elimination-proof/PHIL-DATA-ELIM-001.proof-certificate.txt
+      - uses: actions/upload-artifact@v4
+        with:
+          name: rocq-data-elimination-proof
+          path: data-elimination-proof
+          if-no-files-found: error
+
+  verify-data-elimination-correspondence:
+    needs: rocq-data-elimination-proof
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: haskell-actions/setup@v2
+        with:
+          ghc-version: '9.6.7'
+          cabal-version: 'latest'
+      - name: Build existing proof certifier with warnings as errors
+        run: cabal build exe:phil-certify-core-scalar --ghc-options=-Werror
+      - name: Typecheck unchanged DATA-004/005/006/016 implementation paths
+        run: |
+          set -euo pipefail
+          cabal exec -- ghc -isrc -Wall -Werror -fno-code src/Phil/Core/Context.hs
+          cabal exec -- ghc -isrc -Wall -Werror -fno-code src/Phil/Core/DataDestruction.hs
+          cabal exec -- ghc -isrc -Wall -Werror -fno-code src/Phil/Core/DataBorrow.hs
+          cabal exec -- ghc -isrc -Wall -Werror -fno-code test/Phase1ConsumingRecordDestructionMain.hs
+          cabal exec -- ghc -isrc -Wall -Werror -fno-code test/Phase1MissingLinearFieldDispositionMain.hs
+          cabal exec -- ghc -isrc -Wall -Werror -fno-code test/Phase1ConsumingSumMatchMain.hs
+          cabal exec -- ghc -isrc -Wall -Werror -fno-code test/Phase1BorrowedAggregateInspectionMain.hs
+          cabal exec -- ghc -isrc -Wall -Werror -fno-code test/Phase1AffineOmissionMain.hs
+      - name: Re-run DATA elimination / borrow correspondence corpus
+        run: |
+          set -euo pipefail
+          cabal exec -- runghc -Wall -Werror -isrc test/Phase1ConsumingRecordDestructionMain.hs
+          cabal exec -- runghc -Wall -Werror -isrc test/Phase1MissingLinearFieldDispositionMain.hs
+          cabal exec -- runghc -Wall -Werror -isrc test/Phase1ConsumingSumMatchMain.hs
+          cabal exec -- runghc -Wall -Werror -isrc test/Phase1BorrowedAggregateInspectionMain.hs
+          cabal exec -- runghc -Wall -Werror -isrc test/Phase1AffineOmissionMain.hs
