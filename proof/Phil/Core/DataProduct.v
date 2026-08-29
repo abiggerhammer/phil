@@ -140,7 +140,9 @@ Proof.
       specialize (IH successorRest tailPlan Htail).
       destruct IH as [Hlengths HplanLength].
       simpl.
-      split; now rewrite Hlengths, HplanLength.
+      split.
+      * now rewrite Hlengths.
+      * now rewrite HplanLength.
 Qed.
 
 Theorem accepted_product_elimination_has_exact_arity :
@@ -222,18 +224,21 @@ Proof.
   pose proof
     (restoration_plan_success_has_exact_lengths
       elements successors plan Hplan) as [Hlength _].
-  assert (Hindex : index < length elements).
+  assert (HelementPresent : nth_error elements index <> None).
   {
-    apply nth_error_Some.
     rewrite Helement.
     discriminate.
   }
+  pose proof
+    (proj1 (nth_error_Some elements index) HelementPresent) as Hindex.
   assert (HsuccessorIndex : index < length successors).
   {
     rewrite <- Hlength.
     exact Hindex.
   }
-  apply nth_error_Some in HsuccessorIndex.
+  pose proof
+    (proj2 (nth_error_Some successors index) HsuccessorIndex)
+    as HsuccessorPresent.
   destruct (nth_error successors index) as [successor |] eqn:Hsuccessor.
   - exists successor, plan.
     split.
@@ -244,7 +249,9 @@ Proof.
         -- exact Hplan.
         -- exact Helement.
         -- exact Hsuccessor.
-  - contradiction.
+  - exfalso.
+    apply HsuccessorPresent.
+    reflexivity.
 Qed.
 
 Theorem accepted_product_elimination_fabricates_no_successor :
@@ -267,18 +274,21 @@ Proof.
   pose proof
     (restoration_plan_success_has_exact_lengths
       elements successors plan Hplan) as [Hlength _].
-  assert (Hindex : index < length successors).
+  assert (HsuccessorPresent : nth_error successors index <> None).
   {
-    apply nth_error_Some.
     rewrite Hsuccessor.
     discriminate.
   }
+  pose proof
+    (proj1 (nth_error_Some successors index) HsuccessorPresent) as Hindex.
   assert (HelementIndex : index < length elements).
   {
     rewrite Hlength.
     exact Hindex.
   }
-  apply nth_error_Some in HelementIndex.
+  pose proof
+    (proj2 (nth_error_Some elements index) HelementIndex)
+    as HelementPresent.
   destruct (nth_error elements index) as [element |] eqn:Helement.
   - exists element, plan.
     split.
@@ -289,7 +299,9 @@ Proof.
         -- exact Hplan.
         -- exact Helement.
         -- exact Hsuccessor.
-  - contradiction.
+  - exfalso.
+    apply HelementPresent.
+    reflexivity.
 Qed.
 
 (* Core one-shot ownership supplies the consuming linear-product step. *)
