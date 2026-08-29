@@ -7,6 +7,8 @@ on:
       - 'proof/Phil/Core/ArchitectureRevisionConstructionImplementation.v'
       - 'proof/Phil/Core/ArchitectureRevisionConstructionImplementationExtraction.v'
       - 'docs/phase-1/architecture-revision-construction-implementation-refinement-v1.md'
+      - 'phil-core.cabal'
+      - 'src/ArchitectureRevisionConstructionKernel.hs'
       - 'src/Phil/Core/Static.hs'
       - 'test/Phase1ArchitectureRenameIdentityMain.hs'
       - 'test/Phase1ArchitectureInterfaceValidityMain.hs'
@@ -20,6 +22,8 @@ on:
       - 'proof/Phil/Core/ArchitectureRevisionConstructionImplementation.v'
       - 'proof/Phil/Core/ArchitectureRevisionConstructionImplementationExtraction.v'
       - 'docs/phase-1/architecture-revision-construction-implementation-refinement-v1.md'
+      - 'phil-core.cabal'
+      - 'src/ArchitectureRevisionConstructionKernel.hs'
       - 'src/Phil/Core/Static.hs'
       - 'test/Phase1ArchitectureRenameIdentityMain.hs'
       - 'test/Phase1ArchitectureInterfaceValidityMain.hs'
@@ -47,7 +51,7 @@ jobs:
           rocq c -Q proof/Phil Phil proof/Phil/Core/ArchitectureIdentity.v
           rocq c -Q proof/Phil Phil proof/Phil/Core/ArchitectureRevisionConstructionImplementation.v
 
-      - name: Extract architecture revision-construction kernel
+      - name: Fresh-extract and compare architecture revision-construction kernel
         shell: bash
         run: |
           set -euo pipefail
@@ -59,6 +63,10 @@ jobs:
           grep -q 'planDefinitionRevision' ArchitectureRevisionConstructionKernel.hs
           grep -q 'planScopedInstanceKey' ArchitectureRevisionConstructionKernel.hs
           grep -q 'planInstanceRevision' ArchitectureRevisionConstructionKernel.hs
+          if ! cmp -s ArchitectureRevisionConstructionKernel.hs src/ArchitectureRevisionConstructionKernel.hs; then
+            diff -u src/ArchitectureRevisionConstructionKernel.hs ArchitectureRevisionConstructionKernel.hs || true
+            exit 1
+          fi
           sha256sum ArchitectureRevisionConstructionKernel.hs
           mkdir -p architecture-revision-construction-refinement-proof
           cp \
@@ -74,7 +82,7 @@ jobs:
           path: architecture-revision-construction-refinement-proof
           if-no-files-found: error
 
-  verify-architecture-revision-construction-correspondence:
+  verify-architecture-revision-construction-production-binding:
     needs: rocq-architecture-revision-construction-refinement
     runs-on: ubuntu-latest
     steps:
@@ -90,23 +98,29 @@ jobs:
           ghc-version: '9.6.7'
           cabal-version: 'latest'
 
-      - name: Typecheck extracted plan kernel and unchanged architecture path
+      - name: Typecheck exact kernel and production-bound architecture path
         run: |
           set -euo pipefail
           # Rocq's Haskell extractor emits a qualified Prelude import even when
           # this purely polymorphic generated kernel has no Prelude references.
-          # Suppress only that generator-owned redundancy; every other warning
-          # here and all warnings in handwritten production/test paths remain errors.
-          ghc -Wall -Werror -Wno-unused-imports -fno-code extracted-architecture-revision-construction/ArchitectureRevisionConstructionKernel.hs
-          cabal build exe:phil-certify-core-scalar --ghc-options=-Werror
-          cabal exec -- ghc -isrc -Wall -Werror -fno-code src/Phil/Core/Static.hs
+          # Suppress only that generator-owned warning for the generated module.
+          ghc -Wall -Werror -Wno-unused-imports -fno-code \
+            extracted-architecture-revision-construction/ArchitectureRevisionConstructionKernel.hs
+          cmp -s \
+            extracted-architecture-revision-construction/ArchitectureRevisionConstructionKernel.hs \
+            src/ArchitectureRevisionConstructionKernel.hs
+          cabal check
+          cabal build \
+            lib:phil-core \
+            exe:phil-certify-core-scalar \
+            --ghc-options=-Werror
           for test_main in \
             test/Phase1ArchitectureRenameIdentityMain.hs \
             test/Phase1ArchitectureInterfaceValidityMain.hs \
             test/Phase1ArchitectureDefinitionReplacementMain.hs \
             test/Phase1ArchitectureSiblingNoninterferenceMain.hs
           do
-            cabal exec -- ghc -isrc -Wall -Werror -fno-code "$test_main"
+            cabal exec -- ghc -Wall -Werror -fno-code -package phil-core "$test_main"
           done
 
       - name: Re-run unchanged ARCH-002, ARCH-003, ARCH-004, and ARCH-007 corpora
@@ -120,3 +134,31 @@ jobs:
           do
             cabal exec -- runghc -isrc "$test_main"
           done
+
+      - name: Record production binding identities
+        run: |
+          set -euo pipefail
+          sha256sum \
+            src/ArchitectureRevisionConstructionKernel.hs \
+            src/Phil/Core/Static.hs \
+            phil-core.cabal \
+            test/Phase1ArchitectureRenameIdentityMain.hs \
+            test/Phase1ArchitectureInterfaceValidityMain.hs \
+            test/Phase1ArchitectureDefinitionReplacementMain.hs \
+            test/Phase1ArchitectureSiblingNoninterferenceMain.hs
+          mkdir -p architecture-revision-construction-production-binding
+          cp \
+            src/ArchitectureRevisionConstructionKernel.hs \
+            src/Phil/Core/Static.hs \
+            phil-core.cabal \
+            test/Phase1ArchitectureRenameIdentityMain.hs \
+            test/Phase1ArchitectureInterfaceValidityMain.hs \
+            test/Phase1ArchitectureDefinitionReplacementMain.hs \
+            test/Phase1ArchitectureSiblingNoninterferenceMain.hs \
+            architecture-revision-construction-production-binding/
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: architecture-revision-construction-production-binding
+          path: architecture-revision-construction-production-binding
+          if-no-files-found: error
