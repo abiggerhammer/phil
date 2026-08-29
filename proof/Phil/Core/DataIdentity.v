@@ -119,7 +119,7 @@ Proof.
 Qed.
 
 Theorem data_shape_grants_no_automatic_operation :
-  forall nominalKey shape operation,
+  forall (nominalKey shape : nat) (operation : DataOperation),
     ~ permitsOperation emptyOperationContract operation.
 Proof.
   intros nominalKey shape operation.
