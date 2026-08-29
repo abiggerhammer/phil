@@ -76,6 +76,7 @@ grammarV1ReservedWords = Set.fromList
   , "captures"
   , "claim"
   , "close"
+  , "closure"
   , "commit_receive"
   , "component"
   , "constraint"
