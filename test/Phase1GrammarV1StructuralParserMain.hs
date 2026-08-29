@@ -21,10 +21,24 @@ main = do
         (expectFixtureMode "accepted/14-capability-affine-mode.phil" GrammarV1Affine)
     , testIO "SURF-002 linear capability fixture parses"
         (expectFixtureMode "accepted/15-capability-linear-mode.phil" GrammarV1Linear)
+    , testIO "SURF-002 static type actual fixture preserves generic kind and argument"
+        expectStaticTypeActual
+    , testIO "SURF-002 static session parameter fixture preserves Session kind"
+        expectStaticSessionParameter
+    , testIO "SURF-002 generic requirement fixture preserves requirement categories"
+        expectRequirementCategories
     , testIO "SURF-003 malformed record mode rejects at syntax"
         (expectFixtureReject "rejected/10-record-mode-missing-literal.phil")
     , testIO "SURF-003 unknown capability mode rejects at syntax"
         (expectFixtureReject "rejected/11-capability-mode-unknown-literal.phil")
+    , testIO "SURF-003 type alias cannot acquire declaration mode"
+        (expectFixtureReject "rejected/13-type-alias-mode.phil")
+    , testIO "SURF-003 unclosed static argument list rejects at syntax"
+        (expectFixtureReject "rejected/21-static-argument-unclosed.phil")
+    , testIO "SURF-003 generic requirement missing semicolon rejects at syntax"
+        (expectFixtureReject "rejected/22-generic-requirement-missing-semicolon.phil")
+    , test "SURF-002 name-shaped static actual has one static-reference parse"
+        nameShapedStaticActualPreserved
     , test "SURF-002 source envelope preserves module imports attributes and fields"
         sourceEnvelopePreserved
     , test "SURF-003 nontrivia trailing token cannot be ignored"
@@ -52,6 +66,103 @@ expectFixtureMode relativePath expectedMode = do
             "expected mode " <> show expectedMode <> ", got " <> show actualMode
       declarations -> Left ("expected exactly one declaration, got " <> show (length declarations))
 
+expectStaticTypeActual :: IO (Either String ())
+expectStaticTypeActual = do
+  parsed <- parseFixture "accepted/17-static-type-actual.phil"
+  pure $ do
+    sourceFile <- mapLeft show parsed
+    case grammarV1TopLevelDecls sourceFile of
+      [Located _ firstTop, Located _ secondTop] -> do
+        case locatedValue (grammarV1Declaration firstTop) of
+          GrammarV1TypeAliasDeclaration aliasDecl ->
+            assertGenericKind GrammarV1TypeKind (grammarV1TypeAliasGenericParams aliasDecl)
+          other -> Left ("expected generic type alias first, got " <> show other)
+        case locatedValue (grammarV1Declaration secondTop) of
+          GrammarV1TypeAliasDeclaration aliasDecl ->
+            case locatedValue (grammarV1TypeAliasTarget aliasDecl) of
+              GrammarV1NamedType reference -> do
+                assert
+                  (grammarV1QualifiedNameParts (grammarV1StaticReferenceName reference) == ["Boxed"])
+                  "static type application target was not Boxed"
+                assert
+                  (grammarV1StaticReferenceArguments reference ==
+                    [GrammarV1StaticTypeArgument (GrammarV1UnsignedType "U32")])
+                  "U32 was not preserved as the exact static type actual"
+              other -> Left ("expected applied named type, got " <> show other)
+          other -> Left ("expected applied type alias second, got " <> show other)
+      declarations -> Left ("expected two type aliases, got " <> show (length declarations))
+
+expectStaticSessionParameter :: IO (Either String ())
+expectStaticSessionParameter = do
+  parsed <- parseFixture "accepted/18-static-session-actual.phil"
+  pure $ do
+    sourceFile <- mapLeft show parsed
+    case grammarV1TopLevelDecls sourceFile of
+      [Located _ topLevel] -> case locatedValue (grammarV1Declaration topLevel) of
+        GrammarV1ProtocolDeclaration protocolDecl -> do
+          assertGenericKind GrammarV1SessionKind (grammarV1ProtocolGenericParams protocolDecl)
+          assert (length (grammarV1ProtocolRoles protocolDecl) == 2)
+            "protocol did not preserve its two role declarations"
+          assert (all roleReferencesS (grammarV1ProtocolRoles protocolDecl))
+            "protocol role session references were not preserved as S"
+        other -> Left ("expected protocol declaration, got " <> show other)
+      declarations -> Left ("expected one protocol declaration, got " <> show (length declarations))
+
+expectRequirementCategories :: IO (Either String ())
+expectRequirementCategories = do
+  parsed <- parseFixture "accepted/19-generic-requirement-kinds.phil"
+  pure $ do
+    sourceFile <- mapLeft show parsed
+    case grammarV1TopLevelDecls sourceFile of
+      [Located _ topLevel] -> case locatedValue (grammarV1Declaration topLevel) of
+        GrammarV1RecordDeclaration recordDecl -> do
+          assertGenericKind GrammarV1TypeKind (grammarV1RecordGenericParams recordDecl)
+          assert
+            (map (requirementTag . locatedValue) (grammarV1RecordRequirements recordDecl) ==
+              [ "authority"
+              , "boundary-representation"
+              , "representation"
+              , "placement"
+              , "cost"
+              , "environment"
+              ])
+            "generic requirement categories were not preserved in source order"
+        other -> Left ("expected constrained record declaration, got " <> show other)
+      declarations -> Left ("expected one constrained record, got " <> show (length declarations))
+
+assertGenericKind
+  :: GrammarV1GenericKind
+  -> [Located GrammarV1GenericParam]
+  -> Either String ()
+assertGenericKind expected params = case params of
+  [Located _ param] ->
+    assert (locatedValue (grammarV1GenericParamKind param) == expected) $
+      "expected generic kind " <> show expected
+        <> ", got " <> show (locatedValue (grammarV1GenericParamKind param))
+  values -> Left ("expected exactly one generic parameter, got " <> show (length values))
+
+roleReferencesS :: Located GrammarV1RoleSessionDecl -> Bool
+roleReferencesS (Located _ roleDecl) =
+  case locatedValue (grammarV1RoleSessionExpression roleDecl) of
+    GrammarV1SessionReference reference ->
+      grammarV1QualifiedNameParts (grammarV1StaticReferenceName reference) == ["S"]
+        && null (grammarV1StaticReferenceArguments reference)
+
+requirementTag :: GrammarV1GenericRequirement -> String
+requirementTag requirement = case requirement of
+  GrammarV1StructuralRequirement _ _ -> "structural"
+  GrammarV1PropositionRequirement _ -> "proposition"
+  GrammarV1ProviderRequirement _ _ -> "provider"
+  GrammarV1CallableRequirement _ _ -> "callable"
+  GrammarV1BoundaryRequirement _ _ -> "boundary"
+  GrammarV1ArchitectureRequirement _ _ -> "architecture"
+  GrammarV1AuthorityRequirement _ -> "authority"
+  GrammarV1BoundaryRepresentationRequirement _ -> "boundary-representation"
+  GrammarV1RepresentationRequirement _ -> "representation"
+  GrammarV1PlacementRequirement _ -> "placement"
+  GrammarV1CostRequirement _ -> "cost"
+  GrammarV1EnvironmentRequirement _ -> "environment"
+
 expectFixtureReject :: FilePath -> IO (Either String ())
 expectFixtureReject relativePath = do
   parsed <- parseFixture relativePath
@@ -71,7 +182,35 @@ declarationMode :: GrammarV1Declaration -> Maybe GrammarV1StructuralMode
 declarationMode declaration = case declaration of
   GrammarV1RecordDeclaration value -> grammarV1RecordMode value
   GrammarV1DataDeclaration value -> grammarV1DataMode value
+  GrammarV1TypeAliasDeclaration _ -> Nothing
   GrammarV1CapabilityDeclaration value -> Just (grammarV1CapabilityMode value)
+  GrammarV1ProtocolDeclaration _ -> Nothing
+
+nameShapedStaticActualPreserved :: Either String ()
+nameShapedStaticActualPreserved = do
+  sourceFile <- mapLeft show $ parseGrammarV1StructuralSource "name-shaped-static" source
+  case grammarV1TopLevelDecls sourceFile of
+    [_, Located _ topLevel] -> case locatedValue (grammarV1Declaration topLevel) of
+      GrammarV1TypeAliasDeclaration aliasDecl ->
+        case locatedValue (grammarV1TypeAliasTarget aliasDecl) of
+          GrammarV1NamedType reference ->
+            assert
+              (grammarV1StaticReferenceArguments reference ==
+                [ GrammarV1StaticReferenceArgument
+                    (GrammarV1StaticReference
+                      { grammarV1StaticReferenceName = GrammarV1QualifiedName ["T"]
+                      , grammarV1StaticReferenceArguments = []
+                      })
+                ])
+              "name-shaped static actual was reinterpreted as a type alternative"
+          other -> Left ("expected named type application, got " <> show other)
+      other -> Left ("expected second type alias, got " <> show other)
+    declarations -> Left ("expected two declarations, got " <> show (length declarations))
+  where
+    source = Text.unlines
+      [ "type Ref[T : Type] = T;"
+      , "type Use = Ref[T];"
+      ]
 
 sourceEnvelopePreserved :: Either String ()
 sourceEnvelopePreserved = do
