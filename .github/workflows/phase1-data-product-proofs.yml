@@ -1,0 +1,92 @@
+name: Phase 1 Data Product Proofs
+
+on:
+  pull_request:
+    paths:
+      - 'proof/Phil/Core/DataProduct.v'
+      - 'docs/phase-1/data-product-proof-v1.md'
+      - '.github/workflows/phase1-data-product-proofs.yml'
+      - 'proof/Phil/Core/DataMode.v'
+      - 'proof/Phil/Core/Context.v'
+      - 'src/Phil/Core/Syntax.hs'
+      - 'src/Phil/Core/Checker.hs'
+      - 'src/Phil/Core/Context.hs'
+      - 'src/Phil/Core/DataMode.hs'
+      - 'test/Phase1FiniteProductMain.hs'
+  push:
+    branches: [main]
+    paths:
+      - 'proof/Phil/Core/DataProduct.v'
+      - 'docs/phase-1/data-product-proof-v1.md'
+      - '.github/workflows/phase1-data-product-proofs.yml'
+      - 'proof/Phil/Core/DataMode.v'
+      - 'proof/Phil/Core/Context.v'
+      - 'src/Phil/Core/Syntax.hs'
+      - 'src/Phil/Core/Checker.hs'
+      - 'src/Phil/Core/Context.hs'
+      - 'src/Phil/Core/DataMode.hs'
+      - 'test/Phase1FiniteProductMain.hs'
+
+permissions:
+  contents: read
+
+jobs:
+  rocq-data-product-proof:
+    runs-on: ubuntu-latest
+    container:
+      image: rocq/rocq-prover:9.2.0
+      options: --user root
+    steps:
+      - uses: actions/checkout@v4
+      - name: Compile PHIL-DATA-PRODUCT-001 proof
+        shell: bash
+        run: |
+          set -euo pipefail
+          export PATH="/home/rocq/.opam/${COMPILER}/bin:$PATH"
+          rocq c -Q proof/Phil Phil proof/Phil/Core/Syntax.v
+          rocq c -Q proof/Phil Phil proof/Phil/Core/Context.v
+          rocq c -Q proof/Phil Phil proof/Phil/Core/DataMode.v
+          rocq c -Q proof/Phil Phil proof/Phil/Core/DataProduct.v
+      - name: Record proof identities
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p data-product-proof
+          cp proof/Phil/Core/DataProduct.v proof/Phil/Core/DataProduct.vo data-product-proof/
+          sha256sum \
+            proof/Phil/Core/DataProduct.v \
+            proof/Phil/Core/DataProduct.vo \
+            > data-product-proof/PHIL-DATA-PRODUCT-001.proof.sha256
+          {
+            echo 'obligation=PHIL-DATA-PRODUCT-001'
+            echo 'evidence=Rocq-9.2.0'
+            cat data-product-proof/PHIL-DATA-PRODUCT-001.proof.sha256
+          } > data-product-proof/PHIL-DATA-PRODUCT-001.proof-certificate.txt
+          cat data-product-proof/PHIL-DATA-PRODUCT-001.proof-certificate.txt
+      - uses: actions/upload-artifact@v4
+        with:
+          name: rocq-data-product-proof
+          path: data-product-proof
+          if-no-files-found: error
+
+  verify-data-product-correspondence:
+    needs: rocq-data-product-proof
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: haskell-actions/setup@v2
+        with:
+          ghc-version: '9.6.7'
+          cabal-version: 'latest'
+      - name: Build existing proof certifier with warnings as errors
+        run: cabal build exe:phil-certify-core-scalar --ghc-options=-Werror
+      - name: Typecheck unchanged DATA-015 implementation paths
+        run: |
+          set -euo pipefail
+          cabal exec -- ghc -isrc -Wall -Werror -fno-code src/Phil/Core/Syntax.hs
+          cabal exec -- ghc -isrc -Wall -Werror -fno-code src/Phil/Core/Checker.hs
+          cabal exec -- ghc -isrc -Wall -Werror -fno-code src/Phil/Core/Context.hs
+          cabal exec -- ghc -isrc -Wall -Werror -fno-code src/Phil/Core/DataMode.hs
+          cabal exec -- ghc -isrc -Wall -Werror -fno-code test/Phase1FiniteProductMain.hs
+      - name: Re-run DATA-015 finite product correspondence corpus
+        run: cabal exec -- runghc -Wall -Werror -isrc test/Phase1FiniteProductMain.hs
