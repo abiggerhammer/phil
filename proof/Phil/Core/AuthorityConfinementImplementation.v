@@ -99,8 +99,12 @@ Theorem opaque_provider_authority_subject_decision_accept_iff_certified :
       (OpaqueForeignProviderAuthoritySubject interface boundary)
       checkedInterface checkedDefinition.
 Proof.
-  intros.
-  reflexivity.
+  intros interface boundary checkedInterface checkedDefinition
+    interfaceMatches definitionMatches.
+  unfold decideProviderAuthoritySubject, providerAuthoritySubjectAccepted.
+  split; intro H.
+  - exact I.
+  - reflexivity.
 Qed.
 
 Inductive ProviderAuthorityInventoryBasisKind : Type :=
