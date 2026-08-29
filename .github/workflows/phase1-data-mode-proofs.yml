@@ -1,0 +1,103 @@
+name: Phase 1 Data Mode Proofs
+
+on:
+  pull_request:
+    paths:
+      - 'proof/Phil/Core/DataMode.v'
+      - 'docs/phase-1/data-mode-proof-v1.md'
+      - '.github/workflows/phase1-data-mode-proofs.yml'
+      - 'proof/Phil/Core/Syntax.v'
+      - 'proof/Phil/Core/Context.v'
+      - 'src/Phil/Core/DataMode.hs'
+      - 'src/Phil/Core/NominalDataMode.hs'
+      - 'test/Phase1DataModeMain.hs'
+      - 'test/Phase1LinearRecordConstructionMain.hs'
+      - 'test/Phase1DuplicateRestrictedFieldMain.hs'
+      - 'test/Phase1GenericModePropagationMain.hs'
+      - 'test/Phase1NominalModeStrengtheningMain.hs'
+  push:
+    branches: [main]
+    paths:
+      - 'proof/Phil/Core/DataMode.v'
+      - 'docs/phase-1/data-mode-proof-v1.md'
+      - '.github/workflows/phase1-data-mode-proofs.yml'
+      - 'proof/Phil/Core/Syntax.v'
+      - 'proof/Phil/Core/Context.v'
+      - 'src/Phil/Core/DataMode.hs'
+      - 'src/Phil/Core/NominalDataMode.hs'
+      - 'test/Phase1DataModeMain.hs'
+      - 'test/Phase1LinearRecordConstructionMain.hs'
+      - 'test/Phase1DuplicateRestrictedFieldMain.hs'
+      - 'test/Phase1GenericModePropagationMain.hs'
+      - 'test/Phase1NominalModeStrengtheningMain.hs'
+
+permissions:
+  contents: read
+
+jobs:
+  rocq-data-mode-proof:
+    runs-on: ubuntu-latest
+    container:
+      image: rocq/rocq-prover:9.2.0
+      options: --user root
+    steps:
+      - uses: actions/checkout@v4
+      - name: Compile PHIL-DATA-MODE-001 proof
+        shell: bash
+        run: |
+          set -euo pipefail
+          export PATH="/home/rocq/.opam/${COMPILER}/bin:$PATH"
+          rocq c -Q proof/Phil Phil proof/Phil/Core/Syntax.v
+          rocq c -Q proof/Phil Phil proof/Phil/Core/Context.v
+          rocq c -Q proof/Phil Phil proof/Phil/Core/DataMode.v
+      - name: Record proof identities
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p data-mode-proof
+          cp proof/Phil/Core/DataMode.v proof/Phil/Core/DataMode.vo data-mode-proof/
+          sha256sum \
+            proof/Phil/Core/DataMode.v \
+            proof/Phil/Core/DataMode.vo \
+            > data-mode-proof/PHIL-DATA-MODE-001.proof.sha256
+          {
+            echo 'obligation=PHIL-DATA-MODE-001'
+            echo 'evidence=Rocq-9.2.0'
+            cat data-mode-proof/PHIL-DATA-MODE-001.proof.sha256
+          } > data-mode-proof/PHIL-DATA-MODE-001.proof-certificate.txt
+          cat data-mode-proof/PHIL-DATA-MODE-001.proof-certificate.txt
+      - uses: actions/upload-artifact@v4
+        with:
+          name: rocq-data-mode-proof
+          path: data-mode-proof
+          if-no-files-found: error
+
+  verify-data-mode-correspondence:
+    needs: rocq-data-mode-proof
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: haskell-actions/setup@v2
+        with:
+          ghc-version: '9.6.7'
+          cabal-version: 'latest'
+      - name: Build existing proof certifier with warnings as errors
+        run: cabal build exe:phil-certify-core-scalar --ghc-options=-Werror
+      - name: Typecheck unchanged DATA mode implementation paths
+        run: |
+          set -euo pipefail
+          cabal exec -- ghc -isrc -Wall -Werror -fno-code src/Phil/Core/DataMode.hs
+          cabal exec -- ghc -isrc -Wall -Werror -fno-code src/Phil/Core/NominalDataMode.hs
+          cabal exec -- ghc -isrc -Wall -Werror -fno-code test/Phase1DataModeMain.hs
+          cabal exec -- ghc -isrc -Wall -Werror -fno-code test/Phase1LinearRecordConstructionMain.hs
+          cabal exec -- ghc -isrc -Wall -Werror -fno-code test/Phase1DuplicateRestrictedFieldMain.hs
+          cabal exec -- ghc -isrc -Wall -Werror -fno-code test/Phase1GenericModePropagationMain.hs
+          cabal exec -- ghc -isrc -Wall -Werror -fno-code test/Phase1NominalModeStrengtheningMain.hs
+      - name: Re-run DATA-001–003, DATA-009, and DATA-014 correspondence corpus
+        run: |
+          set -euo pipefail
+          cabal exec -- runghc -Wall -Werror -isrc test/Phase1DataModeMain.hs
+          cabal exec -- runghc -Wall -Werror -isrc test/Phase1LinearRecordConstructionMain.hs
+          cabal exec -- runghc -Wall -Werror -isrc test/Phase1DuplicateRestrictedFieldMain.hs
+          cabal exec -- runghc -Wall -Werror -isrc test/Phase1GenericModePropagationMain.hs
+          cabal exec -- runghc -Wall -Werror -isrc test/Phase1NominalModeStrengtheningMain.hs
