@@ -51,3 +51,6 @@ jobs:
 
       - name: RES-013 join and loop logical invariant conformance
         run: cabal exec -- runghc -Wall -Werror -isrc test/Phase1JoinLoopInvariantMain.hs
+
+      - name: RES-014 zero-actual loop control conformance
+        run: cabal exec -- runghc -Wall -Werror -isrc test/Phase1ZeroActualLoopControlMain.hs
