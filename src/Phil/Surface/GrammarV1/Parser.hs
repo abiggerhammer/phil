@@ -28,6 +28,12 @@ module Phil.Surface.GrammarV1.Parser
   , GrammarV1SessionExpression (..)
   , GrammarV1RoleSessionDecl (..)
   , GrammarV1ProtocolDecl (..)
+  , GrammarV1TermParam (..)
+  , GrammarV1Pattern (..)
+  , GrammarV1Expression (..)
+  , GrammarV1Statement (..)
+  , GrammarV1Block (..)
+  , GrammarV1ComponentDecl (..)
   , parseGrammarV1StructuralSource
   ) where
 
@@ -85,6 +91,7 @@ data GrammarV1Declaration
   | GrammarV1TypeAliasDeclaration GrammarV1TypeAliasDecl
   | GrammarV1CapabilityDeclaration GrammarV1CapabilityDecl
   | GrammarV1ProtocolDeclaration GrammarV1ProtocolDecl
+  | GrammarV1ComponentDeclaration GrammarV1ComponentDecl
   deriving (Eq, Show)
 
 data GrammarV1StructuralMode
@@ -229,6 +236,45 @@ data GrammarV1ProtocolDecl = GrammarV1ProtocolDecl
   , grammarV1ProtocolGenericParams :: [Located GrammarV1GenericParam]
   , grammarV1ProtocolRequirements :: [Located GrammarV1GenericRequirement]
   , grammarV1ProtocolRoles :: [Located GrammarV1RoleSessionDecl]
+  }
+  deriving (Eq, Show)
+
+data GrammarV1TermParam = GrammarV1TermParam
+  { grammarV1TermParamName :: Located Text
+  , grammarV1TermParamType :: Located GrammarV1Type
+  }
+  deriving (Eq, Show)
+
+newtype GrammarV1Pattern = GrammarV1IdentifierPattern
+  { grammarV1IdentifierPatternName :: Located Text
+  }
+  deriving (Eq, Show)
+
+data GrammarV1Expression
+  = GrammarV1NameExpression GrammarV1StaticReference [Located GrammarV1Expression]
+  | GrammarV1BoolExpression Bool
+  | GrammarV1UnitExpression
+  | GrammarV1IntegerExpression Text
+  deriving (Eq, Show)
+
+data GrammarV1Statement
+  = GrammarV1LetStatement (Located GrammarV1Pattern) (Located GrammarV1Expression)
+  | GrammarV1ReturnStatement (Located GrammarV1Expression)
+  | GrammarV1ExpressionStatement (Located GrammarV1Expression)
+  deriving (Eq, Show)
+
+newtype GrammarV1Block = GrammarV1Block
+  { grammarV1BlockStatements :: [Located GrammarV1Statement]
+  }
+  deriving (Eq, Show)
+
+data GrammarV1ComponentDecl = GrammarV1ComponentDecl
+  { grammarV1ComponentName :: Located Text
+  , grammarV1ComponentGenericParams :: [Located GrammarV1GenericParam]
+  , grammarV1ComponentRequirements :: [Located GrammarV1GenericRequirement]
+  , grammarV1ComponentTermParams :: Maybe [Located GrammarV1TermParam]
+  , grammarV1ComponentProvides :: Maybe (Located GrammarV1Type)
+  , grammarV1ComponentBody :: Located GrammarV1Block
   }
   deriving (Eq, Show)
 
@@ -389,6 +435,7 @@ parseDeclaration = do
     Just (GrammarKeyword "type") -> parseTypeAliasDeclaration
     Just (GrammarKeyword "capability") -> parseCapabilityDeclaration
     Just (GrammarKeyword "protocol") -> parseProtocolDeclaration
+    Just (GrammarKeyword "component") -> parseComponentDeclaration
     Just other -> failParser $
       "SURF-002 production parser does not yet implement declaration production beginning with "
         <> renderToken other
@@ -578,6 +625,216 @@ parseSessionExpression = do
       "SURF-002 generic/static slice does not yet implement nonreference session_expression beginning with "
         <> renderToken other
     Nothing -> failParser "expected session_expression at end of input"
+
+parseComponentDeclaration :: Parser (Located GrammarV1Declaration)
+parseComponentDeclaration = do
+  start <- expectKeyword "component"
+  name <- expectIdentifier
+  params <- parseOptionalGenericParams
+  requirements <- parseOptionalGenericRequirements
+  termParams <- parseOptionalTermParams
+  provides <- parseOptionalProvides
+  body <- parseBlock
+  pure $ Located
+    (SourceSpan
+      (sourceSpanStart (locatedSpan start))
+      (sourceSpanEnd (locatedSpan body)))
+    (GrammarV1ComponentDeclaration GrammarV1ComponentDecl
+      { grammarV1ComponentName = name
+      , grammarV1ComponentGenericParams = params
+      , grammarV1ComponentRequirements = requirements
+      , grammarV1ComponentTermParams = termParams
+      , grammarV1ComponentProvides = provides
+      , grammarV1ComponentBody = body
+      })
+
+parseOptionalTermParams :: Parser (Maybe [Located GrammarV1TermParam])
+parseOptionalTermParams = do
+  present <- peekSymbol "("
+  if present then Just <$> parseTermParams else pure Nothing
+
+parseTermParams :: Parser [Located GrammarV1TermParam]
+parseTermParams = do
+  _ <- expectSymbol "("
+  atEnd <- peekSymbol ")"
+  if atEnd
+    then expectSymbol ")" >> pure []
+    else do
+      first <- parseTermParam
+      rest <- parseMoreTermParams
+      _ <- expectSymbol ")"
+      pure (first : rest)
+
+parseMoreTermParams :: Parser [Located GrammarV1TermParam]
+parseMoreTermParams = do
+  hasComma <- peekSymbol ","
+  if hasComma
+    then do
+      _ <- expectSymbol ","
+      atEnd <- peekSymbol ")"
+      if atEnd
+        then failParser "term_params does not admit a trailing comma"
+        else do
+          value <- parseTermParam
+          rest <- parseMoreTermParams
+          pure (value : rest)
+    else pure []
+
+parseTermParam :: Parser (Located GrammarV1TermParam)
+parseTermParam = do
+  name <- expectIdentifier
+  _ <- expectSymbol ":"
+  ty <- parseType
+  pure $ Located
+    (SourceSpan
+      (sourceSpanStart (locatedSpan name))
+      (sourceSpanEnd (locatedSpan ty)))
+    GrammarV1TermParam
+      { grammarV1TermParamName = name
+      , grammarV1TermParamType = ty
+      }
+
+parseOptionalProvides :: Parser (Maybe (Located GrammarV1Type))
+parseOptionalProvides = do
+  present <- peekKeyword "provides"
+  if present
+    then expectKeyword "provides" >> Just <$> parseType
+    else pure Nothing
+
+parseBlock :: Parser (Located GrammarV1Block)
+parseBlock = do
+  start <- expectSymbol "{"
+  statements <- parseStatements
+  end <- expectSymbol "}"
+  pure $ locatedBetween start end (GrammarV1Block statements)
+
+parseStatements :: Parser [Located GrammarV1Statement]
+parseStatements = do
+  atEnd <- peekSymbol "}"
+  if atEnd
+    then pure []
+    else do
+      statement <- parseStatement
+      rest <- parseStatements
+      pure (statement : rest)
+
+parseStatement :: Parser (Located GrammarV1Statement)
+parseStatement = do
+  token <- peekToken
+  case fmap locatedValue token of
+    Just (GrammarKeyword "let") -> parseLetStatement
+    Just (GrammarKeyword "return") -> parseReturnStatement
+    Just _ -> do
+      expression <- parseExpression
+      pure $ Located
+        (locatedSpan expression)
+        (GrammarV1ExpressionStatement expression)
+    Nothing -> failParser "expected statement at end of input"
+
+parseLetStatement :: Parser (Located GrammarV1Statement)
+parseLetStatement = do
+  start <- expectKeyword "let"
+  pattern' <- parsePattern
+  _ <- expectSymbol "="
+  expression <- parseExpression
+  pure $ Located
+    (SourceSpan
+      (sourceSpanStart (locatedSpan start))
+      (sourceSpanEnd (locatedSpan expression)))
+    (GrammarV1LetStatement pattern' expression)
+
+parseReturnStatement :: Parser (Located GrammarV1Statement)
+parseReturnStatement = do
+  start <- expectKeyword "return"
+  expression <- parseExpression
+  pure $ Located
+    (SourceSpan
+      (sourceSpanStart (locatedSpan start))
+      (sourceSpanEnd (locatedSpan expression)))
+    (GrammarV1ReturnStatement expression)
+
+parsePattern :: Parser (Located GrammarV1Pattern)
+parsePattern = do
+  token <- peekToken
+  case fmap locatedValue token of
+    Just (GrammarIdentifier _) -> do
+      name <- expectIdentifier
+      pure $ Located
+        (locatedSpan name)
+        (GrammarV1IdentifierPattern name)
+    Just other -> failParser $
+      "SURF-002 term/block slice expects an identifier pattern; found " <> renderToken other
+    Nothing -> failParser "expected pattern at end of input"
+
+parseExpression :: Parser (Located GrammarV1Expression)
+parseExpression = do
+  token <- peekToken
+  case fmap locatedValue token of
+    Just (GrammarKeyword "true") -> do
+      value <- expectKeyword "true"
+      pure (Located (locatedSpan value) (GrammarV1BoolExpression True))
+    Just (GrammarKeyword "false") -> do
+      value <- expectKeyword "false"
+      pure (Located (locatedSpan value) (GrammarV1BoolExpression False))
+    Just (GrammarKeyword "unit") -> do
+      value <- expectKeyword "unit"
+      pure (Located (locatedSpan value) GrammarV1UnitExpression)
+    Just (GrammarDecimalInteger _) -> do
+      value <- takeToken
+      case locatedValue value of
+        GrammarDecimalInteger integer ->
+          pure (Located (locatedSpan value) (GrammarV1IntegerExpression integer))
+        _ -> failParser "internal DECIMAL_INTEGER expression dispatch error"
+    Just (GrammarIdentifier _) -> parseNameExpression
+    Just other -> failParser $
+      "SURF-002 term/block slice does not yet implement expression beginning with "
+        <> renderToken other
+    Nothing -> failParser "expected expression at end of input"
+
+parseNameExpression :: Parser (Located GrammarV1Expression)
+parseNameExpression = do
+  reference <- parseStaticReference
+  hasTermArguments <- peekSymbol "("
+  if hasTermArguments
+    then do
+      (arguments, end) <- parseTermArguments
+      pure $ Located
+        (SourceSpan
+          (sourceSpanStart (locatedSpan reference))
+          (sourceSpanEnd (locatedSpan end)))
+        (GrammarV1NameExpression (locatedValue reference) arguments)
+    else pure $ Located
+      (locatedSpan reference)
+      (GrammarV1NameExpression (locatedValue reference) [])
+
+parseTermArguments :: Parser ([Located GrammarV1Expression], Located GrammarV1Token)
+parseTermArguments = do
+  _ <- expectSymbol "("
+  atEnd <- peekSymbol ")"
+  if atEnd
+    then do
+      end <- expectSymbol ")"
+      pure ([], end)
+    else do
+      first <- parseExpression
+      rest <- parseMoreTermArguments
+      end <- expectSymbol ")"
+      pure (first : rest, end)
+
+parseMoreTermArguments :: Parser [Located GrammarV1Expression]
+parseMoreTermArguments = do
+  hasComma <- peekSymbol ","
+  if hasComma
+    then do
+      _ <- expectSymbol ","
+      atEnd <- peekSymbol ")"
+      if atEnd
+        then failParser "term_arguments does not admit a trailing comma"
+        else do
+          value <- parseExpression
+          rest <- parseMoreTermArguments
+          pure (value : rest)
+    else pure []
 
 parseOptionalGenericParams :: Parser [Located GrammarV1GenericParam]
 parseOptionalGenericParams = do
