@@ -21,7 +21,7 @@ The plan fields remain polymorphic. Rocq therefore owns the dependency structure
 
 ## Production binding
 
-The exact extracted `generated/ArchitectureRevisionConstructionKernel.hs` is checked in byte-for-byte. `Phil.Core.Static` now routes the four Certified construction seams through that kernel:
+The exact extracted `generated/ArchitectureRevisionConstructionKernel.hs` is checked in byte-for-byte. Production compiles `src/ArchitectureRevisionConstructionKernel.hs`, which is mechanically constrained to equal that exact extraction with one compiler-only `OPTIONS_GHC -Wno-unused-imports` pragma prepended. `Phil.Core.Static` routes the four Certified construction seams through that production mirror:
 
 - `deriveDeclarationIdentity` obtains interface semantics from `planInterfaceRevision`, then obtains the exact interface revision and definition semantics from `planDefinitionRevision` before applying the existing native canonical encoding;
 - `deriveArchitectureInstanceIdentity` obtains the occurrence key, parent, declaration key, interface revision, definition revision, and static bindings from `planInstanceRevision`, and constructs both the returned `InstanceKey` and `InstanceRevision` from those plan fields;
@@ -43,7 +43,7 @@ The following remain explicit primitive representation/runtime foundations rathe
 
 These bridges are finite and fail closed when an extracted namespace/shape cannot be represented.
 
-Rocq's Haskell extractor also emits an unused qualified `Prelude` import in this purely polymorphic kernel. To keep the raw extraction byte-identical while preserving strict warnings for handwritten production code, the exact generated source lives under `generated/`, outside the handwritten `src/` search root. Cabal builds it as a private internal library whose only warning exception is `-Wno-unused-imports`; the main `phil-core` library retains the normal strict warning set and depends on that component. This also prevents strict ad-hoc `-isrc` proof and conformance jobs from rediscovering and recompiling the raw generated source outside its component policy.
+Rocq's Haskell extractor emits an unused qualified `Prelude` import in this purely polymorphic kernel. The raw byte-exact extraction therefore remains under `generated/` and is independently compiled by a private Cabal component with only `-Wno-unused-imports` relaxed. The normal `phil-core` source tree contains the mechanically checked mirror with the same single module-local warning pragma. This matters because many proof and conformance workflows intentionally invoke `runghc -isrc` or `ghc -isrc` directly: those calls must be able to compile the production dependency as an ordinary home module without exposing a hidden internal package or weakening warning policy for unrelated handwritten code.
 
 ## Deliberate non-scope
 
@@ -56,10 +56,11 @@ The dedicated workflow must:
 - recompile the Certified `ArchitectureIdentity.v` model;
 - compile the revision-construction correspondence proof;
 - fresh-extract `ArchitectureRevisionConstructionKernel.hs` and require byte-for-byte identity with `generated/ArchitectureRevisionConstructionKernel.hs`;
-- typecheck the raw extracted kernel under `-Wall -Werror`, suppressing only its generator-owned unused Prelude import;
-- validate the Cabal package description and build the generated internal library plus handwritten `phil-core` under warnings-as-errors;
+- construct the expected production mirror by prepending exactly one `OPTIONS_GHC -Wno-unused-imports` pragma to that raw extraction and require byte-for-byte identity with `src/ArchitectureRevisionConstructionKernel.hs`;
+- typecheck the production mirror under `-Wall -Werror`;
+- validate the Cabal package description and build both the raw generated component and handwritten `phil-core` under warnings-as-errors;
 - typecheck the unchanged ARCH-002, ARCH-003, ARCH-004, and ARCH-007 corpora against the built `phil-core` package under `-Wall -Werror`;
 - rerun those four unchanged corpora through production; and
-- record exact kernel, production module, package-description, and corpus SHA-256 identities in a dedicated production-binding artifact.
+- record exact raw-kernel, production-mirror, production-module, package-description, and corpus SHA-256 identities in a dedicated production-binding artifact.
 
 An all-green exact head closes the remaining construction boundary for `PHIL-ARCH-ID-IMPL-001`; together with the already-closed generic validity-scope dependency, the row can then become `Discharged / Implementation Refined`.
