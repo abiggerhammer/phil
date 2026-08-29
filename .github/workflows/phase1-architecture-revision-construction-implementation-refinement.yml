@@ -8,7 +8,7 @@ on:
       - 'proof/Phil/Core/ArchitectureRevisionConstructionImplementationExtraction.v'
       - 'docs/phase-1/architecture-revision-construction-implementation-refinement-v1.md'
       - 'phil-core.cabal'
-      - 'src/ArchitectureRevisionConstructionKernel.hs'
+      - 'generated/ArchitectureRevisionConstructionKernel.hs'
       - 'src/Phil/Core/Static.hs'
       - 'test/Phase1ArchitectureRenameIdentityMain.hs'
       - 'test/Phase1ArchitectureInterfaceValidityMain.hs'
@@ -23,7 +23,7 @@ on:
       - 'proof/Phil/Core/ArchitectureRevisionConstructionImplementationExtraction.v'
       - 'docs/phase-1/architecture-revision-construction-implementation-refinement-v1.md'
       - 'phil-core.cabal'
-      - 'src/ArchitectureRevisionConstructionKernel.hs'
+      - 'generated/ArchitectureRevisionConstructionKernel.hs'
       - 'src/Phil/Core/Static.hs'
       - 'test/Phase1ArchitectureRenameIdentityMain.hs'
       - 'test/Phase1ArchitectureInterfaceValidityMain.hs'
@@ -63,8 +63,8 @@ jobs:
           grep -q 'planDefinitionRevision' ArchitectureRevisionConstructionKernel.hs
           grep -q 'planScopedInstanceKey' ArchitectureRevisionConstructionKernel.hs
           grep -q 'planInstanceRevision' ArchitectureRevisionConstructionKernel.hs
-          if ! cmp -s ArchitectureRevisionConstructionKernel.hs src/ArchitectureRevisionConstructionKernel.hs; then
-            diff -u src/ArchitectureRevisionConstructionKernel.hs ArchitectureRevisionConstructionKernel.hs || true
+          if ! cmp -s ArchitectureRevisionConstructionKernel.hs generated/ArchitectureRevisionConstructionKernel.hs; then
+            diff -u generated/ArchitectureRevisionConstructionKernel.hs ArchitectureRevisionConstructionKernel.hs || true
             exit 1
           fi
           sha256sum ArchitectureRevisionConstructionKernel.hs
@@ -108,7 +108,7 @@ jobs:
             extracted-architecture-revision-construction/ArchitectureRevisionConstructionKernel.hs
           cmp -s \
             extracted-architecture-revision-construction/ArchitectureRevisionConstructionKernel.hs \
-            src/ArchitectureRevisionConstructionKernel.hs
+            generated/ArchitectureRevisionConstructionKernel.hs
           cabal check
           cabal build \
             lib:phil-core \
@@ -139,7 +139,7 @@ jobs:
         run: |
           set -euo pipefail
           sha256sum \
-            src/ArchitectureRevisionConstructionKernel.hs \
+            generated/ArchitectureRevisionConstructionKernel.hs \
             src/Phil/Core/Static.hs \
             phil-core.cabal \
             test/Phase1ArchitectureRenameIdentityMain.hs \
@@ -148,7 +148,7 @@ jobs:
             test/Phase1ArchitectureSiblingNoninterferenceMain.hs
           mkdir -p architecture-revision-construction-production-binding
           cp \
-            src/ArchitectureRevisionConstructionKernel.hs \
+            generated/ArchitectureRevisionConstructionKernel.hs \
             src/Phil/Core/Static.hs \
             phil-core.cabal \
             test/Phase1ArchitectureRenameIdentityMain.hs \
