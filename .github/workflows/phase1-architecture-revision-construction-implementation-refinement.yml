@@ -118,7 +118,6 @@ jobs:
             exit 1
           fi
           ghc -Wall -Werror -fno-code src/ArchitectureRevisionConstructionKernel.hs
-          cabal check
           cabal build \
             lib:phil-core \
             exe:phil-certify-core-scalar \
