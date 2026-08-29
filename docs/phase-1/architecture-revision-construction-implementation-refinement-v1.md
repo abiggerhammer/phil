@@ -61,7 +61,7 @@ The dedicated workflow must:
 - construct the expected production mirror by prepending exactly one `OPTIONS_GHC -Wno-unused-imports` pragma to that raw extraction and require byte-for-byte identity with `src/ArchitectureRevisionConstructionKernel.hs`;
 - typecheck the production mirror under `-Wall -Werror`;
 - resolve and build the generated component plus handwritten `phil-core` and the scalar proof certifier under warnings-as-errors;
-- typecheck the unchanged ARCH-002, ARCH-003, ARCH-004, and ARCH-007 corpora against the built `phil-core` package under `-Wall -Werror`;
+- typecheck the unchanged ARCH-002, ARCH-003, ARCH-004, and ARCH-007 corpora with the repository's established source-aware `cabal exec -- ghc -isrc -Wall -Werror -fno-code` invocation, so source-only support modules remain available;
 - rerun those four unchanged corpora through production; and
 - record exact raw-kernel, production-mirror, production-module, package-description, and corpus SHA-256 identities in a dedicated production-binding artifact.
 
