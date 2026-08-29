@@ -1,0 +1,91 @@
+name: Phase 1 Boundary Complete Recognition Proofs
+
+on:
+  pull_request:
+    paths:
+      - 'proof/Phil/Core/BoundaryCompleteRecognition.v'
+      - 'docs/phase-1/boundary-complete-recognition-proof-v1.md'
+      - '.github/workflows/phase1-boundary-complete-recognition-proofs.yml'
+      - 'src/Phil/Core/Recognition.hs'
+      - 'src/Phil/Core/BoundaryRecognition.hs'
+      - 'test/Phase1CompleteRecognitionMain.hs'
+      - 'test/Phase1TrailingBytesMain.hs'
+      - 'test/Phase1MalformedRecognitionMain.hs'
+  push:
+    branches: [main]
+    paths:
+      - 'proof/Phil/Core/BoundaryCompleteRecognition.v'
+      - 'docs/phase-1/boundary-complete-recognition-proof-v1.md'
+      - '.github/workflows/phase1-boundary-complete-recognition-proofs.yml'
+      - 'src/Phil/Core/Recognition.hs'
+      - 'src/Phil/Core/BoundaryRecognition.hs'
+      - 'test/Phase1CompleteRecognitionMain.hs'
+      - 'test/Phase1TrailingBytesMain.hs'
+      - 'test/Phase1MalformedRecognitionMain.hs'
+
+permissions:
+  contents: read
+
+jobs:
+  rocq-boundary-complete-recognition-proof:
+    runs-on: ubuntu-latest
+    container:
+      image: rocq/rocq-prover:9.2.0
+      options: --user root
+    steps:
+      - uses: actions/checkout@v4
+      - name: Compile PHIL-BND-COMPLETE-001 proof
+        shell: bash
+        run: |
+          set -euo pipefail
+          export PATH="/home/rocq/.opam/${COMPILER}/bin:$PATH"
+          rocq c -Q proof/Phil Phil proof/Phil/Core/BoundaryCompleteRecognition.v
+      - name: Record proof identities
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p boundary-complete-recognition-proof
+          cp proof/Phil/Core/BoundaryCompleteRecognition.v \
+             proof/Phil/Core/BoundaryCompleteRecognition.vo \
+             boundary-complete-recognition-proof/
+          sha256sum \
+            proof/Phil/Core/BoundaryCompleteRecognition.v \
+            proof/Phil/Core/BoundaryCompleteRecognition.vo \
+            > boundary-complete-recognition-proof/PHIL-BND-COMPLETE-001.proof.sha256
+          {
+            echo 'obligation=PHIL-BND-COMPLETE-001'
+            echo 'evidence=Rocq-9.2.0'
+            cat boundary-complete-recognition-proof/PHIL-BND-COMPLETE-001.proof.sha256
+          } > boundary-complete-recognition-proof/PHIL-BND-COMPLETE-001.proof-certificate.txt
+          cat boundary-complete-recognition-proof/PHIL-BND-COMPLETE-001.proof-certificate.txt
+      - uses: actions/upload-artifact@v4
+        with:
+          name: rocq-boundary-complete-recognition-proof
+          path: boundary-complete-recognition-proof
+          if-no-files-found: error
+
+  verify-boundary-complete-recognition-correspondence:
+    needs: rocq-boundary-complete-recognition-proof
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: haskell-actions/setup@v2
+        with:
+          ghc-version: '9.6.7'
+          cabal-version: 'latest'
+      - name: Build existing proof certifier with warnings as errors
+        run: cabal build exe:phil-certify-core-scalar --ghc-options=-Werror
+      - name: Typecheck unchanged BND-001–003 implementation paths
+        run: |
+          set -euo pipefail
+          cabal exec -- ghc -isrc -Wall -Werror -fno-code src/Phil/Core/Recognition.hs
+          cabal exec -- ghc -isrc -Wall -Werror -fno-code src/Phil/Core/BoundaryRecognition.hs
+          cabal exec -- ghc -isrc -Wall -Werror -fno-code test/Phase1CompleteRecognitionMain.hs
+          cabal exec -- ghc -isrc -Wall -Werror -fno-code test/Phase1TrailingBytesMain.hs
+          cabal exec -- ghc -isrc -Wall -Werror -fno-code test/Phase1MalformedRecognitionMain.hs
+      - name: Re-run unchanged BND-001–003 correspondence corpus
+        run: |
+          set -euo pipefail
+          cabal exec -- runghc -Wall -Werror -isrc test/Phase1CompleteRecognitionMain.hs
+          cabal exec -- runghc -Wall -Werror -isrc test/Phase1TrailingBytesMain.hs
+          cabal exec -- runghc -Wall -Werror -isrc test/Phase1MalformedRecognitionMain.hs
