@@ -46,6 +46,7 @@ module Phil.Core.Static
   ) where
 
 import qualified ArchitectureIdentityKernel as ArchitectureIdentityKernel
+import qualified ArchitectureRevisionConstructionKernel as ArchitectureRevisionConstructionKernel
 import qualified Data.Map.Strict as Map
 import qualified Data.Set as Set
 import Data.Text (Text)
@@ -300,6 +301,10 @@ canonicalSemanticForm semantic = case semantic of
   where
     canonicalAtom value = Text.pack (show (Text.length value)) <> ":" <> value
 
+architectureRevisionConstructionKernelBridgeMismatch :: String -> a
+architectureRevisionConstructionKernelBridgeMismatch seam =
+  error ("ArchitectureRevisionConstructionKernel bridge mismatch: " <> seam)
+
 deriveDeclarationIdentity :: DeclarationDescriptor -> DeclarationIdentity
 deriveDeclarationIdentity descriptor = DeclarationIdentity
   { identityDeclarationKey = declarationKey descriptor
@@ -307,38 +312,78 @@ deriveDeclarationIdentity descriptor = DeclarationIdentity
   , identityDefinitionRevision = definitionRevision
   }
   where
-    interfaceRevision = InterfaceRevision
-      ("phil.interface.canonical.v1:"
-        <> canonicalSemanticForm (declarationInterfaceSemantics descriptor))
-    definitionRevision = DefinitionRevision
-      ("phil.definition.canonical.v1:"
-        <> canonicalSemanticForm (SemanticRecord (Map.fromList
-          [ ("interface_revision", SemanticAtom (unInterfaceRevision interfaceRevision))
-          , ("definition", declarationDefinitionSemantics descriptor)
-          ])))
+    interfaceRevision =
+      case ArchitectureRevisionConstructionKernel.planInterfaceRevision
+        (declarationInterfaceSemantics descriptor) of
+        ArchitectureRevisionConstructionKernel.MkInterfaceRevisionPlan
+          ArchitectureRevisionConstructionKernel.InterfaceRevisionNamespace
+          plannedInterfaceSemantics ->
+            InterfaceRevision
+              ("phil.interface.canonical.v1:"
+                <> canonicalSemanticForm plannedInterfaceSemantics)
+        _ -> architectureRevisionConstructionKernelBridgeMismatch
+          "interface revision plan"
+    definitionRevision =
+      case ArchitectureRevisionConstructionKernel.planDefinitionRevision
+        interfaceRevision
+        (declarationDefinitionSemantics descriptor) of
+        ArchitectureRevisionConstructionKernel.MkDefinitionRevisionPlan
+          ArchitectureRevisionConstructionKernel.DefinitionRevisionNamespace
+          plannedInterfaceRevision
+          plannedDefinitionSemantics ->
+            DefinitionRevision
+              ("phil.definition.canonical.v1:"
+                <> canonicalSemanticForm (SemanticRecord (Map.fromList
+                  [ ("interface_revision", SemanticAtom
+                      (unInterfaceRevision plannedInterfaceRevision))
+                  , ("definition", plannedDefinitionSemantics)
+                  ])))
+        _ -> architectureRevisionConstructionKernelBridgeMismatch
+          "definition revision plan"
 
 deriveArchitectureInstanceIdentity
   :: ArchitectureInstanceDescriptor
   -> ArchitectureInstanceIdentity
 deriveArchitectureInstanceIdentity descriptor = ArchitectureInstanceIdentity
-  { identityInstanceKey = architectureInstanceKey descriptor
-  , identityInstanceRevision = InstanceRevision
-      ("phil.instance.canonical.v1:"
-        <> canonicalSemanticForm (SemanticRecord (Map.fromList
-          [ ("instance_key", SemanticAtom (unInstanceKey (architectureInstanceKey descriptor)))
-          , ("parent_instance_key", maybe (SemanticAtom "")
-              (SemanticAtom . unInstanceKey) (architectureParentInstanceKey descriptor))
-          , ("declaration_key", SemanticAtom
-              (unDeclarationKey (identityDeclarationKey declarationIdentity)))
-          , ("interface_revision", SemanticAtom
-              (unInterfaceRevision (identityInterfaceRevision declarationIdentity)))
-          , ("definition_revision", SemanticAtom
-              (unDefinitionRevision (identityDefinitionRevision declarationIdentity)))
-          , ("bindings", SemanticRecord (architectureStaticBindings descriptor))
-          ])))
+  { identityInstanceKey = plannedInstanceKey
+  , identityInstanceRevision = plannedInstanceRevision
   }
   where
     declarationIdentity = architectureDeclarationIdentity descriptor
+    (plannedInstanceKey, plannedInstanceRevision) =
+      case ArchitectureRevisionConstructionKernel.planInstanceRevision
+        (architectureInstanceKey descriptor)
+        (architectureParentInstanceKey descriptor)
+        (identityDeclarationKey declarationIdentity)
+        (identityInterfaceRevision declarationIdentity)
+        (identityDefinitionRevision declarationIdentity)
+        (architectureStaticBindings descriptor) of
+        ArchitectureRevisionConstructionKernel.MkInstanceRevisionPlan
+          ArchitectureRevisionConstructionKernel.InstanceRevisionNamespace
+          instanceKey
+          parentInstanceKey
+          declarationKeyValue
+          interfaceRevision
+          definitionRevision
+          bindings ->
+            ( instanceKey
+            , InstanceRevision
+                ("phil.instance.canonical.v1:"
+                  <> canonicalSemanticForm (SemanticRecord (Map.fromList
+                    [ ("instance_key", SemanticAtom (unInstanceKey instanceKey))
+                    , ("parent_instance_key", maybe (SemanticAtom "")
+                        (SemanticAtom . unInstanceKey) parentInstanceKey)
+                    , ("declaration_key", SemanticAtom
+                        (unDeclarationKey declarationKeyValue))
+                    , ("interface_revision", SemanticAtom
+                        (unInterfaceRevision interfaceRevision))
+                    , ("definition_revision", SemanticAtom
+                        (unDefinitionRevision definitionRevision))
+                    , ("bindings", SemanticRecord bindings)
+                    ])))
+            )
+        _ -> architectureRevisionConstructionKernelBridgeMismatch
+          "instance revision plan"
 
 deriveArchitectureRealizationIdentity
   :: ArchitectureRealizationDescriptor
@@ -361,12 +406,20 @@ deriveArchitectureRealizationIdentity descriptor = ArchitectureRealizationIdenti
 -- occurrence lineage.  The spelling is intentionally inspectable in Phase 1;
 -- a future compact digest encoding must preserve this equality relation.
 scopedInstanceKey :: InstanceKey -> OccurrenceSlotKey -> InstanceKey
-scopedInstanceKey parent slot = InstanceKey
-  ("phil.instance.scope.v1:"
-    <> canonicalSemanticForm (SemanticRecord (Map.fromList
-      [ ("parent", SemanticAtom (unInstanceKey parent))
-      , ("slot", SemanticAtom (unOccurrenceSlotKey slot))
-      ])))
+scopedInstanceKey parent slot =
+  case ArchitectureRevisionConstructionKernel.planScopedInstanceKey parent slot of
+    ArchitectureRevisionConstructionKernel.MkScopedInstanceKeyPlan
+      ArchitectureRevisionConstructionKernel.ScopedInstanceKeyNamespace
+      plannedParent
+      plannedSlot ->
+        InstanceKey
+          ("phil.instance.scope.v1:"
+            <> canonicalSemanticForm (SemanticRecord (Map.fromList
+              [ ("parent", SemanticAtom (unInstanceKey plannedParent))
+              , ("slot", SemanticAtom (unOccurrenceSlotKey plannedSlot))
+              ])))
+    _ -> architectureRevisionConstructionKernelBridgeMismatch
+      "scoped instance key plan"
 
 instantiateArchitecture
   :: InstanceKey
