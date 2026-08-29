@@ -1,0 +1,127 @@
+name: Phase 1 Provider Replacement Implementation Refinement
+
+on:
+  pull_request:
+    paths:
+      - 'proof/Phil/Core/ProviderReplacementQualification.v'
+      - 'proof/Phil/Core/ProviderReplacementQualificationImplementation.v'
+      - 'proof/Phil/Core/ProviderReplacementQualificationImplementationExtraction.v'
+      - 'app/ProviderReplacementDecisionCorrespondenceMain.hs'
+      - 'src/Phil/Core/ProviderReplacementQualification.hs'
+      - 'test/Phase1ArchitectureProviderReplacementMain.hs'
+      - 'docs/phase-1/provider-replacement-implementation-refinement-v1.md'
+      - '.github/workflows/phase1-provider-replacement-implementation-refinement.yml'
+  push:
+    branches: [main]
+    paths:
+      - 'proof/Phil/Core/ProviderReplacementQualification.v'
+      - 'proof/Phil/Core/ProviderReplacementQualificationImplementation.v'
+      - 'proof/Phil/Core/ProviderReplacementQualificationImplementationExtraction.v'
+      - 'app/ProviderReplacementDecisionCorrespondenceMain.hs'
+      - 'src/Phil/Core/ProviderReplacementQualification.hs'
+      - 'test/Phase1ArchitectureProviderReplacementMain.hs'
+      - 'docs/phase-1/provider-replacement-implementation-refinement-v1.md'
+      - '.github/workflows/phase1-provider-replacement-implementation-refinement.yml'
+
+permissions:
+  contents: read
+
+jobs:
+  rocq-provider-replacement-implementation-refinement:
+    runs-on: ubuntu-latest
+    container:
+      image: rocq/rocq-prover:9.2.0
+      options: --user root
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Compile Certified provider replacement and implementation correspondence
+        shell: bash
+        run: |
+          set -euo pipefail
+          export PATH="/home/rocq/.opam/${COMPILER}/bin:$PATH"
+          rocq c -Q proof/Phil Phil proof/Phil/Core/ProviderReplacementQualification.v
+          rocq c -Q proof/Phil Phil proof/Phil/Core/ProviderReplacementQualificationImplementation.v
+
+      - name: Fresh-extract provider replacement decision kernel
+        shell: bash
+        run: |
+          set -euo pipefail
+          export PATH="/home/rocq/.opam/${COMPILER}/bin:$PATH"
+          rm -f ProviderReplacementQualificationKernel.hs
+          rocq c -Q proof/Phil Phil proof/Phil/Core/ProviderReplacementQualificationImplementationExtraction.v
+          test -s ProviderReplacementQualificationKernel.hs
+          grep -q 'decideProviderReplacementByFacts' ProviderReplacementQualificationKernel.hs
+          grep -q 'decideProviderReplacementReuseByFacts' ProviderReplacementQualificationKernel.hs
+          sha256sum ProviderReplacementQualificationKernel.hs
+          mkdir -p provider-replacement-refinement-proof
+          cp \
+            proof/Phil/Core/ProviderReplacementQualification.v \
+            proof/Phil/Core/ProviderReplacementQualificationImplementation.v \
+            proof/Phil/Core/ProviderReplacementQualificationImplementation.vo \
+            ProviderReplacementQualificationKernel.hs \
+            provider-replacement-refinement-proof/
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: rocq-provider-replacement-implementation-refinement
+          path: provider-replacement-refinement-proof
+          if-no-files-found: error
+
+  verify-provider-replacement-implementation-correspondence:
+    needs: rocq-provider-replacement-implementation-refinement
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/download-artifact@v4
+        with:
+          name: rocq-provider-replacement-implementation-refinement
+          path: extracted-provider-replacement
+
+      - uses: haskell-actions/setup@v2
+        with:
+          ghc-version: '9.6.7'
+          cabal-version: 'latest'
+
+      - name: Typecheck and execute extracted replacement controls
+        run: |
+          set -euo pipefail
+          ghc -Wall -Werror -fno-code \
+            extracted-provider-replacement/ProviderReplacementQualificationKernel.hs
+          ghc -Wall -Werror \
+            -iextracted-provider-replacement \
+            app/ProviderReplacementDecisionCorrespondenceMain.hs \
+            -o provider-replacement-kernel-controls
+          ./provider-replacement-kernel-controls
+
+      - name: Strict-typecheck unchanged production and PROV-015 / ARCH-010 corpus
+        run: |
+          set -euo pipefail
+          cabal build exe:phil-certify-core-scalar --ghc-options=-Werror
+          cabal exec -- ghc -isrc -Wall -Werror -fno-code \
+            src/Phil/Core/ProviderReplacementQualification.hs
+          cabal exec -- ghc -isrc -Wall -Werror -fno-code \
+            test/Phase1ArchitectureProviderReplacementMain.hs
+
+      - name: Re-run unchanged provider replacement corpus
+        run: |
+          set -euo pipefail
+          cabal exec -- runghc -isrc test/Phase1ArchitectureProviderReplacementMain.hs
+
+      - name: Record staging identities
+        run: |
+          set -euo pipefail
+          mkdir -p provider-replacement-implementation-correspondence
+          sha256sum \
+            extracted-provider-replacement/ProviderReplacementQualificationKernel.hs \
+            src/Phil/Core/ProviderReplacementQualification.hs \
+            test/Phase1ArchitectureProviderReplacementMain.hs \
+            app/ProviderReplacementDecisionCorrespondenceMain.hs \
+            > provider-replacement-implementation-correspondence/PHIL-PROV-REPLACE-IMPL-001.staging.sha256
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: provider-replacement-implementation-correspondence
+          path: provider-replacement-implementation-correspondence
+          if-no-files-found: error
