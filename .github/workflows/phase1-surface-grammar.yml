@@ -50,7 +50,7 @@ jobs:
       - name: Check Grammar-v1 lexical authority
         run: cabal exec -- runghc -Wall -Werror -isrc test/Phase1GrammarV1LexerMain.hs
 
-      - name: Check Grammar-v1 structural declaration parsing
+      - name: Check Grammar-v1 production parsing
         run: cabal exec -- runghc -Wall -Werror -isrc test/Phase1GrammarV1StructuralParserMain.hs
 
       - name: Check derivation and corpus tools
