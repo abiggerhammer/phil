@@ -21,7 +21,7 @@ The plan fields remain polymorphic. Rocq therefore owns the dependency structure
 
 ## Production binding
 
-The exact extracted `src/ArchitectureRevisionConstructionKernel.hs` is checked in byte-for-byte. `Phil.Core.Static` now routes the four Certified construction seams through that kernel:
+The exact extracted `generated/ArchitectureRevisionConstructionKernel.hs` is checked in byte-for-byte. `Phil.Core.Static` now routes the four Certified construction seams through that kernel:
 
 - `deriveDeclarationIdentity` obtains interface semantics from `planInterfaceRevision`, then obtains the exact interface revision and definition semantics from `planDefinitionRevision` before applying the existing native canonical encoding;
 - `deriveArchitectureInstanceIdentity` obtains the occurrence key, parent, declaration key, interface revision, definition revision, and static bindings from `planInstanceRevision`, and constructs both the returned `InstanceKey` and `InstanceRevision` from those plan fields;
@@ -43,7 +43,7 @@ The following remain explicit primitive representation/runtime foundations rathe
 
 These bridges are finite and fail closed when an extracted namespace/shape cannot be represented.
 
-Rocq's Haskell extractor also emits an unused qualified `Prelude` import in this purely polymorphic kernel. To keep the raw extraction byte-identical while preserving strict warnings for handwritten production code, Cabal builds the generated kernel as a private internal library whose only warning exception is `-Wno-unused-imports`. The main `phil-core` library retains the normal strict warning set and depends on that generated-kernel component.
+Rocq's Haskell extractor also emits an unused qualified `Prelude` import in this purely polymorphic kernel. To keep the raw extraction byte-identical while preserving strict warnings for handwritten production code, the exact generated source lives under `generated/`, outside the handwritten `src/` search root. Cabal builds it as a private internal library whose only warning exception is `-Wno-unused-imports`; the main `phil-core` library retains the normal strict warning set and depends on that component. This also prevents strict ad-hoc `-isrc` proof and conformance jobs from rediscovering and recompiling the raw generated source outside its component policy.
 
 ## Deliberate non-scope
 
@@ -55,7 +55,7 @@ The dedicated workflow must:
 
 - recompile the Certified `ArchitectureIdentity.v` model;
 - compile the revision-construction correspondence proof;
-- fresh-extract `ArchitectureRevisionConstructionKernel.hs` and require byte-for-byte identity with the checked-in kernel;
+- fresh-extract `ArchitectureRevisionConstructionKernel.hs` and require byte-for-byte identity with `generated/ArchitectureRevisionConstructionKernel.hs`;
 - typecheck the raw extracted kernel under `-Wall -Werror`, suppressing only its generator-owned unused Prelude import;
 - validate the Cabal package description and build the generated internal library plus handwritten `phil-core` under warnings-as-errors;
 - typecheck the unchanged ARCH-002, ARCH-003, ARCH-004, and ARCH-007 corpora against the built `phil-core` package under `-Wall -Werror`;
