@@ -1,4 +1,4 @@
-module corpus.offer;
+module corpus.term_offer;
 
 component Offer(endpoint : Endpoint) {
   offer endpoint {

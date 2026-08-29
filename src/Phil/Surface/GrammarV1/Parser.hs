@@ -41,6 +41,11 @@ module Phil.Surface.GrammarV1.Parser
   , GrammarV1ProtocolDecl (..)
   , GrammarV1TermParam (..)
   , GrammarV1Pattern (..)
+  , GrammarV1FieldBinder (..)
+  , GrammarV1CaseBinders (..)
+  , GrammarV1CasePattern (..)
+  , GrammarV1MatchArmBody (..)
+  , GrammarV1MatchArm (..)
   , GrammarV1Expression (..)
   , GrammarV1Statement (..)
   , GrammarV1Block (..)
@@ -373,7 +378,35 @@ data GrammarV1TermParam = GrammarV1TermParam
 newtype GrammarV1Pattern = GrammarV1IdentifierPattern
   { grammarV1IdentifierPatternName :: Located Text
   }
-  deriving (Eq, Show)
+  deriving (Eq, Ord, Show)
+
+data GrammarV1FieldBinder = GrammarV1FieldBinder
+  { grammarV1FieldBinderField :: Located Text
+  , grammarV1FieldBinderAlias :: Maybe (Located Text)
+  }
+  deriving (Eq, Ord, Show)
+
+data GrammarV1CaseBinders
+  = GrammarV1TupleCaseBinders [Located Text]
+  | GrammarV1RecordCaseBinders [Located GrammarV1FieldBinder]
+  deriving (Eq, Ord, Show)
+
+data GrammarV1CasePattern = GrammarV1CasePattern
+  { grammarV1CasePatternName :: Located GrammarV1QualifiedName
+  , grammarV1CasePatternBinders :: Maybe GrammarV1CaseBinders
+  }
+  deriving (Eq, Ord, Show)
+
+data GrammarV1MatchArmBody
+  = GrammarV1MatchArmBlock (Located GrammarV1Block)
+  | GrammarV1MatchArmStatement (Located GrammarV1Statement)
+  deriving (Eq, Ord, Show)
+
+data GrammarV1MatchArm = GrammarV1MatchArm
+  { grammarV1MatchArmPattern :: Located GrammarV1CasePattern
+  , grammarV1MatchArmBody :: GrammarV1MatchArmBody
+  }
+  deriving (Eq, Ord, Show)
 
 data GrammarV1Expression
   = GrammarV1NameExpression GrammarV1StaticReference [Located GrammarV1Expression]
@@ -386,18 +419,21 @@ data GrammarV1Expression
       (Located GrammarV1Expression)
   | GrammarV1TupleExpression [Located GrammarV1Expression]
   | GrammarV1ParenthesizedExpression (Located GrammarV1Expression)
+  | GrammarV1OfferExpression
+      (Located GrammarV1Expression)
+      [Located GrammarV1MatchArm]
   deriving (Eq, Ord, Show)
 
 data GrammarV1Statement
   = GrammarV1LetStatement (Located GrammarV1Pattern) (Located GrammarV1Expression)
   | GrammarV1ReturnStatement (Located GrammarV1Expression)
   | GrammarV1ExpressionStatement (Located GrammarV1Expression)
-  deriving (Eq, Show)
+  deriving (Eq, Ord, Show)
 
 newtype GrammarV1Block = GrammarV1Block
   { grammarV1BlockStatements :: [Located GrammarV1Statement]
   }
-  deriving (Eq, Show)
+  deriving (Eq, Ord, Show)
 
 data GrammarV1ComponentDecl = GrammarV1ComponentDecl
   { grammarV1ComponentName :: Located Text
@@ -1206,6 +1242,7 @@ parseExpression = do
   token <- peekToken
   case fmap locatedValue token of
     Just (GrammarKeyword "transport") -> parseTransportExpression
+    Just (GrammarKeyword "offer") -> parseOfferExpression
     Just (GrammarKeyword "true") -> do
       value <- expectKeyword "true"
       pure (Located (locatedSpan value) (GrammarV1BoolExpression True))
@@ -1241,6 +1278,158 @@ parseTransportExpression = do
       (sourceSpanStart (locatedSpan start))
       (sourceSpanEnd (locatedSpan evidence)))
     (GrammarV1TransportExpression value target evidence)
+
+parseOfferExpression :: Parser (Located GrammarV1Expression)
+parseOfferExpression = do
+  start <- expectKeyword "offer"
+  scrutinee <- parseExpression
+  _ <- expectSymbol "{"
+  atEnd <- peekSymbol "}"
+  if atEnd
+    then failParser "offer_expression requires at least one match_arm"
+    else do
+      first <- parseMatchArm
+      rest <- parseMatchArms
+      end <- expectSymbol "}"
+      pure $ locatedBetween start end (GrammarV1OfferExpression scrutinee (first : rest))
+
+parseMatchArms :: Parser [Located GrammarV1MatchArm]
+parseMatchArms = do
+  atEnd <- peekSymbol "}"
+  if atEnd
+    then pure []
+    else do
+      arm <- parseMatchArm
+      rest <- parseMatchArms
+      pure (arm : rest)
+
+parseMatchArm :: Parser (Located GrammarV1MatchArm)
+parseMatchArm = do
+  pattern' <- parseCasePattern
+  _ <- expectSymbol "=>"
+  isBlock <- peekSymbol "{"
+  body <- if isBlock
+    then GrammarV1MatchArmBlock <$> parseBlock
+    else GrammarV1MatchArmStatement <$> parseStatement
+  let endSpan = case body of
+        GrammarV1MatchArmBlock block -> locatedSpan block
+        GrammarV1MatchArmStatement statement -> locatedSpan statement
+  pure $ Located
+    (SourceSpan
+      (sourceSpanStart (locatedSpan pattern'))
+      (sourceSpanEnd endSpan))
+    GrammarV1MatchArm
+      { grammarV1MatchArmPattern = pattern'
+      , grammarV1MatchArmBody = body
+      }
+
+parseCasePattern :: Parser (Located GrammarV1CasePattern)
+parseCasePattern = do
+  name <- parseQualifiedName
+  tupleBinders <- peekSymbol "("
+  recordBinders <- peekSymbol "{"
+  if tupleBinders
+    then do
+      (binders, end) <- parseCaseTupleBinders
+      pure $ Located
+        (SourceSpan
+          (sourceSpanStart (locatedSpan name))
+          (sourceSpanEnd (locatedSpan end)))
+        GrammarV1CasePattern
+          { grammarV1CasePatternName = name
+          , grammarV1CasePatternBinders = Just (GrammarV1TupleCaseBinders binders)
+          }
+    else if recordBinders
+      then do
+        (binders, end) <- parseCaseRecordBinders
+        pure $ Located
+          (SourceSpan
+            (sourceSpanStart (locatedSpan name))
+            (sourceSpanEnd (locatedSpan end)))
+          GrammarV1CasePattern
+            { grammarV1CasePatternName = name
+            , grammarV1CasePatternBinders = Just (GrammarV1RecordCaseBinders binders)
+            }
+      else pure $ Located (locatedSpan name) GrammarV1CasePattern
+        { grammarV1CasePatternName = name
+        , grammarV1CasePatternBinders = Nothing
+        }
+
+parseCaseTupleBinders :: Parser ([Located Text], Located GrammarV1Token)
+parseCaseTupleBinders = do
+  _ <- expectSymbol "("
+  atEnd <- peekSymbol ")"
+  if atEnd
+    then do
+      end <- expectSymbol ")"
+      pure ([], end)
+    else do
+      first <- expectIdentifier
+      rest <- parseMoreCaseTupleBinders
+      end <- expectSymbol ")"
+      pure (first : rest, end)
+
+parseMoreCaseTupleBinders :: Parser [Located Text]
+parseMoreCaseTupleBinders = do
+  hasComma <- peekSymbol ","
+  if hasComma
+    then do
+      _ <- expectSymbol ","
+      atEnd <- peekSymbol ")"
+      if atEnd
+        then failParser "case_pattern tuple binders do not admit a trailing comma"
+        else do
+          binder <- expectIdentifier
+          rest <- parseMoreCaseTupleBinders
+          pure (binder : rest)
+    else pure []
+
+parseCaseRecordBinders
+  :: Parser ([Located GrammarV1FieldBinder], Located GrammarV1Token)
+parseCaseRecordBinders = do
+  _ <- expectSymbol "{"
+  atEnd <- peekSymbol "}"
+  if atEnd
+    then do
+      end <- expectSymbol "}"
+      pure ([], end)
+    else do
+      first <- parseFieldBinder
+      rest <- parseMoreFieldBinders
+      end <- expectSymbol "}"
+      pure (first : rest, end)
+
+parseMoreFieldBinders :: Parser [Located GrammarV1FieldBinder]
+parseMoreFieldBinders = do
+  hasComma <- peekSymbol ","
+  if hasComma
+    then do
+      _ <- expectSymbol ","
+      atEnd <- peekSymbol "}"
+      if atEnd
+        then pure []
+        else do
+          binder <- parseFieldBinder
+          rest <- parseMoreFieldBinders
+          pure (binder : rest)
+    else pure []
+
+parseFieldBinder :: Parser (Located GrammarV1FieldBinder)
+parseFieldBinder = do
+  field <- expectIdentifier
+  hasAlias <- peekKeyword "as"
+  alias <- if hasAlias
+    then expectKeyword "as" >> Just <$> expectIdentifier
+    else pure Nothing
+  let endSpan = maybe (locatedSpan field) locatedSpan alias
+  pure $ Located
+    (SourceSpan
+      (sourceSpanStart (locatedSpan field))
+      (sourceSpanEnd endSpan))
+    GrammarV1FieldBinder
+      { grammarV1FieldBinderField = field
+      , grammarV1FieldBinderAlias = alias
+      }
 
 parseTupleOrParenthesizedExpression :: Parser (Located GrammarV1Expression)
 parseTupleOrParenthesizedExpression = do

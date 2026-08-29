@@ -13,6 +13,7 @@ on:
       - 'test/Phase1GrammarV1CallableContractMain.hs'
       - 'test/Phase1GrammarV1OutcomeCalleeMain.hs'
       - 'test/Phase1GrammarV1ProductFunctionMain.hs'
+      - 'test/Phase1GrammarV1OfferCaseMain.hs'
       - 'test/fixtures/phase1-surface/**'
       - 'docs/phase-1/surface-grammar-v1.md'
       - 'docs/phase-1/surface-parser-production-corpus-v1.md'
@@ -31,6 +32,7 @@ on:
       - 'test/Phase1GrammarV1CallableContractMain.hs'
       - 'test/Phase1GrammarV1OutcomeCalleeMain.hs'
       - 'test/Phase1GrammarV1ProductFunctionMain.hs'
+      - 'test/Phase1GrammarV1OfferCaseMain.hs'
       - 'test/fixtures/phase1-surface/**'
       - 'docs/phase-1/surface-grammar-v1.md'
       - 'docs/phase-1/surface-parser-production-corpus-v1.md'
@@ -72,6 +74,9 @@ jobs:
 
       - name: Check Grammar-v1 product and function parsing
         run: cabal exec -- runghc -Wall -Werror -isrc test/Phase1GrammarV1ProductFunctionMain.hs
+
+      - name: Check Grammar-v1 offer and case parsing
+        run: cabal exec -- runghc -Wall -Werror -isrc test/Phase1GrammarV1OfferCaseMain.hs
 
       - name: Check derivation and corpus tools
         run: |
