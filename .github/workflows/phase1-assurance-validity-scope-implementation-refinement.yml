@@ -7,6 +7,7 @@ on:
       - 'proof/Phil/Assurance/ValidityScopeImplementation.v'
       - 'proof/Phil/Assurance/ValidityScopeImplementationExtraction.v'
       - 'docs/phase-1/assurance-validity-scope-implementation-refinement-v1.md'
+      - 'src/AssuranceValidityScopeKernel.hs'
       - 'src/Phil/Assurance/Verify.hs'
       - 'src/Phil/Assurance/RocqValidityScope.hs'
       - 'app/ValidityScopeProofCorrespondenceMain.hs'
@@ -19,6 +20,7 @@ on:
       - 'proof/Phil/Assurance/ValidityScopeImplementation.v'
       - 'proof/Phil/Assurance/ValidityScopeImplementationExtraction.v'
       - 'docs/phase-1/assurance-validity-scope-implementation-refinement-v1.md'
+      - 'src/AssuranceValidityScopeKernel.hs'
       - 'src/Phil/Assurance/Verify.hs'
       - 'src/Phil/Assurance/RocqValidityScope.hs'
       - 'app/ValidityScopeProofCorrespondenceMain.hs'
@@ -45,7 +47,7 @@ jobs:
           rocq c -Q proof/Phil Phil proof/Phil/Assurance/ValidityScope.v
           rocq c -Q proof/Phil Phil proof/Phil/Assurance/ValidityScopeImplementation.v
 
-      - name: Extract assurance validity-scope kernel
+      - name: Fresh-extract and compare assurance validity-scope kernel
         shell: bash
         run: |
           set -euo pipefail
@@ -55,6 +57,10 @@ jobs:
           test -s AssuranceValidityScopeKernel.hs
           grep -q 'validityScopeFactsb' AssuranceValidityScopeKernel.hs
           grep -q 'decideValidityScope' AssuranceValidityScopeKernel.hs
+          if ! cmp -s AssuranceValidityScopeKernel.hs src/AssuranceValidityScopeKernel.hs; then
+            diff -u src/AssuranceValidityScopeKernel.hs AssuranceValidityScopeKernel.hs || true
+            exit 1
+          fi
           sha256sum AssuranceValidityScopeKernel.hs
           mkdir -p assurance-validity-scope-implementation-refinement-proof
           cp \
@@ -70,37 +76,52 @@ jobs:
           path: assurance-validity-scope-implementation-refinement-proof
           if-no-files-found: error
 
-  verify-assurance-validity-scope-implementation-correspondence:
+  verify-assurance-validity-scope-production-binding:
     needs: rocq-assurance-validity-scope-implementation-refinement
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
-
-      - uses: actions/download-artifact@v4
-        with:
-          name: rocq-assurance-validity-scope-implementation-refinement
-          path: extracted-assurance-validity-scope
 
       - uses: haskell-actions/setup@v2
         with:
           ghc-version: '9.6.7'
           cabal-version: 'latest'
 
-      - name: Typecheck extracted kernel and unchanged assurance validity paths
+      - name: Typecheck exact kernel and bound assurance validity path
         run: |
           set -euo pipefail
-          ghc -Wall -Werror -fno-code extracted-assurance-validity-scope/AssuranceValidityScopeKernel.hs
+          ghc -isrc -Wall -Werror -fno-code src/AssuranceValidityScopeKernel.hs
           cabal build exe:phil-certify-core-scalar --ghc-options=-Werror
           cabal exec -- ghc -isrc -Wall -Werror -fno-code src/Phil/Assurance/Verify.hs
           cabal exec -- ghc -isrc -Wall -Werror -fno-code src/Phil/Assurance/RocqValidityScope.hs
           cabal exec -- ghc -isrc -Wall -Werror -fno-code app/ValidityScopeProofCorrespondenceMain.hs
+          cabal exec -- ghc -isrc -Wall -Werror -fno-code test/AssuranceMain.hs
 
-      - name: Re-run unchanged validity-scope correspondence corpus
+      - name: Re-run validity-scope correspondence corpus
         run: |
           set -euo pipefail
           cabal exec -- runghc -isrc app/ValidityScopeProofCorrespondenceMain.hs
 
-      - name: Re-run ordinary assurance corpus
+      - name: Re-run bound assurance corpus
         run: |
           set -euo pipefail
           cabal exec -- runghc -isrc test/AssuranceMain.hs
+
+      - name: Record production closeout identities
+        run: |
+          set -euo pipefail
+          mkdir -p assurance-validity-scope-production-binding
+          sha256sum \
+            src/AssuranceValidityScopeKernel.hs \
+            src/Phil/Assurance/Verify.hs \
+            src/Phil/Assurance/RocqValidityScope.hs \
+            app/ValidityScopeProofCorrespondenceMain.hs \
+            test/AssuranceMain.hs \
+            > assurance-validity-scope-production-binding/PHIL-ASSURE-VALIDITY-IMPL-001.correspondence.sha256
+          cat assurance-validity-scope-production-binding/PHIL-ASSURE-VALIDITY-IMPL-001.correspondence.sha256
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: phil-assurance-validity-scope-production-binding
+          path: assurance-validity-scope-production-binding
+          if-no-files-found: error
