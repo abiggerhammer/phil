@@ -1,0 +1,132 @@
+name: Phase 1 Architecture Instantiation Implementation Refinement
+
+on:
+  pull_request:
+    paths:
+      - 'proof/Phil/Core/ArchitectureIdentity.v'
+      - 'proof/Phil/Core/ArchitectureInstantiation.v'
+      - 'proof/Phil/Core/ArchitectureInstantiationImplementation.v'
+      - 'proof/Phil/Core/ArchitectureInstantiationImplementationExtraction.v'
+      - 'docs/phase-1/architecture-instantiation-implementation-refinement-v1.md'
+      - 'app/ArchitectureInstantiationDecisionCorrespondenceMain.hs'
+      - 'src/Phil/Core/Static.hs'
+      - 'test/Phase1ArchitectureInstantiationMain.hs'
+      - '.github/workflows/phase1-architecture-instantiation-implementation-refinement.yml'
+  push:
+    branches: [main]
+    paths:
+      - 'proof/Phil/Core/ArchitectureIdentity.v'
+      - 'proof/Phil/Core/ArchitectureInstantiation.v'
+      - 'proof/Phil/Core/ArchitectureInstantiationImplementation.v'
+      - 'proof/Phil/Core/ArchitectureInstantiationImplementationExtraction.v'
+      - 'docs/phase-1/architecture-instantiation-implementation-refinement-v1.md'
+      - 'app/ArchitectureInstantiationDecisionCorrespondenceMain.hs'
+      - 'src/Phil/Core/Static.hs'
+      - 'test/Phase1ArchitectureInstantiationMain.hs'
+      - '.github/workflows/phase1-architecture-instantiation-implementation-refinement.yml'
+
+permissions:
+  contents: read
+
+jobs:
+  rocq-architecture-instantiation-implementation-refinement:
+    runs-on: ubuntu-latest
+    container:
+      image: rocq/rocq-prover:9.2.0
+      options: --user root
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Compile Certified architecture instantiation and decision correspondence
+        shell: bash
+        run: |
+          set -euo pipefail
+          export PATH="/home/rocq/.opam/${COMPILER}/bin:$PATH"
+          rocq c -Q proof/Phil Phil proof/Phil/Core/ArchitectureIdentity.v
+          rocq c -Q proof/Phil Phil proof/Phil/Core/ArchitectureInstantiation.v
+          rocq c -Q proof/Phil Phil proof/Phil/Core/ArchitectureInstantiationImplementation.v
+
+      - name: Fresh-extract architecture instantiation decision kernel
+        shell: bash
+        run: |
+          set -euo pipefail
+          export PATH="/home/rocq/.opam/${COMPILER}/bin:$PATH"
+          rm -f ArchitectureInstantiationKernel.hs
+          rocq c -Q proof/Phil Phil proof/Phil/Core/ArchitectureInstantiationImplementationExtraction.v
+          test -s ArchitectureInstantiationKernel.hs
+          grep -q 'decideChildSlotByFacts' ArchitectureInstantiationKernel.hs
+          grep -q 'decideArchitectureRequirementByFacts' ArchitectureInstantiationKernel.hs
+          grep -q 'decideRootRequirementByFacts' ArchitectureInstantiationKernel.hs
+          grep -q 'decideArchitectureReferenceByFacts' ArchitectureInstantiationKernel.hs
+          sha256sum ArchitectureInstantiationKernel.hs
+          mkdir -p architecture-instantiation-refinement-proof
+          cp \
+            proof/Phil/Core/ArchitectureIdentity.v \
+            proof/Phil/Core/ArchitectureInstantiation.v \
+            proof/Phil/Core/ArchitectureInstantiationImplementation.v \
+            proof/Phil/Core/ArchitectureInstantiationImplementation.vo \
+            ArchitectureInstantiationKernel.hs \
+            architecture-instantiation-refinement-proof/
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: rocq-architecture-instantiation-implementation-refinement
+          path: architecture-instantiation-refinement-proof
+          if-no-files-found: error
+
+  verify-architecture-instantiation-implementation-correspondence:
+    needs: rocq-architecture-instantiation-implementation-refinement
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/download-artifact@v4
+        with:
+          name: rocq-architecture-instantiation-implementation-refinement
+          path: extracted-architecture-instantiation
+
+      - uses: haskell-actions/setup@v2
+        with:
+          ghc-version: '9.6.7'
+          cabal-version: 'latest'
+
+      - name: Typecheck and execute extracted kernel controls
+        run: |
+          set -euo pipefail
+          ghc -Wall -Werror -fno-code \
+            extracted-architecture-instantiation/ArchitectureInstantiationKernel.hs
+          ghc -Wall -Werror \
+            -iextracted-architecture-instantiation \
+            app/ArchitectureInstantiationDecisionCorrespondenceMain.hs \
+            -o architecture-instantiation-kernel-controls
+          ./architecture-instantiation-kernel-controls
+
+      - name: Strict-typecheck unchanged production and ARCH-005/006/008/009 corpus
+        run: |
+          set -euo pipefail
+          cabal build exe:phil-certify-core-scalar --ghc-options=-Werror
+          cabal exec -- ghc -isrc -Wall -Werror -fno-code src/Phil/Core/Static.hs
+          cabal exec -- ghc -isrc -Wall -Werror -fno-code \
+            test/Phase1ArchitectureInstantiationMain.hs
+
+      - name: Re-run unchanged architecture instantiation corpus
+        run: |
+          set -euo pipefail
+          cabal exec -- runghc -isrc test/Phase1ArchitectureInstantiationMain.hs
+
+      - name: Record staging identities
+        run: |
+          set -euo pipefail
+          mkdir -p architecture-instantiation-implementation-correspondence
+          sha256sum \
+            extracted-architecture-instantiation/ArchitectureInstantiationKernel.hs \
+            src/Phil/Core/Static.hs \
+            test/Phase1ArchitectureInstantiationMain.hs \
+            app/ArchitectureInstantiationDecisionCorrespondenceMain.hs \
+            > architecture-instantiation-implementation-correspondence/PHIL-ARCH-INST-IMPL-001.staging.sha256
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: architecture-instantiation-implementation-correspondence
+          path: architecture-instantiation-implementation-correspondence
+          if-no-files-found: error
