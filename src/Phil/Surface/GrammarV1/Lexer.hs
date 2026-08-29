@@ -145,6 +145,7 @@ grammarV1ReservedWords = Set.fromList
   , "receive_exact"
   , "receive_frame"
   , "recognize"
+  , "record"
   , "recursive"
   , "ref"
   , "reject"
