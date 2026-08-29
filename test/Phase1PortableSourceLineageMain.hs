@@ -6,9 +6,12 @@ import qualified Data.Map.Strict as Map
 import Data.Text (Text)
 import qualified Data.Text as Text
 import qualified Data.Text.IO as TextIO
+import Phil.Core.Process (ProcessKey)
 import Phil.Core.Static
   ( DeclarationDescriptor (..)
+  , DeclarationKey
   , DeclarationPresentation (..)
+  , InstanceKey
   , SemanticForm (..)
   , deriveDeclarationIdentity
   )
@@ -193,7 +196,7 @@ expectLineageError predicate source =
 declarationAt
   :: Text
   -> ResolvedSourceBundleLineage
-  -> Either String Phil.Core.Static.DeclarationKey
+  -> Either String DeclarationKey
 declarationAt site resolved =
   maybe
     (Left ("missing declaration site: " <> Text.unpack site))
@@ -203,7 +206,7 @@ declarationAt site resolved =
 instanceAt
   :: Text
   -> ResolvedSourceBundleLineage
-  -> Either String Phil.Core.Static.InstanceKey
+  -> Either String InstanceKey
 instanceAt site resolved =
   maybe
     (Left ("missing instance lineage site: " <> Text.unpack site))
@@ -213,7 +216,7 @@ instanceAt site resolved =
 processAt
   :: Text
   -> ResolvedSourceBundleLineage
-  -> Either String Phil.Core.Process.ProcessKey
+  -> Either String ProcessKey
 processAt site resolved =
   maybe
     (Left ("missing process lineage site: " <> Text.unpack site))
