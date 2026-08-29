@@ -10,10 +10,12 @@ on:
       - 'proof/Phil/Core/AuthorityConfinementImplementation.v'
       - 'proof/Phil/Core/AuthorityConfinementImplementationExtraction.v'
       - 'docs/phase-1/authority-confinement-implementation-refinement-v1.md'
+      - 'src/AuthorityConfinementKernel.hs'
       - 'src/Phil/Core/AuthorityConfinement.hs'
       - 'src/Phil/Core/ProviderAuthorityQualification.hs'
       - 'test/Phase1AuthorityAttenuationMain.hs'
       - 'test/Phase1AuthorityConfinementMain.hs'
+      - 'test/Phase1AuthorityConfinementBindingMain.hs'
       - 'test/Phase1ProviderQualificationMain.hs'
       - 'test/Phase1ProviderAuthorityQualificationMain.hs'
       - '.github/workflows/phase1-authority-confinement-implementation-refinement.yml'
@@ -27,10 +29,12 @@ on:
       - 'proof/Phil/Core/AuthorityConfinementImplementation.v'
       - 'proof/Phil/Core/AuthorityConfinementImplementationExtraction.v'
       - 'docs/phase-1/authority-confinement-implementation-refinement-v1.md'
+      - 'src/AuthorityConfinementKernel.hs'
       - 'src/Phil/Core/AuthorityConfinement.hs'
       - 'src/Phil/Core/ProviderAuthorityQualification.hs'
       - 'test/Phase1AuthorityAttenuationMain.hs'
       - 'test/Phase1AuthorityConfinementMain.hs'
+      - 'test/Phase1AuthorityConfinementBindingMain.hs'
       - 'test/Phase1ProviderQualificationMain.hs'
       - 'test/Phase1ProviderAuthorityQualificationMain.hs'
       - '.github/workflows/phase1-authority-confinement-implementation-refinement.yml'
@@ -58,7 +62,7 @@ jobs:
           rocq c -Q proof/Phil Phil proof/Phil/Core/AuthorityConfinement.v
           rocq c -Q proof/Phil Phil proof/Phil/Core/AuthorityConfinementImplementation.v
 
-      - name: Fresh-extract authority confinement kernel
+      - name: Fresh-extract and compare authority confinement kernel
         shell: bash
         run: |
           set -euo pipefail
@@ -69,6 +73,10 @@ jobs:
           grep -q 'decideClosureAuthorityConfinement' AuthorityConfinementKernel.hs
           grep -q 'decideNegativeAuthorityClaim' AuthorityConfinementKernel.hs
           grep -q 'decideProviderAuthorityQualificationFacts' AuthorityConfinementKernel.hs
+          if ! cmp -s AuthorityConfinementKernel.hs src/AuthorityConfinementKernel.hs; then
+            diff -u src/AuthorityConfinementKernel.hs AuthorityConfinementKernel.hs || true
+            exit 1
+          fi
           sha256sum AuthorityConfinementKernel.hs
           mkdir -p authority-confinement-implementation-refinement-proof
           cp \
@@ -84,34 +92,52 @@ jobs:
           path: authority-confinement-implementation-refinement-proof
           if-no-files-found: error
 
-  verify-authority-confinement-implementation-correspondence:
+  verify-authority-confinement-production-binding:
     needs: rocq-authority-confinement-implementation-refinement
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
-
-      - uses: actions/download-artifact@v4
-        with:
-          name: rocq-authority-confinement-implementation-refinement
-          path: extracted-authority-confinement
 
       - uses: haskell-actions/setup@v2
         with:
           ghc-version: '9.6.7'
           cabal-version: 'latest'
 
-      - name: Typecheck extracted kernel and unchanged production targets
+      - name: Typecheck exact kernel and bound authority confinement paths
         run: |
           set -euo pipefail
-          ghc -Wall -Werror -fno-code extracted-authority-confinement/AuthorityConfinementKernel.hs
+          ghc -isrc -Wall -Werror -fno-code src/AuthorityConfinementKernel.hs
           cabal build exe:phil-certify-core-scalar --ghc-options=-Werror
           cabal exec -- ghc -isrc -Wall -Werror -fno-code src/Phil/Core/AuthorityConfinement.hs
           cabal exec -- ghc -isrc -Wall -Werror -fno-code src/Phil/Core/ProviderAuthorityQualification.hs
+          cabal exec -- ghc -isrc -Wall -Werror -fno-code test/Phase1AuthorityConfinementBindingMain.hs
 
-      - name: Re-run authority confinement dependency and correspondence corpora
+      - name: Re-run bound authority confinement dependency and correspondence corpora
         run: |
           set -euo pipefail
           cabal exec -- runghc -isrc test/Phase1AuthorityAttenuationMain.hs
           cabal exec -- runghc -isrc test/Phase1AuthorityConfinementMain.hs
           cabal exec -- runghc -isrc test/Phase1ProviderQualificationMain.hs
           cabal exec -- runghc -isrc test/Phase1ProviderAuthorityQualificationMain.hs
+          cabal exec -- runghc -isrc test/Phase1AuthorityConfinementBindingMain.hs
+
+      - name: Record production closeout identities
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p authority-confinement-production-binding
+          sha256sum \
+            src/AuthorityConfinementKernel.hs \
+            src/Phil/Core/AuthorityConfinement.hs \
+            src/Phil/Core/ProviderAuthorityQualification.hs \
+            test/Phase1AuthorityConfinementMain.hs \
+            test/Phase1ProviderAuthorityQualificationMain.hs \
+            test/Phase1AuthorityConfinementBindingMain.hs \
+            > authority-confinement-production-binding/PHIL-AUTH-CONFINE-IMPL-001.correspondence.sha256
+          cat authority-confinement-production-binding/PHIL-AUTH-CONFINE-IMPL-001.correspondence.sha256
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: phil-authority-confinement-production-binding
+          path: authority-confinement-production-binding
+          if-no-files-found: error
