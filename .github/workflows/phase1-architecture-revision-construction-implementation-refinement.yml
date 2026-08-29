@@ -9,6 +9,7 @@ on:
       - 'docs/phase-1/architecture-revision-construction-implementation-refinement-v1.md'
       - 'phil-core.cabal'
       - 'generated/ArchitectureRevisionConstructionKernel.hs'
+      - 'src/ArchitectureRevisionConstructionKernel.hs'
       - 'src/Phil/Core/Static.hs'
       - 'test/Phase1ArchitectureRenameIdentityMain.hs'
       - 'test/Phase1ArchitectureInterfaceValidityMain.hs'
@@ -24,6 +25,7 @@ on:
       - 'docs/phase-1/architecture-revision-construction-implementation-refinement-v1.md'
       - 'phil-core.cabal'
       - 'generated/ArchitectureRevisionConstructionKernel.hs'
+      - 'src/ArchitectureRevisionConstructionKernel.hs'
       - 'src/Phil/Core/Static.hs'
       - 'test/Phase1ArchitectureRenameIdentityMain.hs'
       - 'test/Phase1ArchitectureInterfaceValidityMain.hs'
@@ -101,14 +103,21 @@ jobs:
       - name: Typecheck exact kernel and production-bound architecture path
         run: |
           set -euo pipefail
-          # Rocq's Haskell extractor emits a qualified Prelude import even when
-          # this purely polymorphic generated kernel has no Prelude references.
-          # Suppress only that generator-owned warning for the generated module.
-          ghc -Wall -Werror -Wno-unused-imports -fno-code \
-            extracted-architecture-revision-construction/ArchitectureRevisionConstructionKernel.hs
+          # Preserve the raw Rocq extraction byte-for-byte under generated/.
           cmp -s \
             extracted-architecture-revision-construction/ArchitectureRevisionConstructionKernel.hs \
             generated/ArchitectureRevisionConstructionKernel.hs
+          # Production uses the same generated payload with one compiler-only
+          # warning pragma so strict -isrc callers do not need a hidden package.
+          {
+            printf '%s\n' '{-# OPTIONS_GHC -Wno-unused-imports #-}'
+            cat generated/ArchitectureRevisionConstructionKernel.hs
+          } > expected-production-kernel.hs
+          if ! cmp -s expected-production-kernel.hs src/ArchitectureRevisionConstructionKernel.hs; then
+            diff -u expected-production-kernel.hs src/ArchitectureRevisionConstructionKernel.hs || true
+            exit 1
+          fi
+          ghc -Wall -Werror -fno-code src/ArchitectureRevisionConstructionKernel.hs
           cabal check
           cabal build \
             lib:phil-core \
@@ -140,6 +149,7 @@ jobs:
           set -euo pipefail
           sha256sum \
             generated/ArchitectureRevisionConstructionKernel.hs \
+            src/ArchitectureRevisionConstructionKernel.hs \
             src/Phil/Core/Static.hs \
             phil-core.cabal \
             test/Phase1ArchitectureRenameIdentityMain.hs \
@@ -149,6 +159,7 @@ jobs:
           mkdir -p architecture-revision-construction-production-binding
           cp \
             generated/ArchitectureRevisionConstructionKernel.hs \
+            src/ArchitectureRevisionConstructionKernel.hs \
             src/Phil/Core/Static.hs \
             phil-core.cabal \
             test/Phase1ArchitectureRenameIdentityMain.hs \
