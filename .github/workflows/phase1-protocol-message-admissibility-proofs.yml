@@ -1,0 +1,92 @@
+name: Phase 1 Protocol Message Admissibility Proofs
+
+on:
+  pull_request:
+    paths:
+      - 'proof/Phil/Core/ProtocolMessageAdmissibility.v'
+      - 'docs/phase-1/protocol-message-admissibility-proof-v1.md'
+      - '.github/workflows/phase1-protocol-message-admissibility-proofs.yml'
+      - 'src/Phil/Core/Protocol/MessageAdmissibility.hs'
+      - 'src/Phil/Core/Protocol/Family.hs'
+      - 'test/Phase1ProtocolMessageAdmissibilityMain.hs'
+      - 'test/Phase1ProtocolProjectionMain.hs'
+      - 'test/Phase1RestrictedMessageTransferMain.hs'
+  push:
+    branches: [main]
+    paths:
+      - 'proof/Phil/Core/ProtocolMessageAdmissibility.v'
+      - 'docs/phase-1/protocol-message-admissibility-proof-v1.md'
+      - '.github/workflows/phase1-protocol-message-admissibility-proofs.yml'
+      - 'src/Phil/Core/Protocol/MessageAdmissibility.hs'
+      - 'src/Phil/Core/Protocol/Family.hs'
+      - 'test/Phase1ProtocolMessageAdmissibilityMain.hs'
+      - 'test/Phase1ProtocolProjectionMain.hs'
+      - 'test/Phase1RestrictedMessageTransferMain.hs'
+
+permissions:
+  contents: read
+
+jobs:
+  rocq-protocol-message-admissibility-proof:
+    runs-on: ubuntu-latest
+    container:
+      image: rocq/rocq-prover:9.2.0
+      options: --user root
+    steps:
+      - uses: actions/checkout@v4
+      - name: Compile PHIL-PROT-MSG-001 proof
+        shell: bash
+        run: |
+          set -euo pipefail
+          export PATH="/home/rocq/.opam/${COMPILER}/bin:$PATH"
+          rocq c -Q proof/Phil Phil proof/Phil/Core/ProtocolMessageAdmissibility.v
+      - name: Record proof identities
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p protocol-message-admissibility-proof
+          cp \
+            proof/Phil/Core/ProtocolMessageAdmissibility.v \
+            proof/Phil/Core/ProtocolMessageAdmissibility.vo \
+            protocol-message-admissibility-proof/
+          sha256sum \
+            proof/Phil/Core/ProtocolMessageAdmissibility.v \
+            proof/Phil/Core/ProtocolMessageAdmissibility.vo \
+            > protocol-message-admissibility-proof/PHIL-PROT-MSG-001.proof.sha256
+          {
+            echo 'obligation=PHIL-PROT-MSG-001'
+            echo 'evidence=Rocq-9.2.0'
+            cat protocol-message-admissibility-proof/PHIL-PROT-MSG-001.proof.sha256
+          } > protocol-message-admissibility-proof/PHIL-PROT-MSG-001.proof-certificate.txt
+          cat protocol-message-admissibility-proof/PHIL-PROT-MSG-001.proof-certificate.txt
+      - uses: actions/upload-artifact@v4
+        with:
+          name: rocq-protocol-message-admissibility-proof
+          path: protocol-message-admissibility-proof
+          if-no-files-found: error
+
+  verify-protocol-message-admissibility-correspondence:
+    needs: rocq-protocol-message-admissibility-proof
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: haskell-actions/setup@v2
+        with:
+          ghc-version: '9.6.7'
+          cabal-version: 'latest'
+      - name: Build existing proof certifier with warnings as errors
+        run: cabal build exe:phil-certify-core-scalar --ghc-options=-Werror
+      - name: Typecheck unchanged PROT-008 implementation and corpus paths
+        run: |
+          set -euo pipefail
+          cabal exec -- ghc -isrc -Wall -Werror -fno-code src/Phil/Core/Protocol/MessageAdmissibility.hs
+          cabal exec -- ghc -isrc -Wall -Werror -fno-code src/Phil/Core/Protocol/Family.hs
+          cabal exec -- ghc -isrc -Wall -Werror -fno-code test/Phase1ProtocolMessageAdmissibilityMain.hs
+          cabal exec -- ghc -isrc -Wall -Werror -fno-code test/Phase1ProtocolProjectionMain.hs
+          cabal exec -- ghc -isrc -Wall -Werror -fno-code test/Phase1RestrictedMessageTransferMain.hs
+      - name: Re-run Message admission and downstream transfer correspondence corpora
+        run: |
+          set -euo pipefail
+          cabal exec -- runghc -Wall -Werror -isrc test/Phase1ProtocolMessageAdmissibilityMain.hs
+          cabal exec -- runghc -Wall -Werror -isrc test/Phase1ProtocolProjectionMain.hs
+          cabal exec -- runghc -Wall -Werror -isrc test/Phase1RestrictedMessageTransferMain.hs
