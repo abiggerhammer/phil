@@ -25,6 +25,8 @@ module Phil.Surface.GrammarV1.Parser
   , GrammarV1DataDecl (..)
   , GrammarV1TypeAliasDecl (..)
   , GrammarV1ClaimDecl (..)
+  , GrammarV1CallableClause (..)
+  , GrammarV1CallableContractDecl (..)
   , GrammarV1CapabilityItem (..)
   , GrammarV1CapabilityDecl (..)
   , GrammarV1SessionExpression (..)
@@ -92,6 +94,7 @@ data GrammarV1Declaration
   | GrammarV1DataDeclaration GrammarV1DataDecl
   | GrammarV1TypeAliasDeclaration GrammarV1TypeAliasDecl
   | GrammarV1ClaimDeclaration GrammarV1ClaimDecl
+  | GrammarV1CallableContractDeclaration GrammarV1CallableContractDecl
   | GrammarV1CapabilityDeclaration GrammarV1CapabilityDecl
   | GrammarV1ProtocolDeclaration GrammarV1ProtocolDecl
   | GrammarV1ComponentDeclaration GrammarV1ComponentDecl
@@ -243,6 +246,20 @@ data GrammarV1ClaimDecl = GrammarV1ClaimDecl
   , grammarV1ClaimRequirements :: [Located GrammarV1GenericRequirement]
   , grammarV1ClaimTermParams :: Maybe [Located GrammarV1TermParam]
   , grammarV1ClaimProposition :: Maybe (Located GrammarV1Proposition)
+  }
+  deriving (Eq, Show)
+
+data GrammarV1CallableClause
+  = GrammarV1CallableEnsures (Located GrammarV1Proposition)
+  deriving (Eq, Show)
+
+data GrammarV1CallableContractDecl = GrammarV1CallableContractDecl
+  { grammarV1CallableName :: Located Text
+  , grammarV1CallableGenericParams :: [Located GrammarV1GenericParam]
+  , grammarV1CallableRequirements :: [Located GrammarV1GenericRequirement]
+  , grammarV1CallableTermParams :: [Located GrammarV1TermParam]
+  , grammarV1CallableResultType :: Located GrammarV1Type
+  , grammarV1CallableClauses :: [Located GrammarV1CallableClause]
   }
   deriving (Eq, Show)
 
@@ -477,6 +494,7 @@ parseDeclaration = do
     Just (GrammarKeyword "data") -> parseDataDeclaration
     Just (GrammarKeyword "type") -> parseTypeAliasDeclaration
     Just (GrammarKeyword "claim") -> parseClaimDeclaration
+    Just (GrammarKeyword "callable") -> parseCallableContractDeclaration
     Just (GrammarKeyword "capability") -> parseCapabilityDeclaration
     Just (GrammarKeyword "protocol") -> parseProtocolDeclaration
     Just (GrammarKeyword "component") -> parseComponentDeclaration
@@ -563,6 +581,55 @@ parseClaimDeclaration = do
     , grammarV1ClaimTermParams = termParams
     , grammarV1ClaimProposition = proposition
     }
+
+parseCallableContractDeclaration :: Parser (Located GrammarV1Declaration)
+parseCallableContractDeclaration = do
+  start <- expectKeyword "callable"
+  name <- expectIdentifier
+  params <- parseOptionalGenericParams
+  requirements <- parseOptionalGenericRequirements
+  termParams <- parseTermParams
+  _ <- expectSymbol "->"
+  resultType <- parseType
+  _ <- expectSymbol "{"
+  clauses <- parseCallableClauses
+  end <- expectSymbol "}"
+  pure $ locatedBetween start end $
+    GrammarV1CallableContractDeclaration GrammarV1CallableContractDecl
+      { grammarV1CallableName = name
+      , grammarV1CallableGenericParams = params
+      , grammarV1CallableRequirements = requirements
+      , grammarV1CallableTermParams = termParams
+      , grammarV1CallableResultType = resultType
+      , grammarV1CallableClauses = clauses
+      }
+
+parseCallableClauses :: Parser [Located GrammarV1CallableClause]
+parseCallableClauses = do
+  atEnd <- peekSymbol "}"
+  if atEnd
+    then pure []
+    else do
+      clause <- parseCallableClause
+      rest <- parseCallableClauses
+      pure (clause : rest)
+
+parseCallableClause :: Parser (Located GrammarV1CallableClause)
+parseCallableClause = do
+  ensures <- peekKeyword "ensures"
+  if ensures
+    then do
+      start <- expectKeyword "ensures"
+      proposition <- parseProposition
+      end <- expectSymbol ";"
+      pure $ locatedBetween start end (GrammarV1CallableEnsures proposition)
+    else do
+      token <- peekToken
+      case token of
+        Just value -> failParser $
+          "SURF-002 callable-contract slice does not yet implement callable_clause beginning with "
+            <> renderToken (locatedValue value)
+        Nothing -> failParser "unterminated callable contract declaration"
 
 parseMoreVariants :: Parser [Located GrammarV1VariantDecl]
 parseMoreVariants = do
