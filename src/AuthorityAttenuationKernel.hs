@@ -39,3 +39,4 @@ decideAuthorityJoin :: Prelude.Bool -> Prelude.Bool -> Prelude.Bool ->
 decideAuthorityJoin hasContinuingBranch subjectsMatch contractsMatch operationsDoNotWiden =
   andb hasContinuingBranch
     (andb subjectsMatch (andb contractsMatch operationsDoNotWiden))
+
