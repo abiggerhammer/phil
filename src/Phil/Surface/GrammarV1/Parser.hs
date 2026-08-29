@@ -164,7 +164,7 @@ data GrammarV1Proposition
   | GrammarV1OrProposition
       (Located GrammarV1Proposition)
       (Located GrammarV1Proposition)
-  deriving (Eq, Show)
+  deriving (Eq, Ord, Show)
 
 data GrammarV1GenericRequirement
   = GrammarV1StructuralRequirement (Located Text) (Located Text)
@@ -185,6 +185,12 @@ data GrammarV1Type
   = GrammarV1UnitType
   | GrammarV1BoolType
   | GrammarV1UnsignedType Text
+  | GrammarV1BytesType (Located GrammarV1Expression)
+  | GrammarV1ProofType (Located GrammarV1Proposition)
+  | GrammarV1RefinementType
+      (Located Text)
+      (Located GrammarV1Type)
+      (Located GrammarV1Proposition)
   | GrammarV1NamedType GrammarV1StaticReference
   deriving (Eq, Ord, Show)
 
@@ -288,7 +294,11 @@ data GrammarV1Expression
   | GrammarV1BoolExpression Bool
   | GrammarV1UnitExpression
   | GrammarV1IntegerExpression Text
-  deriving (Eq, Show)
+  | GrammarV1TransportExpression
+      (Located GrammarV1Expression)
+      (Located GrammarV1Type)
+      (Located GrammarV1Expression)
+  deriving (Eq, Ord, Show)
 
 data GrammarV1Statement
   = GrammarV1LetStatement (Located GrammarV1Pattern) (Located GrammarV1Expression)
@@ -826,6 +836,7 @@ parseExpression :: Parser (Located GrammarV1Expression)
 parseExpression = do
   token <- peekToken
   case fmap locatedValue token of
+    Just (GrammarKeyword "transport") -> parseTransportExpression
     Just (GrammarKeyword "true") -> do
       value <- expectKeyword "true"
       pure (Located (locatedSpan value) (GrammarV1BoolExpression True))
@@ -846,6 +857,20 @@ parseExpression = do
       "SURF-002 term/block slice does not yet implement expression beginning with "
         <> renderToken other
     Nothing -> failParser "expected expression at end of input"
+
+parseTransportExpression :: Parser (Located GrammarV1Expression)
+parseTransportExpression = do
+  start <- expectKeyword "transport"
+  value <- parseExpression
+  _ <- expectKeyword "to"
+  target <- parseType
+  _ <- expectKeyword "using"
+  evidence <- parseExpression
+  pure $ Located
+    (SourceSpan
+      (sourceSpanStart (locatedSpan start))
+      (sourceSpanEnd (locatedSpan evidence)))
+    (GrammarV1TransportExpression value target evidence)
 
 parseNameExpression :: Parser (Located GrammarV1Expression)
 parseNameExpression = do
@@ -1284,11 +1309,42 @@ parseType = do
       case locatedValue value of
         GrammarUIntType width -> pure (Located (locatedSpan value) (GrammarV1UnsignedType width))
         _ -> failParser "internal UINT_TYPE dispatch error"
+    Just (GrammarKeyword "Bytes") -> parseBytesType
+    Just (GrammarKeyword "Proof") -> parseProofType
+    Just (GrammarSymbol "{") -> parseRefinementType
     Just (GrammarIdentifier _) -> do
       reference <- parseStaticReference
       pure $ Located (locatedSpan reference) $ GrammarV1NamedType (locatedValue reference)
     Just other -> failParser ("expected supported type_expression; found " <> renderToken other)
     Nothing -> failParser "expected type_expression at end of input"
+
+parseBytesType :: Parser (Located GrammarV1Type)
+parseBytesType = do
+  start <- expectKeyword "Bytes"
+  _ <- expectSymbol "["
+  lengthExpression <- parseExpression
+  end <- expectSymbol "]"
+  pure $ locatedBetween start end (GrammarV1BytesType lengthExpression)
+
+parseProofType :: Parser (Located GrammarV1Type)
+parseProofType = do
+  start <- expectKeyword "Proof"
+  _ <- expectSymbol "["
+  proposition <- parseProposition
+  end <- expectSymbol "]"
+  pure $ locatedBetween start end (GrammarV1ProofType proposition)
+
+parseRefinementType :: Parser (Located GrammarV1Type)
+parseRefinementType = do
+  start <- expectSymbol "{"
+  binder <- expectIdentifier
+  _ <- expectSymbol ":"
+  baseType <- parseType
+  _ <- expectSymbol "|"
+  proposition <- parseProposition
+  end <- expectSymbol "}"
+  pure $ locatedBetween start end $
+    GrammarV1RefinementType binder baseType proposition
 
 parseStaticReference :: Parser (Located GrammarV1StaticReference)
 parseStaticReference = do
@@ -1346,6 +1402,8 @@ parseStaticArgument = do
     Just (GrammarKeyword "Unit") -> GrammarV1StaticTypeArgument . locatedValue <$> parseType
     Just (GrammarKeyword "Bool") -> GrammarV1StaticTypeArgument . locatedValue <$> parseType
     Just (GrammarUIntType _) -> GrammarV1StaticTypeArgument . locatedValue <$> parseType
+    Just (GrammarKeyword "Bytes") -> GrammarV1StaticTypeArgument . locatedValue <$> parseType
+    Just (GrammarKeyword "Proof") -> GrammarV1StaticTypeArgument . locatedValue <$> parseType
     Just (GrammarIdentifier _) -> GrammarV1StaticReferenceArgument . locatedValue <$> parseStaticReference
     Just (GrammarKeyword "true") -> expectKeyword "true" >> pure (GrammarV1StaticBoolArgument True)
     Just (GrammarKeyword "false") -> expectKeyword "false" >> pure (GrammarV1StaticBoolArgument False)
