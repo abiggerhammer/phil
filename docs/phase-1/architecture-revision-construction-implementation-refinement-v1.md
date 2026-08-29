@@ -45,6 +45,8 @@ These bridges are finite and fail closed when an extracted namespace/shape canno
 
 Rocq's Haskell extractor emits an unused qualified `Prelude` import in this purely polymorphic kernel. The raw byte-exact extraction therefore remains under `generated/` and is independently compiled by a private Cabal component with only `-Wno-unused-imports` relaxed. The normal `phil-core` source tree contains the mechanically checked mirror with the same single module-local warning pragma. This matters because many proof and conformance workflows intentionally invoke `runghc -isrc` or `ghc -isrc` directly: those calls must be able to compile the production dependency as an ordinary home module without exposing a hidden internal package or weakening warning policy for unrelated handwritten code.
 
+Package-publication metadata is deliberately outside this refinement slice. The repository's Cabal package is not currently intended to satisfy Hackage publication policy, so the closeout tests Cabal resolution and strict compilation rather than running `cabal check` and conflating missing publication metadata with an implementation-correspondence failure.
+
 ## Deliberate non-scope
 
 Graph instantiation remains separate. `deriveGraphInstanceIdentity` still owns its graph-specific outer revision over the already-bound base `ArchitectureInstanceIdentity` plus requirement/child/reference semantic bindings. Requirement validation, source-to-checked-semantic elaboration, architecture realization identity, and Systems/StageContract correspondence are likewise not pulled into this slice.
@@ -58,7 +60,7 @@ The dedicated workflow must:
 - fresh-extract `ArchitectureRevisionConstructionKernel.hs` and require byte-for-byte identity with `generated/ArchitectureRevisionConstructionKernel.hs`;
 - construct the expected production mirror by prepending exactly one `OPTIONS_GHC -Wno-unused-imports` pragma to that raw extraction and require byte-for-byte identity with `src/ArchitectureRevisionConstructionKernel.hs`;
 - typecheck the production mirror under `-Wall -Werror`;
-- validate the Cabal package description and build both the raw generated component and handwritten `phil-core` under warnings-as-errors;
+- resolve and build the generated component plus handwritten `phil-core` and the scalar proof certifier under warnings-as-errors;
 - typecheck the unchanged ARCH-002, ARCH-003, ARCH-004, and ARCH-007 corpora against the built `phil-core` package under `-Wall -Werror`;
 - rerun those four unchanged corpora through production; and
 - record exact raw-kernel, production-mirror, production-module, package-description, and corpus SHA-256 identities in a dedicated production-binding artifact.
