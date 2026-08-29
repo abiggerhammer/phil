@@ -1,0 +1,5 @@
+PHIL-SOURCE-BUNDLE-LINEAGE-V1
+root	program:lineage-fixture
+unit	unit.upload-id	site.upload-id	-	@key("decl:upload-id") record UploadId {}
+instance	instance.site.primary	inst:primary
+process	process.site.worker	proc:worker
