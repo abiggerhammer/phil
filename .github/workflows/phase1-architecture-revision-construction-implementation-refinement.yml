@@ -128,7 +128,7 @@ jobs:
             test/Phase1ArchitectureDefinitionReplacementMain.hs \
             test/Phase1ArchitectureSiblingNoninterferenceMain.hs
           do
-            cabal exec -- ghc -Wall -Werror -fno-code -package phil-core "$test_main"
+            cabal exec -- ghc -isrc -Wall -Werror -fno-code "$test_main"
           done
 
       - name: Re-run unchanged ARCH-002, ARCH-003, ARCH-004, and ARCH-007 corpora
