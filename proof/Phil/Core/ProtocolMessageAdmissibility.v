@@ -55,8 +55,10 @@ Theorem aggregate_shape_admissibility_reaches_every_child :
 Proof.
   intros fields child Hin Haggregate.
   simpl in Haggregate.
-  apply forallb_forall in Haggregate.
-  apply Haggregate.
+  pose proof
+    (proj1 (@forallb_forall MessageShape shapeAdmissible fields) Haggregate)
+    as Hall.
+  apply Hall.
   exact Hin.
 Qed.
 
@@ -122,8 +124,10 @@ Theorem product_hard_type_admissibility_reaches_every_child :
 Proof.
   intros elements child Hin Hproduct.
   simpl in Hproduct.
-  apply forallb_forall in Hproduct.
-  apply Hproduct.
+  pose proof
+    (proj1 (@forallb_forall MessageType hardTypeAdmissible elements) Hproduct)
+    as Hall.
+  apply Hall.
   exact Hin.
 Qed.
 
@@ -187,8 +191,10 @@ Theorem intrinsic_product_requires_every_child_intrinsic :
 Proof.
   intros elements child Hin Hproduct.
   simpl in Hproduct.
-  apply forallb_forall in Hproduct.
-  apply Hproduct.
+  pose proof
+    (proj1 (@forallb_forall MessageType intrinsicMessageType elements) Hproduct)
+    as Hall.
+  apply Hall.
   exact Hin.
 Qed.
 
