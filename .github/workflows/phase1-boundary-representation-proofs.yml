@@ -1,0 +1,93 @@
+name: Phase 1 Boundary Representation Proofs
+
+on:
+  pull_request:
+    paths:
+      - 'proof/Phil/Core/BoundaryRepresentation.v'
+      - 'docs/phase-1/boundary-representation-proof-v1.md'
+      - '.github/workflows/phase1-boundary-representation-proofs.yml'
+      - 'src/Phil/Core/BoundaryMapping.hs'
+      - 'src/Phil/Core/BoundaryDirection.hs'
+      - 'test/Phase1BoundaryMappingMain.hs'
+      - 'test/Phase1BoundaryMappingFailureMain.hs'
+      - 'test/Phase1TransformingBoundaryMappingMain.hs'
+      - 'test/Phase1BoundaryDirectionMain.hs'
+  push:
+    branches: [main]
+    paths:
+      - 'proof/Phil/Core/BoundaryRepresentation.v'
+      - 'docs/phase-1/boundary-representation-proof-v1.md'
+      - '.github/workflows/phase1-boundary-representation-proofs.yml'
+      - 'src/Phil/Core/BoundaryMapping.hs'
+      - 'src/Phil/Core/BoundaryDirection.hs'
+      - 'test/Phase1BoundaryMappingMain.hs'
+      - 'test/Phase1BoundaryMappingFailureMain.hs'
+      - 'test/Phase1TransformingBoundaryMappingMain.hs'
+      - 'test/Phase1BoundaryDirectionMain.hs'
+
+permissions:
+  contents: read
+
+jobs:
+  rocq-boundary-representation-proof:
+    runs-on: ubuntu-latest
+    container:
+      image: rocq/rocq-prover:9.2.0
+      options: --user root
+    steps:
+      - uses: actions/checkout@v4
+      - name: Compile PHIL-BND-REP-001 proof
+        shell: bash
+        run: |
+          set -euo pipefail
+          export PATH="/home/rocq/.opam/${COMPILER}/bin:$PATH"
+          rocq c -Q proof/Phil Phil proof/Phil/Core/BoundaryRepresentation.v
+      - name: Record proof identities
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p boundary-representation-proof
+          cp proof/Phil/Core/BoundaryRepresentation.v proof/Phil/Core/BoundaryRepresentation.vo boundary-representation-proof/
+          sha256sum \
+            proof/Phil/Core/BoundaryRepresentation.v \
+            proof/Phil/Core/BoundaryRepresentation.vo \
+            > boundary-representation-proof/PHIL-BND-REP-001.proof.sha256
+          {
+            echo 'obligation=PHIL-BND-REP-001'
+            echo 'evidence=Rocq-9.2.0'
+            cat boundary-representation-proof/PHIL-BND-REP-001.proof.sha256
+          } > boundary-representation-proof/PHIL-BND-REP-001.proof-certificate.txt
+          cat boundary-representation-proof/PHIL-BND-REP-001.proof-certificate.txt
+      - uses: actions/upload-artifact@v4
+        with:
+          name: rocq-boundary-representation-proof
+          path: boundary-representation-proof
+          if-no-files-found: error
+
+  verify-boundary-representation-correspondence:
+    needs: rocq-boundary-representation-proof
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: haskell-actions/setup@v2
+        with:
+          ghc-version: '9.6.7'
+          cabal-version: 'latest'
+      - name: Build ordinary regression substrate
+        run: cabal build all --enable-tests
+      - name: Typecheck unchanged BND-004–007 production paths
+        run: |
+          set -euo pipefail
+          cabal exec -- ghc -isrc -Wall -Werror -fno-code src/Phil/Core/BoundaryMapping.hs
+          cabal exec -- ghc -isrc -Wall -Werror -fno-code src/Phil/Core/BoundaryDirection.hs
+          cabal exec -- ghc -isrc -Wall -Werror -fno-code test/Phase1BoundaryMappingMain.hs
+          cabal exec -- ghc -isrc -Wall -Werror -fno-code test/Phase1BoundaryMappingFailureMain.hs
+          cabal exec -- ghc -isrc -Wall -Werror -fno-code test/Phase1TransformingBoundaryMappingMain.hs
+          cabal exec -- ghc -isrc -Wall -Werror -fno-code test/Phase1BoundaryDirectionMain.hs
+      - name: Re-run BND-004–007 correspondence corpus
+        run: |
+          set -euo pipefail
+          cabal exec -- runghc -Wall -Werror -isrc test/Phase1BoundaryMappingMain.hs
+          cabal exec -- runghc -Wall -Werror -isrc test/Phase1BoundaryMappingFailureMain.hs
+          cabal exec -- runghc -Wall -Werror -isrc test/Phase1TransformingBoundaryMappingMain.hs
+          cabal exec -- runghc -Wall -Werror -isrc test/Phase1BoundaryDirectionMain.hs
