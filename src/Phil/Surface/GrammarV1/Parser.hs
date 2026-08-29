@@ -48,6 +48,7 @@ module Phil.Surface.GrammarV1.Parser
   , GrammarV1MatchArm (..)
   , GrammarV1JoinClause (..)
   , GrammarV1StateBinding (..)
+  , GrammarV1Closure (..)
   , GrammarV1Expression (..)
   , GrammarV1Statement (..)
   , GrammarV1Block (..)
@@ -375,7 +376,7 @@ data GrammarV1TermParam = GrammarV1TermParam
   { grammarV1TermParamName :: Located Text
   , grammarV1TermParamType :: Located GrammarV1Type
   }
-  deriving (Eq, Show)
+  deriving (Eq, Ord, Show)
 
 newtype GrammarV1Pattern = GrammarV1IdentifierPattern
   { grammarV1IdentifierPatternName :: Located Text
@@ -423,6 +424,15 @@ data GrammarV1StateBinding = GrammarV1StateBinding
   }
   deriving (Eq, Ord, Show)
 
+data GrammarV1Closure = GrammarV1Closure
+  { grammarV1ClosureMode :: Maybe GrammarV1StructuralMode
+  , grammarV1ClosureTermParams :: [Located GrammarV1TermParam]
+  , grammarV1ClosureSatisfies :: Located GrammarV1Type
+  , grammarV1ClosureCaptures :: Maybe [Located Text]
+  , grammarV1ClosureBody :: Located GrammarV1Block
+  }
+  deriving (Eq, Ord, Show)
+
 data GrammarV1Expression
   = GrammarV1NameExpression GrammarV1StaticReference [Located GrammarV1Expression]
   | GrammarV1BoolExpression Bool
@@ -447,6 +457,7 @@ data GrammarV1Expression
       (Maybe (Located GrammarV1Proposition))
       (Located GrammarV1Block)
   | GrammarV1ContinueExpression [Located GrammarV1Expression]
+  | GrammarV1ClosureExpression GrammarV1Closure
   deriving (Eq, Ord, Show)
 
 data GrammarV1Statement
@@ -1271,6 +1282,7 @@ parseExpression = do
     Just (GrammarKeyword "if") -> parseIfExpression
     Just (GrammarKeyword "loop") -> parseLoopExpression
     Just (GrammarKeyword "continue") -> parseContinueExpression
+    Just (GrammarKeyword "closure") -> parseClosureExpression
     Just (GrammarKeyword "true") -> do
       value <- expectKeyword "true"
       pure (Located (locatedSpan value) (GrammarV1BoolExpression True))
@@ -1576,6 +1588,45 @@ parseContinueExpression = do
       (arguments, end) <- parseTermArguments
       pure $ locatedBetween start end (GrammarV1ContinueExpression arguments)
     else pure $ Located (locatedSpan start) (GrammarV1ContinueExpression [])
+
+parseClosureExpression :: Parser (Located GrammarV1Expression)
+parseClosureExpression = do
+  start <- expectKeyword "closure"
+  hasMode <- peekKeyword "mode"
+  mode <- if hasMode
+    then expectKeyword "mode" >> Just <$> parseStructuralMode
+    else pure Nothing
+  params <- parseTermParams
+  _ <- expectKeyword "satisfies"
+  satisfiesType <- parseType
+  hasCaptures <- peekKeyword "captures"
+  captures <- if hasCaptures
+    then expectKeyword "captures" >> Just <$> parseClosureCaptures
+    else pure Nothing
+  body <- parseBlock
+  pure $ Located
+    (SourceSpan
+      (sourceSpanStart (locatedSpan start))
+      (sourceSpanEnd (locatedSpan body)))
+    (GrammarV1ClosureExpression GrammarV1Closure
+      { grammarV1ClosureMode = mode
+      , grammarV1ClosureTermParams = params
+      , grammarV1ClosureSatisfies = satisfiesType
+      , grammarV1ClosureCaptures = captures
+      , grammarV1ClosureBody = body
+      })
+
+parseClosureCaptures :: Parser [Located Text]
+parseClosureCaptures = do
+  _ <- expectSymbol "("
+  atEnd <- peekSymbol ")"
+  if atEnd
+    then expectSymbol ")" >> pure []
+    else do
+      first <- expectIdentifier
+      rest <- parseCommaIdentifiers
+      _ <- expectSymbol ")"
+      pure (first : rest)
 
 parseTupleOrParenthesizedExpression :: Parser (Located GrammarV1Expression)
 parseTupleOrParenthesizedExpression = do
