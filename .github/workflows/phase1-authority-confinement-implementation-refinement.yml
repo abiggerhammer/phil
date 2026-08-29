@@ -1,0 +1,117 @@
+name: Phase 1 Authority Confinement Implementation Refinement
+
+on:
+  pull_request:
+    paths:
+      - 'proof/Phil/Core/GenericStructural.v'
+      - 'proof/Phil/Core/AuthorityPossession.v'
+      - 'proof/Phil/Core/AuthorityAttenuation.v'
+      - 'proof/Phil/Core/AuthorityConfinement.v'
+      - 'proof/Phil/Core/AuthorityConfinementImplementation.v'
+      - 'proof/Phil/Core/AuthorityConfinementImplementationExtraction.v'
+      - 'docs/phase-1/authority-confinement-implementation-refinement-v1.md'
+      - 'src/Phil/Core/AuthorityConfinement.hs'
+      - 'src/Phil/Core/ProviderAuthorityQualification.hs'
+      - 'test/Phase1AuthorityAttenuationMain.hs'
+      - 'test/Phase1AuthorityConfinementMain.hs'
+      - 'test/Phase1ProviderQualificationMain.hs'
+      - 'test/Phase1ProviderAuthorityQualificationMain.hs'
+      - '.github/workflows/phase1-authority-confinement-implementation-refinement.yml'
+  push:
+    branches: [main]
+    paths:
+      - 'proof/Phil/Core/GenericStructural.v'
+      - 'proof/Phil/Core/AuthorityPossession.v'
+      - 'proof/Phil/Core/AuthorityAttenuation.v'
+      - 'proof/Phil/Core/AuthorityConfinement.v'
+      - 'proof/Phil/Core/AuthorityConfinementImplementation.v'
+      - 'proof/Phil/Core/AuthorityConfinementImplementationExtraction.v'
+      - 'docs/phase-1/authority-confinement-implementation-refinement-v1.md'
+      - 'src/Phil/Core/AuthorityConfinement.hs'
+      - 'src/Phil/Core/ProviderAuthorityQualification.hs'
+      - 'test/Phase1AuthorityAttenuationMain.hs'
+      - 'test/Phase1AuthorityConfinementMain.hs'
+      - 'test/Phase1ProviderQualificationMain.hs'
+      - 'test/Phase1ProviderAuthorityQualificationMain.hs'
+      - '.github/workflows/phase1-authority-confinement-implementation-refinement.yml'
+
+permissions:
+  contents: read
+
+jobs:
+  rocq-authority-confinement-implementation-refinement:
+    runs-on: ubuntu-latest
+    container:
+      image: rocq/rocq-prover:9.2.0
+      options: --user root
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Compile certified authority confinement and executable correspondence
+        shell: bash
+        run: |
+          set -euo pipefail
+          export PATH="/home/rocq/.opam/${COMPILER}/bin:$PATH"
+          rocq c -Q proof/Phil Phil proof/Phil/Core/GenericStructural.v
+          rocq c -Q proof/Phil Phil proof/Phil/Core/AuthorityPossession.v
+          rocq c -Q proof/Phil Phil proof/Phil/Core/AuthorityAttenuation.v
+          rocq c -Q proof/Phil Phil proof/Phil/Core/AuthorityConfinement.v
+          rocq c -Q proof/Phil Phil proof/Phil/Core/AuthorityConfinementImplementation.v
+
+      - name: Fresh-extract authority confinement kernel
+        shell: bash
+        run: |
+          set -euo pipefail
+          export PATH="/home/rocq/.opam/${COMPILER}/bin:$PATH"
+          rm -f AuthorityConfinementKernel.hs
+          rocq c -Q proof/Phil Phil proof/Phil/Core/AuthorityConfinementImplementationExtraction.v
+          test -s AuthorityConfinementKernel.hs
+          grep -q 'decideClosureAuthorityConfinement' AuthorityConfinementKernel.hs
+          grep -q 'decideNegativeAuthorityClaim' AuthorityConfinementKernel.hs
+          grep -q 'decideProviderAuthorityQualificationFacts' AuthorityConfinementKernel.hs
+          sha256sum AuthorityConfinementKernel.hs
+          mkdir -p authority-confinement-implementation-refinement-proof
+          cp \
+            proof/Phil/Core/AuthorityConfinement.v \
+            proof/Phil/Core/AuthorityConfinementImplementation.v \
+            proof/Phil/Core/AuthorityConfinementImplementation.vo \
+            AuthorityConfinementKernel.hs \
+            authority-confinement-implementation-refinement-proof/
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: rocq-authority-confinement-implementation-refinement
+          path: authority-confinement-implementation-refinement-proof
+          if-no-files-found: error
+
+  verify-authority-confinement-implementation-correspondence:
+    needs: rocq-authority-confinement-implementation-refinement
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/download-artifact@v4
+        with:
+          name: rocq-authority-confinement-implementation-refinement
+          path: extracted-authority-confinement
+
+      - uses: haskell-actions/setup@v2
+        with:
+          ghc-version: '9.6.7'
+          cabal-version: 'latest'
+
+      - name: Typecheck extracted kernel and unchanged production targets
+        run: |
+          set -euo pipefail
+          ghc -Wall -Werror -fno-code extracted-authority-confinement/AuthorityConfinementKernel.hs
+          cabal build exe:phil-certify-core-scalar --ghc-options=-Werror
+          cabal exec -- ghc -isrc -Wall -Werror -fno-code src/Phil/Core/AuthorityConfinement.hs
+          cabal exec -- ghc -isrc -Wall -Werror -fno-code src/Phil/Core/ProviderAuthorityQualification.hs
+
+      - name: Re-run authority confinement dependency and correspondence corpora
+        run: |
+          set -euo pipefail
+          cabal exec -- runghc -isrc test/Phase1AuthorityAttenuationMain.hs
+          cabal exec -- runghc -isrc test/Phase1AuthorityConfinementMain.hs
+          cabal exec -- runghc -isrc test/Phase1ProviderQualificationMain.hs
+          cabal exec -- runghc -isrc test/Phase1ProviderAuthorityQualificationMain.hs
