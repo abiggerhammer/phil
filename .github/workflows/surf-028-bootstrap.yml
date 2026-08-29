@@ -21,6 +21,9 @@ jobs:
           python3 - <<'PY'
           from pathlib import Path
 
+          def block(*values):
+              return '\n'.join(values) + '\n'
+
           parser_path = Path('src/Phil/Surface/GrammarV1/Parser.hs')
           text = parser_path.read_text()
 
@@ -32,448 +35,227 @@ jobs:
               text = text.replace(old, new, 1)
 
           replace_once(
-          '''  , GrammarV1ArchitectureItem (..)
-  , GrammarV1ArchitectureDecl (..)
-''',
-          '''  , GrammarV1ArchitectureItem (..)
-  , GrammarV1RoleTarget (..)
-  , GrammarV1ArchitectureDecl (..)
-''',
-          'export role target')
+              block('  , GrammarV1ArchitectureItem (..)', '  , GrammarV1ArchitectureDecl (..)'),
+              block('  , GrammarV1ArchitectureItem (..)', '  , GrammarV1RoleTarget (..)', '  , GrammarV1ArchitectureDecl (..)'),
+              'export role target')
 
           replace_once(
-          '''newtype GrammarV1SessionExpression = GrammarV1SessionReference
-  { grammarV1SessionReference :: GrammarV1StaticReference
-  }
-  deriving (Eq, Ord, Show)
-''',
-          '''data GrammarV1SessionExpression
-  = GrammarV1SessionReference
-      { grammarV1SessionReference :: GrammarV1StaticReference
-      }
-  | GrammarV1SessionSend
-      (Located GrammarV1TermParam)
-      (Maybe (Located GrammarV1StaticReference))
-      (Maybe (Located GrammarV1Proposition))
-      (Located GrammarV1SessionExpression)
-  | GrammarV1SessionReceive
-      (Located GrammarV1TermParam)
-      (Maybe (Located GrammarV1StaticReference))
-      (Maybe (Located GrammarV1Proposition))
-      (Located GrammarV1SessionExpression)
-  | GrammarV1SessionEnd (Located Text)
-  deriving (Eq, Ord, Show)
-''',
-          'session AST')
+              block(
+                  'newtype GrammarV1SessionExpression = GrammarV1SessionReference',
+                  '  { grammarV1SessionReference :: GrammarV1StaticReference',
+                  '  }',
+                  '  deriving (Eq, Ord, Show)'),
+              block(
+                  'data GrammarV1SessionExpression',
+                  '  = GrammarV1SessionReference',
+                  '      { grammarV1SessionReference :: GrammarV1StaticReference',
+                  '      }',
+                  '  | GrammarV1SessionSend',
+                  '      (Located GrammarV1TermParam)',
+                  '      (Maybe (Located GrammarV1StaticReference))',
+                  '      (Maybe (Located GrammarV1Proposition))',
+                  '      (Located GrammarV1SessionExpression)',
+                  '  | GrammarV1SessionReceive',
+                  '      (Located GrammarV1TermParam)',
+                  '      (Maybe (Located GrammarV1StaticReference))',
+                  '      (Maybe (Located GrammarV1Proposition))',
+                  '      (Located GrammarV1SessionExpression)',
+                  '  | GrammarV1SessionEnd (Located Text)',
+                  '  deriving (Eq, Ord, Show)'),
+              'session AST')
 
           replace_once(
-          '''data GrammarV1ArchitectureItem
-  = GrammarV1ArchitectureInstance
-      (Located Text)
-      (Located GrammarV1StaticReference)
-  | GrammarV1ArchitectureProcess
-      (Located Text)
-      (Located GrammarV1QualifiedName)
-  deriving (Eq, Show)
-''',
-          '''data GrammarV1ArchitectureItem
-  = GrammarV1ArchitectureInstance
-      (Located Text)
-      (Located GrammarV1StaticReference)
-  | GrammarV1ArchitectureProcess
-      (Located Text)
-      (Located GrammarV1QualifiedName)
-  | GrammarV1ArchitectureProtocol
-      (Located Text)
-      (Located GrammarV1StaticReference)
-  | GrammarV1ArchitectureRole
-      (Located GrammarV1QualifiedName)
-      (Located GrammarV1RoleTarget)
-  deriving (Eq, Show)
-
-data GrammarV1RoleTarget
-  = GrammarV1InternalRoleTarget (Located GrammarV1QualifiedName)
-  | GrammarV1ExternalRoleTarget
-  deriving (Eq, Show)
-''',
-          'architecture role AST')
-
-          replace_once(
-          '''parseSessionExpression :: Parser (Located GrammarV1SessionExpression)
-parseSessionExpression = do
-  token <- peekToken
-  case fmap locatedValue token of
-    Just (GrammarIdentifier _) -> do
-      reference <- parseStaticReference
-      pure $ Located
-        (locatedSpan reference)
-        (GrammarV1SessionReference (locatedValue reference))
-    Just other -> failParser $
-      "SURF-002 generic/static slice does not yet implement nonreference session_expression beginning with "
-        <> renderToken other
-    Nothing -> failParser "expected session_expression at end of input"
-''',
-          '''parseSessionExpression :: Parser (Located GrammarV1SessionExpression)
-parseSessionExpression = do
-  token <- peekToken
-  case fmap locatedValue token of
-    Just (GrammarKeyword "send") ->
-      parseSessionTransfer "send" GrammarV1SessionSend
-    Just (GrammarKeyword "receive") ->
-      parseSessionTransfer "receive" GrammarV1SessionReceive
-    Just (GrammarKeyword "end") -> parseSessionEnd
-    Just (GrammarIdentifier _) -> do
-      reference <- parseStaticReference
-      pure $ Located
-        (locatedSpan reference)
-        (GrammarV1SessionReference (locatedValue reference))
-    Just other -> failParser $
-      "SURF-002 external-participant slice does not yet implement session_expression beginning with "
-        <> renderToken other
-    Nothing -> failParser "expected session_expression at end of input"
-
-parseSessionTransfer
-  :: Text
-  -> ( Located GrammarV1TermParam
-       -> Maybe (Located GrammarV1StaticReference)
-       -> Maybe (Located GrammarV1Proposition)
-       -> Located GrammarV1SessionExpression
-       -> GrammarV1SessionExpression
-     )
-  -> Parser (Located GrammarV1SessionExpression)
-parseSessionTransfer keyword constructor = do
-  start <- expectKeyword keyword
-  _ <- expectSymbol "("
-  param <- parseTermParam
-  _ <- expectSymbol ")"
-  hasUsing <- peekKeyword "using"
-  boundary <- if hasUsing
-    then expectKeyword "using" >> Just <$> parseStaticReference
-    else pure Nothing
-  hasGuard <- peekKeyword "when"
-  guard <- if hasGuard
-    then expectKeyword "when" >> Just <$> parseProposition
-    else pure Nothing
-  _ <- expectKeyword "then"
-  continuation <- parseSessionExpression
-  pure $ Located
-    (SourceSpan
-      (sourceSpanStart (locatedSpan start))
-      (sourceSpanEnd (locatedSpan continuation)))
-    (constructor param boundary guard continuation)
-
-parseSessionEnd :: Parser (Located GrammarV1SessionExpression)
-parseSessionEnd = do
-  start <- expectKeyword "end"
-  label <- expectIdentifier
-  pure $ Located
-    (SourceSpan
-      (sourceSpanStart (locatedSpan start))
-      (sourceSpanEnd (locatedSpan label)))
-    (GrammarV1SessionEnd label)
-''',
-          'session parser')
+              block(
+                  'data GrammarV1ArchitectureItem',
+                  '  = GrammarV1ArchitectureInstance',
+                  '      (Located Text)',
+                  '      (Located GrammarV1StaticReference)',
+                  '  | GrammarV1ArchitectureProcess',
+                  '      (Located Text)',
+                  '      (Located GrammarV1QualifiedName)',
+                  '  deriving (Eq, Show)'),
+              block(
+                  'data GrammarV1ArchitectureItem',
+                  '  = GrammarV1ArchitectureInstance',
+                  '      (Located Text)',
+                  '      (Located GrammarV1StaticReference)',
+                  '  | GrammarV1ArchitectureProcess',
+                  '      (Located Text)',
+                  '      (Located GrammarV1QualifiedName)',
+                  '  | GrammarV1ArchitectureProtocol',
+                  '      (Located Text)',
+                  '      (Located GrammarV1StaticReference)',
+                  '  | GrammarV1ArchitectureRole',
+                  '      (Located GrammarV1QualifiedName)',
+                  '      (Located GrammarV1RoleTarget)',
+                  '  deriving (Eq, Show)',
+                  '',
+                  'data GrammarV1RoleTarget',
+                  '  = GrammarV1InternalRoleTarget (Located GrammarV1QualifiedName)',
+                  '  | GrammarV1ExternalRoleTarget',
+                  '  deriving (Eq, Show)'),
+              'architecture role AST')
 
           replace_once(
-          '''    Just (GrammarKeyword "process") -> do
-      start <- expectKeyword "process"
-      name <- expectIdentifier
-      _ <- expectSymbol "="
-      target <- parseQualifiedName
-      end <- expectSymbol ";"
-      pure $ locatedBetween start end (GrammarV1ArchitectureProcess name target)
-    Just other -> failParser $
-''',
-          '''    Just (GrammarKeyword "process") -> do
-      start <- expectKeyword "process"
-      name <- expectIdentifier
-      _ <- expectSymbol "="
-      target <- parseQualifiedName
-      end <- expectSymbol ";"
-      pure $ locatedBetween start end (GrammarV1ArchitectureProcess name target)
-    Just (GrammarKeyword "protocol") -> do
-      start <- expectKeyword "protocol"
-      name <- expectIdentifier
-      _ <- expectSymbol "="
-      target <- parseStaticReference
-      end <- expectSymbol ";"
-      pure $ locatedBetween start end (GrammarV1ArchitectureProtocol name target)
-    Just (GrammarKeyword "role") -> do
-      start <- expectKeyword "role"
-      role <- parseQualifiedName
-      _ <- expectSymbol "="
-      target <- parseRoleTarget
-      end <- expectSymbol ";"
-      pure $ locatedBetween start end (GrammarV1ArchitectureRole role target)
-    Just other -> failParser $
-''',
-          'architecture protocol and role parser')
+              block(
+                  'parseSessionExpression :: Parser (Located GrammarV1SessionExpression)',
+                  'parseSessionExpression = do',
+                  '  token <- peekToken',
+                  '  case fmap locatedValue token of',
+                  '    Just (GrammarIdentifier _) -> do',
+                  '      reference <- parseStaticReference',
+                  '      pure $ Located',
+                  '        (locatedSpan reference)',
+                  '        (GrammarV1SessionReference (locatedValue reference))',
+                  '    Just other -> failParser $',
+                  '      "SURF-002 generic/static slice does not yet implement nonreference session_expression beginning with "',
+                  '        <> renderToken other',
+                  '    Nothing -> failParser "expected session_expression at end of input"'),
+              block(
+                  'parseSessionExpression :: Parser (Located GrammarV1SessionExpression)',
+                  'parseSessionExpression = do',
+                  '  token <- peekToken',
+                  '  case fmap locatedValue token of',
+                  '    Just (GrammarKeyword "send") ->',
+                  '      parseSessionTransfer "send" GrammarV1SessionSend',
+                  '    Just (GrammarKeyword "receive") ->',
+                  '      parseSessionTransfer "receive" GrammarV1SessionReceive',
+                  '    Just (GrammarKeyword "end") -> parseSessionEnd',
+                  '    Just (GrammarIdentifier _) -> do',
+                  '      reference <- parseStaticReference',
+                  '      pure $ Located',
+                  '        (locatedSpan reference)',
+                  '        (GrammarV1SessionReference (locatedValue reference))',
+                  '    Just other -> failParser $',
+                  '      "SURF-002 external-participant slice does not yet implement session_expression beginning with "',
+                  '        <> renderToken other',
+                  '    Nothing -> failParser "expected session_expression at end of input"',
+                  '',
+                  'parseSessionTransfer',
+                  '  :: Text',
+                  '  -> ( Located GrammarV1TermParam',
+                  '       -> Maybe (Located GrammarV1StaticReference)',
+                  '       -> Maybe (Located GrammarV1Proposition)',
+                  '       -> Located GrammarV1SessionExpression',
+                  '       -> GrammarV1SessionExpression',
+                  '     )',
+                  '  -> Parser (Located GrammarV1SessionExpression)',
+                  'parseSessionTransfer keyword constructor = do',
+                  '  start <- expectKeyword keyword',
+                  '  _ <- expectSymbol "("',
+                  '  param <- parseTermParam',
+                  '  _ <- expectSymbol ")"',
+                  '  hasUsing <- peekKeyword "using"',
+                  '  boundary <- if hasUsing',
+                  '    then expectKeyword "using" >> Just <$> parseStaticReference',
+                  '    else pure Nothing',
+                  '  hasGuard <- peekKeyword "when"',
+                  '  guard <- if hasGuard',
+                  '    then expectKeyword "when" >> Just <$> parseProposition',
+                  '    else pure Nothing',
+                  '  _ <- expectKeyword "then"',
+                  '  continuation <- parseSessionExpression',
+                  '  pure $ Located',
+                  '    (SourceSpan',
+                  '      (sourceSpanStart (locatedSpan start))',
+                  '      (sourceSpanEnd (locatedSpan continuation)))',
+                  '    (constructor param boundary guard continuation)',
+                  '',
+                  'parseSessionEnd :: Parser (Located GrammarV1SessionExpression)',
+                  'parseSessionEnd = do',
+                  '  start <- expectKeyword "end"',
+                  '  label <- expectIdentifier',
+                  '  pure $ Located',
+                  '    (SourceSpan',
+                  '      (sourceSpanStart (locatedSpan start))',
+                  '      (sourceSpanEnd (locatedSpan label)))',
+                  '    (GrammarV1SessionEnd label)'),
+              'session parser')
 
           replace_once(
-          '''    Nothing -> failParser "unterminated architecture declaration"
+              block(
+                  '    Just (GrammarKeyword "process") -> do',
+                  '      start <- expectKeyword "process"',
+                  '      name <- expectIdentifier',
+                  '      _ <- expectSymbol "="',
+                  '      target <- parseQualifiedName',
+                  '      end <- expectSymbol ";"',
+                  '      pure $ locatedBetween start end (GrammarV1ArchitectureProcess name target)',
+                  '    Just other -> failParser $'),
+              block(
+                  '    Just (GrammarKeyword "process") -> do',
+                  '      start <- expectKeyword "process"',
+                  '      name <- expectIdentifier',
+                  '      _ <- expectSymbol "="',
+                  '      target <- parseQualifiedName',
+                  '      end <- expectSymbol ";"',
+                  '      pure $ locatedBetween start end (GrammarV1ArchitectureProcess name target)',
+                  '    Just (GrammarKeyword "protocol") -> do',
+                  '      start <- expectKeyword "protocol"',
+                  '      name <- expectIdentifier',
+                  '      _ <- expectSymbol "="',
+                  '      target <- parseStaticReference',
+                  '      end <- expectSymbol ";"',
+                  '      pure $ locatedBetween start end (GrammarV1ArchitectureProtocol name target)',
+                  '    Just (GrammarKeyword "role") -> do',
+                  '      start <- expectKeyword "role"',
+                  '      role <- parseQualifiedName',
+                  '      _ <- expectSymbol "="',
+                  '      target <- parseRoleTarget',
+                  '      end <- expectSymbol ";"',
+                  '      pure $ locatedBetween start end (GrammarV1ArchitectureRole role target)',
+                  '    Just other -> failParser $'),
+              'architecture protocol and role parser')
 
-parseProgramDeclaration :: Parser (Located GrammarV1Declaration)
-''',
-          '''    Nothing -> failParser "unterminated architecture declaration"
-
-parseRoleTarget :: Parser (Located GrammarV1RoleTarget)
-parseRoleTarget = do
-  token <- peekToken
-  case fmap locatedValue token of
-    Just (GrammarKeyword "external") -> do
-      external <- expectKeyword "external"
-      pure (Located (locatedSpan external) GrammarV1ExternalRoleTarget)
-    Just (GrammarIdentifier _) -> do
-      target <- parseQualifiedName
-      pure $ Located
-        (locatedSpan target)
-        (GrammarV1InternalRoleTarget target)
-    Just other -> failParser $
-      "expected role_target qualified_name or external; found " <> renderToken other
-    Nothing -> failParser "expected role_target at end of input"
-
-parseProgramDeclaration :: Parser (Located GrammarV1Declaration)
-''',
-          'role target parser')
+          replace_once(
+              block(
+                  '    Nothing -> failParser "unterminated architecture declaration"',
+                  '',
+                  'parseProgramDeclaration :: Parser (Located GrammarV1Declaration)'),
+              block(
+                  '    Nothing -> failParser "unterminated architecture declaration"',
+                  '',
+                  'parseRoleTarget :: Parser (Located GrammarV1RoleTarget)',
+                  'parseRoleTarget = do',
+                  '  token <- peekToken',
+                  '  case fmap locatedValue token of',
+                  '    Just (GrammarKeyword "external") -> do',
+                  '      external <- expectKeyword "external"',
+                  '      pure (Located (locatedSpan external) GrammarV1ExternalRoleTarget)',
+                  '    Just (GrammarIdentifier _) -> do',
+                  '      target <- parseQualifiedName',
+                  '      pure $ Located',
+                  '        (locatedSpan target)',
+                  '        (GrammarV1InternalRoleTarget target)',
+                  '    Just other -> failParser $',
+                  '      "expected role_target qualified_name or external; found " <> renderToken other',
+                  '    Nothing -> failParser "expected role_target at end of input"',
+                  '',
+                  'parseProgramDeclaration :: Parser (Located GrammarV1Declaration)'),
+              'role target parser')
 
           parser_path.write_text(text)
 
           structural = Path('test/Phase1GrammarV1StructuralParserMain.hs')
           structural_text = structural.read_text()
-          old = '''    GrammarV1SessionReference reference ->
-      grammarV1QualifiedNameParts (grammarV1StaticReferenceName reference) == ["S"]
-        && null (grammarV1StaticReferenceArguments reference)
-'''
-          new = '''    GrammarV1SessionReference reference ->
-      grammarV1QualifiedNameParts (grammarV1StaticReferenceName reference) == ["S"]
-        && null (grammarV1StaticReferenceArguments reference)
-    _ -> False
-'''
+          old = block(
+              '    GrammarV1SessionReference reference ->',
+              '      grammarV1QualifiedNameParts (grammarV1StaticReferenceName reference) == ["S"]',
+              '        && null (grammarV1StaticReferenceArguments reference)')
+          new = block(
+              '    GrammarV1SessionReference reference ->',
+              '      grammarV1QualifiedNameParts (grammarV1StaticReferenceName reference) == ["S"]',
+              '        && null (grammarV1StaticReferenceArguments reference)',
+              '    _ -> False')
           if structural_text.count(old) != 1:
               raise SystemExit('structural session exhaustiveness: unexpected match count')
           structural.write_text(structural_text.replace(old, new, 1))
-
-          Path('test/Phase1GrammarV1ExternalProtocolParticipantMain.hs').write_text(r'''{-# LANGUAGE OverloadedStrings #-}
-
-module Main (main) where
-
-import qualified Data.Text as Text
-import qualified Data.Text.IO as TextIO
-import Phil.Surface.GrammarV1.Parser
-import Phil.Surface.Syntax (Located (..))
-import System.Exit (exitFailure)
-
-main :: IO ()
-main = do
-  results <- sequence
-    [ testIO "SURF-002 external protocol-participant fixture preserves sessions and role targets"
-        expectExternalParticipant
-    , testIO "SURF-003 external role with extra target rejects at syntax"
-        (expectFixtureReject "rejected/24-external-role-extra-target.phil")
-    , test "SURF-002 send/receive preserve optional boundary and guard clauses"
-        optionalSessionClausesPreserved
-    , test "SURF-002 unimplemented select session remains fail closed"
-        selectSessionRejects
-    ]
-  if and results then pure () else exitFailure
-
-test :: String -> Either String () -> IO Bool
-test label result = case result of
-  Right () -> putStrLn ("PASS: " <> label) >> pure True
-  Left detail -> putStrLn ("FAIL: " <> label <> " -- " <> detail) >> pure False
-
-testIO :: String -> IO (Either String ()) -> IO Bool
-testIO label action = action >>= test label
-
-expectExternalParticipant :: IO (Either String ())
-expectExternalParticipant = do
-  parsed <- parseFixture "accepted/28-external-protocol-participant.phil"
-  pure $ do
-    sourceFile <- mapLeft show parsed
-    case grammarV1TopLevelDecls sourceFile of
-      [Located _ protocolTop, Located _ componentTop, Located _ architectureTop, Located _ programTop] -> do
-        case locatedValue (grammarV1Declaration protocolTop) of
-          GrammarV1ProtocolDeclaration protocolDecl -> expectPingProtocol protocolDecl
-          other -> Left ("expected Ping protocol first, got " <> show other)
-        case locatedValue (grammarV1Declaration componentTop) of
-          GrammarV1ComponentDeclaration componentDecl ->
-            assert (locatedValue (grammarV1ComponentName componentDecl) == "ClientWorker")
-              "component declaration was not ClientWorker"
-          other -> Left ("expected ClientWorker component second, got " <> show other)
-        case locatedValue (grammarV1Declaration architectureTop) of
-          GrammarV1ArchitectureDeclaration architectureDecl ->
-            expectExternalArchitecture architectureDecl
-          other -> Left ("expected ExternalPeer architecture third, got " <> show other)
-        case locatedValue (grammarV1Declaration programTop) of
-          GrammarV1ProgramDeclaration programDecl -> do
-            assert (locatedValue (grammarV1ProgramName programDecl) == "main")
-              "program declaration was not main"
-            assert (staticReferenceNamed "ExternalPeer" (grammarV1ProgramTarget programDecl))
-              "program target was not ExternalPeer"
-          other -> Left ("expected main program fourth, got " <> show other)
-      declarations -> Left ("expected four top-level declarations, got " <> show (length declarations))
-
-expectPingProtocol :: GrammarV1ProtocolDecl -> Either String ()
-expectPingProtocol protocolDecl = do
-  assert (locatedValue (grammarV1ProtocolName protocolDecl) == "Ping")
-    "protocol name was not Ping"
-  case grammarV1ProtocolRoles protocolDecl of
-    [Located _ clientRole, Located _ serverRole] -> do
-      assert (locatedValue (grammarV1RoleSessionName clientRole) == "Client")
-        "first role was not Client"
-      expectTransfer GrammarV1SessionSend (grammarV1RoleSessionExpression clientRole)
-      assert (locatedValue (grammarV1RoleSessionName serverRole) == "Server")
-        "second role was not Server"
-      expectTransfer GrammarV1SessionReceive (grammarV1RoleSessionExpression serverRole)
-    roles -> Left ("expected two protocol roles, got " <> show roles)
-  where
-    expectTransfer constructor (Located _ session) = case session of
-      GrammarV1SessionSend param Nothing Nothing continuation
-        | isSend constructor -> checkParamAndEnd param continuation
-      GrammarV1SessionReceive param Nothing Nothing continuation
-        | not (isSend constructor) -> checkParamAndEnd param continuation
-      other -> Left ("unexpected session expression " <> show other)
-    isSend GrammarV1SessionSend{} = True
-    isSend _ = False
-
-checkParamAndEnd
-  :: Located GrammarV1TermParam
-  -> Located GrammarV1SessionExpression
-  -> Either String ()
-checkParamAndEnd (Located _ param) (Located _ continuation) = do
-  assert (locatedValue (grammarV1TermParamName param) == "x")
-    "session parameter name was not x"
-  assert (locatedValue (grammarV1TermParamType param) == GrammarV1UnsignedType "U8")
-    "session parameter type was not U8"
-  case continuation of
-    GrammarV1SessionEnd label ->
-      assert (locatedValue label == "Done") "session end label was not Done"
-    other -> Left ("expected end Done continuation, got " <> show other)
-
-expectExternalArchitecture :: GrammarV1ArchitectureDecl -> Either String ()
-expectExternalArchitecture architectureDecl = do
-  assert (locatedValue (grammarV1ArchitectureName architectureDecl) == "ExternalPeer")
-    "architecture name was not ExternalPeer"
-  case grammarV1ArchitectureItems architectureDecl of
-    [ Located _ (GrammarV1ArchitectureInstance instanceName component)
-      , Located _ (GrammarV1ArchitectureProcess processName processTarget)
-      , Located _ (GrammarV1ArchitectureProtocol protocolName protocolTarget)
-      , Located _ (GrammarV1ArchitectureRole clientRole clientTarget)
-      , Located _ (GrammarV1ArchitectureRole serverRole serverTarget)
-      ] -> do
-        assert (locatedValue instanceName == "client") "instance name was not client"
-        assert (staticReferenceNamed "ClientWorker" component)
-          "client instance target was not ClientWorker"
-        assert (locatedValue processName == "client_run") "process name was not client_run"
-        assert (qualifiedNameNamed ["client"] processTarget)
-          "process target was not client"
-        assert (locatedValue protocolName == "ping") "protocol occurrence was not ping"
-        assert (staticReferenceNamed "Ping" protocolTarget)
-          "protocol target was not Ping"
-        assert (qualifiedNameNamed ["ping", "Client"] clientRole)
-          "internal role path was not ping.Client"
-        expectInternalTarget ["client"] clientTarget
-        assert (qualifiedNameNamed ["ping", "Server"] serverRole)
-          "external role path was not ping.Server"
-        expectExternalTarget serverTarget
-    items -> Left ("unexpected architecture items " <> show items)
-
-expectInternalTarget
-  :: [Text.Text]
-  -> Located GrammarV1RoleTarget
-  -> Either String ()
-expectInternalTarget expected (Located _ target) = case target of
-  GrammarV1InternalRoleTarget name ->
-    assert (qualifiedNameNamed expected name) "internal role target was not preserved"
-  other -> Left ("expected internal role target, got " <> show other)
-
-expectExternalTarget :: Located GrammarV1RoleTarget -> Either String ()
-expectExternalTarget (Located _ target) = case target of
-  GrammarV1ExternalRoleTarget -> Right ()
-  other -> Left ("expected external role target, got " <> show other)
-
-optionalSessionClausesPreserved :: Either String ()
-optionalSessionClausesPreserved = do
-  sourceFile <- mapLeft show $ parseGrammarV1StructuralSource "session-options" source
-  case grammarV1TopLevelDecls sourceFile of
-    [Located _ topLevel] -> case locatedValue (grammarV1Declaration topLevel) of
-      GrammarV1ProtocolDeclaration protocolDecl ->
-        case grammarV1ProtocolRoles protocolDecl of
-          [Located _ firstRole, Located _ secondRole] -> do
-            expectOptions True (grammarV1RoleSessionExpression firstRole)
-            expectOptions False (grammarV1RoleSessionExpression secondRole)
-          roles -> Left ("expected two roles, got " <> show roles)
-      other -> Left ("expected protocol declaration, got " <> show other)
-    declarations -> Left ("expected one declaration, got " <> show (length declarations))
-  where
-    source = Text.unlines
-      [ "protocol P {"
-      , "  role A = send (x : U8) using Wire when true then end Done;"
-      , "  role B = receive (y : U8) using Wire when false then end Done;"
-      , "}"
-      ]
-    expectOptions expectTrue (Located _ session) = case session of
-      GrammarV1SessionSend _ (Just wire) (Just guard) _
-        | expectTrue -> checkOptions wire guard expectTrue
-      GrammarV1SessionReceive _ (Just wire) (Just guard) _
-        | not expectTrue -> checkOptions wire guard expectTrue
-      other -> Left ("unexpected optional-clause session " <> show other)
-    checkOptions wire guard expectTrue = do
-      assert (staticReferenceNamed "Wire" wire) "using target was not Wire"
-      assert
-        (locatedValue guard == if expectTrue then GrammarV1TrueProposition else GrammarV1FalseProposition)
-        "session guard proposition was not preserved"
-
-selectSessionRejects :: Either String ()
-selectSessionRejects = case parseGrammarV1StructuralSource "select-session" source of
-  Left _ -> Right ()
-  Right value -> Left ("expected fail-closed select rejection, parsed " <> show value)
-  where
-    source = Text.unlines
-      [ "protocol P {"
-      , "  role A = select { Go => end Done };"
-      , "  role B = S;"
-      , "}"
-      ]
-
-staticReferenceNamed :: Text.Text -> Located GrammarV1StaticReference -> Bool
-staticReferenceNamed expected (Located _ reference) =
-  grammarV1QualifiedNameParts (grammarV1StaticReferenceName reference) == [expected]
-    && null (grammarV1StaticReferenceArguments reference)
-
-qualifiedNameNamed :: [Text.Text] -> Located GrammarV1QualifiedName -> Bool
-qualifiedNameNamed expected (Located _ name) =
-  grammarV1QualifiedNameParts name == expected
-
-expectFixtureReject :: FilePath -> IO (Either String ())
-expectFixtureReject relativePath = do
-  parsed <- parseFixture relativePath
-  pure $ case parsed of
-    Left _ -> Right ()
-    Right value -> Left ("expected syntax rejection, parsed " <> show value)
-
-parseFixture
-  :: FilePath
-  -> IO (Either GrammarV1ParseDiagnostic GrammarV1SourceFile)
-parseFixture relativePath = do
-  let path = "test/fixtures/phase1-surface/" <> relativePath
-  source <- TextIO.readFile path
-  pure (parseGrammarV1StructuralSource (Text.pack relativePath) source)
-
-assert :: Bool -> String -> Either String ()
-assert condition detail
-  | condition = Right ()
-  | otherwise = Left detail
-
-mapLeft :: (a -> b) -> Either a c -> Either b c
-mapLeft f = either (Left . f) Right
-''')
           PY
 
       - name: Commit parser slice
         run: |
           git config user.name github-actions[bot]
           git config user.email 41898282+github-actions[bot]@users.noreply.github.com
-          git add src/Phil/Surface/GrammarV1/Parser.hs test/Phase1GrammarV1StructuralParserMain.hs test/Phase1GrammarV1ExternalProtocolParticipantMain.hs
+          git add src/Phil/Surface/GrammarV1/Parser.hs test/Phase1GrammarV1StructuralParserMain.hs
           git commit -m "Extend SURF-002 external protocol participant parser"
           git push origin HEAD:${GITHUB_REF_NAME}
