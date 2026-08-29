@@ -52,18 +52,19 @@ Proof.
     destruct (Z.ltb consumed declared) eqn:Htrailing; try discriminate.
     destruct (Z.ltb declared consumed) eqn:Hpast; try discriminate.
     inversion Hcheck; clear Hcheck.
-    apply (proj1 (Z.ltb_ge declared 0)) in Hdeclared.
-    apply (proj1 (Z.ltb_ge consumed 0)) in Hconsumed.
-    apply (proj1 (Z.ltb_ge consumed declared)) in Htrailing.
-    apply (proj1 (Z.ltb_ge declared consumed)) in Hpast.
+    pose proof ((proj1 (Z.ltb_ge declared 0)) Hdeclared) as HdeclaredNonnegative.
+    pose proof ((proj1 (Z.ltb_ge consumed 0)) Hconsumed) as HconsumedNonnegative.
+    pose proof ((proj1 (Z.ltb_ge consumed declared)) Htrailing) as HnotTrailing.
+    pose proof ((proj1 (Z.ltb_ge declared consumed)) Hpast) as HnotPast.
     repeat split; lia.
   - intros [Hdeclared [Hconsumed Hequal]].
     subst consumed.
     assert (Hnonnegative : (declared <? 0) = false).
-    { apply Z.ltb_ge. lia. }
+    { exact ((proj2 (Z.ltb_ge declared 0)) Hdeclared). }
     assert (Hself : (declared <? declared) = false).
-    { apply Z.ltb_ge. lia. }
-    rewrite Hnonnegative, Hnonnegative, Hself, Hself.
+    { exact ((proj2 (Z.ltb_ge declared declared)) (Z.le_refl declared)). }
+    repeat rewrite Hnonnegative.
+    repeat rewrite Hself.
     reflexivity.
 Qed.
 
@@ -78,11 +79,11 @@ Proof.
   unfold checkCompleteExtent.
   simpl.
   assert (Hd : (declared <? 0) = false).
-  { apply Z.ltb_ge. lia. }
+  { exact ((proj2 (Z.ltb_ge declared 0)) Hdeclared). }
   assert (Hc : (consumed <? 0) = false).
-  { apply Z.ltb_ge. lia. }
+  { exact ((proj2 (Z.ltb_ge consumed 0)) Hconsumed). }
   assert (Ht : (consumed <? declared) = true).
-  { apply Z.ltb_lt. exact Hlt. }
+  { exact ((proj2 (Z.ltb_lt consumed declared)) Hlt). }
   rewrite Hd, Hc, Ht.
   reflexivity.
 Qed.
@@ -98,13 +99,13 @@ Proof.
   unfold checkCompleteExtent.
   simpl.
   assert (Hd : (declared <? 0) = false).
-  { apply Z.ltb_ge. lia. }
+  { exact ((proj2 (Z.ltb_ge declared 0)) Hdeclared). }
   assert (Hc : (consumed <? 0) = false).
-  { apply Z.ltb_ge. lia. }
+  { exact ((proj2 (Z.ltb_ge consumed 0)) Hconsumed). }
   assert (HnotTrailing : (consumed <? declared) = false).
-  { apply Z.ltb_ge. lia. }
+  { exact ((proj2 (Z.ltb_ge consumed declared)) (Z.le_trans _ _ _ (Z.le_refl declared) (Z.lt_le_incl _ _ Hlt))). }
   assert (Hpast : (declared <? consumed) = true).
-  { apply Z.ltb_lt. exact Hlt. }
+  { exact ((proj2 (Z.ltb_lt declared consumed)) Hlt). }
   rewrite Hd, Hc, HnotTrailing, Hpast.
   reflexivity.
 Qed.
@@ -118,7 +119,7 @@ Proof.
   - unfold checkCompleteExtent.
     simpl.
     assert (Hd : (declared <? 0) = true).
-    { apply Z.ltb_lt. exact Hdeclared. }
+    { exact ((proj2 (Z.ltb_lt declared 0)) Hdeclared). }
     rewrite Hd.
     reflexivity.
   - unfold checkCompleteExtent.
@@ -126,7 +127,7 @@ Proof.
     destruct (Z.ltb declared 0) eqn:Hd.
     + reflexivity.
     + assert (Hc : (consumed <? 0) = true).
-      { apply Z.ltb_lt. exact Hconsumed. }
+      { exact ((proj2 (Z.ltb_lt consumed 0)) Hconsumed). }
       rewrite Hc.
       reflexivity.
 Qed.
@@ -172,8 +173,7 @@ Proof.
   destruct (checkCompleteExtent extent) eqn:Hextent; try discriminate.
   inversion Hsuccess; subst parsed; clear Hsuccess.
   split.
-  - apply (proj1 (check_complete_extent_complete_iff extent)).
-    exact Hextent.
+  - exact ((proj1 (check_complete_extent_complete_iff extent)) Hextent).
   - repeat split; reflexivity.
 Qed.
 
@@ -245,8 +245,7 @@ Proof.
   destruct (checkCompleteExtent extent) eqn:Hextent; try discriminate.
   inversion Hfailure; subst failure; clear Hfailure.
   split.
-  - apply (proj1 (check_complete_extent_complete_iff extent)).
-    exact Hextent.
+  - exact ((proj1 (check_complete_extent_complete_iff extent)) Hextent).
   - repeat split; reflexivity.
 Qed.
 
