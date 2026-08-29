@@ -362,6 +362,6 @@ Proof.
     try discriminate.
   inversion Hbegin; subst field loaned; clear Hbegin.
   split.
-  - exact Hlookup.
-  - exact Hborrow.
+  - reflexivity.
+  - reflexivity.
 Qed.
