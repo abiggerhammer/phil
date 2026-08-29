@@ -361,5 +361,7 @@ Proof.
   destruct (beginAggregateBorrow owner context) as [next |] eqn:Hborrow;
     try discriminate.
   inversion Hbegin; subst field loaned; clear Hbegin.
-  split; assumption.
+  split.
+  - exact Hlookup.
+  - exact Hborrow.
 Qed.
