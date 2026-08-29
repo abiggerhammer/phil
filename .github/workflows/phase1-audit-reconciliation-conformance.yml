@@ -33,5 +33,7 @@ jobs:
         run: cabal exec -- runghc -Wall -Werror -isrc test/Phase1ExplicitReleaseMain.hs
       - name: EXEC-015 omitted else identity predecessor
         run: cabal exec -- runghc -Wall -Werror -isrc test/Phase1OmittedElseIdentityMain.hs
+      - name: VER-013 prove competence and no assertion fallback
+        run: cabal exec -- runghc -Wall -Werror -isrc test/Phase1ProveCompetenceMain.hs
       - name: DEP-002 RuntimeBound carrier coverage across process/domain transfer
         run: cabal exec -- runghc -Wall -Werror -isrc test/Phase1RuntimeCarrierCoverageMain.hs
