@@ -7,6 +7,7 @@ module Phil.Assurance.Verify
   , verifyManifest
   ) where
 
+import qualified AssuranceValidityScopeKernel as AssuranceValidityScopeKernel
 import Control.Monad (foldM, unless, when)
 import Data.Map.Strict (Map)
 import qualified Data.Map.Strict as Map
@@ -389,8 +390,14 @@ verifyManifest context ledger manifest = do
         obligationAccepted evidence visiting required
 
     scopeMatches (ValidityScope dimensions) =
-      all (\(key, expected) -> Map.lookup key effectiveValidity == Just expected)
-        (Map.toList dimensions)
+      case AssuranceValidityScopeKernel.decideValidityScope facts of
+        AssuranceValidityScopeKernel.ValidityScopeAccepted -> all id facts
+        AssuranceValidityScopeKernel.ValidityScopeRejected -> False
+      where
+        facts =
+          [ Map.lookup key effectiveValidity == Just expected
+          | (key, expected) <- Map.toList dimensions
+          ]
 
     verifyArtifact artifact =
       case Map.lookup (artifactReference artifact) (verificationAvailableArtifacts context) of
