@@ -156,9 +156,11 @@ jobs:
             test/Phase1ArchitectureDefinitionReplacementMain.hs \
             test/Phase1ArchitectureSiblingNoninterferenceMain.hs
           mkdir -p architecture-revision-construction-production-binding
+          cp generated/ArchitectureRevisionConstructionKernel.hs \
+            architecture-revision-construction-production-binding/ArchitectureRevisionConstructionKernel.raw.hs
+          cp src/ArchitectureRevisionConstructionKernel.hs \
+            architecture-revision-construction-production-binding/ArchitectureRevisionConstructionKernel.production.hs
           cp \
-            generated/ArchitectureRevisionConstructionKernel.hs \
-            src/ArchitectureRevisionConstructionKernel.hs \
             src/Phil/Core/Static.hs \
             phil-core.cabal \
             test/Phase1ArchitectureRenameIdentityMain.hs \
