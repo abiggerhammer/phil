@@ -1,4 +1,4 @@
-From Phil.Core Require Import ArchitectureRealization.
+From Phil.Core Require Import ArchitectureIdentity ArchitectureRealization.
 
 Set Implicit Arguments.
 
