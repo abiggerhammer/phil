@@ -1,4 +1,4 @@
-module corpus.transport;
+module corpus.explicit_transport;
 
 component Transport[n : Nat, m : Nat](
   value : Bytes[n],
