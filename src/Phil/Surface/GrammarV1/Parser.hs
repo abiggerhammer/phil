@@ -46,6 +46,8 @@ module Phil.Surface.GrammarV1.Parser
   , GrammarV1CasePattern (..)
   , GrammarV1MatchArmBody (..)
   , GrammarV1MatchArm (..)
+  , GrammarV1JoinClause (..)
+  , GrammarV1StateBinding (..)
   , GrammarV1Expression (..)
   , GrammarV1Statement (..)
   , GrammarV1Block (..)
@@ -283,7 +285,7 @@ data GrammarV1StateSlot = GrammarV1StateSlot
   { grammarV1StateSlotName :: Located Text
   , grammarV1StateSlotType :: Located GrammarV1Type
   }
-  deriving (Eq, Show)
+  deriving (Eq, Ord, Show)
 
 data GrammarV1CalleeTransition
   = GrammarV1CalleePreserve
@@ -408,6 +410,19 @@ data GrammarV1MatchArm = GrammarV1MatchArm
   }
   deriving (Eq, Ord, Show)
 
+data GrammarV1JoinClause = GrammarV1JoinClause
+  { grammarV1JoinState :: [Located GrammarV1StateSlot]
+  , grammarV1JoinInvariant :: Maybe (Located GrammarV1Proposition)
+  }
+  deriving (Eq, Ord, Show)
+
+data GrammarV1StateBinding = GrammarV1StateBinding
+  { grammarV1StateBindingName :: Located Text
+  , grammarV1StateBindingType :: Maybe (Located GrammarV1Type)
+  , grammarV1StateBindingInitializer :: Located GrammarV1Expression
+  }
+  deriving (Eq, Ord, Show)
+
 data GrammarV1Expression
   = GrammarV1NameExpression GrammarV1StaticReference [Located GrammarV1Expression]
   | GrammarV1BoolExpression Bool
@@ -422,6 +437,16 @@ data GrammarV1Expression
   | GrammarV1OfferExpression
       (Located GrammarV1Expression)
       [Located GrammarV1MatchArm]
+  | GrammarV1IfExpression
+      (Located GrammarV1Expression)
+      (Maybe (Located GrammarV1JoinClause))
+      (Located GrammarV1Block)
+      (Maybe (Located GrammarV1Block))
+  | GrammarV1LoopExpression
+      [Located GrammarV1StateBinding]
+      (Maybe (Located GrammarV1Proposition))
+      (Located GrammarV1Block)
+  | GrammarV1ContinueExpression [Located GrammarV1Expression]
   deriving (Eq, Ord, Show)
 
 data GrammarV1Statement
@@ -1243,6 +1268,9 @@ parseExpression = do
   case fmap locatedValue token of
     Just (GrammarKeyword "transport") -> parseTransportExpression
     Just (GrammarKeyword "offer") -> parseOfferExpression
+    Just (GrammarKeyword "if") -> parseIfExpression
+    Just (GrammarKeyword "loop") -> parseLoopExpression
+    Just (GrammarKeyword "continue") -> parseContinueExpression
     Just (GrammarKeyword "true") -> do
       value <- expectKeyword "true"
       pure (Located (locatedSpan value) (GrammarV1BoolExpression True))
@@ -1430,6 +1458,124 @@ parseFieldBinder = do
       { grammarV1FieldBinderField = field
       , grammarV1FieldBinderAlias = alias
       }
+
+parseIfExpression :: Parser (Located GrammarV1Expression)
+parseIfExpression = do
+  start <- expectKeyword "if"
+  condition <- parseExpression
+  hasJoin <- peekKeyword "join"
+  joinClause <- if hasJoin then Just <$> parseJoinClause else pure Nothing
+  thenBlock <- parseBlock
+  hasElse <- peekKeyword "else"
+  elseBlock <- if hasElse
+    then expectKeyword "else" >> Just <$> parseBlock
+    else pure Nothing
+  let endSpan = maybe (locatedSpan thenBlock) locatedSpan elseBlock
+  pure $ Located
+    (SourceSpan
+      (sourceSpanStart (locatedSpan start))
+      (sourceSpanEnd endSpan))
+    (GrammarV1IfExpression condition joinClause thenBlock elseBlock)
+
+parseJoinClause :: Parser (Located GrammarV1JoinClause)
+parseJoinClause = do
+  start <- expectKeyword "join"
+  _ <- expectKeyword "state"
+  _ <- expectSymbol "("
+  atEnd <- peekSymbol ")"
+  slots <- if atEnd
+    then pure []
+    else do
+      first <- parseStateSlot
+      rest <- parseMoreStateSlots
+      pure (first : rest)
+  endState <- expectSymbol ")"
+  hasInvariant <- peekKeyword "invariant"
+  invariant <- if hasInvariant
+    then expectKeyword "invariant" >> Just <$> parseProposition
+    else pure Nothing
+  let endSpan = maybe (locatedSpan endState) locatedSpan invariant
+  pure $ Located
+    (SourceSpan
+      (sourceSpanStart (locatedSpan start))
+      (sourceSpanEnd endSpan))
+    GrammarV1JoinClause
+      { grammarV1JoinState = slots
+      , grammarV1JoinInvariant = invariant
+      }
+
+parseLoopExpression :: Parser (Located GrammarV1Expression)
+parseLoopExpression = do
+  start <- expectKeyword "loop"
+  hasState <- peekKeyword "state"
+  bindings <- if hasState then parseLoopStateBindings else pure []
+  hasInvariant <- peekKeyword "invariant"
+  invariant <- if hasInvariant
+    then expectKeyword "invariant" >> Just <$> parseProposition
+    else pure Nothing
+  body <- parseBlock
+  pure $ Located
+    (SourceSpan
+      (sourceSpanStart (locatedSpan start))
+      (sourceSpanEnd (locatedSpan body)))
+    (GrammarV1LoopExpression bindings invariant body)
+
+parseLoopStateBindings :: Parser [Located GrammarV1StateBinding]
+parseLoopStateBindings = do
+  _ <- expectKeyword "state"
+  _ <- expectSymbol "("
+  atEnd <- peekSymbol ")"
+  if atEnd
+    then expectSymbol ")" >> pure []
+    else do
+      first <- parseStateBinding
+      rest <- parseMoreStateBindings
+      _ <- expectSymbol ")"
+      pure (first : rest)
+
+parseMoreStateBindings :: Parser [Located GrammarV1StateBinding]
+parseMoreStateBindings = do
+  hasComma <- peekSymbol ","
+  if hasComma
+    then do
+      _ <- expectSymbol ","
+      atEnd <- peekSymbol ")"
+      if atEnd
+        then failParser "loop state bindings do not admit a trailing comma"
+        else do
+          binding <- parseStateBinding
+          rest <- parseMoreStateBindings
+          pure (binding : rest)
+    else pure []
+
+parseStateBinding :: Parser (Located GrammarV1StateBinding)
+parseStateBinding = do
+  name <- expectIdentifier
+  hasType <- peekSymbol ":"
+  ty <- if hasType
+    then expectSymbol ":" >> Just <$> parseType
+    else pure Nothing
+  _ <- expectSymbol "="
+  initializer <- parseExpression
+  pure $ Located
+    (SourceSpan
+      (sourceSpanStart (locatedSpan name))
+      (sourceSpanEnd (locatedSpan initializer)))
+    GrammarV1StateBinding
+      { grammarV1StateBindingName = name
+      , grammarV1StateBindingType = ty
+      , grammarV1StateBindingInitializer = initializer
+      }
+
+parseContinueExpression :: Parser (Located GrammarV1Expression)
+parseContinueExpression = do
+  start <- expectKeyword "continue"
+  hasArguments <- peekSymbol "("
+  if hasArguments
+    then do
+      (arguments, end) <- parseTermArguments
+      pure $ locatedBetween start end (GrammarV1ContinueExpression arguments)
+    else pure $ Located (locatedSpan start) (GrammarV1ContinueExpression [])
 
 parseTupleOrParenthesizedExpression :: Parser (Located GrammarV1Expression)
 parseTupleOrParenthesizedExpression = do
