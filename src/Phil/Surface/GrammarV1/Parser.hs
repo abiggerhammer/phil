@@ -33,6 +33,7 @@ module Phil.Surface.GrammarV1.Parser
   , GrammarV1CalleeTransition (..)
   , GrammarV1OutcomeResidueClause (..)
   , GrammarV1OutcomeResidue (..)
+  , GrammarV1FunctionDecl (..)
   , GrammarV1CapabilityItem (..)
   , GrammarV1CapabilityDecl (..)
   , GrammarV1SessionExpression (..)
@@ -101,6 +102,7 @@ data GrammarV1Declaration
   | GrammarV1TypeAliasDeclaration GrammarV1TypeAliasDecl
   | GrammarV1ClaimDeclaration GrammarV1ClaimDecl
   | GrammarV1CallableContractDeclaration GrammarV1CallableContractDecl
+  | GrammarV1FunctionDeclaration GrammarV1FunctionDecl
   | GrammarV1CapabilityDeclaration GrammarV1CapabilityDecl
   | GrammarV1ProtocolDeclaration GrammarV1ProtocolDecl
   | GrammarV1ComponentDeclaration GrammarV1ComponentDecl
@@ -203,6 +205,7 @@ data GrammarV1Type
       (Located Text)
       (Located GrammarV1Type)
       (Located GrammarV1Proposition)
+  | GrammarV1TupleType [Located GrammarV1Type]
   | GrammarV1NamedType GrammarV1StaticReference
   deriving (Eq, Ord, Show)
 
@@ -317,6 +320,18 @@ data GrammarV1CallableContractDecl = GrammarV1CallableContractDecl
   }
   deriving (Eq, Show)
 
+data GrammarV1FunctionDecl = GrammarV1FunctionDecl
+  { grammarV1FunctionRecursive :: Bool
+  , grammarV1FunctionName :: Located Text
+  , grammarV1FunctionGenericParams :: [Located GrammarV1GenericParam]
+  , grammarV1FunctionRequirements :: [Located GrammarV1GenericRequirement]
+  , grammarV1FunctionTermParams :: [Located GrammarV1TermParam]
+  , grammarV1FunctionResultType :: Maybe (Located GrammarV1Type)
+  , grammarV1FunctionSatisfies :: Located GrammarV1Type
+  , grammarV1FunctionBody :: Located GrammarV1Block
+  }
+  deriving (Eq, Show)
+
 data GrammarV1CapabilityItem
   = GrammarV1CapabilityPermits (Located GrammarV1StaticReference)
   deriving (Eq, Show)
@@ -369,6 +384,8 @@ data GrammarV1Expression
       (Located GrammarV1Expression)
       (Located GrammarV1Type)
       (Located GrammarV1Expression)
+  | GrammarV1TupleExpression [Located GrammarV1Expression]
+  | GrammarV1ParenthesizedExpression (Located GrammarV1Expression)
   deriving (Eq, Ord, Show)
 
 data GrammarV1Statement
@@ -549,6 +566,8 @@ parseDeclaration = do
     Just (GrammarKeyword "type") -> parseTypeAliasDeclaration
     Just (GrammarKeyword "claim") -> parseClaimDeclaration
     Just (GrammarKeyword "callable") -> parseCallableContractDeclaration
+    Just (GrammarKeyword "fn") -> parseFunctionDeclaration
+    Just (GrammarKeyword "recursive") -> parseFunctionDeclaration
     Just (GrammarKeyword "capability") -> parseCapabilityDeclaration
     Just (GrammarKeyword "protocol") -> parseProtocolDeclaration
     Just (GrammarKeyword "component") -> parseComponentDeclaration
@@ -883,6 +902,37 @@ parseCalleeTransition = do
       "expected callee transition preserve, consume, or replace; found " <> renderToken other
     Nothing -> failParser "expected callee transition at end of input"
 
+parseFunctionDeclaration :: Parser (Located GrammarV1Declaration)
+parseFunctionDeclaration = do
+  recursive <- peekKeyword "recursive"
+  start <- if recursive then expectKeyword "recursive" else expectKeyword "fn"
+  if recursive then do _ <- expectKeyword "fn"; pure () else pure ()
+  name <- expectIdentifier
+  params <- parseOptionalGenericParams
+  requirements <- parseOptionalGenericRequirements
+  termParams <- parseTermParams
+  hasResult <- peekSymbol "->"
+  resultType <- if hasResult
+    then expectSymbol "->" >> Just <$> parseType
+    else pure Nothing
+  _ <- expectKeyword "satisfies"
+  satisfiesType <- parseType
+  body <- parseBlock
+  pure $ Located
+    (SourceSpan
+      (sourceSpanStart (locatedSpan start))
+      (sourceSpanEnd (locatedSpan body)))
+    (GrammarV1FunctionDeclaration GrammarV1FunctionDecl
+      { grammarV1FunctionRecursive = recursive
+      , grammarV1FunctionName = name
+      , grammarV1FunctionGenericParams = params
+      , grammarV1FunctionRequirements = requirements
+      , grammarV1FunctionTermParams = termParams
+      , grammarV1FunctionResultType = resultType
+      , grammarV1FunctionSatisfies = satisfiesType
+      , grammarV1FunctionBody = body
+      })
+
 parseMoreVariants :: Parser [Located GrammarV1VariantDecl]
 parseMoreVariants = do
   hasPipe <- peekSymbol "|"
@@ -1171,6 +1221,7 @@ parseExpression = do
         GrammarDecimalInteger integer ->
           pure (Located (locatedSpan value) (GrammarV1IntegerExpression integer))
         _ -> failParser "internal DECIMAL_INTEGER expression dispatch error"
+    Just (GrammarSymbol "(") -> parseTupleOrParenthesizedExpression
     Just (GrammarIdentifier _) -> parseNameExpression
     Just other -> failParser $
       "SURF-002 term/block slice does not yet implement expression beginning with "
@@ -1190,6 +1241,41 @@ parseTransportExpression = do
       (sourceSpanStart (locatedSpan start))
       (sourceSpanEnd (locatedSpan evidence)))
     (GrammarV1TransportExpression value target evidence)
+
+parseTupleOrParenthesizedExpression :: Parser (Located GrammarV1Expression)
+parseTupleOrParenthesizedExpression = do
+  start <- expectSymbol "("
+  first <- parseExpression
+  hasComma <- peekSymbol ","
+  if hasComma
+    then do
+      _ <- expectSymbol ","
+      atEnd <- peekSymbol ")"
+      if atEnd
+        then failParser "tuple_expression requires a second expression after comma"
+        else do
+          second <- parseExpression
+          rest <- parseMoreTupleExpressions
+          end <- expectSymbol ")"
+          pure $ locatedBetween start end (GrammarV1TupleExpression (first : second : rest))
+    else do
+      end <- expectSymbol ")"
+      pure $ locatedBetween start end (GrammarV1ParenthesizedExpression first)
+
+parseMoreTupleExpressions :: Parser [Located GrammarV1Expression]
+parseMoreTupleExpressions = do
+  hasComma <- peekSymbol ","
+  if hasComma
+    then do
+      _ <- expectSymbol ","
+      atEnd <- peekSymbol ")"
+      if atEnd
+        then failParser "tuple_expression does not admit a trailing comma"
+        else do
+          value <- parseExpression
+          rest <- parseMoreTupleExpressions
+          pure (value : rest)
+    else pure []
 
 parseNameExpression :: Parser (Located GrammarV1Expression)
 parseNameExpression = do
@@ -1673,6 +1759,7 @@ parseType = do
     Just (GrammarKeyword "Bytes") -> parseBytesType
     Just (GrammarKeyword "Proof") -> parseProofType
     Just (GrammarSymbol "{") -> parseRefinementType
+    Just (GrammarSymbol "(") -> parseTupleType
     Just (GrammarIdentifier _) -> do
       reference <- parseStaticReference
       pure $ Located (locatedSpan reference) $ GrammarV1NamedType (locatedValue reference)
@@ -1706,6 +1793,35 @@ parseRefinementType = do
   end <- expectSymbol "}"
   pure $ locatedBetween start end $
     GrammarV1RefinementType binder baseType proposition
+
+parseTupleType :: Parser (Located GrammarV1Type)
+parseTupleType = do
+  start <- expectSymbol "("
+  first <- parseType
+  _ <- expectSymbol ","
+  atEnd <- peekSymbol ")"
+  if atEnd
+    then failParser "tuple_type requires a second type after comma"
+    else do
+      second <- parseType
+      rest <- parseMoreTupleTypes
+      end <- expectSymbol ")"
+      pure $ locatedBetween start end (GrammarV1TupleType (first : second : rest))
+
+parseMoreTupleTypes :: Parser [Located GrammarV1Type]
+parseMoreTupleTypes = do
+  hasComma <- peekSymbol ","
+  if hasComma
+    then do
+      _ <- expectSymbol ","
+      atEnd <- peekSymbol ")"
+      if atEnd
+        then failParser "tuple_type does not admit a trailing comma"
+        else do
+          ty <- parseType
+          rest <- parseMoreTupleTypes
+          pure (ty : rest)
+    else pure []
 
 parseStaticReference :: Parser (Located GrammarV1StaticReference)
 parseStaticReference = do
@@ -1765,6 +1881,7 @@ parseStaticArgument = do
     Just (GrammarUIntType _) -> GrammarV1StaticTypeArgument . locatedValue <$> parseType
     Just (GrammarKeyword "Bytes") -> GrammarV1StaticTypeArgument . locatedValue <$> parseType
     Just (GrammarKeyword "Proof") -> GrammarV1StaticTypeArgument . locatedValue <$> parseType
+    Just (GrammarSymbol "(") -> GrammarV1StaticTypeArgument . locatedValue <$> parseType
     Just (GrammarIdentifier _) -> GrammarV1StaticReferenceArgument . locatedValue <$> parseStaticReference
     Just (GrammarKeyword "true") -> expectKeyword "true" >> pure (GrammarV1StaticBoolArgument True)
     Just (GrammarKeyword "false") -> expectKeyword "false" >> pure (GrammarV1StaticBoolArgument False)
