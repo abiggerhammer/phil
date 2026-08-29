@@ -17,6 +17,7 @@ on:
       - 'test/Phase1GrammarV1JoinLoopMain.hs'
       - 'test/Phase1GrammarV1ClosureMain.hs'
       - 'test/Phase1GrammarV1RejectMain.hs'
+      - 'test/Phase1GrammarV1BoundaryStaticReferenceMain.hs'
       - 'test/fixtures/phase1-surface/**'
       - 'docs/phase-1/surface-grammar-v1.md'
       - 'docs/phase-1/surface-parser-production-corpus-v1.md'
@@ -39,6 +40,7 @@ on:
       - 'test/Phase1GrammarV1JoinLoopMain.hs'
       - 'test/Phase1GrammarV1ClosureMain.hs'
       - 'test/Phase1GrammarV1RejectMain.hs'
+      - 'test/Phase1GrammarV1BoundaryStaticReferenceMain.hs'
       - 'test/fixtures/phase1-surface/**'
       - 'docs/phase-1/surface-grammar-v1.md'
       - 'docs/phase-1/surface-parser-production-corpus-v1.md'
@@ -92,6 +94,9 @@ jobs:
 
       - name: Check Grammar-v1 standalone reject parsing
         run: cabal exec -- runghc -Wall -Werror -isrc test/Phase1GrammarV1RejectMain.hs
+
+      - name: Check Grammar-v1 boundary static-reference parsing
+        run: cabal exec -- runghc -Wall -Werror -isrc test/Phase1GrammarV1BoundaryStaticReferenceMain.hs
 
       - name: Check derivation and corpus tools
         run: |
