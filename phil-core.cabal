@@ -20,7 +20,7 @@ common common-settings
 
 library architecture-revision-construction-kernel
   import:             common-settings
-  hs-source-dirs:     src
+  hs-source-dirs:     generated
   exposed-modules:
       ArchitectureRevisionConstructionKernel
   ghc-options:
@@ -812,7 +812,7 @@ test-suite phil-storage-failure-detail-abi-tests
   import:   common-settings
   type:     exitcode-stdio-1.0
   hs-source-dirs:     test
-  main-is:  StorageFailureDetailABIMain.hs
+  main-is:            StorageFailureDetailABIMain.hs
   build-depends:
       base >=4.17 && <5,
       containers >=0.6 && <0.8,
