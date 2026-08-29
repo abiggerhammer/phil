@@ -23,3 +23,4 @@ decideValidityScope facts =
   case validityScopeFactsb facts of {
    Prelude.True -> ValidityScopeAccepted;
    Prelude.False -> ValidityScopeRejected}
+
