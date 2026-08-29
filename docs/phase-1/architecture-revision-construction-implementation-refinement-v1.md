@@ -2,13 +2,11 @@
 
 ## Status
 
-Staging / Mechanized target for the revision-construction half of `PHIL-ARCH-ID-IMPL-001`.
+Production-binding closeout for the revision-construction half of `PHIL-ARCH-ID-IMPL-001`.
 
 ## Purpose
 
-`PHIL-ARCH-ID-001` is Certified and the exact rich-identity equality decisions are already production-bound through `ArchitectureIdentityKernel.hs`. Two boundaries still prevent `PHIL-ARCH-ID-IMPL-001` from reaching `Implementation Refined`: generic assurance validity-scope composition and concrete architecture revision construction.
-
-The validity-scope dependency is being refined independently through `PHIL-ASSURE-VALIDITY-IMPL-001`. This tranche isolates the other half without pretending that Rocq proves Haskell `Text`, `Data.Map`, or the concrete `canonicalSemanticForm` encoder.
+`PHIL-ARCH-ID-001` is Certified and the exact rich-identity equality decisions are already production-bound through `ArchitectureIdentityKernel.hs`. The generic assurance validity-scope dependency is now separately production-bound by `PHIL-ASSURE-VALIDITY-IMPL-001`. This closeout binds the remaining concrete architecture revision-construction seam without pretending that Rocq proves Haskell `Text`, `Data.Map`, or the concrete `canonicalSemanticForm` encoder.
 
 ## Extracted construction plans
 
@@ -19,22 +17,22 @@ The validity-scope dependency is being refined independently through `PHIL-ASSUR
 3. scoped `InstanceKey`: the exact parent occurrence lineage plus exact stable child slot under the scoped-instance namespace; and
 4. `InstanceRevision`: the exact occurrence key, optional parent occurrence, declaration key, interface revision, definition revision, and exact static bindings under the instance-revision namespace.
 
-The plan fields are polymorphic. Rocq therefore owns the dependency structure without serializing Phil's concrete representation types. The production-binding tranche can instantiate those fields directly with native `SemanticForm`, `InterfaceRevision`, `DefinitionRevision`, `InstanceKey`, `OccurrenceSlotKey`, and binding-map values.
+The plan fields remain polymorphic. Rocq therefore owns the dependency structure without serializing Phil's concrete representation types.
 
-## Correspondence to the Certified model
+## Production binding
 
-The proof composes directly with `ArchitectureIdentity.v` and establishes that every extracted plan coordinate is exactly the coordinate used by the Certified derivation:
+The exact extracted `generated/ArchitectureRevisionConstructionKernel.hs` is checked in byte-for-byte. Production compiles `src/ArchitectureRevisionConstructionKernel.hs`, which is mechanically constrained to equal that exact extraction with one compiler-only `OPTIONS_GHC -Wno-unused-imports` pragma prepended. `Phil.Core.Static` routes the four Certified construction seams through that production mirror:
 
-- interface-plan semantics equal the Certified `identityInterfaceRevision` input;
-- definition-plan interface/body equal the two fields of Certified `DefinitionRevision`;
-- scoped-key plan parent/slot are exactly the arguments of Certified `ScopedInstanceKey`; and
-- instance-plan fields equal every field of Certified `InstanceRevision`.
+- `deriveDeclarationIdentity` obtains interface semantics from `planInterfaceRevision`, then obtains the exact interface revision and definition semantics from `planDefinitionRevision` before applying the existing native canonical encoding;
+- `deriveArchitectureInstanceIdentity` obtains the occurrence key, parent, declaration key, interface revision, definition revision, and static bindings from `planInstanceRevision`, and constructs both the returned `InstanceKey` and `InstanceRevision` from those plan fields;
+- `scopedInstanceKey` obtains the parent and stable slot from `planScopedInstanceKey` before applying the existing scoped-instance encoding; and
+- every extracted namespace is matched explicitly. An impossible namespace/shape disagreement terminates fail-closed rather than falling back to a handwritten construction.
 
-Negative controls show that a changed definition body, scoped parent, scoped slot, static binding, or instance interface cannot leave the corresponding construction plan unchanged.
+Production therefore no longer hand-authors which semantic coordinates constitute these architecture revisions. The extracted plans own that structure; native code only realizes the resulting coordinates into the already-established canonical representation.
 
-## Concrete representation boundary retained
+## Concrete representation boundary
 
-This staging tranche deliberately leaves production unchanged. The later binding will translate the extracted plans into the existing canonical representation. The following remain explicit primitive representation foundations rather than claims of the Rocq theorem:
+The following remain explicit primitive representation/runtime foundations rather than claims of the Rocq theorem:
 
 - the finite native mapping from extracted revision namespace to the exact `phil.*.canonical.v1:` prefix;
 - the finite native mapping from extracted plan coordinates to the existing canonical record field names;
@@ -43,9 +41,15 @@ This staging tranche deliberately leaves production unchanged. The later binding
 - `canonicalSemanticForm`'s concrete `Text` encoding; and
 - collision-freedom/injectivity assumptions of that concrete canonical encoding.
 
-Those bridges must be small, total, directly tested, and fail closed where an extracted namespace/shape cannot be represented. The important refinement is that production will no longer hand-author which semantic coordinates constitute each architecture revision: that structure comes from the extracted kernel.
+These bridges are finite and fail closed when an extracted namespace/shape cannot be represented.
 
-Graph instantiation, requirement validation, source-to-checked-semantic elaboration, architecture realization identity, and Systems/StageContract correspondence remain separate obligations and are not pulled into this slice.
+Rocq's Haskell extractor emits an unused qualified `Prelude` import in this purely polymorphic kernel. The raw byte-exact extraction therefore remains under `generated/` and is independently compiled by a private Cabal component with only `-Wno-unused-imports` relaxed. The normal `phil-core` source tree contains the mechanically checked mirror with the same single module-local warning pragma. This matters because many proof and conformance workflows intentionally invoke `runghc -isrc` or `ghc -isrc` directly: those calls must be able to compile the production dependency as an ordinary home module without exposing a hidden internal package or weakening warning policy for unrelated handwritten code.
+
+Package-publication metadata is deliberately outside this refinement slice. The repository's Cabal package is not currently intended to satisfy Hackage publication policy, so the closeout tests Cabal resolution and strict compilation rather than running `cabal check` and conflating missing publication metadata with an implementation-correspondence failure.
+
+## Deliberate non-scope
+
+Graph instantiation remains separate. `deriveGraphInstanceIdentity` still owns its graph-specific outer revision over the already-bound base `ArchitectureInstanceIdentity` plus requirement/child/reference semantic bindings. Requirement validation, source-to-checked-semantic elaboration, architecture realization identity, and Systems/StageContract correspondence are likewise not pulled into this slice.
 
 ## Validation
 
@@ -53,9 +57,12 @@ The dedicated workflow must:
 
 - recompile the Certified `ArchitectureIdentity.v` model;
 - compile the revision-construction correspondence proof;
-- fresh-extract `ArchitectureRevisionConstructionKernel.hs`;
-- typecheck the extracted polymorphic kernel under `-Wall -Werror`;
-- typecheck the unchanged production `Phil.Core.Static` path; and
-- rerun the unchanged ARCH-002, ARCH-003, ARCH-004, and ARCH-007 corpora.
+- fresh-extract `ArchitectureRevisionConstructionKernel.hs` and require byte-for-byte identity with `generated/ArchitectureRevisionConstructionKernel.hs`;
+- construct the expected production mirror by prepending exactly one `OPTIONS_GHC -Wno-unused-imports` pragma to that raw extraction and require byte-for-byte identity with `src/ArchitectureRevisionConstructionKernel.hs`;
+- typecheck the production mirror under `-Wall -Werror`;
+- resolve and build the generated component plus handwritten `phil-core` and the scalar proof certifier under warnings-as-errors;
+- typecheck the unchanged ARCH-002, ARCH-003, ARCH-004, and ARCH-007 corpora with the repository's established source-aware `cabal exec -- ghc -isrc -Wall -Werror -fno-code` invocation, so source-only support modules remain available;
+- rerun those four unchanged corpora through production; and
+- record exact raw-kernel, production-mirror, production-module, package-description, and corpus SHA-256 identities in a dedicated production-binding artifact.
 
-A green staging run adds mechanized evidence for the exact revision dependency structure only. It does not yet bind production and therefore does not by itself close `PHIL-ARCH-ID-IMPL-001`.
+An all-green exact head closes the remaining construction boundary for `PHIL-ARCH-ID-IMPL-001`; together with the already-closed generic validity-scope dependency, the row can then become `Discharged / Implementation Refined`.

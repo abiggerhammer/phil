@@ -18,6 +18,16 @@ common common-settings
       -Wincomplete-uni-patterns
       -Wredundant-constraints
 
+library architecture-revision-construction-kernel
+  import:             common-settings
+  hs-source-dirs:     generated
+  exposed-modules:
+      ArchitectureRevisionConstructionKernel
+  ghc-options:
+      -Wno-unused-imports
+  build-depends:
+      base >=4.17 && <5
+
 library
   import:             common-settings
   hs-source-dirs:     src
@@ -47,6 +57,7 @@ library
       Phil.Compiler
   other-modules:
       ArchitectureIdentityKernel
+      ArchitectureRevisionConstructionKernel
       AssuranceValidityScopeKernel
       Phil.Surface.Check.Types
       Phil.Surface.Check.Support
@@ -123,6 +134,7 @@ library
       containers >=0.6 && <0.8,
       cryptohash-sha256 >=0.11 && <0.12,
       megaparsec >=9.6 && <10,
+      phil-core:architecture-revision-construction-kernel,
       text >=2.0 && <2.2
 
 executable phil-core
@@ -779,7 +791,7 @@ test-suite phil-client-control-send-abi-tests
   import:   common-settings
   type:     exitcode-stdio-1.0
   hs-source-dirs:     test
-  main-is:  ClientControlSendABIMain.hs
+  main-is:            ClientControlSendABIMain.hs
   build-depends:
       base >=4.17 && <5,
       containers >=0.6 && <0.8,
@@ -790,7 +802,7 @@ test-suite phil-server-framed-ingress-abi-tests
   import:   common-settings
   type:     exitcode-stdio-1.0
   hs-source-dirs:     test
-  main-is:  ServerFramedIngressABIMain.hs
+  main-is:            ServerFramedIngressABIMain.hs
   build-depends:
       base >=4.17 && <5,
       containers >=0.6 && <0.8,
@@ -801,7 +813,7 @@ test-suite phil-storage-failure-detail-abi-tests
   import:   common-settings
   type:     exitcode-stdio-1.0
   hs-source-dirs:     test
-  main-is:  StorageFailureDetailABIMain.hs
+  main-is:            StorageFailureDetailABIMain.hs
   build-depends:
       base >=4.17 && <5,
       containers >=0.6 && <0.8,
@@ -812,7 +824,7 @@ test-suite phil-control-codec-abi-tests
   import:   common-settings
   type:     exitcode-stdio-1.0
   hs-source-dirs:     test
-  main-is:  ControlCodecABIMain.hs
+  main-is:            ControlCodecABIMain.hs
   build-depends:
       base >=4.17 && <5,
       containers >=0.6 && <0.8,
