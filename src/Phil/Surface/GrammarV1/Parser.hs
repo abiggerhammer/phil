@@ -27,6 +27,12 @@ module Phil.Surface.GrammarV1.Parser
   , GrammarV1ClaimDecl (..)
   , GrammarV1CallableClause (..)
   , GrammarV1CallableContractDecl (..)
+  , GrammarV1OutcomeKind (..)
+  , GrammarV1OutcomeSpec (..)
+  , GrammarV1StateSlot (..)
+  , GrammarV1CalleeTransition (..)
+  , GrammarV1OutcomeResidueClause (..)
+  , GrammarV1OutcomeResidue (..)
   , GrammarV1CapabilityItem (..)
   , GrammarV1CapabilityDecl (..)
   , GrammarV1SessionExpression (..)
@@ -160,6 +166,9 @@ data GrammarV1Proposition
       (Located GrammarV1Expression)
       (Located GrammarV1RelationOperator)
       (Located GrammarV1Expression)
+  | GrammarV1ClaimApplicationProposition
+      GrammarV1StaticReference
+      [Located GrammarV1Expression]
   | GrammarV1NotProposition (Located GrammarV1Proposition)
   | GrammarV1AndProposition
       (Located GrammarV1Proposition)
@@ -249,8 +258,53 @@ data GrammarV1ClaimDecl = GrammarV1ClaimDecl
   }
   deriving (Eq, Show)
 
+data GrammarV1OutcomeKind
+  = GrammarV1SuccessOutcome
+  | GrammarV1NegativeOutcome
+  | GrammarV1TerminalOutcome
+  | GrammarV1FatalOutcome
+  deriving (Eq, Ord, Show)
+
+data GrammarV1OutcomeSpec = GrammarV1OutcomeSpec
+  { grammarV1OutcomeSpecKind :: Located GrammarV1OutcomeKind
+  , grammarV1OutcomeSpecType :: Located GrammarV1Type
+  }
+  deriving (Eq, Show)
+
+data GrammarV1StateSlot = GrammarV1StateSlot
+  { grammarV1StateSlotName :: Located Text
+  , grammarV1StateSlotType :: Located GrammarV1Type
+  }
+  deriving (Eq, Show)
+
+data GrammarV1CalleeTransition
+  = GrammarV1CalleePreserve
+  | GrammarV1CalleeConsume
+  | GrammarV1CalleeReplace
+      (Located GrammarV1StaticReference)
+      (Maybe (Located GrammarV1Expression))
+  deriving (Eq, Show)
+
+data GrammarV1OutcomeResidueClause
+  = GrammarV1OutcomeState [Located GrammarV1StateSlot]
+  | GrammarV1OutcomeCallee (Located GrammarV1CalleeTransition)
+  | GrammarV1OutcomeEnsures (Located GrammarV1Proposition)
+  | GrammarV1OutcomeObligation (Located GrammarV1Proposition)
+  deriving (Eq, Show)
+
+data GrammarV1OutcomeResidue = GrammarV1OutcomeResidue
+  { grammarV1OutcomeResidueKind :: Located GrammarV1OutcomeKind
+  , grammarV1OutcomeResidueType :: Located GrammarV1Type
+  , grammarV1OutcomeResidueClauses :: [Located GrammarV1OutcomeResidueClause]
+  }
+  deriving (Eq, Show)
+
 data GrammarV1CallableClause
   = GrammarV1CallableEnsures (Located GrammarV1Proposition)
+  | GrammarV1CallableOutcomes [Located GrammarV1OutcomeSpec]
+  | GrammarV1CallableOutcomeResidue (Located GrammarV1OutcomeResidue)
+  | GrammarV1CallableObligation (Located GrammarV1Proposition)
+  | GrammarV1CallableCallee (Located GrammarV1CalleeTransition)
   deriving (Eq, Show)
 
 data GrammarV1CallableContractDecl = GrammarV1CallableContractDecl
@@ -616,20 +670,218 @@ parseCallableClauses = do
 
 parseCallableClause :: Parser (Located GrammarV1CallableClause)
 parseCallableClause = do
-  ensures <- peekKeyword "ensures"
-  if ensures
-    then do
-      start <- expectKeyword "ensures"
-      proposition <- parseProposition
+  token <- peekToken
+  case fmap locatedValue token of
+    Just (GrammarKeyword "ensures") ->
+      parseCallablePropositionClause "ensures" GrammarV1CallableEnsures
+    Just (GrammarKeyword "obligation") ->
+      parseCallablePropositionClause "obligation" GrammarV1CallableObligation
+    Just (GrammarKeyword "outcomes") -> do
+      start <- expectKeyword "outcomes"
+      specs <- parseOutcomeSet
       end <- expectSymbol ";"
-      pure $ locatedBetween start end (GrammarV1CallableEnsures proposition)
+      pure $ locatedBetween start end (GrammarV1CallableOutcomes specs)
+    Just (GrammarKeyword "outcome") -> do
+      residue <- parseOutcomeResidue
+      pure $ Located
+        (locatedSpan residue)
+        (GrammarV1CallableOutcomeResidue residue)
+    Just (GrammarKeyword "callee") -> do
+      start <- expectKeyword "callee"
+      transition <- parseCalleeTransition
+      end <- expectSymbol ";"
+      pure $ locatedBetween start end (GrammarV1CallableCallee transition)
+    Just other -> failParser $
+      "SURF-002 outcome/callee slice does not yet implement callable_clause beginning with "
+        <> renderToken other
+    Nothing -> failParser "unterminated callable contract declaration"
+
+parseCallablePropositionClause
+  :: Text
+  -> (Located GrammarV1Proposition -> GrammarV1CallableClause)
+  -> Parser (Located GrammarV1CallableClause)
+parseCallablePropositionClause keyword constructor = do
+  start <- expectKeyword keyword
+  proposition <- parseProposition
+  end <- expectSymbol ";"
+  pure $ locatedBetween start end (constructor proposition)
+
+parseOutcomeSet :: Parser [Located GrammarV1OutcomeSpec]
+parseOutcomeSet = do
+  _ <- expectSymbol "{"
+  atEnd <- peekSymbol "}"
+  if atEnd
+    then expectSymbol "}" >> pure []
     else do
-      token <- peekToken
-      case token of
-        Just value -> failParser $
-          "SURF-002 callable-contract slice does not yet implement callable_clause beginning with "
-            <> renderToken (locatedValue value)
-        Nothing -> failParser "unterminated callable contract declaration"
+      first <- parseOutcomeSpec
+      rest <- parseMoreOutcomeSpecs
+      _ <- expectSymbol "}"
+      pure (first : rest)
+
+parseMoreOutcomeSpecs :: Parser [Located GrammarV1OutcomeSpec]
+parseMoreOutcomeSpecs = do
+  hasComma <- peekSymbol ","
+  if hasComma
+    then do
+      _ <- expectSymbol ","
+      atEnd <- peekSymbol "}"
+      if atEnd
+        then failParser "outcome_set does not admit a trailing comma"
+        else do
+          spec <- parseOutcomeSpec
+          rest <- parseMoreOutcomeSpecs
+          pure (spec : rest)
+    else pure []
+
+parseOutcomeSpec :: Parser (Located GrammarV1OutcomeSpec)
+parseOutcomeSpec = do
+  kind <- parseOutcomeKind
+  ty <- parseType
+  pure $ Located
+    (SourceSpan
+      (sourceSpanStart (locatedSpan kind))
+      (sourceSpanEnd (locatedSpan ty)))
+    GrammarV1OutcomeSpec
+      { grammarV1OutcomeSpecKind = kind
+      , grammarV1OutcomeSpecType = ty
+      }
+
+parseOutcomeKind :: Parser (Located GrammarV1OutcomeKind)
+parseOutcomeKind = do
+  token <- takeToken
+  case locatedValue token of
+    GrammarKeyword "success" -> pure (Located (locatedSpan token) GrammarV1SuccessOutcome)
+    GrammarKeyword "negative" -> pure (Located (locatedSpan token) GrammarV1NegativeOutcome)
+    GrammarKeyword "terminal" -> pure (Located (locatedSpan token) GrammarV1TerminalOutcome)
+    GrammarKeyword "fatal" -> pure (Located (locatedSpan token) GrammarV1FatalOutcome)
+    other -> failAt token $
+      "expected outcome kind success, negative, terminal, or fatal; found " <> renderToken other
+
+parseOutcomeResidue :: Parser (Located GrammarV1OutcomeResidue)
+parseOutcomeResidue = do
+  start <- expectKeyword "outcome"
+  kind <- parseOutcomeKind
+  ty <- parseType
+  _ <- expectSymbol "{"
+  clauses <- parseOutcomeResidueClauses
+  end <- expectSymbol "}"
+  pure $ locatedBetween start end GrammarV1OutcomeResidue
+    { grammarV1OutcomeResidueKind = kind
+    , grammarV1OutcomeResidueType = ty
+    , grammarV1OutcomeResidueClauses = clauses
+    }
+
+parseOutcomeResidueClauses :: Parser [Located GrammarV1OutcomeResidueClause]
+parseOutcomeResidueClauses = do
+  atEnd <- peekSymbol "}"
+  if atEnd
+    then pure []
+    else do
+      clause <- parseOutcomeResidueClause
+      rest <- parseOutcomeResidueClauses
+      pure (clause : rest)
+
+parseOutcomeResidueClause :: Parser (Located GrammarV1OutcomeResidueClause)
+parseOutcomeResidueClause = do
+  token <- peekToken
+  case fmap locatedValue token of
+    Just (GrammarKeyword "state") -> parseOutcomeStateClause
+    Just (GrammarKeyword "callee") -> do
+      start <- expectKeyword "callee"
+      transition <- parseCalleeTransition
+      end <- expectSymbol ";"
+      pure $ locatedBetween start end (GrammarV1OutcomeCallee transition)
+    Just (GrammarKeyword "ensures") ->
+      parseOutcomePropositionClause "ensures" GrammarV1OutcomeEnsures
+    Just (GrammarKeyword "obligation") ->
+      parseOutcomePropositionClause "obligation" GrammarV1OutcomeObligation
+    Just other -> failParser $
+      "expected outcome residue clause; found " <> renderToken other
+    Nothing -> failParser "unterminated outcome residue"
+
+parseOutcomePropositionClause
+  :: Text
+  -> (Located GrammarV1Proposition -> GrammarV1OutcomeResidueClause)
+  -> Parser (Located GrammarV1OutcomeResidueClause)
+parseOutcomePropositionClause keyword constructor = do
+  start <- expectKeyword keyword
+  proposition <- parseProposition
+  end <- expectSymbol ";"
+  pure $ locatedBetween start end (constructor proposition)
+
+parseOutcomeStateClause :: Parser (Located GrammarV1OutcomeResidueClause)
+parseOutcomeStateClause = do
+  start <- expectKeyword "state"
+  _ <- expectSymbol "("
+  atEnd <- peekSymbol ")"
+  slots <- if atEnd
+    then pure []
+    else do
+      first <- parseStateSlot
+      rest <- parseMoreStateSlots
+      pure (first : rest)
+  _ <- expectSymbol ")"
+  end <- expectSymbol ";"
+  pure $ locatedBetween start end (GrammarV1OutcomeState slots)
+
+parseMoreStateSlots :: Parser [Located GrammarV1StateSlot]
+parseMoreStateSlots = do
+  hasComma <- peekSymbol ","
+  if hasComma
+    then do
+      _ <- expectSymbol ","
+      atEnd <- peekSymbol ")"
+      if atEnd
+        then failParser "state slot list does not admit a trailing comma"
+        else do
+          slot <- parseStateSlot
+          rest <- parseMoreStateSlots
+          pure (slot : rest)
+    else pure []
+
+parseStateSlot :: Parser (Located GrammarV1StateSlot)
+parseStateSlot = do
+  name <- expectIdentifier
+  _ <- expectSymbol ":"
+  ty <- parseType
+  pure $ Located
+    (SourceSpan
+      (sourceSpanStart (locatedSpan name))
+      (sourceSpanEnd (locatedSpan ty)))
+    GrammarV1StateSlot
+      { grammarV1StateSlotName = name
+      , grammarV1StateSlotType = ty
+      }
+
+parseCalleeTransition :: Parser (Located GrammarV1CalleeTransition)
+parseCalleeTransition = do
+  token <- peekToken
+  case fmap locatedValue token of
+    Just (GrammarKeyword "preserve") -> do
+      value <- expectKeyword "preserve"
+      pure (Located (locatedSpan value) GrammarV1CalleePreserve)
+    Just (GrammarKeyword "consume") -> do
+      value <- expectKeyword "consume"
+      pure (Located (locatedSpan value) GrammarV1CalleeConsume)
+    Just (GrammarKeyword "replace") -> do
+      start <- expectKeyword "replace"
+      _ <- expectKeyword "with"
+      replacement <- parseStaticReference
+      hasState <- peekKeyword "state"
+      successorState <- if hasState
+        then expectKeyword "state" >> Just <$> parseExpression
+        else pure Nothing
+      let endSpan = case successorState of
+            Just expression -> locatedSpan expression
+            Nothing -> locatedSpan replacement
+      pure $ Located
+        (SourceSpan
+          (sourceSpanStart (locatedSpan start))
+          (sourceSpanEnd endSpan))
+        (GrammarV1CalleeReplace replacement successorState)
+    Just other -> failParser $
+      "expected callee transition preserve, consume, or replace; found " <> renderToken other
+    Nothing -> failParser "expected callee transition at end of input"
 
 parseMoreVariants :: Parser [Located GrammarV1VariantDecl]
 parseMoreVariants = do
@@ -1245,12 +1497,43 @@ parsePropositionAtom = do
           (sourceSpanStart (locatedSpan start))
           (sourceSpanEnd (locatedSpan end)))
         (locatedValue proposition)
+    Just (GrammarIdentifier _) -> parseNamedPropositionAtom
     Just _ -> parseRelationProposition
     Nothing -> failParser "expected proposition at end of input"
+
+parseNamedPropositionAtom :: Parser (Located GrammarV1Proposition)
+parseNamedPropositionAtom = do
+  reference <- parseStaticReference
+  hasTermArguments <- peekSymbol "("
+  if hasTermArguments
+    then do
+      (arguments, end) <- parseTermArguments
+      let expression = Located
+            (SourceSpan
+              (sourceSpanStart (locatedSpan reference))
+              (sourceSpanEnd (locatedSpan end)))
+            (GrammarV1NameExpression (locatedValue reference) arguments)
+      hasRelation <- peekRelationOperator
+      if hasRelation
+        then parseRelationFromLeft expression
+        else pure $ Located
+          (locatedSpan expression)
+          (GrammarV1ClaimApplicationProposition (locatedValue reference) arguments)
+    else do
+      let expression = Located
+            (locatedSpan reference)
+            (GrammarV1NameExpression (locatedValue reference) [])
+      parseRelationFromLeft expression
 
 parseRelationProposition :: Parser (Located GrammarV1Proposition)
 parseRelationProposition = do
   left <- parseExpression
+  parseRelationFromLeft left
+
+parseRelationFromLeft
+  :: Located GrammarV1Expression
+  -> Parser (Located GrammarV1Proposition)
+parseRelationFromLeft left = do
   operator <- parseRelationOperator
   right <- parseExpression
   pure $ Located
@@ -1259,24 +1542,35 @@ parseRelationProposition = do
       (sourceSpanEnd (locatedSpan right)))
     (GrammarV1RelationProposition left operator right)
 
+peekRelationOperator :: Parser Bool
+peekRelationOperator = do
+  token <- peekToken
+  pure $ case token of
+    Just value -> case relationOperatorValue (locatedValue value) of
+      Just _ -> True
+      Nothing -> False
+    Nothing -> False
+
 parseRelationOperator :: Parser (Located GrammarV1RelationOperator)
 parseRelationOperator = do
   token <- takeToken
-  let relation = case locatedValue token of
-        GrammarSymbol "==" -> Just GrammarV1EqualRelation
-        GrammarSymbol "!=" -> Just GrammarV1NotEqualRelation
-        GrammarSymbol "<=" -> Just GrammarV1LessEqualRelation
-        GrammarSymbol ">=" -> Just GrammarV1GreaterEqualRelation
-        GrammarSymbol "<" -> Just GrammarV1LessRelation
-        GrammarSymbol ">" -> Just GrammarV1GreaterRelation
-        GrammarKeyword "in" -> Just GrammarV1InRelation
-        GrammarKeyword "disjoint" -> Just GrammarV1DisjointRelation
-        _ -> Nothing
-  case relation of
+  case relationOperatorValue (locatedValue token) of
     Just value -> pure (Located (locatedSpan token) value)
     Nothing -> failAt token $
       "expected relation operator ==, !=, <=, >=, <, >, in, or disjoint; found "
         <> renderToken (locatedValue token)
+
+relationOperatorValue :: GrammarV1Token -> Maybe GrammarV1RelationOperator
+relationOperatorValue token = case token of
+  GrammarSymbol "==" -> Just GrammarV1EqualRelation
+  GrammarSymbol "!=" -> Just GrammarV1NotEqualRelation
+  GrammarSymbol "<=" -> Just GrammarV1LessEqualRelation
+  GrammarSymbol ">=" -> Just GrammarV1GreaterEqualRelation
+  GrammarSymbol "<" -> Just GrammarV1LessRelation
+  GrammarSymbol ">" -> Just GrammarV1GreaterRelation
+  GrammarKeyword "in" -> Just GrammarV1InRelation
+  GrammarKeyword "disjoint" -> Just GrammarV1DisjointRelation
+  _ -> Nothing
 
 parseOptionalMode :: Parser (Maybe GrammarV1StructuralMode)
 parseOptionalMode = do

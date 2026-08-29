@@ -1,4 +1,4 @@
-module corpus.outcomes;
+module corpus.outcome_residues;
 
 callable Read(blob : Blob) -> ReadResult {
   outcomes { success ReadOk, negative ReadFailure };
