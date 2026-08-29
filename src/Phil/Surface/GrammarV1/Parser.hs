@@ -14,6 +14,7 @@ module Phil.Surface.GrammarV1.Parser
   , GrammarV1GenericParam (..)
   , GrammarV1StaticArgument (..)
   , GrammarV1StaticReference (..)
+  , GrammarV1RelationOperator (..)
   , GrammarV1Proposition (..)
   , GrammarV1GenericRequirement (..)
   , GrammarV1Type (..)
@@ -23,6 +24,7 @@ module Phil.Surface.GrammarV1.Parser
   , GrammarV1VariantDecl (..)
   , GrammarV1DataDecl (..)
   , GrammarV1TypeAliasDecl (..)
+  , GrammarV1ClaimDecl (..)
   , GrammarV1CapabilityItem (..)
   , GrammarV1CapabilityDecl (..)
   , GrammarV1SessionExpression (..)
@@ -89,6 +91,7 @@ data GrammarV1Declaration
   = GrammarV1RecordDeclaration GrammarV1RecordDecl
   | GrammarV1DataDeclaration GrammarV1DataDecl
   | GrammarV1TypeAliasDeclaration GrammarV1TypeAliasDecl
+  | GrammarV1ClaimDeclaration GrammarV1ClaimDecl
   | GrammarV1CapabilityDeclaration GrammarV1CapabilityDecl
   | GrammarV1ProtocolDeclaration GrammarV1ProtocolDecl
   | GrammarV1ComponentDeclaration GrammarV1ComponentDecl
@@ -136,11 +139,32 @@ data GrammarV1StaticReference = GrammarV1StaticReference
   }
   deriving (Eq, Ord, Show)
 
+data GrammarV1RelationOperator
+  = GrammarV1EqualRelation
+  | GrammarV1NotEqualRelation
+  | GrammarV1LessEqualRelation
+  | GrammarV1GreaterEqualRelation
+  | GrammarV1LessRelation
+  | GrammarV1GreaterRelation
+  | GrammarV1InRelation
+  | GrammarV1DisjointRelation
+  deriving (Eq, Ord, Show)
+
 data GrammarV1Proposition
   = GrammarV1TrueProposition
   | GrammarV1FalseProposition
-  | GrammarV1StaticReferenceProposition GrammarV1StaticReference
-  deriving (Eq, Ord, Show)
+  | GrammarV1RelationProposition
+      (Located GrammarV1Expression)
+      (Located GrammarV1RelationOperator)
+      (Located GrammarV1Expression)
+  | GrammarV1NotProposition (Located GrammarV1Proposition)
+  | GrammarV1AndProposition
+      (Located GrammarV1Proposition)
+      (Located GrammarV1Proposition)
+  | GrammarV1OrProposition
+      (Located GrammarV1Proposition)
+      (Located GrammarV1Proposition)
+  deriving (Eq, Show)
 
 data GrammarV1GenericRequirement
   = GrammarV1StructuralRequirement (Located Text) (Located Text)
@@ -204,6 +228,15 @@ data GrammarV1TypeAliasDecl = GrammarV1TypeAliasDecl
   , grammarV1TypeAliasGenericParams :: [Located GrammarV1GenericParam]
   , grammarV1TypeAliasRequirements :: [Located GrammarV1GenericRequirement]
   , grammarV1TypeAliasTarget :: Located GrammarV1Type
+  }
+  deriving (Eq, Show)
+
+data GrammarV1ClaimDecl = GrammarV1ClaimDecl
+  { grammarV1ClaimName :: Located Text
+  , grammarV1ClaimGenericParams :: [Located GrammarV1GenericParam]
+  , grammarV1ClaimRequirements :: [Located GrammarV1GenericRequirement]
+  , grammarV1ClaimTermParams :: Maybe [Located GrammarV1TermParam]
+  , grammarV1ClaimProposition :: Maybe (Located GrammarV1Proposition)
   }
   deriving (Eq, Show)
 
@@ -433,6 +466,7 @@ parseDeclaration = do
     Just (GrammarKeyword "record") -> parseRecordDeclaration
     Just (GrammarKeyword "data") -> parseDataDeclaration
     Just (GrammarKeyword "type") -> parseTypeAliasDeclaration
+    Just (GrammarKeyword "claim") -> parseClaimDeclaration
     Just (GrammarKeyword "capability") -> parseCapabilityDeclaration
     Just (GrammarKeyword "protocol") -> parseProtocolDeclaration
     Just (GrammarKeyword "component") -> parseComponentDeclaration
@@ -496,6 +530,28 @@ parseTypeAliasDeclaration = do
     , grammarV1TypeAliasGenericParams = params
     , grammarV1TypeAliasRequirements = requirements
     , grammarV1TypeAliasTarget = target
+    }
+
+parseClaimDeclaration :: Parser (Located GrammarV1Declaration)
+parseClaimDeclaration = do
+  start <- expectKeyword "claim"
+  name <- expectIdentifier
+  params <- parseOptionalGenericParams
+  requirements <- parseOptionalGenericRequirements
+  termParams <- parseOptionalTermParams
+  hasDefinition <- peekSymbol "="
+  proposition <- if hasDefinition
+    then do
+      _ <- expectSymbol "="
+      Just <$> parseProposition
+    else pure Nothing
+  end <- expectSymbol ";"
+  pure $ locatedBetween start end $ GrammarV1ClaimDeclaration GrammarV1ClaimDecl
+    { grammarV1ClaimName = name
+    , grammarV1ClaimGenericParams = params
+    , grammarV1ClaimRequirements = requirements
+    , grammarV1ClaimTermParams = termParams
+    , grammarV1ClaimProposition = proposition
     }
 
 parseMoreVariants :: Parser [Located GrammarV1VariantDecl]
@@ -1018,7 +1074,68 @@ parsePropositionOnlyRequirement keyword constructor = do
   pure $ locatedBetween start end (constructor proposition)
 
 parseProposition :: Parser (Located GrammarV1Proposition)
-parseProposition = do
+parseProposition = parsePropositionOr
+
+parsePropositionOr :: Parser (Located GrammarV1Proposition)
+parsePropositionOr = do
+  first <- parsePropositionAnd
+  parseMorePropositionOr first
+
+parseMorePropositionOr
+  :: Located GrammarV1Proposition
+  -> Parser (Located GrammarV1Proposition)
+parseMorePropositionOr left = do
+  present <- peekKeyword "or"
+  if present
+    then do
+      _ <- expectKeyword "or"
+      right <- parsePropositionAnd
+      let combined = Located
+            (SourceSpan
+              (sourceSpanStart (locatedSpan left))
+              (sourceSpanEnd (locatedSpan right)))
+            (GrammarV1OrProposition left right)
+      parseMorePropositionOr combined
+    else pure left
+
+parsePropositionAnd :: Parser (Located GrammarV1Proposition)
+parsePropositionAnd = do
+  first <- parsePropositionNot
+  parseMorePropositionAnd first
+
+parseMorePropositionAnd
+  :: Located GrammarV1Proposition
+  -> Parser (Located GrammarV1Proposition)
+parseMorePropositionAnd left = do
+  present <- peekKeyword "and"
+  if present
+    then do
+      _ <- expectKeyword "and"
+      right <- parsePropositionNot
+      let combined = Located
+            (SourceSpan
+              (sourceSpanStart (locatedSpan left))
+              (sourceSpanEnd (locatedSpan right)))
+            (GrammarV1AndProposition left right)
+      parseMorePropositionAnd combined
+    else pure left
+
+parsePropositionNot :: Parser (Located GrammarV1Proposition)
+parsePropositionNot = do
+  present <- peekKeyword "not"
+  if present
+    then do
+      start <- expectKeyword "not"
+      proposition <- parsePropositionNot
+      pure $ Located
+        (SourceSpan
+          (sourceSpanStart (locatedSpan start))
+          (sourceSpanEnd (locatedSpan proposition)))
+        (GrammarV1NotProposition proposition)
+    else parsePropositionAtom
+
+parsePropositionAtom :: Parser (Located GrammarV1Proposition)
+parsePropositionAtom = do
   token <- peekToken
   case fmap locatedValue token of
     Just (GrammarKeyword "true") -> do
@@ -1027,15 +1144,47 @@ parseProposition = do
     Just (GrammarKeyword "false") -> do
       value <- expectKeyword "false"
       pure (Located (locatedSpan value) GrammarV1FalseProposition)
-    Just (GrammarIdentifier _) -> do
-      reference <- parseStaticReference
+    Just (GrammarSymbol "(") -> do
+      start <- expectSymbol "("
+      proposition <- parseProposition
+      end <- expectSymbol ")"
       pure $ Located
-        (locatedSpan reference)
-        (GrammarV1StaticReferenceProposition (locatedValue reference))
-    Just other -> failParser $
-      "SURF-002 generic/static slice does not yet implement proposition beginning with "
-        <> renderToken other
+        (SourceSpan
+          (sourceSpanStart (locatedSpan start))
+          (sourceSpanEnd (locatedSpan end)))
+        (locatedValue proposition)
+    Just _ -> parseRelationProposition
     Nothing -> failParser "expected proposition at end of input"
+
+parseRelationProposition :: Parser (Located GrammarV1Proposition)
+parseRelationProposition = do
+  left <- parseExpression
+  operator <- parseRelationOperator
+  right <- parseExpression
+  pure $ Located
+    (SourceSpan
+      (sourceSpanStart (locatedSpan left))
+      (sourceSpanEnd (locatedSpan right)))
+    (GrammarV1RelationProposition left operator right)
+
+parseRelationOperator :: Parser (Located GrammarV1RelationOperator)
+parseRelationOperator = do
+  token <- takeToken
+  let relation = case locatedValue token of
+        GrammarSymbol "==" -> Just GrammarV1EqualRelation
+        GrammarSymbol "!=" -> Just GrammarV1NotEqualRelation
+        GrammarSymbol "<=" -> Just GrammarV1LessEqualRelation
+        GrammarSymbol ">=" -> Just GrammarV1GreaterEqualRelation
+        GrammarSymbol "<" -> Just GrammarV1LessRelation
+        GrammarSymbol ">" -> Just GrammarV1GreaterRelation
+        GrammarKeyword "in" -> Just GrammarV1InRelation
+        GrammarKeyword "disjoint" -> Just GrammarV1DisjointRelation
+        _ -> Nothing
+  case relation of
+    Just value -> pure (Located (locatedSpan token) value)
+    Nothing -> failAt token $
+      "expected relation operator ==, !=, <=, >=, <, >, in, or disjoint; found "
+        <> renderToken (locatedValue token)
 
 parseOptionalMode :: Parser (Maybe GrammarV1StructuralMode)
 parseOptionalMode = do

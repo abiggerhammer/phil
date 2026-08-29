@@ -29,6 +29,14 @@ main = do
         expectStaticSessionParameter
     , testIO "SURF-002 generic requirement fixture preserves requirement categories"
         expectRequirementCategories
+    , testIO "SURF-002 membership claim preserves relation proposition"
+        (expectRelationClaim "accepted/03-membership.phil" "Contains" GrammarV1InRelation)
+    , testIO "SURF-002 disjointness claim preserves relation proposition"
+        (expectRelationClaim "accepted/04-disjointness.phil" "Separate" GrammarV1DisjointRelation)
+    , testIO "SURF-003 membership relation missing RHS rejects at syntax"
+        (expectFixtureReject "rejected/03-membership-missing-rhs.phil")
+    , testIO "SURF-003 disjointness relation missing RHS rejects at syntax"
+        (expectFixtureReject "rejected/04-disjointness-missing-rhs.phil")
     , testIO "SURF-003 malformed record mode rejects at syntax"
         (expectFixtureReject "rejected/10-record-mode-missing-literal.phil")
     , testIO "SURF-003 unknown capability mode rejects at syntax"
@@ -41,6 +49,8 @@ main = do
         (expectFixtureReject "rejected/21-static-argument-unclosed.phil")
     , testIO "SURF-003 generic requirement missing semicolon rejects at syntax"
         (expectFixtureReject "rejected/22-generic-requirement-missing-semicolon.phil")
+    , test "SURF-002 proposition precedence is not > and > or"
+        propositionPrecedencePreserved
     , test "SURF-002 name-shaped static actual has one static-reference parse"
         nameShapedStaticActualPreserved
     , test "SURF-002 source envelope preserves module imports attributes and fields"
@@ -179,6 +189,67 @@ expectRequirementCategories = do
         other -> Left ("expected constrained record declaration, got " <> show other)
       declarations -> Left ("expected one constrained record, got " <> show (length declarations))
 
+expectRelationClaim
+  :: FilePath
+  -> Text.Text
+  -> GrammarV1RelationOperator
+  -> IO (Either String ())
+expectRelationClaim relativePath expectedName expectedOperator = do
+  parsed <- parseFixture relativePath
+  pure $ do
+    sourceFile <- mapLeft show parsed
+    case reverse (grammarV1TopLevelDecls sourceFile) of
+      Located _ topLevel : _ -> case locatedValue (grammarV1Declaration topLevel) of
+        GrammarV1ClaimDeclaration claimDecl -> do
+          assert (locatedValue (grammarV1ClaimName claimDecl) == expectedName)
+            "claim name was not preserved"
+          case grammarV1ClaimProposition claimDecl of
+            Just (Located _ (GrammarV1RelationProposition left operator right)) -> do
+              assert (locatedValue operator == expectedOperator)
+                "claim relation operator was not preserved"
+              assert (isSimpleNameExpression left)
+                "relation left operand was not a simple name expression"
+              assert (isSimpleNameExpression right)
+                "relation right operand was not a simple name expression"
+            other -> Left ("expected relation proposition, got " <> show other)
+        other -> Left ("expected claim declaration, got " <> show other)
+      [] -> Left "expected at least one top-level declaration"
+
+isSimpleNameExpression :: Located GrammarV1Expression -> Bool
+isSimpleNameExpression (Located _ expression) = case expression of
+  GrammarV1NameExpression reference arguments ->
+    null (grammarV1StaticReferenceArguments reference) && null arguments
+  _ -> False
+
+propositionPrecedencePreserved :: Either String ()
+propositionPrecedencePreserved = do
+  sourceFile <- mapLeft show $ parseGrammarV1StructuralSource "proposition-precedence" source
+  case grammarV1TopLevelDecls sourceFile of
+    [Located _ topLevel] -> case locatedValue (grammarV1Declaration topLevel) of
+      GrammarV1ClaimDeclaration claimDecl ->
+        case grammarV1ClaimProposition claimDecl of
+          Just (Located _ (GrammarV1OrProposition left right)) -> do
+            case locatedValue left of
+              GrammarV1NotProposition inner ->
+                assert (isRelationProposition inner) "not did not bind to the relation"
+              other -> Left ("expected not proposition on left of or, got " <> show other)
+            case locatedValue right of
+              GrammarV1AndProposition relation truth -> do
+                assert (isRelationProposition relation) "and left side was not a relation"
+                assert (locatedValue truth == GrammarV1TrueProposition)
+                  "and right side was not true"
+              other -> Left ("expected and proposition on right of or, got " <> show other)
+          other -> Left ("expected top-level or proposition, got " <> show other)
+      other -> Left ("expected claim declaration, got " <> show other)
+    declarations -> Left ("expected one declaration, got " <> show (length declarations))
+  where
+    source = "claim Logic(a : U32, b : U32, c : U32) = not (a == b) or a == c and true;"
+
+isRelationProposition :: Located GrammarV1Proposition -> Bool
+isRelationProposition (Located _ proposition) = case proposition of
+  GrammarV1RelationProposition _ _ _ -> True
+  _ -> False
+
 assertGenericKind
   :: GrammarV1GenericKind
   -> [Located GrammarV1GenericParam]
@@ -232,6 +303,7 @@ declarationMode declaration = case declaration of
   GrammarV1RecordDeclaration value -> grammarV1RecordMode value
   GrammarV1DataDeclaration value -> grammarV1DataMode value
   GrammarV1TypeAliasDeclaration _ -> Nothing
+  GrammarV1ClaimDeclaration _ -> Nothing
   GrammarV1CapabilityDeclaration value -> Just (grammarV1CapabilityMode value)
   GrammarV1ProtocolDeclaration _ -> Nothing
   GrammarV1ComponentDeclaration _ -> Nothing
