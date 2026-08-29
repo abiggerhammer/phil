@@ -244,7 +244,7 @@ Proof.
     split.
     + exact Hplan.
     + split.
-      * exact Hsuccessor.
+      * reflexivity.
       * eapply restoration_plan_preserves_exact_element_contract.
         -- exact Hplan.
         -- exact Helement.
@@ -294,7 +294,7 @@ Proof.
     split.
     + exact Hplan.
     + split.
-      * exact Helement.
+      * reflexivity.
       * eapply restoration_plan_preserves_exact_element_contract.
         -- exact Hplan.
         -- exact Helement.
