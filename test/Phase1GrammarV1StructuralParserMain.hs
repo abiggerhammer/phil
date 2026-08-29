@@ -21,6 +21,8 @@ main = do
         (expectFixtureMode "accepted/14-capability-affine-mode.phil" GrammarV1Affine)
     , testIO "SURF-002 linear capability fixture parses"
         (expectFixtureMode "accepted/15-capability-linear-mode.phil" GrammarV1Linear)
+    , testIO "SURF-002 ordinary binding fixture preserves term parameter and let-return block"
+        expectOrdinaryBinding
     , testIO "SURF-002 static type actual fixture preserves generic kind and argument"
         expectStaticTypeActual
     , testIO "SURF-002 static session parameter fixture preserves Session kind"
@@ -31,6 +33,8 @@ main = do
         (expectFixtureReject "rejected/10-record-mode-missing-literal.phil")
     , testIO "SURF-003 unknown capability mode rejects at syntax"
         (expectFixtureReject "rejected/11-capability-mode-unknown-literal.phil")
+    , testIO "SURF-003 binding-local structural mode rejects at pattern syntax"
+        (expectFixtureReject "rejected/12-binding-local-mode.phil")
     , testIO "SURF-003 type alias cannot acquire declaration mode"
         (expectFixtureReject "rejected/13-type-alias-mode.phil")
     , testIO "SURF-003 unclosed static argument list rejects at syntax"
@@ -65,6 +69,51 @@ expectFixtureMode relativePath expectedMode = do
         in assert (actualMode == Just expectedMode) $
             "expected mode " <> show expectedMode <> ", got " <> show actualMode
       declarations -> Left ("expected exactly one declaration, got " <> show (length declarations))
+
+expectOrdinaryBinding :: IO (Either String ())
+expectOrdinaryBinding = do
+  parsed <- parseFixture "accepted/16-ordinary-binding-inherits-mode.phil"
+  pure $ do
+    sourceFile <- mapLeft show parsed
+    case grammarV1TopLevelDecls sourceFile of
+      [Located _ topLevel] -> case locatedValue (grammarV1Declaration topLevel) of
+        GrammarV1ComponentDeclaration componentDecl -> do
+          case grammarV1ComponentTermParams componentDecl of
+            Just [Located _ param] -> do
+              assert (locatedValue (grammarV1TermParamName param) == "x")
+                "component parameter name was not x"
+              assert (locatedValue (grammarV1TermParamType param) == GrammarV1UnsignedType "U32")
+                "component parameter type was not U32"
+            other -> Left ("expected exactly one component parameter, got " <> show other)
+          case grammarV1BlockStatements (locatedValue (grammarV1ComponentBody componentDecl)) of
+            [Located _ letStatement, Located _ returnStatement] -> do
+              case letStatement of
+                GrammarV1LetStatement pattern' initializer -> do
+                  assert (identifierPatternNamed "y" pattern')
+                    "let pattern did not bind y"
+                  assert (nameExpressionNamed "x" initializer)
+                    "let initializer was not the name expression x"
+                other -> Left ("expected let statement first, got " <> show other)
+              case returnStatement of
+                GrammarV1ReturnStatement expression ->
+                  assert (nameExpressionNamed "y" expression)
+                    "return expression was not the name expression y"
+                other -> Left ("expected return statement second, got " <> show other)
+            statements -> Left ("expected exactly two component statements, got " <> show (length statements))
+        other -> Left ("expected component declaration, got " <> show other)
+      declarations -> Left ("expected one component declaration, got " <> show (length declarations))
+
+identifierPatternNamed :: Text.Text -> Located GrammarV1Pattern -> Bool
+identifierPatternNamed expected (Located _ pattern') = case pattern' of
+  GrammarV1IdentifierPattern name -> locatedValue name == expected
+
+nameExpressionNamed :: Text.Text -> Located GrammarV1Expression -> Bool
+nameExpressionNamed expected (Located _ expression) = case expression of
+  GrammarV1NameExpression reference arguments ->
+    grammarV1QualifiedNameParts (grammarV1StaticReferenceName reference) == [expected]
+      && null (grammarV1StaticReferenceArguments reference)
+      && null arguments
+  _ -> False
 
 expectStaticTypeActual :: IO (Either String ())
 expectStaticTypeActual = do
@@ -185,6 +234,7 @@ declarationMode declaration = case declaration of
   GrammarV1TypeAliasDeclaration _ -> Nothing
   GrammarV1CapabilityDeclaration value -> Just (grammarV1CapabilityMode value)
   GrammarV1ProtocolDeclaration _ -> Nothing
+  GrammarV1ComponentDeclaration _ -> Nothing
 
 nameShapedStaticActualPreserved :: Either String ()
 nameShapedStaticActualPreserved = do
