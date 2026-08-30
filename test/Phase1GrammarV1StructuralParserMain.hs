@@ -277,6 +277,7 @@ requirementTag requirement = case requirement of
   GrammarV1CallableRequirement _ _ -> "callable"
   GrammarV1BoundaryRequirement _ _ -> "boundary"
   GrammarV1ArchitectureRequirement _ _ -> "architecture"
+  GrammarV1EffectsRequirement _ _ -> "effects"
   GrammarV1AuthorityRequirement _ -> "authority"
   GrammarV1BoundaryRepresentationRequirement _ -> "boundary-representation"
   GrammarV1RepresentationRequirement _ -> "representation"

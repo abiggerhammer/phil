@@ -15,8 +15,6 @@ main = do
         expectRefinementCallable
     , testIO "SURF-003 callable refinement missing bar rejects at syntax"
         (expectFixtureReject "rejected/01-refinement-missing-bar.phil")
-    , test "SURF-002 unsupported valid callable clause fails closed"
-        unsupportedCallableClauseFailsClosed
     ]
   if and results then pure () else exitFailure
 
@@ -111,14 +109,6 @@ expectFixtureReject relativePath = do
   pure $ case parsed of
     Left _ -> Right ()
     Right value -> Left ("expected syntax rejection, parsed " <> show value)
-
-unsupportedCallableClauseFailsClosed :: Either String ()
-unsupportedCallableClauseFailsClosed =
-  case parseGrammarV1StructuralSource "unsupported-callable-clause" source of
-    Left _ -> Right ()
-    Right value -> Left ("expected unsupported callable clause to fail closed, got " <> show value)
-  where
-    source = "callable C(x : U32) -> U32 { consumes { x }; }"
 
 parseFixture
   :: FilePath
