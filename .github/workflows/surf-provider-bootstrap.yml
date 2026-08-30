@@ -1,0 +1,301 @@
+name: SURF provider bootstrap
+
+on:
+  push:
+    branches:
+      - phase1-surf-002-provider-declarations-parser
+
+permissions:
+  contents: write
+
+jobs:
+  patch:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Apply exact provider parser slice
+        run: |
+          python3 - <<'PY'
+          from pathlib import Path
+
+          def block(*lines):
+              return '\n'.join(lines) + '\n'
+
+          path = Path('src/Phil/Surface/GrammarV1/Parser.hs')
+          text = path.read_text()
+
+          def replace_once(old, new, label):
+              global text
+              count = text.count(old)
+              if count != 1:
+                  raise SystemExit(f'{label}: expected one match, found {count}')
+              text = text.replace(old, new, 1)
+
+          replace_once(
+              block('  , GrammarV1FunctionDecl (..)', '  , GrammarV1CapabilityItem (..)'),
+              block(
+                  '  , GrammarV1FunctionDecl (..)',
+                  '  , GrammarV1ProviderContractItem (..)',
+                  '  , GrammarV1ProviderContractDecl (..)',
+                  '  , GrammarV1ProviderImplementationItem (..)',
+                  '  , GrammarV1ProviderImplementationDecl (..)',
+                  '  , GrammarV1OpaqueProviderImplementationDecl (..)',
+                  '  , GrammarV1CapabilityItem (..)'),
+              'provider exports')
+
+          replace_once(
+              block(
+                  '  | GrammarV1FunctionDeclaration GrammarV1FunctionDecl',
+                  '  | GrammarV1CapabilityDeclaration GrammarV1CapabilityDecl'),
+              block(
+                  '  | GrammarV1FunctionDeclaration GrammarV1FunctionDecl',
+                  '  | GrammarV1ProviderContractDeclaration GrammarV1ProviderContractDecl',
+                  '  | GrammarV1ProviderImplementationDeclaration GrammarV1ProviderImplementationDecl',
+                  '  | GrammarV1OpaqueProviderImplementationDeclaration GrammarV1OpaqueProviderImplementationDecl',
+                  '  | GrammarV1CapabilityDeclaration GrammarV1CapabilityDecl'),
+              'provider declaration constructors')
+
+          replace_once(
+              block(
+                  'data GrammarV1CapabilityItem',
+                  '  = GrammarV1CapabilityPermits (Located GrammarV1StaticReference)',
+                  '  deriving (Eq, Show)'),
+              block(
+                  'data GrammarV1ProviderContractItem',
+                  '  = GrammarV1ProviderContractOperation (Located Text) (Located GrammarV1Type)',
+                  '  | GrammarV1ProviderContractLaw (Located Text) (Located GrammarV1Proposition)',
+                  '  | GrammarV1ProviderContractLifecycle (Located Text) (Located GrammarV1Proposition)',
+                  '  deriving (Eq, Show)',
+                  '',
+                  'data GrammarV1ProviderContractDecl = GrammarV1ProviderContractDecl',
+                  '  { grammarV1ProviderContractName :: Located Text',
+                  '  , grammarV1ProviderContractGenericParams :: [Located GrammarV1GenericParam]',
+                  '  , grammarV1ProviderContractRequirements :: [Located GrammarV1GenericRequirement]',
+                  '  , grammarV1ProviderContractItems :: [Located GrammarV1ProviderContractItem]',
+                  '  }',
+                  '  deriving (Eq, Show)',
+                  '',
+                  'data GrammarV1ProviderImplementationItem',
+                  '  = GrammarV1ProviderImplementationOperation',
+                  '      (Located Text)',
+                  '      (Located GrammarV1Type)',
+                  '      (Located GrammarV1Block)',
+                  '  | GrammarV1ProviderImplementationLaw (Located Text) (Located GrammarV1Proposition)',
+                  '  | GrammarV1ProviderImplementationLifecycle (Located Text) (Located GrammarV1Proposition)',
+                  '  deriving (Eq, Show)',
+                  '',
+                  'data GrammarV1ProviderImplementationDecl = GrammarV1ProviderImplementationDecl',
+                  '  { grammarV1ProviderImplementationName :: Located Text',
+                  '  , grammarV1ProviderImplementationGenericParams :: [Located GrammarV1GenericParam]',
+                  '  , grammarV1ProviderImplementationRequirements :: [Located GrammarV1GenericRequirement]',
+                  '  , grammarV1ProviderImplementationSatisfies :: Located GrammarV1Type',
+                  '  , grammarV1ProviderImplementationItems :: [Located GrammarV1ProviderImplementationItem]',
+                  '  }',
+                  '  deriving (Eq, Show)',
+                  '',
+                  'data GrammarV1OpaqueProviderImplementationDecl = GrammarV1OpaqueProviderImplementationDecl',
+                  '  { grammarV1OpaqueProviderImplementationName :: Located Text',
+                  '  , grammarV1OpaqueProviderImplementationGenericParams :: [Located GrammarV1GenericParam]',
+                  '  , grammarV1OpaqueProviderImplementationRequirements :: [Located GrammarV1GenericRequirement]',
+                  '  , grammarV1OpaqueProviderImplementationSatisfies :: Located GrammarV1Type',
+                  '  }',
+                  '  deriving (Eq, Show)',
+                  '',
+                  'data GrammarV1CapabilityItem',
+                  '  = GrammarV1CapabilityPermits (Located GrammarV1StaticReference)',
+                  '  deriving (Eq, Show)'),
+              'provider AST')
+
+          replace_once(
+              block(
+                  '    Just (GrammarKeyword "recursive") -> parseFunctionDeclaration',
+                  '    Just (GrammarKeyword "capability") -> parseCapabilityDeclaration'),
+              block(
+                  '    Just (GrammarKeyword "recursive") -> parseFunctionDeclaration',
+                  '    Just (GrammarKeyword "provider") -> parseProviderDeclaration',
+                  '    Just (GrammarKeyword "opaque") -> parseOpaqueProviderImplementationDeclaration',
+                  '    Just (GrammarKeyword "capability") -> parseCapabilityDeclaration'),
+              'provider dispatch')
+
+          marker = block('parseMoreVariants :: Parser [Located GrammarV1VariantDecl]')
+          if text.count(marker) != 1:
+              raise SystemExit('provider parser insertion marker mismatch')
+
+          provider_parser = block(
+              'parseProviderDeclaration :: Parser (Located GrammarV1Declaration)',
+              'parseProviderDeclaration = do',
+              '  start <- expectKeyword "provider"',
+              '  implementation <- peekKeyword "implementation"',
+              '  if implementation',
+              '    then parseProviderImplementationAfterStart start',
+              '    else parseProviderContractAfterStart start',
+              '',
+              'parseProviderContractAfterStart',
+              '  :: Located GrammarV1Token',
+              '  -> Parser (Located GrammarV1Declaration)',
+              'parseProviderContractAfterStart start = do',
+              '  name <- expectIdentifier',
+              '  params <- parseOptionalGenericParams',
+              '  requirements <- parseOptionalGenericRequirements',
+              '  _ <- expectSymbol "{"',
+              '  items <- parseProviderContractItems',
+              '  end <- expectSymbol "}"',
+              '  pure $ locatedBetween start end $',
+              '    GrammarV1ProviderContractDeclaration GrammarV1ProviderContractDecl',
+              '      { grammarV1ProviderContractName = name',
+              '      , grammarV1ProviderContractGenericParams = params',
+              '      , grammarV1ProviderContractRequirements = requirements',
+              '      , grammarV1ProviderContractItems = items',
+              '      }',
+              '',
+              'parseProviderContractItems :: Parser [Located GrammarV1ProviderContractItem]',
+              'parseProviderContractItems = do',
+              '  atEnd <- peekSymbol "}"',
+              '  if atEnd',
+              '    then pure []',
+              '    else do',
+              '      item <- parseProviderContractItem',
+              '      rest <- parseProviderContractItems',
+              '      pure (item : rest)',
+              '',
+              'parseProviderContractItem :: Parser (Located GrammarV1ProviderContractItem)',
+              'parseProviderContractItem = do',
+              '  token <- peekToken',
+              '  case fmap locatedValue token of',
+              '    Just (GrammarKeyword "operation") -> do',
+              '      start <- expectKeyword "operation"',
+              '      name <- expectIdentifier',
+              '      _ <- expectSymbol ":"',
+              '      ty <- parseType',
+              '      end <- expectSymbol ";"',
+              '      pure $ locatedBetween start end (GrammarV1ProviderContractOperation name ty)',
+              '    Just (GrammarKeyword "law") -> parseProviderContractPropositionItem "law" GrammarV1ProviderContractLaw',
+              '    Just (GrammarKeyword "lifecycle") -> parseProviderContractPropositionItem "lifecycle" GrammarV1ProviderContractLifecycle',
+              '    Just other -> failParser $ "expected provider_contract_item; found " <> renderToken other',
+              '    Nothing -> failParser "unterminated provider contract declaration"',
+              '',
+              'parseProviderContractPropositionItem',
+              '  :: Text',
+              '  -> (Located Text -> Located GrammarV1Proposition -> GrammarV1ProviderContractItem)',
+              '  -> Parser (Located GrammarV1ProviderContractItem)',
+              'parseProviderContractPropositionItem keyword constructor = do',
+              '  start <- expectKeyword keyword',
+              '  name <- expectIdentifier',
+              '  _ <- expectSymbol ":"',
+              '  proposition <- parseProposition',
+              '  end <- expectSymbol ";"',
+              '  pure $ locatedBetween start end (constructor name proposition)',
+              '',
+              'parseProviderImplementationAfterStart',
+              '  :: Located GrammarV1Token',
+              '  -> Parser (Located GrammarV1Declaration)',
+              'parseProviderImplementationAfterStart start = do',
+              '  _ <- expectKeyword "implementation"',
+              '  name <- expectIdentifier',
+              '  params <- parseOptionalGenericParams',
+              '  requirements <- parseOptionalGenericRequirements',
+              '  _ <- expectKeyword "satisfies"',
+              '  satisfiesType <- parseType',
+              '  _ <- expectSymbol "{"',
+              '  items <- parseProviderImplementationItems',
+              '  end <- expectSymbol "}"',
+              '  pure $ locatedBetween start end $',
+              '    GrammarV1ProviderImplementationDeclaration GrammarV1ProviderImplementationDecl',
+              '      { grammarV1ProviderImplementationName = name',
+              '      , grammarV1ProviderImplementationGenericParams = params',
+              '      , grammarV1ProviderImplementationRequirements = requirements',
+              '      , grammarV1ProviderImplementationSatisfies = satisfiesType',
+              '      , grammarV1ProviderImplementationItems = items',
+              '      }',
+              '',
+              'parseProviderImplementationItems :: Parser [Located GrammarV1ProviderImplementationItem]',
+              'parseProviderImplementationItems = do',
+              '  atEnd <- peekSymbol "}"',
+              '  if atEnd',
+              '    then pure []',
+              '    else do',
+              '      item <- parseProviderImplementationItem',
+              '      rest <- parseProviderImplementationItems',
+              '      pure (item : rest)',
+              '',
+              'parseProviderImplementationItem :: Parser (Located GrammarV1ProviderImplementationItem)',
+              'parseProviderImplementationItem = do',
+              '  token <- peekToken',
+              '  case fmap locatedValue token of',
+              '    Just (GrammarKeyword "operation") -> do',
+              '      start <- expectKeyword "operation"',
+              '      name <- expectIdentifier',
+              '      _ <- expectKeyword "satisfies"',
+              '      ty <- parseType',
+              '      body <- parseBlock',
+              '      pure $ Located',
+              '        (SourceSpan',
+              '          (sourceSpanStart (locatedSpan start))',
+              '          (sourceSpanEnd (locatedSpan body)))',
+              '        (GrammarV1ProviderImplementationOperation name ty body)',
+              '    Just (GrammarKeyword "law") -> parseProviderImplementationPropositionItem "law" GrammarV1ProviderImplementationLaw',
+              '    Just (GrammarKeyword "lifecycle") -> parseProviderImplementationPropositionItem "lifecycle" GrammarV1ProviderImplementationLifecycle',
+              '    Just other -> failParser $ "expected provider_implementation_item; found " <> renderToken other',
+              '    Nothing -> failParser "unterminated provider implementation declaration"',
+              '',
+              'parseProviderImplementationPropositionItem',
+              '  :: Text',
+              '  -> (Located Text -> Located GrammarV1Proposition -> GrammarV1ProviderImplementationItem)',
+              '  -> Parser (Located GrammarV1ProviderImplementationItem)',
+              'parseProviderImplementationPropositionItem keyword constructor = do',
+              '  start <- expectKeyword keyword',
+              '  name <- expectIdentifier',
+              '  _ <- expectSymbol "="',
+              '  proposition <- parseProposition',
+              '  end <- expectSymbol ";"',
+              '  pure $ locatedBetween start end (constructor name proposition)',
+              '',
+              'parseOpaqueProviderImplementationDeclaration :: Parser (Located GrammarV1Declaration)',
+              'parseOpaqueProviderImplementationDeclaration = do',
+              '  start <- expectKeyword "opaque"',
+              '  _ <- expectKeyword "provider"',
+              '  _ <- expectKeyword "implementation"',
+              '  name <- expectIdentifier',
+              '  params <- parseOptionalGenericParams',
+              '  requirements <- parseOptionalGenericRequirements',
+              '  _ <- expectKeyword "satisfies"',
+              '  satisfiesType <- parseType',
+              '  end <- expectSymbol ";"',
+              '  pure $ locatedBetween start end $',
+              '    GrammarV1OpaqueProviderImplementationDeclaration GrammarV1OpaqueProviderImplementationDecl',
+              '      { grammarV1OpaqueProviderImplementationName = name',
+              '      , grammarV1OpaqueProviderImplementationGenericParams = params',
+              '      , grammarV1OpaqueProviderImplementationRequirements = requirements',
+              '      , grammarV1OpaqueProviderImplementationSatisfies = satisfiesType',
+              '      }',
+              '')
+
+          text = text.replace(marker, provider_parser + marker, 1)
+          path.write_text(text)
+
+          structural = Path('test/Phase1GrammarV1StructuralParserMain.hs')
+          s = structural.read_text()
+          old = block(
+              '  GrammarV1FunctionDeclaration _ -> Nothing',
+              '  GrammarV1CapabilityDeclaration value -> Just (grammarV1CapabilityMode value)')
+          new = block(
+              '  GrammarV1FunctionDeclaration _ -> Nothing',
+              '  GrammarV1ProviderContractDeclaration _ -> Nothing',
+              '  GrammarV1ProviderImplementationDeclaration _ -> Nothing',
+              '  GrammarV1OpaqueProviderImplementationDeclaration _ -> Nothing',
+              '  GrammarV1CapabilityDeclaration value -> Just (grammarV1CapabilityMode value)')
+          if s.count(old) != 1:
+              raise SystemExit('structural declarationMode match count mismatch')
+          structural.write_text(s.replace(old, new, 1))
+          PY
+
+      - name: Commit provider parser slice
+        run: |
+          git config user.name github-actions[bot]
+          git config user.email 41898282+github-actions[bot]@users.noreply.github.com
+          git add src/Phil/Surface/GrammarV1/Parser.hs test/Phase1GrammarV1StructuralParserMain.hs
+          git commit -m "Extend SURF-002 provider declaration parser"
+          git push origin HEAD:${GITHUB_REF_NAME}
