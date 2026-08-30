@@ -4,7 +4,7 @@ This slice implements the MEM-001–006 storage/allocation realization boundary 
 
 ## Competence boundary
 
-`Phil.Systems.StorageRealization` keeps three concepts mechanically distinct:
+`Phil.Systems.Storage` carries the storage-realization relation alongside the already-packaged Systems storage boundary and keeps three concepts mechanically distinct:
 
 1. ordinary semantic value/resource creation;
 2. explicit semantic storage-resource ownership; and
