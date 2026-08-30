@@ -25,6 +25,12 @@ main = do
         tupleRecordPatternsPreserved
     , test "SURF-003 malformed tuple and record patterns reject at syntax"
         tupleRecordPatternsRejectMalformed
+    , test "SURF-002 term expression precedence and projection preserve structure"
+        termExpressionStructurePreserved
+    , test "SURF-002 fail and reject fallbacks preserve their distinct payloads"
+        termFallbacksPreserved
+    , test "SURF-003 malformed and chained fallbacks reject at syntax"
+        termFallbacksRejectMalformed
     ]
   if and results then pure () else exitFailure
 
@@ -209,6 +215,103 @@ tupleRecordPatternsRejectMalformed = do
   expectSourceReject "fn bad(input : Pair) satisfies Bad { let Pair[U32]{left} = input }"
   expectSourceReject "fn bad(input : Pair) satisfies Bad { let payload.Pair = input }"
 
+termExpressionStructurePreserved :: Either String ()
+termExpressionStructurePreserved = do
+  sourceFile <- mapLeft show $ parseGrammarV1StructuralSource "term-expression-structure" source
+  functionDecl <- onlyFunction sourceFile
+  case grammarV1BlockStatements (locatedValue (grammarV1FunctionBody functionDecl)) of
+    [Located _ (GrammarV1ReturnStatement (Located _ expression))] ->
+      case expression of
+        GrammarV1BinaryExpression
+          (Located _ (GrammarV1BinaryExpression projected (Located _ GrammarV1Add) multiplicative))
+          (Located _ GrammarV1Subtract)
+          four -> do
+            case locatedValue projected of
+              GrammarV1ProjectionExpression receiver field -> do
+                assertSimpleName "source" receiver
+                assert (locatedValue field == "field") "projection field was not field"
+              other -> Left ("expected postfix projection, got " <> show other)
+            case locatedValue multiplicative of
+              GrammarV1BinaryExpression two (Located _ GrammarV1Multiply) three -> do
+                assertInteger "2" two
+                assertInteger "3" three
+              other -> Left ("expected multiplication on additive RHS, got " <> show other)
+            assertInteger "4" four
+        other -> Left ("unexpected additive expression structure " <> show other)
+    statements -> Left ("expected one return statement, got " <> show statements)
+  where
+    source = "fn arithmetic() -> U32 satisfies Arithmetic { return source().field + 2 * 3 - 4 }"
+
+termFallbacksPreserved :: Either String ()
+termFallbacksPreserved = do
+  sourceFile <- mapLeft show $ parseGrammarV1StructuralSource "term-fallbacks" source
+  functionDecl <- onlyFunction sourceFile
+  case grammarV1BlockStatements (locatedValue (grammarV1FunctionBody functionDecl)) of
+    [ Located _ (GrammarV1LetStatement _ failed)
+      , Located _ (GrammarV1LetStatement _ rejected)
+      , Located _ (GrammarV1ReturnStatement fatal)
+      ] -> do
+        case locatedValue failed of
+          GrammarV1FallbackExpression base (Located _ (GrammarV1FailFallback target)) -> do
+            assertNameWithArity "compute" 1 base
+            assertFailureTarget "Problem" 1 target
+          other -> Left ("expected fail fallback, got " <> show other)
+        case locatedValue rejected of
+          GrammarV1FallbackExpression base (Located _ (GrammarV1RejectFallback fallbackValue)) -> do
+            assertSimpleName "x" base
+            case locatedValue fallbackValue of
+              GrammarV1BinaryExpression backup (Located _ GrammarV1Add) multiplicative -> do
+                assertNameWithArity "backup" 1 backup
+                case locatedValue multiplicative of
+                  GrammarV1BinaryExpression one (Located _ GrammarV1Multiply) two -> do
+                    assertInteger "1" one
+                    assertInteger "2" two
+                  other -> Left ("expected reject-fallback multiplication, got " <> show other)
+              other -> Left ("expected reject-fallback additive expression, got " <> show other)
+          other -> Left ("expected reject fallback, got " <> show other)
+        case locatedValue fatal of
+          GrammarV1FallbackExpression
+            (Located _ (GrammarV1RejectExpression operand))
+            (Located _ (GrammarV1FailFallback target)) -> do
+              assertSimpleName "x" operand
+              assertFailureTarget "Fatal" 0 target
+          other -> Left ("expected fallback outside standalone reject primary, got " <> show other)
+    statements -> Left ("expected two let statements and return, got " <> show statements)
+  where
+    source = Text.unlines
+      [ "fn fallbacks(x : U32) -> U32 satisfies Fallbacks {"
+      , "  let failed = compute(x) or fail Problem(x)"
+      , "  let rejected = x or reject backup(x) + 1 * 2"
+      , "  return reject x or fail Fatal"
+      , "}"
+      ]
+
+termFallbacksRejectMalformed :: Either String ()
+termFallbacksRejectMalformed = do
+  expectSourceReject "fn bad(x : U32) satisfies Bad { return x or reject x or reject x }"
+  expectSourceReject "fn bad(x : U32) satisfies Bad { return x or fail Problem + 1 }"
+  expectSourceReject "fn bad(x : U32) satisfies Bad { return x or fail (Problem) }"
+
+assertFailureTarget
+  :: Text.Text
+  -> Int
+  -> Located GrammarV1FailureTarget
+  -> Either String ()
+assertFailureTarget expectedName expectedArity (Located _ target) = do
+  assert
+    (grammarV1QualifiedNameParts
+      (grammarV1StaticReferenceName (grammarV1FailureTargetReference target)) == [expectedName])
+    ("unexpected failure target " <> show (grammarV1FailureTargetReference target))
+  assert
+    (length (grammarV1FailureTargetArguments target) == expectedArity)
+    ("unexpected failure-target arity " <> show (length (grammarV1FailureTargetArguments target)))
+
+assertInteger :: Text.Text -> Located GrammarV1Expression -> Either String ()
+assertInteger expected (Located _ expression) = case expression of
+  GrammarV1IntegerExpression actual ->
+    assert (actual == expected) ("expected integer " <> Text.unpack expected)
+  other -> Left ("expected integer expression, got " <> show other)
+
 assertIdentifierPattern :: Text.Text -> Located GrammarV1Pattern -> Either String ()
 assertIdentifierPattern expected (Located _ pattern') = case pattern' of
   GrammarV1IdentifierPattern name ->
@@ -228,6 +331,23 @@ onlyFunction sourceFile = case grammarV1TopLevelDecls sourceFile of
     GrammarV1FunctionDeclaration functionDecl -> Right functionDecl
     other -> Left ("expected function declaration, got " <> show other)
   declarations -> Left ("expected one function declaration, got " <> show (length declarations))
+
+assertNameWithArity
+  :: Text.Text
+  -> Int
+  -> Located GrammarV1Expression
+  -> Either String ()
+assertNameWithArity expected expectedArity (Located _ expression) = case expression of
+  GrammarV1NameExpression reference arguments -> do
+    assert
+      (grammarV1QualifiedNameParts (grammarV1StaticReferenceName reference) == [expected])
+      ("expected name " <> Text.unpack expected)
+    assert (null (grammarV1StaticReferenceArguments reference))
+      "unexpected static arguments on name expression"
+    assert
+      (length arguments == expectedArity)
+      ("unexpected term-argument arity " <> show (length arguments))
+  other -> Left ("expected name expression, got " <> show other)
 
 assertSimpleName :: Text.Text -> Located GrammarV1Expression -> Either String ()
 assertSimpleName expected (Located _ expression) = case expression of
