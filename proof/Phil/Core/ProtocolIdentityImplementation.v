@@ -55,26 +55,26 @@ Definition decideProtocolActionByFacts
   else ProtocolActionInstanceMismatchDecision.
 
 Record ProtocolContractPlan
-  (instance role session : Type) : Type :=
+  (instance roleKeyType session : Type) : Type :=
   mkProtocolContractPlan {
     plannedProtocolInstance : instance;
-    plannedProtocolRole : role;
+    plannedProtocolRole : roleKeyType;
     plannedProtocolSession : session
   }.
 
 Definition planProtocolContract
-  {instance role session : Type}
+  {instance roleKeyType session : Type}
   (instanceRevision : instance)
-  (roleKey : role)
+  (roleKey : roleKeyType)
   (localSession : session)
-  : ProtocolContractPlan instance role session :=
+  : ProtocolContractPlan instance roleKeyType session :=
   {| plannedProtocolInstance := instanceRevision;
      plannedProtocolRole := roleKey;
      plannedProtocolSession := localSession |}.
 
-Arguments plannedProtocolInstance {instance role session} _.
-Arguments plannedProtocolRole {instance role session} _.
-Arguments plannedProtocolSession {instance role session} _.
+Arguments plannedProtocolInstance {instance roleKeyType session} _.
+Arguments plannedProtocolRole {instance roleKeyType session} _.
+Arguments plannedProtocolSession {instance roleKeyType session} _.
 
 Theorem exact_contract_facts_accept :
   decideProtocolContractByFacts true true true = ProtocolContractAccepted.
@@ -145,9 +145,9 @@ Proof.
 Qed.
 
 Theorem protocol_contract_plan_is_exact :
-  forall instance role session
+  forall instance roleKeyType session
          (instanceRevision : instance)
-         (roleKey : role)
+         (roleKey : roleKeyType)
          (localSession : session),
     plannedProtocolInstance
       (planProtocolContract instanceRevision roleKey localSession) =
