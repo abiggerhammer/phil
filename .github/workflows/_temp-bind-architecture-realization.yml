@@ -1,0 +1,97 @@
+name: Temporary Architecture Realization Binding Patch
+
+on:
+  push:
+    branches: [bind-architecture-realization-closeout]
+    paths:
+      - '.github/workflows/_temp-bind-architecture-realization.yml'
+
+permissions:
+  contents: write
+
+jobs:
+  patch:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: bind-architecture-realization-closeout
+
+      - name: Apply reviewed architecture realization binding
+        shell: python
+        run: |
+          from pathlib import Path
+
+          static_path = Path('src/Phil/Core/Static.hs')
+          text = static_path.read_text()
+          old_import = 'import qualified ArchitectureInstantiationKernel as ArchitectureInstantiationKernel\nimport qualified ArchitectureRevisionConstructionKernel as ArchitectureRevisionConstructionKernel\n'
+          new_import = 'import qualified ArchitectureInstantiationKernel as ArchitectureInstantiationKernel\nimport qualified ArchitectureRealizationKernel as ArchitectureRealizationKernel\nimport qualified ArchitectureRevisionConstructionKernel as ArchitectureRevisionConstructionKernel\n'
+          assert text.count(old_import) == 1, 'unexpected architecture import block'
+          text = text.replace(old_import, new_import, 1)
+
+          old = '''deriveArchitectureRealizationIdentity
+            :: ArchitectureRealizationDescriptor
+            -> ArchitectureRealizationIdentity
+          deriveArchitectureRealizationIdentity descriptor = ArchitectureRealizationIdentity
+            { identityRealizationRevision = RealizationRevision
+                ("phil.realization.canonical.v1:"
+                  <> canonicalSemanticForm (SemanticRecord (Map.fromList
+                    [ ("instance_key", SemanticAtom
+                        (unInstanceKey (identityInstanceKey instanceIdentity)))
+                    , ("instance_revision", SemanticAtom
+                        (unInstanceRevision (identityInstanceRevision instanceIdentity)))
+                    , ("realization", realizationSemantics descriptor)
+                    ])))
+            }
+            where
+              instanceIdentity = realizationInstanceIdentity descriptor
+          '''
+          new = '''deriveArchitectureRealizationIdentity
+            :: ArchitectureRealizationDescriptor
+            -> ArchitectureRealizationIdentity
+          deriveArchitectureRealizationIdentity descriptor =
+            case ArchitectureRealizationKernel.planArchitectureRealization
+                (identityInstanceKey instanceIdentity)
+                (identityInstanceRevision instanceIdentity)
+                (realizationSemantics descriptor) of
+              ArchitectureRealizationKernel.MkArchitectureRealizationPlan
+                plannedInstanceKey
+                plannedInstanceRevision
+                plannedRealizationSemantics ->
+                  ArchitectureRealizationIdentity
+                    { identityRealizationRevision = RealizationRevision
+                        ("phil.realization.canonical.v1:"
+                          <> canonicalSemanticForm (SemanticRecord (Map.fromList
+                            [ ("instance_key", SemanticAtom
+                                (unInstanceKey plannedInstanceKey))
+                            , ("instance_revision", SemanticAtom
+                                (unInstanceRevision plannedInstanceRevision))
+                            , ("realization", plannedRealizationSemantics)
+                            ])))
+                    }
+            where
+              instanceIdentity = realizationInstanceIdentity descriptor
+          '''
+          assert text.count(old) == 1, 'unexpected realization derivation block'
+          text = text.replace(old, new, 1)
+          static_path.write_text(text)
+
+          cabal_path = Path('phil-core.cabal')
+          cabal = cabal_path.read_text()
+          old_modules = '      ArchitectureIdentityKernel\n      ArchitectureInstantiationKernel\n      ArchitectureRevisionConstructionKernel\n'
+          new_modules = '      ArchitectureIdentityKernel\n      ArchitectureInstantiationKernel\n      ArchitectureRealizationKernel\n      ArchitectureRevisionConstructionKernel\n'
+          assert cabal.count(old_modules) == 1, 'unexpected Cabal architecture module block'
+          cabal = cabal.replace(old_modules, new_modules, 1)
+          cabal_path.write_text(cabal)
+
+          Path('.github/workflows/_temp-bind-architecture-realization.yml').unlink()
+
+      - name: Commit reviewed binding
+        run: |
+          set -euo pipefail
+          git diff --check
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git add src/Phil/Core/Static.hs phil-core.cabal .github/workflows/_temp-bind-architecture-realization.yml
+          git commit -m 'Bind architecture realization construction to certified plan'
+          git push origin HEAD:bind-architecture-realization-closeout
