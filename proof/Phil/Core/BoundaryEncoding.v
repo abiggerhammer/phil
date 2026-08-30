@@ -78,19 +78,25 @@ Proof.
     requestedRepresentation expectedOwner actualOwner evidence Hresult.
   destruct admission.
   - simpl in Hresult.
-    destruct (Nat.eqb representation requestedRepresentation) eqn:Hrepresentation;
-      try discriminate.
-    destruct (Nat.eqb expectedOwner actualOwner) eqn:Howner;
-      try discriminate.
-    injection Hresult as Hevidence.
-    subst evidence.
-    pose proof
-      ((proj1 (Nat.eqb_eq representation requestedRepresentation)) Hrepresentation)
-      as Erepresentation.
-    pose proof
-      ((proj1 (Nat.eqb_eq expectedOwner actualOwner)) Howner)
-      as Eowner.
-    repeat split; try assumption; reflexivity.
+    destruct (Nat.eqb representation requestedRepresentation) eqn:Hrepresentation.
+    + rewrite Hrepresentation in Hresult.
+      simpl in Hresult.
+      destruct (Nat.eqb expectedOwner actualOwner) eqn:Howner.
+      * rewrite Howner in Hresult.
+        simpl in Hresult.
+        injection Hresult as Hevidence.
+        subst evidence.
+        pose proof
+          ((proj1 (Nat.eqb_eq representation requestedRepresentation)) Hrepresentation)
+          as Erepresentation.
+        pose proof
+          ((proj1 (Nat.eqb_eq expectedOwner actualOwner)) Howner)
+          as Eowner.
+        repeat split; try assumption; reflexivity.
+      * rewrite Howner in Hresult.
+        discriminate.
+    + rewrite Hrepresentation in Hresult.
+      discriminate.
   - simpl in Hresult.
     discriminate.
 Qed.
