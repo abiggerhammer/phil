@@ -65,3 +65,4 @@ decideCheckedEvidenceSubjectMappingByFacts observationMatches mappedSubjectMatch
 decideRuntimeCoincidenceSubjectMapping :: ProviderEvidenceMappingDecision
 decideRuntimeCoincidenceSubjectMapping =
   ProviderEvidenceRuntimeCoincidenceRejected
+
