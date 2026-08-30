@@ -5,6 +5,7 @@ module Phil.Core.EncodingCanonicality
   , checkEncodingCanonicality
   ) where
 
+import qualified BoundaryEncodingKernel as Kernel
 import Phil.Core.BoundaryMapping (BoundaryRepresentationId)
 import Phil.Core.QualifiedEncoding
   ( GeneratedEncodingEvidence
@@ -33,9 +34,21 @@ checkEncodingCanonicality
   -> GeneratedEncodingEvidence
   -> Either CanonicalityError GeneratedEncodingEvidence
 checkEncodingCanonicality requirement encodingForm evidence =
-  case (requirement, encodingForm) of
-    (CanonicalEncodingRequired, NonCanonicalLegalGrammarMember) ->
+  case Kernel.decideEncodingCanonicality
+    (toKernelRequirement requirement)
+    (toKernelForm encodingForm) of
+    Kernel.EncodingCanonicalityAccepted -> Right evidence
+    Kernel.NonCanonicalEncodingRejectedDecision ->
       Left (NonCanonicalEncodingRejected
         (generatedRepresentation evidence)
         (generatedOutputOwner evidence))
-    _ -> Right evidence
+
+
+toKernelRequirement :: EncodingCanonicality -> Kernel.EncodingCanonicality
+toKernelRequirement CanonicalityNotRequired = Kernel.CanonicalityNotRequired
+toKernelRequirement CanonicalEncodingRequired = Kernel.CanonicalEncodingRequired
+
+
+toKernelForm :: EncodingForm -> Kernel.EncodingForm
+toKernelForm CanonicalGrammarMember = Kernel.CanonicalGrammarMember
+toKernelForm NonCanonicalLegalGrammarMember = Kernel.NonCanonicalLegalGrammarMember
