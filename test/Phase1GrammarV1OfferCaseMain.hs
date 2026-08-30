@@ -23,6 +23,12 @@ main = do
         emptyOfferRejects
     , test "SURF-003 case tuple binders reject trailing comma"
         tupleBinderTrailingCommaRejects
+    , test "SURF-002 construct and borrow primaries preserve payloads"
+        constructBorrowPreserved
+    , test "SURF-002 match decide and break primaries preserve control structure"
+        matchDecideBreakPreserved
+    , test "SURF-003 control primaries reject malformed syntax"
+        controlPrimariesRejectMalformed
     ]
   if and results then pure () else exitFailure
 
@@ -177,6 +183,124 @@ recordCaseAndStatementArmPreserved = do
       , "  }"
       , "}"
       ]
+
+constructBorrowPreserved :: Either String ()
+constructBorrowPreserved = do
+  statements <- singleComponentStatements =<< mapLeft show
+    (parseGrammarV1StructuralSource "construct-borrow" source)
+  case statements of
+    [ Located _ (GrammarV1LetStatement _ constructed)
+      , Located _ (GrammarV1LetStatement _ borrowed)
+      , Located _ (GrammarV1ReturnStatement returned)
+      ] -> do
+        case locatedValue constructed of
+          GrammarV1ConstructExpression target [(leftName, leftValue), (rightName, rightValue)] -> do
+            assert
+              (grammarV1QualifiedNameParts
+                (grammarV1StaticReferenceName (locatedValue target)) == ["Pair"])
+              "construct target was not Pair"
+            assert (null (grammarV1StaticReferenceArguments (locatedValue target)))
+              "construct target unexpectedly had static arguments"
+            assert (locatedValue leftName == "left") "first construct field was not left"
+            assertSimpleName "x" leftValue
+            assert (locatedValue rightName == "right") "second construct field was not right"
+            assertSimpleName "y" rightValue
+          other -> Left ("expected two-field construct expression, got " <> show other)
+        case locatedValue borrowed of
+          GrammarV1BorrowExpression value binder body -> do
+            assertSimpleName "made" value
+            assert (locatedValue binder == "view") "borrow binder was not view"
+            case grammarV1BlockStatements (locatedValue body) of
+              [Located _ (GrammarV1ReturnStatement result)] -> assertSimpleName "view" result
+              other -> Left ("expected borrow body to return view, got " <> show other)
+          other -> Left ("expected borrow expression, got " <> show other)
+        assertSimpleName "borrowed" returned
+    other -> Left ("expected construct, borrow, return statements, got " <> show other)
+  where
+    source = Text.unlines
+      [ "component C(x : U32, y : U32) {"
+      , "  let made = construct Pair { left = x, right = y, }"
+      , "  let borrowed = borrow made as view { return view }"
+      , "  return borrowed"
+      , "}"
+      ]
+
+matchDecideBreakPreserved :: Either String ()
+matchDecideBreakPreserved = do
+  statements <- singleComponentStatements =<< mapLeft show
+    (parseGrammarV1StructuralSource "match-decide-break" source)
+  case statements of
+    [ Located _ (GrammarV1LetStatement _ matched)
+      , Located _ (GrammarV1LetStatement _ decided)
+      , Located _ (GrammarV1ExpressionStatement broken)
+      ] -> do
+        case locatedValue matched of
+          GrammarV1MatchExpression scrutinee (Just joinClause) [leftArm, rightArm] -> do
+            assertSimpleName "tagged" scrutinee
+            let joinValue = locatedValue joinClause
+            case grammarV1JoinState joinValue of
+              [Located _ slot] -> do
+                assert (locatedValue (grammarV1StateSlotName slot) == "saved")
+                  "match join slot was not saved"
+                assert (locatedValue (grammarV1StateSlotType slot) == GrammarV1UnsignedType "U32")
+                  "match join slot type was not U32"
+              other -> Left ("expected one match join state slot, got " <> show other)
+            assert
+              ((locatedValue <$> grammarV1JoinInvariant joinValue) == Just GrammarV1TrueProposition)
+              "match join invariant was not true"
+            assertArmName "Left" leftArm
+            assertTupleBinders ["value"] leftArm
+            assertBlockReturnName "value" leftArm
+            assertArmName "Right" rightArm
+          other -> Left ("expected joined match expression, got " <> show other)
+        case locatedValue decided of
+          GrammarV1DecideExpression
+            (Located _ (GrammarV1BinaryExpression left (Located _ GrammarV1Add) right))
+            [yesArm, noArm] -> do
+              assertSimpleName "x" left
+              assertSimpleName "y" right
+              assertArmName "Yes" yesArm
+              assertArmName "No" noArm
+          other -> Left ("expected additive decide expression, got " <> show other)
+        case locatedValue broken of
+          GrammarV1BreakExpression [first, second] -> do
+            assertSimpleName "x" first
+            assertSimpleName "y" second
+          other -> Left ("expected two-argument break expression, got " <> show other)
+    other -> Left ("expected match, decide, break statements, got " <> show other)
+  where
+    source = Text.unlines
+      [ "component C(tagged : Choice, x : U32, y : U32) {"
+      , "  let matched = match tagged join state (saved : U32) invariant true {"
+      , "    Left(value) => { return value }"
+      , "    Right => return x"
+      , "  }"
+      , "  let decided = decide x + y {"
+      , "    Yes => return x"
+      , "    No => return y"
+      , "  }"
+      , "  break(x, y)"
+      , "}"
+      ]
+
+controlPrimariesRejectMalformed :: Either String ()
+controlPrimariesRejectMalformed = do
+  expectReject "component C(x : U32) { construct Pair { field x } }"
+  expectReject "component C(x : U32) { borrow x view { return view } }"
+  expectReject "component C(x : T) { match x {} }"
+  expectReject "component C(x : U32) { decide x {} }"
+  expectReject "component C(x : U32) { break(x,) }"
+
+singleComponentStatements
+  :: GrammarV1SourceFile
+  -> Either String [Located GrammarV1Statement]
+singleComponentStatements sourceFile =
+  case grammarV1TopLevelDecls sourceFile of
+    [Located _ topLevel] -> case locatedValue (grammarV1Declaration topLevel) of
+      GrammarV1ComponentDeclaration componentDecl ->
+        Right (grammarV1BlockStatements (locatedValue (grammarV1ComponentBody componentDecl)))
+      other -> Left ("expected component declaration, got " <> show other)
+    declarations -> Left ("expected one top-level declaration, got " <> show (length declarations))
 
 emptyOfferRejects :: Either String ()
 emptyOfferRejects = expectReject "component C(x : T) { offer x {} }"
