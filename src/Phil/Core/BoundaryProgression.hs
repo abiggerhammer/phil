@@ -9,6 +9,7 @@ module Phil.Core.BoundaryProgression
   , commitQualifiedSend
   ) where
 
+import qualified BoundaryProgressionKernel as Kernel
 import Phil.Core.BoundaryMapping
   ( BoundaryRepresentationId
   , CorrespondenceEvidence
@@ -68,16 +69,20 @@ establishCompleteEmission
   :: GeneratedEncodingEvidence
   -> EmissionExtent
   -> Either BoundaryProgressionError CompleteEmissionEvidence
-establishCompleteEmission generated extent
-  | intendedEmissionBytes extent < 0 || emittedBytes extent < 0 =
+establishCompleteEmission generated extent =
+  case Kernel.decideEmissionDisposition (classifyEmissionExtent extent) of
+    Kernel.InvalidEmissionExtentDecision ->
       Left (InvalidEmissionExtent extent)
-  | emittedBytes extent < intendedEmissionBytes extent =
+    Kernel.PartialEmissionDecision ->
       Left (PartialTransportEmission extent)
-  | emittedBytes extent > intendedEmissionBytes extent =
+    Kernel.EmissionPastDeclaredFrameDecision ->
       Left (EmissionPastDeclaredFrame extent)
-  | otherwise = Right (CompleteEmissionEvidence
-      (generatedRepresentation generated)
-      (generatedOutputOwner generated))
+    Kernel.CompleteEmissionDecisionAccepted ->
+      case Kernel.planCompleteEmission
+        (generatedRepresentation generated)
+        (generatedOutputOwner generated) of
+        Kernel.MkCompleteEmissionPlan representation owner ->
+          Right (CompleteEmissionEvidence representation owner)
 
 commitMappedReceive
   :: Name
@@ -86,13 +91,22 @@ commitMappedReceive
   -> CorrespondenceEvidence
   -> ResourceContext
   -> Either BoundaryProgressionError CommitReceiveStep
-commitMappedReceive pending successor parsed correspondence context
-  | parsedGrammarId parsed /= correspondenceGrammar correspondence =
+commitMappedReceive pending successor parsed correspondence context =
+  case Kernel.decideReceiveProgressionByFacts
+    (parsedGrammarId parsed == correspondenceGrammar correspondence)
+    (parsedValueName parsed == correspondenceGrammarValue correspondence)
+    underlyingAccepted of
+    Kernel.ReceiveMappingGrammarMismatchDecision ->
       Left ReceiveMappingGrammarMismatch
-  | parsedValueName parsed /= correspondenceGrammarValue correspondence =
+    Kernel.ReceiveMappingValueMismatchDecision ->
       Left ReceiveMappingValueMismatch
-  | otherwise = mapLeft UnderlyingReceiveProgressionError
-      (commitReceive pending successor parsed context)
+    Kernel.UnderlyingReceiveRejectedDecision ->
+      mapLeft UnderlyingReceiveProgressionError underlying
+    Kernel.ReceiveProgressionDecisionAccepted ->
+      mapLeft UnderlyingReceiveProgressionError underlying
+  where
+    underlying = commitReceive pending successor parsed context
+    underlyingAccepted = either (const False) (const True) underlying
 
 commitQualifiedSend
   :: Name
@@ -101,17 +115,36 @@ commitQualifiedSend
   -> CompleteEmissionEvidence
   -> ResourceContext
   -> Either BoundaryProgressionError SessionStep
-commitQualifiedSend endpoint successor generated emission context
-  | generatedRepresentation generated /= completeEmissionRepresentation emission =
+commitQualifiedSend endpoint successor generated emission context =
+  case Kernel.decideSendProgressionByFacts
+    (generatedRepresentation generated == completeEmissionRepresentation emission)
+    (generatedOutputOwner generated == completeEmissionOwner emission)
+    underlyingAccepted of
+    Kernel.SendEmissionRepresentationMismatchDecision ->
       Left (SendEmissionRepresentationMismatch
         (generatedRepresentation generated)
         (completeEmissionRepresentation emission))
-  | generatedOutputOwner generated /= completeEmissionOwner emission =
+    Kernel.SendEmissionOwnerMismatchDecision ->
       Left (SendEmissionOwnerMismatch
         (generatedOutputOwner generated)
         (completeEmissionOwner emission))
-  | otherwise = mapLeft UnderlyingSendProgressionError
-      (sendEndpoint endpoint successor context)
+    Kernel.UnderlyingSendRejectedDecision ->
+      mapLeft UnderlyingSendProgressionError underlying
+    Kernel.SendProgressionDecisionAccepted ->
+      mapLeft UnderlyingSendProgressionError underlying
+  where
+    underlying = sendEndpoint endpoint successor context
+    underlyingAccepted = either (const False) (const True) underlying
+
+classifyEmissionExtent :: EmissionExtent -> Kernel.EmissionDisposition
+classifyEmissionExtent extent
+  | intendedEmissionBytes extent < 0 || emittedBytes extent < 0 =
+      Kernel.InvalidEmissionExtent
+  | emittedBytes extent < intendedEmissionBytes extent =
+      Kernel.PartialEmission
+  | emittedBytes extent > intendedEmissionBytes extent =
+      Kernel.EmissionPastDeclaredFrame
+  | otherwise = Kernel.CompleteEmission
 
 mapLeft :: (a -> b) -> Either a c -> Either b c
 mapLeft f = either (Left . f) Right
