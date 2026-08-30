@@ -82,7 +82,8 @@ Proof.
       try discriminate.
     destruct (Nat.eqb expectedOwner actualOwner) eqn:Howner;
       try discriminate.
-    inversion Hresult; clear Hresult.
+    injection Hresult as Hevidence.
+    subst evidence.
     pose proof
       ((proj1 (Nat.eqb_eq representation requestedRepresentation)) Hrepresentation)
       as Erepresentation.
