@@ -1,0 +1,41 @@
+name: SURF architecture entry/authority bootstrap
+
+on:
+  push:
+    branches:
+      - phase1-surf-002-architecture-entry-authority-parser-bootstrap
+    paths:
+      - .github/patches/surf-architecture-entry-authority.patch
+      - .github/workflows/surf-architecture-entry-authority-bootstrap.yml
+
+permissions:
+  contents: write
+
+jobs:
+  patch:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check out bootstrap branch
+        uses: actions/checkout@v4
+        with:
+          ref: phase1-surf-002-architecture-entry-authority-parser-bootstrap
+          fetch-depth: 0
+
+      - name: Preserve parser patch
+        run: cp .github/patches/surf-architecture-entry-authority.patch /tmp/surf-entry-authority.patch
+
+      - name: Check out target branch
+        run: git checkout phase1-surf-002-architecture-entry-authority-parser
+
+      - name: Apply architecture entry/authority patch
+        run: |
+          git apply --recount /tmp/surf-entry-authority.patch
+          git diff --check
+
+      - name: Commit architecture entry/authority parser slice
+        run: |
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git add src/Phil/Surface/GrammarV1/Parser.hs test/Phase1GrammarV1StaticProcessNetworkMain.hs
+          git commit -m 'Complete SURF-002 architecture entry and authority items'
+          git push origin HEAD:phase1-surf-002-architecture-entry-authority-parser
