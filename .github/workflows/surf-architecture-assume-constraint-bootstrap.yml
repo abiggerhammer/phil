@@ -1,0 +1,38 @@
+name: SURF architecture assume/constraint bootstrap
+
+on:
+  push:
+    branches:
+      - phase1-surf-002-architecture-assume-constraint-parser-bootstrap
+
+permissions:
+  contents: write
+
+jobs:
+  patch:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check out bootstrap branch
+        uses: actions/checkout@v4
+
+      - name: Preserve parser transform
+        run: cp scripts/apply_surf_architecture_assume_constraint.py /tmp/apply_surf_architecture_assume_constraint.py
+
+      - name: Check out target branch
+        uses: actions/checkout@v4
+        with:
+          ref: phase1-surf-002-architecture-assume-constraint-parser
+          fetch-depth: 0
+
+      - name: Apply architecture assume/constraint parser transform
+        run: |
+          python3 /tmp/apply_surf_architecture_assume_constraint.py
+          git diff --check
+
+      - name: Commit architecture assume/constraint parser slice
+        run: |
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git add src/Phil/Surface/GrammarV1/Parser.hs
+          git commit -m 'Complete SURF-002 architecture assume and constraint items'
+          git push origin HEAD:phase1-surf-002-architecture-assume-constraint-parser
