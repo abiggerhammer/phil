@@ -1,13 +1,16 @@
-name: Phase 1 Architecture Import Proofs
+name: Phase 1 Architecture Import Production Binding
 
 on:
   pull_request:
     paths:
+      - 'src/ArchitectureImportKernel.hs'
       - 'src/Phil/Surface/Check.hs'
       - 'src/Phil/Core/Static.hs'
+      - 'phil-core.cabal'
       - 'test/Phase1ImportNoninterferenceMain.hs'
       - 'docs/phase-1/import-noninterference-v1.md'
       - 'docs/phase-1/architecture-import-implementation-refinement-v1.md'
+      - 'docs/phase-1/architecture-import-production-binding-v1.md'
       - 'proof/Phil/Surface/ImportNoninterference.v'
       - 'proof/Phil/Surface/ImportNoninterferenceImplementation.v'
       - 'proof/Phil/Surface/ImportNoninterferenceImplementationExtraction.v'
@@ -17,11 +20,14 @@ on:
   push:
     branches: [main]
     paths:
+      - 'src/ArchitectureImportKernel.hs'
       - 'src/Phil/Surface/Check.hs'
       - 'src/Phil/Core/Static.hs'
+      - 'phil-core.cabal'
       - 'test/Phase1ImportNoninterferenceMain.hs'
       - 'docs/phase-1/import-noninterference-v1.md'
       - 'docs/phase-1/architecture-import-implementation-refinement-v1.md'
+      - 'docs/phase-1/architecture-import-production-binding-v1.md'
       - 'proof/Phil/Surface/ImportNoninterference.v'
       - 'proof/Phil/Surface/ImportNoninterferenceImplementation.v'
       - 'proof/Phil/Surface/ImportNoninterferenceImplementationExtraction.v'
@@ -41,7 +47,7 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
-      - name: Check PHIL-ARCH-IMPORT-001 and implementation correspondence in Rocq
+      - name: Check PHIL-ARCH-IMPORT-001 production kernel in Rocq
         shell: bash
         run: |
           set -euo pipefail
@@ -54,6 +60,10 @@ jobs:
           test -s ArchitectureImportKernel.hs
           grep -q 'decideImportResolutionByFacts' ArchitectureImportKernel.hs
           grep -q 'planImportedBinding' ArchitectureImportKernel.hs
+          cmp ArchitectureImportKernel.hs src/ArchitectureImportKernel.hs
+          KERNEL_SHA="$(sha256sum ArchitectureImportKernel.hs | cut -d' ' -f1)"
+          echo "kernel_sha256=${KERNEL_SHA}"
+          test "${KERNEL_SHA}" = "91f52bfe9c8990674bbae9324a81a93152cee6ab0907c23d3f9e2a3318b40085"
           mkdir -p phase1-arch-import-proof
           cp \
             proof/Phil/Surface/ImportNoninterference.v \
@@ -73,7 +83,7 @@ jobs:
 
       - uses: actions/upload-artifact@v4
         with:
-          name: rocq-phase1-architecture-import-proof
+          name: rocq-phase1-architecture-import-production-binding
           path: phase1-arch-import-proof
           if-no-files-found: error
 
@@ -88,33 +98,42 @@ jobs:
           ghc-version: '9.6.7'
           cabal-version: 'latest'
 
+      - name: Build ordinary regression substrate
+        run: cabal build all --enable-tests
+
       - name: Build proof certifier with warnings as errors
         run: cabal build exe:phil-certify-core-scalar --ghc-options=-Werror
 
       - uses: actions/download-artifact@v4
         with:
-          name: rocq-phase1-architecture-import-proof
+          name: rocq-phase1-architecture-import-production-binding
           path: phase1-arch-import-proof
 
-      - name: Typecheck and execute extracted architecture-import controls
+      - name: Verify exact extracted production kernel
         run: |
           set -euo pipefail
-          ghc -Wall -Werror -fno-code phase1-arch-import-proof/ArchitectureImportKernel.hs
+          cmp phase1-arch-import-proof/ArchitectureImportKernel.hs src/ArchitectureImportKernel.hs
+          ghc -Wall -Werror -fno-code src/ArchitectureImportKernel.hs
+          cabal exec -- ghc -isrc -Wall -Werror -fno-code src/Phil/Surface/Check.hs
+
+      - name: Execute extracted architecture-import controls against production kernel
+        run: |
+          set -euo pipefail
           ghc -Wall -Werror \
-            -iphase1-arch-import-proof \
+            -isrc \
             app/ArchitectureImportDecisionCorrespondenceMain.hs \
             -o architecture-import-kernel-controls
           ./architecture-import-kernel-controls
 
-      - name: Re-run exact ARCH-001 implementation correspondence cases
+      - name: Re-run unchanged ARCH-001 implementation correspondence cases
         run: cabal exec -- runghc -Wall -Werror -isrc test/Phase1ImportNoninterferenceMain.hs
 
-      - name: Emit PHIL-ARCH-IMPORT-001 proof certificate and staging identities
+      - name: Emit PHIL-ARCH-IMPORT-001 proof certificate and production-binding identities
         shell: bash
         run: |
           set -euo pipefail
           mkdir -p phase1-architecture-import-certification
-          mkdir -p architecture-import-implementation-correspondence
+          mkdir -p architecture-import-production-binding
           CERTIFIER="$(cabal list-bin exe:phil-certify-core-scalar)"
           "$CERTIFIER" \
             phase1-arch-import \
@@ -132,16 +151,18 @@ jobs:
             > phase1-architecture-import-certification/PHIL-ARCH-IMPORT-001.correspondence.sha256
 
           sha256sum \
-            phase1-arch-import-proof/ArchitectureImportKernel.hs \
+            src/ArchitectureImportKernel.hs \
             src/Phil/Surface/Check.hs \
+            phil-core.cabal \
             test/Phase1ImportNoninterferenceMain.hs \
             app/ArchitectureImportDecisionCorrespondenceMain.hs \
             proof/Phil/Surface/ImportNoninterferenceImplementation.v \
             docs/phase-1/architecture-import-implementation-refinement-v1.md \
-            > architecture-import-implementation-correspondence/PHIL-ARCH-IMPORT-001.staging.sha256
+            docs/phase-1/architecture-import-production-binding-v1.md \
+            > architecture-import-production-binding/PHIL-ARCH-IMPORT-001.production-binding.sha256
 
           cat phase1-architecture-import-certification/PHIL-ARCH-IMPORT-001.rocq.cert
-          sha256sum phase1-architecture-import-certification/PHIL-ARCH-IMPORT-001.rocq.cert
+          cat architecture-import-production-binding/PHIL-ARCH-IMPORT-001.production-binding.sha256
 
       - uses: actions/upload-artifact@v4
         with:
@@ -151,6 +172,6 @@ jobs:
 
       - uses: actions/upload-artifact@v4
         with:
-          name: architecture-import-implementation-correspondence
-          path: architecture-import-implementation-correspondence
+          name: architecture-import-production-binding
+          path: architecture-import-production-binding
           if-no-files-found: error
