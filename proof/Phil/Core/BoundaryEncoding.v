@@ -75,26 +75,23 @@ Theorem successful_generated_encoding_is_exact :
     generatedOutputOwner evidence = actualOwner.
 Proof.
   intros [implementation representation admission]
-    requestedRepresentation expectedOwner actualOwner evidence Hresult.
+    requestedRepresentation expectedOwner actualOwner
+    [evidenceImplementation evidenceRepresentation evidenceOwner] Hresult.
   destruct admission.
   - simpl in Hresult.
-    destruct (Nat.eqb representation requestedRepresentation) eqn:Hrepresentation.
-    + simpl in Hresult.
-      destruct (Nat.eqb expectedOwner actualOwner) eqn:Howner.
-      * simpl in Hresult.
-        injection Hresult as Hevidence.
-        subst evidence.
-        pose proof
-          ((proj1 (Nat.eqb_eq representation requestedRepresentation)) Hrepresentation)
-          as Erepresentation.
-        pose proof
-          ((proj1 (Nat.eqb_eq expectedOwner actualOwner)) Howner)
-          as Eowner.
-        repeat split; try assumption; reflexivity.
-      * simpl in Hresult.
-        discriminate.
-    + simpl in Hresult.
-      discriminate.
+    destruct (Nat.eqb representation requestedRepresentation) eqn:Hrepresentation;
+      try discriminate.
+    destruct (Nat.eqb expectedOwner actualOwner) eqn:Howner;
+      try discriminate.
+    simpl in Hresult.
+    inversion Hresult; subst; clear Hresult.
+    pose proof
+      ((proj1 (Nat.eqb_eq representation requestedRepresentation)) Hrepresentation)
+      as Erepresentation.
+    pose proof
+      ((proj1 (Nat.eqb_eq expectedOwner actualOwner)) Howner)
+      as Eowner.
+    repeat split; try assumption; reflexivity.
   - simpl in Hresult.
     discriminate.
 Qed.
