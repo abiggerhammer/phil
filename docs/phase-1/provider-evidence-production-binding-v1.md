@@ -8,7 +8,7 @@ This closeout binds the production `PHIL-PROV-EVIDENCE-001` checker to the exact
 
 `5569956812f2c6a81e5b15f08fbc8fe92bd331f0e11efd378401b46fa7126997`
 
-The production library registers that exact module as a home module. The dedicated workflow fresh-extracts it from `ProviderEvidenceQualificationImplementationExtraction.v` and byte-compares the result before compiling production.
+The production checker imports that exact module directly. No package-policy change is needed for this semantic binding: `phil-core.cabal` remains byte-identical, while the dedicated workflow strict-builds the ordinary production component and records the unchanged manifest hash alongside the bound sources. The workflow fresh-extracts the kernel from `ProviderEvidenceQualificationImplementationExtraction.v` and byte-compares the result before compiling production.
 
 ## Production-owned reflected facts
 
@@ -50,7 +50,7 @@ This closeout does not prove proposition truth, SHA-256 correctness, truth of ex
 
 ## Exact-head verification
 
-The existing registered `Phase 1 Provider Evidence Proofs` workflow is used as the production-binding verifier. It:
+The existing registered workflow path now runs as `Phase 1 Provider Evidence Production Binding`. It:
 
 1. rebuilds the Certified provider-evidence proof and implementation correspondence;
 2. fresh-extracts the kernel and byte-compares it with `src/ProviderEvidenceQualificationKernel.hs`;
@@ -59,6 +59,6 @@ The existing registered `Phase 1 Provider Evidence Proofs` workflow is used as t
 5. strict-builds the ordinary production library/certifier path;
 6. reruns all 14 direct extracted-kernel controls unchanged;
 7. reruns the unchanged provider-semantic, PROV-010, and Steve provider corpora; and
-8. records exact kernel, production checker, Cabal, harness, corpus, and documentation hashes in a closeout artifact.
+8. records exact kernel, production checker, unchanged Cabal manifest, harness, corpus, and documentation hashes in a closeout artifact.
 
 `cabal check` is deliberately outside this correspondence workflow because package-publication metadata is unrelated to this semantic obligation.
