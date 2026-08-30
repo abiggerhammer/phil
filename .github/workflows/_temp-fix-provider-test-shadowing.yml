@@ -1,0 +1,59 @@
+name: Temporary Provider Test Shadowing Fix
+
+on:
+  push:
+    branches:
+      - bind-provider-evidence-closeout
+    paths:
+      - '.github/workflows/_temp-fix-provider-test-shadowing.yml'
+
+permissions:
+  contents: write
+
+jobs:
+  patch:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: bind-provider-evidence-closeout
+          fetch-depth: 0
+      - name: Rename only the four shadowing fixture bindings
+        shell: python
+        run: |
+          from pathlib import Path
+          import re
+
+          path = Path('test/Phase1ProviderQualificationMain.hs')
+          text = path.read_text()
+          functions = [
+              ('strongerAuthorityRejects', 'narrowerImplementationAccepts', 3),
+              ('narrowerImplementationAccepts', 'widerEffectRejects', 4),
+              ('widerEffectRejects', 'fatalOutcomeRejects', 3),
+              ('fatalOutcomeRejects', 'missingOutcomeMappingRejects', 3),
+          ]
+          for current, following, expected in functions:
+              start = text.index(current + ' ::')
+              end = text.index('\n' + following + ' ::', start)
+              segment = text[start:end]
+              count = len(re.findall(r'\bsurface\b', segment))
+              assert count == expected, (current, count, expected)
+              segment = re.sub(r'\bsurface\b', 'readSurface', segment)
+              text = text[:start] + segment + text[end:]
+          path.write_text(text)
+      - name: Verify patch surface
+        run: |
+          set -euo pipefail
+          test "$(grep -c '^      surface = providerImplementationCallable readImpl$' test/Phase1ProviderQualificationMain.hs || true)" = 0
+          test "$(grep -c '^      readSurface = providerImplementationCallable readImpl$' test/Phase1ProviderQualificationMain.hs)" = 4
+          git diff --check
+          git diff -- test/Phase1ProviderQualificationMain.hs
+      - name: Commit fix and remove helper
+        run: |
+          set -euo pipefail
+          git config user.name 'Meredith L. Patterson'
+          git config user.email 'clonearmy@gmail.com'
+          git rm .github/workflows/_temp-fix-provider-test-shadowing.yml
+          git add test/Phase1ProviderQualificationMain.hs
+          git commit -m 'Fix provider qualification test shadowing'
+          git push origin HEAD:bind-provider-evidence-closeout
