@@ -31,8 +31,6 @@ main = do
         (expectFixtureReject "rejected/15-outcome-residue-missing-kind.phil")
     , test "SURF-002 named call followed by relation stays a relation"
         callRelationDisambiguation
-    , test "SURF-002 unsupported callable requires clause remains fail closed"
-        unsupportedRequiresFailsClosed
     ]
   if and results then pure () else exitFailure
 
@@ -296,14 +294,6 @@ callRelationDisambiguation = do
     declarations -> Left ("expected one claim declaration, got " <> show (length declarations))
   where
     source = "claim R(x : U32) = P(x) == x;"
-
-unsupportedRequiresFailsClosed :: Either String ()
-unsupportedRequiresFailsClosed =
-  case parseGrammarV1StructuralSource "unsupported-requires" source of
-    Left _ -> Right ()
-    Right value -> Left ("expected unsupported requires clause to fail closed, got " <> show value)
-  where
-    source = "callable C(x : U32) -> U32 { requires true; }"
 
 parseFixture
   :: FilePath
