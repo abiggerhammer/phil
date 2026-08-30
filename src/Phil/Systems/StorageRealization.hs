@@ -218,9 +218,7 @@ data StorageCostLineage = StorageCostLineage
   }
   deriving (Eq, Ord, Show)
 
-newtype CheckedStorageCostLineage = CheckedStorageCostLineage
-  { unCheckedStorageCostLineage :: StorageCostLineage
-  }
+newtype CheckedStorageCostLineage = CheckedStorageCostLineage StorageCostLineage
   deriving (Eq, Ord, Show)
 
 data StorageRealizationError
@@ -249,9 +247,8 @@ checkStorageRealization
   :: StorageRealizationRelation
   -> Either StorageRealizationError CheckedStorageRealization
 checkStorageRealization relation = do
-  subject <- case storageRelationSubject relation of
-    ExactStorageSemanticSubject exactSubject ->
-      validateSubject exactSubject >> Right exactSubject
+  case storageRelationSubject relation of
+    ExactStorageSemanticSubject exactSubject -> validateSubject exactSubject
     PhysicalStorageCoincidence object ->
       Left (StoragePhysicalCoincidenceIsNotSemanticIdentity object)
   validateText "source semantic revision"
@@ -266,7 +263,6 @@ checkStorageRealization relation = do
   validateFailureDisposition
     (storageRelationSourceFailureSurface relation)
     (storageRelationAllocationFailure relation)
-  let _ = subject
   Right (CheckedStorageRealization relation)
 
 checkedStorageSemanticIdentity :: CheckedStorageRealization -> StorageSemanticIdentity
