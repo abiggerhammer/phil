@@ -19,6 +19,10 @@ main = do
         architectureRefBindPreserved
     , test "SURF-003 architecture ref and bind reject static arguments"
         architectureRefBindRejectStaticArguments
+    , test "SURF-002 architecture boundary and observable preserve qualified names"
+        architectureBoundaryObservablePreserved
+    , test "SURF-003 architecture boundary and observable reject static arguments"
+        architectureBoundaryObservableRejectStaticArguments
     , test "SURF-002 unimplemented architecture items remain fail closed"
         (expectReject unimplementedArchitectureItem)
     , test "SURF-002 unimplemented program blocks remain fail closed"
@@ -105,6 +109,46 @@ architectureRefBindRejectStaticArguments :: Either String ()
 architectureRefBindRejectStaticArguments = do
   expectReject "architecture A { ref service = Cluster[U32]; } program main = instantiate A;"
   expectReject "architecture A { bind client[U32] = server.port; } program main = instantiate A;"
+
+architectureBoundaryObservablePreserved :: Either String ()
+architectureBoundaryObservablePreserved = do
+  sourceFile <- mapLeft show $ parseGrammarV1StructuralSource "architecture-boundary-observable" source
+  case grammarV1TopLevelDecls sourceFile of
+    [Located _ architectureTop, Located _ programTop] -> do
+      case locatedValue (grammarV1Declaration architectureTop) of
+        GrammarV1ArchitectureDeclaration architectureDecl ->
+          case grammarV1ArchitectureItems architectureDecl of
+            [ Located _ (GrammarV1ArchitectureBoundary boundarySource boundaryTarget)
+              , Located _ (GrammarV1ArchitectureObservable observableTarget)
+              ] -> do
+                assert (qualifiedNameParts boundarySource == ["edge", "ingress"])
+                  "architecture boundary source was not edge.ingress"
+                assert (qualifiedNameParts boundaryTarget == ["codec", "inbound"])
+                  "architecture boundary target was not codec.inbound"
+                assert (qualifiedNameParts observableTarget == ["metrics", "bytes"])
+                  "architecture observable target was not metrics.bytes"
+            other -> Left ("unexpected boundary/observable architecture items " <> show other)
+        other -> Left ("expected architecture declaration first, got " <> show other)
+      case locatedValue (grammarV1Declaration programTop) of
+        GrammarV1ProgramDeclaration programDecl ->
+          assert (staticReferenceNamed "Wiring" (grammarV1ProgramTarget programDecl))
+            "program target was not Wiring"
+        other -> Left ("expected program declaration second, got " <> show other)
+    declarations -> Left ("expected architecture and program; got " <> show (length declarations))
+  where
+    source = Text.unlines
+      [ "architecture Wiring {"
+      , "  boundary edge.ingress = codec.inbound;"
+      , "  observable metrics.bytes;"
+      , "}"
+      , "program main = instantiate Wiring;"
+      ]
+
+architectureBoundaryObservableRejectStaticArguments :: Either String ()
+architectureBoundaryObservableRejectStaticArguments = do
+  expectReject "architecture A { boundary edge[U32] = codec.inbound; } program main = instantiate A;"
+  expectReject "architecture A { boundary edge.ingress = codec[U32]; } program main = instantiate A;"
+  expectReject "architecture A { observable metrics[U32]; } program main = instantiate A;"
 
 expectArchitectureItems
   :: [Located GrammarV1ArchitectureItem]
