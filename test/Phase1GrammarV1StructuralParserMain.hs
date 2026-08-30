@@ -166,6 +166,8 @@ expectOrdinaryBinding = do
 identifierPatternNamed :: Text.Text -> Located GrammarV1Pattern -> Bool
 identifierPatternNamed expected (Located _ pattern') = case pattern' of
   GrammarV1IdentifierPattern name -> locatedValue name == expected
+  GrammarV1TuplePattern _ -> False
+  GrammarV1RecordPattern _ _ -> False
 
 nameExpressionNamed :: Text.Text -> Located GrammarV1Expression -> Bool
 nameExpressionNamed expected (Located _ expression) = case expression of
