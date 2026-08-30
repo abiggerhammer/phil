@@ -1,0 +1,92 @@
+name: Phase 1 Systems Subject Authority Proofs
+
+on:
+  pull_request:
+    paths:
+      - 'proof/Phil/Core/SystemsSubjectAuthority.v'
+      - 'docs/phase-1/systems-subject-authority-proof-v1.md'
+      - '.github/workflows/phase1-systems-subject-authority-proofs.yml'
+      - 'src/Phil/Systems/SubjectCorrespondence.hs'
+      - 'src/Phil/Systems/ProviderCallCorrespondence.hs'
+      - 'src/Phil/Systems/AuthorityEffectCorrespondence.hs'
+      - 'test/Phase1SubjectCorrespondenceMain.hs'
+      - 'test/Phase1ProviderCallCorrespondenceMain.hs'
+      - 'test/Phase1AuthorityEffectCorrespondenceMain.hs'
+  push:
+    branches: [main]
+    paths:
+      - 'proof/Phil/Core/SystemsSubjectAuthority.v'
+      - 'docs/phase-1/systems-subject-authority-proof-v1.md'
+      - '.github/workflows/phase1-systems-subject-authority-proofs.yml'
+      - 'src/Phil/Systems/SubjectCorrespondence.hs'
+      - 'src/Phil/Systems/ProviderCallCorrespondence.hs'
+      - 'src/Phil/Systems/AuthorityEffectCorrespondence.hs'
+      - 'test/Phase1SubjectCorrespondenceMain.hs'
+      - 'test/Phase1ProviderCallCorrespondenceMain.hs'
+      - 'test/Phase1AuthorityEffectCorrespondenceMain.hs'
+
+permissions:
+  contents: read
+
+jobs:
+  rocq-systems-subject-authority-proof:
+    runs-on: ubuntu-latest
+    container:
+      image: rocq/rocq-prover:9.2.0
+      options: --user root
+    steps:
+      - uses: actions/checkout@v4
+      - name: Compile PHIL-SYS-SUBJECT-AUTH-001 proof
+        shell: bash
+        run: |
+          set -euo pipefail
+          export PATH="/home/rocq/.opam/${COMPILER}/bin:$PATH"
+          rocq c -Q proof/Phil Phil proof/Phil/Core/SystemsSubjectAuthority.v
+      - name: Record proof identities
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p systems-subject-authority-proof
+          cp proof/Phil/Core/SystemsSubjectAuthority.v proof/Phil/Core/SystemsSubjectAuthority.vo systems-subject-authority-proof/
+          sha256sum \
+            proof/Phil/Core/SystemsSubjectAuthority.v \
+            proof/Phil/Core/SystemsSubjectAuthority.vo \
+            > systems-subject-authority-proof/PHIL-SYS-SUBJECT-AUTH-001.proof.sha256
+          {
+            echo 'obligation=PHIL-SYS-SUBJECT-AUTH-001'
+            echo 'evidence=Rocq-9.2.0'
+            cat systems-subject-authority-proof/PHIL-SYS-SUBJECT-AUTH-001.proof.sha256
+          } > systems-subject-authority-proof/PHIL-SYS-SUBJECT-AUTH-001.proof-certificate.txt
+          cat systems-subject-authority-proof/PHIL-SYS-SUBJECT-AUTH-001.proof-certificate.txt
+      - uses: actions/upload-artifact@v4
+        with:
+          name: rocq-systems-subject-authority-proof
+          path: systems-subject-authority-proof
+          if-no-files-found: error
+
+  verify-systems-subject-authority-correspondence:
+    needs: rocq-systems-subject-authority-proof
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: haskell-actions/setup@v2
+        with:
+          ghc-version: '9.6.7'
+          cabal-version: 'latest'
+      - name: Build ordinary regression substrate
+        run: cabal build all --enable-tests
+      - name: Typecheck unchanged SYS-004--006 production chain and corpus
+        run: |
+          set -euo pipefail
+          cabal exec -- ghc -isrc -Wall -Werror -fno-code src/Phil/Systems/SubjectCorrespondence.hs
+          cabal exec -- ghc -isrc -Wall -Werror -fno-code src/Phil/Systems/ProviderCallCorrespondence.hs
+          cabal exec -- ghc -isrc -Wall -Werror -fno-code src/Phil/Systems/AuthorityEffectCorrespondence.hs
+          cabal exec -- ghc -isrc -Wall -Werror -fno-code test/Phase1SubjectCorrespondenceMain.hs
+          cabal exec -- ghc -isrc -Wall -Werror -fno-code test/Phase1ProviderCallCorrespondenceMain.hs
+          cabal exec -- ghc -isrc -Wall -Werror -fno-code test/Phase1AuthorityEffectCorrespondenceMain.hs
+      - name: Re-run 31-case SYS-004--006 corpus
+        run: |
+          set -euo pipefail
+          cabal exec -- runghc -Wall -Werror -isrc test/Phase1SubjectCorrespondenceMain.hs
+          cabal exec -- runghc -Wall -Werror -isrc test/Phase1ProviderCallCorrespondenceMain.hs
+          cabal exec -- runghc -Wall -Werror -isrc test/Phase1AuthorityEffectCorrespondenceMain.hs
