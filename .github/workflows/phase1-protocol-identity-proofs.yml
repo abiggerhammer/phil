@@ -1,4 +1,4 @@
-name: Phase 1 Protocol Identity Proofs
+name: Phase 1 Protocol Identity Production Binding
 
 on:
   pull_request:
@@ -6,6 +6,7 @@ on:
       - 'proof/Phil/Core/ProtocolIdentity.v'
       - 'proof/Phil/Core/ProtocolIdentityImplementation.v'
       - 'proof/Phil/Core/ProtocolIdentityImplementationExtraction.v'
+      - 'src/ProtocolIdentityKernel.hs'
       - 'src/Phil/Core/Protocol.hs'
       - 'src/Phil/Systems/ProtocolStateCorrespondence.hs'
       - 'test/Phase1ProtocolExactActionMain.hs'
@@ -16,6 +17,7 @@ on:
       - 'docs/phase-1/protocol-identity-separation-v1.md'
       - 'docs/phase-1/protocol-identity-proof-v1.md'
       - 'docs/phase-1/protocol-identity-implementation-refinement-v1.md'
+      - 'docs/phase-1/protocol-identity-production-binding-v1.md'
       - '.github/workflows/phase1-protocol-identity-proofs.yml'
   push:
     branches: [main]
@@ -23,6 +25,7 @@ on:
       - 'proof/Phil/Core/ProtocolIdentity.v'
       - 'proof/Phil/Core/ProtocolIdentityImplementation.v'
       - 'proof/Phil/Core/ProtocolIdentityImplementationExtraction.v'
+      - 'src/ProtocolIdentityKernel.hs'
       - 'src/Phil/Core/Protocol.hs'
       - 'src/Phil/Systems/ProtocolStateCorrespondence.hs'
       - 'test/Phase1ProtocolExactActionMain.hs'
@@ -33,6 +36,7 @@ on:
       - 'docs/phase-1/protocol-identity-separation-v1.md'
       - 'docs/phase-1/protocol-identity-proof-v1.md'
       - 'docs/phase-1/protocol-identity-implementation-refinement-v1.md'
+      - 'docs/phase-1/protocol-identity-production-binding-v1.md'
       - '.github/workflows/phase1-protocol-identity-proofs.yml'
 
 permissions:
@@ -47,7 +51,7 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
-      - name: Compile PHIL-PROT-ID-001 proof and implementation correspondence
+      - name: Compile PHIL-PROT-ID-001 production kernel
         shell: bash
         run: |
           set -euo pipefail
@@ -61,6 +65,10 @@ jobs:
           grep -q 'decideProtocolContractByFacts' ProtocolIdentityKernel.hs
           grep -q 'decideProtocolActionByFacts' ProtocolIdentityKernel.hs
           grep -q 'planProtocolContract' ProtocolIdentityKernel.hs
+          cmp ProtocolIdentityKernel.hs src/ProtocolIdentityKernel.hs
+          KERNEL_SHA="$(sha256sum ProtocolIdentityKernel.hs | cut -d' ' -f1)"
+          echo "kernel_sha256=${KERNEL_SHA}"
+          test "${KERNEL_SHA}" = "2e26ec8b481ca72b0813285da1b7f7d91f68b875584065a63955dc17c671ba8d"
 
       - name: Record proof and extraction identities
         shell: bash
@@ -85,14 +93,14 @@ jobs:
             > protocol-identity-proof/PHIL-PROT-ID-001.proof.sha256
           {
             printf '%s\n' 'obligation=PHIL-PROT-ID-001'
-            printf '%s\n' 'evidence=Rocq-9.2.0'
+            printf '%s\n' 'evidence=Rocq-9.2.0-production-binding'
             cat protocol-identity-proof/PHIL-PROT-ID-001.proof.sha256
           } > protocol-identity-proof/PHIL-PROT-ID-001.proof-certificate.txt
           cat protocol-identity-proof/PHIL-PROT-ID-001.proof.sha256
 
       - uses: actions/upload-artifact@v4
         with:
-          name: rocq-protocol-identity-proof
+          name: rocq-protocol-identity-production-binding
           path: protocol-identity-proof
           if-no-files-found: error
 
@@ -112,24 +120,29 @@ jobs:
 
       - uses: actions/download-artifact@v4
         with:
-          name: rocq-protocol-identity-proof
+          name: rocq-protocol-identity-production-binding
           path: protocol-identity-proof
 
-      - name: Typecheck and execute extracted protocol identity controls
+      - name: Verify exact extracted production kernel
         run: |
           set -euo pipefail
-          ghc -Wall -Werror -fno-code protocol-identity-proof/ProtocolIdentityKernel.hs
+          cmp protocol-identity-proof/ProtocolIdentityKernel.hs src/ProtocolIdentityKernel.hs
+          ghc -Wall -Werror -fno-code src/ProtocolIdentityKernel.hs
+          cabal exec -- ghc -isrc -Wall -Werror -fno-code src/Phil/Core/Protocol.hs
+          cabal exec -- ghc -isrc -Wall -Werror -Wno-name-shadowing -fno-code src/Phil/Systems/ProtocolStateCorrespondence.hs
+
+      - name: Execute extracted protocol identity controls against production kernel
+        run: |
+          set -euo pipefail
           ghc -Wall -Werror \
-            -iprotocol-identity-proof \
+            -isrc \
             app/ProtocolIdentityDecisionCorrespondenceMain.hs \
             -o protocol-identity-kernel-controls
           ./protocol-identity-kernel-controls
 
-      - name: Typecheck protocol identity implementation paths
+      - name: Typecheck unchanged protocol identity pressure harnesses
         run: |
           set -euo pipefail
-          cabal exec -- ghc -isrc -Wall -Werror -fno-code src/Phil/Core/Protocol.hs
-          cabal exec -- ghc -isrc -Wall -Werror -Wno-name-shadowing -fno-code src/Phil/Systems/ProtocolStateCorrespondence.hs
           for test_main in \
             test/Phase1ProtocolExactActionMain.hs \
             test/Phase1ProtocolIdentitySeparationMain.hs
@@ -150,13 +163,13 @@ jobs:
             cabal exec -- runghc -isrc "$test_main"
           done
 
-      - name: Record implementation-refinement staging identities
+      - name: Record implementation-refinement production-binding identities
         shell: bash
         run: |
           set -euo pipefail
-          mkdir -p protocol-identity-implementation-correspondence
+          mkdir -p protocol-identity-production-binding
           sha256sum \
-            protocol-identity-proof/ProtocolIdentityKernel.hs \
+            src/ProtocolIdentityKernel.hs \
             src/Phil/Core/Protocol.hs \
             src/Phil/Systems/ProtocolStateCorrespondence.hs \
             test/Phase1ProtocolExactActionMain.hs \
@@ -165,11 +178,12 @@ jobs:
             app/ProtocolIdentityDecisionCorrespondenceMain.hs \
             proof/Phil/Core/ProtocolIdentityImplementation.v \
             docs/phase-1/protocol-identity-implementation-refinement-v1.md \
-            > protocol-identity-implementation-correspondence/PHIL-PROT-ID-001.staging.sha256
-          cat protocol-identity-implementation-correspondence/PHIL-PROT-ID-001.staging.sha256
+            docs/phase-1/protocol-identity-production-binding-v1.md \
+            > protocol-identity-production-binding/PHIL-PROT-ID-001.production-binding.sha256
+          cat protocol-identity-production-binding/PHIL-PROT-ID-001.production-binding.sha256
 
       - uses: actions/upload-artifact@v4
         with:
-          name: protocol-identity-implementation-correspondence
-          path: protocol-identity-implementation-correspondence
+          name: protocol-identity-production-binding
+          path: protocol-identity-production-binding
           if-no-files-found: error
