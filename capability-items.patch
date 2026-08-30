@@ -1,13 +1,13 @@
 diff --git a/src/Phil/Surface/GrammarV1/Parser.hs b/src/Phil/Surface/GrammarV1/Parser.hs
 --- a/src/Phil/Surface/GrammarV1/Parser.hs
 +++ b/src/Phil/Surface/GrammarV1/Parser.hs
-@@ -1,3 +1,5 @@
+@@ -456,3 +456,5 @@
  data GrammarV1CapabilityItem
    = GrammarV1CapabilityPermits (Located GrammarV1StaticReference)
 +  | GrammarV1CapabilityRequires (Located GrammarV1Proposition)
 +  | GrammarV1CapabilityLaw (Located Text) (Located GrammarV1Proposition)
    deriving (Eq, Show)
-@@ -1,18 +1,26 @@
+@@ -1567,18 +1569,26 @@
  parseCapabilityItem :: Parser (Located GrammarV1CapabilityItem)
  parseCapabilityItem = do
 -  permits <- peekKeyword "permits"
@@ -47,7 +47,7 @@ diff --git a/src/Phil/Surface/GrammarV1/Parser.hs b/src/Phil/Surface/GrammarV1/P
 diff --git a/test/Phase1GrammarV1StructuralParserMain.hs b/test/Phase1GrammarV1StructuralParserMain.hs
 --- a/test/Phase1GrammarV1StructuralParserMain.hs
 +++ b/test/Phase1GrammarV1StructuralParserMain.hs
-@@ -1,4 +1,8 @@
+@@ -22,4 +22,8 @@
      , testIO "SURF-002 linear capability fixture parses"
          (expectFixtureMode "accepted/15-capability-linear-mode.phil" GrammarV1Linear)
 +    , test "SURF-002 capability permits/requires/law items preserve source order and payloads"
@@ -56,7 +56,7 @@ diff --git a/test/Phase1GrammarV1StructuralParserMain.hs b/test/Phase1GrammarV1S
 +        capabilityLawEqualsRejects
      , testIO "SURF-002 ordinary binding fixture preserves term parameter and let-return block"
          expectOrdinaryBinding
-@@ -1,4 +1,50 @@
+@@ -81,4 +85,50 @@
        declarations -> Left ("expected exactly one declaration, got " <> show (length declarations))
  
 +capabilityItemsPreserved :: Either String ()
