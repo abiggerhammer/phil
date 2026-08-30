@@ -47,6 +47,7 @@ module Phil.Core.Static
 
 import qualified ArchitectureIdentityKernel as ArchitectureIdentityKernel
 import qualified ArchitectureInstantiationKernel as ArchitectureInstantiationKernel
+import qualified ArchitectureRealizationKernel as ArchitectureRealizationKernel
 import qualified ArchitectureRevisionConstructionKernel as ArchitectureRevisionConstructionKernel
 import qualified Data.Map.Strict as Map
 import qualified Data.Set as Set
@@ -393,17 +394,26 @@ deriveArchitectureInstanceIdentity descriptor = ArchitectureInstanceIdentity
 deriveArchitectureRealizationIdentity
   :: ArchitectureRealizationDescriptor
   -> ArchitectureRealizationIdentity
-deriveArchitectureRealizationIdentity descriptor = ArchitectureRealizationIdentity
-  { identityRealizationRevision = RealizationRevision
-      ("phil.realization.canonical.v1:"
-        <> canonicalSemanticForm (SemanticRecord (Map.fromList
-          [ ("instance_key", SemanticAtom
-              (unInstanceKey (identityInstanceKey instanceIdentity)))
-          , ("instance_revision", SemanticAtom
-              (unInstanceRevision (identityInstanceRevision instanceIdentity)))
-          , ("realization", realizationSemantics descriptor)
-          ])))
-  }
+deriveArchitectureRealizationIdentity descriptor =
+  case ArchitectureRealizationKernel.planArchitectureRealization
+      (identityInstanceKey instanceIdentity)
+      (identityInstanceRevision instanceIdentity)
+      (realizationSemantics descriptor) of
+    ArchitectureRealizationKernel.MkArchitectureRealizationPlan
+      plannedInstanceKey
+      plannedInstanceRevision
+      plannedRealizationSemantics ->
+        ArchitectureRealizationIdentity
+          { identityRealizationRevision = RealizationRevision
+              ("phil.realization.canonical.v1:"
+                <> canonicalSemanticForm (SemanticRecord (Map.fromList
+                  [ ("instance_key", SemanticAtom
+                      (unInstanceKey plannedInstanceKey))
+                  , ("instance_revision", SemanticAtom
+                      (unInstanceRevision plannedInstanceRevision))
+                  , ("realization", plannedRealizationSemantics)
+                  ])))
+          }
   where
     instanceIdentity = realizationInstanceIdentity descriptor
 
