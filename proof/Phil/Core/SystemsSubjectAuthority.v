@@ -150,7 +150,7 @@ Theorem internal_effect_requires_refinement_when_not_in_source_bound :
 Proof.
   intros refinement H.
   destruct H as [Hfalse | Hrefinement].
-  - exact Hfalse.
+  - destruct Hfalse.
   - exact Hrefinement.
 Qed.
 
