@@ -1,0 +1,84 @@
+name: Phase 1 Callable Outcome Proofs
+
+on:
+  pull_request:
+    paths:
+      - 'proof/Phil/Core/CallableOutcomeFidelity.v'
+      - 'docs/phase-1/callable-outcome-fidelity-proof-v1.md'
+      - '.github/workflows/phase1-callable-outcome-proofs.yml'
+      - 'src/Phil/Core/CallableOutcome.hs'
+      - 'src/Phil/Core/Callable.hs'
+      - 'src/Phil/Core/CallableRefinement.hs'
+      - 'src/Phil/Core/Syntax.hs'
+      - 'test/Phase1CallableOutcomeFidelityMain.hs'
+  push:
+    branches: [main]
+    paths:
+      - 'proof/Phil/Core/CallableOutcomeFidelity.v'
+      - 'docs/phase-1/callable-outcome-fidelity-proof-v1.md'
+      - '.github/workflows/phase1-callable-outcome-proofs.yml'
+      - 'src/Phil/Core/CallableOutcome.hs'
+      - 'src/Phil/Core/Callable.hs'
+      - 'src/Phil/Core/CallableRefinement.hs'
+      - 'src/Phil/Core/Syntax.hs'
+      - 'test/Phase1CallableOutcomeFidelityMain.hs'
+
+permissions:
+  contents: read
+
+jobs:
+  rocq-callable-outcome-proof:
+    runs-on: ubuntu-latest
+    container:
+      image: rocq/rocq-prover:9.2.0
+      options: --user root
+    steps:
+      - uses: actions/checkout@v4
+      - name: Compile PHIL-CALL-OUTCOME-001 proof
+        shell: bash
+        run: |
+          set -euo pipefail
+          export PATH="/home/rocq/.opam/${COMPILER}/bin:$PATH"
+          rocq c -Q proof/Phil Phil proof/Phil/Core/CallableOutcomeFidelity.v
+      - name: Record proof identities
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p callable-outcome-proof
+          cp proof/Phil/Core/CallableOutcomeFidelity.v proof/Phil/Core/CallableOutcomeFidelity.vo callable-outcome-proof/
+          sha256sum \
+            proof/Phil/Core/CallableOutcomeFidelity.v \
+            proof/Phil/Core/CallableOutcomeFidelity.vo \
+            > callable-outcome-proof/PHIL-CALL-OUTCOME-001.proof.sha256
+          {
+            echo 'obligation=PHIL-CALL-OUTCOME-001'
+            echo 'evidence=Rocq-9.2.0'
+            cat callable-outcome-proof/PHIL-CALL-OUTCOME-001.proof.sha256
+          } > callable-outcome-proof/PHIL-CALL-OUTCOME-001.proof-certificate.txt
+          cat callable-outcome-proof/PHIL-CALL-OUTCOME-001.proof-certificate.txt
+      - uses: actions/upload-artifact@v4
+        with:
+          name: rocq-callable-outcome-proof
+          path: callable-outcome-proof
+          if-no-files-found: error
+
+  verify-callable-outcome-correspondence:
+    needs: rocq-callable-outcome-proof
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: haskell-actions/setup@v2
+        with:
+          ghc-version: '9.6.7'
+          cabal-version: 'latest'
+      - name: Build ordinary regression substrate
+        run: cabal build all --enable-tests
+      - name: Typecheck unchanged CALL-018 production path
+        run: |
+          set -euo pipefail
+          cabal exec -- ghc -isrc -Wall -Werror -fno-code src/Phil/Core/CallableOutcome.hs
+          cabal exec -- ghc -isrc -Wall -Werror -fno-code test/Phase1CallableOutcomeFidelityMain.hs
+      - name: Re-run CALL-018 outcome-fidelity corpus
+        run: |
+          set -euo pipefail
+          cabal exec -- runghc -Wall -Werror -isrc test/Phase1CallableOutcomeFidelityMain.hs
