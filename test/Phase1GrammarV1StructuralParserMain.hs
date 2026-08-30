@@ -21,6 +21,10 @@ main = do
         (expectFixtureMode "accepted/14-capability-affine-mode.phil" GrammarV1Affine)
     , testIO "SURF-002 linear capability fixture parses"
         (expectFixtureMode "accepted/15-capability-linear-mode.phil" GrammarV1Linear)
+    , test "SURF-002 capability permits/requires/law items preserve source order and payloads"
+        capabilityItemsPreserved
+    , test "SURF-003 capability law rejects provider-implementation equals syntax"
+        capabilityLawEqualsRejects
     , testIO "SURF-002 ordinary binding fixture preserves term parameter and let-return block"
         expectOrdinaryBinding
     , testIO "SURF-002 static type actual fixture preserves generic kind and argument"
@@ -79,6 +83,52 @@ expectFixtureMode relativePath expectedMode = do
         in assert (actualMode == Just expectedMode) $
             "expected mode " <> show expectedMode <> ", got " <> show actualMode
       declarations -> Left ("expected exactly one declaration, got " <> show (length declarations))
+
+capabilityItemsPreserved :: Either String ()
+capabilityItemsPreserved = do
+  sourceFile <- mapLeft show $ parseGrammarV1StructuralSource "capability-items" source
+  case grammarV1TopLevelDecls sourceFile of
+    [Located _ topLevel] -> case locatedValue (grammarV1Declaration topLevel) of
+      GrammarV1CapabilityDeclaration capabilityDecl ->
+        case grammarV1CapabilityItems capabilityDecl of
+          [ Located _ (GrammarV1CapabilityPermits target)
+            , Located _ (GrammarV1CapabilityRequires requirement)
+            , Located _ (GrammarV1CapabilityLaw lawName lawProposition)
+            ] -> do
+              let reference = locatedValue target
+              assert
+                (grammarV1QualifiedNameParts (grammarV1StaticReferenceName reference) == ["Audit"]
+                  && null (grammarV1StaticReferenceArguments reference))
+                "capability permits target was not exact static reference Audit"
+              assert (locatedValue requirement == GrammarV1TrueProposition)
+                "capability requires proposition was not preserved"
+              assert (locatedValue lawName == "Safe")
+                "capability law name was not Safe"
+              assert (locatedValue lawProposition == GrammarV1FalseProposition)
+                "capability law proposition was not preserved"
+          items -> Left ("unexpected capability items " <> show items)
+      other -> Left ("expected capability declaration, got " <> show other)
+    declarations -> Left ("expected one capability declaration, got " <> show (length declarations))
+  where
+    source = Text.unlines
+      [ "capability Access mode unrestricted {"
+      , "  permits Audit;"
+      , "  requires true;"
+      , "  law Safe : false;"
+      , "}"
+      ]
+
+capabilityLawEqualsRejects :: Either String ()
+capabilityLawEqualsRejects =
+  case parseGrammarV1StructuralSource "capability-law-equals" source of
+    Left _ -> Right ()
+    Right value -> Left ("expected capability law '=' rejection, parsed " <> show value)
+  where
+    source = Text.unlines
+      [ "capability Bad mode unrestricted {"
+      , "  law Safe = true;"
+      , "}"
+      ]
 
 expectOrdinaryBinding :: IO (Either String ())
 expectOrdinaryBinding = do
