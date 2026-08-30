@@ -14,6 +14,7 @@ import qualified Data.Map.Strict as Map
 import qualified Data.Set as Set
 import Data.Text (Text)
 import qualified Data.Text as Text
+import qualified ProviderReplacementQualificationKernel as Kernel
 import Phil.Core.ProviderQualificationIdentity
   ( CheckedProviderQualificationAdmissionIdentity (..)
   , ProviderQualificationAdmissionDecision (..)
@@ -133,9 +134,6 @@ checkProviderReplacementQualification prior replacement reusePlan = do
       (providerReplacementEvidence replacement)
       (providerReplacementAdmission replacement)
 
-  requireAdmittedPrior priorAdmission
-  requireAdmittedNew newAdmission
-
   let priorClaimInput = providerReplacementClaim prior
       newClaimInput = providerReplacementClaim replacement
       priorAdmissionInput = providerReplacementAdmission prior
@@ -159,36 +157,55 @@ checkProviderReplacementQualification prior replacement reusePlan = do
       missingReuse = Set.difference sharedRefs reuseKeys
       unexpectedReuse = Set.difference reuseKeys sharedRefs
 
-  requireEqual ProviderReplacementInterfaceMismatch requiredInterface newInterface
-  requireEqual ProviderReplacementOccurrenceMismatch priorOccurrence newOccurrence
-  requireEqual ProviderReplacementInstanceMismatch
-    (providerReplacementInstanceRevision prior)
-    (providerReplacementInstanceRevision replacement)
-
-  if priorSubject == newSubject
-    then Left (ProviderReplacementSameImplementationSubject priorSubject)
-    else Right ()
-  if providerReplacementRealizationRevision prior ==
-      providerReplacementRealizationRevision replacement
-    then Left (ProviderReplacementRealizationUnchanged
-      (providerReplacementRealizationRevision prior))
-    else Right ()
-  if priorClaimRevision == newClaimRevision
-    then Left (ProviderReplacementClaimLineageInherited priorClaimRevision)
-    else Right ()
-  if priorEvidenceRevision == newEvidenceRevision
-    then Left (ProviderReplacementEvidenceLineageInherited priorEvidenceRevision)
-    else Right ()
-  if priorAdmissionRevision == newAdmissionRevision
-    then Left (ProviderReplacementAdmissionLineageInherited priorAdmissionRevision)
-    else Right ()
-
-  if not (Set.null missingReuse)
-    then Left (ProviderReplacementSharedEvidenceWithoutScope missingReuse)
-    else Right ()
-  if not (Set.null unexpectedReuse)
-    then Left (ProviderReplacementUnexpectedReuseJustification unexpectedReuse)
-    else Right ()
+  case Kernel.decideProviderReplacementByFacts
+    (providerReplacementAdmissionAccepted priorAdmission)
+    (providerReplacementAdmissionAccepted newAdmission)
+    (requiredInterface == newInterface)
+    (priorOccurrence == newOccurrence)
+    (providerReplacementInstanceRevision prior ==
+      providerReplacementInstanceRevision replacement)
+    (priorSubject /= newSubject)
+    (providerReplacementRealizationRevision prior /=
+      providerReplacementRealizationRevision replacement)
+    (priorClaimRevision /= newClaimRevision)
+    (priorEvidenceRevision /= newEvidenceRevision)
+    (priorAdmissionRevision /= newAdmissionRevision)
+    (Set.null missingReuse)
+    (Set.null unexpectedReuse) of
+    Kernel.ProviderReplacementAccepted -> Right ()
+    Kernel.ProviderReplacementAdmissionRequired ->
+      case checkedQualificationAdmissionDecision priorAdmission of
+        QualificationRejected reasons ->
+          Left (ProviderReplacementPriorAdmissionRejected reasons)
+        QualificationAdmitted ->
+          case checkedQualificationAdmissionDecision newAdmission of
+            QualificationRejected reasons ->
+              Left (ProviderReplacementNewAdmissionRejected reasons)
+            QualificationAdmitted ->
+              providerReplacementKernelBridgeMismatch "admission"
+    Kernel.ProviderReplacementInterfaceMismatch ->
+      Left (ProviderReplacementInterfaceMismatch requiredInterface newInterface)
+    Kernel.ProviderReplacementOccurrenceMismatch ->
+      Left (ProviderReplacementOccurrenceMismatch priorOccurrence newOccurrence)
+    Kernel.ProviderReplacementInstanceMismatch ->
+      Left (ProviderReplacementInstanceMismatch
+        (providerReplacementInstanceRevision prior)
+        (providerReplacementInstanceRevision replacement))
+    Kernel.ProviderReplacementSameSemanticSubject ->
+      Left (ProviderReplacementSameImplementationSubject priorSubject)
+    Kernel.ProviderReplacementRealizationUnchanged ->
+      Left (ProviderReplacementRealizationUnchanged
+        (providerReplacementRealizationRevision prior))
+    Kernel.ProviderReplacementClaimLineageInherited ->
+      Left (ProviderReplacementClaimLineageInherited priorClaimRevision)
+    Kernel.ProviderReplacementEvidenceLineageInherited ->
+      Left (ProviderReplacementEvidenceLineageInherited priorEvidenceRevision)
+    Kernel.ProviderReplacementAdmissionLineageInherited ->
+      Left (ProviderReplacementAdmissionLineageInherited priorAdmissionRevision)
+    Kernel.ProviderReplacementSharedEvidenceWithoutScope ->
+      Left (ProviderReplacementSharedEvidenceWithoutScope missingReuse)
+    Kernel.ProviderReplacementUnexpectedEvidenceReuse ->
+      Left (ProviderReplacementUnexpectedReuseJustification unexpectedReuse)
 
   mapM_ (validateReuse priorClaimRevision newClaimRevision)
     (Map.toAscList reusePlan)
@@ -213,32 +230,36 @@ checkProviderReplacementQualification prior replacement reusePlan = do
     , checkedProviderReplacementReusedEvidence = sharedRefs
     }
   where
-    validateReuse priorClaimRevision newClaimRevision (key, reuse) = do
-      requireEqual ProviderReplacementReuseReferenceMismatch
-        key (providerReplacementReuseReference reuse)
-      requireEqual ProviderReplacementReusePriorClaimMismatch
-        priorClaimRevision (providerReplacementReusePriorClaimRevision reuse)
-      requireEqual ProviderReplacementReuseNewClaimMismatch
-        newClaimRevision (providerReplacementReuseNewClaimRevision reuse)
-      if Text.null (providerReplacementReuseValidityScopeRevision reuse)
-        then Left (ProviderReplacementReuseScopeMissing key)
-        else Right ()
+    validateReuse priorClaimRevision newClaimRevision (key, reuse) =
+      case Kernel.decideProviderReplacementReuseByFacts
+          (key == providerReplacementReuseReference reuse)
+          (priorClaimRevision == providerReplacementReusePriorClaimRevision reuse)
+          (newClaimRevision == providerReplacementReuseNewClaimRevision reuse)
+          (not (Text.null (providerReplacementReuseValidityScopeRevision reuse))) of
+        Kernel.ProviderReplacementReuseAccepted -> Right ()
+        Kernel.ProviderReplacementReuseReferenceMismatch ->
+          Left (ProviderReplacementReuseReferenceMismatch
+            key (providerReplacementReuseReference reuse))
+        Kernel.ProviderReplacementReusePriorClaimMismatch ->
+          Left (ProviderReplacementReusePriorClaimMismatch
+            priorClaimRevision (providerReplacementReusePriorClaimRevision reuse))
+        Kernel.ProviderReplacementReuseNewClaimMismatch ->
+          Left (ProviderReplacementReuseNewClaimMismatch
+            newClaimRevision (providerReplacementReuseNewClaimRevision reuse))
+        Kernel.ProviderReplacementReuseScopeMissing ->
+          Left (ProviderReplacementReuseScopeMissing key)
 
-requireAdmittedPrior
+providerReplacementAdmissionAccepted
   :: CheckedProviderQualificationAdmissionIdentity
-  -> Either ProviderReplacementQualificationError ()
-requireAdmittedPrior checked = case checkedQualificationAdmissionDecision checked of
-  QualificationAdmitted -> Right ()
-  QualificationRejected reasons ->
-    Left (ProviderReplacementPriorAdmissionRejected reasons)
+  -> Bool
+providerReplacementAdmissionAccepted checked =
+  case checkedQualificationAdmissionDecision checked of
+    QualificationAdmitted -> True
+    QualificationRejected _ -> False
 
-requireAdmittedNew
-  :: CheckedProviderQualificationAdmissionIdentity
-  -> Either ProviderReplacementQualificationError ()
-requireAdmittedNew checked = case checkedQualificationAdmissionDecision checked of
-  QualificationAdmitted -> Right ()
-  QualificationRejected reasons ->
-    Left (ProviderReplacementNewAdmissionRejected reasons)
+providerReplacementKernelBridgeMismatch :: String -> a
+providerReplacementKernelBridgeMismatch seam =
+  error ("ProviderReplacementQualificationKernel bridge mismatch: " <> seam)
 
 evidenceReferences
   :: ProviderQualificationEvidenceIdentityInput
@@ -256,11 +277,6 @@ evidenceReferences evidence = Set.unions
   ]
   where
     tagged kind = Set.map (ProviderReplacementEvidenceReference kind)
-
-requireEqual :: Eq a => (a -> a -> e) -> a -> a -> Either e ()
-requireEqual mkError expected actual
-  | expected == actual = Right ()
-  | otherwise = Left (mkError expected actual)
 
 mapLeft :: (a -> b) -> Either a c -> Either b c
 mapLeft f = either (Left . f) Right

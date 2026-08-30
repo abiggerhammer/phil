@@ -59,6 +59,7 @@ library
       ArchitectureIdentityKernel
       ArchitectureInstantiationKernel
       ArchitectureRevisionConstructionKernel
+      ProviderReplacementQualificationKernel
       AssuranceValidityScopeKernel
       Phil.Surface.Check.Types
       Phil.Surface.Check.Support
