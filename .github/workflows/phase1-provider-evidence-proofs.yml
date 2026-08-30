@@ -1,16 +1,19 @@
-name: Phase 1 Provider Evidence Proofs
+name: Phase 1 Provider Evidence Production Binding
 
 on:
   pull_request:
     paths:
+      - 'src/ProviderEvidenceQualificationKernel.hs'
       - 'src/Phil/Core/ProviderQualification.hs'
       - 'src/Phil/Core/ProviderEvidenceQualification.hs'
       - 'src/Phil/Examples/Steve/ProviderQualifications.hs'
+      - 'phil-core.cabal'
       - 'test/Phase1ProviderQualificationMain.hs'
       - 'test/Phase1ProviderEvidenceQualificationMain.hs'
       - 'test/Phase1SteveProviderQualificationMain.hs'
       - 'docs/phase-1/provider-evidence-competence-v1.md'
       - 'docs/phase-1/provider-evidence-implementation-refinement-v1.md'
+      - 'docs/phase-1/provider-evidence-production-binding-v1.md'
       - 'proof/Phil/Core/GenericStructural.v'
       - 'proof/Phil/Core/CallableMode.v'
       - 'proof/Phil/Core/CallableEffects.v'
@@ -31,14 +34,17 @@ on:
   push:
     branches: [main]
     paths:
+      - 'src/ProviderEvidenceQualificationKernel.hs'
       - 'src/Phil/Core/ProviderQualification.hs'
       - 'src/Phil/Core/ProviderEvidenceQualification.hs'
       - 'src/Phil/Examples/Steve/ProviderQualifications.hs'
+      - 'phil-core.cabal'
       - 'test/Phase1ProviderQualificationMain.hs'
       - 'test/Phase1ProviderEvidenceQualificationMain.hs'
       - 'test/Phase1SteveProviderQualificationMain.hs'
       - 'docs/phase-1/provider-evidence-competence-v1.md'
       - 'docs/phase-1/provider-evidence-implementation-refinement-v1.md'
+      - 'docs/phase-1/provider-evidence-production-binding-v1.md'
       - 'proof/Phil/Core/GenericStructural.v'
       - 'proof/Phil/Core/CallableMode.v'
       - 'proof/Phil/Core/CallableEffects.v'
@@ -61,14 +67,14 @@ permissions:
   contents: read
 
 jobs:
-  rocq-phase1-provider-evidence:
+  rocq-provider-evidence-production-binding:
     runs-on: ubuntu-latest
     container:
       image: rocq/rocq-prover:9.2.0
       options: --user root
     steps:
       - uses: actions/checkout@v4
-      - name: Compile PHIL-PROV-EVIDENCE-001 and implementation correspondence
+      - name: Compile Certified provider evidence chain and implementation correspondence
         shell: bash
         run: |
           set -euo pipefail
@@ -86,113 +92,117 @@ jobs:
           rocq c -Q proof/Phil Phil proof/Phil/Core/ProviderQualification.v
           rocq c -Q proof/Phil Phil proof/Phil/Core/ProviderEvidenceQualification.v
           rocq c -Q proof/Phil Phil proof/Phil/Core/ProviderEvidenceQualificationImplementation.v
+      - name: Fresh-extract exact provider evidence kernel
+        shell: bash
+        run: |
+          set -euo pipefail
+          export PATH="/home/rocq/.opam/${COMPILER}/bin:$PATH"
           rm -f ProviderEvidenceQualificationKernel.hs
           rocq c -Q proof/Phil Phil proof/Phil/Core/ProviderEvidenceQualificationImplementationExtraction.v
           test -s ProviderEvidenceQualificationKernel.hs
+          cmp ProviderEvidenceQualificationKernel.hs src/ProviderEvidenceQualificationKernel.hs
+          test "$(sha256sum ProviderEvidenceQualificationKernel.hs | cut -d' ' -f1)" = \
+            5569956812f2c6a81e5b15f08fbc8fe92bd331f0e11efd378401b46fa7126997
           grep -q 'decideProviderEvidenceCompetenceByFacts' ProviderEvidenceQualificationKernel.hs
           grep -q 'decideDirectEvidenceSubjectMappingByFacts' ProviderEvidenceQualificationKernel.hs
           grep -q 'decideCheckedEvidenceSubjectMappingByFacts' ProviderEvidenceQualificationKernel.hs
           grep -q 'decideRuntimeCoincidenceSubjectMapping' ProviderEvidenceQualificationKernel.hs
-          sha256sum ProviderEvidenceQualificationKernel.hs
-          mkdir -p phase1-provider-evidence-proof
+          mkdir -p provider-evidence-production-proof
           cp \
             proof/Phil/Core/ProviderEvidenceQualification.v \
             proof/Phil/Core/ProviderEvidenceQualification.vo \
             proof/Phil/Core/ProviderEvidenceQualificationImplementation.v \
             proof/Phil/Core/ProviderEvidenceQualificationImplementation.vo \
             ProviderEvidenceQualificationKernel.hs \
-            phase1-provider-evidence-proof/
+            provider-evidence-production-proof/
       - uses: actions/upload-artifact@v4
         with:
-          name: rocq-phase1-provider-evidence-proof
-          path: phase1-provider-evidence-proof
+          name: rocq-provider-evidence-production-binding
+          path: provider-evidence-production-proof
           if-no-files-found: error
 
-  certify-phase1-provider-evidence:
-    needs: rocq-phase1-provider-evidence
+  verify-provider-evidence-production-binding:
+    needs: rocq-provider-evidence-production-binding
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
+      - uses: actions/download-artifact@v4
+        with:
+          name: rocq-provider-evidence-production-binding
+          path: fresh-provider-evidence
       - uses: haskell-actions/setup@v2
         with:
           ghc-version: '9.6.7'
           cabal-version: 'latest'
-      - name: Build existing proof certifier substrate with warnings as errors
-        run: cabal build exe:phil-certify-core-scalar --ghc-options=-Werror
-      - name: Typecheck certifier
-        run: cabal exec -- ghc -isrc -Wall -Werror -fno-code app/Phase1ProviderEvidenceCertificationMain.hs
-      - uses: actions/download-artifact@v4
-        with:
-          name: rocq-phase1-provider-evidence-proof
-          path: phase1-provider-evidence-proof
-      - name: Typecheck and execute extracted provider-evidence controls
+      - name: Verify exact checked-in kernel
         run: |
           set -euo pipefail
-          ghc -Wall -Werror -fno-code \
-            phase1-provider-evidence-proof/ProviderEvidenceQualificationKernel.hs
-          ghc -Wall -Werror \
-            -iphase1-provider-evidence-proof \
+          cmp fresh-provider-evidence/ProviderEvidenceQualificationKernel.hs \
+            src/ProviderEvidenceQualificationKernel.hs
+          test "$(sha256sum src/ProviderEvidenceQualificationKernel.hs | cut -d' ' -f1)" = \
+            5569956812f2c6a81e5b15f08fbc8fe92bd331f0e11efd378401b46fa7126997
+          ghc -Wall -Werror -fno-code src/ProviderEvidenceQualificationKernel.hs
+      - name: Strict-build bound production
+        run: |
+          set -euo pipefail
+          cabal build exe:phil-certify-core-scalar --ghc-options=-Werror
+          cabal exec -- ghc -isrc -Wall -Werror -fno-code \
+            src/Phil/Core/ProviderEvidenceQualification.hs
+      - name: Execute unchanged extracted-kernel controls
+        run: |
+          set -euo pipefail
+          cabal exec -- ghc -isrc -Wall -Werror \
             app/ProviderEvidenceDecisionCorrespondenceMain.hs \
             -o provider-evidence-kernel-controls
           ./provider-evidence-kernel-controls
-      - name: Strict-typecheck unchanged provider-evidence production
+      - name: Strict-typecheck unchanged provider evidence corpora
         run: |
           set -euo pipefail
           cabal exec -- ghc -isrc -Wall -Werror -fno-code \
-            src/Phil/Core/ProviderEvidenceQualification.hs
+            test/Phase1ProviderQualificationMain.hs
           cabal exec -- ghc -isrc -Wall -Werror -fno-code \
             test/Phase1ProviderEvidenceQualificationMain.hs
           cabal exec -- ghc -isrc -Wall -Werror -fno-code \
             test/Phase1SteveProviderQualificationMain.hs
-      - name: Re-run PROV-010 and Steve correspondence
+      - name: Re-run unchanged provider evidence corpora
         run: |
           set -euo pipefail
           cabal exec -- runghc -isrc test/Phase1ProviderQualificationMain.hs
           cabal exec -- runghc -isrc test/Phase1ProviderEvidenceQualificationMain.hs
           cabal exec -- runghc -isrc test/Phase1SteveProviderQualificationMain.hs
-      - name: Emit PHIL-PROV-EVIDENCE-001 certificate
+      - name: Re-emit PHIL-PROV-EVIDENCE-001 certificate
         shell: bash
         run: |
           set -euo pipefail
-          mkdir -p phase1-provider-evidence-certification
+          mkdir -p provider-evidence-production-binding
           cabal exec -- runghc -isrc app/Phase1ProviderEvidenceCertificationMain.hs \
-            phase1-provider-evidence-proof/ProviderEvidenceQualification.v \
-            phase1-provider-evidence-proof/ProviderEvidenceQualification.vo \
-            phase1-provider-evidence-certification/PHIL-PROV-EVIDENCE-001.rocq.cert
+            fresh-provider-evidence/ProviderEvidenceQualification.v \
+            fresh-provider-evidence/ProviderEvidenceQualification.vo \
+            provider-evidence-production-binding/PHIL-PROV-EVIDENCE-001.rocq.cert
+          cat provider-evidence-production-binding/PHIL-PROV-EVIDENCE-001.rocq.cert
+          sha256sum provider-evidence-production-binding/PHIL-PROV-EVIDENCE-001.rocq.cert
+      - name: Record production binding identities
+        run: |
+          set -euo pipefail
           sha256sum \
-            src/Phil/Core/ProviderQualification.hs \
+            src/ProviderEvidenceQualificationKernel.hs \
             src/Phil/Core/ProviderEvidenceQualification.hs \
-            src/Phil/Examples/Steve/ProviderQualifications.hs \
+            src/Phil/Core/ProviderQualification.hs \
+            phil-core.cabal \
+            app/ProviderEvidenceDecisionCorrespondenceMain.hs \
             test/Phase1ProviderQualificationMain.hs \
             test/Phase1ProviderEvidenceQualificationMain.hs \
             test/Phase1SteveProviderQualificationMain.hs \
-            docs/phase-1/provider-evidence-competence-v1.md \
-            proof/Phil/Core/ProviderQualification.v \
-            proof/Phil/Core/ProviderEvidenceQualification.v \
-            app/Phase1ProviderEvidenceCertificationMain.hs \
-            > phase1-provider-evidence-certification/PHIL-PROV-EVIDENCE-001.correspondence.sha256
-          cat phase1-provider-evidence-certification/PHIL-PROV-EVIDENCE-001.rocq.cert
-          sha256sum phase1-provider-evidence-certification/PHIL-PROV-EVIDENCE-001.rocq.cert
-      - name: Record implementation-refinement staging identities
-        run: |
-          set -euo pipefail
-          mkdir -p provider-evidence-implementation-correspondence
-          sha256sum \
-            phase1-provider-evidence-proof/ProviderEvidenceQualificationKernel.hs \
+            docs/phase-1/provider-evidence-production-binding-v1.md \
+            > provider-evidence-production-binding/PHIL-PROV-EVIDENCE-001.production.sha256
+          cp \
+            src/ProviderEvidenceQualificationKernel.hs \
             src/Phil/Core/ProviderEvidenceQualification.hs \
-            test/Phase1ProviderEvidenceQualificationMain.hs \
-            test/Phase1SteveProviderQualificationMain.hs \
-            app/ProviderEvidenceDecisionCorrespondenceMain.hs \
-            proof/Phil/Core/ProviderEvidenceQualificationImplementation.v \
-            docs/phase-1/provider-evidence-implementation-refinement-v1.md \
-            > provider-evidence-implementation-correspondence/PHIL-PROV-EVIDENCE-001.staging.sha256
+            phil-core.cabal \
+            docs/phase-1/provider-evidence-production-binding-v1.md \
+            provider-evidence-production-binding/
       - uses: actions/upload-artifact@v4
         with:
-          name: phil-phase1-provider-evidence-proof-certification
-          path: phase1-provider-evidence-certification
-          if-no-files-found: error
-      - uses: actions/upload-artifact@v4
-        with:
-          name: provider-evidence-implementation-correspondence
-          path: provider-evidence-implementation-correspondence
+          name: provider-evidence-production-binding
+          path: provider-evidence-production-binding
           if-no-files-found: error

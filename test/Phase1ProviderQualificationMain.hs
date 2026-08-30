@@ -106,10 +106,10 @@ strongerAuthorityRejects :: Either String ()
 strongerAuthorityRejects =
   let deleteAuthority = CallableAuthorityRequirement "storage.delete"
       readImpl = providerImplementationEntries providerImplementation Map.! readEntry
-      surface = providerImplementationCallable readImpl
-      stronger = surface
+      readSurface = providerImplementationCallable readImpl
+      stronger = readSurface
         { callableRefinementCallerAuthority = Set.insert deleteAuthority
-            (callableRefinementCallerAuthority surface) }
+            (callableRefinementCallerAuthority readSurface) }
       implementation = providerImplementation
         { providerImplementationEntries = Map.insert readEntry
             (readImpl { providerImplementationCallable = stronger })
@@ -125,10 +125,10 @@ strongerAuthorityRejects =
 narrowerImplementationAccepts :: Either String ()
 narrowerImplementationAccepts =
   let readImpl = providerImplementationEntries providerImplementation Map.! readEntry
-      surface = providerImplementationCallable readImpl
-      narrowerContract = (callableRefinementContract surface)
+      readSurface = providerImplementationCallable readImpl
+      narrowerContract = (callableRefinementContract readSurface)
         { callableContractEffectBound = Set.empty }
-      narrower = surface
+      narrower = readSurface
         { callableRefinementContract = narrowerContract
         , callableRefinementFailures = Set.empty
         }
@@ -143,12 +143,12 @@ widerEffectRejects :: Either String ()
 widerEffectRejects =
   let writeEffect = SemanticEffect "write"
       readImpl = providerImplementationEntries providerImplementation Map.! readEntry
-      surface = providerImplementationCallable readImpl
-      widerContract = (callableRefinementContract surface)
+      readSurface = providerImplementationCallable readImpl
+      widerContract = (callableRefinementContract readSurface)
         { callableContractEffectBound = Set.fromList [readEffect, writeEffect] }
       implementation = providerImplementation
         { providerImplementationEntries = Map.insert readEntry
-            (readImpl { providerImplementationCallable = surface { callableRefinementContract = widerContract } })
+            (readImpl { providerImplementationCallable = readSurface { callableRefinementContract = widerContract } })
             (providerImplementationEntries providerImplementation)
         }
   in case checkProviderSemanticQualification providerContract implementation validClaim of
@@ -161,11 +161,11 @@ fatalOutcomeRejects :: Either String ()
 fatalOutcomeRejects =
   let fatal = CallableFatal "abort"
       readImpl = providerImplementationEntries providerImplementation Map.! readEntry
-      surface = providerImplementationCallable readImpl
+      readSurface = providerImplementationCallable readImpl
       implementation = providerImplementation
         { providerImplementationEntries = Map.insert readEntry
-            (readImpl { providerImplementationCallable = surface
-              { callableRefinementFailures = Set.insert fatal (callableRefinementFailures surface) } })
+            (readImpl { providerImplementationCallable = readSurface
+              { callableRefinementFailures = Set.insert fatal (callableRefinementFailures readSurface) } })
             (providerImplementationEntries providerImplementation)
         }
   in case checkProviderSemanticQualification providerContract implementation validClaim of
