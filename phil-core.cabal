@@ -58,6 +58,7 @@ library
   other-modules:
       ArchitectureIdentityKernel
       ArchitectureInstantiationKernel
+      ArchitectureRealizationKernel
       ArchitectureRevisionConstructionKernel
       ProviderReplacementQualificationKernel
       AssuranceValidityScopeKernel
