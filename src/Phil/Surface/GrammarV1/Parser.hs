@@ -14,6 +14,8 @@ module Phil.Surface.GrammarV1.Parser
   , GrammarV1GenericParam (..)
   , GrammarV1StaticArgument (..)
   , GrammarV1StaticReference (..)
+  , GrammarV1EffectExpression (..)
+  , GrammarV1EffectSetExpression (..)
   , GrammarV1RelationOperator (..)
   , GrammarV1Proposition (..)
   , GrammarV1GenericRequirement (..)
@@ -175,6 +177,17 @@ data GrammarV1StaticReference = GrammarV1StaticReference
   }
   deriving (Eq, Ord, Show)
 
+data GrammarV1EffectExpression = GrammarV1EffectExpression
+  { grammarV1EffectReference :: Located GrammarV1StaticReference
+  , grammarV1EffectArguments :: [Located GrammarV1Expression]
+  }
+  deriving (Eq, Show)
+
+data GrammarV1EffectSetExpression
+  = GrammarV1EffectSetLiteral [Located GrammarV1EffectExpression]
+  | GrammarV1EffectSetReference (Located GrammarV1StaticReference)
+  deriving (Eq, Show)
+
 data GrammarV1RelationOperator
   = GrammarV1EqualRelation
   | GrammarV1NotEqualRelation
@@ -212,6 +225,9 @@ data GrammarV1GenericRequirement
   | GrammarV1CallableRequirement (Located Text) (Located GrammarV1Type)
   | GrammarV1BoundaryRequirement (Located Text) (Located GrammarV1Type)
   | GrammarV1ArchitectureRequirement (Located Text) (Located GrammarV1Type)
+  | GrammarV1EffectsRequirement
+      (Located Text)
+      (Located GrammarV1EffectSetExpression)
   | GrammarV1AuthorityRequirement (Located GrammarV1Type)
   | GrammarV1BoundaryRepresentationRequirement (Located GrammarV1Type)
   | GrammarV1RepresentationRequirement (Located GrammarV1Proposition)
@@ -328,10 +344,17 @@ data GrammarV1OutcomeResidue = GrammarV1OutcomeResidue
   deriving (Eq, Show)
 
 data GrammarV1CallableClause
-  = GrammarV1CallableEnsures (Located GrammarV1Proposition)
+  = GrammarV1CallableRequires (Located GrammarV1Proposition)
+  | GrammarV1CallableConsumes [Located GrammarV1QualifiedName]
+  | GrammarV1CallableBorrows [Located GrammarV1QualifiedName]
+  | GrammarV1CallableAuthority [Located GrammarV1Type]
+  | GrammarV1CallableEffects (Located GrammarV1EffectSetExpression)
   | GrammarV1CallableOutcomes [Located GrammarV1OutcomeSpec]
   | GrammarV1CallableOutcomeResidue (Located GrammarV1OutcomeResidue)
+  | GrammarV1CallableEnsures (Located GrammarV1Proposition)
   | GrammarV1CallableObligation (Located GrammarV1Proposition)
+  | GrammarV1CallableAssumes (Located GrammarV1Proposition)
+  | GrammarV1CallableCost (Located GrammarV1Expression)
   | GrammarV1CallableCallee (Located GrammarV1CalleeTransition)
   deriving (Eq, Show)
 
@@ -890,10 +913,28 @@ parseCallableClause :: Parser (Located GrammarV1CallableClause)
 parseCallableClause = do
   token <- peekToken
   case fmap locatedValue token of
-    Just (GrammarKeyword "ensures") ->
-      parseCallablePropositionClause "ensures" GrammarV1CallableEnsures
-    Just (GrammarKeyword "obligation") ->
-      parseCallablePropositionClause "obligation" GrammarV1CallableObligation
+    Just (GrammarKeyword "requires") ->
+      parseCallablePropositionClause "requires" GrammarV1CallableRequires
+    Just (GrammarKeyword "consumes") -> do
+      start <- expectKeyword "consumes"
+      names <- parseNameSet
+      end <- expectSymbol ";"
+      pure $ locatedBetween start end (GrammarV1CallableConsumes names)
+    Just (GrammarKeyword "borrows") -> do
+      start <- expectKeyword "borrows"
+      names <- parseNameSet
+      end <- expectSymbol ";"
+      pure $ locatedBetween start end (GrammarV1CallableBorrows names)
+    Just (GrammarKeyword "authority") -> do
+      start <- expectKeyword "authority"
+      types <- parseTypeSet
+      end <- expectSymbol ";"
+      pure $ locatedBetween start end (GrammarV1CallableAuthority types)
+    Just (GrammarKeyword "effects") -> do
+      start <- expectKeyword "effects"
+      effects <- parseEffectSetExpression
+      end <- expectSymbol ";"
+      pure $ locatedBetween start end (GrammarV1CallableEffects effects)
     Just (GrammarKeyword "outcomes") -> do
       start <- expectKeyword "outcomes"
       specs <- parseOutcomeSet
@@ -904,14 +945,24 @@ parseCallableClause = do
       pure $ Located
         (locatedSpan residue)
         (GrammarV1CallableOutcomeResidue residue)
+    Just (GrammarKeyword "ensures") ->
+      parseCallablePropositionClause "ensures" GrammarV1CallableEnsures
+    Just (GrammarKeyword "obligation") ->
+      parseCallablePropositionClause "obligation" GrammarV1CallableObligation
+    Just (GrammarKeyword "assumes") ->
+      parseCallablePropositionClause "assumes" GrammarV1CallableAssumes
+    Just (GrammarKeyword "cost") -> do
+      start <- expectKeyword "cost"
+      expression <- parseExpression
+      end <- expectSymbol ";"
+      pure $ locatedBetween start end (GrammarV1CallableCost expression)
     Just (GrammarKeyword "callee") -> do
       start <- expectKeyword "callee"
       transition <- parseCalleeTransition
       end <- expectSymbol ";"
       pure $ locatedBetween start end (GrammarV1CallableCallee transition)
     Just other -> failParser $
-      "SURF-002 outcome/callee slice does not yet implement callable_clause beginning with "
-        <> renderToken other
+      "expected callable_clause; found " <> renderToken other
     Nothing -> failParser "unterminated callable contract declaration"
 
 parseCallablePropositionClause
@@ -923,6 +974,124 @@ parseCallablePropositionClause keyword constructor = do
   proposition <- parseProposition
   end <- expectSymbol ";"
   pure $ locatedBetween start end (constructor proposition)
+
+parseNameSet :: Parser [Located GrammarV1QualifiedName]
+parseNameSet = do
+  _ <- expectSymbol "{"
+  atEnd <- peekSymbol "}"
+  if atEnd
+    then expectSymbol "}" >> pure []
+    else do
+      first <- parseQualifiedName
+      rest <- parseMoreNameSetValues
+      _ <- expectSymbol "}"
+      pure (first : rest)
+
+parseMoreNameSetValues :: Parser [Located GrammarV1QualifiedName]
+parseMoreNameSetValues = do
+  hasComma <- peekSymbol ","
+  if hasComma
+    then do
+      _ <- expectSymbol ","
+      atEnd <- peekSymbol "}"
+      if atEnd
+        then failParser "name_set does not admit a trailing comma"
+        else do
+          name <- parseQualifiedName
+          rest <- parseMoreNameSetValues
+          pure (name : rest)
+    else pure []
+
+parseTypeSet :: Parser [Located GrammarV1Type]
+parseTypeSet = do
+  _ <- expectSymbol "{"
+  atEnd <- peekSymbol "}"
+  if atEnd
+    then expectSymbol "}" >> pure []
+    else do
+      first <- parseType
+      rest <- parseMoreTypeSetValues
+      _ <- expectSymbol "}"
+      pure (first : rest)
+
+parseMoreTypeSetValues :: Parser [Located GrammarV1Type]
+parseMoreTypeSetValues = do
+  hasComma <- peekSymbol ","
+  if hasComma
+    then do
+      _ <- expectSymbol ","
+      atEnd <- peekSymbol "}"
+      if atEnd
+        then failParser "type_set does not admit a trailing comma"
+        else do
+          ty <- parseType
+          rest <- parseMoreTypeSetValues
+          pure (ty : rest)
+    else pure []
+
+parseEffectSetExpression :: Parser (Located GrammarV1EffectSetExpression)
+parseEffectSetExpression = do
+  token <- peekToken
+  case fmap locatedValue token of
+    Just (GrammarSymbol "{") -> parseEffectSetLiteral
+    Just (GrammarIdentifier _) -> do
+      reference <- parseStaticReference
+      pure $ Located
+        (locatedSpan reference)
+        (GrammarV1EffectSetReference reference)
+    Just other -> failParser $
+      "expected effect_set_expression; found " <> renderToken other
+    Nothing -> failParser "expected effect_set_expression at end of input"
+
+parseEffectSetLiteral :: Parser (Located GrammarV1EffectSetExpression)
+parseEffectSetLiteral = do
+  start <- expectSymbol "{"
+  atEnd <- peekSymbol "}"
+  effects <- if atEnd
+    then pure []
+    else do
+      first <- parseEffectExpression
+      rest <- parseMoreEffectExpressions
+      pure (first : rest)
+  end <- expectSymbol "}"
+  pure $ locatedBetween start end (GrammarV1EffectSetLiteral effects)
+
+parseMoreEffectExpressions :: Parser [Located GrammarV1EffectExpression]
+parseMoreEffectExpressions = do
+  hasComma <- peekSymbol ","
+  if hasComma
+    then do
+      _ <- expectSymbol ","
+      atEnd <- peekSymbol "}"
+      if atEnd
+        then failParser "effect_set_literal does not admit a trailing comma"
+        else do
+          effect <- parseEffectExpression
+          rest <- parseMoreEffectExpressions
+          pure (effect : rest)
+    else pure []
+
+parseEffectExpression :: Parser (Located GrammarV1EffectExpression)
+parseEffectExpression = do
+  reference <- parseStaticReference
+  hasArguments <- peekSymbol "("
+  if hasArguments
+    then do
+      (arguments, end) <- parseTermArguments
+      pure $ Located
+        (SourceSpan
+          (sourceSpanStart (locatedSpan reference))
+          (sourceSpanEnd (locatedSpan end)))
+        GrammarV1EffectExpression
+          { grammarV1EffectReference = reference
+          , grammarV1EffectArguments = arguments
+          }
+    else pure $ Located
+      (locatedSpan reference)
+      GrammarV1EffectExpression
+        { grammarV1EffectReference = reference
+        , grammarV1EffectArguments = []
+        }
 
 parseOutcomeSet :: Parser [Located GrammarV1OutcomeSpec]
 parseOutcomeSet = do
@@ -2309,7 +2478,7 @@ parseGenericRequirement = do
     Just (GrammarKeyword "callable") -> parseNamedTypeRequirement "callable" GrammarV1CallableRequirement
     Just (GrammarKeyword "boundary") -> parseBoundaryRequirement
     Just (GrammarKeyword "architecture") -> parseNamedTypeRequirement "architecture" GrammarV1ArchitectureRequirement
-    Just (GrammarKeyword "effects") -> failParser "effects generic requirements are reserved for the later effect-set parser slice"
+    Just (GrammarKeyword "effects") -> parseEffectsRequirement
     Just (GrammarKeyword "authority") -> parseTypeOnlyRequirement "authority" GrammarV1AuthorityRequirement
     Just (GrammarKeyword "representation") -> parsePropositionOnlyRequirement "representation" GrammarV1RepresentationRequirement
     Just (GrammarKeyword "placement") -> parsePropositionOnlyRequirement "placement" GrammarV1PlacementRequirement
@@ -2362,6 +2531,15 @@ parseBoundaryRequirement = do
       ty <- parseType
       end <- expectSymbol ";"
       pure $ locatedBetween start end (GrammarV1BoundaryRequirement name ty)
+
+parseEffectsRequirement :: Parser (Located GrammarV1GenericRequirement)
+parseEffectsRequirement = do
+  start <- expectKeyword "effects"
+  name <- expectIdentifier
+  _ <- expectKeyword "within"
+  effectSet <- parseEffectSetExpression
+  end <- expectSymbol ";"
+  pure $ locatedBetween start end (GrammarV1EffectsRequirement name effectSet)
 
 parseTypeOnlyRequirement
   :: Text
