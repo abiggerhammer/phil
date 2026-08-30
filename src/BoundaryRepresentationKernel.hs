@@ -79,3 +79,4 @@ decideBoundaryUse :: BoundaryDirection -> BoundaryUse ->
                      BoundaryDirectionResult
 decideBoundaryUse =
   checkBoundaryUse
+
