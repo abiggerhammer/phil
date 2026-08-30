@@ -75,24 +75,62 @@ Theorem successful_generated_encoding_is_exact :
     generatedOutputOwner evidence = actualOwner.
 Proof.
   intros [implementation representation admission]
-    requestedRepresentation expectedOwner actualOwner
-    [evidenceImplementation evidenceRepresentation evidenceOwner] Hresult.
+    requestedRepresentation expectedOwner actualOwner evidence Hresult.
   destruct admission.
-  - simpl in Hresult.
-    destruct (Nat.eqb representation requestedRepresentation) eqn:Hrepresentation;
-      try discriminate.
-    destruct (Nat.eqb expectedOwner actualOwner) eqn:Howner;
-      try discriminate.
+  - unfold establishGeneratedEncoding in Hresult.
     simpl in Hresult.
-    inversion Hresult; subst; clear Hresult.
-    pose proof
-      ((proj1 (Nat.eqb_eq representation requestedRepresentation)) Hrepresentation)
-      as Erepresentation.
-    pose proof
-      ((proj1 (Nat.eqb_eq expectedOwner actualOwner)) Howner)
-      as Eowner.
-    repeat split; try assumption; reflexivity.
-  - simpl in Hresult.
+    destruct (Nat.eqb representation requestedRepresentation) eqn:Hrepresentation.
+    + try rewrite Hrepresentation in Hresult.
+      cbn in Hresult.
+      destruct (Nat.eqb expectedOwner actualOwner) eqn:Howner.
+      * try rewrite Howner in Hresult.
+        cbn in Hresult.
+        pose proof
+          (f_equal
+            (fun result =>
+              match result with
+              | QualifiedEncodingSuccess e => generatedByImplementation e
+              | QualifiedEncodingFailure _ => 0
+              end)
+            Hresult) as Himplementation.
+        pose proof
+          (f_equal
+            (fun result =>
+              match result with
+              | QualifiedEncodingSuccess e => generatedRepresentation e
+              | QualifiedEncodingFailure _ => 0
+              end)
+            Hresult) as HgeneratedRepresentation.
+        pose proof
+          (f_equal
+            (fun result =>
+              match result with
+              | QualifiedEncodingSuccess e => generatedOutputOwner e
+              | QualifiedEncodingFailure _ => 0
+              end)
+            Hresult) as HgeneratedOwner.
+        cbn in Himplementation, HgeneratedRepresentation, HgeneratedOwner.
+        pose proof
+          ((proj1 (Nat.eqb_eq representation requestedRepresentation)) Hrepresentation)
+          as Erepresentation.
+        pose proof
+          ((proj1 (Nat.eqb_eq expectedOwner actualOwner)) Howner)
+          as Eowner.
+        repeat split.
+        -- reflexivity.
+        -- exact Erepresentation.
+        -- exact Eowner.
+        -- symmetry. exact Himplementation.
+        -- symmetry. exact HgeneratedRepresentation.
+        -- symmetry. exact HgeneratedOwner.
+      * try rewrite Howner in Hresult.
+        cbn in Hresult.
+        discriminate.
+    + try rewrite Hrepresentation in Hresult.
+      cbn in Hresult.
+      discriminate.
+  - unfold establishGeneratedEncoding in Hresult.
+    simpl in Hresult.
     discriminate.
 Qed.
 
