@@ -10,6 +10,7 @@ on:
       - 'test/Phase1ProviderEvidenceQualificationMain.hs'
       - 'test/Phase1SteveProviderQualificationMain.hs'
       - 'docs/phase-1/provider-evidence-competence-v1.md'
+      - 'docs/phase-1/provider-evidence-implementation-refinement-v1.md'
       - 'proof/Phil/Core/GenericStructural.v'
       - 'proof/Phil/Core/CallableMode.v'
       - 'proof/Phil/Core/CallableEffects.v'
@@ -22,7 +23,10 @@ on:
       - 'proof/Phil/Core/ResourceJoin.v'
       - 'proof/Phil/Core/ProviderQualification.v'
       - 'proof/Phil/Core/ProviderEvidenceQualification.v'
+      - 'proof/Phil/Core/ProviderEvidenceQualificationImplementation.v'
+      - 'proof/Phil/Core/ProviderEvidenceQualificationImplementationExtraction.v'
       - 'app/Phase1ProviderEvidenceCertificationMain.hs'
+      - 'app/ProviderEvidenceDecisionCorrespondenceMain.hs'
       - '.github/workflows/phase1-provider-evidence-proofs.yml'
   push:
     branches: [main]
@@ -34,6 +38,7 @@ on:
       - 'test/Phase1ProviderEvidenceQualificationMain.hs'
       - 'test/Phase1SteveProviderQualificationMain.hs'
       - 'docs/phase-1/provider-evidence-competence-v1.md'
+      - 'docs/phase-1/provider-evidence-implementation-refinement-v1.md'
       - 'proof/Phil/Core/GenericStructural.v'
       - 'proof/Phil/Core/CallableMode.v'
       - 'proof/Phil/Core/CallableEffects.v'
@@ -46,7 +51,10 @@ on:
       - 'proof/Phil/Core/ResourceJoin.v'
       - 'proof/Phil/Core/ProviderQualification.v'
       - 'proof/Phil/Core/ProviderEvidenceQualification.v'
+      - 'proof/Phil/Core/ProviderEvidenceQualificationImplementation.v'
+      - 'proof/Phil/Core/ProviderEvidenceQualificationImplementationExtraction.v'
       - 'app/Phase1ProviderEvidenceCertificationMain.hs'
+      - 'app/ProviderEvidenceDecisionCorrespondenceMain.hs'
       - '.github/workflows/phase1-provider-evidence-proofs.yml'
 
 permissions:
@@ -60,7 +68,7 @@ jobs:
       options: --user root
     steps:
       - uses: actions/checkout@v4
-      - name: Compile PHIL-PROV-EVIDENCE-001
+      - name: Compile PHIL-PROV-EVIDENCE-001 and implementation correspondence
         shell: bash
         run: |
           set -euo pipefail
@@ -77,10 +85,22 @@ jobs:
           rocq c -Q proof/Phil Phil proof/Phil/Core/ResourceJoin.v
           rocq c -Q proof/Phil Phil proof/Phil/Core/ProviderQualification.v
           rocq c -Q proof/Phil Phil proof/Phil/Core/ProviderEvidenceQualification.v
+          rocq c -Q proof/Phil Phil proof/Phil/Core/ProviderEvidenceQualificationImplementation.v
+          rm -f ProviderEvidenceQualificationKernel.hs
+          rocq c -Q proof/Phil Phil proof/Phil/Core/ProviderEvidenceQualificationImplementationExtraction.v
+          test -s ProviderEvidenceQualificationKernel.hs
+          grep -q 'decideProviderEvidenceCompetenceByFacts' ProviderEvidenceQualificationKernel.hs
+          grep -q 'decideDirectEvidenceSubjectMappingByFacts' ProviderEvidenceQualificationKernel.hs
+          grep -q 'decideCheckedEvidenceSubjectMappingByFacts' ProviderEvidenceQualificationKernel.hs
+          grep -q 'decideRuntimeCoincidenceSubjectMapping' ProviderEvidenceQualificationKernel.hs
+          sha256sum ProviderEvidenceQualificationKernel.hs
           mkdir -p phase1-provider-evidence-proof
           cp \
             proof/Phil/Core/ProviderEvidenceQualification.v \
             proof/Phil/Core/ProviderEvidenceQualification.vo \
+            proof/Phil/Core/ProviderEvidenceQualificationImplementation.v \
+            proof/Phil/Core/ProviderEvidenceQualificationImplementation.vo \
+            ProviderEvidenceQualificationKernel.hs \
             phase1-provider-evidence-proof/
       - uses: actions/upload-artifact@v4
         with:
@@ -101,16 +121,35 @@ jobs:
         run: cabal build exe:phil-certify-core-scalar --ghc-options=-Werror
       - name: Typecheck certifier
         run: cabal exec -- ghc -isrc -Wall -Werror -fno-code app/Phase1ProviderEvidenceCertificationMain.hs
+      - uses: actions/download-artifact@v4
+        with:
+          name: rocq-phase1-provider-evidence-proof
+          path: phase1-provider-evidence-proof
+      - name: Typecheck and execute extracted provider-evidence controls
+        run: |
+          set -euo pipefail
+          ghc -Wall -Werror -fno-code \
+            phase1-provider-evidence-proof/ProviderEvidenceQualificationKernel.hs
+          ghc -Wall -Werror \
+            -iphase1-provider-evidence-proof \
+            app/ProviderEvidenceDecisionCorrespondenceMain.hs \
+            -o provider-evidence-kernel-controls
+          ./provider-evidence-kernel-controls
+      - name: Strict-typecheck unchanged provider-evidence production
+        run: |
+          set -euo pipefail
+          cabal exec -- ghc -isrc -Wall -Werror -fno-code \
+            src/Phil/Core/ProviderEvidenceQualification.hs
+          cabal exec -- ghc -isrc -Wall -Werror -fno-code \
+            test/Phase1ProviderEvidenceQualificationMain.hs
+          cabal exec -- ghc -isrc -Wall -Werror -fno-code \
+            test/Phase1SteveProviderQualificationMain.hs
       - name: Re-run PROV-010 and Steve correspondence
         run: |
           set -euo pipefail
           cabal exec -- runghc -isrc test/Phase1ProviderQualificationMain.hs
           cabal exec -- runghc -isrc test/Phase1ProviderEvidenceQualificationMain.hs
           cabal exec -- runghc -isrc test/Phase1SteveProviderQualificationMain.hs
-      - uses: actions/download-artifact@v4
-        with:
-          name: rocq-phase1-provider-evidence-proof
-          path: phase1-provider-evidence-proof
       - name: Emit PHIL-PROV-EVIDENCE-001 certificate
         shell: bash
         run: |
@@ -134,8 +173,26 @@ jobs:
             > phase1-provider-evidence-certification/PHIL-PROV-EVIDENCE-001.correspondence.sha256
           cat phase1-provider-evidence-certification/PHIL-PROV-EVIDENCE-001.rocq.cert
           sha256sum phase1-provider-evidence-certification/PHIL-PROV-EVIDENCE-001.rocq.cert
+      - name: Record implementation-refinement staging identities
+        run: |
+          set -euo pipefail
+          mkdir -p provider-evidence-implementation-correspondence
+          sha256sum \
+            phase1-provider-evidence-proof/ProviderEvidenceQualificationKernel.hs \
+            src/Phil/Core/ProviderEvidenceQualification.hs \
+            test/Phase1ProviderEvidenceQualificationMain.hs \
+            test/Phase1SteveProviderQualificationMain.hs \
+            app/ProviderEvidenceDecisionCorrespondenceMain.hs \
+            proof/Phil/Core/ProviderEvidenceQualificationImplementation.v \
+            docs/phase-1/provider-evidence-implementation-refinement-v1.md \
+            > provider-evidence-implementation-correspondence/PHIL-PROV-EVIDENCE-001.staging.sha256
       - uses: actions/upload-artifact@v4
         with:
           name: phil-phase1-provider-evidence-proof-certification
           path: phase1-provider-evidence-certification
+          if-no-files-found: error
+      - uses: actions/upload-artifact@v4
+        with:
+          name: provider-evidence-implementation-correspondence
+          path: provider-evidence-implementation-correspondence
           if-no-files-found: error
