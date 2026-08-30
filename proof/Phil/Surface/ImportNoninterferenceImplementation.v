@@ -94,16 +94,16 @@ Qed.
    the semantic identity imported into the local scope. *)
 
 Theorem reflected_import_decision_matches_certified_gate_order :
-  forall state localName identity selectedExportPresent localNameFresh,
-    (selectedExportPresent = true) ->
+  forall state localName selectedExportPresent localNameFresh,
+    selectedExportPresent = true ->
     (localNameFresh = true <->
       lookupBinding localName (resolutionBindings state) = None) ->
     decideImportResolutionByFacts
       selectedExportPresent localNameFresh = ImportResolutionDecisionAccepted ->
     lookupBinding localName (resolutionBindings state) = None.
 Proof.
-  intros state localName identity selectedExportPresent localNameFresh
-    Hselected Hfresh Haccepted.
+  intros state localName selectedExportPresent localNameFresh
+    _ Hfresh Haccepted.
   apply accepted_import_requires_both_reflected_facts in Haccepted.
   destruct Haccepted as [_ HfreshFact].
   apply (proj1 Hfresh).
