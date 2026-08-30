@@ -17,8 +17,8 @@ main = do
         (expectFixtureReject "rejected/20-reject-missing-expression.phil")
     , test "SURF-002 nested reject remains structurally parseable"
         nestedRejectPreserved
-    , test "SURF-002 fallback remains fail-closed in standalone reject slice"
-        fallbackStillRejects
+    , test "SURF-002 reject fallback composes with standalone reject parsing"
+        rejectFallbackPreserved
     ]
   if and results then pure () else exitFailure
 
@@ -55,9 +55,19 @@ nestedRejectPreserved = do
       , "}"
       ]
 
-fallbackStillRejects :: Either String ()
-fallbackStillRejects =
-  expectReject "component C(x : U32, y : U32) { x or reject y }"
+rejectFallbackPreserved :: Either String ()
+rejectFallbackPreserved = do
+  expression <- singleComponentExpression =<< mapLeft show
+    (parseGrammarV1StructuralSource "reject-fallback" source)
+  case expression of
+    GrammarV1FallbackExpression base (Located _ fallback) -> do
+      assertSimpleName "x" base
+      case fallback of
+        GrammarV1RejectFallback value -> assertSimpleName "y" value
+        other -> Left ("expected reject fallback, got " <> show other)
+    other -> Left ("expected fallback expression, got " <> show other)
+  where
+    source = "component C(x : U32, y : U32) { x or reject y }"
 
 singleComponentExpression :: GrammarV1SourceFile -> Either String GrammarV1Expression
 singleComponentExpression sourceFile =
@@ -80,11 +90,6 @@ assertSimpleName expected (Located _ expression) = case expression of
       "simple name unexpectedly had static arguments"
     assert (null arguments) "simple name unexpectedly had term arguments"
   other -> Left ("expected simple name expression, got " <> show other)
-
-expectReject :: Text.Text -> Either String ()
-expectReject source = case parseGrammarV1StructuralSource "reject-negative" source of
-  Left _ -> Right ()
-  Right value -> Left ("expected syntax rejection, parsed " <> show value)
 
 expectFixtureReject :: FilePath -> IO (Either String ())
 expectFixtureReject relativePath = do

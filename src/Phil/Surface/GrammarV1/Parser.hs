@@ -62,6 +62,9 @@ module Phil.Surface.GrammarV1.Parser
   , GrammarV1JoinClause (..)
   , GrammarV1StateBinding (..)
   , GrammarV1Closure (..)
+  , GrammarV1BinaryOperator (..)
+  , GrammarV1FailureTarget (..)
+  , GrammarV1Fallback (..)
   , GrammarV1Expression (..)
   , GrammarV1Statement (..)
   , GrammarV1Block (..)
@@ -606,11 +609,38 @@ data GrammarV1Closure = GrammarV1Closure
   }
   deriving (Eq, Ord, Show)
 
+data GrammarV1BinaryOperator
+  = GrammarV1Add
+  | GrammarV1Subtract
+  | GrammarV1Multiply
+  deriving (Eq, Ord, Show)
+
+data GrammarV1FailureTarget = GrammarV1FailureTarget
+  { grammarV1FailureTargetReference :: GrammarV1StaticReference
+  , grammarV1FailureTargetArguments :: [Located GrammarV1Expression]
+  }
+  deriving (Eq, Ord, Show)
+
+data GrammarV1Fallback
+  = GrammarV1FailFallback (Located GrammarV1FailureTarget)
+  | GrammarV1RejectFallback (Located GrammarV1Expression)
+  deriving (Eq, Ord, Show)
+
 data GrammarV1Expression
   = GrammarV1NameExpression GrammarV1StaticReference [Located GrammarV1Expression]
   | GrammarV1BoolExpression Bool
   | GrammarV1UnitExpression
   | GrammarV1IntegerExpression Text
+  | GrammarV1ProjectionExpression
+      (Located GrammarV1Expression)
+      (Located Text)
+  | GrammarV1BinaryExpression
+      (Located GrammarV1Expression)
+      (Located GrammarV1BinaryOperator)
+      (Located GrammarV1Expression)
+  | GrammarV1FallbackExpression
+      (Located GrammarV1Expression)
+      (Located GrammarV1Fallback)
   | GrammarV1TransportExpression
       (Located GrammarV1Expression)
       (Located GrammarV1Type)
@@ -2343,8 +2373,156 @@ parseFieldPattern = do
       , grammarV1FieldPatternValue = value
       }
 
+peekFallbackStart :: Parser Bool
+peekFallbackStart = Parser $ \tokens ->
+  Right (startsFallback tokens, tokens)
+  where
+    startsFallback (first : second : _) =
+      case (locatedValue first, locatedValue second) of
+        (GrammarKeyword "or", GrammarKeyword "fail") -> True
+        (GrammarKeyword "or", GrammarKeyword "reject") -> True
+        _ -> False
+    startsFallback _ = False
+
 parseExpression :: Parser (Located GrammarV1Expression)
 parseExpression = do
+  base <- parseAdditiveExpression
+  hasFallback <- peekFallbackStart
+  if hasFallback
+    then do
+      _ <- expectKeyword "or"
+      fallback <- parseFallback
+      pure $ Located
+        (SourceSpan
+          (sourceSpanStart (locatedSpan base))
+          (sourceSpanEnd (locatedSpan fallback)))
+        (GrammarV1FallbackExpression base fallback)
+    else pure base
+
+parseFallback :: Parser (Located GrammarV1Fallback)
+parseFallback = do
+  token <- peekToken
+  case fmap locatedValue token of
+    Just (GrammarKeyword "fail") -> do
+      start <- expectKeyword "fail"
+      target <- parseFailureTarget
+      pure $ Located
+        (SourceSpan
+          (sourceSpanStart (locatedSpan start))
+          (sourceSpanEnd (locatedSpan target)))
+        (GrammarV1FailFallback target)
+    Just (GrammarKeyword "reject") -> do
+      start <- expectKeyword "reject"
+      value <- parseAdditiveExpression
+      pure $ Located
+        (SourceSpan
+          (sourceSpanStart (locatedSpan start))
+          (sourceSpanEnd (locatedSpan value)))
+        (GrammarV1RejectFallback value)
+    Just other -> failParser $
+      "fallback expects fail or reject; found " <> renderToken other
+    Nothing -> failParser "expected fallback at end of input"
+
+parseFailureTarget :: Parser (Located GrammarV1FailureTarget)
+parseFailureTarget = do
+  reference <- parseStaticReference
+  hasArguments <- peekSymbol "("
+  if hasArguments
+    then do
+      (arguments, end) <- parseTermArguments
+      pure $ Located
+        (SourceSpan
+          (sourceSpanStart (locatedSpan reference))
+          (sourceSpanEnd (locatedSpan end)))
+        GrammarV1FailureTarget
+          { grammarV1FailureTargetReference = locatedValue reference
+          , grammarV1FailureTargetArguments = arguments
+          }
+    else pure $ Located
+      (locatedSpan reference)
+      GrammarV1FailureTarget
+        { grammarV1FailureTargetReference = locatedValue reference
+        , grammarV1FailureTargetArguments = []
+        }
+
+parseAdditiveExpression :: Parser (Located GrammarV1Expression)
+parseAdditiveExpression = do
+  first <- parseMultiplicativeExpression
+  parseMoreAdditiveExpression first
+
+parseMoreAdditiveExpression
+  :: Located GrammarV1Expression
+  -> Parser (Located GrammarV1Expression)
+parseMoreAdditiveExpression left = do
+  hasPlus <- peekSymbol "+"
+  hasMinus <- peekSymbol "-"
+  if hasPlus || hasMinus
+    then do
+      token <- takeToken
+      operator <- case locatedValue token of
+        GrammarSymbol "+" -> pure GrammarV1Add
+        GrammarSymbol "-" -> pure GrammarV1Subtract
+        other -> failParser $
+          "internal additive operator dispatch error for " <> renderToken other
+      right <- parseMultiplicativeExpression
+      let combined = Located
+            (SourceSpan
+              (sourceSpanStart (locatedSpan left))
+              (sourceSpanEnd (locatedSpan right)))
+            (GrammarV1BinaryExpression
+              left
+              (Located (locatedSpan token) operator)
+              right)
+      parseMoreAdditiveExpression combined
+    else pure left
+
+parseMultiplicativeExpression :: Parser (Located GrammarV1Expression)
+parseMultiplicativeExpression = do
+  first <- parsePostfixExpression
+  parseMoreMultiplicativeExpression first
+
+parseMoreMultiplicativeExpression
+  :: Located GrammarV1Expression
+  -> Parser (Located GrammarV1Expression)
+parseMoreMultiplicativeExpression left = do
+  hasMultiply <- peekSymbol "*"
+  if hasMultiply
+    then do
+      token <- takeToken
+      right <- parsePostfixExpression
+      let operator = Located (locatedSpan token) GrammarV1Multiply
+          combined = Located
+            (SourceSpan
+              (sourceSpanStart (locatedSpan left))
+              (sourceSpanEnd (locatedSpan right)))
+            (GrammarV1BinaryExpression left operator right)
+      parseMoreMultiplicativeExpression combined
+    else pure left
+
+parsePostfixExpression :: Parser (Located GrammarV1Expression)
+parsePostfixExpression = do
+  primary <- parsePrimaryExpression
+  parseMorePostfixExpression primary
+
+parseMorePostfixExpression
+  :: Located GrammarV1Expression
+  -> Parser (Located GrammarV1Expression)
+parseMorePostfixExpression base = do
+  hasProjection <- peekSymbol "."
+  if hasProjection
+    then do
+      _ <- expectSymbol "."
+      field <- expectIdentifier
+      let projected = Located
+            (SourceSpan
+              (sourceSpanStart (locatedSpan base))
+              (sourceSpanEnd (locatedSpan field)))
+            (GrammarV1ProjectionExpression base field)
+      parseMorePostfixExpression projected
+    else pure base
+
+parsePrimaryExpression :: Parser (Located GrammarV1Expression)
+parsePrimaryExpression = do
   token <- peekToken
   case fmap locatedValue token of
     Just (GrammarKeyword "transport") -> parseTransportExpression
@@ -2372,18 +2550,18 @@ parseExpression = do
     Just (GrammarSymbol "(") -> parseTupleOrParenthesizedExpression
     Just (GrammarIdentifier _) -> parseNameExpression
     Just other -> failParser $
-      "SURF-002 term/block slice does not yet implement expression beginning with "
+      "SURF-002 term/block slice does not yet implement primary_expression beginning with "
         <> renderToken other
-    Nothing -> failParser "expected expression at end of input"
+    Nothing -> failParser "expected primary_expression at end of input"
 
 parseTransportExpression :: Parser (Located GrammarV1Expression)
 parseTransportExpression = do
   start <- expectKeyword "transport"
-  value <- parseExpression
+  value <- parseAdditiveExpression
   _ <- expectKeyword "to"
   target <- parseType
   _ <- expectKeyword "using"
-  evidence <- parseExpression
+  evidence <- parseAdditiveExpression
   pure $ Located
     (SourceSpan
       (sourceSpanStart (locatedSpan start))
@@ -2393,7 +2571,7 @@ parseTransportExpression = do
 parseOfferExpression :: Parser (Located GrammarV1Expression)
 parseOfferExpression = do
   start <- expectKeyword "offer"
-  scrutinee <- parseExpression
+  scrutinee <- parseAdditiveExpression
   _ <- expectSymbol "{"
   atEnd <- peekSymbol "}"
   if atEnd
@@ -2702,7 +2880,7 @@ parseClosureCaptures = do
 parseRejectExpression :: Parser (Located GrammarV1Expression)
 parseRejectExpression = do
   start <- expectKeyword "reject"
-  operand <- parseExpression
+  operand <- parseAdditiveExpression
   pure $ Located
     (SourceSpan
       (sourceSpanStart (locatedSpan start))
