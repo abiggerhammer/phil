@@ -7,7 +7,11 @@ on:
       - 'src/Phil/Core/Static.hs'
       - 'test/Phase1ImportNoninterferenceMain.hs'
       - 'docs/phase-1/import-noninterference-v1.md'
+      - 'docs/phase-1/architecture-import-implementation-refinement-v1.md'
       - 'proof/Phil/Surface/ImportNoninterference.v'
+      - 'proof/Phil/Surface/ImportNoninterferenceImplementation.v'
+      - 'proof/Phil/Surface/ImportNoninterferenceImplementationExtraction.v'
+      - 'app/ArchitectureImportDecisionCorrespondenceMain.hs'
       - 'app/RocqScalarCertificationMain.hs'
       - '.github/workflows/phase1-architecture-import-proofs.yml'
   push:
@@ -17,7 +21,11 @@ on:
       - 'src/Phil/Core/Static.hs'
       - 'test/Phase1ImportNoninterferenceMain.hs'
       - 'docs/phase-1/import-noninterference-v1.md'
+      - 'docs/phase-1/architecture-import-implementation-refinement-v1.md'
       - 'proof/Phil/Surface/ImportNoninterference.v'
+      - 'proof/Phil/Surface/ImportNoninterferenceImplementation.v'
+      - 'proof/Phil/Surface/ImportNoninterferenceImplementationExtraction.v'
+      - 'app/ArchitectureImportDecisionCorrespondenceMain.hs'
       - 'app/RocqScalarCertificationMain.hs'
       - '.github/workflows/phase1-architecture-import-proofs.yml'
 
@@ -33,18 +41,35 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
-      - name: Check PHIL-ARCH-IMPORT-001 in Rocq
+      - name: Check PHIL-ARCH-IMPORT-001 and implementation correspondence in Rocq
         shell: bash
         run: |
           set -euo pipefail
           export PATH="/home/rocq/.opam/${COMPILER}/bin:$PATH"
           rocq c -Q proof/Phil Phil proof/Phil/Surface/ImportNoninterference.v
+          rocq c -Q proof/Phil Phil proof/Phil/Surface/ImportNoninterferenceImplementation.v
+          rm -f ArchitectureImportKernel.hs
+          rocq c -Q proof/Phil Phil proof/Phil/Surface/ImportNoninterferenceImplementationExtraction.v
           test -f proof/Phil/Surface/ImportNoninterference.vo
+          test -s ArchitectureImportKernel.hs
+          grep -q 'decideImportResolutionByFacts' ArchitectureImportKernel.hs
+          grep -q 'planImportedBinding' ArchitectureImportKernel.hs
           mkdir -p phase1-arch-import-proof
-          cp proof/Phil/Surface/ImportNoninterference.v phase1-arch-import-proof/
-          cp proof/Phil/Surface/ImportNoninterference.vo phase1-arch-import-proof/
-          sha256sum phase1-arch-import-proof/ImportNoninterference.v \
-                    phase1-arch-import-proof/ImportNoninterference.vo
+          cp \
+            proof/Phil/Surface/ImportNoninterference.v \
+            proof/Phil/Surface/ImportNoninterference.vo \
+            proof/Phil/Surface/ImportNoninterferenceImplementation.v \
+            proof/Phil/Surface/ImportNoninterferenceImplementation.vo \
+            proof/Phil/Surface/ImportNoninterferenceImplementationExtraction.v \
+            proof/Phil/Surface/ImportNoninterferenceImplementationExtraction.vo \
+            ArchitectureImportKernel.hs \
+            phase1-arch-import-proof/
+          sha256sum \
+            phase1-arch-import-proof/ImportNoninterference.v \
+            phase1-arch-import-proof/ImportNoninterference.vo \
+            phase1-arch-import-proof/ImportNoninterferenceImplementation.v \
+            phase1-arch-import-proof/ImportNoninterferenceImplementation.vo \
+            phase1-arch-import-proof/ArchitectureImportKernel.hs
 
       - uses: actions/upload-artifact@v4
         with:
@@ -66,19 +91,30 @@ jobs:
       - name: Build proof certifier with warnings as errors
         run: cabal build exe:phil-certify-core-scalar --ghc-options=-Werror
 
-      - name: Re-run exact ARCH-001 implementation correspondence cases
-        run: cabal exec -- runghc -isrc test/Phase1ImportNoninterferenceMain.hs
-
       - uses: actions/download-artifact@v4
         with:
           name: rocq-phase1-architecture-import-proof
           path: phase1-arch-import-proof
 
-      - name: Emit PHIL-ARCH-IMPORT-001 proof certificate
+      - name: Typecheck and execute extracted architecture-import controls
+        run: |
+          set -euo pipefail
+          ghc -Wall -Werror -fno-code phase1-arch-import-proof/ArchitectureImportKernel.hs
+          ghc -Wall -Werror \
+            -iphase1-arch-import-proof \
+            app/ArchitectureImportDecisionCorrespondenceMain.hs \
+            -o architecture-import-kernel-controls
+          ./architecture-import-kernel-controls
+
+      - name: Re-run exact ARCH-001 implementation correspondence cases
+        run: cabal exec -- runghc -Wall -Werror -isrc test/Phase1ImportNoninterferenceMain.hs
+
+      - name: Emit PHIL-ARCH-IMPORT-001 proof certificate and staging identities
         shell: bash
         run: |
           set -euo pipefail
           mkdir -p phase1-architecture-import-certification
+          mkdir -p architecture-import-implementation-correspondence
           CERTIFIER="$(cabal list-bin exe:phil-certify-core-scalar)"
           "$CERTIFIER" \
             phase1-arch-import \
@@ -95,6 +131,15 @@ jobs:
             app/RocqScalarCertificationMain.hs \
             > phase1-architecture-import-certification/PHIL-ARCH-IMPORT-001.correspondence.sha256
 
+          sha256sum \
+            phase1-arch-import-proof/ArchitectureImportKernel.hs \
+            src/Phil/Surface/Check.hs \
+            test/Phase1ImportNoninterferenceMain.hs \
+            app/ArchitectureImportDecisionCorrespondenceMain.hs \
+            proof/Phil/Surface/ImportNoninterferenceImplementation.v \
+            docs/phase-1/architecture-import-implementation-refinement-v1.md \
+            > architecture-import-implementation-correspondence/PHIL-ARCH-IMPORT-001.staging.sha256
+
           cat phase1-architecture-import-certification/PHIL-ARCH-IMPORT-001.rocq.cert
           sha256sum phase1-architecture-import-certification/PHIL-ARCH-IMPORT-001.rocq.cert
 
@@ -102,4 +147,10 @@ jobs:
         with:
           name: phil-phase1-architecture-import-proof-certification
           path: phase1-architecture-import-certification
+          if-no-files-found: error
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: architecture-import-implementation-correspondence
+          path: architecture-import-implementation-correspondence
           if-no-files-found: error
