@@ -51,6 +51,16 @@ Record BoundaryCorrespondencePlan
 
 Arguments mkBoundaryCorrespondencePlan
   {representation grammar valueType value} _ _ _ _ _.
+Arguments plannedRepresentation
+  {representation grammar valueType value} _.
+Arguments plannedGrammar
+  {representation grammar valueType value} _.
+Arguments plannedValueType
+  {representation grammar valueType value} _.
+Arguments plannedGrammarValue
+  {representation grammar valueType value} _.
+Arguments plannedSemanticValue
+  {representation grammar valueType value} _.
 
 Definition planBoundaryCorrespondence
   {representation grammar valueType value : Type}
