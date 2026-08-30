@@ -51,7 +51,7 @@ callableClausesPreserved = do
       , Located _ (GrammarV1CallableCallee callee)
       ] -> do
         assertTrue requires
-        assertQualifiedNames ["x", "state.slot"] consumes
+        assertQualifiedNames ["x", "store.slot"] consumes
         assertQualifiedNames ["loan"] borrows
         assertTypes ["Cap", "OtherCap"] authority
         assertEffectLiteralWithArguments effects
@@ -79,7 +79,7 @@ fullCallableSource :: Text.Text
 fullCallableSource = Text.unlines
   [ "callable C[E : Effects] requires { effects E within {IO, Audit}; } (x : U32) -> Unit {"
   , "  requires true;"
-  , "  consumes {x, state.slot};"
+  , "  consumes {x, store.slot};"
   , "  borrows {loan};"
   , "  authority {Cap, OtherCap};"
   , "  effects {IO, Audit(x)};"
