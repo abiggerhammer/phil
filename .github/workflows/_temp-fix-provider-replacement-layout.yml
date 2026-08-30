@@ -1,0 +1,47 @@
+name: Temporary Provider Replacement Layout Fix
+
+on:
+  push:
+    branches:
+      - bind-provider-replacement-closeout
+    paths:
+      - '.github/workflows/_temp-fix-provider-replacement-layout.yml'
+
+permissions:
+  contents: write
+
+jobs:
+  patch:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: bind-provider-replacement-closeout
+          fetch-depth: 0
+
+      - name: Fix outer case layout
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 - <<'PY'
+          from pathlib import Path
+          p = Path('src/Phil/Core/ProviderReplacementQualification.hs')
+          s = p.read_text()
+          start_marker = '\n  Kernel.ProviderReplacementAccepted -> Right ()'
+          end_marker = '\n\n  mapM_ (validateReuse priorClaimRevision newClaimRevision)'
+          assert s.count(start_marker) == 1
+          assert s.count(end_marker) == 1
+          start = s.index(start_marker) + 1
+          end = s.index(end_marker)
+          block = s[start:end]
+          block = '\n'.join('  ' + line for line in block.split('\n'))
+          s = s[:start] + block + s[end:]
+          p.write_text(s)
+          PY
+          git diff --check
+          rm .github/workflows/_temp-fix-provider-replacement-layout.yml
+          git config user.name 'Meredith L. Patterson'
+          git config user.email 'clonearmy@gmail.com'
+          git add -A
+          git commit -m 'Fix provider replacement case layout'
+          git push origin HEAD:bind-provider-replacement-closeout
