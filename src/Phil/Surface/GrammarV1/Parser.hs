@@ -53,6 +53,7 @@ module Phil.Surface.GrammarV1.Parser
   , GrammarV1ProtocolDecl (..)
   , GrammarV1TermParam (..)
   , GrammarV1Pattern (..)
+  , GrammarV1FieldPattern (..)
   , GrammarV1FieldBinder (..)
   , GrammarV1CaseBinders (..)
   , GrammarV1CasePattern (..)
@@ -539,8 +540,19 @@ data GrammarV1TermParam = GrammarV1TermParam
   }
   deriving (Eq, Ord, Show)
 
-newtype GrammarV1Pattern = GrammarV1IdentifierPattern
-  { grammarV1IdentifierPatternName :: Located Text
+data GrammarV1Pattern
+  = GrammarV1IdentifierPattern
+      { grammarV1IdentifierPatternName :: Located Text
+      }
+  | GrammarV1TuplePattern [Located GrammarV1Pattern]
+  | GrammarV1RecordPattern
+      (Located GrammarV1QualifiedName)
+      [Located GrammarV1FieldPattern]
+  deriving (Eq, Ord, Show)
+
+data GrammarV1FieldPattern = GrammarV1FieldPattern
+  { grammarV1FieldPatternName :: Located Text
+  , grammarV1FieldPatternValue :: Maybe (Located GrammarV1Pattern)
   }
   deriving (Eq, Ord, Show)
 
@@ -2234,14 +2246,102 @@ parsePattern :: Parser (Located GrammarV1Pattern)
 parsePattern = do
   token <- peekToken
   case fmap locatedValue token of
-    Just (GrammarIdentifier _) -> do
-      name <- expectIdentifier
-      pure $ Located
-        (locatedSpan name)
-        (GrammarV1IdentifierPattern name)
+    Just (GrammarIdentifier _) -> parseNamedPattern
+    Just (GrammarSymbol "(") -> parseTuplePattern
     Just other -> failParser $
-      "SURF-002 term/block slice expects an identifier pattern; found " <> renderToken other
+      "expected Grammar-v1 pattern; found " <> renderToken other
     Nothing -> failParser "expected pattern at end of input"
+
+parseNamedPattern :: Parser (Located GrammarV1Pattern)
+parseNamedPattern = do
+  name <- parseQualifiedName
+  record <- peekSymbol "{"
+  if record
+    then parseRecordPatternAfterName name
+    else case grammarV1QualifiedNameParts (locatedValue name) of
+      [part] -> pure $ Located
+        (locatedSpan name)
+        (GrammarV1IdentifierPattern (Located (locatedSpan name) part))
+      _ -> failParser "plain pattern must be an identifier; qualified names require a record pattern body"
+
+parseTuplePattern :: Parser (Located GrammarV1Pattern)
+parseTuplePattern = do
+  start <- expectSymbol "("
+  first <- parsePattern
+  _ <- expectSymbol ","
+  atEnd <- peekSymbol ")"
+  if atEnd
+    then failParser "tuple_pattern requires a second pattern after comma"
+    else do
+      second <- parsePattern
+      rest <- parseMoreTuplePatterns
+      end <- expectSymbol ")"
+      pure $ locatedBetween start end (GrammarV1TuplePattern (first : second : rest))
+
+parseMoreTuplePatterns :: Parser [Located GrammarV1Pattern]
+parseMoreTuplePatterns = do
+  hasComma <- peekSymbol ","
+  if hasComma
+    then do
+      _ <- expectSymbol ","
+      atEnd <- peekSymbol ")"
+      if atEnd
+        then failParser "tuple_pattern does not admit a trailing comma"
+        else do
+          value <- parsePattern
+          rest <- parseMoreTuplePatterns
+          pure (value : rest)
+    else pure []
+
+parseRecordPatternAfterName
+  :: Located GrammarV1QualifiedName
+  -> Parser (Located GrammarV1Pattern)
+parseRecordPatternAfterName name = do
+  _ <- expectSymbol "{"
+  atEnd <- peekSymbol "}"
+  if atEnd
+    then failParser "record_pattern requires at least one field_pattern"
+    else do
+      first <- parseFieldPattern
+      rest <- parseMoreFieldPatterns
+      end <- expectSymbol "}"
+      pure $ Located
+        (SourceSpan
+          (sourceSpanStart (locatedSpan name))
+          (sourceSpanEnd (locatedSpan end)))
+        (GrammarV1RecordPattern name (first : rest))
+
+parseMoreFieldPatterns :: Parser [Located GrammarV1FieldPattern]
+parseMoreFieldPatterns = do
+  hasComma <- peekSymbol ","
+  if hasComma
+    then do
+      _ <- expectSymbol ","
+      atEnd <- peekSymbol "}"
+      if atEnd
+        then pure []
+        else do
+          field <- parseFieldPattern
+          rest <- parseMoreFieldPatterns
+          pure (field : rest)
+    else pure []
+
+parseFieldPattern :: Parser (Located GrammarV1FieldPattern)
+parseFieldPattern = do
+  field <- expectIdentifier
+  hasValue <- peekSymbol "="
+  value <- if hasValue
+    then expectSymbol "=" >> Just <$> parsePattern
+    else pure Nothing
+  let endSpan = maybe (locatedSpan field) locatedSpan value
+  pure $ Located
+    (SourceSpan
+      (sourceSpanStart (locatedSpan field))
+      (sourceSpanEnd endSpan))
+    GrammarV1FieldPattern
+      { grammarV1FieldPatternName = field
+      , grammarV1FieldPatternValue = value
+      }
 
 parseExpression :: Parser (Located GrammarV1Expression)
 parseExpression = do

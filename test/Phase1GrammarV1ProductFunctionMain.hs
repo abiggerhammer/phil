@@ -21,6 +21,10 @@ main = do
         recursiveFunctionPreserved
     , test "SURF-003 tuple expression trailing comma rejects at syntax"
         tupleExpressionTrailingCommaRejects
+    , test "SURF-002 tuple and record patterns preserve recursive structure"
+        tupleRecordPatternsPreserved
+    , test "SURF-003 malformed tuple and record patterns reject at syntax"
+        tupleRecordPatternsRejectMalformed
     ]
   if and results then pure () else exitFailure
 
@@ -144,6 +148,79 @@ tupleExpressionTrailingCommaRejects =
     Right value -> Left ("expected tuple expression trailing comma rejection, got " <> show value)
   where
     source = "fn bad() -> (U32, Bool) satisfies Pair { return (1, true,) }"
+
+tupleRecordPatternsPreserved :: Either String ()
+tupleRecordPatternsPreserved = do
+  sourceFile <- mapLeft show $ parseGrammarV1StructuralSource "tuple-record-patterns" source
+  functionDecl <- onlyFunction sourceFile
+  case grammarV1BlockStatements (locatedValue (grammarV1FunctionBody functionDecl)) of
+    [ Located _ (GrammarV1LetStatement tuplePattern tupleValue)
+      , Located _ (GrammarV1LetStatement recordPattern recordValue)
+      , Located _ (GrammarV1ReturnStatement result)
+      ] -> do
+        case locatedValue tuplePattern of
+          GrammarV1TuplePattern
+            [ left
+              , Located _ (GrammarV1TuplePattern [middle, right])
+              ] -> do
+                assertIdentifierPattern "left" left
+                assertIdentifierPattern "middle" middle
+                assertIdentifierPattern "right" right
+          other -> Left ("unexpected recursive tuple pattern " <> show other)
+        assertSimpleName "input" tupleValue
+        case locatedValue recordPattern of
+          GrammarV1RecordPattern name
+            [ Located _ firstField
+              , Located _ secondField
+              ] -> do
+                assert
+                  (grammarV1QualifiedNameParts (locatedValue name) == ["payload", "Pair"])
+                  "record pattern name was not payload.Pair"
+                assert (locatedValue (grammarV1FieldPatternName firstField) == "first")
+                  "first record field pattern was not first"
+                assert (grammarV1FieldPatternValue firstField == Nothing)
+                  "first record field unexpectedly had a nested pattern"
+                assert (locatedValue (grammarV1FieldPatternName secondField) == "second")
+                  "second record field pattern was not second"
+                case grammarV1FieldPatternValue secondField of
+                  Just (Located _ (GrammarV1TuplePattern [inner, tailPattern])) -> do
+                    assertIdentifierPattern "inner" inner
+                    assertIdentifierPattern "tail" tailPattern
+                  other -> Left ("unexpected second-field nested pattern " <> show other)
+          other -> Left ("unexpected record pattern " <> show other)
+        assertSimpleName "input" recordValue
+        assertSimpleName "left" result
+    statements -> Left ("expected two let statements and a return, got " <> show statements)
+  where
+    source = Text.unlines
+      [ "fn destructure(input : Pair) -> U32 satisfies Destructure {"
+      , "  let (left, (middle, right)) = input"
+      , "  let payload.Pair{first, second = (inner, tail),} = input"
+      , "  return left"
+      , "}"
+      ]
+
+tupleRecordPatternsRejectMalformed :: Either String ()
+tupleRecordPatternsRejectMalformed = do
+  expectSourceReject "fn bad(input : Pair) satisfies Bad { let (only) = input }"
+  expectSourceReject "fn bad(input : Pair) satisfies Bad { let (left, right,) = input }"
+  expectSourceReject "fn bad(input : Pair) satisfies Bad { let Pair{} = input }"
+  expectSourceReject "fn bad(input : Pair) satisfies Bad { let Pair{left = } = input }"
+  expectSourceReject "fn bad(input : Pair) satisfies Bad { let Pair[U32]{left} = input }"
+  expectSourceReject "fn bad(input : Pair) satisfies Bad { let payload.Pair = input }"
+
+assertIdentifierPattern :: Text.Text -> Located GrammarV1Pattern -> Either String ()
+assertIdentifierPattern expected (Located _ pattern') = case pattern' of
+  GrammarV1IdentifierPattern name ->
+    assert (locatedValue name == expected)
+      ("expected identifier pattern " <> Text.unpack expected)
+  other -> Left ("expected identifier pattern, got " <> show other)
+
+expectSourceReject :: Text.Text -> Either String ()
+expectSourceReject source =
+  case parseGrammarV1StructuralSource "malformed-pattern" source of
+    Left _ -> Right ()
+    Right value -> Left ("expected syntax rejection, parsed " <> show value)
 
 onlyFunction :: GrammarV1SourceFile -> Either String GrammarV1FunctionDecl
 onlyFunction sourceFile = case grammarV1TopLevelDecls sourceFile of
