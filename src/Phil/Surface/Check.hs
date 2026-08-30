@@ -32,6 +32,7 @@ module Phil.Surface.Check
   , resolutionBindings
   ) where
 
+import qualified ArchitectureImportKernel as ImportKernel
 import qualified Data.Map.Strict as Map
 import qualified Data.Set as Set
 import Data.Text (Text)
@@ -132,13 +133,24 @@ insertLocalDeclaration
   -> DeclarationIdentity
   -> ResolutionScope
   -> Either ModuleResolutionError ResolutionScope
-insertLocalDeclaration localName declarationIdentity scope
-  | Map.member localName (resolutionBindings scope) =
+insertLocalDeclaration localName declarationIdentity scope =
+  case ImportKernel.decideImportResolutionByFacts
+      True
+      (not (Map.member localName (resolutionBindings scope))) of
+    ImportKernel.ImportResolutionDecisionAccepted ->
+      case ImportKernel.planImportedBinding localName declarationIdentity of
+        ImportKernel.MkImportedBindingPlan plannedLocalName plannedIdentity ->
+          Right scope
+            { resolutionBindings =
+                Map.insert plannedLocalName plannedIdentity (resolutionBindings scope)
+            }
+    ImportKernel.DuplicateResolutionNameDecision ->
       Left (DuplicateResolutionName localName)
-  | otherwise = Right scope
-      { resolutionBindings =
-          Map.insert localName declarationIdentity (resolutionBindings scope)
-      }
+    ImportKernel.UnknownSelectedExportDecision ->
+      -- The selected-export fact is the literal True at this bridge.  Treat any
+      -- impossible kernel/bridge disagreement as the existing fail-closed name
+      -- collision rather than accepting an unvalidated binding.
+      Left (DuplicateResolutionName localName)
 
 resolveImports
   :: ModuleTable
@@ -168,14 +180,31 @@ selectedBindings interface selection = case selection of
   ImportAll -> Right (Map.toAscList (moduleInterfaceExports interface))
   ImportOnly bindings -> mapM resolveOne bindings
   where
-    resolveOne binding = do
-      declarationIdentity <- maybe
-        (Left (UnknownModuleExport
-          (moduleInterfaceName interface)
-          (importExportName binding)))
-        Right
-        (Map.lookup (importExportName binding) (moduleInterfaceExports interface))
-      Right (importLocalName binding, declarationIdentity)
+    resolveOne binding =
+      let selectedIdentity =
+            Map.lookup (importExportName binding) (moduleInterfaceExports interface)
+          selectedExportPresent = maybe False (const True) selectedIdentity
+      in case ImportKernel.decideImportResolutionByFacts selectedExportPresent True of
+        ImportKernel.ImportResolutionDecisionAccepted ->
+          case selectedIdentity of
+            Just declarationIdentity ->
+              case ImportKernel.planImportedBinding
+                  (importLocalName binding)
+                  declarationIdentity of
+                ImportKernel.MkImportedBindingPlan plannedLocalName plannedIdentity ->
+                  Right (plannedLocalName, plannedIdentity)
+            Nothing -> unknownExport binding
+        ImportKernel.UnknownSelectedExportDecision -> unknownExport binding
+        ImportKernel.DuplicateResolutionNameDecision ->
+          -- The local-name-fresh fact is the literal True during selection.
+          -- Fail closed through the native unknown-export diagnostic if an
+          -- impossible bridge disagreement is ever observed.
+          unknownExport binding
+
+    unknownExport binding =
+      Left (UnknownModuleExport
+        (moduleInterfaceName interface)
+        (importExportName binding))
 
 lookupResolvedDeclaration :: Text -> ResolutionScope -> Maybe DeclarationIdentity
 lookupResolvedDeclaration localName = Map.lookup localName . resolutionBindings
