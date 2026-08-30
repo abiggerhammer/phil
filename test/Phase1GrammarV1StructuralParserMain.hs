@@ -307,6 +307,9 @@ declarationMode declaration = case declaration of
   GrammarV1ClaimDeclaration _ -> Nothing
   GrammarV1CallableContractDeclaration _ -> Nothing
   GrammarV1FunctionDeclaration _ -> Nothing
+  GrammarV1ProviderContractDeclaration _ -> Nothing
+  GrammarV1ProviderImplementationDeclaration _ -> Nothing
+  GrammarV1OpaqueProviderImplementationDeclaration _ -> Nothing
   GrammarV1CapabilityDeclaration value -> Just (grammarV1CapabilityMode value)
   GrammarV1BoundaryDeclaration _ -> Nothing
   GrammarV1ProtocolDeclaration _ -> Nothing
