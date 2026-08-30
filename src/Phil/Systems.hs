@@ -7,7 +7,6 @@ module Phil.Systems
   , module Phil.Systems.RecognizedRecord
   , module Phil.Systems.DigestValidation
   , module Phil.Systems.Storage
-  , module Phil.Systems.StorageRealization
   , module Phil.Systems.AcceptedResponse
   , module Phil.Systems.RejectedResponse
   , module Phil.Systems.SessionChoice
@@ -39,7 +38,6 @@ import Phil.Systems.RejectedResponse
 import Phil.Systems.SessionChoice
 import Phil.Systems.Storage
 import Phil.Systems.StorageFailure
-import Phil.Systems.StorageRealization
 import Phil.Systems.VersionChoiceOperands
 import Phil.Systems.VersionSessionChoice
 import Phil.Systems.Verify
