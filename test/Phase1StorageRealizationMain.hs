@@ -238,14 +238,14 @@ checked = mapLeft show . checkStorageRealization
 ordinaryInlineRelation, ordinaryHeapRelation :: StorageRealizationRelation
 ordinaryInlineRelation = baseRelation
   (ExactStorageSemanticSubject ordinarySubject)
-  "register-or-inline"
+  (PhysicalStorageStrategy "register-or-inline")
   Set.empty
   (RealizationRevision "realization.value.inline.v1")
   PhysicalAllocationCannotFail
 
 ordinaryHeapRelation = baseRelation
   (ExactStorageSemanticSubject ordinarySubject)
-  "qualified-hidden-heap"
+  (PhysicalStorageStrategy "qualified-hidden-heap")
   (Set.singleton heapObject)
   (RealizationRevision "realization.value.heap.v1")
   (PhysicalAllocationMayFail (StorageFailureProvedUnreachable capacityEvidence))
@@ -253,7 +253,7 @@ ordinaryHeapRelation = baseRelation
 semanticArenaRelation, semanticDeviceRelation :: StorageRealizationRelation
 semanticArenaRelation = (baseRelation
   (ExactStorageSemanticSubject semanticStorageSubject)
-  "qualified-arena-region"
+  (PhysicalStorageStrategy "qualified-arena-region")
   (Set.singleton arenaObject)
   (RealizationRevision "realization.storage.arena.v1")
   PhysicalAllocationCannotFail)
@@ -263,7 +263,7 @@ semanticArenaRelation = (baseRelation
 
 semanticDeviceRelation = (baseRelation
   (ExactStorageSemanticSubject semanticStorageSubject)
-  "qualified-device-storage"
+  (PhysicalStorageStrategy "qualified-device-storage")
   (Set.singleton deviceObject)
   (RealizationRevision "realization.storage.device.v1")
   (PhysicalAllocationMayFail (StorageFailureDeploymentRequirement deploymentCapacity)))
