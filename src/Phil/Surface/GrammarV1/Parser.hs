@@ -14,6 +14,8 @@ module Phil.Surface.GrammarV1.Parser
   , GrammarV1GenericParam (..)
   , GrammarV1StaticArgument (..)
   , GrammarV1StaticReference (..)
+  , GrammarV1StaticValueOperator (..)
+  , GrammarV1StaticValueExpression (..)
   , GrammarV1EffectExpression (..)
   , GrammarV1EffectSetExpression (..)
   , GrammarV1RelationOperator (..)
@@ -168,7 +170,10 @@ data GrammarV1StaticArgument
   = GrammarV1StaticTypeArgument GrammarV1Type
   | GrammarV1StaticReferenceArgument GrammarV1StaticReference
   | GrammarV1StaticBoolArgument Bool
+  | GrammarV1StaticUnitArgument
   | GrammarV1StaticIntegerArgument Text
+  | GrammarV1StaticValueArgument (Located GrammarV1StaticValueExpression)
+  | GrammarV1StaticEffectSetArgument (Located GrammarV1EffectSetExpression)
   deriving (Eq, Ord, Show)
 
 data GrammarV1StaticReference = GrammarV1StaticReference
@@ -177,16 +182,37 @@ data GrammarV1StaticReference = GrammarV1StaticReference
   }
   deriving (Eq, Ord, Show)
 
+data GrammarV1StaticValueOperator
+  = GrammarV1StaticAdd
+  | GrammarV1StaticSubtract
+  | GrammarV1StaticMultiply
+  deriving (Eq, Ord, Show)
+
+data GrammarV1StaticValueExpression
+  = GrammarV1StaticValueBool Bool
+  | GrammarV1StaticValueUnit
+  | GrammarV1StaticValueInteger Text
+  | GrammarV1StaticValueReference (Located GrammarV1StaticReference)
+  | GrammarV1StaticValueParenthesized (Located GrammarV1StaticValueExpression)
+  | GrammarV1StaticValueProjection
+      (Located GrammarV1StaticValueExpression)
+      (Located Text)
+  | GrammarV1StaticValueBinary
+      (Located GrammarV1StaticValueExpression)
+      (Located GrammarV1StaticValueOperator)
+      (Located GrammarV1StaticValueExpression)
+  deriving (Eq, Ord, Show)
+
 data GrammarV1EffectExpression = GrammarV1EffectExpression
   { grammarV1EffectReference :: Located GrammarV1StaticReference
   , grammarV1EffectArguments :: [Located GrammarV1Expression]
   }
-  deriving (Eq, Show)
+  deriving (Eq, Ord, Show)
 
 data GrammarV1EffectSetExpression
   = GrammarV1EffectSetLiteral [Located GrammarV1EffectExpression]
   | GrammarV1EffectSetReference (Located GrammarV1StaticReference)
-  deriving (Eq, Show)
+  deriving (Eq, Ord, Show)
 
 data GrammarV1RelationOperator
   = GrammarV1EqualRelation
@@ -241,7 +267,12 @@ data GrammarV1Type
   | GrammarV1BoolType
   | GrammarV1UnsignedType Text
   | GrammarV1BytesType (Located GrammarV1Expression)
+  | GrammarV1FrameType (Located GrammarV1StaticReference)
   | GrammarV1ProofType (Located GrammarV1Proposition)
+  | GrammarV1ValidatedType
+      (Located GrammarV1StaticReference)
+      (Located GrammarV1Expression)
+      (Located GrammarV1Expression)
   | GrammarV1RefinementType
       (Located Text)
       (Located GrammarV1Type)
@@ -2815,7 +2846,9 @@ parseType = do
         GrammarUIntType width -> pure (Located (locatedSpan value) (GrammarV1UnsignedType width))
         _ -> failParser "internal UINT_TYPE dispatch error"
     Just (GrammarKeyword "Bytes") -> parseBytesType
+    Just (GrammarKeyword "Frame") -> parseFrameType
     Just (GrammarKeyword "Proof") -> parseProofType
+    Just (GrammarKeyword "Validated") -> parseValidatedType
     Just (GrammarSymbol "{") -> parseRefinementType
     Just (GrammarSymbol "(") -> parseTupleType
     Just (GrammarIdentifier _) -> do
@@ -2832,6 +2865,14 @@ parseBytesType = do
   end <- expectSymbol "]"
   pure $ locatedBetween start end (GrammarV1BytesType lengthExpression)
 
+parseFrameType :: Parser (Located GrammarV1Type)
+parseFrameType = do
+  start <- expectKeyword "Frame"
+  _ <- expectSymbol "["
+  reference <- parseStaticReference
+  end <- expectSymbol "]"
+  pure $ locatedBetween start end (GrammarV1FrameType reference)
+
 parseProofType :: Parser (Located GrammarV1Type)
 parseProofType = do
   start <- expectKeyword "Proof"
@@ -2839,6 +2880,18 @@ parseProofType = do
   proposition <- parseProposition
   end <- expectSymbol "]"
   pure $ locatedBetween start end (GrammarV1ProofType proposition)
+
+parseValidatedType :: Parser (Located GrammarV1Type)
+parseValidatedType = do
+  start <- expectKeyword "Validated"
+  _ <- expectSymbol "["
+  validator <- parseStaticReference
+  _ <- expectSymbol ","
+  input <- parseExpression
+  _ <- expectSymbol ","
+  evidence <- parseExpression
+  end <- expectSymbol "]"
+  pure $ locatedBetween start end (GrammarV1ValidatedType validator input evidence)
 
 parseRefinementType :: Parser (Located GrammarV1Type)
 parseRefinementType = do
@@ -2938,20 +2991,148 @@ parseStaticArgument = do
     Just (GrammarKeyword "Bool") -> GrammarV1StaticTypeArgument . locatedValue <$> parseType
     Just (GrammarUIntType _) -> GrammarV1StaticTypeArgument . locatedValue <$> parseType
     Just (GrammarKeyword "Bytes") -> GrammarV1StaticTypeArgument . locatedValue <$> parseType
+    Just (GrammarKeyword "Frame") -> GrammarV1StaticTypeArgument . locatedValue <$> parseType
     Just (GrammarKeyword "Proof") -> GrammarV1StaticTypeArgument . locatedValue <$> parseType
-    Just (GrammarSymbol "(") -> GrammarV1StaticTypeArgument . locatedValue <$> parseType
-    Just (GrammarIdentifier _) -> GrammarV1StaticReferenceArgument . locatedValue <$> parseStaticReference
-    Just (GrammarKeyword "true") -> expectKeyword "true" >> pure (GrammarV1StaticBoolArgument True)
-    Just (GrammarKeyword "false") -> expectKeyword "false" >> pure (GrammarV1StaticBoolArgument False)
+    Just (GrammarKeyword "Validated") -> GrammarV1StaticTypeArgument . locatedValue <$> parseType
+    Just (GrammarSymbol "{") -> do
+      refinement <- peekBraceStartsRefinement
+      if refinement
+        then GrammarV1StaticTypeArgument . locatedValue <$> parseType
+        else GrammarV1StaticEffectSetArgument <$> parseEffectSetLiteral
+    Just (GrammarSymbol "(") -> do
+      tuple <- peekOuterParenHasComma
+      if tuple
+        then GrammarV1StaticTypeArgument . locatedValue <$> parseType
+        else parseStaticValueAsArgument
+    Just (GrammarIdentifier _) -> parseStaticValueAsArgument
+    Just (GrammarKeyword "true") -> parseStaticValueAsArgument
+    Just (GrammarKeyword "false") -> parseStaticValueAsArgument
+    Just (GrammarKeyword "unit") -> parseStaticValueAsArgument
+    Just (GrammarDecimalInteger _) -> parseStaticValueAsArgument
+    Just other -> failParser $
+      "SURF-002 static-value slice does not yet implement static_argument beginning with "
+        <> renderToken other
+    Nothing -> failParser "expected static_argument at end of input"
+
+parseStaticValueAsArgument :: Parser GrammarV1StaticArgument
+parseStaticValueAsArgument = do
+  value <- parseStaticValueExpression
+  pure $ case locatedValue value of
+    GrammarV1StaticValueBool boolean -> GrammarV1StaticBoolArgument boolean
+    GrammarV1StaticValueUnit -> GrammarV1StaticUnitArgument
+    GrammarV1StaticValueInteger integer -> GrammarV1StaticIntegerArgument integer
+    GrammarV1StaticValueReference reference ->
+      GrammarV1StaticReferenceArgument (locatedValue reference)
+    _ -> GrammarV1StaticValueArgument value
+
+parseStaticValueExpression :: Parser (Located GrammarV1StaticValueExpression)
+parseStaticValueExpression = parseStaticAdditiveExpression
+
+parseStaticAdditiveExpression :: Parser (Located GrammarV1StaticValueExpression)
+parseStaticAdditiveExpression = do
+  first <- parseStaticMultiplicativeExpression
+  parseMoreStaticAdditive first
+
+parseMoreStaticAdditive
+  :: Located GrammarV1StaticValueExpression
+  -> Parser (Located GrammarV1StaticValueExpression)
+parseMoreStaticAdditive left = do
+  token <- peekToken
+  case fmap locatedValue token of
+    Just (GrammarSymbol "+") -> do
+      operator <- expectSymbol "+"
+      right <- parseStaticMultiplicativeExpression
+      parseMoreStaticAdditive (staticBinary left operator GrammarV1StaticAdd right)
+    Just (GrammarSymbol "-") -> do
+      operator <- expectSymbol "-"
+      right <- parseStaticMultiplicativeExpression
+      parseMoreStaticAdditive (staticBinary left operator GrammarV1StaticSubtract right)
+    _ -> pure left
+
+parseStaticMultiplicativeExpression :: Parser (Located GrammarV1StaticValueExpression)
+parseStaticMultiplicativeExpression = do
+  first <- parseStaticPostfixExpression
+  parseMoreStaticMultiplicative first
+
+parseMoreStaticMultiplicative
+  :: Located GrammarV1StaticValueExpression
+  -> Parser (Located GrammarV1StaticValueExpression)
+parseMoreStaticMultiplicative left = do
+  present <- peekSymbol "*"
+  if present
+    then do
+      operator <- expectSymbol "*"
+      right <- parseStaticPostfixExpression
+      parseMoreStaticMultiplicative (staticBinary left operator GrammarV1StaticMultiply right)
+    else pure left
+
+staticBinary
+  :: Located GrammarV1StaticValueExpression
+  -> Located GrammarV1Token
+  -> GrammarV1StaticValueOperator
+  -> Located GrammarV1StaticValueExpression
+  -> Located GrammarV1StaticValueExpression
+staticBinary left operator operatorValue right = Located
+  (SourceSpan
+    (sourceSpanStart (locatedSpan left))
+    (sourceSpanEnd (locatedSpan right)))
+  (GrammarV1StaticValueBinary
+    left
+    (Located (locatedSpan operator) operatorValue)
+    right)
+
+parseStaticPostfixExpression :: Parser (Located GrammarV1StaticValueExpression)
+parseStaticPostfixExpression = do
+  primary <- parseStaticPrimaryExpression
+  parseMoreStaticPostfix primary
+
+parseMoreStaticPostfix
+  :: Located GrammarV1StaticValueExpression
+  -> Parser (Located GrammarV1StaticValueExpression)
+parseMoreStaticPostfix base = do
+  present <- peekSymbol "."
+  if present
+    then do
+      _ <- expectSymbol "."
+      field <- expectIdentifier
+      let projected = Located
+            (SourceSpan
+              (sourceSpanStart (locatedSpan base))
+              (sourceSpanEnd (locatedSpan field)))
+            (GrammarV1StaticValueProjection base field)
+      parseMoreStaticPostfix projected
+    else pure base
+
+parseStaticPrimaryExpression :: Parser (Located GrammarV1StaticValueExpression)
+parseStaticPrimaryExpression = do
+  token <- peekToken
+  case fmap locatedValue token of
+    Just (GrammarKeyword "true") -> do
+      value <- expectKeyword "true"
+      pure (Located (locatedSpan value) (GrammarV1StaticValueBool True))
+    Just (GrammarKeyword "false") -> do
+      value <- expectKeyword "false"
+      pure (Located (locatedSpan value) (GrammarV1StaticValueBool False))
+    Just (GrammarKeyword "unit") -> do
+      value <- expectKeyword "unit"
+      pure (Located (locatedSpan value) GrammarV1StaticValueUnit)
     Just (GrammarDecimalInteger _) -> do
       value <- takeToken
       case locatedValue value of
-        GrammarDecimalInteger integer -> pure (GrammarV1StaticIntegerArgument integer)
-        _ -> failParser "internal DECIMAL_INTEGER dispatch error"
+        GrammarDecimalInteger integer ->
+          pure (Located (locatedSpan value) (GrammarV1StaticValueInteger integer))
+        _ -> failParser "internal static DECIMAL_INTEGER dispatch error"
+    Just (GrammarIdentifier _) -> do
+      reference <- parseStaticReference
+      pure (Located (locatedSpan reference) (GrammarV1StaticValueReference reference))
+    Just (GrammarSymbol "(") -> do
+      start <- expectSymbol "("
+      inner <- parseStaticValueExpression
+      end <- expectSymbol ")"
+      pure $ locatedBetween start end (GrammarV1StaticValueParenthesized inner)
     Just other -> failParser $
-      "SURF-002 generic/static slice does not yet implement static_argument beginning with "
-        <> renderToken other
-    Nothing -> failParser "expected static_argument at end of input"
+      "expected static_primary_expression; found " <> renderToken other
+    Nothing -> failParser "expected static_primary_expression at end of input"
 
 parseQualifiedName :: Parser (Located GrammarV1QualifiedName)
 parseQualifiedName = do
@@ -2975,6 +3156,44 @@ parseQualifiedTail = do
       rest <- parseQualifiedTail
       pure (value : rest)
     else pure []
+
+peekBraceStartsRefinement :: Parser Bool
+peekBraceStartsRefinement = Parser $ \tokens ->
+  let result = case tokens of
+        open : binder : colon : _ ->
+          locatedValue open == GrammarSymbol "{"
+            && isIdentifierToken (locatedValue binder)
+            && locatedValue colon == GrammarSymbol ":"
+        _ -> False
+  in Right (result, tokens)
+  where
+    isIdentifierToken token = case token of
+      GrammarIdentifier _ -> True
+      _ -> False
+
+peekOuterParenHasComma :: Parser Bool
+peekOuterParenHasComma = Parser $ \tokens -> Right (scan tokens, tokens)
+  where
+    scan tokens = case tokens of
+      open : rest
+        | locatedValue open == GrammarSymbol "(" -> go 1 0 0 rest
+      _ -> False
+
+    go :: Int -> Int -> Int -> [Located GrammarV1Token] -> Bool
+    go parens brackets braces remaining = case remaining of
+      [] -> False
+      token : rest -> case locatedValue token of
+        GrammarSymbol "(" -> go (parens + 1) brackets braces rest
+        GrammarSymbol ")"
+          | parens == 1 -> False
+          | otherwise -> go (parens - 1) brackets braces rest
+        GrammarSymbol "[" -> go parens (brackets + 1) braces rest
+        GrammarSymbol "]" -> go parens (max 0 (brackets - 1)) braces rest
+        GrammarSymbol "{" -> go parens brackets (braces + 1) rest
+        GrammarSymbol "}" -> go parens brackets (max 0 (braces - 1)) rest
+        GrammarSymbol ","
+          | parens == 1 && brackets == 0 && braces == 0 -> True
+        _ -> go parens brackets braces rest
 
 peekToken :: Parser (Maybe (Located GrammarV1Token))
 peekToken = Parser $ \tokens -> Right (listToMaybe tokens, tokens)
