@@ -1,0 +1,161 @@
+name: Temporary Provider Evidence Binding Patch v2
+
+on:
+  push:
+    branches:
+      - bind-provider-evidence-closeout
+    paths:
+      - '.github/workflows/_temp-bind-provider-evidence-v2.yml'
+
+permissions:
+  contents: write
+
+jobs:
+  patch:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: bind-provider-evidence-closeout
+          fetch-depth: 0
+      - name: Apply reviewed provider evidence production binding
+        shell: python
+        run: |
+          from pathlib import Path
+
+          static_path = Path('src/Phil/Core/ProviderEvidenceQualification.hs')
+          text = static_path.read_text()
+          import_old = 'import qualified Data.Map.Strict as Map\nimport Data.Text (Text)\n'
+          import_new = ('import qualified Data.Map.Strict as Map\n'
+                        'import Data.Text (Text)\n'
+                        'import qualified ProviderEvidenceQualificationKernel as ProviderEvidenceQualificationKernel\n')
+          assert text.count(import_old) == 1
+          text = text.replace(import_old, import_new, 1)
+
+          marker = 'checkProviderEvidenceProducerCompetence\n  :: CheckedProviderSemanticQualification\n'
+          assert marker in text
+          prefix = text[:text.index(marker)]
+          replacement = '''providerEvidenceQualificationKernelBridgeMismatch :: String -> a
+          providerEvidenceQualificationKernelBridgeMismatch seam =
+            error ("ProviderEvidenceQualificationKernel bridge mismatch: " <> seam)
+
+          checkProviderEvidenceProducerCompetence
+            :: CheckedProviderSemanticQualification
+            -> ProviderEvidenceProducerRequirement
+            -> ProviderEvidenceProducerCompetenceClaim
+            -> Either ProviderEvidenceQualificationError CheckedProviderEvidenceProducerCompetence
+          checkProviderEvidenceProducerCompetence qualified requirement claim =
+            case ProviderEvidenceQualificationKernel.decideProviderEvidenceCompetenceByFacts
+                operationQualified operationMatches familyMatches parametersMatch
+                stableSubjectMatches validityMatches of
+              ProviderEvidenceQualificationKernel.ProviderEvidenceCompetenceAccepted -> do
+                checkSubjectMapping
+                  (providerEvidenceClaimObservation claim)
+                  claimedSubject
+                  (providerEvidenceClaimSubjectMapping claim)
+                Right CheckedProviderEvidenceProducerCompetence
+                  { checkedProviderEvidenceContractRevision = checkedProviderContractRevision qualified
+                  , checkedProviderEvidenceImplementationRevision = checkedProviderImplementationRevision qualified
+                  , checkedProviderEvidenceOperation = requiredOperation
+                  , checkedProviderEvidenceFamily = requiredFamily
+                  , checkedProviderEvidencePropositionParameters = requiredParameters
+                  , checkedProviderEvidenceObservation = providerEvidenceClaimObservation claim
+                  , checkedProviderEvidenceSubject = claimedSubject
+                  , checkedProviderEvidenceMapping = providerEvidenceClaimSubjectMapping claim
+                  , checkedProviderEvidenceValidity = claimedValidity
+                  , checkedProviderEvidenceProposition =
+                      instantiateProviderEvidenceProposition
+                        requiredFamily requiredParameters claimedSubject
+                  }
+              ProviderEvidenceQualificationKernel.ProviderEvidenceOperationNotQualified ->
+                Left (ProviderEvidenceOperationNotQualified requiredOperation)
+              ProviderEvidenceQualificationKernel.ProviderEvidenceOperationMismatch ->
+                Left (ProviderEvidenceOperationMismatch requiredOperation claimedOperation)
+              ProviderEvidenceQualificationKernel.ProviderEvidenceFamilyMismatch ->
+                Left (ProviderEvidenceFamilyMismatch requiredFamily claimedFamily)
+              ProviderEvidenceQualificationKernel.ProviderEvidenceParametersMismatch ->
+                Left (ProviderEvidencePropositionParametersMismatch
+                  requiredParameters claimedParameters)
+              ProviderEvidenceQualificationKernel.ProviderEvidenceStableSubjectMismatch ->
+                Left (ProviderEvidenceStableSubjectMismatch requiredSubject claimedSubject)
+              ProviderEvidenceQualificationKernel.ProviderEvidenceValidityMismatch ->
+                Left (ProviderEvidenceValidityMismatch requiredValidity claimedValidity)
+            where
+              requiredOperation = providerEvidenceRequiredOperation requirement
+              claimedOperation = providerEvidenceClaimOperation claim
+              requiredFamily = providerEvidenceRequiredFamily requirement
+              claimedFamily = providerEvidenceClaimFamily claim
+              requiredParameters = providerEvidenceRequiredPropositionParameters requirement
+              claimedParameters = providerEvidenceClaimPropositionParameters claim
+              requiredSubject = providerEvidenceRequiredStableSubject requirement
+              claimedSubject = providerEvidenceClaimPropositionSubject claim
+              requiredValidity = providerEvidenceRequiredValidity requirement
+              claimedValidity = providerEvidenceClaimValidity claim
+              operationQualified =
+                Map.member requiredOperation (checkedProviderOperations qualified)
+              operationMatches = claimedOperation == requiredOperation
+              familyMatches = claimedFamily == requiredFamily
+              parametersMatch = claimedParameters == requiredParameters
+              stableSubjectMatches = claimedSubject == requiredSubject
+              validityMatches = claimedValidity == requiredValidity
+
+              checkSubjectMapping observation subject mapping = case mapping of
+                DirectStableEvidenceSubject mappedSubject ->
+                  case ProviderEvidenceQualificationKernel.decideDirectEvidenceSubjectMappingByFacts
+                    (observation == StableEvidenceObservation mappedSubject)
+                    (mappedSubject == subject) of
+                    ProviderEvidenceQualificationKernel.ProviderEvidenceMappingAccepted -> Right ()
+                    ProviderEvidenceQualificationKernel.ProviderEvidenceDirectMappingRejected ->
+                      Left (ProviderEvidenceDirectMappingRequiresStableObservation
+                        observation mappedSubject)
+                    _ -> providerEvidenceQualificationKernelBridgeMismatch
+                      "direct subject mapping decision"
+                CheckedObservationToStableSubject _ mappedObservation mappedSubject ->
+                  case ProviderEvidenceQualificationKernel.decideCheckedEvidenceSubjectMappingByFacts
+                    (mappedObservation == observation)
+                    (mappedSubject == subject) of
+                    ProviderEvidenceQualificationKernel.ProviderEvidenceMappingAccepted -> Right ()
+                    ProviderEvidenceQualificationKernel.ProviderEvidenceCheckedObservationMismatch ->
+                      Left (ProviderEvidenceMappingObservationMismatch
+                        observation mappedObservation)
+                    ProviderEvidenceQualificationKernel.ProviderEvidenceCheckedSubjectMismatch ->
+                      Left (ProviderEvidenceMappingSubjectMismatch subject mappedSubject)
+                    _ -> providerEvidenceQualificationKernelBridgeMismatch
+                      "checked subject mapping decision"
+                RuntimeCoincidenceSubjectMapping reason ->
+                  case ProviderEvidenceQualificationKernel.decideRuntimeCoincidenceSubjectMapping of
+                    ProviderEvidenceQualificationKernel.ProviderEvidenceRuntimeCoincidenceRejected ->
+                      Left (ProviderEvidenceRuntimeCoincidenceInsufficient reason)
+                    _ -> providerEvidenceQualificationKernelBridgeMismatch
+                      "runtime coincidence subject mapping decision"
+          '''
+          replacement = '\n'.join(
+              line[10:] if line.startswith('          ') else line
+              for line in replacement.splitlines()) + '\n'
+          static_path.write_text(prefix + replacement)
+
+          cabal_path = Path('phil-core.cabal')
+          cabal = cabal_path.read_text()
+          cabal_old = '      ArchitectureRevisionConstructionKernel\n      ProviderReplacementQualificationKernel\n'
+          cabal_new = ('      ArchitectureRevisionConstructionKernel\n'
+                       '      ProviderEvidenceQualificationKernel\n'
+                       '      ProviderReplacementQualificationKernel\n')
+          assert cabal.count(cabal_old) == 1
+          cabal_path.write_text(cabal.replace(cabal_old, cabal_new, 1))
+      - name: Show exact patch identities
+        run: |
+          set -euo pipefail
+          sha256sum src/ProviderEvidenceQualificationKernel.hs \
+            src/Phil/Core/ProviderEvidenceQualification.hs phil-core.cabal
+          grep -n 'decideProviderEvidence' src/Phil/Core/ProviderEvidenceQualification.hs
+          git diff --stat
+      - name: Commit reviewed binding and remove temporary workflows
+        run: |
+          set -euo pipefail
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git add src/Phil/Core/ProviderEvidenceQualification.hs phil-core.cabal
+          git rm .github/workflows/_temp-bind-provider-evidence.yml \
+            .github/workflows/_temp-bind-provider-evidence-v2.yml
+          git commit -m 'Bind provider evidence decisions to certified kernel'
+          git push origin HEAD:bind-provider-evidence-closeout
