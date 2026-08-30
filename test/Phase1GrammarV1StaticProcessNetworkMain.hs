@@ -23,6 +23,10 @@ main = do
         architectureBoundaryObservablePreserved
     , test "SURF-003 architecture boundary and observable reject static arguments"
         architectureBoundaryObservableRejectStaticArguments
+    , test "SURF-002 architecture assume and constraint preserve proposition payloads"
+        architectureAssumeConstraintPreserved
+    , test "SURF-003 architecture assume and constraint malformed forms reject"
+        architectureAssumeConstraintRejectMalformed
     , test "SURF-002 unimplemented architecture items remain fail closed"
         (expectReject unimplementedArchitectureItem)
     , test "SURF-002 unimplemented program blocks remain fail closed"
@@ -150,6 +154,46 @@ architectureBoundaryObservableRejectStaticArguments = do
   expectReject "architecture A { boundary edge.ingress = codec[U32]; } program main = instantiate A;"
   expectReject "architecture A { observable metrics[U32]; } program main = instantiate A;"
 
+architectureAssumeConstraintPreserved :: Either String ()
+architectureAssumeConstraintPreserved = do
+  sourceFile <- mapLeft show $ parseGrammarV1StructuralSource "architecture-assume-constraint" source
+  case grammarV1TopLevelDecls sourceFile of
+    [Located _ architectureTop, Located _ programTop] -> do
+      case locatedValue (grammarV1Declaration architectureTop) of
+        GrammarV1ArchitectureDeclaration architectureDecl ->
+          case grammarV1ArchitectureItems architectureDecl of
+            [ Located _ (GrammarV1ArchitectureAssume assumption scope)
+              , Located _ (GrammarV1ArchitectureConstraint constraint)
+              ] -> do
+                assert (locatedValue assumption == GrammarV1TrueProposition)
+                  "architecture assumption was not true"
+                assert (qualifiedNameParts scope == ["trust", "zone"])
+                  "architecture assumption scope was not trust.zone"
+                assert (locatedValue constraint == GrammarV1FalseProposition)
+                  "architecture constraint was not false"
+            other -> Left ("unexpected assume/constraint architecture items " <> show other)
+        other -> Left ("expected architecture declaration first, got " <> show other)
+      case locatedValue (grammarV1Declaration programTop) of
+        GrammarV1ProgramDeclaration programDecl ->
+          assert (staticReferenceNamed "Policy" (grammarV1ProgramTarget programDecl))
+            "program target was not Policy"
+        other -> Left ("expected program declaration second, got " <> show other)
+    declarations -> Left ("expected architecture and program; got " <> show (length declarations))
+  where
+    source = Text.unlines
+      [ "architecture Policy {"
+      , "  assume true within trust.zone;"
+      , "  constraint false;"
+      , "}"
+      , "program main = instantiate Policy;"
+      ]
+
+architectureAssumeConstraintRejectMalformed :: Either String ()
+architectureAssumeConstraintRejectMalformed = do
+  expectReject "architecture A { assume true trust.zone; } program main = instantiate A;"
+  expectReject "architecture A { assume true within trust[U32]; } program main = instantiate A;"
+  expectReject "architecture A { constraint ; } program main = instantiate A;"
+
 expectArchitectureItems
   :: [Located GrammarV1ArchitectureItem]
   -> Either String ()
@@ -209,7 +253,7 @@ expectReject source = case parseGrammarV1StructuralSource "fail-closed" source o
 unimplementedArchitectureItem :: Text.Text
 unimplementedArchitectureItem = Text.unlines
   [ "architecture A {"
-  , "  constraint true;"
+  , "  authority token : U32 originates at origin.node;"
   , "}"
   , "program main = instantiate A;"
   ]
