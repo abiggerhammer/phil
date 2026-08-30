@@ -1,0 +1,86 @@
+name: Phase 1 Boundary Progression Proofs
+
+on:
+  pull_request:
+    paths:
+      - 'proof/Phil/Core/BoundaryProgression.v'
+      - 'docs/phase-1/boundary-progression-proof-v1.md'
+      - '.github/workflows/phase1-boundary-progression-proofs.yml'
+      - 'src/Phil/Core/BoundaryProgression.hs'
+      - 'src/Phil/Core/BoundaryMapping.hs'
+      - 'src/Phil/Core/QualifiedEncoding.hs'
+      - 'src/Phil/Core/Recognition.hs'
+      - 'src/Phil/Core/Session.hs'
+      - 'test/Phase1BoundaryProgressionMain.hs'
+  push:
+    branches: [main]
+    paths:
+      - 'proof/Phil/Core/BoundaryProgression.v'
+      - 'docs/phase-1/boundary-progression-proof-v1.md'
+      - '.github/workflows/phase1-boundary-progression-proofs.yml'
+      - 'src/Phil/Core/BoundaryProgression.hs'
+      - 'src/Phil/Core/BoundaryMapping.hs'
+      - 'src/Phil/Core/QualifiedEncoding.hs'
+      - 'src/Phil/Core/Recognition.hs'
+      - 'src/Phil/Core/Session.hs'
+      - 'test/Phase1BoundaryProgressionMain.hs'
+
+permissions:
+  contents: read
+
+jobs:
+  rocq-boundary-progression-proof:
+    runs-on: ubuntu-latest
+    container:
+      image: rocq/rocq-prover:9.2.0
+      options: --user root
+    steps:
+      - uses: actions/checkout@v4
+      - name: Compile PHIL-BND-PROGRESS-001 proof
+        shell: bash
+        run: |
+          set -euo pipefail
+          export PATH="/home/rocq/.opam/${COMPILER}/bin:$PATH"
+          rocq c -Q proof/Phil Phil proof/Phil/Core/BoundaryProgression.v
+      - name: Record proof identities
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p boundary-progression-proof
+          cp proof/Phil/Core/BoundaryProgression.v proof/Phil/Core/BoundaryProgression.vo boundary-progression-proof/
+          sha256sum \
+            proof/Phil/Core/BoundaryProgression.v \
+            proof/Phil/Core/BoundaryProgression.vo \
+            > boundary-progression-proof/PHIL-BND-PROGRESS-001.proof.sha256
+          {
+            echo 'obligation=PHIL-BND-PROGRESS-001'
+            echo 'evidence=Rocq-9.2.0'
+            cat boundary-progression-proof/PHIL-BND-PROGRESS-001.proof.sha256
+          } > boundary-progression-proof/PHIL-BND-PROGRESS-001.proof-certificate.txt
+          cat boundary-progression-proof/PHIL-BND-PROGRESS-001.proof-certificate.txt
+      - uses: actions/upload-artifact@v4
+        with:
+          name: rocq-boundary-progression-proof
+          path: boundary-progression-proof
+          if-no-files-found: error
+
+  verify-boundary-progression-correspondence:
+    needs: rocq-boundary-progression-proof
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: haskell-actions/setup@v2
+        with:
+          ghc-version: '9.6.7'
+          cabal-version: 'latest'
+      - name: Build ordinary regression substrate
+        run: cabal build all --enable-tests
+      - name: Typecheck unchanged BND-011 production path
+        run: |
+          set -euo pipefail
+          cabal exec -- ghc -isrc -Wall -Werror -fno-code src/Phil/Core/BoundaryProgression.hs
+          cabal exec -- ghc -isrc -Wall -Werror -fno-code test/Phase1BoundaryProgressionMain.hs
+      - name: Re-run BND-011 progression corpus
+        run: |
+          set -euo pipefail
+          cabal exec -- runghc -Wall -Werror -isrc test/Phase1BoundaryProgressionMain.hs
