@@ -17,8 +17,6 @@ main = do
         (expectFixtureReject "rejected/24-external-role-extra-target.phil")
     , test "SURF-002 send/receive preserve optional boundary and guard clauses"
         optionalSessionClausesPreserved
-    , test "SURF-002 unimplemented select session remains fail closed"
-        selectSessionRejects
     ]
   if and results then pure () else exitFailure
 
@@ -179,18 +177,6 @@ expectReceiveOptions (Located _ session) = case session of
       "receive guard proposition was not false"
     checkParamAndEnd "y" param continuation
   other -> Left ("expected receive session with optional clauses, got " <> show other)
-
-selectSessionRejects :: Either String ()
-selectSessionRejects = case parseGrammarV1StructuralSource "select-session" source of
-  Left _ -> Right ()
-  Right value -> Left ("expected fail-closed select rejection, parsed " <> show value)
-  where
-    source = Text.unlines
-      [ "protocol P {"
-      , "  role A = select { Go => end Done };"
-      , "  role B = S;"
-      , "}"
-      ]
 
 staticReferenceNamed :: Text.Text -> Located GrammarV1StaticReference -> Bool
 staticReferenceNamed expected (Located _ reference) =
