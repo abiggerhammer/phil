@@ -4,27 +4,35 @@ on:
   pull_request:
     paths:
       - 'proof/Phil/Core/ProtocolIdentity.v'
+      - 'proof/Phil/Core/ProtocolIdentityImplementation.v'
+      - 'proof/Phil/Core/ProtocolIdentityImplementationExtraction.v'
       - 'src/Phil/Core/Protocol.hs'
       - 'src/Phil/Systems/ProtocolStateCorrespondence.hs'
       - 'test/Phase1ProtocolExactActionMain.hs'
       - 'test/Phase1ProtocolIdentitySeparationMain.hs'
       - 'test/Phase1ProtocolStateCorrespondenceMain.hs'
+      - 'app/ProtocolIdentityDecisionCorrespondenceMain.hs'
       - 'docs/phase-1/protocol-exact-action-v1.md'
       - 'docs/phase-1/protocol-identity-separation-v1.md'
       - 'docs/phase-1/protocol-identity-proof-v1.md'
+      - 'docs/phase-1/protocol-identity-implementation-refinement-v1.md'
       - '.github/workflows/phase1-protocol-identity-proofs.yml'
   push:
     branches: [main]
     paths:
       - 'proof/Phil/Core/ProtocolIdentity.v'
+      - 'proof/Phil/Core/ProtocolIdentityImplementation.v'
+      - 'proof/Phil/Core/ProtocolIdentityImplementationExtraction.v'
       - 'src/Phil/Core/Protocol.hs'
       - 'src/Phil/Systems/ProtocolStateCorrespondence.hs'
       - 'test/Phase1ProtocolExactActionMain.hs'
       - 'test/Phase1ProtocolIdentitySeparationMain.hs'
       - 'test/Phase1ProtocolStateCorrespondenceMain.hs'
+      - 'app/ProtocolIdentityDecisionCorrespondenceMain.hs'
       - 'docs/phase-1/protocol-exact-action-v1.md'
       - 'docs/phase-1/protocol-identity-separation-v1.md'
       - 'docs/phase-1/protocol-identity-proof-v1.md'
+      - 'docs/phase-1/protocol-identity-implementation-refinement-v1.md'
       - '.github/workflows/phase1-protocol-identity-proofs.yml'
 
 permissions:
@@ -39,15 +47,22 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
-      - name: Compile PHIL-PROT-ID-001 proof
+      - name: Compile PHIL-PROT-ID-001 proof and implementation correspondence
         shell: bash
         run: |
           set -euo pipefail
           export PATH="/home/rocq/.opam/${COMPILER}/bin:$PATH"
           rocq c -Q proof/Phil Phil proof/Phil/Core/Syntax.v
           rocq c -Q proof/Phil Phil proof/Phil/Core/ProtocolIdentity.v
+          rocq c -Q proof/Phil Phil proof/Phil/Core/ProtocolIdentityImplementation.v
+          rm -f ProtocolIdentityKernel.hs
+          rocq c -Q proof/Phil Phil proof/Phil/Core/ProtocolIdentityImplementationExtraction.v
+          test -s ProtocolIdentityKernel.hs
+          grep -q 'decideProtocolContractByFacts' ProtocolIdentityKernel.hs
+          grep -q 'decideProtocolActionByFacts' ProtocolIdentityKernel.hs
+          grep -q 'planProtocolContract' ProtocolIdentityKernel.hs
 
-      - name: Record proof identities
+      - name: Record proof and extraction identities
         shell: bash
         run: |
           set -euo pipefail
@@ -55,16 +70,25 @@ jobs:
           cp \
             proof/Phil/Core/ProtocolIdentity.v \
             proof/Phil/Core/ProtocolIdentity.vo \
+            proof/Phil/Core/ProtocolIdentityImplementation.v \
+            proof/Phil/Core/ProtocolIdentityImplementation.vo \
+            proof/Phil/Core/ProtocolIdentityImplementationExtraction.v \
+            proof/Phil/Core/ProtocolIdentityImplementationExtraction.vo \
+            ProtocolIdentityKernel.hs \
             protocol-identity-proof/
           sha256sum \
-            proof/Phil/Core/ProtocolIdentity.v \
-            proof/Phil/Core/ProtocolIdentity.vo \
+            protocol-identity-proof/ProtocolIdentity.v \
+            protocol-identity-proof/ProtocolIdentity.vo \
+            protocol-identity-proof/ProtocolIdentityImplementation.v \
+            protocol-identity-proof/ProtocolIdentityImplementation.vo \
+            protocol-identity-proof/ProtocolIdentityKernel.hs \
             > protocol-identity-proof/PHIL-PROT-ID-001.proof.sha256
           {
             printf '%s\n' 'obligation=PHIL-PROT-ID-001'
             printf '%s\n' 'evidence=Rocq-9.2.0'
             cat protocol-identity-proof/PHIL-PROT-ID-001.proof.sha256
           } > protocol-identity-proof/PHIL-PROT-ID-001.proof-certificate.txt
+          cat protocol-identity-proof/PHIL-PROT-ID-001.proof.sha256
 
       - uses: actions/upload-artifact@v4
         with:
@@ -83,10 +107,27 @@ jobs:
           ghc-version: '9.6.7'
           cabal-version: 'latest'
 
+      - name: Build ordinary protocol regression substrate
+        run: cabal build exe:phil-certify-core-scalar --ghc-options=-Werror
+
+      - uses: actions/download-artifact@v4
+        with:
+          name: rocq-protocol-identity-proof
+          path: protocol-identity-proof
+
+      - name: Typecheck and execute extracted protocol identity controls
+        run: |
+          set -euo pipefail
+          ghc -Wall -Werror -fno-code protocol-identity-proof/ProtocolIdentityKernel.hs
+          ghc -Wall -Werror \
+            -iprotocol-identity-proof \
+            app/ProtocolIdentityDecisionCorrespondenceMain.hs \
+            -o protocol-identity-kernel-controls
+          ./protocol-identity-kernel-controls
+
       - name: Typecheck protocol identity implementation paths
         run: |
           set -euo pipefail
-          cabal build exe:phil-certify-core-scalar --ghc-options=-Werror
           cabal exec -- ghc -isrc -Wall -Werror -fno-code src/Phil/Core/Protocol.hs
           cabal exec -- ghc -isrc -Wall -Werror -Wno-name-shadowing -fno-code src/Phil/Systems/ProtocolStateCorrespondence.hs
           for test_main in \
@@ -98,7 +139,7 @@ jobs:
           cabal exec -- ghc -isrc -Wall -Werror -Wno-name-shadowing -fno-code \
             test/Phase1ProtocolStateCorrespondenceMain.hs
 
-      - name: Re-run PROT-001, PROT-002, and SYS-009 pressure corpora
+      - name: Re-run unchanged PROT-001, PROT-002, and SYS-009 pressure corpora
         run: |
           set -euo pipefail
           for test_main in \
@@ -108,3 +149,27 @@ jobs:
           do
             cabal exec -- runghc -isrc "$test_main"
           done
+
+      - name: Record implementation-refinement staging identities
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p protocol-identity-implementation-correspondence
+          sha256sum \
+            protocol-identity-proof/ProtocolIdentityKernel.hs \
+            src/Phil/Core/Protocol.hs \
+            src/Phil/Systems/ProtocolStateCorrespondence.hs \
+            test/Phase1ProtocolExactActionMain.hs \
+            test/Phase1ProtocolIdentitySeparationMain.hs \
+            test/Phase1ProtocolStateCorrespondenceMain.hs \
+            app/ProtocolIdentityDecisionCorrespondenceMain.hs \
+            proof/Phil/Core/ProtocolIdentityImplementation.v \
+            docs/phase-1/protocol-identity-implementation-refinement-v1.md \
+            > protocol-identity-implementation-correspondence/PHIL-PROT-ID-001.staging.sha256
+          cat protocol-identity-implementation-correspondence/PHIL-PROT-ID-001.staging.sha256
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: protocol-identity-implementation-correspondence
+          path: protocol-identity-implementation-correspondence
+          if-no-files-found: error
