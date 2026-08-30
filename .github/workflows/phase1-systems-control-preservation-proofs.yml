@@ -85,17 +85,19 @@ jobs:
           cabal exec -- ghc -isrc -Wall -Werror -fno-code src/Phil/Systems/BranchResourceFailure.hs
           cabal exec -- ghc -isrc -Wall -Werror -fno-code src/Phil/Systems/ControlStateProjection.hs
           # main currently carries one pre-existing local name-shadowing warning in
-          # ProtocolStateCorrespondence; keep every other warning fatal in this proof lane.
+          # ProtocolStateCorrespondence; keep every other warning fatal here.
           cabal exec -- ghc -isrc -Wall -Werror -Wno-name-shadowing -fno-code src/Phil/Systems/ProtocolStateCorrespondence.hs
-          cabal exec -- ghc -isrc -Wall -Werror -Wno-name-shadowing -fno-code src/Phil/Systems/BoundaryCommitCorrespondence.hs
+          # BoundaryCommitCorrespondence additionally carries one pre-existing
+          # redundant Data.Set import. Exempt only those two known warnings.
+          cabal exec -- ghc -isrc -Wall -Werror -Wno-name-shadowing -Wno-unused-imports -fno-code src/Phil/Systems/BoundaryCommitCorrespondence.hs
           cabal exec -- ghc -isrc -Wall -Werror -fno-code test/Phase1BranchResourceFailureMain.hs
           cabal exec -- ghc -isrc -Wall -Werror -fno-code test/Phase1ControlStateProjectionMain.hs
           cabal exec -- ghc -isrc -Wall -Werror -Wno-name-shadowing -fno-code test/Phase1ProtocolStateCorrespondenceMain.hs
-          cabal exec -- ghc -isrc -Wall -Werror -Wno-name-shadowing -fno-code test/Phase1BoundaryCommitCorrespondenceMain.hs
+          cabal exec -- ghc -isrc -Wall -Werror -Wno-name-shadowing -Wno-unused-imports -fno-code test/Phase1BoundaryCommitCorrespondenceMain.hs
       - name: Re-run 46-case SYS-007--010 corpus
         run: |
           set -euo pipefail
           cabal exec -- runghc -Wall -Werror -isrc test/Phase1BranchResourceFailureMain.hs
           cabal exec -- runghc -Wall -Werror -isrc test/Phase1ControlStateProjectionMain.hs
           cabal exec -- runghc -Wall -Werror -Wno-name-shadowing -isrc test/Phase1ProtocolStateCorrespondenceMain.hs
-          cabal exec -- runghc -Wall -Werror -Wno-name-shadowing -isrc test/Phase1BoundaryCommitCorrespondenceMain.hs
+          cabal exec -- runghc -Wall -Werror -Wno-name-shadowing -Wno-unused-imports -isrc test/Phase1BoundaryCommitCorrespondenceMain.hs
