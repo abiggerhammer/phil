@@ -57,6 +57,7 @@ library
       Phil.Compiler
   other-modules:
       ArchitectureIdentityKernel
+      ArchitectureImportKernel
       ArchitectureInstantiationKernel
       ArchitectureRealizationKernel
       ArchitectureRevisionConstructionKernel
