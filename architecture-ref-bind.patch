@@ -1,0 +1,132 @@
+diff --git a/src/Phil/Surface/GrammarV1/Parser.hs b/src/Phil/Surface/GrammarV1/Parser.hs
+--- a/src/Phil/Surface/GrammarV1/Parser.hs
++++ b/src/Phil/Surface/GrammarV1/Parser.hs
+@@ -645,14 +645,20 @@
+ data GrammarV1ArchitectureItem
+   = GrammarV1ArchitectureInstance
+       (Located Text)
+       (Located GrammarV1StaticReference)
++  | GrammarV1ArchitectureRef
++      (Located Text)
++      (Located GrammarV1QualifiedName)
+   | GrammarV1ArchitectureProcess
+       (Located Text)
+       (Located GrammarV1QualifiedName)
+   | GrammarV1ArchitectureProtocol
+       (Located Text)
+       (Located GrammarV1StaticReference)
+   | GrammarV1ArchitectureRole
+       (Located GrammarV1QualifiedName)
+       (Located GrammarV1RoleTarget)
++  | GrammarV1ArchitectureBind
++      (Located GrammarV1QualifiedName)
++      (Located GrammarV1QualifiedName)
+   deriving (Eq, Show)
+@@ -1890,8 +1896,15 @@
+     Just (GrammarKeyword "instance") -> do
+       start <- expectKeyword "instance"
+       name <- expectIdentifier
+       _ <- expectSymbol "="
+       target <- parseStaticReference
+       end <- expectSymbol ";"
+       pure $ locatedBetween start end (GrammarV1ArchitectureInstance name target)
++    Just (GrammarKeyword "ref") -> do
++      start <- expectKeyword "ref"
++      name <- expectIdentifier
++      _ <- expectSymbol "="
++      target <- parseQualifiedName
++      end <- expectSymbol ";"
++      pure $ locatedBetween start end (GrammarV1ArchitectureRef name target)
+     Just (GrammarKeyword "process") -> do
+@@ -1911,8 +1924,15 @@
+     Just (GrammarKeyword "role") -> do
+       start <- expectKeyword "role"
+       role <- parseQualifiedName
+       _ <- expectSymbol "="
+       target <- parseRoleTarget
+       end <- expectSymbol ";"
+       pure $ locatedBetween start end (GrammarV1ArchitectureRole role target)
++    Just (GrammarKeyword "bind") -> do
++      start <- expectKeyword "bind"
++      source <- parseQualifiedName
++      _ <- expectSymbol "="
++      target <- parseQualifiedName
++      end <- expectSymbol ";"
++      pure $ locatedBetween start end (GrammarV1ArchitectureBind source target)
+     Just other -> failParser $
+diff --git a/test/Phase1GrammarV1StaticProcessNetworkMain.hs b/test/Phase1GrammarV1StaticProcessNetworkMain.hs
+--- a/test/Phase1GrammarV1StaticProcessNetworkMain.hs
++++ b/test/Phase1GrammarV1StaticProcessNetworkMain.hs
+@@ -15,6 +15,10 @@
+         expectStaticProcessNetwork
+     , testIO "SURF-003 process missing target rejects at syntax"
+         (expectFixtureReject "rejected/23-process-missing-target.phil")
++    , test "SURF-002 architecture ref and bind preserve qualified names"
++        architectureRefBindPreserved
++    , test "SURF-003 architecture ref and bind reject static arguments"
++        architectureRefBindRejectStaticArguments
+     , test "SURF-002 unimplemented architecture items remain fail closed"
+         (expectReject unimplementedArchitectureItem)
+@@ -58,6 +62,47 @@
+       declarations -> Left ("expected component, architecture, and program; got " <> show (length declarations))
+ 
++architectureRefBindPreserved :: Either String ()
++architectureRefBindPreserved = do
++  sourceFile <- mapLeft show $ parseGrammarV1StructuralSource "architecture-ref-bind" source
++  case grammarV1TopLevelDecls sourceFile of
++    [Located _ architectureTop, Located _ programTop] -> do
++      case locatedValue (grammarV1Declaration architectureTop) of
++        GrammarV1ArchitectureDeclaration architectureDecl ->
++          case grammarV1ArchitectureItems architectureDecl of
++            [ Located _ (GrammarV1ArchitectureRef alias refTarget)
++              , Located _ (GrammarV1ArchitectureBind bindSource bindTarget)
++              ] -> do
++                assert (locatedValue alias == "service")
++                  "architecture ref alias was not service"
++                assert (qualifiedNameParts refTarget == ["cluster", "worker"])
++                  "architecture ref target was not cluster.worker"
++                assert (qualifiedNameParts bindSource == ["client", "port"])
++                  "architecture bind source was not client.port"
++                assert (qualifiedNameParts bindTarget == ["server", "port"])
++                  "architecture bind target was not server.port"
++            other -> Left ("unexpected ref/bind architecture items " <> show other)
++        other -> Left ("expected architecture declaration first, got " <> show other)
++      case locatedValue (grammarV1Declaration programTop) of
++        GrammarV1ProgramDeclaration programDecl ->
++          assert (staticReferenceNamed "Wiring" (grammarV1ProgramTarget programDecl))
++            "program target was not Wiring"
++        other -> Left ("expected program declaration second, got " <> show other)
++    declarations -> Left ("expected architecture and program; got " <> show (length declarations))
++  where
++    source = Text.unlines
++      [ "architecture Wiring {"
++      , "  ref service = cluster.worker;"
++      , "  bind client.port = server.port;"
++      , "}"
++      , "program main = instantiate Wiring;"
++      ]
++
++architectureRefBindRejectStaticArguments :: Either String ()
++architectureRefBindRejectStaticArguments = do
++  expectReject "architecture A { ref service = Cluster[U32]; } program main = instantiate A;"
++  expectReject "architecture A { bind client[U32] = server.port; } program main = instantiate A;"
++
+ expectArchitectureItems
+   :: [Located GrammarV1ArchitectureItem]
+@@ -92,6 +137,10 @@
+ qualifiedNameNamed expected (Located _ name) =
+   grammarV1QualifiedNameParts name == [expected]
+ 
++qualifiedNameParts :: Located GrammarV1QualifiedName -> [Text.Text]
++qualifiedNameParts (Located _ name) =
++  grammarV1QualifiedNameParts name
++
+ expectFixtureReject :: FilePath -> IO (Either String ())
+@@ -119,7 +168,7 @@
+ unimplementedArchitectureItem = Text.unlines
+   [ "architecture A {"
+-  , "  ref alias = target;"
++  , "  constraint true;"
+   , "}"
+   , "program main = instantiate A;"
+   ]
