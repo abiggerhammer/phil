@@ -1,0 +1,34 @@
+name: SURF architecture grant/export bootstrap
+
+on:
+  push:
+    branches:
+      - phase1-surf-002-architecture-grant-export-parser-bootstrap
+
+permissions:
+  contents: write
+
+jobs:
+  patch:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check out bootstrap branch
+        uses: actions/checkout@v4
+        with:
+          ref: phase1-surf-002-architecture-grant-export-parser-bootstrap
+          fetch-depth: 0
+      - name: Preserve parser patch
+        run: cp architecture-grant-export.patch /tmp/architecture-grant-export.patch
+      - name: Check out target branch
+        run: git checkout phase1-surf-002-architecture-grant-export-parser
+      - name: Apply architecture grant/export patch
+        run: |
+          git apply --recount /tmp/architecture-grant-export.patch
+          git diff --check
+      - name: Commit architecture grant/export parser slice
+        run: |
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git add src/Phil/Surface/GrammarV1/Parser.hs test/Phase1GrammarV1StaticProcessNetworkMain.hs
+          git commit -m 'Complete SURF-002 architecture grant and export obligation items'
+          git push origin HEAD:phase1-surf-002-architecture-grant-export-parser
