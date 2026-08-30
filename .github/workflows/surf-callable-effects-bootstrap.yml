@@ -347,7 +347,7 @@ jobs:
           PY
 
       - name: Check parser warning-clean
-        run: cabal exec -- ghc -Wall -Werror -fno-code -isrc src/Phil/Surface/GrammarV1/Parser.hs
+        run: ghc -Wall -Werror -fno-code -isrc src/Phil/Surface/GrammarV1/Parser.hs
 
       - name: Commit callable effects parser slice
         run: |
