@@ -116,13 +116,12 @@ Proof.
         pose proof
           ((proj1 (Nat.eqb_eq expectedOwner actualOwner)) Howner)
           as Eowner.
-        repeat split.
-        -- reflexivity.
-        -- exact Erepresentation.
-        -- exact Eowner.
-        -- symmetry. exact Himplementation.
-        -- symmetry. exact HgeneratedRepresentation.
-        -- symmetry. exact HgeneratedOwner.
+        split; [reflexivity |].
+        split; [exact Erepresentation |].
+        split; [exact Eowner |].
+        split; [symmetry; exact Himplementation |].
+        split; [symmetry; exact HgeneratedRepresentation |].
+        symmetry; exact HgeneratedOwner.
       * try rewrite Howner in Hresult.
         cbn in Hresult.
         discriminate.
