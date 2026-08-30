@@ -27,6 +27,10 @@ main = do
         architectureAssumeConstraintPreserved
     , test "SURF-003 architecture assume and constraint malformed forms reject"
         architectureAssumeConstraintRejectMalformed
+    , test "SURF-002 architecture entry and authority preserve type and origin payloads"
+        architectureEntryAuthorityPreserved
+    , test "SURF-003 architecture entry and authority malformed forms reject"
+        architectureEntryAuthorityRejectMalformed
     , test "SURF-002 unimplemented architecture items remain fail closed"
         (expectReject unimplementedArchitectureItem)
     , test "SURF-002 unimplemented program blocks remain fail closed"
@@ -194,6 +198,56 @@ architectureAssumeConstraintRejectMalformed = do
   expectReject "architecture A { assume true within trust[U32]; } program main = instantiate A;"
   expectReject "architecture A { constraint ; } program main = instantiate A;"
 
+architectureEntryAuthorityPreserved :: Either String ()
+architectureEntryAuthorityPreserved = do
+  sourceFile <- mapLeft show $ parseGrammarV1StructuralSource "architecture-entry-authority" source
+  case grammarV1TopLevelDecls sourceFile of
+    [Located _ architectureTop, Located _ programTop] -> do
+      case locatedValue (grammarV1Declaration architectureTop) of
+        GrammarV1ArchitectureDeclaration architectureDecl ->
+          case grammarV1ArchitectureItems architectureDecl of
+            [ Located _ (GrammarV1ArchitectureEntry entryName entryType)
+              , Located _ (GrammarV1ArchitectureAuthority authorityName authorityType origin)
+              ] -> do
+                assert (locatedValue entryName == "ingress")
+                  "architecture entry name was not ingress"
+                case locatedValue entryType of
+                  GrammarV1FrameType reference ->
+                    assert (staticReferenceNamed "Wire" reference)
+                      "architecture entry type was not Frame[Wire]"
+                  other -> Left ("architecture entry type was not Frame[Wire]: " <> show other)
+                assert (locatedValue authorityName == "token")
+                  "architecture authority name was not token"
+                case locatedValue authorityType of
+                  GrammarV1ProofType proposition ->
+                    assert (locatedValue proposition == GrammarV1TrueProposition)
+                      "architecture authority type was not Proof[true]"
+                  other -> Left ("architecture authority type was not Proof[true]: " <> show other)
+                assert (qualifiedNameParts origin == ["root", "node"])
+                  "architecture authority origin was not root.node"
+            other -> Left ("unexpected entry/authority architecture items " <> show other)
+        other -> Left ("expected architecture declaration first, got " <> show other)
+      case locatedValue (grammarV1Declaration programTop) of
+        GrammarV1ProgramDeclaration programDecl ->
+          assert (staticReferenceNamed "Access" (grammarV1ProgramTarget programDecl))
+            "program target was not Access"
+        other -> Left ("expected program declaration second, got " <> show other)
+    declarations -> Left ("expected architecture and program; got " <> show (length declarations))
+  where
+    source = Text.unlines
+      [ "architecture Access {"
+      , "  entry ingress : Frame[Wire];"
+      , "  authority token : Proof[true] originates at root.node;"
+      , "}"
+      , "program main = instantiate Access;"
+      ]
+
+architectureEntryAuthorityRejectMalformed :: Either String ()
+architectureEntryAuthorityRejectMalformed = do
+  expectReject "architecture A { entry ingress U32; } program main = instantiate A;"
+  expectReject "architecture A { authority token : U32 at root.node; } program main = instantiate A;"
+  expectReject "architecture A { authority token : U32 originates at root[U32]; } program main = instantiate A;"
+
 expectArchitectureItems
   :: [Located GrammarV1ArchitectureItem]
   -> Either String ()
@@ -253,7 +307,7 @@ expectReject source = case parseGrammarV1StructuralSource "fail-closed" source o
 unimplementedArchitectureItem :: Text.Text
 unimplementedArchitectureItem = Text.unlines
   [ "architecture A {"
-  , "  authority token : U32 originates at origin.node;"
+  , "  grant sink = payload;"
   , "}"
   , "program main = instantiate A;"
   ]
