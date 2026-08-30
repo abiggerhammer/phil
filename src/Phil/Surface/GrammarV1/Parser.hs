@@ -68,6 +68,7 @@ module Phil.Surface.GrammarV1.Parser
   , GrammarV1ArchitectureItem (..)
   , GrammarV1RoleTarget (..)
   , GrammarV1ArchitectureDecl (..)
+  , GrammarV1ProgramItem (..)
   , GrammarV1ProgramDecl (..)
   , parseGrammarV1StructuralSource
   ) where
@@ -699,9 +700,24 @@ data GrammarV1ArchitectureDecl = GrammarV1ArchitectureDecl
   }
   deriving (Eq, Show)
 
+data GrammarV1ProgramItem
+  = GrammarV1ProgramEntry
+      (Located Text)
+      (Located GrammarV1Type)
+  | GrammarV1ProgramAssume
+      (Located GrammarV1Proposition)
+      (Located GrammarV1QualifiedName)
+  | GrammarV1ProgramExportObligation
+      (Located GrammarV1QualifiedName)
+      (Located GrammarV1QualifiedName)
+  | GrammarV1ProgramObservable
+      (Located GrammarV1QualifiedName)
+  deriving (Eq, Show)
+
 data GrammarV1ProgramDecl = GrammarV1ProgramDecl
   { grammarV1ProgramName :: Located Text
   , grammarV1ProgramTarget :: Located GrammarV1StaticReference
+  , grammarV1ProgramItems :: [Located GrammarV1ProgramItem]
   }
   deriving (Eq, Show)
 
@@ -2044,12 +2060,70 @@ parseProgramDeclaration = do
   _ <- expectSymbol "="
   _ <- expectKeyword "instantiate"
   target <- parseStaticReference
+  items <- parseOptionalProgramBlock
   end <- expectSymbol ";"
   pure $ locatedBetween start end $
     GrammarV1ProgramDeclaration GrammarV1ProgramDecl
       { grammarV1ProgramName = name
       , grammarV1ProgramTarget = target
+      , grammarV1ProgramItems = items
       }
+
+parseOptionalProgramBlock :: Parser [Located GrammarV1ProgramItem]
+parseOptionalProgramBlock = do
+  present <- peekSymbol "{"
+  if present then parseProgramBlock else pure []
+
+parseProgramBlock :: Parser [Located GrammarV1ProgramItem]
+parseProgramBlock = do
+  _ <- expectSymbol "{"
+  go
+  where
+    go = do
+      atEnd <- peekSymbol "}"
+      if atEnd
+        then expectSymbol "}" >> pure []
+        else do
+          item <- parseProgramItem
+          rest <- go
+          pure (item : rest)
+
+parseProgramItem :: Parser (Located GrammarV1ProgramItem)
+parseProgramItem = do
+  token <- peekToken
+  case fmap locatedValue token of
+    Just (GrammarKeyword "entry") -> do
+      start <- expectKeyword "entry"
+      name <- expectIdentifier
+      _ <- expectSymbol ":"
+      entryType <- parseType
+      end <- expectSymbol ";"
+      pure $ locatedBetween start end (GrammarV1ProgramEntry name entryType)
+    Just (GrammarKeyword "assume") -> do
+      start <- expectKeyword "assume"
+      proposition <- parseProposition
+      _ <- expectKeyword "within"
+      scope <- parseQualifiedName
+      end <- expectSymbol ";"
+      pure $ locatedBetween start end (GrammarV1ProgramAssume proposition scope)
+    Just (GrammarKeyword "export") -> do
+      start <- expectKeyword "export"
+      _ <- expectKeyword "obligation"
+      obligation <- parseQualifiedName
+      _ <- expectKeyword "to"
+      target <- parseQualifiedName
+      end <- expectSymbol ";"
+      pure $ locatedBetween start end
+        (GrammarV1ProgramExportObligation obligation target)
+    Just (GrammarKeyword "observable") -> do
+      start <- expectKeyword "observable"
+      target <- parseQualifiedName
+      end <- expectSymbol ";"
+      pure $ locatedBetween start end (GrammarV1ProgramObservable target)
+    Just other -> failParser $
+      "SURF-002 program-block slice does not implement program_item beginning with "
+        <> renderToken other
+    Nothing -> failParser "unterminated program block"
 
 parseOptionalTermParams :: Parser (Maybe [Located GrammarV1TermParam])
 parseOptionalTermParams = do

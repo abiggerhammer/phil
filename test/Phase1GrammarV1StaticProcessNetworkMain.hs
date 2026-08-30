@@ -35,8 +35,10 @@ main = do
         architectureGrantExportPreserved
     , test "SURF-003 architecture grant and export obligation malformed forms reject"
         architectureGrantExportRejectMalformed
-    , test "SURF-002 unimplemented program blocks remain fail closed"
-        (expectReject unimplementedProgramBlock)
+    , test "SURF-002 program block items preserve payloads"
+        programBlockPreserved
+    , test "SURF-003 program block malformed forms reject"
+        programBlockRejectMalformed
     ]
   if and results then pure () else exitFailure
 
@@ -76,6 +78,8 @@ expectStaticProcessNetwork = do
               "program declaration was not main"
             assert (staticReferenceNamed "Pair" (grammarV1ProgramTarget programDecl))
               "program target was not the static reference Pair"
+            assert (null (grammarV1ProgramItems programDecl))
+              "program without a block unexpectedly acquired program items"
           other -> Left ("expected main program third, got " <> show other)
       declarations -> Left ("expected component, architecture, and program; got " <> show (length declarations))
 
@@ -294,6 +298,66 @@ architectureGrantExportRejectMalformed = do
   expectReject "architecture A { export obligation proof.ready audit.sink; } program main = instantiate A;"
   expectReject "architecture A { export obligation proof.ready to audit[U32]; } program main = instantiate A;"
 
+programBlockPreserved :: Either String ()
+programBlockPreserved = do
+  sourceFile <- mapLeft show $ parseGrammarV1StructuralSource "program-block" source
+  case grammarV1TopLevelDecls sourceFile of
+    [Located _ architectureTop, Located _ programTop] -> do
+      case locatedValue (grammarV1Declaration architectureTop) of
+        GrammarV1ArchitectureDeclaration architectureDecl ->
+          assert (null (grammarV1ArchitectureItems architectureDecl))
+            "empty architecture unexpectedly acquired items"
+        other -> Left ("expected architecture declaration first, got " <> show other)
+      case locatedValue (grammarV1Declaration programTop) of
+        GrammarV1ProgramDeclaration programDecl -> do
+          assert (staticReferenceNamed "A" (grammarV1ProgramTarget programDecl))
+            "program target was not A"
+          case grammarV1ProgramItems programDecl of
+            [ Located _ (GrammarV1ProgramEntry entryName entryType)
+              , Located _ (GrammarV1ProgramAssume assumption scope)
+              , Located _ (GrammarV1ProgramExportObligation obligation exportTarget)
+              , Located _ (GrammarV1ProgramObservable observableTarget)
+              ] -> do
+                assert (locatedValue entryName == "ingress")
+                  "program entry name was not ingress"
+                case locatedValue entryType of
+                  GrammarV1FrameType reference ->
+                    assert (staticReferenceNamed "Wire" reference)
+                      "program entry type was not Frame[Wire]"
+                  other -> Left ("program entry type was not Frame[Wire]: " <> show other)
+                assert (locatedValue assumption == GrammarV1TrueProposition)
+                  "program assumption was not true"
+                assert (qualifiedNameParts scope == ["trust", "zone"])
+                  "program assumption scope was not trust.zone"
+                assert (qualifiedNameParts obligation == ["proof", "ready"])
+                  "program exported obligation was not proof.ready"
+                assert (qualifiedNameParts exportTarget == ["audit", "sink"])
+                  "program export target was not audit.sink"
+                assert (qualifiedNameParts observableTarget == ["metrics", "bytes"])
+                  "program observable target was not metrics.bytes"
+            other -> Left ("unexpected program items " <> show other)
+        other -> Left ("expected program declaration second, got " <> show other)
+    declarations -> Left ("expected architecture and program; got " <> show (length declarations))
+  where
+    source = Text.unlines
+      [ "architecture A {}"
+      , "program main = instantiate A {"
+      , "  entry ingress : Frame[Wire];"
+      , "  assume true within trust.zone;"
+      , "  export obligation proof.ready to audit.sink;"
+      , "  observable metrics.bytes;"
+      , "};"
+      ]
+
+programBlockRejectMalformed :: Either String ()
+programBlockRejectMalformed = do
+  expectReject "architecture A {} program main = instantiate A { entry ingress U32; };"
+  expectReject "architecture A {} program main = instantiate A { assume true trust.zone; };"
+  expectReject "architecture A {} program main = instantiate A { assume true within trust[U32]; };"
+  expectReject "architecture A {} program main = instantiate A { export obligation proof.ready audit.sink; };"
+  expectReject "architecture A {} program main = instantiate A { export obligation proof[U32] to audit.sink; };"
+  expectReject "architecture A {} program main = instantiate A { observable metrics[U32]; };"
+
 expectArchitectureItems
   :: [Located GrammarV1ArchitectureItem]
   -> Either String ()
@@ -349,14 +413,6 @@ expectReject :: Text.Text -> Either String ()
 expectReject source = case parseGrammarV1StructuralSource "fail-closed" source of
   Left _ -> Right ()
   Right value -> Left ("expected fail-closed rejection, parsed " <> show value)
-
-unimplementedProgramBlock :: Text.Text
-unimplementedProgramBlock = Text.unlines
-  [ "architecture A {}"
-  , "program main = instantiate A {"
-  , "  observable x;"
-  , "};"
-  ]
 
 assert :: Bool -> String -> Either String ()
 assert condition detail
