@@ -1,4 +1,4 @@
-name: Phase 1 Boundary Progression Proofs
+name: Phase 1 Boundary Progression Production Binding
 
 on:
   pull_request:
@@ -8,8 +8,10 @@ on:
       - 'proof/Phil/Core/BoundaryProgressionImplementationExtraction.v'
       - 'docs/phase-1/boundary-progression-proof-v1.md'
       - 'docs/phase-1/boundary-progression-implementation-refinement-v1.md'
+      - 'docs/phase-1/boundary-progression-production-binding-v1.md'
       - 'app/BoundaryProgressionDecisionCorrespondenceMain.hs'
       - '.github/workflows/phase1-boundary-progression-proofs.yml'
+      - 'src/BoundaryProgressionKernel.hs'
       - 'src/Phil/Core/BoundaryProgression.hs'
       - 'src/Phil/Core/BoundaryMapping.hs'
       - 'src/Phil/Core/QualifiedEncoding.hs'
@@ -24,8 +26,10 @@ on:
       - 'proof/Phil/Core/BoundaryProgressionImplementationExtraction.v'
       - 'docs/phase-1/boundary-progression-proof-v1.md'
       - 'docs/phase-1/boundary-progression-implementation-refinement-v1.md'
+      - 'docs/phase-1/boundary-progression-production-binding-v1.md'
       - 'app/BoundaryProgressionDecisionCorrespondenceMain.hs'
       - '.github/workflows/phase1-boundary-progression-proofs.yml'
+      - 'src/BoundaryProgressionKernel.hs'
       - 'src/Phil/Core/BoundaryProgression.hs'
       - 'src/Phil/Core/BoundaryMapping.hs'
       - 'src/Phil/Core/QualifiedEncoding.hs'
@@ -44,7 +48,7 @@ jobs:
       options: --user root
     steps:
       - uses: actions/checkout@v4
-      - name: Compile PHIL-BND-PROGRESS-001 proof and implementation correspondence
+      - name: Compile PHIL-BND-PROGRESS-001 and verify exact production kernel
         shell: bash
         run: |
           set -euo pipefail
@@ -58,7 +62,10 @@ jobs:
           grep -q 'decideEmissionDisposition' BoundaryProgressionKernel.hs
           grep -q 'planCompleteEmission' BoundaryProgressionKernel.hs
           grep -q 'decideSendProgressionByFacts' BoundaryProgressionKernel.hs
-          sha256sum BoundaryProgressionKernel.hs
+          cmp BoundaryProgressionKernel.hs src/BoundaryProgressionKernel.hs
+          kernel_sha="$(sha256sum BoundaryProgressionKernel.hs | awk '{print $1}')"
+          test "$kernel_sha" = 'afa650e93d6f954e71efb6283aa0bda6b342da37a7426fcc80adee02ea0848db'
+          sha256sum BoundaryProgressionKernel.hs src/BoundaryProgressionKernel.hs
       - name: Record proof identities
         shell: bash
         run: |
@@ -88,11 +95,11 @@ jobs:
           cat boundary-progression-proof/PHIL-BND-PROGRESS-001.proof-certificate.txt
       - uses: actions/upload-artifact@v4
         with:
-          name: rocq-boundary-progression-proof
+          name: rocq-boundary-progression-production-binding
           path: boundary-progression-proof
           if-no-files-found: error
 
-  verify-boundary-progression-correspondence:
+  verify-boundary-progression-production-binding:
     needs: rocq-boundary-progression-proof
     runs-on: ubuntu-latest
     steps:
@@ -105,41 +112,42 @@ jobs:
         run: cabal build all --enable-tests
       - uses: actions/download-artifact@v4
         with:
-          name: rocq-boundary-progression-proof
+          name: rocq-boundary-progression-production-binding
           path: boundary-progression-proof
-      - name: Typecheck and execute extracted boundary-progression controls
+      - name: Strict-typecheck exact kernel and bound production path
         run: |
           set -euo pipefail
-          ghc -Wall -Werror -fno-code \
-            boundary-progression-proof/BoundaryProgressionKernel.hs
+          ghc -Wall -Werror -fno-code src/BoundaryProgressionKernel.hs
+          cabal exec -- ghc -isrc -Wall -Werror -fno-code src/Phil/Core/BoundaryProgression.hs
+          cabal exec -- ghc -isrc -Wall -Werror -fno-code test/Phase1BoundaryProgressionMain.hs
+      - name: Re-run extracted boundary-progression controls against production kernel
+        run: |
+          set -euo pipefail
           ghc -Wall -Werror \
-            -iboundary-progression-proof \
+            -isrc \
             app/BoundaryProgressionDecisionCorrespondenceMain.hs \
             -o boundary-progression-kernel-controls
           ./boundary-progression-kernel-controls
-      - name: Typecheck unchanged BND-011 production path
-        run: |
-          set -euo pipefail
-          cabal exec -- ghc -isrc -Wall -Werror -fno-code src/Phil/Core/BoundaryProgression.hs
-          cabal exec -- ghc -isrc -Wall -Werror -fno-code test/Phase1BoundaryProgressionMain.hs
-      - name: Re-run BND-011 progression corpus
+      - name: Re-run unchanged BND-011 progression corpus
         run: |
           set -euo pipefail
           cabal exec -- runghc -Wall -Werror -isrc test/Phase1BoundaryProgressionMain.hs
-      - name: Record implementation-refinement staging identities
+      - name: Record implementation-refinement closeout identities
         run: |
           set -euo pipefail
-          mkdir -p boundary-progression-implementation-correspondence
+          mkdir -p boundary-progression-production-binding
           sha256sum \
             boundary-progression-proof/BoundaryProgressionKernel.hs \
+            src/BoundaryProgressionKernel.hs \
             src/Phil/Core/BoundaryProgression.hs \
             test/Phase1BoundaryProgressionMain.hs \
             app/BoundaryProgressionDecisionCorrespondenceMain.hs \
             proof/Phil/Core/BoundaryProgressionImplementation.v \
             docs/phase-1/boundary-progression-implementation-refinement-v1.md \
-            > boundary-progression-implementation-correspondence/PHIL-BND-PROGRESS-001.staging.sha256
+            docs/phase-1/boundary-progression-production-binding-v1.md \
+            > boundary-progression-production-binding/PHIL-BND-PROGRESS-001.closeout.sha256
       - uses: actions/upload-artifact@v4
         with:
-          name: boundary-progression-implementation-correspondence
-          path: boundary-progression-implementation-correspondence
+          name: boundary-progression-production-binding
+          path: boundary-progression-production-binding
           if-no-files-found: error
