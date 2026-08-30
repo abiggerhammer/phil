@@ -88,9 +88,10 @@ Theorem checked_boundary_transfer_preserves_all_boundary_gates :
 Proof.
   intros update evidence transfer resultEvidence Hchecked Hboundary.
   destruct Hboundary as [Hkind Hcopy Hequality Hlaw Hevidence Hscope].
-  repeat split; try assumption.
-  eapply checked_explicit_transport_is_valid.
-  exact Hchecked.
+  split.
+  - eapply checked_explicit_transport_is_valid.
+    exact Hchecked.
+  - repeat split; assumption.
 Qed.
 
 Corollary changed_subject_without_explicit_transport_rejects_at_boundary :
