@@ -678,6 +678,12 @@ data GrammarV1ArchitectureItem
       (Located Text)
       (Located GrammarV1Type)
       (Located GrammarV1QualifiedName)
+  | GrammarV1ArchitectureGrant
+      (Located GrammarV1QualifiedName)
+      (Located GrammarV1Expression)
+  | GrammarV1ArchitectureExportObligation
+      (Located GrammarV1QualifiedName)
+      (Located GrammarV1QualifiedName)
   deriving (Eq, Show)
 
 data GrammarV1RoleTarget
@@ -1994,6 +2000,22 @@ parseArchitectureItem = do
       end <- expectSymbol ";"
       pure $ locatedBetween start end
         (GrammarV1ArchitectureAuthority name authorityType origin)
+    Just (GrammarKeyword "grant") -> do
+      start <- expectKeyword "grant"
+      target <- parseQualifiedName
+      _ <- expectSymbol "="
+      value <- parseExpression
+      end <- expectSymbol ";"
+      pure $ locatedBetween start end (GrammarV1ArchitectureGrant target value)
+    Just (GrammarKeyword "export") -> do
+      start <- expectKeyword "export"
+      _ <- expectKeyword "obligation"
+      obligation <- parseQualifiedName
+      _ <- expectKeyword "to"
+      target <- parseQualifiedName
+      end <- expectSymbol ";"
+      pure $ locatedBetween start end
+        (GrammarV1ArchitectureExportObligation obligation target)
     Just other -> failParser $
       "SURF-002 static process-network slice does not yet implement architecture_item beginning with "
         <> renderToken other

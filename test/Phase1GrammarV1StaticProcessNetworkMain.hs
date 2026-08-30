@@ -31,8 +31,10 @@ main = do
         architectureEntryAuthorityPreserved
     , test "SURF-003 architecture entry and authority malformed forms reject"
         architectureEntryAuthorityRejectMalformed
-    , test "SURF-002 unimplemented architecture items remain fail closed"
-        (expectReject unimplementedArchitectureItem)
+    , test "SURF-002 architecture grant and export obligation preserve payloads"
+        architectureGrantExportPreserved
+    , test "SURF-003 architecture grant and export obligation malformed forms reject"
+        architectureGrantExportRejectMalformed
     , test "SURF-002 unimplemented program blocks remain fail closed"
         (expectReject unimplementedProgramBlock)
     ]
@@ -248,6 +250,50 @@ architectureEntryAuthorityRejectMalformed = do
   expectReject "architecture A { authority token : U32 at root.node; } program main = instantiate A;"
   expectReject "architecture A { authority token : U32 originates at root[U32]; } program main = instantiate A;"
 
+architectureGrantExportPreserved :: Either String ()
+architectureGrantExportPreserved = do
+  sourceFile <- mapLeft show $ parseGrammarV1StructuralSource "architecture-grant-export" source
+  case grammarV1TopLevelDecls sourceFile of
+    [Located _ architectureTop, Located _ programTop] -> do
+      case locatedValue (grammarV1Declaration architectureTop) of
+        GrammarV1ArchitectureDeclaration architectureDecl ->
+          case grammarV1ArchitectureItems architectureDecl of
+            [ Located _ (GrammarV1ArchitectureGrant grantTarget grantValue)
+              , Located _ (GrammarV1ArchitectureExportObligation obligation exportTarget)
+              ] -> do
+                assert (qualifiedNameParts grantTarget == ["trust", "token"])
+                  "architecture grant target was not trust.token"
+                assert (locatedValue grantValue == GrammarV1BoolExpression True)
+                  "architecture grant value was not true"
+                assert (qualifiedNameParts obligation == ["proof", "ready"])
+                  "exported obligation was not proof.ready"
+                assert (qualifiedNameParts exportTarget == ["audit", "sink"])
+                  "export obligation target was not audit.sink"
+            other -> Left ("unexpected grant/export architecture items " <> show other)
+        other -> Left ("expected architecture declaration first, got " <> show other)
+      case locatedValue (grammarV1Declaration programTop) of
+        GrammarV1ProgramDeclaration programDecl ->
+          assert (staticReferenceNamed "Policy" (grammarV1ProgramTarget programDecl))
+            "program target was not Policy"
+        other -> Left ("expected program declaration second, got " <> show other)
+    declarations -> Left ("expected architecture and program; got " <> show (length declarations))
+  where
+    source = Text.unlines
+      [ "architecture Policy {"
+      , "  grant trust.token = true;"
+      , "  export obligation proof.ready to audit.sink;"
+      , "}"
+      , "program main = instantiate Policy;"
+      ]
+
+architectureGrantExportRejectMalformed :: Either String ()
+architectureGrantExportRejectMalformed = do
+  expectReject "architecture A { grant trust[U32] = true; } program main = instantiate A;"
+  expectReject "architecture A { grant trust.token = ; } program main = instantiate A;"
+  expectReject "architecture A { export obligation proof[U32] to audit.sink; } program main = instantiate A;"
+  expectReject "architecture A { export obligation proof.ready audit.sink; } program main = instantiate A;"
+  expectReject "architecture A { export obligation proof.ready to audit[U32]; } program main = instantiate A;"
+
 expectArchitectureItems
   :: [Located GrammarV1ArchitectureItem]
   -> Either String ()
@@ -303,14 +349,6 @@ expectReject :: Text.Text -> Either String ()
 expectReject source = case parseGrammarV1StructuralSource "fail-closed" source of
   Left _ -> Right ()
   Right value -> Left ("expected fail-closed rejection, parsed " <> show value)
-
-unimplementedArchitectureItem :: Text.Text
-unimplementedArchitectureItem = Text.unlines
-  [ "architecture A {"
-  , "  grant sink = payload;"
-  , "}"
-  , "program main = instantiate A;"
-  ]
 
 unimplementedProgramBlock :: Text.Text
 unimplementedProgramBlock = Text.unlines
