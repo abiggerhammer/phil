@@ -65,6 +65,7 @@ module Phil.Surface.GrammarV1.Parser
   , GrammarV1BinaryOperator (..)
   , GrammarV1FailureTarget (..)
   , GrammarV1Fallback (..)
+  , GrammarV1BranchValue (..)
   , GrammarV1Expression (..)
   , GrammarV1Statement (..)
   , GrammarV1Block (..)
@@ -626,6 +627,12 @@ data GrammarV1Fallback
   | GrammarV1RejectFallback (Located GrammarV1Expression)
   deriving (Eq, Ord, Show)
 
+data GrammarV1BranchValue = GrammarV1BranchValue
+  { grammarV1BranchValueName :: Located GrammarV1QualifiedName
+  , grammarV1BranchValueArguments :: [Located GrammarV1Expression]
+  }
+  deriving (Eq, Ord, Show)
+
 data GrammarV1Expression
   = GrammarV1NameExpression GrammarV1StaticReference [Located GrammarV1Expression]
   | GrammarV1BoolExpression Bool
@@ -656,6 +663,34 @@ data GrammarV1Expression
       (Located GrammarV1Expression)
       [Located GrammarV1MatchArm]
   | GrammarV1BreakExpression [Located GrammarV1Expression]
+  | GrammarV1ReceiveFrameExpression (Located GrammarV1Expression)
+  | GrammarV1ReceiveExactExpression
+      (Located GrammarV1Expression)
+      (Located GrammarV1Expression)
+      (Maybe (Located GrammarV1Expression))
+  | GrammarV1ReceiveExpression
+      (Located GrammarV1Type)
+      (Located GrammarV1Expression)
+  | GrammarV1RecognizeExpression
+      (Located GrammarV1StaticReference)
+      (Located GrammarV1Expression)
+  | GrammarV1ValidateExpression
+      (Located GrammarV1StaticReference)
+      (Maybe (Located GrammarV1Expression))
+      (Located GrammarV1Expression)
+  | GrammarV1SendExactExpression
+      (Located GrammarV1Expression)
+      (Located GrammarV1Expression)
+  | GrammarV1SendExpression
+      (Located GrammarV1Expression)
+      (Located GrammarV1Expression)
+  | GrammarV1SelectExpression
+      (Located GrammarV1BranchValue)
+      (Located GrammarV1Expression)
+      (Maybe (Located GrammarV1Expression))
+  | GrammarV1CommitReceiveExpression
+      (Located GrammarV1Expression)
+      (Located GrammarV1Expression)
   | GrammarV1TransportExpression
       (Located GrammarV1Expression)
       (Located GrammarV1Type)
@@ -2549,6 +2584,15 @@ parsePrimaryExpression = do
     Just (GrammarKeyword "loop") -> parseLoopExpression
     Just (GrammarKeyword "continue") -> parseContinueExpression
     Just (GrammarKeyword "break") -> parseBreakExpression
+    Just (GrammarKeyword "receive_frame") -> parseReceiveFrameExpression
+    Just (GrammarKeyword "receive_exact") -> parseReceiveExactExpression
+    Just (GrammarKeyword "receive") -> parseReceiveExpression
+    Just (GrammarKeyword "recognize") -> parseRecognizeExpression
+    Just (GrammarKeyword "validate") -> parseValidateExpression
+    Just (GrammarKeyword "send_exact") -> parseSendExactExpression
+    Just (GrammarKeyword "send") -> parseSendExpression
+    Just (GrammarKeyword "select") -> parseSelectExpression
+    Just (GrammarKeyword "commit_receive") -> parseCommitReceiveExpression
     Just (GrammarKeyword "transport") -> parseTransportExpression
     Just (GrammarKeyword "offer") -> parseOfferExpression
     Just (GrammarKeyword "reject") -> parseRejectExpression
@@ -2573,6 +2617,146 @@ parsePrimaryExpression = do
       "SURF-002 term/block slice does not yet implement primary_expression beginning with "
         <> renderToken other
     Nothing -> failParser "expected primary_expression at end of input"
+
+parseReceiveFrameExpression :: Parser (Located GrammarV1Expression)
+parseReceiveFrameExpression = do
+  start <- expectKeyword "receive_frame"
+  _ <- expectSymbol "("
+  source <- parseExpression
+  end <- expectSymbol ")"
+  pure $ locatedBetween start end (GrammarV1ReceiveFrameExpression source)
+
+parseReceiveExactExpression :: Parser (Located GrammarV1Expression)
+parseReceiveExactExpression = do
+  start <- expectKeyword "receive_exact"
+  amount <- parseAdditiveExpression
+  _ <- expectKeyword "on"
+  endpoint <- parseAdditiveExpression
+  hasUsing <- peekKeyword "using"
+  evidence <- if hasUsing
+    then expectKeyword "using" >> Just <$> parseAdditiveExpression
+    else pure Nothing
+  let endSpan = maybe (locatedSpan endpoint) locatedSpan evidence
+  pure $ Located
+    (SourceSpan
+      (sourceSpanStart (locatedSpan start))
+      (sourceSpanEnd endSpan))
+    (GrammarV1ReceiveExactExpression amount endpoint evidence)
+
+parseReceiveExpression :: Parser (Located GrammarV1Expression)
+parseReceiveExpression = do
+  start <- expectKeyword "receive"
+  resultType <- parseType
+  _ <- expectKeyword "on"
+  endpoint <- parseAdditiveExpression
+  pure $ Located
+    (SourceSpan
+      (sourceSpanStart (locatedSpan start))
+      (sourceSpanEnd (locatedSpan endpoint)))
+    (GrammarV1ReceiveExpression resultType endpoint)
+
+parseRecognizeExpression :: Parser (Located GrammarV1Expression)
+parseRecognizeExpression = do
+  start <- expectKeyword "recognize"
+  recognizer <- parseStaticReference
+  _ <- expectKeyword "from"
+  source <- parseAdditiveExpression
+  pure $ Located
+    (SourceSpan
+      (sourceSpanStart (locatedSpan start))
+      (sourceSpanEnd (locatedSpan source)))
+    (GrammarV1RecognizeExpression recognizer source)
+
+parseValidateExpression :: Parser (Located GrammarV1Expression)
+parseValidateExpression = do
+  start <- expectKeyword "validate"
+  validator <- parseStaticReference
+  hasAt <- peekKeyword "at"
+  position <- if hasAt
+    then expectKeyword "at" >> Just <$> parseAdditiveExpression
+    else pure Nothing
+  _ <- expectKeyword "on"
+  endpoint <- parseAdditiveExpression
+  pure $ Located
+    (SourceSpan
+      (sourceSpanStart (locatedSpan start))
+      (sourceSpanEnd (locatedSpan endpoint)))
+    (GrammarV1ValidateExpression validator position endpoint)
+
+parseSendExactExpression :: Parser (Located GrammarV1Expression)
+parseSendExactExpression = do
+  start <- expectKeyword "send_exact"
+  value <- parseAdditiveExpression
+  _ <- expectKeyword "on"
+  endpoint <- parseAdditiveExpression
+  pure $ Located
+    (SourceSpan
+      (sourceSpanStart (locatedSpan start))
+      (sourceSpanEnd (locatedSpan endpoint)))
+    (GrammarV1SendExactExpression value endpoint)
+
+parseSendExpression :: Parser (Located GrammarV1Expression)
+parseSendExpression = do
+  start <- expectKeyword "send"
+  value <- parseAdditiveExpression
+  _ <- expectKeyword "on"
+  endpoint <- parseAdditiveExpression
+  pure $ Located
+    (SourceSpan
+      (sourceSpanStart (locatedSpan start))
+      (sourceSpanEnd (locatedSpan endpoint)))
+    (GrammarV1SendExpression value endpoint)
+
+parseSelectExpression :: Parser (Located GrammarV1Expression)
+parseSelectExpression = do
+  start <- expectKeyword "select"
+  branch <- parseBranchValue
+  _ <- expectKeyword "on"
+  endpoint <- parseAdditiveExpression
+  hasUsing <- peekKeyword "using"
+  evidence <- if hasUsing
+    then expectKeyword "using" >> Just <$> parseAdditiveExpression
+    else pure Nothing
+  let endSpan = maybe (locatedSpan endpoint) locatedSpan evidence
+  pure $ Located
+    (SourceSpan
+      (sourceSpanStart (locatedSpan start))
+      (sourceSpanEnd endSpan))
+    (GrammarV1SelectExpression branch endpoint evidence)
+
+parseBranchValue :: Parser (Located GrammarV1BranchValue)
+parseBranchValue = do
+  name <- parseQualifiedName
+  hasArguments <- peekSymbol "("
+  if hasArguments
+    then do
+      (arguments, end) <- parseTermArguments
+      pure $ Located
+        (SourceSpan
+          (sourceSpanStart (locatedSpan name))
+          (sourceSpanEnd (locatedSpan end)))
+        GrammarV1BranchValue
+          { grammarV1BranchValueName = name
+          , grammarV1BranchValueArguments = arguments
+          }
+    else pure $ Located
+      (locatedSpan name)
+      GrammarV1BranchValue
+        { grammarV1BranchValueName = name
+        , grammarV1BranchValueArguments = []
+        }
+
+parseCommitReceiveExpression :: Parser (Located GrammarV1Expression)
+parseCommitReceiveExpression = do
+  start <- expectKeyword "commit_receive"
+  source <- parseAdditiveExpression
+  _ <- expectKeyword "using"
+  evidence <- parseAdditiveExpression
+  pure $ Located
+    (SourceSpan
+      (sourceSpanStart (locatedSpan start))
+      (sourceSpanEnd (locatedSpan evidence)))
+    (GrammarV1CommitReceiveExpression source evidence)
 
 parseTransportExpression :: Parser (Located GrammarV1Expression)
 parseTransportExpression = do

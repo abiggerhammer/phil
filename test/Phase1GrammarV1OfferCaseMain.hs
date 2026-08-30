@@ -29,6 +29,12 @@ main = do
         matchDecideBreakPreserved
     , test "SURF-003 control primaries reject malformed syntax"
         controlPrimariesRejectMalformed
+    , test "SURF-002 protocol I/O primaries preserve exact operands"
+        protocolIOPrimariesPreserved
+    , test "SURF-002 protocol I/O optional clauses remain optional"
+        protocolIOOptionalClausesPreserved
+    , test "SURF-003 protocol I/O primaries reject malformed syntax"
+        protocolIOPrimariesRejectMalformed
     ]
   if and results then pure () else exitFailure
 
@@ -290,6 +296,155 @@ controlPrimariesRejectMalformed = do
   expectReject "component C(x : T) { match x {} }"
   expectReject "component C(x : U32) { decide x {} }"
   expectReject "component C(x : U32) { break(x,) }"
+
+protocolIOPrimariesPreserved :: Either String ()
+protocolIOPrimariesPreserved = do
+  statements <- singleComponentStatements =<< mapLeft show
+    (parseGrammarV1StructuralSource "protocol-io-primaries" source)
+  case statements of
+    [ Located _ (GrammarV1LetStatement _ framed)
+      , Located _ (GrammarV1LetStatement _ exact)
+      , Located _ (GrammarV1LetStatement _ received)
+      , Located _ (GrammarV1LetStatement _ recognized)
+      , Located _ (GrammarV1LetStatement _ validated)
+      , Located _ (GrammarV1ExpressionStatement sentExact)
+      , Located _ (GrammarV1ExpressionStatement sent)
+      , Located _ (GrammarV1ExpressionStatement selected)
+      , Located _ (GrammarV1ExpressionStatement committed)
+      ] -> do
+        case locatedValue framed of
+          GrammarV1ReceiveFrameExpression endpoint -> assertSimpleName "endpoint" endpoint
+          other -> Left ("expected receive_frame expression, got " <> show other)
+        case locatedValue exact of
+          GrammarV1ReceiveExactExpression amount endpoint (Just evidence) -> do
+            assertAddNames "n" "one" amount
+            assertSimpleName "endpoint" endpoint
+            assertSimpleName "proof" evidence
+          other -> Left ("expected receive_exact expression with using, got " <> show other)
+        case locatedValue received of
+          GrammarV1ReceiveExpression resultType endpoint -> do
+            assert (locatedValue resultType == GrammarV1UnsignedType "U32")
+              "receive result type was not U32"
+            assertSimpleName "endpoint" endpoint
+          other -> Left ("expected receive expression, got " <> show other)
+        case locatedValue recognized of
+          GrammarV1RecognizeExpression recognizer input -> do
+            assertStaticReferenceName "Packet" recognizer
+            assertSimpleName "plain" input
+          other -> Left ("expected recognize expression, got " <> show other)
+        case locatedValue validated of
+          GrammarV1ValidateExpression validator (Just position) endpoint -> do
+            assertStaticReferenceName "Check" validator
+            assertSimpleName "plain" position
+            assertSimpleName "endpoint" endpoint
+          other -> Left ("expected validate expression with at, got " <> show other)
+        case locatedValue sentExact of
+          GrammarV1SendExactExpression value endpoint -> do
+            assertSimpleName "n" value
+            assertSimpleName "endpoint" endpoint
+          other -> Left ("expected send_exact expression, got " <> show other)
+        case locatedValue sent of
+          GrammarV1SendExpression value endpoint -> do
+            assertAddNames "n" "one" value
+            assertSimpleName "endpoint" endpoint
+          other -> Left ("expected send expression, got " <> show other)
+        case locatedValue selected of
+          GrammarV1SelectExpression branch endpoint (Just evidence) -> do
+            let branchValue = locatedValue branch
+            assert
+              (grammarV1QualifiedNameParts (locatedValue (grammarV1BranchValueName branchValue)) == ["Ready"])
+              "select branch name was not Ready"
+            case grammarV1BranchValueArguments branchValue of
+              [argument] -> assertSimpleName "n" argument
+              other -> Left ("expected one select branch argument, got " <> show other)
+            assertSimpleName "endpoint" endpoint
+            assertSimpleName "proof" evidence
+          other -> Left ("expected select expression with branch payload and using, got " <> show other)
+        case locatedValue committed of
+          GrammarV1CommitReceiveExpression input evidence -> do
+            assertSimpleName "endpoint" input
+            assertSimpleName "validated" evidence
+          other -> Left ("expected commit_receive expression, got " <> show other)
+    other -> Left ("expected nine protocol I/O statements, got " <> show other)
+  where
+    source = Text.unlines
+      [ "component C(endpoint : Channel, n : U32, one : U32, proof : Proof[true]) {"
+      , "  let framed = receive_frame(endpoint)"
+      , "  let exact = receive_exact n + one on endpoint using proof"
+      , "  let plain = receive U32 on endpoint"
+      , "  let recognized = recognize Packet from plain"
+      , "  let validated = validate Check at plain on endpoint"
+      , "  send_exact n on endpoint"
+      , "  send n + one on endpoint"
+      , "  select Ready(n) on endpoint using proof"
+      , "  commit_receive endpoint using validated"
+      , "}"
+      ]
+
+protocolIOOptionalClausesPreserved :: Either String ()
+protocolIOOptionalClausesPreserved = do
+  statements <- singleComponentStatements =<< mapLeft show
+    (parseGrammarV1StructuralSource "protocol-io-optionals" source)
+  case statements of
+    [ Located _ (GrammarV1ExpressionStatement exact)
+      , Located _ (GrammarV1ExpressionStatement validated)
+      , Located _ (GrammarV1ExpressionStatement selected)
+      ] -> do
+        case locatedValue exact of
+          GrammarV1ReceiveExactExpression _ _ Nothing -> Right ()
+          other -> Left ("expected receive_exact without using, got " <> show other)
+        case locatedValue validated of
+          GrammarV1ValidateExpression _ Nothing _ -> Right ()
+          other -> Left ("expected validate without at, got " <> show other)
+        case locatedValue selected of
+          GrammarV1SelectExpression branch _ Nothing -> do
+            let branchValue = locatedValue branch
+            assert (null (grammarV1BranchValueArguments branchValue))
+              "payload-free select unexpectedly had branch arguments"
+          other -> Left ("expected select without using, got " <> show other)
+    other -> Left ("expected three optional-clause statements, got " <> show other)
+  where
+    source = Text.unlines
+      [ "component C(endpoint : Channel, n : U32) {"
+      , "  receive_exact n on endpoint"
+      , "  validate Check on endpoint"
+      , "  select Ready on endpoint"
+      , "}"
+      ]
+
+protocolIOPrimariesRejectMalformed :: Either String ()
+protocolIOPrimariesRejectMalformed = do
+  expectReject "component C(endpoint : Channel) { receive_frame endpoint }"
+  expectReject "component C(endpoint : Channel, n : U32) { receive_exact n endpoint }"
+  expectReject "component C(endpoint : Channel) { receive U32 endpoint }"
+  expectReject "component C(x : U32) { recognize Packet x }"
+  expectReject "component C(endpoint : Channel, x : U32) { validate Check x on endpoint }"
+  expectReject "component C(endpoint : Channel, x : U32) { send_exact x endpoint }"
+  expectReject "component C(endpoint : Channel, x : U32) { send x endpoint }"
+  expectReject "component C(endpoint : Channel) { select Ready endpoint }"
+  expectReject "component C(endpoint : Channel, x : U32) { commit_receive endpoint x }"
+
+assertAddNames
+  :: Text.Text
+  -> Text.Text
+  -> Located GrammarV1Expression
+  -> Either String ()
+assertAddNames leftName rightName (Located _ expression) = case expression of
+  GrammarV1BinaryExpression left (Located _ GrammarV1Add) right -> do
+    assertSimpleName leftName left
+    assertSimpleName rightName right
+  other -> Left ("expected additive expression, got " <> show other)
+
+assertStaticReferenceName
+  :: Text.Text
+  -> Located GrammarV1StaticReference
+  -> Either String ()
+assertStaticReferenceName expected (Located _ reference) = do
+  assert
+    (grammarV1QualifiedNameParts (grammarV1StaticReferenceName reference) == [expected])
+    ("unexpected static reference " <> show reference)
+  assert (null (grammarV1StaticReferenceArguments reference))
+    "static reference unexpectedly had static arguments"
 
 singleComponentStatements
   :: GrammarV1SourceFile
