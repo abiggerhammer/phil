@@ -641,6 +641,21 @@ data GrammarV1Expression
   | GrammarV1FallbackExpression
       (Located GrammarV1Expression)
       (Located GrammarV1Fallback)
+  | GrammarV1ConstructExpression
+      (Located GrammarV1StaticReference)
+      [(Located Text, Located GrammarV1Expression)]
+  | GrammarV1BorrowExpression
+      (Located GrammarV1Expression)
+      (Located Text)
+      (Located GrammarV1Block)
+  | GrammarV1MatchExpression
+      (Located GrammarV1Expression)
+      (Maybe (Located GrammarV1JoinClause))
+      [Located GrammarV1MatchArm]
+  | GrammarV1DecideExpression
+      (Located GrammarV1Expression)
+      [Located GrammarV1MatchArm]
+  | GrammarV1BreakExpression [Located GrammarV1Expression]
   | GrammarV1TransportExpression
       (Located GrammarV1Expression)
       (Located GrammarV1Type)
@@ -2525,12 +2540,17 @@ parsePrimaryExpression :: Parser (Located GrammarV1Expression)
 parsePrimaryExpression = do
   token <- peekToken
   case fmap locatedValue token of
-    Just (GrammarKeyword "transport") -> parseTransportExpression
-    Just (GrammarKeyword "offer") -> parseOfferExpression
+    Just (GrammarKeyword "construct") -> parseConstructExpression
+    Just (GrammarKeyword "borrow") -> parseBorrowExpression
     Just (GrammarKeyword "if") -> parseIfExpression
+    Just (GrammarKeyword "match") -> parseMatchExpression
+    Just (GrammarKeyword "decide") -> parseDecideExpression
+    Just (GrammarKeyword "closure") -> parseClosureExpression
     Just (GrammarKeyword "loop") -> parseLoopExpression
     Just (GrammarKeyword "continue") -> parseContinueExpression
-    Just (GrammarKeyword "closure") -> parseClosureExpression
+    Just (GrammarKeyword "break") -> parseBreakExpression
+    Just (GrammarKeyword "transport") -> parseTransportExpression
+    Just (GrammarKeyword "offer") -> parseOfferExpression
     Just (GrammarKeyword "reject") -> parseRejectExpression
     Just (GrammarKeyword "true") -> do
       value <- expectKeyword "true"
@@ -2720,6 +2740,88 @@ parseFieldBinder = do
       , grammarV1FieldBinderAlias = alias
       }
 
+parseConstructExpression :: Parser (Located GrammarV1Expression)
+parseConstructExpression = do
+  start <- expectKeyword "construct"
+  target <- parseStaticReference
+  _ <- expectSymbol "{"
+  atEnd <- peekSymbol "}"
+  assignments <- if atEnd
+    then pure []
+    else do
+      first <- parseFieldAssignment
+      rest <- parseMoreFieldAssignments
+      pure (first : rest)
+  end <- expectSymbol "}"
+  pure $ locatedBetween start end (GrammarV1ConstructExpression target assignments)
+
+parseFieldAssignment :: Parser (Located Text, Located GrammarV1Expression)
+parseFieldAssignment = do
+  field <- expectIdentifier
+  _ <- expectSymbol "="
+  value <- parseExpression
+  pure (field, value)
+
+parseMoreFieldAssignments :: Parser [(Located Text, Located GrammarV1Expression)]
+parseMoreFieldAssignments = do
+  hasComma <- peekSymbol ","
+  if hasComma
+    then do
+      _ <- expectSymbol ","
+      atEnd <- peekSymbol "}"
+      if atEnd
+        then pure []
+        else do
+          assignment <- parseFieldAssignment
+          rest <- parseMoreFieldAssignments
+          pure (assignment : rest)
+    else pure []
+
+parseBorrowExpression :: Parser (Located GrammarV1Expression)
+parseBorrowExpression = do
+  start <- expectKeyword "borrow"
+  value <- parseAdditiveExpression
+  _ <- expectKeyword "as"
+  binder <- expectIdentifier
+  body <- parseBlock
+  pure $ Located
+    (SourceSpan
+      (sourceSpanStart (locatedSpan start))
+      (sourceSpanEnd (locatedSpan body)))
+    (GrammarV1BorrowExpression value binder body)
+
+parseMatchExpression :: Parser (Located GrammarV1Expression)
+parseMatchExpression = do
+  start <- expectKeyword "match"
+  scrutinee <- parseExpression
+  hasJoin <- peekKeyword "join"
+  joinClause <- if hasJoin then Just <$> parseJoinClause else pure Nothing
+  _ <- expectSymbol "{"
+  atEnd <- peekSymbol "}"
+  if atEnd
+    then failParser "match_expression requires at least one match_arm"
+    else do
+      first <- parseMatchArm
+      rest <- parseMatchArms
+      end <- expectSymbol "}"
+      pure $ locatedBetween start end
+        (GrammarV1MatchExpression scrutinee joinClause (first : rest))
+
+parseDecideExpression :: Parser (Located GrammarV1Expression)
+parseDecideExpression = do
+  start <- expectKeyword "decide"
+  scrutinee <- parseAdditiveExpression
+  _ <- expectSymbol "{"
+  atEnd <- peekSymbol "}"
+  if atEnd
+    then failParser "decide_expression requires at least one match_arm"
+    else do
+      first <- parseMatchArm
+      rest <- parseMatchArms
+      end <- expectSymbol "}"
+      pure $ locatedBetween start end
+        (GrammarV1DecideExpression scrutinee (first : rest))
+
 parseIfExpression :: Parser (Located GrammarV1Expression)
 parseIfExpression = do
   start <- expectKeyword "if"
@@ -2837,6 +2939,16 @@ parseContinueExpression = do
       (arguments, end) <- parseTermArguments
       pure $ locatedBetween start end (GrammarV1ContinueExpression arguments)
     else pure $ Located (locatedSpan start) (GrammarV1ContinueExpression [])
+
+parseBreakExpression :: Parser (Located GrammarV1Expression)
+parseBreakExpression = do
+  start <- expectKeyword "break"
+  hasArguments <- peekSymbol "("
+  if hasArguments
+    then do
+      (arguments, end) <- parseTermArguments
+      pure $ locatedBetween start end (GrammarV1BreakExpression arguments)
+    else pure $ Located (locatedSpan start) (GrammarV1BreakExpression [])
 
 parseClosureExpression :: Parser (Located GrammarV1Expression)
 parseClosureExpression = do
