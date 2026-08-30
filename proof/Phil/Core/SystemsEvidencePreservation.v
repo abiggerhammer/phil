@@ -7,7 +7,7 @@ From Phil.Core Require Import DataSubject BoundarySubject.
   PHIL-SYS-EVID-001 — aggregate evidence, erasure, and assumption preservation
   for the bounded SYS-011--013 Systems chain.
 
-  The proof deliberately composes already-Certified authority rather than
+  This proof deliberately composes already-Certified authority rather than
   restating it:
 
   - PHIL-BND-SUBJECT-001 supplies exact subject-transfer authority over the
@@ -374,7 +374,7 @@ Record SystemsEvidencePreserved
   (update : DataSubjectUpdate)
   (evidence : SubjectBoundEvidence)
   (transfer : BoundarySubjectTransfer)
-  (resultEvidence : option SubjectBoundEvidence)
+  (resultEvidence : SubjectBoundEvidence)
   (context : AssuranceUseContext)
   (erasureRevision : RevisionId)
   (selectedErasureEvidence : EvidenceSet)
