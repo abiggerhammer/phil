@@ -5,6 +5,7 @@ module Phil.Core.BoundarySerialization
   , checkBoundarySerialization
   ) where
 
+import qualified BoundaryEncodingKernel as Kernel
 import Phil.Core.BoundaryMapping (BoundaryRepresentationId)
 import Phil.Core.Syntax (Name)
 
@@ -32,11 +33,27 @@ checkBoundarySerialization
   -> Name
   -> SerializationCorrespondence
   -> Either BoundarySerializationError ()
-checkBoundarySerialization expectedRepresentation expectedSubject correspondence
-  | serializationBasis correspondence /= CheckedWireCorrespondence =
-      Left (UncheckedSerializationBasis (serializationBasis correspondence))
-  | serializationRepresentation correspondence /= expectedRepresentation =
-      Left (SerializationRepresentationMismatch expectedRepresentation (serializationRepresentation correspondence))
-  | serializationSubject correspondence /= expectedSubject =
-      Left (SerializationSubjectMismatch expectedSubject (serializationSubject correspondence))
-  | otherwise = Right ()
+checkBoundarySerialization expectedRepresentation expectedSubject correspondence =
+  case Kernel.decideBoundarySerializationByFacts
+    (toKernelBasis (serializationBasis correspondence))
+    (serializationRepresentation correspondence == expectedRepresentation)
+    (serializationSubject correspondence == expectedSubject) of
+    Kernel.RawMemoryLayoutRejectedDecision ->
+      Left (UncheckedSerializationBasis RawMemoryLayout)
+    Kernel.MatchingCStructShapeRejectedDecision ->
+      Left (UncheckedSerializationBasis MatchingCStructShape)
+    Kernel.SerializationRepresentationMismatchDecision ->
+      Left (SerializationRepresentationMismatch
+        expectedRepresentation
+        (serializationRepresentation correspondence))
+    Kernel.SerializationSubjectMismatchDecision ->
+      Left (SerializationSubjectMismatch
+        expectedSubject
+        (serializationSubject correspondence))
+    Kernel.BoundarySerializationDecisionAccepted -> Right ()
+
+
+toKernelBasis :: SerializationBasis -> Kernel.SerializationBasis
+toKernelBasis CheckedWireCorrespondence = Kernel.CheckedWireCorrespondence
+toKernelBasis RawMemoryLayout = Kernel.RawMemoryLayout
+toKernelBasis MatchingCStructShape = Kernel.MatchingCStructShape
