@@ -1,0 +1,109 @@
+name: Phase 1 Systems Stage Closure Proofs
+
+on:
+  pull_request:
+    paths:
+      - 'proof/Phil/Systems/FactDisposition.v'
+      - 'proof/Phil/Assurance/ValidityScope.v'
+      - 'proof/Phil/Core/SystemsStageClosure.v'
+      - 'docs/phase-1/systems-stage-closure-proof-v1.md'
+      - '.github/workflows/phase1-systems-stage-closure-proofs.yml'
+      - 'src/Phil/Systems/Phase1Stage.hs'
+      - 'src/Phil/Systems/StageClosure.hs'
+      - 'test/Phase1GenericSystemsStageMain.hs'
+      - 'test/Phase1StageClosureMain.hs'
+  push:
+    branches: [main]
+    paths:
+      - 'proof/Phil/Systems/FactDisposition.v'
+      - 'proof/Phil/Assurance/ValidityScope.v'
+      - 'proof/Phil/Core/SystemsStageClosure.v'
+      - 'docs/phase-1/systems-stage-closure-proof-v1.md'
+      - '.github/workflows/phase1-systems-stage-closure-proofs.yml'
+      - 'src/Phil/Systems/Phase1Stage.hs'
+      - 'src/Phil/Systems/StageClosure.hs'
+      - 'test/Phase1GenericSystemsStageMain.hs'
+      - 'test/Phase1StageClosureMain.hs'
+
+permissions:
+  contents: read
+
+jobs:
+  rocq-systems-stage-closure-proof:
+    runs-on: ubuntu-latest
+    container:
+      image: rocq/rocq-prover:9.2.0
+      options: --user root
+    steps:
+      - uses: actions/checkout@v4
+      - name: Compile certified predecessors and PHIL-SYS-STAGE-CLOSURE-001
+        shell: bash
+        run: |
+          set -euo pipefail
+          export PATH="/home/rocq/.opam/${COMPILER}/bin:$PATH"
+          rocq c -Q proof/Phil Phil proof/Phil/Systems/FactDisposition.v
+          rocq c -Q proof/Phil Phil proof/Phil/Assurance/ValidityScope.v
+          rocq c -Q proof/Phil Phil proof/Phil/Core/SystemsStageClosure.v
+      - name: Record proof identities
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p systems-stage-closure-proof
+          cp \
+            proof/Phil/Core/SystemsStageClosure.v \
+            proof/Phil/Core/SystemsStageClosure.vo \
+            systems-stage-closure-proof/
+          sha256sum \
+            proof/Phil/Systems/FactDisposition.v \
+            proof/Phil/Assurance/ValidityScope.v \
+            proof/Phil/Core/SystemsStageClosure.v \
+            proof/Phil/Core/SystemsStageClosure.vo \
+            > systems-stage-closure-proof/PHIL-SYS-STAGE-CLOSURE-001.proof.sha256
+          {
+            echo 'obligation=PHIL-SYS-STAGE-CLOSURE-001'
+            echo 'evidence=Rocq-9.2.0'
+            cat systems-stage-closure-proof/PHIL-SYS-STAGE-CLOSURE-001.proof.sha256
+          } > systems-stage-closure-proof/PHIL-SYS-STAGE-CLOSURE-001.proof-certificate.txt
+          cat systems-stage-closure-proof/PHIL-SYS-STAGE-CLOSURE-001.proof-certificate.txt
+      - uses: actions/upload-artifact@v4
+        with:
+          name: rocq-systems-stage-closure-proof
+          path: systems-stage-closure-proof
+          if-no-files-found: error
+
+  verify-systems-stage-closure-correspondence:
+    needs: rocq-systems-stage-closure-proof
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: haskell-actions/setup@v2
+        with:
+          ghc-version: '9.6.7'
+          cabal-version: 'latest'
+      - name: Build ordinary regression substrate
+        run: cabal build all --enable-tests
+      - name: Strict typecheck coarse StageContract implementation
+        run: |
+          set -euo pipefail
+          cabal exec -- ghc -isrc -Wall -Werror -fno-code src/Phil/Systems/Phase1Stage.hs
+      - name: Typecheck final closure implementation with only inherited warning debt suppressed
+        run: |
+          set -euo pipefail
+          # StageClosure imports the cumulative SYS-009/010 concrete trunk.
+          # Its two inherited warnings are already tracked separately:
+          # ProtocolStateCorrespondence name shadowing and
+          # BoundaryCommitCorrespondence's redundant Set type import.
+          cabal exec -- ghc -isrc -Wall -Werror -Wno-name-shadowing -Wno-unused-imports -fno-code src/Phil/Systems/StageClosure.hs
+      - name: Strict typecheck unchanged 36-case closure corpus
+        run: |
+          set -euo pipefail
+          # The generic SYS-001/002/003 fixture carries one pre-existing
+          # redundant Phil.Core.Static import. Keep the exemption local to
+          # this unchanged test file; production Phase1Stage remains strict.
+          cabal exec -- ghc -isrc -Wall -Werror -Wno-unused-imports -fno-code test/Phase1GenericSystemsStageMain.hs
+          cabal exec -- ghc -isrc -Wall -Werror -Wno-name-shadowing -Wno-unused-imports -fno-code test/Phase1StageClosureMain.hs
+      - name: Re-run unchanged coarse and final closure corpus
+        run: |
+          set -euo pipefail
+          cabal exec -- runghc -Wall -Werror -Wno-unused-imports -isrc test/Phase1GenericSystemsStageMain.hs
+          cabal exec -- runghc -Wall -Werror -Wno-name-shadowing -Wno-unused-imports -isrc test/Phase1StageClosureMain.hs
