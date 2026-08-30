@@ -3,7 +3,7 @@ name: Phase 1 Storage Realization Conformance
 on:
   pull_request:
     paths:
-      - 'src/Phil/Systems/StorageRealization.hs'
+      - 'src/Phil/Systems/Storage.hs'
       - 'src/Phil/Systems.hs'
       - 'test/Phase1StorageRealizationMain.hs'
       - 'docs/phase-1/storage-realization-conformance-v1.md'
@@ -11,7 +11,7 @@ on:
   push:
     branches: [main]
     paths:
-      - 'src/Phil/Systems/StorageRealization.hs'
+      - 'src/Phil/Systems/Storage.hs'
       - 'src/Phil/Systems.hs'
       - 'test/Phase1StorageRealizationMain.hs'
       - 'docs/phase-1/storage-realization-conformance-v1.md'
@@ -31,8 +31,8 @@ jobs:
           cabal-version: 'latest'
       - name: Build ordinary regression substrate
         run: cabal build all --enable-tests
-      - name: Strict typecheck storage realization relation
-        run: cabal exec -- ghc -isrc -Wall -Werror -fno-code src/Phil/Systems/StorageRealization.hs
+      - name: Strict typecheck packaged storage realization relation
+        run: cabal exec -- ghc -isrc -Wall -Werror -fno-code src/Phil/Systems/Storage.hs
       - name: Strict typecheck MEM-001--006 corpus
         run: cabal exec -- ghc -isrc -Wall -Werror -fno-code test/Phase1StorageRealizationMain.hs
       - name: Run MEM-001--006 corpus
