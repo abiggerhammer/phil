@@ -455,6 +455,8 @@ data GrammarV1OpaqueProviderImplementationDecl = GrammarV1OpaqueProviderImplemen
 
 data GrammarV1CapabilityItem
   = GrammarV1CapabilityPermits (Located GrammarV1StaticReference)
+  | GrammarV1CapabilityRequires (Located GrammarV1Proposition)
+  | GrammarV1CapabilityLaw (Located Text) (Located GrammarV1Proposition)
   deriving (Eq, Show)
 
 data GrammarV1CapabilityDecl = GrammarV1CapabilityDecl
@@ -1566,20 +1568,28 @@ parseCapabilityItems = do
 
 parseCapabilityItem :: Parser (Located GrammarV1CapabilityItem)
 parseCapabilityItem = do
-  permits <- peekKeyword "permits"
-  if permits
-    then do
+  token <- peekToken
+  case fmap locatedValue token of
+    Just (GrammarKeyword "permits") -> do
       start <- expectKeyword "permits"
       target <- parseStaticReference
       end <- expectSymbol ";"
       pure $ locatedBetween start end (GrammarV1CapabilityPermits target)
-    else do
-      token <- peekToken
-      case token of
-        Just value -> failParser $
-          "SURF-002 production parser capability item not yet implemented: "
-            <> renderToken (locatedValue value)
-        Nothing -> failParser "unterminated capability declaration"
+    Just (GrammarKeyword "requires") -> do
+      start <- expectKeyword "requires"
+      proposition <- parseProposition
+      end <- expectSymbol ";"
+      pure $ locatedBetween start end (GrammarV1CapabilityRequires proposition)
+    Just (GrammarKeyword "law") -> do
+      start <- expectKeyword "law"
+      name <- expectIdentifier
+      _ <- expectSymbol ":"
+      proposition <- parseProposition
+      end <- expectSymbol ";"
+      pure $ locatedBetween start end (GrammarV1CapabilityLaw name proposition)
+    Just other -> failParser $
+      "expected capability_item permits, requires, or law; found " <> renderToken other
+    Nothing -> failParser "unterminated capability declaration"
 
 parseBoundaryDeclaration :: Parser (Located GrammarV1Declaration)
 parseBoundaryDeclaration = do
