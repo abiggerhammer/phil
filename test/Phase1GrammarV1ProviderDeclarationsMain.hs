@@ -140,10 +140,11 @@ namedTypeWithReferenceActual expectedName expectedActual (Located _ ty) = case t
   GrammarV1NamedType reference ->
     grammarV1QualifiedNameParts (grammarV1StaticReferenceName reference) == [expectedName]
       && grammarV1StaticReferenceArguments reference ==
-        [ GrammarV1StaticReferenceArgument GrammarV1StaticReference
-            { grammarV1StaticReferenceName = GrammarV1QualifiedName [expectedActual]
-            , grammarV1StaticReferenceArguments = []
-            }
+        [ GrammarV1StaticReferenceArgument
+            (GrammarV1StaticReference
+              { grammarV1StaticReferenceName = GrammarV1QualifiedName [expectedActual]
+              , grammarV1StaticReferenceArguments = []
+              })
         ]
   _ -> False
 
