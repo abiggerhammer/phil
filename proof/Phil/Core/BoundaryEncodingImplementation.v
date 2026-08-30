@@ -123,7 +123,7 @@ Theorem qualified_encoding_owner_mismatch_is_last :
 Proof. reflexivity. Qed.
 
 Theorem qualified_encoding_decision_sound_complete :
-  forall encoder requestedRepresentation expectedOwner actualOwner
+  forall encoder requestedRepresentation (expectedOwner actualOwner : nat)
          encoderAdmitted representationMatches outputOwnerMatches,
     (encoderAdmitted = true <->
       encoderAdmission encoder = EncodingAdmitted) ->
