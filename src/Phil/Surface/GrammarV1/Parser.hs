@@ -3179,6 +3179,7 @@ peekOuterParenHasComma = Parser $ \tokens -> Right (scan tokens, tokens)
         | locatedValue open == GrammarSymbol "(" -> go 1 0 0 rest
       _ -> False
 
+    go :: Int -> Int -> Int -> [Located GrammarV1Token] -> Bool
     go parens brackets braces remaining = case remaining of
       [] -> False
       token : rest -> case locatedValue token of
