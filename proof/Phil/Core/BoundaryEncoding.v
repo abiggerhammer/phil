@@ -174,11 +174,18 @@ Proof.
   intros implementation representation expectedOwner actualOwner Hneq.
   unfold establishGeneratedEncoding.
   simpl.
-  destruct (Nat.eqb expectedOwner actualOwner) eqn:Howner.
+  destruct (Nat.eqb representation representation) eqn:Hrepresentation.
+  - destruct (Nat.eqb expectedOwner actualOwner) eqn:Howner.
+    + exfalso.
+      apply Hneq.
+      exact ((proj1 (Nat.eqb_eq expectedOwner actualOwner)) Howner).
+    + reflexivity.
   - exfalso.
-    apply Hneq.
-    exact ((proj1 (Nat.eqb_eq expectedOwner actualOwner)) Howner).
-  - reflexivity.
+    pose proof
+      ((proj1 (Nat.eqb_neq representation representation)) Hrepresentation)
+      as Hself.
+    apply Hself.
+    reflexivity.
 Qed.
 
 Inductive EncodingCanonicality : Type :=
@@ -335,11 +342,18 @@ Proof.
   intros expectedRepresentation expectedSubject actualSubject Hneq.
   unfold checkBoundarySerialization.
   simpl.
-  destruct (Nat.eqb actualSubject expectedSubject) eqn:Hsubject.
+  destruct (Nat.eqb expectedRepresentation expectedRepresentation) eqn:Hrepresentation.
+  - destruct (Nat.eqb actualSubject expectedSubject) eqn:Hsubject.
+    + exfalso.
+      apply Hneq.
+      exact ((proj1 (Nat.eqb_eq actualSubject expectedSubject)) Hsubject).
+    + reflexivity.
   - exfalso.
-    apply Hneq.
-    exact ((proj1 (Nat.eqb_eq actualSubject expectedSubject)) Hsubject).
-  - reflexivity.
+    pose proof
+      ((proj1 (Nat.eqb_neq expectedRepresentation expectedRepresentation)) Hrepresentation)
+      as Hself.
+    apply Hself.
+    reflexivity.
 Qed.
 
 Theorem exact_checked_wire_correspondence_accepts :
@@ -353,7 +367,19 @@ Proof.
   intros representation subject.
   unfold checkBoundarySerialization.
   simpl.
-  reflexivity.
+  destruct (Nat.eqb representation representation) eqn:Hrepresentation.
+  - destruct (Nat.eqb subject subject) eqn:Hsubject.
+    + reflexivity.
+    + exfalso.
+      pose proof ((proj1 (Nat.eqb_neq subject subject)) Hsubject) as Hself.
+      apply Hself.
+      reflexivity.
+  - exfalso.
+    pose proof
+      ((proj1 (Nat.eqb_neq representation representation)) Hrepresentation)
+      as Hself.
+    apply Hself.
+    reflexivity.
 Qed.
 
 Theorem successful_checked_wire_correspondence_is_exact :
@@ -368,18 +394,27 @@ Proof.
   intros expectedRepresentation expectedSubject
     [actualRepresentation actualSubject basis] Hresult.
   destruct basis.
-  - simpl in Hresult.
-    destruct (Nat.eqb actualRepresentation expectedRepresentation) eqn:Hrepresentation;
-      try discriminate.
-    destruct (Nat.eqb actualSubject expectedSubject) eqn:Hsubject;
-      try discriminate.
-    pose proof
-      ((proj1 (Nat.eqb_eq actualRepresentation expectedRepresentation)) Hrepresentation)
-      as Erepresentation.
-    pose proof
-      ((proj1 (Nat.eqb_eq actualSubject expectedSubject)) Hsubject)
-      as Esubject.
-    repeat split; try assumption; reflexivity.
-  - simpl in Hresult. discriminate.
-  - simpl in Hresult. discriminate.
+  - unfold checkBoundarySerialization in Hresult.
+    simpl in Hresult.
+    destruct (Nat.eqb actualRepresentation expectedRepresentation) eqn:Hrepresentation.
+    + cbn in Hresult.
+      destruct (Nat.eqb actualSubject expectedSubject) eqn:Hsubject.
+      * pose proof
+          ((proj1 (Nat.eqb_eq actualRepresentation expectedRepresentation)) Hrepresentation)
+          as Erepresentation.
+        pose proof
+          ((proj1 (Nat.eqb_eq actualSubject expectedSubject)) Hsubject)
+          as Esubject.
+        split; [reflexivity |].
+        split; assumption.
+      * cbn in Hresult.
+        discriminate.
+    + cbn in Hresult.
+      discriminate.
+  - unfold checkBoundarySerialization in Hresult.
+    simpl in Hresult.
+    discriminate.
+  - unfold checkBoundarySerialization in Hresult.
+    simpl in Hresult.
+    discriminate.
 Qed.
