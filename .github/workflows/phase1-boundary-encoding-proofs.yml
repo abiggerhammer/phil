@@ -4,7 +4,11 @@ on:
   pull_request:
     paths:
       - 'proof/Phil/Core/BoundaryEncoding.v'
+      - 'proof/Phil/Core/BoundaryEncodingImplementation.v'
+      - 'proof/Phil/Core/BoundaryEncodingImplementationExtraction.v'
       - 'docs/phase-1/boundary-encoding-proof-v1.md'
+      - 'docs/phase-1/boundary-encoding-implementation-refinement-v1.md'
+      - 'app/BoundaryEncodingDecisionCorrespondenceMain.hs'
       - '.github/workflows/phase1-boundary-encoding-proofs.yml'
       - 'src/Phil/Core/QualifiedEncoding.hs'
       - 'src/Phil/Core/EncodingCanonicality.hs'
@@ -16,7 +20,11 @@ on:
     branches: [main]
     paths:
       - 'proof/Phil/Core/BoundaryEncoding.v'
+      - 'proof/Phil/Core/BoundaryEncodingImplementation.v'
+      - 'proof/Phil/Core/BoundaryEncodingImplementationExtraction.v'
       - 'docs/phase-1/boundary-encoding-proof-v1.md'
+      - 'docs/phase-1/boundary-encoding-implementation-refinement-v1.md'
+      - 'app/BoundaryEncodingDecisionCorrespondenceMain.hs'
       - '.github/workflows/phase1-boundary-encoding-proofs.yml'
       - 'src/Phil/Core/QualifiedEncoding.hs'
       - 'src/Phil/Core/EncodingCanonicality.hs'
@@ -36,21 +44,41 @@ jobs:
       options: --user root
     steps:
       - uses: actions/checkout@v4
-      - name: Compile PHIL-BND-ENCODE-001 proof
+      - name: Compile PHIL-BND-ENCODE-001 proof and implementation correspondence
         shell: bash
         run: |
           set -euo pipefail
           export PATH="/home/rocq/.opam/${COMPILER}/bin:$PATH"
           rocq c -Q proof/Phil Phil proof/Phil/Core/BoundaryEncoding.v
+          rocq c -Q proof/Phil Phil proof/Phil/Core/BoundaryEncodingImplementation.v
+          rm -f BoundaryEncodingKernel.hs
+          rocq c -Q proof/Phil Phil proof/Phil/Core/BoundaryEncodingImplementationExtraction.v
+          test -s BoundaryEncodingKernel.hs
+          grep -q 'decideQualifiedEncodingByFacts' BoundaryEncodingKernel.hs
+          grep -q 'planGeneratedEncoding' BoundaryEncodingKernel.hs
+          grep -q 'decideEncodingCanonicality' BoundaryEncodingKernel.hs
+          grep -q 'decideBoundarySerializationByFacts' BoundaryEncodingKernel.hs
+          sha256sum BoundaryEncodingKernel.hs
       - name: Record proof identities
         shell: bash
         run: |
           set -euo pipefail
           mkdir -p boundary-encoding-proof
-          cp proof/Phil/Core/BoundaryEncoding.v proof/Phil/Core/BoundaryEncoding.vo boundary-encoding-proof/
+          cp \
+            proof/Phil/Core/BoundaryEncoding.v \
+            proof/Phil/Core/BoundaryEncoding.vo \
+            proof/Phil/Core/BoundaryEncodingImplementation.v \
+            proof/Phil/Core/BoundaryEncodingImplementation.vo \
+            proof/Phil/Core/BoundaryEncodingImplementationExtraction.v \
+            proof/Phil/Core/BoundaryEncodingImplementationExtraction.vo \
+            BoundaryEncodingKernel.hs \
+            boundary-encoding-proof/
           sha256sum \
             proof/Phil/Core/BoundaryEncoding.v \
             proof/Phil/Core/BoundaryEncoding.vo \
+            proof/Phil/Core/BoundaryEncodingImplementation.v \
+            proof/Phil/Core/BoundaryEncodingImplementation.vo \
+            BoundaryEncodingKernel.hs \
             > boundary-encoding-proof/PHIL-BND-ENCODE-001.proof.sha256
           {
             echo 'obligation=PHIL-BND-ENCODE-001'
@@ -75,6 +103,20 @@ jobs:
           cabal-version: 'latest'
       - name: Build ordinary regression substrate
         run: cabal build all --enable-tests
+      - uses: actions/download-artifact@v4
+        with:
+          name: rocq-boundary-encoding-proof
+          path: boundary-encoding-proof
+      - name: Typecheck and execute extracted boundary-encoding controls
+        run: |
+          set -euo pipefail
+          ghc -Wall -Werror -fno-code \
+            boundary-encoding-proof/BoundaryEncodingKernel.hs
+          ghc -Wall -Werror \
+            -iboundary-encoding-proof \
+            app/BoundaryEncodingDecisionCorrespondenceMain.hs \
+            -o boundary-encoding-kernel-controls
+          ./boundary-encoding-kernel-controls
       - name: Typecheck unchanged BND-008–010 production paths
         run: |
           set -euo pipefail
@@ -90,3 +132,24 @@ jobs:
           cabal exec -- runghc -Wall -Werror -isrc test/Phase1QualifiedEncodingMain.hs
           cabal exec -- runghc -Wall -Werror -isrc test/Phase1EncodingCanonicalityMain.hs
           cabal exec -- runghc -Wall -Werror -isrc test/Phase1BoundarySerializationMain.hs
+      - name: Record implementation-refinement staging identities
+        run: |
+          set -euo pipefail
+          mkdir -p boundary-encoding-implementation-correspondence
+          sha256sum \
+            boundary-encoding-proof/BoundaryEncodingKernel.hs \
+            src/Phil/Core/QualifiedEncoding.hs \
+            src/Phil/Core/EncodingCanonicality.hs \
+            src/Phil/Core/BoundarySerialization.hs \
+            test/Phase1QualifiedEncodingMain.hs \
+            test/Phase1EncodingCanonicalityMain.hs \
+            test/Phase1BoundarySerializationMain.hs \
+            app/BoundaryEncodingDecisionCorrespondenceMain.hs \
+            proof/Phil/Core/BoundaryEncodingImplementation.v \
+            docs/phase-1/boundary-encoding-implementation-refinement-v1.md \
+            > boundary-encoding-implementation-correspondence/PHIL-BND-ENCODE-001.staging.sha256
+      - uses: actions/upload-artifact@v4
+        with:
+          name: boundary-encoding-implementation-correspondence
+          path: boundary-encoding-implementation-correspondence
+          if-no-files-found: error
