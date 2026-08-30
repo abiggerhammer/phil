@@ -58,7 +58,9 @@ The existing registered workflow path now runs as `Phase 1 Provider Evidence Pro
 4. strict-compiles the checked-in kernel and production checker under `-Wall -Werror`;
 5. strict-builds the ordinary production library/certifier path;
 6. reruns all 14 direct extracted-kernel controls unchanged;
-7. reruns the unchanged provider-semantic, PROV-010, and Steve provider corpora; and
+7. strict-typechecks and reruns the provider-semantic, PROV-010, and Steve provider corpora; and
 8. records exact kernel, production checker, unchanged Cabal manifest, harness, corpus, and documentation hashes in a closeout artifact.
+
+The stronger corpus typecheck also keeps the shared provider-semantic fixtures warning-clean; #420 renames four local `surface` fixture bindings to `readSurface` so they no longer shadow the existing top-level `surface` constructor. This is test-only hygiene and does not alter any assertion or semantic fixture value.
 
 `cabal check` is deliberately outside this correspondence workflow because package-publication metadata is unrelated to this semantic obligation.
