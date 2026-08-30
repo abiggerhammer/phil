@@ -6,6 +6,7 @@ module Phil.Core.QualifiedEncoding
   , establishGeneratedEncoding
   ) where
 
+import qualified BoundaryEncodingKernel as Kernel
 import Phil.Core.BoundaryMapping (BoundaryRepresentationId)
 import Phil.Core.Syntax (Name)
 
@@ -40,16 +41,27 @@ establishGeneratedEncoding
   -> Name
   -> Name
   -> Either QualifiedEncodingError GeneratedEncodingEvidence
-establishGeneratedEncoding encoder requestedRepresentation expectedOwner actualOwner
-  | encoderAdmission encoder /= EncodingAdmitted =
+establishGeneratedEncoding encoder requestedRepresentation expectedOwner actualOwner =
+  case Kernel.decideQualifiedEncodingByFacts
+    (encoderAdmission encoder == EncodingAdmitted)
+    (encoderRepresentation encoder == requestedRepresentation)
+    (expectedOwner == actualOwner) of
+    Kernel.QualifiedEncoderNotAdmittedDecision ->
       Left (EncoderNotAdmitted (encoderImplementation encoder))
-  | encoderRepresentation encoder /= requestedRepresentation =
-      Left (EncodingRepresentationMismatch (encoderRepresentation encoder) requestedRepresentation)
-  | expectedOwner /= actualOwner =
+    Kernel.QualifiedEncodingRepresentationMismatchDecision ->
+      Left (EncodingRepresentationMismatch
+        (encoderRepresentation encoder)
+        requestedRepresentation)
+    Kernel.QualifiedEncodingOutputOwnerMismatchDecision ->
       Left (EncodingOutputOwnerMismatch expectedOwner actualOwner)
-  | otherwise =
-      Right GeneratedEncodingEvidence
-        { generatedByImplementation = encoderImplementation encoder
-        , generatedRepresentation = requestedRepresentation
-        , generatedOutputOwner = actualOwner
-        }
+    Kernel.QualifiedEncodingDecisionAccepted ->
+      case Kernel.planGeneratedEncoding
+        (encoderImplementation encoder)
+        requestedRepresentation
+        actualOwner of
+        Kernel.MkGeneratedEncodingPlan implementation representation owner ->
+          Right GeneratedEncodingEvidence
+            { generatedByImplementation = implementation
+            , generatedRepresentation = representation
+            , generatedOutputOwner = owner
+            }
