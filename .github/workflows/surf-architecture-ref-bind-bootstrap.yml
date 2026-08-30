@@ -1,0 +1,37 @@
+name: SURF architecture ref/bind bootstrap
+
+on:
+  push:
+    branches:
+      - phase1-surf-002-architecture-ref-bind-parser-bootstrap
+    paths:
+      - architecture-ref-bind.patch
+      - .github/workflows/surf-architecture-ref-bind-bootstrap.yml
+
+permissions:
+  contents: write
+
+jobs:
+  patch:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check out bootstrap branch
+        uses: actions/checkout@v4
+      - name: Check out target branch
+        uses: actions/checkout@v4
+        with:
+          ref: phase1-surf-002-architecture-ref-bind-parser
+          path: target
+          fetch-depth: 0
+      - name: Apply architecture ref/bind patch
+        run: |
+          git -C target apply --recount ../architecture-ref-bind.patch
+          git -C target diff --check
+      - name: Commit architecture ref/bind parser slice
+        run: |
+          cd target
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git add src/Phil/Surface/GrammarV1/Parser.hs test/Phase1GrammarV1StaticProcessNetworkMain.hs
+          git commit -m 'Complete SURF-002 architecture ref and bind items'
+          git push origin HEAD:phase1-surf-002-architecture-ref-bind-parser
