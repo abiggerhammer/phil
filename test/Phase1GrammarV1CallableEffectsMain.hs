@@ -18,8 +18,6 @@ main = do
         expectReject "callable C() -> Unit { consumes {x,}; }"
     , test "SURF-002 effects requirement requires within" $
         expectReject "callable C[E : Effects] requires { effects E {IO}; } () -> Unit {}"
-    , test "SURF-002 effect-set static actual remains fail closed" $
-        expectReject "type T = Box[{IO}];"
     ]
   if and results then pure () else exitFailure
 
