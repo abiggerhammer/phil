@@ -28,7 +28,7 @@ jobs:
           text = path.read_text()
           functions = [
               ('strongerAuthorityRejects', 'narrowerImplementationAccepts', 3),
-              ('narrowerImplementationAccepts', 'widerEffectRejects', 4),
+              ('narrowerImplementationAccepts', 'widerEffectRejects', 3),
               ('widerEffectRejects', 'fatalOutcomeRejects', 3),
               ('fatalOutcomeRejects', 'missingOutcomeMappingRejects', 3),
           ]
