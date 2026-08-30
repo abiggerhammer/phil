@@ -17,6 +17,7 @@ module Phil.Core.ProviderEvidenceQualification
   ) where
 
 import qualified Data.Map.Strict as Map
+import qualified ProviderEvidenceQualificationKernel as ProviderEvidenceQualificationKernel
 import Data.Text (Text)
 import Phil.Core.CallableScope (LoanScopeKey)
 import Phil.Core.ProviderQualification
@@ -29,7 +30,6 @@ import Phil.Core.Syntax
   , RefSort (..)
   , RefTerm (..)
   )
-import qualified ProviderEvidenceQualificationKernel as ProviderEvidenceQualificationKernel
 
 newtype ProviderPropositionFamilyKey = ProviderPropositionFamilyKey
   { unProviderPropositionFamilyKey :: Text
