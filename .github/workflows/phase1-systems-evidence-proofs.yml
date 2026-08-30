@@ -1,0 +1,118 @@
+name: Phase 1 Systems Evidence Proofs
+
+on:
+  pull_request:
+    paths:
+      - 'proof/Phil/Assurance/Manifest.v'
+      - 'proof/Phil/Assurance/EvidenceUse.v'
+      - 'proof/Phil/Core/DataSubject.v'
+      - 'proof/Phil/Core/BoundarySubject.v'
+      - 'proof/Phil/Core/SystemsEvidencePreservation.v'
+      - 'docs/phase-1/systems-evidence-preservation-proof-v1.md'
+      - '.github/workflows/phase1-systems-evidence-proofs.yml'
+      - 'src/Phil/Systems/EvidenceSubjectTransfer.hs'
+      - 'src/Phil/Systems/EvidenceErasure.hs'
+      - 'src/Phil/Systems/AssumptionDependency.hs'
+      - 'test/Phase1EvidenceSubjectTransferMain.hs'
+      - 'test/Phase1EvidenceErasureMain.hs'
+      - 'test/Phase1AssumptionDependencyMain.hs'
+  push:
+    branches: [main]
+    paths:
+      - 'proof/Phil/Assurance/Manifest.v'
+      - 'proof/Phil/Assurance/EvidenceUse.v'
+      - 'proof/Phil/Core/DataSubject.v'
+      - 'proof/Phil/Core/BoundarySubject.v'
+      - 'proof/Phil/Core/SystemsEvidencePreservation.v'
+      - 'docs/phase-1/systems-evidence-preservation-proof-v1.md'
+      - '.github/workflows/phase1-systems-evidence-proofs.yml'
+      - 'src/Phil/Systems/EvidenceSubjectTransfer.hs'
+      - 'src/Phil/Systems/EvidenceErasure.hs'
+      - 'src/Phil/Systems/AssumptionDependency.hs'
+      - 'test/Phase1EvidenceSubjectTransferMain.hs'
+      - 'test/Phase1EvidenceErasureMain.hs'
+      - 'test/Phase1AssumptionDependencyMain.hs'
+
+permissions:
+  contents: read
+
+jobs:
+  rocq-systems-evidence-proof:
+    runs-on: ubuntu-latest
+    container:
+      image: rocq/rocq-prover:9.2.0
+      options: --user root
+    steps:
+      - uses: actions/checkout@v4
+      - name: Compile certified predecessors and PHIL-SYS-EVID-001
+        shell: bash
+        run: |
+          set -euo pipefail
+          export PATH="/home/rocq/.opam/${COMPILER}/bin:$PATH"
+          rocq c -Q proof/Phil Phil proof/Phil/Assurance/Manifest.v
+          rocq c -Q proof/Phil Phil proof/Phil/Assurance/EvidenceUse.v
+          rocq c -Q proof/Phil Phil proof/Phil/Core/DataSubject.v
+          rocq c -Q proof/Phil Phil proof/Phil/Core/BoundarySubject.v
+          rocq c -Q proof/Phil Phil proof/Phil/Core/SystemsEvidencePreservation.v
+      - name: Record proof identities
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p systems-evidence-proof
+          cp \
+            proof/Phil/Core/SystemsEvidencePreservation.v \
+            proof/Phil/Core/SystemsEvidencePreservation.vo \
+            systems-evidence-proof/
+          sha256sum \
+            proof/Phil/Assurance/Manifest.v \
+            proof/Phil/Assurance/EvidenceUse.v \
+            proof/Phil/Core/DataSubject.v \
+            proof/Phil/Core/BoundarySubject.v \
+            proof/Phil/Core/SystemsEvidencePreservation.v \
+            proof/Phil/Core/SystemsEvidencePreservation.vo \
+            > systems-evidence-proof/PHIL-SYS-EVID-001.proof.sha256
+          {
+            echo 'obligation=PHIL-SYS-EVID-001'
+            echo 'evidence=Rocq-9.2.0'
+            cat systems-evidence-proof/PHIL-SYS-EVID-001.proof.sha256
+          } > systems-evidence-proof/PHIL-SYS-EVID-001.proof-certificate.txt
+          cat systems-evidence-proof/PHIL-SYS-EVID-001.proof-certificate.txt
+      - uses: actions/upload-artifact@v4
+        with:
+          name: rocq-systems-evidence-proof
+          path: systems-evidence-proof
+          if-no-files-found: error
+
+  verify-systems-evidence-correspondence:
+    needs: rocq-systems-evidence-proof
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: haskell-actions/setup@v2
+        with:
+          ghc-version: '9.6.7'
+          cabal-version: 'latest'
+      - name: Build ordinary regression substrate
+        run: cabal build all --enable-tests
+      - name: Strict typecheck SYS-011 through SYS-013 production relations
+        run: |
+          set -euo pipefail
+          cabal exec -- ghc -isrc -Wall -Werror -fno-code src/Phil/Systems/EvidenceSubjectTransfer.hs
+          cabal exec -- ghc -isrc -Wall -Werror -fno-code src/Phil/Systems/EvidenceErasure.hs
+          cabal exec -- ghc -isrc -Wall -Werror -fno-code src/Phil/Systems/AssumptionDependency.hs
+      - name: Strict typecheck unchanged 36-case correspondence corpus
+        run: |
+          set -euo pipefail
+          # These cumulative test paths transitively compile the already
+          # documented SYS-009/010 warning debt: ProtocolStateCorrespondence
+          # name shadowing and BoundaryCommitCorrespondence's redundant Set
+          # type import. Production SYS-011--013 remains strict above.
+          cabal exec -- ghc -isrc -Wall -Werror -Wno-name-shadowing -Wno-unused-imports -fno-code test/Phase1EvidenceSubjectTransferMain.hs
+          cabal exec -- ghc -isrc -Wall -Werror -Wno-name-shadowing -Wno-unused-imports -fno-code test/Phase1EvidenceErasureMain.hs
+          cabal exec -- ghc -isrc -Wall -Werror -Wno-name-shadowing -Wno-unused-imports -fno-code test/Phase1AssumptionDependencyMain.hs
+      - name: Re-run unchanged SYS-011 through SYS-013 correspondence corpus
+        run: |
+          set -euo pipefail
+          cabal exec -- runghc -Wall -Werror -Wno-name-shadowing -Wno-unused-imports -isrc test/Phase1EvidenceSubjectTransferMain.hs
+          cabal exec -- runghc -Wall -Werror -Wno-name-shadowing -Wno-unused-imports -isrc test/Phase1EvidenceErasureMain.hs
+          cabal exec -- runghc -Wall -Werror -Wno-name-shadowing -Wno-unused-imports -isrc test/Phase1AssumptionDependencyMain.hs
