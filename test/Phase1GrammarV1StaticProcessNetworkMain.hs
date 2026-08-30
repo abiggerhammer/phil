@@ -121,8 +121,8 @@ architectureBoundaryObservablePreserved = do
             [ Located _ (GrammarV1ArchitectureBoundary boundarySource boundaryTarget)
               , Located _ (GrammarV1ArchitectureObservable observableTarget)
               ] -> do
-                assert (qualifiedNameParts boundarySource == ["external", "ingress"])
-                  "architecture boundary source was not external.ingress"
+                assert (qualifiedNameParts boundarySource == ["edge", "ingress"])
+                  "architecture boundary source was not edge.ingress"
                 assert (qualifiedNameParts boundaryTarget == ["codec", "inbound"])
                   "architecture boundary target was not codec.inbound"
                 assert (qualifiedNameParts observableTarget == ["metrics", "bytes"])
@@ -138,7 +138,7 @@ architectureBoundaryObservablePreserved = do
   where
     source = Text.unlines
       [ "architecture Wiring {"
-      , "  boundary external.ingress = codec.inbound;"
+      , "  boundary edge.ingress = codec.inbound;"
       , "  observable metrics.bytes;"
       , "}"
       , "program main = instantiate Wiring;"
@@ -146,8 +146,8 @@ architectureBoundaryObservablePreserved = do
 
 architectureBoundaryObservableRejectStaticArguments :: Either String ()
 architectureBoundaryObservableRejectStaticArguments = do
-  expectReject "architecture A { boundary external[U32] = codec.inbound; } program main = instantiate A;"
-  expectReject "architecture A { boundary external.ingress = codec[U32]; } program main = instantiate A;"
+  expectReject "architecture A { boundary edge[U32] = codec.inbound; } program main = instantiate A;"
+  expectReject "architecture A { boundary edge.ingress = codec[U32]; } program main = instantiate A;"
   expectReject "architecture A { observable metrics[U32]; } program main = instantiate A;"
 
 expectArchitectureItems
