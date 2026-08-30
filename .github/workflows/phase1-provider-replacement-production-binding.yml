@@ -1,0 +1,148 @@
+name: Phase 1 Provider Replacement Production Binding
+
+on:
+  pull_request:
+    paths:
+      - 'proof/Phil/Core/ProviderReplacementQualification.v'
+      - 'proof/Phil/Core/ProviderReplacementQualificationImplementation.v'
+      - 'proof/Phil/Core/ProviderReplacementQualificationImplementationExtraction.v'
+      - 'src/ProviderReplacementQualificationKernel.hs'
+      - 'src/Phil/Core/ProviderReplacementQualification.hs'
+      - 'app/ProviderReplacementDecisionCorrespondenceMain.hs'
+      - 'test/Phase1ArchitectureProviderReplacementMain.hs'
+      - 'phil-core.cabal'
+      - 'docs/phase-1/provider-replacement-production-binding-v1.md'
+      - '.github/workflows/phase1-provider-replacement-production-binding.yml'
+  push:
+    branches: [main]
+    paths:
+      - 'proof/Phil/Core/ProviderReplacementQualification.v'
+      - 'proof/Phil/Core/ProviderReplacementQualificationImplementation.v'
+      - 'proof/Phil/Core/ProviderReplacementQualificationImplementationExtraction.v'
+      - 'src/ProviderReplacementQualificationKernel.hs'
+      - 'src/Phil/Core/ProviderReplacementQualification.hs'
+      - 'app/ProviderReplacementDecisionCorrespondenceMain.hs'
+      - 'test/Phase1ArchitectureProviderReplacementMain.hs'
+      - 'phil-core.cabal'
+      - 'docs/phase-1/provider-replacement-production-binding-v1.md'
+      - '.github/workflows/phase1-provider-replacement-production-binding.yml'
+
+permissions:
+  contents: read
+
+jobs:
+  rocq-provider-replacement-production-binding:
+    runs-on: ubuntu-latest
+    container:
+      image: rocq/rocq-prover:9.2.0
+      options: --user root
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Rebuild Certified replacement correspondence
+        shell: bash
+        run: |
+          set -euo pipefail
+          export PATH="/home/rocq/.opam/${COMPILER}/bin:$PATH"
+          rocq c -Q proof/Phil Phil proof/Phil/Core/ProviderReplacementQualification.v
+          rocq c -Q proof/Phil Phil proof/Phil/Core/ProviderReplacementQualificationImplementation.v
+
+      - name: Fresh-extract exact production kernel
+        shell: bash
+        run: |
+          set -euo pipefail
+          export PATH="/home/rocq/.opam/${COMPILER}/bin:$PATH"
+          rm -f ProviderReplacementQualificationKernel.hs
+          rocq c -Q proof/Phil Phil proof/Phil/Core/ProviderReplacementQualificationImplementationExtraction.v
+          test -s ProviderReplacementQualificationKernel.hs
+          cmp ProviderReplacementQualificationKernel.hs src/ProviderReplacementQualificationKernel.hs
+          test "$(sha256sum ProviderReplacementQualificationKernel.hs | cut -d' ' -f1)" = \
+            cc88e7fecf48e0a7813dbf1f3247ecefc3e960abff761bb6dfee65bc0b3cfd59
+          mkdir -p provider-replacement-production-proof
+          cp \
+            proof/Phil/Core/ProviderReplacementQualification.v \
+            proof/Phil/Core/ProviderReplacementQualificationImplementation.v \
+            proof/Phil/Core/ProviderReplacementQualificationImplementation.vo \
+            ProviderReplacementQualificationKernel.hs \
+            provider-replacement-production-proof/
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: rocq-provider-replacement-production-binding
+          path: provider-replacement-production-proof
+          if-no-files-found: error
+
+  verify-provider-replacement-production-binding:
+    needs: rocq-provider-replacement-production-binding
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/download-artifact@v4
+        with:
+          name: rocq-provider-replacement-production-binding
+          path: fresh-provider-replacement
+
+      - uses: haskell-actions/setup@v2
+        with:
+          ghc-version: '9.6.7'
+          cabal-version: 'latest'
+
+      - name: Verify exact checked-in kernel
+        run: |
+          set -euo pipefail
+          cmp \
+            fresh-provider-replacement/ProviderReplacementQualificationKernel.hs \
+            src/ProviderReplacementQualificationKernel.hs
+          test "$(sha256sum src/ProviderReplacementQualificationKernel.hs | cut -d' ' -f1)" = \
+            cc88e7fecf48e0a7813dbf1f3247ecefc3e960abff761bb6dfee65bc0b3cfd59
+          ghc -Wall -Werror -fno-code src/ProviderReplacementQualificationKernel.hs
+
+      - name: Strict-build production binding
+        run: |
+          set -euo pipefail
+          cabal build exe:phil-certify-core-scalar --ghc-options=-Werror
+          cabal exec -- ghc -isrc -Wall -Werror -fno-code \
+            src/Phil/Core/ProviderReplacementQualification.hs
+
+      - name: Execute direct extracted-kernel controls
+        run: |
+          set -euo pipefail
+          cabal exec -- ghc -isrc -Wall -Werror \
+            app/ProviderReplacementDecisionCorrespondenceMain.hs \
+            -o provider-replacement-kernel-controls
+          ./provider-replacement-kernel-controls
+
+      - name: Re-run unchanged PROV-015 / ARCH-010 corpus
+        run: |
+          set -euo pipefail
+          cabal exec -- ghc -isrc -Wall -Werror -fno-code \
+            test/Phase1ArchitectureProviderReplacementMain.hs
+          cabal exec -- runghc -isrc test/Phase1ArchitectureProviderReplacementMain.hs
+
+      - name: Record production binding identities
+        run: |
+          set -euo pipefail
+          mkdir -p provider-replacement-production-binding
+          sha256sum \
+            src/ProviderReplacementQualificationKernel.hs \
+            src/Phil/Core/ProviderReplacementQualification.hs \
+            phil-core.cabal \
+            test/Phase1ArchitectureProviderReplacementMain.hs \
+            app/ProviderReplacementDecisionCorrespondenceMain.hs \
+            docs/phase-1/provider-replacement-production-binding-v1.md \
+            > provider-replacement-production-binding/PHIL-PROV-REPLACE-IMPL-001.production.sha256
+          cp \
+            src/ProviderReplacementQualificationKernel.hs \
+            src/Phil/Core/ProviderReplacementQualification.hs \
+            phil-core.cabal \
+            test/Phase1ArchitectureProviderReplacementMain.hs \
+            app/ProviderReplacementDecisionCorrespondenceMain.hs \
+            docs/phase-1/provider-replacement-production-binding-v1.md \
+            provider-replacement-production-binding/
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: provider-replacement-production-binding
+          path: provider-replacement-production-binding
+          if-no-files-found: error
