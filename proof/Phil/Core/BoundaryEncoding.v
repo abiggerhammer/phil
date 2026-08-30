@@ -153,11 +153,13 @@ Theorem encoding_representation_mismatch_rejects_exactly :
       (EncodingRepresentationMismatch representation requestedRepresentation).
 Proof.
   intros implementation representation requestedRepresentation expectedOwner actualOwner Hneq.
+  unfold establishGeneratedEncoding.
   simpl.
-  assert (Hrepresentation : Nat.eqb representation requestedRepresentation = false).
-  { exact ((proj2 (Nat.eqb_neq representation requestedRepresentation)) Hneq). }
-  rewrite Hrepresentation.
-  reflexivity.
+  destruct (Nat.eqb representation requestedRepresentation) eqn:Hrepresentation.
+  - exfalso.
+    apply Hneq.
+    exact ((proj1 (Nat.eqb_eq representation requestedRepresentation)) Hrepresentation).
+  - reflexivity.
 Qed.
 
 Theorem encoding_output_owner_mismatch_rejects_exactly :
@@ -170,12 +172,13 @@ Theorem encoding_output_owner_mismatch_rejects_exactly :
       (EncodingOutputOwnerMismatch expectedOwner actualOwner).
 Proof.
   intros implementation representation expectedOwner actualOwner Hneq.
+  unfold establishGeneratedEncoding.
   simpl.
-  rewrite Nat.eqb_refl.
-  assert (Howner : Nat.eqb expectedOwner actualOwner = false).
-  { exact ((proj2 (Nat.eqb_neq expectedOwner actualOwner)) Hneq). }
-  rewrite Howner.
-  reflexivity.
+  destruct (Nat.eqb expectedOwner actualOwner) eqn:Howner.
+  - exfalso.
+    apply Hneq.
+    exact ((proj1 (Nat.eqb_eq expectedOwner actualOwner)) Howner).
+  - reflexivity.
 Qed.
 
 Inductive EncodingCanonicality : Type :=
@@ -310,11 +313,13 @@ Theorem checked_wire_representation_mismatch_rejects_exactly :
       (SerializationRepresentationMismatch expectedRepresentation actualRepresentation).
 Proof.
   intros expectedRepresentation expectedSubject actualRepresentation actualSubject Hneq.
+  unfold checkBoundarySerialization.
   simpl.
-  assert (Hrepresentation : Nat.eqb actualRepresentation expectedRepresentation = false).
-  { exact ((proj2 (Nat.eqb_neq actualRepresentation expectedRepresentation)) Hneq). }
-  rewrite Hrepresentation.
-  reflexivity.
+  destruct (Nat.eqb actualRepresentation expectedRepresentation) eqn:Hrepresentation.
+  - exfalso.
+    apply Hneq.
+    exact ((proj1 (Nat.eqb_eq actualRepresentation expectedRepresentation)) Hrepresentation).
+  - reflexivity.
 Qed.
 
 Theorem checked_wire_subject_mismatch_rejects_exactly :
@@ -328,12 +333,13 @@ Theorem checked_wire_subject_mismatch_rejects_exactly :
       (SerializationSubjectMismatch expectedSubject actualSubject).
 Proof.
   intros expectedRepresentation expectedSubject actualSubject Hneq.
+  unfold checkBoundarySerialization.
   simpl.
-  rewrite Nat.eqb_refl.
-  assert (Hsubject : Nat.eqb actualSubject expectedSubject = false).
-  { exact ((proj2 (Nat.eqb_neq actualSubject expectedSubject)) Hneq). }
-  rewrite Hsubject.
-  reflexivity.
+  destruct (Nat.eqb actualSubject expectedSubject) eqn:Hsubject.
+  - exfalso.
+    apply Hneq.
+    exact ((proj1 (Nat.eqb_eq actualSubject expectedSubject)) Hsubject).
+  - reflexivity.
 Qed.
 
 Theorem exact_checked_wire_correspondence_accepts :
@@ -345,8 +351,8 @@ Theorem exact_checked_wire_correspondence_accepts :
     BoundarySerializationSuccess.
 Proof.
   intros representation subject.
+  unfold checkBoundarySerialization.
   simpl.
-  rewrite !Nat.eqb_refl.
   reflexivity.
 Qed.
 
