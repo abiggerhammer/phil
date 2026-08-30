@@ -12,6 +12,7 @@ module Phil.Core.BoundaryMapping
   , mapRecognizedBoundaryWithDisposition
   ) where
 
+import qualified BoundaryRepresentationKernel as Kernel
 import Data.Text (Text)
 import Phil.Core.Recognition
   ( ParsedWitness
@@ -79,26 +80,63 @@ mapRecognizedBoundaryWithDisposition
   -> BoundaryMappingRequest
   -> BoundaryMappingDisposition
   -> Either BoundaryMappingError CorrespondenceEvidence
-mapRecognizedBoundaryWithDisposition representation parsed request disposition
-  | requestedRepresentation request /= representationId representation =
-      Left (BoundaryRepresentationMismatch (representationId representation) (requestedRepresentation request))
-  | requestedGrammar request /= representationGrammar representation =
-      Left (BoundaryGrammarMismatch (representationGrammar representation) (requestedGrammar request))
-  | requestedValueType request /= representationValueType representation =
-      Left (BoundaryValueTypeMismatch (representationValueType representation) (requestedValueType request))
-  | parsedGrammarId parsed /= representationGrammar representation =
-      Left (RecognizedGrammarMismatch (representationGrammar representation) (parsedGrammarId parsed))
-  | parsedValueName parsed /= requestedGrammarValue request =
-      Left (RecognizedValueMismatch (parsedValueName parsed) (requestedGrammarValue request))
-  | MappingRejected detail <- disposition =
-      Left (BoundaryMappingFailure
+mapRecognizedBoundaryWithDisposition representation parsed request disposition =
+  case Kernel.decideBoundaryMappingByFacts
+      (requestedRepresentation request == representationId representation)
+      (requestedGrammar request == representationGrammar representation)
+      (requestedValueType request == representationValueType representation)
+      (parsedGrammarId parsed == representationGrammar representation)
+      (parsedValueName parsed == requestedGrammarValue request)
+      (disposition == MappingAccepted) of
+    Kernel.BoundaryRepresentationMismatchDecision ->
+      Left (BoundaryRepresentationMismatch
         (representationId representation)
-        (requestedGrammarValue request)
-        detail)
-  | otherwise = Right CorrespondenceEvidence
-      { correspondenceRepresentation = representationId representation
-      , correspondenceGrammar = representationGrammar representation
-      , correspondenceValueType = representationValueType representation
-      , correspondenceGrammarValue = requestedGrammarValue request
-      , correspondenceSemanticValue = requestedSemanticValue request
-      }
+        (requestedRepresentation request))
+    Kernel.BoundaryGrammarMismatchDecision ->
+      Left (BoundaryGrammarMismatch
+        (representationGrammar representation)
+        (requestedGrammar request))
+    Kernel.BoundaryValueTypeMismatchDecision ->
+      Left (BoundaryValueTypeMismatch
+        (representationValueType representation)
+        (requestedValueType request))
+    Kernel.RecognizedGrammarMismatchDecision ->
+      Left (RecognizedGrammarMismatch
+        (representationGrammar representation)
+        (parsedGrammarId parsed))
+    Kernel.RecognizedValueMismatchDecision ->
+      Left (RecognizedValueMismatch
+        (parsedValueName parsed)
+        (requestedGrammarValue request))
+    Kernel.BoundaryMappingRejectedDecision ->
+      case disposition of
+        MappingRejected detail ->
+          Left (BoundaryMappingFailure
+            (representationId representation)
+            (requestedGrammarValue request)
+            detail)
+        MappingAccepted ->
+          Left (BoundaryMappingFailure
+            (representationId representation)
+            (requestedGrammarValue request)
+            "certified boundary mapping bridge mismatch")
+    Kernel.BoundaryMappingDecisionAccepted ->
+      case Kernel.planBoundaryCorrespondence
+          (representationId representation)
+          (representationGrammar representation)
+          (representationValueType representation)
+          (requestedGrammarValue request)
+          (requestedSemanticValue request) of
+        Kernel.MkBoundaryCorrespondencePlan
+            plannedRepresentation
+            plannedGrammar
+            plannedValueType
+            plannedGrammarValue
+            plannedSemanticValue ->
+          Right CorrespondenceEvidence
+            { correspondenceRepresentation = plannedRepresentation
+            , correspondenceGrammar = plannedGrammar
+            , correspondenceValueType = plannedValueType
+            , correspondenceGrammarValue = plannedGrammarValue
+            , correspondenceSemanticValue = plannedSemanticValue
+            }

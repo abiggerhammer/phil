@@ -1,4 +1,4 @@
-name: Phase 1 Boundary Representation Proofs
+name: Phase 1 Boundary Representation Production Binding
 
 on:
   pull_request:
@@ -8,10 +8,13 @@ on:
       - 'proof/Phil/Core/BoundaryRepresentationImplementationExtraction.v'
       - 'docs/phase-1/boundary-representation-proof-v1.md'
       - 'docs/phase-1/boundary-representation-implementation-refinement-v1.md'
+      - 'docs/phase-1/boundary-representation-production-binding-v1.md'
       - 'app/BoundaryRepresentationDecisionCorrespondenceMain.hs'
       - '.github/workflows/phase1-boundary-representation-proofs.yml'
+      - 'src/BoundaryRepresentationKernel.hs'
       - 'src/Phil/Core/BoundaryMapping.hs'
       - 'src/Phil/Core/BoundaryDirection.hs'
+      - 'phil-core.cabal'
       - 'test/Phase1BoundaryMappingMain.hs'
       - 'test/Phase1BoundaryMappingFailureMain.hs'
       - 'test/Phase1TransformingBoundaryMappingMain.hs'
@@ -24,10 +27,13 @@ on:
       - 'proof/Phil/Core/BoundaryRepresentationImplementationExtraction.v'
       - 'docs/phase-1/boundary-representation-proof-v1.md'
       - 'docs/phase-1/boundary-representation-implementation-refinement-v1.md'
+      - 'docs/phase-1/boundary-representation-production-binding-v1.md'
       - 'app/BoundaryRepresentationDecisionCorrespondenceMain.hs'
       - '.github/workflows/phase1-boundary-representation-proofs.yml'
+      - 'src/BoundaryRepresentationKernel.hs'
       - 'src/Phil/Core/BoundaryMapping.hs'
       - 'src/Phil/Core/BoundaryDirection.hs'
+      - 'phil-core.cabal'
       - 'test/Phase1BoundaryMappingMain.hs'
       - 'test/Phase1BoundaryMappingFailureMain.hs'
       - 'test/Phase1TransformingBoundaryMappingMain.hs'
@@ -44,7 +50,7 @@ jobs:
       options: --user root
     steps:
       - uses: actions/checkout@v4
-      - name: Compile PHIL-BND-REP-001 proof and implementation correspondence
+      - name: Compile PHIL-BND-REP-001 and verify exact production kernel
         shell: bash
         run: |
           set -euo pipefail
@@ -57,7 +63,10 @@ jobs:
           grep -q 'decideBoundaryMappingByFacts' BoundaryRepresentationKernel.hs
           grep -q 'planBoundaryCorrespondence' BoundaryRepresentationKernel.hs
           grep -q 'decideBoundaryUse' BoundaryRepresentationKernel.hs
-          sha256sum BoundaryRepresentationKernel.hs
+          cmp BoundaryRepresentationKernel.hs src/BoundaryRepresentationKernel.hs
+          kernel_sha="$(sha256sum BoundaryRepresentationKernel.hs | awk '{print $1}')"
+          test "$kernel_sha" = '9f9c6f424ee5bcb570071a2390917024f2adc7996ea807a053becea414b8dcc8'
+          sha256sum BoundaryRepresentationKernel.hs src/BoundaryRepresentationKernel.hs
       - name: Record proof identities
         shell: bash
         run: |
@@ -87,11 +96,11 @@ jobs:
           cat boundary-representation-proof/PHIL-BND-REP-001.proof-certificate.txt
       - uses: actions/upload-artifact@v4
         with:
-          name: rocq-boundary-representation-proof
+          name: rocq-boundary-representation-production-binding
           path: boundary-representation-proof
           if-no-files-found: error
 
-  verify-boundary-representation-correspondence:
+  verify-boundary-representation-production-binding:
     needs: rocq-boundary-representation-proof
     runs-on: ubuntu-latest
     steps:
@@ -104,52 +113,57 @@ jobs:
         run: cabal build all --enable-tests
       - uses: actions/download-artifact@v4
         with:
-          name: rocq-boundary-representation-proof
+          name: rocq-boundary-representation-production-binding
           path: boundary-representation-proof
-      - name: Typecheck and execute extracted boundary-representation controls
+      - name: Strict-compile exact kernel and bound production seams
         run: |
           set -euo pipefail
-          ghc -Wall -Werror -fno-code \
-            boundary-representation-proof/BoundaryRepresentationKernel.hs
+          cmp boundary-representation-proof/BoundaryRepresentationKernel.hs src/BoundaryRepresentationKernel.hs
+          ghc -Wall -Werror -fno-code src/BoundaryRepresentationKernel.hs
+          cabal exec -- ghc -isrc -Wall -Werror -fno-code src/Phil/Core/BoundaryMapping.hs
+          cabal exec -- ghc -isrc -Wall -Werror -fno-code src/Phil/Core/BoundaryDirection.hs
+      - name: Execute exact extracted-kernel controls
+        run: |
+          set -euo pipefail
           ghc -Wall -Werror \
-            -iboundary-representation-proof \
+            -isrc \
             app/BoundaryRepresentationDecisionCorrespondenceMain.hs \
             -o boundary-representation-kernel-controls
           ./boundary-representation-kernel-controls
-      - name: Typecheck unchanged BND-004–007 production paths
+      - name: Strict-typecheck unchanged BND-004–007 corpus
         run: |
           set -euo pipefail
-          cabal exec -- ghc -isrc -Wall -Werror -fno-code src/Phil/Core/BoundaryMapping.hs
-          cabal exec -- ghc -isrc -Wall -Werror -fno-code src/Phil/Core/BoundaryDirection.hs
           cabal exec -- ghc -isrc -Wall -Werror -fno-code test/Phase1BoundaryMappingMain.hs
           cabal exec -- ghc -isrc -Wall -Werror -fno-code test/Phase1BoundaryMappingFailureMain.hs
           cabal exec -- ghc -isrc -Wall -Werror -fno-code test/Phase1TransformingBoundaryMappingMain.hs
           cabal exec -- ghc -isrc -Wall -Werror -fno-code test/Phase1BoundaryDirectionMain.hs
-      - name: Re-run BND-004–007 correspondence corpus
+      - name: Re-run unchanged BND-004–007 correspondence corpus
         run: |
           set -euo pipefail
           cabal exec -- runghc -Wall -Werror -isrc test/Phase1BoundaryMappingMain.hs
           cabal exec -- runghc -Wall -Werror -isrc test/Phase1BoundaryMappingFailureMain.hs
           cabal exec -- runghc -Wall -Werror -isrc test/Phase1TransformingBoundaryMappingMain.hs
           cabal exec -- runghc -Wall -Werror -isrc test/Phase1BoundaryDirectionMain.hs
-      - name: Record implementation-refinement staging identities
+      - name: Record production-binding identities
         run: |
           set -euo pipefail
-          mkdir -p boundary-representation-implementation-correspondence
+          mkdir -p boundary-representation-production-binding
           sha256sum \
-            boundary-representation-proof/BoundaryRepresentationKernel.hs \
+            src/BoundaryRepresentationKernel.hs \
             src/Phil/Core/BoundaryMapping.hs \
             src/Phil/Core/BoundaryDirection.hs \
+            phil-core.cabal \
             test/Phase1BoundaryMappingMain.hs \
             test/Phase1BoundaryMappingFailureMain.hs \
             test/Phase1TransformingBoundaryMappingMain.hs \
             test/Phase1BoundaryDirectionMain.hs \
             app/BoundaryRepresentationDecisionCorrespondenceMain.hs \
             proof/Phil/Core/BoundaryRepresentationImplementation.v \
-            docs/phase-1/boundary-representation-implementation-refinement-v1.md \
-            > boundary-representation-implementation-correspondence/PHIL-BND-REP-001.staging.sha256
+            docs/phase-1/boundary-representation-production-binding-v1.md \
+            > boundary-representation-production-binding/PHIL-BND-REP-001.production-binding.sha256
+          cat boundary-representation-production-binding/PHIL-BND-REP-001.production-binding.sha256
       - uses: actions/upload-artifact@v4
         with:
-          name: boundary-representation-implementation-correspondence
-          path: boundary-representation-implementation-correspondence
+          name: boundary-representation-production-binding
+          path: boundary-representation-production-binding
           if-no-files-found: error
