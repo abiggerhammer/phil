@@ -278,7 +278,7 @@ baseRelation
   -> RealizationRevision
   -> PhysicalAllocationFailure
   -> StorageRealizationRelation
-baseRelation subject strategy objects realization allocationFailure = StorageRealizationRelation
+baseRelation subject strategy objects realization physicalFailure = StorageRealizationRelation
   { storageRelationSubject = subject
   , storageRelationSourceSemanticRevision = ordinarySemanticRevision
   , storageRelationSourceOutcomeRevision = ordinaryOutcomeRevision
@@ -286,7 +286,7 @@ baseRelation subject strategy objects realization allocationFailure = StorageRea
   , storageRelationPhysicalObjects = objects
   , storageRelationRealizationRevision = realization
   , storageRelationSourceFailureSurface = SourceStorageInfallible
-  , storageRelationAllocationFailure = allocationFailure
+  , storageRelationAllocationFailure = physicalFailure
   }
 
 inlineCost, heapCost :: StorageCostLineage
