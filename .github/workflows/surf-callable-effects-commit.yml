@@ -1,0 +1,41 @@
+name: SURF callable effects commit
+
+on:
+  push:
+    branches:
+      - phase1-surf-002-callable-effects-parser
+    paths:
+      - '.github/workflows/surf-callable-effects-commit.yml'
+
+permissions:
+  contents: write
+
+jobs:
+  apply:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Apply already-validated exact transform
+        run: |
+          python3 - <<'PY'
+          from pathlib import Path
+          import textwrap
+
+          workflow = Path('.github/workflows/surf-callable-effects-bootstrap.yml').read_text()
+          start_marker = "          python3 - <<'PY'\n"
+          start = workflow.index(start_marker) + len(start_marker)
+          end = workflow.index("\n          PY\n", start)
+          code = textwrap.dedent(workflow[start:end])
+          exec(compile(code, 'callable-effects-bootstrap', 'exec'), {})
+          PY
+
+      - name: Commit callable effects parser slice
+        run: |
+          git config user.name github-actions[bot]
+          git config user.email 41898282+github-actions[bot]@users.noreply.github.com
+          git add src/Phil/Surface/GrammarV1/Parser.hs
+          git commit -m "Extend SURF-002 callable effects parser"
+          git push origin HEAD:${GITHUB_REF_NAME}
