@@ -15,6 +15,10 @@ main = do
         expectStaticProcessNetwork
     , testIO "SURF-003 process missing target rejects at syntax"
         (expectFixtureReject "rejected/23-process-missing-target.phil")
+    , test "SURF-002 architecture ref and bind preserve qualified names"
+        architectureRefBindPreserved
+    , test "SURF-003 architecture ref and bind reject static arguments"
+        architectureRefBindRejectStaticArguments
     , test "SURF-002 unimplemented architecture items remain fail closed"
         (expectReject unimplementedArchitectureItem)
     , test "SURF-002 unimplemented program blocks remain fail closed"
@@ -61,6 +65,47 @@ expectStaticProcessNetwork = do
           other -> Left ("expected main program third, got " <> show other)
       declarations -> Left ("expected component, architecture, and program; got " <> show (length declarations))
 
+architectureRefBindPreserved :: Either String ()
+architectureRefBindPreserved = do
+  sourceFile <- mapLeft show $ parseGrammarV1StructuralSource "architecture-ref-bind" source
+  case grammarV1TopLevelDecls sourceFile of
+    [Located _ architectureTop, Located _ programTop] -> do
+      case locatedValue (grammarV1Declaration architectureTop) of
+        GrammarV1ArchitectureDeclaration architectureDecl ->
+          case grammarV1ArchitectureItems architectureDecl of
+            [ Located _ (GrammarV1ArchitectureRef alias refTarget)
+              , Located _ (GrammarV1ArchitectureBind bindSource bindTarget)
+              ] -> do
+                assert (locatedValue alias == "service")
+                  "architecture ref alias was not service"
+                assert (qualifiedNameParts refTarget == ["cluster", "worker"])
+                  "architecture ref target was not cluster.worker"
+                assert (qualifiedNameParts bindSource == ["client", "port"])
+                  "architecture bind source was not client.port"
+                assert (qualifiedNameParts bindTarget == ["server", "port"])
+                  "architecture bind target was not server.port"
+            other -> Left ("unexpected ref/bind architecture items " <> show other)
+        other -> Left ("expected architecture declaration first, got " <> show other)
+      case locatedValue (grammarV1Declaration programTop) of
+        GrammarV1ProgramDeclaration programDecl ->
+          assert (staticReferenceNamed "Wiring" (grammarV1ProgramTarget programDecl))
+            "program target was not Wiring"
+        other -> Left ("expected program declaration second, got " <> show other)
+    declarations -> Left ("expected architecture and program; got " <> show (length declarations))
+  where
+    source = Text.unlines
+      [ "architecture Wiring {"
+      , "  ref service = cluster.worker;"
+      , "  bind client.port = server.port;"
+      , "}"
+      , "program main = instantiate Wiring;"
+      ]
+
+architectureRefBindRejectStaticArguments :: Either String ()
+architectureRefBindRejectStaticArguments = do
+  expectReject "architecture A { ref service = Cluster[U32]; } program main = instantiate A;"
+  expectReject "architecture A { bind client[U32] = server.port; } program main = instantiate A;"
+
 expectArchitectureItems
   :: [Located GrammarV1ArchitectureItem]
   -> Either String ()
@@ -93,6 +138,10 @@ qualifiedNameNamed :: Text.Text -> Located GrammarV1QualifiedName -> Bool
 qualifiedNameNamed expected (Located _ name) =
   grammarV1QualifiedNameParts name == [expected]
 
+qualifiedNameParts :: Located GrammarV1QualifiedName -> [Text.Text]
+qualifiedNameParts (Located _ name) =
+  grammarV1QualifiedNameParts name
+
 expectFixtureReject :: FilePath -> IO (Either String ())
 expectFixtureReject relativePath = do
   parsed <- parseFixture relativePath
@@ -116,7 +165,7 @@ expectReject source = case parseGrammarV1StructuralSource "fail-closed" source o
 unimplementedArchitectureItem :: Text.Text
 unimplementedArchitectureItem = Text.unlines
   [ "architecture A {"
-  , "  ref alias = target;"
+  , "  constraint true;"
   , "}"
   , "program main = instantiate A;"
   ]
