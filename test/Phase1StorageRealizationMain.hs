@@ -6,7 +6,7 @@ import qualified Data.Map.Strict as Map
 import qualified Data.Set as Set
 import Phil.Core.Static (RealizationRevision (..))
 import Phil.Systems.IR (CostClass (..), CostShape (..), emptyCostShape)
-import Phil.Systems.StorageRealization
+import Phil.Systems.Storage
 import System.Exit (exitFailure)
 
 main :: IO ()
