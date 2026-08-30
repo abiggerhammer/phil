@@ -691,6 +691,15 @@ data GrammarV1Expression
   | GrammarV1CommitReceiveExpression
       (Located GrammarV1Expression)
       (Located GrammarV1Expression)
+  | GrammarV1FailExpression
+      (Located GrammarV1FailureTarget)
+      (Located GrammarV1Expression)
+  | GrammarV1CloseExpression (Located GrammarV1Expression)
+  | GrammarV1ReleaseExpression (Located GrammarV1Expression)
+  | GrammarV1AcceptExpression
+      (Located GrammarV1Expression)
+      (Located GrammarV1Type)
+  | GrammarV1ProveExpression (Located GrammarV1Proposition)
   | GrammarV1TransportExpression
       (Located GrammarV1Expression)
       (Located GrammarV1Type)
@@ -2593,7 +2602,12 @@ parsePrimaryExpression = do
     Just (GrammarKeyword "send") -> parseSendExpression
     Just (GrammarKeyword "select") -> parseSelectExpression
     Just (GrammarKeyword "commit_receive") -> parseCommitReceiveExpression
+    Just (GrammarKeyword "fail") -> parseFailExpression
+    Just (GrammarKeyword "close") -> parseCloseExpression
+    Just (GrammarKeyword "release") -> parseReleaseExpression
     Just (GrammarKeyword "transport") -> parseTransportExpression
+    Just (GrammarKeyword "accept") -> parseAcceptExpression
+    Just (GrammarKeyword "prove") -> parseProveExpression
     Just (GrammarKeyword "offer") -> parseOfferExpression
     Just (GrammarKeyword "reject") -> parseRejectExpression
     Just (GrammarKeyword "true") -> do
@@ -2757,6 +2771,60 @@ parseCommitReceiveExpression = do
       (sourceSpanStart (locatedSpan start))
       (sourceSpanEnd (locatedSpan evidence)))
     (GrammarV1CommitReceiveExpression source evidence)
+
+parseFailExpression :: Parser (Located GrammarV1Expression)
+parseFailExpression = do
+  start <- expectKeyword "fail"
+  target <- parseFailureTarget
+  _ <- expectKeyword "on"
+  endpoint <- parseAdditiveExpression
+  pure $ Located
+    (SourceSpan
+      (sourceSpanStart (locatedSpan start))
+      (sourceSpanEnd (locatedSpan endpoint)))
+    (GrammarV1FailExpression target endpoint)
+
+parseCloseExpression :: Parser (Located GrammarV1Expression)
+parseCloseExpression = do
+  start <- expectKeyword "close"
+  endpoint <- parseAdditiveExpression
+  pure $ Located
+    (SourceSpan
+      (sourceSpanStart (locatedSpan start))
+      (sourceSpanEnd (locatedSpan endpoint)))
+    (GrammarV1CloseExpression endpoint)
+
+parseReleaseExpression :: Parser (Located GrammarV1Expression)
+parseReleaseExpression = do
+  start <- expectKeyword "release"
+  value <- parseAdditiveExpression
+  pure $ Located
+    (SourceSpan
+      (sourceSpanStart (locatedSpan start))
+      (sourceSpanEnd (locatedSpan value)))
+    (GrammarV1ReleaseExpression value)
+
+parseAcceptExpression :: Parser (Located GrammarV1Expression)
+parseAcceptExpression = do
+  start <- expectKeyword "accept"
+  value <- parseAdditiveExpression
+  _ <- expectKeyword "as"
+  target <- parseType
+  pure $ Located
+    (SourceSpan
+      (sourceSpanStart (locatedSpan start))
+      (sourceSpanEnd (locatedSpan target)))
+    (GrammarV1AcceptExpression value target)
+
+parseProveExpression :: Parser (Located GrammarV1Expression)
+parseProveExpression = do
+  start <- expectKeyword "prove"
+  proposition <- parseProposition
+  pure $ Located
+    (SourceSpan
+      (sourceSpanStart (locatedSpan start))
+      (sourceSpanEnd (locatedSpan proposition)))
+    (GrammarV1ProveExpression proposition)
 
 parseTransportExpression :: Parser (Located GrammarV1Expression)
 parseTransportExpression = do
