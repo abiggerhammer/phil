@@ -646,6 +646,9 @@ data GrammarV1ArchitectureItem
   = GrammarV1ArchitectureInstance
       (Located Text)
       (Located GrammarV1StaticReference)
+  | GrammarV1ArchitectureRef
+      (Located Text)
+      (Located GrammarV1QualifiedName)
   | GrammarV1ArchitectureProcess
       (Located Text)
       (Located GrammarV1QualifiedName)
@@ -655,6 +658,9 @@ data GrammarV1ArchitectureItem
   | GrammarV1ArchitectureRole
       (Located GrammarV1QualifiedName)
       (Located GrammarV1RoleTarget)
+  | GrammarV1ArchitectureBind
+      (Located GrammarV1QualifiedName)
+      (Located GrammarV1QualifiedName)
   deriving (Eq, Show)
 
 data GrammarV1RoleTarget
@@ -1894,6 +1900,13 @@ parseArchitectureItem = do
       target <- parseStaticReference
       end <- expectSymbol ";"
       pure $ locatedBetween start end (GrammarV1ArchitectureInstance name target)
+    Just (GrammarKeyword "ref") -> do
+      start <- expectKeyword "ref"
+      name <- expectIdentifier
+      _ <- expectSymbol "="
+      target <- parseQualifiedName
+      end <- expectSymbol ";"
+      pure $ locatedBetween start end (GrammarV1ArchitectureRef name target)
     Just (GrammarKeyword "process") -> do
       start <- expectKeyword "process"
       name <- expectIdentifier
@@ -1915,6 +1928,13 @@ parseArchitectureItem = do
       target <- parseRoleTarget
       end <- expectSymbol ";"
       pure $ locatedBetween start end (GrammarV1ArchitectureRole role target)
+    Just (GrammarKeyword "bind") -> do
+      start <- expectKeyword "bind"
+      source <- parseQualifiedName
+      _ <- expectSymbol "="
+      target <- parseQualifiedName
+      end <- expectSymbol ";"
+      pure $ locatedBetween start end (GrammarV1ArchitectureBind source target)
     Just other -> failParser $
       "SURF-002 static process-network slice does not yet implement architecture_item beginning with "
         <> renderToken other
