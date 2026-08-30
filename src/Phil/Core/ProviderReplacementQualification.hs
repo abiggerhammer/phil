@@ -172,40 +172,40 @@ checkProviderReplacementQualification prior replacement reusePlan = do
     (priorAdmissionRevision /= newAdmissionRevision)
     (Set.null missingReuse)
     (Set.null unexpectedReuse) of
-  Kernel.ProviderReplacementAccepted -> Right ()
-  Kernel.ProviderReplacementAdmissionRequired ->
-    case checkedQualificationAdmissionDecision priorAdmission of
-      QualificationRejected reasons ->
-        Left (ProviderReplacementPriorAdmissionRejected reasons)
-      QualificationAdmitted ->
-        case checkedQualificationAdmissionDecision newAdmission of
-          QualificationRejected reasons ->
-            Left (ProviderReplacementNewAdmissionRejected reasons)
-          QualificationAdmitted ->
-            providerReplacementKernelBridgeMismatch "admission"
-  Kernel.ProviderReplacementInterfaceMismatch ->
-    Left (ProviderReplacementInterfaceMismatch requiredInterface newInterface)
-  Kernel.ProviderReplacementOccurrenceMismatch ->
-    Left (ProviderReplacementOccurrenceMismatch priorOccurrence newOccurrence)
-  Kernel.ProviderReplacementInstanceMismatch ->
-    Left (ProviderReplacementInstanceMismatch
-      (providerReplacementInstanceRevision prior)
-      (providerReplacementInstanceRevision replacement))
-  Kernel.ProviderReplacementSameSemanticSubject ->
-    Left (ProviderReplacementSameImplementationSubject priorSubject)
-  Kernel.ProviderReplacementRealizationUnchanged ->
-    Left (ProviderReplacementRealizationUnchanged
-      (providerReplacementRealizationRevision prior))
-  Kernel.ProviderReplacementClaimLineageInherited ->
-    Left (ProviderReplacementClaimLineageInherited priorClaimRevision)
-  Kernel.ProviderReplacementEvidenceLineageInherited ->
-    Left (ProviderReplacementEvidenceLineageInherited priorEvidenceRevision)
-  Kernel.ProviderReplacementAdmissionLineageInherited ->
-    Left (ProviderReplacementAdmissionLineageInherited priorAdmissionRevision)
-  Kernel.ProviderReplacementSharedEvidenceWithoutScope ->
-    Left (ProviderReplacementSharedEvidenceWithoutScope missingReuse)
-  Kernel.ProviderReplacementUnexpectedEvidenceReuse ->
-    Left (ProviderReplacementUnexpectedReuseJustification unexpectedReuse)
+    Kernel.ProviderReplacementAccepted -> Right ()
+    Kernel.ProviderReplacementAdmissionRequired ->
+      case checkedQualificationAdmissionDecision priorAdmission of
+        QualificationRejected reasons ->
+          Left (ProviderReplacementPriorAdmissionRejected reasons)
+        QualificationAdmitted ->
+          case checkedQualificationAdmissionDecision newAdmission of
+            QualificationRejected reasons ->
+              Left (ProviderReplacementNewAdmissionRejected reasons)
+            QualificationAdmitted ->
+              providerReplacementKernelBridgeMismatch "admission"
+    Kernel.ProviderReplacementInterfaceMismatch ->
+      Left (ProviderReplacementInterfaceMismatch requiredInterface newInterface)
+    Kernel.ProviderReplacementOccurrenceMismatch ->
+      Left (ProviderReplacementOccurrenceMismatch priorOccurrence newOccurrence)
+    Kernel.ProviderReplacementInstanceMismatch ->
+      Left (ProviderReplacementInstanceMismatch
+        (providerReplacementInstanceRevision prior)
+        (providerReplacementInstanceRevision replacement))
+    Kernel.ProviderReplacementSameSemanticSubject ->
+      Left (ProviderReplacementSameImplementationSubject priorSubject)
+    Kernel.ProviderReplacementRealizationUnchanged ->
+      Left (ProviderReplacementRealizationUnchanged
+        (providerReplacementRealizationRevision prior))
+    Kernel.ProviderReplacementClaimLineageInherited ->
+      Left (ProviderReplacementClaimLineageInherited priorClaimRevision)
+    Kernel.ProviderReplacementEvidenceLineageInherited ->
+      Left (ProviderReplacementEvidenceLineageInherited priorEvidenceRevision)
+    Kernel.ProviderReplacementAdmissionLineageInherited ->
+      Left (ProviderReplacementAdmissionLineageInherited priorAdmissionRevision)
+    Kernel.ProviderReplacementSharedEvidenceWithoutScope ->
+      Left (ProviderReplacementSharedEvidenceWithoutScope missingReuse)
+    Kernel.ProviderReplacementUnexpectedEvidenceReuse ->
+      Left (ProviderReplacementUnexpectedReuseJustification unexpectedReuse)
 
   mapM_ (validateReuse priorClaimRevision newClaimRevision)
     (Map.toAscList reusePlan)
