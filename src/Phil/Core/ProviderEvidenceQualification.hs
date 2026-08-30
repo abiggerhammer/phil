@@ -29,6 +29,7 @@ import Phil.Core.Syntax
   , RefSort (..)
   , RefTerm (..)
   )
+import qualified ProviderEvidenceQualificationKernel as ProviderEvidenceQualificationKernel
 
 newtype ProviderPropositionFamilyKey = ProviderPropositionFamilyKey
   { unProviderPropositionFamilyKey :: Text
@@ -141,67 +142,102 @@ instantiateProviderEvidenceProposition family parameters subject =
           (unProviderEvidenceSubjectKey subject)
       ])
 
+providerEvidenceQualificationKernelBridgeMismatch :: String -> a
+providerEvidenceQualificationKernelBridgeMismatch seam =
+  error ("ProviderEvidenceQualificationKernel bridge mismatch: " <> seam)
+
 checkProviderEvidenceProducerCompetence
   :: CheckedProviderSemanticQualification
   -> ProviderEvidenceProducerRequirement
   -> ProviderEvidenceProducerCompetenceClaim
   -> Either ProviderEvidenceQualificationError CheckedProviderEvidenceProducerCompetence
-checkProviderEvidenceProducerCompetence qualified requirement claim = do
-  let requiredOperation = providerEvidenceRequiredOperation requirement
-      claimedOperation = providerEvidenceClaimOperation claim
-      requiredFamily = providerEvidenceRequiredFamily requirement
-      claimedFamily = providerEvidenceClaimFamily claim
-      requiredParameters = providerEvidenceRequiredPropositionParameters requirement
-      claimedParameters = providerEvidenceClaimPropositionParameters claim
-      requiredSubject = providerEvidenceRequiredStableSubject requirement
-      claimedSubject = providerEvidenceClaimPropositionSubject claim
-      requiredValidity = providerEvidenceRequiredValidity requirement
-      claimedValidity = providerEvidenceClaimValidity claim
-  if Map.notMember requiredOperation (checkedProviderOperations qualified)
-    then Left (ProviderEvidenceOperationNotQualified requiredOperation)
-    else if claimedOperation /= requiredOperation
-      then Left (ProviderEvidenceOperationMismatch requiredOperation claimedOperation)
-      else if claimedFamily /= requiredFamily
-        then Left (ProviderEvidenceFamilyMismatch requiredFamily claimedFamily)
-        else if claimedParameters /= requiredParameters
-          then Left (ProviderEvidencePropositionParametersMismatch
-            requiredParameters claimedParameters)
-          else if claimedSubject /= requiredSubject
-            then Left (ProviderEvidenceStableSubjectMismatch requiredSubject claimedSubject)
-            else if claimedValidity /= requiredValidity
-              then Left (ProviderEvidenceValidityMismatch requiredValidity claimedValidity)
-              else do
-                checkSubjectMapping
-                  (providerEvidenceClaimObservation claim)
-                  claimedSubject
-                  (providerEvidenceClaimSubjectMapping claim)
-                Right CheckedProviderEvidenceProducerCompetence
-                  { checkedProviderEvidenceContractRevision = checkedProviderContractRevision qualified
-                  , checkedProviderEvidenceImplementationRevision = checkedProviderImplementationRevision qualified
-                  , checkedProviderEvidenceOperation = requiredOperation
-                  , checkedProviderEvidenceFamily = requiredFamily
-                  , checkedProviderEvidencePropositionParameters = requiredParameters
-                  , checkedProviderEvidenceObservation = providerEvidenceClaimObservation claim
-                  , checkedProviderEvidenceSubject = claimedSubject
-                  , checkedProviderEvidenceMapping = providerEvidenceClaimSubjectMapping claim
-                  , checkedProviderEvidenceValidity = claimedValidity
-                  , checkedProviderEvidenceProposition =
-                      instantiateProviderEvidenceProposition
-                        requiredFamily requiredParameters claimedSubject
-                  }
+checkProviderEvidenceProducerCompetence qualified requirement claim =
+  case ProviderEvidenceQualificationKernel.decideProviderEvidenceCompetenceByFacts
+      operationQualified
+      operationMatches
+      familyMatches
+      parametersMatch
+      stableSubjectMatches
+      validityMatches of
+    ProviderEvidenceQualificationKernel.ProviderEvidenceCompetenceAccepted -> do
+      checkSubjectMapping
+        (providerEvidenceClaimObservation claim)
+        claimedSubject
+        (providerEvidenceClaimSubjectMapping claim)
+      Right CheckedProviderEvidenceProducerCompetence
+        { checkedProviderEvidenceContractRevision = checkedProviderContractRevision qualified
+        , checkedProviderEvidenceImplementationRevision = checkedProviderImplementationRevision qualified
+        , checkedProviderEvidenceOperation = requiredOperation
+        , checkedProviderEvidenceFamily = requiredFamily
+        , checkedProviderEvidencePropositionParameters = requiredParameters
+        , checkedProviderEvidenceObservation = providerEvidenceClaimObservation claim
+        , checkedProviderEvidenceSubject = claimedSubject
+        , checkedProviderEvidenceMapping = providerEvidenceClaimSubjectMapping claim
+        , checkedProviderEvidenceValidity = claimedValidity
+        , checkedProviderEvidenceProposition =
+            instantiateProviderEvidenceProposition
+              requiredFamily requiredParameters claimedSubject
+        }
+    ProviderEvidenceQualificationKernel.ProviderEvidenceOperationNotQualified ->
+      Left (ProviderEvidenceOperationNotQualified requiredOperation)
+    ProviderEvidenceQualificationKernel.ProviderEvidenceOperationMismatch ->
+      Left (ProviderEvidenceOperationMismatch requiredOperation claimedOperation)
+    ProviderEvidenceQualificationKernel.ProviderEvidenceFamilyMismatch ->
+      Left (ProviderEvidenceFamilyMismatch requiredFamily claimedFamily)
+    ProviderEvidenceQualificationKernel.ProviderEvidenceParametersMismatch ->
+      Left (ProviderEvidencePropositionParametersMismatch
+        requiredParameters claimedParameters)
+    ProviderEvidenceQualificationKernel.ProviderEvidenceStableSubjectMismatch ->
+      Left (ProviderEvidenceStableSubjectMismatch requiredSubject claimedSubject)
+    ProviderEvidenceQualificationKernel.ProviderEvidenceValidityMismatch ->
+      Left (ProviderEvidenceValidityMismatch requiredValidity claimedValidity)
   where
+    requiredOperation = providerEvidenceRequiredOperation requirement
+    claimedOperation = providerEvidenceClaimOperation claim
+    requiredFamily = providerEvidenceRequiredFamily requirement
+    claimedFamily = providerEvidenceClaimFamily claim
+    requiredParameters = providerEvidenceRequiredPropositionParameters requirement
+    claimedParameters = providerEvidenceClaimPropositionParameters claim
+    requiredSubject = providerEvidenceRequiredStableSubject requirement
+    claimedSubject = providerEvidenceClaimPropositionSubject claim
+    requiredValidity = providerEvidenceRequiredValidity requirement
+    claimedValidity = providerEvidenceClaimValidity claim
+    operationQualified =
+      Map.member requiredOperation (checkedProviderOperations qualified)
+    operationMatches = claimedOperation == requiredOperation
+    familyMatches = claimedFamily == requiredFamily
+    parametersMatch = claimedParameters == requiredParameters
+    stableSubjectMatches = claimedSubject == requiredSubject
+    validityMatches = claimedValidity == requiredValidity
+
     checkSubjectMapping observation subject mapping = case mapping of
-      DirectStableEvidenceSubject mappedSubject
-        | observation == StableEvidenceObservation mappedSubject
-            && mappedSubject == subject -> Right ()
-        | otherwise -> Left
-            (ProviderEvidenceDirectMappingRequiresStableObservation
+      DirectStableEvidenceSubject mappedSubject ->
+        case ProviderEvidenceQualificationKernel.decideDirectEvidenceSubjectMappingByFacts
+          (observation == StableEvidenceObservation mappedSubject)
+          (mappedSubject == subject) of
+          ProviderEvidenceQualificationKernel.ProviderEvidenceMappingAccepted ->
+            Right ()
+          ProviderEvidenceQualificationKernel.ProviderEvidenceDirectMappingRejected ->
+            Left (ProviderEvidenceDirectMappingRequiresStableObservation
               observation mappedSubject)
-      CheckedObservationToStableSubject _ mappedObservation mappedSubject
-        | mappedObservation /= observation -> Left
-            (ProviderEvidenceMappingObservationMismatch observation mappedObservation)
-        | mappedSubject /= subject -> Left
-            (ProviderEvidenceMappingSubjectMismatch subject mappedSubject)
-        | otherwise -> Right ()
+          _ -> providerEvidenceQualificationKernelBridgeMismatch
+            "direct subject mapping decision"
+      CheckedObservationToStableSubject _ mappedObservation mappedSubject ->
+        case ProviderEvidenceQualificationKernel.decideCheckedEvidenceSubjectMappingByFacts
+          (mappedObservation == observation)
+          (mappedSubject == subject) of
+          ProviderEvidenceQualificationKernel.ProviderEvidenceMappingAccepted ->
+            Right ()
+          ProviderEvidenceQualificationKernel.ProviderEvidenceCheckedObservationMismatch ->
+            Left (ProviderEvidenceMappingObservationMismatch
+              observation mappedObservation)
+          ProviderEvidenceQualificationKernel.ProviderEvidenceCheckedSubjectMismatch ->
+            Left (ProviderEvidenceMappingSubjectMismatch subject mappedSubject)
+          _ -> providerEvidenceQualificationKernelBridgeMismatch
+            "checked subject mapping decision"
       RuntimeCoincidenceSubjectMapping reason ->
-        Left (ProviderEvidenceRuntimeCoincidenceInsufficient reason)
+        case ProviderEvidenceQualificationKernel.decideRuntimeCoincidenceSubjectMapping of
+          ProviderEvidenceQualificationKernel.ProviderEvidenceRuntimeCoincidenceRejected ->
+            Left (ProviderEvidenceRuntimeCoincidenceInsufficient reason)
+          _ -> providerEvidenceQualificationKernelBridgeMismatch
+            "runtime coincidence subject mapping decision"
