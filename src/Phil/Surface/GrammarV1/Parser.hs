@@ -661,6 +661,11 @@ data GrammarV1ArchitectureItem
   | GrammarV1ArchitectureBind
       (Located GrammarV1QualifiedName)
       (Located GrammarV1QualifiedName)
+  | GrammarV1ArchitectureBoundary
+      (Located GrammarV1QualifiedName)
+      (Located GrammarV1QualifiedName)
+  | GrammarV1ArchitectureObservable
+      (Located GrammarV1QualifiedName)
   deriving (Eq, Show)
 
 data GrammarV1RoleTarget
@@ -1935,6 +1940,18 @@ parseArchitectureItem = do
       target <- parseQualifiedName
       end <- expectSymbol ";"
       pure $ locatedBetween start end (GrammarV1ArchitectureBind source target)
+    Just (GrammarKeyword "boundary") -> do
+      start <- expectKeyword "boundary"
+      source <- parseQualifiedName
+      _ <- expectSymbol "="
+      target <- parseQualifiedName
+      end <- expectSymbol ";"
+      pure $ locatedBetween start end (GrammarV1ArchitectureBoundary source target)
+    Just (GrammarKeyword "observable") -> do
+      start <- expectKeyword "observable"
+      target <- parseQualifiedName
+      end <- expectSymbol ";"
+      pure $ locatedBetween start end (GrammarV1ArchitectureObservable target)
     Just other -> failParser $
       "SURF-002 static process-network slice does not yet implement architecture_item beginning with "
         <> renderToken other
