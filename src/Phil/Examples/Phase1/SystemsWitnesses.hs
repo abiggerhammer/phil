@@ -411,14 +411,8 @@ runtimeSite
   -> RevisionId
   -> Text
   -> Text
-  -> (Text, RuntimeSiteRef)
+  -> RuntimeSiteRef
 runtimeSite kind revision evidence cost =
-  ("", RuntimeSiteRef kind revision (EvidenceEntryId evidence) cost)
-
--- The helper above is convenient when constructing a site, but Map.fromList
--- needs the semantic site key supplied separately.  Strip the dummy key.
-runtimeSiteRef :: RuntimeSiteKind -> RevisionId -> Text -> Text -> RuntimeSiteRef
-runtimeSiteRef kind revision evidence cost =
   RuntimeSiteRef kind revision (EvidenceEntryId evidence) cost
 
 -- Steve -------------------------------------------------------------------------
