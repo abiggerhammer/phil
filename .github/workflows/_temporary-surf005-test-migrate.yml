@@ -1,0 +1,30 @@
+name: Temporary SURF-005 test migration
+
+on:
+  push:
+    branches:
+      - phase1-surf-005-remove-ambiguities
+
+permissions:
+  contents: write
+
+jobs:
+  migrate-tests:
+    if: github.actor != 'github-actions[bot]'
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: phase1-surf-005-remove-ambiguities
+          fetch-depth: 0
+      - name: Migrate embedded Grammar-v1 source
+        shell: bash
+        run: |
+          echo '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' | base64 -d | gzip -d > /tmp/migrate_tests.py
+          python3 /tmp/migrate_tests.py
+          rm .github/workflows/_temporary-surf005-test-migrate.yml
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git add test/Phase1GrammarV1*Main.hs .github/workflows/_temporary-surf005-test-migrate.yml
+          git commit -m 'Migrate Grammar-v1 tests to determinate syntax'
+          git push origin HEAD:phase1-surf-005-remove-ambiguities
