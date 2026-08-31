@@ -1,0 +1,76 @@
+name: Temporary SURF-005 static postfix repair
+
+on:
+  push:
+    branches:
+      - phase1-surf-005-remove-ambiguities
+
+permissions:
+  contents: write
+
+jobs:
+  repair:
+    if: github.actor != 'github-actions[bot]'
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: phase1-surf-005-remove-ambiguities
+          fetch-depth: 0
+      - name: Repair static postfix parser and pressure
+        shell: bash
+        run: |
+          python3 - <<'PY'
+          from pathlib import Path
+
+          parser = Path('src/Phil/Surface/GrammarV1/Parser.hs')
+          text = parser.read_text()
+          old = "          parseMoreStaticPostfix base\n        else pure $ Located"
+          new = "          pure base\n        else pure $ Located"
+          assert text.count(old) == 1, text.count(old)
+          parser.write_text(text.replace(old, new, 1))
+
+          test = Path('test/Phase1GrammarV1StaticValueTypesMain.hs')
+          text = test.read_text()
+          old_source = '    [ "type Projected = Box[Cfg[N].field.more];"'
+          new_source = '    [ "type Projected = Box[(Cfg[N]).field.more];"'
+          assert text.count(old_source) == 1, text.count(old_source)
+          text = text.replace(old_source, new_source, 1)
+
+          old_results = '    , test "SURF-002 primitive static value leaves preserve canonical argument forms" staticLeavesPreserved'
+          new_results = '    , test "SURF-003 static reference projection requires a closed receiver" $\n        expectReject "type Bad = Box[Cfg[N].field];"\n    , test "SURF-002 primitive static value leaves preserve canonical argument forms" staticLeavesPreserved'
+          assert text.count(old_results) == 1, text.count(old_results)
+          text = text.replace(old_results, new_results, 1)
+
+          old_assert = '''          case locatedValue base of
+            GrammarV1StaticValueReference reference -> do
+              assertStaticReferenceName "Cfg" reference
+              case grammarV1StaticReferenceArguments (locatedValue reference) of
+                [GrammarV1StaticReferenceArgument nested] ->
+                  assert
+                    (grammarV1QualifiedNameParts (grammarV1StaticReferenceName nested) == ["N"])
+                    "Cfg static argument was not N"
+                other -> Left ("unexpected Cfg static arguments " <> show other)
+            other -> Left ("expected Cfg[N] static reference, got " <> show other)'''
+          new_assert = '''          case locatedValue base of
+            GrammarV1StaticValueParenthesized inner ->
+              case locatedValue inner of
+                GrammarV1StaticValueReference reference -> do
+                  assertStaticReferenceName "Cfg" reference
+                  case grammarV1StaticReferenceArguments (locatedValue reference) of
+                    [GrammarV1StaticReferenceArgument nested] ->
+                      assert
+                        (grammarV1QualifiedNameParts (grammarV1StaticReferenceName nested) == ["N"])
+                        "Cfg static argument was not N"
+                    other -> Left ("unexpected Cfg static arguments " <> show other)
+                other -> Left ("expected parenthesized Cfg[N] static reference, got " <> show other)
+            other -> Left ("expected parenthesized Cfg[N] receiver, got " <> show other)'''
+          assert text.count(old_assert) == 1, text.count(old_assert)
+          test.write_text(text.replace(old_assert, new_assert, 1))
+          PY
+          rm .github/workflows/_temporary-surf005-static-postfix.yml
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git add src/Phil/Surface/GrammarV1/Parser.hs test/Phase1GrammarV1StaticValueTypesMain.hs .github/workflows/_temporary-surf005-static-postfix.yml
+          git commit -m 'Align static postfix parser with Grammar-v1'
+          git push origin HEAD:phase1-surf-005-remove-ambiguities
