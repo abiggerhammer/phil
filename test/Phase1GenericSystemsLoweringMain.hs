@@ -21,14 +21,16 @@ main = do
   results <- sequence
     [ test "SYS-GENERIC upload is accepted by generic producer/verifier"
         uploadAccepted
+    , test "SYS-GENERIC runtime sites retain exact source facts"
+        uploadRuntimeFactsRetained
     , test "SYS-GENERIC Steve is accepted by generic producer/verifier"
         steveAccepted
     , test "SYS-GENERIC presentation rename is nonsemantic"
         presentationRenameNonsemantic
     , test "SYS-GENERIC one instance admits two legal realizations"
         twoLegalRealizations
-    , test "SYS-GENERIC missing operation realization rejects"
-        missingOperationRejects
+    , test "SYS-GENERIC missing decision rejects"
+        missingDecisionRejects
     , test "SYS-GENERIC target-only ABI choice remains explicit"
         steveAbiChoiceExplicit
     ]
@@ -48,6 +50,34 @@ uploadAccepted = do
     ("phil.phase1.generic.core-to-systems.v1:"
       `Text.isPrefixOf` stageContractId contract)
     "upload StageContract did not come from generic Core-to-Systems producer"
+
+uploadRuntimeFactsRetained :: Either String ()
+uploadRuntimeFactsRetained =
+  mapM_ assertRuntimeFact
+    [ "hello.complete_recognition"
+    , "begin.complete_recognition"
+    , "hello.policy"
+    , "version.client_refinement"
+    , "begin.policy"
+    , "payload.exact_receive"
+    , "payload.exact_send"
+    , "digest.matches"
+    , "storage.success"
+    ]
+  where
+    contract = systemsArtifactStageContract
+      (phase1StageSystemsArtifact uploadPhase1StageBundle)
+
+    assertRuntimeFact factId =
+      case
+        [ factDisposition transfer
+        | transfer <- stageFacts contract
+        , factTransferId transfer == factId
+        ] of
+        [FactRuntimeRetained _] -> Right ()
+        other -> Left
+          ("source fact is not retained by its exact runtime site: "
+            <> Text.unpack factId <> " -> " <> show other)
 
 steveAccepted :: Either String ()
 steveAccepted = do
@@ -92,16 +122,16 @@ twoLegalRealizations = do
   assert
     (phase1StageSystemsArtifactRevision bundleA
       /= phase1StageSystemsArtifactRevision bundleB)
-    "different runtime realization did not change Systems artifact revision"
+    "different explicit realization choices did not change Systems artifact revision"
 
-missingOperationRejects :: Either String ()
-missingOperationRejects = do
+missingDecisionRejects :: Either String ()
+missingDecisionRejects = do
   checked <- checkedInstance "Sample"
-  let missing = contextA { genericContextOperations = Map.empty }
+  let missing = contextA { genericContextDecisions = Map.empty }
   case lowerGenericSystems checked sampleProgram missing of
-    Left (GenericLoweringMissingOperationRealization "sample.call") -> Right ()
+    Left (GenericLoweringMissingDecision "sample.call") -> Right ()
     other -> Left
-      ("missing operation realization was not rejected exactly: " <> show other)
+      ("missing decision was not rejected exactly: " <> show other)
 
 steveAbiChoiceExplicit :: Either String ()
 steveAbiChoiceExplicit = do
@@ -116,9 +146,9 @@ sampleProgram = CoreSystemsProgram
   { coreProgramLabel = "Sample"
   , coreProgramProfile = CheckedRuntime
   , coreProgramFunctions = Map.singleton "sample.function" sampleFunction
-  , coreProgramFacts = Set.fromList
-      [ "sample.fact.resource"
-      , "sample.fact.failure"
+  , coreProgramFacts = Map.fromList
+      [ ("sample.fact.resource", Nothing)
+      , ("sample.fact.failure", Nothing)
       ]
   }
 
@@ -127,17 +157,25 @@ sampleFunction = CoreSystemsFunction
   { coreFunctionKey = "sample.function"
   , coreFunctionEntry = "entry"
   , coreFunctionValues = Map.fromList
-      [ ("input", CoreInputValue "SampleInput")
-      , ("output", CoreInputValue "SampleOutput")
+      [ ("input", sampleValue "input" "SampleInput")
+      , ("output", sampleValue "output" "SampleOutput")
       ]
-  , coreFunctionBlocks = Map.fromList
-      [ ("entry", CoreSystemsBlock
-          { coreBlockKey = "entry"
-          , coreBlockOperations =
-              [CoreSystemsCall "sample.call" ["input"] ["output"]]
-          , coreBlockTerminator = CoreSystemsEnd "success"
-          })
-      ]
+  , coreFunctionBlocks = Map.singleton "entry"
+      CoreSystemsBlock
+        { coreBlockKey = "entry"
+        , coreBlockOperations =
+            [ CoreRuntimeCall "sample.call" "sample.semantic_call"
+                ["input"] ["output"] Nothing
+            ]
+        , coreBlockTerminator = CoreSystemsEnd "success"
+        }
+  }
+
+sampleValue :: Text.Text -> Text.Text -> CoreSystemsValue
+sampleValue key semanticType = CoreSystemsValue
+  { coreValueKey = key
+  , coreValueRole = CoreRuntimeInput semanticType
+  , coreValueStorageIdentity = Nothing
   }
 
 contextA :: GenericRealizationContext
@@ -167,17 +205,21 @@ sampleContext revision runtimeName realizationRef = GenericRealizationContext
   , genericContextRealizationRefs = Set.singleton realizationRef
   , genericContextQualificationRefs = Set.empty
   , genericContextAssumptions = Set.empty
-  , genericContextOperations = Map.singleton "sample.call"
-      RealizedOperation
-        { realizedOperationRuntimeName = runtimeName
-        , realizedOperationQualificationRefs = Set.empty
-        , realizedOperationAssumptions = Set.empty
-        , realizedOperationCostClass = SemanticRequired
-        , realizedOperationCostShape = emptyCostShape
-        , realizedOperationTargetPreconditions = []
-        , realizedOperationDerivedObligations = []
+  , genericContextDecisions = Map.singleton "sample.call"
+      GenericDecisionSpec
+        { genericDecisionId = DecisionId ("lower.sample:" <> runtimeName)
+        , genericDecisionSourceRepresentation = "sample semantic call"
+        , genericDecisionTargetRepresentation = runtimeName
+        , genericDecisionSemanticEntities = ["sample.call"]
+        , genericDecisionAction = Retain
+        , genericDecisionCostClass = Just SemanticRequired
+        , genericDecisionCostShape =
+            emptyCostShape { costFrequency = Just "per sample call" }
+        , genericDecisionTargetPreconditions = []
+        , genericDecisionAssumptions = []
+        , genericDecisionDerivedObligations = []
         }
-  , genericContextTargetChoices = []
+  , genericContextRuntimeSites = Map.empty
   }
 
 checkedInstance :: Text.Text -> Either String CheckedArchitectureInstance
