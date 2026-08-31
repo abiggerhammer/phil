@@ -107,18 +107,18 @@ Proof.
     Hrevision Htype Hsemantics Hshape Hhard.
   split.
   - intro Hdecision.
-    destruct revisionNonempty eqn:HrevisionFact; simpl in Hdecision; try discriminate.
-    destruct typeMatches eqn:HtypeFact; simpl in Hdecision; try discriminate.
-    destruct semanticsMatches eqn:HsemanticsFact; simpl in Hdecision; try discriminate.
-    destruct shapeAllows eqn:HshapeFact; simpl in Hdecision; try discriminate.
-    destruct hardTypeAllows eqn:HhardFact; simpl in Hdecision; try discriminate.
+    destruct revisionNonempty; simpl in Hdecision; try discriminate.
+    destruct typeMatches; simpl in Hdecision; try discriminate.
+    destruct semanticsMatches; simpl in Hdecision; try discriminate.
+    destruct shapeAllows; simpl in Hdecision; try discriminate.
+    destruct hardTypeAllows; simpl in Hdecision; try discriminate.
     unfold MessageContractAccepted.
     repeat split.
-    + apply (proj1 Hrevision). exact HrevisionFact.
-    + apply (proj1 Htype). exact HtypeFact.
-    + apply (proj1 Hsemantics). exact HsemanticsFact.
-    + apply (proj1 Hshape). exact HshapeFact.
-    + apply (proj1 Hhard). exact HhardFact.
+    + apply (proj1 Hrevision). reflexivity.
+    + apply (proj1 Htype). reflexivity.
+    + apply (proj1 Hsemantics). reflexivity.
+    + apply (proj1 Hshape). reflexivity.
+    + apply (proj1 Hhard). reflexivity.
   - intro Haccepted.
     unfold MessageContractAccepted in Haccepted.
     destruct Haccepted as
@@ -145,9 +145,9 @@ Proof.
   intros ty intrinsicAllows Hreflection.
   split.
   - intro Hdecision.
-    destruct intrinsicAllows eqn:Hintrinsic; simpl in Hdecision; try discriminate.
+    destruct intrinsicAllows; simpl in Hdecision; try discriminate.
     apply (proj1 Hreflection).
-    exact Hintrinsic.
+    reflexivity.
   - intro Hadmitted.
     apply (proj2 Hreflection) in Hadmitted.
     rewrite Hadmitted.
