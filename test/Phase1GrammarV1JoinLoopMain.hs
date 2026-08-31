@@ -90,11 +90,11 @@ untypedLoopAndZeroContinuePreserved = do
         statements -> Left ("expected zero-actual continue, got " <> show statements)
     other -> Left ("expected untyped loop expression, got " <> show other)
   where
-    source = "component C(n : U32) { loop state (i = n) { continue } }"
+    source = "component C(n : U32) { loop state (i = n) { continue; }; }"
 
 loopStateTrailingCommaRejects :: Either String ()
 loopStateTrailingCommaRejects =
-  expectReject "component C(n : U32) { loop state (i = n,) { continue } }"
+  expectReject "component C(n : U32) { loop state (i = n,) { continue; }; }"
 
 singleComponentExpression :: GrammarV1SourceFile -> Either String GrammarV1Expression
 singleComponentExpression sourceFile = case grammarV1TopLevelDecls sourceFile of
