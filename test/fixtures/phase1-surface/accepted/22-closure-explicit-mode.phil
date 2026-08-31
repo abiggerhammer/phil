@@ -10,6 +10,6 @@ callable OneShot(x : U32) -> U32 {
 
 component Demo() {
   let f = closure mode linear (x : U32) satisfies OneShot captures () {
-    return x
-  }
+    return x;
+  };
 }

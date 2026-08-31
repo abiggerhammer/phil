@@ -4,5 +4,5 @@ component RefinedTransport[n : Nat, m : Nat](
   value : {b : Bytes[n] | n <= m},
   equality : Proof[n == m]
 ) {
-  transport value to Bytes[m] using equality
+  transport value to Bytes[m] using equality;
 }

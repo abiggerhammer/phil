@@ -51,7 +51,7 @@ nestedRejectPreserved = do
   where
     source = Text.unlines
       [ "component C(x : U32) {"
-      , "  reject reject x"
+      , "  reject reject x;"
       , "}"
       ]
 
@@ -67,7 +67,7 @@ rejectFallbackPreserved = do
         other -> Left ("expected reject fallback, got " <> show other)
     other -> Left ("expected fallback expression, got " <> show other)
   where
-    source = "component C(x : U32, y : U32) { x or reject y }"
+    source = "component C(x : U32, y : U32) { x or reject y; }"
 
 singleComponentExpression :: GrammarV1SourceFile -> Either String GrammarV1Expression
 singleComponentExpression sourceFile =

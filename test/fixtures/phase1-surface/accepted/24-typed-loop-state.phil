@@ -2,6 +2,6 @@ module corpus.typed_loop_state;
 
 component Counter(n : U32) {
   loop state (i : U32 = n) invariant i >= 0 {
-    continue (i)
-  }
+    continue (i);
+  };
 }

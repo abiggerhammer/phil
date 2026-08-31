@@ -2,8 +2,8 @@ module corpus.join_invariant;
 
 component Joiner(x : U32) {
   if true join state (x_next : U32) invariant x_next >= 0 {
-    x
+    x;
   } else {
-    x
-  }
+    x;
+  };
 }

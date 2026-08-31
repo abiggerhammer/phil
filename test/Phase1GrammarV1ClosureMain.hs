@@ -63,7 +63,7 @@ omittedModeAndCapturesPreserved = do
   where
     source = Text.unlines
       [ "component C() {"
-      , "  closure (x : U32) satisfies OneShot { return x }"
+      , "  closure (x : U32) satisfies OneShot { return x; };"
       , "}"
       ]
 
@@ -79,13 +79,13 @@ nonemptyCapturesPreserved = do
   where
     source = Text.unlines
       [ "component C(a : U32, b : U32) {"
-      , "  closure () satisfies OneShot captures (a, b) { return a }"
+      , "  closure () satisfies OneShot captures (a, b) { return a; };"
       , "}"
       ]
 
 captureTrailingCommaRejects :: Either String ()
 captureTrailingCommaRejects =
-  expectReject "component C(a : U32) { closure () satisfies OneShot captures (a,) { return a } }"
+  expectReject "component C(a : U32) { closure () satisfies OneShot captures (a,) { return a; } }"
 
 componentClosure :: GrammarV1SourceFile -> Either String GrammarV1Closure
 componentClosure sourceFile =

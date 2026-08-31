@@ -13,6 +13,8 @@ main = do
     [ test "SURF-002 Frame and Validated types preserve exact payloads" frameValidatedPreserved
     , test "SURF-002 static arithmetic preserves precedence and associativity" staticArithmeticPreserved
     , test "SURF-002 static postfix and parenthesized values stay distinct from tuple types" staticPostfixAndParenthesesPreserved
+    , test "SURF-003 static reference projection requires a closed receiver" $
+        expectReject "type Bad = Box[Cfg[N].field];"
     , test "SURF-002 primitive static value leaves preserve canonical argument forms" staticLeavesPreserved
     , test "SURF-002 brace-led static actuals distinguish effect sets from refinements" braceStaticActualsPreserved
     , test "SURF-003 static additive expression requires a right operand" $
@@ -77,7 +79,7 @@ staticArithmeticPreserved = do
 staticPostfixAndParenthesesPreserved :: Either String ()
 staticPostfixAndParenthesesPreserved = do
   aliases <- parseAliases $ Text.unlines
-    [ "type Projected = Box[Cfg[N].field.more];"
+    [ "type Projected = Box[(Cfg[N]).field.more];"
     , "type Parenthesized = Pair[(1 + 2) * 3, (U32, Bool)];"
     ]
   case aliases of
@@ -170,15 +172,18 @@ assertProjectionChain expression =
         GrammarV1StaticValueProjection base field -> do
           assert (locatedValue field == "field") "inner projection was not .field"
           case locatedValue base of
-            GrammarV1StaticValueReference reference -> do
-              assertStaticReferenceName "Cfg" reference
-              case grammarV1StaticReferenceArguments (locatedValue reference) of
-                [GrammarV1StaticReferenceArgument nested] ->
-                  assert
-                    (grammarV1QualifiedNameParts (grammarV1StaticReferenceName nested) == ["N"])
-                    "Cfg static argument was not N"
-                other -> Left ("unexpected Cfg static arguments " <> show other)
-            other -> Left ("expected Cfg[N] static reference, got " <> show other)
+            GrammarV1StaticValueParenthesized inner ->
+              case locatedValue inner of
+                GrammarV1StaticValueReference reference -> do
+                  assertStaticReferenceName "Cfg" reference
+                  case grammarV1StaticReferenceArguments (locatedValue reference) of
+                    [GrammarV1StaticReferenceArgument nested] ->
+                      assert
+                        (grammarV1QualifiedNameParts (grammarV1StaticReferenceName nested) == ["N"])
+                        "Cfg static argument was not N"
+                    other -> Left ("unexpected Cfg static arguments " <> show other)
+                other -> Left ("expected parenthesized Cfg[N] static reference, got " <> show other)
+            other -> Left ("expected parenthesized Cfg[N] receiver, got " <> show other)
         other -> Left ("expected .field projection, got " <> show other)
     other -> Left ("expected projection chain, got " <> show other)
 
