@@ -196,7 +196,7 @@ lowerGenericSystems checked program context = do
       facts = collectSourceFacts artifact
       mechanisms = collectSystemsMechanisms artifact
       dispositions = Map.fromSet
-        (const (factDisposition mechanisms assumptions)) facts
+        (const (phase1FactDisposition mechanisms assumptions)) facts
       qualifications = Set.union
         (genericContextQualificationRefs context)
         (Set.unions
@@ -684,8 +684,8 @@ correspondenceTrace program =
   | function <- Map.elems (coreProgramFunctions program)
   ]
 
-factDisposition :: Set SystemsMechanismKey -> Set Text -> Phase1FactDisposition
-factDisposition mechanisms assumptions
+phase1FactDisposition :: Set SystemsMechanismKey -> Set Text -> Phase1FactDisposition
+phase1FactDisposition mechanisms assumptions
   | Set.null assumptions = Phase1FactRealized mechanisms
   | otherwise = Phase1FactAssumptionDependent assumptions
       (Phase1FactRealized mechanisms)
