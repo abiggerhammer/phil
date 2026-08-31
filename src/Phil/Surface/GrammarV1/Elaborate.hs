@@ -4,6 +4,7 @@ module Phil.Surface.GrammarV1.Elaborate
   , grammarV1GenericKindCategory
   , grammarV1BareStaticReferenceActual
   , grammarV1StructuralMode
+  , grammarV1RelationProposition
   ) where
 
 import qualified Data.Text as Text
@@ -16,11 +17,16 @@ import Phil.Core.Generic.StaticActual
   ( GenericStaticActual (..)
   , GenericStaticKind (..)
   )
-import Phil.Core.Syntax (Mode (..))
+import Phil.Core.Syntax
+  ( Mode (..)
+  , Proposition (..)
+  , RefTerm
+  )
 import Phil.Surface.GrammarV1.Parser
   ( GrammarV1GenericKind (..)
   , GrammarV1GenericRequirement (..)
   , GrammarV1QualifiedName (..)
+  , GrammarV1RelationOperator (..)
   , GrammarV1StaticArgument (..)
   , GrammarV1StaticReference (..)
   , GrammarV1StructuralMode (..)
@@ -94,3 +100,23 @@ grammarV1StructuralMode sourceMode = case sourceMode of
   GrammarV1Unrestricted -> Unrestricted
   GrammarV1Affine -> Affine
   GrammarV1Linear -> Linear
+
+-- | Route one already-parsed Grammar-v1 relation operator to its exact Core
+-- proposition constructor. Greater-than relations canonicalize by reversing
+-- operands into Core's LessThan/LessEqual forms; membership and disjointness
+-- remain their native semantic propositions. No relation is retried as another
+-- category to obtain acceptance.
+grammarV1RelationProposition
+  :: GrammarV1RelationOperator
+  -> RefTerm
+  -> RefTerm
+  -> Proposition
+grammarV1RelationProposition operator left right = case operator of
+  GrammarV1EqualRelation -> Equal left right
+  GrammarV1NotEqualRelation -> NotEqual left right
+  GrammarV1LessEqualRelation -> LessEqual left right
+  GrammarV1GreaterEqualRelation -> LessEqual right left
+  GrammarV1LessRelation -> LessThan left right
+  GrammarV1GreaterRelation -> LessThan right left
+  GrammarV1InRelation -> Member left right
+  GrammarV1DisjointRelation -> Disjoint left right
