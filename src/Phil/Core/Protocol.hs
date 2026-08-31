@@ -23,6 +23,7 @@ import Data.Map.Strict (Map)
 import Data.Text (Text)
 import qualified Data.Text as Text
 import qualified ProtocolIdentityKernel as Kernel
+import qualified ProtocolProgressionGuardKernel as ProgressionKernel
 import Phil.Core.Context
   ( CheckError
   , ResourceContext (..)
@@ -344,31 +345,53 @@ advanceMetadata
   -> Either ProtocolCheckError
       (Maybe ProtocolEndpointBinding, ProtocolContext)
 advanceMetadata predecessor binding sessionStep context =
-  let remaining = Map.delete predecessor (protocolEndpoints context)
+  let endpoints = protocolEndpoints context
+      predecessorLive = Map.member predecessor endpoints
+      remaining = Map.delete predecessor endpoints
       resources = stepContext sessionStep
   in case stepSuccessor sessionStep of
-      Nothing -> Right
-        ( Nothing
-        , ProtocolContext
-            { protocolResources = resources
-            , protocolEndpoints = remaining
-            }
-        )
-      Just (successorName, successorSession)
-        | Map.member successorName remaining ->
+      Nothing ->
+        case ProgressionKernel.decideProtocolCloseByFact predecessorLive of
+          ProgressionKernel.ProtocolCloseAccepted -> Right
+            ( Nothing
+            , ProtocolContext
+                { protocolResources = resources
+                , protocolEndpoints = remaining
+                }
+            )
+          ProgressionKernel.ProtocolClosePredecessorMissingDecision ->
+            Left (ProtocolEndpointUnknown predecessor)
+      Just (successorName, successorSession) ->
+        let namesDistinct = successorName /= predecessor
+            successorFresh = not (Map.member successorName endpoints)
+        in case ProgressionKernel.decideProtocolContinuationByFacts
+            predecessorLive namesDistinct successorFresh of
+          ProgressionKernel.ProtocolContinuationAccepted ->
+            case ProgressionKernel.planProtocolSuccessorContract
+                (protocolEndpointInstance binding)
+                (protocolEndpointRole binding)
+                successorSession of
+              ProgressionKernel.MkProtocolSuccessorContractPlan
+                  instanceRevision role nextSession ->
+                let successorBinding = ProtocolEndpointBinding
+                      { protocolEndpointName = successorName
+                      , protocolEndpointInstance = instanceRevision
+                      , protocolEndpointRole = role
+                      , protocolEndpointSession = nextSession
+                      }
+                in Right
+                  ( Just successorBinding
+                  , ProtocolContext
+                      { protocolResources = resources
+                      , protocolEndpoints = Map.insert successorName successorBinding remaining
+                      }
+                  )
+          ProgressionKernel.ProtocolContinuationPredecessorMissingDecision ->
+            Left (ProtocolEndpointUnknown predecessor)
+          ProgressionKernel.ProtocolContinuationSameNameDecision ->
             Left (ProtocolEndpointMetadataConflict successorName)
-        | otherwise ->
-            let successorBinding = binding
-                  { protocolEndpointName = successorName
-                  , protocolEndpointSession = successorSession
-                  }
-            in Right
-              ( Just successorBinding
-              , ProtocolContext
-                  { protocolResources = resources
-                  , protocolEndpoints = Map.insert successorName successorBinding remaining
-                  }
-              )
+          ProgressionKernel.ProtocolContinuationSuccessorOccupiedDecision ->
+            Left (ProtocolEndpointMetadataConflict successorName)
 
 checkEndpointContract
   :: ProtocolEndpointContract
