@@ -1,6 +1,6 @@
-module corpus.offer_transport_composition;
+module corpus.offer_transport;
 
-component OfferConvert[n : Nat, m : Nat](
+component OfferTransport[n : Nat, m : Nat](
   endpoint : Endpoint,
   value : Bytes[n],
   equality : Proof[n == m]
