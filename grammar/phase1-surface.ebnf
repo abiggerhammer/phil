@@ -28,8 +28,9 @@
 #
 # Separators:
 # - commas separate parameter/argument/field lists;
-# - semicolons terminate static declaration/configuration items;
-# - ordinary term statements retain the Phase 0 semicolon-free surface.
+# - semicolons terminate static declaration/configuration items and ordinary
+#   term statements;
+# - braces and parentheses delimit compound term expressions where noted below.
 #
 # Effects:
 # - effect labels are static references optionally applied to term arguments;
@@ -208,13 +209,14 @@ static_additive_expression =
 static_multiplicative_expression =
   static_postfix_expression, { "*", static_postfix_expression } ;
 static_postfix_expression =
-  static_primary_expression, { ".", identifier } ;
-static_primary_expression =
+    static_reference
+  | static_nonreference_primary_expression, { ".", identifier }
+  ;
+static_nonreference_primary_expression =
     "true"
   | "false"
   | "unit"
   | integer_literal
-  | static_reference
   | "(", static_value_expression, ")"
   ;
 
@@ -425,9 +427,9 @@ program_item =
 
 block = "{", { statement }, "}" ;
 statement =
-    "let", pattern, "=", expression
-  | "return", expression
-  | expression
+    "let", pattern, "=", expression, ";"
+  | "return", expression, ";"
+  | expression, ";"
   ;
 
 pattern =
@@ -452,9 +454,15 @@ multiplicative_expression =
   postfix_expression, { "*", postfix_expression } ;
 
 postfix_expression =
-  primary_expression, { ".", identifier } ;
+    named_postfix_expression
+  | nonname_primary_expression, { ".", identifier }
+  ;
 
-primary_expression =
+named_postfix_expression =
+  qualified_name, [ static_arguments ],
+  [ term_arguments, { ".", identifier } ] ;
+
+nonname_primary_expression =
     construct_expression
   | borrow_expression
   | if_expression
@@ -487,11 +495,7 @@ primary_expression =
   | "false"
   | "unit"
   | integer_literal
-  | name_expression
   ;
-
-name_expression =
-  qualified_name, [ static_arguments ], [ term_arguments ] ;
 
 construct_expression =
   "construct", static_reference,
@@ -549,28 +553,28 @@ receive_frame_expression =
   "receive_frame", "(", expression, ")" ;
 
 receive_exact_expression =
-  "receive_exact", additive_expression, "on", additive_expression,
-  [ "using", additive_expression ] ;
+  "receive_exact", additive_expression,
+  [ "using", additive_expression ], "on", postfix_expression ;
 
 receive_expression =
-  "receive", type_expression, "on", additive_expression ;
+  "receive", type_expression, "on", postfix_expression ;
 
 recognize_expression =
-  "recognize", static_reference, "from", additive_expression ;
+  "recognize", static_reference, "from", postfix_expression ;
 
 validate_expression =
   "validate", static_reference,
-  [ "at", additive_expression ], "on", additive_expression ;
+  [ "at", additive_expression ], "on", postfix_expression ;
 
 send_exact_expression =
-  "send_exact", additive_expression, "on", additive_expression ;
+  "send_exact", additive_expression, "on", postfix_expression ;
 
 send_expression =
-  "send", additive_expression, "on", additive_expression ;
+  "send", additive_expression, "on", postfix_expression ;
 
 select_expression =
-  "select", branch_value, "on", additive_expression,
-  [ "using", additive_expression ] ;
+  "select", branch_value, [ "using", additive_expression ],
+  "on", postfix_expression ;
 
 offer_expression =
   "offer", additive_expression,
@@ -580,23 +584,23 @@ branch_value =
   qualified_name, [ term_arguments ] ;
 
 commit_receive_expression =
-  "commit_receive", additive_expression, "using", additive_expression ;
+  "commit_receive", additive_expression, "using", postfix_expression ;
 
 reject_expression =
-  "reject", additive_expression ;
+  "reject", postfix_expression ;
 
 fail_expression =
-  "fail", failure_target, "on", additive_expression ;
+  "fail", failure_target, "on", postfix_expression ;
 
 failure_target =
   static_reference, [ term_arguments ] ;
 
-close_expression = "close", additive_expression ;
-release_expression = "release", additive_expression ;
+close_expression = "close", postfix_expression ;
+release_expression = "release", postfix_expression ;
 
 transport_expression =
   "transport", additive_expression, "to", type_expression,
-  "using", additive_expression ;
+  "using", postfix_expression ;
 
 accept_expression =
   "accept", additive_expression, "as", type_expression ;
