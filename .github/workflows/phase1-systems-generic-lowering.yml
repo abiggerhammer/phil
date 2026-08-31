@@ -1,0 +1,77 @@
+name: Phase 1 Generic Systems Lowering
+
+on:
+  pull_request:
+    paths:
+      - 'src/Phil/Systems/GenericLowering.hs'
+      - 'src/Phil/Examples/Phase1/SystemsWitnesses.hs'
+      - 'test/Phase1GenericSystemsLoweringMain.hs'
+      - 'docs/phase-1/systems-generic-lowering-v1.md'
+      - '.github/workflows/phase1-systems-generic-lowering.yml'
+  push:
+    branches: [main]
+    paths:
+      - 'src/Phil/Systems/GenericLowering.hs'
+      - 'src/Phil/Examples/Phase1/SystemsWitnesses.hs'
+      - 'test/Phase1GenericSystemsLoweringMain.hs'
+      - 'docs/phase-1/systems-generic-lowering-v1.md'
+      - '.github/workflows/phase1-systems-generic-lowering.yml'
+
+permissions:
+  contents: read
+
+jobs:
+  verify-generic-systems-lowering:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: haskell-actions/setup@v2
+        with:
+          ghc-version: '9.6.7'
+          cabal-version: 'latest'
+
+      - name: Resolve project dependencies
+        run: |
+          set -euo pipefail
+          cabal update
+          cabal build exe:phil-core --ghc-options=-Werror
+
+      - name: Strict-build generic lowering producer
+        run: |
+          set -euo pipefail
+          cabal exec -- ghc -isrc -Wall -Werror -fno-code \
+            src/Phil/Systems/GenericLowering.hs
+          cabal exec -- ghc -isrc -Wall -Werror -fno-code \
+            src/Phil/Examples/Phase1/SystemsWitnesses.hs
+
+      - name: Run SYS-GENERIC focused corpus
+        run: |
+          set -euo pipefail
+          cabal exec -- ghc -isrc -Wall -Werror \
+            test/Phase1GenericSystemsLoweringMain.hs \
+            -o phase1-generic-systems-lowering
+          ./phase1-generic-systems-lowering
+
+      - name: Record implementation identities
+        run: |
+          set -euo pipefail
+          mkdir -p generic-systems-lowering
+          sha256sum \
+            src/Phil/Systems/GenericLowering.hs \
+            src/Phil/Examples/Phase1/SystemsWitnesses.hs \
+            test/Phase1GenericSystemsLoweringMain.hs \
+            docs/phase-1/systems-generic-lowering-v1.md \
+            > generic-systems-lowering/PHIL-SYS-GENERIC-001.implementation.sha256
+          cp \
+            src/Phil/Systems/GenericLowering.hs \
+            src/Phil/Examples/Phase1/SystemsWitnesses.hs \
+            test/Phase1GenericSystemsLoweringMain.hs \
+            docs/phase-1/systems-generic-lowering-v1.md \
+            generic-systems-lowering/
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: phase1-generic-systems-lowering
+          path: generic-systems-lowering
+          if-no-files-found: error
