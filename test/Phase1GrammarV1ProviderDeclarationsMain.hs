@@ -49,7 +49,7 @@ providerFamilyPreserved = do
       , "  lifecycle alive : true;"
       , "}"
       , "provider implementation MemStore[T : Type] requires { proposition true; } satisfies Store[T] {"
-      , "  operation put satisfies Put { return unit }"
+      , "  operation put satisfies Put { return unit; }"
       , "  law coherent = true;"
       , "  lifecycle alive = true;"
       , "}"

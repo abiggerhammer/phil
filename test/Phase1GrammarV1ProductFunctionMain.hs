@@ -137,7 +137,7 @@ parenthesizedExpressionPreserved = do
         other -> Left ("expected parenthesized expression, got " <> show other)
     statements -> Left ("expected one return statement, got " <> show statements)
   where
-    source = "fn identity(x : U32) -> U32 satisfies Identity { return (x) }"
+    source = "fn identity(x : U32) -> U32 satisfies Identity { return (x); }"
 
 recursiveFunctionPreserved :: Either String ()
 recursiveFunctionPreserved = do
@@ -145,7 +145,7 @@ recursiveFunctionPreserved = do
   functionDecl <- onlyFunction sourceFile
   assert (grammarV1FunctionRecursive functionDecl) "recursive marker was not preserved"
   where
-    source = "recursive fn recur(x : U32) -> U32 satisfies Rec { return x }"
+    source = "recursive fn recur(x : U32) -> U32 satisfies Rec { return x; }"
 
 tupleExpressionTrailingCommaRejects :: Either String ()
 tupleExpressionTrailingCommaRejects =
@@ -153,7 +153,7 @@ tupleExpressionTrailingCommaRejects =
     Left _ -> Right ()
     Right value -> Left ("expected tuple expression trailing comma rejection, got " <> show value)
   where
-    source = "fn bad() -> (U32, Bool) satisfies Pair { return (1, true,) }"
+    source = "fn bad() -> (U32, Bool) satisfies Pair { return (1, true,); }"
 
 tupleRecordPatternsPreserved :: Either String ()
 tupleRecordPatternsPreserved = do
@@ -200,9 +200,9 @@ tupleRecordPatternsPreserved = do
   where
     source = Text.unlines
       [ "fn destructure(input : Pair) -> U32 satisfies Destructure {"
-      , "  let (left, (middle, right)) = input"
-      , "  let payload.Pair{first, second = (inner, tail),} = input"
-      , "  return left"
+      , "  let (left, (middle, right)) = input;"
+      , "  let payload.Pair{first, second = (inner, tail),} = input;"
+      , "  return left;"
       , "}"
       ]
 
@@ -240,7 +240,7 @@ termExpressionStructurePreserved = do
         other -> Left ("unexpected additive expression structure " <> show other)
     statements -> Left ("expected one return statement, got " <> show statements)
   where
-    source = "fn arithmetic() -> U32 satisfies Arithmetic { return source().field + 2 * 3 - 4 }"
+    source = "fn arithmetic() -> U32 satisfies Arithmetic { return source().field + 2 * 3 - 4; }"
 
 termFallbacksPreserved :: Either String ()
 termFallbacksPreserved = do
@@ -280,17 +280,17 @@ termFallbacksPreserved = do
   where
     source = Text.unlines
       [ "fn fallbacks(x : U32) -> U32 satisfies Fallbacks {"
-      , "  let failed = compute(x) or fail Problem(x)"
-      , "  let rejected = x or reject backup(x) + 1 * 2"
-      , "  return reject x or fail Fatal"
+      , "  let failed = compute(x) or fail Problem(x);"
+      , "  let rejected = x or reject backup(x) + 1 * 2;"
+      , "  return reject x or fail Fatal;"
       , "}"
       ]
 
 termFallbacksRejectMalformed :: Either String ()
 termFallbacksRejectMalformed = do
-  expectSourceReject "fn bad(x : U32) satisfies Bad { return x or reject x or reject x }"
-  expectSourceReject "fn bad(x : U32) satisfies Bad { return x or fail Problem + 1 }"
-  expectSourceReject "fn bad(x : U32) satisfies Bad { return x or fail (Problem) }"
+  expectSourceReject "fn bad(x : U32) satisfies Bad { return x or reject x or reject x; }"
+  expectSourceReject "fn bad(x : U32) satisfies Bad { return x or fail Problem + 1; }"
+  expectSourceReject "fn bad(x : U32) satisfies Bad { return x or fail (Problem); }"
 
 assertFailureTarget
   :: Text.Text

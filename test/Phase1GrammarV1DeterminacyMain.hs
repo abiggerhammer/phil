@@ -132,11 +132,11 @@ localSuffixAttachmentPreserved :: Either String ()
 localSuffixAttachmentPreserved = do
   functionDecl <- parseOnlyFunction "determinacy-local-suffix" $ Text.unlines
     [ "fn attach(x : U8) -> U8 satisfies Attach {"
-    , "  let called = f(x)"
-    , "  let qualified = pkg.value"
-    , "  let projected = (x).field"
-    , "  let closed = close x + 1 * 2"
-    , "  return x or fail Problem(x)"
+    , "  let called = f(x);"
+    , "  let qualified = pkg.value;"
+    , "  let projected = (x).field;"
+    , "  let closed = close x + 1 * 2;"
+    , "  return x or fail Problem(x);"
     , "}"
     ]
   case grammarV1BlockStatements (locatedValue (grammarV1FunctionBody functionDecl)) of
@@ -188,10 +188,10 @@ nestedUsingAttachmentPreserved :: Either String ()
 nestedUsingAttachmentPreserved = do
   functionDecl <- parseOnlyFunction "determinacy-nested-using" $ Text.unlines
     [ "fn nested() satisfies Nested {"
-    , "  let exactInner = receive_exact 1 on receive_exact 2 on endpoint using proof"
-    , "  let exactOuter = receive_exact 1 on (receive_exact 2 on endpoint) using proof"
-    , "  let selectInner = select A on select B on endpoint using proof"
-    , "  let selectOuter = select A on (select B on endpoint) using proof"
+    , "  let exactInner = receive_exact 1 on receive_exact 2 using proof on endpoint;"
+    , "  let exactOuter = receive_exact 1 using proof on (receive_exact 2 on endpoint);"
+    , "  let selectInner = select A on select B using proof on endpoint;"
+    , "  let selectOuter = select A using proof on (select B on endpoint);"
     , "}"
     ]
   case grammarV1BlockStatements (locatedValue (grammarV1FunctionBody functionDecl)) of

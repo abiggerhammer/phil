@@ -189,8 +189,8 @@ recordCaseAndStatementArmPreserved = do
     source = Text.unlines
       [ "component C(x : Packet) {"
       , "  offer x {"
-      , "    Packet{payload as p, tag,} => return p"
-      , "  }"
+      , "    Packet{payload as p, tag,} => return p;"
+      , "  };"
       , "}"
       ]
 
@@ -229,9 +229,9 @@ constructBorrowPreserved = do
   where
     source = Text.unlines
       [ "component C(x : U32, y : U32) {"
-      , "  let made = construct Pair { left = x, right = y, }"
-      , "  let borrowed = borrow made as view { return view }"
-      , "  return borrowed"
+      , "  let made = construct Pair { left = x, right = y, };"
+      , "  let borrowed = borrow made as view { return view; };"
+      , "  return borrowed;"
       , "}"
       ]
 
@@ -282,21 +282,21 @@ matchDecideBreakPreserved = do
     source = Text.unlines
       [ "component C(tagged : Choice, x : U32, y : U32) {"
       , "  let matched = match tagged join state (saved : U32) invariant true {"
-      , "    Left(value) => { return value }"
-      , "    Right => return x"
-      , "  }"
+      , "    Left(value) => { return value; }"
+      , "    Right => return x;"
+      , "  };"
       , "  let decided = decide x + y {"
-      , "    Yes => return x"
-      , "    No => return y"
-      , "  }"
-      , "  break(x, y)"
+      , "    Yes => return x;"
+      , "    No => return y;"
+      , "  };"
+      , "  break(x, y);"
       , "}"
       ]
 
 controlPrimariesRejectMalformed :: Either String ()
 controlPrimariesRejectMalformed = do
   expectReject "component C(x : U32) { construct Pair { field x } }"
-  expectReject "component C(x : U32) { borrow x view { return view } }"
+  expectReject "component C(x : U32) { borrow x view { return view; } }"
   expectReject "component C(x : T) { match x {} }"
   expectReject "component C(x : U32) { decide x {} }"
   expectReject "component C(x : U32) { break(x,) }"
@@ -373,15 +373,15 @@ protocolIOPrimariesPreserved = do
   where
     source = Text.unlines
       [ "component C(endpoint : Channel, n : U32, one : U32, proof : Proof[true]) {"
-      , "  let framed = receive_frame(endpoint)"
-      , "  let exact = receive_exact n + one on endpoint using proof"
-      , "  let plain = receive U32 on endpoint"
-      , "  let recognized = recognize Packet from plain"
-      , "  let validated = validate Check at plain on endpoint"
-      , "  send_exact n on endpoint"
-      , "  send n + one on endpoint"
-      , "  select Ready(n) on endpoint using proof"
-      , "  commit_receive endpoint using validated"
+      , "  let framed = receive_frame(endpoint);"
+      , "  let exact = receive_exact n + one using proof on endpoint;"
+      , "  let plain = receive U32 on endpoint;"
+      , "  let recognized = recognize Packet from plain;"
+      , "  let validated = validate Check at plain on endpoint;"
+      , "  send_exact n on endpoint;"
+      , "  send n + one on endpoint;"
+      , "  select Ready(n) using proof on endpoint;"
+      , "  commit_receive endpoint using validated;"
       , "}"
       ]
 
@@ -410,9 +410,9 @@ protocolIOOptionalClausesPreserved = do
   where
     source = Text.unlines
       [ "component C(endpoint : Channel, n : U32) {"
-      , "  receive_exact n on endpoint"
-      , "  validate Check on endpoint"
-      , "  select Ready on endpoint"
+      , "  receive_exact n on endpoint;"
+      , "  validate Check on endpoint;"
+      , "  select Ready on endpoint;"
       , "}"
       ]
 
@@ -493,11 +493,11 @@ terminalResourcePrimariesPreserved = do
   where
     source = Text.unlines
       [ "component C(endpoint : Channel, payload : Blob, raw : U32, x : U32, y : U32) {"
-      , "  fail Problem(x) on endpoint"
-      , "  close endpoint"
-      , "  release payload"
-      , "  let accepted = accept raw as U32"
-      , "  let proved = prove x == y"
+      , "  fail Problem(x) on endpoint;"
+      , "  close endpoint;"
+      , "  release payload;"
+      , "  let accepted = accept raw as U32;"
+      , "  let proved = prove(x == y);"
       , "}"
       ]
 
@@ -525,7 +525,7 @@ emptyOfferRejects = expectReject "component C(x : T) { offer x {} }"
 
 tupleBinderTrailingCommaRejects :: Either String ()
 tupleBinderTrailingCommaRejects =
-  expectReject "component C(x : T) { offer x { Right(value,) => { return value } } }"
+  expectReject "component C(x : T) { offer x { Right(value,) => { return value; } } }"
 
 expectReject :: Text.Text -> Either String ()
 expectReject source = case parseGrammarV1StructuralSource "offer-negative" source of

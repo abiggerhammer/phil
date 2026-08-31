@@ -51,7 +51,7 @@ nestedRejectPreserved = do
   where
     source = Text.unlines
       [ "component C(x : U32) {"
-      , "  reject reject x"
+      , "  reject reject x;"
       , "}"
       ]
 
