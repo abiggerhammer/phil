@@ -1,0 +1,7 @@
+module corpus.trailing_input;
+
+record CompleteSource {
+  value : U8
+}
+
+trailing

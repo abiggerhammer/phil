@@ -55,6 +55,18 @@
     {"id":"SURF-PROD-R021","path":"rejected/21-static-argument-unclosed.phil","expect":"reject-syntax","covers":["static_arguments"],"required_failure_layer":"syntax"},
     {"id":"SURF-PROD-R022","path":"rejected/22-generic-requirement-missing-semicolon.phil","expect":"reject-syntax","covers":["generic_requirement"],"required_failure_layer":"syntax"},
     {"id":"SURF-PROD-R023","path":"rejected/23-process-missing-target.phil","expect":"reject-syntax","covers":["architecture_item:process"],"required_failure_layer":"syntax"},
-    {"id":"SURF-PROD-R024","path":"rejected/24-external-role-extra-target.phil","expect":"reject-syntax","covers":["architecture_item:role","role_target:external"],"required_failure_layer":"syntax"}
+    {"id":"SURF-PROD-R024","path":"rejected/24-external-role-extra-target.phil","expect":"reject-syntax","covers":["architecture_item:role","role_target:external"],"required_failure_layer":"syntax"},
+    {"id":"SURF-PROD-R025","path":"rejected/25-trailing-input.phil","expect":"reject-syntax","covers":["source_file:whole-input"],"required_failure_layer":"syntax"},
+    {"id":"SURF-PROD-R026","path":"rejected/26-invalid-string-escape.phil","expect":"reject-syntax","covers":["lexical:string_escape"],"required_failure_layer":"syntax"},
+    {"id":"SURF-PROD-R027","path":"rejected/27-unsafe-block.phil","expect":"reject-syntax","covers":["explicit-non-goal:unsafe"],"required_failure_layer":"syntax"},
+    {"id":"SURF-PROD-R028","path":"rejected/28-unchecked-block.phil","expect":"reject-syntax","covers":["explicit-non-goal:unchecked"],"required_failure_layer":"syntax"},
+    {"id":"SURF-PROD-R029","path":"rejected/29-spawn-block.phil","expect":"reject-syntax","covers":["explicit-non-goal:spawn"],"required_failure_layer":"syntax"},
+    {"id":"SURF-PROD-R030","path":"rejected/30-await-block.phil","expect":"reject-syntax","covers":["explicit-non-goal:await"],"required_failure_layer":"syntax"},
+    {"id":"SURF-PROD-R031","path":"rejected/31-assignment.phil","expect":"reject-syntax","covers":["explicit-non-goal:assignment"],"required_failure_layer":"syntax"},
+    {"id":"SURF-PROD-R032","path":"rejected/32-try-catch.phil","expect":"reject-syntax","covers":["explicit-non-goal:exceptions"],"required_failure_layer":"syntax"},
+    {"id":"SURF-PROD-R033","path":"rejected/33-atomic-block.phil","expect":"reject-syntax","covers":["explicit-non-goal:shared-memory-atomic"],"required_failure_layer":"syntax"},
+    {"id":"SURF-PROD-R034","path":"rejected/34-malloc-placement.phil","expect":"reject-syntax","covers":["explicit-non-goal:allocation-placement"],"required_failure_layer":"syntax"},
+    {"id":"SURF-PROD-R035","path":"rejected/35-macro-declaration.phil","expect":"reject-syntax","covers":["explicit-non-goal:macro"],"required_failure_layer":"syntax"},
+    {"id":"SURF-PROD-R036","path":"rejected/36-reflection.phil","expect":"reject-syntax","covers":["explicit-non-goal:reflection"],"required_failure_layer":"syntax"}
   ]
 }

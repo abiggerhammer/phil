@@ -11,6 +11,21 @@ ROOT = Path(__file__).resolve().parents[1]
 CORPUS = ROOT / "test" / "fixtures" / "phase1-surface"
 MANIFEST = CORPUS / "manifest.json"
 
+SURF003_REQUIRED_NEGATIVE_COVERS = {
+    "source_file:whole-input",
+    "lexical:string_escape",
+    "explicit-non-goal:unsafe",
+    "explicit-non-goal:unchecked",
+    "explicit-non-goal:spawn",
+    "explicit-non-goal:await",
+    "explicit-non-goal:assignment",
+    "explicit-non-goal:exceptions",
+    "explicit-non-goal:shared-memory-atomic",
+    "explicit-non-goal:allocation-placement",
+    "explicit-non-goal:macro",
+    "explicit-non-goal:reflection",
+}
+
 
 def fail(message: str) -> None:
     raise SystemExit(message)
@@ -31,6 +46,7 @@ def validate_manifest() -> list[dict[str, object]]:
 
     seen_ids: set[str] = set()
     seen_paths: set[str] = set()
+    negative_covers: set[str] = set()
     allowed_expectations = {"parse", "reject-syntax"}
 
     for fixture in fixtures:
@@ -78,6 +94,7 @@ def validate_manifest() -> list[dict[str, object]]:
                 fail(f"{fixture_id}: negative fixture must require syntax-layer failure")
             if not path_text.startswith("rejected/"):
                 fail(f"{fixture_id}: syntax-negative fixture must live under rejected/")
+            negative_covers.update(covers)
 
     disk_paths = {
         str(path.relative_to(CORPUS))
@@ -88,6 +105,10 @@ def validate_manifest() -> list[dict[str, object]]:
         missing = sorted(disk_paths - seen_paths)
         stale = sorted(seen_paths - disk_paths)
         fail(f"manifest/file mismatch: unlisted={missing}, missing={stale}")
+
+    missing_surf003 = sorted(SURF003_REQUIRED_NEGATIVE_COVERS - negative_covers)
+    if missing_surf003:
+        fail(f"SURF-003 negative coverage missing: {missing_surf003}")
 
     return fixtures
 
