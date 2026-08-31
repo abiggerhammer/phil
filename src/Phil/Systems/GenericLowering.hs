@@ -299,8 +299,9 @@ lowerProgram program context = do
     }
   where
     lowerFunction _ function = do
-      blocks <- Map.traverseWithKey (lowerBlock function)
+      blocksByText <- Map.traverseWithKey (lowerBlock function)
         (coreFunctionBlocks function)
+      let blocks = Map.mapKeys BlockId blocksByText
       pure SystemsFunction
         { systemsFunctionName = coreFunctionKey function
         , systemsFunctionEntry = BlockId (coreFunctionEntry function)
