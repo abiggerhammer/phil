@@ -2,71 +2,60 @@
 
 ## Status
 
-Executable conformance boundary for Matrix case `SURF-005` and supporting evidence for `PHIL-SURFACE-DETERM-001`.
+Executable audit boundary for Matrix case `SURF-005` and supporting evidence for `PHIL-SURFACE-DETERM-001`.
 
-The normative concrete-syntax authority remains `grammar/phase1-surface.ebnf`. This note does not create a second grammar and does not claim a language-wide unambiguity theorem.
+The normative concrete-syntax authority remains `grammar/phase1-surface.ebnf`. This note does not create a second grammar. **SURF-005 is not discharged by this audit alone.**
 
 ## Required property
 
-An accepted Grammar-v1 source must have one concrete located surface structure modulo explicitly nonsemantic trivia. Parser alternative order, backtracking, or recovery policy must not choose between semantically distinct parses of the same source bytes.
+An accepted Grammar-v1 source must have one concrete located surface structure modulo explicitly nonsemantic trivia. Parser alternative order, backtracking, greedy consumption, or recovery policy may not choose between semantically distinct parses of the same source bytes.
 
 That is stronger than observing that the current Haskell parser is a deterministic function.
 
-## Reviewed interpretation policy
+## Executable local-overlap inventory
 
-The canonical EBNF deliberately keeps ordinary term statements semicolon-free and uses compact optional/repetition notation. The local-overlap audit therefore exposes places where a naive nondeterministic reading could otherwise assign a suffix either to an inner construct or to its enclosing context.
+`scripts/check_phase1_surface_determinacy.py` imports the same typed EBNF representation used by the canonical derivation path and computes nullable, FIRST, and FOLLOW facts plus local FIRST/FIRST and FIRST/FOLLOW overlaps.
 
-Grammar v1 resolves those reviewed sites with **maximal local attachment**: once a concrete production has begun, any immediately available suffix admitted by that still-open production is consumed there before control returns to its enclosing production. Parentheses and mandatory delimiters close the inner production and can therefore expose a later suffix to the outer one.
+The resulting overlap surface is checked against `grammar/phase1-surface-determinacy.json`. Every entry is bound to the exact Grammar-v1 digest and carries both a reviewed disposition and named parser-pressure files. Any grammar revision that changes the overlap surface fails the surface-grammar workflow until the inventory is reviewed again.
 
-The policy has the following concrete consequences:
+The current Grammar-v1 revision has **27 reviewed local overlap sites**. They fall into two materially different classes.
 
-- reserved-keyword lexical priority is applied before syntactic alternatives, so a reserved second keyword such as `implementation` or `representation` cannot be reinterpreted as an identifier to select a different branch;
-- an immediately following term-argument list belongs to the still-open local name, `break`, `continue`, or failure target rather than becoming a new parenthesized statement;
-- a nested optional `using` belongs to the innermost still-open `receive_exact` or `select`; parentheses around that inner expression close it and make the suffix available to the outer expression;
-- the active additive, multiplicative, postfix, and proposition production consumes its own operator repetition before returning outward, implementing the precedence already written in the EBNF;
-- a `qualified_name` consumes its maximal dotted identifier chain before its containing name/static-reference expression returns. Consequently `pkg.value` is one qualified name; projection from a simple name can be made syntactically non-name, for example `(x).field`, while a call result such as `source().field` is already unambiguously projectable;
-- in comma-separated forms that admit a trailing comma, comma followed by another element-start token continues the list, while comma followed by the closing delimiter is the trailing comma; and
-- for shared-prefix alternatives, the first mandatory distinguishing token commits the branch rather than parser source order or recovery policy.
+### Structurally resolved overlaps
 
-These rules are an interpretation of the production structure in the normative EBNF, not a second editable grammar. The reviewed overlap inventory records every current site where the rule matters and binds that review to the exact EBNF digest.
+Several sites share an initial token but are still unique under the ordinary EBNF because a later mandatory token or delimiter distinguishes the only complete derivation. Examples include:
 
-## Executable ambiguity inventory
+- `provider` contract versus `provider implementation`;
+- ordinary versus `boundary representation` generic requirements;
+- tuple versus parenthesized forms;
+- refinement-type versus effect-set static actuals;
+- several comma-list continuation versus trailing-comma sites; and
+- keyword-led session forms versus name-shaped session references.
 
-`scripts/check_phase1_surface_determinacy.py` imports the same typed EBNF representation used by the canonical derivation path and computes:
+These remain useful regression points because a parser can still get them wrong, but they do not by themselves require a syntax change.
 
-- nullable nonterminals;
-- FIRST token sets;
-- FOLLOW token sets;
-- FIRST/FIRST overlap between grammar alternatives;
-- FIRST/FOLLOW overlap at optional and repetition boundaries; and
-- rejection of nullable repetition bodies.
+### Residual grammar ambiguities
 
-The resulting local-overlap surface is checked against `grammar/phase1-surface-determinacy.json`.
+The audit also exposes sites where the present plain EBNF admits parser-strategy-dependent attachment. These must be repaired before SURF-005 can be called implemented.
 
-An overlap is not automatically a language ambiguity. For example, two declaration forms may share an initial keyword while a later mandatory token distinguishes them. It is, however, a place where one-token dispatch alone is insufficient and where a parser implementation could accidentally make meaning depend on alternative order or backtracking. Every such overlap therefore requires both an explicit reviewed disposition and named executable parser pressure in the inventory.
+The important families are:
 
-Any Grammar-v1 revision that changes the local-overlap set fails the surface-grammar workflow until the determinacy inventory is deliberately reviewed and rebound to the new exact grammar digest. Deleting the prose disposition or its parser-pressure references also fails the inventory check.
+- **semicolon-free statement boundaries**: an immediate argument list can attach to `f`, `break`, `continue`, or a failure target, or can begin a following parenthesized expression statement under a nondeterministic reading;
+- **nested trailing `using` clauses**: an unparenthesized `using` after nested `receive_exact` or `select` can attach to the inner or outer eligible expression;
+- **recursive prefix/additive/postfix attachment**: keyword-led expressions with trailing additive operands can compete with an enclosing `+`, `-`, `*`, or projection suffix; and
+- **qualified name versus projection**: a dotted token sequence such as `pkg.value` can be read as a maximal qualified name or as projection from a shorter name unless the grammar itself commits one structure.
+
+The current Haskell parser consistently chooses one side of these cases. `test/Phase1GrammarV1DeterminacyMain.hs` captures that implementation behavior so future refactors cannot change it accidentally while the grammar repair is pending. **Those tests are behavioral evidence, not authority that the alternative derivation is invalid.**
+
+Semicolon terminators are an available and straightforward repair for the statement-boundary family. They do not solve the nested-`using` or intra-expression attachment families, which require a separate grammar/precedence repair.
 
 ## Exact parser-shape pressure
 
-`test/Phase1GrammarV1DeterminacyMain.hs` exercises high-risk surfaces and requires distinct located AST constructors rather than mere parse success. Its pressure includes:
+`test/Phase1GrammarV1DeterminacyMain.hs` exercises shared declaration prefixes, brace-led static categories, grouping versus tuples, session references versus keyword forms, current local call/projection/prefix attachment, and nested `using` behavior.
 
-- declaration forms sharing prefixes, including optional record/data mode clauses and mandatory capability mode;
-- provider contract versus provider implementation versus opaque provider implementation;
-- brace-led static effect-set actuals versus brace-led refinement-type actuals;
-- parenthesized static values versus tuple types;
-- keyword-led session expressions versus name-shaped static session references;
-- local attachment of call arguments, qualified names, explicit projections, prefix-expression operands, and failure-target arguments; and
-- inward versus parenthesized-outward attachment of nested `using` clauses.
-
-`test/Phase1GrammarV1DeterminacyVariantMain.hs` separately pressures record/tuple variant payload comma behavior, including rejection of a tuple-style trailing comma.
-
-Existing Grammar-v1 harnesses provide additional exact-shape pressure for provider declarations, generic requirements, patterns, relation operators, callable outcome residues, expression precedence/fallbacks, joins/loops, case/construct lists, static-reference arguments, and the remaining production families. The inventory names those concrete test files per reviewed overlap rather than relying on an ambient claim that the parser suite is comprehensive.
+`test/Phase1GrammarV1DeterminacyVariantMain.hs` separately pressures record/tuple variant payload comma behavior. Existing focused Grammar-v1 harnesses remain the named pressure for the other reviewed sites.
 
 ## Competence boundary
 
-This SURF-005 slice establishes a reproducible ambiguity-review inventory plus differential/exact-shape implementation pressure. It does **not** by itself prove that no arbitrarily long accepted token sequence has two EBNF derivations.
+This slice establishes a reproducible detector, an exact review inventory, and executable capture of current implementation behavior. It deliberately leaves SURF-005 **In progress** until the residual ambiguous families are removed from Grammar v1 and the audit is rerun against the repaired grammar.
 
-The stronger `PHIL-SURFACE-DETERM-001` proof obligation remains the place for a language-wide unambiguity/determinate-parse theorem over the admitted lexical/syntactic model. Concrete lexer/parser-library correspondence also remains an explicit implementation boundary until separately tightened.
-
-This separation is intentional: the Matrix case can be executable and regression-resistant without overstating what finite tests or local FIRST/FOLLOW analysis prove.
+The stronger `PHIL-SURFACE-DETERM-001` proof obligation remains the place for language-wide determinate-parse authority over the admitted lexical/syntactic model. Concrete lexer/parser-library correspondence also remains an explicit implementation boundary until separately tightened.
