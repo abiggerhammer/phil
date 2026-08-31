@@ -4,8 +4,10 @@ on:
   pull_request:
     paths:
       - 'grammar/phase1-surface.ebnf'
+      - 'grammar/phase1-surface-determinacy.json'
       - 'scripts/derive_phase1_surface_grammar.py'
       - 'scripts/check_phase1_surface_corpus.py'
+      - 'scripts/check_phase1_surface_determinacy.py'
       - 'src/Phil/Surface/GrammarV1/**'
       - 'test/Phase1GrammarV1LexerMain.hs'
       - 'test/Phase1GrammarV1StructuralParserMain.hs'
@@ -34,8 +36,10 @@ on:
       - main
     paths:
       - 'grammar/phase1-surface.ebnf'
+      - 'grammar/phase1-surface-determinacy.json'
       - 'scripts/derive_phase1_surface_grammar.py'
       - 'scripts/check_phase1_surface_corpus.py'
+      - 'scripts/check_phase1_surface_determinacy.py'
       - 'src/Phil/Surface/GrammarV1/**'
       - 'test/Phase1GrammarV1LexerMain.hs'
       - 'test/Phase1GrammarV1StructuralParserMain.hs'
@@ -134,9 +138,13 @@ jobs:
         run: |
           python3 -m py_compile scripts/derive_phase1_surface_grammar.py
           python3 -m py_compile scripts/check_phase1_surface_corpus.py
+          python3 -m py_compile scripts/check_phase1_surface_determinacy.py
 
       - name: Check surface production corpus integrity
         run: python3 scripts/check_phase1_surface_corpus.py
+
+      - name: Check Grammar-v1 local determinacy inventory
+        run: python3 scripts/check_phase1_surface_determinacy.py
 
       - name: Check manifest-driven Grammar-v1 corpus
         run: |
