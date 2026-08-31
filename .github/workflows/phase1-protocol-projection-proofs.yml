@@ -1,4 +1,4 @@
-name: Phase 1 Protocol Projection Proofs
+name: Phase 1 Protocol Projection Production Binding
 
 on:
   pull_request:
@@ -8,6 +8,7 @@ on:
       - 'proof/Phil/Core/ProtocolProjectionImplementationExtraction.v'
       - 'proof/Phil/Core/ProtocolIdentity.v'
       - 'proof/Phil/Core/Session.v'
+      - 'src/ProtocolProjectionKernel.hs'
       - 'src/Phil/Core/Protocol/Generic.hs'
       - 'src/Phil/Core/Protocol/Family.hs'
       - 'test/Phase1ProtocolGenericEndpointMain.hs'
@@ -17,6 +18,7 @@ on:
       - 'docs/phase-1/protocol-projection-v1.md'
       - 'docs/phase-1/protocol-projection-proof-v1.md'
       - 'docs/phase-1/protocol-projection-implementation-refinement-v1.md'
+      - 'docs/phase-1/protocol-projection-production-binding-v1.md'
       - '.github/workflows/phase1-protocol-projection-proofs.yml'
   push:
     branches: [main]
@@ -26,6 +28,7 @@ on:
       - 'proof/Phil/Core/ProtocolProjectionImplementationExtraction.v'
       - 'proof/Phil/Core/ProtocolIdentity.v'
       - 'proof/Phil/Core/Session.v'
+      - 'src/ProtocolProjectionKernel.hs'
       - 'src/Phil/Core/Protocol/Generic.hs'
       - 'src/Phil/Core/Protocol/Family.hs'
       - 'test/Phase1ProtocolGenericEndpointMain.hs'
@@ -35,6 +38,7 @@ on:
       - 'docs/phase-1/protocol-projection-v1.md'
       - 'docs/phase-1/protocol-projection-proof-v1.md'
       - 'docs/phase-1/protocol-projection-implementation-refinement-v1.md'
+      - 'docs/phase-1/protocol-projection-production-binding-v1.md'
       - '.github/workflows/phase1-protocol-projection-proofs.yml'
 
 permissions:
@@ -49,7 +53,7 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
-      - name: Compile PHIL-PROT-PROJ-001 proof and implementation correspondence
+      - name: Compile PHIL-PROT-PROJ-001 proof and exact production kernel
         shell: bash
         run: |
           set -euo pipefail
@@ -67,8 +71,12 @@ jobs:
           grep -q 'decideProjectionSessionByFact' ProtocolProjectionKernel.hs
           grep -q 'planProtocolProjection' ProtocolProjectionKernel.hs
           grep -q 'planTransferredProtocolContract' ProtocolProjectionKernel.hs
+          cmp ProtocolProjectionKernel.hs src/ProtocolProjectionKernel.hs
+          kernel_sha256="$(sha256sum ProtocolProjectionKernel.hs | cut -d' ' -f1)"
+          printf 'kernel_sha256=%s\n' "$kernel_sha256"
+          test "$kernel_sha256" = '5c4f9dd27b3b54a4cf596dd6f74b8090bf1442891207a4442a637585e580a556'
 
-      - name: Record proof and extraction identities
+      - name: Record proof and production-kernel identities
         shell: bash
         run: |
           set -euo pipefail
@@ -98,7 +106,7 @@ jobs:
 
       - uses: actions/upload-artifact@v4
         with:
-          name: rocq-protocol-projection-proof
+          name: rocq-protocol-projection-production-binding
           path: protocol-projection-proof
           if-no-files-found: error
 
@@ -118,20 +126,24 @@ jobs:
 
       - uses: actions/download-artifact@v4
         with:
-          name: rocq-protocol-projection-proof
+          name: rocq-protocol-projection-production-binding
           path: protocol-projection-proof
 
-      - name: Typecheck and execute extracted protocol projection controls
+      - name: Verify exact extracted production kernel and direct controls
         run: |
           set -euo pipefail
+          cmp protocol-projection-proof/ProtocolProjectionKernel.hs src/ProtocolProjectionKernel.hs
+          test "$(sha256sum src/ProtocolProjectionKernel.hs | cut -d' ' -f1)" = \
+            '5c4f9dd27b3b54a4cf596dd6f74b8090bf1442891207a4442a637585e580a556'
           ghc -Wall -Werror -fno-code protocol-projection-proof/ProtocolProjectionKernel.hs
+          ghc -Wall -Werror -fno-code src/ProtocolProjectionKernel.hs
           ghc -Wall -Werror \
-            -iprotocol-projection-proof \
+            -isrc \
             app/ProtocolProjectionDecisionCorrespondenceMain.hs \
             -o protocol-projection-kernel-controls
           ./protocol-projection-kernel-controls
 
-      - name: Typecheck protocol projection implementation paths
+      - name: Typecheck bound protocol projection production paths
         run: |
           set -euo pipefail
           cabal exec -- ghc -isrc -Wall -Werror -fno-code src/Phil/Core/Protocol/Generic.hs
@@ -145,13 +157,13 @@ jobs:
           cabal exec -- runghc -isrc test/Phase1ProtocolGenericEndpointMain.hs
           cabal exec -- runghc -isrc test/Phase1ProtocolProjectionMain.hs
 
-      - name: Record implementation-refinement staging identities
+      - name: Record implementation-refinement production-binding identities
         shell: bash
         run: |
           set -euo pipefail
-          mkdir -p protocol-projection-implementation-correspondence
+          mkdir -p protocol-projection-production-binding
           sha256sum \
-            protocol-projection-proof/ProtocolProjectionKernel.hs \
+            src/ProtocolProjectionKernel.hs \
             src/Phil/Core/Protocol/Generic.hs \
             src/Phil/Core/Protocol/Family.hs \
             test/Phase1ProtocolGenericEndpointMain.hs \
@@ -159,11 +171,12 @@ jobs:
             app/ProtocolProjectionDecisionCorrespondenceMain.hs \
             proof/Phil/Core/ProtocolProjectionImplementation.v \
             docs/phase-1/protocol-projection-implementation-refinement-v1.md \
-            > protocol-projection-implementation-correspondence/PHIL-PROT-PROJ-001.staging.sha256
-          cat protocol-projection-implementation-correspondence/PHIL-PROT-PROJ-001.staging.sha256
+            docs/phase-1/protocol-projection-production-binding-v1.md \
+            > protocol-projection-production-binding/PHIL-PROT-PROJ-001.closeout.sha256
+          cat protocol-projection-production-binding/PHIL-PROT-PROJ-001.closeout.sha256
 
       - uses: actions/upload-artifact@v4
         with:
-          name: protocol-projection-implementation-correspondence
-          path: protocol-projection-implementation-correspondence
+          name: protocol-projection-production-binding
+          path: protocol-projection-production-binding
           if-no-files-found: error
