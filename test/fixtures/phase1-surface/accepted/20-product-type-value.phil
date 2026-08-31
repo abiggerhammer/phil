@@ -9,5 +9,5 @@ callable MakePair() -> (U32, Bool) {
 }
 
 fn make_pair() -> (U32, Bool) satisfies MakePair {
-  return (1, true)
+  return (1, true);
 }
