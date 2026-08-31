@@ -23,610 +23,448 @@ jobs:
           python3 - <<'PY'
           from pathlib import Path
 
-          def replace_one(text, old, new, label):
-              count = text.count(old)
-              if count != 1:
-                  raise SystemExit(f"{label}: expected exactly one match, found {count}")
-              return text.replace(old, new, 1)
+          def between(text, start, end, replacement, label):
+              i = text.find(start)
+              if i < 0:
+                  raise SystemExit(f"{label}: start anchor not found")
+              j = text.find(end, i + len(start))
+              if j < 0:
+                  raise SystemExit(f"{label}: end anchor not found")
+              return text[:i] + replacement.rstrip() + "\n\n" + text[j+1:]
 
           parser_path = Path("src/Phil/Surface/GrammarV1/Parser.hs")
           p = parser_path.read_text()
 
-          old = '''parseStatement :: Parser (Located GrammarV1Statement)
-          parseStatement = do
-            token <- peekToken
-            case fmap locatedValue token of
-              Just (GrammarKeyword "let") -> parseLetStatement
-              Just (GrammarKeyword "return") -> parseReturnStatement
-              Just _ -> do
-                expression <- parseExpression
-                pure $ Located
-                  (locatedSpan expression)
-                  (GrammarV1ExpressionStatement expression)
-              Nothing -> failParser "expected statement at end of input"
+          p = between(p,
+            "parseStatement :: Parser (Located GrammarV1Statement)",
+            "\nparsePattern :: Parser (Located GrammarV1Pattern)",
+            r'''parseStatement :: Parser (Located GrammarV1Statement)
+parseStatement = do
+  token <- peekToken
+  case fmap locatedValue token of
+    Just (GrammarKeyword "let") -> parseLetStatement
+    Just (GrammarKeyword "return") -> parseReturnStatement
+    Just _ -> do
+      expression <- parseExpression
+      end <- expectSymbol ";"
+      pure $ Located
+        (SourceSpan
+          (sourceSpanStart (locatedSpan expression))
+          (sourceSpanEnd (locatedSpan end)))
+        (GrammarV1ExpressionStatement expression)
+    Nothing -> failParser "expected statement at end of input"
 
-          parseLetStatement :: Parser (Located GrammarV1Statement)
-          parseLetStatement = do
-            start <- expectKeyword "let"
-            pattern' <- parsePattern
-            _ <- expectSymbol "="
-            expression <- parseExpression
-            pure $ Located
-              (SourceSpan
-                (sourceSpanStart (locatedSpan start))
-                (sourceSpanEnd (locatedSpan expression)))
-              (GrammarV1LetStatement pattern' expression)
+parseLetStatement :: Parser (Located GrammarV1Statement)
+parseLetStatement = do
+  start <- expectKeyword "let"
+  pattern' <- parsePattern
+  _ <- expectSymbol "="
+  expression <- parseExpression
+  end <- expectSymbol ";"
+  pure $ Located
+    (SourceSpan
+      (sourceSpanStart (locatedSpan start))
+      (sourceSpanEnd (locatedSpan end)))
+    (GrammarV1LetStatement pattern' expression)
 
-          parseReturnStatement :: Parser (Located GrammarV1Statement)
-          parseReturnStatement = do
-            start <- expectKeyword "return"
-            expression <- parseExpression
-            pure $ Located
-              (SourceSpan
-                (sourceSpanStart (locatedSpan start))
-                (sourceSpanEnd (locatedSpan expression)))
-              (GrammarV1ReturnStatement expression)
-          '''.replace('          ', '')
-          new = '''parseStatement :: Parser (Located GrammarV1Statement)
-          parseStatement = do
-            token <- peekToken
-            case fmap locatedValue token of
-              Just (GrammarKeyword "let") -> parseLetStatement
-              Just (GrammarKeyword "return") -> parseReturnStatement
-              Just _ -> do
-                expression <- parseExpression
-                end <- expectSymbol ";"
-                pure $ Located
-                  (SourceSpan
-                    (sourceSpanStart (locatedSpan expression))
-                    (sourceSpanEnd (locatedSpan end)))
-                  (GrammarV1ExpressionStatement expression)
-              Nothing -> failParser "expected statement at end of input"
+parseReturnStatement :: Parser (Located GrammarV1Statement)
+parseReturnStatement = do
+  start <- expectKeyword "return"
+  expression <- parseExpression
+  end <- expectSymbol ";"
+  pure $ Located
+    (SourceSpan
+      (sourceSpanStart (locatedSpan start))
+      (sourceSpanEnd (locatedSpan end)))
+    (GrammarV1ReturnStatement expression)''',
+            "statement terminators")
 
-          parseLetStatement :: Parser (Located GrammarV1Statement)
-          parseLetStatement = do
-            start <- expectKeyword "let"
-            pattern' <- parsePattern
-            _ <- expectSymbol "="
-            expression <- parseExpression
-            end <- expectSymbol ";"
-            pure $ Located
-              (SourceSpan
-                (sourceSpanStart (locatedSpan start))
-                (sourceSpanEnd (locatedSpan end)))
-              (GrammarV1LetStatement pattern' expression)
+          p = between(p,
+            "peekFallbackStart :: Parser Bool",
+            "\nparseFallback :: Parser (Located GrammarV1Fallback)",
+            r'''peekFallbackStart :: Parser Bool
+peekFallbackStart = Parser $ \tokens ->
+  Right (startsFallback tokens, tokens)
+  where
+    startsFallback (first : second : _) =
+      case (locatedValue first, locatedValue second) of
+        (GrammarKeyword "or", GrammarKeyword "fail") -> True
+        (GrammarKeyword "or", GrammarKeyword "reject") -> True
+        _ -> False
+    startsFallback _ = False
 
-          parseReturnStatement :: Parser (Located GrammarV1Statement)
-          parseReturnStatement = do
-            start <- expectKeyword "return"
-            expression <- parseExpression
-            end <- expectSymbol ";"
-            pure $ Located
-              (SourceSpan
-                (sourceSpanStart (locatedSpan start))
-                (sourceSpanEnd (locatedSpan end)))
-              (GrammarV1ReturnStatement expression)
-          '''.replace('          ', '')
-          p = replace_one(p, old, new, "statement terminators")
+peekCommandExpressionStart :: Parser Bool
+peekCommandExpressionStart = do
+  token <- peekToken
+  pure $ case fmap locatedValue token of
+    Just (GrammarKeyword keyword) -> keyword `elem`
+      [ "construct", "borrow", "if", "match", "decide", "closure", "loop"
+      , "continue", "break", "receive_frame", "receive_exact", "receive"
+      , "recognize", "validate", "send_exact", "send", "select", "offer"
+      , "commit_receive", "reject", "fail", "close", "release", "transport"
+      , "accept", "prove"
+      ]
+    _ -> False
 
-          old = '''peekFallbackStart :: Parser Bool
-          peekFallbackStart = Parser $ \\tokens ->
-            Right (startsFallback tokens, tokens)
-            where
-              startsFallback (first : second : _) =
-                case (locatedValue first, locatedValue second) of
-                  (GrammarKeyword "or", GrammarKeyword "fail") -> True
-                  (GrammarKeyword "or", GrammarKeyword "reject") -> True
-                  _ -> False
-              startsFallback _ = False
+parseBaseExpression :: Parser (Located GrammarV1Expression)
+parseBaseExpression = do
+  command <- peekCommandExpressionStart
+  if command then parseCommandExpression else parseAdditiveExpression
 
-          parseExpression :: Parser (Located GrammarV1Expression)
-          parseExpression = do
-            base <- parseAdditiveExpression
-            hasFallback <- peekFallbackStart
-            if hasFallback
-              then do
-                _ <- expectKeyword "or"
-                fallback <- parseFallback
-                pure $ Located
-                  (SourceSpan
-                    (sourceSpanStart (locatedSpan base))
-                    (sourceSpanEnd (locatedSpan fallback)))
-                  (GrammarV1FallbackExpression base fallback)
-              else pure base
-          '''.replace('          ', '')
-          new = '''peekFallbackStart :: Parser Bool
-          peekFallbackStart = Parser $ \\tokens ->
-            Right (startsFallback tokens, tokens)
-            where
-              startsFallback (first : second : _) =
-                case (locatedValue first, locatedValue second) of
-                  (GrammarKeyword "or", GrammarKeyword "fail") -> True
-                  (GrammarKeyword "or", GrammarKeyword "reject") -> True
-                  _ -> False
-              startsFallback _ = False
+parseExpression :: Parser (Located GrammarV1Expression)
+parseExpression = do
+  base <- parseBaseExpression
+  hasFallback <- peekFallbackStart
+  if hasFallback
+    then do
+      _ <- expectKeyword "or"
+      fallback <- parseFallback
+      pure $ Located
+        (SourceSpan
+          (sourceSpanStart (locatedSpan base))
+          (sourceSpanEnd (locatedSpan fallback)))
+        (GrammarV1FallbackExpression base fallback)
+    else pure base''',
+            "expression command layer")
 
-          peekCommandExpressionStart :: Parser Bool
-          peekCommandExpressionStart = do
-            token <- peekToken
-            pure $ case fmap locatedValue token of
-              Just (GrammarKeyword keyword) -> keyword `elem`
-                [ "construct", "borrow", "if", "match", "decide", "closure", "loop"
-                , "continue", "break", "receive_frame", "receive_exact", "receive"
-                , "recognize", "validate", "send_exact", "send", "select", "offer"
-                , "commit_receive", "reject", "fail", "close", "release", "transport"
-                , "accept", "prove"
-                ]
-              _ -> False
+          p = between(p,
+            "parsePostfixExpression :: Parser (Located GrammarV1Expression)",
+            "\nparseReceiveFrameExpression :: Parser (Located GrammarV1Expression)",
+            r'''parsePostfixExpression :: Parser (Located GrammarV1Expression)
+parsePostfixExpression = do
+  token <- peekToken
+  case fmap locatedValue token of
+    Just (GrammarIdentifier _) -> parseNamedPostfixExpression
+    _ -> do
+      primary <- parsePrimaryExpression
+      parseMorePostfixExpression primary
 
-          parseExpression :: Parser (Located GrammarV1Expression)
-          parseExpression = do
-            command <- peekCommandExpressionStart
-            base <- if command then parseCommandExpression else parseAdditiveExpression
-            hasFallback <- peekFallbackStart
-            if hasFallback
-              then do
-                _ <- expectKeyword "or"
-                fallback <- parseFallback
-                pure $ Located
-                  (SourceSpan
-                    (sourceSpanStart (locatedSpan base))
-                    (sourceSpanEnd (locatedSpan fallback)))
-                  (GrammarV1FallbackExpression base fallback)
-              else pure base
-          '''.replace('          ', '')
-          p = replace_one(p, old, new, "command expression layer")
+parseNamedPostfixExpression :: Parser (Located GrammarV1Expression)
+parseNamedPostfixExpression = do
+  name <- parseQualifiedName
+  hasStatic <- peekSymbol "["
+  (staticArguments, staticEnd) <- if hasStatic
+    then do
+      (arguments, end) <- parseStaticArguments
+      pure (arguments, Just end)
+    else pure ([], Nothing)
+  let referenceEnd = maybe (locatedSpan name) locatedSpan staticEnd
+      reference = GrammarV1StaticReference
+        { grammarV1StaticReferenceName = locatedValue name
+        , grammarV1StaticReferenceArguments = staticArguments
+        }
+      referenceLocated = Located
+        (SourceSpan
+          (sourceSpanStart (locatedSpan name))
+          (sourceSpanEnd referenceEnd))
+        reference
+  hasTermArguments <- peekSymbol "("
+  if hasTermArguments
+    then do
+      (arguments, end) <- parseTermArguments
+      let named = Located
+            (SourceSpan
+              (sourceSpanStart (locatedSpan name))
+              (sourceSpanEnd (locatedSpan end)))
+            (GrammarV1NameExpression reference arguments)
+      parseMorePostfixExpression named
+    else if hasStatic
+      then do
+        let named = Located (locatedSpan referenceLocated) (GrammarV1NameExpression reference [])
+        parseMorePostfixExpression named
+      else pure $ Located
+        (locatedSpan name)
+        (GrammarV1NameExpression reference [])
 
-          old = '''parsePostfixExpression :: Parser (Located GrammarV1Expression)
-          parsePostfixExpression = do
-            primary <- parsePrimaryExpression
-            parseMorePostfixExpression primary
+parseMorePostfixExpression
+  :: Located GrammarV1Expression
+  -> Parser (Located GrammarV1Expression)
+parseMorePostfixExpression base = do
+  hasProjection <- peekSymbol "."
+  if hasProjection
+    then do
+      _ <- expectSymbol "."
+      field <- expectIdentifier
+      let projected = Located
+            (SourceSpan
+              (sourceSpanStart (locatedSpan base))
+              (sourceSpanEnd (locatedSpan field)))
+            (GrammarV1ProjectionExpression base field)
+      parseMorePostfixExpression projected
+    else pure base
 
-          parseMorePostfixExpression
-            :: Located GrammarV1Expression
-            -> Parser (Located GrammarV1Expression)
-          parseMorePostfixExpression base = do
-            hasProjection <- peekSymbol "."
-            if hasProjection
-              then do
-                _ <- expectSymbol "."
-                field <- expectIdentifier
-                let projected = Located
-                      (SourceSpan
-                        (sourceSpanStart (locatedSpan base))
-                        (sourceSpanEnd (locatedSpan field)))
-                      (GrammarV1ProjectionExpression base field)
-                parseMorePostfixExpression projected
-              else pure base
+parsePrimaryExpression :: Parser (Located GrammarV1Expression)
+parsePrimaryExpression = do
+  token <- peekToken
+  case fmap locatedValue token of
+    Just (GrammarKeyword "true") -> do
+      value <- expectKeyword "true"
+      pure (Located (locatedSpan value) (GrammarV1BoolExpression True))
+    Just (GrammarKeyword "false") -> do
+      value <- expectKeyword "false"
+      pure (Located (locatedSpan value) (GrammarV1BoolExpression False))
+    Just (GrammarKeyword "unit") -> do
+      value <- expectKeyword "unit"
+      pure (Located (locatedSpan value) GrammarV1UnitExpression)
+    Just (GrammarDecimalInteger _) -> do
+      value <- takeToken
+      case locatedValue value of
+        GrammarDecimalInteger integer ->
+          pure (Located (locatedSpan value) (GrammarV1IntegerExpression integer))
+        _ -> failParser "internal DECIMAL_INTEGER expression dispatch error"
+    Just (GrammarSymbol "(") -> parseTupleOrParenthesizedExpression
+    Just other -> failParser $
+      "expected arithmetic primary_expression; found " <> renderToken other
+    Nothing -> failParser "expected primary_expression at end of input"
 
-          parsePrimaryExpression :: Parser (Located GrammarV1Expression)
-          parsePrimaryExpression = do
-            token <- peekToken
-            case fmap locatedValue token of
-              Just (GrammarKeyword "construct") -> parseConstructExpression
-              Just (GrammarKeyword "borrow") -> parseBorrowExpression
-              Just (GrammarKeyword "if") -> parseIfExpression
-              Just (GrammarKeyword "match") -> parseMatchExpression
-              Just (GrammarKeyword "decide") -> parseDecideExpression
-              Just (GrammarKeyword "closure") -> parseClosureExpression
-              Just (GrammarKeyword "loop") -> parseLoopExpression
-              Just (GrammarKeyword "continue") -> parseContinueExpression
-              Just (GrammarKeyword "break") -> parseBreakExpression
-              Just (GrammarKeyword "receive_frame") -> parseReceiveFrameExpression
-              Just (GrammarKeyword "receive_exact") -> parseReceiveExactExpression
-              Just (GrammarKeyword "receive") -> parseReceiveExpression
-              Just (GrammarKeyword "recognize") -> parseRecognizeExpression
-              Just (GrammarKeyword "validate") -> parseValidateExpression
-              Just (GrammarKeyword "send_exact") -> parseSendExactExpression
-              Just (GrammarKeyword "send") -> parseSendExpression
-              Just (GrammarKeyword "select") -> parseSelectExpression
-              Just (GrammarKeyword "commit_receive") -> parseCommitReceiveExpression
-              Just (GrammarKeyword "fail") -> parseFailExpression
-              Just (GrammarKeyword "close") -> parseCloseExpression
-              Just (GrammarKeyword "release") -> parseReleaseExpression
-              Just (GrammarKeyword "transport") -> parseTransportExpression
-              Just (GrammarKeyword "accept") -> parseAcceptExpression
-              Just (GrammarKeyword "prove") -> parseProveExpression
-              Just (GrammarKeyword "offer") -> parseOfferExpression
-              Just (GrammarKeyword "reject") -> parseRejectExpression
-              Just (GrammarKeyword "true") -> do
-                value <- expectKeyword "true"
-                pure (Located (locatedSpan value) (GrammarV1BoolExpression True))
-              Just (GrammarKeyword "false") -> do
-                value <- expectKeyword "false"
-                pure (Located (locatedSpan value) (GrammarV1BoolExpression False))
-              Just (GrammarKeyword "unit") -> do
-                value <- expectKeyword "unit"
-                pure (Located (locatedSpan value) GrammarV1UnitExpression)
-              Just (GrammarDecimalInteger _) -> do
-                value <- takeToken
-                case locatedValue value of
-                  GrammarDecimalInteger integer ->
-                    pure (Located (locatedSpan value) (GrammarV1IntegerExpression integer))
-                  _ -> failParser "internal DECIMAL_INTEGER expression dispatch error"
-              Just (GrammarSymbol "(") -> parseTupleOrParenthesizedExpression
-              Just (GrammarIdentifier _) -> parseNameExpression
-              Just other -> failParser $
-                "SURF-002 term/block slice does not yet implement primary_expression beginning with "
-                  <> renderToken other
-              Nothing -> failParser "expected primary_expression at end of input"
-          '''.replace('          ', '')
-          new = '''parsePostfixExpression :: Parser (Located GrammarV1Expression)
-          parsePostfixExpression = do
-            token <- peekToken
-            case fmap locatedValue token of
-              Just (GrammarIdentifier _) -> parseNamedPostfixExpression
-              _ -> do
-                primary <- parsePrimaryExpression
-                parseMorePostfixExpression primary
+parseCommandExpression :: Parser (Located GrammarV1Expression)
+parseCommandExpression = do
+  token <- peekToken
+  case fmap locatedValue token of
+    Just (GrammarKeyword "construct") -> parseConstructExpression
+    Just (GrammarKeyword "borrow") -> parseBorrowExpression
+    Just (GrammarKeyword "if") -> parseIfExpression
+    Just (GrammarKeyword "match") -> parseMatchExpression
+    Just (GrammarKeyword "decide") -> parseDecideExpression
+    Just (GrammarKeyword "closure") -> parseClosureExpression
+    Just (GrammarKeyword "loop") -> parseLoopExpression
+    Just (GrammarKeyword "continue") -> parseContinueExpression
+    Just (GrammarKeyword "break") -> parseBreakExpression
+    Just (GrammarKeyword "receive_frame") -> parseReceiveFrameExpression
+    Just (GrammarKeyword "receive_exact") -> parseReceiveExactExpression
+    Just (GrammarKeyword "receive") -> parseReceiveExpression
+    Just (GrammarKeyword "recognize") -> parseRecognizeExpression
+    Just (GrammarKeyword "validate") -> parseValidateExpression
+    Just (GrammarKeyword "send_exact") -> parseSendExactExpression
+    Just (GrammarKeyword "send") -> parseSendExpression
+    Just (GrammarKeyword "select") -> parseSelectExpression
+    Just (GrammarKeyword "offer") -> parseOfferExpression
+    Just (GrammarKeyword "commit_receive") -> parseCommitReceiveExpression
+    Just (GrammarKeyword "reject") -> parseRejectExpression
+    Just (GrammarKeyword "fail") -> parseFailExpression
+    Just (GrammarKeyword "close") -> parseCloseExpression
+    Just (GrammarKeyword "release") -> parseReleaseExpression
+    Just (GrammarKeyword "transport") -> parseTransportExpression
+    Just (GrammarKeyword "accept") -> parseAcceptExpression
+    Just (GrammarKeyword "prove") -> parseProveExpression
+    Just other -> failParser $
+      "expected command_expression; found " <> renderToken other
+    Nothing -> failParser "expected command_expression at end of input"''',
+            "postfix and command factoring")
 
-          parseNamedPostfixExpression :: Parser (Located GrammarV1Expression)
-          parseNamedPostfixExpression = do
-            reference <- parseStaticReference
-            hasTermArguments <- peekSymbol "("
-            if hasTermArguments
-              then do
-                (arguments, end) <- parseTermArguments
-                let named = Located
-                      (SourceSpan
-                        (sourceSpanStart (locatedSpan reference))
-                        (sourceSpanEnd (locatedSpan end)))
-                      (GrammarV1NameExpression (locatedValue reference) arguments)
-                parseMorePostfixExpression named
-              else pure $ Located
+          p = between(p,
+            "parseReceiveExactExpression :: Parser (Located GrammarV1Expression)",
+            "\nparseReceiveExpression :: Parser (Located GrammarV1Expression)",
+            r'''parseReceiveExactExpression :: Parser (Located GrammarV1Expression)
+parseReceiveExactExpression = do
+  start <- expectKeyword "receive_exact"
+  amount <- parseBaseExpression
+  hasUsing <- peekKeyword "using"
+  evidence <- if hasUsing
+    then expectKeyword "using" >> Just <$> parseBaseExpression
+    else pure Nothing
+  _ <- expectKeyword "on"
+  endpoint <- parseBaseExpression
+  pure $ Located
+    (SourceSpan
+      (sourceSpanStart (locatedSpan start))
+      (sourceSpanEnd (locatedSpan endpoint)))
+    (GrammarV1ReceiveExactExpression amount endpoint evidence)''',
+            "receive_exact using placement")
+
+          p = between(p,
+            "parseSelectExpression :: Parser (Located GrammarV1Expression)",
+            "\nparseBranchValue :: Parser (Located GrammarV1BranchValue)",
+            r'''parseSelectExpression :: Parser (Located GrammarV1Expression)
+parseSelectExpression = do
+  start <- expectKeyword "select"
+  branch <- parseBranchValue
+  hasUsing <- peekKeyword "using"
+  evidence <- if hasUsing
+    then expectKeyword "using" >> Just <$> parseBaseExpression
+    else pure Nothing
+  _ <- expectKeyword "on"
+  endpoint <- parseBaseExpression
+  pure $ Located
+    (SourceSpan
+      (sourceSpanStart (locatedSpan start))
+      (sourceSpanEnd (locatedSpan endpoint)))
+    (GrammarV1SelectExpression branch endpoint evidence)''',
+            "select using placement")
+
+          p = between(p,
+            "parseProveExpression :: Parser (Located GrammarV1Expression)",
+            "\nparseTransportExpression :: Parser (Located GrammarV1Expression)",
+            r'''parseProveExpression :: Parser (Located GrammarV1Expression)
+parseProveExpression = do
+  start <- expectKeyword "prove"
+  _ <- expectSymbol "("
+  proposition <- parseProposition
+  end <- expectSymbol ")"
+  pure $ locatedBetween start end (GrammarV1ProveExpression proposition)''',
+            "prove delimiter")
+
+          p = between(p,
+            "parseStaticPostfixExpression :: Parser (Located GrammarV1StaticValueExpression)",
+            "\nparseMoreStaticPostfix\n",
+            r'''parseStaticPostfixExpression :: Parser (Located GrammarV1StaticValueExpression)
+parseStaticPostfixExpression = do
+  token <- peekToken
+  case fmap locatedValue token of
+    Just (GrammarIdentifier _) -> do
+      name <- parseQualifiedName
+      hasStatic <- peekSymbol "["
+      if hasStatic
+        then do
+          (arguments, end) <- parseStaticArguments
+          let reference = Located
+                (SourceSpan
+                  (sourceSpanStart (locatedSpan name))
+                  (sourceSpanEnd (locatedSpan end)))
+                GrammarV1StaticReference
+                  { grammarV1StaticReferenceName = locatedValue name
+                  , grammarV1StaticReferenceArguments = arguments
+                  }
+              base = Located
                 (locatedSpan reference)
-                (GrammarV1NameExpression (locatedValue reference) [])
+                (GrammarV1StaticValueReference reference)
+          parseMoreStaticPostfix base
+        else pure $ Located
+          (locatedSpan name)
+          (GrammarV1StaticValueReference
+            (Located (locatedSpan name) GrammarV1StaticReference
+              { grammarV1StaticReferenceName = locatedValue name
+              , grammarV1StaticReferenceArguments = []
+              }))
+    _ -> do
+      primary <- parseStaticPrimaryExpression
+      parseMoreStaticPostfix primary''',
+            "static postfix factoring")
 
-          parseMorePostfixExpression
-            :: Located GrammarV1Expression
-            -> Parser (Located GrammarV1Expression)
-          parseMorePostfixExpression base = do
-            hasProjection <- peekSymbol "."
-            if hasProjection
-              then do
-                _ <- expectSymbol "."
-                field <- expectIdentifier
-                let projected = Located
-                      (SourceSpan
-                        (sourceSpanStart (locatedSpan base))
-                        (sourceSpanEnd (locatedSpan field)))
-                      (GrammarV1ProjectionExpression base field)
-                parseMorePostfixExpression projected
-              else pure base
+          start = p.find("parseNameExpression :: Parser (Located GrammarV1Expression)")
+          if start >= 0:
+              end = p.find("\nparseTermArguments ::", start)
+              if end < 0:
+                  raise SystemExit("parseNameExpression end anchor not found")
+              p = p[:start] + p[end+1:]
 
-          parsePrimaryExpression :: Parser (Located GrammarV1Expression)
-          parsePrimaryExpression = do
-            token <- peekToken
-            case fmap locatedValue token of
-              Just (GrammarKeyword "true") -> do
-                value <- expectKeyword "true"
-                pure (Located (locatedSpan value) (GrammarV1BoolExpression True))
-              Just (GrammarKeyword "false") -> do
-                value <- expectKeyword "false"
-                pure (Located (locatedSpan value) (GrammarV1BoolExpression False))
-              Just (GrammarKeyword "unit") -> do
-                value <- expectKeyword "unit"
-                pure (Located (locatedSpan value) GrammarV1UnitExpression)
-              Just (GrammarDecimalInteger _) -> do
-                value <- takeToken
-                case locatedValue value of
-                  GrammarDecimalInteger integer ->
-                    pure (Located (locatedSpan value) (GrammarV1IntegerExpression integer))
-                  _ -> failParser "internal DECIMAL_INTEGER expression dispatch error"
-              Just (GrammarSymbol "(") -> parseTupleOrParenthesizedExpression
-              Just other -> failParser $
-                "expected non-command primary_expression; found " <> renderToken other
-              Nothing -> failParser "expected primary_expression at end of input"
+          p = p.replace("value <- parseAdditiveExpression\n  _ <- expectKeyword \"as\"", "value <- parseBaseExpression\n  _ <- expectKeyword \"as\"")
+          p = p.replace("scrutinee <- parseAdditiveExpression\n  _ <- expectSymbol \"{\"", "scrutinee <- parseBaseExpression\n  _ <- expectSymbol \"{\"")
+          p = p.replace("endpoint <- parseAdditiveExpression", "endpoint <- parseBaseExpression")
+          p = p.replace("source <- parseAdditiveExpression", "source <- parseBaseExpression")
+          p = p.replace("position <- if hasAt\n    then expectKeyword \"at\" >> Just <$> parseAdditiveExpression", "position <- if hasAt\n    then expectKeyword \"at\" >> Just <$> parseBaseExpression")
+          p = p.replace("value <- parseAdditiveExpression", "value <- parseBaseExpression")
+          p = p.replace("evidence <- parseAdditiveExpression", "evidence <- parseBaseExpression")
+          p = p.replace("operand <- parseAdditiveExpression", "operand <- parseBaseExpression")
+          p = p.replace("scrutinee <- parseAdditiveExpression", "scrutinee <- parseBaseExpression")
 
-          parseCommandExpression :: Parser (Located GrammarV1Expression)
-          parseCommandExpression = do
-            token <- peekToken
-            case fmap locatedValue token of
-              Just (GrammarKeyword "construct") -> parseConstructExpression
-              Just (GrammarKeyword "borrow") -> parseBorrowExpression
-              Just (GrammarKeyword "if") -> parseIfExpression
-              Just (GrammarKeyword "match") -> parseMatchExpression
-              Just (GrammarKeyword "decide") -> parseDecideExpression
-              Just (GrammarKeyword "closure") -> parseClosureExpression
-              Just (GrammarKeyword "loop") -> parseLoopExpression
-              Just (GrammarKeyword "continue") -> parseContinueExpression
-              Just (GrammarKeyword "break") -> parseBreakExpression
-              Just (GrammarKeyword "receive_frame") -> parseReceiveFrameExpression
-              Just (GrammarKeyword "receive_exact") -> parseReceiveExactExpression
-              Just (GrammarKeyword "receive") -> parseReceiveExpression
-              Just (GrammarKeyword "recognize") -> parseRecognizeExpression
-              Just (GrammarKeyword "validate") -> parseValidateExpression
-              Just (GrammarKeyword "send_exact") -> parseSendExactExpression
-              Just (GrammarKeyword "send") -> parseSendExpression
-              Just (GrammarKeyword "select") -> parseSelectExpression
-              Just (GrammarKeyword "offer") -> parseOfferExpression
-              Just (GrammarKeyword "commit_receive") -> parseCommitReceiveExpression
-              Just (GrammarKeyword "reject") -> parseRejectExpression
-              Just (GrammarKeyword "fail") -> parseFailExpression
-              Just (GrammarKeyword "close") -> parseCloseExpression
-              Just (GrammarKeyword "release") -> parseReleaseExpression
-              Just (GrammarKeyword "transport") -> parseTransportExpression
-              Just (GrammarKeyword "accept") -> parseAcceptExpression
-              Just (GrammarKeyword "prove") -> parseProveExpression
-              Just other -> failParser $
-                "expected command_expression; found " <> renderToken other
-              Nothing -> failParser "expected command_expression at end of input"
-          '''.replace('          ', '')
-          p = replace_one(p, old, new, "postfix/command factoring")
-
-          old = '''parseReceiveExactExpression :: Parser (Located GrammarV1Expression)
-          parseReceiveExactExpression = do
-            start <- expectKeyword "receive_exact"
-            amount <- parseAdditiveExpression
-            _ <- expectKeyword "on"
-            endpoint <- parseAdditiveExpression
-            hasUsing <- peekKeyword "using"
-            evidence <- if hasUsing
-              then expectKeyword "using" >> Just <$> parseAdditiveExpression
-              else pure Nothing
-            let endSpan = maybe (locatedSpan endpoint) locatedSpan evidence
-            pure $ Located
-              (SourceSpan
-                (sourceSpanStart (locatedSpan start))
-                (sourceSpanEnd endSpan))
-              (GrammarV1ReceiveExactExpression amount endpoint evidence)
-          '''.replace('          ', '')
-          new = '''parseReceiveExactExpression :: Parser (Located GrammarV1Expression)
-          parseReceiveExactExpression = do
-            start <- expectKeyword "receive_exact"
-            amount <- parseAdditiveExpression
-            hasUsing <- peekKeyword "using"
-            evidence <- if hasUsing
-              then expectKeyword "using" >> Just <$> parseAdditiveExpression
-              else pure Nothing
-            _ <- expectKeyword "on"
-            endpoint <- parseAdditiveExpression
-            pure $ Located
-              (SourceSpan
-                (sourceSpanStart (locatedSpan start))
-                (sourceSpanEnd (locatedSpan endpoint)))
-              (GrammarV1ReceiveExactExpression amount endpoint evidence)
-          '''.replace('          ', '')
-          p = replace_one(p, old, new, "receive_exact using placement")
-
-          old = '''parseSelectExpression :: Parser (Located GrammarV1Expression)
-          parseSelectExpression = do
-            start <- expectKeyword "select"
-            branch <- parseBranchValue
-            _ <- expectKeyword "on"
-            endpoint <- parseAdditiveExpression
-            hasUsing <- peekKeyword "using"
-            evidence <- if hasUsing
-              then expectKeyword "using" >> Just <$> parseAdditiveExpression
-              else pure Nothing
-            let endSpan = maybe (locatedSpan endpoint) locatedSpan evidence
-            pure $ Located
-              (SourceSpan
-                (sourceSpanStart (locatedSpan start))
-                (sourceSpanEnd endSpan))
-              (GrammarV1SelectExpression branch endpoint evidence)
-          '''.replace('          ', '')
-          new = '''parseSelectExpression :: Parser (Located GrammarV1Expression)
-          parseSelectExpression = do
-            start <- expectKeyword "select"
-            branch <- parseBranchValue
-            hasUsing <- peekKeyword "using"
-            evidence <- if hasUsing
-              then expectKeyword "using" >> Just <$> parseAdditiveExpression
-              else pure Nothing
-            _ <- expectKeyword "on"
-            endpoint <- parseAdditiveExpression
-            pure $ Located
-              (SourceSpan
-                (sourceSpanStart (locatedSpan start))
-                (sourceSpanEnd (locatedSpan endpoint)))
-              (GrammarV1SelectExpression branch endpoint evidence)
-          '''.replace('          ', '')
-          p = replace_one(p, old, new, "select using placement")
-
-          old = '''parseProveExpression :: Parser (Located GrammarV1Expression)
-          parseProveExpression = do
-            start <- expectKeyword "prove"
-            proposition <- parseProposition
-            pure $ Located
-              (SourceSpan
-                (sourceSpanStart (locatedSpan start))
-                (sourceSpanEnd (locatedSpan proposition)))
-              (GrammarV1ProveExpression proposition)
-          '''.replace('          ', '')
-          new = '''parseProveExpression :: Parser (Located GrammarV1Expression)
-          parseProveExpression = do
-            start <- expectKeyword "prove"
-            _ <- expectSymbol "("
-            proposition <- parseProposition
-            end <- expectSymbol ")"
-            pure $ locatedBetween start end (GrammarV1ProveExpression proposition)
-          '''.replace('          ', '')
-          p = replace_one(p, old, new, "prove delimiter")
-
-          old = '''parseStaticPostfixExpression :: Parser (Located GrammarV1StaticValueExpression)
-          parseStaticPostfixExpression = do
-            primary <- parseStaticPrimaryExpression
-            parseMoreStaticPostfix primary
-          '''.replace('          ', '')
-          new = '''parseStaticPostfixExpression :: Parser (Located GrammarV1StaticValueExpression)
-          parseStaticPostfixExpression = do
-            token <- peekToken
-            case fmap locatedValue token of
-              Just (GrammarIdentifier _) -> parseStaticPrimaryExpression
-              _ -> do
-                primary <- parseStaticPrimaryExpression
-                parseMoreStaticPostfix primary
-          '''.replace('          ', '')
-          p = replace_one(p, old, new, "static postfix factoring")
-
-          old = '''parseNameExpression :: Parser (Located GrammarV1Expression)
-          parseNameExpression = do
-            reference <- parseStaticReference
-            hasTermArguments <- peekSymbol "("
-            if hasTermArguments
-              then do
-                (arguments, end) <- parseTermArguments
-                pure $ Located
-                  (SourceSpan
-                    (sourceSpanStart (locatedSpan reference))
-                    (sourceSpanEnd (locatedSpan end)))
-                  (GrammarV1NameExpression (locatedValue reference) arguments)
-              else pure $ Located
-                (locatedSpan reference)
-                (GrammarV1NameExpression (locatedValue reference) [])
-
-          '''.replace('          ', '')
-          if old not in p:
-              raise SystemExit("old parseNameExpression block not found exactly once")
-          p = p.replace(old, '', 1)
+          p = p.replace("left <- parseExpression\n  parseRelationFromLeft left", "left <- parseAdditiveExpression\n  parseRelationFromLeft left")
+          p = p.replace("right <- parseExpression\n  pure $ Located\n    (SourceSpan\n      (sourceSpanStart (locatedSpan left))", "right <- parseAdditiveExpression\n  pure $ Located\n    (SourceSpan\n      (sourceSpanStart (locatedSpan left))")
 
           parser_path.write_text(p)
 
           grammar_path = Path("grammar/phase1-surface.ebnf")
           g = grammar_path.read_text()
-          old = '''expression = additive_expression, [ "or", fallback ] ;
-          fallback = "fail", failure_target | "reject", additive_expression ;
+          g = between(g,
+            "expression = additive_expression, [ \"or\", fallback ] ;",
+            "\nconstruct_expression =",
+            '''expression = base_expression, [ "or", fallback ] ;
+fallback = "fail", failure_target | "reject", base_expression ;
 
-          additive_expression =
-            multiplicative_expression,
-            { ( "+" | "-" ), multiplicative_expression } ;
+base_expression = command_expression | additive_expression ;
 
-          multiplicative_expression =
-            postfix_expression, { "*", postfix_expression } ;
+command_expression =
+    construct_expression
+  | borrow_expression
+  | if_expression
+  | match_expression
+  | decide_expression
+  | closure_expression
+  | loop_expression
+  | continue_expression
+  | break_expression
+  | receive_frame_expression
+  | receive_exact_expression
+  | receive_expression
+  | recognize_expression
+  | validate_expression
+  | send_exact_expression
+  | send_expression
+  | select_expression
+  | offer_expression
+  | commit_receive_expression
+  | reject_expression
+  | fail_expression
+  | close_expression
+  | release_expression
+  | transport_expression
+  | accept_expression
+  | prove_expression
+  ;
 
-          postfix_expression =
-              named_postfix_expression
-            | nonname_primary_expression, { ".", identifier }
-            ;
+additive_expression =
+  multiplicative_expression,
+  { ( "+" | "-" ), multiplicative_expression } ;
 
-          named_postfix_expression =
-            qualified_name, [ static_arguments ],
-            [ term_arguments, { ".", identifier } ] ;
+multiplicative_expression =
+  postfix_expression, { "*", postfix_expression } ;
 
-          nonname_primary_expression =
-              construct_expression
-            | borrow_expression
-            | if_expression
-            | match_expression
-            | decide_expression
-            | closure_expression
-            | loop_expression
-            | continue_expression
-            | break_expression
-            | receive_frame_expression
-            | receive_exact_expression
-            | receive_expression
-            | recognize_expression
-            | validate_expression
-            | send_exact_expression
-            | send_expression
-            | select_expression
-            | offer_expression
-            | commit_receive_expression
-            | reject_expression
-            | fail_expression
-            | close_expression
-            | release_expression
-            | transport_expression
-            | accept_expression
-            | prove_expression
-            | tuple_expression
-            | parenthesized_expression
-            | "true"
-            | "false"
-            | "unit"
-            | integer_literal
-            ;
-          '''.replace('          ', '')
-          new = '''expression = base_expression, [ "or", fallback ] ;
-          fallback = "fail", failure_target | "reject", additive_expression ;
+postfix_expression =
+    named_postfix_expression
+  | primary_expression, { ".", identifier }
+  ;
 
-          base_expression = command_expression | additive_expression ;
+named_postfix_expression =
+  qualified_name,
+  [ static_arguments, [ term_arguments ], { ".", identifier }
+    | term_arguments, { ".", identifier } ] ;
 
-          command_expression =
-              construct_expression
-            | borrow_expression
-            | if_expression
-            | match_expression
-            | decide_expression
-            | closure_expression
-            | loop_expression
-            | continue_expression
-            | break_expression
-            | receive_frame_expression
-            | receive_exact_expression
-            | receive_expression
-            | recognize_expression
-            | validate_expression
-            | send_exact_expression
-            | send_expression
-            | select_expression
-            | offer_expression
-            | commit_receive_expression
-            | reject_expression
-            | fail_expression
-            | close_expression
-            | release_expression
-            | transport_expression
-            | accept_expression
-            | prove_expression
-            ;
+primary_expression =
+    tuple_expression
+  | parenthesized_expression
+  | "true"
+  | "false"
+  | "unit"
+  | integer_literal
+  ;''',
+            "grammar expression layer")
 
-          additive_expression =
-            multiplicative_expression,
-            { ( "+" | "-" ), multiplicative_expression } ;
+          replacements = {
+            '"borrow", additive_expression, "as", identifier, block': '"borrow", base_expression, "as", identifier, block',
+            '"decide", additive_expression,': '"decide", base_expression,',
+            '"receive_exact", additive_expression,\n  [ "using", additive_expression ], "on", postfix_expression': '"receive_exact", base_expression,\n  [ "using", base_expression ], "on", base_expression',
+            '"receive", type_expression, "on", postfix_expression': '"receive", type_expression, "on", base_expression',
+            '"recognize", static_reference, "from", postfix_expression': '"recognize", static_reference, "from", base_expression',
+            '[ "at", additive_expression ], "on", postfix_expression': '[ "at", base_expression ], "on", base_expression',
+            '"send_exact", additive_expression, "on", postfix_expression': '"send_exact", base_expression, "on", base_expression',
+            '"send", additive_expression, "on", postfix_expression': '"send", base_expression, "on", base_expression',
+            '"select", branch_value, [ "using", additive_expression ],\n  "on", postfix_expression': '"select", branch_value, [ "using", base_expression ],\n  "on", base_expression',
+            '"offer", additive_expression,': '"offer", base_expression,',
+            '"commit_receive", additive_expression, "using", postfix_expression': '"commit_receive", base_expression, "using", base_expression',
+            '"reject", postfix_expression': '"reject", base_expression',
+            '"fail", failure_target, "on", postfix_expression': '"fail", failure_target, "on", base_expression',
+            'close_expression = "close", postfix_expression': 'close_expression = "close", base_expression',
+            'release_expression = "release", postfix_expression': 'release_expression = "release", base_expression',
+            '"transport", additive_expression, "to", type_expression,\n  "using", postfix_expression': '"transport", base_expression, "to", type_expression,\n  "using", base_expression',
+            '"accept", additive_expression, "as", type_expression': '"accept", base_expression, "as", type_expression',
+            'prove_expression = "prove", proposition ;': 'prove_expression = "prove", "(", proposition, ")" ;',
+          }
+          for old, new in replacements.items():
+              if old not in g:
+                  raise SystemExit(f"grammar replacement not found: {old}")
+              g = g.replace(old, new, 1)
 
-          multiplicative_expression =
-            postfix_expression, { "*", postfix_expression } ;
-
-          postfix_expression =
-              named_postfix_expression
-            | primary_expression, { ".", identifier }
-            ;
-
-          named_postfix_expression =
-            qualified_name, [ static_arguments ],
-            [ term_arguments, { ".", identifier } ] ;
-
-          primary_expression =
-              tuple_expression
-            | parenthesized_expression
-            | "true"
-            | "false"
-            | "unit"
-            | integer_literal
-            ;
-          '''.replace('          ', '')
-          g = replace_one(g, old, new, "grammar command layer")
-
-          old = '''receive_exact_expression =
-            "receive_exact", additive_expression,
-            [ "using", additive_expression ], "on", postfix_expression ;
-          '''.replace('          ', '')
-          new = '''receive_exact_expression =
-            "receive_exact", additive_expression,
-            [ "using", additive_expression ], "on", additive_expression ;
-          '''.replace('          ', '')
-          g = replace_one(g, old, new, "grammar receive_exact endpoint")
-
-          for label, old, new in [
-              ("receive endpoint", '"receive", type_expression, "on", postfix_expression ;', '"receive", type_expression, "on", additive_expression ;'),
-              ("recognize source", '"recognize", static_reference, "from", postfix_expression ;', '"recognize", static_reference, "from", additive_expression ;'),
-              ("validate endpoint", '[ "at", additive_expression ], "on", postfix_expression ;', '[ "at", additive_expression ], "on", additive_expression ;'),
-              ("send_exact endpoint", '"send_exact", additive_expression, "on", postfix_expression ;', '"send_exact", additive_expression, "on", additive_expression ;'),
-              ("send endpoint", '"send", additive_expression, "on", postfix_expression ;', '"send", additive_expression, "on", additive_expression ;'),
-              ("select endpoint", '"on", postfix_expression ;', '"on", additive_expression ;'),
-              ("commit evidence", '"commit_receive", additive_expression, "using", postfix_expression ;', '"commit_receive", additive_expression, "using", additive_expression ;'),
-              ("reject operand", '"reject", postfix_expression ;', '"reject", additive_expression ;'),
-              ("fail endpoint", '"fail", failure_target, "on", postfix_expression ;', '"fail", failure_target, "on", additive_expression ;'),
-              ("close operand", 'close_expression = "close", postfix_expression ;', 'close_expression = "close", additive_expression ;'),
-              ("release operand", 'release_expression = "release", postfix_expression ;', 'release_expression = "release", additive_expression ;'),
-              ("transport evidence", '"using", postfix_expression ;', '"using", additive_expression ;'),
-          ]:
-              g = replace_one(g, old, new, label)
-
-          g = replace_one(g, 'prove_expression = "prove", proposition ;', 'prove_expression = "prove", "(", proposition, ")" ;', "grammar prove delimiter")
+          old_static = '''static_postfix_expression =
+    static_reference
+  | static_nonreference_primary_expression, { ".", identifier }
+  ;'''
+          new_static = '''static_postfix_expression =
+    qualified_name, [ static_arguments, { ".", identifier } ]
+  | static_nonreference_primary_expression, { ".", identifier }
+  ;'''
+          if old_static not in g:
+              raise SystemExit("static postfix grammar block not found")
+          g = g.replace(old_static, new_static, 1)
           grammar_path.write_text(g)
           PY
 
