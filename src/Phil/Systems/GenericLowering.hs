@@ -132,7 +132,9 @@ data GenericDecisionSpec = GenericDecisionSpec
 
 -- | ADR-020 realization input.  There is no program/witness discriminator.
 -- Runtime-site evidence, lowering decisions, qualifications, assumptions, and
--- target choices are explicit data.
+-- target choices are explicit data. Runtime-site map keys are exact source fact
+-- keys: this lets the producer retain the right fact without guessing from a
+-- revision that may also index an erased or transferred representation.
 data GenericRealizationContext = GenericRealizationContext
   { genericContextRevision :: Text
   , genericContextSemantics :: SemanticForm
@@ -159,6 +161,9 @@ data GenericLoweringError
   | GenericLoweringUnknownValue Text Text Text
   | GenericLoweringMissingDecision Text
   | GenericLoweringMissingRuntimeSite Text
+  | GenericLoweringUnknownRuntimeFact Text
+  | GenericLoweringRuntimeFactMissingRevision Text
+  | GenericLoweringRuntimeFactRevisionMismatch Text RevisionId RevisionId
   | GenericLoweringDuplicateDecision DecisionId
   | GenericLoweringStageRejected Phase1StageVerificationError
   deriving (Eq, Show)
@@ -246,7 +251,22 @@ validateInputs program context = do
     GenericLoweringEmptyFacts
   require (not (Map.null (coreProgramFunctions program)))
     GenericLoweringEmptyFunctions
+  mapM_ (validateRuntimeFact program)
+    (Map.toAscList (genericContextRuntimeSites context))
   mapM_ (validateFunction context) (Map.toAscList (coreProgramFunctions program))
+
+validateRuntimeFact
+  :: CoreSystemsProgram
+  -> (Text, RuntimeSiteRef)
+  -> Either GenericLoweringError ()
+validateRuntimeFact program (factKey, site) =
+  case Map.lookup factKey (coreProgramFacts program) of
+    Nothing -> Left (GenericLoweringUnknownRuntimeFact factKey)
+    Just Nothing -> Left (GenericLoweringRuntimeFactMissingRevision factKey)
+    Just (Just expectedRevision) ->
+      require (expectedRevision == runtimeSiteRevision site)
+        (GenericLoweringRuntimeFactRevisionMismatch
+          factKey expectedRevision (runtimeSiteRevision site))
 
 validateFunction
   :: GenericRealizationContext
@@ -541,8 +561,10 @@ makeStageContract checked sourceDigest targetDigest program context decisions =
         [ FactTransfer
             { factTransferId = fact
             , factSourceRevision = revision
-            , factDisposition = FactConsumed
-                "preserved by generic checked-Core to Systems accounting"
+            , factDisposition = case Map.lookup fact runtimeFacts of
+                Just site -> FactRuntimeRetained (runtimeSiteEvidence site)
+                Nothing -> FactConsumed
+                  "preserved by generic checked-Core to Systems accounting"
             }
         | (fact, revision) <- Map.toAscList (coreProgramFacts program)
         ]
@@ -565,6 +587,8 @@ makeStageContract checked sourceDigest targetDigest program context decisions =
         [ "checked Core resource/failure structure is lowered constructor-for-constructor; realization metadata may not silently remove it"
         ]
     }
+  where
+    runtimeFacts = genericContextRuntimeSites context
 
 realizationSemanticForm
   :: CoreSystemsProgram
