@@ -4,8 +4,10 @@ on:
   pull_request:
     paths:
       - 'grammar/phase1-surface.ebnf'
+      - 'grammar/phase1-surface-determinacy.json'
       - 'scripts/derive_phase1_surface_grammar.py'
       - 'scripts/check_phase1_surface_corpus.py'
+      - 'scripts/check_phase1_surface_determinacy.py'
       - 'src/Phil/Surface/GrammarV1/**'
       - 'test/Phase1GrammarV1LexerMain.hs'
       - 'test/Phase1GrammarV1StructuralParserMain.hs'
@@ -24,18 +26,23 @@ on:
       - 'test/Phase1GrammarV1CallableEffectsMain.hs'
       - 'test/Phase1GrammarV1StaticValueTypesMain.hs'
       - 'test/Phase1GrammarV1SessionExpressionsMain.hs'
+      - 'test/Phase1GrammarV1DeterminacyMain.hs'
+      - 'test/Phase1GrammarV1DeterminacyVariantMain.hs'
       - 'test/Phase1GrammarV1CorpusMain.hs'
       - 'test/fixtures/phase1-surface/**'
       - 'docs/phase-1/surface-grammar-v1.md'
       - 'docs/phase-1/surface-parser-production-corpus-v1.md'
+      - 'docs/phase-1/surface-determinacy-v1.md'
       - '.github/workflows/phase1-surface-grammar.yml'
   push:
     branches:
       - main
     paths:
       - 'grammar/phase1-surface.ebnf'
+      - 'grammar/phase1-surface-determinacy.json'
       - 'scripts/derive_phase1_surface_grammar.py'
       - 'scripts/check_phase1_surface_corpus.py'
+      - 'scripts/check_phase1_surface_determinacy.py'
       - 'src/Phil/Surface/GrammarV1/**'
       - 'test/Phase1GrammarV1LexerMain.hs'
       - 'test/Phase1GrammarV1StructuralParserMain.hs'
@@ -54,10 +61,13 @@ on:
       - 'test/Phase1GrammarV1CallableEffectsMain.hs'
       - 'test/Phase1GrammarV1StaticValueTypesMain.hs'
       - 'test/Phase1GrammarV1SessionExpressionsMain.hs'
+      - 'test/Phase1GrammarV1DeterminacyMain.hs'
+      - 'test/Phase1GrammarV1DeterminacyVariantMain.hs'
       - 'test/Phase1GrammarV1CorpusMain.hs'
       - 'test/fixtures/phase1-surface/**'
       - 'docs/phase-1/surface-grammar-v1.md'
       - 'docs/phase-1/surface-parser-production-corpus-v1.md'
+      - 'docs/phase-1/surface-determinacy-v1.md'
       - '.github/workflows/phase1-surface-grammar.yml'
 
 permissions:
@@ -69,6 +79,18 @@ jobs:
     steps:
       - name: Check out repository
         uses: actions/checkout@v4
+
+      - name: Check grammar-only tools
+        run: |
+          python3 -m py_compile scripts/derive_phase1_surface_grammar.py
+          python3 -m py_compile scripts/check_phase1_surface_corpus.py
+          python3 -m py_compile scripts/check_phase1_surface_determinacy.py
+
+      - name: Check surface production corpus integrity
+        run: python3 scripts/check_phase1_surface_corpus.py
+
+      - name: Check Grammar-v1 local determinacy inventory
+        run: python3 scripts/check_phase1_surface_determinacy.py
 
       - name: Set up Haskell
         uses: haskell-actions/setup@v2
@@ -130,13 +152,11 @@ jobs:
       - name: Check Grammar-v1 session expression parsing
         run: cabal exec -- runghc -Wall -Werror -isrc test/Phase1GrammarV1SessionExpressionsMain.hs
 
-      - name: Check derivation and corpus tools
-        run: |
-          python3 -m py_compile scripts/derive_phase1_surface_grammar.py
-          python3 -m py_compile scripts/check_phase1_surface_corpus.py
+      - name: Check Grammar-v1 determinacy shape pressure
+        run: cabal exec -- runghc -Wall -Werror -isrc test/Phase1GrammarV1DeterminacyMain.hs
 
-      - name: Check surface production corpus integrity
-        run: python3 scripts/check_phase1_surface_corpus.py
+      - name: Check Grammar-v1 variant determinacy pressure
+        run: cabal exec -- runghc -Wall -Werror -isrc test/Phase1GrammarV1DeterminacyVariantMain.hs
 
       - name: Check manifest-driven Grammar-v1 corpus
         run: |
