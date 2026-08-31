@@ -1,8 +1,9 @@
 #!/usr/bin/env python3
-"""Validate the declarative Phase 1 surface parser production corpus."""
+"""Validate and expose the declarative Phase 1 surface parser corpus."""
 
 from __future__ import annotations
 
+import argparse
 import json
 from pathlib import Path
 
@@ -15,7 +16,7 @@ def fail(message: str) -> None:
     raise SystemExit(message)
 
 
-def main() -> None:
+def validate_manifest() -> list[dict[str, object]]:
     data = json.loads(MANIFEST.read_text(encoding="utf-8"))
     if data.get("authority") != "grammar/phase1-surface.ebnf":
         fail("corpus authority must remain grammar/phase1-surface.ebnf")
@@ -33,6 +34,8 @@ def main() -> None:
     allowed_expectations = {"parse", "reject-syntax"}
 
     for fixture in fixtures:
+        if not isinstance(fixture, dict):
+            fail("every fixture must be a JSON object")
         fixture_id = fixture.get("id")
         path_text = fixture.get("path")
         expectation = fixture.get("expect")
@@ -40,12 +43,16 @@ def main() -> None:
 
         if not isinstance(fixture_id, str) or not fixture_id:
             fail("every fixture must have a non-empty string id")
+        if any(separator in fixture_id for separator in ("\t", "\n", "\r")):
+            fail(f"{fixture_id!r}: fixture id must be one-line TSV-safe text")
         if fixture_id in seen_ids:
             fail(f"duplicate fixture id: {fixture_id}")
         seen_ids.add(fixture_id)
 
         if not isinstance(path_text, str) or not path_text.endswith(".phil"):
             fail(f"{fixture_id}: path must name a .phil file")
+        if any(separator in path_text for separator in ("\t", "\n", "\r")):
+            fail(f"{fixture_id}: path must be one-line TSV-safe text")
         if path_text in seen_paths:
             fail(f"duplicate fixture path: {path_text}")
         seen_paths.add(path_text)
@@ -82,7 +89,28 @@ def main() -> None:
         stale = sorted(seen_paths - disk_paths)
         fail(f"manifest/file mismatch: unlisted={missing}, missing={stale}")
 
-    print(f"Phase 1 surface corpus: {len(fixtures)} fixtures, manifest integral")
+    return fixtures
+
+
+def emit_parser_cases(fixtures: list[dict[str, object]]) -> None:
+    for fixture in fixtures:
+        print(f"{fixture['id']}\t{fixture['path']}\t{fixture['expect']}")
+
+
+def main() -> None:
+    parser = argparse.ArgumentParser()
+    parser.add_argument(
+        "--emit-parser-cases",
+        action="store_true",
+        help="emit validated fixture id/path/expectation rows as TSV for the Haskell parser harness",
+    )
+    args = parser.parse_args()
+
+    fixtures = validate_manifest()
+    if args.emit_parser_cases:
+        emit_parser_cases(fixtures)
+    else:
+        print(f"Phase 1 surface corpus: {len(fixtures)} fixtures, manifest integral")
 
 
 if __name__ == "__main__":
