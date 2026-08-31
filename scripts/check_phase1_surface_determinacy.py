@@ -32,6 +32,7 @@ GRAMMAR = ROOT / "grammar" / "phase1-surface.ebnf"
 INVENTORY = ROOT / "grammar" / "phase1-surface-determinacy.json"
 EOF = "<EOF>"
 EPSILON = "<epsilon>"
+FINDING_FIELDS = ("kind", "rule", "path", "tokens", "detail")
 
 
 def atom_key(node: Node) -> str | None:
@@ -56,7 +57,11 @@ def nullable(node: Node, nullable_rules: dict[str, bool]) -> bool:
     raise TypeError(node)
 
 
-def first(node: Node, first_rules: dict[str, set[str]], nullable_rules: dict[str, bool]) -> set[str]:
+def first(
+    node: Node,
+    first_rules: dict[str, set[str]],
+    nullable_rules: dict[str, bool],
+) -> set[str]:
     atom = atom_key(node)
     if atom is not None:
         return {atom}
@@ -79,7 +84,9 @@ def first(node: Node, first_rules: dict[str, set[str]], nullable_rules: dict[str
     raise TypeError(node)
 
 
-def derive_nullable_first(rules: list[tuple[str, Node]]) -> tuple[dict[str, bool], dict[str, set[str]]]:
+def derive_nullable_first(
+    rules: list[tuple[str, Node]],
+) -> tuple[dict[str, bool], dict[str, set[str]]]:
     nullable_rules = {name: False for name, _ in rules}
     first_rules = {name: set() for name, _ in rules}
 
@@ -320,14 +327,66 @@ def findings(rules: list[tuple[str, Node]]) -> list[Finding]:
     return sorted(out)
 
 
+def finding_projection(entry: object) -> dict[str, object]:
+    if not isinstance(entry, dict):
+        raise ValueError("every determinacy overlap must be a JSON object")
+    missing = [field for field in FINDING_FIELDS if field not in entry]
+    if missing:
+        raise ValueError(f"determinacy overlap missing finding fields: {missing}")
+    return {field: entry[field] for field in FINDING_FIELDS}
+
+
+def validate_reviewed_entries(entries: object) -> list[dict[str, object]]:
+    if not isinstance(entries, list):
+        raise ValueError("reviewed_overlaps must be a JSON list")
+    projected: list[dict[str, object]] = []
+    for index, entry in enumerate(entries):
+        finding = finding_projection(entry)
+        disposition = entry.get("disposition") if isinstance(entry, dict) else None
+        pressure = entry.get("pressure") if isinstance(entry, dict) else None
+        if not isinstance(disposition, str) or not disposition.strip():
+            raise ValueError(f"reviewed overlap {index} needs a nonempty disposition")
+        if (
+            not isinstance(pressure, list)
+            or not pressure
+            or not all(isinstance(value, str) and value.strip() for value in pressure)
+        ):
+            raise ValueError(f"reviewed overlap {index} needs nonempty parser-pressure references")
+        projected.append(finding)
+    return projected
+
+
+def review_template(digest: str, actual: list[dict[str, object]]) -> dict[str, object]:
+    return {
+        "authority": "grammar/phase1-surface.ebnf",
+        "grammar_sha256": digest,
+        "reviewed_overlaps": [
+            {
+                **finding,
+                "disposition": "REVIEW REQUIRED",
+                "pressure": [],
+            }
+            for finding in actual
+        ],
+    }
+
+
 def main() -> int:
     source_text, rules = load(GRAMMAR)
     digest = hashlib.sha256(source_text.encode("utf-8")).hexdigest()
     actual = [finding.as_json() for finding in findings(rules)]
     inventory = json.loads(INVENTORY.read_text(encoding="utf-8"))
 
+    try:
+        if inventory.get("authority") != "grammar/phase1-surface.ebnf":
+            raise ValueError("determinacy inventory authority must remain grammar/phase1-surface.ebnf")
+        expected = validate_reviewed_entries(inventory.get("reviewed_overlaps"))
+    except ValueError as error:
+        print(f"Phase 1 surface determinacy inventory error: {error}")
+        print(json.dumps(review_template(digest, actual), ensure_ascii=False, indent=2, sort_keys=True))
+        return 1
+
     expected_digest = inventory.get("grammar_sha256")
-    expected = inventory.get("reviewed_overlaps")
     if expected_digest == digest and expected == actual:
         print(
             f"Phase 1 surface determinacy: {len(actual)} reviewed local overlap(s), inventory exact"
@@ -335,19 +394,8 @@ def main() -> int:
         return 0
 
     print("Phase 1 surface determinacy inventory drift.")
-    print("Replace grammar/phase1-surface-determinacy.json only after reviewing every overlap:")
-    print(
-        json.dumps(
-            {
-                "authority": "grammar/phase1-surface.ebnf",
-                "grammar_sha256": digest,
-                "reviewed_overlaps": actual,
-            },
-            ensure_ascii=False,
-            indent=2,
-            sort_keys=True,
-        )
-    )
+    print("Review every overlap, then replace grammar/phase1-surface-determinacy.json with:")
+    print(json.dumps(review_template(digest, actual), ensure_ascii=False, indent=2, sort_keys=True))
     return 1
 
 
