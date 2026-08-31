@@ -6,6 +6,7 @@ module Phil.Core.DataOperationContract
   , permitsOperation
   ) where
 
+import qualified DataIdentityKernel as Kernel
 import Data.Set (Set)
 import qualified Data.Set as Set
 
@@ -33,4 +34,6 @@ grantOperation operation (OperationContract operations) =
 
 permitsOperation :: OperationContract -> DataOperation -> Bool
 permitsOperation (OperationContract operations) operation =
-  Set.member operation operations
+  case Kernel.decideDataOperationByFact (Set.member operation operations) of
+    Kernel.DataOperationAccepted -> True
+    Kernel.DataOperationRejected -> False
