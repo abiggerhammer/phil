@@ -52,6 +52,7 @@ import Phil.Core.Syntax
   , Session (..)
   , Ty
   )
+import qualified ProtocolProjectionKernel as ProjectionKernel
 
 -- | A protocol-family message position is either concrete or supplied by one
 -- exact generic static parameter at instantiation time. Bare concrete messages
@@ -178,36 +179,57 @@ projectProtocolRole
   :: BinaryProtocolInstance
   -> ProtocolRoleKey
   -> Either ProtocolFamilyError ProtocolProjectionEvidence
-projectProtocolRole instanceValue role = do
-  session <- maybe
-    (Left (UnknownProtocolProjectionRole role (Map.keys (protocolInstanceRoleSessions instanceValue))))
-    Right
-    (Map.lookup role (protocolInstanceRoleSessions instanceValue))
-  Right ProtocolProjectionEvidence
-    { protocolProjectionInstance = binaryProtocolInstanceRevision instanceValue
-    , protocolProjectionRole = role
-    , protocolProjectionSession = session
-    }
+projectProtocolRole instanceValue role =
+  case ProjectionKernel.decideDeclaredProjectionRoleByFact roleDeclared of
+    ProjectionKernel.DeclaredProjectionRoleAccepted ->
+      case selectedSession of
+        Just session ->
+          case ProjectionKernel.planProtocolProjection
+            (binaryProtocolInstanceRevision instanceValue)
+            role
+            session of
+            ProjectionKernel.MkProtocolProjectionPlan
+              instanceRevision roleKey localSession -> Right ProtocolProjectionEvidence
+                { protocolProjectionInstance = instanceRevision
+                , protocolProjectionRole = roleKey
+                , protocolProjectionSession = localSession
+                }
+        Nothing -> unknownRole
+    ProjectionKernel.UndeclaredProjectionRoleRejected -> unknownRole
+  where
+    selectedSession = Map.lookup role (protocolInstanceRoleSessions instanceValue)
+    roleDeclared = maybe False (const True) selectedSession
+    unknownRole = Left
+      (UnknownProtocolProjectionRole role (Map.keys (protocolInstanceRoleSessions instanceValue)))
 
 verifyProtocolProjection
   :: BinaryProtocolInstance
   -> ProtocolProjectionEvidence
   -> Either ProtocolFamilyError ()
 verifyProtocolProjection instanceValue evidence = do
-  requireEqual
-    ProtocolProjectionInstanceMismatch
-    (binaryProtocolInstanceRevision instanceValue)
-    (protocolProjectionInstance evidence)
+  let expectedInstance = binaryProtocolInstanceRevision instanceValue
+      actualInstance = protocolProjectionInstance evidence
+  case ProjectionKernel.decideProjectionInstanceByFact
+      (expectedInstance == actualInstance) of
+    ProjectionKernel.ProjectionInstanceAccepted -> Right ()
+    ProjectionKernel.ProjectionInstanceMismatchDecision ->
+      Left (ProtocolProjectionInstanceMismatch expectedInstance actualInstance)
   expectedSession <- maybe
     (Left (UnknownProtocolProjectionRole
       (protocolProjectionRole evidence)
       (Map.keys (protocolInstanceRoleSessions instanceValue))))
     Right
     (Map.lookup (protocolProjectionRole evidence) (protocolInstanceRoleSessions instanceValue))
-  requireEqual
-    (ProtocolProjectionSessionMismatch (protocolProjectionRole evidence))
-    expectedSession
-    (protocolProjectionSession evidence)
+  let actualSession = protocolProjectionSession evidence
+  case ProjectionKernel.decideProjectionSessionByFact
+      (expectedSession == actualSession) of
+    ProjectionKernel.ProjectionSessionAccepted -> Right ()
+    ProjectionKernel.ProjectionSessionMismatchDecision ->
+      Left
+        (ProtocolProjectionSessionMismatch
+          (protocolProjectionRole evidence)
+          expectedSession
+          actualSession)
 
 validateRoles :: BinaryProtocolFamily -> Either ProtocolFamilyError ()
 validateRoles family
@@ -364,11 +386,6 @@ deriveProtocolInstanceRevision :: GenericApplicationIdentity -> ProtocolInstance
 deriveProtocolInstanceRevision applicationIdentity = ProtocolInstanceRevision
   ("phil.protocol.instance.canonical.v1:"
     <> canonicalSemanticForm (genericApplicationSemanticForm applicationIdentity))
-
-requireEqual :: Eq a => (a -> a -> e) -> a -> a -> Either e ()
-requireEqual constructor expected actual
-  | expected == actual = Right ()
-  | otherwise = Left (constructor expected actual)
 
 mapLeft :: (a -> b) -> Either a c -> Either b c
 mapLeft f = either (Left . f) Right
