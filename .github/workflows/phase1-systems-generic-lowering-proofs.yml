@@ -1,0 +1,120 @@
+name: Phase 1 Generic Systems Lowering Proofs
+
+on:
+  pull_request:
+    paths:
+      - 'proof/Phil/Core/ArchitectureIdentity.v'
+      - 'proof/Phil/Core/ArchitectureInstantiation.v'
+      - 'proof/Phil/Core/ProviderReplacementQualification.v'
+      - 'proof/Phil/Core/ArchitectureRealization.v'
+      - 'proof/Phil/Systems/FactDisposition.v'
+      - 'proof/Phil/Assurance/ValidityScope.v'
+      - 'proof/Phil/Core/SystemsStageClosure.v'
+      - 'proof/Phil/Core/SystemsGenericLowering.v'
+      - 'src/Phil/Systems/GenericLowering.hs'
+      - 'src/Phil/Examples/Phase1/SystemsWitnesses.hs'
+      - 'test/Phase1GenericSystemsLoweringMain.hs'
+      - 'test/Phase1GenericSystemsStageMain.hs'
+      - 'docs/phase-1/systems-generic-lowering-proof-v1.md'
+      - '.github/workflows/phase1-systems-generic-lowering-proofs.yml'
+  push:
+    branches: [main]
+    paths:
+      - 'proof/Phil/Core/ArchitectureIdentity.v'
+      - 'proof/Phil/Core/ArchitectureInstantiation.v'
+      - 'proof/Phil/Core/ProviderReplacementQualification.v'
+      - 'proof/Phil/Core/ArchitectureRealization.v'
+      - 'proof/Phil/Systems/FactDisposition.v'
+      - 'proof/Phil/Assurance/ValidityScope.v'
+      - 'proof/Phil/Core/SystemsStageClosure.v'
+      - 'proof/Phil/Core/SystemsGenericLowering.v'
+      - 'src/Phil/Systems/GenericLowering.hs'
+      - 'src/Phil/Examples/Phase1/SystemsWitnesses.hs'
+      - 'test/Phase1GenericSystemsLoweringMain.hs'
+      - 'test/Phase1GenericSystemsStageMain.hs'
+      - 'docs/phase-1/systems-generic-lowering-proof-v1.md'
+      - '.github/workflows/phase1-systems-generic-lowering-proofs.yml'
+
+permissions:
+  contents: read
+
+jobs:
+  rocq-generic-systems-lowering-proof:
+    runs-on: ubuntu-latest
+    container:
+      image: rocq/rocq-prover:9.2.0
+      options: --user root
+    steps:
+      - uses: actions/checkout@v4
+      - name: Compile certified predecessors and PHIL-SYS-GENERIC-001
+        shell: bash
+        run: |
+          set -euo pipefail
+          export PATH="/home/rocq/.opam/${COMPILER}/bin:$PATH"
+          rocq c -Q proof/Phil Phil proof/Phil/Core/ArchitectureIdentity.v
+          rocq c -Q proof/Phil Phil proof/Phil/Core/ArchitectureInstantiation.v
+          rocq c -Q proof/Phil Phil proof/Phil/Core/ProviderReplacementQualification.v
+          rocq c -Q proof/Phil Phil proof/Phil/Core/ArchitectureRealization.v
+          rocq c -Q proof/Phil Phil proof/Phil/Systems/FactDisposition.v
+          rocq c -Q proof/Phil Phil proof/Phil/Assurance/ValidityScope.v
+          rocq c -Q proof/Phil Phil proof/Phil/Core/SystemsStageClosure.v
+          rocq c -Q proof/Phil Phil proof/Phil/Core/SystemsGenericLowering.v
+      - name: Record proof identities
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p systems-generic-lowering-proof
+          cp \
+            proof/Phil/Core/SystemsGenericLowering.v \
+            proof/Phil/Core/SystemsGenericLowering.vo \
+            systems-generic-lowering-proof/
+          sha256sum \
+            proof/Phil/Core/ArchitectureRealization.v \
+            proof/Phil/Core/SystemsStageClosure.v \
+            proof/Phil/Core/SystemsGenericLowering.v \
+            proof/Phil/Core/SystemsGenericLowering.vo \
+            > systems-generic-lowering-proof/PHIL-SYS-GENERIC-001.proof.sha256
+          {
+            echo 'obligation=PHIL-SYS-GENERIC-001'
+            echo 'evidence=Rocq-9.2.0'
+            cat systems-generic-lowering-proof/PHIL-SYS-GENERIC-001.proof.sha256
+          } > systems-generic-lowering-proof/PHIL-SYS-GENERIC-001.proof-certificate.txt
+          cat systems-generic-lowering-proof/PHIL-SYS-GENERIC-001.proof-certificate.txt
+      - uses: actions/upload-artifact@v4
+        with:
+          name: rocq-generic-systems-lowering-proof
+          path: systems-generic-lowering-proof
+          if-no-files-found: error
+
+  verify-generic-systems-lowering-correspondence:
+    needs: rocq-generic-systems-lowering-proof
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: haskell-actions/setup@v2
+        with:
+          ghc-version: '9.6.7'
+          cabal-version: 'latest'
+      - name: Build ordinary regression substrate
+        run: cabal build all --enable-tests
+      - name: Strict typecheck unchanged generic producer and witness adapters
+        run: |
+          set -euo pipefail
+          cabal exec -- ghc -isrc -Wall -Werror -fno-code \
+            src/Phil/Systems/GenericLowering.hs
+          cabal exec -- ghc -isrc -Wall -Werror -fno-code \
+            src/Phil/Examples/Phase1/SystemsWitnesses.hs
+      - name: Re-run unchanged SYS-GENERIC focused corpus
+        run: |
+          set -euo pipefail
+          cabal exec -- ghc -isrc -Wall -Werror \
+            test/Phase1GenericSystemsLoweringMain.hs \
+            -o phase1-generic-systems-lowering-proof-correspondence
+          ./phase1-generic-systems-lowering-proof-correspondence
+      - name: Re-run unchanged generic StageContract corpus
+        run: |
+          set -euo pipefail
+          cabal exec -- ghc -isrc -Wall -Werror -Wno-unused-imports \
+            test/Phase1GenericSystemsStageMain.hs \
+            -o phase1-generic-systems-stage-proof-correspondence
+          ./phase1-generic-systems-stage-proof-correspondence
