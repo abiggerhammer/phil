@@ -1,0 +1,4 @@
+module corpus.macro_decl;
+
+macro Expand {
+}

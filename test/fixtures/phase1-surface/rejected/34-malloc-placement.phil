@@ -1,0 +1,5 @@
+module corpus.malloc_placement;
+
+fn bad() satisfies U8 {
+  malloc U8 in heap
+}

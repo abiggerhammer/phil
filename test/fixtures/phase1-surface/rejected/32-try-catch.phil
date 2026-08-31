@@ -1,0 +1,5 @@
+module corpus.try_catch;
+
+fn bad() satisfies U8 {
+  try { 0 } catch { 1 }
+}

@@ -1,0 +1,5 @@
+module corpus.assignment;
+
+fn bad(x : U8) satisfies U8 {
+  x = 1
+}

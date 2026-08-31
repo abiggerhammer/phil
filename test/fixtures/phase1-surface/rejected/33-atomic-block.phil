@@ -1,0 +1,5 @@
+module corpus.atomic_block;
+
+fn bad() satisfies U8 {
+  atomic { 0 }
+}

@@ -1,0 +1,5 @@
+module corpus.unsafe_block;
+
+fn bad() satisfies U8 {
+  unsafe { 0 }
+}

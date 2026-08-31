@@ -1,0 +1,5 @@
+module corpus.spawn_block;
+
+fn bad() satisfies U8 {
+  spawn { 0 }
+}

@@ -1,0 +1,5 @@
+module corpus.unchecked_block;
+
+fn bad() satisfies U8 {
+  unchecked { 0 }
+}

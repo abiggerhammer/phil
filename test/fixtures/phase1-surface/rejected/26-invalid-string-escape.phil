@@ -1,0 +1,6 @@
+module corpus.invalid_escape;
+
+@key("bad\q")
+record BadEscape {
+  value : U8
+}
