@@ -3,6 +3,7 @@ module Phil.Surface.GrammarV1.Elaborate
   , grammarV1GenericRequirementCompetence
   , grammarV1GenericKindCategory
   , grammarV1BareStaticReferenceActual
+  , grammarV1StructuralMode
   ) where
 
 import qualified Data.Text as Text
@@ -15,12 +16,14 @@ import Phil.Core.Generic.StaticActual
   ( GenericStaticActual (..)
   , GenericStaticKind (..)
   )
+import Phil.Core.Syntax (Mode (..))
 import Phil.Surface.GrammarV1.Parser
   ( GrammarV1GenericKind (..)
   , GrammarV1GenericRequirement (..)
   , GrammarV1QualifiedName (..)
   , GrammarV1StaticArgument (..)
   , GrammarV1StaticReference (..)
+  , GrammarV1StructuralMode (..)
   )
 
 -- | Preserve the source-selected generic requirement category exactly.
@@ -81,3 +84,13 @@ grammarV1BareStaticReferenceActual argument = case argument of
           [] -> Nothing
           parts -> Just (ReferencedGenericStaticActual (Text.intercalate (Text.singleton '.') parts))
   _ -> Nothing
+
+-- | Preserve an explicit source structural-mode choice exactly. Omission is
+-- represented by the declaration's surrounding Maybe and must remain omitted
+-- until the competent data/capability/closure mode checker derives or validates
+-- the semantic mode; this mapping never invents a default.
+grammarV1StructuralMode :: GrammarV1StructuralMode -> Mode
+grammarV1StructuralMode sourceMode = case sourceMode of
+  GrammarV1Unrestricted -> Unrestricted
+  GrammarV1Affine -> Affine
+  GrammarV1Linear -> Linear
