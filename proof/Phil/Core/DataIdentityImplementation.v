@@ -47,8 +47,8 @@ Proof.
   intros left right reflected Hreflect.
   destruct reflected.
   - split.
-    + intro _. apply Hreflect. reflexivity.
-    + intro _. reflexivity.
+    + intro Haccepted. apply Hreflect. reflexivity.
+    + intro Hequal. reflexivity.
   - split.
     + intro H. discriminate.
     + intro Hequal.
@@ -74,8 +74,8 @@ Proof.
   intros contract operation reflected Hreflect.
   destruct reflected.
   - split.
-    + intro _. apply Hreflect. reflexivity.
-    + intro _. reflexivity.
+    + intro Haccepted. apply Hreflect. reflexivity.
+    + intro Hpermit. reflexivity.
   - split.
     + intro H. discriminate.
     + intro Hpermit.
