@@ -1,306 +1,141 @@
 {
   "authority": "grammar/phase1-surface.ebnf",
-  "grammar_sha256": "05098cf83f54cdb1382abd5d6dd20264ccd075b4cabc9b76e5fea31c232c7b6e",
+  "grammar_sha256": "1bc73beb296475f96d739181c0a7609eaf53a61362b2aa0cf7bd7184d06e67ac",
   "reviewed_overlaps": [
     {
       "kind": "alternative-first-overlap",
       "rule": "declaration",
       "path": "declaration",
-      "tokens": [
-        "literal:\"provider\""
-      ],
+      "tokens": ["literal:\"provider\""],
       "detail": "branches 6 and 7",
       "disposition": "Shared provider prefix is resolved by the next reserved token: 'implementation' cannot be an identifier, so provider implementation and ordinary provider contract forms cannot both succeed on the same token stream.",
-      "pressure": [
-        "test/Phase1GrammarV1ProviderDeclarationsMain.hs",
-        "test/Phase1GrammarV1DeterminacyMain.hs"
-      ]
+      "pressure": ["test/Phase1GrammarV1ProviderDeclarationsMain.hs", "test/Phase1GrammarV1DeterminacyMain.hs"]
     },
     {
       "kind": "alternative-first-overlap",
       "rule": "generic_requirement",
       "path": "generic_requirement",
-      "tokens": [
-        "literal:\"boundary\""
-      ],
+      "tokens": ["literal:\"boundary\""],
       "detail": "branches 4 and 8",
       "disposition": "After 'boundary', reserved 'representation' commits the boundary-representation requirement; the ordinary boundary requirement requires an identifier followed by ':'. Lexical keyword priority prevents reinterpretation.",
-      "pressure": [
-        "test/Phase1GrammarV1StructuralParserMain.hs"
-      ]
-    },
-    {
-      "kind": "alternative-first-overlap",
-      "rule": "nonname_primary_expression",
-      "path": "nonname_primary_expression",
-      "tokens": [
-        "literal:\"(\""
-      ],
-      "detail": "branches 26 and 27",
-      "disposition": "Parenthesized and tuple expressions share '('. After the first expression, comma commits a tuple while ')' commits grouping; a tuple requires at least two elements.",
-      "pressure": [
-        "test/Phase1GrammarV1ProductFunctionMain.hs",
-        "test/Phase1GrammarV1DeterminacyMain.hs"
-      ]
+      "pressure": ["test/Phase1GrammarV1StructuralParserMain.hs"]
     },
     {
       "kind": "alternative-first-overlap",
       "rule": "pattern",
       "path": "pattern",
-      "tokens": [
-        "class:<IDENTIFIER>"
-      ],
+      "tokens": ["class:<IDENTIFIER>"],
       "detail": "branches 0 and 2",
       "disposition": "A maximal qualified name followed by '{' commits record_pattern; otherwise only a single identifier may close as the ordinary identifier pattern.",
-      "pressure": [
-        "test/Phase1GrammarV1ProductFunctionMain.hs"
-      ]
+      "pressure": ["test/Phase1GrammarV1ProductFunctionMain.hs"]
+    },
+    {
+      "kind": "alternative-first-overlap",
+      "rule": "primary_expression",
+      "path": "primary_expression",
+      "tokens": ["literal:\"(\""],
+      "detail": "branches 0 and 1",
+      "disposition": "Parenthesized and tuple expressions share '('. After the first expression, comma commits a tuple while ')' commits grouping; a tuple requires at least two elements.",
+      "pressure": ["test/Phase1GrammarV1ProductFunctionMain.hs", "test/Phase1GrammarV1DeterminacyMain.hs"]
     },
     {
       "kind": "alternative-first-overlap",
       "rule": "proposition_atom",
       "path": "proposition_atom",
-      "tokens": [
-        "class:<IDENTIFIER>"
-      ],
+      "tokens": ["class:<IDENTIFIER>"],
       "detail": "branches 0 and 4",
       "disposition": "A name-shaped additive expression is a relation only when an explicit relation operator follows its complete left operand; otherwise the claim-application form is selected by its required argument list.",
-      "pressure": [
-        "test/Phase1GrammarV1OutcomeCalleeMain.hs",
-        "test/Phase1GrammarV1StructuralParserMain.hs"
-      ]
+      "pressure": ["test/Phase1GrammarV1OutcomeCalleeMain.hs", "test/Phase1GrammarV1StructuralParserMain.hs"]
     },
     {
       "kind": "alternative-first-overlap",
       "rule": "proposition_atom",
       "path": "proposition_atom",
-      "tokens": [
-        "literal:\"(\""
-      ],
+      "tokens": ["literal:\"(\""],
       "detail": "branches 0 and 1",
       "disposition": "A following relation operator after the balanced left additive operand commits relation_proposition; otherwise balanced parenthesized proposition syntax closes the atom.",
-      "pressure": [
-        "test/Phase1GrammarV1StructuralParserMain.hs",
-        "test/Phase1GrammarV1DeterminacyMain.hs"
-      ]
+      "pressure": ["test/Phase1GrammarV1StructuralParserMain.hs", "test/Phase1GrammarV1DeterminacyMain.hs"]
     },
     {
       "kind": "alternative-first-overlap",
       "rule": "proposition_atom",
       "path": "proposition_atom",
-      "tokens": [
-        "literal:\"false\""
-      ],
+      "tokens": ["literal:\"false\""],
       "detail": "branches 0 and 3",
       "disposition": "Bare 'false' is the literal proposition only when no relation operator follows; with a relation operator it is the complete left additive operand of relation_proposition.",
-      "pressure": [
-        "test/Phase1GrammarV1StructuralParserMain.hs"
-      ]
+      "pressure": ["test/Phase1GrammarV1StructuralParserMain.hs"]
     },
     {
       "kind": "alternative-first-overlap",
       "rule": "proposition_atom",
       "path": "proposition_atom",
-      "tokens": [
-        "literal:\"true\""
-      ],
+      "tokens": ["literal:\"true\""],
       "detail": "branches 0 and 2",
       "disposition": "Bare 'true' is the literal proposition only when no relation operator follows; with a relation operator it is the complete left additive operand of relation_proposition.",
-      "pressure": [
-        "test/Phase1GrammarV1StructuralParserMain.hs"
-      ]
+      "pressure": ["test/Phase1GrammarV1StructuralParserMain.hs"]
     },
     {
       "kind": "alternative-first-overlap",
       "rule": "static_argument",
       "path": "static_argument",
-      "tokens": [
-        "literal:\"(\""
-      ],
+      "tokens": ["literal:\"(\""],
       "detail": "branches 0 and 2",
       "disposition": "A parenthesized static value closes at ')' after one static expression; a tuple type is committed by the comma following its first type element.",
-      "pressure": [
-        "test/Phase1GrammarV1StaticValueTypesMain.hs",
-        "test/Phase1GrammarV1DeterminacyMain.hs"
-      ]
+      "pressure": ["test/Phase1GrammarV1StaticValueTypesMain.hs", "test/Phase1GrammarV1DeterminacyMain.hs"]
     },
     {
       "kind": "alternative-first-overlap",
       "rule": "static_argument",
       "path": "static_argument",
-      "tokens": [
-        "literal:\"{\""
-      ],
+      "tokens": ["literal:\"{\""],
       "detail": "branches 0 and 3",
       "disposition": "Brace-led refinement types require ':' after their initial identifier, while effect-set literals use effect expressions; the first required structural separator commits the category.",
-      "pressure": [
-        "test/Phase1GrammarV1StaticValueTypesMain.hs",
-        "test/Phase1GrammarV1DeterminacyMain.hs"
-      ]
-    },
-    {
-      "kind": "repeat-follow-overlap",
-      "rule": "additive_expression",
-      "path": "additive_expression/seq[1]",
-      "tokens": [
-        "literal:\"+\"",
-        "literal:\"-\""
-      ],
-      "detail": "another repetition can begin with a token that can also follow the repetition",
-      "disposition": "Residual recursive-tail warning. Retained as an explicit review site until the repaired keyword-tail grammar and parser pressure establish that '+'/'-' cannot select between an inner and enclosing additive expression.",
-      "pressure": [
-        "test/Phase1GrammarV1ProductFunctionMain.hs",
-        "test/Phase1GrammarV1DeterminacyMain.hs"
-      ]
+      "pressure": ["test/Phase1GrammarV1StaticValueTypesMain.hs", "test/Phase1GrammarV1DeterminacyMain.hs"]
     },
     {
       "kind": "repeat-follow-overlap",
       "rule": "case_pattern",
       "path": "case_pattern/seq[1]/optional/alt[1]/seq[1]/optional/seq[1]",
-      "tokens": [
-        "literal:\",\""
-      ],
+      "tokens": ["literal:\",\""],
       "detail": "another repetition can begin with a token that can also follow the repetition",
       "disposition": "Inside a record case binder, comma followed by another binder continues the list; comma followed by '}' is the admitted trailing comma. The following token uniquely decides.",
-      "pressure": [
-        "test/Phase1GrammarV1OfferCaseMain.hs"
-      ]
+      "pressure": ["test/Phase1GrammarV1OfferCaseMain.hs"]
     },
     {
       "kind": "repeat-follow-overlap",
       "rule": "construct_expression",
       "path": "construct_expression/seq[3]/optional/seq[1]",
-      "tokens": [
-        "literal:\",\""
-      ],
+      "tokens": ["literal:\",\""],
       "detail": "another repetition can begin with a token that can also follow the repetition",
       "disposition": "Inside construct fields, comma followed by an identifier assignment continues the list; comma followed by '}' is the admitted trailing comma.",
-      "pressure": [
-        "test/Phase1GrammarV1OfferCaseMain.hs"
-      ]
-    },
-    {
-      "kind": "repeat-follow-overlap",
-      "rule": "multiplicative_expression",
-      "path": "multiplicative_expression/seq[1]",
-      "tokens": [
-        "literal:\"*\""
-      ],
-      "detail": "another repetition can begin with a token that can also follow the repetition",
-      "disposition": "Residual recursive-tail warning. Retained until repaired keyword-tail syntax and exact parser shape demonstrate that '*' cannot choose between an inner and enclosing multiplicative expression.",
-      "pressure": [
-        "test/Phase1GrammarV1ProductFunctionMain.hs",
-        "test/Phase1GrammarV1DeterminacyMain.hs"
-      ]
-    },
-    {
-      "kind": "repeat-follow-overlap",
-      "rule": "named_postfix_expression",
-      "path": "named_postfix_expression/seq[2]/optional/seq[1]",
-      "tokens": [
-        "literal:\".\""
-      ],
-      "detail": "another repetition can begin with a token that can also follow the repetition",
-      "disposition": "A projection suffix in named_postfix_expression is admitted only after an explicit term-argument list; a bare dotted identifier sequence remains the qualified_name. This site is retained for exact-shape pressure while the parser is updated to the repaired factorization.",
-      "pressure": [
-        "test/Phase1GrammarV1DeterminacyMain.hs",
-        "test/Phase1GrammarV1ProductFunctionMain.hs"
-      ]
-    },
-    {
-      "kind": "repeat-follow-overlap",
-      "rule": "postfix_expression",
-      "path": "postfix_expression/alt[1]/seq[1]",
-      "tokens": [
-        "literal:\".\""
-      ],
-      "detail": "another repetition can begin with a token that can also follow the repetition",
-      "disposition": "For non-name primaries, '.field' is an explicit postfix projection suffix. Bare names are handled by named_postfix_expression, so this repetition does not compete with qualified-name growth.",
-      "pressure": [
-        "test/Phase1GrammarV1DeterminacyMain.hs",
-        "test/Phase1GrammarV1ProductFunctionMain.hs"
-      ]
-    },
-    {
-      "kind": "repeat-follow-overlap",
-      "rule": "proposition_and",
-      "path": "proposition_and/seq[1]",
-      "tokens": [
-        "literal:\"and\""
-      ],
-      "detail": "another repetition can begin with a token that can also follow the repetition",
-      "disposition": "The proposition grammar's 'and' repetition encodes precedence directly; parentheses are the explicit delimiter for an earlier close. Retained as a review site for language-wide proof rather than treated as parser-order authority.",
-      "pressure": [
-        "test/Phase1GrammarV1StructuralParserMain.hs"
-      ]
-    },
-    {
-      "kind": "repeat-follow-overlap",
-      "rule": "proposition_or",
-      "path": "proposition_or/seq[1]",
-      "tokens": [
-        "literal:\"or\""
-      ],
-      "detail": "another repetition can begin with a token that can also follow the repetition",
-      "disposition": "The proposition grammar's 'or' repetition encodes precedence directly. Term fallback is restricted to the distinct token pairs 'or fail' and 'or reject'.",
-      "pressure": [
-        "test/Phase1GrammarV1StructuralParserMain.hs",
-        "test/Phase1GrammarV1ProductFunctionMain.hs"
-      ]
-    },
-    {
-      "kind": "repeat-follow-overlap",
-      "rule": "qualified_name",
-      "path": "qualified_name/seq[1]",
-      "tokens": [
-        "literal:\".\""
-      ],
-      "detail": "another repetition can begin with a token that can also follow the repetition",
-      "disposition": "qualified_name consumes its dotted identifier chain. The repaired term/static postfix grammar no longer permits projection directly from a bare name, so '.identifier' on a bare name has only the qualified-name interpretation.",
-      "pressure": [
-        "test/Phase1GrammarV1DeterminacyMain.hs",
-        "test/Phase1GrammarV1ProductFunctionMain.hs"
-      ]
+      "pressure": ["test/Phase1GrammarV1OfferCaseMain.hs"]
     },
     {
       "kind": "repeat-follow-overlap",
       "rule": "record_decl",
       "path": "record_decl/seq[6]/optional/seq[1]",
-      "tokens": [
-        "literal:\",\""
-      ],
+      "tokens": ["literal:\",\""],
       "detail": "another repetition can begin with a token that can also follow the repetition",
       "disposition": "In record fields, comma followed by another field continues the repetition; comma followed by '}' is the admitted trailing comma.",
-      "pressure": [
-        "test/Phase1GrammarV1StructuralParserMain.hs",
-        "test/Phase1GrammarV1CorpusMain.hs"
-      ]
+      "pressure": ["test/Phase1GrammarV1StructuralParserMain.hs", "test/Phase1GrammarV1CorpusMain.hs"]
     },
     {
       "kind": "repeat-follow-overlap",
       "rule": "record_pattern",
       "path": "record_pattern/seq[3]",
-      "tokens": [
-        "literal:\",\""
-      ],
+      "tokens": ["literal:\",\""],
       "detail": "another repetition can begin with a token that can also follow the repetition",
       "disposition": "In record patterns, comma followed by another field pattern continues the repetition; comma followed by '}' is the admitted trailing comma.",
-      "pressure": [
-        "test/Phase1GrammarV1ProductFunctionMain.hs"
-      ]
+      "pressure": ["test/Phase1GrammarV1ProductFunctionMain.hs"]
     },
     {
       "kind": "repeat-follow-overlap",
       "rule": "variant_payload",
       "path": "variant_payload/alt[0]/seq[1]/optional/seq[1]",
-      "tokens": [
-        "literal:\",\""
-      ],
+      "tokens": ["literal:\",\""],
       "detail": "another repetition can begin with a token that can also follow the repetition",
       "disposition": "In record-style variant payloads, comma followed by another field continues the list; comma followed by '}' is the admitted trailing comma. Tuple-style payloads retain their separate no-trailing-comma rule.",
-      "pressure": [
-        "test/Phase1GrammarV1DeterminacyVariantMain.hs"
-      ]
+      "pressure": ["test/Phase1GrammarV1DeterminacyVariantMain.hs"]
     }
   ]
 }
