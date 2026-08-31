@@ -2,6 +2,8 @@ From Stdlib Require Import Bool.Bool.
 
 From Phil.Core Require Import ProtocolProgressionGuard.
 
+Set Implicit Arguments.
+
 (*
   PHIL-PROT-STEP-001 — representation-neutral implementation correspondence.
 
