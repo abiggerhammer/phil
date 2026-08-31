@@ -27,6 +27,7 @@ on:
       - 'test/Phase1GrammarV1StaticValueTypesMain.hs'
       - 'test/Phase1GrammarV1SessionExpressionsMain.hs'
       - 'test/Phase1GrammarV1DeterminacyMain.hs'
+      - 'test/Phase1GrammarV1DeterminacyVariantMain.hs'
       - 'test/Phase1GrammarV1CorpusMain.hs'
       - 'test/fixtures/phase1-surface/**'
       - 'docs/phase-1/surface-grammar-v1.md'
@@ -61,6 +62,7 @@ on:
       - 'test/Phase1GrammarV1StaticValueTypesMain.hs'
       - 'test/Phase1GrammarV1SessionExpressionsMain.hs'
       - 'test/Phase1GrammarV1DeterminacyMain.hs'
+      - 'test/Phase1GrammarV1DeterminacyVariantMain.hs'
       - 'test/Phase1GrammarV1CorpusMain.hs'
       - 'test/fixtures/phase1-surface/**'
       - 'docs/phase-1/surface-grammar-v1.md'
@@ -152,6 +154,9 @@ jobs:
 
       - name: Check Grammar-v1 determinacy shape pressure
         run: cabal exec -- runghc -Wall -Werror -isrc test/Phase1GrammarV1DeterminacyMain.hs
+
+      - name: Check Grammar-v1 variant determinacy pressure
+        run: cabal exec -- runghc -Wall -Werror -isrc test/Phase1GrammarV1DeterminacyVariantMain.hs
 
       - name: Check manifest-driven Grammar-v1 corpus
         run: |
