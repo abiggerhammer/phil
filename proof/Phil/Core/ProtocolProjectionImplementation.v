@@ -146,7 +146,7 @@ Proof.
 Qed.
 
 Theorem projection_instance_decision_sound_complete :
-  forall expected actual instanceMatches,
+  forall (expected actual : ProtocolInstanceRevision) instanceMatches,
     (instanceMatches = true <-> expected = actual) ->
     (decideProjectionInstanceByFact instanceMatches =
        ProjectionInstanceAccepted <-> expected = actual).
@@ -164,7 +164,7 @@ Proof.
 Qed.
 
 Theorem projection_session_decision_sound_complete :
-  forall expected actual sessionMatches,
+  forall (expected actual : Session) sessionMatches,
     (sessionMatches = true <-> expected = actual) ->
     (decideProjectionSessionByFact sessionMatches =
        ProjectionSessionAccepted <-> expected = actual).
