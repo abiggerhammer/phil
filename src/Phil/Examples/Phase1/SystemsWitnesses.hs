@@ -9,31 +9,31 @@ module Phil.Examples.Phase1.SystemsWitnesses
   ) where
 
 import qualified Data.Map.Strict as Map
-import Data.Map.Strict (Map)
 import qualified Data.Set as Set
 import Data.Set (Set)
 import Data.Text (Text)
-import Phil.Assurance.Types (Digest, RevisionId (..), digestText)
+import Phil.Assurance.Types (RevisionId (..))
 import Phil.Core.ProviderQualificationIdentity
   ( CheckedProviderQualificationAdmissionIdentity (..)
   , ProviderQualificationEvidenceIdentityInput (..)
   , QualificationAdmissionRevision (..)
   )
-import Phil.Core.Static (InstanceRevision (..), RealizationRevision (..))
+import Phil.Core.Static
 import Phil.Examples.Steve.ProviderQualifications
+import Phil.Systems.GenericLowering
 import Phil.Systems.IR
-import Phil.Systems.Phase0 (phase0SystemsArtifact)
-import Phil.Systems.Phase1Stage
+import Phil.Systems.Phase1Stage (Phase1StageBundle)
 
 uploadPhase1StageBundle :: Phase1StageBundle
-uploadPhase1StageBundle = accountArtifact
-  (InstanceRevision "phase1.upload.instance.v1")
-  (RealizationRevision "phase1.upload.realization.host.v1")
-  "phase1-stage-verifier.v1"
-  phase0SystemsArtifact
-  (Set.singleton "realization:upload.host.v1")
-  Set.empty
-  Set.empty
+uploadPhase1StageBundle =
+  case lowerWitness
+      (InstanceKey "instance.phase1.upload")
+      (DeclarationKey "decl.phase1.upload")
+      "Upload"
+      uploadCoreProgram
+      uploadRealizationContext of
+    Right bundle -> bundle
+    Left err -> error ("generic upload lowering failed: " <> err)
 
 stevePhase1StageBundle :: Either String Phase1StageBundle
 stevePhase1StageBundle = do
@@ -49,54 +49,348 @@ stevePhase1StageBundle = do
         [ qualificationEvidenceAssumptions digestArtifact
         , qualificationEvidenceAssumptions blobArtifact
         ]
-  pure (accountArtifact
-    (InstanceRevision "phase1.steve.instance.v1")
-    (RealizationRevision "phase1.steve.realization.host.v1")
-    "phase1-stage-verifier.v1"
-    steveSystemsArtifact
-    (Set.singleton "realization:steve.host.v1")
-    qualificationRefs
-    assumptions)
+      context = steveRealizationContext qualificationRefs assumptions
+  lowerWitness
+    (InstanceKey "instance.phase1.steve")
+    (DeclarationKey "decl.phase1.steve")
+    "Steve"
+    steveCoreProgram
+    context
 
--- | One witness-neutral accounting constructor.  It has no upload/Steve branch:
--- the caller supplies an artifact and the exact realization/qualification facts
--- that justify its target graph.
-accountArtifact
-  :: InstanceRevision
-  -> RealizationRevision
+-- | Witness adapters end at exact checked ArchitectureInstances. The generic
+-- producer receives only that identity, target-abstract checked Core execution,
+-- and an explicit realization context. It has no witness-name branch.
+lowerWitness
+  :: InstanceKey
+  -> DeclarationKey
   -> Text
-  -> SystemsArtifact
-  -> Set Text
-  -> Set Text
-  -> Set Text
-  -> Phase1StageBundle
-accountArtifact instanceRevision realizationRevision verifierProfile artifact realizationRefs qualificationRefs assumptions =
-  makePhase1StageBundle
-    instanceRevision
-    realizationRevision
-    verifierProfile
-    artifact
-    dispositions
-    justifications
+  -> CoreSystemsProgram
+  -> GenericRealizationContext
+  -> Either String Phase1StageBundle
+lowerWitness instanceKey declarationKey displayName program context = do
+  checked <- checkedProgramInstance instanceKey declarationKey displayName program
+  mapLeft show (lowerGenericSystems checked program context)
+
+checkedProgramInstance
+  :: InstanceKey
+  -> DeclarationKey
+  -> Text
+  -> CoreSystemsProgram
+  -> Either String CheckedArchitectureInstance
+checkedProgramInstance instanceKey declarationKey displayName program = do
+  graph <- mapLeft show (instantiateArchitecture instanceKey node)
+  maybe
+    (Left "witness ArchitectureInstance root missing after construction")
+    Right
+    (lookupArchitectureInstance instanceKey graph)
   where
-    facts = collectSourceFacts artifact
-    mechanisms = collectSystemsMechanisms artifact
-
-    -- SYS-001 establishes accounting completeness, not yet the finer SYS-002+
-    -- relation taxonomy. Each source responsibility is therefore related to the
-    -- exact witness Systems graph as a bounded realized relation.
-    disposition = case Set.null assumptions of
-      True -> Phase1FactRealized mechanisms
-      False -> Phase1FactAssumptionDependent assumptions (Phase1FactRealized mechanisms)
-    dispositions = Map.fromSet (const disposition) facts
-
-    justification = SystemsJustification
-      { systemsJustificationSourceFacts = facts
-      , systemsJustificationRealizationRefs = realizationRefs
-      , systemsJustificationQualificationRefs = qualificationRefs
-      , systemsJustificationAssumptionRefs = assumptions
+    declaration = deriveDeclarationIdentity DeclarationDescriptor
+      { declarationPresentation =
+          DeclarationPresentation displayName ["phase1", "witness"]
+      , declarationKey = declarationKey
+      , declarationInterfaceSemantics = SemanticRecord (Map.fromList
+          [ ("boundary", SemanticAtom "checked-core-to-systems")
+          , ("facts", SemanticUnordered
+              (Set.map SemanticAtom (coreProgramFacts program)))
+          ])
+      , declarationDefinitionSemantics = coreSystemsProgramSemanticForm program
       }
-    justifications = Map.fromSet (const justification) mechanisms
+    node = ArchitectureNodeSpec
+      { architectureNodeDeclaration = declaration
+      , architectureNodeStaticBindings = Map.empty
+      , architectureNodeRequirements = []
+      , architectureNodeChildren = []
+      , architectureNodeReferences = []
+      }
+
+uploadCoreProgram :: CoreSystemsProgram
+uploadCoreProgram = CoreSystemsProgram
+  { coreProgramLabel = "Upload"
+  , coreProgramProfile = CheckedRuntime
+  , coreProgramFunctions = Map.fromList
+      [ ("upload.client", uploadClientFunction)
+      , ("upload.server", uploadServerFunction)
+      ]
+  , coreProgramFacts = Set.fromList
+      [ "upload.protocol.exact-progression"
+      , "upload.payload.unique-owner"
+      , "upload.begin-policy-before-payload"
+      , "upload.digest-before-accept"
+      , "upload.failure-resource-closure"
+      ]
+  }
+
+uploadClientFunction :: CoreSystemsFunction
+uploadClientFunction = CoreSystemsFunction
+  { coreFunctionKey = "upload.client"
+  , coreFunctionEntry = "client.start"
+  , coreFunctionValues = Map.fromList
+      [ ("client.payload", CoreOwnedValue "upload.payload")
+      , ("client.payload-view", CoreBorrowedValue "client.payload")
+      , ("client.versions", CoreInputValue "SupportedVersions")
+      , ("client.digest", CoreInputValue "Digest")
+      , ("client.begin", CoreInputValue "Begin")
+      , ("client.session", CoreInputValue "UploadSession")
+      ]
+  , coreFunctionBlocks = blockMap
+      [ coreBlock "client.start"
+          [coreCall "upload.supported-versions" [] ["client.versions"]]
+          (coreChoice "upload.version-choice" ["client.versions"]
+            [ ("unsupported", "client.unsupported")
+            , ("version", "client.digest")
+            ])
+      , coreBlock "client.unsupported" [] (CoreSystemsEnd "failure")
+      , coreBlock "client.digest"
+          [coreCall "upload.digest" ["client.payload-view"] ["client.digest"]]
+          (coreChoice "upload.begin-policy" ["client.digest"]
+            [ ("reject", "client.reject")
+            , ("proceed", "client.cancel")
+            ])
+      , coreBlock "client.reject" [] (CoreSystemsEnd "failure")
+      , coreBlock "client.cancel" []
+          (coreChoice "upload.cancel-choice" []
+            [ ("cancel", "client.cancelled")
+            , ("payload", "client.send")
+            ])
+      , coreBlock "client.cancelled" [] (CoreSystemsEnd "cancelled")
+      , coreBlock "client.send"
+          [coreCall "upload.send-exact"
+            ["client.payload", "client.session"] ["client.session"]]
+          (coreChoice "upload.final-response" ["client.session"]
+            [ ("rejected", "client.final-rejected")
+            , ("accepted", "client.accepted")
+            ])
+      , coreBlock "client.final-rejected" [] (CoreSystemsEnd "failure")
+      , coreBlock "client.accepted"
+          [CoreSystemsTrace "upload.client.accepted"]
+          (CoreSystemsEnd "success")
+      ]
+  }
+
+uploadServerFunction :: CoreSystemsFunction
+uploadServerFunction = CoreSystemsFunction
+  { coreFunctionKey = "upload.server"
+  , coreFunctionEntry = "server.hello"
+  , coreFunctionValues = Map.fromList
+      [ ("server.session", CoreInputValue "UploadSession")
+      , ("server.hello", CoreInputValue "Hello")
+      , ("server.begin", CoreInputValue "Begin")
+      , ("server.payload", CoreOwnedValue "upload.server.payload")
+      , ("server.payload-view", CoreBorrowedValue "server.payload")
+      , ("server.digest", CoreInputValue "Digest")
+      , ("server.id", CoreInputValue "UploadId")
+      ]
+  , coreFunctionBlocks = blockMap
+      [ coreBlock "server.hello"
+          [coreCall "upload.receive-hello"
+            ["server.session"] ["server.hello", "server.session"]]
+          (coreChoice "upload.hello-policy" ["server.hello"]
+            [ ("unsupported", "server.unsupported")
+            , ("version", "server.begin")
+            ])
+      , coreBlock "server.unsupported" [] (CoreSystemsEnd "failure")
+      , coreBlock "server.begin"
+          [coreCall "upload.receive-begin"
+            ["server.session"] ["server.begin", "server.session"]]
+          (coreChoice "upload.begin-policy" ["server.begin"]
+            [ ("reject", "server.reject")
+            , ("proceed", "server.payload")
+            ])
+      , coreBlock "server.reject" [] (CoreSystemsEnd "failure")
+      , coreBlock "server.payload"
+          [ coreCall "upload.receive-exact"
+              ["server.session"] ["server.payload", "server.session"]
+          , coreCall "upload.digest"
+              ["server.payload-view"] ["server.digest"]
+          ]
+          (coreChoice "upload.store"
+            ["server.payload", "server.digest"]
+            [ ("stored", "server.respond")
+            , ("failure", "server.failure")
+            ])
+      , coreBlock "server.failure" [] (CoreSystemsEnd "failure")
+      , coreBlock "server.respond"
+          [coreCall "upload.respond"
+            ["server.id", "server.session"] ["server.session"]]
+          (CoreSystemsEnd "success")
+      ]
+  }
+
+uploadRealizationContext :: GenericRealizationContext
+uploadRealizationContext = GenericRealizationContext
+  { genericContextRevision = "realization-context.upload.host.v1"
+  , genericContextSemantics = SemanticRecord (Map.fromList
+      [ ("target", SemanticAtom "host")
+      , ("profile", SemanticAtom "checked-runtime")
+      ])
+  , genericContextVerifierProfile = "phase1-stage-verifier.v1"
+  , genericContextRealizationRefs = Set.singleton "realization:upload.host.v1"
+  , genericContextQualificationRefs = Set.empty
+  , genericContextAssumptions = Set.singleton "upload.host-runtime-profile.v1"
+  , genericContextOperations = Map.fromList
+      [ runtime "upload.supported-versions" "supported_versions"
+      , runtime "upload.version-choice" "choose_supported"
+      , runtime "upload.digest" "sha256"
+      , runtime "upload.begin-policy" "BeginPolicy.validate"
+      , runtime "upload.cancel-choice" "should_cancel_upload"
+      , runtime "upload.send-exact" "send_exact"
+      , runtime "upload.final-response" "Upload.final-response"
+      , runtime "upload.receive-hello" "receive Hello"
+      , runtime "upload.hello-policy" "HelloPolicy.validate"
+      , runtime "upload.receive-begin" "receive Begin"
+      , runtime "upload.receive-exact" "receive_exact"
+      , runtime "upload.store" "store"
+      , runtime "upload.respond" "record_upload_id"
+      ]
+  , genericContextTargetChoices = []
+  }
+  where
+    runtime key name = (key, ordinaryRuntime name)
+
+steveCoreProgram :: CoreSystemsProgram
+steveCoreProgram = CoreSystemsProgram
+  { coreProgramLabel = "Steve"
+  , coreProgramProfile = CheckedRuntime
+  , coreProgramFunctions = Map.fromList
+      [ ("steve.put", stevePutFunction)
+      , ("steve.get", steveGetFunction)
+      ]
+  , coreProgramFacts = Set.fromList
+      [ "steve.digest.stable-subject"
+      , "steve.digest.sha256-profile"
+      , "steve.blob.borrow-preservation"
+      , "steve.blob.no-replace"
+      , "steve.blob.atomic-visibility"
+      , "steve.blob.authority-confinement"
+      , "steve.provider.admission-lineage"
+      ]
+  }
+
+stevePutFunction :: CoreSystemsFunction
+stevePutFunction = CoreSystemsFunction
+  { coreFunctionKey = "steve.put"
+  , coreFunctionEntry = "put.digest"
+  , coreFunctionValues = Map.fromList
+      [ ("put.candidate", CoreOwnedValue "steve.candidate")
+      , ("put.digest-view", CoreBorrowedValue "put.candidate")
+      , ("put.install-view", CoreBorrowedValue "put.candidate")
+      , ("put.id", CoreInputValue "ContentId[SHA256]")
+      ]
+  , coreFunctionBlocks = blockMap
+      [ coreBlock "put.digest" []
+          (coreChoice "steve.digest.compute" ["put.digest-view"]
+            [("computed", "put.install")])
+      , coreBlock "put.install" []
+          (coreChoice "steve.blob.install-if-absent"
+            ["put.id", "put.install-view"]
+            [ ("installed", "put.ok")
+            , ("already-exists", "put.ok")
+            , ("storage-failure", "put.failure")
+            ])
+      , coreBlock "put.ok"
+          [CoreSystemsTrace "steve.put.commit"]
+          (CoreSystemsEnd "success")
+      , coreBlock "put.failure" [] (CoreSystemsEnd "storage-failure")
+      ]
+  }
+
+steveGetFunction :: CoreSystemsFunction
+steveGetFunction = CoreSystemsFunction
+  { coreFunctionKey = "steve.get"
+  , coreFunctionEntry = "get.read"
+  , coreFunctionValues = Map.fromList
+      [ ("get.id", CoreInputValue "ContentId[SHA256]")
+      , ("get.bytes", CoreOwnedValue "steve.read-result")
+      , ("get.bytes-view", CoreBorrowedValue "get.bytes")
+      ]
+  , coreFunctionBlocks = blockMap
+      [ coreBlock "get.read" []
+          (coreChoice "steve.blob.read" ["get.id"]
+            [ ("found", "get.check")
+            , ("not-found", "get.not-found")
+            , ("storage-failure", "get.failure")
+            ])
+      , coreBlock "get.check" []
+          (coreChoice "steve.digest.check" ["get.id", "get.bytes-view"]
+            [ ("accepted", "get.ok")
+            , ("rejected", "get.integrity-failure")
+            ])
+      , coreBlock "get.ok"
+          [CoreSystemsTrace "steve.get.commit"]
+          (CoreSystemsEnd "success")
+      , coreBlock "get.not-found" [] (CoreSystemsEnd "not-found")
+      , coreBlock "get.integrity-failure" []
+          (CoreSystemsEnd "integrity-failure")
+      , coreBlock "get.failure" [] (CoreSystemsEnd "storage-failure")
+      ]
+  }
+
+steveRealizationContext :: Set Text -> Set Text -> GenericRealizationContext
+steveRealizationContext qualificationRefs assumptions = GenericRealizationContext
+  { genericContextRevision = "realization-context.steve.host.v1"
+  , genericContextSemantics = SemanticRecord (Map.fromList
+      [ ("target", SemanticAtom "host")
+      , ("profile", SemanticAtom "checked-runtime")
+      , ("provider-model", SemanticAtom "qualified")
+      ])
+  , genericContextVerifierProfile = "phase1-stage-verifier.v1"
+  , genericContextRealizationRefs = Set.singleton "realization:steve.host.v1"
+  , genericContextQualificationRefs = qualificationRefs
+  , genericContextAssumptions = assumptions
+  , genericContextOperations = Map.fromList
+      [ qualifiedRuntime "steve.digest.compute" "DigestProvider.compute"
+      , qualifiedRuntime "steve.blob.install-if-absent"
+          "BlobProvider.install-if-absent"
+      , qualifiedRuntime "steve.blob.read" "BlobProvider.read"
+      , qualifiedRuntime "steve.digest.check" "DigestProvider.check"
+      ]
+  , genericContextTargetChoices =
+      [ RealizedTargetChoice
+          { realizedTargetDecisionId = steveHostAbiDecisionId
+          , realizedTargetSourceRepresentation =
+              "Steve BlobProvider semantic byte slice"
+          , realizedTargetRepresentation = "host pointer/length byte-slice ABI"
+          , realizedTargetSemanticEntities = ["steve.blob.byte-slice"]
+          , realizedTargetAction = ChooseLayout
+          , realizedTargetCostClass = TargetRequired
+          , realizedTargetCostShape = emptyCostShape
+          , realizedTargetPreconditions = [steveHostAbiTargetPrecondition]
+          , realizedTargetAssumptions = []
+          , realizedTargetDerivedObligations = [steveHostAbiObligationRevision]
+          , realizedTargetInspectionPlan =
+              [ "verify selected host ABI preserves pointer/length pairing"
+              , "verify host length representation covers semantic byte length range"
+              ]
+          }
+      ]
+  }
+  where
+    qualifiedRuntime key name =
+      (key, (ordinaryRuntime name)
+        { realizedOperationQualificationRefs = qualificationRefs
+        , realizedOperationAssumptions = assumptions
+        })
+
+ordinaryRuntime :: Text -> RealizedOperation
+ordinaryRuntime name = RealizedOperation
+  { realizedOperationRuntimeName = name
+  , realizedOperationQualificationRefs = Set.empty
+  , realizedOperationAssumptions = Set.empty
+  , realizedOperationCostClass = SemanticRequired
+  , realizedOperationCostShape = emptyCostShape
+  , realizedOperationTargetPreconditions = []
+  , realizedOperationDerivedObligations = []
+  }
+
+steveHostAbiDecisionId :: DecisionId
+steveHostAbiDecisionId = DecisionId "lower.steve.host-abi"
+
+steveHostAbiTargetPrecondition :: Text
+steveHostAbiTargetPrecondition =
+  "host BlobProvider byte-slice ABI preserves pointer/length pairing and length range"
+
+steveHostAbiObligationRevision :: RevisionId
+steveHostAbiObligationRevision = RevisionId "obligation.phase1.steve.host-abi.v1"
 
 qualificationEvidenceAssumptions
   :: SteveProviderQualificationArtifact
@@ -108,225 +402,30 @@ admissionText :: CheckedProviderQualificationAdmissionIdentity -> Text
 admissionText checked = case checkedQualificationAdmissionRevision checked of
   QualificationAdmissionRevision value -> value
 
-steveHostAbiDecisionId :: DecisionId
-steveHostAbiDecisionId = DecisionId "lower.steve.host-abi"
-
-steveHostAbiTargetPrecondition :: Text
-steveHostAbiTargetPrecondition =
-  "host BlobProvider byte-slice ABI preserves pointer/length pairing and length range"
-
-steveHostAbiObligationRevision :: RevisionId
-steveHostAbiObligationRevision =
-  RevisionId "obligation.phase1.steve.host-abi.v1"
-
-steveSystemsArtifact :: SystemsArtifact
-steveSystemsArtifact = SystemsArtifact
-  { systemsArtifactProgram = steveProgram
-  , systemsArtifactStageContract = steveStageContract
-  , systemsArtifactLoweringLedger = steveLoweringLedger
+coreBlock
+  :: Text
+  -> [CoreSystemsOperation]
+  -> CoreSystemsTerminator
+  -> CoreSystemsBlock
+coreBlock key operations terminator = CoreSystemsBlock
+  { coreBlockKey = key
+  , coreBlockOperations = operations
+  , coreBlockTerminator = terminator
   }
 
-steveProgram :: SystemsProgram
-steveProgram = SystemsProgram
-  { systemsProgramName = "steve"
-  , systemsProgramProfile = CheckedRuntime
-  , systemsProgramFunctions = Map.fromList
-      [ (systemsFunctionName stevePutFunction, stevePutFunction)
-      , (systemsFunctionName steveGetFunction, steveGetFunction)
-      ]
+blockMap :: [CoreSystemsBlock] -> Map.Map Text CoreSystemsBlock
+blockMap blocks = Map.fromList
+  [(coreBlockKey blockValue, blockValue) | blockValue <- blocks]
+
+coreCall :: Text -> [Text] -> [Text] -> CoreSystemsOperation
+coreCall = CoreSystemsCall
+
+coreChoice :: Text -> [Text] -> [(Text, Text)] -> CoreSystemsTerminator
+coreChoice key inputs arms = CoreSystemsChoice
+  { coreChoiceOperation = key
+  , coreChoiceInputs = inputs
+  , coreChoiceArms = Map.fromList arms
   }
-
-stevePutFunction :: SystemsFunction
-stevePutFunction = SystemsFunction
-  { systemsFunctionName = "StevePut"
-  , systemsFunctionEntry = blockId "put.entry"
-  , systemsFunctionValues = valueMap
-      [ ownerValue "put.candidate" "steve.candidate"
-      , viewValue "put.digest-view" "put.candidate"
-      , viewValue "put.install-view" "put.candidate"
-      , scalarValue "put.id" "ContentId[SHA256]"
-      ]
-  , systemsFunctionBlocks = blockMap
-      [ block "put.entry" []
-          (runtimeChoice "DigestProvider.compute" ["put.digest-view"]
-            [ ("computed", "put.install") ])
-      , block "put.install" []
-          (runtimeChoice "BlobProvider.install-if-absent"
-            ["put.id", "put.install-view"]
-            [ ("installed", "put.ok")
-            , ("already-exists", "put.ok")
-            , ("storage-failure", "put.failure")
-            ])
-      , block "put.ok" [OpTraceEvent "steve.put.commit"] (TermEnd "success")
-      , block "put.failure" [] (TermEnd "storage-failure")
-      ]
-  }
-
-steveGetFunction :: SystemsFunction
-steveGetFunction = SystemsFunction
-  { systemsFunctionName = "SteveGet"
-  , systemsFunctionEntry = blockId "get.entry"
-  , systemsFunctionValues = valueMap
-      [ scalarValue "get.id" "ContentId[SHA256]"
-      , ownerValue "get.bytes" "steve.read-result"
-      , viewValue "get.bytes-view" "get.bytes"
-      ]
-  , systemsFunctionBlocks = blockMap
-      [ block "get.entry" []
-          (runtimeChoice "BlobProvider.read" ["get.id"]
-            [ ("found", "get.check")
-            , ("not-found", "get.not-found")
-            , ("storage-failure", "get.failure")
-            ])
-      , block "get.check" []
-          (runtimeChoice "DigestProvider.check" ["get.id", "get.bytes-view"]
-            [ ("accepted", "get.ok")
-            , ("rejected", "get.integrity-failure")
-            ])
-      , block "get.ok" [OpTraceEvent "steve.get.commit"] (TermEnd "success")
-      , block "get.not-found" [] (TermEnd "not-found")
-      , block "get.integrity-failure" [] (TermEnd "integrity-failure")
-      , block "get.failure" [] (TermEnd "storage-failure")
-      ]
-  }
-
-steveSourceArtifactDigest :: Digest
-steveSourceArtifactDigest =
-  digestText "Steve Phase 1 architecture/provider semantic source"
-
-steveTargetArtifactDigest :: Digest
-steveTargetArtifactDigest = systemsProgramDigest steveProgram
-
-steveStageContract :: StageContract
-steveStageContract = StageContract
-  { stageContractId = "phase1.steve.provider-to-systems.v1"
-  , stageSourceArtifactDigest = steveSourceArtifactDigest
-  , stageTargetArtifactDigest = steveTargetArtifactDigest
-  , stageFacts = map sourceFact
-      [ "steve.digest.stable-subject"
-      , "steve.digest.sha256-profile"
-      , "steve.blob.borrow-preservation"
-      , "steve.blob.no-replace"
-      , "steve.blob.atomic-visibility"
-      , "steve.blob.authority-confinement"
-      , "steve.provider.admission-lineage"
-      ]
-  , stageInvariants = Map.empty
-  , stageRequiredEdges = []
-  , stageDerivedObligations = [steveHostAbiObligationRevision]
-  , stageAssumptions =
-      [ "sha256.semantic-profile.v1"
-      , "blob.no-out-of-band-mutation.v1"
-      , "blob.atomic-publication.v1"
-      , "blob.internal-authority-confinement.v1"
-      ]
-  , stageTraceRelation =
-      [ "StevePut commit follows digest compute and BlobProvider install outcome"
-      , "SteveGet success follows BlobProvider read and DigestProvider check"
-      ]
-  , stageResourceFailureRelation =
-      [ "DigestProvider and BlobProvider observe candidate bytes through shared borrows"
-      , "typed storage/integrity outcomes remain distinct"
-      ]
-  }
-
-sourceFact :: Text -> FactTransfer
-sourceFact key = FactTransfer
-  { factTransferId = key
-  , factSourceRevision = Nothing
-  , factDisposition = FactConsumed "indexed by Phase1Stage bidirectional accounting"
-  }
-
-steveLoweringLedger :: LoweringLedger
-steveLoweringLedger = LoweringLedger
-  { loweringLedgerDecisions = decisions
-  , loweringLedgerRoot = deriveLoweringLedgerRoot decisions
-  }
-  where
-    decisions = Map.singleton steveHostAbiDecisionId steveHostAbiDecision
-
-steveHostAbiDecision :: LoweringDecision
-steveHostAbiDecision = provisional
-  { loweringDecisionDigest = deriveLoweringDecisionDigest provisional }
-  where
-    provisional = LoweringDecision
-      { loweringDecisionId = steveHostAbiDecisionId
-      , loweringDecisionDigest = digestText "pending"
-      , loweringSourceArtifactDigest = steveSourceArtifactDigest
-      , loweringTargetArtifactDigest = steveTargetArtifactDigest
-      , loweringSourceRepresentation = "Steve BlobProvider semantic byte slice"
-      , loweringTargetRepresentation = "host pointer/length byte-slice ABI"
-      , loweringSemanticEntities = ["steve.blob.byte-slice"]
-      , loweringObligationRevisions = []
-      , loweringAssuranceEntries = []
-      , loweringAssuranceUses = []
-      , loweringAction = ChooseLayout
-      , loweringRepresentationBefore = "OwnedBytes / shared semantic byte view"
-      , loweringRepresentationAfter = "host pointer + length pair"
-      , loweringInvariantsPreserved = []
-      , loweringInvariantsTransferred = []
-      , loweringRuntimeResidue = []
-      , loweringCostClass = Just TargetRequired
-      , loweringCostShape = emptyCostShape
-      , loweringTargetPreconditions = [steveHostAbiTargetPrecondition]
-      , loweringAssumptions = []
-      , loweringDerivedObligations = [steveHostAbiObligationRevision]
-      , loweringInspectionPlan =
-          [ "verify selected host ABI preserves pointer/length pairing"
-          , "verify host length representation covers the semantic byte length range"
-          ]
-      }
-
-runtimeChoice :: Text -> [Text] -> [(Text, Text)] -> SystemsTerminator
-runtimeChoice name inputs arms = TermRuntimeChoice
-  { runtimeChoiceName = name
-  , runtimeChoiceInputs = map valueId inputs
-  , runtimeChoiceSite = Nothing
-  , runtimeChoiceArms = Map.fromList
-      [ (label, SystemsRuntimeChoiceArm Nothing (blockId target))
-      | (label, target) <- arms
-      ]
-  }
-
-block :: Text -> [SystemsOp] -> SystemsTerminator -> SystemsBlock
-block key operations terminator = SystemsBlock
-  { systemsBlockId = blockId key
-  , systemsBlockOps = operations
-  , systemsBlockTerminator = terminator
-  }
-
-blockMap :: [SystemsBlock] -> Map BlockId SystemsBlock
-blockMap blocks = Map.fromList [(systemsBlockId value, value) | value <- blocks]
-
-valueMap :: [SystemsValue] -> Map ValueId SystemsValue
-valueMap values = Map.fromList [(systemsValueId value, value) | value <- values]
-
-ownerValue :: Text -> Text -> SystemsValue
-ownerValue key storage = SystemsValue
-  { systemsValueId = valueId key
-  , systemsValueRole = OwnedBuffer "OwnedBytes"
-  , systemsStorageIdentity = Just storage
-  }
-
-viewValue :: Text -> Text -> SystemsValue
-viewValue key owner = SystemsValue
-  { systemsValueId = valueId key
-  , systemsValueRole = BorrowedSlice (valueId owner)
-  , systemsStorageIdentity = Nothing
-  }
-
-scalarValue :: Text -> Text -> SystemsValue
-scalarValue key role = SystemsValue
-  { systemsValueId = valueId key
-  , systemsValueRole = RuntimeInput role
-  , systemsStorageIdentity = Nothing
-  }
-
-valueId :: Text -> ValueId
-valueId = ValueId
-
-blockId :: Text -> BlockId
-blockId = BlockId
 
 mapLeft :: (a -> b) -> Either a c -> Either b c
 mapLeft f = either (Left . f) Right
