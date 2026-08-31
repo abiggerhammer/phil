@@ -315,9 +315,9 @@ validateFunction context (functionMapKey, function) = do
       CoreSystemsRuntimeCheck site inputs _ _ -> do
         validateSite site
         mapM_ validateValue inputs
-      CoreSystemsReceiveExact site transport length owner _ _ -> do
+      CoreSystemsReceiveExact site transport lengthValue owner _ _ -> do
         validateSite site
-        mapM_ validateValue [transport, length, owner]
+        mapM_ validateValue [transport, lengthValue, owner]
       CoreSystemsStore site owner result _ _ -> do
         validateSite site
         mapM_ validateValue [owner, result]
@@ -432,11 +432,11 @@ lowerProgram program context = do
           , checkSuccess = BlockId success
           , checkFailure = BlockId failure
           }
-      CoreSystemsReceiveExact siteKey transport length owner success failure -> do
+      CoreSystemsReceiveExact siteKey transport lengthValue owner success failure -> do
         site <- siteFor siteKey context
         pure TermReceiveExact
           { exactTransport = ValueId transport
-          , exactLength = ValueId length
+          , exactLength = ValueId lengthValue
           , exactPayloadOwner = ValueId owner
           , exactSite = site
           , exactSuccess = BlockId success
@@ -670,9 +670,9 @@ terminatorSemanticForm terminator = case terminator of
     , SemanticAtom success
     , SemanticAtom failure
     ]
-  CoreSystemsReceiveExact _ transport length owner success failure ->
+  CoreSystemsReceiveExact _ transport lengthValue owner success failure ->
     tagged "receive-exact" (map SemanticAtom
-      [transport, length, owner, success, failure])
+      [transport, lengthValue, owner, success, failure])
   CoreSystemsStore _ owner result success failure -> tagged "store"
     (map SemanticAtom [owner, result, success, failure])
   CoreSystemsRuntimeChoice name inputs _ arms -> tagged "runtime-choice"
