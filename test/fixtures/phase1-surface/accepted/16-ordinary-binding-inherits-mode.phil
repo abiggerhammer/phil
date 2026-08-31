@@ -1,6 +1,6 @@
-module corpus.ordinary_binding_inherits_mode;
+module corpus.binding_mode;
 
-component Identity(x : U32) {
+component BindingMode(x : U32) {
   let y = x;
   return y;
 }
