@@ -35,6 +35,10 @@ main = do
         protocolIOOptionalClausesPreserved
     , test "SURF-003 protocol I/O primaries reject malformed syntax"
         protocolIOPrimariesRejectMalformed
+    , test "SURF-002 terminal resource and evidence primaries preserve payloads"
+        terminalResourcePrimariesPreserved
+    , test "SURF-003 terminal resource and evidence primaries reject malformed syntax"
+        terminalResourcePrimariesRejectMalformed
     ]
   if and results then pure () else exitFailure
 
@@ -445,6 +449,65 @@ assertStaticReferenceName expected (Located _ reference) = do
     ("unexpected static reference " <> show reference)
   assert (null (grammarV1StaticReferenceArguments reference))
     "static reference unexpectedly had static arguments"
+
+terminalResourcePrimariesPreserved :: Either String ()
+terminalResourcePrimariesPreserved = do
+  statements <- singleComponentStatements =<< mapLeft show
+    (parseGrammarV1StructuralSource "terminal-resource-primaries" source)
+  case statements of
+    [ Located _ (GrammarV1ExpressionStatement failed)
+      , Located _ (GrammarV1ExpressionStatement closed)
+      , Located _ (GrammarV1ExpressionStatement released)
+      , Located _ (GrammarV1LetStatement _ accepted)
+      , Located _ (GrammarV1LetStatement _ proved)
+      ] -> do
+        case locatedValue failed of
+          GrammarV1FailExpression target endpoint -> do
+            assertStaticReferenceName "Problem"
+              (Located (locatedSpan target) (grammarV1FailureTargetReference (locatedValue target)))
+            case grammarV1FailureTargetArguments (locatedValue target) of
+              [argument] -> assertSimpleName "x" argument
+              other -> Left ("expected one fail target argument, got " <> show other)
+            assertSimpleName "endpoint" endpoint
+          other -> Left ("expected standalone fail expression, got " <> show other)
+        case locatedValue closed of
+          GrammarV1CloseExpression endpoint -> assertSimpleName "endpoint" endpoint
+          other -> Left ("expected close expression, got " <> show other)
+        case locatedValue released of
+          GrammarV1ReleaseExpression value -> assertSimpleName "payload" value
+          other -> Left ("expected release expression, got " <> show other)
+        case locatedValue accepted of
+          GrammarV1AcceptExpression value target -> do
+            assertSimpleName "raw" value
+            assert (locatedValue target == GrammarV1UnsignedType "U32")
+              "accept target type was not U32"
+          other -> Left ("expected accept expression, got " <> show other)
+        case locatedValue proved of
+          GrammarV1ProveExpression proposition -> case locatedValue proposition of
+            GrammarV1RelationProposition left (Located _ GrammarV1EqualRelation) right -> do
+              assertSimpleName "x" left
+              assertSimpleName "y" right
+            other -> Left ("expected equality proposition under prove, got " <> show other)
+          other -> Left ("expected prove expression, got " <> show other)
+    other -> Left ("expected fail, close, release, accept, prove statements, got " <> show other)
+  where
+    source = Text.unlines
+      [ "component C(endpoint : Channel, payload : Blob, raw : U32, x : U32, y : U32) {"
+      , "  fail Problem(x) on endpoint"
+      , "  close endpoint"
+      , "  release payload"
+      , "  let accepted = accept raw as U32"
+      , "  let proved = prove x == y"
+      , "}"
+      ]
+
+terminalResourcePrimariesRejectMalformed :: Either String ()
+terminalResourcePrimariesRejectMalformed = do
+  expectReject "component C(endpoint : Channel) { fail Problem endpoint }"
+  expectReject "component C { close }"
+  expectReject "component C { release }"
+  expectReject "component C(raw : U32) { accept raw U32 }"
+  expectReject "component C { prove }"
 
 singleComponentStatements
   :: GrammarV1SourceFile
