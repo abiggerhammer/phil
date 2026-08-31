@@ -1,7 +1,7 @@
-module corpus.refinement_transport_composition;
+module corpus.refined_transport;
 
-component Convert[n : Nat, m : Nat](
-  value : { b : Bytes[n] | n <= m },
+component RefinedTransport[n : Nat, m : Nat](
+  value : {b : Bytes[n] | n <= m},
   equality : Proof[n == m]
 ) {
   transport value to Bytes[m] using equality;
