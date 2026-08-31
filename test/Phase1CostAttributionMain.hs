@@ -141,16 +141,53 @@ emptyCharge b = let (k,v) = Map.findMin (costAttributionStageRuntimeBases b); ba
 emptyShapeDecision b = let (k,v) = Map.findMin (costAttributionStageRuntimeBases b); bad = v { runtimeCostBasisDecision = DecisionId "lower.erase.pending_wrapper" } in b { costAttributionStageRuntimeBases = Map.insert k bad (costAttributionStageRuntimeBases b) }
 
 incompatibleClass, incompatibleShape :: Either String ()
-incompatibleClass = incompatible "upload.runtime.frame_receive" "upload.runtime.hello_policy" isClass where isClass (Left (CostChargeIncompatibleClass _ xs)) = Set.size xs > 1; isClass _ = False
-incompatibleShape = incompatible "upload.runtime.frame_receive" "upload.runtime.send_exact" isShape where isShape (Left (CostChargeIncompatibleShape _ xs)) = Set.size xs > 1; isShape _ = False
-incompatible left right accept = do
+incompatibleClass = incompatibleAggregation changeClass isClass
+  where
+    changeClass contribution = contribution
+      { costContributionClass = differentCostClass (costContributionClass contribution) }
+    isClass (Left (CostChargeIncompatibleClass _ xs)) = Set.size xs > 1
+    isClass _ = False
+
+incompatibleShape = incompatibleAggregation changeShape isShape
+  where
+    changeShape contribution = contribution
+      { costContributionShape =
+          (costContributionShape contribution)
+            { costFrequency = Just "incompatible-test-frequency" }
+      }
+    isShape (Left (CostChargeIncompatibleShape _ xs)) = Set.size xs > 1
+    isShape _ = False
+
+incompatibleAggregation
+  :: (CostContribution -> CostContribution)
+  -> (Either CostAttributionVerificationError (Map.Map CostChargeIdentity AttributedCost) -> Bool)
+  -> Either String ()
+incompatibleAggregation mutate accept = do
   b <- uploadCostAttributionStage
-  let bases0 = costAttributionStageRuntimeBases b; lp = RuntimePrimitiveProfileRef left; rp = RuntimePrimitiveProfileRef right
-  l <- need "left cost basis" (Map.lookup lp bases0); r <- need "right cost basis" (Map.lookup rp bases0)
-  let bases = Map.insert rp (r { runtimeCostBasisCharge = runtimeCostBasisCharge l }) bases0
-      mapping = deriveContributionCharges bases (costAttributionStageContributions b)
-      mutated = reseal b { costAttributionStageRuntimeBases = bases, costAttributionStageContributionCharges = mapping }
-  if accept (verifyCostAttributionStageBundle mutated) then Right () else Left ("incompatible aggregation produced wrong result: " <> show (verifyCostAttributionStageBundle mutated))
+  case
+    [ pair
+    | pair@(_, contribution) <- Map.toAscList (costAttributionStageContributions b)
+    , RuntimeSiteCostMechanism {} <- [costContributionMechanism contribution]
+    ] of
+      (leftId, left) : (rightId, right) : _ -> do
+        let sharedCharge = CostChargeIdentity "cost.test.incompatible-aggregation"
+            contributions = Map.fromList
+              [ (leftId, left)
+              , (rightId, mutate right)
+              ]
+            mapping = Map.fromList
+              [ (leftId, sharedCharge)
+              , (rightId, sharedCharge)
+              ]
+            result = deriveAttributedCosts contributions mapping
+        if accept result
+          then Right ()
+          else Left ("incompatible aggregation produced wrong result: " <> show result)
+      _ -> Left "need at least two runtime cost contributions"
+
+differentCostClass :: CostClass -> CostClass
+differentCostClass SemanticRequired = DefensiveProfile
+differentCostClass _ = SemanticRequired
 
 contributionOmission, contributionInvented, contributionKeyDrift, contributionClassTamper, contributionShapeTamper, contributionClaimTamper :: CostAttributionStageBundle -> CostAttributionStageBundle
 contributionOmission b = let (k,_) = Map.findMin (costAttributionStageContributions b) in b { costAttributionStageContributions = Map.delete k (costAttributionStageContributions b) }
