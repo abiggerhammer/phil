@@ -1,6 +1,6 @@
 From Stdlib Require Import Bool.Bool.
 
-From Phil.Core Require Import ProtocolProjection.
+From Phil.Core Require Import ProtocolProjection ProtocolIdentity Syntax.
 
 Set Implicit Arguments.
 
