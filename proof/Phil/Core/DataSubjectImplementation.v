@@ -95,7 +95,7 @@ Proof.
   destruct priorConsumed, replacementConstructed, priorStable,
     replacementStable, kindsMatch, evidenceTemplateMentionsSubject,
     evidenceMatchesPrior, evidenceStable, evidenceKindMatchesPrior;
-    reflexivity.
+    simpl; split; intro H; try reflexivity; discriminate H.
 Qed.
 
 Theorem reflected_prerequisite_facts_are_certified :
@@ -166,7 +166,8 @@ Theorem transport_mode_decision_accept_iff_exact_presence_shape :
     dataSubjectTransportModeFactsAccepted sameSubject transportPresent = true.
 Proof.
   intros sameSubject transportPresent.
-  destruct sameSubject, transportPresent; reflexivity.
+  destruct sameSubject, transportPresent;
+    simpl; split; intro H; try reflexivity; discriminate H.
 Qed.
 
 Inductive DataSubjectTransportDecision : Type :=
@@ -225,7 +226,8 @@ Proof.
   intros.
   destruct dispositionAccepted, revisionNonempty, evidenceReferenceMatches,
     priorIdentityMatches, replacementIdentityMatches, sourcePropositionMatches,
-    targetPropositionMatches; reflexivity.
+    targetPropositionMatches;
+    simpl; split; intro H; try reflexivity; discriminate H.
 Qed.
 
 Theorem reflected_transport_facts_are_certified :
