@@ -4,29 +4,37 @@ on:
   pull_request:
     paths:
       - 'proof/Phil/Core/ProtocolProjection.v'
+      - 'proof/Phil/Core/ProtocolProjectionImplementation.v'
+      - 'proof/Phil/Core/ProtocolProjectionImplementationExtraction.v'
       - 'proof/Phil/Core/ProtocolIdentity.v'
       - 'proof/Phil/Core/Session.v'
       - 'src/Phil/Core/Protocol/Generic.hs'
       - 'src/Phil/Core/Protocol/Family.hs'
       - 'test/Phase1ProtocolGenericEndpointMain.hs'
       - 'test/Phase1ProtocolProjectionMain.hs'
+      - 'app/ProtocolProjectionDecisionCorrespondenceMain.hs'
       - 'docs/phase-1/protocol-generic-endpoint-v1.md'
       - 'docs/phase-1/protocol-projection-v1.md'
       - 'docs/phase-1/protocol-projection-proof-v1.md'
+      - 'docs/phase-1/protocol-projection-implementation-refinement-v1.md'
       - '.github/workflows/phase1-protocol-projection-proofs.yml'
   push:
     branches: [main]
     paths:
       - 'proof/Phil/Core/ProtocolProjection.v'
+      - 'proof/Phil/Core/ProtocolProjectionImplementation.v'
+      - 'proof/Phil/Core/ProtocolProjectionImplementationExtraction.v'
       - 'proof/Phil/Core/ProtocolIdentity.v'
       - 'proof/Phil/Core/Session.v'
       - 'src/Phil/Core/Protocol/Generic.hs'
       - 'src/Phil/Core/Protocol/Family.hs'
       - 'test/Phase1ProtocolGenericEndpointMain.hs'
       - 'test/Phase1ProtocolProjectionMain.hs'
+      - 'app/ProtocolProjectionDecisionCorrespondenceMain.hs'
       - 'docs/phase-1/protocol-generic-endpoint-v1.md'
       - 'docs/phase-1/protocol-projection-v1.md'
       - 'docs/phase-1/protocol-projection-proof-v1.md'
+      - 'docs/phase-1/protocol-projection-implementation-refinement-v1.md'
       - '.github/workflows/phase1-protocol-projection-proofs.yml'
 
 permissions:
@@ -41,7 +49,7 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
-      - name: Compile PHIL-PROT-PROJ-001 proof
+      - name: Compile PHIL-PROT-PROJ-001 proof and implementation correspondence
         shell: bash
         run: |
           set -euo pipefail
@@ -50,8 +58,17 @@ jobs:
           rocq c -Q proof/Phil Phil proof/Phil/Core/Session.v
           rocq c -Q proof/Phil Phil proof/Phil/Core/ProtocolIdentity.v
           rocq c -Q proof/Phil Phil proof/Phil/Core/ProtocolProjection.v
+          rocq c -Q proof/Phil Phil proof/Phil/Core/ProtocolProjectionImplementation.v
+          rm -f ProtocolProjectionKernel.hs
+          rocq c -Q proof/Phil Phil proof/Phil/Core/ProtocolProjectionImplementationExtraction.v
+          test -s ProtocolProjectionKernel.hs
+          grep -q 'decideDeclaredProjectionRoleByFact' ProtocolProjectionKernel.hs
+          grep -q 'decideProjectionInstanceByFact' ProtocolProjectionKernel.hs
+          grep -q 'decideProjectionSessionByFact' ProtocolProjectionKernel.hs
+          grep -q 'planProtocolProjection' ProtocolProjectionKernel.hs
+          grep -q 'planTransferredProtocolContract' ProtocolProjectionKernel.hs
 
-      - name: Record proof identities
+      - name: Record proof and extraction identities
         shell: bash
         run: |
           set -euo pipefail
@@ -59,16 +76,25 @@ jobs:
           cp \
             proof/Phil/Core/ProtocolProjection.v \
             proof/Phil/Core/ProtocolProjection.vo \
+            proof/Phil/Core/ProtocolProjectionImplementation.v \
+            proof/Phil/Core/ProtocolProjectionImplementation.vo \
+            proof/Phil/Core/ProtocolProjectionImplementationExtraction.v \
+            proof/Phil/Core/ProtocolProjectionImplementationExtraction.vo \
+            ProtocolProjectionKernel.hs \
             protocol-projection-proof/
           sha256sum \
-            proof/Phil/Core/ProtocolProjection.v \
-            proof/Phil/Core/ProtocolProjection.vo \
+            protocol-projection-proof/ProtocolProjection.v \
+            protocol-projection-proof/ProtocolProjection.vo \
+            protocol-projection-proof/ProtocolProjectionImplementation.v \
+            protocol-projection-proof/ProtocolProjectionImplementation.vo \
+            protocol-projection-proof/ProtocolProjectionKernel.hs \
             > protocol-projection-proof/PHIL-PROT-PROJ-001.proof.sha256
           {
             printf '%s\n' 'obligation=PHIL-PROT-PROJ-001'
             printf '%s\n' 'evidence=Rocq-9.2.0'
             cat protocol-projection-proof/PHIL-PROT-PROJ-001.proof.sha256
           } > protocol-projection-proof/PHIL-PROT-PROJ-001.proof-certificate.txt
+          cat protocol-projection-proof/PHIL-PROT-PROJ-001.proof.sha256
 
       - uses: actions/upload-artifact@v4
         with:
@@ -87,17 +113,57 @@ jobs:
           ghc-version: '9.6.7'
           cabal-version: 'latest'
 
+      - name: Build ordinary protocol projection regression substrate
+        run: cabal build exe:phil-certify-core-scalar --ghc-options=-Werror
+
+      - uses: actions/download-artifact@v4
+        with:
+          name: rocq-protocol-projection-proof
+          path: protocol-projection-proof
+
+      - name: Typecheck and execute extracted protocol projection controls
+        run: |
+          set -euo pipefail
+          ghc -Wall -Werror -fno-code protocol-projection-proof/ProtocolProjectionKernel.hs
+          ghc -Wall -Werror \
+            -iprotocol-projection-proof \
+            app/ProtocolProjectionDecisionCorrespondenceMain.hs \
+            -o protocol-projection-kernel-controls
+          ./protocol-projection-kernel-controls
+
       - name: Typecheck protocol projection implementation paths
         run: |
           set -euo pipefail
-          cabal build exe:phil-certify-core-scalar --ghc-options=-Werror
           cabal exec -- ghc -isrc -Wall -Werror -fno-code src/Phil/Core/Protocol/Generic.hs
           cabal exec -- ghc -isrc -Wall -Werror -fno-code src/Phil/Core/Protocol/Family.hs
           cabal exec -- ghc -isrc -Wall -Werror -fno-code test/Phase1ProtocolGenericEndpointMain.hs
           cabal exec -- ghc -isrc -Wall -Werror -fno-code test/Phase1ProtocolProjectionMain.hs
 
-      - name: Re-run PROT-003 and PROT-004 pressure corpora
+      - name: Re-run unchanged PROT-003 and PROT-004 pressure corpora
         run: |
           set -euo pipefail
           cabal exec -- runghc -isrc test/Phase1ProtocolGenericEndpointMain.hs
           cabal exec -- runghc -isrc test/Phase1ProtocolProjectionMain.hs
+
+      - name: Record implementation-refinement staging identities
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p protocol-projection-implementation-correspondence
+          sha256sum \
+            protocol-projection-proof/ProtocolProjectionKernel.hs \
+            src/Phil/Core/Protocol/Generic.hs \
+            src/Phil/Core/Protocol/Family.hs \
+            test/Phase1ProtocolGenericEndpointMain.hs \
+            test/Phase1ProtocolProjectionMain.hs \
+            app/ProtocolProjectionDecisionCorrespondenceMain.hs \
+            proof/Phil/Core/ProtocolProjectionImplementation.v \
+            docs/phase-1/protocol-projection-implementation-refinement-v1.md \
+            > protocol-projection-implementation-correspondence/PHIL-PROT-PROJ-001.staging.sha256
+          cat protocol-projection-implementation-correspondence/PHIL-PROT-PROJ-001.staging.sha256
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: protocol-projection-implementation-correspondence
+          path: protocol-projection-implementation-correspondence
+          if-no-files-found: error
