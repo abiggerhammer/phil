@@ -20,11 +20,186 @@ jobs:
       - name: Migrate embedded Grammar-v1 source
         shell: bash
         run: |
-          echo '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' | base64 -d | gzip -d > /tmp/migrate_tests.py
-          python3 /tmp/migrate_tests.py
+          python3 - <<'PY'
+          from pathlib import Path
+          import re
+
+          command_words = {
+              'construct', 'borrow', 'if', 'match', 'decide', 'closure', 'loop',
+              'continue', 'break', 'receive_frame', 'receive_exact', 'receive',
+              'recognize', 'validate', 'send_exact', 'send', 'select', 'offer',
+              'commit_receive', 'reject', 'fail', 'close', 'release', 'transport',
+              'accept', 'prove'
+          }
+          top_words = {
+              'module', 'import', 'record', 'data', 'type', 'claim', 'callable',
+              'fn', 'recursive', 'provider', 'opaque', 'capability', 'boundary',
+              'protocol', 'architecture', 'component', 'program'
+          }
+          string_re = re.compile(r'"((?:[^"\\]|\\.)*)"')
+
+          def starts_word(text, words):
+              stripped = text.lstrip()
+              return any(stripped == w or stripped.startswith(w + ' ') for w in words)
+
+          def top_level_start(text):
+              s = text.lstrip()
+              return starts_word(s, top_words)
+
+          def rewrite_using(text):
+              # Only rewrite simple, single-command spellings. Nested determinacy
+              # cases are handled explicitly below so ownership stays intentional.
+              if text.count('receive_exact') == 1 and ' on ' in text and ' using ' in text:
+                  text = re.sub(
+                      r'(receive_exact\s+.+?)\s+on\s+(.+?)\s+using\s+([^;{}]+)',
+                      lambda m: f'{m.group(1)} using {m.group(3).rstrip()} on {m.group(2).rstrip()}',
+                      text,
+                      count=1)
+              if text.count('select') == 1 and ' on ' in text and ' using ' in text:
+                  text = re.sub(
+                      r'(select\s+.+?)\s+on\s+(.+?)\s+using\s+([^;{}]+)',
+                      lambda m: f'{m.group(1)} using {m.group(3).rstrip()} on {m.group(2).rstrip()}',
+                      text,
+                      count=1)
+              return text
+
+          def rewrite_prove(text):
+              if 'prove(' in text:
+                  return text
+              return re.sub(r'\bprove\s+([^;{}]+)', lambda m: 'prove(' + m.group(1).rstrip() + ')', text)
+
+          def rewrite_inline_returns(text):
+              return re.sub(
+                  r'\{\s*return\s+([^{};]+?)\s*\}',
+                  lambda m: '{ return ' + m.group(1).rstrip() + '; }',
+                  text)
+
+          def statement_opener(s):
+              return (
+                  s.startswith('let ')
+                  or s.startswith('return ')
+                  or starts_word(s, command_words)
+              )
+
+          def transform_source_line(raw, stack):
+              raw = rewrite_inline_returns(rewrite_prove(rewrite_using(raw)))
+              s = raw.strip()
+              if not s:
+                  return raw
+
+              if s == '} else {':
+                  previous = stack.pop() if stack else {'term': True, 'needs_end': True}
+                  stack.append(previous)
+                  return raw
+
+              if s == '}':
+                  previous = stack.pop() if stack else {'term': False, 'needs_end': False}
+                  if previous['needs_end'] and not raw.rstrip().endswith(';'):
+                      return raw.rstrip() + ';'
+                  return raw
+
+              if s.endswith('{'):
+                  if '=>' in s:
+                      stack.append({'term': True, 'needs_end': False})
+                  elif statement_opener(s):
+                      stack.append({'term': True, 'needs_end': True})
+                  elif s.startswith('component ') or s.startswith('fn ') or s.startswith('recursive fn '):
+                      stack.append({'term': True, 'needs_end': False})
+                  else:
+                      stack.append({'term': False, 'needs_end': False})
+                  return raw
+
+              if '=> return ' in s and not s.endswith(';'):
+                  return raw.rstrip() + ';'
+
+              in_term_block = bool(stack and stack[-1]['term'])
+              if in_term_block and not s.endswith(';') and '=>' not in s:
+                  # In Grammar-v1 term blocks every complete line here is a
+                  # statement. Multiline command headers are the brace cases above.
+                  return raw.rstrip() + ';'
+              return raw
+
+          def transform_literal(content, stack):
+              return transform_source_line(content, stack)
+
+          changed = []
+          for path in sorted(Path('test').glob('Phase1GrammarV1*Main.hs')):
+              lines = path.read_text().splitlines(True)
+              out = []
+              in_unlines = False
+              phil_unlines = False
+              stack = []
+              touched = False
+
+              for line in lines:
+                  if 'Text.unlines' in line:
+                      in_unlines = True
+                      phil_unlines = False
+                      stack = []
+
+                  matches = list(string_re.finditer(line))
+                  process = False
+                  if in_unlines and matches:
+                      if not phil_unlines:
+                          phil_unlines = any(top_level_start(m.group(1)) for m in matches)
+                      process = phil_unlines
+                  elif matches:
+                      process = any(top_level_start(m.group(1)) for m in matches)
+
+                  if process:
+                      pieces = []
+                      last = 0
+                      for m in matches:
+                          pieces.append(line[last:m.start(1)])
+                          new_content = transform_literal(m.group(1), stack)
+                          pieces.append(new_content)
+                          touched = touched or new_content != m.group(1)
+                          last = m.end(1)
+                      pieces.append(line[last:])
+                      line = ''.join(pieces)
+
+                  out.append(line)
+                  stripped_hs = line.strip()
+                  if in_unlines and stripped_hs.startswith(']'):
+                      in_unlines = False
+                      phil_unlines = False
+                      stack = []
+
+              text = ''.join(out)
+
+              # Explicitly replace the old nested-using pressure with forms whose
+              # owner is encoded by the pre-on placement rather than parser greed.
+              if path.name == 'Phase1GrammarV1DeterminacyMain.hs':
+                  replacements = {
+                      '  let exactInner = receive_exact 1 on receive_exact 2 on endpoint using proof;':
+                          '  let exactInner = receive_exact 1 on receive_exact 2 using proof on endpoint;',
+                      '  let exactOuter = receive_exact 1 on (receive_exact 2 on endpoint) using proof;':
+                          '  let exactOuter = receive_exact 1 using proof on (receive_exact 2 on endpoint);',
+                      '  let selectInner = select A on select B on endpoint using proof;':
+                          '  let selectInner = select A on select B using proof on endpoint;',
+                      '  let selectOuter = select A on (select B on endpoint) using proof;':
+                          '  let selectOuter = select A using proof on (select B on endpoint);',
+                  }
+                  for old, new in replacements.items():
+                      if old in text:
+                          text = text.replace(old, new)
+                          touched = True
+
+              if touched and text != path.read_text():
+                  path.write_text(text)
+                  changed.append(str(path))
+
+          print('migrated', len(changed), 'Grammar-v1 Haskell test files')
+          for path in changed:
+              print(path)
+          PY
           rm .github/workflows/_temporary-surf005-test-migrate.yml
           git config user.name 'github-actions[bot]'
           git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
           git add test/Phase1GrammarV1*Main.hs .github/workflows/_temporary-surf005-test-migrate.yml
+          if git diff --cached --quiet; then
+            echo 'No migration changes produced' >&2
+            exit 1
+          fi
           git commit -m 'Migrate Grammar-v1 tests to determinate syntax'
           git push origin HEAD:phase1-surf-005-remove-ambiguities
