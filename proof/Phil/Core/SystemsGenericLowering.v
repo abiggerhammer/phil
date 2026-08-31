@@ -1,5 +1,7 @@
 From Stdlib Require Import Arith.PeanoNat.
 
+From Phil.Assurance Require Import ValidityScope.
+From Phil.Systems Require Import FactDisposition.
 From Phil.Core Require Import
   ArchitectureIdentity
   ArchitectureInstantiation
