@@ -24,6 +24,7 @@ import Phil.Core.Protocol
   , ProtocolContext
   , checkProtocolAction
   )
+import qualified ProtocolProgressionGuardKernel as Kernel
 
 -- | Guards stay layered: reusable protocol requirements are distinct from
 -- architecture-specific strengthening, even though both are discharged through
@@ -76,14 +77,20 @@ checkGuardedProtocolAction verification ledger manifest request context = do
   mapLeft ProtocolGuardCoreError
     (checkProtocolAction (guardedProtocolAction request) context)
   where
-    requireGuard guard
-      | not (Set.member revision (manifestObligationRevisions manifest)) =
+    requireGuard guard =
+      case Kernel.decideProtocolGuardRequirementByFacts
+          revisionPresent revisionCertified of
+        Kernel.ProtocolGuardRequirementAccepted -> Right ()
+        Kernel.ProtocolGuardRevisionMissingDecision ->
           Left (MissingProtocolTransitionGuardRevision guard)
-      | not (Set.member revision (manifestCertificationScope manifest)) =
+        Kernel.ProtocolGuardRevisionNotCertifiedDecision ->
           Left (ProtocolTransitionGuardNotCertified guard)
-      | otherwise = Right ()
       where
         revision = protocolGuardRevision guard
+        revisionPresent =
+          Set.member revision (manifestObligationRevisions manifest)
+        revisionCertified =
+          Set.member revision (manifestCertificationScope manifest)
 
 normalizeGuards
   :: [ProtocolTransitionGuard]
@@ -91,9 +98,13 @@ normalizeGuards
 normalizeGuards = go Set.empty
   where
     go _ [] = Right []
-    go seen (guard : rest)
-      | Set.member guard seen = Left (DuplicateProtocolTransitionGuard guard)
-      | otherwise = (guard :) <$> go (Set.insert guard seen) rest
+    go seen (guard : rest) =
+      case Kernel.decideProtocolGuardListByFact
+          (not (Set.member guard seen)) of
+        Kernel.ProtocolGuardListAccepted ->
+          (guard :) <$> go (Set.insert guard seen) rest
+        Kernel.ProtocolGuardListDuplicateDecision ->
+          Left (DuplicateProtocolTransitionGuard guard)
 
 mapLeft :: (a -> b) -> Either a c -> Either b c
 mapLeft f = either (Left . f) Right
