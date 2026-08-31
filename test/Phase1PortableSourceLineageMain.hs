@@ -230,6 +230,7 @@ singleUnitBundle metadataKey source =
 bundleWithUnits :: [(Text, Text, Text, Text)] -> Text
 bundleWithUnits units = Text.unlines $
   [ "PHIL-SOURCE-BUNDLE-LINEAGE-V1"
+  , "grammar\t" <> unGrammarRevision canonicalGrammarRevisionV1
   , "root\tprogram:test"
   ]
   ++ map renderUnit units
