@@ -26,6 +26,7 @@ on:
       - 'test/Phase1GrammarV1CallableEffectsMain.hs'
       - 'test/Phase1GrammarV1StaticValueTypesMain.hs'
       - 'test/Phase1GrammarV1SessionExpressionsMain.hs'
+      - 'test/Phase1GrammarV1DeterminacyMain.hs'
       - 'test/Phase1GrammarV1CorpusMain.hs'
       - 'test/fixtures/phase1-surface/**'
       - 'docs/phase-1/surface-grammar-v1.md'
@@ -58,6 +59,7 @@ on:
       - 'test/Phase1GrammarV1CallableEffectsMain.hs'
       - 'test/Phase1GrammarV1StaticValueTypesMain.hs'
       - 'test/Phase1GrammarV1SessionExpressionsMain.hs'
+      - 'test/Phase1GrammarV1DeterminacyMain.hs'
       - 'test/Phase1GrammarV1CorpusMain.hs'
       - 'test/fixtures/phase1-surface/**'
       - 'docs/phase-1/surface-grammar-v1.md'
@@ -133,6 +135,9 @@ jobs:
 
       - name: Check Grammar-v1 session expression parsing
         run: cabal exec -- runghc -Wall -Werror -isrc test/Phase1GrammarV1SessionExpressionsMain.hs
+
+      - name: Check Grammar-v1 determinacy shape pressure
+        run: cabal exec -- runghc -Wall -Werror -isrc test/Phase1GrammarV1DeterminacyMain.hs
 
       - name: Check derivation and corpus tools
         run: |
