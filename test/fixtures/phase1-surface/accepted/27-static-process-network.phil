@@ -1,5 +1,5 @@
 component Worker provides Unit {
-    return unit
+    return unit;
 }
 
 architecture Pair {
