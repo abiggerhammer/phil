@@ -151,8 +151,7 @@ checkDataSubjectEvidenceUpdate update evidence maybeTransport = do
     Kernel.DataSubjectReplacementNotStableDecision ->
       Left (stableFailure replacementIdentity replacementKindResult)
     Kernel.DataSubjectKindMismatchDecision ->
-      Left (kindMismatchFailure priorIdentity replacementIdentity
-        priorKindResult replacementKindResult)
+      Left (kindMismatchFailure priorKindResult replacementKindResult)
     Kernel.DataSubjectEvidenceTemplateMissingSubjectDecision ->
       Left (DataSubjectEvidenceTemplateDoesNotMentionSubject
         (subjectEvidenceBinder evidence))
@@ -161,8 +160,7 @@ checkDataSubjectEvidenceUpdate update evidence maybeTransport = do
     Kernel.DataSubjectEvidenceNotStableDecision ->
       Left (stableFailure evidenceIdentity evidenceKindResult)
     Kernel.DataSubjectEvidenceKindMismatchDecision ->
-      Left (kindMismatchFailure priorIdentity evidenceIdentity
-        priorKindResult evidenceKindResult)
+      Left (kindMismatchFailure priorKindResult evidenceKindResult)
 
   let resultEvidence = evidence { subjectEvidenceSubject = replacement }
       sourceProposition = subjectEvidenceProposition evidence
@@ -275,21 +273,13 @@ stableFailure identity result = case result of
   Right _ -> DataSubjectNotStableIdentity identity
 
 kindMismatchFailure
-  :: RefTerm
-  -> RefTerm
-  -> Either DataSubjectTransportError Text
+  :: Either DataSubjectTransportError Text
   -> Either DataSubjectTransportError Text
   -> DataSubjectTransportError
-kindMismatchFailure leftIdentity rightIdentity left right = case (left, right) of
+kindMismatchFailure left right = case (left, right) of
   (Right leftKind, Right rightKind) -> DataSubjectKindMismatch leftKind rightKind
   (Left err, _) -> err
   (_, Left err) -> err
-  _ -> DataSubjectKindMismatch
-    (representationFallback leftIdentity)
-    (representationFallback rightIdentity)
-
-representationFallback :: RefTerm -> Text
-representationFallback _ = "internal data subject kind reflection mismatch"
 
 stableIdentityKind :: RefTerm -> Either DataSubjectTransportError Text
 stableIdentityKind identity = case identity of
