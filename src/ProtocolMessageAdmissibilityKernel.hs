@@ -41,3 +41,4 @@ decideIntrinsicBoundaryMessageByFact intrinsicAllows =
   case intrinsicAllows of {
    Prelude.True -> IntrinsicBoundaryMessageAcceptedDecision;
    Prelude.False -> IntrinsicBoundaryMessageRequiresContractDecision}
+
