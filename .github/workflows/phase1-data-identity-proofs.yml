@@ -1,4 +1,4 @@
-name: Phase 1 Data Identity Proofs
+name: Phase 1 Data Identity Production Binding
 
 on:
   pull_request:
@@ -8,8 +8,10 @@ on:
       - 'proof/Phil/Core/DataIdentityImplementationExtraction.v'
       - 'docs/phase-1/data-identity-proof-v1.md'
       - 'docs/phase-1/data-identity-implementation-refinement-v1.md'
+      - 'docs/phase-1/data-identity-production-binding-v1.md'
       - 'app/DataIdentityDecisionCorrespondenceMain.hs'
       - '.github/workflows/phase1-data-identity-proofs.yml'
+      - 'src/DataIdentityKernel.hs'
       - 'src/Phil/Core/DataIdentity.hs'
       - 'src/Phil/Core/DataOperationContract.hs'
       - 'test/Phase1DataIdentityMain.hs'
@@ -22,8 +24,10 @@ on:
       - 'proof/Phil/Core/DataIdentityImplementationExtraction.v'
       - 'docs/phase-1/data-identity-proof-v1.md'
       - 'docs/phase-1/data-identity-implementation-refinement-v1.md'
+      - 'docs/phase-1/data-identity-production-binding-v1.md'
       - 'app/DataIdentityDecisionCorrespondenceMain.hs'
       - '.github/workflows/phase1-data-identity-proofs.yml'
+      - 'src/DataIdentityKernel.hs'
       - 'src/Phil/Core/DataIdentity.hs'
       - 'src/Phil/Core/DataOperationContract.hs'
       - 'test/Phase1DataIdentityMain.hs'
@@ -41,7 +45,7 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
-      - name: Compile PHIL-DATA-ID-001 proof and implementation correspondence
+      - name: Compile PHIL-DATA-ID-001 proof and exact production kernel
         shell: bash
         run: |
           set -euo pipefail
@@ -54,8 +58,12 @@ jobs:
           grep -q 'decideDataIdentityByFact' DataIdentityKernel.hs
           grep -q 'decideDataOperationByFact' DataIdentityKernel.hs
           grep -q 'decideDataOperationAfterIdentityByFacts' DataIdentityKernel.hs
+          cmp DataIdentityKernel.hs src/DataIdentityKernel.hs
+          kernel_sha256="$(sha256sum DataIdentityKernel.hs | cut -d' ' -f1)"
+          printf 'kernel_sha256=%s\n' "$kernel_sha256"
+          test "$kernel_sha256" = '237c3232c586627f5b79b77657deb035f9480e73bb474950c202e2e763ec609c'
 
-      - name: Record proof and extraction identities
+      - name: Record proof and production-kernel identities
         shell: bash
         run: |
           set -euo pipefail
@@ -85,7 +93,7 @@ jobs:
 
       - uses: actions/upload-artifact@v4
         with:
-          name: rocq-data-identity-proof
+          name: rocq-data-identity-production-binding
           path: data-identity-proof
           if-no-files-found: error
 
@@ -105,20 +113,24 @@ jobs:
 
       - uses: actions/download-artifact@v4
         with:
-          name: rocq-data-identity-proof
+          name: rocq-data-identity-production-binding
           path: data-identity-proof
 
-      - name: Typecheck and execute extracted data identity controls
+      - name: Verify exact extracted production kernel and direct controls
         run: |
           set -euo pipefail
+          cmp data-identity-proof/DataIdentityKernel.hs src/DataIdentityKernel.hs
+          test "$(sha256sum src/DataIdentityKernel.hs | cut -d' ' -f1)" = \
+            '237c3232c586627f5b79b77657deb035f9480e73bb474950c202e2e763ec609c'
           ghc -Wall -Werror -fno-code data-identity-proof/DataIdentityKernel.hs
+          ghc -Wall -Werror -fno-code src/DataIdentityKernel.hs
           ghc -Wall -Werror \
-            -idata-identity-proof \
+            -isrc \
             app/DataIdentityDecisionCorrespondenceMain.hs \
             -o data-identity-kernel-controls
           ./data-identity-kernel-controls
 
-      - name: Typecheck unchanged DATA-010/011 implementation paths
+      - name: Typecheck bound DATA-010/011 implementation paths
         run: |
           set -euo pipefail
           cabal exec -- ghc -isrc -Wall -Werror -fno-code src/Phil/Core/DataIdentity.hs
@@ -132,12 +144,12 @@ jobs:
           cabal exec -- runghc -Wall -Werror -isrc test/Phase1DataIdentityMain.hs
           cabal exec -- runghc -Wall -Werror -isrc test/Phase1DataOperationContractMain.hs
 
-      - name: Record implementation-refinement staging identities
+      - name: Record implementation-refinement production-binding identities
         run: |
           set -euo pipefail
-          mkdir -p data-identity-implementation-correspondence
+          mkdir -p data-identity-production-binding
           sha256sum \
-            data-identity-proof/DataIdentityKernel.hs \
+            src/DataIdentityKernel.hs \
             src/Phil/Core/DataIdentity.hs \
             src/Phil/Core/DataOperationContract.hs \
             test/Phase1DataIdentityMain.hs \
@@ -145,11 +157,12 @@ jobs:
             app/DataIdentityDecisionCorrespondenceMain.hs \
             proof/Phil/Core/DataIdentityImplementation.v \
             docs/phase-1/data-identity-implementation-refinement-v1.md \
-            > data-identity-implementation-correspondence/PHIL-DATA-ID-001.staging.sha256
-          cat data-identity-implementation-correspondence/PHIL-DATA-ID-001.staging.sha256
+            docs/phase-1/data-identity-production-binding-v1.md \
+            > data-identity-production-binding/PHIL-DATA-ID-001.closeout.sha256
+          cat data-identity-production-binding/PHIL-DATA-ID-001.closeout.sha256
 
       - uses: actions/upload-artifact@v4
         with:
-          name: data-identity-implementation-correspondence
-          path: data-identity-implementation-correspondence
+          name: data-identity-production-binding
+          path: data-identity-production-binding
           if-no-files-found: error
