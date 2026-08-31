@@ -160,7 +160,7 @@ uploadServerFunction = CoreSystemsFunction
               "server.frame.hello" "server.transport" "Hello"
           , CoreBorrowView "raw-borrow" "server.raw.hello" "server.frame.hello"
           ]
-          (CoreSystemsRecognize "hello-ingress"
+          (CoreSystemsRecognize "hello.complete_recognition"
             "server.pending.hello" "server.raw.hello"
             "server.hello.commit" "server.hello.recognition_failure")
       , block "server.hello.commit"
@@ -168,7 +168,7 @@ uploadServerFunction = CoreSystemsFunction
               "server.pending.hello" "server.transport"
           , CoreEraseFact "erase-ingress" revHelloIngress useEraseHelloPending
           ]
-          (CoreSystemsRuntimeCheck "hello-policy" []
+          (CoreSystemsRuntimeCheck "hello.policy" []
             "server.version.choose" "server.hello.policy_failure")
       , block "server.hello.recognition_failure"
           [ CoreDestroyPending "cleanup"
@@ -196,7 +196,7 @@ uploadServerFunction = CoreSystemsFunction
               "server.frame.begin" "server.transport" "Begin"
           , CoreBorrowView "raw-borrow" "server.raw.begin" "server.frame.begin"
           ]
-          (CoreSystemsRecognize "begin-ingress"
+          (CoreSystemsRecognize "begin.complete_recognition"
             "server.pending.begin" "server.raw.begin"
             "server.begin.commit" "server.begin.recognition_failure")
       , block "server.begin.commit"
@@ -204,7 +204,7 @@ uploadServerFunction = CoreSystemsFunction
               "server.pending.begin" "server.transport"
           , CoreEraseFact "erase-ingress" revBeginIngress useEraseBeginPending
           ]
-          (CoreSystemsRuntimeCheck "begin-policy" []
+          (CoreSystemsRuntimeCheck "begin.policy" []
             "server.proceed" "server.reject")
       , block "server.begin.recognition_failure"
           [ CoreDestroyPending "cleanup"
@@ -226,7 +226,7 @@ uploadServerFunction = CoreSystemsFunction
             "server.payload" "server.cancel")
       , block "server.cancel" [] (CoreSystemsEnd "cancelled")
       , block "server.payload" []
-          (CoreSystemsReceiveExact "payload-receive"
+          (CoreSystemsReceiveExact "payload.exact_receive"
             "server.transport" "server.begin_length" "server.payload"
             "server.digest" "server.early_eof")
       , block "server.early_eof"
@@ -238,7 +238,7 @@ uploadServerFunction = CoreSystemsFunction
           , CoreEraseFact "erase-payload-index"
               revPayloadReceive useErasePayloadIndex
           ]
-          (CoreSystemsRuntimeCheck "digest" ["server.payload_view"]
+          (CoreSystemsRuntimeCheck "digest.matches" ["server.payload_view"]
             "server.store" "server.digest_mismatch")
       , block "server.digest_mismatch"
           [ CoreReleaseOwner "cleanup" "server.payload"
@@ -248,7 +248,7 @@ uploadServerFunction = CoreSystemsFunction
           (CoreSystemsEnd "failure")
       , block "server.store"
           [CoreEraseFact "erase-digest-proof" revDigest useEraseDigestProof]
-          (CoreSystemsStore "storage" "server.payload" "server.upload_id"
+          (CoreSystemsStore "storage.success" "server.payload" "server.upload_id"
             "server.accepted" "server.storage_failure")
       , block "server.accepted"
           [ CoreRuntimeCall "semantic-call" "select accepted"
@@ -285,7 +285,7 @@ uploadClientFunction = CoreSystemsFunction
           [CoreReleaseOwner "cleanup" "client.payload"]
           (CoreSystemsEnd "failure")
       , block "client.version.check" []
-          (CoreSystemsRuntimeCheck "version-client" []
+          (CoreSystemsRuntimeCheck "version.client_refinement" []
             "client.version" "client.version_failure")
       , block "client.version_failure" []
           (CoreSystemsFatal "VersionRefinementFailure")
@@ -316,7 +316,8 @@ uploadClientFunction = CoreSystemsFunction
           [ CoreRuntimeCall "semantic-call" "select payload"
               ["client.transport"] [] Nothing
           , CoreRuntimeCall "send-exact" "send_exact"
-              ["client.transport", "client.payload"] [] (Just "payload-send")
+              ["client.transport", "client.payload"] []
+              (Just "payload.exact_send")
           , CoreRuntimeCall "semantic-call" "receive accepted/rejected label"
               ["client.transport"] ["client.result_branch"] Nothing
           ]
@@ -360,31 +361,31 @@ uploadRealizationContext = GenericRealizationContext
       , ordinaryDecision "semantic-call" "lower.runtime.semantic_call" Retain
       ]
   , genericContextRuntimeSites = Map.fromList
-      [ ("hello-ingress", runtimeSite
+      [ ("hello.complete_recognition", runtimeSite
           (RecognitionBoundary "Hello") revHelloIngress
           "evidence.upload.ingress.hello.runtime" "upload.runtime.frame_receive")
-      , ("begin-ingress", runtimeSite
+      , ("begin.complete_recognition", runtimeSite
           (RecognitionBoundary "Begin") revBeginIngress
           "evidence.upload.ingress.begin.runtime" "upload.runtime.frame_receive")
-      , ("hello-policy", runtimeSite
+      , ("hello.policy", runtimeSite
           (ValidationBoundary "HelloPolicy") revHelloPolicy
           "evidence.upload.hello_policy.runtime" "upload.runtime.hello_policy")
-      , ("version-client", runtimeSite
+      , ("version.client_refinement", runtimeSite
           (BranchRefinementBoundary "selected-version") revVersionClient
           "evidence.upload.version.client.runtime" "upload.runtime.branch_refinement")
-      , ("begin-policy", runtimeSite
+      , ("begin.policy", runtimeSite
           (ValidationBoundary "BeginPolicy") revBeginPolicy
           "evidence.upload.begin_policy.runtime" "upload.runtime.begin_policy")
-      , ("payload-receive", runtimeSite
+      , ("payload.exact_receive", runtimeSite
           ExactReceiveBoundary revPayloadReceive
           "evidence.upload.payload.receive.runtime" "upload.runtime.receive_exact")
-      , ("payload-send", runtimeSite
+      , ("payload.exact_send", runtimeSite
           ExactSendBoundary revPayloadSend
           "evidence.upload.payload.send.runtime" "upload.runtime.send_exact")
-      , ("digest", runtimeSite
+      , ("digest.matches", runtimeSite
           DigestBoundary revDigest
           "evidence.upload.digest.runtime" "upload.runtime.digest")
-      , ("storage", runtimeSite
+      , ("storage.success", runtimeSite
           StorageBoundary revStorage
           "evidence.upload.storage.runtime" "upload.runtime.store")
       ]
@@ -568,7 +569,7 @@ qualificationEvidenceAssumptions artifact =
 
 admissionText :: CheckedProviderQualificationAdmissionIdentity -> Text
 admissionText checked = case checkedQualificationAdmissionRevision checked of
-  QualificationAdmissionRevision value -> value
+  QualificationAdmissionRevision revisionText -> revisionText
 
 uploadRevisionFor :: Text -> RevisionId
 uploadRevisionFor obligationName =
