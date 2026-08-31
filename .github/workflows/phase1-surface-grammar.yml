@@ -31,6 +31,7 @@ on:
       - 'test/fixtures/phase1-surface/**'
       - 'docs/phase-1/surface-grammar-v1.md'
       - 'docs/phase-1/surface-parser-production-corpus-v1.md'
+      - 'docs/phase-1/surface-determinacy-v1.md'
       - '.github/workflows/phase1-surface-grammar.yml'
   push:
     branches:
@@ -64,6 +65,7 @@ on:
       - 'test/fixtures/phase1-surface/**'
       - 'docs/phase-1/surface-grammar-v1.md'
       - 'docs/phase-1/surface-parser-production-corpus-v1.md'
+      - 'docs/phase-1/surface-determinacy-v1.md'
       - '.github/workflows/phase1-surface-grammar.yml'
 
 permissions:
@@ -75,6 +77,18 @@ jobs:
     steps:
       - name: Check out repository
         uses: actions/checkout@v4
+
+      - name: Check grammar-only tools
+        run: |
+          python3 -m py_compile scripts/derive_phase1_surface_grammar.py
+          python3 -m py_compile scripts/check_phase1_surface_corpus.py
+          python3 -m py_compile scripts/check_phase1_surface_determinacy.py
+
+      - name: Check surface production corpus integrity
+        run: python3 scripts/check_phase1_surface_corpus.py
+
+      - name: Check Grammar-v1 local determinacy inventory
+        run: python3 scripts/check_phase1_surface_determinacy.py
 
       - name: Set up Haskell
         uses: haskell-actions/setup@v2
@@ -138,18 +152,6 @@ jobs:
 
       - name: Check Grammar-v1 determinacy shape pressure
         run: cabal exec -- runghc -Wall -Werror -isrc test/Phase1GrammarV1DeterminacyMain.hs
-
-      - name: Check derivation and corpus tools
-        run: |
-          python3 -m py_compile scripts/derive_phase1_surface_grammar.py
-          python3 -m py_compile scripts/check_phase1_surface_corpus.py
-          python3 -m py_compile scripts/check_phase1_surface_determinacy.py
-
-      - name: Check surface production corpus integrity
-        run: python3 scripts/check_phase1_surface_corpus.py
-
-      - name: Check Grammar-v1 local determinacy inventory
-        run: python3 scripts/check_phase1_surface_determinacy.py
 
       - name: Check manifest-driven Grammar-v1 corpus
         run: |
