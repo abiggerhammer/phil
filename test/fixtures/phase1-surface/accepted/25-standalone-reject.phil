@@ -1,5 +1,5 @@
 module corpus.standalone_reject;
 
-component Reject(x : U32) {
+component Rejector(x : U32) {
   reject x;
 }
