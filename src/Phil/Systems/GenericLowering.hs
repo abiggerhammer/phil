@@ -2,13 +2,13 @@
 
 module Phil.Systems.GenericLowering
   ( CoreSystemsValueRole (..)
+  , CoreSystemsValue (..)
   , CoreSystemsOperation (..)
   , CoreSystemsTerminator (..)
   , CoreSystemsBlock (..)
   , CoreSystemsFunction (..)
   , CoreSystemsProgram (..)
-  , RealizedOperation (..)
-  , RealizedTargetChoice (..)
+  , GenericDecisionSpec (..)
   , GenericRealizationContext (..)
   , GenericLoweringError (..)
   , coreSystemsProgramSemanticForm
@@ -21,7 +21,12 @@ import qualified Data.Set as Set
 import Data.Set (Set)
 import Data.Text (Text)
 import qualified Data.Text as Text
-import Phil.Assurance.Types (Digest, RevisionId (..), digestText)
+import Phil.Assurance.Types
+  ( AssuranceUseId
+  , Digest
+  , RevisionId
+  , digestText
+  )
 import Phil.Core.Static
   ( ArchitectureRealizationDescriptor (..)
   , CheckedArchitectureInstance (..)
@@ -35,33 +40,51 @@ import Phil.Core.Static
 import Phil.Systems.IR
 import Phil.Systems.Phase1Stage
 
--- | Target-abstract, already-checked Core execution vocabulary consumed by the
--- generic Phase-1 Systems producer. This is deliberately smaller than Systems
--- IR: runtime symbols, ABI/layout choices, target assumptions, qualifications,
--- and costs enter only through 'GenericRealizationContext'.
+-- | Target-abstract checked-Core storage/value roles.  These are semantic roles,
+-- not concrete ABI/layout choices.
 data CoreSystemsValueRole
-  = CoreOwnedValue Text
+  = CoreTransportHandle
+  | CorePendingIngress Text
+  | CoreFrameOwner Text
+  | CoreOwnedBuffer Text
   | CoreBorrowedValue Text
-  | CoreInputValue Text
+  | CoreRuntimeScalar Text
+  | CoreRuntimeInput Text
   deriving (Eq, Ord, Show)
 
+data CoreSystemsValue = CoreSystemsValue
+  { coreValueKey :: Text
+  , coreValueRole :: CoreSystemsValueRole
+  , coreValueStorageIdentity :: Maybe Text
+  }
+  deriving (Eq, Ord, Show)
+
+-- | Checked-Core operations retain semantic control/resource structure while
+-- referring to realization decisions only by witness-neutral keys.
 data CoreSystemsOperation
-  = CoreSystemsCall
-      { coreCallOperation :: Text
-      , coreCallInputs :: [Text]
-      , coreCallOutputs :: [Text]
-      }
-  | CoreSystemsTrace Text
+  = CoreReceiveFrame Text Text Text Text Text
+  | CoreBorrowView Text Text Text
+  | CoreCommitIngress Text Text Text
+  | CoreDestroyPending Text Text Text
+  | CoreReleaseOwner Text Text
+  | CoreCleanupPartial Text Text
+  | CoreRuntimeCall Text Text [Text] [Text] (Maybe Text)
+  | CoreEraseFact Text RevisionId AssuranceUseId
+  | CoreTrace Text
   deriving (Eq, Ord, Show)
 
+-- | Terminator runtime sites are realization-context references.  Source control
+-- flow and source-visible operation names remain in checked Core.
 data CoreSystemsTerminator
   = CoreSystemsJump Text
-  | CoreSystemsChoice
-      { coreChoiceOperation :: Text
-      , coreChoiceInputs :: [Text]
-      , coreChoiceArms :: Map Text Text
-      }
+  | CoreSystemsBranch Text Text Text
+  | CoreSystemsRecognize Text Text Text Text Text
+  | CoreSystemsRuntimeCheck Text [Text] Text Text
+  | CoreSystemsReceiveExact Text Text Text Text Text Text
+  | CoreSystemsStore Text Text Text Text Text
+  | CoreSystemsRuntimeChoice Text [Text] (Maybe Text) (Map Text Text)
   | CoreSystemsEnd Text
+  | CoreSystemsFatal Text
   deriving (Eq, Ord, Show)
 
 data CoreSystemsBlock = CoreSystemsBlock
@@ -74,49 +97,42 @@ data CoreSystemsBlock = CoreSystemsBlock
 data CoreSystemsFunction = CoreSystemsFunction
   { coreFunctionKey :: Text
   , coreFunctionEntry :: Text
-  , coreFunctionValues :: Map Text CoreSystemsValueRole
+  , coreFunctionValues :: Map Text CoreSystemsValue
   , coreFunctionBlocks :: Map Text CoreSystemsBlock
   }
   deriving (Eq, Ord, Show)
 
--- | Presentation is deliberately absent from semantic identity. Renaming a
--- witness therefore cannot select another lowering rule.
+-- | Presentation is deliberately absent from semantic identity.  Source facts
+-- retain their exact obligation revision where one exists, because later runtime
+-- claim binding is revision-indexed.
 data CoreSystemsProgram = CoreSystemsProgram
   { coreProgramLabel :: Text
   , coreProgramProfile :: CompilationProfile
   , coreProgramFunctions :: Map Text CoreSystemsFunction
-  , coreProgramFacts :: Set Text
+  , coreProgramFacts :: Map Text (Maybe RevisionId)
   }
   deriving (Eq, Show)
 
-data RealizedOperation = RealizedOperation
-  { realizedOperationRuntimeName :: Text
-  , realizedOperationQualificationRefs :: Set Text
-  , realizedOperationAssumptions :: Set Text
-  , realizedOperationCostClass :: CostClass
-  , realizedOperationCostShape :: CostShape
-  , realizedOperationTargetPreconditions :: [Text]
-  , realizedOperationDerivedObligations :: [RevisionId]
+-- | Explicit lowering/realization choice.  The producer seals source/target
+-- digests itself, so callers cannot smuggle a pre-built Systems artifact through
+-- this structure.
+data GenericDecisionSpec = GenericDecisionSpec
+  { genericDecisionId :: DecisionId
+  , genericDecisionSourceRepresentation :: Text
+  , genericDecisionTargetRepresentation :: Text
+  , genericDecisionSemanticEntities :: [Text]
+  , genericDecisionAction :: LoweringAction
+  , genericDecisionCostClass :: Maybe CostClass
+  , genericDecisionCostShape :: CostShape
+  , genericDecisionTargetPreconditions :: [Text]
+  , genericDecisionAssumptions :: [Text]
+  , genericDecisionDerivedObligations :: [RevisionId]
   }
   deriving (Eq, Ord, Show)
 
-data RealizedTargetChoice = RealizedTargetChoice
-  { realizedTargetDecisionId :: DecisionId
-  , realizedTargetSourceRepresentation :: Text
-  , realizedTargetRepresentation :: Text
-  , realizedTargetSemanticEntities :: [Text]
-  , realizedTargetAction :: LoweringAction
-  , realizedTargetCostClass :: CostClass
-  , realizedTargetCostShape :: CostShape
-  , realizedTargetPreconditions :: [Text]
-  , realizedTargetAssumptions :: [Text]
-  , realizedTargetDerivedObligations :: [RevisionId]
-  , realizedTargetInspectionPlan :: [Text]
-  }
-  deriving (Eq, Ord, Show)
-
--- | Explicit ADR-020 realization input. There is no program or witness
--- discriminator. Ambient runtime discovery is not realization authority.
+-- | ADR-020 realization input.  There is no program/witness discriminator.
+-- Runtime-site evidence, lowering decisions, qualifications, assumptions, and
+-- target choices are explicit data.
 data GenericRealizationContext = GenericRealizationContext
   { genericContextRevision :: Text
   , genericContextSemantics :: SemanticForm
@@ -124,8 +140,8 @@ data GenericRealizationContext = GenericRealizationContext
   , genericContextRealizationRefs :: Set Text
   , genericContextQualificationRefs :: Set Text
   , genericContextAssumptions :: Set Text
-  , genericContextOperations :: Map Text RealizedOperation
-  , genericContextTargetChoices :: [RealizedTargetChoice]
+  , genericContextDecisions :: Map Text GenericDecisionSpec
+  , genericContextRuntimeSites :: Map Text RuntimeSiteRef
   }
   deriving (Eq, Show)
 
@@ -135,11 +151,14 @@ data GenericLoweringError
   | GenericLoweringEmptyRealizationRefs
   | GenericLoweringEmptyFacts
   | GenericLoweringEmptyFunctions
+  | GenericLoweringFunctionKeyMismatch Text Text
+  | GenericLoweringValueKeyMismatch Text Text Text
   | GenericLoweringMissingEntry Text Text
   | GenericLoweringBlockKeyMismatch Text Text Text
   | GenericLoweringUnknownBlockTarget Text Text Text
   | GenericLoweringUnknownValue Text Text Text
-  | GenericLoweringMissingOperationRealization Text
+  | GenericLoweringMissingDecision Text
+  | GenericLoweringMissingRuntimeSite Text
   | GenericLoweringDuplicateDecision DecisionId
   | GenericLoweringStageRejected Phase1StageVerificationError
   deriving (Eq, Show)
@@ -147,7 +166,8 @@ data GenericLoweringError
 coreSystemsProgramSemanticForm :: CoreSystemsProgram -> SemanticForm
 coreSystemsProgramSemanticForm program = SemanticRecord (Map.fromList
   [ ("profile", SemanticAtom (profileText (coreProgramProfile program)))
-  , ("facts", SemanticUnordered (Set.map SemanticAtom (coreProgramFacts program)))
+  , ("facts", SemanticRecord
+      (Map.map factRevisionSemanticForm (coreProgramFacts program)))
   , ("functions", SemanticRecord
       (Map.map functionSemanticForm (coreProgramFunctions program)))
   ])
@@ -162,10 +182,7 @@ lowerGenericSystems checked program context = do
   systemsProgram <- lowerProgram program context
   let sourceDigest = deriveSourceDigest checked program
       targetDigest = systemsProgramDigest systemsProgram
-  opDecisions <- operationDecisions sourceDigest targetDigest program context
-  targetDecisions <- mapM (targetDecision sourceDigest targetDigest)
-    (genericContextTargetChoices context)
-  decisions <- uniqueDecisions (opDecisions <> targetDecisions)
+  decisions <- lowerDecisionLedger sourceDigest targetDigest context
   let ledger = LoweringLedger
         { loweringLedgerDecisions = decisions
         , loweringLedgerRoot = deriveLoweringLedgerRoot decisions
@@ -183,32 +200,23 @@ lowerGenericSystems checked program context = do
           { realizationInstanceIdentity = instanceIdentity
           , realizationSemantics = realizationSemanticForm program context
           }
-      assumptions = Set.unions
-        [ genericContextAssumptions context
-        , Set.unions
-            [ realizedOperationAssumptions realized
-            | realized <- Map.elems (genericContextOperations context)
-            ]
-        , Set.fromList
-            (concatMap realizedTargetAssumptions
-              (genericContextTargetChoices context))
-        ]
+      decisionAssumptions = Set.fromList
+        (concatMap genericDecisionAssumptions
+          (Map.elems (genericContextDecisions context)))
+      assumptions = Set.union
+        (genericContextAssumptions context)
+        decisionAssumptions
       facts = collectSourceFacts artifact
       mechanisms = collectSystemsMechanisms artifact
       dispositions = Map.fromSet
         (const (phase1FactDisposition mechanisms assumptions)) facts
-      qualifications = Set.union
-        (genericContextQualificationRefs context)
-        (Set.unions
-          [ realizedOperationQualificationRefs realized
-          | realized <- Map.elems (genericContextOperations context)
-          ])
       justifications = Map.fromSet
         (const SystemsJustification
           { systemsJustificationSourceFacts = facts
           , systemsJustificationRealizationRefs =
               genericContextRealizationRefs context
-          , systemsJustificationQualificationRefs = qualifications
+          , systemsJustificationQualificationRefs =
+              genericContextQualificationRefs context
           , systemsJustificationAssumptionRefs = assumptions
           })
         mechanisms
@@ -234,48 +242,98 @@ validateInputs program context = do
     GenericLoweringEmptyContextRevision
   require (not (Set.null (genericContextRealizationRefs context)))
     GenericLoweringEmptyRealizationRefs
-  require (not (Set.null (coreProgramFacts program)))
+  require (not (Map.null (coreProgramFacts program)))
     GenericLoweringEmptyFacts
   require (not (Map.null (coreProgramFunctions program)))
     GenericLoweringEmptyFunctions
-  mapM_ validateFunction (Map.toAscList (coreProgramFunctions program))
-  mapM_ requireOperation (Set.toAscList (programOperationKeys program))
-  where
-    requireOperation key =
-      require (Map.member key (genericContextOperations context))
-        (GenericLoweringMissingOperationRealization key)
+  mapM_ (validateFunction context) (Map.toAscList (coreProgramFunctions program))
 
-validateFunction :: (Text, CoreSystemsFunction) -> Either GenericLoweringError ()
-validateFunction (functionMapKey, function) = do
+validateFunction
+  :: GenericRealizationContext
+  -> (Text, CoreSystemsFunction)
+  -> Either GenericLoweringError ()
+validateFunction context (functionMapKey, function) = do
+  require (functionMapKey == coreFunctionKey function)
+    (GenericLoweringFunctionKeyMismatch functionMapKey (coreFunctionKey function))
   require (Map.member (coreFunctionEntry function) blocks)
     (GenericLoweringMissingEntry functionMapKey (coreFunctionEntry function))
-  mapM_ validateRole (Map.toAscList values)
+  mapM_ validateValueEntry (Map.toAscList values)
+  mapM_ validateRole (Map.elems values)
   mapM_ validateBlock (Map.toAscList blocks)
   where
     values = coreFunctionValues function
     blocks = coreFunctionBlocks function
 
-    validateRole (_, role) = case role of
+    validateValueEntry (valueMapKey, value) =
+      require (valueMapKey == coreValueKey value)
+        (GenericLoweringValueKeyMismatch functionMapKey valueMapKey (coreValueKey value))
+
+    validateRole value = case coreValueRole value of
       CoreBorrowedValue owner -> validateValue owner
-      CoreOwnedValue _ -> Right ()
-      CoreInputValue _ -> Right ()
+      _ -> Right ()
 
     validateBlock (blockMapKey, blockValue) = do
       require (blockMapKey == coreBlockKey blockValue)
         (GenericLoweringBlockKeyMismatch functionMapKey blockMapKey
           (coreBlockKey blockValue))
-      mapM_ validateOperationValues (coreBlockOperations blockValue)
-      validateTerminatorValues (coreBlockTerminator blockValue)
+      mapM_ validateOperation (coreBlockOperations blockValue)
+      validateTerminator (coreBlockTerminator blockValue)
       mapM_ validateTarget (terminatorTargets (coreBlockTerminator blockValue))
 
-    validateOperationValues operation = case operation of
-      CoreSystemsCall _ inputs outputs -> mapM_ validateValue (inputs <> outputs)
-      CoreSystemsTrace _ -> Right ()
+    validateOperation operation = case operation of
+      CoreReceiveFrame decision pending frame transport _ -> do
+        validateDecision decision
+        mapM_ validateValue [pending, frame, transport]
+      CoreBorrowView decision view owner -> do
+        validateDecision decision
+        mapM_ validateValue [view, owner]
+      CoreCommitIngress decision pending transport -> do
+        validateDecision decision
+        mapM_ validateValue [pending, transport]
+      CoreDestroyPending decision pending frame -> do
+        validateDecision decision
+        mapM_ validateValue [pending, frame]
+      CoreReleaseOwner decision owner -> do
+        validateDecision decision
+        validateValue owner
+      CoreCleanupPartial decision owner -> do
+        validateDecision decision
+        validateValue owner
+      CoreRuntimeCall decision _ inputs outputs site -> do
+        validateDecision decision
+        mapM_ validateValue (inputs <> outputs)
+        mapM_ validateSite site
+      CoreEraseFact decision _ _ -> validateDecision decision
+      CoreTrace _ -> Right ()
 
-    validateTerminatorValues terminator = case terminator of
+    validateTerminator terminator = case terminator of
       CoreSystemsJump _ -> Right ()
-      CoreSystemsChoice _ inputs _ -> mapM_ validateValue inputs
+      CoreSystemsBranch value _ _ -> validateValue value
+      CoreSystemsRecognize site pending raw _ _ -> do
+        validateSite site
+        mapM_ validateValue [pending, raw]
+      CoreSystemsRuntimeCheck site inputs _ _ -> do
+        validateSite site
+        mapM_ validateValue inputs
+      CoreSystemsReceiveExact site transport length owner _ _ -> do
+        validateSite site
+        mapM_ validateValue [transport, length, owner]
+      CoreSystemsStore site owner result _ _ -> do
+        validateSite site
+        mapM_ validateValue [owner, result]
+      CoreSystemsRuntimeChoice _ inputs site _ -> do
+        mapM_ validateValue inputs
+        mapM_ validateSite site
       CoreSystemsEnd _ -> Right ()
+      CoreSystemsFatal _ -> Right ()
+
+    validateDecision key =
+      require (Map.member key (genericContextDecisions context))
+        (GenericLoweringMissingDecision key)
+
+    validateSite key =
+      require (Map.member key (genericContextRuntimeSites context))
+        (GenericLoweringMissingRuntimeSite key)
 
     validateValue key =
       require (Map.member key values)
@@ -306,16 +364,14 @@ lowerProgram program context = do
         { systemsFunctionName = coreFunctionKey function
         , systemsFunctionEntry = BlockId (coreFunctionEntry function)
         , systemsFunctionValues = Map.fromList
-            [ (ValueId key, lowerValue key role)
-            | (key, role) <- Map.toAscList (coreFunctionValues function)
+            [ (ValueId key, lowerValue value)
+            | (key, value) <- Map.toAscList (coreFunctionValues function)
             ]
         , systemsFunctionBlocks = blocks
         }
 
-    lowerBlock function blockMapKey blockValue = do
-      operations <- mapM
-        (uncurry (lowerOperation function blockMapKey))
-        (zip [(0 :: Int) ..] (coreBlockOperations blockValue))
+    lowerBlock _ _ blockValue = do
+      operations <- mapM lowerOperation (coreBlockOperations blockValue)
       terminator <- lowerTerminator (coreBlockTerminator blockValue)
       pure SystemsBlock
         { systemsBlockId = BlockId (coreBlockKey blockValue)
@@ -323,168 +379,149 @@ lowerProgram program context = do
         , systemsBlockTerminator = terminator
         }
 
-    lowerOperation function blockKey index operation = case operation of
-      CoreSystemsTrace label -> Right (OpTraceEvent label)
-      CoreSystemsCall operationKey inputs outputs -> do
-        realized <- realizedFor operationKey context
+    lowerOperation operation = case operation of
+      CoreReceiveFrame decision pending frame transport grammar ->
+        OpReceiveFrame
+          (ValueId pending) (ValueId frame) (ValueId transport) grammar
+          <$> decisionIdFor decision context
+      CoreBorrowView decision view owner ->
+        OpBorrowView (ValueId view) (ValueId owner)
+          <$> decisionIdFor decision context
+      CoreCommitIngress decision pending transport ->
+        OpCommitIngress (ValueId pending) (ValueId transport)
+          <$> decisionIdFor decision context
+      CoreDestroyPending decision pending frame ->
+        OpDestroyPending (ValueId pending) (ValueId frame)
+          <$> decisionIdFor decision context
+      CoreReleaseOwner decision owner ->
+        OpReleaseOwner (ValueId owner) <$> decisionIdFor decision context
+      CoreCleanupPartial decision owner ->
+        OpCleanupPartial (ValueId owner) <$> decisionIdFor decision context
+      CoreRuntimeCall decision name inputs outputs siteKey -> do
+        decisionId <- decisionIdFor decision context
+        site <- optionalSiteFor siteKey context
         pure OpRuntimeCall
-          { runtimeCallName = realizedOperationRuntimeName realized
+          { runtimeCallName = name
           , runtimeCallInputs = map ValueId inputs
           , runtimeCallOutputs = map ValueId outputs
-          , runtimeCallSite = Nothing
-          , runtimeCallDecision = operationDecisionId
-              (coreFunctionKey function) blockKey
-              ("op." <> Text.pack (show index))
+          , runtimeCallSite = site
+          , runtimeCallDecision = decisionId
           }
+      CoreEraseFact decision revision use ->
+        OpEraseFact revision use <$> decisionIdFor decision context
+      CoreTrace label -> Right (OpTraceEvent label)
 
     lowerTerminator terminator = case terminator of
       CoreSystemsJump target -> Right (TermJump (BlockId target))
-      CoreSystemsEnd outcome -> Right (TermEnd outcome)
-      CoreSystemsChoice operationKey inputs arms -> do
-        realized <- realizedFor operationKey context
+      CoreSystemsBranch value yes no ->
+        Right (TermBranch (ValueId value) (BlockId yes) (BlockId no))
+      CoreSystemsRecognize siteKey pending raw success failure -> do
+        site <- siteFor siteKey context
+        pure TermRecognize
+          { recognizePending = ValueId pending
+          , recognizeRawView = ValueId raw
+          , recognizeSite = site
+          , recognizeSuccess = BlockId success
+          , recognizeFailure = BlockId failure
+          }
+      CoreSystemsRuntimeCheck siteKey inputs success failure -> do
+        site <- siteFor siteKey context
+        pure TermRuntimeCheck
+          { checkInputs = map ValueId inputs
+          , checkSite = site
+          , checkSuccess = BlockId success
+          , checkFailure = BlockId failure
+          }
+      CoreSystemsReceiveExact siteKey transport length owner success failure -> do
+        site <- siteFor siteKey context
+        pure TermReceiveExact
+          { exactTransport = ValueId transport
+          , exactLength = ValueId length
+          , exactPayloadOwner = ValueId owner
+          , exactSite = site
+          , exactSuccess = BlockId success
+          , exactFailure = BlockId failure
+          }
+      CoreSystemsStore siteKey owner result success failure -> do
+        site <- siteFor siteKey context
+        pure TermStore
+          { storeOwner = ValueId owner
+          , storeResult = ValueId result
+          , storeSite = site
+          , storeSuccess = BlockId success
+          , storeFailure = BlockId failure
+          }
+      CoreSystemsRuntimeChoice name inputs siteKey arms -> do
+        site <- optionalSiteFor siteKey context
         pure TermRuntimeChoice
-          { runtimeChoiceName = realizedOperationRuntimeName realized
+          { runtimeChoiceName = name
           , runtimeChoiceInputs = map ValueId inputs
-          , runtimeChoiceSite = Nothing
+          , runtimeChoiceSite = site
           , runtimeChoiceArms = Map.map
               (SystemsRuntimeChoiceArm Nothing . BlockId) arms
           }
+      CoreSystemsEnd outcome -> Right (TermEnd outcome)
+      CoreSystemsFatal detail -> Right (TermFatal detail)
 
-lowerValue :: Text -> CoreSystemsValueRole -> SystemsValue
-lowerValue key role = SystemsValue
-  { systemsValueId = ValueId key
-  , systemsValueRole = case role of
-      CoreOwnedValue _ -> OwnedBuffer "CoreOwned"
+lowerValue :: CoreSystemsValue -> SystemsValue
+lowerValue value = SystemsValue
+  { systemsValueId = ValueId (coreValueKey value)
+  , systemsValueRole = case coreValueRole value of
+      CoreTransportHandle -> TransportHandle
+      CorePendingIngress grammar -> PendingIngress grammar
+      CoreFrameOwner grammar -> FrameOwner grammar
+      CoreOwnedBuffer semanticType -> OwnedBuffer semanticType
       CoreBorrowedValue owner -> BorrowedSlice (ValueId owner)
-      CoreInputValue description -> RuntimeInput description
-  , systemsStorageIdentity = case role of
-      CoreOwnedValue storage -> Just storage
-      CoreBorrowedValue _ -> Nothing
-      CoreInputValue _ -> Nothing
+      CoreRuntimeScalar scalarType -> RuntimeScalar scalarType
+      CoreRuntimeInput inputType -> RuntimeInput inputType
+  , systemsStorageIdentity = coreValueStorageIdentity value
   }
 
-operationDecisions
+lowerDecisionLedger
   :: Digest
   -> Digest
-  -> CoreSystemsProgram
   -> GenericRealizationContext
-  -> Either GenericLoweringError [(DecisionId, LoweringDecision)]
-operationDecisions sourceDigest targetDigest program context =
-  concat <$> mapM functionDecisions (Map.toAscList (coreProgramFunctions program))
+  -> Either GenericLoweringError (Map DecisionId LoweringDecision)
+lowerDecisionLedger sourceDigest targetDigest context =
+  go Map.empty (Map.elems (genericContextDecisions context))
   where
-    functionDecisions (_, function) =
-      concat <$> mapM (blockDecisions function)
-        (Map.toAscList (coreFunctionBlocks function))
+    go result [] = Right result
+    go result (spec : rest)
+      | Map.member (genericDecisionId spec) result =
+          Left (GenericLoweringDuplicateDecision (genericDecisionId spec))
+      | otherwise = go
+          (Map.insert (genericDecisionId spec)
+            (renderDecision sourceDigest targetDigest spec) result)
+          rest
 
-    blockDecisions function (blockKey, blockValue) = do
-      opItems <- fmap concat $ mapM
-        (uncurry (operationItem function blockKey))
-        (zip [(0 :: Int) ..] (coreBlockOperations blockValue))
-      termItems <- terminatorItem function blockKey
-        (coreBlockTerminator blockValue)
-      pure (opItems <> termItems)
-
-    operationItem function blockKey index operation = case operation of
-      CoreSystemsTrace _ -> Right []
-      CoreSystemsCall key _ _ -> do
-        realized <- realizedFor key context
-        let decisionId = operationDecisionId
-              (coreFunctionKey function) blockKey
-              ("op." <> Text.pack (show index))
-        pure [(decisionId, realizedDecision
-          sourceDigest targetDigest decisionId key realized)]
-
-    terminatorItem function blockKey terminator = case terminator of
-      CoreSystemsChoice key _ _ -> do
-        realized <- realizedFor key context
-        let decisionId = operationDecisionId
-              (coreFunctionKey function) blockKey "term"
-        pure [(decisionId, realizedDecision
-          sourceDigest targetDigest decisionId key realized)]
-      CoreSystemsJump _ -> Right []
-      CoreSystemsEnd _ -> Right []
-
-realizedDecision
-  :: Digest
-  -> Digest
-  -> DecisionId
-  -> Text
-  -> RealizedOperation
-  -> LoweringDecision
-realizedDecision sourceDigest targetDigest decisionId operationKey realized =
+renderDecision :: Digest -> Digest -> GenericDecisionSpec -> LoweringDecision
+renderDecision sourceDigest targetDigest spec =
   provisional { loweringDecisionDigest = deriveLoweringDecisionDigest provisional }
   where
     provisional = LoweringDecision
-      { loweringDecisionId = decisionId
+      { loweringDecisionId = genericDecisionId spec
       , loweringDecisionDigest = digestText "pending"
       , loweringSourceArtifactDigest = sourceDigest
       , loweringTargetArtifactDigest = targetDigest
-      , loweringSourceRepresentation = "checked-core-operation:" <> operationKey
-      , loweringTargetRepresentation =
-          "systems-runtime-operation:" <> realizedOperationRuntimeName realized
-      , loweringSemanticEntities = [operationKey]
+      , loweringSourceRepresentation = genericDecisionSourceRepresentation spec
+      , loweringTargetRepresentation = genericDecisionTargetRepresentation spec
+      , loweringSemanticEntities = genericDecisionSemanticEntities spec
       , loweringObligationRevisions = []
       , loweringAssuranceEntries = []
       , loweringAssuranceUses = []
-      , loweringAction = Materialize
-      , loweringRepresentationBefore = "checked Core operation"
-      , loweringRepresentationAfter = "Systems runtime operation/control"
-      , loweringInvariantsPreserved = ["core-operation-correspondence"]
+      , loweringAction = genericDecisionAction spec
+      , loweringRepresentationBefore = genericDecisionSourceRepresentation spec
+      , loweringRepresentationAfter = genericDecisionTargetRepresentation spec
+      , loweringInvariantsPreserved = []
       , loweringInvariantsTransferred = []
       , loweringRuntimeResidue = []
-      , loweringCostClass = Just (realizedOperationCostClass realized)
-      , loweringCostShape = realizedOperationCostShape realized
-      , loweringTargetPreconditions = realizedOperationTargetPreconditions realized
-      , loweringAssumptions = Set.toAscList (realizedOperationAssumptions realized)
-      , loweringDerivedObligations = realizedOperationDerivedObligations realized
-      , loweringInspectionPlan =
-          ["verify exact checked-Core operation correspondence"]
+      , loweringCostClass = genericDecisionCostClass spec
+      , loweringCostShape = genericDecisionCostShape spec
+      , loweringTargetPreconditions = genericDecisionTargetPreconditions spec
+      , loweringAssumptions = genericDecisionAssumptions spec
+      , loweringDerivedObligations = genericDecisionDerivedObligations spec
+      , loweringInspectionPlan = []
       }
-
-targetDecision
-  :: Digest
-  -> Digest
-  -> RealizedTargetChoice
-  -> Either GenericLoweringError (DecisionId, LoweringDecision)
-targetDecision sourceDigest targetDigest choice = Right
-  (decisionId, provisional
-    { loweringDecisionDigest = deriveLoweringDecisionDigest provisional })
-  where
-    decisionId = realizedTargetDecisionId choice
-    provisional = LoweringDecision
-      { loweringDecisionId = decisionId
-      , loweringDecisionDigest = digestText "pending"
-      , loweringSourceArtifactDigest = sourceDigest
-      , loweringTargetArtifactDigest = targetDigest
-      , loweringSourceRepresentation = realizedTargetSourceRepresentation choice
-      , loweringTargetRepresentation = realizedTargetRepresentation choice
-      , loweringSemanticEntities = realizedTargetSemanticEntities choice
-      , loweringObligationRevisions = []
-      , loweringAssuranceEntries = []
-      , loweringAssuranceUses = []
-      , loweringAction = realizedTargetAction choice
-      , loweringRepresentationBefore = realizedTargetSourceRepresentation choice
-      , loweringRepresentationAfter = realizedTargetRepresentation choice
-      , loweringInvariantsPreserved = ["explicit-target-realization-choice"]
-      , loweringInvariantsTransferred = []
-      , loweringRuntimeResidue = []
-      , loweringCostClass = Just (realizedTargetCostClass choice)
-      , loweringCostShape = realizedTargetCostShape choice
-      , loweringTargetPreconditions = realizedTargetPreconditions choice
-      , loweringAssumptions = realizedTargetAssumptions choice
-      , loweringDerivedObligations = realizedTargetDerivedObligations choice
-      , loweringInspectionPlan = realizedTargetInspectionPlan choice
-      }
-
-uniqueDecisions
-  :: [(DecisionId, LoweringDecision)]
-  -> Either GenericLoweringError (Map DecisionId LoweringDecision)
-uniqueDecisions = go Map.empty
-  where
-    go result [] = Right result
-    go result ((key, value) : rest)
-      | Map.member key result = Left (GenericLoweringDuplicateDecision key)
-      | otherwise = go (Map.insert key value result) rest
 
 makeStageContract
   :: CheckedArchitectureInstance
@@ -503,11 +540,11 @@ makeStageContract checked sourceDigest targetDigest program context decisions =
     , stageFacts =
         [ FactTransfer
             { factTransferId = fact
-            , factSourceRevision = Nothing
+            , factSourceRevision = revision
             , factDisposition = FactConsumed
                 "preserved by generic checked-Core to Systems accounting"
             }
-        | fact <- Set.toAscList (coreProgramFacts program)
+        | (fact, revision) <- Map.toAscList (coreProgramFacts program)
         ]
     , stageInvariants = Map.empty
     , stageRequiredEdges = []
@@ -515,10 +552,8 @@ makeStageContract checked sourceDigest targetDigest program context decisions =
         (concatMap loweringDerivedObligations (Map.elems decisions)))
     , stageAssumptions = Set.toAscList (Set.unions
         [ genericContextAssumptions context
-        , Set.unions
-            [ Set.fromList (loweringAssumptions decision)
-            | decision <- Map.elems decisions
-            ]
+        , Set.fromList
+            (concatMap loweringAssumptions (Map.elems decisions))
         ])
     , stageTraceRelation =
         [ "architecture-instance="
@@ -527,8 +562,7 @@ makeStageContract checked sourceDigest targetDigest program context decisions =
         ]
         <> correspondenceTrace program
     , stageResourceFailureRelation =
-        [ "checked Core resource/failure obligations remain explicit facts or "
-            <> "realization assumptions; Systems lowering may not silently drop them"
+        [ "checked Core resource/failure structure is lowered constructor-for-constructor; realization metadata may not silently remove it"
         ]
     }
 
@@ -546,11 +580,11 @@ realizationSemanticForm program context = SemanticRecord (Map.fromList
       (Set.map SemanticAtom (genericContextQualificationRefs context)))
   , ("assumptions", SemanticUnordered
       (Set.map SemanticAtom (genericContextAssumptions context)))
-  , ("operations", SemanticRecord
-      (Map.map realizedOperationSemanticForm (genericContextOperations context)))
+  , ("decisions", SemanticRecord
+      (Map.map decisionSemanticForm (genericContextDecisions context)))
+  , ("runtime_sites", SemanticRecord
+      (Map.map runtimeSiteSemanticForm (genericContextRuntimeSites context)))
   , ("verifier_profile", SemanticAtom (genericContextVerifierProfile context))
-  , ("target_choices", SemanticUnordered (Set.fromList
-      (map targetChoiceSemanticForm (genericContextTargetChoices context))))
   ])
 
 deriveSourceDigest
@@ -571,16 +605,27 @@ functionSemanticForm function = SemanticRecord (Map.fromList
   [ ("key", SemanticAtom (coreFunctionKey function))
   , ("entry", SemanticAtom (coreFunctionEntry function))
   , ("values", SemanticRecord
-      (Map.map valueRoleSemanticForm (coreFunctionValues function)))
+      (Map.map valueSemanticForm (coreFunctionValues function)))
   , ("blocks", SemanticRecord
       (Map.map blockSemanticForm (coreFunctionBlocks function)))
   ])
 
+valueSemanticForm :: CoreSystemsValue -> SemanticForm
+valueSemanticForm value = SemanticRecord (Map.fromList
+  [ ("key", SemanticAtom (coreValueKey value))
+  , ("role", valueRoleSemanticForm (coreValueRole value))
+  , ("storage", SemanticAtom (maybe "" id (coreValueStorageIdentity value)))
+  ])
+
 valueRoleSemanticForm :: CoreSystemsValueRole -> SemanticForm
 valueRoleSemanticForm role = case role of
-  CoreOwnedValue storage -> tagged "owned" [SemanticAtom storage]
+  CoreTransportHandle -> tagged "transport" []
+  CorePendingIngress grammar -> tagged "pending-ingress" [SemanticAtom grammar]
+  CoreFrameOwner grammar -> tagged "frame-owner" [SemanticAtom grammar]
+  CoreOwnedBuffer semanticType -> tagged "owned-buffer" [SemanticAtom semanticType]
   CoreBorrowedValue owner -> tagged "borrowed" [SemanticAtom owner]
-  CoreInputValue description -> tagged "input" [SemanticAtom description]
+  CoreRuntimeScalar scalarType -> tagged "runtime-scalar" [SemanticAtom scalarType]
+  CoreRuntimeInput inputType -> tagged "runtime-input" [SemanticAtom inputType]
 
 blockSemanticForm :: CoreSystemsBlock -> SemanticForm
 blockSemanticForm blockValue = SemanticRecord (Map.fromList
@@ -590,93 +635,119 @@ blockSemanticForm blockValue = SemanticRecord (Map.fromList
   , ("terminator", terminatorSemanticForm (coreBlockTerminator blockValue))
   ])
 
+-- Realization decision/site keys are intentionally omitted from checked-Core
+-- semantic identity.  They are represented in realizationSemanticForm instead.
 operationSemanticForm :: CoreSystemsOperation -> SemanticForm
 operationSemanticForm operation = case operation of
-  CoreSystemsTrace label -> tagged "trace" [SemanticAtom label]
-  CoreSystemsCall key inputs outputs -> tagged "call"
-    [ SemanticAtom key
+  CoreReceiveFrame _ pending frame transport grammar -> tagged "receive-frame"
+    (map SemanticAtom [pending, frame, transport, grammar])
+  CoreBorrowView _ view owner -> tagged "borrow-view"
+    (map SemanticAtom [view, owner])
+  CoreCommitIngress _ pending transport -> tagged "commit-ingress"
+    (map SemanticAtom [pending, transport])
+  CoreDestroyPending _ pending frame -> tagged "destroy-pending"
+    (map SemanticAtom [pending, frame])
+  CoreReleaseOwner _ owner -> tagged "release-owner" [SemanticAtom owner]
+  CoreCleanupPartial _ owner -> tagged "cleanup-partial" [SemanticAtom owner]
+  CoreRuntimeCall _ name inputs outputs _ -> tagged "runtime-call"
+    [ SemanticAtom name
     , SemanticOrdered (map SemanticAtom inputs)
     , SemanticOrdered (map SemanticAtom outputs)
     ]
+  CoreEraseFact _ revision _ -> tagged "erase-fact"
+    [SemanticAtom (showText revision)]
+  CoreTrace label -> tagged "trace" [SemanticAtom label]
 
 terminatorSemanticForm :: CoreSystemsTerminator -> SemanticForm
 terminatorSemanticForm terminator = case terminator of
   CoreSystemsJump target -> tagged "jump" [SemanticAtom target]
-  CoreSystemsEnd outcome -> tagged "end" [SemanticAtom outcome]
-  CoreSystemsChoice key inputs arms -> tagged "choice"
-    [ SemanticAtom key
+  CoreSystemsBranch value yes no -> tagged "branch"
+    (map SemanticAtom [value, yes, no])
+  CoreSystemsRecognize _ pending raw success failure -> tagged "recognize"
+    (map SemanticAtom [pending, raw, success, failure])
+  CoreSystemsRuntimeCheck _ inputs success failure -> tagged "runtime-check"
+    [ SemanticOrdered (map SemanticAtom inputs)
+    , SemanticAtom success
+    , SemanticAtom failure
+    ]
+  CoreSystemsReceiveExact _ transport length owner success failure ->
+    tagged "receive-exact" (map SemanticAtom
+      [transport, length, owner, success, failure])
+  CoreSystemsStore _ owner result success failure -> tagged "store"
+    (map SemanticAtom [owner, result, success, failure])
+  CoreSystemsRuntimeChoice name inputs _ arms -> tagged "runtime-choice"
+    [ SemanticAtom name
     , SemanticOrdered (map SemanticAtom inputs)
     , SemanticRecord (Map.map SemanticAtom arms)
     ]
+  CoreSystemsEnd outcome -> tagged "end" [SemanticAtom outcome]
+  CoreSystemsFatal detail -> tagged "fatal" [SemanticAtom detail]
 
-realizedOperationSemanticForm :: RealizedOperation -> SemanticForm
-realizedOperationSemanticForm realized = SemanticRecord (Map.fromList
-  [ ("runtime", SemanticAtom (realizedOperationRuntimeName realized))
-  , ("qualification_refs", SemanticUnordered
-      (Set.map SemanticAtom (realizedOperationQualificationRefs realized)))
-  , ("assumptions", SemanticUnordered
-      (Set.map SemanticAtom (realizedOperationAssumptions realized)))
-  , ("cost_class", SemanticAtom
-      (costClassText (realizedOperationCostClass realized)))
-  , ("cost_shape", costShapeSemanticForm (realizedOperationCostShape realized))
-  , ("target_preconditions", SemanticOrdered
-      (map SemanticAtom (realizedOperationTargetPreconditions realized)))
-  , ("derived_obligations", SemanticOrdered
-      (map (SemanticAtom . revisionText)
-        (realizedOperationDerivedObligations realized)))
-  ])
+factRevisionSemanticForm :: Maybe RevisionId -> SemanticForm
+factRevisionSemanticForm revision = SemanticAtom (maybe "" showText revision)
 
-targetChoiceSemanticForm :: RealizedTargetChoice -> SemanticForm
-targetChoiceSemanticForm choice = SemanticRecord (Map.fromList
-  [ ("decision", SemanticAtom (unDecisionId (realizedTargetDecisionId choice)))
-  , ("source", SemanticAtom (realizedTargetSourceRepresentation choice))
-  , ("target", SemanticAtom (realizedTargetRepresentation choice))
+decisionSemanticForm :: GenericDecisionSpec -> SemanticForm
+decisionSemanticForm spec = SemanticRecord (Map.fromList
+  [ ("id", SemanticAtom (unDecisionId (genericDecisionId spec)))
+  , ("source", SemanticAtom (genericDecisionSourceRepresentation spec))
+  , ("target", SemanticAtom (genericDecisionTargetRepresentation spec))
   , ("entities", SemanticOrdered
-      (map SemanticAtom (realizedTargetSemanticEntities choice)))
-  , ("action", SemanticAtom (actionText (realizedTargetAction choice)))
-  , ("cost_class", SemanticAtom (costClassText (realizedTargetCostClass choice)))
-  , ("cost_shape", costShapeSemanticForm (realizedTargetCostShape choice))
+      (map SemanticAtom (genericDecisionSemanticEntities spec)))
+  , ("action", SemanticAtom (showText (genericDecisionAction spec)))
+  , ("cost_class", SemanticAtom (maybe "" showText (genericDecisionCostClass spec)))
+  , ("cost_shape", SemanticAtom (showText (genericDecisionCostShape spec)))
   , ("preconditions", SemanticOrdered
-      (map SemanticAtom (realizedTargetPreconditions choice)))
+      (map SemanticAtom (genericDecisionTargetPreconditions spec)))
   , ("assumptions", SemanticOrdered
-      (map SemanticAtom (realizedTargetAssumptions choice)))
+      (map SemanticAtom (genericDecisionAssumptions spec)))
   , ("derived", SemanticOrdered
-      (map (SemanticAtom . revisionText)
-        (realizedTargetDerivedObligations choice)))
+      (map (SemanticAtom . showText) (genericDecisionDerivedObligations spec)))
   ])
 
-programOperationKeys :: CoreSystemsProgram -> Set Text
-programOperationKeys program = Set.fromList
-  (concatMap functionKeys (Map.elems (coreProgramFunctions program)))
-  where
-    functionKeys function =
-      concatMap blockKeys (Map.elems (coreFunctionBlocks function))
-
-    blockKeys blockValue =
-      [ key | CoreSystemsCall key _ _ <- coreBlockOperations blockValue ]
-      <> case coreBlockTerminator blockValue of
-          CoreSystemsChoice key _ _ -> [key]
-          CoreSystemsJump _ -> []
-          CoreSystemsEnd _ -> []
+runtimeSiteSemanticForm :: RuntimeSiteRef -> SemanticForm
+runtimeSiteSemanticForm site = SemanticRecord (Map.fromList
+  [ ("kind", SemanticAtom (showText (runtimeSiteKind site)))
+  , ("revision", SemanticAtom (showText (runtimeSiteRevision site)))
+  , ("evidence", SemanticAtom (showText (runtimeSiteEvidence site)))
+  , ("cost", SemanticAtom (runtimeSiteCostRef site))
+  ])
 
 terminatorTargets :: CoreSystemsTerminator -> [Text]
 terminatorTargets terminator = case terminator of
   CoreSystemsJump target -> [target]
-  CoreSystemsChoice _ _ arms -> Map.elems arms
+  CoreSystemsBranch _ yes no -> [yes, no]
+  CoreSystemsRecognize _ _ _ success failure -> [success, failure]
+  CoreSystemsRuntimeCheck _ _ success failure -> [success, failure]
+  CoreSystemsReceiveExact _ _ _ _ success failure -> [success, failure]
+  CoreSystemsStore _ _ _ success failure -> [success, failure]
+  CoreSystemsRuntimeChoice _ _ _ arms -> Map.elems arms
   CoreSystemsEnd _ -> []
+  CoreSystemsFatal _ -> []
 
-operationDecisionId :: Text -> Text -> Text -> DecisionId
-operationDecisionId functionKey blockKey suffix = DecisionId
-  ("lower.generic.op:" <> functionKey <> ":" <> blockKey <> ":" <> suffix)
-
-realizedFor
+decisionIdFor
   :: Text
   -> GenericRealizationContext
-  -> Either GenericLoweringError RealizedOperation
-realizedFor key context = maybe
-  (Left (GenericLoweringMissingOperationRealization key))
+  -> Either GenericLoweringError DecisionId
+decisionIdFor key context = maybe
+  (Left (GenericLoweringMissingDecision key))
+  (Right . genericDecisionId)
+  (Map.lookup key (genericContextDecisions context))
+
+siteFor
+  :: Text
+  -> GenericRealizationContext
+  -> Either GenericLoweringError RuntimeSiteRef
+siteFor key context = maybe
+  (Left (GenericLoweringMissingRuntimeSite key))
   Right
-  (Map.lookup key (genericContextOperations context))
+  (Map.lookup key (genericContextRuntimeSites context))
+
+optionalSiteFor
+  :: Maybe Text
+  -> GenericRealizationContext
+  -> Either GenericLoweringError (Maybe RuntimeSiteRef)
+optionalSiteFor Nothing _ = Right Nothing
+optionalSiteFor (Just key) context = Just <$> siteFor key context
 
 correspondenceTrace :: CoreSystemsProgram -> [Text]
 correspondenceTrace program =
@@ -706,44 +777,5 @@ profileText profile = case profile of
   CheckedRuntime -> "checked-runtime"
   CertifiedRelease -> "certified-release"
 
-costClassText :: CostClass -> Text
-costClassText costClass = case costClass of
-  SemanticRequired -> "semantic-required"
-  RuntimeAssuranceRequired -> "runtime-assurance-required"
-  TargetRequired -> "target-required"
-  DefensiveProfile -> "defensive-profile"
-  ConservativeLowering -> "conservative-lowering"
-
-actionText :: LoweringAction -> Text
-actionText action = case action of
-  Retain -> "retain"
-  Materialize -> "materialize"
-  Erase -> "erase"
-  Fuse -> "fuse"
-  Specialize -> "specialize"
-  Copy -> "copy"
-  Borrow -> "borrow"
-  ChooseLayout -> "choose-layout"
-  InsertCheck -> "insert-check"
-  RemoveCheck -> "remove-check"
-  RepresentAsControlFlow -> "represent-as-control-flow"
-  Cleanup -> "cleanup"
-
-costShapeSemanticForm :: CostShape -> SemanticForm
-costShapeSemanticForm shape = SemanticRecord (Map.fromList
-  [ ("compile_time", maybeAtom (costCompileTime shape))
-  , ("code_size", maybeAtom (costCodeSize shape))
-  , ("allocation_count", maybeAtom (costAllocationCount shape))
-  , ("peak_live_memory", maybeAtom (costPeakLiveMemory shape))
-  , ("bytes_copied", maybeAtom (costBytesCopied shape))
-  , ("dynamic_check_count", maybeAtom (costDynamicCheckCount shape))
-  , ("branch_or_dispatch", maybeAtom (costBranchOrDispatch shape))
-  , ("hash_or_crypto_work", maybeAtom (costHashOrCryptoWork shape))
-  , ("synchronization", maybeAtom (costSynchronization shape))
-  , ("frequency", maybeAtom (costFrequency shape))
-  ])
-  where
-    maybeAtom = SemanticAtom . maybe "" id
-
-revisionText :: RevisionId -> Text
-revisionText = unRevisionId
+showText :: Show a => a -> Text
+showText = Text.pack . show
