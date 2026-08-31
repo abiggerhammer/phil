@@ -203,7 +203,7 @@ Proof.
   simpl in Heq.
   injection Heq as Hidentity.
   apply Hdistinct.
-  exact (f_equal storageIdentitySubject Hidentity).
+  exact Hidentity.
 Qed.
 
 Theorem selected_physical_realization_change_is_architectural_not_semantic :
