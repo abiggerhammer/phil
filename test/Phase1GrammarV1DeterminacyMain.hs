@@ -53,7 +53,7 @@ declarationFamiliesPreserved = do
 braceActualsPreserved :: Either String ()
 braceActualsPreserved = do
   sourceFile <- parse "determinacy-braces" $ Text.unlines
-    [ "type Effects = Box[{IO, Audit(x)}];"
+    [ "type EffectActual = Box[{IO, Audit(x)}];"
     , "type Refined = Box[{v : U8 | v > 0}];"
     ]
   aliases <- traverse onlyAlias (grammarV1TopLevelDecls sourceFile)
