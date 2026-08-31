@@ -4088,7 +4088,7 @@ parseStaticPostfixExpression = do
               base = Located
                 (locatedSpan reference)
                 (GrammarV1StaticValueReference reference)
-          parseMoreStaticPostfix base
+          pure base
         else pure $ Located
           (locatedSpan name)
           (GrammarV1StaticValueReference
