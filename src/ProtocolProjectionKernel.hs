@@ -48,3 +48,4 @@ planTransferredProtocolContract :: a1 -> a2 -> a3 ->
                                    a2 a3
 planTransferredProtocolContract instanceRevision roleKey localSession =
   MkTransferredProtocolContractPlan instanceRevision roleKey localSession
+
