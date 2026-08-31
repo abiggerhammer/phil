@@ -4,7 +4,11 @@ on:
   pull_request:
     paths:
       - 'proof/Phil/Core/DataSubject.v'
+      - 'proof/Phil/Core/DataSubjectImplementation.v'
+      - 'proof/Phil/Core/DataSubjectImplementationExtraction.v'
       - 'docs/phase-1/data-subject-proof-v1.md'
+      - 'docs/phase-1/data-subject-implementation-refinement-v1.md'
+      - 'app/DataSubjectDecisionCorrespondenceMain.hs'
       - '.github/workflows/phase1-data-subject-proofs.yml'
       - 'src/Phil/Core/DataSubjectTransport.hs'
       - 'test/Phase1DataSubjectTransportMain.hs'
@@ -12,7 +16,11 @@ on:
     branches: [main]
     paths:
       - 'proof/Phil/Core/DataSubject.v'
+      - 'proof/Phil/Core/DataSubjectImplementation.v'
+      - 'proof/Phil/Core/DataSubjectImplementationExtraction.v'
       - 'docs/phase-1/data-subject-proof-v1.md'
+      - 'docs/phase-1/data-subject-implementation-refinement-v1.md'
+      - 'app/DataSubjectDecisionCorrespondenceMain.hs'
       - '.github/workflows/phase1-data-subject-proofs.yml'
       - 'src/Phil/Core/DataSubjectTransport.hs'
       - 'test/Phase1DataSubjectTransportMain.hs'
@@ -28,21 +36,41 @@ jobs:
       options: --user root
     steps:
       - uses: actions/checkout@v4
-      - name: Compile PHIL-DATA-SUBJECT-001 proof
+
+      - name: Compile PHIL-DATA-SUBJECT-001 proof and implementation correspondence
         shell: bash
         run: |
           set -euo pipefail
           export PATH="/home/rocq/.opam/${COMPILER}/bin:$PATH"
           rocq c -Q proof/Phil Phil proof/Phil/Core/DataSubject.v
-      - name: Record proof identities
+          rocq c -Q proof/Phil Phil proof/Phil/Core/DataSubjectImplementation.v
+          rm -f DataSubjectKernel.hs
+          rocq c -Q proof/Phil Phil proof/Phil/Core/DataSubjectImplementationExtraction.v
+          test -s DataSubjectKernel.hs
+          grep -q 'decideDataSubjectPrerequisites' DataSubjectKernel.hs
+          grep -q 'decideDataSubjectTransportMode' DataSubjectKernel.hs
+          grep -q 'decideDataSubjectTransport' DataSubjectKernel.hs
+
+      - name: Record proof and extraction identities
         shell: bash
         run: |
           set -euo pipefail
           mkdir -p data-subject-proof
-          cp proof/Phil/Core/DataSubject.v proof/Phil/Core/DataSubject.vo data-subject-proof/
-          sha256sum \
+          cp \
             proof/Phil/Core/DataSubject.v \
             proof/Phil/Core/DataSubject.vo \
+            proof/Phil/Core/DataSubjectImplementation.v \
+            proof/Phil/Core/DataSubjectImplementation.vo \
+            proof/Phil/Core/DataSubjectImplementationExtraction.v \
+            proof/Phil/Core/DataSubjectImplementationExtraction.vo \
+            DataSubjectKernel.hs \
+            data-subject-proof/
+          sha256sum \
+            data-subject-proof/DataSubject.v \
+            data-subject-proof/DataSubject.vo \
+            data-subject-proof/DataSubjectImplementation.v \
+            data-subject-proof/DataSubjectImplementation.vo \
+            data-subject-proof/DataSubjectKernel.hs \
             > data-subject-proof/PHIL-DATA-SUBJECT-001.proof.sha256
           {
             echo 'obligation=PHIL-DATA-SUBJECT-001'
@@ -50,6 +78,7 @@ jobs:
             cat data-subject-proof/PHIL-DATA-SUBJECT-001.proof.sha256
           } > data-subject-proof/PHIL-DATA-SUBJECT-001.proof-certificate.txt
           cat data-subject-proof/PHIL-DATA-SUBJECT-001.proof-certificate.txt
+
       - uses: actions/upload-artifact@v4
         with:
           name: rocq-data-subject-proof
@@ -61,18 +90,57 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
+
       - uses: haskell-actions/setup@v2
         with:
           ghc-version: '9.6.7'
           cabal-version: 'latest'
+
       - name: Build existing proof certifier with warnings as errors
         run: cabal build exe:phil-certify-core-scalar --ghc-options=-Werror
+
+      - uses: actions/download-artifact@v4
+        with:
+          name: rocq-data-subject-proof
+          path: data-subject-proof
+
+      - name: Typecheck and execute extracted data subject controls
+        run: |
+          set -euo pipefail
+          ghc -Wall -Werror -fno-code data-subject-proof/DataSubjectKernel.hs
+          ghc -Wall -Werror \
+            -idata-subject-proof \
+            app/DataSubjectDecisionCorrespondenceMain.hs \
+            -o data-subject-kernel-controls
+          ./data-subject-kernel-controls
+
       - name: Typecheck unchanged DATA-012 implementation and corpus
         run: |
           set -euo pipefail
           cabal exec -- ghc -isrc -Wall -Werror -fno-code src/Phil/Core/DataSubjectTransport.hs
           cabal exec -- ghc -isrc -Wall -Werror -fno-code test/Phase1DataSubjectTransportMain.hs
-      - name: Re-run DATA-012 19-case correspondence corpus
+
+      - name: Re-run unchanged DATA-012 19-case correspondence corpus
         run: |
           set -euo pipefail
           cabal exec -- runghc -Wall -Werror -isrc test/Phase1DataSubjectTransportMain.hs
+
+      - name: Record implementation-refinement staging identities
+        run: |
+          set -euo pipefail
+          mkdir -p data-subject-implementation-correspondence
+          sha256sum \
+            data-subject-proof/DataSubjectKernel.hs \
+            src/Phil/Core/DataSubjectTransport.hs \
+            test/Phase1DataSubjectTransportMain.hs \
+            app/DataSubjectDecisionCorrespondenceMain.hs \
+            proof/Phil/Core/DataSubjectImplementation.v \
+            docs/phase-1/data-subject-implementation-refinement-v1.md \
+            > data-subject-implementation-correspondence/PHIL-DATA-SUBJECT-001.staging.sha256
+          cat data-subject-implementation-correspondence/PHIL-DATA-SUBJECT-001.staging.sha256
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: data-subject-implementation-correspondence
+          path: data-subject-implementation-correspondence
+          if-no-files-found: error
