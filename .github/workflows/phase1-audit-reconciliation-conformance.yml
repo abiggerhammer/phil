@@ -25,6 +25,8 @@ jobs:
         run: cabal build all --enable-tests
       - name: GEN-013 exact static actual kind elaboration
         run: cabal exec -- runghc -Wall -Werror -isrc test/Phase1GenericStaticKindMain.hs
+      - name: SURF-008 Grammar-v1 static kind and reference elaboration routing
+        run: cabal exec -- runghc -Wall -Werror -isrc test/Phase1GrammarV1StaticKindElaborationMain.hs
       - name: GEN-014 generic requirement category fidelity
         run: cabal exec -- runghc -Wall -Werror -isrc test/Phase1GenericRequirementCategoryMain.hs
       - name: SURF-008 Grammar-v1 generic requirement elaboration routing
