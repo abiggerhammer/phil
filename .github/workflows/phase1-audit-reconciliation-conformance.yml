@@ -27,6 +27,8 @@ jobs:
         run: cabal exec -- runghc -Wall -Werror -isrc test/Phase1GenericStaticKindMain.hs
       - name: GEN-014 generic requirement category fidelity
         run: cabal exec -- runghc -Wall -Werror -isrc test/Phase1GenericRequirementCategoryMain.hs
+      - name: SURF-008 Grammar-v1 generic requirement elaboration routing
+        run: cabal exec -- runghc -Wall -Werror -isrc test/Phase1GrammarV1GenericRequirementElaborationMain.hs
       - name: CALL-017 explicit stricter closure mode
         run: cabal exec -- runghc -Wall -Werror -isrc test/Phase1ExplicitClosureModeMain.hs
       - name: CALL-018 outcome classification and residual-obligation fidelity
