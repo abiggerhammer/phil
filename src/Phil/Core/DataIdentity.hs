@@ -4,6 +4,8 @@ module Phil.Core.DataIdentity
   , definitionallyEqualDataType
   ) where
 
+import qualified DataIdentityKernel as Kernel
+
 data DataTypeRef
   = NominalType String
   | TransparentAlias String DataTypeRef
@@ -15,4 +17,8 @@ resolveDataType ref = case ref of
   TransparentAlias _ target -> resolveDataType target
 
 definitionallyEqualDataType :: DataTypeRef -> DataTypeRef -> Bool
-definitionallyEqualDataType left right = resolveDataType left == resolveDataType right
+definitionallyEqualDataType left right =
+  case Kernel.decideDataIdentityByFact
+      (resolveDataType left == resolveDataType right) of
+    Kernel.DataIdentityAccepted -> True
+    Kernel.DataIdentityRejected -> False
