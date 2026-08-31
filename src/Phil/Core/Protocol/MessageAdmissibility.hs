@@ -16,6 +16,7 @@ import Phil.Core.Syntax
   ( ProductElementType (..)
   , Ty (..)
   )
+import qualified ProtocolMessageAdmissibilityKernel as Kernel
 
 -- | Semantic shape established by the competent boundary-message checker.
 -- Structural mode is deliberately absent: movability/linearity is not Message
@@ -56,40 +57,73 @@ data BoundaryMessageError
   deriving (Eq, Ord, Show)
 
 -- | Check one exact Message actual before protocol instantiation/session
--- substitution. This is deliberately independent of ownership-transfer rules.
+-- substitution. Concrete equality and recursive path discovery remain native;
+-- the exact extracted kernel owns which reflected gate wins.
 checkBoundaryMessageContract
   :: Ty
   -> SemanticForm
   -> BoundaryMessageContract
   -> Either BoundaryMessageError ()
-checkBoundaryMessageContract actualType actualSemantics contract = do
-  if Text.null (boundaryMessageContractRevision contract)
-    then Left BoundaryMessageContractRevisionEmpty
-    else Right ()
-  requireEqual BoundaryMessageContractTypeMismatch
-    actualType
-    (boundaryMessageContractType contract)
-  requireEqual BoundaryMessageContractSemanticsMismatch
-    actualSemantics
-    (boundaryMessageContractSemantics contract)
-  case firstForbiddenShape [] (boundaryMessageContractShape contract) of
-    Just failure -> Left failure
-    Nothing -> Right ()
-  case firstHardTypeFailure [] actualType of
-    Just failure -> Left failure
-    Nothing -> Right ()
+checkBoundaryMessageContract actualType actualSemantics contract =
+  case Kernel.decideBoundaryMessageContractByFacts
+    revisionNonempty typeMatches semanticsMatches shapeAllows hardTypeAllows of
+      Kernel.BoundaryMessageContractAcceptedDecision -> Right ()
+      Kernel.BoundaryMessageRevisionEmptyDecision ->
+        Left BoundaryMessageContractRevisionEmpty
+      Kernel.BoundaryMessageTypeMismatchDecision ->
+        Left (BoundaryMessageContractTypeMismatch actualType contractType)
+      Kernel.BoundaryMessageSemanticsMismatchDecision ->
+        Left (BoundaryMessageContractSemanticsMismatch actualSemantics contractSemantics)
+      Kernel.BoundaryMessageShapeRejectedDecision ->
+        case shapeFailure of
+          Just failure -> Left failure
+          Nothing -> Left kernelShapeInvariantFailure
+      Kernel.BoundaryMessageHardTypeRejectedDecision ->
+        case hardTypeFailure of
+          Just failure -> Left failure
+          Nothing -> Left kernelHardTypeInvariantFailure
+  where
+    revisionNonempty = not (Text.null (boundaryMessageContractRevision contract))
+    contractType = boundaryMessageContractType contract
+    contractSemantics = boundaryMessageContractSemantics contract
+    typeMatches = actualType == contractType
+    semanticsMatches = actualSemantics == contractSemantics
+    shapeFailure = firstForbiddenShape [] (boundaryMessageContractShape contract)
+    hardTypeFailure = firstHardTypeFailure [] actualType
+    shapeAllows = case shapeFailure of
+      Nothing -> True
+      Just _ -> False
+    hardTypeAllows = case hardTypeFailure of
+      Nothing -> True
+      Just _ -> False
+
+-- These are fail-closed bridge sentinels. Under the byte-checked extracted
+-- kernel they are unreachable because the reflected booleans and cached native
+-- diagnostics agree by construction.
+kernelShapeInvariantFailure :: BoundaryMessageError
+kernelShapeInvariantFailure =
+  BoundaryMessageInadmissible [] LiveEndpointNotCommunicable
+
+kernelHardTypeInvariantFailure :: BoundaryMessageError
+kernelHardTypeInvariantFailure =
+  BoundaryMessageInadmissible [] InternalReceiveStateNotCommunicable
 
 -- | Bare concrete session-message types are admitted only when the type itself
--- is sufficient to establish boundary competence. Ownership-sensitive or
--- authority-sensitive types must use a parameterized Message actual carrying an
--- explicit BoundaryMessageContract instead of relying on structural movement.
+-- is sufficient to establish boundary competence. Native recursive traversal
+-- computes the fact; the extracted kernel owns the final admission choice.
 intrinsicBoundaryMessageType :: Ty -> Bool
-intrinsicBoundaryMessageType ty = case ty of
+intrinsicBoundaryMessageType ty =
+  case Kernel.decideIntrinsicBoundaryMessageByFact (intrinsicBoundaryMessageTypeFact ty) of
+    Kernel.IntrinsicBoundaryMessageAcceptedDecision -> True
+    Kernel.IntrinsicBoundaryMessageRequiresContractDecision -> False
+
+intrinsicBoundaryMessageTypeFact :: Ty -> Bool
+intrinsicBoundaryMessageTypeFact ty = case ty of
   TyUnit -> True
   TyBool -> True
   TyUInt _ -> True
-  TyProduct elements -> all (intrinsicBoundaryMessageType . productElementType) elements
-  TyRefined _ inner _ -> intrinsicBoundaryMessageType inner
+  TyProduct elements -> all (intrinsicBoundaryMessageTypeFact . productElementType) elements
+  TyRefined _ inner _ -> intrinsicBoundaryMessageTypeFact inner
   _ -> False
 
 firstForbiddenShape
@@ -135,8 +169,3 @@ firstIndexed check path = go 0
       case check (path <> [index]) value of
         Just failure -> Just failure
         Nothing -> go (index + 1) rest
-
-requireEqual :: Eq a => (a -> a -> e) -> a -> a -> Either e ()
-requireEqual makeError expected actual
-  | expected == actual = Right ()
-  | otherwise = Left (makeError expected actual)
