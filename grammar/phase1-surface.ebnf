@@ -209,7 +209,7 @@ static_additive_expression =
 static_multiplicative_expression =
   static_postfix_expression, { "*", static_postfix_expression } ;
 static_postfix_expression =
-    static_reference
+    qualified_name, [ static_arguments, { ".", identifier } ]
   | static_nonreference_primary_expression, { ".", identifier }
   ;
 static_nonreference_primary_expression =
@@ -443,26 +443,12 @@ record_pattern =
   qualified_name, "{", field_pattern, { ",", field_pattern }, [ "," ], "}" ;
 field_pattern = identifier, [ "=", pattern ] ;
 
-expression = additive_expression, [ "or", fallback ] ;
-fallback = "fail", failure_target | "reject", additive_expression ;
+expression = base_expression, [ "or", fallback ] ;
+fallback = "fail", failure_target | "reject", base_expression ;
 
-additive_expression =
-  multiplicative_expression,
-  { ( "+" | "-" ), multiplicative_expression } ;
+base_expression = command_expression | additive_expression ;
 
-multiplicative_expression =
-  postfix_expression, { "*", postfix_expression } ;
-
-postfix_expression =
-    named_postfix_expression
-  | nonname_primary_expression, { ".", identifier }
-  ;
-
-named_postfix_expression =
-  qualified_name, [ static_arguments ],
-  [ term_arguments, { ".", identifier } ] ;
-
-nonname_primary_expression =
+command_expression =
     construct_expression
   | borrow_expression
   | if_expression
@@ -489,7 +475,27 @@ nonname_primary_expression =
   | transport_expression
   | accept_expression
   | prove_expression
-  | tuple_expression
+  ;
+
+additive_expression =
+  multiplicative_expression,
+  { ( "+" | "-" ), multiplicative_expression } ;
+
+multiplicative_expression =
+  postfix_expression, { "*", postfix_expression } ;
+
+postfix_expression =
+    named_postfix_expression
+  | primary_expression, { ".", identifier }
+  ;
+
+named_postfix_expression =
+  qualified_name,
+  [ static_arguments, [ term_arguments ], { ".", identifier }
+    | term_arguments, { ".", identifier } ] ;
+
+primary_expression =
+    tuple_expression
   | parenthesized_expression
   | "true"
   | "false"
@@ -503,7 +509,7 @@ construct_expression =
 field_assignment = identifier, "=", expression ;
 
 borrow_expression =
-  "borrow", additive_expression, "as", identifier, block ;
+  "borrow", base_expression, "as", identifier, block ;
 
 join_clause =
   "join", "state", "(", [ state_slot, { ",", state_slot } ], ")",
@@ -527,7 +533,7 @@ case_pattern =
 field_binder = identifier, [ "as", identifier ] ;
 
 decide_expression =
-  "decide", additive_expression,
+  "decide", base_expression,
   "{", match_arm, { match_arm }, "}" ;
 
 closure_expression =
@@ -553,59 +559,59 @@ receive_frame_expression =
   "receive_frame", "(", expression, ")" ;
 
 receive_exact_expression =
-  "receive_exact", additive_expression,
-  [ "using", additive_expression ], "on", postfix_expression ;
+  "receive_exact", base_expression,
+  [ "using", base_expression ], "on", base_expression ;
 
 receive_expression =
-  "receive", type_expression, "on", postfix_expression ;
+  "receive", type_expression, "on", base_expression ;
 
 recognize_expression =
-  "recognize", static_reference, "from", postfix_expression ;
+  "recognize", static_reference, "from", base_expression ;
 
 validate_expression =
   "validate", static_reference,
-  [ "at", additive_expression ], "on", postfix_expression ;
+  [ "at", base_expression ], "on", base_expression ;
 
 send_exact_expression =
-  "send_exact", additive_expression, "on", postfix_expression ;
+  "send_exact", base_expression, "on", base_expression ;
 
 send_expression =
-  "send", additive_expression, "on", postfix_expression ;
+  "send", base_expression, "on", base_expression ;
 
 select_expression =
-  "select", branch_value, [ "using", additive_expression ],
-  "on", postfix_expression ;
+  "select", branch_value, [ "using", base_expression ],
+  "on", base_expression ;
 
 offer_expression =
-  "offer", additive_expression,
+  "offer", base_expression,
   "{", match_arm, { match_arm }, "}" ;
 
 branch_value =
   qualified_name, [ term_arguments ] ;
 
 commit_receive_expression =
-  "commit_receive", additive_expression, "using", postfix_expression ;
+  "commit_receive", base_expression, "using", base_expression ;
 
 reject_expression =
-  "reject", postfix_expression ;
+  "reject", base_expression ;
 
 fail_expression =
-  "fail", failure_target, "on", postfix_expression ;
+  "fail", failure_target, "on", base_expression ;
 
 failure_target =
   static_reference, [ term_arguments ] ;
 
-close_expression = "close", postfix_expression ;
-release_expression = "release", postfix_expression ;
+close_expression = "close", base_expression ;
+release_expression = "release", base_expression ;
 
 transport_expression =
-  "transport", additive_expression, "to", type_expression,
-  "using", postfix_expression ;
+  "transport", base_expression, "to", type_expression,
+  "using", base_expression ;
 
 accept_expression =
-  "accept", additive_expression, "as", type_expression ;
+  "accept", base_expression, "as", type_expression ;
 
-prove_expression = "prove", proposition ;
+prove_expression = "prove", "(", proposition, ")" ;
 
 tuple_expression =
   "(", expression, ",", expression, { ",", expression }, ")" ;

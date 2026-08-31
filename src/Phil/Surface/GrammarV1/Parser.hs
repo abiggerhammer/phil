@@ -2304,8 +2304,11 @@ parseStatement = do
     Just (GrammarKeyword "return") -> parseReturnStatement
     Just _ -> do
       expression <- parseExpression
+      end <- expectSymbol ";"
       pure $ Located
-        (locatedSpan expression)
+        (SourceSpan
+          (sourceSpanStart (locatedSpan expression))
+          (sourceSpanEnd (locatedSpan end)))
         (GrammarV1ExpressionStatement expression)
     Nothing -> failParser "expected statement at end of input"
 
@@ -2315,20 +2318,22 @@ parseLetStatement = do
   pattern' <- parsePattern
   _ <- expectSymbol "="
   expression <- parseExpression
+  end <- expectSymbol ";"
   pure $ Located
     (SourceSpan
       (sourceSpanStart (locatedSpan start))
-      (sourceSpanEnd (locatedSpan expression)))
+      (sourceSpanEnd (locatedSpan end)))
     (GrammarV1LetStatement pattern' expression)
 
 parseReturnStatement :: Parser (Located GrammarV1Statement)
 parseReturnStatement = do
   start <- expectKeyword "return"
   expression <- parseExpression
+  end <- expectSymbol ";"
   pure $ Located
     (SourceSpan
       (sourceSpanStart (locatedSpan start))
-      (sourceSpanEnd (locatedSpan expression)))
+      (sourceSpanEnd (locatedSpan end)))
     (GrammarV1ReturnStatement expression)
 
 parsePattern :: Parser (Located GrammarV1Pattern)
@@ -2443,9 +2448,27 @@ peekFallbackStart = Parser $ \tokens ->
         _ -> False
     startsFallback _ = False
 
+peekCommandExpressionStart :: Parser Bool
+peekCommandExpressionStart = do
+  token <- peekToken
+  pure $ case fmap locatedValue token of
+    Just (GrammarKeyword keyword) -> keyword `elem`
+      [ "construct", "borrow", "if", "match", "decide", "closure", "loop"
+      , "continue", "break", "receive_frame", "receive_exact", "receive"
+      , "recognize", "validate", "send_exact", "send", "select", "offer"
+      , "commit_receive", "reject", "fail", "close", "release", "transport"
+      , "accept", "prove"
+      ]
+    _ -> False
+
+parseBaseExpression :: Parser (Located GrammarV1Expression)
+parseBaseExpression = do
+  command <- peekCommandExpressionStart
+  if command then parseCommandExpression else parseAdditiveExpression
+
 parseExpression :: Parser (Located GrammarV1Expression)
 parseExpression = do
-  base <- parseAdditiveExpression
+  base <- parseBaseExpression
   hasFallback <- peekFallbackStart
   if hasFallback
     then do
@@ -2472,7 +2495,7 @@ parseFallback = do
         (GrammarV1FailFallback target)
     Just (GrammarKeyword "reject") -> do
       start <- expectKeyword "reject"
-      value <- parseAdditiveExpression
+      value <- parseBaseExpression
       pure $ Located
         (SourceSpan
           (sourceSpanStart (locatedSpan start))
@@ -2560,8 +2583,49 @@ parseMoreMultiplicativeExpression left = do
 
 parsePostfixExpression :: Parser (Located GrammarV1Expression)
 parsePostfixExpression = do
-  primary <- parsePrimaryExpression
-  parseMorePostfixExpression primary
+  token <- peekToken
+  case fmap locatedValue token of
+    Just (GrammarIdentifier _) -> parseNamedPostfixExpression
+    _ -> do
+      primary <- parsePrimaryExpression
+      parseMorePostfixExpression primary
+
+parseNamedPostfixExpression :: Parser (Located GrammarV1Expression)
+parseNamedPostfixExpression = do
+  name <- parseQualifiedName
+  hasStatic <- peekSymbol "["
+  (staticArguments, staticEnd) <- if hasStatic
+    then do
+      (arguments, end) <- parseStaticArguments
+      pure (arguments, Just end)
+    else pure ([], Nothing)
+  let referenceEnd = maybe (locatedSpan name) locatedSpan staticEnd
+      reference = GrammarV1StaticReference
+        { grammarV1StaticReferenceName = locatedValue name
+        , grammarV1StaticReferenceArguments = staticArguments
+        }
+      referenceLocated = Located
+        (SourceSpan
+          (sourceSpanStart (locatedSpan name))
+          (sourceSpanEnd referenceEnd))
+        reference
+  hasTermArguments <- peekSymbol "("
+  if hasTermArguments
+    then do
+      (arguments, end) <- parseTermArguments
+      let named = Located
+            (SourceSpan
+              (sourceSpanStart (locatedSpan name))
+              (sourceSpanEnd (locatedSpan end)))
+            (GrammarV1NameExpression reference arguments)
+      parseMorePostfixExpression named
+    else if hasStatic
+      then do
+        let named = Located (locatedSpan referenceLocated) (GrammarV1NameExpression reference [])
+        parseMorePostfixExpression named
+      else pure $ Located
+        (locatedSpan name)
+        (GrammarV1NameExpression reference [])
 
 parseMorePostfixExpression
   :: Located GrammarV1Expression
@@ -2584,6 +2648,30 @@ parsePrimaryExpression :: Parser (Located GrammarV1Expression)
 parsePrimaryExpression = do
   token <- peekToken
   case fmap locatedValue token of
+    Just (GrammarKeyword "true") -> do
+      value <- expectKeyword "true"
+      pure (Located (locatedSpan value) (GrammarV1BoolExpression True))
+    Just (GrammarKeyword "false") -> do
+      value <- expectKeyword "false"
+      pure (Located (locatedSpan value) (GrammarV1BoolExpression False))
+    Just (GrammarKeyword "unit") -> do
+      value <- expectKeyword "unit"
+      pure (Located (locatedSpan value) GrammarV1UnitExpression)
+    Just (GrammarDecimalInteger _) -> do
+      value <- takeToken
+      case locatedValue value of
+        GrammarDecimalInteger integer ->
+          pure (Located (locatedSpan value) (GrammarV1IntegerExpression integer))
+        _ -> failParser "internal DECIMAL_INTEGER expression dispatch error"
+    Just (GrammarSymbol "(") -> parseTupleOrParenthesizedExpression
+    Just other -> failParser $
+      "expected arithmetic primary_expression; found " <> renderToken other
+    Nothing -> failParser "expected primary_expression at end of input"
+
+parseCommandExpression :: Parser (Located GrammarV1Expression)
+parseCommandExpression = do
+  token <- peekToken
+  case fmap locatedValue token of
     Just (GrammarKeyword "construct") -> parseConstructExpression
     Just (GrammarKeyword "borrow") -> parseBorrowExpression
     Just (GrammarKeyword "if") -> parseIfExpression
@@ -2601,36 +2689,18 @@ parsePrimaryExpression = do
     Just (GrammarKeyword "send_exact") -> parseSendExactExpression
     Just (GrammarKeyword "send") -> parseSendExpression
     Just (GrammarKeyword "select") -> parseSelectExpression
+    Just (GrammarKeyword "offer") -> parseOfferExpression
     Just (GrammarKeyword "commit_receive") -> parseCommitReceiveExpression
+    Just (GrammarKeyword "reject") -> parseRejectExpression
     Just (GrammarKeyword "fail") -> parseFailExpression
     Just (GrammarKeyword "close") -> parseCloseExpression
     Just (GrammarKeyword "release") -> parseReleaseExpression
     Just (GrammarKeyword "transport") -> parseTransportExpression
     Just (GrammarKeyword "accept") -> parseAcceptExpression
     Just (GrammarKeyword "prove") -> parseProveExpression
-    Just (GrammarKeyword "offer") -> parseOfferExpression
-    Just (GrammarKeyword "reject") -> parseRejectExpression
-    Just (GrammarKeyword "true") -> do
-      value <- expectKeyword "true"
-      pure (Located (locatedSpan value) (GrammarV1BoolExpression True))
-    Just (GrammarKeyword "false") -> do
-      value <- expectKeyword "false"
-      pure (Located (locatedSpan value) (GrammarV1BoolExpression False))
-    Just (GrammarKeyword "unit") -> do
-      value <- expectKeyword "unit"
-      pure (Located (locatedSpan value) GrammarV1UnitExpression)
-    Just (GrammarDecimalInteger _) -> do
-      value <- takeToken
-      case locatedValue value of
-        GrammarDecimalInteger integer ->
-          pure (Located (locatedSpan value) (GrammarV1IntegerExpression integer))
-        _ -> failParser "internal DECIMAL_INTEGER expression dispatch error"
-    Just (GrammarSymbol "(") -> parseTupleOrParenthesizedExpression
-    Just (GrammarIdentifier _) -> parseNameExpression
     Just other -> failParser $
-      "SURF-002 term/block slice does not yet implement primary_expression beginning with "
-        <> renderToken other
-    Nothing -> failParser "expected primary_expression at end of input"
+      "expected command_expression; found " <> renderToken other
+    Nothing -> failParser "expected command_expression at end of input"
 
 parseReceiveFrameExpression :: Parser (Located GrammarV1Expression)
 parseReceiveFrameExpression = do
@@ -2643,18 +2713,17 @@ parseReceiveFrameExpression = do
 parseReceiveExactExpression :: Parser (Located GrammarV1Expression)
 parseReceiveExactExpression = do
   start <- expectKeyword "receive_exact"
-  amount <- parseAdditiveExpression
-  _ <- expectKeyword "on"
-  endpoint <- parseAdditiveExpression
+  amount <- parseBaseExpression
   hasUsing <- peekKeyword "using"
   evidence <- if hasUsing
-    then expectKeyword "using" >> Just <$> parseAdditiveExpression
+    then expectKeyword "using" >> Just <$> parseBaseExpression
     else pure Nothing
-  let endSpan = maybe (locatedSpan endpoint) locatedSpan evidence
+  _ <- expectKeyword "on"
+  endpoint <- parseBaseExpression
   pure $ Located
     (SourceSpan
       (sourceSpanStart (locatedSpan start))
-      (sourceSpanEnd endSpan))
+      (sourceSpanEnd (locatedSpan endpoint)))
     (GrammarV1ReceiveExactExpression amount endpoint evidence)
 
 parseReceiveExpression :: Parser (Located GrammarV1Expression)
@@ -2662,7 +2731,7 @@ parseReceiveExpression = do
   start <- expectKeyword "receive"
   resultType <- parseType
   _ <- expectKeyword "on"
-  endpoint <- parseAdditiveExpression
+  endpoint <- parseBaseExpression
   pure $ Located
     (SourceSpan
       (sourceSpanStart (locatedSpan start))
@@ -2674,7 +2743,7 @@ parseRecognizeExpression = do
   start <- expectKeyword "recognize"
   recognizer <- parseStaticReference
   _ <- expectKeyword "from"
-  source <- parseAdditiveExpression
+  source <- parseBaseExpression
   pure $ Located
     (SourceSpan
       (sourceSpanStart (locatedSpan start))
@@ -2687,10 +2756,10 @@ parseValidateExpression = do
   validator <- parseStaticReference
   hasAt <- peekKeyword "at"
   position <- if hasAt
-    then expectKeyword "at" >> Just <$> parseAdditiveExpression
+    then expectKeyword "at" >> Just <$> parseBaseExpression
     else pure Nothing
   _ <- expectKeyword "on"
-  endpoint <- parseAdditiveExpression
+  endpoint <- parseBaseExpression
   pure $ Located
     (SourceSpan
       (sourceSpanStart (locatedSpan start))
@@ -2700,9 +2769,9 @@ parseValidateExpression = do
 parseSendExactExpression :: Parser (Located GrammarV1Expression)
 parseSendExactExpression = do
   start <- expectKeyword "send_exact"
-  value <- parseAdditiveExpression
+  value <- parseBaseExpression
   _ <- expectKeyword "on"
-  endpoint <- parseAdditiveExpression
+  endpoint <- parseBaseExpression
   pure $ Located
     (SourceSpan
       (sourceSpanStart (locatedSpan start))
@@ -2712,9 +2781,9 @@ parseSendExactExpression = do
 parseSendExpression :: Parser (Located GrammarV1Expression)
 parseSendExpression = do
   start <- expectKeyword "send"
-  value <- parseAdditiveExpression
+  value <- parseBaseExpression
   _ <- expectKeyword "on"
-  endpoint <- parseAdditiveExpression
+  endpoint <- parseBaseExpression
   pure $ Located
     (SourceSpan
       (sourceSpanStart (locatedSpan start))
@@ -2725,17 +2794,16 @@ parseSelectExpression :: Parser (Located GrammarV1Expression)
 parseSelectExpression = do
   start <- expectKeyword "select"
   branch <- parseBranchValue
-  _ <- expectKeyword "on"
-  endpoint <- parseAdditiveExpression
   hasUsing <- peekKeyword "using"
   evidence <- if hasUsing
-    then expectKeyword "using" >> Just <$> parseAdditiveExpression
+    then expectKeyword "using" >> Just <$> parseBaseExpression
     else pure Nothing
-  let endSpan = maybe (locatedSpan endpoint) locatedSpan evidence
+  _ <- expectKeyword "on"
+  endpoint <- parseBaseExpression
   pure $ Located
     (SourceSpan
       (sourceSpanStart (locatedSpan start))
-      (sourceSpanEnd endSpan))
+      (sourceSpanEnd (locatedSpan endpoint)))
     (GrammarV1SelectExpression branch endpoint evidence)
 
 parseBranchValue :: Parser (Located GrammarV1BranchValue)
@@ -2763,9 +2831,9 @@ parseBranchValue = do
 parseCommitReceiveExpression :: Parser (Located GrammarV1Expression)
 parseCommitReceiveExpression = do
   start <- expectKeyword "commit_receive"
-  source <- parseAdditiveExpression
+  source <- parseBaseExpression
   _ <- expectKeyword "using"
-  evidence <- parseAdditiveExpression
+  evidence <- parseBaseExpression
   pure $ Located
     (SourceSpan
       (sourceSpanStart (locatedSpan start))
@@ -2777,7 +2845,7 @@ parseFailExpression = do
   start <- expectKeyword "fail"
   target <- parseFailureTarget
   _ <- expectKeyword "on"
-  endpoint <- parseAdditiveExpression
+  endpoint <- parseBaseExpression
   pure $ Located
     (SourceSpan
       (sourceSpanStart (locatedSpan start))
@@ -2787,7 +2855,7 @@ parseFailExpression = do
 parseCloseExpression :: Parser (Located GrammarV1Expression)
 parseCloseExpression = do
   start <- expectKeyword "close"
-  endpoint <- parseAdditiveExpression
+  endpoint <- parseBaseExpression
   pure $ Located
     (SourceSpan
       (sourceSpanStart (locatedSpan start))
@@ -2797,7 +2865,7 @@ parseCloseExpression = do
 parseReleaseExpression :: Parser (Located GrammarV1Expression)
 parseReleaseExpression = do
   start <- expectKeyword "release"
-  value <- parseAdditiveExpression
+  value <- parseBaseExpression
   pure $ Located
     (SourceSpan
       (sourceSpanStart (locatedSpan start))
@@ -2807,7 +2875,7 @@ parseReleaseExpression = do
 parseAcceptExpression :: Parser (Located GrammarV1Expression)
 parseAcceptExpression = do
   start <- expectKeyword "accept"
-  value <- parseAdditiveExpression
+  value <- parseBaseExpression
   _ <- expectKeyword "as"
   target <- parseType
   pure $ Located
@@ -2819,21 +2887,19 @@ parseAcceptExpression = do
 parseProveExpression :: Parser (Located GrammarV1Expression)
 parseProveExpression = do
   start <- expectKeyword "prove"
+  _ <- expectSymbol "("
   proposition <- parseProposition
-  pure $ Located
-    (SourceSpan
-      (sourceSpanStart (locatedSpan start))
-      (sourceSpanEnd (locatedSpan proposition)))
-    (GrammarV1ProveExpression proposition)
+  end <- expectSymbol ")"
+  pure $ locatedBetween start end (GrammarV1ProveExpression proposition)
 
 parseTransportExpression :: Parser (Located GrammarV1Expression)
 parseTransportExpression = do
   start <- expectKeyword "transport"
-  value <- parseAdditiveExpression
+  value <- parseBaseExpression
   _ <- expectKeyword "to"
   target <- parseType
   _ <- expectKeyword "using"
-  evidence <- parseAdditiveExpression
+  evidence <- parseBaseExpression
   pure $ Located
     (SourceSpan
       (sourceSpanStart (locatedSpan start))
@@ -2843,7 +2909,7 @@ parseTransportExpression = do
 parseOfferExpression :: Parser (Located GrammarV1Expression)
 parseOfferExpression = do
   start <- expectKeyword "offer"
-  scrutinee <- parseAdditiveExpression
+  scrutinee <- parseBaseExpression
   _ <- expectSymbol "{"
   atEnd <- peekSymbol "}"
   if atEnd
@@ -3032,7 +3098,7 @@ parseMoreFieldAssignments = do
 parseBorrowExpression :: Parser (Located GrammarV1Expression)
 parseBorrowExpression = do
   start <- expectKeyword "borrow"
-  value <- parseAdditiveExpression
+  value <- parseBaseExpression
   _ <- expectKeyword "as"
   binder <- expectIdentifier
   body <- parseBlock
@@ -3062,7 +3128,7 @@ parseMatchExpression = do
 parseDecideExpression :: Parser (Located GrammarV1Expression)
 parseDecideExpression = do
   start <- expectKeyword "decide"
-  scrutinee <- parseAdditiveExpression
+  scrutinee <- parseBaseExpression
   _ <- expectSymbol "{"
   atEnd <- peekSymbol "}"
   if atEnd
@@ -3244,7 +3310,7 @@ parseClosureCaptures = do
 parseRejectExpression :: Parser (Located GrammarV1Expression)
 parseRejectExpression = do
   start <- expectKeyword "reject"
-  operand <- parseAdditiveExpression
+  operand <- parseBaseExpression
   pure $ Located
     (SourceSpan
       (sourceSpanStart (locatedSpan start))
@@ -3285,22 +3351,6 @@ parseMoreTupleExpressions = do
           rest <- parseMoreTupleExpressions
           pure (value : rest)
     else pure []
-
-parseNameExpression :: Parser (Located GrammarV1Expression)
-parseNameExpression = do
-  reference <- parseStaticReference
-  hasTermArguments <- peekSymbol "("
-  if hasTermArguments
-    then do
-      (arguments, end) <- parseTermArguments
-      pure $ Located
-        (SourceSpan
-          (sourceSpanStart (locatedSpan reference))
-          (sourceSpanEnd (locatedSpan end)))
-        (GrammarV1NameExpression (locatedValue reference) arguments)
-    else pure $ Located
-      (locatedSpan reference)
-      (GrammarV1NameExpression (locatedValue reference) [])
 
 parseTermArguments :: Parser ([Located GrammarV1Expression], Located GrammarV1Token)
 parseTermArguments = do
@@ -3631,7 +3681,7 @@ parseNamedPropositionAtom = do
 
 parseRelationProposition :: Parser (Located GrammarV1Proposition)
 parseRelationProposition = do
-  left <- parseExpression
+  left <- parseAdditiveExpression
   parseRelationFromLeft left
 
 parseRelationFromLeft
@@ -3639,7 +3689,7 @@ parseRelationFromLeft
   -> Parser (Located GrammarV1Proposition)
 parseRelationFromLeft left = do
   operator <- parseRelationOperator
-  right <- parseExpression
+  right <- parseAdditiveExpression
   pure $ Located
     (SourceSpan
       (sourceSpanStart (locatedSpan left))
@@ -4019,8 +4069,36 @@ staticBinary left operator operatorValue right = Located
 
 parseStaticPostfixExpression :: Parser (Located GrammarV1StaticValueExpression)
 parseStaticPostfixExpression = do
-  primary <- parseStaticPrimaryExpression
-  parseMoreStaticPostfix primary
+  token <- peekToken
+  case fmap locatedValue token of
+    Just (GrammarIdentifier _) -> do
+      name <- parseQualifiedName
+      hasStatic <- peekSymbol "["
+      if hasStatic
+        then do
+          (arguments, end) <- parseStaticArguments
+          let reference = Located
+                (SourceSpan
+                  (sourceSpanStart (locatedSpan name))
+                  (sourceSpanEnd (locatedSpan end)))
+                GrammarV1StaticReference
+                  { grammarV1StaticReferenceName = locatedValue name
+                  , grammarV1StaticReferenceArguments = arguments
+                  }
+              base = Located
+                (locatedSpan reference)
+                (GrammarV1StaticValueReference reference)
+          parseMoreStaticPostfix base
+        else pure $ Located
+          (locatedSpan name)
+          (GrammarV1StaticValueReference
+            (Located (locatedSpan name) GrammarV1StaticReference
+              { grammarV1StaticReferenceName = locatedValue name
+              , grammarV1StaticReferenceArguments = []
+              }))
+    _ -> do
+      primary <- parseStaticPrimaryExpression
+      parseMoreStaticPostfix primary
 
 parseMoreStaticPostfix
   :: Located GrammarV1StaticValueExpression
