@@ -5,6 +5,8 @@ module Phil.Surface.Lineage
   , DeclarationSiteId (..)
   , InstanceLineageSiteId (..)
   , ProcessLineageSiteId (..)
+  , GrammarRevision (..)
+  , canonicalGrammarRevisionV1
   , PortableSourceUnit (..)
   , PortableInstanceLineage (..)
   , PortableProcessLineage (..)
@@ -12,11 +14,12 @@ module Phil.Surface.Lineage
   , ResolvedSourceBundleLineage (..)
   , LineageError (..)
   , decodePortableSourceBundle
+  , decodePortableSourceBundleForGrammar
   , resolveSourceBundleLineage
   ) where
 
 import Control.Monad (foldM)
-import Data.Char (isAlphaNum, isControl, isLetter, isSpace)
+import Data.Char (isAlphaNum, isControl, isDigit, isLetter, isSpace)
 import qualified Data.Map.Strict as Map
 import Data.Map.Strict (Map)
 import qualified Data.Set as Set
@@ -43,6 +46,15 @@ newtype InstanceLineageSiteId = InstanceLineageSiteId { unInstanceLineageSiteId 
 newtype ProcessLineageSiteId = ProcessLineageSiteId { unProcessLineageSiteId :: Text }
   deriving (Eq, Ord, Show)
 
+-- | Exact concrete-grammar identity carried by a portable SourceBundle.
+-- Grammar compatibility is not inferred from this value: Phase 1 accepts only
+-- the exact revision selected by the current front end.
+newtype GrammarRevision = GrammarRevision { unGrammarRevision :: Text }
+  deriving (Eq, Ord, Show)
+
+canonicalGrammarRevisionV1 :: GrammarRevision
+canonicalGrammarRevisionV1 = GrammarRevision "sha256:1bc73beb296475f96d739181c0a7609eaf53a61362b2aa0cf7bd7184d06e67ac"
+
 -- | Implementation-independent SourceBundle fixture record. The metadata key is
 -- deliberately kept as text until the lineage competence check validates it.
 data PortableSourceUnit = PortableSourceUnit
@@ -66,7 +78,8 @@ data PortableProcessLineage = PortableProcessLineage
   deriving (Eq, Show)
 
 data PortableSourceBundle = PortableSourceBundle
-  { portableSelectedProgramRoot :: Text
+  { portableGrammarRevision :: GrammarRevision
+  , portableSelectedProgramRoot :: Text
   , portableSourceUnits :: [PortableSourceUnit]
   , portableInstanceLineage :: [PortableInstanceLineage]
   , portableProcessLineage :: [PortableProcessLineage]
@@ -82,6 +95,10 @@ data ResolvedSourceBundleLineage = ResolvedSourceBundleLineage
 
 data LineageError
   = InvalidBundleHeader Text
+  | MissingGrammarRevision
+  | DuplicateGrammarRevision GrammarRevision GrammarRevision
+  | MalformedGrammarRevision Text
+  | IncompatibleGrammarRevision GrammarRevision GrammarRevision
   | MissingSelectedProgramRoot
   | DuplicateSelectedProgramRoot Text Text
   | MalformedPortableRecord Int Text
@@ -106,8 +123,20 @@ data LineageError
 portableHeader :: Text
 portableHeader = "PHIL-SOURCE-BUNDLE-LINEAGE-V1"
 
+validateGrammarRevision :: Text -> Either LineageError GrammarRevision
+validateGrammarRevision raw =
+  case Text.stripPrefix "sha256:" raw of
+    Just digestValue
+      | raw == Text.strip raw
+      , Text.length digestValue == 64
+      , Text.all isLowerHex digestValue -> Right (GrammarRevision raw)
+    _ -> Left (MalformedGrammarRevision raw)
+  where
+    isLowerHex character = isDigit character || (character >= 'a' && character <= 'f')
+
 data DecodeState = DecodeState
-  { decodeRoot :: Maybe Text
+  { decodeGrammar :: Maybe GrammarRevision
+  , decodeRoot :: Maybe Text
   , decodeUnits :: [PortableSourceUnit]
   , decodeInstances :: [PortableInstanceLineage]
   , decodeProcesses :: [PortableProcessLineage]
@@ -115,7 +144,8 @@ data DecodeState = DecodeState
 
 emptyDecodeState :: DecodeState
 emptyDecodeState = DecodeState
-  { decodeRoot = Nothing
+  { decodeGrammar = Nothing
+  , decodeRoot = Nothing
   , decodeUnits = []
   , decodeInstances = []
   , decodeProcesses = []
@@ -125,7 +155,16 @@ emptyDecodeState = DecodeState
 -- This is test/interchange infrastructure, not permanent Phil source syntax or
 -- a commitment to a long-term stable-key wire encoding.
 decodePortableSourceBundle :: Text -> Either LineageError PortableSourceBundle
-decodePortableSourceBundle input =
+decodePortableSourceBundle = decodePortableSourceBundleForGrammar canonicalGrammarRevisionV1
+
+-- | Decode for one explicitly selected concrete-grammar revision. Phase 1 has
+-- no implicit migration or compatibility relation: a different exact digest is
+-- an incompatible input and fails before source lineage can be resolved.
+decodePortableSourceBundleForGrammar
+  :: GrammarRevision
+  -> Text
+  -> Either LineageError PortableSourceBundle
+decodePortableSourceBundleForGrammar expectedGrammar input =
   case Text.lines input of
     [] -> Left (InvalidBundleHeader "")
     header : records
@@ -133,9 +172,14 @@ decodePortableSourceBundle input =
           Left (InvalidBundleHeader (Text.strip header))
       | otherwise -> do
           decoded <- foldM decodeRecord emptyDecodeState (zip [2 ..] records)
+          grammarRevision <- maybe (Left MissingGrammarRevision) Right (decodeGrammar decoded)
+          if grammarRevision == expectedGrammar
+            then Right ()
+            else Left (IncompatibleGrammarRevision expectedGrammar grammarRevision)
           root <- maybe (Left MissingSelectedProgramRoot) Right (decodeRoot decoded)
           Right PortableSourceBundle
-            { portableSelectedProgramRoot = root
+            { portableGrammarRevision = grammarRevision
+            , portableSelectedProgramRoot = root
             , portableSourceUnits = reverse (decodeUnits decoded)
             , portableInstanceLineage = reverse (decodeInstances decoded)
             , portableProcessLineage = reverse (decodeProcesses decoded)
@@ -147,6 +191,11 @@ decodeRecord state (lineNumber, rawLine)
   | "#" `Text.isPrefixOf` stripped = Right state
   | otherwise =
       case Text.splitOn "\t" rawLine of
+        ["grammar", rawRevision] -> do
+          revisionValue <- validateGrammarRevision (Text.strip rawRevision)
+          case decodeGrammar state of
+            Nothing -> Right state { decodeGrammar = Just revisionValue }
+            Just existing -> Left (DuplicateGrammarRevision existing revisionValue)
         ["root", root] ->
           let root' = Text.strip root
           in if Text.null root'

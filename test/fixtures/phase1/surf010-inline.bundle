@@ -1,4 +1,5 @@
 PHIL-SOURCE-BUNDLE-LINEAGE-V1
+grammar	sha256:1bc73beb296475f96d739181c0a7609eaf53a61362b2aa0cf7bd7184d06e67ac
 root	program:lineage-fixture
 unit	unit.upload-id	site.upload-id	-	@key("decl:upload-id") record UploadId {}
 instance	instance.site.primary	inst:primary

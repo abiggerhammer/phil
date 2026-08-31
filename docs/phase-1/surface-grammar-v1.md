@@ -247,6 +247,8 @@ The broader semantic-to-surface audit that motivated the previous cases is recor
 
 The earlier reconciliation sequence exposed already-admitted semantics: refinement/transport/finite relations/outcome residues/offer; declaration-level structural modes; and the broader static-actual/requirement/product/outcome-class/obligation/control-state completeness repairs. ADR-024 is a deliberate bounded Phase 1 semantic extension: it adds architecture-level process activation and explicit internal-versus-external protocol participant classification while keeping physical concurrency mechanisms outside source semantics.
 
+Portable SourceBundle interchange therefore carries a required exact grammar-revision record, `grammar\tsha256:<64-lowercase-hex>`. The current Phase 1 front end accepts only `canonicalGrammarRevisionV1`, which is mechanically checked against the SHA-256 of `grammar/phase1-surface.ebnf`. Missing, duplicate, malformed, or incompatible revision metadata fails closed before source lineage resolution or parsing. This binding is SourceBundle/front-end metadata, not `.phil` syntax, and Phase 1 defines no implicit cross-revision compatibility relation.
+
 A future incompatible syntax change must be explicit rather than silently changing parser behavior.
 
 ## Deliberate non-goals
