@@ -179,7 +179,7 @@ localSuffixAttachmentPreserved = do
         case locatedValue failed of
           GrammarV1FallbackExpression base (Located _ (GrammarV1FailFallback target)) -> do
             assertSimpleName "x" base
-            assert (length (grammarV1FailureTargetArguments target) == 1)
+            assert (length (grammarV1FailureTargetArguments (locatedValue target)) == 1)
               "failure-target term arguments did not attach locally"
           other -> Left ("fail fallback did not retain its target arguments: " <> show other)
     statements -> Left ("unexpected local-suffix statement sequence " <> show statements)
