@@ -79,5 +79,5 @@ grammarV1BareStaticReferenceActual argument = case argument of
     | null (grammarV1StaticReferenceArguments reference) ->
         case grammarV1QualifiedNameParts (grammarV1StaticReferenceName reference) of
           [] -> Nothing
-          parts -> Just (ReferencedGenericStaticActual (Text.intercalate "." parts))
+          parts -> Just (ReferencedGenericStaticActual (Text.intercalate (Text.singleton '.') parts))
   _ -> Nothing
