@@ -1,4 +1,4 @@
-name: Phase 1 Data Subject Proofs
+name: Phase 1 Data Subject Production Binding
 
 on:
   pull_request:
@@ -8,8 +8,10 @@ on:
       - 'proof/Phil/Core/DataSubjectImplementationExtraction.v'
       - 'docs/phase-1/data-subject-proof-v1.md'
       - 'docs/phase-1/data-subject-implementation-refinement-v1.md'
+      - 'docs/phase-1/data-subject-production-binding-v1.md'
       - 'app/DataSubjectDecisionCorrespondenceMain.hs'
       - '.github/workflows/phase1-data-subject-proofs.yml'
+      - 'src/DataSubjectKernel.hs'
       - 'src/Phil/Core/DataSubjectTransport.hs'
       - 'test/Phase1DataSubjectTransportMain.hs'
   push:
@@ -20,8 +22,10 @@ on:
       - 'proof/Phil/Core/DataSubjectImplementationExtraction.v'
       - 'docs/phase-1/data-subject-proof-v1.md'
       - 'docs/phase-1/data-subject-implementation-refinement-v1.md'
+      - 'docs/phase-1/data-subject-production-binding-v1.md'
       - 'app/DataSubjectDecisionCorrespondenceMain.hs'
       - '.github/workflows/phase1-data-subject-proofs.yml'
+      - 'src/DataSubjectKernel.hs'
       - 'src/Phil/Core/DataSubjectTransport.hs'
       - 'test/Phase1DataSubjectTransportMain.hs'
 
@@ -37,7 +41,7 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
-      - name: Compile PHIL-DATA-SUBJECT-001 proof and implementation correspondence
+      - name: Compile PHIL-DATA-SUBJECT-001 proof and exact production kernel
         shell: bash
         run: |
           set -euo pipefail
@@ -50,8 +54,11 @@ jobs:
           grep -q 'decideDataSubjectPrerequisites' DataSubjectKernel.hs
           grep -q 'decideDataSubjectTransportMode' DataSubjectKernel.hs
           grep -q 'decideDataSubjectTransport' DataSubjectKernel.hs
+          cmp DataSubjectKernel.hs src/DataSubjectKernel.hs
+          test "$(sha256sum DataSubjectKernel.hs | cut -d' ' -f1)" = \
+            'b4b03eaab273225b39e50f080ff01fbafd82644b03aebd44f2589742161f424a'
 
-      - name: Record proof and extraction identities
+      - name: Record proof and production-kernel identities
         shell: bash
         run: |
           set -euo pipefail
@@ -74,14 +81,14 @@ jobs:
             > data-subject-proof/PHIL-DATA-SUBJECT-001.proof.sha256
           {
             echo 'obligation=PHIL-DATA-SUBJECT-001'
-            echo 'evidence=Rocq-9.2.0'
+            echo 'evidence=Rocq-9.2.0-production-binding'
             cat data-subject-proof/PHIL-DATA-SUBJECT-001.proof.sha256
           } > data-subject-proof/PHIL-DATA-SUBJECT-001.proof-certificate.txt
           cat data-subject-proof/PHIL-DATA-SUBJECT-001.proof-certificate.txt
 
       - uses: actions/upload-artifact@v4
         with:
-          name: rocq-data-subject-proof
+          name: rocq-data-subject-production-binding
           path: data-subject-proof
           if-no-files-found: error
 
@@ -101,20 +108,24 @@ jobs:
 
       - uses: actions/download-artifact@v4
         with:
-          name: rocq-data-subject-proof
+          name: rocq-data-subject-production-binding
           path: data-subject-proof
 
-      - name: Typecheck and execute extracted data subject controls
+      - name: Verify exact extracted production kernel and direct controls
         run: |
           set -euo pipefail
+          cmp data-subject-proof/DataSubjectKernel.hs src/DataSubjectKernel.hs
+          test "$(sha256sum src/DataSubjectKernel.hs | cut -d' ' -f1)" = \
+            'b4b03eaab273225b39e50f080ff01fbafd82644b03aebd44f2589742161f424a'
           ghc -Wall -Werror -fno-code data-subject-proof/DataSubjectKernel.hs
+          ghc -Wall -Werror -fno-code src/DataSubjectKernel.hs
           ghc -Wall -Werror \
-            -idata-subject-proof \
+            -isrc \
             app/DataSubjectDecisionCorrespondenceMain.hs \
             -o data-subject-kernel-controls
           ./data-subject-kernel-controls
 
-      - name: Typecheck unchanged DATA-012 implementation and corpus
+      - name: Typecheck bound DATA-012 implementation and corpus
         run: |
           set -euo pipefail
           cabal exec -- ghc -isrc -Wall -Werror -fno-code src/Phil/Core/DataSubjectTransport.hs
@@ -125,22 +136,23 @@ jobs:
           set -euo pipefail
           cabal exec -- runghc -Wall -Werror -isrc test/Phase1DataSubjectTransportMain.hs
 
-      - name: Record implementation-refinement staging identities
+      - name: Record implementation-refinement production-binding identities
         run: |
           set -euo pipefail
-          mkdir -p data-subject-implementation-correspondence
+          mkdir -p data-subject-production-binding
           sha256sum \
-            data-subject-proof/DataSubjectKernel.hs \
+            src/DataSubjectKernel.hs \
             src/Phil/Core/DataSubjectTransport.hs \
             test/Phase1DataSubjectTransportMain.hs \
             app/DataSubjectDecisionCorrespondenceMain.hs \
             proof/Phil/Core/DataSubjectImplementation.v \
             docs/phase-1/data-subject-implementation-refinement-v1.md \
-            > data-subject-implementation-correspondence/PHIL-DATA-SUBJECT-001.staging.sha256
-          cat data-subject-implementation-correspondence/PHIL-DATA-SUBJECT-001.staging.sha256
+            docs/phase-1/data-subject-production-binding-v1.md \
+            > data-subject-production-binding/PHIL-DATA-SUBJECT-001.closeout.sha256
+          cat data-subject-production-binding/PHIL-DATA-SUBJECT-001.closeout.sha256
 
       - uses: actions/upload-artifact@v4
         with:
-          name: data-subject-implementation-correspondence
-          path: data-subject-implementation-correspondence
+          name: data-subject-production-binding
+          path: data-subject-production-binding
           if-no-files-found: error

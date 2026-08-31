@@ -13,6 +13,7 @@ module Phil.Core.DataSubjectTransport
   , checkDataSubjectEvidenceUpdate
   ) where
 
+import qualified DataSubjectKernel as Kernel
 import Data.Text (Text)
 import qualified Data.Text as Text
 import Phil.Core.Refinement
@@ -111,40 +112,70 @@ checkDataSubjectEvidenceUpdate
   -> Maybe DataSubjectTransport
   -> Either DataSubjectTransportError CheckedDataSubjectUpdate
 checkDataSubjectEvidenceUpdate update evidence maybeTransport = do
-  if dataSubjectUpdatePriorConsumed update
-    then Right ()
-    else Left DataSubjectPriorNotConsumed
-  if dataSubjectUpdateReplacementConstructed update
-    then Right ()
-    else Left DataSubjectReplacementNotConstructed
-
   let prior = dataSubjectUpdatePrior update
       replacement = dataSubjectUpdateReplacement update
       priorIdentity = dataSubjectIdentity prior
       replacementIdentity = dataSubjectIdentity replacement
       evidenceIdentity = dataSubjectIdentity (subjectEvidenceSubject evidence)
+      priorKindResult = stableIdentityKind priorIdentity
+      replacementKindResult = stableIdentityKind replacementIdentity
+      evidenceKindResult = stableIdentityKind evidenceIdentity
+      priorStable = stableResult priorKindResult
+      replacementStable = stableResult replacementKindResult
+      evidenceStable = stableResult evidenceKindResult
+      kindsMatch = stableKindsMatch priorKindResult replacementKindResult
+      evidenceKindMatchesPrior = stableKindsMatch priorKindResult evidenceKindResult
+      evidenceTemplateMentionsSubject =
+        propositionMentions
+          (subjectEvidenceBinder evidence)
+          (subjectEvidenceTemplate evidence)
+      evidenceMatchesPrior = evidenceIdentity == priorIdentity
 
-  priorKind <- stableIdentityKind priorIdentity
-  replacementKind <- stableIdentityKind replacementIdentity
-  if priorKind == replacementKind
-    then Right ()
-    else Left (DataSubjectKindMismatch priorKind replacementKind)
-
-  if propositionMentions (subjectEvidenceBinder evidence) (subjectEvidenceTemplate evidence)
-    then Right ()
-    else Left (DataSubjectEvidenceTemplateDoesNotMentionSubject
-      (subjectEvidenceBinder evidence))
-
-  if evidenceIdentity == priorIdentity
-    then Right ()
-    else Left (DataSubjectEvidencePriorMismatch priorIdentity evidenceIdentity)
+  case Kernel.decideDataSubjectPrerequisites
+      (dataSubjectUpdatePriorConsumed update)
+      (dataSubjectUpdateReplacementConstructed update)
+      priorStable
+      replacementStable
+      kindsMatch
+      evidenceTemplateMentionsSubject
+      evidenceMatchesPrior
+      evidenceStable
+      evidenceKindMatchesPrior of
+    Kernel.DataSubjectPrerequisitesAccepted -> Right ()
+    Kernel.DataSubjectPriorNotConsumedDecision ->
+      Left DataSubjectPriorNotConsumed
+    Kernel.DataSubjectReplacementNotConstructedDecision ->
+      Left DataSubjectReplacementNotConstructed
+    Kernel.DataSubjectPriorNotStableDecision ->
+      Left (stableFailure priorIdentity priorKindResult)
+    Kernel.DataSubjectReplacementNotStableDecision ->
+      Left (stableFailure replacementIdentity replacementKindResult)
+    Kernel.DataSubjectKindMismatchDecision ->
+      Left (kindMismatchFailure priorKindResult replacementKindResult)
+    Kernel.DataSubjectEvidenceTemplateMissingSubjectDecision ->
+      Left (DataSubjectEvidenceTemplateDoesNotMentionSubject
+        (subjectEvidenceBinder evidence))
+    Kernel.DataSubjectEvidencePriorMismatchDecision ->
+      Left (DataSubjectEvidencePriorMismatch priorIdentity evidenceIdentity)
+    Kernel.DataSubjectEvidenceNotStableDecision ->
+      Left (stableFailure evidenceIdentity evidenceKindResult)
+    Kernel.DataSubjectEvidenceKindMismatchDecision ->
+      Left (kindMismatchFailure priorKindResult evidenceKindResult)
 
   let resultEvidence = evidence { subjectEvidenceSubject = replacement }
       sourceProposition = subjectEvidenceProposition evidence
       targetProposition = subjectEvidenceProposition resultEvidence
+      sameSubject = priorIdentity == replacementIdentity
+      transportPresent = case maybeTransport of
+        Nothing -> False
+        Just _ -> True
 
-  if priorIdentity == replacementIdentity
-    then case maybeTransport of
+  case Kernel.decideDataSubjectTransportMode sameSubject transportPresent of
+    Kernel.DataSubjectUnexpectedTransportDecision ->
+      Left DataSubjectUnexpectedTransportForSameSubject
+    Kernel.DataSubjectTransportRequiredDecision ->
+      Left (DataSubjectTransportRequired priorIdentity replacementIdentity)
+    Kernel.DataSubjectTransportModeAccepted -> case maybeTransport of
       Nothing -> Right CheckedDataSubjectUpdate
         { checkedDataSubjectPrior = prior
         , checkedDataSubjectReplacement = replacement
@@ -152,9 +183,6 @@ checkDataSubjectEvidenceUpdate update evidence maybeTransport = do
         , checkedDataSubjectResultEvidence = resultEvidence
         , checkedDataSubjectTransport = Nothing
         }
-      Just _ -> Left DataSubjectUnexpectedTransportForSameSubject
-    else case maybeTransport of
-      Nothing -> Left (DataSubjectTransportRequired priorIdentity replacementIdentity)
       Just transport -> do
         validateTransport
           priorIdentity replacementIdentity sourceProposition targetProposition
@@ -175,43 +203,83 @@ validateTransport
   -> SubjectBoundEvidence
   -> DataSubjectTransport
   -> Either DataSubjectTransportError ()
-validateTransport priorIdentity replacementIdentity sourceProposition targetProposition evidence transport = do
-  case dataSubjectTransportDisposition transport of
-    SubjectTransportAccepted -> Right ()
-    SubjectTransportRejected reason -> Left (DataSubjectTransportRejected reason)
+validateTransport priorIdentity replacementIdentity sourceProposition targetProposition evidence transport =
+  case Kernel.decideDataSubjectTransport
+      dispositionAccepted
+      revisionNonempty
+      evidenceReferenceMatches
+      priorIdentityMatches
+      replacementIdentityMatches
+      sourcePropositionMatches
+      targetPropositionMatches of
+    Kernel.DataSubjectTransportAcceptedDecision -> Right ()
+    Kernel.DataSubjectTransportDispositionRejectedDecision ->
+      Left dispositionFailure
+    Kernel.DataSubjectTransportRevisionMissingDecision ->
+      Left DataSubjectTransportRelationRevisionMissing
+    Kernel.DataSubjectTransportEvidenceMismatchDecision ->
+      Left (DataSubjectTransportEvidenceMismatch expectedReference actualReference)
+    Kernel.DataSubjectTransportPriorMismatchDecision ->
+      Left (DataSubjectTransportPriorMismatch priorIdentity actualPrior)
+    Kernel.DataSubjectTransportReplacementMismatchDecision ->
+      Left (DataSubjectTransportReplacementMismatch
+        replacementIdentity actualReplacement)
+    Kernel.DataSubjectTransportSourcePropositionMismatchDecision ->
+      Left (DataSubjectTransportSourcePropositionMismatch
+        sourceProposition actualSource)
+    Kernel.DataSubjectTransportTargetPropositionMismatchDecision ->
+      Left (DataSubjectTransportTargetPropositionMismatch
+        targetProposition actualTarget)
+  where
+    (dispositionAccepted, dispositionFailure) =
+      case dataSubjectTransportDisposition transport of
+        SubjectTransportAccepted ->
+          (True, DataSubjectTransportRejected
+            "internal data subject disposition reflection mismatch")
+        SubjectTransportRejected reason ->
+          (False, DataSubjectTransportRejected reason)
+    revisionNonempty = not (Text.null (dataSubjectTransportRelationRevision transport))
+    expectedReference = subjectEvidenceReference evidence
+    actualReference = dataSubjectTransportEvidenceReference transport
+    evidenceReferenceMatches = actualReference == expectedReference
+    actualPrior = dataSubjectTransportPriorIdentity transport
+    priorIdentityMatches = actualPrior == priorIdentity
+    actualReplacement = dataSubjectTransportReplacementIdentity transport
+    replacementIdentityMatches = actualReplacement == replacementIdentity
+    actualSource = normalizeProposition (dataSubjectTransportSourceProposition transport)
+    sourcePropositionMatches = actualSource == sourceProposition
+    actualTarget = normalizeProposition (dataSubjectTransportTargetProposition transport)
+    targetPropositionMatches = actualTarget == targetProposition
 
-  if Text.null (dataSubjectTransportRelationRevision transport)
-    then Left DataSubjectTransportRelationRevisionMissing
-    else Right ()
+stableResult :: Either DataSubjectTransportError Text -> Bool
+stableResult result = case result of
+  Right _ -> True
+  Left _ -> False
 
-  let expectedReference = subjectEvidenceReference evidence
-      actualReference = dataSubjectTransportEvidenceReference transport
-  if actualReference == expectedReference
-    then Right ()
-    else Left (DataSubjectTransportEvidenceMismatch expectedReference actualReference)
+stableKindsMatch
+  :: Either DataSubjectTransportError Text
+  -> Either DataSubjectTransportError Text
+  -> Bool
+stableKindsMatch left right = case (left, right) of
+  (Right leftKind, Right rightKind) -> leftKind == rightKind
+  _ -> False
 
-  let actualPrior = dataSubjectTransportPriorIdentity transport
-  if actualPrior == priorIdentity
-    then Right ()
-    else Left (DataSubjectTransportPriorMismatch priorIdentity actualPrior)
+stableFailure
+  :: RefTerm
+  -> Either DataSubjectTransportError Text
+  -> DataSubjectTransportError
+stableFailure identity result = case result of
+  Left err -> err
+  Right _ -> DataSubjectNotStableIdentity identity
 
-  let actualReplacement = dataSubjectTransportReplacementIdentity transport
-  if actualReplacement == replacementIdentity
-    then Right ()
-    else Left (DataSubjectTransportReplacementMismatch
-      replacementIdentity actualReplacement)
-
-  let actualSource = normalizeProposition (dataSubjectTransportSourceProposition transport)
-  if actualSource == sourceProposition
-    then Right ()
-    else Left (DataSubjectTransportSourcePropositionMismatch
-      sourceProposition actualSource)
-
-  let actualTarget = normalizeProposition (dataSubjectTransportTargetProposition transport)
-  if actualTarget == targetProposition
-    then Right ()
-    else Left (DataSubjectTransportTargetPropositionMismatch
-      targetProposition actualTarget)
+kindMismatchFailure
+  :: Either DataSubjectTransportError Text
+  -> Either DataSubjectTransportError Text
+  -> DataSubjectTransportError
+kindMismatchFailure left right = case (left, right) of
+  (Right leftKind, Right rightKind) -> DataSubjectKindMismatch leftKind rightKind
+  (Left err, _) -> err
+  (_, Left err) -> err
 
 stableIdentityKind :: RefTerm -> Either DataSubjectTransportError Text
 stableIdentityKind identity = case identity of
