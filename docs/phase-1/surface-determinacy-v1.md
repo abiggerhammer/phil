@@ -46,7 +46,7 @@ A command used *inside* arithmetic or field projection must be syntactically clo
 
 A bare dotted term such as `pkg.value` is a maximal `qualified_name`. Field projection becomes available after syntax that has already closed the name alternative: a parenthesized receiver, a term call, or a static-argument suffix. Examples include `(x).field`, `source().field`, and `value[T].field`.
 
-The static-value postfix grammar uses the same principle: a bare dotted static reference is a qualified name, while projection may follow a closed static-argument suffix or a nonreference primary.
+The static-value postfix grammar is stricter because a static reference, including one with static arguments, remains one reference production rather than a projection receiver. Static projection therefore requires a nonreference primary or an explicitly closed parenthesized receiver: `(Cfg[N]).field` is admitted, while `Cfg[N].field` is rejected.
 
 This is a grammar-level commitment, not an instruction to make `parseQualifiedName` greedy.
 
