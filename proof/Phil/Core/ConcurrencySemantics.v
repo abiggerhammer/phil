@@ -3,6 +3,8 @@ Import ListNotations.
 
 From Phil.Core Require Import
   Syntax
+  Context
+  ArchitectureIdentity
   ProcessJoin
   ProcessTerminal
   SystemsGenericLowering.
@@ -26,10 +28,6 @@ Definition ProtocolInstanceKey := nat.
 Definition ProtocolRoleKey := nat.
 Definition MessageSubjectKey := nat.
 Definition RestrictedSubjectKey := nat.
-
-(* -------------------------------------------------------------------------- *)
-(* CONC-001--003, 010--011: static population and ownership partition.         *)
-(* -------------------------------------------------------------------------- *)
 
 Record StaticProcessOccurrence : Type := mkStaticProcessOccurrence {
   staticProcessKey : ProcessKey;
@@ -129,10 +127,6 @@ Proof.
   - exact Hother.
   - exact Howner.
 Qed.
-
-(* -------------------------------------------------------------------------- *)
-(* CONC-004--006 plus PROT-008: exact synchronous rendezvous and causality.    *)
-(* -------------------------------------------------------------------------- *)
 
 Definition MessageAdmission := MessageSubjectKey -> bool.
 
@@ -244,10 +238,6 @@ Proof.
   exact Hscheduler.
 Qed.
 
-(* -------------------------------------------------------------------------- *)
-(* CONC-007: process failure is local and cannot fabricate peer progression.   *)
-(* -------------------------------------------------------------------------- *)
-
 Inductive ProcessExecutionStatus : Type :=
 | ProcessRunning
 | ProcessTerminated
@@ -289,10 +279,6 @@ Proof.
   rewrite (process_failure_does_not_cancel_peer before after failed peer Hstep Hdistinct).
   exact Hrunning.
 Qed.
-
-(* -------------------------------------------------------------------------- *)
-(* CONC-008: local terminal facts and whole-program terminal/stuck closure.     *)
-(* -------------------------------------------------------------------------- *)
 
 Record LocalProcessTerminalFact : Type := mkLocalProcessTerminalFact {
   localTerminalProcess : ProcessKey;
@@ -365,10 +351,6 @@ Proof.
   - reflexivity.
 Qed.
 
-(* -------------------------------------------------------------------------- *)
-(* CONC-009: execution mechanism belongs to realization, not source identity.  *)
-(* -------------------------------------------------------------------------- *)
-
 Record ConcurrencySemanticRevision : Type := mkConcurrencySemanticRevision {
   concurrencyPopulationRevision : nat;
   concurrencyRendezvousRevision : nat;
@@ -410,9 +392,6 @@ Proof.
   exact (f_equal executionPhysicalMechanismRevision Heq).
 Qed.
 
-(* Certified PHIL-SYS-GENERIC-001 remains the Systems identity boundary beneath
-   concurrency realization.  Concurrency execution choices cannot rekey the
-   checked ArchitectureInstance carried by generic lowering. *)
 Theorem generic_systems_instance_identity_survives_concurrency_realization :
   forall input context physicalMechanism,
     genericSourceInstanceRevision
@@ -423,10 +402,6 @@ Proof.
   intros.
   apply generic_lowering_preserves_exact_architecture_instance_revision.
 Qed.
-
-(* -------------------------------------------------------------------------- *)
-(* Aggregate safety statement.                                                *)
-(* -------------------------------------------------------------------------- *)
 
 Record BoundedConcurrencySafety
   (population : ProcessPopulation)
