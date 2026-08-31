@@ -22,6 +22,7 @@ import qualified Data.Map.Strict as Map
 import Data.Map.Strict (Map)
 import Data.Text (Text)
 import qualified Data.Text as Text
+import qualified ProtocolIdentityKernel as Kernel
 import Phil.Core.Context
   ( CheckError
   , ResourceContext (..)
@@ -176,11 +177,17 @@ lookupProtocolEndpoint :: Name -> ProtocolContext -> Maybe ProtocolEndpointBindi
 lookupProtocolEndpoint name = Map.lookup name . protocolEndpoints
 
 protocolEndpointContract :: ProtocolEndpointBinding -> ProtocolEndpointContract
-protocolEndpointContract binding = ProtocolEndpointContract
-  { protocolContractInstance = protocolEndpointInstance binding
-  , protocolContractRole = protocolEndpointRole binding
-  , protocolContractSession = protocolEndpointSession binding
-  }
+protocolEndpointContract binding =
+  case Kernel.planProtocolContract
+      (protocolEndpointInstance binding)
+      (protocolEndpointRole binding)
+      (protocolEndpointSession binding) of
+    Kernel.MkProtocolContractPlan instanceRevision role localSession ->
+      ProtocolEndpointContract
+        { protocolContractInstance = instanceRevision
+        , protocolContractRole = role
+        , protocolContractSession = localSession
+        }
 
 -- | Check whether one endpoint occurrence may inhabit a position expecting the
 -- other's exact endpoint contract. Occurrence names are intentionally ignored;
@@ -221,17 +228,50 @@ checkProtocolAction request context = do
   if protocolEndpointName binding /= endpoint
     then Left (ProtocolEndpointMapKeyMismatch endpoint (protocolEndpointName binding))
     else Right ()
-  requireEqual
-    (ProtocolInstanceMismatch endpoint)
-    expectedInstance
-    (protocolEndpointInstance binding)
-  requireEqual
-    (ProtocolRoleMismatch endpoint)
-    expectedRole
-    (protocolEndpointRole binding)
+
+  let actualInstance = protocolEndpointInstance binding
+      actualRole = protocolEndpointRole binding
+      instanceMatches = expectedInstance == actualInstance
+      roleMatches = expectedRole == actualRole
+
+  case Kernel.decideProtocolActionByFacts
+      instanceMatches
+      roleMatches
+      True of
+    Kernel.ProtocolActionAccepted -> Right ()
+    Kernel.ProtocolActionInstanceMismatchDecision ->
+      Left (ProtocolInstanceMismatch endpoint expectedInstance actualInstance)
+    Kernel.ProtocolActionRoleMismatchDecision ->
+      Left (ProtocolRoleMismatch endpoint expectedRole actualRole)
+    Kernel.ProtocolActionLocalStateRejectedDecision ->
+      Left (ProtocolInstanceMismatch endpoint expectedInstance actualInstance)
+
   checkResourceAgreement binding (protocolResources context)
-  sessionStep <- mapLeft ProtocolSessionError $
-    runSessionAction request (protocolResources context)
+
+  let sessionResult = runSessionAction request (protocolResources context)
+      localStateAllows = case sessionResult of
+        Right _ -> True
+        Left _ -> False
+
+  sessionStep <- case
+      Kernel.decideProtocolActionByFacts True True localStateAllows of
+    Kernel.ProtocolActionAccepted ->
+      case sessionResult of
+        Right step -> Right step
+        Left sessionError -> Left (ProtocolSessionError sessionError)
+    Kernel.ProtocolActionLocalStateRejectedDecision ->
+      case sessionResult of
+        Left sessionError -> Left (ProtocolSessionError sessionError)
+        Right _ ->
+          Left (ProtocolEndpointSessionMismatch
+            endpoint
+            (protocolEndpointSession binding)
+            (protocolEndpointSession binding))
+    Kernel.ProtocolActionInstanceMismatchDecision ->
+      Left (ProtocolInstanceMismatch endpoint expectedInstance actualInstance)
+    Kernel.ProtocolActionRoleMismatchDecision ->
+      Left (ProtocolRoleMismatch endpoint expectedRole actualRole)
+
   (successor, nextContext) <- advanceMetadata endpoint binding sessionStep context
   Right CheckedProtocolStep
     { checkedProtocolPredecessor = binding
@@ -334,24 +374,24 @@ checkEndpointContract
   :: ProtocolEndpointContract
   -> ProtocolEndpointContract
   -> Either ProtocolCheckError ()
-checkEndpointContract expected actual = do
-  requireEqual
-    ProtocolEndpointContractInstanceMismatch
-    (protocolContractInstance expected)
-    (protocolContractInstance actual)
-  requireEqual
-    ProtocolEndpointContractRoleMismatch
-    (protocolContractRole expected)
-    (protocolContractRole actual)
-  requireEqual
-    ProtocolEndpointContractSessionMismatch
-    (protocolContractSession expected)
-    (protocolContractSession actual)
-
-requireEqual :: Eq a => (a -> a -> e) -> a -> a -> Either e ()
-requireEqual constructor expected actual
-  | expected == actual = Right ()
-  | otherwise = Left (constructor expected actual)
+checkEndpointContract expected actual =
+  case Kernel.decideProtocolContractByFacts
+      (protocolContractInstance expected == protocolContractInstance actual)
+      (protocolContractRole expected == protocolContractRole actual)
+      (protocolContractSession expected == protocolContractSession actual) of
+    Kernel.ProtocolContractAccepted -> Right ()
+    Kernel.ProtocolContractInstanceMismatchDecision ->
+      Left (ProtocolEndpointContractInstanceMismatch
+        (protocolContractInstance expected)
+        (protocolContractInstance actual))
+    Kernel.ProtocolContractRoleMismatchDecision ->
+      Left (ProtocolEndpointContractRoleMismatch
+        (protocolContractRole expected)
+        (protocolContractRole actual))
+    Kernel.ProtocolContractSessionMismatchDecision ->
+      Left (ProtocolEndpointContractSessionMismatch
+        (protocolContractSession expected)
+        (protocolContractSession actual))
 
 mapLeft :: (a -> b) -> Either a c -> Either b c
 mapLeft f = either (Left . f) Right
