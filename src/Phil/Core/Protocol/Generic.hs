@@ -17,6 +17,7 @@ import Phil.Core.Syntax
   ( Mode (Linear)
   , Name
   )
+import qualified ProtocolProjectionKernel as ProjectionKernel
 
 -- | Move one live endpoint occurrence to a fresh local name without inspecting
 -- or exercising its session state.  This operation is therefore valid even
@@ -38,7 +39,18 @@ transferProtocolEndpoint predecessor successor context = do
     consumeLinear predecessor (protocolResources context)
   resources <- mapLeft ProtocolResourceError $
     insertBinding Linear successor endpointTy consumed
-  let successorBinding = binding { protocolEndpointName = successor }
+  let successorBinding =
+        case ProjectionKernel.planTransferredProtocolContract
+          (protocolEndpointInstance binding)
+          (protocolEndpointRole binding)
+          (protocolEndpointSession binding) of
+          ProjectionKernel.MkTransferredProtocolContractPlan
+            instanceRevision roleKey localSession -> ProtocolEndpointBinding
+              { protocolEndpointName = successor
+              , protocolEndpointInstance = instanceRevision
+              , protocolEndpointRole = roleKey
+              , protocolEndpointSession = localSession
+              }
   Right ProtocolContext
     { protocolResources = resources
     , protocolEndpoints = Map.insert successor successorBinding
