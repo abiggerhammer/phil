@@ -7,37 +7,53 @@ main :: IO ()
 main = do
   results <- sequence
     [ test "continuation accepts exact facts" $
-        decideProtocolContinuationByFacts True True True == ProtocolContinuationAccepted
+        case decideProtocolContinuationByFacts True True True of
+          ProtocolContinuationAccepted -> True
+          _ -> False
     , test "missing predecessor wins first" $
-        decideProtocolContinuationByFacts False True True ==
-          ProtocolContinuationPredecessorMissingDecision
+        case decideProtocolContinuationByFacts False True True of
+          ProtocolContinuationPredecessorMissingDecision -> True
+          _ -> False
     , test "same-name successor rejects" $
-        decideProtocolContinuationByFacts True False True ==
-          ProtocolContinuationSameNameDecision
+        case decideProtocolContinuationByFacts True False True of
+          ProtocolContinuationSameNameDecision -> True
+          _ -> False
     , test "occupied successor rejects" $
-        decideProtocolContinuationByFacts True True False ==
-          ProtocolContinuationSuccessorOccupiedDecision
+        case decideProtocolContinuationByFacts True True False of
+          ProtocolContinuationSuccessorOccupiedDecision -> True
+          _ -> False
     , test "live close accepts" $
-        decideProtocolCloseByFact True == ProtocolCloseAccepted
+        case decideProtocolCloseByFact True of
+          ProtocolCloseAccepted -> True
+          _ -> False
     , test "stale close rejects" $
-        decideProtocolCloseByFact False == ProtocolClosePredecessorMissingDecision
+        case decideProtocolCloseByFact False of
+          ProtocolClosePredecessorMissingDecision -> True
+          _ -> False
     , test "successor plan preserves exact coordinates" $
         case planProtocolSuccessorContract (11 :: Int) (22 :: Int) (33 :: Int) of
           MkProtocolSuccessorContractPlan instanceRevision role session ->
             instanceRevision == 11 && role == 22 && session == 33
     , test "unique guard list accepts" $
-        decideProtocolGuardListByFact True == ProtocolGuardListAccepted
+        case decideProtocolGuardListByFact True of
+          ProtocolGuardListAccepted -> True
+          _ -> False
     , test "duplicate guard list rejects" $
-        decideProtocolGuardListByFact False == ProtocolGuardListDuplicateDecision
+        case decideProtocolGuardListByFact False of
+          ProtocolGuardListDuplicateDecision -> True
+          _ -> False
     , test "present certified guard accepts" $
-        decideProtocolGuardRequirementByFacts True True ==
-          ProtocolGuardRequirementAccepted
+        case decideProtocolGuardRequirementByFacts True True of
+          ProtocolGuardRequirementAccepted -> True
+          _ -> False
     , test "missing guard revision wins first" $
-        decideProtocolGuardRequirementByFacts False True ==
-          ProtocolGuardRevisionMissingDecision
+        case decideProtocolGuardRequirementByFacts False True of
+          ProtocolGuardRevisionMissingDecision -> True
+          _ -> False
     , test "uncertified guard rejects" $
-        decideProtocolGuardRequirementByFacts True False ==
-          ProtocolGuardRevisionNotCertifiedDecision
+        case decideProtocolGuardRequirementByFacts True False of
+          ProtocolGuardRevisionNotCertifiedDecision -> True
+          _ -> False
     ]
   if and results then pure () else exitFailure
 
