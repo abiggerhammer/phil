@@ -1,4 +1,4 @@
-name: Phase 1 Boundary Subject Proofs
+name: Phase 1 Boundary Subject Production Binding
 
 on:
   pull_request:
@@ -9,8 +9,10 @@ on:
       - 'proof/Phil/Core/BoundarySubjectImplementationExtraction.v'
       - 'docs/phase-1/boundary-subject-proof-v1.md'
       - 'docs/phase-1/boundary-subject-implementation-refinement-v1.md'
+      - 'docs/phase-1/boundary-subject-production-binding-v1.md'
       - 'app/BoundarySubjectDecisionCorrespondenceMain.hs'
       - '.github/workflows/phase1-boundary-subject-proofs.yml'
+      - 'src/BoundarySubjectKernel.hs'
       - 'src/Phil/Systems/EvidenceSubjectTransfer.hs'
       - 'src/Phil/Systems/BoundaryTargetRelation.hs'
       - 'test/Phase1EvidenceSubjectTransferMain.hs'
@@ -24,8 +26,10 @@ on:
       - 'proof/Phil/Core/BoundarySubjectImplementationExtraction.v'
       - 'docs/phase-1/boundary-subject-proof-v1.md'
       - 'docs/phase-1/boundary-subject-implementation-refinement-v1.md'
+      - 'docs/phase-1/boundary-subject-production-binding-v1.md'
       - 'app/BoundarySubjectDecisionCorrespondenceMain.hs'
       - '.github/workflows/phase1-boundary-subject-proofs.yml'
+      - 'src/BoundarySubjectKernel.hs'
       - 'src/Phil/Systems/EvidenceSubjectTransfer.hs'
       - 'src/Phil/Systems/BoundaryTargetRelation.hs'
       - 'test/Phase1EvidenceSubjectTransferMain.hs'
@@ -43,7 +47,7 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
-      - name: Compile certified boundary subject proof and implementation correspondence
+      - name: Compile certified boundary subject proof and fresh extraction
         shell: bash
         run: |
           set -euo pipefail
@@ -56,6 +60,7 @@ jobs:
           test -s BoundarySubjectKernel.hs
           grep -q 'decideBoundarySubjectTransferByFacts' BoundarySubjectKernel.hs
           grep -q 'decideZeroCopyRealizationByFacts' BoundarySubjectKernel.hs
+          echo '243656d82520d7909c9b1e39d799f4530c818ad20fff36319b7ecb496332d152  BoundarySubjectKernel.hs' | sha256sum -c -
 
       - name: Record proof and extraction identities
         shell: bash
@@ -79,21 +84,21 @@ jobs:
             boundary-subject-proof/BoundarySubjectImplementation.v \
             boundary-subject-proof/BoundarySubjectImplementation.vo \
             boundary-subject-proof/BoundarySubjectKernel.hs \
-            > boundary-subject-proof/PHIL-BND-SUBJECT-001.proof.sha256
+            > boundary-subject-proof/PHIL-BND-SUBJECT-001.production-binding.proof.sha256
           {
             echo 'obligation=PHIL-BND-SUBJECT-001'
-            echo 'evidence=Rocq-9.2.0'
-            cat boundary-subject-proof/PHIL-BND-SUBJECT-001.proof.sha256
-          } > boundary-subject-proof/PHIL-BND-SUBJECT-001.proof-certificate.txt
-          cat boundary-subject-proof/PHIL-BND-SUBJECT-001.proof-certificate.txt
+            echo 'evidence=Rocq-9.2.0-production-binding'
+            cat boundary-subject-proof/PHIL-BND-SUBJECT-001.production-binding.proof.sha256
+          } > boundary-subject-proof/PHIL-BND-SUBJECT-001.production-binding.proof-certificate.txt
+          cat boundary-subject-proof/PHIL-BND-SUBJECT-001.production-binding.proof-certificate.txt
 
       - uses: actions/upload-artifact@v4
         with:
-          name: rocq-boundary-subject-proof
+          name: rocq-boundary-subject-production-binding
           path: boundary-subject-proof
           if-no-files-found: error
 
-  verify-boundary-subject-correspondence:
+  verify-boundary-subject-production-binding:
     needs: rocq-boundary-subject-proof
     runs-on: ubuntu-latest
     steps:
@@ -109,20 +114,22 @@ jobs:
 
       - uses: actions/download-artifact@v4
         with:
-          name: rocq-boundary-subject-proof
+          name: rocq-boundary-subject-production-binding
           path: boundary-subject-proof
 
-      - name: Typecheck and execute extracted boundary-subject controls
+      - name: Verify exact checked-in kernel and direct controls
         run: |
           set -euo pipefail
-          ghc -Wall -Werror -fno-code boundary-subject-proof/BoundarySubjectKernel.hs
+          cmp boundary-subject-proof/BoundarySubjectKernel.hs src/BoundarySubjectKernel.hs
+          echo '243656d82520d7909c9b1e39d799f4530c818ad20fff36319b7ecb496332d152  src/BoundarySubjectKernel.hs' | sha256sum -c -
+          ghc -Wall -Werror -fno-code src/BoundarySubjectKernel.hs
           ghc -Wall -Werror \
-            -iboundary-subject-proof \
+            -isrc \
             app/BoundarySubjectDecisionCorrespondenceMain.hs \
-            -o boundary-subject-kernel-controls
-          ./boundary-subject-kernel-controls
+            -o boundary-subject-production-kernel-controls
+          ./boundary-subject-production-kernel-controls
 
-      - name: Strict typecheck unchanged BND-012 and BND-013 production relations
+      - name: Strict typecheck bound BND-012 and BND-013 production relations
         run: |
           set -euo pipefail
           cabal exec -- ghc -isrc -Wall -Werror -fno-code src/Phil/Systems/EvidenceSubjectTransfer.hs
@@ -142,12 +149,13 @@ jobs:
           cabal exec -- runghc -Wall -Werror -Wno-name-shadowing -Wno-unused-imports -isrc test/Phase1EvidenceSubjectTransferMain.hs
           cabal exec -- runghc -Wall -Werror -isrc test/Phase1BoundaryTargetRelationMain.hs
 
-      - name: Record implementation-refinement staging identities
+      - name: Record production-binding identities
         run: |
           set -euo pipefail
-          mkdir -p boundary-subject-implementation-correspondence
+          mkdir -p boundary-subject-production-binding
           sha256sum \
             boundary-subject-proof/BoundarySubjectKernel.hs \
+            src/BoundarySubjectKernel.hs \
             src/Phil/Systems/EvidenceSubjectTransfer.hs \
             src/Phil/Systems/BoundaryTargetRelation.hs \
             test/Phase1EvidenceSubjectTransferMain.hs \
@@ -155,11 +163,12 @@ jobs:
             app/BoundarySubjectDecisionCorrespondenceMain.hs \
             proof/Phil/Core/BoundarySubjectImplementation.v \
             docs/phase-1/boundary-subject-implementation-refinement-v1.md \
-            > boundary-subject-implementation-correspondence/PHIL-BND-SUBJECT-001.staging.sha256
-          cat boundary-subject-implementation-correspondence/PHIL-BND-SUBJECT-001.staging.sha256
+            docs/phase-1/boundary-subject-production-binding-v1.md \
+            > boundary-subject-production-binding/PHIL-BND-SUBJECT-001.production-binding.sha256
+          cat boundary-subject-production-binding/PHIL-BND-SUBJECT-001.production-binding.sha256
 
       - uses: actions/upload-artifact@v4
         with:
-          name: boundary-subject-implementation-correspondence
-          path: boundary-subject-implementation-correspondence
+          name: boundary-subject-production-binding
+          path: boundary-subject-production-binding
           if-no-files-found: error

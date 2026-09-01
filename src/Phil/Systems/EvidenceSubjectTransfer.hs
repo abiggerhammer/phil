@@ -17,6 +17,7 @@ module Phil.Systems.EvidenceSubjectTransfer
   , verifyEvidenceTransferStageBundle
   ) where
 
+import qualified BoundarySubjectKernel as Kernel
 import qualified Data.Map.Strict as Map
 import Data.Map.Strict (Map)
 import qualified Data.Set as Set
@@ -212,32 +213,35 @@ checkRelation bundle (key, relation) = do
   if Set.null (subjectTransferAllowedEvidence relation)
     then Left (SubjectTransferEmptyAllowedEvidence key)
     else Right ()
-  checkBasis key (subjectTransferBasis relation)
-  case subjectTransferValidityScope relation of
-    SubjectValidityScopeRevision scope
-      | Text.null scope -> Left (SubjectTransferEmptyValidityScope key)
-      | otherwise -> Right ()
+  checkRelationAdmissionPreflight key relation
 
-checkBasis
+-- | Relation preflight uses the certified decision for every fact already
+-- available at relation-validation time. The proposition-specific evidence
+-- gate is neutralized here and checked with the concrete evidence reference in
+-- 'requireTransferableEvidence'.
+checkRelationAdmissionPreflight
   :: SubjectTransferRelationKey
-  -> SubjectTransferBasis
+  -> SubjectTransferRelation
   -> Either EvidenceTransferVerificationError ()
-checkBasis key basis = case basis of
-  CheckedSubjectCopy
-      (CopyRelationRevision copyRevision)
-      (ByteEqualityRevision equalityRevision)
-      (EvidenceTransferLawRevision lawRevision) -> do
-    if Text.null copyRevision
-      then Left (SubjectTransferEmptyCopyRevision key)
-      else Right ()
-    if Text.null equalityRevision
-      then Left (SubjectTransferEmptyByteEqualityRevision key)
-      else Right ()
-    if Text.null lawRevision
-      then Left (SubjectTransferEmptyLawRevision key)
-      else Right ()
-  RuntimeSubjectCoincidence reason ->
-    Left (SubjectTransferRuntimeCoincidenceRejected key reason)
+checkRelationAdmissionPreflight key relation =
+  case subjectTransferBasis relation of
+    CheckedSubjectCopy
+        (CopyRelationRevision copyRevision)
+        (ByteEqualityRevision equalityRevision)
+        (EvidenceTransferLawRevision lawRevision) ->
+      mapRelationDecision key relation Nothing $
+        Kernel.decideBoundarySubjectTransferByFacts
+          True
+          True
+          (not (Text.null copyRevision))
+          (not (Text.null equalityRevision))
+          (not (Text.null lawRevision))
+          True
+          (validityScopePresent relation)
+    RuntimeSubjectCoincidence reason ->
+      mapRelationDecision key relation (Just reason) $
+        Kernel.decideBoundarySubjectTransferByFacts
+          False False False False False True (validityScopePresent relation)
 
 checkRebinding
   :: EvidenceTransferStageBundle
@@ -295,10 +299,81 @@ requireTransferableEvidence
   -> SubjectTransferRelation
   -> Text
   -> Either EvidenceTransferVerificationError ()
-requireTransferableEvidence key relationKey relation evidenceRef
-  | Set.member evidenceRef (subjectTransferAllowedEvidence relation) = Right ()
-  | otherwise = Left
-      (EvidenceRebindingEvidenceNotTransferable key relationKey evidenceRef)
+requireTransferableEvidence key relationKey relation evidenceRef =
+  case subjectTransferBasis relation of
+    CheckedSubjectCopy
+        (CopyRelationRevision copyRevision)
+        (ByteEqualityRevision equalityRevision)
+        (EvidenceTransferLawRevision lawRevision) ->
+      mapEvidenceDecision key relationKey relation evidenceRef Nothing $
+        Kernel.decideBoundarySubjectTransferByFacts
+          True
+          True
+          (not (Text.null copyRevision))
+          (not (Text.null equalityRevision))
+          (not (Text.null lawRevision))
+          (Set.member evidenceRef (subjectTransferAllowedEvidence relation))
+          (validityScopePresent relation)
+    RuntimeSubjectCoincidence reason ->
+      mapEvidenceDecision key relationKey relation evidenceRef (Just reason) $
+        Kernel.decideBoundarySubjectTransferByFacts
+          False False False False False
+          (Set.member evidenceRef (subjectTransferAllowedEvidence relation))
+          (validityScopePresent relation)
+
+mapRelationDecision
+  :: SubjectTransferRelationKey
+  -> SubjectTransferRelation
+  -> Maybe Text
+  -> Kernel.BoundarySubjectTransferDecision
+  -> Either EvidenceTransferVerificationError ()
+mapRelationDecision relationKey _ runtimeReason decision = case decision of
+  Kernel.BoundarySubjectTransferAcceptedDecision -> Right ()
+  Kernel.BoundarySubjectRuntimeCoincidenceDecision ->
+    Left (SubjectTransferRuntimeCoincidenceRejected relationKey
+      (maybe "runtime subject coincidence" id runtimeReason))
+  Kernel.BoundarySubjectCopyRevisionDecision ->
+    Left (SubjectTransferEmptyCopyRevision relationKey)
+  Kernel.BoundarySubjectByteEqualityDecision ->
+    Left (SubjectTransferEmptyByteEqualityRevision relationKey)
+  Kernel.BoundarySubjectTransferLawDecision ->
+    Left (SubjectTransferEmptyLawRevision relationKey)
+  Kernel.BoundarySubjectValidityScopeDecision ->
+    Left (SubjectTransferEmptyValidityScope relationKey)
+  Kernel.BoundarySubjectTransportKindDecision ->
+    Left (SubjectTransferEmptyCopyRevision relationKey)
+  Kernel.BoundarySubjectEvidenceReferenceDecision ->
+    Left (SubjectTransferEmptyAllowedEvidence relationKey)
+
+mapEvidenceDecision
+  :: EvidenceRebindingKey
+  -> SubjectTransferRelationKey
+  -> SubjectTransferRelation
+  -> Text
+  -> Maybe Text
+  -> Kernel.BoundarySubjectTransferDecision
+  -> Either EvidenceTransferVerificationError ()
+mapEvidenceDecision key relationKey _ evidenceRef runtimeReason decision = case decision of
+  Kernel.BoundarySubjectTransferAcceptedDecision -> Right ()
+  Kernel.BoundarySubjectRuntimeCoincidenceDecision ->
+    Left (SubjectTransferRuntimeCoincidenceRejected relationKey
+      (maybe "runtime subject coincidence" id runtimeReason))
+  Kernel.BoundarySubjectCopyRevisionDecision ->
+    Left (SubjectTransferEmptyCopyRevision relationKey)
+  Kernel.BoundarySubjectByteEqualityDecision ->
+    Left (SubjectTransferEmptyByteEqualityRevision relationKey)
+  Kernel.BoundarySubjectTransferLawDecision ->
+    Left (SubjectTransferEmptyLawRevision relationKey)
+  Kernel.BoundarySubjectEvidenceReferenceDecision ->
+    Left (EvidenceRebindingEvidenceNotTransferable key relationKey evidenceRef)
+  Kernel.BoundarySubjectValidityScopeDecision ->
+    Left (SubjectTransferEmptyValidityScope relationKey)
+  Kernel.BoundarySubjectTransportKindDecision ->
+    Left (SubjectTransferEmptyCopyRevision relationKey)
+
+validityScopePresent :: SubjectTransferRelation -> Bool
+validityScopePresent relation = case subjectTransferValidityScope relation of
+  SubjectValidityScopeRevision scope -> not (Text.null scope)
 
 semanticRelation :: SubjectTransferRelation -> SemanticForm
 semanticRelation relation = SemanticRecord (Map.fromList
