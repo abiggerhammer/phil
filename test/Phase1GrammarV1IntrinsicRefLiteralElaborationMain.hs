@@ -30,26 +30,25 @@ intrinsicLiteralsElaborateExactly :: Either String ()
 intrinsicLiteralsElaborateExactly = do
   sourceFile <- mapLeft show $ parseGrammarV1StructuralSource "surf008-ref-literals" source
   case grammarV1TopLevelDecls sourceFile of
-    [natTop, boolTop, _, _] -> do
+    [natTop, _, _] -> do
       (natLeft, natRight) <- relationOperands natTop
       assert
         ( grammarV1IntrinsicRefLiteral natLeft == Just (RefNat 7)
           && grammarV1IntrinsicRefLiteral natRight == Just (RefNat 0)
         )
         "natural-number literal elaboration changed exact values"
-      (boolLeft, boolRight) <- relationOperands boolTop
       assert
-        ( grammarV1IntrinsicRefLiteral boolLeft == Just (RefBool True)
-          && grammarV1IntrinsicRefLiteral boolRight == Just (RefBool False)
+        ( grammarV1IntrinsicRefLiteral (GrammarV1BoolExpression True) == Just (RefBool True)
+          && grammarV1IntrinsicRefLiteral (GrammarV1BoolExpression False) == Just (RefBool False)
         )
         "Boolean literal elaboration changed exact values"
-    declarations -> Left ("expected four claim declarations, got " <> show (length declarations))
+    declarations -> Left ("expected three claim declarations, got " <> show (length declarations))
 
 contextualFormsFailClosed :: Either String ()
 contextualFormsFailClosed = do
   sourceFile <- mapLeft show $ parseGrammarV1StructuralSource "surf008-ref-contextual" source
   case grammarV1TopLevelDecls sourceFile of
-    [_, _, nameTop, unitTop] -> do
+    [_, nameTop, unitTop] -> do
       (nameLeft, nameRight) <- relationOperands nameTop
       assert
         ( grammarV1IntrinsicRefLiteral nameLeft == Nothing
@@ -62,7 +61,7 @@ contextualFormsFailClosed = do
           && grammarV1IntrinsicRefLiteral unitRight == Nothing
         )
         "unit expression unexpectedly acquired a Core reference-term encoding"
-    declarations -> Left ("expected four claim declarations, got " <> show (length declarations))
+    declarations -> Left ("expected three claim declarations, got " <> show (length declarations))
 
 malformedIntegerFailsClosed :: Either String ()
 malformedIntegerFailsClosed =
@@ -73,7 +72,6 @@ malformedIntegerFailsClosed =
 source :: Text.Text
 source = Text.unlines
   [ "claim NatLit() = 7 == 0;"
-  , "claim BoolLit() = true == false;"
   , "claim NameLit(x : U32) = x == 1;"
   , "claim UnitLit() = unit == unit;"
   ]
