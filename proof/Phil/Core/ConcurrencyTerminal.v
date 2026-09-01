@@ -163,12 +163,10 @@ Theorem fatal_process_failure_leaves_running_peer_running :
 Proof.
   intros before after failed peer Hfailure Hdistinct Hrunning.
   pose proof
-    (exact_failure_implies_status_isolation before after failed Hfailure)
-    as Hstatus.
-  eapply process_failure_cannot_fabricate_peer_terminal_state.
-  - exact Hstatus.
-  - exact Hdistinct.
-  - exact Hrunning.
+    (exactFailurePeersUnchanged before after failed Hfailure peer Hdistinct)
+    as Heq.
+  rewrite Heq.
+  exact Hrunning.
 Qed.
 
 Definition CertifiedTerminalMap :=
