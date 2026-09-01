@@ -75,7 +75,8 @@ Proof.
 Qed.
 
 Theorem activation_target_is_functional :
-  forall activation key first second,
+  forall (activation : ActivationMap) (key : ProcessKey)
+         (first second : ProcessTarget),
     activation key = Some first ->
     activation key = Some second ->
     first = second.
@@ -104,7 +105,8 @@ Qed.
 Definition RestrictedOwnership := RestrictedSubjectKey -> option ProcessKey.
 
 Theorem restricted_subject_has_at_most_one_owner :
-  forall ownership subject first second,
+  forall (ownership : RestrictedOwnership) (subject : RestrictedSubjectKey)
+         (first second : ProcessKey),
     ownership subject = Some first ->
     ownership subject = Some second ->
     first = second.
@@ -116,7 +118,8 @@ Proof.
 Qed.
 
 Theorem structural_wrapper_cannot_create_second_restricted_owner :
-  forall ownership subject owner other,
+  forall (ownership : RestrictedOwnership) (subject : RestrictedSubjectKey)
+         (owner other : ProcessKey),
     ownership subject = Some owner ->
     other <> owner ->
     ownership subject <> Some other.
@@ -393,7 +396,7 @@ Proof.
 Qed.
 
 Theorem generic_systems_instance_identity_survives_concurrency_realization :
-  forall input context physicalMechanism,
+  forall input context (physicalMechanism : nat),
     genericSourceInstanceRevision
       (genericResultSourceRevision
         (lowerGenericSystemsModel input context)) =
