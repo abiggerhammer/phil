@@ -1,0 +1,108 @@
+name: Phase 1 Concurrency Activation Proofs
+
+on:
+  pull_request:
+    paths:
+      - 'proof/Phil/Core/ConcurrencySemantics.v'
+      - 'proof/Phil/Core/ConcurrencyActivation.v'
+      - 'src/Phil/Core/ProcessActivation.hs'
+      - 'src/Phil/Core/ProcessParticipants.hs'
+      - 'test/Phase1StaticProcessPopulationMain.hs'
+      - 'test/Phase1ProcessIdentityMain.hs'
+      - 'test/Phase1ProcessActivationOwnershipMain.hs'
+      - 'test/Phase1ParticipantClassificationMain.hs'
+      - 'test/Phase1UnrestrictedReachabilityMain.hs'
+      - 'docs/phase-1/concurrency-activation-proof-v1.md'
+      - '.github/workflows/phase1-concurrency-activation-proofs.yml'
+  push:
+    branches: [main]
+    paths:
+      - 'proof/Phil/Core/ConcurrencyActivation.v'
+      - 'docs/phase-1/concurrency-activation-proof-v1.md'
+      - '.github/workflows/phase1-concurrency-activation-proofs.yml'
+
+permissions:
+  contents: read
+
+jobs:
+  rocq-concurrency-activation-proof:
+    runs-on: ubuntu-latest
+    container:
+      image: rocq/rocq-prover:9.2.0
+      options: --user root
+    steps:
+      - uses: actions/checkout@v4
+      - name: Compile certified concurrency predecessor and PHIL-CONC-ACTIVATE-001
+        shell: bash
+        run: |
+          set -euo pipefail
+          export PATH="/home/rocq/.opam/${COMPILER}/bin:$PATH"
+          rocq c -Q proof/Phil Phil proof/Phil/Core/Syntax.v
+          rocq c -Q proof/Phil Phil proof/Phil/Core/Context.v
+          rocq c -Q proof/Phil Phil proof/Phil/Core/ContextJoin.v
+          rocq c -Q proof/Phil Phil proof/Phil/Core/ProcessJoin.v
+          rocq c -Q proof/Phil Phil proof/Phil/Core/ProcessTerminal.v
+          rocq c -Q proof/Phil Phil proof/Phil/Core/ArchitectureIdentity.v
+          rocq c -Q proof/Phil Phil proof/Phil/Core/ArchitectureInstantiation.v
+          rocq c -Q proof/Phil Phil proof/Phil/Core/ProviderReplacementQualification.v
+          rocq c -Q proof/Phil Phil proof/Phil/Core/ArchitectureRealization.v
+          rocq c -Q proof/Phil Phil proof/Phil/Systems/FactDisposition.v
+          rocq c -Q proof/Phil Phil proof/Phil/Assurance/ValidityScope.v
+          rocq c -Q proof/Phil Phil proof/Phil/Core/SystemsStageClosure.v
+          rocq c -Q proof/Phil Phil proof/Phil/Core/SystemsGenericLowering.v
+          rocq c -Q proof/Phil Phil proof/Phil/Core/ConcurrencySemantics.v
+          rocq c -Q proof/Phil Phil proof/Phil/Core/ConcurrencyActivation.v
+      - name: Record proof identities
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p concurrency-activation-proof
+          cp \
+            proof/Phil/Core/ConcurrencyActivation.v \
+            proof/Phil/Core/ConcurrencyActivation.vo \
+            concurrency-activation-proof/
+          sha256sum \
+            proof/Phil/Core/ConcurrencySemantics.v \
+            proof/Phil/Core/ConcurrencyActivation.v \
+            proof/Phil/Core/ConcurrencyActivation.vo \
+            > concurrency-activation-proof/PHIL-CONC-ACTIVATE-001.proof.sha256
+          {
+            echo 'obligation=PHIL-CONC-ACTIVATE-001'
+            echo 'evidence=Rocq-9.2.0'
+            cat concurrency-activation-proof/PHIL-CONC-ACTIVATE-001.proof.sha256
+          } > concurrency-activation-proof/PHIL-CONC-ACTIVATE-001.proof-certificate.txt
+          cat concurrency-activation-proof/PHIL-CONC-ACTIVATE-001.proof-certificate.txt
+      - uses: actions/upload-artifact@v4
+        with:
+          name: rocq-concurrency-activation-proof
+          path: concurrency-activation-proof
+          if-no-files-found: error
+
+  verify-concurrency-activation-correspondence:
+    needs: rocq-concurrency-activation-proof
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: haskell-actions/setup@v2
+        with:
+          ghc-version: '9.6.7'
+          cabal-version: 'latest'
+      - name: Build ordinary regression substrate
+        run: cabal build all --enable-tests
+      - name: Strict typecheck activation and participant implementations
+        run: |
+          set -euo pipefail
+          cabal exec -- ghc -isrc -Wall -Werror -fno-code src/Phil/Core/ProcessActivation.hs
+          cabal exec -- ghc -isrc -Wall -Werror -fno-code src/Phil/Core/ProcessParticipants.hs
+      - name: Re-run unchanged activation / participant / reachability corpus
+        run: |
+          set -euo pipefail
+          for test_file in \
+            test/Phase1StaticProcessPopulationMain.hs \
+            test/Phase1ProcessIdentityMain.hs \
+            test/Phase1ProcessActivationOwnershipMain.hs \
+            test/Phase1ParticipantClassificationMain.hs \
+            test/Phase1UnrestrictedReachabilityMain.hs
+          do
+            cabal exec -- runghc -Wall -Werror -isrc "$test_file"
+          done
