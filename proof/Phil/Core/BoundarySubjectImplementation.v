@@ -95,8 +95,7 @@ Proof.
   intros a b c d e f g.
   unfold decideBoundarySubjectTransferByFacts,
     BoundarySubjectTransferFactsSatisfied.
-  destruct a, b, c, d, e, f, g; simpl; split; intro H;
-    try discriminate; repeat split; reflexivity.
+  destruct a, b, c, d, e, f, g; simpl; tauto.
 Qed.
 
 Theorem reflected_checked_boundary_transfer_facts_exact :
@@ -252,8 +251,7 @@ Theorem zero_copy_decision_accepted_iff :
 Proof.
   intros a b c d e f g h i j k l.
   unfold decideZeroCopyRealizationByFacts, ZeroCopyFactsSatisfied.
-  destruct a, b, c, d, e, f, g, h, i, j, k, l; simpl; split; intro H;
-    try discriminate; repeat split; reflexivity.
+  destruct a, b, c, d, e, f, g, h, i, j, k, l; simpl; tauto.
 Qed.
 
 Theorem reflected_checked_zero_copy_facts_exact :
