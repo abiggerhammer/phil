@@ -31,6 +31,8 @@ jobs:
         run: cabal exec -- runghc -Wall -Werror -isrc test/Phase1GrammarV1StructuralModeElaborationMain.hs
       - name: SURF-008 Grammar-v1 relation elaboration routing
         run: cabal exec -- runghc -Wall -Werror -isrc test/Phase1GrammarV1RelationElaborationMain.hs
+      - name: SURF-008 Grammar-v1 logical proposition elaboration routing
+        run: cabal exec -- runghc -Wall -Werror -isrc test/Phase1GrammarV1LogicalPropositionElaborationMain.hs
       - name: GEN-014 generic requirement category fidelity
         run: cabal exec -- runghc -Wall -Werror -isrc test/Phase1GenericRequirementCategoryMain.hs
       - name: SURF-008 Grammar-v1 generic requirement elaboration routing
