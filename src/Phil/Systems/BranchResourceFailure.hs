@@ -40,6 +40,7 @@ import Phil.Systems.ProviderCallCorrespondence
 import Phil.Systems.SubjectCorrespondence
   ( SubjectStageBundle (..)
   )
+import qualified SystemsControlPreservationKernel as Kernel
 
 newtype BranchResourceStageRevision = BranchResourceStageRevision
   { unBranchResourceStageRevision :: Text
@@ -171,8 +172,14 @@ checkBranchSite bundle (key, site) = do
   arms <- case terminatorArms (systemsBlockTerminator blockValue) of
     Just value -> Right value
     Nothing -> Left (BranchResourceSiteNotBranching key)
-  requireEqual (BranchResourceOutcomeDomainMismatch key)
-    (Map.keysSet arms) (Map.keysSet (branchSiteOutcomes site))
+  case Kernel.decideBranchPreservationByFacts
+      (Map.keysSet arms == Map.keysSet (branchSiteOutcomes site))
+      True True True True of
+    Kernel.BranchPreservationAcceptedDecision -> Right ()
+    Kernel.BranchOutcomeDomainDecision ->
+      Left (BranchResourceOutcomeDomainMismatch key
+        (Map.keysSet arms) (Map.keysSet (branchSiteOutcomes site)))
+    _ -> kernelInvariant "branch-outcome-domain"
   mapM_ (checkTrackedOwner key function) (Set.toAscList (branchSiteTrackedOwners site))
   mapM_ (checkOutcome key site function arms)
     (Map.toAscList (branchSiteOutcomes site))
@@ -185,10 +192,13 @@ checkTrackedOwner
 checkTrackedOwner mechanism function owner =
   case Map.lookup owner (systemsFunctionValues function) of
     Nothing -> Left (BranchResourceTrackedOwnerUnknown mechanism owner)
-    Just value
-      | isOwningRole (systemsValueRole value) -> Right ()
-      | otherwise -> Left (BranchResourceTrackedValueNotOwning
-          mechanism owner (systemsValueRole value))
+    Just value ->
+      case Kernel.decideBranchPreservationByFacts
+          True True True True (isOwningRole (systemsValueRole value)) of
+        Kernel.BranchPreservationAcceptedDecision -> Right ()
+        Kernel.BranchTrackedOwnerDecision -> Left
+          (BranchResourceTrackedValueNotOwning mechanism owner (systemsValueRole value))
+        _ -> kernelInvariant "branch-tracked-owner"
 
 checkOutcome
   :: SystemsMechanismKey
@@ -203,8 +213,12 @@ checkOutcome mechanism site function arms (label, contract) = do
     else Right ()
   let tracked = branchSiteTrackedOwners site
       actualFateDomain = Map.keysSet (branchOutcomeOwnerFates contract)
-  requireEqual (BranchResourceOwnerFateDomainMismatch mechanism label)
-    tracked actualFateDomain
+  case Kernel.decideBranchPreservationByFacts
+      True (tracked == actualFateDomain) True True True of
+    Kernel.BranchPreservationAcceptedDecision -> Right ()
+    Kernel.BranchOwnerFateDomainDecision ->
+      Left (BranchResourceOwnerFateDomainMismatch mechanism label tracked actualFateDomain)
+    _ -> kernelInvariant "branch-owner-fate-domain"
   target <- case Map.lookup label arms of
     Just value -> Right value
     Nothing -> Left (BranchResourceOutcomeDomainMismatch
@@ -214,8 +228,12 @@ checkOutcome mechanism site function arms (label, contract) = do
     Nothing -> Left (BranchResourceUnknownBlock mechanism target)
   let actualControl = targetControlClass (systemsBlockTerminator targetBlock)
       expectedControl = branchOutcomeControlClass contract
-  requireEqual (BranchResourceControlClassMismatch mechanism label)
-    expectedControl actualControl
+  case Kernel.decideBranchPreservationByFacts
+      True True True (expectedControl == actualControl) True of
+    Kernel.BranchPreservationAcceptedDecision -> Right ()
+    Kernel.BranchControlClassDecision ->
+      Left (BranchResourceControlClassMismatch mechanism label expectedControl actualControl)
+    _ -> kernelInvariant "branch-control-class"
   let releases = releaseCounts (systemsBlockOps targetBlock)
   mapM_ (checkFate mechanism label actualControl releases)
     (Map.toAscList (branchOutcomeOwnerFates contract))
@@ -227,23 +245,29 @@ checkFate
   -> Map ValueId Int
   -> (ValueId, BranchOwnerFate)
   -> Either BranchResourceStageVerificationError ()
-checkFate mechanism label control releases (owner, fate) = do
-  let count = Map.findWithDefault 0 owner releases
-  if count > 1
-    then Left (BranchResourceOwnerDoubleReleased mechanism label owner count)
-    else case fate of
-      OwnerContinues
-        | count /= 0 -> Left (BranchResourceOwnerReleasedUnexpectedly mechanism label owner)
-        | control /= BranchContinues ->
-            Left (BranchResourceOwnerContinuesOnTerminal mechanism label owner control)
-        | otherwise -> Right ()
-      OwnerReleased
-        | count == 1 -> Right ()
-        | otherwise -> Left (BranchResourceOwnerReleaseMissing mechanism label owner)
-      OwnerReturnedAtTerminal
-        | count /= 0 -> Left (BranchResourceOwnerReleasedUnexpectedly mechanism label owner)
-        | isNormalTerminal control -> Right ()
-        | otherwise -> Left (BranchResourceOwnerReturnNotTerminal mechanism label owner control)
+checkFate mechanism label control releases (owner, fate) =
+  case Kernel.decideBranchPreservationByFacts
+      True True (nativeResult == Right ()) True True of
+    Kernel.BranchPreservationAcceptedDecision -> Right ()
+    Kernel.BranchOwnerFateRealizationDecision -> nativeResult
+    _ -> kernelInvariant "branch-owner-fate-realization"
+  where
+    count = Map.findWithDefault 0 owner releases
+    nativeResult
+      | count > 1 = Left (BranchResourceOwnerDoubleReleased mechanism label owner count)
+      | otherwise = case fate of
+          OwnerContinues
+            | count /= 0 -> Left (BranchResourceOwnerReleasedUnexpectedly mechanism label owner)
+            | control /= BranchContinues ->
+                Left (BranchResourceOwnerContinuesOnTerminal mechanism label owner control)
+            | otherwise -> Right ()
+          OwnerReleased
+            | count == 1 -> Right ()
+            | otherwise -> Left (BranchResourceOwnerReleaseMissing mechanism label owner)
+          OwnerReturnedAtTerminal
+            | count /= 0 -> Left (BranchResourceOwnerReleasedUnexpectedly mechanism label owner)
+            | isNormalTerminal control -> Right ()
+            | otherwise -> Left (BranchResourceOwnerReturnNotTerminal mechanism label owner control)
 
 releaseCounts :: [SystemsOp] -> Map ValueId Int
 releaseCounts = Map.fromListWith (+) . concatMap releasedByOperation
@@ -359,3 +383,7 @@ requireEqual mkError expected actual
 
 mapLeft :: (a -> b) -> Either a c -> Either b c
 mapLeft f = either (Left . f) Right
+
+kernelInvariant :: String -> Either e a
+kernelInvariant label =
+  error ("SystemsControlPreservationKernel mismatch: " <> label)
