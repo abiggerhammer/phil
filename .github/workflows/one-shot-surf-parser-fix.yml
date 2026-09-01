@@ -1,0 +1,171 @@
+name: One-shot SURF parser fix
+
+on:
+  push:
+    branches:
+      - phase1-surf-008-bound-relation-elaboration
+
+permissions:
+  contents: write
+
+jobs:
+  patch-parser:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: phase1-surf-008-bound-relation-elaboration
+      - name: Repair proposition relation disambiguation
+        run: |
+          python3 - <<'PY'
+          from pathlib import Path
+
+          parser_path = Path('src/Phil/Surface/GrammarV1/Parser.hs')
+          parser = parser_path.read_text()
+          old = '''parsePropositionAtom :: Parser (Located GrammarV1Proposition)
+          parsePropositionAtom = do
+            token <- peekToken
+            case fmap locatedValue token of
+              Just (GrammarKeyword "true") -> do
+                value <- expectKeyword "true"
+                pure (Located (locatedSpan value) GrammarV1TrueProposition)
+              Just (GrammarKeyword "false") -> do
+                value <- expectKeyword "false"
+                pure (Located (locatedSpan value) GrammarV1FalseProposition)
+              Just (GrammarSymbol "(") -> do
+                start <- expectSymbol "("
+                proposition <- parseProposition
+                end <- expectSymbol ")"
+                pure $ Located
+                  (SourceSpan
+                    (sourceSpanStart (locatedSpan start))
+                    (sourceSpanEnd (locatedSpan end)))
+                  (locatedValue proposition)
+              Just (GrammarIdentifier _) -> parseNamedPropositionAtom
+              Just _ -> parseRelationProposition
+              Nothing -> failParser "expected proposition at end of input"
+          '''
+          # The literal above is indented by the YAML block. Dedent it to the Haskell source.
+          import textwrap
+          old = textwrap.dedent(old)
+          new = '''parsePropositionAtom :: Parser (Located GrammarV1Proposition)
+          parsePropositionAtom = do
+            relation <- peekParsesRelationProposition
+            if relation
+              then parseRelationProposition
+              else parseNonRelationPropositionAtom
+
+          -- | Preserve the normative proposition_atom ordering without committing
+          -- identifier-, literal-, or parenthesis-led input to a shorter parse.
+          -- relation_proposition owns a complete additive_expression on each side,
+          -- so probe that production first and consume nothing during the probe.
+          peekParsesRelationProposition :: Parser Bool
+          peekParsesRelationProposition = Parser $ \\tokens ->
+            Right
+              ( case runParser parseRelationProposition tokens of
+                  Right _ -> True
+                  Left _ -> False
+              , tokens
+              )
+
+          parseNonRelationPropositionAtom :: Parser (Located GrammarV1Proposition)
+          parseNonRelationPropositionAtom = do
+            token <- peekToken
+            case fmap locatedValue token of
+              Just (GrammarKeyword "true") -> do
+                value <- expectKeyword "true"
+                pure (Located (locatedSpan value) GrammarV1TrueProposition)
+              Just (GrammarKeyword "false") -> do
+                value <- expectKeyword "false"
+                pure (Located (locatedSpan value) GrammarV1FalseProposition)
+              Just (GrammarSymbol "(") -> do
+                start <- expectSymbol "("
+                proposition <- parseProposition
+                end <- expectSymbol ")"
+                pure $ Located
+                  (SourceSpan
+                    (sourceSpanStart (locatedSpan start))
+                    (sourceSpanEnd (locatedSpan end)))
+                  (locatedValue proposition)
+              Just (GrammarIdentifier _) -> parseNamedPropositionAtom
+              Just _ -> parseRelationProposition
+              Nothing -> failParser "expected proposition at end of input"
+          '''
+          new = textwrap.dedent(new)
+          if parser.count(old) != 1:
+              raise SystemExit(f'parser target count was {parser.count(old)}, expected 1')
+          parser_path.write_text(parser.replace(old, new, 1))
+
+          test_path = Path('test/Phase1GrammarV1BoundRelationElaborationMain.hs')
+          test = test_path.read_text()
+          old_actual = '''  let actual =
+                map (grammarV1BoundRelationProposition state) propositions
+                  <> [ grammarV1BoundRelationProposition state projectedProposition
+                     , grammarV1BoundRelationProposition state arithmeticProposition
+                     ]
+          '''
+          old_actual = textwrap.dedent(old_actual)
+          new_actual = '''  let actual = map (grammarV1BoundRelationProposition state) propositions
+          '''
+          new_actual = textwrap.dedent(new_actual)
+          if test.count(old_actual) != 1:
+              raise SystemExit(f'test actual target count was {test.count(old_actual)}, expected 1')
+          test = test.replace(old_actual, new_actual, 1)
+
+          old_helpers = '''projectedProposition :: GrammarV1Proposition
+          projectedProposition =
+            GrammarV1RelationProposition
+              (Located syntheticSpan
+                (GrammarV1ProjectionExpression
+                  (Located syntheticSpan (simpleNameExpression "n"))
+                  (Located syntheticSpan "field")))
+              (Located syntheticSpan GrammarV1EqualRelation)
+              (Located syntheticSpan (simpleNameExpression "n"))
+
+          arithmeticProposition :: GrammarV1Proposition
+          arithmeticProposition =
+            GrammarV1RelationProposition
+              (Located syntheticSpan
+                (GrammarV1BinaryExpression
+                  (Located syntheticSpan (simpleNameExpression "n"))
+                  (Located syntheticSpan GrammarV1Add)
+                  (Located syntheticSpan (GrammarV1IntegerExpression "1"))))
+              (Located syntheticSpan GrammarV1EqualRelation)
+              (Located syntheticSpan (simpleNameExpression "m"))
+
+          simpleNameExpression :: Text.Text -> GrammarV1Expression
+          simpleNameExpression name =
+            GrammarV1NameExpression
+              (GrammarV1StaticReference (GrammarV1QualifiedName [name]) [])
+              []
+
+          '''
+          old_helpers = textwrap.dedent(old_helpers)
+          if test.count(old_helpers) != 1:
+              raise SystemExit(f'test helper target count was {test.count(old_helpers)}, expected 1')
+          test = test.replace(old_helpers, '', 1)
+
+          old_source = '''  , "claim Called = n(1) == n;"
+            , "claim Consumed = spent == n;"
+            , "claim TruthLeaf = true;"
+          '''
+          old_source = textwrap.dedent(old_source)
+          new_source = '''  , "claim Called = n(1) == n;"
+            , "claim Projected = (n).field == n;"
+            , "claim Consumed = spent == n;"
+            , "claim Arithmetic = n + 1 == m;"
+            , "claim TruthLeaf = true;"
+          '''
+          new_source = textwrap.dedent(new_source)
+          if test.count(old_source) != 1:
+              raise SystemExit(f'test source target count was {test.count(old_source)}, expected 1')
+          test_path.write_text(test.replace(old_source, new_source, 1))
+          PY
+      - name: Commit parser repair
+        run: |
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git add src/Phil/Surface/GrammarV1/Parser.hs test/Phase1GrammarV1BoundRelationElaborationMain.hs
+          git diff --cached --check
+          git commit -m 'Fix additive relation proposition parsing'
+          git push origin HEAD:phase1-surf-008-bound-relation-elaboration
