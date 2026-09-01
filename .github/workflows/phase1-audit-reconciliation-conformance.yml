@@ -45,6 +45,8 @@ jobs:
         run: cabal exec -- runghc -Wall -Werror -isrc test/Phase1GrammarV1IntrinsicTypeCompositionMain.hs
       - name: SURF-008 Grammar-v1 bare Frame type elaboration
         run: cabal exec -- runghc -Wall -Werror -isrc test/Phase1GrammarV1BareFrameTypeElaborationMain.hs
+      - name: SURF-008 Grammar-v1 bare Validated type elaboration
+        run: cabal exec -- runghc -Wall -Werror -isrc test/Phase1GrammarV1BareValidatedTypeElaborationMain.hs
       - name: SURF-008 Grammar-v1 intrinsic claim application elaboration routing
         run: cabal exec -- runghc -Wall -Werror -isrc test/Phase1GrammarV1IntrinsicClaimApplicationElaborationMain.hs
       - name: SURF-008 Grammar-v1 primitive type elaboration routing
