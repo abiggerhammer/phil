@@ -7,6 +7,7 @@ module Phil.Surface.GrammarV1.Elaborate
   , grammarV1RelationProposition
   , grammarV1LogicalProposition
   , grammarV1PrimitiveType
+  , grammarV1IntrinsicRefLiteral
   ) where
 
 import qualified Data.Text as Text
@@ -23,11 +24,12 @@ import Phil.Core.Generic.StaticActual
 import Phil.Core.Syntax
   ( Mode (..)
   , Proposition (..)
-  , RefTerm
+  , RefTerm (..)
   , Ty (..)
   )
 import Phil.Surface.GrammarV1.Parser
-  ( GrammarV1GenericKind (..)
+  ( GrammarV1Expression (..)
+  , GrammarV1GenericKind (..)
   , GrammarV1GenericRequirement (..)
   , GrammarV1Proposition (..)
   , GrammarV1QualifiedName (..)
@@ -168,4 +170,23 @@ grammarV1UIntWidth widthText = do
       | Text.null rest
       , width > 0
       , width <= toInteger (maxBound :: Int) -> Just (fromInteger width)
+    _ -> Nothing
+
+-- | Elaborate only scalar literal expressions whose Core reference-term meaning
+-- is intrinsic and context-free. Integer literals become Nat terms and Boolean
+-- literals remain Boolean terms. Names, calls, projections, unit, and compound
+-- expressions remain unresolved for a competent contextual elaborator rather
+-- than being guessed into RefVar or another semantic category.
+grammarV1IntrinsicRefLiteral :: GrammarV1Expression -> Maybe RefTerm
+grammarV1IntrinsicRefLiteral expression = case expression of
+  GrammarV1IntegerExpression literalText ->
+    RefNat <$> grammarV1NaturalLiteral literalText
+  GrammarV1BoolExpression value -> Just (RefBool value)
+  _ -> Nothing
+
+grammarV1NaturalLiteral :: Text.Text -> Maybe Integer
+grammarV1NaturalLiteral literalText =
+  case TextRead.decimal literalText :: Either String (Integer, Text.Text) of
+    Right (literal, rest)
+      | Text.null rest -> Just literal
     _ -> Nothing
