@@ -20,7 +20,7 @@ import Phil.Core.Generic.RequirementCategory
   , competenceForRequirementCategory
   )
 import Phil.Core.Generic.StaticActual
-  ( GenericGenericStaticActual (..)
+  ( GenericStaticActual (..)
   , GenericStaticKind (..)
   )
 import Phil.Core.Syntax
