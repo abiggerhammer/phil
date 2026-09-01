@@ -3634,6 +3634,26 @@ parsePropositionNot = do
 
 parsePropositionAtom :: Parser (Located GrammarV1Proposition)
 parsePropositionAtom = do
+  relation <- peekParsesRelationProposition
+  if relation
+    then parseRelationProposition
+    else parseNonRelationPropositionAtom
+
+-- | Preserve the normative proposition_atom ordering without committing
+-- identifier-, literal-, or parenthesis-led input to a shorter parse.
+-- relation_proposition owns a complete additive_expression on each side,
+-- so probe that production first and consume nothing during the probe.
+peekParsesRelationProposition :: Parser Bool
+peekParsesRelationProposition = Parser $ \tokens ->
+  Right
+    ( case runParser parseRelationProposition tokens of
+        Right _ -> True
+        Left _ -> False
+    , tokens
+    )
+
+parseNonRelationPropositionAtom :: Parser (Located GrammarV1Proposition)
+parseNonRelationPropositionAtom = do
   token <- peekToken
   case fmap locatedValue token of
     Just (GrammarKeyword "true") -> do
