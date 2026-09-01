@@ -17,14 +17,13 @@ From Phil.Core Require ResourceObligation.
 
   This layer composes the already Certified concurrency population/activation
   and rendezvous semantics with ProcessTerminal resource closure and the
-  PHIL-RES-OBL-001 pending-obligation model.  It deliberately proves safety
+  PHIL-RES-OBL-001 pending-obligation model. It deliberately proves safety
   only: no fairness, deadlock freedom, eventual response, deadline, or physical
   scheduler property is implied.
 *)
 
 Definition EndpointOccurrenceKey := nat.
-Definition LiveEndpoint : ProcessKey -> EndpointOccurrenceKey -> Prop :=
-  fun _ _ => True.
+Parameter LiveEndpoint : ProcessKey -> EndpointOccurrenceKey -> Prop.
 
 Definition LocalObligationClosure (payload : StatePayload) : Prop :=
   forall obligation : ResourceObligation.ObligationId,
@@ -93,10 +92,6 @@ Proof.
   - left. eexists. reflexivity.
   - right. eexists. eexists. reflexivity.
 Qed.
-
-(* -------------------------------------------------------------------------- *)
-(* Failure isolation: a fatal actor cannot mutate any peer semantic snapshot.  *)
-(* -------------------------------------------------------------------------- *)
 
 Record PeerSemanticState : Type := mkPeerSemanticState {
   peerExecutionStatus : ProcessExecutionStatus;
@@ -176,10 +171,6 @@ Proof.
   - exact Hrunning.
 Qed.
 
-(* -------------------------------------------------------------------------- *)
-(* Exact ProcessKey-indexed root closure.                                      *)
-(* -------------------------------------------------------------------------- *)
-
 Definition CertifiedTerminalMap :=
   ProcessKey -> option CertifiedProcessTerminalFact.
 
@@ -258,7 +249,6 @@ Theorem external_participant_classification_cannot_supply_process_identity :
 Proof.
   intros process Heq.
   apply (external_participant_has_no_internal_process_key process).
-  symmetry.
   exact Heq.
 Qed.
 
@@ -274,10 +264,6 @@ Proof.
   rewrite Hrunning in Hterminal.
   discriminate.
 Qed.
-
-(* -------------------------------------------------------------------------- *)
-(* Stuck is a live nonterminal state with no enabled local/rendezvous step.    *)
-(* -------------------------------------------------------------------------- *)
 
 Inductive SemanticEnabledStep : Type :=
 | EnabledLocalSemanticStep : ProcessKey -> SemanticEnabledStep
@@ -347,8 +333,6 @@ Proof.
   exact Hterminal.
 Qed.
 
-(* Certified activation supplies the exact static population inherited by the
-   terminal layer; root closure never invents a second population. *)
 Theorem certified_terminal_layer_reuses_activation_population :
   forall population activation bindings restrictedOwner directStatefulOwner
          expected participants facts statuses root,
