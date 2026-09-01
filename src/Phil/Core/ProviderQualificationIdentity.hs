@@ -29,6 +29,10 @@ import Phil.Core.Static
   , SemanticForm (..)
   , canonicalSemanticForm
   )
+import ProviderQualificationLineageCoreKernel
+  ( QualificationIdentityDecision (..)
+  , decideQualificationIdentityByFacts
+  )
 
 newtype QualificationClaimRevision = QualificationClaimRevision
   { unQualificationClaimRevision :: Text }
@@ -203,14 +207,19 @@ checkQualificationEvidenceIdentity
   :: ProviderQualificationClaimIdentityInput
   -> ProviderQualificationEvidenceIdentityInput
   -> Either ProviderQualificationIdentityError CheckedProviderQualificationEvidenceIdentity
-checkQualificationEvidenceIdentity claim evidence
-  | qualificationEvidenceClaimRevision evidence /= expectedClaim =
-      Left (QualificationEvidenceClaimRevisionMismatch
-        expectedClaim (qualificationEvidenceClaimRevision evidence))
-  | otherwise = Right CheckedProviderQualificationEvidenceIdentity
-      { checkedQualificationEvidenceClaimRevision = expectedClaim
-      , checkedQualificationEvidenceRevision = deriveQualificationEvidenceRevision evidence
-      }
+checkQualificationEvidenceIdentity claim evidence =
+  case decideQualificationIdentityByFacts
+      (qualificationEvidenceClaimRevision evidence == expectedClaim)
+      True
+      True
+      True of
+    QualificationIdentityAcceptedDecision ->
+      Right CheckedProviderQualificationEvidenceIdentity
+        { checkedQualificationEvidenceClaimRevision = expectedClaim
+        , checkedQualificationEvidenceRevision = deriveQualificationEvidenceRevision evidence
+        }
+    _ -> Left (QualificationEvidenceClaimRevisionMismatch
+      expectedClaim (qualificationEvidenceClaimRevision evidence))
   where
     expectedClaim = deriveQualificationClaimRevision claim
 
@@ -219,26 +228,35 @@ checkQualificationAdmissionIdentity
   -> ProviderQualificationEvidenceIdentityInput
   -> ProviderQualificationAdmissionIdentityInput
   -> Either ProviderQualificationIdentityError CheckedProviderQualificationAdmissionIdentity
-checkQualificationAdmissionIdentity claim evidence admission = do
-  checkedEvidence <- checkQualificationEvidenceIdentity claim evidence
-  let expectedClaim = checkedQualificationEvidenceClaimRevision checkedEvidence
-      expectedEvidence = checkedQualificationEvidenceRevision checkedEvidence
-      expectedInterface = qualificationClaimRequiredInterface claim
-  if qualificationAdmissionClaimRevision admission /= expectedClaim
-    then Left (QualificationAdmissionClaimRevisionMismatch
-      expectedClaim (qualificationAdmissionClaimRevision admission))
-    else if qualificationAdmissionEvidenceRevision admission /= expectedEvidence
-      then Left (QualificationAdmissionEvidenceRevisionMismatch
+checkQualificationAdmissionIdentity claim evidence admission =
+  case decideQualificationIdentityByFacts
+      (qualificationEvidenceClaimRevision evidence == expectedClaim)
+      (qualificationAdmissionClaimRevision admission == expectedClaim)
+      (qualificationAdmissionEvidenceRevision admission == expectedEvidence)
+      (qualificationAdmissionRequiredInterface admission == expectedInterface) of
+    QualificationEvidenceClaimDecision ->
+      Left (QualificationEvidenceClaimRevisionMismatch
+        expectedClaim (qualificationEvidenceClaimRevision evidence))
+    QualificationAdmissionClaimDecision ->
+      Left (QualificationAdmissionClaimRevisionMismatch
+        expectedClaim (qualificationAdmissionClaimRevision admission))
+    QualificationAdmissionEvidenceDecision ->
+      Left (QualificationAdmissionEvidenceRevisionMismatch
         expectedEvidence (qualificationAdmissionEvidenceRevision admission))
-      else if qualificationAdmissionRequiredInterface admission /= expectedInterface
-        then Left (QualificationAdmissionInterfaceMismatch
-          expectedInterface (qualificationAdmissionRequiredInterface admission))
-        else Right CheckedProviderQualificationAdmissionIdentity
-          { checkedQualificationAdmissionClaimRevision = expectedClaim
-          , checkedQualificationAdmissionEvidenceRevision = expectedEvidence
-          , checkedQualificationAdmissionRevision = deriveQualificationAdmissionRevision admission
-          , checkedQualificationAdmissionDecision = qualificationAdmissionDecision admission
-          }
+    QualificationAdmissionInterfaceDecision ->
+      Left (QualificationAdmissionInterfaceMismatch
+        expectedInterface (qualificationAdmissionRequiredInterface admission))
+    QualificationIdentityAcceptedDecision ->
+      Right CheckedProviderQualificationAdmissionIdentity
+        { checkedQualificationAdmissionClaimRevision = expectedClaim
+        , checkedQualificationAdmissionEvidenceRevision = expectedEvidence
+        , checkedQualificationAdmissionRevision = deriveQualificationAdmissionRevision admission
+        , checkedQualificationAdmissionDecision = qualificationAdmissionDecision admission
+        }
+  where
+    expectedClaim = deriveQualificationClaimRevision claim
+    expectedEvidence = deriveQualificationEvidenceRevision evidence
+    expectedInterface = qualificationClaimRequiredInterface claim
 
 subjectSemantic :: ProviderQualificationSubject -> SemanticForm
 subjectSemantic subject = case subject of
