@@ -36,7 +36,7 @@ intrinsicProofTypesPreserveMeaning = do
     "intrinsic Proof composition changed a verified leaf/tree or accepted contextual specialization: " <> show actual
   where
     expected =
-      [ Just (TyProof (GreaterThanCanonical 7 3))
+      [ Just (TyProof (greaterThanCanonical 7 3))
       , Just (TyProof (Conjunction (Atom "Ready" [RefNat 1]) (Negation Falsehood)))
       , Just (TyProof (Disjunction (Equal (RefNat 1) (RefNat 1)) (Atom "Flag" [RefBool True])))
       , Nothing
@@ -44,7 +44,7 @@ intrinsicProofTypesPreserveMeaning = do
       , Nothing
       ]
 
-    GreaterThanCanonical left right = LessThan (RefNat right) (RefNat left)
+    greaterThanCanonical left right = LessThan (RefNat right) (RefNat left)
 
 proofType :: Located GrammarV1TopLevelDecl -> Either String (Maybe Ty)
 proofType (Located _ topLevel) =
