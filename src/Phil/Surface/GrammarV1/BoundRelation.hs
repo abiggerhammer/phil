@@ -11,7 +11,10 @@ import Phil.Surface.GrammarV1.Elaborate
   ( grammarV1IntrinsicRefLiteral
   , grammarV1RelationProposition
   )
-import Phil.Surface.GrammarV1.Parser (GrammarV1Proposition (..))
+import Phil.Surface.GrammarV1.Parser
+  ( GrammarV1Expression
+  , GrammarV1Proposition (..)
+  )
 import Phil.Surface.Syntax (Located (..))
 
 -- | Compose only relation operands whose reference-term meaning is already
@@ -37,5 +40,7 @@ grammarV1BoundRelationProposition state source = case source of
       Left _ -> Nothing
   _ -> Nothing
   where
-    verifiedTerm :: Located a -> Maybe RefTerm
-    verifiedTerm = error "unreachable"
+    verifiedTerm :: Located GrammarV1Expression -> Maybe RefTerm
+    verifiedTerm located =
+      grammarV1IntrinsicRefLiteral (locatedValue located)
+        <|> grammarV1BoundRefTerm state located
