@@ -33,6 +33,8 @@ jobs:
         run: cabal exec -- runghc -Wall -Werror -isrc test/Phase1GrammarV1RelationElaborationMain.hs
       - name: SURF-008 Grammar-v1 logical proposition elaboration routing
         run: cabal exec -- runghc -Wall -Werror -isrc test/Phase1GrammarV1LogicalPropositionElaborationMain.hs
+      - name: SURF-008 Grammar-v1 logical Proof type elaboration routing
+        run: cabal exec -- runghc -Wall -Werror -isrc test/Phase1GrammarV1LogicalProofTypeElaborationMain.hs
       - name: SURF-008 Grammar-v1 primitive type elaboration routing
         run: cabal exec -- runghc -Wall -Werror -isrc test/Phase1GrammarV1PrimitiveTypeElaborationMain.hs
       - name: SURF-008 Grammar-v1 intrinsic reference literal elaboration routing

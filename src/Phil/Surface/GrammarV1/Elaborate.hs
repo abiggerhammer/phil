@@ -9,6 +9,7 @@ module Phil.Surface.GrammarV1.Elaborate
   , grammarV1PrimitiveType
   , grammarV1IntrinsicRefLiteral
   , grammarV1IntrinsicBytesType
+  , grammarV1LogicalProofType
   ) where
 
 import qualified Data.Text as Text
@@ -202,4 +203,14 @@ grammarV1IntrinsicBytesType sourceType = case sourceType of
     case grammarV1IntrinsicRefLiteral sizeExpression of
       Just size@(RefNat _) -> Just (TyBytes size)
       _ -> Nothing
+  _ -> Nothing
+
+-- | Preserve a Grammar-v1 Proof[...] type exactly when its proposition belongs
+-- to the already-verified context-free logical fragment. Relation and claim
+-- leaves remain unresolved for later contextual elaboration rather than being
+-- invented or reinterpreted merely to construct TyProof.
+grammarV1LogicalProofType :: GrammarV1Type -> Maybe Ty
+grammarV1LogicalProofType sourceType = case sourceType of
+  GrammarV1ProofType (Located _ proposition) ->
+    TyProof <$> grammarV1LogicalProposition proposition
   _ -> Nothing
