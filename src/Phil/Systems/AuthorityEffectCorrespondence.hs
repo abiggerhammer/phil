@@ -61,6 +61,7 @@ import Phil.Systems.ProviderCallCorrespondence
   , SelectedProviderAdmission (..)
   , verifyProviderCallStageBundle
   )
+import qualified SystemsSubjectAuthorityKernel as Kernel
 
 newtype AuthorityEffectStageRevision = AuthorityEffectStageRevision
   { unAuthorityEffectStageRevision :: Text
@@ -203,11 +204,24 @@ verifyAuthorityEffectStageBundle bundle = do
       actualOccurrences = Map.keysSet (authorityEffectStageSurfaces bundle)
       expectedUses = providerCallStageCallSites base
       actualUses = Map.keysSet (authorityEffectStageUses bundle)
-  requireEqual AuthorityEffectSurfaceDomainMismatch expectedOccurrences actualOccurrences
-  requireEqual AuthorityEffectUseDomainMismatch expectedUses actualUses
+  case Kernel.decideAuthorityEffectStageByFacts
+      True
+      (expectedOccurrences == actualOccurrences)
+      (expectedUses == actualUses)
+      True True True True True of
+    Kernel.AuthorityEffectStageAcceptedDecision -> Right ()
+    Kernel.AuthorityEffectSurfaceDomainDecision ->
+      Left (AuthorityEffectSurfaceDomainMismatch expectedOccurrences actualOccurrences)
+    Kernel.AuthorityEffectUseDomainDecision ->
+      Left (AuthorityEffectUseDomainMismatch expectedUses actualUses)
+    _ -> kernelInvariant "authority-effect-domain"
   mapM_ (checkSurface selections) (Map.toAscList (authorityEffectStageSurfaces bundle))
   mapM_ (checkUse base (authorityEffectStageSurfaces bundle))
     (Map.toAscList (authorityEffectStageUses bundle))
+  case Kernel.decideAuthorityEffectStageByFacts
+      True True True True True True True True of
+    Kernel.AuthorityEffectStageAcceptedDecision -> Right ()
+    _ -> kernelInvariant "authority-effect-final"
 
 checkSurface
   :: Map Text SelectedProviderAdmission
@@ -249,14 +263,22 @@ checkSurface selections (occurrence, surface) = do
           allowedPublic = checkedProviderAuthorityClientVisible authority
           publicEscape = Set.difference assignedPublic allowedPublic
           unassignedPublic = Set.difference allowedPublic assignedPublic
-      if Set.null publicEscape
-        then Right ()
-        else Left (AuthorityEffectPublicAuthorityEscape occurrence publicEscape)
-      if Set.null unassignedPublic
-        then Right ()
-        else Left (AuthorityEffectPublicAuthorityUnassigned occurrence unassignedPublic)
-      mapM_ (checkInternalAssignments occurrence authority)
-        (Map.toAscList assignments)
+          internalOk = internalAssignmentsQualified authority assignments
+      case Kernel.decideAuthorityEffectStageByFacts
+          True True True
+          (Set.null publicEscape)
+          (Set.null unassignedPublic)
+          internalOk
+          True True of
+        Kernel.AuthorityEffectStageAcceptedDecision -> Right ()
+        Kernel.AuthorityEffectPublicEscapeDecision ->
+          Left (AuthorityEffectPublicAuthorityEscape occurrence publicEscape)
+        Kernel.AuthorityEffectPublicCompletenessDecision ->
+          Left (AuthorityEffectPublicAuthorityUnassigned occurrence unassignedPublic)
+        Kernel.AuthorityEffectInternalAssignmentsDecision ->
+          firstOrInvariant "internal-authority-assignments"
+            (internalAssignmentErrors occurrence authority assignments)
+        _ -> kernelInvariant "authority-effect-qualified-surface"
     OpaqueProviderSemanticSurface evidence operations -> do
       case selectedProviderSubject selection of
         OpaqueProviderBoundary _ -> Right ()
@@ -298,21 +320,29 @@ checkAuthoritySubject occurrence selection checked =
         && actualDefinition == definition -> Right ()
     _ -> Left (AuthorityEffectAuthoritySubjectMismatch occurrence)
 
-checkInternalAssignments
+internalAssignmentsQualified
+  :: CheckedProviderAuthorityQualification
+  -> Map ProviderOperationKey ProviderOperationAuthorityAssignment
+  -> Bool
+internalAssignmentsQualified authority = null . internalAssignmentErrors "" authority
+
+internalAssignmentErrors
   :: Text
   -> CheckedProviderAuthorityQualification
-  -> (ProviderOperationKey, ProviderOperationAuthorityAssignment)
-  -> Either AuthorityEffectStageVerificationError ()
-checkInternalAssignments occurrence authority (operation, assignment) =
-  mapM_ checkOne (Map.toAscList (operationInternalAuthority assignment))
+  -> Map ProviderOperationKey ProviderOperationAuthorityAssignment
+  -> [AuthorityEffectStageVerificationError]
+internalAssignmentErrors occurrence authority assignments = concatMap checkAssignment
+  (Map.toAscList assignments)
   where
     qualifiedExtra = checkedProviderAuthorityDispositions authority
-    checkOne (use, disposition) = case Map.lookup use qualifiedExtra of
-      Nothing -> Left (AuthorityEffectInternalAuthorityNotQualified occurrence operation use)
+    checkAssignment (operation, assignment) = concatMap (checkOne operation)
+      (Map.toAscList (operationInternalAuthority assignment))
+    checkOne operation (use, disposition) = case Map.lookup use qualifiedExtra of
+      Nothing -> [AuthorityEffectInternalAuthorityNotQualified occurrence operation use]
       Just expected
-        | expected == disposition -> Right ()
-        | otherwise -> Left
-            (AuthorityEffectInternalAuthorityDispositionMismatch occurrence operation use)
+        | expected == disposition -> []
+        | otherwise ->
+            [AuthorityEffectInternalAuthorityDispositionMismatch occurrence operation use]
 
 checkUse
   :: ProviderCallStageBundle
@@ -370,17 +400,24 @@ checkEffect
   -> Set SemanticEffect
   -> ProviderEffectUse
   -> Either AuthorityEffectStageVerificationError ()
-checkEffect mechanism bound use
-  | Set.member effect bound = Right ()
-  | visibility == SourceObservableEffect =
+checkEffect mechanism bound use =
+  case Kernel.decideEffectUseByFacts
+      (Set.member effect bound)
+      hasRefinement
+      kernelVisibility of
+    Kernel.EffectUseAcceptedDecision -> Right ()
+    Kernel.EffectUseObservableWideningDecision ->
       Left (AuthorityEffectObservableRealizationWidening mechanism effect)
-  | otherwise = case providerEffectUseRefinement use of
-      Just (RealizationEffectRevision revision)
-        | not (Text.null revision) -> Right ()
-      _ -> Left (AuthorityEffectMissingRealizationRefinement mechanism effect)
+    Kernel.EffectUseMissingRefinementDecision ->
+      Left (AuthorityEffectMissingRealizationRefinement mechanism effect)
   where
     effect = providerEffectUseEffect use
-    visibility = providerEffectUseVisibility use
+    kernelVisibility = case providerEffectUseVisibility use of
+      SourceObservableEffect -> Kernel.SourceObservableEffect
+      InternalRealizationEffect -> Kernel.InternalRealizationEffect
+    hasRefinement = case providerEffectUseRefinement use of
+      Just (RealizationEffectRevision revision) -> not (Text.null revision)
+      Nothing -> False
 
 checkAuthority
   :: SystemsMechanismKey
@@ -388,17 +425,43 @@ checkAuthority
   -> Map AuthorityUse ProviderExtraAuthorityDisposition
   -> ProviderAuthorityExercise
   -> Either AuthorityEffectStageVerificationError ()
-checkAuthority mechanism publicAuthority internalAuthority exercise = case exercise of
-  PublicProviderAuthority use
-    | Set.member use publicAuthority -> Right ()
-    | otherwise -> Left (AuthorityEffectHiddenPublicAuthority mechanism use)
-  QualifiedInternalProviderAuthority use disposition ->
-    case Map.lookup use internalAuthority of
-      Nothing -> Left (AuthorityEffectHiddenInternalAuthority mechanism use)
-      Just expected
-        | expected == disposition -> Right ()
-        | otherwise -> Left
-            (AuthorityEffectInternalAuthorityUseDispositionMismatch mechanism use)
+checkAuthority mechanism publicAuthority internalAuthority exercise =
+  case exercise of
+    PublicProviderAuthority use ->
+      case Kernel.decideAuthorityExerciseByFacts
+          (Set.member use publicAuthority)
+          False
+          False
+          Kernel.PublicAuthority of
+        Kernel.AuthorityExerciseAcceptedDecision -> Right ()
+        Kernel.AuthorityExerciseHiddenPublicDecision ->
+          Left (AuthorityEffectHiddenPublicAuthority mechanism use)
+        _ -> kernelInvariant "public-authority-exercise"
+    QualifiedInternalProviderAuthority use disposition ->
+      let qualified = Map.member use internalAuthority
+          dispositionMatches = Map.lookup use internalAuthority == Just disposition
+      in case Kernel.decideAuthorityExerciseByFacts
+          False
+          qualified
+          dispositionMatches
+          Kernel.QualifiedInternalAuthority of
+        Kernel.AuthorityExerciseAcceptedDecision -> Right ()
+        Kernel.AuthorityExerciseHiddenInternalDecision ->
+          Left (AuthorityEffectHiddenInternalAuthority mechanism use)
+        Kernel.AuthorityExerciseDispositionDecision ->
+          Left (AuthorityEffectInternalAuthorityUseDispositionMismatch mechanism use)
+        _ -> kernelInvariant "internal-authority-exercise"
+
+firstOrInvariant
+  :: String
+  -> [AuthorityEffectStageVerificationError]
+  -> Either AuthorityEffectStageVerificationError ()
+firstOrInvariant _ (err : _) = Left err
+firstOrInvariant label [] = kernelInvariant label
+
+kernelInvariant :: String -> Either AuthorityEffectStageVerificationError ()
+kernelInvariant label =
+  error ("SystemsSubjectAuthorityKernel mismatch: " <> label)
 
 semanticSurface :: ProviderSemanticSurfaceBasis -> SemanticForm
 semanticSurface surface = case surface of
