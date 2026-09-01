@@ -101,3 +101,4 @@ decideQualificationDependencyClosureByFacts allReachableGrounded =
   case allReachableGrounded of {
    Prelude.True -> QualificationDependencyClosureAcceptedDecision;
    Prelude.False -> QualificationDependencyUngroundedDecision}
+
