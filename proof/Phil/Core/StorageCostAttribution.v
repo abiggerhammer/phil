@@ -1,6 +1,8 @@
 From Stdlib Require Import Bool.Bool Arith.PeanoNat.
 
 From Phil.Core Require Import
+  SystemsStageClosure
+  SystemsRealizationEffects
   StorageRealization
   SystemsRuntimeGraph.
 
