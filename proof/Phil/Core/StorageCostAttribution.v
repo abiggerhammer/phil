@@ -239,7 +239,8 @@ Qed.
 Theorem distinct_storage_cost_lineage_does_not_rewrite_semantic_identity :
   forall subject semanticRevision outcomeRevision instance
          firstSelected secondSelected firstStrategy secondStrategy
-         firstObjects secondObjects firstLineage secondLineage,
+         firstObjects secondObjects
+         (firstLineage secondLineage : StorageCostLineageFacts),
     firstLineage <> secondLineage ->
     storage_semantic_identity
       (makeStorageRealization
