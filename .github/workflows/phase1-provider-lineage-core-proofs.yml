@@ -8,7 +8,11 @@ on:
       - 'test/Phase1ProviderQualificationIdentityMain.hs'
       - 'test/Phase1ProviderQualificationDependencyMain.hs'
       - 'proof/Phil/Core/ProviderQualificationLineageCore.v'
+      - 'proof/Phil/Core/ProviderQualificationLineageCoreImplementation.v'
+      - 'proof/Phil/Core/ProviderQualificationLineageCoreImplementationExtraction.v'
+      - 'app/ProviderLineageCoreDecisionCorrespondenceMain.hs'
       - 'app/Phase1ProviderLineageCoreCertificationMain.hs'
+      - 'docs/phase-1/provider-lineage-core-implementation-refinement-v1.md'
       - '.github/workflows/phase1-provider-lineage-core-proofs.yml'
   push:
     branches: [main]
@@ -18,7 +22,11 @@ on:
       - 'test/Phase1ProviderQualificationIdentityMain.hs'
       - 'test/Phase1ProviderQualificationDependencyMain.hs'
       - 'proof/Phil/Core/ProviderQualificationLineageCore.v'
+      - 'proof/Phil/Core/ProviderQualificationLineageCoreImplementation.v'
+      - 'proof/Phil/Core/ProviderQualificationLineageCoreImplementationExtraction.v'
+      - 'app/ProviderLineageCoreDecisionCorrespondenceMain.hs'
       - 'app/Phase1ProviderLineageCoreCertificationMain.hs'
+      - 'docs/phase-1/provider-lineage-core-implementation-refinement-v1.md'
       - '.github/workflows/phase1-provider-lineage-core-proofs.yml'
 
 permissions:
@@ -32,17 +40,40 @@ jobs:
       options: --user root
     steps:
       - uses: actions/checkout@v4
-      - name: Compile PHIL-PROV-LINEAGE-CORE-001
+      - name: Compile PHIL-PROV-LINEAGE-CORE-001 and implementation correspondence
         shell: bash
         run: |
           set -euo pipefail
           export PATH="/home/rocq/.opam/${COMPILER}/bin:$PATH"
           rocq c -Q proof/Phil Phil proof/Phil/Core/ProviderQualificationLineageCore.v
+          rocq c -Q proof/Phil Phil proof/Phil/Core/ProviderQualificationLineageCoreImplementation.v
+          rm -f ProviderQualificationLineageCoreKernel.hs
+          rocq c -Q proof/Phil Phil proof/Phil/Core/ProviderQualificationLineageCoreImplementationExtraction.v
+          test -s ProviderQualificationLineageCoreKernel.hs
+          grep -q 'decideQualificationIdentityByFacts' ProviderQualificationLineageCoreKernel.hs
+          grep -q 'propagateGroundPresence' ProviderQualificationLineageCoreKernel.hs
+      - name: Record proof and extraction identities
+        shell: bash
+        run: |
+          set -euo pipefail
           mkdir -p phase1-provider-lineage-core-proof
           cp \
             proof/Phil/Core/ProviderQualificationLineageCore.v \
             proof/Phil/Core/ProviderQualificationLineageCore.vo \
+            proof/Phil/Core/ProviderQualificationLineageCoreImplementation.v \
+            proof/Phil/Core/ProviderQualificationLineageCoreImplementation.vo \
+            proof/Phil/Core/ProviderQualificationLineageCoreImplementationExtraction.v \
+            proof/Phil/Core/ProviderQualificationLineageCoreImplementationExtraction.vo \
+            ProviderQualificationLineageCoreKernel.hs \
             phase1-provider-lineage-core-proof/
+          sha256sum \
+            phase1-provider-lineage-core-proof/ProviderQualificationLineageCore.v \
+            phase1-provider-lineage-core-proof/ProviderQualificationLineageCore.vo \
+            phase1-provider-lineage-core-proof/ProviderQualificationLineageCoreImplementation.v \
+            phase1-provider-lineage-core-proof/ProviderQualificationLineageCoreImplementation.vo \
+            phase1-provider-lineage-core-proof/ProviderQualificationLineageCoreKernel.hs \
+            > phase1-provider-lineage-core-proof/PHIL-PROV-LINEAGE-CORE-001.proof.sha256
+          cat phase1-provider-lineage-core-proof/PHIL-PROV-LINEAGE-CORE-001.proof.sha256
       - uses: actions/upload-artifact@v4
         with:
           name: rocq-phase1-provider-lineage-core-proof
@@ -60,17 +91,30 @@ jobs:
           cabal-version: 'latest'
       - name: Build existing proof certifier substrate with warnings as errors
         run: cabal build exe:phil-certify-core-scalar --ghc-options=-Werror
-      - name: Typecheck certifier
-        run: cabal exec -- ghc -isrc -Wall -Werror -fno-code app/Phase1ProviderLineageCoreCertificationMain.hs
-      - name: Re-run PROV-011 and PROV-012 correspondence
+      - name: Typecheck certifier and unchanged production modules
         run: |
           set -euo pipefail
-          cabal exec -- runghc -isrc test/Phase1ProviderQualificationIdentityMain.hs
-          cabal exec -- runghc -isrc test/Phase1ProviderQualificationDependencyMain.hs
+          cabal exec -- ghc -isrc -Wall -Werror -fno-code app/Phase1ProviderLineageCoreCertificationMain.hs
+          cabal exec -- ghc -isrc -Wall -Werror -fno-code src/Phil/Core/ProviderQualificationIdentity.hs
+          cabal exec -- ghc -isrc -Wall -Werror -fno-code src/Phil/Core/ProviderQualificationDependency.hs
       - uses: actions/download-artifact@v4
         with:
           name: rocq-phase1-provider-lineage-core-proof
           path: phase1-provider-lineage-core-proof
+      - name: Typecheck and execute extracted lineage-core controls
+        run: |
+          set -euo pipefail
+          ghc -Wall -Werror -fno-code phase1-provider-lineage-core-proof/ProviderQualificationLineageCoreKernel.hs
+          ghc -Wall -Werror \
+            -iphase1-provider-lineage-core-proof \
+            app/ProviderLineageCoreDecisionCorrespondenceMain.hs \
+            -o provider-lineage-core-kernel-controls
+          ./provider-lineage-core-kernel-controls
+      - name: Re-run unchanged PROV-011 and PROV-012 correspondence
+        run: |
+          set -euo pipefail
+          cabal exec -- runghc -isrc test/Phase1ProviderQualificationIdentityMain.hs
+          cabal exec -- runghc -isrc test/Phase1ProviderQualificationDependencyMain.hs
       - name: Emit PHIL-PROV-LINEAGE-CORE-001 certificate
         shell: bash
         run: |
@@ -90,8 +134,28 @@ jobs:
             > phase1-provider-lineage-core-certification/PHIL-PROV-LINEAGE-CORE-001.correspondence.sha256
           cat phase1-provider-lineage-core-certification/PHIL-PROV-LINEAGE-CORE-001.rocq.cert
           sha256sum phase1-provider-lineage-core-certification/PHIL-PROV-LINEAGE-CORE-001.rocq.cert
+      - name: Record implementation-refinement staging identities
+        run: |
+          set -euo pipefail
+          mkdir -p provider-lineage-core-implementation-correspondence
+          sha256sum \
+            phase1-provider-lineage-core-proof/ProviderQualificationLineageCoreKernel.hs \
+            src/Phil/Core/ProviderQualificationIdentity.hs \
+            src/Phil/Core/ProviderQualificationDependency.hs \
+            test/Phase1ProviderQualificationIdentityMain.hs \
+            test/Phase1ProviderQualificationDependencyMain.hs \
+            app/ProviderLineageCoreDecisionCorrespondenceMain.hs \
+            proof/Phil/Core/ProviderQualificationLineageCoreImplementation.v \
+            docs/phase-1/provider-lineage-core-implementation-refinement-v1.md \
+            > provider-lineage-core-implementation-correspondence/PHIL-PROV-LINEAGE-CORE-001.staging.sha256
+          cat provider-lineage-core-implementation-correspondence/PHIL-PROV-LINEAGE-CORE-001.staging.sha256
       - uses: actions/upload-artifact@v4
         with:
           name: phil-phase1-provider-lineage-core-proof-certification
           path: phase1-provider-lineage-core-certification
+          if-no-files-found: error
+      - uses: actions/upload-artifact@v4
+        with:
+          name: provider-lineage-core-implementation-correspondence
+          path: provider-lineage-core-implementation-correspondence
           if-no-files-found: error
