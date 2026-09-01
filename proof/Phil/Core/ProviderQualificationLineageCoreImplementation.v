@@ -128,7 +128,15 @@ Proof.
   - simpl. intuition discriminate.
   - destruct value; simpl.
     + intuition.
-    + exact IH.
+    + split.
+      * intro Hexists.
+        right.
+        apply (proj1 IH).
+        exact Hexists.
+      * intros [Hfalse | Hin].
+        -- discriminate Hfalse.
+        -- apply (proj2 IH).
+           exact Hin.
 Qed.
 
 Theorem propagate_ground_presence_exact :
