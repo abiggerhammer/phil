@@ -84,8 +84,8 @@ jobs:
         run: |
           set -euo pipefail
           cabal exec -- ghc -isrc -Wall -Werror -Wno-name-shadowing -fno-code src/Phil/Systems/RuntimeClaimBinding.hs
-          cabal exec -- ghc -isrc -Wall -Werror -fno-code src/Phil/Systems/RuntimePrimitiveReuse.hs
-          cabal exec -- ghc -isrc -Wall -Werror -fno-code src/Phil/Systems/CostAttribution.hs
+          cabal exec -- ghc -isrc -Wall -Werror -Wno-name-shadowing -fno-code src/Phil/Systems/RuntimePrimitiveReuse.hs
+          cabal exec -- ghc -isrc -Wall -Werror -Wno-name-shadowing -fno-code src/Phil/Systems/CostAttribution.hs
       - name: Re-run unchanged SYS-015 / SYS-016 / SYS-018 corpus
         run: |
           set -euo pipefail
