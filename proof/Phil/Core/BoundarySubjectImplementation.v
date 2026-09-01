@@ -132,7 +132,6 @@ Proof.
   - intro Haccepted.
     destruct Haccepted as [Hkind Hcopy Hequality Hlaw Hevidence Hscope].
     repeat split.
-    + reflexivity.
     + unfold transportKindIsCopy.
       destruct (dataSubjectTransportKind (boundaryDataTransport transfer))
         eqn:HtransportKind.
@@ -311,7 +310,6 @@ Proof.
       [Hstage Hrepresentation Hgrammar Hvalue Hsource Hmemory Hendian
        Hlifetime Hownership Hdevice Hassumptions].
     repeat split.
-    + reflexivity.
     + apply Nat.eqb_eq.
       exact Hstage.
     + exact ((proj2 (revision_present_iff
