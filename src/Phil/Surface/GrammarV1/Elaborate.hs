@@ -10,6 +10,7 @@ module Phil.Surface.GrammarV1.Elaborate
   , grammarV1IntrinsicRefLiteral
   , grammarV1IntrinsicBytesType
   , grammarV1LogicalProofType
+  , grammarV1IntrinsicClaimApplication
   ) where
 
 import qualified Data.Text as Text
@@ -213,4 +214,21 @@ grammarV1LogicalProofType :: GrammarV1Type -> Maybe Ty
 grammarV1LogicalProofType sourceType = case sourceType of
   GrammarV1ProofType (Located _ proposition) ->
     TyProof <$> grammarV1LogicalProposition proposition
+  _ -> Nothing
+
+-- | Preserve a bare, unspecialized claim reference and intrinsic scalar literal
+-- arguments exactly as one Core atom. This is syntactic identity plumbing only:
+-- claim existence, arity, and argument sorts remain the competent semantic
+-- checker's responsibility. Specialized claim references and contextual argument
+-- expressions fail closed rather than acquiring invented bindings or static
+-- instantiations.
+grammarV1IntrinsicClaimApplication :: GrammarV1Proposition -> Maybe Proposition
+grammarV1IntrinsicClaimApplication source = case source of
+  GrammarV1ClaimApplicationProposition reference arguments
+    | null (grammarV1StaticReferenceArguments reference) -> do
+        claim <- case grammarV1QualifiedNameParts (grammarV1StaticReferenceName reference) of
+          [] -> Nothing
+          parts -> Just (Text.intercalate (Text.singleton '.') parts)
+        terms <- mapM (grammarV1IntrinsicRefLiteral . locatedValue) arguments
+        Just (Atom claim terms)
   _ -> Nothing
