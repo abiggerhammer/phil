@@ -57,7 +57,9 @@ boundRelationsPreserveMeaning = do
   propositions <- mapM claimProposition (grammarV1TopLevelDecls sourceFile)
   let actual =
         map (grammarV1BoundRelationProposition state) propositions
-          <> [grammarV1BoundRelationProposition state projectedProposition]
+          <> [ grammarV1BoundRelationProposition state projectedProposition
+             , grammarV1BoundRelationProposition state arithmeticProposition
+             ]
       expected =
         [ Just (LessThan (RefVar (Name "n")) (RefVar (Name "m")))
         , Just (LessEqual (RefVar (Name "n")) (RefNat 7))
@@ -104,6 +106,17 @@ projectedProposition =
     (Located syntheticSpan GrammarV1EqualRelation)
     (Located syntheticSpan (simpleNameExpression "n"))
 
+arithmeticProposition :: GrammarV1Proposition
+arithmeticProposition =
+  GrammarV1RelationProposition
+    (Located syntheticSpan
+      (GrammarV1BinaryExpression
+        (Located syntheticSpan (simpleNameExpression "n"))
+        (Located syntheticSpan GrammarV1Add)
+        (Located syntheticSpan (GrammarV1IntegerExpression "1"))))
+    (Located syntheticSpan GrammarV1EqualRelation)
+    (Located syntheticSpan (simpleNameExpression "m"))
+
 simpleNameExpression :: Text.Text -> GrammarV1Expression
 simpleNameExpression name =
   GrammarV1NameExpression
@@ -124,7 +137,6 @@ source = Text.unlines
   , "claim Specialized = n[U32] == n;"
   , "claim Called = n(1) == n;"
   , "claim Consumed = spent == n;"
-  , "claim Arithmetic = n + 1 == m;"
   , "claim TruthLeaf = true;"
   ]
 
