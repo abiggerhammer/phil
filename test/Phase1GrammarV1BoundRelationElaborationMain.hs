@@ -55,7 +55,9 @@ boundRelationsPreserveMeaning = do
     moveVariable (Located syntheticSpan ()) "spent" state7
   sourceFile <- mapLeft show $ parseGrammarV1StructuralSource "surf008-bound-relations" source
   propositions <- mapM claimProposition (grammarV1TopLevelDecls sourceFile)
-  let actual = map (grammarV1BoundRelationProposition state) propositions
+  let actual =
+        map (grammarV1BoundRelationProposition state) propositions
+          <> [grammarV1BoundRelationProposition state projectedProposition]
       expected =
         [ Just (LessThan (RefVar (Name "n")) (RefVar (Name "m")))
         , Just (LessEqual (RefVar (Name "n")) (RefNat 7))
@@ -92,6 +94,22 @@ claimProposition (Located _ topLevel) =
         Nothing -> Left "claim had no proposition"
     other -> Left ("expected claim declaration, got " <> show other)
 
+projectedProposition :: GrammarV1Proposition
+projectedProposition =
+  GrammarV1RelationProposition
+    (Located syntheticSpan
+      (GrammarV1ProjectionExpression
+        (Located syntheticSpan (simpleNameExpression "n"))
+        (Located syntheticSpan "field")))
+    (Located syntheticSpan GrammarV1EqualRelation)
+    (Located syntheticSpan (simpleNameExpression "n"))
+
+simpleNameExpression :: Text.Text -> GrammarV1Expression
+simpleNameExpression name =
+  GrammarV1NameExpression
+    (GrammarV1StaticReference (GrammarV1QualifiedName [name]) [])
+    []
+
 source :: Text.Text
 source = Text.unlines
   [ "claim NatOrder = n < m;"
@@ -105,7 +123,6 @@ source = Text.unlines
   , "claim Qualified = pkg.n == n;"
   , "claim Specialized = n[U32] == n;"
   , "claim Called = n(1) == n;"
-  , "claim Projected = (n).field == n;"
   , "claim Consumed = spent == n;"
   , "claim Arithmetic = n + 1 == m;"
   , "claim TruthLeaf = true;"
