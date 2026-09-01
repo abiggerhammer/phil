@@ -2,6 +2,7 @@ From Stdlib Require Import Lists.List Bool.Bool Arith.PeanoNat.
 Import ListNotations.
 
 From Phil.Core Require Import
+  Syntax
   Session
   ProtocolIdentity
   ProtocolProjection
