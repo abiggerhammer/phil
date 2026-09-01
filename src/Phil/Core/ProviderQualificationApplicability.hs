@@ -28,6 +28,10 @@ import Phil.Core.Static
   , InterfaceRevision
   , RealizationRevision
   )
+import ProviderQualificationLineageTargetKernel
+  ( AdmissionApplicabilityDecision (..)
+  , decideAdmissionApplicabilityByFacts
+  )
 
 newtype ProviderRequirementOccurrenceKey = ProviderRequirementOccurrenceKey
   { unProviderRequirementOccurrenceKey :: Text
@@ -109,81 +113,134 @@ checkProviderAdmissionApplicability
   -> ProviderConcreteAdmissionApplicability
   -> SelectedProviderRealization
   -> Either ProviderAdmissionApplicabilityError CheckedProviderAdmissionApplicability
-checkProviderAdmissionApplicability admission targetEvidence applicability selected = do
-  case checkedQualificationAdmissionDecision admission of
-    QualificationAdmitted -> Right ()
-    QualificationRejected _ -> Left ProviderApplicabilityAdmissionRejected
-  let expectedAdmission = checkedQualificationAdmissionRevision admission
-      expectedClaim = checkedQualificationAdmissionClaimRevision admission
-      expectedTargetEvidence = deriveTargetRealizationEvidenceRevision targetEvidence
-  requireEqual ProviderApplicabilityAdmissionRevisionMismatch
-    expectedAdmission (providerApplicabilityAdmissionRevision applicability)
-  requireEqual ProviderApplicabilityClaimRevisionMismatch
-    expectedClaim (providerApplicabilityClaimRevision applicability)
-  requireEqual ProviderApplicabilityTargetEvidenceRevisionMismatch
-    expectedTargetEvidence (providerApplicabilityTargetEvidenceRevision applicability)
-  requireEqual ProviderApplicabilityTargetEvidenceClaimMismatch
-    expectedClaim (targetEvidenceClaimRevision targetEvidence)
-  requireEqual ProviderApplicabilityInterfaceMismatch
-    (targetEvidenceRequiredInterface targetEvidence)
-    (providerApplicabilityRequiredInterface applicability)
-  requireEqual ProviderApplicabilityImplementationMismatch
-    (targetEvidenceSemanticImplementation targetEvidence)
-    (providerApplicabilityImplementationDefinition applicability)
-  requireEqual ProviderApplicabilityTargetProfileMismatch
-    (targetEvidenceTargetProfileRevision targetEvidence)
-    (providerApplicabilityTargetProfileRevision applicability)
-  requireEqual ProviderApplicabilityArtifactMismatch
-    (targetEvidenceArtifactRevision targetEvidence)
-    (providerApplicabilityArtifactRevision applicability)
-  requireEqual ProviderApplicabilityRuntimeAbiMismatch
-    (targetEvidenceRuntimeAbiRevision targetEvidence)
-    (providerApplicabilityRuntimeAbiRevision applicability)
-
-  requireEqual ProviderApplicabilitySelectionAdmissionMismatch
-    (providerApplicabilityAdmissionRevision applicability)
-    (selectedProviderAdmissionRevision selected)
-  requireEqual ProviderApplicabilitySelectionTargetEvidenceMismatch
-    (providerApplicabilityTargetEvidenceRevision applicability)
-    (selectedProviderTargetEvidenceRevision selected)
-  requireEqual ProviderApplicabilityRequirementOccurrenceMismatch
-    (providerApplicabilityRequirementOccurrence applicability)
-    (selectedProviderRequirementOccurrence selected)
-  requireEqual ProviderApplicabilityInstanceRevisionMismatch
-    (providerApplicabilityInstanceRevision applicability)
-    (selectedProviderInstanceRevision selected)
-  requireEqual ProviderApplicabilityRealizationRevisionMismatch
-    (providerApplicabilityRealizationRevision applicability)
-    (selectedProviderRealizationRevision selected)
-  requireEqual ProviderApplicabilityInterfaceMismatch
-    (providerApplicabilityRequiredInterface applicability)
-    (selectedProviderRequiredInterface selected)
-  requireEqual ProviderApplicabilityImplementationMismatch
-    (providerApplicabilityImplementationDefinition applicability)
-    (selectedProviderImplementationDefinition selected)
-  requireEqual ProviderApplicabilityTargetProfileMismatch
-    (providerApplicabilityTargetProfileRevision applicability)
-    (selectedProviderTargetProfileRevision selected)
-  requireEqual ProviderApplicabilityArtifactMismatch
-    (providerApplicabilityArtifactRevision applicability)
-    (selectedProviderArtifactRevision selected)
-  requireEqual ProviderApplicabilityRuntimeAbiMismatch
-    (providerApplicabilityRuntimeAbiRevision applicability)
-    (selectedProviderRuntimeAbiRevision selected)
-
-  Right CheckedProviderAdmissionApplicability
-    { checkedProviderApplicabilityAdmissionRevision = expectedAdmission
-    , checkedProviderApplicabilityClaimRevision = expectedClaim
-    , checkedProviderApplicabilityTargetEvidenceRevision = expectedTargetEvidence
-    , checkedProviderApplicabilityRequirementOccurrence =
-        providerApplicabilityRequirementOccurrence applicability
-    , checkedProviderApplicabilityInstanceRevision =
-        providerApplicabilityInstanceRevision applicability
-    , checkedProviderApplicabilityRealizationRevision =
-        providerApplicabilityRealizationRevision applicability
-    }
-
-requireEqual :: Eq a => (a -> a -> e) -> a -> a -> Either e ()
-requireEqual mkError expected actual
-  | expected == actual = Right ()
-  | otherwise = Left (mkError expected actual)
+checkProviderAdmissionApplicability admission targetEvidence applicability selected =
+  case decision of
+    AdmissionApplicabilityAcceptedDecision ->
+      Right CheckedProviderAdmissionApplicability
+        { checkedProviderApplicabilityAdmissionRevision = expectedAdmission
+        , checkedProviderApplicabilityClaimRevision = expectedClaim
+        , checkedProviderApplicabilityTargetEvidenceRevision = expectedTargetEvidence
+        , checkedProviderApplicabilityRequirementOccurrence =
+            providerApplicabilityRequirementOccurrence applicability
+        , checkedProviderApplicabilityInstanceRevision =
+            providerApplicabilityInstanceRevision applicability
+        , checkedProviderApplicabilityRealizationRevision =
+            providerApplicabilityRealizationRevision applicability
+        }
+    AdmissionApplicabilityRejectedDecision ->
+      Left ProviderApplicabilityAdmissionRejected
+    AdmissionApplicabilityAdmissionRevisionDecision ->
+      Left (ProviderApplicabilityAdmissionRevisionMismatch
+        expectedAdmission (providerApplicabilityAdmissionRevision applicability))
+    AdmissionApplicabilityClaimRevisionDecision ->
+      Left (ProviderApplicabilityClaimRevisionMismatch
+        expectedClaim (providerApplicabilityClaimRevision applicability))
+    AdmissionApplicabilityTargetEvidenceRevisionDecision ->
+      Left (ProviderApplicabilityTargetEvidenceRevisionMismatch
+        expectedTargetEvidence (providerApplicabilityTargetEvidenceRevision applicability))
+    AdmissionApplicabilityTargetEvidenceClaimDecision ->
+      Left (ProviderApplicabilityTargetEvidenceClaimMismatch
+        expectedClaim (targetEvidenceClaimRevision targetEvidence))
+    AdmissionApplicabilityInterfaceEvidenceDecision ->
+      Left (ProviderApplicabilityInterfaceMismatch
+        (targetEvidenceRequiredInterface targetEvidence)
+        (providerApplicabilityRequiredInterface applicability))
+    AdmissionApplicabilityImplementationEvidenceDecision ->
+      Left (ProviderApplicabilityImplementationMismatch
+        (targetEvidenceSemanticImplementation targetEvidence)
+        (providerApplicabilityImplementationDefinition applicability))
+    AdmissionApplicabilityTargetEvidenceDecision ->
+      Left (ProviderApplicabilityTargetProfileMismatch
+        (targetEvidenceTargetProfileRevision targetEvidence)
+        (providerApplicabilityTargetProfileRevision applicability))
+    AdmissionApplicabilityArtifactEvidenceDecision ->
+      Left (ProviderApplicabilityArtifactMismatch
+        (targetEvidenceArtifactRevision targetEvidence)
+        (providerApplicabilityArtifactRevision applicability))
+    AdmissionApplicabilityAbiEvidenceDecision ->
+      Left (ProviderApplicabilityRuntimeAbiMismatch
+        (targetEvidenceRuntimeAbiRevision targetEvidence)
+        (providerApplicabilityRuntimeAbiRevision applicability))
+    AdmissionApplicabilitySelectedAdmissionDecision ->
+      Left (ProviderApplicabilitySelectionAdmissionMismatch
+        (providerApplicabilityAdmissionRevision applicability)
+        (selectedProviderAdmissionRevision selected))
+    AdmissionApplicabilitySelectedEvidenceDecision ->
+      Left (ProviderApplicabilitySelectionTargetEvidenceMismatch
+        (providerApplicabilityTargetEvidenceRevision applicability)
+        (selectedProviderTargetEvidenceRevision selected))
+    AdmissionApplicabilitySelectedOccurrenceDecision ->
+      Left (ProviderApplicabilityRequirementOccurrenceMismatch
+        (providerApplicabilityRequirementOccurrence applicability)
+        (selectedProviderRequirementOccurrence selected))
+    AdmissionApplicabilitySelectedInstanceDecision ->
+      Left (ProviderApplicabilityInstanceRevisionMismatch
+        (providerApplicabilityInstanceRevision applicability)
+        (selectedProviderInstanceRevision selected))
+    AdmissionApplicabilitySelectedRealizationDecision ->
+      Left (ProviderApplicabilityRealizationRevisionMismatch
+        (providerApplicabilityRealizationRevision applicability)
+        (selectedProviderRealizationRevision selected))
+    AdmissionApplicabilitySelectedInterfaceDecision ->
+      Left (ProviderApplicabilityInterfaceMismatch
+        (providerApplicabilityRequiredInterface applicability)
+        (selectedProviderRequiredInterface selected))
+    AdmissionApplicabilitySelectedImplementationDecision ->
+      Left (ProviderApplicabilityImplementationMismatch
+        (providerApplicabilityImplementationDefinition applicability)
+        (selectedProviderImplementationDefinition selected))
+    AdmissionApplicabilitySelectedTargetDecision ->
+      Left (ProviderApplicabilityTargetProfileMismatch
+        (providerApplicabilityTargetProfileRevision applicability)
+        (selectedProviderTargetProfileRevision selected))
+    AdmissionApplicabilitySelectedArtifactDecision ->
+      Left (ProviderApplicabilityArtifactMismatch
+        (providerApplicabilityArtifactRevision applicability)
+        (selectedProviderArtifactRevision selected))
+    AdmissionApplicabilitySelectedAbiDecision ->
+      Left (ProviderApplicabilityRuntimeAbiMismatch
+        (providerApplicabilityRuntimeAbiRevision applicability)
+        (selectedProviderRuntimeAbiRevision selected))
+  where
+    expectedAdmission = checkedQualificationAdmissionRevision admission
+    expectedClaim = checkedQualificationAdmissionClaimRevision admission
+    expectedTargetEvidence = deriveTargetRealizationEvidenceRevision targetEvidence
+    admitted = case checkedQualificationAdmissionDecision admission of
+      QualificationAdmitted -> True
+      QualificationRejected _ -> False
+    decision = decideAdmissionApplicabilityByFacts
+      admitted
+      (providerApplicabilityAdmissionRevision applicability == expectedAdmission)
+      (providerApplicabilityClaimRevision applicability == expectedClaim)
+      (providerApplicabilityTargetEvidenceRevision applicability == expectedTargetEvidence)
+      (targetEvidenceClaimRevision targetEvidence == expectedClaim)
+      (providerApplicabilityRequiredInterface applicability ==
+        targetEvidenceRequiredInterface targetEvidence)
+      (providerApplicabilityImplementationDefinition applicability ==
+        targetEvidenceSemanticImplementation targetEvidence)
+      (providerApplicabilityTargetProfileRevision applicability ==
+        targetEvidenceTargetProfileRevision targetEvidence)
+      (providerApplicabilityArtifactRevision applicability ==
+        targetEvidenceArtifactRevision targetEvidence)
+      (providerApplicabilityRuntimeAbiRevision applicability ==
+        targetEvidenceRuntimeAbiRevision targetEvidence)
+      (selectedProviderAdmissionRevision selected ==
+        providerApplicabilityAdmissionRevision applicability)
+      (selectedProviderTargetEvidenceRevision selected ==
+        providerApplicabilityTargetEvidenceRevision applicability)
+      (selectedProviderRequirementOccurrence selected ==
+        providerApplicabilityRequirementOccurrence applicability)
+      (selectedProviderInstanceRevision selected ==
+        providerApplicabilityInstanceRevision applicability)
+      (selectedProviderRealizationRevision selected ==
+        providerApplicabilityRealizationRevision applicability)
+      (selectedProviderRequiredInterface selected ==
+        providerApplicabilityRequiredInterface applicability)
+      (selectedProviderImplementationDefinition selected ==
+        providerApplicabilityImplementationDefinition applicability)
+      (selectedProviderTargetProfileRevision selected ==
+        providerApplicabilityTargetProfileRevision applicability)
+      (selectedProviderArtifactRevision selected ==
+        providerApplicabilityArtifactRevision applicability)
+      (selectedProviderRuntimeAbiRevision selected ==
+        providerApplicabilityRuntimeAbiRevision applicability)

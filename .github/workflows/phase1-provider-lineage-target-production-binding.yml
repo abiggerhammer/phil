@@ -1,0 +1,139 @@
+name: Phase 1 Provider Lineage Target Production Binding
+
+on:
+  pull_request:
+    paths:
+      - 'src/ProviderQualificationLineageTargetKernel.hs'
+      - 'src/Phil/Core/ProviderQualificationTargetReuse.hs'
+      - 'src/Phil/Core/ProviderQualificationApplicability.hs'
+      - 'test/Phase1ProviderQualificationTargetReuseMain.hs'
+      - 'test/Phase1ProviderQualificationApplicabilityMain.hs'
+      - 'app/ProviderLineageTargetDecisionCorrespondenceMain.hs'
+      - 'proof/Phil/Core/ProviderQualificationLineageTarget.v'
+      - 'proof/Phil/Core/ProviderQualificationLineageTargetImplementation.v'
+      - 'proof/Phil/Core/ProviderQualificationLineageTargetImplementationExtraction.v'
+      - 'docs/phase-1/provider-lineage-target-production-binding-v1.md'
+      - '.github/workflows/phase1-provider-lineage-target-production-binding.yml'
+  push:
+    branches: [main]
+    paths:
+      - 'src/ProviderQualificationLineageTargetKernel.hs'
+      - 'src/Phil/Core/ProviderQualificationTargetReuse.hs'
+      - 'src/Phil/Core/ProviderQualificationApplicability.hs'
+      - 'test/Phase1ProviderQualificationTargetReuseMain.hs'
+      - 'test/Phase1ProviderQualificationApplicabilityMain.hs'
+      - 'app/ProviderLineageTargetDecisionCorrespondenceMain.hs'
+      - 'proof/Phil/Core/ProviderQualificationLineageTarget.v'
+      - 'proof/Phil/Core/ProviderQualificationLineageTargetImplementation.v'
+      - 'proof/Phil/Core/ProviderQualificationLineageTargetImplementationExtraction.v'
+      - 'docs/phase-1/provider-lineage-target-production-binding-v1.md'
+      - '.github/workflows/phase1-provider-lineage-target-production-binding.yml'
+
+permissions:
+  contents: read
+
+jobs:
+  rocq-exact-kernel:
+    runs-on: ubuntu-latest
+    container:
+      image: rocq/rocq-prover:9.2.0
+      options: --user root
+    steps:
+      - uses: actions/checkout@v4
+      - name: Fresh-extract exact provider lineage target kernel
+        shell: bash
+        run: |
+          set -euo pipefail
+          export PATH="/home/rocq/.opam/${COMPILER}/bin:$PATH"
+          rocq c -Q proof/Phil Phil proof/Phil/Core/ProviderQualificationLineageTarget.v
+          rocq c -Q proof/Phil Phil proof/Phil/Core/ProviderQualificationLineageTargetImplementation.v
+          rm -f ProviderQualificationLineageTargetKernel.hs
+          rocq c -Q proof/Phil Phil proof/Phil/Core/ProviderQualificationLineageTargetImplementationExtraction.v
+          test -s ProviderQualificationLineageTargetKernel.hs
+          test "$(sha256sum ProviderQualificationLineageTargetKernel.hs | cut -d' ' -f1)" = \
+            '829e98d3b1653b0f4ca1a3fd64f570206df0a05e5500467d82f13a75a4d0f030'
+          cmp ProviderQualificationLineageTargetKernel.hs src/ProviderQualificationLineageTargetKernel.hs
+      - name: Stage exact kernel proof artifact
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p provider-lineage-target-exact-kernel
+          cp ProviderQualificationLineageTargetKernel.hs provider-lineage-target-exact-kernel/
+          cp proof/Phil/Core/ProviderQualificationLineageTargetImplementation.v \
+             proof/Phil/Core/ProviderQualificationLineageTargetImplementation.vo \
+             proof/Phil/Core/ProviderQualificationLineageTargetImplementationExtraction.v \
+             proof/Phil/Core/ProviderQualificationLineageTargetImplementationExtraction.vo \
+             provider-lineage-target-exact-kernel/
+          sha256sum provider-lineage-target-exact-kernel/* > \
+            provider-lineage-target-exact-kernel/PHIL-PROV-LINEAGE-TARGET-001.exact-kernel.sha256
+          cat provider-lineage-target-exact-kernel/PHIL-PROV-LINEAGE-TARGET-001.exact-kernel.sha256
+      - uses: actions/upload-artifact@v4
+        with:
+          name: provider-lineage-target-exact-kernel
+          path: provider-lineage-target-exact-kernel
+          if-no-files-found: error
+
+  production-binding:
+    needs: rocq-exact-kernel
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: haskell-actions/setup@v2
+        with:
+          ghc-version: '9.6.7'
+          cabal-version: 'latest'
+      - name: Build existing Haskell substrate
+        run: cabal build exe:phil-certify-core-scalar --ghc-options=-Werror
+      - uses: actions/download-artifact@v4
+        with:
+          name: provider-lineage-target-exact-kernel
+          path: provider-lineage-target-exact-kernel
+      - name: Require checked-in/fresh kernel identity
+        run: |
+          set -euo pipefail
+          cmp provider-lineage-target-exact-kernel/ProviderQualificationLineageTargetKernel.hs \
+              src/ProviderQualificationLineageTargetKernel.hs
+          test "$(sha256sum src/ProviderQualificationLineageTargetKernel.hs | cut -d' ' -f1)" = \
+            '829e98d3b1653b0f4ca1a3fd64f570206df0a05e5500467d82f13a75a4d0f030'
+      - name: Strict typecheck exact kernel and bound production modules
+        run: |
+          set -euo pipefail
+          ghc -Wall -Werror -fno-code src/ProviderQualificationLineageTargetKernel.hs
+          cabal exec -- ghc -isrc -Wall -Werror -fno-code \
+            src/Phil/Core/ProviderQualificationTargetReuse.hs
+          cabal exec -- ghc -isrc -Wall -Werror -fno-code \
+            src/Phil/Core/ProviderQualificationApplicability.hs
+      - name: Execute exact extracted decision controls
+        run: |
+          set -euo pipefail
+          ghc -Wall -Werror -isrc \
+            app/ProviderLineageTargetDecisionCorrespondenceMain.hs \
+            -o provider-lineage-target-kernel-controls
+          ./provider-lineage-target-kernel-controls
+      - name: Re-run unchanged PROV-013 and PROV-014 correspondence
+        run: |
+          set -euo pipefail
+          cabal exec -- runghc -Wall -Werror -isrc \
+            test/Phase1ProviderQualificationTargetReuseMain.hs
+          cabal exec -- runghc -Wall -Werror -isrc \
+            test/Phase1ProviderQualificationApplicabilityMain.hs
+      - name: Record production-binding identities
+        run: |
+          set -euo pipefail
+          mkdir -p provider-lineage-target-production-binding
+          sha256sum \
+            src/ProviderQualificationLineageTargetKernel.hs \
+            src/Phil/Core/ProviderQualificationTargetReuse.hs \
+            src/Phil/Core/ProviderQualificationApplicability.hs \
+            test/Phase1ProviderQualificationTargetReuseMain.hs \
+            test/Phase1ProviderQualificationApplicabilityMain.hs \
+            app/ProviderLineageTargetDecisionCorrespondenceMain.hs \
+            proof/Phil/Core/ProviderQualificationLineageTargetImplementation.v \
+            docs/phase-1/provider-lineage-target-production-binding-v1.md \
+            > provider-lineage-target-production-binding/PHIL-PROV-LINEAGE-TARGET-001.production-binding.sha256
+          cat provider-lineage-target-production-binding/PHIL-PROV-LINEAGE-TARGET-001.production-binding.sha256
+      - uses: actions/upload-artifact@v4
+        with:
+          name: provider-lineage-target-production-binding
+          path: provider-lineage-target-production-binding
+          if-no-files-found: error
