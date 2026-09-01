@@ -52,8 +52,8 @@ jobs:
           rocq c -Q proof/Phil Phil proof/Phil/Core/ArchitectureInstantiation.v
           rocq c -Q proof/Phil Phil proof/Phil/Core/ProviderReplacementQualification.v
           rocq c -Q proof/Phil Phil proof/Phil/Core/ArchitectureRealization.v
-          rocq c -Q proof/Phil Phil proof/Phil/Core/FactDisposition.v
-          rocq c -Q proof/Phil Phil proof/Phil/Core/ValidityScope.v
+          rocq c -Q proof/Phil Phil proof/Phil/Systems/FactDisposition.v
+          rocq c -Q proof/Phil Phil proof/Phil/Assurance/ValidityScope.v
           rocq c -Q proof/Phil Phil proof/Phil/Core/SystemsStageClosure.v
           rocq c -Q proof/Phil Phil proof/Phil/Core/SystemsRealizationEffects.v
           rocq c -Q proof/Phil Phil proof/Phil/Core/SystemsSubjectAuthority.v
