@@ -1,0 +1,117 @@
+name: Phase 1 Storage Terminal Closure Proofs
+
+on:
+  pull_request:
+    paths:
+      - 'proof/Phil/Core/StorageTerminalClosure.v'
+      - 'proof/Phil/Core/StorageRealization.v'
+      - 'proof/Phil/Core/ConcurrencyTerminal.v'
+      - 'proof/Phil/Core/ProcessTerminal.v'
+      - 'proof/Phil/Core/ResourceObligation.v'
+      - 'proof/Phil/Core/SystemsStageClosure.v'
+      - 'src/Phil/Systems/Storage.hs'
+      - 'src/Phil/Core/ProcessLifecycle.hs'
+      - 'test/Phase1StorageRealizationMain.hs'
+      - 'test/Phase1ProcessTerminalClosureMain.hs'
+      - 'docs/phase-1/storage-terminal-closure-proof-v1.md'
+      - '.github/workflows/phase1-storage-terminal-closure-proofs.yml'
+  push:
+    branches: [main]
+    paths:
+      - 'proof/Phil/Core/StorageTerminalClosure.v'
+      - 'docs/phase-1/storage-terminal-closure-proof-v1.md'
+      - '.github/workflows/phase1-storage-terminal-closure-proofs.yml'
+
+permissions:
+  contents: read
+
+jobs:
+  rocq-storage-terminal-closure-proof:
+    runs-on: ubuntu-latest
+    container:
+      image: rocq/rocq-prover:9.2.0
+      options: --user root
+    steps:
+      - uses: actions/checkout@v4
+      - name: Compile certified predecessors and PHIL-MEM-CLOSURE-001
+        shell: bash
+        run: |
+          set -euo pipefail
+          export PATH="/home/rocq/.opam/${COMPILER}/bin:$PATH"
+          rocq c -Q proof/Phil Phil proof/Phil/Core/Syntax.v
+          rocq c -Q proof/Phil Phil proof/Phil/Core/Session.v
+          rocq c -Q proof/Phil Phil proof/Phil/Core/ProtocolIdentity.v
+          rocq c -Q proof/Phil Phil proof/Phil/Core/ProtocolProjection.v
+          rocq c -Q proof/Phil Phil proof/Phil/Core/ProtocolProgressionGuard.v
+          rocq c -Q proof/Phil Phil proof/Phil/Core/ProtocolMessageAdmissibility.v
+          rocq c -Q proof/Phil Phil proof/Phil/Core/Context.v
+          rocq c -Q proof/Phil Phil proof/Phil/Core/ContextJoin.v
+          rocq c -Q proof/Phil Phil proof/Phil/Core/ProcessJoin.v
+          rocq c -Q proof/Phil Phil proof/Phil/Core/ProcessTerminal.v
+          rocq c -Q proof/Phil Phil proof/Phil/Core/ResourceObligation.v
+          rocq c -Q proof/Phil Phil proof/Phil/Core/ArchitectureIdentity.v
+          rocq c -Q proof/Phil Phil proof/Phil/Core/ArchitectureInstantiation.v
+          rocq c -Q proof/Phil Phil proof/Phil/Core/ProviderReplacementQualification.v
+          rocq c -Q proof/Phil Phil proof/Phil/Core/ArchitectureRealization.v
+          rocq c -Q proof/Phil Phil proof/Phil/Systems/FactDisposition.v
+          rocq c -Q proof/Phil Phil proof/Phil/Assurance/ValidityScope.v
+          rocq c -Q proof/Phil Phil proof/Phil/Core/SystemsStageClosure.v
+          rocq c -Q proof/Phil Phil proof/Phil/Core/SystemsRealizationEffects.v
+          rocq c -Q proof/Phil Phil proof/Phil/Core/SystemsSubjectAuthority.v
+          rocq c -Q proof/Phil Phil proof/Phil/Core/StorageRealization.v
+          rocq c -Q proof/Phil Phil proof/Phil/Core/SystemsGenericLowering.v
+          rocq c -Q proof/Phil Phil proof/Phil/Core/ConcurrencySemantics.v
+          rocq c -Q proof/Phil Phil proof/Phil/Core/ConcurrencyActivation.v
+          rocq c -Q proof/Phil Phil proof/Phil/Core/ConcurrencyRendezvous.v
+          rocq c -Q proof/Phil Phil proof/Phil/Core/ConcurrencyTerminal.v
+          rocq c -Q proof/Phil Phil proof/Phil/Core/StorageTerminalClosure.v
+      - name: Record proof identities
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p storage-terminal-closure-proof
+          cp \
+            proof/Phil/Core/StorageTerminalClosure.v \
+            proof/Phil/Core/StorageTerminalClosure.vo \
+            storage-terminal-closure-proof/
+          sha256sum \
+            proof/Phil/Core/StorageRealization.v \
+            proof/Phil/Core/SystemsStageClosure.v \
+            proof/Phil/Core/ResourceObligation.v \
+            proof/Phil/Core/ConcurrencyTerminal.v \
+            proof/Phil/Core/StorageTerminalClosure.v \
+            proof/Phil/Core/StorageTerminalClosure.vo \
+            > storage-terminal-closure-proof/PHIL-MEM-CLOSURE-001.proof.sha256
+          {
+            echo 'obligation=PHIL-MEM-CLOSURE-001'
+            echo 'evidence=Rocq-9.2.0'
+            cat storage-terminal-closure-proof/PHIL-MEM-CLOSURE-001.proof.sha256
+          } > storage-terminal-closure-proof/PHIL-MEM-CLOSURE-001.proof-certificate.txt
+          cat storage-terminal-closure-proof/PHIL-MEM-CLOSURE-001.proof-certificate.txt
+      - uses: actions/upload-artifact@v4
+        with:
+          name: rocq-storage-terminal-closure-proof
+          path: storage-terminal-closure-proof
+          if-no-files-found: error
+
+  verify-storage-terminal-closure-correspondence:
+    needs: rocq-storage-terminal-closure-proof
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: haskell-actions/setup@v2
+        with:
+          ghc-version: '9.6.7'
+          cabal-version: 'latest'
+      - name: Build ordinary regression substrate
+        run: cabal build all --enable-tests
+      - name: Strict typecheck storage and lifecycle implementations
+        run: |
+          set -euo pipefail
+          cabal exec -- ghc -isrc -Wall -Werror -fno-code src/Phil/Systems/Storage.hs
+          cabal exec -- ghc -isrc -Wall -Werror -fno-code src/Phil/Core/ProcessLifecycle.hs
+      - name: Re-run unchanged MEM-001--006 and process terminal corpora
+        run: |
+          set -euo pipefail
+          cabal exec -- runghc -Wall -Werror -isrc test/Phase1StorageRealizationMain.hs
+          cabal exec -- runghc -Wall -Werror -isrc test/Phase1ProcessTerminalClosureMain.hs
