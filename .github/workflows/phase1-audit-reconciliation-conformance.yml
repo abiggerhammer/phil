@@ -41,6 +41,8 @@ jobs:
         run: cabal exec -- runghc -Wall -Werror -isrc test/Phase1GrammarV1LogicalProofTypeElaborationMain.hs
       - name: SURF-008 Grammar-v1 intrinsic Proof type composition
         run: cabal exec -- runghc -Wall -Werror -isrc test/Phase1GrammarV1IntrinsicProofTypeCompositionMain.hs
+      - name: SURF-008 Grammar-v1 intrinsic type composition
+        run: cabal exec -- runghc -Wall -Werror -isrc test/Phase1GrammarV1IntrinsicTypeCompositionMain.hs
       - name: SURF-008 Grammar-v1 intrinsic claim application elaboration routing
         run: cabal exec -- runghc -Wall -Werror -isrc test/Phase1GrammarV1IntrinsicClaimApplicationElaborationMain.hs
       - name: SURF-008 Grammar-v1 primitive type elaboration routing
