@@ -9,7 +9,8 @@ import Phil.Surface.Check.Types (SurfaceState)
 import Phil.Surface.GrammarV1.BoundRef (grammarV1BoundRefTerm)
 import Phil.Surface.GrammarV1.Elaborate (grammarV1IntrinsicRefLiteral)
 import Phil.Surface.GrammarV1.Parser
-  ( GrammarV1Proposition (..)
+  ( GrammarV1Expression
+  , GrammarV1Proposition (..)
   , GrammarV1QualifiedName (..)
   , GrammarV1StaticReference (..)
   )
@@ -35,5 +36,7 @@ grammarV1BoundClaimApplication state source = case source of
         Just (Atom claim terms)
   _ -> Nothing
   where
-    verifiedTerm :: Located a -> Maybe RefTerm
-    verifiedTerm _ = Nothing
+    verifiedTerm :: Located GrammarV1Expression -> Maybe RefTerm
+    verifiedTerm located =
+      grammarV1IntrinsicRefLiteral (locatedValue located)
+        <|> grammarV1BoundRefTerm state located
