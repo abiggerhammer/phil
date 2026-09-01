@@ -1,0 +1,129 @@
+name: Phase 1 Concurrency Semantics Proofs
+
+on:
+  pull_request:
+    paths:
+      - 'proof/Phil/Core/ArchitectureIdentity.v'
+      - 'proof/Phil/Core/ArchitectureInstantiation.v'
+      - 'proof/Phil/Core/ProviderReplacementQualification.v'
+      - 'proof/Phil/Core/ArchitectureRealization.v'
+      - 'proof/Phil/Systems/FactDisposition.v'
+      - 'proof/Phil/Assurance/ValidityScope.v'
+      - 'proof/Phil/Core/SystemsStageClosure.v'
+      - 'proof/Phil/Core/SystemsGenericLowering.v'
+      - 'proof/Phil/Core/Syntax.v'
+      - 'proof/Phil/Core/Context.v'
+      - 'proof/Phil/Core/ContextJoin.v'
+      - 'proof/Phil/Core/ProcessJoin.v'
+      - 'proof/Phil/Core/ProcessTerminal.v'
+      - 'proof/Phil/Core/ConcurrencySemantics.v'
+      - 'src/Phil/Core/Process.hs'
+      - 'test/Phase1StaticProcessPopulationMain.hs'
+      - 'test/Phase1ProcessIdentityMain.hs'
+      - 'test/Phase1ProcessActivationOwnershipMain.hs'
+      - 'test/Phase1ExactProcessRendezvousMain.hs'
+      - 'test/Phase1RestrictedMessageTransferMain.hs'
+      - 'test/Phase1SchedulerIndependentOrderMain.hs'
+      - 'test/Phase1FailureIsolationMain.hs'
+      - 'test/Phase1ProcessTerminalClosureMain.hs'
+      - 'test/Phase1ProcessExecutionRealizationMain.hs'
+      - 'test/Phase1ParticipantClassificationMain.hs'
+      - 'test/Phase1UnrestrictedReachabilityMain.hs'
+      - 'docs/phase-1/concurrency-semantics-proof-v1.md'
+      - '.github/workflows/phase1-concurrency-semantics-proofs.yml'
+  push:
+    branches: [main]
+    paths:
+      - 'proof/Phil/Core/ConcurrencySemantics.v'
+      - 'docs/phase-1/concurrency-semantics-proof-v1.md'
+      - '.github/workflows/phase1-concurrency-semantics-proofs.yml'
+
+permissions:
+  contents: read
+
+jobs:
+  rocq-concurrency-semantics-proof:
+    runs-on: ubuntu-latest
+    container:
+      image: rocq/rocq-prover:9.2.0
+      options: --user root
+    steps:
+      - uses: actions/checkout@v4
+      - name: Compile certified predecessors and PHIL-CONC-SEM-001
+        shell: bash
+        run: |
+          set -euo pipefail
+          export PATH="/home/rocq/.opam/${COMPILER}/bin:$PATH"
+          rocq c -Q proof/Phil Phil proof/Phil/Core/Syntax.v
+          rocq c -Q proof/Phil Phil proof/Phil/Core/Context.v
+          rocq c -Q proof/Phil Phil proof/Phil/Core/ContextJoin.v
+          rocq c -Q proof/Phil Phil proof/Phil/Core/ProcessJoin.v
+          rocq c -Q proof/Phil Phil proof/Phil/Core/ProcessTerminal.v
+          rocq c -Q proof/Phil Phil proof/Phil/Core/ArchitectureIdentity.v
+          rocq c -Q proof/Phil Phil proof/Phil/Core/ArchitectureInstantiation.v
+          rocq c -Q proof/Phil Phil proof/Phil/Core/ProviderReplacementQualification.v
+          rocq c -Q proof/Phil Phil proof/Phil/Core/ArchitectureRealization.v
+          rocq c -Q proof/Phil Phil proof/Phil/Systems/FactDisposition.v
+          rocq c -Q proof/Phil Phil proof/Phil/Assurance/ValidityScope.v
+          rocq c -Q proof/Phil Phil proof/Phil/Core/SystemsStageClosure.v
+          rocq c -Q proof/Phil Phil proof/Phil/Core/SystemsGenericLowering.v
+          rocq c -Q proof/Phil Phil proof/Phil/Core/ConcurrencySemantics.v
+      - name: Record proof identities
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p concurrency-semantics-proof
+          cp \
+            proof/Phil/Core/ConcurrencySemantics.v \
+            proof/Phil/Core/ConcurrencySemantics.vo \
+            concurrency-semantics-proof/
+          sha256sum \
+            proof/Phil/Core/ProcessJoin.v \
+            proof/Phil/Core/ProcessTerminal.v \
+            proof/Phil/Core/SystemsGenericLowering.v \
+            proof/Phil/Core/ConcurrencySemantics.v \
+            proof/Phil/Core/ConcurrencySemantics.vo \
+            > concurrency-semantics-proof/PHIL-CONC-SEM-001.proof.sha256
+          {
+            echo 'obligation=PHIL-CONC-SEM-001'
+            echo 'evidence=Rocq-9.2.0'
+            cat concurrency-semantics-proof/PHIL-CONC-SEM-001.proof.sha256
+          } > concurrency-semantics-proof/PHIL-CONC-SEM-001.proof-certificate.txt
+          cat concurrency-semantics-proof/PHIL-CONC-SEM-001.proof-certificate.txt
+      - uses: actions/upload-artifact@v4
+        with:
+          name: rocq-concurrency-semantics-proof
+          path: concurrency-semantics-proof
+          if-no-files-found: error
+
+  verify-concurrency-semantics-correspondence:
+    needs: rocq-concurrency-semantics-proof
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: haskell-actions/setup@v2
+        with:
+          ghc-version: '9.6.7'
+          cabal-version: 'latest'
+      - name: Build ordinary regression substrate
+        run: cabal build all --enable-tests
+      - name: Strict typecheck process implementation
+        run: cabal exec -- ghc -isrc -Wall -Werror -fno-code src/Phil/Core/Process.hs
+      - name: Re-run unchanged CONC-001--011 corpus
+        run: |
+          set -euo pipefail
+          for test_file in \
+            test/Phase1StaticProcessPopulationMain.hs \
+            test/Phase1ProcessIdentityMain.hs \
+            test/Phase1ProcessActivationOwnershipMain.hs \
+            test/Phase1ExactProcessRendezvousMain.hs \
+            test/Phase1RestrictedMessageTransferMain.hs \
+            test/Phase1SchedulerIndependentOrderMain.hs \
+            test/Phase1FailureIsolationMain.hs \
+            test/Phase1ProcessTerminalClosureMain.hs \
+            test/Phase1ProcessExecutionRealizationMain.hs \
+            test/Phase1ParticipantClassificationMain.hs \
+            test/Phase1UnrestrictedReachabilityMain.hs
+          do
+            cabal exec -- runghc -Wall -Werror -isrc "$test_file"
+          done
