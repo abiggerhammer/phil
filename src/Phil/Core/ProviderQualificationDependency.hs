@@ -19,6 +19,17 @@ import Phil.Core.ProviderQualificationIdentity
   ( ProviderQualificationAdmissionDecision (..)
   , QualificationAdmissionRevision
   )
+import ProviderQualificationLineageCoreKernel
+  ( QualificationDependencyClosureDecision (..)
+  , QualificationDependencyNodeDecision (..)
+  , QualificationRegistryDecision (..)
+  , QualificationRootDecision (..)
+  , decideQualificationDependencyClosureByFacts
+  , decideQualificationDependencyNodeByFacts
+  , decideQualificationRegistryByFacts
+  , decideQualificationRootByFacts
+  , propagateGroundPresence
+  )
 
 newtype QualificationGroundKey = QualificationGroundKey
   { unQualificationGroundKey :: Text
@@ -116,38 +127,47 @@ checkProviderQualificationDependencyGraph graph = do
       closedGrounds = closeGrounds reachable initialGrounds
       ungrounded = Set.filter
         (maybe True Set.null . (`Map.lookup` closedGrounds)) reachable
-  if not (Set.null ungrounded)
-    then Left (QualificationDependencyUngrounded ungrounded)
-    else Right CheckedProviderQualificationDependencyGraph
-      { checkedQualificationDependencyRoots = qualificationDependencyRoots graph
-      , checkedQualificationDependencyGroundsByAdmission = closedGrounds
-      , checkedQualificationDependencyGroundRegistry =
-          qualificationDependencyGroundRegistry graph
-      }
+  case decideQualificationDependencyClosureByFacts (Set.null ungrounded) of
+    QualificationDependencyUngroundedDecision ->
+      Left (QualificationDependencyUngrounded ungrounded)
+    QualificationDependencyClosureAcceptedDecision ->
+      Right CheckedProviderQualificationDependencyGraph
+        { checkedQualificationDependencyRoots = qualificationDependencyRoots graph
+        , checkedQualificationDependencyGroundsByAdmission = closedGrounds
+        , checkedQualificationDependencyGroundRegistry =
+            qualificationDependencyGroundRegistry graph
+        }
   where
     nodes = qualificationDependencyNodes graph
     grounds = qualificationDependencyGroundRegistry graph
+    groundUniverse = Map.keysSet grounds
 
     validateRegistryKeys = do
       mapM_ validateNodeKey (Map.toAscList nodes)
       mapM_ validateGroundKey (Map.toAscList grounds)
 
-    validateNodeKey (key, node)
-      | key == qualificationDependencyAdmissionRevision node = Right ()
-      | otherwise = Left (QualificationDependencyNodeKeyMismatch
+    validateNodeKey (key, node) =
+      case decideQualificationRegistryByFacts
+          (key == qualificationDependencyAdmissionRevision node) True of
+        QualificationRegistryAcceptedDecision -> Right ()
+        _ -> Left (QualificationDependencyNodeKeyMismatch
           key (qualificationDependencyAdmissionRevision node))
 
-    validateGroundKey (key, ground)
-      | key == qualificationGroundKey ground = Right ()
-      | otherwise = Left (QualificationGroundRegistryKeyMismatch
+    validateGroundKey (key, ground) =
+      case decideQualificationRegistryByFacts
+          True (key == qualificationGroundKey ground) of
+        QualificationRegistryAcceptedDecision -> Right ()
+        _ -> Left (QualificationGroundRegistryKeyMismatch
           key (qualificationGroundKey ground))
 
     validateRoots = mapM_ validateRoot
       (Set.toAscList (qualificationDependencyRoots graph))
 
-    validateRoot root
-      | Map.member root nodes = Right ()
-      | otherwise = Left (QualificationDependencyUnknownRoot root)
+    validateRoot root =
+      case decideQualificationRootByFacts (Map.member root nodes) of
+        QualificationRootAcceptedDecision -> Right ()
+        QualificationUnknownRootDecision ->
+          Left (QualificationDependencyUnknownRoot root)
 
     validateReachableNodes = mapM_ validateReachable
       (Set.toAscList reachableAdmissions)
@@ -158,25 +178,40 @@ checkProviderQualificationDependencyGraph graph = do
 
     validateNode node = do
       let owner = qualificationDependencyAdmissionRevision node
-      case qualificationDependencyAdmissionDecision node of
-        QualificationAdmitted -> Right ()
-        QualificationRejected reasons ->
-          Left (QualificationDependencyRejectedAdmission owner reasons)
+          (admissionAccepted, rejectedReasons) =
+            case qualificationDependencyAdmissionDecision node of
+              QualificationAdmitted -> (True, Set.empty)
+              QualificationRejected reasons -> (False, reasons)
+      case decideQualificationDependencyNodeByFacts
+          admissionAccepted True True True of
+        QualificationDependencyNodeAcceptedDecision -> Right ()
+        _ -> Left (QualificationDependencyRejectedAdmission owner rejectedReasons)
       mapM_ (validateAdmissionDependency owner)
         (Set.toAscList (qualificationDependencyAdmissions node))
       mapM_ (validateGroundDependency owner)
         (Set.toAscList (qualificationDependencyGrounds node))
 
-    validateAdmissionDependency owner dependency
-      | Map.member dependency nodes = Right ()
-      | otherwise = Left (QualificationDependencyUnknownAdmission owner dependency)
+    validateAdmissionDependency owner dependency =
+      case decideQualificationDependencyNodeByFacts
+          True (Map.member dependency nodes) True True of
+        QualificationDependencyNodeAcceptedDecision -> Right ()
+        _ -> Left (QualificationDependencyUnknownAdmission owner dependency)
 
     validateGroundDependency owner groundKey = case Map.lookup groundKey grounds of
-      Nothing -> Left (QualificationDependencyUnknownGround owner groundKey)
-      Just ground -> case qualificationGroundDisposition ground of
-        QualificationGroundAccepted -> Right ()
-        QualificationGroundRejected reasons ->
-          Left (QualificationDependencyRejectedGround owner groundKey reasons)
+      Nothing ->
+        case decideQualificationDependencyNodeByFacts True True False True of
+          QualificationDependencyNodeAcceptedDecision -> Right ()
+          _ -> Left (QualificationDependencyUnknownGround owner groundKey)
+      Just ground ->
+        let (groundAccepted, rejectedReasons) =
+              case qualificationGroundDisposition ground of
+                QualificationGroundAccepted -> (True, Set.empty)
+                QualificationGroundRejected reasons -> (False, reasons)
+        in case decideQualificationDependencyNodeByFacts
+            True True True groundAccepted of
+          QualificationDependencyNodeAcceptedDecision -> Right ()
+          _ -> Left (QualificationDependencyRejectedGround
+            owner groundKey rejectedReasons)
 
     reachableAdmissions = go Set.empty
       (Set.toAscList (qualificationDependencyRoots graph))
@@ -205,10 +240,17 @@ checkProviderQualificationDependencyGraph graph = do
     propagate reachable accumulated admission = case Map.lookup admission nodes of
       Nothing -> accumulated
       Just node ->
-        let inherited = Set.unions
+        let own = Map.findWithDefault Set.empty admission accumulated
+            dependencyGroundSets =
               [ Map.findWithDefault Set.empty dependency accumulated
               | dependency <- Set.toAscList (qualificationDependencyAdmissions node)
               , Set.member dependency reachable
               ]
-            own = Map.findWithDefault Set.empty admission accumulated
-        in Map.insert admission (Set.union own inherited) accumulated
+            propagated = Set.filter
+              (\groundKey -> propagateGroundPresence
+                (Set.member groundKey own)
+                [ Set.member groundKey dependencyGrounds
+                | dependencyGrounds <- dependencyGroundSets
+                ])
+              groundUniverse
+        in Map.insert admission propagated accumulated
