@@ -5,6 +5,7 @@ module Phil.Surface.GrammarV1.Elaborate
   , grammarV1BareStaticReferenceActual
   , grammarV1StructuralMode
   , grammarV1RelationProposition
+  , grammarV1LogicalProposition
   ) where
 
 import qualified Data.Text as Text
@@ -25,12 +26,14 @@ import Phil.Core.Syntax
 import Phil.Surface.GrammarV1.Parser
   ( GrammarV1GenericKind (..)
   , GrammarV1GenericRequirement (..)
+  , GrammarV1Proposition (..)
   , GrammarV1QualifiedName (..)
   , GrammarV1RelationOperator (..)
   , GrammarV1StaticArgument (..)
   , GrammarV1StaticReference (..)
   , GrammarV1StructuralMode (..)
   )
+import Phil.Surface.Syntax (Located (..))
 
 -- | Preserve the source-selected generic requirement category exactly.
 -- This is the first bounded Grammar-v1 -> semantic elaboration bridge for
@@ -120,3 +123,23 @@ grammarV1RelationProposition operator left right = case operator of
   GrammarV1GreaterRelation -> LessThan right left
   GrammarV1InRelation -> Member left right
   GrammarV1DisjointRelation -> Disjoint left right
+
+-- | Preserve the parser-selected logical connective tree exactly for the
+-- proposition fragment whose leaves are intrinsic truth values. Atomic relation
+-- and claim-application leaves remain owned by their competent elaborators and
+-- therefore fail closed at this bounded bridge instead of being reinterpreted.
+grammarV1LogicalProposition :: GrammarV1Proposition -> Maybe Proposition
+grammarV1LogicalProposition source = case source of
+  GrammarV1TrueProposition -> Just Truth
+  GrammarV1FalseProposition -> Just Falsehood
+  GrammarV1NotProposition (Located _ inner) ->
+    Negation <$> grammarV1LogicalProposition inner
+  GrammarV1AndProposition (Located _ left) (Located _ right) ->
+    Conjunction
+      <$> grammarV1LogicalProposition left
+      <*> grammarV1LogicalProposition right
+  GrammarV1OrProposition (Located _ left) (Located _ right) ->
+    Disjunction
+      <$> grammarV1LogicalProposition left
+      <*> grammarV1LogicalProposition right
+  _ -> Nothing
