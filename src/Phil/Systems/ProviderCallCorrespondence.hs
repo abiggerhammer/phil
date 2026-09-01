@@ -49,6 +49,7 @@ import Phil.Systems.SubjectCorrespondence
   , SubjectStageVerificationError
   , verifySubjectStageBundle
   )
+import qualified SystemsSubjectAuthorityKernel as Kernel
 
 newtype ProviderCallStageRevision = ProviderCallStageRevision
   { unProviderCallStageRevision :: Text
@@ -173,17 +174,38 @@ verifyProviderCallStageBundle bundle = do
       mechanisms =
         phase1StageSystemsMechanisms
           (subjectStageBase (providerCallStageBase bundle))
-      unknownCallSites = Set.difference (providerCallStageCallSites bundle) mechanisms
-      linkDomain = Map.keysSet (providerCallStageLinks bundle)
+      callSites = providerCallStageCallSites bundle
+      links = providerCallStageLinks bundle
+      selections = providerCallStageSelections bundle
+      unknownCallSites = Set.difference callSites mechanisms
+      linkDomain = Map.keysSet links
   requireEqual ProviderCallStageRevisionMismatch expectedRevision actualRevision
-  if Set.null unknownCallSites
-    then Right ()
-    else Left (ProviderCallSiteUnknown unknownCallSites)
-  requireEqual ProviderCallLinkDomainMismatch
-    (providerCallStageCallSites bundle) linkDomain
-  mapM_ checkSelection (Map.toAscList (providerCallStageSelections bundle))
-  mapM_ (checkLink (providerCallStageSelections bundle))
-    (Map.toAscList (providerCallStageLinks bundle))
+  mapM_ checkSelection (Map.toAscList selections)
+  mapM_ checkLinkStructure (Map.toAscList links)
+  case Kernel.decideProviderCallStageByFacts
+      True
+      (kernelProviderBindingBasis links)
+      (allAdmissionsExact selections links)
+      (allInterfacesExact selections links)
+      (allOperationsExact selections links)
+      (allImplementationEntriesExact selections links)
+      (Set.null unknownCallSites && callSites == linkDomain) of
+    Kernel.ProviderCallStageAcceptedDecision -> Right ()
+    Kernel.ProviderCallSubjectStageDecision ->
+      kernelInvariant "provider-subject-stage"
+    Kernel.ProviderCallBindingDecision ->
+      firstOrInvariant "provider-binding" (runtimeBindingErrors links)
+    Kernel.ProviderCallAdmissionDecision ->
+      firstOrInvariant "provider-admission" (admissionBindingErrors selections links)
+    Kernel.ProviderCallInterfaceDecision ->
+      firstOrInvariant "provider-interface" (interfaceBindingErrors selections links)
+    Kernel.ProviderCallOperationDecision ->
+      firstOrInvariant "provider-operation" (operationBindingErrors selections links)
+    Kernel.ProviderCallImplementationEntryDecision ->
+      firstOrInvariant "provider-entry" (entryBindingErrors selections links)
+    Kernel.ProviderCallSiteDomainDecision
+      | not (Set.null unknownCallSites) -> Left (ProviderCallSiteUnknown unknownCallSites)
+      | otherwise -> Left (ProviderCallLinkDomainMismatch callSites linkDomain)
   where
     checkSelection (key, selection) = do
       requireEqual ProviderSelectionMapKeyMismatch key (selectedProviderOccurrence selection)
@@ -222,28 +244,160 @@ verifyProviderCallStageBundle bundle = do
         then Left (ProviderSelectionEmptyOperationMap key)
         else Right ()
 
-    checkLink selections (key, link) = do
+    checkLinkStructure (key, link) =
       requireEqual ProviderCallLinkMapKeyMismatch key (providerCallMechanism link)
-      case providerCallBindingBasis link of
-        RuntimeSymbolOnlyProviderCall symbol signature ->
-          Left (ProviderCallRuntimeSymbolInferenceRejected key symbol signature)
-        ExactProviderCallBinding occurrence admission interface operation entry -> do
-          selection <- case Map.lookup occurrence selections of
-            Just value -> Right value
-            Nothing -> Left (ProviderCallUnknownSelection key occurrence)
-          let expectedAdmission = checkedQualificationAdmissionRevision
-                (selectedProviderCheckedAdmission selection)
-              expectedInterface = selectedProviderRequiredInterface selection
-          requireEqual (ProviderCallAdmissionMismatch key)
-            expectedAdmission admission
-          requireEqual (ProviderCallInterfaceMismatch key)
-            expectedInterface interface
-          expectedEntry <- case Map.lookup operation
-              (selectedProviderOperationEntries selection) of
-            Just value -> Right value
-            Nothing -> Left (ProviderCallOperationNotSelected key operation)
-          requireEqual (ProviderCallImplementationEntryMismatch key)
-            expectedEntry entry
+
+kernelProviderBindingBasis
+  :: Map SystemsMechanismKey ProviderCallLink
+  -> Kernel.ProviderCallBindingBasis
+kernelProviderBindingBasis links
+  | any runtimeOnly (Map.elems links) = Kernel.RuntimeSymbolOnlyProviderCall
+  | otherwise = Kernel.ExactProviderCallBinding
+  where
+    runtimeOnly link = case providerCallBindingBasis link of
+      RuntimeSymbolOnlyProviderCall _ _ -> True
+      ExactProviderCallBinding {} -> False
+
+allAdmissionsExact
+  :: Map Text SelectedProviderAdmission
+  -> Map SystemsMechanismKey ProviderCallLink
+  -> Bool
+allAdmissionsExact selections = all linkAdmissionExact . Map.toAscList
+  where
+    linkAdmissionExact (_, link) = case providerCallBindingBasis link of
+      RuntimeSymbolOnlyProviderCall _ _ -> False
+      ExactProviderCallBinding occurrence admission _ _ _ ->
+        case Map.lookup occurrence selections of
+          Nothing -> False
+          Just selection ->
+            checkedQualificationAdmissionRevision
+              (selectedProviderCheckedAdmission selection) == admission
+
+allInterfacesExact
+  :: Map Text SelectedProviderAdmission
+  -> Map SystemsMechanismKey ProviderCallLink
+  -> Bool
+allInterfacesExact selections = all linkInterfaceExact . Map.elems
+  where
+    linkInterfaceExact link = case providerCallBindingBasis link of
+      RuntimeSymbolOnlyProviderCall _ _ -> False
+      ExactProviderCallBinding occurrence _ interface _ _ ->
+        maybe False ((== interface) . selectedProviderRequiredInterface)
+          (Map.lookup occurrence selections)
+
+allOperationsExact
+  :: Map Text SelectedProviderAdmission
+  -> Map SystemsMechanismKey ProviderCallLink
+  -> Bool
+allOperationsExact selections = all linkOperationExact . Map.elems
+  where
+    linkOperationExact link = case providerCallBindingBasis link of
+      RuntimeSymbolOnlyProviderCall _ _ -> False
+      ExactProviderCallBinding occurrence _ _ operation _ ->
+        maybe False (Map.member operation . selectedProviderOperationEntries)
+          (Map.lookup occurrence selections)
+
+allImplementationEntriesExact
+  :: Map Text SelectedProviderAdmission
+  -> Map SystemsMechanismKey ProviderCallLink
+  -> Bool
+allImplementationEntriesExact selections = all linkEntryExact . Map.elems
+  where
+    linkEntryExact link = case providerCallBindingBasis link of
+      RuntimeSymbolOnlyProviderCall _ _ -> False
+      ExactProviderCallBinding occurrence _ _ operation entry ->
+        case Map.lookup occurrence selections of
+          Nothing -> False
+          Just selection ->
+            Map.lookup operation (selectedProviderOperationEntries selection) == Just entry
+
+runtimeBindingErrors
+  :: Map SystemsMechanismKey ProviderCallLink
+  -> [ProviderCallStageVerificationError]
+runtimeBindingErrors links =
+  [ ProviderCallRuntimeSymbolInferenceRejected key symbol signature
+  | (key, link) <- Map.toAscList links
+  , RuntimeSymbolOnlyProviderCall symbol signature <- [providerCallBindingBasis link]
+  ]
+
+admissionBindingErrors
+  :: Map Text SelectedProviderAdmission
+  -> Map SystemsMechanismKey ProviderCallLink
+  -> [ProviderCallStageVerificationError]
+admissionBindingErrors selections links = concatMap check (Map.toAscList links)
+  where
+    check (key, link) = case providerCallBindingBasis link of
+      RuntimeSymbolOnlyProviderCall _ _ -> []
+      ExactProviderCallBinding occurrence admission _ _ _ ->
+        case Map.lookup occurrence selections of
+          Nothing -> [ProviderCallUnknownSelection key occurrence]
+          Just selection ->
+            let expected = checkedQualificationAdmissionRevision
+                  (selectedProviderCheckedAdmission selection)
+            in [ ProviderCallAdmissionMismatch key expected admission
+               | expected /= admission
+               ]
+
+interfaceBindingErrors
+  :: Map Text SelectedProviderAdmission
+  -> Map SystemsMechanismKey ProviderCallLink
+  -> [ProviderCallStageVerificationError]
+interfaceBindingErrors selections links = concatMap check (Map.toAscList links)
+  where
+    check (key, link) = case providerCallBindingBasis link of
+      RuntimeSymbolOnlyProviderCall _ _ -> []
+      ExactProviderCallBinding occurrence _ interface _ _ ->
+        case Map.lookup occurrence selections of
+          Nothing -> []
+          Just selection ->
+            let expected = selectedProviderRequiredInterface selection
+            in [ ProviderCallInterfaceMismatch key expected interface
+               | expected /= interface
+               ]
+
+operationBindingErrors
+  :: Map Text SelectedProviderAdmission
+  -> Map SystemsMechanismKey ProviderCallLink
+  -> [ProviderCallStageVerificationError]
+operationBindingErrors selections links = concatMap check (Map.toAscList links)
+  where
+    check (key, link) = case providerCallBindingBasis link of
+      RuntimeSymbolOnlyProviderCall _ _ -> []
+      ExactProviderCallBinding occurrence _ _ operation _ ->
+        case Map.lookup occurrence selections of
+          Just selection
+            | Map.notMember operation (selectedProviderOperationEntries selection) ->
+                [ProviderCallOperationNotSelected key operation]
+          _ -> []
+
+entryBindingErrors
+  :: Map Text SelectedProviderAdmission
+  -> Map SystemsMechanismKey ProviderCallLink
+  -> [ProviderCallStageVerificationError]
+entryBindingErrors selections links = concatMap check (Map.toAscList links)
+  where
+    check (key, link) = case providerCallBindingBasis link of
+      RuntimeSymbolOnlyProviderCall _ _ -> []
+      ExactProviderCallBinding occurrence _ _ operation entry ->
+        case Map.lookup occurrence selections of
+          Nothing -> []
+          Just selection ->
+            case Map.lookup operation (selectedProviderOperationEntries selection) of
+              Just expected
+                | expected /= entry ->
+                    [ProviderCallImplementationEntryMismatch key expected entry]
+              _ -> []
+
+firstOrInvariant
+  :: String
+  -> [ProviderCallStageVerificationError]
+  -> Either ProviderCallStageVerificationError ()
+firstOrInvariant _ (err : _) = Left err
+firstOrInvariant label [] = kernelInvariant label
+
+kernelInvariant :: String -> Either ProviderCallStageVerificationError ()
+kernelInvariant label =
+  error ("SystemsSubjectAuthorityKernel mismatch: " <> label)
 
 semanticSelection :: SelectedProviderAdmission -> SemanticForm
 semanticSelection selection = SemanticRecord (Map.fromList
