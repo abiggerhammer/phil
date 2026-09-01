@@ -25,6 +25,10 @@ import Phil.Core.Static
   , SemanticForm (..)
   , canonicalSemanticForm
   )
+import ProviderQualificationLineageTargetKernel
+  ( TargetReuseDecision (..)
+  , decideTargetReuseByFacts
+  )
 
 newtype TargetRealizationEvidenceRevision = TargetRealizationEvidenceRevision
   { unTargetRealizationEvidenceRevision :: Text
@@ -95,46 +99,81 @@ checkProviderCrossTargetSemanticReuse
   -> ProviderTargetRealizationEvidence
   -> ProviderTargetRealizationEvidence
   -> Either ProviderCrossTargetReuseError CheckedProviderCrossTargetReuse
-checkProviderCrossTargetSemanticReuse claim priorEvidence newEvidence = do
-  implementation <- semanticImplementation
-  let claimRevision = deriveQualificationClaimRevision claim
-      requiredInterface = qualificationClaimRequiredInterface claim
-  validateEvidence claimRevision requiredInterface implementation priorEvidence
-  validateEvidence claimRevision requiredInterface implementation newEvidence
-  if targetEvidenceTargetProfileRevision priorEvidence ==
-      targetEvidenceTargetProfileRevision newEvidence
-    then Left (TargetReuseRequiresDistinctTarget
-      (targetEvidenceTargetProfileRevision newEvidence))
-    else Right CheckedProviderCrossTargetReuse
-      { checkedCrossTargetClaimRevision = claimRevision
-      , checkedCrossTargetSemanticImplementation = implementation
-      , checkedCrossTargetPriorEvidenceRevision =
-          deriveTargetRealizationEvidenceRevision priorEvidence
-      , checkedCrossTargetNewEvidenceRevision =
-          deriveTargetRealizationEvidenceRevision newEvidence
-      , checkedCrossTargetPriorTargetProfile =
-          targetEvidenceTargetProfileRevision priorEvidence
-      , checkedCrossTargetNewTargetProfile =
-          targetEvidenceTargetProfileRevision newEvidence
-      }
+checkProviderCrossTargetSemanticReuse claim priorEvidence newEvidence =
+  case decision of
+    TargetReuseAcceptedDecision ->
+      case semanticImplementation of
+        Just implementation -> Right CheckedProviderCrossTargetReuse
+          { checkedCrossTargetClaimRevision = claimRevision
+          , checkedCrossTargetSemanticImplementation = implementation
+          , checkedCrossTargetPriorEvidenceRevision =
+              deriveTargetRealizationEvidenceRevision priorEvidence
+          , checkedCrossTargetNewEvidenceRevision =
+              deriveTargetRealizationEvidenceRevision newEvidence
+          , checkedCrossTargetPriorTargetProfile =
+              targetEvidenceTargetProfileRevision priorEvidence
+          , checkedCrossTargetNewTargetProfile =
+              targetEvidenceTargetProfileRevision newEvidence
+          }
+        Nothing -> Left TargetReuseRequiresSemanticImplementationClaim
+    TargetReuseSemanticLayerDecision ->
+      Left TargetReuseRequiresSemanticImplementationClaim
+    TargetReuseSemanticSubjectDecision ->
+      Left TargetReuseRequiresSemanticImplementationClaim
+    TargetReusePriorClaimDecision ->
+      Left (TargetReuseClaimRevisionMismatch
+        claimRevision (targetEvidenceClaimRevision priorEvidence))
+    TargetReusePriorInterfaceDecision ->
+      Left (TargetReuseInterfaceMismatch
+        requiredInterface (targetEvidenceRequiredInterface priorEvidence))
+    TargetReusePriorImplementationDecision ->
+      case semanticImplementation of
+        Just implementation -> Left (TargetReuseImplementationMismatch
+          implementation (targetEvidenceSemanticImplementation priorEvidence))
+        Nothing -> Left TargetReuseRequiresSemanticImplementationClaim
+    TargetReusePriorTranslationDecision ->
+      Left (TargetReuseMissingTranslationEvidence
+        (targetEvidenceTargetProfileRevision priorEvidence))
+    TargetReuseNewClaimDecision ->
+      Left (TargetReuseClaimRevisionMismatch
+        claimRevision (targetEvidenceClaimRevision newEvidence))
+    TargetReuseNewInterfaceDecision ->
+      Left (TargetReuseInterfaceMismatch
+        requiredInterface (targetEvidenceRequiredInterface newEvidence))
+    TargetReuseNewImplementationDecision ->
+      case semanticImplementation of
+        Just implementation -> Left (TargetReuseImplementationMismatch
+          implementation (targetEvidenceSemanticImplementation newEvidence))
+        Nothing -> Left TargetReuseRequiresSemanticImplementationClaim
+    TargetReuseNewTranslationDecision ->
+      Left (TargetReuseMissingTranslationEvidence
+        (targetEvidenceTargetProfileRevision newEvidence))
+    TargetReuseDistinctProfileDecision ->
+      Left (TargetReuseRequiresDistinctTarget
+        (targetEvidenceTargetProfileRevision newEvidence))
   where
-    semanticImplementation = case
-      (qualificationClaimLayer claim, qualificationClaimSubject claim) of
-      (SemanticImplementationQualification, SemanticProviderImplementation revision) ->
-        Right revision
-      _ -> Left TargetReuseRequiresSemanticImplementationClaim
-
-    validateEvidence claimRevision requiredInterface implementation evidence
-      | targetEvidenceClaimRevision evidence /= claimRevision =
-          Left (TargetReuseClaimRevisionMismatch
-            claimRevision (targetEvidenceClaimRevision evidence))
-      | targetEvidenceRequiredInterface evidence /= requiredInterface =
-          Left (TargetReuseInterfaceMismatch
-            requiredInterface (targetEvidenceRequiredInterface evidence))
-      | targetEvidenceSemanticImplementation evidence /= implementation =
-          Left (TargetReuseImplementationMismatch
-            implementation (targetEvidenceSemanticImplementation evidence))
-      | Set.null (targetEvidenceTranslationValidationRefs evidence) =
-          Left (TargetReuseMissingTranslationEvidence
-            (targetEvidenceTargetProfileRevision evidence))
-      | otherwise = Right ()
+    claimRevision = deriveQualificationClaimRevision claim
+    requiredInterface = qualificationClaimRequiredInterface claim
+    semanticLayer = qualificationClaimLayer claim == SemanticImplementationQualification
+    semanticImplementation = case qualificationClaimSubject claim of
+      SemanticProviderImplementation revision -> Just revision
+      _ -> Nothing
+    semanticSubject = case semanticImplementation of
+      Just _ -> True
+      Nothing -> False
+    implementationMatches evidence = case semanticImplementation of
+      Just implementation -> targetEvidenceSemanticImplementation evidence == implementation
+      Nothing -> False
+    decision = decideTargetReuseByFacts
+      semanticLayer
+      semanticSubject
+      (targetEvidenceClaimRevision priorEvidence == claimRevision)
+      (targetEvidenceRequiredInterface priorEvidence == requiredInterface)
+      (implementationMatches priorEvidence)
+      (not (Set.null (targetEvidenceTranslationValidationRefs priorEvidence)))
+      (targetEvidenceClaimRevision newEvidence == claimRevision)
+      (targetEvidenceRequiredInterface newEvidence == requiredInterface)
+      (implementationMatches newEvidence)
+      (not (Set.null (targetEvidenceTranslationValidationRefs newEvidence)))
+      (targetEvidenceTargetProfileRevision priorEvidence /=
+        targetEvidenceTargetProfileRevision newEvidence)
