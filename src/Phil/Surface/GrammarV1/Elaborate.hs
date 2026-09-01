@@ -8,6 +8,7 @@ module Phil.Surface.GrammarV1.Elaborate
   , grammarV1LogicalProposition
   , grammarV1PrimitiveType
   , grammarV1IntrinsicRefLiteral
+  , grammarV1IntrinsicBytesType
   ) where
 
 import qualified Data.Text as Text
@@ -190,3 +191,15 @@ grammarV1NaturalLiteral literalText =
     Right (literal, rest)
       | Text.null rest -> Just literal
     _ -> Nothing
+
+-- | Elaborate the context-free Bytes fragment only when its size expression has
+-- already-established intrinsic Nat meaning. A Boolean literal, name, call,
+-- projection, or compound expression remains outside this bridge; in particular
+-- this function never invents a binding for a source name merely to form TyBytes.
+grammarV1IntrinsicBytesType :: GrammarV1Type -> Maybe Ty
+grammarV1IntrinsicBytesType sourceType = case sourceType of
+  GrammarV1BytesType (Located _ sizeExpression) ->
+    case grammarV1IntrinsicRefLiteral sizeExpression of
+      Just size@(RefNat _) -> Just (TyBytes size)
+      _ -> Nothing
+  _ -> Nothing
