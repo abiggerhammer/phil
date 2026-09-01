@@ -37,6 +37,7 @@ import Phil.Systems.Phase1Stage
   , Phase1StageVerificationError
   , verifyPhase1StageBundle
   )
+import qualified SystemsSubjectAuthorityKernel as Kernel
 
 newtype SourceSubjectKey = SourceSubjectKey
   { unSourceSubjectKey :: Text
@@ -138,59 +139,158 @@ verifySubjectStageBundle bundle = do
   let expectedRevision = deriveSubjectStageRevision bundle
       actualRevision = subjectStageRevision bundle
   requireEqual SubjectStageRevisionMismatch expectedRevision actualRevision
-  mapM_ checkCorrespondence (Map.toAscList correspondences)
-  checkExclusiveSystemsBindings correspondences
+  mapM_ checkStructuralCorrespondence (Map.toAscList correspondences)
+  case Kernel.decideSubjectStageByFacts
+      (kernelSubjectBasis correspondences)
+      (allSystemsSetsNonempty correspondences)
+      (allSystemsValuesExist functions correspondences)
+      (systemsBindingsExclusive correspondences)
+      (allValidityScopesExact correspondences) of
+    Kernel.SubjectStageAcceptedDecision -> Right ()
+    Kernel.SubjectStageBasisDecision ->
+      firstOrInvariant "subject-basis" (runtimeCoincidenceErrors correspondences)
+    Kernel.SubjectStageSystemsSetDecision ->
+      firstOrInvariant "subject-systems-set" (emptySystemsSetErrors correspondences)
+    Kernel.SubjectStageSystemsValuesDecision ->
+      firstOrInvariant "subject-systems-values"
+        (unknownSystemsValueErrors functions correspondences)
+    Kernel.SubjectStageExclusivityDecision ->
+      firstOrInvariant "subject-exclusivity" (sharedSystemsValueErrors correspondences)
+    Kernel.SubjectStageValidityScopeDecision ->
+      firstOrInvariant "subject-validity" (emptyValidityScopeErrors correspondences)
   where
     correspondences = subjectStageCorrespondences bundle
     artifact = phase1StageSystemsArtifact (subjectStageBase bundle)
     functions = systemsProgramFunctions (systemsArtifactProgram artifact)
 
-    checkCorrespondence (key, correspondence) = do
-      let actualKey = subjectCorrespondenceSource correspondence
-          systemsRefs = subjectCorrespondenceSystemsValues correspondence
-      requireEqual SubjectCorrespondenceMapKeyMismatch key actualKey
-      if Set.null systemsRefs
-        then Left (SubjectCorrespondenceEmptySystemsSet key)
-        else Right ()
-      mapM_ (checkSystemsRef key) (Set.toAscList systemsRefs)
-      case subjectCorrespondenceBasis correspondence of
-        CheckedSubjectRelation (SubjectRelationRevision relation)
-          | Text.null relation -> Left (SubjectCorrespondenceEmptyRelationRevision key)
-          | otherwise -> Right ()
-        RuntimeRepresentationCoincidence reason ->
-          Left (SubjectCorrespondenceRuntimeCoincidenceRejected key reason)
-      case subjectCorrespondenceValidityScope correspondence of
-        SubjectValidityScopeRevision scope
-          | Text.null scope -> Left (SubjectCorrespondenceEmptyValidityScope key)
-          | otherwise -> Right ()
-
-    checkSystemsRef sourceSubject ref =
-      case Map.lookup (systemsValueRefFunction ref) functions of
-        Nothing -> Left (SubjectCorrespondenceUnknownFunction
-          sourceSubject (systemsValueRefFunction ref))
-        Just function ->
-          if Map.member (systemsValueRefValue ref) (systemsFunctionValues function)
-            then Right ()
-            else Left (SubjectCorrespondenceUnknownValue sourceSubject ref)
-
-checkExclusiveSystemsBindings
-  :: Map SourceSubjectKey SubjectCorrespondence
+checkStructuralCorrespondence
+  :: (SourceSubjectKey, SubjectCorrespondence)
   -> Either SubjectStageVerificationError ()
-checkExclusiveSystemsBindings correspondences =
-  case
-    [ (ref, subjects)
-    | (ref, subjects) <- Map.toAscList reverseBindings
-    , Set.size subjects > 1
-    ] of
-    [] -> Right ()
-    (ref, subjects) : _ -> Left
-      (SubjectCorrespondenceSystemsValueShared ref subjects)
+checkStructuralCorrespondence (key, correspondence) = do
+  requireEqual SubjectCorrespondenceMapKeyMismatch
+    key (subjectCorrespondenceSource correspondence)
+  case subjectCorrespondenceBasis correspondence of
+    CheckedSubjectRelation (SubjectRelationRevision relation)
+      | Text.null relation -> Left (SubjectCorrespondenceEmptyRelationRevision key)
+      | otherwise -> Right ()
+    RuntimeRepresentationCoincidence _ -> Right ()
+
+kernelSubjectBasis
+  :: Map SourceSubjectKey SubjectCorrespondence
+  -> Kernel.SubjectCorrespondenceBasis
+kernelSubjectBasis correspondences
+  | any isRuntimeCoincidence (Map.elems correspondences) =
+      Kernel.RuntimeRepresentationCoincidence
+  | otherwise = Kernel.CheckedSubjectRelation
+  where
+    isRuntimeCoincidence correspondence = case subjectCorrespondenceBasis correspondence of
+      RuntimeRepresentationCoincidence _ -> True
+      CheckedSubjectRelation _ -> False
+
+allSystemsSetsNonempty :: Map SourceSubjectKey SubjectCorrespondence -> Bool
+allSystemsSetsNonempty = all (not . Set.null . subjectCorrespondenceSystemsValues) . Map.elems
+
+allSystemsValuesExist
+  :: Map Text SystemsFunction
+  -> Map SourceSubjectKey SubjectCorrespondence
+  -> Bool
+allSystemsValuesExist functions = all correspondenceValuesExist . Map.elems
+  where
+    correspondenceValuesExist correspondence =
+      all (systemsRefExists functions)
+        (Set.toAscList (subjectCorrespondenceSystemsValues correspondence))
+
+systemsRefExists :: Map Text SystemsFunction -> SystemsValueRef -> Bool
+systemsRefExists functions ref =
+  case Map.lookup (systemsValueRefFunction ref) functions of
+    Nothing -> False
+    Just function ->
+      Map.member (systemsValueRefValue ref) (systemsFunctionValues function)
+
+systemsBindingsExclusive :: Map SourceSubjectKey SubjectCorrespondence -> Bool
+systemsBindingsExclusive = null . sharedSystemsValueErrors
+
+allValidityScopesExact :: Map SourceSubjectKey SubjectCorrespondence -> Bool
+allValidityScopesExact = all validityExact . Map.elems
+  where
+    validityExact correspondence = case subjectCorrespondenceValidityScope correspondence of
+      SubjectValidityScopeRevision scope -> not (Text.null scope)
+
+runtimeCoincidenceErrors
+  :: Map SourceSubjectKey SubjectCorrespondence
+  -> [SubjectStageVerificationError]
+runtimeCoincidenceErrors correspondences =
+  [ SubjectCorrespondenceRuntimeCoincidenceRejected key reason
+  | (key, correspondence) <- Map.toAscList correspondences
+  , RuntimeRepresentationCoincidence reason <- [subjectCorrespondenceBasis correspondence]
+  ]
+
+emptySystemsSetErrors
+  :: Map SourceSubjectKey SubjectCorrespondence
+  -> [SubjectStageVerificationError]
+emptySystemsSetErrors correspondences =
+  [ SubjectCorrespondenceEmptySystemsSet key
+  | (key, correspondence) <- Map.toAscList correspondences
+  , Set.null (subjectCorrespondenceSystemsValues correspondence)
+  ]
+
+unknownSystemsValueErrors
+  :: Map Text SystemsFunction
+  -> Map SourceSubjectKey SubjectCorrespondence
+  -> [SubjectStageVerificationError]
+unknownSystemsValueErrors functions correspondences =
+  [ err
+  | (key, correspondence) <- Map.toAscList correspondences
+  , ref <- Set.toAscList (subjectCorrespondenceSystemsValues correspondence)
+  , err <- maybeToList (systemsRefError functions key ref)
+  ]
+
+systemsRefError
+  :: Map Text SystemsFunction
+  -> SourceSubjectKey
+  -> SystemsValueRef
+  -> Maybe SubjectStageVerificationError
+systemsRefError functions sourceSubject ref =
+  case Map.lookup (systemsValueRefFunction ref) functions of
+    Nothing -> Just (SubjectCorrespondenceUnknownFunction
+      sourceSubject (systemsValueRefFunction ref))
+    Just function
+      | Map.member (systemsValueRefValue ref) (systemsFunctionValues function) -> Nothing
+      | otherwise -> Just (SubjectCorrespondenceUnknownValue sourceSubject ref)
+
+sharedSystemsValueErrors
+  :: Map SourceSubjectKey SubjectCorrespondence
+  -> [SubjectStageVerificationError]
+sharedSystemsValueErrors correspondences =
+  [ SubjectCorrespondenceSystemsValueShared ref subjects
+  | (ref, subjects) <- Map.toAscList reverseBindings
+  , Set.size subjects > 1
+  ]
   where
     reverseBindings = Map.fromListWith Set.union
       [ (ref, Set.singleton sourceSubject)
       | (sourceSubject, correspondence) <- Map.toAscList correspondences
       , ref <- Set.toAscList (subjectCorrespondenceSystemsValues correspondence)
       ]
+
+emptyValidityScopeErrors
+  :: Map SourceSubjectKey SubjectCorrespondence
+  -> [SubjectStageVerificationError]
+emptyValidityScopeErrors correspondences =
+  [ SubjectCorrespondenceEmptyValidityScope key
+  | (key, correspondence) <- Map.toAscList correspondences
+  , SubjectValidityScopeRevision scope <- [subjectCorrespondenceValidityScope correspondence]
+  , Text.null scope
+  ]
+
+firstOrInvariant :: String -> [SubjectStageVerificationError] -> Either SubjectStageVerificationError ()
+firstOrInvariant _ (err : _) = Left err
+firstOrInvariant label [] =
+  error ("SystemsSubjectAuthorityKernel mismatch: " <> label)
+
+maybeToList :: Maybe a -> [a]
+maybeToList Nothing = []
+maybeToList (Just value) = [value]
 
 semanticCorrespondence :: SubjectCorrespondence -> SemanticForm
 semanticCorrespondence correspondence = SemanticRecord (Map.fromList
