@@ -1,0 +1,113 @@
+name: Phase 1 Storage Cost Attribution Proofs
+
+on:
+  pull_request:
+    paths:
+      - 'proof/Phil/Core/StorageRealization.v'
+      - 'proof/Phil/Core/SystemsRuntimeGraph.v'
+      - 'proof/Phil/Core/StorageCostAttribution.v'
+      - 'src/Phil/Systems/Storage.hs'
+      - 'src/Phil/Systems/RuntimeClaimBinding.hs'
+      - 'src/Phil/Systems/RuntimePrimitiveReuse.hs'
+      - 'src/Phil/Systems/CostAttribution.hs'
+      - 'test/Phase1StorageRealizationMain.hs'
+      - 'test/Phase1CostAttributionMain.hs'
+      - 'docs/phase-1/storage-cost-attribution-proof-v1.md'
+      - '.github/workflows/phase1-storage-cost-attribution-proofs.yml'
+  push:
+    branches: [main]
+    paths:
+      - 'proof/Phil/Core/StorageCostAttribution.v'
+      - 'docs/phase-1/storage-cost-attribution-proof-v1.md'
+      - '.github/workflows/phase1-storage-cost-attribution-proofs.yml'
+
+permissions:
+  contents: read
+
+jobs:
+  rocq-storage-cost-attribution-proof:
+    runs-on: ubuntu-latest
+    container:
+      image: rocq/rocq-prover:9.2.0
+      options: --user root
+    steps:
+      - uses: actions/checkout@v4
+      - name: Compile certified predecessors and PHIL-MEM-COST-001
+        shell: bash
+        run: |
+          set -euo pipefail
+          export PATH="/home/rocq/.opam/${COMPILER}/bin:$PATH"
+          rocq c -Q proof/Phil Phil proof/Phil/Core/Syntax.v
+          rocq c -Q proof/Phil Phil proof/Phil/Core/Session.v
+          rocq c -Q proof/Phil Phil proof/Phil/Core/ProtocolIdentity.v
+          rocq c -Q proof/Phil Phil proof/Phil/Core/ProtocolProjection.v
+          rocq c -Q proof/Phil Phil proof/Phil/Core/ProtocolProgressionGuard.v
+          rocq c -Q proof/Phil Phil proof/Phil/Core/ProtocolMessageAdmissibility.v
+          rocq c -Q proof/Phil Phil proof/Phil/Core/Context.v
+          rocq c -Q proof/Phil Phil proof/Phil/Core/ContextJoin.v
+          rocq c -Q proof/Phil Phil proof/Phil/Core/ProcessJoin.v
+          rocq c -Q proof/Phil Phil proof/Phil/Core/ProcessTerminal.v
+          rocq c -Q proof/Phil Phil proof/Phil/Core/ResourceObligation.v
+          rocq c -Q proof/Phil Phil proof/Phil/Core/ArchitectureIdentity.v
+          rocq c -Q proof/Phil Phil proof/Phil/Core/ArchitectureInstantiation.v
+          rocq c -Q proof/Phil Phil proof/Phil/Core/ProviderReplacementQualification.v
+          rocq c -Q proof/Phil Phil proof/Phil/Core/ArchitectureRealization.v
+          rocq c -Q proof/Phil Phil proof/Phil/Core/FactDisposition.v
+          rocq c -Q proof/Phil Phil proof/Phil/Core/ValidityScope.v
+          rocq c -Q proof/Phil Phil proof/Phil/Core/SystemsStageClosure.v
+          rocq c -Q proof/Phil Phil proof/Phil/Core/SystemsRealizationEffects.v
+          rocq c -Q proof/Phil Phil proof/Phil/Core/SystemsSubjectAuthority.v
+          rocq c -Q proof/Phil Phil proof/Phil/Core/StorageRealization.v
+          rocq c -Q proof/Phil Phil proof/Phil/Systems/Runtime.v
+          rocq c -Q proof/Phil Phil proof/Phil/LLVM/Preservation.v
+          rocq c -Q proof/Phil Phil proof/Phil/LLVM/RuntimeSymbolIdentity.v
+          rocq c -Q proof/Phil Phil proof/Phil/Core/SystemsRuntimeGraph.v
+          rocq c -Q proof/Phil Phil proof/Phil/Core/StorageCostAttribution.v
+      - name: Record proof identities
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p storage-cost-attribution-proof
+          cp \
+            proof/Phil/Core/StorageCostAttribution.v \
+            proof/Phil/Core/StorageCostAttribution.vo \
+            storage-cost-attribution-proof/
+          sha256sum \
+            proof/Phil/Core/StorageRealization.v \
+            proof/Phil/Core/SystemsRuntimeGraph.v \
+            proof/Phil/Core/StorageCostAttribution.v \
+            proof/Phil/Core/StorageCostAttribution.vo \
+            > storage-cost-attribution-proof/PHIL-MEM-COST-001.proof.sha256
+          {
+            echo 'obligation=PHIL-MEM-COST-001'
+            echo 'evidence=Rocq-9.2.0'
+            cat storage-cost-attribution-proof/PHIL-MEM-COST-001.proof.sha256
+          } > storage-cost-attribution-proof/PHIL-MEM-COST-001.proof-certificate.txt
+          cat storage-cost-attribution-proof/PHIL-MEM-COST-001.proof-certificate.txt
+      - uses: actions/upload-artifact@v4
+        with:
+          name: rocq-storage-cost-attribution-proof
+          path: storage-cost-attribution-proof
+          if-no-files-found: error
+
+  verify-storage-cost-attribution-correspondence:
+    needs: rocq-storage-cost-attribution-proof
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: haskell-actions/setup@v2
+        with:
+          ghc-version: '9.6.7'
+          cabal-version: 'latest'
+      - name: Build ordinary regression substrate
+        run: cabal build all --enable-tests
+      - name: Strict typecheck storage and cost implementation
+        run: |
+          set -euo pipefail
+          cabal exec -- ghc -isrc -Wall -Werror -fno-code src/Phil/Systems/Storage.hs
+          cabal exec -- ghc -isrc -Wall -Werror -Wno-name-shadowing -fno-code src/Phil/Systems/CostAttribution.hs
+      - name: Re-run unchanged MEM-006 and SYS-018 correspondence corpora
+        run: |
+          set -euo pipefail
+          cabal exec -- runghc -isrc test/Phase1StorageRealizationMain.hs
+          cabal exec -- runghc -isrc test/Phase1CostAttributionMain.hs
