@@ -1,3 +1,18 @@
 packages:
   .
   phase0-projection
+
+-- Temporary CI fallback for the Hackage mirror outage observed 2026-09-01.
+-- Keep ordinary builds on authenticated Hackage. The GitHub Actions profile
+-- currently uses Linux + GHC 9.6.7; only that profile uses a separately named
+-- direct HTTPS repository so Cabal does not consult Hackage's signed mirror
+-- list containing the failing Dream.io endpoint. Remove this block once the
+-- upstream mirror list is repaired.
+repository phil-ci-hackage-direct
+  url: https://hackage.haskell.org/
+  secure: False
+
+active-repositories: hackage.haskell.org
+
+if os(linux) && impl(ghc == 9.6.7)
+  active-repositories: phil-ci-hackage-direct
