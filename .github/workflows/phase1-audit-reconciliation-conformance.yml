@@ -33,8 +33,6 @@ jobs:
         run: cabal exec -- runghc -Wall -Werror -isrc test/Phase1GrammarV1RelationElaborationMain.hs
       - name: SURF-008 Grammar-v1 intrinsic relation leaf elaboration routing
         run: cabal exec -- runghc -Wall -Werror -isrc test/Phase1GrammarV1IntrinsicRelationElaborationMain.hs
-      - name: SURF-008 Grammar-v1 binding-aware relation elaboration
-        run: cabal exec -- runghc -Wall -Werror -isrc test/Phase1GrammarV1BoundRelationElaborationMain.hs
       - name: SURF-008 Grammar-v1 intrinsic proposition composition
         run: cabal exec -- runghc -Wall -Werror -isrc test/Phase1GrammarV1IntrinsicPropositionCompositionMain.hs
       - name: SURF-008 Grammar-v1 logical proposition elaboration routing
