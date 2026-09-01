@@ -7,6 +7,7 @@ module Phil.Systems.BoundaryTargetRelation
   , verifyBoundaryTargetRealization
   ) where
 
+import qualified BoundarySubjectKernel as Kernel
 import Data.Text (Text)
 import qualified Data.Text as Text
 import Phil.Core.BoundaryMapping
@@ -57,42 +58,73 @@ verifyBoundaryTargetRealization base realization = do
   mapLeft BoundaryTargetBaseStageError (verifyTargetStrengtheningStageBundle base)
   case realization of
     PointerReinterpretation detail ->
-      Left (BoundaryTargetPointerReinterpretationRejected detail)
-    CheckedZeroCopy relation -> do
-      requireEqual BoundaryTargetStageRevisionMismatch
-        (targetStrengtheningStageRevision base)
-        (zeroCopyTargetStageRevision relation)
-      requireRevisionFacts relation
-      mapM_ requireFact
-        [ ("source semantic constructors/fields", zeroCopySourceSemanticLayout relation)
-        , ("concrete memory layout", zeroCopyConcreteMemoryLayout relation)
-        , ("endian/alignment/padding/tagging", zeroCopyEndianAlignmentPaddingTagging relation)
-        , ("lifetime rules", zeroCopyLifetimeRules relation)
-        , ("ownership/borrowing rules", zeroCopyOwnershipRules relation)
-        , ("device/storage-domain constraints", zeroCopyDeviceStorageConstraints relation)
-        , ("target assumptions/carriers", zeroCopyTargetAssumptionsCarriers relation)
-        ]
+      case Kernel.decideZeroCopyRealizationByFacts
+        False False False False False False False False False False False False of
+        Kernel.ZeroCopyPointerReinterpretationDecision ->
+          Left (BoundaryTargetPointerReinterpretationRejected detail)
+        _ -> Left (BoundaryTargetPointerReinterpretationRejected detail)
+    CheckedZeroCopy relation ->
+      mapZeroCopyDecision base relation (checkedZeroCopyDecision base relation)
 
-requireRevisionFacts
-  :: ZeroCopyTargetRelation
+checkedZeroCopyDecision
+  :: TargetStrengtheningStageBundle
+  -> ZeroCopyTargetRelation
+  -> Kernel.ZeroCopyRealizationDecision
+checkedZeroCopyDecision base relation =
+  Kernel.decideZeroCopyRealizationByFacts
+    True
+    (targetStrengtheningStageRevision base == zeroCopyTargetStageRevision relation)
+    (factPresent representation)
+    (factPresent grammar)
+    (factPresent valueType)
+    (factPresent (zeroCopySourceSemanticLayout relation))
+    (factPresent (zeroCopyConcreteMemoryLayout relation))
+    (factPresent (zeroCopyEndianAlignmentPaddingTagging relation))
+    (factPresent (zeroCopyLifetimeRules relation))
+    (factPresent (zeroCopyOwnershipRules relation))
+    (factPresent (zeroCopyDeviceStorageConstraints relation))
+    (factPresent (zeroCopyTargetAssumptionsCarriers relation))
+  where
+    BoundaryRepresentationId representation = zeroCopyBoundaryRepresentation relation
+    GrammarId grammar = zeroCopyGrammarRevision relation
+    ValueTypeRevision valueType = zeroCopyValueTypeRevision relation
+
+mapZeroCopyDecision
+  :: TargetStrengtheningStageBundle
+  -> ZeroCopyTargetRelation
+  -> Kernel.ZeroCopyRealizationDecision
   -> Either BoundaryTargetRelationError ()
-requireRevisionFacts relation = do
-  let BoundaryRepresentationId representation = zeroCopyBoundaryRepresentation relation
-      GrammarId grammar = zeroCopyGrammarRevision relation
-      ValueTypeRevision valueType = zeroCopyValueTypeRevision relation
-  requireFact ("boundary representation revision", representation)
-  requireFact ("grammar revision", grammar)
-  requireFact ("semantic value type revision", valueType)
+mapZeroCopyDecision base relation decision = case decision of
+  Kernel.ZeroCopyRealizationAcceptedDecision -> Right ()
+  Kernel.ZeroCopyStageRevisionDecision ->
+    Left (BoundaryTargetStageRevisionMismatch
+      (targetStrengtheningStageRevision base)
+      (zeroCopyTargetStageRevision relation))
+  Kernel.ZeroCopyBoundaryRepresentationDecision ->
+    Left (BoundaryTargetMissingFact "boundary representation revision")
+  Kernel.ZeroCopyGrammarDecision ->
+    Left (BoundaryTargetMissingFact "grammar revision")
+  Kernel.ZeroCopyValueTypeDecision ->
+    Left (BoundaryTargetMissingFact "semantic value type revision")
+  Kernel.ZeroCopySourceSemanticLayoutDecision ->
+    Left (BoundaryTargetMissingFact "source semantic constructors/fields")
+  Kernel.ZeroCopyConcreteMemoryLayoutDecision ->
+    Left (BoundaryTargetMissingFact "concrete memory layout")
+  Kernel.ZeroCopyEndianAlignmentPaddingTaggingDecision ->
+    Left (BoundaryTargetMissingFact "endian/alignment/padding/tagging")
+  Kernel.ZeroCopyLifetimeRulesDecision ->
+    Left (BoundaryTargetMissingFact "lifetime rules")
+  Kernel.ZeroCopyOwnershipRulesDecision ->
+    Left (BoundaryTargetMissingFact "ownership/borrowing rules")
+  Kernel.ZeroCopyDeviceStorageConstraintsDecision ->
+    Left (BoundaryTargetMissingFact "device/storage-domain constraints")
+  Kernel.ZeroCopyTargetAssumptionsCarriersDecision ->
+    Left (BoundaryTargetMissingFact "target assumptions/carriers")
+  Kernel.ZeroCopyPointerReinterpretationDecision ->
+    Left (BoundaryTargetMissingFact "checked zero-copy realization")
 
-requireFact :: (Text, Text) -> Either BoundaryTargetRelationError ()
-requireFact (label, value)
-  | Text.null (Text.strip value) = Left (BoundaryTargetMissingFact label)
-  | otherwise = Right ()
-
-requireEqual :: Eq a => (a -> a -> e) -> a -> a -> Either e ()
-requireEqual mkError expected actual
-  | expected == actual = Right ()
-  | otherwise = Left (mkError expected actual)
+factPresent :: Text -> Bool
+factPresent = not . Text.null . Text.strip
 
 mapLeft :: (a -> b) -> Either a c -> Either b c
 mapLeft f = either (Left . f) Right
