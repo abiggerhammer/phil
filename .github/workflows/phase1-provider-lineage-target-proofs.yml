@@ -9,7 +9,11 @@ on:
       - 'test/Phase1ProviderQualificationApplicabilityMain.hs'
       - 'docs/phase-1/provider-cross-target-reuse-v1.md'
       - 'docs/phase-1/provider-admission-applicability-v1.md'
+      - 'docs/phase-1/provider-lineage-target-implementation-refinement-v1.md'
       - 'proof/Phil/Core/ProviderQualificationLineageTarget.v'
+      - 'proof/Phil/Core/ProviderQualificationLineageTargetImplementation.v'
+      - 'proof/Phil/Core/ProviderQualificationLineageTargetImplementationExtraction.v'
+      - 'app/ProviderLineageTargetDecisionCorrespondenceMain.hs'
       - 'app/Phase1ProviderLineageTargetCertificationMain.hs'
       - '.github/workflows/phase1-provider-lineage-target-proofs.yml'
   push:
@@ -21,7 +25,11 @@ on:
       - 'test/Phase1ProviderQualificationApplicabilityMain.hs'
       - 'docs/phase-1/provider-cross-target-reuse-v1.md'
       - 'docs/phase-1/provider-admission-applicability-v1.md'
+      - 'docs/phase-1/provider-lineage-target-implementation-refinement-v1.md'
       - 'proof/Phil/Core/ProviderQualificationLineageTarget.v'
+      - 'proof/Phil/Core/ProviderQualificationLineageTargetImplementation.v'
+      - 'proof/Phil/Core/ProviderQualificationLineageTargetImplementationExtraction.v'
+      - 'app/ProviderLineageTargetDecisionCorrespondenceMain.hs'
       - 'app/Phase1ProviderLineageTargetCertificationMain.hs'
       - '.github/workflows/phase1-provider-lineage-target-proofs.yml'
 
@@ -36,17 +44,40 @@ jobs:
       options: --user root
     steps:
       - uses: actions/checkout@v4
-      - name: Compile PHIL-PROV-LINEAGE-TARGET-001
+      - name: Compile PHIL-PROV-LINEAGE-TARGET-001 and implementation correspondence
         shell: bash
         run: |
           set -euo pipefail
           export PATH="/home/rocq/.opam/${COMPILER}/bin:$PATH"
           rocq c -Q proof/Phil Phil proof/Phil/Core/ProviderQualificationLineageTarget.v
+          rocq c -Q proof/Phil Phil proof/Phil/Core/ProviderQualificationLineageTargetImplementation.v
+          rm -f ProviderQualificationLineageTargetKernel.hs
+          rocq c -Q proof/Phil Phil proof/Phil/Core/ProviderQualificationLineageTargetImplementationExtraction.v
+          test -s ProviderQualificationLineageTargetKernel.hs
+          grep -q 'decideTargetReuseByFacts' ProviderQualificationLineageTargetKernel.hs
+          grep -q 'decideAdmissionApplicabilityByFacts' ProviderQualificationLineageTargetKernel.hs
+      - name: Record proof and extraction identities
+        shell: bash
+        run: |
+          set -euo pipefail
           mkdir -p phase1-provider-lineage-target-proof
           cp \
             proof/Phil/Core/ProviderQualificationLineageTarget.v \
             proof/Phil/Core/ProviderQualificationLineageTarget.vo \
+            proof/Phil/Core/ProviderQualificationLineageTargetImplementation.v \
+            proof/Phil/Core/ProviderQualificationLineageTargetImplementation.vo \
+            proof/Phil/Core/ProviderQualificationLineageTargetImplementationExtraction.v \
+            proof/Phil/Core/ProviderQualificationLineageTargetImplementationExtraction.vo \
+            ProviderQualificationLineageTargetKernel.hs \
             phase1-provider-lineage-target-proof/
+          sha256sum \
+            phase1-provider-lineage-target-proof/ProviderQualificationLineageTarget.v \
+            phase1-provider-lineage-target-proof/ProviderQualificationLineageTarget.vo \
+            phase1-provider-lineage-target-proof/ProviderQualificationLineageTargetImplementation.v \
+            phase1-provider-lineage-target-proof/ProviderQualificationLineageTargetImplementation.vo \
+            phase1-provider-lineage-target-proof/ProviderQualificationLineageTargetKernel.hs \
+            > phase1-provider-lineage-target-proof/PHIL-PROV-LINEAGE-TARGET-001.proof.sha256
+          cat phase1-provider-lineage-target-proof/PHIL-PROV-LINEAGE-TARGET-001.proof.sha256
       - uses: actions/upload-artifact@v4
         with:
           name: rocq-phase1-provider-lineage-target-proof
@@ -64,17 +95,35 @@ jobs:
           cabal-version: 'latest'
       - name: Build existing proof certifier substrate with warnings as errors
         run: cabal build exe:phil-certify-core-scalar --ghc-options=-Werror
-      - name: Typecheck certifier
-        run: cabal exec -- ghc -isrc -Wall -Werror -fno-code app/Phase1ProviderLineageTargetCertificationMain.hs
-      - name: Re-run PROV-013 and PROV-014 correspondence
+      - name: Typecheck certifier and unchanged production modules
         run: |
           set -euo pipefail
-          cabal exec -- runghc -isrc test/Phase1ProviderQualificationTargetReuseMain.hs
-          cabal exec -- runghc -isrc test/Phase1ProviderQualificationApplicabilityMain.hs
+          cabal exec -- ghc -isrc -Wall -Werror -fno-code app/Phase1ProviderLineageTargetCertificationMain.hs
+          cabal exec -- ghc -isrc -Wall -Werror -fno-code src/Phil/Core/ProviderQualificationTargetReuse.hs
+          cabal exec -- ghc -isrc -Wall -Werror -fno-code src/Phil/Core/ProviderQualificationApplicability.hs
       - uses: actions/download-artifact@v4
         with:
           name: rocq-phase1-provider-lineage-target-proof
           path: phase1-provider-lineage-target-proof
+      - name: Typecheck and execute extracted lineage-target controls
+        run: |
+          set -euo pipefail
+          ghc -Wall -Werror -fno-code phase1-provider-lineage-target-proof/ProviderQualificationLineageTargetKernel.hs
+          ghc -Wall -Werror \
+            -iphase1-provider-lineage-target-proof \
+            app/ProviderLineageTargetDecisionCorrespondenceMain.hs \
+            -o provider-lineage-target-kernel-controls
+          ./provider-lineage-target-kernel-controls
+      - name: Strict typecheck unchanged PROV-013 and PROV-014 correspondence
+        run: |
+          set -euo pipefail
+          cabal exec -- ghc -isrc -Wall -Werror -fno-code test/Phase1ProviderQualificationTargetReuseMain.hs
+          cabal exec -- ghc -isrc -Wall -Werror -fno-code test/Phase1ProviderQualificationApplicabilityMain.hs
+      - name: Re-run unchanged PROV-013 and PROV-014 correspondence
+        run: |
+          set -euo pipefail
+          cabal exec -- runghc -Wall -Werror -isrc test/Phase1ProviderQualificationTargetReuseMain.hs
+          cabal exec -- runghc -Wall -Werror -isrc test/Phase1ProviderQualificationApplicabilityMain.hs
       - name: Emit PHIL-PROV-LINEAGE-TARGET-001 certificate
         shell: bash
         run: |
@@ -96,8 +145,28 @@ jobs:
             > phase1-provider-lineage-target-certification/PHIL-PROV-LINEAGE-TARGET-001.correspondence.sha256
           cat phase1-provider-lineage-target-certification/PHIL-PROV-LINEAGE-TARGET-001.rocq.cert
           sha256sum phase1-provider-lineage-target-certification/PHIL-PROV-LINEAGE-TARGET-001.rocq.cert
+      - name: Record implementation-refinement staging identities
+        run: |
+          set -euo pipefail
+          mkdir -p provider-lineage-target-implementation-correspondence
+          sha256sum \
+            phase1-provider-lineage-target-proof/ProviderQualificationLineageTargetKernel.hs \
+            src/Phil/Core/ProviderQualificationTargetReuse.hs \
+            src/Phil/Core/ProviderQualificationApplicability.hs \
+            test/Phase1ProviderQualificationTargetReuseMain.hs \
+            test/Phase1ProviderQualificationApplicabilityMain.hs \
+            app/ProviderLineageTargetDecisionCorrespondenceMain.hs \
+            proof/Phil/Core/ProviderQualificationLineageTargetImplementation.v \
+            docs/phase-1/provider-lineage-target-implementation-refinement-v1.md \
+            > provider-lineage-target-implementation-correspondence/PHIL-PROV-LINEAGE-TARGET-001.staging.sha256
+          cat provider-lineage-target-implementation-correspondence/PHIL-PROV-LINEAGE-TARGET-001.staging.sha256
       - uses: actions/upload-artifact@v4
         with:
           name: phil-phase1-provider-lineage-target-proof-certification
           path: phase1-provider-lineage-target-certification
+          if-no-files-found: error
+      - uses: actions/upload-artifact@v4
+        with:
+          name: provider-lineage-target-implementation-correspondence
+          path: provider-lineage-target-implementation-correspondence
           if-no-files-found: error
