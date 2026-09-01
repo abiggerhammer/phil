@@ -5,7 +5,11 @@ on:
     paths:
       - 'proof/Phil/Core/DataSubject.v'
       - 'proof/Phil/Core/BoundarySubject.v'
+      - 'proof/Phil/Core/BoundarySubjectImplementation.v'
+      - 'proof/Phil/Core/BoundarySubjectImplementationExtraction.v'
       - 'docs/phase-1/boundary-subject-proof-v1.md'
+      - 'docs/phase-1/boundary-subject-implementation-refinement-v1.md'
+      - 'app/BoundarySubjectDecisionCorrespondenceMain.hs'
       - '.github/workflows/phase1-boundary-subject-proofs.yml'
       - 'src/Phil/Systems/EvidenceSubjectTransfer.hs'
       - 'src/Phil/Systems/BoundaryTargetRelation.hs'
@@ -16,7 +20,11 @@ on:
     paths:
       - 'proof/Phil/Core/DataSubject.v'
       - 'proof/Phil/Core/BoundarySubject.v'
+      - 'proof/Phil/Core/BoundarySubjectImplementation.v'
+      - 'proof/Phil/Core/BoundarySubjectImplementationExtraction.v'
       - 'docs/phase-1/boundary-subject-proof-v1.md'
+      - 'docs/phase-1/boundary-subject-implementation-refinement-v1.md'
+      - 'app/BoundarySubjectDecisionCorrespondenceMain.hs'
       - '.github/workflows/phase1-boundary-subject-proofs.yml'
       - 'src/Phil/Systems/EvidenceSubjectTransfer.hs'
       - 'src/Phil/Systems/BoundaryTargetRelation.hs'
@@ -34,14 +42,22 @@ jobs:
       options: --user root
     steps:
       - uses: actions/checkout@v4
-      - name: Compile certified DATA-SUBJECT predecessor and PHIL-BND-SUBJECT-001
+
+      - name: Compile certified boundary subject proof and implementation correspondence
         shell: bash
         run: |
           set -euo pipefail
           export PATH="/home/rocq/.opam/${COMPILER}/bin:$PATH"
           rocq c -Q proof/Phil Phil proof/Phil/Core/DataSubject.v
           rocq c -Q proof/Phil Phil proof/Phil/Core/BoundarySubject.v
-      - name: Record proof identities
+          rocq c -Q proof/Phil Phil proof/Phil/Core/BoundarySubjectImplementation.v
+          rm -f BoundarySubjectKernel.hs
+          rocq c -Q proof/Phil Phil proof/Phil/Core/BoundarySubjectImplementationExtraction.v
+          test -s BoundarySubjectKernel.hs
+          grep -q 'decideBoundarySubjectTransferByFacts' BoundarySubjectKernel.hs
+          grep -q 'decideZeroCopyRealizationByFacts' BoundarySubjectKernel.hs
+
+      - name: Record proof and extraction identities
         shell: bash
         run: |
           set -euo pipefail
@@ -50,11 +66,19 @@ jobs:
             proof/Phil/Core/DataSubject.v \
             proof/Phil/Core/BoundarySubject.v \
             proof/Phil/Core/BoundarySubject.vo \
+            proof/Phil/Core/BoundarySubjectImplementation.v \
+            proof/Phil/Core/BoundarySubjectImplementation.vo \
+            proof/Phil/Core/BoundarySubjectImplementationExtraction.v \
+            proof/Phil/Core/BoundarySubjectImplementationExtraction.vo \
+            BoundarySubjectKernel.hs \
             boundary-subject-proof/
           sha256sum \
-            proof/Phil/Core/DataSubject.v \
-            proof/Phil/Core/BoundarySubject.v \
-            proof/Phil/Core/BoundarySubject.vo \
+            boundary-subject-proof/DataSubject.v \
+            boundary-subject-proof/BoundarySubject.v \
+            boundary-subject-proof/BoundarySubject.vo \
+            boundary-subject-proof/BoundarySubjectImplementation.v \
+            boundary-subject-proof/BoundarySubjectImplementation.vo \
+            boundary-subject-proof/BoundarySubjectKernel.hs \
             > boundary-subject-proof/PHIL-BND-SUBJECT-001.proof.sha256
           {
             echo 'obligation=PHIL-BND-SUBJECT-001'
@@ -62,6 +86,7 @@ jobs:
             cat boundary-subject-proof/PHIL-BND-SUBJECT-001.proof.sha256
           } > boundary-subject-proof/PHIL-BND-SUBJECT-001.proof-certificate.txt
           cat boundary-subject-proof/PHIL-BND-SUBJECT-001.proof-certificate.txt
+
       - uses: actions/upload-artifact@v4
         with:
           name: rocq-boundary-subject-proof
@@ -73,28 +98,68 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
+
       - uses: haskell-actions/setup@v2
         with:
           ghc-version: '9.6.7'
           cabal-version: 'latest'
+
       - name: Build ordinary regression substrate
         run: cabal build all --enable-tests
-      - name: Strict typecheck BND-012 and BND-013 production relations
+
+      - uses: actions/download-artifact@v4
+        with:
+          name: rocq-boundary-subject-proof
+          path: boundary-subject-proof
+
+      - name: Typecheck and execute extracted boundary-subject controls
+        run: |
+          set -euo pipefail
+          ghc -Wall -Werror -fno-code boundary-subject-proof/BoundarySubjectKernel.hs
+          ghc -Wall -Werror \
+            -iboundary-subject-proof \
+            app/BoundarySubjectDecisionCorrespondenceMain.hs \
+            -o boundary-subject-kernel-controls
+          ./boundary-subject-kernel-controls
+
+      - name: Strict typecheck unchanged BND-012 and BND-013 production relations
         run: |
           set -euo pipefail
           cabal exec -- ghc -isrc -Wall -Werror -fno-code src/Phil/Systems/EvidenceSubjectTransfer.hs
           cabal exec -- ghc -isrc -Wall -Werror -fno-code src/Phil/Systems/BoundaryTargetRelation.hs
+
       - name: Strict typecheck unchanged 15-case correspondence corpus
         run: |
           set -euo pipefail
-          # Phase1EvidenceSubjectTransferMain transitively compiles the existing
-          # SYS-009/010 correspondence modules, whose pre-existing warning debt
-          # is tracked separately: ProtocolStateCorrespondence name shadowing
-          # and BoundaryCommitCorrespondence's redundant Set type import.
+          # Phase1EvidenceSubjectTransferMain transitively compiles existing
+          # SYS-009/010 correspondence modules with pre-existing warning debt.
           cabal exec -- ghc -isrc -Wall -Werror -Wno-name-shadowing -Wno-unused-imports -fno-code test/Phase1EvidenceSubjectTransferMain.hs
           cabal exec -- ghc -isrc -Wall -Werror -fno-code test/Phase1BoundaryTargetRelationMain.hs
+
       - name: Re-run unchanged BND-012 and BND-013 correspondence corpus
         run: |
           set -euo pipefail
           cabal exec -- runghc -Wall -Werror -Wno-name-shadowing -Wno-unused-imports -isrc test/Phase1EvidenceSubjectTransferMain.hs
           cabal exec -- runghc -Wall -Werror -isrc test/Phase1BoundaryTargetRelationMain.hs
+
+      - name: Record implementation-refinement staging identities
+        run: |
+          set -euo pipefail
+          mkdir -p boundary-subject-implementation-correspondence
+          sha256sum \
+            boundary-subject-proof/BoundarySubjectKernel.hs \
+            src/Phil/Systems/EvidenceSubjectTransfer.hs \
+            src/Phil/Systems/BoundaryTargetRelation.hs \
+            test/Phase1EvidenceSubjectTransferMain.hs \
+            test/Phase1BoundaryTargetRelationMain.hs \
+            app/BoundarySubjectDecisionCorrespondenceMain.hs \
+            proof/Phil/Core/BoundarySubjectImplementation.v \
+            docs/phase-1/boundary-subject-implementation-refinement-v1.md \
+            > boundary-subject-implementation-correspondence/PHIL-BND-SUBJECT-001.staging.sha256
+          cat boundary-subject-implementation-correspondence/PHIL-BND-SUBJECT-001.staging.sha256
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: boundary-subject-implementation-correspondence
+          path: boundary-subject-implementation-correspondence
+          if-no-files-found: error
