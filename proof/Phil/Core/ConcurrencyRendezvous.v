@@ -15,7 +15,7 @@ From Phil.Core Require Import
   transfer, and scheduler-independent causality.
 
   This theorem composes Certified protocol identity/projection/progression,
-  Message admissibility, PHIL-CONC-SEM-001, and PHIL-CONC-ACTIVATE-001.  It
+  Message admissibility, PHIL-CONC-SEM-001, and PHIL-CONC-ACTIVATE-001. It
   deliberately does not model physical transport timing or scheduler fairness.
   Concrete Haskell endpoint/resource maps, ProcessKey/role-occurrence encoding,
   and source-to-architecture extraction remain correspondence boundaries.
@@ -200,15 +200,14 @@ Theorem accepted_rendezvous_uses_exact_binary_instance_and_roles :
           (dualRendezvousReceiverEndpoint witness))).
 Proof.
   intros witness Haccepted.
-  destruct Haccepted as
-    [Hwell _ _ HsenderInstance HreceiverInstance HsenderRole HreceiverRole
-     _ _ _ _ _ _ _ _ _ _ _ _ _ _].
   split.
-  - exact HsenderInstance.
+  - exact (exactRendezvousSenderInstance witness Haccepted).
   - split.
-    + exact HreceiverInstance.
-    + destruct Hwell as [Hroles _].
-      rewrite HsenderRole, HreceiverRole.
+    + exact (exactRendezvousReceiverInstance witness Haccepted).
+    + pose proof (exactRendezvousBinaryWellFormed witness Haccepted) as Hwell.
+      destruct Hwell as [Hroles _].
+      rewrite (exactRendezvousSenderRole witness Haccepted).
+      rewrite (exactRendezvousReceiverRole witness Haccepted).
       exact Hroles.
 Qed.
 
@@ -231,9 +230,9 @@ Theorem accepted_rendezvous_current_and_successor_sessions_are_dual :
           (dualRendezvousSenderEndpoint witness)).
 Proof.
   intros witness Haccepted.
-  destruct Haccepted as
-    [_ _ _ _ _ _ _ Hcurrent Hsuccessor _ _ _ _ _ _ _ _ _ _ _ _].
-  split; assumption.
+  split.
+  - exact (exactRendezvousCurrentSessionsDual witness Haccepted).
+  - exact (exactRendezvousSuccessorSessionsDual witness Haccepted).
 Qed.
 
 Theorem accepted_rendezvous_predecessors_are_consumed :
@@ -249,7 +248,8 @@ Theorem accepted_rendezvous_predecessors_are_consumed :
           (dualRendezvousReceiverEndpoint witness))) = None.
 Proof.
   intros witness Haccepted.
-  destruct Haccepted as [_ Hsender Hreceiver _].
+  pose proof (exactRendezvousSenderProgression witness Haccepted) as Hsender.
+  pose proof (exactRendezvousReceiverProgression witness Haccepted) as Hreceiver.
   unfold EndpointProgressionAccepted in Hsender, Hreceiver.
   destruct Hsender as [_ [_ HsenderStep]].
   destruct Hreceiver as [_ [_ HreceiverStep]].
@@ -289,7 +289,8 @@ Theorem accepted_rendezvous_installs_exact_successors :
               (dualRendezvousReceiverEndpoint witness)))).
 Proof.
   intros witness Haccepted.
-  destruct Haccepted as [_ Hsender Hreceiver _].
+  pose proof (exactRendezvousSenderProgression witness Haccepted) as Hsender.
+  pose proof (exactRendezvousReceiverProgression witness Haccepted) as Hreceiver.
   unfold EndpointProgressionAccepted in Hsender, Hreceiver.
   destruct Hsender as [_ [_ HsenderStep]].
   destruct Hreceiver as [_ [_ HreceiverStep]].
@@ -345,7 +346,8 @@ Theorem accepted_rendezvous_successors_preserve_exact_instance_and_role :
             (dualRendezvousReceiverEndpoint witness))).
 Proof.
   intros witness Haccepted.
-  destruct Haccepted as [_ Hsender Hreceiver _].
+  pose proof (exactRendezvousSenderProgression witness Haccepted) as Hsender.
+  pose proof (exactRendezvousReceiverProgression witness Haccepted) as Hreceiver.
   unfold EndpointProgressionAccepted in Hsender, Hreceiver.
   destruct Hsender as [HsenderLookup [_ HsenderStep]].
   destruct Hreceiver as [HreceiverLookup [_ HreceiverStep]].
@@ -355,8 +357,10 @@ Proof.
   pose proof
     (successful_continuation_preserves_exact_instance_and_role
       _ _ _ _ _ _ HreceiverStep) as HreceiverExact.
-  destruct HsenderExact as [senderContract [HsenderFound [HsenderInstance [HsenderRole _]]]].
-  destruct HreceiverExact as [receiverContract [HreceiverFound [HreceiverInstance [HreceiverRole _]]]].
+  destruct HsenderExact as
+    [senderContract [HsenderFound [HsenderInstance [HsenderRole _]]]].
+  destruct HreceiverExact as
+    [receiverContract [HreceiverFound [HreceiverInstance [HreceiverRole _]]]].
   rewrite HsenderLookup in HsenderFound.
   inversion HsenderFound; subst senderContract.
   rewrite HreceiverLookup in HreceiverFound.
@@ -378,8 +382,7 @@ Theorem accepted_rendezvous_message_admission_precedes_restricted_transfer :
       Some (dualRendezvousReceiverProcess witness).
 Proof.
   intros witness subject Haccepted Hsubject.
-  destruct Haccepted as
-    [_ _ _ _ _ _ _ _ _ _ _ _ _ Hmessage Hcoarse _ _ _ HsenderProcess HreceiverProcess].
+  pose proof (exactRendezvousCoarseStep witness Haccepted) as Hcoarse.
   pose proof
     (restricted_rendezvous_transfers_exact_owner
       (dualRendezvousMessageAdmission witness)
@@ -389,11 +392,11 @@ Proof.
       subject Hcoarse Hsubject) as Htransfer.
   destruct Htransfer as [Hbefore Hafter].
   split.
-  - exact Hmessage.
+  - exact (exactRendezvousMessageAccepted witness Haccepted).
   - split.
-    + rewrite <- HsenderProcess.
+    + rewrite <- (exactRendezvousCoarseSenderProcess witness Haccepted).
       exact Hbefore.
-    + rewrite <- HreceiverProcess.
+    + rewrite <- (exactRendezvousCoarseReceiverProcess witness Haccepted).
       exact Hafter.
 Qed.
 
@@ -408,15 +411,14 @@ Theorem accepted_rendezvous_internal_processes_are_activated :
         Some target).
 Proof.
   intros witness Haccepted.
-  destruct Haccepted as
-    [_ _ _ _ _ _ _ _ _ Hparticipants Hsender Hreceiver _ _ _ _ _ _ _ _ _].
+  pose proof (exactRendezvousParticipantClassification witness Haccepted) as Hparticipants.
   split.
   - eapply internal_participant_names_activated_process.
     + exact Hparticipants.
-    + exact Hsender.
+    + exact (exactRendezvousSenderParticipant witness Haccepted).
   - eapply internal_participant_names_activated_process.
     + exact Hparticipants.
-    + exact Hreceiver.
+    + exact (exactRendezvousReceiverParticipant witness Haccepted).
 Qed.
 
 Theorem accepted_rendezvous_internal_processes_are_static :
@@ -430,15 +432,14 @@ Theorem accepted_rendezvous_internal_processes_are_static :
       staticProcessKey occurrence = dualRendezvousReceiverProcess witness).
 Proof.
   intros witness Haccepted.
-  destruct Haccepted as
-    [_ _ _ _ _ _ _ _ _ Hparticipants Hsender Hreceiver _ _ _ _ _ _ _ _ _].
+  pose proof (exactRendezvousParticipantClassification witness Haccepted) as Hparticipants.
   split.
   - eapply internal_participant_names_static_process.
     + exact Hparticipants.
-    + exact Hsender.
+    + exact (exactRendezvousSenderParticipant witness Haccepted).
   - eapply internal_participant_names_static_process.
     + exact Hparticipants.
-    + exact Hreceiver.
+    + exact (exactRendezvousReceiverParticipant witness Haccepted).
 Qed.
 
 Theorem accepted_rendezvous_causality_is_semantic_not_scheduler_order :
@@ -452,15 +453,15 @@ Theorem accepted_rendezvous_causality_is_semantic_not_scheduler_order :
       (dualRendezvousReceiverProcess witness).
 Proof.
   intros witness Haccepted.
-  destruct Haccepted as
-    [_ _ _ _ _ _ _ _ _ _ _ _ _ _ Hcoarse _ _ _ HsenderProcess HreceiverProcess].
+  pose proof (exactRendezvousCoarseStep witness Haccepted) as Hcoarse.
   pose proof
     (restricted_rendezvous_sender_and_receiver_are_distinct
       (dualRendezvousMessageAdmission witness)
       (dualRendezvousOwnershipBefore witness)
       (dualRendezvousOwnershipAfter witness)
       (dualRendezvousStep witness) Hcoarse) as Hdistinct.
-  rewrite HsenderProcess, HreceiverProcess in Hdistinct.
+  rewrite (exactRendezvousCoarseSenderProcess witness Haccepted) in Hdistinct.
+  rewrite (exactRendezvousCoarseReceiverProcess witness Haccepted) in Hdistinct.
   split.
   - apply CauseRendezvous.
     exact Hdistinct.
@@ -488,7 +489,8 @@ Theorem accepted_rendezvous_makes_both_predecessors_stale :
       ProtocolProgressionRejected).
 Proof.
   intros witness Haccepted.
-  destruct Haccepted as [_ Hsender Hreceiver _].
+  pose proof (exactRendezvousSenderProgression witness Haccepted) as Hsender.
+  pose proof (exactRendezvousReceiverProgression witness Haccepted) as Hreceiver.
   unfold EndpointProgressionAccepted in Hsender, Hreceiver.
   destruct Hsender as [_ [_ HsenderStep]].
   destruct Hreceiver as [_ [_ HreceiverStep]].
