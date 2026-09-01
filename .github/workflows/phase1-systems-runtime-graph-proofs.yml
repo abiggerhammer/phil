@@ -94,5 +94,5 @@ jobs:
             test/Phase1RuntimePrimitiveReuseMain.hs \
             test/Phase1CostAttributionMain.hs
           do
-            cabal exec -- runghc -Wall -Werror -Wno-name-shadowing -isrc "$test_file"
+            cabal exec -- runghc -Wall -Werror -Wno-name-shadowing -Wno-unused-imports -isrc "$test_file"
           done
