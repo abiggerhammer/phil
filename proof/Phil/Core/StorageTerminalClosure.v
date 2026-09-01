@@ -4,6 +4,8 @@ Import ListNotations.
 From Phil.Core Require Import
   StorageRealization
   SystemsStageClosure
+  ProcessTerminal
+  ConcurrencySemantics
   ConcurrencyTerminal.
 
 (*
