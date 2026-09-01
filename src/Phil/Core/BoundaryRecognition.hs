@@ -5,6 +5,7 @@ module Phil.Core.BoundaryRecognition
   , rejectMalformedCompleteFrame
   ) where
 
+import qualified BoundaryCompleteRecognitionKernel as Kernel
 import Data.Text (Text)
 import Phil.Core.Context (ResourceContext)
 import Phil.Core.Recognition
@@ -55,14 +56,16 @@ rejectMalformedCompleteFrame raw detail extent context = do
 checkCompleteExtent
   :: RecognitionExtent
   -> Either CompleteRecognitionError ()
-checkCompleteExtent extent
-  | declaredFrameBytes extent < 0 || consumedFrameBytes extent < 0 =
-      Left (InvalidRecognitionExtent extent)
-  | consumedFrameBytes extent < declaredFrameBytes extent =
-      Left (TrailingBytesInsideFrame extent)
-  | consumedFrameBytes extent > declaredFrameBytes extent =
-      Left (RecognitionConsumedPastFrame extent)
-  | otherwise = Right ()
+checkCompleteExtent extent =
+  case Kernel.decideCompleteExtentByFacts
+      (declaredFrameBytes extent < 0)
+      (consumedFrameBytes extent < 0)
+      (consumedFrameBytes extent < declaredFrameBytes extent)
+      (declaredFrameBytes extent < consumedFrameBytes extent) of
+    Kernel.ExtentInvalid -> Left (InvalidRecognitionExtent extent)
+    Kernel.ExtentTrailing -> Left (TrailingBytesInsideFrame extent)
+    Kernel.ExtentPast -> Left (RecognitionConsumedPastFrame extent)
+    Kernel.ExtentComplete -> Right ()
 
 mapLeft :: (a -> b) -> Either a c -> Either b c
 mapLeft f = either (Left . f) Right
