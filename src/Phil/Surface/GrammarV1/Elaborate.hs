@@ -6,9 +6,11 @@ module Phil.Surface.GrammarV1.Elaborate
   , grammarV1StructuralMode
   , grammarV1RelationProposition
   , grammarV1LogicalProposition
+  , grammarV1PrimitiveType
   ) where
 
 import qualified Data.Text as Text
+import qualified Data.Text.Read as TextRead
 import Phil.Core.Generic.RequirementCategory
   ( GenericRequirementCategory (..)
   , GenericRequirementCompetence
@@ -22,6 +24,7 @@ import Phil.Core.Syntax
   ( Mode (..)
   , Proposition (..)
   , RefTerm
+  , Ty (..)
   )
 import Phil.Surface.GrammarV1.Parser
   ( GrammarV1GenericKind (..)
@@ -32,6 +35,7 @@ import Phil.Surface.GrammarV1.Parser
   , GrammarV1StaticArgument (..)
   , GrammarV1StaticReference (..)
   , GrammarV1StructuralMode (..)
+  , GrammarV1Type (..)
   )
 import Phil.Surface.Syntax (Located (..))
 
@@ -143,3 +147,25 @@ grammarV1LogicalProposition source = case source of
       <$> grammarV1LogicalProposition left
       <*> grammarV1LogicalProposition right
   _ -> Nothing
+
+-- | Elaborate only intrinsic primitive type forms whose Core representation is
+-- independent of names, expressions, propositions, or static-reference
+-- resolution. Grammar-v1 deliberately accepts arbitrary U<digits> tokens, so
+-- zero and widths that cannot be represented by Core's Int carrier fail closed
+-- instead of wrapping, truncating, or being guessed as another type.
+grammarV1PrimitiveType :: GrammarV1Type -> Maybe Ty
+grammarV1PrimitiveType sourceType = case sourceType of
+  GrammarV1UnitType -> Just TyUnit
+  GrammarV1BoolType -> Just TyBool
+  GrammarV1UnsignedType widthText -> TyUInt <$> grammarV1UIntWidth widthText
+  _ -> Nothing
+
+grammarV1UIntWidth :: Text.Text -> Maybe Int
+grammarV1UIntWidth widthText = do
+  digits <- Text.stripPrefix (Text.singleton 'U') widthText
+  case TextRead.decimal digits :: Either String (Integer, Text.Text) of
+    Right (width, rest)
+      | Text.null rest
+      , width > 0
+      , width <= toInteger (maxBound :: Int) -> Just (fromInteger width)
+    _ -> Nothing
