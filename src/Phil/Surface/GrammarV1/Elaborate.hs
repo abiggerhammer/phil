@@ -11,6 +11,7 @@ module Phil.Surface.GrammarV1.Elaborate
   , grammarV1IntrinsicBytesType
   , grammarV1LogicalProofType
   , grammarV1IntrinsicClaimApplication
+  , grammarV1IntrinsicRelationProposition
   ) where
 
 import qualified Data.Text as Text
@@ -231,4 +232,22 @@ grammarV1IntrinsicClaimApplication source = case source of
           parts -> Just (Text.intercalate (Text.singleton '.') parts)
         terms <- mapM (grammarV1IntrinsicRefLiteral . locatedValue) arguments
         Just (Atom claim terms)
+  _ -> Nothing
+
+-- | Compose the already-verified relation-operator mapping with only the
+-- context-free scalar literal reference terms established by #477. Contextual
+-- names, arithmetic expressions, calls, projections, and other operands remain
+-- unresolved so this bridge cannot invent a binding or term interpretation just
+-- to make a relation elaborate.
+grammarV1IntrinsicRelationProposition
+  :: GrammarV1Proposition
+  -> Maybe Proposition
+grammarV1IntrinsicRelationProposition source = case source of
+  GrammarV1RelationProposition
+    (Located _ left)
+    (Located _ operator)
+    (Located _ right) ->
+      grammarV1RelationProposition operator
+        <$> grammarV1IntrinsicRefLiteral left
+        <*> grammarV1IntrinsicRefLiteral right
   _ -> Nothing
