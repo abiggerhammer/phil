@@ -5,6 +5,7 @@ module Main (main) where
 import qualified Data.Text as Text
 import Phil.Core.Syntax
   ( GrammarId (..)
+  , Name (..)
   , Proposition (..)
   , RefTerm (..)
   , Ty (..)
@@ -46,6 +47,11 @@ intrinsicTypesPreserveMeaning = do
               (Equal (RefNat 1) (RefNat 1))))
       , Just (TyFrame (GrammarId "Hello"))
       , Just (TyFrame (GrammarId "Wire.Codec"))
+      , Just (TyValidated "Check" (Name "payload") (Name "evidence"))
+      , Just (TyValidated "Rules.Check" (Name "payload") (Name "evidence"))
+      , Nothing
+      , Nothing
+      , Nothing
       , Nothing
       , Nothing
       , Nothing
@@ -69,6 +75,11 @@ source = Text.unlines
   , "type ProofT = Proof[Ready(1) or 1 == 1];"
   , "type FrameT = Frame[Hello];"
   , "type QualifiedFrameT = Frame[Wire.Codec];"
+  , "type ValidatedT = Validated[Check, payload, evidence];"
+  , "type QualifiedValidatedT = Validated[Rules.Check, payload, evidence];"
+  , "type SpecializedValidated = Validated[Check[U32], payload, evidence];"
+  , "type QualifiedValidatedInput = Validated[Check, pkg.payload, evidence];"
+  , "type ProjectedValidatedInput = Validated[Check, (payload).field, evidence];"
   , "type ZeroWidth = U0;"
   , "type ContextBytes = Bytes[x];"
   , "type SpecializedFrame = Frame[Wire.Codec[U32]];"
