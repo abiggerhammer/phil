@@ -72,9 +72,9 @@ malformedIntegerFailsClosed =
 
 source :: Text.Text
 source = Text.unlines
-  [ "claim Nat() = 7 == 0;"
+  [ "claim NatLit() = 7 == 0;"
   , "claim BoolLit() = true == false;"
-  , "claim Name(x : U32) = x == 1;"
+  , "claim NameLit(x : U32) = x == 1;"
   , "claim UnitLit() = unit == unit;"
   ]
 
