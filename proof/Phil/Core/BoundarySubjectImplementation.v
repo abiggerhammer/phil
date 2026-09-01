@@ -1,6 +1,6 @@
 From Stdlib Require Import Bool.Bool Arith.PeanoNat.
 
-From Phil.Core Require Import BoundarySubject.
+From Phil.Core Require Import DataSubject BoundarySubject.
 
 (*
   Mechanical implementation-refinement surface for PHIL-BND-SUBJECT-001.
