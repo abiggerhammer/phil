@@ -1,0 +1,118 @@
+name: Phase 1 Concurrency Rendezvous Proofs
+
+on:
+  pull_request:
+    paths:
+      - 'proof/Phil/Core/ProtocolIdentity.v'
+      - 'proof/Phil/Core/ProtocolProjection.v'
+      - 'proof/Phil/Core/ProtocolProgressionGuard.v'
+      - 'proof/Phil/Core/ProtocolMessageAdmissibility.v'
+      - 'proof/Phil/Core/ConcurrencySemantics.v'
+      - 'proof/Phil/Core/ConcurrencyActivation.v'
+      - 'proof/Phil/Core/ConcurrencyRendezvous.v'
+      - 'src/Phil/Core/ProcessRendezvous.hs'
+      - 'test/Phase1ProtocolProjectionMain.hs'
+      - 'test/Phase1ProtocolMessageAdmissibilityMain.hs'
+      - 'test/Phase1ExactProcessRendezvousMain.hs'
+      - 'test/Phase1RestrictedMessageTransferMain.hs'
+      - 'test/Phase1SchedulerIndependentOrderMain.hs'
+      - 'docs/phase-1/concurrency-rendezvous-proof-v1.md'
+      - '.github/workflows/phase1-concurrency-rendezvous-proofs.yml'
+  push:
+    branches: [main]
+    paths:
+      - 'proof/Phil/Core/ConcurrencyRendezvous.v'
+      - 'docs/phase-1/concurrency-rendezvous-proof-v1.md'
+      - '.github/workflows/phase1-concurrency-rendezvous-proofs.yml'
+
+permissions:
+  contents: read
+
+jobs:
+  rocq-concurrency-rendezvous-proof:
+    runs-on: ubuntu-latest
+    container:
+      image: rocq/rocq-prover:9.2.0
+      options: --user root
+    steps:
+      - uses: actions/checkout@v4
+      - name: Compile certified predecessors and PHIL-CONC-RENDEZVOUS-001
+        shell: bash
+        run: |
+          set -euo pipefail
+          export PATH="/home/rocq/.opam/${COMPILER}/bin:$PATH"
+          rocq c -Q proof/Phil Phil proof/Phil/Core/Syntax.v
+          rocq c -Q proof/Phil Phil proof/Phil/Core/Session.v
+          rocq c -Q proof/Phil Phil proof/Phil/Core/ProtocolIdentity.v
+          rocq c -Q proof/Phil Phil proof/Phil/Core/ProtocolProjection.v
+          rocq c -Q proof/Phil Phil proof/Phil/Core/ProtocolProgressionGuard.v
+          rocq c -Q proof/Phil Phil proof/Phil/Core/ProtocolMessageAdmissibility.v
+          rocq c -Q proof/Phil Phil proof/Phil/Core/Context.v
+          rocq c -Q proof/Phil Phil proof/Phil/Core/ContextJoin.v
+          rocq c -Q proof/Phil Phil proof/Phil/Core/ProcessJoin.v
+          rocq c -Q proof/Phil Phil proof/Phil/Core/ProcessTerminal.v
+          rocq c -Q proof/Phil Phil proof/Phil/Core/ArchitectureIdentity.v
+          rocq c -Q proof/Phil Phil proof/Phil/Core/ArchitectureInstantiation.v
+          rocq c -Q proof/Phil Phil proof/Phil/Core/ProviderReplacementQualification.v
+          rocq c -Q proof/Phil Phil proof/Phil/Core/ArchitectureRealization.v
+          rocq c -Q proof/Phil Phil proof/Phil/Systems/FactDisposition.v
+          rocq c -Q proof/Phil Phil proof/Phil/Assurance/ValidityScope.v
+          rocq c -Q proof/Phil Phil proof/Phil/Core/SystemsStageClosure.v
+          rocq c -Q proof/Phil Phil proof/Phil/Core/SystemsGenericLowering.v
+          rocq c -Q proof/Phil Phil proof/Phil/Core/ConcurrencySemantics.v
+          rocq c -Q proof/Phil Phil proof/Phil/Core/ConcurrencyActivation.v
+          rocq c -Q proof/Phil Phil proof/Phil/Core/ConcurrencyRendezvous.v
+      - name: Record proof identities
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p concurrency-rendezvous-proof
+          cp \
+            proof/Phil/Core/ConcurrencyRendezvous.v \
+            proof/Phil/Core/ConcurrencyRendezvous.vo \
+            concurrency-rendezvous-proof/
+          sha256sum \
+            proof/Phil/Core/ProtocolProjection.v \
+            proof/Phil/Core/ProtocolProgressionGuard.v \
+            proof/Phil/Core/ProtocolMessageAdmissibility.v \
+            proof/Phil/Core/ConcurrencyActivation.v \
+            proof/Phil/Core/ConcurrencyRendezvous.v \
+            proof/Phil/Core/ConcurrencyRendezvous.vo \
+            > concurrency-rendezvous-proof/PHIL-CONC-RENDEZVOUS-001.proof.sha256
+          {
+            echo 'obligation=PHIL-CONC-RENDEZVOUS-001'
+            echo 'evidence=Rocq-9.2.0'
+            cat concurrency-rendezvous-proof/PHIL-CONC-RENDEZVOUS-001.proof.sha256
+          } > concurrency-rendezvous-proof/PHIL-CONC-RENDEZVOUS-001.proof-certificate.txt
+          cat concurrency-rendezvous-proof/PHIL-CONC-RENDEZVOUS-001.proof-certificate.txt
+      - uses: actions/upload-artifact@v4
+        with:
+          name: rocq-concurrency-rendezvous-proof
+          path: concurrency-rendezvous-proof
+          if-no-files-found: error
+
+  verify-concurrency-rendezvous-correspondence:
+    needs: rocq-concurrency-rendezvous-proof
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: haskell-actions/setup@v2
+        with:
+          ghc-version: '9.6.7'
+          cabal-version: 'latest'
+      - name: Build ordinary regression substrate
+        run: cabal build all --enable-tests
+      - name: Strict typecheck rendezvous implementation
+        run: cabal exec -- ghc -isrc -Wall -Werror -fno-code src/Phil/Core/ProcessRendezvous.hs
+      - name: Re-run unchanged protocol/rendezvous/transfer/causality corpus
+        run: |
+          set -euo pipefail
+          for test_file in \
+            test/Phase1ProtocolProjectionMain.hs \
+            test/Phase1ProtocolMessageAdmissibilityMain.hs \
+            test/Phase1ExactProcessRendezvousMain.hs \
+            test/Phase1RestrictedMessageTransferMain.hs \
+            test/Phase1SchedulerIndependentOrderMain.hs
+          do
+            cabal exec -- runghc -Wall -Werror -isrc "$test_file"
+          done
