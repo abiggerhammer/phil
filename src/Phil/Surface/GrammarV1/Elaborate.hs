@@ -162,7 +162,7 @@ grammarV1PrimitiveType sourceType = case sourceType of
 
 grammarV1UIntWidth :: Text.Text -> Maybe Int
 grammarV1UIntWidth widthText = do
-  digits <- Text.stripPrefix "U" widthText
+  digits <- Text.stripPrefix (Text.singleton 'U') widthText
   case TextRead.decimal digits :: Either String (Integer, Text.Text) of
     Right (width, rest)
       | Text.null rest
