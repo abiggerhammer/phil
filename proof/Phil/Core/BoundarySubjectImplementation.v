@@ -133,8 +133,9 @@ Proof.
     destruct Haccepted as [Hkind Hcopy Hequality Hlaw Hevidence Hscope].
     repeat split.
     + reflexivity.
-    + exact ((proj2 (transport_kind_is_copy_iff
-        (boundaryDataTransport transfer))) Hkind).
+    + unfold transportKindIsCopy.
+      rewrite Hkind.
+      reflexivity.
     + exact ((proj2 (revision_present_iff
         (boundaryCopyRelationRevision transfer))) Hcopy).
     + exact ((proj2 (revision_present_iff
