@@ -1,0 +1,147 @@
+name: Phase 1 Systems Subject Authority Production Binding
+
+on:
+  pull_request:
+    paths:
+      - 'src/SystemsSubjectAuthorityKernel.hs'
+      - 'src/Phil/Systems/SubjectCorrespondence.hs'
+      - 'src/Phil/Systems/ProviderCallCorrespondence.hs'
+      - 'src/Phil/Systems/AuthorityEffectCorrespondence.hs'
+      - 'test/Phase1SubjectCorrespondenceMain.hs'
+      - 'test/Phase1ProviderCallCorrespondenceMain.hs'
+      - 'test/Phase1AuthorityEffectCorrespondenceMain.hs'
+      - 'app/SystemsSubjectAuthorityDecisionCorrespondenceMain.hs'
+      - 'proof/Phil/Core/SystemsSubjectAuthority.v'
+      - 'proof/Phil/Core/SystemsSubjectAuthorityImplementation.v'
+      - 'proof/Phil/Core/SystemsSubjectAuthorityImplementationExtraction.v'
+      - 'docs/phase-1/systems-subject-authority-production-binding-v1.md'
+      - '.github/workflows/phase1-systems-subject-authority-production-binding.yml'
+  push:
+    branches: [main]
+    paths:
+      - 'src/SystemsSubjectAuthorityKernel.hs'
+      - 'src/Phil/Systems/SubjectCorrespondence.hs'
+      - 'src/Phil/Systems/ProviderCallCorrespondence.hs'
+      - 'src/Phil/Systems/AuthorityEffectCorrespondence.hs'
+      - 'test/Phase1SubjectCorrespondenceMain.hs'
+      - 'test/Phase1ProviderCallCorrespondenceMain.hs'
+      - 'test/Phase1AuthorityEffectCorrespondenceMain.hs'
+      - 'app/SystemsSubjectAuthorityDecisionCorrespondenceMain.hs'
+      - 'proof/Phil/Core/SystemsSubjectAuthority.v'
+      - 'proof/Phil/Core/SystemsSubjectAuthorityImplementation.v'
+      - 'proof/Phil/Core/SystemsSubjectAuthorityImplementationExtraction.v'
+      - 'docs/phase-1/systems-subject-authority-production-binding-v1.md'
+      - '.github/workflows/phase1-systems-subject-authority-production-binding.yml'
+
+permissions:
+  contents: read
+
+jobs:
+  rocq-exact-kernel:
+    runs-on: ubuntu-latest
+    container:
+      image: rocq/rocq-prover:9.2.0
+      options: --user root
+    steps:
+      - uses: actions/checkout@v4
+      - name: Fresh-extract exact Systems subject authority kernel
+        shell: bash
+        run: |
+          set -euo pipefail
+          export PATH="/home/rocq/.opam/${COMPILER}/bin:$PATH"
+          rocq c -Q proof/Phil Phil proof/Phil/Core/SystemsSubjectAuthority.v
+          rocq c -Q proof/Phil Phil proof/Phil/Core/SystemsSubjectAuthorityImplementation.v
+          rm -f SystemsSubjectAuthorityKernel.hs
+          rocq c -Q proof/Phil Phil proof/Phil/Core/SystemsSubjectAuthorityImplementationExtraction.v
+          test -s SystemsSubjectAuthorityKernel.hs
+          test "$(sha256sum SystemsSubjectAuthorityKernel.hs | cut -d' ' -f1)" = \
+            'f03b1e98aeb54e271c4a66204593bea9c8f8b1090cd3013300c7ade48b79043d'
+          cmp SystemsSubjectAuthorityKernel.hs src/SystemsSubjectAuthorityKernel.hs
+      - name: Stage exact kernel proof artifact
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p systems-subject-authority-exact-kernel
+          cp SystemsSubjectAuthorityKernel.hs systems-subject-authority-exact-kernel/
+          cp \
+            proof/Phil/Core/SystemsSubjectAuthorityImplementation.v \
+            proof/Phil/Core/SystemsSubjectAuthorityImplementation.vo \
+            proof/Phil/Core/SystemsSubjectAuthorityImplementationExtraction.v \
+            proof/Phil/Core/SystemsSubjectAuthorityImplementationExtraction.vo \
+            systems-subject-authority-exact-kernel/
+          sha256sum systems-subject-authority-exact-kernel/* > \
+            systems-subject-authority-exact-kernel/PHIL-SYS-SUBJECT-AUTH-001.exact-kernel.sha256
+          cat systems-subject-authority-exact-kernel/PHIL-SYS-SUBJECT-AUTH-001.exact-kernel.sha256
+      - uses: actions/upload-artifact@v4
+        with:
+          name: systems-subject-authority-exact-kernel
+          path: systems-subject-authority-exact-kernel
+          if-no-files-found: error
+
+  production-binding:
+    needs: rocq-exact-kernel
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: haskell-actions/setup@v2
+        with:
+          ghc-version: '9.6.7'
+          cabal-version: 'latest'
+      - name: Build ordinary regression substrate
+        run: cabal build all --enable-tests
+      - uses: actions/download-artifact@v4
+        with:
+          name: systems-subject-authority-exact-kernel
+          path: systems-subject-authority-exact-kernel
+      - name: Require checked-in/fresh kernel identity
+        run: |
+          set -euo pipefail
+          cmp systems-subject-authority-exact-kernel/SystemsSubjectAuthorityKernel.hs \
+              src/SystemsSubjectAuthorityKernel.hs
+          test "$(sha256sum src/SystemsSubjectAuthorityKernel.hs | cut -d' ' -f1)" = \
+            'f03b1e98aeb54e271c4a66204593bea9c8f8b1090cd3013300c7ade48b79043d'
+      - name: Strict typecheck exact kernel and bound production chain
+        run: |
+          set -euo pipefail
+          ghc -Wall -Werror -fno-code src/SystemsSubjectAuthorityKernel.hs
+          cabal exec -- ghc -isrc -Wall -Werror -fno-code \
+            src/Phil/Systems/SubjectCorrespondence.hs
+          cabal exec -- ghc -isrc -Wall -Werror -fno-code \
+            src/Phil/Systems/ProviderCallCorrespondence.hs
+          cabal exec -- ghc -isrc -Wall -Werror -fno-code \
+            src/Phil/Systems/AuthorityEffectCorrespondence.hs
+      - name: Execute exact extracted decision controls
+        run: |
+          set -euo pipefail
+          ghc -Wall -Werror -isrc \
+            app/SystemsSubjectAuthorityDecisionCorrespondenceMain.hs \
+            -o systems-subject-authority-kernel-controls
+          ./systems-subject-authority-kernel-controls
+      - name: Re-run unchanged 31-case SYS-004--006 correspondence
+        run: |
+          set -euo pipefail
+          cabal exec -- runghc -Wall -Werror -isrc test/Phase1SubjectCorrespondenceMain.hs
+          cabal exec -- runghc -Wall -Werror -isrc test/Phase1ProviderCallCorrespondenceMain.hs
+          cabal exec -- runghc -Wall -Werror -isrc test/Phase1AuthorityEffectCorrespondenceMain.hs
+      - name: Record production-binding identities
+        run: |
+          set -euo pipefail
+          mkdir -p systems-subject-authority-production-binding
+          sha256sum \
+            src/SystemsSubjectAuthorityKernel.hs \
+            src/Phil/Systems/SubjectCorrespondence.hs \
+            src/Phil/Systems/ProviderCallCorrespondence.hs \
+            src/Phil/Systems/AuthorityEffectCorrespondence.hs \
+            test/Phase1SubjectCorrespondenceMain.hs \
+            test/Phase1ProviderCallCorrespondenceMain.hs \
+            test/Phase1AuthorityEffectCorrespondenceMain.hs \
+            app/SystemsSubjectAuthorityDecisionCorrespondenceMain.hs \
+            proof/Phil/Core/SystemsSubjectAuthorityImplementation.v \
+            docs/phase-1/systems-subject-authority-production-binding-v1.md \
+            > systems-subject-authority-production-binding/PHIL-SYS-SUBJECT-AUTH-001.production-binding.sha256
+          cat systems-subject-authority-production-binding/PHIL-SYS-SUBJECT-AUTH-001.production-binding.sha256
+      - uses: actions/upload-artifact@v4
+        with:
+          name: systems-subject-authority-production-binding
+          path: systems-subject-authority-production-binding
+          if-no-files-found: error
