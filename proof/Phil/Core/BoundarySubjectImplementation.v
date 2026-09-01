@@ -136,8 +136,7 @@ Proof.
       destruct (dataSubjectTransportKind (boundaryDataTransport transfer))
         eqn:HtransportKind.
       * reflexivity.
-      * rewrite HtransportKind in Hkind.
-        discriminate Hkind.
+      * discriminate Hkind.
     + exact ((proj2 (revision_present_iff
         (boundaryCopyRelationRevision transfer))) Hcopy).
     + exact ((proj2 (revision_present_iff
