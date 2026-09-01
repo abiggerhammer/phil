@@ -74,6 +74,7 @@ import Phil.Systems.SubjectCorrespondence
   , SubjectStageBundle (..)
   , SystemsValueRef (..)
   )
+import qualified SystemsControlPreservationKernel as Kernel
 
 newtype ControlStateStageRevision = ControlStateStageRevision
   { unControlStateStageRevision :: Text
@@ -368,8 +369,13 @@ checkStateProjection program subjectIndex boundary projection = do
     (stateBoundaryTargetBlock boundary) actualTarget
   let expectedSlots = Map.keysSet (stateBoundarySlots boundary)
       actualSlots = Map.keysSet (stateProjectionBindings projection)
-  requireEqual (StateProjectionBindingDomainMismatch (stateProjectionKey projection))
-    expectedSlots actualSlots
+  case Kernel.decideStateProjectionByFacts
+      True (expectedSlots == actualSlots) True True True True True True True of
+    Kernel.StateProjectionAcceptedDecision -> Right ()
+    Kernel.StateSlotDomainDecision ->
+      Left (StateProjectionBindingDomainMismatch (stateProjectionKey projection)
+        expectedSlots actualSlots)
+    _ -> kernelInvariant "state-slot-domain"
   mapM_ (checkIncoming function)
     (Map.toAscList (stateProjectionIncomingRestricted projection))
   mapM_ (checkBinding function)
@@ -379,20 +385,36 @@ checkStateProjection program subjectIndex boundary projection = do
   where
     projectionKey = stateProjectionKey projection
 
-    checkProjectionKind = case (stateBoundaryKind boundary, stateProjectionKind projection) of
-      (OrdinaryJoinBoundary, OrdinaryJoinPredecessor) -> Right ()
-      (LoopStateBoundary, LoopInitialEntry) -> Right ()
-      (LoopStateBoundary, LoopBackedge) -> Right ()
-      (boundaryKind, projectionKind) ->
-        Left (StateProjectionKindMismatch projectionKey boundaryKind projectionKind)
+    checkProjectionKind =
+      case Kernel.decideStateProjectionByFacts
+          projectionKindExact True True True True True True True True of
+        Kernel.StateProjectionAcceptedDecision -> Right ()
+        Kernel.StateProjectionKindDecision ->
+          Left (StateProjectionKindMismatch projectionKey
+            (stateBoundaryKind boundary) (stateProjectionKind projection))
+        _ -> kernelInvariant "state-projection-kind"
+
+    projectionKindExact = case (stateBoundaryKind boundary, stateProjectionKind projection) of
+      (OrdinaryJoinBoundary, OrdinaryJoinPredecessor) -> True
+      (LoopStateBoundary, LoopInitialEntry) -> True
+      (LoopStateBoundary, LoopBackedge) -> True
+      _ -> False
 
     checkIncoming function (ref, mode) = do
-      if mode == Unrestricted
-        then Left (StateProjectionIncomingOwnerModeInvalid projectionKey ref mode)
-        else Right ()
+      case Kernel.decideStateProjectionByFacts
+          True True (mode /= Unrestricted) True True True True True True of
+        Kernel.StateProjectionAcceptedDecision -> Right ()
+        Kernel.StateRestrictedOwnerModeDecision ->
+          Left (StateProjectionIncomingOwnerModeInvalid projectionKey ref mode)
+        _ -> kernelInvariant "state-incoming-owner-mode"
       value <- lookupValue projectionKey function ref
       case systemsValueRole value of
-        BorrowedSlice _ -> Left (StateProjectionScopedLoanEscape projectionKey ref)
+        BorrowedSlice _ ->
+          case Kernel.decideStateProjectionByFacts
+              True True True True True True False True True of
+            Kernel.StateScopedLoanEscapeDecision ->
+              Left (StateProjectionScopedLoanEscape projectionKey ref)
+            _ -> kernelInvariant "state-incoming-loan"
         role
           | isOwningRole role -> Right ()
           | otherwise -> Left (StateProjectionIncomingValueNotOwning projectionKey ref role)
@@ -405,40 +427,60 @@ checkStateProjection program subjectIndex boundary projection = do
           (Map.keysSet (stateProjectionBindings projection)))
       value <- lookupValue projectionKey function ref
       case systemsValueRole value of
-        BorrowedSlice _ -> Left (StateProjectionScopedLoanEscape projectionKey ref)
+        BorrowedSlice _ ->
+          case Kernel.decideStateProjectionByFacts
+              True True True True True True False True True of
+            Kernel.StateScopedLoanEscapeDecision ->
+              Left (StateProjectionScopedLoanEscape projectionKey ref)
+            _ -> kernelInvariant "state-binding-loan"
         _ -> Right ()
-      case stateSlotMode slot of
-        Unrestricted ->
-          case Map.lookup ref (stateProjectionIncomingRestricted projection) of
-            Nothing -> Right ()
-            Just actualMode -> Left
-              (StateProjectionModeMismatch projectionKey slotKey Unrestricted actualMode)
-        expectedMode -> case Map.lookup ref (stateProjectionIncomingRestricted projection) of
-          Nothing -> Left (StateProjectionRestrictedSlotMissingOwner projectionKey slotKey ref)
-          Just actualMode -> requireEqual
-            (StateProjectionModeMismatch projectionKey slotKey)
-            expectedMode actualMode
+      let nativeModeResult = case stateSlotMode slot of
+            Unrestricted ->
+              case Map.lookup ref (stateProjectionIncomingRestricted projection) of
+                Nothing -> Right ()
+                Just actualMode -> Left
+                  (StateProjectionModeMismatch projectionKey slotKey Unrestricted actualMode)
+            expectedMode -> case Map.lookup ref (stateProjectionIncomingRestricted projection) of
+              Nothing -> Left (StateProjectionRestrictedSlotMissingOwner projectionKey slotKey ref)
+              Just actualMode -> requireEqual
+                (StateProjectionModeMismatch projectionKey slotKey)
+                expectedMode actualMode
+      case Kernel.decideStateProjectionByFacts
+          True True (nativeModeResult == Right ()) True True True True True True of
+        Kernel.StateProjectionAcceptedDecision -> Right ()
+        Kernel.StateRestrictedOwnerModeDecision -> nativeModeResult
+        _ -> kernelInvariant "state-binding-mode"
       checkSubject slotKey ref (stateSlotSubjectRequirement slot)
 
     checkSubject _ _ AnyStateSubject = Right ()
     checkSubject slotKey ref (FixedStateSubject subject) =
-      case Map.lookup subject subjectIndex of
-        Nothing -> Left (StateProjectionFixedSubjectUnknown projectionKey slotKey subject)
-        Just refs
-          | Set.member ref refs -> Right ()
-          | otherwise -> Left
-              (StateProjectionFixedSubjectMismatch projectionKey slotKey subject ref)
+      let nativeSubjectResult = case Map.lookup subject subjectIndex of
+            Nothing -> Left (StateProjectionFixedSubjectUnknown projectionKey slotKey subject)
+            Just refs
+              | Set.member ref refs -> Right ()
+              | otherwise -> Left
+                  (StateProjectionFixedSubjectMismatch projectionKey slotKey subject ref)
+      in case Kernel.decideStateProjectionByFacts
+          True True True (nativeSubjectResult == Right ()) True True True True True of
+        Kernel.StateProjectionAcceptedDecision -> Right ()
+        Kernel.StateFixedSubjectDecision -> nativeSubjectResult
+        _ -> kernelInvariant "state-fixed-subject"
 
     checkRestrictedMultiplicity =
-      case
-        [ (ref, count)
-        | (ref, count) <- Map.toAscList counts
-        , Map.member ref (stateProjectionIncomingRestricted projection)
-        , count > 1
-        ] of
-        [] -> Right ()
-        (ref, count) : _ -> Left
-          (StateProjectionRestrictedOwnerDuplicated projectionKey ref count)
+      let nativeMultiplicity = case
+            [ (ref, count)
+            | (ref, count) <- Map.toAscList counts
+            , Map.member ref (stateProjectionIncomingRestricted projection)
+            , count > 1
+            ] of
+            [] -> Right ()
+            (ref, count) : _ -> Left
+              (StateProjectionRestrictedOwnerDuplicated projectionKey ref count)
+      in case Kernel.decideStateProjectionByFacts
+          True True True True (nativeMultiplicity == Right ()) True True True True of
+        Kernel.StateProjectionAcceptedDecision -> Right ()
+        Kernel.StateRestrictedOwnerUniqueDecision -> nativeMultiplicity
+        _ -> kernelInvariant "state-restricted-unique"
       where
         counts = Map.fromListWith (+)
           [ (ref, 1 :: Int)
@@ -453,9 +495,12 @@ checkStateProjection program subjectIndex boundary projection = do
             , mode == Linear
             ]
           unaccounted = Set.difference incomingLinear boundRefs
-      in if Set.null unaccounted
-          then Right ()
-          else Left (StateProjectionUnaccountedLinearOwners projectionKey unaccounted)
+      in case Kernel.decideStateProjectionByFacts
+          True True True True True (Set.null unaccounted) True True True of
+        Kernel.StateProjectionAcceptedDecision -> Right ()
+        Kernel.StateLinearOwnersCoveredDecision ->
+          Left (StateProjectionUnaccountedLinearOwners projectionKey unaccounted)
+        _ -> kernelInvariant "state-linear-coverage"
 
 checkClosureCaptureProjection
   :: ClosureCaptureProjection
@@ -474,19 +519,27 @@ checkClosureCaptureProjection projection = do
       | callableCaptureSemanticMode semantic == Unrestricted = Right ()
       | otherwise =
           let count = length (Map.findWithDefault [] captureKey carriers)
-          in if count == 1
-              then Right ()
-              else Left (ClosureRestrictedCaptureCardinality key captureKey count)
+          in case Kernel.decideStateProjectionByFacts
+              True True True True True True True (count == 1) True of
+            Kernel.StateProjectionAcceptedDecision -> Right ()
+            Kernel.ClosureCaptureCarrierDecision ->
+              Left (ClosureRestrictedCaptureCardinality key captureKey count)
+            _ -> kernelInvariant "closure-capture-carrier"
 
     checkCarrierSharing =
-      case
-        [ (carrier, owners)
-        | (carrier, owners) <- Map.toAscList reverseBindings
-        , Set.size owners > 1
-        ] of
-        [] -> Right ()
-        (carrier, owners) : _ -> Left
-          (ClosureRestrictedCarrierShared key carrier owners)
+      let nativeSharing = case
+            [ (carrier, owners)
+            | (carrier, owners) <- Map.toAscList reverseBindings
+            , Set.size owners > 1
+            ] of
+            [] -> Right ()
+            (carrier, owners) : _ -> Left
+              (ClosureRestrictedCarrierShared key carrier owners)
+      in case Kernel.decideStateProjectionByFacts
+          True True True True True True True True (nativeSharing == Right ()) of
+        Kernel.StateProjectionAcceptedDecision -> Right ()
+        Kernel.ClosureCarrierSharingDecision -> nativeSharing
+        _ -> kernelInvariant "closure-carrier-sharing"
       where
         reverseBindings = Map.fromListWith Set.union
           [ (carrier, Set.singleton captureKey)
@@ -646,3 +699,7 @@ requireEqual mkError expected actual
 
 mapLeft :: (a -> b) -> Either a c -> Either b c
 mapLeft f = either (Left . f) Right
+
+kernelInvariant :: String -> Either e a
+kernelInvariant label =
+  error ("SystemsControlPreservationKernel mismatch: " <> label)
