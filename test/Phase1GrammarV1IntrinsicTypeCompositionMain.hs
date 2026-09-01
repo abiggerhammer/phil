@@ -4,7 +4,8 @@ module Main (main) where
 
 import qualified Data.Text as Text
 import Phil.Core.Syntax
-  ( Proposition (..)
+  ( GrammarId (..)
+  , Proposition (..)
   , RefTerm (..)
   , Ty (..)
   )
@@ -31,7 +32,7 @@ intrinsicTypesPreserveMeaning = do
   sourceFile <- mapLeft show $ parseGrammarV1StructuralSource "surf008-intrinsic-types" source
   actual <- mapM intrinsicType (grammarV1TopLevelDecls sourceFile)
   assert (actual == expected) $
-    "intrinsic type composition changed a verified type or accepted a contextual form: " <> show actual
+    "intrinsic type composition changed a verified type or accepted a contextual/specialized form: " <> show actual
   where
     expected =
       [ Just TyUnit
@@ -43,6 +44,9 @@ intrinsicTypesPreserveMeaning = do
             (Disjunction
               (Atom "Ready" [RefNat 1])
               (Equal (RefNat 1) (RefNat 1))))
+      , Just (TyFrame (GrammarId "Hello"))
+      , Just (TyFrame (GrammarId "Wire.Codec"))
+      , Nothing
       , Nothing
       , Nothing
       , Nothing
@@ -63,8 +67,11 @@ source = Text.unlines
   , "type WordT = U32;"
   , "type BytesT = Bytes[7];"
   , "type ProofT = Proof[Ready(1) or 1 == 1];"
+  , "type FrameT = Frame[Hello];"
+  , "type QualifiedFrameT = Frame[Wire.Codec];"
   , "type ZeroWidth = U0;"
   , "type ContextBytes = Bytes[x];"
+  , "type SpecializedFrame = Frame[Wire.Codec[U32]];"
   , "type NamedT = Other;"
   , "type TupleT = (U32, Bool);"
   ]
