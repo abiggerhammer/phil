@@ -134,8 +134,11 @@ Proof.
     repeat split.
     + reflexivity.
     + unfold transportKindIsCopy.
-      rewrite Hkind.
-      reflexivity.
+      destruct (dataSubjectTransportKind (boundaryDataTransport transfer))
+        eqn:HtransportKind.
+      * reflexivity.
+      * rewrite HtransportKind in Hkind.
+        discriminate Hkind.
     + exact ((proj2 (revision_present_iff
         (boundaryCopyRelationRevision transfer))) Hcopy).
     + exact ((proj2 (revision_present_iff
@@ -309,9 +312,8 @@ Proof.
        Hlifetime Hownership Hdevice Hassumptions].
     repeat split.
     + reflexivity.
-    + exact ((proj2 (Nat.eqb_eq
-        (zeroCopyBaseStageRevision relation)
-        (zeroCopyRelationStageRevision relation))) Hstage).
+    + apply Nat.eqb_eq.
+      exact Hstage.
     + exact ((proj2 (revision_present_iff
         (zeroCopyBoundaryRepresentationRevision relation))) Hrepresentation).
     + exact ((proj2 (revision_present_iff
