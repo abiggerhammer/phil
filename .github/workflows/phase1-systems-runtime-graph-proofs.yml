@@ -1,0 +1,98 @@
+name: Phase 1 Systems Runtime Graph Proofs
+
+on:
+  pull_request:
+    paths:
+      - 'proof/Phil/Systems/Runtime.v'
+      - 'proof/Phil/LLVM/Preservation.v'
+      - 'proof/Phil/LLVM/RuntimeSymbolIdentity.v'
+      - 'proof/Phil/Core/SystemsRuntimeGraph.v'
+      - 'src/Phil/Systems/RuntimeClaimBinding.hs'
+      - 'src/Phil/Systems/RuntimePrimitiveReuse.hs'
+      - 'src/Phil/Systems/CostAttribution.hs'
+      - 'test/Phase1RuntimeClaimBindingMain.hs'
+      - 'test/Phase1RuntimePrimitiveReuseMain.hs'
+      - 'test/Phase1CostAttributionMain.hs'
+      - 'docs/phase-1/systems-runtime-graph-proof-v1.md'
+      - '.github/workflows/phase1-systems-runtime-graph-proofs.yml'
+  push:
+    branches: [main]
+    paths:
+      - 'proof/Phil/Core/SystemsRuntimeGraph.v'
+      - 'docs/phase-1/systems-runtime-graph-proof-v1.md'
+      - '.github/workflows/phase1-systems-runtime-graph-proofs.yml'
+
+permissions:
+  contents: read
+
+jobs:
+  rocq-systems-runtime-graph-proof:
+    runs-on: ubuntu-latest
+    container:
+      image: rocq/rocq-prover:9.2.0
+      options: --user root
+    steps:
+      - uses: actions/checkout@v4
+      - name: Compile certified predecessors and PHIL-SYS-RUNTIME-GRAPH-001
+        shell: bash
+        run: |
+          set -euo pipefail
+          export PATH="/home/rocq/.opam/${COMPILER}/bin:$PATH"
+          rocq c -Q proof/Phil Phil proof/Phil/Systems/Runtime.v
+          rocq c -Q proof/Phil Phil proof/Phil/LLVM/Preservation.v
+          rocq c -Q proof/Phil Phil proof/Phil/LLVM/RuntimeSymbolIdentity.v
+          rocq c -Q proof/Phil Phil proof/Phil/Core/SystemsRuntimeGraph.v
+      - name: Record proof identities
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p systems-runtime-graph-proof
+          cp \
+            proof/Phil/Core/SystemsRuntimeGraph.v \
+            proof/Phil/Core/SystemsRuntimeGraph.vo \
+            systems-runtime-graph-proof/
+          sha256sum \
+            proof/Phil/Systems/Runtime.v \
+            proof/Phil/LLVM/RuntimeSymbolIdentity.v \
+            proof/Phil/Core/SystemsRuntimeGraph.v \
+            proof/Phil/Core/SystemsRuntimeGraph.vo \
+            > systems-runtime-graph-proof/PHIL-SYS-RUNTIME-GRAPH-001.proof.sha256
+          {
+            echo 'obligation=PHIL-SYS-RUNTIME-GRAPH-001'
+            echo 'evidence=Rocq-9.2.0'
+            cat systems-runtime-graph-proof/PHIL-SYS-RUNTIME-GRAPH-001.proof.sha256
+          } > systems-runtime-graph-proof/PHIL-SYS-RUNTIME-GRAPH-001.proof-certificate.txt
+          cat systems-runtime-graph-proof/PHIL-SYS-RUNTIME-GRAPH-001.proof-certificate.txt
+      - uses: actions/upload-artifact@v4
+        with:
+          name: rocq-systems-runtime-graph-proof
+          path: systems-runtime-graph-proof
+          if-no-files-found: error
+
+  verify-systems-runtime-graph-correspondence:
+    needs: rocq-systems-runtime-graph-proof
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: haskell-actions/setup@v2
+        with:
+          ghc-version: '9.6.7'
+          cabal-version: 'latest'
+      - name: Build ordinary regression substrate
+        run: cabal build all --enable-tests
+      - name: Strict typecheck runtime graph implementation
+        run: |
+          set -euo pipefail
+          cabal exec -- ghc -isrc -Wall -Werror -Wno-name-shadowing -fno-code src/Phil/Systems/RuntimeClaimBinding.hs
+          cabal exec -- ghc -isrc -Wall -Werror -Wno-name-shadowing -fno-code src/Phil/Systems/RuntimePrimitiveReuse.hs
+          cabal exec -- ghc -isrc -Wall -Werror -Wno-name-shadowing -fno-code src/Phil/Systems/CostAttribution.hs
+      - name: Re-run unchanged SYS-015 / SYS-016 / SYS-018 corpus
+        run: |
+          set -euo pipefail
+          for test_file in \
+            test/Phase1RuntimeClaimBindingMain.hs \
+            test/Phase1RuntimePrimitiveReuseMain.hs \
+            test/Phase1CostAttributionMain.hs
+          do
+            cabal exec -- runghc -Wall -Werror -Wno-name-shadowing -Wno-unused-imports -Wno-missing-signatures -isrc "$test_file"
+          done
