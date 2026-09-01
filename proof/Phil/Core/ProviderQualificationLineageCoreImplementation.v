@@ -148,7 +148,15 @@ Proof.
   unfold propagateGroundPresence.
   destruct own; simpl.
   - intuition.
-  - apply existsb_identity_true_iff.
+  - split.
+    + intro Hexists.
+      right.
+      apply (proj1 (existsb_identity_true_iff dependencies)).
+      exact Hexists.
+    + intros [Hfalse | Hin].
+      * discriminate Hfalse.
+      * apply (proj2 (existsb_identity_true_iff dependencies)).
+        exact Hin.
 Qed.
 
 Theorem direct_ground_presence_is_preserved :
