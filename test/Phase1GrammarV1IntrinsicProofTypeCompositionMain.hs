@@ -3,6 +3,15 @@
 module Main (main) where
 
 import qualified Data.Text as Text
+import Phil.Core.Focusing
+  ( FocusStep (..)
+  , FocusingError (..)
+  )
+import Phil.Core.Static
+  ( declareOpaqueClaim
+  , declareTransparentClaim
+  , emptyStaticContext
+  )
 import Phil.Core.Syntax
   ( Mode (..)
   , Name (..)
@@ -25,6 +34,9 @@ import Phil.Surface.Check.Types
 import Phil.Surface.GrammarV1.BoundProofType
   ( grammarV1BoundProofType
   )
+import Phil.Surface.GrammarV1.CheckedProofType
+  ( grammarV1CheckedProofType
+  )
 import Phil.Surface.GrammarV1.IntrinsicProofType
   ( grammarV1IntrinsicProofType
   )
@@ -39,6 +51,8 @@ main = do
         intrinsicProofTypesPreserveMeaning
     , test "SURF-008 binding-aware Proof composition preserves richer exact Core meaning and poisons unresolved trees"
         boundProofTypesPreserveMeaning
+    , test "SURF-008 checked Proof types inherit exact Core focusing semantics"
+        checkedProofTypesUseCoreFocusing
     ]
   if and results then pure () else exitFailure
 
@@ -111,6 +125,90 @@ boundProofTypesPreserveMeaning = do
   assert (actual == expected) $
     "binding-aware Proof composition changed a verified tree or failed to poison an unresolved nested leaf: " <> show actual
 
+checkedProofTypesUseCoreFocusing :: Either String ()
+checkedProofTypesUseCoreFocusing = do
+  context1 <- mapLeft show $
+    declareTransparentClaim
+      "Positive"
+      [(Name "x", SortUInt 8)]
+      (LessThan
+        (RefNat 0)
+        (RefToNat (RefVar (Name "x"))))
+      emptyStaticContext
+  context2 <- mapLeft show $
+    declareOpaqueClaim "NeedsNat" [(Name "n", SortNat)] context1
+  context3 <- mapLeft show $
+    declareOpaqueClaim "Flagged" [(Name "flag", SortBool)] context2
+  context <- mapLeft show $
+    declareOpaqueClaim "NeedsUInt" [(Name "u", SortUInt 8)] context3
+  state1 <- bind "u" Unrestricted (TyUInt 8) emptySurfaceState
+  state2 <- bind "flag" Unrestricted TyBool state1
+  state <- bind "n" Unrestricted (TyOpaqueSorted "NatIndex" SortNat) state2
+  sourceFile <- mapLeft show $
+    parseGrammarV1StructuralSource "surf008-checked-proof-types" checkedSource
+  sourceTypes <- mapM typeAliasTarget (grammarV1TopLevelDecls sourceFile)
+  case sourceTypes of
+    [ transparent
+      , opaque
+      , coercion
+      , unknown
+      , arity
+      , sortMismatch
+      , reverseCoercion
+      , specialized
+      , unresolved
+      , notProof
+      ] -> do
+        let u = RefVar (Name "u")
+            flag = RefVar (Name "flag")
+        case grammarV1CheckedProofType context state transparent of
+          Just (Right (TyProof canonical, steps)) -> do
+            assert
+              (canonical == LessThan (RefNat 0) (RefToNat u))
+              ("transparent Proof claim expanded to the wrong proposition: " <> show canonical)
+            assert
+              (ExpandedTransparentClaim "Positive" `elem` steps)
+              ("transparent Proof claim lost its Core expansion trace: " <> show steps)
+          other -> Left ("transparent Proof claim did not check successfully: " <> show other)
+        case grammarV1CheckedProofType context state opaque of
+          Just (Right (TyProof canonical, _)) ->
+            assert
+              (canonical == Atom "Flagged" [flag])
+              ("opaque Proof claim changed meaning: " <> show canonical)
+          other -> Left ("opaque Proof claim did not check successfully: " <> show other)
+        case grammarV1CheckedProofType context state coercion of
+          Just (Right (TyProof canonical, steps)) -> do
+            assert
+              (canonical == Atom "NeedsNat" [RefToNat u])
+              ("checked Proof did not preserve Core UInt-to-Nat coercion: " <> show canonical)
+            assert
+              (InsertedUIntToNat u `elem` steps)
+              ("checked Proof lost the Core UInt-to-Nat focusing trace: " <> show steps)
+          other -> Left ("coercing Proof claim did not check successfully: " <> show other)
+        case grammarV1CheckedProofType context state unknown of
+          Just (Left (UnknownClaim "Missing")) -> Right ()
+          other -> Left ("unknown Proof claim did not preserve Core rejection: " <> show other)
+        case grammarV1CheckedProofType context state arity of
+          Just (Left (ClaimArityMismatch "Flagged" 1 2)) -> Right ()
+          other -> Left ("Proof claim arity mismatch did not preserve Core rejection: " <> show other)
+        case grammarV1CheckedProofType context state sortMismatch of
+          Just (Left (ClaimArgumentSortMismatch "Flagged" 0 SortBool (SortUInt 8))) -> Right ()
+          other -> Left ("Proof claim sort mismatch did not preserve Core rejection: " <> show other)
+        case grammarV1CheckedProofType context state reverseCoercion of
+          Just (Left (ClaimArgumentSortMismatch "NeedsUInt" 0 (SortUInt 8) SortNat)) -> Right ()
+          other -> Left ("Proof Nat-to-UInt mismatch acquired an invented coercion: " <> show other)
+        assert
+          (grammarV1CheckedProofType context state specialized == Nothing)
+          "specialized Proof claim reached Core focusing despite structural non-competence"
+        assert
+          (grammarV1CheckedProofType context state unresolved == Nothing)
+          "unresolved Proof argument reached Core focusing despite structural non-competence"
+        assert
+          (grammarV1CheckedProofType context state notProof == Nothing)
+          "non-Proof type entered checked Proof routing"
+    other -> Left
+      ("expected ten checked Proof type cases, got " <> show (length other))
+
 bind :: Text.Text -> Mode -> Ty -> SurfaceState -> Either String SurfaceState
 bind name mode ty state =
   mapLeft show $
@@ -145,6 +243,20 @@ boundSource = Text.unlines
   , "type SpecializedProof = Proof[true and Ready[U32](n)];"
   , "type ConsumedProof = Proof[Ready(spent) or false];"
   , "type ProjectedProof = Proof[(n).field == n or true];"
+  , "type NotProof = Bool;"
+  ]
+
+checkedSource :: Text.Text
+checkedSource = Text.unlines
+  [ "type Transparent = Proof[Positive(u)];"
+  , "type Opaque = Proof[Flagged(flag)];"
+  , "type Coercion = Proof[NeedsNat(u)];"
+  , "type Unknown = Proof[Missing(u)];"
+  , "type Arity = Proof[Flagged(flag, flag)];"
+  , "type SortMismatch = Proof[Flagged(u)];"
+  , "type ReverseCoercion = Proof[NeedsUInt(n)];"
+  , "type Specialized = Proof[Positive[U8](u)];"
+  , "type Unresolved = Proof[Positive(missing)];"
   , "type NotProof = Bool;"
   ]
 
