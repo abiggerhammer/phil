@@ -513,15 +513,6 @@ lookupValue key function ref = maybe
   Right
   (Map.lookup (systemsValueRefValue ref) (systemsFunctionValues function))
 
-requireRefEqual
-  :: (SystemsValueRef -> SystemsValueRef -> BoundaryCommitVerificationError)
-  -> SystemsValueRef
-  -> SystemsFunction
-  -> ValueId
-  -> Either BoundaryCommitVerificationError ()
-requireRefEqual mkError expected function actualValue =
-  requireEqual mkError expected (SystemsValueRef (systemsFunctionName function) actualValue)
-
 protocolSubjectStage :: ProtocolStateStageBundle -> SubjectStageBundle
 protocolSubjectStage =
   providerCallStageBase
