@@ -14,6 +14,7 @@ module Phil.Systems.StageClosure
 
 import qualified Data.Map.Strict as Map
 import Data.Text (Text)
+import qualified Data.Text as Text
 import Phil.Core.Static
   ( InstanceRevision (..)
   , RealizationRevision (..)
@@ -84,6 +85,7 @@ import Phil.Systems.SubjectCorrespondence
 import Phil.Systems.TargetStrengthening
   ( TargetStrengtheningStageBundle (..)
   )
+import qualified SystemsStageClosureKernel as ClosureKernel
 
 newtype ClosedStageContractRevision = ClosedStageContractRevision
   { unClosedStageContractRevision :: Text
@@ -216,33 +218,89 @@ verifyStageClosureBundle bundle = do
       nextSubject = nextStageSubjectStage (stageClosureNextStage bundle)
       concreteCommon = subjectStageBase concreteSubject
       nextCommon = subjectStageBase nextSubject
+      sourceDecision = ClosureKernel.decideSourceClosureByFacts
+        (phase1StageSourceFacts concreteCommon
+          == Map.keysSet (phase1StageFactDispositions concreteCommon))
+        True
+        True
+      targetDecision = ClosureKernel.decideTargetClosureByFacts
+        (phase1StageSystemsMechanisms concreteCommon
+          == Map.keysSet (phase1StageSystemsJustifications concreteCommon))
+        True
+        True
 
-  requireEqual StageClosureSubjectRevisionMismatch
-    (subjectStageRevision concreteSubject)
-    (subjectStageRevision nextSubject)
-  requireEqual StageClosureInstanceRevisionMismatch
-    (phase1StageInstanceRevision concreteCommon)
-    (phase1StageInstanceRevision nextCommon)
-  requireEqual StageClosureRealizationRevisionMismatch
-    (phase1StageRealizationRevision concreteCommon)
-    (phase1StageRealizationRevision nextCommon)
-  requireEqual StageClosureSystemsRevisionMismatch
-    (phase1StageSystemsArtifactRevision concreteCommon)
-    (phase1StageSystemsArtifactRevision nextCommon)
-  requireEqual StageClosurePhase1ContractRevisionMismatch
-    (phase1StageContractRevision concreteCommon)
-    (phase1StageContractRevision nextCommon)
-  requireEqual StageClosureVerifierProfileMismatch
-    (phase1StageVerifierProfileRevision concreteCommon)
-    (phase1StageVerifierProfileRevision nextCommon)
+  case sourceDecision of
+    ClosureKernel.SourceClosureAcceptedDecision -> Right ()
+    _ -> kernelInvariant "source-closure-after-native-verification"
+  case targetDecision of
+    ClosureKernel.TargetClosureAcceptedDecision -> Right ()
+    _ -> kernelInvariant "target-closure-after-native-verification"
 
-  let expectedSystems = deriveSystemsArtifactRevision
+  let concreteSubjectRevision = subjectStageRevision concreteSubject
+      nextSubjectRevision = subjectStageRevision nextSubject
+      concreteInstanceRevision = phase1StageInstanceRevision concreteCommon
+      nextInstanceRevision = phase1StageInstanceRevision nextCommon
+      concreteRealizationRevision = phase1StageRealizationRevision concreteCommon
+      nextRealizationRevision = phase1StageRealizationRevision nextCommon
+      concreteSystemsRevision = phase1StageSystemsArtifactRevision concreteCommon
+      nextSystemsRevision = phase1StageSystemsArtifactRevision nextCommon
+      concreteContractRevision = phase1StageContractRevision concreteCommon
+      nextContractRevision = phase1StageContractRevision nextCommon
+      concreteProfile = phase1StageVerifierProfileRevision concreteCommon
+      nextProfile = phase1StageVerifierProfileRevision nextCommon
+      expectedSystems = deriveSystemsArtifactRevision
         (phase1StageSystemsArtifact concreteCommon)
-  requireEqual StageClosureStoredSystemsRevisionMismatch
-    expectedSystems (stageClosureSystemsArtifactRevision bundle)
-  requireEqual StageClosureContractRevisionMismatch
-    (deriveClosedStageContractRevision bundle)
-    (stageClosureContractRevision bundle)
+      storedSystems = stageClosureSystemsArtifactRevision bundle
+      expectedFinal = deriveClosedStageContractRevision bundle
+      storedFinal = stageClosureContractRevision bundle
+      identityDecision = ClosureKernel.decideStageIdentityByFacts
+        (concreteSubjectRevision == nextSubjectRevision)
+        (concreteInstanceRevision == nextInstanceRevision)
+        (concreteRealizationRevision == nextRealizationRevision)
+        (concreteSystemsRevision == nextSystemsRevision)
+        (concreteContractRevision == nextContractRevision)
+        (concreteProfile == nextProfile)
+        (expectedSystems == storedSystems)
+        (expectedFinal == storedFinal)
+        (not (Text.null (unSystemsArtifactRevision storedSystems)))
+        (not (Text.null (unClosedStageContractRevision storedFinal)))
+
+  case identityDecision of
+    ClosureKernel.StageIdentityAcceptedDecision -> Right ()
+    ClosureKernel.StageIdentitySubjectDecision ->
+      Left (StageClosureSubjectRevisionMismatch
+        concreteSubjectRevision nextSubjectRevision)
+    ClosureKernel.StageIdentityInstanceDecision ->
+      Left (StageClosureInstanceRevisionMismatch
+        concreteInstanceRevision nextInstanceRevision)
+    ClosureKernel.StageIdentityRealizationDecision ->
+      Left (StageClosureRealizationRevisionMismatch
+        concreteRealizationRevision nextRealizationRevision)
+    ClosureKernel.StageIdentitySystemsDecision ->
+      Left (StageClosureSystemsRevisionMismatch
+        concreteSystemsRevision nextSystemsRevision)
+    ClosureKernel.StageIdentityContractDecision ->
+      Left (StageClosurePhase1ContractRevisionMismatch
+        concreteContractRevision nextContractRevision)
+    ClosureKernel.StageIdentityProfileDecision ->
+      Left (StageClosureVerifierProfileMismatch concreteProfile nextProfile)
+    ClosureKernel.StageIdentityRecomputedSystemsDecision ->
+      Left (StageClosureStoredSystemsRevisionMismatch expectedSystems storedSystems)
+    ClosureKernel.StageIdentityRecomputedFinalDecision ->
+      Left (StageClosureContractRevisionMismatch expectedFinal storedFinal)
+    ClosureKernel.StageIdentityStoredSystemsDecision ->
+      kernelInvariant "stored-systems-presence"
+    ClosureKernel.StageIdentityStoredFinalDecision ->
+      kernelInvariant "stored-final-presence"
+
+  case ClosureKernel.decideSystemsStageClosureByFacts
+      True True
+      (sourceAccepted sourceDecision)
+      (targetAccepted targetDecision)
+      True
+      (identityAccepted identityDecision) of
+    ClosureKernel.SystemsStageClosureAcceptedDecision -> Right ()
+    _ -> kernelInvariant "cumulative-stage-closure"
 
 verifyConcrete
   :: ConcreteStageClosure
@@ -252,6 +310,21 @@ verifyConcrete concrete = case concrete of
     mapLeft StageClosureBranchError (verifyBranchResourceStageBundle bundle)
   ConcreteThroughBoundary bundle ->
     mapLeft StageClosureBoundaryError (verifyBoundaryCommitStageBundle bundle)
+
+sourceAccepted :: ClosureKernel.SourceClosureDecision -> Bool
+sourceAccepted decision = case decision of
+  ClosureKernel.SourceClosureAcceptedDecision -> True
+  _ -> False
+
+targetAccepted :: ClosureKernel.TargetClosureDecision -> Bool
+targetAccepted decision = case decision of
+  ClosureKernel.TargetClosureAcceptedDecision -> True
+  _ -> False
+
+identityAccepted :: ClosureKernel.StageIdentityDecision -> Bool
+identityAccepted decision = case decision of
+  ClosureKernel.StageIdentityAcceptedDecision -> True
+  _ -> False
 
 concreteKind :: ConcreteStageClosure -> Text
 concreteKind concrete = case concrete of
@@ -274,10 +347,9 @@ realizationText (RealizationRevision value) = value
 phase1RevisionText :: Phase1StageContractRevision -> Text
 phase1RevisionText (Phase1StageContractRevision value) = value
 
-requireEqual :: Eq a => (a -> a -> e) -> a -> a -> Either e ()
-requireEqual mkError expected actual
-  | expected == actual = Right ()
-  | otherwise = Left (mkError expected actual)
-
 mapLeft :: (a -> b) -> Either a c -> Either b c
 mapLeft f = either (Left . f) Right
+
+kernelInvariant :: String -> a
+kernelInvariant label =
+  error ("SystemsStageClosureKernel mismatch: " <> label)
