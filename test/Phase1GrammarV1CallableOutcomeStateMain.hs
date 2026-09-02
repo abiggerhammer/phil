@@ -3,11 +3,24 @@
 module Main (main) where
 
 import qualified Data.Text as Text
+import Phil.Core.Focusing (FocusingError (..))
+import Phil.Core.Static
+  ( StaticContext
+  , declareOpaqueClaim
+  , emptyStaticContext
+  )
 import Phil.Core.Syntax
   ( Name (..)
+  , Proposition (..)
+  , RefSort (..)
+  , RefTerm (..)
   , Ty (..)
   )
 import Phil.Surface.Check.Support (emptySurfaceState)
+import Phil.Surface.GrammarV1.CallableOutcomePropositions
+  ( grammarV1CallableOutcomeEnsures
+  , grammarV1CallableOutcomeObligations
+  )
 import Phil.Surface.GrammarV1.CallableOutcomeState
   ( grammarV1CallableOutcomeStateTelescopes
   )
@@ -30,6 +43,14 @@ main = do
         genericCallableStateRejects
     , test "SURF-008 callable without outcome residues has exact empty projection"
         absentOutcomeResiduesAreEmpty
+    , test "SURF-008 outcome propositions use exact parameter plus branch-state scope"
+        checkedOutcomePropositionsUseBranchScope
+    , test "SURF-008 outcome propositions reject unresolved branch-state names structurally"
+        missingOutcomeStateBindingRejects
+    , test "SURF-008 repeated outcome state is ambiguous for proposition scope"
+        repeatedOutcomeStateScopeRejects
+    , test "SURF-008 outcome proposition Core failures remain distinct"
+        outcomePropositionCoreFailurePreserved
     ]
   if and results then pure () else exitFailure
 
@@ -113,6 +134,113 @@ absentOutcomeResiduesAreEmpty = do
   assert
     (grammarV1CallableOutcomeStateTelescopes emptySurfaceState callable == Just [])
     "callable without outcome residues did not preserve exact absence"
+  context <- checkedContext
+  assert
+    (grammarV1CallableOutcomeEnsures context emptySurfaceState callable == Just (Right []))
+    "outcome ensures projection did not preserve exact absence"
+  assert
+    (grammarV1CallableOutcomeObligations context emptySurfaceState callable == Just (Right []))
+    "outcome obligation projection did not preserve exact absence"
+
+checkedOutcomePropositionsUseBranchScope :: Either String ()
+checkedOutcomePropositionsUseBranchScope = do
+  context <- checkedContext
+  callable <- onlyCallable $ Text.unlines
+    [ "callable CheckedOutcome(x : U32) -> Unit {"
+    , "  outcome success Done {"
+    , "    state (s : U8);"
+    , "    ensures PairOk(x, s);"
+    , "    obligation PairOk(x, s);"
+    , "    ensures ParamOk(x);"
+    , "  }"
+    , "  outcome negative Retry {"
+    , "    ensures ParamOk(x);"
+    , "  }"
+    , "}"
+    ]
+  case
+      ( grammarV1CallableOutcomeEnsures context emptySurfaceState callable
+      , grammarV1CallableOutcomeObligations context emptySurfaceState callable
+      ) of
+    (Just (Right ensured), Just (Right obligations)) -> do
+      let x = RefVar (Name "x")
+          s = RefVar (Name "s")
+          pair = Atom "PairOk" [x, s]
+          parameterOnly = Atom "ParamOk" [x]
+      assert
+        (stripSteps ensured ==
+          [ (GrammarV1SuccessOutcome, [pair, parameterOnly])
+          , (GrammarV1NegativeOutcome, [parameterOnly])
+          ])
+        ("outcome ensures lost branch scope/category/order: " <> show ensured)
+      assert
+        (stripSteps obligations ==
+          [ (GrammarV1SuccessOutcome, [pair])
+          , (GrammarV1NegativeOutcome, [])
+          ])
+        ("outcome obligations were reclassified or lost branch scope: " <> show obligations)
+    other -> Left
+      ("checked outcome propositions did not preserve branch scope/categories: " <> show other)
+
+missingOutcomeStateBindingRejects :: Either String ()
+missingOutcomeStateBindingRejects = do
+  context <- checkedContext
+  callable <- onlyCallable $ Text.unlines
+    [ "callable MissingState(x : U32) -> Unit {"
+    , "  outcome success Done {"
+    , "    ensures PairOk(x, s);"
+    , "  }"
+    , "}"
+    ]
+  assert
+    (grammarV1CallableOutcomeEnsures context emptySurfaceState callable == Nothing)
+    "unbound branch-state name reached Core focusing or acquired an ambient meaning"
+
+repeatedOutcomeStateScopeRejects :: Either String ()
+repeatedOutcomeStateScopeRejects = do
+  context <- checkedContext
+  callable <- onlyCallable $ Text.unlines
+    [ "callable AmbiguousState(x : U32) -> Unit {"
+    , "  outcome success Done {"
+    , "    state (a : U8);"
+    , "    state (b : U8);"
+    , "    ensures ParamOk(x);"
+    , "  }"
+    , "}"
+    ]
+  assert
+    (grammarV1CallableOutcomeEnsures context emptySurfaceState callable == Nothing)
+    "checked proposition routing arbitrarily selected one of several state scopes"
+
+outcomePropositionCoreFailurePreserved :: Either String ()
+outcomePropositionCoreFailurePreserved = do
+  context <- checkedContext
+  callable <- onlyCallable $ Text.unlines
+    [ "callable CoreReject(x : U32) -> Unit {"
+    , "  outcome success Done {"
+    , "    state (s : U8);"
+    , "    ensures Missing(x);"
+    , "  }"
+    , "}"
+    ]
+  case grammarV1CallableOutcomeEnsures context emptySurfaceState callable of
+    Just (Left (UnknownClaim "Missing")) -> Right ()
+    other -> Left ("Core UnknownClaim was collapsed or changed: " <> show other)
+
+checkedContext :: Either String StaticContext
+checkedContext = do
+  context1 <- mapLeft show $
+    declareOpaqueClaim
+      "PairOk"
+      [(Name "x", SortUInt 32), (Name "s", SortUInt 8)]
+      emptyStaticContext
+  mapLeft show $
+    declareOpaqueClaim "ParamOk" [(Name "x", SortUInt 32)] context1
+
+stripSteps
+  :: [(GrammarV1OutcomeKind, [(Proposition, steps)])]
+  -> [(GrammarV1OutcomeKind, [Proposition])]
+stripSteps = map (\(kind, propositions) -> (kind, map fst propositions))
 
 onlyCallable :: Text.Text -> Either String GrammarV1CallableContractDecl
 onlyCallable source = do
