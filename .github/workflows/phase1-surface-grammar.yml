@@ -7,7 +7,7 @@ on:
       - 'grammar/phase1-surface-determinacy.json'
       - 'scripts/derive_phase1_surface_grammar.py'
       - 'scripts/check_phase1_surface_corpus.py'
-      - 'scripts/check_phase1_surface_determinacy.py'
+      - 'scripts/check_phase1_surface-determinacy.py'
       - 'src/Phil/Surface/GrammarV1/**'
       - 'test/Phase1GrammarV1LexerMain.hs'
       - 'test/Phase1GrammarV1StructuralParserMain.hs'
@@ -21,6 +21,7 @@ on:
       - 'test/Phase1GrammarV1RejectMain.hs'
       - 'test/Phase1GrammarV1BoundaryStaticReferenceMain.hs'
       - 'test/Phase1GrammarV1BoundaryCanonicalityMain.hs'
+      - 'test/Phase1GrammarV1BoundaryCodecReferenceElaborationMain.hs'
       - 'test/Phase1GrammarV1StaticProcessNetworkMain.hs'
       - 'test/Phase1GrammarV1ExternalProtocolParticipantMain.hs'
       - 'test/Phase1GrammarV1ProviderDeclarationsMain.hs'
@@ -43,7 +44,7 @@ on:
       - 'grammar/phase1-surface-determinacy.json'
       - 'scripts/derive_phase1_surface_grammar.py'
       - 'scripts/check_phase1_surface_corpus.py'
-      - 'scripts/check_phase1_surface_determinacy.py'
+      - 'scripts/check_phase1_surface-determinacy.py'
       - 'src/Phil/Surface/GrammarV1/**'
       - 'test/Phase1GrammarV1LexerMain.hs'
       - 'test/Phase1GrammarV1StructuralParserMain.hs'
@@ -57,6 +58,7 @@ on:
       - 'test/Phase1GrammarV1RejectMain.hs'
       - 'test/Phase1GrammarV1BoundaryStaticReferenceMain.hs'
       - 'test/Phase1GrammarV1BoundaryCanonicalityMain.hs'
+      - 'test/Phase1GrammarV1BoundaryCodecReferenceElaborationMain.hs'
       - 'test/Phase1GrammarV1StaticProcessNetworkMain.hs'
       - 'test/Phase1GrammarV1ExternalProtocolParticipantMain.hs'
       - 'test/Phase1GrammarV1ProviderDeclarationsMain.hs'
@@ -138,6 +140,9 @@ jobs:
 
       - name: Check Grammar-v1 boundary canonicality routing
         run: cabal exec -- runghc -Wall -Werror -isrc test/Phase1GrammarV1BoundaryCanonicalityMain.hs
+
+      - name: Check Grammar-v1 boundary codec reference routing
+        run: cabal exec -- runghc -Wall -Werror -isrc test/Phase1GrammarV1BoundaryCodecReferenceElaborationMain.hs
 
       - name: Check Grammar-v1 static process-network parsing
         run: cabal exec -- runghc -Wall -Werror -isrc test/Phase1GrammarV1StaticProcessNetworkMain.hs
