@@ -3,6 +3,7 @@ module Phil.Surface.GrammarV1.BoundRelation
   ) where
 
 import Phil.Core.Focusing (canonicalizeProposition)
+import Phil.Core.SortCheck (checkPropositionSorts)
 import Phil.Core.Static (emptyStaticContext)
 import Phil.Core.Syntax (Proposition)
 import Phil.Surface.Check.Types (SurfaceState (..))
@@ -18,13 +19,14 @@ import Phil.Surface.GrammarV1.Parser
 import Phil.Surface.Syntax (Located (..))
 
 -- | Compose relation operands through the verified binding-aware Phase-1
--- refinement-expression bridge, preserve the parser-selected relation operator,
--- then delegate admissible UInt->Nat insertion and canonical sort checking to
--- the existing Core focusing boundary. Plain relations need no claim environment,
--- so the empty static context is exact here: no claim identity, evidence, or
--- authority can be introduced by this bridge. Ordered UInt/Nat pairs gain only
--- Core's established RefToNat coercion; mixed-sort equality remains fail-closed.
--- Projection and unresolved names still fail in the expression bridge.
+-- refinement-expression bridge and preserve the parser-selected relation
+-- operator exactly. Relations already accepted by the existing Core sort checker
+-- are returned unchanged. Only a raw sort failure delegates to Core focusing, so
+-- established UInt->Nat insertion can rescue admissible ordered UInt/Nat pairs
+-- without normalizing or otherwise rewriting already-valid relations. Plain
+-- relations need no claim environment, so the empty static context is exact here:
+-- no claim identity, evidence, or authority can be introduced by this bridge.
+-- Mixed-sort equality, projection, and unresolved names remain fail-closed.
 grammarV1BoundRelationProposition
   :: SurfaceState
   -> GrammarV1Proposition
@@ -37,7 +39,10 @@ grammarV1BoundRelationProposition state source = case source of
           (locatedValue operator)
           leftTerm
           rightTerm
-    case canonicalizeProposition emptyStaticContext (stateCore state) proposition of
-      Right (canonical, _) -> Just canonical
-      Left _ -> Nothing
+    case checkPropositionSorts (stateCore state) proposition of
+      Right () -> Just proposition
+      Left _ ->
+        case canonicalizeProposition emptyStaticContext (stateCore state) proposition of
+          Right (canonical, _) -> Just canonical
+          Left _ -> Nothing
   _ -> Nothing
