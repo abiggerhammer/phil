@@ -89,3 +89,5 @@ jobs:
         run: cabal exec -- runghc -Wall -Werror -isrc test/Phase1RuntimeCarrierCoverageMain.hs
       - name: DEP-003–005 deployment qualification, freshness, and topology integrity
         run: cabal exec -- runghc -Wall -Werror -isrc test/Phase1DeploymentQualificationMain.hs
+      - name: DEP-006 qualification-gated narrow authority
+        run: cabal exec -- runghc -Wall -Werror -isrc test/Phase1DeploymentAuthorityMain.hs
