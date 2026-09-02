@@ -44,6 +44,7 @@ import Phil.Systems.SubjectCorrespondence
   , SubjectCorrespondence (..)
   , SubjectStageBundle (..)
   )
+import qualified SystemsEvidencePreservationKernel as Kernel
 
 newtype EvidenceErasureStageRevision = EvidenceErasureStageRevision
   { unEvidenceErasureStageRevision :: Text
@@ -236,33 +237,81 @@ checkJustification bundle (key, justification) = do
     (Left (ErasureUnknownSubject key subject))
     Right
     (Map.lookup subject (baseCorrespondences bundle))
-  if Set.member (unSourceFactKey fact) (subjectCorrespondenceEvidenceRefs correspondence)
-    then Right ()
-    else Left (ErasureSourceFactNotEvidenceForSubject key subject fact)
+  let sourceSubjectExact =
+        Set.member (unSourceFactKey fact) (subjectCorrespondenceEvidenceRefs correspondence)
+  case Kernel.decideEvidenceErasureByFacts
+      Kernel.True (toKernelBool sourceSubjectExact) Kernel.True Kernel.True
+      Kernel.True Kernel.True Kernel.True Kernel.True Kernel.True Kernel.True of
+    Kernel.EvidenceErasureAcceptedDecision -> Right ()
+    Kernel.EvidenceErasureSourceSubjectDecision ->
+      Left (ErasureSourceFactNotEvidenceForSubject key subject fact)
+    _ -> kernelInvariant "erasure-source-subject"
   case erasureRepresentation justification of
-    ErasedRepresentationKey value
-      | Text.null value -> Left (ErasureEmptyRepresentation key)
-      | otherwise -> Right ()
+    ErasedRepresentationKey value ->
+      case Kernel.decideEvidenceErasureByFacts
+          Kernel.True Kernel.True Kernel.True (toKernelBool (not (Text.null value)))
+          Kernel.True Kernel.True Kernel.True Kernel.True Kernel.True Kernel.True of
+        Kernel.EvidenceErasureAcceptedDecision -> Right ()
+        Kernel.EvidenceErasureRepresentationDecision ->
+          Left (ErasureEmptyRepresentation key)
+        _ -> kernelInvariant "erasure-representation"
   let discharge = erasureDischargeEvidenceRefs justification
   if Set.null discharge
     then Left (ErasureEmptyDischargeEvidence key)
     else Right ()
-  mapM_ (requireDischargeEvidence key subject correspondence)
-    (Set.toAscList discharge)
+  let dischargeResult = mapM_ (requireDischargeEvidence key subject correspondence)
+        (Set.toAscList discharge)
+  case Kernel.decideEvidenceErasureByFacts
+      Kernel.True Kernel.True (toKernelBool (isRight dischargeResult)) Kernel.True
+      Kernel.True Kernel.True Kernel.True Kernel.True Kernel.True Kernel.True of
+    Kernel.EvidenceErasureAcceptedDecision -> dischargeResult
+    Kernel.EvidenceErasureDischargeSubjectDecision -> dischargeResult
+    _ -> kernelInvariant "erasure-discharge-subject"
   case erasureLastSemanticUse justification of
-    SemanticUseKey value
-      | Text.null value -> Left (ErasureEmptyLastSemanticUse key)
-      | otherwise -> Right ()
+    SemanticUseKey value ->
+      case Kernel.decideEvidenceErasureByFacts
+          Kernel.True Kernel.True Kernel.True Kernel.True
+          (toKernelBool (not (Text.null value))) Kernel.True Kernel.True Kernel.True
+          Kernel.True Kernel.True of
+        Kernel.EvidenceErasureAcceptedDecision -> Right ()
+        Kernel.EvidenceErasureLastUseDecision -> Left (ErasureEmptyLastSemanticUse key)
+        _ -> kernelInvariant "erasure-last-use"
   case erasureNoLaterConsumerBasis justification of
-    NoLaterConsumerRevision value
-      | Text.null value -> Left (ErasureEmptyNoLaterConsumerBasis key)
-      | otherwise -> Right ()
-  checkOptionalRevision key ErasureEmptySuccessorInvariant
-    unSuccessorInvariantRevision (erasureSuccessorInvariant justification)
-  checkOptionalRevision key ErasureEmptyRuntimeResidueChange
-    unRuntimeResidueChangeRevision (erasureRuntimeResidueChange justification)
-  checkOptionalRevision key ErasureEmptyCostChange
-    unErasureCostChangeRevision (erasureCostChange justification)
+    NoLaterConsumerRevision value ->
+      case Kernel.decideEvidenceErasureByFacts
+          Kernel.True Kernel.True Kernel.True Kernel.True Kernel.True
+          (toKernelBool (not (Text.null value))) Kernel.True Kernel.True Kernel.True
+          Kernel.True of
+        Kernel.EvidenceErasureAcceptedDecision -> Right ()
+        Kernel.EvidenceErasureConsumerClosureBasisDecision ->
+          Left (ErasureEmptyNoLaterConsumerBasis key)
+        _ -> kernelInvariant "erasure-consumer-closure-basis"
+  let successorWellFormed = optionalRevisionWellFormed
+        unSuccessorInvariantRevision (erasureSuccessorInvariant justification)
+  case Kernel.decideEvidenceErasureByFacts
+      Kernel.True Kernel.True Kernel.True Kernel.True Kernel.True Kernel.True
+      (toKernelBool successorWellFormed) Kernel.True Kernel.True Kernel.True of
+    Kernel.EvidenceErasureAcceptedDecision -> Right ()
+    Kernel.EvidenceErasureSuccessorRevisionDecision ->
+      Left (ErasureEmptySuccessorInvariant key)
+    _ -> kernelInvariant "erasure-successor-revision"
+  let runtimeWellFormed = optionalRevisionWellFormed
+        unRuntimeResidueChangeRevision (erasureRuntimeResidueChange justification)
+  case Kernel.decideEvidenceErasureByFacts
+      Kernel.True Kernel.True Kernel.True Kernel.True Kernel.True Kernel.True
+      Kernel.True (toKernelBool runtimeWellFormed) Kernel.True Kernel.True of
+    Kernel.EvidenceErasureAcceptedDecision -> Right ()
+    Kernel.EvidenceErasureRuntimeResidueRevisionDecision ->
+      Left (ErasureEmptyRuntimeResidueChange key)
+    _ -> kernelInvariant "erasure-runtime-residue-revision"
+  let costWellFormed = optionalRevisionWellFormed
+        unErasureCostChangeRevision (erasureCostChange justification)
+  case Kernel.decideEvidenceErasureByFacts
+      Kernel.True Kernel.True Kernel.True Kernel.True Kernel.True Kernel.True
+      Kernel.True Kernel.True (toKernelBool costWellFormed) Kernel.True of
+    Kernel.EvidenceErasureAcceptedDecision -> Right ()
+    Kernel.EvidenceErasureCostRevisionDecision -> Left (ErasureEmptyCostChange key)
+    _ -> kernelInvariant "erasure-cost-revision"
 
 checkUniqueSourceFacts
   :: EvidenceErasureStageBundle
@@ -299,19 +348,39 @@ checkConsumer bundle (key, consumer) = do
   if Set.member (unSourceFactKey fact) (subjectCorrespondenceEvidenceRefs correspondence)
     then Right ()
     else Left (LaterConsumerFactNotEvidenceForSubject key subject fact)
-  case laterConsumerBasis consumer of
-    ConsumerNeedsErasedRepresentation -> Right ()
-    ConsumerUsesSuccessorInvariant (SuccessorInvariantRevision value)
-      | Text.null value -> Left
-          (ErasureLiveConsumerMissingSuccessorInvariant
-            (ErasureJustificationKey "") key (SuccessorInvariantRevision value))
-      | otherwise -> Right ()
+  let basisResult = case laterConsumerBasis consumer of
+        ConsumerNeedsErasedRepresentation -> Right ()
+        ConsumerUsesSuccessorInvariant (SuccessorInvariantRevision value)
+          | Text.null value -> Left
+              (ErasureLiveConsumerMissingSuccessorInvariant
+                (ErasureJustificationKey "") key (SuccessorInvariantRevision value))
+          | otherwise -> Right ()
+  case Kernel.decideEvidenceErasureByFacts
+      Kernel.True Kernel.True Kernel.True Kernel.True Kernel.True Kernel.True
+      Kernel.True Kernel.True Kernel.True (toKernelBool (isRight basisResult)) of
+    Kernel.EvidenceErasureAcceptedDecision -> basisResult
+    Kernel.EvidenceErasureLaterConsumersDecision -> basisResult
+    _ -> kernelInvariant "erasure-consumer-basis"
 
 checkConsumerClosure
   :: EvidenceErasureStageBundle
   -> LaterSemanticConsumer
   -> Either EvidenceErasureVerificationError ()
-checkConsumerClosure bundle consumer = do
+checkConsumerClosure bundle consumer =
+  case Kernel.decideEvidenceErasureByFacts
+      Kernel.True Kernel.True Kernel.True Kernel.True Kernel.True Kernel.True
+      Kernel.True Kernel.True Kernel.True (toKernelBool (isRight nativeResult)) of
+    Kernel.EvidenceErasureAcceptedDecision -> nativeResult
+    Kernel.EvidenceErasureLaterConsumersDecision -> nativeResult
+    _ -> kernelInvariant "erasure-later-consumers"
+  where
+    nativeResult = nativeCheckConsumerClosure bundle consumer
+
+nativeCheckConsumerClosure
+  :: EvidenceErasureStageBundle
+  -> LaterSemanticConsumer
+  -> Either EvidenceErasureVerificationError ()
+nativeCheckConsumerClosure bundle consumer = do
   let fact = laterConsumerSourceFact consumer
       subject = laterConsumerSubject consumer
       matching =
@@ -352,16 +421,9 @@ requireDischargeEvidence key subject correspondence evidenceRef
   | Set.member evidenceRef (subjectCorrespondenceEvidenceRefs correspondence) = Right ()
   | otherwise = Left (ErasureDischargeEvidenceNotForSubject key subject evidenceRef)
 
-checkOptionalRevision
-  :: ErasureJustificationKey
-  -> (ErasureJustificationKey -> EvidenceErasureVerificationError)
-  -> (a -> Text)
-  -> Maybe a
-  -> Either EvidenceErasureVerificationError ()
-checkOptionalRevision _ _ _ Nothing = Right ()
-checkOptionalRevision key mkError render (Just value)
-  | Text.null (render value) = Left (mkError key)
-  | otherwise = Right ()
+optionalRevisionWellFormed :: (a -> Text) -> Maybe a -> Bool
+optionalRevisionWellFormed _ Nothing = True
+optionalRevisionWellFormed render (Just value) = not (Text.null (render value))
 
 baseSubjectStage :: EvidenceErasureStageBundle -> SubjectStageBundle
 baseSubjectStage = evidenceTransferStageBase . evidenceErasureStageBase
@@ -431,3 +493,15 @@ requireEqual mkError expected actual
 
 mapLeft :: (a -> b) -> Either a c -> Either b c
 mapLeft f = either (Left . f) Right
+
+toKernelBool :: Bool -> Kernel.Bool
+toKernelBool value = if value then Kernel.True else Kernel.False
+
+isRight :: Either a b -> Bool
+isRight value = case value of
+  Right _ -> True
+  Left _ -> False
+
+kernelInvariant :: String -> Either e a
+kernelInvariant label =
+  error ("SystemsEvidencePreservationKernel mismatch: " <> label)
