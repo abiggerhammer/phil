@@ -8,7 +8,11 @@ on:
       - 'proof/Phil/Core/DataSubject.v'
       - 'proof/Phil/Core/BoundarySubject.v'
       - 'proof/Phil/Core/SystemsEvidencePreservation.v'
+      - 'proof/Phil/Core/SystemsEvidencePreservationImplementation.v'
+      - 'proof/Phil/Core/SystemsEvidencePreservationImplementationExtraction.v'
+      - 'app/SystemsEvidencePreservationDecisionCorrespondenceMain.hs'
       - 'docs/phase-1/systems-evidence-preservation-proof-v1.md'
+      - 'docs/phase-1/systems-evidence-preservation-implementation-refinement-v1.md'
       - '.github/workflows/phase1-systems-evidence-proofs.yml'
       - 'src/Phil/Systems/EvidenceSubjectTransfer.hs'
       - 'src/Phil/Systems/EvidenceErasure.hs'
@@ -24,7 +28,11 @@ on:
       - 'proof/Phil/Core/DataSubject.v'
       - 'proof/Phil/Core/BoundarySubject.v'
       - 'proof/Phil/Core/SystemsEvidencePreservation.v'
+      - 'proof/Phil/Core/SystemsEvidencePreservationImplementation.v'
+      - 'proof/Phil/Core/SystemsEvidencePreservationImplementationExtraction.v'
+      - 'app/SystemsEvidencePreservationDecisionCorrespondenceMain.hs'
       - 'docs/phase-1/systems-evidence-preservation-proof-v1.md'
+      - 'docs/phase-1/systems-evidence-preservation-implementation-refinement-v1.md'
       - '.github/workflows/phase1-systems-evidence-proofs.yml'
       - 'src/Phil/Systems/EvidenceSubjectTransfer.hs'
       - 'src/Phil/Systems/EvidenceErasure.hs'
@@ -44,7 +52,7 @@ jobs:
       options: --user root
     steps:
       - uses: actions/checkout@v4
-      - name: Compile certified predecessors and PHIL-SYS-EVID-001
+      - name: Compile certified predecessors, PHIL-SYS-EVID-001, and implementation correspondence
         shell: bash
         run: |
           set -euo pipefail
@@ -54,7 +62,14 @@ jobs:
           rocq c -Q proof/Phil Phil proof/Phil/Core/DataSubject.v
           rocq c -Q proof/Phil Phil proof/Phil/Core/BoundarySubject.v
           rocq c -Q proof/Phil Phil proof/Phil/Core/SystemsEvidencePreservation.v
-      - name: Record proof identities
+          rocq c -Q proof/Phil Phil proof/Phil/Core/SystemsEvidencePreservationImplementation.v
+          rm -f SystemsEvidencePreservationKernel.hs
+          rocq c -Q proof/Phil Phil proof/Phil/Core/SystemsEvidencePreservationImplementationExtraction.v
+          test -s SystemsEvidencePreservationKernel.hs
+          grep -q 'decideEvidenceErasureByFacts' SystemsEvidencePreservationKernel.hs
+          grep -q 'decideAssumptionDependencyByFacts' SystemsEvidencePreservationKernel.hs
+          grep -q 'decideSystemsEvidenceByFacts' SystemsEvidencePreservationKernel.hs
+      - name: Record proof and extraction identities
         shell: bash
         run: |
           set -euo pipefail
@@ -62,6 +77,11 @@ jobs:
           cp \
             proof/Phil/Core/SystemsEvidencePreservation.v \
             proof/Phil/Core/SystemsEvidencePreservation.vo \
+            proof/Phil/Core/SystemsEvidencePreservationImplementation.v \
+            proof/Phil/Core/SystemsEvidencePreservationImplementation.vo \
+            proof/Phil/Core/SystemsEvidencePreservationImplementationExtraction.v \
+            proof/Phil/Core/SystemsEvidencePreservationImplementationExtraction.vo \
+            SystemsEvidencePreservationKernel.hs \
             systems-evidence-proof/
           sha256sum \
             proof/Phil/Assurance/Manifest.v \
@@ -70,6 +90,9 @@ jobs:
             proof/Phil/Core/BoundarySubject.v \
             proof/Phil/Core/SystemsEvidencePreservation.v \
             proof/Phil/Core/SystemsEvidencePreservation.vo \
+            proof/Phil/Core/SystemsEvidencePreservationImplementation.v \
+            proof/Phil/Core/SystemsEvidencePreservationImplementation.vo \
+            SystemsEvidencePreservationKernel.hs \
             > systems-evidence-proof/PHIL-SYS-EVID-001.proof.sha256
           {
             echo 'obligation=PHIL-SYS-EVID-001'
@@ -94,6 +117,20 @@ jobs:
           cabal-version: 'latest'
       - name: Build ordinary regression substrate
         run: cabal build all --enable-tests
+      - uses: actions/download-artifact@v4
+        with:
+          name: rocq-systems-evidence-proof
+          path: systems-evidence-proof
+      - name: Typecheck and execute extracted SYS-EVID controls
+        run: |
+          set -euo pipefail
+          ghc -Wall -Werror -Wno-unused-imports -fno-code \
+            systems-evidence-proof/SystemsEvidencePreservationKernel.hs
+          ghc -Wall -Werror -Wno-unused-imports \
+            -isystems-evidence-proof \
+            app/SystemsEvidencePreservationDecisionCorrespondenceMain.hs \
+            -o systems-evidence-kernel-controls
+          ./systems-evidence-kernel-controls
       - name: Strict typecheck SYS-011 through SYS-013 production relations
         run: |
           set -euo pipefail
@@ -116,3 +153,25 @@ jobs:
           cabal exec -- runghc -Wall -Werror -Wno-name-shadowing -Wno-unused-imports -isrc test/Phase1EvidenceSubjectTransferMain.hs
           cabal exec -- runghc -Wall -Werror -Wno-name-shadowing -Wno-unused-imports -isrc test/Phase1EvidenceErasureMain.hs
           cabal exec -- runghc -Wall -Werror -Wno-name-shadowing -Wno-unused-imports -isrc test/Phase1AssumptionDependencyMain.hs
+      - name: Record implementation-refinement staging identities
+        run: |
+          set -euo pipefail
+          mkdir -p systems-evidence-implementation-correspondence
+          sha256sum \
+            systems-evidence-proof/SystemsEvidencePreservationKernel.hs \
+            src/Phil/Systems/EvidenceSubjectTransfer.hs \
+            src/Phil/Systems/EvidenceErasure.hs \
+            src/Phil/Systems/AssumptionDependency.hs \
+            test/Phase1EvidenceSubjectTransferMain.hs \
+            test/Phase1EvidenceErasureMain.hs \
+            test/Phase1AssumptionDependencyMain.hs \
+            app/SystemsEvidencePreservationDecisionCorrespondenceMain.hs \
+            proof/Phil/Core/SystemsEvidencePreservationImplementation.v \
+            docs/phase-1/systems-evidence-preservation-implementation-refinement-v1.md \
+            > systems-evidence-implementation-correspondence/PHIL-SYS-EVID-001.staging.sha256
+          cat systems-evidence-implementation-correspondence/PHIL-SYS-EVID-001.staging.sha256
+      - uses: actions/upload-artifact@v4
+        with:
+          name: systems-evidence-implementation-correspondence
+          path: systems-evidence-implementation-correspondence
+          if-no-files-found: error
