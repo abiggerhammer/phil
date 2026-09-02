@@ -37,7 +37,7 @@ Inductive SyntaxPathStep : Type :=
 Definition SyntaxPath : Type := list SyntaxPathStep.
 
 Definition descend (path : SyntaxPath) (step : SyntaxPathStep) : SyntaxPath :=
-  path ++ [step].
+  List.app path [step].
 
 Fixpoint lookupRule
   (name : string)
