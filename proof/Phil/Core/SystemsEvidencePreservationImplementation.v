@@ -1,5 +1,5 @@
-From Phil.Core Require Import SystemsEvidencePreservation.
 From Phil.Assurance Require Import EvidenceUse.
+From Phil.Core Require Import DataSubject BoundarySubject SystemsEvidencePreservation.
 
 Inductive EvidenceErasureDecision : Type :=
 | EvidenceErasureAcceptedDecision
