@@ -10,6 +10,7 @@ import Phil.Core.Focusing
   )
 import Phil.Core.Static
   ( declareOpaqueClaim
+  , declareTransparentClaim
   , emptyStaticContext
   )
 import Phil.Core.Syntax
@@ -20,6 +21,12 @@ import Phil.Core.Syntax
   , Ty (..)
   )
 import Phil.Surface.Check.Support (emptySurfaceState)
+import Phil.Surface.GrammarV1.CallablePropositions
+  ( grammarV1CallableAssumptions
+  , grammarV1CallableEnsures
+  , grammarV1CallableObligations
+  , grammarV1CallableRequires
+  )
 import Phil.Surface.GrammarV1.CallableSignature
   ( grammarV1CheckedCallableSignature
   )
@@ -36,6 +43,8 @@ main = do
         (expectFixtureReject "rejected/01-refinement-missing-bar.phil")
     , test "SURF-008 primitive callable parameters establish exact checked result scope"
         checkedCallableSignaturesPreserveScope
+    , test "SURF-008 callable proposition clauses preserve category, order, scope, and Core authority"
+        checkedCallablePropositionsPreserveCategories
     ]
   if and results then pure () else exitFailure
 
@@ -128,6 +137,92 @@ checkedCallableSignaturesPreserveScope = do
     "checked callable signature routing changed name/parameter/result meaning or collapsed competence boundaries: "
       <> show actual
 
+checkedCallablePropositionsPreserveCategories :: Either String ()
+checkedCallablePropositionsPreserveCategories = do
+  context1 <- mapLeft show $
+    declareOpaqueClaim
+      "NeedsNat"
+      [(Name "n", SortNat)]
+      emptyStaticContext
+  context2 <- mapLeft show $
+    declareOpaqueClaim
+      "Flagged"
+      [(Name "flag", SortBool)]
+      context1
+  context <- mapLeft show $
+    declareTransparentClaim
+      "Positive"
+      [(Name "x", SortUInt 8)]
+      (LessThan
+        (RefNat 0)
+        (RefToNat (RefVar (Name "x"))))
+      context2
+  sourceFile <- mapLeft show $
+    parseGrammarV1StructuralSource "surf008-callable-propositions" propositionSource
+  declarations <- mapM callableDeclaration (grammarV1TopLevelDecls sourceFile)
+  case declarations of
+    [clauses, unknown, specialized, unresolved, duplicate, generic, empty] -> do
+      let x = RefVar (Name "x")
+          ok = RefVar (Name "ok")
+      assert
+        (grammarV1CallableRequires context emptySurfaceState clauses
+          == Just
+              (Right
+                [ (Atom "Flagged" [ok], [])
+                , (Atom "NeedsNat" [RefToNat x], [InsertedUIntToNat x])
+                ]))
+        "callable requires lost source order, category, or Core focusing trace"
+      assert
+        (grammarV1CallableEnsures context emptySurfaceState clauses
+          == Just
+              (Right
+                [ ( LessThan (RefNat 0) (RefToNat x)
+                  , [ExpandedTransparentClaim "Positive"]
+                  )
+                ]))
+        "callable ensures did not preserve transparent Core claim semantics"
+      assert
+        (grammarV1CallableObligations context emptySurfaceState clauses
+          == Just
+              (Right
+                [ (Atom "NeedsNat" [RefToNat x], [InsertedUIntToNat x])
+                ]))
+        "callable residual obligation was dropped or reclassified"
+      assert
+        (grammarV1CallableAssumptions context emptySurfaceState clauses
+          == Just (Right [(Atom "Flagged" [ok], [])]))
+        "callable assumption was dropped or reclassified"
+      assert
+        (grammarV1CallableEnsures context emptySurfaceState unknown
+          == Just (Left (UnknownClaim "Missing")))
+        "callable Core rejection collapsed into source non-competence"
+      assert
+        (grammarV1CallableRequires context emptySurfaceState specialized == Nothing)
+        "specialized callable claim reached Core despite structural non-competence"
+      assert
+        (grammarV1CallableEnsures context emptySurfaceState unresolved == Nothing)
+        "unresolved callable proposition argument reached Core"
+      assert
+        (grammarV1CallableEnsures context emptySurfaceState duplicate == Nothing)
+        "duplicate callable parameter scope was silently accepted"
+      assert
+        (grammarV1CallableRequires context emptySurfaceState generic == Nothing)
+        "generic callable entered primitive proposition-clause scope"
+      assert
+        (grammarV1CallableRequires context emptySurfaceState empty == Just (Right []))
+        "absent callable requires did not preserve exact empty category"
+      assert
+        (grammarV1CallableEnsures context emptySurfaceState empty == Just (Right []))
+        "absent callable ensures did not preserve exact empty category"
+      assert
+        (grammarV1CallableObligations context emptySurfaceState empty == Just (Right []))
+        "absent callable obligations did not preserve exact empty category"
+      assert
+        (grammarV1CallableAssumptions context emptySurfaceState empty == Just (Right []))
+        "absent callable assumptions did not preserve exact empty category"
+    other -> Left
+      ("expected seven callable proposition fixtures, got " <> show (length other))
+
 callableDeclaration
   :: Located GrammarV1TopLevelDecl
   -> Either String GrammarV1CallableContractDecl
@@ -145,6 +240,17 @@ signatureSource = Text.unlines
   , "callable Generic[T : Type](x : U8) -> U8 {}"
   , "callable RefinedParam(x : {v : U8 | v > 0}) -> U8 {}"
   , "callable TupleResult(x : U8) -> (U8, Bool) {}"
+  ]
+
+propositionSource :: Text.Text
+propositionSource = Text.unlines
+  [ "callable Clauses(x : U8, ok : Bool) -> U8 { requires Flagged(ok); requires NeedsNat(x); ensures Positive(x); obligation NeedsNat(x); assumes Flagged(ok); }"
+  , "callable Unknown(x : U8) -> U8 { ensures Missing(x); }"
+  , "callable Specialized(x : U8, ok : Bool) -> U8 { requires Flagged[U8](ok); }"
+  , "callable Unresolved(x : U8) -> U8 { ensures Positive(missing); }"
+  , "callable Duplicate(x : U8, x : Bool) -> U8 { ensures true; }"
+  , "callable Generic[T : Type](x : U8) -> U8 { requires true; }"
+  , "callable Empty(x : U8) -> U8 {}"
   ]
 
 assertRefinementParameter :: GrammarV1Type -> Either String ()
