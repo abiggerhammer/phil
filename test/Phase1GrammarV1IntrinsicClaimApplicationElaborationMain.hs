@@ -6,6 +6,10 @@ import qualified Data.Text as Text
 import Phil.Core.Static
   ( ClaimDecl (..)
   , ClaimDefinition (..)
+  , StaticContext
+  , StaticError (..)
+  , emptyStaticContext
+  , lookupClaim
   )
 import Phil.Core.Syntax
   ( Mode (..)
@@ -31,6 +35,7 @@ import Phil.Surface.GrammarV1.BoundClaimApplication
   )
 import Phil.Surface.GrammarV1.ClaimDeclaration
   ( grammarV1ClaimDeclaration
+  , grammarV1RegisterClaimDeclaration
   )
 import Phil.Surface.GrammarV1.Elaborate (grammarV1IntrinsicClaimApplication)
 import Phil.Surface.GrammarV1.Parser
@@ -46,6 +51,8 @@ main = do
         boundClaimApplicationsPreserveMeaning
     , test "SURF-008 primitive Grammar-v1 claim declarations route to exact Core ClaimDecl semantics"
         claimDeclarationsPreserveMeaning
+    , test "SURF-008 Grammar-v1 claims register only through Core StaticContext authority"
+        claimRegistrationUsesCoreAuthority
     ]
   if and results then pure () else exitFailure
 
@@ -174,6 +181,49 @@ claimDeclarationsPreserveMeaning = do
     "claim declaration routing changed name/parameter/body meaning or admitted a deferred declaration form: "
       <> show actual
 
+claimRegistrationUsesCoreAuthority :: Either String ()
+claimRegistrationUsesCoreAuthority = do
+  sourceFile <- mapLeft show $
+    parseGrammarV1StructuralSource "surf008-claim-registration" registrationSource
+  declarations <- mapM claimDeclaration (grammarV1TopLevelDecls sourceFile)
+  case declarations of
+    [first, second, duplicate, deferred] -> do
+      context1 <- requireRegistered "First" first emptyStaticContext
+      context2 <- requireRegistered "Second" second context1
+      let firstExpected = ClaimDecl
+            { claimParameters = [(Name "x", SortUInt 8)]
+            , claimDefinition = OpaqueClaim
+            }
+          secondExpected = ClaimDecl
+            { claimParameters = [(Name "ok", SortBool)]
+            , claimDefinition = TransparentClaim
+                (Atom "Ready" [RefVar (Name "ok")])
+            }
+      assert (lookupClaim "First" context2 == Just firstExpected)
+        "Core StaticContext did not preserve the exact first registered claim"
+      assert (lookupClaim "Second" context2 == Just secondExpected)
+        "Core StaticContext did not preserve the exact second registered claim"
+      case grammarV1RegisterClaimDeclaration duplicate context2 of
+        Just (Left (DuplicateClaim "First")) -> Right ()
+        other -> Left
+          ("duplicate claim did not reach Core's DuplicateClaim authority: " <> show other)
+      case grammarV1RegisterClaimDeclaration deferred context2 of
+        Nothing -> Right ()
+        other -> Left
+          ("deferred generic claim reached Core registration unexpectedly: " <> show other)
+    other -> Left
+      ("expected four claim declarations for registration pressure, got " <> show (length other))
+
+requireRegistered
+  :: String
+  -> GrammarV1ClaimDecl
+  -> StaticContext
+  -> Either String StaticContext
+requireRegistered label declaration context =
+  case grammarV1RegisterClaimDeclaration declaration context of
+    Just (Right nextContext) -> Right nextContext
+    other -> Left (label <> " did not register successfully: " <> show other)
+
 bind :: Text.Text -> Mode -> Ty -> SurfaceState -> Either String SurfaceState
 bind name mode ty state =
   mapLeft show $
@@ -244,6 +294,14 @@ declarationSource = Text.unlines
   , "claim Required requires { proposition true; } (x : U8);"
   , "claim Duplicate(x : U8, x : U8);"
   , "claim BadBody(x : U8) = missing < x;"
+  ]
+
+registrationSource :: Text.Text
+registrationSource = Text.unlines
+  [ "claim First(x : U8);"
+  , "claim Second(ok : Bool) = Ready(ok);"
+  , "claim First(flag : Bool);"
+  , "claim Deferred[T : Type](x : U8);"
   ]
 
 assert :: Bool -> String -> Either String ()
