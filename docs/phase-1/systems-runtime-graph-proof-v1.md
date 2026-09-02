@@ -20,13 +20,17 @@ A valid runtime claim/cost graph has:
 4. a functional **contribution → final charge** relation, so one contribution cannot be counted under two physical/accounting identities;
 5. exact class/shape compatibility for contributions that share a final charge; incompatible class or shape cannot be aggregated;
 6. claim→charge lineage derived through exact claim→site→contribution→charge edges rather than claims owning physical charge entries directly;
-7. reuse of the Certified `PHIL-LLVM-RUNTIME-SYM-001` theorem: revision/evidence/use metadata and claim-set cardinality do not rename or multiply the linker-visible physical primitive identity.
+7. reuse of target-neutral `PHIL-TARGET-RUNTIME-PRIM-001`: assurance revision/evidence/use metadata and claim-set cardinality do not rename the selected physical primitive/profile entry identity.
+
+`PHIL-TARGET-RUNTIME-PRIM-001` intentionally does **not** say that the target entry is a linker symbol. A concrete target profile may refine the entry identity to an LLVM linker symbol, a WebAssembly import/function/table identity, an EVM opcode/precompile/runtime entry, an SBF syscall/CPI target, or another exact target-visible mechanism. The existing `PHIL-LLVM-RUNTIME-SYM-001` theorem is retained as one LLVM-specific instantiation plus its separate LLVM-call multiplicity proof.
 
 Together these facts capture the assurance-relevant part of “shared mechanism cost is charged once”: several site-owned contributions may point to one final charge identity, while the final charge remains one identity and retains the contributing lineage. The theorem does **not** assert universal numeric performance values.
 
 ## Deliberate boundaries
 
 The Rocq theorem does not duplicate concrete Haskell `Text`, `Map`, or `Set` representation, canonical StageContract serialization, or selected-profile cost vocabulary. Those remain implementation/correspondence boundaries.
+
+Target-specific entry naming, calling convention, import/link semantics, opcode/syscall selection, runtime implementation correctness, and target call-site multiplicity remain target-profile refinement questions. They are not imported into the generic Systems runtime graph.
 
 The dedicated workflow reruns the unchanged production correspondence:
 
