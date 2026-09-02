@@ -1,7 +1,7 @@
 module Main where
 
 import System.Exit (exitFailure)
-import SystemsEvidencePreservationKernel
+import qualified SystemsEvidencePreservationKernel as Kernel
 
 assert :: String -> Bool -> IO ()
 assert label condition =
@@ -11,48 +11,64 @@ assert label condition =
       putStrLn ("FAIL: " <> label)
       exitFailure
 
-erasureTag :: EvidenceErasureDecision -> String
+toKernelBool :: Bool -> Kernel.Bool
+toKernelBool value =
+  if value then Kernel.True else Kernel.False
+
+erasureTag :: Kernel.EvidenceErasureDecision -> String
 erasureTag decision = case decision of
-  EvidenceErasureAcceptedDecision -> "accepted"
-  EvidenceErasureAssuranceUseDecision -> "assurance-use"
-  EvidenceErasureSourceSubjectDecision -> "source-subject"
-  EvidenceErasureDischargeSubjectDecision -> "discharge-subject"
-  EvidenceErasureRepresentationDecision -> "representation"
-  EvidenceErasureLastUseDecision -> "last-use"
-  EvidenceErasureConsumerClosureBasisDecision -> "closure-basis"
-  EvidenceErasureSuccessorRevisionDecision -> "successor-revision"
-  EvidenceErasureRuntimeResidueRevisionDecision -> "runtime-residue-revision"
-  EvidenceErasureCostRevisionDecision -> "cost-revision"
-  EvidenceErasureLaterConsumersDecision -> "later-consumers"
+  Kernel.EvidenceErasureAcceptedDecision -> "accepted"
+  Kernel.EvidenceErasureAssuranceUseDecision -> "assurance-use"
+  Kernel.EvidenceErasureSourceSubjectDecision -> "source-subject"
+  Kernel.EvidenceErasureDischargeSubjectDecision -> "discharge-subject"
+  Kernel.EvidenceErasureRepresentationDecision -> "representation"
+  Kernel.EvidenceErasureLastUseDecision -> "last-use"
+  Kernel.EvidenceErasureConsumerClosureBasisDecision -> "closure-basis"
+  Kernel.EvidenceErasureSuccessorRevisionDecision -> "successor-revision"
+  Kernel.EvidenceErasureRuntimeResidueRevisionDecision -> "runtime-residue-revision"
+  Kernel.EvidenceErasureCostRevisionDecision -> "cost-revision"
+  Kernel.EvidenceErasureLaterConsumersDecision -> "later-consumers"
 
-assumptionTag :: AssumptionDependencyDecision -> String
+assumptionTag :: Kernel.AssumptionDependencyDecision -> String
 assumptionTag decision = case decision of
-  AssumptionDependencyAcceptedDecision -> "accepted"
-  AssumptionRegistryDecision -> "registry"
-  AssumptionAuthorityDecision -> "authority"
-  AssumptionValidityScopeDecision -> "validity-scope"
-  AssumptionForwardDecision -> "forward"
-  AssumptionForwardScopeDecision -> "forward-scope"
-  AssumptionReverseDecision -> "reverse"
+  Kernel.AssumptionDependencyAcceptedDecision -> "accepted"
+  Kernel.AssumptionRegistryDecision -> "registry"
+  Kernel.AssumptionAuthorityDecision -> "authority"
+  Kernel.AssumptionValidityScopeDecision -> "validity-scope"
+  Kernel.AssumptionForwardDecision -> "forward"
+  Kernel.AssumptionForwardScopeDecision -> "forward-scope"
+  Kernel.AssumptionReverseDecision -> "reverse"
 
-systemsTag :: SystemsEvidenceDecision -> String
+systemsTag :: Kernel.SystemsEvidenceDecision -> String
 systemsTag decision = case decision of
-  SystemsEvidenceAcceptedDecision -> "accepted"
-  SystemsEvidenceSubjectTransferDecision -> "subject-transfer"
-  SystemsEvidenceErasureDecision -> "erasure"
-  SystemsEvidenceAssumptionDecision -> "assumption"
+  Kernel.SystemsEvidenceAcceptedDecision -> "accepted"
+  Kernel.SystemsEvidenceSubjectTransferDecision -> "subject-transfer"
+  Kernel.SystemsEvidenceErasureDecision -> "erasure"
+  Kernel.SystemsEvidenceAssumptionDecision -> "assumption"
 
 checkErasure :: String -> String -> Bool -> Bool -> Bool -> Bool -> Bool -> Bool -> Bool -> Bool -> Bool -> Bool -> IO ()
 checkErasure label expected a b c d e f g h i j =
-  assert label (erasureTag (decideEvidenceErasureByFacts a b c d e f g h i j) == expected)
+  assert label
+    (erasureTag
+      (Kernel.decideEvidenceErasureByFacts
+        (toKernelBool a) (toKernelBool b) (toKernelBool c) (toKernelBool d)
+        (toKernelBool e) (toKernelBool f) (toKernelBool g) (toKernelBool h)
+        (toKernelBool i) (toKernelBool j)) == expected)
 
 checkAssumption :: String -> String -> Bool -> Bool -> Bool -> Bool -> Bool -> Bool -> IO ()
 checkAssumption label expected a b c d e f =
-  assert label (assumptionTag (decideAssumptionDependencyByFacts a b c d e f) == expected)
+  assert label
+    (assumptionTag
+      (Kernel.decideAssumptionDependencyByFacts
+        (toKernelBool a) (toKernelBool b) (toKernelBool c)
+        (toKernelBool d) (toKernelBool e) (toKernelBool f)) == expected)
 
 checkSystems :: String -> String -> Bool -> Bool -> Bool -> IO ()
 checkSystems label expected a b c =
-  assert label (systemsTag (decideSystemsEvidenceByFacts a b c) == expected)
+  assert label
+    (systemsTag
+      (Kernel.decideSystemsEvidenceByFacts
+        (toKernelBool a) (toKernelBool b) (toKernelBool c)) == expected)
 
 main :: IO ()
 main = do
