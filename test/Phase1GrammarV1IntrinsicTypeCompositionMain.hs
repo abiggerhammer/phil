@@ -3,6 +3,15 @@
 module Main (main) where
 
 import qualified Data.Text as Text
+import Phil.Core.Focusing
+  ( FocusStep (..)
+  , FocusingError (..)
+  )
+import Phil.Core.Static
+  ( declareOpaqueClaim
+  , declareTransparentClaim
+  , emptyStaticContext
+  )
 import Phil.Core.Syntax
   ( GrammarId (..)
   , Mode (..)
@@ -24,6 +33,7 @@ import Phil.Surface.Check.Types
   , SurfaceState
   )
 import Phil.Surface.GrammarV1.BoundType (grammarV1BoundType)
+import Phil.Surface.GrammarV1.CheckedType (grammarV1CheckedType)
 import Phil.Surface.GrammarV1.IntrinsicType (grammarV1IntrinsicType)
 import Phil.Surface.GrammarV1.Parser
 import Phil.Surface.Syntax (Located (..))
@@ -36,6 +46,8 @@ main = do
         intrinsicTypesPreserveMeaning
     , test "SURF-008 binding-aware type composition preserves richer verified fragments and focused coercion"
         boundTypesPreserveMeaning
+    , test "SURF-008 checked type composition preserves structural competence and Core focusing outcomes"
+        checkedTypesPreserveCompetence
     ]
   if and results then pure () else exitFailure
 
@@ -150,6 +162,68 @@ boundTypesPreserveMeaning = do
       , Nothing
       ]
 
+checkedTypesPreserveCompetence :: Either String ()
+checkedTypesPreserveCompetence = do
+  state1 <- bind "n" Unrestricted (TyOpaqueSorted "NatIndex" SortNat) emptySurfaceState
+  state2 <- bind "flag" Unrestricted TyBool state1
+  state <- bind "u8" Unrestricted (TyUInt 8) state2
+  context1 <- mapLeft show $
+    declareOpaqueClaim "Flagged" [(Name "flag", SortBool)] emptyStaticContext
+  context2 <- mapLeft show $
+    declareOpaqueClaim "NeedsNat" [(Name "n", SortNat)] context1
+  context <- mapLeft show $
+    declareTransparentClaim
+      "Positive"
+      [(Name "x", SortUInt 8)]
+      (LessThan
+        (RefNat 0)
+        (RefToNat (RefVar (Name "x"))))
+      context2
+  sourceFile <- mapLeft show $
+    parseGrammarV1StructuralSource "surf008-checked-types" checkedSource
+  sourceTypes <- mapM typeAliasTarget (grammarV1TopLevelDecls sourceFile)
+  let n = RefVar (Name "n")
+      flag = RefVar (Name "flag")
+      u8 = RefVar (Name "u8")
+      v = RefVar (Name "v")
+      actual = map (grammarV1CheckedType context state) sourceTypes
+      expected =
+        [ Just (Right (TyUnit, []))
+        , Just (Right (TyBytes (RefAdd n (RefNat 1)), []))
+        , Just (Right (TyFrame (GrammarId "Hello"), []))
+        , Just (Right (TyOpaque "Other", []))
+        , Just (Right (TyProof (Atom "Flagged" [flag]), []))
+        , Just
+            (Right
+              ( TyProof (Atom "NeedsNat" [RefToNat u8])
+              , [InsertedUIntToNat u8]
+              ))
+        , Just (Left (UnknownClaim "Missing"))
+        , Just
+            (Right
+              ( TyRefined
+                  (Name "v")
+                  (TyUInt 8)
+                  (LessThan (RefNat 0) (RefToNat v))
+              , [ExpandedTransparentClaim "Positive"]
+              ))
+        , Just
+            (Right
+              ( TyRefined
+                  (Name "v")
+                  (TyUInt 8)
+                  (Atom "NeedsNat" [RefToNat v])
+              , [InsertedUIntToNat v]
+              ))
+        , Just (Left (UnknownClaim "Missing"))
+        , Nothing
+        , Nothing
+        , Nothing
+        ]
+  assert (actual == expected) $
+    "checked type composition changed type/trace meaning or collapsed source non-competence with Core rejection: "
+      <> show actual
+
 intrinsicType :: Located GrammarV1TopLevelDecl -> Either String (Maybe Ty)
 intrinsicType (Located _ topLevel) =
   case locatedValue (grammarV1Declaration topLevel) of
@@ -165,6 +239,15 @@ boundType state (Located _ topLevel) =
   case locatedValue (grammarV1Declaration topLevel) of
     GrammarV1TypeAliasDeclaration aliasDecl ->
       Right (grammarV1BoundType state (locatedValue (grammarV1TypeAliasTarget aliasDecl)))
+    other -> Left ("expected type alias declaration, got " <> show other)
+
+typeAliasTarget
+  :: Located GrammarV1TopLevelDecl
+  -> Either String GrammarV1Type
+typeAliasTarget (Located _ topLevel) =
+  case locatedValue (grammarV1Declaration topLevel) of
+    GrammarV1TypeAliasDeclaration aliasDecl ->
+      Right (locatedValue (grammarV1TypeAliasTarget aliasDecl))
     other -> Left ("expected type alias declaration, got " <> show other)
 
 bind :: Text.Text -> Mode -> Ty -> SurfaceState -> Either String SurfaceState
@@ -225,6 +308,23 @@ boundSource = Text.unlines
   , "type QualifiedNamedT = pkg.Other;"
   , "type SpecializedNamedT = Other[U32];"
   , "type TupleT = (U32, Bool);"
+  ]
+
+checkedSource :: Text.Text
+checkedSource = Text.unlines
+  [ "type UnitT = Unit;"
+  , "type BytesT = Bytes[n + 1];"
+  , "type FrameT = Frame[Hello];"
+  , "type NamedT = Other;"
+  , "type OpaqueProof = Proof[Flagged(flag)];"
+  , "type CoercingProof = Proof[NeedsNat(u8)];"
+  , "type UnknownProof = Proof[Missing(flag)];"
+  , "type TransparentRefinement = {v : U8 | Positive(v)};"
+  , "type CoercingRefinement = {v : U8 | NeedsNat(v)};"
+  , "type UnknownRefinement = {v : U8 | Missing(v)};"
+  , "type SpecializedProof = Proof[Flagged[U8](flag)];"
+  , "type WrongSortBytes = Bytes[flag];"
+  , "type TupleT = (U8, Bool);"
   ]
 
 assert :: Bool -> String -> Either String ()
