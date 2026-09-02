@@ -5,8 +5,29 @@ module Main (main) where
 import qualified Data.Text as Text
 import qualified Data.Text.IO as TextIO
 import Phil.Core.BoundaryDirection (BoundaryDirection (..))
+import Phil.Core.Syntax
+  ( Mode (..)
+  , Name (..)
+  , Proposition (..)
+  , RefSort (..)
+  , RefTerm (..)
+  , Ty (..)
+  )
+import Phil.Surface.Check.Support
+  ( emptySurfaceState
+  , insertBindingMeta
+  , syntheticSpan
+  )
+import Phil.Surface.Check.Types
+  ( BindingMeta (..)
+  , SurfaceShape (..)
+  , SurfaceState
+  )
 import Phil.Surface.GrammarV1.BoundaryDirection
   ( grammarV1BoundaryDirection
+  )
+import Phil.Surface.GrammarV1.BoundaryValueType
+  ( grammarV1BoundaryValueType
   )
 import Phil.Surface.GrammarV1.Parser
 import Phil.Surface.Syntax (Located (..))
@@ -25,6 +46,8 @@ main = do
         boundaryMissingSemicolonRejects
     , test "SURF-008 Grammar-v1 boundary items route to exact Core direction"
         boundaryDirectionsRouteExactly
+    , test "SURF-008 Grammar-v1 boundary value types inherit exact verified type meaning"
+        boundaryValueTypesRouteExactly
     ]
   if and results then pure () else exitFailure
 
@@ -110,6 +133,47 @@ boundaryDirectionsRouteExactly = do
   assert (actual == expected) $
     "boundary direction routing changed explicit receive/send meaning or invented a default: "
       <> show actual
+
+boundaryValueTypesRouteExactly :: Either String ()
+boundaryValueTypesRouteExactly = do
+  state <- bind "n" Unrestricted (TyOpaqueSorted "NatIndex" SortNat) emptySurfaceState
+  primitive <- parseBoundary "boundary-value-primitive"
+    "boundary Word : U32 { canonical; }"
+  contextualBytes <- parseBoundary "boundary-value-bytes"
+    "boundary Packet : Bytes[n + 1] { canonical; }"
+  proofType <- parseBoundary "boundary-value-proof"
+    "boundary Evidence : Proof[n < 7] { canonical; }"
+  focusedRefinement <- parseBoundary "boundary-value-refinement"
+    "boundary Positive : {v : U8 | v > 0} { canonical; }"
+  tupleType <- parseBoundary "boundary-value-tuple"
+    "boundary Pair : (U32, Bool) { canonical; }"
+  let actual = map (grammarV1BoundaryValueType state)
+        [ primitive
+        , contextualBytes
+        , proofType
+        , focusedRefinement
+        , tupleType
+        ]
+      n = RefVar (Name "n")
+      expected =
+        [ Just (TyUInt 32)
+        , Just (TyBytes (RefAdd n (RefNat 1)))
+        , Just (TyProof (LessThan n (RefNat 7)))
+        , Just
+            (TyRefined
+              (Name "v")
+              (TyUInt 8)
+              (LessThan (RefNat 0) (RefToNat (RefVar (Name "v")))))
+        , Nothing
+        ]
+  assert (actual == expected) $
+    "boundary value-type routing changed verified type meaning or admitted an unresolved type: "
+      <> show actual
+
+bind :: Text.Text -> Mode -> Ty -> SurfaceState -> Either String SurfaceState
+bind name mode ty state =
+  mapLeft show $
+    insertBindingMeta syntheticSpan name (BindingMeta mode ty PlainShape) state
 
 parseBoundary :: Text.Text -> Text.Text -> Either String GrammarV1BoundaryDecl
 parseBoundary label source =
