@@ -324,9 +324,9 @@ Proof.
   specialize (Huses use Hviolating).
   unfold CarrierUseAccounted in Huses.
   destruct (carrierUseDisposition model use) as [|carrier|boundary] eqn:Hdisp.
-  - left. exact Hdisp.
-  - right. left. exists carrier. split; assumption.
-  - right. right. exists boundary. split; assumption.
+  - left. reflexivity.
+  - right. left. exists carrier. split; [reflexivity | exact Huses].
+  - right. right. exists boundary. split; [reflexivity | exact Huses].
 Qed.
 
 Theorem certified_active_transfer_cannot_silently_drop_carrier :
