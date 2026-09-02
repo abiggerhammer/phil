@@ -83,5 +83,7 @@ jobs:
         run: cabal exec -- runghc -Wall -Werror -isrc test/Phase1PortableSourceLineageMain.hs
       - name: SURF-006 exact Grammar-v1 source-bundle revision binding
         run: cabal exec -- runghc -Wall -Werror -isrc test/Phase1GrammarRevisionBindingMain.hs
+      - name: DEP-001 exact RuntimeBound carrier binding
+        run: cabal exec -- runghc -Wall -Werror -isrc test/Phase1RuntimeCarrierBindingMain.hs
       - name: DEP-002 RuntimeBound carrier coverage across process/domain transfer
         run: cabal exec -- runghc -Wall -Werror -isrc test/Phase1RuntimeCarrierCoverageMain.hs
