@@ -175,7 +175,7 @@ Ltac synchronize_some_results :=
           let Heq := fresh "Heq" in
           assert (Heq : left = right) by congruence;
           clear Hright Hmirror;
-          inversion Heq; subst; clear Heq
+          inversion Heq; subst
       end
   end.
 
