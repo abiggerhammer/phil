@@ -35,7 +35,7 @@ main = do
   results <- sequence
     [ test "SURF-008 intrinsic claim applications preserve exact Core atoms"
         intrinsicClaimApplicationsPreserveMeaning
-    , test "SURF-008 binding-aware claim arguments preserve only verified term meaning"
+    , test "SURF-008 binding-aware claim arguments preserve richer verified term structure"
         boundClaimApplicationsPreserveMeaning
     ]
   if and results then pure () else exitFailure
@@ -63,17 +63,32 @@ intrinsicClaimApplicationsPreserveMeaning = do
 boundClaimApplicationsPreserveMeaning :: Either String ()
 boundClaimApplicationsPreserveMeaning = do
   state1 <- bind "n" Unrestricted (TyOpaqueSorted "NatIndex" SortNat) emptySurfaceState
-  state2 <- bind "flag" Unrestricted TyBool state1
-  state3 <- bind "spent" Affine (TyOpaqueSorted "NatIndex" SortNat) state2
+  state2 <- bind "m" Unrestricted (TyOpaqueSorted "NatIndex" SortNat) state1
+  state3 <- bind "u" Unrestricted (TyUInt 32) state2
+  state4 <- bind "flag" Unrestricted TyBool state3
+  state5 <- bind "bytes" Unrestricted (TyBytes (RefNat 8)) state4
+  state6 <- bind "spent" Affine (TyOpaqueSorted "NatIndex" SortNat) state5
   (_, state) <- mapLeft show $
-    moveVariable (Located syntheticSpan ()) "spent" state3
+    moveVariable (Located syntheticSpan ()) "spent" state6
   sourceFile <- mapLeft show $ parseGrammarV1StructuralSource "surf008-bound-claims" boundSource
   propositions <- mapM claimProposition (grammarV1TopLevelDecls sourceFile)
-  let actual = map (grammarV1BoundClaimApplication state) propositions
+  let n = RefVar (Name "n")
+      m = RefVar (Name "m")
+      u = RefVar (Name "u")
+      bytes = RefVar (Name "bytes")
+      actual = map (grammarV1BoundClaimApplication state) propositions
       expected =
-        [ Just (Atom "Ready" [RefVar (Name "n"), RefNat 1])
+        [ Just (Atom "Ready" [n, RefNat 1])
         , Just (Atom "Flag" [RefVar (Name "flag"), RefBool False])
-        , Just (Atom "Rules.Ready" [RefVar (Name "n")])
+        , Just (Atom "Rules.Ready" [n])
+        , Just (Atom "Ready" [n])
+        , Just (Atom "Ready" [RefAdd n (RefNat 1)])
+        , Just (Atom "Ready" [RefSub n (RefNat 1)])
+        , Just (Atom "Ready" [RefScale 2 n])
+        , Just (Atom "Ready" [RefScale 2 n])
+        , Just (Atom "Ready" [RefLen bytes])
+        , Just (Atom "Ready" [RefToNat u])
+        , Just (Atom "Ready" [RefAdd n u])
         , Nothing
         , Nothing
         , Nothing
@@ -84,7 +99,8 @@ boundClaimApplicationsPreserveMeaning = do
         , Nothing
         ]
   assert (actual == expected) $
-    "binding-aware claim application changed identity/arguments or accepted an unresolved source form: " <> show actual
+    "binding-aware claim application changed identity/arguments or invented an unsupported source form: " <> show actual
+  assert (m /= n) "test fixture accidentally collapsed distinct bindings"
 
 bind :: Text.Text -> Mode -> Ty -> SurfaceState -> Either String SurfaceState
 bind name mode ty state =
@@ -116,13 +132,21 @@ boundSource = Text.unlines
   [ "claim BoundNat = Ready(n, 1);"
   , "claim BoundBool = Flag(flag, false);"
   , "claim QualifiedClaim = Rules.Ready(n);"
+  , "claim GroupedArg = Ready((n));"
+  , "claim ArithmeticArg = Ready(n + 1);"
+  , "claim SubtractionArg = Ready(n - 1);"
+  , "claim ScaleLeftArg = Ready(2 * n);"
+  , "claim ScaleRightArg = Ready(n * 2);"
+  , "claim LengthArg = Ready(len(bytes));"
+  , "claim ExplicitToNatArg = Ready(toNat(u));"
+  , "claim MixedSortRaw = Ready(n + u);"
   , "claim Unknown = Ready(missing);"
   , "claim Consumed = Ready(spent);"
   , "claim SpecializedClaim = Ready[U32](n);"
   , "claim CalledArg = Ready(f(1));"
   , "claim ProjectedArg = Ready((n).field);"
-  , "claim ArithmeticArg = Ready(n + 1);"
   , "claim QualifiedArg = Ready(pkg.n);"
+  , "claim SymbolicMultiply = Ready(n * m);"
   , "claim NonClaim = n == 1;"
   ]
 
