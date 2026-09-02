@@ -1,0 +1,149 @@
+name: Phase 1 Systems Stage Closure Production Binding
+
+on:
+  pull_request:
+    paths:
+      - 'generated/SystemsStageClosureKernel.hs'
+      - 'src/SystemsStageClosureKernel.hs'
+      - 'src/Phil/Systems/StageClosure.hs'
+      - 'proof/Phil/Systems/FactDisposition.v'
+      - 'proof/Phil/Assurance/ValidityScope.v'
+      - 'proof/Phil/Core/SystemsStageClosure.v'
+      - 'proof/Phil/Core/SystemsStageClosureImplementation.v'
+      - 'proof/Phil/Core/SystemsStageClosureImplementationExtraction.v'
+      - 'app/SystemsStageClosureDecisionCorrespondenceMain.hs'
+      - 'test/Phase1GenericSystemsStageMain.hs'
+      - 'test/Phase1StageClosureMain.hs'
+      - 'docs/phase-1/systems-stage-closure-production-binding-v1.md'
+      - '.github/workflows/phase1-systems-stage-closure-production-binding.yml'
+  push:
+    branches: [main]
+    paths:
+      - 'generated/SystemsStageClosureKernel.hs'
+      - 'src/SystemsStageClosureKernel.hs'
+      - 'src/Phil/Systems/StageClosure.hs'
+      - 'proof/Phil/Systems/FactDisposition.v'
+      - 'proof/Phil/Assurance/ValidityScope.v'
+      - 'proof/Phil/Core/SystemsStageClosure.v'
+      - 'proof/Phil/Core/SystemsStageClosureImplementation.v'
+      - 'proof/Phil/Core/SystemsStageClosureImplementationExtraction.v'
+      - 'app/SystemsStageClosureDecisionCorrespondenceMain.hs'
+      - 'test/Phase1GenericSystemsStageMain.hs'
+      - 'test/Phase1StageClosureMain.hs'
+      - 'docs/phase-1/systems-stage-closure-production-binding-v1.md'
+      - '.github/workflows/phase1-systems-stage-closure-production-binding.yml'
+
+permissions:
+  contents: read
+
+jobs:
+  rocq-exact-kernel:
+    runs-on: ubuntu-latest
+    container:
+      image: rocq/rocq-prover:9.2.0
+      options: --user root
+    steps:
+      - uses: actions/checkout@v4
+      - name: Fresh-extract exact Systems stage closure kernel
+        shell: bash
+        run: |
+          set -euo pipefail
+          export PATH="/home/rocq/.opam/${COMPILER}/bin:$PATH"
+          rocq c -Q proof/Phil Phil proof/Phil/Systems/FactDisposition.v
+          rocq c -Q proof/Phil Phil proof/Phil/Assurance/ValidityScope.v
+          rocq c -Q proof/Phil Phil proof/Phil/Core/SystemsStageClosure.v
+          rocq c -Q proof/Phil Phil proof/Phil/Core/SystemsStageClosureImplementation.v
+          rm -f SystemsStageClosureKernel.hs
+          rocq c -Q proof/Phil Phil proof/Phil/Core/SystemsStageClosureImplementationExtraction.v
+          test -s SystemsStageClosureKernel.hs
+          test "$(sha256sum SystemsStageClosureKernel.hs | cut -d' ' -f1)" = \
+            '7f37e2760054fdc2ffcb30ee571ff6da9445e29f652f228ec9c53ddc1097dd4a'
+          cmp SystemsStageClosureKernel.hs generated/SystemsStageClosureKernel.hs
+          cmp SystemsStageClosureKernel.hs src/SystemsStageClosureKernel.hs
+      - name: Stage exact kernel artifact
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p systems-stage-closure-exact-kernel
+          cp \
+            SystemsStageClosureKernel.hs \
+            proof/Phil/Core/SystemsStageClosureImplementation.v \
+            proof/Phil/Core/SystemsStageClosureImplementation.vo \
+            proof/Phil/Core/SystemsStageClosureImplementationExtraction.v \
+            proof/Phil/Core/SystemsStageClosureImplementationExtraction.vo \
+            systems-stage-closure-exact-kernel/
+          sha256sum systems-stage-closure-exact-kernel/* > \
+            systems-stage-closure-exact-kernel/PHIL-SYS-STAGE-CLOSURE-001.exact-kernel.sha256
+          cat systems-stage-closure-exact-kernel/PHIL-SYS-STAGE-CLOSURE-001.exact-kernel.sha256
+      - uses: actions/upload-artifact@v4
+        with:
+          name: systems-stage-closure-exact-kernel
+          path: systems-stage-closure-exact-kernel
+          if-no-files-found: error
+
+  production-binding:
+    needs: rocq-exact-kernel
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: haskell-actions/setup@v2
+        with:
+          ghc-version: '9.6.7'
+          cabal-version: 'latest'
+      - name: Build ordinary regression substrate
+        run: cabal build all --enable-tests
+      - uses: actions/download-artifact@v4
+        with:
+          name: systems-stage-closure-exact-kernel
+          path: systems-stage-closure-exact-kernel
+      - name: Require checked-in exact kernel identities
+        run: |
+          set -euo pipefail
+          cmp systems-stage-closure-exact-kernel/SystemsStageClosureKernel.hs \
+            generated/SystemsStageClosureKernel.hs
+          cmp systems-stage-closure-exact-kernel/SystemsStageClosureKernel.hs \
+            src/SystemsStageClosureKernel.hs
+          test "$(sha256sum generated/SystemsStageClosureKernel.hs | cut -d' ' -f1)" = \
+            '7f37e2760054fdc2ffcb30ee571ff6da9445e29f652f228ec9c53ddc1097dd4a'
+      - name: Strict typecheck kernel and bound production path
+        run: |
+          set -euo pipefail
+          ghc -Wall -Werror -fno-code generated/SystemsStageClosureKernel.hs
+          ghc -Wall -Werror -fno-code src/SystemsStageClosureKernel.hs
+          cabal exec -- ghc -isrc -Wall -Werror \
+            -Wno-name-shadowing -Wno-unused-imports -fno-code \
+            src/Phil/Systems/StageClosure.hs
+      - name: Execute exact Stage Closure controls through production kernel
+        run: |
+          set -euo pipefail
+          ghc -Wall -Werror -isrc \
+            app/SystemsStageClosureDecisionCorrespondenceMain.hs \
+            -o systems-stage-closure-production-controls
+          ./systems-stage-closure-production-controls
+      - name: Re-run unchanged 36-case closure correspondence corpus
+        run: |
+          set -euo pipefail
+          cabal exec -- runghc -Wall -Werror -Wno-unused-imports -isrc \
+            test/Phase1GenericSystemsStageMain.hs
+          cabal exec -- runghc -Wall -Werror -Wno-name-shadowing -Wno-unused-imports -isrc \
+            test/Phase1StageClosureMain.hs
+      - name: Record production-binding identities
+        run: |
+          set -euo pipefail
+          mkdir -p systems-stage-closure-production-binding
+          sha256sum \
+            generated/SystemsStageClosureKernel.hs \
+            src/SystemsStageClosureKernel.hs \
+            src/Phil/Systems/StageClosure.hs \
+            test/Phase1GenericSystemsStageMain.hs \
+            test/Phase1StageClosureMain.hs \
+            app/SystemsStageClosureDecisionCorrespondenceMain.hs \
+            proof/Phil/Core/SystemsStageClosureImplementation.v \
+            docs/phase-1/systems-stage-closure-production-binding-v1.md \
+            > systems-stage-closure-production-binding/PHIL-SYS-STAGE-CLOSURE-001.production-binding.sha256
+          cat systems-stage-closure-production-binding/PHIL-SYS-STAGE-CLOSURE-001.production-binding.sha256
+      - uses: actions/upload-artifact@v4
+        with:
+          name: systems-stage-closure-production-binding
+          path: systems-stage-closure-production-binding
+          if-no-files-found: error
