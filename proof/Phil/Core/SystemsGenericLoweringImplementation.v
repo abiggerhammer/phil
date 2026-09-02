@@ -1,5 +1,6 @@
 From Stdlib Require Import Bool.Bool.
 
+From Phil.Core Require Import SystemsStageClosure.
 From Phil.Core Require Import SystemsGenericLowering.
 
 (*
