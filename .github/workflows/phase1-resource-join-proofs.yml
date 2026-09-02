@@ -16,7 +16,11 @@ on:
       - 'proof/Phil/Core/ContextJoin.v'
       - 'proof/Phil/Core/ProcessJoin.v'
       - 'proof/Phil/Core/ResourceJoin.v'
+      - 'proof/Phil/Core/ResourceJoinImplementation.v'
+      - 'proof/Phil/Core/ResourceJoinImplementationExtraction.v'
       - 'app/Phase1ResourceJoinCertificationMain.hs'
+      - 'app/ResourceJoinDecisionCorrespondenceMain.hs'
+      - 'docs/phase-1/resource-join-implementation-refinement-v1.md'
       - '.github/workflows/phase1-resource-join-proofs.yml'
   push:
     branches: [main]
@@ -34,7 +38,11 @@ on:
       - 'proof/Phil/Core/ContextJoin.v'
       - 'proof/Phil/Core/ProcessJoin.v'
       - 'proof/Phil/Core/ResourceJoin.v'
+      - 'proof/Phil/Core/ResourceJoinImplementation.v'
+      - 'proof/Phil/Core/ResourceJoinImplementationExtraction.v'
       - 'app/Phase1ResourceJoinCertificationMain.hs'
+      - 'app/ResourceJoinDecisionCorrespondenceMain.hs'
+      - 'docs/phase-1/resource-join-implementation-refinement-v1.md'
       - '.github/workflows/phase1-resource-join-proofs.yml'
 
 permissions:
@@ -48,7 +56,7 @@ jobs:
       options: --user root
     steps:
       - uses: actions/checkout@v4
-      - name: Compile PHIL-RES-JOIN-001
+      - name: Compile PHIL-RES-JOIN-001 and implementation correspondence
         shell: bash
         run: |
           set -euo pipefail
@@ -58,8 +66,20 @@ jobs:
           rocq c -Q proof/Phil Phil proof/Phil/Core/ContextJoin.v
           rocq c -Q proof/Phil Phil proof/Phil/Core/ProcessJoin.v
           rocq c -Q proof/Phil Phil proof/Phil/Core/ResourceJoin.v
+          rocq c -Q proof/Phil Phil proof/Phil/Core/ResourceJoinImplementation.v
+          rm -f ResourceJoinKernel.hs
+          rocq c -Q proof/Phil Phil proof/Phil/Core/ResourceJoinImplementationExtraction.v
+          test -s ResourceJoinKernel.hs
           mkdir -p phase1-resource-join-proof
-          cp proof/Phil/Core/ResourceJoin.v proof/Phil/Core/ResourceJoin.vo phase1-resource-join-proof/
+          cp \
+            proof/Phil/Core/ResourceJoin.v \
+            proof/Phil/Core/ResourceJoin.vo \
+            proof/Phil/Core/ResourceJoinImplementation.v \
+            proof/Phil/Core/ResourceJoinImplementation.vo \
+            ResourceJoinKernel.hs \
+            phase1-resource-join-proof/
+          sha256sum ResourceJoinKernel.hs \
+            > phase1-resource-join-proof/ResourceJoinKernel.sha256
       - uses: actions/upload-artifact@v4
         with:
           name: rocq-phase1-resource-join-proof
@@ -77,6 +97,19 @@ jobs:
           cabal-version: 'latest'
       - name: Build existing proof certifier with warnings as errors
         run: cabal build exe:phil-certify-core-scalar --ghc-options=-Werror
+      - uses: actions/download-artifact@v4
+        with:
+          name: rocq-phase1-resource-join-proof
+          path: phase1-resource-join-proof
+      - name: Check and execute extracted Resource Join controls
+        shell: bash
+        run: |
+          set -euo pipefail
+          cp phase1-resource-join-proof/ResourceJoinKernel.hs ResourceJoinKernel.hs
+          ghc -Wall -Werror -fno-code ResourceJoinKernel.hs
+          ghc -i. -Wall -Werror -fno-code app/ResourceJoinDecisionCorrespondenceMain.hs
+          runghc -i. app/ResourceJoinDecisionCorrespondenceMain.hs
+          sha256sum ResourceJoinKernel.hs
       - name: Typecheck certifier
         run: cabal exec -- ghc -isrc -Wall -Werror -fno-code app/Phase1ResourceJoinCertificationMain.hs
       - name: Re-run resource join correspondence
@@ -87,11 +120,7 @@ jobs:
           cabal exec -- runghc -isrc test/Phase1SubjectCorrespondenceMain.hs
           cabal exec -- runghc -isrc test/Phase1ControlStateProjectionMain.hs
           cabal exec -- runghc -isrc test/Phase1ProtocolStateCorrespondenceMain.hs
-      - uses: actions/download-artifact@v4
-        with:
-          name: rocq-phase1-resource-join-proof
-          path: phase1-resource-join-proof
-      - name: Emit PHIL-RES-JOIN-001 certificate
+      - name: Emit PHIL-RES-JOIN-001 certificate and correspondence manifest
         shell: bash
         run: |
           set -euo pipefail
@@ -114,8 +143,14 @@ jobs:
             proof/Phil/Core/ContextJoin.v \
             proof/Phil/Core/ProcessJoin.v \
             proof/Phil/Core/ResourceJoin.v \
+            proof/Phil/Core/ResourceJoinImplementation.v \
+            proof/Phil/Core/ResourceJoinImplementationExtraction.v \
             app/Phase1ResourceJoinCertificationMain.hs \
+            app/ResourceJoinDecisionCorrespondenceMain.hs \
+            docs/phase-1/resource-join-implementation-refinement-v1.md \
             > phase1-resource-join-certification/PHIL-RES-JOIN-001.correspondence.sha256
+          sha256sum ResourceJoinKernel.hs \
+            > phase1-resource-join-certification/ResourceJoinKernel.sha256
           cat phase1-resource-join-certification/PHIL-RES-JOIN-001.rocq.cert
           sha256sum phase1-resource-join-certification/PHIL-RES-JOIN-001.rocq.cert
       - uses: actions/upload-artifact@v4
