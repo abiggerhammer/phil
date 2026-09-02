@@ -18,6 +18,7 @@ import Phil.Assurance.Types
 import Phil.Assurance.Verify (ManifestError, verifyManifest)
 import Phil.Core.Scalar (scalarLiteralInRange, scalarLiteralType)
 import Phil.Systems.IR
+import qualified SystemsIdentityKernel as IdentityKernel
 
 data SystemsVerificationContext = SystemsVerificationContext
   { systemsAssuranceLedger :: AssuranceLedger
@@ -147,6 +148,7 @@ verifySystemsArtifact context artifact = do
       (systemsAssuranceManifest context)
   verifyArtifactIdentity context artifact
   verifyLoweringLedger context artifact
+  verifyIdentityKernel context artifact
   verifyProgram artifact
   verifyStageContract context artifact
   verifyRuntimeCoverage context artifact
@@ -238,6 +240,53 @@ verifyLoweringLedger context artifact = do
             Left (RemoveCheckDropsRuntimeEvidence key entryId)
           _ -> pure ()
 
+-- Native verification above retains the existing detailed diagnostic ordering.
+-- This exact extracted-kernel gate is therefore an acceptance invariant: after
+-- the concrete digest/container checks succeed, the Certified normalized
+-- identity classifier must agree or production fails closed.
+verifyIdentityKernel
+  :: SystemsVerificationContext
+  -> SystemsArtifact
+  -> Either SystemsVerificationError ()
+verifyIdentityKernel context artifact = do
+  let contract = systemsArtifactStageContract artifact
+      expectedSource = systemsExpectedSourceArtifactDigest context
+      actualSource = stageSourceArtifactDigest contract
+      expectedTarget = systemsProgramDigest (systemsArtifactProgram artifact)
+      actualTarget = stageTargetArtifactDigest contract
+      expectedImplementation = systemsArtifactDigest artifact
+      actualImplementation =
+        manifestImplementationDigest (systemsAssuranceManifest context)
+      ledger = systemsArtifactLoweringLedger artifact
+      decisions = loweringLedgerDecisions ledger
+      expectedRoot = deriveLoweringLedgerRoot decisions
+      actualRoot = loweringLedgerRoot ledger
+      manifestRoot =
+        manifestLoweringLedgerRoot (systemsAssuranceManifest context)
+      artifactDecision = IdentityKernel.decideArtifactIdentityByFacts
+        (actualSource == expectedSource)
+        (actualTarget == expectedTarget)
+        (actualImplementation == expectedImplementation)
+        (actualRoot == expectedRoot)
+        (manifestRoot == actualRoot)
+
+  case artifactDecision of
+    IdentityKernel.ArtifactIdentityAcceptedDecision -> pure ()
+    _ -> identityKernelInvariant "artifact-identity-after-native-verification"
+
+  forM_ (Map.toAscList decisions) $ \(key, lowering) -> do
+    let expectedDigest = deriveLoweringDecisionDigest lowering
+        decision = IdentityKernel.decideDecisionBindingByFacts
+          (not (Text.null (unDecisionId key)))
+          (key == loweringDecisionId lowering)
+          (loweringDecisionDigest lowering == expectedDigest)
+          (loweringSourceArtifactDigest lowering == actualSource)
+          (loweringTargetArtifactDigest lowering == actualTarget)
+    case decision of
+      IdentityKernel.DecisionBindingAcceptedDecision -> pure ()
+      _ -> identityKernelInvariant
+        ("decision-binding-after-native-verification:"
+          <> Text.unpack (unDecisionId key))
 verifyProgram :: SystemsArtifact -> Either SystemsVerificationError ()
 verifyProgram artifact = do
   let program = systemsArtifactProgram artifact
@@ -870,5 +919,8 @@ firstDuplicate = go Set.empty
       | Set.member value seen = Just value
       | otherwise = go (Set.insert value seen) rest
 
+identityKernelInvariant :: String -> a
+identityKernelInvariant label =
+  error ("certified Systems identity kernel mismatch: " <> label)
 mapLeft :: (a -> b) -> Either a c -> Either b c
 mapLeft transform = either (Left . transform) Right
