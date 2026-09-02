@@ -55,7 +55,7 @@ Proof.
   intros contributionIdentifiesSite runtimeSymbolsVerified.
   unfold decideRuntimePrimitiveReuseByFacts.
   destruct contributionIdentifiesSite; destruct runtimeSymbolsVerified;
-    split; intros H; try discriminate; try (split; reflexivity).
+    simpl; intuition congruence.
 Qed.
 
 Inductive RuntimeCostAttributionDecision : Type :=
@@ -83,7 +83,7 @@ Proof.
   intros sharedChargeClassCompatible sharedChargeShapeCompatible.
   unfold decideRuntimeCostAttributionByFacts.
   destruct sharedChargeClassCompatible; destruct sharedChargeShapeCompatible;
-    split; intros H; try discriminate; try (split; reflexivity).
+    simpl; intuition congruence.
 Qed.
 
 Inductive SystemsRuntimeGraphDecision : Type :=
@@ -114,8 +114,7 @@ Proof.
   intros claimGraphAccepted primitiveReuseAccepted costAttributionAccepted.
   unfold decideSystemsRuntimeGraphByFacts.
   destruct claimGraphAccepted; destruct primitiveReuseAccepted;
-    destruct costAttributionAccepted; split; intros H; try discriminate;
-    try (repeat split; reflexivity).
+    destruct costAttributionAccepted; simpl; intuition congruence.
 Qed.
 
 Theorem systems_runtime_graph_decision_corresponds_validity :
