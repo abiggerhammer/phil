@@ -3,11 +3,16 @@
 module Main (main) where
 
 import qualified Data.Text as Text
+import Phil.Core.Focusing
+  ( FocusStep (..)
+  , FocusingError (..)
+  )
 import Phil.Core.Static
   ( ClaimDecl (..)
   , ClaimDefinition (..)
   , StaticContext
   , StaticError (..)
+  , declareOpaqueClaim
   , emptyStaticContext
   , lookupClaim
   )
@@ -33,6 +38,9 @@ import Phil.Surface.Check.Types
 import Phil.Surface.GrammarV1.BoundClaimApplication
   ( grammarV1BoundClaimApplication
   )
+import Phil.Surface.GrammarV1.CheckedClaimApplication
+  ( grammarV1CheckedClaimApplication
+  )
 import Phil.Surface.GrammarV1.ClaimDeclaration
   ( grammarV1ClaimDeclaration
   , grammarV1RegisterClaimDeclaration
@@ -53,6 +61,8 @@ main = do
         claimDeclarationsPreserveMeaning
     , test "SURF-008 Grammar-v1 claims register only through Core StaticContext authority"
         claimRegistrationUsesCoreAuthority
+    , test "SURF-008 Grammar-v1 claim applications delegate semantic checking to Core focusing"
+        checkedClaimApplicationsUseCoreAuthority
     ]
   if and results then pure () else exitFailure
 
@@ -214,6 +224,103 @@ claimRegistrationUsesCoreAuthority = do
     other -> Left
       ("expected four claim declarations for registration pressure, got " <> show (length other))
 
+checkedClaimApplicationsUseCoreAuthority :: Either String ()
+checkedClaimApplicationsUseCoreAuthority = do
+  declarationFile <- mapLeft show $
+    parseGrammarV1StructuralSource "surf008-checked-claim-declarations" checkedDeclarationSource
+  declarations <- mapM claimDeclaration (grammarV1TopLevelDecls declarationFile)
+  context0 <- case declarations of
+    [positive, flagged] -> do
+      context1 <- requireRegistered "Positive" positive emptyStaticContext
+      requireRegistered "Flagged" flagged context1
+    other -> Left
+      ("expected two checked claim declarations, got " <> show (length other))
+  context <- mapLeft show $
+    declareOpaqueClaim "NeedsNat" [(Name "n", SortNat)] context0
+  state1 <- bind "u" Unrestricted (TyUInt 8) emptySurfaceState
+  state2 <- bind "ok" Unrestricted TyBool state1
+  state <- bind "n" Unrestricted (TyOpaqueSorted "NatIndex" SortNat) state2
+  applicationFile <- mapLeft show $
+    parseGrammarV1StructuralSource "surf008-checked-claim-applications" checkedApplicationSource
+  propositions <- mapM claimProposition (grammarV1TopLevelDecls applicationFile)
+  case map (grammarV1CheckedClaimApplication context state) propositions of
+    [ positive
+      , flagged
+      , needsNat
+      , unknown
+      , wrongSort
+      , wrongArity
+      , reverseCoercion
+      , specialized
+      , unresolvedTerm
+      ] -> do
+        let u = RefVar (Name "u")
+            ok = RefVar (Name "ok")
+        positiveSteps <- expectCheckedRight
+          "transparent Positive"
+          (LessThan (RefNat 0) (RefToNat u))
+          positive
+        assert (ExpandedTransparentClaim "Positive" `elem` positiveSteps)
+          "transparent claim application did not record Core expansion"
+        _ <- expectCheckedRight "opaque Flagged" (Atom "Flagged" [ok]) flagged
+        natSteps <- expectCheckedRight
+          "NeedsNat UInt-to-Nat coercion"
+          (Atom "NeedsNat" [RefToNat u])
+          needsNat
+        assert (InsertedUIntToNat u `elem` natSteps)
+          "Core claim application did not record required UInt-to-Nat coercion"
+        expectCheckedLeft "unknown claim" (UnknownClaim "Missing") unknown
+        expectCheckedLeft
+          "claim argument sort mismatch"
+          (ClaimArgumentSortMismatch "Flagged" 0 SortBool (SortUInt 8))
+          wrongSort
+        expectCheckedLeft
+          "claim arity mismatch"
+          (ClaimArityMismatch "Flagged" 1 2)
+          wrongArity
+        expectCheckedLeft
+          "unsupported Nat-to-UInt coercion"
+          (ClaimArgumentSortMismatch "Positive" 0 (SortUInt 8) SortNat)
+          reverseCoercion
+        expectStructuralNothing "specialized claim reference" specialized
+        expectStructuralNothing "unresolved claim argument" unresolvedTerm
+    other -> Left
+      ("expected nine checked claim application results, got " <> show (length other))
+
+expectCheckedRight
+  :: String
+  -> Proposition
+  -> Maybe (Either FocusingError (Proposition, [FocusStep]))
+  -> Either String [FocusStep]
+expectCheckedRight label expected result =
+  case result of
+    Just (Right (actual, steps))
+      | actual == expected -> Right steps
+      | otherwise -> Left
+          (label <> " produced wrong canonical proposition: " <> show actual)
+    other -> Left (label <> " did not succeed through Core focusing: " <> show other)
+
+expectCheckedLeft
+  :: String
+  -> FocusingError
+  -> Maybe (Either FocusingError (Proposition, [FocusStep]))
+  -> Either String ()
+expectCheckedLeft label expected result =
+  case result of
+    Just (Left actual)
+      | actual == expected -> Right ()
+      | otherwise -> Left (label <> " produced wrong Core rejection: " <> show actual)
+    other -> Left (label <> " did not reject through Core focusing: " <> show other)
+
+expectStructuralNothing
+  :: String
+  -> Maybe (Either FocusingError (Proposition, [FocusStep]))
+  -> Either String ()
+expectStructuralNothing label result =
+  case result of
+    Nothing -> Right ()
+    other -> Left (label <> " unexpectedly reached Core focusing: " <> show other)
+
 requireRegistered
   :: String
   -> GrammarV1ClaimDecl
@@ -302,6 +409,25 @@ registrationSource = Text.unlines
   , "claim Second(ok : Bool) = Ready(ok);"
   , "claim First(flag : Bool);"
   , "claim Deferred[T : Type](x : U8);"
+  ]
+
+checkedDeclarationSource :: Text.Text
+checkedDeclarationSource = Text.unlines
+  [ "claim Positive(x : U8) = x > 0;"
+  , "claim Flagged(ok : Bool);"
+  ]
+
+checkedApplicationSource :: Text.Text
+checkedApplicationSource = Text.unlines
+  [ "claim ApplyPositive = Positive(u);"
+  , "claim ApplyFlagged = Flagged(ok);"
+  , "claim ApplyNeedsNat = NeedsNat(u);"
+  , "claim ApplyMissing = Missing(u);"
+  , "claim ApplyWrongSort = Flagged(u);"
+  , "claim ApplyWrongArity = Flagged(ok, ok);"
+  , "claim ApplyReverseCoercion = Positive(n);"
+  , "claim ApplySpecialized = Flagged[Bool](ok);"
+  , "claim ApplyUnresolvedTerm = Flagged(missing);"
   ]
 
 assert :: Bool -> String -> Either String ()
