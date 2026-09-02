@@ -11,18 +11,22 @@ import Phil.Surface.GrammarV1.BoundBytesType
 import Phil.Surface.GrammarV1.BoundProofType
   ( grammarV1BoundProofType
   )
+import Phil.Surface.GrammarV1.BoundRefinementType
+  ( grammarV1BoundRefinementType
+  )
 import Phil.Surface.GrammarV1.IntrinsicType
   ( grammarV1IntrinsicType
   )
 import Phil.Surface.GrammarV1.Parser (GrammarV1Type (..))
 
 -- | Compose only type fragments whose source-to-Core meaning is already
--- verified. Context-free types continue through the #496 dispatcher; Bytes
--- additionally admits the #499 live Nat-bound form, and Proof delegates to the
--- #509 binding-aware proposition composition. The two Bytes routes are the
--- already-verified literal and live-simple-name fragments; failure in both
--- remains failure rather than triggering any new interpretation. All richer
--- contextual type forms remain unresolved.
+-- verified. Context-free types continue through the intrinsic dispatcher; Bytes
+-- additionally admits the live Nat-bound form, Proof delegates to binding-aware
+-- proposition composition, and primitive-base refinements delegate to the exact
+-- temporary-binder bridge. The two Bytes routes are the already-verified literal
+-- and live-simple-name fragments; failure remains failure rather than triggering
+-- a new interpretation. Tuple/product element modes, coercion-dependent
+-- refinements, and all richer contextual type forms remain unresolved.
 grammarV1BoundType
   :: SurfaceState
   -> GrammarV1Type
@@ -32,4 +36,5 @@ grammarV1BoundType state sourceType = case sourceType of
     grammarV1IntrinsicType sourceType
       <|> grammarV1BoundBytesType state sourceType
   GrammarV1ProofType _ -> grammarV1BoundProofType state sourceType
+  GrammarV1RefinementType _ _ _ -> grammarV1BoundRefinementType state sourceType
   _ -> grammarV1IntrinsicType sourceType
