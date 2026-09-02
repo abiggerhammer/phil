@@ -7,6 +7,9 @@ on:
       - 'proof/Phil/LLVM/Preservation.v'
       - 'proof/Phil/LLVM/RuntimeSymbolIdentity.v'
       - 'proof/Phil/Core/SystemsRuntimeGraph.v'
+      - 'proof/Phil/Core/SystemsRuntimeGraphImplementation.v'
+      - 'proof/Phil/Core/SystemsRuntimeGraphImplementationExtraction.v'
+      - 'app/SystemsRuntimeGraphDecisionCorrespondenceMain.hs'
       - 'src/Phil/Systems/RuntimeClaimBinding.hs'
       - 'src/Phil/Systems/RuntimePrimitiveReuse.hs'
       - 'src/Phil/Systems/CostAttribution.hs'
@@ -14,12 +17,26 @@ on:
       - 'test/Phase1RuntimePrimitiveReuseMain.hs'
       - 'test/Phase1CostAttributionMain.hs'
       - 'docs/phase-1/systems-runtime-graph-proof-v1.md'
+      - 'docs/phase-1/systems-runtime-graph-implementation-refinement-v1.md'
       - '.github/workflows/phase1-systems-runtime-graph-proofs.yml'
   push:
     branches: [main]
     paths:
+      - 'proof/Phil/Systems/Runtime.v'
+      - 'proof/Phil/LLVM/Preservation.v'
+      - 'proof/Phil/LLVM/RuntimeSymbolIdentity.v'
       - 'proof/Phil/Core/SystemsRuntimeGraph.v'
+      - 'proof/Phil/Core/SystemsRuntimeGraphImplementation.v'
+      - 'proof/Phil/Core/SystemsRuntimeGraphImplementationExtraction.v'
+      - 'app/SystemsRuntimeGraphDecisionCorrespondenceMain.hs'
+      - 'src/Phil/Systems/RuntimeClaimBinding.hs'
+      - 'src/Phil/Systems/RuntimePrimitiveReuse.hs'
+      - 'src/Phil/Systems/CostAttribution.hs'
+      - 'test/Phase1RuntimeClaimBindingMain.hs'
+      - 'test/Phase1RuntimePrimitiveReuseMain.hs'
+      - 'test/Phase1CostAttributionMain.hs'
       - 'docs/phase-1/systems-runtime-graph-proof-v1.md'
+      - 'docs/phase-1/systems-runtime-graph-implementation-refinement-v1.md'
       - '.github/workflows/phase1-systems-runtime-graph-proofs.yml'
 
 permissions:
@@ -33,7 +50,7 @@ jobs:
       options: --user root
     steps:
       - uses: actions/checkout@v4
-      - name: Compile certified predecessors and PHIL-SYS-RUNTIME-GRAPH-001
+      - name: Compile certified predecessors, PHIL-SYS-RUNTIME-GRAPH-001, and implementation correspondence
         shell: bash
         run: |
           set -euo pipefail
@@ -42,7 +59,15 @@ jobs:
           rocq c -Q proof/Phil Phil proof/Phil/LLVM/Preservation.v
           rocq c -Q proof/Phil Phil proof/Phil/LLVM/RuntimeSymbolIdentity.v
           rocq c -Q proof/Phil Phil proof/Phil/Core/SystemsRuntimeGraph.v
-      - name: Record proof identities
+          rocq c -Q proof/Phil Phil proof/Phil/Core/SystemsRuntimeGraphImplementation.v
+          rm -f SystemsRuntimeGraphKernel.hs
+          rocq c -Q proof/Phil Phil proof/Phil/Core/SystemsRuntimeGraphImplementationExtraction.v
+          test -s SystemsRuntimeGraphKernel.hs
+          grep -q 'decideRuntimeClaimGraphByFacts' SystemsRuntimeGraphKernel.hs
+          grep -q 'decideRuntimePrimitiveReuseByFacts' SystemsRuntimeGraphKernel.hs
+          grep -q 'decideRuntimeCostAttributionByFacts' SystemsRuntimeGraphKernel.hs
+          grep -q 'decideSystemsRuntimeGraphByFacts' SystemsRuntimeGraphKernel.hs
+      - name: Record proof and extraction identities
         shell: bash
         run: |
           set -euo pipefail
@@ -50,12 +75,20 @@ jobs:
           cp \
             proof/Phil/Core/SystemsRuntimeGraph.v \
             proof/Phil/Core/SystemsRuntimeGraph.vo \
+            proof/Phil/Core/SystemsRuntimeGraphImplementation.v \
+            proof/Phil/Core/SystemsRuntimeGraphImplementation.vo \
+            proof/Phil/Core/SystemsRuntimeGraphImplementationExtraction.v \
+            SystemsRuntimeGraphKernel.hs \
             systems-runtime-graph-proof/
           sha256sum \
             proof/Phil/Systems/Runtime.v \
             proof/Phil/LLVM/RuntimeSymbolIdentity.v \
             proof/Phil/Core/SystemsRuntimeGraph.v \
             proof/Phil/Core/SystemsRuntimeGraph.vo \
+            proof/Phil/Core/SystemsRuntimeGraphImplementation.v \
+            proof/Phil/Core/SystemsRuntimeGraphImplementation.vo \
+            proof/Phil/Core/SystemsRuntimeGraphImplementationExtraction.v \
+            SystemsRuntimeGraphKernel.hs \
             > systems-runtime-graph-proof/PHIL-SYS-RUNTIME-GRAPH-001.proof.sha256
           {
             echo 'obligation=PHIL-SYS-RUNTIME-GRAPH-001'
@@ -80,12 +113,35 @@ jobs:
           cabal-version: 'latest'
       - name: Build ordinary regression substrate
         run: cabal build all --enable-tests
+      - uses: actions/download-artifact@v4
+        with:
+          name: rocq-systems-runtime-graph-proof
+          path: systems-runtime-graph-proof
+      - name: Typecheck and execute extracted runtime-graph controls
+        run: |
+          set -euo pipefail
+          ghc -Wall -Werror -fno-code systems-runtime-graph-proof/SystemsRuntimeGraphKernel.hs
+          ghc -Wall -Werror \
+            -isystems-runtime-graph-proof \
+            app/SystemsRuntimeGraphDecisionCorrespondenceMain.hs \
+            -o systems-runtime-graph-kernel-controls
+          ./systems-runtime-graph-kernel-controls
       - name: Strict typecheck runtime graph implementation
         run: |
           set -euo pipefail
           cabal exec -- ghc -isrc -Wall -Werror -Wno-name-shadowing -fno-code src/Phil/Systems/RuntimeClaimBinding.hs
           cabal exec -- ghc -isrc -Wall -Werror -Wno-name-shadowing -fno-code src/Phil/Systems/RuntimePrimitiveReuse.hs
           cabal exec -- ghc -isrc -Wall -Werror -Wno-name-shadowing -fno-code src/Phil/Systems/CostAttribution.hs
+      - name: Strict typecheck unchanged 77-case runtime graph corpus
+        run: |
+          set -euo pipefail
+          for test_file in \
+            test/Phase1RuntimeClaimBindingMain.hs \
+            test/Phase1RuntimePrimitiveReuseMain.hs \
+            test/Phase1CostAttributionMain.hs
+          do
+            cabal exec -- ghc -Wall -Werror -Wno-name-shadowing -Wno-unused-imports -Wno-missing-signatures -isrc -fno-code "$test_file"
+          done
       - name: Re-run unchanged SYS-015 / SYS-016 / SYS-018 corpus
         run: |
           set -euo pipefail
@@ -96,3 +152,25 @@ jobs:
           do
             cabal exec -- runghc -Wall -Werror -Wno-name-shadowing -Wno-unused-imports -Wno-missing-signatures -isrc "$test_file"
           done
+      - name: Record implementation-refinement staging identities
+        run: |
+          set -euo pipefail
+          mkdir -p systems-runtime-graph-implementation-correspondence
+          sha256sum \
+            systems-runtime-graph-proof/SystemsRuntimeGraphKernel.hs \
+            src/Phil/Systems/RuntimeClaimBinding.hs \
+            src/Phil/Systems/RuntimePrimitiveReuse.hs \
+            src/Phil/Systems/CostAttribution.hs \
+            test/Phase1RuntimeClaimBindingMain.hs \
+            test/Phase1RuntimePrimitiveReuseMain.hs \
+            test/Phase1CostAttributionMain.hs \
+            app/SystemsRuntimeGraphDecisionCorrespondenceMain.hs \
+            proof/Phil/Core/SystemsRuntimeGraphImplementation.v \
+            docs/phase-1/systems-runtime-graph-implementation-refinement-v1.md \
+            > systems-runtime-graph-implementation-correspondence/PHIL-SYS-RUNTIME-GRAPH-001.staging.sha256
+          cat systems-runtime-graph-implementation-correspondence/PHIL-SYS-RUNTIME-GRAPH-001.staging.sha256
+      - uses: actions/upload-artifact@v4
+        with:
+          name: systems-runtime-graph-implementation-correspondence
+          path: systems-runtime-graph-implementation-correspondence
+          if-no-files-found: error
