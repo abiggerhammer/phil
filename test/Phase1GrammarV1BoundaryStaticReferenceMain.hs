@@ -4,6 +4,10 @@ module Main (main) where
 
 import qualified Data.Text as Text
 import qualified Data.Text.IO as TextIO
+import Phil.Core.BoundaryDirection (BoundaryDirection (..))
+import Phil.Surface.GrammarV1.BoundaryDirection
+  ( grammarV1BoundaryDirection
+  )
 import Phil.Surface.GrammarV1.Parser
 import Phil.Surface.Syntax (Located (..))
 import System.Exit (exitFailure)
@@ -19,6 +23,8 @@ main = do
         allBoundaryItemsPreserved
     , test "SURF-003 boundary item missing semicolon rejects"
         boundaryMissingSemicolonRejects
+    , test "SURF-008 Grammar-v1 boundary items route to exact Core direction"
+        boundaryDirectionsRouteExactly
     ]
   if and results then pure () else exitFailure
 
@@ -82,6 +88,32 @@ allBoundaryItemsPreserved = do
 boundaryMissingSemicolonRejects :: Either String ()
 boundaryMissingSemicolonRejects =
   expectReject "boundary B : U8 { receive using Decoder[U8] }"
+
+boundaryDirectionsRouteExactly :: Either String ()
+boundaryDirectionsRouteExactly = do
+  receiveOnly <- parseBoundary "receive-only"
+    "boundary R : U8 { receive using Decoder[U8]; }"
+  sendOnly <- parseBoundary "send-only"
+    "boundary S : U8 { send using Encoder[U8]; }"
+  bidirectional <- parseBoundary "bidirectional"
+    "boundary B : U8 { receive using Decoder[U8]; send using Encoder[U8]; }"
+  directionless <- parseBoundary "directionless"
+    "boundary N : U8 { canonical; }"
+  let actual = map grammarV1BoundaryDirection
+        [receiveOnly, sendOnly, bidirectional, directionless]
+      expected =
+        [ Just ReceiveOnly
+        , Just SendOnly
+        , Just Bidirectional
+        , Nothing
+        ]
+  assert (actual == expected) $
+    "boundary direction routing changed explicit receive/send meaning or invented a default: "
+      <> show actual
+
+parseBoundary :: Text.Text -> Text.Text -> Either String GrammarV1BoundaryDecl
+parseBoundary label source =
+  singleBoundary =<< mapLeft show (parseGrammarV1StructuralSource label source)
 
 singleBoundary :: GrammarV1SourceFile -> Either String GrammarV1BoundaryDecl
 singleBoundary sourceFile =
