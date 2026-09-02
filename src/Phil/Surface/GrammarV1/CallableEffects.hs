@@ -30,7 +30,7 @@ grammarV1SemanticEffect effect
   | not (null (grammarV1StaticReferenceArguments reference)) = Nothing
   | otherwise = case grammarV1QualifiedNameParts (grammarV1StaticReferenceName reference) of
       [] -> Nothing
-      parts -> Just (SemanticEffect (Text.intercalate "." parts))
+      parts -> Just (SemanticEffect (Text.intercalate (Text.singleton '.') parts))
   where
     reference = locatedValue (grammarV1EffectReference effect)
 
