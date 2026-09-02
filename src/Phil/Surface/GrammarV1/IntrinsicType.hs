@@ -10,6 +10,9 @@ import Phil.Surface.GrammarV1.Elaborate
 import Phil.Surface.GrammarV1.IntrinsicFrameType
   ( grammarV1BareFrameType
   )
+import Phil.Surface.GrammarV1.IntrinsicNamedType
+  ( grammarV1BareNamedType
+  )
 import Phil.Surface.GrammarV1.IntrinsicProofType
   ( grammarV1IntrinsicProofType
   )
@@ -20,10 +23,10 @@ import Phil.Surface.GrammarV1.Parser (GrammarV1Type (..))
 
 -- | Compose only Grammar-v1 type forms whose source-to-Core meaning has already
 -- been verified as context-free. Primitive Unit/Bool/U<n>, literal-sized Bytes,
--- intrinsic Proof types, unspecialized Frame types, and the narrow lossless
--- Validated form delegate to their exact verified bridges. Specialized Frame or
--- validator references, non-simple validation identities, refinement, tuple,
--- named, and any other context-dependent type form remains unresolved rather
+-- intrinsic Proof types, unspecialized Frame and named types, and the narrow
+-- lossless Validated form delegate to their exact verified bridges. Specialized
+-- Frame/named/validator references, non-simple validation identities, refinement,
+-- tuple, and any other context-dependent type form remains unresolved rather
 -- than acquiring invented identity, element modes, bindings, evidence, or
 -- static-reference meaning.
 grammarV1IntrinsicType :: GrammarV1Type -> Maybe Ty
@@ -35,4 +38,5 @@ grammarV1IntrinsicType sourceType = case sourceType of
   GrammarV1ProofType _ -> grammarV1IntrinsicProofType sourceType
   GrammarV1FrameType _ -> grammarV1BareFrameType sourceType
   GrammarV1ValidatedType _ _ _ -> grammarV1BareValidatedType sourceType
+  GrammarV1NamedType _ -> grammarV1BareNamedType sourceType
   _ -> Nothing
