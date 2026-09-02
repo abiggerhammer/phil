@@ -1,5 +1,6 @@
 module Phil.Surface.GrammarV1.ClaimDeclaration
   ( grammarV1ClaimDeclaration
+  , grammarV1RegisterClaimDeclaration
   ) where
 
 import Data.Text (Text)
@@ -7,6 +8,10 @@ import Phil.Core.SortCheck (refSortOfTy)
 import Phil.Core.Static
   ( ClaimDecl (..)
   , ClaimDefinition (..)
+  , StaticContext
+  , StaticError
+  , declareOpaqueClaim
+  , declareTransparentClaim
   )
 import Phil.Core.Syntax
   ( Mode (..)
@@ -67,6 +72,30 @@ grammarV1ClaimDeclaration source
         )
   where
     termParameters = maybe [] id (grammarV1ClaimTermParams source)
+
+-- | Compose the bounded Grammar-v1 claim elaborator with Core's existing
+-- StaticContext registration authority. Nothing means the source declaration
+-- is still outside this surface bridge's competence. Just (Left error) means
+-- the source elaborated successfully but Core rejected registration; Just
+-- (Right context) is the exact registered static context. This keeps surface
+-- non-competence distinct from semantic rejection and delegates duplicate claim
+-- identity, parameter uniqueness, and RefSort validity to the established Core
+-- registration path rather than maintaining a parallel declaration table.
+grammarV1RegisterClaimDeclaration
+  :: GrammarV1ClaimDecl
+  -> StaticContext
+  -> Maybe (Either StaticError StaticContext)
+grammarV1RegisterClaimDeclaration source context = do
+  (claimName, declaration) <- grammarV1ClaimDeclaration source
+  pure $ case claimDefinition declaration of
+    OpaqueClaim ->
+      declareOpaqueClaim claimName (claimParameters declaration) context
+    TransparentClaim proposition ->
+      declareTransparentClaim
+        claimName
+        (claimParameters declaration)
+        proposition
+        context
 
 elaborateParameters
   :: [Located GrammarV1TermParam]
