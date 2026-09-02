@@ -7,8 +7,13 @@ on:
       - 'proof/Phil/Assurance/ValidityScope.v'
       - 'proof/Phil/Core/SystemsStageClosure.v'
       - 'proof/Phil/Core/SystemsRealizationEffects.v'
+      - 'proof/Phil/Core/SystemsRealizationEffectsImplementation.v'
+      - 'proof/Phil/Core/SystemsRealizationEffectsImplementationExtraction.v'
+      - 'app/SystemsRealizationEffectsDecisionCorrespondenceMain.hs'
       - 'docs/phase-1/systems-realization-effects-proof-v1.md'
+      - 'docs/phase-1/systems-realization-effects-implementation-refinement-v1.md'
       - '.github/workflows/phase1-systems-realization-effects-proofs.yml'
+      - 'src/SystemsStageClosureKernel.hs'
       - 'src/Phil/Systems/TargetStrengthening.hs'
       - 'src/Phil/Systems/StagingEffect.hs'
       - 'src/Phil/Systems/NextStageRequirement.hs'
@@ -22,8 +27,13 @@ on:
       - 'proof/Phil/Assurance/ValidityScope.v'
       - 'proof/Phil/Core/SystemsStageClosure.v'
       - 'proof/Phil/Core/SystemsRealizationEffects.v'
+      - 'proof/Phil/Core/SystemsRealizationEffectsImplementation.v'
+      - 'proof/Phil/Core/SystemsRealizationEffectsImplementationExtraction.v'
+      - 'app/SystemsRealizationEffectsDecisionCorrespondenceMain.hs'
       - 'docs/phase-1/systems-realization-effects-proof-v1.md'
+      - 'docs/phase-1/systems-realization-effects-implementation-refinement-v1.md'
       - '.github/workflows/phase1-systems-realization-effects-proofs.yml'
+      - 'src/SystemsStageClosureKernel.hs'
       - 'src/Phil/Systems/TargetStrengthening.hs'
       - 'src/Phil/Systems/StagingEffect.hs'
       - 'src/Phil/Systems/NextStageRequirement.hs'
@@ -42,7 +52,7 @@ jobs:
       options: --user root
     steps:
       - uses: actions/checkout@v4
-      - name: Compile certified predecessor and PHIL-SYS-REALIZE-001
+      - name: Compile certified predecessor, PHIL-SYS-REALIZE-001, and implementation correspondence
         shell: bash
         run: |
           set -euo pipefail
@@ -51,7 +61,15 @@ jobs:
           rocq c -Q proof/Phil Phil proof/Phil/Assurance/ValidityScope.v
           rocq c -Q proof/Phil Phil proof/Phil/Core/SystemsStageClosure.v
           rocq c -Q proof/Phil Phil proof/Phil/Core/SystemsRealizationEffects.v
-      - name: Record proof identities
+          rocq c -Q proof/Phil Phil proof/Phil/Core/SystemsRealizationEffectsImplementation.v
+          rm -f SystemsRealizationEffectsKernel.hs
+          rocq c -Q proof/Phil Phil proof/Phil/Core/SystemsRealizationEffectsImplementationExtraction.v
+          test -s SystemsRealizationEffectsKernel.hs
+          grep -q 'decideTargetStrengtheningByFacts' SystemsRealizationEffectsKernel.hs
+          grep -q 'decideStagingEffectByFacts' SystemsRealizationEffectsKernel.hs
+          grep -q 'decideNextStageExportByFacts' SystemsRealizationEffectsKernel.hs
+          grep -q 'decideSystemsRealizationEffectsByFacts' SystemsRealizationEffectsKernel.hs
+      - name: Record proof and extraction identities
         shell: bash
         run: |
           set -euo pipefail
@@ -59,11 +77,19 @@ jobs:
           cp \
             proof/Phil/Core/SystemsRealizationEffects.v \
             proof/Phil/Core/SystemsRealizationEffects.vo \
+            proof/Phil/Core/SystemsRealizationEffectsImplementation.v \
+            proof/Phil/Core/SystemsRealizationEffectsImplementation.vo \
+            proof/Phil/Core/SystemsRealizationEffectsImplementationExtraction.v \
+            proof/Phil/Core/SystemsRealizationEffectsImplementationExtraction.vo \
+            SystemsRealizationEffectsKernel.hs \
             systems-realization-effects-proof/
           sha256sum \
             proof/Phil/Core/SystemsStageClosure.v \
             proof/Phil/Core/SystemsRealizationEffects.v \
             proof/Phil/Core/SystemsRealizationEffects.vo \
+            proof/Phil/Core/SystemsRealizationEffectsImplementation.v \
+            proof/Phil/Core/SystemsRealizationEffectsImplementation.vo \
+            SystemsRealizationEffectsKernel.hs \
             > systems-realization-effects-proof/PHIL-SYS-REALIZE-001.proof.sha256
           {
             echo 'obligation=PHIL-SYS-REALIZE-001'
@@ -88,6 +114,20 @@ jobs:
           cabal-version: 'latest'
       - name: Build ordinary regression substrate
         run: cabal build all --enable-tests
+      - uses: actions/download-artifact@v4
+        with:
+          name: rocq-systems-realization-effects-proof
+          path: systems-realization-effects-proof
+      - name: Typecheck and execute extracted SYS-REALIZE controls
+        run: |
+          set -euo pipefail
+          ghc -Wall -Werror -fno-code \
+            systems-realization-effects-proof/SystemsRealizationEffectsKernel.hs
+          ghc -Wall -Werror \
+            -isystems-realization-effects-proof \
+            app/SystemsRealizationEffectsDecisionCorrespondenceMain.hs \
+            -o systems-realization-effects-kernel-controls
+          ./systems-realization-effects-kernel-controls
       - name: Strict typecheck realization implementation surfaces
         run: |
           set -euo pipefail
@@ -108,3 +148,26 @@ jobs:
           cabal exec -- runghc -Wall -Werror -isrc test/Phase1TargetStrengtheningMain.hs
           cabal exec -- runghc -Wall -Werror -Wno-name-shadowing -isrc test/Phase1StagingEffectMain.hs
           cabal exec -- runghc -Wall -Werror -Wno-name-shadowing -isrc test/Phase1NextStageRequirementMain.hs
+      - name: Record implementation-refinement staging identities
+        run: |
+          set -euo pipefail
+          mkdir -p systems-realization-effects-implementation-correspondence
+          sha256sum \
+            systems-realization-effects-proof/SystemsRealizationEffectsKernel.hs \
+            src/SystemsStageClosureKernel.hs \
+            src/Phil/Systems/TargetStrengthening.hs \
+            src/Phil/Systems/StagingEffect.hs \
+            src/Phil/Systems/NextStageRequirement.hs \
+            test/Phase1TargetStrengtheningMain.hs \
+            test/Phase1StagingEffectMain.hs \
+            test/Phase1NextStageRequirementMain.hs \
+            app/SystemsRealizationEffectsDecisionCorrespondenceMain.hs \
+            proof/Phil/Core/SystemsRealizationEffectsImplementation.v \
+            docs/phase-1/systems-realization-effects-implementation-refinement-v1.md \
+            > systems-realization-effects-implementation-correspondence/PHIL-SYS-REALIZE-001.staging.sha256
+          cat systems-realization-effects-implementation-correspondence/PHIL-SYS-REALIZE-001.staging.sha256
+      - uses: actions/upload-artifact@v4
+        with:
+          name: systems-realization-effects-implementation-correspondence
+          path: systems-realization-effects-implementation-correspondence
+          if-no-files-found: error
