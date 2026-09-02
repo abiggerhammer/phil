@@ -1,0 +1,134 @@
+name: Phase 1 Systems Realization Effects Production Binding
+
+on:
+  pull_request:
+    paths:
+      - 'proof/Phil/Core/SystemsRealizationEffects.v'
+      - 'proof/Phil/Core/SystemsRealizationEffectsImplementation.v'
+      - 'proof/Phil/Core/SystemsRealizationEffectsImplementationExtraction.v'
+      - 'generated/SystemsRealizationEffectsKernel.hs'
+      - 'src/SystemsRealizationEffectsKernel.hs'
+      - 'src/SystemsStageClosureKernel.hs'
+      - 'src/Phil/Systems/StageClosure.hs'
+      - 'src/Phil/Systems/TargetStrengthening.hs'
+      - 'src/Phil/Systems/StagingEffect.hs'
+      - 'src/Phil/Systems/NextStageRequirement.hs'
+      - 'app/SystemsRealizationEffectsDecisionCorrespondenceMain.hs'
+      - 'test/Phase1TargetStrengtheningMain.hs'
+      - 'test/Phase1StagingEffectMain.hs'
+      - 'test/Phase1NextStageRequirementMain.hs'
+      - 'test/Phase1StageClosureMain.hs'
+      - 'docs/phase-1/systems-realization-effects-production-binding-v1.md'
+      - '.github/workflows/phase1-systems-realization-effects-production-binding.yml'
+
+permissions:
+  contents: read
+
+jobs:
+  exact-realization-effects-kernel:
+    runs-on: ubuntu-latest
+    container:
+      image: rocq/rocq-prover:9.2.0
+      options: --user root
+    steps:
+      - uses: actions/checkout@v4
+      - name: Fresh-extract exact REALIZE kernel
+        shell: bash
+        run: |
+          set -euo pipefail
+          export PATH="/home/rocq/.opam/${COMPILER}/bin:$PATH"
+          rocq c -Q proof/Phil Phil proof/Phil/Systems/FactDisposition.v
+          rocq c -Q proof/Phil Phil proof/Phil/Assurance/ValidityScope.v
+          rocq c -Q proof/Phil Phil proof/Phil/Core/SystemsStageClosure.v
+          rocq c -Q proof/Phil Phil proof/Phil/Core/SystemsRealizationEffects.v
+          rocq c -Q proof/Phil Phil proof/Phil/Core/SystemsRealizationEffectsImplementation.v
+          rm -f SystemsRealizationEffectsKernel.hs
+          rocq c -Q proof/Phil Phil proof/Phil/Core/SystemsRealizationEffectsImplementationExtraction.v
+          test -s SystemsRealizationEffectsKernel.hs
+          echo '1bf83a057b435b29783f0c2a455606a7bd3ce3649a9cbd5e28f5b09955e25852  SystemsRealizationEffectsKernel.hs' | sha256sum -c -
+          cmp SystemsRealizationEffectsKernel.hs generated/SystemsRealizationEffectsKernel.hs
+          cmp SystemsRealizationEffectsKernel.hs src/SystemsRealizationEffectsKernel.hs
+      - name: Record exact kernel identities
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p systems-realization-effects-exact-kernel
+          cp SystemsRealizationEffectsKernel.hs systems-realization-effects-exact-kernel/
+          sha256sum \
+            SystemsRealizationEffectsKernel.hs \
+            generated/SystemsRealizationEffectsKernel.hs \
+            src/SystemsRealizationEffectsKernel.hs \
+            proof/Phil/Core/SystemsRealizationEffectsImplementation.v \
+            proof/Phil/Core/SystemsRealizationEffectsImplementationExtraction.v \
+            > systems-realization-effects-exact-kernel/PHIL-SYS-REALIZE-001.exact-kernel.sha256
+          cat systems-realization-effects-exact-kernel/PHIL-SYS-REALIZE-001.exact-kernel.sha256
+      - uses: actions/upload-artifact@v4
+        with:
+          name: systems-realization-effects-exact-kernel
+          path: systems-realization-effects-exact-kernel
+          if-no-files-found: error
+
+  verify-realization-effects-production-binding:
+    needs: exact-realization-effects-kernel
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: haskell-actions/setup@v2
+        with:
+          ghc-version: '9.6.7'
+          cabal-version: 'latest'
+      - name: Build ordinary regression substrate
+        run: cabal build all --enable-tests
+      - name: Strict typecheck exact production kernel and bound path
+        run: |
+          set -euo pipefail
+          ghc -Wall -Werror -fno-code src/SystemsRealizationEffectsKernel.hs
+          cabal exec -- ghc -isrc -Wall -Werror -fno-code src/Phil/Systems/TargetStrengthening.hs
+          cabal exec -- ghc -isrc -Wall -Werror -Wno-name-shadowing -fno-code src/Phil/Systems/StagingEffect.hs
+          cabal exec -- ghc -isrc -Wall -Werror -Wno-name-shadowing -fno-code src/Phil/Systems/NextStageRequirement.hs
+          cabal exec -- ghc -isrc -Wall -Werror -Wno-name-shadowing -Wno-unused-imports -fno-code src/Phil/Systems/StageClosure.hs
+      - name: Execute 33 direct controls through production kernel
+        run: |
+          set -euo pipefail
+          ghc -Wall -Werror -isrc \
+            app/SystemsRealizationEffectsDecisionCorrespondenceMain.hs \
+            -o systems-realization-effects-kernel-controls
+          ./systems-realization-effects-kernel-controls
+      - name: Strict typecheck unchanged REALIZE and final closure corpora
+        run: |
+          set -euo pipefail
+          cabal exec -- ghc -isrc -Wall -Werror -fno-code test/Phase1TargetStrengtheningMain.hs
+          cabal exec -- ghc -isrc -Wall -Werror -Wno-name-shadowing -fno-code test/Phase1StagingEffectMain.hs
+          cabal exec -- ghc -isrc -Wall -Werror -Wno-name-shadowing -fno-code test/Phase1NextStageRequirementMain.hs
+          cabal exec -- ghc -isrc -Wall -Werror -Wno-name-shadowing -Wno-unused-imports -fno-code test/Phase1StageClosureMain.hs
+      - name: Re-run unchanged 68-case REALIZE corpus and 20-case final closure corpus
+        run: |
+          set -euo pipefail
+          cabal exec -- runghc -Wall -Werror -isrc test/Phase1TargetStrengtheningMain.hs
+          cabal exec -- runghc -Wall -Werror -Wno-name-shadowing -isrc test/Phase1StagingEffectMain.hs
+          cabal exec -- runghc -Wall -Werror -Wno-name-shadowing -isrc test/Phase1NextStageRequirementMain.hs
+          cabal exec -- runghc -Wall -Werror -Wno-name-shadowing -Wno-unused-imports -isrc test/Phase1StageClosureMain.hs
+      - name: Record production-binding identities
+        run: |
+          set -euo pipefail
+          mkdir -p systems-realization-effects-production-binding
+          sha256sum \
+            generated/SystemsRealizationEffectsKernel.hs \
+            src/SystemsRealizationEffectsKernel.hs \
+            src/SystemsStageClosureKernel.hs \
+            src/Phil/Systems/StageClosure.hs \
+            src/Phil/Systems/TargetStrengthening.hs \
+            src/Phil/Systems/StagingEffect.hs \
+            src/Phil/Systems/NextStageRequirement.hs \
+            test/Phase1TargetStrengtheningMain.hs \
+            test/Phase1StagingEffectMain.hs \
+            test/Phase1NextStageRequirementMain.hs \
+            test/Phase1StageClosureMain.hs \
+            docs/phase-1/systems-realization-effects-production-binding-v1.md \
+            > systems-realization-effects-production-binding/PHIL-SYS-REALIZE-001.production-binding.sha256
+          cat systems-realization-effects-production-binding/PHIL-SYS-REALIZE-001.production-binding.sha256
+      - uses: actions/upload-artifact@v4
+        with:
+          name: systems-realization-effects-production-binding
+          path: systems-realization-effects-production-binding
+          if-no-files-found: error
