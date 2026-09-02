@@ -29,8 +29,8 @@ import System.Exit (exitFailure)
 main :: IO ()
 main = do
   results <- sequence
-    [ test "SURF-008 binding-aware Bytes routing requires a live Nat-sorted name"
-        boundBytesRequiresLiveNat
+    [ test "SURF-008 binding-aware Bytes routing preserves richer Nat expressions and sort competence"
+        boundBytesPreserveRicherNatExpressions
     ]
   if and results then pure () else exitFailure
 
@@ -39,32 +39,44 @@ test label result = case result of
   Right () -> putStrLn ("PASS: " <> label) >> pure True
   Left detail -> putStrLn ("FAIL: " <> label <> " -- " <> detail) >> pure False
 
-boundBytesRequiresLiveNat :: Either String ()
-boundBytesRequiresLiveNat = do
-  withNat <- bind "n" Unrestricted (TyOpaqueSorted "NatIndex" SortNat) emptySurfaceState
-  withUInt <- bind "u" Unrestricted (TyUInt 32) withNat
-  withBool <- bind "flag" Unrestricted TyBool withUInt
-  withSpent <- bind "spent" Affine (TyOpaqueSorted "NatIndex" SortNat) withBool
+boundBytesPreserveRicherNatExpressions :: Either String ()
+boundBytesPreserveRicherNatExpressions = do
+  state1 <- bind "n" Unrestricted (TyOpaqueSorted "NatIndex" SortNat) emptySurfaceState
+  state2 <- bind "m" Unrestricted (TyOpaqueSorted "NatIndex" SortNat) state1
+  state3 <- bind "u" Unrestricted (TyUInt 32) state2
+  state4 <- bind "flag" Unrestricted TyBool state3
+  state5 <- bind "bytes" Unrestricted (TyBytes (RefNat 4)) state4
+  state6 <- bind "spent" Affine (TyOpaqueSorted "NatIndex" SortNat) state5
   (_, state) <- mapLeft show $
-    moveVariable (Located syntheticSpan ()) "spent" withSpent
+    moveVariable (Located syntheticSpan ()) "spent" state6
   sourceFile <- mapLeft show $ parseGrammarV1StructuralSource "surf008-bound-bytes" source
   actual <- mapM (boundType state) (grammarV1TopLevelDecls sourceFile)
+  let n = RefVar (Name "n")
+      u = RefVar (Name "u")
+      bytes = RefVar (Name "bytes")
+      expected =
+        [ Just (TyBytes n)
+        , Just (TyBytes (RefNat 7))
+        , Just (TyBytes n)
+        , Just (TyBytes (RefAdd n (RefNat 2)))
+        , Just (TyBytes (RefSub n (RefNat 1)))
+        , Just (TyBytes (RefScale 2 n))
+        , Just (TyBytes (RefScale 2 n))
+        , Just (TyBytes (RefLen bytes))
+        , Just (TyBytes (RefToNat u))
+        , Nothing
+        , Nothing
+        , Nothing
+        , Nothing
+        , Nothing
+        , Nothing
+        , Nothing
+        , Nothing
+        , Nothing
+        , Nothing
+        ]
   assert (actual == expected) $
-    "binding-aware Bytes routing accepted a wrong-sort, unresolved, consumed, or non-bound form: " <> show actual
-  where
-    expected =
-      [ Just (TyBytes (RefVar (Name "n")))
-      , Nothing
-      , Nothing
-      , Nothing
-      , Nothing
-      , Nothing
-      , Nothing
-      , Nothing
-      , Nothing
-      , Nothing
-      , Nothing
-      ]
+    "binding-aware Bytes routing changed a verified Nat expression or accepted a wrong-sort/unresolved form: " <> show actual
 
 bind :: Text.Text -> Mode -> Ty -> SurfaceState -> Either String SurfaceState
 bind name mode ty state =
@@ -85,15 +97,24 @@ boundType state (Located _ topLevel) =
 source :: Text.Text
 source = Text.unlines
   [ "type LiveNat = Bytes[n];"
+  , "type Literal = Bytes[7];"
+  , "type Grouped = Bytes[(n)];"
+  , "type Add = Bytes[n + 2];"
+  , "type Sub = Bytes[n - 1];"
+  , "type ScaleLeft = Bytes[2 * n];"
+  , "type ScaleRight = Bytes[n * 2];"
+  , "type Length = Bytes[len(bytes)];"
+  , "type ExplicitToNat = Bytes[toNat(u)];"
   , "type UIntWrong = Bytes[u];"
   , "type BoolWrong = Bytes[flag];"
+  , "type MixedSortRaw = Bytes[n + u];"
   , "type Unknown = Bytes[missing];"
   , "type Qualified = Bytes[pkg.n];"
   , "type Specialized = Bytes[n[U32]];"
   , "type Called = Bytes[n(1)];"
   , "type Projected = Bytes[(n).field];"
   , "type Consumed = Bytes[spent];"
-  , "type Literal = Bytes[7];"
+  , "type SymbolicMultiply = Bytes[n * m];"
   , "type NotBytes = Bool;"
   ]
 
