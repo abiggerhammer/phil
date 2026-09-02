@@ -205,16 +205,17 @@ Proof.
   intros model use Hcert Hrequired.
   destruct (certified_required_runtime_use_has_exact_carrier
     model use Hcert Hrequired) as [carrier [Hexact Hknown]].
-  destruct Hexact as
-    [Hbinding [Hrequired' [Hknown' [Hdisp [Hobligation
-      [Hrevision [Hevidence [Hcost [Hestablished [Hclaim
-        [Hprocess [Hexecution Hauthority]]]]]]]]]]]]].
+  assert (Hauthority :
+    verifyRuntimeAuthority (carrierRuntimeAuthority model carrier) = GateAccepted).
+  { unfold ExactCarrierBinding in Hexact. tauto. }
   pose proof
     (successful_runtime_authority_is_complete
       (carrierRuntimeAuthority model carrier) Hauthority)
     as Hcomplete.
   exists carrier.
-  repeat split; try assumption.
+  split.
+  - exact Hexact.
+  - exact Hcomplete.
 Qed.
 
 Theorem certified_covered_use_has_exact_selected_site_evidence_and_cost :
@@ -235,10 +236,21 @@ Theorem certified_covered_use_has_exact_selected_site_evidence_and_cost :
 Proof.
   intros model use carrier Hcert Hexact.
   destruct Hcert as [Hgraph Hbound Hphantom Huses Htransfers].
-  destruct Hexact as
-    [Hbinding [Hrequired [Hknown [Hdisp [Hobligation
-      [Hrevision [Hevidence [Hcost [Hestablished [Hclaim
-        [Hprocess [Hexecution Hauthority]]]]]]]]]]]]].
+  assert (Hrevision :
+    runtimeSiteRevision
+      (graphRuntimeSite (carrierGraph model) (carrierUseSite model use)) =
+      carrierUseObligation model use).
+  { unfold ExactCarrierBinding in Hexact. tauto. }
+  assert (Hevidence :
+    runtimeSiteEvidence
+      (graphRuntimeSite (carrierGraph model) (carrierUseSite model use)) =
+      carrierUseEvidence model use).
+  { unfold ExactCarrierBinding in Hexact. tauto. }
+  assert (Hcost :
+    runtimeSiteCost
+      (graphRuntimeSite (carrierGraph model) (carrierUseSite model use)) =
+      carrierUseCost model use).
+  { unfold ExactCarrierBinding in Hexact. tauto. }
   pose proof
     (graph_site_uses_selected_runtime_evidence
       (carrierGraph model) (carrierUseSite model use) Hgraph)
@@ -274,10 +286,12 @@ Theorem certified_covered_use_has_exact_claim_charge_lineage :
         charge.
 Proof.
   intros model use carrier Hcert Hexact.
-  destruct Hexact as
-    [Hbinding [Hrequired [Hknown [Hdisp [Hobligation
-      [Hrevision [Hevidence [Hcost [Hestablished [Hclaim
-        [Hprocess [Hexecution Hauthority]]]]]]]]]]]]].
+  assert (Hclaim :
+    graphClaimAtSite
+      (carrierGraph model)
+      (carrierClaim model carrier)
+      (carrierUseSite model use)).
+  { unfold ExactCarrierBinding in Hexact. tauto. }
   exists (graphSiteContribution (carrierGraph model) (carrierUseSite model use)).
   exists (graphContributionCharge
     (carrierGraph model)
