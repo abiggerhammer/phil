@@ -1,0 +1,127 @@
+name: Phase 1 Resource Join Production Binding
+
+on:
+  pull_request:
+    paths:
+      - 'generated/ResourceJoinKernel.hs'
+      - 'src/ResourceJoinKernel.hs'
+      - 'src/Phil/Systems/ControlStateProjection.hs'
+      - 'phil-core.cabal'
+      - 'proof/Phil/Core/ResourceJoin.v'
+      - 'proof/Phil/Core/ResourceJoinImplementation.v'
+      - 'proof/Phil/Core/ResourceJoinImplementationExtraction.v'
+      - 'app/ResourceJoinDecisionCorrespondenceMain.hs'
+      - 'test/Main.hs'
+      - 'test/ProcessMain.hs'
+      - 'test/Phase1SubjectCorrespondenceMain.hs'
+      - 'test/Phase1ControlStateProjectionMain.hs'
+      - 'test/Phase1ProtocolStateCorrespondenceMain.hs'
+      - 'docs/phase-1/resource-join-production-binding-v1.md'
+      - '.github/workflows/phase1-resource-join-production-binding.yml'
+
+permissions:
+  contents: read
+
+jobs:
+  exact-resource-join-kernel:
+    runs-on: ubuntu-latest
+    container:
+      image: rocq/rocq-prover:9.2.0
+      options: --user root
+    steps:
+      - uses: actions/checkout@v4
+      - name: Fresh-extract exact Resource Join kernel
+        shell: bash
+        run: |
+          set -euo pipefail
+          export PATH="/home/rocq/.opam/${COMPILER}/bin:$PATH"
+          rocq c -Q proof/Phil Phil proof/Phil/Core/Syntax.v
+          rocq c -Q proof/Phil Phil proof/Phil/Core/Context.v
+          rocq c -Q proof/Phil Phil proof/Phil/Core/ContextJoin.v
+          rocq c -Q proof/Phil Phil proof/Phil/Core/ProcessJoin.v
+          rocq c -Q proof/Phil Phil proof/Phil/Core/ResourceJoin.v
+          rocq c -Q proof/Phil Phil proof/Phil/Core/ResourceJoinImplementation.v
+          rm -f ResourceJoinKernel.hs
+          rocq c -Q proof/Phil Phil proof/Phil/Core/ResourceJoinImplementationExtraction.v
+          test -s ResourceJoinKernel.hs
+          echo '788a8cdf3d6ba199880b54a636002ca039c790980e43f6c44260774271d86af6  ResourceJoinKernel.hs' | sha256sum -c -
+          cmp ResourceJoinKernel.hs generated/ResourceJoinKernel.hs
+          cmp ResourceJoinKernel.hs src/ResourceJoinKernel.hs
+      - name: Record exact kernel identities
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p resource-join-exact-kernel
+          cp ResourceJoinKernel.hs resource-join-exact-kernel/
+          sha256sum \
+            ResourceJoinKernel.hs \
+            generated/ResourceJoinKernel.hs \
+            src/ResourceJoinKernel.hs \
+            proof/Phil/Core/ResourceJoin.v \
+            proof/Phil/Core/ResourceJoinImplementation.v \
+            proof/Phil/Core/ResourceJoinImplementationExtraction.v \
+            > resource-join-exact-kernel/PHIL-RES-JOIN-001.exact-kernel.sha256
+          cat resource-join-exact-kernel/PHIL-RES-JOIN-001.exact-kernel.sha256
+      - uses: actions/upload-artifact@v4
+        with:
+          name: resource-join-exact-kernel
+          path: resource-join-exact-kernel
+          if-no-files-found: error
+
+  verify-resource-join-production-binding:
+    needs: exact-resource-join-kernel
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: haskell-actions/setup@v2
+        with:
+          ghc-version: '9.6.7'
+          cabal-version: 'latest'
+      - name: Build bound library with warnings as errors
+        run: |
+          set -euo pipefail
+          cabal build lib:phil-core --ghc-options=-Werror
+      - name: Strict typecheck exact kernel and bound production surface
+        run: |
+          set -euo pipefail
+          ghc -Wall -Werror -fno-code src/ResourceJoinKernel.hs
+          cabal exec -- ghc -isrc -Wall -Werror -fno-code src/Phil/Systems/ControlStateProjection.hs
+      - name: Execute 4 direct controls through production kernel
+        run: |
+          set -euo pipefail
+          ghc -Wall -Werror -isrc \
+            app/ResourceJoinDecisionCorrespondenceMain.hs \
+            -o resource-join-kernel-controls
+          ./resource-join-kernel-controls
+      - name: Re-run unchanged 72-case Resource Join correspondence stack
+        run: |
+          set -euo pipefail
+          cabal exec -- runghc -isrc test/Main.hs
+          cabal exec -- runghc -isrc test/ProcessMain.hs
+          cabal exec -- runghc -isrc test/Phase1SubjectCorrespondenceMain.hs
+          cabal exec -- runghc -isrc test/Phase1ControlStateProjectionMain.hs
+          cabal exec -- runghc -isrc test/Phase1ProtocolStateCorrespondenceMain.hs
+      - name: Record production-binding identities
+        run: |
+          set -euo pipefail
+          mkdir -p resource-join-production-binding
+          sha256sum \
+            generated/ResourceJoinKernel.hs \
+            src/ResourceJoinKernel.hs \
+            src/Phil/Systems/ControlStateProjection.hs \
+            phil-core.cabal \
+            app/ResourceJoinDecisionCorrespondenceMain.hs \
+            test/Main.hs \
+            test/ProcessMain.hs \
+            test/Phase1SubjectCorrespondenceMain.hs \
+            test/Phase1ControlStateProjectionMain.hs \
+            test/Phase1ProtocolStateCorrespondenceMain.hs \
+            docs/phase-1/resource-join-implementation-refinement-v1.md \
+            docs/phase-1/resource-join-production-binding-v1.md \
+            > resource-join-production-binding/PHIL-RES-JOIN-001.production-binding.sha256
+          cat resource-join-production-binding/PHIL-RES-JOIN-001.production-binding.sha256
+      - uses: actions/upload-artifact@v4
+        with:
+          name: resource-join-production-binding
+          path: resource-join-production-binding
+          if-no-files-found: error
