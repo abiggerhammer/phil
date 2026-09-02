@@ -3,6 +3,15 @@
 module Main (main) where
 
 import qualified Data.Text as Text
+import Phil.Core.Focusing
+  ( FocusStep (..)
+  , FocusingError (..)
+  )
+import Phil.Core.Static
+  ( declareOpaqueClaim
+  , declareTransparentClaim
+  , emptyStaticContext
+  )
 import Phil.Core.Syntax
   ( Mode (..)
   , Name (..)
@@ -25,6 +34,9 @@ import Phil.Surface.Check.Types
 import Phil.Surface.GrammarV1.BoundProposition
   ( grammarV1BoundProposition
   )
+import Phil.Surface.GrammarV1.CheckedProposition
+  ( grammarV1CheckedProposition
+  )
 import Phil.Surface.GrammarV1.IntrinsicProposition
   ( grammarV1IntrinsicProposition
   )
@@ -39,6 +51,8 @@ main = do
         intrinsicPropositionsComposeExactly
     , test "SURF-008 binding-aware proposition fragments compose richer verified trees and poison unresolved trees"
         boundPropositionsComposeExactly
+    , test "SURF-008 complete binding-aware proposition trees check once through Core focusing"
+        checkedPropositionsUseCoreFocusing
     ]
   if and results then pure () else exitFailure
 
@@ -108,6 +122,54 @@ boundPropositionsComposeExactly = do
   assert (actual == expected) $
     "binding-aware proposition composition changed a verified tree or failed to poison an unresolved nested leaf: " <> show actual
 
+checkedPropositionsUseCoreFocusing :: Either String ()
+checkedPropositionsUseCoreFocusing = do
+  context1 <- mapLeft show $
+    declareTransparentClaim
+      "Positive"
+      [(Name "x", SortUInt 8)]
+      (LessThan
+        (RefNat 0)
+        (RefToNat (RefVar (Name "x"))))
+      emptyStaticContext
+  context2 <- mapLeft show $
+    declareOpaqueClaim "NeedsNat" [(Name "n", SortNat)] context1
+  context <- mapLeft show $
+    declareOpaqueClaim "Flagged" [(Name "ok", SortBool)] context2
+  state1 <- bind "u" Unrestricted (TyUInt 8) emptySurfaceState
+  state2 <- bind "flag" Unrestricted TyBool state1
+  state <- bind "n" Unrestricted (TyOpaqueSorted "NatIndex" SortNat) state2
+  sourceFile <- mapLeft show $
+    parseGrammarV1StructuralSource "surf008-checked-propositions" checkedSource
+  propositions <- mapM claimProposition (grammarV1TopLevelDecls sourceFile)
+  let u = RefVar (Name "u")
+      flag = RefVar (Name "flag")
+      expectedCanonical =
+        Disjunction
+          (Conjunction
+            (LessThan (RefNat 0) (RefToNat u))
+            (Atom "NeedsNat" [RefToNat u]))
+          (Atom "Flagged" [flag])
+      actual = map (grammarV1CheckedProposition context state) propositions
+  case actual of
+    [ Just (Right (canonical, steps))
+      , Just (Left (UnknownClaim "Missing"))
+      , Just (Left (ClaimArityMismatch "Flagged" 1 2))
+      , Just (Left (ClaimArgumentSortMismatch "Flagged" 0 SortBool (SortUInt 8)))
+      , Just (Left (ClaimArgumentSortMismatch "Positive" 0 (SortUInt 8) SortNat))
+      , Nothing
+      , Nothing
+      ] -> do
+        assert (canonical == expectedCanonical) $
+          "whole-tree focusing changed canonical proposition meaning: " <> show canonical
+        assert (ExpandedTransparentClaim "Positive" `elem` steps) $
+          "whole-tree focusing did not record transparent claim expansion: " <> show steps
+        assert (InsertedUIntToNat u `elem` steps) $
+          "whole-tree focusing did not record UInt-to-Nat argument coercion: " <> show steps
+    other -> Left
+      ("checked proposition routing collapsed structural/Core failures or changed Core diagnostics: "
+        <> show other)
+
 bind :: Text.Text -> Mode -> Ty -> SurfaceState -> Either String SurfaceState
 bind name mode ty state =
   mapLeft show $
@@ -144,6 +206,17 @@ boundSource = Text.unlines
   , "claim SpecializedNested = true and Ready[U32](n);"
   , "claim ConsumedNested = Ready(spent) or false;"
   , "claim ProjectedNested = (n).field == n or true;"
+  ]
+
+checkedSource :: Text.Text
+checkedSource = Text.unlines
+  [ "claim CheckedTree = Positive(u) and NeedsNat(u) or Flagged(flag);"
+  , "claim UnknownNested = true and Missing(u);"
+  , "claim ArityNested = Flagged(flag, flag) or false;"
+  , "claim SortNested = Flagged(u) and true;"
+  , "claim NatToUInt = Positive(n) or false;"
+  , "claim SpecializedNested = true and Positive[U8](u);"
+  , "claim UnresolvedNested = Flagged(missing) or false;"
   ]
 
 assert :: Bool -> String -> Either String ()
