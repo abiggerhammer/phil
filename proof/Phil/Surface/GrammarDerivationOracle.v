@@ -168,10 +168,12 @@ Ltac synchronize_some_results :=
   repeat match goal with
   | Hleft : ?f = Some ?left,
     Hright : ?f = Some ?right |- _ =>
-      let Heq := fresh "Heq" in
-      assert (Heq : left = right) by congruence;
-      clear Hleft Hright;
-      first [ discriminate Heq | inversion Heq; subst; clear Heq ]
+      first
+        [ constr_eq left right; fail 1
+        | let Heq := fresh "Heq" in
+          assert (Heq : left = right) by congruence;
+          clear Hleft Hright;
+          first [ discriminate Heq | inversion Heq; subst; clear Heq ] ]
   end.
 
 Ltac consume_functional_ih :=
