@@ -170,7 +170,8 @@ Ltac synchronize_some_results :=
     Hright : ?f = Some ?right |- _ =>
       let Heq := fresh "Heq" in
       assert (Heq : left = right) by congruence;
-      subst right
+      clear Hleft Hright;
+      first [ discriminate Heq | inversion Heq; subst; clear Heq ]
   end.
 
 Ltac consume_functional_ih :=
