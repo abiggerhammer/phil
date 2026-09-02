@@ -112,7 +112,7 @@ effectSetReferencePreserved = do
 simpleEffectSemantics :: Either String ()
 simpleEffectSemantics = do
   literal <- onlyCallable $ Text.unlines
-    [ "callable Effects() -> Unit {"
+    [ "callable EffectCarrier() -> Unit {"
     , "  effects {IO, pkg.Audit, IO};"
     , "  effects {};"
     , "}"
