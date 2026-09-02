@@ -63,6 +63,7 @@ library
       ArchitectureRevisionConstructionKernel
       ProviderReplacementQualificationKernel
       AssuranceValidityScopeKernel
+      SystemsIdentityKernel
       Phil.Surface.Check.Types
       Phil.Surface.Check.Support
       Phil.Surface.Check.Preflight
