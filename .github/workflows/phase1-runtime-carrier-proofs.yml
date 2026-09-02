@@ -6,10 +6,9 @@ on:
       - 'proof/Phil/Assurance/RuntimeCarrier.v'
       - 'proof/Phil/Assurance/EvidenceUse.v'
       - 'proof/Phil/Assurance/Manifest.v'
+      - 'proof/Phil/Core/RuntimePrimitiveIdentity.v'
       - 'proof/Phil/Core/SystemsRuntimeGraph.v'
       - 'proof/Phil/Systems/Runtime.v'
-      - 'proof/Phil/LLVM/Preservation.v'
-      - 'proof/Phil/LLVM/RuntimeSymbolIdentity.v'
       - 'src/Phil/Systems/RuntimeCarrierBinding.hs'
       - 'src/Phil/Systems/RuntimeCarrierCoverage.hs'
       - 'test/Phase1RuntimeCarrierBindingMain.hs'
@@ -20,6 +19,8 @@ on:
     branches: [main]
     paths:
       - 'proof/Phil/Assurance/RuntimeCarrier.v'
+      - 'proof/Phil/Core/RuntimePrimitiveIdentity.v'
+      - 'proof/Phil/Core/SystemsRuntimeGraph.v'
       - 'docs/phase-1/runtime-carrier-proof-v1.md'
       - '.github/workflows/phase1-runtime-carrier-proofs.yml'
 
@@ -42,8 +43,7 @@ jobs:
           rocq c -Q proof/Phil Phil proof/Phil/Assurance/Manifest.v
           rocq c -Q proof/Phil Phil proof/Phil/Assurance/EvidenceUse.v
           rocq c -Q proof/Phil Phil proof/Phil/Systems/Runtime.v
-          rocq c -Q proof/Phil Phil proof/Phil/LLVM/Preservation.v
-          rocq c -Q proof/Phil Phil proof/Phil/LLVM/RuntimeSymbolIdentity.v
+          rocq c -Q proof/Phil Phil proof/Phil/Core/RuntimePrimitiveIdentity.v
           rocq c -Q proof/Phil Phil proof/Phil/Core/SystemsRuntimeGraph.v
           rocq c -Q proof/Phil Phil proof/Phil/Assurance/RuntimeCarrier.v
       - name: Record proof identities
@@ -57,6 +57,7 @@ jobs:
             runtime-carrier-proof/
           sha256sum \
             proof/Phil/Assurance/EvidenceUse.v \
+            proof/Phil/Core/RuntimePrimitiveIdentity.v \
             proof/Phil/Core/SystemsRuntimeGraph.v \
             proof/Phil/Assurance/RuntimeCarrier.v \
             proof/Phil/Assurance/RuntimeCarrier.vo \
