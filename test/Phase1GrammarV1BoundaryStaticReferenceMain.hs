@@ -29,6 +29,10 @@ import Phil.Surface.GrammarV1.BoundaryDirection
 import Phil.Surface.GrammarV1.BoundaryFailureTypes
   ( grammarV1BoundaryFailureTypes
   )
+import Phil.Surface.GrammarV1.BoundaryPropositions
+  ( grammarV1BoundaryCorrespondences
+  , grammarV1BoundaryLaws
+  )
 import Phil.Surface.GrammarV1.BoundaryValueType
   ( grammarV1BoundaryValueType
   )
@@ -53,6 +57,8 @@ main = do
         boundaryValueTypesRouteExactly
     , test "SURF-008 Grammar-v1 boundary failure types preserve ordered verified type meaning"
         boundaryFailureTypesRouteExactly
+    , test "SURF-008 Grammar-v1 boundary correspondence and law propositions preserve exact categories"
+        boundaryPropositionItemsRouteExactly
     ]
   if and results then pure () else exitFailure
 
@@ -214,6 +220,66 @@ boundaryFailureTypesRouteExactly = do
   assert (actual == expected) $
     "boundary failure-type routing changed source order, dropped a failure, or partially accepted an unresolved type: "
       <> show actual
+
+boundaryPropositionItemsRouteExactly :: Either String ()
+boundaryPropositionItemsRouteExactly = do
+  state1 <- bind "n" Unrestricted (TyOpaqueSorted "NatIndex" SortNat) emptySurfaceState
+  state <- bind "u" Unrestricted (TyUInt 32) state1
+  none <- parseBoundary "boundary-propositions-none"
+    "boundary None : U8 { canonical; }"
+  rich <- parseBoundary "boundary-propositions-rich" $ Text.unlines
+    [ "boundary Facts : U8 {"
+    , "  correspondence n + 1 == 7;"
+    , "  correspondence u < 7;"
+    , "  law ReadyLaw : Ready(n + 1, true) and n < 7;"
+    , "  law FocusedLaw : 7 < u;"
+    , "}"
+    ]
+  unresolvedCorrespondence <- parseBoundary "boundary-propositions-bad-correspondence" $ Text.unlines
+    [ "boundary BadCorrespondence : U8 {"
+    , "  correspondence missing == n;"
+    , "  law StillFine : true;"
+    , "}"
+    ]
+  unresolvedLaw <- parseBoundary "boundary-propositions-bad-law" $ Text.unlines
+    [ "boundary BadLaw : U8 {"
+    , "  correspondence true;"
+    , "  law Bad : Ready[U32](n);"
+    , "}"
+    ]
+  let n = RefVar (Name "n")
+      u = RefVar (Name "u")
+      boundaries = [none, rich, unresolvedCorrespondence, unresolvedLaw]
+      actualCorrespondences = map (grammarV1BoundaryCorrespondences state) boundaries
+      actualLaws = map (grammarV1BoundaryLaws state) boundaries
+      expectedCorrespondences =
+        [ Just []
+        , Just
+            [ Equal (RefAdd n (RefNat 1)) (RefNat 7)
+            , LessThan (RefToNat u) (RefNat 7)
+            ]
+        , Nothing
+        , Just [Truth]
+        ]
+      expectedLaws =
+        [ Just []
+        , Just
+            [ ( "ReadyLaw"
+              , Conjunction
+                  (Atom "Ready" [RefAdd n (RefNat 1), RefBool True])
+                  (LessThan n (RefNat 7))
+              )
+            , ("FocusedLaw", LessThan (RefNat 7) (RefToNat u))
+            ]
+        , Just [("StillFine", Truth)]
+        , Nothing
+        ]
+  assert (actualCorrespondences == expectedCorrespondences) $
+    "boundary correspondence routing changed order/meaning or failed to reject an unresolved correspondence: "
+      <> show actualCorrespondences
+  assert (actualLaws == expectedLaws) $
+    "boundary law routing changed names/order/meaning or failed to reject an unresolved law: "
+      <> show actualLaws
 
 bind :: Text.Text -> Mode -> Ty -> SurfaceState -> Either String SurfaceState
 bind name mode ty state =
