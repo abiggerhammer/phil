@@ -1,0 +1,105 @@
+name: Phase 1 Systems Identity Production Binding
+
+on:
+  pull_request:
+    paths:
+      - 'proof/Phil/Systems/Identity.v'
+      - 'proof/Phil/Systems/IdentityImplementation.v'
+      - 'proof/Phil/Systems/IdentityImplementationExtraction.v'
+      - 'generated/SystemsIdentityKernel.hs'
+      - 'src/SystemsIdentityKernel.hs'
+      - 'src/Phil/Systems/IR.hs'
+      - 'src/Phil/Systems/Verify.hs'
+      - 'app/SystemsIdentityDecisionCorrespondenceMain.hs'
+      - 'test/SystemsMain.hs'
+      - 'docs/phase-1/systems-identity-production-binding-v1.md'
+      - '.github/workflows/phase1-systems-identity-production-binding.yml'
+
+permissions:
+  contents: read
+
+jobs:
+  exact-systems-identity-kernel:
+    runs-on: ubuntu-latest
+    container:
+      image: rocq/rocq-prover:9.2.0
+      options: --user root
+    steps:
+      - uses: actions/checkout@v4
+      - name: Fresh-extract exact Systems identity kernel
+        shell: bash
+        run: |
+          set -euo pipefail
+          export PATH="/home/rocq/.opam/${COMPILER}/bin:$PATH"
+          rocq c -Q proof/Phil Phil proof/Phil/Systems/Identity.v
+          rocq c -Q proof/Phil Phil proof/Phil/Systems/IdentityImplementation.v
+          rm -f SystemsIdentityKernel.hs
+          rocq c -Q proof/Phil Phil proof/Phil/Systems/IdentityImplementationExtraction.v
+          test -s SystemsIdentityKernel.hs
+          echo '90a5a62df64ec43939379149b24a0f2dd8fd3afd1625eb4ab03598e9ddbc1a53  SystemsIdentityKernel.hs' | sha256sum -c -
+          cmp SystemsIdentityKernel.hs generated/SystemsIdentityKernel.hs
+          cmp SystemsIdentityKernel.hs src/SystemsIdentityKernel.hs
+      - name: Record exact kernel identities
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p systems-identity-exact-kernel
+          cp SystemsIdentityKernel.hs systems-identity-exact-kernel/
+          sha256sum \
+            SystemsIdentityKernel.hs \
+            generated/SystemsIdentityKernel.hs \
+            src/SystemsIdentityKernel.hs \
+            proof/Phil/Systems/Identity.v \
+            proof/Phil/Systems/IdentityImplementation.v \
+            proof/Phil/Systems/IdentityImplementationExtraction.v \
+            > systems-identity-exact-kernel/PHIL-SYS-ID-001.exact-kernel.sha256
+          cat systems-identity-exact-kernel/PHIL-SYS-ID-001.exact-kernel.sha256
+      - uses: actions/upload-artifact@v4
+        with:
+          name: systems-identity-exact-kernel
+          path: systems-identity-exact-kernel
+          if-no-files-found: error
+
+  verify-systems-identity-production-binding:
+    needs: exact-systems-identity-kernel
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: haskell-actions/setup@v2
+        with:
+          ghc-version: '9.6.7'
+          cabal-version: 'latest'
+      - name: Build ordinary regression substrate
+        run: cabal build all --enable-tests
+      - name: Strict typecheck exact production kernel and bound verifier
+        run: |
+          set -euo pipefail
+          ghc -Wall -Werror -fno-code src/SystemsIdentityKernel.hs
+          cabal exec -- ghc -isrc -Wall -Werror -fno-code src/Phil/Systems/Verify.hs
+      - name: Execute 12 direct controls through production kernel
+        run: |
+          set -euo pipefail
+          ghc -Wall -Werror -isrc \
+            app/SystemsIdentityDecisionCorrespondenceMain.hs \
+            -o systems-identity-kernel-controls
+          ./systems-identity-kernel-controls
+      - name: Re-run unchanged 20-case Systems verifier corpus
+        run: cabal test phil-systems-tests --test-show-details=direct
+      - name: Record production-binding identities
+        run: |
+          set -euo pipefail
+          mkdir -p systems-identity-production-binding
+          sha256sum \
+            generated/SystemsIdentityKernel.hs \
+            src/SystemsIdentityKernel.hs \
+            src/Phil/Systems/Verify.hs \
+            src/Phil/Systems/IR.hs \
+            test/SystemsMain.hs \
+            docs/phase-1/systems-identity-production-binding-v1.md \
+            > systems-identity-production-binding/PHIL-SYS-ID-001.production-binding.sha256
+          cat systems-identity-production-binding/PHIL-SYS-ID-001.production-binding.sha256
+      - uses: actions/upload-artifact@v4
+        with:
+          name: systems-identity-production-binding
+          path: systems-identity-production-binding
+          if-no-files-found: error
