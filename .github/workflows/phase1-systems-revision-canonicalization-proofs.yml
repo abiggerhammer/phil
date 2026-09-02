@@ -4,19 +4,30 @@ on:
   pull_request:
     paths:
       - 'proof/Phil/Core/SystemsRevisionCanonicalization.v'
+      - 'proof/Phil/Core/SystemsRevisionCanonicalizationImplementation.v'
+      - 'proof/Phil/Core/SystemsRevisionCanonicalizationImplementationExtraction.v'
       - 'proof/Phil/Core/ArchitectureIdentity.v'
       - 'proof/Phil/Core/SystemsStageClosure.v'
       - 'proof/Phil/Systems/Identity.v'
       - 'src/Phil/Systems/Phase1Stage.hs'
       - 'test/Phase1GenericSystemsStageMain.hs'
       - 'test/Phase1StageClosureMain.hs'
+      - 'app/SystemsRevisionCanonicalizationConstructionCorrespondenceMain.hs'
       - 'docs/phase-1/systems-revision-canonicalization-proof-v1.md'
+      - 'docs/phase-1/systems-revision-canonicalization-implementation-refinement-v1.md'
       - '.github/workflows/phase1-systems-revision-canonicalization-proofs.yml'
   push:
     branches: [main]
     paths:
       - 'proof/Phil/Core/SystemsRevisionCanonicalization.v'
+      - 'proof/Phil/Core/SystemsRevisionCanonicalizationImplementation.v'
+      - 'proof/Phil/Core/SystemsRevisionCanonicalizationImplementationExtraction.v'
+      - 'src/Phil/Systems/Phase1Stage.hs'
+      - 'test/Phase1GenericSystemsStageMain.hs'
+      - 'test/Phase1StageClosureMain.hs'
+      - 'app/SystemsRevisionCanonicalizationConstructionCorrespondenceMain.hs'
       - 'docs/phase-1/systems-revision-canonicalization-proof-v1.md'
+      - 'docs/phase-1/systems-revision-canonicalization-implementation-refinement-v1.md'
       - '.github/workflows/phase1-systems-revision-canonicalization-proofs.yml'
 
 permissions:
@@ -30,7 +41,7 @@ jobs:
       options: --user root
     steps:
       - uses: actions/checkout@v4
-      - name: Compile certified predecessors and PHIL-SYS-REV-001
+      - name: Compile certified predecessors, PHIL-SYS-REV-001, and implementation correspondence
         shell: bash
         run: |
           set -euo pipefail
@@ -41,7 +52,13 @@ jobs:
           rocq c -Q proof/Phil Phil proof/Phil/Assurance/ValidityScope.v
           rocq c -Q proof/Phil Phil proof/Phil/Core/SystemsStageClosure.v
           rocq c -Q proof/Phil Phil proof/Phil/Core/SystemsRevisionCanonicalization.v
-      - name: Record proof identities
+          rocq c -Q proof/Phil Phil proof/Phil/Core/SystemsRevisionCanonicalizationImplementation.v
+          rm -f SystemsRevisionCanonicalizationKernel.hs
+          rocq c -Q proof/Phil Phil proof/Phil/Core/SystemsRevisionCanonicalizationImplementationExtraction.v
+          test -s SystemsRevisionCanonicalizationKernel.hs
+          grep -q 'planSystemsArtifactRevision' SystemsRevisionCanonicalizationKernel.hs
+          grep -q 'planPhase1StageContractRevision' SystemsRevisionCanonicalizationKernel.hs
+      - name: Record proof and extraction identities
         shell: bash
         run: |
           set -euo pipefail
@@ -49,6 +66,11 @@ jobs:
           cp \
             proof/Phil/Core/SystemsRevisionCanonicalization.v \
             proof/Phil/Core/SystemsRevisionCanonicalization.vo \
+            proof/Phil/Core/SystemsRevisionCanonicalizationImplementation.v \
+            proof/Phil/Core/SystemsRevisionCanonicalizationImplementation.vo \
+            proof/Phil/Core/SystemsRevisionCanonicalizationImplementationExtraction.v \
+            proof/Phil/Core/SystemsRevisionCanonicalizationImplementationExtraction.vo \
+            SystemsRevisionCanonicalizationKernel.hs \
             systems-revision-canonicalization-proof/
           sha256sum \
             proof/Phil/Core/ArchitectureIdentity.v \
@@ -56,6 +78,9 @@ jobs:
             proof/Phil/Core/SystemsStageClosure.v \
             proof/Phil/Core/SystemsRevisionCanonicalization.v \
             proof/Phil/Core/SystemsRevisionCanonicalization.vo \
+            proof/Phil/Core/SystemsRevisionCanonicalizationImplementation.v \
+            proof/Phil/Core/SystemsRevisionCanonicalizationImplementation.vo \
+            SystemsRevisionCanonicalizationKernel.hs \
             > systems-revision-canonicalization-proof/PHIL-SYS-REV-001.proof.sha256
           {
             echo 'obligation=PHIL-SYS-REV-001'
@@ -80,7 +105,21 @@ jobs:
           cabal-version: 'latest'
       - name: Build ordinary regression substrate
         run: cabal build all --enable-tests
-      - name: Strict typecheck canonical Systems revision implementation
+      - uses: actions/download-artifact@v4
+        with:
+          name: rocq-systems-revision-canonicalization-proof
+          path: systems-revision-canonicalization-proof
+      - name: Typecheck and execute extracted revision-construction controls
+        run: |
+          set -euo pipefail
+          ghc -Wall -Werror -Wno-unused-imports -fno-code \
+            systems-revision-canonicalization-proof/SystemsRevisionCanonicalizationKernel.hs
+          ghc -Wall -Werror -Wno-unused-imports \
+            -isystems-revision-canonicalization-proof \
+            app/SystemsRevisionCanonicalizationConstructionCorrespondenceMain.hs \
+            -o systems-revision-canonicalization-kernel-controls
+          ./systems-revision-canonicalization-kernel-controls
+      - name: Strict typecheck unchanged canonical Systems revision implementation
         run: |
           set -euo pipefail
           cabal exec -- ghc -isrc -Wall -Werror -fno-code src/Phil/Systems/Phase1Stage.hs
@@ -89,3 +128,22 @@ jobs:
           set -euo pipefail
           cabal exec -- runghc -isrc test/Phase1GenericSystemsStageMain.hs
           cabal exec -- runghc -isrc test/Phase1StageClosureMain.hs
+      - name: Record implementation-refinement staging identities
+        run: |
+          set -euo pipefail
+          mkdir -p systems-revision-canonicalization-implementation-correspondence
+          sha256sum \
+            systems-revision-canonicalization-proof/SystemsRevisionCanonicalizationKernel.hs \
+            src/Phil/Systems/Phase1Stage.hs \
+            test/Phase1GenericSystemsStageMain.hs \
+            test/Phase1StageClosureMain.hs \
+            app/SystemsRevisionCanonicalizationConstructionCorrespondenceMain.hs \
+            proof/Phil/Core/SystemsRevisionCanonicalizationImplementation.v \
+            docs/phase-1/systems-revision-canonicalization-implementation-refinement-v1.md \
+            > systems-revision-canonicalization-implementation-correspondence/PHIL-SYS-REV-001.staging.sha256
+          cat systems-revision-canonicalization-implementation-correspondence/PHIL-SYS-REV-001.staging.sha256
+      - uses: actions/upload-artifact@v4
+        with:
+          name: systems-revision-canonicalization-implementation-correspondence
+          path: systems-revision-canonicalization-implementation-correspondence
+          if-no-files-found: error
