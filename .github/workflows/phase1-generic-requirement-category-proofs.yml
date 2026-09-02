@@ -1,0 +1,81 @@
+name: Phase 1 Generic Requirement Category Proofs
+
+on:
+  pull_request:
+    paths:
+      - 'proof/Phil/Core/GenericRequirementCategory.v'
+      - 'src/Phil/Core/Generic/RequirementCategory.hs'
+      - 'test/Phase1GenericRequirementCategoryMain.hs'
+      - 'docs/phase-1/generic-requirement-category-proof-v1.md'
+      - '.github/workflows/phase1-generic-requirement-category-proofs.yml'
+  push:
+    branches: [main]
+    paths:
+      - 'proof/Phil/Core/GenericRequirementCategory.v'
+      - 'src/Phil/Core/Generic/RequirementCategory.hs'
+      - 'test/Phase1GenericRequirementCategoryMain.hs'
+      - 'docs/phase-1/generic-requirement-category-proof-v1.md'
+      - '.github/workflows/phase1-generic-requirement-category-proofs.yml'
+
+permissions:
+  contents: read
+
+jobs:
+  rocq-generic-requirement-category-proof:
+    runs-on: ubuntu-latest
+    container:
+      image: rocq/rocq-prover:9.2.0
+      options: --user root
+    steps:
+      - uses: actions/checkout@v4
+      - name: Compile PHIL-GEN-CATEGORY-001
+        shell: bash
+        run: |
+          set -euo pipefail
+          export PATH="/home/rocq/.opam/${COMPILER}/bin:$PATH"
+          rocq c -Q proof/Phil Phil proof/Phil/Core/GenericRequirementCategory.v
+      - name: Record proof identities
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p generic-requirement-category-proof
+          cp \
+            proof/Phil/Core/GenericRequirementCategory.v \
+            proof/Phil/Core/GenericRequirementCategory.vo \
+            generic-requirement-category-proof/
+          sha256sum \
+            proof/Phil/Core/GenericRequirementCategory.v \
+            proof/Phil/Core/GenericRequirementCategory.vo \
+            src/Phil/Core/Generic/RequirementCategory.hs \
+            test/Phase1GenericRequirementCategoryMain.hs \
+            > generic-requirement-category-proof/PHIL-GEN-CATEGORY-001.proof.sha256
+          {
+            echo 'obligation=PHIL-GEN-CATEGORY-001'
+            echo 'evidence=Rocq-9.2.0'
+            cat generic-requirement-category-proof/PHIL-GEN-CATEGORY-001.proof.sha256
+          } > generic-requirement-category-proof/PHIL-GEN-CATEGORY-001.proof-certificate.txt
+          cat generic-requirement-category-proof/PHIL-GEN-CATEGORY-001.proof-certificate.txt
+      - uses: actions/upload-artifact@v4
+        with:
+          name: rocq-generic-requirement-category-proof
+          path: generic-requirement-category-proof
+          if-no-files-found: error
+
+  verify-generic-requirement-category-correspondence:
+    needs: rocq-generic-requirement-category-proof
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: haskell-actions/setup@v2
+        with:
+          ghc-version: '9.6.7'
+          cabal-version: 'latest'
+      - name: Build ordinary regression substrate
+        run: cabal build all --enable-tests
+      - name: Strict typecheck GEN-014 implementation and corpus
+        run: |
+          set -euo pipefail
+          cabal exec -- ghc -isrc -Wall -Werror -fno-code src/Phil/Core/Generic/RequirementCategory.hs
+          cabal exec -- ghc -isrc -Wall -Werror -fno-code test/Phase1GenericRequirementCategoryMain.hs
+      - name: Re-run unchanged GEN-014 corpus
+        run: cabal exec -- runghc -Wall -Werror -isrc test/Phase1GenericRequirementCategoryMain.hs
