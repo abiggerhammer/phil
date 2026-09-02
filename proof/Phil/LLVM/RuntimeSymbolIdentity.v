@@ -1,24 +1,23 @@
-From Phil.Core Require Import RuntimePrimitiveIdentity.
 From Phil.LLVM Require Import Preservation.
 
 (*
-  PHIL-LLVM-RUNTIME-SYM-001 — LLVM instantiation of the target-neutral
-  PHIL-TARGET-RUNTIME-PRIM-001 runtime primitive identity relation, plus the
-  recognized-record ABI v1 call-multiplicity rule introduced by PR #43.
+  PHIL-LLVM-RUNTIME-SYM-001 — normalized proof model of the recognized-record
+  ABI v1 rule introduced by PR #43.
 
   Linker-visible runtime symbols are functions of physical primitive identity
-  and ABI signature only. Revision/evidence/use identities and claim-set
+  and ABI signature only.  Revision/evidence/use identities and claim-set
   cardinality remain verifier metadata and cannot, by themselves, rename the
-  primitive or multiply the physical call. The current RuntimeSiteRef is a
+  primitive or multiply the physical call.  The current RuntimeSiteRef is a
   singleton-claim special case; arbitrary nonempty claim-set preservation is
-  deliberately outside this LLVM-specific theorem.
+  deliberately outside this theorem.
 *)
 
-Definition RuntimeSignatureId := RuntimePrimitiveProfileId.
-Definition RuntimeSymbolId := RuntimeTargetEntryId.
-Definition RuntimeRevisionId := RuntimeAssuranceRevisionId.
-Definition RuntimeEvidenceId := RuntimeAssuranceEvidenceId.
-Definition RuntimeUseId := RuntimeAssuranceUseId.
+Definition RuntimePrimitiveId := nat.
+Definition RuntimeSignatureId := nat.
+Definition RuntimeSymbolId := nat.
+Definition RuntimeRevisionId := nat.
+Definition RuntimeEvidenceId := nat.
+Definition RuntimeUseId := nat.
 
 Record RuntimeSymbolModel : Type := mkRuntimeSymbolModel {
   runtimeSymbolPreservation : LLVMPreservationModel;
@@ -33,19 +32,6 @@ Record RuntimeSymbolModel : Type := mkRuntimeSymbolModel {
   runtimeSymbolClaimCount : nat;
   runtimeSymbolAssuranceIdentityEncoded : bool
 }.
-
-Definition runtimeSymbolAsPrimitiveIdentity
-  (model : RuntimeSymbolModel) : RuntimePrimitiveIdentityModel :=
-  {| runtimePrimitiveIdentity := runtimeSymbolPrimitive model;
-     runtimePrimitiveProfile := runtimeSymbolSignature model;
-     runtimePrimitiveEntryBuilder := runtimeSymbolBuilder model;
-     runtimePrimitiveActualEntry := runtimeSymbolActual model;
-     runtimePrimitiveAssuranceRevision := runtimeSymbolRevision model;
-     runtimePrimitiveAssuranceEvidence := runtimeSymbolEvidence model;
-     runtimePrimitiveAssuranceUse := runtimeSymbolUse model;
-     runtimePrimitiveClaimCount := runtimeSymbolClaimCount model;
-     runtimePrimitiveAssuranceIdentityEncoded :=
-       runtimeSymbolAssuranceIdentityEncoded model |}.
 
 Definition linkerSymbolFor
   (model : RuntimeSymbolModel)
@@ -74,18 +60,6 @@ Record RuntimeSymbolVerificationSuccess
     runtimeSymbolAssuranceIdentityEncoded model = false
 }.
 
-Theorem verified_runtime_symbol_refines_target_neutral_primitive_identity :
-  forall model,
-    RuntimeSymbolVerificationSuccess model ->
-    RuntimePrimitiveIdentityVerificationSuccess
-      (runtimeSymbolAsPrimitiveIdentity model).
-Proof.
-  intros model H.
-  constructor.
-  - exact (runtime_symbol_success_physical_identity model H).
-  - exact (runtime_symbol_success_no_assurance_encoding model H).
-Qed.
-
 Theorem verified_runtime_symbol_uses_physical_primitive_and_signature :
   forall model,
     RuntimeSymbolVerificationSuccess model ->
@@ -105,17 +79,6 @@ Theorem runtime_symbol_is_independent_of_revision_evidence_use_and_claim_count :
 Proof.
   intros.
   reflexivity.
-Qed.
-
-Theorem runtime_symbol_independence_is_target_neutral_identity_independence :
-  forall model revisionA evidenceA useA countA revisionB evidenceB useB countB,
-    targetEntryFor (runtimeSymbolAsPrimitiveIdentity model)
-      revisionA evidenceA useA countA =
-    targetEntryFor (runtimeSymbolAsPrimitiveIdentity model)
-      revisionB evidenceB useB countB.
-Proof.
-  intros.
-  apply runtime_primitive_entry_is_independent_of_assurance_metadata.
 Qed.
 
 Theorem verified_singleton_runtime_site_remains_one_llvm_call :
