@@ -74,6 +74,7 @@ import Phil.Systems.SubjectCorrespondence
   , SubjectStageBundle (..)
   , SystemsValueRef (..)
   )
+import qualified ResourceJoinKernel as ResourceJoinKernel
 import qualified SystemsControlPreservationKernel as Kernel
 
 newtype ControlStateStageRevision = ControlStateStageRevision
@@ -382,6 +383,7 @@ checkStateProjection program subjectIndex boundary projection = do
     (Map.toAscList (stateProjectionBindings projection))
   checkRestrictedMultiplicity
   checkLinearCoverage
+  checkResourceJoinKernel
   where
     projectionKey = stateProjectionKey projection
 
@@ -502,6 +504,48 @@ checkStateProjection program subjectIndex boundary projection = do
           Left (StateProjectionUnaccountedLinearOwners projectionKey unaccounted)
         _ -> kernelInvariant "state-linear-coverage"
 
+
+checkResourceJoinKernel =
+  case ResourceJoinKernel.decideResourceProjectionByFacts
+      allIncomingLinearExactlyOnceBound
+      noInventedLinearOwners
+      allBoundLinearSubjectsAdmissible of
+    ResourceJoinKernel.ResourceProjectionAcceptedDecision -> Right ()
+    _ -> kernelInvariant "resource-join"
+  where
+    bindingCounts = Map.fromListWith (+)
+      [ (ref, 1 :: Int)
+      | ref <- Map.elems (stateProjectionBindings projection)
+      ]
+    incomingLinear = Set.fromList
+      [ ref
+      | (ref, mode) <- Map.toAscList
+          (stateProjectionIncomingRestricted projection)
+      , mode == Linear
+      ]
+    linearBindings =
+      [ (slotKey, ref)
+      | (slotKey, ref) <- Map.toAscList
+          (stateProjectionBindings projection)
+      , Just slot <- [Map.lookup slotKey (stateBoundarySlots boundary)]
+      , stateSlotMode slot == Linear
+      ]
+    allIncomingLinearExactlyOnceBound = all
+      (\ref -> Map.findWithDefault 0 ref bindingCounts == 1)
+      (Set.toList incomingLinear)
+    noInventedLinearOwners = all
+      (\(_, ref) ->
+        Map.lookup ref (stateProjectionIncomingRestricted projection)
+          == Just Linear)
+      linearBindings
+    allBoundLinearSubjectsAdmissible = all subjectAdmissible linearBindings
+    subjectAdmissible (slotKey, ref) =
+      case Map.lookup slotKey (stateBoundarySlots boundary) of
+        Nothing -> False
+        Just slot -> case stateSlotSubjectRequirement slot of
+          AnyStateSubject -> True
+          FixedStateSubject subject ->
+            maybe False (Set.member ref) (Map.lookup subject subjectIndex)
 checkClosureCaptureProjection
   :: ClosureCaptureProjection
   -> Either ControlStateProjectionError ()

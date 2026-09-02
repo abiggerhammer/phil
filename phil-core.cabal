@@ -64,6 +64,7 @@ library
       ProviderReplacementQualificationKernel
       AssuranceValidityScopeKernel
       SystemsIdentityKernel
+      ResourceJoinKernel
       Phil.Surface.Check.Types
       Phil.Surface.Check.Support
       Phil.Surface.Check.Preflight
