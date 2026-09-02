@@ -2,8 +2,14 @@
 
 module Main (main) where
 
+import qualified Data.Set as Set
 import qualified Data.Text as Text
 import qualified Data.Text.IO as TextIO
+import Phil.Core.CallableRefinement (CallableFailure (..))
+import Phil.Core.Syntax (Outcome (..))
+import Phil.Surface.GrammarV1.CallableOutcomes
+  ( grammarV1CallableFailures
+  )
 import Phil.Surface.GrammarV1.Parser
 import Phil.Surface.Syntax (Located (..))
 import System.Exit (exitFailure)
@@ -19,6 +25,8 @@ main = do
         expectOutcomeRefinement
     , testIO "SURF-002 outcome kinds and obligations preserve all four kinds"
         expectOutcomeKindsAndObligations
+    , testIO "SURF-008 simple callable outcome classes preserve exact Core failure identities"
+        simpleOutcomeFailures
     , testIO "SURF-003 outcome state missing semicolon rejects at syntax"
         (expectFixtureReject "rejected/06-outcome-state-missing-semicolon.phil")
     , testIO "SURF-003 replace callee missing with rejects at syntax"
@@ -147,6 +155,54 @@ expectOutcomeKindsAndObligations = do
                 other -> Left ("unexpected success obligation residue " <> show other)
             _ -> Left "internal four-residue assertion mismatch"
       clauses -> Left ("unexpected outcome-kinds callable clauses " <> show clauses)
+
+simpleOutcomeFailures :: IO (Either String ())
+simpleOutcomeFailures = do
+  parsed <- parseFixture "accepted/21-outcome-kinds-obligations.phil"
+  pure $ do
+    callable <- onlyCallable parsed
+    assert
+      ( grammarV1CallableFailures callable ==
+          Just (Set.fromList
+            [ CallableTypedNegative (Outcome "Retry")
+            , CallableDeclaredTerminal (Outcome "Closed")
+            , CallableFatal "Crashed"
+            ])
+      )
+      "source outcome classes did not preserve exact Core failure identities"
+
+    qualified <- onlyCallable $ parseGrammarV1StructuralSource "qualified-outcomes" $ Text.unlines
+      [ "callable OutcomeCarrier() -> Unit {"
+      , "  outcomes { success Done, negative pkg.Retry, terminal pkg.Closed, fatal pkg.Crashed };"
+      , "}"
+      ]
+    assert
+      ( grammarV1CallableFailures qualified ==
+          Just (Set.fromList
+            [ CallableTypedNegative (Outcome "pkg.Retry")
+            , CallableDeclaredTerminal (Outcome "pkg.Closed")
+            , CallableFatal "pkg.Crashed"
+            ])
+      )
+      "qualified outcome identities lost exact dotted spelling"
+
+    successOnly <- onlyCallable $ parseGrammarV1StructuralSource "success-only-outcome"
+      "callable SuccessOnly() -> Unit { outcomes { success Done }; }"
+    assert
+      (grammarV1CallableFailures successOnly == Just Set.empty)
+      "success outcome was incorrectly projected as a Core failure"
+
+    specialized <- onlyCallable $ parseGrammarV1StructuralSource "specialized-outcome"
+      "callable SpecializedOutcome() -> Unit { outcomes { negative Retry[U8] }; }"
+    assert
+      (grammarV1CallableFailures specialized == Nothing)
+      "specialized outcome type was flattened into an opaque Core failure identity"
+
+    structured <- onlyCallable $ parseGrammarV1StructuralSource "structured-outcome"
+      "callable StructuredOutcome() -> Unit { outcomes { fatal (U8, Bool) }; }"
+    assert
+      (grammarV1CallableFailures structured == Nothing)
+      "structured fatal type was flattened into an opaque Core failure identity"
 
 assertOutcomeKinds
   :: [GrammarV1OutcomeKind]
