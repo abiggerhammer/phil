@@ -85,19 +85,17 @@ jobs:
         with:
           ghc-version: '9.6.7'
           cabal-version: 'latest'
+      - uses: actions/download-artifact@v4
+        with:
+          name: rocq-systems-identity-proof
+          path: systems-identity-proof
       - name: Build ordinary regression substrate
         run: cabal build all --enable-tests
-      - name: Fresh-extract identity kernel for Haskell controls
+      - name: Materialize extracted identity kernel
         shell: bash
         run: |
           set -euo pipefail
-          docker run --rm -v "$PWD:/work" -w /work rocq/rocq-prover:9.2.0 bash -lc '
-            export PATH="/home/rocq/.opam/${COMPILER}/bin:$PATH"
-            rocq c -Q proof/Phil Phil proof/Phil/Systems/Identity.v
-            rocq c -Q proof/Phil Phil proof/Phil/Systems/IdentityImplementation.v
-            rm -f SystemsIdentityKernel.hs
-            rocq c -Q proof/Phil Phil proof/Phil/Systems/IdentityImplementationExtraction.v
-          '
+          cp systems-identity-proof/SystemsIdentityKernel.hs .
           test -s SystemsIdentityKernel.hs
       - name: Strict typecheck raw kernel and unchanged verifier
         run: |
