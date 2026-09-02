@@ -33,6 +33,7 @@ import Phil.Core.Static
   , canonicalSemanticForm
   )
 import Phil.Systems.IR
+import qualified SystemsRevisionCanonicalizationKernel as RevisionKernel
 
 newtype SystemsArtifactRevision = SystemsArtifactRevision
   { unSystemsArtifactRevision :: Text
@@ -130,36 +131,64 @@ normalizePhase1SystemsArtifact artifact = SystemsArtifact
       }
 
 deriveSystemsArtifactRevision :: SystemsArtifact -> SystemsArtifactRevision
-deriveSystemsArtifactRevision =
-  SystemsArtifactRevision
-    . unDigest
-    . systemsArtifactDigest
-    . normalizePhase1SystemsArtifact
+deriveSystemsArtifactRevision artifact =
+  case RevisionKernel.planSystemsArtifactRevision source program contract ledger of
+    RevisionKernel.MkSystemsArtifactRevisionPlan
+      RevisionKernel.SystemsArtifactRevisionNamespace
+      plannedSource plannedProgram plannedContract plannedLedger ->
+        SystemsArtifactRevision
+          . unDigest
+          . systemsArtifactDigest
+          $ SystemsArtifact
+            { systemsArtifactProgram = plannedProgram
+            , systemsArtifactStageContract =
+                plannedContract { stageSourceArtifactDigest = plannedSource }
+            , systemsArtifactLoweringLedger = plannedLedger
+            }
+    _ -> kernelInvariant "systems-artifact-revision-plan"
+  where
+    normalized = normalizePhase1SystemsArtifact artifact
+    program = systemsArtifactProgram normalized
+    contract = systemsArtifactStageContract normalized
+    source = stageSourceArtifactDigest contract
+    ledger = systemsArtifactLoweringLedger normalized
 
 derivePhase1StageContractRevision :: Phase1StageBundle -> Phase1StageContractRevision
 derivePhase1StageContractRevision bundle =
-  Phase1StageContractRevision
-    ("phil.phase1.stage.canonical.v1:"
-      <> canonicalSemanticForm (SemanticRecord (Map.fromList
-        [ ("instance", SemanticAtom (instanceText (phase1StageInstanceRevision bundle)))
-        , ("realization", SemanticAtom (realizationText (phase1StageRealizationRevision bundle)))
-        , ("systems", SemanticAtom
-            (unSystemsArtifactRevision (phase1StageSystemsArtifactRevision bundle)))
-        , ("verifier_profile", SemanticAtom (phase1StageVerifierProfileRevision bundle))
-        , ("source_facts", semanticSourceFactSet (phase1StageSourceFacts bundle))
-        , ("dispositions", SemanticRecord
-            (Map.fromList
-              [ (unSourceFactKey key, semanticDisposition value)
-              | (key, value) <- Map.toAscList (phase1StageFactDispositions bundle)
-              ]))
-        , ("systems_mechanisms", semanticMechanismSet
-            (phase1StageSystemsMechanisms bundle))
-        , ("justifications", SemanticRecord
-            (Map.fromList
-              [ (unSystemsMechanismKey key, semanticJustification value)
-              | (key, value) <- Map.toAscList (phase1StageSystemsJustifications bundle)
-              ]))
-        ])))
+  case RevisionKernel.planPhase1StageContractRevision
+      (phase1StageInstanceRevision bundle)
+      (phase1StageRealizationRevision bundle)
+      (phase1StageSystemsArtifactRevision bundle)
+      (phase1StageVerifierProfileRevision bundle)
+      (phase1StageSourceFacts bundle)
+      (phase1StageFactDispositions bundle)
+      (phase1StageSystemsMechanisms bundle)
+      (phase1StageSystemsJustifications bundle) of
+    RevisionKernel.MkPhase1StageContractRevisionPlan
+      RevisionKernel.Phase1StageContractRevisionNamespace
+      instanceRevision realizationRevision systemsRevision verifierProfile
+      sourceFacts dispositions mechanisms justifications ->
+        Phase1StageContractRevision
+          ("phil.phase1.stage.canonical.v1:"
+            <> canonicalSemanticForm (SemanticRecord (Map.fromList
+              [ ("instance", SemanticAtom (instanceText instanceRevision))
+              , ("realization", SemanticAtom (realizationText realizationRevision))
+              , ("systems", SemanticAtom (unSystemsArtifactRevision systemsRevision))
+              , ("verifier_profile", SemanticAtom verifierProfile)
+              , ("source_facts", semanticSourceFactSet sourceFacts)
+              , ("dispositions", SemanticRecord
+                  (Map.fromList
+                    [ (unSourceFactKey key, semanticDisposition value)
+                    | (key, value) <- Map.toAscList dispositions
+                    ]))
+              , ("systems_mechanisms", semanticMechanismSet mechanisms)
+              , ("justifications", SemanticRecord
+                  (Map.fromList
+                    [ (unSystemsMechanismKey key, semanticJustification value)
+                    | (key, value) <- Map.toAscList justifications
+                    ]))
+              ])))
+    _ -> kernelInvariant "phase1-stage-contract-revision-plan"
 
 collectSourceFacts :: SystemsArtifact -> Set SourceFactKey
 collectSourceFacts artifact = Set.fromList
@@ -440,3 +469,7 @@ requireEqual :: Eq a => (a -> a -> e) -> a -> a -> Either e ()
 requireEqual mkError expected actual
   | expected == actual = Right ()
   | otherwise = Left (mkError expected actual)
+
+kernelInvariant :: String -> a
+kernelInvariant label =
+  error ("SystemsRevisionCanonicalizationKernel mismatch: " <> label)
