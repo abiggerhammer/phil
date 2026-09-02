@@ -1,0 +1,104 @@
+name: Phase 1 Surface Determinacy Oracle
+
+on:
+  pull_request:
+    paths:
+      - 'grammar/phase1-surface.ebnf'
+      - 'grammar/phase1-surface-determinacy.json'
+      - 'scripts/derive_phase1_surface_grammar.py'
+      - 'scripts/check_phase1_surface_determinacy.py'
+      - 'proof/Phil/Surface/GrammarDerivation.v'
+      - 'proof/Phil/Surface/GrammarDerivationOracle.v'
+      - 'docs/phase-1/surface-determinacy-oracle-v1.md'
+      - '.github/workflows/phase1-surface-determinacy-oracle.yml'
+  push:
+    branches: [main]
+    paths:
+      - 'grammar/phase1-surface.ebnf'
+      - 'grammar/phase1-surface-determinacy.json'
+      - 'scripts/derive_phase1_surface_grammar.py'
+      - 'scripts/check_phase1_surface_determinacy.py'
+      - 'proof/Phil/Surface/GrammarDerivation.v'
+      - 'proof/Phil/Surface/GrammarDerivationOracle.v'
+      - 'docs/phase-1/surface-determinacy-oracle-v1.md'
+      - '.github/workflows/phase1-surface-determinacy-oracle.yml'
+
+permissions:
+  contents: read
+
+jobs:
+  derive-exact-grammar:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Check exact determinacy inventory
+        shell: bash
+        run: |
+          set -euo pipefail
+          output="$(python3 scripts/check_phase1_surface_determinacy.py)"
+          printf '%s\n' "$output"
+          grep -F '15 reviewed local overlap(s), inventory exact' <<<"$output"
+      - name: Derive exact typed grammar twice
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 scripts/derive_phase1_surface_grammar.py --write
+          cp proof/Phil/Surface/Grammar.v /tmp/Grammar.first.v
+          python3 scripts/derive_phase1_surface_grammar.py --write
+          cmp /tmp/Grammar.first.v proof/Phil/Surface/Grammar.v
+          python3 scripts/derive_phase1_surface_grammar.py --check
+      - uses: actions/upload-artifact@v4
+        with:
+          name: exact-phase1-surface-grammar-for-oracle
+          path: proof/Phil/Surface/Grammar.v
+          if-no-files-found: error
+
+  rocq-surface-oracle:
+    needs: derive-exact-grammar
+    runs-on: ubuntu-latest
+    container:
+      image: rocq/rocq-prover:9.2.0
+      options: --user root
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/download-artifact@v4
+        with:
+          name: exact-phase1-surface-grammar-for-oracle
+          path: proof/Phil/Surface
+      - name: Compile exact grammar oracle functionality proof
+        shell: bash
+        run: |
+          set -euo pipefail
+          export PATH="/home/rocq/.opam/${COMPILER}/bin:$PATH"
+          rocq c -Q proof/Phil Phil proof/Phil/Surface/Grammar.v
+          rocq c -Q proof/Phil Phil proof/Phil/Surface/GrammarDerivation.v
+          rocq c -Q proof/Phil Phil proof/Phil/Surface/GrammarDerivationOracle.v
+      - name: Record oracle proof identities
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p surface-determinacy-oracle
+          cp \
+            proof/Phil/Surface/Grammar.v \
+            proof/Phil/Surface/GrammarDerivation.v \
+            proof/Phil/Surface/GrammarDerivation.vo \
+            proof/Phil/Surface/GrammarDerivationOracle.v \
+            proof/Phil/Surface/GrammarDerivationOracle.vo \
+            surface-determinacy-oracle/
+          sha256sum \
+            grammar/phase1-surface.ebnf \
+            grammar/phase1-surface-determinacy.json \
+            scripts/derive_phase1_surface_grammar.py \
+            scripts/check_phase1_surface_determinacy.py \
+            proof/Phil/Surface/Grammar.v \
+            proof/Phil/Surface/GrammarDerivation.v \
+            proof/Phil/Surface/GrammarDerivation.vo \
+            proof/Phil/Surface/GrammarDerivationOracle.v \
+            proof/Phil/Surface/GrammarDerivationOracle.vo \
+            > surface-determinacy-oracle/oracle-identities.sha256
+          cat surface-determinacy-oracle/oracle-identities.sha256
+      - uses: actions/upload-artifact@v4
+        with:
+          name: rocq-surface-determinacy-oracle
+          path: surface-determinacy-oracle
+          if-no-files-found: error
