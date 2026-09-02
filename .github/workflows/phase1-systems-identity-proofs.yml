@@ -1,0 +1,127 @@
+name: Phase 1 Systems Identity Proofs
+
+on:
+  pull_request:
+    paths:
+      - 'proof/Phil/Systems/Identity.v'
+      - 'proof/Phil/Systems/IdentityImplementation.v'
+      - 'proof/Phil/Systems/IdentityImplementationExtraction.v'
+      - 'src/Phil/Systems/IR.hs'
+      - 'src/Phil/Systems/Verify.hs'
+      - 'app/SystemsIdentityDecisionCorrespondenceMain.hs'
+      - 'test/SystemsMain.hs'
+      - 'docs/phase-1/systems-identity-implementation-refinement-v1.md'
+      - '.github/workflows/phase1-systems-identity-proofs.yml'
+  push:
+    branches: [main]
+    paths:
+      - 'proof/Phil/Systems/Identity.v'
+      - 'proof/Phil/Systems/IdentityImplementation.v'
+      - 'proof/Phil/Systems/IdentityImplementationExtraction.v'
+      - 'src/Phil/Systems/IR.hs'
+      - 'src/Phil/Systems/Verify.hs'
+      - 'app/SystemsIdentityDecisionCorrespondenceMain.hs'
+      - 'test/SystemsMain.hs'
+      - 'docs/phase-1/systems-identity-implementation-refinement-v1.md'
+      - '.github/workflows/phase1-systems-identity-proofs.yml'
+
+permissions:
+  contents: read
+
+jobs:
+  rocq-systems-identity-proof:
+    runs-on: ubuntu-latest
+    container:
+      image: rocq/rocq-prover:9.2.0
+      options: --user root
+    steps:
+      - uses: actions/checkout@v4
+      - name: Compile PHIL-SYS-ID-001 and implementation correspondence
+        shell: bash
+        run: |
+          set -euo pipefail
+          export PATH="/home/rocq/.opam/${COMPILER}/bin:$PATH"
+          rocq c -Q proof/Phil Phil proof/Phil/Systems/Identity.v
+          rocq c -Q proof/Phil Phil proof/Phil/Systems/IdentityImplementation.v
+          rm -f SystemsIdentityKernel.hs
+          rocq c -Q proof/Phil Phil proof/Phil/Systems/IdentityImplementationExtraction.v
+          test -s SystemsIdentityKernel.hs
+          grep -q 'decideArtifactIdentityByFacts' SystemsIdentityKernel.hs
+          grep -q 'decideDecisionBindingByFacts' SystemsIdentityKernel.hs
+      - name: Record proof and extraction identities
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p systems-identity-proof
+          cp \
+            proof/Phil/Systems/Identity.v \
+            proof/Phil/Systems/Identity.vo \
+            proof/Phil/Systems/IdentityImplementation.v \
+            proof/Phil/Systems/IdentityImplementation.vo \
+            proof/Phil/Systems/IdentityImplementationExtraction.v \
+            SystemsIdentityKernel.hs \
+            systems-identity-proof/
+          sha256sum \
+            proof/Phil/Systems/Identity.v \
+            proof/Phil/Systems/Identity.vo \
+            proof/Phil/Systems/IdentityImplementation.v \
+            proof/Phil/Systems/IdentityImplementation.vo \
+            proof/Phil/Systems/IdentityImplementationExtraction.v \
+            SystemsIdentityKernel.hs \
+            > systems-identity-proof/PHIL-SYS-ID-001.proof.sha256
+          cat systems-identity-proof/PHIL-SYS-ID-001.proof.sha256
+      - uses: actions/upload-artifact@v4
+        with:
+          name: rocq-systems-identity-proof
+          path: systems-identity-proof
+          if-no-files-found: error
+
+  verify-systems-identity-correspondence:
+    needs: rocq-systems-identity-proof
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: haskell-actions/setup@v2
+        with:
+          ghc-version: '9.6.7'
+          cabal-version: 'latest'
+      - uses: actions/download-artifact@v4
+        with:
+          name: rocq-systems-identity-proof
+          path: systems-identity-proof
+      - name: Build ordinary regression substrate
+        run: cabal build all --enable-tests
+      - name: Materialize extracted identity kernel
+        shell: bash
+        run: |
+          set -euo pipefail
+          cp systems-identity-proof/SystemsIdentityKernel.hs .
+          test -s SystemsIdentityKernel.hs
+      - name: Strict typecheck raw kernel and unchanged verifier
+        run: |
+          set -euo pipefail
+          ghc -Wall -Werror -fno-code SystemsIdentityKernel.hs
+          cabal exec -- ghc -isrc -Wall -Werror -fno-code src/Phil/Systems/Verify.hs
+      - name: Execute 12 direct identity controls
+        run: |
+          set -euo pipefail
+          ghc -Wall -Werror -i. app/SystemsIdentityDecisionCorrespondenceMain.hs -o systems-identity-controls
+          ./systems-identity-controls
+      - name: Re-run unchanged 20-case Systems verifier corpus
+        run: cabal test phil-systems-tests --test-show-details=direct
+      - name: Record correspondence identities
+        run: |
+          set -euo pipefail
+          mkdir -p systems-identity-implementation-correspondence
+          sha256sum \
+            SystemsIdentityKernel.hs \
+            src/Phil/Systems/IR.hs \
+            src/Phil/Systems/Verify.hs \
+            test/SystemsMain.hs \
+            > systems-identity-implementation-correspondence/PHIL-SYS-ID-001.correspondence.sha256
+          cat systems-identity-implementation-correspondence/PHIL-SYS-ID-001.correspondence.sha256
+      - uses: actions/upload-artifact@v4
+        with:
+          name: systems-identity-implementation-correspondence
+          path: systems-identity-implementation-correspondence
+          if-no-files-found: error
