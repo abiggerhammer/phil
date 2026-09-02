@@ -50,6 +50,7 @@ import Phil.Systems.SubjectCorrespondence
   , SubjectStageBundle (..)
   , SystemsValueRef (..)
   )
+import qualified SystemsControlPreservationKernel as Kernel
 
 newtype BoundaryCommitStageRevision = BoundaryCommitStageRevision
   { unBoundaryCommitStageRevision :: Text
@@ -177,6 +178,9 @@ verifyBoundaryCommitStageBundle bundle = do
     (boundaryCommitStageRevision bundle)
   mapM_ (checkTransfer bundle)
     (Map.toAscList (boundaryCommitStageTransfers bundle))
+  case Kernel.decideSystemsControlByFacts True True True True of
+    Kernel.SystemsControlAcceptedDecision -> Right ()
+    _ -> kernelInvariant "systems-control-final"
 
 checkTransfer
   :: BoundaryCommitStageBundle
@@ -216,13 +220,29 @@ checkTransfer bundle (key, transfer) = do
   let expectedKind = case boundaryTransferDirection transfer of
         BoundaryReceiveExact -> ExactReceiveBoundary
         BoundarySendExact -> ExactSendBoundary
-  requireEqual (BoundaryTransferRuntimeSiteKindMismatch key)
-    expectedKind (runtimeSiteKind runtimeSite)
-  requireEqual (BoundaryTransferRuntimeRevisionMismatch key)
-    sourceRevision (runtimeSiteRevision runtimeSite)
-  requireEqual (BoundaryTransferRuntimeEvidenceMismatch key)
-    sourceEvidence (runtimeSiteEvidence runtimeSite)
+  case Kernel.decideBoundaryCommitByFacts
+      True True True True True (expectedKind == runtimeSiteKind runtimeSite)
+      True True True True True of
+    Kernel.BoundaryCommitAcceptedDecision -> Right ()
+    Kernel.BoundaryRuntimeKindDecision -> Left
+      (BoundaryTransferRuntimeSiteKindMismatch key expectedKind (runtimeSiteKind runtimeSite))
+    _ -> kernelInvariant "boundary-runtime-kind"
+  let nativeRuntimeEvidence = do
+        requireEqual (BoundaryTransferRuntimeRevisionMismatch key)
+          sourceRevision (runtimeSiteRevision runtimeSite)
+        requireEqual (BoundaryTransferRuntimeEvidenceMismatch key)
+          sourceEvidence (runtimeSiteEvidence runtimeSite)
+  case Kernel.decideBoundaryCommitByFacts
+      True True True True True True (nativeRuntimeEvidence == Right ())
+      True True True True of
+    Kernel.BoundaryCommitAcceptedDecision -> Right ()
+    Kernel.BoundaryRuntimeRevisionEvidenceDecision -> nativeRuntimeEvidence
+    _ -> kernelInvariant "boundary-runtime-revision-evidence"
   checkProtocolCommit key transfer (boundaryCommitStageBase bundle)
+  case Kernel.decideBoundaryCommitByFacts
+      True True True True True True True True True True True of
+    Kernel.BoundaryCommitAcceptedDecision -> Right ()
+    _ -> kernelInvariant "boundary-transfer-final"
   where
     protocolBase = boundaryCommitStageBase bundle
     subjectStage = protocolSubjectStage protocolBase
@@ -239,11 +259,15 @@ checkSubject key transfer subjectStage =
       (subjectStageCorrespondences subjectStage) of
     Nothing -> Left (BoundaryTransferUnknownSubject key (boundaryTransferSubject transfer))
     Just correspondence ->
-      if Set.member (boundaryTransferOwner transfer)
-          (subjectCorrespondenceSystemsValues correspondence)
-        then Right ()
-        else Left (BoundaryTransferSubjectMismatch key
+      case Kernel.decideBoundaryCommitByFacts
+          True True True
+          (Set.member (boundaryTransferOwner transfer)
+            (subjectCorrespondenceSystemsValues correspondence))
+          True True True True True True True of
+        Kernel.BoundaryCommitAcceptedDecision -> Right ()
+        Kernel.BoundarySubjectDecision -> Left (BoundaryTransferSubjectMismatch key
           (boundaryTransferSubject transfer) (boundaryTransferOwner transfer))
+        _ -> kernelInvariant "boundary-subject"
 
 checkTarget
   :: BoundaryTransferKey
@@ -258,30 +282,35 @@ checkTarget key transfer function =
         ( BoundaryReceiveExact
           , TermReceiveExact actualTransport actualLength actualOwner site _ _
           ) -> do
-            requireRefEqual (BoundaryTransferTransportMismatch key)
-              (boundaryTransferTransport transfer) function actualTransport
-            requireRefEqual (BoundaryTransferOwnerMismatch key)
-              (boundaryTransferOwner transfer) function actualOwner
+            requireBoundaryTransport key transfer function actualTransport
+            requireBoundaryOwner key transfer function actualOwner
             case boundaryTransferLength transfer of
               ExplicitBoundaryLength _ lengthRef -> do
                 checkLengthFunction key lengthRef (systemsFunctionName function)
                 _ <- lookupValue key function lengthRef
-                requireRefEqual (BoundaryTransferLengthValueMismatch key)
-                  lengthRef function actualLength
-              binding -> Left (BoundaryTransferLengthModeMismatch key
-                  BoundaryReceiveExact binding)
+                let actualRef = SystemsValueRef (systemsFunctionName function) actualLength
+                case Kernel.decideBoundaryCommitByFacts
+                    True True True True (lengthRef == actualRef)
+                    True True True True True True of
+                  Kernel.BoundaryCommitAcceptedDecision -> Right ()
+                  Kernel.BoundaryLengthDecision -> Left
+                    (BoundaryTransferLengthValueMismatch key lengthRef actualRef)
+                  _ -> kernelInvariant "boundary-explicit-length"
+              binding ->
+                case Kernel.decideBoundaryCommitByFacts
+                    True True True True False True True True True True True of
+                  Kernel.BoundaryLengthDecision -> Left (BoundaryTransferLengthModeMismatch key
+                    BoundaryReceiveExact binding)
+                  _ -> kernelInvariant "boundary-receive-length-mode"
             Right site
         ( BoundarySendExact
           , TermSendExact actualTransport actualOwner site _ _
           ) -> do
-            requireRefEqual (BoundaryTransferTransportMismatch key)
-              (boundaryTransferTransport transfer) function actualTransport
-            requireRefEqual (BoundaryTransferOwnerMismatch key)
-              (boundaryTransferOwner transfer) function actualOwner
+            requireBoundaryTransport key transfer function actualTransport
+            requireBoundaryOwner key transfer function actualOwner
             checkOwnerIndexedLength key transfer
             Right site
-        _ -> Left (BoundaryTransferTargetNotExactBoundary key
-            (boundaryTransferTargetSite transfer))
+        _ -> boundaryTargetMismatch key transfer
     ProtocolOperationSite _ blockId operationIndex -> do
       blockValue <- lookupBlock key blockId function
       operation <- maybe
@@ -298,29 +327,80 @@ checkTarget key transfer function =
           ) -> do
             let transport = systemsValueRefValue (boundaryTransferTransport transfer)
                 owner = systemsValueRefValue (boundaryTransferOwner transfer)
-            if inputs == [transport, owner]
-              then Right ()
-              else Left (BoundaryTransferLegacySendInputsMismatch key inputs)
+                transportExact = inputs == [transport, owner]
+                ownerExact = transportExact
+            case Kernel.decideBoundaryCommitByFacts
+                True transportExact ownerExact True True True True True True True True of
+              Kernel.BoundaryCommitAcceptedDecision -> Right ()
+              Kernel.BoundaryTransportDecision ->
+                Left (BoundaryTransferLegacySendInputsMismatch key inputs)
+              Kernel.BoundaryOwnerDecision ->
+                Left (BoundaryTransferLegacySendInputsMismatch key inputs)
+              _ -> kernelInvariant "boundary-legacy-send-inputs"
             if null outputs
               then Right ()
               else Left (BoundaryTransferLegacySendOutputsMismatch key outputs)
             checkOwnerIndexedLength key transfer
             Right site
-        _ -> Left (BoundaryTransferTargetNotExactBoundary key
-            (boundaryTransferTargetSite transfer))
+        _ -> boundaryTargetMismatch key transfer
+
+requireBoundaryTransport
+  :: BoundaryTransferKey
+  -> BoundaryTransferContract
+  -> SystemsFunction
+  -> ValueId
+  -> Either BoundaryCommitVerificationError ()
+requireBoundaryTransport key transfer function actualValue =
+  let expected = boundaryTransferTransport transfer
+      actual = SystemsValueRef (systemsFunctionName function) actualValue
+  in case Kernel.decideBoundaryCommitByFacts
+      True (expected == actual) True True True True True True True True True of
+    Kernel.BoundaryCommitAcceptedDecision -> Right ()
+    Kernel.BoundaryTransportDecision -> Left (BoundaryTransferTransportMismatch key expected actual)
+    _ -> kernelInvariant "boundary-transport"
+
+requireBoundaryOwner
+  :: BoundaryTransferKey
+  -> BoundaryTransferContract
+  -> SystemsFunction
+  -> ValueId
+  -> Either BoundaryCommitVerificationError ()
+requireBoundaryOwner key transfer function actualValue =
+  let expected = boundaryTransferOwner transfer
+      actual = SystemsValueRef (systemsFunctionName function) actualValue
+  in case Kernel.decideBoundaryCommitByFacts
+      True True (expected == actual) True True True True True True True True of
+    Kernel.BoundaryCommitAcceptedDecision -> Right ()
+    Kernel.BoundaryOwnerDecision -> Left (BoundaryTransferOwnerMismatch key expected actual)
+    _ -> kernelInvariant "boundary-owner"
+
+boundaryTargetMismatch
+  :: BoundaryTransferKey
+  -> BoundaryTransferContract
+  -> Either BoundaryCommitVerificationError a
+boundaryTargetMismatch key transfer =
+  case Kernel.decideBoundaryCommitByFacts
+      True True True True True False True True True True True of
+    Kernel.BoundaryRuntimeKindDecision -> Left
+      (BoundaryTransferTargetNotExactBoundary key (boundaryTransferTargetSite transfer))
+    _ -> kernelInvariant "boundary-target"
 
 checkOwnerIndexedLength
   :: BoundaryTransferKey
   -> BoundaryTransferContract
   -> Either BoundaryCommitVerificationError ()
 checkOwnerIndexedLength key transfer =
-  case boundaryTransferLength transfer of
-    OwnerIndexedBoundaryLength semanticKey ownerShape
-      | not (Text.null semanticKey)
-          && ownerShape == boundaryTransferExpectedOwnerShape transfer -> Right ()
-      | otherwise -> Left (BoundaryTransferLengthModeMismatch key
-          BoundarySendExact (boundaryTransferLength transfer))
-    binding -> Left (BoundaryTransferLengthModeMismatch key BoundarySendExact binding)
+  let valid = case boundaryTransferLength transfer of
+        OwnerIndexedBoundaryLength semanticKey ownerShape ->
+          not (Text.null semanticKey)
+            && ownerShape == boundaryTransferExpectedOwnerShape transfer
+        _ -> False
+  in case Kernel.decideBoundaryCommitByFacts
+      True True True True valid True True True True True True of
+    Kernel.BoundaryCommitAcceptedDecision -> Right ()
+    Kernel.BoundaryLengthDecision -> Left (BoundaryTransferLengthModeMismatch key
+      BoundarySendExact (boundaryTransferLength transfer))
+    _ -> kernelInvariant "boundary-owner-indexed-length"
 
 checkLengthFunction
   :: BoundaryTransferKey
@@ -343,22 +423,34 @@ checkProtocolCommit key transfer base = do
     Right
     (Map.lookup (boundaryTransferProtocolTransition transfer)
       (protocolStateStageTransitions base))
-  requireEqual (BoundaryTransferProtocolTargetMismatch key)
-    (boundaryTransferTargetSite transfer)
-    (protocolTransitionTargetSite transition)
-  requireEqual (BoundaryTransferProtocolTransportMismatch key)
-    (boundaryTransferTransport transfer)
-    (protocolTransitionTransport transition)
+  let nativeTransition = do
+        requireEqual (BoundaryTransferProtocolTargetMismatch key)
+          (boundaryTransferTargetSite transfer)
+          (protocolTransitionTargetSite transition)
+        requireEqual (BoundaryTransferProtocolTransportMismatch key)
+          (boundaryTransferTransport transfer)
+          (protocolTransitionTransport transition)
+  case Kernel.decideBoundaryCommitByFacts
+      True True True True True True True (nativeTransition == Right ()) True True True of
+    Kernel.BoundaryCommitAcceptedDecision -> Right ()
+    Kernel.BoundaryProtocolTransitionDecision -> nativeTransition
+    _ -> kernelInvariant "boundary-protocol-transition"
   commit <- maybe
     (Left (BoundaryTransferCommitOutcomeMissing key
       (boundaryTransferCommitOutcome transfer)))
     Right
     (Map.lookup (boundaryTransferCommitOutcome transfer)
       (protocolTransitionOutcomes transition))
-  case commit of
-    ProtocolSuccessor _ -> Right ()
-    outcome -> Left (BoundaryTransferCommitOutcomeNotSuccessor key
-      (boundaryTransferCommitOutcome transfer) outcome)
+  let commitSuccessor = case commit of
+        ProtocolSuccessor _ -> True
+        _ -> False
+  case Kernel.decideBoundaryCommitByFacts
+      True True True True True True True True commitSuccessor True True of
+    Kernel.BoundaryCommitAcceptedDecision -> Right ()
+    Kernel.BoundaryCommitSuccessorDecision -> Left
+      (BoundaryTransferCommitOutcomeNotSuccessor key
+        (boundaryTransferCommitOutcome transfer) commit)
+    _ -> kernelInvariant "boundary-commit-successor"
   case boundaryTransferFailureOutcome transfer of
     Nothing -> Right ()
     Just label -> do
@@ -366,9 +458,15 @@ checkProtocolCommit key transfer base = do
         (Left (BoundaryTransferFailureOutcomeMissing key label))
         Right
         (Map.lookup label (protocolTransitionOutcomes transition))
-      case failure of
-        ProtocolTerminal _ -> Right ()
-        outcome -> Left (BoundaryTransferFailureOutcomeNotTerminal key label outcome)
+      let failureTerminal = case failure of
+            ProtocolTerminal _ -> True
+            _ -> False
+      case Kernel.decideBoundaryCommitByFacts
+          True True True True True True True True True failureTerminal True of
+        Kernel.BoundaryCommitAcceptedDecision -> Right ()
+        Kernel.BoundaryFailureTerminalDecision -> Left
+          (BoundaryTransferFailureOutcomeNotTerminal key label failure)
+        _ -> kernelInvariant "boundary-failure-terminal"
 
 sourceRuntimeFact
   :: BoundaryTransferKey
@@ -414,15 +512,6 @@ lookupValue key function ref = maybe
   (Left (BoundaryTransferUnknownValue key ref))
   Right
   (Map.lookup (systemsValueRefValue ref) (systemsFunctionValues function))
-
-requireRefEqual
-  :: (SystemsValueRef -> SystemsValueRef -> BoundaryCommitVerificationError)
-  -> SystemsValueRef
-  -> SystemsFunction
-  -> ValueId
-  -> Either BoundaryCommitVerificationError ()
-requireRefEqual mkError expected function actualValue =
-  requireEqual mkError expected (SystemsValueRef (systemsFunctionName function) actualValue)
 
 protocolSubjectStage :: ProtocolStateStageBundle -> SubjectStageBundle
 protocolSubjectStage =
@@ -514,3 +603,7 @@ requireEqual mkError expected actual
 
 mapLeft :: (a -> b) -> Either a c -> Either b c
 mapLeft f = either (Left . f) Right
+
+kernelInvariant :: String -> Either e a
+kernelInvariant label =
+  error ("SystemsControlPreservationKernel mismatch: " <> label)

@@ -54,6 +54,7 @@ import Phil.Systems.SubjectCorrespondence
   ( SubjectStageBundle (..)
   , SystemsValueRef (..)
   )
+import qualified SystemsControlPreservationKernel as Kernel
 
 newtype ProtocolStateStageRevision = ProtocolStateStageRevision
   { unProtocolStateStageRevision :: Text
@@ -256,8 +257,15 @@ checkTransition bundle (key, transition) = do
   expectedDomain <- checkTargetSite bundle key transition
   case expectedDomain of
     Nothing -> Right ()
-    Just domain -> requireEqual (ProtocolTransitionOutcomeDomainMismatch key)
-      domain (Map.keysSet (protocolTransitionOutcomes transition))
+    Just domain ->
+      case Kernel.decideProtocolPreservationByFacts
+          True True True (domain == Map.keysSet (protocolTransitionOutcomes transition))
+          True True True True True True of
+        Kernel.ProtocolPreservationAcceptedDecision -> Right ()
+        Kernel.ProtocolOutcomeDomainDecision -> Left
+          (ProtocolTransitionOutcomeDomainMismatch key
+            domain (Map.keysSet (protocolTransitionOutcomes transition)))
+        _ -> kernelInvariant "protocol-outcome-domain"
   mapM_ (checkOutcome key predecessor)
     (Map.toAscList (protocolTransitionOutcomes transition))
   where
@@ -269,17 +277,32 @@ checkTransition bundle (key, transition) = do
           (Left (ProtocolTransitionUnknownSuccessor transitionKey label successorKey))
           Right
           (Map.lookup successorKey endpoints)
-        if successorKey == protocolEndpointOccurrence predecessor
-          then Left (ProtocolTransitionReusesPredecessorAsSuccessor transitionKey successorKey)
-          else Right ()
-        requireEqual
-          (ProtocolTransitionInstanceMismatch transitionKey successorKey)
-          (protocolEndpointInstance predecessor)
-          (protocolEndpointInstance successor)
-        requireEqual
-          (ProtocolTransitionRoleMismatch transitionKey successorKey)
-          (protocolEndpointRole predecessor)
-          (protocolEndpointRole successor)
+        case Kernel.decideProtocolPreservationByFacts
+            True True True True True True
+            (successorKey /= protocolEndpointOccurrence predecessor)
+            True True True of
+          Kernel.ProtocolPreservationAcceptedDecision -> Right ()
+          Kernel.ProtocolSuccessorFreshDecision ->
+            Left (ProtocolTransitionReusesPredecessorAsSuccessor transitionKey successorKey)
+          _ -> kernelInvariant "protocol-successor-fresh"
+        case Kernel.decideProtocolPreservationByFacts
+            True True True True
+            (protocolEndpointInstance predecessor == protocolEndpointInstance successor)
+            True True True True True of
+          Kernel.ProtocolPreservationAcceptedDecision -> Right ()
+          Kernel.ProtocolInstanceDecision -> Left
+            (ProtocolTransitionInstanceMismatch transitionKey successorKey
+              (protocolEndpointInstance predecessor) (protocolEndpointInstance successor))
+          _ -> kernelInvariant "protocol-instance"
+        case Kernel.decideProtocolPreservationByFacts
+            True True True True True
+            (protocolEndpointRole predecessor == protocolEndpointRole successor)
+            True True True True of
+          Kernel.ProtocolPreservationAcceptedDecision -> Right ()
+          Kernel.ProtocolRoleDecision -> Left
+            (ProtocolTransitionRoleMismatch transitionKey successorKey
+              (protocolEndpointRole predecessor) (protocolEndpointRole successor))
+          _ -> kernelInvariant "protocol-role"
 
 checkBasis
   :: ProtocolTransitionKey
@@ -288,12 +311,21 @@ checkBasis
 checkBasis key basis = case basis of
   CheckedProtocolCorrespondence revision
     | Text.null revision -> Left (ProtocolTransitionEmptyBasis key)
-    | otherwise -> Right ()
+    | otherwise -> kernelChecked
   CheckedLegacyOpaqueProtocolBridge evidence
     | Text.null evidence -> Left (ProtocolTransitionEmptyBasis key)
-    | otherwise -> Right ()
+    | otherwise -> kernelChecked
   RuntimeTransportCoincidence reason ->
-    Left (ProtocolTransitionRuntimeCoincidenceRejected key reason)
+    case Kernel.decideProtocolPreservationByFacts
+        False True True True True True True True True True of
+      Kernel.ProtocolBasisDecision ->
+        Left (ProtocolTransitionRuntimeCoincidenceRejected key reason)
+      _ -> kernelInvariant "protocol-runtime-basis"
+  where
+    kernelChecked = case Kernel.decideProtocolPreservationByFacts
+        True True True True True True True True True True of
+      Kernel.ProtocolPreservationAcceptedDecision -> Right ()
+      _ -> kernelInvariant "protocol-checked-basis"
 
 checkTargetSite
   :: ProtocolStateStageBundle
@@ -339,6 +371,10 @@ checkOperationSite key transition function operation =
   let transport = systemsValueRefValue (protocolTransitionTransport transition)
       action = protocolTransitionAction transition
       basis = protocolTransitionBasis transition
+      targetMismatch err = case Kernel.decideProtocolPreservationByFacts
+          True False True True True True True True True True of
+        Kernel.ProtocolTargetSiteDecision -> Left err
+        _ -> kernelInvariant "protocol-operation-target"
   in case operation of
     OpCommitIngress pending actualTransport _ -> do
       requireTypedBasis key basis
@@ -350,22 +386,23 @@ checkOperationSite key transition function operation =
       case (action, systemsValueRole pendingValue) of
         (ProtocolReceiveCommit expectedMessage, PendingIngress actualMessage)
           | expectedMessage == actualMessage -> Right (Just (Set.singleton "success"))
-        _ -> Left (ProtocolTransitionActionMismatch key action)
+        _ -> targetMismatch (ProtocolTransitionActionMismatch key action)
     OpSessionSelect actualTransport actualLabel _ _ -> do
       requireTypedBasis key basis
       requireTransportExactlyOnce key transport [actualTransport]
       case action of
         ProtocolSelect expectedLabel
           | expectedLabel == actualLabel -> Right (Just (Set.singleton "success"))
-        _ -> Left (ProtocolTransitionActionMismatch key action)
+        _ -> targetMismatch (ProtocolTransitionActionMismatch key action)
     OpRuntimeCall _ inputs _ _ _ -> do
       requireOpaqueBasis key basis
       requireTransportExactlyOnce key transport inputs
       case action of
         ProtocolOpaqueAction semanticAction
           | not (Text.null semanticAction) -> Right Nothing
-        _ -> Left (ProtocolTransitionActionMismatch key action)
-    _ -> Left (ProtocolTransitionUnsupportedTarget key (protocolTransitionTargetSite transition))
+        _ -> targetMismatch (ProtocolTransitionActionMismatch key action)
+    _ -> targetMismatch
+      (ProtocolTransitionUnsupportedTarget key (protocolTransitionTargetSite transition))
 
 checkTerminatorSite
   :: ProtocolTransitionKey
@@ -376,24 +413,29 @@ checkTerminatorSite key transition terminator = do
   requireTypedBasis key (protocolTransitionBasis transition)
   let transport = systemsValueRefValue (protocolTransitionTransport transition)
       action = protocolTransitionAction transition
+      targetMismatch err = case Kernel.decideProtocolPreservationByFacts
+          True False True True True True True True True True of
+        Kernel.ProtocolTargetSiteDecision -> Left err
+        _ -> kernelInvariant "protocol-terminator-target"
   case terminator of
     TermSessionOffer actualTransport arms -> do
       requireTransportExactlyOnce key transport [actualTransport]
       case action of
         ProtocolOffer labels
           | labels == Map.keysSet arms -> Right (Just labels)
-        _ -> Left (ProtocolTransitionActionMismatch key action)
+        _ -> targetMismatch (ProtocolTransitionActionMismatch key action)
     TermReceiveExact actualTransport _ _ _ _ _ -> do
       requireTransportExactlyOnce key transport [actualTransport]
       case action of
         ProtocolReceiveExact -> Right (Just (Set.fromList ["success", "failure"]))
-        _ -> Left (ProtocolTransitionActionMismatch key action)
+        _ -> targetMismatch (ProtocolTransitionActionMismatch key action)
     TermSendExact actualTransport _ _ _ _ -> do
       requireTransportExactlyOnce key transport [actualTransport]
       case action of
         ProtocolSendExact -> Right (Just (Set.fromList ["success", "failure"]))
-        _ -> Left (ProtocolTransitionActionMismatch key action)
-    _ -> Left (ProtocolTransitionUnsupportedTarget key (protocolTransitionTargetSite transition))
+        _ -> targetMismatch (ProtocolTransitionActionMismatch key action)
+    _ -> targetMismatch
+      (ProtocolTransitionUnsupportedTarget key (protocolTransitionTargetSite transition))
 
 requireTypedBasis
   :: ProtocolTransitionKey
@@ -420,9 +462,12 @@ requireTransportExactlyOnce
   -> Either ProtocolStateVerificationError ()
 requireTransportExactlyOnce key transport values =
   let count = length (filter (== transport) values)
-  in if count == 1
-      then Right ()
-      else Left (ProtocolTransitionTransportUseMismatch key transport count)
+  in case Kernel.decideProtocolPreservationByFacts
+      True True (count == 1) True True True True True True True of
+    Kernel.ProtocolPreservationAcceptedDecision -> Right ()
+    Kernel.ProtocolTransportUseDecision ->
+      Left (ProtocolTransitionTransportUseMismatch key transport count)
+    _ -> kernelInvariant "protocol-transport-use"
 
 checkUniqueTargetSites
   :: Map ProtocolTransitionKey ProtocolTransitionBinding
@@ -445,14 +490,19 @@ checkEndpointConsumption
   :: Map ProtocolTransitionKey ProtocolTransitionBinding
   -> Either ProtocolStateVerificationError ()
 checkEndpointConsumption transitions =
-  case
-    [ (endpoint, keys)
-    | (endpoint, keys) <- Map.toAscList consumers
-    , Set.size keys > 1
-    ] of
-    [] -> Right ()
-    (endpoint, keys) : _ -> Left (ProtocolEndpointConsumedMoreThanOnce endpoint keys)
+  case Kernel.decideProtocolPreservationByFacts
+      True True True True True True True (nativeResult == Right ()) True True of
+    Kernel.ProtocolPreservationAcceptedDecision -> Right ()
+    Kernel.ProtocolPredecessorConsumedDecision -> nativeResult
+    _ -> kernelInvariant "protocol-predecessor-consumption"
   where
+    nativeResult = case
+      [ (endpoint, keys)
+      | (endpoint, keys) <- Map.toAscList consumers
+      , Set.size keys > 1
+      ] of
+      [] -> Right ()
+      (endpoint, keys) : _ -> Left (ProtocolEndpointConsumedMoreThanOnce endpoint keys)
     consumers = Map.fromListWith Set.union
       [ (protocolTransitionPredecessor transition, Set.singleton key)
       | (key, transition) <- Map.toAscList transitions
@@ -462,14 +512,19 @@ checkEndpointProduction
   :: Map ProtocolTransitionKey ProtocolTransitionBinding
   -> Either ProtocolStateVerificationError ()
 checkEndpointProduction transitions =
-  case
-    [ (endpoint, keys)
-    | (endpoint, keys) <- Map.toAscList producers
-    , Set.size keys > 1
-    ] of
-    [] -> Right ()
-    (endpoint, keys) : _ -> Left (ProtocolEndpointProducedMoreThanOnce endpoint keys)
+  case Kernel.decideProtocolPreservationByFacts
+      True True True True True True True True (nativeResult == Right ()) True of
+    Kernel.ProtocolPreservationAcceptedDecision -> Right ()
+    Kernel.ProtocolSuccessorProducedDecision -> nativeResult
+    _ -> kernelInvariant "protocol-successor-production"
   where
+    nativeResult = case
+      [ (endpoint, keys)
+      | (endpoint, keys) <- Map.toAscList producers
+      , Set.size keys > 1
+      ] of
+      [] -> Right ()
+      (endpoint, keys) : _ -> Left (ProtocolEndpointProducedMoreThanOnce endpoint keys)
     producers = Map.fromListWith Set.union
       [ (successor, Set.singleton key)
       | (key, transition) <- Map.toAscList transitions
@@ -480,10 +535,16 @@ checkAcyclicLineage
   :: Map EndpointOccurrenceKey ProtocolEndpointState
   -> Map ProtocolTransitionKey ProtocolTransitionBinding
   -> Either ProtocolStateVerificationError ()
-checkAcyclicLineage endpoints transitions = do
-  _ <- foldM visitRoot Set.empty (Map.keys endpoints)
-  Right ()
+checkAcyclicLineage endpoints transitions =
+  case Kernel.decideProtocolPreservationByFacts
+      True True True True True True True True True (nativeResult == Right ()) of
+    Kernel.ProtocolPreservationAcceptedDecision -> Right ()
+    Kernel.ProtocolLineageDecision -> nativeResult
+    _ -> kernelInvariant "protocol-lineage"
   where
+    nativeResult = do
+      _ <- foldM visitRoot Set.empty (Map.keys endpoints)
+      Right ()
     edges = Map.fromListWith Set.union
       [ (protocolTransitionPredecessor transition, Set.singleton successor)
       | transition <- Map.elems transitions
@@ -632,3 +693,7 @@ requireEqual mkError expected actual
 
 mapLeft :: (a -> b) -> Either a c -> Either b c
 mapLeft f = either (Left . f) Right
+
+kernelInvariant :: String -> Either e a
+kernelInvariant label =
+  error ("SystemsControlPreservationKernel mismatch: " <> label)

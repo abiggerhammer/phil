@@ -1,0 +1,159 @@
+name: Phase 1 Systems Control Preservation Production Binding
+
+on:
+  pull_request:
+    paths:
+      - 'src/SystemsControlPreservationKernel.hs'
+      - 'src/Phil/Systems/BranchResourceFailure.hs'
+      - 'src/Phil/Systems/ControlStateProjection.hs'
+      - 'src/Phil/Systems/ProtocolStateCorrespondence.hs'
+      - 'src/Phil/Systems/BoundaryCommitCorrespondence.hs'
+      - 'test/Phase1BranchResourceFailureMain.hs'
+      - 'test/Phase1ControlStateProjectionMain.hs'
+      - 'test/Phase1ProtocolStateCorrespondenceMain.hs'
+      - 'test/Phase1BoundaryCommitCorrespondenceMain.hs'
+      - 'app/SystemsControlPreservationDecisionCorrespondenceMain.hs'
+      - 'proof/Phil/Core/SystemsControlPreservation.v'
+      - 'proof/Phil/Core/SystemsControlPreservationImplementation.v'
+      - 'proof/Phil/Core/SystemsControlPreservationImplementationExtraction.v'
+      - 'docs/phase-1/systems-control-preservation-production-binding-v1.md'
+      - '.github/workflows/phase1-systems-control-preservation-production-binding.yml'
+  push:
+    branches: [main]
+    paths:
+      - 'src/SystemsControlPreservationKernel.hs'
+      - 'src/Phil/Systems/BranchResourceFailure.hs'
+      - 'src/Phil/Systems/ControlStateProjection.hs'
+      - 'src/Phil/Systems/ProtocolStateCorrespondence.hs'
+      - 'src/Phil/Systems/BoundaryCommitCorrespondence.hs'
+      - 'test/Phase1BranchResourceFailureMain.hs'
+      - 'test/Phase1ControlStateProjectionMain.hs'
+      - 'test/Phase1ProtocolStateCorrespondenceMain.hs'
+      - 'test/Phase1BoundaryCommitCorrespondenceMain.hs'
+      - 'app/SystemsControlPreservationDecisionCorrespondenceMain.hs'
+      - 'proof/Phil/Core/SystemsControlPreservation.v'
+      - 'proof/Phil/Core/SystemsControlPreservationImplementation.v'
+      - 'proof/Phil/Core/SystemsControlPreservationImplementationExtraction.v'
+      - 'docs/phase-1/systems-control-preservation-production-binding-v1.md'
+      - '.github/workflows/phase1-systems-control-preservation-production-binding.yml'
+
+permissions:
+  contents: read
+
+jobs:
+  rocq-exact-kernel:
+    runs-on: ubuntu-latest
+    container:
+      image: rocq/rocq-prover:9.2.0
+      options: --user root
+    steps:
+      - uses: actions/checkout@v4
+      - name: Fresh-extract exact Systems control preservation kernel
+        shell: bash
+        run: |
+          set -euo pipefail
+          export PATH="/home/rocq/.opam/${COMPILER}/bin:$PATH"
+          rocq c -Q proof/Phil Phil proof/Phil/Core/SystemsControlPreservation.v
+          rocq c -Q proof/Phil Phil proof/Phil/Core/SystemsControlPreservationImplementation.v
+          rm -f SystemsControlPreservationKernel.hs
+          rocq c -Q proof/Phil Phil proof/Phil/Core/SystemsControlPreservationImplementationExtraction.v
+          test -s SystemsControlPreservationKernel.hs
+          test "$(sha256sum SystemsControlPreservationKernel.hs | cut -d' ' -f1)" = \
+            'c85d50d0e2e8e9c694729509829d3e5bab9361fcbc399f0d1626cbfb4743c042'
+          cmp SystemsControlPreservationKernel.hs src/SystemsControlPreservationKernel.hs
+      - name: Stage exact kernel proof artifact
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p systems-control-preservation-exact-kernel
+          cp SystemsControlPreservationKernel.hs systems-control-preservation-exact-kernel/
+          cp \
+            proof/Phil/Core/SystemsControlPreservationImplementation.v \
+            proof/Phil/Core/SystemsControlPreservationImplementation.vo \
+            proof/Phil/Core/SystemsControlPreservationImplementationExtraction.v \
+            proof/Phil/Core/SystemsControlPreservationImplementationExtraction.vo \
+            systems-control-preservation-exact-kernel/
+          sha256sum systems-control-preservation-exact-kernel/* > \
+            systems-control-preservation-exact-kernel/PHIL-SYS-CONTROL-001.exact-kernel.sha256
+          cat systems-control-preservation-exact-kernel/PHIL-SYS-CONTROL-001.exact-kernel.sha256
+      - uses: actions/upload-artifact@v4
+        with:
+          name: systems-control-preservation-exact-kernel
+          path: systems-control-preservation-exact-kernel
+          if-no-files-found: error
+
+  production-binding:
+    needs: rocq-exact-kernel
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: haskell-actions/setup@v2
+        with:
+          ghc-version: '9.6.7'
+          cabal-version: 'latest'
+      - name: Build ordinary regression substrate
+        run: cabal build all --enable-tests
+      - uses: actions/download-artifact@v4
+        with:
+          name: systems-control-preservation-exact-kernel
+          path: systems-control-preservation-exact-kernel
+      - name: Require checked-in/fresh kernel identity
+        run: |
+          set -euo pipefail
+          cmp systems-control-preservation-exact-kernel/SystemsControlPreservationKernel.hs \
+              src/SystemsControlPreservationKernel.hs
+          test "$(sha256sum src/SystemsControlPreservationKernel.hs | cut -d' ' -f1)" = \
+            'c85d50d0e2e8e9c694729509829d3e5bab9361fcbc399f0d1626cbfb4743c042'
+      - name: Strict typecheck exact kernel and bound production chain
+        run: |
+          set -euo pipefail
+          ghc -Wall -Werror -fno-code src/SystemsControlPreservationKernel.hs
+          cabal exec -- ghc -isrc -Wall -Werror -fno-code src/Phil/Systems/BranchResourceFailure.hs
+          cabal exec -- ghc -isrc -Wall -Werror -fno-code src/Phil/Systems/ControlStateProjection.hs
+          # main carries one pre-existing local name-shadowing warning here.
+          cabal exec -- ghc -isrc -Wall -Werror -Wno-name-shadowing -fno-code \
+            src/Phil/Systems/ProtocolStateCorrespondence.hs
+          # BoundaryCommitCorrespondence also carries one pre-existing redundant
+          # Data.Set import. Keep only the two staging-era warning exemptions.
+          cabal exec -- ghc -isrc -Wall -Werror -Wno-name-shadowing -Wno-unused-imports -fno-code \
+            src/Phil/Systems/BoundaryCommitCorrespondence.hs
+      - name: Execute exact extracted decision controls
+        run: |
+          set -euo pipefail
+          ghc -Wall -Werror -isrc \
+            app/SystemsControlPreservationDecisionCorrespondenceMain.hs \
+            -o systems-control-preservation-kernel-controls
+          ./systems-control-preservation-kernel-controls
+      - name: Re-run unchanged 46-case SYS-007--010 correspondence
+        run: |
+          set -euo pipefail
+          cabal exec -- runghc -Wall -Werror -isrc test/Phase1BranchResourceFailureMain.hs
+          cabal exec -- runghc -Wall -Werror -isrc test/Phase1ControlStateProjectionMain.hs
+          cabal exec -- runghc -Wall -Werror -Wno-name-shadowing -isrc \
+            test/Phase1ProtocolStateCorrespondenceMain.hs
+          cabal exec -- runghc -Wall -Werror -Wno-name-shadowing -Wno-unused-imports -isrc \
+            test/Phase1BoundaryCommitCorrespondenceMain.hs
+      - name: Record production-binding identities
+        run: |
+          set -euo pipefail
+          mkdir -p systems-control-preservation-production-binding
+          sha256sum \
+            src/SystemsControlPreservationKernel.hs \
+            src/Phil/Systems/BranchResourceFailure.hs \
+            src/Phil/Systems/ControlStateProjection.hs \
+            src/Phil/Systems/ProtocolStateCorrespondence.hs \
+            src/Phil/Systems/BoundaryCommitCorrespondence.hs \
+            test/Phase1BranchResourceFailureMain.hs \
+            test/Phase1ControlStateProjectionMain.hs \
+            test/Phase1ProtocolStateCorrespondenceMain.hs \
+            test/Phase1BoundaryCommitCorrespondenceMain.hs \
+            app/SystemsControlPreservationDecisionCorrespondenceMain.hs \
+            proof/Phil/Core/SystemsControlPreservationImplementation.v \
+            docs/phase-1/systems-control-preservation-production-binding-v1.md \
+            > systems-control-preservation-production-binding/PHIL-SYS-CONTROL-001.production-binding.sha256
+          cat systems-control-preservation-production-binding/PHIL-SYS-CONTROL-001.production-binding.sha256
+      - uses: actions/upload-artifact@v4
+        with:
+          name: systems-control-preservation-production-binding
+          path: systems-control-preservation-production-binding
+          if-no-files-found: error
