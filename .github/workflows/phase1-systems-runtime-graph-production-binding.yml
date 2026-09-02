@@ -1,0 +1,145 @@
+name: Phase 1 Systems Runtime Graph Production Binding
+
+on:
+  pull_request:
+    paths:
+      - 'proof/Phil/Systems/Runtime.v'
+      - 'proof/Phil/LLVM/Preservation.v'
+      - 'proof/Phil/LLVM/RuntimeSymbolIdentity.v'
+      - 'proof/Phil/Core/SystemsRuntimeGraph.v'
+      - 'proof/Phil/Core/SystemsRuntimeGraphImplementation.v'
+      - 'proof/Phil/Core/SystemsRuntimeGraphImplementationExtraction.v'
+      - 'generated/SystemsRuntimeGraphKernel.hs'
+      - 'src/SystemsRuntimeGraphKernel.hs'
+      - 'src/Phil/Systems/RuntimeClaimBinding.hs'
+      - 'src/Phil/Systems/RuntimePrimitiveReuse.hs'
+      - 'src/Phil/Systems/CostAttribution.hs'
+      - 'src/Phil/Systems/StageClosure.hs'
+      - 'app/SystemsRuntimeGraphDecisionCorrespondenceMain.hs'
+      - 'test/Phase1RuntimeClaimBindingMain.hs'
+      - 'test/Phase1RuntimePrimitiveReuseMain.hs'
+      - 'test/Phase1CostAttributionMain.hs'
+      - 'test/Phase1StageClosureMain.hs'
+      - 'test/LLVMMain.hs'
+      - 'docs/phase-1/systems-runtime-graph-production-binding-v1.md'
+      - '.github/workflows/phase1-systems-runtime-graph-production-binding.yml'
+
+permissions:
+  contents: read
+
+jobs:
+  exact-runtime-graph-kernel:
+    runs-on: ubuntu-latest
+    container:
+      image: rocq/rocq-prover:9.2.0
+      options: --user root
+    steps:
+      - uses: actions/checkout@v4
+      - name: Fresh-extract exact Runtime Graph kernel
+        shell: bash
+        run: |
+          set -euo pipefail
+          export PATH="/home/rocq/.opam/${COMPILER}/bin:$PATH"
+          rocq c -Q proof/Phil Phil proof/Phil/Systems/Runtime.v
+          rocq c -Q proof/Phil Phil proof/Phil/LLVM/Preservation.v
+          rocq c -Q proof/Phil Phil proof/Phil/LLVM/RuntimeSymbolIdentity.v
+          rocq c -Q proof/Phil Phil proof/Phil/Core/SystemsRuntimeGraph.v
+          rocq c -Q proof/Phil Phil proof/Phil/Core/SystemsRuntimeGraphImplementation.v
+          rm -f SystemsRuntimeGraphKernel.hs
+          rocq c -Q proof/Phil Phil proof/Phil/Core/SystemsRuntimeGraphImplementationExtraction.v
+          test -s SystemsRuntimeGraphKernel.hs
+          echo '6e61c312addbbfc15135105c5282b1610901e3c4d82fadf4596ad0644e3f18de  SystemsRuntimeGraphKernel.hs' | sha256sum -c -
+          cmp SystemsRuntimeGraphKernel.hs generated/SystemsRuntimeGraphKernel.hs
+          cmp SystemsRuntimeGraphKernel.hs src/SystemsRuntimeGraphKernel.hs
+      - name: Record exact kernel identities
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p systems-runtime-graph-exact-kernel
+          cp SystemsRuntimeGraphKernel.hs systems-runtime-graph-exact-kernel/
+          sha256sum \
+            SystemsRuntimeGraphKernel.hs \
+            generated/SystemsRuntimeGraphKernel.hs \
+            src/SystemsRuntimeGraphKernel.hs \
+            proof/Phil/Core/SystemsRuntimeGraphImplementation.v \
+            proof/Phil/Core/SystemsRuntimeGraphImplementationExtraction.v \
+            proof/Phil/LLVM/RuntimeSymbolIdentity.v \
+            > systems-runtime-graph-exact-kernel/PHIL-SYS-RUNTIME-GRAPH-001.exact-kernel.sha256
+          cat systems-runtime-graph-exact-kernel/PHIL-SYS-RUNTIME-GRAPH-001.exact-kernel.sha256
+      - uses: actions/upload-artifact@v4
+        with:
+          name: systems-runtime-graph-exact-kernel
+          path: systems-runtime-graph-exact-kernel
+          if-no-files-found: error
+
+  verify-runtime-graph-production-binding:
+    needs: exact-runtime-graph-kernel
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: haskell-actions/setup@v2
+        with:
+          ghc-version: '9.6.7'
+          cabal-version: 'latest'
+      - name: Build ordinary regression substrate
+        run: cabal build all --enable-tests
+      - name: Strict typecheck exact production kernel and bound StageClosure path
+        run: |
+          set -euo pipefail
+          ghc -Wall -Werror -fno-code src/SystemsRuntimeGraphKernel.hs
+          cabal exec -- ghc -isrc -Wall -Werror -Wno-name-shadowing -Wno-unused-imports -fno-code src/Phil/Systems/StageClosure.hs
+      - name: Execute 12 direct controls through production kernel
+        run: |
+          set -euo pipefail
+          ghc -Wall -Werror -isrc \
+            app/SystemsRuntimeGraphDecisionCorrespondenceMain.hs \
+            -o systems-runtime-graph-kernel-controls
+          ./systems-runtime-graph-kernel-controls
+      - name: Strict typecheck unchanged Runtime Graph and final closure corpora
+        run: |
+          set -euo pipefail
+          for test_file in \
+            test/Phase1RuntimeClaimBindingMain.hs \
+            test/Phase1RuntimePrimitiveReuseMain.hs \
+            test/Phase1CostAttributionMain.hs
+          do
+            cabal exec -- ghc -Wall -Werror -Wno-name-shadowing -Wno-unused-imports -Wno-missing-signatures -isrc -fno-code "$test_file"
+          done
+          cabal exec -- ghc -isrc -Wall -Werror -Wno-name-shadowing -Wno-unused-imports -fno-code test/Phase1StageClosureMain.hs
+      - name: Re-run unchanged 77-case Runtime Graph corpus and 20-case final closure corpus
+        run: |
+          set -euo pipefail
+          for test_file in \
+            test/Phase1RuntimeClaimBindingMain.hs \
+            test/Phase1RuntimePrimitiveReuseMain.hs \
+            test/Phase1CostAttributionMain.hs
+          do
+            cabal exec -- runghc -Wall -Werror -Wno-name-shadowing -Wno-unused-imports -Wno-missing-signatures -isrc "$test_file"
+          done
+          cabal exec -- runghc -Wall -Werror -Wno-name-shadowing -Wno-unused-imports -isrc test/Phase1StageClosureMain.hs
+      - name: Re-run runtime-symbol predecessor checks
+        run: cabal test phil-llvm-tests --test-show-details=direct
+      - name: Record production-binding identities
+        run: |
+          set -euo pipefail
+          mkdir -p systems-runtime-graph-production-binding
+          sha256sum \
+            generated/SystemsRuntimeGraphKernel.hs \
+            src/SystemsRuntimeGraphKernel.hs \
+            src/Phil/Systems/StageClosure.hs \
+            src/Phil/Systems/RuntimeClaimBinding.hs \
+            src/Phil/Systems/RuntimePrimitiveReuse.hs \
+            src/Phil/Systems/CostAttribution.hs \
+            test/Phase1RuntimeClaimBindingMain.hs \
+            test/Phase1RuntimePrimitiveReuseMain.hs \
+            test/Phase1CostAttributionMain.hs \
+            test/Phase1StageClosureMain.hs \
+            test/LLVMMain.hs \
+            docs/phase-1/systems-runtime-graph-production-binding-v1.md \
+            > systems-runtime-graph-production-binding/PHIL-SYS-RUNTIME-GRAPH-001.production-binding.sha256
+          cat systems-runtime-graph-production-binding/PHIL-SYS-RUNTIME-GRAPH-001.production-binding.sha256
+      - uses: actions/upload-artifact@v4
+        with:
+          name: systems-runtime-graph-production-binding
+          path: systems-runtime-graph-production-binding
+          if-no-files-found: error

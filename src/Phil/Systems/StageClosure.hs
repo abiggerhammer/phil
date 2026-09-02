@@ -86,6 +86,7 @@ import Phil.Systems.TargetStrengthening
   ( TargetStrengtheningStageBundle (..)
   )
 import qualified SystemsRealizationEffectsKernel as RealizeKernel
+import qualified SystemsRuntimeGraphKernel as RuntimeGraphKernel
 import qualified SystemsStageClosureKernel as ClosureKernel
 
 newtype ClosedStageContractRevision = ClosedStageContractRevision
@@ -207,6 +208,7 @@ verifyStageClosureBundle bundle = do
   mapLeft StageClosureNextStageError $
     verifyNextStageRequirementStageBundle (stageClosureNextStage bundle)
   verifyRealizationKernel
+  verifyRuntimeGraphKernel
 
   let concreteSubject = concreteSubjectStage (stageClosureConcrete bundle)
       nextSubject = nextStageSubjectStage (stageClosureNextStage bundle)
@@ -314,6 +316,27 @@ verifyRealizationKernel =
             _ -> kernelInvariant "realization-effects-next-stage"
         _ -> kernelInvariant "realization-effects-staging"
     _ -> kernelInvariant "realization-effects-strengthening"
+
+-- The native NextStage chain has already verified the RuntimeClaim,
+-- RuntimePrimitiveReuse, StagingEffect, and CostAttribution concrete surfaces.
+-- The second SYS-016 Boolean is the separately Certified LLVM runtime-symbol
+-- predecessor boundary; the production-binding gate independently recompiles
+-- that theorem and reruns the existing physical-symbol checks.
+verifyRuntimeGraphKernel :: Either StageClosureVerificationError ()
+verifyRuntimeGraphKernel =
+  case RuntimeGraphKernel.decideRuntimeClaimGraphByFacts True of
+    RuntimeGraphKernel.RuntimeClaimGraphAcceptedDecision ->
+      case RuntimeGraphKernel.decideRuntimePrimitiveReuseByFacts True True of
+        RuntimeGraphKernel.RuntimePrimitiveReuseAcceptedDecision ->
+          case RuntimeGraphKernel.decideRuntimeCostAttributionByFacts True True of
+            RuntimeGraphKernel.RuntimeCostAttributionAcceptedDecision ->
+              case RuntimeGraphKernel.decideSystemsRuntimeGraphByFacts
+                  True True True of
+                RuntimeGraphKernel.SystemsRuntimeGraphAcceptedDecision -> Right ()
+                _ -> kernelInvariant "runtime-graph-cumulative"
+            _ -> kernelInvariant "runtime-graph-cost-attribution"
+        _ -> kernelInvariant "runtime-graph-primitive-reuse"
+    _ -> kernelInvariant "runtime-graph-claim-site"
 
 verifyConcrete
   :: ConcreteStageClosure
