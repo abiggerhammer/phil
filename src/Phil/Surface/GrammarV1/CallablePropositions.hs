@@ -21,6 +21,7 @@ import Phil.Surface.GrammarV1.CheckedProposition
 import Phil.Surface.GrammarV1.Parser
   ( GrammarV1CallableClause (..)
   , GrammarV1CallableContractDecl (..)
+  , GrammarV1Proposition
   )
 import Phil.Surface.Syntax (Located (..))
 
@@ -85,7 +86,7 @@ grammarV1CallableAssumptions =
       _ -> Nothing
 
 grammarV1CallablePropositionCategory
-  :: (GrammarV1CallableClause -> Maybe (Located a))
+  :: (GrammarV1CallableClause -> Maybe (Located GrammarV1Proposition))
   -> StaticContext
   -> SurfaceState
   -> GrammarV1CallableContractDecl
