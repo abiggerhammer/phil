@@ -378,7 +378,7 @@ Proof.
   destruct (certified_required_runtime_use_has_complete_runtime_authority
     model use Hcert Hrequired)
     as [boundCarrier [Hexact
-      [Hpresent [Hcomplete [Hresidue [Hcost [HknownCost]]]]]]].
+      [Hpresent [Hcomplete [Hresidue [Hcost HknownCost]]]]]].
   destruct Hexact as [HexactBinding _].
   rewrite Hbinding in HexactBinding.
   inversion HexactBinding; subst boundCarrier.
