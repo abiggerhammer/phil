@@ -1,3 +1,5 @@
+{-# LANGUAGE OverloadedStrings #-}
+
 module Phil.Surface.GrammarV1.BoundRefExpression
   ( grammarV1BoundRefExpression
   ) where
