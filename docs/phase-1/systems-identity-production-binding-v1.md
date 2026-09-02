@@ -30,6 +30,8 @@ After the native artifact-identity and lowering-ledger checks succeed, productio
 
 Impossible disagreement after native verification fails closed through a certified-kernel invariant. Native rejection payloads and ordering are unchanged.
 
+The production mirror is registered explicitly as `SystemsIdentityKernel` in the main `phil-core` library `other-modules`, so the ordinary package graph and the `cabal.project.ci` `-Werror` lint build both own the dependency.
+
 ## Deliberate boundary
 
 The theorem and extracted kernel treat digests as opaque identities. Concrete serialization, SHA-256 collision resistance/injectivity, digest-construction correctness, assurance-manifest construction, container correspondence, external evidence truth, runtime/backend behavior, and Rocq/GHC correctness remain explicit representation/evidence/TCB boundaries.
