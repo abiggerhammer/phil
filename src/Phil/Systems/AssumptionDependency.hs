@@ -45,6 +45,7 @@ import Phil.Systems.Phase1Stage
 import Phil.Systems.SubjectCorrespondence
   ( SubjectStageBundle (..)
   )
+import qualified SystemsEvidencePreservationKernel as Kernel
 
 newtype AssumptionDependencyStageRevision = AssumptionDependencyStageRevision
   { unAssumptionDependencyStageRevision :: Text
@@ -192,8 +193,14 @@ verifyAssumptionDependencyStageBundle
   :: AssumptionDependencyStageBundle
   -> Either AssumptionDependencyVerificationError ()
 verifyAssumptionDependencyStageBundle bundle = do
-  mapLeft AssumptionDependencyBaseError $
-    verifyEvidenceErasureStageBundle (assumptionDependencyStageBase bundle)
+  let baseResult = verifyEvidenceErasureStageBundle (assumptionDependencyStageBase bundle)
+  case Kernel.decideSystemsEvidenceByFacts
+      Kernel.True (toKernelBool (isRight baseResult)) Kernel.True of
+    Kernel.SystemsEvidenceAcceptedDecision ->
+      mapLeft AssumptionDependencyBaseError baseResult
+    Kernel.SystemsEvidenceErasureDecision ->
+      mapLeft AssumptionDependencyBaseError baseResult
+    _ -> kernelInvariant "cumulative-erasure-predecessor"
   requireEqual AssumptionDependencyStageRevisionMismatch
     (deriveAssumptionDependencyStageRevision bundle)
     (assumptionDependencyStageRevision bundle)
@@ -207,17 +214,38 @@ verifyAssumptionDependencyStageBundle bundle = do
       requiredConsumers = Map.keysSet required
       actualConsumers = Map.keysSet (assumptionDependencyStageForward bundle)
 
-  requireEqual AssumptionRegistryDomainMismatch
-    requiredAssumptions actualAssumptions
-  requireEqual AssumptionForwardDomainMismatch
-    requiredConsumers actualConsumers
+  case Kernel.decideAssumptionDependencyByFacts
+      (toKernelBool (requiredAssumptions == actualAssumptions))
+      Kernel.True Kernel.True Kernel.True Kernel.True Kernel.True of
+    Kernel.AssumptionDependencyAcceptedDecision -> Right ()
+    Kernel.AssumptionRegistryDecision ->
+      Left (AssumptionRegistryDomainMismatch requiredAssumptions actualAssumptions)
+    _ -> kernelInvariant "assumption-registry"
+  case Kernel.decideAssumptionDependencyByFacts
+      Kernel.True Kernel.True Kernel.True
+      (toKernelBool (requiredConsumers == actualConsumers))
+      Kernel.True Kernel.True of
+    Kernel.AssumptionDependencyAcceptedDecision -> Right ()
+    Kernel.AssumptionForwardDecision ->
+      Left (AssumptionForwardDomainMismatch requiredConsumers actualConsumers)
+    _ -> kernelInvariant "assumption-forward-domain"
   mapM_ (checkForward bundle) (Map.toAscList required)
 
   let expectedReverse = deriveReverse required
       actualReverse = assumptionDependencyStageReverse bundle
-  requireEqual AssumptionReverseDomainMismatch
-    (Map.keysSet expectedReverse) (Map.keysSet actualReverse)
+      expectedReverseDomain = Map.keysSet expectedReverse
+      actualReverseDomain = Map.keysSet actualReverse
+  case Kernel.decideAssumptionDependencyByFacts
+      Kernel.True Kernel.True Kernel.True Kernel.True Kernel.True
+      (toKernelBool (expectedReverseDomain == actualReverseDomain)) of
+    Kernel.AssumptionDependencyAcceptedDecision -> Right ()
+    Kernel.AssumptionReverseDecision ->
+      Left (AssumptionReverseDomainMismatch expectedReverseDomain actualReverseDomain)
+    _ -> kernelInvariant "assumption-reverse-domain"
   mapM_ (checkReverse actualReverse) (Map.toAscList expectedReverse)
+  case Kernel.decideSystemsEvidenceByFacts Kernel.True Kernel.True Kernel.True of
+    Kernel.SystemsEvidenceAcceptedDecision -> Right ()
+    _ -> kernelInvariant "cumulative-acceptance"
 
 checkBinding
   :: (StageAssumptionKey, AssumptionBinding)
@@ -227,10 +255,15 @@ checkBinding (key, binding) = do
   if Text.null (unStageAssumptionKey key)
     then Left AssumptionBindingEmptyKey
     else Right ()
-  case assumptionBindingValidityScope binding of
-    AssumptionValidityScopeRevision value
-      | Text.null value -> Left (AssumptionBindingEmptyValidityScope key)
-      | otherwise -> Right ()
+  let validityScopePresent = case assumptionBindingValidityScope binding of
+        AssumptionValidityScopeRevision value -> not (Text.null value)
+  case Kernel.decideAssumptionDependencyByFacts
+      Kernel.True Kernel.True (toKernelBool validityScopePresent)
+      Kernel.True Kernel.True Kernel.True of
+    Kernel.AssumptionDependencyAcceptedDecision -> Right ()
+    Kernel.AssumptionValidityScopeDecision ->
+      Left (AssumptionBindingEmptyValidityScope key)
+    _ -> kernelInvariant "assumption-validity-scope"
 
 checkForward
   :: AssumptionDependencyStageBundle
@@ -242,8 +275,14 @@ checkForward bundle (consumer, expectedAssumptions) = do
       (Set.singleton consumer) Set.empty)
     Just value -> Right value
   let actualAssumptions = Map.keysSet actualDependencies
-  requireEqual (AssumptionForwardSetMismatch consumer)
-    expectedAssumptions actualAssumptions
+  case Kernel.decideAssumptionDependencyByFacts
+      Kernel.True Kernel.True Kernel.True
+      (toKernelBool (expectedAssumptions == actualAssumptions))
+      Kernel.True Kernel.True of
+    Kernel.AssumptionDependencyAcceptedDecision -> Right ()
+    Kernel.AssumptionForwardDecision ->
+      Left (AssumptionForwardSetMismatch consumer expectedAssumptions actualAssumptions)
+    _ -> kernelInvariant "assumption-forward-set"
   mapM_ (checkScope actualDependencies) (Set.toAscList expectedAssumptions)
   where
     registry = assumptionDependencyStageAssumptions bundle
@@ -256,8 +295,13 @@ checkForward bundle (consumer, expectedAssumptions) = do
         Nothing -> Left (AssumptionForwardSetMismatch consumer
           expectedAssumptions (Map.keysSet dependencies))
         Just scope -> Right scope
-      requireEqual (AssumptionForwardScopeMismatch consumer assumption)
-        expectedScope actualScope
+      case Kernel.decideAssumptionDependencyByFacts
+          Kernel.True Kernel.True Kernel.True Kernel.True
+          (toKernelBool (expectedScope == actualScope)) Kernel.True of
+        Kernel.AssumptionDependencyAcceptedDecision -> Right ()
+        Kernel.AssumptionForwardScopeDecision -> Left
+          (AssumptionForwardScopeMismatch consumer assumption expectedScope actualScope)
+        _ -> kernelInvariant "assumption-forward-scope"
 
 checkReverse
   :: Map StageAssumptionKey (Set AssumptionConsumer)
@@ -267,9 +311,14 @@ checkReverse actualReverse (assumption, expectedConsumers) =
   case Map.lookup assumption actualReverse of
     Nothing -> Left (AssumptionReverseDomainMismatch
       (Set.singleton assumption) (Map.keysSet actualReverse))
-    Just actualConsumers -> requireEqual
-      (AssumptionReverseConsumerMismatch assumption)
-      expectedConsumers actualConsumers
+    Just actualConsumers ->
+      case Kernel.decideAssumptionDependencyByFacts
+          Kernel.True Kernel.True Kernel.True Kernel.True Kernel.True
+          (toKernelBool (expectedConsumers == actualConsumers)) of
+        Kernel.AssumptionDependencyAcceptedDecision -> Right ()
+        Kernel.AssumptionReverseDecision -> Left
+          (AssumptionReverseConsumerMismatch assumption expectedConsumers actualConsumers)
+        _ -> kernelInvariant "assumption-reverse-consumers"
 
 factAssumptionRefs :: Phase1FactDisposition -> Set Text
 factAssumptionRefs disposition = case disposition of
@@ -332,3 +381,15 @@ requireEqual mkError expected actual
 
 mapLeft :: (a -> b) -> Either a c -> Either b c
 mapLeft f = either (Left . f) Right
+
+toKernelBool :: Bool -> Kernel.Bool
+toKernelBool value = if value then Kernel.True else Kernel.False
+
+isRight :: Either a b -> Bool
+isRight value = case value of
+  Right _ -> True
+  Left _ -> False
+
+kernelInvariant :: String -> Either e a
+kernelInvariant label =
+  error ("SystemsEvidencePreservationKernel mismatch: " <> label)
