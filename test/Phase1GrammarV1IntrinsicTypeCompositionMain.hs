@@ -65,6 +65,13 @@ intrinsicTypesPreserveMeaning = do
       , Just (TyFrame (GrammarId "Wire.Codec"))
       , Just (TyValidated "Check" (Name "payload") (Name "evidence"))
       , Just (TyValidated "Rules.Check" (Name "payload") (Name "evidence"))
+      , Just (TyRefined (Name "v") (TyUInt 8) Truth)
+      , Just
+          (TyRefined
+            (Name "b")
+            TyBool
+            (Conjunction Truth (Negation Falsehood)))
+      , Nothing
       , Nothing
       , Nothing
       , Nothing
@@ -105,6 +112,19 @@ boundTypesPreserveMeaning = do
               (Equal (RefNat 1) (RefNat 1))))
       , Just (TyFrame (GrammarId "Hello"))
       , Just (TyValidated "Check" (Name "payload") (Name "evidence"))
+      , Just (TyRefined (Name "v") (TyUInt 8) Truth)
+      , Just
+          (TyRefined
+            (Name "b")
+            TyBool
+            (Equal (RefVar (Name "b")) (RefBool True)))
+      , Just
+          (TyRefined
+            (Name "b")
+            TyBool
+            (Equal (RefVar (Name "b")) (RefVar (Name "flag"))))
+      , Nothing
+      , Nothing
       , Nothing
       , Nothing
       , Nothing
@@ -113,6 +133,7 @@ boundTypesPreserveMeaning = do
       , Nothing
       , Just (TyOpaque "Other")
       , Just (TyOpaque "pkg.Other")
+      , Nothing
       , Nothing
       ]
 
@@ -149,6 +170,9 @@ intrinsicSource = Text.unlines
   , "type QualifiedFrameT = Frame[Wire.Codec];"
   , "type ValidatedT = Validated[Check, payload, evidence];"
   , "type QualifiedValidatedT = Validated[Rules.Check, payload, evidence];"
+  , "type IntrinsicRefinement = {v : U8 | true};"
+  , "type IntrinsicRefinementTree = {b : Bool | true and not false};"
+  , "type BinderRefinement = {b : Bool | b == true};"
   , "type SpecializedValidated = Validated[Check[U32], payload, evidence];"
   , "type QualifiedValidatedInput = Validated[Check, pkg.payload, evidence];"
   , "type ProjectedValidatedInput = Validated[Check, (payload).field, evidence];"
@@ -170,6 +194,11 @@ boundSource = Text.unlines
   , "type IntrinsicProof = Proof[Ready(1) or 1 == 1];"
   , "type FrameT = Frame[Hello];"
   , "type ValidatedT = Validated[Check, payload, evidence];"
+  , "type IntrinsicRefinement = {v : U8 | true};"
+  , "type BoundRefinement = {b : Bool | b == true};"
+  , "type OuterRefinement = {b : Bool | b == flag};"
+  , "type ShadowedRefinement = {flag : Bool | true};"
+  , "type CoercionRefinement = {v : U8 | v > 0};"
   , "type WrongSortBytes = Bytes[flag];"
   , "type UnknownBytes = Bytes[missing];"
   , "type UnknownProof = Proof[missing == n];"
@@ -179,6 +208,7 @@ boundSource = Text.unlines
   , "type NamedT = Other;"
   , "type QualifiedNamedT = pkg.Other;"
   , "type SpecializedNamedT = Other[U32];"
+  , "type TupleT = (U32, Bool);"
   ]
 
 assert :: Bool -> String -> Either String ()
