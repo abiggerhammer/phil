@@ -1,0 +1,185 @@
+name: Phase 1 Systems Evidence Production Binding
+
+on:
+  pull_request:
+    paths:
+      - 'generated/SystemsEvidencePreservationKernel.hs'
+      - 'src/SystemsEvidencePreservationKernel.hs'
+      - 'src/Phil/Systems/EvidenceErasure.hs'
+      - 'src/Phil/Systems/AssumptionDependency.hs'
+      - 'proof/Phil/Assurance/Manifest.v'
+      - 'proof/Phil/Assurance/EvidenceUse.v'
+      - 'proof/Phil/Core/DataSubject.v'
+      - 'proof/Phil/Core/BoundarySubject.v'
+      - 'proof/Phil/Core/SystemsEvidencePreservation.v'
+      - 'proof/Phil/Core/SystemsEvidencePreservationImplementation.v'
+      - 'proof/Phil/Core/SystemsEvidencePreservationImplementationExtraction.v'
+      - 'app/SystemsEvidencePreservationDecisionCorrespondenceMain.hs'
+      - 'test/Phase1EvidenceSubjectTransferMain.hs'
+      - 'test/Phase1EvidenceErasureMain.hs'
+      - 'test/Phase1AssumptionDependencyMain.hs'
+      - 'docs/phase-1/systems-evidence-preservation-production-binding-v1.md'
+      - '.github/workflows/phase1-systems-evidence-production-binding.yml'
+  push:
+    branches: [main]
+    paths:
+      - 'generated/SystemsEvidencePreservationKernel.hs'
+      - 'src/SystemsEvidencePreservationKernel.hs'
+      - 'src/Phil/Systems/EvidenceErasure.hs'
+      - 'src/Phil/Systems/AssumptionDependency.hs'
+      - 'proof/Phil/Assurance/Manifest.v'
+      - 'proof/Phil/Assurance/EvidenceUse.v'
+      - 'proof/Phil/Core/DataSubject.v'
+      - 'proof/Phil/Core/BoundarySubject.v'
+      - 'proof/Phil/Core/SystemsEvidencePreservation.v'
+      - 'proof/Phil/Core/SystemsEvidencePreservationImplementation.v'
+      - 'proof/Phil/Core/SystemsEvidencePreservationImplementationExtraction.v'
+      - 'app/SystemsEvidencePreservationDecisionCorrespondenceMain.hs'
+      - 'test/Phase1EvidenceSubjectTransferMain.hs'
+      - 'test/Phase1EvidenceErasureMain.hs'
+      - 'test/Phase1AssumptionDependencyMain.hs'
+      - 'docs/phase-1/systems-evidence-preservation-production-binding-v1.md'
+      - '.github/workflows/phase1-systems-evidence-production-binding.yml'
+
+permissions:
+  contents: read
+
+jobs:
+  rocq-exact-kernel:
+    runs-on: ubuntu-latest
+    container:
+      image: rocq/rocq-prover:9.2.0
+      options: --user root
+    steps:
+      - uses: actions/checkout@v4
+      - name: Fresh-extract exact Systems evidence kernel
+        shell: bash
+        run: |
+          set -euo pipefail
+          export PATH="/home/rocq/.opam/${COMPILER}/bin:$PATH"
+          rocq c -Q proof/Phil Phil proof/Phil/Assurance/Manifest.v
+          rocq c -Q proof/Phil Phil proof/Phil/Assurance/EvidenceUse.v
+          rocq c -Q proof/Phil Phil proof/Phil/Core/DataSubject.v
+          rocq c -Q proof/Phil Phil proof/Phil/Core/BoundarySubject.v
+          rocq c -Q proof/Phil Phil proof/Phil/Core/SystemsEvidencePreservation.v
+          rocq c -Q proof/Phil Phil proof/Phil/Core/SystemsEvidencePreservationImplementation.v
+          rm -f SystemsEvidencePreservationKernel.hs
+          rocq c -Q proof/Phil Phil proof/Phil/Core/SystemsEvidencePreservationImplementationExtraction.v
+          test -s SystemsEvidencePreservationKernel.hs
+          test "$(sha256sum SystemsEvidencePreservationKernel.hs | cut -d' ' -f1)" = \
+            '60611b8457f9f6c91941a5e7970e7714c807dab492cca228a0da9b690a0a1852'
+          cmp SystemsEvidencePreservationKernel.hs \
+            generated/SystemsEvidencePreservationKernel.hs
+      - name: Require exact strict production mirror
+        shell: bash
+        run: |
+          set -euo pipefail
+          {
+            printf '%s\n' '{-# OPTIONS_GHC -Wno-unused-imports #-}'
+            cat SystemsEvidencePreservationKernel.hs
+          } > expected-production-kernel.hs
+          cmp expected-production-kernel.hs src/SystemsEvidencePreservationKernel.hs
+      - name: Stage exact kernel artifact
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p systems-evidence-exact-kernel
+          cp \
+            SystemsEvidencePreservationKernel.hs \
+            expected-production-kernel.hs \
+            proof/Phil/Core/SystemsEvidencePreservationImplementation.v \
+            proof/Phil/Core/SystemsEvidencePreservationImplementation.vo \
+            proof/Phil/Core/SystemsEvidencePreservationImplementationExtraction.v \
+            proof/Phil/Core/SystemsEvidencePreservationImplementationExtraction.vo \
+            systems-evidence-exact-kernel/
+          sha256sum systems-evidence-exact-kernel/* > \
+            systems-evidence-exact-kernel/PHIL-SYS-EVID-001.exact-kernel.sha256
+          cat systems-evidence-exact-kernel/PHIL-SYS-EVID-001.exact-kernel.sha256
+      - uses: actions/upload-artifact@v4
+        with:
+          name: systems-evidence-exact-kernel
+          path: systems-evidence-exact-kernel
+          if-no-files-found: error
+
+  production-binding:
+    needs: rocq-exact-kernel
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: haskell-actions/setup@v2
+        with:
+          ghc-version: '9.6.7'
+          cabal-version: 'latest'
+      - name: Build ordinary regression substrate
+        run: cabal build all --enable-tests
+      - uses: actions/download-artifact@v4
+        with:
+          name: systems-evidence-exact-kernel
+          path: systems-evidence-exact-kernel
+      - name: Require checked-in exact kernel identities
+        run: |
+          set -euo pipefail
+          cmp systems-evidence-exact-kernel/SystemsEvidencePreservationKernel.hs \
+            generated/SystemsEvidencePreservationKernel.hs
+          cmp systems-evidence-exact-kernel/expected-production-kernel.hs \
+            src/SystemsEvidencePreservationKernel.hs
+          test "$(sha256sum generated/SystemsEvidencePreservationKernel.hs | cut -d' ' -f1)" = \
+            '60611b8457f9f6c91941a5e7970e7714c807dab492cca228a0da9b690a0a1852'
+      - name: Strict typecheck kernel and bound production paths
+        run: |
+          set -euo pipefail
+          ghc -Wall -Werror -Wno-unused-imports -fno-code \
+            generated/SystemsEvidencePreservationKernel.hs
+          ghc -Wall -Werror -fno-code src/SystemsEvidencePreservationKernel.hs
+          cabal exec -- ghc -isrc -Wall -Werror -fno-code \
+            src/Phil/Systems/EvidenceErasure.hs
+          cabal exec -- ghc -isrc -Wall -Werror -fno-code \
+            src/Phil/Systems/AssumptionDependency.hs
+      - name: Execute exact decision controls through production kernel
+        run: |
+          set -euo pipefail
+          ghc -Wall -Werror -isrc \
+            app/SystemsEvidencePreservationDecisionCorrespondenceMain.hs \
+            -o systems-evidence-production-controls
+          ./systems-evidence-production-controls
+      - name: Strict typecheck unchanged 36-case correspondence corpus
+        run: |
+          set -euo pipefail
+          cabal exec -- ghc -isrc -Wall -Werror -Wno-name-shadowing -Wno-unused-imports -fno-code \
+            test/Phase1EvidenceSubjectTransferMain.hs
+          cabal exec -- ghc -isrc -Wall -Werror -Wno-name-shadowing -Wno-unused-imports -fno-code \
+            test/Phase1EvidenceErasureMain.hs
+          cabal exec -- ghc -isrc -Wall -Werror -Wno-name-shadowing -Wno-unused-imports -fno-code \
+            test/Phase1AssumptionDependencyMain.hs
+      - name: Re-run unchanged SYS-011 through SYS-013 correspondence corpus
+        run: |
+          set -euo pipefail
+          cabal exec -- runghc -Wall -Werror -Wno-name-shadowing -Wno-unused-imports -isrc \
+            test/Phase1EvidenceSubjectTransferMain.hs
+          cabal exec -- runghc -Wall -Werror -Wno-name-shadowing -Wno-unused-imports -isrc \
+            test/Phase1EvidenceErasureMain.hs
+          cabal exec -- runghc -Wall -Werror -Wno-name-shadowing -Wno-unused-imports -isrc \
+            test/Phase1AssumptionDependencyMain.hs
+      - name: Record production-binding identities
+        run: |
+          set -euo pipefail
+          mkdir -p systems-evidence-production-binding
+          sha256sum \
+            generated/SystemsEvidencePreservationKernel.hs \
+            src/SystemsEvidencePreservationKernel.hs \
+            src/Phil/Systems/EvidenceSubjectTransfer.hs \
+            src/Phil/Systems/EvidenceErasure.hs \
+            src/Phil/Systems/AssumptionDependency.hs \
+            test/Phase1EvidenceSubjectTransferMain.hs \
+            test/Phase1EvidenceErasureMain.hs \
+            test/Phase1AssumptionDependencyMain.hs \
+            app/SystemsEvidencePreservationDecisionCorrespondenceMain.hs \
+            proof/Phil/Core/SystemsEvidencePreservationImplementation.v \
+            docs/phase-1/systems-evidence-preservation-production-binding-v1.md \
+            > systems-evidence-production-binding/PHIL-SYS-EVID-001.production-binding.sha256
+          cat systems-evidence-production-binding/PHIL-SYS-EVID-001.production-binding.sha256
+      - uses: actions/upload-artifact@v4
+        with:
+          name: systems-evidence-production-binding
+          path: systems-evidence-production-binding
+          if-no-files-found: error
