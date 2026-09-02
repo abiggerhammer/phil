@@ -1,0 +1,159 @@
+name: Phase 1 Systems Revision Canonicalization Production Binding
+
+on:
+  pull_request:
+    paths:
+      - 'generated/SystemsRevisionCanonicalizationKernel.hs'
+      - 'src/SystemsRevisionCanonicalizationKernel.hs'
+      - 'src/Phil/Systems/Phase1Stage.hs'
+      - 'proof/Phil/Core/SystemsRevisionCanonicalization.v'
+      - 'proof/Phil/Core/SystemsRevisionCanonicalizationImplementation.v'
+      - 'proof/Phil/Core/SystemsRevisionCanonicalizationImplementationExtraction.v'
+      - 'proof/Phil/Core/ArchitectureIdentity.v'
+      - 'proof/Phil/Core/SystemsStageClosure.v'
+      - 'proof/Phil/Systems/Identity.v'
+      - 'app/SystemsRevisionCanonicalizationConstructionCorrespondenceMain.hs'
+      - 'test/Phase1GenericSystemsStageMain.hs'
+      - 'test/Phase1StageClosureMain.hs'
+      - 'docs/phase-1/systems-revision-canonicalization-production-binding-v1.md'
+      - '.github/workflows/phase1-systems-revision-canonicalization-production-binding.yml'
+  push:
+    branches: [main]
+    paths:
+      - 'generated/SystemsRevisionCanonicalizationKernel.hs'
+      - 'src/SystemsRevisionCanonicalizationKernel.hs'
+      - 'src/Phil/Systems/Phase1Stage.hs'
+      - 'proof/Phil/Core/SystemsRevisionCanonicalization.v'
+      - 'proof/Phil/Core/SystemsRevisionCanonicalizationImplementation.v'
+      - 'proof/Phil/Core/SystemsRevisionCanonicalizationImplementationExtraction.v'
+      - 'app/SystemsRevisionCanonicalizationConstructionCorrespondenceMain.hs'
+      - 'test/Phase1GenericSystemsStageMain.hs'
+      - 'test/Phase1StageClosureMain.hs'
+      - 'docs/phase-1/systems-revision-canonicalization-production-binding-v1.md'
+      - '.github/workflows/phase1-systems-revision-canonicalization-production-binding.yml'
+
+permissions:
+  contents: read
+
+jobs:
+  rocq-exact-kernel:
+    runs-on: ubuntu-latest
+    container:
+      image: rocq/rocq-prover:9.2.0
+      options: --user root
+    steps:
+      - uses: actions/checkout@v4
+      - name: Fresh-extract exact Systems revision construction kernel
+        shell: bash
+        run: |
+          set -euo pipefail
+          export PATH="/home/rocq/.opam/${COMPILER}/bin:$PATH"
+          rocq c -Q proof/Phil Phil proof/Phil/Core/ArchitectureIdentity.v
+          rocq c -Q proof/Phil Phil proof/Phil/Systems/Identity.v
+          rocq c -Q proof/Phil Phil proof/Phil/Systems/FactDisposition.v
+          rocq c -Q proof/Phil Phil proof/Phil/Assurance/ValidityScope.v
+          rocq c -Q proof/Phil Phil proof/Phil/Core/SystemsStageClosure.v
+          rocq c -Q proof/Phil Phil proof/Phil/Core/SystemsRevisionCanonicalization.v
+          rocq c -Q proof/Phil Phil proof/Phil/Core/SystemsRevisionCanonicalizationImplementation.v
+          rm -f SystemsRevisionCanonicalizationKernel.hs
+          rocq c -Q proof/Phil Phil proof/Phil/Core/SystemsRevisionCanonicalizationImplementationExtraction.v
+          test -s SystemsRevisionCanonicalizationKernel.hs
+          test "$(sha256sum SystemsRevisionCanonicalizationKernel.hs | cut -d' ' -f1)" = \
+            '2d3e8443e0145fdf4d9c3a15160428d5f8a7f0422775e35a296c529f0e523b7b'
+          cmp SystemsRevisionCanonicalizationKernel.hs \
+            generated/SystemsRevisionCanonicalizationKernel.hs
+      - name: Require exact strict production mirror
+        shell: bash
+        run: |
+          set -euo pipefail
+          {
+            printf '%s\n' '{-# OPTIONS_GHC -Wno-unused-imports #-}'
+            cat SystemsRevisionCanonicalizationKernel.hs
+          } > expected-production-kernel.hs
+          cmp expected-production-kernel.hs src/SystemsRevisionCanonicalizationKernel.hs
+      - name: Stage exact kernel artifact
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p systems-revision-canonicalization-exact-kernel
+          cp \
+            SystemsRevisionCanonicalizationKernel.hs \
+            expected-production-kernel.hs \
+            proof/Phil/Core/SystemsRevisionCanonicalizationImplementation.v \
+            proof/Phil/Core/SystemsRevisionCanonicalizationImplementation.vo \
+            proof/Phil/Core/SystemsRevisionCanonicalizationImplementationExtraction.v \
+            proof/Phil/Core/SystemsRevisionCanonicalizationImplementationExtraction.vo \
+            systems-revision-canonicalization-exact-kernel/
+          sha256sum systems-revision-canonicalization-exact-kernel/* > \
+            systems-revision-canonicalization-exact-kernel/PHIL-SYS-REV-001.exact-kernel.sha256
+          cat systems-revision-canonicalization-exact-kernel/PHIL-SYS-REV-001.exact-kernel.sha256
+      - uses: actions/upload-artifact@v4
+        with:
+          name: systems-revision-canonicalization-exact-kernel
+          path: systems-revision-canonicalization-exact-kernel
+          if-no-files-found: error
+
+  production-binding:
+    needs: rocq-exact-kernel
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: haskell-actions/setup@v2
+        with:
+          ghc-version: '9.6.7'
+          cabal-version: 'latest'
+      - name: Build ordinary regression substrate
+        run: cabal build all --enable-tests
+      - uses: actions/download-artifact@v4
+        with:
+          name: systems-revision-canonicalization-exact-kernel
+          path: systems-revision-canonicalization-exact-kernel
+      - name: Require checked-in exact kernel identities
+        run: |
+          set -euo pipefail
+          cmp systems-revision-canonicalization-exact-kernel/SystemsRevisionCanonicalizationKernel.hs \
+            generated/SystemsRevisionCanonicalizationKernel.hs
+          cmp systems-revision-canonicalization-exact-kernel/expected-production-kernel.hs \
+            src/SystemsRevisionCanonicalizationKernel.hs
+          test "$(sha256sum generated/SystemsRevisionCanonicalizationKernel.hs | cut -d' ' -f1)" = \
+            '2d3e8443e0145fdf4d9c3a15160428d5f8a7f0422775e35a296c529f0e523b7b'
+      - name: Strict typecheck kernel and bound production path
+        run: |
+          set -euo pipefail
+          ghc -Wall -Werror -Wno-unused-imports -fno-code \
+            generated/SystemsRevisionCanonicalizationKernel.hs
+          ghc -Wall -Werror -fno-code src/SystemsRevisionCanonicalizationKernel.hs
+          cabal exec -- ghc -isrc -Wall -Werror -fno-code \
+            src/Phil/Systems/Phase1Stage.hs
+      - name: Execute exact construction-plan controls through production kernel
+        run: |
+          set -euo pipefail
+          ghc -Wall -Werror -isrc \
+            app/SystemsRevisionCanonicalizationConstructionCorrespondenceMain.hs \
+            -o systems-revision-canonicalization-production-controls
+          ./systems-revision-canonicalization-production-controls
+      - name: Re-run unchanged canonical revision correspondence corpora
+        run: |
+          set -euo pipefail
+          cabal exec -- runghc -isrc test/Phase1GenericSystemsStageMain.hs
+          cabal exec -- runghc -isrc test/Phase1StageClosureMain.hs
+      - name: Record production-binding identities
+        run: |
+          set -euo pipefail
+          mkdir -p systems-revision-canonicalization-production-binding
+          sha256sum \
+            generated/SystemsRevisionCanonicalizationKernel.hs \
+            src/SystemsRevisionCanonicalizationKernel.hs \
+            src/Phil/Systems/Phase1Stage.hs \
+            test/Phase1GenericSystemsStageMain.hs \
+            test/Phase1StageClosureMain.hs \
+            app/SystemsRevisionCanonicalizationConstructionCorrespondenceMain.hs \
+            proof/Phil/Core/SystemsRevisionCanonicalizationImplementation.v \
+            docs/phase-1/systems-revision-canonicalization-production-binding-v1.md \
+            > systems-revision-canonicalization-production-binding/PHIL-SYS-REV-001.production-binding.sha256
+          cat systems-revision-canonicalization-production-binding/PHIL-SYS-REV-001.production-binding.sha256
+      - uses: actions/upload-artifact@v4
+        with:
+          name: systems-revision-canonicalization-production-binding
+          path: systems-revision-canonicalization-production-binding
+          if-no-files-found: error
