@@ -1,0 +1,136 @@
+name: Temporary Systems Identity Binding Patch
+
+on:
+  push:
+    branches: [bind-systems-identity-decisions]
+    paths:
+      - '.github/workflows/zz-temp-bind-systems-identity.yml'
+
+permissions:
+  contents: write
+
+jobs:
+  patch:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: bind-systems-identity-decisions
+          fetch-depth: 0
+      - name: Apply exact verifier binding patch
+        shell: python
+        run: |
+          from pathlib import Path
+
+          path = Path('src/Phil/Systems/Verify.hs')
+          text = path.read_text()
+
+          old = 'import Phil.Systems.IR\n'
+          new = 'import Phil.Systems.IR\nimport qualified SystemsIdentityKernel as IdentityKernel\n'
+          assert text.count(old) == 1
+          text = text.replace(old, new, 1)
+
+          old = '''  verifyArtifactIdentity context artifact
+          verifyLoweringLedger context artifact
+          verifyProgram artifact
+          '''
+          new = '''  verifyArtifactIdentity context artifact
+          verifyLoweringLedger context artifact
+          verifyIdentityKernel context artifact
+          verifyProgram artifact
+          '''
+          assert text.count(old) == 1
+          text = text.replace(old, new, 1)
+
+          old = '''    when (loweringAction lowering == RemoveCheck) $
+            forM_ (loweringAssuranceEntries lowering) $ \\entryId ->
+              case Map.lookup entryId (ledgerEvidence (systemsAssuranceLedger context)) of
+                Just entry | evidenceAssuranceKind entry == RuntimeEnforced ->
+                  Left (RemoveCheckDropsRuntimeEvidence key entryId)
+                _ -> pure ()
+
+          verifyProgram :: SystemsArtifact -> Either SystemsVerificationError ()
+          '''
+          new = '''    when (loweringAction lowering == RemoveCheck) $
+            forM_ (loweringAssuranceEntries lowering) $ \\entryId ->
+              case Map.lookup entryId (ledgerEvidence (systemsAssuranceLedger context)) of
+                Just entry | evidenceAssuranceKind entry == RuntimeEnforced ->
+                  Left (RemoveCheckDropsRuntimeEvidence key entryId)
+                _ -> pure ()
+
+          -- Native verification above retains the existing detailed diagnostic ordering.
+          -- This exact extracted-kernel gate is therefore an acceptance invariant: after
+          -- the concrete digest/container checks succeed, the Certified normalized
+          -- identity classifier must agree or production fails closed.
+          verifyIdentityKernel
+            :: SystemsVerificationContext
+            -> SystemsArtifact
+            -> Either SystemsVerificationError ()
+          verifyIdentityKernel context artifact = do
+            let contract = systemsArtifactStageContract artifact
+                expectedSource = systemsExpectedSourceArtifactDigest context
+                actualSource = stageSourceArtifactDigest contract
+                expectedTarget = systemsProgramDigest (systemsArtifactProgram artifact)
+                actualTarget = stageTargetArtifactDigest contract
+                expectedImplementation = systemsArtifactDigest artifact
+                actualImplementation =
+                  manifestImplementationDigest (systemsAssuranceManifest context)
+                ledger = systemsArtifactLoweringLedger artifact
+                decisions = loweringLedgerDecisions ledger
+                expectedRoot = deriveLoweringLedgerRoot decisions
+                actualRoot = loweringLedgerRoot ledger
+                manifestRoot =
+                  manifestLoweringLedgerRoot (systemsAssuranceManifest context)
+                artifactDecision = IdentityKernel.decideArtifactIdentityByFacts
+                  (actualSource == expectedSource)
+                  (actualTarget == expectedTarget)
+                  (actualImplementation == expectedImplementation)
+                  (actualRoot == expectedRoot)
+                  (manifestRoot == actualRoot)
+
+            case artifactDecision of
+              IdentityKernel.ArtifactIdentityAcceptedDecision -> pure ()
+              _ -> identityKernelInvariant "artifact-identity-after-native-verification"
+
+            forM_ (Map.toAscList decisions) $ \\(key, lowering) -> do
+              let expectedDigest = deriveLoweringDecisionDigest lowering
+                  decision = IdentityKernel.decideDecisionBindingByFacts
+                    (not (Text.null (unDecisionId key)))
+                    (key == loweringDecisionId lowering)
+                    (loweringDecisionDigest lowering == expectedDigest)
+                    (loweringSourceArtifactDigest lowering == actualSource)
+                    (loweringTargetArtifactDigest lowering == actualTarget)
+              case decision of
+                IdentityKernel.DecisionBindingAcceptedDecision -> pure ()
+                _ -> identityKernelInvariant
+                  ("decision-binding-after-native-verification:"
+                    <> Text.unpack (unDecisionId key))
+
+          verifyProgram :: SystemsArtifact -> Either SystemsVerificationError ()
+          '''
+          assert text.count(old) == 1
+          text = text.replace(old, new, 1)
+
+          old = '''mapLeft :: (a -> b) -> Either a c -> Either b c
+          mapLeft transform = either (Left . transform) Right
+          '''
+          new = '''identityKernelInvariant :: String -> a
+          identityKernelInvariant label =
+            error ("certified Systems identity kernel mismatch: " <> label)
+
+          mapLeft :: (a -> b) -> Either a c -> Either b c
+          mapLeft transform = either (Left . transform) Right
+          '''
+          assert text.count(old) == 1
+          text = text.replace(old, new, 1)
+
+          path.write_text(text)
+      - name: Commit binding and remove temporary workflow
+        run: |
+          set -euo pipefail
+          rm .github/workflows/zz-temp-bind-systems-identity.yml
+          git config user.name github-actions[bot]
+          git config user.email 41898282+github-actions[bot]@users.noreply.github.com
+          git add src/Phil/Systems/Verify.hs .github/workflows/zz-temp-bind-systems-identity.yml
+          git commit -m 'Bind Systems identity verification to certified kernel'
+          git push origin HEAD:bind-systems-identity-decisions
