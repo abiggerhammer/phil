@@ -170,7 +170,7 @@ Ltac synchronize_some_results :=
       | Hleft : ?f = Some ?left,
         Hright : ?f = Some ?right |- _ =>
           tryif constr_eq Hleft Hright
-          then fail 1
+          then fail 0
           else
             let Heq := fresh "Heq" in
             assert (Heq : left = right) by congruence;
