@@ -1,0 +1,137 @@
+name: Phase 1 Generic Systems Lowering Production Binding
+
+on:
+  pull_request:
+    paths:
+      - 'proof/Phil/Core/ArchitectureIdentity.v'
+      - 'proof/Phil/Core/ArchitectureInstantiation.v'
+      - 'proof/Phil/Core/ProviderReplacementQualification.v'
+      - 'proof/Phil/Core/ArchitectureRealization.v'
+      - 'proof/Phil/Systems/FactDisposition.v'
+      - 'proof/Phil/Assurance/ValidityScope.v'
+      - 'proof/Phil/Core/SystemsStageClosure.v'
+      - 'proof/Phil/Core/SystemsGenericLowering.v'
+      - 'proof/Phil/Core/SystemsGenericLoweringImplementation.v'
+      - 'proof/Phil/Core/SystemsGenericLoweringImplementationExtraction.v'
+      - 'generated/SystemsGenericLoweringKernel.hs'
+      - 'src/SystemsGenericLoweringKernel.hs'
+      - 'src/Phil/Systems/GenericLowering.hs'
+      - 'src/Phil/Examples/Phase1/SystemsWitnesses.hs'
+      - 'src/Phil/Systems/StageClosure.hs'
+      - 'app/SystemsGenericLoweringDecisionCorrespondenceMain.hs'
+      - 'test/Phase1GenericSystemsLoweringMain.hs'
+      - 'test/Phase1GenericSystemsStageMain.hs'
+      - 'test/Phase1StageClosureMain.hs'
+      - 'docs/phase-1/systems-generic-lowering-production-binding-v1.md'
+      - '.github/workflows/phase1-systems-generic-lowering-production-binding.yml'
+
+permissions:
+  contents: read
+
+jobs:
+  exact-generic-systems-lowering-kernel:
+    runs-on: ubuntu-latest
+    container:
+      image: rocq/rocq-prover:9.2.0
+      options: --user root
+    steps:
+      - uses: actions/checkout@v4
+      - name: Fresh-extract exact Generic Systems lowering kernel
+        shell: bash
+        run: |
+          set -euo pipefail
+          export PATH="/home/rocq/.opam/${COMPILER}/bin:$PATH"
+          rocq c -Q proof/Phil Phil proof/Phil/Core/ArchitectureIdentity.v
+          rocq c -Q proof/Phil Phil proof/Phil/Core/ArchitectureInstantiation.v
+          rocq c -Q proof/Phil Phil proof/Phil/Core/ProviderReplacementQualification.v
+          rocq c -Q proof/Phil Phil proof/Phil/Core/ArchitectureRealization.v
+          rocq c -Q proof/Phil Phil proof/Phil/Systems/FactDisposition.v
+          rocq c -Q proof/Phil Phil proof/Phil/Assurance/ValidityScope.v
+          rocq c -Q proof/Phil Phil proof/Phil/Core/SystemsStageClosure.v
+          rocq c -Q proof/Phil Phil proof/Phil/Core/SystemsGenericLowering.v
+          rocq c -Q proof/Phil Phil proof/Phil/Core/SystemsGenericLoweringImplementation.v
+          rm -f SystemsGenericLoweringKernel.hs
+          rocq c -Q proof/Phil Phil proof/Phil/Core/SystemsGenericLoweringImplementationExtraction.v
+          test -s SystemsGenericLoweringKernel.hs
+          echo 'af042ab8cfd60ea84140485b9097dd380eff7c7e7122835be3f8174d7e89b8f8  SystemsGenericLoweringKernel.hs' | sha256sum -c -
+          cmp SystemsGenericLoweringKernel.hs generated/SystemsGenericLoweringKernel.hs
+          cmp SystemsGenericLoweringKernel.hs src/SystemsGenericLoweringKernel.hs
+      - name: Record exact kernel identities
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p systems-generic-lowering-exact-kernel
+          cp SystemsGenericLoweringKernel.hs systems-generic-lowering-exact-kernel/
+          sha256sum \
+            SystemsGenericLoweringKernel.hs \
+            generated/SystemsGenericLoweringKernel.hs \
+            src/SystemsGenericLoweringKernel.hs \
+            proof/Phil/Core/SystemsGenericLoweringImplementation.v \
+            proof/Phil/Core/SystemsGenericLoweringImplementationExtraction.v \
+            > systems-generic-lowering-exact-kernel/PHIL-SYS-GENERIC-001.exact-kernel.sha256
+          cat systems-generic-lowering-exact-kernel/PHIL-SYS-GENERIC-001.exact-kernel.sha256
+      - uses: actions/upload-artifact@v4
+        with:
+          name: systems-generic-lowering-exact-kernel
+          path: systems-generic-lowering-exact-kernel
+          if-no-files-found: error
+
+  verify-generic-systems-lowering-production-binding:
+    needs: exact-generic-systems-lowering-kernel
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: haskell-actions/setup@v2
+        with:
+          ghc-version: '9.6.7'
+          cabal-version: 'latest'
+      - name: Build ordinary regression substrate
+        run: cabal build all --enable-tests
+      - name: Strict typecheck exact production kernel, generic producer, witnesses, and final StageClosure path
+        run: |
+          set -euo pipefail
+          ghc -Wall -Werror -fno-code src/SystemsGenericLoweringKernel.hs
+          cabal exec -- ghc -isrc -Wall -Werror -fno-code src/Phil/Systems/GenericLowering.hs
+          cabal exec -- ghc -isrc -Wall -Werror -fno-code src/Phil/Examples/Phase1/SystemsWitnesses.hs
+          cabal exec -- ghc -isrc -Wall -Werror -Wno-name-shadowing -Wno-unused-imports -fno-code src/Phil/Systems/StageClosure.hs
+      - name: Execute 7 direct controls through production kernel
+        run: |
+          set -euo pipefail
+          ghc -Wall -Werror -isrc \
+            app/SystemsGenericLoweringDecisionCorrespondenceMain.hs \
+            -o systems-generic-lowering-kernel-controls
+          ./systems-generic-lowering-kernel-controls
+      - name: Strict typecheck unchanged Generic and final closure corpora
+        run: |
+          set -euo pipefail
+          cabal exec -- ghc -isrc -Wall -Werror -fno-code test/Phase1GenericSystemsLoweringMain.hs
+          cabal exec -- ghc -isrc -Wall -Werror -Wno-unused-imports -fno-code test/Phase1GenericSystemsStageMain.hs
+          cabal exec -- ghc -isrc -Wall -Werror -Wno-name-shadowing -Wno-unused-imports -fno-code test/Phase1StageClosureMain.hs
+      - name: Re-run unchanged Generic producer/witness corpora and 20-case final closure corpus
+        run: |
+          set -euo pipefail
+          cabal exec -- runghc -isrc -Wall -Werror test/Phase1GenericSystemsLoweringMain.hs
+          cabal exec -- runghc -isrc -Wall -Werror -Wno-unused-imports test/Phase1GenericSystemsStageMain.hs
+          cabal exec -- runghc -isrc -Wall -Werror -Wno-name-shadowing -Wno-unused-imports test/Phase1StageClosureMain.hs
+      - name: Record production-binding identities
+        run: |
+          set -euo pipefail
+          mkdir -p systems-generic-lowering-production-binding
+          sha256sum \
+            generated/SystemsGenericLoweringKernel.hs \
+            src/SystemsGenericLoweringKernel.hs \
+            src/Phil/Systems/GenericLowering.hs \
+            src/Phil/Examples/Phase1/SystemsWitnesses.hs \
+            src/Phil/Systems/StageClosure.hs \
+            app/SystemsGenericLoweringDecisionCorrespondenceMain.hs \
+            test/Phase1GenericSystemsLoweringMain.hs \
+            test/Phase1GenericSystemsStageMain.hs \
+            test/Phase1StageClosureMain.hs \
+            docs/phase-1/systems-generic-lowering-production-binding-v1.md \
+            > systems-generic-lowering-production-binding/PHIL-SYS-GENERIC-001.production-binding.sha256
+          cat systems-generic-lowering-production-binding/PHIL-SYS-GENERIC-001.production-binding.sha256
+      - uses: actions/upload-artifact@v4
+        with:
+          name: systems-generic-lowering-production-binding
+          path: systems-generic-lowering-production-binding
+          if-no-files-found: error
