@@ -165,16 +165,19 @@ Proof.
 Qed.
 
 Ltac synchronize_some_results :=
-  repeat multimatch goal with
-  | Hleft : ?f = Some ?left,
-    Hright : ?f = Some ?right |- _ =>
-      first
-        [ constr_eq left right; fail 1
-        | let Heq := fresh "Heq" in
-          assert (Heq : left = right) by congruence;
-          clear Hleft Hright;
-          first [ discriminate Heq | inversion Heq; subst; clear Heq ] ]
-  end.
+  first
+    [ multimatch goal with
+      | Hleft : ?f = Some ?left,
+        Hright : ?f = Some ?right |- _ =>
+          first
+            [ constr_eq Hleft Hright; fail 1
+            | let Heq := fresh "Heq" in
+              assert (Heq : left = right) by congruence;
+              clear Hright;
+              inversion Heq; subst; clear Heq;
+              synchronize_some_results ]
+      end
+    | idtac ].
 
 Ltac consume_functional_ih :=
   repeat match goal with
