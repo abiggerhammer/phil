@@ -1,5 +1,6 @@
 module Phil.Surface.GrammarV1.CallableSignature
-  ( grammarV1CheckedCallableSignature
+  ( grammarV1CallableParameterScope
+  , grammarV1CheckedCallableSignature
   ) where
 
 import Data.Text (Text)
@@ -31,17 +32,29 @@ import Phil.Surface.GrammarV1.Parser
   )
 import Phil.Surface.Syntax (Located (..))
 
+-- | Construct the exact temporary lexical scope shared by checked callable
+-- signature and clause projections. Generic parameters and requirements remain
+-- outside this bounded fragment. Term parameters are admitted only when their
+-- source types have the already-established primitive unrestricted meaning;
+-- insertion in source order preserves duplicate-name rejection at the existing
+-- binding authority. The returned state is a temporary semantic environment for
+-- sibling callable elaboration only and is never installed in the caller.
+grammarV1CallableParameterScope
+  :: SurfaceState
+  -> GrammarV1CallableContractDecl
+  -> Maybe ([(Name, Ty)], SurfaceState)
+grammarV1CallableParameterScope state source
+  | not (null (grammarV1CallableGenericParams source)) = Nothing
+  | not (null (grammarV1CallableRequirements source)) = Nothing
+  | otherwise = elaborateParameters state (grammarV1CallableTermParams source)
+
 -- | Route the first exact Grammar-v1 callable-signature fragment through the
--- checked type dispatcher. Generic parameters and requirements remain outside
--- this bounded bridge. Term parameters are admitted only when their source type
--- has intrinsic primitive meaning (Unit, Bool, or U<n>), whose unrestricted
--- binding mode is already established. Parameters enter one temporary lexical
--- scope in source order, so duplicate names fail at the existing binding
--- authority and the checked result type may depend on earlier parameters.
--- Callable clauses are deliberately not interpreted here: this function projects
--- only the checked signature that later clause slices can reuse. Structural
--- source non-competence remains Nothing; Core proposition/type rejection in the
--- result remains a distinct Left, with the exact focusing trace preserved.
+-- checked type dispatcher. The parameter environment delegates only to
+-- grammarV1CallableParameterScope, so later callable clause slices can share the
+-- same lexical competence boundary rather than rebuilding it. The checked result
+-- type may depend on earlier parameters. Structural source non-competence remains
+-- Nothing; Core proposition/type rejection in the result remains a distinct Left,
+-- with the exact focusing trace preserved. Callable clauses remain uninterpreted.
 grammarV1CheckedCallableSignature
   :: StaticContext
   -> SurfaceState
@@ -50,25 +63,21 @@ grammarV1CheckedCallableSignature
       (Either
         FocusingError
         ((Text, [(Name, Ty)], Ty), [FocusStep]))
-grammarV1CheckedCallableSignature staticContext state source
-  | not (null (grammarV1CallableGenericParams source)) = Nothing
-  | not (null (grammarV1CallableRequirements source)) = Nothing
-  | otherwise = do
-      (parameters, scopedState) <-
-        elaborateParameters state (grammarV1CallableTermParams source)
-      checkedResult <- grammarV1CheckedType
-        staticContext
-        scopedState
-        (locatedValue (grammarV1CallableResultType source))
-      pure $ fmap
-        (\(resultType, steps) ->
-          ( ( locatedValue (grammarV1CallableName source)
-            , parameters
-            , resultType
-            )
-          , steps
-          ))
-        checkedResult
+grammarV1CheckedCallableSignature staticContext state source = do
+  (parameters, scopedState) <- grammarV1CallableParameterScope state source
+  checkedResult <- grammarV1CheckedType
+    staticContext
+    scopedState
+    (locatedValue (grammarV1CallableResultType source))
+  pure $ fmap
+    (\(resultType, steps) ->
+      ( ( locatedValue (grammarV1CallableName source)
+        , parameters
+        , resultType
+        )
+      , steps
+      ))
+    checkedResult
 
 elaborateParameters
   :: SurfaceState
