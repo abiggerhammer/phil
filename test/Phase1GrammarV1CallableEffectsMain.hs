@@ -5,6 +5,10 @@ module Main (main) where
 import qualified Data.Set as Set
 import qualified Data.Text as Text
 import Phil.Core.Callable (SemanticEffect (..))
+import Phil.Core.CallableRefinement (CallableAuthorityRequirement (..))
+import Phil.Surface.GrammarV1.CallableAuthority
+  ( grammarV1CallableAuthorityBounds
+  )
 import Phil.Surface.GrammarV1.CallableEffects
   ( grammarV1CallableEffectBounds
   )
@@ -19,6 +23,8 @@ main = do
     , test "SURF-002 effect-set references remain distinct from literals" effectSetReferencePreserved
     , test "SURF-008 simple callable effect literals preserve exact Core identities"
         simpleEffectSemantics
+    , test "SURF-008 simple callable authority types preserve exact Core identities"
+        simpleAuthoritySemantics
     , test "SURF-002 effect-set trailing comma rejects at syntax" $
         expectReject "callable C() -> Unit { effects {IO,}; }"
     , test "SURF-002 name-set trailing comma rejects at syntax" $
@@ -136,6 +142,37 @@ simpleEffectSemantics = do
   assert
     (grammarV1CallableEffectBounds referenced == Nothing)
     "effect-set reference was treated as a concrete Core effect set"
+
+simpleAuthoritySemantics :: Either String ()
+simpleAuthoritySemantics = do
+  literal <- onlyCallable $ Text.unlines
+    [ "callable AuthorityCarrier() -> Unit {"
+    , "  authority {Cap, pkg.ReadCap, Cap};"
+    , "  authority {};"
+    , "}"
+    ]
+  assert
+    (grammarV1CallableAuthorityBounds literal ==
+      Just
+        [ Set.fromList
+            [ CallableAuthorityRequirement "Cap"
+            , CallableAuthorityRequirement "pkg.ReadCap"
+            ]
+        , Set.empty
+        ])
+    "simple callable authority routing changed exact identity, clause order, or Set normalization"
+
+  specialized <- onlyCallable
+    "callable SpecializedAuthority() -> Unit { authority {Cap[U8]}; }"
+  assert
+    (grammarV1CallableAuthorityBounds specialized == Nothing)
+    "specialized authority type was flattened into a textual authority identity"
+
+  structured <- onlyCallable
+    "callable StructuredAuthority() -> Unit { authority {(U8, Bool)}; }"
+  assert
+    (grammarV1CallableAuthorityBounds structured == Nothing)
+    "structured authority type was flattened into a textual authority identity"
 
 assertEffectLiteral :: [Text.Text] -> Located GrammarV1EffectSetExpression -> Either String ()
 assertEffectLiteral expected (Located _ effectSet) = case effectSet of
