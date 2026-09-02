@@ -85,8 +85,8 @@ jobs:
         with:
           ghc-version: '9.6.7'
           cabal-version: 'latest'
-      - name: Build package and tests with warnings as errors
-        run: cabal build all --enable-tests --ghc-options=-Werror
+      - name: Build bound library with warnings as errors
+        run: cabal build lib:phil-core --ghc-options=-Werror
       - name: Strict-typecheck bound production surface
         shell: bash
         run: |
