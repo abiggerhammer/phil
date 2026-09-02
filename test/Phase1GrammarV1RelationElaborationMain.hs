@@ -102,6 +102,7 @@ boundRelationsPreserveMeaning = do
         , Just (LessEqual n (RefNat 7))
         , Just (Equal (RefVar (Name "flag")) (RefVar (Name "flag2")))
         , Just (Equal u (RefVar (Name "v")))
+        , Just (Equal (RefNat 1) (RefNat 1))
         , Just (LessThan n m)
         , Nothing
         , Nothing
@@ -172,6 +173,7 @@ boundRelationSource = Text.unlines
   , "claim NatMixed = n <= 7;"
   , "claim BoolEq = flag == flag2;"
   , "claim UIntEq = u == v;"
+  , "claim LiteralEqualityStaysStructural = 1 == 1;"
   , "claim Greater = m > n;"
   , "claim SortMismatch = n == flag;"
   , "claim BadOrder = flag < flag2;"
