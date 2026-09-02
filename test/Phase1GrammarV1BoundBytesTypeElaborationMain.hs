@@ -74,6 +74,7 @@ boundBytesPreserveRicherNatExpressions = do
         , Nothing
         , Nothing
         , Nothing
+        , Nothing
         ]
   assert (actual == expected) $
     "binding-aware Bytes routing changed a verified Nat expression or accepted a wrong-sort/unresolved form: " <> show actual
