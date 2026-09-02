@@ -1,5 +1,6 @@
 module Phil.Surface.GrammarV1.CallableSignature
-  ( grammarV1CallableParameterScope
+  ( grammarV1InsertPrimitiveBinding
+  , grammarV1CallableParameterScope
   , grammarV1CheckedCallableSignature
   ) where
 
@@ -29,8 +30,30 @@ import Phil.Surface.GrammarV1.Elaborate
 import Phil.Surface.GrammarV1.Parser
   ( GrammarV1CallableContractDecl (..)
   , GrammarV1TermParam (..)
+  , GrammarV1Type
   )
 import Phil.Surface.Syntax (Located (..))
+
+-- | Insert one source binding whose type is already in the bounded primitive
+-- unrestricted fragment shared by callable parameter and outcome-state scope.
+-- The ordinary surface binding authority still owns duplicate-name rejection and
+-- updates both binding metadata and the live Core resource context together.
+grammarV1InsertPrimitiveBinding
+  :: Located Text
+  -> Located GrammarV1Type
+  -> SurfaceState
+  -> Maybe ((Name, Ty), SurfaceState)
+grammarV1InsertPrimitiveBinding sourceName sourceType state = do
+  ty <- grammarV1PrimitiveType (locatedValue sourceType)
+  let bindingText = locatedValue sourceName
+      bindingName = Name bindingText
+  next <- either (const Nothing) Just $
+    insertBindingMeta
+      (locatedSpan sourceName)
+      bindingText
+      (BindingMeta Unrestricted ty PlainShape)
+      state
+  pure ((bindingName, ty), next)
 
 -- | Construct the exact temporary lexical scope shared by checked callable
 -- signature and clause projections. Generic parameters and requirements remain
@@ -87,14 +110,8 @@ elaborateParameters = go []
   where
     go reversed state [] = Just (reverse reversed, state)
     go reversed state (Located _ parameter : rest) = do
-      ty <- grammarV1PrimitiveType
-        (locatedValue (grammarV1TermParamType parameter))
-      let parameterText = locatedValue (grammarV1TermParamName parameter)
-          parameterName = Name parameterText
-      next <- either (const Nothing) Just $
-        insertBindingMeta
-          (locatedSpan (grammarV1TermParamName parameter))
-          parameterText
-          (BindingMeta Unrestricted ty PlainShape)
-          state
+      ((parameterName, ty), next) <- grammarV1InsertPrimitiveBinding
+        (grammarV1TermParamName parameter)
+        (grammarV1TermParamType parameter)
+        state
       go ((parameterName, ty) : reversed) next rest
