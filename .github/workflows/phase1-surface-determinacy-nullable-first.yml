@@ -1,0 +1,75 @@
+name: Phase 1 Surface Determinacy Nullable FIRST
+
+on:
+  pull_request:
+    paths:
+      - 'grammar/phase1-surface.ebnf'
+      - 'scripts/derive_phase1_surface_grammar.py'
+      - 'scripts/check_phase1_surface_determinacy.py'
+      - 'scripts/derive_phase1_surface_determinacy_certificate.py'
+      - 'proof/Phil/Surface/GrammarDeterminacyNullableFirst.v'
+      - '.github/workflows/phase1-surface-determinacy-nullable-first.yml'
+  push:
+    branches: [main]
+    paths:
+      - 'grammar/phase1-surface.ebnf'
+      - 'scripts/derive_phase1_surface_grammar.py'
+      - 'scripts/check_phase1_surface_determinacy.py'
+      - 'scripts/derive_phase1_surface_determinacy_certificate.py'
+      - 'proof/Phil/Surface/GrammarDeterminacyNullableFirst.v'
+      - '.github/workflows/phase1-surface-determinacy-nullable-first.yml'
+
+permissions:
+  contents: read
+
+jobs:
+  rocq-nullable-first:
+    runs-on: ubuntu-latest
+    container:
+      image: rocq/rocq-prover:9.2.0
+      options: --user root
+    steps:
+      - uses: actions/checkout@v4
+      - name: Derive exact grammar and overlap certificate
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 scripts/derive_phase1_surface_grammar.py --write
+          python3 scripts/derive_phase1_surface_determinacy_certificate.py --write
+          python3 scripts/derive_phase1_surface_grammar.py --check
+          python3 scripts/derive_phase1_surface_determinacy_certificate.py --check
+      - name: Compile nullable and FIRST fixed points
+        shell: bash
+        run: |
+          set -euo pipefail
+          export PATH="/home/rocq/.opam/${COMPILER}/bin:$PATH"
+          rocq c -Q proof/Phil Phil proof/Phil/Surface/Grammar.v
+          rocq c -Q proof/Phil Phil proof/Phil/Surface/GrammarDeterminacyCertificate.v
+          rocq c -Q proof/Phil Phil proof/Phil/Surface/GrammarDeterminacyNullableFirst.v
+      - name: Record proof identities
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p surface-determinacy-nullable-first
+          cp \
+            proof/Phil/Surface/Grammar.v \
+            proof/Phil/Surface/GrammarDeterminacyCertificate.v \
+            proof/Phil/Surface/GrammarDeterminacyNullableFirst.v \
+            proof/Phil/Surface/GrammarDeterminacyNullableFirst.vo \
+            surface-determinacy-nullable-first/
+          sha256sum \
+            grammar/phase1-surface.ebnf \
+            scripts/derive_phase1_surface_grammar.py \
+            scripts/check_phase1_surface_determinacy.py \
+            scripts/derive_phase1_surface_determinacy_certificate.py \
+            proof/Phil/Surface/Grammar.v \
+            proof/Phil/Surface/GrammarDeterminacyCertificate.v \
+            proof/Phil/Surface/GrammarDeterminacyNullableFirst.v \
+            proof/Phil/Surface/GrammarDeterminacyNullableFirst.vo \
+            > surface-determinacy-nullable-first/identities.sha256
+          cat surface-determinacy-nullable-first/identities.sha256
+      - uses: actions/upload-artifact@v4
+        with:
+          name: rocq-surface-determinacy-nullable-first
+          path: surface-determinacy-nullable-first
+          if-no-files-found: error
