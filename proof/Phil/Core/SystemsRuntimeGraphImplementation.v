@@ -150,18 +150,18 @@ Proof.
   - intros Haccepted.
     apply systems_runtime_graph_decision_exact in Haccepted.
     destruct Haccepted as [HclaimAccepted [HreuseAccepted HcostAccepted]].
-    apply Hclaim in HclaimAccepted.
-    apply Hreuse in HreuseAccepted.
-    apply Hcost in HcostAccepted.
-    destruct HreuseAccepted as [Hcontribution Hsymbol].
-    destruct HcostAccepted as [Hclass Hshape].
+    pose proof ((proj1 Hclaim) HclaimAccepted) as Hsite.
+    pose proof ((proj1 Hreuse) HreuseAccepted) as HreuseFacts.
+    pose proof ((proj1 Hcost) HcostAccepted) as HcostFacts.
+    destruct HreuseFacts as [Hcontribution Hsymbol].
+    destruct HcostFacts as [Hclass Hshape].
     constructor; assumption.
   - intros Hvalid.
     destruct Hvalid as [Hsite Hcontribution Hclass Hshape Hsymbol].
     apply systems_runtime_graph_decision_exact.
     split.
-    + apply Hclaim. exact Hsite.
+    + apply (proj2 Hclaim). exact Hsite.
     + split.
-      * apply Hreuse. split; assumption.
-      * apply Hcost. split; assumption.
+      * apply (proj2 Hreuse). split; assumption.
+      * apply (proj2 Hcost). split; assumption.
 Qed.
