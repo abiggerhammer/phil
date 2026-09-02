@@ -1,0 +1,97 @@
+name: Phase 1 Runtime Carrier Proofs
+
+on:
+  pull_request:
+    paths:
+      - 'proof/Phil/Assurance/RuntimeCarrier.v'
+      - 'proof/Phil/Assurance/EvidenceUse.v'
+      - 'proof/Phil/Assurance/Manifest.v'
+      - 'proof/Phil/Core/SystemsRuntimeGraph.v'
+      - 'proof/Phil/Systems/Runtime.v'
+      - 'proof/Phil/LLVM/Preservation.v'
+      - 'proof/Phil/LLVM/RuntimeSymbolIdentity.v'
+      - 'src/Phil/Systems/RuntimeCarrierBinding.hs'
+      - 'src/Phil/Systems/RuntimeCarrierCoverage.hs'
+      - 'test/Phase1RuntimeCarrierBindingMain.hs'
+      - 'test/Phase1RuntimeCarrierCoverageMain.hs'
+      - 'docs/phase-1/runtime-carrier-proof-v1.md'
+      - '.github/workflows/phase1-runtime-carrier-proofs.yml'
+  push:
+    branches: [main]
+    paths:
+      - 'proof/Phil/Assurance/RuntimeCarrier.v'
+      - 'docs/phase-1/runtime-carrier-proof-v1.md'
+      - '.github/workflows/phase1-runtime-carrier-proofs.yml'
+
+permissions:
+  contents: read
+
+jobs:
+  rocq-runtime-carrier-proof:
+    runs-on: ubuntu-latest
+    container:
+      image: rocq/rocq-prover:9.2.0
+      options: --user root
+    steps:
+      - uses: actions/checkout@v4
+      - name: Compile Certified predecessors and PHIL-ASSURE-CARRIER-001
+        shell: bash
+        run: |
+          set -euo pipefail
+          export PATH="/home/rocq/.opam/${COMPILER}/bin:$PATH"
+          rocq c -Q proof/Phil Phil proof/Phil/Assurance/Manifest.v
+          rocq c -Q proof/Phil Phil proof/Phil/Assurance/EvidenceUse.v
+          rocq c -Q proof/Phil Phil proof/Phil/Systems/Runtime.v
+          rocq c -Q proof/Phil Phil proof/Phil/LLVM/Preservation.v
+          rocq c -Q proof/Phil Phil proof/Phil/LLVM/RuntimeSymbolIdentity.v
+          rocq c -Q proof/Phil Phil proof/Phil/Core/SystemsRuntimeGraph.v
+          rocq c -Q proof/Phil Phil proof/Phil/Assurance/RuntimeCarrier.v
+      - name: Record proof identities
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p runtime-carrier-proof
+          cp \
+            proof/Phil/Assurance/RuntimeCarrier.v \
+            proof/Phil/Assurance/RuntimeCarrier.vo \
+            runtime-carrier-proof/
+          sha256sum \
+            proof/Phil/Assurance/EvidenceUse.v \
+            proof/Phil/Core/SystemsRuntimeGraph.v \
+            proof/Phil/Assurance/RuntimeCarrier.v \
+            proof/Phil/Assurance/RuntimeCarrier.vo \
+            > runtime-carrier-proof/PHIL-ASSURE-CARRIER-001.proof.sha256
+          {
+            echo 'obligation=PHIL-ASSURE-CARRIER-001'
+            echo 'evidence=Rocq-9.2.0'
+            cat runtime-carrier-proof/PHIL-ASSURE-CARRIER-001.proof.sha256
+          } > runtime-carrier-proof/PHIL-ASSURE-CARRIER-001.proof-certificate.txt
+          cat runtime-carrier-proof/PHIL-ASSURE-CARRIER-001.proof-certificate.txt
+      - uses: actions/upload-artifact@v4
+        with:
+          name: rocq-runtime-carrier-proof
+          path: runtime-carrier-proof
+          if-no-files-found: error
+
+  verify-runtime-carrier-correspondence:
+    needs: rocq-runtime-carrier-proof
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: haskell-actions/setup@v2
+        with:
+          ghc-version: '9.6.7'
+          cabal-version: 'latest'
+      - name: Build ordinary regression substrate
+        run: cabal build all --enable-tests
+      - name: Strict typecheck DEP-001 and DEP-002 implementation/corpora
+        run: |
+          set -euo pipefail
+          cabal exec -- ghc -isrc -Wall -Werror -fno-code src/Phil/Systems/RuntimeCarrierBinding.hs
+          cabal exec -- ghc -isrc -Wall -Werror -fno-code src/Phil/Systems/RuntimeCarrierCoverage.hs
+          cabal exec -- ghc -isrc -Wall -Werror -fno-code test/Phase1RuntimeCarrierBindingMain.hs
+          cabal exec -- ghc -isrc -Wall -Werror -fno-code test/Phase1RuntimeCarrierCoverageMain.hs
+      - name: Re-run unchanged DEP-001 establishment corpus
+        run: cabal exec -- runghc -Wall -Werror -isrc test/Phase1RuntimeCarrierBindingMain.hs
+      - name: Re-run unchanged DEP-002 coverage/transfer corpus
+        run: cabal exec -- runghc -Wall -Werror -isrc test/Phase1RuntimeCarrierCoverageMain.hs
