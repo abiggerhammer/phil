@@ -37,7 +37,7 @@ main = do
   results <- sequence
     [ test "SURF-008 intrinsic Proof composition preserves exact Core meaning"
         intrinsicProofTypesPreserveMeaning
-    , test "SURF-008 binding-aware Proof composition preserves exact Core meaning and poisons unresolved trees"
+    , test "SURF-008 binding-aware Proof composition preserves richer exact Core meaning and poisons unresolved trees"
         boundProofTypesPreserveMeaning
     ]
   if and results then pure () else exitFailure
@@ -96,7 +96,13 @@ boundProofTypesPreserveMeaning = do
                   (Atom "Ready" [RefVar (Name "flag"), RefVar (Name "n")])
               ))
         , Nothing
-        , Nothing
+        , Just
+            (TyProof
+              (Conjunction
+                Truth
+                (Equal
+                  (RefAdd (RefVar (Name "n")) (RefNat 1))
+                  (RefVar (Name "m")))))
         , Nothing
         , Nothing
         , Nothing
