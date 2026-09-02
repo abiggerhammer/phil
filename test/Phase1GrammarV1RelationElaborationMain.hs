@@ -35,7 +35,7 @@ main = do
   results <- sequence
     [ test "SURF-008 Grammar-v1 relation operators preserve exact Core meaning"
         relationOperatorsPreserveMeaning
-    , test "SURF-008 binding-aware relation routing preserves richer refinement expressions and sort competence"
+    , test "SURF-008 binding-aware relation routing preserves richer refinement expressions and focusing competence"
         boundRelationsPreserveMeaning
     ]
   if and results then pure () else exitFailure
@@ -117,6 +117,8 @@ boundRelationsPreserveMeaning = do
         , Just (Equal (RefScale 2 n) m)
         , Just (Equal (RefLen bytes) (RefNat 4))
         , Just (Equal (RefToNat u) (RefNat 7))
+        , Just (LessThan (RefToNat u) (RefNat 7))
+        , Just (LessThan (RefNat 7) (RefToNat u))
         , Nothing
         , Nothing
         , Nothing
@@ -186,6 +188,8 @@ boundRelationSource = Text.unlines
   , "claim Length = len(bytes) == 4;"
   , "claim ExplicitToNat = toNat(u) == 7;"
   , "claim MixedNeedsFocus = u < 7;"
+  , "claim MixedRightNeedsFocus = 7 < u;"
+  , "claim MixedEqualityStillRejects = u == 7;"
   , "claim SymbolicMultiply = n * m == n;"
   , "claim TruthLeaf = true;"
   ]
