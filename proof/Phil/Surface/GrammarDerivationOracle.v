@@ -181,10 +181,13 @@ Ltac consume_functional_ih :=
       ?leftRest = nextRest /\ ?leftResult = nextResult,
     H : OracleDerives ?oracle ?rules ?goal ?input ?rightRest ?rightResult |- _ =>
       let Hfunctional := fresh "Hfunctional" in
+      let Hrest := fresh "Hrest" in
+      let Hresult := fresh "Hresult" in
       pose proof (IH rightRest rightResult H) as Hfunctional;
       clear H;
-      destruct Hfunctional;
-      subst
+      destruct Hfunctional as [Hrest Hresult];
+      subst rightRest;
+      inversion Hresult; subst; clear Hresult
   end.
 
 Theorem oracle_derivation_functional :
@@ -200,7 +203,7 @@ Proof.
     synchronize_some_results;
     try congruence;
     consume_functional_ih;
-    split; congruence.
+    split; reflexivity.
 Qed.
 
 Definition OracleResolvedExpression
