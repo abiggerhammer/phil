@@ -35,7 +35,7 @@ main = do
   results <- sequence
     [ test "SURF-008 intrinsic Grammar-v1 refinement types preserve exact Core structure and fail closed"
         intrinsicRefinementTypesPreserveMeaning
-    , test "SURF-008 binder-scoped Grammar-v1 refinement types preserve lexical predicate meaning"
+    , test "SURF-008 binder-scoped Grammar-v1 refinement types preserve lexical predicate meaning and focused coercion"
         boundRefinementTypesPreserveMeaning
     ]
   if and results then pure () else exitFailure
@@ -93,7 +93,11 @@ boundRefinementTypesPreserveMeaning = do
               TyBool
               (Atom "Ready" [RefVar (Name "flag")]))
         , Just (TyRefined (Name "v") (TyUInt 8) Truth)
-        , Nothing
+        , Just
+            (TyRefined
+              (Name "v")
+              (TyUInt 8)
+              (LessThan (RefNat 0) (RefToNat (RefVar (Name "v")))))
         , Nothing
         , Nothing
         , Nothing
