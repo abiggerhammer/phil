@@ -30,99 +30,85 @@ jobs:
           assert text.count(old) == 1
           text = text.replace(old, new, 1)
 
-          old = '''  verifyArtifactIdentity context artifact
-          verifyLoweringLedger context artifact
-          verifyProgram artifact
-          '''
-          new = '''  verifyArtifactIdentity context artifact
-          verifyLoweringLedger context artifact
-          verifyIdentityKernel context artifact
-          verifyProgram artifact
-          '''
+          old = (
+              '  verifyArtifactIdentity context artifact\n'
+              '  verifyLoweringLedger context artifact\n'
+              '  verifyProgram artifact\n'
+          )
+          new = (
+              '  verifyArtifactIdentity context artifact\n'
+              '  verifyLoweringLedger context artifact\n'
+              '  verifyIdentityKernel context artifact\n'
+              '  verifyProgram artifact\n'
+          )
           assert text.count(old) == 1
           text = text.replace(old, new, 1)
 
-          old = '''    when (loweringAction lowering == RemoveCheck) $
-            forM_ (loweringAssuranceEntries lowering) $ \\entryId ->
-              case Map.lookup entryId (ledgerEvidence (systemsAssuranceLedger context)) of
-                Just entry | evidenceAssuranceKind entry == RuntimeEnforced ->
-                  Left (RemoveCheckDropsRuntimeEvidence key entryId)
-                _ -> pure ()
+          helper_lines = [
+              '-- Native verification above retains the existing detailed diagnostic ordering.',
+              '-- This exact extracted-kernel gate is therefore an acceptance invariant: after',
+              '-- the concrete digest/container checks succeed, the Certified normalized',
+              '-- identity classifier must agree or production fails closed.',
+              'verifyIdentityKernel',
+              '  :: SystemsVerificationContext',
+              '  -> SystemsArtifact',
+              '  -> Either SystemsVerificationError ()',
+              'verifyIdentityKernel context artifact = do',
+              '  let contract = systemsArtifactStageContract artifact',
+              '      expectedSource = systemsExpectedSourceArtifactDigest context',
+              '      actualSource = stageSourceArtifactDigest contract',
+              '      expectedTarget = systemsProgramDigest (systemsArtifactProgram artifact)',
+              '      actualTarget = stageTargetArtifactDigest contract',
+              '      expectedImplementation = systemsArtifactDigest artifact',
+              '      actualImplementation =',
+              '        manifestImplementationDigest (systemsAssuranceManifest context)',
+              '      ledger = systemsArtifactLoweringLedger artifact',
+              '      decisions = loweringLedgerDecisions ledger',
+              '      expectedRoot = deriveLoweringLedgerRoot decisions',
+              '      actualRoot = loweringLedgerRoot ledger',
+              '      manifestRoot =',
+              '        manifestLoweringLedgerRoot (systemsAssuranceManifest context)',
+              '      artifactDecision = IdentityKernel.decideArtifactIdentityByFacts',
+              '        (actualSource == expectedSource)',
+              '        (actualTarget == expectedTarget)',
+              '        (actualImplementation == expectedImplementation)',
+              '        (actualRoot == expectedRoot)',
+              '        (manifestRoot == actualRoot)',
+              '',
+              '  case artifactDecision of',
+              '    IdentityKernel.ArtifactIdentityAcceptedDecision -> pure ()',
+              '    _ -> identityKernelInvariant "artifact-identity-after-native-verification"',
+              '',
+              '  forM_ (Map.toAscList decisions) $ \\(key, lowering) -> do',
+              '    let expectedDigest = deriveLoweringDecisionDigest lowering',
+              '        decision = IdentityKernel.decideDecisionBindingByFacts',
+              '          (not (Text.null (unDecisionId key)))',
+              '          (key == loweringDecisionId lowering)',
+              '          (loweringDecisionDigest lowering == expectedDigest)',
+              '          (loweringSourceArtifactDigest lowering == actualSource)',
+              '          (loweringTargetArtifactDigest lowering == actualTarget)',
+              '    case decision of',
+              '      IdentityKernel.DecisionBindingAcceptedDecision -> pure ()',
+              '      _ -> identityKernelInvariant',
+              '        ("decision-binding-after-native-verification:"',
+              '          <> Text.unpack (unDecisionId key))',
+              '',
+          ]
+          helper = '\n'.join(helper_lines)
+          marker = '\nverifyProgram :: SystemsArtifact -> Either SystemsVerificationError ()\n'
+          assert text.count(marker) == 1
+          text = text.replace(marker, '\n' + helper + 'verifyProgram :: SystemsArtifact -> Either SystemsVerificationError ()\n', 1)
 
-          verifyProgram :: SystemsArtifact -> Either SystemsVerificationError ()
-          '''
-          new = '''    when (loweringAction lowering == RemoveCheck) $
-            forM_ (loweringAssuranceEntries lowering) $ \\entryId ->
-              case Map.lookup entryId (ledgerEvidence (systemsAssuranceLedger context)) of
-                Just entry | evidenceAssuranceKind entry == RuntimeEnforced ->
-                  Left (RemoveCheckDropsRuntimeEvidence key entryId)
-                _ -> pure ()
-
-          -- Native verification above retains the existing detailed diagnostic ordering.
-          -- This exact extracted-kernel gate is therefore an acceptance invariant: after
-          -- the concrete digest/container checks succeed, the Certified normalized
-          -- identity classifier must agree or production fails closed.
-          verifyIdentityKernel
-            :: SystemsVerificationContext
-            -> SystemsArtifact
-            -> Either SystemsVerificationError ()
-          verifyIdentityKernel context artifact = do
-            let contract = systemsArtifactStageContract artifact
-                expectedSource = systemsExpectedSourceArtifactDigest context
-                actualSource = stageSourceArtifactDigest contract
-                expectedTarget = systemsProgramDigest (systemsArtifactProgram artifact)
-                actualTarget = stageTargetArtifactDigest contract
-                expectedImplementation = systemsArtifactDigest artifact
-                actualImplementation =
-                  manifestImplementationDigest (systemsAssuranceManifest context)
-                ledger = systemsArtifactLoweringLedger artifact
-                decisions = loweringLedgerDecisions ledger
-                expectedRoot = deriveLoweringLedgerRoot decisions
-                actualRoot = loweringLedgerRoot ledger
-                manifestRoot =
-                  manifestLoweringLedgerRoot (systemsAssuranceManifest context)
-                artifactDecision = IdentityKernel.decideArtifactIdentityByFacts
-                  (actualSource == expectedSource)
-                  (actualTarget == expectedTarget)
-                  (actualImplementation == expectedImplementation)
-                  (actualRoot == expectedRoot)
-                  (manifestRoot == actualRoot)
-
-            case artifactDecision of
-              IdentityKernel.ArtifactIdentityAcceptedDecision -> pure ()
-              _ -> identityKernelInvariant "artifact-identity-after-native-verification"
-
-            forM_ (Map.toAscList decisions) $ \\(key, lowering) -> do
-              let expectedDigest = deriveLoweringDecisionDigest lowering
-                  decision = IdentityKernel.decideDecisionBindingByFacts
-                    (not (Text.null (unDecisionId key)))
-                    (key == loweringDecisionId lowering)
-                    (loweringDecisionDigest lowering == expectedDigest)
-                    (loweringSourceArtifactDigest lowering == actualSource)
-                    (loweringTargetArtifactDigest lowering == actualTarget)
-              case decision of
-                IdentityKernel.DecisionBindingAcceptedDecision -> pure ()
-                _ -> identityKernelInvariant
-                  ("decision-binding-after-native-verification:"
-                    <> Text.unpack (unDecisionId key))
-
-          verifyProgram :: SystemsArtifact -> Either SystemsVerificationError ()
-          '''
-          assert text.count(old) == 1
-          text = text.replace(old, new, 1)
-
-          old = '''mapLeft :: (a -> b) -> Either a c -> Either b c
-          mapLeft transform = either (Left . transform) Right
-          '''
-          new = '''identityKernelInvariant :: String -> a
-          identityKernelInvariant label =
-            error ("certified Systems identity kernel mismatch: " <> label)
-
-          mapLeft :: (a -> b) -> Either a c -> Either b c
-          mapLeft transform = either (Left . transform) Right
-          '''
-          assert text.count(old) == 1
-          text = text.replace(old, new, 1)
+          tail_lines = [
+              'identityKernelInvariant :: String -> a',
+              'identityKernelInvariant label =',
+              '  error ("certified Systems identity kernel mismatch: " <> label)',
+              '',
+          ]
+          tail = '\n'.join(tail_lines)
+          marker = '\nmapLeft :: (a -> b) -> Either a c -> Either b c\n'
+          assert text.count(marker) == 1
+          text = text.replace(marker, '\n' + tail + 'mapLeft :: (a -> b) -> Either a c -> Either b c\n', 1)
 
           path.write_text(text)
       - name: Commit binding and remove temporary workflow
