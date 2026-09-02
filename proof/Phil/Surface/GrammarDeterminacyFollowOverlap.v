@@ -228,17 +228,17 @@ Fixpoint alternative_against_rest
   (rights : list EbnfExpression) : list OverlapSite :=
   match rights with
   | [] => []
-  | right :: rest =>
+  | right_expression :: rest =>
       let shared :=
         token_intersection
           (first_expression
             phase1_surface_nullable_facts phase1_surface_first_facts left)
           (first_expression
-            phase1_surface_nullable_facts phase1_surface_first_facts right) in
+            phase1_surface_nullable_facts phase1_surface_first_facts right_expression) in
       let shared_with_epsilon :=
         if andb
              (nullable_expression phase1_surface_nullable_facts left)
-             (nullable_expression phase1_surface_nullable_facts right)
+             (nullable_expression phase1_surface_nullable_facts right_expression)
         then token_insert OverlapEpsilon shared
         else shared in
       List.app
