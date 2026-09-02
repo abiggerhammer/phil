@@ -1,5 +1,6 @@
 From Stdlib Require Import Bool.Bool.
 
+From Phil.Core Require Import ResourceJoin.
 From Phil.Core Require Import ResourceScope.
 
 Inductive ScopedBoundaryDecision : Type :=
