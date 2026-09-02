@@ -1,7 +1,6 @@
 From Stdlib Require Import Bool.Bool.
 
-From Phil.Core Require Import ResourceJoin.
-From Phil.Core Require Import ResourceScope.
+From Phil.Core Require Import ResourceJoin ResourceScope.
 
 Inductive ScopedBoundaryDecision : Type :=
 | ScopedBoundaryAcceptedDecision
@@ -32,30 +31,27 @@ Proof.
   intros succession kind projection resourceProjectionAccepted lexicalLoansClosed
     Hresource Hloans.
   unfold decideScopedBoundaryByFacts, ScopedBoundaryProjectionSuccess.
-  destruct resourceProjectionAccepted eqn:HresourceBool;
-    destruct lexicalLoansClosed eqn:HloansBool; simpl.
+  destruct resourceProjectionAccepted;
+    destruct lexicalLoansClosed; simpl in *.
   - split.
     + intros _. split.
-      * apply (proj1 Hresource). exact HresourceBool.
-      * apply (proj1 Hloans). exact HloansBool.
+      * apply (proj1 Hresource). reflexivity.
+      * apply (proj1 Hloans). reflexivity.
     + intros _. reflexivity.
   - split.
     + discriminate.
     + intros [_ Hclosed].
       apply (proj2 Hloans) in Hclosed.
-      rewrite HloansBool in Hclosed.
       discriminate.
   - split.
     + discriminate.
     + intros [Hprojection _].
       apply (proj2 Hresource) in Hprojection.
-      rewrite HresourceBool in Hprojection.
       discriminate.
   - split.
     + discriminate.
     + intros [Hprojection _].
       apply (proj2 Hresource) in Hprojection.
-      rewrite HresourceBool in Hprojection.
       discriminate.
 Qed.
 
@@ -79,15 +75,14 @@ Theorem affine_projection_decision_corresponds_explicit_state :
 Proof.
   intros declared state explicitCarrier Hexplicit.
   unfold decideAffineProjectionByFact.
-  destruct explicitCarrier eqn:Hcarrier; simpl.
+  destruct explicitCarrier; simpl in *.
   - split.
-    + intros _. apply (proj1 Hexplicit). exact Hcarrier.
+    + intros _. apply (proj1 Hexplicit). reflexivity.
     + intros _. reflexivity.
   - split.
     + discriminate.
     + intros Hstate.
       apply (proj2 Hexplicit) in Hstate.
-      rewrite Hcarrier in Hstate.
       discriminate.
 Qed.
 
@@ -126,29 +121,26 @@ Theorem branch_disposition_decision_corresponds_scope_theorems :
 Proof.
   intros terminalExcluded continuingExact Hterminal Hcontinuing.
   unfold decideBranchDispositionByFacts.
-  destruct terminalExcluded eqn:HterminalBool;
-    destruct continuingExact eqn:HcontinuingBool; simpl.
+  destruct terminalExcluded;
+    destruct continuingExact; simpl in *.
   - split.
     + intros _. split.
-      * apply (proj1 Hterminal). exact HterminalBool.
-      * apply (proj1 Hcontinuing). exact HcontinuingBool.
+      * apply (proj1 Hterminal). reflexivity.
+      * apply (proj1 Hcontinuing). reflexivity.
     + intros _. reflexivity.
   - split.
     + discriminate.
     + intros [_ Hexact].
       apply (proj2 Hcontinuing) in Hexact.
-      rewrite HcontinuingBool in Hexact.
       discriminate.
   - split.
     + discriminate.
     + intros [Hexcluded _].
       apply (proj2 Hterminal) in Hexcluded.
-      rewrite HterminalBool in Hexcluded.
       discriminate.
   - split.
     + discriminate.
     + intros [Hexcluded _].
       apply (proj2 Hterminal) in Hexcluded.
-      rewrite HterminalBool in Hexcluded.
       discriminate.
 Qed.
