@@ -93,7 +93,13 @@ grammarV1CallablePropositionCategory
   -> Maybe (Either FocusingError [(Proposition, [FocusStep])])
 grammarV1CallablePropositionCategory select staticContext state source = do
   (_, scopedState) <- grammarV1CallableParameterScope state source
-  checked <- mapM elaborate selected
+  checked <- mapM
+    (\proposition ->
+      grammarV1CheckedProposition
+        staticContext
+        scopedState
+        (locatedValue proposition))
+    selected
   pure (sequence checked)
   where
     selected =
@@ -101,8 +107,3 @@ grammarV1CallablePropositionCategory select staticContext state source = do
       | Located _ clause <- grammarV1CallableClauses source
       , Just proposition <- [select clause]
       ]
-    elaborate proposition =
-      grammarV1CheckedProposition
-        staticContext
-        scopedState
-        (locatedValue proposition)
