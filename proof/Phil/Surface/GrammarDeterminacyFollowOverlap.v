@@ -255,10 +255,10 @@ Fixpoint alternative_pair_sites
   (items : list EbnfExpression) : list OverlapSite :=
   match items with
   | [] => []
-  | left :: rest =>
+  | left_expression :: rest =>
       List.app
         (alternative_against_rest
-          rule path left_index (S left_index) left rest)
+          rule path left_index (S left_index) left_expression rest)
         (alternative_pair_sites rule path (S left_index) rest)
   end.
 
