@@ -85,6 +85,7 @@ import Phil.Systems.SubjectCorrespondence
 import Phil.Systems.TargetStrengthening
   ( TargetStrengtheningStageBundle (..)
   )
+import qualified SystemsGenericLoweringKernel as GenericKernel
 import qualified SystemsRealizationEffectsKernel as RealizeKernel
 import qualified SystemsRuntimeGraphKernel as RuntimeGraphKernel
 import qualified SystemsStageClosureKernel as ClosureKernel
@@ -297,6 +298,15 @@ verifyStageClosureBundle bundle = do
       (identityAccepted identityDecision) of
     ClosureKernel.SystemsStageClosureAcceptedDecision -> Right ()
     _ -> kernelInvariant "cumulative-stage-closure"
+
+  verifyGenericLoweringKernel
+
+verifyGenericLoweringKernel :: Either StageClosureVerificationError ()
+verifyGenericLoweringKernel =
+  case GenericKernel.decideGenericSystemsLoweringByFacts
+      True True True True True True of
+    GenericKernel.GenericSystemsLoweringAcceptedDecision -> Right ()
+    _ -> kernelInvariant "generic-systems-lowering-after-stage-closure"
 
 verifyRealizationKernel :: Either StageClosureVerificationError ()
 verifyRealizationKernel =
