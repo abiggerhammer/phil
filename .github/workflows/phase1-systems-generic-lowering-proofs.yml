@@ -11,11 +11,15 @@ on:
       - 'proof/Phil/Assurance/ValidityScope.v'
       - 'proof/Phil/Core/SystemsStageClosure.v'
       - 'proof/Phil/Core/SystemsGenericLowering.v'
+      - 'proof/Phil/Core/SystemsGenericLoweringImplementation.v'
+      - 'proof/Phil/Core/SystemsGenericLoweringImplementationExtraction.v'
+      - 'app/SystemsGenericLoweringDecisionCorrespondenceMain.hs'
       - 'src/Phil/Systems/GenericLowering.hs'
       - 'src/Phil/Examples/Phase1/SystemsWitnesses.hs'
       - 'test/Phase1GenericSystemsLoweringMain.hs'
       - 'test/Phase1GenericSystemsStageMain.hs'
       - 'docs/phase-1/systems-generic-lowering-proof-v1.md'
+      - 'docs/phase-1/systems-generic-lowering-implementation-refinement-v1.md'
       - '.github/workflows/phase1-systems-generic-lowering-proofs.yml'
   push:
     branches: [main]
@@ -28,11 +32,15 @@ on:
       - 'proof/Phil/Assurance/ValidityScope.v'
       - 'proof/Phil/Core/SystemsStageClosure.v'
       - 'proof/Phil/Core/SystemsGenericLowering.v'
+      - 'proof/Phil/Core/SystemsGenericLoweringImplementation.v'
+      - 'proof/Phil/Core/SystemsGenericLoweringImplementationExtraction.v'
+      - 'app/SystemsGenericLoweringDecisionCorrespondenceMain.hs'
       - 'src/Phil/Systems/GenericLowering.hs'
       - 'src/Phil/Examples/Phase1/SystemsWitnesses.hs'
       - 'test/Phase1GenericSystemsLoweringMain.hs'
       - 'test/Phase1GenericSystemsStageMain.hs'
       - 'docs/phase-1/systems-generic-lowering-proof-v1.md'
+      - 'docs/phase-1/systems-generic-lowering-implementation-refinement-v1.md'
       - '.github/workflows/phase1-systems-generic-lowering-proofs.yml'
 
 permissions:
@@ -46,7 +54,7 @@ jobs:
       options: --user root
     steps:
       - uses: actions/checkout@v4
-      - name: Compile certified predecessors and PHIL-SYS-GENERIC-001
+      - name: Compile certified predecessors, PHIL-SYS-GENERIC-001, and implementation correspondence
         shell: bash
         run: |
           set -euo pipefail
@@ -59,7 +67,12 @@ jobs:
           rocq c -Q proof/Phil Phil proof/Phil/Assurance/ValidityScope.v
           rocq c -Q proof/Phil Phil proof/Phil/Core/SystemsStageClosure.v
           rocq c -Q proof/Phil Phil proof/Phil/Core/SystemsGenericLowering.v
-      - name: Record proof identities
+          rocq c -Q proof/Phil Phil proof/Phil/Core/SystemsGenericLoweringImplementation.v
+          rm -f SystemsGenericLoweringKernel.hs
+          rocq c -Q proof/Phil Phil proof/Phil/Core/SystemsGenericLoweringImplementationExtraction.v
+          test -s SystemsGenericLoweringKernel.hs
+          grep -q 'decideGenericSystemsLoweringByFacts' SystemsGenericLoweringKernel.hs
+      - name: Record proof and extraction identities
         shell: bash
         run: |
           set -euo pipefail
@@ -67,12 +80,20 @@ jobs:
           cp \
             proof/Phil/Core/SystemsGenericLowering.v \
             proof/Phil/Core/SystemsGenericLowering.vo \
+            proof/Phil/Core/SystemsGenericLoweringImplementation.v \
+            proof/Phil/Core/SystemsGenericLoweringImplementation.vo \
+            proof/Phil/Core/SystemsGenericLoweringImplementationExtraction.v \
+            SystemsGenericLoweringKernel.hs \
             systems-generic-lowering-proof/
           sha256sum \
             proof/Phil/Core/ArchitectureRealization.v \
             proof/Phil/Core/SystemsStageClosure.v \
             proof/Phil/Core/SystemsGenericLowering.v \
             proof/Phil/Core/SystemsGenericLowering.vo \
+            proof/Phil/Core/SystemsGenericLoweringImplementation.v \
+            proof/Phil/Core/SystemsGenericLoweringImplementation.vo \
+            proof/Phil/Core/SystemsGenericLoweringImplementationExtraction.v \
+            SystemsGenericLoweringKernel.hs \
             > systems-generic-lowering-proof/PHIL-SYS-GENERIC-001.proof.sha256
           {
             echo 'obligation=PHIL-SYS-GENERIC-001'
@@ -97,6 +118,20 @@ jobs:
           cabal-version: 'latest'
       - name: Build ordinary regression substrate
         run: cabal build all --enable-tests
+      - uses: actions/download-artifact@v4
+        with:
+          name: rocq-generic-systems-lowering-proof
+          path: systems-generic-lowering-proof
+      - name: Typecheck and execute extracted generic-lowering controls
+        run: |
+          set -euo pipefail
+          ghc -Wall -Werror -fno-code \
+            systems-generic-lowering-proof/SystemsGenericLoweringKernel.hs
+          ghc -Wall -Werror \
+            -isystems-generic-lowering-proof \
+            app/SystemsGenericLoweringDecisionCorrespondenceMain.hs \
+            -o systems-generic-lowering-kernel-controls
+          ./systems-generic-lowering-kernel-controls
       - name: Strict typecheck unchanged generic producer and witness adapters
         run: |
           set -euo pipefail
@@ -118,3 +153,23 @@ jobs:
             test/Phase1GenericSystemsStageMain.hs \
             -o phase1-generic-systems-stage-proof-correspondence
           ./phase1-generic-systems-stage-proof-correspondence
+      - name: Record implementation-refinement staging identities
+        run: |
+          set -euo pipefail
+          mkdir -p systems-generic-lowering-implementation-correspondence
+          sha256sum \
+            systems-generic-lowering-proof/SystemsGenericLoweringKernel.hs \
+            src/Phil/Systems/GenericLowering.hs \
+            src/Phil/Examples/Phase1/SystemsWitnesses.hs \
+            test/Phase1GenericSystemsLoweringMain.hs \
+            test/Phase1GenericSystemsStageMain.hs \
+            app/SystemsGenericLoweringDecisionCorrespondenceMain.hs \
+            proof/Phil/Core/SystemsGenericLoweringImplementation.v \
+            docs/phase-1/systems-generic-lowering-implementation-refinement-v1.md \
+            > systems-generic-lowering-implementation-correspondence/PHIL-SYS-GENERIC-001.staging.sha256
+          cat systems-generic-lowering-implementation-correspondence/PHIL-SYS-GENERIC-001.staging.sha256
+      - uses: actions/upload-artifact@v4
+        with:
+          name: systems-generic-lowering-implementation-correspondence
+          path: systems-generic-lowering-implementation-correspondence
+          if-no-files-found: error
