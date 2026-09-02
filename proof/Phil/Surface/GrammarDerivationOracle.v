@@ -165,7 +165,7 @@ Proof.
 Qed.
 
 Ltac synchronize_some_results :=
-  repeat match goal with
+  repeat multimatch goal with
   | Hleft : ?f = Some ?left,
     Hright : ?f = Some ?right |- _ =>
       first
