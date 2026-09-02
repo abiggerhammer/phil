@@ -26,6 +26,9 @@ import Phil.Surface.Check.Types
 import Phil.Surface.GrammarV1.BoundaryDirection
   ( grammarV1BoundaryDirection
   )
+import Phil.Surface.GrammarV1.BoundaryFailureTypes
+  ( grammarV1BoundaryFailureTypes
+  )
 import Phil.Surface.GrammarV1.BoundaryValueType
   ( grammarV1BoundaryValueType
   )
@@ -48,6 +51,8 @@ main = do
         boundaryDirectionsRouteExactly
     , test "SURF-008 Grammar-v1 boundary value types inherit exact verified type meaning"
         boundaryValueTypesRouteExactly
+    , test "SURF-008 Grammar-v1 boundary failure types preserve ordered verified type meaning"
+        boundaryFailureTypesRouteExactly
     ]
   if and results then pure () else exitFailure
 
@@ -168,6 +173,46 @@ boundaryValueTypesRouteExactly = do
         ]
   assert (actual == expected) $
     "boundary value-type routing changed verified type meaning or admitted an unresolved type: "
+      <> show actual
+
+boundaryFailureTypesRouteExactly :: Either String ()
+boundaryFailureTypesRouteExactly = do
+  state <- bind "n" Unrestricted (TyOpaqueSorted "NatIndex" SortNat) emptySurfaceState
+  none <- parseBoundary "boundary-failure-none"
+    "boundary None : U8 { canonical; }"
+  single <- parseBoundary "boundary-failure-single"
+    "boundary Single : U8 { failure U32; }"
+  multiple <- parseBoundary "boundary-failure-multiple" $ Text.unlines
+    [ "boundary Multiple : U8 {"
+    , "  failure Bytes[n + 1];"
+    , "  failure Proof[n < 7];"
+    , "  failure {v : U8 | v > 0};"
+    , "}"
+    ]
+  unresolved <- parseBoundary "boundary-failure-unresolved" $ Text.unlines
+    [ "boundary Unresolved : U8 {"
+    , "  failure U8;"
+    , "  failure (U32, Bool);"
+    , "}"
+    ]
+  let n = RefVar (Name "n")
+      actual = map (grammarV1BoundaryFailureTypes state)
+        [none, single, multiple, unresolved]
+      expected =
+        [ Just []
+        , Just [TyUInt 32]
+        , Just
+            [ TyBytes (RefAdd n (RefNat 1))
+            , TyProof (LessThan n (RefNat 7))
+            , TyRefined
+                (Name "v")
+                (TyUInt 8)
+                (LessThan (RefNat 0) (RefToNat (RefVar (Name "v"))))
+            ]
+        , Nothing
+        ]
+  assert (actual == expected) $
+    "boundary failure-type routing changed source order, dropped a failure, or partially accepted an unresolved type: "
       <> show actual
 
 bind :: Text.Text -> Mode -> Ty -> SurfaceState -> Either String SurfaceState
