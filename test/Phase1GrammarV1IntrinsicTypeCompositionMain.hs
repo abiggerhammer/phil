@@ -71,6 +71,8 @@ intrinsicTypesPreserveMeaning = do
       , Nothing
       , Nothing
       , Nothing
+      , Just (TyOpaque "Other")
+      , Just (TyOpaque "pkg.Other")
       , Nothing
       , Nothing
       ]
@@ -109,6 +111,8 @@ boundTypesPreserveMeaning = do
       , Nothing
       , Nothing
       , Nothing
+      , Just (TyOpaque "Other")
+      , Just (TyOpaque "pkg.Other")
       , Nothing
       ]
 
@@ -152,6 +156,8 @@ intrinsicSource = Text.unlines
   , "type ContextBytes = Bytes[x];"
   , "type SpecializedFrame = Frame[Wire.Codec[U32]];"
   , "type NamedT = Other;"
+  , "type QualifiedNamedT = pkg.Other;"
+  , "type SpecializedNamedT = Other[U32];"
   , "type TupleT = (U32, Bool);"
   ]
 
@@ -171,6 +177,8 @@ boundSource = Text.unlines
   , "type ArithmeticProof = Proof[n + 1 == 7];"
   , "type SpecializedProof = Proof[Ready[U32](n)];"
   , "type NamedT = Other;"
+  , "type QualifiedNamedT = pkg.Other;"
+  , "type SpecializedNamedT = Other[U32];"
   ]
 
 assert :: Bool -> String -> Either String ()
