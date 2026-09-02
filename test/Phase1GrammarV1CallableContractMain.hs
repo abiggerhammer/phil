@@ -4,6 +4,25 @@ module Main (main) where
 
 import qualified Data.Text as Text
 import qualified Data.Text.IO as TextIO
+import Phil.Core.Focusing
+  ( FocusStep (..)
+  , FocusingError (..)
+  )
+import Phil.Core.Static
+  ( declareOpaqueClaim
+  , emptyStaticContext
+  )
+import Phil.Core.Syntax
+  ( Name (..)
+  , Proposition (..)
+  , RefSort (..)
+  , RefTerm (..)
+  , Ty (..)
+  )
+import Phil.Surface.Check.Support (emptySurfaceState)
+import Phil.Surface.GrammarV1.CallableSignature
+  ( grammarV1CheckedCallableSignature
+  )
 import Phil.Surface.GrammarV1.Parser
 import Phil.Surface.Syntax (Located (..))
 import System.Exit (exitFailure)
@@ -15,6 +34,8 @@ main = do
         expectRefinementCallable
     , testIO "SURF-003 callable refinement missing bar rejects at syntax"
         (expectFixtureReject "rejected/01-refinement-missing-bar.phil")
+    , test "SURF-008 primitive callable parameters establish exact checked result scope"
+        checkedCallableSignaturesPreserveScope
     ]
   if and results then pure () else exitFailure
 
@@ -63,6 +84,68 @@ expectRefinementCallable = do
               clauses -> Left ("expected one ensures clause, got " <> show clauses)
           other -> Left ("expected callable contract second, got " <> show other)
       declarations -> Left ("expected claim and callable declarations, got " <> show (length declarations))
+
+checkedCallableSignaturesPreserveScope :: Either String ()
+checkedCallableSignaturesPreserveScope = do
+  context <- mapLeft show $
+    declareOpaqueClaim
+      "NeedsNat"
+      [(Name "n", SortNat)]
+      emptyStaticContext
+  sourceFile <- mapLeft show $
+    parseGrammarV1StructuralSource "surf008-callable-signatures" signatureSource
+  declarations <- mapM callableDeclaration (grammarV1TopLevelDecls sourceFile)
+  let x = RefVar (Name "x")
+      actual = map
+        (grammarV1CheckedCallableSignature context emptySurfaceState)
+        declarations
+      expected =
+        [ Just
+            (Right
+              ( ( "DependentBytes"
+                , [ (Name "x", TyUInt 8)
+                  , (Name "ok", TyBool)
+                  ]
+                , TyBytes (RefToNat x)
+                )
+              , []
+              ))
+        , Just
+            (Right
+              ( ( "CheckedProof"
+                , [(Name "x", TyUInt 8)]
+                , TyProof (Atom "NeedsNat" [RefToNat x])
+                )
+              , [InsertedUIntToNat x]
+              ))
+        , Just (Left (UnknownClaim "Missing"))
+        , Nothing
+        , Nothing
+        , Nothing
+        , Nothing
+        ]
+  assert (actual == expected) $
+    "checked callable signature routing changed name/parameter/result meaning or collapsed competence boundaries: "
+      <> show actual
+
+callableDeclaration
+  :: Located GrammarV1TopLevelDecl
+  -> Either String GrammarV1CallableContractDecl
+callableDeclaration (Located _ topLevel) =
+  case locatedValue (grammarV1Declaration topLevel) of
+    GrammarV1CallableContractDeclaration declaration -> Right declaration
+    other -> Left ("expected callable declaration, got " <> show other)
+
+signatureSource :: Text.Text
+signatureSource = Text.unlines
+  [ "callable DependentBytes(x : U8, ok : Bool) -> Bytes[toNat(x)] {}"
+  , "callable CheckedProof(x : U8) -> Proof[NeedsNat(x)] {}"
+  , "callable UnknownClaim(x : U8) -> Proof[Missing(x)] {}"
+  , "callable Duplicate(x : U8, x : Bool) -> Bool {}"
+  , "callable Generic[T : Type](x : U8) -> U8 {}"
+  , "callable RefinedParam(x : {v : U8 | v > 0}) -> U8 {}"
+  , "callable TupleResult(x : U8) -> (U8, Bool) {}"
+  ]
 
 assertRefinementParameter :: GrammarV1Type -> Either String ()
 assertRefinementParameter ty = case ty of
