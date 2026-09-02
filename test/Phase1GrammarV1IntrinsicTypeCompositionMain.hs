@@ -34,7 +34,7 @@ main = do
   results <- sequence
     [ test "SURF-008 intrinsic type composition preserves exact Core meaning"
         intrinsicTypesPreserveMeaning
-    , test "SURF-008 binding-aware type composition preserves richer verified fragments and fails closed"
+    , test "SURF-008 binding-aware type composition preserves richer verified fragments and focused coercion"
         boundTypesPreserveMeaning
     ]
   if and results then pure () else exitFailure
@@ -124,7 +124,11 @@ boundTypesPreserveMeaning = do
             TyBool
             (Equal (RefVar (Name "b")) (RefVar (Name "flag"))))
       , Nothing
-      , Nothing
+      , Just
+          (TyRefined
+            (Name "v")
+            (TyUInt 8)
+            (LessThan (RefNat 0) (RefToNat (RefVar (Name "v")))))
       , Nothing
       , Nothing
       , Nothing
