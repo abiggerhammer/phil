@@ -59,6 +59,8 @@ jobs:
         run: cabal exec -- runghc -Wall -Werror -isrc test/Phase1GrammarV1IntrinsicRefLiteralElaborationMain.hs
       - name: SURF-008 Grammar-v1 binding-aware simple reference elaboration
         run: cabal exec -- runghc -Wall -Werror -isrc test/Phase1GrammarV1BoundSimpleReferenceElaborationMain.hs
+      - name: SURF-008 Grammar-v1 binding-aware refinement expression composition
+        run: cabal exec -- runghc -Wall -Werror -isrc test/Phase1GrammarV1BoundRefExpressionCompositionMain.hs
       - name: SURF-008 Grammar-v1 binding-aware Bytes type elaboration
         run: cabal exec -- runghc -Wall -Werror -isrc test/Phase1GrammarV1BoundBytesTypeElaborationMain.hs
       - name: SURF-008 Grammar-v1 intrinsic Bytes type elaboration routing
