@@ -35,7 +35,7 @@ main = do
   results <- sequence
     [ test "SURF-008 Grammar-v1 relation operators preserve exact Core meaning"
         relationOperatorsPreserveMeaning
-    , test "SURF-008 binding-aware relation routing preserves exact meaning and sort competence"
+    , test "SURF-008 binding-aware relation routing preserves richer refinement expressions and sort competence"
         boundRelationsPreserveMeaning
     ]
   if and results then pure () else exitFailure
@@ -86,18 +86,23 @@ boundRelationsPreserveMeaning = do
   state4 <- bind "flag2" Unrestricted TyBool state3
   state5 <- bind "u" Unrestricted (TyUInt 32) state4
   state6 <- bind "v" Unrestricted (TyUInt 32) state5
-  state7 <- bind "spent" Affine (TyOpaqueSorted "NatIndex" SortNat) state6
+  state7 <- bind "bytes" Unrestricted (TyBytes (RefNat 4)) state6
+  state8 <- bind "spent" Affine (TyOpaqueSorted "NatIndex" SortNat) state7
   (_, state) <- mapLeft show $
-    moveVariable (Located syntheticSpan ()) "spent" state7
+    moveVariable (Located syntheticSpan ()) "spent" state8
   sourceFile <- mapLeft show $ parseGrammarV1StructuralSource "surf008-bound-relations" boundRelationSource
   propositions <- mapM claimProposition (grammarV1TopLevelDecls sourceFile)
-  let actual = map (grammarV1BoundRelationProposition state) propositions
+  let n = RefVar (Name "n")
+      m = RefVar (Name "m")
+      u = RefVar (Name "u")
+      bytes = RefVar (Name "bytes")
+      actual = map (grammarV1BoundRelationProposition state) propositions
       expected =
-        [ Just (LessThan (RefVar (Name "n")) (RefVar (Name "m")))
-        , Just (LessEqual (RefVar (Name "n")) (RefNat 7))
+        [ Just (LessThan n m)
+        , Just (LessEqual n (RefNat 7))
         , Just (Equal (RefVar (Name "flag")) (RefVar (Name "flag2")))
-        , Just (Equal (RefVar (Name "u")) (RefVar (Name "v")))
-        , Just (LessThan (RefVar (Name "n")) (RefVar (Name "m")))
+        , Just (Equal u (RefVar (Name "v")))
+        , Just (LessThan n m)
         , Nothing
         , Nothing
         , Nothing
@@ -105,6 +110,13 @@ boundRelationsPreserveMeaning = do
         , Nothing
         , Nothing
         , Nothing
+        , Nothing
+        , Just (Equal (RefAdd n (RefNat 1)) m)
+        , Just (Equal (RefSub m (RefNat 1)) n)
+        , Just (Equal (RefScale 2 n) m)
+        , Just (Equal (RefScale 2 n) m)
+        , Just (Equal (RefLen bytes) (RefNat 4))
+        , Just (Equal (RefToNat u) (RefNat 7))
         , Nothing
         , Nothing
         , Nothing
@@ -168,6 +180,13 @@ boundRelationSource = Text.unlines
   , "claim Projected = (n).field == n;"
   , "claim Consumed = spent == n;"
   , "claim Arithmetic = n + 1 == m;"
+  , "claim Subtraction = m - 1 == n;"
+  , "claim ScaleLeft = 2 * n == m;"
+  , "claim ScaleRight = n * 2 == m;"
+  , "claim Length = len(bytes) == 4;"
+  , "claim ExplicitToNat = toNat(u) == 7;"
+  , "claim MixedNeedsFocus = u < 7;"
+  , "claim SymbolicMultiply = n * m == n;"
   , "claim TruthLeaf = true;"
   ]
 
