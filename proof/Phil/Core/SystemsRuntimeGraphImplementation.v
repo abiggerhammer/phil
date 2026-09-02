@@ -1,5 +1,7 @@
 From Stdlib Require Import Bool.Bool.
 
+From Phil.Systems Require Import Runtime.
+From Phil.LLVM Require Import RuntimeSymbolIdentity.
 From Phil.Core Require Import SystemsRuntimeGraph.
 
 (*
