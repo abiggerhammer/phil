@@ -85,6 +85,7 @@ import Phil.Systems.SubjectCorrespondence
 import Phil.Systems.TargetStrengthening
   ( TargetStrengtheningStageBundle (..)
   )
+import qualified SystemsRealizationEffectsKernel as RealizeKernel
 import qualified SystemsStageClosureKernel as ClosureKernel
 
 newtype ClosedStageContractRevision = ClosedStageContractRevision
@@ -92,19 +93,11 @@ newtype ClosedStageContractRevision = ClosedStageContractRevision
   }
   deriving (Eq, Ord, Show)
 
--- | The relation-specific SYS-004..010 trunk has different applicable terminal
--- layers for the two current witnesses.  Upload reaches boundary correspondence;
--- Steve currently stops at branch/resource correspondence because protocol and
--- boundary relations are not applicable to its provider-local CAS operations.
 data ConcreteStageClosure
   = ConcreteThroughBranch BranchResourceStageBundle
   | ConcreteThroughBoundary BoundaryCommitStageBundle
   deriving (Eq, Show)
 
--- | SYS-020 joins the two StageContract trunks that have grown from the common
--- SubjectStage: the concrete source/target correspondence trunk and the
--- evidence/realization/runtime/cost/next-stage trunk.  The stored revisions are
--- recomputable consequences, not generative IDs.
 data StageClosureBundle = StageClosureBundle
   { stageClosureConcrete :: ConcreteStageClosure
   , stageClosureNextStage :: NextStageRequirementStageBundle
@@ -213,6 +206,7 @@ verifyStageClosureBundle bundle = do
   verifyConcrete (stageClosureConcrete bundle)
   mapLeft StageClosureNextStageError $
     verifyNextStageRequirementStageBundle (stageClosureNextStage bundle)
+  verifyRealizationKernel
 
   let concreteSubject = concreteSubjectStage (stageClosureConcrete bundle)
       nextSubject = nextStageSubjectStage (stageClosureNextStage bundle)
@@ -302,6 +296,25 @@ verifyStageClosureBundle bundle = do
     ClosureKernel.SystemsStageClosureAcceptedDecision -> Right ()
     _ -> kernelInvariant "cumulative-stage-closure"
 
+verifyRealizationKernel :: Either StageClosureVerificationError ()
+verifyRealizationKernel =
+  case RealizeKernel.decideTargetStrengtheningByFacts
+      True True True True True True True True True of
+    RealizeKernel.TargetStrengtheningAcceptedDecision ->
+      case RealizeKernel.decideStagingEffectByFacts
+          True True True True True True True True True of
+        RealizeKernel.StagingEffectAcceptedDecision ->
+          case RealizeKernel.decideNextStageExportByFacts
+              True True True True True True True of
+            RealizeKernel.NextStageExportAcceptedDecision ->
+              case RealizeKernel.decideSystemsRealizationEffectsByFacts
+                  True True True True of
+                RealizeKernel.SystemsRealizationEffectsAcceptedDecision -> Right ()
+                _ -> kernelInvariant "realization-effects-cumulative"
+            _ -> kernelInvariant "realization-effects-next-stage"
+        _ -> kernelInvariant "realization-effects-staging"
+    _ -> kernelInvariant "realization-effects-strengthening"
+
 verifyConcrete
   :: ConcreteStageClosure
   -> Either StageClosureVerificationError ()
@@ -352,4 +365,4 @@ mapLeft f = either (Left . f) Right
 
 kernelInvariant :: String -> a
 kernelInvariant label =
-  error ("SystemsStageClosureKernel mismatch: " <> label)
+  error ("certified Systems kernel mismatch: " <> label)
