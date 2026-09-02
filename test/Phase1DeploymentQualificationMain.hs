@@ -94,7 +94,7 @@ qualificationOutlivesEvidenceRejects =
       (Just tooWide) of
     Left (DeploymentQualificationOutlivesDomainEvidence key innerFrom innerUntil outerFrom outerUntil) ->
       assert
-        ( key == cpuEvidenceKey
+        ( key == gpuEvidenceKey
           && innerFrom == 90
           && innerUntil == 180
           && outerFrom == 100
