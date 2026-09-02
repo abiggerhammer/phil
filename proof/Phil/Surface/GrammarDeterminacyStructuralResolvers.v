@@ -1,6 +1,10 @@
 From Stdlib Require Import Arith.PeanoNat Bool.Bool Lists.List Strings.String.
 
-From Phil.Surface Require Import GrammarDeterminacySimpleResolvers.
+From Phil.Surface Require Import
+  GrammarDerivation
+  GrammarDerivationOracle
+  GrammarDeterminacyCertificate
+  GrammarDeterminacySimpleResolvers.
 
 Import ListNotations.
 Open Scope string_scope.
