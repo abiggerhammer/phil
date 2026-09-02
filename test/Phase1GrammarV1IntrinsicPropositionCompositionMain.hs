@@ -37,7 +37,7 @@ main = do
   results <- sequence
     [ test "SURF-008 intrinsic proposition fragments compose exactly and fail closed"
         intrinsicPropositionsComposeExactly
-    , test "SURF-008 binding-aware proposition fragments compose exactly and poison unresolved trees"
+    , test "SURF-008 binding-aware proposition fragments compose richer verified trees and poison unresolved trees"
         boundPropositionsComposeExactly
     ]
   if and results then pure () else exitFailure
@@ -95,7 +95,12 @@ boundPropositionsComposeExactly = do
                 (Atom "Ready" [RefVar (Name "flag"), RefVar (Name "n")])
             )
         , Nothing
-        , Nothing
+        , Just
+            (Conjunction
+              Truth
+              (Equal
+                (RefAdd (RefVar (Name "n")) (RefNat 1))
+                (RefVar (Name "m"))))
         , Nothing
         , Nothing
         , Nothing
