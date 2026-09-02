@@ -88,9 +88,11 @@ boundTypesPreserveMeaning :: Either String ()
 boundTypesPreserveMeaning = do
   state1 <- bind "n" Unrestricted (TyOpaqueSorted "NatIndex" SortNat) emptySurfaceState
   state2 <- bind "flag" Unrestricted TyBool state1
-  state3 <- bind "spent" Affine (TyOpaqueSorted "NatIndex" SortNat) state2
+  state3 <- bind "u" Unrestricted (TyUInt 32) state2
+  state4 <- bind "bytes" Unrestricted (TyBytes (RefNat 4)) state3
+  state5 <- bind "spent" Affine (TyOpaqueSorted "NatIndex" SortNat) state4
   (_, state) <- mapLeft show $
-    moveVariable (Located syntheticSpan ()) "spent" state3
+    moveVariable (Located syntheticSpan ()) "spent" state5
   sourceFile <- mapLeft show $ parseGrammarV1StructuralSource "surf008-bound-types" boundSource
   actual <- mapM (boundType state) (grammarV1TopLevelDecls sourceFile)
   assert (actual == expected) $
@@ -100,6 +102,9 @@ boundTypesPreserveMeaning = do
       [ Just TyUnit
       , Just (TyBytes (RefNat 7))
       , Just (TyBytes (RefVar (Name "n")))
+      , Just (TyBytes (RefAdd (RefVar (Name "n")) (RefNat 1)))
+      , Just (TyBytes (RefLen (RefVar (Name "bytes"))))
+      , Just (TyBytes (RefToNat (RefVar (Name "u"))))
       , Just
           (TyProof
             (Conjunction
@@ -198,6 +203,9 @@ boundSource = Text.unlines
   [ "type UnitT = Unit;"
   , "type LiteralBytes = Bytes[7];"
   , "type BoundBytes = Bytes[n];"
+  , "type ArithmeticBytes = Bytes[n + 1];"
+  , "type LengthBytes = Bytes[len(bytes)];"
+  , "type ToNatBytes = Bytes[toNat(u)];"
   , "type BoundProof = Proof[n < 7 and Ready(flag, n)];"
   , "type IntrinsicProof = Proof[Ready(1) or 1 == 1];"
   , "type FrameT = Frame[Hello];"
