@@ -1,0 +1,86 @@
+name: Phase 1 Surface Determinacy FOLLOW Overlap
+
+on:
+  pull_request:
+    paths:
+      - 'grammar/phase1-surface.ebnf'
+      - 'scripts/derive_phase1_surface_grammar.py'
+      - 'scripts/check_phase1_surface_determinacy.py'
+      - 'scripts/derive_phase1_surface_determinacy_certificate.py'
+      - 'proof/Phil/Surface/GrammarDeterminacyCertificate.v'
+      - 'proof/Phil/Surface/GrammarDeterminacyNullableFirst.v'
+      - 'proof/Phil/Surface/GrammarDeterminacyFollowOverlap.v'
+      - 'docs/phase-1/surface-determinacy-follow-overlap-v1.md'
+      - '.github/workflows/phase1-surface-determinacy-follow-overlap.yml'
+  push:
+    branches: [main]
+    paths:
+      - 'grammar/phase1-surface.ebnf'
+      - 'scripts/derive_phase1_surface_grammar.py'
+      - 'scripts/check_phase1_surface_determinacy.py'
+      - 'scripts/derive_phase1_surface_determinacy_certificate.py'
+      - 'proof/Phil/Surface/GrammarDeterminacyCertificate.v'
+      - 'proof/Phil/Surface/GrammarDeterminacyNullableFirst.v'
+      - 'proof/Phil/Surface/GrammarDeterminacyFollowOverlap.v'
+      - 'docs/phase-1/surface-determinacy-follow-overlap-v1.md'
+      - '.github/workflows/phase1-surface-determinacy-follow-overlap.yml'
+
+permissions:
+  contents: read
+
+jobs:
+  rocq-follow-overlap:
+    runs-on: ubuntu-latest
+    container:
+      image: rocq/rocq-prover:9.2.0
+      options: --user root
+    steps:
+      - uses: actions/checkout@v4
+      - name: Derive exact grammar and overlap certificate
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 scripts/derive_phase1_surface_grammar.py --write
+          python3 scripts/derive_phase1_surface_determinacy_certificate.py --write
+          python3 scripts/derive_phase1_surface_grammar.py --check
+          python3 scripts/derive_phase1_surface_determinacy_certificate.py --check
+      - name: Compile FOLLOW fixed point and exact overlap completeness
+        shell: bash
+        run: |
+          set -euo pipefail
+          export PATH="/home/rocq/.opam/${COMPILER}/bin:$PATH"
+          rocq c -Q proof/Phil Phil proof/Phil/Surface/Grammar.v
+          rocq c -Q proof/Phil Phil proof/Phil/Surface/GrammarDeterminacyCertificate.v
+          rocq c -Q proof/Phil Phil proof/Phil/Surface/GrammarDeterminacyNullableFirst.v
+          rocq c -Q proof/Phil Phil proof/Phil/Surface/GrammarDeterminacyFollowOverlap.v
+      - name: Record proof identities
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p surface-determinacy-follow-overlap
+          cp \
+            proof/Phil/Surface/Grammar.v \
+            proof/Phil/Surface/GrammarDeterminacyCertificate.v \
+            proof/Phil/Surface/GrammarDeterminacyNullableFirst.v \
+            proof/Phil/Surface/GrammarDeterminacyNullableFirst.vo \
+            proof/Phil/Surface/GrammarDeterminacyFollowOverlap.v \
+            proof/Phil/Surface/GrammarDeterminacyFollowOverlap.vo \
+            surface-determinacy-follow-overlap/
+          sha256sum \
+            grammar/phase1-surface.ebnf \
+            scripts/derive_phase1_surface_grammar.py \
+            scripts/check_phase1_surface_determinacy.py \
+            scripts/derive_phase1_surface_determinacy_certificate.py \
+            proof/Phil/Surface/Grammar.v \
+            proof/Phil/Surface/GrammarDeterminacyCertificate.v \
+            proof/Phil/Surface/GrammarDeterminacyNullableFirst.v \
+            proof/Phil/Surface/GrammarDeterminacyNullableFirst.vo \
+            proof/Phil/Surface/GrammarDeterminacyFollowOverlap.v \
+            proof/Phil/Surface/GrammarDeterminacyFollowOverlap.vo \
+            > surface-determinacy-follow-overlap/identities.sha256
+          cat surface-determinacy-follow-overlap/identities.sha256
+      - uses: actions/upload-artifact@v4
+        with:
+          name: rocq-surface-determinacy-follow-overlap
+          path: surface-determinacy-follow-overlap
+          if-no-files-found: error
