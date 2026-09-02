@@ -169,13 +169,14 @@ Ltac synchronize_some_results :=
     [ multimatch goal with
       | Hleft : ?f = Some ?left,
         Hright : ?f = Some ?right |- _ =>
-          first
-            [ constr_eq Hleft Hright; fail 1
-            | let Heq := fresh "Heq" in
-              assert (Heq : left = right) by congruence;
-              clear Hright;
-              inversion Heq; subst; clear Heq;
-              synchronize_some_results ]
+          tryif constr_eq Hleft Hright
+          then fail 1
+          else
+            let Heq := fresh "Heq" in
+            assert (Heq : left = right) by congruence;
+            clear Hright;
+            inversion Heq; subst; clear Heq;
+            synchronize_some_results
       end
     | idtac ].
 
