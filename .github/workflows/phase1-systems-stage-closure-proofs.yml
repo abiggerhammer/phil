@@ -6,7 +6,11 @@ on:
       - 'proof/Phil/Systems/FactDisposition.v'
       - 'proof/Phil/Assurance/ValidityScope.v'
       - 'proof/Phil/Core/SystemsStageClosure.v'
+      - 'proof/Phil/Core/SystemsStageClosureImplementation.v'
+      - 'proof/Phil/Core/SystemsStageClosureImplementationExtraction.v'
+      - 'app/SystemsStageClosureDecisionCorrespondenceMain.hs'
       - 'docs/phase-1/systems-stage-closure-proof-v1.md'
+      - 'docs/phase-1/systems-stage-closure-implementation-refinement-v1.md'
       - '.github/workflows/phase1-systems-stage-closure-proofs.yml'
       - 'src/Phil/Systems/Phase1Stage.hs'
       - 'src/Phil/Systems/StageClosure.hs'
@@ -18,7 +22,11 @@ on:
       - 'proof/Phil/Systems/FactDisposition.v'
       - 'proof/Phil/Assurance/ValidityScope.v'
       - 'proof/Phil/Core/SystemsStageClosure.v'
+      - 'proof/Phil/Core/SystemsStageClosureImplementation.v'
+      - 'proof/Phil/Core/SystemsStageClosureImplementationExtraction.v'
+      - 'app/SystemsStageClosureDecisionCorrespondenceMain.hs'
       - 'docs/phase-1/systems-stage-closure-proof-v1.md'
+      - 'docs/phase-1/systems-stage-closure-implementation-refinement-v1.md'
       - '.github/workflows/phase1-systems-stage-closure-proofs.yml'
       - 'src/Phil/Systems/Phase1Stage.hs'
       - 'src/Phil/Systems/StageClosure.hs'
@@ -36,7 +44,7 @@ jobs:
       options: --user root
     steps:
       - uses: actions/checkout@v4
-      - name: Compile certified predecessors and PHIL-SYS-STAGE-CLOSURE-001
+      - name: Compile certified predecessors, PHIL-SYS-STAGE-CLOSURE-001, and implementation correspondence
         shell: bash
         run: |
           set -euo pipefail
@@ -44,7 +52,15 @@ jobs:
           rocq c -Q proof/Phil Phil proof/Phil/Systems/FactDisposition.v
           rocq c -Q proof/Phil Phil proof/Phil/Assurance/ValidityScope.v
           rocq c -Q proof/Phil Phil proof/Phil/Core/SystemsStageClosure.v
-      - name: Record proof identities
+          rocq c -Q proof/Phil Phil proof/Phil/Core/SystemsStageClosureImplementation.v
+          rm -f SystemsStageClosureKernel.hs
+          rocq c -Q proof/Phil Phil proof/Phil/Core/SystemsStageClosureImplementationExtraction.v
+          test -s SystemsStageClosureKernel.hs
+          grep -q 'decideSourceClosureByFacts' SystemsStageClosureKernel.hs
+          grep -q 'decideTargetClosureByFacts' SystemsStageClosureKernel.hs
+          grep -q 'decideStageIdentityByFacts' SystemsStageClosureKernel.hs
+          grep -q 'decideSystemsStageClosureByFacts' SystemsStageClosureKernel.hs
+      - name: Record proof and extraction identities
         shell: bash
         run: |
           set -euo pipefail
@@ -52,12 +68,20 @@ jobs:
           cp \
             proof/Phil/Core/SystemsStageClosure.v \
             proof/Phil/Core/SystemsStageClosure.vo \
+            proof/Phil/Core/SystemsStageClosureImplementation.v \
+            proof/Phil/Core/SystemsStageClosureImplementation.vo \
+            proof/Phil/Core/SystemsStageClosureImplementationExtraction.v \
+            proof/Phil/Core/SystemsStageClosureImplementationExtraction.vo \
+            SystemsStageClosureKernel.hs \
             systems-stage-closure-proof/
           sha256sum \
             proof/Phil/Systems/FactDisposition.v \
             proof/Phil/Assurance/ValidityScope.v \
             proof/Phil/Core/SystemsStageClosure.v \
             proof/Phil/Core/SystemsStageClosure.vo \
+            proof/Phil/Core/SystemsStageClosureImplementation.v \
+            proof/Phil/Core/SystemsStageClosureImplementation.vo \
+            SystemsStageClosureKernel.hs \
             > systems-stage-closure-proof/PHIL-SYS-STAGE-CLOSURE-001.proof.sha256
           {
             echo 'obligation=PHIL-SYS-STAGE-CLOSURE-001'
@@ -82,6 +106,20 @@ jobs:
           cabal-version: 'latest'
       - name: Build ordinary regression substrate
         run: cabal build all --enable-tests
+      - uses: actions/download-artifact@v4
+        with:
+          name: rocq-systems-stage-closure-proof
+          path: systems-stage-closure-proof
+      - name: Typecheck and execute extracted stage-closure controls
+        run: |
+          set -euo pipefail
+          ghc -Wall -Werror -fno-code \
+            systems-stage-closure-proof/SystemsStageClosureKernel.hs
+          ghc -Wall -Werror \
+            -isystems-stage-closure-proof \
+            app/SystemsStageClosureDecisionCorrespondenceMain.hs \
+            -o systems-stage-closure-kernel-controls
+          ./systems-stage-closure-kernel-controls
       - name: Strict typecheck coarse StageContract implementation
         run: |
           set -euo pipefail
@@ -107,3 +145,23 @@ jobs:
           set -euo pipefail
           cabal exec -- runghc -Wall -Werror -Wno-unused-imports -isrc test/Phase1GenericSystemsStageMain.hs
           cabal exec -- runghc -Wall -Werror -Wno-name-shadowing -Wno-unused-imports -isrc test/Phase1StageClosureMain.hs
+      - name: Record implementation-refinement staging identities
+        run: |
+          set -euo pipefail
+          mkdir -p systems-stage-closure-implementation-correspondence
+          sha256sum \
+            systems-stage-closure-proof/SystemsStageClosureKernel.hs \
+            src/Phil/Systems/Phase1Stage.hs \
+            src/Phil/Systems/StageClosure.hs \
+            test/Phase1GenericSystemsStageMain.hs \
+            test/Phase1StageClosureMain.hs \
+            app/SystemsStageClosureDecisionCorrespondenceMain.hs \
+            proof/Phil/Core/SystemsStageClosureImplementation.v \
+            docs/phase-1/systems-stage-closure-implementation-refinement-v1.md \
+            > systems-stage-closure-implementation-correspondence/PHIL-SYS-STAGE-CLOSURE-001.staging.sha256
+          cat systems-stage-closure-implementation-correspondence/PHIL-SYS-STAGE-CLOSURE-001.staging.sha256
+      - uses: actions/upload-artifact@v4
+        with:
+          name: systems-stage-closure-implementation-correspondence
+          path: systems-stage-closure-implementation-correspondence
+          if-no-files-found: error
