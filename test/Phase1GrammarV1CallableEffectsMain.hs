@@ -2,7 +2,12 @@
 
 module Main (main) where
 
+import qualified Data.Set as Set
 import qualified Data.Text as Text
+import Phil.Core.Callable (SemanticEffect (..))
+import Phil.Surface.GrammarV1.CallableEffects
+  ( grammarV1CallableEffectBounds
+  )
 import Phil.Surface.GrammarV1.Parser
 import Phil.Surface.Syntax (Located (..))
 import System.Exit (exitFailure)
@@ -12,6 +17,8 @@ main = do
   results <- sequence
     [ test "SURF-002 callable/effects slice preserves all callable clauses" callableClausesPreserved
     , test "SURF-002 effect-set references remain distinct from literals" effectSetReferencePreserved
+    , test "SURF-008 simple callable effect literals preserve exact Core identities"
+        simpleEffectSemantics
     , test "SURF-002 effect-set trailing comma rejects at syntax" $
         expectReject "callable C() -> Unit { effects {IO,}; }"
     , test "SURF-002 name-set trailing comma rejects at syntax" $
@@ -101,6 +108,34 @@ effectSetReferencePreserved = do
           assertStaticReference "E" reference
         other -> Left ("expected effect-set reference, got " <> show other)
     clauses -> Left ("expected one effects clause, got " <> show clauses)
+
+simpleEffectSemantics :: Either String ()
+simpleEffectSemantics = do
+  literal <- onlyCallable $ Text.unlines
+    [ "callable EffectCarrier() -> Unit {"
+    , "  effects {IO, pkg.Audit, IO};"
+    , "  effects {};"
+    , "}"
+    ]
+  assert
+    (grammarV1CallableEffectBounds literal ==
+      Just
+        [ Set.fromList [SemanticEffect "IO", SemanticEffect "pkg.Audit"]
+        , Set.empty
+        ])
+    "simple callable effect routing changed exact identity, clause order, or Set normalization"
+
+  argumentBearing <- onlyCallable
+    "callable ArgumentEffect(x : U8) -> Unit { effects {Audit(x)}; }"
+  assert
+    (grammarV1CallableEffectBounds argumentBearing == Nothing)
+    "argument-bearing effect was flattened into a SemanticEffect identity"
+
+  referenced <- onlyCallable
+    "callable ReferencedEffects() -> Unit { effects E; }"
+  assert
+    (grammarV1CallableEffectBounds referenced == Nothing)
+    "effect-set reference was treated as a concrete Core effect set"
 
 assertEffectLiteral :: [Text.Text] -> Located GrammarV1EffectSetExpression -> Either String ()
 assertEffectLiteral expected (Located _ effectSet) = case effectSet of
