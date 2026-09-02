@@ -1,5 +1,6 @@
 module Phil.Surface.GrammarV1.CallableOutcomeState
-  ( grammarV1OutcomeResidueStateTelescopes
+  ( grammarV1OutcomeResidueStateScopes
+  , grammarV1OutcomeResidueStateTelescopes
   , grammarV1CallableOutcomeStateTelescopes
   ) where
 
@@ -23,23 +24,33 @@ import Phil.Surface.GrammarV1.Parser
 import Phil.Surface.Syntax (Located (..))
 
 -- | Elaborate each explicit outcome-state telescope independently under the same
--- callable parameter scope. Repeated state clauses remain repeated semantic
--- projections in source order: this bridge neither merges them nor invents a
--- cardinality rule. Within one telescope, primitive state slots are inserted in
--- source order through the ordinary binding authority, so duplicate names fail
--- closed. The bounded primitive fragment is intentional until a general checked
--- type-to-structural-mode authority is available.
+-- callable parameter scope and retain the resulting temporary lexical state.
+-- Repeated state clauses remain repeated semantic projections in source order:
+-- this bridge neither merges them nor invents a cardinality rule. Within one
+-- telescope, primitive state slots are inserted in source order through the
+-- ordinary binding authority, so duplicate names fail closed. The temporary
+-- states are exposed only so sibling outcome semantics can reuse the exact same
+-- branch scope rather than reconstructing it differently.
+grammarV1OutcomeResidueStateScopes
+  :: SurfaceState
+  -> GrammarV1OutcomeResidue
+  -> Maybe [([(Name, Ty)], SurfaceState)]
+grammarV1OutcomeResidueStateScopes parameterState source =
+  mapM (elaborateSlots parameterState)
+    [ slots
+    | Located _ (GrammarV1OutcomeState slots) <- grammarV1OutcomeResidueClauses source
+    ]
+
+-- | Preserve only the explicit state telescopes for callers that do not need the
+-- temporary lexical environment. This is a projection of
+-- grammarV1OutcomeResidueStateScopes and therefore shares exactly the same
+-- primitive competence and duplicate-binding behavior.
 grammarV1OutcomeResidueStateTelescopes
   :: SurfaceState
   -> GrammarV1OutcomeResidue
   -> Maybe [[(Name, Ty)]]
 grammarV1OutcomeResidueStateTelescopes parameterState source =
-  mapM elaborateStateClause
-    [ slots
-    | Located _ (GrammarV1OutcomeState slots) <- grammarV1OutcomeResidueClauses source
-    ]
-  where
-    elaborateStateClause slots = fst <$> elaborateSlots parameterState slots
+  map fst <$> grammarV1OutcomeResidueStateScopes parameterState source
 
 -- | Preserve the source order and outcome kind of every branch-sensitive residue
 -- while projecting only its explicit primitive state telescopes. Exact absence of
