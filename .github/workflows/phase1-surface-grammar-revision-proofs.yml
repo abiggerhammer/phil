@@ -1,0 +1,121 @@
+name: Phase 1 Surface Grammar Revision Proofs
+
+on:
+  pull_request:
+    paths:
+      - 'grammar/phase1-surface.ebnf'
+      - 'scripts/derive_phase1_surface_grammar.py'
+      - 'proof/Phil/Surface/GrammarRevision.v'
+      - 'src/Phil/Surface/Lineage.hs'
+      - 'test/Phase1GrammarRevisionBindingMain.hs'
+      - 'test/Phase1PortableSourceLineageMain.hs'
+      - 'docs/phase-1/surface-grammar-revision-proof-v1.md'
+      - '.github/workflows/phase1-surface-grammar-revision-proofs.yml'
+  push:
+    branches: [main]
+    paths:
+      - 'grammar/phase1-surface.ebnf'
+      - 'scripts/derive_phase1_surface_grammar.py'
+      - 'proof/Phil/Surface/GrammarRevision.v'
+      - 'src/Phil/Surface/Lineage.hs'
+      - 'test/Phase1GrammarRevisionBindingMain.hs'
+      - 'test/Phase1PortableSourceLineageMain.hs'
+      - 'docs/phase-1/surface-grammar-revision-proof-v1.md'
+      - '.github/workflows/phase1-surface-grammar-revision-proofs.yml'
+
+permissions:
+  contents: read
+
+jobs:
+  derive-exact-grammar:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Derive exact typed Grammar-v1 artifact
+        run: |
+          set -euo pipefail
+          python3 -m py_compile scripts/derive_phase1_surface_grammar.py
+          python3 scripts/derive_phase1_surface_grammar.py --write
+          cp proof/Phil/Surface/Grammar.v /tmp/Grammar.first.v
+          python3 scripts/derive_phase1_surface_grammar.py --write
+          cmp /tmp/Grammar.first.v proof/Phil/Surface/Grammar.v
+          python3 scripts/derive_phase1_surface_grammar.py --check
+          sha256sum grammar/phase1-surface.ebnf proof/Phil/Surface/Grammar.v
+      - uses: actions/upload-artifact@v4
+        with:
+          name: exact-phase1-surface-grammar
+          path: proof/Phil/Surface/Grammar.v
+          if-no-files-found: error
+
+  rocq-surface-grammar-revision-proof:
+    needs: derive-exact-grammar
+    runs-on: ubuntu-latest
+    container:
+      image: rocq/rocq-prover:9.2.0
+      options: --user root
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/download-artifact@v4
+        with:
+          name: exact-phase1-surface-grammar
+          path: proof/Phil/Surface
+      - name: Compile exact Grammar-v1 artifact and PHIL-SURFACE-REV-001
+        shell: bash
+        run: |
+          set -euo pipefail
+          export PATH="/home/rocq/.opam/${COMPILER}/bin:$PATH"
+          rocq c -Q proof/Phil Phil proof/Phil/Surface/Grammar.v
+          rocq c -Q proof/Phil Phil proof/Phil/Surface/GrammarRevision.v
+      - name: Record proof identities
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p surface-grammar-revision-proof
+          cp \
+            proof/Phil/Surface/Grammar.v \
+            proof/Phil/Surface/Grammar.vo \
+            proof/Phil/Surface/GrammarRevision.v \
+            proof/Phil/Surface/GrammarRevision.vo \
+            surface-grammar-revision-proof/
+          sha256sum \
+            grammar/phase1-surface.ebnf \
+            proof/Phil/Surface/Grammar.v \
+            proof/Phil/Surface/Grammar.vo \
+            proof/Phil/Surface/GrammarRevision.v \
+            proof/Phil/Surface/GrammarRevision.vo \
+            src/Phil/Surface/Lineage.hs \
+            test/Phase1GrammarRevisionBindingMain.hs \
+            > surface-grammar-revision-proof/PHIL-SURFACE-REV-001.proof.sha256
+          {
+            echo 'obligation=PHIL-SURFACE-REV-001'
+            echo 'evidence=Rocq-9.2.0'
+            cat surface-grammar-revision-proof/PHIL-SURFACE-REV-001.proof.sha256
+          } > surface-grammar-revision-proof/PHIL-SURFACE-REV-001.proof-certificate.txt
+          cat surface-grammar-revision-proof/PHIL-SURFACE-REV-001.proof-certificate.txt
+      - uses: actions/upload-artifact@v4
+        with:
+          name: rocq-surface-grammar-revision-proof
+          path: surface-grammar-revision-proof
+          if-no-files-found: error
+
+  verify-surface-grammar-revision-correspondence:
+    needs: rocq-surface-grammar-revision-proof
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: haskell-actions/setup@v2
+        with:
+          ghc-version: '9.6.7'
+          cabal-version: 'latest'
+      - name: Build ordinary regression substrate
+        run: cabal build all --enable-tests
+      - name: Strict typecheck lineage implementation and revision corpus
+        run: |
+          set -euo pipefail
+          cabal exec -- ghc -isrc -Wall -Werror -fno-code src/Phil/Surface/Lineage.hs
+          cabal exec -- ghc -isrc -Wall -Werror -fno-code test/Phase1GrammarRevisionBindingMain.hs
+          cabal exec -- ghc -isrc -Wall -Werror -fno-code test/Phase1PortableSourceLineageMain.hs
+      - name: Recompute exact Grammar-v1 SHA and rerun SURF-006
+        run: cabal exec -- runghc -Wall -Werror -isrc test/Phase1GrammarRevisionBindingMain.hs
+      - name: Re-run unchanged portable lineage corpus
+        run: cabal exec -- runghc -Wall -Werror -isrc test/Phase1PortableSourceLineageMain.hs
