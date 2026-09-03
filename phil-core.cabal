@@ -62,6 +62,7 @@ library
       ArchitectureRealizationKernel
       ArchitectureRevisionConstructionKernel
       ProviderReplacementQualificationKernel
+      AssuranceEvidenceAuthorityKernel
       AssuranceValidityScopeKernel
       SystemsIdentityKernel
       ResourceInvariantKernel
@@ -73,6 +74,7 @@ library
       Phil.Surface.Check.Support
       Phil.Surface.Check.Preflight
       Phil.Surface.Check.Engine
+      Phil.Assurance.EvidenceAuthorityKernelBridge
       Phil.Assurance.Types
       Phil.Assurance.Handoff
       Phil.Assurance.Verify

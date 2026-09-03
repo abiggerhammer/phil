@@ -15,6 +15,10 @@ import Data.Set (Set)
 import qualified Data.Set as Set
 import Data.Text (Text)
 import qualified Data.Text as Text
+import Phil.Assurance.EvidenceAuthorityKernelBridge
+  ( artifactAuthorityKernelAccepts
+  , runtimeAuthorityKernelAccepts
+  )
 import Phil.Assurance.Types
 import Phil.Core.Syntax (ObligationId (..))
 
@@ -70,6 +74,7 @@ data ManifestError
   | RuntimeMechanismIncomplete EvidenceEntryId
   | AssumedEvidenceMissingBoundary EvidenceEntryId
   | MissingCostReference EvidenceEntryId Text
+  | EvidenceAuthorityKernelDisagreement EvidenceEntryId AssuranceKind
   | JustificationCycle [GraphNode]
   | AcceptanceRuleUnsatisfied RevisionId
   | MissingAssuranceUse AssuranceUseId
@@ -238,6 +243,7 @@ verifyManifest context ledger manifest = do
       mapM_ verifyArtifact (evidenceArtifact entry)
       verifyKindRequirements entry
       mapM_ (verifyCostRef key) (evidenceCostRefs entry)
+      verifyEvidenceAuthorityKernel entry
 
     verifyEvidenceAssumption assumptions entryId assumptionKey = do
       unless (Set.member assumptionKey (manifestAssumptionNodes manifest)) $
@@ -418,6 +424,60 @@ verifyManifest context ledger manifest = do
       RuntimeEnforced -> verifyRuntime entry
       Assumed -> verifyAssumed entry
       KernelChecked -> Right ()
+
+    verifyEvidenceAuthorityKernel entry = case evidenceAssuranceKind entry of
+      ProofAssistantTheorem -> verifyArtifactAuthorityKernel entry
+      CertificateChecked -> verifyArtifactAuthorityKernel entry
+      TranslationValidated -> verifyArtifactAuthorityKernel entry
+      DifferentialTested -> verifyArtifactAuthorityKernel entry
+      PropertyTested -> verifyArtifactAuthorityKernel entry
+      RuntimeEnforced -> verifyRuntimeAuthorityKernel entry
+      Assumed -> Right ()
+      KernelChecked -> Right ()
+
+    verifyArtifactAuthorityKernel entry =
+      unless (artifactAuthorityKernelAccepts declared identityMatches digestMatches) $
+        Left (EvidenceAuthorityKernelDisagreement
+          (evidenceEntryId entry)
+          (evidenceAssuranceKind entry))
+      where
+        declared = case evidenceArtifact entry of
+          Nothing -> False
+          Just _ -> True
+        available = case evidenceArtifact entry of
+          Nothing -> Nothing
+          Just artifact -> Map.lookup
+            (artifactReference artifact)
+            (verificationAvailableArtifacts context)
+        identityMatches = case available of
+          Nothing -> False
+          Just _ -> True
+        digestMatches = case (evidenceArtifact entry, available) of
+          (Just artifact, Just digest) -> digest == artifactDigest artifact
+          _ -> False
+
+    verifyRuntimeAuthorityKernel entry =
+      unless (runtimeAuthorityKernelAccepts
+        mechanismPresent
+        mechanismComplete
+        residuePresent
+        costReferencePresent
+        costReferenceKnown) $
+          Left (EvidenceAuthorityKernelDisagreement
+            (evidenceEntryId entry)
+            (evidenceAssuranceKind entry))
+      where
+        mechanismPresent = case evidenceRuntimeMechanism entry of
+          Nothing -> False
+          Just _ -> True
+        mechanismComplete = case evidenceRuntimeMechanism entry of
+          Nothing -> False
+          Just mechanism -> runtimeComplete mechanism
+        residuePresent = not (null (evidenceRuntimeResidue entry))
+        costReferencePresent = not (null (evidenceCostRefs entry))
+        costReferenceKnown = all
+          (\costRef -> Set.member costRef (verificationKnownCostRefs context))
+          (evidenceCostRefs entry)
 
     requireArtifact entry = case evidenceArtifact entry of
       Nothing -> Left (EvidenceKindRequiresArtifact
