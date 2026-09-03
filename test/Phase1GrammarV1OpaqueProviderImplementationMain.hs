@@ -10,6 +10,9 @@ import Phil.Core.Generic
   ( GenericRequirement (..)
   , GenericStaticParameterKey (..)
   )
+import Phil.Core.Generic.RequirementCategory
+  ( GenericRequirementCategory (..)
+  )
 import Phil.Core.Generic.StaticActual
   ( GenericStaticActual (..)
   , GenericStaticKind (..)
