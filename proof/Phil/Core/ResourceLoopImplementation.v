@@ -40,7 +40,14 @@ Proof.
   destruct kindMatches;
     destruct resourceProjectionAccepted;
     destruct slotDomainExact;
-    destruct requirementsExact; simpl; tauto.
+    destruct requirementsExact; simpl.
+  all: split.
+  all: try discriminate.
+  all: try (intros H;
+            destruct H as [Hkind [Hresource [Hslots Hrequirements]]];
+            discriminate).
+  - intros _. repeat split; reflexivity.
+  - intros _. reflexivity.
 Qed.
 
 Definition ExpectedLoopProjectionAccepted
