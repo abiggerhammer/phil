@@ -4,7 +4,11 @@ on:
   pull_request:
     paths:
       - 'proof/Phil/Core/DataProduct.v'
+      - 'proof/Phil/Core/DataProductImplementation.v'
+      - 'proof/Phil/Core/DataProductImplementationExtraction.v'
+      - 'app/DataProductDecisionCorrespondenceMain.hs'
       - 'docs/phase-1/data-product-proof-v1.md'
+      - 'docs/phase-1/data-product-implementation-refinement-v1.md'
       - '.github/workflows/phase1-data-product-proofs.yml'
       - 'proof/Phil/Core/DataMode.v'
       - 'proof/Phil/Core/Context.v'
@@ -17,7 +21,11 @@ on:
     branches: [main]
     paths:
       - 'proof/Phil/Core/DataProduct.v'
+      - 'proof/Phil/Core/DataProductImplementation.v'
+      - 'proof/Phil/Core/DataProductImplementationExtraction.v'
+      - 'app/DataProductDecisionCorrespondenceMain.hs'
       - 'docs/phase-1/data-product-proof-v1.md'
+      - 'docs/phase-1/data-product-implementation-refinement-v1.md'
       - '.github/workflows/phase1-data-product-proofs.yml'
       - 'proof/Phil/Core/DataMode.v'
       - 'proof/Phil/Core/Context.v'
@@ -38,7 +46,7 @@ jobs:
       options: --user root
     steps:
       - uses: actions/checkout@v4
-      - name: Compile PHIL-DATA-PRODUCT-001 proof
+      - name: Compile PHIL-DATA-PRODUCT-001 proof and implementation correspondence
         shell: bash
         run: |
           set -euo pipefail
@@ -47,19 +55,32 @@ jobs:
           rocq c -Q proof/Phil Phil proof/Phil/Core/Context.v
           rocq c -Q proof/Phil Phil proof/Phil/Core/DataMode.v
           rocq c -Q proof/Phil Phil proof/Phil/Core/DataProduct.v
-      - name: Record proof identities
+          rocq c -Q proof/Phil Phil proof/Phil/Core/DataProductImplementation.v
+          rm -f DataProductKernel.hs
+          rocq c -Q proof/Phil Phil proof/Phil/Core/DataProductImplementationExtraction.v
+          test -s DataProductKernel.hs
+      - name: Record proof and exact kernel identities
         shell: bash
         run: |
           set -euo pipefail
           mkdir -p data-product-proof
-          cp proof/Phil/Core/DataProduct.v proof/Phil/Core/DataProduct.vo data-product-proof/
+          cp \
+            proof/Phil/Core/DataProduct.v \
+            proof/Phil/Core/DataProduct.vo \
+            proof/Phil/Core/DataProductImplementation.v \
+            proof/Phil/Core/DataProductImplementation.vo \
+            DataProductKernel.hs \
+            data-product-proof/
           sha256sum \
             proof/Phil/Core/DataProduct.v \
             proof/Phil/Core/DataProduct.vo \
+            proof/Phil/Core/DataProductImplementation.v \
+            proof/Phil/Core/DataProductImplementation.vo \
+            DataProductKernel.hs \
             > data-product-proof/PHIL-DATA-PRODUCT-001.proof.sha256
           {
             echo 'obligation=PHIL-DATA-PRODUCT-001'
-            echo 'evidence=Rocq-9.2.0'
+            echo 'evidence=Rocq-9.2.0+extraction'
             cat data-product-proof/PHIL-DATA-PRODUCT-001.proof.sha256
           } > data-product-proof/PHIL-DATA-PRODUCT-001.proof-certificate.txt
           cat data-product-proof/PHIL-DATA-PRODUCT-001.proof-certificate.txt
@@ -80,6 +101,18 @@ jobs:
           cabal-version: 'latest'
       - name: Build existing proof certifier with warnings as errors
         run: cabal build exe:phil-certify-core-scalar --ghc-options=-Werror
+      - uses: actions/download-artifact@v4
+        with:
+          name: rocq-data-product-proof
+          path: data-product-proof
+      - name: Check and execute extracted Data Product controls
+        run: |
+          set -euo pipefail
+          cp data-product-proof/DataProductKernel.hs .
+          cabal exec -- ghc -i. -Wall -Werror -fno-code DataProductKernel.hs
+          cabal exec -- ghc -i. -Wall -Werror -fno-code app/DataProductDecisionCorrespondenceMain.hs
+          cabal exec -- runghc -Wall -Werror -i. app/DataProductDecisionCorrespondenceMain.hs
+          sha256sum DataProductKernel.hs
       - name: Typecheck unchanged DATA-015 implementation paths
         run: |
           set -euo pipefail
