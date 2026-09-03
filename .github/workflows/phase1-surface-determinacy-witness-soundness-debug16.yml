@@ -23,7 +23,7 @@ jobs:
           python3 scripts/derive_phase1_surface_grammar.py --write
           python3 scripts/derive_phase1_surface_determinacy_certificate.py --write
 
-      - name: Apply nullable packaging and FIRST bridge diagnostic
+      - name: Apply semantic nullable witness diagnostic
         shell: bash
         run: |
           set -euo pipefail
@@ -31,15 +31,262 @@ jobs:
           from pathlib import Path
           import textwrap
 
-          workflow = Path('.github/workflows/phase1-surface-determinacy-witness-soundness-debug15.yml').read_text()
-          marker = workflow.index('- name: Apply opaque-case nullable witness diagnostic')
+          workflow = Path('.github/workflows/phase1-surface-determinacy-witness-soundness-debug14.yml').read_text()
+          marker = workflow.index('- name: Apply depth-safe diagnostic without computed rule extraction')
           start = workflow.index('          from pathlib import Path', marker)
           end = workflow.index('\n          PY', start)
           code = textwrap.dedent(workflow[start:end])
-          exec(compile(code, '<existing-debug15-diagnostics>', 'exec'), {})
+          exec(compile(code, '<existing-debug14-diagnostics>', 'exec'), {})
 
           path = Path('proof/Phil/Surface/GrammarDeterminacyWitnessSoundness.v')
           source = path.read_text()
+          block_start = source.index('Fixpoint nullable_witness_depth_sound')
+          block_end = source.index('\nTheorem phase1_surface_nullable_witness_matches_computed_facts', block_start)
+
+          replacement = r'''Inductive ComputedNullableSem : EbnfExpression -> Prop :=
+          | computed_nullable_nonterminal_sem :
+              forall name,
+                lookup_bool name phase1_surface_nullable_facts = true ->
+                ComputedNullableSem (ENonterminal name)
+          | computed_nullable_sequence_sem :
+              forall items,
+                ComputedNullableSequenceSem items ->
+                ComputedNullableSem (ESequence items)
+          | computed_nullable_alternative_sem :
+              forall items,
+                ComputedNullableAlternativeSem items ->
+                ComputedNullableSem (EAlternative items)
+          | computed_nullable_optional_sem :
+              forall body,
+                ComputedNullableSem (EOptional body)
+          | computed_nullable_repetition_sem :
+              forall body,
+                ComputedNullableSem (ERepetition body)
+
+          with ComputedNullableSequenceSem : list EbnfExpression -> Prop :=
+          | computed_nullable_sequence_nil_sem :
+              ComputedNullableSequenceSem []
+          | computed_nullable_sequence_cons_sem :
+              forall item rest,
+                ComputedNullableSem item ->
+                ComputedNullableSequenceSem rest ->
+                ComputedNullableSequenceSem (item :: rest)
+
+          with ComputedNullableAlternativeSem : list EbnfExpression -> Prop :=
+          | computed_nullable_alternative_here_sem :
+              forall item rest,
+                ComputedNullableSem item ->
+                ComputedNullableAlternativeSem (item :: rest)
+          | computed_nullable_alternative_later_sem :
+              forall item rest,
+                ComputedNullableAlternativeSem rest ->
+                ComputedNullableAlternativeSem (item :: rest).
+
+          Lemma computed_nullable_sequence_sem_sound :
+            forall fuel items,
+              (forall expression,
+                ComputedNullableSem expression ->
+                nullable_depth_safe_fuel fuel expression = true ->
+                nullable_expression_fuel
+                  fuel phase1_surface_nullable_facts expression = Some true) ->
+              ComputedNullableSequenceSem items ->
+              forallb (nullable_depth_safe_fuel fuel) items = true ->
+              nullable_expression_fuel
+                (S fuel) phase1_surface_nullable_facts
+                (ESequence items) = Some true.
+          Proof.
+            intros fuel items Hsound Hsem.
+            induction Hsem as
+              [| item rest Hitem Hrest IHrest]; intros Hsafe.
+            - reflexivity.
+            - simpl in Hsafe.
+              apply andb_true_iff in Hsafe as [Hitem_safe Hrest_safe].
+              pose proof (Hsound item Hitem Hitem_safe) as Hitem_true.
+              assert (Hrest_expr_safe :
+                nullable_depth_safe_fuel
+                  (S fuel) (ESequence rest) = true).
+              { simpl. exact Hrest_safe. }
+              pose proof (IHrest Hrest_safe) as Hrest_true.
+              pose proof Hrest_true as Hrest_local.
+              simpl in Hrest_local.
+              simpl.
+              rewrite Hitem_true, Hrest_local.
+              reflexivity.
+          Qed.
+
+          Lemma computed_nullable_alternative_sem_sound :
+            forall fuel items,
+              (forall expression,
+                ComputedNullableSem expression ->
+                nullable_depth_safe_fuel fuel expression = true ->
+                nullable_expression_fuel
+                  fuel phase1_surface_nullable_facts expression = Some true) ->
+              ComputedNullableAlternativeSem items ->
+              forallb (nullable_depth_safe_fuel fuel) items = true ->
+              nullable_expression_fuel
+                (S fuel) phase1_surface_nullable_facts
+                (EAlternative items) = Some true.
+          Proof.
+            intros fuel items Hsound Hsem.
+            induction Hsem as
+              [item rest Hitem | item rest Hrest IHrest]; intros Hsafe.
+            - simpl in Hsafe.
+              apply andb_true_iff in Hsafe as [Hitem_safe Hrest_safe].
+              pose proof (Hsound item Hitem Hitem_safe) as Hitem_true.
+              assert (Hrest_expr_safe :
+                nullable_depth_safe_fuel
+                  (S fuel) (EAlternative rest) = true).
+              { simpl. exact Hrest_safe. }
+              destruct
+                (nullable_depth_safe_defined
+                  (S fuel) (EAlternative rest) Hrest_expr_safe)
+                as [rest_value Hrest_defined].
+              pose proof Hrest_defined as Hrest_local.
+              simpl in Hrest_local.
+              simpl.
+              rewrite Hitem_true, Hrest_local.
+              reflexivity.
+            - simpl in Hsafe.
+              apply andb_true_iff in Hsafe as [Hitem_safe Hrest_safe].
+              destruct
+                (nullable_depth_safe_defined fuel item Hitem_safe)
+                as [item_value Hitem_defined].
+              pose proof (IHrest Hrest_safe) as Hrest_true.
+              pose proof Hrest_true as Hrest_local.
+              simpl in Hrest_local.
+              simpl.
+              rewrite Hitem_defined, Hrest_local.
+              destruct item_value; reflexivity.
+          Qed.
+
+          Lemma computed_nullable_sem_sound_step :
+            forall fuel,
+              (forall expression,
+                ComputedNullableSem expression ->
+                nullable_depth_safe_fuel fuel expression = true ->
+                nullable_expression_fuel
+                  fuel phase1_surface_nullable_facts expression = Some true) ->
+              forall expression,
+                ComputedNullableSem expression ->
+                nullable_depth_safe_fuel (S fuel) expression = true ->
+                nullable_expression_fuel
+                  (S fuel) phase1_surface_nullable_facts expression = Some true.
+          Proof.
+            intros fuel IH expression Hsem Hsafe.
+            destruct Hsem as
+              [name Hlookup
+              | items Hitems
+              | items Hitems
+              | body
+              | body].
+            - simpl. rewrite Hlookup. reflexivity.
+            - simpl in Hsafe.
+              exact
+                (computed_nullable_sequence_sem_sound
+                  fuel items IH Hitems Hsafe).
+            - simpl in Hsafe.
+              exact
+                (computed_nullable_alternative_sem_sound
+                  fuel items IH Hitems Hsafe).
+            - reflexivity.
+            - reflexivity.
+          Qed.
+
+          Theorem computed_nullable_sem_sound :
+            forall fuel expression,
+              ComputedNullableSem expression ->
+              nullable_depth_safe_fuel fuel expression = true ->
+              nullable_expression_fuel
+                fuel phase1_surface_nullable_facts expression = Some true.
+          Proof.
+            induction fuel as [| fuel IH].
+            - intros expression Hsem Hsafe.
+              simpl in Hsafe. discriminate.
+            - intros expression Hsem Hsafe.
+              exact
+                (computed_nullable_sem_sound_step
+                  fuel IH expression Hsem Hsafe).
+          Qed.
+
+          Lemma nullable_witness_nonterminal_sem_case :
+            forall name body,
+              lookupRule name phase1_surface_rules = Some body ->
+              ComputedNullableSem body ->
+              ComputedNullableSem (ENonterminal name).
+          Proof.
+            intros name body Hlookup Hbody_sem.
+            assert (Hbody_safe :
+              nullable_depth_safe_fuel expression_fuel body = true).
+            {
+              apply phase1_surface_rule_body_nullable_depth_safe with name.
+              exact Hlookup.
+            }
+            pose proof
+              (computed_nullable_sem_sound
+                expression_fuel body Hbody_sem Hbody_safe)
+              as Hbody_true.
+            pose proof
+              (phase1_surface_nullable_lookup_rule name body Hlookup)
+              as Hlookup_fact.
+            unfold nullable_expression in Hlookup_fact.
+            rewrite Hbody_true in Hlookup_fact.
+            simpl in Hlookup_fact.
+            apply computed_nullable_nonterminal_sem.
+            exact Hlookup_fact.
+          Qed.
+
+          Theorem nullable_witness_implies_computed_sem :
+            (forall expression,
+              NullableWitness phase1_surface_rules expression ->
+              ComputedNullableSem expression) /\
+            (forall items,
+              NullableSequenceWitness phase1_surface_rules items ->
+              ComputedNullableSequenceSem items) /\
+            (forall items,
+              NullableAlternativeWitness phase1_surface_rules items ->
+              ComputedNullableAlternativeSem items).
+          Proof.
+            apply NullableWitness_mutind.
+            - intros name body Hlookup Hbody IHbody.
+              exact
+                (nullable_witness_nonterminal_sem_case
+                  name body Hlookup IHbody).
+            - intros items Hitems IHitems.
+              now constructor.
+            - intros items Hitems IHitems.
+              now constructor.
+            - intros body.
+              constructor.
+            - intros body.
+              constructor.
+            - constructor.
+            - intros item rest Hitem IHitem Hrest IHrest.
+              now constructor.
+            - intros item rest Hitem IHitem.
+              now constructor.
+            - intros item rest Hrest IHrest.
+              now constructor.
+          Qed.
+
+          Corollary nullable_witness_depth_sound :
+            forall expression
+              (witness : NullableWitness phase1_surface_rules expression)
+              fuel,
+              nullable_depth_safe_fuel fuel expression = true ->
+              nullable_expression_fuel
+                fuel phase1_surface_nullable_facts expression = Some true.
+          Proof.
+            intros expression witness fuel Hsafe.
+            pose proof
+              ((proj1 nullable_witness_implies_computed_sem)
+                expression witness)
+              as Hsem.
+            exact (computed_nullable_sem_sound fuel expression Hsem Hsafe).
+          Qed.
+          '''
+
+          source = source[:block_start] + replacement + source[block_end:]
+
           needle = 'phase1_surface_nullable_witness_fuel_sound'
           if source.count(needle) != 1:
               raise SystemExit(f'expected one stale nullable FIRST bridge, found {source.count(needle)}')
