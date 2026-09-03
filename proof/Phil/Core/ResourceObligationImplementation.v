@@ -6,7 +6,7 @@ Inductive PendingObligationDecision : Type :=
 | PendingObligationAcceptedDecision
 | PendingObligationLostDecision.
 
-Definition decidePendingObigationReconvergenceByFacts
+Definition decidePendingObligationReconvergenceByFacts
   (pendingBefore pendingAfter : bool)
   : PendingObligationDecision :=
   if pendingBefore then
@@ -19,7 +19,7 @@ Definition decidePendingObigationReconvergenceByFacts
 
 Theorem pending_obligation_decision_exact :
   forall pendingBefore pendingAfter,
-    (decidePendingObigationReconvergenceByFacts pendingBefore pendingAfter =
+    (decidePendingObligationReconvergenceByFacts pendingBefore pendingAfter =
        PendingObligationAcceptedDecision <->
      (pendingBefore = true -> pendingAfter = true)).
 Proof.
@@ -45,7 +45,7 @@ Theorem pending_obligation_decision_corresponds_reconvergence :
   forall payloadBefore payloadAfter obligation pendingBefore pendingAfter,
     (pendingBefore = true <-> PendingObligation payloadBefore obligation) ->
     (pendingAfter = true <-> PendingObligation payloadAfter obligation) ->
-    (decidePendingObigationReconvergenceByFacts pendingBefore pendingAfter =
+    (decidePendingObligationReconvergenceByFacts pendingBefore pendingAfter =
        PendingObligationAcceptedDecision <->
      (PendingObligation payloadBefore obligation ->
       PendingObligation payloadAfter obligation)).
@@ -75,7 +75,7 @@ Theorem accepted_pending_decision_cannot_fabricate_explicit_disposition :
   forall payloadBefore payloadAfter obligation pendingBefore pendingAfter,
     (pendingBefore = true <-> PendingObligation payloadBefore obligation) ->
     (pendingAfter = true <-> PendingObligation payloadAfter obligation) ->
-    decidePendingObigationReconvergenceByFacts pendingBefore pendingAfter =
+    decidePendingObligationReconvergenceByFacts pendingBefore pendingAfter =
       PendingObligationAcceptedDecision ->
     PendingObligation payloadBefore obligation ->
     ~ ExplicitDisposition (obligationStatus payloadAfter obligation).
@@ -93,9 +93,9 @@ Qed.
 
 Theorem pending_obligation_decision_composes :
   forall before middle after,
-    decidePendingObigationReconvergenceByFacts before middle =
+    decidePendingObligationReconvergenceByFacts before middle =
       PendingObligationAcceptedDecision ->
-    decidePendingObigationReconvergenceByFacts middle after =
+    decidePendingObligationReconvergenceByFacts middle after =
       PendingObligationAcceptedDecision ->
     before = true ->
     after = true.
