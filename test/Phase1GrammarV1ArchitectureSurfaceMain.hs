@@ -52,7 +52,7 @@ checkedArchitectureSemantics = do
     , "  protocol wire = Ping;"
     , "  role wire.Client = proc;"
     , "  role wire.Server = external;"
-    , "  bind proc.out = proc.in;"
+    , "  bind proc.out = proc.input;"
     , "  boundary proc.edge = codec.inbound;"
     , "  observable proc.metrics;"
     , "  assume true within trust.zone;"
@@ -83,7 +83,7 @@ checkedArchitectureSemantics = do
               (GrammarV1CheckedInternalRoleTarget "proc")
           , GrammarV1CheckedArchitectureRole "wire.Server"
               GrammarV1CheckedExternalRoleTarget
-          , GrammarV1CheckedArchitectureBind "proc.out" "proc.in"
+          , GrammarV1CheckedArchitectureBind "proc.out" "proc.input"
           , GrammarV1CheckedArchitectureBoundary "proc.edge" "codec.inbound"
           , GrammarV1CheckedArchitectureObservable "proc.metrics"
           , GrammarV1CheckedArchitectureAssume Truth "trust.zone" []
