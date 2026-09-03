@@ -76,10 +76,17 @@ closedHeaderSemantics = do
   -- The body deliberately contains an unresolved name. Header success therefore
   -- cannot be mistaken for a claim that body semantics were checked by this slice.
   case grammarV1BlockStatements (locatedValue (grammarV1FunctionBody source)) of
-    [Located _ (GrammarV1ReturnStatement (Located _ (GrammarV1NameExpression name)))] ->
-      assert
-        (grammarV1QualifiedNameParts name == ["missing"])
-        "test body no longer carries the deliberately unresolved name"
+    [ Located _
+        (GrammarV1ReturnStatement
+          (Located _ (GrammarV1NameExpression reference arguments)))
+      ] -> do
+        assert (null arguments)
+          "deliberately unresolved body name unexpectedly acquired term arguments"
+        assert (null (grammarV1StaticReferenceArguments reference))
+          "deliberately unresolved body name unexpectedly acquired static arguments"
+        assert
+          (grammarV1QualifiedNameParts (grammarV1StaticReferenceName reference) == ["missing"])
+          "test body no longer carries the deliberately unresolved name"
     body -> Left ("unexpected function body shape: " <> show body)
 
 recursionMarkerPreserved :: Either String ()
