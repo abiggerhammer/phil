@@ -4,17 +4,25 @@ on:
   pull_request:
     paths:
       - 'proof/Phil/Core/GenericStaticKind.v'
+      - 'proof/Phil/Core/GenericStaticKindImplementation.v'
+      - 'proof/Phil/Core/GenericStaticKindImplementationExtraction.v'
       - 'src/Phil/Core/Generic/StaticActual.hs'
       - 'test/Phase1GenericStaticKindMain.hs'
+      - 'app/GenericStaticKindDecisionCorrespondenceMain.hs'
       - 'docs/phase-1/generic-static-kind-proof-v1.md'
+      - 'docs/phase-1/generic-static-kind-implementation-refinement-v1.md'
       - '.github/workflows/phase1-generic-static-kind-proofs.yml'
   push:
     branches: [main]
     paths:
       - 'proof/Phil/Core/GenericStaticKind.v'
+      - 'proof/Phil/Core/GenericStaticKindImplementation.v'
+      - 'proof/Phil/Core/GenericStaticKindImplementationExtraction.v'
       - 'src/Phil/Core/Generic/StaticActual.hs'
       - 'test/Phase1GenericStaticKindMain.hs'
+      - 'app/GenericStaticKindDecisionCorrespondenceMain.hs'
       - 'docs/phase-1/generic-static-kind-proof-v1.md'
+      - 'docs/phase-1/generic-static-kind-implementation-refinement-v1.md'
       - '.github/workflows/phase1-generic-static-kind-proofs.yml'
 
 permissions:
@@ -28,13 +36,17 @@ jobs:
       options: --user root
     steps:
       - uses: actions/checkout@v4
-      - name: Compile PHIL-GEN-KIND-001
+      - name: Compile PHIL-GEN-KIND-001 proof and implementation correspondence
         shell: bash
         run: |
           set -euo pipefail
           export PATH="/home/rocq/.opam/${COMPILER}/bin:$PATH"
           rocq c -Q proof/Phil Phil proof/Phil/Core/GenericStaticKind.v
-      - name: Record proof identities
+          rocq c -Q proof/Phil Phil proof/Phil/Core/GenericStaticKindImplementation.v
+          rm -f GenericStaticKindKernel.hs
+          rocq c -Q proof/Phil Phil proof/Phil/Core/GenericStaticKindImplementationExtraction.v
+          test -s GenericStaticKindKernel.hs
+      - name: Record proof and exact kernel identities
         shell: bash
         run: |
           set -euo pipefail
@@ -42,16 +54,23 @@ jobs:
           cp \
             proof/Phil/Core/GenericStaticKind.v \
             proof/Phil/Core/GenericStaticKind.vo \
+            proof/Phil/Core/GenericStaticKindImplementation.v \
+            proof/Phil/Core/GenericStaticKindImplementation.vo \
+            GenericStaticKindKernel.hs \
             generic-static-kind-proof/
           sha256sum \
             proof/Phil/Core/GenericStaticKind.v \
             proof/Phil/Core/GenericStaticKind.vo \
+            proof/Phil/Core/GenericStaticKindImplementation.v \
+            proof/Phil/Core/GenericStaticKindImplementation.vo \
+            GenericStaticKindKernel.hs \
             src/Phil/Core/Generic/StaticActual.hs \
             test/Phase1GenericStaticKindMain.hs \
+            app/GenericStaticKindDecisionCorrespondenceMain.hs \
             > generic-static-kind-proof/PHIL-GEN-KIND-001.proof.sha256
           {
             echo 'obligation=PHIL-GEN-KIND-001'
-            echo 'evidence=Rocq-9.2.0'
+            echo 'evidence=Rocq-9.2.0+extraction'
             cat generic-static-kind-proof/PHIL-GEN-KIND-001.proof.sha256
           } > generic-static-kind-proof/PHIL-GEN-KIND-001.proof-certificate.txt
           cat generic-static-kind-proof/PHIL-GEN-KIND-001.proof-certificate.txt
@@ -72,7 +91,20 @@ jobs:
           cabal-version: 'latest'
       - name: Build ordinary regression substrate
         run: cabal build all --enable-tests
-      - name: Strict typecheck GEN-013 implementation and corpus
+      - uses: actions/download-artifact@v4
+        with:
+          name: rocq-generic-static-kind-proof
+          path: generic-static-kind-proof
+      - name: Check and execute extracted GEN-KIND controls
+        run: |
+          set -euo pipefail
+          cp generic-static-kind-proof/GenericStaticKindKernel.hs .
+          cabal exec -- ghc -i. -Wall -Werror -Wno-unused-imports -fno-code \
+            GenericStaticKindKernel.hs \
+            app/GenericStaticKindDecisionCorrespondenceMain.hs
+          cabal exec -- runghc -i. -Wall -Werror -Wno-unused-imports \
+            app/GenericStaticKindDecisionCorrespondenceMain.hs
+      - name: Strict typecheck unchanged GEN-013 implementation and corpus
         run: |
           set -euo pipefail
           cabal exec -- ghc -isrc -Wall -Werror -fno-code src/Phil/Core/Generic/StaticActual.hs
