@@ -8,6 +8,7 @@ import Phil.Core.Syntax
   , Name (..)
   , Outcome (..)
   , Session (..)
+  , Ty
   )
 import Phil.Surface.Check.Support (emptySurfaceState)
 import Phil.Surface.Check.Types (SurfaceState)
@@ -91,7 +92,7 @@ elaborateBranch recursionNames state (Located _ branch)
 elaboratePayload
   :: Maybe [Located GrammarV1TermParam]
   -> SurfaceState
-  -> Maybe (Maybe (Name, Phil.Core.Syntax.Ty), SurfaceState)
+  -> Maybe (Maybe (Name, Ty), SurfaceState)
 elaboratePayload source state =
   case source of
     Nothing -> Just (Nothing, state)
@@ -103,7 +104,7 @@ elaboratePayload source state =
 insertPrimitiveParam
   :: Located GrammarV1TermParam
   -> SurfaceState
-  -> Maybe ((Name, Phil.Core.Syntax.Ty), SurfaceState)
+  -> Maybe ((Name, Ty), SurfaceState)
 insertPrimitiveParam (Located _ param) =
   grammarV1InsertPrimitiveBinding
     (grammarV1TermParamName param)
