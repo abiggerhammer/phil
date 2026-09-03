@@ -151,6 +151,43 @@ Proof.
   exact Hfact.
 Qed.
 
+Lemma nullable_sequence_cons_defined :
+  forall fuel item rest item_value rest_value,
+    nullable_expression_fuel
+      fuel phase1_surface_nullable_facts item = Some item_value ->
+    nullable_expression_fuel
+      (S fuel) phase1_surface_nullable_facts (ESequence rest) = Some rest_value ->
+    exists value,
+      nullable_expression_fuel
+        (S fuel) phase1_surface_nullable_facts
+        (ESequence (item :: rest)) = Some value.
+Proof.
+  intros fuel item rest item_value rest_value Hitem Hrest.
+  simpl in Hrest.
+  simpl.
+  rewrite Hitem, Hrest.
+  eexists. reflexivity.
+Qed.
+
+Lemma nullable_alternative_cons_defined :
+  forall fuel item rest item_value rest_value,
+    nullable_expression_fuel
+      fuel phase1_surface_nullable_facts item = Some item_value ->
+    nullable_expression_fuel
+      (S fuel) phase1_surface_nullable_facts
+      (EAlternative rest) = Some rest_value ->
+    exists value,
+      nullable_expression_fuel
+        (S fuel) phase1_surface_nullable_facts
+        (EAlternative (item :: rest)) = Some value.
+Proof.
+  intros fuel item rest item_value rest_value Hitem Hrest.
+  simpl in Hrest.
+  simpl.
+  rewrite Hitem, Hrest.
+  eexists. reflexivity.
+Qed.
+
 Lemma choice_safe_nullable_sequence_defined :
   forall fuel items,
     (forall expression,
@@ -164,14 +201,12 @@ Lemma choice_safe_nullable_sequence_defined :
         (S fuel) phase1_surface_nullable_facts (ESequence items) = Some value.
 Proof.
   intros fuel items IH.
-  induction items as [| item rest IHrest]; intros Hsafe; simpl in *.
-  - eexists. reflexivity.
+  induction items as [| item rest IHrest]; intros Hsafe; simpl in Hsafe.
+  - simpl. eexists. reflexivity.
   - apply andb_true_iff in Hsafe as [Hitem_safe Hrest_safe].
     destruct (IH item Hitem_safe) as [item_value Hitem_value].
     destruct (IHrest Hrest_safe) as [rest_value Hrest_value].
-    simpl in Hrest_value.
-    rewrite Hitem_value, Hrest_value.
-    eexists. reflexivity.
+    eapply nullable_sequence_cons_defined; eauto.
 Qed.
 
 Lemma choice_safe_nullable_alternative_defined :
@@ -192,15 +227,13 @@ Lemma choice_safe_nullable_alternative_defined :
         (S fuel) phase1_surface_nullable_facts (EAlternative items) = Some value.
 Proof.
   intros fuel items IH.
-  induction items as [| item rest IHrest]; intros Hsafe; simpl in *.
-  - eexists. reflexivity.
+  induction items as [| item rest IHrest]; intros Hsafe; simpl in Hsafe.
+  - simpl. eexists. reflexivity.
   - apply andb_true_iff in Hsafe as [Hhead_safe Hrest_safe].
     apply andb_true_iff in Hhead_safe as [_ Hitem_safe].
     destruct (IH item Hitem_safe) as [item_value Hitem_value].
     destruct (IHrest Hrest_safe) as [rest_value Hrest_value].
-    simpl in Hrest_value.
-    rewrite Hitem_value, Hrest_value.
-    eexists. reflexivity.
+    eapply nullable_alternative_cons_defined; eauto.
 Qed.
 
 Lemma choice_safe_nullable_defined :
@@ -225,6 +258,51 @@ Proof.
     + simpl. eexists. reflexivity.
 Qed.
 
+Lemma first_sequence_cons_defined :
+  forall fuel item rest item_first item_nullable rest_first,
+    first_expression_fuel
+      fuel phase1_surface_nullable_facts phase1_surface_first_facts item =
+      Some item_first ->
+    nullable_expression_fuel
+      fuel phase1_surface_nullable_facts item = Some item_nullable ->
+    first_expression_fuel
+      (S fuel) phase1_surface_nullable_facts phase1_surface_first_facts
+      (ESequence rest) = Some rest_first ->
+    exists tokens,
+      first_expression_fuel
+        (S fuel) phase1_surface_nullable_facts phase1_surface_first_facts
+        (ESequence (item :: rest)) = Some tokens.
+Proof.
+  intros fuel item rest item_first item_nullable rest_first
+    Hitem_first Hitem_nullable Hrest_first.
+  simpl in Hrest_first.
+  simpl.
+  rewrite Hitem_first, Hitem_nullable.
+  destruct item_nullable.
+  - rewrite Hrest_first. eexists. reflexivity.
+  - eexists. reflexivity.
+Qed.
+
+Lemma first_alternative_cons_defined :
+  forall fuel item rest item_first rest_first,
+    first_expression_fuel
+      fuel phase1_surface_nullable_facts phase1_surface_first_facts item =
+      Some item_first ->
+    first_expression_fuel
+      (S fuel) phase1_surface_nullable_facts phase1_surface_first_facts
+      (EAlternative rest) = Some rest_first ->
+    exists tokens,
+      first_expression_fuel
+        (S fuel) phase1_surface_nullable_facts phase1_surface_first_facts
+        (EAlternative (item :: rest)) = Some tokens.
+Proof.
+  intros fuel item rest item_first rest_first Hitem_first Hrest_first.
+  simpl in Hrest_first.
+  simpl.
+  rewrite Hitem_first, Hrest_first.
+  eexists. reflexivity.
+Qed.
+
 Lemma choice_safe_first_sequence_defined :
   forall fuel items,
     (forall expression,
@@ -244,18 +322,14 @@ Lemma choice_safe_first_sequence_defined :
         (ESequence items) = Some tokens.
 Proof.
   intros fuel items IH.
-  induction items as [| item rest IHrest]; intros Hsafe; simpl in *.
-  - eexists. reflexivity.
+  induction items as [| item rest IHrest]; intros Hsafe; simpl in Hsafe.
+  - simpl. eexists. reflexivity.
   - apply andb_true_iff in Hsafe as [Hitem_safe Hrest_safe].
     destruct (IH item Hitem_safe) as [item_first Hitem_first].
     destruct (choice_safe_nullable_defined fuel item Hitem_safe)
       as [item_nullable Hitem_nullable].
     destruct (IHrest Hrest_safe) as [rest_first Hrest_first].
-    simpl in Hrest_first.
-    rewrite Hitem_first, Hitem_nullable.
-    destruct item_nullable.
-    + rewrite Hrest_first. eexists. reflexivity.
-    + eexists. reflexivity.
+    eapply first_sequence_cons_defined; eauto.
 Qed.
 
 Lemma choice_safe_first_alternative_defined :
@@ -282,15 +356,13 @@ Lemma choice_safe_first_alternative_defined :
         (EAlternative items) = Some tokens.
 Proof.
   intros fuel items IH.
-  induction items as [| item rest IHrest]; intros Hsafe; simpl in *.
-  - eexists. reflexivity.
+  induction items as [| item rest IHrest]; intros Hsafe; simpl in Hsafe.
+  - simpl. eexists. reflexivity.
   - apply andb_true_iff in Hsafe as [Hhead_safe Hrest_safe].
     apply andb_true_iff in Hhead_safe as [_ Hitem_safe].
     destruct (IH item Hitem_safe) as [item_first Hitem_first].
     destruct (IHrest Hrest_safe) as [rest_first Hrest_first].
-    simpl in Hrest_first.
-    rewrite Hitem_first, Hrest_first.
-    eexists. reflexivity.
+    eapply first_alternative_cons_defined; eauto.
 Qed.
 
 Lemma choice_safe_first_defined :
