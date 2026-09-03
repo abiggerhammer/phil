@@ -472,7 +472,8 @@ Proof.
     unfold DerivesRepetitionFirstProperty.
     destruct input as [|first_token tail].
     + exact I.
-    + unfold DerivesFirstProperty in IHbody.
+    + intros Hneq.
+      unfold DerivesFirstProperty in IHbody.
       exact (IHbody Hprogress).
 Qed.
 
