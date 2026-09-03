@@ -23,7 +23,7 @@ jobs:
           python3 scripts/derive_phase1_surface_grammar.py --write
           python3 scripts/derive_phase1_surface_determinacy_certificate.py --write
 
-      - name: Apply existing diagnostics and isolate alternative existential steps
+      - name: Apply existing diagnostics and strip witness terms from alternatives
         shell: bash
         run: |
           set -euo pipefail
@@ -75,13 +75,12 @@ jobs:
             eapply nullable_alternative_tail_true; eauto.
           Qed.
 
-          Lemma nullable_alternative_here_fuel_case :
+          Lemma nullable_alternative_here_property_case :
             forall item rest,
-              NullableWitness phase1_surface_rules item ->
               NullableWitnessFuelProperty item ->
               NullableAlternativeFuelProperty (item :: rest).
           Proof.
-            intros item rest Hitem IHitem.
+            intros item rest IHitem.
             unfold NullableAlternativeFuelProperty in *.
             intros fuel Hfuel Hsafe.
             simpl in Hsafe.
@@ -96,13 +95,12 @@ jobs:
             eapply nullable_alternative_here_from_safe_tail; eauto.
           Qed.
 
-          Lemma nullable_alternative_later_fuel_case :
+          Lemma nullable_alternative_later_property_case :
             forall item rest,
-              NullableAlternativeWitness phase1_surface_rules rest ->
               NullableAlternativeFuelProperty rest ->
               NullableAlternativeFuelProperty (item :: rest).
           Proof.
-            intros item rest Hrest IHrest.
+            intros item rest IHrest.
             unfold NullableAlternativeFuelProperty in *.
             intros fuel Hfuel Hsafe.
             simpl in Hsafe.
@@ -110,6 +108,26 @@ jobs:
             apply andb_true_iff in Hhead_safe as [_ Hitem_safe].
             pose proof (IHrest fuel Hfuel Hrest_safe) as Hrest_eval.
             eapply nullable_alternative_later_from_safe_head; eauto.
+          Qed.
+
+          Lemma nullable_alternative_here_fuel_case :
+            forall item rest,
+              NullableWitness phase1_surface_rules item ->
+              NullableWitnessFuelProperty item ->
+              NullableAlternativeFuelProperty (item :: rest).
+          Proof.
+            intros item rest _ IHitem.
+            exact (nullable_alternative_here_property_case item rest IHitem).
+          Qed.
+
+          Lemma nullable_alternative_later_fuel_case :
+            forall item rest,
+              NullableAlternativeWitness phase1_surface_rules rest ->
+              NullableAlternativeFuelProperty rest ->
+              NullableAlternativeFuelProperty (item :: rest).
+          Proof.
+            intros item rest _ IHrest.
+            exact (nullable_alternative_later_property_case item rest IHrest).
           Qed.
           '''
           path.write_text(source[:start] + replacement + source[end:])
