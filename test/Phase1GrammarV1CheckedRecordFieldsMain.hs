@@ -58,7 +58,7 @@ main = do
 test :: String -> Either String () -> IO Bool
 test label result = case result of
   Right () -> putStrLn ("PASS: " <> label) >> pure True
-  Left detail -> putStrLn ("FAIL: " <> label <> " -- " <> detail) >> exitFailure
+  Left detail -> putStrLn ("FAIL: " <> label <> " -- " <> detail) >> pure False
 
 closedRecordFields :: Either String ()
 closedRecordFields = do
