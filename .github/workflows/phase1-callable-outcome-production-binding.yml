@@ -1,0 +1,111 @@
+name: Phase 1 Callable Outcome Production Binding
+
+on:
+  pull_request:
+    paths:
+      - 'generated/CallableOutcomeKernel.hs'
+      - 'src/CallableOutcomeKernel.hs'
+      - 'src/Phil/Core/CallableOutcomeKernelBridge.hs'
+      - 'src/Phil/Core/CallableOutcome.hs'
+      - 'app/CallableOutcomeDecisionCorrespondenceMain.hs'
+      - 'app/CallableOutcomeProductionBindingMain.hs'
+      - 'proof/Phil/Core/CallableOutcomeFidelity.v'
+      - 'proof/Phil/Core/CallableOutcomeImplementation.v'
+      - 'proof/Phil/Core/CallableOutcomeImplementationExtraction.v'
+      - 'docs/phase-1/callable-outcome-production-binding-v1.md'
+      - '.github/workflows/phase1-callable-outcome-production-binding.yml'
+      - 'test/Phase1CallableOutcomeFidelityMain.hs'
+  push:
+    branches: [main]
+    paths:
+      - 'generated/CallableOutcomeKernel.hs'
+      - 'src/CallableOutcomeKernel.hs'
+      - 'src/Phil/Core/CallableOutcomeKernelBridge.hs'
+      - 'src/Phil/Core/CallableOutcome.hs'
+      - 'proof/Phil/Core/CallableOutcomeFidelity.v'
+      - 'proof/Phil/Core/CallableOutcomeImplementation.v'
+      - 'proof/Phil/Core/CallableOutcomeImplementationExtraction.v'
+      - '.github/workflows/phase1-callable-outcome-production-binding.yml'
+      - 'test/Phase1CallableOutcomeFidelityMain.hs'
+
+permissions:
+  contents: read
+
+jobs:
+  exact-callable-outcome-kernel:
+    runs-on: ubuntu-latest
+    container:
+      image: rocq/rocq-prover:9.2.0
+      options: --user root
+    steps:
+      - uses: actions/checkout@v4
+      - name: Freshly extract exact Callable Outcome kernel
+        shell: bash
+        run: |
+          set -euo pipefail
+          export PATH="/home/rocq/.opam/${COMPILER}/bin:$PATH"
+          rocq c -Q proof/Phil Phil proof/Phil/Core/CallableOutcomeFidelity.v
+          rocq c -Q proof/Phil Phil proof/Phil/Core/CallableOutcomeImplementation.v
+          rm -f CallableOutcomeKernel.hs
+          rocq c -Q proof/Phil Phil proof/Phil/Core/CallableOutcomeImplementationExtraction.v
+          test -s CallableOutcomeKernel.hs
+          test "$(sha256sum CallableOutcomeKernel.hs | cut -d' ' -f1)" = \
+            bd25c94d9240bdf3c32ff402ddd39c826f9e478d413264975353955eb7ac9f8f
+          cmp CallableOutcomeKernel.hs generated/CallableOutcomeKernel.hs
+          cmp CallableOutcomeKernel.hs src/CallableOutcomeKernel.hs
+      - name: Record exact kernel identity
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p callable-outcome-exact-kernel
+          cp CallableOutcomeKernel.hs callable-outcome-exact-kernel/
+          sha256sum CallableOutcomeKernel.hs \
+            > callable-outcome-exact-kernel/CallableOutcomeKernel.sha256
+      - uses: actions/upload-artifact@v4
+        with:
+          name: callable-outcome-exact-kernel
+          path: callable-outcome-exact-kernel
+          if-no-files-found: error
+
+  verify-callable-outcome-production-binding:
+    needs: exact-callable-outcome-kernel
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: haskell-actions/setup@v2
+        with:
+          ghc-version: '9.6.7'
+          cabal-version: 'latest'
+      - name: Build broad library regression surface
+        run: cabal build lib:phil-core --ghc-options=-Werror
+      - name: Strictly typecheck bound Callable Outcome surface
+        run: |
+          set -euo pipefail
+          cabal exec -- ghc -isrc -Wall -Werror -Wno-unused-imports -fno-code src/CallableOutcomeKernel.hs
+          cabal exec -- ghc -isrc -Wall -Werror -fno-code src/Phil/Core/CallableOutcomeKernelBridge.hs
+          cabal exec -- ghc -isrc -Wall -Werror -fno-code src/Phil/Core/CallableOutcome.hs
+          cabal exec -- ghc -isrc -Wall -Werror -Wno-unused-imports -fno-code app/CallableOutcomeDecisionCorrespondenceMain.hs
+          cabal exec -- ghc -isrc -Wall -Werror -fno-code app/CallableOutcomeProductionBindingMain.hs
+          cabal exec -- ghc -isrc -Wall -Werror -fno-code test/Phase1CallableOutcomeFidelityMain.hs
+      - name: Execute exact extracted-kernel controls
+        run: cabal exec -- runghc -Wall -Werror -Wno-unused-imports -isrc app/CallableOutcomeDecisionCorrespondenceMain.hs
+      - name: Execute production-binding controls
+        run: cabal exec -- runghc -Wall -Werror -isrc app/CallableOutcomeProductionBindingMain.hs
+      - name: Re-run unchanged CALL-018 corpus
+        run: cabal exec -- runghc -Wall -Werror -isrc test/Phase1CallableOutcomeFidelityMain.hs
+      - name: Record production binding identities
+        run: |
+          set -euo pipefail
+          mkdir -p callable-outcome-production-binding
+          sha256sum \
+            src/CallableOutcomeKernel.hs \
+            src/Phil/Core/CallableOutcomeKernelBridge.hs \
+            src/Phil/Core/CallableOutcome.hs \
+            app/CallableOutcomeProductionBindingMain.hs \
+            test/Phase1CallableOutcomeFidelityMain.hs \
+            > callable-outcome-production-binding/PHIL-CALL-OUTCOME-001.production.sha256
+      - uses: actions/upload-artifact@v4
+        with:
+          name: callable-outcome-production-binding
+          path: callable-outcome-production-binding
+          if-no-files-found: error
