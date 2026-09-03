@@ -54,7 +54,7 @@ test label result = case result of
 checkedSpecialization :: Either String ()
 checkedSpecialization = do
   reference <- aliasReference "type T = pkg.Box[U32, Shared];"
-  (typeArgument, providerArgument) <- exactlyTwoArguments reference
+  (typeArgument, _) <- exactlyTwoArguments reference
   let typeKey = GenericStaticParameterKey "T"
       providerKey = GenericStaticParameterKey "P"
       parameters =
