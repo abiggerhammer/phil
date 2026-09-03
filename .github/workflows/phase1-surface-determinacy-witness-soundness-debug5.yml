@@ -23,7 +23,7 @@ jobs:
           python3 scripts/derive_phase1_surface_grammar.py --write
           python3 scripts/derive_phase1_surface_determinacy_certificate.py --write
 
-      - name: Apply value-only nullable diagnostics
+      - name: Apply wrapped value-only nullable diagnostics
         shell: bash
         run: |
           set -euo pipefail
@@ -45,9 +45,38 @@ jobs:
 
           path = Path('proof/Phil/Surface/GrammarDeterminacyWitnessSoundness.v')
           source = path.read_text()
-          helper_start = source.index('Lemma phase1_surface_nullable_rule_body_defined :')
-          helper_end = source.index('\nLemma nullable_truth_nonterminal_case :', helper_start)
-          helper = r'''Lemma phase1_surface_nullable_rule_body_defined :
+          block_start = source.index('Definition NullableWitnessTruthProperty')
+          block_end = source.index('\nLemma overlap_token_eqb_eq', block_start)
+          wrapped = r'''Inductive NullableWitnessTruthProperty
+            (expression : EbnfExpression) : Prop :=
+          | nullable_witness_truth_property_intro :
+              (forall fuel value,
+                nullable_expression_fuel
+                  fuel phase1_surface_nullable_facts expression = Some value ->
+                value = true) ->
+              NullableWitnessTruthProperty expression.
+
+          Inductive NullableSequenceTruthProperty
+            (items : list EbnfExpression) : Prop :=
+          | nullable_sequence_truth_property_intro :
+              (forall fuel value,
+                nullable_expression_fuel
+                  (S fuel) phase1_surface_nullable_facts (ESequence items) =
+                  Some value ->
+                value = true) ->
+              NullableSequenceTruthProperty items.
+
+          Inductive NullableAlternativeTruthProperty
+            (items : list EbnfExpression) : Prop :=
+          | nullable_alternative_truth_property_intro :
+              (forall fuel value,
+                nullable_expression_fuel
+                  (S fuel) phase1_surface_nullable_facts (EAlternative items) =
+                  Some value ->
+                value = true) ->
+              NullableAlternativeTruthProperty items.
+
+          Lemma phase1_surface_nullable_rule_body_defined :
             forall name body,
               lookupRule name phase1_surface_rules = Some body ->
               exists value,
@@ -60,8 +89,246 @@ jobs:
                 expression_fuel body
                 (phase1_surface_rule_body_choice_safe name body Hlookup)).
           Qed.
+
+          Lemma nullable_truth_nonterminal_case :
+            forall name body,
+              lookupRule name phase1_surface_rules = Some body ->
+              NullableWitness phase1_surface_rules body ->
+              NullableWitnessTruthProperty body ->
+              NullableWitnessTruthProperty (ENonterminal name).
+          Proof.
+            intros name body Hlookup _ IHbody.
+            destruct IHbody as [IHbody].
+            constructor.
+            intros fuel value Heval.
+            destruct fuel as [| fuel].
+            - simpl in Heval. discriminate.
+            - simpl in Heval.
+              inversion Heval. subst value.
+              destruct (phase1_surface_nullable_rule_body_defined
+                name body Hlookup) as [body_value Hbody_eval].
+              pose proof
+                (IHbody expression_fuel body_value Hbody_eval)
+                as Hbody_true.
+              subst body_value.
+              pose proof
+                (phase1_surface_nullable_lookup_rule name body Hlookup)
+                as Hlookup_fact.
+              unfold nullable_expression in Hlookup_fact.
+              rewrite Hbody_eval in Hlookup_fact.
+              simpl in Hlookup_fact.
+              exact Hlookup_fact.
+          Qed.
+
+          Lemma nullable_truth_sequence_case :
+            forall items,
+              NullableSequenceWitness phase1_surface_rules items ->
+              NullableSequenceTruthProperty items ->
+              NullableWitnessTruthProperty (ESequence items).
+          Proof.
+            intros items _ IHitems.
+            destruct IHitems as [IHitems].
+            constructor.
+            intros fuel value Heval.
+            destruct fuel as [| fuel].
+            - simpl in Heval. discriminate.
+            - exact (IHitems fuel value Heval).
+          Qed.
+
+          Lemma nullable_truth_alternative_case :
+            forall items,
+              NullableAlternativeWitness phase1_surface_rules items ->
+              NullableAlternativeTruthProperty items ->
+              NullableWitnessTruthProperty (EAlternative items).
+          Proof.
+            intros items _ IHitems.
+            destruct IHitems as [IHitems].
+            constructor.
+            intros fuel value Heval.
+            destruct fuel as [| fuel].
+            - simpl in Heval. discriminate.
+            - exact (IHitems fuel value Heval).
+          Qed.
+
+          Lemma nullable_truth_optional_case :
+            forall body,
+              NullableWitnessTruthProperty (EOptional body).
+          Proof.
+            intros body.
+            constructor.
+            intros fuel value Heval.
+            destruct fuel; simpl in Heval; try discriminate.
+            inversion Heval. reflexivity.
+          Qed.
+
+          Lemma nullable_truth_repetition_case :
+            forall body,
+              NullableWitnessTruthProperty (ERepetition body).
+          Proof.
+            intros body.
+            constructor.
+            intros fuel value Heval.
+            destruct fuel; simpl in Heval; try discriminate.
+            inversion Heval. reflexivity.
+          Qed.
+
+          Lemma nullable_sequence_truth_nil_case :
+            NullableSequenceTruthProperty [].
+          Proof.
+            constructor.
+            intros fuel value Heval.
+            simpl in Heval.
+            inversion Heval. reflexivity.
+          Qed.
+
+          Lemma nullable_sequence_truth_cons_case :
+            forall item rest,
+              NullableWitness phase1_surface_rules item ->
+              NullableWitnessTruthProperty item ->
+              NullableSequenceWitness phase1_surface_rules rest ->
+              NullableSequenceTruthProperty rest ->
+              NullableSequenceTruthProperty (item :: rest).
+          Proof.
+            intros item rest _ IHitem _ IHrest.
+            destruct IHitem as [IHitem].
+            destruct IHrest as [IHrest].
+            constructor.
+            intros fuel value Heval.
+            pose proof Heval as Hstep.
+            simpl in Hstep.
+            destruct (nullable_expression_fuel
+              fuel phase1_surface_nullable_facts item)
+              as [item_value |] eqn:Hitem_eval.
+            - destruct (nullable_expression_fuel
+                (S fuel) phase1_surface_nullable_facts (ESequence rest))
+                as [rest_value |] eqn:Hrest_eval.
+              + pose proof Hrest_eval as Hrest_local.
+                simpl in Hrest_local.
+                rewrite Hitem_eval, Hrest_local in Hstep.
+                inversion Hstep. subst value.
+                pose proof (IHitem fuel item_value Hitem_eval) as Hitem_true.
+                pose proof (IHrest fuel rest_value Hrest_eval) as Hrest_true.
+                subst item_value rest_value.
+                reflexivity.
+              + pose proof Hrest_eval as Hrest_local.
+                simpl in Hrest_local.
+                rewrite Hitem_eval, Hrest_local in Hstep.
+                discriminate.
+            - rewrite Hitem_eval in Hstep.
+              discriminate.
+          Qed.
+
+          Lemma nullable_alternative_truth_here_case :
+            forall item rest,
+              NullableWitness phase1_surface_rules item ->
+              NullableWitnessTruthProperty item ->
+              NullableAlternativeTruthProperty (item :: rest).
+          Proof.
+            intros item rest _ IHitem.
+            destruct IHitem as [IHitem].
+            constructor.
+            intros fuel value Heval.
+            pose proof Heval as Hstep.
+            simpl in Hstep.
+            destruct (nullable_expression_fuel
+              fuel phase1_surface_nullable_facts item)
+              as [item_value |] eqn:Hitem_eval.
+            - destruct (nullable_expression_fuel
+                (S fuel) phase1_surface_nullable_facts (EAlternative rest))
+                as [rest_value |] eqn:Hrest_eval.
+              + pose proof Hrest_eval as Hrest_local.
+                simpl in Hrest_local.
+                rewrite Hitem_eval, Hrest_local in Hstep.
+                inversion Hstep. subst value.
+                pose proof (IHitem fuel item_value Hitem_eval) as Hitem_true.
+                subst item_value.
+                reflexivity.
+              + pose proof Hrest_eval as Hrest_local.
+                simpl in Hrest_local.
+                rewrite Hitem_eval, Hrest_local in Hstep.
+                discriminate.
+            - rewrite Hitem_eval in Hstep.
+              discriminate.
+          Qed.
+
+          Lemma nullable_alternative_truth_later_case :
+            forall item rest,
+              NullableAlternativeWitness phase1_surface_rules rest ->
+              NullableAlternativeTruthProperty rest ->
+              NullableAlternativeTruthProperty (item :: rest).
+          Proof.
+            intros item rest _ IHrest.
+            destruct IHrest as [IHrest].
+            constructor.
+            intros fuel value Heval.
+            pose proof Heval as Hstep.
+            simpl in Hstep.
+            destruct (nullable_expression_fuel
+              fuel phase1_surface_nullable_facts item)
+              as [item_value |] eqn:Hitem_eval.
+            - destruct (nullable_expression_fuel
+                (S fuel) phase1_surface_nullable_facts (EAlternative rest))
+                as [rest_value |] eqn:Hrest_eval.
+              + pose proof Hrest_eval as Hrest_local.
+                simpl in Hrest_local.
+                rewrite Hitem_eval, Hrest_local in Hstep.
+                inversion Hstep. subst value.
+                pose proof (IHrest fuel rest_value Hrest_eval) as Hrest_true.
+                subst rest_value.
+                destruct item_value; reflexivity.
+              + pose proof Hrest_eval as Hrest_local.
+                simpl in Hrest_local.
+                rewrite Hitem_eval, Hrest_local in Hstep.
+                discriminate.
+            - rewrite Hitem_eval in Hstep.
+              discriminate.
+          Qed.
+
+          Theorem phase1_surface_nullable_witness_value_sound :
+            (forall expression,
+              NullableWitness phase1_surface_rules expression ->
+              NullableWitnessTruthProperty expression) /\
+            (forall items,
+              NullableSequenceWitness phase1_surface_rules items ->
+              NullableSequenceTruthProperty items) /\
+            (forall items,
+              NullableAlternativeWitness phase1_surface_rules items ->
+              NullableAlternativeTruthProperty items).
+          Proof.
+            apply NullableWitness_mutind.
+            - exact nullable_truth_nonterminal_case.
+            - exact nullable_truth_sequence_case.
+            - exact nullable_truth_alternative_case.
+            - exact nullable_truth_optional_case.
+            - exact nullable_truth_repetition_case.
+            - exact nullable_sequence_truth_nil_case.
+            - exact nullable_sequence_truth_cons_case.
+            - exact nullable_alternative_truth_here_case.
+            - exact nullable_alternative_truth_later_case.
+          Qed.
+
+          Corollary phase1_surface_nullable_witness_matches_computed_facts :
+            forall expression,
+              NullableWitness phase1_surface_rules expression ->
+              choice_bodies_nonnullable_fuel expression_fuel expression = true ->
+              nullable_expression phase1_surface_nullable_facts expression = true.
+          Proof.
+            intros expression Hnullable Hsafe.
+            destruct (choice_safe_nullable_defined
+              expression_fuel expression Hsafe)
+              as [value Heval].
+            destruct
+              (proj1 phase1_surface_nullable_witness_value_sound
+                expression Hnullable)
+              as [Htruth].
+            pose proof (Htruth expression_fuel value Heval) as Htrue.
+            subst value.
+            unfold nullable_expression.
+            rewrite Heval.
+            reflexivity.
+          Qed.
           '''
-          path.write_text(source[:helper_start] + helper + source[helper_end:])
+          path.write_text(source[:block_start] + wrapped + source[block_end:])
           PY
 
       - name: Compile witness soundness with timing
