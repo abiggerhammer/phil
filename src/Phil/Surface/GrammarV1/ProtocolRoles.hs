@@ -7,6 +7,7 @@ module Phil.Surface.GrammarV1.ProtocolRoles
 import Phil.Core.Protocol (ProtocolRoleKey (..))
 import Phil.Core.Protocol.Family (ProtocolSessionTemplate)
 import Phil.Core.Session (dualSession)
+import Phil.Core.Value (definitionallyEqualSession)
 import Phil.Surface.GrammarV1.Parser
   ( GrammarV1ProtocolDecl (..)
   , GrammarV1RoleSessionDecl (..)
@@ -54,7 +55,9 @@ grammarV1ClosedProtocolRoleTemplates source
 
 -- | Validate the closed role pair against the semantic constraints already
 -- owned by Core's binary protocol family: the two roles must be distinct, and
--- the second local session must be exactly the Core dual of the first. Source
+-- the second local session must be definitionally equal to the Core dual of the
+-- first. Core's alpha-aware session equality owns binder renaming, so distinct
+-- role-local source binder names do not become a false duality failure. Source
 -- outside the bounded closed/primitive fragment remains Nothing; an admitted
 -- source pair that violates role identity or duality is a distinct Left. No
 -- declaration/interface identity or protocol-instance revision is synthesized.
@@ -78,7 +81,7 @@ grammarV1CheckedClosedProtocolRoleTemplates source = do
       pure $
         if firstKey == secondKey
           then Left (DuplicateProtocolRole firstKey)
-          else if secondSession /= dualSession firstSession
+          else if not (definitionallyEqualSession secondSession (dualSession firstSession))
             then Left (NonDualProtocolRoles firstKey secondKey)
             else Right templates
     _ -> Nothing
