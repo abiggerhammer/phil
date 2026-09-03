@@ -1,6 +1,7 @@
 module Phil.Surface.GrammarV1.TypeAlias
   ( grammarV1CheckedTypeAlias
   , grammarV1CheckedTypeAliasMode
+  , grammarV1CheckedTypeAliasModeWithNamedResolutions
   ) where
 
 import Data.Text (Text)
@@ -15,8 +16,12 @@ import Phil.Core.Static (StaticContext)
 import Phil.Core.Syntax (Ty)
 import Phil.Surface.Check.Support (emptySurfaceState)
 import Phil.Surface.GrammarV1.CheckedType
-  ( grammarV1CheckedType
+  ( GrammarV1CheckedResolvedTypeMode
+  , GrammarV1CheckedTypeModeResolutionError
+  , GrammarV1ResolvedNamedTypeMode
+  , grammarV1CheckedType
   , grammarV1CheckedTypeMode
+  , grammarV1CheckedTypeModeWithNamedResolutions
   )
 import Phil.Surface.GrammarV1.Parser
   ( GrammarV1TypeAliasDecl (..)
@@ -72,6 +77,39 @@ grammarV1CheckedTypeAliasMode staticContext source
       checked <- grammarV1CheckedTypeMode
         staticContext
         emptySurfaceState
+        (locatedValue (grammarV1TypeAliasTarget source))
+      pure $ fmap
+        (\(checkedMode, steps) ->
+          ( (locatedValue (grammarV1TypeAliasName source), checkedMode)
+          , steps
+          ))
+        checked
+
+-- | Extend transparent alias mode inheritance through the exact named-type
+-- resolution seam established by #616. Intrinsic targets behave exactly as in
+-- 'grammarV1CheckedTypeAliasMode'; a bare named target may additionally consume
+-- exact declaration/static resolution evidence, and the resulting stable
+-- declaration/interface provenance stays attached to the inherited mode.
+--
+-- Alias spelling still has no authority to reclassify its target. Generic or
+-- requirement-bearing aliases remain outside this closed declaration fragment,
+-- and specialized named targets remain outside generic-instantiation competence.
+grammarV1CheckedTypeAliasModeWithNamedResolutions
+  :: StaticContext
+  -> [GrammarV1ResolvedNamedTypeMode]
+  -> GrammarV1TypeAliasDecl
+  -> Maybe
+      (Either
+        GrammarV1CheckedTypeModeResolutionError
+        ((Text, GrammarV1CheckedResolvedTypeMode), [FocusStep]))
+grammarV1CheckedTypeAliasModeWithNamedResolutions staticContext resolutions source
+  | not (null (grammarV1TypeAliasGenericParams source)) = Nothing
+  | not (null (grammarV1TypeAliasRequirements source)) = Nothing
+  | otherwise = do
+      checked <- grammarV1CheckedTypeModeWithNamedResolutions
+        staticContext
+        emptySurfaceState
+        resolutions
         (locatedValue (grammarV1TypeAliasTarget source))
       pure $ fmap
         (\(checkedMode, steps) ->
