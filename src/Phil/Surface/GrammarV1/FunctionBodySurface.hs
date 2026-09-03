@@ -31,7 +31,7 @@ import Phil.Surface.Syntax
   , SurfaceExpression (..)
   )
 
--- | First checked Grammar-v1 function-body carrier. The already-checked header is
+-- | Checked Grammar-v1 function-body carrier. The already-checked header is
 -- retained unchanged and the body result is the ordinary production surface
 -- checker's exact terminal-control projection.
 data GrammarV1CheckedClosedFunctionBody = GrammarV1CheckedClosedFunctionBody
@@ -49,22 +49,26 @@ data GrammarV1FunctionBodySurfaceError
   | GrammarV1FunctionBodyResultMismatch Ty [Control]
   deriving (Eq, Show)
 
--- | Route the first body-semantic fragment through the existing production
--- surface checker rather than introducing a second body checker.
+-- | Route the bounded closed body-semantic fragment through the existing
+-- production surface checker rather than introducing a second body checker.
 --
--- This slice is deliberately parameter-free so no source term spelling is used
--- as binder authority and SURF-009 remains separate. The body must contain one
--- return statement whose expression is recursively limited to Bool/Unit and
--- parentheses. The supplied checked header is re-derived from the same source
--- declaration and stable declaration/definition identities before body checking,
--- preventing a checked body from being attached to a different function header.
+-- This slice remains deliberately parameter-free so no source term spelling is
+-- used as binder authority and SURF-009 stays separate. Every admitted statement
+-- is either a return or an expression statement, and every admitted expression is
+-- recursively limited to Bool/Unit and parentheses. Source order is preserved
+-- exactly. The production checker therefore owns sequencing semantics, including
+-- rejection of statements after terminal control and ordinary unrestricted-value
+-- discard behavior.
 --
--- The synthetic surface component has no parameters or provides contract. Its
--- only purpose is to reuse the established expression/control/resource checker;
--- success additionally requires its exact terminal control to be one Return of
--- the header's already-checked result type. Calls, names, literals other than
--- Bool/Unit, bindings, branching, protocol/resource operations, closures, and all
--- other body forms remain structural non-competence (Nothing).
+-- The supplied checked header is re-derived from the same source declaration and
+-- stable declaration/definition identities before body checking, preventing a
+-- checked body from being attached to a different function header. The synthetic
+-- surface component has no parameters or provides contract; its only purpose is
+-- to reuse the established expression/control/resource checker. Success still
+-- requires exact terminal control to be one Return of the header's already-checked
+-- result type. Calls, names, literals other than Bool/Unit, let-bindings,
+-- branching, protocol/resource operations, closures, and all other body forms
+-- remain structural non-competence (Nothing).
 grammarV1CheckedClosedFunctionBody
   :: StaticContext
   -> GrammarV1CheckedFunctionHeader
@@ -87,7 +91,7 @@ grammarV1CheckedClosedFunctionBody staticContext expectedHeader source = do
           pure (Left (GrammarV1FunctionBodyHeaderMismatch expectedHeader actualHeader))
       | not (null (checkedFunctionParameters actualHeader)) -> Nothing
       | otherwise -> do
-          body <- grammarV1ClosedReturnBody (grammarV1FunctionBody source)
+          body <- grammarV1ClosedBody (grammarV1FunctionBody source)
           let syntheticComponent = Located
                 (locatedSpan (grammarV1FunctionBody source))
                 (Component
@@ -110,26 +114,35 @@ grammarV1CheckedClosedFunctionBody staticContext expectedHeader source = do
                 }
               else Left (GrammarV1FunctionBodyResultMismatch expectedResult controls)
 
-grammarV1ClosedReturnBody :: Located GrammarV1Block -> Maybe (Located Block)
-grammarV1ClosedReturnBody (Located blockSpan (GrammarV1Block statements)) =
-  case statements of
-    [Located statementSpan (GrammarV1ReturnStatement sourceExpression)] -> do
-      expression <- grammarV1ClosedReturnExpression sourceExpression
-      pure (Located blockSpan (Block
-        [Located statementSpan (ReturnStatement expression)]))
-    _ -> Nothing
+grammarV1ClosedBody :: Located GrammarV1Block -> Maybe (Located Block)
+grammarV1ClosedBody (Located blockSpan (GrammarV1Block statements)) = do
+  checked <- mapM grammarV1ClosedStatement statements
+  pure (Located blockSpan (Block checked))
 
-grammarV1ClosedReturnExpression
+grammarV1ClosedStatement
+  :: Located GrammarV1Statement
+  -> Maybe (Located Statement)
+grammarV1ClosedStatement (Located statementSpan source) =
+  case source of
+    GrammarV1ReturnStatement sourceExpression -> do
+      expression <- grammarV1ClosedExpression sourceExpression
+      pure (Located statementSpan (ReturnStatement expression))
+    GrammarV1ExpressionStatement sourceExpression -> do
+      expression <- grammarV1ClosedExpression sourceExpression
+      pure (Located statementSpan (ExpressionStatement expression))
+    GrammarV1LetStatement {} -> Nothing
+
+grammarV1ClosedExpression
   :: Located GrammarV1Expression
   -> Maybe (Located SurfaceExpression)
-grammarV1ClosedReturnExpression (Located expressionSpan source) =
+grammarV1ClosedExpression (Located expressionSpan source) =
   case source of
     GrammarV1BoolExpression value ->
       Just (Located expressionSpan (BooleanExpression value))
     GrammarV1UnitExpression ->
       Just (Located expressionSpan UnitExpression)
     GrammarV1ParenthesizedExpression inner -> do
-      checked <- grammarV1ClosedReturnExpression inner
+      checked <- grammarV1ClosedExpression inner
       Just (Located expressionSpan (locatedValue checked))
     _ -> Nothing
 
