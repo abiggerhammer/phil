@@ -47,6 +47,7 @@ import Phil.Core.Syntax
   , Ty (..)
   , Value (..)
   )
+import qualified ResourceLoopKernel as ResourceLoopKernel
 
 data ValueResult = ValueResult
   { valueResultType :: Ty
@@ -251,15 +252,26 @@ transportValue value proofName targetTy state = do
     _ -> do
       mapLeft valueSortError (checkTypeSorts state targetTy)
       case transportRequirement sourceTy targetTy of
-        TransportDefinitionallyEqual -> Left (TransportNotRequired sourceTy)
+        TransportDefinitionallyEqual ->
+          case ResourceLoopKernel.decideStateTransportByFacts
+              (definitionallyEqualTy sourceTy targetTy) False of
+            ResourceLoopKernel.StateTransportAcceptedDecision ->
+              Left (TransportNotRequired sourceTy)
+            _ -> resourceLoopKernelInvariant "definitional-transport"
         TransportUnsupported -> Left (UnsupportedTransport sourceTy targetTy)
         TransportRequires proposition -> do
           evidenceUses <- mapLeft ValueRefinementError $
             dischargePropositionUsing proofName proposition (valueResultState source)
-          Right source
-            { valueResultType = targetTy
-            , valueResultEvidence = appendEvidenceList evidenceUses (valueResultEvidence source)
-            }
+          let explicitEvidenceAccepted = not (null evidenceUses)
+          case ResourceLoopKernel.decideStateTransportByFacts
+              (definitionallyEqualTy sourceTy targetTy)
+              explicitEvidenceAccepted of
+            ResourceLoopKernel.StateTransportAcceptedDecision ->
+              Right source
+                { valueResultType = targetTy
+                , valueResultEvidence = appendEvidenceList evidenceUses (valueResultEvidence source)
+                }
+            _ -> resourceLoopKernelInvariant "explicit-transport"
 
 data TransportRequirement
   = TransportDefinitionallyEqual
@@ -274,6 +286,10 @@ transportRequirement source target
         (TyBytes sourceIndex, TyBytes targetIndex) ->
           TransportRequires (Equal sourceIndex targetIndex)
         _ -> TransportUnsupported
+
+resourceLoopKernelInvariant :: String -> Either e a
+resourceLoopKernelInvariant label =
+  error ("ResourceLoopKernel mismatch: " <> label)
 
 compareTypes :: Ty -> Ty -> EqualityBoundary
 compareTypes actual expected

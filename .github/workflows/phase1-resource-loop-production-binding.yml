@@ -1,0 +1,121 @@
+name: Phase 1 Resource Loop Production Binding
+
+on:
+  pull_request:
+    paths:
+      - 'generated/ResourceLoopKernel.hs'
+      - 'src/ResourceLoopKernel.hs'
+      - 'src/Phil/Systems/ControlStateProjection.hs'
+      - 'src/Phil/Core/Value.hs'
+      - 'phil-core.cabal'
+      - 'proof/Phil/Core/ResourceJoin.v'
+      - 'proof/Phil/Core/ResourceLoop.v'
+      - 'proof/Phil/Core/ResourceLoopImplementation.v'
+      - 'proof/Phil/Core/ResourceLoopImplementationExtraction.v'
+      - 'app/ResourceLoopDecisionCorrespondenceMain.hs'
+      - 'test/Phase1LoopStateProjectionMain.hs'
+      - 'test/Phase1PropositionalStateTransportMain.hs'
+      - 'docs/phase-1/resource-loop-implementation-refinement-v1.md'
+      - 'docs/phase-1/resource-loop-production-binding-v1.md'
+      - '.github/workflows/phase1-resource-loop-production-binding.yml'
+
+permissions:
+  contents: read
+
+jobs:
+  exact-resource-loop-kernel:
+    runs-on: ubuntu-latest
+    container:
+      image: rocq/rocq-prover:9.2.0
+      options: --user root
+    steps:
+      - uses: actions/checkout@v4
+      - name: Fresh-extract exact Resource Loop kernel
+        shell: bash
+        run: |
+          set -euo pipefail
+          export PATH="/home/rocq/.opam/${COMPILER}/bin:$PATH"
+          rocq c -Q proof/Phil Phil proof/Phil/Core/Syntax.v
+          rocq c -Q proof/Phil Phil proof/Phil/Core/Context.v
+          rocq c -Q proof/Phil Phil proof/Phil/Core/ContextJoin.v
+          rocq c -Q proof/Phil Phil proof/Phil/Core/ProcessJoin.v
+          rocq c -Q proof/Phil Phil proof/Phil/Core/ResourceJoin.v
+          rocq c -Q proof/Phil Phil proof/Phil/Core/ResourceLoop.v
+          rocq c -Q proof/Phil Phil proof/Phil/Core/ResourceLoopImplementation.v
+          rm -f ResourceLoopKernel.hs
+          rocq c -Q proof/Phil Phil proof/Phil/Core/ResourceLoopImplementationExtraction.v
+          test -s ResourceLoopKernel.hs
+          echo 'a9c8341d35f193300a5be18f74a3020e1211e6d19a255d31e2f09a8a43efb564  ResourceLoopKernel.hs' | sha256sum -c -
+          cmp ResourceLoopKernel.hs generated/ResourceLoopKernel.hs
+          cmp ResourceLoopKernel.hs src/ResourceLoopKernel.hs
+      - name: Record exact kernel identities
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p resource-loop-exact-kernel
+          cp ResourceLoopKernel.hs resource-loop-exact-kernel/
+          sha256sum \
+            ResourceLoopKernel.hs \
+            generated/ResourceLoopKernel.hs \
+            src/ResourceLoopKernel.hs \
+            proof/Phil/Core/ResourceLoop.v \
+            proof/Phil/Core/ResourceLoopImplementation.v \
+            proof/Phil/Core/ResourceLoopImplementationExtraction.v \
+            > resource-loop-exact-kernel/PHIL-RES-LOOP-001.exact-kernel.sha256
+          cat resource-loop-exact-kernel/PHIL-RES-LOOP-001.exact-kernel.sha256
+      - uses: actions/upload-artifact@v4
+        with:
+          name: resource-loop-exact-kernel
+          path: resource-loop-exact-kernel
+          if-no-files-found: error
+
+  verify-resource-loop-production-binding:
+    needs: exact-resource-loop-kernel
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: haskell-actions/setup@v2
+        with:
+          ghc-version: '9.6.7'
+          cabal-version: 'latest'
+      - name: Build production library with warnings as errors
+        run: cabal build lib:phil-core --ghc-options=-Werror
+      - name: Strict-typecheck bound Resource Loop surface
+        shell: bash
+        run: |
+          set -euo pipefail
+          cabal exec -- ghc -isrc -Wall -Werror -fno-code src/ResourceLoopKernel.hs
+          cabal exec -- ghc -isrc -Wall -Werror -fno-code src/Phil/Systems/ControlStateProjection.hs
+          cabal exec -- ghc -isrc -Wall -Werror -fno-code src/Phil/Core/Value.hs
+          cabal exec -- ghc -isrc -Wall -Werror -fno-code app/ResourceLoopDecisionCorrespondenceMain.hs
+      - name: Execute 8 direct controls through production kernel
+        run: cabal exec -- runghc -isrc app/ResourceLoopDecisionCorrespondenceMain.hs
+      - name: Re-run unchanged RES-009/010 correspondence corpus
+        shell: bash
+        run: |
+          set -euo pipefail
+          cabal exec -- runghc -Wall -Werror -isrc test/Phase1LoopStateProjectionMain.hs
+          cabal exec -- runghc -Wall -Werror -isrc test/Phase1PropositionalStateTransportMain.hs
+      - name: Record production-binding identities
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p resource-loop-production-binding
+          sha256sum \
+            generated/ResourceLoopKernel.hs \
+            src/ResourceLoopKernel.hs \
+            src/Phil/Systems/ControlStateProjection.hs \
+            src/Phil/Core/Value.hs \
+            phil-core.cabal \
+            app/ResourceLoopDecisionCorrespondenceMain.hs \
+            test/Phase1LoopStateProjectionMain.hs \
+            test/Phase1PropositionalStateTransportMain.hs \
+            docs/phase-1/resource-loop-implementation-refinement-v1.md \
+            docs/phase-1/resource-loop-production-binding-v1.md \
+            > resource-loop-production-binding/PHIL-RES-LOOP-001.production-binding.sha256
+          cat resource-loop-production-binding/PHIL-RES-LOOP-001.production-binding.sha256
+      - uses: actions/upload-artifact@v4
+        with:
+          name: resource-loop-production-binding
+          path: resource-loop-production-binding
+          if-no-files-found: error
