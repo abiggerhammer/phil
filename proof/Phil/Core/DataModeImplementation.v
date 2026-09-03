@@ -1,7 +1,7 @@
 From Stdlib Require Import Bool.Bool Lists.List Lia.
 Import ListNotations.
 
-From Phil.Core Require Import DataMode.
+From Phil.Core Require Import Syntax DataMode.
 
 (*
   PHIL-DATA-MODE-001 — executable implementation-refinement staging.
