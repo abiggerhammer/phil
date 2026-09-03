@@ -67,7 +67,7 @@ Proof.
     targetImplementationReason contractMatches detailPresent.
   destruct nonWeakening, equalToMinimum, justificationPresent,
     targetImplementationReason, contractMatches, detailPresent;
-    simpl; intuition discriminate.
+    simpl; intuition congruence.
 Qed.
 
 Theorem explicit_closure_mode_decision_accept_iff_certified :
@@ -134,7 +134,7 @@ Theorem checked_closure_mode_shape_accept_iff_facts :
 Proof.
   intros minimumExact selectedExact justificationExact.
   destruct minimumExact, selectedExact, justificationExact;
-    simpl; intuition discriminate.
+    simpl; intuition congruence.
 Qed.
 
 Theorem certified_explicit_closure_mode_supplies_checked_shape :
