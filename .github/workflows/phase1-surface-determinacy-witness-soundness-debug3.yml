@@ -1,0 +1,166 @@
+name: Phase 1 Surface Determinacy Witness Soundness Debug 3
+
+on:
+  pull_request:
+
+permissions:
+  contents: read
+
+jobs:
+  rocq-witness-soundness-debug3:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    container:
+      image: rocq/rocq-prover:9.2.0
+      options: --user root
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Derive exact Grammar-v1 inputs
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 scripts/derive_phase1_surface_grammar.py --write
+          python3 scripts/derive_phase1_surface_determinacy_certificate.py --write
+
+      - name: Apply diagnostics and split alternative properties by fuel
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 - <<'PY'
+          from pathlib import Path
+          import textwrap
+
+          workflow = Path('.github/workflows/phase1-surface-determinacy-witness-soundness-debug2.yml').read_text()
+          marker = workflow.index('- name: Apply existing diagnostics and strip witness terms from alternatives')
+          start = workflow.index('          from pathlib import Path', marker)
+          end = workflow.index('\n          PY', start)
+          code = textwrap.dedent(workflow[start:end])
+          exec(compile(code, '<existing-debug2-diagnostics>', 'exec'), {})
+
+          path = Path('proof/Phil/Surface/GrammarDeterminacyWitnessSoundness.v')
+          source = path.read_text()
+          start = source.index('Lemma nullable_alternative_here_property_case :')
+          end = source.index('\nTheorem phase1_surface_nullable_witness_fuel_sound', start)
+          replacement = r'''Lemma nullable_alternative_here_at_fuel :
+            forall item rest fuel,
+              NullableWitnessFuelProperty item ->
+              S fuel <= expression_fuel ->
+              forallb
+                (fun candidate =>
+                  andb
+                    (negb (nullable_expression phase1_surface_nullable_facts candidate))
+                    (choice_bodies_nonnullable_fuel fuel candidate))
+                (item :: rest) = true ->
+              nullable_expression_fuel
+                (S fuel) phase1_surface_nullable_facts
+                (EAlternative (item :: rest)) = Some true.
+          Proof.
+            intros item rest fuel IHitem Hfuel Hsafe.
+            simpl in Hsafe.
+            apply andb_true_iff in Hsafe as [Hhead_safe Hrest_safe].
+            apply andb_true_iff in Hhead_safe as [_ Hitem_safe].
+            pose proof
+              (IHitem fuel
+                (Nat.le_trans (Nat.le_succ_diag_r fuel) Hfuel)
+                Hitem_safe)
+              as Hitem_eval.
+            assert (Hrest_expr_safe :
+              choice_bodies_nonnullable_fuel
+                (S fuel) (EAlternative rest) = true).
+            { simpl. exact Hrest_safe. }
+            exact
+              (nullable_alternative_here_from_safe_tail
+                fuel item rest Hitem_eval Hrest_expr_safe).
+          Qed.
+
+          Lemma nullable_alternative_later_at_fuel :
+            forall item rest fuel,
+              NullableAlternativeFuelProperty rest ->
+              S fuel <= expression_fuel ->
+              forallb
+                (fun candidate =>
+                  andb
+                    (negb (nullable_expression phase1_surface_nullable_facts candidate))
+                    (choice_bodies_nonnullable_fuel fuel candidate))
+                (item :: rest) = true ->
+              nullable_expression_fuel
+                (S fuel) phase1_surface_nullable_facts
+                (EAlternative (item :: rest)) = Some true.
+          Proof.
+            intros item rest fuel IHrest Hfuel Hsafe.
+            simpl in Hsafe.
+            apply andb_true_iff in Hsafe as [Hhead_safe Hrest_safe].
+            apply andb_true_iff in Hhead_safe as [_ Hitem_safe].
+            pose proof (IHrest fuel Hfuel Hrest_safe) as Hrest_eval.
+            exact
+              (nullable_alternative_later_from_safe_head
+                fuel item rest Hitem_safe Hrest_eval).
+          Qed.
+
+          Lemma nullable_alternative_here_property_case :
+            forall item rest,
+              NullableWitnessFuelProperty item ->
+              NullableAlternativeFuelProperty (item :: rest).
+          Proof.
+            intros item rest IHitem.
+            unfold NullableAlternativeFuelProperty.
+            intros fuel Hfuel Hsafe.
+            exact
+              (nullable_alternative_here_at_fuel
+                item rest fuel IHitem Hfuel Hsafe).
+          Qed.
+
+          Lemma nullable_alternative_later_property_case :
+            forall item rest,
+              NullableAlternativeFuelProperty rest ->
+              NullableAlternativeFuelProperty (item :: rest).
+          Proof.
+            intros item rest IHrest.
+            unfold NullableAlternativeFuelProperty.
+            intros fuel Hfuel Hsafe.
+            exact
+              (nullable_alternative_later_at_fuel
+                item rest fuel IHrest Hfuel Hsafe).
+          Qed.
+
+          Lemma nullable_alternative_here_fuel_case :
+            forall item rest,
+              NullableWitness phase1_surface_rules item ->
+              NullableWitnessFuelProperty item ->
+              NullableAlternativeFuelProperty (item :: rest).
+          Proof.
+            intros item rest _ IHitem.
+            exact (nullable_alternative_here_property_case item rest IHitem).
+          Qed.
+
+          Lemma nullable_alternative_later_fuel_case :
+            forall item rest,
+              NullableAlternativeWitness phase1_surface_rules rest ->
+              NullableAlternativeFuelProperty rest ->
+              NullableAlternativeFuelProperty (item :: rest).
+          Proof.
+            intros item rest _ IHrest.
+            exact (nullable_alternative_later_property_case item rest IHrest).
+          Qed.
+          '''
+          path.write_text(source[:start] + replacement + source[end:])
+          PY
+
+      - name: Compile witness soundness with timing
+        shell: bash
+        run: |
+          set -euo pipefail
+          export PATH="/home/rocq/.opam/${COMPILER}/bin:$PATH"
+          rocq c -Q proof/Phil Phil proof/Phil/Surface/Grammar.v
+          rocq c -Q proof/Phil Phil proof/Phil/Surface/GrammarDerivation.v
+          rocq c -Q proof/Phil Phil proof/Phil/Surface/GrammarDerivationOracle.v
+          rocq c -Q proof/Phil Phil proof/Phil/Surface/GrammarDeterminacyCertificate.v
+          rocq c -Q proof/Phil Phil proof/Phil/Surface/GrammarDeterminacyNullableFirst.v
+          rocq c -Q proof/Phil Phil proof/Phil/Surface/GrammarDeterminacyFollowOverlap.v
+          rocq c -Q proof/Phil Phil proof/Phil/Surface/GrammarDeterminacySimpleResolvers.v
+          rocq c -Q proof/Phil Phil proof/Phil/Surface/GrammarDeterminacyStructuralResolvers.v
+          rocq c -Q proof/Phil Phil proof/Phil/Surface/GrammarDeterminacyPredictiveOracle.v
+          rocq c -Q proof/Phil Phil proof/Phil/Surface/GrammarDerivationLookahead.v
+          timeout 300s rocq c -time -Q proof/Phil Phil \
+            proof/Phil/Surface/GrammarDeterminacyWitnessSoundness.v
