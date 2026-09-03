@@ -1,0 +1,17 @@
+name: Resource Loop helper smoke
+
+on:
+  push:
+    branches:
+      - bind-resource-loop-kernel
+    paths:
+      - '.github/workflows/_resource-loop-helper-smoke.yml'
+
+permissions:
+  contents: read
+
+jobs:
+  smoke:
+    runs-on: ubuntu-latest
+    steps:
+      - run: echo helper-smoke-ok
