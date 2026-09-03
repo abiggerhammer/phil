@@ -1,0 +1,32 @@
+name: Apply Resource Invariant binding patch
+
+on:
+  push:
+    branches:
+      - bind-resource-invariant-kernel
+    paths:
+      - '.github/workflows/_apply-resource-invariant-binding.yml'
+
+permissions:
+  contents: write
+
+jobs:
+  apply:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: bind-resource-invariant-kernel
+      - name: Apply production binding
+        run: |
+          set -euo pipefail
+          python3 scripts/apply_resource_invariant_binding.py
+          git diff --check
+      - name: Commit production binding
+        run: |
+          set -euo pipefail
+          git config user.name github-actions[bot]
+          git config user.email 41898282+github-actions[bot]@users.noreply.github.com
+          git add src/Phil/Systems/ControlStateInvariant.hs phil-core.cabal
+          git commit -m 'Bind Resource Invariant kernel to invariant boundary checking'
+          git push origin HEAD:bind-resource-invariant-kernel
