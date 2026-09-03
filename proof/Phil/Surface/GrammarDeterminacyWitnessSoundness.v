@@ -15,6 +15,10 @@ From Phil.Surface Require Import
 Import ListNotations.
 Open Scope string_scope.
 
+Opaque phase1_surface_rules
+  phase1_surface_nullable_facts
+  phase1_surface_first_facts.
+
 (*
   Fixed-point soundness bridge for PHIL-SURFACE-DETERM-001.
 
@@ -668,3 +672,7 @@ Proof.
   rewrite Heval.
   exact Hmem.
 Qed.
+
+Transparent phase1_surface_rules
+  phase1_surface_nullable_facts
+  phase1_surface_first_facts.
