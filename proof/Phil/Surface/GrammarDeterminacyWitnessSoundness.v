@@ -50,13 +50,23 @@ Qed.
 Lemma phase1_surface_rule_choice_safe :
   forall name body,
     lookupRule name phase1_surface_rules = Some body ->
-    choice_bodies_nonnullable_fuel expression_fuel body = true.
+    choice_bodies_nonnullable_rule (name, body) = true.
 Proof.
   intros name body Hlookup.
-  change (choice_bodies_nonnullable_rule (name, body) = true).
   eapply lookupRule_forallb.
   - exact phase1_surface_all_choice_bodies_are_nonnullable.
   - exact Hlookup.
+Qed.
+
+Lemma phase1_surface_rule_body_choice_safe :
+  forall name body,
+    lookupRule name phase1_surface_rules = Some body ->
+    choice_bodies_nonnullable_fuel expression_fuel body = true.
+Proof.
+  intros name body Hlookup.
+  pose proof (phase1_surface_rule_choice_safe name body Hlookup) as Hsafe.
+  cbn in Hsafe.
+  exact Hsafe.
 Qed.
 
 Lemma lookup_bool_nullable_pass :
@@ -252,7 +262,7 @@ Proof.
     + simpl in Hsafe. discriminate.
     + assert (Hbody_safe :
         choice_bodies_nonnullable_fuel expression_fuel body = true).
-      { eapply phase1_surface_rule_choice_safe. exact Hlookup. }
+      { eapply phase1_surface_rule_body_choice_safe. exact Hlookup. }
       specialize (IHbody expression_fuel (Nat.le_refl _) Hbody_safe).
       pose proof (phase1_surface_nullable_lookup_rule name body Hlookup)
         as Hlookup_fact.
@@ -499,7 +509,7 @@ Proof.
     + simpl in Hsafe. discriminate.
     + assert (Hbody_safe :
         choice_bodies_nonnullable_fuel expression_fuel body = true).
-      { eapply phase1_surface_rule_choice_safe. exact Hlookup. }
+      { eapply phase1_surface_rule_body_choice_safe. exact Hlookup. }
       destruct (IHbody expression_fuel (Nat.le_refl _) Hbody_safe)
         as [tokens [Hbody_first Hbody_mem]].
       pose proof (phase1_surface_first_lookup_rule name body Hlookup)
