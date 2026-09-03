@@ -164,6 +164,11 @@ jobs:
                   raise SystemExit(f'missing FIRST branch binder: {old}')
               first = first.replace(old, new)
 
+          redundant = '* rewrite String.eqb_refl. reflexivity.'
+          if first.count(redundant) != 2:
+              raise SystemExit(f'expected two redundant token rewrites, found {first.count(redundant)}')
+          first = first.replace(redundant, '* reflexivity.')
+
           wrapper = r'''
 
           Theorem phase1_surface_first_witness_fuel_sound :
