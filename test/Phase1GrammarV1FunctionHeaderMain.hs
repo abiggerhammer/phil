@@ -19,6 +19,10 @@ import Phil.Core.Syntax
   , Name (..)
   , Ty (..)
   )
+import Phil.Surface.Check.Types
+  ( RejectionClass (..)
+  , SurfaceCheckError (..)
+  )
 import Phil.Surface.GrammarV1.CallableSignature
   ( GrammarV1CheckedFunctionHeader (..)
   , grammarV1CheckedClosedFunctionHeader
@@ -49,6 +53,10 @@ main = do
         functionCompetenceBoundaries
     , test "SURF-008 closed parameter-free function bodies route through production checking"
         closedFunctionBodySemantics
+    , test "SURF-008 closed function statement sequences preserve source order through production checking"
+        closedFunctionBodyStatementSequence
+    , test "SURF-008 closed function bodies delegate terminal sequencing rejection to production checking"
+        closedFunctionBodyControlAfterTerminal
     , test "SURF-008 closed function bodies preserve exact result-type rejection"
         closedFunctionBodyResultMismatch
     , test "SURF-008 checked function bodies cannot attach to a different checked header"
@@ -206,6 +214,46 @@ closedFunctionBodySemantics = do
     )
     "parenthesized Unit return body did not preserve exact terminal control"
 
+closedFunctionBodyStatementSequence :: Either String ()
+closedFunctionBodyStatementSequence = do
+  source <- onlyFunction $ Text.unlines
+    [ "fn sequence() -> Bool satisfies C {"
+    , "  unit;"
+    , "  true;"
+    , "  return false;"
+    , "}"
+    ]
+  let declarationKey = DeclarationKey "function.body.sequence.lineage"
+      definitionRevision = DefinitionRevision "function.body.sequence.definition"
+  header <- checkedHeader declarationKey definitionRevision source
+  assert
+    ( grammarV1CheckedClosedFunctionBody emptyStaticContext header source
+        == Just
+          (Right GrammarV1CheckedClosedFunctionBody
+            { checkedClosedFunctionBodyHeader = header
+            , checkedClosedFunctionBodyControls = [Return TyBool]
+            })
+    )
+    "closed expression-statement sequence did not preserve source order and final return"
+
+closedFunctionBodyControlAfterTerminal :: Either String ()
+closedFunctionBodyControlAfterTerminal = do
+  source <- onlyFunction $ Text.unlines
+    [ "fn afterReturn() -> Bool satisfies C {"
+    , "  return true;"
+    , "  unit;"
+    , "}"
+    ]
+  let declarationKey = DeclarationKey "function.body.terminal.lineage"
+      definitionRevision = DefinitionRevision "function.body.terminal.definition"
+  header <- checkedHeader declarationKey definitionRevision source
+  case grammarV1CheckedClosedFunctionBody emptyStaticContext header source of
+    Just (Left (GrammarV1FunctionBodySurfaceCheckError surfaceError)) ->
+      assert (surfaceErrorClass surfaceError == ControlAfterTerminal)
+        "production checker did not preserve control-after-terminal rejection"
+    other -> Left
+      ("statement after return did not fail through production checking: " <> show other)
+
 closedFunctionBodyResultMismatch :: Either String ()
 closedFunctionBodyResultMismatch = do
   source <- onlyFunction
@@ -245,23 +293,16 @@ functionBodyCompetenceBoundaries = do
     "fn integerLiteral() -> U32 satisfies C { return 1; }"
   namedBody <- onlyFunction
     "fn namedBody() -> Bool satisfies C { return missing; }"
-  multiStatement <- onlyFunction $ Text.unlines
-    [ "fn multi() -> Bool satisfies C {"
-    , "  true;"
-    , "  return true;"
-    , "}"
-    ]
   let declarationKey = DeclarationKey "function.body.boundary.lineage"
       definitionRevision = DefinitionRevision "function.body.boundary.definition"
   mapM_ (\(label, source) -> do
     header <- checkedHeader declarationKey definitionRevision source
     assert
       (grammarV1CheckedClosedFunctionBody emptyStaticContext header source == Nothing)
-      (label <> " escaped the first closed body competence boundary"))
+      (label <> " escaped the closed body competence boundary"))
     [ ("parameter-bearing body", parameterized)
     , ("integer-literal body", integerLiteral)
     , ("name-bearing body", namedBody)
-    , ("multi-statement body", multiStatement)
     ]
 
 checkedHeader
