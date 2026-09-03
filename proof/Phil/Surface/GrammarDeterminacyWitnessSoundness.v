@@ -58,14 +58,27 @@ Proof.
   - exact Hlookup.
 Qed.
 
+Lemma choice_bodies_nonnullable_rule_pair :
+  forall name body,
+    choice_bodies_nonnullable_rule (name, body) =
+    choice_bodies_nonnullable_fuel expression_fuel body.
+Proof.
+  reflexivity.
+Qed.
+
 Lemma phase1_surface_rule_body_choice_safe :
   forall name body,
     lookupRule name phase1_surface_rules = Some body ->
     choice_bodies_nonnullable_fuel expression_fuel body = true.
 Proof.
   intros name body Hlookup.
-  pose proof (phase1_surface_rule_choice_safe name body Hlookup) as Hsafe.
-  cbn in Hsafe.
+  assert (Hsafe : choice_bodies_nonnullable_rule (name, body) = true).
+  {
+    eapply lookupRule_forallb.
+    - exact phase1_surface_all_choice_bodies_are_nonnullable.
+    - exact Hlookup.
+  }
+  rewrite choice_bodies_nonnullable_rule_pair in Hsafe.
   exact Hsafe.
 Qed.
 
