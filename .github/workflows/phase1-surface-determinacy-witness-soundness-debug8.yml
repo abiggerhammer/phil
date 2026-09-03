@@ -1,0 +1,169 @@
+name: Phase 1 Surface Determinacy Witness Soundness Debug 8
+
+on:
+  pull_request:
+
+permissions:
+  contents: read
+
+jobs:
+  rocq-witness-soundness-debug8:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    container:
+      image: rocq/rocq-prover:9.2.0
+      options: --user root
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Derive exact Grammar-v1 inputs
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 scripts/derive_phase1_surface_grammar.py --write
+          python3 scripts/derive_phase1_surface_determinacy_certificate.py --write
+
+      - name: Apply step-factored canonical-fuel diagnostic
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 - <<'PY'
+          from pathlib import Path
+          import textwrap
+
+          workflow = Path('.github/workflows/phase1-surface-determinacy-witness-soundness-debug7.yml').read_text()
+          marker = workflow.index('- name: Apply successor-only canonical-fuel diagnostic')
+          start = workflow.index('          from pathlib import Path', marker)
+          end = workflow.index('\n          PY', start)
+          code = textwrap.dedent(workflow[start:end])
+          exec(compile(code, '<existing-debug7-diagnostics>', 'exec'), {})
+
+          path = Path('proof/Phil/Surface/GrammarDeterminacyWitnessSoundness.v')
+          source = path.read_text()
+
+          safety_start = source.index('Lemma choice_bodies_nonnullable_fuel_succ :')
+          safety_end = source.index('\nLemma nullable_sequence_fuel_lift :', safety_start)
+          safety = r'''Lemma choice_bodies_nonnullable_fuel_succ_step :
+            forall fuel,
+              (forall expression,
+                choice_bodies_nonnullable_fuel fuel expression = true ->
+                choice_bodies_nonnullable_fuel (S fuel) expression = true) ->
+              forall expression,
+                choice_bodies_nonnullable_fuel (S fuel) expression = true ->
+                choice_bodies_nonnullable_fuel (S (S fuel)) expression = true.
+          Proof.
+            intros fuel IH expression Hsafe.
+            destruct expression as
+              [literal | class_name | name | items | items | body | body];
+              simpl in Hsafe |- *.
+            - abstract reflexivity.
+            - abstract reflexivity.
+            - abstract reflexivity.
+            - abstract (
+                eapply
+                  (forallb_impl_true
+                    EbnfExpression
+                    (choice_bodies_nonnullable_fuel fuel)
+                    (choice_bodies_nonnullable_fuel (S fuel)));
+                [intros item Hitem; apply IH; exact Hitem | exact Hsafe]).
+            - abstract (
+                eapply
+                  (forallb_impl_true
+                    EbnfExpression
+                    (fun item =>
+                      andb
+                        (negb (nullable_expression phase1_surface_nullable_facts item))
+                        (choice_bodies_nonnullable_fuel fuel item))
+                    (fun item =>
+                      andb
+                        (negb (nullable_expression phase1_surface_nullable_facts item))
+                        (choice_bodies_nonnullable_fuel (S fuel) item)));
+                [ intros item Hitem;
+                  apply andb_true_iff in Hitem as [Hnullable Hbody];
+                  apply andb_true_iff; split;
+                  [ exact Hnullable | apply IH; exact Hbody ]
+                | exact Hsafe ]).
+            - abstract (
+                apply andb_true_iff in Hsafe as [Hnullable Hbody];
+                apply andb_true_iff; split;
+                [ exact Hnullable | apply IH; exact Hbody ]).
+            - abstract (
+                apply andb_true_iff in Hsafe as [Hnullable Hbody];
+                apply andb_true_iff; split;
+                [ exact Hnullable | apply IH; exact Hbody ]).
+          Qed.
+
+          Lemma choice_bodies_nonnullable_fuel_succ :
+            forall fuel expression,
+              choice_bodies_nonnullable_fuel fuel expression = true ->
+              choice_bodies_nonnullable_fuel (S fuel) expression = true.
+          Proof.
+            induction fuel as [| fuel IH].
+            - intros expression Hsafe.
+              simpl in Hsafe. discriminate.
+            - intros expression Hsafe.
+              exact
+                (choice_bodies_nonnullable_fuel_succ_step
+                  fuel IH expression Hsafe).
+          Qed.
+          '''
+          source = source[:safety_start] + safety + source[safety_end:]
+
+          nullable_start = source.index('Lemma nullable_expression_fuel_succ :')
+          nullable_end = source.index('\nDefinition expression_child_fuel :', nullable_start)
+          nullable = r'''Lemma nullable_expression_fuel_succ_step :
+            forall fuel,
+              (forall expression value,
+                nullable_expression_fuel
+                  fuel phase1_surface_nullable_facts expression = Some value ->
+                nullable_expression_fuel
+                  (S fuel) phase1_surface_nullable_facts expression = Some value) ->
+              forall expression value,
+                nullable_expression_fuel
+                  (S fuel) phase1_surface_nullable_facts expression = Some value ->
+                nullable_expression_fuel
+                  (S (S fuel)) phase1_surface_nullable_facts expression = Some value.
+          Proof.
+            intros fuel IH expression value Heval.
+            exact
+              (nullable_expression_fuel_lift_step
+                fuel (S fuel) IH expression value Heval).
+          Qed.
+
+          Lemma nullable_expression_fuel_succ :
+            forall fuel expression value,
+              nullable_expression_fuel
+                fuel phase1_surface_nullable_facts expression = Some value ->
+              nullable_expression_fuel
+                (S fuel) phase1_surface_nullable_facts expression = Some value.
+          Proof.
+            induction fuel as [| fuel IH].
+            - intros expression value Heval.
+              simpl in Heval. discriminate.
+            - intros expression value Heval.
+              exact
+                (nullable_expression_fuel_succ_step
+                  fuel IH expression value Heval).
+          Qed.
+          '''
+          source = source[:nullable_start] + nullable + source[nullable_end:]
+          path.write_text(source)
+          PY
+
+      - name: Compile witness soundness with timing
+        shell: bash
+        run: |
+          set -euo pipefail
+          export PATH="/home/rocq/.opam/${COMPILER}/bin:$PATH"
+          rocq c -Q proof/Phil Phil proof/Phil/Surface/Grammar.v
+          rocq c -Q proof/Phil Phil proof/Phil/Surface/GrammarDerivation.v
+          rocq c -Q proof/Phil Phil proof/Phil/Surface/GrammarDerivationOracle.v
+          rocq c -Q proof/Phil Phil proof/Phil/Surface/GrammarDeterminacyCertificate.v
+          rocq c -Q proof/Phil Phil proof/Phil/Surface/GrammarDeterminacyNullableFirst.v
+          rocq c -Q proof/Phil Phil proof/Phil/Surface/GrammarDeterminacyFollowOverlap.v
+          rocq c -Q proof/Phil Phil proof/Phil/Surface/GrammarDeterminacySimpleResolvers.v
+          rocq c -Q proof/Phil Phil proof/Phil/Surface/GrammarDeterminacyStructuralResolvers.v
+          rocq c -Q proof/Phil Phil proof/Phil/Surface/GrammarDeterminacyPredictiveOracle.v
+          rocq c -Q proof/Phil Phil proof/Phil/Surface/GrammarDerivationLookahead.v
+          timeout 300s rocq c -time -Q proof/Phil Phil \
+            proof/Phil/Surface/GrammarDeterminacyWitnessSoundness.v
