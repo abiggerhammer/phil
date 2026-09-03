@@ -36,12 +36,12 @@ Definition decideExactCarrierBindingByFacts
 
 Theorem exact_carrier_binding_decision_accept_iff_certified :
   forall model use carrier
-         bindingExact requiredUse carrierKnown dispositionCovered obligationExact
+         bindingExact requiredUse carrierKnown0 dispositionCovered obligationExact
          siteRevisionExact siteEvidenceExact siteCostExact establishedAtSite
          claimAtSite processExact executionCovered runtimeAuthorityAccepted,
     (bindingExact = true <-> carrierBinding model use = Some carrier) ->
     (requiredUse = true <-> carrierRequiredUse model use = true) ->
-    (carrierKnown = true <-> carrierKnown model carrier = true) ->
+    (carrierKnown0 = true <-> carrierKnown model carrier = true) ->
     (dispositionCovered = true <->
       carrierUseDisposition model use = CarrierUseCovered carrier) ->
     (obligationExact = true <->
@@ -72,7 +72,7 @@ Theorem exact_carrier_binding_decision_accept_iff_certified :
     (runtimeAuthorityAccepted = true <->
       verifyRuntimeAuthority (carrierRuntimeAuthority model carrier) = GateAccepted) ->
     decideExactCarrierBindingByFacts
-      bindingExact requiredUse carrierKnown dispositionCovered obligationExact
+      bindingExact requiredUse carrierKnown0 dispositionCovered obligationExact
       siteRevisionExact siteEvidenceExact siteCostExact establishedAtSite
       claimAtSite processExact executionCovered runtimeAuthorityAccepted = true <->
     ExactCarrierBinding model use carrier.
