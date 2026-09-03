@@ -6,8 +6,14 @@ import qualified Data.Text as Text
 import Phil.Core.Focusing
   ( FocusingError (..)
   )
+import Phil.Core.Generic
+  ( GenericRequirement (..)
+  , GenericStaticParameterKey (..)
+  )
 import Phil.Core.Generic.StaticActual
   ( GenericStaticActual (..)
+  , GenericStaticKind (..)
+  , GenericStaticParameter (..)
   )
 import Phil.Core.ProviderQualification
   ( ProviderOperationKey (..)
@@ -15,6 +21,7 @@ import Phil.Core.ProviderQualification
 import Phil.Core.Static
   ( DeclarationKey (..)
   , DefinitionRevision (..)
+  , InterfaceRevision (..)
   , emptyStaticContext
   )
 import Phil.Core.Syntax
@@ -25,6 +32,15 @@ import Phil.Core.Syntax
 import Phil.Surface.Check.Types
   ( RejectionClass (..)
   , SurfaceCheckError (..)
+  )
+import Phil.Surface.GrammarV1.GenericDischarge
+  ( GrammarV1CheckedGenericRequirement (..)
+  )
+import Phil.Surface.GrammarV1.GenericProviderImplementationSurface
+  ( GrammarV1CheckedGenericProviderImplementationSurface (..)
+  , GrammarV1GenericProviderImplementationSurfaceError (..)
+  , GrammarV1ResolvedGenericProviderParameter (..)
+  , grammarV1CheckedGenericProviderImplementationSurface
   )
 import Phil.Surface.GrammarV1.Parser
 import Phil.Surface.GrammarV1.ProviderImplementationSurface
@@ -59,6 +75,16 @@ main = do
         providerImplementationDuplicateVisibility
     , test "SURF-008 richer ordinary provider implementation forms remain fail-closed"
         providerImplementationCompetenceBoundaries
+    , test "SURF-008 generic provider implementations compose resolved schemas with the ordinary checked surface"
+        genericProviderImplementationSurface
+    , test "SURF-008 generic provider parameter evidence is exact and key-safe"
+        genericProviderParameterEvidenceFailures
+    , test "SURF-008 generic provider requirement evidence preserves exact Core-backed category"
+        genericProviderRequirementEvidenceFailures
+    , test "SURF-008 unsupported generic provider requirement categories remain fail-closed"
+        genericProviderUnsupportedRequirement
+    , test "SURF-008 generic provider bodies preserve ordinary production rejection"
+        genericProviderBodyFailure
     ]
   if and results then pure () else exitFailure
 
@@ -269,6 +295,256 @@ providerImplementationCompetenceBoundaries = do
     , ("name-bearing operation body", nameBody)
     ]
 
+genericProviderImplementationSurface :: Either String ()
+genericProviderImplementationSurface = do
+  declaration <- onlyProviderImplementation genericProviderSource
+  sourceParameter <- oneGenericParameter declaration
+  sourceRequirements <- twoGenericRequirements declaration
+  let stableParameter = GenericStaticParameter
+        (GenericStaticParameterKey "provider.generic.type-parameter")
+        GenericTypeKind
+      parameterEvidence =
+        [ GrammarV1ResolvedGenericProviderParameter sourceParameter stableParameter ]
+      requirementEvidence = checkedGenericProviderRequirements sourceRequirements
+  case grammarV1CheckedGenericProviderImplementationSurface
+      emptyStaticContext
+      genericProviderDeclarationKey
+      genericProviderDefinitionRevision
+      parameterEvidence
+      requirementEvidence
+      declaration of
+    Just (Right checked) -> do
+      assert
+        (checkedGenericProviderParameters checked == [stableParameter])
+        "generic provider parameter stable identity/kind was not preserved"
+      assert
+        (checkedGenericProviderRequirements checked == requirementEvidence)
+        "generic provider checked requirements lost source order or focus evidence"
+      let ordinary = checkedGenericProviderOrdinarySurface checked
+      assert
+        ( checkedProviderImplementationContractReference ordinary
+            == ReferencedGenericStaticActual "contracts.Store"
+        )
+        "generic provider ordinary surface changed unresolved contract reference"
+      assert
+        ( checkedProviderImplementationItems ordinary
+            == [ GrammarV1CheckedProviderImplementationOperation
+                   (ProviderOperationKey "ping")
+                   (ReferencedGenericStaticActual "api.Ping")
+                   [Return TyUnit]
+               , GrammarV1CheckedProviderImplementationLaw "coherent" Truth []
+               ]
+        )
+        "generic provider ordinary item semantics diverged from the #637 path"
+    other -> Left ("generic provider surface did not compose: " <> show other)
+
+genericProviderParameterEvidenceFailures :: Either String ()
+genericProviderParameterEvidenceFailures = do
+  declaration <- onlyProviderImplementation
+    "provider implementation Generic[T : Type] satisfies Store { operation ping satisfies Ping { return unit; } }"
+  sourceParameter <- oneGenericParameter declaration
+  otherDeclaration <- onlyProviderImplementation
+    "provider implementation Other[U : Type] satisfies Store { operation ping satisfies Ping { return unit; } }"
+  otherParameter <- oneGenericParameter otherDeclaration
+  let key = GenericStaticParameterKey "provider.generic.parameter"
+      valid = GrammarV1ResolvedGenericProviderParameter
+        sourceParameter (GenericStaticParameter key GenericTypeKind)
+      wrongSource = GrammarV1ResolvedGenericProviderParameter
+        otherParameter (GenericStaticParameter key GenericTypeKind)
+      wrongKind = GrammarV1ResolvedGenericProviderParameter
+        sourceParameter (GenericStaticParameter key GenericMessageKind)
+      project params = grammarV1CheckedGenericProviderImplementationSurface
+        emptyStaticContext
+        genericProviderDeclarationKey
+        genericProviderDefinitionRevision
+        params
+        []
+        declaration
+  assert
+    (project [] == Just (Left
+      (GrammarV1GenericProviderParameterEvidenceCountMismatch 1 0)))
+    "missing generic provider parameter evidence did not reject explicitly"
+  case project [wrongSource] of
+    Just (Left (GrammarV1GenericProviderParameterSourceMismatch 0 _ _)) -> Right ()
+    other -> Left ("foreign generic provider parameter evidence was accepted: " <> show other)
+  assert
+    ( project [wrongKind]
+        == Just
+          (Left
+            (GrammarV1GenericProviderParameterKindMismatch
+              key GenericTypeKind GenericMessageKind))
+    )
+    "wrong-kind generic provider parameter evidence was accepted"
+  assert
+    (project [valid] /= Nothing)
+    "valid generic provider parameter evidence lost structural competence"
+  duplicateDeclaration <- onlyProviderImplementation
+    "provider implementation Duplicate[T : Type, U : Type] satisfies Store { operation ping satisfies Ping { return unit; } }"
+  case grammarV1ProviderImplementationGenericParams duplicateDeclaration of
+    [firstParameter, secondParameter] ->
+      let duplicateEvidence =
+            [ GrammarV1ResolvedGenericProviderParameter
+                firstParameter (GenericStaticParameter key GenericTypeKind)
+            , GrammarV1ResolvedGenericProviderParameter
+                secondParameter (GenericStaticParameter key GenericTypeKind)
+            ]
+      in assert
+          ( grammarV1CheckedGenericProviderImplementationSurface
+              emptyStaticContext
+              genericProviderDeclarationKey
+              genericProviderDefinitionRevision
+              duplicateEvidence
+              []
+              duplicateDeclaration
+              == Just (Left (GrammarV1DuplicateGenericProviderParameterKey key))
+          )
+          "duplicate stable generic provider parameter keys were accepted"
+    params -> Left ("expected two generic provider parameters, got " <> show (length params))
+
+genericProviderRequirementEvidenceFailures :: Either String ()
+genericProviderRequirementEvidenceFailures = do
+  declaration <- onlyProviderImplementation
+    "provider implementation Required requires { proposition true; } satisfies Store { operation ping satisfies Ping { return unit; } }"
+  sourceRequirement <- oneGenericRequirement declaration
+  let providerKey = GenericStaticParameterKey "provider.foreign"
+      wrongCategory = GrammarV1CheckedGenericRequirement
+        { checkedGenericRequirementSource = sourceRequirement
+        , checkedGenericRequirementCore =
+            GenericProviderContractRequirement
+              providerKey
+              (InterfaceRevision "provider.foreign.v1")
+        , checkedGenericRequirementFocusSteps = []
+        }
+      project evidence = grammarV1CheckedGenericProviderImplementationSurface
+        emptyStaticContext
+        genericProviderDeclarationKey
+        genericProviderDefinitionRevision
+        []
+        evidence
+        declaration
+  assert
+    ( project []
+        == Just
+          (Left
+            (GrammarV1GenericProviderRequirementEvidenceCountMismatch 1 0))
+    )
+    "missing generic provider requirement evidence did not reject explicitly"
+  assert
+    ( project [wrongCategory]
+        == Just
+          (Left
+            (GrammarV1GenericProviderRequirementCategoryMismatch
+              0
+              GenericPropositionCategory
+              GenericProviderCategory))
+    )
+    "generic provider requirement evidence for the wrong category was accepted"
+
+genericProviderUnsupportedRequirement :: Either String ()
+genericProviderUnsupportedRequirement = do
+  declaration <- onlyProviderImplementation
+    "provider implementation Unsupported requires { callable C : CallableContract; } satisfies Store { operation ping satisfies Ping { return unit; } }"
+  assert
+    ( grammarV1CheckedGenericProviderImplementationSurface
+        emptyStaticContext
+        genericProviderDeclarationKey
+        genericProviderDefinitionRevision
+        []
+        []
+        declaration
+        == Nothing
+    )
+    "non-Core-backed generic provider requirement category escaped competence wall"
+
+genericProviderBodyFailure :: Either String ()
+genericProviderBodyFailure = do
+  declaration <- onlyProviderImplementation $ Text.unlines
+    [ "provider implementation Generic[T : Type] satisfies Store {"
+    , "  operation ping satisfies Ping {"
+    , "    return true;"
+    , "    unit;"
+    , "  }"
+    , "}"
+    ]
+  sourceParameter <- oneGenericParameter declaration
+  let parameterEvidence =
+        [ GrammarV1ResolvedGenericProviderParameter
+            sourceParameter
+            (GenericStaticParameter
+              (GenericStaticParameterKey "provider.generic.type-parameter")
+              GenericTypeKind)
+        ]
+  case grammarV1CheckedGenericProviderImplementationSurface
+      emptyStaticContext
+      genericProviderDeclarationKey
+      genericProviderDefinitionRevision
+      parameterEvidence
+      []
+      declaration of
+    Just
+      (Left
+        (GrammarV1GenericProviderOrdinarySurfaceError
+          (GrammarV1ProviderImplementationBodyError
+            (ProviderOperationKey "ping")
+            surfaceError))) ->
+      assert (surfaceErrorClass surfaceError == ControlAfterTerminal)
+        "generic provider body lost ordinary production ControlAfterTerminal rejection"
+    other -> Left ("generic provider body failure did not preserve ordinary checker error: " <> show other)
+
+checkedGenericProviderRequirements
+  :: (Located GrammarV1GenericRequirement, Located GrammarV1GenericRequirement)
+  -> [GrammarV1CheckedGenericRequirement]
+checkedGenericProviderRequirements (propositionRequirement, providerRequirement) =
+  [ GrammarV1CheckedGenericRequirement
+      { checkedGenericRequirementSource = propositionRequirement
+      , checkedGenericRequirementCore = GenericPropositionRequirement Truth
+      , checkedGenericRequirementFocusSteps = []
+      }
+  , GrammarV1CheckedGenericRequirement
+      { checkedGenericRequirementSource = providerRequirement
+      , checkedGenericRequirementCore = GenericProviderContractRequirement
+          (GenericStaticParameterKey "provider.generic.requirement-P")
+          (InterfaceRevision "provider.generic.requirement-P.v1")
+      , checkedGenericRequirementFocusSteps = []
+      }
+  ]
+
+oneGenericParameter
+  :: GrammarV1ProviderImplementationDecl
+  -> Either String (Located GrammarV1GenericParam)
+oneGenericParameter declaration =
+  case grammarV1ProviderImplementationGenericParams declaration of
+    [parameter] -> Right parameter
+    parameters -> Left ("expected one generic provider parameter, got " <> show (length parameters))
+
+oneGenericRequirement
+  :: GrammarV1ProviderImplementationDecl
+  -> Either String (Located GrammarV1GenericRequirement)
+oneGenericRequirement declaration =
+  case grammarV1ProviderImplementationRequirements declaration of
+    [requirement] -> Right requirement
+    requirements -> Left ("expected one generic provider requirement, got " <> show (length requirements))
+
+twoGenericRequirements
+  :: GrammarV1ProviderImplementationDecl
+  -> Either String
+      (Located GrammarV1GenericRequirement, Located GrammarV1GenericRequirement)
+twoGenericRequirements declaration =
+  case grammarV1ProviderImplementationRequirements declaration of
+    [firstRequirement, secondRequirement] -> Right (firstRequirement, secondRequirement)
+    requirements -> Left ("expected two generic provider requirements, got " <> show (length requirements))
+
+genericProviderSource :: Text.Text
+genericProviderSource = Text.unlines
+  [ "provider implementation Generic[T : Type] requires {"
+  , "  proposition true;"
+  , "  provider P : ProviderContract;"
+  , "} satisfies contracts.Store {"
+  , "  operation ping satisfies api.Ping { return unit; }"
+  , "  law coherent = true;"
+  , "}"
+  ]
+
 onlyOpaqueProvider
   :: Text.Text
   -> Either String GrammarV1OpaqueProviderImplementationDecl
@@ -306,6 +582,12 @@ providerDeclarationKey = DeclarationKey "provider.implementation.mem-store"
 
 providerDefinitionRevision :: DefinitionRevision
 providerDefinitionRevision = DefinitionRevision "provider.implementation.mem-store.v1"
+
+genericProviderDeclarationKey :: DeclarationKey
+genericProviderDeclarationKey = DeclarationKey "provider.implementation.generic-store"
+
+genericProviderDefinitionRevision :: DefinitionRevision
+genericProviderDefinitionRevision = DefinitionRevision "provider.implementation.generic-store.v1"
 
 assert :: Bool -> String -> Either String ()
 assert condition detail
