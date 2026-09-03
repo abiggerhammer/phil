@@ -42,6 +42,26 @@ jobs:
               raise SystemExit('expected rule-body-definedness branch not found in debug4 program')
           code = code.replace(old, new, 1)
           exec(compile(code, '<debug4-diagnostics-with-rule-body-fix>', 'exec'), {})
+
+          path = Path('proof/Phil/Surface/GrammarDeterminacyWitnessSoundness.v')
+          source = path.read_text()
+          helper_start = source.index('Lemma phase1_surface_nullable_rule_body_defined :')
+          helper_end = source.index('\nLemma nullable_truth_nonterminal_case :', helper_start)
+          helper = r'''Lemma phase1_surface_nullable_rule_body_defined :
+            forall name body,
+              lookupRule name phase1_surface_rules = Some body ->
+              exists value,
+                nullable_expression_fuel
+                  expression_fuel phase1_surface_nullable_facts body = Some value.
+          Proof.
+            intros name body Hlookup.
+            exact
+              (choice_safe_nullable_defined
+                expression_fuel body
+                (phase1_surface_rule_body_choice_safe name body Hlookup)).
+          Qed.
+          '''
+          path.write_text(source[:helper_start] + helper + source[helper_end:])
           PY
 
       - name: Compile witness soundness with timing
