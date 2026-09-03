@@ -1,0 +1,199 @@
+name: Phase 1 Surface Determinacy Witness Soundness Debug 18
+
+on:
+  pull_request:
+
+permissions:
+  contents: read
+
+jobs:
+  rocq-witness-soundness-debug18:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    container:
+      image: rocq/rocq-prover:9.2.0
+      options: --user root
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Derive exact Grammar-v1 inputs
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 scripts/derive_phase1_surface_grammar.py --write
+          python3 scripts/derive_phase1_surface_determinacy_certificate.py --write
+
+      - name: Apply factored FIRST alternative diagnostic
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 - <<'PY'
+          from pathlib import Path
+          import textwrap
+
+          history = Path('.github/debug-workflow-history')
+          workflows = Path('.github/workflows')
+          for archived in history.glob('phase1-surface-determinacy-witness-soundness-debug*.yml'):
+              (workflows / archived.name).write_text(archived.read_text())
+
+          workflow = Path('.github/workflows/phase1-surface-determinacy-witness-soundness-debug17.yml').read_text()
+          marker = workflow.index('- name: Apply first-order nullable and FIRST semantic diagnostic')
+          start = workflow.index('          from pathlib import Path', marker)
+          end = workflow.index('\n          PY', start)
+          code = textwrap.dedent(workflow[start:end])
+          exec(compile(code, '<existing-debug17-diagnostics>', 'exec'), {})
+
+          path = Path('proof/Phil/Surface/GrammarDeterminacyWitnessSoundness.v')
+          source = path.read_text()
+          alt_start = source.index('Lemma computed_first_alternative_sem_sound :')
+          alt_end = source.index('\nLemma computed_first_sem_sound_step', alt_start)
+
+          replacement = r'''Lemma computed_first_alternative_here_from_results :
+            forall token fuel item rest item_first rest_first,
+              first_expression_fuel
+                fuel
+                phase1_surface_nullable_facts
+                phase1_surface_first_facts
+                item = Some item_first ->
+              token_mem token item_first = true ->
+              first_expression_fuel
+                (S fuel)
+                phase1_surface_nullable_facts
+                phase1_surface_first_facts
+                (EAlternative rest) = Some rest_first ->
+              exists tokens,
+                first_expression_fuel
+                  (S fuel)
+                  phase1_surface_nullable_facts
+                  phase1_surface_first_facts
+                  (EAlternative (item :: rest)) = Some tokens /\
+                token_mem token tokens = true.
+          Proof.
+            intros token fuel item rest item_first rest_first
+              Hitem_first Hitem_mem Hrest_first.
+            pose proof Hrest_first as Hrest_local.
+            simpl in Hrest_local.
+            simpl.
+            rewrite Hitem_first, Hrest_local.
+            exists (token_union item_first rest_first). split.
+            - reflexivity.
+            - apply token_mem_union_left. exact Hitem_mem.
+          Qed.
+
+          Lemma computed_first_alternative_later_from_results :
+            forall token fuel item rest item_first rest_first,
+              first_expression_fuel
+                fuel
+                phase1_surface_nullable_facts
+                phase1_surface_first_facts
+                item = Some item_first ->
+              first_expression_fuel
+                (S fuel)
+                phase1_surface_nullable_facts
+                phase1_surface_first_facts
+                (EAlternative rest) = Some rest_first ->
+              token_mem token rest_first = true ->
+              exists tokens,
+                first_expression_fuel
+                  (S fuel)
+                  phase1_surface_nullable_facts
+                  phase1_surface_first_facts
+                  (EAlternative (item :: rest)) = Some tokens /\
+                token_mem token tokens = true.
+          Proof.
+            intros token fuel item rest item_first rest_first
+              Hitem_first Hrest_first Hrest_mem.
+            pose proof Hrest_first as Hrest_local.
+            simpl in Hrest_local.
+            simpl.
+            rewrite Hitem_first, Hrest_local.
+            exists (token_union item_first rest_first). split.
+            - reflexivity.
+            - apply token_mem_union_right. exact Hrest_mem.
+          Qed.
+
+          Lemma computed_first_alternative_sem_sound :
+            forall token fuel items,
+              (forall expression,
+                ComputedFirstSem token expression ->
+                choice_bodies_nonnullable_fuel fuel expression = true ->
+                exists tokens,
+                  first_expression_fuel
+                    fuel
+                    phase1_surface_nullable_facts
+                    phase1_surface_first_facts
+                    expression = Some tokens /\
+                  token_mem token tokens = true) ->
+              ComputedFirstAlternativeSem token items ->
+              forallb
+                (fun item =>
+                  andb
+                    (negb
+                      (nullable_expression
+                        phase1_surface_nullable_facts item))
+                    (choice_bodies_nonnullable_fuel fuel item))
+                items = true ->
+              exists tokens,
+                first_expression_fuel
+                  (S fuel)
+                  phase1_surface_nullable_facts
+                  phase1_surface_first_facts
+                  (EAlternative items) = Some tokens /\
+                token_mem token tokens = true.
+          Proof.
+            intros token fuel items Hsound Hsem.
+            induction Hsem as
+              [item rest Hitem
+              | item rest Hrest IHrest]; intros Hsafe.
+            - simpl in Hsafe.
+              apply andb_true_iff in Hsafe as [Hhead_safe Hrest_safe].
+              apply andb_true_iff in Hhead_safe as [_ Hitem_safe].
+              destruct (Hsound item Hitem Hitem_safe)
+                as [item_first [Hitem_first Hitem_mem]].
+              assert (Hrest_expr_safe :
+                choice_bodies_nonnullable_fuel
+                  (S fuel) (EAlternative rest) = true).
+              { simpl. exact Hrest_safe. }
+              destruct (choice_safe_first_defined
+                (S fuel) (EAlternative rest) Hrest_expr_safe)
+                as [rest_first Hrest_first].
+              exact
+                (computed_first_alternative_here_from_results
+                  token fuel item rest item_first rest_first
+                  Hitem_first Hitem_mem Hrest_first).
+            - simpl in Hsafe.
+              apply andb_true_iff in Hsafe as [Hhead_safe Hrest_safe].
+              apply andb_true_iff in Hhead_safe as [_ Hitem_safe].
+              destruct (choice_safe_first_defined fuel item Hitem_safe)
+                as [item_first Hitem_first].
+              destruct (IHrest Hrest_safe)
+                as [rest_first [Hrest_first Hrest_mem]].
+              exact
+                (computed_first_alternative_later_from_results
+                  token fuel item rest item_first rest_first
+                  Hitem_first Hrest_first Hrest_mem).
+          Qed.
+          '''
+
+          source = source[:alt_start] + replacement + source[alt_end:]
+          path.write_text(source)
+          print(f'generated witness proof characters: {len(source)}')
+          PY
+
+      - name: Compile witness soundness with forced timeout
+        shell: bash
+        run: |
+          set -euo pipefail
+          export PATH="/home/rocq/.opam/${COMPILER}/bin:$PATH"
+          rocq c -Q proof/Phil Phil proof/Phil/Surface/Grammar.v
+          rocq c -Q proof/Phil Phil proof/Phil/Surface/GrammarDerivation.v
+          rocq c -Q proof/Phil Phil proof/Phil/Surface/GrammarDerivationOracle.v
+          rocq c -Q proof/Phil Phil proof/Phil/Surface/GrammarDeterminacyCertificate.v
+          rocq c -Q proof/Phil Phil proof/Phil/Surface/GrammarDeterminacyNullableFirst.v
+          rocq c -Q proof/Phil Phil proof/Phil/Surface/GrammarDeterminacyFollowOverlap.v
+          rocq c -Q proof/Phil Phil proof/Phil/Surface/GrammarDeterminacySimpleResolvers.v
+          rocq c -Q proof/Phil Phil proof/Phil/Surface/GrammarDeterminacyStructuralResolvers.v
+          rocq c -Q proof/Phil Phil proof/Phil/Surface/GrammarDeterminacyPredictiveOracle.v
+          rocq c -Q proof/Phil Phil proof/Phil/Surface/GrammarDerivationLookahead.v
+          timeout -k 5s 90s rocq c -time -Q proof/Phil Phil \
+            proof/Phil/Surface/GrammarDeterminacyWitnessSoundness.v
