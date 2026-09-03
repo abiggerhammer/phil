@@ -3,6 +3,9 @@
 module Main (main) where
 
 import qualified Data.Text as Text
+import Phil.Core.CheckedBindingMode
+  ( CheckedTypeMode (..)
+  )
 import Phil.Core.Focusing
   ( FocusStep (..)
   , FocusingError (..)
@@ -33,7 +36,10 @@ import Phil.Surface.Check.Types
   , SurfaceState
   )
 import Phil.Surface.GrammarV1.BoundType (grammarV1BoundType)
-import Phil.Surface.GrammarV1.CheckedType (grammarV1CheckedType)
+import Phil.Surface.GrammarV1.CheckedType
+  ( grammarV1CheckedType
+  , grammarV1CheckedTypeMode
+  )
 import Phil.Surface.GrammarV1.IntrinsicType (grammarV1IntrinsicType)
 import Phil.Surface.GrammarV1.Parser
 import Phil.Surface.Syntax (Located (..))
@@ -48,6 +54,8 @@ main = do
         boundTypesPreserveMeaning
     , test "SURF-008 checked type composition preserves structural competence and Core focusing outcomes"
         checkedTypesPreserveCompetence
+    , test "SURF-008 checked type modes preserve type competence, Core failures, and focusing traces"
+        checkedTypeModesPreserveCompetence
     ]
   if and results then pure () else exitFailure
 
@@ -222,6 +230,76 @@ checkedTypesPreserveCompetence = do
         ]
   assert (actual == expected) $
     "checked type composition changed type/trace meaning or collapsed source non-competence with Core rejection: "
+      <> show actual
+
+checkedTypeModesPreserveCompetence :: Either String ()
+checkedTypeModesPreserveCompetence = do
+  state1 <- bind "n" Unrestricted (TyOpaqueSorted "NatIndex" SortNat) emptySurfaceState
+  state2 <- bind "flag" Unrestricted TyBool state1
+  state <- bind "u8" Unrestricted (TyUInt 8) state2
+  context1 <- mapLeft show $
+    declareOpaqueClaim "Flagged" [(Name "flag", SortBool)] emptyStaticContext
+  context2 <- mapLeft show $
+    declareOpaqueClaim "NeedsNat" [(Name "n", SortNat)] context1
+  context <- mapLeft show $
+    declareTransparentClaim
+      "Positive"
+      [(Name "x", SortUInt 8)]
+      (LessThan
+        (RefNat 0)
+        (RefToNat (RefVar (Name "x"))))
+      context2
+  sourceFile <- mapLeft show $
+    parseGrammarV1StructuralSource "surf008-checked-type-modes" checkedSource
+  sourceTypes <- mapM typeAliasTarget (grammarV1TopLevelDecls sourceFile)
+  let n = RefVar (Name "n")
+      flag = RefVar (Name "flag")
+      u8 = RefVar (Name "u8")
+      v = RefVar (Name "v")
+      checked ty mode = CheckedTypeMode
+        { checkedBindingType = ty
+        , checkedBindingMode = mode
+        }
+      actual = map (grammarV1CheckedTypeMode context state) sourceTypes
+      expected =
+        [ Just (Right (checked TyUnit Unrestricted, []))
+        , Just (Right (checked (TyBytes (RefAdd n (RefNat 1))) Linear, []))
+        , Nothing
+        , Nothing
+        , Just (Right (checked (TyProof (Atom "Flagged" [flag])) Unrestricted, []))
+        , Just
+            (Right
+              ( checked (TyProof (Atom "NeedsNat" [RefToNat u8])) Unrestricted
+              , [InsertedUIntToNat u8]
+              ))
+        , Just (Left (UnknownClaim "Missing"))
+        , Just
+            (Right
+              ( checked
+                  (TyRefined
+                    (Name "v")
+                    (TyUInt 8)
+                    (LessThan (RefNat 0) (RefToNat v)))
+                  Unrestricted
+              , [ExpandedTransparentClaim "Positive"]
+              ))
+        , Just
+            (Right
+              ( checked
+                  (TyRefined
+                    (Name "v")
+                    (TyUInt 8)
+                    (Atom "NeedsNat" [RefToNat v]))
+                  Unrestricted
+              , [InsertedUIntToNat v]
+              ))
+        , Just (Left (UnknownClaim "Missing"))
+        , Nothing
+        , Nothing
+        , Nothing
+        ]
+  assert (actual == expected) $
+    "checked type mode routing invented a mode, lost a Core failure, or changed a focusing trace: "
       <> show actual
 
 intrinsicType :: Located GrammarV1TopLevelDecl -> Either String (Maybe Ty)
