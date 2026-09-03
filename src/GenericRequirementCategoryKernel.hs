@@ -102,3 +102,4 @@ decideRequirementInterfaceDomainByFacts handoffDomainExact checkedDomainExact =
      Prelude.True -> RequirementInterfaceDomainAcceptedDecision;
      Prelude.False -> RequirementInterfaceCheckedDomainDecision};
    Prelude.False -> RequirementInterfaceHandoffDomainDecision}
+
