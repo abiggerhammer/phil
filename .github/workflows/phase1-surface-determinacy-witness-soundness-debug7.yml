@@ -1,0 +1,183 @@
+name: Phase 1 Surface Determinacy Witness Soundness Debug 7
+
+on:
+  pull_request:
+
+permissions:
+  contents: read
+
+jobs:
+  rocq-witness-soundness-debug7:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    container:
+      image: rocq/rocq-prover:9.2.0
+      options: --user root
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Derive exact Grammar-v1 inputs
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 scripts/derive_phase1_surface_grammar.py --write
+          python3 scripts/derive_phase1_surface_determinacy_certificate.py --write
+
+      - name: Apply successor-only canonical-fuel diagnostic
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 - <<'PY'
+          from pathlib import Path
+          import textwrap
+
+          workflow = Path('.github/workflows/phase1-surface-determinacy-witness-soundness-debug6.yml').read_text()
+          marker = workflow.index('- name: Apply canonical-fuel nullable witness diagnostic')
+          start = workflow.index('          from pathlib import Path', marker)
+          end = workflow.index('\n          PY', start)
+          code = textwrap.dedent(workflow[start:end])
+          exec(compile(code, '<existing-debug6-diagnostics>', 'exec'), {})
+
+          path = Path('proof/Phil/Surface/GrammarDeterminacyWitnessSoundness.v')
+          source = path.read_text()
+
+          safety_start = source.index('Lemma choice_bodies_nonnullable_fuel_monotone :')
+          safety_end = source.index('\nLemma nullable_sequence_fuel_lift :', safety_start)
+          safety = r'''Lemma forallb_impl_true :
+            forall (A : Type) (predicate result : A -> bool) items,
+              (forall item, predicate item = true -> result item = true) ->
+              forallb predicate items = true ->
+              forallb result items = true.
+          Proof.
+            intros A predicate result items Himpl.
+            induction items as [| item rest IH]; simpl; intros Hall.
+            - reflexivity.
+            - apply andb_true_iff in Hall as [Hitem Hrest].
+              apply andb_true_iff. split.
+              + apply Himpl. exact Hitem.
+              + apply IH. exact Hrest.
+          Qed.
+
+          Lemma choice_bodies_nonnullable_fuel_succ :
+            forall fuel expression,
+              choice_bodies_nonnullable_fuel fuel expression = true ->
+              choice_bodies_nonnullable_fuel (S fuel) expression = true.
+          Proof.
+            induction fuel as [| fuel IH]; intros expression Hsafe.
+            - simpl in Hsafe. discriminate.
+            - destruct expression as
+                [literal | class_name | name | items | items | body | body];
+                simpl in Hsafe |- *.
+              + reflexivity.
+              + reflexivity.
+              + reflexivity.
+              + eapply
+                  (forallb_impl_true
+                    EbnfExpression
+                    (choice_bodies_nonnullable_fuel fuel)
+                    (choice_bodies_nonnullable_fuel (S fuel))).
+                * intros item Hitem. apply IH. exact Hitem.
+                * exact Hsafe.
+              + eapply
+                  (forallb_impl_true
+                    EbnfExpression
+                    (fun item =>
+                      andb
+                        (negb (nullable_expression phase1_surface_nullable_facts item))
+                        (choice_bodies_nonnullable_fuel fuel item))
+                    (fun item =>
+                      andb
+                        (negb (nullable_expression phase1_surface_nullable_facts item))
+                        (choice_bodies_nonnullable_fuel (S fuel) item))).
+                * intros item Hitem.
+                  apply andb_true_iff in Hitem as [Hnullable Hbody].
+                  apply andb_true_iff. split.
+                  -- exact Hnullable.
+                  -- apply IH. exact Hbody.
+                * exact Hsafe.
+              + apply andb_true_iff in Hsafe as [Hnullable Hbody].
+                apply andb_true_iff. split.
+                * exact Hnullable.
+                * apply IH. exact Hbody.
+              + apply andb_true_iff in Hsafe as [Hnullable Hbody].
+                apply andb_true_iff. split.
+                * exact Hnullable.
+                * apply IH. exact Hbody.
+          Qed.
+          '''
+          source = source[:safety_start] + safety + source[safety_end:]
+
+          monotone_start = source.index('Lemma nullable_expression_fuel_monotone :')
+          monotone_end = source.index('\nDefinition expression_child_fuel :', monotone_start)
+          monotone = r'''Lemma nullable_expression_fuel_succ :
+            forall fuel expression value,
+              nullable_expression_fuel
+                fuel phase1_surface_nullable_facts expression = Some value ->
+              nullable_expression_fuel
+                (S fuel) phase1_surface_nullable_facts expression = Some value.
+          Proof.
+            induction fuel as [| fuel IH]; intros expression value Heval.
+            - simpl in Heval. discriminate.
+            - eapply nullable_expression_fuel_lift_step.
+              + intros child child_value Hchild.
+                exact (IH child child_value Hchild).
+              + exact Heval.
+          Qed.
+          '''
+          source = source[:monotone_start] + monotone + source[monotone_end:]
+
+          smaller_start = source.index('Lemma nullable_safe_smaller_from_canonical :')
+          smaller_end = source.index('\nDefinition NullableWitnessCanonicalProperty', smaller_start)
+          smaller = r'''Lemma nullable_safe_child_from_canonical :
+            forall expression,
+              choice_bodies_nonnullable_fuel
+                expression_child_fuel expression = true ->
+              nullable_expression_fuel
+                expression_fuel phase1_surface_nullable_facts expression = Some true ->
+              nullable_expression_fuel
+                expression_child_fuel phase1_surface_nullable_facts expression = Some true.
+          Proof.
+            intros expression Hsafe Hcanonical.
+            destruct
+              (choice_safe_nullable_defined
+                expression_child_fuel expression Hsafe)
+              as [value Hchild].
+            pose proof
+              (nullable_expression_fuel_succ
+                expression_child_fuel expression value Hchild)
+              as Hfull.
+            rewrite <- expression_fuel_is_successor in Hfull.
+            rewrite Hcanonical in Hfull.
+            inversion Hfull. subst value.
+            exact Hchild.
+          Qed.
+          '''
+          source = source[:smaller_start] + smaller + source[smaller_end:]
+
+          source = source.replace(
+            '''eapply choice_bodies_nonnullable_fuel_monotone.\n              - unfold expression_child_fuel, expression_fuel. lia.\n              - exact Hitem_safe.''',
+            '''rewrite expression_fuel_is_successor.\n              apply choice_bodies_nonnullable_fuel_succ.\n              exact Hitem_safe.''')
+          source = source.replace(
+            '''(nullable_safe_smaller_from_canonical\n                expression_child_fuel item\n                (ltac:(unfold expression_child_fuel, expression_fuel; lia))\n                Hitem_safe Hitem_full)''',
+            '''(nullable_safe_child_from_canonical\n                item Hitem_safe Hitem_full)''')
+
+          path.write_text(source)
+          PY
+
+      - name: Compile witness soundness with timing
+        shell: bash
+        run: |
+          set -euo pipefail
+          export PATH="/home/rocq/.opam/${COMPILER}/bin:$PATH"
+          rocq c -Q proof/Phil Phil proof/Phil/Surface/Grammar.v
+          rocq c -Q proof/Phil Phil proof/Phil/Surface/GrammarDerivation.v
+          rocq c -Q proof/Phil Phil proof/Phil/Surface/GrammarDerivationOracle.v
+          rocq c -Q proof/Phil Phil proof/Phil/Surface/GrammarDeterminacyCertificate.v
+          rocq c -Q proof/Phil Phil proof/Phil/Surface/GrammarDeterminacyNullableFirst.v
+          rocq c -Q proof/Phil Phil proof/Phil/Surface/GrammarDeterminacyFollowOverlap.v
+          rocq c -Q proof/Phil Phil proof/Phil/Surface/GrammarDeterminacySimpleResolvers.v
+          rocq c -Q proof/Phil Phil proof/Phil/Surface/GrammarDeterminacyStructuralResolvers.v
+          rocq c -Q proof/Phil Phil proof/Phil/Surface/GrammarDeterminacyPredictiveOracle.v
+          rocq c -Q proof/Phil Phil proof/Phil/Surface/GrammarDerivationLookahead.v
+          timeout 300s rocq c -time -Q proof/Phil Phil \
+            proof/Phil/Surface/GrammarDeterminacyWitnessSoundness.v
