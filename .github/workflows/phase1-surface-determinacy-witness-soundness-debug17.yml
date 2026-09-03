@@ -23,7 +23,7 @@ jobs:
           python3 scripts/derive_phase1_surface_grammar.py --write
           python3 scripts/derive_phase1_surface_determinacy_certificate.py --write
 
-      - name: Apply factored nonterminal adapter diagnostic
+      - name: Apply factored nullable and per-token FIRST diagnostic
         shell: bash
         run: |
           set -euo pipefail
@@ -111,6 +111,89 @@ jobs:
           Qed.
           '''
           source = source[:old_start] + replacement + source[old_end:]
+
+          first_start = source.index('Theorem phase1_surface_first_witness_fuel_sound :')
+          first_end = source.index('\nCorollary phase1_surface_first_witness_matches_computed_facts', first_start)
+          first = source[first_start:first_end]
+
+          old_statement = '''Theorem phase1_surface_first_witness_fuel_sound :
+            (forall token expression,
+              FirstWitness phase1_surface_rules token expression ->
+              FirstWitnessFuelProperty token expression) /\\
+            (forall token items,
+              FirstSequenceWitness phase1_surface_rules token items ->
+              FirstSequenceFuelProperty token items) /\\
+            (forall token items,
+              FirstAlternativeWitness phase1_surface_rules token items ->
+              FirstAlternativeFuelProperty token items).
+          Proof.
+            apply FirstWitness_mutind.
+          '''
+          new_statement = '''Theorem phase1_surface_first_witness_fuel_sound_for_token :
+            forall token,
+            (forall expression,
+              FirstWitness phase1_surface_rules token expression ->
+              FirstWitnessFuelProperty token expression) /\\
+            (forall items,
+              FirstSequenceWitness phase1_surface_rules token items ->
+              FirstSequenceFuelProperty token items) /\\
+            (forall items,
+              FirstAlternativeWitness phase1_surface_rules token items ->
+              FirstAlternativeFuelProperty token items).
+          Proof.
+            intros token.
+            apply FirstWitness_mutind.
+          '''
+          if first.count(old_statement) != 1:
+              raise SystemExit(f'expected FIRST theorem statement once, found {first.count(old_statement)}')
+          first = first.replace(old_statement, new_statement, 1)
+
+          intros_rewrites = {
+              '- intros token literal Htoken.': '- intros literal Htoken.',
+              '- intros token class_name Htoken.': '- intros class_name Htoken.',
+              '- intros token name body Hlookup Hbody IHbody.': '- intros name body Hlookup Hbody IHbody.',
+              '- intros token items Hitems IHitems.': '- intros items Hitems IHitems.',
+              '- intros token body Hbody IHbody.': '- intros body Hbody IHbody.',
+              '- intros token item rest Hitem IHitem.': '- intros item rest Hitem IHitem.',
+              '- intros token item rest Hnullable Hrest IHrest.': '- intros item rest Hnullable Hrest IHrest.',
+              '- intros token item rest Hrest IHrest.': '- intros item rest Hrest IHrest.',
+          }
+          for old, new in intros_rewrites.items():
+              count = first.count(old)
+              if count == 0:
+                  raise SystemExit(f'missing FIRST branch binder: {old}')
+              first = first.replace(old, new)
+
+          wrapper = r'''
+
+          Theorem phase1_surface_first_witness_fuel_sound :
+            (forall token expression,
+              FirstWitness phase1_surface_rules token expression ->
+              FirstWitnessFuelProperty token expression) /\
+            (forall token items,
+              FirstSequenceWitness phase1_surface_rules token items ->
+              FirstSequenceFuelProperty token items) /\
+            (forall token items,
+              FirstAlternativeWitness phase1_surface_rules token items ->
+              FirstAlternativeFuelProperty token items).
+          Proof.
+            split.
+            - intros token.
+              exact
+                (proj1
+                  (phase1_surface_first_witness_fuel_sound_for_token token)).
+            - split.
+              + intros token.
+                exact
+                  (proj1 (proj2
+                    (phase1_surface_first_witness_fuel_sound_for_token token))).
+              + intros token.
+                exact
+                  (proj2 (proj2
+                    (phase1_surface_first_witness_fuel_sound_for_token token))).
+          Qed.
+          '''
+          source = source[:first_start] + first + wrapper + source[first_end:]
           path.write_text(source)
           print(f'generated witness proof characters: {len(source)}')
           PY
