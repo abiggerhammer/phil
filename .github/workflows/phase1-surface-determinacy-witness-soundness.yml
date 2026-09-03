@@ -2,41 +2,8 @@ name: Phase 1 Surface Determinacy Witness Soundness
 
 on:
   pull_request:
-    paths:
-      - 'grammar/phase1-surface.ebnf'
-      - 'scripts/derive_phase1_surface_grammar.py'
-      - 'scripts/check_phase1_surface_determinacy.py'
-      - 'scripts/derive_phase1_surface_determinacy_certificate.py'
-      - 'proof/Phil/Surface/GrammarDerivation.v'
-      - 'proof/Phil/Surface/GrammarDerivationLookahead.v'
-      - 'proof/Phil/Surface/GrammarDerivationOracle.v'
-      - 'proof/Phil/Surface/GrammarDeterminacyCertificate.v'
-      - 'proof/Phil/Surface/GrammarDeterminacyNullableFirst.v'
-      - 'proof/Phil/Surface/GrammarDeterminacyFollowOverlap.v'
-      - 'proof/Phil/Surface/GrammarDeterminacySimpleResolvers.v'
-      - 'proof/Phil/Surface/GrammarDeterminacyStructuralResolvers.v'
-      - 'proof/Phil/Surface/GrammarDeterminacyPredictiveOracle.v'
-      - 'proof/Phil/Surface/GrammarDeterminacyWitnessSoundness.v'
-      - 'docs/phase-1/surface-determinacy-witness-soundness-v1.md'
-      - '.github/workflows/phase1-surface-determinacy-witness-soundness.yml'
   push:
     branches: [main]
-    paths:
-      - 'grammar/phase1-surface.ebnf'
-      - 'scripts/derive_phase1_surface_grammar.py'
-      - 'scripts/check_phase1_surface_determinacy.py'
-      - 'scripts/derive_phase1_surface_determinacy_certificate.py'
-      - 'proof/Phil/Surface/GrammarDerivation.v'
-      - 'proof/Phil/Surface/GrammarDerivationLookahead.v'
-      - 'proof/Phil/Surface/GrammarDerivationOracle.v'
-      - 'proof/Phil/Surface/GrammarDeterminacyCertificate.v'
-      - 'proof/Phil/Surface/GrammarDeterminacyNullableFirst.v'
-      - 'proof/Phil/Surface/GrammarDeterminacyFollowOverlap.v'
-      - 'proof/Phil/Surface/GrammarDeterminacySimpleResolvers.v'
-      - 'proof/Phil/Surface/GrammarDeterminacyStructuralResolvers.v'
-      - 'proof/Phil/Surface/GrammarDeterminacyPredictiveOracle.v'
-      - 'docs/phase-1/surface-determinacy-witness-soundness-v1.md'
-      - '.github/workflows/phase1-surface-determinacy-witness-soundness.yml'
 
 permissions:
   contents: read
@@ -50,6 +17,7 @@ jobs:
       options: --user root
     steps:
       - uses: actions/checkout@v4
+
       - name: Derive exact Grammar-v1 inputs
         shell: bash
         run: |
@@ -58,7 +26,8 @@ jobs:
           python3 scripts/derive_phase1_surface_determinacy_certificate.py --write
           python3 scripts/derive_phase1_surface_grammar.py --check
           python3 scripts/derive_phase1_surface_determinacy_certificate.py --check
-      - name: Apply diagnostic first-definedness split
+
+      - name: Apply witness-soundness diagnostics
         shell: bash
         run: |
           set -euo pipefail
@@ -67,9 +36,10 @@ jobs:
 
           path = Path('proof/Phil/Surface/GrammarDeterminacyWitnessSoundness.v')
           source = path.read_text()
+
           start = source.index('Lemma choice_safe_first_defined :')
           end = source.index('\nDefinition NullableWitnessFuelProperty', start)
-          new = '''Lemma choice_safe_first_optional_safety_equation :
+          first_block = r'''Lemma choice_safe_first_optional_safety_equation :
             forall fuel body,
               choice_bodies_nonnullable_fuel (S fuel) (EOptional body) =
               andb
@@ -227,20 +197,45 @@ jobs:
               exact (choice_safe_first_defined_step fuel IH expression Hsafe).
           Qed.
           '''
-          path.write_text(source[:start] + new + source[end:])
-          PY
-      - name: Apply diagnostic nullable-witness case split
-        shell: bash
-        run: |
-          set -euo pipefail
-          python3 - <<'PY'
-          from pathlib import Path
+          source = source[:start] + first_block + source[end:]
 
-          path = Path('proof/Phil/Surface/GrammarDeterminacyWitnessSoundness.v')
-          source = path.read_text()
           start = source.index('Theorem phase1_surface_nullable_witness_fuel_sound :')
           end = source.index('\nCorollary phase1_surface_nullable_witness_matches_computed_facts', start)
-          new = '''Lemma nullable_witness_nonterminal_fuel_case :
+          nullable_block = r'''Lemma nullable_expression_fuel_true_implies_nullable :
+            forall expression,
+              nullable_expression_fuel
+                expression_fuel phase1_surface_nullable_facts expression = Some true ->
+              nullable_expression phase1_surface_nullable_facts expression = true.
+          Proof.
+            intros expression Heval.
+            unfold nullable_expression.
+            rewrite Heval.
+            reflexivity.
+          Qed.
+
+          Lemma nullable_nonterminal_fuel_equation :
+            forall fuel name,
+              nullable_expression_fuel
+                (S fuel) phase1_surface_nullable_facts (ENonterminal name) =
+              Some (lookup_bool name phase1_surface_nullable_facts).
+          Proof.
+            reflexivity.
+          Qed.
+
+          Lemma nullable_rule_lookup_true_from_body :
+            forall name body,
+              lookupRule name phase1_surface_rules = Some body ->
+              nullable_expression phase1_surface_nullable_facts body = true ->
+              lookup_bool name phase1_surface_nullable_facts = true.
+          Proof.
+            intros name body Hlookup Hbody.
+            pose proof (phase1_surface_nullable_lookup_rule name body Hlookup)
+              as Hlookup_fact.
+            rewrite Hbody in Hlookup_fact.
+            exact Hlookup_fact.
+          Qed.
+
+          Lemma nullable_witness_nonterminal_fuel_case :
             forall name body,
               lookupRule name phase1_surface_rules = Some body ->
               NullableWitness phase1_surface_rules body ->
@@ -255,13 +250,23 @@ jobs:
             - assert (Hbody_safe :
                 choice_bodies_nonnullable_fuel expression_fuel body = true).
               { eapply phase1_surface_rule_body_choice_safe. exact Hlookup. }
-              specialize (IHbody expression_fuel (Nat.le_refl _) Hbody_safe).
-              pose proof (phase1_surface_nullable_lookup_rule name body Hlookup)
-                as Hlookup_fact.
-              unfold nullable_expression in Hlookup_fact.
-              rewrite IHbody in Hlookup_fact.
-              simpl in Hlookup_fact.
-              simpl. rewrite Hlookup_fact. reflexivity.
+              pose proof
+                (IHbody expression_fuel (Nat.le_refl _) Hbody_safe)
+                as Hbody_eval.
+              assert (Hbody_nullable :
+                nullable_expression phase1_surface_nullable_facts body = true).
+              {
+                eapply nullable_expression_fuel_true_implies_nullable.
+                exact Hbody_eval.
+              }
+              assert (Hname_nullable :
+                lookup_bool name phase1_surface_nullable_facts = true).
+              {
+                eapply nullable_rule_lookup_true_from_body; eauto.
+              }
+              rewrite nullable_nonterminal_fuel_equation.
+              rewrite Hname_nullable.
+              reflexivity.
           Qed.
 
           Lemma nullable_witness_sequence_fuel_case :
@@ -395,10 +400,10 @@ jobs:
           Theorem phase1_surface_nullable_witness_fuel_sound :
             (forall expression,
               NullableWitness phase1_surface_rules expression ->
-              NullableWitnessFuelProperty expression) /\\
+              NullableWitnessFuelProperty expression) /\
             (forall items,
               NullableSequenceWitness phase1_surface_rules items ->
-              NullableSequenceFuelProperty items) /\\
+              NullableSequenceFuelProperty items) /\
             (forall items,
               NullableAlternativeWitness phase1_surface_rules items ->
               NullableAlternativeFuelProperty items).
@@ -415,8 +420,10 @@ jobs:
             - exact nullable_alternative_later_fuel_case.
           Qed.
           '''
-          path.write_text(source[:start] + new + source[end:])
+          source = source[:start] + nullable_block + source[end:]
+          path.write_text(source)
           PY
+
       - name: Compile nullable/FIRST witness soundness bridge
         shell: bash
         run: |
@@ -442,6 +449,7 @@ jobs:
           timeout 300s rocq c -time -Q proof/Phil Phil \
             proof/Phil/Surface/GrammarDeterminacyWitnessSoundness.v
           echo "=== finished GrammarDeterminacyWitnessSoundness.v at $(date -u +%FT%TZ) ==="
+
       - name: Record witness-soundness proof identities
         shell: bash
         run: |
@@ -480,6 +488,7 @@ jobs:
             proof/Phil/Surface/GrammarDeterminacyWitnessSoundness.vo \
             > surface-determinacy-witness-soundness/identities.sha256
           cat surface-determinacy-witness-soundness/identities.sha256
+
       - uses: actions/upload-artifact@v4
         with:
           name: rocq-surface-determinacy-witness-soundness
