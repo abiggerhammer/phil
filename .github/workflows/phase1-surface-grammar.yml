@@ -27,6 +27,7 @@ on:
       - 'test/Phase1GrammarV1BoundaryCanonicalityMain.hs'
       - 'test/Phase1GrammarV1BoundaryCodecReferenceElaborationMain.hs'
       - 'test/Phase1GrammarV1StaticProcessNetworkMain.hs'
+      - 'test/Phase1GrammarV1ProgramSurfaceMain.hs'
       - 'test/Phase1GrammarV1ExternalProtocolParticipantMain.hs'
       - 'test/Phase1GrammarV1ProviderDeclarationsMain.hs'
       - 'test/Phase1GrammarV1OpaqueProviderImplementationMain.hs'
@@ -75,6 +76,7 @@ on:
       - 'test/Phase1GrammarV1BoundaryCanonicalityMain.hs'
       - 'test/Phase1GrammarV1BoundaryCodecReferenceElaborationMain.hs'
       - 'test/Phase1GrammarV1StaticProcessNetworkMain.hs'
+      - 'test/Phase1GrammarV1ProgramSurfaceMain.hs'
       - 'test/Phase1GrammarV1ExternalProtocolParticipantMain.hs'
       - 'test/Phase1GrammarV1ProviderDeclarationsMain.hs'
       - 'test/Phase1GrammarV1OpaqueProviderImplementationMain.hs'
@@ -180,6 +182,9 @@ jobs:
 
       - name: Check Grammar-v1 static process-network parsing
         run: cabal exec -- runghc -Wall -Werror -isrc test/Phase1GrammarV1StaticProcessNetworkMain.hs
+
+      - name: Check Grammar-v1 checked program-root routing
+        run: cabal exec -- runghc -Wall -Werror -isrc test/Phase1GrammarV1ProgramSurfaceMain.hs
 
       - name: Check Grammar-v1 external protocol-participant parsing
         run: cabal exec -- runghc -Wall -Werror -isrc test/Phase1GrammarV1ExternalProtocolParticipantMain.hs
