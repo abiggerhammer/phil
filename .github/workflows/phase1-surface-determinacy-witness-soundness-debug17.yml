@@ -164,10 +164,12 @@ jobs:
                   raise SystemExit(f'missing FIRST branch binder: {old}')
               first = first.replace(old, new)
 
-          redundant = '* rewrite String.eqb_refl. reflexivity.'
-          if first.count(redundant) != 2:
-              raise SystemExit(f'expected two redundant token rewrites, found {first.count(redundant)}')
-          first = first.replace(redundant, '* reflexivity.')
+          membership = '* rewrite String.eqb_refl. reflexivity.'
+          if first.count(membership) != 2:
+              raise SystemExit(f'expected two singleton token memberships, found {first.count(membership)}')
+          first = first.replace(
+              membership,
+              '* unfold token_mem. rewrite overlap_token_eqb_refl. reflexivity.')
 
           wrapper = r'''
 
