@@ -45,6 +45,7 @@ permissions:
 jobs:
   rocq-witness-soundness:
     runs-on: ubuntu-latest
+    timeout-minutes: 30
     container:
       image: rocq/rocq-prover:9.2.0
       options: --user root
