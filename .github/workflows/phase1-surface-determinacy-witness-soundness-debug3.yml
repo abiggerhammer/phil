@@ -62,7 +62,9 @@ jobs:
             apply andb_true_iff in Hhead_safe as [_ Hitem_safe].
             pose proof
               (IHitem fuel
-                (Nat.le_trans (Nat.le_succ_diag_r fuel) Hfuel)
+                (Nat.le_trans
+                  fuel (S fuel) expression_fuel
+                  (Nat.le_succ_diag_r fuel) Hfuel)
                 Hitem_safe)
               as Hitem_eval.
             assert (Hrest_expr_safe :
