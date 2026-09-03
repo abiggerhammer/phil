@@ -151,6 +151,21 @@ Proof.
   exact Hfact.
 Qed.
 
+Lemma forallb_andb_right :
+  forall (A : Type) (left right : A -> bool) items,
+    forallb (fun item => andb (left item) (right item)) items = true ->
+    forallb right items = true.
+Proof.
+  intros A left right items.
+  induction items as [| item rest IH]; intros Hall; simpl in *.
+  - reflexivity.
+  - apply andb_true_iff in Hall as [Hhead Htail].
+    apply andb_true_iff in Hhead as [_ Hright].
+    apply andb_true_iff. split.
+    + exact Hright.
+    + apply IH. exact Htail.
+Qed.
+
 Lemma nullable_sequence_cons_defined :
   forall fuel item rest item_value rest_value,
     nullable_expression_fuel
@@ -209,6 +224,27 @@ Proof.
     eapply nullable_sequence_cons_defined; eauto.
 Qed.
 
+Lemma choice_safe_nullable_alternative_choices_defined :
+  forall fuel items,
+    (forall expression,
+      choice_bodies_nonnullable_fuel fuel expression = true ->
+      exists value,
+        nullable_expression_fuel
+          fuel phase1_surface_nullable_facts expression = Some value) ->
+    forallb (choice_bodies_nonnullable_fuel fuel) items = true ->
+    exists value,
+      nullable_expression_fuel
+        (S fuel) phase1_surface_nullable_facts (EAlternative items) = Some value.
+Proof.
+  intros fuel items IH.
+  induction items as [| item rest IHrest]; intros Hsafe; simpl in Hsafe.
+  - simpl. eexists. reflexivity.
+  - apply andb_true_iff in Hsafe as [Hitem_safe Hrest_safe].
+    destruct (IH item Hitem_safe) as [item_value Hitem_value].
+    destruct (IHrest Hrest_safe) as [rest_value Hrest_value].
+    eapply nullable_alternative_cons_defined; eauto.
+Qed.
+
 Lemma choice_safe_nullable_alternative_defined :
   forall fuel items,
     (forall expression,
@@ -226,14 +262,16 @@ Lemma choice_safe_nullable_alternative_defined :
       nullable_expression_fuel
         (S fuel) phase1_surface_nullable_facts (EAlternative items) = Some value.
 Proof.
-  intros fuel items IH.
-  induction items as [| item rest IHrest]; intros Hsafe; simpl in Hsafe.
-  - simpl. eexists. reflexivity.
-  - apply andb_true_iff in Hsafe as [Hhead_safe Hrest_safe].
-    apply andb_true_iff in Hhead_safe as [_ Hitem_safe].
-    destruct (IH item Hitem_safe) as [item_value Hitem_value].
-    destruct (IHrest Hrest_safe) as [rest_value Hrest_value].
-    eapply nullable_alternative_cons_defined; eauto.
+  intros fuel items IH Hsafe.
+  eapply choice_safe_nullable_alternative_choices_defined.
+  - exact IH.
+  - eapply
+      (forallb_andb_right
+        EbnfExpression
+        (fun item => negb (nullable_expression phase1_surface_nullable_facts item))
+        (choice_bodies_nonnullable_fuel fuel)
+        items).
+    exact Hsafe.
 Qed.
 
 Lemma choice_safe_nullable_defined :
@@ -332,6 +370,33 @@ Proof.
     eapply first_sequence_cons_defined; eauto.
 Qed.
 
+Lemma choice_safe_first_alternative_choices_defined :
+  forall fuel items,
+    (forall expression,
+      choice_bodies_nonnullable_fuel fuel expression = true ->
+      exists tokens,
+        first_expression_fuel
+          fuel
+          phase1_surface_nullable_facts
+          phase1_surface_first_facts
+          expression = Some tokens) ->
+    forallb (choice_bodies_nonnullable_fuel fuel) items = true ->
+    exists tokens,
+      first_expression_fuel
+        (S fuel)
+        phase1_surface_nullable_facts
+        phase1_surface_first_facts
+        (EAlternative items) = Some tokens.
+Proof.
+  intros fuel items IH.
+  induction items as [| item rest IHrest]; intros Hsafe; simpl in Hsafe.
+  - simpl. eexists. reflexivity.
+  - apply andb_true_iff in Hsafe as [Hitem_safe Hrest_safe].
+    destruct (IH item Hitem_safe) as [item_first Hitem_first].
+    destruct (IHrest Hrest_safe) as [rest_first Hrest_first].
+    eapply first_alternative_cons_defined; eauto.
+Qed.
+
 Lemma choice_safe_first_alternative_defined :
   forall fuel items,
     (forall expression,
@@ -355,14 +420,16 @@ Lemma choice_safe_first_alternative_defined :
         phase1_surface_first_facts
         (EAlternative items) = Some tokens.
 Proof.
-  intros fuel items IH.
-  induction items as [| item rest IHrest]; intros Hsafe; simpl in Hsafe.
-  - simpl. eexists. reflexivity.
-  - apply andb_true_iff in Hsafe as [Hhead_safe Hrest_safe].
-    apply andb_true_iff in Hhead_safe as [_ Hitem_safe].
-    destruct (IH item Hitem_safe) as [item_first Hitem_first].
-    destruct (IHrest Hrest_safe) as [rest_first Hrest_first].
-    eapply first_alternative_cons_defined; eauto.
+  intros fuel items IH Hsafe.
+  eapply choice_safe_first_alternative_choices_defined.
+  - exact IH.
+  - eapply
+      (forallb_andb_right
+        EbnfExpression
+        (fun item => negb (nullable_expression phase1_surface_nullable_facts item))
+        (choice_bodies_nonnullable_fuel fuel)
+        items).
+    exact Hsafe.
 Qed.
 
 Lemma choice_safe_first_defined :
