@@ -5,16 +5,21 @@ module Phil.Core.DataBorrow
   , endBorrowedAggregateField
   ) where
 
+import Control.Monad (unless)
 import Data.List (find)
+import qualified Data.Set as Set
 import Phil.Core.Context
-  ( CheckError
-  , ResourceContext
+  ( CheckError (..)
+  , ResourceContext (..)
   , endSharedLoan
+  , ensureComplete
   , startSharedLoan
+  , useBinding
   )
 import Phil.Core.DataDestruction
   ( OwnedField (..)
   )
+import qualified Phil.Core.DataEliminationKernelBridge as KernelBridge
 import Phil.Core.Syntax (Mode, Name, Ty)
 
 -- | DATA-006 makes aggregate observation explicit without creating another
@@ -31,6 +36,7 @@ data BorrowedAggregateField = BorrowedAggregateField
 data DataBorrowError
   = DataBorrowContextError CheckError
   | UnknownBorrowedAggregateField Name
+  | CertifiedDataEliminationBorrowKernelDisagreement
   deriving (Eq, Show)
 
 beginBorrowedAggregateField
@@ -44,6 +50,25 @@ beginBorrowedAggregateField owner fields fieldName context = do
     Nothing -> Left (UnknownBorrowedAggregateField fieldName)
     Just value -> Right value
   next <- mapLeft DataBorrowContextError (startSharedLoan owner context)
+  let loanStarted = Set.member owner (sharedLoans next)
+      ownerImmobilized = case useBinding owner next of
+        Left (OwnerBorrowed actual) -> actual == owner
+        _ -> False
+      activeLoanRejectedAtBoundary = case ensureComplete next of
+        Left (EscapingLoans loans) -> Set.member owner loans
+        _ -> False
+      loanEndPreservedOwner = case endSharedLoan owner next of
+        Right restored -> restored == context
+        Left _ -> False
+  unless
+    ( KernelBridge.borrowLifecycleAccepted
+        True
+        loanStarted
+        ownerImmobilized
+        activeLoanRejectedAtBoundary
+        loanEndPreservedOwner
+    ) $
+    Left CertifiedDataEliminationBorrowKernelDisagreement
   Right
     ( BorrowedAggregateField
         { borrowedAggregateOwner = owner
