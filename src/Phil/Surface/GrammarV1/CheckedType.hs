@@ -1,6 +1,11 @@
 module Phil.Surface.GrammarV1.CheckedType
-  ( grammarV1CheckedType
+  ( GrammarV1ResolvedNamedTypeMode (..)
+  , GrammarV1CheckedTypeModeOrigin (..)
+  , GrammarV1CheckedResolvedTypeMode (..)
+  , GrammarV1CheckedTypeModeResolutionError (..)
+  , grammarV1CheckedType
   , grammarV1CheckedTypeMode
+  , grammarV1CheckedTypeModeWithNamedResolutions
   ) where
 
 import Phil.Core.CheckedBindingMode
@@ -13,7 +18,15 @@ import Phil.Core.Focusing
   ( FocusStep
   , FocusingError
   )
-import Phil.Core.Static (StaticContext)
+import Phil.Core.Generic.StaticActual
+  ( GenericStaticActual
+  , GenericStaticKind (..)
+  )
+import Phil.Core.Static
+  ( DeclarationKey
+  , InterfaceRevision
+  , StaticContext
+  )
 import Phil.Core.Syntax
   ( Mode (..)
   , ProductElementType (..)
@@ -29,8 +42,12 @@ import Phil.Surface.GrammarV1.CheckedProofType
 import Phil.Surface.GrammarV1.CheckedRefinementType
   ( grammarV1CheckedRefinementType
   )
+import Phil.Surface.GrammarV1.Elaborate
+  ( grammarV1BareStaticReferenceActual
+  )
 import Phil.Surface.GrammarV1.Parser
-  ( GrammarV1Type (..)
+  ( GrammarV1StaticArgument (..)
+  , GrammarV1Type (..)
   )
 
 -- | Provide one checked entry point for every currently supported Grammar-v1
@@ -88,6 +105,145 @@ grammarV1CheckedTypeMode staticContext state sourceType = do
               }
           , steps
           ))
+
+-- | One named-type resolution supplied by the competent declaration/static
+-- layer. The unresolved reference is repeated deliberately so source-to-resolution
+-- correspondence can be checked exactly. Stable declaration/interface identity
+-- and the already-checked type/mode travel together; none is derived from source
+-- spelling at this boundary.
+data GrammarV1ResolvedNamedTypeMode = GrammarV1ResolvedNamedTypeMode
+  { resolvedNamedTypeReference :: GenericStaticActual
+  , resolvedNamedTypeKind :: GenericStaticKind
+  , resolvedNamedTypeDeclarationKey :: DeclarationKey
+  , resolvedNamedTypeInterfaceRevision :: InterfaceRevision
+  , resolvedNamedTypeCheckedMode :: CheckedTypeMode
+  }
+  deriving (Eq, Show)
+
+-- | Preserve whether structural mode was intrinsic to the checked Core type or
+-- supplied by an exact resolved named declaration. Named provenance remains
+-- visible so stable semantic identity is not collapsed back into display text.
+data GrammarV1CheckedTypeModeOrigin
+  = GrammarV1IntrinsicTypeModeOrigin
+  | GrammarV1NamedTypeModeOrigin
+      GenericStaticActual
+      DeclarationKey
+      InterfaceRevision
+  deriving (Eq, Show)
+
+data GrammarV1CheckedResolvedTypeMode = GrammarV1CheckedResolvedTypeMode
+  { checkedResolvedTypeMode :: CheckedTypeMode
+  , checkedResolvedTypeModeOrigin :: GrammarV1CheckedTypeModeOrigin
+  }
+  deriving (Eq, Show)
+
+data GrammarV1CheckedTypeModeResolutionError
+  = GrammarV1TypeModeFocusingError FocusingError
+  | GrammarV1NamedTypeModeUnresolved GenericStaticActual
+  | GrammarV1NamedTypeModeKindMismatch
+      GenericStaticActual
+      [GenericStaticKind]
+  | GrammarV1NamedTypeModeAmbiguous
+      GenericStaticActual
+      [DeclarationKey]
+  | GrammarV1NamedTypeModeCheckedTypeMismatch
+      GenericStaticActual
+      Ty
+      Ty
+  deriving (Eq, Show)
+
+-- | Extend checked mode(T) through exact caller-supplied named-type resolution
+-- without teaching source spelling to determine structural behavior. Intrinsic
+-- types use the same structural authority as 'grammarV1CheckedTypeMode'. A bare,
+-- unspecialized named type may additionally consume exactly one Type-kind
+-- resolution for its exact unresolved static reference. The resolution must
+-- carry a CheckedTypeMode whose Ty is exactly the already-checked source Ty.
+--
+-- Missing, wrong-kind, ambiguous, or type-mismatched resolutions reject at this
+-- explicit resolution boundary. Specialized named types remain source
+-- non-competent because their static arguments still require generic
+-- instantiation. Frame and Validated remain unresolved resource/declaration
+-- categories rather than borrowing named-type evidence. Core focusing rejection
+-- remains distinct from every resolution failure.
+grammarV1CheckedTypeModeWithNamedResolutions
+  :: StaticContext
+  -> SurfaceState
+  -> [GrammarV1ResolvedNamedTypeMode]
+  -> GrammarV1Type
+  -> Maybe
+      (Either
+        GrammarV1CheckedTypeModeResolutionError
+        (GrammarV1CheckedResolvedTypeMode, [FocusStep]))
+grammarV1CheckedTypeModeWithNamedResolutions
+    staticContext state resolutions sourceType = do
+  checked <- grammarV1CheckedType staticContext state sourceType
+  case checked of
+    Left err -> pure (Left (GrammarV1TypeModeFocusingError err))
+    Right (ty, steps) -> case checkedCoreTypeMode ty of
+      Just mode -> pure
+        (Right
+          ( GrammarV1CheckedResolvedTypeMode
+              { checkedResolvedTypeMode = CheckedTypeMode
+                  { checkedBindingType = ty
+                  , checkedBindingMode = mode
+                  }
+              , checkedResolvedTypeModeOrigin = GrammarV1IntrinsicTypeModeOrigin
+              }
+          , steps
+          ))
+      Nothing -> do
+        sourceReference <- namedTypeReference sourceType
+        pure $ fmap (, steps) (resolveNamedTypeMode sourceReference ty resolutions)
+
+namedTypeReference :: GrammarV1Type -> Maybe GenericStaticActual
+namedTypeReference sourceType = case sourceType of
+  GrammarV1NamedType reference ->
+    grammarV1BareStaticReferenceActual
+      (GrammarV1StaticReferenceArgument reference)
+  _ -> Nothing
+
+resolveNamedTypeMode
+  :: GenericStaticActual
+  -> Ty
+  -> [GrammarV1ResolvedNamedTypeMode]
+  -> Either GrammarV1CheckedTypeModeResolutionError GrammarV1CheckedResolvedTypeMode
+resolveNamedTypeMode sourceReference checkedType resolutions =
+  case referenceMatches of
+    [] -> Left (GrammarV1NamedTypeModeUnresolved sourceReference)
+    _ -> case typeMatches of
+      [] -> Left
+        (GrammarV1NamedTypeModeKindMismatch
+          sourceReference
+          (map resolvedNamedTypeKind referenceMatches))
+      [resolved]
+        | checkedBindingType (resolvedNamedTypeCheckedMode resolved) == checkedType ->
+            Right GrammarV1CheckedResolvedTypeMode
+              { checkedResolvedTypeMode = resolvedNamedTypeCheckedMode resolved
+              , checkedResolvedTypeModeOrigin = GrammarV1NamedTypeModeOrigin
+                  sourceReference
+                  (resolvedNamedTypeDeclarationKey resolved)
+                  (resolvedNamedTypeInterfaceRevision resolved)
+              }
+        | otherwise -> Left
+            (GrammarV1NamedTypeModeCheckedTypeMismatch
+              sourceReference
+              checkedType
+              (checkedBindingType (resolvedNamedTypeCheckedMode resolved)))
+      many -> Left
+        (GrammarV1NamedTypeModeAmbiguous
+          sourceReference
+          (map resolvedNamedTypeDeclarationKey many))
+  where
+    referenceMatches =
+      [ resolved
+      | resolved <- resolutions
+      , resolvedNamedTypeReference resolved == sourceReference
+      ]
+    typeMatches =
+      [ resolved
+      | resolved <- referenceMatches
+      , resolvedNamedTypeKind resolved == GenericTypeKind
+      ]
 
 checkedCoreTypeMode :: Ty -> Maybe Mode
 checkedCoreTypeMode ty = case ty of
