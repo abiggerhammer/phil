@@ -113,3 +113,4 @@ decideAggregateFormationByFact restrictedOccurrencesUnique =
   case restrictedOccurrencesUnique of {
    Prelude.True -> AggregateFormationAcceptedDecision;
    Prelude.False -> AggregateFormationDuplicateRestrictedDecision}
+
