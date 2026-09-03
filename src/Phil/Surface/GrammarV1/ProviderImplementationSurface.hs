@@ -42,7 +42,7 @@ import Phil.Surface.GrammarV1.CheckedProposition
   ( grammarV1CheckedProposition
   )
 import Phil.Surface.GrammarV1.ClosedBodySurface
-  ( grammarV1ClosedBody
+  ( grammarV1ClosedBoolUnitBlock
   )
 import Phil.Surface.GrammarV1.Elaborate
   ( grammarV1BareStaticReferenceActual
@@ -198,7 +198,7 @@ grammarV1CheckedClosedProviderImplementationSurface
             (Located _ operationType)
             sourceBody -> do
           callableReference <- unresolvedCallableReference operationType
-          body <- grammarV1ClosedBody sourceBody
+          body <- grammarV1ClosedBoolUnitBlock sourceBody
           let operationKey = ProviderOperationKey operationName
               syntheticComponent = Located
                 (locatedSpan sourceBody)
