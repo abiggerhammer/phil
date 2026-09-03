@@ -33,6 +33,10 @@ import Phil.Surface.Check.Types
 import Phil.Surface.GrammarV1.BoundaryFailureTypes
   ( grammarV1CheckedBoundaryFailureTypes
   )
+import Phil.Surface.GrammarV1.BoundaryPropositions
+  ( grammarV1CheckedBoundaryCorrespondences
+  , grammarV1CheckedBoundaryLaws
+  )
 import Phil.Surface.GrammarV1.BoundaryValueType
   ( grammarV1CheckedBoundaryValueType
   )
@@ -47,6 +51,8 @@ main = do
         checkedBoundaryValueTypes
     , test "SURF-008 checked boundary failure types preserve order and Core focusing outcomes"
         checkedBoundaryFailureTypes
+    , test "SURF-008 checked boundary propositions preserve categories names and Core focusing outcomes"
+        checkedBoundaryPropositions
     ]
   if and results then pure () else exitFailure
 
@@ -191,6 +197,104 @@ checkedBoundaryFailureTypes = do
   assert
     (grammarV1CheckedBoundaryFailureTypes context state unsupported == Nothing)
     "unsupported tuple failure type was partially accepted by checked boundary routing"
+
+checkedBoundaryPropositions :: Either String ()
+checkedBoundaryPropositions = do
+  context1 <- mapLeft show $
+    declareTransparentClaim
+      "Positive"
+      [(Name "x", SortUInt 8)]
+      (LessThan
+        (RefNat 0)
+        (RefToNat (RefVar (Name "x"))))
+      emptyStaticContext
+  context <- mapLeft show $
+    declareOpaqueClaim "NeedsNat" [(Name "n", SortNat)] context1
+  state <- bind "u" Unrestricted (TyUInt 8) emptySurfaceState
+  none <- parseBoundary "boundary-checked-propositions-none"
+    "boundary None : U8 { canonical; }"
+  rich <- parseBoundary "boundary-checked-propositions-rich" $ Text.unlines
+    [ "boundary Facts : U8 {"
+    , "  correspondence NeedsNat(u);"
+    , "  correspondence true;"
+    , "  law PositiveLaw : Positive(u);"
+    , "  law LiteralLaw : true;"
+    , "}"
+    ]
+  badLaw <- parseBoundary "boundary-checked-propositions-bad-law" $ Text.unlines
+    [ "boundary BadLaw : U8 {"
+    , "  correspondence true;"
+    , "  law Bad : Missing(u);"
+    , "}"
+    ]
+  badCorrespondence <- parseBoundary "boundary-checked-propositions-bad-correspondence" $ Text.unlines
+    [ "boundary BadCorrespondence : U8 {"
+    , "  correspondence Missing(u);"
+    , "  law Fine : true;"
+    , "}"
+    ]
+  unsupportedLaw <- parseBoundary "boundary-checked-propositions-unsupported-law" $ Text.unlines
+    [ "boundary UnsupportedLaw : U8 {"
+    , "  law Specialized : NeedsNat[U8](u);"
+    , "}"
+    ]
+
+  let u = RefVar (Name "u")
+  assert
+    (grammarV1CheckedBoundaryCorrespondences context state none == Just (Right []))
+    "boundary without correspondences did not preserve exact empty checked category"
+  assert
+    (grammarV1CheckedBoundaryLaws context state none == Just (Right []))
+    "boundary without laws did not preserve exact empty checked category"
+
+  case grammarV1CheckedBoundaryCorrespondences context state rich of
+    Just
+      (Right
+        [ (Atom "NeedsNat" [RefToNat actualU], [InsertedUIntToNat tracedU])
+        , (Truth, [])
+        ]) -> do
+          assert (actualU == u && tracedU == u)
+            "checked boundary correspondence lost exact UInt-to-Nat subject/trace"
+    other -> Left
+      ("checked boundary correspondences changed order, canonical meaning, or trace: "
+        <> show other)
+
+  case grammarV1CheckedBoundaryLaws context state rich of
+    Just
+      (Right
+        [ ("PositiveLaw", predicate, positiveSteps)
+        , ("LiteralLaw", Truth, [])
+        ]) -> do
+          assert
+            (predicate == LessThan (RefNat 0) (RefToNat u))
+            "checked boundary law lost transparent canonical proposition"
+          assert (ExpandedTransparentClaim "Positive" `elem` positiveSteps)
+            "checked boundary law lost transparent-claim expansion trace"
+    other -> Left
+      ("checked boundary laws changed names, order, canonical meaning, or trace: "
+        <> show other)
+
+  assert
+    (grammarV1CheckedBoundaryCorrespondences context state badLaw ==
+      Just (Right [(Truth, [])]))
+    "bad law incorrectly poisoned independent correspondence category"
+  assert
+    (grammarV1CheckedBoundaryLaws context state badLaw ==
+      Just (Left (UnknownClaim "Missing")))
+    "law Core error collapsed into source non-competence"
+
+  assert
+    (grammarV1CheckedBoundaryCorrespondences context state badCorrespondence ==
+      Just (Left (UnknownClaim "Missing")))
+    "correspondence Core error collapsed into source non-competence"
+  assert
+    (grammarV1CheckedBoundaryLaws context state badCorrespondence ==
+      Just (Right [("Fine", Truth, [])]))
+    "bad correspondence incorrectly poisoned independent law category"
+
+  assert
+    (grammarV1CheckedBoundaryLaws context state unsupportedLaw == Nothing)
+    "specialized law application bypassed checked proposition competence wall"
 
 bind :: Text.Text -> Mode -> Ty -> SurfaceState -> Either String SurfaceState
 bind name mode ty state =
