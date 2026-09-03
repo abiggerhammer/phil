@@ -36,15 +36,12 @@ jobs:
           start = workflow.index('          from pathlib import Path', marker)
           end = workflow.index('\n          PY', start)
           code = textwrap.dedent(workflow[start:end])
-          exec(compile(code, '<existing-debug4-diagnostics>', 'exec'), {})
-
-          path = Path('proof/Phil/Surface/GrammarDeterminacyWitnessSoundness.v')
-          source = path.read_text()
-          old = '            - exists value. exact Heval.\n'
-          new = '            - exists value. reflexivity.\n'
-          if old not in source:
-              raise SystemExit('expected rule-body-definedness branch not found')
-          path.write_text(source.replace(old, new, 1))
+          old = '- exists value. exact Heval.'
+          new = '- exists value. reflexivity.'
+          if old not in code:
+              raise SystemExit('expected rule-body-definedness branch not found in debug4 program')
+          code = code.replace(old, new, 1)
+          exec(compile(code, '<debug4-diagnostics-with-rule-body-fix>', 'exec'), {})
           PY
 
       - name: Compile witness soundness with timing
