@@ -1,8 +1,14 @@
 module Phil.Surface.GrammarV1.SessionSemantics
   ( grammarV1PrimitiveSession
+  , grammarV1PrimitiveSessionTemplate
   ) where
 
 import qualified Data.Set as Set
+import Phil.Core.Protocol.Family
+  ( ProtocolBranchTemplate (..)
+  , ProtocolSessionTemplate (..)
+  , ProtocolTypeTemplate (..)
+  )
 import Phil.Core.Syntax
   ( Branch (..)
   , Name (..)
@@ -30,6 +36,16 @@ import Phil.Surface.Syntax (Located (..))
 -- bounded competence rather than being erased or flattened.
 grammarV1PrimitiveSession :: GrammarV1SessionExpression -> Maybe Session
 grammarV1PrimitiveSession = elaborate Set.empty emptySurfaceState
+
+-- | Preserve the same admitted local-session fragment in the Core protocol
+-- family template vocabulary. This is a structural change of carrier only:
+-- every admitted concrete message type is wrapped as ProtocolConcreteType and
+-- no generic message parameter, role relation, family identity, or duality fact
+-- is inferred here.
+grammarV1PrimitiveSessionTemplate
+  :: GrammarV1SessionExpression
+  -> Maybe ProtocolSessionTemplate
+grammarV1PrimitiveSessionTemplate = fmap sessionTemplate . grammarV1PrimitiveSession
 
 elaborate
   :: Set.Set Name
@@ -109,3 +125,24 @@ insertPrimitiveParam (Located _ param) =
   grammarV1InsertPrimitiveBinding
     (grammarV1TermParamName param)
     (grammarV1TermParamType param)
+
+sessionTemplate :: Session -> ProtocolSessionTemplate
+sessionTemplate source = case source of
+  Send binder ty continuation ->
+    ProtocolTemplateSend binder (ProtocolConcreteType ty) (sessionTemplate continuation)
+  Receive binder ty continuation ->
+    ProtocolTemplateReceive binder (ProtocolConcreteType ty) (sessionTemplate continuation)
+  Select branches -> ProtocolTemplateSelect (map branchTemplate branches)
+  Offer branches -> ProtocolTemplateOffer (map branchTemplate branches)
+  End outcome -> ProtocolTemplateEnd outcome
+  Rec recursionName body -> ProtocolTemplateRec recursionName (sessionTemplate body)
+  SessionVar variable -> ProtocolTemplateVar variable
+
+branchTemplate :: Branch -> ProtocolBranchTemplate
+branchTemplate branch = ProtocolBranchTemplate
+  { protocolTemplateBranchLabel = branchLabel branch
+  , protocolTemplateBranchPayload = fmap
+      (\(binder, ty) -> (binder, ProtocolConcreteType ty))
+      (branchPayload branch)
+  , protocolTemplateBranchContinuation = sessionTemplate (branchContinuation branch)
+  }
