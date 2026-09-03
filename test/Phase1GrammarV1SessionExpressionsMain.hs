@@ -212,14 +212,14 @@ primitiveSessionRoutes = do
 
 primitiveSessionCompetence :: Either String ()
 primitiveSessionCompetence = do
-  staticRef <- firstRole =<< onlyProtocol staticReferenceSource
-  codec <- firstRole =<< onlyProtocol codecSessionSource
-  guarded <- firstRole =<< onlyProtocol guardedSessionSource
-  richPayload <- firstRole =<< onlyProtocol richPayloadSource
-  explicitEmpty <- firstRole =<< onlyProtocol explicitEmptyBranchSource
-  multiPayload <- firstRole =<< onlyProtocol multiPayloadBranchSource
-  unbound <- firstRole =<< onlyProtocol unboundContinueSource
-  duplicateBinder <- firstRole =<< onlyProtocol duplicateBinderSource
+  staticRef <- firstProtocolRole =<< onlyProtocol staticReferenceSource
+  codec <- firstProtocolRole =<< onlyProtocol codecSessionSource
+  guarded <- firstProtocolRole =<< onlyProtocol guardedSessionSource
+  richPayload <- firstProtocolRole =<< onlyProtocol richPayloadSource
+  explicitEmpty <- firstProtocolRole =<< onlyProtocol explicitEmptyBranchSource
+  multiPayload <- firstProtocolRole =<< onlyProtocol multiPayloadBranchSource
+  unbound <- firstProtocolRole =<< onlyProtocol unboundContinueSource
+  duplicateBinder <- firstProtocolRole =<< onlyProtocol duplicateBinderSource
   mapM_ expectNothing
     [ ("static session reference", staticRef)
     , ("codec-bearing session", codec)
@@ -250,8 +250,8 @@ roleSession expected protocol =
     sessions -> Left
       ("expected one role " <> Text.unpack expected <> ", got " <> show (length sessions))
 
-firstRole :: GrammarV1ProtocolDecl -> Either String (Located GrammarV1SessionExpression)
-firstRole protocol =
+firstProtocolRole :: GrammarV1ProtocolDecl -> Either String (Located GrammarV1SessionExpression)
+firstProtocolRole protocol =
   case grammarV1ProtocolRoles protocol of
     Located _ role : _ -> Right (grammarV1RoleSessionExpression role)
     [] -> Left "expected at least one protocol role"
