@@ -25,3 +25,4 @@ decideInvariantBoundaryByFacts predecessorsDistinct structuralAccepted witnesses
        Prelude.False -> InvariantBoundaryWitnessDomainDecision};
      Prelude.False -> InvariantBoundaryStructuralDecision};
    Prelude.False -> InvariantBoundaryDuplicatePredecessorDecision}
+
