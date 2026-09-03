@@ -151,6 +151,58 @@ Proof.
   exact Hfact.
 Qed.
 
+Lemma choice_safe_nullable_sequence_defined :
+  forall fuel items,
+    (forall expression,
+      choice_bodies_nonnullable_fuel fuel expression = true ->
+      exists value,
+        nullable_expression_fuel
+          fuel phase1_surface_nullable_facts expression = Some value) ->
+    forallb (choice_bodies_nonnullable_fuel fuel) items = true ->
+    exists value,
+      nullable_expression_fuel
+        (S fuel) phase1_surface_nullable_facts (ESequence items) = Some value.
+Proof.
+  intros fuel items IH.
+  induction items as [| item rest IHrest]; intros Hsafe; simpl in *.
+  - eexists. reflexivity.
+  - apply andb_true_iff in Hsafe as [Hitem_safe Hrest_safe].
+    destruct (IH item Hitem_safe) as [item_value Hitem_value].
+    destruct (IHrest Hrest_safe) as [rest_value Hrest_value].
+    simpl in Hrest_value.
+    rewrite Hitem_value, Hrest_value.
+    eexists. reflexivity.
+Qed.
+
+Lemma choice_safe_nullable_alternative_defined :
+  forall fuel items,
+    (forall expression,
+      choice_bodies_nonnullable_fuel fuel expression = true ->
+      exists value,
+        nullable_expression_fuel
+          fuel phase1_surface_nullable_facts expression = Some value) ->
+    forallb
+      (fun item =>
+        andb
+          (negb (nullable_expression phase1_surface_nullable_facts item))
+          (choice_bodies_nonnullable_fuel fuel item))
+      items = true ->
+    exists value,
+      nullable_expression_fuel
+        (S fuel) phase1_surface_nullable_facts (EAlternative items) = Some value.
+Proof.
+  intros fuel items IH.
+  induction items as [| item rest IHrest]; intros Hsafe; simpl in *.
+  - eexists. reflexivity.
+  - apply andb_true_iff in Hsafe as [Hhead_safe Hrest_safe].
+    apply andb_true_iff in Hhead_safe as [_ Hitem_safe].
+    destruct (IH item Hitem_safe) as [item_value Hitem_value].
+    destruct (IHrest Hrest_safe) as [rest_value Hrest_value].
+    simpl in Hrest_value.
+    rewrite Hitem_value, Hrest_value.
+    eexists. reflexivity.
+Qed.
+
 Lemma choice_safe_nullable_defined :
   forall fuel expression,
     choice_bodies_nonnullable_fuel fuel expression = true ->
@@ -161,30 +213,84 @@ Proof.
   induction fuel as [| fuel IH]; intros expression Hsafe.
   - simpl in Hsafe. discriminate.
   - destruct expression as
-      [literal | class_name | name | items | items | body | body];
-      simpl in *.
+      [literal | class_name | name | items | items | body | body].
+    + simpl. eexists. reflexivity.
+    + simpl. eexists. reflexivity.
+    + simpl. eexists. reflexivity.
+    + simpl in Hsafe.
+      eapply choice_safe_nullable_sequence_defined; eauto.
+    + simpl in Hsafe.
+      eapply choice_safe_nullable_alternative_defined; eauto.
+    + simpl. eexists. reflexivity.
+    + simpl. eexists. reflexivity.
+Qed.
+
+Lemma choice_safe_first_sequence_defined :
+  forall fuel items,
+    (forall expression,
+      choice_bodies_nonnullable_fuel fuel expression = true ->
+      exists tokens,
+        first_expression_fuel
+          fuel
+          phase1_surface_nullable_facts
+          phase1_surface_first_facts
+          expression = Some tokens) ->
+    forallb (choice_bodies_nonnullable_fuel fuel) items = true ->
+    exists tokens,
+      first_expression_fuel
+        (S fuel)
+        phase1_surface_nullable_facts
+        phase1_surface_first_facts
+        (ESequence items) = Some tokens.
+Proof.
+  intros fuel items IH.
+  induction items as [| item rest IHrest]; intros Hsafe; simpl in *.
+  - eexists. reflexivity.
+  - apply andb_true_iff in Hsafe as [Hitem_safe Hrest_safe].
+    destruct (IH item Hitem_safe) as [item_first Hitem_first].
+    destruct (choice_safe_nullable_defined fuel item Hitem_safe)
+      as [item_nullable Hitem_nullable].
+    destruct (IHrest Hrest_safe) as [rest_first Hrest_first].
+    simpl in Hrest_first.
+    rewrite Hitem_first, Hitem_nullable.
+    destruct item_nullable.
+    + rewrite Hrest_first. eexists. reflexivity.
     + eexists. reflexivity.
-    + eexists. reflexivity.
-    + eexists. reflexivity.
-    + induction items as [| item rest IHrest]; simpl in *.
-      * eexists. reflexivity.
-      * apply andb_true_iff in Hsafe as [Hitem_safe Hrest_safe].
-        destruct (IH item Hitem_safe) as [item_value Hitem_value].
-        destruct (IHrest Hrest_safe) as [rest_value Hrest_value].
-        simpl in Hrest_value.
-        rewrite Hitem_value, Hrest_value.
-        eexists. reflexivity.
-    + induction items as [| item rest IHrest]; simpl in *.
-      * eexists. reflexivity.
-      * apply andb_true_iff in Hsafe as [Hhead_safe Hrest_safe].
-        apply andb_true_iff in Hhead_safe as [_ Hitem_safe].
-        destruct (IH item Hitem_safe) as [item_value Hitem_value].
-        destruct (IHrest Hrest_safe) as [rest_value Hrest_value].
-        simpl in Hrest_value.
-        rewrite Hitem_value, Hrest_value.
-        eexists. reflexivity.
-    + eexists. reflexivity.
-    + eexists. reflexivity.
+Qed.
+
+Lemma choice_safe_first_alternative_defined :
+  forall fuel items,
+    (forall expression,
+      choice_bodies_nonnullable_fuel fuel expression = true ->
+      exists tokens,
+        first_expression_fuel
+          fuel
+          phase1_surface_nullable_facts
+          phase1_surface_first_facts
+          expression = Some tokens) ->
+    forallb
+      (fun item =>
+        andb
+          (negb (nullable_expression phase1_surface_nullable_facts item))
+          (choice_bodies_nonnullable_fuel fuel item))
+      items = true ->
+    exists tokens,
+      first_expression_fuel
+        (S fuel)
+        phase1_surface_nullable_facts
+        phase1_surface_first_facts
+        (EAlternative items) = Some tokens.
+Proof.
+  intros fuel items IH.
+  induction items as [| item rest IHrest]; intros Hsafe; simpl in *.
+  - eexists. reflexivity.
+  - apply andb_true_iff in Hsafe as [Hhead_safe Hrest_safe].
+    apply andb_true_iff in Hhead_safe as [_ Hitem_safe].
+    destruct (IH item Hitem_safe) as [item_first Hitem_first].
+    destruct (IHrest Hrest_safe) as [rest_first Hrest_first].
+    simpl in Hrest_first.
+    rewrite Hitem_first, Hrest_first.
+    eexists. reflexivity.
 Qed.
 
 Lemma choice_safe_first_defined :
@@ -200,35 +306,19 @@ Proof.
   induction fuel as [| fuel IH]; intros expression Hsafe.
   - simpl in Hsafe. discriminate.
   - destruct expression as
-      [literal | class_name | name | items | items | body | body];
-      simpl in *.
-    + eexists. reflexivity.
-    + eexists. reflexivity.
-    + eexists. reflexivity.
-    + induction items as [| item rest IHrest]; simpl in *.
-      * eexists. reflexivity.
-      * apply andb_true_iff in Hsafe as [Hitem_safe Hrest_safe].
-        destruct (IH item Hitem_safe) as [item_first Hitem_first].
-        destruct (choice_safe_nullable_defined fuel item Hitem_safe)
-          as [item_nullable Hitem_nullable].
-        destruct (IHrest Hrest_safe) as [rest_first Hrest_first].
-        simpl in Hrest_first.
-        rewrite Hitem_first, Hitem_nullable.
-        destruct item_nullable.
-        -- rewrite Hrest_first. eexists. reflexivity.
-        -- eexists. reflexivity.
-    + induction items as [| item rest IHrest]; simpl in *.
-      * eexists. reflexivity.
-      * apply andb_true_iff in Hsafe as [Hhead_safe Hrest_safe].
-        apply andb_true_iff in Hhead_safe as [_ Hitem_safe].
-        destruct (IH item Hitem_safe) as [item_first Hitem_first].
-        destruct (IHrest Hrest_safe) as [rest_first Hrest_first].
-        simpl in Hrest_first.
-        rewrite Hitem_first, Hrest_first.
-        eexists. reflexivity.
-    + apply andb_true_iff in Hsafe as [_ Hbody_safe].
+      [literal | class_name | name | items | items | body | body].
+    + simpl. eexists. reflexivity.
+    + simpl. eexists. reflexivity.
+    + simpl. eexists. reflexivity.
+    + simpl in Hsafe.
+      eapply choice_safe_first_sequence_defined; eauto.
+    + simpl in Hsafe.
+      eapply choice_safe_first_alternative_defined; eauto.
+    + simpl in Hsafe.
+      apply andb_true_iff in Hsafe as [_ Hbody_safe].
       exact (IH body Hbody_safe).
-    + apply andb_true_iff in Hsafe as [_ Hbody_safe].
+    + simpl in Hsafe.
+      apply andb_true_iff in Hsafe as [_ Hbody_safe].
       exact (IH body Hbody_safe).
 Qed.
 
