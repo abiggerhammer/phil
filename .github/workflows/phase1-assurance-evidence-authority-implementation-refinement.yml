@@ -1,0 +1,116 @@
+name: Phase 1 Assurance Evidence Authority Implementation Refinement
+
+on:
+  pull_request:
+    paths:
+      - 'proof/Phil/Assurance/EvidenceUse.v'
+      - 'proof/Phil/Assurance/EvidenceAuthorityImplementation.v'
+      - 'proof/Phil/Assurance/EvidenceAuthorityImplementationExtraction.v'
+      - 'app/AssuranceEvidenceAuthorityDecisionCorrespondenceMain.hs'
+      - 'docs/phase-1/assurance-evidence-authority-implementation-refinement-v1.md'
+      - 'src/Phil/Assurance/Types.hs'
+      - 'src/Phil/Assurance/Verify.hs'
+      - 'test/AssuranceMain.hs'
+      - '.github/workflows/phase1-assurance-evidence-authority-implementation-refinement.yml'
+  push:
+    branches: [main]
+    paths:
+      - 'proof/Phil/Assurance/EvidenceUse.v'
+      - 'proof/Phil/Assurance/EvidenceAuthorityImplementation.v'
+      - 'proof/Phil/Assurance/EvidenceAuthorityImplementationExtraction.v'
+      - 'app/AssuranceEvidenceAuthorityDecisionCorrespondenceMain.hs'
+      - 'docs/phase-1/assurance-evidence-authority-implementation-refinement-v1.md'
+      - 'src/Phil/Assurance/Types.hs'
+      - 'src/Phil/Assurance/Verify.hs'
+      - 'test/AssuranceMain.hs'
+      - '.github/workflows/phase1-assurance-evidence-authority-implementation-refinement.yml'
+
+permissions:
+  contents: read
+
+jobs:
+  rocq-assurance-evidence-authority:
+    runs-on: ubuntu-latest
+    container:
+      image: rocq/rocq-prover:9.2.0
+      options: --user root
+    steps:
+      - uses: actions/checkout@v4
+      - name: Compile Certified predecessor and implementation correspondence
+        shell: bash
+        run: |
+          set -euo pipefail
+          export PATH="/home/rocq/.opam/${COMPILER}/bin:$PATH"
+          rocq c -Q proof/Phil Phil proof/Phil/Assurance/Manifest.v
+          rocq c -Q proof/Phil Phil proof/Phil/Assurance/EvidenceUse.v
+          rocq c -Q proof/Phil Phil proof/Phil/Assurance/EvidenceAuthorityImplementation.v
+          rm -f AssuranceEvidenceAuthorityKernel.hs
+          rocq c -Q proof/Phil Phil proof/Phil/Assurance/EvidenceAuthorityImplementationExtraction.v
+          test -s AssuranceEvidenceAuthorityKernel.hs
+      - name: Record proof and exact kernel identities
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p assurance-evidence-authority-proof
+          cp \
+            proof/Phil/Assurance/EvidenceUse.v \
+            proof/Phil/Assurance/EvidenceUse.vo \
+            proof/Phil/Assurance/EvidenceAuthorityImplementation.v \
+            proof/Phil/Assurance/EvidenceAuthorityImplementation.vo \
+            AssuranceEvidenceAuthorityKernel.hs \
+            assurance-evidence-authority-proof/
+          sha256sum \
+            proof/Phil/Assurance/EvidenceUse.v \
+            proof/Phil/Assurance/EvidenceUse.vo \
+            proof/Phil/Assurance/EvidenceAuthorityImplementation.v \
+            proof/Phil/Assurance/EvidenceAuthorityImplementation.vo \
+            AssuranceEvidenceAuthorityKernel.hs \
+            src/Phil/Assurance/Types.hs \
+            src/Phil/Assurance/Verify.hs \
+            test/AssuranceMain.hs \
+            app/AssuranceEvidenceAuthorityDecisionCorrespondenceMain.hs \
+            > assurance-evidence-authority-proof/PHIL-ASSURE-EVID-001.implementation.sha256
+          {
+            echo 'obligation=PHIL-ASSURE-EVID-001'
+            echo 'evidence=Rocq-9.2.0+extraction'
+            cat assurance-evidence-authority-proof/PHIL-ASSURE-EVID-001.implementation.sha256
+          } > assurance-evidence-authority-proof/PHIL-ASSURE-EVID-001.implementation-certificate.txt
+          cat assurance-evidence-authority-proof/PHIL-ASSURE-EVID-001.implementation-certificate.txt
+      - uses: actions/upload-artifact@v4
+        with:
+          name: rocq-assurance-evidence-authority-proof
+          path: assurance-evidence-authority-proof
+          if-no-files-found: error
+
+  verify-assurance-evidence-authority-correspondence:
+    needs: rocq-assurance-evidence-authority
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: haskell-actions/setup@v2
+        with:
+          ghc-version: '9.6.7'
+          cabal-version: 'latest'
+      - name: Build ordinary regression substrate
+        run: cabal build all --enable-tests
+      - uses: actions/download-artifact@v4
+        with:
+          name: rocq-assurance-evidence-authority-proof
+          path: assurance-evidence-authority-proof
+      - name: Check and execute extracted evidence-authority controls
+        run: |
+          set -euo pipefail
+          cp assurance-evidence-authority-proof/AssuranceEvidenceAuthorityKernel.hs .
+          cabal exec -- ghc -i. -Wall -Werror -Wno-unused-imports -fno-code \
+            AssuranceEvidenceAuthorityKernel.hs \
+            app/AssuranceEvidenceAuthorityDecisionCorrespondenceMain.hs
+          cabal exec -- runghc -i. -Wall -Werror -Wno-unused-imports \
+            app/AssuranceEvidenceAuthorityDecisionCorrespondenceMain.hs
+      - name: Strict typecheck unchanged production assurance path
+        run: |
+          set -euo pipefail
+          cabal exec -- ghc -isrc -Wall -Werror -fno-code src/Phil/Assurance/Types.hs
+          cabal exec -- ghc -isrc -Wall -Werror -fno-code src/Phil/Assurance/Verify.hs
+          cabal exec -- ghc -isrc -Wall -Werror -fno-code test/AssuranceMain.hs
+      - name: Re-run unchanged 23-case assurance corpus
+        run: cabal exec -- runghc -Wall -Werror -isrc test/AssuranceMain.hs
