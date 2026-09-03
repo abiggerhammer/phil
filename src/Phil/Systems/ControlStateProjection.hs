@@ -75,6 +75,7 @@ import Phil.Systems.SubjectCorrespondence
   , SystemsValueRef (..)
   )
 import qualified ResourceJoinKernel as ResourceJoinKernel
+import qualified ResourceScopeKernel as ResourceScopeKernel
 import qualified SystemsControlPreservationKernel as Kernel
 
 newtype ControlStateStageRevision = ControlStateStageRevision
@@ -342,6 +343,33 @@ checkStateBoundaryProjections program subjectIndex boundary projections = do
       | otherwise -> Left (StateBoundaryProjectionShapeMismatch
           (stateBoundaryKey boundary) LoopStateBoundary
           ordinaryCount initialCount backedgeCount)
+  checkResourceScopeBranchDisposition
+  where
+    checkResourceScopeBranchDisposition =
+      case ResourceScopeKernel.decideBranchDispositionByFacts
+          terminalExcluded continuingExact of
+        ResourceScopeKernel.BranchDispositionAcceptedDecision -> Right ()
+        _ -> resourceScopeKernelInvariant "branch-disposition"
+
+    terminalExcluded = all hasContinuingTarget projections
+    continuingExact = all edgeTargetsBoundary projections
+
+    hasContinuingTarget projection = case projectionBlock projection of
+      Nothing -> False
+      Just block -> not (Map.null (terminatorTargets (systemsBlockTerminator block)))
+
+    edgeTargetsBoundary projection = case projectionBlock projection of
+      Nothing -> False
+      Just block ->
+        Map.lookup (stateProjectionEdgeLabel projection)
+          (terminatorTargets (systemsBlockTerminator block))
+          == Just (stateBoundaryTargetBlock boundary)
+
+    projectionBlock projection = do
+      function <- Map.lookup (stateBoundaryFunction boundary)
+        (systemsProgramFunctions program)
+      Map.lookup (stateProjectionFromBlock projection)
+        (systemsFunctionBlocks function)
 
 checkStateProjection
   :: SystemsProgram
@@ -384,6 +412,7 @@ checkStateProjection program subjectIndex boundary projection = do
   checkRestrictedMultiplicity
   checkLinearCoverage
   checkResourceJoinKernel
+  checkResourceScopeProjectionKernel function
   where
     projectionKey = stateProjectionKey projection
 
@@ -504,6 +533,28 @@ checkStateProjection program subjectIndex boundary projection = do
           Left (StateProjectionUnaccountedLinearOwners projectionKey unaccounted)
         _ -> kernelInvariant "state-linear-coverage"
 
+    checkResourceScopeProjectionKernel function = do
+      scopeValues <- mapM (lookupValue projectionKey function) scopedRefs
+      case ResourceScopeKernel.decideScopedBoundaryByFacts
+          True (all lexicalLoanClosed scopeValues) of
+        ResourceScopeKernel.ScopedBoundaryAcceptedDecision -> Right ()
+        _ -> resourceScopeKernelInvariant "scoped-boundary"
+      case ResourceScopeKernel.decideAffineProjectionByFact
+          explicitAffineCarriers of
+        ResourceScopeKernel.AffineProjectionAcceptedDecision -> Right ()
+        _ -> resourceScopeKernelInvariant "affine-projection"
+      where
+        scopedRefs = Set.toList (Set.fromList
+          (Map.keys (stateProjectionIncomingRestricted projection)
+            <> Map.elems (stateProjectionBindings projection)))
+        lexicalLoanClosed value = case systemsValueRole value of
+          BorrowedSlice _ -> False
+          _ -> True
+        explicitAffineCarriers = all
+          (\(slotKey, slot) ->
+            stateSlotMode slot /= Affine
+              || Map.member slotKey (stateProjectionBindings projection))
+          (Map.toAscList (stateBoundarySlots boundary))
 
     checkResourceJoinKernel =
       case ResourceJoinKernel.decideResourceProjectionByFacts
@@ -748,3 +799,7 @@ mapLeft f = either (Left . f) Right
 kernelInvariant :: String -> Either e a
 kernelInvariant label =
   error ("SystemsControlPreservationKernel mismatch: " <> label)
+
+resourceScopeKernelInvariant :: String -> Either e a
+resourceScopeKernelInvariant label =
+  error ("ResourceScopeKernel mismatch: " <> label)

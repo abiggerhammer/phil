@@ -65,6 +65,7 @@ library
       AssuranceValidityScopeKernel
       SystemsIdentityKernel
       ResourceJoinKernel
+      ResourceScopeKernel
       Phil.Surface.Check.Types
       Phil.Surface.Check.Support
       Phil.Surface.Check.Preflight
