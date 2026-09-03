@@ -61,8 +61,14 @@ jobs:
             - destruct items as [| item rest]; simpl in Hsafe |- *.
               + reflexivity.
               + discriminate.
-            - simpl in Hsafe. discriminate.
-            - simpl in Hsafe. discriminate.
+            - simpl in Hsafe.
+              apply andb_true_iff in Hsafe as [_ Hbody].
+              simpl in Hbody.
+              discriminate.
+            - simpl in Hsafe.
+              apply andb_true_iff in Hsafe as [_ Hbody].
+              simpl in Hbody.
+              discriminate.
           Qed.
           '''
           source = source[:safety_start] + safety + source[safety_end:]
