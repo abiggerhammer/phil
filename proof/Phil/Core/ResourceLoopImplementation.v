@@ -26,6 +26,23 @@ Definition decideLoopProjectionByFacts
   else
     LoopProjectionKindDecision.
 
+Theorem loop_projection_decision_exact :
+  forall kindMatches resourceProjectionAccepted slotDomainExact requirementsExact,
+    (decideLoopProjectionByFacts
+       kindMatches resourceProjectionAccepted slotDomainExact requirementsExact =
+       LoopProjectionAcceptedDecision <->
+     kindMatches = true /\
+     resourceProjectionAccepted = true /\
+     slotDomainExact = true /\
+     requirementsExact = true).
+Proof.
+  intros kindMatches resourceProjectionAccepted slotDomainExact requirementsExact.
+  destruct kindMatches;
+    destruct resourceProjectionAccepted;
+    destruct slotDomainExact;
+    destruct requirementsExact; simpl; tauto.
+Qed.
+
 Definition ExpectedLoopProjectionAccepted
   (expected : LoopProjectionKind)
   (succession : SuccessionEvidence)
@@ -58,27 +75,30 @@ Proof.
   intros expected succession telescope projection
     kindMatches resourceProjectionAccepted slotDomainExact requirementsExact
     Hkind Hresource Hslots Hrequirements.
-  unfold decideLoopProjectionByFacts, ExpectedLoopProjectionAccepted,
-    LoopProjectionAccepted, ProjectionUsesLoopTelescope.
-  destruct kindMatches;
-    destruct resourceProjectionAccepted;
-    destruct slotDomainExact;
-    destruct requirementsExact; simpl in *.
-  all: split.
-  all: try discriminate.
-  all: try (intros [HkindProp [HresourceProp [HslotsProp HrequirementsProp]]];
-            first [
-              apply (proj2 Hkind) in HkindProp; discriminate
-            | apply (proj2 Hresource) in HresourceProp; discriminate
-            | apply (proj2 Hslots) in HslotsProp; discriminate
-            | apply (proj2 Hrequirements) in HrequirementsProp; discriminate
-            ]).
-  - intros _. repeat split.
-    + apply (proj1 Hkind). reflexivity.
-    + apply (proj1 Hresource). reflexivity.
-    + apply (proj1 Hslots). reflexivity.
-    + apply (proj1 Hrequirements). reflexivity.
-  - intros _. reflexivity.
+  split.
+  - intro Hdecision.
+    apply (proj1 (loop_projection_decision_exact
+      kindMatches resourceProjectionAccepted slotDomainExact requirementsExact))
+      in Hdecision.
+    destruct Hdecision as [HkindBool [HresourceBool [HslotsBool HrequirementsBool]]].
+    unfold ExpectedLoopProjectionAccepted, LoopProjectionAccepted,
+      ProjectionUsesLoopTelescope.
+    repeat split.
+    + apply (proj1 Hkind). exact HkindBool.
+    + apply (proj1 Hresource). exact HresourceBool.
+    + apply (proj1 Hslots). exact HslotsBool.
+    + apply (proj1 Hrequirements). exact HrequirementsBool.
+  - intro Haccepted.
+    unfold ExpectedLoopProjectionAccepted, LoopProjectionAccepted,
+      ProjectionUsesLoopTelescope in Haccepted.
+    destruct Haccepted as [HkindProp [HresourceProp [HslotsProp HrequirementsProp]]].
+    apply (proj2 (loop_projection_decision_exact
+      kindMatches resourceProjectionAccepted slotDomainExact requirementsExact)).
+    repeat split.
+    + apply (proj2 Hkind). exact HkindProp.
+    + apply (proj2 Hresource). exact HresourceProp.
+    + apply (proj2 Hslots). exact HslotsProp.
+    + apply (proj2 Hrequirements). exact HrequirementsProp.
 Qed.
 
 Inductive StateTransportDecision : Type :=
