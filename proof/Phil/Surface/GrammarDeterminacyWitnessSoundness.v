@@ -53,6 +53,7 @@ Lemma phase1_surface_rule_choice_safe :
     choice_bodies_nonnullable_fuel expression_fuel body = true.
 Proof.
   intros name body Hlookup.
+  change (choice_bodies_nonnullable_rule (name, body) = true).
   eapply lookupRule_forallb.
   - exact phase1_surface_all_choice_bodies_are_nonnullable.
   - exact Hlookup.
