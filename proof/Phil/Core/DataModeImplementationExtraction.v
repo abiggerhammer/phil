@@ -1,5 +1,5 @@
 From Stdlib Require Import Extraction.
-From Phil.Core Require Import DataModeImplementation.
+From Phil.Core Require Import DataMode DataModeImplementation.
 
 Extraction Language Haskell.
 Extract Inductive bool => "Prelude.Bool" [ "Prelude.True" "Prelude.False" ].
