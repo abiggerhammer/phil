@@ -44,7 +44,7 @@ Proof.
   all: split.
   all: try discriminate.
   all: try (intros H;
-            destruct H as [Hkind [Hresource [Hslots Hrequirements]]];
+            destruct H as [_ [_ [_ Hrequirements]]];
             discriminate).
   - intros _. repeat split; reflexivity.
   - intros _. reflexivity.
@@ -88,24 +88,32 @@ Proof.
       kindMatches resourceProjectionAccepted slotDomainExact requirementsExact))
       in Hdecision.
     destruct Hdecision as [HkindBool [HresourceBool [HslotsBool HrequirementsBool]]].
-    unfold ExpectedLoopProjectionAccepted, LoopProjectionAccepted,
-      ProjectionUsesLoopTelescope.
-    repeat split.
-    + apply (proj1 Hkind). exact HkindBool.
-    + apply (proj1 Hresource). exact HresourceBool.
-    + apply (proj1 Hslots). exact HslotsBool.
-    + apply (proj1 Hrequirements). exact HrequirementsBool.
+    unfold ExpectedLoopProjectionAccepted.
+    split.
+    + exact ((proj1 Hkind) HkindBool).
+    + unfold LoopProjectionAccepted.
+      split.
+      * exact ((proj1 Hresource) HresourceBool).
+      * unfold ProjectionUsesLoopTelescope.
+        split.
+        -- exact ((proj1 Hslots) HslotsBool).
+        -- exact ((proj1 Hrequirements) HrequirementsBool).
   - intro Haccepted.
-    unfold ExpectedLoopProjectionAccepted, LoopProjectionAccepted,
-      ProjectionUsesLoopTelescope in Haccepted.
-    destruct Haccepted as [HkindProp [HresourceProp [HslotsProp HrequirementsProp]]].
+    unfold ExpectedLoopProjectionAccepted in Haccepted.
+    destruct Haccepted as [HkindProp Hloop].
+    unfold LoopProjectionAccepted in Hloop.
+    destruct Hloop as [HresourceProp Htelescope].
+    unfold ProjectionUsesLoopTelescope in Htelescope.
+    destruct Htelescope as [HslotsProp HrequirementsProp].
     apply (proj2 (loop_projection_decision_exact
       kindMatches resourceProjectionAccepted slotDomainExact requirementsExact)).
-    repeat split.
-    + apply (proj2 Hkind). exact HkindProp.
-    + apply (proj2 Hresource). exact HresourceProp.
-    + apply (proj2 Hslots). exact HslotsProp.
-    + apply (proj2 Hrequirements). exact HrequirementsProp.
+    split.
+    + exact ((proj2 Hkind) HkindProp).
+    + split.
+      * exact ((proj2 Hresource) HresourceProp).
+      * split.
+        -- exact ((proj2 Hslots) HslotsProp).
+        -- exact ((proj2 Hrequirements) HrequirementsProp).
 Qed.
 
 Inductive StateTransportDecision : Type :=
@@ -136,17 +144,19 @@ Proof.
   destruct definitionallyEqual;
     destruct explicitEvidenceAccepted; simpl in *.
   - split.
-    + intros _. left. apply (proj1 Hdefeq). reflexivity.
+    + intros _. left. exact ((proj1 Hdefeq) eq_refl).
     + intros _. reflexivity.
   - split.
-    + intros _. left. apply (proj1 Hdefeq). reflexivity.
+    + intros _. left. exact ((proj1 Hdefeq) eq_refl).
     + intros _. reflexivity.
   - split.
-    + intros _. right. apply (proj1 Hevidence). reflexivity.
+    + intros _. right. exact ((proj1 Hevidence) eq_refl).
     + intros _. reflexivity.
   - split.
     + discriminate.
     + intros [Hequal | Haccepted].
-      * apply (proj2 Hdefeq) in Hequal. discriminate.
-      * apply (proj2 Hevidence) in Haccepted. discriminate.
+      * pose proof ((proj2 Hdefeq) Hequal) as Hfalse.
+        discriminate.
+      * pose proof ((proj2 Hevidence) Haccepted) as Hfalse.
+        discriminate.
 Qed.
