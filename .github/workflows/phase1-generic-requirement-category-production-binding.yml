@@ -1,0 +1,111 @@
+name: Phase 1 Generic Requirement Category Production Binding
+
+on:
+  pull_request:
+    paths:
+      - 'generated/GenericRequirementCategoryKernel.hs'
+      - 'src/GenericRequirementCategoryKernel.hs'
+      - 'src/Phil/Core/GenericRequirementCategoryKernelBridge.hs'
+      - 'src/Phil/Core/Generic/RequirementCategory.hs'
+      - 'app/GenericRequirementCategoryDecisionCorrespondenceMain.hs'
+      - 'app/GenericRequirementCategoryProductionBindingMain.hs'
+      - 'proof/Phil/Core/GenericRequirementCategory.v'
+      - 'proof/Phil/Core/GenericRequirementCategoryImplementation.v'
+      - 'proof/Phil/Core/GenericRequirementCategoryImplementationExtraction.v'
+      - 'docs/phase-1/generic-requirement-category-production-binding-v1.md'
+      - '.github/workflows/phase1-generic-requirement-category-production-binding.yml'
+      - 'test/Phase1GenericRequirementCategoryMain.hs'
+  push:
+    branches: [main]
+    paths:
+      - 'generated/GenericRequirementCategoryKernel.hs'
+      - 'src/GenericRequirementCategoryKernel.hs'
+      - 'src/Phil/Core/GenericRequirementCategoryKernelBridge.hs'
+      - 'src/Phil/Core/Generic/RequirementCategory.hs'
+      - 'proof/Phil/Core/GenericRequirementCategory.v'
+      - 'proof/Phil/Core/GenericRequirementCategoryImplementation.v'
+      - 'proof/Phil/Core/GenericRequirementCategoryImplementationExtraction.v'
+      - '.github/workflows/phase1-generic-requirement-category-production-binding.yml'
+      - 'test/Phase1GenericRequirementCategoryMain.hs'
+
+permissions:
+  contents: read
+
+jobs:
+  exact-generic-requirement-category-kernel:
+    runs-on: ubuntu-latest
+    container:
+      image: rocq/rocq-prover:9.2.0
+      options: --user root
+    steps:
+      - uses: actions/checkout@v4
+      - name: Freshly extract exact Generic Requirement Category kernel
+        shell: bash
+        run: |
+          set -euo pipefail
+          export PATH="/home/rocq/.opam/${COMPILER}/bin:$PATH"
+          rocq c -Q proof/Phil Phil proof/Phil/Core/GenericRequirementCategory.v
+          rocq c -Q proof/Phil Phil proof/Phil/Core/GenericRequirementCategoryImplementation.v
+          rm -f GenericRequirementCategoryKernel.hs
+          rocq c -Q proof/Phil Phil proof/Phil/Core/GenericRequirementCategoryImplementationExtraction.v
+          test -s GenericRequirementCategoryKernel.hs
+          test "$(sha256sum GenericRequirementCategoryKernel.hs | cut -d' ' -f1)" = \
+            f1b71633c1f312a9c0226f1f095b17b24475630213ce787c5b08cc4233b96b11
+          cmp GenericRequirementCategoryKernel.hs generated/GenericRequirementCategoryKernel.hs
+          cmp GenericRequirementCategoryKernel.hs src/GenericRequirementCategoryKernel.hs
+      - name: Record exact kernel identity
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p generic-requirement-category-exact-kernel
+          cp GenericRequirementCategoryKernel.hs generic-requirement-category-exact-kernel/
+          sha256sum GenericRequirementCategoryKernel.hs \
+            > generic-requirement-category-exact-kernel/GenericRequirementCategoryKernel.sha256
+      - uses: actions/upload-artifact@v4
+        with:
+          name: generic-requirement-category-exact-kernel
+          path: generic-requirement-category-exact-kernel
+          if-no-files-found: error
+
+  verify-generic-requirement-category-production-binding:
+    needs: exact-generic-requirement-category-kernel
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: haskell-actions/setup@v2
+        with:
+          ghc-version: '9.6.7'
+          cabal-version: 'latest'
+      - name: Build broad library regression surface
+        run: cabal build lib:phil-core --ghc-options=-Werror
+      - name: Strictly typecheck bound Generic Requirement Category surface
+        run: |
+          set -euo pipefail
+          cabal exec -- ghc -isrc -Wall -Werror -Wno-unused-imports -fno-code src/GenericRequirementCategoryKernel.hs
+          cabal exec -- ghc -isrc -Wall -Werror -Wno-unused-imports -fno-code src/Phil/Core/GenericRequirementCategoryKernelBridge.hs
+          cabal exec -- ghc -isrc -Wall -Werror -fno-code src/Phil/Core/Generic/RequirementCategory.hs
+          cabal exec -- ghc -isrc -Wall -Werror -Wno-unused-imports -fno-code app/GenericRequirementCategoryDecisionCorrespondenceMain.hs
+          cabal exec -- ghc -isrc -Wall -Werror -fno-code app/GenericRequirementCategoryProductionBindingMain.hs
+          cabal exec -- ghc -isrc -Wall -Werror -fno-code test/Phase1GenericRequirementCategoryMain.hs
+      - name: Execute exact extracted-kernel controls
+        run: cabal exec -- runghc -Wall -Werror -Wno-unused-imports -isrc app/GenericRequirementCategoryDecisionCorrespondenceMain.hs
+      - name: Execute production-binding controls
+        run: cabal exec -- runghc -Wall -Werror -isrc app/GenericRequirementCategoryProductionBindingMain.hs
+      - name: Re-run unchanged GEN-014 corpus
+        run: cabal exec -- runghc -Wall -Werror -isrc test/Phase1GenericRequirementCategoryMain.hs
+      - name: Record production binding identities
+        run: |
+          set -euo pipefail
+          mkdir -p generic-requirement-category-production-binding
+          sha256sum \
+            src/GenericRequirementCategoryKernel.hs \
+            src/Phil/Core/GenericRequirementCategoryKernelBridge.hs \
+            src/Phil/Core/Generic/RequirementCategory.hs \
+            app/GenericRequirementCategoryProductionBindingMain.hs \
+            test/Phase1GenericRequirementCategoryMain.hs \
+            > generic-requirement-category-production-binding/PHIL-GEN-CATEGORY-001.production.sha256
+      - uses: actions/upload-artifact@v4
+        with:
+          name: generic-requirement-category-production-binding
+          path: generic-requirement-category-production-binding
+          if-no-files-found: error

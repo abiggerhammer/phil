@@ -18,6 +18,7 @@ import Data.List (foldl')
 import qualified Data.Map.Strict as Map
 import qualified Data.Set as Set
 import Data.Text (Text)
+import qualified Phil.Core.GenericRequirementCategoryKernelBridge as KernelBridge
 import Phil.Core.Static (SemanticForm)
 
 newtype GenericRequirementKey = GenericRequirementKey
@@ -64,11 +65,6 @@ data GenericPublicRequirement = GenericPublicRequirement
   }
   deriving (Eq, Ord, Show)
 
--- | Handoff targets model the output of elaboration before it is trusted. An
--- implementation may request the checker competent for one semantic category,
--- or it may incorrectly attempt to turn the requirement into an assumption.
--- Generic interface checking rejects the latter; any later assumption
--- disposition belongs to an explicitly permitted enclosing assurance boundary.
 data GenericRequirementHandoffTarget
   = GenericHandoffToCompetence GenericRequirementCompetence
   | GenericHandoffAsAssumption Text
@@ -113,25 +109,16 @@ data GenericRequirementCategoryError
       GenericRequirementKey
       GenericRequirementCategory
       Text
+  | GenericRequirementCategoryKernelDisagreement Text
   deriving (Eq, Show)
 
 competenceForRequirementCategory
   :: GenericRequirementCategory
   -> GenericRequirementCompetence
-competenceForRequirementCategory category = case category of
-  GenericStructuralCategory -> StructuralRequirementChecker
-  GenericPropositionCategory -> PropositionRequirementChecker
-  GenericProviderCategory -> ProviderRequirementChecker
-  GenericCallableCategory -> CallableRequirementChecker
-  GenericBoundaryCategory -> BoundaryRequirementChecker
-  GenericArchitectureCategory -> ArchitectureRequirementChecker
-  GenericEffectsCategory -> EffectsRequirementChecker
-  GenericAuthorityCategory -> AuthorityRequirementChecker
-  GenericBoundaryRepresentationCategory -> BoundaryRepresentationRequirementChecker
-  GenericRepresentationCategory -> RepresentationRequirementChecker
-  GenericPlacementCategory -> PlacementRequirementChecker
-  GenericCostCategory -> CostRequirementChecker
-  GenericEnvironmentCategory -> EnvironmentRequirementChecker
+competenceForRequirementCategory =
+  fromKernelCompetence
+    . KernelBridge.certifiedCompetenceForKernelCategory
+    . toKernelCategory
 
 checkGenericRequirementHandoffs
   :: [GenericPublicRequirement]
@@ -140,13 +127,31 @@ checkGenericRequirementHandoffs
 checkGenericRequirementHandoffs requirements handoffs = do
   requirementMap <- normalizeRequirements requirements
   handoffMap <- normalizeHandoffs handoffs
-  case Set.lookupMin (Map.keysSet requirementMap `Set.difference` Map.keysSet handoffMap) of
-    Just key -> Left (MissingGenericRequirementHandoff key)
+  let requirementKeys = Map.keysSet requirementMap
+      handoffKeys = Map.keysSet handoffMap
+      handoffDomainExact = requirementKeys == handoffKeys
+  case Set.lookupMin (requirementKeys `Set.difference` handoffKeys) of
+    Just key -> do
+      requireDomainClassification
+        KernelBridge.RequirementInterfaceHandoffDomainClassification
+        handoffDomainExact
+        False
+      Left (MissingGenericRequirementHandoff key)
     Nothing -> Right ()
-  case Set.lookupMin (Map.keysSet handoffMap `Set.difference` Map.keysSet requirementMap) of
-    Just key -> Left (UnexpectedGenericRequirementHandoff key)
+  case Set.lookupMin (handoffKeys `Set.difference` requirementKeys) of
+    Just key -> do
+      requireDomainClassification
+        KernelBridge.RequirementInterfaceHandoffDomainClassification
+        handoffDomainExact
+        False
+      Left (UnexpectedGenericRequirementHandoff key)
     Nothing -> Right ()
   checked <- Map.traverseWithKey (checkOne handoffMap) requirementMap
+  let checkedDomainExact = Map.keysSet checked == requirementKeys
+  requireDomainClassification
+    KernelBridge.RequirementInterfaceDomainAcceptedClassification
+    handoffDomainExact
+    checkedDomainExact
   pure (CheckedGenericRequirementInterface checked)
 
 normalizeRequirements
@@ -187,22 +192,133 @@ checkOne handoffs key requirement = do
     (Map.lookup key handoffs)
   let expectedCategory = genericPublicRequirementCategory requirement
       actualCategory = genericHandoffRequirementCategory handoff
+      handoffKeyMatches =
+        genericHandoffRequirementKey handoff == genericPublicRequirementKey requirement
+  if handoffKeyMatches
+    then Right ()
+    else do
+      requireHandoffClassification
+        KernelBridge.RequirementHandoffKeyClassification
+        False False False False False False False
+      Left (GenericRequirementCategoryKernelDisagreement
+        "normalized handoff key did not match its public requirement key")
   if actualCategory == expectedCategory
     then Right ()
-    else Left (GenericRequirementCategorySubstitution
-      key expectedCategory actualCategory)
+    else do
+      requireHandoffClassification
+        KernelBridge.RequirementHandoffCategoryClassification
+        True False False False False False False
+      Left (GenericRequirementCategorySubstitution
+        key expectedCategory actualCategory)
+  let expectedCompetence = competenceForRequirementCategory expectedCategory
   competence <- case genericHandoffTarget handoff of
-    GenericHandoffAsAssumption detail ->
+    GenericHandoffAsAssumption detail -> do
+      requireHandoffClassification
+        KernelBridge.RequirementHandoffTargetClassification
+        True True False False False False False
       Left (GenericRequirementSilentAssumption key expectedCategory detail)
-    GenericHandoffToCompetence actualCompetence -> do
-      let expectedCompetence = competenceForRequirementCategory expectedCategory
+    GenericHandoffToCompetence actualCompetence ->
       if actualCompetence == expectedCompetence
         then Right actualCompetence
-        else Left (GenericRequirementCompetenceMismatch
-          key expectedCategory expectedCompetence actualCompetence)
-  pure CheckedGenericRequirementHandoff
-    { checkedRequirementKey = key
-    , checkedRequirementCategory = expectedCategory
-    , checkedRequirementSemanticForm = genericPublicRequirementSemanticForm requirement
-    , checkedRequirementCompetence = competence
-    }
+        else do
+          requireHandoffClassification
+            KernelBridge.RequirementHandoffTargetClassification
+            True True False False False False False
+          Left (GenericRequirementCompetenceMismatch
+            key expectedCategory expectedCompetence actualCompetence)
+  let checked = CheckedGenericRequirementHandoff
+        { checkedRequirementKey = key
+        , checkedRequirementCategory = expectedCategory
+        , checkedRequirementSemanticForm = genericPublicRequirementSemanticForm requirement
+        , checkedRequirementCompetence = competence
+        }
+      targetMatches = case genericHandoffTarget handoff of
+        GenericHandoffToCompetence actualCompetence ->
+          actualCompetence == expectedCompetence
+        GenericHandoffAsAssumption _ -> False
+  requireHandoffClassification
+    KernelBridge.RequirementHandoffAcceptedClassification
+    handoffKeyMatches
+    (actualCategory == expectedCategory)
+    targetMatches
+    (checkedRequirementKey checked == genericPublicRequirementKey requirement)
+    (checkedRequirementCategory checked == expectedCategory)
+    (checkedRequirementSemanticForm checked == genericPublicRequirementSemanticForm requirement)
+    (checkedRequirementCompetence checked == expectedCompetence)
+  pure checked
+
+requireHandoffClassification
+  :: KernelBridge.RequirementHandoffClassification
+  -> Bool
+  -> Bool
+  -> Bool
+  -> Bool
+  -> Bool
+  -> Bool
+  -> Bool
+  -> Either GenericRequirementCategoryError ()
+requireHandoffClassification expected handoffKeyMatches handoffCategoryMatches
+    handoffTargetMatches checkedKeyMatches checkedCategoryMatches
+    checkedSemanticFormMatches checkedCompetenceMatches =
+  let actual = KernelBridge.classifyRequirementHandoffFacts
+        handoffKeyMatches
+        handoffCategoryMatches
+        handoffTargetMatches
+        checkedKeyMatches
+        checkedCategoryMatches
+        checkedSemanticFormMatches
+        checkedCompetenceMatches
+  in if actual == expected
+      then Right ()
+      else Left (GenericRequirementCategoryKernelDisagreement
+        "extracted handoff decision disagreed with native GEN-014 classification")
+
+requireDomainClassification
+  :: KernelBridge.RequirementInterfaceDomainClassification
+  -> Bool
+  -> Bool
+  -> Either GenericRequirementCategoryError ()
+requireDomainClassification expected handoffDomainExact checkedDomainExact =
+  let actual = KernelBridge.classifyRequirementInterfaceDomainFacts
+        handoffDomainExact checkedDomainExact
+  in if actual == expected
+      then Right ()
+      else Left (GenericRequirementCategoryKernelDisagreement
+        "extracted interface-domain decision disagreed with native GEN-014 classification")
+
+toKernelCategory
+  :: GenericRequirementCategory
+  -> KernelBridge.KernelRequirementCategory
+toKernelCategory category = case category of
+  GenericStructuralCategory -> KernelBridge.KernelStructuralCategory
+  GenericPropositionCategory -> KernelBridge.KernelPropositionCategory
+  GenericProviderCategory -> KernelBridge.KernelProviderCategory
+  GenericCallableCategory -> KernelBridge.KernelCallableCategory
+  GenericBoundaryCategory -> KernelBridge.KernelBoundaryCategory
+  GenericArchitectureCategory -> KernelBridge.KernelArchitectureCategory
+  GenericEffectsCategory -> KernelBridge.KernelEffectsCategory
+  GenericAuthorityCategory -> KernelBridge.KernelAuthorityCategory
+  GenericBoundaryRepresentationCategory -> KernelBridge.KernelBoundaryRepresentationCategory
+  GenericRepresentationCategory -> KernelBridge.KernelRepresentationCategory
+  GenericPlacementCategory -> KernelBridge.KernelPlacementCategory
+  GenericCostCategory -> KernelBridge.KernelCostCategory
+  GenericEnvironmentCategory -> KernelBridge.KernelEnvironmentCategory
+
+fromKernelCompetence
+  :: KernelBridge.KernelRequirementCompetence
+  -> GenericRequirementCompetence
+fromKernelCompetence competence = case competence of
+  KernelBridge.KernelStructuralRequirementChecker -> StructuralRequirementChecker
+  KernelBridge.KernelPropositionRequirementChecker -> PropositionRequirementChecker
+  KernelBridge.KernelProviderRequirementChecker -> ProviderRequirementChecker
+  KernelBridge.KernelCallableRequirementChecker -> CallableRequirementChecker
+  KernelBridge.KernelBoundaryRequirementChecker -> BoundaryRequirementChecker
+  KernelBridge.KernelArchitectureRequirementChecker -> ArchitectureRequirementChecker
+  KernelBridge.KernelEffectsRequirementChecker -> EffectsRequirementChecker
+  KernelBridge.KernelAuthorityRequirementChecker -> AuthorityRequirementChecker
+  KernelBridge.KernelBoundaryRepresentationRequirementChecker ->
+    BoundaryRepresentationRequirementChecker
+  KernelBridge.KernelRepresentationRequirementChecker -> RepresentationRequirementChecker
+  KernelBridge.KernelPlacementRequirementChecker -> PlacementRequirementChecker
+  KernelBridge.KernelCostRequirementChecker -> CostRequirementChecker
+  KernelBridge.KernelEnvironmentRequirementChecker -> EnvironmentRequirementChecker
