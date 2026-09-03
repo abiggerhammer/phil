@@ -1,6 +1,6 @@
 From Stdlib Require Import Bool.Bool.
 
-From Phil.Core Require Import ResourceLoop.
+From Phil.Core Require Import ResourceJoin ResourceLoop.
 
 Inductive LoopProjectionDecision : Type :=
 | LoopProjectionAcceptedDecision
