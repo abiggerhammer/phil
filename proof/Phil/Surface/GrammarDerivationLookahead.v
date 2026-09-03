@@ -469,11 +469,11 @@ Proof.
     contradiction.
   - intros path body input middle rest tree trees
       Hbody IHbody Hprogress Hrest IHrest.
-    unfold DerivesRepetitionFirstProperty in *.
-    destruct input as [|first_token tail]; auto.
-    intros Hneq.
-    apply IHbody.
-    exact Hprogress.
+    unfold DerivesRepetitionFirstProperty.
+    destruct input as [|first_token tail].
+    + exact I.
+    + unfold DerivesFirstProperty in IHbody.
+      exact (IHbody Hprogress).
 Qed.
 
 Corollary derives_consuming_first_witness :
