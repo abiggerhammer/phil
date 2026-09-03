@@ -110,7 +110,7 @@ Proof.
   - intros path body input.
     exists []. reflexivity.
   - intros path body input middle rest tree trees
-      Hbody Hprogress IHbody Hrest IHrest.
+      Hbody IHbody Hprogress Hrest IHrest.
     destruct IHbody as [first Hfirst].
     destruct IHrest as [second Hsecond].
     exists (List.app first second).
@@ -263,7 +263,7 @@ Proof.
   - intros path body input Hequal.
     exact I.
   - intros path body input middle rest tree trees
-      Hbody Hprogress IHbody Hrest IHrest Hequal.
+      Hbody IHbody Hprogress Hrest IHrest Hequal.
     exact I.
 Qed.
 
@@ -465,7 +465,7 @@ Proof.
     destruct input as [|first_token tail]; auto.
     contradiction.
   - intros path body input middle rest tree trees
-      Hbody Hprogress IHbody Hrest IHrest.
+      Hbody IHbody Hprogress Hrest IHrest.
     unfold DerivesRepetitionFirstProperty in *.
     destruct input as [|first_token tail]; auto.
     intros Hneq.
