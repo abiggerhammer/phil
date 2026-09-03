@@ -3,7 +3,6 @@
 module Main (main) where
 
 import qualified Data.Map.Strict as Map
-import qualified Data.Set as Set
 import Phil.Assurance
 import Phil.Assurance.EvidenceAuthorityKernelBridge
   ( artifactAuthorityKernelAccepts
