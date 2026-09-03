@@ -32,6 +32,7 @@ import Phil.Surface.GrammarV1.Parser
   ( GrammarV1CapabilityDecl (..)
   , GrammarV1CapabilityItem (..)
   , GrammarV1StaticArgument (..)
+  , GrammarV1StaticReference
   )
 import Phil.Surface.Syntax (Located (..))
 
