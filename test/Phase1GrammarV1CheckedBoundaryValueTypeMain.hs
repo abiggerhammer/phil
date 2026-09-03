@@ -30,6 +30,9 @@ import Phil.Surface.Check.Types
   , SurfaceShape (..)
   , SurfaceState
   )
+import Phil.Surface.GrammarV1.BoundaryFailureTypes
+  ( grammarV1CheckedBoundaryFailureTypes
+  )
 import Phil.Surface.GrammarV1.BoundaryValueType
   ( grammarV1CheckedBoundaryValueType
   )
@@ -42,6 +45,8 @@ main = do
   results <- sequence
     [ test "SURF-008 checked boundary value types preserve Core focusing outcomes"
         checkedBoundaryValueTypes
+    , test "SURF-008 checked boundary failure types preserve order and Core focusing outcomes"
+        checkedBoundaryFailureTypes
     ]
   if and results then pure () else exitFailure
 
@@ -111,6 +116,81 @@ checkedBoundaryValueTypes = do
   assert
     (grammarV1CheckedBoundaryValueType context state tupleType == Nothing)
     "unsupported tuple boundary type bypassed the checked type competence wall"
+
+checkedBoundaryFailureTypes :: Either String ()
+checkedBoundaryFailureTypes = do
+  context1 <- mapLeft show $
+    declareTransparentClaim
+      "Positive"
+      [(Name "x", SortUInt 8)]
+      (LessThan
+        (RefNat 0)
+        (RefToNat (RefVar (Name "x"))))
+      emptyStaticContext
+  context <- mapLeft show $
+    declareOpaqueClaim "NeedsNat" [(Name "n", SortNat)] context1
+  state <- bind "u" Unrestricted (TyUInt 8) emptySurfaceState
+  none <- parseBoundary "boundary-checked-failures-none"
+    "boundary None : U8 { canonical; }"
+  mixed <- parseBoundary "boundary-checked-failures-mixed" $ Text.unlines
+    [ "boundary Mixed : U8 {"
+    , "  failure U32;"
+    , "  failure Proof[NeedsNat(u)];"
+    , "  failure {v : U8 | Positive(v)};"
+    , "}"
+    ]
+  unknown <- parseBoundary "boundary-checked-failures-unknown" $ Text.unlines
+    [ "boundary UnknownFailure : U8 {"
+    , "  failure U32;"
+    , "  failure Proof[Missing(u)];"
+    , "}"
+    ]
+  unsupported <- parseBoundary "boundary-checked-failures-unsupported" $ Text.unlines
+    [ "boundary UnsupportedFailure : U8 {"
+    , "  failure U8;"
+    , "  failure (U32, Bool);"
+    , "}"
+    ]
+
+  let u = RefVar (Name "u")
+  assert
+    (grammarV1CheckedBoundaryFailureTypes context state none == Just (Right []))
+    "boundary without failure declarations did not preserve exact empty checked surface"
+
+  case grammarV1CheckedBoundaryFailureTypes context state mixed of
+    Just
+      (Right
+        [ (TyUInt 32, [])
+        , (TyProof proofProposition, proofSteps)
+        , (TyRefined binder base predicate, refinementSteps)
+        ]) -> do
+          assert
+            (proofProposition == Atom "NeedsNat" [RefToNat u])
+            "checked boundary failure Proof changed canonical proposition"
+          assert
+            (proofSteps == [InsertedUIntToNat u])
+            "checked boundary failure Proof lost exact UInt-to-Nat trace"
+          assert (binder == Name "v" && base == TyUInt 8)
+            "checked boundary failure refinement changed binder or base type"
+          assert
+            (predicate == LessThan
+              (RefNat 0)
+              (RefToNat (RefVar (Name "v"))))
+            "checked boundary failure refinement changed canonical predicate"
+          assert (ExpandedTransparentClaim "Positive" `elem` refinementSteps)
+            "checked boundary failure refinement lost transparent-claim trace"
+    other -> Left
+      ("checked boundary failure routing changed order, type meaning, or trace shape: "
+        <> show other)
+
+  assert
+    (grammarV1CheckedBoundaryFailureTypes context state unknown ==
+      Just (Left (UnknownClaim "Missing")))
+    "boundary failure Core error collapsed into source non-competence or partial success"
+
+  assert
+    (grammarV1CheckedBoundaryFailureTypes context state unsupported == Nothing)
+    "unsupported tuple failure type was partially accepted by checked boundary routing"
 
 bind :: Text.Text -> Mode -> Ty -> SurfaceState -> Either String SurfaceState
 bind name mode ty state =
