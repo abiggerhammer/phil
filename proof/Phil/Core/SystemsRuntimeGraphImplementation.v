@@ -11,9 +11,10 @@ From Phil.Core Require Import RuntimePrimitiveIdentity SystemsRuntimeGraph.
   correspondence boundaries.
 
   The historical RuntimePrimitiveReuseSymbolIdentityDecision constructor name
-  is retained for extracted-kernel byte/API compatibility; its semantic gate is
-  now the target-neutral PHIL-TARGET-RUNTIME-PRIM-001 entry-identity relation,
-  not specifically a linker-symbol relation.
+  and runtimeSymbolsVerified computational binder are retained for extracted
+  kernel byte/API compatibility; their semantic gate is now the target-neutral
+  PHIL-TARGET-RUNTIME-PRIM-001 entry-identity relation, not specifically a
+  linker-symbol relation.
 *)
 
 Inductive RuntimeClaimGraphDecision : Type :=
@@ -43,24 +44,24 @@ Inductive RuntimePrimitiveReuseDecision : Type :=
 | RuntimePrimitiveReuseSymbolIdentityDecision.
 
 Definition decideRuntimePrimitiveReuseByFacts
-  (contributionIdentifiesSite runtimeEntriesVerified : bool)
+  (contributionIdentifiesSite runtimeSymbolsVerified : bool)
   : RuntimePrimitiveReuseDecision :=
   if contributionIdentifiesSite then
-    if runtimeEntriesVerified
+    if runtimeSymbolsVerified
     then RuntimePrimitiveReuseAcceptedDecision
     else RuntimePrimitiveReuseSymbolIdentityDecision
   else RuntimePrimitiveReuseContributionIdentityDecision.
 
 Theorem runtime_primitive_reuse_decision_exact :
-  forall contributionIdentifiesSite runtimeEntriesVerified,
+  forall contributionIdentifiesSite runtimeSymbolsVerified,
     decideRuntimePrimitiveReuseByFacts
-      contributionIdentifiesSite runtimeEntriesVerified =
+      contributionIdentifiesSite runtimeSymbolsVerified =
       RuntimePrimitiveReuseAcceptedDecision <->
-    contributionIdentifiesSite = true /\ runtimeEntriesVerified = true.
+    contributionIdentifiesSite = true /\ runtimeSymbolsVerified = true.
 Proof.
-  intros contributionIdentifiesSite runtimeEntriesVerified.
+  intros contributionIdentifiesSite runtimeSymbolsVerified.
   unfold decideRuntimePrimitiveReuseByFacts.
-  destruct contributionIdentifiesSite; destruct runtimeEntriesVerified;
+  destruct contributionIdentifiesSite; destruct runtimeSymbolsVerified;
     simpl; intuition congruence.
 Qed.
 
