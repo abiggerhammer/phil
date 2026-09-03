@@ -56,10 +56,10 @@ Proof.
   intros first second [left Hleft] [right Hright].
   assert (Hleft_length :
     List.length first = List.length left + List.length second).
-  { rewrite Hleft, List.app_length. lia. }
+  { rewrite Hleft, List.length_app. lia. }
   assert (Hright_length :
     List.length second = List.length right + List.length first).
-  { rewrite Hright, List.app_length. lia. }
+  { rewrite Hright, List.length_app. lia. }
   assert (List.length left = 0) by lia.
   assert (List.length right = 0) by lia.
   apply List.length_zero_iff_nil in H.
@@ -255,7 +255,7 @@ Proof.
       - destruct (derives_sequence_consumes_prefix
           rules path (S index) items middle rest trees Hitems)
           as [suffix Hsuffix].
-        exists suffix. now rewrite Hequal in Hsuffix.
+        exists suffix. now rewrite <- Hequal in Hsuffix.
     }
     constructor.
     + apply IHitem. exact Hinput_middle.
