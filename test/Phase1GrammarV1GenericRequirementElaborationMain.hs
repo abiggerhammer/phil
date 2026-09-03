@@ -134,7 +134,7 @@ coreRequirementRouting = do
 structuralResolutionFailures :: Either String ()
 structuralResolutionFailures = do
   duplicateRequirement <- onlyRequirement "structural T : duplicate;"
-  unsupportedRequirement <- onlyRequirement "structural T : copy;"
+  unsupportedRequirement <- onlyRequirement "structural T : frobnicate;"
   let leftKey = GenericValueParameterKey "left-T"
       rightKey = GenericValueParameterKey "right-T"
       check resolutions requirement = grammarV1CheckedCoreGenericRequirement
@@ -157,7 +157,7 @@ structuralResolutionFailures = do
     (check
       [GrammarV1ResolvedStructuralRequirement "T" leftKey]
       unsupportedRequirement
-      == Just (Left (GrammarV1StructuralPermissionUnsupported "copy")))
+      == Just (Left (GrammarV1StructuralPermissionUnsupported "frobnicate")))
     "unknown structural permission was guessed as a Core permission"
 
 providerResolutionFailures :: Either String ()
