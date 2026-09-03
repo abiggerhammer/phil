@@ -1,0 +1,117 @@
+name: Phase 1 Callable Mode Strengthening Production Binding
+
+on:
+  pull_request:
+    paths:
+      - 'generated/CallableModeStrengtheningKernel.hs'
+      - 'src/CallableModeStrengtheningKernel.hs'
+      - 'src/Phil/Core/CallableModeStrengtheningKernelBridge.hs'
+      - 'src/Phil/Core/Callable/ModeDeclaration.hs'
+      - 'app/CallableModeStrengtheningDecisionCorrespondenceMain.hs'
+      - 'app/CallableModeStrengtheningProductionBindingMain.hs'
+      - 'proof/Phil/Core/GenericStructural.v'
+      - 'proof/Phil/Core/CallableMode.v'
+      - 'proof/Phil/Core/CallableModeStrengthening.v'
+      - 'proof/Phil/Core/CallableModeStrengtheningImplementation.v'
+      - 'proof/Phil/Core/CallableModeStrengtheningImplementationExtraction.v'
+      - 'docs/phase-1/callable-mode-strengthening-production-binding-v1.md'
+      - '.github/workflows/phase1-callable-mode-strengthening-production-binding.yml'
+      - 'test/Phase1ExplicitClosureModeMain.hs'
+  push:
+    branches: [main]
+    paths:
+      - 'generated/CallableModeStrengtheningKernel.hs'
+      - 'src/CallableModeStrengtheningKernel.hs'
+      - 'src/Phil/Core/CallableModeStrengtheningKernelBridge.hs'
+      - 'src/Phil/Core/Callable/ModeDeclaration.hs'
+      - 'proof/Phil/Core/GenericStructural.v'
+      - 'proof/Phil/Core/CallableMode.v'
+      - 'proof/Phil/Core/CallableModeStrengthening.v'
+      - 'proof/Phil/Core/CallableModeStrengtheningImplementation.v'
+      - 'proof/Phil/Core/CallableModeStrengtheningImplementationExtraction.v'
+      - '.github/workflows/phase1-callable-mode-strengthening-production-binding.yml'
+      - 'test/Phase1ExplicitClosureModeMain.hs'
+
+permissions:
+  contents: read
+
+jobs:
+  exact-callable-mode-strengthening-kernel:
+    runs-on: ubuntu-latest
+    container:
+      image: rocq/rocq-prover:9.2.0
+      options: --user root
+    steps:
+      - uses: actions/checkout@v4
+      - name: Freshly extract exact Callable Mode Strengthening kernel
+        shell: bash
+        run: |
+          set -euo pipefail
+          export PATH="/home/rocq/.opam/${COMPILER}/bin:$PATH"
+          rocq c -Q proof/Phil Phil proof/Phil/Core/GenericStructural.v
+          rocq c -Q proof/Phil Phil proof/Phil/Core/CallableMode.v
+          rocq c -Q proof/Phil Phil proof/Phil/Core/CallableModeStrengthening.v
+          rocq c -Q proof/Phil Phil proof/Phil/Core/CallableModeStrengtheningImplementation.v
+          rm -f CallableModeStrengtheningKernel.hs
+          rocq c -Q proof/Phil Phil proof/Phil/Core/CallableModeStrengtheningImplementationExtraction.v
+          test -s CallableModeStrengtheningKernel.hs
+          test "$(sha256sum CallableModeStrengtheningKernel.hs | cut -d' ' -f1)" = \
+            f985e64a008d0202a63f548da824a11ce8ef15e1a6aa7e1ab7aa3489861ee25e
+          cmp CallableModeStrengtheningKernel.hs generated/CallableModeStrengtheningKernel.hs
+          cmp CallableModeStrengtheningKernel.hs src/CallableModeStrengtheningKernel.hs
+      - name: Record exact kernel identity
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p callable-mode-strengthening-exact-kernel
+          cp CallableModeStrengtheningKernel.hs callable-mode-strengthening-exact-kernel/
+          sha256sum CallableModeStrengtheningKernel.hs \
+            > callable-mode-strengthening-exact-kernel/CallableModeStrengtheningKernel.sha256
+      - uses: actions/upload-artifact@v4
+        with:
+          name: callable-mode-strengthening-exact-kernel
+          path: callable-mode-strengthening-exact-kernel
+          if-no-files-found: error
+
+  verify-callable-mode-strengthening-production-binding:
+    needs: exact-callable-mode-strengthening-kernel
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: haskell-actions/setup@v2
+        with:
+          ghc-version: '9.6.7'
+          cabal-version: 'latest'
+      - name: Build broad library regression surface
+        run: cabal build lib:phil-core --ghc-options=-Werror
+      - name: Strictly typecheck bound Callable Mode Strengthening surface
+        run: |
+          set -euo pipefail
+          cabal exec -- ghc -isrc -Wall -Werror -Wno-unused-imports -fno-code src/CallableModeStrengtheningKernel.hs
+          cabal exec -- ghc -isrc -Wall -Werror -fno-code src/Phil/Core/CallableModeStrengtheningKernelBridge.hs
+          cabal exec -- ghc -isrc -Wall -Werror -fno-code src/Phil/Core/Callable/ModeDeclaration.hs
+          cabal exec -- ghc -isrc -Wall -Werror -Wno-unused-imports -fno-code app/CallableModeStrengtheningDecisionCorrespondenceMain.hs
+          cabal exec -- ghc -isrc -Wall -Werror -fno-code app/CallableModeStrengtheningProductionBindingMain.hs
+          cabal exec -- ghc -isrc -Wall -Werror -fno-code test/Phase1ExplicitClosureModeMain.hs
+      - name: Execute exact extracted-kernel controls
+        run: cabal exec -- runghc -Wall -Werror -Wno-unused-imports -isrc app/CallableModeStrengtheningDecisionCorrespondenceMain.hs
+      - name: Execute production-binding controls
+        run: cabal exec -- runghc -Wall -Werror -isrc app/CallableModeStrengtheningProductionBindingMain.hs
+      - name: Re-run unchanged CALL-017 corpus
+        run: cabal exec -- runghc -Wall -Werror -isrc test/Phase1ExplicitClosureModeMain.hs
+      - name: Record production binding identities
+        run: |
+          set -euo pipefail
+          mkdir -p callable-mode-strengthening-production-binding
+          sha256sum \
+            src/CallableModeStrengtheningKernel.hs \
+            src/Phil/Core/CallableModeStrengtheningKernelBridge.hs \
+            src/Phil/Core/Callable/ModeDeclaration.hs \
+            app/CallableModeStrengtheningProductionBindingMain.hs \
+            test/Phase1ExplicitClosureModeMain.hs \
+            > callable-mode-strengthening-production-binding/PHIL-CALL-MODE-STRENGTHEN-001.production.sha256
+      - uses: actions/upload-artifact@v4
+        with:
+          name: callable-mode-strengthening-production-binding
+          path: callable-mode-strengthening-production-binding
+          if-no-files-found: error
