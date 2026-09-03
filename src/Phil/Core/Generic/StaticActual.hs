@@ -14,6 +14,14 @@ import Data.List (foldl')
 import qualified Data.Set as Set
 import Data.Text (Text)
 import Phil.Core.Generic (GenericStaticParameterKey)
+import Phil.Core.GenericStaticKindKernelBridge
+  ( CertifiedCheckedStaticActualShapeDecision (..)
+  , CertifiedDirectStaticActualDecision (..)
+  , CertifiedReferencedStaticActualDecision (..)
+  , certifiedCheckedStaticActualShapeDecision
+  , certifiedDirectStaticActualDecision
+  , certifiedReferencedStaticActualDecision
+  )
 import Phil.Core.Static (SemanticForm)
 
 data GenericStaticKind
@@ -77,6 +85,7 @@ data GenericStaticKindError
       GenericStaticKind
       Text
       [SemanticForm]
+  | GenericStaticKindKernelDisagreement
   deriving (Eq, Show)
 
 checkGenericStaticActuals
@@ -110,22 +119,31 @@ checkActual
   -> Either GenericStaticKindError CheckedGenericStaticActual
 checkActual references parameter actual =
   case actual of
-    DirectGenericStaticActual actualKind semanticForm
-      | actualKind == expectedKind -> Right (checked semanticForm)
-      | otherwise -> Left
-          (GenericStaticDirectKindMismatch parameterKey expectedKind actualKind)
+    DirectGenericStaticActual actualKind semanticForm ->
+      case certifiedDirectStaticActualDecision (actualKind == expectedKind) of
+        CertifiedDirectStaticActualAccepted -> checked semanticForm
+        CertifiedDirectStaticActualKindMismatch ->
+          Left (GenericStaticDirectKindMismatch parameterKey expectedKind actualKind)
+        CertifiedDirectStaticActualKernelDisagreement ->
+          Left GenericStaticKindKernelDisagreement
     ReferencedGenericStaticActual referenceName -> do
       semanticForm <- resolveReference
         parameterKey expectedKind referenceName references
-      Right (checked semanticForm)
+      checked semanticForm
   where
     parameterKey = genericStaticParameterKey parameter
     expectedKind = genericStaticParameterKind parameter
-    checked semanticForm = CheckedGenericStaticActual
-      { checkedGenericStaticParameterKey = parameterKey
-      , checkedGenericStaticKind = expectedKind
-      , checkedGenericStaticSemanticForm = semanticForm
-      }
+    checked semanticForm = do
+      let result = CheckedGenericStaticActual
+            { checkedGenericStaticParameterKey = parameterKey
+            , checkedGenericStaticKind = expectedKind
+            , checkedGenericStaticSemanticForm = semanticForm
+            }
+          parameterKeyExact = checkedGenericStaticParameterKey result == parameterKey
+          kindExact = checkedGenericStaticKind result == expectedKind
+      case certifiedCheckedStaticActualShapeDecision parameterKeyExact kindExact of
+        CertifiedCheckedStaticActualShapeAccepted -> Right result
+        _ -> Left GenericStaticKindKernelDisagreement
 
 resolveReference
   :: GenericStaticParameterKey
@@ -134,17 +152,24 @@ resolveReference
   -> [GenericStaticReferenceCandidate]
   -> Either GenericStaticKindError SemanticForm
 resolveReference parameterKey expectedKind referenceName references =
-  case candidates of
-    [] -> Left (GenericStaticReferenceUnresolved parameterKey expectedKind referenceName)
-    _ -> case matching of
-      [] -> Left (GenericStaticReferenceKindMismatch
+  case certifiedReferencedStaticActualDecision
+      nameExists expectedKindPresent expectedKindUnique selectedSemanticFormExact of
+    CertifiedReferencedStaticActualUnresolved ->
+      Left (GenericStaticReferenceUnresolved parameterKey expectedKind referenceName)
+    CertifiedReferencedStaticActualKindMismatch ->
+      Left (GenericStaticReferenceKindMismatch
         parameterKey expectedKind referenceName availableKinds)
-      [candidate] -> Right (genericStaticReferenceSemanticForm candidate)
-      many -> Left (GenericStaticReferenceAmbiguous
-        parameterKey
-        expectedKind
-        referenceName
-        (map genericStaticReferenceSemanticForm many))
+    CertifiedReferencedStaticActualAmbiguous ->
+      Left (GenericStaticReferenceAmbiguous
+        parameterKey expectedKind referenceName matchingForms)
+    CertifiedReferencedStaticActualAccepted ->
+      case matching of
+        [candidate] -> Right (genericStaticReferenceSemanticForm candidate)
+        _ -> Left GenericStaticKindKernelDisagreement
+    CertifiedReferencedStaticActualSemanticFormMismatch ->
+      Left GenericStaticKindKernelDisagreement
+    CertifiedReferencedStaticActualKernelDisagreement ->
+      Left GenericStaticKindKernelDisagreement
   where
     candidates =
       [ candidate
@@ -156,4 +181,14 @@ resolveReference parameterKey expectedKind referenceName references =
       | candidate <- candidates
       , genericStaticReferenceKind candidate == expectedKind
       ]
+    matchingForms = map genericStaticReferenceSemanticForm matching
     availableKinds = Set.fromList (map genericStaticReferenceKind candidates)
+    nameExists = not (null candidates)
+    expectedKindPresent = not (null matching)
+    expectedKindUnique = length matching == 1
+    selectedSemanticFormExact = case matching of
+      [candidate] ->
+        case matchingForms of
+          [selected] -> selected == genericStaticReferenceSemanticForm candidate
+          _ -> False
+      _ -> False

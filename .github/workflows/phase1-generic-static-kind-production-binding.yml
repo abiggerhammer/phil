@@ -1,0 +1,111 @@
+name: Phase 1 Generic Static Kind Production Binding
+
+on:
+  pull_request:
+    paths:
+      - 'generated/GenericStaticKindKernel.hs'
+      - 'src/GenericStaticKindKernel.hs'
+      - 'src/Phil/Core/GenericStaticKindKernelBridge.hs'
+      - 'src/Phil/Core/Generic/StaticActual.hs'
+      - 'app/GenericStaticKindDecisionCorrespondenceMain.hs'
+      - 'app/GenericStaticKindProductionBindingMain.hs'
+      - 'proof/Phil/Core/GenericStaticKind.v'
+      - 'proof/Phil/Core/GenericStaticKindImplementation.v'
+      - 'proof/Phil/Core/GenericStaticKindImplementationExtraction.v'
+      - 'docs/phase-1/generic-static-kind-production-binding-v1.md'
+      - '.github/workflows/phase1-generic-static-kind-production-binding.yml'
+      - 'test/Phase1GenericStaticKindMain.hs'
+  push:
+    branches: [main]
+    paths:
+      - 'generated/GenericStaticKindKernel.hs'
+      - 'src/GenericStaticKindKernel.hs'
+      - 'src/Phil/Core/GenericStaticKindKernelBridge.hs'
+      - 'src/Phil/Core/Generic/StaticActual.hs'
+      - 'proof/Phil/Core/GenericStaticKind.v'
+      - 'proof/Phil/Core/GenericStaticKindImplementation.v'
+      - 'proof/Phil/Core/GenericStaticKindImplementationExtraction.v'
+      - '.github/workflows/phase1-generic-static-kind-production-binding.yml'
+      - 'test/Phase1GenericStaticKindMain.hs'
+
+permissions:
+  contents: read
+
+jobs:
+  exact-generic-static-kind-kernel:
+    runs-on: ubuntu-latest
+    container:
+      image: rocq/rocq-prover:9.2.0
+      options: --user root
+    steps:
+      - uses: actions/checkout@v4
+      - name: Freshly extract exact Generic Static Kind kernel
+        shell: bash
+        run: |
+          set -euo pipefail
+          export PATH="/home/rocq/.opam/${COMPILER}/bin:$PATH"
+          rocq c -Q proof/Phil Phil proof/Phil/Core/GenericStaticKind.v
+          rocq c -Q proof/Phil Phil proof/Phil/Core/GenericStaticKindImplementation.v
+          rm -f GenericStaticKindKernel.hs
+          rocq c -Q proof/Phil Phil proof/Phil/Core/GenericStaticKindImplementationExtraction.v
+          test -s GenericStaticKindKernel.hs
+          test "$(sha256sum GenericStaticKindKernel.hs | cut -d' ' -f1)" = \
+            11b37e69f97ab68e7e3615faed701251759a850dda1b6d207dc61312478ccce0
+          cmp GenericStaticKindKernel.hs generated/GenericStaticKindKernel.hs
+          cmp GenericStaticKindKernel.hs src/GenericStaticKindKernel.hs
+      - name: Record exact kernel identity
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p generic-static-kind-exact-kernel
+          cp GenericStaticKindKernel.hs generic-static-kind-exact-kernel/
+          sha256sum GenericStaticKindKernel.hs \
+            > generic-static-kind-exact-kernel/GenericStaticKindKernel.sha256
+      - uses: actions/upload-artifact@v4
+        with:
+          name: generic-static-kind-exact-kernel
+          path: generic-static-kind-exact-kernel
+          if-no-files-found: error
+
+  verify-generic-static-kind-production-binding:
+    needs: exact-generic-static-kind-kernel
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: haskell-actions/setup@v2
+        with:
+          ghc-version: '9.6.7'
+          cabal-version: 'latest'
+      - name: Build broad library regression surface
+        run: cabal build lib:phil-core --ghc-options=-Werror
+      - name: Strictly typecheck bound Generic Static Kind surface
+        run: |
+          set -euo pipefail
+          cabal exec -- ghc -isrc -Wall -Werror -fno-code src/GenericStaticKindKernel.hs
+          cabal exec -- ghc -isrc -Wall -Werror -fno-code src/Phil/Core/GenericStaticKindKernelBridge.hs
+          cabal exec -- ghc -isrc -Wall -Werror -fno-code src/Phil/Core/Generic/StaticActual.hs
+          cabal exec -- ghc -isrc -Wall -Werror -fno-code app/GenericStaticKindDecisionCorrespondenceMain.hs
+          cabal exec -- ghc -isrc -Wall -Werror -fno-code app/GenericStaticKindProductionBindingMain.hs
+          cabal exec -- ghc -isrc -Wall -Werror -fno-code test/Phase1GenericStaticKindMain.hs
+      - name: Execute exact extracted-kernel controls
+        run: cabal exec -- runghc -Wall -Werror -isrc app/GenericStaticKindDecisionCorrespondenceMain.hs
+      - name: Execute production-binding controls
+        run: cabal exec -- runghc -Wall -Werror -isrc app/GenericStaticKindProductionBindingMain.hs
+      - name: Re-run unchanged GEN-013 corpus
+        run: cabal exec -- runghc -Wall -Werror -isrc test/Phase1GenericStaticKindMain.hs
+      - name: Record production binding identities
+        run: |
+          set -euo pipefail
+          mkdir -p generic-static-kind-production-binding
+          sha256sum \
+            src/GenericStaticKindKernel.hs \
+            src/Phil/Core/GenericStaticKindKernelBridge.hs \
+            src/Phil/Core/Generic/StaticActual.hs \
+            app/GenericStaticKindProductionBindingMain.hs \
+            test/Phase1GenericStaticKindMain.hs \
+            > generic-static-kind-production-binding/PHIL-GEN-KIND-001.production.sha256
+      - uses: actions/upload-artifact@v4
+        with:
+          name: generic-static-kind-production-binding
+          path: generic-static-kind-production-binding
+          if-no-files-found: error
