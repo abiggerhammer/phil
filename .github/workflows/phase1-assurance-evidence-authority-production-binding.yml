@@ -1,0 +1,115 @@
+name: Phase 1 Assurance Evidence Authority Production Binding
+
+on:
+  pull_request:
+    paths:
+      - 'proof/Phil/Assurance/EvidenceUse.v'
+      - 'proof/Phil/Assurance/EvidenceAuthorityImplementation.v'
+      - 'proof/Phil/Assurance/EvidenceAuthorityImplementationExtraction.v'
+      - 'generated/AssuranceEvidenceAuthorityKernel.hs'
+      - 'src/AssuranceEvidenceAuthorityKernel.hs'
+      - 'src/Phil/Assurance/EvidenceAuthorityKernelBridge.hs'
+      - 'src/Phil/Assurance/Verify.hs'
+      - 'app/AssuranceEvidenceAuthorityDecisionCorrespondenceMain.hs'
+      - 'app/AssuranceEvidenceAuthorityProductionBindingMain.hs'
+      - 'test/AssuranceMain.hs'
+      - 'docs/phase-1/assurance-evidence-authority-production-binding-v1.md'
+      - '.github/workflows/phase1-assurance-evidence-authority-production-binding.yml'
+  push:
+    branches: [main]
+    paths:
+      - 'generated/AssuranceEvidenceAuthorityKernel.hs'
+      - 'src/AssuranceEvidenceAuthorityKernel.hs'
+      - 'src/Phil/Assurance/EvidenceAuthorityKernelBridge.hs'
+      - 'src/Phil/Assurance/Verify.hs'
+      - 'app/AssuranceEvidenceAuthorityProductionBindingMain.hs'
+      - 'docs/phase-1/assurance-evidence-authority-production-binding-v1.md'
+      - '.github/workflows/phase1-assurance-evidence-authority-production-binding.yml'
+
+permissions:
+  contents: read
+
+jobs:
+  exact-assurance-evidence-authority-kernel:
+    runs-on: ubuntu-latest
+    container:
+      image: rocq/rocq-prover:9.2.0
+      options: --user root
+    steps:
+      - uses: actions/checkout@v4
+      - name: Freshly extract exact assurance evidence authority kernel
+        shell: bash
+        run: |
+          set -euo pipefail
+          export PATH="/home/rocq/.opam/${COMPILER}/bin:$PATH"
+          rocq c -Q proof/Phil Phil proof/Phil/Assurance/Manifest.v
+          rocq c -Q proof/Phil Phil proof/Phil/Assurance/EvidenceUse.v
+          rocq c -Q proof/Phil Phil proof/Phil/Assurance/EvidenceAuthorityImplementation.v
+          rm -f AssuranceEvidenceAuthorityKernel.hs
+          rocq c -Q proof/Phil Phil proof/Phil/Assurance/EvidenceAuthorityImplementationExtraction.v
+          test -s AssuranceEvidenceAuthorityKernel.hs
+          echo 'f9a393565320f74f84270a7e7f975da7e992d9f72b4492f22a101dbaf5b029ee  AssuranceEvidenceAuthorityKernel.hs' | sha256sum -c -
+          cmp AssuranceEvidenceAuthorityKernel.hs generated/AssuranceEvidenceAuthorityKernel.hs
+          cmp AssuranceEvidenceAuthorityKernel.hs src/AssuranceEvidenceAuthorityKernel.hs
+      - name: Record exact kernel identity
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p assurance-evidence-authority-exact-kernel
+          cp AssuranceEvidenceAuthorityKernel.hs assurance-evidence-authority-exact-kernel/
+          sha256sum \
+            AssuranceEvidenceAuthorityKernel.hs \
+            generated/AssuranceEvidenceAuthorityKernel.hs \
+            src/AssuranceEvidenceAuthorityKernel.hs \
+            > assurance-evidence-authority-exact-kernel/PHIL-ASSURE-EVID-001.kernel.sha256
+          cat assurance-evidence-authority-exact-kernel/PHIL-ASSURE-EVID-001.kernel.sha256
+      - uses: actions/upload-artifact@v4
+        with:
+          name: assurance-evidence-authority-exact-kernel
+          path: assurance-evidence-authority-exact-kernel
+          if-no-files-found: error
+
+  verify-assurance-evidence-authority-production-binding:
+    needs: exact-assurance-evidence-authority-kernel
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: haskell-actions/setup@v2
+        with:
+          ghc-version: '9.6.7'
+          cabal-version: 'latest'
+      - name: Build broad library regression surface
+        run: cabal build lib:phil-core --ghc-options=-Werror
+      - name: Strictly typecheck bound assurance evidence authority surface
+        run: |
+          set -euo pipefail
+          cabal exec -- ghc -isrc -Wall -Werror -Wno-unused-imports -fno-code src/AssuranceEvidenceAuthorityKernel.hs
+          cabal exec -- ghc -isrc -Wall -Werror -fno-code src/Phil/Assurance/EvidenceAuthorityKernelBridge.hs
+          cabal exec -- ghc -isrc -Wall -Werror -fno-code src/Phil/Assurance/Verify.hs
+          cabal exec -- ghc -isrc -Wall -Werror -Wno-unused-imports -fno-code app/AssuranceEvidenceAuthorityDecisionCorrespondenceMain.hs
+          cabal exec -- ghc -isrc -Wall -Werror -fno-code app/AssuranceEvidenceAuthorityProductionBindingMain.hs
+          cabal exec -- ghc -isrc -Wall -Werror -fno-code test/AssuranceMain.hs
+      - name: Execute exact extracted-kernel controls
+        run: cabal exec -- runghc -Wall -Werror -Wno-unused-imports -isrc app/AssuranceEvidenceAuthorityDecisionCorrespondenceMain.hs
+      - name: Execute production-binding controls
+        run: cabal exec -- runghc -Wall -Werror -isrc app/AssuranceEvidenceAuthorityProductionBindingMain.hs
+      - name: Re-run unchanged 23-case assurance corpus
+        run: cabal exec -- runghc -Wall -Werror -isrc test/AssuranceMain.hs
+      - name: Record production binding identities
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p assurance-evidence-authority-production-binding
+          sha256sum \
+            src/AssuranceEvidenceAuthorityKernel.hs \
+            src/Phil/Assurance/EvidenceAuthorityKernelBridge.hs \
+            src/Phil/Assurance/Verify.hs \
+            app/AssuranceEvidenceAuthorityProductionBindingMain.hs \
+            test/AssuranceMain.hs \
+            > assurance-evidence-authority-production-binding/PHIL-ASSURE-EVID-001.production.sha256
+          cat assurance-evidence-authority-production-binding/PHIL-ASSURE-EVID-001.production.sha256
+      - uses: actions/upload-artifact@v4
+        with:
+          name: assurance-evidence-authority-production-binding
+          path: assurance-evidence-authority-production-binding
+          if-no-files-found: error
