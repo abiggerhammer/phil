@@ -40,23 +40,24 @@ jobs:
 
           path = Path('proof/Phil/Surface/GrammarDeterminacyWitnessSoundness.v')
           source = path.read_text()
-          old = '''    pose proof
-              (proj1 phase1_surface_nullable_witness_fuel_sound
-                item Hnullable fuel Hfuel_item Hitem_safe)
-              as Hitem_nullable.
-          '''
-          new = '''    pose proof
-              (choice_safe_implies_nullable_depth_safe
-                fuel item Hitem_safe)
-              as Hitem_depth_safe.
-            pose proof
-              (nullable_witness_depth_sound
-                item Hnullable fuel Hitem_depth_safe)
-              as Hitem_nullable.
-          '''
-          if source.count(old) != 1:
-              raise SystemExit(f'expected one stale nullable FIRST bridge, found {source.count(old)}')
-          source = source.replace(old, new, 1)
+          needle = 'phase1_surface_nullable_witness_fuel_sound'
+          if source.count(needle) != 1:
+              raise SystemExit(f'expected one stale nullable FIRST bridge, found {source.count(needle)}')
+          needle_at = source.index(needle)
+          statement_start = source.rfind('    pose proof', 0, needle_at)
+          statement_end_marker = '      as Hitem_nullable.'
+          statement_end = source.index(statement_end_marker, needle_at) + len(statement_end_marker)
+          new = (
+              '    pose proof\n'
+              '      (choice_safe_implies_nullable_depth_safe\n'
+              '        fuel item Hitem_safe)\n'
+              '      as Hitem_depth_safe.\n'
+              '    pose proof\n'
+              '      (nullable_witness_depth_sound\n'
+              '        item Hnullable fuel Hitem_depth_safe)\n'
+              '      as Hitem_nullable.'
+          )
+          source = source[:statement_start] + new + source[statement_end:]
           path.write_text(source)
           print(f'generated witness proof characters: {len(source)}')
           PY
