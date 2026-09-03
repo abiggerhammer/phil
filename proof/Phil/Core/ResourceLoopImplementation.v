@@ -37,17 +37,17 @@ Theorem loop_projection_decision_exact :
      requirementsExact = true).
 Proof.
   intros kindMatches resourceProjectionAccepted slotDomainExact requirementsExact.
-  destruct kindMatches;
-    destruct resourceProjectionAccepted;
-    destruct slotDomainExact;
-    destruct requirementsExact; simpl.
-  all: split.
-  all: try discriminate.
-  all: try (intros H;
-            destruct H as [_ [_ [_ Hrequirements]]];
-            discriminate).
-  - intros _. repeat split; reflexivity.
-  - intros _. reflexivity.
+  split.
+  - intro Hdecision.
+    unfold decideLoopProjectionByFacts in Hdecision.
+    destruct kindMatches eqn:Hkind; try discriminate.
+    destruct resourceProjectionAccepted eqn:Hresource; try discriminate.
+    destruct slotDomainExact eqn:Hslots; try discriminate.
+    destruct requirementsExact eqn:Hrequirements; try discriminate.
+    repeat split; assumption.
+  - intros [Hkind [Hresource [Hslots Hrequirements]]].
+    rewrite Hkind, Hresource, Hslots, Hrequirements.
+    reflexivity.
 Qed.
 
 Definition ExpectedLoopProjectionAccepted
