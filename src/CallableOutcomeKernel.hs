@@ -60,3 +60,4 @@ decideCallableOutcomeByFacts classDomainExact stateExact transitionExact residua
        Prelude.False -> CallableOutcomeCalleeTransitionDecision};
      Prelude.False -> CallableOutcomeStateDecision};
    Prelude.False -> CallableOutcomeClassSetDecision}
+
