@@ -15,7 +15,8 @@ import Phil.Core.Static
   , emptyStaticContext
   )
 import Phil.Core.Syntax
-  ( Name (..)
+  ( Control (..)
+  , Name (..)
   , Ty (..)
   )
 import Phil.Surface.GrammarV1.CallableSignature
@@ -25,6 +26,11 @@ import Phil.Surface.GrammarV1.CallableSignature
 import Phil.Surface.GrammarV1.ComponentSurface
   ( GrammarV1CheckedComponentHeader (..)
   , grammarV1CheckedClosedComponentHeader
+  )
+import Phil.Surface.GrammarV1.FunctionBodySurface
+  ( GrammarV1CheckedClosedFunctionBody (..)
+  , GrammarV1FunctionBodySurfaceError (..)
+  , grammarV1CheckedClosedFunctionBody
   )
 import Phil.Surface.GrammarV1.Parser
 import Phil.Surface.Syntax (Located (..))
@@ -41,6 +47,14 @@ main = do
         resultFocusingFailurePreserved
     , test "SURF-008 function headers remain fail-closed outside bounded competence"
         functionCompetenceBoundaries
+    , test "SURF-008 closed parameter-free function bodies route through production checking"
+        closedFunctionBodySemantics
+    , test "SURF-008 closed function bodies preserve exact result-type rejection"
+        closedFunctionBodyResultMismatch
+    , test "SURF-008 checked function bodies cannot attach to a different checked header"
+        closedFunctionBodyHeaderMismatch
+    , test "SURF-008 function bodies stay fail-closed before binder and richer expression competence"
+        functionBodyCompetenceBoundaries
     , test "SURF-008 closed component headers preserve stable identity and checked optional signature"
         componentHeaderSemantics
     , test "SURF-008 component headers preserve omitted versus explicit-empty parameter syntax"
@@ -162,6 +176,104 @@ functionCompetenceBoundaries = do
     , ("omitted result type", omittedResult)
     , ("specialized satisfies reference", specializedSatisfies)
     ]
+
+closedFunctionBodySemantics :: Either String ()
+closedFunctionBodySemantics = do
+  boolSource <- onlyFunction
+    "fn truth() -> Bool satisfies C { return true; }"
+  unitSource <- onlyFunction
+    "fn noop() -> Unit satisfies C { return (unit); }"
+  let declarationKey = DeclarationKey "function.body.lineage"
+      definitionRevision = DefinitionRevision "function.body.definition"
+  boolHeader <- checkedHeader declarationKey definitionRevision boolSource
+  unitHeader <- checkedHeader declarationKey definitionRevision unitSource
+  assert
+    ( grammarV1CheckedClosedFunctionBody emptyStaticContext boolHeader boolSource
+        == Just
+          (Right GrammarV1CheckedClosedFunctionBody
+            { checkedClosedFunctionBodyHeader = boolHeader
+            , checkedClosedFunctionBodyControls = [Return TyBool]
+            })
+    )
+    "closed Bool return body did not route through the production surface checker"
+  assert
+    ( grammarV1CheckedClosedFunctionBody emptyStaticContext unitHeader unitSource
+        == Just
+          (Right GrammarV1CheckedClosedFunctionBody
+            { checkedClosedFunctionBodyHeader = unitHeader
+            , checkedClosedFunctionBodyControls = [Return TyUnit]
+            })
+    )
+    "parenthesized Unit return body did not preserve exact terminal control"
+
+closedFunctionBodyResultMismatch :: Either String ()
+closedFunctionBodyResultMismatch = do
+  source <- onlyFunction
+    "fn mismatch() -> U32 satisfies C { return true; }"
+  let declarationKey = DeclarationKey "function.body.mismatch.lineage"
+      definitionRevision = DefinitionRevision "function.body.mismatch.definition"
+  header <- checkedHeader declarationKey definitionRevision source
+  let actual = grammarV1CheckedClosedFunctionBody
+        emptyStaticContext header source
+  assert
+    (actual == Just
+      (Left (GrammarV1FunctionBodyResultMismatch (TyUInt 32) [Return TyBool])))
+    ("function body result mismatch was not preserved exactly: " <> show actual)
+
+closedFunctionBodyHeaderMismatch :: Either String ()
+closedFunctionBodyHeaderMismatch = do
+  first <- onlyFunction
+    "fn first() -> Bool satisfies C { return true; }"
+  second <- onlyFunction
+    "fn second() -> Bool satisfies C { return true; }"
+  let declarationKey = DeclarationKey "function.body.header.lineage"
+      definitionRevision = DefinitionRevision "function.body.header.definition"
+  firstHeader <- checkedHeader declarationKey definitionRevision first
+  secondHeader <- checkedHeader declarationKey definitionRevision second
+  let actual = grammarV1CheckedClosedFunctionBody
+        emptyStaticContext firstHeader second
+  assert
+    (actual == Just
+      (Left (GrammarV1FunctionBodyHeaderMismatch firstHeader secondHeader)))
+    "body from a different source declaration attached to the supplied checked header"
+
+functionBodyCompetenceBoundaries :: Either String ()
+functionBodyCompetenceBoundaries = do
+  parameterized <- onlyFunction
+    "fn parameterized(x : Bool) -> Bool satisfies C { return true; }"
+  integerLiteral <- onlyFunction
+    "fn integerLiteral() -> U32 satisfies C { return 1; }"
+  namedBody <- onlyFunction
+    "fn namedBody() -> Bool satisfies C { return missing; }"
+  multiStatement <- onlyFunction $ Text.unlines
+    [ "fn multi() -> Bool satisfies C {"
+    , "  true;"
+    , "  return true;"
+    , "}"
+    ]
+  let declarationKey = DeclarationKey "function.body.boundary.lineage"
+      definitionRevision = DefinitionRevision "function.body.boundary.definition"
+  mapM_ (\(label, source) -> do
+    header <- checkedHeader declarationKey definitionRevision source
+    assert
+      (grammarV1CheckedClosedFunctionBody emptyStaticContext header source == Nothing)
+      (label <> " escaped the first closed body competence boundary"))
+    [ ("parameter-bearing body", parameterized)
+    , ("integer-literal body", integerLiteral)
+    , ("name-bearing body", namedBody)
+    , ("multi-statement body", multiStatement)
+    ]
+
+checkedHeader
+  :: DeclarationKey
+  -> DefinitionRevision
+  -> GrammarV1FunctionDecl
+  -> Either String GrammarV1CheckedFunctionHeader
+checkedHeader declarationKey definitionRevision source =
+  case grammarV1CheckedClosedFunctionHeader
+      emptyStaticContext declarationKey definitionRevision source of
+    Just (Right (header, [])) -> Right header
+    other -> Left ("expected closed checked function header, got " <> show other)
 
 componentHeaderSemantics :: Either String ()
 componentHeaderSemantics = do
