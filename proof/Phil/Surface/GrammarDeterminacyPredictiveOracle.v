@@ -143,7 +143,8 @@ Proof.
   rewrite expression_at_path_app.
   rewrite Hpath.
   simpl.
-  reflexivity.
+  destruct (step_expression phase1_surface_rules expression step);
+    reflexivity.
 Qed.
 
 Definition phase1_surface_predictive_oracle : DerivationOracle :=
