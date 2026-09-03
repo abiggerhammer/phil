@@ -15,6 +15,7 @@ import qualified Data.Map.Strict as Map
 import qualified Data.Set as Set
 import Data.Text (Text)
 import Phil.Core.Callable (CalleeTransition)
+import qualified Phil.Core.CallableOutcomeKernelBridge as KernelBridge
 import Phil.Core.CallableRefinement (CallableFailure)
 
 -- | Exact caller-visible outcome class. Success is explicit here so the complete
@@ -103,13 +104,13 @@ data CallableOutcomeError
       CallableOutcomeClass
       (Set.Set CallableOutcomeAtom)
       (Set.Set CallableOutcomeAtom)
+  | CallableOutcomeKernelDisagreement Text
   deriving (Eq, Show)
 
--- | Check complete branch-class and residue fidelity for CALL-018. This is a
--- direct equality boundary, not a refinement/subtyping relation: CALL-012 owns
--- whether one callable may substitute for another, while this checker ensures
--- that the chosen callable interface preserves the exact classification and
--- semantic account of each of its outcomes.
+-- | Check complete branch-class and residue fidelity for CALL-018. Native code
+-- owns normalization, concrete equality, residual witness selection, and exact
+-- diagnostic payloads. The extracted Rocq classifier owns the final semantic
+-- decision over those reflected facts and is used fail-closed.
 checkCallableOutcomeContract
   :: [CallableOutcomeContract]
   -> [CallableOutcomeContract]
@@ -119,9 +120,14 @@ checkCallableOutcomeContract expectedOutcomes actualOutcomes = do
   actual <- normalizeActual actualOutcomes
   let expectedClasses = Map.keysSet expected
       actualClasses = Map.keysSet actual
-  if expectedClasses /= actualClasses
-    then Left (CallableOutcomeClassSetMismatch expectedClasses actualClasses)
-    else mapM_ (checkOne actual) (Map.toAscList expected)
+      classDomainExact = expectedClasses == actualClasses
+  if classDomainExact
+    then mapM_ (checkOne actual) (Map.toAscList expected)
+    else case KernelBridge.classifyCallableOutcomeFacts
+        False True True True True True True True KernelBridge.KernelResidualExact of
+      KernelBridge.CallableOutcomeClassSetClassification ->
+        Left (CallableOutcomeClassSetMismatch expectedClasses actualClasses)
+      _ -> kernelDisagreement "class-domain rejection"
   Right CheckedCallableOutcomeContract
     { checkedCallableExpectedOutcomes = expected
     , checkedCallableActualOutcomes = actual
@@ -154,53 +160,124 @@ checkOne
   :: Map.Map CallableOutcomeClass CallableOutcomeContract
   -> (CallableOutcomeClass, CallableOutcomeContract)
   -> Either CallableOutcomeError ()
-checkOne actualByClass (outcomeClass, expected) = do
-  let actual = actualByClass Map.! outcomeClass
-  requireEqual (CallableOutcomeStateMismatch outcomeClass)
-    (callableOutcomeState expected)
-    (callableOutcomeState actual)
-  requireEqual (CallableOutcomeCalleeTransitionMismatch outcomeClass)
-    (callableOutcomeCalleeTransition expected)
-    (callableOutcomeCalleeTransition actual)
-  checkResidualObligations outcomeClass expected actual
-  requireEqual (CallableOutcomePostconditionMismatch outcomeClass)
-    (callableOutcomePostconditions expected)
-    (callableOutcomePostconditions actual)
-  requireEqual (CallableOutcomeAssumptionMismatch outcomeClass)
-    (callableOutcomeAssumptions expected)
-    (callableOutcomeAssumptions actual)
-  requireEqual (CallableOutcomeEffectMismatch outcomeClass)
-    (callableOutcomeEffects expected)
-    (callableOutcomeEffects actual)
-  requireEqual (CallableOutcomeDischargedFactMismatch outcomeClass)
-    (callableOutcomeDischargedFacts expected)
-    (callableOutcomeDischargedFacts actual)
-
-checkResidualObligations
-  :: CallableOutcomeClass
-  -> CallableOutcomeContract
-  -> CallableOutcomeContract
-  -> Either CallableOutcomeError ()
-checkResidualObligations outcomeClass expected actual =
-  case firstReclassified of
-    Just (obligation, bucket) ->
-      Left (CallableResidualObligationReclassified outcomeClass obligation bucket)
-    Nothing -> requireEqual (CallableResidualObligationMismatch outcomeClass)
-      expectedResidual actualResidual
+checkOne actualByClass (outcomeClass, expected) =
+  case classification of
+    KernelBridge.CallableOutcomeClassSetClassification ->
+      kernelDisagreement "per-branch class-domain classification"
+    KernelBridge.CallableOutcomeStateClassification
+      | not stateExact ->
+          Left (CallableOutcomeStateMismatch outcomeClass
+            (callableOutcomeState expected) (callableOutcomeState actual))
+      | otherwise -> kernelDisagreement "state classification"
+    KernelBridge.CallableOutcomeCalleeTransitionClassification
+      | stateExact && not transitionExact ->
+          Left (CallableOutcomeCalleeTransitionMismatch outcomeClass
+            (callableOutcomeCalleeTransition expected)
+            (callableOutcomeCalleeTransition actual))
+      | otherwise -> kernelDisagreement "callee-transition classification"
+    KernelBridge.CallableResidualObligationReclassifiedClassification kernelBucket ->
+      case firstReclassified of
+        Just (obligation, bucket)
+          | stateExact
+              && transitionExact
+              && toKernelBucket bucket == kernelBucket ->
+              Left (CallableResidualObligationReclassified
+                outcomeClass obligation bucket)
+        _ -> kernelDisagreement "residual-reclassification classification"
+    KernelBridge.CallableResidualObligationMismatchClassification
+      | stateExact
+          && transitionExact
+          && noReclassification
+          && not residualExact ->
+          Left (CallableResidualObligationMismatch outcomeClass
+            expectedResidual actualResidual)
+      | otherwise -> kernelDisagreement "residual-mismatch classification"
+    KernelBridge.CallableOutcomePostconditionClassification
+      | prefixThroughResidual && not postconditionsExact ->
+          Left (CallableOutcomePostconditionMismatch outcomeClass
+            expectedPostconditions actualPostconditions)
+      | otherwise -> kernelDisagreement "postcondition classification"
+    KernelBridge.CallableOutcomeAssumptionClassification
+      | prefixThroughResidual
+          && postconditionsExact
+          && not assumptionsExact ->
+          Left (CallableOutcomeAssumptionMismatch outcomeClass
+            expectedAssumptions actualAssumptions)
+      | otherwise -> kernelDisagreement "assumption classification"
+    KernelBridge.CallableOutcomeEffectClassification
+      | prefixThroughResidual
+          && postconditionsExact
+          && assumptionsExact
+          && not effectsExact ->
+          Left (CallableOutcomeEffectMismatch outcomeClass
+            expectedEffects actualEffects)
+      | otherwise -> kernelDisagreement "effect classification"
+    KernelBridge.CallableOutcomeDischargedFactClassification
+      | prefixThroughResidual
+          && postconditionsExact
+          && assumptionsExact
+          && effectsExact
+          && not dischargedFactsExact ->
+          Left (CallableOutcomeDischargedFactMismatch outcomeClass
+            expectedDischarged actualDischarged)
+      | otherwise -> kernelDisagreement "discharged-fact classification"
+    KernelBridge.CallableOutcomeAcceptedClassification
+      | prefixThroughResidual
+          && postconditionsExact
+          && assumptionsExact
+          && effectsExact
+          && dischargedFactsExact -> Right ()
+      | otherwise -> kernelDisagreement "accepted classification"
   where
+    actual = actualByClass Map.! outcomeClass
+    stateExact = callableOutcomeState expected == callableOutcomeState actual
+    transitionExact =
+      callableOutcomeCalleeTransition expected == callableOutcomeCalleeTransition actual
     expectedResidual = callableOutcomeResidualObligations expected
     actualResidual = callableOutcomeResidualObligations actual
+    residualExact = expectedResidual == actualResidual
+    expectedPostconditions = callableOutcomePostconditions expected
+    actualPostconditions = callableOutcomePostconditions actual
+    postconditionsExact = expectedPostconditions == actualPostconditions
+    expectedAssumptions = callableOutcomeAssumptions expected
+    actualAssumptions = callableOutcomeAssumptions actual
+    assumptionsExact = expectedAssumptions == actualAssumptions
+    expectedEffects = callableOutcomeEffects expected
+    actualEffects = callableOutcomeEffects actual
+    effectsExact = expectedEffects == actualEffects
+    expectedDischarged = callableOutcomeDischargedFacts expected
+    actualDischarged = callableOutcomeDischargedFacts actual
+    dischargedFactsExact = expectedDischarged == actualDischarged
     missing = Set.toAscList (Set.difference expectedResidual actualResidual)
     firstReclassified = firstJust (map reclassifiedBucket missing)
+    noReclassification = case firstReclassified of
+      Nothing -> True
+      Just _ -> False
+    prefixThroughResidual =
+      stateExact && transitionExact && noReclassification && residualExact
+    residualDisposition = case firstReclassified of
+      Nothing -> KernelBridge.KernelResidualExact
+      Just (_, bucket) ->
+        KernelBridge.KernelResidualReclassified (toKernelBucket bucket)
+    classification = KernelBridge.classifyCallableOutcomeFacts
+      True
+      stateExact
+      transitionExact
+      residualExact
+      postconditionsExact
+      assumptionsExact
+      effectsExact
+      dischargedFactsExact
+      residualDisposition
 
     reclassifiedBucket obligation
-      | Set.member obligation (callableOutcomePostconditions actual) =
+      | Set.member obligation actualPostconditions =
           Just (obligation, OutcomePostconditionBucket)
-      | Set.member obligation (callableOutcomeAssumptions actual) =
+      | Set.member obligation actualAssumptions =
           Just (obligation, OutcomeAssumptionBucket)
-      | Set.member obligation (callableOutcomeEffects actual) =
+      | Set.member obligation actualEffects =
           Just (obligation, OutcomeEffectBucket)
-      | Set.member obligation (callableOutcomeDischargedFacts actual) =
+      | Set.member obligation actualDischarged =
           Just (obligation, OutcomeDischargedFactBucket)
       | otherwise = Nothing
 
@@ -210,7 +287,14 @@ firstJust (candidate : rest) = case candidate of
   Just value -> Just value
   Nothing -> firstJust rest
 
-requireEqual :: Eq a => (a -> a -> CallableOutcomeError) -> a -> a -> Either CallableOutcomeError ()
-requireEqual makeError expected actual
-  | expected == actual = Right ()
-  | otherwise = Left (makeError expected actual)
+toKernelBucket :: CallableOutcomeBucket -> KernelBridge.KernelOutcomeBucket
+toKernelBucket bucket = case bucket of
+  OutcomePostconditionBucket -> KernelBridge.KernelOutcomePostconditionBucket
+  OutcomeAssumptionBucket -> KernelBridge.KernelOutcomeAssumptionBucket
+  OutcomeEffectBucket -> KernelBridge.KernelOutcomeEffectBucket
+  OutcomeDischargedFactBucket -> KernelBridge.KernelOutcomeDischargedFactBucket
+
+kernelDisagreement :: Text -> Either CallableOutcomeError a
+kernelDisagreement detail =
+  Left (CallableOutcomeKernelDisagreement
+    ("extracted Callable Outcome decision disagreed with native facts at " <> detail))
