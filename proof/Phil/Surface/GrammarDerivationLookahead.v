@@ -420,7 +420,8 @@ Proof.
     unfold DerivesFirstProperty, DerivesSequenceFirstProperty in *.
     destruct input as [|first_token tail]; auto.
     intros Hneq.
-    now constructor.
+    apply first_sequence_witness.
+    exact (IH Hneq).
   - intros path items index item input rest tree Hnth Hderive IH.
     unfold DerivesFirstProperty in *.
     destruct input as [|first_token tail]; auto.
@@ -435,12 +436,14 @@ Proof.
     unfold DerivesFirstProperty in *.
     destruct input as [|first_token tail]; auto.
     intros Hneq.
-    now constructor.
+    apply first_optional_witness.
+    exact (IH Hneq).
   - intros path body input rest trees Hderive IH.
     unfold DerivesFirstProperty, DerivesRepetitionFirstProperty in *.
     destruct input as [|first_token tail]; auto.
     intros Hneq.
-    now constructor.
+    apply first_repetition_witness.
+    exact (IH Hneq).
   - intros path index input.
     unfold DerivesSequenceFirstProperty.
     destruct input as [|first_token tail]; auto.
