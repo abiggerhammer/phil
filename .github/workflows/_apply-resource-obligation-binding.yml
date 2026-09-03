@@ -1,0 +1,32 @@
+name: Apply Resource Obligation binding patch
+
+on:
+  push:
+    branches:
+      - bind-resource-obligation-kernel
+    paths:
+      - '.github/workflows/_apply-resource-obligation-binding.yml'
+
+permissions:
+  contents: write
+
+jobs:
+  apply:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: bind-resource-obligation-kernel
+      - name: Apply production binding
+        run: |
+          set -euo pipefail
+          python3 scripts/apply_resource_obligation_binding.py
+          git diff --check
+      - name: Commit production binding
+        run: |
+          set -euo pipefail
+          git config user.name github-actions[bot]
+          git config user.email 41898282+github-actions[bot]@users.noreply.github.com
+          git add src/Phil/Core/Process.hs phil-core.cabal
+          git commit -m 'Bind Resource Obligation kernel to join normalization'
+          git push origin HEAD:bind-resource-obligation-kernel
