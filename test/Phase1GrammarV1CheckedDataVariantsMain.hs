@@ -2,6 +2,7 @@
 
 module Main (main) where
 
+import qualified Data.Text as Text
 import Phil.Core.Focusing
   ( FocusStep (..)
   , FocusingError (..)
@@ -56,7 +57,7 @@ checkedDataVariants = do
     , "  | Empty()"
     , "  | EmptyRecord{}"
     , "  | Pair(U8, Bool)"
-    , "  | Named{left : U32, refined : {v : U8 | Positive(v)},}" 
+    , "  | Named{left : U32, refined : {v : U8 | Positive(v)},}"
     , "  ;"
     ]
   duplicate <- parseData "data Duplicate = Same | Same;"
@@ -129,16 +130,13 @@ checkedDataVariants = do
 parseData :: String -> Either String GrammarV1DataDecl
 parseData source = do
   sourceFile <- mapLeft show $
-    parseGrammarV1StructuralSource "checked-data-variants" (fromString source)
+    parseGrammarV1StructuralSource "checked-data-variants" (Text.pack source)
   case grammarV1TopLevelDecls sourceFile of
     [Located _ topLevel] -> case locatedValue (grammarV1Declaration topLevel) of
       GrammarV1DataDeclaration declaration -> Right declaration
       other -> Left ("expected data declaration, got " <> show other)
     declarations -> Left
       ("expected one data declaration, got " <> show (length declarations))
-
-fromString :: String -> Data.Text.Text
-fromString = Data.Text.pack
 
 assert :: Bool -> String -> Either String ()
 assert condition detail
