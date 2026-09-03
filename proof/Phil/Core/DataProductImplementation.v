@@ -72,10 +72,12 @@ Proof.
   split.
   - intro Haccepted.
     split.
-    + apply accepted_product_elimination_has_exact_arity.
-      exact Haccepted.
-    + apply accepted_product_elimination_has_unique_successors.
-      exact Haccepted.
+    + exact
+        (accepted_product_elimination_has_exact_arity
+          elements successors Haccepted).
+    + exact
+        (accepted_product_elimination_has_unique_successors
+          elements successors Haccepted).
   - intros [Hlength Hdistinct].
     destruct (restoration_plan_exists_for_equal_lengths
       elements successors Hlength) as [plan Hplan].
