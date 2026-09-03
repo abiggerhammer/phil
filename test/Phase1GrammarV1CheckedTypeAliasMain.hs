@@ -11,7 +11,8 @@ import Phil.Core.Focusing
   , FocusingError (..)
   )
 import Phil.Core.Static
-  ( declareTransparentClaim
+  ( StaticContext
+  , declareTransparentClaim
   , emptyStaticContext
   )
 import Phil.Core.Syntax
@@ -191,7 +192,7 @@ checkedClosedAliasModes = do
   assert (grammarV1CheckedTypeAliasMode context generic == Nothing)
     "generic alias bypassed the closed alias-mode competence wall"
 
-positiveContext :: Either String Phil.Core.Static.StaticContext
+positiveContext :: Either String StaticContext
 positiveContext = mapLeft show $
   declareTransparentClaim
     "Positive"
