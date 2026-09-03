@@ -1,0 +1,127 @@
+name: Phase 1 Data Elimination Production Binding
+
+on:
+  pull_request:
+    paths:
+      - 'generated/DataEliminationKernel.hs'
+      - 'src/DataEliminationKernel.hs'
+      - 'src/Phil/Core/DataEliminationKernelBridge.hs'
+      - 'src/Phil/Core/DataDestruction.hs'
+      - 'src/Phil/Core/DataBorrow.hs'
+      - 'phil-core.cabal'
+      - 'proof/Phil/Core/Syntax.v'
+      - 'proof/Phil/Core/Context.v'
+      - 'proof/Phil/Core/DataElimination.v'
+      - 'proof/Phil/Core/DataEliminationImplementation.v'
+      - 'proof/Phil/Core/DataEliminationImplementationExtraction.v'
+      - 'app/DataEliminationDecisionCorrespondenceMain.hs'
+      - 'app/DataEliminationProductionBindingMain.hs'
+      - 'test/Phase1ConsumingRecordDestructionMain.hs'
+      - 'test/Phase1MissingLinearFieldDispositionMain.hs'
+      - 'test/Phase1ConsumingSumMatchMain.hs'
+      - 'test/Phase1BorrowedAggregateInspectionMain.hs'
+      - 'test/Phase1AffineOmissionMain.hs'
+      - 'docs/phase-1/data-elimination-implementation-refinement-v1.md'
+      - 'docs/phase-1/data-elimination-production-binding-v1.md'
+      - '.github/workflows/phase1-data-elimination-production-binding.yml'
+
+permissions:
+  contents: read
+
+jobs:
+  exact-data-elimination-kernel:
+    runs-on: ubuntu-latest
+    container:
+      image: rocq/rocq-prover:9.2.0
+      options: --user root
+    steps:
+      - uses: actions/checkout@v4
+      - name: Fresh-extract exact Data Elimination kernel
+        shell: bash
+        run: |
+          set -euo pipefail
+          export PATH="/home/rocq/.opam/${COMPILER}/bin:$PATH"
+          rocq c -Q proof/Phil Phil proof/Phil/Core/Syntax.v
+          rocq c -Q proof/Phil Phil proof/Phil/Core/Context.v
+          rocq c -Q proof/Phil Phil proof/Phil/Core/DataElimination.v
+          rocq c -Q proof/Phil Phil proof/Phil/Core/DataEliminationImplementation.v
+          rm -f DataEliminationKernel.hs
+          rocq c -Q proof/Phil Phil proof/Phil/Core/DataEliminationImplementationExtraction.v
+          test -s DataEliminationKernel.hs
+          echo 'e03de46fdb1791bd6f3ee96cd9acdd6065b0b55d4d717597f86c86fbd1df3ddd  DataEliminationKernel.hs' | sha256sum -c -
+          cmp DataEliminationKernel.hs generated/DataEliminationKernel.hs
+          cmp DataEliminationKernel.hs src/DataEliminationKernel.hs
+      - name: Record exact kernel identities
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p data-elimination-exact-kernel
+          cp DataEliminationKernel.hs data-elimination-exact-kernel/
+          sha256sum \
+            DataEliminationKernel.hs \
+            generated/DataEliminationKernel.hs \
+            src/DataEliminationKernel.hs \
+            proof/Phil/Core/DataElimination.v \
+            proof/Phil/Core/DataEliminationImplementation.v \
+            proof/Phil/Core/DataEliminationImplementationExtraction.v \
+            > data-elimination-exact-kernel/PHIL-DATA-ELIM-001.exact-kernel.sha256
+          cat data-elimination-exact-kernel/PHIL-DATA-ELIM-001.exact-kernel.sha256
+      - uses: actions/upload-artifact@v4
+        with:
+          name: data-elimination-exact-kernel
+          path: data-elimination-exact-kernel
+          if-no-files-found: error
+
+  verify-data-elimination-production-binding:
+    needs: exact-data-elimination-kernel
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: haskell-actions/setup@v2
+        with:
+          ghc-version: '9.6.7'
+          cabal-version: 'latest'
+      - name: Build production library with warnings as errors
+        run: cabal build lib:phil-core --ghc-options=-Werror
+      - name: Strict-typecheck bound Data Elimination surface
+        run: |
+          set -euo pipefail
+          cabal exec -- ghc -isrc -Wall -Werror -fno-code src/DataEliminationKernel.hs
+          cabal exec -- ghc -isrc -Wall -Werror -fno-code src/Phil/Core/DataEliminationKernelBridge.hs
+          cabal exec -- ghc -isrc -Wall -Werror -fno-code src/Phil/Core/DataDestruction.hs
+          cabal exec -- ghc -isrc -Wall -Werror -fno-code src/Phil/Core/DataBorrow.hs
+          cabal exec -- ghc -isrc -Wall -Werror -fno-code app/DataEliminationDecisionCorrespondenceMain.hs
+          cabal exec -- ghc -isrc -Wall -Werror -fno-code app/DataEliminationProductionBindingMain.hs
+      - name: Execute 23 direct controls through production kernel
+        run: cabal exec -- runghc -Wall -Werror -isrc app/DataEliminationDecisionCorrespondenceMain.hs
+      - name: Execute production Data Elimination binding controls
+        run: cabal exec -- runghc -Wall -Werror -isrc app/DataEliminationProductionBindingMain.hs
+      - name: Re-run unchanged DATA elimination / borrow correspondence corpus
+        run: |
+          set -euo pipefail
+          cabal exec -- runghc -Wall -Werror -isrc test/Phase1ConsumingRecordDestructionMain.hs
+          cabal exec -- runghc -Wall -Werror -isrc test/Phase1MissingLinearFieldDispositionMain.hs
+          cabal exec -- runghc -Wall -Werror -isrc test/Phase1ConsumingSumMatchMain.hs
+          cabal exec -- runghc -Wall -Werror -isrc test/Phase1BorrowedAggregateInspectionMain.hs
+          cabal exec -- runghc -Wall -Werror -isrc test/Phase1AffineOmissionMain.hs
+      - name: Record production-binding identities
+        run: |
+          set -euo pipefail
+          mkdir -p data-elimination-production-binding
+          sha256sum \
+            generated/DataEliminationKernel.hs \
+            src/DataEliminationKernel.hs \
+            src/Phil/Core/DataEliminationKernelBridge.hs \
+            src/Phil/Core/DataDestruction.hs \
+            src/Phil/Core/DataBorrow.hs \
+            app/DataEliminationDecisionCorrespondenceMain.hs \
+            app/DataEliminationProductionBindingMain.hs \
+            docs/phase-1/data-elimination-implementation-refinement-v1.md \
+            docs/phase-1/data-elimination-production-binding-v1.md \
+            > data-elimination-production-binding/PHIL-DATA-ELIM-001.production-binding.sha256
+          cat data-elimination-production-binding/PHIL-DATA-ELIM-001.production-binding.sha256
+      - uses: actions/upload-artifact@v4
+        with:
+          name: data-elimination-production-binding
+          path: data-elimination-production-binding
+          if-no-files-found: error
