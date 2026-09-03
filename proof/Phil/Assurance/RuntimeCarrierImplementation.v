@@ -2,6 +2,7 @@ From Stdlib Require Import Bool.Bool.
 
 From Phil.Assurance Require Import EvidenceUse RuntimeCarrier.
 From Phil.Core Require Import SystemsRuntimeGraph.
+From Phil.Systems Require Import Runtime.
 
 (*
   PHIL-ASSURE-CARRIER-001 — representation-neutral executable decision
