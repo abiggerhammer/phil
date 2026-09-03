@@ -23,7 +23,7 @@ jobs:
           python3 scripts/derive_phase1_surface_grammar.py --write
           python3 scripts/derive_phase1_surface_determinacy_certificate.py --write
 
-      - name: Apply factored nullable and per-token FIRST diagnostic
+      - name: Apply first-order nullable and FIRST semantic diagnostic
         shell: bash
         run: |
           set -euo pipefail
@@ -114,64 +114,443 @@ jobs:
 
           first_start = source.index('Theorem phase1_surface_first_witness_fuel_sound :')
           first_end = source.index('\nCorollary phase1_surface_first_witness_matches_computed_facts', first_start)
-          first = source[first_start:first_end]
+          first_replacement = r'''Inductive ComputedFirstSem (token : OverlapToken)
+            : EbnfExpression -> Prop :=
+          | computed_first_literal_sem :
+              forall literal,
+                token = OverlapLiteral literal ->
+                ComputedFirstSem token (ELiteral literal)
+          | computed_first_lexical_sem :
+              forall class_name,
+                token = OverlapLexicalClass class_name ->
+                ComputedFirstSem token (ELexicalClass class_name)
+          | computed_first_nonterminal_sem :
+              forall name,
+                token_mem token
+                  (lookup_tokens name phase1_surface_first_facts) = true ->
+                ComputedFirstSem token (ENonterminal name)
+          | computed_first_sequence_sem :
+              forall items,
+                ComputedFirstSequenceSem token items ->
+                ComputedFirstSem token (ESequence items)
+          | computed_first_alternative_sem :
+              forall items,
+                ComputedFirstAlternativeSem token items ->
+                ComputedFirstSem token (EAlternative items)
+          | computed_first_optional_sem :
+              forall body,
+                ComputedFirstSem token body ->
+                ComputedFirstSem token (EOptional body)
+          | computed_first_repetition_sem :
+              forall body,
+                ComputedFirstSem token body ->
+                ComputedFirstSem token (ERepetition body)
 
-          old_statement = '''Theorem phase1_surface_first_witness_fuel_sound :
-            (forall token expression,
-              FirstWitness phase1_surface_rules token expression ->
-              FirstWitnessFuelProperty token expression) /\\
-            (forall token items,
-              FirstSequenceWitness phase1_surface_rules token items ->
-              FirstSequenceFuelProperty token items) /\\
-            (forall token items,
-              FirstAlternativeWitness phase1_surface_rules token items ->
-              FirstAlternativeFuelProperty token items).
+          with ComputedFirstSequenceSem (token : OverlapToken)
+            : list EbnfExpression -> Prop :=
+          | computed_first_sequence_here_sem :
+              forall item rest,
+                ComputedFirstSem token item ->
+                ComputedFirstSequenceSem token (item :: rest)
+          | computed_first_sequence_later_sem :
+              forall item rest,
+                ComputedNullableSem item ->
+                ComputedFirstSequenceSem token rest ->
+                ComputedFirstSequenceSem token (item :: rest)
+
+          with ComputedFirstAlternativeSem (token : OverlapToken)
+            : list EbnfExpression -> Prop :=
+          | computed_first_alternative_here_sem :
+              forall item rest,
+                ComputedFirstSem token item ->
+                ComputedFirstAlternativeSem token (item :: rest)
+          | computed_first_alternative_later_sem :
+              forall item rest,
+                ComputedFirstAlternativeSem token rest ->
+                ComputedFirstAlternativeSem token (item :: rest).
+
+          Lemma computed_first_sequence_sem_sound :
+            forall token fuel items,
+              (forall expression,
+                ComputedFirstSem token expression ->
+                choice_bodies_nonnullable_fuel fuel expression = true ->
+                exists tokens,
+                  first_expression_fuel
+                    fuel
+                    phase1_surface_nullable_facts
+                    phase1_surface_first_facts
+                    expression = Some tokens /\
+                  token_mem token tokens = true) ->
+              ComputedFirstSequenceSem token items ->
+              forallb (choice_bodies_nonnullable_fuel fuel) items = true ->
+              exists tokens,
+                first_expression_fuel
+                  (S fuel)
+                  phase1_surface_nullable_facts
+                  phase1_surface_first_facts
+                  (ESequence items) = Some tokens /\
+                token_mem token tokens = true.
           Proof.
-            apply FirstWitness_mutind.
-          '''
-          new_statement = '''Theorem phase1_surface_first_witness_fuel_sound_for_token :
+            intros token fuel items Hsound Hsem.
+            induction Hsem as
+              [item rest Hitem
+              | item rest Hnullable Hrest IHrest]; intros Hsafe.
+            - simpl in Hsafe.
+              apply andb_true_iff in Hsafe as [Hitem_safe Hrest_safe].
+              destruct (Hsound item Hitem Hitem_safe)
+                as [item_first [Hitem_first Hitem_mem]].
+              destruct (choice_safe_nullable_defined fuel item Hitem_safe)
+                as [item_nullable Hitem_nullable].
+              assert (Hrest_expr_safe :
+                choice_bodies_nonnullable_fuel
+                  (S fuel) (ESequence rest) = true).
+              { simpl. exact Hrest_safe. }
+              destruct (choice_safe_first_defined
+                (S fuel) (ESequence rest) Hrest_expr_safe)
+                as [rest_first Hrest_first].
+              simpl in Hrest_first.
+              simpl.
+              rewrite Hitem_first, Hitem_nullable.
+              destruct item_nullable.
+              + rewrite Hrest_first.
+                exists (token_union item_first rest_first). split.
+                * reflexivity.
+                * apply token_mem_union_left. exact Hitem_mem.
+              + exists item_first. split; [reflexivity | exact Hitem_mem].
+            - simpl in Hsafe.
+              apply andb_true_iff in Hsafe as [Hitem_safe Hrest_safe].
+              pose proof
+                (choice_safe_implies_nullable_depth_safe
+                  fuel item Hitem_safe)
+                as Hitem_depth_safe.
+              pose proof
+                (computed_nullable_sem_sound
+                  fuel item Hnullable Hitem_depth_safe)
+                as Hitem_nullable.
+              destruct (choice_safe_first_defined fuel item Hitem_safe)
+                as [item_first Hitem_first].
+              destruct (IHrest Hrest_safe)
+                as [rest_first [Hrest_first Hrest_mem]].
+              simpl in Hrest_first.
+              simpl.
+              rewrite Hitem_first, Hitem_nullable, Hrest_first.
+              exists (token_union item_first rest_first). split.
+              + reflexivity.
+              + apply token_mem_union_right. exact Hrest_mem.
+          Qed.
+
+          Lemma computed_first_alternative_sem_sound :
+            forall token fuel items,
+              (forall expression,
+                ComputedFirstSem token expression ->
+                choice_bodies_nonnullable_fuel fuel expression = true ->
+                exists tokens,
+                  first_expression_fuel
+                    fuel
+                    phase1_surface_nullable_facts
+                    phase1_surface_first_facts
+                    expression = Some tokens /\
+                  token_mem token tokens = true) ->
+              ComputedFirstAlternativeSem token items ->
+              forallb
+                (fun item =>
+                  andb
+                    (negb
+                      (nullable_expression
+                        phase1_surface_nullable_facts item))
+                    (choice_bodies_nonnullable_fuel fuel item))
+                items = true ->
+              exists tokens,
+                first_expression_fuel
+                  (S fuel)
+                  phase1_surface_nullable_facts
+                  phase1_surface_first_facts
+                  (EAlternative items) = Some tokens /\
+                token_mem token tokens = true.
+          Proof.
+            intros token fuel items Hsound Hsem.
+            induction Hsem as
+              [item rest Hitem
+              | item rest Hrest IHrest]; intros Hsafe.
+            - simpl in Hsafe.
+              apply andb_true_iff in Hsafe as [Hhead_safe Hrest_safe].
+              apply andb_true_iff in Hhead_safe as [_ Hitem_safe].
+              destruct (Hsound item Hitem Hitem_safe)
+                as [item_first [Hitem_first Hitem_mem]].
+              assert (Hrest_expr_safe :
+                choice_bodies_nonnullable_fuel
+                  (S fuel) (EAlternative rest) = true).
+              { simpl. exact Hrest_safe. }
+              destruct (choice_safe_first_defined
+                (S fuel) (EAlternative rest) Hrest_expr_safe)
+                as [rest_first Hrest_first].
+              simpl in Hrest_first.
+              simpl.
+              rewrite Hitem_first, Hrest_first.
+              exists (token_union item_first rest_first). split.
+              + reflexivity.
+              + apply token_mem_union_left. exact Hitem_mem.
+            - simpl in Hsafe.
+              apply andb_true_iff in Hsafe as [Hhead_safe Hrest_safe].
+              apply andb_true_iff in Hhead_safe as [_ Hitem_safe].
+              destruct (choice_safe_first_defined fuel item Hitem_safe)
+                as [item_first Hitem_first].
+              destruct (IHrest Hrest_safe)
+                as [rest_first [Hrest_first Hrest_mem]].
+              simpl in Hrest_first.
+              simpl.
+              rewrite Hitem_first, Hrest_first.
+              exists (token_union item_first rest_first). split.
+              + reflexivity.
+              + apply token_mem_union_right. exact Hrest_mem.
+          Qed.
+
+          Lemma computed_first_sem_sound_step :
+            forall token fuel,
+              (forall expression,
+                ComputedFirstSem token expression ->
+                choice_bodies_nonnullable_fuel fuel expression = true ->
+                exists tokens,
+                  first_expression_fuel
+                    fuel
+                    phase1_surface_nullable_facts
+                    phase1_surface_first_facts
+                    expression = Some tokens /\
+                  token_mem token tokens = true) ->
+              forall expression,
+                ComputedFirstSem token expression ->
+                choice_bodies_nonnullable_fuel (S fuel) expression = true ->
+                exists tokens,
+                  first_expression_fuel
+                    (S fuel)
+                    phase1_surface_nullable_facts
+                    phase1_surface_first_facts
+                    expression = Some tokens /\
+                  token_mem token tokens = true.
+          Proof.
+            intros token fuel IH expression Hsem Hsafe.
+            destruct Hsem as
+              [literal Htoken
+              | class_name Htoken
+              | name Hmem
+              | items Hitems
+              | items Hitems
+              | body Hbody
+              | body Hbody].
+            - subst token.
+              exists [OverlapLiteral literal]. split.
+              + reflexivity.
+              + unfold token_mem.
+                rewrite overlap_token_eqb_refl.
+                reflexivity.
+            - subst token.
+              exists [OverlapLexicalClass class_name]. split.
+              + reflexivity.
+              + unfold token_mem.
+                rewrite overlap_token_eqb_refl.
+                reflexivity.
+            - exists (lookup_tokens name phase1_surface_first_facts).
+              split.
+              + reflexivity.
+              + exact Hmem.
+            - simpl in Hsafe.
+              exact
+                (computed_first_sequence_sem_sound
+                  token fuel items IH Hitems Hsafe).
+            - simpl in Hsafe.
+              exact
+                (computed_first_alternative_sem_sound
+                  token fuel items IH Hitems Hsafe).
+            - simpl in Hsafe.
+              apply andb_true_iff in Hsafe as [_ Hbody_safe].
+              exact (IH body Hbody Hbody_safe).
+            - simpl in Hsafe.
+              apply andb_true_iff in Hsafe as [_ Hbody_safe].
+              exact (IH body Hbody Hbody_safe).
+          Qed.
+
+          Theorem computed_first_sem_sound :
+            forall token fuel expression,
+              ComputedFirstSem token expression ->
+              choice_bodies_nonnullable_fuel fuel expression = true ->
+              exists tokens,
+                first_expression_fuel
+                  fuel
+                  phase1_surface_nullable_facts
+                  phase1_surface_first_facts
+                  expression = Some tokens /\
+                token_mem token tokens = true.
+          Proof.
+            intros token fuel.
+            induction fuel as [| fuel IH].
+            - intros expression Hsem Hsafe.
+              simpl in Hsafe. discriminate.
+            - intros expression Hsem Hsafe.
+              exact
+                (computed_first_sem_sound_step
+                  token fuel IH expression Hsem Hsafe).
+          Qed.
+
+          Lemma computed_first_sem_sound_at_expression_fuel :
+            forall token body,
+              ComputedFirstSem token body ->
+              choice_bodies_nonnullable_fuel expression_fuel body = true ->
+              exists tokens,
+                first_expression_fuel
+                  expression_fuel
+                  phase1_surface_nullable_facts
+                  phase1_surface_first_facts
+                  body = Some tokens /\
+                token_mem token tokens = true.
+          Proof.
+            intros token body Hsem Hsafe.
+            exact
+              (computed_first_sem_sound
+                token expression_fuel body Hsem Hsafe).
+          Qed.
+
+          Lemma phase1_surface_first_lookup_mem :
+            forall token name body tokens,
+              lookupRule name phase1_surface_rules = Some body ->
+              first_expression_fuel
+                expression_fuel
+                phase1_surface_nullable_facts
+                phase1_surface_first_facts
+                body = Some tokens ->
+              token_mem token tokens = true ->
+              token_mem token
+                (lookup_tokens name phase1_surface_first_facts) = true.
+          Proof.
+            intros token name body tokens Hlookup Hbody_first Hmem.
+            pose proof
+              (phase1_surface_first_lookup_rule name body Hlookup)
+              as Hlookup_fact.
+            unfold first_expression in Hlookup_fact.
+            rewrite Hbody_first in Hlookup_fact.
+            simpl in Hlookup_fact.
+            rewrite Hlookup_fact.
+            exact Hmem.
+          Qed.
+
+          Lemma first_witness_nonterminal_sem_case :
+            forall token name body,
+              lookupRule name phase1_surface_rules = Some body ->
+              ComputedFirstSem token body ->
+              ComputedFirstSem token (ENonterminal name).
+          Proof.
+            intros token name body Hlookup Hbody_sem.
+            assert (Hbody_safe :
+              choice_bodies_nonnullable_fuel expression_fuel body = true).
+            {
+              apply phase1_surface_rule_body_choice_safe with name.
+              exact Hlookup.
+            }
+            destruct
+              (computed_first_sem_sound_at_expression_fuel
+                token body Hbody_sem Hbody_safe)
+              as [tokens [Hbody_first Hbody_mem]].
+            apply computed_first_nonterminal_sem.
+            eapply phase1_surface_first_lookup_mem.
+            - exact Hlookup.
+            - exact Hbody_first.
+            - exact Hbody_mem.
+          Qed.
+
+          Theorem first_witness_implies_computed_sem_for_token :
             forall token,
             (forall expression,
               FirstWitness phase1_surface_rules token expression ->
-              FirstWitnessFuelProperty token expression) /\\
+              ComputedFirstSem token expression) /\
             (forall items,
               FirstSequenceWitness phase1_surface_rules token items ->
-              FirstSequenceFuelProperty token items) /\\
+              ComputedFirstSequenceSem token items) /\
             (forall items,
               FirstAlternativeWitness phase1_surface_rules token items ->
-              FirstAlternativeFuelProperty token items).
+              ComputedFirstAlternativeSem token items).
           Proof.
             intros token.
             apply FirstWitness_mutind.
-          '''
-          if first.count(old_statement) != 1:
-              raise SystemExit(f'expected FIRST theorem statement once, found {first.count(old_statement)}')
-          first = first.replace(old_statement, new_statement, 1)
+            - intros literal Htoken.
+              apply computed_first_literal_sem.
+              exact Htoken.
+            - intros class_name Htoken.
+              apply computed_first_lexical_sem.
+              exact Htoken.
+            - intros name body Hlookup Hbody IHbody.
+              exact
+                (first_witness_nonterminal_sem_case
+                  token name body Hlookup IHbody).
+            - intros items Hitems IHitems.
+              apply computed_first_sequence_sem.
+              exact IHitems.
+            - intros items Hitems IHitems.
+              apply computed_first_alternative_sem.
+              exact IHitems.
+            - intros body Hbody IHbody.
+              apply computed_first_optional_sem.
+              exact IHbody.
+            - intros body Hbody IHbody.
+              apply computed_first_repetition_sem.
+              exact IHbody.
+            - intros item rest Hitem IHitem.
+              apply computed_first_sequence_here_sem.
+              exact IHitem.
+            - intros item rest Hnullable Hrest IHrest.
+              apply computed_first_sequence_later_sem.
+              + exact
+                  ((proj1 nullable_witness_implies_computed_sem)
+                    item Hnullable).
+              + exact IHrest.
+            - intros item rest Hitem IHitem.
+              apply computed_first_alternative_here_sem.
+              exact IHitem.
+            - intros item rest Hrest IHrest.
+              apply computed_first_alternative_later_sem.
+              exact IHrest.
+          Qed.
 
-          intros_rewrites = {
-              '- intros token literal Htoken.': '- intros literal Htoken.',
-              '- intros token class_name Htoken.': '- intros class_name Htoken.',
-              '- intros token name body Hlookup Hbody IHbody.': '- intros name body Hlookup Hbody IHbody.',
-              '- intros token items Hitems IHitems.': '- intros items Hitems IHitems.',
-              '- intros token body Hbody IHbody.': '- intros body Hbody IHbody.',
-              '- intros token item rest Hitem IHitem.': '- intros item rest Hitem IHitem.',
-              '- intros token item rest Hnullable Hrest IHrest.': '- intros item rest Hnullable Hrest IHrest.',
-              '- intros token item rest Hrest IHrest.': '- intros item rest Hrest IHrest.',
-          }
-          for old, new in intros_rewrites.items():
-              count = first.count(old)
-              if count == 0:
-                  raise SystemExit(f'missing FIRST branch binder: {old}')
-              first = first.replace(old, new)
+          Lemma computed_first_sem_fuel_property :
+            forall token expression,
+              ComputedFirstSem token expression ->
+              FirstWitnessFuelProperty token expression.
+          Proof.
+            intros token expression Hsem.
+            unfold FirstWitnessFuelProperty.
+            intros fuel Hfuel Hsafe.
+            exact
+              (computed_first_sem_sound
+                token fuel expression Hsem Hsafe).
+          Qed.
 
-          membership = '* rewrite String.eqb_refl. reflexivity.'
-          if first.count(membership) != 2:
-              raise SystemExit(f'expected two singleton token memberships, found {first.count(membership)}')
-          first = first.replace(
-              membership,
-              '* unfold token_mem. rewrite overlap_token_eqb_refl. reflexivity.')
+          Lemma computed_first_sequence_sem_fuel_property :
+            forall token items,
+              ComputedFirstSequenceSem token items ->
+              FirstSequenceFuelProperty token items.
+          Proof.
+            intros token items Hsem.
+            unfold FirstSequenceFuelProperty.
+            intros fuel Hfuel Hsafe.
+            exact
+              (computed_first_sequence_sem_sound
+                token fuel items
+                (computed_first_sem_sound token fuel)
+                Hsem Hsafe).
+          Qed.
 
-          wrapper = r'''
+          Lemma computed_first_alternative_sem_fuel_property :
+            forall token items,
+              ComputedFirstAlternativeSem token items ->
+              FirstAlternativeFuelProperty token items.
+          Proof.
+            intros token items Hsem.
+            unfold FirstAlternativeFuelProperty.
+            intros fuel Hfuel Hsafe.
+            exact
+              (computed_first_alternative_sem_sound
+                token fuel items
+                (computed_first_sem_sound token fuel)
+                Hsem Hsafe).
+          Qed.
 
           Theorem phase1_surface_first_witness_fuel_sound :
             (forall token expression,
@@ -185,22 +564,28 @@ jobs:
               FirstAlternativeFuelProperty token items).
           Proof.
             split.
-            - intros token.
+            - intros token expression Hfirst.
+              apply computed_first_sem_fuel_property.
               exact
-                (proj1
-                  (phase1_surface_first_witness_fuel_sound_for_token token)).
+                ((proj1
+                  (first_witness_implies_computed_sem_for_token token))
+                  expression Hfirst).
             - split.
-              + intros token.
+              + intros token items Hfirst.
+                apply computed_first_sequence_sem_fuel_property.
                 exact
-                  (proj1 (proj2
-                    (phase1_surface_first_witness_fuel_sound_for_token token))).
-              + intros token.
+                  ((proj1 (proj2
+                    (first_witness_implies_computed_sem_for_token token)))
+                    items Hfirst).
+              + intros token items Hfirst.
+                apply computed_first_alternative_sem_fuel_property.
                 exact
-                  (proj2 (proj2
-                    (phase1_surface_first_witness_fuel_sound_for_token token))).
+                  ((proj2 (proj2
+                    (first_witness_implies_computed_sem_for_token token)))
+                    items Hfirst).
           Qed.
           '''
-          source = source[:first_start] + first + wrapper + source[first_end:]
+          source = source[:first_start] + first_replacement + source[first_end:]
           path.write_text(source)
           print(f'generated witness proof characters: {len(source)}')
           PY
