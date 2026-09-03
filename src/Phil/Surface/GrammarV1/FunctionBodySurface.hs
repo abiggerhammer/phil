@@ -90,12 +90,12 @@ grammarV1CheckedClosedFunctionBody staticContext expectedHeader source = do
           body <- grammarV1ClosedReturnBody (grammarV1FunctionBody source)
           let syntheticComponent = Located
                 (locatedSpan (grammarV1FunctionBody source))
-                Component
+                (Component
                   { componentName = checkedFunctionDisplayName actualHeader
                   , componentParameters = []
                   , componentProvides = Nothing
                   , componentBody = body
-                  }
+                  })
           pure $ do
             checked <- mapLeft GrammarV1FunctionBodySurfaceCheckError $
               checkSurfaceComponent
