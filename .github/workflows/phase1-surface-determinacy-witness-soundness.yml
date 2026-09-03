@@ -119,19 +119,23 @@ jobs:
             intros fuel IH expression Hsafe.
             destruct expression as
               [literal | class_name | name | items | items | body | body].
-            - simpl. eexists. reflexivity.
-            - simpl. eexists. reflexivity.
-            - simpl. eexists. reflexivity.
-            - simpl in Hsafe.
-              eapply choice_safe_first_sequence_defined; eauto.
-            - simpl in Hsafe.
-              eapply choice_safe_first_alternative_defined; eauto.
-            - simpl in Hsafe.
-              apply andb_true_iff in Hsafe as [_ Hbody_safe].
-              exact (IH body Hbody_safe).
-            - simpl in Hsafe.
-              apply andb_true_iff in Hsafe as [_ Hbody_safe].
-              exact (IH body Hbody_safe).
+            - abstract (simpl; eexists; reflexivity).
+            - abstract (simpl; eexists; reflexivity).
+            - abstract (simpl; eexists; reflexivity).
+            - abstract (
+                simpl in Hsafe;
+                exact (choice_safe_first_sequence_defined fuel items IH Hsafe)).
+            - abstract (
+                simpl in Hsafe;
+                exact (choice_safe_first_alternative_defined fuel items IH Hsafe)).
+            - abstract (
+                simpl in Hsafe;
+                apply andb_true_iff in Hsafe as [_ Hbody_safe];
+                exact (IH body Hbody_safe)).
+            - abstract (
+                simpl in Hsafe;
+                apply andb_true_iff in Hsafe as [_ Hbody_safe];
+                exact (IH body Hbody_safe)).
           Qed.
 
           Lemma choice_safe_first_defined :
@@ -148,7 +152,7 @@ jobs:
             - intros expression Hsafe.
               simpl in Hsafe. discriminate.
             - intros expression Hsafe.
-              eapply choice_safe_first_defined_step; eauto.
+              exact (choice_safe_first_defined_step fuel IH expression Hsafe).
           Qed.
           '''
           if old not in source:
