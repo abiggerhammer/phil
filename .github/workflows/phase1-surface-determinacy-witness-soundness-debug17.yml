@@ -31,6 +31,11 @@ jobs:
           from pathlib import Path
           import textwrap
 
+          history = Path('.github/debug-workflow-history')
+          workflows = Path('.github/workflows')
+          for archived in history.glob('phase1-surface-determinacy-witness-soundness-debug*.yml'):
+              (workflows / archived.name).write_text(archived.read_text())
+
           workflow = Path('.github/workflows/phase1-surface-determinacy-witness-soundness-debug16.yml').read_text()
           marker = workflow.index('- name: Apply semantic nullable witness diagnostic')
           start = workflow.index('          from pathlib import Path', marker)
