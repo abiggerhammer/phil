@@ -15,7 +15,9 @@ import Phil.Core.Syntax
   )
 import Phil.Surface.GrammarV1.Parser
 import Phil.Surface.GrammarV1.ProtocolRoles
-  ( grammarV1ClosedProtocolRoleTemplates
+  ( GrammarV1ProtocolRoleError (..)
+  , grammarV1CheckedClosedProtocolRoleTemplates
+  , grammarV1ClosedProtocolRoleTemplates
   )
 import Phil.Surface.Syntax (Located (..))
 import System.Exit (exitFailure)
@@ -27,6 +29,8 @@ main = do
         closedRolesPreserved
     , test "SURF-008 protocol role projection does not invent duality"
         nonDualRolesPreserved
+    , test "SURF-008 checked protocol roles enforce distinct alpha-aware Core duals"
+        checkedRoleSemantics
     , test "SURF-008 protocol role templates preserve session competence boundaries"
         competenceBoundaries
     ]
@@ -40,22 +44,8 @@ test label result = case result of
 closedRolesPreserved :: Either String ()
 closedRolesPreserved = do
   protocol <- onlyProtocol closedProtocolSource
-  let expected =
-        ( ( ProtocolRoleKey "Client"
-          , ProtocolTemplateSend
-              (Name "outgoing")
-              (ProtocolConcreteType (TyUInt 8))
-              (ProtocolTemplateEnd (Outcome "Done"))
-          )
-        , ( ProtocolRoleKey "Server"
-          , ProtocolTemplateReceive
-              (Name "incoming")
-              (ProtocolConcreteType (TyUInt 8))
-              (ProtocolTemplateEnd (Outcome "Done"))
-          )
-        )
   assert
-    (grammarV1ClosedProtocolRoleTemplates protocol == Just expected)
+    (grammarV1ClosedProtocolRoleTemplates protocol == Just expectedClosedRoles)
     "closed binary protocol did not preserve role order and exact session templates"
 
 nonDualRolesPreserved :: Either String ()
@@ -69,6 +59,29 @@ nonDualRolesPreserved = do
     (grammarV1ClosedProtocolRoleTemplates protocol == Just expected)
     "role-template projection incorrectly asserted or repaired protocol duality"
 
+checkedRoleSemantics :: Either String ()
+checkedRoleSemantics = do
+  closed <- onlyProtocol closedProtocolSource
+  duplicate <- onlyProtocol duplicateRoleSource
+  nonDual <- onlyProtocol nonDualProtocolSource
+  assert
+    (grammarV1CheckedClosedProtocolRoleTemplates closed == Just (Right expectedClosedRoles))
+    "alpha-renamed role-local binders were not accepted as definitionally dual"
+  assert
+    ( grammarV1CheckedClosedProtocolRoleTemplates duplicate
+        == Just (Left (DuplicateProtocolRole (ProtocolRoleKey "Same")))
+    )
+    "duplicate protocol role identity did not reject before duality"
+  assert
+    ( grammarV1CheckedClosedProtocolRoleTemplates nonDual
+        == Just
+          (Left
+            (NonDualProtocolRoles
+              (ProtocolRoleKey "First")
+              (ProtocolRoleKey "Second")))
+    )
+    "non-dual closed role sessions did not reject explicitly"
+
 competenceBoundaries :: Either String ()
 competenceBoundaries = do
   codec <- onlyProtocol codecProtocolSource
@@ -80,10 +93,32 @@ competenceBoundaries = do
     , ("requirement-bearing protocol", requirement)
     ]
   where
-    expectNothing (label, protocol) =
+    expectNothing (label, protocol) = do
       assert
         (grammarV1ClosedProtocolRoleTemplates protocol == Nothing)
-        (label <> " escaped the closed protocol-role competence boundary")
+        (label <> " escaped the closed protocol-role projection boundary")
+      assert
+        (grammarV1CheckedClosedProtocolRoleTemplates protocol == Nothing)
+        (label <> " escaped the checked protocol-role competence boundary")
+
+expectedClosedRoles
+  :: ( (ProtocolRoleKey, ProtocolSessionTemplate)
+     , (ProtocolRoleKey, ProtocolSessionTemplate)
+     )
+expectedClosedRoles =
+  ( ( ProtocolRoleKey "Client"
+    , ProtocolTemplateSend
+        (Name "outgoing")
+        (ProtocolConcreteType (TyUInt 8))
+        (ProtocolTemplateEnd (Outcome "Done"))
+    )
+  , ( ProtocolRoleKey "Server"
+    , ProtocolTemplateReceive
+        (Name "incoming")
+        (ProtocolConcreteType (TyUInt 8))
+        (ProtocolTemplateEnd (Outcome "Done"))
+    )
+  )
 
 onlyProtocol :: Text.Text -> Either String GrammarV1ProtocolDecl
 onlyProtocol source = do
@@ -99,6 +134,14 @@ closedProtocolSource = Text.unlines
   [ "protocol P {"
   , "  role Client = send (outgoing : U8) then end Done;"
   , "  role Server = receive (incoming : U8) then end Done;"
+  , "}"
+  ]
+
+duplicateRoleSource :: Text.Text
+duplicateRoleSource = Text.unlines
+  [ "protocol P {"
+  , "  role Same = send (outgoing : U8) then end Done;"
+  , "  role Same = receive (incoming : U8) then end Done;"
   , "}"
   ]
 
