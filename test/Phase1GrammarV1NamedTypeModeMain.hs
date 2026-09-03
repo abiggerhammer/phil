@@ -13,6 +13,9 @@ import Phil.Core.Generic.StaticActual
   ( GenericStaticActual (..)
   , GenericStaticKind (..)
   )
+import Phil.Core.NominalDataMode
+  ( NominalModeError (..)
+  )
 import Phil.Core.Static
   ( DeclarationKey (..)
   , InterfaceRevision (..)
@@ -31,6 +34,19 @@ import Phil.Surface.GrammarV1.CheckedType
   , grammarV1CheckedTypeModeWithNamedResolutions
   )
 import Phil.Surface.GrammarV1.Parser
+import Phil.Surface.GrammarV1.ResolvedAggregateMode
+  ( GrammarV1CheckedResolvedDataMode (..)
+  , GrammarV1CheckedResolvedDataModeError (..)
+  , GrammarV1CheckedResolvedRecordMode (..)
+  , GrammarV1CheckedResolvedRecordModeError (..)
+  , GrammarV1CheckedResolvedVariantMode (..)
+  , GrammarV1CheckedResolvedVariantModePayload (..)
+  , grammarV1CheckedClosedDataModeWithNamedResolutions
+  , grammarV1CheckedClosedRecordModeWithNamedResolutions
+  )
+import Phil.Surface.GrammarV1.TypeAlias
+  ( grammarV1CheckedTypeAliasModeWithNamedResolutions
+  )
 import Phil.Surface.Syntax (Located (..))
 import System.Exit (exitFailure)
 
@@ -47,6 +63,10 @@ main = do
         intrinsicAndFocusingSeparation
     , test "SURF-008 specialized and non-named unresolved types cannot borrow named mode evidence"
         unresolvedFormsStayClosed
+    , test "SURF-008 exact named modes compose through aliases, records, and sums"
+        namedModesComposeThroughDeclarations
+    , test "SURF-008 aggregate named-mode failures preserve resolution and nominal layers"
+        aggregateFailuresRemainDistinct
     ]
   if and results then pure () else exitFailure
 
@@ -181,6 +201,115 @@ unresolvedFormsStayClosed = do
       == Nothing)
     "Frame type borrowed unrelated named-type mode evidence"
 
+namedModesComposeThroughDeclarations :: Either String ()
+namedModesComposeThroughDeclarations = do
+  alias <- parseAlias "type Alias = Other;"
+  record <- parseRecord "record Envelope { tag : U8, payload : Other }"
+  dat <- parseData "data MaybeOther = None | Some(Other);"
+  let resolved = resolution
+        "Other" GenericTypeKind "decl-other" "iface-other" (TyOpaque "Other") Linear
+      expectedOrigin = GrammarV1NamedTypeModeOrigin
+        (ReferencedGenericStaticActual "Other")
+        (DeclarationKey "decl-other")
+        (InterfaceRevision "iface-other")
+  case grammarV1CheckedTypeAliasModeWithNamedResolutions
+      emptyStaticContext [resolved] alias of
+    Just (Right (("Alias", checked), [])) -> do
+      assert
+        (checkedResolvedTypeMode checked == CheckedTypeMode (TyOpaque "Other") Linear)
+        "transparent alias changed the resolved target type/mode"
+      assert
+        (checkedResolvedTypeModeOrigin checked == expectedOrigin)
+        "transparent alias discarded stable named-type resolution provenance"
+    other -> Left ("resolved alias mode composition changed: " <> show other)
+
+  case grammarV1CheckedClosedRecordModeWithNamedResolutions
+      emptyStaticContext [resolved] Nothing record of
+    Just (Right checkedRecord) -> do
+      assert (checkedResolvedRecordStructuralMode checkedRecord == Linear)
+        "record did not derive linear mode from exact named field resolution"
+      case checkedResolvedRecordModeFields checkedRecord of
+        [ ("tag", tagMode, [])
+          , ("payload", payloadMode, [])
+          ] -> do
+            assert
+              (checkedResolvedTypeMode tagMode == CheckedTypeMode (TyUInt 8) Unrestricted)
+              "record intrinsic field mode changed"
+            assert
+              (checkedResolvedTypeModeOrigin tagMode == GrammarV1IntrinsicTypeModeOrigin)
+              "record intrinsic field acquired named provenance"
+            assert
+              (checkedResolvedTypeMode payloadMode == CheckedTypeMode (TyOpaque "Other") Linear)
+              "record named field type/mode changed"
+            assert
+              (checkedResolvedTypeModeOrigin payloadMode == expectedOrigin)
+              "record named field discarded stable resolution provenance"
+        fields -> Left ("record field order/provenance changed: " <> show fields)
+    other -> Left ("resolved record mode composition changed: " <> show other)
+
+  case grammarV1CheckedClosedDataModeWithNamedResolutions
+      emptyStaticContext [resolved] Nothing dat of
+    Just (Right checkedData) -> do
+      assert (checkedResolvedDataStructuralMode checkedData == Linear)
+        "sum did not derive linear mode from exact named payload resolution"
+      case checkedResolvedDataModeVariants checkedData of
+        [ GrammarV1CheckedResolvedVariantMode "None" Nothing
+          , GrammarV1CheckedResolvedVariantMode "Some"
+              (Just (GrammarV1CheckedResolvedVariantModeTuple [(payloadMode, [])]))
+          ] -> do
+            assert
+              (checkedResolvedTypeMode payloadMode == CheckedTypeMode (TyOpaque "Other") Linear)
+              "sum named payload type/mode changed"
+            assert
+              (checkedResolvedTypeModeOrigin payloadMode == expectedOrigin)
+              "sum named payload discarded stable resolution provenance"
+        variants -> Left ("sum variant order/payload shape changed: " <> show variants)
+    other -> Left ("resolved data mode composition changed: " <> show other)
+
+aggregateFailuresRemainDistinct :: Either String ()
+aggregateFailuresRemainDistinct = do
+  record <- parseRecord "record Envelope { payload : Other }"
+  weakenedRecord <- parseRecord
+    "record Envelope mode unrestricted { payload : Other }"
+  dat <- parseData "data MaybeOther = None | Some(Other);"
+  weakenedData <- parseData
+    "data MaybeOther mode unrestricted = None | Some(Other);"
+  let reference = ReferencedGenericStaticActual "Other"
+      resolved = resolution
+        "Other" GenericTypeKind "decl-other" "iface-other" (TyOpaque "Other") Linear
+  assert
+    (grammarV1CheckedClosedRecordModeWithNamedResolutions
+      emptyStaticContext [] Nothing record
+      == Just
+        (Left
+          (GrammarV1ResolvedRecordModeTypeError
+            (GrammarV1NamedTypeModeUnresolved reference))))
+    "record missing-resolution failure collapsed into non-competence or nominal error"
+  assert
+    (grammarV1CheckedClosedRecordModeWithNamedResolutions
+      emptyStaticContext [resolved] Nothing weakenedRecord
+      == Just
+        (Left
+          (GrammarV1ResolvedRecordModeNominalError
+            (DeclaredModeWeakensDerived Linear Unrestricted))))
+    "record named mode bypassed Core no-weakening authority"
+  assert
+    (grammarV1CheckedClosedDataModeWithNamedResolutions
+      emptyStaticContext [] Nothing dat
+      == Just
+        (Left
+          (GrammarV1ResolvedDataModeTypeError
+            (GrammarV1NamedTypeModeUnresolved reference))))
+    "sum missing-resolution failure collapsed into non-competence or nominal error"
+  assert
+    (grammarV1CheckedClosedDataModeWithNamedResolutions
+      emptyStaticContext [resolved] Nothing weakenedData
+      == Just
+        (Left
+          (GrammarV1ResolvedDataModeNominalError
+            (DeclaredModeWeakensDerived Linear Unrestricted))))
+    "sum named mode bypassed Core no-weakening authority"
+
 resolution
   :: Text.Text
   -> GenericStaticKind
@@ -200,15 +329,38 @@ resolution reference kind declarationKey interfaceRevision ty mode =
 
 aliasTarget :: Text.Text -> Either String GrammarV1Type
 aliasTarget source = do
+  alias <- parseAlias source
+  Right (locatedValue (grammarV1TypeAliasTarget alias))
+
+parseAlias :: Text.Text -> Either String GrammarV1TypeAliasDecl
+parseAlias source = do
+  declaration <- onlyDeclaration source
+  case declaration of
+    GrammarV1TypeAliasDeclaration alias -> Right alias
+    other -> Left ("expected type alias declaration, got " <> show other)
+
+parseRecord :: Text.Text -> Either String GrammarV1RecordDecl
+parseRecord source = do
+  declaration <- onlyDeclaration source
+  case declaration of
+    GrammarV1RecordDeclaration record -> Right record
+    other -> Left ("expected record declaration, got " <> show other)
+
+parseData :: Text.Text -> Either String GrammarV1DataDecl
+parseData source = do
+  declaration <- onlyDeclaration source
+  case declaration of
+    GrammarV1DataDeclaration dat -> Right dat
+    other -> Left ("expected data declaration, got " <> show other)
+
+onlyDeclaration :: Text.Text -> Either String GrammarV1Declaration
+onlyDeclaration source = do
   sourceFile <- mapLeft show $
     parseGrammarV1StructuralSource "named-type-mode" source
   case grammarV1TopLevelDecls sourceFile of
-    [Located _ topLevel] -> case locatedValue (grammarV1Declaration topLevel) of
-      GrammarV1TypeAliasDeclaration alias ->
-        Right (locatedValue (grammarV1TypeAliasTarget alias))
-      other -> Left ("expected type alias declaration, got " <> show other)
+    [Located _ topLevel] -> Right (locatedValue (grammarV1Declaration topLevel))
     declarations -> Left
-      ("expected one type alias declaration, got " <> show (length declarations))
+      ("expected one declaration, got " <> show (length declarations))
 
 assert :: Bool -> String -> Either String ()
 assert condition detail
