@@ -5,8 +5,7 @@ module Main (main) where
 import qualified Data.Set as Set
 import qualified Data.Text as Text
 import Phil.Core.Generic
-  ( GenericApplicationIdentity (..)
-  , GenericStaticParameterKey (..)
+  ( GenericStaticParameterKey (..)
   , deriveGenericApplicationIdentity
   )
 import Phil.Core.Generic.StaticActual
@@ -55,9 +54,8 @@ test label result = case result of
 checkedSpecialization :: Either String ()
 checkedSpecialization = do
   reference <- aliasReference "type T = pkg.Box[U32, Shared];"
-  arguments <- exactlyTwoArguments reference
-  let [typeArgument, providerArgument] = arguments
-      typeKey = GenericStaticParameterKey "T"
+  (typeArgument, providerArgument) <- exactlyTwoArguments reference
+  let typeKey = GenericStaticParameterKey "T"
       providerKey = GenericStaticParameterKey "P"
       parameters =
         [ GenericStaticParameter typeKey GenericTypeKind
@@ -103,7 +101,7 @@ checkedSpecialization = do
 nameShapedAuthorityBoundary :: Either String ()
 nameShapedAuthorityBoundary = do
   reference <- aliasReference "type T = Box[U32, Shared];"
-  [typeArgument, providerArgument] <- exactlyTwoArguments reference
+  (typeArgument, providerArgument) <- exactlyTwoArguments reference
   let parameters =
         [ GenericStaticParameter (GenericStaticParameterKey "T") GenericTypeKind
         , GenericStaticParameter (GenericStaticParameterKey "P") GenericProviderContractKind
@@ -131,7 +129,7 @@ nameShapedAuthorityBoundary = do
 directEvidenceFailures :: Either String ()
 directEvidenceFailures = do
   reference <- aliasReference "type T = Box[U32, Shared];"
-  [typeArgument, _] <- exactlyTwoArguments reference
+  (typeArgument, _) <- exactlyTwoArguments reference
   let typeKey = GenericStaticParameterKey "T"
       providerKey = GenericStaticParameterKey "P"
       parameters =
@@ -179,7 +177,7 @@ directEvidenceFailures = do
 referenceResolutionFailures :: Either String ()
 referenceResolutionFailures = do
   reference <- aliasReference "type T = Box[U32, Shared];"
-  [typeArgument, _] <- exactlyTwoArguments reference
+  (typeArgument, _) <- exactlyTwoArguments reference
   let typeKey = GenericStaticParameterKey "T"
       providerKey = GenericStaticParameterKey "P"
       parameters =
@@ -270,10 +268,10 @@ aliasReference source = do
 
 exactlyTwoArguments
   :: GrammarV1StaticReference
-  -> Either String [GrammarV1StaticArgument]
+  -> Either String (GrammarV1StaticArgument, GrammarV1StaticArgument)
 exactlyTwoArguments reference =
   case grammarV1StaticReferenceArguments reference of
-    arguments@[_, _] -> Right arguments
+    [first, second] -> Right (first, second)
     arguments -> Left ("expected two static arguments, got " <> show (length arguments))
 
 assert :: Bool -> String -> Either String ()
