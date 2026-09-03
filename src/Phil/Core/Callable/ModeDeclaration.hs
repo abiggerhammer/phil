@@ -14,6 +14,7 @@ import Phil.Core.Callable
   ( CallableContract (..)
   , ClosureCaptureSummary (..)
   )
+import qualified Phil.Core.CallableModeStrengtheningKernelBridge as KernelBridge
 import Phil.Core.Static (InterfaceRevision)
 import Phil.Core.Syntax (Mode (..))
 
@@ -44,6 +45,7 @@ data ClosureModeDeclarationError
       InterfaceRevision
   | StricterClosureModeEmptyJustification Mode
   | TargetImplementationCannotStrengthenClosureMode Text
+  | ClosureModeStrengtheningKernelDisagreement Text
   deriving (Eq, Ord, Show)
 
 checkClosureModeDeclaration
@@ -53,21 +55,45 @@ checkClosureModeDeclaration
   -> Either ClosureModeDeclarationError CheckedClosureMode
 checkClosureModeDeclaration contract captures declaration =
   case declaration of
-    DerivedClosureMode -> Right (checked minimumMode Nothing)
-    ExplicitClosureMode declared justification
-      | modeRank declared < modeRank minimumMode ->
-          Left (ExplicitClosureModeWeakensCaptureMinimum minimumMode declared)
-      | declared == minimumMode -> Right (checked declared justification)
-      | otherwise -> do
-          semanticJustification <- maybe
-            (Left (StricterClosureModeMissingSemanticJustification minimumMode declared))
-            Right
-            justification
-          validateJustification declared semanticJustification
-          Right (checked declared (Just semanticJustification))
+    DerivedClosureMode -> acceptChecked minimumMode Nothing
+    ExplicitClosureMode declared justification ->
+      let nonWeakening = modeRank declared >= modeRank minimumMode
+          equalToMinimum = declared == minimumMode
+          ( justificationPresent
+            , targetImplementationReason
+            , contractMatches
+            , detailPresent
+            ) = justificationFacts justification
+          classification = KernelBridge.classifyExplicitClosureModeFacts
+            nonWeakening
+            equalToMinimum
+            justificationPresent
+            targetImplementationReason
+            contractMatches
+            detailPresent
+      in case classification of
+          KernelBridge.ExplicitClosureModeWeakeningClassification ->
+            Left (ExplicitClosureModeWeakensCaptureMinimum minimumMode declared)
+          KernelBridge.ExplicitClosureModeEqualClassification ->
+            acceptChecked declared justification
+          KernelBridge.ExplicitClosureModeMissingJustificationClassification ->
+            Left (StricterClosureModeMissingSemanticJustification minimumMode declared)
+          KernelBridge.ExplicitClosureModeTargetImplementationClassification ->
+            case justification of
+              Just (TargetImplementationModeReason detail) ->
+                Left (TargetImplementationCannotStrengthenClosureMode detail)
+              _ -> kernelDisagreement
+                "extracted target-implementation classification lacked a target reason"
+          KernelBridge.ExplicitClosureModeWrongContractClassification ->
+            wrongContractError justification
+          KernelBridge.ExplicitClosureModeEmptyJustificationClassification ->
+            Left (StricterClosureModeEmptyJustification declared)
+          KernelBridge.ExplicitClosureModeStrengthenedClassification ->
+            acceptChecked declared justification
   where
     minimumMode = closureMinimumStructuralMode captures
     interfaceRevision = callableContractInterfaceRevision contract
+
     checked selected justification = CheckedClosureMode
       { checkedClosureMinimumMode = minimumMode
       , checkedClosureSelectedMode = selected
@@ -75,19 +101,37 @@ checkClosureModeDeclaration contract captures declaration =
       , checkedClosureCaptureSummary = captures
       }
 
-    validateJustification selected justification = case justification of
-      TargetImplementationModeReason detail ->
-        Left (TargetImplementationCannotStrengthenClosureMode detail)
-      LifecycleModeObligation revision detail ->
-        validateSemantic selected revision detail
-      AuthorityModeObligation revision detail ->
-        validateSemantic selected revision detail
+    acceptChecked selected justification =
+      let result = checked selected justification
+          shape = KernelBridge.classifyCheckedClosureModeShapeFacts
+            (checkedClosureMinimumMode result == minimumMode)
+            (checkedClosureSelectedMode result == selected)
+            (checkedClosureModeJustification result == justification)
+      in case shape of
+          KernelBridge.CheckedClosureModeShapeAcceptedClassification -> Right result
+          other -> kernelDisagreement
+            ("extracted checked-shape classifier rejected production result: "
+              <> Text.pack (show other))
 
-    validateSemantic selected revision detail
-      | revision /= interfaceRevision =
-          Left (StricterClosureModeWrongContract interfaceRevision revision)
-      | Text.null detail = Left (StricterClosureModeEmptyJustification selected)
-      | otherwise = Right ()
+    justificationFacts maybeJustification = case maybeJustification of
+      Nothing -> (False, False, False, False)
+      Just (TargetImplementationModeReason detail) ->
+        (True, True, False, not (Text.null detail))
+      Just (LifecycleModeObligation revision detail) ->
+        (True, False, revision == interfaceRevision, not (Text.null detail))
+      Just (AuthorityModeObligation revision detail) ->
+        (True, False, revision == interfaceRevision, not (Text.null detail))
+
+    wrongContractError maybeJustification = case maybeJustification of
+      Just (LifecycleModeObligation revision _) ->
+        Left (StricterClosureModeWrongContract interfaceRevision revision)
+      Just (AuthorityModeObligation revision _) ->
+        Left (StricterClosureModeWrongContract interfaceRevision revision)
+      _ -> kernelDisagreement
+        "extracted wrong-contract classification lacked a semantic justification"
+
+    kernelDisagreement detail =
+      Left (ClosureModeStrengtheningKernelDisagreement detail)
 
 modeRank :: Mode -> Int
 modeRank mode = case mode of
