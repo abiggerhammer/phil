@@ -15,6 +15,7 @@ import Phil.Surface.GrammarV1.CheckedType (grammarV1CheckedType)
 import Phil.Surface.GrammarV1.Parser
   ( GrammarV1BoundaryDecl (..)
   , GrammarV1BoundaryItem (..)
+  , GrammarV1Type
   )
 import Phil.Surface.Syntax (Located (..))
 
@@ -53,7 +54,7 @@ grammarV1CheckedBoundaryFailureTypes staticContext state boundary = do
 
 boundaryFailureTypes
   :: GrammarV1BoundaryDecl
-  -> [Located Phil.Surface.GrammarV1.Parser.GrammarV1Type]
+  -> [Located GrammarV1Type]
 boundaryFailureTypes boundary =
   [ failureType
   | Located _ item <- grammarV1BoundaryItems boundary
