@@ -2,11 +2,20 @@ module Phil.Surface.GrammarV1.ProtocolRoles
   ( GrammarV1ProtocolRoleError (..)
   , grammarV1ClosedProtocolRoleTemplates
   , grammarV1CheckedClosedProtocolRoleTemplates
+  , grammarV1ClosedBinaryProtocolFamily
   ) where
 
+import qualified Data.Set as Set
 import Phil.Core.Protocol (ProtocolRoleKey (..))
-import Phil.Core.Protocol.Family (ProtocolSessionTemplate)
+import Phil.Core.Protocol.Family
+  ( BinaryProtocolFamily (..)
+  , ProtocolSessionTemplate
+  )
 import Phil.Core.Session (dualSession)
+import Phil.Core.Static
+  ( DeclarationKey
+  , InterfaceRevision
+  )
 import Phil.Core.Value (definitionallyEqualSession)
 import Phil.Surface.GrammarV1.Parser
   ( GrammarV1ProtocolDecl (..)
@@ -85,3 +94,31 @@ grammarV1CheckedClosedProtocolRoleTemplates source = do
             then Left (NonDualProtocolRoles firstKey secondKey)
             else Right templates
     _ -> Nothing
+
+-- | Construct the exact closed Core binary-family carrier once stable declaration
+-- lineage and public-interface revision have been supplied by an authority above
+-- Grammar v1. Source spelling and module location are intentionally ignored for
+-- identity: Core's DeclarationKey is stable lineage, not a source-name hash. The
+-- peer source session is first checked as the alpha-aware dual of the primary;
+-- Core therefore stores only the primary template and derives the peer later at
+-- instantiation. Closed Grammar-v1 protocols contribute no generic requirements.
+grammarV1ClosedBinaryProtocolFamily
+  :: DeclarationKey
+  -> InterfaceRevision
+  -> GrammarV1ProtocolDecl
+  -> Maybe (Either GrammarV1ProtocolRoleError BinaryProtocolFamily)
+grammarV1ClosedBinaryProtocolFamily declarationKey interfaceRevision source = do
+  checked <- grammarV1CheckedClosedProtocolRoleTemplates source
+  pure $ fmap buildFamily checked
+  where
+    buildFamily
+      ( (primaryRole, primarySession)
+      , (peerRole, _peerSession)
+      ) = BinaryProtocolFamily
+        { protocolFamilyDeclarationKey = declarationKey
+        , protocolFamilyInterfaceRevision = interfaceRevision
+        , protocolFamilyRequirements = Set.empty
+        , protocolFamilyPrimaryRole = primaryRole
+        , protocolFamilyPeerRole = peerRole
+        , protocolFamilyPrimarySession = primarySession
+        }
