@@ -17,7 +17,7 @@ on:
     paths:
       - 'grammar/phase1-surface.ebnf'
       - 'scripts/derive_phase1_surface_grammar.py'
-      - 'scripts/check_phase1_surface-determinacy.py'
+      - 'scripts/check_phase1_surface_determinacy.py'
       - 'scripts/derive_phase1_surface_determinacy_certificate.py'
       - 'proof/Phil/Surface/GrammarDerivation.v'
       - 'proof/Phil/Surface/GrammarDeterminacyCertificate.v'
