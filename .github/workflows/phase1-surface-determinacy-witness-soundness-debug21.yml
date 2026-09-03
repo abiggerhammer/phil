@@ -1,0 +1,140 @@
+name: Phase 1 Surface Determinacy Witness Soundness Debug 21
+
+on:
+  pull_request:
+
+permissions:
+  contents: read
+
+jobs:
+  rocq-witness-soundness-debug21:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    container:
+      image: rocq/rocq-prover:9.2.0
+      options: --user root
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Derive exact Grammar-v1 inputs
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 scripts/derive_phase1_surface_grammar.py --write
+          python3 scripts/derive_phase1_surface_determinacy_certificate.py --write
+
+      - name: Apply unary FIRST result-lift diagnostic
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 - <<'PY'
+          from pathlib import Path
+          import textwrap
+
+          history = Path('.github/debug-workflow-history')
+          workflows = Path('.github/workflows')
+          for archived in history.glob('phase1-surface-determinacy-witness-soundness-debug*.yml'):
+              (workflows / archived.name).write_text(archived.read_text())
+
+          workflow = Path('.github/workflows/phase1-surface-determinacy-witness-soundness-debug20.yml').read_text()
+          marker = workflow.index('- name: Apply abstracted FIRST step diagnostic')
+          start = workflow.index('          from pathlib import Path', marker)
+          end = workflow.index('\n          PY', start)
+          code = textwrap.dedent(workflow[start:end])
+          exec(compile(code, '<existing-debug20-diagnostics>', 'exec'), {})
+
+          path = Path('proof/Phil/Surface/GrammarDeterminacyWitnessSoundness.v')
+          source = path.read_text()
+          step_start = source.index('Lemma computed_first_sem_sound_step :')
+
+          helpers = r'''Lemma computed_first_optional_result_lift :
+  forall token fuel body,
+    (exists tokens,
+      first_expression_fuel
+        fuel
+        phase1_surface_nullable_facts
+        phase1_surface_first_facts
+        body = Some tokens /\
+      token_mem token tokens = true) ->
+    exists tokens,
+      first_expression_fuel
+        (S fuel)
+        phase1_surface_nullable_facts
+        phase1_surface_first_facts
+        (EOptional body) = Some tokens /\
+      token_mem token tokens = true.
+Proof.
+  intros token fuel body [tokens [Hfirst Hmem]].
+  exists tokens. split.
+  - simpl. exact Hfirst.
+  - exact Hmem.
+Qed.
+
+Lemma computed_first_repetition_result_lift :
+  forall token fuel body,
+    (exists tokens,
+      first_expression_fuel
+        fuel
+        phase1_surface_nullable_facts
+        phase1_surface_first_facts
+        body = Some tokens /\
+      token_mem token tokens = true) ->
+    exists tokens,
+      first_expression_fuel
+        (S fuel)
+        phase1_surface_nullable_facts
+        phase1_surface_first_facts
+        (ERepetition body) = Some tokens /\
+      token_mem token tokens = true.
+Proof.
+  intros token fuel body [tokens [Hfirst Hmem]].
+  exists tokens. split.
+  - simpl. exact Hfirst.
+  - exact Hmem.
+Qed.
+
+'''
+          source = source[:step_start] + helpers + source[step_start:]
+
+          old = '''  - abstract (
+      simpl in Hsafe;
+      apply andb_true_iff in Hsafe as [_ Hbody_safe];
+      exact (IH body Hbody Hbody_safe)).'''
+          optional = '''  - abstract (
+      simpl in Hsafe;
+      apply andb_true_iff in Hsafe as [_ Hbody_safe];
+      exact
+        (computed_first_optional_result_lift
+          token fuel body (IH body Hbody Hbody_safe))).'''
+          repetition = '''  - abstract (
+      simpl in Hsafe;
+      apply andb_true_iff in Hsafe as [_ Hbody_safe];
+      exact
+        (computed_first_repetition_result_lift
+          token fuel body (IH body Hbody Hbody_safe))).'''
+
+          if source.count(old) < 2:
+              raise SystemExit('expected two unary FIRST branches')
+          source = source.replace(old, optional, 1)
+          source = source.replace(old, repetition, 1)
+          path.write_text(source)
+          print(f'generated witness proof characters: {len(source)}')
+          PY
+
+      - name: Compile witness soundness with forced timeout
+        shell: bash
+        run: |
+          set -euo pipefail
+          export PATH="/home/rocq/.opam/${COMPILER}/bin:$PATH"
+          rocq c -Q proof/Phil Phil proof/Phil/Surface/Grammar.v
+          rocq c -Q proof/Phil Phil proof/Phil/Surface/GrammarDerivation.v
+          rocq c -Q proof/Phil Phil proof/Phil/Surface/GrammarDerivationOracle.v
+          rocq c -Q proof/Phil Phil proof/Phil/Surface/GrammarDeterminacyCertificate.v
+          rocq c -Q proof/Phil Phil proof/Phil/Surface/GrammarDeterminacyNullableFirst.v
+          rocq c -Q proof/Phil Phil proof/Phil/Surface/GrammarDeterminacyFollowOverlap.v
+          rocq c -Q proof/Phil Phil proof/Phil/Surface/GrammarDeterminacySimpleResolvers.v
+          rocq c -Q proof/Phil Phil proof/Phil/Surface/GrammarDeterminacyStructuralResolvers.v
+          rocq c -Q proof/Phil Phil proof/Phil/Surface/GrammarDeterminacyPredictiveOracle.v
+          rocq c -Q proof/Phil Phil proof/Phil/Surface/GrammarDerivationLookahead.v
+          timeout -k 5s 90s rocq c -time -Q proof/Phil Phil \
+            proof/Phil/Surface/GrammarDeterminacyWitnessSoundness.v
