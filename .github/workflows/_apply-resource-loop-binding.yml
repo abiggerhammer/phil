@@ -1,0 +1,237 @@
+name: Apply Resource Loop binding patch
+
+on:
+  push:
+    branches:
+      - bind-resource-loop-kernel
+    paths:
+      - '.github/workflows/_apply-resource-loop-binding.yml'
+
+permissions:
+  contents: write
+
+jobs:
+  apply:
+    if: github.event.head_commit.message == 'Add Resource Loop binding patch runner'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: bind-resource-loop-kernel
+      - name: Patch production ownership points
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 - <<'PY'
+          from pathlib import Path
+
+          path = Path('src/Phil/Systems/ControlStateProjection.hs')
+          text = path.read_text()
+          old = '''import qualified ResourceJoinKernel as ResourceJoinKernel
+import qualified ResourceScopeKernel as ResourceScopeKernel
+'''
+          new = '''import qualified ResourceJoinKernel as ResourceJoinKernel
+import qualified ResourceLoopKernel as ResourceLoopKernel
+import qualified ResourceScopeKernel as ResourceScopeKernel
+'''
+          assert old in text
+          text = text.replace(old, new, 1)
+
+          old = '''  checkResourceJoinKernel
+  checkResourceScopeProjectionKernel function
+'''
+          new = '''  checkResourceJoinKernel
+  checkResourceScopeProjectionKernel function
+  checkResourceLoopProjectionKernel
+'''
+          assert old in text
+          text = text.replace(old, new, 1)
+
+          marker = '''    checkResourceScopeProjectionKernel function = do
+'''
+          assert marker in text
+          helper = r'''    checkResourceLoopProjectionKernel =
+      case stateBoundaryKind boundary of
+        OrdinaryJoinBoundary -> Right ()
+        LoopStateBoundary ->
+          case ResourceLoopKernel.decideLoopProjectionByFacts
+              loopKindMatches
+              resourceJoinAccepted
+              slotDomainExact
+              requirementsExact of
+            ResourceLoopKernel.LoopProjectionAcceptedDecision -> Right ()
+            _ -> resourceLoopKernelInvariant "loop-projection"
+      where
+        loopKindMatches = case stateProjectionKind projection of
+          LoopInitialEntry -> True
+          LoopBackedge -> True
+          OrdinaryJoinPredecessor -> False
+        slotDomainExact =
+          Map.keysSet (stateBoundarySlots boundary)
+            == Map.keysSet (stateProjectionBindings projection)
+        requirementsExact = all bindingMatchesDeclaredRequirement
+          (Map.toAscList (stateBoundarySlots boundary))
+        bindingMatchesDeclaredRequirement (slotKey, slot) =
+          case Map.lookup slotKey (stateProjectionBindings projection) of
+            Nothing -> False
+            Just ref -> modeMatches slot ref && subjectMatches slot ref
+        modeMatches slot ref = case stateSlotMode slot of
+          Unrestricted ->
+            Map.notMember ref (stateProjectionIncomingRestricted projection)
+          expectedMode ->
+            Map.lookup ref (stateProjectionIncomingRestricted projection)
+              == Just expectedMode
+        subjectMatches slot ref = case stateSlotSubjectRequirement slot of
+          AnyStateSubject -> True
+          FixedStateSubject subject ->
+            maybe False (Set.member ref) (Map.lookup subject subjectIndex)
+        resourceJoinAccepted = case ResourceJoinKernel.decideResourceProjectionByFacts
+            allIncomingLinearExactlyOnceBound
+            noInventedLinearOwners
+            allBoundLinearSubjectsAdmissible of
+          ResourceJoinKernel.ResourceProjectionAcceptedDecision -> True
+          _ -> False
+        bindingCounts = Map.fromListWith (+)
+          [ (ref, 1 :: Int)
+          | ref <- Map.elems (stateProjectionBindings projection)
+          ]
+        incomingLinear = Set.fromList
+          [ ref
+          | (ref, mode) <- Map.toAscList
+              (stateProjectionIncomingRestricted projection)
+          , mode == Linear
+          ]
+        linearBindings =
+          [ (slotKey, ref)
+          | (slotKey, ref) <- Map.toAscList
+              (stateProjectionBindings projection)
+          , Just slot <- [Map.lookup slotKey (stateBoundarySlots boundary)]
+          , stateSlotMode slot == Linear
+          ]
+        allIncomingLinearExactlyOnceBound = all
+          (\ref -> Map.findWithDefault 0 ref bindingCounts == 1)
+          (Set.toList incomingLinear)
+        noInventedLinearOwners = all
+          (\(_, ref) ->
+            Map.lookup ref (stateProjectionIncomingRestricted projection)
+              == Just Linear)
+          linearBindings
+        allBoundLinearSubjectsAdmissible = all subjectAdmissible linearBindings
+        subjectAdmissible (slotKey, ref) =
+          case Map.lookup slotKey (stateBoundarySlots boundary) of
+            Nothing -> False
+            Just slot -> case stateSlotSubjectRequirement slot of
+              AnyStateSubject -> True
+              FixedStateSubject subject ->
+                maybe False (Set.member ref) (Map.lookup subject subjectIndex)
+
+'''
+          text = text.replace(marker, helper + marker, 1)
+
+          old = '''resourceScopeKernelInvariant :: String -> Either e a
+resourceScopeKernelInvariant label =
+  error ("ResourceScopeKernel mismatch: " <> label)
+'''
+          new = '''resourceScopeKernelInvariant :: String -> Either e a
+resourceScopeKernelInvariant label =
+  error ("ResourceScopeKernel mismatch: " <> label)
+
+resourceLoopKernelInvariant :: String -> Either e a
+resourceLoopKernelInvariant label =
+  error ("ResourceLoopKernel mismatch: " <> label)
+'''
+          assert old in text
+          text = text.replace(old, new, 1)
+          path.write_text(text)
+
+          path = Path('src/Phil/Core/Value.hs')
+          text = path.read_text()
+          old = '''import Phil.Core.Syntax
+  ( Branch (..)
+'''
+          new = '''import Phil.Core.Syntax
+  ( Branch (..)
+'''
+          assert old in text
+          # Keep existing grouped import intact; add kernel after it closes.
+          close = '''  , Value (..)
+  )
+'''
+          replacement = '''  , Value (..)
+  )
+import qualified ResourceLoopKernel as ResourceLoopKernel
+'''
+          assert close in text
+          text = text.replace(close, replacement, 1)
+
+          old = '''      case transportRequirement sourceTy targetTy of
+        TransportDefinitionallyEqual -> Left (TransportNotRequired sourceTy)
+        TransportUnsupported -> Left (UnsupportedTransport sourceTy targetTy)
+        TransportRequires proposition -> do
+          evidenceUses <- mapLeft ValueRefinementError $
+            dischargePropositionUsing proofName proposition (valueResultState source)
+          Right source
+            { valueResultType = targetTy
+            , valueResultEvidence = appendEvidenceList evidenceUses (valueResultEvidence source)
+            }
+'''
+          new = '''      case transportRequirement sourceTy targetTy of
+        TransportDefinitionallyEqual ->
+          case ResourceLoopKernel.decideStateTransportByFacts
+              (definitionallyEqualTy sourceTy targetTy) False of
+            ResourceLoopKernel.StateTransportAcceptedDecision ->
+              Left (TransportNotRequired sourceTy)
+            _ -> resourceLoopKernelInvariant "definitional-transport"
+        TransportUnsupported -> Left (UnsupportedTransport sourceTy targetTy)
+        TransportRequires proposition -> do
+          evidenceUses <- mapLeft ValueRefinementError $
+            dischargePropositionUsing proofName proposition (valueResultState source)
+          let explicitEvidenceAccepted = not (null evidenceUses)
+          case ResourceLoopKernel.decideStateTransportByFacts
+              (definitionallyEqualTy sourceTy targetTy)
+              explicitEvidenceAccepted of
+            ResourceLoopKernel.StateTransportAcceptedDecision ->
+              Right source
+                { valueResultType = targetTy
+                , valueResultEvidence = appendEvidenceList evidenceUses (valueResultEvidence source)
+                }
+            _ -> resourceLoopKernelInvariant "explicit-transport"
+'''
+          assert old in text
+          text = text.replace(old, new, 1)
+
+          marker = '''compareTypes :: Ty -> Ty -> EqualityBoundary
+'''
+          assert marker in text
+          helper = '''resourceLoopKernelInvariant :: String -> Either e a
+resourceLoopKernelInvariant label =
+  error ("ResourceLoopKernel mismatch: " <> label)
+
+'''
+          text = text.replace(marker, helper + marker, 1)
+          path.write_text(text)
+
+          path = Path('phil-core.cabal')
+          text = path.read_text()
+          old = '''      ResourceJoinKernel
+      ResourceScopeKernel
+'''
+          new = '''      ResourceJoinKernel
+      ResourceLoopKernel
+      ResourceScopeKernel
+'''
+          assert old in text
+          text = text.replace(old, new, 1)
+          path.write_text(text)
+          PY
+          git diff --check
+          git diff -- src/Phil/Systems/ControlStateProjection.hs src/Phil/Core/Value.hs phil-core.cabal
+      - name: Commit production binding patch
+        shell: bash
+        run: |
+          set -euo pipefail
+          git config user.name github-actions[bot]
+          git config user.email 41898282+github-actions[bot]@users.noreply.github.com
+          git add src/Phil/Systems/ControlStateProjection.hs src/Phil/Core/Value.hs phil-core.cabal
+          git commit -m 'Bind Resource Loop kernel to production checks'
+          git push origin HEAD:bind-resource-loop-kernel
