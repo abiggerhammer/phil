@@ -27,6 +27,11 @@ import Phil.Surface.GrammarV1.CallableSignature
   ( GrammarV1CheckedFunctionHeader (..)
   , grammarV1CheckedClosedFunctionHeader
   )
+import Phil.Surface.GrammarV1.ComponentBodySurface
+  ( GrammarV1CheckedClosedComponentBody (..)
+  , GrammarV1ComponentBodySurfaceError (..)
+  , grammarV1CheckedClosedComponentBody
+  )
 import Phil.Surface.GrammarV1.ComponentSurface
   ( GrammarV1CheckedComponentHeader (..)
   , grammarV1CheckedClosedComponentHeader
@@ -71,6 +76,14 @@ main = do
         componentProvidesFocusingFailurePreserved
     , test "SURF-008 component headers remain fail-closed outside bounded competence"
         componentCompetenceBoundaries
+    , test "SURF-008 closed component bodies route through production checking"
+        closedComponentBodySemantics
+    , test "SURF-008 closed component bodies delegate terminal sequencing rejection to production checking"
+        closedComponentBodyControlAfterTerminal
+    , test "SURF-008 checked component bodies cannot attach to a different checked header"
+        closedComponentBodyHeaderMismatch
+    , test "SURF-008 component bodies stay fail-closed before binder and richer expression competence"
+        componentBodyCompetenceBoundaries
     ]
   if and results then pure () else exitFailure
 
@@ -107,8 +120,6 @@ closedHeaderSemantics = do
         == Just (Right (expected, []))
     )
     "closed function header lost stable identity, parameter/result meaning, or satisfies reference"
-  -- The body deliberately contains an unresolved name. Header success therefore
-  -- cannot be mistaken for a claim that body semantics were checked by this slice.
   case grammarV1BlockStatements (locatedValue (grammarV1FunctionBody source)) of
     [ Located _
         (GrammarV1ReturnStatement
@@ -398,6 +409,109 @@ componentCompetenceBoundaries = do
     , ("nonprimitive parameter", namedParameter)
     , ("duplicate parameter", duplicateParameter)
     ]
+
+closedComponentBodySemantics :: Either String ()
+closedComponentBodySemantics = do
+  omitted <- onlyComponent $ Text.unlines
+    [ "component Worker {"
+    , "  unit;"
+    , "  return true;"
+    , "}"
+    ]
+  explicit <- onlyComponent
+    "component Typed() provides U32 { return unit; }"
+  let declarationKey = DeclarationKey "component.body.lineage"
+      definitionRevision = DefinitionRevision "component.body.definition"
+  omittedHeader <- checkedComponentHeader declarationKey definitionRevision omitted
+  explicitHeader <- checkedComponentHeader declarationKey definitionRevision explicit
+  assert (checkedComponentParameters omittedHeader == Nothing)
+    "omitted component parameter shape changed before body checking"
+  assert
+    ( grammarV1CheckedClosedComponentBody emptyStaticContext omittedHeader omitted
+        == Just
+          (Right GrammarV1CheckedClosedComponentBody
+            { checkedClosedComponentBodyHeader = omittedHeader
+            , checkedClosedComponentBodyControls = [Return TyBool]
+            })
+    )
+    "closed omitted-parameter component body did not route through production checking"
+  assert
+    ( checkedComponentParameters explicitHeader == Just []
+      && checkedComponentProvidesType explicitHeader == Just (TyUInt 32) )
+    "explicit-empty/provides component header changed before body checking"
+  assert
+    ( grammarV1CheckedClosedComponentBody emptyStaticContext explicitHeader explicit
+        == Just
+          (Right GrammarV1CheckedClosedComponentBody
+            { checkedClosedComponentBodyHeader = explicitHeader
+            , checkedClosedComponentBodyControls = [Return TyUnit]
+            })
+    )
+    "closed explicit-empty component body lost checked provides/header identity"
+
+closedComponentBodyControlAfterTerminal :: Either String ()
+closedComponentBodyControlAfterTerminal = do
+  source <- onlyComponent $ Text.unlines
+    [ "component Terminal {"
+    , "  return unit;"
+    , "  true;"
+    , "}"
+    ]
+  let declarationKey = DeclarationKey "component.body.terminal.lineage"
+      definitionRevision = DefinitionRevision "component.body.terminal.definition"
+  header <- checkedComponentHeader declarationKey definitionRevision source
+  case grammarV1CheckedClosedComponentBody emptyStaticContext header source of
+    Just (Left (GrammarV1ComponentBodySurfaceCheckError surfaceError)) ->
+      assert (surfaceErrorClass surfaceError == ControlAfterTerminal)
+        "component production checker did not preserve control-after-terminal rejection"
+    other -> Left
+      ("component statement after return did not fail through production checking: " <> show other)
+
+closedComponentBodyHeaderMismatch :: Either String ()
+closedComponentBodyHeaderMismatch = do
+  first <- onlyComponent "component First { return unit; }"
+  second <- onlyComponent "component Second { return unit; }"
+  let declarationKey = DeclarationKey "component.body.header.lineage"
+      definitionRevision = DefinitionRevision "component.body.header.definition"
+  firstHeader <- checkedComponentHeader declarationKey definitionRevision first
+  secondHeader <- checkedComponentHeader declarationKey definitionRevision second
+  let actual = grammarV1CheckedClosedComponentBody
+        emptyStaticContext firstHeader second
+  assert
+    (actual == Just
+      (Left (GrammarV1ComponentBodyHeaderMismatch firstHeader secondHeader)))
+    "body from a different component declaration attached to the supplied checked header"
+
+componentBodyCompetenceBoundaries :: Either String ()
+componentBodyCompetenceBoundaries = do
+  parameterized <- onlyComponent
+    "component Parameterized(x : Bool) { return unit; }"
+  integerLiteral <- onlyComponent
+    "component IntegerLiteral { return 1; }"
+  namedBody <- onlyComponent
+    "component NamedBody { missing; }"
+  let declarationKey = DeclarationKey "component.body.boundary.lineage"
+      definitionRevision = DefinitionRevision "component.body.boundary.definition"
+  mapM_ (\(label, source) -> do
+    header <- checkedComponentHeader declarationKey definitionRevision source
+    assert
+      (grammarV1CheckedClosedComponentBody emptyStaticContext header source == Nothing)
+      (label <> " escaped the closed component-body competence boundary"))
+    [ ("parameter-bearing component body", parameterized)
+    , ("integer-literal component body", integerLiteral)
+    , ("name-bearing component body", namedBody)
+    ]
+
+checkedComponentHeader
+  :: DeclarationKey
+  -> DefinitionRevision
+  -> GrammarV1ComponentDecl
+  -> Either String GrammarV1CheckedComponentHeader
+checkedComponentHeader declarationKey definitionRevision source =
+  case grammarV1CheckedClosedComponentHeader
+      emptyStaticContext declarationKey definitionRevision source of
+    Just (Right (header, [])) -> Right header
+    other -> Left ("expected closed checked component header, got " <> show other)
 
 onlyFunction :: Text.Text -> Either String GrammarV1FunctionDecl
 onlyFunction source = do

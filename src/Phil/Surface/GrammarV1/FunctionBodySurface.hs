@@ -17,18 +17,15 @@ import Phil.Surface.GrammarV1.CallableSignature
   ( GrammarV1CheckedFunctionHeader (..)
   , grammarV1CheckedClosedFunctionHeader
   )
+import Phil.Surface.GrammarV1.ClosedBodySurface
+  ( grammarV1ClosedBoolUnitBlock
+  )
 import Phil.Surface.GrammarV1.Parser
-  ( GrammarV1Block (..)
-  , GrammarV1Expression (..)
-  , GrammarV1FunctionDecl (..)
-  , GrammarV1Statement (..)
+  ( GrammarV1FunctionDecl (..)
   )
 import Phil.Surface.Syntax
-  ( Block (..)
-  , Component (..)
+  ( Component (..)
   , Located (..)
-  , Statement (..)
-  , SurfaceExpression (..)
   )
 
 -- | Checked Grammar-v1 function-body carrier. The already-checked header is
@@ -53,12 +50,11 @@ data GrammarV1FunctionBodySurfaceError
 -- production surface checker rather than introducing a second body checker.
 --
 -- This slice remains deliberately parameter-free so no source term spelling is
--- used as binder authority and SURF-009 stays separate. Every admitted statement
--- is either a return or an expression statement, and every admitted expression is
--- recursively limited to Bool/Unit and parentheses. Source order is preserved
--- exactly. The production checker therefore owns sequencing semantics, including
--- rejection of statements after terminal control and ordinary unrestricted-value
--- discard behavior.
+-- used as binder authority and SURF-009 stays separate. The shared
+-- grammarV1ClosedBoolUnitBlock bridge preserves source order and admits only
+-- Bool/Unit return/expression statements. The production checker therefore owns
+-- sequencing semantics, including rejection after terminal control and ordinary
+-- unrestricted-value discard behavior.
 --
 -- The supplied checked header is re-derived from the same source declaration and
 -- stable declaration/definition identities before body checking, preventing a
@@ -91,7 +87,7 @@ grammarV1CheckedClosedFunctionBody staticContext expectedHeader source = do
           pure (Left (GrammarV1FunctionBodyHeaderMismatch expectedHeader actualHeader))
       | not (null (checkedFunctionParameters actualHeader)) -> Nothing
       | otherwise -> do
-          body <- grammarV1ClosedBody (grammarV1FunctionBody source)
+          body <- grammarV1ClosedBoolUnitBlock (grammarV1FunctionBody source)
           let syntheticComponent = Located
                 (locatedSpan (grammarV1FunctionBody source))
                 (Component
@@ -113,38 +109,6 @@ grammarV1CheckedClosedFunctionBody staticContext expectedHeader source = do
                 , checkedClosedFunctionBodyControls = controls
                 }
               else Left (GrammarV1FunctionBodyResultMismatch expectedResult controls)
-
-grammarV1ClosedBody :: Located GrammarV1Block -> Maybe (Located Block)
-grammarV1ClosedBody (Located blockSpan (GrammarV1Block statements)) = do
-  checked <- mapM grammarV1ClosedStatement statements
-  pure (Located blockSpan (Block checked))
-
-grammarV1ClosedStatement
-  :: Located GrammarV1Statement
-  -> Maybe (Located Statement)
-grammarV1ClosedStatement (Located statementSpan source) =
-  case source of
-    GrammarV1ReturnStatement sourceExpression -> do
-      expression <- grammarV1ClosedExpression sourceExpression
-      pure (Located statementSpan (ReturnStatement expression))
-    GrammarV1ExpressionStatement sourceExpression -> do
-      expression <- grammarV1ClosedExpression sourceExpression
-      pure (Located statementSpan (ExpressionStatement expression))
-    GrammarV1LetStatement {} -> Nothing
-
-grammarV1ClosedExpression
-  :: Located GrammarV1Expression
-  -> Maybe (Located SurfaceExpression)
-grammarV1ClosedExpression (Located expressionSpan source) =
-  case source of
-    GrammarV1BoolExpression value ->
-      Just (Located expressionSpan (BooleanExpression value))
-    GrammarV1UnitExpression ->
-      Just (Located expressionSpan UnitExpression)
-    GrammarV1ParenthesizedExpression inner -> do
-      checked <- grammarV1ClosedExpression inner
-      Just (Located expressionSpan (locatedValue checked))
-    _ -> Nothing
 
 mapLeft :: (a -> b) -> Either a c -> Either b c
 mapLeft f = either (Left . f) Right
