@@ -75,6 +75,7 @@ import Phil.Systems.SubjectCorrespondence
   , SystemsValueRef (..)
   )
 import qualified ResourceJoinKernel as ResourceJoinKernel
+import qualified ResourceLoopKernel as ResourceLoopKernel
 import qualified ResourceScopeKernel as ResourceScopeKernel
 import qualified SystemsControlPreservationKernel as Kernel
 
@@ -413,6 +414,7 @@ checkStateProjection program subjectIndex boundary projection = do
   checkLinearCoverage
   checkResourceJoinKernel
   checkResourceScopeProjectionKernel function
+  checkResourceLoopProjectionKernel
   where
     projectionKey = stateProjectionKey projection
 
@@ -532,6 +534,81 @@ checkStateProjection program subjectIndex boundary projection = do
         Kernel.StateLinearOwnersCoveredDecision ->
           Left (StateProjectionUnaccountedLinearOwners projectionKey unaccounted)
         _ -> kernelInvariant "state-linear-coverage"
+
+    checkResourceLoopProjectionKernel =
+      case stateBoundaryKind boundary of
+        OrdinaryJoinBoundary -> Right ()
+        LoopStateBoundary ->
+          case ResourceLoopKernel.decideLoopProjectionByFacts
+              loopKindMatches
+              resourceJoinAccepted
+              slotDomainExact
+              requirementsExact of
+            ResourceLoopKernel.LoopProjectionAcceptedDecision -> Right ()
+            _ -> resourceLoopKernelInvariant "loop-projection"
+      where
+        loopKindMatches = case stateProjectionKind projection of
+          LoopInitialEntry -> True
+          LoopBackedge -> True
+          OrdinaryJoinPredecessor -> False
+        slotDomainExact =
+          Map.keysSet (stateBoundarySlots boundary)
+            == Map.keysSet (stateProjectionBindings projection)
+        requirementsExact = all bindingMatchesDeclaredRequirement
+          (Map.toAscList (stateBoundarySlots boundary))
+        bindingMatchesDeclaredRequirement (slotKey, slot) =
+          case Map.lookup slotKey (stateProjectionBindings projection) of
+            Nothing -> False
+            Just ref -> modeMatches slot ref && subjectMatches slot ref
+        modeMatches slot ref = case stateSlotMode slot of
+          Unrestricted ->
+            Map.notMember ref (stateProjectionIncomingRestricted projection)
+          expectedMode ->
+            Map.lookup ref (stateProjectionIncomingRestricted projection)
+              == Just expectedMode
+        subjectMatches slot ref = case stateSlotSubjectRequirement slot of
+          AnyStateSubject -> True
+          FixedStateSubject subject ->
+            maybe False (Set.member ref) (Map.lookup subject subjectIndex)
+        resourceJoinAccepted = case ResourceJoinKernel.decideResourceProjectionByFacts
+            allIncomingLinearExactlyOnceBound
+            noInventedLinearOwners
+            allBoundLinearSubjectsAdmissible of
+          ResourceJoinKernel.ResourceProjectionAcceptedDecision -> True
+          _ -> False
+        bindingCounts = Map.fromListWith (+)
+          [ (ref, 1 :: Int)
+          | ref <- Map.elems (stateProjectionBindings projection)
+          ]
+        incomingLinear = Set.fromList
+          [ ref
+          | (ref, mode) <- Map.toAscList
+              (stateProjectionIncomingRestricted projection)
+          , mode == Linear
+          ]
+        linearBindings =
+          [ (slotKey, ref)
+          | (slotKey, ref) <- Map.toAscList
+              (stateProjectionBindings projection)
+          , Just slot <- [Map.lookup slotKey (stateBoundarySlots boundary)]
+          , stateSlotMode slot == Linear
+          ]
+        allIncomingLinearExactlyOnceBound = all
+          (\ref -> Map.findWithDefault 0 ref bindingCounts == 1)
+          (Set.toList incomingLinear)
+        noInventedLinearOwners = all
+          (\(_, ref) ->
+            Map.lookup ref (stateProjectionIncomingRestricted projection)
+              == Just Linear)
+          linearBindings
+        allBoundLinearSubjectsAdmissible = all subjectAdmissible linearBindings
+        subjectAdmissible (slotKey, ref) =
+          case Map.lookup slotKey (stateBoundarySlots boundary) of
+            Nothing -> False
+            Just slot -> case stateSlotSubjectRequirement slot of
+              AnyStateSubject -> True
+              FixedStateSubject subject ->
+                maybe False (Set.member ref) (Map.lookup subject subjectIndex)
 
     checkResourceScopeProjectionKernel function = do
       scopeValues <- mapM (lookupValue projectionKey function) scopedRefs
@@ -803,3 +880,7 @@ kernelInvariant label =
 resourceScopeKernelInvariant :: String -> Either e a
 resourceScopeKernelInvariant label =
   error ("ResourceScopeKernel mismatch: " <> label)
+
+resourceLoopKernelInvariant :: String -> Either e a
+resourceLoopKernelInvariant label =
+  error ("ResourceLoopKernel mismatch: " <> label)
