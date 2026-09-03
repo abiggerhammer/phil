@@ -59,6 +59,102 @@ jobs:
           python3 scripts/derive_phase1_surface_determinacy_certificate.py --write
           python3 scripts/derive_phase1_surface_grammar.py --check
           python3 scripts/derive_phase1_surface_determinacy_certificate.py --check
+      - name: Apply diagnostic first-definedness split
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 - <<'PY'
+          from pathlib import Path
+
+          path = Path('proof/Phil/Surface/GrammarDeterminacyWitnessSoundness.v')
+          source = path.read_text()
+          old = '''Lemma choice_safe_first_defined :
+            forall fuel expression,
+              choice_bodies_nonnullable_fuel fuel expression = true ->
+              exists tokens,
+                first_expression_fuel
+                  fuel
+                  phase1_surface_nullable_facts
+                  phase1_surface_first_facts
+                  expression = Some tokens.
+          Proof.
+            induction fuel as [| fuel IH]; intros expression Hsafe.
+            - simpl in Hsafe. discriminate.
+            - destruct expression as
+                [literal | class_name | name | items | items | body | body].
+              + simpl. eexists. reflexivity.
+              + simpl. eexists. reflexivity.
+              + simpl. eexists. reflexivity.
+              + simpl in Hsafe.
+                eapply choice_safe_first_sequence_defined; eauto.
+              + simpl in Hsafe.
+                eapply choice_safe_first_alternative_defined; eauto.
+              + simpl in Hsafe.
+                apply andb_true_iff in Hsafe as [_ Hbody_safe].
+                exact (IH body Hbody_safe).
+              + simpl in Hsafe.
+                apply andb_true_iff in Hsafe as [_ Hbody_safe].
+                exact (IH body Hbody_safe).
+          Qed.
+          '''
+          new = '''Lemma choice_safe_first_defined_step :
+            forall fuel,
+              (forall expression,
+                choice_bodies_nonnullable_fuel fuel expression = true ->
+                exists tokens,
+                  first_expression_fuel
+                    fuel
+                    phase1_surface_nullable_facts
+                    phase1_surface_first_facts
+                    expression = Some tokens) ->
+              forall expression,
+                choice_bodies_nonnullable_fuel (S fuel) expression = true ->
+                exists tokens,
+                  first_expression_fuel
+                    (S fuel)
+                    phase1_surface_nullable_facts
+                    phase1_surface_first_facts
+                    expression = Some tokens.
+          Proof.
+            intros fuel IH expression Hsafe.
+            destruct expression as
+              [literal | class_name | name | items | items | body | body].
+            - simpl. eexists. reflexivity.
+            - simpl. eexists. reflexivity.
+            - simpl. eexists. reflexivity.
+            - simpl in Hsafe.
+              eapply choice_safe_first_sequence_defined; eauto.
+            - simpl in Hsafe.
+              eapply choice_safe_first_alternative_defined; eauto.
+            - simpl in Hsafe.
+              apply andb_true_iff in Hsafe as [_ Hbody_safe].
+              exact (IH body Hbody_safe).
+            - simpl in Hsafe.
+              apply andb_true_iff in Hsafe as [_ Hbody_safe].
+              exact (IH body Hbody_safe).
+          Qed.
+
+          Lemma choice_safe_first_defined :
+            forall fuel expression,
+              choice_bodies_nonnullable_fuel fuel expression = true ->
+              exists tokens,
+                first_expression_fuel
+                  fuel
+                  phase1_surface_nullable_facts
+                  phase1_surface_first_facts
+                  expression = Some tokens.
+          Proof.
+            induction fuel as [| fuel IH].
+            - intros expression Hsafe.
+              simpl in Hsafe. discriminate.
+            - intros expression Hsafe.
+              eapply choice_safe_first_defined_step; eauto.
+          Qed.
+          '''
+          if old not in source:
+              raise SystemExit('diagnostic replacement target not found')
+          path.write_text(source.replace(old, new, 1))
+          PY
       - name: Compile nullable/FIRST witness soundness bridge
         shell: bash
         run: |
