@@ -4,6 +4,8 @@ on:
   pull_request:
     paths:
       - 'proof/Phil/Assurance/RuntimeCarrier.v'
+      - 'proof/Phil/Assurance/RuntimeCarrierImplementation.v'
+      - 'proof/Phil/Assurance/RuntimeCarrierImplementationExtraction.v'
       - 'proof/Phil/Assurance/EvidenceUse.v'
       - 'proof/Phil/Assurance/Manifest.v'
       - 'proof/Phil/Core/RuntimePrimitiveIdentity.v'
@@ -13,15 +15,25 @@ on:
       - 'src/Phil/Systems/RuntimeCarrierCoverage.hs'
       - 'test/Phase1RuntimeCarrierBindingMain.hs'
       - 'test/Phase1RuntimeCarrierCoverageMain.hs'
+      - 'app/RuntimeCarrierDecisionCorrespondenceMain.hs'
       - 'docs/phase-1/runtime-carrier-proof-v1.md'
+      - 'docs/phase-1/runtime-carrier-implementation-refinement-v1.md'
       - '.github/workflows/phase1-runtime-carrier-proofs.yml'
   push:
     branches: [main]
     paths:
       - 'proof/Phil/Assurance/RuntimeCarrier.v'
+      - 'proof/Phil/Assurance/RuntimeCarrierImplementation.v'
+      - 'proof/Phil/Assurance/RuntimeCarrierImplementationExtraction.v'
       - 'proof/Phil/Core/RuntimePrimitiveIdentity.v'
       - 'proof/Phil/Core/SystemsRuntimeGraph.v'
+      - 'src/Phil/Systems/RuntimeCarrierBinding.hs'
+      - 'src/Phil/Systems/RuntimeCarrierCoverage.hs'
+      - 'test/Phase1RuntimeCarrierBindingMain.hs'
+      - 'test/Phase1RuntimeCarrierCoverageMain.hs'
+      - 'app/RuntimeCarrierDecisionCorrespondenceMain.hs'
       - 'docs/phase-1/runtime-carrier-proof-v1.md'
+      - 'docs/phase-1/runtime-carrier-implementation-refinement-v1.md'
       - '.github/workflows/phase1-runtime-carrier-proofs.yml'
 
 permissions:
@@ -35,7 +47,7 @@ jobs:
       options: --user root
     steps:
       - uses: actions/checkout@v4
-      - name: Compile Certified predecessors and PHIL-ASSURE-CARRIER-001
+      - name: Compile Certified predecessors and Runtime Carrier implementation correspondence
         shell: bash
         run: |
           set -euo pipefail
@@ -46,7 +58,11 @@ jobs:
           rocq c -Q proof/Phil Phil proof/Phil/Core/RuntimePrimitiveIdentity.v
           rocq c -Q proof/Phil Phil proof/Phil/Core/SystemsRuntimeGraph.v
           rocq c -Q proof/Phil Phil proof/Phil/Assurance/RuntimeCarrier.v
-      - name: Record proof identities
+          rocq c -Q proof/Phil Phil proof/Phil/Assurance/RuntimeCarrierImplementation.v
+          rm -f RuntimeCarrierKernel.hs
+          rocq c -Q proof/Phil Phil proof/Phil/Assurance/RuntimeCarrierImplementationExtraction.v
+          test -s RuntimeCarrierKernel.hs
+      - name: Record proof and exact kernel identities
         shell: bash
         run: |
           set -euo pipefail
@@ -54,6 +70,9 @@ jobs:
           cp \
             proof/Phil/Assurance/RuntimeCarrier.v \
             proof/Phil/Assurance/RuntimeCarrier.vo \
+            proof/Phil/Assurance/RuntimeCarrierImplementation.v \
+            proof/Phil/Assurance/RuntimeCarrierImplementation.vo \
+            RuntimeCarrierKernel.hs \
             runtime-carrier-proof/
           sha256sum \
             proof/Phil/Assurance/EvidenceUse.v \
@@ -61,13 +80,21 @@ jobs:
             proof/Phil/Core/SystemsRuntimeGraph.v \
             proof/Phil/Assurance/RuntimeCarrier.v \
             proof/Phil/Assurance/RuntimeCarrier.vo \
-            > runtime-carrier-proof/PHIL-ASSURE-CARRIER-001.proof.sha256
+            proof/Phil/Assurance/RuntimeCarrierImplementation.v \
+            proof/Phil/Assurance/RuntimeCarrierImplementation.vo \
+            RuntimeCarrierKernel.hs \
+            src/Phil/Systems/RuntimeCarrierBinding.hs \
+            src/Phil/Systems/RuntimeCarrierCoverage.hs \
+            test/Phase1RuntimeCarrierBindingMain.hs \
+            test/Phase1RuntimeCarrierCoverageMain.hs \
+            app/RuntimeCarrierDecisionCorrespondenceMain.hs \
+            > runtime-carrier-proof/PHIL-ASSURE-CARRIER-001.implementation.sha256
           {
             echo 'obligation=PHIL-ASSURE-CARRIER-001'
-            echo 'evidence=Rocq-9.2.0'
-            cat runtime-carrier-proof/PHIL-ASSURE-CARRIER-001.proof.sha256
-          } > runtime-carrier-proof/PHIL-ASSURE-CARRIER-001.proof-certificate.txt
-          cat runtime-carrier-proof/PHIL-ASSURE-CARRIER-001.proof-certificate.txt
+            echo 'evidence=Rocq-9.2.0+extraction'
+            cat runtime-carrier-proof/PHIL-ASSURE-CARRIER-001.implementation.sha256
+          } > runtime-carrier-proof/PHIL-ASSURE-CARRIER-001.implementation-certificate.txt
+          cat runtime-carrier-proof/PHIL-ASSURE-CARRIER-001.implementation-certificate.txt
       - uses: actions/upload-artifact@v4
         with:
           name: rocq-runtime-carrier-proof
@@ -85,7 +112,20 @@ jobs:
           cabal-version: 'latest'
       - name: Build ordinary regression substrate
         run: cabal build all --enable-tests
-      - name: Strict typecheck DEP-001 and DEP-002 implementation/corpora
+      - uses: actions/download-artifact@v4
+        with:
+          name: rocq-runtime-carrier-proof
+          path: runtime-carrier-proof
+      - name: Check and execute extracted Runtime Carrier controls
+        run: |
+          set -euo pipefail
+          cp runtime-carrier-proof/RuntimeCarrierKernel.hs .
+          cabal exec -- ghc -i. -Wall -Werror -Wno-unused-imports -fno-code \
+            RuntimeCarrierKernel.hs \
+            app/RuntimeCarrierDecisionCorrespondenceMain.hs
+          cabal exec -- runghc -i. -Wall -Werror -Wno-unused-imports \
+            app/RuntimeCarrierDecisionCorrespondenceMain.hs
+      - name: Strict typecheck unchanged DEP-001 and DEP-002 implementation/corpora
         run: |
           set -euo pipefail
           cabal exec -- ghc -isrc -Wall -Werror -fno-code src/Phil/Systems/RuntimeCarrierBinding.hs
