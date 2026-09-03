@@ -35,6 +35,7 @@ on:
       - 'test/Phase1GrammarV1CheckedRecordFieldsMain.hs'
       - 'test/Phase1GrammarV1CheckedDataVariantsMain.hs'
       - 'test/Phase1GrammarV1CheckedDataModeCompositionMain.hs'
+      - 'test/Phase1GrammarV1NamedTypeModeMain.hs'
       - 'test/Phase1GrammarV1SessionExpressionsMain.hs'
       - 'test/Phase1GrammarV1ProtocolRoleTemplatesMain.hs'
       - 'test/Phase1GrammarV1DeterminacyMain.hs'
@@ -81,6 +82,7 @@ on:
       - 'test/Phase1GrammarV1CheckedRecordFieldsMain.hs'
       - 'test/Phase1GrammarV1CheckedDataVariantsMain.hs'
       - 'test/Phase1GrammarV1CheckedDataModeCompositionMain.hs'
+      - 'test/Phase1GrammarV1NamedTypeModeMain.hs'
       - 'test/Phase1GrammarV1SessionExpressionsMain.hs'
       - 'test/Phase1GrammarV1ProtocolRoleTemplatesMain.hs'
       - 'test/Phase1GrammarV1DeterminacyMain.hs'
@@ -200,6 +202,9 @@ jobs:
 
       - name: Check Grammar-v1 checked data-mode composition
         run: cabal exec -- runghc -Wall -Werror -isrc test/Phase1GrammarV1CheckedDataModeCompositionMain.hs
+
+      - name: Check Grammar-v1 named type-mode resolution
+        run: cabal exec -- runghc -Wall -Werror -isrc test/Phase1GrammarV1NamedTypeModeMain.hs
 
       - name: Check Grammar-v1 session expression parsing
         run: cabal exec -- runghc -Wall -Werror -isrc test/Phase1GrammarV1SessionExpressionsMain.hs
