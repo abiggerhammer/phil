@@ -1,5 +1,5 @@
 From Stdlib Require Import Bool.Bool.
-From Phil.Core Require Import CallableModeStrengthening.
+From Phil.Core Require Import CallableMode CallableModeStrengthening.
 
 (*
   Executable implementation correspondence for PHIL-CALL-MODE-STRENGTHEN-001.
