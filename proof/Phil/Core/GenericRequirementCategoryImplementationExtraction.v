@@ -1,5 +1,7 @@
 From Corelib Require Extraction.
-From Phil.Core Require Import GenericRequirementCategoryImplementation.
+From Phil.Core Require Import
+  GenericRequirementCategory
+  GenericRequirementCategoryImplementation.
 
 Extraction Language Haskell.
 
