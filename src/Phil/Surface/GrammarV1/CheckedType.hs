@@ -193,7 +193,10 @@ grammarV1CheckedTypeModeWithNamedResolutions
           ))
       Nothing -> do
         sourceReference <- namedTypeReference sourceType
-        pure $ fmap (, steps) (resolveNamedTypeMode sourceReference ty resolutions)
+        pure $
+          fmap
+            (\resolved -> (resolved, steps))
+            (resolveNamedTypeMode sourceReference ty resolutions)
 
 namedTypeReference :: GrammarV1Type -> Maybe GenericStaticActual
 namedTypeReference sourceType = case sourceType of
