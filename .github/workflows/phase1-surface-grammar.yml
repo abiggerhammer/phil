@@ -22,6 +22,7 @@ on:
       - 'test/Phase1GrammarV1ClosureMain.hs'
       - 'test/Phase1GrammarV1RejectMain.hs'
       - 'test/Phase1GrammarV1BoundaryStaticReferenceMain.hs'
+      - 'test/Phase1GrammarV1CheckedBoundaryValueTypeMain.hs'
       - 'test/Phase1GrammarV1BoundaryCanonicalityMain.hs'
       - 'test/Phase1GrammarV1BoundaryCodecReferenceElaborationMain.hs'
       - 'test/Phase1GrammarV1StaticProcessNetworkMain.hs'
@@ -61,6 +62,7 @@ on:
       - 'test/Phase1GrammarV1ClosureMain.hs'
       - 'test/Phase1GrammarV1RejectMain.hs'
       - 'test/Phase1GrammarV1BoundaryStaticReferenceMain.hs'
+      - 'test/Phase1GrammarV1CheckedBoundaryValueTypeMain.hs'
       - 'test/Phase1GrammarV1BoundaryCanonicalityMain.hs'
       - 'test/Phase1GrammarV1BoundaryCodecReferenceElaborationMain.hs'
       - 'test/Phase1GrammarV1StaticProcessNetworkMain.hs'
@@ -147,6 +149,9 @@ jobs:
 
       - name: Check Grammar-v1 boundary static-reference parsing
         run: cabal exec -- runghc -Wall -Werror -isrc test/Phase1GrammarV1BoundaryStaticReferenceMain.hs
+
+      - name: Check Grammar-v1 checked boundary value-type routing
+        run: cabal exec -- runghc -Wall -Werror -isrc test/Phase1GrammarV1CheckedBoundaryValueTypeMain.hs
 
       - name: Check Grammar-v1 boundary canonicality routing
         run: cabal exec -- runghc -Wall -Werror -isrc test/Phase1GrammarV1BoundaryCanonicalityMain.hs
