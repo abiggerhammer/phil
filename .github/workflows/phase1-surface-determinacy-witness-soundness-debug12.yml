@@ -1,0 +1,115 @@
+name: Phase 1 Surface Determinacy Witness Soundness Debug 12
+
+on:
+  pull_request:
+
+permissions:
+  contents: read
+
+jobs:
+  rocq-witness-soundness-debug12:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    container:
+      image: rocq/rocq-prover:9.2.0
+      options: --user root
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Derive exact Grammar-v1 inputs
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 scripts/derive_phase1_surface_grammar.py --write
+          python3 scripts/derive_phase1_surface_determinacy_certificate.py --write
+
+      - name: Apply concrete chain with direct fuel-one base cases
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 - <<'PY'
+          from pathlib import Path
+          import re
+          import textwrap
+
+          workflow = Path('.github/workflows/phase1-surface-determinacy-witness-soundness-debug11.yml').read_text()
+          marker = workflow.index('- name: Apply concrete fuel-step diagnostic with surviving call-site rewrites')
+          start = workflow.index('          from pathlib import Path', marker)
+          end = workflow.index('\n          PY', start)
+          code = textwrap.dedent(workflow[start:end])
+          exec(compile(code, '<existing-debug11-diagnostics>', 'exec'), {})
+
+          path = Path('proof/Phil/Surface/GrammarDeterminacyWitnessSoundness.v')
+          source = path.read_text()
+
+          safety_start = source.index('Lemma choice_bodies_nonnullable_fuel_succ_1 :')
+          safety_end = source.index('\nLemma choice_bodies_nonnullable_fuel_succ_2 :', safety_start)
+          safety = r'''Lemma choice_bodies_nonnullable_fuel_succ_1 :
+            forall expression,
+              choice_bodies_nonnullable_fuel 1 expression = true ->
+              choice_bodies_nonnullable_fuel 2 expression = true.
+          Proof.
+            intros expression Hsafe.
+            destruct expression as
+              [literal | class_name | name | items | items | body | body].
+            - reflexivity.
+            - reflexivity.
+            - reflexivity.
+            - destruct items as [| item rest]; simpl in Hsafe |- *.
+              + reflexivity.
+              + discriminate.
+            - destruct items as [| item rest]; simpl in Hsafe |- *.
+              + reflexivity.
+              + discriminate.
+            - simpl in Hsafe. discriminate.
+            - simpl in Hsafe. discriminate.
+          Qed.
+          '''
+          source = source[:safety_start] + safety + source[safety_end:]
+
+          nullable_start = source.index('Lemma nullable_expression_fuel_succ_1 :')
+          nullable_end = source.index('\nLemma nullable_expression_fuel_succ_2 :', nullable_start)
+          nullable = r'''Lemma nullable_expression_fuel_succ_1 :
+            forall expression value,
+              nullable_expression_fuel
+                1 phase1_surface_nullable_facts expression = Some value ->
+              nullable_expression_fuel
+                2 phase1_surface_nullable_facts expression = Some value.
+          Proof.
+            intros expression value Heval.
+            destruct expression as
+              [literal | class_name | name | items | items | body | body].
+            - simpl in Heval |- *. exact Heval.
+            - simpl in Heval |- *. exact Heval.
+            - simpl in Heval |- *. exact Heval.
+            - destruct items as [| item rest]; simpl in Heval |- *.
+              + exact Heval.
+              + discriminate.
+            - destruct items as [| item rest]; simpl in Heval |- *.
+              + exact Heval.
+              + discriminate.
+            - simpl in Heval |- *. exact Heval.
+            - simpl in Heval |- *. exact Heval.
+          Qed.
+          '''
+          source = source[:nullable_start] + nullable + source[nullable_end:]
+          path.write_text(source)
+          PY
+
+      - name: Compile witness soundness with timing
+        shell: bash
+        run: |
+          set -euo pipefail
+          export PATH="/home/rocq/.opam/${COMPILER}/bin:$PATH"
+          rocq c -Q proof/Phil Phil proof/Phil/Surface/Grammar.v
+          rocq c -Q proof/Phil Phil proof/Phil/Surface/GrammarDerivation.v
+          rocq c -Q proof/Phil Phil proof/Phil/Surface/GrammarDerivationOracle.v
+          rocq c -Q proof/Phil Phil proof/Phil/Surface/GrammarDeterminacyCertificate.v
+          rocq c -Q proof/Phil Phil proof/Phil/Surface/GrammarDeterminacyNullableFirst.v
+          rocq c -Q proof/Phil Phil proof/Phil/Surface/GrammarDeterminacyFollowOverlap.v
+          rocq c -Q proof/Phil Phil proof/Phil/Surface/GrammarDeterminacySimpleResolvers.v
+          rocq c -Q proof/Phil Phil proof/Phil/Surface/GrammarDeterminacyStructuralResolvers.v
+          rocq c -Q proof/Phil Phil proof/Phil/Surface/GrammarDeterminacyPredictiveOracle.v
+          rocq c -Q proof/Phil Phil proof/Phil/Surface/GrammarDerivationLookahead.v
+          timeout 300s rocq c -time -Q proof/Phil Phil \
+            proof/Phil/Surface/GrammarDeterminacyWitnessSoundness.v
