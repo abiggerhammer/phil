@@ -1,0 +1,111 @@
+name: Phase 1 Resource Invariant Production Binding
+
+on:
+  pull_request:
+    paths:
+      - 'generated/ResourceInvariantKernel.hs'
+      - 'src/ResourceInvariantKernel.hs'
+      - 'src/Phil/Systems/ControlStateInvariant.hs'
+      - 'phil-core.cabal'
+      - 'proof/Phil/Core/ResourceInvariant.v'
+      - 'proof/Phil/Core/ResourceInvariantImplementation.v'
+      - 'proof/Phil/Core/ResourceInvariantImplementationExtraction.v'
+      - 'app/ResourceInvariantDecisionCorrespondenceMain.hs'
+      - 'test/Phase1JoinLoopInvariantMain.hs'
+      - 'docs/phase-1/resource-invariant-production-binding-v1.md'
+      - '.github/workflows/phase1-resource-invariant-production-binding.yml'
+
+permissions:
+  contents: read
+
+jobs:
+  exact-resource-invariant-kernel:
+    runs-on: ubuntu-latest
+    container:
+      image: rocq/rocq-prover:9.2.0
+      options: --user root
+    steps:
+      - uses: actions/checkout@v4
+      - name: Fresh-extract exact Resource Invariant kernel
+        shell: bash
+        run: |
+          set -euo pipefail
+          export PATH="/home/rocq/.opam/${COMPILER}/bin:$PATH"
+          rocq c -Q proof/Phil Phil proof/Phil/Core/Syntax.v
+          rocq c -Q proof/Phil Phil proof/Phil/Core/Context.v
+          rocq c -Q proof/Phil Phil proof/Phil/Core/ContextJoin.v
+          rocq c -Q proof/Phil Phil proof/Phil/Core/ProcessJoin.v
+          rocq c -Q proof/Phil Phil proof/Phil/Core/ResourceJoin.v
+          rocq c -Q proof/Phil Phil proof/Phil/Core/ResourceLoop.v
+          rocq c -Q proof/Phil Phil proof/Phil/Core/ResourceObligation.v
+          rocq c -Q proof/Phil Phil proof/Phil/Core/ResourceInvariant.v
+          rocq c -Q proof/Phil Phil proof/Phil/Core/ResourceInvariantImplementation.v
+          rm -f ResourceInvariantKernel.hs
+          rocq c -Q proof/Phil Phil proof/Phil/Core/ResourceInvariantImplementationExtraction.v
+          test -s ResourceInvariantKernel.hs
+          echo '7e723862de80652cbe34879d857db54874ff45d4d902173db93e0fe772065079  ResourceInvariantKernel.hs' | sha256sum -c -
+          cmp ResourceInvariantKernel.hs generated/ResourceInvariantKernel.hs
+          cmp ResourceInvariantKernel.hs src/ResourceInvariantKernel.hs
+      - name: Record exact kernel identities
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p resource-invariant-exact-kernel
+          cp ResourceInvariantKernel.hs resource-invariant-exact-kernel/
+          sha256sum \
+            ResourceInvariantKernel.hs \
+            generated/ResourceInvariantKernel.hs \
+            src/ResourceInvariantKernel.hs \
+            proof/Phil/Core/ResourceInvariant.v \
+            proof/Phil/Core/ResourceInvariantImplementation.v \
+            proof/Phil/Core/ResourceInvariantImplementationExtraction.v \
+            > resource-invariant-exact-kernel/PHIL-RES-INVARIANT-001.exact-kernel.sha256
+          cat resource-invariant-exact-kernel/PHIL-RES-INVARIANT-001.exact-kernel.sha256
+      - uses: actions/upload-artifact@v4
+        with:
+          name: resource-invariant-exact-kernel
+          path: resource-invariant-exact-kernel
+          if-no-files-found: error
+
+  verify-resource-invariant-production-binding:
+    needs: exact-resource-invariant-kernel
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: haskell-actions/setup@v2
+        with:
+          ghc-version: '9.6.7'
+          cabal-version: 'latest'
+      - name: Build production library with warnings as errors
+        run: cabal build lib:phil-core --ghc-options=-Werror
+      - name: Strict-typecheck bound Resource Invariant surface
+        run: |
+          set -euo pipefail
+          cabal exec -- ghc -isrc -Wall -Werror -fno-code src/ResourceInvariantKernel.hs
+          cabal exec -- ghc -isrc -Wall -Werror -fno-code src/Phil/Systems/ControlStateProjection.hs
+          cabal exec -- ghc -isrc -Wall -Werror -fno-code src/Phil/Systems/ControlStateInvariant.hs
+          cabal exec -- ghc -isrc -Wall -Werror -fno-code app/ResourceInvariantDecisionCorrespondenceMain.hs
+      - name: Execute 5 direct controls through production kernel
+        run: cabal exec -- runghc -isrc app/ResourceInvariantDecisionCorrespondenceMain.hs
+      - name: Re-run unchanged RES-013 correspondence corpus
+        run: cabal exec -- runghc -Wall -Werror -isrc test/Phase1JoinLoopInvariantMain.hs
+      - name: Record production-binding identities
+        run: |
+          set -euo pipefail
+          mkdir -p resource-invariant-production-binding
+          sha256sum \
+            generated/ResourceInvariantKernel.hs \
+            src/ResourceInvariantKernel.hs \
+            src/Phil/Systems/ControlStateInvariant.hs \
+            phil-core.cabal \
+            app/ResourceInvariantDecisionCorrespondenceMain.hs \
+            test/Phase1JoinLoopInvariantMain.hs \
+            docs/phase-1/resource-invariant-implementation-refinement-v1.md \
+            docs/phase-1/resource-invariant-production-binding-v1.md \
+            > resource-invariant-production-binding/PHIL-RES-INVARIANT-001.production-binding.sha256
+          cat resource-invariant-production-binding/PHIL-RES-INVARIANT-001.production-binding.sha256
+      - uses: actions/upload-artifact@v4
+        with:
+          name: resource-invariant-production-binding
+          path: resource-invariant-production-binding
+          if-no-files-found: error
