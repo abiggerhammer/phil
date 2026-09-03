@@ -45,7 +45,7 @@ permissions:
 jobs:
   rocq-witness-soundness:
     runs-on: ubuntu-latest
-    timeout-minutes: 30
+    timeout-minutes: 15
     container:
       image: rocq/rocq-prover:9.2.0
       options: --user root
@@ -64,17 +64,26 @@ jobs:
         run: |
           set -euo pipefail
           export PATH="/home/rocq/.opam/${COMPILER}/bin:$PATH"
-          rocq c -Q proof/Phil Phil proof/Phil/Surface/Grammar.v
-          rocq c -Q proof/Phil Phil proof/Phil/Surface/GrammarDerivation.v
-          rocq c -Q proof/Phil Phil proof/Phil/Surface/GrammarDerivationOracle.v
-          rocq c -Q proof/Phil Phil proof/Phil/Surface/GrammarDeterminacyCertificate.v
-          rocq c -Q proof/Phil Phil proof/Phil/Surface/GrammarDeterminacyNullableFirst.v
-          rocq c -Q proof/Phil Phil proof/Phil/Surface/GrammarDeterminacyFollowOverlap.v
-          rocq c -Q proof/Phil Phil proof/Phil/Surface/GrammarDeterminacySimpleResolvers.v
-          rocq c -Q proof/Phil Phil proof/Phil/Surface/GrammarDeterminacyStructuralResolvers.v
-          rocq c -Q proof/Phil Phil proof/Phil/Surface/GrammarDeterminacyPredictiveOracle.v
-          rocq c -Q proof/Phil Phil proof/Phil/Surface/GrammarDerivationLookahead.v
-          rocq c -Q proof/Phil Phil proof/Phil/Surface/GrammarDeterminacyWitnessSoundness.v
+          compile() {
+            file="$1"
+            echo "=== compiling ${file} at $(date -u +%FT%TZ) ==="
+            rocq c -Q proof/Phil Phil "${file}"
+            echo "=== finished ${file} at $(date -u +%FT%TZ) ==="
+          }
+          compile proof/Phil/Surface/Grammar.v
+          compile proof/Phil/Surface/GrammarDerivation.v
+          compile proof/Phil/Surface/GrammarDerivationOracle.v
+          compile proof/Phil/Surface/GrammarDeterminacyCertificate.v
+          compile proof/Phil/Surface/GrammarDeterminacyNullableFirst.v
+          compile proof/Phil/Surface/GrammarDeterminacyFollowOverlap.v
+          compile proof/Phil/Surface/GrammarDeterminacySimpleResolvers.v
+          compile proof/Phil/Surface/GrammarDeterminacyStructuralResolvers.v
+          compile proof/Phil/Surface/GrammarDeterminacyPredictiveOracle.v
+          compile proof/Phil/Surface/GrammarDerivationLookahead.v
+          echo "=== timing GrammarDeterminacyWitnessSoundness.v at $(date -u +%FT%TZ) ==="
+          timeout 300s rocq c -time -Q proof/Phil Phil \
+            proof/Phil/Surface/GrammarDeterminacyWitnessSoundness.v
+          echo "=== finished GrammarDeterminacyWitnessSoundness.v at $(date -u +%FT%TZ) ==="
       - name: Record witness-soundness proof identities
         shell: bash
         run: |
