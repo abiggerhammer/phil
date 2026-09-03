@@ -3,7 +3,24 @@
 module Main (main) where
 
 import qualified Data.Text as Text
+import Phil.Core.Focusing (FocusingError (..))
+import Phil.Core.Generic.StaticActual
+  ( GenericStaticActual (..)
+  )
+import Phil.Core.ProviderQualification
+  ( ProviderOperationKey (..)
+  )
+import Phil.Core.Static
+  ( DeclarationKey (..)
+  , InterfaceRevision (..)
+  , emptyStaticContext
+  )
+import Phil.Core.Syntax (Proposition (..))
 import Phil.Surface.GrammarV1.Parser
+import Phil.Surface.GrammarV1.ProviderContractSurface
+  ( GrammarV1CheckedProviderContractSurface (..)
+  , grammarV1CheckedClosedProviderContractSurface
+  )
 import Phil.Surface.Syntax (Located (..))
 import System.Exit (exitFailure)
 
@@ -17,6 +34,14 @@ main = do
         expectReject "provider implementation P satisfies C { operation op C {} }"
     , test "SURF-002 opaque provider implementation rejects a body" $
         expectReject "opaque provider implementation P satisfies C {}"
+    , test "SURF-008 closed provider contract surface preserves stable identity, operation references, laws, and lifecycle"
+        closedProviderContractSurface
+    , test "SURF-008 provider contract proposition Core failures remain distinct from source non-competence"
+        providerContractCoreFailure
+    , test "SURF-008 provider operation duplicate spelling remains visible before competent contract construction"
+        providerContractDuplicateOperationVisibility
+    , test "SURF-008 generic, specialized, structured, and unresolved provider contract forms remain fail-closed"
+        providerContractCompetenceBoundaries
     ]
   if and results then pure () else exitFailure
 
@@ -55,6 +80,139 @@ providerFamilyPreserved = do
       , "}"
       , "opaque provider implementation RemoteStore satisfies Store[U32];"
       ]
+
+closedProviderContractSurface :: Either String ()
+closedProviderContractSurface = do
+  provider <- onlyProviderContract $ Text.unlines
+    [ "provider Store {"
+    , "  operation read : api.Reader;"
+    , "  law coherent : true;"
+    , "  operation write : Writer;"
+    , "  lifecycle alive : false;"
+    , "}"
+    ]
+  renamed <- onlyProviderContract $ Text.unlines
+    [ "provider RenamedPresentation {"
+    , "  operation read : api.Reader;"
+    , "  law coherent : true;"
+    , "  operation write : Writer;"
+    , "  lifecycle alive : false;"
+    , "}"
+    ]
+  let declarationKey = DeclarationKey "provider.stable.store"
+      interfaceRevision = InterfaceRevision "provider.interface.v1"
+      expected = GrammarV1CheckedProviderContractSurface
+        { checkedProviderDeclarationKey = declarationKey
+        , checkedProviderInterfaceRevision = interfaceRevision
+        , checkedProviderOperationReferences =
+            [ (ProviderOperationKey "read", ReferencedGenericStaticActual "api.Reader")
+            , (ProviderOperationKey "write", ReferencedGenericStaticActual "Writer")
+            ]
+        , checkedProviderLaws = [("coherent", Truth, [])]
+        , checkedProviderLifecycle = [("alive", Falsehood, [])]
+        }
+  assert
+    ( grammarV1CheckedClosedProviderContractSurface
+        emptyStaticContext
+        declarationKey
+        interfaceRevision
+        provider
+        == Just (Right expected)
+    )
+    "closed provider contract surface did not preserve exact semantic categories"
+  assert
+    ( grammarV1CheckedClosedProviderContractSurface
+        emptyStaticContext
+        declarationKey
+        interfaceRevision
+        renamed
+        == Just (Right expected)
+    )
+    "provider display-name change leaked into stable declaration/interface identity"
+
+providerContractCoreFailure :: Either String ()
+providerContractCoreFailure = do
+  provider <- onlyProviderContract $ Text.unlines
+    [ "provider BadClaim {"
+    , "  operation read : Reader;"
+    , "  law bad : Missing();"
+    , "}"
+    ]
+  let declarationKey = DeclarationKey "provider.stable.bad-claim"
+      interfaceRevision = InterfaceRevision "provider.interface.bad-claim"
+  assert
+    ( grammarV1CheckedClosedProviderContractSurface
+        emptyStaticContext
+        declarationKey
+        interfaceRevision
+        provider
+        == Just (Left (UnknownClaim "Missing"))
+    )
+    "provider law Core UnknownClaim collapsed into source non-competence"
+
+providerContractDuplicateOperationVisibility :: Either String ()
+providerContractDuplicateOperationVisibility = do
+  provider <- onlyProviderContract $ Text.unlines
+    [ "provider Duplicate {"
+    , "  operation access : Reader;"
+    , "  operation access : Writer;"
+    , "}"
+    ]
+  let declarationKey = DeclarationKey "provider.stable.duplicate"
+      interfaceRevision = InterfaceRevision "provider.interface.duplicate"
+  case grammarV1CheckedClosedProviderContractSurface
+      emptyStaticContext declarationKey interfaceRevision provider of
+    Just (Right checked) ->
+      assert
+        ( checkedProviderOperationReferences checked
+            == [ (ProviderOperationKey "access", ReferencedGenericStaticActual "Reader")
+               , (ProviderOperationKey "access", ReferencedGenericStaticActual "Writer")
+               ]
+        )
+        "provider operation duplicate spelling was normalized before competent uniqueness checking"
+    other -> Left ("duplicate operation visibility changed unexpectedly: " <> show other)
+
+providerContractCompetenceBoundaries :: Either String ()
+providerContractCompetenceBoundaries = do
+  specialized <- onlyProviderContract
+    "provider Specialized { operation read : Reader[U8]; }"
+  structured <- onlyProviderContract
+    "provider Structured { operation read : U8; }"
+  generic <- onlyProviderContract
+    "provider Generic[T : Type] { operation read : Reader; }"
+  required <- onlyProviderContract
+    "provider Required requires { proposition true; } { operation read : Reader; }"
+  unresolved <- onlyProviderContract $ Text.unlines
+    [ "provider Unresolved {"
+    , "  operation read : Reader;"
+    , "  lifecycle indexed : n == 0;"
+    , "}"
+    ]
+  let declarationKey = DeclarationKey "provider.stable.boundary"
+      interfaceRevision = InterfaceRevision "provider.interface.boundary"
+      project = grammarV1CheckedClosedProviderContractSurface
+        emptyStaticContext declarationKey interfaceRevision
+  assert (project specialized == Nothing)
+    "specialized provider operation callable reference was flattened to its base spelling"
+  assert (project structured == Nothing)
+    "structured provider operation type was reinterpreted as a callable contract reference"
+  assert (project generic == Nothing)
+    "generic provider contract escaped the closed-provider competence wall"
+  assert (project required == Nothing)
+    "requirement-bearing provider contract escaped the closed-provider competence wall"
+  assert (project unresolved == Nothing)
+    "free provider lifecycle proposition acquired an invented top-level binding"
+
+onlyProviderContract :: Text.Text -> Either String GrammarV1ProviderContractDecl
+onlyProviderContract source = do
+  sourceFile <- mapLeft show $
+    parseGrammarV1StructuralSource "checked-provider-contract" source
+  case grammarV1TopLevelDecls sourceFile of
+    [Located _ topLevel] -> case locatedValue (grammarV1Declaration topLevel) of
+      GrammarV1ProviderContractDeclaration provider -> Right provider
+      other -> Left ("expected provider contract declaration, got " <> show other)
+    declarations -> Left
+      ("expected one provider contract declaration, got " <> show (length declarations))
 
 checkContract :: GrammarV1ProviderContractDecl -> Either String ()
 checkContract contractDecl = do
