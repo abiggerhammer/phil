@@ -66,6 +66,7 @@ library
       SystemsIdentityKernel
       ResourceJoinKernel
       ResourceLoopKernel
+      ResourceObligationKernel
       ResourceScopeKernel
       Phil.Surface.Check.Types
       Phil.Surface.Check.Support

@@ -49,6 +49,7 @@ import Phil.Core.Static
   , canonicalSemanticForm
   )
 import Phil.Core.Syntax (Control (..), Outcome, Ty)
+import qualified ResourceObligationKernel as ResourceObligationKernel
 
 data FlowPath = FlowPath
   { pathControl :: Control
@@ -109,7 +110,29 @@ joinBranches flows = do
       [] -> pure Nothing
       _ -> Just <$> mapLeft BranchJoinError
         (joinContinuing (map (resourceContext . pathState) continuingPaths))
-  pure (ProcessFlow (map (normalizeContinue joinedContext) paths))
+  let normalizedPaths = map (normalizeContinue joinedContext) paths
+  pure (ProcessFlow (zipWith checkObligationReconvergence paths normalizedPaths))
+
+checkObligationReconvergence :: FlowPath -> FlowPath -> FlowPath
+checkObligationReconvergence before after
+  | pathControl before /= Continue = after
+  | all obligationPreserved obligationIds = after
+  | otherwise = resourceObligationKernelInvariant
+  where
+    beforeObligations = residualObligations (pathState before)
+    afterObligations = residualObligations (pathState after)
+    obligationIds = Set.toList
+      (Map.keysSet beforeObligations `Set.union` Map.keysSet afterObligations)
+    obligationPreserved obligationId =
+      case ResourceObligationKernel.decidePendingObligationReconvergenceByFacts
+          (Map.member obligationId beforeObligations)
+          (Map.member obligationId afterObligations) of
+        ResourceObligationKernel.PendingObligationAcceptedDecision -> True
+        ResourceObligationKernel.PendingObligationLostDecision -> False
+
+resourceObligationKernelInvariant :: a
+resourceObligationKernelInvariant =
+  error "ResourceObligationKernel mismatch: continuing-path obligation lost at reconvergence"
 
 normalizeContinue :: Maybe ResourceContext -> FlowPath -> FlowPath
 normalizeContinue joinedContext path =
