@@ -40,13 +40,56 @@ Definition decideExplicitClosureModeByFacts
     else ExplicitClosureModeMissingJustificationDecision
   else ExplicitClosureModeWeakeningDecision.
 
+Definition explicitClosureModeDecisionAcceptsBool
+  (decision : ExplicitClosureModeDecision) : bool :=
+  match decision with
+  | ExplicitClosureModeEqualDecision => true
+  | ExplicitClosureModeStrengthenedDecision => true
+  | _ => false
+  end.
+
+Definition explicitClosureModeFacts
+  (nonWeakening
+   equalToMinimum
+   justificationPresent
+   targetImplementationReason
+   contractMatches
+   detailPresent : bool) : bool :=
+  andb nonWeakening
+    (orb equalToMinimum
+      (andb justificationPresent
+        (andb (negb targetImplementationReason)
+          (andb contractMatches detailPresent)))).
+
+Theorem explicit_closure_mode_decision_computes_facts :
+  forall nonWeakening equalToMinimum justificationPresent
+         targetImplementationReason contractMatches detailPresent,
+    explicitClosureModeDecisionAcceptsBool
+      (decideExplicitClosureModeByFacts
+        nonWeakening
+        equalToMinimum
+        justificationPresent
+        targetImplementationReason
+        contractMatches
+        detailPresent) =
+    explicitClosureModeFacts
+      nonWeakening
+      equalToMinimum
+      justificationPresent
+      targetImplementationReason
+      contractMatches
+      detailPresent.
+Proof.
+  intros nonWeakening equalToMinimum justificationPresent
+    targetImplementationReason contractMatches detailPresent.
+  destruct nonWeakening, equalToMinimum, justificationPresent,
+    targetImplementationReason, contractMatches, detailPresent;
+    reflexivity.
+Qed.
+
 Definition ExplicitClosureModeDecisionAccepts
   (decision : ExplicitClosureModeDecision) : Prop :=
-  match decision with
-  | ExplicitClosureModeEqualDecision => True
-  | ExplicitClosureModeStrengthenedDecision => True
-  | _ => False
-  end.
+  explicitClosureModeDecisionAcceptsBool decision = true.
 
 Theorem explicit_closure_mode_decision_accept_iff_facts :
   forall nonWeakening equalToMinimum justificationPresent
@@ -59,31 +102,56 @@ Theorem explicit_closure_mode_decision_accept_iff_facts :
         targetImplementationReason
         contractMatches
         detailPresent) <->
-    nonWeakening = true /\
-    (equalToMinimum = true \/
-      (justificationPresent = true /\
-       targetImplementationReason = false /\
-       contractMatches = true /\
-       detailPresent = true)).
+    explicitClosureModeFacts
+      nonWeakening
+      equalToMinimum
+      justificationPresent
+      targetImplementationReason
+      contractMatches
+      detailPresent = true.
 Proof.
   intros nonWeakening equalToMinimum justificationPresent
     targetImplementationReason contractMatches detailPresent.
-  destruct nonWeakening, equalToMinimum, justificationPresent,
-    targetImplementationReason, contractMatches, detailPresent;
-    simpl; intuition.
+  unfold ExplicitClosureModeDecisionAccepts.
+  rewrite explicit_closure_mode_decision_computes_facts.
+  reflexivity.
+Qed.
+
+Theorem constructed_explicit_closure_mode_valid_iff_semantic_core :
+  forall contractRevision captureMinimum declared justification,
+    ClosureModeDeclarationValid
+      contractRevision
+      captureMinimum
+      (ExplicitClosureMode declared justification)
+      (mkCheckedClosureMode captureMinimum declared justification) <->
+    modeLe captureMinimum declared = true /\
+    (declared = captureMinimum \/
+     SemanticStrengtheningJustification contractRevision justification).
+Proof.
+  intros contractRevision captureMinimum declared justification.
+  unfold ClosureModeDeclarationValid.
+  simpl.
+  split.
+  - intros [_ [_ [_ Hcore]]].
+    exact Hcore.
+  - intros [HnonWeakening Hreason].
+    repeat split; try reflexivity; assumption.
 Qed.
 
 Theorem explicit_closure_mode_decision_accept_iff_certified :
   forall contractRevision captureMinimum declared justification
          nonWeakening equalToMinimum justificationPresent
          targetImplementationReason contractMatches detailPresent,
-    (nonWeakening = true <-> modeLe captureMinimum declared = true) ->
-    (equalToMinimum = true <-> declared = captureMinimum) ->
-    (justificationPresent = true /\
-     targetImplementationReason = false /\
-     contractMatches = true /\
-     detailPresent = true <->
-       SemanticStrengtheningJustification contractRevision justification) ->
+    (explicitClosureModeFacts
+       nonWeakening
+       equalToMinimum
+       justificationPresent
+       targetImplementationReason
+       contractMatches
+       detailPresent = true <->
+      modeLe captureMinimum declared = true /\
+      (declared = captureMinimum \/
+       SemanticStrengtheningJustification contractRevision justification)) ->
     ExplicitClosureModeDecisionAccepts
       (decideExplicitClosureModeByFacts
         nonWeakening
@@ -100,13 +168,10 @@ Theorem explicit_closure_mode_decision_accept_iff_certified :
 Proof.
   intros contractRevision captureMinimum declared justification
     nonWeakening equalToMinimum justificationPresent
-    targetImplementationReason contractMatches detailPresent
-    HnonWeakening Hequal Hsemantic.
+    targetImplementationReason contractMatches detailPresent Hreflection.
   rewrite explicit_closure_mode_decision_accept_iff_facts.
-  unfold ClosureModeDeclarationValid.
-  simpl.
-  rewrite HnonWeakening, Hequal, Hsemantic.
-  reflexivity.
+  rewrite constructed_explicit_closure_mode_valid_iff_semantic_core.
+  exact Hreflection.
 Qed.
 
 Inductive CheckedClosureModeShapeDecision : Type :=
@@ -126,25 +191,46 @@ Definition decideCheckedClosureModeShapeByFacts
     else CheckedClosureModeSelectedDecision
   else CheckedClosureModeMinimumDecision.
 
+Definition checkedClosureModeShapeDecisionAcceptsBool
+  (decision : CheckedClosureModeShapeDecision) : bool :=
+  match decision with
+  | CheckedClosureModeShapeAcceptedDecision => true
+  | _ => false
+  end.
+
+Definition checkedClosureModeShapeFacts
+  (minimumExact selectedExact justificationExact : bool) : bool :=
+  andb minimumExact (andb selectedExact justificationExact).
+
+Theorem checked_closure_mode_shape_decision_computes_facts :
+  forall minimumExact selectedExact justificationExact,
+    checkedClosureModeShapeDecisionAcceptsBool
+      (decideCheckedClosureModeShapeByFacts
+        minimumExact selectedExact justificationExact) =
+    checkedClosureModeShapeFacts
+      minimumExact selectedExact justificationExact.
+Proof.
+  intros minimumExact selectedExact justificationExact.
+  destruct minimumExact, selectedExact, justificationExact;
+    reflexivity.
+Qed.
+
 Definition CheckedClosureModeShapeDecisionAccepts
   (decision : CheckedClosureModeShapeDecision) : Prop :=
-  match decision with
-  | CheckedClosureModeShapeAcceptedDecision => True
-  | _ => False
-  end.
+  checkedClosureModeShapeDecisionAcceptsBool decision = true.
 
 Theorem checked_closure_mode_shape_accept_iff_facts :
   forall minimumExact selectedExact justificationExact,
     CheckedClosureModeShapeDecisionAccepts
       (decideCheckedClosureModeShapeByFacts
         minimumExact selectedExact justificationExact) <->
-    minimumExact = true /\
-    selectedExact = true /\
-    justificationExact = true.
+    checkedClosureModeShapeFacts
+      minimumExact selectedExact justificationExact = true.
 Proof.
   intros minimumExact selectedExact justificationExact.
-  destruct minimumExact, selectedExact, justificationExact;
-    simpl; intuition.
+  unfold CheckedClosureModeShapeDecisionAccepts.
+  rewrite checked_closure_mode_shape_decision_computes_facts.
+  reflexivity.
 Qed.
 
 Theorem certified_explicit_closure_mode_supplies_checked_shape :
@@ -155,28 +241,24 @@ Theorem certified_explicit_closure_mode_supplies_checked_shape :
       captureMinimum
       (ExplicitClosureMode declared justification)
       checked ->
-    (minimumExact = true <->
-      checkedMinimumMode checked = captureMinimum) ->
-    (selectedExact = true <->
-      checkedSelectedMode checked = declared) ->
-    (justificationExact = true <->
+    (checkedClosureModeShapeFacts
+       minimumExact selectedExact justificationExact = true <->
+      checkedMinimumMode checked = captureMinimum /\
+      checkedSelectedMode checked = declared /\
       checkedModeJustification checked = justification) ->
     CheckedClosureModeShapeDecisionAccepts
       (decideCheckedClosureModeShapeByFacts
         minimumExact selectedExact justificationExact).
 Proof.
   intros contractRevision captureMinimum declared justification checked
-    minimumExact selectedExact justificationExact
-    Hvalid Hminimum Hselected Hjustification.
+    minimumExact selectedExact justificationExact Hvalid Hreflection.
   apply (proj2
     (checked_closure_mode_shape_accept_iff_facts
       minimumExact selectedExact justificationExact)).
+  apply (proj2 Hreflection).
   unfold ClosureModeDeclarationValid in Hvalid.
-  destruct Hvalid as [HminimumEq [HselectedEq [HjustificationEq _]]].
-  repeat split.
-  - exact ((proj2 Hminimum) HminimumEq).
-  - exact ((proj2 Hselected) HselectedEq).
-  - exact ((proj2 Hjustification) HjustificationEq).
+  destruct Hvalid as [Hminimum [Hselected [Hjustification _]]].
+  repeat split; assumption.
 Qed.
 
 Theorem certified_derived_closure_mode_supplies_checked_shape :
@@ -184,26 +266,22 @@ Theorem certified_derived_closure_mode_supplies_checked_shape :
          minimumExact selectedExact justificationExact,
     ClosureModeDeclarationValid
       contractRevision captureMinimum DerivedClosureMode checked ->
-    (minimumExact = true <->
-      checkedMinimumMode checked = captureMinimum) ->
-    (selectedExact = true <->
-      checkedSelectedMode checked = captureMinimum) ->
-    (justificationExact = true <->
+    (checkedClosureModeShapeFacts
+       minimumExact selectedExact justificationExact = true <->
+      checkedMinimumMode checked = captureMinimum /\
+      checkedSelectedMode checked = captureMinimum /\
       checkedModeJustification checked = None) ->
     CheckedClosureModeShapeDecisionAccepts
       (decideCheckedClosureModeShapeByFacts
         minimumExact selectedExact justificationExact).
 Proof.
   intros contractRevision captureMinimum checked
-    minimumExact selectedExact justificationExact
-    Hvalid Hminimum Hselected Hjustification.
+    minimumExact selectedExact justificationExact Hvalid Hreflection.
   apply (proj2
     (checked_closure_mode_shape_accept_iff_facts
       minimumExact selectedExact justificationExact)).
+  apply (proj2 Hreflection).
   unfold ClosureModeDeclarationValid in Hvalid.
-  destruct Hvalid as [HminimumEq [HselectedEq HjustificationEq]].
-  repeat split.
-  - exact ((proj2 Hminimum) HminimumEq).
-  - exact ((proj2 Hselected) HselectedEq).
-  - exact ((proj2 Hjustification) HjustificationEq).
+  destruct Hvalid as [Hminimum [Hselected Hjustification]].
+  repeat split; assumption.
 Qed.
