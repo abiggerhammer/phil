@@ -17,7 +17,10 @@ import Phil.Core.Protocol.Family
   , ProtocolSessionTemplate (..)
   , ProtocolTypeTemplate (..)
   )
-import Phil.Core.Syntax (Name (..))
+import Phil.Core.Syntax
+  ( Name (..)
+  , Outcome (..)
+  )
 import Phil.Surface.Check.Support (emptySurfaceState)
 import Phil.Surface.Check.Types (SurfaceState)
 import Phil.Surface.GrammarV1.CallableSignature
@@ -112,19 +115,24 @@ grammarV1ResolvedMessageProtocolRoleTemplates parameterEvidence useEvidence sour
   | not (all sourceParameterIsMessage sourceParameters) = Nothing
   | not (null (grammarV1ProtocolRequirements source)) = Nothing
   | otherwise = case grammarV1ProtocolRoles source of
-      [firstRole, secondRole] -> do
-        let checkedParameters = validateParameterEvidence
-              sourceParameters parameterEvidence
-        pure $ do
-          parameterKeys <- checkedParameters
-          (first, firstUses) <- projectRole parameterKeys useEvidence firstRole
-          (second, secondUses) <- projectRole parameterKeys useEvidence secondRole
-          let used = firstUses <> secondUses
-          case firstUnexpectedUseEvidence used useEvidence of
-            Just extra -> Left
-              (GrammarV1UnexpectedProtocolMessageUseEvidence
-                (resolvedProtocolMessageSourceType extra))
-            Nothing -> Right (first, second)
+      [firstRole, secondRole] -> case
+          validateParameterEvidence sourceParameters parameterEvidence of
+        Left err -> Just (Left err)
+        Right parameterKeys -> do
+          firstResult <- projectRole parameterKeys useEvidence firstRole
+          case firstResult of
+            Left err -> Just (Left err)
+            Right (first, firstUses) -> do
+              secondResult <- projectRole parameterKeys useEvidence secondRole
+              pure $ case secondResult of
+                Left err -> Left err
+                Right (second, secondUses) ->
+                  let used = firstUses <> secondUses
+                  in case firstUnexpectedUseEvidence used useEvidence of
+                    Just extra -> Left
+                      (GrammarV1UnexpectedProtocolMessageUseEvidence
+                        (resolvedProtocolMessageSourceType extra))
+                    Nothing -> Right (first, second)
       _ -> Nothing
   where
     sourceParameters = grammarV1ProtocolGenericParams source
@@ -138,12 +146,13 @@ validateParameterEvidence
   -> [GrammarV1ResolvedProtocolMessageParameter]
   -> Either GrammarV1ProtocolMessageTemplateError (Set.Set GenericStaticParameterKey)
 validateParameterEvidence sourceParameters evidence
-  | length sourceParameters /= length evidence = Left
+  | length sourceParameters /= length evidence = countMismatch
+  | otherwise = go 0 Set.empty sourceParameters evidence
+  where
+    countMismatch = Left
       (GrammarV1ProtocolMessageParameterEvidenceCountMismatch
         (length sourceParameters)
         (length evidence))
-  | otherwise = go 0 Set.empty sourceParameters evidence
-  where
     go _ keys [] [] = Right keys
     go index keys (sourceParameter : sourceRest) (resolved : resolvedRest)
       | sourceParameter /= resolvedProtocolMessageSourceParameter resolved = Left
@@ -165,32 +174,32 @@ validateParameterEvidence sourceParameters evidence
       where
         parameter = resolvedProtocolMessageParameter resolved
         key = genericStaticParameterKey parameter
-    go _ _ _ _ = error "protocol Message parameter evidence length guard failed"
+    go _ _ _ _ = countMismatch
 
 projectRole
   :: Set.Set GenericStaticParameterKey
   -> [GrammarV1ResolvedProtocolMessageUse]
   -> Located GrammarV1RoleSessionDecl
-  -> Either
-      GrammarV1ProtocolMessageTemplateError
-      ((ProtocolRoleKey, ProtocolSessionTemplate), [Located GrammarV1Type])
+  -> Maybe
+      (Either
+        GrammarV1ProtocolMessageTemplateError
+        ((ProtocolRoleKey, ProtocolSessionTemplate), [Located GrammarV1Type]))
 projectRole parameterKeys evidence (Located _ role) = do
-  (session, used) <- maybe
-    (error "parameterized protocol role escaped structural competence guard")
-    id
-    (projectSession
-      Set.empty
-      Set.empty
-      emptySurfaceState
-      parameterKeys
-      evidence
-      (locatedValue (grammarV1RoleSessionExpression role)))
-  Right
-    ( ( ProtocolRoleKey (locatedValue (grammarV1RoleSessionName role))
-      , session
-      )
-    , used
-    )
+  projected <- projectSession
+    Set.empty
+    Set.empty
+    emptySurfaceState
+    parameterKeys
+    evidence
+    (locatedValue (grammarV1RoleSessionExpression role))
+  pure $ fmap
+    (\(session, used) ->
+      ( ( ProtocolRoleKey (locatedValue (grammarV1RoleSessionName role))
+        , session
+        )
+      , used
+      ))
+    projected
 
 projectSession
   :: Set.Set Name
@@ -208,43 +217,41 @@ projectSession recursionNames binders state parameterKeys evidence source =
     GrammarV1SessionReference _ -> Nothing
     GrammarV1SessionSend param Nothing Nothing continuation -> do
       projected <- projectMessageParameter binders state parameterKeys evidence param
-      pure $ do
-        ((binder, message), nextBinders, nextState, ownUses) <- projected
-        successor <- maybe
-          (error "parameterized send continuation escaped structural competence guard")
-          id
-          (projectSession
+      case projected of
+        Left err -> Just (Left err)
+        Right ((binder, message), nextBinders, nextState, ownUses) -> do
+          successor <- projectSession
             recursionNames
             nextBinders
             nextState
             parameterKeys
             evidence
-            (locatedValue continuation))
-        let (continuationTemplate, continuationUses) = successor
-        Right
-          ( ProtocolTemplateSend binder message continuationTemplate
-          , ownUses <> continuationUses
-          )
+            (locatedValue continuation)
+          pure $ fmap
+            (\(continuationTemplate, continuationUses) ->
+              ( ProtocolTemplateSend binder message continuationTemplate
+              , ownUses <> continuationUses
+              ))
+            successor
     GrammarV1SessionSend _ _ _ _ -> Nothing
     GrammarV1SessionReceive param Nothing Nothing continuation -> do
       projected <- projectMessageParameter binders state parameterKeys evidence param
-      pure $ do
-        ((binder, message), nextBinders, nextState, ownUses) <- projected
-        successor <- maybe
-          (error "parameterized receive continuation escaped structural competence guard")
-          id
-          (projectSession
+      case projected of
+        Left err -> Just (Left err)
+        Right ((binder, message), nextBinders, nextState, ownUses) -> do
+          successor <- projectSession
             recursionNames
             nextBinders
             nextState
             parameterKeys
             evidence
-            (locatedValue continuation))
-        let (continuationTemplate, continuationUses) = successor
-        Right
-          ( ProtocolTemplateReceive binder message continuationTemplate
-          , ownUses <> continuationUses
-          )
+            (locatedValue continuation)
+          pure $ fmap
+            (\(continuationTemplate, continuationUses) ->
+              ( ProtocolTemplateReceive binder message continuationTemplate
+              , ownUses <> continuationUses
+              ))
+            successor
     GrammarV1SessionReceive _ _ _ _ -> Nothing
     GrammarV1SessionSelect branches -> do
       projected <- projectBranches
@@ -259,7 +266,7 @@ projectSession recursionNames binders state parameterKeys evidence source =
         (\(checked, used) -> (ProtocolTemplateOffer checked, used))
         projected
     GrammarV1SessionEnd outcome ->
-      Just (Right (ProtocolTemplateEnd (Phil.Core.Syntax.Outcome (locatedValue outcome)), []))
+      Just (Right (ProtocolTemplateEnd (Outcome (locatedValue outcome)), []))
     GrammarV1SessionRecursive recursionName body -> do
       let name = Name (locatedValue recursionName)
       projected <- projectSession
@@ -292,11 +299,15 @@ projectBranches
 projectBranches _ _ _ _ _ [] = Just (Right ([], []))
 projectBranches recursionNames binders state parameterKeys evidence (branch : rest) = do
   first <- projectBranch recursionNames binders state parameterKeys evidence branch
-  remaining <- projectBranches recursionNames binders state parameterKeys evidence rest
-  pure $ do
-    (firstBranch, firstUses) <- first
-    (restBranches, restUses) <- remaining
-    Right (firstBranch : restBranches, firstUses <> restUses)
+  case first of
+    Left err -> Just (Left err)
+    Right (firstBranch, firstUses) -> do
+      remaining <- projectBranches
+        recursionNames binders state parameterKeys evidence rest
+      pure $ fmap
+        (\(restBranches, restUses) ->
+          (firstBranch : restBranches, firstUses <> restUses))
+        remaining
 
 projectBranch
   :: Set.Set Name
@@ -322,28 +333,27 @@ projectBranch recursionNames binders state parameterKeys evidence (Located _ bra
               (Just (binder, message), nextBinders, nextState, used))
             projected
         Just _ -> Nothing
-      pure $ do
-        (checkedPayload, nextBinders, nextState, payloadUses) <- payload
-        continuation <- maybe
-          (error "parameterized branch continuation escaped structural competence guard")
-          id
-          (projectSession
+      case payload of
+        Left err -> Just (Left err)
+        Right (checkedPayload, nextBinders, nextState, payloadUses) -> do
+          continuation <- projectSession
             recursionNames
             nextBinders
             nextState
             parameterKeys
             evidence
-            (locatedValue (grammarV1SessionBranchContinuation branch)))
-        let (continuationTemplate, continuationUses) = continuation
-        Right
-          ( ProtocolBranchTemplate
-              { protocolTemplateBranchLabel =
-                  locatedValue (grammarV1SessionBranchLabel branch)
-              , protocolTemplateBranchPayload = checkedPayload
-              , protocolTemplateBranchContinuation = continuationTemplate
-              }
-          , payloadUses <> continuationUses
-          )
+            (locatedValue (grammarV1SessionBranchContinuation branch))
+          pure $ fmap
+            (\(continuationTemplate, continuationUses) ->
+              ( ProtocolBranchTemplate
+                  { protocolTemplateBranchLabel =
+                      locatedValue (grammarV1SessionBranchLabel branch)
+                  , protocolTemplateBranchPayload = checkedPayload
+                  , protocolTemplateBranchContinuation = continuationTemplate
+                  }
+              , payloadUses <> continuationUses
+              ))
+            continuation
 
 projectMessageParameter
   :: Set.Set Name
