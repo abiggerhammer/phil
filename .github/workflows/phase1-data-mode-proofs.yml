@@ -4,7 +4,11 @@ on:
   pull_request:
     paths:
       - 'proof/Phil/Core/DataMode.v'
+      - 'proof/Phil/Core/DataModeImplementation.v'
+      - 'proof/Phil/Core/DataModeImplementationExtraction.v'
+      - 'app/DataModeDecisionCorrespondenceMain.hs'
       - 'docs/phase-1/data-mode-proof-v1.md'
+      - 'docs/phase-1/data-mode-implementation-refinement-v1.md'
       - '.github/workflows/phase1-data-mode-proofs.yml'
       - 'proof/Phil/Core/Syntax.v'
       - 'proof/Phil/Core/Context.v'
@@ -19,7 +23,11 @@ on:
     branches: [main]
     paths:
       - 'proof/Phil/Core/DataMode.v'
+      - 'proof/Phil/Core/DataModeImplementation.v'
+      - 'proof/Phil/Core/DataModeImplementationExtraction.v'
+      - 'app/DataModeDecisionCorrespondenceMain.hs'
       - 'docs/phase-1/data-mode-proof-v1.md'
+      - 'docs/phase-1/data-mode-implementation-refinement-v1.md'
       - '.github/workflows/phase1-data-mode-proofs.yml'
       - 'proof/Phil/Core/Syntax.v'
       - 'proof/Phil/Core/Context.v'
@@ -42,7 +50,7 @@ jobs:
       options: --user root
     steps:
       - uses: actions/checkout@v4
-      - name: Compile PHIL-DATA-MODE-001 proof
+      - name: Compile PHIL-DATA-MODE-001 proof and implementation correspondence
         shell: bash
         run: |
           set -euo pipefail
@@ -50,19 +58,32 @@ jobs:
           rocq c -Q proof/Phil Phil proof/Phil/Core/Syntax.v
           rocq c -Q proof/Phil Phil proof/Phil/Core/Context.v
           rocq c -Q proof/Phil Phil proof/Phil/Core/DataMode.v
-      - name: Record proof identities
+          rocq c -Q proof/Phil Phil proof/Phil/Core/DataModeImplementation.v
+          rm -f DataModeKernel.hs
+          rocq c -Q proof/Phil Phil proof/Phil/Core/DataModeImplementationExtraction.v
+          test -s DataModeKernel.hs
+      - name: Record proof and exact kernel identities
         shell: bash
         run: |
           set -euo pipefail
           mkdir -p data-mode-proof
-          cp proof/Phil/Core/DataMode.v proof/Phil/Core/DataMode.vo data-mode-proof/
+          cp \
+            proof/Phil/Core/DataMode.v \
+            proof/Phil/Core/DataMode.vo \
+            proof/Phil/Core/DataModeImplementation.v \
+            proof/Phil/Core/DataModeImplementation.vo \
+            DataModeKernel.hs \
+            data-mode-proof/
           sha256sum \
             proof/Phil/Core/DataMode.v \
             proof/Phil/Core/DataMode.vo \
+            proof/Phil/Core/DataModeImplementation.v \
+            proof/Phil/Core/DataModeImplementation.vo \
+            DataModeKernel.hs \
             > data-mode-proof/PHIL-DATA-MODE-001.proof.sha256
           {
             echo 'obligation=PHIL-DATA-MODE-001'
-            echo 'evidence=Rocq-9.2.0'
+            echo 'evidence=Rocq-9.2.0+extraction'
             cat data-mode-proof/PHIL-DATA-MODE-001.proof.sha256
           } > data-mode-proof/PHIL-DATA-MODE-001.proof-certificate.txt
           cat data-mode-proof/PHIL-DATA-MODE-001.proof-certificate.txt
@@ -83,6 +104,19 @@ jobs:
           cabal-version: 'latest'
       - name: Build existing proof certifier with warnings as errors
         run: cabal build exe:phil-certify-core-scalar --ghc-options=-Werror
+      - uses: actions/download-artifact@v4
+        with:
+          name: rocq-data-mode-proof
+          path: data-mode-proof
+      - name: Check and execute extracted Data Mode controls
+        shell: bash
+        run: |
+          set -euo pipefail
+          cp data-mode-proof/DataModeKernel.hs DataModeKernel.hs
+          ghc -Wall -Werror -fno-code DataModeKernel.hs
+          ghc -i. -Wall -Werror -fno-code app/DataModeDecisionCorrespondenceMain.hs
+          runghc -i. app/DataModeDecisionCorrespondenceMain.hs
+          sha256sum DataModeKernel.hs
       - name: Typecheck unchanged DATA mode implementation paths
         run: |
           set -euo pipefail
@@ -93,7 +127,7 @@ jobs:
           cabal exec -- ghc -isrc -Wall -Werror -fno-code test/Phase1DuplicateRestrictedFieldMain.hs
           cabal exec -- ghc -isrc -Wall -Werror -fno-code test/Phase1GenericModePropagationMain.hs
           cabal exec -- ghc -isrc -Wall -Werror -fno-code test/Phase1NominalModeStrengtheningMain.hs
-      - name: Re-run DATA-001–003, DATA-009, and DATA-014 correspondence corpus
+      - name: Re-run unchanged DATA-001–003, DATA-009, and DATA-014 correspondence corpus
         run: |
           set -euo pipefail
           cabal exec -- runghc -Wall -Werror -isrc test/Phase1DataModeMain.hs
