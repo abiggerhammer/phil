@@ -3,11 +3,19 @@ module Phil.Surface.GrammarV1.DataVariants
   , GrammarV1CheckedVariant (..)
   , GrammarV1VariantPayloadModeEvidence (..)
   , GrammarV1VariantModeEvidence (..)
+  , GrammarV1CheckedVariantModePayload (..)
+  , GrammarV1CheckedVariantMode (..)
+  , GrammarV1CheckedDataMode (..)
+  , GrammarV1CheckedDataModeError (..)
   , grammarV1CheckedDataVariants
   , grammarV1DataModeFromCheckedVariants
+  , grammarV1CheckedClosedDataMode
   ) where
 
 import Data.Text (Text)
+import Phil.Core.CheckedBindingMode
+  ( CheckedTypeMode (..)
+  )
 import Phil.Core.Focusing
   ( FocusStep
   , FocusingError
@@ -25,6 +33,7 @@ import Phil.Core.Syntax
 import Phil.Surface.Check.Support (emptySurfaceState)
 import Phil.Surface.GrammarV1.CheckedType
   ( grammarV1CheckedType
+  , grammarV1CheckedTypeMode
   )
 import Phil.Surface.GrammarV1.Elaborate
   ( grammarV1StructuralMode
@@ -61,6 +70,32 @@ data GrammarV1VariantModeEvidence = GrammarV1VariantModeEvidence
   { grammarV1VariantModeName :: Text
   , grammarV1VariantModePayload :: Maybe GrammarV1VariantPayloadModeEvidence
   }
+  deriving (Eq, Show)
+
+-- | Checked type+mode payload semantics retained before aggregate sum mode is
+-- considered. Nullary constructors are represented by the outer Maybe in
+-- 'GrammarV1CheckedVariantMode', so explicit empty tuple and record payloads
+-- remain distinct.
+data GrammarV1CheckedVariantModePayload
+  = GrammarV1CheckedVariantModeRecord [(Text, CheckedTypeMode, [FocusStep])]
+  | GrammarV1CheckedVariantModeTuple [(CheckedTypeMode, [FocusStep])]
+  deriving (Eq, Show)
+
+data GrammarV1CheckedVariantMode = GrammarV1CheckedVariantMode
+  { checkedVariantModeName :: Text
+  , checkedVariantModePayload :: Maybe GrammarV1CheckedVariantModePayload
+  }
+  deriving (Eq, Show)
+
+data GrammarV1CheckedDataMode = GrammarV1CheckedDataMode
+  { checkedDataModeVariants :: [GrammarV1CheckedVariantMode]
+  , checkedDataStructuralMode :: Mode
+  }
+  deriving (Eq, Show)
+
+data GrammarV1CheckedDataModeError
+  = GrammarV1DataModeFocusingError FocusingError
+  | GrammarV1DataModeNominalError NominalModeError
   deriving (Eq, Show)
 
 -- | Project the closed Grammar-v1 sum/data variant surface without inventing
@@ -138,6 +173,93 @@ grammarV1DataModeFromCheckedVariants checkedVariants justification declaration
           constructorPayloadModes
           (grammarV1StructuralMode <$> grammarV1DataMode declaration)
           justification
+
+-- | Close the intrinsic subset of data/sum mode(T) without caller-supplied
+-- payload modes. Every payload type is checked exactly once through
+-- 'grammarV1CheckedTypeMode' under the empty top-level term scope. The resulting
+-- exact mode evidence is then routed through the already-established
+-- 'grammarV1DataModeFromCheckedVariants' correspondence and Core 'checkSumMode'.
+--
+-- This removes external mode injection only where type semantics already have
+-- authority to determine mode. Declaration-backed Frame/Validated/opaque named
+-- modes, generic/requirement-bearing data, and other unresolved payload forms
+-- remain fail-closed. Strict nominal strengthening still requires caller-supplied
+-- admitted semantic justification; source spelling never manufactures it.
+grammarV1CheckedClosedDataMode
+  :: StaticContext
+  -> Maybe NominalRestrictionJustification
+  -> GrammarV1DataDecl
+  -> Maybe (Either GrammarV1CheckedDataModeError GrammarV1CheckedDataMode)
+grammarV1CheckedClosedDataMode staticContext justification declaration
+  | not (null (grammarV1DataGenericParams declaration)) = Nothing
+  | not (null (grammarV1DataRequirements declaration)) = Nothing
+  | otherwise = do
+      checkedResults <- mapM checkVariant (grammarV1DataVariants declaration)
+      case sequence checkedResults of
+        Left err -> Just (Left (GrammarV1DataModeFocusingError err))
+        Right checkedVariants -> do
+          nominalResult <- grammarV1DataModeFromCheckedVariants
+            (map checkedVariantModeEvidence checkedVariants)
+            justification
+            declaration
+          pure $ case nominalResult of
+            Left err -> Left (GrammarV1DataModeNominalError err)
+            Right mode -> Right GrammarV1CheckedDataMode
+              { checkedDataModeVariants = checkedVariants
+              , checkedDataStructuralMode = mode
+              }
+  where
+    checkVariant (Located _ variant) = do
+      payload <- checkPayload (grammarV1VariantPayload variant)
+      pure $ fmap
+        (GrammarV1CheckedVariantMode (locatedValue (grammarV1VariantName variant)))
+        payload
+
+    checkPayload Nothing = Just (Right Nothing)
+    checkPayload (Just payload) = case payload of
+      GrammarV1VariantRecord fields -> do
+        checked <- collect (map checkField fields)
+        pure (fmap (Just . GrammarV1CheckedVariantModeRecord) checked)
+      GrammarV1VariantTuple types -> do
+        checked <- collect (map checkType types)
+        pure (fmap (Just . GrammarV1CheckedVariantModeTuple) checked)
+
+    checkField (Located _ field) = do
+      checked <- grammarV1CheckedTypeMode
+        staticContext
+        emptySurfaceState
+        (locatedValue (grammarV1FieldType field))
+      pure $ fmap
+        (\(checkedTypeMode, steps) ->
+          (locatedValue (grammarV1FieldName field), checkedTypeMode, steps))
+        checked
+
+    checkType (Located _ sourceType) =
+      grammarV1CheckedTypeMode staticContext emptySurfaceState sourceType
+
+checkedVariantModeEvidence
+  :: GrammarV1CheckedVariantMode
+  -> GrammarV1VariantModeEvidence
+checkedVariantModeEvidence checked = GrammarV1VariantModeEvidence
+  { grammarV1VariantModeName = checkedVariantModeName checked
+  , grammarV1VariantModePayload =
+      checkedPayloadModeEvidence <$> checkedVariantModePayload checked
+  }
+
+checkedPayloadModeEvidence
+  :: GrammarV1CheckedVariantModePayload
+  -> GrammarV1VariantPayloadModeEvidence
+checkedPayloadModeEvidence payload = case payload of
+  GrammarV1CheckedVariantModeRecord fields ->
+    GrammarV1VariantRecordModeEvidence
+      [ (name, checkedBindingMode checkedTypeMode)
+      | (name, checkedTypeMode, _) <- fields
+      ]
+  GrammarV1CheckedVariantModeTuple values ->
+    GrammarV1VariantTupleModeEvidence
+      [ checkedBindingMode checkedTypeMode
+      | (checkedTypeMode, _) <- values
+      ]
 
 matchVariants
   :: [Located GrammarV1VariantDecl]
