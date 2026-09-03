@@ -1,0 +1,130 @@
+name: Phase 1 Data Sum Production Binding
+
+on:
+  pull_request:
+    paths:
+      - 'generated/DataSumKernel.hs'
+      - 'src/DataSumKernel.hs'
+      - 'src/Phil/Core/DataSumKernelBridge.hs'
+      - 'src/Phil/Core/DataSum.hs'
+      - 'src/Phil/Core/DataDestruction.hs'
+      - 'src/Phil/Core/DataMode.hs'
+      - 'src/Phil/Core/Context.hs'
+      - 'proof/Phil/Core/Syntax.v'
+      - 'proof/Phil/Core/Context.v'
+      - 'proof/Phil/Core/ContextJoin.v'
+      - 'proof/Phil/Core/DataMode.v'
+      - 'proof/Phil/Core/DataElimination.v'
+      - 'proof/Phil/Core/DataSum.v'
+      - 'proof/Phil/Core/DataSumImplementation.v'
+      - 'proof/Phil/Core/DataSumImplementationExtraction.v'
+      - 'app/DataSumDecisionCorrespondenceMain.hs'
+      - 'app/DataSumProductionBindingMain.hs'
+      - 'test/Phase1ConservativeSumModeMain.hs'
+      - 'test/Phase1ConsumingSumMatchMain.hs'
+      - 'test/Phase1SumArmLinearLeakMain.hs'
+      - 'test/Phase1ExplicitBranchResourceSumMain.hs'
+      - 'docs/phase-1/data-sum-implementation-refinement-v1.md'
+      - 'docs/phase-1/data-sum-production-binding-v1.md'
+      - '.github/workflows/phase1-data-sum-production-binding.yml'
+
+permissions:
+  contents: read
+
+jobs:
+  exact-data-sum-kernel:
+    runs-on: ubuntu-latest
+    container:
+      image: rocq/rocq-prover:9.2.0
+      options: --user root
+    steps:
+      - uses: actions/checkout@v4
+      - name: Fresh-extract exact Data Sum kernel
+        shell: bash
+        run: |
+          set -euo pipefail
+          export PATH="/home/rocq/.opam/${COMPILER}/bin:$PATH"
+          rocq c -Q proof/Phil Phil proof/Phil/Core/Syntax.v
+          rocq c -Q proof/Phil Phil proof/Phil/Core/Context.v
+          rocq c -Q proof/Phil Phil proof/Phil/Core/ContextJoin.v
+          rocq c -Q proof/Phil Phil proof/Phil/Core/DataMode.v
+          rocq c -Q proof/Phil Phil proof/Phil/Core/DataElimination.v
+          rocq c -Q proof/Phil Phil proof/Phil/Core/DataSum.v
+          rocq c -Q proof/Phil Phil proof/Phil/Core/DataSumImplementation.v
+          rm -f DataSumKernel.hs
+          rocq c -Q proof/Phil Phil proof/Phil/Core/DataSumImplementationExtraction.v
+          test -s DataSumKernel.hs
+          echo '7e04187772d0214e4e9edc424ae41b44843287d7fbf4bcfdc8c400b60747caf2  DataSumKernel.hs' | sha256sum -c -
+          cmp DataSumKernel.hs generated/DataSumKernel.hs
+          cmp DataSumKernel.hs src/DataSumKernel.hs
+      - name: Record exact kernel identities
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p data-sum-exact-kernel
+          cp DataSumKernel.hs data-sum-exact-kernel/
+          sha256sum \
+            DataSumKernel.hs \
+            generated/DataSumKernel.hs \
+            src/DataSumKernel.hs \
+            proof/Phil/Core/DataSum.v \
+            proof/Phil/Core/DataSumImplementation.v \
+            proof/Phil/Core/DataSumImplementationExtraction.v \
+            > data-sum-exact-kernel/PHIL-DATA-SUM-001.exact-kernel.sha256
+          cat data-sum-exact-kernel/PHIL-DATA-SUM-001.exact-kernel.sha256
+      - uses: actions/upload-artifact@v4
+        with:
+          name: data-sum-exact-kernel
+          path: data-sum-exact-kernel
+          if-no-files-found: error
+
+  verify-data-sum-production-binding:
+    needs: exact-data-sum-kernel
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: haskell-actions/setup@v2
+        with:
+          ghc-version: '9.6.7'
+          cabal-version: 'latest'
+      - name: Build production library with warnings as errors
+        run: cabal build lib:phil-core --ghc-options=-Werror
+      - name: Strict-typecheck bound Data Sum surface
+        run: |
+          set -euo pipefail
+          cabal exec -- ghc -isrc -Wall -Werror -fno-code src/DataSumKernel.hs
+          cabal exec -- ghc -isrc -Wall -Werror -fno-code src/Phil/Core/DataSumKernelBridge.hs
+          cabal exec -- ghc -isrc -Wall -Werror -fno-code src/Phil/Core/DataSum.hs
+          cabal exec -- ghc -isrc -Wall -Werror -fno-code app/DataSumDecisionCorrespondenceMain.hs
+          cabal exec -- ghc -isrc -Wall -Werror -fno-code app/DataSumProductionBindingMain.hs
+      - name: Execute 15 direct controls through production kernel
+        run: cabal exec -- runghc -Wall -Werror -isrc app/DataSumDecisionCorrespondenceMain.hs
+      - name: Execute production Data Sum binding controls
+        run: cabal exec -- runghc -Wall -Werror -isrc app/DataSumProductionBindingMain.hs
+      - name: Re-run unchanged resource-bearing sum correspondence corpus
+        run: |
+          set -euo pipefail
+          cabal exec -- runghc -Wall -Werror -isrc test/Phase1ConservativeSumModeMain.hs
+          cabal exec -- runghc -Wall -Werror -isrc test/Phase1ConsumingSumMatchMain.hs
+          cabal exec -- runghc -Wall -Werror -isrc test/Phase1SumArmLinearLeakMain.hs
+          cabal exec -- runghc -Wall -Werror -isrc test/Phase1ExplicitBranchResourceSumMain.hs
+      - name: Record production-binding identities
+        run: |
+          set -euo pipefail
+          mkdir -p data-sum-production-binding
+          sha256sum \
+            generated/DataSumKernel.hs \
+            src/DataSumKernel.hs \
+            src/Phil/Core/DataSumKernelBridge.hs \
+            src/Phil/Core/DataSum.hs \
+            app/DataSumDecisionCorrespondenceMain.hs \
+            app/DataSumProductionBindingMain.hs \
+            docs/phase-1/data-sum-implementation-refinement-v1.md \
+            docs/phase-1/data-sum-production-binding-v1.md \
+            > data-sum-production-binding/PHIL-DATA-SUM-001.production-binding.sha256
+          cat data-sum-production-binding/PHIL-DATA-SUM-001.production-binding.sha256
+      - uses: actions/upload-artifact@v4
+        with:
+          name: data-sum-production-binding
+          path: data-sum-production-binding
+          if-no-files-found: error
