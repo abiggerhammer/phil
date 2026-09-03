@@ -3,7 +3,21 @@
 module Main (main) where
 
 import qualified Data.Text as Text
+import Phil.Core.Session
+  ( SessionError (..)
+  , exposeSessionHead
+  )
+import Phil.Core.Syntax
+  ( Branch (..)
+  , Name (..)
+  , Outcome (..)
+  , Session (..)
+  , Ty (..)
+  )
 import Phil.Surface.GrammarV1.Parser
+import Phil.Surface.GrammarV1.SessionSemantics
+  ( grammarV1PrimitiveSession
+  )
 import Phil.Surface.Syntax (Located (..))
 import System.Exit (exitFailure)
 
@@ -20,6 +34,10 @@ main = do
         expectReject trailingPipeSource
     , test "SURF-003 explicit branch params reject a trailing comma" $
         expectReject trailingParamCommaSource
+    , test "SURF-008 primitive Grammar-v1 session structure routes exactly to Core"
+        primitiveSessionRoutes
+    , test "SURF-008 primitive session bridge preserves competence boundaries"
+        primitiveSessionCompetence
     ]
   if and results then pure () else exitFailure
 
@@ -147,6 +165,97 @@ sessionStaticActualPreserved = do
         other -> Left ("expected one static session argument, got " <> show other)
     other -> Left ("expected named alias target, got " <> show other)
 
+primitiveSessionRoutes :: Either String ()
+primitiveSessionRoutes = do
+  protocol <- onlyProtocol primitiveSessionSource
+  client <- roleSession "Client" protocol
+  server <- roleSession "Server" protocol
+  let loop = Name "Loop"
+      expectedClient = Rec loop (Select
+        [ Branch
+            { branchLabel = "Go"
+            , branchPayload = Just (Name "x", TyUInt 8)
+            , branchContinuation = Send (Name "y") (TyUInt 8) (SessionVar loop)
+            }
+        , Branch
+            { branchLabel = "Stop"
+            , branchPayload = Nothing
+            , branchContinuation = End (Outcome "Done")
+            }
+        ])
+      expectedServer = Offer
+        [ Branch
+            { branchLabel = "Go"
+            , branchPayload = Nothing
+            , branchContinuation = Receive (Name "z") (TyUInt 8) (End (Outcome "Done"))
+            }
+        , Branch
+            { branchLabel = "Stop"
+            , branchPayload = Nothing
+            , branchContinuation = End (Outcome "Done")
+            }
+        ]
+  assert
+    (grammarV1PrimitiveSession (locatedValue client) == Just expectedClient)
+    "primitive client session did not preserve exact Core structure"
+  assert
+    (grammarV1PrimitiveSession (locatedValue server) == Just expectedServer)
+    "primitive server session did not preserve exact Core structure"
+
+  unguarded <- roleSession "A" =<< onlyProtocol unguardedRecursionSource
+  case grammarV1PrimitiveSession (locatedValue unguarded) of
+    Just coreSession ->
+      assert
+        (exposeSessionHead coreSession == Left (UnguardedRecursion (Name "Loop")))
+        "unguarded recursion was not preserved for the existing Core checker"
+    Nothing -> Left "bound unguarded recursion was rejected before Core could check it"
+
+primitiveSessionCompetence :: Either String ()
+primitiveSessionCompetence = do
+  staticRef <- firstRole =<< onlyProtocol staticReferenceSource
+  codec <- firstRole =<< onlyProtocol codecSessionSource
+  guarded <- firstRole =<< onlyProtocol guardedSessionSource
+  richPayload <- firstRole =<< onlyProtocol richPayloadSource
+  explicitEmpty <- firstRole =<< onlyProtocol explicitEmptyBranchSource
+  multiPayload <- firstRole =<< onlyProtocol multiPayloadBranchSource
+  unbound <- firstRole =<< onlyProtocol unboundContinueSource
+  duplicateBinder <- firstRole =<< onlyProtocol duplicateBinderSource
+  mapM_ expectNothing
+    [ ("static session reference", staticRef)
+    , ("codec-bearing session", codec)
+    , ("guard-bearing session", guarded)
+    , ("nonprimitive message payload", richPayload)
+    , ("explicit empty branch payload", explicitEmpty)
+    , ("multi-parameter branch payload", multiPayload)
+    , ("unbound continue", unbound)
+    , ("duplicate dependent binder", duplicateBinder)
+    ]
+  where
+    expectNothing (label, session) =
+      assert
+        (grammarV1PrimitiveSession (locatedValue session) == Nothing)
+        (label <> " escaped the primitive session competence boundary")
+
+roleSession
+  :: Text.Text
+  -> GrammarV1ProtocolDecl
+  -> Either String (Located GrammarV1SessionExpression)
+roleSession expected protocol =
+  case
+    [ grammarV1RoleSessionExpression role
+    | Located _ role <- grammarV1ProtocolRoles protocol
+    , locatedValue (grammarV1RoleSessionName role) == expected
+    ] of
+    [session] -> Right session
+    sessions -> Left
+      ("expected one role " <> Text.unpack expected <> ", got " <> show (length sessions))
+
+firstRole :: GrammarV1ProtocolDecl -> Either String (Located GrammarV1SessionExpression)
+firstRole protocol =
+  case grammarV1ProtocolRoles protocol of
+    Located _ role : _ -> Right (grammarV1RoleSessionExpression role)
+    [] -> Left "expected at least one protocol role"
+
 assertParam
   :: Text.Text
   -> Text.Text
@@ -208,6 +317,92 @@ sessionSource = Text.unlines
   , "    Go using Wire when false => receive (z : U8) then end Done"
   , "    | Stop => end Done"
   , "  };"
+  , "}"
+  ]
+
+primitiveSessionSource :: Text.Text
+primitiveSessionSource = Text.unlines
+  [ "protocol P {"
+  , "  role Client = recursive Loop = select {"
+  , "    Go(x : U8) => send (y : U8) then continue Loop"
+  , "    | Stop => end Done"
+  , "  };"
+  , "  role Server = offer {"
+  , "    Go => receive (z : U8) then end Done"
+  , "    | Stop => end Done"
+  , "  };"
+  , "}"
+  ]
+
+unguardedRecursionSource :: Text.Text
+unguardedRecursionSource = Text.unlines
+  [ "protocol P {"
+  , "  role A = recursive Loop = continue Loop;"
+  , "  role B = end Done;"
+  , "}"
+  ]
+
+staticReferenceSource :: Text.Text
+staticReferenceSource = Text.unlines
+  [ "protocol P {"
+  , "  role A = Next;"
+  , "  role B = end Done;"
+  , "}"
+  ]
+
+codecSessionSource :: Text.Text
+codecSessionSource = Text.unlines
+  [ "protocol P {"
+  , "  role A = send (x : U8) using Wire then end Done;"
+  , "  role B = end Done;"
+  , "}"
+  ]
+
+guardedSessionSource :: Text.Text
+guardedSessionSource = Text.unlines
+  [ "protocol P {"
+  , "  role A = receive (x : U8) when true then end Done;"
+  , "  role B = end Done;"
+  , "}"
+  ]
+
+richPayloadSource :: Text.Text
+richPayloadSource = Text.unlines
+  [ "protocol P {"
+  , "  role A = send (payload : Bytes[1]) then end Done;"
+  , "  role B = end Done;"
+  , "}"
+  ]
+
+explicitEmptyBranchSource :: Text.Text
+explicitEmptyBranchSource = Text.unlines
+  [ "protocol P {"
+  , "  role A = select { Stop() => end Done };"
+  , "  role B = end Done;"
+  , "}"
+  ]
+
+multiPayloadBranchSource :: Text.Text
+multiPayloadBranchSource = Text.unlines
+  [ "protocol P {"
+  , "  role A = offer { Pair(x : U8, y : Bool) => end Done };"
+  , "  role B = end Done;"
+  , "}"
+  ]
+
+unboundContinueSource :: Text.Text
+unboundContinueSource = Text.unlines
+  [ "protocol P {"
+  , "  role A = continue Missing;"
+  , "  role B = end Done;"
+  , "}"
+  ]
+
+duplicateBinderSource :: Text.Text
+duplicateBinderSource = Text.unlines
+  [ "protocol P {"
+  , "  role A = send (x : U8) then receive (x : Bool) then end Done;"
+  , "  role B = end Done;"
   , "}"
   ]
 
