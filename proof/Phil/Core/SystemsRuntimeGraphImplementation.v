@@ -1,8 +1,7 @@
 From Stdlib Require Import Bool.Bool.
 
 From Phil.Systems Require Import Runtime.
-From Phil.LLVM Require Import RuntimeSymbolIdentity.
-From Phil.Core Require Import SystemsRuntimeGraph.
+From Phil.Core Require Import RuntimePrimitiveIdentity SystemsRuntimeGraph.
 
 (*
   Mechanical implementation-refinement surface for already-Certified
@@ -10,6 +9,12 @@ From Phil.Core Require Import SystemsRuntimeGraph.
   normalized theorem gates.  Concrete Haskell graph/domain construction,
   selected profile data, representation, and diagnostics remain explicit
   correspondence boundaries.
+
+  The historical RuntimePrimitiveReuseSymbolIdentityDecision constructor name
+  and runtimeSymbolsVerified computational binder are retained for extracted
+  kernel byte/API compatibility; their semantic gate is now the target-neutral
+  PHIL-TARGET-RUNTIME-PRIM-001 entry-identity relation, not specifically a
+  linker-symbol relation.
 *)
 
 Inductive RuntimeClaimGraphDecision : Type :=
@@ -131,7 +136,8 @@ Theorem systems_runtime_graph_decision_corresponds_validity :
         graphSiteContribution graph left = graphSiteContribution graph right ->
         left = right) /\
       (forall site,
-        RuntimeSymbolVerificationSuccess (graphRuntimeSymbolModel graph site))) ->
+        RuntimePrimitiveIdentityVerificationSuccess
+          (graphRuntimePrimitiveIdentityModel graph site))) ->
     (costAttributionAccepted = true <->
       (forall left right,
         graphContributionCharge graph left = graphContributionCharge graph right ->
@@ -153,11 +159,11 @@ Proof.
     pose proof ((proj1 Hclaim) HclaimAccepted) as Hsite.
     pose proof ((proj1 Hreuse) HreuseAccepted) as HreuseFacts.
     pose proof ((proj1 Hcost) HcostAccepted) as HcostFacts.
-    destruct HreuseFacts as [Hcontribution Hsymbol].
+    destruct HreuseFacts as [Hcontribution Hentry].
     destruct HcostFacts as [Hclass Hshape].
     constructor; assumption.
   - intros Hvalid.
-    destruct Hvalid as [Hsite Hcontribution Hclass Hshape Hsymbol].
+    destruct Hvalid as [Hsite Hcontribution Hclass Hshape Hentry].
     apply systems_runtime_graph_decision_exact.
     split.
     + apply (proj2 Hclaim). exact Hsite.

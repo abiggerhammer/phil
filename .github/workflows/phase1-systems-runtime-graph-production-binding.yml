@@ -4,6 +4,7 @@ on:
   pull_request:
     paths:
       - 'proof/Phil/Systems/Runtime.v'
+      - 'proof/Phil/Core/RuntimePrimitiveIdentity.v'
       - 'proof/Phil/LLVM/Preservation.v'
       - 'proof/Phil/LLVM/RuntimeSymbolIdentity.v'
       - 'proof/Phil/Core/SystemsRuntimeGraph.v'
@@ -41,6 +42,9 @@ jobs:
           set -euo pipefail
           export PATH="/home/rocq/.opam/${COMPILER}/bin:$PATH"
           rocq c -Q proof/Phil Phil proof/Phil/Systems/Runtime.v
+          rocq c -Q proof/Phil Phil proof/Phil/Core/RuntimePrimitiveIdentity.v
+          # LLVM runtime-symbol identity remains one backend-specific refinement
+          # of the target-neutral primitive relation, not a Systems predecessor.
           rocq c -Q proof/Phil Phil proof/Phil/LLVM/Preservation.v
           rocq c -Q proof/Phil Phil proof/Phil/LLVM/RuntimeSymbolIdentity.v
           rocq c -Q proof/Phil Phil proof/Phil/Core/SystemsRuntimeGraph.v
@@ -61,6 +65,7 @@ jobs:
             SystemsRuntimeGraphKernel.hs \
             generated/SystemsRuntimeGraphKernel.hs \
             src/SystemsRuntimeGraphKernel.hs \
+            proof/Phil/Core/RuntimePrimitiveIdentity.v \
             proof/Phil/Core/SystemsRuntimeGraphImplementation.v \
             proof/Phil/Core/SystemsRuntimeGraphImplementationExtraction.v \
             proof/Phil/LLVM/RuntimeSymbolIdentity.v \
@@ -117,7 +122,7 @@ jobs:
             cabal exec -- runghc -Wall -Werror -Wno-name-shadowing -Wno-unused-imports -Wno-missing-signatures -isrc "$test_file"
           done
           cabal exec -- runghc -Wall -Werror -Wno-name-shadowing -Wno-unused-imports -isrc test/Phase1StageClosureMain.hs
-      - name: Re-run runtime-symbol predecessor checks
+      - name: Re-run LLVM target-refinement checks
         run: cabal test phil-llvm-tests --test-show-details=direct
       - name: Record production-binding identities
         run: |
@@ -135,6 +140,7 @@ jobs:
             test/Phase1CostAttributionMain.hs \
             test/Phase1StageClosureMain.hs \
             test/LLVMMain.hs \
+            proof/Phil/Core/RuntimePrimitiveIdentity.v \
             docs/phase-1/systems-runtime-graph-production-binding-v1.md \
             > systems-runtime-graph-production-binding/PHIL-SYS-RUNTIME-GRAPH-001.production-binding.sha256
           cat systems-runtime-graph-production-binding/PHIL-SYS-RUNTIME-GRAPH-001.production-binding.sha256

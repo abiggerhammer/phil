@@ -4,6 +4,7 @@ on:
   pull_request:
     paths:
       - 'proof/Phil/Core/StorageRealization.v'
+      - 'proof/Phil/Core/RuntimePrimitiveIdentity.v'
       - 'proof/Phil/Core/SystemsRuntimeGraph.v'
       - 'proof/Phil/Core/StorageCostAttribution.v'
       - 'src/Phil/Systems/Storage.hs'
@@ -17,6 +18,8 @@ on:
   push:
     branches: [main]
     paths:
+      - 'proof/Phil/Core/RuntimePrimitiveIdentity.v'
+      - 'proof/Phil/Core/SystemsRuntimeGraph.v'
       - 'proof/Phil/Core/StorageCostAttribution.v'
       - 'docs/phase-1/storage-cost-attribution-proof-v1.md'
       - '.github/workflows/phase1-storage-cost-attribution-proofs.yml'
@@ -59,8 +62,7 @@ jobs:
           rocq c -Q proof/Phil Phil proof/Phil/Core/SystemsSubjectAuthority.v
           rocq c -Q proof/Phil Phil proof/Phil/Core/StorageRealization.v
           rocq c -Q proof/Phil Phil proof/Phil/Systems/Runtime.v
-          rocq c -Q proof/Phil Phil proof/Phil/LLVM/Preservation.v
-          rocq c -Q proof/Phil Phil proof/Phil/LLVM/RuntimeSymbolIdentity.v
+          rocq c -Q proof/Phil Phil proof/Phil/Core/RuntimePrimitiveIdentity.v
           rocq c -Q proof/Phil Phil proof/Phil/Core/SystemsRuntimeGraph.v
           rocq c -Q proof/Phil Phil proof/Phil/Core/StorageCostAttribution.v
       - name: Record proof identities
@@ -74,6 +76,7 @@ jobs:
             storage-cost-attribution-proof/
           sha256sum \
             proof/Phil/Core/StorageRealization.v \
+            proof/Phil/Core/RuntimePrimitiveIdentity.v \
             proof/Phil/Core/SystemsRuntimeGraph.v \
             proof/Phil/Core/StorageCostAttribution.v \
             proof/Phil/Core/StorageCostAttribution.vo \

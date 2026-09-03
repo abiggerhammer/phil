@@ -2,20 +2,24 @@ From Stdlib Require Import Lists.List Arith.PeanoNat.
 Import ListNotations.
 
 From Phil.Systems Require Import Runtime.
-From Phil.LLVM Require Import RuntimeSymbolIdentity.
+From Phil.Core Require Import RuntimePrimitiveIdentity.
 
 (*
   PHIL-SYS-RUNTIME-GRAPH-001 — many-to-many runtime claim/site graph,
   reusable primitive identity, and exact shared-cost attribution.
 
-  This normalized model composes two older Certified foundations rather than
-  rebuilding them:
+  This normalized model composes two target-neutral Certified foundations rather
+  than rebuilding them:
 
   - PHIL-SYS-RUNTIME-001 supplies exact selected RuntimeEnforced evidence,
     revision, declared cost, and runtime-site verification;
-  - PHIL-LLVM-RUNTIME-SYM-001 supplies the rule that linker-visible runtime
-    symbols depend on physical primitive/signature identity rather than
+  - PHIL-TARGET-RUNTIME-PRIM-001 supplies the rule that target-visible runtime
+    entry identity depends on physical primitive/profile identity rather than
     assurance metadata or claim-set cardinality.
+
+  Linker symbols, WebAssembly imports/functions/tables, VM opcodes/precompiles,
+  SBF syscalls/CPI targets, and other backend entry representations are target
+  refinements of that second relation rather than assumptions imported here.
 
   Concrete Text/Map/Set encoding, canonical stage serialization, selected
   profile vocabulary, and Haskell graph construction remain correspondence
@@ -41,7 +45,8 @@ Record RuntimeClaimCostGraph : Type := mkRuntimeClaimCostGraph {
   graphContributionCharge : GraphContributionId -> GraphChargeId;
   graphContributionClass : GraphContributionId -> GraphCostClass;
   graphContributionShape : GraphContributionId -> GraphCostShape;
-  graphRuntimeSymbolModel : GraphSiteId -> RuntimeSymbolModel
+  graphRuntimePrimitiveIdentityModel :
+    GraphSiteId -> RuntimePrimitiveIdentityModel
 }.
 
 Definition ClaimContribution
@@ -92,11 +97,12 @@ Record RuntimeClaimCostGraphValid
       graphContributionCharge graph left = graphContributionCharge graph right ->
       graphContributionShape graph left = graphContributionShape graph right;
 
-  (* Each site's physical runtime symbol remains governed by the predecessor
-     runtime-symbol theorem. *)
-  graphEveryRuntimeSymbolVerified :
+  (* Each site's target-visible runtime entry remains governed by the
+     target-neutral runtime primitive identity theorem. *)
+  graphEveryRuntimePrimitiveIdentityVerified :
     forall site,
-      RuntimeSymbolVerificationSuccess (graphRuntimeSymbolModel graph site)
+      RuntimePrimitiveIdentityVerificationSuccess
+        (graphRuntimePrimitiveIdentityModel graph site)
 }.
 
 Theorem graph_site_uses_selected_runtime_evidence :
@@ -309,31 +315,35 @@ Proof.
   repeat split; assumption.
 Qed.
 
-(* The predecessor LLVM theorem makes assurance revision/evidence/use identity
-   and claim cardinality non-naming metadata for the physical primitive. *)
-Theorem claim_set_cardinality_does_not_rename_verified_runtime_symbol :
+(* The target-neutral primitive theorem makes assurance revision/evidence/use
+   identity and claim cardinality non-naming metadata for the physical entry. *)
+Theorem claim_set_cardinality_does_not_rename_verified_runtime_entry :
   forall graph site revisionA evidenceA useA countA
          revisionB evidenceB useB countB,
     RuntimeClaimCostGraphValid graph ->
-    linkerSymbolFor (graphRuntimeSymbolModel graph site)
+    targetEntryFor (graphRuntimePrimitiveIdentityModel graph site)
       revisionA evidenceA useA countA =
-    linkerSymbolFor (graphRuntimeSymbolModel graph site)
+    targetEntryFor (graphRuntimePrimitiveIdentityModel graph site)
       revisionB evidenceB useB countB.
 Proof.
   intros graph site revisionA evidenceA useA countA
     revisionB evidenceB useB countB Hvalid.
-  apply runtime_symbol_is_independent_of_revision_evidence_use_and_claim_count.
+  apply runtime_primitive_entry_is_independent_of_assurance_metadata.
 Qed.
 
-Theorem verified_graph_runtime_symbol_uses_physical_primitive_signature :
+Theorem verified_graph_runtime_entry_uses_physical_primitive_profile :
   forall graph site,
     RuntimeClaimCostGraphValid graph ->
-    runtimeSymbolActual (graphRuntimeSymbolModel graph site) =
-      runtimeSymbolBuilder (graphRuntimeSymbolModel graph site)
-        (runtimeSymbolPrimitive (graphRuntimeSymbolModel graph site))
-        (runtimeSymbolSignature (graphRuntimeSymbolModel graph site)).
+    runtimePrimitiveActualEntry
+      (graphRuntimePrimitiveIdentityModel graph site) =
+    runtimePrimitiveEntryBuilder
+      (graphRuntimePrimitiveIdentityModel graph site)
+      (runtimePrimitiveIdentity
+        (graphRuntimePrimitiveIdentityModel graph site))
+      (runtimePrimitiveProfile
+        (graphRuntimePrimitiveIdentityModel graph site)).
 Proof.
   intros graph site Hvalid.
-  eapply verified_runtime_symbol_uses_physical_primitive_and_signature.
-  exact (graphEveryRuntimeSymbolVerified graph Hvalid site).
+  eapply verified_runtime_primitive_uses_physical_identity_and_profile.
+  exact (graphEveryRuntimePrimitiveIdentityVerified graph Hvalid site).
 Qed.

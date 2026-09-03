@@ -4,6 +4,7 @@ on:
   pull_request:
     paths:
       - 'proof/Phil/Systems/Runtime.v'
+      - 'proof/Phil/Core/RuntimePrimitiveIdentity.v'
       - 'proof/Phil/LLVM/Preservation.v'
       - 'proof/Phil/LLVM/RuntimeSymbolIdentity.v'
       - 'proof/Phil/Core/SystemsRuntimeGraph.v'
@@ -23,6 +24,7 @@ on:
     branches: [main]
     paths:
       - 'proof/Phil/Systems/Runtime.v'
+      - 'proof/Phil/Core/RuntimePrimitiveIdentity.v'
       - 'proof/Phil/LLVM/Preservation.v'
       - 'proof/Phil/LLVM/RuntimeSymbolIdentity.v'
       - 'proof/Phil/Core/SystemsRuntimeGraph.v'
@@ -50,12 +52,15 @@ jobs:
       options: --user root
     steps:
       - uses: actions/checkout@v4
-      - name: Compile certified predecessors, PHIL-SYS-RUNTIME-GRAPH-001, and implementation correspondence
+      - name: Compile certified predecessors, target-neutral primitive identity, PHIL-SYS-RUNTIME-GRAPH-001, and correspondence
         shell: bash
         run: |
           set -euo pipefail
           export PATH="/home/rocq/.opam/${COMPILER}/bin:$PATH"
           rocq c -Q proof/Phil Phil proof/Phil/Systems/Runtime.v
+          rocq c -Q proof/Phil Phil proof/Phil/Core/RuntimePrimitiveIdentity.v
+          # Keep the existing LLVM theorem green as one backend instantiation;
+          # SystemsRuntimeGraph.v no longer imports it.
           rocq c -Q proof/Phil Phil proof/Phil/LLVM/Preservation.v
           rocq c -Q proof/Phil Phil proof/Phil/LLVM/RuntimeSymbolIdentity.v
           rocq c -Q proof/Phil Phil proof/Phil/Core/SystemsRuntimeGraph.v
@@ -73,6 +78,8 @@ jobs:
           set -euo pipefail
           mkdir -p systems-runtime-graph-proof
           cp \
+            proof/Phil/Core/RuntimePrimitiveIdentity.v \
+            proof/Phil/Core/RuntimePrimitiveIdentity.vo \
             proof/Phil/Core/SystemsRuntimeGraph.v \
             proof/Phil/Core/SystemsRuntimeGraph.vo \
             proof/Phil/Core/SystemsRuntimeGraphImplementation.v \
@@ -82,6 +89,8 @@ jobs:
             systems-runtime-graph-proof/
           sha256sum \
             proof/Phil/Systems/Runtime.v \
+            proof/Phil/Core/RuntimePrimitiveIdentity.v \
+            proof/Phil/Core/RuntimePrimitiveIdentity.vo \
             proof/Phil/LLVM/RuntimeSymbolIdentity.v \
             proof/Phil/Core/SystemsRuntimeGraph.v \
             proof/Phil/Core/SystemsRuntimeGraph.vo \
@@ -92,6 +101,7 @@ jobs:
             > systems-runtime-graph-proof/PHIL-SYS-RUNTIME-GRAPH-001.proof.sha256
           {
             echo 'obligation=PHIL-SYS-RUNTIME-GRAPH-001'
+            echo 'target-primitive-obligation=PHIL-TARGET-RUNTIME-PRIM-001'
             echo 'evidence=Rocq-9.2.0'
             cat systems-runtime-graph-proof/PHIL-SYS-RUNTIME-GRAPH-001.proof.sha256
           } > systems-runtime-graph-proof/PHIL-SYS-RUNTIME-GRAPH-001.proof-certificate.txt
@@ -165,6 +175,7 @@ jobs:
             test/Phase1RuntimePrimitiveReuseMain.hs \
             test/Phase1CostAttributionMain.hs \
             app/SystemsRuntimeGraphDecisionCorrespondenceMain.hs \
+            proof/Phil/Core/RuntimePrimitiveIdentity.v \
             proof/Phil/Core/SystemsRuntimeGraphImplementation.v \
             docs/phase-1/systems-runtime-graph-implementation-refinement-v1.md \
             > systems-runtime-graph-implementation-correspondence/PHIL-SYS-RUNTIME-GRAPH-001.staging.sha256

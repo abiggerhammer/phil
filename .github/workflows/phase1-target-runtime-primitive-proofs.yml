@@ -1,0 +1,67 @@
+name: Phase 1 Target Runtime Primitive Proofs
+
+on:
+  pull_request:
+    paths:
+      - 'proof/Phil/Core/RuntimePrimitiveIdentity.v'
+      - 'proof/Phil/LLVM/Preservation.v'
+      - 'proof/Phil/LLVM/RuntimeSymbolIdentity.v'
+      - 'proof/Phil/LLVM/RuntimeSymbolTargetPrimitiveRefinement.v'
+      - 'docs/phase-1/backend-portability-audit-v1.md'
+      - '.github/workflows/phase1-target-runtime-primitive-proofs.yml'
+  push:
+    branches: [main]
+    paths:
+      - 'proof/Phil/Core/RuntimePrimitiveIdentity.v'
+      - 'proof/Phil/LLVM/RuntimeSymbolTargetPrimitiveRefinement.v'
+      - '.github/workflows/phase1-target-runtime-primitive-proofs.yml'
+
+permissions:
+  contents: read
+
+jobs:
+  rocq-target-runtime-primitive-proof:
+    runs-on: ubuntu-latest
+    container:
+      image: rocq/rocq-prover:9.2.0
+      options: --user root
+    steps:
+      - uses: actions/checkout@v4
+      - name: Compile target-neutral primitive identity and LLVM refinement
+        shell: bash
+        run: |
+          set -euo pipefail
+          export PATH="/home/rocq/.opam/${COMPILER}/bin:$PATH"
+          rocq c -Q proof/Phil Phil proof/Phil/Core/RuntimePrimitiveIdentity.v
+          rocq c -Q proof/Phil Phil proof/Phil/LLVM/Preservation.v
+          rocq c -Q proof/Phil Phil proof/Phil/LLVM/RuntimeSymbolIdentity.v
+          rocq c -Q proof/Phil Phil proof/Phil/LLVM/RuntimeSymbolTargetPrimitiveRefinement.v
+      - name: Record proof identities
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p target-runtime-primitive-proof
+          cp \
+            proof/Phil/Core/RuntimePrimitiveIdentity.v \
+            proof/Phil/Core/RuntimePrimitiveIdentity.vo \
+            proof/Phil/LLVM/RuntimeSymbolTargetPrimitiveRefinement.v \
+            proof/Phil/LLVM/RuntimeSymbolTargetPrimitiveRefinement.vo \
+            target-runtime-primitive-proof/
+          sha256sum \
+            proof/Phil/Core/RuntimePrimitiveIdentity.v \
+            proof/Phil/Core/RuntimePrimitiveIdentity.vo \
+            proof/Phil/LLVM/RuntimeSymbolIdentity.v \
+            proof/Phil/LLVM/RuntimeSymbolTargetPrimitiveRefinement.v \
+            proof/Phil/LLVM/RuntimeSymbolTargetPrimitiveRefinement.vo \
+            > target-runtime-primitive-proof/PHIL-TARGET-RUNTIME-PRIM-001.proof.sha256
+          {
+            echo 'obligation=PHIL-TARGET-RUNTIME-PRIM-001'
+            echo 'evidence=Rocq-9.2.0'
+            cat target-runtime-primitive-proof/PHIL-TARGET-RUNTIME-PRIM-001.proof.sha256
+          } > target-runtime-primitive-proof/PHIL-TARGET-RUNTIME-PRIM-001.proof-certificate.txt
+          cat target-runtime-primitive-proof/PHIL-TARGET-RUNTIME-PRIM-001.proof-certificate.txt
+      - uses: actions/upload-artifact@v4
+        with:
+          name: rocq-target-runtime-primitive-proof
+          path: target-runtime-primitive-proof
+          if-no-files-found: error
