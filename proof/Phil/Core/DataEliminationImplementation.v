@@ -39,11 +39,7 @@ Proof.
     destruct disposition as [disposition |];
     try destruct disposition;
     cbn;
-    split;
-    intro H;
-    try reflexivity;
-    try discriminate;
-    auto.
+    intuition discriminate.
 Qed.
 
 Inductive EliminationPlanDecision : Type :=
@@ -62,6 +58,21 @@ Definition decideEliminationPlanByFacts
   else
     EliminationPlanFieldDispositionDecision.
 
+Theorem elimination_plan_decision_accept_iff_facts :
+  forall allFieldDispositionsAllowed dispositionEntriesDistinct,
+    decideEliminationPlanByFacts
+      allFieldDispositionsAllowed dispositionEntriesDistinct =
+      EliminationPlanAcceptedDecision <->
+    allFieldDispositionsAllowed = true /\
+    dispositionEntriesDistinct = true.
+Proof.
+  intros allFieldDispositionsAllowed dispositionEntriesDistinct.
+  destruct allFieldDispositionsAllowed;
+    destruct dispositionEntriesDistinct;
+    cbn;
+    intuition discriminate.
+Qed.
+
 Theorem elimination_plan_decision_reflects_certified :
   forall fields dispositions entries
          allFieldDispositionsAllowed dispositionEntriesDistinct,
@@ -78,29 +89,9 @@ Proof.
   intros fields dispositions entries
     allFieldDispositionsAllowed dispositionEntriesDistinct
     Hfields Hdistinct.
-  destruct allFieldDispositionsAllowed;
-    destruct dispositionEntriesDistinct;
-    cbn.
-  - split; intro H.
-    + split.
-      * apply (proj1 Hfields). reflexivity.
-      * apply (proj1 Hdistinct). reflexivity.
-    + reflexivity.
-  - split; intro H.
-    + discriminate.
-    + destruct H as [_ HdistinctProp].
-      pose proof ((proj2 Hdistinct) HdistinctProp) as Htrue.
-      discriminate.
-  - split; intro H.
-    + discriminate.
-    + destruct H as [HfieldsProp _].
-      pose proof ((proj2 Hfields) HfieldsProp) as Htrue.
-      discriminate.
-  - split; intro H.
-    + discriminate.
-    + destruct H as [HfieldsProp _].
-      pose proof ((proj2 Hfields) HfieldsProp) as Htrue.
-      discriminate.
+  rewrite elimination_plan_decision_accept_iff_facts.
+  rewrite Hfields, Hdistinct.
+  reflexivity.
 Qed.
 
 Inductive AggregateDispositionKind : Type :=
@@ -135,7 +126,7 @@ Theorem aggregate_disposition_decision_accept_iff_certified :
     AggregateDispositionAccepted disposition.
 Proof.
   intros disposition.
-  destruct disposition; cbn; split; intro H; try exact I; try discriminate.
+  destruct disposition; cbn; intuition discriminate.
 Qed.
 
 Inductive ConsumingEliminationDecision : Type :=
@@ -159,6 +150,23 @@ Definition decideConsumingEliminationByFacts
   else
     ConsumingEliminationAggregateDecision.
 
+Theorem consuming_elimination_decision_accept_iff_facts :
+  forall aggregateConsumed successorsExact successorsDistinct,
+    decideConsumingEliminationByFacts
+      aggregateConsumed successorsExact successorsDistinct =
+      ConsumingEliminationAcceptedDecision <->
+    aggregateConsumed = true /\
+    successorsExact = true /\
+    successorsDistinct = true.
+Proof.
+  intros aggregateConsumed successorsExact successorsDistinct.
+  destruct aggregateConsumed;
+    destruct successorsExact;
+    destruct successorsDistinct;
+    cbn;
+    intuition discriminate.
+Qed.
+
 Theorem consuming_elimination_decision_reflects_facts :
   forall aggregateConsumed successorsExact successorsDistinct
          AggregateConsumed SuccessorsExact SuccessorsDistinct,
@@ -173,36 +181,9 @@ Proof.
   intros aggregateConsumed successorsExact successorsDistinct
     AggregateConsumed SuccessorsExact SuccessorsDistinct
     Haggregate Hexact Hdistinct.
-  destruct aggregateConsumed;
-    destruct successorsExact;
-    destruct successorsDistinct;
-    cbn.
-  - split; intro H.
-    + repeat split.
-      * apply (proj1 Haggregate). reflexivity.
-      * apply (proj1 Hexact). reflexivity.
-      * apply (proj1 Hdistinct). reflexivity.
-    + reflexivity.
-  - split; intro H.
-    + discriminate.
-    + destruct H as [_ [_ Hprop]].
-      pose proof ((proj2 Hdistinct) Hprop) as Htrue.
-      discriminate.
-  - split; intro H.
-    + discriminate.
-    + destruct H as [_ [Hprop _]].
-      pose proof ((proj2 Hexact) Hprop) as Htrue.
-      discriminate.
-  - split; intro H.
-    + discriminate.
-    + destruct H as [_ [Hprop _]].
-      pose proof ((proj2 Hexact) Hprop) as Htrue.
-      discriminate.
-  - all: split; intro H.
-    + discriminate.
-    + destruct H as [Hprop _].
-      pose proof ((proj2 Haggregate) Hprop) as Htrue.
-      discriminate.
+  rewrite consuming_elimination_decision_accept_iff_facts.
+  rewrite Haggregate, Hexact, Hdistinct.
+  reflexivity.
 Qed.
 
 Inductive BorrowLifecycleDecision : Type :=
@@ -231,6 +212,30 @@ Definition decideBorrowLifecycleByFacts
     else BorrowLifecycleStartDecision
   else BorrowLifecycleFieldDecision.
 
+Theorem borrow_lifecycle_decision_accept_iff_facts :
+  forall fieldDeclared loanStarted ownerImmobilized
+         activeLoanRejectedAtBoundary loanEndPreservedOwner,
+    decideBorrowLifecycleByFacts
+      fieldDeclared loanStarted ownerImmobilized
+      activeLoanRejectedAtBoundary loanEndPreservedOwner =
+      BorrowLifecycleAcceptedDecision <->
+    fieldDeclared = true /\
+    loanStarted = true /\
+    ownerImmobilized = true /\
+    activeLoanRejectedAtBoundary = true /\
+    loanEndPreservedOwner = true.
+Proof.
+  intros fieldDeclared loanStarted ownerImmobilized
+    activeLoanRejectedAtBoundary loanEndPreservedOwner.
+  destruct fieldDeclared;
+    destruct loanStarted;
+    destruct ownerImmobilized;
+    destruct activeLoanRejectedAtBoundary;
+    destruct loanEndPreservedOwner;
+    cbn;
+    intuition discriminate.
+Qed.
+
 Theorem borrow_lifecycle_decision_reflects_facts :
   forall fieldDeclared loanStarted ownerImmobilized
          activeLoanRejectedAtBoundary loanEndPreservedOwner
@@ -253,33 +258,7 @@ Proof.
     FieldDeclared LoanStarted OwnerImmobilized
     ActiveLoanRejectedAtBoundary LoanEndPreservedOwner
     Hfield Hstart Hmovement Hboundary Hend.
-  destruct fieldDeclared;
-    destruct loanStarted;
-    destruct ownerImmobilized;
-    destruct activeLoanRejectedAtBoundary;
-    destruct loanEndPreservedOwner;
-    cbn.
-  - split; intro H.
-    + repeat split.
-      * apply (proj1 Hfield). reflexivity.
-      * apply (proj1 Hstart). reflexivity.
-      * apply (proj1 Hmovement). reflexivity.
-      * apply (proj1 Hboundary). reflexivity.
-      * apply (proj1 Hend). reflexivity.
-    + reflexivity.
-  - split; intro H.
-    + discriminate.
-    + destruct H as [_ [_ [_ [_ Hprop]]]].
-      pose proof ((proj2 Hend) Hprop) as Htrue.
-      discriminate.
-  - all: split; intro H.
-    + discriminate.
-    + destruct H as [HfieldProp [HstartProp [HmovementProp [HboundaryProp HendProp]]]].
-      first
-        [ pose proof ((proj2 Hfield) HfieldProp) as Htrue
-        | pose proof ((proj2 Hstart) HstartProp) as Htrue
-        | pose proof ((proj2 Hmovement) HmovementProp) as Htrue
-        | pose proof ((proj2 Hboundary) HboundaryProp) as Htrue
-        | pose proof ((proj2 Hend) HendProp) as Htrue ];
-      discriminate.
+  rewrite borrow_lifecycle_decision_accept_iff_facts.
+  rewrite Hfield, Hstart, Hmovement, Hboundary, Hend.
+  reflexivity.
 Qed.
