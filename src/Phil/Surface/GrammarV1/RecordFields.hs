@@ -1,5 +1,6 @@
 module Phil.Surface.GrammarV1.RecordFields
   ( grammarV1CheckedRecordFields
+  , grammarV1RecordModeFromCheckedFields
   ) where
 
 import Data.Text (Text)
@@ -7,11 +8,22 @@ import Phil.Core.Focusing
   ( FocusStep
   , FocusingError
   )
+import Phil.Core.NominalDataMode
+  ( NominalModeError
+  , NominalRestrictionJustification
+  , checkRecordMode
+  )
 import Phil.Core.Static (StaticContext)
-import Phil.Core.Syntax (Ty)
+import Phil.Core.Syntax
+  ( Mode
+  , Ty
+  )
 import Phil.Surface.Check.Support (emptySurfaceState)
 import Phil.Surface.GrammarV1.CheckedType
   ( grammarV1CheckedType
+  )
+import Phil.Surface.GrammarV1.Elaborate
+  ( grammarV1StructuralMode
   )
 import Phil.Surface.GrammarV1.Parser
   ( GrammarV1Field (..)
@@ -54,3 +66,39 @@ grammarV1CheckedRecordFields staticContext source
           , steps
           ))
         result
+
+-- | Route one closed Grammar-v1 record's declaration-level structural mode
+-- through Core's existing nominal data-mode authority once the exact checked
+-- mode of every owned field has been supplied by a competent type/resource
+-- checker. This bridge deliberately does not derive Mode from Ty: that general
+-- correspondence remains a separate semantic authority wall.
+--
+-- Supplied field names must match the source field list exactly, including
+-- order and duplicates, so an aggregate mode cannot silently be computed from
+-- another record's field-mode set. Omitted source mode derives the ordinary
+-- strongest-owned-field mode. An explicit source mode is only a strengthening
+-- candidate; Core rejects weakening and requires an admitted nominal resource/
+-- lifecycle justification for a strict strengthening. This surface bridge does
+-- not manufacture that justification.
+--
+-- Generic and requirement-bearing records retain the same fail-closed boundary
+-- as 'grammarV1CheckedRecordFields'.
+grammarV1RecordModeFromCheckedFields
+  :: [(Text, Mode)]
+  -> Maybe NominalRestrictionJustification
+  -> GrammarV1RecordDecl
+  -> Maybe (Either NominalModeError Mode)
+grammarV1RecordModeFromCheckedFields checkedFieldModes justification source
+  | not (null (grammarV1RecordGenericParams source)) = Nothing
+  | not (null (grammarV1RecordRequirements source)) = Nothing
+  | map fst checkedFieldModes /= sourceFieldNames = Nothing
+  | otherwise = Just $
+      checkRecordMode
+        (map snd checkedFieldModes)
+        (grammarV1StructuralMode <$> grammarV1RecordMode source)
+        justification
+  where
+    sourceFieldNames =
+      map
+        (locatedValue . grammarV1FieldName . locatedValue)
+        (grammarV1RecordFields source)

@@ -7,12 +7,17 @@ import Phil.Core.Focusing
   ( FocusStep (..)
   , FocusingError (..)
   )
+import Phil.Core.NominalDataMode
+  ( NominalModeError (..)
+  , NominalRestrictionJustification (..)
+  )
 import Phil.Core.Static
   ( declareTransparentClaim
   , emptyStaticContext
   )
 import Phil.Core.Syntax
-  ( Name (..)
+  ( Mode (..)
+  , Name (..)
   , Proposition (..)
   , RefSort (..)
   , RefTerm (..)
@@ -21,6 +26,7 @@ import Phil.Core.Syntax
 import Phil.Surface.GrammarV1.Parser
 import Phil.Surface.GrammarV1.RecordFields
   ( grammarV1CheckedRecordFields
+  , grammarV1RecordModeFromCheckedFields
   )
 import Phil.Surface.Syntax (Located (..))
 import System.Exit (exitFailure)
@@ -36,6 +42,14 @@ main = do
         unsupportedRecordField
     , test "SURF-008 record fields cannot inherit free caller-local term dependencies"
         freeRecordFieldDependency
+    , test "SURF-008 closed record mode omission derives the exact Core aggregate mode"
+        recordModeDerivation
+    , test "SURF-008 explicit record mode strengthening requires admitted nominal justification"
+        recordModeStrengthening
+    , test "SURF-008 explicit record mode weakening rejects through Core nominal semantics"
+        recordModeWeakening
+    , test "SURF-008 supplied record field-mode identity must match source fields exactly"
+        recordModeFieldCorrespondence
     , test "SURF-008 generic and requirement-bearing records remain outside closed field competence"
         openRecordFormsReject
     ]
@@ -110,6 +124,113 @@ freeRecordFieldDependency = do
     (grammarV1CheckedRecordFields emptyStaticContext record == Nothing)
     "top-level record field inherited an undeclared caller-local term dependency"
 
+recordModeDerivation :: Either String ()
+recordModeDerivation = do
+  unrestrictedRecord <- onlyRecord
+    "record Plain { left : U8, right : Bool }"
+  resourceRecord <- onlyRecord
+    "record Owned { plain : U8, resource : Resource }"
+  assert
+    ( grammarV1RecordModeFromCheckedFields
+        [("left", Unrestricted), ("right", Unrestricted)]
+        Nothing
+        unrestrictedRecord
+        == Just (Right Unrestricted)
+    )
+    "omitted unrestricted record mode did not derive the exact Core minimum"
+  assert
+    ( grammarV1RecordModeFromCheckedFields
+        [("plain", Unrestricted), ("resource", Linear)]
+        Nothing
+        resourceRecord
+        == Just (Right Linear)
+    )
+    "omitted record mode did not preserve the strongest supplied owned-field mode"
+
+recordModeStrengthening :: Either String ()
+recordModeStrengthening = do
+  strengthened <- onlyRecord
+    "record FireOnce mode linear { id : U64 }"
+  assert
+    ( grammarV1RecordModeFromCheckedFields
+        [("id", Unrestricted)]
+        Nothing
+        strengthened
+        == Just (Left (StrongerModeMissingJustification Unrestricted Linear))
+    )
+    "strict record-mode strengthening bypassed Core justification requirements"
+  assert
+    ( grammarV1RecordModeFromCheckedFields
+        [("id", Unrestricted)]
+        (Just (AdmittedLifecycleObligation "fire-once lifecycle"))
+        strengthened
+        == Just (Right Linear)
+    )
+    "admitted lifecycle justification did not permit exact linear strengthening"
+  assert
+    ( grammarV1RecordModeFromCheckedFields
+        [("id", Unrestricted)]
+        (Just (UnadmittedNominalRestriction "source spelling is not evidence"))
+        strengthened
+        == Just
+          (Left
+            (StrongerModeUnadmittedJustification
+              "source spelling is not evidence"))
+    )
+    "unadmitted nominal restriction was treated as strengthening evidence"
+
+recordModeWeakening :: Either String ()
+recordModeWeakening = do
+  weakened <- onlyRecord
+    "record BadWrapper mode unrestricted { payload : Resource }"
+  equal <- onlyRecord
+    "record LeaseWrapper mode affine { payload : Lease }"
+  assert
+    ( grammarV1RecordModeFromCheckedFields
+        [("payload", Linear)]
+        Nothing
+        weakened
+        == Just (Left (DeclaredModeWeakensDerived Linear Unrestricted))
+    )
+    "explicit unrestricted record mode laundered a supplied linear field mode"
+  assert
+    ( grammarV1RecordModeFromCheckedFields
+        [("payload", Affine)]
+        Nothing
+        equal
+        == Just (Right Affine)
+    )
+    "explicit mode equal to the derived minimum spuriously required strengthening evidence"
+
+recordModeFieldCorrespondence :: Either String ()
+recordModeFieldCorrespondence = do
+  record <- onlyRecord
+    "record Ordered { first : U8, second : Bool }"
+  assert
+    ( grammarV1RecordModeFromCheckedFields
+        [("second", Unrestricted), ("first", Linear)]
+        Nothing
+        record
+        == Nothing
+    )
+    "reordered checked field-mode evidence was accepted for the wrong source fields"
+  assert
+    ( grammarV1RecordModeFromCheckedFields
+        [("first", Unrestricted)]
+        Nothing
+        record
+        == Nothing
+    )
+    "incomplete checked field-mode evidence was accepted"
+  assert
+    ( grammarV1RecordModeFromCheckedFields
+        [("first", Unrestricted), ("second", Unrestricted), ("extra", Linear)]
+        Nothing
+        record
+        == Nothing
+    )
+    "extra checked field-mode evidence was silently folded into the record mode"
+
 openRecordFormsReject :: Either String ()
 openRecordFormsReject = do
   genericRecord <- onlyRecord
@@ -122,6 +243,22 @@ openRecordFormsReject = do
   assert
     (grammarV1CheckedRecordFields emptyStaticContext requiredRecord == Nothing)
     "requirement-bearing record bypassed the closed-record field competence wall"
+  assert
+    ( grammarV1RecordModeFromCheckedFields
+        [("value", Unrestricted)]
+        Nothing
+        genericRecord
+        == Nothing
+    )
+    "generic record bypassed the closed-record mode competence wall"
+  assert
+    ( grammarV1RecordModeFromCheckedFields
+        [("value", Unrestricted)]
+        Nothing
+        requiredRecord
+        == Nothing
+    )
+    "requirement-bearing record bypassed the closed-record mode competence wall"
 
 onlyRecord :: Text.Text -> Either String GrammarV1RecordDecl
 onlyRecord source = do
