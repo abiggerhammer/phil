@@ -4,6 +4,11 @@ module Main (main) where
 
 import qualified Data.Set as Set
 import qualified Data.Text as Text
+import Phil.Core.Generic (GenericStaticParameterKey (..))
+import Phil.Core.Generic.StaticActual
+  ( GenericStaticKind (..)
+  , GenericStaticParameter (..)
+  )
 import Phil.Core.Protocol (ProtocolRoleKey (..))
 import Phil.Core.Protocol.Family
   ( BinaryProtocolFamily (..)
@@ -20,6 +25,12 @@ import Phil.Core.Syntax
   , Ty (..)
   )
 import Phil.Surface.GrammarV1.Parser
+import Phil.Surface.GrammarV1.ProtocolMessageTemplates
+  ( GrammarV1ProtocolMessageTemplateError (..)
+  , GrammarV1ResolvedProtocolMessageParameter (..)
+  , GrammarV1ResolvedProtocolMessageUse (..)
+  , grammarV1ResolvedMessageProtocolRoleTemplates
+  )
 import Phil.Surface.GrammarV1.ProtocolRoles
   ( GrammarV1ProtocolRoleError (..)
   , grammarV1CheckedClosedProtocolRoleTemplates
@@ -42,6 +53,12 @@ main = do
         closedFamilySemantics
     , test "SURF-008 protocol role templates preserve session competence boundaries"
         competenceBoundaries
+    , test "SURF-008 resolved Message parameters route exact source uses into Core protocol templates"
+        resolvedMessageParameterTemplates
+    , test "SURF-008 protocol Message parameter projection consumes exact binder evidence"
+        resolvedMessageEvidenceBoundaries
+    , test "SURF-008 parameterized protocol templates stay fail-closed outside Message competence"
+        parameterizedProtocolCompetenceBoundaries
     ]
   if and results then pure () else exitFailure
 
@@ -154,6 +171,250 @@ competenceBoundaries = do
         (grammarV1ClosedBinaryProtocolFamily declarationKey interfaceRevision protocol == Nothing)
         (label <> " escaped the closed protocol-family competence boundary")
 
+resolvedMessageParameterTemplates :: Either String ()
+resolvedMessageParameterTemplates = do
+  protocol <- onlyProtocol parameterizedMessageProtocolSource
+  renamed <- onlyProtocol renamedMessageParameterProtocolSource
+  let parameterKey = GenericStaticParameterKey "protocol.message.parameter.stable"
+  (parameterEvidence, useEvidence, _) <- resolvedMessageEvidence parameterKey protocol
+  (renamedParameterEvidence, renamedUseEvidence, _) <- resolvedMessageEvidence parameterKey renamed
+  let expected = expectedParameterizedRoles parameterKey
+  assert
+    (grammarV1ClosedProtocolRoleTemplates protocol == Nothing)
+    "parameterized protocol unexpectedly escaped through the closed role route"
+  assert
+    ( grammarV1ResolvedMessageProtocolRoleTemplates
+        [parameterEvidence] useEvidence protocol
+        == Just (Right expected)
+    )
+    "resolved Message parameter uses did not become exact ProtocolParameterType templates"
+  assert
+    ( grammarV1ResolvedMessageProtocolRoleTemplates
+        [renamedParameterEvidence] renamedUseEvidence renamed
+        == Just (Right expected)
+    )
+    "source Message parameter spelling change altered caller-supplied semantic key"
+
+resolvedMessageEvidenceBoundaries :: Either String ()
+resolvedMessageEvidenceBoundaries = do
+  protocol <- onlyProtocol parameterizedMessageProtocolSource
+  let parameterKey = GenericStaticParameterKey "protocol.message.parameter.stable"
+      foreignKey = GenericStaticParameterKey "protocol.message.parameter.foreign"
+  (parameterEvidence, useEvidence, primitiveUse) <- resolvedMessageEvidence parameterKey protocol
+  (clientUse, serverUse) <- case useEvidence of
+    [firstUse, secondUse] -> Right (firstUse, secondUse)
+    other -> Left ("expected two Message use evidence entries, got " <> show other)
+  let project parameters uses =
+        grammarV1ResolvedMessageProtocolRoleTemplates parameters uses protocol
+  assert
+    ( project [] useEvidence
+        == Just
+          (Left
+            (GrammarV1ProtocolMessageParameterEvidenceCountMismatch 1 0))
+    )
+    "missing declaration-parameter evidence was not rejected explicitly"
+  assert
+    ( project [parameterEvidence] [clientUse]
+        == Just
+          (Left
+            (GrammarV1MissingProtocolMessageUseEvidence
+              (resolvedProtocolMessageSourceType serverUse)))
+    )
+    "missing exact Message use evidence was not rejected explicitly"
+  assert
+    ( project [parameterEvidence] [clientUse, clientUse, serverUse]
+        == Just
+          (Left
+            (GrammarV1DuplicateProtocolMessageUseEvidence
+              (resolvedProtocolMessageSourceType clientUse)))
+    )
+    "duplicate exact Message use evidence was not rejected explicitly"
+  let foreignUse = clientUse
+        { resolvedProtocolMessageUseParameterKey = foreignKey }
+  assert
+    ( project [parameterEvidence] [foreignUse, serverUse]
+        == Just
+          (Left (GrammarV1ProtocolMessageUseUndeclaredParameter foreignKey))
+    )
+    "foreign Message parameter key was accepted at a source use occurrence"
+  let extraUse = GrammarV1ResolvedProtocolMessageUse
+        { resolvedProtocolMessageSourceType = primitiveUse
+        , resolvedProtocolMessageUseParameterKey = parameterKey
+        }
+  assert
+    ( project [parameterEvidence] (useEvidence <> [extraUse])
+        == Just
+          (Left (GrammarV1UnexpectedProtocolMessageUseEvidence primitiveUse))
+    )
+    "extra binder evidence was silently ignored"
+  let wrongKindParameter = parameterEvidence
+        { resolvedProtocolMessageParameter = GenericStaticParameter
+            parameterKey
+            GenericTypeKind
+        }
+  assert
+    ( project [wrongKindParameter] useEvidence
+        == Just
+          (Left
+            (GrammarV1ProtocolMessageParameterKindMismatch
+              parameterKey
+              GenericTypeKind))
+    )
+    "wrong-kind declaration evidence was accepted as a Message parameter"
+
+parameterizedProtocolCompetenceBoundaries :: Either String ()
+parameterizedProtocolCompetenceBoundaries = do
+  closed <- onlyProtocol closedProtocolSource
+  typeGeneric <- onlyProtocol typeParameterizedProtocolSource
+  required <- onlyProtocol requiredMessageProtocolSource
+  boundary <- onlyProtocol boundaryMessageProtocolSource
+  specialized <- onlyProtocol specializedMessageProtocolSource
+  let parameterKey = GenericStaticParameterKey "protocol.message.parameter.stable"
+  assert
+    (grammarV1ResolvedMessageProtocolRoleTemplates [] [] closed == Nothing)
+    "closed protocol escaped through the separate parameterized route"
+  assert
+    (grammarV1ResolvedMessageProtocolRoleTemplates [] [] typeGeneric == Nothing)
+    "non-Message generic protocol escaped Message-parameter competence"
+  requiredParameter <- messageParameterEvidenceOnly parameterKey required
+  assert
+    ( grammarV1ResolvedMessageProtocolRoleTemplates [requiredParameter] [] required
+        == Nothing
+    )
+    "requirement-bearing Message protocol escaped the bounded template route"
+  boundaryParameter <- messageParameterEvidenceOnly parameterKey boundary
+  assert
+    ( grammarV1ResolvedMessageProtocolRoleTemplates [boundaryParameter] [] boundary
+        == Nothing
+    )
+    "boundary-bearing Message transition lost its boundary semantics"
+  specializedParameter <- messageParameterEvidenceOnly parameterKey specialized
+  specializedType <- firstRoleOuterMessageType specialized
+  let specializedUse = GrammarV1ResolvedProtocolMessageUse
+        { resolvedProtocolMessageSourceType = specializedType
+        , resolvedProtocolMessageUseParameterKey = parameterKey
+        }
+  assert
+    ( grammarV1ResolvedMessageProtocolRoleTemplates
+        [specializedParameter]
+        [specializedUse]
+        specialized
+        == Nothing
+    )
+    "specialized Message type use was flattened to one parameter key"
+
+expectedParameterizedRoles
+  :: GenericStaticParameterKey
+  -> ( (ProtocolRoleKey, ProtocolSessionTemplate)
+     , (ProtocolRoleKey, ProtocolSessionTemplate)
+     )
+expectedParameterizedRoles parameterKey =
+  ( ( ProtocolRoleKey "Client"
+    , ProtocolTemplateSend
+        (Name "payload")
+        (ProtocolParameterType parameterKey)
+        (ProtocolTemplateSend
+          (Name "tag")
+          (ProtocolConcreteType (TyUInt 8))
+          (ProtocolTemplateEnd (Outcome "Done")))
+    )
+  , ( ProtocolRoleKey "Server"
+    , ProtocolTemplateReceive
+        (Name "payload")
+        (ProtocolParameterType parameterKey)
+        (ProtocolTemplateReceive
+          (Name "tag")
+          (ProtocolConcreteType (TyUInt 8))
+          (ProtocolTemplateEnd (Outcome "Done")))
+    )
+  )
+
+resolvedMessageEvidence
+  :: GenericStaticParameterKey
+  -> GrammarV1ProtocolDecl
+  -> Either
+      String
+      ( GrammarV1ResolvedProtocolMessageParameter
+      , [GrammarV1ResolvedProtocolMessageUse]
+      , Located GrammarV1Type
+      )
+resolvedMessageEvidence parameterKey protocol = do
+  parameterEvidence <- messageParameterEvidenceOnly parameterKey protocol
+  (clientType, clientPrimitive, serverType) <- parameterizedMessageTypes protocol
+  let oneUse sourceType = GrammarV1ResolvedProtocolMessageUse
+        { resolvedProtocolMessageSourceType = sourceType
+        , resolvedProtocolMessageUseParameterKey = parameterKey
+        }
+  Right
+    ( parameterEvidence
+    , [oneUse clientType, oneUse serverType]
+    , clientPrimitive
+    )
+
+messageParameterEvidenceOnly
+  :: GenericStaticParameterKey
+  -> GrammarV1ProtocolDecl
+  -> Either String GrammarV1ResolvedProtocolMessageParameter
+messageParameterEvidenceOnly parameterKey protocol = case grammarV1ProtocolGenericParams protocol of
+  [sourceParameter] -> Right GrammarV1ResolvedProtocolMessageParameter
+    { resolvedProtocolMessageSourceParameter = sourceParameter
+    , resolvedProtocolMessageParameter = GenericStaticParameter
+        parameterKey
+        GenericMessageKind
+    }
+  other -> Left
+    ("expected one protocol generic parameter, got " <> show (length other))
+
+parameterizedMessageTypes
+  :: GrammarV1ProtocolDecl
+  -> Either String (Located GrammarV1Type, Located GrammarV1Type, Located GrammarV1Type)
+parameterizedMessageTypes protocol = case grammarV1ProtocolRoles protocol of
+  [Located _ clientRole, Located _ serverRole] -> do
+    (clientMessage, clientPrimitive) <- twoSequentialSendTypes
+      (locatedValue (grammarV1RoleSessionExpression clientRole))
+    (serverMessage, _) <- twoSequentialReceiveTypes
+      (locatedValue (grammarV1RoleSessionExpression serverRole))
+    Right (clientMessage, clientPrimitive, serverMessage)
+  other -> Left ("expected two protocol roles, got " <> show (length other))
+
+twoSequentialSendTypes
+  :: GrammarV1SessionExpression
+  -> Either String (Located GrammarV1Type, Located GrammarV1Type)
+twoSequentialSendTypes source = case source of
+  GrammarV1SessionSend first Nothing Nothing continuation ->
+    case locatedValue continuation of
+      GrammarV1SessionSend second Nothing Nothing _ -> Right
+        ( grammarV1TermParamType (locatedValue first)
+        , grammarV1TermParamType (locatedValue second)
+        )
+      other -> Left ("expected second send transition, got " <> show other)
+  other -> Left ("expected first send transition, got " <> show other)
+
+twoSequentialReceiveTypes
+  :: GrammarV1SessionExpression
+  -> Either String (Located GrammarV1Type, Located GrammarV1Type)
+twoSequentialReceiveTypes source = case source of
+  GrammarV1SessionReceive first Nothing Nothing continuation ->
+    case locatedValue continuation of
+      GrammarV1SessionReceive second Nothing Nothing _ -> Right
+        ( grammarV1TermParamType (locatedValue first)
+        , grammarV1TermParamType (locatedValue second)
+        )
+      other -> Left ("expected second receive transition, got " <> show other)
+  other -> Left ("expected first receive transition, got " <> show other)
+
+firstRoleOuterMessageType
+  :: GrammarV1ProtocolDecl
+  -> Either String (Located GrammarV1Type)
+firstRoleOuterMessageType protocol = case grammarV1ProtocolRoles protocol of
+  Located _ firstRole : _ -> case locatedValue (grammarV1RoleSessionExpression firstRole) of
+    GrammarV1SessionSend parameter _ _ _ ->
+      Right (grammarV1TermParamType (locatedValue parameter))
+    GrammarV1SessionReceive parameter _ _ _ ->
+      Right (grammarV1TermParamType (locatedValue parameter))
+    other -> Left ("expected outer send/receive transition, got " <> show other)
+  [] -> Left "expected at least one protocol role"
+
 expectedClosedRoles
   :: ( (ProtocolRoleKey, ProtocolSessionTemplate)
      , (ProtocolRoleKey, ProtocolSessionTemplate)
@@ -235,6 +496,54 @@ requirementProtocolSource = Text.unlines
   [ "protocol P requires { proposition true; } {"
   , "  role A = end Done;"
   , "  role B = end Done;"
+  , "}"
+  ]
+
+parameterizedMessageProtocolSource :: Text.Text
+parameterizedMessageProtocolSource = Text.unlines
+  [ "protocol P[M : Message] {"
+  , "  role Client = send (payload : M) then send (tag : U8) then end Done;"
+  , "  role Server = receive (payload : M) then receive (tag : U8) then end Done;"
+  , "}"
+  ]
+
+renamedMessageParameterProtocolSource :: Text.Text
+renamedMessageParameterProtocolSource = Text.unlines
+  [ "protocol Renamed[Payload : Message] {"
+  , "  role Client = send (payload : Payload) then send (tag : U8) then end Done;"
+  , "  role Server = receive (payload : Payload) then receive (tag : U8) then end Done;"
+  , "}"
+  ]
+
+typeParameterizedProtocolSource :: Text.Text
+typeParameterizedProtocolSource = Text.unlines
+  [ "protocol P[T : Type] {"
+  , "  role Client = send (payload : T) then end Done;"
+  , "  role Server = receive (payload : T) then end Done;"
+  , "}"
+  ]
+
+requiredMessageProtocolSource :: Text.Text
+requiredMessageProtocolSource = Text.unlines
+  [ "protocol P[M : Message] requires { proposition true; } {"
+  , "  role Client = send (payload : M) then end Done;"
+  , "  role Server = receive (payload : M) then end Done;"
+  , "}"
+  ]
+
+boundaryMessageProtocolSource :: Text.Text
+boundaryMessageProtocolSource = Text.unlines
+  [ "protocol P[M : Message] {"
+  , "  role Client = send (payload : M) using Wire then end Done;"
+  , "  role Server = receive (payload : M) then end Done;"
+  , "}"
+  ]
+
+specializedMessageProtocolSource :: Text.Text
+specializedMessageProtocolSource = Text.unlines
+  [ "protocol P[M : Message] {"
+  , "  role Client = send (payload : Box[M]) then end Done;"
+  , "  role Server = receive (payload : Box[M]) then end Done;"
   , "}"
   ]
 
