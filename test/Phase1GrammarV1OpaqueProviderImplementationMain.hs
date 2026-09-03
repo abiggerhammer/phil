@@ -308,7 +308,7 @@ genericProviderImplementationSurface = do
         GenericTypeKind
       parameterEvidence =
         [ GrammarV1ResolvedGenericProviderParameter sourceParameter stableParameter ]
-      requirementEvidence = checkedGenericProviderRequirements sourceRequirements
+      requirementEvidence = buildCheckedGenericProviderRequirements sourceRequirements
   case grammarV1CheckedGenericProviderImplementationSurface
       emptyStaticContext
       genericProviderDeclarationKey
@@ -494,10 +494,10 @@ genericProviderBodyFailure = do
         "generic provider body lost ordinary production ControlAfterTerminal rejection"
     other -> Left ("generic provider body failure did not preserve ordinary checker error: " <> show other)
 
-checkedGenericProviderRequirements
+buildCheckedGenericProviderRequirements
   :: (Located GrammarV1GenericRequirement, Located GrammarV1GenericRequirement)
   -> [GrammarV1CheckedGenericRequirement]
-checkedGenericProviderRequirements (propositionRequirement, providerRequirement) =
+buildCheckedGenericProviderRequirements (propositionRequirement, providerRequirement) =
   [ GrammarV1CheckedGenericRequirement
       { checkedGenericRequirementSource = propositionRequirement
       , checkedGenericRequirementCore = GenericPropositionRequirement Truth
