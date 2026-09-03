@@ -2,13 +2,25 @@
 
 module Main (main) where
 
+import qualified Data.Map.Strict as Map
+import qualified Data.Set as Set
 import qualified Data.Text as Text
+import Phil.Core.Callable
+  ( CallableContract (..)
+  , CalleeTransition (..)
+  )
+import Phil.Core.CallableRefinement
+  ( CallableMachineShape (..)
+  , CallableRefinementSurface (..)
+  )
 import Phil.Core.Focusing (FocusingError (..))
 import Phil.Core.Generic.StaticActual
   ( GenericStaticActual (..)
   )
 import Phil.Core.ProviderQualification
-  ( ProviderOperationKey (..)
+  ( ProviderContract (..)
+  , ProviderOperationContract (..)
+  , ProviderOperationKey (..)
   )
 import Phil.Core.Static
   ( DeclarationKey (..)
@@ -19,7 +31,11 @@ import Phil.Core.Syntax (Proposition (..))
 import Phil.Surface.GrammarV1.Parser
 import Phil.Surface.GrammarV1.ProviderContractSurface
   ( GrammarV1CheckedProviderContractSurface (..)
+  , GrammarV1ProviderContractConstructionError (..)
+  , GrammarV1ResolvedProviderContract (..)
+  , GrammarV1ResolvedProviderOperation (..)
   , grammarV1CheckedClosedProviderContractSurface
+  , grammarV1ConstructClosedProviderContract
   )
 import Phil.Surface.Syntax (Located (..))
 import System.Exit (exitFailure)
@@ -42,6 +58,12 @@ main = do
         providerContractDuplicateOperationVisibility
     , test "SURF-008 generic, specialized, structured, and unresolved provider contract forms remain fail-closed"
         providerContractCompetenceBoundaries
+    , test "SURF-008 exact resolved provider operations construct Core ProviderContract"
+        exactProviderContractConstruction
+    , test "SURF-008 provider resolution evidence must preserve exact source key/reference order"
+        providerResolutionShapeIsExact
+    , test "SURF-008 duplicate provider operation keys reject before Core Map construction"
+        duplicateProviderOperationConstructionRejects
     ]
   if and results then pure () else exitFailure
 
@@ -83,14 +105,7 @@ providerFamilyPreserved = do
 
 closedProviderContractSurface :: Either String ()
 closedProviderContractSurface = do
-  provider <- onlyProviderContract $ Text.unlines
-    [ "provider Store {"
-    , "  operation read : api.Reader;"
-    , "  law coherent : true;"
-    , "  operation write : Writer;"
-    , "  lifecycle alive : false;"
-    , "}"
-    ]
+  provider <- onlyProviderContract standardProviderSource
   renamed <- onlyProviderContract $ Text.unlines
     [ "provider RenamedPresentation {"
     , "  operation read : api.Reader;"
@@ -99,8 +114,8 @@ closedProviderContractSurface = do
     , "  lifecycle alive : false;"
     , "}"
     ]
-  let declarationKey = DeclarationKey "provider.stable.store"
-      interfaceRevision = InterfaceRevision "provider.interface.v1"
+  let declarationKey = providerDeclarationKey
+      interfaceRevision = providerInterfaceRevision
       expected = GrammarV1CheckedProviderContractSurface
         { checkedProviderDeclarationKey = declarationKey
         , checkedProviderInterfaceRevision = interfaceRevision
@@ -152,12 +167,7 @@ providerContractCoreFailure = do
 
 providerContractDuplicateOperationVisibility :: Either String ()
 providerContractDuplicateOperationVisibility = do
-  provider <- onlyProviderContract $ Text.unlines
-    [ "provider Duplicate {"
-    , "  operation access : Reader;"
-    , "  operation access : Writer;"
-    , "}"
-    ]
+  provider <- onlyProviderContract duplicateProviderSource
   let declarationKey = DeclarationKey "provider.stable.duplicate"
       interfaceRevision = InterfaceRevision "provider.interface.duplicate"
   case grammarV1CheckedClosedProviderContractSurface
@@ -202,6 +212,163 @@ providerContractCompetenceBoundaries = do
     "requirement-bearing provider contract escaped the closed-provider competence wall"
   assert (project unresolved == Nothing)
     "free provider lifecycle proposition acquired an invented top-level binding"
+
+exactProviderContractConstruction :: Either String ()
+exactProviderContractConstruction = do
+  surface <- standardCheckedProviderSurface
+  let readContract = providerOperationContract "read"
+      writeContract = providerOperationContract "write"
+      resolutions =
+        [ providerResolution "read" "api.Reader" readContract
+        , providerResolution "write" "Writer" writeContract
+        ]
+      expectedCore = ProviderContract
+        { providerContractInterfaceRevision = providerInterfaceRevision
+        , providerContractOperations = Map.fromList
+            [ (ProviderOperationKey "read", readContract)
+            , (ProviderOperationKey "write", writeContract)
+            ]
+        }
+  case grammarV1ConstructClosedProviderContract surface resolutions of
+    Right checked -> do
+      assert (resolvedProviderDeclarationKey checked == providerDeclarationKey)
+        "resolved provider contract lost stable declaration identity"
+      assert (resolvedProviderCoreContract checked == expectedCore)
+        "resolved provider contract changed interface revision or operation semantics"
+      assert (resolvedProviderLaws checked == checkedProviderLaws surface)
+        "resolved provider contract dropped checked laws"
+      assert (resolvedProviderLifecycle checked == checkedProviderLifecycle surface)
+        "resolved provider contract dropped checked lifecycle propositions"
+    Left err -> Left ("exact provider contract construction rejected: " <> show err)
+
+providerResolutionShapeIsExact :: Either String ()
+providerResolutionShapeIsExact = do
+  surface <- standardCheckedProviderSurface
+  let readResolution = providerResolution
+        "read" "api.Reader" (providerOperationContract "read")
+      writeResolution = providerResolution
+        "write" "Writer" (providerOperationContract "write")
+      wrongReference = providerResolution
+        "read" "Writer" (providerOperationContract "read")
+  assert
+    ( grammarV1ConstructClosedProviderContract surface [writeResolution, readResolution]
+        == Left
+          (ProviderOperationResolutionMismatch
+            0
+            (ProviderOperationKey "read")
+            (ReferencedGenericStaticActual "api.Reader")
+            (ProviderOperationKey "write")
+            (ReferencedGenericStaticActual "Writer"))
+    )
+    "reordered provider resolution evidence was accepted"
+  assert
+    ( grammarV1ConstructClosedProviderContract surface [readResolution]
+        == Left (ProviderOperationResolutionCountMismatch 2 1)
+    )
+    "missing provider resolution evidence was accepted"
+  assert
+    ( grammarV1ConstructClosedProviderContract
+        surface
+        [ readResolution
+        , writeResolution
+        , providerResolution "extra" "Extra" (providerOperationContract "extra")
+        ]
+        == Left (ProviderOperationResolutionCountMismatch 2 3)
+    )
+    "extra provider resolution evidence was accepted"
+  assert
+    ( grammarV1ConstructClosedProviderContract surface [wrongReference, writeResolution]
+        == Left
+          (ProviderOperationResolutionMismatch
+            0
+            (ProviderOperationKey "read")
+            (ReferencedGenericStaticActual "api.Reader")
+            (ProviderOperationKey "read")
+            (ReferencedGenericStaticActual "Writer"))
+    )
+    "provider resolution evidence was allowed to change the unresolved callable identity"
+
+duplicateProviderOperationConstructionRejects :: Either String ()
+duplicateProviderOperationConstructionRejects = do
+  provider <- onlyProviderContract duplicateProviderSource
+  surface <- case grammarV1CheckedClosedProviderContractSurface
+      emptyStaticContext
+      (DeclarationKey "provider.stable.duplicate")
+      (InterfaceRevision "provider.interface.duplicate")
+      provider of
+    Just (Right checked) -> Right checked
+    other -> Left ("duplicate provider surface did not check: " <> show other)
+  let resolutions =
+        [ providerResolution "access" "Reader" (providerOperationContract "reader")
+        , providerResolution "access" "Writer" (providerOperationContract "writer")
+        ]
+  assert
+    ( grammarV1ConstructClosedProviderContract surface resolutions
+        == Left (ProviderContractDuplicateOperationKey (ProviderOperationKey "access"))
+    )
+    "duplicate provider operation key was silently overwritten by Map construction"
+
+standardCheckedProviderSurface :: Either String GrammarV1CheckedProviderContractSurface
+standardCheckedProviderSurface = do
+  provider <- onlyProviderContract standardProviderSource
+  case grammarV1CheckedClosedProviderContractSurface
+      emptyStaticContext
+      providerDeclarationKey
+      providerInterfaceRevision
+      provider of
+    Just (Right checked) -> Right checked
+    other -> Left ("standard provider surface did not check: " <> show other)
+
+providerResolution
+  :: Text.Text
+  -> Text.Text
+  -> ProviderOperationContract
+  -> GrammarV1ResolvedProviderOperation
+providerResolution key reference contract = GrammarV1ResolvedProviderOperation
+  { resolvedProviderOperationKey = ProviderOperationKey key
+  , resolvedProviderOperationReference = ReferencedGenericStaticActual reference
+  , resolvedProviderOperationContract = contract
+  }
+
+providerOperationContract :: Text.Text -> ProviderOperationContract
+providerOperationContract label = ProviderOperationContract
+  { providerOperationCallableContract = CallableRefinementSurface
+      { callableRefinementMachineShape = CallableMachineShape (label <> ".shape")
+      , callableRefinementContract = CallableContract
+          { callableContractInterfaceRevision = InterfaceRevision (label <> ".callable.interface")
+          , callableContractCalleeTransition = PreserveCallee
+          , callableContractEffectBound = Set.empty
+          }
+      , callableRefinementCallerAuthority = Set.empty
+      , callableRefinementFailures = Set.empty
+      }
+  , providerOperationPreconditions = Set.empty
+  , providerOperationOutcomeResidues = Map.empty
+  }
+
+providerDeclarationKey :: DeclarationKey
+providerDeclarationKey = DeclarationKey "provider.stable.store"
+
+providerInterfaceRevision :: InterfaceRevision
+providerInterfaceRevision = InterfaceRevision "provider.interface.v1"
+
+standardProviderSource :: Text.Text
+standardProviderSource = Text.unlines
+  [ "provider Store {"
+  , "  operation read : api.Reader;"
+  , "  law coherent : true;"
+  , "  operation write : Writer;"
+  , "  lifecycle alive : false;"
+  , "}"
+  ]
+
+duplicateProviderSource :: Text.Text
+duplicateProviderSource = Text.unlines
+  [ "provider Duplicate {"
+  , "  operation access : Reader;"
+  , "  operation access : Writer;"
+  , "}"
+  ]
 
 onlyProviderContract :: Text.Text -> Either String GrammarV1ProviderContractDecl
 onlyProviderContract source = do
@@ -253,10 +420,10 @@ checkImplementation implementationDecl = do
         assert (locatedValue operationName == "put") "implementation operation was not put"
         assert (namedTypeNamed ["Put"] operationType) "implementation operation type was not Put"
         assert (returnsUnit body) "implementation operation body did not return unit"
-        assert (locatedValue lawName == "coherent") "implementation law was not coherent"
+        assert (locatedValue lawName == "coherent") "implementation law name was not coherent"
         assert (locatedValue lawProposition == GrammarV1TrueProposition)
           "implementation law proposition was not true"
-        assert (locatedValue lifecycleName == "alive") "implementation lifecycle was not alive"
+        assert (locatedValue lifecycleName == "alive") "implementation lifecycle name was not alive"
         assert (locatedValue lifecycleProposition == GrammarV1TrueProposition)
           "implementation lifecycle proposition was not true"
     items -> Left ("unexpected provider implementation items " <> show items)
