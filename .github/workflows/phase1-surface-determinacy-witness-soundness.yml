@@ -69,7 +69,59 @@ jobs:
           source = path.read_text()
           start = source.index('Lemma choice_safe_first_defined :')
           end = source.index('\nDefinition NullableWitnessFuelProperty', start)
-          new = '''Lemma choice_safe_first_optional_defined :
+          new = '''Lemma choice_safe_first_optional_safety_equation :
+            forall fuel body,
+              choice_bodies_nonnullable_fuel (S fuel) (EOptional body) =
+              andb
+                (negb (nullable_expression phase1_surface_nullable_facts body))
+                (choice_bodies_nonnullable_fuel fuel body).
+          Proof.
+            reflexivity.
+          Qed.
+
+          Lemma choice_safe_first_repetition_safety_equation :
+            forall fuel body,
+              choice_bodies_nonnullable_fuel (S fuel) (ERepetition body) =
+              andb
+                (negb (nullable_expression phase1_surface_nullable_facts body))
+                (choice_bodies_nonnullable_fuel fuel body).
+          Proof.
+            reflexivity.
+          Qed.
+
+          Lemma first_expression_optional_fuel_equation :
+            forall fuel body,
+              first_expression_fuel
+                (S fuel)
+                phase1_surface_nullable_facts
+                phase1_surface_first_facts
+                (EOptional body) =
+              first_expression_fuel
+                fuel
+                phase1_surface_nullable_facts
+                phase1_surface_first_facts
+                body.
+          Proof.
+            reflexivity.
+          Qed.
+
+          Lemma first_expression_repetition_fuel_equation :
+            forall fuel body,
+              first_expression_fuel
+                (S fuel)
+                phase1_surface_nullable_facts
+                phase1_surface_first_facts
+                (ERepetition body) =
+              first_expression_fuel
+                fuel
+                phase1_surface_nullable_facts
+                phase1_surface_first_facts
+                body.
+          Proof.
+            reflexivity.
+          Qed.
+
+          Lemma choice_safe_first_optional_defined :
             forall fuel body,
               (forall expression,
                 choice_bodies_nonnullable_fuel fuel expression = true ->
@@ -88,10 +140,12 @@ jobs:
                   (EOptional body) = Some tokens.
           Proof.
             intros fuel body IH Hsafe.
-            simpl in Hsafe.
+            rewrite choice_safe_first_optional_safety_equation in Hsafe.
             apply andb_true_iff in Hsafe as [_ Hbody_safe].
-            simpl.
-            exact (IH body Hbody_safe).
+            destruct (IH body Hbody_safe) as [tokens Htokens].
+            exists tokens.
+            rewrite first_expression_optional_fuel_equation.
+            exact Htokens.
           Qed.
 
           Lemma choice_safe_first_repetition_defined :
@@ -113,10 +167,12 @@ jobs:
                   (ERepetition body) = Some tokens.
           Proof.
             intros fuel body IH Hsafe.
-            simpl in Hsafe.
+            rewrite choice_safe_first_repetition_safety_equation in Hsafe.
             apply andb_true_iff in Hsafe as [_ Hbody_safe].
-            simpl.
-            exact (IH body Hbody_safe).
+            destruct (IH body Hbody_safe) as [tokens Htokens].
+            exists tokens.
+            rewrite first_expression_repetition_fuel_equation.
+            exact Htokens.
           Qed.
 
           Lemma choice_safe_first_defined_step :
