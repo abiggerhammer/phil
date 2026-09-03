@@ -13,9 +13,12 @@ import qualified Data.Text as Text
 import Phil.Core.DataMode
   ( deriveRecordMode
   , deriveSumMode
-  , modeLub
   )
-import Phil.Core.Syntax (Mode)
+import Phil.Core.DataModeKernelBridge
+  ( CertifiedNominalDecision (..)
+  , certifiedNominalDecision
+  )
+import Phil.Core.Syntax (Mode (..))
 
 data NominalRestrictionJustification
   = AdmittedResourceObligation Text
@@ -29,6 +32,7 @@ data NominalModeError
   | StrongerModeMissingJustification Mode Mode
   | StrongerModeUnadmittedJustification Text
   | StrongerModeEmptyJustification
+  | CertifiedNominalModeKernelDisagreement Mode (Maybe Mode)
   deriving (Eq, Show)
 
 checkNominalMode
@@ -36,16 +40,15 @@ checkNominalMode
   -> Maybe Mode
   -> Maybe NominalRestrictionJustification
   -> Either NominalModeError Mode
-checkNominalMode derivedMode declaredMode justification =
-  case declaredMode of
-    Nothing -> Right derivedMode
-    Just declared
-      | modeLub derivedMode declared /= declared ->
-          Left (DeclaredModeWeakensDerived derivedMode declared)
-      | declared == derivedMode -> Right declared
-      | otherwise -> do
-          checkStrengtheningJustification derivedMode declared justification
-          Right declared
+checkNominalMode derivedMode declaredMode justification = do
+  (acceptedMode, strictJustificationAccepted) <-
+    checkNominalModeNative derivedMode declaredMode justification
+  case certifiedNominalDecision
+      derivedMode declaredMode strictJustificationAccepted of
+    CertifiedNominalAccepted certifiedMode
+      | certifiedMode == acceptedMode -> Right acceptedMode
+    _ ->
+      Left (CertifiedNominalModeKernelDisagreement derivedMode declaredMode)
 
 checkRecordMode
   :: [Mode]
@@ -61,6 +64,22 @@ checkSumMode
   -> Either NominalModeError Mode
 checkSumMode constructorPayloadModes = checkNominalMode (deriveSumMode constructorPayloadModes)
 
+checkNominalModeNative
+  :: Mode
+  -> Maybe Mode
+  -> Maybe NominalRestrictionJustification
+  -> Either NominalModeError (Mode, Bool)
+checkNominalModeNative derivedMode declaredMode justification =
+  case declaredMode of
+    Nothing -> Right (derivedMode, False)
+    Just declared
+      | nativeModeLub derivedMode declared /= declared ->
+          Left (DeclaredModeWeakensDerived derivedMode declared)
+      | declared == derivedMode -> Right (declared, False)
+      | otherwise -> do
+          checkStrengtheningJustification derivedMode declared justification
+          Right (declared, True)
+
 checkStrengtheningJustification
   :: Mode
   -> Mode
@@ -74,6 +93,14 @@ checkStrengtheningJustification derived declared justification =
     Just admitted
       | Text.null (justificationText admitted) -> Left StrongerModeEmptyJustification
       | otherwise -> Right ()
+
+nativeModeLub :: Mode -> Mode -> Mode
+nativeModeLub left right = case (left, right) of
+  (Linear, _) -> Linear
+  (_, Linear) -> Linear
+  (Affine, _) -> Affine
+  (_, Affine) -> Affine
+  _ -> Unrestricted
 
 justificationText :: NominalRestrictionJustification -> Text
 justificationText justification = case justification of

@@ -17,6 +17,13 @@ import Phil.Core.Context
   , insertBinding
   , useBinding
   )
+import Phil.Core.DataModeKernelBridge
+  ( certifiedAggregateFormationAccepted
+  , certifiedModeLub
+  , certifiedRecordMode
+  , certifiedResolvedStrongest
+  , certifiedSumMode
+  )
 import Phil.Core.Syntax
   ( Mode (..)
   , Name
@@ -36,21 +43,17 @@ data ProductError
   | ProductExpected Name Ty
   | ProductModeMismatch Name Mode Mode
   | ProductArityMismatch Int Int
+  | ProductFormationKernelDisagreement
   deriving (Eq, Show)
 
 modeLub :: Mode -> Mode -> Mode
-modeLub left right = case (left, right) of
-  (Linear, _) -> Linear
-  (_, Linear) -> Linear
-  (Affine, _) -> Affine
-  (_, Affine) -> Affine
-  _ -> Unrestricted
+modeLub = certifiedModeLub
 
 deriveRecordMode :: [Mode] -> Mode
-deriveRecordMode = foldr modeLub Unrestricted
+deriveRecordMode = certifiedRecordMode
 
 deriveSumMode :: [[Mode]] -> Mode
-deriveSumMode = foldr (modeLub . deriveRecordMode) Unrestricted
+deriveSumMode = certifiedSumMode
 
 instantiateMode :: [(String, Mode)] -> ModeExpr -> Either String Mode
 instantiateMode environment expression = case expression of
@@ -59,8 +62,12 @@ instantiateMode environment expression = case expression of
     case lookup parameter environment of
       Just mode -> Right mode
       Nothing -> Left ("unknown generic mode parameter: " <> parameter)
-  StrongestMode expressions ->
-    foldr modeLub Unrestricted <$> traverse (instantiateMode environment) expressions
+  StrongestMode expressions -> do
+    resolved <- traverse (instantiateMode environment) expressions
+    case certifiedResolvedStrongest resolved of
+      Just mode -> Right mode
+      Nothing ->
+        Left "certified data-mode kernel rejected fully resolved strongest-mode input"
 
 productMode :: [ProductElementType] -> Mode
 productMode = deriveRecordMode . map productElementMode
@@ -72,6 +79,15 @@ formProductBinding
   -> Either ProductError (ProductValue, ResourceContext)
 formProductBinding productName sourceNames context = do
   (elements, afterSources) <- collectSources sourceNames context
+  let restrictedSourceNames =
+        [ name
+        | (name, element) <- zip sourceNames elements
+        , productElementMode element /= Unrestricted
+        ]
+      restrictedOccurrencesUnique = noDuplicates restrictedSourceNames
+  if certifiedAggregateFormationAccepted restrictedOccurrencesUnique
+    then Right ()
+    else Left ProductFormationKernelDisagreement
   let value = ProductValue elements
       ty = TyProduct elements
       mode = productMode elements
@@ -116,6 +132,11 @@ collectSources sourceNames initial = go sourceNames initial []
     go (name : rest) current reversed = do
       (mode, ty, next) <- mapLeft ProductContextError $ useBinding name current
       go rest next (ProductElementType mode ty : reversed)
+
+noDuplicates :: Eq a => [a] -> Bool
+noDuplicates values = case values of
+  [] -> True
+  value : rest -> value `notElem` rest && noDuplicates rest
 
 mapLeft :: (a -> b) -> Either a c -> Either b c
 mapLeft f = either (Left . f) Right
