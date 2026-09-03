@@ -1,0 +1,113 @@
+name: Phase 1 Data Product Production Binding
+
+on:
+  pull_request:
+    paths:
+      - 'generated/DataProductKernel.hs'
+      - 'src/DataProductKernel.hs'
+      - 'src/Phil/Core/DataProductKernelBridge.hs'
+      - 'src/Phil/Core/DataMode.hs'
+      - 'app/DataProductDecisionCorrespondenceMain.hs'
+      - 'app/DataProductProductionBindingMain.hs'
+      - 'proof/Phil/Core/DataProduct.v'
+      - 'proof/Phil/Core/DataProductImplementation.v'
+      - 'proof/Phil/Core/DataProductImplementationExtraction.v'
+      - 'docs/phase-1/data-product-production-binding-v1.md'
+      - '.github/workflows/phase1-data-product-production-binding.yml'
+      - 'test/Phase1FiniteProductMain.hs'
+  push:
+    branches: [main]
+    paths:
+      - 'generated/DataProductKernel.hs'
+      - 'src/DataProductKernel.hs'
+      - 'src/Phil/Core/DataProductKernelBridge.hs'
+      - 'src/Phil/Core/DataMode.hs'
+      - 'proof/Phil/Core/DataProduct.v'
+      - 'proof/Phil/Core/DataProductImplementation.v'
+      - 'proof/Phil/Core/DataProductImplementationExtraction.v'
+      - '.github/workflows/phase1-data-product-production-binding.yml'
+      - 'test/Phase1FiniteProductMain.hs'
+
+permissions:
+  contents: read
+
+jobs:
+  exact-data-product-kernel:
+    runs-on: ubuntu-latest
+    container:
+      image: rocq/rocq-prover:9.2.0
+      options: --user root
+    steps:
+      - uses: actions/checkout@v4
+      - name: Freshly extract exact Data Product kernel
+        shell: bash
+        run: |
+          set -euo pipefail
+          export PATH="/home/rocq/.opam/${COMPILER}/bin:$PATH"
+          rocq c -Q proof/Phil Phil proof/Phil/Core/Syntax.v
+          rocq c -Q proof/Phil Phil proof/Phil/Core/Context.v
+          rocq c -Q proof/Phil Phil proof/Phil/Core/DataMode.v
+          rocq c -Q proof/Phil Phil proof/Phil/Core/DataProduct.v
+          rocq c -Q proof/Phil Phil proof/Phil/Core/DataProductImplementation.v
+          rm -f DataProductKernel.hs
+          rocq c -Q proof/Phil Phil proof/Phil/Core/DataProductImplementationExtraction.v
+          test -s DataProductKernel.hs
+          test "$(sha256sum DataProductKernel.hs | cut -d' ' -f1)" = \
+            d3b7c219a49b2efe622c04a4f9407f108fbc0b7ddf1524cd297be39259f80ed6
+          cmp DataProductKernel.hs generated/DataProductKernel.hs
+          cmp DataProductKernel.hs src/DataProductKernel.hs
+      - name: Record exact kernel identity
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p data-product-exact-kernel
+          cp DataProductKernel.hs data-product-exact-kernel/
+          sha256sum DataProductKernel.hs > data-product-exact-kernel/DataProductKernel.sha256
+      - uses: actions/upload-artifact@v4
+        with:
+          name: data-product-exact-kernel
+          path: data-product-exact-kernel
+          if-no-files-found: error
+
+  verify-data-product-production-binding:
+    needs: exact-data-product-kernel
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: haskell-actions/setup@v2
+        with:
+          ghc-version: '9.6.7'
+          cabal-version: 'latest'
+      - name: Build broad library regression surface
+        run: cabal build lib:phil-core --ghc-options=-Werror
+      - name: Strictly typecheck bound Data Product surface
+        run: |
+          set -euo pipefail
+          cabal exec -- ghc -isrc -Wall -Werror -fno-code src/DataProductKernel.hs
+          cabal exec -- ghc -isrc -Wall -Werror -fno-code src/Phil/Core/DataProductKernelBridge.hs
+          cabal exec -- ghc -isrc -Wall -Werror -fno-code src/Phil/Core/DataMode.hs
+          cabal exec -- ghc -isrc -Wall -Werror -fno-code app/DataProductDecisionCorrespondenceMain.hs
+          cabal exec -- ghc -isrc -Wall -Werror -fno-code app/DataProductProductionBindingMain.hs
+          cabal exec -- ghc -isrc -Wall -Werror -fno-code test/Phase1FiniteProductMain.hs
+      - name: Execute exact extracted-kernel controls
+        run: cabal exec -- runghc -Wall -Werror -isrc app/DataProductDecisionCorrespondenceMain.hs
+      - name: Execute production-binding controls
+        run: cabal exec -- runghc -Wall -Werror -isrc app/DataProductProductionBindingMain.hs
+      - name: Re-run unchanged DATA-015 corpus
+        run: cabal exec -- runghc -Wall -Werror -isrc test/Phase1FiniteProductMain.hs
+      - name: Record production binding identities
+        run: |
+          set -euo pipefail
+          mkdir -p data-product-production-binding
+          sha256sum \
+            src/DataProductKernel.hs \
+            src/Phil/Core/DataProductKernelBridge.hs \
+            src/Phil/Core/DataMode.hs \
+            app/DataProductProductionBindingMain.hs \
+            test/Phase1FiniteProductMain.hs \
+            > data-product-production-binding/PHIL-DATA-PRODUCT-001.production.sha256
+      - uses: actions/upload-artifact@v4
+        with:
+          name: data-product-production-binding
+          path: data-product-production-binding
+          if-no-files-found: error
