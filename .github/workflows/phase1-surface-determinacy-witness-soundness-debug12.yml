@@ -60,7 +60,10 @@ jobs:
               + discriminate.
             - destruct items as [| item rest]; simpl in Hsafe |- *.
               + reflexivity.
-              + discriminate.
+              + apply andb_true_iff in Hsafe as [Hhead _].
+                apply andb_true_iff in Hhead as [_ Hbody].
+                simpl in Hbody.
+                discriminate.
             - simpl in Hsafe.
               apply andb_true_iff in Hsafe as [_ Hbody].
               simpl in Hbody.
