@@ -3,6 +3,9 @@
 module Main (main) where
 
 import qualified Data.Text as Text
+import Phil.Core.CheckedBindingMode
+  ( CheckedTypeMode (..)
+  )
 import Phil.Core.Focusing
   ( FocusStep (..)
   , FocusingError (..)
@@ -25,7 +28,10 @@ import Phil.Core.Syntax
   )
 import Phil.Surface.GrammarV1.Parser
 import Phil.Surface.GrammarV1.RecordFields
-  ( grammarV1CheckedRecordFields
+  ( GrammarV1CheckedRecordMode (..)
+  , GrammarV1CheckedRecordModeError (..)
+  , grammarV1CheckedClosedRecordMode
+  , grammarV1CheckedRecordFields
   , grammarV1RecordModeFromCheckedFields
   )
 import Phil.Surface.Syntax (Located (..))
@@ -50,6 +56,10 @@ main = do
         recordModeWeakening
     , test "SURF-008 supplied record field-mode identity must match source fields exactly"
         recordModeFieldCorrespondence
+    , test "SURF-008 closed intrinsic records derive mode from exact checked field semantics"
+        checkedRecordModeComposition
+    , test "SURF-008 composed record mode preserves focusing and nominal failure layers"
+        checkedRecordModeFailureBoundaries
     , test "SURF-008 generic and requirement-bearing records remain outside closed field competence"
         openRecordFormsReject
     ]
@@ -231,6 +241,112 @@ recordModeFieldCorrespondence = do
     )
     "extra checked field-mode evidence was silently folded into the record mode"
 
+checkedRecordModeComposition :: Either String ()
+checkedRecordModeComposition = do
+  plain <- onlyRecord
+    "record Plain { left : U8, right : Bool }"
+  owned <- onlyRecord
+    "record Owned { plain : U8, payload : Bytes[7] }"
+  duplicate <- onlyRecord
+    "record Duplicate { item : U8, item : Bytes[7] }"
+  assert
+    ( grammarV1CheckedClosedRecordMode emptyStaticContext Nothing plain
+        == Just
+          (Right
+            GrammarV1CheckedRecordMode
+              { checkedRecordModeFields =
+                  [ ("left", CheckedTypeMode (TyUInt 8) Unrestricted, [])
+                  , ("right", CheckedTypeMode TyBool Unrestricted, [])
+                  ]
+              , checkedRecordStructuralMode = Unrestricted
+              })
+    )
+    "closed intrinsic record did not derive unrestricted mode from exact checked fields"
+  assert
+    ( grammarV1CheckedClosedRecordMode emptyStaticContext Nothing owned
+        == Just
+          (Right
+            GrammarV1CheckedRecordMode
+              { checkedRecordModeFields =
+                  [ ("plain", CheckedTypeMode (TyUInt 8) Unrestricted, [])
+                  , ("payload", CheckedTypeMode (TyBytes (RefNat 7)) Linear, [])
+                  ]
+              , checkedRecordStructuralMode = Linear
+              })
+    )
+    "owned Bytes field did not drive exact closed record mode to linear"
+  case grammarV1CheckedClosedRecordMode emptyStaticContext Nothing duplicate of
+    Just (Right checked) -> do
+      assert
+        (map (\(name, _, _) -> name) (checkedRecordModeFields checked)
+          == ["item", "item"])
+        "closed record mode composition normalized duplicate source field spelling"
+      assert (checkedRecordStructuralMode checked == Linear)
+        "duplicate-spelling record lost the strongest exact field mode"
+    other -> Left ("duplicate-spelling closed record mode rejected: " <> show other)
+
+checkedRecordModeFailureBoundaries :: Either String ()
+checkedRecordModeFailureBoundaries = do
+  context <- mapLeft show $
+    declareTransparentClaim
+      "Positive"
+      [(Name "x", SortUInt 8)]
+      (LessThan
+        (RefNat 0)
+        (RefToNat (RefVar (Name "x"))))
+      emptyStaticContext
+  strengthened <- onlyRecord
+    "record FireOnce mode linear { value : {v : U8 | Positive(v)} }"
+  weakened <- onlyRecord
+    "record BadWrapper mode unrestricted { payload : Bytes[7] }"
+  unknown <- onlyRecord
+    "record BadClaim { proof : Proof[Missing(1)] }"
+  unresolved <- onlyRecord
+    "record Framed { frame : Frame[Hello] }"
+  assert
+    ( grammarV1CheckedClosedRecordMode context Nothing strengthened
+        == Just
+          (Left
+            (GrammarV1RecordModeNominalError
+              (StrongerModeMissingJustification Unrestricted Linear)))
+    )
+    "composed record mode bypassed strict-strengthening justification"
+  case grammarV1CheckedClosedRecordMode
+      context
+      (Just (AdmittedLifecycleObligation "fire-once lifecycle"))
+      strengthened of
+    Just (Right checked) -> case checkedRecordModeFields checked of
+      [("value", CheckedTypeMode (TyRefined binder base predicate) Unrestricted, steps)] -> do
+        assert (binder == Name "v" && base == TyUInt 8)
+          "composed record mode changed refinement binder/base"
+        assert
+          (predicate == LessThan
+            (RefNat 0)
+            (RefToNat (RefVar (Name "v"))))
+          "composed record mode changed canonical refinement predicate"
+        assert (ExpandedTransparentClaim "Positive" `elem` steps)
+          "composed record mode lost checked type focusing trace"
+        assert (checkedRecordStructuralMode checked == Linear)
+          "admitted nominal strengthening did not produce exact linear mode"
+      fields -> Left ("unexpected composed refinement field payload: " <> show fields)
+    other -> Left ("admitted composed record strengthening rejected: " <> show other)
+  assert
+    ( grammarV1CheckedClosedRecordMode emptyStaticContext Nothing weakened
+        == Just
+          (Left
+            (GrammarV1RecordModeNominalError
+              (DeclaredModeWeakensDerived Linear Unrestricted)))
+    )
+    "composed record mode allowed explicit weakening of intrinsic linear field"
+  assert
+    ( grammarV1CheckedClosedRecordMode emptyStaticContext Nothing unknown
+        == Just (Left (GrammarV1RecordModeFocusingError (UnknownClaim "Missing")))
+    )
+    "record-field Core failure collapsed into nominal failure or source non-competence"
+  assert
+    (grammarV1CheckedClosedRecordMode emptyStaticContext Nothing unresolved == Nothing)
+    "declaration-backed Frame field acquired a guessed structural mode"
+
 openRecordFormsReject :: Either String ()
 openRecordFormsReject = do
   genericRecord <- onlyRecord
@@ -259,6 +375,12 @@ openRecordFormsReject = do
         == Nothing
     )
     "requirement-bearing record bypassed the closed-record mode competence wall"
+  assert
+    (grammarV1CheckedClosedRecordMode emptyStaticContext Nothing genericRecord == Nothing)
+    "generic record bypassed composed closed-record mode competence"
+  assert
+    (grammarV1CheckedClosedRecordMode emptyStaticContext Nothing requiredRecord == Nothing)
+    "requirement-bearing record bypassed composed closed-record mode competence"
 
 onlyRecord :: Text.Text -> Either String GrammarV1RecordDecl
 onlyRecord source = do
