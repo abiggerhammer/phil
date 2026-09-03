@@ -1,0 +1,111 @@
+name: Phase 1 Resource Obligation Production Binding
+
+on:
+  pull_request:
+    paths:
+      - 'generated/ResourceObligationKernel.hs'
+      - 'src/ResourceObligationKernel.hs'
+      - 'src/Phil/Core/Process.hs'
+      - 'phil-core.cabal'
+      - 'proof/Phil/Core/ResourceObligation.v'
+      - 'proof/Phil/Core/ResourceObligationImplementation.v'
+      - 'proof/Phil/Core/ResourceObligationImplementationExtraction.v'
+      - 'app/ResourceObligationDecisionCorrespondenceMain.hs'
+      - 'test/Phase1ObligationReconvergenceMain.hs'
+      - 'docs/phase-1/resource-obligation-implementation-refinement-v1.md'
+      - 'docs/phase-1/resource-obligation-production-binding-v1.md'
+      - '.github/workflows/phase1-resource-obligation-production-binding.yml'
+
+permissions:
+  contents: read
+
+jobs:
+  exact-resource-obligation-kernel:
+    runs-on: ubuntu-latest
+    container:
+      image: rocq/rocq-prover:9.2.0
+      options: --user root
+    steps:
+      - uses: actions/checkout@v4
+      - name: Fresh-extract exact Resource Obligation kernel
+        shell: bash
+        run: |
+          set -euo pipefail
+          export PATH="/home/rocq/.opam/${COMPILER}/bin:$PATH"
+          rocq c -Q proof/Phil Phil proof/Phil/Core/Syntax.v
+          rocq c -Q proof/Phil Phil proof/Phil/Core/Context.v
+          rocq c -Q proof/Phil Phil proof/Phil/Core/ContextJoin.v
+          rocq c -Q proof/Phil Phil proof/Phil/Core/ProcessJoin.v
+          rocq c -Q proof/Phil Phil proof/Phil/Core/ResourceObligation.v
+          rocq c -Q proof/Phil Phil proof/Phil/Core/ResourceObligationImplementation.v
+          rm -f ResourceObligationKernel.hs
+          rocq c -Q proof/Phil Phil proof/Phil/Core/ResourceObligationImplementationExtraction.v
+          test -s ResourceObligationKernel.hs
+          echo 'ad29db6a9cd16549ca39b97150b80383a6efc520d1f9e235a29ed869cd901345  ResourceObligationKernel.hs' | sha256sum -c -
+          cmp ResourceObligationKernel.hs generated/ResourceObligationKernel.hs
+          cmp ResourceObligationKernel.hs src/ResourceObligationKernel.hs
+      - name: Record exact kernel identities
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p resource-obligation-exact-kernel
+          cp ResourceObligationKernel.hs resource-obligation-exact-kernel/
+          sha256sum \
+            ResourceObligationKernel.hs \
+            generated/ResourceObligationKernel.hs \
+            src/ResourceObligationKernel.hs \
+            proof/Phil/Core/ResourceObligation.v \
+            proof/Phil/Core/ResourceObligationImplementation.v \
+            proof/Phil/Core/ResourceObligationImplementationExtraction.v \
+            > resource-obligation-exact-kernel/PHIL-RES-OBL-001.exact-kernel.sha256
+          cat resource-obligation-exact-kernel/PHIL-RES-OBL-001.exact-kernel.sha256
+      - uses: actions/upload-artifact@v4
+        with:
+          name: resource-obligation-exact-kernel
+          path: resource-obligation-exact-kernel
+          if-no-files-found: error
+
+  verify-resource-obligation-production-binding:
+    needs: exact-resource-obligation-kernel
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: haskell-actions/setup@v2
+        with:
+          ghc-version: '9.6.7'
+          cabal-version: 'latest'
+      - name: Build production library with warnings as errors
+        run: cabal build lib:phil-core --ghc-options=-Werror
+      - name: Strict-typecheck bound Resource Obligation surface
+        shell: bash
+        run: |
+          set -euo pipefail
+          cabal exec -- ghc -isrc -Wall -Werror -fno-code src/ResourceObligationKernel.hs
+          cabal exec -- ghc -isrc -Wall -Werror -fno-code src/Phil/Core/Process.hs
+          cabal exec -- ghc -isrc -Wall -Werror -fno-code app/ResourceObligationDecisionCorrespondenceMain.hs
+          cabal exec -- ghc -isrc -Wall -Werror -fno-code test/Phase1ObligationReconvergenceMain.hs
+      - name: Execute 4 direct controls through production kernel
+        run: cabal exec -- runghc -isrc app/ResourceObligationDecisionCorrespondenceMain.hs
+      - name: Re-run unchanged RES-011 correspondence corpus
+        run: cabal exec -- runghc -Wall -Werror -isrc test/Phase1ObligationReconvergenceMain.hs
+      - name: Record production-binding identities
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p resource-obligation-production-binding
+          sha256sum \
+            generated/ResourceObligationKernel.hs \
+            src/ResourceObligationKernel.hs \
+            src/Phil/Core/Process.hs \
+            phil-core.cabal \
+            app/ResourceObligationDecisionCorrespondenceMain.hs \
+            test/Phase1ObligationReconvergenceMain.hs \
+            docs/phase-1/resource-obligation-implementation-refinement-v1.md \
+            docs/phase-1/resource-obligation-production-binding-v1.md \
+            > resource-obligation-production-binding/PHIL-RES-OBL-001.production-binding.sha256
+          cat resource-obligation-production-binding/PHIL-RES-OBL-001.production-binding.sha256
+      - uses: actions/upload-artifact@v4
+        with:
+          name: resource-obligation-production-binding
+          path: resource-obligation-production-binding
+          if-no-files-found: error
