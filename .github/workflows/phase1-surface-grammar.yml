@@ -34,6 +34,7 @@ on:
       - 'test/Phase1GrammarV1CheckedRecordFieldsMain.hs'
       - 'test/Phase1GrammarV1CheckedDataVariantsMain.hs'
       - 'test/Phase1GrammarV1SessionExpressionsMain.hs'
+      - 'test/Phase1GrammarV1ProtocolRoleTemplatesMain.hs'
       - 'test/Phase1GrammarV1DeterminacyMain.hs'
       - 'test/Phase1GrammarV1DeterminacyVariantMain.hs'
       - 'test/Phase1GrammarV1CorpusMain.hs'
@@ -77,6 +78,7 @@ on:
       - 'test/Phase1GrammarV1CheckedRecordFieldsMain.hs'
       - 'test/Phase1GrammarV1CheckedDataVariantsMain.hs'
       - 'test/Phase1GrammarV1SessionExpressionsMain.hs'
+      - 'test/Phase1GrammarV1ProtocolRoleTemplatesMain.hs'
       - 'test/Phase1GrammarV1DeterminacyMain.hs'
       - 'test/Phase1GrammarV1DeterminacyVariantMain.hs'
       - 'test/Phase1GrammarV1CorpusMain.hs'
@@ -191,6 +193,9 @@ jobs:
 
       - name: Check Grammar-v1 session expression parsing
         run: cabal exec -- runghc -Wall -Werror -isrc test/Phase1GrammarV1SessionExpressionsMain.hs
+
+      - name: Check Grammar-v1 protocol role template routing
+        run: cabal exec -- runghc -Wall -Werror -isrc test/Phase1GrammarV1ProtocolRoleTemplatesMain.hs
 
       - name: Check Grammar-v1 determinacy shape pressure
         run: cabal exec -- runghc -Wall -Werror -isrc test/Phase1GrammarV1DeterminacyMain.hs
