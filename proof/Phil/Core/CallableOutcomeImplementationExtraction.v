@@ -1,5 +1,5 @@
 From Corelib Require Extraction.
-From Phil.Core Require Import CallableOutcomeImplementation.
+From Phil.Core Require Import CallableOutcomeFidelity CallableOutcomeImplementation.
 
 Extraction Language Haskell.
 
