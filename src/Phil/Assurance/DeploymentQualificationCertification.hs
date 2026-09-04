@@ -2,6 +2,7 @@ module Phil.Assurance.DeploymentQualificationCertification
   ( DeploymentQualificationKernelFacts (..)
   , DeploymentQualificationCertificationError (..)
   , deploymentQualificationKernelFacts
+  , verifyDeploymentQualificationKernelFacts
   , verifyDeploymentQualificationCertification
   ) where
 
@@ -55,9 +56,16 @@ verifyDeploymentQualificationCertification
     Just value -> Right value
   let facts = deploymentQualificationKernelFacts
         current plan domainEvidenceRegistry compositionRegistry qualification
-      qualificationAccepted = kernelAccepts facts
+  verifyDeploymentQualificationKernelFacts True facts
+
+verifyDeploymentQualificationKernelFacts
+  :: Bool
+  -> DeploymentQualificationKernelFacts
+  -> Either DeploymentQualificationCertificationError ()
+verifyDeploymentQualificationKernelFacts qualificationPresent facts = do
+  let qualificationAccepted = kernelAccepts facts
       availableAccepted = Kernel.decideDeploymentQualificationAvailableByFacts
-        True qualificationAccepted
+        qualificationPresent qualificationAccepted
   unless (qualificationAccepted && availableAccepted) $
     Left (DeploymentQualificationCertificationKernelDisagreement facts)
 
