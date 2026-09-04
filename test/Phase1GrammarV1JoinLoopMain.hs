@@ -29,6 +29,17 @@ import Phil.Surface.GrammarV1.JoinStateScope
 import Phil.Surface.GrammarV1.LetPatternScope
   ( GrammarV1CheckedLetScopeStep (..)
   )
+import Phil.Surface.GrammarV1.LexicalReferenceScope
+  ( GrammarV1CheckedLexicalReference (..)
+  , GrammarV1LexicalReferenceError (..)
+  )
+import Phil.Surface.GrammarV1.LoopStateScope
+  ( GrammarV1CheckedLoopBodyStep (..)
+  , GrammarV1CheckedLoopSlot (..)
+  , GrammarV1CheckedLoopState (..)
+  , GrammarV1LoopStateScopeError (..)
+  , grammarV1CheckedLoopExpressionInScope
+  )
 import Phil.Surface.GrammarV1.Parser
 import Phil.Surface.Syntax (Located (..))
 import System.Exit (exitFailure)
@@ -64,6 +75,24 @@ main = do
         joinBinderNotVisibleInArm
     , test "SURF-009 join-state alpha renaming preserves semantic identity"
         joinAlphaRenamingPreservesIdentity
+    , test "SURF-009 loop initializers use entry scope and header state drives continue"
+        loopInitializersUseEntryScope
+    , test "SURF-009 later loop-state types may depend on earlier header binders"
+        dependentLoopStateResolvesEarlierHeader
+    , test "SURF-009 loop-state initializers cannot see future header binders"
+        loopInitializerCannotSeeHeaderBinder
+    , test "SURF-009 loop-state types reject forward header references"
+        loopTypeForwardReferenceRejects
+    , test "SURF-009 loop-state binders cannot shadow enclosing parameters"
+        loopStateCannotShadowParameter
+    , test "SURF-009 duplicate loop-state binders reject"
+        duplicateLoopStateRejects
+    , test "SURF-009 loop body lets and break actuals stay inside loop scope"
+        loopBodyLetBreakScopeCloses
+    , test "SURF-009 zero-actual continue never implicitly captures loop state"
+        zeroActualContinueDoesNotCaptureState
+    , test "SURF-009 loop-state alpha renaming preserves semantic identity"
+        loopStateAlphaRenamingPreservesIdentity
     ]
   if and results then pure () else exitFailure
 
@@ -399,6 +428,304 @@ joinAlphaRenamingPreservesIdentity = do
   assert (map grammarV1ResolvedBinderDisplayName renamedBinders == ["count", "bytes"])
     "renamed join display spellings were not retained diagnostically"
 
+loopInitializersUseEntryScope :: Either String ()
+loopInitializersUseEntryScope = do
+  functionDecl <- onlyFunction "loop-entry-scope" $ Text.unlines
+    [ "fn loop_entry_scope(seed : U8) -> U8 satisfies C {"
+    , "  loop state (i : U8 = seed) invariant i >= 0 {"
+    , "    continue(i);"
+    , "  };"
+    , "  return seed;"
+    , "}"
+    ]
+  let declarationKey = DeclarationKey "decl.LoopEntryScope"
+  (parameters, initialScope) <- mapLeft show
+    (grammarV1FunctionParameterScope declarationKey functionDecl)
+  seedBinder <- exactlyOne "loop entry parameter" parameters
+  expression <- firstExpressionStatement functionDecl
+  (checked, finalScope) <- checkedLoop initialScope expression
+  slot <- exactlyOne "loop state slot" (grammarV1CheckedLoopSlots checked)
+  let iBinder = grammarV1CheckedLoopSlotBinder slot
+  initializerReference <- exactlyOne "loop initializer reference"
+    (grammarV1CheckedLoopSlotInitializerReferences slot)
+  invariantReference <- exactlyOne "loop invariant reference"
+    (grammarV1CheckedLoopInvariantReferences checked)
+  assert
+    (grammarV1ResolvedBinderKey
+      (grammarV1CheckedLexicalReferenceBinder initializerReference)
+      == grammarV1ResolvedBinderKey seedBinder)
+    "loop initializer did not resolve in the pre-header entry scope"
+  assert
+    (grammarV1ResolvedBinderKey
+      (grammarV1CheckedLexicalReferenceBinder invariantReference)
+      == grammarV1ResolvedBinderKey iBinder)
+    "loop invariant did not resolve the established header binder"
+  case grammarV1CheckedLoopBodySteps checked of
+    [GrammarV1CheckedLoopContinueStep _ actuals references] -> do
+      assert (length actuals == 1)
+        "continue(i) did not retain exactly one explicit successor actual"
+      continued <- exactlyOne "continue lexical reference" references
+      assert
+        (grammarV1ResolvedBinderKey
+          (grammarV1CheckedLexicalReferenceBinder continued)
+          == grammarV1ResolvedBinderKey iBinder)
+        "continue(i) did not resolve the current loop-header occurrence"
+    other -> Left ("expected one continue step, got " <> show other)
+  assert
+    (grammarV1BinderOrdinal (grammarV1ResolvedBinderKey iBinder) == 1)
+    "loop header binder did not follow the function parameter ordinal"
+  assertNotInScope iBinder finalScope
+
+dependentLoopStateResolvesEarlierHeader :: Either String ()
+dependentLoopStateResolvesEarlierHeader = do
+  functionDecl <- onlyFunction "loop-dependent-state" $ Text.unlines
+    [ "fn loop_dependent_state(seed : U8) -> U8 satisfies C {"
+    , "  loop state (n : U8 = seed, payload : Bytes[n] = seed) invariant n >= 0 {"
+    , "    continue(n, payload);"
+    , "  };"
+    , "  return seed;"
+    , "}"
+    ]
+  (_, initialScope) <- mapLeft show
+    (grammarV1FunctionParameterScope
+      (DeclarationKey "decl.LoopDependentState") functionDecl)
+  expression <- firstExpressionStatement functionDecl
+  (checked, finalScope) <- checkedLoop initialScope expression
+  case grammarV1CheckedLoopSlots checked of
+    [nSlot, payloadSlot] -> do
+      let nBinder = grammarV1CheckedLoopSlotBinder nSlot
+          payloadBinder = grammarV1CheckedLoopSlotBinder payloadSlot
+      dependency <- exactlyOne "loop payload type dependency"
+        (grammarV1CheckedLoopSlotTypeReferences payloadSlot)
+      assert
+        (grammarV1ResolvedBinderKey
+          (grammarV1CheckedLexicalReferenceBinder dependency)
+          == grammarV1ResolvedBinderKey nBinder)
+        "later loop-state type did not resolve earlier header binder n"
+      payloadInitializer <- exactlyOne "payload entry initializer reference"
+        (grammarV1CheckedLoopSlotInitializerReferences payloadSlot)
+      assert
+        (grammarV1ResolvedBinderDisplayName
+          (grammarV1CheckedLexicalReferenceBinder payloadInitializer) == "seed")
+        "later loop initializer incorrectly resolved through header scope"
+      case grammarV1CheckedLoopBodySteps checked of
+        [GrammarV1CheckedLoopContinueStep _ actuals references] -> do
+          assert (length actuals == 2)
+            "continue(n, payload) did not preserve exact successor arity"
+          assert
+            (map (grammarV1ResolvedBinderKey . grammarV1CheckedLexicalReferenceBinder)
+                references
+              == [grammarV1ResolvedBinderKey nBinder,
+                  grammarV1ResolvedBinderKey payloadBinder])
+            "continue actuals did not resolve the two current header binders"
+        other -> Left ("expected dependent continue step, got " <> show other)
+      assertNotInScope nBinder finalScope
+      assertNotInScope payloadBinder finalScope
+    other -> Left ("expected n/payload loop slots, got " <> show other)
+
+loopInitializerCannotSeeHeaderBinder :: Either String ()
+loopInitializerCannotSeeHeaderBinder = do
+  functionDecl <- onlyFunction "loop-future-initializer" $ Text.unlines
+    [ "fn loop_future_initializer(seed : U8) -> U8 satisfies C {"
+    , "  loop state (i : U8 = i) {"
+    , "    continue(i);"
+    , "  };"
+    , "  return seed;"
+    , "}"
+    ]
+  (_, initialScope) <- mapLeft show
+    (grammarV1FunctionParameterScope
+      (DeclarationKey "decl.LoopFutureInitializer") functionDecl)
+  expression <- firstExpressionStatement functionDecl
+  case grammarV1CheckedLoopExpressionInScope initialScope expression of
+    Just (Left (GrammarV1LoopStateReferenceError
+      (GrammarV1LexicalReferenceForwardReference missing))) ->
+        assert (locatedValue missing == "i")
+          "loop initializer forward-reference diagnostic lost state spelling"
+    other -> Left ("expected loop initializer forward-reference rejection, got " <> show other)
+
+loopTypeForwardReferenceRejects :: Either String ()
+loopTypeForwardReferenceRejects = do
+  functionDecl <- onlyFunction "loop-forward-type" $ Text.unlines
+    [ "fn loop_forward_type(seed : U8) -> U8 satisfies C {"
+    , "  loop state (payload : Bytes[n] = seed, n : U8 = seed) {"
+    , "    continue(payload, n);"
+    , "  };"
+    , "  return seed;"
+    , "}"
+    ]
+  (_, initialScope) <- mapLeft show
+    (grammarV1FunctionParameterScope
+      (DeclarationKey "decl.LoopForwardType") functionDecl)
+  expression <- firstExpressionStatement functionDecl
+  case grammarV1CheckedLoopExpressionInScope initialScope expression of
+    Just (Left (GrammarV1LoopStateReferenceError
+      (GrammarV1LexicalReferenceForwardReference missing))) ->
+        assert (locatedValue missing == "n")
+          "loop-state type forward-reference diagnostic lost future spelling"
+    other -> Left ("expected loop-state type forward-reference rejection, got " <> show other)
+
+loopStateCannotShadowParameter :: Either String ()
+loopStateCannotShadowParameter = do
+  functionDecl <- onlyFunction "loop-shadow-parameter" $ Text.unlines
+    [ "fn loop_shadow_parameter(i : U8) -> U8 satisfies C {"
+    , "  loop state (i : U8 = i) {"
+    , "    continue(i);"
+    , "  };"
+    , "  return i;"
+    , "}"
+    ]
+  (_, initialScope) <- mapLeft show
+    (grammarV1FunctionParameterScope
+      (DeclarationKey "decl.LoopShadowParameter") functionDecl)
+  expression <- firstExpressionStatement functionDecl
+  case grammarV1CheckedLoopExpressionInScope initialScope expression of
+    Just (Left (GrammarV1LoopStateBinderError
+      (GrammarV1ActiveShadowing shadowing previous))) -> do
+        assert (locatedValue shadowing == "i")
+          "loop-state shadowing diagnostic lost local spelling"
+        assert (grammarV1ResolvedBinderDisplayName previous == "i")
+          "loop-state shadowing diagnostic lost enclosing parameter"
+    other -> Left ("expected loop-state active-shadowing rejection, got " <> show other)
+
+duplicateLoopStateRejects :: Either String ()
+duplicateLoopStateRejects = do
+  functionDecl <- onlyFunction "loop-duplicate-state" $ Text.unlines
+    [ "fn loop_duplicate_state(seed : U8) -> U8 satisfies C {"
+    , "  loop state (item : U8 = seed, item : U8 = seed) {"
+    , "    continue(item, item);"
+    , "  };"
+    , "  return seed;"
+    , "}"
+    ]
+  (_, initialScope) <- mapLeft show
+    (grammarV1FunctionParameterScope
+      (DeclarationKey "decl.LoopDuplicateState") functionDecl)
+  expression <- firstExpressionStatement functionDecl
+  case grammarV1CheckedLoopExpressionInScope initialScope expression of
+    Just (Left (GrammarV1LoopStateBinderError
+      (GrammarV1DuplicateBinder duplicate previous))) -> do
+        assert (locatedValue duplicate == "item")
+          "duplicate loop-state diagnostic lost second spelling"
+        assert (grammarV1ResolvedBinderDisplayName previous == "item")
+          "duplicate loop-state diagnostic lost first binder"
+    other -> Left ("expected duplicate loop-state rejection, got " <> show other)
+
+loopBodyLetBreakScopeCloses :: Either String ()
+loopBodyLetBreakScopeCloses = do
+  functionDecl <- onlyFunction "loop-body-break" $ Text.unlines
+    [ "fn loop_body_break(seed : U8) -> U8 satisfies C {"
+    , "  loop state (i : U8 = seed) {"
+    , "    let temp = i;"
+    , "    break(temp);"
+    , "  };"
+    , "  return seed;"
+    , "}"
+    ]
+  (_, initialScope) <- mapLeft show
+    (grammarV1FunctionParameterScope
+      (DeclarationKey "decl.LoopBodyBreak") functionDecl)
+  expression <- firstExpressionStatement functionDecl
+  (checked, finalScope) <- checkedLoop initialScope expression
+  loopSlot <- exactlyOne "loop body state slot" (grammarV1CheckedLoopSlots checked)
+  let iBinder = grammarV1CheckedLoopSlotBinder loopSlot
+  case grammarV1CheckedLoopBodySteps checked of
+    [ GrammarV1CheckedLoopBodyLetStep _ initializerReferences [tempBinder]
+      , GrammarV1CheckedLoopBreakStep _ actuals breakReferences
+      ] -> do
+        initializerReference <- exactlyOne "loop body let initializer"
+          initializerReferences
+        assert
+          (grammarV1ResolvedBinderKey
+            (grammarV1CheckedLexicalReferenceBinder initializerReference)
+            == grammarV1ResolvedBinderKey iBinder)
+          "loop-body let initializer did not resolve header state"
+        assert (grammarV1ResolvedBinderDisplayName tempBinder == "temp")
+          "loop-body let binder spelling changed"
+        assert (length actuals == 1)
+          "break(temp) did not retain exactly one explicit exit actual"
+        breakReference <- exactlyOne "break lexical reference" breakReferences
+        assert
+          (grammarV1ResolvedBinderKey
+            (grammarV1CheckedLexicalReferenceBinder breakReference)
+            == grammarV1ResolvedBinderKey tempBinder)
+          "break(temp) did not resolve body-local temp"
+        assert
+          (grammarV1BinderOrdinal (grammarV1ResolvedBinderKey tempBinder) == 2)
+          "body-local temp did not receive fresh identity after loop state"
+        assertNotInScope iBinder finalScope
+        assertNotInScope tempBinder finalScope
+    other -> Left ("expected loop let then break trace, got " <> show other)
+
+zeroActualContinueDoesNotCaptureState :: Either String ()
+zeroActualContinueDoesNotCaptureState = do
+  functionDecl <- onlyFunction "loop-zero-continue" $ Text.unlines
+    [ "fn loop_zero_continue(seed : U8) -> U8 satisfies C {"
+    , "  loop state (i : U8 = seed) {"
+    , "    continue;"
+    , "  };"
+    , "  return seed;"
+    , "}"
+    ]
+  (_, initialScope) <- mapLeft show
+    (grammarV1FunctionParameterScope
+      (DeclarationKey "decl.LoopZeroContinue") functionDecl)
+  expression <- firstExpressionStatement functionDecl
+  (checked, _) <- checkedLoop initialScope expression
+  case grammarV1CheckedLoopBodySteps checked of
+    [GrammarV1CheckedLoopContinueStep _ actuals references] -> do
+      assert (null actuals)
+        "bare continue acquired an implicit successor actual"
+      assert (null references)
+        "bare continue implicitly captured the current loop-state binder"
+    other -> Left ("expected one zero-actual continue step, got " <> show other)
+
+loopStateAlphaRenamingPreservesIdentity :: Either String ()
+loopStateAlphaRenamingPreservesIdentity = do
+  original <- onlyFunction "loop-alpha-original" $ Text.unlines
+    [ "fn loop_alpha(seed : U8) -> U8 satisfies C {"
+    , "  loop state (i : U8 = seed) invariant i >= 0 {"
+    , "    continue(i);"
+    , "  };"
+    , "  return seed;"
+    , "}"
+    ]
+  renamed <- onlyFunction "loop-alpha-renamed" $ Text.unlines
+    [ "fn loop_alpha(seed : U8) -> U8 satisfies C {"
+    , "    loop state (cursor : U8 = seed) invariant cursor >= 0 {"
+    , "      continue(cursor);"
+    , "    };"
+    , "    return seed;"
+    , "}"
+    ]
+  let declarationKey = DeclarationKey "decl.LoopAlpha"
+  (_, originalScope) <- mapLeft show
+    (grammarV1FunctionParameterScope declarationKey original)
+  (_, renamedScope) <- mapLeft show
+    (grammarV1FunctionParameterScope declarationKey renamed)
+  originalExpression <- firstExpressionStatement original
+  renamedExpression <- firstExpressionStatement renamed
+  (originalChecked, _) <- checkedLoop originalScope originalExpression
+  (renamedChecked, _) <- checkedLoop renamedScope renamedExpression
+  originalSlot <- exactlyOne "original alpha loop slot"
+    (grammarV1CheckedLoopSlots originalChecked)
+  renamedSlot <- exactlyOne "renamed alpha loop slot"
+    (grammarV1CheckedLoopSlots renamedChecked)
+  let originalBinder = grammarV1CheckedLoopSlotBinder originalSlot
+      renamedBinder = grammarV1CheckedLoopSlotBinder renamedSlot
+  assert
+    (grammarV1ResolvedBinderKey originalBinder
+      == grammarV1ResolvedBinderKey renamedBinder)
+    "alpha-renaming loop state changed semantic BinderKey"
+  assert
+    (grammarV1ResolvedBinderCoreName originalBinder
+      == grammarV1ResolvedBinderCoreName renamedBinder)
+    "alpha-renaming loop state changed generated Core name"
+  assert (grammarV1ResolvedBinderDisplayName originalBinder == "i")
+    "original loop-state spelling was not retained diagnostically"
+  assert (grammarV1ResolvedBinderDisplayName renamedBinder == "cursor")
+    "renamed loop-state spelling was not retained diagnostically"
+
 checkedJoin
   :: GrammarV1LexicalScope
   -> Located GrammarV1Expression
@@ -407,6 +734,15 @@ checkedJoin scope expression =
   case grammarV1CheckedJoinExpressionInScope scope expression of
     Just (Right checked) -> Right checked
     other -> Left ("expected checked join expression, got " <> show other)
+
+checkedLoop
+  :: GrammarV1LexicalScope
+  -> Located GrammarV1Expression
+  -> Either String (GrammarV1CheckedLoopState, GrammarV1LexicalScope)
+checkedLoop scope expression =
+  case grammarV1CheckedLoopExpressionInScope scope expression of
+    Just (Right checked) -> Right checked
+    other -> Left ("expected checked loop scope, got " <> show other)
 
 matchJoinClause
   :: GrammarV1CheckedJoinExpression
@@ -428,6 +764,19 @@ resolveLike binder scope = mapLeft show $ grammarV1ResolveLocal
   (Located (grammarV1ResolvedBinderSourceSpan binder)
     (grammarV1ResolvedBinderDisplayName binder))
   scope
+
+assertNotInScope
+  :: GrammarV1ResolvedBinder
+  -> GrammarV1LexicalScope
+  -> Either String ()
+assertNotInScope binder scope =
+  case grammarV1ResolveLocal
+      (Located (grammarV1ResolvedBinderSourceSpan binder)
+        (grammarV1ResolvedBinderDisplayName binder))
+      scope of
+    Left (GrammarV1BinderNotInScope _) -> Right ()
+    other -> Left
+      ("closed lexical binder remained visible after scope exit: " <> show other)
 
 firstExpressionStatement
   :: GrammarV1FunctionDecl
