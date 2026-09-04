@@ -1,4 +1,4 @@
-From Stdlib Require Import Bool.Bool.
+From Stdlib Require Import Bool.Bool Setoids.Setoid.
 
 From Phil.Core Require Import RuntimePrimitiveIdentity.
 
