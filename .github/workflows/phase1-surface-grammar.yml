@@ -172,6 +172,9 @@ jobs:
       - name: Check Grammar-v1 let pattern scope
         run: cabal exec -- runghc -Wall -Werror -isrc test/Phase1GrammarV1LetPatternScopeMain.hs
 
+      - name: Check Grammar-v1 case-arm scope
+        run: cabal exec -- runghc -Wall -Werror -isrc test/Phase1GrammarV1CaseArmScopeMain.hs
+
       - name: Check Grammar-v1 offer and case parsing
         run: cabal exec -- runghc -Wall -Werror -isrc test/Phase1GrammarV1OfferCaseMain.hs
 
