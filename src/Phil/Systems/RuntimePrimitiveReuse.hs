@@ -177,7 +177,7 @@ makeRuntimePrimitiveStageBundle
   -> Map RuntimeSiteKey RuntimePrimitiveSiteBinding
   -> Map RuntimePrimitiveProfileRef (Set RuntimeSiteKey)
   -> RuntimePrimitiveStageBundle
-makeRuntimePrimitiveStageBundle base sites reverse = provisional
+makeRuntimePrimitiveStageBundle base sites reverseMap = provisional
   { runtimePrimitiveStageRevision =
       deriveRuntimePrimitiveStageRevision provisional }
   where
@@ -185,17 +185,17 @@ makeRuntimePrimitiveStageBundle base sites reverse = provisional
       { runtimePrimitiveStageBase = base
       , runtimePrimitiveStageRevision = RuntimePrimitiveStageRevision "pending"
       , runtimePrimitiveStageSites = sites
-      , runtimePrimitiveStageReverse = reverse
+      , runtimePrimitiveStageReverse = reverseMap
       }
 
 completeRuntimePrimitiveStageBundle
   :: RuntimeClaimStageBundle
   -> RuntimePrimitiveStageBundle
 completeRuntimePrimitiveStageBundle base =
-  makeRuntimePrimitiveStageBundle base sites reverse
+  makeRuntimePrimitiveStageBundle base sites derivedReverse
   where
     sites = deriveRuntimePrimitiveSiteBindings base
-    reverse = deriveRuntimePrimitiveReverse sites
+    derivedReverse = deriveRuntimePrimitiveReverse sites
 
 verifyRuntimePrimitiveStageBundle
   :: RuntimePrimitiveStageBundle
