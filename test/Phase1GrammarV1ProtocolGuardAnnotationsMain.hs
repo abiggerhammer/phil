@@ -7,12 +7,24 @@ import Phil.Core.Focusing
   ( FocusStep
   , FocusingError (..)
   )
+import Phil.Core.Generic (GenericStaticParameterKey (..))
+import Phil.Core.Generic.StaticActual
+  ( GenericStaticActual (..)
+  , GenericStaticKind (..)
+  , GenericStaticParameter (..)
+  , GenericStaticReferenceCandidate (..)
+  )
 import Phil.Core.Protocol (ProtocolRoleKey (..))
 import Phil.Core.Protocol.Family
   ( ProtocolSessionTemplate (..)
   , ProtocolTypeTemplate (..)
   )
-import Phil.Core.Static (emptyStaticContext)
+import Phil.Core.Static
+  ( DeclarationKey (..)
+  , InterfaceRevision (..)
+  , SemanticForm (..)
+  , emptyStaticContext
+  )
 import Phil.Core.Syntax
   ( Name (..)
   , Outcome (..)
@@ -20,6 +32,12 @@ import Phil.Core.Syntax
   , Ty (..)
   )
 import Phil.Surface.GrammarV1.Parser
+import Phil.Surface.GrammarV1.ProtocolBoundaryAnnotations
+  ( GrammarV1ProtocolBoundaryAnnotation (..)
+  , GrammarV1ProtocolBoundarySite (..)
+  , GrammarV1ResolvedProtocolBoundaryReference (..)
+  , GrammarV1ResolvedSpecializedProtocolBoundary (..)
+  )
 import Phil.Surface.GrammarV1.ProtocolGuardAnnotations
   ( GrammarV1CheckedProtocolGuardAnnotation (..)
   , GrammarV1ClosedProtocolGuardSurface (..)
@@ -27,8 +45,16 @@ import Phil.Surface.GrammarV1.ProtocolGuardAnnotations
   , GrammarV1ProtocolGuardSite (..)
   , grammarV1CheckedClosedProtocolGuardSurface
   )
+import Phil.Surface.GrammarV1.ProtocolGuardBoundaryComposition
+  ( GrammarV1CheckedGuardedProtocolBoundaries (..)
+  , GrammarV1ClosedGuardBoundarySurface (..)
+  , grammarV1CheckedGuardBoundarySurface
+  )
 import Phil.Surface.GrammarV1.ProtocolRoles
   ( GrammarV1ProtocolRoleError (..)
+  )
+import Phil.Surface.GrammarV1.SpecializedStaticReference
+  ( GrammarV1ResolvedDirectStaticArgument (..)
   )
 import Phil.Surface.Syntax (Located (..))
 import System.Exit (exitFailure)
@@ -46,6 +72,8 @@ main = do
         guardFocusingFailure
     , test "SURF-008 protocol guard routing preserves binder and boundary competence walls"
         guardCompetenceBoundaries
+    , test "SURF-008 binder-free guards compose with bare specialized and mixed boundaries"
+        guardBoundaryComposition
     ]
   if and results then pure () else exitFailure
 
@@ -210,6 +238,170 @@ guardCompetenceBoundaries = do
     , ("protocol without guards", unguarded)
     , ("generic guarded protocol", generic)
     ]
+
+guardBoundaryComposition :: Either String ()
+guardBoundaryComposition = do
+  bare <- onlyProtocol $ Text.unlines
+    [ "protocol GuardedBare {"
+    , "  role Client = send (x : U8) using WireOut when true then end Done;"
+    , "  role Server = receive (y : U8) using WireIn when true then end Done;"
+    , "}"
+    ]
+  specialized <- onlyProtocol $ Text.unlines
+    [ "protocol GuardedSpecialized {"
+    , "  role Client = send (x : U8) using WireOut[U8] when true then end Done;"
+    , "  role Server = receive (y : U8) using WireIn[U8] when true then end Done;"
+    , "}"
+    ]
+  mixed <- onlyProtocol $ Text.unlines
+    [ "protocol GuardedMixed {"
+    , "  role Client = send (x : U8) using WireOut when true then end Done;"
+    , "  role Server = receive (y : U8) using WireIn[U8] when true then end Done;"
+    , "}"
+    ]
+  bareSurface <- checkedGuardBoundary bare
+  specializedSurface <- checkedGuardBoundary specialized
+  mixedSurface <- checkedGuardBoundary mixed
+  assert
+    (boundaryKind bareSurface == "bare")
+    "guard composition did not retain the resolved bare-boundary authority"
+  assert
+    (boundaryKind specializedSurface == "specialized")
+    "guard composition did not retain the specialized-boundary authority"
+  assert
+    (boundaryKind mixedSurface == "mixed")
+    "guard composition did not retain both boundary-reference authorities"
+  mapM_ (\surface -> do
+    assert
+      (length (checkedGuardBoundaryGuards surface) == 2)
+      "guard composition lost a source guard"
+    assert
+      (all ((== Truth) . checkedProtocolGuardProposition)
+        (checkedGuardBoundaryGuards surface))
+      "guard composition changed a checked proposition"
+    ) [bareSurface, specializedSurface, mixedSurface]
+  binderDependent <- onlyProtocol $ Text.unlines
+    [ "protocol GuardedBinderDependent {"
+    , "  role Client = send (x : U8) using WireOut when x == x then end Done;"
+    , "  role Server = receive (y : U8) using WireIn[U8] when y == y then end Done;"
+    , "}"
+    ]
+  (binderBareEvidence, binderSpecializedEvidence) <- messageBoundaryEvidence binderDependent
+  assert
+    ( grammarV1CheckedGuardBoundarySurface
+        emptyStaticContext
+        binderBareEvidence
+        binderSpecializedEvidence
+        binderDependent
+        == Nothing
+    )
+    "boundary composition accidentally resolved live guard binders before SURF-009"
+
+checkedGuardBoundary
+  :: GrammarV1ProtocolDecl
+  -> Either String GrammarV1ClosedGuardBoundarySurface
+checkedGuardBoundary protocol = do
+  (bareEvidence, specializedEvidence) <- messageBoundaryEvidence protocol
+  case grammarV1CheckedGuardBoundarySurface
+      emptyStaticContext bareEvidence specializedEvidence protocol of
+    Just (Right surface) -> Right surface
+    other -> Left ("expected checked guard/boundary composition, got " <> show other)
+
+boundaryKind :: GrammarV1ClosedGuardBoundarySurface -> String
+boundaryKind surface = case checkedGuardBoundaryBoundaries surface of
+  GrammarV1CheckedGuardedBareProtocolBoundaries _ -> "bare"
+  GrammarV1CheckedGuardedSpecializedProtocolBoundaries _ -> "specialized"
+  GrammarV1CheckedGuardedMixedProtocolBoundaries _ -> "mixed"
+
+messageBoundaryEvidence
+  :: GrammarV1ProtocolDecl
+  -> Either String
+      ( [GrammarV1ResolvedProtocolBoundaryReference]
+      , [GrammarV1ResolvedSpecializedProtocolBoundary]
+      )
+messageBoundaryEvidence protocol = do
+  uses <- mapM messageBoundaryUse (grammarV1ProtocolRoles protocol)
+  bareEvidence <- mapM bareBoundaryEvidence
+    [ use
+    | use@(_, _, Located _ reference) <- uses
+    , null (grammarV1StaticReferenceArguments reference)
+    ]
+  specializedEvidence <- mapM specializedBoundaryEvidence
+    [ use
+    | use@(_, _, Located _ reference) <- uses
+    , not (null (grammarV1StaticReferenceArguments reference))
+    ]
+  pure (bareEvidence, specializedEvidence)
+
+messageBoundaryUse
+  :: Located GrammarV1RoleSessionDecl
+  -> Either String
+      (ProtocolRoleKey, GrammarV1ProtocolBoundarySite, Located GrammarV1StaticReference)
+messageBoundaryUse (Located _ role) =
+  let roleKey = ProtocolRoleKey (locatedValue (grammarV1RoleSessionName role))
+  in case locatedValue (grammarV1RoleSessionExpression role) of
+    GrammarV1SessionSend _ (Just reference) _ _ ->
+      Right (roleKey, GrammarV1SendBoundary, reference)
+    GrammarV1SessionReceive _ (Just reference) _ _ ->
+      Right (roleKey, GrammarV1ReceiveBoundary, reference)
+    other -> Left ("expected one boundary-bearing message session, got " <> show other)
+
+bareBoundaryEvidence
+  :: (ProtocolRoleKey, GrammarV1ProtocolBoundarySite, Located GrammarV1StaticReference)
+  -> Either String GrammarV1ResolvedProtocolBoundaryReference
+bareBoundaryEvidence (roleKey, site, sourceReference@(Located _ reference)) =
+  let targetName = qualifiedNameText (grammarV1StaticReferenceName reference)
+      annotation = GrammarV1ProtocolBoundaryAnnotation
+        { protocolBoundaryRole = roleKey
+        , protocolBoundarySite = site
+        , protocolBoundarySourceReference = sourceReference
+        , protocolBoundaryStaticReference = ReferencedGenericStaticActual targetName
+        }
+  in Right GrammarV1ResolvedProtocolBoundaryReference
+    { resolvedProtocolBoundarySourceAnnotation = annotation
+    , resolvedProtocolBoundaryTargetCandidate = GenericStaticReferenceCandidate
+        targetName
+        GenericBoundaryContractKind
+        (SemanticAtom ("boundary." <> targetName <> ".resolved"))
+    , resolvedProtocolBoundaryDeclarationKey = DeclarationKey ("decl." <> targetName)
+    , resolvedProtocolBoundaryInterfaceRevision =
+        InterfaceRevision ("iface." <> targetName <> ".v1")
+    }
+
+specializedBoundaryEvidence
+  :: (ProtocolRoleKey, GrammarV1ProtocolBoundarySite, Located GrammarV1StaticReference)
+  -> Either String GrammarV1ResolvedSpecializedProtocolBoundary
+specializedBoundaryEvidence (roleKey, site, sourceReference@(Located _ reference)) = do
+  argument <- case grammarV1StaticReferenceArguments reference of
+    [one] -> Right one
+    other -> Left
+      ("expected one specialized boundary argument, got " <> show (length other))
+  let targetName = qualifiedNameText (grammarV1StaticReferenceName reference)
+      typeKey = GenericStaticParameterKey ("protocol.boundary.type." <> targetName)
+  Right GrammarV1ResolvedSpecializedProtocolBoundary
+    { resolvedSpecializedProtocolBoundaryRole = roleKey
+    , resolvedSpecializedProtocolBoundarySite = site
+    , resolvedSpecializedProtocolBoundarySourceReference = sourceReference
+    , resolvedSpecializedProtocolBoundaryTargetCandidate = GenericStaticReferenceCandidate
+        targetName
+        GenericBoundaryContractKind
+        (SemanticAtom ("boundary." <> targetName <> ".checked"))
+    , resolvedSpecializedProtocolBoundaryDeclarationKey = DeclarationKey ("decl." <> targetName)
+    , resolvedSpecializedProtocolBoundaryInterfaceRevision =
+        InterfaceRevision ("iface." <> targetName <> ".v1")
+    , resolvedSpecializedProtocolBoundaryParameters =
+        [GenericStaticParameter typeKey GenericTypeKind]
+    , resolvedSpecializedProtocolBoundaryDirectArguments =
+        [ GrammarV1ResolvedDirectStaticArgument
+            argument
+            GenericTypeKind
+            (SemanticAtom "type.U8.checked")
+        ]
+    , resolvedSpecializedProtocolBoundaryArgumentReferences = []
+    }
+
+qualifiedNameText :: GrammarV1QualifiedName -> Text.Text
+qualifiedNameText source = Text.intercalate "." (grammarV1QualifiedNameParts source)
 
 guardSummary
   :: GrammarV1ClosedProtocolGuardSurface
