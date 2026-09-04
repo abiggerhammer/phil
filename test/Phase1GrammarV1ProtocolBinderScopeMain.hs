@@ -103,10 +103,11 @@ branchScopesAreDisjoint = do
     , "    | Stop(item : U8) when item == item =>"
     , "      send (inside : U8) when inside == item then end Done"
     , "  };"
+    , "  role Server = end Done;"
     , "}"
     ]
   checked <- checkedProtocol (DeclarationKey "decl.BranchScope") protocol
-  role <- exactlyOne "protocol role" (grammarV1CheckedProtocolRoles checked)
+  role <- roleByKey (ProtocolRoleKey "Client") (grammarV1CheckedProtocolRoles checked)
   let binders = map resolved (grammarV1CheckedProtocolRoleBinders role)
   assert (map grammarV1ResolvedBinderDisplayName binders == ["item", "inside", "item", "inside"])
     "branch-local binder traversal did not preserve source order"
@@ -129,10 +130,11 @@ dependentBranchPayloadResolvesEarlierBinder = do
     , "  role Client = select {"
     , "    Go(n : U8, payload : Bytes[n]) when n >= 0 => end Done"
     , "  };"
+    , "  role Server = end Done;"
     , "}"
     ]
   checked <- checkedProtocol (DeclarationKey "decl.DependentBranch") protocol
-  role <- exactlyOne "protocol role" (grammarV1CheckedProtocolRoles checked)
+  role <- roleByKey (ProtocolRoleKey "Client") (grammarV1CheckedProtocolRoles checked)
   case grammarV1CheckedProtocolRoleBinders role of
     [nSource, payloadSource] -> do
       dependency <- exactlyOne "dependent payload type reference"
@@ -150,6 +152,7 @@ branchPayloadForwardReferenceRejects = do
     , "  role Client = select {"
     , "    Go(payload : Bytes[n], n : U8) => end Done"
     , "  };"
+    , "  role Server = end Done;"
     , "}"
     ]
   case grammarV1CheckedProtocolBinderScope (DeclarationKey "decl.ForwardBranch") protocol of
@@ -165,6 +168,7 @@ branchPayloadCannotShadowMessage = do
     , "  role Client = send (item : U8) then select {"
     , "    Go(item : U8) => end Done"
     , "  };"
+    , "  role Server = end Done;"
     , "}"
     ]
   case grammarV1CheckedProtocolBinderScope (DeclarationKey "decl.ShadowBranch") protocol of
@@ -180,6 +184,7 @@ sequentialMessageDuplicateRejects = do
     [ "protocol DuplicateMessage {"
     , "  role Client = send (value : U8) then"
     , "    send (value : U8) then end Done;"
+    , "  role Server = end Done;"
     , "}"
     ]
   case grammarV1CheckedProtocolBinderScope (DeclarationKey "decl.DuplicateMessage") protocol of
@@ -258,6 +263,17 @@ guardBinders = map grammarV1CheckedLexicalReferenceBinder . grammarV1CheckedProt
 
 allResolvedBinders :: GrammarV1CheckedProtocolBinderScope -> [GrammarV1ResolvedBinder]
 allResolvedBinders = concatMap (map resolved . grammarV1CheckedProtocolRoleBinders) . grammarV1CheckedProtocolRoles
+
+roleByKey
+  :: ProtocolRoleKey
+  -> [GrammarV1CheckedProtocolRoleScope]
+  -> Either String GrammarV1CheckedProtocolRoleScope
+roleByKey expected roles =
+  case filter ((== expected) . grammarV1CheckedProtocolRole) roles of
+    [role] -> Right role
+    [] -> Left ("missing checked protocol role " <> show expected)
+    matches -> Left
+      ("duplicate checked protocol role " <> show expected <> ": " <> show (length matches))
 
 onlyProtocol :: Text.Text -> Either String GrammarV1ProtocolDecl
 onlyProtocol source = do
