@@ -1,6 +1,7 @@
 From Stdlib Require Import Arith.PeanoNat Bool.Bool Lists.List Strings.String.
 
 From Phil.Surface Require Import
+  GrammarDerivation
   GrammarDerivationOracle
   GrammarDeterminacyStructuralResolvers.
 
