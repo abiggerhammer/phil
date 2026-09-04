@@ -71,7 +71,7 @@ grammarV1CheckedSemanticType
         (GrammarV1CheckedSemanticType, GrammarV1LexicalScope))
 grammarV1CheckedSemanticType staticContext lexicalScope state source =
   case locatedValue source of
-    GrammarV1RefinementType {} -> do
+    GrammarV1RefinementType _ _ _ -> do
       checked <- grammarV1CheckedSemanticRefinementType
         staticContext lexicalScope state (locatedValue source)
       pure $ do
