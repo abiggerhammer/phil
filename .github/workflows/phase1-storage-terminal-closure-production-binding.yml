@@ -112,13 +112,14 @@ jobs:
           cabal exec -- ghc -isrc -Wall -Werror -fno-code src/Phil/Systems/Storage.hs
           cabal exec -- ghc -isrc -Wall -Werror -fno-code src/Phil/Systems/StorageRealizationCertification.hs
           cabal exec -- ghc -isrc -Wall -Werror -fno-code src/Phil/Systems/StorageAllocationFailureCertification.hs
-          # StageClosure's transitive baseline currently contains known name-shadowing
-          # warnings outside this PR. Keep every other warning fatal here.
-          cabal exec -- ghc -isrc -Wall -Werror -Wno-name-shadowing -fno-code src/Phil/Systems/StageClosure.hs
+          # StageClosure's transitive baseline currently contains known
+          # name-shadowing and redundant-import warnings outside this PR.
+          # Keep every other warning fatal here.
+          cabal exec -- ghc -isrc -Wall -Werror -Wno-name-shadowing -Wno-unused-imports -fno-code src/Phil/Systems/StageClosure.hs
           cabal exec -- ghc -isrc -Wall -Werror -fno-code src/Phil/Core/ProcessLifecycle.hs
-          cabal exec -- ghc -isrc -Wall -Werror -Wno-name-shadowing -fno-code src/Phil/Systems/StorageTerminalClosureCertification.hs
+          cabal exec -- ghc -isrc -Wall -Werror -Wno-name-shadowing -Wno-unused-imports -fno-code src/Phil/Systems/StorageTerminalClosureCertification.hs
           cabal exec -- ghc -isrc -Wall -Werror -Wno-unused-imports -fno-code app/StorageTerminalClosureDecisionCorrespondenceMain.hs
-          cabal exec -- ghc -isrc -Wall -Werror -Wno-name-shadowing -fno-code app/StorageTerminalClosureProductionBindingMain.hs
+          cabal exec -- ghc -isrc -Wall -Werror -Wno-name-shadowing -Wno-unused-imports -fno-code app/StorageTerminalClosureProductionBindingMain.hs
           cabal exec -- ghc -isrc -Wall -Werror -fno-code test/Phase1StorageRealizationMain.hs
           cabal exec -- ghc -isrc -Wall -Werror -fno-code test/Phase1ProcessTerminalClosureMain.hs
       - name: Execute exact extracted-kernel controls
@@ -129,7 +130,7 @@ jobs:
           cabal exec -- runghc -Wall -Werror -isrc app/StorageRealizationProductionBindingMain.hs
           cabal exec -- runghc -Wall -Werror -isrc app/StorageAllocationFailureProductionBindingMain.hs
       - name: Execute MEM-004/MEM-005 production-binding controls
-        run: cabal exec -- runghc -Wall -Werror -Wno-name-shadowing -isrc app/StorageTerminalClosureProductionBindingMain.hs
+        run: cabal exec -- runghc -Wall -Werror -Wno-name-shadowing -Wno-unused-imports -isrc app/StorageTerminalClosureProductionBindingMain.hs
       - name: Re-run unchanged MEM and process-terminal corpora
         run: |
           set -euo pipefail
