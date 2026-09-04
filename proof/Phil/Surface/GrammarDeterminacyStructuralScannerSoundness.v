@@ -273,7 +273,11 @@ Definition relation_neutral_step
   (token : ConcreteToken) : option nat :=
   match token with
   | TLiteral literal =>
-      if delimiter_open_literalb literal
+      if andb
+        (Nat.eqb depth 0)
+        (proposition_atom_boundary_literalb literal)
+      then None
+      else if delimiter_open_literalb literal
       then Some (S depth)
       else if delimiter_close_literalb literal
       then
@@ -284,8 +288,6 @@ Definition relation_neutral_step
       else if Nat.eqb depth 0
       then
         if relation_operator_literalb literal
-        then None
-        else if proposition_atom_boundary_literalb literal
         then None
         else Some depth
       else Some depth
@@ -319,23 +321,49 @@ Proof.
     reflexivity.
   - destruct token as [literal | class_name lexeme].
     + simpl in Hneutral |- *.
-      destruct (delimiter_open_literalb literal) eqn:Hopen.
-      * eapply IH. exact Hneutral.
-      * destruct (delimiter_close_literalb literal) eqn:Hclose.
-        -- destruct depth as [| depth].
-           ++ discriminate Hneutral.
-           ++ eapply IH. exact Hneutral.
-        -- destruct (Nat.eqb depth 0) eqn:Hdepth.
-           ++ destruct (relation_operator_literalb literal) eqn:Hoperator.
+      destruct
+        (andb
+          (Nat.eqb depth 0)
+          (proposition_atom_boundary_literalb literal))
+        eqn:Hboundary.
+      * discriminate Hneutral.
+      * destruct (delimiter_open_literalb literal) eqn:Hopen.
+        -- eapply IH. exact Hneutral.
+        -- destruct (delimiter_close_literalb literal) eqn:Hclose.
+           ++ destruct depth as [| depth].
               ** discriminate Hneutral.
-              ** destruct
-                   (proposition_atom_boundary_literalb literal)
-                   eqn:Hboundary.
+              ** eapply IH. exact Hneutral.
+           ++ destruct (Nat.eqb depth 0) eqn:Hdepth.
+              ** destruct (relation_operator_literalb literal) eqn:Hoperator.
                  --- discriminate Hneutral.
                  --- eapply IH. exact Hneutral.
-           ++ eapply IH. exact Hneutral.
+              ** eapply IH. exact Hneutral.
     + simpl in Hneutral |- *.
       eapply IH. exact Hneutral.
+Qed.
+
+Lemma relation_operator_literalb_not_boundary :
+  forall literal,
+    relation_operator_literalb literal = true ->
+    proposition_atom_boundary_literalb literal = false.
+Proof.
+  intros literal Hoperator.
+  unfold relation_operator_literalb in Hoperator.
+  apply orb_true_iff in Hoperator as [Heq | Hoperator].
+  - apply String.eqb_eq in Heq. subst literal. reflexivity.
+  - apply orb_true_iff in Hoperator as [Heq | Hoperator].
+    + apply String.eqb_eq in Heq. subst literal. reflexivity.
+    + apply orb_true_iff in Hoperator as [Heq | Hoperator].
+      * apply String.eqb_eq in Heq. subst literal. reflexivity.
+      * apply orb_true_iff in Hoperator as [Heq | Hoperator].
+        -- apply String.eqb_eq in Heq. subst literal. reflexivity.
+        -- apply orb_true_iff in Hoperator as [Heq | Hoperator].
+           ++ apply String.eqb_eq in Heq. subst literal. reflexivity.
+           ++ apply orb_true_iff in Hoperator as [Heq | Hoperator].
+              ** apply String.eqb_eq in Heq. subst literal. reflexivity.
+              ** apply orb_true_iff in Hoperator as [Heq | Heq].
+                 --- apply String.eqb_eq in Heq. subst literal. reflexivity.
+                 --- apply String.eqb_eq in Heq. subst literal. reflexivity.
 Qed.
 
 Lemma relation_commit_scan_neutral_operator :
@@ -348,11 +376,14 @@ Lemma relation_commit_scan_neutral_operator :
       depth (prefix ++ TLiteral literal :: suffix) = true.
 Proof.
   intros depth prefix suffix literal Hneutral Hopen Hclose Hoperator.
+  pose proof
+    (relation_operator_literalb_not_boundary literal Hoperator)
+    as Hboundary.
   rewrite
     (relation_commit_scan_after_neutral_prefix
       depth prefix 0 (TLiteral literal :: suffix) Hneutral).
   simpl.
-  rewrite Hopen, Hclose, Hoperator.
+  rewrite Hboundary, Hopen, Hclose, Hoperator.
   reflexivity.
 Qed.
 
@@ -372,7 +403,7 @@ Proof.
     (relation_commit_scan_after_neutral_prefix
       depth prefix 0 (TLiteral literal :: suffix) Hneutral).
   simpl.
-  rewrite Hopen, Hclose, Hoperator, Hboundary.
+  rewrite Hboundary.
   reflexivity.
 Qed.
 
