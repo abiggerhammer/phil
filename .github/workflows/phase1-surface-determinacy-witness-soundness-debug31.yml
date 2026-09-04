@@ -4,7 +4,7 @@ on:
   pull_request:
 
 permissions:
-  contents: read
+  contents: write
 
 jobs:
   rocq-witness-soundness-debug31:
@@ -15,6 +15,9 @@ jobs:
       options: --user root
     steps:
       - uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.pull_request.head.sha }}
+          fetch-depth: 0
 
       - name: Derive exact Grammar-v1 inputs
         shell: bash
@@ -28,13 +31,6 @@ jobs:
         run: |
           set -euo pipefail
           python3 scripts/debug_phase1_surface_witness_soundness_31.py
-
-      - name: Capture transformed witness source
-        uses: actions/upload-artifact@v4
-        with:
-          name: debug31-generated-witness-source
-          path: proof/Phil/Surface/GrammarDeterminacyWitnessSoundness.v
-          if-no-files-found: error
 
       - name: Compile witness soundness with forced timeout
         shell: bash
@@ -53,3 +49,20 @@ jobs:
           rocq c -Q proof/Phil Phil proof/Phil/Surface/GrammarDerivationLookahead.v
           timeout -k 5s 90s rocq c -time -Q proof/Phil Phil \
             proof/Phil/Surface/GrammarDeterminacyWitnessSoundness.v
+
+      - name: Commit validated witness source
+        if: github.event.pull_request.head.repo.full_name == github.repository
+        shell: bash
+        env:
+          HEAD_REF: ${{ github.head_ref }}
+        run: |
+          set -euo pipefail
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add proof/Phil/Surface/GrammarDeterminacyWitnessSoundness.v
+          if git diff --cached --quiet; then
+            echo "validated witness source already materialized"
+            exit 0
+          fi
+          git commit -m "Integrate validated witness soundness proof"
+          git push origin HEAD:"${HEAD_REF}"
