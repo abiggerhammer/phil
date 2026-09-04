@@ -19,7 +19,7 @@ import Data.Text (Text)
 import qualified Data.Text as Text
 import Phil.Assurance.Types (RevisionId)
 import Phil.Core.Process (ProcessKey)
-import Phil.Systems.IR (StageContract (..))
+import Phil.Systems.IR (FactTransfer (..), StageContract (..))
 import Phil.Systems.ProcessRealization
   ( PhysicalExecutionKey
   , ProcessExecutionRealization (..)
@@ -153,7 +153,13 @@ checkRuntimeCarrierCoverage profile contract realization carriers uses transitio
         || any isCoveredUse uses
         || not (null transitions)
 
-    stageObligations = Set.fromList (stageDerivedObligations contract)
+    stageObligations = Set.fromList
+      ( stageDerivedObligations contract
+        <> [ revision
+           | fact <- stageFacts contract
+           , Just revision <- [factSourceRevision fact]
+           ]
+      )
     processExecutions = realizationProcessExecutions realization
     factsById = Map.fromListWith (<>)
       [ (processFactId fact, [fact])
