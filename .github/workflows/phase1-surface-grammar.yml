@@ -171,6 +171,9 @@ jobs:
       - name: Check Grammar-v1 lexical binder scope
         run: cabal exec -- runghc -Wall -Werror -isrc test/Phase1GrammarV1BinderScopeMain.hs
 
+      - name: Check Grammar-v1 generic binder scope
+        run: cabal exec -- runghc -Wall -Werror -isrc test/Phase1GrammarV1GenericBinderScopeMain.hs
+
       - name: Check Grammar-v1 let pattern scope
         run: cabal exec -- runghc -Wall -Werror -isrc test/Phase1GrammarV1LetPatternScopeMain.hs
 
