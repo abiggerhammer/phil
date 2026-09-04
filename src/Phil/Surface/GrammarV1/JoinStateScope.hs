@@ -12,13 +12,12 @@ import qualified Data.Set as Set
 import Data.Text (Text)
 import Phil.Surface.GrammarV1.BinderScope
   ( GrammarV1BinderKind (GrammarV1JoinStateBinder)
-  , GrammarV1BinderScopeError (..)
+  , GrammarV1BinderScopeError
   , GrammarV1LexicalScope
   , GrammarV1ResolvedBinder
   , grammarV1BindLocal
   , grammarV1EnterLexicalScope
   , grammarV1LeaveLexicalScope
-  , grammarV1ResolveLocal
   )
 import Phil.Surface.GrammarV1.CaseArmScope
   ( GrammarV1CaseArmScopeError
@@ -30,6 +29,12 @@ import Phil.Surface.GrammarV1.LetPatternScope
   , GrammarV1LetPatternScopeError
   , grammarV1CheckedLetPatternBlockInScope
   )
+import Phil.Surface.GrammarV1.LexicalReferenceScope
+  ( GrammarV1CheckedLexicalReference (..)
+  , GrammarV1LexicalReferenceError (..)
+  , grammarV1CheckedPropositionReferences
+  , grammarV1CheckedTypeReferences
+  )
 import Phil.Surface.GrammarV1.ParameterBodyScope
   ( GrammarV1CheckedLocalValueOccurrence
   , grammarV1CheckedLocalValueOccurrenceInScope
@@ -37,14 +42,8 @@ import Phil.Surface.GrammarV1.ParameterBodyScope
 import Phil.Surface.GrammarV1.Parser
   ( GrammarV1Block
   , GrammarV1Expression (..)
-  , GrammarV1Fallback (..)
-  , GrammarV1FailureTarget (..)
   , GrammarV1JoinClause (..)
-  , GrammarV1Proposition (..)
-  , GrammarV1QualifiedName (..)
   , GrammarV1StateSlot (..)
-  , GrammarV1StaticReference (..)
-  , GrammarV1Type (..)
   )
 import Phil.Surface.Syntax (Located (..))
 
@@ -197,7 +196,8 @@ checkedJoinClause (Located _ joinClause) scope = do
     Right (checkedSlots, finalScope) -> do
       invariantResult <- case grammarV1JoinInvariant joinClause of
         Nothing -> Just (Right [])
-        Just invariant -> checkedPropositionReferences Set.empty finalScope invariant
+        Just invariant -> checkedJoinReferences
+          (grammarV1CheckedPropositionReferences Set.empty finalScope invariant)
       Just $ fmap
         (\invariantReferences ->
           ( GrammarV1CheckedJoinClause
@@ -218,10 +218,11 @@ checkedJoinSlots
         ([GrammarV1CheckedJoinSlot], GrammarV1LexicalScope))
 checkedJoinSlots _ scope [] = Just (Right ([], scope))
 checkedJoinSlots pendingNames scope (source@(Located _ slot) : rest) = do
-  typeReferencesResult <- checkedTypeReferences
-    (Set.fromList pendingNames)
-    scope
-    (grammarV1StateSlotType slot)
+  typeReferencesResult <- checkedJoinReferences
+    (grammarV1CheckedTypeReferences
+      (Set.fromList pendingNames)
+      scope
+      (grammarV1StateSlotType slot))
   case typeReferencesResult of
     Left scopeError -> Just (Left scopeError)
     Right typeReferences ->
@@ -244,111 +245,28 @@ checkedJoinSlots pendingNames scope (source@(Located _ slot) : rest) = do
               ))
             remainder
 
-checkedTypeReferences
-  :: Set.Set Text
-  -> GrammarV1LexicalScope
-  -> Located GrammarV1Type
-  -> Maybe (Either GrammarV1JoinStateScopeError [GrammarV1CheckedJoinReference])
-checkedTypeReferences pending scope (Located _ ty) = case ty of
-  GrammarV1UnitType -> Just (Right [])
-  GrammarV1BoolType -> Just (Right [])
-  GrammarV1UnsignedType _ -> Just (Right [])
-  GrammarV1BytesType expression -> checkedExpressionReferences pending scope expression
-  GrammarV1FrameType _ -> Just (Right [])
-  GrammarV1ProofType proposition -> checkedPropositionReferences pending scope proposition
-  GrammarV1ValidatedType _ context subject ->
-    combineChecked
-      (checkedExpressionReferences pending scope context)
-      (checkedExpressionReferences pending scope subject)
-  GrammarV1RefinementType _ _ _ -> Nothing
-  GrammarV1TupleType elements -> checkedMany
-    (map (checkedTypeReferences pending scope) elements)
-  GrammarV1NamedType _ -> Just (Right [])
+checkedJoinReferences
+  :: Maybe
+      (Either
+        GrammarV1LexicalReferenceError
+        [GrammarV1CheckedLexicalReference])
+  -> Maybe
+      (Either GrammarV1JoinStateScopeError [GrammarV1CheckedJoinReference])
+checkedJoinReferences = fmap $ either
+  (Left . joinReferenceError)
+  (Right . map joinReference)
 
-checkedPropositionReferences
-  :: Set.Set Text
-  -> GrammarV1LexicalScope
-  -> Located GrammarV1Proposition
-  -> Maybe (Either GrammarV1JoinStateScopeError [GrammarV1CheckedJoinReference])
-checkedPropositionReferences pending scope (Located _ proposition) = case proposition of
-  GrammarV1TrueProposition -> Just (Right [])
-  GrammarV1FalseProposition -> Just (Right [])
-  GrammarV1RelationProposition left _ right -> combineChecked
-    (checkedExpressionReferences pending scope left)
-    (checkedExpressionReferences pending scope right)
-  GrammarV1ClaimApplicationProposition _ arguments -> checkedMany
-    (map (checkedExpressionReferences pending scope) arguments)
-  GrammarV1NotProposition inner -> checkedPropositionReferences pending scope inner
-  GrammarV1AndProposition left right -> combineChecked
-    (checkedPropositionReferences pending scope left)
-    (checkedPropositionReferences pending scope right)
-  GrammarV1OrProposition left right -> combineChecked
-    (checkedPropositionReferences pending scope left)
-    (checkedPropositionReferences pending scope right)
+joinReference :: GrammarV1CheckedLexicalReference -> GrammarV1CheckedJoinReference
+joinReference reference = GrammarV1CheckedJoinReference
+  { grammarV1CheckedJoinReferenceSource =
+      grammarV1CheckedLexicalReferenceSource reference
+  , grammarV1CheckedJoinReferenceBinder =
+      grammarV1CheckedLexicalReferenceBinder reference
+  }
 
-checkedExpressionReferences
-  :: Set.Set Text
-  -> GrammarV1LexicalScope
-  -> Located GrammarV1Expression
-  -> Maybe (Either GrammarV1JoinStateScopeError [GrammarV1CheckedJoinReference])
-checkedExpressionReferences pending scope (Located sourceSpan expression) =
-  case expression of
-    GrammarV1NameExpression reference arguments
-      | null arguments
-      , null (grammarV1StaticReferenceArguments reference)
-      , [displayName] <- grammarV1QualifiedNameParts
-          (grammarV1StaticReferenceName reference) ->
-          let sourceName = Located sourceSpan displayName
-          in case grammarV1ResolveLocal sourceName scope of
-              Right binder -> Just (Right
-                [GrammarV1CheckedJoinReference sourceName binder])
-              Left (GrammarV1BinderNotInScope _)
-                | Set.member displayName pending ->
-                    Just (Left (GrammarV1JoinStateForwardReference sourceName))
-                | otherwise -> Just (Right [])
-              Left scopeError -> Just (Left (GrammarV1JoinStateBinderError scopeError))
-    GrammarV1NameExpression _ arguments -> checkedMany
-      (map (checkedExpressionReferences pending scope) arguments)
-    GrammarV1BoolExpression _ -> Just (Right [])
-    GrammarV1UnitExpression -> Just (Right [])
-    GrammarV1IntegerExpression _ -> Just (Right [])
-    GrammarV1ProjectionExpression receiver _ ->
-      checkedExpressionReferences pending scope receiver
-    GrammarV1BinaryExpression left _ right -> combineChecked
-      (checkedExpressionReferences pending scope left)
-      (checkedExpressionReferences pending scope right)
-    GrammarV1FallbackExpression primary fallback -> combineChecked
-      (checkedExpressionReferences pending scope primary)
-      (checkedFallbackReferences pending scope fallback)
-    GrammarV1TupleExpression elements -> checkedMany
-      (map (checkedExpressionReferences pending scope) elements)
-    GrammarV1ParenthesizedExpression inner ->
-      checkedExpressionReferences pending scope inner
-    _ -> Nothing
-
-checkedFallbackReferences
-  :: Set.Set Text
-  -> GrammarV1LexicalScope
-  -> Located GrammarV1Fallback
-  -> Maybe (Either GrammarV1JoinStateScopeError [GrammarV1CheckedJoinReference])
-checkedFallbackReferences pending scope (Located _ fallback) = case fallback of
-  GrammarV1FailFallback (Located _ target) -> checkedMany
-    (map (checkedExpressionReferences pending scope)
-      (grammarV1FailureTargetArguments target))
-  GrammarV1RejectFallback expression ->
-    checkedExpressionReferences pending scope expression
-
-combineChecked
-  :: Maybe (Either e [a])
-  -> Maybe (Either e [a])
-  -> Maybe (Either e [a])
-combineChecked left right = do
-  leftResult <- left
-  rightResult <- right
-  Just $ do
-    leftValues <- leftResult
-    rightValues <- rightResult
-    Right (leftValues <> rightValues)
-
-checkedMany :: [Maybe (Either e [a])] -> Maybe (Either e [a])
-checkedMany = foldr combineChecked (Just (Right []))
+joinReferenceError :: GrammarV1LexicalReferenceError -> GrammarV1JoinStateScopeError
+joinReferenceError referenceError = case referenceError of
+  GrammarV1LexicalReferenceBinderError scopeError ->
+    GrammarV1JoinStateBinderError scopeError
+  GrammarV1LexicalReferenceForwardReference sourceName ->
+    GrammarV1JoinStateForwardReference sourceName
