@@ -85,5 +85,28 @@ Qed.
 '''
 
 source = source[:alternative_here_start] + replacement + source[mutual_start:]
+
+old_mutual_header = r'''Theorem computed_first_sem_sound_mutual :
+  forall token,
+    (forall expression witness,
+      ComputedFirstFuelProperty token expression) /\
+    (forall items witness,
+      ComputedFirstSequenceFuelProperty token items) /\
+    (forall items witness,
+      ComputedFirstAlternativeFuelProperty token items).
+'''
+new_mutual_header = r'''Theorem computed_first_sem_sound_mutual :
+  forall token,
+    (forall expression (witness : ComputedFirstSem token expression),
+      ComputedFirstFuelProperty token expression) /\
+    (forall items (witness : ComputedFirstSequenceSem token items),
+      ComputedFirstSequenceFuelProperty token items) /\
+    (forall items (witness : ComputedFirstAlternativeSem token items),
+      ComputedFirstAlternativeFuelProperty token items).
+'''
+if old_mutual_header not in source:
+    raise SystemExit("Debug 30 mutual theorem header did not match witness-independent output")
+source = source.replace(old_mutual_header, new_mutual_header, 1)
+
 path.write_text(source)
 print(f"generated witness proof characters: {len(source)}")
