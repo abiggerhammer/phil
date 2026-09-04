@@ -3,20 +3,32 @@
 module Main (main) where
 
 import qualified Data.Text as Text
+import Phil.Core.Focusing
+  ( FocusingError (..)
+  )
+import Phil.Core.Protocol.Family
+  ( ProtocolSessionTemplate (..)
+  , ProtocolTypeTemplate (..)
+  )
 import Phil.Core.Session
   ( SessionError (..)
   , exposeSessionHead
   )
+import Phil.Core.Static (emptyStaticContext)
 import Phil.Core.Syntax
   ( Branch (..)
   , Name (..)
   , Outcome (..)
+  , RefTerm (..)
   , Session (..)
   , Ty (..)
   )
 import Phil.Surface.GrammarV1.Parser
 import Phil.Surface.GrammarV1.SessionSemantics
-  ( grammarV1PrimitiveSession
+  ( GrammarV1CheckedSessionError (..)
+  , grammarV1CheckedSession
+  , grammarV1CheckedSessionTemplate
+  , grammarV1PrimitiveSession
   )
 import Phil.Surface.Syntax (Located (..))
 import System.Exit (exitFailure)
@@ -40,6 +52,10 @@ main = do
         explicitEmptyBranchPayloadRoutes
     , test "SURF-008 primitive session bridge preserves competence boundaries"
         primitiveSessionCompetence
+    , test "SURF-008 checked session payloads preserve intrinsic mode authority and dependent scope"
+        checkedSessionPayloadRoutes
+    , test "SURF-008 checked session payload route preserves failure and competence boundaries"
+        checkedSessionFailureBoundaries
     ]
   if and results then pure () else exitFailure
 
@@ -268,6 +284,69 @@ primitiveSessionCompetence = do
         (grammarV1PrimitiveSession (locatedValue session) == Nothing)
         (label <> " escaped the primitive session competence boundary")
 
+checkedSessionPayloadRoutes :: Either String ()
+checkedSessionPayloadRoutes = do
+  source <- firstProtocolRole =<< onlyProtocol checkedPayloadSource
+  let payload = Name "payload"
+      copy = Name "copy"
+      firstType = TyBytes (RefNat 4)
+      secondType = TyBytes (RefLen (RefVar payload))
+      expectedSession =
+        Send payload firstType
+          (Receive copy secondType (End (Outcome "Done")))
+      expectedTemplate =
+        ProtocolTemplateSend payload (ProtocolConcreteType firstType)
+          (ProtocolTemplateReceive copy (ProtocolConcreteType secondType)
+            (ProtocolTemplateEnd (Outcome "Done")))
+  assert
+    (grammarV1PrimitiveSession (locatedValue source) == Nothing)
+    "checked Bytes payload escaped through the primitive-only session route"
+  assert
+    ( grammarV1CheckedSession emptyStaticContext (locatedValue source)
+        == Just (Right (expectedSession, []))
+    )
+    "checked session payloads lost Bytes meaning, dependent binder scope, or focusing trace"
+  assert
+    ( grammarV1CheckedSessionTemplate emptyStaticContext (locatedValue source)
+        == Just (Right (expectedTemplate, []))
+    )
+    "checked session template conversion changed checked payload meaning"
+
+checkedSessionFailureBoundaries :: Either String ()
+checkedSessionFailureBoundaries = do
+  unknown <- firstProtocolRole =<< onlyProtocol unknownProofPayloadSource
+  duplicate <- firstProtocolRole =<< onlyProtocol duplicateBinderSource
+  frame <- firstProtocolRole =<< onlyProtocol framePayloadSource
+  staticRef <- firstProtocolRole =<< onlyProtocol staticReferenceSource
+  boundary <- firstProtocolRole =<< onlyProtocol codecSessionSource
+  guarded <- firstProtocolRole =<< onlyProtocol guardedSessionSource
+  multiPayload <- firstProtocolRole =<< onlyProtocol multiPayloadBranchSource
+  unbound <- firstProtocolRole =<< onlyProtocol unboundContinueSource
+  assert
+    ( grammarV1CheckedSession emptyStaticContext (locatedValue unknown)
+        == Just
+          (Left
+            (GrammarV1CheckedSessionFocusingError
+              (UnknownClaim "Missing")))
+    )
+    "checked session type focusing failure collapsed into source non-competence"
+  case grammarV1CheckedSession emptyStaticContext (locatedValue duplicate) of
+    Just (Left (GrammarV1CheckedSessionBindingError _)) -> Right ()
+    other -> Left
+      ("duplicate checked session binder was not rejected by binding authority: "
+        <> show other)
+  mapM_ (\(label, session) ->
+    assert
+      (grammarV1CheckedSession emptyStaticContext (locatedValue session) == Nothing)
+      (label <> " escaped the checked session competence boundary"))
+    [ ("Frame payload without resolved structural mode", frame)
+    , ("static session reference", staticRef)
+    , ("boundary-bearing session", boundary)
+    , ("guard-bearing session", guarded)
+    , ("multi-parameter branch payload", multiPayload)
+    , ("unbound continue", unbound)
+    ]
+
 roleSession
   :: Text.Text
   -> GrammarV1ProtocolDecl
@@ -402,6 +481,30 @@ richPayloadSource :: Text.Text
 richPayloadSource = Text.unlines
   [ "protocol P {"
   , "  role A = send (payload : Bytes[1]) then end Done;"
+  , "  role B = end Done;"
+  , "}"
+  ]
+
+checkedPayloadSource :: Text.Text
+checkedPayloadSource = Text.unlines
+  [ "protocol P {"
+  , "  role A = send (payload : Bytes[4]) then receive (copy : Bytes[len(payload)]) then end Done;"
+  , "  role B = end Done;"
+  , "}"
+  ]
+
+unknownProofPayloadSource :: Text.Text
+unknownProofPayloadSource = Text.unlines
+  [ "protocol P {"
+  , "  role A = send (proof : Proof[Missing()]) then end Done;"
+  , "  role B = end Done;"
+  , "}"
+  ]
+
+framePayloadSource :: Text.Text
+framePayloadSource = Text.unlines
+  [ "protocol P {"
+  , "  role A = send (frame : Frame[Hello]) then end Done;"
   , "  role B = end Done;"
   , "}"
   ]
