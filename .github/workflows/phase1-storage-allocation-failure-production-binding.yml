@@ -1,0 +1,145 @@
+name: Phase 1 Storage Allocation Failure Production Binding
+
+on:
+  pull_request:
+    paths:
+      - 'proof/Phil/Core/ArchitectureIdentity.v'
+      - 'proof/Phil/Core/ArchitectureInstantiation.v'
+      - 'proof/Phil/Core/ProviderReplacementQualification.v'
+      - 'proof/Phil/Core/ArchitectureRealization.v'
+      - 'proof/Phil/Systems/FactDisposition.v'
+      - 'proof/Phil/Assurance/ValidityScope.v'
+      - 'proof/Phil/Core/SystemsStageClosure.v'
+      - 'proof/Phil/Core/SystemsRealizationEffects.v'
+      - 'proof/Phil/Core/SystemsSubjectAuthority.v'
+      - 'proof/Phil/Core/StorageRealization.v'
+      - 'proof/Phil/Core/StorageAllocationFailure.v'
+      - 'proof/Phil/Core/StorageAllocationFailureImplementation.v'
+      - 'proof/Phil/Core/StorageAllocationFailureImplementationExtraction.v'
+      - 'generated/StorageAllocationFailureKernel.hs'
+      - 'src/StorageRealizationKernel.hs'
+      - 'src/StorageAllocationFailureKernel.hs'
+      - 'src/Phil/Systems/Storage.hs'
+      - 'src/Phil/Systems/StorageRealizationCertification.hs'
+      - 'src/Phil/Systems/StorageAllocationFailureCertification.hs'
+      - 'app/StorageRealizationProductionBindingMain.hs'
+      - 'app/StorageAllocationFailureDecisionCorrespondenceMain.hs'
+      - 'app/StorageAllocationFailureProductionBindingMain.hs'
+      - 'test/Phase1StorageRealizationMain.hs'
+      - 'docs/phase-1/storage-allocation-failure-production-binding-v1.md'
+      - '.github/workflows/phase1-storage-allocation-failure-production-binding.yml'
+  push:
+    branches: [main]
+    paths:
+      - 'generated/StorageAllocationFailureKernel.hs'
+      - 'src/StorageAllocationFailureKernel.hs'
+      - 'src/Phil/Systems/StorageAllocationFailureCertification.hs'
+      - 'app/StorageAllocationFailureProductionBindingMain.hs'
+      - 'docs/phase-1/storage-allocation-failure-production-binding-v1.md'
+      - '.github/workflows/phase1-storage-allocation-failure-production-binding.yml'
+
+permissions:
+  contents: read
+
+jobs:
+  exact-storage-allocation-failure-kernel:
+    runs-on: ubuntu-latest
+    container:
+      image: rocq/rocq-prover:9.2.0
+      options: --user root
+    steps:
+      - uses: actions/checkout@v4
+      - name: Freshly extract exact Storage Allocation Failure kernel
+        shell: bash
+        run: |
+          set -euo pipefail
+          export PATH="/home/rocq/.opam/${COMPILER}/bin:$PATH"
+          rocq c -Q proof/Phil Phil proof/Phil/Core/ArchitectureIdentity.v
+          rocq c -Q proof/Phil Phil proof/Phil/Core/ArchitectureInstantiation.v
+          rocq c -Q proof/Phil Phil proof/Phil/Core/ProviderReplacementQualification.v
+          rocq c -Q proof/Phil Phil proof/Phil/Core/ArchitectureRealization.v
+          rocq c -Q proof/Phil Phil proof/Phil/Systems/FactDisposition.v
+          rocq c -Q proof/Phil Phil proof/Phil/Assurance/ValidityScope.v
+          rocq c -Q proof/Phil Phil proof/Phil/Core/SystemsStageClosure.v
+          rocq c -Q proof/Phil Phil proof/Phil/Core/SystemsRealizationEffects.v
+          rocq c -Q proof/Phil Phil proof/Phil/Core/SystemsSubjectAuthority.v
+          rocq c -Q proof/Phil Phil proof/Phil/Core/StorageRealization.v
+          rocq c -Q proof/Phil Phil proof/Phil/Core/StorageAllocationFailure.v
+          rocq c -Q proof/Phil Phil proof/Phil/Core/StorageAllocationFailureImplementation.v
+          rm -f StorageAllocationFailureKernel.hs
+          rocq c -Q proof/Phil Phil proof/Phil/Core/StorageAllocationFailureImplementationExtraction.v
+          test -s StorageAllocationFailureKernel.hs
+          echo '7d1ba8b9667373d46b5756f8c709e5a18b8c052aae3d4ee35365ac5a3dc4019c  StorageAllocationFailureKernel.hs' | sha256sum -c -
+          cmp StorageAllocationFailureKernel.hs generated/StorageAllocationFailureKernel.hs
+          cmp StorageAllocationFailureKernel.hs src/StorageAllocationFailureKernel.hs
+      - name: Record exact kernel identity
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p storage-allocation-failure-exact-kernel
+          cp StorageAllocationFailureKernel.hs storage-allocation-failure-exact-kernel/
+          sha256sum \
+            StorageAllocationFailureKernel.hs \
+            generated/StorageAllocationFailureKernel.hs \
+            src/StorageAllocationFailureKernel.hs \
+            > storage-allocation-failure-exact-kernel/PHIL-MEM-FAIL-001.kernel.sha256
+          cat storage-allocation-failure-exact-kernel/PHIL-MEM-FAIL-001.kernel.sha256
+      - uses: actions/upload-artifact@v4
+        with:
+          name: storage-allocation-failure-exact-kernel
+          path: storage-allocation-failure-exact-kernel
+          if-no-files-found: error
+
+  verify-storage-allocation-failure-production-binding:
+    needs: exact-storage-allocation-failure-kernel
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: haskell-actions/setup@v2
+        with:
+          ghc-version: '9.6.7'
+          cabal-version: 'latest'
+      - name: Build broad regression surface
+        run: cabal build all --enable-tests
+      - name: Strictly typecheck bound Storage Allocation Failure surface
+        run: |
+          set -euo pipefail
+          cabal exec -- ghc -isrc -Wall -Werror -Wno-unused-imports -fno-code src/StorageRealizationKernel.hs
+          cabal exec -- ghc -isrc -Wall -Werror -Wno-unused-imports -fno-code src/StorageAllocationFailureKernel.hs
+          cabal exec -- ghc -isrc -Wall -Werror -fno-code src/Phil/Systems/Storage.hs
+          cabal exec -- ghc -isrc -Wall -Werror -fno-code src/Phil/Systems/StorageRealizationCertification.hs
+          cabal exec -- ghc -isrc -Wall -Werror -fno-code src/Phil/Systems/StorageAllocationFailureCertification.hs
+          cabal exec -- ghc -isrc -Wall -Werror -Wno-unused-imports -fno-code app/StorageAllocationFailureDecisionCorrespondenceMain.hs
+          cabal exec -- ghc -isrc -Wall -Werror -fno-code app/StorageRealizationProductionBindingMain.hs
+          cabal exec -- ghc -isrc -Wall -Werror -fno-code app/StorageAllocationFailureProductionBindingMain.hs
+          cabal exec -- ghc -isrc -Wall -Werror -fno-code test/Phase1StorageRealizationMain.hs
+      - name: Execute exact extracted-kernel controls
+        run: cabal exec -- runghc -Wall -Werror -Wno-unused-imports -isrc app/StorageAllocationFailureDecisionCorrespondenceMain.hs
+      - name: Re-run implementation-refined MEM-001 predecessor controls
+        run: cabal exec -- runghc -Wall -Werror -isrc app/StorageRealizationProductionBindingMain.hs
+      - name: Execute MEM-002/MEM-003 production-binding controls
+        run: cabal exec -- runghc -Wall -Werror -isrc app/StorageAllocationFailureProductionBindingMain.hs
+      - name: Re-run unchanged MEM-001 through MEM-006 corpus
+        run: cabal exec -- runghc -Wall -Werror -isrc test/Phase1StorageRealizationMain.hs
+      - name: Record production binding identities
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p storage-allocation-failure-production-binding
+          sha256sum \
+            src/StorageRealizationKernel.hs \
+            src/StorageAllocationFailureKernel.hs \
+            src/Phil/Systems/Storage.hs \
+            src/Phil/Systems/StorageRealizationCertification.hs \
+            src/Phil/Systems/StorageAllocationFailureCertification.hs \
+            app/StorageAllocationFailureDecisionCorrespondenceMain.hs \
+            app/StorageRealizationProductionBindingMain.hs \
+            app/StorageAllocationFailureProductionBindingMain.hs \
+            test/Phase1StorageRealizationMain.hs \
+            > storage-allocation-failure-production-binding/PHIL-MEM-FAIL-001.production.sha256
+          cat storage-allocation-failure-production-binding/PHIL-MEM-FAIL-001.production.sha256
+      - uses: actions/upload-artifact@v4
+        with:
+          name: storage-allocation-failure-production-binding
+          path: storage-allocation-failure-production-binding
+          if-no-files-found: error
