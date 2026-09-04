@@ -53,7 +53,10 @@ jobs:
           compile proof/Phil/Surface/GrammarDeterminacySimpleResolverSoundness.v
           compile proof/Phil/Surface/GrammarDeterminacyStructuralScannerSoundness.v
           compile proof/Phil/Surface/GrammarDeterminacyQualifiedNameSoundness.v
-          compile proof/Phil/Surface/GrammarDeterminacyPatternResolverSoundness.v
+          echo "=== timing proof/Phil/Surface/GrammarDeterminacyPatternResolverSoundness.v at $(date -u +%FT%TZ) ==="
+          timeout 300s rocq c -time -Q proof/Phil Phil \
+            proof/Phil/Surface/GrammarDeterminacyPatternResolverSoundness.v
+          echo "=== finished proof/Phil/Surface/GrammarDeterminacyPatternResolverSoundness.v at $(date -u +%FT%TZ) ==="
 
       - name: Record pattern-resolver proof identities
         shell: bash
