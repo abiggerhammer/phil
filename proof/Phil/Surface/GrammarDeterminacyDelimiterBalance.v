@@ -164,6 +164,25 @@ Definition delimiter_alternative_balanced_fuel
       option_nat_isb (delimiter_effect_fuel fuel depth item) depth)
     items.
 
+Lemma delimiter_effect_literal_step :
+  forall fuel depth literal,
+    delimiter_effect_fuel (S fuel) depth (ELiteral literal) =
+      delimiter_balance_step depth (TLiteral literal).
+Proof.
+  reflexivity.
+Qed.
+
+Lemma delimiter_balance_scan_single :
+  forall depth token final_depth,
+    delimiter_balance_step depth token = Some final_depth ->
+    delimiter_balance_scan depth (token :: nil) = Some final_depth.
+Proof.
+  intros depth token final_depth Hstep.
+  unfold delimiter_balance_scan.
+  rewrite Hstep.
+  reflexivity.
+Qed.
+
 Lemma delimiter_effect_sequence_step :
   forall fuel depth items,
     delimiter_effect_fuel (S fuel) depth (ESequence items) =
@@ -431,16 +450,9 @@ Proof.
     destruct fuel as [| fuel]; try discriminate Heffect.
     exists [TLiteral literal].
     split; first reflexivity.
-    change
-      (delimiter_balance_step depth (TLiteral literal) = Some final_depth)
-      in Heffect.
-    change
-      (match delimiter_balance_step depth (TLiteral literal) with
-       | Some next_depth => Some next_depth
-       | None => None
-       end = Some final_depth).
-    rewrite Heffect.
-    reflexivity.
+    rewrite delimiter_effect_literal_step in Heffect.
+    eapply delimiter_balance_scan_single.
+    exact Heffect.
   - intros path class_name lexeme tail fuel depth final_depth Heffect.
     destruct fuel as [| fuel]; try discriminate Heffect.
     inversion Heffect; subst final_depth.
