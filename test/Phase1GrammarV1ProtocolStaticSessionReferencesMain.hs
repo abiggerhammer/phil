@@ -8,8 +8,14 @@ import Phil.Core.Generic.StaticActual
   ( GenericStaticActual (..)
   , GenericStaticKind (..)
   , GenericStaticParameter (..)
+  , GenericStaticReferenceCandidate (..)
   )
 import Phil.Core.Protocol (ProtocolRoleKey (..))
+import Phil.Core.Static
+  ( DeclarationKey (..)
+  , InterfaceRevision (..)
+  , SemanticForm (..)
+  )
 import Phil.Surface.GrammarV1.Parser
 import Phil.Surface.GrammarV1.ProtocolSessionParameterReferences
   ( GrammarV1ProtocolSessionParameterReferenceError (..)
@@ -17,8 +23,18 @@ import Phil.Surface.GrammarV1.ProtocolSessionParameterReferences
   , GrammarV1ResolvedProtocolSessionRoleReference (..)
   , grammarV1ResolvedSessionParameterRoleReferences
   )
+import Phil.Surface.GrammarV1.ProtocolSpecializedSessionReferences
+  ( GrammarV1CheckedSpecializedSessionRole (..)
+  , GrammarV1ProtocolSpecializedSessionError (..)
+  , GrammarV1ResolvedSpecializedSessionRole (..)
+  , grammarV1CheckedSpecializedProtocolSessionReferences
+  )
 import Phil.Surface.GrammarV1.ProtocolStaticSessionReferences
   ( grammarV1ClosedProtocolRoleSessionReferences
+  )
+import Phil.Surface.GrammarV1.SpecializedStaticReference
+  ( GrammarV1ResolvedDirectStaticArgument (..)
+  , GrammarV1SpecializedStaticReferenceError (..)
   )
 import Phil.Surface.Syntax (Located (..))
 import System.Exit (exitFailure)
@@ -42,6 +58,12 @@ main = do
         sessionParameterEvidenceBoundaries
     , test "SURF-008 Session-parameter reference routing preserves its competence wall"
         sessionParameterCompetenceBoundaries
+    , test "SURF-008 specialized Session references consume exact target-category evidence"
+        specializedSessionReferencesConsumeTargetEvidence
+    , test "SURF-008 specialized Session references reject detached or wrong target evidence"
+        specializedSessionEvidenceBoundaries
+    , test "SURF-008 specialized Session reference routing preserves its competence wall"
+        specializedSessionCompetenceBoundaries
     ]
   if and results then pure () else exitFailure
 
@@ -294,6 +316,174 @@ sessionParameterCompetenceBoundaries = do
         == Nothing
     )
     "specialized Session-parameter reference was flattened to a direct binder use"
+
+specializedSessionReferencesConsumeTargetEvidence :: Either String ()
+specializedSessionReferencesConsumeTargetEvidence = do
+  protocol <- onlyProtocol specializedProtocolSource
+  evidence <- specializedSessionEvidence protocol
+  case grammarV1CheckedSpecializedProtocolSessionReferences evidence protocol of
+    Just (Right (first, second)) -> do
+      assert
+        (checkedSpecializedSessionRoleKey first == ProtocolRoleKey "Client")
+        "first specialized Session role key changed"
+      assert
+        (checkedSpecializedSessionRoleKey second == ProtocolRoleKey "Server")
+        "second specialized Session role key changed"
+      assert
+        ( checkedSpecializedSessionTargetSemanticForm first
+            == SemanticAtom "session.sessions.Flow.checked"
+        )
+        "first specialized Session target semantic form changed"
+      assert
+        ( checkedSpecializedSessionTargetSemanticForm second
+            == SemanticAtom "session.sessions.Flow.checked"
+        )
+        "second specialized Session target semantic form changed"
+      assert
+        ( checkedSpecializedSessionReference first
+            == checkedSpecializedSessionReference second
+        )
+        "identical stable target/arguments produced different checked specializations"
+    other -> Left ("specialized Session reference did not compose checked evidence: " <> show other)
+
+specializedSessionEvidenceBoundaries :: Either String ()
+specializedSessionEvidenceBoundaries = do
+  protocol <- onlyProtocol specializedProtocolSource
+  evidence <- specializedSessionEvidence protocol
+  case evidence of
+    [first, second] -> do
+      let swapped = [second, first]
+      case grammarV1CheckedSpecializedProtocolSessionReferences swapped protocol of
+        Just (Left (GrammarV1SpecializedSessionRoleSourceMismatch 0 _ _)) -> Right ()
+        other -> Left ("specialized Session evidence detached from exact role occurrence: " <> show other)
+      let wrongName = first
+            { resolvedSpecializedSessionTargetCandidate =
+                (resolvedSpecializedSessionTargetCandidate first)
+                  { genericStaticReferenceName = "sessions.Other" }
+            }
+      assert
+        ( grammarV1CheckedSpecializedProtocolSessionReferences
+            [wrongName, second] protocol
+            == Just
+              (Left
+                (GrammarV1SpecializedSessionTargetNameMismatch
+                  "sessions.Flow"
+                  "sessions.Other"))
+        )
+        "wrong specialized Session target name was accepted"
+      let wrongKind = first
+            { resolvedSpecializedSessionTargetCandidate =
+                (resolvedSpecializedSessionTargetCandidate first)
+                  { genericStaticReferenceKind = GenericTypeKind }
+            }
+      assert
+        ( grammarV1CheckedSpecializedProtocolSessionReferences
+            [wrongKind, second] protocol
+            == Just
+              (Left
+                (GrammarV1SpecializedSessionTargetKindMismatch
+                  "sessions.Flow"
+                  GenericTypeKind))
+        )
+        "non-Session target candidate was accepted at a specialized Session role"
+      let missingArgumentEvidence = first
+            { resolvedSpecializedSessionDirectArguments = [] }
+      case grammarV1CheckedSpecializedProtocolSessionReferences
+          [missingArgumentEvidence, second] protocol of
+        Just
+          (Left
+            (GrammarV1SpecializedSessionStaticReferenceError
+              (GrammarV1MissingDirectStaticArgumentEvidence _))) -> Right ()
+        other -> Left
+          ("missing specialized static-argument evidence was not preserved: " <> show other)
+      assert
+        ( grammarV1CheckedSpecializedProtocolSessionReferences [] protocol
+            == Just (Left (GrammarV1SpecializedSessionEvidenceCountMismatch 2 0))
+        )
+        "missing specialized Session role evidence did not reject explicitly"
+    other -> Left ("expected two specialized Session evidence entries, got " <> show (length other))
+
+specializedSessionCompetenceBoundaries :: Either String ()
+specializedSessionCompetenceBoundaries = do
+  bare <- onlyProtocol $ Text.unlines
+    [ "protocol Bare { role A = sessions.Flow; role B = sessions.Flow; }"
+    ]
+  generic <- onlyProtocol $ Text.unlines
+    [ "protocol Generic[T : Type] {"
+    , "  role A = sessions.Flow[U32];"
+    , "  role B = sessions.Flow[U32];"
+    , "}"
+    ]
+  required <- onlyProtocol $ Text.unlines
+    [ "protocol Required requires { proposition true; } {"
+    , "  role A = sessions.Flow[U32];"
+    , "  role B = sessions.Flow[U32];"
+    , "}"
+    ]
+  mixed <- onlyProtocol $ Text.unlines
+    [ "protocol Mixed {"
+    , "  role A = sessions.Flow[U32];"
+    , "  role B = sessions.Flow;"
+    , "}"
+    ]
+  assert
+    (grammarV1CheckedSpecializedProtocolSessionReferences [] bare == Nothing)
+    "bare Session reference escaped specialized-session route"
+  assert
+    (grammarV1CheckedSpecializedProtocolSessionReferences [] generic == Nothing)
+    "generic protocol escaped closed specialized-session route"
+  assert
+    (grammarV1CheckedSpecializedProtocolSessionReferences [] required == Nothing)
+    "requirement-bearing protocol escaped specialized-session route"
+  assert
+    (grammarV1CheckedSpecializedProtocolSessionReferences [] mixed == Nothing)
+    "mixed bare/specialized role pair escaped specialized-session route"
+
+specializedSessionEvidence
+  :: GrammarV1ProtocolDecl
+  -> Either String [GrammarV1ResolvedSpecializedSessionRole]
+specializedSessionEvidence protocol =
+  case grammarV1ProtocolRoles protocol of
+    [firstRole, secondRole] -> mapM specializedSessionRoleEvidence [firstRole, secondRole]
+    other -> Left ("expected two specialized protocol roles, got " <> show (length other))
+
+specializedSessionRoleEvidence
+  :: Located GrammarV1RoleSessionDecl
+  -> Either String GrammarV1ResolvedSpecializedSessionRole
+specializedSessionRoleEvidence sourceRole = do
+  argument <- case locatedValue (grammarV1RoleSessionExpression (locatedValue sourceRole)) of
+    GrammarV1SessionReference reference ->
+      case grammarV1StaticReferenceArguments reference of
+        [one] -> Right one
+        other -> Left ("expected one specialized Session argument, got " <> show (length other))
+    other -> Left ("expected specialized Session role reference, got " <> show other)
+  let typeKey = GenericStaticParameterKey "session.target.type"
+  Right GrammarV1ResolvedSpecializedSessionRole
+    { resolvedSpecializedSessionSourceRole = sourceRole
+    , resolvedSpecializedSessionTargetCandidate = GenericStaticReferenceCandidate
+        "sessions.Flow"
+        GenericSessionKind
+        (SemanticAtom "session.sessions.Flow.checked")
+    , resolvedSpecializedSessionDeclarationKey = DeclarationKey "decl.sessions.Flow"
+    , resolvedSpecializedSessionInterfaceRevision = InterfaceRevision "iface.sessions.Flow.v1"
+    , resolvedSpecializedSessionParameters =
+        [GenericStaticParameter typeKey GenericTypeKind]
+    , resolvedSpecializedSessionDirectArguments =
+        [ GrammarV1ResolvedDirectStaticArgument
+            argument
+            GenericTypeKind
+            (SemanticAtom "type.U32.checked")
+        ]
+    , resolvedSpecializedSessionArgumentReferences = []
+    }
+
+specializedProtocolSource :: Text.Text
+specializedProtocolSource = Text.unlines
+  [ "protocol Specialized {"
+  , "  role Client = sessions.Flow[U32];"
+  , "  role Server = sessions.Flow[U32];"
+  , "}"
+  ]
 
 sessionParameterEvidence
   :: GenericStaticParameterKey
