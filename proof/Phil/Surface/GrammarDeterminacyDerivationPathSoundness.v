@@ -168,7 +168,7 @@ Proof.
   exists prefix.
   split.
   - exact Hlength.
-  - simpl in Hpath.
+  - rewrite List.app_nil_r in Hpath.
     exact Hpath.
 Qed.
 
