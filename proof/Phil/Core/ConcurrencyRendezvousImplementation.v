@@ -344,33 +344,30 @@ Proof.
   - intros Haccepted.
     split.
     + unfold RendezvousEndpointFacts.
-      repeat split.
-      * exact (exactRendezvousBinaryWellFormed witness Haccepted).
-      * exact (exactRendezvousSenderProgression witness Haccepted).
-      * exact (exactRendezvousReceiverProgression witness Haccepted).
-      * exact (exactRendezvousSenderInstance witness Haccepted).
-      * exact (exactRendezvousReceiverInstance witness Haccepted).
-      * exact (exactRendezvousSenderRole witness Haccepted).
-      * exact (exactRendezvousReceiverRole witness Haccepted).
-      * exact (exactRendezvousCurrentSessionsDual witness Haccepted).
-      * exact (exactRendezvousSuccessorSessionsDual witness Haccepted).
+      refine (conj (exactRendezvousBinaryWellFormed witness Haccepted) _).
+      refine (conj (exactRendezvousSenderProgression witness Haccepted) _).
+      refine (conj (exactRendezvousReceiverProgression witness Haccepted) _).
+      refine (conj (exactRendezvousSenderInstance witness Haccepted) _).
+      refine (conj (exactRendezvousReceiverInstance witness Haccepted) _).
+      refine (conj (exactRendezvousSenderRole witness Haccepted) _).
+      refine (conj (exactRendezvousReceiverRole witness Haccepted) _).
+      refine (conj (exactRendezvousCurrentSessionsDual witness Haccepted) _).
+      exact (exactRendezvousSuccessorSessionsDual witness Haccepted).
     + split.
       * unfold RendezvousParticipantFacts.
-        repeat split.
-        -- exact (exactRendezvousParticipantClassification witness Haccepted).
-        -- exact (exactRendezvousSenderParticipant witness Haccepted).
-        -- exact (exactRendezvousReceiverParticipant witness Haccepted).
-        -- exact (exactRendezvousSenderRoleOccurrence witness Haccepted).
-        -- exact (exactRendezvousReceiverRoleOccurrence witness Haccepted).
+        refine (conj (exactRendezvousParticipantClassification witness Haccepted) _).
+        refine (conj (exactRendezvousSenderParticipant witness Haccepted) _).
+        refine (conj (exactRendezvousReceiverParticipant witness Haccepted) _).
+        refine (conj (exactRendezvousSenderRoleOccurrence witness Haccepted) _).
+        exact (exactRendezvousReceiverRoleOccurrence witness Haccepted).
       * unfold RendezvousMessageCoarseFacts.
-        repeat split.
-        -- exact (exactRendezvousMessageAccepted witness Haccepted).
-        -- exact (exactRendezvousCoarseStep witness Haccepted).
-        -- exact (exactRendezvousCoarseInstance witness Haccepted).
-        -- exact (exactRendezvousCoarseSenderRole witness Haccepted).
-        -- exact (exactRendezvousCoarseReceiverRole witness Haccepted).
-        -- exact (exactRendezvousCoarseSenderProcess witness Haccepted).
-        -- exact (exactRendezvousCoarseReceiverProcess witness Haccepted).
+        refine (conj (exactRendezvousMessageAccepted witness Haccepted) _).
+        refine (conj (exactRendezvousCoarseStep witness Haccepted) _).
+        refine (conj (exactRendezvousCoarseInstance witness Haccepted) _).
+        refine (conj (exactRendezvousCoarseSenderRole witness Haccepted) _).
+        refine (conj (exactRendezvousCoarseReceiverRole witness Haccepted) _).
+        refine (conj (exactRendezvousCoarseSenderProcess witness Haccepted) _).
+        exact (exactRendezvousCoarseReceiverProcess witness Haccepted).
 Qed.
 
 Theorem decideExactInternalRendezvousByFacts_classifies :
