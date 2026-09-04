@@ -138,7 +138,7 @@ Proof.
     as [lexeme [suffix [Hidentifier_input _]]].
   exists lexeme, suffix.
   rewrite Hinput.
-  rewrite Hmiddle.
+  rewrite <- Hmiddle.
   rewrite Hidentifier_input.
   reflexivity.
 Qed.
@@ -187,7 +187,7 @@ Proof.
     as [suffix [Hsecond_input [_ _]]].
   exists suffix.
   rewrite Hinput.
-  rewrite Hmiddle.
+  rewrite <- Hmiddle.
   rewrite Hsecond_input.
   reflexivity.
 Qed.
