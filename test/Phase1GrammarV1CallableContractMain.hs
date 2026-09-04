@@ -2,14 +2,18 @@
 
 module Main (main) where
 
+import qualified Data.Map.Strict as Map
 import qualified Data.Text as Text
 import qualified Data.Text.IO as TextIO
+import Phil.Core.Checker (CheckState (..))
+import Phil.Core.Context (ResourceContext (..))
 import Phil.Core.Focusing
   ( FocusStep (..)
   , FocusingError (..)
   )
 import Phil.Core.Static
-  ( declareOpaqueClaim
+  ( DeclarationKey (..)
+  , declareOpaqueClaim
   , declareTransparentClaim
   , emptyStaticContext
   )
@@ -21,6 +25,12 @@ import Phil.Core.Syntax
   , Ty (..)
   )
 import Phil.Surface.Check.Support (emptySurfaceState)
+import Phil.Surface.Check.Types (SurfaceState (..))
+import Phil.Surface.GrammarV1.BinderScope
+  ( GrammarV1BinderKind (..)
+  , GrammarV1BinderScopeError (..)
+  , GrammarV1ResolvedBinder (..)
+  )
 import Phil.Surface.GrammarV1.CallablePropositions
   ( grammarV1CallableAssumptions
   , grammarV1CallableEnsures
@@ -30,7 +40,15 @@ import Phil.Surface.GrammarV1.CallablePropositions
 import Phil.Surface.GrammarV1.CallableSignature
   ( grammarV1CheckedCallableSignature
   )
+import Phil.Surface.GrammarV1.LexicalReferenceScope
+  ( GrammarV1CheckedLexicalReference (..)
+  )
 import Phil.Surface.GrammarV1.Parser
+import Phil.Surface.GrammarV1.SemanticCallableSignature
+  ( GrammarV1CheckedSemanticCallableSignature (..)
+  , GrammarV1SemanticCallableSignatureError (..)
+  , grammarV1CheckedSemanticCallableSignature
+  )
 import Phil.Surface.Syntax (Located (..))
 import System.Exit (exitFailure)
 
@@ -45,6 +63,16 @@ main = do
         checkedCallableSignaturesPreserveScope
     , test "SURF-008 callable proposition clauses preserve category, order, scope, and Core authority"
         checkedCallablePropositionsPreserveCategories
+    , test "SURF-009 semantic callable signatures use generated parameter state"
+        semanticCallableUsesGeneratedNames
+    , test "SURF-009 semantic callable signatures are alpha-stable for dependent results"
+        semanticCallableAlphaStable
+    , test "SURF-009 semantic callable signatures preserve duplicate-binder diagnostics"
+        semanticCallableDuplicatePreserved
+    , test "SURF-009 semantic callable signatures preserve Core focusing errors"
+        semanticCallableFocusingPreserved
+    , test "SURF-009 semantic callable signatures remain bounded to primitive parameters"
+        semanticCallableCompetenceBoundary
     ]
   if and results then pure () else exitFailure
 
@@ -223,6 +251,135 @@ checkedCallablePropositionsPreserveCategories = do
     other -> Left
       ("expected seven callable proposition fixtures, got " <> show (length other))
 
+semanticCallableUsesGeneratedNames :: Either String ()
+semanticCallableUsesGeneratedNames = do
+  source <- onlyCallable "semantic-callable" $ Text.unlines
+    [ "callable Dependent(n : U8, ok : Bool) -> Bytes[toNat(n)] {}"
+    ]
+  let declarationKey = DeclarationKey "decl.SemanticCallable"
+  checked <- checkedSemanticCallable declarationKey source
+  case checkedSemanticCallableParameters checked of
+    [(nBinder, TyUInt 8), (okBinder, TyBool)] -> do
+      let nName@(Name nText) = grammarV1ResolvedBinderCoreName nBinder
+          okName@(Name okText) = grammarV1ResolvedBinderCoreName okBinder
+          state = checkedSemanticCallableState checked
+          context = resourceContext (stateCore state)
+      assert
+        ( grammarV1ResolvedBinderKind nBinder == GrammarV1CallableParameterBinder
+          && grammarV1ResolvedBinderKind okBinder == GrammarV1CallableParameterBinder )
+        "callable parameters did not retain their distinct binder family"
+      assert (nText /= "n" && okText /= "ok")
+        "semantic callable parameter names collapsed to source spelling"
+      assert
+        (Map.member nText (stateBindings state) && Map.member okText (stateBindings state))
+        "semantic callable SurfaceState omitted generated parameter names"
+      assert
+        (not (Map.member "n" (stateBindings state)) && not (Map.member "ok" (stateBindings state)))
+        "source callable parameter spelling leaked into semantic SurfaceState"
+      assert
+        (Map.member nName (unrestrictedBindings context) && Map.member okName (unrestrictedBindings context))
+        "Core resource context omitted generated callable parameter names"
+      assert
+        (checkedSemanticCallableResultType checked
+          == TyBytes (RefToNat (RefVar nName)))
+        "dependent callable result did not retain generated n identity"
+      reference <- exactlyOne
+        "semantic callable result reference"
+        (checkedSemanticCallableResultReferences checked)
+      assert
+        ( grammarV1ResolvedBinderKey
+            (grammarV1CheckedLexicalReferenceBinder reference)
+          == grammarV1ResolvedBinderKey nBinder )
+        "dependent callable result reference lost exact binder evidence"
+    other -> Left ("unexpected semantic callable parameter shape: " <> show other)
+
+semanticCallableAlphaStable :: Either String ()
+semanticCallableAlphaStable = do
+  original <- onlyCallable "semantic-callable-alpha-original"
+    "callable Dependent(n : U8, ok : Bool) -> Bytes[toNat(n)] {}"
+  renamed <- onlyCallable "semantic-callable-alpha-renamed"
+    "callable Dependent(count : U8, ready : Bool) -> Bytes[toNat(count)] {}"
+  let declarationKey = DeclarationKey "decl.SemanticCallableAlpha"
+  originalChecked <- checkedSemanticCallable declarationKey original
+  renamedChecked <- checkedSemanticCallable declarationKey renamed
+  let originalBinders = map fst (checkedSemanticCallableParameters originalChecked)
+      renamedBinders = map fst (checkedSemanticCallableParameters renamedChecked)
+  assert
+    (map grammarV1ResolvedBinderKey originalBinders
+      == map grammarV1ResolvedBinderKey renamedBinders)
+    "alpha-renaming changed semantic callable binder keys"
+  assert
+    (map grammarV1ResolvedBinderCoreName originalBinders
+      == map grammarV1ResolvedBinderCoreName renamedBinders)
+    "alpha-renaming changed semantic callable Core names"
+  assert
+    (checkedSemanticCallableResultType originalChecked
+      == checkedSemanticCallableResultType renamedChecked)
+    "alpha-renaming changed dependent semantic callable result type"
+  assert
+    (map grammarV1ResolvedBinderDisplayName originalBinders == ["n", "ok"])
+    "original callable display spellings changed"
+  assert
+    (map grammarV1ResolvedBinderDisplayName renamedBinders == ["count", "ready"])
+    "renamed callable display spellings changed"
+
+semanticCallableDuplicatePreserved :: Either String ()
+semanticCallableDuplicatePreserved = do
+  source <- onlyCallable "semantic-callable-duplicate"
+    "callable Duplicate(x : U8, x : Bool) -> U8 {}"
+  case grammarV1CheckedSemanticCallableSignature
+      emptyStaticContext
+      (DeclarationKey "decl.SemanticCallableDuplicate")
+      source of
+    Just (Left (GrammarV1SemanticCallableBinderScopeError
+      (GrammarV1DuplicateBinder duplicate previous))) -> do
+        assert (locatedValue duplicate == "x")
+          "semantic callable duplicate diagnostic lost source spelling"
+        assert (grammarV1ResolvedBinderDisplayName previous == "x")
+          "semantic callable duplicate diagnostic lost previous binder"
+    other -> Left
+      ("expected semantic callable duplicate-binder rejection, got " <> show other)
+
+semanticCallableFocusingPreserved :: Either String ()
+semanticCallableFocusingPreserved = do
+  source <- onlyCallable "semantic-callable-focusing"
+    "callable Bad(x : U8) -> Proof[Missing(x)] {}"
+  let actual = grammarV1CheckedSemanticCallableSignature
+        emptyStaticContext
+        (DeclarationKey "decl.SemanticCallableFocusing")
+        source
+  assert
+    (actual == Just
+      (Left
+        (GrammarV1SemanticCallableResultFocusingError
+          (UnknownClaim "Missing"))))
+    ("semantic callable changed Core UnknownClaim rejection: " <> show actual)
+
+semanticCallableCompetenceBoundary :: Either String ()
+semanticCallableCompetenceBoundary = do
+  named <- onlyCallable "semantic-callable-named"
+    "callable Named(x : Other) -> U8 {}"
+  generic <- onlyCallable "semantic-callable-generic"
+    "callable Generic[T : Type](x : U8) -> U8 {}"
+  let check source = grammarV1CheckedSemanticCallableSignature
+        emptyStaticContext
+        (DeclarationKey "decl.SemanticCallableBoundary")
+        source
+  assert (check named == Nothing)
+    "nonprimitive callable parameter escaped semantic-signature competence"
+  assert (check generic == Nothing)
+    "generic callable escaped semantic-signature competence"
+
+checkedSemanticCallable
+  :: DeclarationKey
+  -> GrammarV1CallableContractDecl
+  -> Either String GrammarV1CheckedSemanticCallableSignature
+checkedSemanticCallable declarationKey source =
+  case grammarV1CheckedSemanticCallableSignature
+      emptyStaticContext declarationKey source of
+    Just (Right (checked, [])) -> Right checked
+    other -> Left ("expected checked semantic callable signature, got " <> show other)
+
 callableDeclaration
   :: Located GrammarV1TopLevelDecl
   -> Either String GrammarV1CallableContractDecl
@@ -230,6 +387,22 @@ callableDeclaration (Located _ topLevel) =
   case locatedValue (grammarV1Declaration topLevel) of
     GrammarV1CallableContractDeclaration declaration -> Right declaration
     other -> Left ("expected callable declaration, got " <> show other)
+
+onlyCallable
+  :: Text.Text
+  -> Text.Text
+  -> Either String GrammarV1CallableContractDecl
+onlyCallable label source = do
+  sourceFile <- mapLeft show (parseGrammarV1StructuralSource label source)
+  case grammarV1TopLevelDecls sourceFile of
+    [declaration] -> callableDeclaration declaration
+    declarations -> Left
+      ("expected one callable declaration, got " <> show (length declarations))
+
+exactlyOne :: String -> [a] -> Either String a
+exactlyOne _ [value] = Right value
+exactlyOne label values = Left
+  ("expected exactly one " <> label <> ", got " <> show (length values))
 
 signatureSource :: Text.Text
 signatureSource = Text.unlines
