@@ -27,12 +27,6 @@ jobs:
           python3 scripts/derive_phase1_surface_grammar.py --check
           python3 scripts/derive_phase1_surface_determinacy_certificate.py --check
 
-      - name: Apply validated witness-soundness transform
-        shell: bash
-        run: |
-          set -euo pipefail
-          python3 scripts/debug_phase1_surface_witness_soundness_31.py
-
       - name: Compile nullable/FIRST witness soundness bridge
         shell: bash
         run: |
