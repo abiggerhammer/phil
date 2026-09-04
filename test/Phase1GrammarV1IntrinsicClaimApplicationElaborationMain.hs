@@ -10,6 +10,7 @@ import Phil.Core.Focusing
 import Phil.Core.Static
   ( ClaimDecl (..)
   , ClaimDefinition (..)
+  , DeclarationKey (..)
   , StaticContext
   , StaticError (..)
   , declareOpaqueClaim
@@ -35,6 +36,11 @@ import Phil.Surface.Check.Types
   , SurfaceShape (..)
   , SurfaceState
   )
+import Phil.Surface.GrammarV1.BinderScope
+  ( GrammarV1BinderKind (..)
+  , GrammarV1BinderScopeError (..)
+  , GrammarV1ResolvedBinder (..)
+  )
 import Phil.Surface.GrammarV1.BoundClaimApplication
   ( grammarV1BoundClaimApplication
   )
@@ -46,7 +52,16 @@ import Phil.Surface.GrammarV1.ClaimDeclaration
   , grammarV1RegisterClaimDeclaration
   )
 import Phil.Surface.GrammarV1.Elaborate (grammarV1IntrinsicClaimApplication)
+import Phil.Surface.GrammarV1.LexicalReferenceScope
+  ( GrammarV1CheckedLexicalReference (..)
+  )
 import Phil.Surface.GrammarV1.Parser
+import Phil.Surface.GrammarV1.SemanticClaimDeclaration
+  ( GrammarV1CheckedSemanticClaimDeclaration (..)
+  , GrammarV1SemanticClaimDeclarationError (..)
+  , grammarV1CheckedSemanticClaimDeclaration
+  , grammarV1RegisterSemanticClaimDeclaration
+  )
 import Phil.Surface.Syntax (Located (..))
 import System.Exit (exitFailure)
 
@@ -63,6 +78,14 @@ main = do
         claimRegistrationUsesCoreAuthority
     , test "SURF-008 Grammar-v1 claim applications delegate semantic checking to Core focusing"
         checkedClaimApplicationsUseCoreAuthority
+    , test "SURF-009 semantic claim declarations use generated parameter identity"
+        semanticClaimDeclarationsUseGeneratedNames
+    , test "SURF-009 semantic claim declarations are alpha-stable and preserve optional parameter shape"
+        semanticClaimDeclarationsAlphaStable
+    , test "SURF-009 semantic claim registration substitutes generated formals through Core"
+        semanticClaimRegistrationSubstitutesGeneratedFormals
+    , test "SURF-009 semantic claim declaration diagnostics and competence remain explicit"
+        semanticClaimDeclarationBoundaries
     ]
   if and results then pure () else exitFailure
 
@@ -286,6 +309,175 @@ checkedClaimApplicationsUseCoreAuthority = do
         expectStructuralNothing "unresolved claim argument" unresolvedTerm
     other -> Left
       ("expected nine checked claim application results, got " <> show (length other))
+
+semanticClaimDeclarationsUseGeneratedNames :: Either String ()
+semanticClaimDeclarationsUseGeneratedNames = do
+  source <- onlyClaim "semantic-claim-generated" $
+    "claim Mixed(x : U8, ok : Bool) = x < 7 and Ready(ok);"
+  checked <- checkedSemanticClaim (DeclarationKey "decl.SemanticClaim") source
+  case checkedSemanticClaimParameters checked of
+    Just [(xBinder, SortUInt 8), (okBinder, SortBool)] -> do
+      let xName@(Name xText) = grammarV1ResolvedBinderCoreName xBinder
+          okName@(Name okText) = grammarV1ResolvedBinderCoreName okBinder
+          expectedDefinition = TransparentClaim
+            (Conjunction
+              (LessThan (RefToNat (RefVar xName)) (RefNat 7))
+              (Atom "Ready" [RefVar okName]))
+          coreDeclaration = checkedSemanticClaimCoreDeclaration checked
+      assert
+        ( grammarV1ResolvedBinderKind xBinder == GrammarV1ClaimParameterBinder
+          && grammarV1ResolvedBinderKind okBinder == GrammarV1ClaimParameterBinder )
+        "semantic claim parameters did not retain their distinct binder family"
+      assert (xText /= "x" && okText /= "ok")
+        "semantic claim Core names collapsed to display spelling"
+      assert
+        (claimParameters coreDeclaration
+          == [(xName, SortUInt 8), (okName, SortBool)])
+        "semantic ClaimDecl did not use generated parameter names"
+      assert
+        (claimDefinition coreDeclaration == expectedDefinition)
+        "transparent claim body did not use the generated parameter telescope"
+      references <- case checkedSemanticClaimBodyReferences checked of
+        Just refs -> Right refs
+        Nothing -> Left "transparent semantic claim lost body reference evidence"
+      case references of
+        [xReference, okReference] -> do
+          assert
+            ( grammarV1ResolvedBinderKey
+                (grammarV1CheckedLexicalReferenceBinder xReference)
+              == grammarV1ResolvedBinderKey xBinder )
+            "transparent claim lost exact x binder evidence"
+          assert
+            ( grammarV1ResolvedBinderKey
+                (grammarV1CheckedLexicalReferenceBinder okReference)
+              == grammarV1ResolvedBinderKey okBinder )
+            "transparent claim lost exact ok binder evidence"
+        other -> Left
+          ("expected two semantic claim body references, got " <> show (length other))
+    other -> Left ("unexpected semantic claim parameter shape: " <> show other)
+
+semanticClaimDeclarationsAlphaStable :: Either String ()
+semanticClaimDeclarationsAlphaStable = do
+  original <- onlyClaim "semantic-claim-alpha-original" $
+    "claim Alpha(x : U8, ok : Bool) = x < 7 and Ready(ok);"
+  renamed <- onlyClaim "semantic-claim-alpha-renamed" $
+    "claim Alpha(count : U8, ready : Bool) = count < 7 and Ready(ready);"
+  let declarationKey = DeclarationKey "decl.SemanticClaimAlpha"
+  originalChecked <- checkedSemanticClaim declarationKey original
+  renamedChecked <- checkedSemanticClaim declarationKey renamed
+  originalParameters <- presentSemanticClaimParameters originalChecked
+  renamedParameters <- presentSemanticClaimParameters renamedChecked
+  assert
+    (map (grammarV1ResolvedBinderKey . fst) originalParameters
+      == map (grammarV1ResolvedBinderKey . fst) renamedParameters)
+    "alpha-renaming changed semantic claim binder keys"
+  assert
+    (map (grammarV1ResolvedBinderCoreName . fst) originalParameters
+      == map (grammarV1ResolvedBinderCoreName . fst) renamedParameters)
+    "alpha-renaming changed semantic claim Core names"
+  assert
+    (checkedSemanticClaimCoreDeclaration originalChecked
+      == checkedSemanticClaimCoreDeclaration renamedChecked)
+    "alpha-renaming changed semantic ClaimDecl meaning"
+  noParams <- onlyClaim "semantic-claim-no-params" "claim NoParams = true;"
+  emptyParams <- onlyClaim "semantic-claim-empty-params" "claim EmptyParams() = true;"
+  noParamsChecked <- checkedSemanticClaim
+    (DeclarationKey "decl.SemanticClaimNoParams") noParams
+  emptyParamsChecked <- checkedSemanticClaim
+    (DeclarationKey "decl.SemanticClaimEmptyParams") emptyParams
+  assert (checkedSemanticClaimParameters noParamsChecked == Nothing)
+    "omitted claim parameter syntax was not preserved"
+  assert (checkedSemanticClaimParameters emptyParamsChecked == Just [])
+    "explicit empty claim parameter syntax was not preserved"
+  assert
+    ( claimParameters (checkedSemanticClaimCoreDeclaration noParamsChecked) == []
+      && claimParameters (checkedSemanticClaimCoreDeclaration emptyParamsChecked) == [] )
+    "optional claim source shape leaked into Core parameter semantics"
+
+semanticClaimRegistrationSubstitutesGeneratedFormals :: Either String ()
+semanticClaimRegistrationSubstitutesGeneratedFormals = do
+  positive <- onlyClaim "semantic-claim-register" $
+    "claim Positive(x : U8) = x > 0;"
+  let declarationKey = DeclarationKey "decl.SemanticRegisteredPositive"
+  context <- case grammarV1RegisterSemanticClaimDeclaration
+      declarationKey positive emptyStaticContext of
+    Just (Right registered) -> Right registered
+    other -> Left ("semantic claim did not register: " <> show other)
+  registered <- case lookupClaim "Positive" context of
+    Just declaration -> Right declaration
+    Nothing -> Left "registered semantic claim was not in Core StaticContext"
+  formalName <- case claimParameters registered of
+    [(name, SortUInt 8)] -> Right name
+    other -> Left ("unexpected registered semantic claim telescope: " <> show other)
+  assert (formalName /= Name "x")
+    "registered semantic claim retained source spelling as its Core formal"
+  state <- bind "u" Unrestricted (TyUInt 8) emptySurfaceState
+  application <- onlyClaim "semantic-claim-apply" "claim Apply = Positive(u);"
+  proposition <- case grammarV1ClaimProposition application of
+    Just located -> Right (locatedValue located)
+    Nothing -> Left "semantic claim application fixture had no proposition"
+  let u = RefVar (Name "u")
+      actual = grammarV1CheckedClaimApplication context state proposition
+  steps <- expectCheckedRight
+    "semantic registered Positive"
+    (LessThan (RefNat 0) (RefToNat u))
+    actual
+  assert (ExpandedTransparentClaim "Positive" `elem` steps)
+    "semantic generated formal was not substituted through Core expansion"
+
+semanticClaimDeclarationBoundaries :: Either String ()
+semanticClaimDeclarationBoundaries = do
+  duplicate <- onlyClaim "semantic-claim-duplicate" $
+    "claim Duplicate(x : U8, x : Bool) = true;"
+  let duplicateActual = grammarV1CheckedSemanticClaimDeclaration
+        (DeclarationKey "decl.SemanticClaimDuplicate") duplicate
+  case duplicateActual of
+    Just (Left (GrammarV1SemanticClaimBinderScopeError
+      (GrammarV1DuplicateBinder duplicateName previous))) -> do
+        assert (locatedValue duplicateName == "x")
+          "semantic claim duplicate diagnostic lost source spelling"
+        assert (grammarV1ResolvedBinderDisplayName previous == "x")
+          "semantic claim duplicate diagnostic lost previous binder"
+    other -> Left
+      ("expected semantic claim duplicate-binder rejection, got " <> show other)
+  generic <- onlyClaim "semantic-claim-generic" $
+    "claim Generic[T : Type](x : U8) = true;"
+  named <- onlyClaim "semantic-claim-named" $
+    "claim Named(x : Widget) = true;"
+  let check source = grammarV1CheckedSemanticClaimDeclaration
+        (DeclarationKey "decl.SemanticClaimBoundary") source
+  assert (check generic == Nothing)
+    "generic claim escaped semantic claim competence"
+  assert (check named == Nothing)
+    "nonprimitive claim parameter escaped semantic claim competence"
+
+checkedSemanticClaim
+  :: DeclarationKey
+  -> GrammarV1ClaimDecl
+  -> Either String GrammarV1CheckedSemanticClaimDeclaration
+checkedSemanticClaim declarationKey source =
+  case grammarV1CheckedSemanticClaimDeclaration declarationKey source of
+    Just (Right checked) -> Right checked
+    other -> Left ("expected checked semantic claim declaration, got " <> show other)
+
+presentSemanticClaimParameters
+  :: GrammarV1CheckedSemanticClaimDeclaration
+  -> Either String [(GrammarV1ResolvedBinder, RefSort)]
+presentSemanticClaimParameters checked =
+  case checkedSemanticClaimParameters checked of
+    Just parameters -> Right parameters
+    Nothing -> Left "expected a present semantic claim parameter telescope"
+
+onlyClaim
+  :: Text.Text
+  -> Text.Text
+  -> Either String GrammarV1ClaimDecl
+onlyClaim label source = do
+  sourceFile <- mapLeft show (parseGrammarV1StructuralSource label source)
+  case grammarV1TopLevelDecls sourceFile of
+    [declaration] -> claimDeclaration declaration
+    declarations -> Left
+      ("expected one claim declaration, got " <> show (length declarations))
 
 expectCheckedRight
   :: String
