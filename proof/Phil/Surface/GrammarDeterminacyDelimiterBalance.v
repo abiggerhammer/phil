@@ -238,7 +238,12 @@ Proof.
   - discriminate Heffect.
   - destruct expression as
       [literal | class_name | name | items | items | body | body].
-    + simpl in Heffect |- *.
+    + change
+        (delimiter_balance_step depth (TLiteral literal) = Some final_depth)
+        in Heffect.
+      change
+        (delimiter_balance_step (depth + extra) (TLiteral literal) =
+          Some (final_depth + extra)).
       eapply delimiter_balance_step_shift.
       exact Heffect.
     + inversion Heffect; subst final_depth.
