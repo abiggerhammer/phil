@@ -1,3 +1,5 @@
+{-# LANGUAGE OverloadedStrings #-}
+
 module Phil.Surface.GrammarV1.BinderScope
   ( GrammarV1BinderKind (..)
   , GrammarV1BinderKey (..)
