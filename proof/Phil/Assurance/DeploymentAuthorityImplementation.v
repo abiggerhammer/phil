@@ -139,15 +139,17 @@ Proof.
   - intros [Hqualification0 [Hpolicy0 [Hgrant0 Hbegin0]]].
     constructor; assumption.
   - intros Hissued.
-    repeat split.
+    split.
     + exact (issuedQualificationValid
         current plan domainRegistry compositionRegistry qualification policy grant Hissued).
-    + exact (issuedPolicyAdmissible
-        current plan domainRegistry compositionRegistry qualification policy grant Hissued).
-    + exact (issuedGrantMatches
-        current plan domainRegistry compositionRegistry qualification policy grant Hissued).
-    + exact (issuedGrantBeginsAtObservation
-        current plan domainRegistry compositionRegistry qualification policy grant Hissued).
+    + split.
+      * exact (issuedPolicyAdmissible
+          current plan domainRegistry compositionRegistry qualification policy grant Hissued).
+      * split.
+        -- exact (issuedGrantMatches
+            current plan domainRegistry compositionRegistry qualification policy grant Hissued).
+        -- exact (issuedGrantBeginsAtObservation
+            current plan domainRegistry compositionRegistry qualification policy grant Hissued).
 Qed.
 
 Definition decideDeploymentAuthorityUsableByFacts
@@ -185,13 +187,15 @@ Proof.
   - intros [Hqualification0 [Hpolicy0 [Hgrant0 Hcurrent0]]].
     constructor; assumption.
   - intros Husable.
-    repeat split.
+    split.
     + exact (usableQualificationValid
         current plan domainRegistry compositionRegistry qualification policy grant Husable).
-    + exact (usablePolicyAdmissible
-        current plan domainRegistry compositionRegistry qualification policy grant Husable).
-    + exact (usableGrantMatches
-        current plan domainRegistry compositionRegistry qualification policy grant Husable).
-    + exact (usableGrantCurrent
-        current plan domainRegistry compositionRegistry qualification policy grant Husable).
+    + split.
+      * exact (usablePolicyAdmissible
+          current plan domainRegistry compositionRegistry qualification policy grant Husable).
+      * split.
+        -- exact (usableGrantMatches
+            current plan domainRegistry compositionRegistry qualification policy grant Husable).
+        -- exact (usableGrantCurrent
+            current plan domainRegistry compositionRegistry qualification policy grant Husable).
 Qed.
