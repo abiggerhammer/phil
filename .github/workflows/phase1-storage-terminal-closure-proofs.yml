@@ -4,22 +4,36 @@ on:
   pull_request:
     paths:
       - 'proof/Phil/Core/StorageTerminalClosure.v'
+      - 'proof/Phil/Core/StorageTerminalClosureImplementation.v'
+      - 'proof/Phil/Core/StorageTerminalClosureImplementationExtraction.v'
       - 'proof/Phil/Core/StorageRealization.v'
       - 'proof/Phil/Core/ConcurrencyTerminal.v'
       - 'proof/Phil/Core/ProcessTerminal.v'
       - 'proof/Phil/Core/ResourceObligation.v'
       - 'proof/Phil/Core/SystemsStageClosure.v'
+      - 'src/StorageRealizationKernel.hs'
+      - 'src/StorageAllocationFailureKernel.hs'
       - 'src/Phil/Systems/Storage.hs'
+      - 'src/Phil/Systems/StorageRealizationCertification.hs'
+      - 'src/Phil/Systems/StorageAllocationFailureCertification.hs'
       - 'src/Phil/Core/ProcessLifecycle.hs'
+      - 'app/StorageTerminalClosureDecisionCorrespondenceMain.hs'
+      - 'app/StorageRealizationProductionBindingMain.hs'
+      - 'app/StorageAllocationFailureProductionBindingMain.hs'
       - 'test/Phase1StorageRealizationMain.hs'
       - 'test/Phase1ProcessTerminalClosureMain.hs'
       - 'docs/phase-1/storage-terminal-closure-proof-v1.md'
+      - 'docs/phase-1/storage-terminal-closure-implementation-refinement-v1.md'
       - '.github/workflows/phase1-storage-terminal-closure-proofs.yml'
   push:
     branches: [main]
     paths:
       - 'proof/Phil/Core/StorageTerminalClosure.v'
+      - 'proof/Phil/Core/StorageTerminalClosureImplementation.v'
+      - 'proof/Phil/Core/StorageTerminalClosureImplementationExtraction.v'
+      - 'app/StorageTerminalClosureDecisionCorrespondenceMain.hs'
       - 'docs/phase-1/storage-terminal-closure-proof-v1.md'
+      - 'docs/phase-1/storage-terminal-closure-implementation-refinement-v1.md'
       - '.github/workflows/phase1-storage-terminal-closure-proofs.yml'
 
 permissions:
@@ -33,7 +47,7 @@ jobs:
       options: --user root
     steps:
       - uses: actions/checkout@v4
-      - name: Compile certified predecessors and PHIL-MEM-CLOSURE-001
+      - name: Compile certified predecessors and PHIL-MEM-CLOSURE-001 implementation correspondence
         shell: bash
         run: |
           set -euo pipefail
@@ -65,7 +79,11 @@ jobs:
           rocq c -Q proof/Phil Phil proof/Phil/Core/ConcurrencyRendezvous.v
           rocq c -Q proof/Phil Phil proof/Phil/Core/ConcurrencyTerminal.v
           rocq c -Q proof/Phil Phil proof/Phil/Core/StorageTerminalClosure.v
-      - name: Record proof identities
+          rocq c -Q proof/Phil Phil proof/Phil/Core/StorageTerminalClosureImplementation.v
+          rm -f StorageTerminalClosureKernel.hs
+          rocq c -Q proof/Phil Phil proof/Phil/Core/StorageTerminalClosureImplementationExtraction.v
+          test -s StorageTerminalClosureKernel.hs
+      - name: Record proof and exact kernel identities
         shell: bash
         run: |
           set -euo pipefail
@@ -73,6 +91,9 @@ jobs:
           cp \
             proof/Phil/Core/StorageTerminalClosure.v \
             proof/Phil/Core/StorageTerminalClosure.vo \
+            proof/Phil/Core/StorageTerminalClosureImplementation.v \
+            proof/Phil/Core/StorageTerminalClosureImplementation.vo \
+            StorageTerminalClosureKernel.hs \
             storage-terminal-closure-proof/
           sha256sum \
             proof/Phil/Core/StorageRealization.v \
@@ -81,13 +102,26 @@ jobs:
             proof/Phil/Core/ConcurrencyTerminal.v \
             proof/Phil/Core/StorageTerminalClosure.v \
             proof/Phil/Core/StorageTerminalClosure.vo \
-            > storage-terminal-closure-proof/PHIL-MEM-CLOSURE-001.proof.sha256
+            proof/Phil/Core/StorageTerminalClosureImplementation.v \
+            proof/Phil/Core/StorageTerminalClosureImplementation.vo \
+            StorageTerminalClosureKernel.hs \
+            src/StorageRealizationKernel.hs \
+            src/StorageAllocationFailureKernel.hs \
+            src/Phil/Systems/Storage.hs \
+            src/Phil/Systems/StorageRealizationCertification.hs \
+            src/Phil/Systems/StorageAllocationFailureCertification.hs \
+            src/Phil/Core/ProcessLifecycle.hs \
+            app/StorageTerminalClosureDecisionCorrespondenceMain.hs \
+            test/Phase1StorageRealizationMain.hs \
+            test/Phase1ProcessTerminalClosureMain.hs \
+            > storage-terminal-closure-proof/PHIL-MEM-CLOSURE-001.implementation.sha256
           {
             echo 'obligation=PHIL-MEM-CLOSURE-001'
-            echo 'evidence=Rocq-9.2.0'
-            cat storage-terminal-closure-proof/PHIL-MEM-CLOSURE-001.proof.sha256
-          } > storage-terminal-closure-proof/PHIL-MEM-CLOSURE-001.proof-certificate.txt
-          cat storage-terminal-closure-proof/PHIL-MEM-CLOSURE-001.proof-certificate.txt
+            echo 'predecessor=PHIL-MEM-REALIZE-001'
+            echo 'evidence=Rocq-9.2.0+extraction'
+            cat storage-terminal-closure-proof/PHIL-MEM-CLOSURE-001.implementation.sha256
+          } > storage-terminal-closure-proof/PHIL-MEM-CLOSURE-001.implementation-certificate.txt
+          cat storage-terminal-closure-proof/PHIL-MEM-CLOSURE-001.implementation-certificate.txt
       - uses: actions/upload-artifact@v4
         with:
           name: rocq-storage-terminal-closure-proof
@@ -105,11 +139,30 @@ jobs:
           cabal-version: 'latest'
       - name: Build ordinary regression substrate
         run: cabal build all --enable-tests
-      - name: Strict typecheck storage and lifecycle implementations
+      - uses: actions/download-artifact@v4
+        with:
+          name: rocq-storage-terminal-closure-proof
+          path: storage-terminal-closure-proof
+      - name: Check and execute extracted Storage Terminal Closure controls
         run: |
           set -euo pipefail
+          cabal exec -- ghc -istorage-terminal-closure-proof -Wall -Werror -Wno-unused-imports -fno-code storage-terminal-closure-proof/StorageTerminalClosureKernel.hs
+          cabal exec -- ghc -istorage-terminal-closure-proof -Wall -Werror -fno-code app/StorageTerminalClosureDecisionCorrespondenceMain.hs
+          cabal exec -- runghc -istorage-terminal-closure-proof -Wall -Werror app/StorageTerminalClosureDecisionCorrespondenceMain.hs
+      - name: Strict typecheck refined storage predecessors and lifecycle implementation
+        run: |
+          set -euo pipefail
+          cabal exec -- ghc -isrc -Wall -Werror -Wno-unused-imports -fno-code src/StorageRealizationKernel.hs
+          cabal exec -- ghc -isrc -Wall -Werror -Wno-unused-imports -fno-code src/StorageAllocationFailureKernel.hs
           cabal exec -- ghc -isrc -Wall -Werror -fno-code src/Phil/Systems/Storage.hs
+          cabal exec -- ghc -isrc -Wall -Werror -fno-code src/Phil/Systems/StorageRealizationCertification.hs
+          cabal exec -- ghc -isrc -Wall -Werror -fno-code src/Phil/Systems/StorageAllocationFailureCertification.hs
           cabal exec -- ghc -isrc -Wall -Werror -fno-code src/Phil/Core/ProcessLifecycle.hs
+      - name: Re-run implementation-refined storage predecessor controls
+        run: |
+          set -euo pipefail
+          cabal exec -- runghc -Wall -Werror -isrc app/StorageRealizationProductionBindingMain.hs
+          cabal exec -- runghc -Wall -Werror -isrc app/StorageAllocationFailureProductionBindingMain.hs
       - name: Re-run unchanged MEM-001--006 and process terminal corpora
         run: |
           set -euo pipefail
