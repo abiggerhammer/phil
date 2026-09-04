@@ -1,0 +1,182 @@
+name: Phase 1 Concurrency Execution Realization Production Binding
+
+on:
+  pull_request:
+    paths:
+      - 'proof/Phil/Core/ConcurrencyExecutionRealization.v'
+      - 'proof/Phil/Core/ConcurrencyExecutionRealizationImplementation.v'
+      - 'proof/Phil/Core/ConcurrencyExecutionRealizationImplementationExtraction.v'
+      - 'proof/Phil/Core/ConcurrencySemantics.v'
+      - 'proof/Phil/Core/ConcurrencyTerminal.v'
+      - 'proof/Phil/Core/SystemsStageClosure.v'
+      - 'proof/Phil/Core/SystemsControlPreservation.v'
+      - 'proof/Phil/Core/SystemsRealizationEffects.v'
+      - 'generated/ConcurrencyExecutionRealizationKernel.hs'
+      - 'src/ConcurrencyExecutionRealizationKernel.hs'
+      - 'src/Phil/Systems/ProcessRealization.hs'
+      - 'src/Phil/Systems/ProcessRealizationCertification.hs'
+      - 'src/Phil/Core/ConcurrencyActivationCertification.hs'
+      - 'src/Phil/Core/ConcurrencyRendezvousCertification.hs'
+      - 'src/Phil/Core/ConcurrencyTerminalCertification.hs'
+      - 'app/ConcurrencyActivationProductionBindingMain.hs'
+      - 'app/ConcurrencyRendezvousProductionBindingMain.hs'
+      - 'app/ConcurrencyTerminalProductionBindingMain.hs'
+      - 'app/ConcurrencyExecutionRealizationDecisionCorrespondenceMain.hs'
+      - 'app/ConcurrencyExecutionRealizationProductionBindingMain.hs'
+      - 'test/Phase1ProcessExecutionRealizationMain.hs'
+      - 'docs/phase-1/concurrency-execution-realization-production-binding-v1.md'
+      - '.github/workflows/phase1-concurrency-execution-realization-production-binding.yml'
+  push:
+    branches: [main]
+    paths:
+      - 'proof/Phil/Core/ConcurrencyExecutionRealization.v'
+      - 'proof/Phil/Core/ConcurrencyExecutionRealizationImplementation.v'
+      - 'proof/Phil/Core/ConcurrencyExecutionRealizationImplementationExtraction.v'
+      - 'generated/ConcurrencyExecutionRealizationKernel.hs'
+      - 'src/ConcurrencyExecutionRealizationKernel.hs'
+      - 'src/Phil/Systems/ProcessRealization.hs'
+      - 'src/Phil/Systems/ProcessRealizationCertification.hs'
+      - 'src/Phil/Core/ConcurrencyActivationCertification.hs'
+      - 'src/Phil/Core/ConcurrencyRendezvousCertification.hs'
+      - 'src/Phil/Core/ConcurrencyTerminalCertification.hs'
+      - 'app/ConcurrencyExecutionRealizationProductionBindingMain.hs'
+      - 'test/Phase1ProcessExecutionRealizationMain.hs'
+      - 'docs/phase-1/concurrency-execution-realization-production-binding-v1.md'
+      - '.github/workflows/phase1-concurrency-execution-realization-production-binding.yml'
+
+permissions:
+  contents: read
+
+jobs:
+  exact-concurrency-execution-realization-kernel:
+    runs-on: ubuntu-latest
+    container:
+      image: rocq/rocq-prover:9.2.0
+      options: --user root
+    steps:
+      - uses: actions/checkout@v4
+      - name: Freshly extract exact PHIL-CONC-LOWER-001 kernel
+        shell: bash
+        run: |
+          set -euo pipefail
+          export PATH="/home/rocq/.opam/${COMPILER}/bin:$PATH"
+          rocq c -Q proof/Phil Phil proof/Phil/Core/Syntax.v
+          rocq c -Q proof/Phil Phil proof/Phil/Core/Session.v
+          rocq c -Q proof/Phil Phil proof/Phil/Core/ProtocolIdentity.v
+          rocq c -Q proof/Phil Phil proof/Phil/Core/ProtocolProjection.v
+          rocq c -Q proof/Phil Phil proof/Phil/Core/ProtocolProgressionGuard.v
+          rocq c -Q proof/Phil Phil proof/Phil/Core/ProtocolMessageAdmissibility.v
+          rocq c -Q proof/Phil Phil proof/Phil/Core/Context.v
+          rocq c -Q proof/Phil Phil proof/Phil/Core/ContextJoin.v
+          rocq c -Q proof/Phil Phil proof/Phil/Core/ProcessJoin.v
+          rocq c -Q proof/Phil Phil proof/Phil/Core/ProcessTerminal.v
+          rocq c -Q proof/Phil Phil proof/Phil/Core/ResourceObligation.v
+          rocq c -Q proof/Phil Phil proof/Phil/Core/ArchitectureIdentity.v
+          rocq c -Q proof/Phil Phil proof/Phil/Core/ArchitectureInstantiation.v
+          rocq c -Q proof/Phil Phil proof/Phil/Core/ProviderReplacementQualification.v
+          rocq c -Q proof/Phil Phil proof/Phil/Core/ArchitectureRealization.v
+          rocq c -Q proof/Phil Phil proof/Phil/Systems/FactDisposition.v
+          rocq c -Q proof/Phil Phil proof/Phil/Assurance/ValidityScope.v
+          rocq c -Q proof/Phil Phil proof/Phil/Core/SystemsStageClosure.v
+          rocq c -Q proof/Phil Phil proof/Phil/Core/SystemsGenericLowering.v
+          rocq c -Q proof/Phil Phil proof/Phil/Core/ConcurrencySemantics.v
+          rocq c -Q proof/Phil Phil proof/Phil/Core/ConcurrencyActivation.v
+          rocq c -Q proof/Phil Phil proof/Phil/Core/ConcurrencyRendezvous.v
+          rocq c -Q proof/Phil Phil proof/Phil/Core/ConcurrencyTerminal.v
+          rocq c -Q proof/Phil Phil proof/Phil/Core/SystemsControlPreservation.v
+          rocq c -Q proof/Phil Phil proof/Phil/Core/SystemsRealizationEffects.v
+          rocq c -Q proof/Phil Phil proof/Phil/Core/ConcurrencyExecutionRealization.v
+          rocq c -Q proof/Phil Phil proof/Phil/Core/ConcurrencyExecutionRealizationImplementation.v
+          rm -f ConcurrencyExecutionRealizationKernel.hs
+          rocq c -Q proof/Phil Phil proof/Phil/Core/ConcurrencyExecutionRealizationImplementationExtraction.v
+          test -s ConcurrencyExecutionRealizationKernel.hs
+          test "$(wc -c < ConcurrencyExecutionRealizationKernel.hs)" -eq 2248
+          echo '0fa44b0fa81334793b5df469422aeb6f44d387f877f8ca16dfce3f82af32540e  ConcurrencyExecutionRealizationKernel.hs' | sha256sum -c -
+          cmp ConcurrencyExecutionRealizationKernel.hs generated/ConcurrencyExecutionRealizationKernel.hs
+          cmp ConcurrencyExecutionRealizationKernel.hs src/ConcurrencyExecutionRealizationKernel.hs
+      - name: Record exact kernel identity
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p concurrency-execution-realization-exact-kernel
+          cp ConcurrencyExecutionRealizationKernel.hs concurrency-execution-realization-exact-kernel/
+          sha256sum \
+            ConcurrencyExecutionRealizationKernel.hs \
+            generated/ConcurrencyExecutionRealizationKernel.hs \
+            src/ConcurrencyExecutionRealizationKernel.hs \
+            proof/Phil/Core/ConcurrencyExecutionRealizationImplementation.v \
+            proof/Phil/Core/ConcurrencyExecutionRealizationImplementation.vo \
+            > concurrency-execution-realization-exact-kernel/PHIL-CONC-LOWER-001.exact-kernel.sha256
+          cat concurrency-execution-realization-exact-kernel/PHIL-CONC-LOWER-001.exact-kernel.sha256
+      - uses: actions/upload-artifact@v4
+        with:
+          name: concurrency-execution-realization-exact-kernel
+          path: concurrency-execution-realization-exact-kernel
+          if-no-files-found: error
+
+  verify-concurrency-execution-realization-production-binding:
+    needs: exact-concurrency-execution-realization-kernel
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: haskell-actions/setup@v2
+        with:
+          ghc-version: '9.6.7'
+          cabal-version: 'latest'
+      - name: Build ordinary regression substrate
+        run: cabal build all --enable-tests
+      - uses: actions/download-artifact@v4
+        with:
+          name: concurrency-execution-realization-exact-kernel
+          path: concurrency-execution-realization-exact-kernel
+      - name: Strict typecheck exact kernel and production correspondence surfaces
+        run: |
+          set -euo pipefail
+          cabal exec -- ghc -i"$PWD/concurrency-execution-realization-exact-kernel" -Wall -Werror -Wno-unused-imports -fno-code concurrency-execution-realization-exact-kernel/ConcurrencyExecutionRealizationKernel.hs
+          cabal exec -- ghc -isrc -Wall -Werror -fno-code src/ConcurrencyExecutionRealizationKernel.hs
+          cabal exec -- ghc -isrc -Wall -Werror -fno-code src/Phil/Systems/ProcessRealization.hs
+          cabal exec -- ghc -isrc -Wall -Werror -fno-code src/Phil/Core/ConcurrencyActivationCertification.hs
+          cabal exec -- ghc -isrc -Wall -Werror -fno-code src/Phil/Core/ConcurrencyRendezvousCertification.hs
+          cabal exec -- ghc -isrc -Wall -Werror -fno-code src/Phil/Core/ConcurrencyTerminalCertification.hs
+          cabal exec -- ghc -isrc -Wall -Werror -fno-code src/Phil/Systems/ProcessRealizationCertification.hs
+          cabal exec -- ghc -i"$PWD/concurrency-execution-realization-exact-kernel" -isrc -Wall -Werror -fno-code app/ConcurrencyExecutionRealizationDecisionCorrespondenceMain.hs
+          cabal exec -- ghc -isrc -Wall -Werror -fno-code app/ConcurrencyExecutionRealizationProductionBindingMain.hs
+          cabal exec -- ghc -isrc -Wall -Werror -fno-code test/Phase1ProcessExecutionRealizationMain.hs
+      - name: Execute exact staging extracted-kernel controls
+        run: cabal exec -- runghc -i"$PWD/concurrency-execution-realization-exact-kernel" -isrc -Wall -Werror app/ConcurrencyExecutionRealizationDecisionCorrespondenceMain.hs
+      - name: Re-run implementation-refined concurrency predecessors
+        run: |
+          set -euo pipefail
+          cabal exec -- runghc -Wall -Werror -isrc app/ConcurrencyActivationProductionBindingMain.hs
+          cabal exec -- runghc -Wall -Werror -isrc app/ConcurrencyRendezvousProductionBindingMain.hs
+          cabal exec -- runghc -Wall -Werror -isrc app/ConcurrencyTerminalProductionBindingMain.hs
+      - name: Execute production binding controls
+        run: cabal exec -- runghc -Wall -Werror -isrc app/ConcurrencyExecutionRealizationProductionBindingMain.hs
+      - name: Re-run unchanged CONC-009 correspondence corpus
+        run: cabal exec -- runghc -Wall -Werror -isrc test/Phase1ProcessExecutionRealizationMain.hs
+      - name: Record production identities
+        run: |
+          set -euo pipefail
+          mkdir -p concurrency-execution-realization-production-binding
+          sha256sum \
+            generated/ConcurrencyExecutionRealizationKernel.hs \
+            src/ConcurrencyExecutionRealizationKernel.hs \
+            src/Phil/Systems/ProcessRealization.hs \
+            src/Phil/Systems/ProcessRealizationCertification.hs \
+            src/Phil/Core/ConcurrencyActivationCertification.hs \
+            src/Phil/Core/ConcurrencyRendezvousCertification.hs \
+            src/Phil/Core/ConcurrencyTerminalCertification.hs \
+            app/ConcurrencyExecutionRealizationDecisionCorrespondenceMain.hs \
+            app/ConcurrencyActivationProductionBindingMain.hs \
+            app/ConcurrencyRendezvousProductionBindingMain.hs \
+            app/ConcurrencyTerminalProductionBindingMain.hs \
+            app/ConcurrencyExecutionRealizationProductionBindingMain.hs \
+            test/Phase1ProcessExecutionRealizationMain.hs \
+            docs/phase-1/concurrency-execution-realization-production-binding-v1.md \
+            > concurrency-execution-realization-production-binding/PHIL-CONC-LOWER-001.production.sha256
+          cat concurrency-execution-realization-production-binding/PHIL-CONC-LOWER-001.production.sha256
+      - uses: actions/upload-artifact@v4
+        with:
+          name: concurrency-execution-realization-production-binding
+          path: concurrency-execution-realization-production-binding
+          if-no-files-found: error
