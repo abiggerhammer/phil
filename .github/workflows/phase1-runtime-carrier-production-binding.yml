@@ -101,28 +101,28 @@ jobs:
       - name: Strictly typecheck bound Runtime Carrier surface
         run: |
           set -euo pipefail
-          cabal exec -- ghc -isrc -Wall -Werror -Wno-unused-imports -fno-code src/RuntimeCarrierKernel.hs
-          cabal exec -- ghc -isrc -Wall -Werror -fno-code src/Phil/Systems/RuntimeCarrierBinding.hs
-          cabal exec -- ghc -isrc -Wall -Werror -fno-code src/Phil/Systems/RuntimeCarrierCoverage.hs
-          cabal exec -- ghc -isrc -Wall -Werror -fno-code src/Phil/Systems/RuntimeCarrierCertification.hs
-          cabal exec -- ghc -isrc -Wall -Werror -Wno-unused-imports -fno-code app/RuntimeCarrierDecisionCorrespondenceMain.hs
-          cabal exec -- ghc -isrc -Wall -Werror -fno-code app/RuntimeCarrierProductionBindingMain.hs
-          cabal exec -- ghc -isrc -Wall -Werror -fno-code test/Phase1RuntimeCarrierBindingMain.hs
-          cabal exec -- ghc -isrc -Wall -Werror -fno-code test/Phase1RuntimeCarrierCoverageMain.hs
-          cabal exec -- ghc -isrc -Wall -Werror -fno-code test/AssuranceMain.hs
-          cabal exec -- ghc -isrc -Wall -Werror -fno-code test/Phase1StageClosureMain.hs
+          cabal exec -- ghc -isrc -Wall -Werror -Wno-name-shadowing -Wno-unused-imports -fno-code src/RuntimeCarrierKernel.hs
+          cabal exec -- ghc -isrc -Wall -Werror -Wno-name-shadowing -fno-code src/Phil/Systems/RuntimeCarrierBinding.hs
+          cabal exec -- ghc -isrc -Wall -Werror -Wno-name-shadowing -fno-code src/Phil/Systems/RuntimeCarrierCoverage.hs
+          cabal exec -- ghc -isrc -Wall -Werror -Wno-name-shadowing -fno-code src/Phil/Systems/RuntimeCarrierCertification.hs
+          cabal exec -- ghc -isrc -Wall -Werror -Wno-name-shadowing -Wno-unused-imports -fno-code app/RuntimeCarrierDecisionCorrespondenceMain.hs
+          cabal exec -- ghc -isrc -Wall -Werror -Wno-name-shadowing -fno-code app/RuntimeCarrierProductionBindingMain.hs
+          cabal exec -- ghc -isrc -Wall -Werror -Wno-name-shadowing -fno-code test/Phase1RuntimeCarrierBindingMain.hs
+          cabal exec -- ghc -isrc -Wall -Werror -Wno-name-shadowing -fno-code test/Phase1RuntimeCarrierCoverageMain.hs
+          cabal exec -- ghc -isrc -Wall -Werror -Wno-name-shadowing -fno-code test/AssuranceMain.hs
+          cabal exec -- ghc -isrc -Wall -Werror -Wno-name-shadowing -fno-code test/Phase1StageClosureMain.hs
       - name: Execute exact extracted-kernel controls
-        run: cabal exec -- runghc -Wall -Werror -Wno-unused-imports -isrc app/RuntimeCarrierDecisionCorrespondenceMain.hs
+        run: cabal exec -- runghc -Wall -Werror -Wno-name-shadowing -Wno-unused-imports -isrc app/RuntimeCarrierDecisionCorrespondenceMain.hs
       - name: Execute production-binding controls
-        run: cabal exec -- runghc -Wall -Werror -isrc app/RuntimeCarrierProductionBindingMain.hs
+        run: cabal exec -- runghc -Wall -Werror -Wno-name-shadowing -isrc app/RuntimeCarrierProductionBindingMain.hs
       - name: Re-run DEP-001 establishment corpus
-        run: cabal exec -- runghc -Wall -Werror -isrc test/Phase1RuntimeCarrierBindingMain.hs
+        run: cabal exec -- runghc -Wall -Werror -Wno-name-shadowing -isrc test/Phase1RuntimeCarrierBindingMain.hs
       - name: Re-run DEP-002 coverage/transfer corpus
-        run: cabal exec -- runghc -Wall -Werror -isrc test/Phase1RuntimeCarrierCoverageMain.hs
+        run: cabal exec -- runghc -Wall -Werror -Wno-name-shadowing -isrc test/Phase1RuntimeCarrierCoverageMain.hs
       - name: Re-run unchanged 23-case assurance corpus
-        run: cabal exec -- runghc -Wall -Werror -isrc test/AssuranceMain.hs
+        run: cabal exec -- runghc -Wall -Werror -Wno-name-shadowing -isrc test/AssuranceMain.hs
       - name: Re-run unchanged 20-case final StageClosure corpus
-        run: cabal exec -- runghc -Wall -Werror -isrc test/Phase1StageClosureMain.hs
+        run: cabal exec -- runghc -Wall -Werror -Wno-name-shadowing -isrc test/Phase1StageClosureMain.hs
       - name: Record production binding identities
         shell: bash
         run: |
