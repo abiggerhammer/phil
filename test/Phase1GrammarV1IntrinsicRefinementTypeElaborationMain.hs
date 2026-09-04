@@ -8,7 +8,8 @@ import Phil.Core.Focusing
   , FocusingError (..)
   )
 import Phil.Core.Static
-  ( StaticContext
+  ( DeclarationKey (..)
+  , StaticContext
   , declareOpaqueClaim
   , declareTransparentClaim
   , emptyStaticContext
@@ -31,6 +32,14 @@ import Phil.Surface.Check.Types
   , SurfaceShape (..)
   , SurfaceState
   )
+import Phil.Surface.GrammarV1.BinderScope
+  ( GrammarV1BinderKey (..)
+  , GrammarV1BinderKind (..)
+  , GrammarV1BinderScopeError (..)
+  , GrammarV1ResolvedBinder (..)
+  , grammarV1BindLocal
+  , grammarV1RootLexicalScope
+  )
 import Phil.Surface.GrammarV1.BoundRefinementType
   ( grammarV1BoundRefinementType
   )
@@ -40,7 +49,15 @@ import Phil.Surface.GrammarV1.CheckedRefinementType
 import Phil.Surface.GrammarV1.IntrinsicRefinementType
   ( grammarV1IntrinsicRefinementType
   )
+import Phil.Surface.GrammarV1.LexicalReferenceScope
+  ( GrammarV1CheckedLexicalReference (..)
+  )
 import Phil.Surface.GrammarV1.Parser
+import Phil.Surface.GrammarV1.SemanticRefinementType
+  ( GrammarV1CheckedSemanticRefinementType (..)
+  , GrammarV1SemanticRefinementTypeError (..)
+  , grammarV1CheckedSemanticRefinementType
+  )
 import Phil.Surface.Syntax (Located (..))
 import System.Exit (exitFailure)
 
@@ -53,6 +70,16 @@ main = do
         boundRefinementTypesPreserveMeaning
     , test "SURF-008 checked Grammar-v1 refinement predicates delegate once to Core focusing"
         checkedRefinementTypesUseCoreFocusing
+    , test "SURF-009 semantic refinement binders use generated Core identity"
+        semanticRefinementUsesGeneratedIdentity
+    , test "SURF-009 semantic refinement binders are alpha-stable"
+        semanticRefinementAlphaStable
+    , test "SURF-009 sibling refinements advance one declaration-wide ordinal stream"
+        semanticRefinementOrdinalsAdvance
+    , test "SURF-009 refinement shadowing follows lexical identity, not SurfaceState spelling"
+        semanticRefinementShadowingUsesLexicalScope
+    , test "SURF-009 semantic refinement focusing failures remain explicit"
+        semanticRefinementFocusingFailurePreserved
     ]
   if and results then pure () else exitFailure
 
@@ -195,6 +222,161 @@ checkedRefinementTypesUseCoreFocusing = do
     other -> Left
       ("expected twelve checked refinement source types, got " <> show (length other))
 
+semanticRefinementUsesGeneratedIdentity :: Either String ()
+semanticRefinementUsesGeneratedIdentity = do
+  staticContext <- checkedClaimContext
+  sourceType <- oneTypeAliasTarget
+    "type Semantic = {v : U8 | NeedsNat(v)};"
+  let declarationKey = DeclarationKey "decl.SemanticRefinement"
+      rootScope = grammarV1RootLexicalScope declarationKey
+  (checked, _) <- expectSemanticSuccess
+    ( grammarV1CheckedSemanticRefinementType
+        staticContext
+        rootScope
+        emptySurfaceState
+        sourceType
+    )
+  let binder = checkedSemanticRefinementBinder checked
+      semanticName = grammarV1ResolvedBinderCoreName binder
+      expectedType = TyRefined
+        semanticName
+        (TyUInt 8)
+        (Atom "NeedsNat" [RefToNat (RefVar semanticName)])
+  assert (grammarV1ResolvedBinderKind binder == GrammarV1RefinementBinder)
+    "semantic refinement used the wrong binder family"
+  assert (semanticName /= Name "v")
+    "semantic refinement reused source spelling as Core identity"
+  assert (checkedSemanticRefinementType checked == expectedType)
+    ("semantic refinement did not rewrite predicate identity: "
+      <> show (checkedSemanticRefinementType checked))
+  reference <- exactlyOne
+    "semantic refinement predicate reference"
+    (checkedSemanticRefinementReferences checked)
+  assert
+    ( grammarV1ResolvedBinderKey
+        (grammarV1CheckedLexicalReferenceBinder reference)
+        == grammarV1ResolvedBinderKey binder
+    )
+    "semantic refinement predicate evidence did not point at its exact binder"
+  assert
+    (InsertedUIntToNat (RefVar semanticName)
+      `elem` checkedSemanticRefinementFocusSteps checked)
+    "semantic refinement lost Core UInt-to-Nat focusing evidence"
+
+semanticRefinementAlphaStable :: Either String ()
+semanticRefinementAlphaStable = do
+  staticContext <- checkedClaimContext
+  original <- oneTypeAliasTarget
+    "type Original = {v : U8 | NeedsNat(v)};"
+  renamed <- oneTypeAliasTarget
+    "type Renamed = {count : U8 | NeedsNat(count)};"
+  let declarationKey = DeclarationKey "decl.SemanticRefinementAlpha"
+  (originalChecked, _) <- expectSemanticSuccess
+    ( grammarV1CheckedSemanticRefinementType
+        staticContext
+        (grammarV1RootLexicalScope declarationKey)
+        emptySurfaceState
+        original
+    )
+  (renamedChecked, _) <- expectSemanticSuccess
+    ( grammarV1CheckedSemanticRefinementType
+        staticContext
+        (grammarV1RootLexicalScope declarationKey)
+        emptySurfaceState
+        renamed
+    )
+  let originalBinder = checkedSemanticRefinementBinder originalChecked
+      renamedBinder = checkedSemanticRefinementBinder renamedChecked
+  assert
+    (grammarV1ResolvedBinderKey originalBinder == grammarV1ResolvedBinderKey renamedBinder)
+    "alpha-renaming changed semantic refinement BinderKey"
+  assert
+    (grammarV1ResolvedBinderCoreName originalBinder == grammarV1ResolvedBinderCoreName renamedBinder)
+    "alpha-renaming changed semantic refinement Core name"
+  assert
+    (checkedSemanticRefinementType originalChecked
+      == checkedSemanticRefinementType renamedChecked)
+    "alpha-renaming changed semantic refinement Core type"
+  assert
+    (grammarV1ResolvedBinderDisplayName originalBinder /= grammarV1ResolvedBinderDisplayName renamedBinder)
+    "alpha-renaming test did not actually change source spelling"
+
+semanticRefinementOrdinalsAdvance :: Either String ()
+semanticRefinementOrdinalsAdvance = do
+  staticContext <- checkedClaimContext
+  firstType <- oneTypeAliasTarget
+    "type First = {v : U8 | NeedsNat(v)};"
+  secondType <- oneTypeAliasTarget
+    "type Second = {v : U8 | NeedsNat(v)};"
+  let rootScope = grammarV1RootLexicalScope
+        (DeclarationKey "decl.SemanticRefinementSequence")
+  (firstChecked, afterFirst) <- expectSemanticSuccess
+    ( grammarV1CheckedSemanticRefinementType
+        staticContext rootScope emptySurfaceState firstType
+    )
+  (secondChecked, _) <- expectSemanticSuccess
+    ( grammarV1CheckedSemanticRefinementType
+        staticContext afterFirst emptySurfaceState secondType
+    )
+  let firstBinder = checkedSemanticRefinementBinder firstChecked
+      secondBinder = checkedSemanticRefinementBinder secondChecked
+  assert
+    ( map (grammarV1BinderOrdinal . grammarV1ResolvedBinderKey)
+        [firstBinder, secondBinder]
+        == [0, 1]
+    )
+    "sibling refinements restarted or skipped the declaration-wide ordinal stream"
+  assert
+    (grammarV1ResolvedBinderCoreName firstBinder
+      /= grammarV1ResolvedBinderCoreName secondBinder)
+    "sibling refinements reused semantic Core identity"
+
+semanticRefinementShadowingUsesLexicalScope :: Either String ()
+semanticRefinementShadowingUsesLexicalScope = do
+  staticContext <- checkedClaimContext
+  sourceType <- oneTypeAliasTarget
+    "type Shadow = {v : U8 | NeedsNat(v)};"
+  let declarationKey = DeclarationKey "decl.SemanticRefinementShadow"
+      rootScope = grammarV1RootLexicalScope declarationKey
+  spellingState <- bind "v" Unrestricted (TyUInt 8) emptySurfaceState
+  _ <- expectSemanticSuccess
+    ( grammarV1CheckedSemanticRefinementType
+        staticContext rootScope spellingState sourceType
+    )
+  (_, activeScope) <- mapLeft show $
+    grammarV1BindLocal
+      GrammarV1FunctionParameterBinder
+      (Located syntheticSpan "v")
+      rootScope
+  case grammarV1CheckedSemanticRefinementType
+      staticContext activeScope emptySurfaceState sourceType of
+    Just
+      (Left
+        (GrammarV1SemanticRefinementBinderScopeError
+          (GrammarV1ActiveShadowing shadowing previous))) -> do
+            assert (locatedValue shadowing == "v")
+              "semantic refinement shadowing diagnostic lost source spelling"
+            assert (grammarV1ResolvedBinderDisplayName previous == "v")
+              "semantic refinement shadowing diagnostic lost active outer binder"
+    other -> Left
+      ("active lexical binder did not block refinement shadowing: " <> show other)
+
+semanticRefinementFocusingFailurePreserved :: Either String ()
+semanticRefinementFocusingFailurePreserved = do
+  sourceType <- oneTypeAliasTarget
+    "type Missing = {v : U8 | Missing(v)};"
+  case grammarV1CheckedSemanticRefinementType
+      emptyStaticContext
+      (grammarV1RootLexicalScope (DeclarationKey "decl.SemanticRefinementMissing"))
+      emptySurfaceState
+      sourceType of
+    Just
+      (Left
+        (GrammarV1SemanticRefinementFocusingError
+          (UnknownClaim "Missing"))) -> Right ()
+    other -> Left
+      ("semantic refinement Core focusing failure changed: " <> show other)
+
 checkedClaimContext :: Either String StaticContext
 checkedClaimContext = do
   context1 <- mapLeft show $
@@ -250,6 +432,18 @@ expectStructuralNothing result =
     other -> Left
       ("expected refinement source non-competence, got " <> show other)
 
+expectSemanticSuccess
+  :: Show scope
+  => Maybe
+      (Either
+        GrammarV1SemanticRefinementTypeError
+        (GrammarV1CheckedSemanticRefinementType, scope))
+  -> Either String (GrammarV1CheckedSemanticRefinementType, scope)
+expectSemanticSuccess result =
+  case result of
+    Just (Right checked) -> Right checked
+    other -> Left ("expected semantic refinement success, got " <> show other)
+
 intrinsicRefinementType :: Located GrammarV1TopLevelDecl -> Either String (Maybe Ty)
 intrinsicRefinementType (Located _ topLevel) =
   case locatedValue (grammarV1Declaration topLevel) of
@@ -280,6 +474,20 @@ typeAliasTarget (Located _ topLevel) =
     GrammarV1TypeAliasDeclaration aliasDecl ->
       Right (locatedValue (grammarV1TypeAliasTarget aliasDecl))
     other -> Left ("expected type alias declaration, got " <> show other)
+
+oneTypeAliasTarget :: Text.Text -> Either String GrammarV1Type
+oneTypeAliasTarget source = do
+  sourceFile <- mapLeft show $
+    parseGrammarV1StructuralSource "semantic-refinement" source
+  case grammarV1TopLevelDecls sourceFile of
+    [topLevel] -> typeAliasTarget topLevel
+    declarations -> Left
+      ("expected one semantic refinement alias, got " <> show (length declarations))
+
+exactlyOne :: String -> [a] -> Either String a
+exactlyOne _ [value] = Right value
+exactlyOne label values =
+  Left ("expected exactly one " <> label <> ", got " <> show (length values))
 
 bind :: Text.Text -> Mode -> Ty -> SurfaceState -> Either String SurfaceState
 bind name mode ty state =

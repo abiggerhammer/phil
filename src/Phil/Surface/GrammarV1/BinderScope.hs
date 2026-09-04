@@ -48,6 +48,7 @@ data GrammarV1BinderKind
   | GrammarV1ClaimParameterBinder
   | GrammarV1ComponentParameterBinder
   | GrammarV1ClosureParameterBinder
+  | GrammarV1RefinementBinder
   | GrammarV1LetPatternBinder
   | GrammarV1MatchArmBinder
   | GrammarV1BorrowViewBinder
