@@ -6,11 +6,21 @@ import qualified Data.Set as Set
 import qualified Data.Text as Text
 import Phil.Core.Callable (SemanticEffect (..))
 import Phil.Core.CallableRefinement (CallableAuthorityRequirement (..))
+import Phil.Core.Generic (GenericStaticParameterKey (..))
+import Phil.Core.Generic.StaticActual
+  ( GenericStaticKind (..)
+  , GenericStaticParameter (..)
+  )
 import Phil.Surface.GrammarV1.CallableAuthority
   ( grammarV1CallableAuthorityBounds
   )
 import Phil.Surface.GrammarV1.CallableEffects
-  ( grammarV1CallableEffectBounds
+  ( GrammarV1CallableEffectBoundTemplate (..)
+  , GrammarV1CallableEffectReferenceError (..)
+  , GrammarV1ResolvedCallableEffectUse (..)
+  , GrammarV1ResolvedCallableEffectsParameter (..)
+  , grammarV1CallableEffectBounds
+  , grammarV1ResolvedCallableEffectBounds
   )
 import Phil.Surface.GrammarV1.CallableResources
   ( GrammarV1CallableResourceClause (..)
@@ -28,6 +38,8 @@ main = do
     , test "SURF-002 effect-set references remain distinct from literals" effectSetReferencePreserved
     , test "SURF-008 simple callable effect literals preserve exact Core identities"
         simpleEffectSemantics
+    , test "SURF-008 resolved callable Effects references preserve stable parameter identity"
+        resolvedEffectParameterSemantics
     , test "SURF-008 simple callable authority types preserve exact Core identities"
         simpleAuthoritySemantics
     , test "SURF-008 callable consumes and borrows preserve exact unresolved resource intent"
@@ -149,6 +161,102 @@ simpleEffectSemantics = do
   assert
     (grammarV1CallableEffectBounds referenced == Nothing)
     "effect-set reference was treated as a concrete Core effect set"
+
+resolvedEffectParameterSemantics :: Either String ()
+resolvedEffectParameterSemantics = do
+  callable <- onlyCallable $ Text.unlines
+    [ "callable GenericEffects[E : Effects, T : Type]() -> Unit {"
+    , "  effects E;"
+    , "  effects {IO, IO};"
+    , "  effects E;"
+    , "}"
+    ]
+  sourceParameter <- case
+      [ parameter
+      | parameter@(Located _ genericParameter) <- grammarV1CallableGenericParams callable
+      , locatedValue (grammarV1GenericParamKind genericParameter) == GrammarV1EffectsKind
+      ] of
+    [parameter] -> Right parameter
+    parameters -> Left
+      ("expected one Effects parameter, got " <> show (length parameters))
+  effectClauses <- case
+      [ effectSet
+      | Located _ (GrammarV1CallableEffects effectSet) <- grammarV1CallableClauses callable
+      ] of
+    [firstUse, literalUse, secondUse] -> Right (firstUse, literalUse, secondUse)
+    clauses -> Left ("expected three effects clauses, got " <> show (length clauses))
+  let (firstUse, literalUse, secondUse) = effectClauses
+      parameterKey = GenericStaticParameterKey "callable.effects.parameter.E"
+      parameterEvidence = GrammarV1ResolvedCallableEffectsParameter
+        { resolvedCallableEffectsSourceParameter = sourceParameter
+        , resolvedCallableEffectsParameter = GenericStaticParameter
+            parameterKey
+            GenericEffectsKind
+        }
+      use sourceUse = GrammarV1ResolvedCallableEffectUse
+        { resolvedCallableEffectSourceUse = sourceUse
+        , resolvedCallableEffectUseParameterKey = parameterKey
+        }
+      uses = [use firstUse, use secondUse]
+      expected =
+        [ GrammarV1CallableEffectsParameterBound parameterKey
+        , GrammarV1ConcreteCallableEffectBound (Set.singleton (SemanticEffect "IO"))
+        , GrammarV1CallableEffectsParameterBound parameterKey
+        ]
+  assert
+    (grammarV1ResolvedCallableEffectBounds [parameterEvidence] uses callable
+      == Just (Right expected))
+    "resolved Effects parameter references did not preserve stable key and literal order"
+  assert
+    ( grammarV1ResolvedCallableEffectBounds
+        [parameterEvidence]
+        [use firstUse]
+        callable
+        == Just
+          (Left (GrammarV1MissingCallableEffectUseEvidence secondUse))
+    )
+    "missing second Effects use evidence was not rejected explicitly"
+  let wrongKindEvidence = parameterEvidence
+        { resolvedCallableEffectsParameter = GenericStaticParameter
+            parameterKey
+            GenericTypeKind
+        }
+  assert
+    ( grammarV1ResolvedCallableEffectBounds [wrongKindEvidence] uses callable
+        == Just
+          (Left
+            (GrammarV1CallableEffectsParameterKindMismatch
+              parameterKey
+              GenericTypeKind))
+    )
+    "wrong-kind Effects parameter evidence was accepted"
+  let foreignKey = GenericStaticParameterKey "callable.effects.parameter.foreign"
+      foreignUse = GrammarV1ResolvedCallableEffectUse
+        { resolvedCallableEffectSourceUse = firstUse
+        , resolvedCallableEffectUseParameterKey = foreignKey
+        }
+  assert
+    ( grammarV1ResolvedCallableEffectBounds
+        [parameterEvidence]
+        [foreignUse, use secondUse]
+        callable
+        == Just
+          (Left (GrammarV1CallableEffectUseUndeclaredParameter foreignKey))
+    )
+    "foreign Effects parameter key was accepted at a callable effect use"
+  let extraUse = GrammarV1ResolvedCallableEffectUse
+        { resolvedCallableEffectSourceUse = literalUse
+        , resolvedCallableEffectUseParameterKey = parameterKey
+        }
+  assert
+    ( grammarV1ResolvedCallableEffectBounds
+        [parameterEvidence]
+        (uses <> [extraUse])
+        callable
+        == Just
+          (Left (GrammarV1UnexpectedCallableEffectUseEvidence literalUse))
+    )
+    "extra Effects use evidence for a literal clause was silently ignored"
 
 simpleAuthoritySemantics :: Either String ()
 simpleAuthoritySemantics = do
@@ -277,7 +385,7 @@ assertStaticReference expected (Located _ reference) = do
     (grammarV1QualifiedNameParts (grammarV1StaticReferenceName reference) == [expected])
     ("expected static reference " <> Text.unpack expected)
   assert (null (grammarV1StaticReferenceArguments reference))
-    "static reference unexpectedly had arguments"
+    "static reference unexpectedly had static arguments"
 
 assertTrue :: Located GrammarV1Proposition -> Either String ()
 assertTrue proposition =
