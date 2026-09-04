@@ -402,5 +402,5 @@ Proof.
   intros witness Hendpoint Hparticipant Hcoarse.
   apply accepted_rendezvous_causality_is_semantic_not_scheduler_order.
   apply (proj1 (exactInternalRendezvous_grouped witness)).
-  repeat split; assumption.
+  exact (conj Hendpoint (conj Hparticipant Hcoarse)).
 Qed.
