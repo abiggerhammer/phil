@@ -19,7 +19,6 @@ import Phil.Core.ProcessParticipants
 import Phil.Core.ProcessRendezvous
 import Phil.Core.Protocol
 import Phil.Core.Protocol.Family
-import Phil.Core.Protocol.MessageAdmissibility
 import Phil.Core.Static
 import Phil.Core.Syntax
 import System.Exit (exitFailure)
