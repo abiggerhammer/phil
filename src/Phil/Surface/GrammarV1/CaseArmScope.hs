@@ -7,6 +7,7 @@ module Phil.Surface.GrammarV1.CaseArmScope
   ) where
 
 import Data.Maybe (fromMaybe)
+import Data.Text (Text)
 import Phil.Surface.GrammarV1.BinderScope
   ( GrammarV1BinderKind (GrammarV1MatchArmBinder)
   , GrammarV1BinderScopeError
@@ -190,7 +191,7 @@ bindCasePattern (Located _ casePattern) scope =
       (restBinders, afterRest) <- bindNames rest afterFirst
       Right (firstBinder : restBinders, afterRest)
 
-caseFieldBinderName :: Located GrammarV1FieldBinder -> Located Data.Text.Text
+caseFieldBinderName :: Located GrammarV1FieldBinder -> Located Text
 caseFieldBinderName (Located _ fieldBinder) =
   fromMaybe
     (grammarV1FieldBinderField fieldBinder)
