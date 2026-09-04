@@ -1,0 +1,164 @@
+name: Phase 1 Concurrency Activation Production Binding
+
+on:
+  pull_request:
+    paths:
+      - 'proof/Phil/Core/ConcurrencySemantics.v'
+      - 'proof/Phil/Core/ConcurrencyActivation.v'
+      - 'proof/Phil/Core/ConcurrencyActivationImplementation.v'
+      - 'proof/Phil/Core/ConcurrencyActivationImplementationExtraction.v'
+      - 'generated/ConcurrencyActivationKernel.hs'
+      - 'src/ConcurrencyActivationKernel.hs'
+      - 'src/Phil/Core/Process.hs'
+      - 'src/Phil/Core/ProcessActivation.hs'
+      - 'src/Phil/Core/ProcessParticipants.hs'
+      - 'src/Phil/Core/ConcurrencyActivationCertification.hs'
+      - 'app/ConcurrencyActivationDecisionCorrespondenceMain.hs'
+      - 'app/ConcurrencyActivationProductionBindingMain.hs'
+      - 'test/Phase1StaticProcessPopulationMain.hs'
+      - 'test/Phase1ProcessIdentityMain.hs'
+      - 'test/Phase1ProcessActivationOwnershipMain.hs'
+      - 'test/Phase1ParticipantClassificationMain.hs'
+      - 'test/Phase1UnrestrictedReachabilityMain.hs'
+      - 'docs/phase-1/concurrency-activation-production-binding-v1.md'
+      - '.github/workflows/phase1-concurrency-activation-production-binding.yml'
+  push:
+    branches: [main]
+    paths:
+      - 'proof/Phil/Core/ConcurrencyActivationImplementation.v'
+      - 'proof/Phil/Core/ConcurrencyActivationImplementationExtraction.v'
+      - 'generated/ConcurrencyActivationKernel.hs'
+      - 'src/ConcurrencyActivationKernel.hs'
+      - 'src/Phil/Core/ConcurrencyActivationCertification.hs'
+      - 'app/ConcurrencyActivationProductionBindingMain.hs'
+      - 'docs/phase-1/concurrency-activation-production-binding-v1.md'
+      - '.github/workflows/phase1-concurrency-activation-production-binding.yml'
+
+permissions:
+  contents: read
+
+jobs:
+  exact-concurrency-activation-kernel:
+    runs-on: ubuntu-latest
+    container:
+      image: rocq/rocq-prover:9.2.0
+      options: --user root
+    steps:
+      - uses: actions/checkout@v4
+      - name: Freshly extract exact PHIL-CONC-ACTIVATE-001 kernel
+        shell: bash
+        run: |
+          set -euo pipefail
+          export PATH="/home/rocq/.opam/${COMPILER}/bin:$PATH"
+          rocq c -Q proof/Phil Phil proof/Phil/Core/Syntax.v
+          rocq c -Q proof/Phil Phil proof/Phil/Core/Context.v
+          rocq c -Q proof/Phil Phil proof/Phil/Core/ContextJoin.v
+          rocq c -Q proof/Phil Phil proof/Phil/Core/ProcessJoin.v
+          rocq c -Q proof/Phil Phil proof/Phil/Core/ProcessTerminal.v
+          rocq c -Q proof/Phil Phil proof/Phil/Core/ArchitectureIdentity.v
+          rocq c -Q proof/Phil Phil proof/Phil/Core/ArchitectureInstantiation.v
+          rocq c -Q proof/Phil Phil proof/Phil/Core/ProviderReplacementQualification.v
+          rocq c -Q proof/Phil Phil proof/Phil/Core/ArchitectureRealization.v
+          rocq c -Q proof/Phil Phil proof/Phil/Systems/FactDisposition.v
+          rocq c -Q proof/Phil Phil proof/Phil/Assurance/ValidityScope.v
+          rocq c -Q proof/Phil Phil proof/Phil/Core/SystemsStageClosure.v
+          rocq c -Q proof/Phil Phil proof/Phil/Core/SystemsGenericLowering.v
+          rocq c -Q proof/Phil Phil proof/Phil/Core/ConcurrencySemantics.v
+          rocq c -Q proof/Phil Phil proof/Phil/Core/ConcurrencyActivation.v
+          rocq c -Q proof/Phil Phil proof/Phil/Core/ConcurrencyActivationImplementation.v
+          rm -f ConcurrencyActivationKernel.hs
+          rocq c -Q proof/Phil Phil proof/Phil/Core/ConcurrencyActivationImplementationExtraction.v
+          test -s ConcurrencyActivationKernel.hs
+          test "$(wc -c < ConcurrencyActivationKernel.hs)" -eq 2066
+          echo '344a132a263ba0f0c2821f35e03257ea74c49ced652d28938d11accffe09c063  ConcurrencyActivationKernel.hs' | sha256sum -c -
+          cmp ConcurrencyActivationKernel.hs generated/ConcurrencyActivationKernel.hs
+          cmp ConcurrencyActivationKernel.hs src/ConcurrencyActivationKernel.hs
+      - name: Record exact kernel identity
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p concurrency-activation-exact-kernel
+          cp ConcurrencyActivationKernel.hs concurrency-activation-exact-kernel/
+          sha256sum \
+            ConcurrencyActivationKernel.hs \
+            generated/ConcurrencyActivationKernel.hs \
+            src/ConcurrencyActivationKernel.hs \
+            proof/Phil/Core/ConcurrencyActivationImplementation.v \
+            proof/Phil/Core/ConcurrencyActivationImplementation.vo \
+            > concurrency-activation-exact-kernel/PHIL-CONC-ACTIVATE-001.exact-kernel.sha256
+          cat concurrency-activation-exact-kernel/PHIL-CONC-ACTIVATE-001.exact-kernel.sha256
+      - uses: actions/upload-artifact@v4
+        with:
+          name: concurrency-activation-exact-kernel
+          path: concurrency-activation-exact-kernel
+          if-no-files-found: error
+
+  verify-concurrency-activation-production-binding:
+    needs: exact-concurrency-activation-kernel
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: haskell-actions/setup@v2
+        with:
+          ghc-version: '9.6.7'
+          cabal-version: 'latest'
+      - name: Build ordinary regression substrate
+        run: cabal build all --enable-tests
+      - uses: actions/download-artifact@v4
+        with:
+          name: concurrency-activation-exact-kernel
+          path: concurrency-activation-exact-kernel
+      - name: Strict typecheck exact kernel and production correspondence surfaces
+        run: |
+          set -euo pipefail
+          cp concurrency-activation-exact-kernel/ConcurrencyActivationKernel.hs .
+          cabal exec -- ghc -i. -Wall -Werror -Wno-unused-imports -fno-code ConcurrencyActivationKernel.hs
+          cabal exec -- ghc -isrc -Wall -Werror -fno-code src/Phil/Core/Process.hs
+          cabal exec -- ghc -isrc -Wall -Werror -fno-code src/Phil/Core/ProcessActivation.hs
+          cabal exec -- ghc -isrc -Wall -Werror -fno-code src/Phil/Core/ProcessParticipants.hs
+          cabal exec -- ghc -isrc -Wall -Werror -fno-code src/Phil/Core/ConcurrencyActivationCertification.hs
+          cabal exec -- ghc -i. -Wall -Werror -Wno-unused-imports -fno-code app/ConcurrencyActivationDecisionCorrespondenceMain.hs
+          cabal exec -- ghc -isrc -Wall -Werror -fno-code app/ConcurrencyActivationProductionBindingMain.hs
+      - name: Execute exact staging extracted-kernel controls
+        run: cabal exec -- runghc -i. -Wall -Werror -Wno-unused-imports app/ConcurrencyActivationDecisionCorrespondenceMain.hs
+      - name: Execute production binding controls
+        run: cabal exec -- runghc -isrc -Wall -Werror app/ConcurrencyActivationProductionBindingMain.hs
+      - name: Re-run unchanged activation / participant / reachability corpus
+        run: |
+          set -euo pipefail
+          for test_file in \
+            test/Phase1StaticProcessPopulationMain.hs \
+            test/Phase1ProcessIdentityMain.hs \
+            test/Phase1ProcessActivationOwnershipMain.hs \
+            test/Phase1ParticipantClassificationMain.hs \
+            test/Phase1UnrestrictedReachabilityMain.hs
+          do
+            cabal exec -- runghc -Wall -Werror -isrc "$test_file"
+          done
+      - name: Record production identities
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p concurrency-activation-production-binding
+          sha256sum \
+            generated/ConcurrencyActivationKernel.hs \
+            src/ConcurrencyActivationKernel.hs \
+            src/Phil/Core/Process.hs \
+            src/Phil/Core/ProcessActivation.hs \
+            src/Phil/Core/ProcessParticipants.hs \
+            src/Phil/Core/ConcurrencyActivationCertification.hs \
+            app/ConcurrencyActivationDecisionCorrespondenceMain.hs \
+            app/ConcurrencyActivationProductionBindingMain.hs \
+            test/Phase1StaticProcessPopulationMain.hs \
+            test/Phase1ProcessIdentityMain.hs \
+            test/Phase1ProcessActivationOwnershipMain.hs \
+            test/Phase1ParticipantClassificationMain.hs \
+            test/Phase1UnrestrictedReachabilityMain.hs \
+            docs/phase-1/concurrency-activation-production-binding-v1.md \
+            > concurrency-activation-production-binding/PHIL-CONC-ACTIVATE-001.production.sha256
+          cat concurrency-activation-production-binding/PHIL-CONC-ACTIVATE-001.production.sha256
+      - uses: actions/upload-artifact@v4
+        with:
+          name: concurrency-activation-production-binding
+          path: concurrency-activation-production-binding
+          if-no-files-found: error
