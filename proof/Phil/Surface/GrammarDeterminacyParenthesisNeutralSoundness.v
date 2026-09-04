@@ -349,6 +349,24 @@ Proof.
   reflexivity.
 Qed.
 
+Lemma phase1_surface_parenthesis_neutral_pass_member_candidate :
+  forall safe_names name,
+    phase1_surface_parenthesis_neutral_pass safe_names = safe_names ->
+    In name safe_names ->
+    phase1_surface_parenthesis_neutral_candidateb safe_names name = true.
+Proof.
+  intros safe_names name Hstable Hin.
+  assert (Hin_pass :
+    In name (phase1_surface_parenthesis_neutral_pass safe_names)).
+  {
+    rewrite Hstable.
+    exact Hin.
+  }
+  unfold phase1_surface_parenthesis_neutral_pass in Hin_pass.
+  apply filter_In in Hin_pass as [_ Hcandidate].
+  exact Hcandidate.
+Qed.
+
 Opaque parenthesis_neutral_effect_fuel.
 
 Lemma phase1_surface_parenthesis_neutral_name_body_effect_zero :
@@ -360,16 +378,11 @@ Lemma phase1_surface_parenthesis_neutral_name_body_effect_zero :
       parenthesis_neutral_fuel 0 body = Some 0.
 Proof.
   intros name body Hin Hlookup.
-  assert (Hin_pass :
-    In name
-      (phase1_surface_parenthesis_neutral_pass
-        phase1_surface_parenthesis_neutral_names)).
-  {
-    rewrite phase1_surface_parenthesis_neutral_names_are_stable.
-    exact Hin.
-  }
-  unfold phase1_surface_parenthesis_neutral_pass in Hin_pass.
-  apply filter_In in Hin_pass as [_ Hcandidate].
+  pose proof
+    (phase1_surface_parenthesis_neutral_pass_member_candidate
+      phase1_surface_parenthesis_neutral_names name
+      phase1_surface_parenthesis_neutral_names_are_stable Hin)
+    as Hcandidate.
   unfold phase1_surface_parenthesis_neutral_candidateb in Hcandidate.
   rewrite Hlookup in Hcandidate.
   apply option_nat_isb_true in Hcandidate.
