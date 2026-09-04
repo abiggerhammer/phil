@@ -1,0 +1,166 @@
+name: Phase 1 Storage Cost Attribution Production Binding
+
+on:
+  pull_request:
+    paths:
+      - 'proof/Phil/Core/StorageRealization.v'
+      - 'proof/Phil/Core/RuntimePrimitiveIdentity.v'
+      - 'proof/Phil/Core/SystemsRuntimeGraph.v'
+      - 'proof/Phil/Core/StorageCostAttribution.v'
+      - 'proof/Phil/Core/StorageCostAttributionImplementation.v'
+      - 'proof/Phil/Core/StorageCostAttributionImplementationExtraction.v'
+      - 'generated/StorageCostAttributionKernel.hs'
+      - 'src/StorageCostAttributionKernel.hs'
+      - 'src/SystemsRuntimeGraphKernel.hs'
+      - 'src/Phil/Systems/Storage.hs'
+      - 'src/Phil/Systems/StorageRealizationCertification.hs'
+      - 'src/Phil/Systems/CostAttribution.hs'
+      - 'src/Phil/Systems/StageClosure.hs'
+      - 'src/Phil/Systems/StorageCostAttributionCertification.hs'
+      - 'app/StorageCostAttributionDecisionCorrespondenceMain.hs'
+      - 'app/StorageCostAttributionProductionBindingMain.hs'
+      - 'app/StorageRealizationProductionBindingMain.hs'
+      - 'app/SystemsRuntimeGraphDecisionCorrespondenceMain.hs'
+      - 'test/Phase1StorageRealizationMain.hs'
+      - 'test/Phase1CostAttributionMain.hs'
+      - 'test/Phase1StageClosureMain.hs'
+      - 'docs/phase-1/storage-cost-attribution-production-binding-v1.md'
+      - '.github/workflows/phase1-storage-cost-attribution-production-binding.yml'
+  push:
+    branches: [main]
+    paths:
+      - 'generated/StorageCostAttributionKernel.hs'
+      - 'src/StorageCostAttributionKernel.hs'
+      - 'src/Phil/Systems/StorageCostAttributionCertification.hs'
+      - 'app/StorageCostAttributionProductionBindingMain.hs'
+      - 'docs/phase-1/storage-cost-attribution-production-binding-v1.md'
+      - '.github/workflows/phase1-storage-cost-attribution-production-binding.yml'
+
+permissions:
+  contents: read
+
+jobs:
+  exact-storage-cost-attribution-kernel:
+    runs-on: ubuntu-latest
+    container:
+      image: rocq/rocq-prover:9.2.0
+      options: --user root
+    steps:
+      - uses: actions/checkout@v4
+      - name: Freshly extract exact Storage Cost Attribution kernel
+        shell: bash
+        run: |
+          set -euo pipefail
+          export PATH="/home/rocq/.opam/${COMPILER}/bin:$PATH"
+          rocq c -Q proof/Phil Phil proof/Phil/Core/Syntax.v
+          rocq c -Q proof/Phil Phil proof/Phil/Core/Session.v
+          rocq c -Q proof/Phil Phil proof/Phil/Core/ProtocolIdentity.v
+          rocq c -Q proof/Phil Phil proof/Phil/Core/ProtocolProjection.v
+          rocq c -Q proof/Phil Phil proof/Phil/Core/ProtocolProgressionGuard.v
+          rocq c -Q proof/Phil Phil proof/Phil/Core/ProtocolMessageAdmissibility.v
+          rocq c -Q proof/Phil Phil proof/Phil/Core/Context.v
+          rocq c -Q proof/Phil Phil proof/Phil/Core/ContextJoin.v
+          rocq c -Q proof/Phil Phil proof/Phil/Core/ProcessJoin.v
+          rocq c -Q proof/Phil Phil proof/Phil/Core/ProcessTerminal.v
+          rocq c -Q proof/Phil Phil proof/Phil/Core/ResourceObligation.v
+          rocq c -Q proof/Phil Phil proof/Phil/Core/ArchitectureIdentity.v
+          rocq c -Q proof/Phil Phil proof/Phil/Core/ArchitectureInstantiation.v
+          rocq c -Q proof/Phil Phil proof/Phil/Core/ProviderReplacementQualification.v
+          rocq c -Q proof/Phil Phil proof/Phil/Core/ArchitectureRealization.v
+          rocq c -Q proof/Phil Phil proof/Phil/Systems/FactDisposition.v
+          rocq c -Q proof/Phil Phil proof/Phil/Assurance/ValidityScope.v
+          rocq c -Q proof/Phil Phil proof/Phil/Core/SystemsStageClosure.v
+          rocq c -Q proof/Phil Phil proof/Phil/Core/SystemsRealizationEffects.v
+          rocq c -Q proof/Phil Phil proof/Phil/Core/SystemsSubjectAuthority.v
+          rocq c -Q proof/Phil Phil proof/Phil/Core/StorageRealization.v
+          rocq c -Q proof/Phil Phil proof/Phil/Systems/Runtime.v
+          rocq c -Q proof/Phil Phil proof/Phil/Core/RuntimePrimitiveIdentity.v
+          rocq c -Q proof/Phil Phil proof/Phil/Core/SystemsRuntimeGraph.v
+          rocq c -Q proof/Phil Phil proof/Phil/Core/StorageCostAttribution.v
+          rocq c -Q proof/Phil Phil proof/Phil/Core/StorageCostAttributionImplementation.v
+          rm -f StorageCostAttributionKernel.hs
+          rocq c -Q proof/Phil Phil proof/Phil/Core/StorageCostAttributionImplementationExtraction.v
+          test -s StorageCostAttributionKernel.hs
+          echo '9b2ba9be6582f34288da985c7e9f07c559cc29d4c493ac17fee982edab3942a2  StorageCostAttributionKernel.hs' | sha256sum -c -
+          cmp StorageCostAttributionKernel.hs generated/StorageCostAttributionKernel.hs
+          cmp StorageCostAttributionKernel.hs src/StorageCostAttributionKernel.hs
+      - name: Record exact kernel identity
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p storage-cost-attribution-exact-kernel
+          cp StorageCostAttributionKernel.hs storage-cost-attribution-exact-kernel/
+          sha256sum StorageCostAttributionKernel.hs \
+            > storage-cost-attribution-exact-kernel/PHIL-MEM-COST-001.kernel.sha256
+          cat storage-cost-attribution-exact-kernel/PHIL-MEM-COST-001.kernel.sha256
+      - uses: actions/upload-artifact@v4
+        with:
+          name: storage-cost-attribution-exact-kernel
+          path: storage-cost-attribution-exact-kernel
+          if-no-files-found: error
+
+  verify-storage-cost-attribution-production-binding:
+    needs: exact-storage-cost-attribution-kernel
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: haskell-actions/setup@v2
+        with:
+          ghc-version: '9.6.7'
+          cabal-version: 'latest'
+      - name: Build broad regression surface
+        run: cabal build all --enable-tests
+      - name: Strictly typecheck bound Storage Cost Attribution surface
+        run: |
+          set -euo pipefail
+          cabal exec -- ghc -isrc -Wall -Werror -fno-code src/StorageCostAttributionKernel.hs
+          cabal exec -- ghc -isrc -Wall -Werror -fno-code src/Phil/Systems/Storage.hs
+          cabal exec -- ghc -isrc -Wall -Werror -fno-code src/Phil/Systems/StorageRealizationCertification.hs
+          cabal exec -- ghc -isrc -Wall -Werror -Wno-name-shadowing -fno-code src/Phil/Systems/CostAttribution.hs
+          # StageClosure's transitive baseline contains known name-shadowing and
+          # redundant-import warnings outside this PR; keep every other warning fatal.
+          cabal exec -- ghc -isrc -Wall -Werror -Wno-name-shadowing -Wno-unused-imports -fno-code src/Phil/Systems/StageClosure.hs
+          cabal exec -- ghc -isrc -Wall -Werror -Wno-name-shadowing -Wno-unused-imports -fno-code src/Phil/Systems/StorageCostAttributionCertification.hs
+          cabal exec -- ghc -isrc -Wall -Werror -fno-code app/StorageCostAttributionDecisionCorrespondenceMain.hs
+          cabal exec -- ghc -isrc -Wall -Werror -Wno-name-shadowing -Wno-unused-imports -fno-code app/StorageCostAttributionProductionBindingMain.hs
+          cabal exec -- ghc -isrc -Wall -Werror -fno-code test/Phase1StorageRealizationMain.hs
+          cabal exec -- ghc -isrc -Wall -Werror -Wno-name-shadowing -fno-code test/Phase1CostAttributionMain.hs
+          cabal exec -- ghc -isrc -Wall -Werror -Wno-name-shadowing -Wno-unused-imports -fno-code test/Phase1StageClosureMain.hs
+      - name: Execute exact extracted-kernel controls
+        run: cabal exec -- runghc -Wall -Werror -isrc app/StorageCostAttributionDecisionCorrespondenceMain.hs
+      - name: Re-run implementation-refined StorageRealization predecessor
+        run: cabal exec -- runghc -Wall -Werror -isrc app/StorageRealizationProductionBindingMain.hs
+      - name: Re-run production-bound Systems runtime-graph controls
+        run: cabal exec -- runghc -Wall -Werror -Wno-unused-imports -isrc app/SystemsRuntimeGraphDecisionCorrespondenceMain.hs
+      - name: Execute MEM-006 production-binding controls
+        run: cabal exec -- runghc -Wall -Werror -Wno-name-shadowing -Wno-unused-imports -isrc app/StorageCostAttributionProductionBindingMain.hs
+      - name: Re-run unchanged MEM, SYS-018, and final StageClosure corpora
+        run: |
+          set -euo pipefail
+          cabal exec -- runghc -Wall -Werror -isrc test/Phase1StorageRealizationMain.hs
+          cabal exec -- runghc -Wall -Werror -Wno-name-shadowing -isrc test/Phase1CostAttributionMain.hs
+          cabal exec -- runghc -Wall -Werror -Wno-name-shadowing -Wno-unused-imports -isrc test/Phase1StageClosureMain.hs
+      - name: Record production binding identities
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p storage-cost-attribution-production-binding
+          sha256sum \
+            src/StorageCostAttributionKernel.hs \
+            src/SystemsRuntimeGraphKernel.hs \
+            src/Phil/Systems/Storage.hs \
+            src/Phil/Systems/StorageRealizationCertification.hs \
+            src/Phil/Systems/CostAttribution.hs \
+            src/Phil/Systems/StageClosure.hs \
+            src/Phil/Systems/StorageCostAttributionCertification.hs \
+            app/StorageCostAttributionProductionBindingMain.hs \
+            test/Phase1StorageRealizationMain.hs \
+            test/Phase1CostAttributionMain.hs \
+            test/Phase1StageClosureMain.hs \
+            > storage-cost-attribution-production-binding/PHIL-MEM-COST-001.production.sha256
+          cat storage-cost-attribution-production-binding/PHIL-MEM-COST-001.production.sha256
+      - uses: actions/upload-artifact@v4
+        with:
+          name: storage-cost-attribution-production-binding
+          path: storage-cost-attribution-production-binding
+          if-no-files-found: error
