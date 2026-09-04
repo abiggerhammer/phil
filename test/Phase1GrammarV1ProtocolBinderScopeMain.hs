@@ -9,12 +9,18 @@ import Phil.Core.Checker (CheckState (..))
 import Phil.Core.Context (ResourceContext (..))
 import Phil.Core.Focusing (FocusingError (UnknownClaim))
 import Phil.Core.Protocol (ProtocolRoleKey (..))
+import Phil.Core.Protocol.Family
+  ( ProtocolBranchTemplate (..)
+  , ProtocolSessionTemplate (..)
+  , ProtocolTypeTemplate (..)
+  )
 import Phil.Core.Static
   ( DeclarationKey (..)
   , emptyStaticContext
   )
 import Phil.Core.Syntax
   ( Name (..)
+  , Outcome (..)
   , RefTerm (..)
   , Ty (..)
   )
@@ -46,6 +52,13 @@ import Phil.Surface.GrammarV1.ProtocolGuardChecking
   , GrammarV1ProtocolGuardCheckingError (..)
   , grammarV1CheckedProtocolCoreGuards
   )
+import Phil.Surface.GrammarV1.SemanticProtocolRoles
+  ( grammarV1CheckedSemanticProtocolRoleTemplates
+  )
+import Phil.Surface.GrammarV1.SemanticSessionSemantics
+  ( GrammarV1SemanticSessionError (..)
+  , grammarV1CheckedSemanticSession
+  )
 import Phil.Surface.Syntax (Located (..))
 import System.Exit (exitFailure)
 
@@ -74,6 +87,16 @@ main = do
         protocolCoreGuardAlphaRenamingPreservesIdentity
     , test "SURF-009 protocol guard Core focusing errors remain explicit"
         protocolCoreGuardFocusingErrorPreserved
+    , test "SURF-009 protocol sessions consume generated binder names in dependent payloads"
+        semanticProtocolSessionsUseGeneratedNames
+    , test "SURF-009 semantic protocol sessions are alpha-stable at Core identity"
+        semanticProtocolSessionsAreAlphaStable
+    , test "SURF-009 semantic protocol branch state remains sibling-local"
+        semanticProtocolBranchStateIsSiblingLocal
+    , test "SURF-009 semantic protocol sessions require exact binder evidence"
+        semanticProtocolSessionEvidenceMismatch
+    , test "SURF-009 semantic protocol session competence remains bounded"
+        semanticProtocolSessionCompetenceBoundary
     ]
   if and results then pure () else exitFailure
 
@@ -354,6 +377,222 @@ protocolCoreGuardFocusingErrorPreserved = do
       (GrammarV1ProtocolGuardPropositionFocusingError (UnknownClaim "Missing"))) ->
         Right ()
     other -> Left ("Core UnknownClaim was collapsed or changed: " <> show other)
+
+semanticProtocolSessionsUseGeneratedNames :: Either String ()
+semanticProtocolSessionsUseGeneratedNames = do
+  protocol <- onlyProtocol $ Text.unlines
+    [ "protocol SemanticDependent {"
+    , "  role Client = send (payload : Bytes[4]) then"
+    , "    send (tag : Bytes[len(payload)]) then end Done;"
+    , "  role Server = receive (incoming : Bytes[4]) then"
+    , "    receive (tag2 : Bytes[len(incoming)]) then end Done;"
+    , "}"
+    ]
+  let declarationKey = DeclarationKey "decl.SemanticProtocolDependent"
+  scope <- checkedProtocol declarationKey protocol
+  case grammarV1CheckedProtocolRoles scope of
+    [clientScope, serverScope] ->
+      case
+          ( grammarV1CheckedProtocolRoleBinders clientScope
+          , grammarV1CheckedProtocolRoleBinders serverScope
+          ) of
+        ([clientPayload, clientTag], [serverPayload, serverTag]) -> do
+          let clientPayloadName = semanticBinderName clientPayload
+              clientTagName = semanticBinderName clientTag
+              serverPayloadName = semanticBinderName serverPayload
+              serverTagName = semanticBinderName serverTag
+          assert
+            (clientPayloadName /= Name "payload" && clientTagName /= Name "tag")
+            "semantic Client session reused source binder spelling"
+          assert
+            (serverPayloadName /= Name "incoming" && serverTagName /= Name "tag2")
+            "semantic Server session reused source binder spelling"
+          assert (clientPayloadName /= serverPayloadName)
+            "sibling protocol roles reused semantic binder identity"
+          ((clientKey, clientTemplate), (serverKey, serverTemplate)) <-
+            checkedSemanticProtocolTemplates declarationKey protocol
+          assert
+            (clientKey == ProtocolRoleKey "Client" && serverKey == ProtocolRoleKey "Server")
+            "semantic protocol role order changed"
+          assert
+            (clientTemplate ==
+              ProtocolTemplateSend
+                clientPayloadName
+                (ProtocolConcreteType (TyBytes (RefNat 4)))
+                (ProtocolTemplateSend
+                  clientTagName
+                  (ProtocolConcreteType
+                    (TyBytes (RefLen (RefVar clientPayloadName))))
+                  (ProtocolTemplateEnd (Outcome "Done"))))
+            "Client dependent type did not consume generated SurfaceState identity"
+          assert
+            (serverTemplate ==
+              ProtocolTemplateReceive
+                serverPayloadName
+                (ProtocolConcreteType (TyBytes (RefNat 4)))
+                (ProtocolTemplateReceive
+                  serverTagName
+                  (ProtocolConcreteType
+                    (TyBytes (RefLen (RefVar serverPayloadName))))
+                  (ProtocolTemplateEnd (Outcome "Done"))))
+            "Server dependent type did not consume generated SurfaceState identity"
+        other -> Left ("unexpected semantic protocol binder shape: " <> show other)
+    other -> Left ("expected two semantic protocol role scopes, got " <> show other)
+
+semanticProtocolSessionsAreAlphaStable :: Either String ()
+semanticProtocolSessionsAreAlphaStable = do
+  original <- onlyProtocol $ Text.unlines
+    [ "protocol SemanticAlpha {"
+    , "  role Client = send (payload : Bytes[4]) then"
+    , "    send (tag : Bytes[len(payload)]) then end Done;"
+    , "  role Server = receive (incoming : Bytes[4]) then"
+    , "    receive (tag2 : Bytes[len(incoming)]) then end Done;"
+    , "}"
+    ]
+  renamed <- onlyProtocol $ Text.unlines
+    [ "protocol RenamedSemanticAlpha {"
+    , "  role Client = send (bytes : Bytes[4]) then"
+    , "    send (checksum : Bytes[len(bytes)]) then end Done;"
+    , "  role Server = receive (chunk : Bytes[4]) then"
+    , "    receive (check : Bytes[len(chunk)]) then end Done;"
+    , "}"
+    ]
+  let declarationKey = DeclarationKey "decl.SemanticProtocolAlpha"
+  originalScope <- checkedProtocol declarationKey original
+  renamedScope <- checkedProtocol declarationKey renamed
+  assert
+    ( map grammarV1ResolvedBinderCoreName (allResolvedBinders originalScope)
+        == map grammarV1ResolvedBinderCoreName (allResolvedBinders renamedScope)
+    )
+    "alpha-renaming changed protocol semantic Core names"
+  originalTemplates <- checkedSemanticProtocolTemplates declarationKey original
+  renamedTemplates <- checkedSemanticProtocolTemplates declarationKey renamed
+  assert (originalTemplates == renamedTemplates)
+    "alpha-renaming changed semantic protocol templates"
+
+semanticProtocolBranchStateIsSiblingLocal :: Either String ()
+semanticProtocolBranchStateIsSiblingLocal = do
+  protocol <- onlyProtocol $ Text.unlines
+    [ "protocol SemanticBranches {"
+    , "  role Client = select {"
+    , "    Go(item : U8) => send (inside : Bytes[toNat(item)]) then end Done"
+    , "    | Stop(item : U8) => send (inside : Bytes[toNat(item)]) then end Done"
+    , "  };"
+    , "  role Server = offer {"
+    , "    Go(value : U8) => receive (received : Bytes[toNat(value)]) then end Done"
+    , "    | Stop(value : U8) => receive (received : Bytes[toNat(value)]) then end Done"
+    , "  };"
+    , "}"
+    ]
+  let declarationKey = DeclarationKey "decl.SemanticProtocolBranches"
+  scope <- checkedProtocol declarationKey protocol
+  clientScope <- roleByKey (ProtocolRoleKey "Client") (grammarV1CheckedProtocolRoles scope)
+  case map semanticBinderName (grammarV1CheckedProtocolRoleBinders clientScope) of
+    [goItem, goInside, stopItem, stopInside] -> do
+      assert (goItem /= stopItem && goInside /= stopInside)
+        "sibling protocol branch binders reused semantic identity"
+      ((_, clientTemplate), _) <- checkedSemanticProtocolTemplates declarationKey protocol
+      case clientTemplate of
+        ProtocolTemplateSelect [goBranch, stopBranch] -> do
+          assertSemanticBranch "Go" goItem goInside goBranch
+          assertSemanticBranch "Stop" stopItem stopInside stopBranch
+        other -> Left ("expected semantic select template, got " <> show other)
+    other -> Left ("unexpected semantic Client branch binder shape: " <> show other)
+
+semanticProtocolSessionEvidenceMismatch :: Either String ()
+semanticProtocolSessionEvidenceMismatch = do
+  protocol <- onlyProtocol $ Text.unlines
+    [ "protocol SemanticEvidence {"
+    , "  role Client = send (payload : Bytes[4]) then"
+    , "    send (tag : Bytes[len(payload)]) then end Done;"
+    , "  role Server = receive (incoming : Bytes[4]) then"
+    , "    receive (tag2 : Bytes[len(incoming)]) then end Done;"
+    , "}"
+    ]
+  let declarationKey = DeclarationKey "decl.SemanticProtocolEvidence"
+  scope <- checkedProtocol declarationKey protocol
+  case (grammarV1ProtocolRoles protocol, grammarV1CheckedProtocolRoles scope) of
+    (Located _ clientRole : _, clientScope : _) ->
+      case grammarV1CheckedProtocolRoleBinders clientScope of
+        _first : rest ->
+          case grammarV1CheckedSemanticSession
+              emptyStaticContext
+              (ProtocolRoleKey "Client")
+              rest
+              (locatedValue (grammarV1RoleSessionExpression clientRole)) of
+            Just
+              (Left
+                (GrammarV1SemanticSessionBinderEvidenceMismatch _ _ _ _)) -> Right ()
+            other -> Left
+              ("semantic session did not reject misordered binder evidence: "
+                <> show other)
+        [] -> Left "semantic evidence fixture unexpectedly had no Client binders"
+    _ -> Left "semantic evidence fixture lost role/source alignment"
+
+semanticProtocolSessionCompetenceBoundary :: Either String ()
+semanticProtocolSessionCompetenceBoundary = do
+  guarded <- onlyProtocol $ Text.unlines
+    [ "protocol GuardedSemantic {"
+    , "  role Client = send (x : U8) when x == x then end Done;"
+    , "  role Server = receive (y : U8) when y == y then end Done;"
+    , "}"
+    ]
+  generic <- onlyProtocol $ Text.unlines
+    [ "protocol GenericSemantic[T : Type] {"
+    , "  role Client = send (x : U8) then end Done;"
+    , "  role Server = receive (y : U8) then end Done;"
+    , "}"
+    ]
+  let declarationKey = DeclarationKey "decl.SemanticProtocolBoundary"
+  assert
+    (grammarV1CheckedSemanticProtocolRoleTemplates
+      emptyStaticContext declarationKey guarded == Nothing)
+    "guard-bearing protocol escaped semantic session competence"
+  assert
+    (grammarV1CheckedSemanticProtocolRoleTemplates
+      emptyStaticContext declarationKey generic == Nothing)
+    "generic protocol escaped closed semantic session competence"
+
+checkedSemanticProtocolTemplates
+  :: DeclarationKey
+  -> GrammarV1ProtocolDecl
+  -> Either
+      String
+      ( (ProtocolRoleKey, ProtocolSessionTemplate)
+      , (ProtocolRoleKey, ProtocolSessionTemplate)
+      )
+checkedSemanticProtocolTemplates declarationKey protocol =
+  case grammarV1CheckedSemanticProtocolRoleTemplates
+      emptyStaticContext declarationKey protocol of
+    Just (Right (templates, _steps)) -> Right templates
+    other -> Left ("expected checked semantic protocol templates, got " <> show other)
+
+semanticBinderName :: GrammarV1CheckedProtocolBinder -> Name
+semanticBinderName =
+  grammarV1ResolvedBinderCoreName . grammarV1CheckedProtocolBinderResolved
+
+assertSemanticBranch
+  :: Text.Text
+  -> Name
+  -> Name
+  -> ProtocolBranchTemplate
+  -> Either String ()
+assertSemanticBranch label itemName insideName branch = do
+  assert (protocolTemplateBranchLabel branch == label)
+    ("semantic branch label changed for " <> Text.unpack label)
+  assert
+    (protocolTemplateBranchPayload branch
+      == Just (itemName, ProtocolConcreteType (TyUInt 8)))
+    ("semantic branch payload identity changed for " <> Text.unpack label)
+  assert
+    (protocolTemplateBranchContinuation branch ==
+      ProtocolTemplateSend
+        insideName
+        (ProtocolConcreteType
+          (TyBytes (RefToNat (RefVar itemName))))
+        (ProtocolTemplateEnd (Outcome "Done")))
+    ("branch-local dependent continuation lost semantic identity for "
+      <> Text.unpack label)
 
 checkedProtocol :: DeclarationKey -> GrammarV1ProtocolDecl -> Either String GrammarV1CheckedProtocolBinderScope
 checkedProtocol declarationKey protocol =
