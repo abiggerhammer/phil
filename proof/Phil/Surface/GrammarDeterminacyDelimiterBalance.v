@@ -587,8 +587,7 @@ Corollary phase1_surface_nonterminal_derivation_is_delimiter_balanced :
       delimiter_balance_scan 0 consumed = Some 0.
 Proof.
   intros path name input rest tree Hderive.
-  eapply (proj1 phase1_surface_delimiter_effect_sound).
-  - exact Hderive.
-  - unfold delimiter_fuel.
-    reflexivity.
+  eapply ((proj1 phase1_surface_delimiter_effect_sound)
+    path (ENonterminal name) input rest tree Hderive 1 0 0).
+  reflexivity.
 Qed.
