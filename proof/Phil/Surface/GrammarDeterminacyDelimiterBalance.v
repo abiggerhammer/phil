@@ -431,7 +431,14 @@ Proof.
     destruct fuel as [| fuel]; try discriminate Heffect.
     exists [TLiteral literal].
     split; first reflexivity.
-    simpl in Heffect |- *.
+    change
+      (delimiter_balance_step depth (TLiteral literal) = Some final_depth)
+      in Heffect.
+    change
+      (match delimiter_balance_step depth (TLiteral literal) with
+       | Some next_depth => Some next_depth
+       | None => None
+       end = Some final_depth).
     rewrite Heffect.
     reflexivity.
   - intros path class_name lexeme tail fuel depth final_depth Heffect.
@@ -518,22 +525,26 @@ Proof.
     unfold delimiter_sequence_effect_fuel in Heffect.
     simpl in Heffect.
     destruct (delimiter_effect_fuel fuel depth item)
-      as [middle_depth |] eqn:Hitem_effect; try discriminate Heffect.
-    change
-      (delimiter_sequence_effect_fuel
-        fuel middle_depth items = Some final_depth)
-      in Heffect.
-    destruct (IHitem fuel depth middle_depth Hitem_effect)
-      as [first [Hfirst_input Hfirst_scan]].
-    destruct (IHitems fuel middle_depth final_depth Heffect)
-      as [second [Hsecond_input Hsecond_scan]].
-    exists (first ++ second).
-    split.
-    + eapply prefix_compose; eauto.
-    + rewrite
-        (delimiter_balance_scan_app
-          depth first second middle_depth Hfirst_scan).
-      exact Hsecond_scan.
+      as [middle_depth |] eqn:Hitem_effect.
+    { change
+        (delimiter_sequence_effect_fuel
+          fuel middle_depth items = Some final_depth)
+        in Heffect.
+      destruct (IHitem fuel depth middle_depth Hitem_effect)
+        as [first [Hfirst_input Hfirst_scan]].
+      destruct (IHitems fuel middle_depth final_depth Heffect)
+        as [second [Hsecond_input Hsecond_scan]].
+      exists (List.app first second).
+      split.
+      + eapply prefix_compose; eauto.
+      + rewrite
+          (delimiter_balance_scan_app
+            depth first second middle_depth Hfirst_scan).
+        exact Hsecond_scan.
+    }
+    { rewrite delimiter_sequence_fold_none in Heffect.
+      discriminate Heffect.
+    }
   - intros path body input fuel depth Hbody_effect.
     exists [].
     split; reflexivity.
@@ -544,7 +555,7 @@ Proof.
       as [first [Hfirst_input Hfirst_scan]].
     destruct (IHrest fuel depth Hbody_effect)
       as [second [Hsecond_input Hsecond_scan]].
-    exists (first ++ second).
+    exists (List.app first second).
     split.
     + eapply prefix_compose; eauto.
     + rewrite
