@@ -311,8 +311,9 @@ checkedExpressions
       (Either
         GrammarV1LoopStateScopeError
         [GrammarV1CheckedLexicalReference])
-checkedExpressions scope = checkedMany . map
+checkedExpressions scope actuals = fmap (fmap concat) $ checkedMany $ map
   (loopReferences . grammarV1CheckedExpressionReferences Set.empty scope)
+  actuals
 
 loopReferences
   :: Maybe
