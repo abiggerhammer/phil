@@ -4,6 +4,7 @@ From Phil.Surface Require Import
   Grammar
   GrammarDerivation
   GrammarDerivationOracle
+  GrammarDeterminacyCertificate
   GrammarDeterminacyNullableFirst
   GrammarDeterminacyFollowOverlap
   GrammarDeterminacySimpleResolverSoundness
