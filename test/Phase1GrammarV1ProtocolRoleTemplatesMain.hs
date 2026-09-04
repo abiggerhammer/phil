@@ -4,6 +4,7 @@ module Main (main) where
 
 import qualified Data.Set as Set
 import qualified Data.Text as Text
+import Phil.Core.Focusing (FocusingError (..))
 import Phil.Core.Generic (GenericStaticParameterKey (..))
 import Phil.Core.Generic.StaticActual
   ( GenericStaticKind (..)
@@ -18,10 +19,12 @@ import Phil.Core.Protocol.Family
 import Phil.Core.Static
   ( DeclarationKey (..)
   , InterfaceRevision (..)
+  , emptyStaticContext
   )
 import Phil.Core.Syntax
   ( Name (..)
   , Outcome (..)
+  , RefTerm (..)
   , Ty (..)
   )
 import Phil.Surface.GrammarV1.Parser
@@ -32,10 +35,16 @@ import Phil.Surface.GrammarV1.ProtocolMessageTemplates
   , grammarV1ResolvedMessageProtocolRoleTemplates
   )
 import Phil.Surface.GrammarV1.ProtocolRoles
-  ( GrammarV1ProtocolRoleError (..)
+  ( GrammarV1CheckedProtocolRoleError (..)
+  , GrammarV1ProtocolRoleError (..)
+  , grammarV1CheckedBinaryProtocolFamily
   , grammarV1CheckedClosedProtocolRoleTemplates
+  , grammarV1CheckedProtocolRoleTemplates
   , grammarV1ClosedBinaryProtocolFamily
   , grammarV1ClosedProtocolRoleTemplates
+  )
+import Phil.Surface.GrammarV1.SessionSemantics
+  ( GrammarV1CheckedSessionError (..)
   )
 import Phil.Surface.Syntax (Located (..))
 import System.Exit (exitFailure)
@@ -59,6 +68,14 @@ main = do
         resolvedMessageEvidenceBoundaries
     , test "SURF-008 parameterized protocol templates stay fail-closed outside Message competence"
         parameterizedProtocolCompetenceBoundaries
+    , test "SURF-008 checked richer protocol roles preserve alpha-renamed dependent payload duality"
+        checkedPayloadRoleSemantics
+    , test "SURF-008 checked richer protocol roles close into stable Core family identity"
+        checkedPayloadFamilySemantics
+    , test "SURF-008 checked richer protocol roles preserve Core non-duality rejection"
+        checkedPayloadNonDuality
+    , test "SURF-008 checked richer protocol roles preserve role-local type and binding failures"
+        checkedPayloadFailureRouting
     ]
   if and results then pure () else exitFailure
 
@@ -303,6 +320,100 @@ parameterizedProtocolCompetenceBoundaries = do
     )
     "specialized Message type use was flattened to one parameter key"
 
+checkedPayloadRoleSemantics :: Either String ()
+checkedPayloadRoleSemantics = do
+  protocol <- onlyProtocol checkedPayloadProtocolSource
+  let expected =
+        ( ( ProtocolRoleKey "Client"
+          , ProtocolTemplateSend
+              (Name "payload")
+              (ProtocolConcreteType (TyBytes (RefNat 4)))
+              (ProtocolTemplateSend
+                (Name "tag")
+                (ProtocolConcreteType (TyBytes (RefLen (RefVar (Name "payload")))))
+                (ProtocolTemplateEnd (Outcome "Done")))
+          )
+        , ( ProtocolRoleKey "Server"
+          , ProtocolTemplateReceive
+              (Name "data")
+              (ProtocolConcreteType (TyBytes (RefNat 4)))
+              (ProtocolTemplateReceive
+                (Name "tag2")
+                (ProtocolConcreteType (TyBytes (RefLen (RefVar (Name "data")))))
+                (ProtocolTemplateEnd (Outcome "Done")))
+          )
+        )
+  assert
+    ( grammarV1CheckedProtocolRoleTemplates emptyStaticContext protocol
+        == Just (Right (expected, []))
+    )
+    "checked richer role templates lost dependent payloads or alpha-aware duality"
+
+checkedPayloadFamilySemantics :: Either String ()
+checkedPayloadFamilySemantics = do
+  protocol <- onlyProtocol checkedPayloadProtocolSource
+  let declarationKey = DeclarationKey "protocol.checked.stable.lineage"
+      interfaceRevision = InterfaceRevision "protocol.checked.interface.v1"
+      expected = BinaryProtocolFamily
+        { protocolFamilyDeclarationKey = declarationKey
+        , protocolFamilyInterfaceRevision = interfaceRevision
+        , protocolFamilyRequirements = Set.empty
+        , protocolFamilyPrimaryRole = ProtocolRoleKey "Client"
+        , protocolFamilyPeerRole = ProtocolRoleKey "Server"
+        , protocolFamilyPrimarySession =
+            ProtocolTemplateSend
+              (Name "payload")
+              (ProtocolConcreteType (TyBytes (RefNat 4)))
+              (ProtocolTemplateSend
+                (Name "tag")
+                (ProtocolConcreteType (TyBytes (RefLen (RefVar (Name "payload")))))
+                (ProtocolTemplateEnd (Outcome "Done")))
+        }
+  assert
+    ( grammarV1CheckedBinaryProtocolFamily
+        emptyStaticContext declarationKey interfaceRevision protocol
+        == Just (Right (expected, []))
+    )
+    "checked richer protocol did not preserve caller-supplied family identity"
+
+checkedPayloadNonDuality :: Either String ()
+checkedPayloadNonDuality = do
+  protocol <- onlyProtocol checkedPayloadNonDualSource
+  assert
+    ( grammarV1CheckedProtocolRoleTemplates emptyStaticContext protocol
+        == Just
+          (Left
+            (GrammarV1CheckedProtocolRoleSemanticError
+              (NonDualProtocolRoles
+                (ProtocolRoleKey "Client")
+                (ProtocolRoleKey "Server"))))
+    )
+    "different dependent payload types bypassed Core protocol duality"
+
+checkedPayloadFailureRouting :: Either String ()
+checkedPayloadFailureRouting = do
+  focusing <- onlyProtocol checkedPayloadFocusingFailureSource
+  duplicateBinder <- onlyProtocol checkedPayloadDuplicateBinderSource
+  assert
+    ( grammarV1CheckedProtocolRoleTemplates emptyStaticContext focusing
+        == Just
+          (Left
+            (GrammarV1CheckedProtocolRoleSessionError
+              (ProtocolRoleKey "Client")
+              (GrammarV1CheckedSessionFocusingError
+                (UnknownClaim "Missing"))))
+    )
+    "first-role payload focusing failure lost its protocol-role provenance"
+  case grammarV1CheckedProtocolRoleTemplates emptyStaticContext duplicateBinder of
+    Just
+      (Left
+        (GrammarV1CheckedProtocolRoleSessionError
+          (ProtocolRoleKey "Client")
+          (GrammarV1CheckedSessionBindingError _))) -> Right ()
+    other -> Left
+      ("duplicate checked session binder did not remain a first-role binding failure: "
+        <> show other)
+
 expectedParameterizedRoles
   :: GenericStaticParameterKey
   -> ( (ProtocolRoleKey, ProtocolSessionTemplate)
@@ -544,6 +655,38 @@ specializedMessageProtocolSource = Text.unlines
   [ "protocol P[M : Message] {"
   , "  role Client = send (payload : Box[M]) then end Done;"
   , "  role Server = receive (payload : Box[M]) then end Done;"
+  , "}"
+  ]
+
+checkedPayloadProtocolSource :: Text.Text
+checkedPayloadProtocolSource = Text.unlines
+  [ "protocol Rich {"
+  , "  role Client = send (payload : Bytes[4]) then send (tag : Bytes[len(payload)]) then end Done;"
+  , "  role Server = receive (data : Bytes[4]) then receive (tag2 : Bytes[len(data)]) then end Done;"
+  , "}"
+  ]
+
+checkedPayloadNonDualSource :: Text.Text
+checkedPayloadNonDualSource = Text.unlines
+  [ "protocol RichBad {"
+  , "  role Client = send (payload : Bytes[4]) then send (tag : Bytes[len(payload)]) then end Done;"
+  , "  role Server = receive (data : Bytes[4]) then receive (tag2 : Bytes[5]) then end Done;"
+  , "}"
+  ]
+
+checkedPayloadFocusingFailureSource :: Text.Text
+checkedPayloadFocusingFailureSource = Text.unlines
+  [ "protocol RichFocusBad {"
+  , "  role Client = send (proof : Proof[Missing()]) then end Done;"
+  , "  role Server = receive (proof2 : Proof[Missing()]) then end Done;"
+  , "}"
+  ]
+
+checkedPayloadDuplicateBinderSource :: Text.Text
+checkedPayloadDuplicateBinderSource = Text.unlines
+  [ "protocol RichBindingBad {"
+  , "  role Client = send (x : U8) then send (x : Bool) then end Done;"
+  , "  role Server = receive (a : U8) then receive (b : Bool) then end Done;"
   , "}"
   ]
 
