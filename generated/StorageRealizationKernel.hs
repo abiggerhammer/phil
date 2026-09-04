@@ -19,3 +19,4 @@ decideStorageRealizationValidByFacts subjectBasisAdmitted exactSubjectPresent se
         (andb outcomeRevisionNonzero
           (andb physicalStrategyNonzero
             (andb selectedSemanticsNonzero physicalObjectsNonzero)))))
+
