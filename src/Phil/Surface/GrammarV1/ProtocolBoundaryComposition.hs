@@ -19,7 +19,6 @@ import Phil.Surface.GrammarV1.ProtocolBoundaryAnnotations
   , GrammarV1CheckedSpecializedProtocolBoundaryAnnotation (..)
   , GrammarV1ClosedResolvedProtocolBoundarySurface (..)
   , GrammarV1ClosedSpecializedProtocolBoundarySurface (..)
-  , GrammarV1ProtocolBoundaryAnnotation
   , GrammarV1ProtocolBoundaryResolutionError
   , GrammarV1ProtocolBoundarySite (..)
   , GrammarV1ProtocolSpecializedBoundaryError
@@ -136,15 +135,15 @@ hasBare :: [GrammarV1MixedProtocolBoundaryOccurrence] -> Bool
 hasBare = any isBare
   where
     isBare occurrence = case occurrence of
-      GrammarV1MixedBareBoundaryOccurrence {} -> True
-      GrammarV1MixedSpecializedBoundaryOccurrence {} -> False
+      GrammarV1MixedBareBoundaryOccurrence _ _ _ -> True
+      GrammarV1MixedSpecializedBoundaryOccurrence _ _ _ -> False
 
 hasSpecialized :: [GrammarV1MixedProtocolBoundaryOccurrence] -> Bool
 hasSpecialized = any isSpecialized
   where
     isSpecialized occurrence = case occurrence of
-      GrammarV1MixedBareBoundaryOccurrence {} -> False
-      GrammarV1MixedSpecializedBoundaryOccurrence {} -> True
+      GrammarV1MixedBareBoundaryOccurrence _ _ _ -> False
+      GrammarV1MixedSpecializedBoundaryOccurrence _ _ _ -> True
 
 partitionRoles
   :: [Located GrammarV1RoleSessionDecl]
