@@ -339,13 +339,19 @@ Qed.
 
 Definition delimiter_fuel : nat := 256.
 
+Definition delimiter_body_balancedb
+  (body : EbnfExpression) : bool :=
+  option_nat_isb
+    (delimiter_effect_fuel delimiter_fuel 0 body) 0.
+
 Definition delimiter_rule_body_balancedb
   (rule : GrammarRule) : bool :=
-  option_nat_isb
-    (delimiter_effect_fuel delimiter_fuel 0 (snd rule)) 0.
+  delimiter_body_balancedb (snd rule).
 
 Theorem phase1_surface_all_rule_bodies_are_delimiter_balanced :
-  forallb delimiter_rule_body_balancedb phase1_surface_rules = true.
+  forallb
+    (fun rule => delimiter_body_balancedb (snd rule))
+    phase1_surface_rules = true.
 Proof.
   vm_compute.
   reflexivity.
@@ -377,18 +383,13 @@ Lemma phase1_surface_lookup_rule_delimiter_effect_zero :
 Proof.
   intros name body Hlookup.
   pose proof
-    phase1_surface_all_rule_bodies_are_delimiter_balanced
-    as Hall.
-  unfold delimiter_rule_body_balancedb in Hall.
-  pose proof
     (forallb_lookup_rule_body
-      (fun candidate_body =>
-        option_nat_isb
-          (delimiter_effect_fuel delimiter_fuel 0 candidate_body) 0)
+      delimiter_body_balancedb
       phase1_surface_rules name body
-      Hall
+      phase1_surface_all_rule_bodies_are_delimiter_balanced
       Hlookup)
     as Hbalanced.
+  unfold delimiter_body_balancedb in Hbalanced.
   apply option_nat_isb_true in Hbalanced.
   exact Hbalanced.
 Qed.
