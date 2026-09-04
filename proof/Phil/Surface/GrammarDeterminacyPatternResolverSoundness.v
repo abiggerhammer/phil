@@ -23,45 +23,16 @@ Open Scope string_scope.
   remaining overlapping branch is a plain identifier.  Its consumed token is
   exact, so the only way the structural scanner could misclassify it as a
   record pattern would be for the accepting continuation to begin with "." or
-  "{".  The computed Grammar-v1 FOLLOW fixed point excludes both tokens from
-  FOLLOW(pattern), which makes those tails impossible.
+  "{".  GrammarDeterminacyFollowOverlap certifies directly, in the same
+  compilation unit as the FOLLOW fixed point, that FOLLOW(pattern) excludes
+  both tokens.
 *)
-
-Definition phase1_surface_pattern_follow : list OverlapToken :=
-  lookup_tokens "pattern" phase1_surface_follow_facts.
-
-(*
-  Compute FOLLOW(pattern) only once.  Keeping the shared value under a let
-  avoids repeating the imported fixed-point evaluation for the two structural
-  tail exclusions.
-*)
-Definition phase1_surface_pattern_follow_structural_tail_check : bool :=
-  let follow := phase1_surface_pattern_follow in
-  andb
-    (negb (token_mem (OverlapLiteral ".") follow))
-    (negb (token_mem (OverlapLiteral "{") follow)).
-
-Theorem phase1_surface_pattern_follow_structural_tail_check_true :
-  phase1_surface_pattern_follow_structural_tail_check = true.
-Proof.
-  vm_compute.
-  reflexivity.
-Qed.
 
 Theorem phase1_surface_pattern_follow_excludes_dot :
   token_mem (OverlapLiteral ".") phase1_surface_pattern_follow = false.
 Proof.
   pose proof phase1_surface_pattern_follow_structural_tail_check_true
     as Hcheck.
-  change
-    (andb
-      (negb
-        (token_mem
-          (OverlapLiteral ".") phase1_surface_pattern_follow))
-      (negb
-        (token_mem
-          (OverlapLiteral "{") phase1_surface_pattern_follow)) = true)
-    in Hcheck.
   apply andb_true_iff in Hcheck as [Hdot _].
   apply negb_true_iff in Hdot.
   exact Hdot.
@@ -72,15 +43,6 @@ Theorem phase1_surface_pattern_follow_excludes_open_brace :
 Proof.
   pose proof phase1_surface_pattern_follow_structural_tail_check_true
     as Hcheck.
-  change
-    (andb
-      (negb
-        (token_mem
-          (OverlapLiteral ".") phase1_surface_pattern_follow))
-      (negb
-        (token_mem
-          (OverlapLiteral "{") phase1_surface_pattern_follow)) = true)
-    in Hcheck.
   apply andb_true_iff in Hcheck as [_ Hbrace].
   apply negb_true_iff in Hbrace.
   exact Hbrace.
