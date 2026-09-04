@@ -5,8 +5,7 @@ module Main (main) where
 import qualified Data.Text as Text
 import Phil.Core.Static (DeclarationKey (..))
 import Phil.Surface.GrammarV1.BinderScope
-  ( GrammarV1BinderKey
-  , GrammarV1BinderScopeError (..)
+  ( GrammarV1BinderScopeError (..)
   , GrammarV1ResolvedBinder (..)
   , grammarV1ClosureParameterScope
   , grammarV1FunctionParameterScope
