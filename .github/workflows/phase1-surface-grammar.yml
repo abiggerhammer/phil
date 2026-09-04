@@ -13,6 +13,7 @@ on:
       - 'test/Phase1GrammarV1StructuralParserMain.hs'
       - 'test/Phase1GrammarV1RefinementTransportMain.hs'
       - 'test/Phase1GrammarV1CallableContractMain.hs'
+      - 'test/Phase1GrammarV1SemanticCallablePropositionsMain.hs'
       - 'test/Phase1GrammarV1OutcomeCalleeMain.hs'
       - 'test/Phase1GrammarV1CallableOutcomeStateMain.hs'
       - 'test/Phase1GrammarV1CalleeTransitionElaborationMain.hs'
@@ -69,6 +70,7 @@ on:
       - 'test/Phase1GrammarV1StructuralParserMain.hs'
       - 'test/Phase1GrammarV1RefinementTransportMain.hs'
       - 'test/Phase1GrammarV1CallableContractMain.hs'
+      - 'test/Phase1GrammarV1SemanticCallablePropositionsMain.hs'
       - 'test/Phase1GrammarV1OutcomeCalleeMain.hs'
       - 'test/Phase1GrammarV1CallableOutcomeStateMain.hs'
       - 'test/Phase1GrammarV1CalleeTransitionElaborationMain.hs'
@@ -154,6 +156,9 @@ jobs:
 
       - name: Check Grammar-v1 callable contract parsing
         run: cabal exec -- runghc -Wall -Werror -isrc test/Phase1GrammarV1CallableContractMain.hs
+
+      - name: Check Grammar-v1 semantic callable proposition routing
+        run: cabal exec -- runghc -Wall -Werror -isrc test/Phase1GrammarV1SemanticCallablePropositionsMain.hs
 
       - name: Check Grammar-v1 outcome and callee parsing
         run: cabal exec -- runghc -Wall -Werror -isrc test/Phase1GrammarV1OutcomeCalleeMain.hs
