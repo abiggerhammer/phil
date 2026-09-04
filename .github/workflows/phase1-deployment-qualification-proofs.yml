@@ -4,17 +4,25 @@ on:
   pull_request:
     paths:
       - 'proof/Phil/Assurance/DeploymentQualification.v'
+      - 'proof/Phil/Assurance/DeploymentQualificationImplementation.v'
+      - 'proof/Phil/Assurance/DeploymentQualificationImplementationExtraction.v'
       - 'src/Phil/Assurance/DeploymentQualification.hs'
       - 'test/Phase1DeploymentQualificationMain.hs'
+      - 'app/DeploymentQualificationDecisionCorrespondenceMain.hs'
       - 'docs/phase-1/deployment-qualification-proof-v1.md'
+      - 'docs/phase-1/deployment-qualification-implementation-refinement-v1.md'
       - '.github/workflows/phase1-deployment-qualification-proofs.yml'
   push:
     branches: [main]
     paths:
       - 'proof/Phil/Assurance/DeploymentQualification.v'
+      - 'proof/Phil/Assurance/DeploymentQualificationImplementation.v'
+      - 'proof/Phil/Assurance/DeploymentQualificationImplementationExtraction.v'
       - 'src/Phil/Assurance/DeploymentQualification.hs'
       - 'test/Phase1DeploymentQualificationMain.hs'
+      - 'app/DeploymentQualificationDecisionCorrespondenceMain.hs'
       - 'docs/phase-1/deployment-qualification-proof-v1.md'
+      - 'docs/phase-1/deployment-qualification-implementation-refinement-v1.md'
       - '.github/workflows/phase1-deployment-qualification-proofs.yml'
 
 permissions:
@@ -28,13 +36,17 @@ jobs:
       options: --user root
     steps:
       - uses: actions/checkout@v4
-      - name: Compile PHIL-DEPLOY-QUAL-001
+      - name: Compile PHIL-DEPLOY-QUAL-001 and implementation correspondence
         shell: bash
         run: |
           set -euo pipefail
           export PATH="/home/rocq/.opam/${COMPILER}/bin:$PATH"
           rocq c -Q proof/Phil Phil proof/Phil/Assurance/DeploymentQualification.v
-      - name: Record proof identities
+          rocq c -Q proof/Phil Phil proof/Phil/Assurance/DeploymentQualificationImplementation.v
+          rm -f DeploymentQualificationKernel.hs
+          rocq c -Q proof/Phil Phil proof/Phil/Assurance/DeploymentQualificationImplementationExtraction.v
+          test -s DeploymentQualificationKernel.hs
+      - name: Record proof and exact kernel identities
         shell: bash
         run: |
           set -euo pipefail
@@ -42,19 +54,26 @@ jobs:
           cp \
             proof/Phil/Assurance/DeploymentQualification.v \
             proof/Phil/Assurance/DeploymentQualification.vo \
+            proof/Phil/Assurance/DeploymentQualificationImplementation.v \
+            proof/Phil/Assurance/DeploymentQualificationImplementation.vo \
+            DeploymentQualificationKernel.hs \
             deployment-qualification-proof/
           sha256sum \
             proof/Phil/Assurance/DeploymentQualification.v \
             proof/Phil/Assurance/DeploymentQualification.vo \
+            proof/Phil/Assurance/DeploymentQualificationImplementation.v \
+            proof/Phil/Assurance/DeploymentQualificationImplementation.vo \
+            DeploymentQualificationKernel.hs \
             src/Phil/Assurance/DeploymentQualification.hs \
             test/Phase1DeploymentQualificationMain.hs \
-            > deployment-qualification-proof/PHIL-DEPLOY-QUAL-001.proof.sha256
+            app/DeploymentQualificationDecisionCorrespondenceMain.hs \
+            > deployment-qualification-proof/PHIL-DEPLOY-QUAL-001.implementation.sha256
           {
             echo 'obligation=PHIL-DEPLOY-QUAL-001'
-            echo 'evidence=Rocq-9.2.0'
-            cat deployment-qualification-proof/PHIL-DEPLOY-QUAL-001.proof.sha256
-          } > deployment-qualification-proof/PHIL-DEPLOY-QUAL-001.proof-certificate.txt
-          cat deployment-qualification-proof/PHIL-DEPLOY-QUAL-001.proof-certificate.txt
+            echo 'evidence=Rocq-9.2.0+extraction'
+            cat deployment-qualification-proof/PHIL-DEPLOY-QUAL-001.implementation.sha256
+          } > deployment-qualification-proof/PHIL-DEPLOY-QUAL-001.implementation-certificate.txt
+          cat deployment-qualification-proof/PHIL-DEPLOY-QUAL-001.implementation-certificate.txt
       - uses: actions/upload-artifact@v4
         with:
           name: rocq-deployment-qualification-proof
@@ -72,7 +91,20 @@ jobs:
           cabal-version: 'latest'
       - name: Build ordinary regression substrate
         run: cabal build all --enable-tests
-      - name: Strict typecheck deployment qualification implementation and corpus
+      - uses: actions/download-artifact@v4
+        with:
+          name: rocq-deployment-qualification-proof
+          path: deployment-qualification-proof
+      - name: Check and execute extracted Deployment Qualification controls
+        run: |
+          set -euo pipefail
+          cp deployment-qualification-proof/DeploymentQualificationKernel.hs .
+          cabal exec -- ghc -i. -Wall -Werror -Wno-unused-imports -fno-code \
+            DeploymentQualificationKernel.hs \
+            app/DeploymentQualificationDecisionCorrespondenceMain.hs
+          cabal exec -- runghc -i. -Wall -Werror -Wno-unused-imports \
+            app/DeploymentQualificationDecisionCorrespondenceMain.hs
+      - name: Strict typecheck unchanged deployment qualification implementation and corpus
         run: |
           set -euo pipefail
           cabal exec -- ghc -isrc -Wall -Werror -fno-code src/Phil/Assurance/DeploymentQualification.hs
