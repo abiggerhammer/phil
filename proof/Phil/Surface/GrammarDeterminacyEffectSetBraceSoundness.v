@@ -39,6 +39,24 @@ Proof.
     eauto.
 Qed.
 
+Lemma derives_repetition_input_cases :
+  forall rules path body input rest trees,
+    DerivesRepetition rules path body input rest trees ->
+    input = rest \/
+    exists middle tree tail_trees,
+      Derives rules (descend path AtRepetitionBody)
+        body input middle tree /\
+      DerivesRepetition rules path body middle rest tail_trees.
+Proof.
+  intros rules path body input rest trees Hderive.
+  inversion Hderive; subst.
+  - left.
+    reflexivity.
+  - right.
+    do 3 eexists.
+    split; eauto.
+Qed.
+
 Lemma phase1_surface_sequence_literal_prefix :
   forall path literal tail_items input rest tree,
     Derives phase1_surface_rules path
@@ -617,12 +635,29 @@ Proof.
           after_effect_expression after_repetition
           repetition_tree Hrepetition)
         as [repetition_trees [_ Hrepetition_body]].
-      inversion Hrepetition_body; subst.
-      * rewrite Hafter_repetition.
+      destruct
+        (derives_repetition_input_cases
+          phase1_surface_rules
+          (descend
+            (descend
+              (descend
+                (descend path (AtNonterminal "effect_set_literal"))
+                (AtSequence 1))
+              AtOptionalBody)
+            (AtSequence 1))
+          (ESequence
+            [ELiteral ","; ENonterminal "effect_expression"])
+          after_effect_expression after_repetition
+          repetition_trees Hrepetition_body)
+        as [Hrepetition_empty | Hrepetition_present].
+      * rewrite Hrepetition_empty.
+        rewrite Hafter_repetition.
         rewrite Hafter_optional.
         apply static_argument_brace_other_separator_tail_commits_effect_set.
         reflexivity.
-      * destruct
+      * destruct Hrepetition_present
+          as [middle [head_tree [tail_trees [Hhead _]]]].
+        destruct
           (phase1_surface_sequence_literal_prefix
             (descend
               (descend
@@ -634,7 +669,7 @@ Proof.
                 (AtSequence 1))
               AtRepetitionBody)
             "," [ENonterminal "effect_expression"]
-            after_effect_expression middle tree0 H)
+            after_effect_expression middle head_tree Hhead)
           as [suffix Hcomma].
         rewrite Hcomma.
         apply static_argument_brace_other_separator_tail_commits_effect_set.
