@@ -426,7 +426,15 @@ Proof.
     exists [TLiteral literal].
     split.
     + reflexivity.
-    + simpl.
+    + change
+        (parenthesis_neutral_step depth (TLiteral literal) =
+          Some final_depth)
+        in Heffect.
+      change
+        (match parenthesis_neutral_step depth (TLiteral literal) with
+         | Some next_depth => Some next_depth
+         | None => None
+         end = Some final_depth).
       rewrite Heffect.
       reflexivity.
   - intros path class_name lexeme tail fuel depth final_depth Heffect.
