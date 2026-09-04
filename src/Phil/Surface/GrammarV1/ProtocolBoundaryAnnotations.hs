@@ -8,12 +8,17 @@ module Phil.Surface.GrammarV1.ProtocolBoundaryAnnotations
   , GrammarV1ClosedSpecializedProtocolBoundarySurface (..)
   , GrammarV1ProtocolSpecializedBoundaryError (..)
   , grammarV1CheckedSpecializedProtocolBoundarySurface
+  , GrammarV1ResolvedProtocolBoundaryReference (..)
+  , GrammarV1CheckedResolvedProtocolBoundaryAnnotation (..)
+  , GrammarV1ClosedResolvedProtocolBoundarySurface (..)
+  , GrammarV1ProtocolBoundaryResolutionError (..)
+  , grammarV1CheckedResolvedProtocolBoundarySurface
   ) where
 
 import qualified Data.Text as Text
 import Data.Text (Text)
 import Phil.Core.Generic.StaticActual
-  ( GenericStaticActual
+  ( GenericStaticActual (..)
   , GenericStaticKind (..)
   , GenericStaticParameter
   , GenericStaticReferenceCandidate (..)
@@ -571,3 +576,152 @@ checkSpecializedBoundary index occurrence resolved
 qualifiedNameText :: GrammarV1QualifiedName -> Text
 qualifiedNameText source =
   Text.intercalate (Text.singleton '.') (grammarV1QualifiedNameParts source)
+
+-- | Exact declaration-resolution evidence for one bare/qualified unspecialized
+-- protocol boundary annotation. The complete source annotation is repeated so
+-- resolution cannot drift between equal-spelled occurrences at different roles or
+-- structural sites. Stable declaration/interface identity and the target
+-- candidate come from the competent static resolver rather than source spelling.
+data GrammarV1ResolvedProtocolBoundaryReference =
+  GrammarV1ResolvedProtocolBoundaryReference
+    { resolvedProtocolBoundarySourceAnnotation :: GrammarV1ProtocolBoundaryAnnotation
+    , resolvedProtocolBoundaryTargetCandidate :: GenericStaticReferenceCandidate
+    , resolvedProtocolBoundaryDeclarationKey :: DeclarationKey
+    , resolvedProtocolBoundaryInterfaceRevision :: InterfaceRevision
+    }
+  deriving (Eq, Show)
+
+-- | A bare protocol boundary after exact static category resolution. Source
+-- occurrence identity and the unresolved reference remain visible beside stable
+-- declaration/interface identity and the resolver-supplied semantic form.
+data GrammarV1CheckedResolvedProtocolBoundaryAnnotation =
+  GrammarV1CheckedResolvedProtocolBoundaryAnnotation
+    { checkedResolvedProtocolBoundaryRole :: ProtocolRoleKey
+    , checkedResolvedProtocolBoundarySite :: GrammarV1ProtocolBoundarySite
+    , checkedResolvedProtocolBoundarySourceReference :: Located GrammarV1StaticReference
+    , checkedResolvedProtocolBoundaryStaticReference :: GenericStaticActual
+    , checkedResolvedProtocolBoundaryDeclarationKey :: DeclarationKey
+    , checkedResolvedProtocolBoundaryInterfaceRevision :: InterfaceRevision
+    , checkedResolvedProtocolBoundarySemanticForm :: SemanticForm
+    }
+  deriving (Eq, Show)
+
+data GrammarV1ClosedResolvedProtocolBoundarySurface =
+  GrammarV1ClosedResolvedProtocolBoundarySurface
+    { checkedResolvedProtocolBoundaryRoleTemplates
+        :: ( (ProtocolRoleKey, ProtocolSessionTemplate)
+           , (ProtocolRoleKey, ProtocolSessionTemplate)
+           )
+    , checkedResolvedProtocolBoundaryAnnotations
+        :: [GrammarV1CheckedResolvedProtocolBoundaryAnnotation]
+    }
+  deriving (Eq, Show)
+
+data GrammarV1ProtocolBoundaryResolutionError
+  = GrammarV1ResolvedProtocolBoundaryRoleError GrammarV1ProtocolRoleError
+  | GrammarV1ResolvedProtocolBoundaryEvidenceCountMismatch Int Int
+  | GrammarV1ResolvedProtocolBoundarySourceMismatch
+      Int GrammarV1ProtocolBoundaryAnnotation GrammarV1ProtocolBoundaryAnnotation
+  | GrammarV1ResolvedProtocolBoundaryUnexpectedStaticActual
+      Int GenericStaticActual
+  | GrammarV1ResolvedProtocolBoundaryTargetNameMismatch Int Text Text
+  | GrammarV1ResolvedProtocolBoundaryTargetKindMismatch
+      Int Text GenericStaticKind
+  deriving (Eq, Show)
+
+-- | Consume exact resolver evidence for the bare boundary annotations preserved by
+-- 'grammarV1CheckedClosedProtocolBoundarySurface'. This bridge does not perform a
+-- second parse or rebuild protocol structure: the #648 checked surface remains the
+-- source-occurrence and closed-protocol authority, including payload typing,
+-- recursion, duplicate-role rejection and alpha-aware duality.
+--
+-- Every annotation must receive one evidence entry in exact source preorder. The
+-- evidence repeats the complete source annotation, the target candidate must keep
+-- the same textual reference and carry GenericBoundaryContractKind, and stable
+-- DeclarationKey/InterfaceRevision are preserved unchanged. The target semantic
+-- form is consumed from the competent resolver rather than synthesized from source
+-- spelling.
+--
+-- This slice does not establish boundary qualification, representation,
+-- codec/transport semantics, peer compatibility, authority, runtime evidence, or
+-- source-binder scope. Specialized references remain owned by the sibling checked
+-- static-application route, while guards and generic/requirement-bearing protocols
+-- retain the existing fail-closed competence boundary.
+grammarV1CheckedResolvedProtocolBoundarySurface
+  :: [GrammarV1ResolvedProtocolBoundaryReference]
+  -> GrammarV1ProtocolDecl
+  -> Maybe
+      (Either
+        GrammarV1ProtocolBoundaryResolutionError
+        GrammarV1ClosedResolvedProtocolBoundarySurface)
+grammarV1CheckedResolvedProtocolBoundarySurface evidence source = do
+  checked <- grammarV1CheckedClosedProtocolBoundarySurface source
+  case checked of
+    Left err -> pure (Left (GrammarV1ResolvedProtocolBoundaryRoleError err))
+    Right surface ->
+      let annotations = checkedProtocolBoundaryAnnotations surface
+      in if null annotations
+          then Nothing
+          else if length evidence /= length annotations
+            then pure
+              (Left
+                (GrammarV1ResolvedProtocolBoundaryEvidenceCountMismatch
+                  (length annotations)
+                  (length evidence)))
+            else pure $ do
+              resolved <- sequence
+                [ checkResolvedProtocolBoundary index annotation supplied
+                | (index, annotation, supplied) <- zip3 [0 ..] annotations evidence
+                ]
+              Right GrammarV1ClosedResolvedProtocolBoundarySurface
+                { checkedResolvedProtocolBoundaryRoleTemplates =
+                    checkedProtocolBoundaryRoleTemplates surface
+                , checkedResolvedProtocolBoundaryAnnotations = resolved
+                }
+
+checkResolvedProtocolBoundary
+  :: Int
+  -> GrammarV1ProtocolBoundaryAnnotation
+  -> GrammarV1ResolvedProtocolBoundaryReference
+  -> Either
+      GrammarV1ProtocolBoundaryResolutionError
+      GrammarV1CheckedResolvedProtocolBoundaryAnnotation
+checkResolvedProtocolBoundary index annotation supplied
+  | resolvedProtocolBoundarySourceAnnotation supplied /= annotation =
+      Left
+        (GrammarV1ResolvedProtocolBoundarySourceMismatch
+          index
+          annotation
+          (resolvedProtocolBoundarySourceAnnotation supplied))
+  | otherwise = case protocolBoundaryStaticReference annotation of
+      ReferencedGenericStaticActual sourceName
+        | genericStaticReferenceName target /= sourceName ->
+            Left
+              (GrammarV1ResolvedProtocolBoundaryTargetNameMismatch
+                index
+                sourceName
+                (genericStaticReferenceName target))
+        | genericStaticReferenceKind target /= GenericBoundaryContractKind ->
+            Left
+              (GrammarV1ResolvedProtocolBoundaryTargetKindMismatch
+                index
+                sourceName
+                (genericStaticReferenceKind target))
+        | otherwise -> Right GrammarV1CheckedResolvedProtocolBoundaryAnnotation
+            { checkedResolvedProtocolBoundaryRole = protocolBoundaryRole annotation
+            , checkedResolvedProtocolBoundarySite = protocolBoundarySite annotation
+            , checkedResolvedProtocolBoundarySourceReference =
+                protocolBoundarySourceReference annotation
+            , checkedResolvedProtocolBoundaryStaticReference =
+                protocolBoundaryStaticReference annotation
+            , checkedResolvedProtocolBoundaryDeclarationKey =
+                resolvedProtocolBoundaryDeclarationKey supplied
+            , checkedResolvedProtocolBoundaryInterfaceRevision =
+                resolvedProtocolBoundaryInterfaceRevision supplied
+            , checkedResolvedProtocolBoundarySemanticForm =
+                genericStaticReferenceSemanticForm target
+            }
+      other -> Left
+        (GrammarV1ResolvedProtocolBoundaryUnexpectedStaticActual index other)
+  where
+    target = resolvedProtocolBoundaryTargetCandidate supplied
