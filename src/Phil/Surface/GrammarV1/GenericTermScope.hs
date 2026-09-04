@@ -23,6 +23,7 @@ import Phil.Surface.GrammarV1.GenericBinderScope
 import Phil.Surface.GrammarV1.Parser
   ( GrammarV1Block (..)
   , GrammarV1BranchValue (..)
+  , GrammarV1CallableClause (..)
   , GrammarV1CallableContractDecl (..)
   , GrammarV1CaseBinders (..)
   , GrammarV1CasePattern (..)
@@ -39,6 +40,8 @@ import Phil.Surface.GrammarV1.Parser
   , GrammarV1JoinClause (..)
   , GrammarV1MatchArm (..)
   , GrammarV1MatchArmBody (..)
+  , GrammarV1OutcomeResidue (..)
+  , GrammarV1OutcomeResidueClause (..)
   , GrammarV1Pattern (..)
   , GrammarV1ProtocolDecl (..)
   , GrammarV1ProviderImplementationDecl (..)
@@ -86,9 +89,10 @@ grammarV1CheckedFunctionGenericTermScope declarationKey source =
       <> grammarV1TermBinderSitesInBlock (grammarV1FunctionBody source)
     )
 
--- | Callable contracts have a static telescope and a term-parameter telescope
--- but no implementation body. The two namespaces remain semantically distinct
--- and a term parameter may not hide an active generic parameter.
+-- | Callable contracts keep generic-static parameters active across both the
+-- ordinary term-parameter telescope and outcome-local state-slot binders. Outcome
+-- residues are branch-local at runtime, but none may hide a declaration-static
+-- spelling while that generic telescope remains active.
 grammarV1CheckedCallableGenericTermScope
   :: DeclarationKey
   -> GrammarV1CallableContractDecl
@@ -97,7 +101,9 @@ grammarV1CheckedCallableGenericTermScope declarationKey source =
   checkedGenericTermScope
     declarationKey
     (grammarV1CallableGenericParams source)
-    (termParameterSites (grammarV1CallableTermParams source))
+    ( termParameterSites (grammarV1CallableTermParams source)
+      <> callableOutcomeStateSites source
+    )
 
 -- | Claim term parameters share the declaration with generic-static parameters
 -- and therefore obey the same no-active-shadowing boundary.
@@ -182,6 +188,16 @@ rejectStaticShadowing genericScope sourceName =
 
 termParameterSites :: [Located GrammarV1TermParam] -> [Located Text]
 termParameterSites = map (grammarV1TermParamName . locatedValue)
+
+callableOutcomeStateSites :: GrammarV1CallableContractDecl -> [Located Text]
+callableOutcomeStateSites source =
+  [ grammarV1StateSlotName (locatedValue slot)
+  | Located _ (GrammarV1CallableOutcomeResidue (Located _ residue)) <-
+      grammarV1CallableClauses source
+  , Located _ (GrammarV1OutcomeState slots) <-
+      grammarV1OutcomeResidueClauses residue
+  , slot <- slots
+  ]
 
 providerItemBinderSites :: Located GrammarV1ProviderImplementationItem -> [Located Text]
 providerItemBinderSites (Located _ item) = case item of
