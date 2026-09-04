@@ -1,0 +1,171 @@
+name: Phase 1 Concurrency Terminal Production Binding
+
+on:
+  pull_request:
+    paths:
+      - 'proof/Phil/Core/ConcurrencyTerminal.v'
+      - 'proof/Phil/Core/ConcurrencyTerminalImplementation.v'
+      - 'proof/Phil/Core/ConcurrencyTerminalImplementationExtraction.v'
+      - 'generated/ConcurrencyTerminalKernel.hs'
+      - 'src/ConcurrencyTerminalKernel.hs'
+      - 'src/Phil/Core/ConcurrencyTerminalCertification.hs'
+      - 'src/Phil/Core/ProcessLifecycle.hs'
+      - 'src/Phil/Core/ConcurrencyActivationCertification.hs'
+      - 'src/Phil/Core/ConcurrencyRendezvousCertification.hs'
+      - 'app/ConcurrencyTerminalDecisionCorrespondenceMain.hs'
+      - 'app/ConcurrencyTerminalProductionBindingMain.hs'
+      - 'app/ConcurrencyActivationProductionBindingMain.hs'
+      - 'app/ConcurrencyRendezvousProductionBindingMain.hs'
+      - 'test/Phase1FailureIsolationMain.hs'
+      - 'test/Phase1ProcessTerminalClosureMain.hs'
+      - 'test/Phase1ParticipantClassificationMain.hs'
+      - 'docs/phase-1/concurrency-terminal-production-binding-v1.md'
+      - '.github/workflows/phase1-concurrency-terminal-production-binding.yml'
+  push:
+    branches: [main]
+    paths:
+      - 'generated/ConcurrencyTerminalKernel.hs'
+      - 'src/ConcurrencyTerminalKernel.hs'
+      - 'src/Phil/Core/ConcurrencyTerminalCertification.hs'
+      - 'docs/phase-1/concurrency-terminal-production-binding-v1.md'
+      - '.github/workflows/phase1-concurrency-terminal-production-binding.yml'
+
+permissions:
+  contents: read
+
+jobs:
+  exact-concurrency-terminal-kernel:
+    runs-on: ubuntu-latest
+    container:
+      image: rocq/rocq-prover:9.2.0
+      options: --user root
+    steps:
+      - uses: actions/checkout@v4
+      - name: Freshly extract exact PHIL-CONC-TERM-001 kernel
+        shell: bash
+        run: |
+          set -euo pipefail
+          export PATH="/home/rocq/.opam/${COMPILER}/bin:$PATH"
+          rocq c -Q proof/Phil Phil proof/Phil/Core/Syntax.v
+          rocq c -Q proof/Phil Phil proof/Phil/Core/Session.v
+          rocq c -Q proof/Phil Phil proof/Phil/Core/ProtocolIdentity.v
+          rocq c -Q proof/Phil Phil proof/Phil/Core/ProtocolProjection.v
+          rocq c -Q proof/Phil Phil proof/Phil/Core/ProtocolProgressionGuard.v
+          rocq c -Q proof/Phil Phil proof/Phil/Core/ProtocolMessageAdmissibility.v
+          rocq c -Q proof/Phil Phil proof/Phil/Core/Context.v
+          rocq c -Q proof/Phil Phil proof/Phil/Core/ContextJoin.v
+          rocq c -Q proof/Phil Phil proof/Phil/Core/ProcessJoin.v
+          rocq c -Q proof/Phil Phil proof/Phil/Core/ProcessTerminal.v
+          rocq c -Q proof/Phil Phil proof/Phil/Core/ResourceObligation.v
+          rocq c -Q proof/Phil Phil proof/Phil/Core/ArchitectureIdentity.v
+          rocq c -Q proof/Phil Phil proof/Phil/Core/ArchitectureInstantiation.v
+          rocq c -Q proof/Phil Phil proof/Phil/Core/ProviderReplacementQualification.v
+          rocq c -Q proof/Phil Phil proof/Phil/Core/ArchitectureRealization.v
+          rocq c -Q proof/Phil Phil proof/Phil/Systems/FactDisposition.v
+          rocq c -Q proof/Phil Phil proof/Phil/Assurance/ValidityScope.v
+          rocq c -Q proof/Phil Phil proof/Phil/Core/SystemsStageClosure.v
+          rocq c -Q proof/Phil Phil proof/Phil/Core/SystemsGenericLowering.v
+          rocq c -Q proof/Phil Phil proof/Phil/Core/ConcurrencySemantics.v
+          rocq c -Q proof/Phil Phil proof/Phil/Core/ConcurrencyActivation.v
+          rocq c -Q proof/Phil Phil proof/Phil/Core/ConcurrencyRendezvous.v
+          rocq c -Q proof/Phil Phil proof/Phil/Core/ConcurrencyTerminal.v
+          rocq c -Q proof/Phil Phil proof/Phil/Core/ConcurrencyTerminalImplementation.v
+          rm -f ConcurrencyTerminalKernel.hs
+          rocq c -Q proof/Phil Phil proof/Phil/Core/ConcurrencyTerminalImplementationExtraction.v
+          test -s ConcurrencyTerminalKernel.hs
+          test "$(wc -c < ConcurrencyTerminalKernel.hs)" -eq 1800
+          echo '6cbb280fe49621f82fa8b3b3999450c82d86c0b2df658c8c3edd60534889135a  ConcurrencyTerminalKernel.hs' | sha256sum -c -
+          cmp ConcurrencyTerminalKernel.hs generated/ConcurrencyTerminalKernel.hs
+          cmp ConcurrencyTerminalKernel.hs src/ConcurrencyTerminalKernel.hs
+      - name: Record exact kernel identity
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p concurrency-terminal-exact-kernel
+          cp ConcurrencyTerminalKernel.hs concurrency-terminal-exact-kernel/
+          sha256sum \
+            ConcurrencyTerminalKernel.hs \
+            generated/ConcurrencyTerminalKernel.hs \
+            src/ConcurrencyTerminalKernel.hs \
+            proof/Phil/Core/ConcurrencyTerminalImplementation.v \
+            proof/Phil/Core/ConcurrencyTerminalImplementation.vo \
+            > concurrency-terminal-exact-kernel/PHIL-CONC-TERM-001.exact-kernel.sha256
+          cat concurrency-terminal-exact-kernel/PHIL-CONC-TERM-001.exact-kernel.sha256
+      - uses: actions/upload-artifact@v4
+        with:
+          name: concurrency-terminal-exact-kernel
+          path: concurrency-terminal-exact-kernel
+          if-no-files-found: error
+
+  verify-concurrency-terminal-production-binding:
+    needs: exact-concurrency-terminal-kernel
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: haskell-actions/setup@v2
+        with:
+          ghc-version: '9.6.7'
+          cabal-version: 'latest'
+      - name: Build ordinary regression substrate
+        run: cabal build all --enable-tests
+      - uses: actions/download-artifact@v4
+        with:
+          name: concurrency-terminal-exact-kernel
+          path: concurrency-terminal-exact-kernel
+      - name: Strict typecheck exact kernel and production correspondence surfaces
+        run: |
+          set -euo pipefail
+          cp concurrency-terminal-exact-kernel/ConcurrencyTerminalKernel.hs .
+          cabal exec -- ghc -i. -Wall -Werror -Wno-unused-imports -fno-code ConcurrencyTerminalKernel.hs
+          cabal exec -- ghc -isrc -Wall -Werror -fno-code src/ConcurrencyTerminalKernel.hs
+          cabal exec -- ghc -isrc -Wall -Werror -fno-code src/Phil/Core/ProcessLifecycle.hs
+          cabal exec -- ghc -isrc -Wall -Werror -fno-code src/Phil/Core/ConcurrencyActivationCertification.hs
+          cabal exec -- ghc -isrc -Wall -Werror -fno-code src/Phil/Core/ConcurrencyRendezvousCertification.hs
+          cabal exec -- ghc -isrc -Wall -Werror -fno-code src/Phil/Core/ConcurrencyTerminalCertification.hs
+          cabal exec -- ghc -i. -Wall -Werror -Wno-unused-imports -fno-code app/ConcurrencyTerminalDecisionCorrespondenceMain.hs
+          cabal exec -- ghc -isrc -Wall -Werror -fno-code app/ConcurrencyTerminalProductionBindingMain.hs
+      - name: Execute exact staging extracted-kernel controls
+        run: cabal exec -- runghc -i. -Wall -Werror -Wno-unused-imports app/ConcurrencyTerminalDecisionCorrespondenceMain.hs
+      - name: Re-run implementation-refined activation and rendezvous predecessors
+        run: |
+          set -euo pipefail
+          cabal exec -- runghc -Wall -Werror -isrc app/ConcurrencyActivationProductionBindingMain.hs
+          cabal exec -- runghc -Wall -Werror -isrc app/ConcurrencyRendezvousProductionBindingMain.hs
+      - name: Execute production binding controls
+        run: cabal exec -- runghc -Wall -Werror -isrc app/ConcurrencyTerminalProductionBindingMain.hs
+      - name: Re-run unchanged failure / terminal / external-participant corpus
+        run: |
+          set -euo pipefail
+          for test_file in \
+            test/Phase1FailureIsolationMain.hs \
+            test/Phase1ProcessTerminalClosureMain.hs \
+            test/Phase1ParticipantClassificationMain.hs
+          do
+            cabal exec -- runghc -Wall -Werror -isrc "$test_file"
+          done
+      - name: Record production identities
+        run: |
+          set -euo pipefail
+          mkdir -p concurrency-terminal-production-binding
+          sha256sum \
+            generated/ConcurrencyTerminalKernel.hs \
+            src/ConcurrencyTerminalKernel.hs \
+            src/Phil/Core/ProcessLifecycle.hs \
+            src/Phil/Core/ConcurrencyActivationCertification.hs \
+            src/Phil/Core/ConcurrencyRendezvousCertification.hs \
+            src/Phil/Core/ConcurrencyTerminalCertification.hs \
+            app/ConcurrencyTerminalDecisionCorrespondenceMain.hs \
+            app/ConcurrencyActivationProductionBindingMain.hs \
+            app/ConcurrencyRendezvousProductionBindingMain.hs \
+            app/ConcurrencyTerminalProductionBindingMain.hs \
+            test/Phase1FailureIsolationMain.hs \
+            test/Phase1ProcessTerminalClosureMain.hs \
+            test/Phase1ParticipantClassificationMain.hs \
+            docs/phase-1/concurrency-terminal-production-binding-v1.md \
+            > concurrency-terminal-production-binding/PHIL-CONC-TERM-001.production.sha256
+          cat concurrency-terminal-production-binding/PHIL-CONC-TERM-001.production.sha256
+      - uses: actions/upload-artifact@v4
+        with:
+          name: concurrency-terminal-production-binding
+          path: concurrency-terminal-production-binding
+          if-no-files-found: error
