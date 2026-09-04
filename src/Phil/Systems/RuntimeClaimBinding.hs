@@ -321,7 +321,7 @@ makeRuntimeClaimStageBundle
   -> Map RuntimeSiteKey (Set RuntimeClaimRevision)
   -> Map PhysicalRuntimeCostIdentity PhysicalRuntimeCost
   -> RuntimeClaimStageBundle
-makeRuntimeClaimStageBundle base sites claims bindings reverse costs = provisional
+makeRuntimeClaimStageBundle base sites claims bindings reverseMap costs = provisional
   { runtimeClaimStageRevision = deriveRuntimeClaimStageRevision provisional }
   where
     provisional = RuntimeClaimStageBundle
@@ -330,7 +330,7 @@ makeRuntimeClaimStageBundle base sites claims bindings reverse costs = provision
       , runtimeClaimStageSites = sites
       , runtimeClaimStageClaims = claims
       , runtimeClaimStageBindings = bindings
-      , runtimeClaimStageReverse = reverse
+      , runtimeClaimStageReverse = reverseMap
       , runtimeClaimStagePhysicalCosts = costs
       }
 
@@ -340,10 +340,10 @@ completeRuntimeClaimStageBundle
   -> Map RuntimeClaimRevision RuntimeClaimBinding
   -> RuntimeClaimStageBundle
 completeRuntimeClaimStageBundle base claims bindings =
-  makeRuntimeClaimStageBundle base sites claims bindings reverse costs
+  makeRuntimeClaimStageBundle base sites claims bindings derivedReverse costs
   where
     sites = deriveRuntimeSiteBindings base
-    reverse = deriveRuntimeClaimReverse bindings
+    derivedReverse = deriveRuntimeClaimReverse bindings
     costs = derivePhysicalRuntimeCosts sites
 
 verifyRuntimeClaimStageBundle
