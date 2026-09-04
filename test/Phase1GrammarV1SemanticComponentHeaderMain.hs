@@ -14,6 +14,7 @@ import Phil.Core.Static
   )
 import Phil.Core.Syntax
   ( Name (..)
+  , Proposition (..)
   , RefTerm (..)
   , Ty (..)
   )
