@@ -3,26 +3,49 @@ module Phil.Surface.GrammarV1.ProtocolBoundaryAnnotations
   , GrammarV1ProtocolBoundaryAnnotation (..)
   , GrammarV1ClosedProtocolBoundarySurface (..)
   , grammarV1CheckedClosedProtocolBoundarySurface
+  , GrammarV1ResolvedSpecializedProtocolBoundary (..)
+  , GrammarV1CheckedSpecializedProtocolBoundaryAnnotation (..)
+  , GrammarV1ClosedSpecializedProtocolBoundarySurface (..)
+  , GrammarV1ProtocolSpecializedBoundaryError (..)
+  , grammarV1CheckedSpecializedProtocolBoundarySurface
   ) where
 
+import qualified Data.Text as Text
 import Data.Text (Text)
-import Phil.Core.Generic.StaticActual (GenericStaticActual)
+import Phil.Core.Generic.StaticActual
+  ( GenericStaticActual
+  , GenericStaticKind (..)
+  , GenericStaticParameter
+  , GenericStaticReferenceCandidate (..)
+  )
 import Phil.Core.Protocol (ProtocolRoleKey (..))
 import Phil.Core.Protocol.Family (ProtocolSessionTemplate)
+import Phil.Core.Static
+  ( DeclarationKey
+  , InterfaceRevision
+  , SemanticForm
+  )
 import Phil.Surface.GrammarV1.Elaborate
   ( grammarV1BareStaticReferenceActual
   )
 import Phil.Surface.GrammarV1.Parser
   ( GrammarV1ProtocolDecl (..)
+  , GrammarV1QualifiedName (..)
   , GrammarV1RoleSessionDecl (..)
   , GrammarV1SessionBranch (..)
   , GrammarV1SessionExpression (..)
   , GrammarV1StaticArgument (..)
-  , GrammarV1StaticReference
+  , GrammarV1StaticReference (..)
   )
 import Phil.Surface.GrammarV1.ProtocolRoles
   ( GrammarV1ProtocolRoleError
   , grammarV1CheckedClosedProtocolRoleTemplates
+  )
+import Phil.Surface.GrammarV1.SpecializedStaticReference
+  ( GrammarV1CheckedSpecializedStaticReference
+  , GrammarV1ResolvedDirectStaticArgument
+  , GrammarV1SpecializedStaticReferenceError
+  , grammarV1CheckedSpecializedStaticReference
   )
 import Phil.Surface.Syntax (Located (..))
 
@@ -211,3 +234,340 @@ boundaryAnnotation roleKey site (Just sourceReference@(Located _ reference)) = d
         , protocolBoundaryStaticReference = actual
         }
     ]
+
+-- | Resolver evidence for one specialized protocol-boundary occurrence. The
+-- source role/site/reference triple is repeated deliberately so positional
+-- semantic evidence cannot drift onto another syntactically similar occurrence.
+-- Target category, stable declaration/interface identity, generic parameter
+-- schema, and static-argument evidence all come from competent resolution layers.
+data GrammarV1ResolvedSpecializedProtocolBoundary =
+  GrammarV1ResolvedSpecializedProtocolBoundary
+    { resolvedSpecializedProtocolBoundaryRole :: ProtocolRoleKey
+    , resolvedSpecializedProtocolBoundarySite :: GrammarV1ProtocolBoundarySite
+    , resolvedSpecializedProtocolBoundarySourceReference
+        :: Located GrammarV1StaticReference
+    , resolvedSpecializedProtocolBoundaryTargetCandidate
+        :: GenericStaticReferenceCandidate
+    , resolvedSpecializedProtocolBoundaryDeclarationKey :: DeclarationKey
+    , resolvedSpecializedProtocolBoundaryInterfaceRevision :: InterfaceRevision
+    , resolvedSpecializedProtocolBoundaryParameters :: [GenericStaticParameter]
+    , resolvedSpecializedProtocolBoundaryDirectArguments
+        :: [GrammarV1ResolvedDirectStaticArgument]
+    , resolvedSpecializedProtocolBoundaryArgumentReferences
+        :: [GenericStaticReferenceCandidate]
+    }
+  deriving (Eq, Show)
+
+-- | One specialized `using` occurrence after the generic static-application
+-- checker has established exact target-parameter/argument correspondence. The
+-- target semantic form is retained separately for the later competent boundary
+-- resolver; it is not interpreted here as representation or runtime evidence.
+data GrammarV1CheckedSpecializedProtocolBoundaryAnnotation =
+  GrammarV1CheckedSpecializedProtocolBoundaryAnnotation
+    { checkedSpecializedProtocolBoundaryRole :: ProtocolRoleKey
+    , checkedSpecializedProtocolBoundarySite :: GrammarV1ProtocolBoundarySite
+    , checkedSpecializedProtocolBoundarySourceReference
+        :: Located GrammarV1StaticReference
+    , checkedSpecializedProtocolBoundaryTargetSemanticForm :: SemanticForm
+    , checkedSpecializedProtocolBoundaryReference
+        :: GrammarV1CheckedSpecializedStaticReference
+    }
+  deriving (Eq, Show)
+
+-- | Checked closed role templates plus exact source-ordered checked specialized
+-- boundary applications removed before the established protocol-role checker ran.
+data GrammarV1ClosedSpecializedProtocolBoundarySurface =
+  GrammarV1ClosedSpecializedProtocolBoundarySurface
+    { checkedSpecializedProtocolBoundaryRoleTemplates
+        :: ( (ProtocolRoleKey, ProtocolSessionTemplate)
+           , (ProtocolRoleKey, ProtocolSessionTemplate)
+           )
+    , checkedSpecializedProtocolBoundaryAnnotations
+        :: [GrammarV1CheckedSpecializedProtocolBoundaryAnnotation]
+    }
+  deriving (Eq, Show)
+
+data GrammarV1ProtocolSpecializedBoundaryError
+  = GrammarV1SpecializedProtocolBoundaryRoleError GrammarV1ProtocolRoleError
+  | GrammarV1SpecializedProtocolBoundaryEvidenceCountMismatch Int Int
+  | GrammarV1SpecializedProtocolBoundaryRoleMismatch
+      Int ProtocolRoleKey ProtocolRoleKey
+  | GrammarV1SpecializedProtocolBoundarySiteMismatch
+      Int GrammarV1ProtocolBoundarySite GrammarV1ProtocolBoundarySite
+  | GrammarV1SpecializedProtocolBoundarySourceReferenceMismatch
+      Int
+      (Located GrammarV1StaticReference)
+      (Located GrammarV1StaticReference)
+  | GrammarV1SpecializedProtocolBoundaryTargetNameMismatch Int Text Text
+  | GrammarV1SpecializedProtocolBoundaryTargetKindMismatch
+      Int Text GenericStaticKind
+  | GrammarV1SpecializedProtocolBoundaryStaticReferenceError
+      Int GrammarV1SpecializedStaticReferenceError
+  deriving (Eq, Show)
+
+-- | Check specialized Grammar-v1 protocol-boundary annotations without treating
+-- source spelling as boundary-contract resolution authority.
+--
+-- This is the specialized sibling of
+-- 'grammarV1CheckedClosedProtocolBoundarySurface'. A protocol must contain at
+-- least one specialized boundary reference, and every explicit boundary reference
+-- in the admitted fragment must be specialized. Each source occurrence is removed
+-- only from a structural copy that is delegated unchanged to the existing closed
+-- protocol-role checker. Thus payload typing, recursion validity, duplicate-role
+-- rejection and alpha-aware duality remain authoritative and cannot be bypassed by
+-- boundary specialization.
+--
+-- Evidence is consumed in exact source preorder and must match the exact role,
+-- structural site and Located source reference. The supplied target candidate must
+-- match source target spelling and carry GenericBoundaryContractKind. Static
+-- argument kind checking and GenericApplicationIdentity construction delegate
+-- unchanged to 'grammarV1CheckedSpecializedStaticReference'.
+--
+-- Guards remain non-competence because their propositions may depend on live
+-- message/payload binders. Bare boundary references remain owned by the sibling
+-- unresolved route. Generic/requirement-bearing protocols and other unsupported
+-- session forms still fail through the delegated closed checker. This bridge does
+-- not establish boundary-contract qualification, representation, codec/transport
+-- semantics, peer compatibility, authority, or runtime boundary evidence, and it
+-- does not resolve source binders.
+grammarV1CheckedSpecializedProtocolBoundarySurface
+  :: [GrammarV1ResolvedSpecializedProtocolBoundary]
+  -> GrammarV1ProtocolDecl
+  -> Maybe
+      (Either
+        GrammarV1ProtocolSpecializedBoundaryError
+        GrammarV1ClosedSpecializedProtocolBoundarySurface)
+grammarV1CheckedSpecializedProtocolBoundarySurface evidence source = do
+  (strippedRoles, occurrences) <-
+    stripSpecializedRoles (grammarV1ProtocolRoles source)
+  if null occurrences
+    then Nothing
+    else do
+      let stripped = source { grammarV1ProtocolRoles = strippedRoles }
+      checkedTemplates <- grammarV1CheckedClosedProtocolRoleTemplates stripped
+      case checkedTemplates of
+        Left err -> pure
+          (Left (GrammarV1SpecializedProtocolBoundaryRoleError err))
+        Right templates ->
+          if length evidence /= length occurrences
+            then pure
+              (Left
+                (GrammarV1SpecializedProtocolBoundaryEvidenceCountMismatch
+                  (length occurrences)
+                  (length evidence)))
+            else do
+              checked <- mapM
+                (\(index, occurrence, resolved) ->
+                  checkSpecializedBoundary index occurrence resolved)
+                (zip3 [0 ..] occurrences evidence)
+              pure $ do
+                annotations <- sequence checked
+                Right GrammarV1ClosedSpecializedProtocolBoundarySurface
+                  { checkedSpecializedProtocolBoundaryRoleTemplates = templates
+                  , checkedSpecializedProtocolBoundaryAnnotations = annotations
+                  }
+
+data GrammarV1SpecializedProtocolBoundaryOccurrence =
+  GrammarV1SpecializedProtocolBoundaryOccurrence
+    { specializedProtocolBoundaryOccurrenceRole :: ProtocolRoleKey
+    , specializedProtocolBoundaryOccurrenceSite :: GrammarV1ProtocolBoundarySite
+    , specializedProtocolBoundaryOccurrenceSourceReference
+        :: Located GrammarV1StaticReference
+    }
+  deriving (Eq, Show)
+
+stripSpecializedRoles
+  :: [Located GrammarV1RoleSessionDecl]
+  -> Maybe
+      ( [Located GrammarV1RoleSessionDecl]
+      , [GrammarV1SpecializedProtocolBoundaryOccurrence]
+      )
+stripSpecializedRoles [] = Just ([], [])
+stripSpecializedRoles (Located roleSpan role : rest) = do
+  let roleKey = ProtocolRoleKey (locatedValue (grammarV1RoleSessionName role))
+      Located sessionSpan session = grammarV1RoleSessionExpression role
+  (strippedSession, ownOccurrences) <-
+    stripSpecializedSession roleKey session
+  (strippedRest, restOccurrences) <- stripSpecializedRoles rest
+  let strippedRole = role
+        { grammarV1RoleSessionExpression = Located sessionSpan strippedSession }
+  pure
+    ( Located roleSpan strippedRole : strippedRest
+    , ownOccurrences <> restOccurrences
+    )
+
+stripSpecializedSession
+  :: ProtocolRoleKey
+  -> GrammarV1SessionExpression
+  -> Maybe
+      ( GrammarV1SessionExpression
+      , [GrammarV1SpecializedProtocolBoundaryOccurrence]
+      )
+stripSpecializedSession roleKey source = case source of
+  GrammarV1SessionReference _ -> Just (source, [])
+  GrammarV1SessionSend parameter boundary Nothing continuation -> do
+    own <- specializedBoundaryOccurrence roleKey GrammarV1SendBoundary boundary
+    strippedContinuation <- stripSpecializedLocatedSession roleKey continuation
+    pure
+      ( GrammarV1SessionSend parameter Nothing Nothing (fst strippedContinuation)
+      , own <> snd strippedContinuation
+      )
+  GrammarV1SessionSend _ _ (Just _) _ -> Nothing
+  GrammarV1SessionReceive parameter boundary Nothing continuation -> do
+    own <- specializedBoundaryOccurrence roleKey GrammarV1ReceiveBoundary boundary
+    strippedContinuation <- stripSpecializedLocatedSession roleKey continuation
+    pure
+      ( GrammarV1SessionReceive parameter Nothing Nothing (fst strippedContinuation)
+      , own <> snd strippedContinuation
+      )
+  GrammarV1SessionReceive _ _ (Just _) _ -> Nothing
+  GrammarV1SessionSelect branches -> do
+    (stripped, occurrences) <-
+      stripSpecializedBranches True roleKey branches
+    pure (GrammarV1SessionSelect stripped, occurrences)
+  GrammarV1SessionOffer branches -> do
+    (stripped, occurrences) <-
+      stripSpecializedBranches False roleKey branches
+    pure (GrammarV1SessionOffer stripped, occurrences)
+  GrammarV1SessionEnd _ -> Just (source, [])
+  GrammarV1SessionRecursive recursionName body -> do
+    (strippedBody, occurrences) <-
+      stripSpecializedLocatedSession roleKey body
+    pure (GrammarV1SessionRecursive recursionName strippedBody, occurrences)
+  GrammarV1SessionContinue _ -> Just (source, [])
+
+stripSpecializedLocatedSession
+  :: ProtocolRoleKey
+  -> Located GrammarV1SessionExpression
+  -> Maybe
+      ( Located GrammarV1SessionExpression
+      , [GrammarV1SpecializedProtocolBoundaryOccurrence]
+      )
+stripSpecializedLocatedSession roleKey (Located spanValue source) = do
+  (stripped, occurrences) <- stripSpecializedSession roleKey source
+  pure (Located spanValue stripped, occurrences)
+
+stripSpecializedBranches
+  :: Bool
+  -> ProtocolRoleKey
+  -> [Located GrammarV1SessionBranch]
+  -> Maybe
+      ( [Located GrammarV1SessionBranch]
+      , [GrammarV1SpecializedProtocolBoundaryOccurrence]
+      )
+stripSpecializedBranches _ _ [] = Just ([], [])
+stripSpecializedBranches selecting roleKey (Located branchSpan branch : rest)
+  | grammarV1SessionBranchGuard branch /= Nothing = Nothing
+  | otherwise = do
+      let label = locatedValue (grammarV1SessionBranchLabel branch)
+          site
+            | selecting = GrammarV1SelectBranchBoundary label
+            | otherwise = GrammarV1OfferBranchBoundary label
+      own <- specializedBoundaryOccurrence
+        roleKey site (grammarV1SessionBranchBoundary branch)
+      (continuation, continuationOccurrences) <-
+        stripSpecializedLocatedSession
+          roleKey
+          (grammarV1SessionBranchContinuation branch)
+      (strippedRest, restOccurrences) <-
+        stripSpecializedBranches selecting roleKey rest
+      let strippedBranch = branch
+            { grammarV1SessionBranchBoundary = Nothing
+            , grammarV1SessionBranchGuard = Nothing
+            , grammarV1SessionBranchContinuation = continuation
+            }
+      pure
+        ( Located branchSpan strippedBranch : strippedRest
+        , own <> continuationOccurrences <> restOccurrences
+        )
+
+specializedBoundaryOccurrence
+  :: ProtocolRoleKey
+  -> GrammarV1ProtocolBoundarySite
+  -> Maybe (Located GrammarV1StaticReference)
+  -> Maybe [GrammarV1SpecializedProtocolBoundaryOccurrence]
+specializedBoundaryOccurrence _ _ Nothing = Just []
+specializedBoundaryOccurrence roleKey site (Just sourceReference@(Located _ reference))
+  | null (grammarV1StaticReferenceArguments reference) = Nothing
+  | otherwise = Just
+      [ GrammarV1SpecializedProtocolBoundaryOccurrence
+          { specializedProtocolBoundaryOccurrenceRole = roleKey
+          , specializedProtocolBoundaryOccurrenceSite = site
+          , specializedProtocolBoundaryOccurrenceSourceReference = sourceReference
+          }
+      ]
+
+checkSpecializedBoundary
+  :: Int
+  -> GrammarV1SpecializedProtocolBoundaryOccurrence
+  -> GrammarV1ResolvedSpecializedProtocolBoundary
+  -> Maybe
+      (Either
+        GrammarV1ProtocolSpecializedBoundaryError
+        GrammarV1CheckedSpecializedProtocolBoundaryAnnotation)
+checkSpecializedBoundary index occurrence resolved
+  | resolvedSpecializedProtocolBoundaryRole resolved /= sourceRole =
+      pure
+        (Left
+          (GrammarV1SpecializedProtocolBoundaryRoleMismatch
+            index
+            sourceRole
+            (resolvedSpecializedProtocolBoundaryRole resolved)))
+  | resolvedSpecializedProtocolBoundarySite resolved /= sourceSite =
+      pure
+        (Left
+          (GrammarV1SpecializedProtocolBoundarySiteMismatch
+            index
+            sourceSite
+            (resolvedSpecializedProtocolBoundarySite resolved)))
+  | resolvedSpecializedProtocolBoundarySourceReference resolved /= sourceReference =
+      pure
+        (Left
+          (GrammarV1SpecializedProtocolBoundarySourceReferenceMismatch
+            index
+            sourceReference
+            (resolvedSpecializedProtocolBoundarySourceReference resolved)))
+  | genericStaticReferenceName target /= sourceName =
+      pure
+        (Left
+          (GrammarV1SpecializedProtocolBoundaryTargetNameMismatch
+            index
+            sourceName
+            (genericStaticReferenceName target)))
+  | genericStaticReferenceKind target /= GenericBoundaryContractKind =
+      pure
+        (Left
+          (GrammarV1SpecializedProtocolBoundaryTargetKindMismatch
+            index
+            sourceName
+            (genericStaticReferenceKind target)))
+  | otherwise = do
+      checked <- grammarV1CheckedSpecializedStaticReference
+        (resolvedSpecializedProtocolBoundaryDeclarationKey resolved)
+        (resolvedSpecializedProtocolBoundaryInterfaceRevision resolved)
+        (resolvedSpecializedProtocolBoundaryParameters resolved)
+        (resolvedSpecializedProtocolBoundaryDirectArguments resolved)
+        (resolvedSpecializedProtocolBoundaryArgumentReferences resolved)
+        (locatedValue sourceReference)
+      pure $ case checked of
+        Left err -> Left
+          (GrammarV1SpecializedProtocolBoundaryStaticReferenceError index err)
+        Right result -> Right GrammarV1CheckedSpecializedProtocolBoundaryAnnotation
+          { checkedSpecializedProtocolBoundaryRole = sourceRole
+          , checkedSpecializedProtocolBoundarySite = sourceSite
+          , checkedSpecializedProtocolBoundarySourceReference = sourceReference
+          , checkedSpecializedProtocolBoundaryTargetSemanticForm =
+              genericStaticReferenceSemanticForm target
+          , checkedSpecializedProtocolBoundaryReference = result
+          }
+  where
+    sourceRole = specializedProtocolBoundaryOccurrenceRole occurrence
+    sourceSite = specializedProtocolBoundaryOccurrenceSite occurrence
+    sourceReference = specializedProtocolBoundaryOccurrenceSourceReference occurrence
+    sourceName = qualifiedNameText
+      (grammarV1StaticReferenceName (locatedValue sourceReference))
+    target = resolvedSpecializedProtocolBoundaryTargetCandidate resolved
+
+qualifiedNameText :: GrammarV1QualifiedName -> Text
+qualifiedNameText source =
+  Text.intercalate (Text.singleton '.') (grammarV1QualifiedNameParts source)
