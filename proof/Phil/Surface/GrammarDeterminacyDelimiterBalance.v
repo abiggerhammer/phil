@@ -471,7 +471,7 @@ Proof.
       (delimiter_effect_fuel_shift
         delimiter_fuel body 0 0 depth Hbody_zero)
       as Hbody_depth.
-    simpl in Hbody_depth.
+    cbn [Nat.add] in Hbody_depth.
     eapply IH.
     exact Hbody_depth.
   - intros path items input rest trees Hderive IH
