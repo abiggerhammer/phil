@@ -7,6 +7,7 @@ From Phil.Surface Require Import
   GrammarDeterminacyCertificate
   GrammarDeterminacyNullableFirst
   GrammarDeterminacyFollowOverlap
+  GrammarDeterminacyStructuralResolvers
   GrammarDeterminacySimpleResolverSoundness
   GrammarDeterminacyStructuralScannerSoundness
   GrammarDeterminacyContinuationSoundness
