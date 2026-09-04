@@ -30,18 +30,60 @@ Open Scope string_scope.
 Definition phase1_surface_pattern_follow : list OverlapToken :=
   lookup_tokens "pattern" phase1_surface_follow_facts.
 
-Theorem phase1_surface_pattern_follow_excludes_dot :
-  token_mem (OverlapLiteral ".") phase1_surface_pattern_follow = false.
+(*
+  Compute FOLLOW(pattern) only once.  Keeping the shared value under a let
+  avoids repeating the imported fixed-point evaluation for the two structural
+  tail exclusions.
+*)
+Definition phase1_surface_pattern_follow_structural_tail_check : bool :=
+  let follow := phase1_surface_pattern_follow in
+  andb
+    (negb (token_mem (OverlapLiteral ".") follow))
+    (negb (token_mem (OverlapLiteral "{") follow)).
+
+Theorem phase1_surface_pattern_follow_structural_tail_check_true :
+  phase1_surface_pattern_follow_structural_tail_check = true.
 Proof.
   vm_compute.
   reflexivity.
 Qed.
 
+Theorem phase1_surface_pattern_follow_excludes_dot :
+  token_mem (OverlapLiteral ".") phase1_surface_pattern_follow = false.
+Proof.
+  pose proof phase1_surface_pattern_follow_structural_tail_check_true
+    as Hcheck.
+  change
+    (andb
+      (negb
+        (token_mem
+          (OverlapLiteral ".") phase1_surface_pattern_follow))
+      (negb
+        (token_mem
+          (OverlapLiteral "{") phase1_surface_pattern_follow)) = true)
+    in Hcheck.
+  apply andb_true_iff in Hcheck as [Hdot _].
+  apply negb_true_iff in Hdot.
+  exact Hdot.
+Qed.
+
 Theorem phase1_surface_pattern_follow_excludes_open_brace :
   token_mem (OverlapLiteral "{") phase1_surface_pattern_follow = false.
 Proof.
-  vm_compute.
-  reflexivity.
+  pose proof phase1_surface_pattern_follow_structural_tail_check_true
+    as Hcheck.
+  change
+    (andb
+      (negb
+        (token_mem
+          (OverlapLiteral ".") phase1_surface_pattern_follow))
+      (negb
+        (token_mem
+          (OverlapLiteral "{") phase1_surface_pattern_follow)) = true)
+    in Hcheck.
+  apply andb_true_iff in Hcheck as [_ Hbrace].
+  apply negb_true_iff in Hbrace.
+  exact Hbrace.
 Qed.
 
 Lemma phase1_surface_pattern_follow_literal_is_not_structural_record_tail :
