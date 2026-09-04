@@ -1,6 +1,6 @@
 From Stdlib Require Import Bool.Bool.
 
-From Phil.Core Require Import StorageAllocationFailure.
+From Phil.Core Require Import StorageRealization StorageAllocationFailure.
 
 (*
   Machine-facing decision surface for PHIL-MEM-FAIL-001.
