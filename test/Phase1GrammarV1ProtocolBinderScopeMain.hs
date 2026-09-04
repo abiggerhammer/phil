@@ -291,7 +291,7 @@ dependentProtocolGuardUsesSemanticType = do
   protocol <- onlyProtocol $ Text.unlines
     [ "protocol DependentCore {"
     , "  role Client = select {"
-    , "    Go(n : U8, payload : Bytes[n]) when payload == payload => end Done"
+    , "    Go(n : U8, payload : Bytes[toNat(n)]) when payload == payload => end Done"
     , "  };"
     , "  role Server = end Done;"
     , "}"
@@ -308,7 +308,7 @@ dependentProtocolGuardUsesSemanticType = do
     (Left "dependent payload semantic binding missing from SurfaceState")
     Right
     (Map.lookup payloadName (stateBindings state))
-  assert (bindingType payloadMeta == TyBytes (RefVar nName))
+  assert (bindingType payloadMeta == TyBytes (RefToNat (RefVar nName)))
     ("dependent payload type did not preserve semantic n identity: " <> show (bindingType payloadMeta))
 
 protocolCoreGuardAlphaRenamingPreservesIdentity :: Either String ()
