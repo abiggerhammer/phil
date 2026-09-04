@@ -7,6 +7,7 @@ import Phil.Core.Static (DeclarationKey (..))
 import Phil.Surface.GrammarV1.BinderScope
   ( GrammarV1BinderKey (..)
   , GrammarV1BinderScopeError (..)
+  , GrammarV1LexicalScope
   , GrammarV1ResolvedBinder (..)
   , grammarV1FunctionParameterScope
   , grammarV1ResolveLocal
@@ -321,11 +322,9 @@ joinAlphaRenamingPreservesIdentity = do
     "renamed join display spellings were not retained diagnostically"
 
 checkedJoin
-  :: Phil.Surface.GrammarV1.BinderScope.GrammarV1LexicalScope
+  :: GrammarV1LexicalScope
   -> Located GrammarV1Expression
-  -> Either
-      String
-      (GrammarV1CheckedJoinExpression, Phil.Surface.GrammarV1.BinderScope.GrammarV1LexicalScope)
+  -> Either String (GrammarV1CheckedJoinExpression, GrammarV1LexicalScope)
 checkedJoin scope expression =
   case grammarV1CheckedJoinExpressionInScope scope expression of
     Just (Right checked) -> Right checked
@@ -345,7 +344,7 @@ branchLetBinder branch = case grammarV1CheckedIfBranchSteps branch of
 
 resolveLike
   :: GrammarV1ResolvedBinder
-  -> Phil.Surface.GrammarV1.BinderScope.GrammarV1LexicalScope
+  -> GrammarV1LexicalScope
   -> Either String GrammarV1ResolvedBinder
 resolveLike binder scope = mapLeft show $ grammarV1ResolveLocal
   (Located (grammarV1ResolvedBinderSourceSpan binder)
