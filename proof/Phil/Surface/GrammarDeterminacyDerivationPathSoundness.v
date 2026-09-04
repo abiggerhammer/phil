@@ -146,13 +146,13 @@ Proof.
   destruct Hcontext as [prefix [Hlength Hpath]].
   exists (prefix ++ [item]).
   split.
-  - rewrite List.app_length.
+  - rewrite List.length_app.
     simpl.
     lia.
   - replace ((prefix ++ [item]) ++ items)
       with (prefix ++ item :: items).
     + exact Hpath.
-    + rewrite List.app_assoc.
+    + rewrite <- List.app_assoc.
       reflexivity.
 Qed.
 
