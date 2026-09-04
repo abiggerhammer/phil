@@ -61,22 +61,22 @@ import Phil.Core.ProcessParticipants
   , ProtocolRoleOccurrence (..)
   )
 import Phil.Core.ProcessRendezvous
-  ( ProcessCommunicationState (..)
-  , ProcessRendezvousError
+  ( ProcessCommunicationAttempt (JointProcessRendezvous)
+  , ProcessCommunicationState (..)
+  , ProcessRendezvousError (..)
   , ProcessRendezvousRequest (..)
   , ProcessRendezvousSide (..)
   , RestrictedMessageTransfer (..)
   , checkProcessCommunication
   , checkRestrictedProcessRendezvous
   , communicationStateFromActivation
-  , ProcessCommunicationAttempt (JointProcessRendezvous)
   )
 import Phil.Core.Protocol
   ( CheckedProtocolStep (..)
+  , ProtocolActionRequest (..)
   , ProtocolCheckError
   , ProtocolContext
   , ProtocolEndpointBinding (..)
-  , ProtocolActionRequest (..)
   , ProtocolInstanceRevision (..)
   , ProtocolRoleKey
   , checkProtocolAction
@@ -84,7 +84,7 @@ import Phil.Core.Protocol
   )
 import Phil.Core.Protocol.Family
   ( BinaryProtocolFamily (..)
-  , BinaryProtocolInstance
+  , BinaryProtocolInstance (..)
   , ProtocolFamilyError
   , ProtocolMessageArgument (..)
   , ProtocolProjectionEvidence (..)
@@ -130,7 +130,7 @@ certifiedRendezvousParticipantClassification
 certifiedRendezvousParticipantClassification =
   certifiedParticipantClassification . unCertifiedRendezvousActivation
 
--- | Opaque exact binary-protocol witness.  Unlike BinaryProtocolInstance's
+-- | Opaque exact binary-protocol witness. Unlike BinaryProtocolInstance's
 -- compact runtime representation, this retains the source family's primary/peer
 -- orientation and exact initial dual projections required by the Certified
 -- rendezvous theorem.
@@ -319,7 +319,7 @@ verifyExactInternalRendezvousKernelFacts endpointValid participantsValid message
       (ConcurrencyRendezvousCertifiedKernelDisagreement
         endpointValid participantsValid messageCoarseValid)
 
--- | Certified Message-bearing joint rendezvous.  Select/offer remains a native
+-- | Certified Message-bearing joint rendezvous. Select/offer remains a native
 -- protocol feature, but the PHIL-CONC-RENDEZVOUS-001 production boundary is
 -- intentionally fail-closed unless the synchronous action carries an exact
 -- Message witness matching both endpoint session steps.
@@ -377,8 +377,6 @@ certifyAcceptedRendezvous
 certifyAcceptedRendezvous activation protocol beforeState afterState request transfer evidence = do
   let contextsBefore = communicationProtocolContexts beforeState
       contextsAfter = communicationProtocolContexts afterState
-      network = certifiedRendezvousActivationNetwork activation
-      instanceValue = certifiedRendezvousProtocolInstance protocol
       (sender, receiver) = requestSides request
       senderProcess = rendezvousProcess sender
       receiverProcess = rendezvousProcess receiver
@@ -418,25 +416,9 @@ certifyAcceptedRendezvous activation protocol beforeState afterState request tra
   where
     requireContext processKey contextMap = maybe
       (Left (ConcurrencyRendezvousNativeError
-        (missingContextError processKey)))
+        (RendezvousMissingProtocolContext processKey)))
       Right
       (Map.lookup processKey contextMap)
-
--- The native checker already emitted this exact diagnostic before reflection;
--- this sentinel is therefore only reachable if a pure-success result and the
--- reflected context map disagree, in which case the bridge still fails closed.
-missingContextError :: ProcessKey -> ProcessRendezvousError
-missingContextError = rendezvousMissingContext
-
-rendezvousMissingContext :: ProcessKey -> ProcessRendezvousError
-rendezvousMissingContext processKey =
-  case impossibleMissingContext processKey of
-    Left err -> err
-    Right _ -> error "unreachable rendezvous missing-context sentinel"
-
-impossibleMissingContext :: ProcessKey -> Either ProcessRendezvousError ()
-impossibleMissingContext processKey =
-  Left (RendezvousMissingProtocolContext processKey)
 
 rendezvousEndpointFacts
   :: CertifiedRendezvousProtocol
