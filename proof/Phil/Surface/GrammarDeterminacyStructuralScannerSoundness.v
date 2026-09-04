@@ -54,7 +54,9 @@ Proof.
   - reflexivity.
   - simpl.
     rewrite qualified_name_remainder_dot_tokens.
-    reflexivity.
+    destruct tail as [| token tail].
+    + reflexivity.
+    + destruct token; reflexivity.
 Qed.
 
 Theorem pattern_decision_identifier_other_literal_tail :
