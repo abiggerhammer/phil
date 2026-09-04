@@ -278,6 +278,26 @@ Proof.
   reflexivity.
 Qed.
 
+Lemma parenthesis_neutral_effect_nonterminal_zero_step :
+  forall safe_names fuel name,
+    parenthesis_neutral_effect_fuel
+      safe_names (S fuel) 0 (ENonterminal name) =
+    if parenthesis_neutral_string_mem name safe_names
+    then Some 0
+    else None.
+Proof.
+  reflexivity.
+Qed.
+
+Lemma parenthesis_neutral_effect_nonterminal_positive_step :
+  forall safe_names fuel depth name,
+    parenthesis_neutral_effect_fuel
+      safe_names (S fuel) (S depth) (ENonterminal name) =
+    Some (S depth).
+Proof.
+  reflexivity.
+Qed.
+
 Definition parenthesis_neutral_fuel : nat := 256.
 
 Definition phase1_surface_rule_names : list string :=
@@ -446,7 +466,7 @@ Proof.
       fuel depth final_depth Heffect.
     destruct fuel as [| fuel]; try discriminate Heffect.
     destruct depth as [| depth].
-    + simpl in Heffect.
+    + rewrite parenthesis_neutral_effect_nonterminal_zero_step in Heffect.
       destruct
         (parenthesis_neutral_string_mem
           name phase1_surface_parenthesis_neutral_names)
@@ -459,7 +479,7 @@ Proof.
         as Hbody_effect.
       eapply IH.
       exact Hbody_effect.
-    + simpl in Heffect.
+    + rewrite parenthesis_neutral_effect_nonterminal_positive_step in Heffect.
       inversion Heffect; subst final_depth.
       assert (Houter :
         Derives phase1_surface_rules path
@@ -616,7 +636,7 @@ Proof.
   intros path name input rest tree Hsafe Hderive.
   eapply ((proj1 phase1_surface_parenthesis_neutral_effect_sound)
     path (ENonterminal name) input rest tree Hderive 1 0 0).
-  simpl.
+  rewrite parenthesis_neutral_effect_nonterminal_zero_step.
   rewrite Hsafe.
   reflexivity.
 Qed.
