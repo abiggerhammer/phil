@@ -1,0 +1,97 @@
+name: Phase 1 Surface Determinacy Witness Soundness Debug 31
+
+on:
+  pull_request:
+
+permissions:
+  actions: read
+  contents: write
+
+jobs:
+  rocq-witness-soundness-debug31:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    container:
+      image: rocq/rocq-prover:9.2.0
+      options: --user root
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Derive exact Grammar-v1 inputs
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 scripts/derive_phase1_surface_grammar.py --write
+          python3 scripts/derive_phase1_surface_determinacy_certificate.py --write
+
+      - name: Download validated Debug 31 source
+        uses: actions/download-artifact@v4
+        with:
+          name: debug31-generated-witness-source
+          path: /tmp/debug31-source
+          github-token: ${{ github.token }}
+          run-id: 33825589329
+
+      - name: Verify and install validated source
+        shell: bash
+        run: |
+          set -euo pipefail
+          echo "c950254960a8d60791756a09028b63be51558c51a707b1450fdabe03fcc44a1d  /tmp/debug31-source/GrammarDeterminacyWitnessSoundness.v" | sha256sum -c -
+          cp /tmp/debug31-source/GrammarDeterminacyWitnessSoundness.v \
+            proof/Phil/Surface/GrammarDeterminacyWitnessSoundness.v
+
+      - name: Compile captured witness soundness source
+        shell: bash
+        run: |
+          set -euo pipefail
+          export PATH="/home/rocq/.opam/${COMPILER}/bin:$PATH"
+          rocq c -Q proof/Phil Phil proof/Phil/Surface/Grammar.v
+          rocq c -Q proof/Phil Phil proof/Phil/Surface/GrammarDerivation.v
+          rocq c -Q proof/Phil Phil proof/Phil/Surface/GrammarDerivationOracle.v
+          rocq c -Q proof/Phil Phil proof/Phil/Surface/GrammarDeterminacyCertificate.v
+          rocq c -Q proof/Phil Phil proof/Phil/Surface/GrammarDeterminacyNullableFirst.v
+          rocq c -Q proof/Phil Phil proof/Phil/Surface/GrammarDeterminacyFollowOverlap.v
+          rocq c -Q proof/Phil Phil proof/Phil/Surface/GrammarDeterminacySimpleResolvers.v
+          rocq c -Q proof/Phil Phil proof/Phil/Surface/GrammarDeterminacyStructuralResolvers.v
+          rocq c -Q proof/Phil Phil proof/Phil/Surface/GrammarDeterminacyPredictiveOracle.v
+          rocq c -Q proof/Phil Phil proof/Phil/Surface/GrammarDerivationLookahead.v
+          timeout -k 5s 90s rocq c -time -Q proof/Phil Phil \
+            proof/Phil/Surface/GrammarDeterminacyWitnessSoundness.v
+
+  materialize-witness-source:
+    needs: rocq-witness-soundness-debug31
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    if: github.event.pull_request.head.repo.full_name == github.repository
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ github.head_ref }}
+          fetch-depth: 0
+
+      - name: Download validated Debug 31 source
+        uses: actions/download-artifact@v4
+        with:
+          name: debug31-generated-witness-source
+          path: debug31-source
+          github-token: ${{ github.token }}
+          run-id: 33825589329
+
+      - name: Commit validated witness source
+        shell: bash
+        env:
+          HEAD_REF: ${{ github.head_ref }}
+        run: |
+          set -euo pipefail
+          echo "c950254960a8d60791756a09028b63be51558c51a707b1450fdabe03fcc44a1d  debug31-source/GrammarDeterminacyWitnessSoundness.v" | sha256sum -c -
+          cp debug31-source/GrammarDeterminacyWitnessSoundness.v \
+            proof/Phil/Surface/GrammarDeterminacyWitnessSoundness.v
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add proof/Phil/Surface/GrammarDeterminacyWitnessSoundness.v
+          if git diff --cached --quiet; then
+            echo "validated witness source already materialized"
+            exit 0
+          fi
+          git commit -m "Integrate validated witness soundness proof"
+          git push origin "HEAD:${HEAD_REF}"

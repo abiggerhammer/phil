@@ -1,0 +1,91 @@
+name: Phase 1 Surface Determinacy Witness Soundness Debug 13
+
+on:
+  pull_request:
+
+permissions:
+  contents: read
+
+jobs:
+  rocq-witness-soundness-debug13:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    container:
+      image: rocq/rocq-prover:9.2.0
+      options: --user root
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Derive exact Grammar-v1 inputs
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 scripts/derive_phase1_surface_grammar.py --write
+          python3 scripts/derive_phase1_surface_determinacy_certificate.py --write
+
+      - name: Apply depth-safe diagnostic with rule-pair projection fix
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 - <<'PY'
+          from pathlib import Path
+          import textwrap
+
+          workflow = Path('.github/workflows/phase1-surface-determinacy-witness-soundness-debug12.yml').read_text()
+          marker = workflow.index('- name: Apply depth-safe nullable witness diagnostic')
+          start = workflow.index('          from pathlib import Path', marker)
+          end = workflow.index('\n          PY', start)
+          code = textwrap.dedent(workflow[start:end])
+          exec(compile(code, '<existing-debug12-diagnostics>', 'exec'), {})
+
+          path = Path('proof/Phil/Surface/GrammarDeterminacyWitnessSoundness.v')
+          source = path.read_text()
+          old = '''Lemma phase1_surface_rule_body_nullable_depth_safe :
+            forall name body,
+              lookupRule name phase1_surface_rules = Some body ->
+              nullable_depth_safe_fuel expression_fuel body = true.
+          Proof.
+            intros name body Hlookup.
+            eapply lookupRule_forallb.
+            - exact phase1_surface_all_rule_bodies_nullable_depth_safe.
+            - exact Hlookup.
+          Qed.
+          '''
+          new = '''Lemma phase1_surface_rule_body_nullable_depth_safe :
+            forall name body,
+              lookupRule name phase1_surface_rules = Some body ->
+              nullable_depth_safe_fuel expression_fuel body = true.
+          Proof.
+            intros name body Hlookup.
+            assert (Hrule : nullable_depth_safe_rule (name, body) = true).
+            {
+              eapply lookupRule_forallb.
+              - exact phase1_surface_all_rule_bodies_nullable_depth_safe.
+              - exact Hlookup.
+            }
+            unfold nullable_depth_safe_rule in Hrule.
+            exact Hrule.
+          Qed.
+          '''
+          if source.count(old) != 1:
+              raise SystemExit(f'expected one rule-body depth-safe helper, found {source.count(old)}')
+          path.write_text(source.replace(old, new, 1))
+          PY
+
+      - name: Compile witness soundness with timing
+        shell: bash
+        run: |
+          set -euo pipefail
+          export PATH="/home/rocq/.opam/${COMPILER}/bin:$PATH"
+          rocq c -Q proof/Phil Phil proof/Phil/Surface/Grammar.v
+          rocq c -Q proof/Phil Phil proof/Phil/Surface/GrammarDerivation.v
+          rocq c -Q proof/Phil Phil proof/Phil/Surface/GrammarDerivationOracle.v
+          rocq c -Q proof/Phil Phil proof/Phil/Surface/GrammarDeterminacyCertificate.v
+          rocq c -Q proof/Phil Phil proof/Phil/Surface/GrammarDeterminacyNullableFirst.v
+          rocq c -Q proof/Phil Phil proof/Phil/Surface/GrammarDeterminacyFollowOverlap.v
+          rocq c -Q proof/Phil Phil proof/Phil/Surface/GrammarDeterminacySimpleResolvers.v
+          rocq c -Q proof/Phil Phil proof/Phil/Surface/GrammarDeterminacyStructuralResolvers.v
+          rocq c -Q proof/Phil Phil proof/Phil/Surface/GrammarDeterminacyPredictiveOracle.v
+          rocq c -Q proof/Phil Phil proof/Phil/Surface/GrammarDerivationLookahead.v
+          timeout 300s rocq c -time -Q proof/Phil Phil \
+            proof/Phil/Surface/GrammarDeterminacyWitnessSoundness.v

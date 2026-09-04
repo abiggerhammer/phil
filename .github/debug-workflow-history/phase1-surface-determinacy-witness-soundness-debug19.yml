@@ -1,0 +1,226 @@
+name: Phase 1 Surface Determinacy Witness Soundness Debug 19
+
+on:
+  pull_request:
+
+permissions:
+  contents: read
+
+jobs:
+  rocq-witness-soundness-debug19:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    container:
+      image: rocq/rocq-prover:9.2.0
+      options: --user root
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Derive exact Grammar-v1 inputs
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 scripts/derive_phase1_surface_grammar.py --write
+          python3 scripts/derive_phase1_surface_determinacy_certificate.py --write
+
+      - name: Apply member-based FIRST alternative diagnostic
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 - <<'PY'
+          from pathlib import Path
+          import textwrap
+
+          history = Path('.github/debug-workflow-history')
+          workflows = Path('.github/workflows')
+          for archived in history.glob('phase1-surface-determinacy-witness-soundness-debug*.yml'):
+              (workflows / archived.name).write_text(archived.read_text())
+
+          workflow = Path('.github/workflows/phase1-surface-determinacy-witness-soundness-debug18.yml').read_text()
+          marker = workflow.index('- name: Apply factored FIRST alternative diagnostic')
+          start = workflow.index('          from pathlib import Path', marker)
+          end = workflow.index('\n          PY', start)
+          code = textwrap.dedent(workflow[start:end])
+          exec(compile(code, '<existing-debug18-diagnostics>', 'exec'), {})
+
+          path = Path('proof/Phil/Surface/GrammarDeterminacyWitnessSoundness.v')
+          source = path.read_text()
+          alt_start = source.index('Lemma computed_first_alternative_sem_sound :')
+          alt_end = source.index('\nLemma computed_first_sem_sound_step', alt_start)
+
+          replacement = r'''Lemma forallb_member_true :
+            forall (A : Type) (predicate : A -> bool) items item,
+              forallb predicate items = true ->
+              In item items ->
+              predicate item = true.
+          Proof.
+            intros A predicate items.
+            induction items as [| head rest IH]; intros item Hall Hin.
+            - inversion Hin.
+            - simpl in Hall.
+              apply andb_true_iff in Hall as [Hhead Hrest].
+              destruct Hin as [Heq | Hin].
+              + subst item. exact Hhead.
+              + eapply IH; eauto.
+          Qed.
+
+          Lemma computed_first_alternative_has_member :
+            forall token items,
+              ComputedFirstAlternativeSem token items ->
+              exists item,
+                In item items /\ ComputedFirstSem token item.
+          Proof.
+            intros token items Hsem.
+            induction Hsem as
+              [item rest Hitem
+              | item rest Hrest IHrest].
+            - exists item. split.
+              + left. reflexivity.
+              + exact Hitem.
+            - destruct IHrest as [selected [Hin Hselected]].
+              exists selected. split.
+              + right. exact Hin.
+              + exact Hselected.
+          Qed.
+
+          Lemma computed_first_alternative_choices_defined :
+            forall fuel items,
+              forallb (choice_bodies_nonnullable_fuel fuel) items = true ->
+              exists tokens,
+                first_expression_fuel
+                  (S fuel)
+                  phase1_surface_nullable_facts
+                  phase1_surface_first_facts
+                  (EAlternative items) = Some tokens.
+          Proof.
+            intros fuel items Hsafe.
+            exact
+              (choice_safe_first_alternative_choices_defined
+                fuel items (choice_safe_first_defined fuel) Hsafe).
+          Qed.
+
+          Lemma first_alternative_member_preserved :
+            forall token fuel items selected selected_tokens,
+              forallb (choice_bodies_nonnullable_fuel fuel) items = true ->
+              In selected items ->
+              first_expression_fuel
+                fuel
+                phase1_surface_nullable_facts
+                phase1_surface_first_facts
+                selected = Some selected_tokens ->
+              token_mem token selected_tokens = true ->
+              exists tokens,
+                first_expression_fuel
+                  (S fuel)
+                  phase1_surface_nullable_facts
+                  phase1_surface_first_facts
+                  (EAlternative items) = Some tokens /\
+                token_mem token tokens = true.
+          Proof.
+            intros token fuel items.
+            induction items as [| head rest IH];
+              intros selected selected_tokens Hsafe Hin Hselected Hmem.
+            - inversion Hin.
+            - simpl in Hsafe.
+              apply andb_true_iff in Hsafe as [Hhead_safe Hrest_safe].
+              destruct (choice_safe_first_defined fuel head Hhead_safe)
+                as [head_tokens Hhead_first].
+              destruct Hin as [Heq | Hin].
+              + subst selected.
+                rewrite Hselected in Hhead_first.
+                inversion Hhead_first. subst head_tokens.
+                destruct
+                  (computed_first_alternative_choices_defined
+                    fuel rest Hrest_safe)
+                  as [rest_tokens Hrest_first].
+                exact
+                  (computed_first_alternative_here_from_results
+                    token fuel head rest selected_tokens rest_tokens
+                    Hselected Hmem Hrest_first).
+              + destruct
+                  (IH selected selected_tokens Hrest_safe Hin Hselected Hmem)
+                  as [rest_tokens [Hrest_first Hrest_mem]].
+                exact
+                  (computed_first_alternative_later_from_results
+                    token fuel head rest head_tokens rest_tokens
+                    Hhead_first Hrest_first Hrest_mem).
+          Qed.
+
+          Lemma computed_first_alternative_sem_sound :
+            forall token fuel items,
+              (forall expression,
+                ComputedFirstSem token expression ->
+                choice_bodies_nonnullable_fuel fuel expression = true ->
+                exists tokens,
+                  first_expression_fuel
+                    fuel
+                    phase1_surface_nullable_facts
+                    phase1_surface_first_facts
+                    expression = Some tokens /\
+                  token_mem token tokens = true) ->
+              ComputedFirstAlternativeSem token items ->
+              forallb
+                (fun item =>
+                  andb
+                    (negb
+                      (nullable_expression
+                        phase1_surface_nullable_facts item))
+                    (choice_bodies_nonnullable_fuel fuel item))
+                items = true ->
+              exists tokens,
+                first_expression_fuel
+                  (S fuel)
+                  phase1_surface_nullable_facts
+                  phase1_surface_first_facts
+                  (EAlternative items) = Some tokens /\
+                token_mem token tokens = true.
+          Proof.
+            intros token fuel items Hsound Hsem Hsafe.
+            destruct (computed_first_alternative_has_member token items Hsem)
+              as [selected [Hin Hselected_sem]].
+            pose proof
+              (forallb_andb_right
+                EbnfExpression
+                (fun item =>
+                  negb
+                    (nullable_expression phase1_surface_nullable_facts item))
+                (choice_bodies_nonnullable_fuel fuel)
+                items Hsafe)
+              as Hbodies_safe.
+            pose proof
+              (forallb_member_true
+                EbnfExpression
+                (choice_bodies_nonnullable_fuel fuel)
+                items selected Hbodies_safe Hin)
+              as Hselected_safe.
+            destruct (Hsound selected Hselected_sem Hselected_safe)
+              as [selected_tokens [Hselected_first Hselected_mem]].
+            exact
+              (first_alternative_member_preserved
+                token fuel items selected selected_tokens
+                Hbodies_safe Hin Hselected_first Hselected_mem).
+          Qed.
+          '''
+
+          source = source[:alt_start] + replacement + source[alt_end:]
+          path.write_text(source)
+          print(f'generated witness proof characters: {len(source)}')
+          PY
+
+      - name: Compile witness soundness with forced timeout
+        shell: bash
+        run: |
+          set -euo pipefail
+          export PATH="/home/rocq/.opam/${COMPILER}/bin:$PATH"
+          rocq c -Q proof/Phil Phil proof/Phil/Surface/Grammar.v
+          rocq c -Q proof/Phil Phil proof/Phil/Surface/GrammarDerivation.v
+          rocq c -Q proof/Phil Phil proof/Phil/Surface/GrammarDerivationOracle.v
+          rocq c -Q proof/Phil Phil proof/Phil/Surface/GrammarDeterminacyCertificate.v
+          rocq c -Q proof/Phil Phil proof/Phil/Surface/GrammarDeterminacyNullableFirst.v
+          rocq c -Q proof/Phil Phil proof/Phil/Surface/GrammarDeterminacyFollowOverlap.v
+          rocq c -Q proof/Phil Phil proof/Phil/Surface/GrammarDeterminacySimpleResolvers.v
+          rocq c -Q proof/Phil Phil proof/Phil/Surface/GrammarDeterminacyStructuralResolvers.v
+          rocq c -Q proof/Phil Phil proof/Phil/Surface/GrammarDeterminacyPredictiveOracle.v
+          rocq c -Q proof/Phil Phil proof/Phil/Surface/GrammarDerivationLookahead.v
+          timeout -k 5s 90s rocq c -time -Q proof/Phil Phil \
+            proof/Phil/Surface/GrammarDeterminacyWitnessSoundness.v

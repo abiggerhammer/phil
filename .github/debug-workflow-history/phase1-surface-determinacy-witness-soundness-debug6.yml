@@ -1,0 +1,534 @@
+name: Phase 1 Surface Determinacy Witness Soundness Debug 6
+
+on:
+  pull_request:
+
+permissions:
+  contents: read
+
+jobs:
+  rocq-witness-soundness-debug6:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    container:
+      image: rocq/rocq-prover:9.2.0
+      options: --user root
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Derive exact Grammar-v1 inputs
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 scripts/derive_phase1_surface_grammar.py --write
+          python3 scripts/derive_phase1_surface_determinacy_certificate.py --write
+
+      - name: Apply canonical-fuel nullable witness diagnostic
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 - <<'PY'
+          from pathlib import Path
+          import textwrap
+
+          workflow = Path('.github/workflows/phase1-surface-determinacy-witness-soundness-debug5.yml').read_text()
+          marker = workflow.index('- name: Apply wrapped value-only nullable diagnostics')
+          start = workflow.index('          from pathlib import Path', marker)
+          end = workflow.index('\n          PY', start)
+          code = textwrap.dedent(workflow[start:end])
+          exec(compile(code, '<existing-debug5-diagnostics>', 'exec'), {})
+
+          path = Path('proof/Phil/Surface/GrammarDeterminacyWitnessSoundness.v')
+          source = path.read_text()
+          block_start = source.index('Inductive NullableWitnessTruthProperty')
+          block_end = source.index('\nLemma overlap_token_eqb_eq', block_start)
+          canonical = r'''Lemma choice_bodies_nonnullable_fuel_monotone :
+            forall smaller larger expression,
+              smaller <= larger ->
+              choice_bodies_nonnullable_fuel smaller expression = true ->
+              choice_bodies_nonnullable_fuel larger expression = true.
+          Proof.
+            induction smaller as [| smaller IH];
+              intros larger expression Hle Hsafe.
+            - simpl in Hsafe. discriminate.
+            - destruct larger as [| larger].
+              + lia.
+              + apply Nat.succ_le_mono in Hle.
+                destruct expression as
+                  [literal | class_name | name | items | items | body | body];
+                  simpl in Hsafe |- *.
+                * reflexivity.
+                * reflexivity.
+                * reflexivity.
+                * induction items as [| item rest IHrest];
+                    simpl in Hsafe |- *.
+                  -- reflexivity.
+                  -- apply andb_true_iff in Hsafe as [Hitem Hrest].
+                     apply andb_true_iff. split.
+                     ++ eapply IH; eauto.
+                     ++ apply IHrest. exact Hrest.
+                * induction items as [| item rest IHrest];
+                    simpl in Hsafe |- *.
+                  -- reflexivity.
+                  -- apply andb_true_iff in Hsafe as [Hhead Hrest].
+                     apply andb_true_iff in Hhead as [Hnullable Hitem].
+                     apply andb_true_iff. split.
+                     ++ apply andb_true_iff. split.
+                        ** exact Hnullable.
+                        ** eapply IH; eauto.
+                     ++ apply IHrest. exact Hrest.
+                * apply andb_true_iff in Hsafe as [Hnullable Hbody].
+                  apply andb_true_iff. split.
+                  -- exact Hnullable.
+                  -- eapply IH; eauto.
+                * apply andb_true_iff in Hsafe as [Hnullable Hbody].
+                  apply andb_true_iff. split.
+                  -- exact Hnullable.
+                  -- eapply IH; eauto.
+          Qed.
+
+          Lemma nullable_sequence_fuel_lift :
+            forall smaller larger items,
+              (forall expression value,
+                nullable_expression_fuel
+                  smaller phase1_surface_nullable_facts expression = Some value ->
+                nullable_expression_fuel
+                  larger phase1_surface_nullable_facts expression = Some value) ->
+              forall value,
+                nullable_expression_fuel
+                  (S smaller) phase1_surface_nullable_facts
+                  (ESequence items) = Some value ->
+                nullable_expression_fuel
+                  (S larger) phase1_surface_nullable_facts
+                  (ESequence items) = Some value.
+          Proof.
+            intros smaller larger items Hlift.
+            induction items as [| item rest IHrest]; intros value Heval.
+            - simpl in *. exact Heval.
+            - pose proof Heval as Hstep.
+              simpl in Hstep.
+              destruct (nullable_expression_fuel
+                smaller phase1_surface_nullable_facts item)
+                as [item_value |] eqn:Hitem.
+              + destruct (nullable_expression_fuel
+                  (S smaller) phase1_surface_nullable_facts (ESequence rest))
+                  as [rest_value |] eqn:Hrest.
+                * pose proof Hrest as Hrest_local.
+                  simpl in Hrest_local.
+                  rewrite Hitem, Hrest_local in Hstep.
+                  pose proof (Hlift item item_value Hitem) as Hitem_big.
+                  pose proof (IHrest rest_value Hrest) as Hrest_big.
+                  pose proof Hrest_big as Hrest_big_local.
+                  simpl in Hrest_big_local.
+                  simpl.
+                  rewrite Hitem_big, Hrest_big_local.
+                  exact Hstep.
+                * pose proof Hrest as Hrest_local.
+                  simpl in Hrest_local.
+                  rewrite Hitem, Hrest_local in Hstep.
+                  discriminate.
+              + rewrite Hitem in Hstep.
+                discriminate.
+          Qed.
+
+          Lemma nullable_alternative_fuel_lift :
+            forall smaller larger items,
+              (forall expression value,
+                nullable_expression_fuel
+                  smaller phase1_surface_nullable_facts expression = Some value ->
+                nullable_expression_fuel
+                  larger phase1_surface_nullable_facts expression = Some value) ->
+              forall value,
+                nullable_expression_fuel
+                  (S smaller) phase1_surface_nullable_facts
+                  (EAlternative items) = Some value ->
+                nullable_expression_fuel
+                  (S larger) phase1_surface_nullable_facts
+                  (EAlternative items) = Some value.
+          Proof.
+            intros smaller larger items Hlift.
+            induction items as [| item rest IHrest]; intros value Heval.
+            - simpl in *. exact Heval.
+            - pose proof Heval as Hstep.
+              simpl in Hstep.
+              destruct (nullable_expression_fuel
+                smaller phase1_surface_nullable_facts item)
+                as [item_value |] eqn:Hitem.
+              + destruct (nullable_expression_fuel
+                  (S smaller) phase1_surface_nullable_facts (EAlternative rest))
+                  as [rest_value |] eqn:Hrest.
+                * pose proof Hrest as Hrest_local.
+                  simpl in Hrest_local.
+                  rewrite Hitem, Hrest_local in Hstep.
+                  pose proof (Hlift item item_value Hitem) as Hitem_big.
+                  pose proof (IHrest rest_value Hrest) as Hrest_big.
+                  pose proof Hrest_big as Hrest_big_local.
+                  simpl in Hrest_big_local.
+                  simpl.
+                  rewrite Hitem_big, Hrest_big_local.
+                  exact Hstep.
+                * pose proof Hrest as Hrest_local.
+                  simpl in Hrest_local.
+                  rewrite Hitem, Hrest_local in Hstep.
+                  discriminate.
+              + rewrite Hitem in Hstep.
+                discriminate.
+          Qed.
+
+          Lemma nullable_expression_fuel_lift_step :
+            forall smaller larger,
+              (forall expression value,
+                nullable_expression_fuel
+                  smaller phase1_surface_nullable_facts expression = Some value ->
+                nullable_expression_fuel
+                  larger phase1_surface_nullable_facts expression = Some value) ->
+              forall expression value,
+                nullable_expression_fuel
+                  (S smaller) phase1_surface_nullable_facts expression = Some value ->
+                nullable_expression_fuel
+                  (S larger) phase1_surface_nullable_facts expression = Some value.
+          Proof.
+            intros smaller larger Hlift expression value Heval.
+            destruct expression as
+              [literal | class_name | name | items | items | body | body].
+            - simpl in *. exact Heval.
+            - simpl in *. exact Heval.
+            - simpl in *. exact Heval.
+            - eapply nullable_sequence_fuel_lift; eauto.
+            - eapply nullable_alternative_fuel_lift; eauto.
+            - simpl in *. exact Heval.
+            - simpl in *. exact Heval.
+          Qed.
+
+          Lemma nullable_expression_fuel_monotone :
+            forall smaller larger expression value,
+              smaller <= larger ->
+              nullable_expression_fuel
+                smaller phase1_surface_nullable_facts expression = Some value ->
+              nullable_expression_fuel
+                larger phase1_surface_nullable_facts expression = Some value.
+          Proof.
+            induction smaller as [| smaller IH];
+              intros larger expression value Hle Heval.
+            - simpl in Heval. discriminate.
+            - destruct larger as [| larger].
+              + lia.
+              + apply Nat.succ_le_mono in Hle.
+                eapply nullable_expression_fuel_lift_step.
+                * intros child child_value Hchild.
+                  eapply IH; eauto.
+                * exact Heval.
+          Qed.
+
+          Definition expression_child_fuel : nat := 255.
+
+          Lemma expression_fuel_is_successor :
+            expression_fuel = S expression_child_fuel.
+          Proof. reflexivity. Qed.
+
+          Lemma nullable_safe_smaller_from_canonical :
+            forall smaller expression,
+              smaller <= expression_fuel ->
+              choice_bodies_nonnullable_fuel smaller expression = true ->
+              nullable_expression_fuel
+                expression_fuel phase1_surface_nullable_facts expression = Some true ->
+              nullable_expression_fuel
+                smaller phase1_surface_nullable_facts expression = Some true.
+          Proof.
+            intros smaller expression Hle Hsafe Hcanonical.
+            destruct (choice_safe_nullable_defined smaller expression Hsafe)
+              as [value Hsmall].
+            pose proof
+              (nullable_expression_fuel_monotone
+                smaller expression_fuel expression value Hle Hsmall)
+              as Hlarge.
+            rewrite Hcanonical in Hlarge.
+            inversion Hlarge. subst value.
+            exact Hsmall.
+          Qed.
+
+          Definition NullableWitnessCanonicalProperty
+            (expression : EbnfExpression) : Prop :=
+            choice_bodies_nonnullable_fuel expression_fuel expression = true ->
+            nullable_expression_fuel
+              expression_fuel phase1_surface_nullable_facts expression = Some true.
+
+          Definition NullableSequenceCanonicalProperty
+            (items : list EbnfExpression) : Prop :=
+            choice_bodies_nonnullable_fuel
+              expression_fuel (ESequence items) = true ->
+            nullable_expression_fuel
+              expression_fuel phase1_surface_nullable_facts
+              (ESequence items) = Some true.
+
+          Definition NullableAlternativeCanonicalProperty
+            (items : list EbnfExpression) : Prop :=
+            choice_bodies_nonnullable_fuel
+              expression_fuel (EAlternative items) = true ->
+            nullable_expression_fuel
+              expression_fuel phase1_surface_nullable_facts
+              (EAlternative items) = Some true.
+
+          Lemma nullable_nonterminal_canonical_from_body :
+            forall name body,
+              lookupRule name phase1_surface_rules = Some body ->
+              nullable_expression_fuel
+                expression_fuel phase1_surface_nullable_facts body = Some true ->
+              nullable_expression_fuel
+                expression_fuel phase1_surface_nullable_facts
+                (ENonterminal name) = Some true.
+          Proof.
+            intros name body Hlookup Hbody.
+            pose proof
+              (phase1_surface_nullable_lookup_rule name body Hlookup)
+              as Hlookup_fact.
+            unfold nullable_expression in Hlookup_fact.
+            rewrite Hbody in Hlookup_fact.
+            simpl in Hlookup_fact.
+            rewrite expression_fuel_is_successor.
+            simpl.
+            rewrite Hlookup_fact.
+            reflexivity.
+          Qed.
+
+          Lemma nullable_canonical_nonterminal_case :
+            forall name body,
+              lookupRule name phase1_surface_rules = Some body ->
+              NullableWitness phase1_surface_rules body ->
+              NullableWitnessCanonicalProperty body ->
+              NullableWitnessCanonicalProperty (ENonterminal name).
+          Proof.
+            intros name body Hlookup _ IHbody _.
+            eapply nullable_nonterminal_canonical_from_body.
+            - exact Hlookup.
+            - apply IHbody.
+              apply phase1_surface_rule_body_choice_safe with name.
+              exact Hlookup.
+          Qed.
+
+          Lemma nullable_canonical_sequence_case :
+            forall items,
+              NullableSequenceWitness phase1_surface_rules items ->
+              NullableSequenceCanonicalProperty items ->
+              NullableWitnessCanonicalProperty (ESequence items).
+          Proof.
+            intros items _ IHitems Hsafe.
+            exact (IHitems Hsafe).
+          Qed.
+
+          Lemma nullable_canonical_alternative_case :
+            forall items,
+              NullableAlternativeWitness phase1_surface_rules items ->
+              NullableAlternativeCanonicalProperty items ->
+              NullableWitnessCanonicalProperty (EAlternative items).
+          Proof.
+            intros items _ IHitems Hsafe.
+            exact (IHitems Hsafe).
+          Qed.
+
+          Lemma nullable_canonical_optional_case :
+            forall body,
+              NullableWitnessCanonicalProperty (EOptional body).
+          Proof.
+            intros body _.
+            rewrite expression_fuel_is_successor.
+            reflexivity.
+          Qed.
+
+          Lemma nullable_canonical_repetition_case :
+            forall body,
+              NullableWitnessCanonicalProperty (ERepetition body).
+          Proof.
+            intros body _.
+            rewrite expression_fuel_is_successor.
+            reflexivity.
+          Qed.
+
+          Lemma nullable_sequence_canonical_nil_case :
+            NullableSequenceCanonicalProperty [].
+          Proof.
+            intros _.
+            rewrite expression_fuel_is_successor.
+            reflexivity.
+          Qed.
+
+          Lemma nullable_sequence_canonical_cons_case :
+            forall item rest,
+              NullableWitness phase1_surface_rules item ->
+              NullableWitnessCanonicalProperty item ->
+              NullableSequenceWitness phase1_surface_rules rest ->
+              NullableSequenceCanonicalProperty rest ->
+              NullableSequenceCanonicalProperty (item :: rest).
+          Proof.
+            intros item rest _ IHitem _ IHrest Hsafe.
+            rewrite expression_fuel_is_successor in Hsafe.
+            simpl in Hsafe.
+            apply andb_true_iff in Hsafe as [Hitem_safe Hrest_safe].
+            assert (Hitem_safe_full :
+              choice_bodies_nonnullable_fuel expression_fuel item = true).
+            {
+              eapply choice_bodies_nonnullable_fuel_monotone.
+              - unfold expression_child_fuel, expression_fuel. lia.
+              - exact Hitem_safe.
+            }
+            pose proof (IHitem Hitem_safe_full) as Hitem_full.
+            pose proof
+              (nullable_safe_smaller_from_canonical
+                expression_child_fuel item
+                (ltac:(unfold expression_child_fuel, expression_fuel; lia))
+                Hitem_safe Hitem_full)
+              as Hitem_child.
+            assert (Hrest_safe_full :
+              choice_bodies_nonnullable_fuel
+                expression_fuel (ESequence rest) = true).
+            {
+              rewrite expression_fuel_is_successor.
+              simpl.
+              exact Hrest_safe.
+            }
+            pose proof (IHrest Hrest_safe_full) as Hrest_full.
+            pose proof Hrest_full as Hrest_local.
+            rewrite expression_fuel_is_successor in Hrest_local.
+            simpl in Hrest_local.
+            rewrite expression_fuel_is_successor.
+            simpl.
+            rewrite Hitem_child, Hrest_local.
+            reflexivity.
+          Qed.
+
+          Lemma nullable_alternative_canonical_here_case :
+            forall item rest,
+              NullableWitness phase1_surface_rules item ->
+              NullableWitnessCanonicalProperty item ->
+              NullableAlternativeCanonicalProperty (item :: rest).
+          Proof.
+            intros item rest _ IHitem Hsafe.
+            rewrite expression_fuel_is_successor in Hsafe.
+            simpl in Hsafe.
+            apply andb_true_iff in Hsafe as [Hhead_safe Hrest_safe].
+            apply andb_true_iff in Hhead_safe as [_ Hitem_safe].
+            assert (Hitem_safe_full :
+              choice_bodies_nonnullable_fuel expression_fuel item = true).
+            {
+              eapply choice_bodies_nonnullable_fuel_monotone.
+              - unfold expression_child_fuel, expression_fuel. lia.
+              - exact Hitem_safe.
+            }
+            pose proof (IHitem Hitem_safe_full) as Hitem_full.
+            pose proof
+              (nullable_safe_smaller_from_canonical
+                expression_child_fuel item
+                (ltac:(unfold expression_child_fuel, expression_fuel; lia))
+                Hitem_safe Hitem_full)
+              as Hitem_child.
+            assert (Hrest_expr_safe :
+              choice_bodies_nonnullable_fuel
+                expression_fuel (EAlternative rest) = true).
+            {
+              rewrite expression_fuel_is_successor.
+              simpl.
+              exact Hrest_safe.
+            }
+            destruct (choice_safe_nullable_defined
+              expression_fuel (EAlternative rest) Hrest_expr_safe)
+              as [rest_value Hrest_full].
+            pose proof Hrest_full as Hrest_local.
+            rewrite expression_fuel_is_successor in Hrest_local.
+            simpl in Hrest_local.
+            rewrite expression_fuel_is_successor.
+            simpl.
+            rewrite Hitem_child, Hrest_local.
+            reflexivity.
+          Qed.
+
+          Lemma nullable_alternative_canonical_later_case :
+            forall item rest,
+              NullableAlternativeWitness phase1_surface_rules rest ->
+              NullableAlternativeCanonicalProperty rest ->
+              NullableAlternativeCanonicalProperty (item :: rest).
+          Proof.
+            intros item rest _ IHrest Hsafe.
+            rewrite expression_fuel_is_successor in Hsafe.
+            simpl in Hsafe.
+            apply andb_true_iff in Hsafe as [Hhead_safe Hrest_safe].
+            apply andb_true_iff in Hhead_safe as [_ Hitem_safe].
+            destruct (choice_safe_nullable_defined
+              expression_child_fuel item Hitem_safe)
+              as [item_value Hitem_child].
+            assert (Hrest_safe_full :
+              choice_bodies_nonnullable_fuel
+                expression_fuel (EAlternative rest) = true).
+            {
+              rewrite expression_fuel_is_successor.
+              simpl.
+              exact Hrest_safe.
+            }
+            pose proof (IHrest Hrest_safe_full) as Hrest_full.
+            pose proof Hrest_full as Hrest_local.
+            rewrite expression_fuel_is_successor in Hrest_local.
+            simpl in Hrest_local.
+            rewrite expression_fuel_is_successor.
+            simpl.
+            rewrite Hitem_child, Hrest_local.
+            destruct item_value; reflexivity.
+          Qed.
+
+          Theorem phase1_surface_nullable_witness_canonical_sound :
+            (forall expression,
+              NullableWitness phase1_surface_rules expression ->
+              NullableWitnessCanonicalProperty expression) /\
+            (forall items,
+              NullableSequenceWitness phase1_surface_rules items ->
+              NullableSequenceCanonicalProperty items) /\
+            (forall items,
+              NullableAlternativeWitness phase1_surface_rules items ->
+              NullableAlternativeCanonicalProperty items).
+          Proof.
+            apply NullableWitness_mutind.
+            - exact nullable_canonical_nonterminal_case.
+            - exact nullable_canonical_sequence_case.
+            - exact nullable_canonical_alternative_case.
+            - exact nullable_canonical_optional_case.
+            - exact nullable_canonical_repetition_case.
+            - exact nullable_sequence_canonical_nil_case.
+            - exact nullable_sequence_canonical_cons_case.
+            - exact nullable_alternative_canonical_here_case.
+            - exact nullable_alternative_canonical_later_case.
+          Qed.
+
+          Corollary phase1_surface_nullable_witness_matches_computed_facts :
+            forall expression,
+              NullableWitness phase1_surface_rules expression ->
+              choice_bodies_nonnullable_fuel expression_fuel expression = true ->
+              nullable_expression phase1_surface_nullable_facts expression = true.
+          Proof.
+            intros expression Hnullable Hsafe.
+            pose proof
+              (proj1 phase1_surface_nullable_witness_canonical_sound
+                expression Hnullable Hsafe)
+              as Heval.
+            unfold nullable_expression.
+            rewrite Heval.
+            reflexivity.
+          Qed.
+          '''
+          path.write_text(source[:block_start] + canonical + source[block_end:])
+          PY
+
+      - name: Compile witness soundness with timing
+        shell: bash
+        run: |
+          set -euo pipefail
+          export PATH="/home/rocq/.opam/${COMPILER}/bin:$PATH"
+          rocq c -Q proof/Phil Phil proof/Phil/Surface/Grammar.v
+          rocq c -Q proof/Phil Phil proof/Phil/Surface/GrammarDerivation.v
+          rocq c -Q proof/Phil Phil proof/Phil/Surface/GrammarDerivationOracle.v
+          rocq c -Q proof/Phil Phil proof/Phil/Surface/GrammarDeterminacyCertificate.v
+          rocq c -Q proof/Phil Phil proof/Phil/Surface/GrammarDeterminacyNullableFirst.v
+          rocq c -Q proof/Phil Phil proof/Phil/Surface/GrammarDeterminacyFollowOverlap.v
+          rocq c -Q proof/Phil Phil proof/Phil/Surface/GrammarDeterminacySimpleResolvers.v
+          rocq c -Q proof/Phil Phil proof/Phil/Surface/GrammarDeterminacyStructuralResolvers.v
+          rocq c -Q proof/Phil Phil proof/Phil/Surface/GrammarDeterminacyPredictiveOracle.v
+          rocq c -Q proof/Phil Phil proof/Phil/Surface/GrammarDerivationLookahead.v
+          timeout 300s rocq c -time -Q proof/Phil Phil \
+            proof/Phil/Surface/GrammarDeterminacyWitnessSoundness.v
