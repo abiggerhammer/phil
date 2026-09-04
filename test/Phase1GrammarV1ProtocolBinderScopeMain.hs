@@ -453,8 +453,8 @@ semanticProtocolSessionsAreAlphaStable = do
     [ "protocol RenamedSemanticAlpha {"
     , "  role Client = send (bytes : Bytes[4]) then"
     , "    send (checksum : Bytes[len(bytes)]) then end Done;"
-    , "  role Server = receive (data : Bytes[4]) then"
-    , "    receive (check : Bytes[len(data)]) then end Done;"
+    , "  role Server = receive (chunk : Bytes[4]) then"
+    , "    receive (check : Bytes[len(chunk)]) then end Done;"
     , "}"
     ]
   let declarationKey = DeclarationKey "decl.SemanticProtocolAlpha"
