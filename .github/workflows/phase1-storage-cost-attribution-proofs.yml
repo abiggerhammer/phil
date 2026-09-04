@@ -7,13 +7,21 @@ on:
       - 'proof/Phil/Core/RuntimePrimitiveIdentity.v'
       - 'proof/Phil/Core/SystemsRuntimeGraph.v'
       - 'proof/Phil/Core/StorageCostAttribution.v'
+      - 'proof/Phil/Core/StorageCostAttributionImplementation.v'
+      - 'proof/Phil/Core/StorageCostAttributionImplementationExtraction.v'
       - 'src/Phil/Systems/Storage.hs'
+      - 'src/Phil/Systems/StorageRealizationCertification.hs'
       - 'src/Phil/Systems/RuntimeClaimBinding.hs'
       - 'src/Phil/Systems/RuntimePrimitiveReuse.hs'
       - 'src/Phil/Systems/CostAttribution.hs'
+      - 'src/Phil/Systems/StageClosure.hs'
+      - 'app/StorageCostAttributionDecisionCorrespondenceMain.hs'
+      - 'app/StorageRealizationProductionBindingMain.hs'
       - 'test/Phase1StorageRealizationMain.hs'
       - 'test/Phase1CostAttributionMain.hs'
+      - 'test/Phase1StageClosureMain.hs'
       - 'docs/phase-1/storage-cost-attribution-proof-v1.md'
+      - 'docs/phase-1/storage-cost-attribution-implementation-refinement-v1.md'
       - '.github/workflows/phase1-storage-cost-attribution-proofs.yml'
   push:
     branches: [main]
@@ -21,7 +29,11 @@ on:
       - 'proof/Phil/Core/RuntimePrimitiveIdentity.v'
       - 'proof/Phil/Core/SystemsRuntimeGraph.v'
       - 'proof/Phil/Core/StorageCostAttribution.v'
+      - 'proof/Phil/Core/StorageCostAttributionImplementation.v'
+      - 'proof/Phil/Core/StorageCostAttributionImplementationExtraction.v'
+      - 'app/StorageCostAttributionDecisionCorrespondenceMain.hs'
       - 'docs/phase-1/storage-cost-attribution-proof-v1.md'
+      - 'docs/phase-1/storage-cost-attribution-implementation-refinement-v1.md'
       - '.github/workflows/phase1-storage-cost-attribution-proofs.yml'
 
 permissions:
@@ -35,7 +47,7 @@ jobs:
       options: --user root
     steps:
       - uses: actions/checkout@v4
-      - name: Compile certified predecessors and PHIL-MEM-COST-001
+      - name: Compile certified predecessors and PHIL-MEM-COST-001 implementation refinement
         shell: bash
         run: |
           set -euo pipefail
@@ -65,7 +77,11 @@ jobs:
           rocq c -Q proof/Phil Phil proof/Phil/Core/RuntimePrimitiveIdentity.v
           rocq c -Q proof/Phil Phil proof/Phil/Core/SystemsRuntimeGraph.v
           rocq c -Q proof/Phil Phil proof/Phil/Core/StorageCostAttribution.v
-      - name: Record proof identities
+          rocq c -Q proof/Phil Phil proof/Phil/Core/StorageCostAttributionImplementation.v
+          rm -f StorageCostAttributionKernel.hs
+          rocq c -Q proof/Phil Phil proof/Phil/Core/StorageCostAttributionImplementationExtraction.v
+          test -s StorageCostAttributionKernel.hs
+      - name: Record proof and exact kernel identities
         shell: bash
         run: |
           set -euo pipefail
@@ -73,6 +89,9 @@ jobs:
           cp \
             proof/Phil/Core/StorageCostAttribution.v \
             proof/Phil/Core/StorageCostAttribution.vo \
+            proof/Phil/Core/StorageCostAttributionImplementation.v \
+            proof/Phil/Core/StorageCostAttributionImplementation.vo \
+            StorageCostAttributionKernel.hs \
             storage-cost-attribution-proof/
           sha256sum \
             proof/Phil/Core/StorageRealization.v \
@@ -80,10 +99,22 @@ jobs:
             proof/Phil/Core/SystemsRuntimeGraph.v \
             proof/Phil/Core/StorageCostAttribution.v \
             proof/Phil/Core/StorageCostAttribution.vo \
+            proof/Phil/Core/StorageCostAttributionImplementation.v \
+            proof/Phil/Core/StorageCostAttributionImplementation.vo \
+            StorageCostAttributionKernel.hs \
+            src/SystemsRuntimeGraphKernel.hs \
+            src/Phil/Systems/Storage.hs \
+            src/Phil/Systems/StorageRealizationCertification.hs \
+            src/Phil/Systems/CostAttribution.hs \
+            src/Phil/Systems/StageClosure.hs \
+            app/StorageCostAttributionDecisionCorrespondenceMain.hs \
+            test/Phase1StorageRealizationMain.hs \
+            test/Phase1CostAttributionMain.hs \
+            test/Phase1StageClosureMain.hs \
             > storage-cost-attribution-proof/PHIL-MEM-COST-001.proof.sha256
           {
             echo 'obligation=PHIL-MEM-COST-001'
-            echo 'evidence=Rocq-9.2.0'
+            echo 'evidence=Rocq-9.2.0-machine-refinement-staging'
             cat storage-cost-attribution-proof/PHIL-MEM-COST-001.proof.sha256
           } > storage-cost-attribution-proof/PHIL-MEM-COST-001.proof-certificate.txt
           cat storage-cost-attribution-proof/PHIL-MEM-COST-001.proof-certificate.txt
@@ -104,13 +135,26 @@ jobs:
           cabal-version: 'latest'
       - name: Build ordinary regression substrate
         run: cabal build all --enable-tests
-      - name: Strict typecheck storage and cost implementation
+      - uses: actions/download-artifact@v4
+        with:
+          name: rocq-storage-cost-attribution-proof
+          path: storage-cost-attribution-proof
+      - name: Strict typecheck exact extracted kernel and current correspondence surfaces
         run: |
           set -euo pipefail
+          cp storage-cost-attribution-proof/StorageCostAttributionKernel.hs .
+          cabal exec -- ghc -i. -Wall -Werror -Wno-unused-imports -fno-code StorageCostAttributionKernel.hs
           cabal exec -- ghc -isrc -Wall -Werror -fno-code src/Phil/Systems/Storage.hs
+          cabal exec -- ghc -isrc -Wall -Werror -fno-code src/Phil/Systems/StorageRealizationCertification.hs
           cabal exec -- ghc -isrc -Wall -Werror -Wno-name-shadowing -fno-code src/Phil/Systems/CostAttribution.hs
-      - name: Re-run unchanged MEM-006 and SYS-018 correspondence corpora
+          cabal exec -- ghc -i. -Wall -Werror -Wno-unused-imports -fno-code app/StorageCostAttributionDecisionCorrespondenceMain.hs
+      - name: Execute exact extracted-kernel controls
+        run: cabal exec -- runghc -i. -Wall -Werror -Wno-unused-imports app/StorageCostAttributionDecisionCorrespondenceMain.hs
+      - name: Re-run implementation-refined StorageRealization predecessor
+        run: cabal exec -- runghc -Wall -Werror -isrc app/StorageRealizationProductionBindingMain.hs
+      - name: Re-run unchanged MEM-006, SYS-018, and production-bound runtime-graph integration corpora
         run: |
           set -euo pipefail
           cabal exec -- runghc -isrc test/Phase1StorageRealizationMain.hs
           cabal exec -- runghc -isrc test/Phase1CostAttributionMain.hs
+          cabal exec -- runghc -isrc test/Phase1StageClosureMain.hs
