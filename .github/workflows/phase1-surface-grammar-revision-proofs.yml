@@ -6,10 +6,14 @@ on:
       - 'grammar/phase1-surface.ebnf'
       - 'scripts/derive_phase1_surface_grammar.py'
       - 'proof/Phil/Surface/GrammarRevision.v'
+      - 'proof/Phil/Surface/GrammarRevisionImplementation.v'
+      - 'proof/Phil/Surface/GrammarRevisionImplementationExtraction.v'
       - 'src/Phil/Surface/Lineage.hs'
+      - 'app/GrammarRevisionDecisionCorrespondenceMain.hs'
       - 'test/Phase1GrammarRevisionBindingMain.hs'
       - 'test/Phase1PortableSourceLineageMain.hs'
       - 'docs/phase-1/surface-grammar-revision-proof-v1.md'
+      - 'docs/phase-1/surface-grammar-revision-implementation-refinement-v1.md'
       - '.github/workflows/phase1-surface-grammar-revision-proofs.yml'
   push:
     branches: [main]
@@ -17,10 +21,14 @@ on:
       - 'grammar/phase1-surface.ebnf'
       - 'scripts/derive_phase1_surface_grammar.py'
       - 'proof/Phil/Surface/GrammarRevision.v'
+      - 'proof/Phil/Surface/GrammarRevisionImplementation.v'
+      - 'proof/Phil/Surface/GrammarRevisionImplementationExtraction.v'
       - 'src/Phil/Surface/Lineage.hs'
+      - 'app/GrammarRevisionDecisionCorrespondenceMain.hs'
       - 'test/Phase1GrammarRevisionBindingMain.hs'
       - 'test/Phase1PortableSourceLineageMain.hs'
       - 'docs/phase-1/surface-grammar-revision-proof-v1.md'
+      - 'docs/phase-1/surface-grammar-revision-implementation-refinement-v1.md'
       - '.github/workflows/phase1-surface-grammar-revision-proofs.yml'
 
 permissions:
@@ -59,14 +67,18 @@ jobs:
         with:
           name: exact-phase1-surface-grammar
           path: proof/Phil/Surface
-      - name: Compile exact Grammar-v1 artifact and PHIL-SURFACE-REV-001
+      - name: Compile exact Grammar-v1 revision and implementation refinement
         shell: bash
         run: |
           set -euo pipefail
           export PATH="/home/rocq/.opam/${COMPILER}/bin:$PATH"
           rocq c -Q proof/Phil Phil proof/Phil/Surface/Grammar.v
           rocq c -Q proof/Phil Phil proof/Phil/Surface/GrammarRevision.v
-      - name: Record proof identities
+          rocq c -Q proof/Phil Phil proof/Phil/Surface/GrammarRevisionImplementation.v
+          rm -f GrammarRevisionKernel.hs
+          rocq c -Q proof/Phil Phil proof/Phil/Surface/GrammarRevisionImplementationExtraction.v
+          test -s GrammarRevisionKernel.hs
+      - name: Record proof and exact kernel identities
         shell: bash
         run: |
           set -euo pipefail
@@ -76,6 +88,9 @@ jobs:
             proof/Phil/Surface/Grammar.vo \
             proof/Phil/Surface/GrammarRevision.v \
             proof/Phil/Surface/GrammarRevision.vo \
+            proof/Phil/Surface/GrammarRevisionImplementation.v \
+            proof/Phil/Surface/GrammarRevisionImplementation.vo \
+            GrammarRevisionKernel.hs \
             surface-grammar-revision-proof/
           sha256sum \
             grammar/phase1-surface.ebnf \
@@ -83,12 +98,18 @@ jobs:
             proof/Phil/Surface/Grammar.vo \
             proof/Phil/Surface/GrammarRevision.v \
             proof/Phil/Surface/GrammarRevision.vo \
+            proof/Phil/Surface/GrammarRevisionImplementation.v \
+            proof/Phil/Surface/GrammarRevisionImplementation.vo \
+            GrammarRevisionKernel.hs \
             src/Phil/Surface/Lineage.hs \
+            app/GrammarRevisionDecisionCorrespondenceMain.hs \
             test/Phase1GrammarRevisionBindingMain.hs \
+            test/Phase1PortableSourceLineageMain.hs \
+            docs/phase-1/surface-grammar-revision-implementation-refinement-v1.md \
             > surface-grammar-revision-proof/PHIL-SURFACE-REV-001.proof.sha256
           {
             echo 'obligation=PHIL-SURFACE-REV-001'
-            echo 'evidence=Rocq-9.2.0'
+            echo 'evidence=Rocq-9.2.0-machine-refinement-staging'
             cat surface-grammar-revision-proof/PHIL-SURFACE-REV-001.proof.sha256
           } > surface-grammar-revision-proof/PHIL-SURFACE-REV-001.proof-certificate.txt
           cat surface-grammar-revision-proof/PHIL-SURFACE-REV-001.proof-certificate.txt
@@ -109,12 +130,20 @@ jobs:
           cabal-version: 'latest'
       - name: Build ordinary regression substrate
         run: cabal build all --enable-tests
-      - name: Strict typecheck lineage implementation and revision corpus
+      - uses: actions/download-artifact@v4
+        with:
+          name: rocq-surface-grammar-revision-proof
+          path: surface-grammar-revision-proof
+      - name: Strict typecheck exact kernel, lineage implementation, and corpora
         run: |
           set -euo pipefail
+          cabal exec -- ghc -i"$PWD/surface-grammar-revision-proof" -Wall -Werror -Wno-unused-imports -fno-code surface-grammar-revision-proof/GrammarRevisionKernel.hs
+          cabal exec -- ghc -i"$PWD/surface-grammar-revision-proof" -Wall -Werror -fno-code app/GrammarRevisionDecisionCorrespondenceMain.hs
           cabal exec -- ghc -isrc -Wall -Werror -fno-code src/Phil/Surface/Lineage.hs
           cabal exec -- ghc -isrc -Wall -Werror -fno-code test/Phase1GrammarRevisionBindingMain.hs
           cabal exec -- ghc -isrc -Wall -Werror -fno-code test/Phase1PortableSourceLineageMain.hs
+      - name: Execute exact extracted-kernel controls
+        run: cabal exec -- runghc -i"$PWD/surface-grammar-revision-proof" -Wall -Werror app/GrammarRevisionDecisionCorrespondenceMain.hs
       - name: Recompute exact Grammar-v1 SHA and rerun SURF-006
         run: cabal exec -- runghc -Wall -Werror -isrc test/Phase1GrammarRevisionBindingMain.hs
       - name: Re-run unchanged portable lineage corpus
