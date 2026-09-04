@@ -4,13 +4,22 @@ module Main (main) where
 
 import qualified Data.Text as Text
 import Phil.Core.Static (DeclarationKey (..))
+import Phil.Core.Syntax (Value (..))
 import Phil.Surface.GrammarV1.BinderScope
-  ( GrammarV1BinderScopeError (..)
+  ( GrammarV1BinderKey
+  , GrammarV1BinderScopeError (..)
   , GrammarV1ResolvedBinder (..)
   , grammarV1ClosureParameterScope
   , grammarV1FunctionParameterScope
   , grammarV1LeaveLexicalScope
   , grammarV1ResolveLocal
+  )
+import Phil.Surface.GrammarV1.ParameterBodyScope
+  ( GrammarV1CheckedLocalValueOccurrence (..)
+  , GrammarV1CheckedParameterBody (..)
+  , GrammarV1ParameterBodyError (..)
+  , grammarV1CheckedClosureParameterBody
+  , grammarV1CheckedFunctionParameterBody
   )
 import Phil.Surface.GrammarV1.Parser
 import Phil.Surface.Syntax (Located (..))
@@ -29,6 +38,16 @@ main = do
         siblingScopesReuseSpellingDistinctly
     , test "SURF-009 declaration roots keep equal local ordinals distinct"
         declarationRootsSeparateBinderIdentity
+    , test "SURF-009 function body parameter occurrences keep alpha-stable semantic identity"
+        functionBodyParameterOccurrencesResolve
+    , test "SURF-009 closure body resolves enclosing and local parameters to exact occurrences"
+        closureBodyResolvesOuterAndLocalParameters
+    , test "SURF-009 unknown bare body names remain outside local-binder competence"
+        unknownBodyNameRemainsOutsideCompetence
+    , test "SURF-009 let-bound bodies remain for the later pattern-binder slice"
+        letBodyRemainsOutsideCompetence
+    , test "SURF-009 body route preserves duplicate-parameter rejection"
+        parameterBodyPreservesDuplicateRejection
     ]
   if and results then pure () else exitFailure
 
@@ -174,7 +193,144 @@ declarationRootsSeparateBinderIdentity = do
   assert
     (grammarV1ResolvedBinderCoreName leftBinder
       /= grammarV1ResolvedBinderCoreName rightBinder)
-    "different declaration roots reused one Core binder name"
+    "different declaration roots reused one Core name"
+
+functionBodyParameterOccurrencesResolve :: Either String ()
+functionBodyParameterOccurrencesResolve = do
+  original <- onlyFunction "binder-body-original" $ Text.unlines
+    [ "fn body_scope(x : U8, y : U8) -> U8 satisfies C {"
+    , "  x;"
+    , "  return (y);"
+    , "}"
+    ]
+  renamed <- onlyFunction "binder-body-renamed" $ Text.unlines
+    [ "fn body_scope(left : U8, right : U8) -> U8 satisfies C {"
+    , "    left;"
+    , "    return ((right));"
+    , "}"
+    ]
+  let declarationKey = DeclarationKey "decl.BodyScope"
+  originalChecked <- checkedFunctionBody declarationKey original
+  renamedChecked <- checkedFunctionBody declarationKey renamed
+  assert
+    (bodyOccurrenceKeys originalChecked == bodyOccurrenceKeys renamedChecked)
+    "alpha-renaming changed resolved body occurrence identity"
+  assert
+    (bodyCoreValues originalChecked == expectedBinderCoreValues originalChecked)
+    "original body occurrences did not use exact generated Core names"
+  assert
+    (bodyCoreValues renamedChecked == expectedBinderCoreValues renamedChecked)
+    "renamed body occurrences did not use exact generated Core names"
+  assert
+    (map grammarV1ResolvedBinderDisplayName
+      (grammarV1CheckedParameterBinders originalChecked) == ["x", "y"])
+    "original body binder display spellings were not preserved diagnostically"
+  assert
+    (map grammarV1ResolvedBinderDisplayName
+      (grammarV1CheckedParameterBinders renamedChecked) == ["left", "right"])
+    "renamed body binder display spellings were not preserved diagnostically"
+
+closureBodyResolvesOuterAndLocalParameters :: Either String ()
+closureBodyResolvesOuterAndLocalParameters = do
+  outerFunction <- onlyFunction "binder-body-outer" $ Text.unlines
+    [ "fn outer_scope(seed : U8) -> U8 satisfies C {"
+    , "  return seed;"
+    , "}"
+    ]
+  closure <- onlyClosure "binder-body-closure" $ Text.unlines
+    [ "component Holder() {"
+    , "  closure (item : U8) satisfies C {"
+    , "    seed;"
+    , "    return (item);"
+    , "  };"
+    , "}"
+    ]
+  let declarationKey = DeclarationKey "decl.ClosureBody"
+  (outerBinders, outerScope) <- mapLeft show
+    (grammarV1FunctionParameterScope declarationKey outerFunction)
+  outerBinder <- exactlyOne "outer parameter binder" outerBinders
+  checked <- case grammarV1CheckedClosureParameterBody outerScope closure of
+    Just (Right body) -> Right body
+    other -> Left ("expected checked closure parameter body, got " <> show other)
+  localBinder <- exactlyOne
+    "closure parameter binder"
+    (grammarV1CheckedParameterBinders checked)
+  assert
+    (bodyOccurrenceKeys checked
+      == [ grammarV1ResolvedBinderKey outerBinder
+         , grammarV1ResolvedBinderKey localBinder
+         ])
+    "closure body did not resolve outer then local parameter occurrences exactly"
+  assert
+    (bodyCoreValues checked
+      == [ VVar (grammarV1ResolvedBinderCoreName outerBinder)
+         , VVar (grammarV1ResolvedBinderCoreName localBinder)
+         ])
+    "closure body Core values did not preserve exact outer/local binder names"
+
+unknownBodyNameRemainsOutsideCompetence :: Either String ()
+unknownBodyNameRemainsOutsideCompetence = do
+  functionDecl <- onlyFunction "binder-body-global" $ Text.unlines
+    [ "fn global_scope(x : U8) -> U8 satisfies C {"
+    , "  return helper;"
+    , "}"
+    ]
+  case grammarV1CheckedFunctionParameterBody
+      (DeclarationKey "decl.GlobalScope") functionDecl of
+    Nothing -> Right ()
+    other -> Left ("unknown bare name was misclassified as a local binder: " <> show other)
+
+letBodyRemainsOutsideCompetence :: Either String ()
+letBodyRemainsOutsideCompetence = do
+  functionDecl <- onlyFunction "binder-body-let" $ Text.unlines
+    [ "fn let_scope(x : U8) -> U8 satisfies C {"
+    , "  let y = x;"
+    , "  return y;"
+    , "}"
+    ]
+  case grammarV1CheckedFunctionParameterBody
+      (DeclarationKey "decl.LetScope") functionDecl of
+    Nothing -> Right ()
+    other -> Left ("let-bound body escaped the later pattern-binder slice: " <> show other)
+
+parameterBodyPreservesDuplicateRejection :: Either String ()
+parameterBodyPreservesDuplicateRejection = do
+  functionDecl <- onlyFunction "binder-body-duplicate" $ Text.unlines
+    [ "fn duplicate_scope(x : U8, x : U8) -> U8 satisfies C {"
+    , "  return x;"
+    , "}"
+    ]
+  case grammarV1CheckedFunctionParameterBody
+      (DeclarationKey "decl.DuplicateScope") functionDecl of
+    Just (Left (GrammarV1ParameterBodyBinderError
+      (GrammarV1DuplicateBinder duplicate previous))) -> do
+        assert (locatedValue duplicate == "x")
+          "body duplicate diagnostic lost duplicate spelling"
+        assert (grammarV1ResolvedBinderDisplayName previous == "x")
+          "body duplicate diagnostic lost previous binder"
+    other -> Left ("expected body duplicate-binder rejection, got " <> show other)
+
+checkedFunctionBody
+  :: DeclarationKey
+  -> GrammarV1FunctionDecl
+  -> Either String GrammarV1CheckedParameterBody
+checkedFunctionBody declarationKey functionDecl =
+  case grammarV1CheckedFunctionParameterBody declarationKey functionDecl of
+    Just (Right checked) -> Right checked
+    other -> Left ("expected checked function parameter body, got " <> show other)
+
+bodyOccurrenceKeys :: GrammarV1CheckedParameterBody -> [GrammarV1BinderKey]
+bodyOccurrenceKeys =
+  map (grammarV1ResolvedBinderKey . grammarV1CheckedLocalValueBinder)
+    . grammarV1CheckedParameterOccurrences
+
+bodyCoreValues :: GrammarV1CheckedParameterBody -> [Value]
+bodyCoreValues =
+  map grammarV1CheckedLocalValueCore . grammarV1CheckedParameterOccurrences
+
+expectedBinderCoreValues :: GrammarV1CheckedParameterBody -> [Value]
+expectedBinderCoreValues =
+  map (VVar . grammarV1ResolvedBinderCoreName) . grammarV1CheckedParameterBinders
 
 onlyFunction :: Text.Text -> Text.Text -> Either String GrammarV1FunctionDecl
 onlyFunction label source = do
