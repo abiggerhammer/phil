@@ -35,6 +35,9 @@ import Phil.Surface.Check.Types
   , SurfaceCheckError
   , SurfaceState
   )
+import Phil.Surface.GrammarV1.BinderScope
+  ( GrammarV1ResolvedBinder (..)
+  )
 import Phil.Surface.GrammarV1.CheckedType
   ( grammarV1CheckedTypeMode
   )
@@ -350,7 +353,7 @@ checkedInsertParam
         , [GrammarV1CheckedProtocolBinder]
         ))
 checkedInsertParam staticContext roleKey site source@(Located _ parameter) state evidence = do
-  (checkedBinder, remaining) <- pure $ consumeBinderEvidence roleKey site source evidence
+  let (checkedBinder, remaining) = consumeBinderEvidence roleKey site source evidence
   case checkedBinder of
     Left err -> pure (Left err)
     Right binderEvidence ->
