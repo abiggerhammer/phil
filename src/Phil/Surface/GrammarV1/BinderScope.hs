@@ -43,6 +43,8 @@ data GrammarV1BinderKind
   | GrammarV1BorrowViewBinder
   | GrammarV1JoinStateBinder
   | GrammarV1LoopStateBinder
+  | GrammarV1ProtocolMessageBinder
+  | GrammarV1ProtocolBranchPayloadBinder
   deriving (Eq, Ord, Show)
 
 -- | Semantic identity for one local source binder. Display spelling and source
