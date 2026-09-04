@@ -1,6 +1,6 @@
 From Stdlib Require Import Bool.Bool.
 
-From Phil.Core Require Import StorageCostAttribution.
+From Phil.Core Require Import SystemsRuntimeGraph StorageCostAttribution.
 
 (*
   Machine-facing decision surface for PHIL-MEM-COST-001.
