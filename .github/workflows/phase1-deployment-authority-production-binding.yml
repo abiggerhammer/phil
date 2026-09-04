@@ -1,0 +1,129 @@
+name: Phase 1 Deployment Authority Production Binding
+
+on:
+  pull_request:
+    paths:
+      - 'proof/Phil/Assurance/DeploymentQualification.v'
+      - 'proof/Phil/Assurance/DeploymentAuthority.v'
+      - 'proof/Phil/Assurance/DeploymentAuthorityImplementation.v'
+      - 'proof/Phil/Assurance/DeploymentAuthorityImplementationExtraction.v'
+      - 'generated/DeploymentAuthorityKernel.hs'
+      - 'src/DeploymentQualificationKernel.hs'
+      - 'src/DeploymentAuthorityKernel.hs'
+      - 'src/Phil/Assurance/DeploymentQualification.hs'
+      - 'src/Phil/Assurance/DeploymentQualificationCertification.hs'
+      - 'src/Phil/Assurance/DeploymentAuthority.hs'
+      - 'src/Phil/Assurance/DeploymentAuthorityCertification.hs'
+      - 'app/DeploymentAuthorityDecisionCorrespondenceMain.hs'
+      - 'app/DeploymentAuthorityProductionBindingMain.hs'
+      - 'test/Phase1DeploymentQualificationMain.hs'
+      - 'test/Phase1DeploymentAuthorityMain.hs'
+      - 'docs/phase-1/deployment-authority-production-binding-v1.md'
+      - '.github/workflows/phase1-deployment-authority-production-binding.yml'
+  push:
+    branches: [main]
+    paths:
+      - 'generated/DeploymentAuthorityKernel.hs'
+      - 'src/DeploymentAuthorityKernel.hs'
+      - 'src/Phil/Assurance/DeploymentAuthorityCertification.hs'
+      - 'app/DeploymentAuthorityProductionBindingMain.hs'
+      - 'docs/phase-1/deployment-authority-production-binding-v1.md'
+      - '.github/workflows/phase1-deployment-authority-production-binding.yml'
+
+permissions:
+  contents: read
+
+jobs:
+  exact-deployment-authority-kernel:
+    runs-on: ubuntu-latest
+    container:
+      image: rocq/rocq-prover:9.2.0
+      options: --user root
+    steps:
+      - uses: actions/checkout@v4
+      - name: Freshly extract exact Deployment Authority kernel
+        shell: bash
+        run: |
+          set -euo pipefail
+          export PATH="/home/rocq/.opam/${COMPILER}/bin:$PATH"
+          rocq c -Q proof/Phil Phil proof/Phil/Assurance/DeploymentQualification.v
+          rocq c -Q proof/Phil Phil proof/Phil/Assurance/DeploymentAuthority.v
+          rocq c -Q proof/Phil Phil proof/Phil/Assurance/DeploymentAuthorityImplementation.v
+          rm -f DeploymentAuthorityKernel.hs
+          rocq c -Q proof/Phil Phil proof/Phil/Assurance/DeploymentAuthorityImplementationExtraction.v
+          test -s DeploymentAuthorityKernel.hs
+          echo 'f47b41f780eb6f4123b8fce7d996b35f2394bcda3e03adba9003504b6d668bad  DeploymentAuthorityKernel.hs' | sha256sum -c -
+          cmp DeploymentAuthorityKernel.hs generated/DeploymentAuthorityKernel.hs
+          cmp DeploymentAuthorityKernel.hs src/DeploymentAuthorityKernel.hs
+      - name: Record exact kernel identity
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p deployment-authority-exact-kernel
+          cp DeploymentAuthorityKernel.hs deployment-authority-exact-kernel/
+          sha256sum \
+            DeploymentAuthorityKernel.hs \
+            generated/DeploymentAuthorityKernel.hs \
+            src/DeploymentAuthorityKernel.hs \
+            > deployment-authority-exact-kernel/PHIL-DEPLOY-AUTH-001.kernel.sha256
+          cat deployment-authority-exact-kernel/PHIL-DEPLOY-AUTH-001.kernel.sha256
+      - uses: actions/upload-artifact@v4
+        with:
+          name: deployment-authority-exact-kernel
+          path: deployment-authority-exact-kernel
+          if-no-files-found: error
+
+  verify-deployment-authority-production-binding:
+    needs: exact-deployment-authority-kernel
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: haskell-actions/setup@v2
+        with:
+          ghc-version: '9.6.7'
+          cabal-version: 'latest'
+      - name: Build broad regression surface
+        run: cabal build all --enable-tests
+      - name: Strictly typecheck bound Deployment Authority surface
+        run: |
+          set -euo pipefail
+          cabal exec -- ghc -isrc -Wall -Werror -Wno-unused-imports -fno-code src/DeploymentQualificationKernel.hs
+          cabal exec -- ghc -isrc -Wall -Werror -Wno-unused-imports -fno-code src/DeploymentAuthorityKernel.hs
+          cabal exec -- ghc -isrc -Wall -Werror -Wno-name-shadowing -fno-code src/Phil/Assurance/DeploymentQualification.hs
+          cabal exec -- ghc -isrc -Wall -Werror -Wno-name-shadowing -fno-code src/Phil/Assurance/DeploymentQualificationCertification.hs
+          cabal exec -- ghc -isrc -Wall -Werror -Wno-name-shadowing -fno-code src/Phil/Assurance/DeploymentAuthority.hs
+          cabal exec -- ghc -isrc -Wall -Werror -Wno-name-shadowing -fno-code src/Phil/Assurance/DeploymentAuthorityCertification.hs
+          cabal exec -- ghc -isrc -Wall -Werror -Wno-name-shadowing -Wno-unused-imports -fno-code app/DeploymentAuthorityDecisionCorrespondenceMain.hs
+          cabal exec -- ghc -isrc -Wall -Werror -Wno-name-shadowing -fno-code app/DeploymentAuthorityProductionBindingMain.hs
+          cabal exec -- ghc -isrc -Wall -Werror -Wno-name-shadowing -fno-code test/Phase1DeploymentQualificationMain.hs
+          cabal exec -- ghc -isrc -Wall -Werror -Wno-name-shadowing -fno-code test/Phase1DeploymentAuthorityMain.hs
+      - name: Execute exact extracted-kernel controls
+        run: cabal exec -- runghc -Wall -Werror -Wno-name-shadowing -Wno-unused-imports -isrc app/DeploymentAuthorityDecisionCorrespondenceMain.hs
+      - name: Execute production-binding controls
+        run: cabal exec -- runghc -Wall -Werror -Wno-name-shadowing -isrc app/DeploymentAuthorityProductionBindingMain.hs
+      - name: Re-run implementation-refined DEP-003 through DEP-005 predecessor corpus
+        run: cabal exec -- runghc -Wall -Werror -Wno-name-shadowing -isrc test/Phase1DeploymentQualificationMain.hs
+      - name: Re-run unchanged DEP-006 authority corpus
+        run: cabal exec -- runghc -Wall -Werror -Wno-name-shadowing -isrc test/Phase1DeploymentAuthorityMain.hs
+      - name: Record production binding identities
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p deployment-authority-production-binding
+          sha256sum \
+            src/DeploymentQualificationKernel.hs \
+            src/DeploymentAuthorityKernel.hs \
+            src/Phil/Assurance/DeploymentQualificationCertification.hs \
+            src/Phil/Assurance/DeploymentAuthority.hs \
+            src/Phil/Assurance/DeploymentAuthorityCertification.hs \
+            app/DeploymentAuthorityDecisionCorrespondenceMain.hs \
+            app/DeploymentAuthorityProductionBindingMain.hs \
+            test/Phase1DeploymentQualificationMain.hs \
+            test/Phase1DeploymentAuthorityMain.hs \
+            > deployment-authority-production-binding/PHIL-DEPLOY-AUTH-001.production.sha256
+          cat deployment-authority-production-binding/PHIL-DEPLOY-AUTH-001.production.sha256
+      - uses: actions/upload-artifact@v4
+        with:
+          name: deployment-authority-production-binding
+          path: deployment-authority-production-binding
+          if-no-files-found: error
