@@ -195,16 +195,13 @@ Proof.
   - unfold delimiter_balance_step in *.
     destruct (delimiter_open_literalb literal) eqn:Hopen.
     + inversion Hstep; subst final_depth.
-      rewrite Hopen.
       reflexivity.
     + destruct (delimiter_close_literalb literal) eqn:Hclose.
       * destruct depth as [| depth].
         -- discriminate Hstep.
         -- inversion Hstep; subst final_depth.
-           rewrite Hopen, Hclose.
            reflexivity.
       * inversion Hstep; subst final_depth.
-        rewrite Hopen, Hclose.
         reflexivity.
   - inversion Hstep; subst final_depth.
     reflexivity.
