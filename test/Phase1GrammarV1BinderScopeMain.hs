@@ -40,12 +40,12 @@ test label result = case result of
 functionAlphaRenamingPreservesSemanticIdentity :: Either String ()
 functionAlphaRenamingPreservesSemanticIdentity = do
   original <- onlyFunction "binder-alpha-original" $ Text.unlines
-    [ "fn bind(x : U8, y : U8) -> U8 satisfies C {"
+    [ "fn alpha_scope(x : U8, y : U8) -> U8 satisfies C {"
     , "  return x;"
     , "}"
     ]
   renamed <- onlyFunction "binder-alpha-renamed" $ Text.unlines
-    [ "fn bind(left : U8, right : U8) -> U8 satisfies C {"
+    [ "fn alpha_scope(left : U8, right : U8) -> U8 satisfies C {"
     , "    return left;"
     , "}"
     ]
