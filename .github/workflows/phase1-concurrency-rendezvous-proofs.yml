@@ -74,7 +74,14 @@ jobs:
           rocq c -Q proof/Phil Phil proof/Phil/Core/ConcurrencySemantics.v
           rocq c -Q proof/Phil Phil proof/Phil/Core/ConcurrencyActivation.v
           rocq c -Q proof/Phil Phil proof/Phil/Core/ConcurrencyRendezvous.v
-          rocq c -Q proof/Phil Phil proof/Phil/Core/ConcurrencyRendezvousImplementation.v
+          rocq c -Q proof/Phil Phil \
+            -ri Phil.Core.Session \
+            -ri Phil.Core.ProtocolIdentity \
+            -ri Phil.Core.ProtocolProjection \
+            -ri Phil.Core.ProtocolMessageAdmissibility \
+            -ri Phil.Core.ConcurrencySemantics \
+            -ri Phil.Core.ConcurrencyActivation \
+            proof/Phil/Core/ConcurrencyRendezvousImplementation.v
           rm -f ConcurrencyRendezvousKernel.hs
           rocq c -Q proof/Phil Phil proof/Phil/Core/ConcurrencyRendezvousImplementationExtraction.v
           test -s ConcurrencyRendezvousKernel.hs
