@@ -656,7 +656,7 @@ Proof.
         apply static_argument_brace_other_separator_tail_commits_effect_set.
         reflexivity.
       * destruct Hrepetition_present
-          as [middle [head_tree [tail_trees [Hhead _]]]].
+          as [middle [head_tree [repetition_tail_trees [Hhead _]]]].
         destruct
           (phase1_surface_sequence_literal_prefix
             (descend
