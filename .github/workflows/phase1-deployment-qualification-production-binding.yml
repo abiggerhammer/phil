@@ -1,0 +1,114 @@
+name: Phase 1 Deployment Qualification Production Binding
+
+on:
+  pull_request:
+    paths:
+      - 'proof/Phil/Assurance/DeploymentQualification.v'
+      - 'proof/Phil/Assurance/DeploymentQualificationImplementation.v'
+      - 'proof/Phil/Assurance/DeploymentQualificationImplementationExtraction.v'
+      - 'generated/DeploymentQualificationKernel.hs'
+      - 'src/DeploymentQualificationKernel.hs'
+      - 'src/Phil/Assurance/DeploymentQualification.hs'
+      - 'src/Phil/Assurance/DeploymentQualificationCertification.hs'
+      - 'app/DeploymentQualificationDecisionCorrespondenceMain.hs'
+      - 'app/DeploymentQualificationProductionBindingMain.hs'
+      - 'test/Phase1DeploymentQualificationMain.hs'
+      - 'docs/phase-1/deployment-qualification-production-binding-v1.md'
+      - '.github/workflows/phase1-deployment-qualification-production-binding.yml'
+  push:
+    branches: [main]
+    paths:
+      - 'generated/DeploymentQualificationKernel.hs'
+      - 'src/DeploymentQualificationKernel.hs'
+      - 'src/Phil/Assurance/DeploymentQualificationCertification.hs'
+      - 'app/DeploymentQualificationProductionBindingMain.hs'
+      - 'docs/phase-1/deployment-qualification-production-binding-v1.md'
+      - '.github/workflows/phase1-deployment-qualification-production-binding.yml'
+
+permissions:
+  contents: read
+
+jobs:
+  exact-deployment-qualification-kernel:
+    runs-on: ubuntu-latest
+    container:
+      image: rocq/rocq-prover:9.2.0
+      options: --user root
+    steps:
+      - uses: actions/checkout@v4
+      - name: Freshly extract exact Deployment Qualification kernel
+        shell: bash
+        run: |
+          set -euo pipefail
+          export PATH="/home/rocq/.opam/${COMPILER}/bin:$PATH"
+          rocq c -Q proof/Phil Phil proof/Phil/Assurance/DeploymentQualification.v
+          rocq c -Q proof/Phil Phil proof/Phil/Assurance/DeploymentQualificationImplementation.v
+          rm -f DeploymentQualificationKernel.hs
+          rocq c -Q proof/Phil Phil proof/Phil/Assurance/DeploymentQualificationImplementationExtraction.v
+          test -s DeploymentQualificationKernel.hs
+          echo '31ebad6b671e91bc4225b95df6fba66e8a2723be3864da6fbf26423a6cd2107a  DeploymentQualificationKernel.hs' | sha256sum -c -
+          cmp DeploymentQualificationKernel.hs generated/DeploymentQualificationKernel.hs
+          cmp DeploymentQualificationKernel.hs src/DeploymentQualificationKernel.hs
+      - name: Record exact kernel identity
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p deployment-qualification-exact-kernel
+          cp DeploymentQualificationKernel.hs deployment-qualification-exact-kernel/
+          sha256sum \
+            DeploymentQualificationKernel.hs \
+            generated/DeploymentQualificationKernel.hs \
+            src/DeploymentQualificationKernel.hs \
+            > deployment-qualification-exact-kernel/PHIL-DEPLOY-QUAL-001.kernel.sha256
+          cat deployment-qualification-exact-kernel/PHIL-DEPLOY-QUAL-001.kernel.sha256
+      - uses: actions/upload-artifact@v4
+        with:
+          name: deployment-qualification-exact-kernel
+          path: deployment-qualification-exact-kernel
+          if-no-files-found: error
+
+  verify-deployment-qualification-production-binding:
+    needs: exact-deployment-qualification-kernel
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: haskell-actions/setup@v2
+        with:
+          ghc-version: '9.6.7'
+          cabal-version: 'latest'
+      - name: Build broad regression surface
+        run: cabal build all --enable-tests
+      - name: Strictly typecheck bound Deployment Qualification surface
+        run: |
+          set -euo pipefail
+          cabal exec -- ghc -isrc -Wall -Werror -Wno-unused-imports -fno-code src/DeploymentQualificationKernel.hs
+          cabal exec -- ghc -isrc -Wall -Werror -Wno-name-shadowing -fno-code src/Phil/Assurance/DeploymentQualification.hs
+          cabal exec -- ghc -isrc -Wall -Werror -Wno-name-shadowing -fno-code src/Phil/Assurance/DeploymentQualificationCertification.hs
+          cabal exec -- ghc -isrc -Wall -Werror -Wno-name-shadowing -Wno-unused-imports -fno-code app/DeploymentQualificationDecisionCorrespondenceMain.hs
+          cabal exec -- ghc -isrc -Wall -Werror -Wno-name-shadowing -fno-code app/DeploymentQualificationProductionBindingMain.hs
+          cabal exec -- ghc -isrc -Wall -Werror -Wno-name-shadowing -fno-code test/Phase1DeploymentQualificationMain.hs
+      - name: Execute exact extracted-kernel controls
+        run: cabal exec -- runghc -Wall -Werror -Wno-name-shadowing -Wno-unused-imports -isrc app/DeploymentQualificationDecisionCorrespondenceMain.hs
+      - name: Execute production-binding controls
+        run: cabal exec -- runghc -Wall -Werror -Wno-name-shadowing -isrc app/DeploymentQualificationProductionBindingMain.hs
+      - name: Re-run unchanged DEP-003 through DEP-005 corpus
+        run: cabal exec -- runghc -Wall -Werror -Wno-name-shadowing -isrc test/Phase1DeploymentQualificationMain.hs
+      - name: Record production binding identities
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p deployment-qualification-production-binding
+          sha256sum \
+            src/DeploymentQualificationKernel.hs \
+            src/Phil/Assurance/DeploymentQualification.hs \
+            src/Phil/Assurance/DeploymentQualificationCertification.hs \
+            app/DeploymentQualificationDecisionCorrespondenceMain.hs \
+            app/DeploymentQualificationProductionBindingMain.hs \
+            test/Phase1DeploymentQualificationMain.hs \
+            > deployment-qualification-production-binding/PHIL-DEPLOY-QUAL-001.production.sha256
+          cat deployment-qualification-production-binding/PHIL-DEPLOY-QUAL-001.production.sha256
+      - uses: actions/upload-artifact@v4
+        with:
+          name: deployment-qualification-production-binding
+          path: deployment-qualification-production-binding
+          if-no-files-found: error
