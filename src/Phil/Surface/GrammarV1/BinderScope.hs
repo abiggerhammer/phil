@@ -44,6 +44,7 @@ import Phil.Surface.Syntax
 data GrammarV1BinderKind
   = GrammarV1FunctionParameterBinder
   | GrammarV1CallableParameterBinder
+  | GrammarV1CallableOutcomeStateBinder
   | GrammarV1ClaimParameterBinder
   | GrammarV1ComponentParameterBinder
   | GrammarV1ClosureParameterBinder
