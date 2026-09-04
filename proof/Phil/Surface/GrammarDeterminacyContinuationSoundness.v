@@ -118,7 +118,7 @@ Lemma choice_bodies_nonnullable_fuel_step_monotone :
 Proof.
   intros fuel.
   induction fuel as [| fuel IH]; intros expression Hsafe.
-  - change false = true in Hsafe.
+  - change (false = true) in Hsafe.
     discriminate.
   - destruct expression as
       [literal | class_name | name | items | items | body | body].
