@@ -409,21 +409,21 @@ Theorem phase1_surface_delimiter_effect_sound :
     forall fuel depth final_depth,
       delimiter_effect_fuel fuel depth expression = Some final_depth ->
       exists consumed,
-        input = consumed ++ rest /\
+        input = List.app consumed rest /\
         delimiter_balance_scan depth consumed = Some final_depth) /\
   (forall path index items input rest trees,
     DerivesSequence phase1_surface_rules path index items input rest trees ->
     forall fuel depth final_depth,
       delimiter_sequence_effect_fuel fuel depth items = Some final_depth ->
       exists consumed,
-        input = consumed ++ rest /\
+        input = List.app consumed rest /\
         delimiter_balance_scan depth consumed = Some final_depth) /\
   (forall path body input rest trees,
     DerivesRepetition phase1_surface_rules path body input rest trees ->
     forall fuel depth,
       delimiter_effect_fuel fuel depth body = Some depth ->
       exists consumed,
-        input = consumed ++ rest /\
+        input = List.app consumed rest /\
         delimiter_balance_scan depth consumed = Some depth).
 Proof.
   apply Derivation_mutind.
@@ -558,7 +558,7 @@ Corollary phase1_surface_nonterminal_derivation_is_delimiter_balanced :
     Derives phase1_surface_rules path (ENonterminal name)
       input rest tree ->
     exists consumed,
-      input = consumed ++ rest /\
+      input = List.app consumed rest /\
       delimiter_balance_scan 0 consumed = Some 0.
 Proof.
   intros path name input rest tree Hderive.
