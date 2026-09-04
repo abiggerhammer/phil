@@ -4,22 +4,36 @@ on:
   pull_request:
     paths:
       - 'proof/Phil/Core/ConcurrencyTerminal.v'
+      - 'proof/Phil/Core/ConcurrencyTerminalImplementation.v'
+      - 'proof/Phil/Core/ConcurrencyTerminalImplementationExtraction.v'
       - 'proof/Phil/Core/ConcurrencyRendezvous.v'
       - 'proof/Phil/Core/ConcurrencyActivation.v'
       - 'proof/Phil/Core/ConcurrencySemantics.v'
       - 'proof/Phil/Core/ProcessTerminal.v'
       - 'proof/Phil/Core/ResourceObligation.v'
       - 'src/Phil/Core/ProcessLifecycle.hs'
+      - 'src/Phil/Core/ConcurrencyActivationCertification.hs'
+      - 'src/Phil/Core/ConcurrencyRendezvousCertification.hs'
+      - 'src/ConcurrencyActivationKernel.hs'
+      - 'src/ConcurrencyRendezvousKernel.hs'
+      - 'app/ConcurrencyActivationProductionBindingMain.hs'
+      - 'app/ConcurrencyRendezvousProductionBindingMain.hs'
+      - 'app/ConcurrencyTerminalDecisionCorrespondenceMain.hs'
       - 'test/Phase1FailureIsolationMain.hs'
       - 'test/Phase1ProcessTerminalClosureMain.hs'
       - 'test/Phase1ParticipantClassificationMain.hs'
       - 'docs/phase-1/concurrency-terminal-proof-v1.md'
+      - 'docs/phase-1/concurrency-terminal-implementation-refinement-v1.md'
       - '.github/workflows/phase1-concurrency-terminal-proofs.yml'
   push:
     branches: [main]
     paths:
       - 'proof/Phil/Core/ConcurrencyTerminal.v'
+      - 'proof/Phil/Core/ConcurrencyTerminalImplementation.v'
+      - 'proof/Phil/Core/ConcurrencyTerminalImplementationExtraction.v'
+      - 'app/ConcurrencyTerminalDecisionCorrespondenceMain.hs'
       - 'docs/phase-1/concurrency-terminal-proof-v1.md'
+      - 'docs/phase-1/concurrency-terminal-implementation-refinement-v1.md'
       - '.github/workflows/phase1-concurrency-terminal-proofs.yml'
 
 permissions:
@@ -33,7 +47,7 @@ jobs:
       options: --user root
     steps:
       - uses: actions/checkout@v4
-      - name: Compile certified predecessors and PHIL-CONC-TERM-001
+      - name: Compile certified predecessors and PHIL-CONC-TERM-001 implementation refinement
         shell: bash
         run: |
           set -euo pipefail
@@ -61,7 +75,11 @@ jobs:
           rocq c -Q proof/Phil Phil proof/Phil/Core/ConcurrencyActivation.v
           rocq c -Q proof/Phil Phil proof/Phil/Core/ConcurrencyRendezvous.v
           rocq c -Q proof/Phil Phil proof/Phil/Core/ConcurrencyTerminal.v
-      - name: Record proof identities
+          rocq c -Q proof/Phil Phil proof/Phil/Core/ConcurrencyTerminalImplementation.v
+          rm -f ConcurrencyTerminalKernel.hs
+          rocq c -Q proof/Phil Phil proof/Phil/Core/ConcurrencyTerminalImplementationExtraction.v
+          test -s ConcurrencyTerminalKernel.hs
+      - name: Record proof and exact kernel identities
         shell: bash
         run: |
           set -euo pipefail
@@ -69,6 +87,9 @@ jobs:
           cp \
             proof/Phil/Core/ConcurrencyTerminal.v \
             proof/Phil/Core/ConcurrencyTerminal.vo \
+            proof/Phil/Core/ConcurrencyTerminalImplementation.v \
+            proof/Phil/Core/ConcurrencyTerminalImplementation.vo \
+            ConcurrencyTerminalKernel.hs \
             concurrency-terminal-proof/
           sha256sum \
             proof/Phil/Core/ProcessTerminal.v \
@@ -77,10 +98,22 @@ jobs:
             proof/Phil/Core/ConcurrencyRendezvous.v \
             proof/Phil/Core/ConcurrencyTerminal.v \
             proof/Phil/Core/ConcurrencyTerminal.vo \
+            proof/Phil/Core/ConcurrencyTerminalImplementation.v \
+            proof/Phil/Core/ConcurrencyTerminalImplementation.vo \
+            ConcurrencyTerminalKernel.hs \
+            src/ConcurrencyActivationKernel.hs \
+            src/ConcurrencyRendezvousKernel.hs \
+            src/Phil/Core/ConcurrencyActivationCertification.hs \
+            src/Phil/Core/ConcurrencyRendezvousCertification.hs \
+            src/Phil/Core/ProcessLifecycle.hs \
+            app/ConcurrencyTerminalDecisionCorrespondenceMain.hs \
+            test/Phase1FailureIsolationMain.hs \
+            test/Phase1ProcessTerminalClosureMain.hs \
+            test/Phase1ParticipantClassificationMain.hs \
             > concurrency-terminal-proof/PHIL-CONC-TERM-001.proof.sha256
           {
             echo 'obligation=PHIL-CONC-TERM-001'
-            echo 'evidence=Rocq-9.2.0'
+            echo 'evidence=Rocq-9.2.0-machine-refinement-staging'
             cat concurrency-terminal-proof/PHIL-CONC-TERM-001.proof.sha256
           } > concurrency-terminal-proof/PHIL-CONC-TERM-001.proof-certificate.txt
           cat concurrency-terminal-proof/PHIL-CONC-TERM-001.proof-certificate.txt
@@ -101,8 +134,24 @@ jobs:
           cabal-version: 'latest'
       - name: Build ordinary regression substrate
         run: cabal build all --enable-tests
-      - name: Strict typecheck lifecycle implementation
-        run: cabal exec -- ghc -isrc -Wall -Werror -fno-code src/Phil/Core/ProcessLifecycle.hs
+      - uses: actions/download-artifact@v4
+        with:
+          name: rocq-concurrency-terminal-proof
+          path: concurrency-terminal-proof
+      - name: Strict typecheck exact kernel and lifecycle surfaces
+        run: |
+          set -euo pipefail
+          cp concurrency-terminal-proof/ConcurrencyTerminalKernel.hs .
+          cabal exec -- ghc -i. -Wall -Werror -Wno-unused-imports -fno-code ConcurrencyTerminalKernel.hs
+          cabal exec -- ghc -isrc -Wall -Werror -fno-code src/Phil/Core/ProcessLifecycle.hs
+          cabal exec -- ghc -i. -Wall -Werror -Wno-unused-imports -fno-code app/ConcurrencyTerminalDecisionCorrespondenceMain.hs
+      - name: Execute exact extracted-kernel controls
+        run: cabal exec -- runghc -i. -Wall -Werror -Wno-unused-imports app/ConcurrencyTerminalDecisionCorrespondenceMain.hs
+      - name: Re-run implementation-refined activation and rendezvous predecessors
+        run: |
+          set -euo pipefail
+          cabal exec -- runghc -Wall -Werror -isrc app/ConcurrencyActivationProductionBindingMain.hs
+          cabal exec -- runghc -Wall -Werror -isrc app/ConcurrencyRendezvousProductionBindingMain.hs
       - name: Re-run unchanged failure / terminal / external-participant corpus
         run: |
           set -euo pipefail
