@@ -113,6 +113,35 @@ Proof.
   reflexivity.
 Qed.
 
+Lemma phase1_surface_qualified_name_repetition_body_is_exact :
+  forall path body input rest trees,
+    DerivesRepetition phase1_surface_rules path body input rest trees ->
+    body = ESequence [ELiteral "."; ENonterminal "identifier"] ->
+    exists names,
+      input = qualified_name_dot_tokens names rest.
+Proof.
+  intros path body input rest trees Hderive.
+  induction Hderive as
+    [path body input
+    |path body input middle rest tree trees
+       Hbody Hprogress Hrest IHrest];
+    intros Hbody_shape.
+  - exists [].
+    reflexivity.
+  - subst body.
+    destruct
+      (phase1_surface_dot_identifier_derivation_is_exact
+        (descend path AtRepetitionBody)
+        input middle tree Hbody)
+      as [name Hinput].
+    destruct (IHrest eq_refl) as [names Hmiddle].
+    exists (name :: names).
+    simpl.
+    rewrite Hinput.
+    rewrite Hmiddle.
+    reflexivity.
+Qed.
+
 Lemma phase1_surface_qualified_name_repetition_is_exact :
   forall path input rest trees,
     DerivesRepetition phase1_surface_rules path
@@ -122,23 +151,9 @@ Lemma phase1_surface_qualified_name_repetition_is_exact :
       input = qualified_name_dot_tokens names rest.
 Proof.
   intros path input rest trees Hderive.
-  induction Hderive as
-    [path body input
-    |path body input middle rest tree trees
-       Hbody Hprogress Hrest IHrest].
-  - exists [].
-    reflexivity.
-  - destruct
-      (phase1_surface_dot_identifier_derivation_is_exact
-        (descend path AtRepetitionBody)
-        input middle tree Hbody)
-      as [name Hinput].
-    destruct IHrest as [names Hmiddle].
-    exists (name :: names).
-    simpl.
-    rewrite Hinput.
-    rewrite Hmiddle.
-    reflexivity.
+  eapply phase1_surface_qualified_name_repetition_body_is_exact.
+  - exact Hderive.
+  - reflexivity.
 Qed.
 
 Theorem phase1_surface_qualified_name_derivation_is_exact :
