@@ -6,9 +6,9 @@ import qualified Data.List as List
 import qualified Data.Text as Text
 import Phil.Core.Static (DeclarationKey (..))
 import Phil.Surface.GrammarV1.BinderScope
-  ( GrammarV1BinderKey (..)
-  , GrammarV1BinderKind (GrammarV1LetPatternBinder)
+  ( GrammarV1BinderKind (GrammarV1LetPatternBinder)
   , GrammarV1BinderScopeError (..)
+  , GrammarV1LexicalScope
   , GrammarV1ResolvedBinder (..)
   , grammarV1BindLocal
   , grammarV1FunctionParameterScope
@@ -40,14 +40,10 @@ main = do
         offerRecordAliasesComposeWithLet
     , test "SURF-009 decide shares the exact case-arm binder authority"
         decideUsesCaseArmAuthority
-    , test "SURF-009 duplicate case binders reject"
-        duplicateCaseBindersReject
-    , test "SURF-009 case binders cannot shadow active enclosing parameters"
-        caseBinderCannotShadowParameter
-    , test "SURF-009 scrutinees resolve before arm binders exist"
-        scrutineeCannotSeeFutureArmBinder
-    , test "SURF-009 match join-state remains for the join-state binder slice"
-        matchJoinRemainsOutsideCompetence
+    , test "SURF-009 duplicate and active-shadowing case binders reject"
+        caseBinderRejections
+    , test "SURF-009 scrutinees resolve before arm binders and join-state remains later-owned"
+        competenceBoundaries
     , test "SURF-009 alpha-renamed case binders preserve semantic identity"
         caseBinderAlphaRenamingPreservesIdentity
     ]
@@ -87,13 +83,12 @@ matchSiblingScopesAreDistinct = do
       let leftBinders = grammarV1CheckedCaseArmBinders leftArm
           rightBinders = grammarV1CheckedCaseArmBinders rightArm
           allBinders = leftBinders <> rightBinders
+          allKeys = map grammarV1ResolvedBinderKey allBinders
       assert (map grammarV1ResolvedBinderDisplayName leftBinders == ["x", "y"])
         "left tuple case binders were not allocated in source order"
       assert (map grammarV1ResolvedBinderDisplayName rightBinders == ["x", "y"])
         "right tuple case binders were not allocated in source order"
-      assert
-        (List.nub (map grammarV1ResolvedBinderKey allBinders)
-          == map grammarV1ResolvedBinderKey allBinders)
+      assert (List.nub allKeys == allKeys)
         "sibling arms reused a semantic binder key"
       leftX <- headEither "left x binder" leftBinders
       rightY <- lastEither "right y binder" rightBinders
@@ -115,8 +110,8 @@ matchSiblingScopesAreDistinct = do
       (laterBinder, _) <- mapLeft show
         (grammarV1BindLocal GrammarV1LetPatternBinder laterSource finalScope)
       assert
-        (grammarV1BinderOrdinal (grammarV1ResolvedBinderKey laterBinder) == 5)
-        "declaration-wide binder ordinal did not advance across both sibling arms"
+        (grammarV1ResolvedBinderKey laterBinder `notElem` allKeys)
+        "binder allocation after match reused an arm-local semantic key"
     other -> Left ("expected two checked match arms, got " <> show other)
 
 offerRecordAliasesComposeWithLet :: Either String ()
@@ -144,9 +139,9 @@ offerRecordAliasesComposeWithLet = do
       let packetBinders = grammarV1CheckedCaseArmBinders packetArm
           otherBinders = grammarV1CheckedCaseArmBinders otherArm
       assert (map grammarV1ResolvedBinderDisplayName packetBinders == ["p", "tag"])
-        "record field alias/shorthand did not choose the exact local binder names"
+        "record field alias/shorthand did not choose the exact local names"
       assert (map grammarV1ResolvedBinderDisplayName otherBinders == ["p", "tag"])
-        "second record arm did not preserve alias/shorthand binder names"
+        "second record arm did not preserve alias/shorthand names"
       packetP <- headEither "Packet p binder" packetBinders
       case grammarV1CheckedCaseArmBodySteps packetArm of
         [ GrammarV1CheckedLetBindingStep _ initializer [copyBinder]
@@ -156,21 +151,21 @@ offerRecordAliasesComposeWithLet = do
               (grammarV1ResolvedBinderKey
                 (grammarV1CheckedLocalValueBinder initializer)
                 == grammarV1ResolvedBinderKey packetP)
-              "arm-local let initializer did not resolve the case alias p"
+              "arm-local let initializer did not resolve case alias p"
             assert (grammarV1ResolvedBinderDisplayName copyBinder == "copy")
               "arm-local let did not allocate copy"
             assert
               (grammarV1ResolvedBinderKey
                 (grammarV1CheckedLocalValueBinder returned)
                 == grammarV1ResolvedBinderKey copyBinder)
-              "arm-local return did not resolve the let binder copy"
+              "arm-local return did not resolve copy"
         other -> Left ("unexpected Packet arm body scope trace: " <> show other)
       otherTag <- lastEither "Other tag binder" otherBinders
       otherOccurrence <- exactlyOneOccurrence otherArm
       assert
         (grammarV1ResolvedBinderKey (grammarV1CheckedLocalValueBinder otherOccurrence)
           == grammarV1ResolvedBinderKey otherTag)
-        "record shorthand tag did not resolve to the arm-local tag binder"
+        "record shorthand tag did not resolve arm-locally"
     other -> Left ("expected two checked offer arms, got " <> show other)
 
 decideUsesCaseArmAuthority :: Either String ()
@@ -195,40 +190,34 @@ decideUsesCaseArmAuthority = do
       (grammarV1CheckedCaseArms checked) == [["value"], ["other"]])
     "decide case binders were not preserved exactly"
 
-duplicateCaseBindersReject :: Either String ()
-duplicateCaseBindersReject = do
-  functionDecl <- onlyFunction "case-duplicate" $ Text.unlines
+caseBinderRejections :: Either String ()
+caseBinderRejections = do
+  duplicateFunction <- onlyFunction "case-duplicate" $ Text.unlines
     [ "fn duplicate_case(tagged : U8) -> U8 satisfies C {"
-    , "  return match tagged {"
-    , "    Left(item, item) => item;"
-    , "  };"
+    , "  return match tagged { Left(item, item) => item; };"
     , "}"
     ]
-  (_, initialScope) <- mapLeft show
-    (grammarV1FunctionParameterScope (DeclarationKey "decl.DuplicateCase") functionDecl)
-  expression <- onlyReturnExpression functionDecl
-  case grammarV1CheckedCaseExpressionInScope initialScope expression of
+  (_, duplicateScope) <- mapLeft show
+    (grammarV1FunctionParameterScope (DeclarationKey "decl.DuplicateCase") duplicateFunction)
+  duplicateExpression <- onlyReturnExpression duplicateFunction
+  case grammarV1CheckedCaseExpressionInScope duplicateScope duplicateExpression of
     Just (Left (GrammarV1CaseArmBinderError
       (GrammarV1DuplicateBinder duplicate previous))) -> do
         assert (locatedValue duplicate == "item")
-          "duplicate case-binder diagnostic lost source spelling"
+          "duplicate case-binder diagnostic lost spelling"
         assert (grammarV1ResolvedBinderDisplayName previous == "item")
           "duplicate case-binder diagnostic lost first binder"
     other -> Left ("expected duplicate case-binder rejection, got " <> show other)
 
-caseBinderCannotShadowParameter :: Either String ()
-caseBinderCannotShadowParameter = do
-  functionDecl <- onlyFunction "case-shadow" $ Text.unlines
+  shadowFunction <- onlyFunction "case-shadow" $ Text.unlines
     [ "fn shadow_case(x : U8) -> U8 satisfies C {"
-    , "  return match x {"
-    , "    Same(x) => x;"
-    , "  };"
+    , "  return match x { Same(x) => x; };"
     , "}"
     ]
-  (_, initialScope) <- mapLeft show
-    (grammarV1FunctionParameterScope (DeclarationKey "decl.ShadowCase") functionDecl)
-  expression <- onlyReturnExpression functionDecl
-  case grammarV1CheckedCaseExpressionInScope initialScope expression of
+  (_, shadowScope) <- mapLeft show
+    (grammarV1FunctionParameterScope (DeclarationKey "decl.ShadowCase") shadowFunction)
+  shadowExpression <- onlyReturnExpression shadowFunction
+  case grammarV1CheckedCaseExpressionInScope shadowScope shadowExpression of
     Just (Left (GrammarV1CaseArmBinderError
       (GrammarV1ActiveShadowing shadowing previous))) -> do
         assert (locatedValue shadowing == "x")
@@ -237,35 +226,29 @@ caseBinderCannotShadowParameter = do
           "case shadowing diagnostic lost enclosing parameter"
     other -> Left ("expected active case-binder shadow rejection, got " <> show other)
 
-scrutineeCannotSeeFutureArmBinder :: Either String ()
-scrutineeCannotSeeFutureArmBinder = do
-  functionDecl <- onlyFunction "case-future-scrutinee" $ Text.unlines
+competenceBoundaries :: Either String ()
+competenceBoundaries = do
+  futureFunction <- onlyFunction "case-future-scrutinee" $ Text.unlines
     [ "fn future_case(seed : U8) -> U8 satisfies C {"
-    , "  return match future {"
-    , "    Left(future) => future;"
-    , "  };"
+    , "  return match future { Left(future) => future; };"
     , "}"
     ]
-  (_, initialScope) <- mapLeft show
-    (grammarV1FunctionParameterScope (DeclarationKey "decl.FutureCase") functionDecl)
-  expression <- onlyReturnExpression functionDecl
-  case grammarV1CheckedCaseExpressionInScope initialScope expression of
+  (_, futureScope) <- mapLeft show
+    (grammarV1FunctionParameterScope (DeclarationKey "decl.FutureCase") futureFunction)
+  futureExpression <- onlyReturnExpression futureFunction
+  case grammarV1CheckedCaseExpressionInScope futureScope futureExpression of
     Nothing -> Right ()
     other -> Left ("future arm binder leaked into scrutinee scope: " <> show other)
 
-matchJoinRemainsOutsideCompetence :: Either String ()
-matchJoinRemainsOutsideCompetence = do
-  functionDecl <- onlyFunction "case-join-wall" $ Text.unlines
+  joinFunction <- onlyFunction "case-join-wall" $ Text.unlines
     [ "fn join_case(tagged : U8) -> U8 satisfies C {"
-    , "  return match tagged join state (saved : U8) {"
-    , "    Left(value) => value;"
-    , "  };"
+    , "  return match tagged join state (saved : U8) { Left(value) => value; };"
     , "}"
     ]
-  (_, initialScope) <- mapLeft show
-    (grammarV1FunctionParameterScope (DeclarationKey "decl.JoinCase") functionDecl)
-  expression <- onlyReturnExpression functionDecl
-  case grammarV1CheckedCaseExpressionInScope initialScope expression of
+  (_, joinScope) <- mapLeft show
+    (grammarV1FunctionParameterScope (DeclarationKey "decl.JoinCase") joinFunction)
+  joinExpression <- onlyReturnExpression joinFunction
+  case grammarV1CheckedCaseExpressionInScope joinScope joinExpression of
     Nothing -> Right ()
     other -> Left ("join-state binder escaped its later SURF-009 slice: " <> show other)
 
@@ -273,18 +256,12 @@ caseBinderAlphaRenamingPreservesIdentity :: Either String ()
 caseBinderAlphaRenamingPreservesIdentity = do
   original <- onlyFunction "case-alpha-original" $ Text.unlines
     [ "fn alpha_case(tagged : U8) -> U8 satisfies C {"
-    , "  return match tagged {"
-    , "    Left(x, y) => y;"
-    , "    Right(z) => z;"
-    , "  };"
+    , "  return match tagged { Left(x, y) => y; Right(z) => z; };"
     , "}"
     ]
   renamed <- onlyFunction "case-alpha-renamed" $ Text.unlines
     [ "fn alpha_case(source : U8) -> U8 satisfies C {"
-    , "    return match source {"
-    , "      Left(a, b) => b;"
-    , "      Right(c) => c;"
-    , "    };"
+    , "    return match source { Left(a, b) => b; Right(c) => c; };"
     , "}"
     ]
   let declarationKey = DeclarationKey "decl.AlphaCase"
@@ -309,16 +286,14 @@ caseBinderAlphaRenamingPreservesIdentity = do
       == map grammarV1ResolvedBinderCoreName renamedBinders)
     "alpha-renaming case binders changed Core identity"
   assert (map grammarV1ResolvedBinderDisplayName originalBinders == ["x", "y", "z"])
-    "original case binder spellings were not retained diagnostically"
+    "original case spellings were not retained diagnostically"
   assert (map grammarV1ResolvedBinderDisplayName renamedBinders == ["a", "b", "c"])
-    "renamed case binder spellings were not retained diagnostically"
+    "renamed case spellings were not retained diagnostically"
 
 checkedCase
-  :: Phil.Surface.GrammarV1.BinderScope.GrammarV1LexicalScope
+  :: GrammarV1LexicalScope
   -> Located GrammarV1Expression
-  -> Either
-      String
-      (GrammarV1CheckedCaseExpression, Phil.Surface.GrammarV1.BinderScope.GrammarV1LexicalScope)
+  -> Either String (GrammarV1CheckedCaseExpression, GrammarV1LexicalScope)
 checkedCase scope expression =
   case grammarV1CheckedCaseExpressionInScope scope expression of
     Just (Right checked) -> Right checked
