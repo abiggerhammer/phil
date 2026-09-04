@@ -3,7 +3,10 @@
 module Main (main) where
 
 import qualified Data.Text as Text
-import Phil.Core.Focusing (FocusingError (..))
+import Phil.Core.Focusing
+  ( FocusStep
+  , FocusingError (..)
+  )
 import Phil.Core.Protocol (ProtocolRoleKey (..))
 import Phil.Core.Protocol.Family
   ( ProtocolSessionTemplate (..)
@@ -210,7 +213,7 @@ guardCompetenceBoundaries = do
 
 guardSummary
   :: GrammarV1ClosedProtocolGuardSurface
-  -> [(ProtocolRoleKey, GrammarV1ProtocolGuardSite, Proposition, [Phil.Core.Focusing.FocusStep])]
+  -> [(ProtocolRoleKey, GrammarV1ProtocolGuardSite, Proposition, [FocusStep])]
 guardSummary surface =
   [ ( checkedProtocolGuardRole annotation
     , checkedProtocolGuardSite annotation
