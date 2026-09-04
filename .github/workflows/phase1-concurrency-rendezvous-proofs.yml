@@ -10,19 +10,31 @@ on:
       - 'proof/Phil/Core/ConcurrencySemantics.v'
       - 'proof/Phil/Core/ConcurrencyActivation.v'
       - 'proof/Phil/Core/ConcurrencyRendezvous.v'
+      - 'proof/Phil/Core/ConcurrencyRendezvousImplementation.v'
+      - 'proof/Phil/Core/ConcurrencyRendezvousImplementationExtraction.v'
+      - 'src/ConcurrencyActivationKernel.hs'
+      - 'src/Phil/Core/ConcurrencyActivationCertification.hs'
       - 'src/Phil/Core/ProcessRendezvous.hs'
+      - 'src/Phil/Core/ProcessCausality.hs'
+      - 'app/ConcurrencyActivationProductionBindingMain.hs'
+      - 'app/ConcurrencyRendezvousDecisionCorrespondenceMain.hs'
       - 'test/Phase1ProtocolProjectionMain.hs'
       - 'test/Phase1ProtocolMessageAdmissibilityMain.hs'
       - 'test/Phase1ExactProcessRendezvousMain.hs'
       - 'test/Phase1RestrictedMessageTransferMain.hs'
       - 'test/Phase1SchedulerIndependentOrderMain.hs'
       - 'docs/phase-1/concurrency-rendezvous-proof-v1.md'
+      - 'docs/phase-1/concurrency-rendezvous-implementation-refinement-v1.md'
       - '.github/workflows/phase1-concurrency-rendezvous-proofs.yml'
   push:
     branches: [main]
     paths:
       - 'proof/Phil/Core/ConcurrencyRendezvous.v'
+      - 'proof/Phil/Core/ConcurrencyRendezvousImplementation.v'
+      - 'proof/Phil/Core/ConcurrencyRendezvousImplementationExtraction.v'
+      - 'app/ConcurrencyRendezvousDecisionCorrespondenceMain.hs'
       - 'docs/phase-1/concurrency-rendezvous-proof-v1.md'
+      - 'docs/phase-1/concurrency-rendezvous-implementation-refinement-v1.md'
       - '.github/workflows/phase1-concurrency-rendezvous-proofs.yml'
 
 permissions:
@@ -36,7 +48,7 @@ jobs:
       options: --user root
     steps:
       - uses: actions/checkout@v4
-      - name: Compile certified predecessors and PHIL-CONC-RENDEZVOUS-001
+      - name: Compile certified predecessors and PHIL-CONC-RENDEZVOUS-001 implementation refinement
         shell: bash
         run: |
           set -euo pipefail
@@ -62,7 +74,18 @@ jobs:
           rocq c -Q proof/Phil Phil proof/Phil/Core/ConcurrencySemantics.v
           rocq c -Q proof/Phil Phil proof/Phil/Core/ConcurrencyActivation.v
           rocq c -Q proof/Phil Phil proof/Phil/Core/ConcurrencyRendezvous.v
-      - name: Record proof identities
+          rocq c -Q proof/Phil Phil \
+            -ri Phil.Core.Session \
+            -ri Phil.Core.ProtocolIdentity \
+            -ri Phil.Core.ProtocolProjection \
+            -ri Phil.Core.ProtocolMessageAdmissibility \
+            -ri Phil.Core.ConcurrencySemantics \
+            -ri Phil.Core.ConcurrencyActivation \
+            proof/Phil/Core/ConcurrencyRendezvousImplementation.v
+          rm -f ConcurrencyRendezvousKernel.hs
+          rocq c -Q proof/Phil Phil proof/Phil/Core/ConcurrencyRendezvousImplementationExtraction.v
+          test -s ConcurrencyRendezvousKernel.hs
+      - name: Record proof and exact kernel identities
         shell: bash
         run: |
           set -euo pipefail
@@ -70,6 +93,9 @@ jobs:
           cp \
             proof/Phil/Core/ConcurrencyRendezvous.v \
             proof/Phil/Core/ConcurrencyRendezvous.vo \
+            proof/Phil/Core/ConcurrencyRendezvousImplementation.v \
+            proof/Phil/Core/ConcurrencyRendezvousImplementation.vo \
+            ConcurrencyRendezvousKernel.hs \
             concurrency-rendezvous-proof/
           sha256sum \
             proof/Phil/Core/ProtocolProjection.v \
@@ -78,10 +104,24 @@ jobs:
             proof/Phil/Core/ConcurrencyActivation.v \
             proof/Phil/Core/ConcurrencyRendezvous.v \
             proof/Phil/Core/ConcurrencyRendezvous.vo \
+            proof/Phil/Core/ConcurrencyRendezvousImplementation.v \
+            proof/Phil/Core/ConcurrencyRendezvousImplementation.vo \
+            ConcurrencyRendezvousKernel.hs \
+            src/ConcurrencyActivationKernel.hs \
+            src/Phil/Core/ConcurrencyActivationCertification.hs \
+            src/Phil/Core/ProcessRendezvous.hs \
+            src/Phil/Core/ProcessCausality.hs \
+            app/ConcurrencyActivationProductionBindingMain.hs \
+            app/ConcurrencyRendezvousDecisionCorrespondenceMain.hs \
+            test/Phase1ProtocolProjectionMain.hs \
+            test/Phase1ProtocolMessageAdmissibilityMain.hs \
+            test/Phase1ExactProcessRendezvousMain.hs \
+            test/Phase1RestrictedMessageTransferMain.hs \
+            test/Phase1SchedulerIndependentOrderMain.hs \
             > concurrency-rendezvous-proof/PHIL-CONC-RENDEZVOUS-001.proof.sha256
           {
             echo 'obligation=PHIL-CONC-RENDEZVOUS-001'
-            echo 'evidence=Rocq-9.2.0'
+            echo 'evidence=Rocq-9.2.0-machine-refinement-staging'
             cat concurrency-rendezvous-proof/PHIL-CONC-RENDEZVOUS-001.proof.sha256
           } > concurrency-rendezvous-proof/PHIL-CONC-RENDEZVOUS-001.proof-certificate.txt
           cat concurrency-rendezvous-proof/PHIL-CONC-RENDEZVOUS-001.proof-certificate.txt
@@ -102,8 +142,22 @@ jobs:
           cabal-version: 'latest'
       - name: Build ordinary regression substrate
         run: cabal build all --enable-tests
-      - name: Strict typecheck rendezvous implementation
-        run: cabal exec -- ghc -isrc -Wall -Werror -fno-code src/Phil/Core/ProcessRendezvous.hs
+      - uses: actions/download-artifact@v4
+        with:
+          name: rocq-concurrency-rendezvous-proof
+          path: concurrency-rendezvous-proof
+      - name: Strict typecheck exact kernel and current rendezvous surfaces
+        run: |
+          set -euo pipefail
+          cp concurrency-rendezvous-proof/ConcurrencyRendezvousKernel.hs .
+          cabal exec -- ghc -i. -Wall -Werror -Wno-unused-imports -fno-code ConcurrencyRendezvousKernel.hs
+          cabal exec -- ghc -isrc -Wall -Werror -fno-code src/Phil/Core/ProcessRendezvous.hs
+          cabal exec -- ghc -isrc -Wall -Werror -fno-code src/Phil/Core/ProcessCausality.hs
+          cabal exec -- ghc -i. -Wall -Werror -Wno-unused-imports -fno-code app/ConcurrencyRendezvousDecisionCorrespondenceMain.hs
+      - name: Execute exact extracted-kernel controls
+        run: cabal exec -- runghc -i. -Wall -Werror -Wno-unused-imports app/ConcurrencyRendezvousDecisionCorrespondenceMain.hs
+      - name: Re-run implementation-refined activation predecessor
+        run: cabal exec -- runghc -Wall -Werror -isrc app/ConcurrencyActivationProductionBindingMain.hs
       - name: Re-run unchanged protocol/rendezvous/transfer/causality corpus
         run: |
           set -euo pipefail
