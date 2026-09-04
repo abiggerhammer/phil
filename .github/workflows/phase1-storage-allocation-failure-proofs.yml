@@ -14,17 +14,31 @@ on:
       - 'proof/Phil/Core/SystemsSubjectAuthority.v'
       - 'proof/Phil/Core/StorageRealization.v'
       - 'proof/Phil/Core/StorageAllocationFailure.v'
+      - 'proof/Phil/Core/StorageAllocationFailureImplementation.v'
+      - 'proof/Phil/Core/StorageAllocationFailureImplementationExtraction.v'
+      - 'src/StorageRealizationKernel.hs'
       - 'src/Phil/Systems/Storage.hs'
+      - 'src/Phil/Systems/StorageRealizationCertification.hs'
+      - 'app/StorageRealizationProductionBindingMain.hs'
+      - 'app/StorageAllocationFailureDecisionCorrespondenceMain.hs'
       - 'test/Phase1StorageRealizationMain.hs'
       - 'docs/phase-1/storage-allocation-failure-proof-v1.md'
+      - 'docs/phase-1/storage-allocation-failure-implementation-refinement-v1.md'
       - '.github/workflows/phase1-storage-allocation-failure-proofs.yml'
   push:
     branches: [main]
     paths:
       - 'proof/Phil/Core/StorageAllocationFailure.v'
+      - 'proof/Phil/Core/StorageAllocationFailureImplementation.v'
+      - 'proof/Phil/Core/StorageAllocationFailureImplementationExtraction.v'
+      - 'src/StorageRealizationKernel.hs'
       - 'src/Phil/Systems/Storage.hs'
+      - 'src/Phil/Systems/StorageRealizationCertification.hs'
+      - 'app/StorageRealizationProductionBindingMain.hs'
+      - 'app/StorageAllocationFailureDecisionCorrespondenceMain.hs'
       - 'test/Phase1StorageRealizationMain.hs'
       - 'docs/phase-1/storage-allocation-failure-proof-v1.md'
+      - 'docs/phase-1/storage-allocation-failure-implementation-refinement-v1.md'
       - '.github/workflows/phase1-storage-allocation-failure-proofs.yml'
 
 permissions:
@@ -38,7 +52,7 @@ jobs:
       options: --user root
     steps:
       - uses: actions/checkout@v4
-      - name: Compile certified storage predecessors and PHIL-MEM-FAIL-001
+      - name: Compile certified storage predecessors and PHIL-MEM-FAIL-001 implementation correspondence
         shell: bash
         run: |
           set -euo pipefail
@@ -54,7 +68,11 @@ jobs:
           rocq c -Q proof/Phil Phil proof/Phil/Core/SystemsSubjectAuthority.v
           rocq c -Q proof/Phil Phil proof/Phil/Core/StorageRealization.v
           rocq c -Q proof/Phil Phil proof/Phil/Core/StorageAllocationFailure.v
-      - name: Record proof identities
+          rocq c -Q proof/Phil Phil proof/Phil/Core/StorageAllocationFailureImplementation.v
+          rm -f StorageAllocationFailureKernel.hs
+          rocq c -Q proof/Phil Phil proof/Phil/Core/StorageAllocationFailureImplementationExtraction.v
+          test -s StorageAllocationFailureKernel.hs
+      - name: Record proof and exact kernel identities
         shell: bash
         run: |
           set -euo pipefail
@@ -62,20 +80,31 @@ jobs:
           cp \
             proof/Phil/Core/StorageAllocationFailure.v \
             proof/Phil/Core/StorageAllocationFailure.vo \
+            proof/Phil/Core/StorageAllocationFailureImplementation.v \
+            proof/Phil/Core/StorageAllocationFailureImplementation.vo \
+            StorageAllocationFailureKernel.hs \
             storage-allocation-failure-proof/
           sha256sum \
             proof/Phil/Core/StorageRealization.v \
             proof/Phil/Core/StorageAllocationFailure.v \
             proof/Phil/Core/StorageAllocationFailure.vo \
+            proof/Phil/Core/StorageAllocationFailureImplementation.v \
+            proof/Phil/Core/StorageAllocationFailureImplementation.vo \
+            StorageAllocationFailureKernel.hs \
+            src/StorageRealizationKernel.hs \
             src/Phil/Systems/Storage.hs \
+            src/Phil/Systems/StorageRealizationCertification.hs \
+            app/StorageRealizationProductionBindingMain.hs \
+            app/StorageAllocationFailureDecisionCorrespondenceMain.hs \
             test/Phase1StorageRealizationMain.hs \
-            > storage-allocation-failure-proof/PHIL-MEM-FAIL-001.proof.sha256
+            > storage-allocation-failure-proof/PHIL-MEM-FAIL-001.implementation.sha256
           {
             echo 'obligation=PHIL-MEM-FAIL-001'
-            echo 'evidence=Rocq-9.2.0'
-            cat storage-allocation-failure-proof/PHIL-MEM-FAIL-001.proof.sha256
-          } > storage-allocation-failure-proof/PHIL-MEM-FAIL-001.proof-certificate.txt
-          cat storage-allocation-failure-proof/PHIL-MEM-FAIL-001.proof-certificate.txt
+            echo 'predecessor=PHIL-MEM-REALIZE-001'
+            echo 'evidence=Rocq-9.2.0+extraction'
+            cat storage-allocation-failure-proof/PHIL-MEM-FAIL-001.implementation.sha256
+          } > storage-allocation-failure-proof/PHIL-MEM-FAIL-001.implementation-certificate.txt
+          cat storage-allocation-failure-proof/PHIL-MEM-FAIL-001.implementation-certificate.txt
       - uses: actions/upload-artifact@v4
         with:
           name: rocq-storage-allocation-failure-proof
@@ -93,10 +122,28 @@ jobs:
           cabal-version: 'latest'
       - name: Build ordinary regression substrate
         run: cabal build all --enable-tests
-      - name: Strict typecheck storage implementation and unchanged MEM corpus
+      - uses: actions/download-artifact@v4
+        with:
+          name: rocq-storage-allocation-failure-proof
+          path: storage-allocation-failure-proof
+      - name: Check and execute extracted allocation-failure controls
         run: |
           set -euo pipefail
+          cp storage-allocation-failure-proof/StorageAllocationFailureKernel.hs .
+          cabal exec -- ghc -i. -Wall -Werror -Wno-unused-imports -fno-code \
+            StorageAllocationFailureKernel.hs \
+            app/StorageAllocationFailureDecisionCorrespondenceMain.hs
+          cabal exec -- runghc -i. -Wall -Werror -Wno-unused-imports \
+            app/StorageAllocationFailureDecisionCorrespondenceMain.hs
+      - name: Strict typecheck implementation-refined MEM-001 predecessor and unchanged storage corpus
+        run: |
+          set -euo pipefail
+          cabal exec -- ghc -isrc -Wall -Werror -Wno-unused-imports -fno-code src/StorageRealizationKernel.hs
           cabal exec -- ghc -isrc -Wall -Werror -fno-code src/Phil/Systems/Storage.hs
+          cabal exec -- ghc -isrc -Wall -Werror -fno-code src/Phil/Systems/StorageRealizationCertification.hs
+          cabal exec -- ghc -isrc -Wall -Werror -fno-code app/StorageRealizationProductionBindingMain.hs
           cabal exec -- ghc -isrc -Wall -Werror -fno-code test/Phase1StorageRealizationMain.hs
+      - name: Re-run implementation-refined MEM-001 predecessor controls
+        run: cabal exec -- runghc -isrc -Wall -Werror app/StorageRealizationProductionBindingMain.hs
       - name: Re-run unchanged MEM-001--006 corpus including six MEM-002--003 cases
         run: cabal exec -- runghc -isrc -Wall -Werror test/Phase1StorageRealizationMain.hs
