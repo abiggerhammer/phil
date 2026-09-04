@@ -115,7 +115,7 @@ grammarV1CheckedJoinExpressionInScope
       (Either
         GrammarV1JoinStateScopeError
         (GrammarV1CheckedJoinExpression, GrammarV1LexicalScope))
-grammarV1CheckedJoinExpressionInScope scope source@(Located sourceSpan expression) =
+grammarV1CheckedJoinExpressionInScope scope (Located sourceSpan expression) =
   case expression of
     GrammarV1MatchExpression scrutinee (Just joinClause) arms -> do
       let withoutJoin = Located sourceSpan
@@ -260,7 +260,7 @@ checkedTypeReferences pending scope (Located _ ty) = case ty of
     combineChecked
       (checkedExpressionReferences pending scope context)
       (checkedExpressionReferences pending scope subject)
-  GrammarV1RefinementType {} -> Nothing
+  GrammarV1RefinementType _ _ _ -> Nothing
   GrammarV1TupleType elements -> checkedMany
     (map (checkedTypeReferences pending scope) elements)
   GrammarV1NamedType _ -> Just (Right [])
@@ -291,7 +291,7 @@ checkedExpressionReferences
   -> GrammarV1LexicalScope
   -> Located GrammarV1Expression
   -> Maybe (Either GrammarV1JoinStateScopeError [GrammarV1CheckedJoinReference])
-checkedExpressionReferences pending scope source@(Located sourceSpan expression) =
+checkedExpressionReferences pending scope (Located sourceSpan expression) =
   case expression of
     GrammarV1NameExpression reference arguments
       | null arguments
@@ -351,4 +351,4 @@ combineChecked left right = do
     Right (leftValues <> rightValues)
 
 checkedMany :: [Maybe (Either e [a])] -> Maybe (Either e [a])
-checkedMany = foldr (combineChecked) (Just (Right []))
+checkedMany = foldr combineChecked (Just (Right []))
