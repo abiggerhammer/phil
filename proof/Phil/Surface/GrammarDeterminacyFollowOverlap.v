@@ -463,3 +463,19 @@ Proof.
   vm_compute.
   reflexivity.
 Qed.
+
+Definition phase1_surface_pattern_follow : list OverlapToken :=
+  lookup_tokens "pattern" phase1_surface_follow_facts.
+
+Theorem phase1_surface_pattern_follow_structural_tail_check_true :
+  andb
+    (negb
+      (token_mem
+        (OverlapLiteral ".") phase1_surface_pattern_follow))
+    (negb
+      (token_mem
+        (OverlapLiteral "{") phase1_surface_pattern_follow)) = true.
+Proof.
+  vm_compute.
+  reflexivity.
+Qed.
