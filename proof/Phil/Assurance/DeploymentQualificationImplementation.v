@@ -16,7 +16,7 @@ From Phil.Assurance Require Import DeploymentQualification.
 Definition decideDeploymentQualificationByFacts
   (topologyIdentityValid linksWellFormed claimDomainsTotal claimDomainsSound
    artifactExact policyExact topologyExact claimSetExact
-   qualificationIdentityValid qualificationCurrent
+   identityValidFact qualificationCurrent
    everySelectedDomainHasEvidence noExtraDomainBinding
    compositionEvidenceValid : bool) : bool :=
   andb topologyIdentityValid
@@ -27,7 +27,7 @@ Definition decideDeploymentQualificationByFacts
             (andb policyExact
               (andb topologyExact
                 (andb claimSetExact
-                  (andb qualificationIdentityValid
+                  (andb identityValidFact
                     (andb qualificationCurrent
                       (andb everySelectedDomainHasEvidence
                         (andb noExtraDomainBinding compositionEvidenceValid))))))))))).
@@ -36,7 +36,7 @@ Theorem deployment_qualification_decision_accept_iff_certified :
   forall current plan domainRegistry compositionRegistry qualification
          topologyIdentityValid linksWellFormed claimDomainsTotal claimDomainsSound
          artifactExact policyExact topologyExact claimSetExact
-         qualificationIdentityValid qualificationCurrent
+         identityValidFact qualificationCurrent
          everySelectedDomainHasEvidence noExtraDomainBinding
          compositionEvidenceValid,
     (topologyIdentityValid = true <->
@@ -63,7 +63,7 @@ Theorem deployment_qualification_decision_accept_iff_certified :
     (claimSetExact = true <->
       forall claim,
         qualificationClaim qualification claim = planClaim plan claim) ->
-    (qualificationIdentityValid = true <->
+    (identityValidFact = true <->
       qualificationIdentityValid qualification = true) ->
     (qualificationCurrent = true <->
       PointWithin current
@@ -99,7 +99,7 @@ Theorem deployment_qualification_decision_accept_iff_certified :
     decideDeploymentQualificationByFacts
       topologyIdentityValid linksWellFormed claimDomainsTotal claimDomainsSound
       artifactExact policyExact topologyExact claimSetExact
-      qualificationIdentityValid qualificationCurrent
+      identityValidFact qualificationCurrent
       everySelectedDomainHasEvidence noExtraDomainBinding
       compositionEvidenceValid = true <->
     DeploymentQualificationValid
@@ -108,7 +108,7 @@ Proof.
   intros current plan domainRegistry compositionRegistry qualification
     topologyIdentityValid0 linksWellFormed0 claimDomainsTotal0 claimDomainsSound0
     artifactExact0 policyExact0 topologyExact0 claimSetExact0
-    qualificationIdentityValid0 qualificationCurrent0
+    identityValidFact0 qualificationCurrent0
     everySelectedDomainHasEvidence0 noExtraDomainBinding0 compositionEvidenceValid0
     HtopologyIdentity HlinksWellFormed HclaimDomainsTotal HclaimDomainsSound
     HartifactExact HpolicyExact HtopologyExact HclaimSetExact
