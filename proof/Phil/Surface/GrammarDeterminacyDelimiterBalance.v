@@ -300,7 +300,7 @@ Proof.
         unfold delimiter_alternative_balanced_fuel in *.
         apply forallb_forall.
         intros item Hin.
-        apply forallb_forall in Hall.
+        rewrite forallb_forall in Hall.
         specialize (Hall item Hin).
         apply option_nat_isb_true in Hall.
         pose proof
@@ -453,7 +453,7 @@ Proof.
       (delimiter_alternative_balanced_fuel fuel depth items)
       eqn:Hall; try discriminate Heffect.
     inversion Heffect; subst final_depth.
-    apply forallb_forall in Hall.
+    rewrite forallb_forall in Hall.
     assert (Hin : In item items).
     { eapply nth_error_In. exact Hnth. }
     specialize (Hall item Hin).
