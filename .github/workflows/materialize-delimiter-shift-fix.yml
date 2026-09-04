@@ -1,0 +1,86 @@
+name: Materialize Delimiter Shift Fix
+
+on:
+  push:
+    branches: [prove-surface-delimiter-balance]
+
+permissions:
+  contents: write
+
+jobs:
+  materialize-fix:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: prove-surface-delimiter-balance
+          fetch-depth: 0
+
+      - name: Materialize robust shift proof
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 - <<'PY'
+          from pathlib import Path
+
+          path = Path('proof/Phil/Surface/GrammarDeterminacyDelimiterBalance.v')
+          source = path.read_text()
+          old = '''Lemma delimiter_balance_step_shift :
+  forall depth token final_depth extra,
+    delimiter_balance_step depth token = Some final_depth ->
+    delimiter_balance_step (depth + extra) token =
+      Some (final_depth + extra).
+Proof.
+  intros depth token final_depth extra Hstep.
+  destruct token as [literal | class_name lexeme].
+  - unfold delimiter_balance_step in *.
+    destruct (delimiter_open_literalb literal) eqn:Hopen.
+    + inversion Hstep; subst final_depth.
+      rewrite Hopen.
+      reflexivity.
+    + destruct (delimiter_close_literalb literal) eqn:Hclose.
+      * destruct depth as [| depth].
+        -- discriminate Hstep.
+        -- inversion Hstep; subst final_depth.
+           rewrite Hopen, Hclose.
+           reflexivity.
+      * inversion Hstep; subst final_depth.
+        rewrite Hopen, Hclose.
+        reflexivity.
+  - inversion Hstep; subst final_depth.
+    reflexivity.
+Qed.
+'''
+          new = '''Lemma delimiter_balance_step_shift :
+  forall depth token final_depth extra,
+    delimiter_balance_step depth token = Some final_depth ->
+    delimiter_balance_step (depth + extra) token =
+      Some (final_depth + extra).
+Proof.
+  intros depth token final_depth extra Hstep.
+  destruct token as [literal | class_name lexeme].
+  - unfold delimiter_balance_step in *.
+    destruct (delimiter_open_literalb literal) eqn:Hopen.
+    + inversion Hstep; subst final_depth.
+      reflexivity.
+    + destruct (delimiter_close_literalb literal) eqn:Hclose.
+      * destruct depth as [| depth].
+        -- discriminate Hstep.
+        -- inversion Hstep; subst final_depth.
+           reflexivity.
+      * inversion Hstep; subst final_depth.
+        reflexivity.
+  - inversion Hstep; subst final_depth.
+    reflexivity.
+Qed.
+'''
+          if source.count(old) != 1:
+              raise SystemExit(f'expected exactly one shift lemma block, found {source.count(old)}')
+          path.write_text(source.replace(old, new, 1))
+          PY
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add proof/Phil/Surface/GrammarDeterminacyDelimiterBalance.v
+          git rm .github/workflows/materialize-delimiter-shift-fix.yml
+          git commit -m "Fix delimiter balance shift proof simplification"
+          git push origin HEAD:prove-surface-delimiter-balance
