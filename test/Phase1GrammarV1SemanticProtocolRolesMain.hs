@@ -3,6 +3,7 @@
 module Main (main) where
 
 import qualified Data.Text as Text
+import Phil.Core.Focusing (FocusStep)
 import Phil.Core.Protocol (ProtocolRoleKey (..))
 import Phil.Core.Protocol.Family
   ( BinaryProtocolFamily (..)
@@ -193,7 +194,9 @@ semanticSessionEvidenceMismatchPreserved = do
               (ProtocolRoleKey "Client")
               rest
               (locatedValue (grammarV1RoleSessionExpression clientRole)) of
-            Just (Left GrammarV1SemanticSessionBinderEvidenceMismatch {}) -> Right ()
+            Just
+              (Left
+                (GrammarV1SemanticSessionBinderEvidenceMismatch _ _ _ _)) -> Right ()
             other -> Left
               ("misordered semantic protocol binder evidence was not explicit: "
                 <> show other)
@@ -221,17 +224,13 @@ checkedSemanticRoles
       String
       ( (ProtocolRoleKey, ProtocolSessionTemplate)
       , (ProtocolRoleKey, ProtocolSessionTemplate)
-      , [a]
+      , [FocusStep]
       )
 checkedSemanticRoles declarationKey protocol =
   case grammarV1CheckedSemanticProtocolRoleTemplates
       emptyStaticContext declarationKey protocol of
-    Just (Right ((client, server), steps)) -> Right (client, server, coerceSteps steps)
+    Just (Right ((client, server), steps)) -> Right (client, server, steps)
     other -> Left ("expected checked semantic protocol roles, got " <> show other)
-  where
-    coerceSteps :: [b] -> [a]
-    coerceSteps [] = []
-    coerceSteps _ = error "checkedSemanticRoles: nonempty focusing trace requires explicit type"
 
 checkedBinderScope
   :: DeclarationKey
