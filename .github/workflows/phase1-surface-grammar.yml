@@ -19,6 +19,7 @@ on:
       - 'test/Phase1GrammarV1ProductFunctionMain.hs'
       - 'test/Phase1GrammarV1FunctionHeaderMain.hs'
       - 'test/Phase1GrammarV1BinderScopeMain.hs'
+      - 'test/Phase1GrammarV1LetPatternScopeMain.hs'
       - 'test/Phase1GrammarV1OfferCaseMain.hs'
       - 'test/Phase1GrammarV1JoinLoopMain.hs'
       - 'test/Phase1GrammarV1ClosureMain.hs'
@@ -72,6 +73,7 @@ on:
       - 'test/Phase1GrammarV1ProductFunctionMain.hs'
       - 'test/Phase1GrammarV1FunctionHeaderMain.hs'
       - 'test/Phase1GrammarV1BinderScopeMain.hs'
+      - 'test/Phase1GrammarV1LetPatternScopeMain.hs'
       - 'test/Phase1GrammarV1OfferCaseMain.hs'
       - 'test/Phase1GrammarV1JoinLoopMain.hs'
       - 'test/Phase1GrammarV1ClosureMain.hs'
@@ -166,6 +168,9 @@ jobs:
 
       - name: Check Grammar-v1 lexical binder scope
         run: cabal exec -- runghc -Wall -Werror -isrc test/Phase1GrammarV1BinderScopeMain.hs
+
+      - name: Check Grammar-v1 let pattern scope
+        run: cabal exec -- runghc -Wall -Werror -isrc test/Phase1GrammarV1LetPatternScopeMain.hs
 
       - name: Check Grammar-v1 offer and case parsing
         run: cabal exec -- runghc -Wall -Werror -isrc test/Phase1GrammarV1OfferCaseMain.hs
