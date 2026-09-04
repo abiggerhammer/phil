@@ -1,0 +1,140 @@
+name: Phase 1 Target Runtime Primitive Production Binding
+
+on:
+  pull_request:
+    paths:
+      - 'proof/Phil/Core/RuntimePrimitiveIdentity.v'
+      - 'proof/Phil/Core/RuntimePrimitiveIdentityImplementation.v'
+      - 'proof/Phil/Core/RuntimePrimitiveIdentityImplementationExtraction.v'
+      - 'proof/Phil/LLVM/Preservation.v'
+      - 'proof/Phil/LLVM/RuntimeSymbolIdentity.v'
+      - 'proof/Phil/LLVM/RuntimeSymbolTargetPrimitiveRefinement.v'
+      - 'generated/RuntimePrimitiveIdentityKernel.hs'
+      - 'src/RuntimePrimitiveIdentityKernel.hs'
+      - 'src/Phil/Systems/RuntimeClaimBinding.hs'
+      - 'src/Phil/Systems/RuntimePrimitiveReuse.hs'
+      - 'src/Phil/Systems/RuntimePrimitiveIdentityCertification.hs'
+      - 'src/Phil/Examples/Phase1/RuntimePrimitiveWitnesses.hs'
+      - 'app/RuntimePrimitiveIdentityDecisionCorrespondenceMain.hs'
+      - 'app/RuntimePrimitiveIdentityProductionBindingMain.hs'
+      - 'test/Phase1RuntimePrimitiveReuseMain.hs'
+      - 'test/LLVMMain.hs'
+      - 'docs/phase-1/target-runtime-primitive-implementation-refinement-v1.md'
+      - 'docs/phase-1/target-runtime-primitive-production-binding-v1.md'
+      - '.github/workflows/phase1-target-runtime-primitive-production-binding.yml'
+  push:
+    branches: [main]
+    paths:
+      - 'proof/Phil/Core/RuntimePrimitiveIdentity.v'
+      - 'proof/Phil/Core/RuntimePrimitiveIdentityImplementation.v'
+      - 'proof/Phil/Core/RuntimePrimitiveIdentityImplementationExtraction.v'
+      - 'generated/RuntimePrimitiveIdentityKernel.hs'
+      - 'src/RuntimePrimitiveIdentityKernel.hs'
+      - 'src/Phil/Systems/RuntimePrimitiveIdentityCertification.hs'
+      - '.github/workflows/phase1-target-runtime-primitive-production-binding.yml'
+
+permissions:
+  contents: read
+
+jobs:
+  exact-target-runtime-primitive-kernel:
+    runs-on: ubuntu-latest
+    container:
+      image: rocq/rocq-prover:9.2.0
+      options: --user root
+    steps:
+      - uses: actions/checkout@v4
+      - name: Fresh-extract exact target runtime primitive kernel
+        shell: bash
+        run: |
+          set -euo pipefail
+          export PATH="/home/rocq/.opam/${COMPILER}/bin:$PATH"
+          rocq c -Q proof/Phil Phil proof/Phil/Core/RuntimePrimitiveIdentity.v
+          rocq c -Q proof/Phil Phil proof/Phil/Core/RuntimePrimitiveIdentityImplementation.v
+          rm -f RuntimePrimitiveIdentityKernel.hs
+          rocq c -Q proof/Phil Phil proof/Phil/Core/RuntimePrimitiveIdentityImplementationExtraction.v
+          test -s RuntimePrimitiveIdentityKernel.hs
+          test "$(wc -c < RuntimePrimitiveIdentityKernel.hs)" -eq 386
+          echo '9ec11eff3177ae9606f551e20bd3fbe9051c44fe113e8ba8f57d9b80e6e55dc0  RuntimePrimitiveIdentityKernel.hs' | sha256sum -c -
+          cmp RuntimePrimitiveIdentityKernel.hs generated/RuntimePrimitiveIdentityKernel.hs
+          cmp RuntimePrimitiveIdentityKernel.hs src/RuntimePrimitiveIdentityKernel.hs
+          rocq c -Q proof/Phil Phil proof/Phil/LLVM/Preservation.v
+          rocq c -Q proof/Phil Phil proof/Phil/LLVM/RuntimeSymbolIdentity.v
+          rocq c -Q proof/Phil Phil proof/Phil/LLVM/RuntimeSymbolTargetPrimitiveRefinement.v
+      - name: Record exact kernel identities
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p target-runtime-primitive-exact-kernel
+          cp RuntimePrimitiveIdentityKernel.hs target-runtime-primitive-exact-kernel/
+          sha256sum \
+            RuntimePrimitiveIdentityKernel.hs \
+            generated/RuntimePrimitiveIdentityKernel.hs \
+            src/RuntimePrimitiveIdentityKernel.hs \
+            proof/Phil/Core/RuntimePrimitiveIdentity.v \
+            proof/Phil/Core/RuntimePrimitiveIdentityImplementation.v \
+            proof/Phil/Core/RuntimePrimitiveIdentityImplementationExtraction.v \
+            proof/Phil/LLVM/RuntimeSymbolIdentity.v \
+            proof/Phil/LLVM/RuntimeSymbolTargetPrimitiveRefinement.v \
+            > target-runtime-primitive-exact-kernel/PHIL-TARGET-RUNTIME-PRIM-001.exact-kernel.sha256
+          cat target-runtime-primitive-exact-kernel/PHIL-TARGET-RUNTIME-PRIM-001.exact-kernel.sha256
+      - uses: actions/upload-artifact@v4
+        with:
+          name: target-runtime-primitive-exact-kernel
+          path: target-runtime-primitive-exact-kernel
+          if-no-files-found: error
+
+  verify-target-runtime-primitive-production-binding:
+    needs: exact-target-runtime-primitive-kernel
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: haskell-actions/setup@v2
+        with:
+          ghc-version: '9.6.7'
+          cabal-version: 'latest'
+      - name: Build ordinary regression substrate
+        run: cabal build all --enable-tests
+      - name: Strict typecheck exact kernel and production correspondence surface
+        shell: bash
+        run: |
+          set -euo pipefail
+          ghc -Wall -Werror -fno-code src/RuntimePrimitiveIdentityKernel.hs
+          cabal exec -- ghc -isrc -Wall -Werror -fno-code src/Phil/Systems/RuntimePrimitiveIdentityCertification.hs
+          cabal exec -- ghc -isrc -Wall -Werror -fno-code app/RuntimePrimitiveIdentityDecisionCorrespondenceMain.hs
+          cabal exec -- ghc -isrc -Wall -Werror -fno-code app/RuntimePrimitiveIdentityProductionBindingMain.hs
+          cabal exec -- ghc -isrc -Wall -Werror -fno-code test/Phase1RuntimePrimitiveReuseMain.hs
+      - name: Re-run #708 exact extracted-kernel controls through production copy
+        run: cabal exec -- runghc -isrc -Wall -Werror app/RuntimePrimitiveIdentityDecisionCorrespondenceMain.hs
+      - name: Execute target runtime primitive production controls
+        run: cabal exec -- runghc -isrc -Wall -Werror app/RuntimePrimitiveIdentityProductionBindingMain.hs
+      - name: Re-run unchanged 18-case SYS-016 corpus
+        run: cabal exec -- runghc -isrc -Wall -Werror test/Phase1RuntimePrimitiveReuseMain.hs
+      - name: Re-run LLVM target-specific refinement regression
+        run: cabal test phil-llvm-tests --test-show-details=direct
+      - name: Record production-binding identities
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p target-runtime-primitive-production-binding
+          sha256sum \
+            generated/RuntimePrimitiveIdentityKernel.hs \
+            src/RuntimePrimitiveIdentityKernel.hs \
+            src/Phil/Systems/RuntimePrimitiveIdentityCertification.hs \
+            src/Phil/Systems/RuntimeClaimBinding.hs \
+            src/Phil/Systems/RuntimePrimitiveReuse.hs \
+            app/RuntimePrimitiveIdentityDecisionCorrespondenceMain.hs \
+            app/RuntimePrimitiveIdentityProductionBindingMain.hs \
+            test/Phase1RuntimePrimitiveReuseMain.hs \
+            test/LLVMMain.hs \
+            proof/Phil/Core/RuntimePrimitiveIdentity.v \
+            proof/Phil/Core/RuntimePrimitiveIdentityImplementation.v \
+            proof/Phil/LLVM/RuntimeSymbolTargetPrimitiveRefinement.v \
+            docs/phase-1/target-runtime-primitive-production-binding-v1.md \
+            > target-runtime-primitive-production-binding/PHIL-TARGET-RUNTIME-PRIM-001.production-binding.sha256
+          cat target-runtime-primitive-production-binding/PHIL-TARGET-RUNTIME-PRIM-001.production-binding.sha256
+      - uses: actions/upload-artifact@v4
+        with:
+          name: target-runtime-primitive-production-binding
+          path: target-runtime-primitive-production-binding
+          if-no-files-found: error
