@@ -12,3 +12,4 @@ decideRuntimePrimitiveIdentityByFacts :: Prelude.Bool -> Prelude.Bool ->
                                          Prelude.Bool
 decideRuntimePrimitiveIdentityByFacts =
   andb
+
