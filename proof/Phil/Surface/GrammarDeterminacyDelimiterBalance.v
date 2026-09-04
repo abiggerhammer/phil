@@ -488,6 +488,7 @@ Proof.
       (delimiter_alternative_balanced_fuel fuel depth items)
       eqn:Hall; try discriminate Heffect.
     inversion Heffect; subst final_depth.
+    unfold delimiter_alternative_balanced_fuel in Hall.
     rewrite forallb_forall in Hall.
     assert (Hin : In item items).
     { eapply nth_error_In. exact Hnth. }
