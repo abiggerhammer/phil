@@ -3,9 +3,25 @@
 module Main (main) where
 
 import qualified Data.List as List
+import qualified Data.Map.Strict as Map
 import qualified Data.Text as Text
+import Phil.Core.Checker (CheckState (..))
+import Phil.Core.Context (ResourceContext (..))
+import Phil.Core.Focusing (FocusingError (UnknownClaim))
 import Phil.Core.Protocol (ProtocolRoleKey (..))
-import Phil.Core.Static (DeclarationKey (..))
+import Phil.Core.Static
+  ( DeclarationKey (..)
+  , emptyStaticContext
+  )
+import Phil.Core.Syntax
+  ( Name (..)
+  , RefTerm (..)
+  , Ty (..)
+  )
+import Phil.Surface.Check.Types
+  ( BindingMeta (..)
+  , SurfaceState (..)
+  )
 import Phil.Surface.GrammarV1.BinderScope
   ( GrammarV1BinderKey (..)
   , GrammarV1BinderScopeError (..)
@@ -24,6 +40,11 @@ import Phil.Surface.GrammarV1.ProtocolBinderScope
   , GrammarV1CheckedProtocolRoleScope (..)
   , GrammarV1ProtocolBinderScopeError (..)
   , grammarV1CheckedProtocolBinderScope
+  )
+import Phil.Surface.GrammarV1.ProtocolGuardChecking
+  ( GrammarV1CheckedProtocolCoreGuard (..)
+  , GrammarV1ProtocolGuardCheckingError (..)
+  , grammarV1CheckedProtocolCoreGuards
   )
 import Phil.Surface.Syntax (Located (..))
 import System.Exit (exitFailure)
@@ -45,6 +66,14 @@ main = do
         sequentialMessageDuplicateRejects
     , test "SURF-009 protocol binder alpha-renaming preserves semantic identity"
         protocolAlphaRenamingPreservesIdentity
+    , test "SURF-009 protocol guards use generated semantic names in SurfaceState"
+        protocolGuardStateUsesSemanticNames
+    , test "SURF-009 dependent protocol guard types use semantic binder dependencies"
+        dependentProtocolGuardUsesSemanticType
+    , test "SURF-009 checked protocol guards are alpha-stable at Core identity"
+        protocolCoreGuardAlphaRenamingPreservesIdentity
+    , test "SURF-009 protocol guard Core focusing errors remain explicit"
+        protocolCoreGuardFocusingErrorPreserved
     ]
   if and results then pure () else exitFailure
 
@@ -230,11 +259,116 @@ protocolAlphaRenamingPreservesIdentity = do
   assert (map grammarV1ResolvedBinderDisplayName renamedBinders == ["count", "payload", "size", "bytes"])
     "renamed protocol binder spellings changed"
 
+protocolGuardStateUsesSemanticNames :: Either String ()
+protocolGuardStateUsesSemanticNames = do
+  protocol <- onlyProtocol $ Text.unlines
+    [ "protocol CoreGuard {"
+    , "  role Client = send (n : U8) when n == n then end Done;"
+    , "  role Server = receive (value : U8) when value == value then end Done;"
+    , "}"
+    ]
+  guards <- checkedCoreGuards (DeclarationKey "decl.CoreGuard") protocol
+  firstGuard <- exactlyOne "first Core guard" (take 1 guards)
+  binder <- exactlyOne
+    "first Core guard binder"
+    (grammarV1CheckedProtocolCoreGuardBinders firstGuard)
+  let semanticName@(Name semanticText) = grammarV1ResolvedBinderCoreName binder
+      state = grammarV1CheckedProtocolCoreGuardState firstGuard
+      context = resourceContext (stateCore state)
+  assert (semanticText /= "n")
+    "semantic protocol binder collapsed to source spelling"
+  assert (Map.member semanticText (stateBindings state))
+    "semantic SurfaceState did not use generated Core name"
+  assert (not (Map.member "n" (stateBindings state)))
+    "source spelling leaked into semantic SurfaceState"
+  assert (Map.member semanticName (unrestrictedBindings context))
+    "Core resource context did not use generated binder name"
+  assert (not (Map.member (Name "n") (unrestrictedBindings context)))
+    "Core resource context retained source spelling as identity"
+
+dependentProtocolGuardUsesSemanticType :: Either String ()
+dependentProtocolGuardUsesSemanticType = do
+  protocol <- onlyProtocol $ Text.unlines
+    [ "protocol DependentCore {"
+    , "  role Client = select {"
+    , "    Go(n : U8, payload : Bytes[toNat(n)]) when payload == payload => end Done"
+    , "  };"
+    , "  role Server = end Done;"
+    , "}"
+    ]
+  guards <- checkedCoreGuards (DeclarationKey "decl.DependentCore") protocol
+  guard <- exactlyOne "dependent Core guard" guards
+  let binders = grammarV1CheckedProtocolCoreGuardBinders guard
+      state = grammarV1CheckedProtocolCoreGuardState guard
+  nBinder <- binderNamed "n" binders
+  payloadBinder <- binderNamed "payload" binders
+  let nName = grammarV1ResolvedBinderCoreName nBinder
+      Name payloadName = grammarV1ResolvedBinderCoreName payloadBinder
+  payloadMeta <- maybe
+    (Left "dependent payload semantic binding missing from SurfaceState")
+    Right
+    (Map.lookup payloadName (stateBindings state))
+  assert (bindingType payloadMeta == TyBytes (RefToNat (RefVar nName)))
+    ("dependent payload type did not preserve semantic n identity: " <> show (bindingType payloadMeta))
+
+protocolCoreGuardAlphaRenamingPreservesIdentity :: Either String ()
+protocolCoreGuardAlphaRenamingPreservesIdentity = do
+  original <- onlyProtocol $ Text.unlines
+    [ "protocol CoreAlpha {"
+    , "  role Client = send (n : U8) when n == n then end Done;"
+    , "  role Server = receive (m : U8) when m == m then end Done;"
+    , "}"
+    ]
+  renamed <- onlyProtocol $ Text.unlines
+    [ "protocol CoreAlpha {"
+    , "  role Client = send (count : U8) when count == count then end Done;"
+    , "  role Server = receive (size : U8) when size == size then end Done;"
+    , "}"
+    ]
+  let declarationKey = DeclarationKey "decl.CoreAlpha"
+  originalGuards <- checkedCoreGuards declarationKey original
+  renamedGuards <- checkedCoreGuards declarationKey renamed
+  assert (map guardCoreNames originalGuards == map guardCoreNames renamedGuards)
+    "alpha-renaming changed materialized Core binder names"
+  assert
+    ( map grammarV1CheckedProtocolCoreGuardProposition originalGuards
+        == map grammarV1CheckedProtocolCoreGuardProposition renamedGuards
+    )
+    "alpha-renaming changed checked Core guard propositions"
+  assert (map guardDisplayNames originalGuards /= map guardDisplayNames renamedGuards)
+    "Core guard alpha test did not change source display spellings"
+
+protocolCoreGuardFocusingErrorPreserved :: Either String ()
+protocolCoreGuardFocusingErrorPreserved = do
+  protocol <- onlyProtocol $ Text.unlines
+    [ "protocol BadCoreGuard {"
+    , "  role Client = send (n : U8) when Missing(n) then end Done;"
+    , "  role Server = receive (value : U8) then end Done;"
+    , "}"
+    ]
+  case grammarV1CheckedProtocolCoreGuards
+      emptyStaticContext
+      (DeclarationKey "decl.BadCoreGuard")
+      protocol of
+    Just (Left
+      (GrammarV1ProtocolGuardPropositionFocusingError (UnknownClaim "Missing"))) ->
+        Right ()
+    other -> Left ("Core UnknownClaim was collapsed or changed: " <> show other)
+
 checkedProtocol :: DeclarationKey -> GrammarV1ProtocolDecl -> Either String GrammarV1CheckedProtocolBinderScope
 checkedProtocol declarationKey protocol =
   case grammarV1CheckedProtocolBinderScope declarationKey protocol of
     Just (Right checked) -> Right checked
     other -> Left ("expected checked protocol binder scope, got " <> show other)
+
+checkedCoreGuards
+  :: DeclarationKey
+  -> GrammarV1ProtocolDecl
+  -> Either String [GrammarV1CheckedProtocolCoreGuard]
+checkedCoreGuards declarationKey protocol =
+  case grammarV1CheckedProtocolCoreGuards emptyStaticContext declarationKey protocol of
+    Just (Right guards) -> Right guards
+    other -> Left ("expected checked protocol Core guards, got " <> show other)
 
 resolved :: GrammarV1CheckedProtocolBinder -> GrammarV1ResolvedBinder
 resolved = grammarV1CheckedProtocolBinderResolved
@@ -263,6 +397,24 @@ guardBinders = map grammarV1CheckedLexicalReferenceBinder . grammarV1CheckedProt
 
 allResolvedBinders :: GrammarV1CheckedProtocolBinderScope -> [GrammarV1ResolvedBinder]
 allResolvedBinders = concatMap (map resolved . grammarV1CheckedProtocolRoleBinders) . grammarV1CheckedProtocolRoles
+
+guardCoreNames :: GrammarV1CheckedProtocolCoreGuard -> [Name]
+guardCoreNames = map grammarV1ResolvedBinderCoreName . grammarV1CheckedProtocolCoreGuardBinders
+
+guardDisplayNames :: GrammarV1CheckedProtocolCoreGuard -> [Text.Text]
+guardDisplayNames = map grammarV1ResolvedBinderDisplayName . grammarV1CheckedProtocolCoreGuardBinders
+
+binderNamed
+  :: Text.Text
+  -> [GrammarV1ResolvedBinder]
+  -> Either String GrammarV1ResolvedBinder
+binderNamed displayName binders =
+  case filter ((== displayName) . grammarV1ResolvedBinderDisplayName) binders of
+    [binder] -> Right binder
+    matches -> Left
+      ( "expected one binder named " <> Text.unpack displayName
+        <> ", got " <> show (length matches)
+      )
 
 roleByKey
   :: ProtocolRoleKey
