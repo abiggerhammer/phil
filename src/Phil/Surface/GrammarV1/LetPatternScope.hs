@@ -2,6 +2,7 @@ module Phil.Surface.GrammarV1.LetPatternScope
   ( GrammarV1CheckedLetScopeStep (..)
   , GrammarV1CheckedLetScopeTrace (..)
   , GrammarV1LetPatternScopeError (..)
+  , grammarV1CheckedLetPatternBlockInScope
   , grammarV1CheckedFunctionLetPatternScope
   , grammarV1CheckedClosureLetPatternScope
   ) where
@@ -54,6 +55,20 @@ newtype GrammarV1LetPatternScopeError = GrammarV1LetPatternBinderError
   }
   deriving (Eq, Show)
 
+-- | Check the bounded sequential-let fragment from one exact lexical scope and
+-- return both its trace and the resulting scope. Returning the final scope is
+-- important for nested lexical regions: local frames can later be discarded while
+-- the declaration-wide fresh-binder ordinal remains advanced.
+grammarV1CheckedLetPatternBlockInScope
+  :: GrammarV1LexicalScope
+  -> Located GrammarV1Block
+  -> Maybe
+      (Either
+        GrammarV1LetPatternScopeError
+        ([GrammarV1CheckedLetScopeStep], GrammarV1LexicalScope))
+grammarV1CheckedLetPatternBlockInScope scope (Located _ (GrammarV1Block statements)) =
+  checkedStatements scope statements
+
 -- | Check lexical availability for the bounded function-body fragment containing
 -- sequential lets whose initializers are already-available simple local values.
 -- The initializer is resolved before the pattern is bound, so a let cannot make
@@ -68,8 +83,9 @@ grammarV1CheckedFunctionLetPatternScope declarationKey functionDecl =
     Left scopeError -> Just (Left (GrammarV1LetPatternBinderError scopeError))
     Right (parameterBinders, scope) ->
       fmap
-        (fmap (GrammarV1CheckedLetScopeTrace parameterBinders))
-        (checkedBlock scope (grammarV1FunctionBody functionDecl))
+        (fmap (\(steps, _finalScope) ->
+          GrammarV1CheckedLetScopeTrace parameterBinders steps))
+        (grammarV1CheckedLetPatternBlockInScope scope (grammarV1FunctionBody functionDecl))
 
 -- | The same bounded sequential-let scope trace for a closure. The caller's exact
 -- outer scope remains active; closure parameters are allocated in the child frame
@@ -83,21 +99,18 @@ grammarV1CheckedClosureLetPatternScope outerScope closure =
     Left scopeError -> Just (Left (GrammarV1LetPatternBinderError scopeError))
     Right (parameterBinders, scope) ->
       fmap
-        (fmap (GrammarV1CheckedLetScopeTrace parameterBinders))
-        (checkedBlock scope (grammarV1ClosureBody closure))
-
-checkedBlock
-  :: GrammarV1LexicalScope
-  -> Located GrammarV1Block
-  -> Maybe (Either GrammarV1LetPatternScopeError [GrammarV1CheckedLetScopeStep])
-checkedBlock scope (Located _ (GrammarV1Block statements)) =
-  checkedStatements scope statements
+        (fmap (\(steps, _finalScope) ->
+          GrammarV1CheckedLetScopeTrace parameterBinders steps))
+        (grammarV1CheckedLetPatternBlockInScope scope (grammarV1ClosureBody closure))
 
 checkedStatements
   :: GrammarV1LexicalScope
   -> [Located GrammarV1Statement]
-  -> Maybe (Either GrammarV1LetPatternScopeError [GrammarV1CheckedLetScopeStep])
-checkedStatements _ [] = Just (Right [])
+  -> Maybe
+      (Either
+        GrammarV1LetPatternScopeError
+        ([GrammarV1CheckedLetScopeStep], GrammarV1LexicalScope))
+checkedStatements scope [] = Just (Right ([], scope))
 checkedStatements scope (source@(Located _ statement) : rest) =
   case statement of
     GrammarV1LetStatement patternValue initializer -> do
@@ -107,7 +120,10 @@ checkedStatements scope (source@(Located _ statement) : rest) =
         Right (binders, nextScope) -> do
           remainder <- checkedStatements nextScope rest
           Just $ fmap
-            (GrammarV1CheckedLetBindingStep source initializerOccurrence binders :)
+            (\(steps, finalScope) ->
+              ( GrammarV1CheckedLetBindingStep source initializerOccurrence binders : steps
+              , finalScope
+              ))
             remainder
     GrammarV1ReturnStatement expression ->
       checkedOccurrenceStatement scope source expression rest
@@ -119,8 +135,14 @@ checkedOccurrenceStatement
   -> Located GrammarV1Statement
   -> Located GrammarV1Expression
   -> [Located GrammarV1Statement]
-  -> Maybe (Either GrammarV1LetPatternScopeError [GrammarV1CheckedLetScopeStep])
+  -> Maybe
+      (Either
+        GrammarV1LetPatternScopeError
+        ([GrammarV1CheckedLetScopeStep], GrammarV1LexicalScope))
 checkedOccurrenceStatement scope source expression rest = do
   occurrence <- grammarV1CheckedLocalValueOccurrenceInScope scope expression
   remainder <- checkedStatements scope rest
-  Just $ fmap (GrammarV1CheckedLetOccurrenceStep source occurrence :) remainder
+  Just $ fmap
+    (\(steps, finalScope) ->
+      (GrammarV1CheckedLetOccurrenceStep source occurrence : steps, finalScope))
+    remainder
