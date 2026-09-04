@@ -117,7 +117,7 @@ Proof.
     simpl.
     destruct (proposition_atom_boundary_literalb literal) eqn:Hboundary.
     + reflexivity.
-    + rewrite Hboundary, Hopen, Hclose.
+    + rewrite Hopen, Hclose.
       reflexivity.
 Qed.
 
