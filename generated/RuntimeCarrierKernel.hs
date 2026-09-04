@@ -64,3 +64,4 @@ decideClosedCarrierTransitionByFacts carrierKnown obligationExact processExact f
   andb carrierKnown
     (andb obligationExact
       (andb processExact (andb fromCovered destinationNotRuntimeBound)))
+
