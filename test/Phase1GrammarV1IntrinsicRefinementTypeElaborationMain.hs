@@ -433,7 +433,8 @@ expectStructuralNothing result =
       ("expected refinement source non-competence, got " <> show other)
 
 expectSemanticSuccess
-  :: Maybe
+  :: Show scope
+  => Maybe
       (Either
         GrammarV1SemanticRefinementTypeError
         (GrammarV1CheckedSemanticRefinementType, scope))
