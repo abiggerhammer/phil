@@ -31,9 +31,11 @@ import Phil.Surface.Syntax (Located (..))
 -- | Project the first exact Grammar-v1 session fragment into Core Session.
 -- Message binders reuse the established primitive/unrestricted lexical binding
 -- authority, so only Unit/Bool/U<n> payloads enter this bridge for now.
--- Codec/boundary references, guards, static session references, explicit empty
--- branch payload lists, and multi-parameter branch payloads remain outside this
--- bounded competence rather than being erased or flattened.
+-- Codec/boundary references, guards, static session references, and
+-- multi-parameter branch payloads remain outside this bounded competence rather
+-- than being erased or flattened. Omitted branch parameters and an explicitly
+-- empty source list are distinct parser forms but both denote the same Core
+-- no-payload branch carrier.
 grammarV1PrimitiveSession :: GrammarV1SessionExpression -> Maybe Session
 grammarV1PrimitiveSession = elaborate Set.empty emptySurfaceState
 
@@ -112,6 +114,7 @@ elaboratePayload
 elaboratePayload source state =
   case source of
     Nothing -> Just (Nothing, state)
+    Just [] -> Just (Nothing, state)
     Just [param] -> do
       ((binder, payloadType), nextState) <- insertPrimitiveParam param state
       pure (Just (binder, payloadType), nextState)

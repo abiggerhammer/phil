@@ -36,6 +36,8 @@ main = do
         expectReject trailingParamCommaSource
     , test "SURF-008 primitive Grammar-v1 session structure routes exactly to Core"
         primitiveSessionRoutes
+    , test "SURF-008 explicit empty branch payload syntax elaborates as no-payload Core"
+        explicitEmptyBranchPayloadRoutes
     , test "SURF-008 primitive session bridge preserves competence boundaries"
         primitiveSessionCompetence
     ]
@@ -210,13 +212,44 @@ primitiveSessionRoutes = do
         "unguarded recursion was not preserved for the existing Core checker"
     Nothing -> Left "bound unguarded recursion was rejected before Core could check it"
 
+explicitEmptyBranchPayloadRoutes :: Either String ()
+explicitEmptyBranchPayloadRoutes = do
+  explicit <- firstProtocolRole =<< onlyProtocol explicitEmptyBranchSource
+  omitted <- firstProtocolRole =<< onlyProtocol omittedEmptyBranchSource
+  case locatedValue explicit of
+    GrammarV1SessionSelect [Located _ branch] ->
+      assert
+        (grammarV1SessionBranchParams branch == Just [])
+        "parser did not preserve explicit empty branch payload syntax"
+    other -> Left ("expected explicit-empty select branch, got " <> show other)
+  case locatedValue omitted of
+    GrammarV1SessionSelect [Located _ branch] ->
+      assert
+        (grammarV1SessionBranchParams branch == Nothing)
+        "parser did not preserve omitted branch payload syntax"
+    other -> Left ("expected omitted-payload select branch, got " <> show other)
+  let expected = Select
+        [ Branch
+            { branchLabel = "Stop"
+            , branchPayload = Nothing
+            , branchContinuation = End (Outcome "Done")
+            }
+        ]
+      explicitCore = grammarV1PrimitiveSession (locatedValue explicit)
+      omittedCore = grammarV1PrimitiveSession (locatedValue omitted)
+  assert
+    (explicitCore == Just expected)
+    "explicit empty branch payload did not elaborate as a no-payload Core branch"
+  assert
+    (explicitCore == omittedCore)
+    "explicit empty and omitted branch payload syntax diverged after elaboration"
+
 primitiveSessionCompetence :: Either String ()
 primitiveSessionCompetence = do
   staticRef <- firstProtocolRole =<< onlyProtocol staticReferenceSource
   codec <- firstProtocolRole =<< onlyProtocol codecSessionSource
   guarded <- firstProtocolRole =<< onlyProtocol guardedSessionSource
   richPayload <- firstProtocolRole =<< onlyProtocol richPayloadSource
-  explicitEmpty <- firstProtocolRole =<< onlyProtocol explicitEmptyBranchSource
   multiPayload <- firstProtocolRole =<< onlyProtocol multiPayloadBranchSource
   unbound <- firstProtocolRole =<< onlyProtocol unboundContinueSource
   duplicateBinder <- firstProtocolRole =<< onlyProtocol duplicateBinderSource
@@ -225,7 +258,6 @@ primitiveSessionCompetence = do
     , ("codec-bearing session", codec)
     , ("guard-bearing session", guarded)
     , ("nonprimitive message payload", richPayload)
-    , ("explicit empty branch payload", explicitEmpty)
     , ("multi-parameter branch payload", multiPayload)
     , ("unbound continue", unbound)
     , ("duplicate dependent binder", duplicateBinder)
@@ -378,6 +410,14 @@ explicitEmptyBranchSource :: Text.Text
 explicitEmptyBranchSource = Text.unlines
   [ "protocol P {"
   , "  role A = select { Stop() => end Done };"
+  , "  role B = end Done;"
+  , "}"
+  ]
+
+omittedEmptyBranchSource :: Text.Text
+omittedEmptyBranchSource = Text.unlines
+  [ "protocol P {"
+  , "  role A = select { Stop => end Done };"
   , "  role B = end Done;"
   , "}"
   ]
