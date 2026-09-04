@@ -230,10 +230,23 @@ deterministic = do
 reverseMap :: Ord k => Map.Map k v -> Map.Map k v
 reverseMap = Map.fromList . reverse . Map.toAscList
 
+frameIds :: CostAttributionStageBundle -> Either String (Set.Set CostContributionIdentity)
 frameIds b = let p = RuntimePrimitiveProfileRef "upload.runtime.frame_receive"; ids = Set.fromList [i | (i,c) <- Map.toAscList (costAttributionStageContributions b), RuntimeSiteCostMechanism _ q _ <- [costContributionMechanism c], p == q] in if Set.null ids then Left "frame contributions missing" else Right ids
+
+firstRuntimeContribution :: CostAttributionStageBundle -> (CostContributionIdentity, CostContribution)
 firstRuntimeContribution b = head [x | x@(_,c) <- Map.toAscList (costAttributionStageContributions b), RuntimeSiteCostMechanism _ _ _ <- [costContributionMechanism c]]
+
+firstRuntimeCharge :: CostAttributionStageBundle -> (CostChargeIdentity, AttributedCost)
 firstRuntimeCharge b = head [x | x@(_,c) <- Map.toAscList (costAttributionStageCharges b), not (Set.null (attributedCostRuntimeClaims c))]
+
+reseal :: CostAttributionStageBundle -> CostAttributionStageBundle
 reseal b = b { costAttributionStageRevision = deriveCostAttributionStageRevision b }
+
+need :: String -> Maybe a -> Either String a
 need label = maybe (Left (label <> " missing")) Right
+
+assert :: Bool -> String -> Either String ()
 assert ok msg = if ok then Right () else Left msg
+
+mapLeft :: (a -> b) -> Either a c -> Either b c
 mapLeft f = either (Left . f) Right
