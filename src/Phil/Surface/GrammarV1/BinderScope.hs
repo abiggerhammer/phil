@@ -13,6 +13,7 @@ module Phil.Surface.GrammarV1.BinderScope
   , grammarV1ResolveLocal
   , grammarV1BindTermParameters
   , grammarV1FunctionParameterScope
+  , grammarV1CallableParameterBinderScope
   , grammarV1ComponentParameterScope
   , grammarV1ClosureParameterScope
   ) where
@@ -24,7 +25,8 @@ import qualified Data.Text as Text
 import Phil.Core.Static (DeclarationKey (..))
 import Phil.Core.Syntax (Name (..))
 import Phil.Surface.GrammarV1.Parser
-  ( GrammarV1Closure (..)
+  ( GrammarV1CallableContractDecl (..)
+  , GrammarV1Closure (..)
   , GrammarV1ComponentDecl (..)
   , GrammarV1FunctionDecl (..)
   , GrammarV1TermParam (..)
@@ -39,6 +41,7 @@ import Phil.Surface.Syntax
 -- declaration lineage plus a fresh lexical ordinal.
 data GrammarV1BinderKind
   = GrammarV1FunctionParameterBinder
+  | GrammarV1CallableParameterBinder
   | GrammarV1ComponentParameterBinder
   | GrammarV1ClosureParameterBinder
   | GrammarV1LetPatternBinder
@@ -204,6 +207,21 @@ grammarV1FunctionParameterScope declarationKey functionDecl =
   grammarV1BindTermParameters
     GrammarV1FunctionParameterBinder
     (grammarV1FunctionTermParams functionDecl)
+    (grammarV1RootLexicalScope declarationKey)
+
+-- | Establish the root term-parameter telescope for a callable contract. Callable
+-- parameters are a distinct SURF-009 binder family from function implementation
+-- parameters even when the two declarations later correspond structurally.
+grammarV1CallableParameterBinderScope
+  :: DeclarationKey
+  -> GrammarV1CallableContractDecl
+  -> Either
+      GrammarV1BinderScopeError
+      ([GrammarV1ResolvedBinder], GrammarV1LexicalScope)
+grammarV1CallableParameterBinderScope declarationKey callableDecl =
+  grammarV1BindTermParameters
+    GrammarV1CallableParameterBinder
+    (grammarV1CallableTermParams callableDecl)
     (grammarV1RootLexicalScope declarationKey)
 
 -- | Establish the root term-parameter scope for one component while preserving
