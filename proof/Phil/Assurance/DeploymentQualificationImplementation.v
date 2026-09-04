@@ -127,8 +127,33 @@ Proof.
     end.
     constructor; assumption.
   - intros Hvalid.
-    destruct Hvalid.
-    repeat split; assumption.
+    repeat split.
+    + exact (qualifiedTopologyIdentityValid
+        current plan domainRegistry compositionRegistry qualification Hvalid).
+    + exact (qualifiedLinksWellFormed
+        current plan domainRegistry compositionRegistry qualification Hvalid).
+    + exact (qualifiedClaimDomainsTotal
+        current plan domainRegistry compositionRegistry qualification Hvalid).
+    + exact (qualifiedClaimDomainsSound
+        current plan domainRegistry compositionRegistry qualification Hvalid).
+    + exact (qualifiedExactArtifact
+        current plan domainRegistry compositionRegistry qualification Hvalid).
+    + exact (qualifiedExactPolicy
+        current plan domainRegistry compositionRegistry qualification Hvalid).
+    + exact (qualifiedExactTopology
+        current plan domainRegistry compositionRegistry qualification Hvalid).
+    + exact (qualifiedExactClaimSet
+        current plan domainRegistry compositionRegistry qualification Hvalid).
+    + exact (qualifiedIdentityValid
+        current plan domainRegistry compositionRegistry qualification Hvalid).
+    + exact (qualifiedCurrent
+        current plan domainRegistry compositionRegistry qualification Hvalid).
+    + exact (qualifiedEverySelectedDomainHasEvidence
+        current plan domainRegistry compositionRegistry qualification Hvalid).
+    + exact (qualifiedNoExtraDomainBinding
+        current plan domainRegistry compositionRegistry qualification Hvalid).
+    + exact (qualifiedCompositionEvidence
+        current plan domainRegistry compositionRegistry qualification Hvalid).
 Qed.
 
 Definition decideDeploymentQualificationAvailableByFacts
