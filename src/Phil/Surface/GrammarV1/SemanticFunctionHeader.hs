@@ -4,7 +4,6 @@ module Phil.Surface.GrammarV1.SemanticFunctionHeader
   , grammarV1CheckedSemanticFunctionHeader
   ) where
 
-import qualified Data.Set as Set
 import Data.Text (Text)
 import Phil.Core.Focusing
   ( FocusStep
@@ -29,10 +28,10 @@ import Phil.Surface.Check.Types
   )
 import Phil.Surface.GrammarV1.BinderScope
   ( GrammarV1BinderScopeError
+  , GrammarV1LexicalScope
   , GrammarV1ResolvedBinder (..)
   , grammarV1FunctionParameterScope
   )
-import Phil.Surface.GrammarV1.CheckedType (grammarV1CheckedType)
 import Phil.Surface.GrammarV1.Elaborate
   ( grammarV1BareStaticReferenceActual
   , grammarV1PrimitiveType
@@ -40,7 +39,6 @@ import Phil.Surface.GrammarV1.Elaborate
 import Phil.Surface.GrammarV1.LexicalReferenceScope
   ( GrammarV1CheckedLexicalReference
   , GrammarV1LexicalReferenceError
-  , grammarV1CheckedTypeReferences
   )
 import Phil.Surface.GrammarV1.Parser
   ( GrammarV1FunctionDecl (..)
@@ -50,14 +48,23 @@ import Phil.Surface.GrammarV1.Parser
   )
 import Phil.Surface.GrammarV1.SemanticBindingState
   ( grammarV1InsertSemanticBinding
-  , grammarV1RewriteTypeReferences
+  )
+import Phil.Surface.GrammarV1.SemanticCheckedType
+  ( GrammarV1CheckedSemanticType (..)
+  , GrammarV1SemanticCheckedTypeError (..)
+  , grammarV1CheckedSemanticType
+  )
+import Phil.Surface.GrammarV1.SemanticRefinementType
+  ( GrammarV1SemanticRefinementTypeError
   )
 import Phil.Surface.Syntax (Located (..))
 
 -- | A checked closed function header whose runtime term parameters have exact
 -- SURF-009 binder identity. Display spelling remains attached to each resolved
 -- binder for diagnostics, while the retained SurfaceState and checked dependent
--- result type use only generated semantic Core names.
+-- result type use only generated semantic Core names. The lexical scope retained
+-- here is the post-result scope: a result refinement binder has already closed,
+-- but its declaration-wide ordinal remains consumed for later body binders.
 data GrammarV1CheckedSemanticFunctionHeader = GrammarV1CheckedSemanticFunctionHeader
   { checkedSemanticFunctionDeclarationKey :: DeclarationKey
   , checkedSemanticFunctionDefinitionRevision :: DefinitionRevision
@@ -68,6 +75,7 @@ data GrammarV1CheckedSemanticFunctionHeader = GrammarV1CheckedSemanticFunctionHe
   , checkedSemanticFunctionResultReferences :: [GrammarV1CheckedLexicalReference]
   , checkedSemanticFunctionSatisfiesReference :: GenericStaticActual
   , checkedSemanticFunctionState :: SurfaceState
+  , checkedSemanticFunctionLexicalScope :: GrammarV1LexicalScope
   }
   deriving (Eq, Show)
 
@@ -77,6 +85,8 @@ data GrammarV1SemanticFunctionHeaderError
   | GrammarV1SemanticFunctionResultReferenceError GrammarV1LexicalReferenceError
   | GrammarV1SemanticFunctionResultRewriteNonCompetent (Located GrammarV1Type)
   | GrammarV1SemanticFunctionResultFocusingError FocusingError
+  | GrammarV1SemanticFunctionResultRefinementError
+      GrammarV1SemanticRefinementTypeError
   deriving (Eq, Show)
 
 -- | Migrate the bounded closed-function header path onto resolver-issued runtime
@@ -86,12 +96,13 @@ data GrammarV1SemanticFunctionHeaderError
 -- closed-header bridge, but their SurfaceState entries are inserted under the
 -- generated Core names from BinderScope rather than source spelling.
 --
--- The explicit result type is reference-checked against that exact lexical scope,
--- rewritten only at certified local occurrences, and then delegated to the
--- ordinary checked type bridge over the semantic-name state. This admits dependent
--- results such as Bytes[toNat(x)] without making x's display spelling semantic.
--- Static/global names remain untouched. Specialized satisfies references and
--- structurally unsupported parameter/result forms remain source non-competence.
+-- Result checking now delegates to SemanticCheckedType. Ordinary dependent types
+-- still use exact reference evidence and semantic-name rewriting; a top-level
+-- primitive-base refinement additionally allocates its local binder in a child
+-- lexical scope, rewrites its predicate to generated names, and returns the outer
+-- scope with the declaration-wide ordinal advanced. Static/global names remain
+-- untouched. Specialized satisfies references and structurally unsupported
+-- parameter/result forms remain source non-competence.
 grammarV1CheckedSemanticFunctionHeader
   :: StaticContext
   -> DeclarationKey
@@ -119,49 +130,32 @@ grammarV1CheckedSemanticFunctionHeader
           case built of
             Left buildError -> pure (Left buildError)
             Right (parameters, semanticState) -> do
-              checkedReferences <- grammarV1CheckedTypeReferences
-                Set.empty
+              checkedResult <- grammarV1CheckedSemanticType
+                staticContext
                 lexicalScope
+                semanticState
                 resultSource
-              case checkedReferences of
-                Left referenceError ->
-                  pure
-                    (Left
-                      (GrammarV1SemanticFunctionResultReferenceError
-                        referenceError))
-                Right references ->
-                  case grammarV1RewriteTypeReferences references resultSource of
-                    Nothing ->
-                      pure
-                        (Left
-                          (GrammarV1SemanticFunctionResultRewriteNonCompetent
-                            resultSource))
-                    Just rewrittenResult -> do
-                      checkedResult <- grammarV1CheckedType
-                        staticContext
-                        semanticState
-                        (locatedValue rewrittenResult)
-                      pure $ case checkedResult of
-                        Left focusingError ->
-                          Left
-                            (GrammarV1SemanticFunctionResultFocusingError
-                              focusingError)
-                        Right (resultType, focusSteps) ->
-                          Right
-                            ( GrammarV1CheckedSemanticFunctionHeader
-                                { checkedSemanticFunctionDeclarationKey = declarationKey
-                                , checkedSemanticFunctionDefinitionRevision = definitionRevision
-                                , checkedSemanticFunctionRecursive = grammarV1FunctionRecursive source
-                                , checkedSemanticFunctionDisplayName =
-                                    locatedValue (grammarV1FunctionName source)
-                                , checkedSemanticFunctionParameters = parameters
-                                , checkedSemanticFunctionResultType = resultType
-                                , checkedSemanticFunctionResultReferences = references
-                                , checkedSemanticFunctionSatisfiesReference = satisfiesReference
-                                , checkedSemanticFunctionState = semanticState
-                                }
-                            , focusSteps
-                            )
+              pure $ case checkedResult of
+                Left typeError -> Left (mapResultTypeError typeError)
+                Right (semanticResult, nextLexicalScope) ->
+                  Right
+                    ( GrammarV1CheckedSemanticFunctionHeader
+                        { checkedSemanticFunctionDeclarationKey = declarationKey
+                        , checkedSemanticFunctionDefinitionRevision = definitionRevision
+                        , checkedSemanticFunctionRecursive = grammarV1FunctionRecursive source
+                        , checkedSemanticFunctionDisplayName =
+                            locatedValue (grammarV1FunctionName source)
+                        , checkedSemanticFunctionParameters = parameters
+                        , checkedSemanticFunctionResultType =
+                            checkedSemanticTypeValue semanticResult
+                        , checkedSemanticFunctionResultReferences =
+                            checkedSemanticTypeReferences semanticResult
+                        , checkedSemanticFunctionSatisfiesReference = satisfiesReference
+                        , checkedSemanticFunctionState = semanticState
+                        , checkedSemanticFunctionLexicalScope = nextLexicalScope
+                        }
+                    , checkedSemanticTypeFocusSteps semanticResult
+                    )
 
 buildSemanticParameters
   :: [GrammarV1ResolvedBinder]
@@ -185,6 +179,19 @@ buildSemanticParameters = go [] emptySurfaceState
         Right nextState ->
           go ((binder, ty) : reversed) nextState binders parameters
     go _ _ _ _ = Nothing
+
+mapResultTypeError
+  :: GrammarV1SemanticCheckedTypeError
+  -> GrammarV1SemanticFunctionHeaderError
+mapResultTypeError typeError = case typeError of
+  GrammarV1SemanticCheckedTypeReferenceError referenceError ->
+    GrammarV1SemanticFunctionResultReferenceError referenceError
+  GrammarV1SemanticCheckedTypeRewriteNonCompetent source ->
+    GrammarV1SemanticFunctionResultRewriteNonCompetent source
+  GrammarV1SemanticCheckedTypeFocusingError focusingError ->
+    GrammarV1SemanticFunctionResultFocusingError focusingError
+  GrammarV1SemanticCheckedTypeRefinementError refinementError ->
+    GrammarV1SemanticFunctionResultRefinementError refinementError
 
 unresolvedCallableReference :: GrammarV1Type -> Maybe GenericStaticActual
 unresolvedCallableReference sourceType = case sourceType of
