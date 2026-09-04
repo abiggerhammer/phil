@@ -4,20 +4,38 @@ on:
   pull_request:
     paths:
       - 'proof/Phil/Core/ConcurrencyExecutionRealization.v'
+      - 'proof/Phil/Core/ConcurrencyExecutionRealizationImplementation.v'
+      - 'proof/Phil/Core/ConcurrencyExecutionRealizationImplementationExtraction.v'
       - 'proof/Phil/Core/ConcurrencySemantics.v'
       - 'proof/Phil/Core/ConcurrencyTerminal.v'
       - 'proof/Phil/Core/SystemsStageClosure.v'
       - 'proof/Phil/Core/SystemsControlPreservation.v'
       - 'proof/Phil/Core/SystemsRealizationEffects.v'
       - 'src/Phil/Systems/ProcessRealization.hs'
+      - 'src/Phil/Core/ConcurrencyTerminalCertification.hs'
+      - 'src/ConcurrencyTerminalKernel.hs'
+      - 'generated/ConcurrencyTerminalKernel.hs'
+      - 'app/ConcurrencyTerminalProductionBindingMain.hs'
+      - 'app/ConcurrencyExecutionRealizationDecisionCorrespondenceMain.hs'
       - 'test/Phase1ProcessExecutionRealizationMain.hs'
       - 'docs/phase-1/concurrency-execution-realization-proof-v1.md'
+      - 'docs/phase-1/concurrency-execution-realization-implementation-refinement-v1.md'
       - '.github/workflows/phase1-concurrency-execution-realization-proofs.yml'
   push:
     branches: [main]
     paths:
       - 'proof/Phil/Core/ConcurrencyExecutionRealization.v'
+      - 'proof/Phil/Core/ConcurrencyExecutionRealizationImplementation.v'
+      - 'proof/Phil/Core/ConcurrencyExecutionRealizationImplementationExtraction.v'
+      - 'src/Phil/Systems/ProcessRealization.hs'
+      - 'src/Phil/Core/ConcurrencyTerminalCertification.hs'
+      - 'src/ConcurrencyTerminalKernel.hs'
+      - 'generated/ConcurrencyTerminalKernel.hs'
+      - 'app/ConcurrencyTerminalProductionBindingMain.hs'
+      - 'app/ConcurrencyExecutionRealizationDecisionCorrespondenceMain.hs'
+      - 'test/Phase1ProcessExecutionRealizationMain.hs'
       - 'docs/phase-1/concurrency-execution-realization-proof-v1.md'
+      - 'docs/phase-1/concurrency-execution-realization-implementation-refinement-v1.md'
       - '.github/workflows/phase1-concurrency-execution-realization-proofs.yml'
 
 permissions:
@@ -31,7 +49,7 @@ jobs:
       options: --user root
     steps:
       - uses: actions/checkout@v4
-      - name: Compile certified predecessors and PHIL-CONC-LOWER-001
+      - name: Compile certified predecessors and PHIL-CONC-LOWER-001 implementation refinement
         shell: bash
         run: |
           set -euo pipefail
@@ -62,7 +80,11 @@ jobs:
           rocq c -Q proof/Phil Phil proof/Phil/Core/SystemsControlPreservation.v
           rocq c -Q proof/Phil Phil proof/Phil/Core/SystemsRealizationEffects.v
           rocq c -Q proof/Phil Phil proof/Phil/Core/ConcurrencyExecutionRealization.v
-      - name: Record proof identities
+          rocq c -Q proof/Phil Phil proof/Phil/Core/ConcurrencyExecutionRealizationImplementation.v
+          rm -f ConcurrencyExecutionRealizationKernel.hs
+          rocq c -Q proof/Phil Phil proof/Phil/Core/ConcurrencyExecutionRealizationImplementationExtraction.v
+          test -s ConcurrencyExecutionRealizationKernel.hs
+      - name: Record proof and exact kernel identities
         shell: bash
         run: |
           set -euo pipefail
@@ -70,6 +92,9 @@ jobs:
           cp \
             proof/Phil/Core/ConcurrencyExecutionRealization.v \
             proof/Phil/Core/ConcurrencyExecutionRealization.vo \
+            proof/Phil/Core/ConcurrencyExecutionRealizationImplementation.v \
+            proof/Phil/Core/ConcurrencyExecutionRealizationImplementation.vo \
+            ConcurrencyExecutionRealizationKernel.hs \
             concurrency-execution-realization-proof/
           sha256sum \
             proof/Phil/Core/ConcurrencySemantics.v \
@@ -79,10 +104,19 @@ jobs:
             proof/Phil/Core/SystemsRealizationEffects.v \
             proof/Phil/Core/ConcurrencyExecutionRealization.v \
             proof/Phil/Core/ConcurrencyExecutionRealization.vo \
+            proof/Phil/Core/ConcurrencyExecutionRealizationImplementation.v \
+            proof/Phil/Core/ConcurrencyExecutionRealizationImplementation.vo \
+            ConcurrencyExecutionRealizationKernel.hs \
+            src/ConcurrencyTerminalKernel.hs \
+            src/Phil/Core/ConcurrencyTerminalCertification.hs \
+            src/Phil/Systems/ProcessRealization.hs \
+            app/ConcurrencyTerminalProductionBindingMain.hs \
+            app/ConcurrencyExecutionRealizationDecisionCorrespondenceMain.hs \
+            test/Phase1ProcessExecutionRealizationMain.hs \
             > concurrency-execution-realization-proof/PHIL-CONC-LOWER-001.proof.sha256
           {
             echo 'obligation=PHIL-CONC-LOWER-001'
-            echo 'evidence=Rocq-9.2.0'
+            echo 'evidence=Rocq-9.2.0-machine-refinement-staging'
             cat concurrency-execution-realization-proof/PHIL-CONC-LOWER-001.proof.sha256
           } > concurrency-execution-realization-proof/PHIL-CONC-LOWER-001.proof-certificate.txt
           cat concurrency-execution-realization-proof/PHIL-CONC-LOWER-001.proof-certificate.txt
@@ -103,10 +137,20 @@ jobs:
           cabal-version: 'latest'
       - name: Build ordinary regression substrate
         run: cabal build all --enable-tests
-      - name: Strict typecheck CONC-009 implementation and corpus
+      - uses: actions/download-artifact@v4
+        with:
+          name: rocq-concurrency-execution-realization-proof
+          path: concurrency-execution-realization-proof
+      - name: Strict typecheck exact kernel and CONC-009 implementation surface
         run: |
           set -euo pipefail
+          cabal exec -- ghc -Wall -Werror -Wno-unused-imports -fno-code concurrency-execution-realization-proof/ConcurrencyExecutionRealizationKernel.hs
           cabal exec -- ghc -isrc -Wall -Werror -fno-code src/Phil/Systems/ProcessRealization.hs
+          cabal exec -- ghc -i"$PWD/concurrency-execution-realization-proof" -isrc -Wall -Werror -fno-code app/ConcurrencyExecutionRealizationDecisionCorrespondenceMain.hs
           cabal exec -- ghc -isrc -Wall -Werror -fno-code test/Phase1ProcessExecutionRealizationMain.hs
+      - name: Execute exact extracted-kernel controls
+        run: cabal exec -- runghc -i"$PWD/concurrency-execution-realization-proof" -isrc -Wall -Werror app/ConcurrencyExecutionRealizationDecisionCorrespondenceMain.hs
+      - name: Re-run implementation-refined terminal predecessor
+        run: cabal exec -- runghc -isrc -Wall -Werror app/ConcurrencyTerminalProductionBindingMain.hs
       - name: Re-run unchanged CONC-009 correspondence corpus
         run: cabal exec -- runghc -Wall -Werror -isrc test/Phase1ProcessExecutionRealizationMain.hs
