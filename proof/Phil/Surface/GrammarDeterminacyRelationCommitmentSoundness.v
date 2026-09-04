@@ -56,6 +56,26 @@ Proof.
   reflexivity.
 Qed.
 
+Opaque phase1_surface_proposition_atom_follow.
+
+Lemma relation_continuation_lookahead_literal_cons :
+  forall literal tail follow,
+    continuation_lookahead_mem
+      (TLiteral literal :: tail) follow =
+    token_mem (OverlapLiteral literal) follow.
+Proof.
+  reflexivity.
+Qed.
+
+Lemma relation_continuation_lookahead_lexical_cons :
+  forall class_name lexeme tail follow,
+    continuation_lookahead_mem
+      (TLexical class_name lexeme :: tail) follow =
+    token_mem (OverlapLexicalClass class_name) follow.
+Proof.
+  reflexivity.
+Qed.
+
 Lemma relation_overlap_token_eqb_eq :
   forall first second,
     overlap_token_eqb first second = true ->
@@ -131,11 +151,7 @@ Proof.
   destruct input as [| token tail].
   - reflexivity.
   - destruct token as [literal | class_name lexeme].
-    + change
-        (token_mem
-          (OverlapLiteral literal)
-          phase1_surface_proposition_atom_follow = true)
-        in Hcontinuation.
+    + rewrite relation_continuation_lookahead_literal_cons in Hcontinuation.
       pose proof
         (phase1_surface_proposition_atom_follow_member_stops
           (OverlapLiteral literal) Hcontinuation)
@@ -143,11 +159,7 @@ Proof.
       simpl in Hstop.
       eapply relation_follow_literal_scan_false.
       exact Hstop.
-    + change
-        (token_mem
-          (OverlapLexicalClass class_name)
-          phase1_surface_proposition_atom_follow = true)
-        in Hcontinuation.
+    + rewrite relation_continuation_lookahead_lexical_cons in Hcontinuation.
       pose proof
         (phase1_surface_proposition_atom_follow_member_stops
           (OverlapLexicalClass class_name) Hcontinuation)
@@ -190,6 +202,8 @@ Proof.
   vm_compute.
   reflexivity.
 Qed.
+
+Opaque phase1_surface_relation_operator_items.
 
 Lemma phase1_surface_relation_operator_derivation_is_exact :
   forall path input rest tree,
