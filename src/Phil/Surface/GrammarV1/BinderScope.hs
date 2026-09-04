@@ -14,6 +14,7 @@ module Phil.Surface.GrammarV1.BinderScope
   , grammarV1BindTermParameters
   , grammarV1FunctionParameterScope
   , grammarV1CallableParameterBinderScope
+  , grammarV1ClaimParameterScope
   , grammarV1ComponentParameterScope
   , grammarV1ClosureParameterScope
   ) where
@@ -26,6 +27,7 @@ import Phil.Core.Static (DeclarationKey (..))
 import Phil.Core.Syntax (Name (..))
 import Phil.Surface.GrammarV1.Parser
   ( GrammarV1CallableContractDecl (..)
+  , GrammarV1ClaimDecl (..)
   , GrammarV1Closure (..)
   , GrammarV1ComponentDecl (..)
   , GrammarV1FunctionDecl (..)
@@ -42,6 +44,7 @@ import Phil.Surface.Syntax
 data GrammarV1BinderKind
   = GrammarV1FunctionParameterBinder
   | GrammarV1CallableParameterBinder
+  | GrammarV1ClaimParameterBinder
   | GrammarV1ComponentParameterBinder
   | GrammarV1ClosureParameterBinder
   | GrammarV1LetPatternBinder
@@ -223,6 +226,24 @@ grammarV1CallableParameterBinderScope declarationKey callableDecl =
     GrammarV1CallableParameterBinder
     (grammarV1CallableTermParams callableDecl)
     (grammarV1RootLexicalScope declarationKey)
+
+-- | Establish one claim's exact term-parameter identity while preserving the
+-- source distinction between omitted parameters and an explicit empty list.
+grammarV1ClaimParameterScope
+  :: DeclarationKey
+  -> GrammarV1ClaimDecl
+  -> Either
+      GrammarV1BinderScopeError
+      (Maybe [GrammarV1ResolvedBinder], GrammarV1LexicalScope)
+grammarV1ClaimParameterScope declarationKey claimDecl =
+  case grammarV1ClaimTermParams claimDecl of
+    Nothing -> Right (Nothing, grammarV1RootLexicalScope declarationKey)
+    Just parameters -> do
+      (binders, scope) <- grammarV1BindTermParameters
+        GrammarV1ClaimParameterBinder
+        parameters
+        (grammarV1RootLexicalScope declarationKey)
+      Right (Just binders, scope)
 
 -- | Establish the root term-parameter scope for one component while preserving
 -- the source distinction between an omitted parameter list and explicit `()`.
