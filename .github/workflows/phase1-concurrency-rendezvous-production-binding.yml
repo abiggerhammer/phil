@@ -1,0 +1,191 @@
+name: Phase 1 Concurrency Rendezvous Production Binding
+
+on:
+  pull_request:
+    paths:
+      - 'proof/Phil/Core/ProtocolProjection.v'
+      - 'proof/Phil/Core/ProtocolProgressionGuard.v'
+      - 'proof/Phil/Core/ProtocolMessageAdmissibility.v'
+      - 'proof/Phil/Core/ConcurrencySemantics.v'
+      - 'proof/Phil/Core/ConcurrencyActivation.v'
+      - 'proof/Phil/Core/ConcurrencyRendezvous.v'
+      - 'proof/Phil/Core/ConcurrencyRendezvousImplementation.v'
+      - 'proof/Phil/Core/ConcurrencyRendezvousImplementationExtraction.v'
+      - 'generated/ConcurrencyRendezvousKernel.hs'
+      - 'src/ConcurrencyRendezvousKernel.hs'
+      - 'src/Phil/Core/Protocol.hs'
+      - 'src/Phil/Core/Protocol/Family.hs'
+      - 'src/Phil/Core/Protocol/MessageAdmissibility.hs'
+      - 'src/Phil/Core/ProcessRendezvous.hs'
+      - 'src/Phil/Core/ProcessCausality.hs'
+      - 'src/Phil/Core/ConcurrencyActivationCertification.hs'
+      - 'src/Phil/Core/ConcurrencyRendezvousCertification.hs'
+      - 'app/ConcurrencyRendezvousDecisionCorrespondenceMain.hs'
+      - 'app/ConcurrencyActivationProductionBindingMain.hs'
+      - 'app/ConcurrencyRendezvousProductionBindingMain.hs'
+      - 'test/Phase1ProtocolProjectionMain.hs'
+      - 'test/Phase1ProtocolMessageAdmissibilityMain.hs'
+      - 'test/Phase1ExactProcessRendezvousMain.hs'
+      - 'test/Phase1RestrictedMessageTransferMain.hs'
+      - 'test/Phase1SchedulerIndependentOrderMain.hs'
+      - 'docs/phase-1/concurrency-rendezvous-production-binding-v1.md'
+      - '.github/workflows/phase1-concurrency-rendezvous-production-binding.yml'
+  push:
+    branches: [main]
+    paths:
+      - 'proof/Phil/Core/ConcurrencyRendezvousImplementation.v'
+      - 'proof/Phil/Core/ConcurrencyRendezvousImplementationExtraction.v'
+      - 'generated/ConcurrencyRendezvousKernel.hs'
+      - 'src/ConcurrencyRendezvousKernel.hs'
+      - 'src/Phil/Core/ConcurrencyRendezvousCertification.hs'
+      - 'app/ConcurrencyRendezvousProductionBindingMain.hs'
+      - 'docs/phase-1/concurrency-rendezvous-production-binding-v1.md'
+      - '.github/workflows/phase1-concurrency-rendezvous-production-binding.yml'
+
+permissions:
+  contents: read
+
+jobs:
+  exact-concurrency-rendezvous-kernel:
+    runs-on: ubuntu-latest
+    container:
+      image: rocq/rocq-prover:9.2.0
+      options: --user root
+    steps:
+      - uses: actions/checkout@v4
+      - name: Freshly extract exact PHIL-CONC-RENDEZVOUS-001 kernel
+        shell: bash
+        run: |
+          set -euo pipefail
+          export PATH="/home/rocq/.opam/${COMPILER}/bin:$PATH"
+          rocq c -Q proof/Phil Phil proof/Phil/Core/Syntax.v
+          rocq c -Q proof/Phil Phil proof/Phil/Core/Session.v
+          rocq c -Q proof/Phil Phil proof/Phil/Core/ProtocolIdentity.v
+          rocq c -Q proof/Phil Phil proof/Phil/Core/ProtocolProjection.v
+          rocq c -Q proof/Phil Phil proof/Phil/Core/ProtocolProgressionGuard.v
+          rocq c -Q proof/Phil Phil proof/Phil/Core/ProtocolMessageAdmissibility.v
+          rocq c -Q proof/Phil Phil proof/Phil/Core/Context.v
+          rocq c -Q proof/Phil Phil proof/Phil/Core/ContextJoin.v
+          rocq c -Q proof/Phil Phil proof/Phil/Core/ProcessJoin.v
+          rocq c -Q proof/Phil Phil proof/Phil/Core/ProcessTerminal.v
+          rocq c -Q proof/Phil Phil proof/Phil/Core/ArchitectureIdentity.v
+          rocq c -Q proof/Phil Phil proof/Phil/Core/ArchitectureInstantiation.v
+          rocq c -Q proof/Phil Phil proof/Phil/Core/ProviderReplacementQualification.v
+          rocq c -Q proof/Phil Phil proof/Phil/Core/ArchitectureRealization.v
+          rocq c -Q proof/Phil Phil proof/Phil/Systems/FactDisposition.v
+          rocq c -Q proof/Phil Phil proof/Phil/Assurance/ValidityScope.v
+          rocq c -Q proof/Phil Phil proof/Phil/Core/SystemsStageClosure.v
+          rocq c -Q proof/Phil Phil proof/Phil/Core/SystemsGenericLowering.v
+          rocq c -Q proof/Phil Phil proof/Phil/Core/ConcurrencySemantics.v
+          rocq c -Q proof/Phil Phil proof/Phil/Core/ConcurrencyActivation.v
+          rocq c -Q proof/Phil Phil proof/Phil/Core/ConcurrencyRendezvous.v
+          rocq c -Q proof/Phil Phil \
+            -ri Phil.Core.Session \
+            -ri Phil.Core.ProtocolIdentity \
+            -ri Phil.Core.ProtocolProjection \
+            -ri Phil.Core.ProtocolMessageAdmissibility \
+            -ri Phil.Core.ConcurrencySemantics \
+            -ri Phil.Core.ConcurrencyActivation \
+            proof/Phil/Core/ConcurrencyRendezvousImplementation.v
+          rm -f ConcurrencyRendezvousKernel.hs
+          rocq c -Q proof/Phil Phil proof/Phil/Core/ConcurrencyRendezvousImplementationExtraction.v
+          test -s ConcurrencyRendezvousKernel.hs
+          test "$(wc -c < ConcurrencyRendezvousKernel.hs)" -eq 2693
+          echo '38ba061829cc7b4f85f678833da1ba8afa7fc2fb713ef0204b306dd1becc0a64  ConcurrencyRendezvousKernel.hs' | sha256sum -c -
+          cmp ConcurrencyRendezvousKernel.hs generated/ConcurrencyRendezvousKernel.hs
+          cmp ConcurrencyRendezvousKernel.hs src/ConcurrencyRendezvousKernel.hs
+      - name: Record exact kernel identity
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p concurrency-rendezvous-exact-kernel
+          cp ConcurrencyRendezvousKernel.hs concurrency-rendezvous-exact-kernel/
+          sha256sum \
+            ConcurrencyRendezvousKernel.hs \
+            generated/ConcurrencyRendezvousKernel.hs \
+            src/ConcurrencyRendezvousKernel.hs \
+            proof/Phil/Core/ConcurrencyRendezvousImplementation.v \
+            proof/Phil/Core/ConcurrencyRendezvousImplementation.vo \
+            > concurrency-rendezvous-exact-kernel/PHIL-CONC-RENDEZVOUS-001.exact-kernel.sha256
+          cat concurrency-rendezvous-exact-kernel/PHIL-CONC-RENDEZVOUS-001.exact-kernel.sha256
+      - uses: actions/upload-artifact@v4
+        with:
+          name: concurrency-rendezvous-exact-kernel
+          path: concurrency-rendezvous-exact-kernel
+          if-no-files-found: error
+
+  verify-concurrency-rendezvous-production-binding:
+    needs: exact-concurrency-rendezvous-kernel
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: haskell-actions/setup@v2
+        with:
+          ghc-version: '9.6.7'
+          cabal-version: 'latest'
+      - name: Build ordinary regression substrate
+        run: cabal build all --enable-tests
+      - uses: actions/download-artifact@v4
+        with:
+          name: concurrency-rendezvous-exact-kernel
+          path: concurrency-rendezvous-exact-kernel
+      - name: Strict typecheck exact kernel and production correspondence surfaces
+        run: |
+          set -euo pipefail
+          cp concurrency-rendezvous-exact-kernel/ConcurrencyRendezvousKernel.hs .
+          cabal exec -- ghc -i. -Wall -Werror -Wno-unused-imports -fno-code ConcurrencyRendezvousKernel.hs
+          cabal exec -- ghc -isrc -Wall -Werror -fno-code src/ConcurrencyRendezvousKernel.hs
+          cabal exec -- ghc -isrc -Wall -Werror -fno-code src/Phil/Core/ProcessRendezvous.hs
+          cabal exec -- ghc -isrc -Wall -Werror -fno-code src/Phil/Core/ProcessCausality.hs
+          cabal exec -- ghc -isrc -Wall -Werror -fno-code src/Phil/Core/ConcurrencyActivationCertification.hs
+          cabal exec -- ghc -isrc -Wall -Werror -fno-code src/Phil/Core/ConcurrencyRendezvousCertification.hs
+          cabal exec -- ghc -i. -Wall -Werror -Wno-unused-imports -fno-code app/ConcurrencyRendezvousDecisionCorrespondenceMain.hs
+          cabal exec -- ghc -isrc -Wall -Werror -fno-code app/ConcurrencyRendezvousProductionBindingMain.hs
+      - name: Execute exact staging extracted-kernel controls
+        run: cabal exec -- runghc -i. -Wall -Werror -Wno-unused-imports app/ConcurrencyRendezvousDecisionCorrespondenceMain.hs
+      - name: Re-run implementation-refined activation predecessor
+        run: cabal exec -- runghc -Wall -Werror -isrc app/ConcurrencyActivationProductionBindingMain.hs
+      - name: Execute production binding controls
+        run: cabal exec -- runghc -Wall -Werror -isrc app/ConcurrencyRendezvousProductionBindingMain.hs
+      - name: Re-run unchanged protocol/rendezvous/transfer/causality corpus
+        run: |
+          set -euo pipefail
+          for test_file in \
+            test/Phase1ProtocolProjectionMain.hs \
+            test/Phase1ProtocolMessageAdmissibilityMain.hs \
+            test/Phase1ExactProcessRendezvousMain.hs \
+            test/Phase1RestrictedMessageTransferMain.hs \
+            test/Phase1SchedulerIndependentOrderMain.hs
+          do
+            cabal exec -- runghc -Wall -Werror -isrc "$test_file"
+          done
+      - name: Record production identities
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p concurrency-rendezvous-production-binding
+          sha256sum \
+            generated/ConcurrencyRendezvousKernel.hs \
+            src/ConcurrencyRendezvousKernel.hs \
+            src/Phil/Core/Protocol/Family.hs \
+            src/Phil/Core/Protocol/MessageAdmissibility.hs \
+            src/Phil/Core/ProcessRendezvous.hs \
+            src/Phil/Core/ProcessCausality.hs \
+            src/Phil/Core/ConcurrencyActivationCertification.hs \
+            src/Phil/Core/ConcurrencyRendezvousCertification.hs \
+            app/ConcurrencyRendezvousDecisionCorrespondenceMain.hs \
+            app/ConcurrencyActivationProductionBindingMain.hs \
+            app/ConcurrencyRendezvousProductionBindingMain.hs \
+            test/Phase1ProtocolProjectionMain.hs \
+            test/Phase1ProtocolMessageAdmissibilityMain.hs \
+            test/Phase1ExactProcessRendezvousMain.hs \
+            test/Phase1RestrictedMessageTransferMain.hs \
+            test/Phase1SchedulerIndependentOrderMain.hs \
+            docs/phase-1/concurrency-rendezvous-production-binding-v1.md \
+            > concurrency-rendezvous-production-binding/PHIL-CONC-RENDEZVOUS-001.production.sha256
+          cat concurrency-rendezvous-production-binding/PHIL-CONC-RENDEZVOUS-001.production.sha256
+      - uses: actions/upload-artifact@v4
+        with:
+          name: concurrency-rendezvous-production-binding
+          path: concurrency-rendezvous-production-binding
+          if-no-files-found: error
