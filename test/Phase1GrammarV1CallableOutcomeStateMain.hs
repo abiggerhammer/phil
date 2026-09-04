@@ -21,7 +21,8 @@ import Phil.Core.Syntax
 import Phil.Surface.Check.Support (emptySurfaceState)
 import Phil.Surface.Check.Types (SurfaceState (..))
 import Phil.Surface.GrammarV1.BinderScope
-  ( GrammarV1BinderKind (..)
+  ( GrammarV1BinderKey
+  , GrammarV1BinderKind (..)
   , GrammarV1BinderScopeError (..)
   , GrammarV1ResolvedBinder (..)
   )
@@ -551,7 +552,7 @@ exactlyOneCategory other = Left
 
 assertReferenceKeys
   :: String
-  -> [Phil.Surface.GrammarV1.BinderScope.GrammarV1BinderKey]
+  -> [GrammarV1BinderKey]
   -> GrammarV1CheckedSemanticCallableProposition
   -> Either String ()
 assertReferenceKeys label expected checked =
