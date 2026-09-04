@@ -12,6 +12,11 @@ import Phil.Surface.GrammarV1.CallableAuthority
 import Phil.Surface.GrammarV1.CallableEffects
   ( grammarV1CallableEffectBounds
   )
+import Phil.Surface.GrammarV1.CallableResources
+  ( GrammarV1CallableResourceClause (..)
+  , GrammarV1CallableResourceDisposition (..)
+  , grammarV1CallableResourceClauses
+  )
 import Phil.Surface.GrammarV1.Parser
 import Phil.Surface.Syntax (Located (..))
 import System.Exit (exitFailure)
@@ -25,6 +30,8 @@ main = do
         simpleEffectSemantics
     , test "SURF-008 simple callable authority types preserve exact Core identities"
         simpleAuthoritySemantics
+    , test "SURF-008 callable consumes and borrows preserve exact unresolved resource intent"
+        callableResourceSemantics
     , test "SURF-002 effect-set trailing comma rejects at syntax" $
         expectReject "callable C() -> Unit { effects {IO,}; }"
     , test "SURF-002 name-set trailing comma rejects at syntax" $
@@ -173,6 +180,48 @@ simpleAuthoritySemantics = do
   assert
     (grammarV1CallableAuthorityBounds structured == Nothing)
     "structured authority type was flattened into a textual authority identity"
+
+callableResourceSemantics :: Either String ()
+callableResourceSemantics = do
+  callable <- onlyCallable $ Text.unlines
+    [ "callable ResourceCarrier() -> Unit {"
+    , "  consumes {owner, store.slot, owner};"
+    , "  borrows {loan};"
+    , "  consumes {};"
+    , "  borrows {pkg.shared, loan};"
+    , "}"
+    ]
+  case grammarV1CallableResourceClauses callable of
+    [ GrammarV1CallableResourceClause
+        GrammarV1CallableConsumesResource firstConsumes
+      , GrammarV1CallableResourceClause
+        GrammarV1CallableBorrowsResource firstBorrows
+      , GrammarV1CallableResourceClause
+        GrammarV1CallableConsumesResource emptyConsumes
+      , GrammarV1CallableResourceClause
+        GrammarV1CallableBorrowsResource secondBorrows
+      ] -> do
+        assertQualifiedNames ["owner", "store.slot", "owner"] firstConsumes
+        assertQualifiedNames ["loan"] firstBorrows
+        assert (null emptyConsumes) "explicit empty consumes clause was not preserved"
+        assertQualifiedNames ["pkg.shared", "loan"] secondBorrows
+    clauses -> Left
+      ("callable resource clauses lost category, grouping, or source order: "
+        <> show clauses)
+
+  empty <- onlyCallable "callable NoResources() -> Unit {}"
+  assert
+    (null (grammarV1CallableResourceClauses empty))
+    "callable without resource clauses acquired implicit resource behavior"
+
+  generic <- onlyCallable
+    "callable GenericResource[T : Type](x : T) -> Unit { consumes {x}; }"
+  case grammarV1CallableResourceClauses generic of
+    [GrammarV1CallableResourceClause GrammarV1CallableConsumesResource names] ->
+      assertQualifiedNames ["x"] names
+    clauses -> Left
+      ("generic callable resource intent was reinterpreted before binder resolution: "
+        <> show clauses)
 
 assertEffectLiteral :: [Text.Text] -> Located GrammarV1EffectSetExpression -> Either String ()
 assertEffectLiteral expected (Located _ effectSet) = case effectSet of
