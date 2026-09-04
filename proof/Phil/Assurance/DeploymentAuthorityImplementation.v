@@ -1,6 +1,6 @@
 From Stdlib Require Import Bool.Bool.
 
-From Phil.Assurance Require Import DeploymentAuthority.
+From Phil.Assurance Require Import DeploymentQualification DeploymentAuthority.
 
 (*
   PHIL-DEPLOY-AUTH-001 — representation-neutral executable decision kernels
