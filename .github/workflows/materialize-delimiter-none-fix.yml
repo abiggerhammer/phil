@@ -1,0 +1,28 @@
+name: Materialize Delimiter None Fix
+
+on:
+  push:
+    branches: [prove-surface-delimiter-balance]
+
+permissions:
+  contents: write
+
+jobs:
+  materialize:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: prove-surface-delimiter-balance
+          fetch-depth: 0
+      - name: Apply proof patch
+        run: |
+          set -euo pipefail
+          python3 scripts/materialize_delimiter_none_fix.py
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add proof/Phil/Surface/GrammarDeterminacyDelimiterBalance.v
+          git rm scripts/materialize_delimiter_none_fix.py
+          git rm .github/workflows/materialize-delimiter-none-fix.yml
+          git commit -m "Discharge delimiter sequence None state"
+          git push origin HEAD:prove-surface-delimiter-balance
