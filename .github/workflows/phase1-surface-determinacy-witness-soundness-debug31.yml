@@ -29,6 +29,13 @@ jobs:
           set -euo pipefail
           python3 scripts/debug_phase1_surface_witness_soundness_31.py
 
+      - name: Capture transformed witness source
+        uses: actions/upload-artifact@v4
+        with:
+          name: debug31-generated-witness-source
+          path: proof/Phil/Surface/GrammarDeterminacyWitnessSoundness.v
+          if-no-files-found: error
+
       - name: Compile witness soundness with forced timeout
         shell: bash
         run: |
