@@ -24,7 +24,8 @@ import Phil.Core.Syntax
   )
 import Phil.Surface.Check.Types (SurfaceState (..))
 import Phil.Surface.GrammarV1.BinderScope
-  ( GrammarV1BinderScopeError (..)
+  ( GrammarV1BinderKey
+  , GrammarV1BinderScopeError (..)
   , GrammarV1ResolvedBinder (..)
   )
 import Phil.Surface.GrammarV1.LexicalReferenceScope
