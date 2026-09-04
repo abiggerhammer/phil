@@ -5,6 +5,7 @@ module Phil.Surface.GrammarV1.SemanticFunctionHeader
   ) where
 
 import qualified Data.Set as Set
+import Data.Text (Text)
 import Phil.Core.Focusing
   ( FocusStep
   , FocusingError
@@ -61,7 +62,7 @@ data GrammarV1CheckedSemanticFunctionHeader = GrammarV1CheckedSemanticFunctionHe
   { checkedSemanticFunctionDeclarationKey :: DeclarationKey
   , checkedSemanticFunctionDefinitionRevision :: DefinitionRevision
   , checkedSemanticFunctionRecursive :: Bool
-  , checkedSemanticFunctionDisplayName :: String
+  , checkedSemanticFunctionDisplayName :: Text
   , checkedSemanticFunctionParameters :: [(GrammarV1ResolvedBinder, Ty)]
   , checkedSemanticFunctionResultType :: Ty
   , checkedSemanticFunctionResultReferences :: [GrammarV1CheckedLexicalReference]
@@ -152,7 +153,7 @@ grammarV1CheckedSemanticFunctionHeader
                                 , checkedSemanticFunctionDefinitionRevision = definitionRevision
                                 , checkedSemanticFunctionRecursive = grammarV1FunctionRecursive source
                                 , checkedSemanticFunctionDisplayName =
-                                    show (locatedValue (grammarV1FunctionName source))
+                                    locatedValue (grammarV1FunctionName source)
                                 , checkedSemanticFunctionParameters = parameters
                                 , checkedSemanticFunctionResultType = resultType
                                 , checkedSemanticFunctionResultReferences = references
