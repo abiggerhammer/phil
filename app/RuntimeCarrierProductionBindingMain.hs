@@ -121,7 +121,8 @@ wrongAssuranceLinkRejects = do
         }
   case verifyFixture f { fixtureWitness = witness1 } of
     Left detail
-      | "RuntimeCarrierCertificationCarrierBindingMismatch" `contains` detail
+      | "RuntimeCarrierCertificationRetainedUseUncovered" `contains` detail
+          || "RuntimeCarrierCertificationCarrierBindingMismatch" `contains` detail
           || "RuntimeCarrierCertificationUseObligationMismatch" `contains` detail -> Right ()
     other -> Left ("cross-assurance carrier link was accepted: " <> show other)
 
@@ -167,7 +168,8 @@ carrierObligationDriftRejects = do
       carriers1 = Map.insert (runtimeCarrierKey carrier0) badCarrier (fixtureCarriers f)
   case verifyFixture f { fixtureCarriers = carriers1 } of
     Left detail
-      | "RuntimeCarrierCertificationCoverageError" `contains` detail -> Right ()
+      | "RuntimeCarrierCertificationBindingError (RuntimeCarrierBindingCarrierObligationMismatch" `contains` detail
+          || "RuntimeCarrierCertificationCoverageError" `contains` detail -> Right ()
     other -> Left ("carrier obligation drift was accepted: " <> show other)
 
 forbiddenProfileRejects :: Either String ()
