@@ -3,6 +3,7 @@ From Stdlib Require Import Bool.Bool.
 From Phil.Core Require Import
   Syntax
   Context
+  ProcessJoin
   ProcessTerminal
   ResourceObligation
   ConcurrencySemantics
