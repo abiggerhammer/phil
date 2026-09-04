@@ -265,8 +265,7 @@ Proof.
           (IH item depth middle_depth extra Hitem)
           as Hitem_shift.
         rewrite Hitem_shift.
-        eapply IHitems.
-        exact Heffect.
+        exact (IHitems middle_depth final_depth Heffect).
     + rewrite delimiter_effect_alternative_step in Heffect |- *.
       destruct
         (delimiter_alternative_balanced_fuel fuel depth items)
