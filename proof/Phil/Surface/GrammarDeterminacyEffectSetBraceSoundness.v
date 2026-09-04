@@ -306,7 +306,12 @@ Proof.
         after_qualified_name after_static_arguments
         static_arguments_tree Hstatic_arguments)
       as [Hstatic_absent | Hstatic_present].
-    + rewrite Hstatic_absent in Hafter_static_arguments.
+    + assert (Hafter_qualified_name :
+        after_qualified_name = after_static_reference).
+      {
+        rewrite Hstatic_absent.
+        exact Hafter_static_arguments.
+      }
       destruct
         (derives_optional_input_cases
           phase1_surface_rules
@@ -320,7 +325,7 @@ Proof.
       * exists first_name, rest.
         split.
         -- rewrite Hinput.
-           rewrite Hafter_static_arguments.
+           rewrite Hafter_qualified_name.
            rewrite Hterm_absent.
            rewrite Hafter_term_arguments.
            reflexivity.
@@ -342,7 +347,7 @@ Proof.
         exists first_name, (TLiteral "(" :: suffix).
         split.
         -- rewrite Hinput.
-           rewrite Hafter_static_arguments.
+           rewrite Hafter_qualified_name.
            rewrite Hafter_static_reference_prefix.
            reflexivity.
         -- right.
