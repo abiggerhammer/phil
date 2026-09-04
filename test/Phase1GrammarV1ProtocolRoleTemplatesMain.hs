@@ -335,11 +335,11 @@ checkedPayloadRoleSemantics = do
           )
         , ( ProtocolRoleKey "Server"
           , ProtocolTemplateReceive
-              (Name "data")
+              (Name "incoming")
               (ProtocolConcreteType (TyBytes (RefNat 4)))
               (ProtocolTemplateReceive
                 (Name "tag2")
-                (ProtocolConcreteType (TyBytes (RefLen (RefVar (Name "data")))))
+                (ProtocolConcreteType (TyBytes (RefLen (RefVar (Name "incoming")))))
                 (ProtocolTemplateEnd (Outcome "Done")))
           )
         )
@@ -662,7 +662,7 @@ checkedPayloadProtocolSource :: Text.Text
 checkedPayloadProtocolSource = Text.unlines
   [ "protocol Rich {"
   , "  role Client = send (payload : Bytes[4]) then send (tag : Bytes[len(payload)]) then end Done;"
-  , "  role Server = receive (data : Bytes[4]) then receive (tag2 : Bytes[len(data)]) then end Done;"
+  , "  role Server = receive (incoming : Bytes[4]) then receive (tag2 : Bytes[len(incoming)]) then end Done;"
   , "}"
   ]
 
@@ -670,7 +670,7 @@ checkedPayloadNonDualSource :: Text.Text
 checkedPayloadNonDualSource = Text.unlines
   [ "protocol RichBad {"
   , "  role Client = send (payload : Bytes[4]) then send (tag : Bytes[len(payload)]) then end Done;"
-  , "  role Server = receive (data : Bytes[4]) then receive (tag2 : Bytes[5]) then end Done;"
+  , "  role Server = receive (incoming : Bytes[4]) then receive (tag2 : Bytes[5]) then end Done;"
   , "}"
   ]
 
