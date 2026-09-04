@@ -313,8 +313,7 @@ Proof.
         (AtSequence 1))
       after_left after_operator operator_tree Hoperator)
     as [literal [operator_tail
-      [Hafter_left [Hafter_operator [Hopen [Hclose Hoperator_literal]]]]]].
-  rewrite Hafter_operator in Hafter_left.
+      [Hafter_left [_ [Hopen [Hclose Hoperator_literal]]]]]].
   rewrite Hinput.
   rewrite Hafter_left.
   eapply relation_commit_scan_neutral_operator.
@@ -440,7 +439,7 @@ Proof.
   exact Hcontinuation.
 Qed.
 
-Lemma phase1_surface_grouped_proposition_expression : EbnfExpression :=
+Definition phase1_surface_grouped_proposition_expression : EbnfExpression :=
   ESequence
     [ ELiteral "("
     ; ENonterminal "proposition"
