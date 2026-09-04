@@ -48,6 +48,14 @@ Proof.
   exact Hbrace.
 Qed.
 
+Lemma continuation_lookahead_mem_literal_cons :
+  forall literal tail follow,
+    continuation_lookahead_mem (TLiteral literal :: tail) follow =
+    token_mem (OverlapLiteral literal) follow.
+Proof.
+  reflexivity.
+Qed.
+
 Lemma phase1_surface_pattern_follow_literal_is_not_structural_record_tail :
   forall literal tail,
     continuation_lookahead_mem
@@ -57,13 +65,11 @@ Lemma phase1_surface_pattern_follow_literal_is_not_structural_record_tail :
     String.eqb literal "." = false.
 Proof.
   intros literal tail Hcontinuation.
+  rewrite continuation_lookahead_mem_literal_cons in Hcontinuation.
   split.
   - destruct (String.eqb literal "{") eqn:Hbrace.
     + apply String.eqb_eq in Hbrace.
       subst literal.
-      change
-        (token_mem (OverlapLiteral "{") phase1_surface_pattern_follow = true)
-        in Hcontinuation.
       rewrite phase1_surface_pattern_follow_excludes_open_brace
         in Hcontinuation.
       discriminate.
@@ -71,9 +77,6 @@ Proof.
   - destruct (String.eqb literal ".") eqn:Hdot.
     + apply String.eqb_eq in Hdot.
       subst literal.
-      change
-        (token_mem (OverlapLiteral ".") phase1_surface_pattern_follow = true)
-        in Hcontinuation.
       rewrite phase1_surface_pattern_follow_excludes_dot
         in Hcontinuation.
       discriminate.
