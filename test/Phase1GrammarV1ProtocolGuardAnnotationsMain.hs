@@ -94,11 +94,11 @@ branchGuardsPreserved = do
     [ "protocol Branches {"
     , "  role Client = select {"
     , "    Go(x : U8) when true => end Done"
-    , "    | Stop when false => end Done"
+    , "    | Stop when true => end Done"
     , "  };"
     , "  role Server = offer {"
     , "    Go(y : U8) when true => end Done"
-    , "    | Stop when false => end Done"
+    , "    | Stop when true => end Done"
     , "  };"
     , "}"
     ]
@@ -111,7 +111,7 @@ branchGuardsPreserved = do
           )
         , ( ProtocolRoleKey "Client"
           , GrammarV1SelectBranchGuard "Stop"
-          , Falsehood
+          , Truth
           , []
           )
         , ( ProtocolRoleKey "Server"
@@ -121,7 +121,7 @@ branchGuardsPreserved = do
           )
         , ( ProtocolRoleKey "Server"
           , GrammarV1OfferBranchGuard "Stop"
-          , Falsehood
+          , Truth
           , []
           )
         ]
