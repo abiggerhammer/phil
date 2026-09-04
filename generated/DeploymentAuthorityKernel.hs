@@ -42,3 +42,4 @@ decideDeploymentAuthorityUsableByFacts :: Prelude.Bool -> Prelude.Bool ->
 decideDeploymentAuthorityUsableByFacts qualificationValid policyAdmissible grantMatches grantCurrent =
   andb qualificationValid
     (andb policyAdmissible (andb grantMatches grantCurrent))
+
