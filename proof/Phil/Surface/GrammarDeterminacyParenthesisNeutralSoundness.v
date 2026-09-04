@@ -5,6 +5,7 @@ From Phil.Surface Require Import
   GrammarDerivation
   GrammarDerivationLookahead
   GrammarDeterminacyDelimiterBalance
+  GrammarDeterminacyStructuralResolvers
   GrammarDeterminacyStructuralScannerSoundness.
 
 Import ListNotations.
