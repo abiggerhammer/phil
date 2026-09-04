@@ -449,10 +449,11 @@ Proof.
   - intros path literal tail fuel depth final_depth Heffect.
     destruct fuel as [| fuel]; try discriminate Heffect.
     exists [TLiteral literal].
-    split; first reflexivity.
-    rewrite delimiter_effect_literal_step in Heffect.
-    eapply delimiter_balance_scan_single.
-    exact Heffect.
+    split.
+    + reflexivity.
+    + rewrite delimiter_effect_literal_step in Heffect.
+      eapply delimiter_balance_scan_single.
+      exact Heffect.
   - intros path class_name lexeme tail fuel depth final_depth Heffect.
     destruct fuel as [| fuel]; try discriminate Heffect.
     inversion Heffect; subst final_depth.
