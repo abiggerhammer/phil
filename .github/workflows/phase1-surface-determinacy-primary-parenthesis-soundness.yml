@@ -45,6 +45,7 @@ jobs:
           compile proof/Phil/Surface/GrammarDeterminacyNullableFirst.v
           compile proof/Phil/Surface/GrammarDeterminacyFollowOverlap.v
           compile proof/Phil/Surface/GrammarDeterminacySimpleResolvers.v
+          compile proof/Phil/Surface/GrammarDeterminacySimpleResolverSoundness.v
           compile proof/Phil/Surface/GrammarDeterminacyStructuralResolvers.v
           compile proof/Phil/Surface/GrammarDerivationLookahead.v
           compile proof/Phil/Surface/GrammarDeterminacyDelimiterBalance.v
@@ -69,6 +70,7 @@ jobs:
             proof/Phil/Surface/GrammarDeterminacyNullableFirst.v \
             proof/Phil/Surface/GrammarDeterminacyFollowOverlap.v \
             proof/Phil/Surface/GrammarDeterminacySimpleResolvers.v \
+            proof/Phil/Surface/GrammarDeterminacySimpleResolverSoundness.v \
             proof/Phil/Surface/GrammarDeterminacyStructuralResolvers.v \
             proof/Phil/Surface/GrammarDeterminacyDelimiterBalance.v \
             proof/Phil/Surface/GrammarDeterminacyStructuralScannerSoundness.v \
@@ -90,6 +92,7 @@ jobs:
             proof/Phil/Surface/GrammarDeterminacyNullableFirst.v \
             proof/Phil/Surface/GrammarDeterminacyFollowOverlap.v \
             proof/Phil/Surface/GrammarDeterminacySimpleResolvers.v \
+            proof/Phil/Surface/GrammarDeterminacySimpleResolverSoundness.v \
             proof/Phil/Surface/GrammarDeterminacyStructuralResolvers.v \
             proof/Phil/Surface/GrammarDeterminacyDelimiterBalance.v \
             proof/Phil/Surface/GrammarDeterminacyStructuralScannerSoundness.v \
