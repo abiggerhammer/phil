@@ -162,12 +162,14 @@ checkedMessage
   -> Located GrammarV1SessionExpression
   -> Maybe (Either GrammarV1ProtocolBinderScopeError ([GrammarV1CheckedProtocolBinder], [GrammarV1CheckedProtocolGuard], GrammarV1LexicalScope))
 checkedMessage roleKey binderSite guardSite scope source@(Located _ parameter) guard continuation = do
+  let sourceName = grammarV1TermParamName parameter
+      pendingSelf = Set.singleton (locatedValue sourceName)
   typeResult <- protocolReferences
-    (grammarV1CheckedTypeReferences Set.empty scope (grammarV1TermParamType parameter))
+    (grammarV1CheckedTypeReferences pendingSelf scope (grammarV1TermParamType parameter))
   case typeResult of
     Left scopeError -> Just (Left scopeError)
     Right typeReferences ->
-      case grammarV1BindLocal GrammarV1ProtocolMessageBinder (grammarV1TermParamName parameter) scope of
+      case grammarV1BindLocal GrammarV1ProtocolMessageBinder sourceName scope of
         Left scopeError -> Just (Left (GrammarV1ProtocolBinderError scopeError))
         Right (binder, boundScope) -> do
           guardResult <- checkedGuard roleKey guardSite boundScope guard
