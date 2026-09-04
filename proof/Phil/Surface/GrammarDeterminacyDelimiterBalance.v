@@ -377,13 +377,18 @@ Lemma phase1_surface_lookup_rule_delimiter_effect_zero :
 Proof.
   intros name body Hlookup.
   pose proof
+    phase1_surface_all_rule_bodies_are_delimiter_balanced
+    as Hall.
+  unfold delimiter_rule_body_balancedb in Hall.
+  pose proof
     (forallb_lookup_rule_body
-      delimiter_rule_body_balancedb
+      (fun candidate_body =>
+        option_nat_isb
+          (delimiter_effect_fuel delimiter_fuel 0 candidate_body) 0)
       phase1_surface_rules name body
-      phase1_surface_all_rule_bodies_are_delimiter_balanced
+      Hall
       Hlookup)
     as Hbalanced.
-  unfold delimiter_rule_body_balancedb in Hbalanced.
   apply option_nat_isb_true in Hbalanced.
   exact Hbalanced.
 Qed.
