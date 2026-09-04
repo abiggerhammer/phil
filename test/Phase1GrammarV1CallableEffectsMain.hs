@@ -14,6 +14,10 @@ import Phil.Core.Generic.StaticActual
 import Phil.Surface.GrammarV1.CallableAuthority
   ( grammarV1CallableAuthorityBounds
   )
+import Phil.Surface.GrammarV1.CallableCost
+  ( GrammarV1CallableCostClause (..)
+  , grammarV1CallableCostClauses
+  )
 import Phil.Surface.GrammarV1.CallableEffects
   ( GrammarV1CallableEffectBoundTemplate (..)
   , GrammarV1CallableEffectReferenceError (..)
@@ -44,6 +48,8 @@ main = do
         simpleAuthoritySemantics
     , test "SURF-008 callable consumes and borrows preserve exact unresolved resource intent"
         callableResourceSemantics
+    , test "SURF-008 callable cost clauses preserve exact cost-model handoff intent"
+        callableCostSemantics
     , test "SURF-002 effect-set trailing comma rejects at syntax" $
         expectReject "callable C() -> Unit { effects {IO,}; }"
     , test "SURF-002 name-set trailing comma rejects at syntax" $
@@ -330,6 +336,34 @@ callableResourceSemantics = do
     clauses -> Left
       ("generic callable resource intent was reinterpreted before binder resolution: "
         <> show clauses)
+
+callableCostSemantics :: Either String ()
+callableCostSemantics = do
+  callable <- onlyCallable $ Text.unlines
+    [ "callable CostCarrier[T : Type]() -> Unit {"
+    , "  cost 7;"
+    , "  cost model;"
+    , "  cost 7;"
+    , "}"
+    ]
+  case grammarV1CallableCostClauses callable of
+    [ GrammarV1CallableCostClause firstCost
+      , GrammarV1CallableCostClause modelCost
+      , GrammarV1CallableCostClause secondCost
+      ] -> do
+        assertInteger "7" firstCost
+        assertSimpleName "model" modelCost
+        assertInteger "7" secondCost
+        assert (firstCost /= secondCost)
+          "duplicate cost expressions collapsed distinct source occurrences"
+    clauses -> Left
+      ("callable cost clauses lost exact source order or multiplicity: "
+        <> show clauses)
+
+  empty <- onlyCallable "callable NoCost() -> Unit {}"
+  assert
+    (null (grammarV1CallableCostClauses empty))
+    "callable without cost clauses acquired implicit cost semantics"
 
 assertEffectLiteral :: [Text.Text] -> Located GrammarV1EffectSetExpression -> Either String ()
 assertEffectLiteral expected (Located _ effectSet) = case effectSet of
