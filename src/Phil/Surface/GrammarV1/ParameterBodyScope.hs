@@ -2,6 +2,7 @@ module Phil.Surface.GrammarV1.ParameterBodyScope
   ( GrammarV1CheckedLocalValueOccurrence (..)
   , GrammarV1CheckedParameterBody (..)
   , GrammarV1ParameterBodyError (..)
+  , grammarV1CheckedLocalValueOccurrenceInScope
   , grammarV1CheckedFunctionParameterBody
   , grammarV1CheckedClosureParameterBody
   ) where
@@ -97,27 +98,34 @@ checkedStatementOccurrence
   -> Located GrammarV1Statement
   -> Maybe GrammarV1CheckedLocalValueOccurrence
 checkedStatementOccurrence scope (Located _ statement) = case statement of
-  GrammarV1ReturnStatement expression -> checkedExpressionOccurrence scope expression
-  GrammarV1ExpressionStatement expression -> checkedExpressionOccurrence scope expression
+  GrammarV1ReturnStatement expression ->
+    grammarV1CheckedLocalValueOccurrenceInScope scope expression
+  GrammarV1ExpressionStatement expression ->
+    grammarV1CheckedLocalValueOccurrenceInScope scope expression
   GrammarV1LetStatement _ _ -> Nothing
 
-checkedExpressionOccurrence
+-- | Resolve one bare or parenthesized single-segment local value occurrence in an
+-- exact lexical scope. An absent local stays outside this bounded route because
+-- the same source spelling may instead denote a static/global declaration.
+grammarV1CheckedLocalValueOccurrenceInScope
   :: GrammarV1LexicalScope
   -> Located GrammarV1Expression
   -> Maybe GrammarV1CheckedLocalValueOccurrence
-checkedExpressionOccurrence scope source@(Located expressionSpan expression) = case expression of
-  GrammarV1ParenthesizedExpression inner -> checkedExpressionOccurrence scope inner
-  GrammarV1NameExpression reference arguments
-    | null arguments
-    , null (grammarV1StaticReferenceArguments reference)
-    , [displayName] <- grammarV1QualifiedNameParts (grammarV1StaticReferenceName reference) ->
-        case grammarV1ResolveLocal (Located expressionSpan displayName) scope of
-          Right resolvedBinder -> Just GrammarV1CheckedLocalValueOccurrence
-            { grammarV1CheckedLocalValueSource = source
-            , grammarV1CheckedLocalValueBinder = resolvedBinder
-            , grammarV1CheckedLocalValueCore =
-                VVar (grammarV1ResolvedBinderCoreName resolvedBinder)
-            }
-          Left (GrammarV1BinderNotInScope _) -> Nothing
-          Left _ -> Nothing
-  _ -> Nothing
+grammarV1CheckedLocalValueOccurrenceInScope scope source@(Located expressionSpan expression) =
+  case expression of
+    GrammarV1ParenthesizedExpression inner ->
+      grammarV1CheckedLocalValueOccurrenceInScope scope inner
+    GrammarV1NameExpression reference arguments
+      | null arguments
+      , null (grammarV1StaticReferenceArguments reference)
+      , [displayName] <- grammarV1QualifiedNameParts (grammarV1StaticReferenceName reference) ->
+          case grammarV1ResolveLocal (Located expressionSpan displayName) scope of
+            Right resolvedBinder -> Just GrammarV1CheckedLocalValueOccurrence
+              { grammarV1CheckedLocalValueSource = source
+              , grammarV1CheckedLocalValueBinder = resolvedBinder
+              , grammarV1CheckedLocalValueCore =
+                  VVar (grammarV1ResolvedBinderCoreName resolvedBinder)
+              }
+            Left (GrammarV1BinderNotInScope _) -> Nothing
+            Left _ -> Nothing
+    _ -> Nothing
