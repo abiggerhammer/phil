@@ -5,22 +5,30 @@ on:
     paths:
       - 'proof/Phil/Assurance/DeploymentQualification.v'
       - 'proof/Phil/Assurance/DeploymentAuthority.v'
+      - 'proof/Phil/Assurance/DeploymentAuthorityImplementation.v'
+      - 'proof/Phil/Assurance/DeploymentAuthorityImplementationExtraction.v'
       - 'src/Phil/Assurance/DeploymentQualification.hs'
       - 'src/Phil/Assurance/DeploymentAuthority.hs'
       - 'test/Phase1DeploymentQualificationMain.hs'
       - 'test/Phase1DeploymentAuthorityMain.hs'
+      - 'app/DeploymentAuthorityDecisionCorrespondenceMain.hs'
       - 'docs/phase-1/deployment-authority-proof-v1.md'
+      - 'docs/phase-1/deployment-authority-implementation-refinement-v1.md'
       - '.github/workflows/phase1-deployment-authority-proofs.yml'
   push:
     branches: [main]
     paths:
       - 'proof/Phil/Assurance/DeploymentQualification.v'
       - 'proof/Phil/Assurance/DeploymentAuthority.v'
+      - 'proof/Phil/Assurance/DeploymentAuthorityImplementation.v'
+      - 'proof/Phil/Assurance/DeploymentAuthorityImplementationExtraction.v'
       - 'src/Phil/Assurance/DeploymentQualification.hs'
       - 'src/Phil/Assurance/DeploymentAuthority.hs'
       - 'test/Phase1DeploymentQualificationMain.hs'
       - 'test/Phase1DeploymentAuthorityMain.hs'
+      - 'app/DeploymentAuthorityDecisionCorrespondenceMain.hs'
       - 'docs/phase-1/deployment-authority-proof-v1.md'
+      - 'docs/phase-1/deployment-authority-implementation-refinement-v1.md'
       - '.github/workflows/phase1-deployment-authority-proofs.yml'
 
 permissions:
@@ -34,14 +42,18 @@ jobs:
       options: --user root
     steps:
       - uses: actions/checkout@v4
-      - name: Compile Certified deployment qualification and PHIL-DEPLOY-AUTH-001
+      - name: Compile PHIL-DEPLOY-AUTH-001 and implementation correspondence
         shell: bash
         run: |
           set -euo pipefail
           export PATH="/home/rocq/.opam/${COMPILER}/bin:$PATH"
           rocq c -Q proof/Phil Phil proof/Phil/Assurance/DeploymentQualification.v
           rocq c -Q proof/Phil Phil proof/Phil/Assurance/DeploymentAuthority.v
-      - name: Record proof identities
+          rocq c -Q proof/Phil Phil proof/Phil/Assurance/DeploymentAuthorityImplementation.v
+          rm -f DeploymentAuthorityKernel.hs
+          rocq c -Q proof/Phil Phil proof/Phil/Assurance/DeploymentAuthorityImplementationExtraction.v
+          test -s DeploymentAuthorityKernel.hs
+      - name: Record proof and exact kernel identities
         shell: bash
         run: |
           set -euo pipefail
@@ -49,23 +61,30 @@ jobs:
           cp \
             proof/Phil/Assurance/DeploymentAuthority.v \
             proof/Phil/Assurance/DeploymentAuthority.vo \
+            proof/Phil/Assurance/DeploymentAuthorityImplementation.v \
+            proof/Phil/Assurance/DeploymentAuthorityImplementation.vo \
+            DeploymentAuthorityKernel.hs \
             deployment-authority-proof/
           sha256sum \
             proof/Phil/Assurance/DeploymentQualification.v \
             proof/Phil/Assurance/DeploymentAuthority.v \
             proof/Phil/Assurance/DeploymentAuthority.vo \
+            proof/Phil/Assurance/DeploymentAuthorityImplementation.v \
+            proof/Phil/Assurance/DeploymentAuthorityImplementation.vo \
+            DeploymentAuthorityKernel.hs \
             src/Phil/Assurance/DeploymentQualification.hs \
             src/Phil/Assurance/DeploymentAuthority.hs \
             test/Phase1DeploymentQualificationMain.hs \
             test/Phase1DeploymentAuthorityMain.hs \
-            > deployment-authority-proof/PHIL-DEPLOY-AUTH-001.proof.sha256
+            app/DeploymentAuthorityDecisionCorrespondenceMain.hs \
+            > deployment-authority-proof/PHIL-DEPLOY-AUTH-001.implementation.sha256
           {
             echo 'obligation=PHIL-DEPLOY-AUTH-001'
             echo 'predecessor=PHIL-DEPLOY-QUAL-001'
-            echo 'evidence=Rocq-9.2.0'
-            cat deployment-authority-proof/PHIL-DEPLOY-AUTH-001.proof.sha256
-          } > deployment-authority-proof/PHIL-DEPLOY-AUTH-001.proof-certificate.txt
-          cat deployment-authority-proof/PHIL-DEPLOY-AUTH-001.proof-certificate.txt
+            echo 'evidence=Rocq-9.2.0+extraction'
+            cat deployment-authority-proof/PHIL-DEPLOY-AUTH-001.implementation.sha256
+          } > deployment-authority-proof/PHIL-DEPLOY-AUTH-001.implementation-certificate.txt
+          cat deployment-authority-proof/PHIL-DEPLOY-AUTH-001.implementation-certificate.txt
       - uses: actions/upload-artifact@v4
         with:
           name: rocq-deployment-authority-proof
@@ -83,14 +102,27 @@ jobs:
           cabal-version: 'latest'
       - name: Build ordinary regression substrate
         run: cabal build all --enable-tests
-      - name: Strict typecheck deployment qualification and authority implementation/corpora
+      - uses: actions/download-artifact@v4
+        with:
+          name: rocq-deployment-authority-proof
+          path: deployment-authority-proof
+      - name: Check and execute extracted Deployment Authority controls
+        run: |
+          set -euo pipefail
+          cp deployment-authority-proof/DeploymentAuthorityKernel.hs .
+          cabal exec -- ghc -i. -Wall -Werror -Wno-unused-imports -fno-code \
+            DeploymentAuthorityKernel.hs \
+            app/DeploymentAuthorityDecisionCorrespondenceMain.hs
+          cabal exec -- runghc -i. -Wall -Werror -Wno-unused-imports \
+            app/DeploymentAuthorityDecisionCorrespondenceMain.hs
+      - name: Strict typecheck unchanged qualification and authority implementations/corpora
         run: |
           set -euo pipefail
           cabal exec -- ghc -isrc -Wall -Werror -fno-code src/Phil/Assurance/DeploymentQualification.hs
           cabal exec -- ghc -isrc -Wall -Werror -fno-code src/Phil/Assurance/DeploymentAuthority.hs
           cabal exec -- ghc -isrc -Wall -Werror -fno-code test/Phase1DeploymentQualificationMain.hs
           cabal exec -- ghc -isrc -Wall -Werror -fno-code test/Phase1DeploymentAuthorityMain.hs
-      - name: Re-run Certified DEP-003 through DEP-005 predecessor corpus
+      - name: Re-run implementation-refined DEP-003 through DEP-005 predecessor corpus
         run: cabal exec -- runghc -Wall -Werror -isrc test/Phase1DeploymentQualificationMain.hs
       - name: Re-run unchanged DEP-006 authority corpus
         run: cabal exec -- runghc -Wall -Werror -isrc test/Phase1DeploymentAuthorityMain.hs
