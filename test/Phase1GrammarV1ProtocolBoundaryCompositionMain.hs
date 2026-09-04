@@ -296,13 +296,13 @@ mixedBoundaryEvidence
 mixedBoundaryEvidence protocol = do
   occurrences <- boundaryOccurrences protocol
   bare <- mapM bareBoundaryEvidence
-    [ occurrence
-    | occurrence@(_, _, Located _ reference) <- occurrences
+    [ boundaryUse
+    | boundaryUse@(_, _, Located _ reference) <- occurrences
     , null (grammarV1StaticReferenceArguments reference)
     ]
   specialized <- mapM specializedBoundaryEvidence
-    [ occurrence
-    | occurrence@(_, _, Located _ reference) <- occurrences
+    [ boundaryUse
+    | boundaryUse@(_, _, Located _ reference) <- occurrences
     , not (null (grammarV1StaticReferenceArguments reference))
     ]
   pure (bare, specialized)
