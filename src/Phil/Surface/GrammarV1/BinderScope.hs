@@ -13,6 +13,7 @@ module Phil.Surface.GrammarV1.BinderScope
   , grammarV1ResolveLocal
   , grammarV1BindTermParameters
   , grammarV1FunctionParameterScope
+  , grammarV1ComponentParameterScope
   , grammarV1ClosureParameterScope
   ) where
 
@@ -24,6 +25,7 @@ import Phil.Core.Static (DeclarationKey (..))
 import Phil.Core.Syntax (Name (..))
 import Phil.Surface.GrammarV1.Parser
   ( GrammarV1Closure (..)
+  , GrammarV1ComponentDecl (..)
   , GrammarV1FunctionDecl (..)
   , GrammarV1TermParam (..)
   )
@@ -37,6 +39,7 @@ import Phil.Surface.Syntax
 -- declaration lineage plus a fresh lexical ordinal.
 data GrammarV1BinderKind
   = GrammarV1FunctionParameterBinder
+  | GrammarV1ComponentParameterBinder
   | GrammarV1ClosureParameterBinder
   | GrammarV1LetPatternBinder
   | GrammarV1MatchArmBinder
@@ -202,6 +205,26 @@ grammarV1FunctionParameterScope declarationKey functionDecl =
     GrammarV1FunctionParameterBinder
     (grammarV1FunctionTermParams functionDecl)
     (grammarV1RootLexicalScope declarationKey)
+
+-- | Establish the root term-parameter scope for one component while preserving
+-- the source distinction between an omitted parameter list and explicit `()`.
+-- Present parameters receive the same declaration-rooted ordinal/Core-name
+-- identity discipline as the other SURF-009 runtime binder families.
+grammarV1ComponentParameterScope
+  :: DeclarationKey
+  -> GrammarV1ComponentDecl
+  -> Either
+      GrammarV1BinderScopeError
+      (Maybe [GrammarV1ResolvedBinder], GrammarV1LexicalScope)
+grammarV1ComponentParameterScope declarationKey componentDecl =
+  case grammarV1ComponentTermParams componentDecl of
+    Nothing -> Right (Nothing, grammarV1RootLexicalScope declarationKey)
+    Just parameters -> do
+      (binders, scope) <- grammarV1BindTermParameters
+        GrammarV1ComponentParameterBinder
+        parameters
+        (grammarV1RootLexicalScope declarationKey)
+      Right (Just binders, scope)
 
 -- | Enter a child region for one closure and allocate its parameters there. An
 -- equal spelling still active in the enclosing function/closure is rejected as
