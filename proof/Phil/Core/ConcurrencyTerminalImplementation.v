@@ -1,4 +1,4 @@
-From Stdlib Require Import Bool.Bool.
+From Stdlib Require Import Bool.Bool Lists.List.
 
 From Phil.Core Require Import
   Syntax
