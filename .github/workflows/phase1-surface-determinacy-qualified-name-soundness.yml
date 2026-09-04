@@ -1,0 +1,97 @@
+name: Phase 1 Surface Determinacy Qualified Name Soundness
+
+on:
+  pull_request:
+  push:
+    branches: [main]
+
+permissions:
+  contents: read
+
+jobs:
+  rocq-qualified-name-soundness:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    container:
+      image: rocq/rocq-prover:9.2.0
+      options: --user root
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Derive exact Grammar-v1 inputs
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 scripts/derive_phase1_surface_grammar.py --write
+          python3 scripts/derive_phase1_surface_determinacy_certificate.py --write
+          python3 scripts/derive_phase1_surface_grammar.py --check
+          python3 scripts/derive_phase1_surface_determinacy_certificate.py --check
+
+      - name: Compile qualified-name soundness proof
+        shell: bash
+        run: |
+          set -euo pipefail
+          export PATH="/home/rocq/.opam/${COMPILER}/bin:$PATH"
+          compile() {
+            file="$1"
+            echo "=== compiling ${file} at $(date -u +%FT%TZ) ==="
+            rocq c -Q proof/Phil Phil "${file}"
+            echo "=== finished ${file} at $(date -u +%FT%TZ) ==="
+          }
+          compile proof/Phil/Surface/Grammar.v
+          compile proof/Phil/Surface/GrammarDerivation.v
+          compile proof/Phil/Surface/GrammarDerivationOracle.v
+          compile proof/Phil/Surface/GrammarDeterminacyCertificate.v
+          compile proof/Phil/Surface/GrammarDeterminacyNullableFirst.v
+          compile proof/Phil/Surface/GrammarDeterminacyFollowOverlap.v
+          compile proof/Phil/Surface/GrammarDeterminacySimpleResolvers.v
+          compile proof/Phil/Surface/GrammarDeterminacySimpleResolverSoundness.v
+          compile proof/Phil/Surface/GrammarDeterminacyStructuralResolvers.v
+          compile proof/Phil/Surface/GrammarDeterminacyStructuralScannerSoundness.v
+          compile proof/Phil/Surface/GrammarDeterminacyQualifiedNameSoundness.v
+
+      - name: Record qualified-name proof identities
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p surface-determinacy-qualified-name-soundness
+          cp \
+            proof/Phil/Surface/Grammar.v \
+            proof/Phil/Surface/GrammarDerivation.v \
+            proof/Phil/Surface/GrammarDerivationOracle.v \
+            proof/Phil/Surface/GrammarDeterminacyCertificate.v \
+            proof/Phil/Surface/GrammarDeterminacyNullableFirst.v \
+            proof/Phil/Surface/GrammarDeterminacyFollowOverlap.v \
+            proof/Phil/Surface/GrammarDeterminacySimpleResolvers.v \
+            proof/Phil/Surface/GrammarDeterminacySimpleResolverSoundness.v \
+            proof/Phil/Surface/GrammarDeterminacyStructuralResolvers.v \
+            proof/Phil/Surface/GrammarDeterminacyStructuralScannerSoundness.v \
+            proof/Phil/Surface/GrammarDeterminacyQualifiedNameSoundness.v \
+            proof/Phil/Surface/GrammarDeterminacyQualifiedNameSoundness.vo \
+            surface-determinacy-qualified-name-soundness/
+          sha256sum \
+            grammar/phase1-surface.ebnf \
+            grammar/phase1-surface-determinacy.json \
+            scripts/derive_phase1_surface_grammar.py \
+            scripts/check_phase1_surface_determinacy.py \
+            scripts/derive_phase1_surface_determinacy_certificate.py \
+            proof/Phil/Surface/Grammar.v \
+            proof/Phil/Surface/GrammarDerivation.v \
+            proof/Phil/Surface/GrammarDerivationOracle.v \
+            proof/Phil/Surface/GrammarDeterminacyCertificate.v \
+            proof/Phil/Surface/GrammarDeterminacyNullableFirst.v \
+            proof/Phil/Surface/GrammarDeterminacyFollowOverlap.v \
+            proof/Phil/Surface/GrammarDeterminacySimpleResolvers.v \
+            proof/Phil/Surface/GrammarDeterminacySimpleResolverSoundness.v \
+            proof/Phil/Surface/GrammarDeterminacyStructuralResolvers.v \
+            proof/Phil/Surface/GrammarDeterminacyStructuralScannerSoundness.v \
+            proof/Phil/Surface/GrammarDeterminacyQualifiedNameSoundness.v \
+            proof/Phil/Surface/GrammarDeterminacyQualifiedNameSoundness.vo \
+            > surface-determinacy-qualified-name-soundness/identities.sha256
+          cat surface-determinacy-qualified-name-soundness/identities.sha256
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: rocq-surface-determinacy-qualified-name-soundness
+          path: surface-determinacy-qualified-name-soundness
+          if-no-files-found: error
