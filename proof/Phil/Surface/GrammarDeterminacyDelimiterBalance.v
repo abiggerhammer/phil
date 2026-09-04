@@ -344,6 +344,17 @@ Definition delimiter_body_balancedb
   option_nat_isb
     (delimiter_effect_fuel delimiter_fuel 0 body) 0.
 
+Lemma delimiter_body_balancedb_true :
+  forall body,
+    delimiter_body_balancedb body = true ->
+    delimiter_effect_fuel delimiter_fuel 0 body = Some 0.
+Proof.
+  intros body Hbalanced.
+  unfold delimiter_body_balancedb in Hbalanced.
+  apply option_nat_isb_true in Hbalanced.
+  exact Hbalanced.
+Qed.
+
 Definition delimiter_rule_body_balancedb
   (rule : GrammarRule) : bool :=
   delimiter_body_balancedb (snd rule).
@@ -382,16 +393,10 @@ Lemma phase1_surface_lookup_rule_delimiter_effect_zero :
     delimiter_effect_fuel delimiter_fuel 0 body = Some 0.
 Proof.
   intros name body Hlookup.
-  pose proof
-    (forallb_lookup_rule_body
-      delimiter_body_balancedb
-      phase1_surface_rules name body
-      phase1_surface_all_rule_bodies_are_delimiter_balanced
-      Hlookup)
-    as Hbalanced.
-  unfold delimiter_body_balancedb in Hbalanced.
-  apply option_nat_isb_true in Hbalanced.
-  exact Hbalanced.
+  eapply delimiter_body_balancedb_true.
+  eapply forallb_lookup_rule_body.
+  - exact phase1_surface_all_rule_bodies_are_delimiter_balanced.
+  - exact Hlookup.
 Qed.
 
 Theorem phase1_surface_delimiter_effect_sound :
