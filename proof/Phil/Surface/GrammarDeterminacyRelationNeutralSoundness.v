@@ -50,6 +50,14 @@ Proof.
   destruct token as [literal | class_name lexeme].
   - unfold delimiter_balance_step in Hstep.
     unfold relation_neutral_step.
+    assert (Hpositive :
+      Nat.eqb (depth + S extra) 0 = false).
+    {
+      apply Nat.eqb_neq.
+      lia.
+    }
+    rewrite !Hpositive.
+    simpl.
     destruct (delimiter_open_literalb literal) eqn:Hopen.
     + inversion Hstep; subst final_depth.
       reflexivity.
@@ -59,13 +67,6 @@ Proof.
         -- inversion Hstep; subst final_depth.
            reflexivity.
       * inversion Hstep; subst final_depth.
-        assert (Hpositive :
-          Nat.eqb (depth + S extra) 0 = false).
-        {
-          apply Nat.eqb_neq.
-          lia.
-        }
-        rewrite Hpositive.
         reflexivity.
   - inversion Hstep; subst final_depth.
     reflexivity.

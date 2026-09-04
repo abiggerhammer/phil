@@ -242,11 +242,14 @@ Definition relation_operator_literalb (literal : string) : bool :=
 
 Definition proposition_atom_boundary_literalb (literal : string) : bool :=
   orb (String.eqb literal "and")
-  (orb (String.eqb literal "or")
-  (orb (String.eqb literal ";")
-  (orb (String.eqb literal ",")
-  (orb (String.eqb literal "=>")
-       (String.eqb literal "}"))))).
+    (orb (String.eqb literal "or")
+      (orb (String.eqb literal ";")
+        (orb (String.eqb literal ",")
+          (orb (String.eqb literal "=>")
+            (orb (String.eqb literal "then")
+              (orb (String.eqb literal "within")
+                (orb (String.eqb literal "{")
+                     (String.eqb literal "}")))))))).
 
 Fixpoint relation_commit_scan
   (depth : nat)
@@ -254,7 +257,11 @@ Fixpoint relation_commit_scan
   match tokens with
   | [] => false
   | TLiteral literal :: rest =>
-      if delimiter_open_literalb literal
+      if andb
+        (Nat.eqb depth 0)
+        (proposition_atom_boundary_literalb literal)
+      then false
+      else if delimiter_open_literalb literal
       then relation_commit_scan (S depth) rest
       else if delimiter_close_literalb literal
       then
@@ -266,8 +273,6 @@ Fixpoint relation_commit_scan
       then
         if relation_operator_literalb literal
         then true
-        else if proposition_atom_boundary_literalb literal
-        then false
         else relation_commit_scan depth rest
       else relation_commit_scan depth rest
   | _ :: rest => relation_commit_scan depth rest
@@ -330,14 +335,14 @@ Proof. reflexivity. Qed.
 Theorem pattern_name_then_brace_commits_record_pattern :
   pattern_decision
     [TLexical "IDENTIFIER" "R"; TLiteral "{"; TLexical "IDENTIFIER" "x"] =
-  Some (ChooseAlternative 2).
+    Some (ChooseAlternative 2).
 Proof. reflexivity. Qed.
 
 Theorem qualified_pattern_name_then_brace_commits_record_pattern :
   pattern_decision
     [TLexical "IDENTIFIER" "M"; TLiteral "."; TLexical "IDENTIFIER" "R";
      TLiteral "{"; TLexical "IDENTIFIER" "x"] =
-  Some (ChooseAlternative 2).
+    Some (ChooseAlternative 2).
 Proof. reflexivity. Qed.
 
 Theorem parenthesized_expression_close_commits_grouping :
@@ -382,6 +387,27 @@ Proof. reflexivity. Qed.
 Theorem proposition_true_without_relation_commits_literal :
   proposition_atom_decision [TLiteral "true"; TLiteral ";"] =
   Some (ChooseAlternative 2).
+Proof. reflexivity. Qed.
+
+Theorem proposition_true_then_tail_commits_literal :
+  forall tail,
+    proposition_atom_decision
+      (TLiteral "true" :: TLiteral "then" :: tail) =
+    Some (ChooseAlternative 2).
+Proof. reflexivity. Qed.
+
+Theorem proposition_true_within_tail_commits_literal :
+  forall tail,
+    proposition_atom_decision
+      (TLiteral "true" :: TLiteral "within" :: tail) =
+    Some (ChooseAlternative 2).
+Proof. reflexivity. Qed.
+
+Theorem proposition_true_open_brace_tail_commits_literal :
+  forall tail,
+    proposition_atom_decision
+      (TLiteral "true" :: TLiteral "{" :: tail) =
+    Some (ChooseAlternative 2).
 Proof. reflexivity. Qed.
 
 Theorem proposition_true_with_relation_commits_relation :
