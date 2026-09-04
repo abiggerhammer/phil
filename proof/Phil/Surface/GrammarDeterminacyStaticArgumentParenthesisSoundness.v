@@ -437,8 +437,7 @@ Proof.
                              inversion Hnth; subst item.
                              eapply phase1_surface_tuple_type_derivation_commits_static_argument_tuple_branch.
                              exact Hbranch.
-                         *** vm_compute in Hnth.
-                             discriminate Hnth.
+                         *** destruct index; vm_compute in Hnth; discriminate Hnth.
 Qed.
 
 Lemma phase1_surface_static_value_expression_lookup_exact :
@@ -575,8 +574,7 @@ Proof.
         as [primary_path [middle [primary_tree Hprimary]]].
       exists primary_path, middle, primary_tree.
       exact Hprimary.
-    + vm_compute in Hnth.
-      discriminate Hnth.
+    + destruct index; vm_compute in Hnth; discriminate Hnth.
 Qed.
 
 Definition phase1_surface_static_nonreference_primary_expression_items :
@@ -675,8 +673,7 @@ Proof.
                   (AtAlternative 4)),
                 branch_tree.
               exact Hbranch.
-           ++ vm_compute in Hnth.
-              discriminate Hnth.
+           ++ destruct index; vm_compute in Hnth; discriminate Hnth.
 Qed.
 
 Theorem phase1_surface_static_value_expression_open_derivation_commits_static_argument_value_branch :
