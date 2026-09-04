@@ -107,6 +107,7 @@ semanticCategoriesUseGeneratedNames = do
         (Map.member nName (unrestrictedBindings contextState)
           && Map.member okName (unrestrictedBindings contextState))
         "Core resource context omitted semantic callable parameters"
+
       requires <- checkedCategory
         (grammarV1CheckedSemanticCallableRequires context declarationKey source)
       req <- exactlyOne "semantic requires" requires
@@ -122,17 +123,22 @@ semanticCategoriesUseGeneratedNames = do
         "requires lexical reference"
         (checkedSemanticCallablePropositionReferences req)
       assert
-        (grammarV1ResolvedBinderKey
-          (grammarV1CheckedLexicalReferenceBinder reqRef)
-          == grammarV1ResolvedBinderKey nBinder)
+        (referenceBinderKey reqRef == grammarV1ResolvedBinderKey nBinder)
         "requires proposition lost exact n binder evidence"
+
       assumptions <- checkedCategory
         (grammarV1CheckedSemanticCallableAssumptions context declarationKey source)
       assumption <- exactlyOne "semantic assumption" assumptions
       assert
-        (checkedSemanticCallablePropositionCore assumption
-          == Equal (RefVar okName) (RefVar okName))
-        "assumption proposition did not use generated ok identity"
+        (checkedSemanticCallablePropositionCore assumption == Truth)
+        "reflexive Bool equality did not canonicalize to Truth"
+      let assumptionKeys =
+            map referenceBinderKey
+              (checkedSemanticCallablePropositionReferences assumption)
+      assert
+        (assumptionKeys
+          == replicate 2 (grammarV1ResolvedBinderKey okBinder))
+        "assumption occurrences did not retain exact generated ok binder evidence"
     other -> Left ("unexpected semantic callable parameter shape: " <> show other)
 
 semanticCategoriesPreserveOrder :: Either String ()
@@ -203,17 +209,15 @@ semanticCallablePropositionsAlphaStable = do
     (checkedSemanticCallablePropositionCore originalOne
       == checkedSemanticCallablePropositionCore renamedOne)
     "alpha-renaming changed callable proposition Core meaning"
-  originalRef <- exactlyOne
-    "original alpha reference"
-    (checkedSemanticCallablePropositionReferences originalOne)
-  renamedRef <- exactlyOne
-    "renamed alpha reference"
-    (checkedSemanticCallablePropositionReferences renamedOne)
-  assert
-    ( grammarV1ResolvedBinderKey
-        (grammarV1CheckedLexicalReferenceBinder originalRef)
-      == grammarV1ResolvedBinderKey
-        (grammarV1CheckedLexicalReferenceBinder renamedRef) )
+  let originalKeys =
+        map referenceBinderKey
+          (checkedSemanticCallablePropositionReferences originalOne)
+      renamedKeys =
+        map referenceBinderKey
+          (checkedSemanticCallablePropositionReferences renamedOne)
+  assert (length originalKeys == 2 && length renamedKeys == 2)
+    "reflexive equality did not retain both lexical occurrence records"
+  assert (originalKeys == renamedKeys)
     "alpha-renaming changed callable proposition binder identity"
 
 semanticClauseIndependentOfBadResult :: Either String ()
@@ -229,11 +233,14 @@ semanticClauseIndependentOfBadResult = do
   binder <- exactlyOne
     "independent parameter"
     (map fst (semanticCallableScopeParameters scope))
-  let semanticName = grammarV1ResolvedBinderCoreName binder
   assert
-    (checkedSemanticCallablePropositionCore checked
-      == Equal (RefVar semanticName) (RefVar semanticName))
-    "bad result type poisoned or changed independent ensures semantics"
+    (checkedSemanticCallablePropositionCore checked == Truth)
+    "bad result type poisoned independent ensures canonical meaning"
+  assert
+    ( map referenceBinderKey
+        (checkedSemanticCallablePropositionReferences checked)
+      == replicate 2 (grammarV1ResolvedBinderKey binder) )
+    "bad result type changed independent ensures binder evidence"
 
 semanticCallablePropositionFocusingPreserved :: Either String ()
 semanticCallablePropositionFocusingPreserved = do
@@ -282,13 +289,14 @@ semanticCallablePropositionCompetenceBoundary = do
   assert (check named == Nothing)
     "nonprimitive callable parameter escaped semantic proposition competence"
   case check unresolved of
-    Just (Right [checked]) ->
-      assert
-        (null (checkedSemanticCallablePropositionReferences checked))
-        "unresolved global-looking name was misclassified as lexical binder"
+    Just (Left (GrammarV1SemanticCallablePropositionCheckNonCompetent _)) -> Right ()
     other -> Left
-      ("unresolved global-looking proposition did not preserve structural route: "
+      ("unresolved global-looking proposition did not remain explicit check non-competence: "
         <> show other)
+
+referenceBinderKey :: GrammarV1CheckedLexicalReference -> GrammarV1BinderKey
+referenceBinderKey =
+  grammarV1ResolvedBinderKey . grammarV1CheckedLexicalReferenceBinder
 
 checkedScope
   :: DeclarationKey
