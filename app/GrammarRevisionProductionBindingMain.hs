@@ -2,6 +2,7 @@
 
 module Main (main) where
 
+import Data.Either (isLeft, isRight)
 import Data.Text (Text)
 import qualified Data.Text as Text
 import qualified Data.Text.IO as TextIO
@@ -27,13 +28,13 @@ main = do
     , test "native incompatible-revision diagnostic precedes kernel admission"
         (expectNative isIncompatible incompatibleRevisionBundle)
     , test "exact grammar revision kernel facts are accepted"
-        (expectKernel Right (GrammarRevisionKernelFacts True True True))
+        (expectKernel isRight (GrammarRevisionKernelFacts True True True))
     , test "kernel rejects absent/incompetent revision fact"
-        (expectKernel Left (GrammarRevisionKernelFacts False True True))
+        (expectKernel isLeft (GrammarRevisionKernelFacts False True True))
     , test "kernel rejects selected-revision mismatch fact"
-        (expectKernel Left (GrammarRevisionKernelFacts True False True))
+        (expectKernel isLeft (GrammarRevisionKernelFacts True False True))
     , test "kernel rejects payload-rebinding disagreement fact"
-        (expectKernel Left (GrammarRevisionKernelFacts True True False))
+        (expectKernel isLeft (GrammarRevisionKernelFacts True True False))
     ]
   if and results then pure () else exitFailure
 
