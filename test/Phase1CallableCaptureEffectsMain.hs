@@ -3,7 +3,13 @@
 module Main (main) where
 
 import qualified Data.Set as Set
+import qualified Phil.Core.Authority as Authority
 import Phil.Core.Callable
+import Phil.Core.Effect
+  ( CheckedSemanticEffect (..)
+  , SemanticEffectSubjectKey (..)
+  , checkedSemanticEffect
+  )
 import Phil.Core.Static (InterfaceRevision (..))
 import Phil.Core.Syntax (Mode (..))
 import System.Exit (exitFailure)
@@ -23,6 +29,10 @@ main = do
     , test "CALL-004 forwarding storing and returning callable stay effect-neutral" forwardingDoesNotPropagateEffects
     , test "CALL-005 reachable invocation propagates exact public effect bound" invocationPropagatesEffects
     , test "CALL-005 repeated invocation effect inference is canonical set union" invocationEffectsAreCanonicalUnion
+    , test "EFF-005 effect permission does not grant semantic authority"
+        effectPermissionDoesNotGrantAuthority
+    , test "EFF-005 possessed authority stays effect-neutral until invocation"
+        authorityPossessionDoesNotIncurEffect
     ]
   if and results then pure () else exitFailure
 
@@ -129,6 +139,57 @@ invocationEffectsAreCanonicalUnion =
   in assert (actual == expected)
       "effect inference did not canonicalize repeated invocation effects as set union"
 
+effectPermissionDoesNotGrantAuthority :: Either String ()
+effectPermissionDoesNotGrantAuthority = do
+  checkedWrite <- mapLeft show
+    (checkedSemanticEffect ["storage", "Write"] [storeEffectSubject])
+  let writeEffect = checkedSemanticEffectCore checkedWrite
+      effectOnly = Authority.EffectPermissionOnly (unSemanticEffect writeEffect)
+  case Authority.checkAuthorityExercise
+      writeAuthorityRequirement effectOnly Authority.emptyAuthorityState of
+    Left (Authority.AuthoritySourceIsNotPossession actual) ->
+      assert (actual == effectOnly)
+        "authority rejection did not preserve the exact effect-only source"
+    other -> Left
+      ("effect permission was accepted as semantic write authority: " <> show other)
+
+authorityPossessionDoesNotIncurEffect :: Either String ()
+authorityPossessionDoesNotIncurEffect = do
+  authorityState <- mapLeft show
+    (Authority.insertAuthorityCapability
+      writeAuthorityCapability Authority.emptyAuthorityState)
+  checkedExercise <- mapLeft show
+    (Authority.checkAuthorityExercise
+      writeAuthorityRequirement
+      (Authority.PossessedCapability writeAuthorityOccurrence)
+      authorityState)
+  assert
+    (Authority.checkedAuthorityRequirement checkedExercise == writeAuthorityRequirement)
+    "successful authority exercise changed the exact write requirement"
+  checkedWrite <- mapLeft show
+    (checkedSemanticEffect ["storage", "Write"] [storeEffectSubject])
+  let writeEffect = checkedSemanticEffectCore checkedWrite
+      writeContract = CallableContract
+        { callableContractInterfaceRevision =
+            InterfaceRevision "callable.storage-write.interface.v1"
+        , callableContractCalleeTransition = PreserveCallee
+        , callableContractEffectBound = Set.singleton writeEffect
+        }
+      latentUses =
+        [ PossessCallable writeContract
+        , PassCallable writeContract
+        , StoreCallable writeContract
+        , ReturnCallable writeContract
+        ]
+  assert
+    (Set.null (inferReachableCallableEffects latentUses))
+    "possessing/exercising write authority imported the callable write effect"
+  assert
+    ( inferReachableCallableEffects (latentUses <> [InvokeCallable writeContract])
+        == Set.singleton writeEffect
+    )
+    "reachable invocation did not contribute exactly storage.Write(store)"
+
 ownerOccurrence, tokenOccurrence, labelOccurrence :: CaptureOccurrenceKey
 ownerOccurrence = CaptureOccurrenceKey "owner.bytes.001"
 tokenOccurrence = CaptureOccurrenceKey "token.cache.001"
@@ -161,6 +222,34 @@ auditContract = CallableContract
   { callableContractInterfaceRevision = InterfaceRevision "callable.audit.interface.v1"
   , callableContractCalleeTransition = PreserveCallee
   , callableContractEffectBound = Set.singleton auditEffect
+  }
+
+storeEffectSubject :: SemanticEffectSubjectKey
+storeEffectSubject = SemanticEffectSubjectKey "semantic.subject.store"
+
+writeAuthorityOccurrence :: Authority.CapabilityOccurrenceKey
+writeAuthorityOccurrence = Authority.CapabilityOccurrenceKey "capability.storage-write.001"
+
+writeAuthorityRequirement :: Authority.AuthorityRequirement
+writeAuthorityRequirement = Authority.AuthorityRequirement
+  { Authority.requiredAuthorityContract =
+      Authority.AuthorityContractKey "authority.storage"
+  , Authority.requiredAuthoritySubject =
+      Authority.AuthoritySubjectKey "semantic.subject.store"
+  , Authority.requiredAuthorityOperation =
+      Authority.AuthorityOperationKey "storage.Write"
+  }
+
+writeAuthorityCapability :: Authority.AuthorityCapability
+writeAuthorityCapability = Authority.AuthorityCapability
+  { Authority.authorityCapabilityOccurrence = writeAuthorityOccurrence
+  , Authority.authorityCapabilityContract =
+      Authority.AuthorityContractKey "authority.storage"
+  , Authority.authorityCapabilitySubject =
+      Authority.AuthoritySubjectKey "semantic.subject.store"
+  , Authority.authorityCapabilityMode = Unrestricted
+  , Authority.authorityCapabilityOperations =
+      Set.singleton (Authority.AuthorityOperationKey "storage.Write")
   }
 
 assert :: Bool -> String -> Either String ()
