@@ -17,7 +17,6 @@ import Phil.Core.SIntArithmetic
   , SIntArithmeticError
   , SIntArithmeticOperator (..)
   , SIntTerm (..)
-  , SIntType
   , checkPlainSIntArithmetic
   , sIntTypeFromCoreType
   )
@@ -64,8 +63,8 @@ checkGrammarV1PlainSIntArithmetic state contextualType environment expression re
     GrammarV1BinaryExpression left locatedOperator right ->
       Right (locatedValue left, locatedValue locatedOperator, locatedValue right)
     _ -> Left (GrammarV1PlainSIntBinaryExpressionRequired expression)
-  left <- resolveOperand ty contextualType environment leftExpression
-  right <- resolveOperand ty contextualType environment rightExpression
+  left <- resolveOperand contextualType environment leftExpression
+  right <- resolveOperand contextualType environment rightExpression
   let coreOperator = case operator of
         GrammarV1Add -> SIntAdd
         GrammarV1Subtract -> SIntSubtract
@@ -79,12 +78,11 @@ checkGrammarV1PlainSIntArithmetic state contextualType environment expression re
   Right (decision, nextState)
 
 resolveOperand
-  :: SIntType
-  -> GrammarV1Type
+  :: GrammarV1Type
   -> GrammarV1SIntEnvironment
   -> GrammarV1Expression
   -> Either GrammarV1PlainSIntArithmeticError SIntTerm
-resolveOperand _ty contextualType environment expression =
+resolveOperand contextualType environment expression =
   case expression of
     GrammarV1IntegerExpression _ ->
       SIntKnown <$> mapLeft GrammarV1PlainSIntLiteralError
