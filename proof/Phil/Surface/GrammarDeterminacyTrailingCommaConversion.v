@@ -97,6 +97,7 @@ Lemma trailing_comma_tail_shapeb_cases :
      outer_follow = [OverlapLiteral "}"]).
 Proof.
   intros items outer_follow Hshape.
+  unfold trailing_comma_tail_shapeb in Hshape.
   destruct items as [| first rest]; try discriminate Hshape.
   destruct first as
     [literal | class_name | name | seq_items | alt_items | optional_body | repeat_body];
