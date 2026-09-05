@@ -13,6 +13,7 @@ import Phil.Core.SIntArithmetic
   , PlainSIntArithmeticSite (..)
   , SIntArithmeticError (..)
   , SIntArithmeticOperator (..)
+  , plainSIntArithmeticProposition
   )
 import Phil.Core.Scalar (ScalarLiteral (..))
 import Phil.Core.Syntax
@@ -215,7 +216,7 @@ symbolicSignedArithmetic = do
     "signed arithmetic obligation did not enter ordinary CheckState"
   assert
     (obligationProposition obligation
-      == Phil.Core.SIntArithmetic.plainSIntArithmeticProposition
+      == plainSIntArithmeticProposition
           SIntMultiply 32
           (environment Map.! leftReference)
           (environment Map.! rightReference)
