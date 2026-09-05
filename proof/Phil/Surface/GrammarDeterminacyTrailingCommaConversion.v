@@ -206,11 +206,14 @@ Proof.
     + simpl in Hstarts.
       discriminate Hstarts.
     + simpl in Hstarts.
-      apply String.eqb_eq in Hstarts.
-      subst class_name.
-      exists lexeme, remaining.
-      rewrite Hinput.
-      reflexivity.
+      destruct (String.eqb class_name "IDENTIFIER") eqn:Hclass.
+      * apply String.eqb_eq in Hclass.
+        subst class_name.
+        exists lexeme, remaining.
+        rewrite Hinput.
+        reflexivity.
+      * simpl in Hstarts.
+        discriminate Hstarts.
 Qed.
 
 Theorem trailing_comma_body_derivation_continues :
