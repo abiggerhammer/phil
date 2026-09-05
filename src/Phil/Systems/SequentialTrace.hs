@@ -11,24 +11,18 @@ module Phil.Systems.SequentialTrace
   , checkSequentialTraceRefinement
   ) where
 
-import Data.List (findIndex, nub, sort)
+import Data.List (findIndex, sort)
 import qualified Data.Set as Set
 import Data.Text (Text)
 import qualified Data.Text as Text
 import Phil.Assurance.Types (Digest)
 import Phil.Systems.IR (StageContract (..))
 
--- | Exact semantic identity of one bounded source execution event.  The key is
--- supplied by the competent source/event projector; display spelling, target
--- instruction identity, and host execution identity are deliberately absent.
 newtype SequentialEventKey = SequentialEventKey
   { unSequentialEventKey :: Text
   }
   deriving (Eq, Ord, Show)
 
--- | Exact evidence that two semantic events may commute without changing the
--- source projection.  Commutation is symmetric; the evidence identifier is part
--- of the StageContract relation and must be nonempty.
 data SequentialCommutation = SequentialCommutation
   { sequentialCommutationLeft :: SequentialEventKey
   , sequentialCommutationRight :: SequentialEventKey
@@ -36,9 +30,6 @@ data SequentialCommutation = SequentialCommutation
   }
   deriving (Eq, Ord, Show)
 
--- | Ordered source/target trace relation tied to one exact StageContract and its
--- source/target artifact digests.  StageContract.trace_relation itself remains a
--- set-like collection of relation facts; order lives inside this checked witness.
 data SequentialTraceRefinement = SequentialTraceRefinement
   { sequentialTraceStageContractId :: Text
   , sequentialTraceSourceDigest :: Digest
