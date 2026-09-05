@@ -138,8 +138,15 @@ Proof.
         subst comma close.
         left.
         reflexivity.
-      * simpl in Hshape.
-        discriminate Hshape.
+      * destruct first as
+          [literal | class_name | name | seq_items | alt_items |
+           optional_body | repeat_body];
+          try (simpl in Hshape; discriminate Hshape).
+        destruct optional_body as
+          [comma | class_name | name | seq_items | alt_items |
+           nested_optional | nested_repeat];
+          simpl in Hshape;
+          discriminate Hshape.
 Qed.
 
 Lemma trailing_comma_body_derivation_has_identifier_prefix :
