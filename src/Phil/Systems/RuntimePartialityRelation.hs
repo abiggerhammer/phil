@@ -1,7 +1,8 @@
 {-# LANGUAGE OverloadedStrings #-}
 
 module Phil.Systems.RuntimePartialityRelation
-  ( TargetPartialityKind (..)
+  ( TargetCapacityClass (..)
+  , TargetPartialityKind (..)
   , RuntimePartialityHazardRef (..)
   , RuntimePartialitySourceOutcome (..)
   , RuntimePartialityEnforcementKey (..)
@@ -29,17 +30,36 @@ import Phil.Systems.TargetStrengthening
   , verifyTargetStrengtheningStageBundle
   )
 
+-- | Target-independent realization-capacity classes for EXEC-013. These are
+-- semantic coordinates of the selected realization, not Phil source resource
+-- kinds. A backend may refine one class further through 'TargetOtherCapacity',
+-- but it may not collapse distinct classes merely because one physical runtime
+-- reports them through the same error or trap mechanism.
+data TargetCapacityClass
+  = TargetStackOrDepthCapacity
+  | TargetGasOrFuelCapacity
+  | TargetDescriptorTableQueueCapacity
+  | TargetWorkerTaskCapacity
+  | TargetDeviceLaunchCapacity
+  | TargetDeviceScratchCapacity
+  | TargetDeviceRegisterCapacity
+  | TargetDeviceLocalMemoryCapacity
+  | TargetPinnedOrDmaCapacity
+  | TargetAllocatorCapacity
+  | TargetOtherCapacity Text
+  deriving (Eq, Ord, Show)
+
 -- | Target-level ways in which violating a realization validity condition can
--- widen Phil semantics. EXEC-012 pressures the first five constructors. The
--- capacity constructor is included so EXEC-013 can reuse the same relation
--- rather than introducing a second partiality algebra.
+-- widen Phil semantics. EXEC-012 pressures UB/poison/unreachable/trap/exception
+-- consequences. EXEC-013 reuses the same relation for typed realization-only
+-- capacity exhaustion rather than introducing a second partiality algebra.
 data TargetPartialityKind
   = TargetUndefinedBehavior
   | TargetPoison
   | TargetUnreachable
   | TargetTrap
   | TargetExceptionalHalt
-  | TargetCapacityExhaustion Text
+  | TargetCapacityExhaustion TargetCapacityClass
   | TargetOtherPartiality Text
   deriving (Eq, Ord, Show)
 
@@ -76,7 +96,8 @@ newtype RuntimePartialityDeploymentRequirementKey =
 -- | Target-independent ADR-026 disposition vocabulary. Storage allocation
 -- failure already uses the same semantic alternatives in MEM-002/003; this
 -- relation lifts them from allocation-only failure to arbitrary target validity
--- conditions. There is deliberately no "native target behavior" constructor.
+-- and realization-capacity conditions. There is deliberately no "native target
+-- behavior" constructor.
 data RuntimePartialityDisposition
   = RuntimePartialityMapsToSourceOutcome RuntimePartialitySourceOutcome
   | RuntimePartialityProvedSatisfied RevisionId
@@ -168,13 +189,21 @@ checkHazardSet (precondition, kinds)
     checkKind kind =
       let ref = RuntimePartialityHazardRef precondition kind
       in case kind of
-          TargetCapacityExhaustion label
-            | Text.null (Text.strip label) ->
-                Left (RuntimePartialityEmptyHazardIdentity ref)
+          TargetCapacityExhaustion capacity -> checkCapacityClass ref capacity
           TargetOtherPartiality label
             | Text.null (Text.strip label) ->
                 Left (RuntimePartialityEmptyHazardIdentity ref)
           _ -> Right ()
+
+checkCapacityClass
+  :: RuntimePartialityHazardRef
+  -> TargetCapacityClass
+  -> Either RuntimePartialityError ()
+checkCapacityClass ref capacity = case capacity of
+  TargetOtherCapacity label
+    | Text.null (Text.strip label) ->
+        Left (RuntimePartialityEmptyHazardIdentity ref)
+  _ -> Right ()
 
 checkDisposition
   :: RuntimePartialityRelation
