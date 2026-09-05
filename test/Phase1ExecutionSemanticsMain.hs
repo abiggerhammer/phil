@@ -4,7 +4,9 @@ module Main (main) where
 
 import qualified Data.Map.Strict as Map
 import qualified Data.Set as Set
+import Data.Text (Text)
 import Phil.Assurance.Types (Digest (..))
+import Phil.Core.Callable (SemanticEffect (..))
 import Phil.Core.CheckedUIntArithmetic
   ( CheckedUIntArithmeticDecision (..)
   , CheckedUIntArithmeticError (..)
@@ -22,7 +24,8 @@ import Phil.Core.Discharge
 import Phil.Core.Scalar (ScalarLiteral (..))
 import Phil.Core.Static (emptyStaticContext)
 import Phil.Core.Syntax
-  ( Obligation (..)
+  ( Mode (..)
+  , Obligation (..)
   , ObligationId (..)
   , RefSort (..)
   , RefTerm (..)
@@ -60,6 +63,13 @@ import Phil.Systems.SemanticInitialization
   , checkSemanticInitializationTrace
   , renderSemanticInitializationTrace
   )
+import Phil.Systems.StructuralDiscard
+  ( StructuralDiscardError (..)
+  , StructuralDiscardTrace (..)
+  , TargetStructuralDiscard (..)
+  , checkStructuralDiscardCorrespondence
+  , renderStructuralDiscardTrace
+  )
 import System.Exit (exitFailure)
 
 main :: IO ()
@@ -83,6 +93,8 @@ main = do
         exactPlainUIntArithmetic
     , test "EXEC-009 checked UInt arithmetic exposes exact success and explicit range outcomes"
         checkedUIntArithmeticOutcomes
+    , test "EXEC-010 structural discard has no implicit finalizer semantics"
+        structuralDiscardHasNoHiddenFinalizer
     ]
   if and results then pure () else exitFailure
 
@@ -357,6 +369,63 @@ checkedUIntArithmeticOutcomes = do
     Left (CheckedUIntArithmeticOperandTypeMismatch _ (ScalarUIntLiteral 16 1) 8) -> Right ()
     other -> Left ("checked arithmetic coerced a wrong-width operand: " <> show other)
 
+structuralDiscardHasNoHiddenFinalizer :: Either String ()
+structuralDiscardHasNoHiddenFinalizer = do
+  let affine = discardTrace Affine "cache"
+      affineTarget = discardTarget Affine "cache"
+        { targetStructuralDiscardPhysicalReclamation = Set.singleton "drop-stack-slot" }
+      affineContract = discardContractFor affine
+  mapLeft show (checkStructuralDiscardCorrespondence affineContract affine affineTarget)
+
+  let unrestricted = discardTrace Unrestricted "counter"
+      unrestrictedTarget = discardTarget Unrestricted "counter"
+  mapLeft show
+    (checkStructuralDiscardCorrespondence
+      (discardContractFor unrestricted)
+      unrestricted
+      unrestrictedTarget)
+
+  let linear = discardTrace Linear "session"
+  case checkStructuralDiscardCorrespondence
+      (discardContractFor linear)
+      linear
+      (discardTarget Linear "session") of
+    Left (StructuralDiscardLinearBinding "session") -> Right ()
+    other -> Left ("linear binding was weakened as structural discard: " <> show other)
+
+  let finalizerEffect = SemanticEffect "io.flush"
+      effectTarget = affineTarget
+        { targetStructuralDiscardSemanticEffects = Set.singleton finalizerEffect }
+  case checkStructuralDiscardCorrespondence affineContract affine effectTarget of
+    Left (StructuralDiscardHiddenSemanticEffects actual) ->
+      assert (actual == Set.singleton finalizerEffect)
+        "hidden-finalizer rejection lost the exact semantic effect"
+    other -> Left ("affine discard smuggled a finalizer effect: " <> show other)
+
+  let failureTarget = affineTarget
+        { targetStructuralDiscardFailures = Set.singleton "finalizer-failed" }
+  case checkStructuralDiscardCorrespondence affineContract affine failureTarget of
+    Left (StructuralDiscardHiddenFailures actual) ->
+      assert (actual == Set.singleton "finalizer-failed")
+        "hidden-finalizer rejection lost the exact failure"
+    other -> Left ("affine discard smuggled a finalizer failure: " <> show other)
+
+  let transitionTarget = affineTarget
+        { targetStructuralDiscardResourceTransitions = Set.singleton "close(cache)" }
+  case checkStructuralDiscardCorrespondence affineContract affine transitionTarget of
+    Left (StructuralDiscardHiddenResourceTransitions actual) ->
+      assert (actual == Set.singleton "close(cache)")
+        "hidden-finalizer rejection lost the exact resource transition"
+    other -> Left ("affine discard smuggled an implicit close transition: " <> show other)
+
+  let relation = renderStructuralDiscardTrace affine
+      unboundContract = affineContract { stageTraceRelation = [] }
+  case checkStructuralDiscardCorrespondence unboundContract affine affineTarget of
+    Left (StructuralDiscardMissingTraceRelation actual) ->
+      assert (actual == relation)
+        "missing StageContract relation lost the exact structural-discard identity"
+    other -> Left ("unbound target discard realization was accepted: " <> show other)
+
 baseTrace :: [SemanticInitializationEvent] -> SemanticInitializationTrace
 baseTrace events = SemanticInitializationTrace
   { semanticInitializationStageContractId = "stage.exec.init"
@@ -376,6 +445,39 @@ contractFor trace = StageContract
   , stageDerivedObligations = []
   , stageAssumptions = []
   , stageTraceRelation = [renderSemanticInitializationTrace trace]
+  , stageResourceFailureRelation = []
+  }
+
+discardTrace :: Mode -> Text -> StructuralDiscardTrace
+discardTrace mode binding = StructuralDiscardTrace
+  { structuralDiscardStageContractId = "stage.exec.discard"
+  , structuralDiscardSourceDigest = Digest "source.exec.discard"
+  , structuralDiscardTargetDigest = Digest "target.exec.discard"
+  , structuralDiscardBinding = binding
+  , structuralDiscardMode = mode
+  }
+
+discardTarget :: Mode -> Text -> TargetStructuralDiscard
+discardTarget mode binding = TargetStructuralDiscard
+  { targetStructuralDiscardBinding = binding
+  , targetStructuralDiscardMode = mode
+  , targetStructuralDiscardSemanticEffects = Set.empty
+  , targetStructuralDiscardFailures = Set.empty
+  , targetStructuralDiscardResourceTransitions = Set.empty
+  , targetStructuralDiscardPhysicalReclamation = Set.empty
+  }
+
+discardContractFor :: StructuralDiscardTrace -> StageContract
+discardContractFor trace = StageContract
+  { stageContractId = structuralDiscardStageContractId trace
+  , stageSourceArtifactDigest = structuralDiscardSourceDigest trace
+  , stageTargetArtifactDigest = structuralDiscardTargetDigest trace
+  , stageFacts = []
+  , stageInvariants = Map.empty
+  , stageRequiredEdges = []
+  , stageDerivedObligations = []
+  , stageAssumptions = []
+  , stageTraceRelation = [renderStructuralDiscardTrace trace]
   , stageResourceFailureRelation = []
   }
 
