@@ -22,10 +22,8 @@ Open Scope string_scope.
   The ordinary -> predictive-oracle conversion needs one small amount of
   information that the one-token FOLLOW certificate deliberately does not
   retain: at the five trailing-comma repetition sites, stopping on a comma is
-  sound only when the next token is the enclosing close brace.  The checked
-  qualified-name repetition is the other intentional repetition overlap: a
-  "." followed by IDENTIFIER always continues the maximal qualified name.
-  This checker records those exact local shapes while classifying every other
+  sound only when the next token is the enclosing close brace.  This checker
+  records that exact local two-token shape while also classifying every other
   choice point as either a certified resolver root or a FIRST/FOLLOW-disjoint
   fallback site.
 
@@ -121,16 +119,6 @@ Definition comma_identifier_repetition_bodyb
   | _ => false
   end.
 
-Definition qualified_name_repetition_bodyb
-  (body : EbnfExpression) : bool :=
-  match body with
-  | ESequence [ELiteral separator; ENonterminal name] =>
-      andb
-        (String.eqb separator ".")
-        (String.eqb name "identifier")
-  | _ => false
-  end.
-
 Definition trailing_comma_tail_shapeb
   (items : list EbnfExpression)
   (outer_follow : list OverlapToken) : bool :=
@@ -169,8 +157,6 @@ Definition repetition_assembly_guardb
   (body : EbnfExpression) : bool :=
   if trailing_comma_repeat_pathb path
   then comma_identifier_repetition_bodyb body
-  else if qualified_name_repeat_pathb path
-  then qualified_name_repetition_bodyb body
   else expression_follow_disjointb body outer_follow.
 
 Definition oracle_assembly_fuel : nat := 512.
