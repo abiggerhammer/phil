@@ -6,6 +6,7 @@ From Phil.Surface Require Import
   GrammarDerivationOracle
   GrammarDeterminacyStructuralResolvers
   GrammarDeterminacySimpleResolverSoundness
+  GrammarDeterminacyContinuationSoundness
   GrammarDeterminacyPatternResolverSoundness
   GrammarDeterminacyPrimaryParenthesisSoundness
   GrammarDeterminacyAlternativeResolverLift.
