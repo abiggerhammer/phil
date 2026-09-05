@@ -12,12 +12,13 @@ Open Scope string_scope.
 (*
   First resolver tranche for PHIL-SURFACE-DETERM-001.
 
-  #572 proved that the proof-facing nullable/FIRST/FOLLOW traversal computes
-  exactly the same 15 local overlap sites as the generated certificate.  This
-  file binds seven of those sites to two small token-level resolver families:
+  The proof-facing nullable/FIRST/FOLLOW traversal computes exactly the same
+  local overlap set as the generated certificate.  This file binds the overlap
+  sites decidable from a small fixed token prefix to three resolver families:
 
-    - reserved keyword versus IDENTIFIER continuation (2 sites), and
-    - comma-list continuation versus closing/trailing-comma termination (5).
+    - reserved keyword versus IDENTIFIER continuation (2 sites),
+    - comma-list continuation versus closing/trailing-comma termination (5), and
+    - maximal qualified-name repetition on "." IDENTIFIER (1).
 
   ConcreteToken already represents the admitted lexical contract at the proof
   boundary: literal tokens and lexical-class tokens are distinct constructors.
@@ -75,8 +76,16 @@ Definition trailing_comma_resolver_siteb (site : OverlapSite) : bool :=
       "variant_payload/alt[0]/seq[1]/optional/seq[1]"
       [OverlapLiteral ","])))) .
 
+Definition qualified_name_repeat_resolver_siteb (site : OverlapSite) : bool :=
+  site_key_matches site RepeatFollowOverlap
+    "qualified_name" "qualified_name/seq[1]" [OverlapLiteral "."].
+
 Definition simple_resolver_siteb (site : OverlapSite) : bool :=
-  orb (reserved_keyword_resolver_siteb site) (trailing_comma_resolver_siteb site).
+  orb
+    (reserved_keyword_resolver_siteb site)
+    (orb
+      (trailing_comma_resolver_siteb site)
+      (qualified_name_repeat_resolver_siteb site)).
 
 Theorem phase1_surface_reserved_keyword_resolver_sites_are_exactly_two :
   List.length
@@ -96,9 +105,18 @@ Proof.
   reflexivity.
 Qed.
 
-Theorem phase1_surface_simple_resolver_sites_are_exactly_seven :
+Theorem phase1_surface_qualified_name_repeat_resolver_site_is_unique :
   List.length
-    (filter simple_resolver_siteb phase1_surface_determinacy_certificate) = 7.
+    (filter qualified_name_repeat_resolver_siteb
+      phase1_surface_determinacy_certificate) = 1.
+Proof.
+  vm_compute.
+  reflexivity.
+Qed.
+
+Theorem phase1_surface_simple_resolver_sites_are_exactly_eight :
+  List.length
+    (filter simple_resolver_siteb phase1_surface_determinacy_certificate) = 8.
 Proof.
   vm_compute.
   reflexivity.
@@ -178,6 +196,12 @@ Definition trailing_comma_repeat_pathb (path : SyntaxPath) : bool :=
   (orb (path_has_suffixb path record_pattern_comma_repeat_suffix)
        (path_has_suffixb path variant_payload_comma_repeat_suffix)))).
 
+Definition qualified_name_repeat_suffix : SyntaxPath :=
+  [AtNonterminal "qualified_name"; AtSequence 1].
+
+Definition qualified_name_repeat_pathb (path : SyntaxPath) : bool :=
+  path_has_suffixb path qualified_name_repeat_suffix.
+
 Definition provider_declaration_decision
   (input : list ConcreteToken) : option OracleDecision :=
   match input with
@@ -243,6 +267,18 @@ Definition trailing_comma_repeat_decision
   | _ => None
   end.
 
+Definition qualified_name_repeat_decision
+  (input : list ConcreteToken) : option OracleDecision :=
+  match input with
+  | TLiteral separator :: TLexical class_name _ :: _ =>
+      if andb
+           (String.eqb separator ".")
+           (String.eqb class_name "IDENTIFIER")
+      then Some ChooseRepetitionContinue
+      else None
+  | _ => None
+  end.
+
 Definition phase1_surface_simple_resolver : DerivationOracle :=
   fun path input =>
     if path_has_suffixb path provider_declaration_suffix
@@ -251,6 +287,8 @@ Definition phase1_surface_simple_resolver : DerivationOracle :=
     then generic_requirement_decision input
     else if trailing_comma_repeat_pathb path
     then trailing_comma_repeat_decision input
+    else if qualified_name_repeat_pathb path
+    then qualified_name_repeat_decision input
     else None.
 
 Theorem provider_declaration_contract_prefix_commits_branch_six :
@@ -304,6 +342,14 @@ Qed.
 Theorem close_without_comma_stops_list_repetition :
   trailing_comma_repeat_decision [TLiteral "}"] =
   Some ChooseRepetitionStop.
+Proof.
+  reflexivity.
+Qed.
+
+Theorem dot_then_identifier_continues_qualified_name :
+  qualified_name_repeat_decision
+    [TLiteral "."; TLexical "IDENTIFIER" "member"] =
+  Some ChooseRepetitionContinue.
 Proof.
   reflexivity.
 Qed.
