@@ -377,9 +377,13 @@ semanticCallableResultRefinementComposesWithOutcomes = do
   stateScope <- exactlyOne
     "composed callable outcome state scope"
     (semanticCallableOutcomeResidueStateScopes residue)
-  (sBinder, TyUInt 8) <- exactlyOne
+  stateBinding <- exactlyOne
     "composed callable outcome state binding"
     (semanticCallableOutcomeStateBindings stateScope)
+  sBinder <- case stateBinding of
+    (binder, TyUInt 8) -> Right binder
+    other -> Left
+      ("unexpected composed callable outcome state binding: " <> show other)
   assert
     (grammarV1BinderOrdinal (grammarV1ResolvedBinderKey sBinder) == 2)
     "callable outcome state reused the closed result-refinement ordinal"
