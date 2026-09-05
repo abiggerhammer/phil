@@ -288,7 +288,7 @@ mergeNegativeIntegerLiterals = go Nothing
                 (GrammarDecimalInteger ("-" <> digits))
           in merged : go (Just merged) rest
     go _ [token] = [token]
-    go previous (token : rest) = token : go (Just token) rest
+    go _ (token : rest) = token : go (Just token) rest
 
     unaryPosition Nothing = True
     unaryPosition (Just token) = not (canTerminateExpression (locatedValue token))
