@@ -7,6 +7,7 @@ From Phil.Surface Require Import
   GrammarDeterminacyNullableFirst
   GrammarDeterminacyStructuralResolvers
   GrammarDeterminacyPredictiveOracle
+  GrammarDeterminacyContinuationSoundness
   GrammarDeterminacyPredictiveFallbackSoundness
   GrammarDeterminacyAlternativeEarlierDisjoint
   GrammarDeterminacyAlternativeResolverSemanticCore
