@@ -496,6 +496,7 @@ command_expression =
   | fail_expression
   | close_expression
   | release_expression
+  | convert_expression
   | transport_expression
   | accept_expression
   | prove_expression
@@ -526,7 +527,6 @@ named_postfix_expression =
 primary_expression =
     tuple_expression
   | parenthesized_expression
-  | convert_expression
   | "true"
   | "false"
   | "unit"
