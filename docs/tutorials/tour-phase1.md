@@ -199,7 +199,19 @@ record FireOnceToken mode linear {
 
 The keyword `mode` introduces the record's structural-use contract; `linear` is the selected mode. The other two mode keywords are `unrestricted` and `affine`. The field `id` is just a `U64`, but the record as a whole therefore has a stronger contract: a `FireOnceToken` is linear.
 
-Why would that be useful?
+Omitting `mode` does **not** mean “default to unrestricted.” For ordinary records and sums, Phil derives the minimum structural mode required by the values the type may own. A record containing only unrestricted fields, such as the earlier `Point`, is therefore unrestricted without needing to say so. But a record that owns a linear value is itself at least linear:
+
+```phil
+record ArmedAction {
+    token : FireOnceToken
+}
+```
+
+`ArmedAction` is derived as linear because its `token` field is linear. Sums are conservative in the same way: if any constructor can own a linear payload, the sum as a whole must be treated as linear until pattern matching reveals which constructor is actually present.
+
+An explicit `mode` annotation may preserve that derived minimum or make the type stricter when its checked lifecycle contract justifies the restriction; it may never make the type more permissive than its contents. In short: **omitted mode means derived mode, not unrestricted mode**.
+
+Why would an explicit stricter mode be useful?
 
 Imagine the value represented permission to fire a one-shot actuator, consume a cryptographic nonce, commit a transaction, or advance a protocol endpoint. Accidentally duplicating the value could mean doing the protected action twice.
 
