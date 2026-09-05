@@ -44,6 +44,7 @@ import Phil.Core.Syntax
   , RefSort (..)
   , RefTerm (..)
   )
+import qualified SteveProviderQualificationWitnessKernel as WitnessKernel
 
 -- | The two concrete Phase 1 Steve provider qualification artifacts. Both use
 -- the same generic representation; their differences are only provider-specific
@@ -87,10 +88,164 @@ materializeSteveProviderQualifications
 materializeSteveProviderQualifications = do
   digest <- materializeDigestProvider
   blob <- materializeBlobProvider
-  pure SteveProviderQualifications
-    { steveDigestProviderQualification = digest
-    , steveBlobProviderQualification = blob
-    }
+  let qualifications = SteveProviderQualifications
+        { steveDigestProviderQualification = digest
+        , steveBlobProviderQualification = blob
+        }
+  if steveProviderQualificationWitnessKernelAccepts qualifications
+    then pure qualifications
+    else Left (SteveProviderQualificationError
+      "Steve provider witness certified-kernel disagreement")
+
+steveProviderQualificationWitnessKernelAccepts
+  :: SteveProviderQualifications
+  -> Bool
+steveProviderQualificationWitnessKernelAccepts qualifications =
+  WitnessKernel.decideSteveProviderQualificationWitnessByFacts
+    (admissionAccepted digest && admissionAccepted blob)
+    (digestSubjectExactFact digest)
+    (digestObservationMappedFact digest)
+    (digestBorrowPreservedFact digest)
+    (blobBorrowAllOutcomesFact blob)
+    (blobWholeLayersPresentFact blob)
+    (blobNoReplaceEnforcedFact blob)
+    (blobPartialPublicationForbiddenFact blob)
+    (blobAuthorityDispositionedFact blob)
+    (obligationManifestExactFact digest && obligationManifestExactFact blob)
+    (conditionLineageExactFact digest && conditionLineageExactFact blob
+      && digestSha256ConditionExplicitFact digest)
+  where
+    digest = steveDigestProviderQualification qualifications
+    blob = steveBlobProviderQualification qualifications
+
+admissionAccepted :: SteveProviderQualificationArtifact -> Bool
+admissionAccepted artifact = case checkedQualificationAdmissionDecision
+    (steveProviderCheckedAdmission artifact) of
+  QualificationAdmitted -> True
+  QualificationRejected _ -> False
+
+digestSubjectExactFact :: SteveProviderQualificationArtifact -> Bool
+digestSubjectExactFact artifact = case steveProviderEvidenceCompetences artifact of
+  competence : _ ->
+    checkedProviderEvidenceSubject competence == digestComputeSubject
+  [] -> False
+
+digestObservationMappedFact :: SteveProviderQualificationArtifact -> Bool
+digestObservationMappedFact artifact = case steveProviderEvidenceCompetences artifact of
+  competence : _ -> case checkedProviderEvidenceObservation competence of
+    ScopedBorrowEvidenceObservation _ _ ->
+      case checkedProviderEvidenceMapping competence of
+        CheckedObservationToStableSubject _ observation subject ->
+          observation == checkedProviderEvidenceObservation competence
+            && subject == checkedProviderEvidenceSubject competence
+        _ -> False
+    _ -> False
+  [] -> False
+
+digestBorrowPreservedFact :: SteveProviderQualificationArtifact -> Bool
+digestBorrowPreservedFact artifact = case Map.lookup digestComputeOperation
+    (providerContractOperations (steveProviderContract artifact)) of
+  Just operation -> case Map.elems (providerOperationOutcomeResidues operation) of
+    [residue] -> resourceBorrowPreserved digestCandidateResource residue
+    _ -> False
+  Nothing -> False
+
+blobBorrowAllOutcomesFact :: SteveProviderQualificationArtifact -> Bool
+blobBorrowAllOutcomesFact artifact = case Map.lookup blobInstallOperation
+    (providerContractOperations (steveProviderContract artifact)) of
+  Just operation ->
+    let residues = Map.elems (providerOperationOutcomeResidues operation)
+    in length residues == 3
+      && all (resourceBorrowPreserved blobCandidateResource) residues
+  Nothing -> False
+
+resourceBorrowPreserved :: ProviderResourceKey -> ProviderResourceResidue -> Bool
+resourceBorrowPreserved key residue =
+  Set.member key (providerResidueBorrowedInputs residue)
+    && not (Set.member key (providerResidueConsumedInputs residue))
+
+blobWholeLayersPresentFact :: SteveProviderQualificationArtifact -> Bool
+blobWholeLayersPresentFact artifact =
+  maybe False (const True) (steveProviderCheckedState artifact)
+    && not (null (steveProviderLaws artifact))
+    && maybe False (const True) (steveProviderCheckedLifecycle artifact)
+    && not (Set.null (checkedProviderAuthorityExtra
+      (steveProviderCheckedAuthority artifact)))
+
+blobNoReplaceEnforcedFact :: SteveProviderQualificationArtifact -> Bool
+blobNoReplaceEnforcedFact artifact = case steveProviderLaws artifact of
+  (law, _) : _ ->
+    let installed = ProviderImplementationEvent
+          blobInstallOperation blobImplInstallInstalled
+    in case checkProviderLawTrace
+        (steveProviderCheckedSemantic artifact) law [installed, installed] of
+      Left (ProviderLawViolation _ 1 _ _) -> True
+      _ -> False
+  [] -> False
+
+blobPartialPublicationForbiddenFact
+  :: SteveProviderQualificationArtifact
+  -> Bool
+blobPartialPublicationForbiddenFact artifact =
+  case (steveProviderLifecycleContract artifact, steveProviderLifecycleModel artifact) of
+    (Just contract, Just model) ->
+      let partialState = ProviderObservableStateKey "object.partially-committed"
+          partial = ProviderInterruptionObservation
+            blobObservationBoundary
+            partialState
+            emptyResidue
+            ProviderRetrySameOperation
+          broken = ProviderLifecycleModel $ Map.insert
+            blobAfterPublicationPoint
+            (Set.singleton partial)
+            (providerLifecycleImplementationObservations model)
+      in case checkProviderLifecycleQualification
+          (steveProviderCheckedSemantic artifact) contract broken of
+        Left (ProviderLifecycleForbiddenObservableState point state) ->
+          point == blobAfterPublicationPoint && state == partialState
+        _ -> False
+    _ -> False
+
+blobAuthorityDispositionedFact :: SteveProviderQualificationArtifact -> Bool
+blobAuthorityDispositionedFact artifact =
+  checkedProviderAuthorityExtra checked == expectedExtra
+    && Map.lookup blobAuthorityOverwrite dispositions
+      == Just (ExtraAuthorityAssumptionDependent blobConfinementAssumption)
+    && Map.lookup blobAuthorityDelete dispositions
+      == Just (ExtraAuthorityAssumptionDependent blobConfinementAssumption)
+  where
+    checked = steveProviderCheckedAuthority artifact
+    dispositions = checkedProviderAuthorityDispositions checked
+    expectedExtra = Set.fromList [blobAuthorityOverwrite, blobAuthorityDelete]
+
+obligationManifestExactFact :: SteveProviderQualificationArtifact -> Bool
+obligationManifestExactFact artifact =
+  Map.keysSet (qualificationEvidenceObligationDispositions
+    (steveProviderIdentityEvidence artifact))
+    == steveProviderRequiredObligationKeys artifact
+
+conditionLineageExactFact :: SteveProviderQualificationArtifact -> Bool
+conditionLineageExactFact artifact =
+  conditions == evidenceAssumptions && conditions == admissionConditions
+  where
+    conditions = qualificationClaimConditions (steveProviderIdentityClaim artifact)
+    evidenceAssumptions = qualificationEvidenceAssumptionRefs
+      (steveProviderIdentityEvidence artifact)
+    admissionConditions = Map.keysSet $ qualificationAdmissionConditionDispositions
+      (steveProviderIdentityAdmission artifact)
+
+digestSha256ConditionExplicitFact :: SteveProviderQualificationArtifact -> Bool
+digestSha256ConditionExplicitFact artifact =
+  conditions == Set.singleton sha256Condition
+    && Set.member sha256Condition evidenceAssumptions
+    && Set.member sha256Condition admissionConditions
+  where
+    sha256Condition = "assumption:sha256-semantic-profile.v1"
+    conditions = qualificationClaimConditions (steveProviderIdentityClaim artifact)
+    evidenceAssumptions = qualificationEvidenceAssumptionRefs
+      (steveProviderIdentityEvidence artifact)
+    admissionConditions = Map.keysSet $ qualificationAdmissionConditionDispositions
+      (steveProviderIdentityAdmission artifact)
 
 materializeDigestProvider
   :: Either SteveProviderQualificationError SteveProviderQualificationArtifact
