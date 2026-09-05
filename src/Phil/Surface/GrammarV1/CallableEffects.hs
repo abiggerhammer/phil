@@ -3,12 +3,18 @@ module Phil.Surface.GrammarV1.CallableEffects
   , GrammarV1ResolvedCallableEffectsParameter (..)
   , GrammarV1ResolvedCallableEffectUse (..)
   , GrammarV1CallableEffectReferenceError (..)
+  , GrammarV1CheckedSubjectIndexedEffect (..)
+  , GrammarV1SubjectIndexedEffectError (..)
   , grammarV1SemanticEffect
   , grammarV1EffectSet
   , grammarV1CallableEffectBounds
   , grammarV1ResolvedCallableEffectBounds
+  , grammarV1CheckedSubjectIndexedSemanticEffect
+  , grammarV1CheckedSubjectIndexedEffectSet
+  , grammarV1CheckedSubjectIndexedCallableEffectBounds
   ) where
 
+import qualified Data.Map.Strict as Map
 import qualified Data.Set as Set
 import qualified Data.Text as Text
 import Phil.Core.Callable (SemanticEffect (..))
@@ -17,11 +23,26 @@ import Phil.Core.Generic.StaticActual
   ( GenericStaticKind (..)
   , GenericStaticParameter (..)
   )
+import Phil.Core.Static
+  ( SemanticForm (..)
+  , canonicalSemanticForm
+  )
+import Phil.Core.Syntax (Name (..))
+import Phil.Surface.GrammarV1.BinderScope
+  ( GrammarV1LexicalScope
+  , GrammarV1ResolvedBinder (..)
+  )
+import Phil.Surface.GrammarV1.LexicalReferenceScope
+  ( GrammarV1CheckedLexicalReference (..)
+  , GrammarV1LexicalReferenceError
+  , grammarV1CheckedExpressionReferences
+  )
 import Phil.Surface.GrammarV1.Parser
   ( GrammarV1CallableClause (..)
   , GrammarV1CallableContractDecl (..)
   , GrammarV1EffectExpression (..)
   , GrammarV1EffectSetExpression (..)
+  , GrammarV1Expression (..)
   , GrammarV1GenericKind (..)
   , GrammarV1GenericParam (..)
   , GrammarV1QualifiedName (..)
@@ -71,6 +92,21 @@ data GrammarV1CallableEffectReferenceError
   | GrammarV1CallableEffectUseUndeclaredParameter GenericStaticParameterKey
   | GrammarV1UnexpectedCallableEffectUseEvidence
       (Located GrammarV1EffectSetExpression)
+  deriving (Eq, Show)
+
+-- | One effect whose argument-bearing source form has been resolved through the
+-- exact SURF-009 lexical authority. The Core carrier remains the established
+-- Text-backed SemanticEffect used by the certified callable-effect checker;
+-- subject identity is supplied by resolver-issued Core Names, never source text.
+data GrammarV1CheckedSubjectIndexedEffect = GrammarV1CheckedSubjectIndexedEffect
+  { checkedSubjectIndexedEffectCore :: SemanticEffect
+  , checkedSubjectIndexedEffectReferences :: [GrammarV1CheckedLexicalReference]
+  }
+  deriving (Eq, Show)
+
+data GrammarV1SubjectIndexedEffectError
+  = GrammarV1EffectSubjectReferenceError GrammarV1LexicalReferenceError
+  | GrammarV1EffectSubjectNotLocal (Located GrammarV1Expression)
   deriving (Eq, Show)
 
 -- | Preserve the first exact Grammar-v1 effect identity fragment as Core's
@@ -157,6 +193,116 @@ grammarV1ResolvedCallableEffectBounds parameterEvidence useEvidence source =
       [ effectSet
       | Located _ (GrammarV1CallableEffects effectSet) <- grammarV1CallableClauses source
       ]
+
+-- | Resolve one argument-bearing effect only when every effect argument is one
+-- simple active lexical subject. Argument-free effects preserve their established
+-- Core identity byte-for-byte. Subject-bearing effects use a versioned canonical
+-- SemanticForm containing the checked effect label and resolver-issued Core Name
+-- of each exact subject, so alpha-renaming cannot change effect identity and two
+-- equal-typed local subjects cannot collapse merely because their representation
+-- or source spelling happens to coincide.
+grammarV1CheckedSubjectIndexedSemanticEffect
+  :: GrammarV1LexicalScope
+  -> Located GrammarV1EffectExpression
+  -> Maybe
+      (Either
+        GrammarV1SubjectIndexedEffectError
+        GrammarV1CheckedSubjectIndexedEffect)
+grammarV1CheckedSubjectIndexedSemanticEffect scope (Located _ effect)
+  | null arguments = do
+      core <- grammarV1SemanticEffect effect
+      pure (Right (GrammarV1CheckedSubjectIndexedEffect core []))
+  | not (null (grammarV1StaticReferenceArguments reference)) = Nothing
+  | null labelParts = Nothing
+  | otherwise = do
+      checkedArguments <- mapM (checkedEffectSubject scope) arguments
+      pure $ do
+        references <- sequence checkedArguments
+        let subjects = map
+              (grammarV1ResolvedBinderCoreName . grammarV1CheckedLexicalReferenceBinder)
+              references
+        Right GrammarV1CheckedSubjectIndexedEffect
+          { checkedSubjectIndexedEffectCore =
+              canonicalSubjectIndexedEffect labelParts subjects
+          , checkedSubjectIndexedEffectReferences = references
+          }
+  where
+    arguments = grammarV1EffectArguments effect
+    reference = locatedValue (grammarV1EffectReference effect)
+    labelParts = grammarV1QualifiedNameParts (grammarV1StaticReferenceName reference)
+
+-- | Resolve one literal effect set under one exact lexical scope. Set
+-- canonicalization remains the already-established concrete carrier; exact
+-- lexical evidence is retained in source occurrence order separately.
+grammarV1CheckedSubjectIndexedEffectSet
+  :: GrammarV1LexicalScope
+  -> GrammarV1EffectSetExpression
+  -> Maybe
+      (Either
+        GrammarV1SubjectIndexedEffectError
+        (Set.Set SemanticEffect, [GrammarV1CheckedLexicalReference]))
+grammarV1CheckedSubjectIndexedEffectSet scope source = case source of
+  GrammarV1EffectSetLiteral effects -> do
+    checked <- mapM (grammarV1CheckedSubjectIndexedSemanticEffect scope) effects
+    pure $ do
+      resolved <- sequence checked
+      Right
+        ( Set.fromList (map checkedSubjectIndexedEffectCore resolved)
+        , concatMap checkedSubjectIndexedEffectReferences resolved
+        )
+  GrammarV1EffectSetReference _ -> Nothing
+
+-- | Compose the bounded subject-indexed literal route across callable `effects`
+-- clauses. Generic Effects references remain owned by the separate stable-key
+-- route and are intentionally outside this first EFF slice.
+grammarV1CheckedSubjectIndexedCallableEffectBounds
+  :: GrammarV1LexicalScope
+  -> GrammarV1CallableContractDecl
+  -> Maybe
+      (Either
+        GrammarV1SubjectIndexedEffectError
+        [(Set.Set SemanticEffect, [GrammarV1CheckedLexicalReference])])
+grammarV1CheckedSubjectIndexedCallableEffectBounds scope source =
+  sequence <$> mapM elaborate
+    [ effectSet
+    | Located _ (GrammarV1CallableEffects effectSet) <- grammarV1CallableClauses source
+    ]
+  where
+    elaborate (Located _ effectSet) =
+      grammarV1CheckedSubjectIndexedEffectSet scope effectSet
+
+checkedEffectSubject
+  :: GrammarV1LexicalScope
+  -> Located GrammarV1Expression
+  -> Maybe
+      (Either
+        GrammarV1SubjectIndexedEffectError
+        GrammarV1CheckedLexicalReference)
+checkedEffectSubject scope source@(Located _ expression) = case expression of
+  GrammarV1NameExpression reference arguments
+    | null arguments
+    , null (grammarV1StaticReferenceArguments reference)
+    , [_] <- grammarV1QualifiedNameParts (grammarV1StaticReferenceName reference) -> do
+        checked <- grammarV1CheckedExpressionReferences Set.empty scope source
+        pure $ case checked of
+          Left referenceError -> Left
+            (GrammarV1EffectSubjectReferenceError referenceError)
+          Right [resolved] -> Right resolved
+          Right _ -> Left (GrammarV1EffectSubjectNotLocal source)
+  _ -> Nothing
+
+canonicalSubjectIndexedEffect :: [Text.Text] -> [Name] -> SemanticEffect
+canonicalSubjectIndexedEffect labelParts subjects =
+  SemanticEffect
+    ( Text.pack "phil.effect.subject.v1:"
+      <> canonicalSemanticForm
+        (SemanticRecord (Map.fromList
+          [ (Text.pack "label", SemanticOrdered (map SemanticAtom labelParts))
+          , (Text.pack "subjects", SemanticOrdered (map subjectForm subjects))
+          ]))
+    )
+  where
+    subjectForm (Name name) = SemanticAtom name
 
 validateEffectsParameterEvidence
   :: [Located GrammarV1GenericParam]
