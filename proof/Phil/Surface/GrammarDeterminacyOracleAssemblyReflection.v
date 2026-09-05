@@ -110,6 +110,16 @@ Proof.
   exact Hdisjoint.
 Qed.
 
+Lemma expression_first_disjoint_fromb_cons_equation :
+  forall left head rest,
+    expression_first_disjoint_fromb left (head :: rest) =
+    andb
+      (expression_first_disjointb left head)
+      (expression_first_disjoint_fromb left rest).
+Proof.
+  reflexivity.
+Qed.
+
 Lemma expression_first_disjoint_fromb_nth :
   forall left rights index right,
     expression_first_disjoint_fromb left rights = true ->
@@ -120,11 +130,7 @@ Proof.
   induction rights as [| head rest IH];
     intros index right Hdisjoint Hnth.
   - destruct index; simpl in Hnth; discriminate.
-  - change
-      (andb
-        (expression_first_disjointb left head)
-        (expression_first_disjoint_fromb left rest) = true)
-      in Hdisjoint.
+  - rewrite expression_first_disjoint_fromb_cons_equation in Hdisjoint.
     apply andb_true_iff in Hdisjoint as [Hhead Hrest].
     destruct index as [| index].
     + simpl in Hnth.
@@ -134,6 +140,16 @@ Proof.
       eapply IH.
       * exact Hrest.
       * exact Hnth.
+Qed.
+
+Lemma alternatives_pairwise_first_disjointb_cons_equation :
+  forall head rest,
+    alternatives_pairwise_first_disjointb (head :: rest) =
+    andb
+      (expression_first_disjoint_fromb head rest)
+      (alternatives_pairwise_first_disjointb rest).
+Proof.
+  reflexivity.
 Qed.
 
 Lemma alternatives_pairwise_first_disjointb_nth_lt :
@@ -148,11 +164,7 @@ Proof.
     intros first_index first second_index second
       Hpairwise Hfirst Hsecond Hlt.
   - destruct first_index; simpl in Hfirst; discriminate.
-  - change
-      (andb
-        (expression_first_disjoint_fromb head rest)
-        (alternatives_pairwise_first_disjointb rest) = true)
-      in Hpairwise.
+  - rewrite alternatives_pairwise_first_disjointb_cons_equation in Hpairwise.
     apply andb_true_iff in Hpairwise as [Hhead Hrest].
     destruct first_index as [| first_index].
     + simpl in Hfirst.
@@ -199,6 +211,21 @@ Proof.
   - exact Hlt.
 Qed.
 
+Lemma sequence_head_assembly_guard_repetition_equation :
+  forall path index body rest outer_follow,
+    sequence_head_assembly_guardb
+      path index (ERepetition body) rest outer_follow =
+    if trailing_comma_repeat_pathb
+         (descend path (AtSequence index))
+    then
+      andb
+        (comma_identifier_repetition_bodyb body)
+        (trailing_comma_tail_shapeb rest outer_follow)
+    else true.
+Proof.
+  reflexivity.
+Qed.
+
 Lemma sequence_head_assembly_guard_trailing :
   forall path index body rest outer_follow,
     trailing_comma_repeat_pathb
@@ -209,10 +236,20 @@ Lemma sequence_head_assembly_guard_trailing :
     trailing_comma_tail_shapeb rest outer_follow = true.
 Proof.
   intros path index body rest outer_follow Htrailing Hguard.
-  unfold sequence_head_assembly_guardb in Hguard.
+  rewrite sequence_head_assembly_guard_repetition_equation in Hguard.
   rewrite Htrailing in Hguard.
   apply andb_true_iff in Hguard as [Hbody Htail].
   split; assumption.
+Qed.
+
+Lemma repetition_assembly_guard_equation :
+  forall path outer_follow body,
+    repetition_assembly_guardb path outer_follow body =
+    if trailing_comma_repeat_pathb path
+    then comma_identifier_repetition_bodyb body
+    else expression_follow_disjointb body outer_follow.
+Proof.
+  reflexivity.
 Qed.
 
 Lemma repetition_assembly_guard_trailing :
@@ -222,7 +259,7 @@ Lemma repetition_assembly_guard_trailing :
     comma_identifier_repetition_bodyb body = true.
 Proof.
   intros path outer_follow body Htrailing Hguard.
-  unfold repetition_assembly_guardb in Hguard.
+  rewrite repetition_assembly_guard_equation in Hguard.
   rewrite Htrailing in Hguard.
   exact Hguard.
 Qed.
@@ -234,7 +271,7 @@ Lemma repetition_assembly_guard_fallback :
     expression_follow_disjointb body outer_follow = true.
 Proof.
   intros path outer_follow body Htrailing Hguard.
-  unfold repetition_assembly_guardb in Hguard.
+  rewrite repetition_assembly_guard_equation in Hguard.
   rewrite Htrailing in Hguard.
   exact Hguard.
 Qed.
