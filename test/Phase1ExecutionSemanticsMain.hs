@@ -5,7 +5,28 @@ module Main (main) where
 import qualified Data.Map.Strict as Map
 import qualified Data.Set as Set
 import Phil.Assurance.Types (Digest (..))
+import Phil.Core.Checker (emptyCheckState)
+import Phil.Core.Discharge
+  ( DischargeError (..)
+  , emptyDischargePolicy
+  , resolveObligation
+  )
 import Phil.Core.Scalar (ScalarLiteral (..))
+import Phil.Core.Static (emptyStaticContext)
+import Phil.Core.Syntax
+  ( Obligation (..)
+  , ObligationId (..)
+  , RefSort (..)
+  , RefTerm (..)
+  )
+import Phil.Core.UIntArithmetic
+  ( PlainUIntArithmeticDecision (..)
+  , PlainUIntArithmeticSite (..)
+  , UIntArithmeticError (..)
+  , UIntArithmeticOperator (..)
+  , checkPlainUIntArithmetic
+  , plainUIntArithmeticProposition
+  )
 import Phil.Surface.GrammarV1.Parser
   ( GrammarV1Expression (..)
   , GrammarV1Type (..)
@@ -49,6 +70,8 @@ main = do
         missingInitializationRelationRejects
     , test "EXEC-007 unsuffixed runtime integer literals use exact contextual UInt range"
         contextualUIntLiteralRange
+    , test "EXEC-008 plain UInt arithmetic is exact or remains an explicit obligation"
+        exactPlainUIntArithmetic
     ]
   if and results then pure () else exitFailure
 
@@ -208,6 +231,77 @@ contextualUIntLiteralRange = do
       (GrammarV1BoolExpression True) of
     Left (GrammarV1RuntimeIntegerLiteralRequired (GrammarV1BoolExpression True)) -> Right ()
     other -> Left ("non-integer expression entered UInt literal elaboration: " <> show other)
+
+exactPlainUIntArithmetic :: Either String ()
+exactPlainUIntArithmetic = do
+  let site name = PlainUIntArithmeticSite
+        { plainUIntArithmeticObligationId = ObligationId name
+        , plainUIntArithmeticOrigin = "EXEC-008"
+        , plainUIntArithmeticScope = "test"
+        , plainUIntArithmeticRequiredPoint = "before arithmetic result use"
+        }
+      check operator left right result =
+        checkPlainUIntArithmetic
+          emptyCheckState
+          operator
+          8
+          left
+          right
+          result
+
+  assert
+    ( check UIntAdd (RefUInt 8 10) (RefUInt 8 20) (RefUInt 8 30) (site "exec008.add")
+        == Right (PlainUIntArithmeticEstablished (ScalarUIntLiteral 8 30))
+    )
+    "closed U8 addition did not preserve its exact mathematical result"
+  assert
+    ( check UIntSubtract (RefUInt 8 20) (RefUInt 8 7) (RefUInt 8 13) (site "exec008.sub")
+        == Right (PlainUIntArithmeticEstablished (ScalarUIntLiteral 8 13))
+    )
+    "closed U8 subtraction did not preserve its exact mathematical result"
+  assert
+    ( check UIntMultiply (RefUInt 8 15) (RefUInt 8 15) (RefUInt 8 225) (site "exec008.mul")
+        == Right (PlainUIntArithmeticEstablished (ScalarUIntLiteral 8 225))
+    )
+    "closed U8 multiplication did not preserve its exact mathematical result"
+
+  case check UIntAdd (RefUInt 8 255) (RefUInt 8 1) (RefUInt 8 0) (site "exec008.overflow") of
+    Left (UIntArithmeticKnownResultOutOfRange UIntAdd 8 255 1 256) -> Right ()
+    other -> Left ("U8 addition overflow acquired target wrap behavior: " <> show other)
+  case check UIntSubtract (RefUInt 8 0) (RefUInt 8 1) (RefUInt 8 255) (site "exec008.underflow") of
+    Left (UIntArithmeticKnownResultOutOfRange UIntSubtract 8 0 1 (-1)) -> Right ()
+    other -> Left ("U8 subtraction underflow acquired target wrap behavior: " <> show other)
+  case check UIntMultiply (RefUInt 8 16) (RefUInt 8 16) (RefUInt 8 0) (site "exec008.mul-overflow") of
+    Left (UIntArithmeticKnownResultOutOfRange UIntMultiply 8 16 16 256) -> Right ()
+    other -> Left ("U8 multiplication overflow acquired target wrap behavior: " <> show other)
+  case check UIntAdd (RefUInt 8 1) (RefUInt 8 2) (RefUInt 8 4) (site "exec008.wrong-result") of
+    Left (UIntArithmeticKnownResultMismatch UIntAdd 8 1 2 3 4) -> Right ()
+    other -> Left ("plain arithmetic accepted a target/result drift: " <> show other)
+
+  let left = RefOpaque (SortUInt 8) "exec008.left"
+      right = RefOpaque (SortUInt 8) "exec008.right"
+      result = RefOpaque (SortUInt 8) "exec008.result"
+      symbolicSite = site "exec008.symbolic"
+  decision <- mapLeft show
+    (check UIntAdd left right result symbolicSite)
+  obligation <- case decision of
+    PlainUIntArithmeticRequiresProof value -> Right value
+    other -> Left ("symbolic plain arithmetic invented a result without proof: " <> show other)
+  assert
+    (obligationProposition obligation == plainUIntArithmeticProposition UIntAdd left right result)
+    "symbolic arithmetic obligation lost exact operator/operand/result identity"
+  case resolveObligation
+      emptyStaticContext
+      emptyCheckState
+      emptyDischargePolicy
+      obligation of
+    Left (UnresolvedObligation actualId actualProposition) -> do
+      assert (actualId == obligationId obligation)
+        "ADR-025 unresolved arithmetic obligation lost its exact obligation id"
+      assert (actualProposition == obligationProposition obligation)
+        "ADR-025 unresolved arithmetic obligation lost its exact proposition"
+    other -> Left
+      ("plain symbolic arithmetic selected target behavior without proof/policy: " <> show other)
 
 baseTrace :: [SemanticInitializationEvent] -> SemanticInitializationTrace
 baseTrace events = SemanticInitializationTrace
