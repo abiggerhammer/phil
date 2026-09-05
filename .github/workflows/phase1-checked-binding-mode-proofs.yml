@@ -1,0 +1,126 @@
+name: Phase 1 Checked Binding Mode Proofs
+
+on:
+  pull_request:
+    paths:
+      - 'proof/Phil/Core/Syntax.v'
+      - 'proof/Phil/Core/Context.v'
+      - 'proof/Phil/Core/CheckedBindingMode.v'
+      - 'proof/Phil/Core/CheckedBindingModeImplementation.v'
+      - 'proof/Phil/Core/CheckedBindingModeImplementationExtraction.v'
+      - 'src/Phil/Core/CheckedBindingMode.hs'
+      - 'test/Phase1CheckedBindingModeMain.hs'
+      - 'app/CheckedBindingModeDecisionCorrespondenceMain.hs'
+      - 'docs/phase-1/checked-binding-mode-proof-v1.md'
+      - '.github/workflows/phase1-checked-binding-mode-proofs.yml'
+  push:
+    branches: [main]
+    paths:
+      - 'proof/Phil/Core/Syntax.v'
+      - 'proof/Phil/Core/Context.v'
+      - 'proof/Phil/Core/CheckedBindingMode.v'
+      - 'proof/Phil/Core/CheckedBindingModeImplementation.v'
+      - 'proof/Phil/Core/CheckedBindingModeImplementationExtraction.v'
+      - 'src/Phil/Core/CheckedBindingMode.hs'
+      - 'test/Phase1CheckedBindingModeMain.hs'
+      - 'app/CheckedBindingModeDecisionCorrespondenceMain.hs'
+      - 'docs/phase-1/checked-binding-mode-proof-v1.md'
+      - '.github/workflows/phase1-checked-binding-mode-proofs.yml'
+
+permissions:
+  contents: read
+
+jobs:
+  rocq-checked-binding-mode-proof:
+    runs-on: ubuntu-latest
+    container:
+      image: rocq/rocq-prover:9.2.0
+      options: --user root
+    steps:
+      - uses: actions/checkout@v4
+      - name: Compile PHIL-RES-BIND-MODE-001 and extract decision kernel
+        shell: bash
+        run: |
+          set -euo pipefail
+          export PATH="/home/rocq/.opam/${COMPILER}/bin:$PATH"
+          rocq c -Q proof/Phil Phil proof/Phil/Core/Syntax.v
+          rocq c -Q proof/Phil Phil proof/Phil/Core/Context.v
+          rocq c -Q proof/Phil Phil proof/Phil/Core/CheckedBindingMode.v
+          rocq c -Q proof/Phil Phil proof/Phil/Core/CheckedBindingModeImplementation.v
+          rm -f CheckedBindingModeKernel.hs
+          rocq c -Q proof/Phil Phil proof/Phil/Core/CheckedBindingModeImplementationExtraction.v
+          test -s CheckedBindingModeKernel.hs
+      - name: Record proof and exact kernel identities
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p checked-binding-mode-proof
+          cp \
+            proof/Phil/Core/CheckedBindingMode.v \
+            proof/Phil/Core/CheckedBindingMode.vo \
+            proof/Phil/Core/CheckedBindingModeImplementation.v \
+            proof/Phil/Core/CheckedBindingModeImplementation.vo \
+            proof/Phil/Core/CheckedBindingModeImplementationExtraction.v \
+            CheckedBindingModeKernel.hs \
+            checked-binding-mode-proof/
+          sha256sum \
+            proof/Phil/Core/CheckedBindingMode.v \
+            proof/Phil/Core/CheckedBindingMode.vo \
+            proof/Phil/Core/CheckedBindingModeImplementation.v \
+            proof/Phil/Core/CheckedBindingModeImplementation.vo \
+            proof/Phil/Core/CheckedBindingModeImplementationExtraction.v \
+            CheckedBindingModeKernel.hs \
+            src/Phil/Core/CheckedBindingMode.hs \
+            test/Phase1CheckedBindingModeMain.hs \
+            app/CheckedBindingModeDecisionCorrespondenceMain.hs \
+            docs/phase-1/checked-binding-mode-proof-v1.md \
+            > checked-binding-mode-proof/PHIL-RES-BIND-MODE-001.proof.sha256
+          {
+            echo 'obligation=PHIL-RES-BIND-MODE-001'
+            echo 'evidence=Rocq-9.2.0+extraction'
+            echo 'claim=successful owning binding requires exact checked type and checked mode before exact Context zone placement; mode mismatch cannot reclassify; origin cannot reclassify'
+            echo 'residual=checked type-to-mode derivation, Haskell/Rocq representation correspondence, Eq/Map implementation, extraction/toolchain, and production kernel binding remain explicit boundaries'
+            cat checked-binding-mode-proof/PHIL-RES-BIND-MODE-001.proof.sha256
+          } > checked-binding-mode-proof/PHIL-RES-BIND-MODE-001.proof-certificate.txt
+          cat checked-binding-mode-proof/PHIL-RES-BIND-MODE-001.proof-certificate.txt
+      - uses: actions/upload-artifact@v4
+        with:
+          name: rocq-checked-binding-mode-proof
+          path: checked-binding-mode-proof
+          if-no-files-found: error
+
+  verify-checked-binding-mode-correspondence:
+    needs: rocq-checked-binding-mode-proof
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: haskell-actions/setup@v2
+        with:
+          ghc-version: '9.6.7'
+          cabal-version: 'latest'
+      - uses: actions/download-artifact@v4
+        with:
+          name: rocq-checked-binding-mode-proof
+          path: checked-binding-mode-proof
+      - name: Strict typecheck exact kernel, harness, and existing RES-012 implementation
+        shell: bash
+        run: |
+          set -euo pipefail
+          ghc -Wall -Werror -fno-code \
+            checked-binding-mode-proof/CheckedBindingModeKernel.hs
+          cabal exec -- ghc \
+            -ichecked-binding-mode-proof \
+            -Wall -Werror -fno-code \
+            app/CheckedBindingModeDecisionCorrespondenceMain.hs
+          cabal exec -- ghc -isrc -Wall -Werror -fno-code \
+            src/Phil/Core/CheckedBindingMode.hs
+          cabal exec -- ghc -isrc -Wall -Werror -fno-code \
+            test/Phase1CheckedBindingModeMain.hs
+      - name: Execute exact extracted-kernel controls
+        run: |
+          cabal exec -- runghc \
+            -ichecked-binding-mode-proof \
+            -Wall -Werror \
+            app/CheckedBindingModeDecisionCorrespondenceMain.hs
+      - name: Re-run unchanged RES-012 corpus
+        run: cabal exec -- runghc -isrc -Wall -Werror test/Phase1CheckedBindingModeMain.hs
