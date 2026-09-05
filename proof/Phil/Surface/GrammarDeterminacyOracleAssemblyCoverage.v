@@ -269,6 +269,18 @@ Proof.
   reflexivity.
 Qed.
 
+Lemma oracle_assembly_coverage_rule_pair :
+  forall name body,
+    oracle_assembly_coverage_rule (name, body) =
+    oracle_assembly_coverage_fuel
+      oracle_assembly_fuel
+      [AtNonterminal name]
+      (lookup_tokens name phase1_surface_follow_facts)
+      body.
+Proof.
+  reflexivity.
+Qed.
+
 (* Keep successful rule lookup symbolic below.  Unfolding the generated rule
    table while instantiating the generic forallb lookup lemma is needlessly
    expensive and can exhaust the dedicated proof timeout. *)
@@ -284,10 +296,14 @@ Theorem phase1_surface_rule_body_oracle_assembly_covered :
       body = true.
 Proof.
   intros name body Hlookup.
-  change (oracle_assembly_coverage_rule (name, body) = true).
-  eapply lookupRule_forallb.
-  - exact phase1_surface_all_rule_bodies_have_oracle_assembly_coverage.
-  - exact Hlookup.
+  assert (Hcovered : oracle_assembly_coverage_rule (name, body) = true).
+  {
+    eapply lookupRule_forallb.
+    - exact phase1_surface_all_rule_bodies_have_oracle_assembly_coverage.
+    - exact Hlookup.
+  }
+  rewrite oracle_assembly_coverage_rule_pair in Hcovered.
+  exact Hcovered.
 Qed.
 
 Lemma oracle_assembly_sequence_cons_covered :
