@@ -98,32 +98,47 @@ Lemma trailing_comma_tail_shapeb_cases :
 Proof.
   intros items outer_follow Hshape.
   unfold trailing_comma_tail_shapeb in Hshape.
-  destruct items as [| first rest]; try discriminate Hshape.
-  destruct first as
-    [literal | class_name | name | seq_items | alt_items | optional_body | repeat_body];
-    try discriminate Hshape.
-  destruct optional_body as
-    [comma | class_name | name | seq_items | alt_items | nested_optional | nested_repeat];
-    try discriminate Hshape.
-  destruct rest as [| second rest].
-  - simpl in Hshape.
-    apply andb_true_iff in Hshape as [Hcomma Hfollow].
-    apply String.eqb_eq in Hcomma.
-    subst comma.
-    apply assembly_overlap_token_list_eqb_eq in Hfollow.
-    right.
-    split; reflexivity || exact Hfollow.
-  - destruct rest as [| third rest]; try discriminate Hshape.
-    destruct second as
-      [close | class_name | name | seq_items | alt_items | optional_body | repeat_body];
-      try discriminate Hshape.
-    simpl in Hshape.
-    apply andb_true_iff in Hshape as [Hcomma Hclose].
-    apply String.eqb_eq in Hcomma.
-    apply String.eqb_eq in Hclose.
-    subst comma close.
-    left.
-    reflexivity.
+  destruct items as [| first rest].
+  - discriminate Hshape.
+  - destruct rest as [| second rest].
+    + destruct first as
+        [literal | class_name | name | seq_items | alt_items |
+         optional_body | repeat_body];
+        try discriminate Hshape.
+      destruct optional_body as
+        [comma | class_name | name | seq_items | alt_items |
+         nested_optional | nested_repeat];
+        try discriminate Hshape.
+      simpl in Hshape.
+      apply andb_true_iff in Hshape as [Hcomma Hfollow].
+      apply String.eqb_eq in Hcomma.
+      subst comma.
+      apply assembly_overlap_token_list_eqb_eq in Hfollow.
+      right.
+      split.
+      * reflexivity.
+      * exact Hfollow.
+    + destruct rest as [| third rest].
+      * destruct first as
+          [literal | class_name | name | seq_items | alt_items |
+           optional_body | repeat_body];
+          try discriminate Hshape.
+        destruct optional_body as
+          [comma | class_name | name | seq_items | alt_items |
+           nested_optional | nested_repeat];
+          try discriminate Hshape.
+        destruct second as
+          [close | class_name | name | seq_items | alt_items |
+           optional_body | repeat_body];
+          try discriminate Hshape.
+        simpl in Hshape.
+        apply andb_true_iff in Hshape as [Hcomma Hclose].
+        apply String.eqb_eq in Hcomma.
+        apply String.eqb_eq in Hclose.
+        subst comma close.
+        left.
+        reflexivity.
+      * discriminate Hshape.
 Qed.
 
 Lemma trailing_comma_body_derivation_has_identifier_prefix :
