@@ -359,7 +359,7 @@ Proof.
     intros path outer_follow base items relative item Hcovered Hnth.
   - discriminate Hcovered.
   - destruct items as [| head rest].
-    + simpl in Hnth. discriminate Hnth.
+    + destruct relative; simpl in Hnth; discriminate Hnth.
     + rewrite oracle_assembly_alternative_cons_equation in Hcovered.
       apply andb_true_iff in Hcovered as [Hhead Hrest].
       destruct relative as [| relative].
