@@ -28,15 +28,12 @@ data SortError
   | NonRefinementVisibleVariable Name Ty
   | InvalidNatLiteral Integer
   | InvalidUIntLiteral Int Integer
-  | InvalidSIntLiteral Int Integer
   | InvalidUIntTypeWidth Int
-  | InvalidSIntTypeWidth Int
   | InvalidAnnotatedSort RefSort
   | InvalidBytesIndexSort RefTerm RefSort
   | InvalidFieldProjection RefTerm RefSort Text
   | InvalidLengthOperand RefTerm RefSort
   | InvalidToNatOperand RefTerm RefSort
-  | InvalidToIntegerOperand RefTerm RefSort
   | ExpectedNatOperand RefTerm RefSort
   | NegativeScaleCoefficient Integer
   | EqualitySortMismatch RefSort RefSort
@@ -54,9 +51,6 @@ refSortOfTy ty =
     TyUInt width
       | width > 0 -> Just (SortUInt width)
       | otherwise -> Nothing
-    TySInt width
-      | width > 0 -> Just (SortSInt width)
-      | otherwise -> Nothing
     TyBytes _ -> Just (SortFiniteSeq (SortUInt 8))
     TyFrame _ -> Just (SortOpaque "Frame")
     TyRefined _ base _ -> refSortOfTy base
@@ -69,9 +63,6 @@ checkTypeSorts state ty =
   case ty of
     TyUInt width
       | width <= 0 -> Left (InvalidUIntTypeWidth width)
-      | otherwise -> Right ()
-    TySInt width
-      | width <= 0 -> Left (InvalidSIntTypeWidth width)
       | otherwise -> Right ()
     TyBytes index -> do
       indexSort <- sortOfRefTerm state index
@@ -97,11 +88,6 @@ sortOfRefTerm state = go
           | width <= 0 -> Left (InvalidUIntLiteral width literal)
           | literal < 0 || literal >= (2 ^ width) -> Left (InvalidUIntLiteral width literal)
           | otherwise -> Right (SortUInt width)
-        RefSInt width literal
-          | width <= 0 -> Left (InvalidSIntLiteral width literal)
-          | literal < negate (2 ^ (width - 1)) || literal >= (2 ^ (width - 1)) ->
-              Left (InvalidSIntLiteral width literal)
-          | otherwise -> Right (SortSInt width)
         RefBool _ -> Right SortBool
         RefField base field resultSort -> do
           validateRefSort resultSort
@@ -120,11 +106,6 @@ sortOfRefTerm state = go
           case valueSort of
             SortUInt _ -> Right SortNat
             _ -> Left (InvalidToNatOperand value valueSort)
-        RefToInteger value -> do
-          valueSort <- go value
-          case valueSort of
-            SortSInt _ -> Right SortInteger
-            _ -> Left (InvalidToIntegerOperand value valueSort)
         RefAdd left right -> natBinary left right
         RefSub left right -> natBinary left right
         RefScale coefficient value
@@ -192,10 +173,7 @@ checkPropositionSorts state = go
       rightSort <- termSort right
       case (leftSort, rightSort) of
         (SortNat, SortNat) -> Right ()
-        (SortInteger, SortInteger) -> Right ()
         (SortUInt leftWidth, SortUInt rightWidth)
-          | leftWidth == rightWidth -> Right ()
-        (SortSInt leftWidth, SortSInt rightWidth)
           | leftWidth == rightWidth -> Right ()
         _ -> Left (InvalidOrderedSort leftSort rightSort)
 
@@ -226,7 +204,6 @@ propositionSideConditions proposition = deduplicate (goProposition proposition)
         RefField base _ _ -> goTerm base
         RefLen value -> goTerm value
         RefToNat value -> goTerm value
-        RefToInteger value -> goTerm value
         RefAdd left right -> goTerm left ++ goTerm right
         RefSub left right ->
           goTerm left ++ goTerm right ++ [LessEqual right left]
@@ -255,8 +232,6 @@ validateRefSort :: RefSort -> Either SortError ()
 validateRefSort sort =
   case sort of
     SortUInt width
-      | width <= 0 -> Left (InvalidAnnotatedSort sort)
-    SortSInt width
       | width <= 0 -> Left (InvalidAnnotatedSort sort)
     SortFiniteSeq elementSort -> validateRefSort elementSort
     SortFiniteSet elementSort -> validateRefSort elementSort
