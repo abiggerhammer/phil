@@ -26,6 +26,7 @@ import Phil.Core.UIntArithmetic
   , UIntArithmeticOperator (..)
   , checkPlainUIntArithmetic
   , plainUIntArithmeticProposition
+  , registerUIntArithmeticClaims
   )
 import Phil.Surface.GrammarV1.Parser
   ( GrammarV1Expression (..)
@@ -288,10 +289,14 @@ exactPlainUIntArithmetic = do
     PlainUIntArithmeticRequiresProof value -> Right value
     other -> Left ("symbolic plain arithmetic invented a result without proof: " <> show other)
   assert
-    (obligationProposition obligation == plainUIntArithmeticProposition UIntAdd left right result)
-    "symbolic arithmetic obligation lost exact operator/operand/result identity"
+    (obligationProposition obligation == plainUIntArithmeticProposition UIntAdd 8 left right result)
+    "symbolic arithmetic obligation lost exact operator/width/operand/result identity"
+  arithmeticContext0 <- mapLeft show
+    (registerUIntArithmeticClaims emptyStaticContext)
+  arithmeticContext <- mapLeft show
+    (registerUIntArithmeticClaims arithmeticContext0)
   case resolveObligation
-      emptyStaticContext
+      arithmeticContext
       emptyCheckState
       emptyDischargePolicy
       obligation of
