@@ -7,8 +7,10 @@ module Phil.Core.UIntArithmetic
   , UIntArithmeticError (..)
   , checkPlainUIntArithmetic
   , plainUIntArithmeticProposition
+  , registerUIntArithmeticClaims
   ) where
 
+import Control.Monad (foldM)
 import Data.Text (Text)
 import Phil.Core.Checker (CheckState)
 import Phil.Core.Scalar
@@ -19,8 +21,17 @@ import Phil.Core.SortCheck
   ( SortError
   , sortOfRefTerm
   )
+import Phil.Core.Static
+  ( ClaimDecl (..)
+  , ClaimDefinition (..)
+  , StaticContext
+  , StaticError (..)
+  , declareOpaqueClaim
+  , lookupClaim
+  )
 import Phil.Core.Syntax
-  ( Obligation (..)
+  ( Name (..)
+  , Obligation (..)
   , ObligationId
   , Proposition (..)
   , RefSort (..)
@@ -80,11 +91,14 @@ data UIntArithmeticError
 -- range.  No modulo reduction is ever performed.
 --
 -- For symbolic operands/result, this emits one exact ordinary Core obligation
--- whose Atom is the semantic contract for this operation.  This is deliberate:
--- the existing discharge machinery may prove/export the obligation, while an
--- unresolved obligation remains an explicit failure.  A later checked-operation
--- slice gives runtime overflow/underflow its own source-visible outcome instead
--- of laundering it through this plain judgment.
+-- whose opaque arithmetic claim is the semantic contract for this operation.
+-- The claim arguments are width plus explicit UInt-to-Nat views of the exact
+-- operands/result, so one claim declaration remains valid for every UInt width
+-- without erasing width identity.  The existing discharge machinery may
+-- prove/runtime-bind/export the obligation, while an unresolved obligation
+-- remains an explicit failure.  A later checked-operation slice gives runtime
+-- overflow/underflow its own source-visible outcome instead of laundering it
+-- through this plain judgment.
 checkPlainUIntArithmetic
   :: CheckState
   -> UIntArithmeticOperator
@@ -113,20 +127,56 @@ checkPlainUIntArithmetic state operator width left right result site = do
           else Right (PlainUIntArithmeticEstablished literal)
     _ -> Right (PlainUIntArithmeticRequiresProof Obligation
       { obligationId = plainUIntArithmeticObligationId site
-      , obligationProposition = plainUIntArithmeticProposition operator left right result
+      , obligationProposition =
+          plainUIntArithmeticProposition operator width left right result
       , obligationOrigin = plainUIntArithmeticOrigin site
       , obligationScope = plainUIntArithmeticScope site
       , obligationRequiredPoint = plainUIntArithmeticRequiredPoint site
       })
 
+-- | Canonical proposition for one exact plain UInt operation.  Arithmetic claim
+-- declarations are width-generic because all four claim parameters are Nat:
+-- the explicit width plus exact toNat views of left/right/result.  The UInt
+-- terms themselves remain exact semantic inputs to those views.
 plainUIntArithmeticProposition
   :: UIntArithmeticOperator
+  -> Int
   -> RefTerm
   -> RefTerm
   -> RefTerm
   -> Proposition
-plainUIntArithmeticProposition operator left right result =
-  Atom (operatorAtom operator) [left, right, result]
+plainUIntArithmeticProposition operator width left right result =
+  Atom (operatorAtom operator)
+    [ RefNat (toInteger width)
+    , RefToNat left
+    , RefToNat right
+    , RefToNat result
+    ]
+
+-- | Install the three arithmetic relation declarations needed by Core focusing
+-- before ADR-025 can reason about arithmetic obligations.  Re-registering the
+-- exact same declarations is idempotent; a conflicting declaration under one
+-- of the reserved arithmetic claim names fails closed as DuplicateClaim.
+registerUIntArithmeticClaims
+  :: StaticContext
+  -> Either StaticError StaticContext
+registerUIntArithmeticClaims = foldM ensureClaim
+  where
+    parameters =
+      [ (Name "width", SortNat)
+      , (Name "left", SortNat)
+      , (Name "right", SortNat)
+      , (Name "result", SortNat)
+      ]
+    expected = ClaimDecl parameters OpaqueClaim
+
+    ensureClaim context operator =
+      let claimName = operatorAtom operator
+      in case lookupClaim claimName context of
+          Nothing -> declareOpaqueClaim claimName parameters context
+          Just actual
+            | actual == expected -> Right context
+            | otherwise -> Left (DuplicateClaim claimName)
 
 checkOperand
   :: CheckState
