@@ -100,7 +100,9 @@ jobs:
             scripts/derive_phase1_surface_determinacy_certificate.py \
             proof/Phil/Surface/Grammar.v \
             proof/Phil/Surface/GrammarDeterminacyCertificate.v \
+            proof/Phil/Surface/GrammarDeterminacyCertificate.vo \
             proof/Phil/Surface/GrammarDeterminacyCertificateCheck.v \
+            proof/Phil/Surface/GrammarDeterminacyCertificateCheck.vo \
             > surface-determinacy-certificate/certificate-identities.sha256
           cat surface-determinacy-certificate/certificate-identities.sha256
       - uses: actions/upload-artifact@v4
