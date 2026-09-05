@@ -2,8 +2,11 @@
 
 module Main (main) where
 
+import qualified Data.Map.Strict as Map
+import qualified Data.Set as Set
 import qualified Data.Text as Text
 import qualified Data.Text.IO as TextIO
+import Phil.Assurance.Types (Digest (..))
 import Phil.Surface.GrammarV1.Parser
 import Phil.Surface.GrammarV1.SequentialExecution
   ( GrammarV1ExecutionChoice (..)
@@ -16,6 +19,17 @@ import Phil.Surface.Syntax
   ( Located (..)
   , SourcePoint (..)
   , SourceSpan (..)
+  )
+import Phil.Systems.IR (StageContract (..))
+import Phil.Systems.SequentialTrace
+  ( CheckedSequentialTraceRefinement (..)
+  , SequentialCommutation (..)
+  , SequentialEventKey (..)
+  , SequentialTraceRefinement (..)
+  , SequentialTraceRefinementError (..)
+  , checkSequentialTraceRefinement
+  , renderSequentialCommutationRelation
+  , renderSequentialTraceRelation
   )
 import System.Exit (exitFailure)
 
@@ -38,6 +52,10 @@ main = do
         untakenBranchesDoNotExecute
     , test "EXEC sequencing fails closed rather than inventing finite loop semantics"
         loopExecutionNeedsLoopAuthority
+    , test "EXEC-001 StageContract rejects unproved reorder and accepts exact commuting refinement"
+        stageTraceRefinementPreservesSourceOrder
+    , test "EXEC-003 StageContract rejects speculative untaken-arm events"
+        stageTraceRejectsSpeculativeUntakenArm
     ]
   if and results then pure () else exitFailure
 
@@ -221,6 +239,115 @@ loopExecutionNeedsLoopAuthority = do
       assert (actual == loopExpression)
         "loop fail-closed diagnostic lost the exact source occurrence"
     other -> Left ("general loop was approximated by the local sequential driver: " <> show other)
+
+stageTraceRefinementPreservesSourceOrder :: Either String ()
+stageTraceRefinementPreservesSourceOrder = do
+  let first = callAt 500 "effectFirst" []
+      second = callAt 501 "effectSecond" []
+      sourceBlock = blockAt 502
+        [ expressionStatementAt 500 first
+        , expressionStatementAt 501 second
+        ]
+  (trace, control) <- mapLeft show
+    (grammarV1SequentialExecutionTrace [] [] sourceBlock)
+  assert (control == GrammarV1ExecutionContinues)
+    "StageContract source-order fixture unexpectedly terminated"
+  let sourceOrder = map eventKey (completedCallNames trace)
+      exact = baseSequentialRefinement sourceOrder sourceOrder Set.empty
+      exactContract = contractForSequentialRefinement exact []
+  checkedExact <- mapLeft show (checkSequentialTraceRefinement exactContract exact)
+  assert (Set.null (checkedSequentialTraceUsedCommutations checkedExact))
+    "exact source order unexpectedly required a commutation"
+
+  let reversedOrder = reverse sourceOrder
+      unproved = baseSequentialRefinement sourceOrder reversedOrder Set.empty
+      unprovedContract = contractForSequentialRefinement unproved []
+  case checkSequentialTraceRefinement unprovedContract unproved of
+    Left (SequentialOrderViolation _ _) -> Right ()
+    other -> Left ("unproved observable reorder was not rejected: " <> show other)
+
+  case sourceOrder of
+    [firstKey, secondKey] -> do
+      let commute = SequentialCommutation
+            { sequentialCommutationLeft = firstKey
+            , sequentialCommutationRight = secondKey
+            , sequentialCommutationEvidence = "proof.exec.commute.effectFirst.effectSecond"
+            }
+          proved = baseSequentialRefinement
+            sourceOrder
+            reversedOrder
+            (Set.singleton commute)
+          provedContract = contractForSequentialRefinement proved [commute]
+      checked <- mapLeft show (checkSequentialTraceRefinement provedContract proved)
+      assert
+        (checkedSequentialTraceUsedCommutations checked == Set.singleton commute)
+        "accepted reorder did not retain its exact commuting evidence"
+    other -> Left ("unexpected source event projection " <> show other)
+
+stageTraceRejectsSpeculativeUntakenArm :: Either String ()
+stageTraceRejectsSpeculativeUntakenArm = do
+  let condition = callAt 520 "condition" []
+      taken = callAt 521 "taken" []
+      untaken = callAt 522 "untaken" []
+      ifExpression = locatedAt 523
+        (GrammarV1IfExpression
+          condition
+          Nothing
+          (blockAt 524 [expressionStatementAt 521 taken])
+          (Just (blockAt 525 [expressionStatementAt 522 untaken])))
+      sourceBlock = blockAt 526 [expressionStatementAt 523 ifExpression]
+  (trace, _) <- mapLeft show
+    (grammarV1SequentialExecutionTrace
+      [GrammarV1IfChoice ifExpression True]
+      []
+      sourceBlock)
+  let sourceOrder = map eventKey (completedCallNames trace)
+      speculativeTarget = sourceOrder <> [eventKey "untaken"]
+      refinement = baseSequentialRefinement sourceOrder speculativeTarget Set.empty
+      contract = contractForSequentialRefinement refinement []
+  case checkSequentialTraceRefinement contract refinement of
+    Left (SequentialTraceEventSetMismatch actualSource actualTarget) -> do
+      assert (actualSource == sourceOrder)
+        "speculation diagnostic changed the exact source projection"
+      assert (actualTarget == speculativeTarget)
+        "speculation diagnostic changed the exact target projection"
+    other -> Left ("speculative untaken-arm event was accepted: " <> show other)
+
+baseSequentialRefinement
+  :: [SequentialEventKey]
+  -> [SequentialEventKey]
+  -> Set.Set SequentialCommutation
+  -> SequentialTraceRefinement
+baseSequentialRefinement source target commutations = SequentialTraceRefinement
+  { sequentialTraceStageContractId = "stage.exec.order.v1"
+  , sequentialTraceSourceDigest = Digest "source.exec.order.v1"
+  , sequentialTraceTargetDigest = Digest "target.exec.order.v1"
+  , sequentialTraceSourceOrder = source
+  , sequentialTraceTargetProjection = target
+  , sequentialTraceCommutations = commutations
+  }
+
+contractForSequentialRefinement
+  :: SequentialTraceRefinement
+  -> [SequentialCommutation]
+  -> StageContract
+contractForSequentialRefinement refinement commutations = StageContract
+  { stageContractId = sequentialTraceStageContractId refinement
+  , stageSourceArtifactDigest = sequentialTraceSourceDigest refinement
+  , stageTargetArtifactDigest = sequentialTraceTargetDigest refinement
+  , stageFacts = []
+  , stageInvariants = Map.empty
+  , stageRequiredEdges = []
+  , stageDerivedObligations = []
+  , stageAssumptions = []
+  , stageTraceRelation =
+      renderSequentialTraceRelation refinement
+        : map renderSequentialCommutationRelation commutations
+  , stageResourceFailureRelation = []
+  }
+
+eventKey :: Text.Text -> SequentialEventKey
+eventKey = SequentialEventKey . ("event." <>)
 
 completedCallNames :: [GrammarV1ExecutionEvent] -> [Text.Text]
 completedCallNames events =
