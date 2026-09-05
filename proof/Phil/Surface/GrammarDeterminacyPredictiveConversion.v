@@ -112,7 +112,11 @@ Proof.
   - exact Hsafe.
   - exact Hnonnullable.
   - intros earlier_index earlier_item Hlt Hearlier.
-    eapply predictive_bridge_pairwise_excludes_earlier_alternative; eauto.
+    exact
+      (predictive_bridge_pairwise_excludes_earlier_alternative
+        path items index item input rest tree
+        Hpairwise Hnth Hderive Hsafe Hnonnullable
+        earlier_index earlier_item Hlt Hearlier).
 Qed.
 
 Lemma predictive_bridge_pairwise_oracle_alternative :
