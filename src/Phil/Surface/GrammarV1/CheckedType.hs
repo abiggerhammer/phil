@@ -106,11 +106,6 @@ grammarV1CheckedTypeMode staticContext state sourceType = do
           , steps
           ))
 
--- | One named-type resolution supplied by the competent declaration/static
--- layer. The unresolved reference is repeated deliberately so source-to-resolution
--- correspondence can be checked exactly. Stable declaration/interface identity
--- and the already-checked type/mode travel together; none is derived from source
--- spelling at this boundary.
 data GrammarV1ResolvedNamedTypeMode = GrammarV1ResolvedNamedTypeMode
   { resolvedNamedTypeReference :: GenericStaticActual
   , resolvedNamedTypeKind :: GenericStaticKind
@@ -120,9 +115,6 @@ data GrammarV1ResolvedNamedTypeMode = GrammarV1ResolvedNamedTypeMode
   }
   deriving (Eq, Show)
 
--- | Preserve whether structural mode was intrinsic to the checked Core type or
--- supplied by an exact resolved named declaration. Named provenance remains
--- visible so stable semantic identity is not collapsed back into display text.
 data GrammarV1CheckedTypeModeOrigin
   = GrammarV1IntrinsicTypeModeOrigin
   | GrammarV1NamedTypeModeOrigin
@@ -152,19 +144,6 @@ data GrammarV1CheckedTypeModeResolutionError
       Ty
   deriving (Eq, Show)
 
--- | Extend checked mode(T) through exact caller-supplied named-type resolution
--- without teaching source spelling to determine structural behavior. Intrinsic
--- types use the same structural authority as 'grammarV1CheckedTypeMode'. A bare,
--- unspecialized named type may additionally consume exactly one Type-kind
--- resolution for its exact unresolved static reference. The resolution must
--- carry a CheckedTypeMode whose Ty is exactly the already-checked source Ty.
---
--- Missing, wrong-kind, ambiguous, or type-mismatched resolutions reject at this
--- explicit resolution boundary. Specialized named types remain source
--- non-competent because their static arguments still require generic
--- instantiation. Frame and Validated remain unresolved resource/declaration
--- categories rather than borrowing named-type evidence. Core focusing rejection
--- remains distinct from every resolution failure.
 grammarV1CheckedTypeModeWithNamedResolutions
   :: StaticContext
   -> SurfaceState
@@ -253,6 +232,7 @@ checkedCoreTypeMode ty = case ty of
   TyUnit -> Just Unrestricted
   TyBool -> Just Unrestricted
   TyUInt _ -> Just Unrestricted
+  TySInt _ -> Just Unrestricted
   TyBytes _ -> Just Linear
   TyPendingRecv _ -> Just Linear
   TyProof _ -> Just Unrestricted
