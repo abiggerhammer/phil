@@ -42,6 +42,7 @@ jobs:
           compile proof/Phil/Surface/GrammarDerivation.v
           compile proof/Phil/Surface/GrammarDerivationOracle.v
           compile proof/Phil/Surface/GrammarDeterminacyCertificate.v
+          compile proof/Phil/Surface/GrammarDeterminacyNullableFirst.v
           compile proof/Phil/Surface/GrammarDeterminacyFollowOverlap.v
           compile proof/Phil/Surface/GrammarDeterminacySimpleResolvers.v
           compile proof/Phil/Surface/GrammarDeterminacySimpleResolverSoundness.v
