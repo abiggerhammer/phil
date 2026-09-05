@@ -248,6 +248,8 @@ Lemma repetition_assembly_guard_equation :
     repetition_assembly_guardb path outer_follow body =
     if trailing_comma_repeat_pathb path
     then comma_identifier_repetition_bodyb body
+    else if qualified_name_repeat_pathb path
+    then qualified_name_repetition_bodyb body
     else expression_follow_disjointb body outer_follow.
 Proof.
   reflexivity.
@@ -265,14 +267,30 @@ Proof.
   exact Hguard.
 Qed.
 
+Lemma repetition_assembly_guard_qualified_name :
+  forall path outer_follow body,
+    trailing_comma_repeat_pathb path = false ->
+    qualified_name_repeat_pathb path = true ->
+    repetition_assembly_guardb path outer_follow body = true ->
+    qualified_name_repetition_bodyb body = true.
+Proof.
+  intros path outer_follow body Htrailing Hqualified Hguard.
+  rewrite repetition_assembly_guard_equation in Hguard.
+  rewrite Htrailing in Hguard.
+  rewrite Hqualified in Hguard.
+  exact Hguard.
+Qed.
+
 Lemma repetition_assembly_guard_fallback :
   forall path outer_follow body,
     trailing_comma_repeat_pathb path = false ->
+    qualified_name_repeat_pathb path = false ->
     repetition_assembly_guardb path outer_follow body = true ->
     expression_follow_disjointb body outer_follow = true.
 Proof.
-  intros path outer_follow body Htrailing Hguard.
+  intros path outer_follow body Htrailing Hqualified Hguard.
   rewrite repetition_assembly_guard_equation in Hguard.
   rewrite Htrailing in Hguard.
+  rewrite Hqualified in Hguard.
   exact Hguard.
 Qed.
