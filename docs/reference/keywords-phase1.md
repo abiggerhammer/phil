@@ -119,7 +119,7 @@ The current inventory contains **132 reserved words**. Every reserved word appea
 | `select` | Declares/executes active protocol branch selection. |
 | `offer` | Declares/executes passive protocol branch handling. |
 | `end` | Declares a terminal session state with a terminal label. |
-| `recursive` | Introduces guarded session recursion or marks a named function as recursive. |
+| `recursive` | Introduces guarded session recursion; on a named function, it is the required declaration marker that makes self/mutual recursion eligible for stabilized-contract checking. An unmarked recursive `fn` does not typecheck. |
 | `continue` | In sessions, jumps to a named recursion variable; in term loops, supplies the next loop-state actuals. |
 | `then` | Connects a protocol send/receive action to its successor session state. |
 | `using` | Supplies an explicit contract/evidence value to a protocol, boundary, validation, transport, or exact-I/O form. |
