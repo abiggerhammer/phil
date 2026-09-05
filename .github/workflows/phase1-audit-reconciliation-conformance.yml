@@ -89,6 +89,8 @@ jobs:
         run: cabal exec -- runghc -Wall -Werror -isrc test/Phase1ExplicitReleaseMain.hs
       - name: EXEC-015 omitted else identity predecessor
         run: cabal exec -- runghc -Wall -Werror -isrc test/Phase1OmittedElseIdentityMain.hs
+      - name: EXEC-016 fixed-width signed integer semantics
+        run: cabal exec -- runghc -Wall -Werror -isrc test/Phase1ExecutionSIntArithmeticMain.hs
       - name: VER-013 prove competence and no assertion fallback
         run: cabal exec -- runghc -Wall -Werror -isrc test/Phase1ProveCompetenceMain.hs
       - name: SURF-010 portable persisted lineage competence
