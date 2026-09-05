@@ -272,16 +272,28 @@ A loop is a join with a backedge, so the same ownership problem appears every ti
 Grammar v1 therefore lets a loop declare the state carried from one iteration to the next:
 
 ```phil
-component Counter(n : U32) {
-    loop state (i : U32 = n) invariant i >= 0 {
-        continue(i);
+component Countdown(n : {v : U32 | v > 0}) {
+    loop state (i : U32 = n) invariant i > 0 {
+        if i > 1 {
+            continue(i - 1);
+        } else {
+            break;
+        };
     };
+
+    return unit;
 }
 ```
 
-The keyword `loop` introduces the loop. `state (i : U32 = n)` says that the loop carries one state slot named `i`, of type `U32`, initially supplied by `n`. The `invariant` must hold on entry and on every backedge.
+The keyword `loop` introduces the loop. `state (i : U32 = n)` says that the loop carries one state slot named `i`, of type `U32`, initially supplied by `n`. The refinement on `n` establishes the loop invariant on the initial entry.
 
-Term-level `continue(...)` supplies the exact successor values for the next iteration. It is not assignment to mutable locals: the old loop state is succeeded by the new loop state, and the checker verifies that the successor fits the same declared contract.
+A loop `invariant` is a **reliable proposition**, not a runtime guard. Phil may rely on `i > 0` while checking the loop body because the initial entry and every backedge must establish it. If a proposed backedge would violate the invariant, that backedge is rejected; Phil does not silently reinterpret the failure as a loop exit.
+
+The `if i > 1` is different: it is an ordinary **runtime guard**. At runtime it chooses which control-flow path executes. When it is true, `continue(i - 1)` supplies the exact successor value for the next iteration. Because that branch knows `i > 1`, the successor `i - 1` still establishes the invariant `i > 0`. When the guard is false, `break` explicitly exits the loop.
+
+For example, starting with `n = 3`, the loop states are `3 → 2 → 1 → exit`. The invariant describes what is guaranteed to be true at each admitted loop state; the `if` decides at runtime whether there will be another state.
+
+Term-level `continue(...)` is not assignment to mutable locals: the old loop state is succeeded by the new loop state, and the checker verifies that the successor fits the same declared contract.
 
 The other loop-control keyword is `break`, which exits the loop and, where the surrounding exit contract carries values, supplies those values explicitly:
 
