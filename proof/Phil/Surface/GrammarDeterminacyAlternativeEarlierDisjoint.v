@@ -53,8 +53,10 @@ Lemma earlier_first_disjointb_nth_lt :
     nth_error items earlier_index = Some earlier ->
     expression_first_disjointb earlier selected = true.
 Proof.
+  intros items selected count.
+  revert items.
   induction count as [| count IH];
-    intros items selected earlier_index earlier Hcheck Hlt Hnth.
+    intros items earlier_index earlier Hcheck Hlt Hnth.
   - lia.
   - destruct items as [| head rest].
     + discriminate Hcheck.
