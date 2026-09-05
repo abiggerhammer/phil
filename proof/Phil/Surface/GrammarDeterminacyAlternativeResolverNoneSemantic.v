@@ -9,6 +9,7 @@ From Phil.Surface Require Import
   GrammarDeterminacyPredictiveOracle
   GrammarDeterminacyContinuationSoundness
   GrammarDeterminacyPredictiveFallbackSoundness
+  GrammarDeterminacyRelationCommitmentSoundness
   GrammarDeterminacyAlternativeEarlierDisjoint
   GrammarDeterminacyAlternativeResolverSemanticCore
   GrammarDeterminacyAlternativeResolverSemanticComplex.
