@@ -3,7 +3,7 @@
 module Main (main) where
 
 import qualified Data.Set as Set
-import Phil.Core.CallableRefinement (CallableFailure)
+import Data.Text (Text)
 import Phil.Core.Checker (emptyCheckState)
 import Phil.Core.IntegerDivision
   ( CheckedDivisionResult (..)
@@ -234,6 +234,3 @@ assert condition detail
 
 mapLeft :: (a -> b) -> Either a c -> Either b c
 mapLeft f = either (Left . f) Right
-
-_failureTypeWitness :: CallableFailure -> CallableFailure
-_failureTypeWitness = id
