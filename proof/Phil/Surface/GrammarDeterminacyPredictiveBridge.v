@@ -54,7 +54,12 @@ Proof.
   intros fuel items index item Hsafe Hnth.
   rewrite choice_bodies_nonnullable_alternative_step in Hsafe.
   rewrite forallb_forall in Hsafe.
-  pose proof (Hsafe item (nth_error_In items index item Hnth)) as Hitem.
+  assert (Hin : In item items).
+  {
+    eapply nth_error_In.
+    exact Hnth.
+  }
+  pose proof (Hsafe item Hin) as Hitem.
   apply andb_true_iff in Hitem as [Hnonnullable Hchild].
   apply negb_true_iff in Hnonnullable.
   split; assumption.
