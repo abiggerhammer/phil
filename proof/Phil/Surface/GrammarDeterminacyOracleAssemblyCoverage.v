@@ -56,9 +56,9 @@ Fixpoint expression_first_disjoint_fromb
   (rights : list EbnfExpression) : bool :=
   match rights with
   | [] => true
-  | right :: rest =>
+  | candidate :: rest =>
       andb
-        (expression_first_disjointb left right)
+        (expression_first_disjointb left candidate)
         (expression_first_disjoint_fromb left rest)
   end.
 
