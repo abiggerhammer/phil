@@ -327,6 +327,22 @@ Proof.
   repeat split; assumption.
 Qed.
 
+Lemma oracle_assembly_alternative_cons_equation :
+  forall fuel path outer_follow index item rest,
+    oracle_assembly_alternative_coverage_fuel
+      (S fuel) path outer_follow index (item :: rest) =
+    andb
+      (oracle_assembly_coverage_fuel
+        fuel
+        (descend path (AtAlternative index))
+        outer_follow
+        item)
+      (oracle_assembly_alternative_coverage_fuel
+        fuel path outer_follow (S index) rest).
+Proof.
+  reflexivity.
+Qed.
+
 Lemma oracle_assembly_alternative_member_covered :
   forall fuel path outer_follow base items relative item,
     oracle_assembly_alternative_coverage_fuel
@@ -342,20 +358,23 @@ Proof.
   induction fuel as [| fuel IH];
     intros path outer_follow base items relative item Hcovered Hnth.
   - discriminate Hcovered.
-  - destruct items as [| head rest]; simpl in Hnth; try discriminate.
-    simpl in Hcovered.
-    apply andb_true_iff in Hcovered as [Hhead Hrest].
-    destruct relative as [| relative].
-    + inversion Hnth; subst head.
-      exists fuel.
-      replace (base + 0) with base by lia.
-      exact Hhead.
-    + specialize
-        (IH path outer_follow (S base) rest relative item Hrest Hnth)
-        as [child_fuel Hchild].
-      exists child_fuel.
-      replace (base + S relative) with (S base + relative) by lia.
-      exact Hchild.
+  - destruct items as [| head rest].
+    + simpl in Hnth. discriminate Hnth.
+    + rewrite oracle_assembly_alternative_cons_equation in Hcovered.
+      apply andb_true_iff in Hcovered as [Hhead Hrest].
+      destruct relative as [| relative].
+      * simpl in Hnth.
+        inversion Hnth; subst head.
+        exists fuel.
+        replace (base + 0) with base by lia.
+        exact Hhead.
+      * simpl in Hnth.
+        specialize
+          (IH path outer_follow (S base) rest relative item Hrest Hnth)
+          as [child_fuel Hchild].
+        exists child_fuel.
+        replace (base + S relative) with (S base + relative) by lia.
+        exact Hchild.
 Qed.
 
 Lemma oracle_assembly_alternative_guard :
