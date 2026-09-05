@@ -514,7 +514,7 @@ Proof.
                                        rewrite Hinput_open in Hstart.
                                        discriminate Hstart.
                                   ++++ destruct index as [| index].
-                                       #### vm_compute in Hnth.
+                                       ----- vm_compute in Hnth.
                                             inversion Hnth; subst item.
                                             destruct phase1_surface_refinement_type_lookup_prefix
                                               as [tail_items Hrefinement].
@@ -525,7 +525,7 @@ Proof.
                                               as [suffix Hstart].
                                             rewrite Hinput_open in Hstart.
                                             discriminate Hstart.
-                                       #### destruct index as [| index].
+                                       ----- destruct index as [| index].
                                             ***** vm_compute in Hnth.
                                                   inversion Hnth; subst item.
                                                   eapply phase1_surface_tuple_type_derivation_commits_static_argument_tuple_branch.
