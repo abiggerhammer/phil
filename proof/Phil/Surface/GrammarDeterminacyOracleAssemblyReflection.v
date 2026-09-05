@@ -42,7 +42,7 @@ Proof.
   intros left right Hempty.
   unfold token_intersection_emptyb in Hempty.
   destruct (token_intersection left right) as [| head rest] eqn:Hintersection.
-  - exact Hintersection.
+  - reflexivity.
   - discriminate Hempty.
 Qed.
 
