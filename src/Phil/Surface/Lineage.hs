@@ -53,7 +53,7 @@ newtype GrammarRevision = GrammarRevision { unGrammarRevision :: Text }
   deriving (Eq, Ord, Show)
 
 canonicalGrammarRevisionV1 :: GrammarRevision
-canonicalGrammarRevisionV1 = GrammarRevision "sha256:cf957c4cc27f8f2814e312eca8885a76bce09deaa0a9977904963130c76a145e"
+canonicalGrammarRevisionV1 = GrammarRevision "sha256:5c2b140cc2f20748f1c42c680899d6e003d5fb4112e8feb7828ee6f06516369f"
 
 -- | Implementation-independent SourceBundle fixture record. The metadata key is
 -- deliberately kept as text until the lineage competence check validates it.
