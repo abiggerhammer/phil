@@ -14,13 +14,18 @@ import Phil.Core.Static
   )
 import Phil.Core.Syntax
   ( Name (..)
+  , Proposition (..)
   , RefTerm (..)
   , Ty (..)
   )
 import Phil.Surface.Check.Types (SurfaceState (..))
 import Phil.Surface.GrammarV1.BinderScope
-  ( GrammarV1BinderScopeError (..)
+  ( GrammarV1BinderKey (..)
+  , GrammarV1BinderKind (..)
+  , GrammarV1BinderScopeError (..)
   , GrammarV1ResolvedBinder (..)
+  , grammarV1BindLocal
+  , grammarV1ResolveLocal
   )
 import Phil.Surface.GrammarV1.LexicalReferenceScope
   ( GrammarV1CheckedLexicalReference (..)
@@ -43,6 +48,8 @@ main = do
         generatedParameterState
     , test "SURF-009 semantic component headers are alpha-stable for dependent provides"
         alphaStableDependentProvides
+    , test "SURF-009 semantic component refinement provides retain ordinal composition"
+        semanticRefinementProvidesCompose
     , test "SURF-009 semantic component headers preserve duplicate-binder diagnostics"
         duplicateBinderPreserved
     , test "SURF-009 semantic component headers preserve Core focusing errors"
@@ -165,6 +172,61 @@ alphaStableDependentProvides = do
   assert
     (map grammarV1ResolvedBinderDisplayName renamedBinders == ["count", "ready"])
     "renamed component display spellings changed"
+
+semanticRefinementProvidesCompose :: Either String ()
+semanticRefinementProvidesCompose = do
+  component <- onlyComponent "semantic-component-refinement" $
+    "component Refined(n : U8) provides {v : U8 | v <= n} {}"
+  let declarationKey = DeclarationKey "component.refinement.lineage"
+      definitionRevision = DefinitionRevision "component.refinement.v1"
+  header <- checkedHeader declarationKey definitionRevision component
+  nBinder <- case checkedSemanticComponentParameters header of
+    Just [(binder, TyUInt 8)] -> Right binder
+    other -> Left ("unexpected refinement component parameter shape: " <> show other)
+  references <- maybe
+    (Left "refinement provides lost exact reference evidence")
+    Right
+    (checkedSemanticComponentProvidesReferences header)
+  case references of
+    [vReference, nReference] -> do
+      let vBinder = grammarV1CheckedLexicalReferenceBinder vReference
+          nEvidence = grammarV1CheckedLexicalReferenceBinder nReference
+          vName@(Name vText) = grammarV1ResolvedBinderCoreName vBinder
+          nName = grammarV1ResolvedBinderCoreName nBinder
+          postScope = checkedSemanticComponentLexicalScope header
+      assert (grammarV1ResolvedBinderDisplayName vBinder == "v")
+        "refinement provides lost diagnostic binder spelling"
+      assert (vText /= "v")
+        "refinement provides reused source spelling as Core identity"
+      assert
+        (grammarV1ResolvedBinderKey nEvidence == grammarV1ResolvedBinderKey nBinder)
+        "refinement provides outer reference did not retain exact parameter identity"
+      assert
+        ( grammarV1BinderOrdinal (grammarV1ResolvedBinderKey nBinder) == 0
+          && grammarV1BinderOrdinal (grammarV1ResolvedBinderKey vBinder) == 1 )
+        "component parameter/refinement binder ordinals were not declaration-wide"
+      assert
+        (checkedSemanticComponentProvidesType header
+          == Just
+            (TyRefined
+              vName
+              (TyUInt 8)
+              (LessEqual (RefVar vName) (RefVar nName))))
+        "component refinement provides did not preserve semantic parameter/local identities"
+      case grammarV1ResolveLocal
+          (Located (grammarV1ResolvedBinderSourceSpan vBinder) "v")
+          postScope of
+        Left (GrammarV1BinderNotInScope _) -> Right ()
+        other -> Left ("closed refinement binder leaked into component post-scope: " <> show other)
+      (laterBinder, _) <- mapLeft show $
+        grammarV1BindLocal
+          GrammarV1LetPatternBinder
+          (Located (grammarV1ResolvedBinderSourceSpan vBinder) "later")
+          postScope
+      assert
+        (grammarV1BinderOrdinal (grammarV1ResolvedBinderKey laterBinder) == 2)
+        "later component binder reused a consumed refinement ordinal"
+    other -> Left ("unexpected refinement provides reference trace: " <> show other)
 
 duplicateBinderPreserved :: Either String ()
 duplicateBinderPreserved = do

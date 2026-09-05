@@ -4,7 +4,6 @@ module Phil.Surface.GrammarV1.SemanticComponentHeader
   , grammarV1CheckedSemanticComponentHeader
   ) where
 
-import qualified Data.Set as Set
 import Data.Text (Text)
 import Phil.Core.Focusing
   ( FocusStep
@@ -28,15 +27,14 @@ import Phil.Surface.Check.Types
   )
 import Phil.Surface.GrammarV1.BinderScope
   ( GrammarV1BinderScopeError
+  , GrammarV1LexicalScope
   , GrammarV1ResolvedBinder
   , grammarV1ComponentParameterScope
   )
-import Phil.Surface.GrammarV1.CheckedType (grammarV1CheckedType)
 import Phil.Surface.GrammarV1.Elaborate (grammarV1PrimitiveType)
 import Phil.Surface.GrammarV1.LexicalReferenceScope
   ( GrammarV1CheckedLexicalReference
   , GrammarV1LexicalReferenceError
-  , grammarV1CheckedTypeReferences
   )
 import Phil.Surface.GrammarV1.Parser
   ( GrammarV1ComponentDecl (..)
@@ -45,7 +43,14 @@ import Phil.Surface.GrammarV1.Parser
   )
 import Phil.Surface.GrammarV1.SemanticBindingState
   ( grammarV1InsertSemanticBinding
-  , grammarV1RewriteTypeReferences
+  )
+import Phil.Surface.GrammarV1.SemanticCheckedType
+  ( GrammarV1CheckedSemanticType (..)
+  , GrammarV1SemanticCheckedTypeError (..)
+  , grammarV1CheckedSemanticType
+  )
+import Phil.Surface.GrammarV1.SemanticRefinementType
+  ( GrammarV1SemanticRefinementTypeError
   )
 import Phil.Surface.Syntax (Located (..))
 
@@ -53,7 +58,9 @@ import Phil.Surface.Syntax (Located (..))
 -- semantic identity. Omitted versus explicitly empty parameter syntax remains
 -- visible in the parameter carrier, while every present parameter is retained as
 -- its resolved binder plus checked type. The temporary SurfaceState is keyed only
--- by generated Core names and is retained for composition with later body slices.
+-- by generated Core names. The retained lexical scope is the post-provides scope:
+-- any refinement binder inside the provides type has closed, but its declaration-
+-- wide ordinal remains consumed for later component-body binders.
 data GrammarV1CheckedSemanticComponentHeader = GrammarV1CheckedSemanticComponentHeader
   { checkedSemanticComponentDeclarationKey :: DeclarationKey
   , checkedSemanticComponentDefinitionRevision :: DefinitionRevision
@@ -62,6 +69,7 @@ data GrammarV1CheckedSemanticComponentHeader = GrammarV1CheckedSemanticComponent
   , checkedSemanticComponentProvidesType :: Maybe Ty
   , checkedSemanticComponentProvidesReferences :: Maybe [GrammarV1CheckedLexicalReference]
   , checkedSemanticComponentState :: SurfaceState
+  , checkedSemanticComponentLexicalScope :: GrammarV1LexicalScope
   }
   deriving (Eq, Show)
 
@@ -71,6 +79,8 @@ data GrammarV1SemanticComponentHeaderError
   | GrammarV1SemanticComponentProvidesReferenceError GrammarV1LexicalReferenceError
   | GrammarV1SemanticComponentProvidesRewriteNonCompetent (Located GrammarV1Type)
   | GrammarV1SemanticComponentProvidesFocusingError FocusingError
+  | GrammarV1SemanticComponentProvidesRefinementError
+      GrammarV1SemanticRefinementTypeError
   deriving (Eq, Show)
 
 -- | Migrate the bounded closed-component header route onto resolver-issued
@@ -79,12 +89,12 @@ data GrammarV1SemanticComponentHeaderError
 -- Present term parameters retain the existing primitive unrestricted competence,
 -- but are inserted under generated semantic names obtained from BinderScope.
 --
--- A present `provides` type is reference-checked in the exact component lexical
--- scope, rewritten only at certified local occurrences, and delegated to the
--- ordinary checked type authority over that semantic state. This permits exact
--- dependent headers such as `component C(n : U8) provides Bytes[toNat(n)]` while
--- preventing display spelling from becoming Core identity. Absence of a provides
--- clause remains distinct from an empty reference set on a present closed type.
+-- A present `provides` type now delegates to SemanticCheckedType. Ordinary
+-- dependent provides retain exact reference evidence and semantic-name rewriting;
+-- a top-level primitive-base refinement additionally allocates its local binder in
+-- a child lexical scope and returns the enclosing scope with that ordinal consumed.
+-- Absence of a provides clause leaves the parameter lexical scope unchanged and
+-- remains distinct from an empty reference set on a present closed type.
 grammarV1CheckedSemanticComponentHeader
   :: StaticContext
   -> DeclarationKey
@@ -112,48 +122,34 @@ grammarV1CheckedSemanticComponentHeader
               case grammarV1ComponentProvides source of
                 Nothing -> Just
                   (Right
-                    ( buildHeader parameters Nothing Nothing semanticState
+                    ( buildHeader
+                        parameters
+                        Nothing
+                        Nothing
+                        semanticState
+                        lexicalScope
                     , []
                     ))
                 Just providesSource -> do
-                  checkedReferences <- grammarV1CheckedTypeReferences
-                    Set.empty
+                  checkedProvides <- grammarV1CheckedSemanticType
+                    staticContext
                     lexicalScope
+                    semanticState
                     providesSource
-                  case checkedReferences of
-                    Left referenceError ->
-                      Just
-                        (Left
-                          (GrammarV1SemanticComponentProvidesReferenceError
-                            referenceError))
-                    Right references ->
-                      case grammarV1RewriteTypeReferences references providesSource of
-                        Nothing ->
-                          Just
-                            (Left
-                              (GrammarV1SemanticComponentProvidesRewriteNonCompetent
-                                providesSource))
-                        Just rewrittenProvides -> do
-                          checkedProvides <- grammarV1CheckedType
-                            staticContext
+                  pure $ case checkedProvides of
+                    Left typeError -> Left (mapProvidesTypeError typeError)
+                    Right (semanticProvides, nextLexicalScope) ->
+                      Right
+                        ( buildHeader
+                            parameters
+                            (Just (checkedSemanticTypeValue semanticProvides))
+                            (Just (checkedSemanticTypeReferences semanticProvides))
                             semanticState
-                            (locatedValue rewrittenProvides)
-                          pure $ case checkedProvides of
-                            Left focusingError ->
-                              Left
-                                (GrammarV1SemanticComponentProvidesFocusingError
-                                  focusingError)
-                            Right (providesType, focusSteps) ->
-                              Right
-                                ( buildHeader
-                                    parameters
-                                    (Just providesType)
-                                    (Just references)
-                                    semanticState
-                                , focusSteps
-                                )
+                            nextLexicalScope
+                        , checkedSemanticTypeFocusSteps semanticProvides
+                        )
   where
-    buildHeader parameters providesType providesReferences semanticState =
+    buildHeader parameters providesType providesReferences semanticState lexicalScope =
       GrammarV1CheckedSemanticComponentHeader
         { checkedSemanticComponentDeclarationKey = declarationKey
         , checkedSemanticComponentDefinitionRevision = definitionRevision
@@ -163,6 +159,7 @@ grammarV1CheckedSemanticComponentHeader
         , checkedSemanticComponentProvidesType = providesType
         , checkedSemanticComponentProvidesReferences = providesReferences
         , checkedSemanticComponentState = semanticState
+        , checkedSemanticComponentLexicalScope = lexicalScope
         }
 
 buildSemanticParameters
@@ -202,3 +199,16 @@ buildPresentParameters = go [] emptySurfaceState
         Right nextState ->
           go ((binder, ty) : reversed) nextState binders parameters
     go _ _ _ _ = Nothing
+
+mapProvidesTypeError
+  :: GrammarV1SemanticCheckedTypeError
+  -> GrammarV1SemanticComponentHeaderError
+mapProvidesTypeError typeError = case typeError of
+  GrammarV1SemanticCheckedTypeReferenceError referenceError ->
+    GrammarV1SemanticComponentProvidesReferenceError referenceError
+  GrammarV1SemanticCheckedTypeRewriteNonCompetent source ->
+    GrammarV1SemanticComponentProvidesRewriteNonCompetent source
+  GrammarV1SemanticCheckedTypeFocusingError focusingError ->
+    GrammarV1SemanticComponentProvidesFocusingError focusingError
+  GrammarV1SemanticCheckedTypeRefinementError refinementError ->
+    GrammarV1SemanticComponentProvidesRefinementError refinementError
