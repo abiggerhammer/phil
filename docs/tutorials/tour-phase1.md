@@ -2,7 +2,7 @@
 
 ## From one architecture to a language for architectures
 
-*Work-in-progress Phase 1 edition. This tutorial explains the semantic model Phase 1 is building toward. Unlike the frozen [Phase 0 Tour](tour-phase0.md), it intentionally does not yet present executable `.phil` listings. Phase 1 Surface Grammar v1 is normative, but the canonical parser/elaborator/front-end path is still being completed. Source examples will be added only after they can be checked through that path and kept under CI.*
+*Work-in-progress Phase 1 edition. The canonical Grammar-v1 parser/elaborator/front-end path is now available, so this Tour is beginning its executable-source pass. The `.phil` listings below are taken from source forms exercised by the Phase 1 front-end corpus and named semantic-routing tests. Where a listing demonstrates only one competence layer, the surrounding text says so; parseability is never treated as proof of semantic acceptance.*
 
 Phil is a systems language for building software from the outside in. Instead of starting with “what instructions should the computer run?”, Phil starts with questions like:
 
@@ -63,7 +63,20 @@ The upload program and Steve need different architecture. That is the point.
 
 If the language can describe both through the same parser, type checker, contract machinery, Systems lowering, and assurance model, then the compiler is starting to understand a language rather than a pair of examples.
 
-> **Source example to add after the canonical front end lands:** the smallest ordinary declarations that distinguish the upload architecture from Steve without any compiler-recognized program identity. The example should be checked through the canonical parser/elaborator and should have a negative companion showing that an undeclared provider/protocol/root cannot be installed by compiler magic.
+The ordinary root form is now real source rather than tutorial pseudocode. One front-end conformance case is:
+
+```phil
+program main = instantiate pkg.Arch {
+  entry ingress : U32;
+  assume true within trust.zone;
+  export obligation proof.ready to audit.sink;
+  observable metrics.bytes;
+};
+```
+
+The important point is what is *not* present: there is no compiler-recognized upload or Steve switch. `pkg.Arch` is an ordinary architecture reference, and the entry, assumption, exported obligation, and observable are ordered source items checked through the same program-root machinery. The front-end test also renames the source program while supplying the same stable lineage identity and checks that display spelling does not become semantic identity. See [`Phase1GrammarV1ProgramSurfaceMain.hs`](../../test/Phase1GrammarV1ProgramSurfaceMain.hs).
+
+The final upload/Steve side-by-side listings will make this section more concrete still, but the program-root syntax and its stable-identity boundary are no longer hypothetical.
 
 ## 2. The program declares its architecture
 
@@ -135,7 +148,14 @@ And now we can add a second one:
 
 > **Stable identity is carried deliberately; it is not rediscovered from accidents of the current source tree.**
 
-> **Source example to add after the canonical front end lands:** two architecture occurrences with equal-looking types or representations but distinct semantic identities, plus a lineage-preserving rename/move case. A negative companion should try to substitute one occurrence for another or reuse copied-site lineage and fail at the competent identity/lineage layer.
+For a top-level declaration, that lineage can be visible directly in source:
+
+```phil
+@key("decl:upload-id")
+record UploadId {}
+```
+
+The canonical SURF-010 SourceBundle fixture carries that exact declaration lineage together with separate stable instance and process keys. Those occurrence keys are bundle metadata rather than attributes on architecture items, which is why a rename or move can preserve identity while copying a genuinely new site requires fresh lineage. See [`surf010-inline.bundle`](../../test/fixtures/phase1/surf010-inline.bundle).
 
 ## 3. Abstraction means saying what you actually need
 
@@ -192,7 +212,21 @@ This is one of the ways Phil tries to make abstraction honest:
 
 > **Generic code may rely only on the facts and permissions its contract actually provides.**
 
-> **Source example to add after the canonical front end lands:** a structure-polymorphic identity function that accepts a linear actual and returns the same unique owner; a generic discard that is rejected without weakening permission; and a generic duplicate that is rejected without contraction permission. These should become canonical positive/negative tutorial fixtures tied to the corresponding generic conformance cases.
+Grammar v1 spells those requirements explicitly. This front-end fixture routes the three currently Core-backed categories through their competent semantic checkers:
+
+```phil
+record Routed[T : Type] requires {
+  structural T : duplicate;
+  proposition true;
+  provider P : ProviderContract;
+} {
+  value : T
+}
+```
+
+Here `structural T : duplicate;` does not make `T` duplicable. After binder resolution it becomes a contraction requirement on the exact generic parameter, which a concrete instantiation must satisfy. The same test verifies that a missing or ambiguous `T` resolution rejects rather than selecting a convenient binder. See [`Phase1GrammarV1GenericRequirementElaborationMain.hs`](../../test/Phase1GrammarV1GenericRequirementElaborationMain.hs).
+
+The structure-polymorphic identity/discard/duplicate trio is still the best compact tutorial example to add once we choose the final pedagogical bodies, but the requirement surface and its stable binder routing are already executable.
 
 ## 4. Ownership does not disappear inside abstraction
 
@@ -226,7 +260,27 @@ The broad rule is:
 
 > **Abstraction may hide representation. It may not hide ownership.**
 
-> **Source example to add after the canonical front end lands:** a closure capturing one linear value, plus a negative case attempting to duplicate the closure; and a branch or loop example showing that the same exact linear owner must be accounted for at reconvergence/backedge.
+The source can also state an intentionally stricter possession mode when that restriction belongs to the public contract. The production corpus contains this complete example:
+
+```phil
+module corpus.closure_explicit_mode;
+
+callable OneShot(x : U32) -> U32 {
+  outcomes { success U32 };
+  outcome success U32 {
+    state ();
+    callee consume;
+  }
+}
+
+component Demo() {
+  let f = closure mode linear (x : U32) satisfies OneShot captures () {
+    return x;
+  };
+}
+```
+
+`mode linear` is not permission to weaken a linear capture; it is a stronger possession restriction on the callable value itself. The parser preserves it exactly and the later callable-mode semantics decide whether the closure's captures justify that mode. See [`22-closure-explicit-mode.phil`](../../test/fixtures/phase1-surface/accepted/22-closure-explicit-mode.phil).
 
 ## 5. Functions are values with contracts
 
@@ -262,7 +316,28 @@ Failure behavior matters too. A same-signature implementation that introduces a 
 
 So higher-order substitution is about semantic boundaries, not just ABI compatibility.
 
-> **Source example to add after the canonical front end lands:** one higher-order function receiving a callable under a public contract, one narrower accepted implementation, and one same-machine-shape implementation rejected because it widens authority, effects, failures, or resource residue.
+Here is a deliberately dense callable from the front-end conformance corpus. It is useful precisely because its clauses stay distinct rather than collapsing into “function metadata”:
+
+```phil
+callable C[E : Effects] requires {
+  effects E within {IO, Audit};
+} (x : U32) -> Unit {
+  requires true;
+  consumes {x, store.slot};
+  borrows {loan};
+  authority {Cap, OtherCap};
+  effects {IO, Audit(x)};
+  outcomes {success Unit};
+  outcome success Unit {}
+  ensures true;
+  obligation true;
+  assumes true;
+  cost 7;
+  callee preserve;
+}
+```
+
+The corresponding test checks that requirements, consumption, borrowing, authority, effects, outcomes, obligations, assumptions, cost, and callee transition remain separate ordered categories. References such as `Cap` or `store.slot` still need the competent semantic context; parsing the declaration does not manufacture them. See [`Phase1GrammarV1CallableEffectsMain.hs`](../../test/Phase1GrammarV1CallableEffectsMain.hs).
 
 ## 6. Effects say what a computation may do
 
@@ -312,7 +387,17 @@ The result is a simple refinement direction:
 
 > **An implementation may be narrower than its public effect bound. It may not silently be wider.**
 
-> **Source example to add after the canonical front end lands:** a callable with subject-indexed effects, two distinct storage subjects, a valid narrower effect instantiation, and a rejected widening. Include the `Effects`-parameter example only once its parser/elaborator semantics are live, even though Grammar v1 already fixes the concrete spelling.
+Effects parameters are live in the canonical front end too. This test fixture uses the same exact parameter twice with a concrete effect set in between:
+
+```phil
+callable GenericEffects[E : Effects, T : Type]() -> Unit {
+  effects E;
+  effects {IO, IO};
+  effects E;
+}
+```
+
+The duplicate `IO` entries normalize as a set, while the two uses of `E` remain uses of the same resolved stable generic parameter. Missing, wrong-kind, or foreign binder evidence rejects explicitly rather than turning `E` into a stringly typed effect name. See [`Phase1GrammarV1CallableEffectsMain.hs`](../../test/Phase1GrammarV1CallableEffectsMain.hs).
 
 ## 7. Carrying an effect is not performing it
 
@@ -344,7 +429,7 @@ can invoke something that may write
 performed the write
 ```
 
-> **Source example to add after the canonical front end lands:** a higher-order forwarding combinator whose effect parameter stays latent while the callable is passed through, followed by an invocation site where the effect becomes part of the reachable effect footprint.
+> **Next executable example:** a higher-order forwarding combinator whose effect parameter stays latent while the callable is passed through, followed by an invocation site where the effect becomes part of the reachable effect footprint.
 
 ## 8. Permission is not an effect
 
@@ -385,7 +470,7 @@ That separation lets the checker reject a program for **missing authority** even
 
 It also lets Phil state negative authority claims properly. “This component cannot delete objects” should not mean merely “our test run did not happen to call delete.” It should mean that the component lacks a checked path to the relevant authority.
 
-> **Source example to add after the canonical front end lands:** one callable whose effect bound includes a storage write but which is rejected because the required authority is absent; and one program that possesses the authority but never invokes the effectful operation.
+> **Next executable example:** one callable whose effect bound includes a storage write but which is rejected because the required authority is absent; and one program that possesses the authority but never invokes the effectful operation.
 
 ## 9. The surrounding world can have requirements too
 
@@ -422,7 +507,7 @@ A single storage operation may participate in all four, but Phil does not collap
 
 That separation is intentional. It keeps each piece of the type system responsible for a question it can answer precisely.
 
-> **Source example to add after the canonical front end lands:** a small example in which a storage affordance/environment requirement, storage authority, and `Write(store)` effect are visibly separate facts. Do not introduce a new surface-level “coeffect language” merely for the tutorial; use whatever checked contextual-requirement forms the canonical front end actually exposes.
+> **Next executable example:** a small example in which a storage affordance/environment requirement, storage authority, and `Write(store)` effect are visibly separate facts. Do not introduce a new surface-level “coeffect language” merely for the tutorial; use the checked contextual-requirement forms the canonical front end already exposes.
 
 ## 10. Protocols become reusable language objects
 
@@ -452,7 +537,7 @@ There is another boundary before transfer: a Phil value does not become a valid 
 
 So Phase 1 gets reusable protocol abstraction without losing the exact state and boundary discipline that made Phase 0 useful.
 
-> **Source example to add after the canonical front end lands:** two instances of the same protocol family plus a negative cross-instance endpoint substitution; a small endpoint-polymorphic callable that cannot perform an unconstrained communication action; and a message-admissibility pair showing that “movable value” is not automatically “protocol message.”
+> **Next executable example:** two instances of the same protocol family plus a negative cross-instance endpoint substitution; a small endpoint-polymorphic callable that cannot perform an unconstrained communication action; and a message-admissibility pair showing that “movable value” is not automatically “protocol message.”
 
 ## 11. Processes are semantic; threads are not
 
@@ -494,7 +579,13 @@ This leaves several properties deliberately outside the default semantics:
 
 Those may be obligations a program proves or assumes. They are not facts the concurrency checker gets for free.
 
-> **Source example to add after the canonical front end lands:** two static processes performing one exact rendezvous, plus a negative wrong-instance or unilateral progression; and a generativity example where two nested architecture occurrences contribute distinct ProcessKeys even though the declaration-local process site has the same spelling.
+Process activation itself is pleasantly small source syntax. Inside an architecture:
+
+```phil
+process worker_run = worker;
+```
+
+The right-hand side names an already-created executable occurrence; it does not instantiate or clone it. The process site supplies generative process/activation identity through its persisted SourceBundle lineage. The same syntax-completeness audit that introduced this form explicitly keeps OS threads, tasks, workers, and scheduler choices outside source semantics. See [`syntax-semantics-completeness-v1.md`](../phase-1/syntax-semantics-completeness-v1.md).
 
 ## 12. External participants are explicit, and failure stays local
 
@@ -530,7 +621,14 @@ The whole network reaches successful terminal closure only when every static Phi
 
 An active network with no enabled step is **stuck**. It is not successful termination.
 
-> **Source example to add after the canonical front end lands:** one internal role plus one explicit external role; a missing-classification rejection; and a failure example where the external side disappears but the internal process remains stuck until an explicit local failure/disposition path closes its own boundary.
+The internal/external distinction is explicit in the source rather than inferred from a missing binding:
+
+```phil
+role p.client = worker;
+role p.server = external;
+```
+
+`worker` must resolve to the appropriate activated internal occurrence. `external` means only that the peer role lies outside the Phil process population; it does not choose a transport or synthesize successful failure handling. The production corpus contains both accepted and malformed external-role cases, while the concurrency checker owns the semantic closure rules. See [`syntax-semantics-completeness-v1.md`](../phase-1/syntax-semantics-completeness-v1.md).
 
 ## 13. Providers are contracts, not privileged libraries
 
@@ -583,7 +681,15 @@ Phase 1 proves this for ordinary providers inside the first Phil implementation.
 
 Phase 2 will attack the bigger privileged implementation: the compiler/checker itself.
 
-> **Source example to add after the canonical front end lands:** one provider contract with two qualified implementations or materially distinct test realizations, plus an ABI-compatible but unqualified implementation that is rejected. The tutorial should explain qualification evidence without implying that tests alone prove arbitrary provider laws.
+The declaration surface makes the separation visible:
+
+```phil
+provider Store {}
+provider implementation MemoryStore satisfies Store {}
+opaque provider implementation RemoteStore satisfies Store;
+```
+
+These lines declare a contract and two implementations that *claim* to satisfy it. They do not self-qualify either implementation. Qualification is an assurance/build object checked outside ordinary source, which prevents “I wrote `satisfies`, therefore the theorem is true” from becoming a language escape hatch. These forms are exercised by the Grammar-v1 determinacy and provider-declaration tests; see [`Phase1GrammarV1DeterminacyMain.hs`](../../test/Phase1GrammarV1DeterminacyMain.hs) and [`Phase1GrammarV1ProviderDeclarationsMain.hs`](../../test/Phase1GrammarV1ProviderDeclarationsMain.hs).
 
 ## 14. Ordinary data and control must obey the same rules
 
@@ -611,7 +717,19 @@ Likewise, Phil uses dependent types where they buy precision, but dependency is 
 
 The language can therefore be computationally powerful without making the compiler omniscient.
 
-> **Source example to add after the canonical front end lands:** one resource-carrying loop whose initial edge and backedge re-establish the same explicit state, one rejected backedge that loses or changes a linear owner, and one small record/sum/product example whose structural mode follows its contents.
+A declaration can state a stricter nominal mode explicitly. This accepted production fixture is intentionally tiny:
+
+```phil
+module corpus.record_mode;
+
+record FireOnceToken mode linear {
+  id : U64
+}
+```
+
+The keyword `linear` does not let the parser decide whether the declaration is semantically justified; it preserves the author's requested strengthening for the structural-mode checker. Ordinary compound values still derive their minimum mode from what they own. See [`11-record-explicit-linear-mode.phil`](../../test/fixtures/phase1-surface/accepted/11-record-explicit-linear-mode.phil).
+
+A later Tour pass should pair this with the resource-carrying loop fixture so the initial edge and backedge can be read next to the declaration whose owner they preserve.
 
 ## 15. Ordinary execution has target-independent rules
 
@@ -655,7 +773,7 @@ First, legal affine weakening is just structural weakening. It does not secretly
 
 Second, time, randomness, environment variables, host/process/thread identity, scheduler state, and similar observations are not ambient Phil inputs. They enter only through explicit providers, entries, capabilities, protocols, boundaries, or assumptions.
 
-> **Source example to add after the canonical front end lands:** left-to-right evaluation with one visible effect, exact `UInt` boundary cases, checked-overflow branching, a hidden-finalizer rejection, and a clock/random/environment access that succeeds only through an explicit provider or boundary.
+> **Next executable example:** left-to-right evaluation with one visible effect, exact `UInt` boundary cases, checked-overflow branching, a hidden-finalizer rejection, and a clock/random/environment access that succeeds only through an explicit provider or boundary.
 
 ## 16. The two witnesses should look different
 
@@ -932,9 +1050,9 @@ When a program is rejected, Phil wants the rejection to name a competent reason:
 
 It should not fail because theorem search wandered off indefinitely.
 
-## 22. The grammar is already normative; the front end is not finished
+## 22. The grammar is normative; the front end now checks it
 
-Phase 1 now has one normative concrete-syntax authority:
+Phase 1 has one normative concrete-syntax authority:
 
 ```text
 grammar/phase1-surface.ebnf
@@ -964,39 +1082,35 @@ SourceBundle
 
 Some implementations may fuse or reorganize those passes internally. The competence boundaries and checked relationships are what matter.
 
-The canonical parser and elaborator must agree with the exact Grammar-v1 revision rather than defining an accidental second language through parser-library behavior. Likewise, lineage must come from the SourceBundle rather than being reconstructed from Haskell object identity or mutable source positions.
+The canonical parser and elaborator agree against the exact Grammar-v1 revision rather than defining an accidental second language through parser-library behavior. Likewise, lineage comes from the SourceBundle rather than being reconstructed from Haskell object identity or mutable source positions.
 
-That is why this draft contains no claimed executable Phase 1 `.phil` listings yet.
+That is why this edition can finally contain claimed Phase 1 `.phil` listings.
 
-A tutorial example should eventually satisfy a stronger standard than “this looks plausible according to the EBNF.”
-
-Every source listing in the finished Phase 1 Tour should be:
+Every source listing in the finished Phase 1 Tour should still satisfy a stronger standard than “this looks plausible according to the EBNF.” It should be:
 
 1. accepted by the canonical parser for the exact Grammar-v1 revision;
-2. carried in the same portable SourceBundle path used by ordinary programs;
+2. carried through the same source/SourceBundle competence boundaries used by ordinary programs where the example depends on them;
 3. accepted by the semantic layer it is intended to demonstrate;
 4. accompanied by a deliberately rejected companion where that distinction is pedagogically useful; and
-5. exercised in CI so documentation drift becomes a build failure.
+5. traceable to CI coverage so documentation examples do not quietly become a second syntax dialect.
 
-Until that front-end path exists, prose is safer than fake certainty.
+The examples introduced in this pass are therefore copied from named front-end tests or production-corpus fixtures, with those sources linked beside the explanation. Later passes can replace small routing fixtures with the final upload and Steve source witnesses where that makes the story clearer.
 
-## 23. What this draft will gain as Phase 1 closes
+## 23. What this Tour will gain as Phase 1 closes
 
-This version of the Tour is intentionally semantic-first.
+This Tour began semantic-first because the source front end was still moving. That constraint is gone. The remaining work is now to replace the most useful prose-only placeholders with compact executable witnesses and inspectable artifacts in roughly this order:
 
-As Phase 1 implementation closes, it should gain executable source and inspectable artifacts in roughly this order:
-
-1. **Canonical declarations, roots, and SourceBundles** — enough ordinary source plus persisted lineage to show that architecture/identity comes from the program bundle, not compiler-installed witness state.
-2. **Generics and structural requirements** — linear identity, rejected discard, rejected duplication.
-3. **Callables, effects, and authority** — latent effect propagation, subject-indexed effects, missing-authority rejection, higher-order narrowing.
+1. **Canonical declarations, roots, and SourceBundles** — now represented by initial executable examples above; expand them into the final ordinary upload/Steve roots and lineage fixtures.
+2. **Generics and structural requirements** — the requirement surface is now shown; add the final identity/discard/duplicate body trio.
+3. **Callables, effects, and authority** — callable and Effects source are now shown; add the smallest higher-order narrowing and missing-authority pairs.
 4. **Protocol abstraction and message admissibility** — reusable family/instance identity, cross-instance rejection, and the boundary between movable values and legal messages.
-5. **Static process networks** — explicit processes, internal/external role classification, exact rendezvous, local failure/terminality, and ProcessKey generativity.
-6. **Provider qualification/replacement** — one contract, multiple realizations, unqualified replacement rejection.
-7. **Ordinary data, cyclic control, and deterministic execution** — records/sums/products, explicit join/backedge state, evaluation order, and checked arithmetic.
+5. **Static process networks** — process activation and explicit external participation are now shown; add one exact rendezvous and ProcessKey-generativity witness.
+6. **Provider qualification/replacement** — the source declaration/implementation boundary is now shown; add the two realized/qualified Steve alternatives and unqualified rejection.
+7. **Ordinary data, cyclic control, and deterministic execution** — structural mode source is now shown; add explicit join/backedge state, evaluation order, and checked arithmetic.
 8. **Application verification** — one inspectable VerificationBundle with intrinsic rejection, residual obligations, policy dispositions, and reusable evidence.
 9. **Upload and Steve source witnesses** — small end-to-end slices of both programs through the same front end and verification path.
 10. **Systems/realization/assurance views** — show checked realization facts, derived obligations, process mappings, runtime carriers, exact evidence lineage, and the final AssuranceManifest.
-11. **Runnable commands** — only once the repository can offer commands that exercise the canonical Phase 1 source path rather than a tutorial-only fixture.
+11. **Runnable commands** — commands that exercise the canonical Phase 1 source path rather than a tutorial-only fixture.
 
 At that point the Tour should receive the same readability pass as the Phase 0 edition: define jargon where it first becomes necessary, keep the main narrative concrete, and move implementation archaeology out of the reader's path.
 
@@ -1072,7 +1186,7 @@ If you remember only a few things from this Phase 1 tour, remember these:
 - **Intrinsic invalidity is not an assurance disposition.** A bad Phil program is rejected before proof/runtime/assumption/export choices are considered.
 - **Source verification is not artifact certification.** The realization and StageContract must close their own preservation and target-derived obligations.
 - **The runtime may be powerful without making the checker omniscient.** Automatic checking stays inside deliberately bounded competent procedures.
-- **Grammar and static semantics are separate.** Grammar v1 says what source has Phil's concrete shape; the canonical front end must still establish what that source means and whether it is allowed.
+- **Grammar and static semantics are separate.** Grammar v1 says what source has Phil's concrete shape; the canonical front end establishes what that source means and whether it is allowed.
 
 The shortest version is still the Phase 1 charter's:
 
