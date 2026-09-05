@@ -460,19 +460,70 @@ record Routed[T : Type] requires {
 
 `[T : Type]` introduces a generic parameter named `T` whose kind is `Type`. The keyword `requires` opens the set of facts and capabilities that must be supplied when this generic declaration is instantiated.
 
-Inside that block, `structural T : duplicate;` is an ownership requirement, `proposition true;` is a logical requirement, and `provider P : ProviderContract;` is a provider-contract requirement. They are different requirement categories even though they share one `requires` block.
+Inside that block, the three lines are three different kinds of prerequisite:
 
-The important line for ownership is:
+- `structural T : duplicate;` requires a structural permission for values of `T`;
+- `proposition true;` requires a logical proposition to hold;
+- `provider P : ProviderContract;` requires an exact provider contract.
+
+### Structural requirements
+
+Here **structural** does not mean the fields or memory layout of `T`. It comes from structural logic: the rules for whether a value may be *discarded* or *duplicated*.
+
+Phil currently exposes two such generic permissions:
+
+```phil
+structural T : discard;
+structural T : duplicate;
+```
+
+`discard` means the generic body is allowed to use **weakening** on a `T`: it may decide not to use that value at all.
+
+`duplicate` means the generic body is allowed to use **contraction** on a `T`: it may make the same value available to more than one use.
+
+Those permissions line up with the structural modes from section 3:
+
+| Actual mode of `T` | May satisfy `discard` | May satisfy `duplicate` |
+| --- | --- | --- |
+| unrestricted | yes | yes |
+| affine | yes | no |
+| linear | no | no |
+
+So this requirement:
 
 ```phil
 structural T : duplicate;
 ```
 
-That does not *grant* duplication to every `T`. It records that this generic abstraction requires contraction permission from the concrete actual.
+does **not** grant copying to an arbitrary `T`. It says that this generic declaration is only valid for actual types whose mode already permits duplication. A linear actual therefore fails that requirement; an unrestricted actual can satisfy it.
 
-A linear actual therefore cannot satisfy a generic body that genuinely duplicates its value unless some separate admitted rule justifies that duplication.
+There is an important zero-requirement case too. If generic code merely transfers an abstract value from one place to another, without dropping or copying it, it needs neither structural permission. Phil's structural checker also compares what the generic body actually does with the public requirements it declares, so a body that duplicates `T` cannot publish an interface pretending that no duplication permission is needed.
 
-This is why genericity does not become an escape hatch around ownership:
+### Proposition requirements
+
+A **proposition** requirement is different. It is not about copy/drop permissions at all. It says:
+
+> **This generic declaration may be used only in a context where this exact logical fact has been accounted for.**
+
+The example says:
+
+```phil
+proposition true;
+```
+
+which is deliberately boring: `true` is a proposition that is trivially satisfied. It is present in this conformance fixture mainly to exercise the proposition-requirement path. A useful generic would normally require a nontrivial fact about the objects or contracts it depends on.
+
+Writing `proposition P;` does not make `P` true, and it is not a runtime `Bool` test. The proposition is checked as a Phil logical proposition and becomes part of the generic's public requirement set. At a particular instantiation, that exact requirement must then have an accepted disposition—for example matching evidence, or an explicit assumption/export when the active policy permits one.
+
+So the three requirement categories answer different questions:
+
+```text
+structural T : duplicate;       can values of T legally be copied here?
+proposition P;                  has the logical fact P been established/accounted for?
+provider P : ProviderContract;  is the required provider contract available here?
+```
+
+This is why genericity does not become an escape hatch around ownership or proof:
 
 > **Abstract code gets no secret privileges.**
 
