@@ -7,6 +7,7 @@ module Phil.Core.UIntArithmetic
   , UIntArithmeticError (..)
   , checkPlainUIntArithmetic
   , plainUIntArithmeticProposition
+  , applyUIntArithmeticOperator
   , registerUIntArithmeticClaims
   ) where
 
@@ -96,9 +97,8 @@ data UIntArithmeticError
 -- operands/result, so one claim declaration remains valid for every UInt width
 -- without erasing width identity.  The existing discharge machinery may
 -- prove/runtime-bind/export the obligation, while an unresolved obligation
--- remains an explicit failure.  A later checked-operation slice gives runtime
--- overflow/underflow its own source-visible outcome instead of laundering it
--- through this plain judgment.
+-- remains an explicit failure.  Checked operations reuse the same mathematical
+-- operator below but give runtime overflow/underflow a source-visible outcome.
 checkPlainUIntArithmetic
   :: CheckState
   -> UIntArithmeticOperator
@@ -114,7 +114,7 @@ checkPlainUIntArithmetic state operator width left right result site = do
   checkResult state width result
   case (knownUInt left, knownUInt right, knownUInt result) of
     (Just (_, leftValue), Just (_, rightValue), Just (_, actualResult)) -> do
-      let mathematicalResult = applyOperator operator leftValue rightValue
+      let mathematicalResult = applyUIntArithmeticOperator operator leftValue rightValue
           literal = ScalarUIntLiteral width mathematicalResult
       if not (scalarLiteralInRange literal)
         then Left
@@ -152,6 +152,19 @@ plainUIntArithmeticProposition operator width left right result =
     , RefToNat right
     , RefToNat result
     ]
+
+-- | One shared mathematical interpretation for plain and checked UInt
+-- arithmetic.  This deliberately operates on unbounded Integer and therefore
+-- cannot encode machine wraparound, saturation, or target traps.
+applyUIntArithmeticOperator
+  :: UIntArithmeticOperator
+  -> Integer
+  -> Integer
+  -> Integer
+applyUIntArithmeticOperator operator left right = case operator of
+  UIntAdd -> left + right
+  UIntSubtract -> left - right
+  UIntMultiply -> left * right
 
 -- | Install the three arithmetic relation declarations needed by Core focusing
 -- before ADR-025 can reason about arithmetic obligations.  Re-registering the
@@ -205,12 +218,6 @@ knownUInt :: RefTerm -> Maybe (Int, Integer)
 knownUInt term = case term of
   RefUInt width value -> Just (width, value)
   _ -> Nothing
-
-applyOperator :: UIntArithmeticOperator -> Integer -> Integer -> Integer
-applyOperator operator left right = case operator of
-  UIntAdd -> left + right
-  UIntSubtract -> left - right
-  UIntMultiply -> left * right
 
 operatorAtom :: UIntArithmeticOperator -> Text
 operatorAtom operator = case operator of
