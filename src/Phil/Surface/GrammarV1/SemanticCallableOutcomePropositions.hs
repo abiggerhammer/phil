@@ -2,6 +2,8 @@ module Phil.Surface.GrammarV1.SemanticCallableOutcomePropositions
   ( GrammarV1SemanticCallableOutcomePropositionError (..)
   , grammarV1CheckedSemanticCallableOutcomeEnsures
   , grammarV1CheckedSemanticCallableOutcomeObligations
+  , grammarV1CheckedSemanticCallableOutcomeEnsuresAfterResult
+  , grammarV1CheckedSemanticCallableOutcomeObligationsAfterResult
   ) where
 
 import qualified Data.Set as Set
@@ -34,6 +36,7 @@ import Phil.Surface.GrammarV1.SemanticCallableOutcomeState
   , GrammarV1SemanticCallableOutcomeStateError
   , GrammarV1SemanticCallableOutcomeStateScope (..)
   , grammarV1SemanticCallableOutcomeScopes
+  , grammarV1SemanticCallableOutcomeScopesAfterResult
   )
 import Phil.Surface.GrammarV1.SemanticCallablePropositions
   ( GrammarV1CheckedSemanticCallableProposition (..)
@@ -63,7 +66,7 @@ data GrammarV1SemanticCallableOutcomePropositionError
 
 -- | Check outcome-local postconditions under the exact callable parameter scope
 -- plus the one explicit semantic state telescope for that residue, when present.
--- Source order and outcome category are preserved exactly.
+-- This independent clause API deliberately does not depend on result-type success.
 grammarV1CheckedSemanticCallableOutcomeEnsures
   :: StaticContext
   -> DeclarationKey
@@ -79,8 +82,8 @@ grammarV1CheckedSemanticCallableOutcomeEnsures =
       GrammarV1OutcomeEnsures proposition -> Just proposition
       _ -> Nothing
 
--- | Check outcome-local residual obligations through the same exact branch scope
--- without reclassifying them as postconditions or discharged facts.
+-- | Check outcome-local residual obligations through the same independent exact
+-- branch scope without reclassifying them as postconditions or discharged facts.
 grammarV1CheckedSemanticCallableOutcomeObligations
   :: StaticContext
   -> DeclarationKey
@@ -91,6 +94,42 @@ grammarV1CheckedSemanticCallableOutcomeObligations
         [(GrammarV1OutcomeKind, [GrammarV1CheckedSemanticCallableProposition])])
 grammarV1CheckedSemanticCallableOutcomeObligations =
   checkedCategory select
+  where
+    select clause = case clause of
+      GrammarV1OutcomeObligation proposition -> Just proposition
+      _ -> Nothing
+
+-- | Whole-callable postcondition composition. Result-type checking happens first,
+-- so a closed result-refinement binder consumes its declaration-wide ordinal before
+-- outcome-state binders are allocated. Proposition references then consume those
+-- composed state identities rather than the parameter-only independent identities.
+grammarV1CheckedSemanticCallableOutcomeEnsuresAfterResult
+  :: StaticContext
+  -> DeclarationKey
+  -> GrammarV1CallableContractDecl
+  -> Maybe
+      (Either
+        GrammarV1SemanticCallableOutcomePropositionError
+        [(GrammarV1OutcomeKind, [GrammarV1CheckedSemanticCallableProposition])])
+grammarV1CheckedSemanticCallableOutcomeEnsuresAfterResult =
+  checkedCategoryAfterResult select
+  where
+    select clause = case clause of
+      GrammarV1OutcomeEnsures proposition -> Just proposition
+      _ -> Nothing
+
+-- | Whole-callable residual-obligation composition through the same post-result
+-- outcome-state identity stream.
+grammarV1CheckedSemanticCallableOutcomeObligationsAfterResult
+  :: StaticContext
+  -> DeclarationKey
+  -> GrammarV1CallableContractDecl
+  -> Maybe
+      (Either
+        GrammarV1SemanticCallableOutcomePropositionError
+        [(GrammarV1OutcomeKind, [GrammarV1CheckedSemanticCallableProposition])])
+grammarV1CheckedSemanticCallableOutcomeObligationsAfterResult =
+  checkedCategoryAfterResult select
   where
     select clause = case clause of
       GrammarV1OutcomeObligation proposition -> Just proposition
@@ -107,6 +146,24 @@ checkedCategory
         [(GrammarV1OutcomeKind, [GrammarV1CheckedSemanticCallableProposition])])
 checkedCategory select staticContext declarationKey source = do
   scoped <- grammarV1SemanticCallableOutcomeScopes declarationKey source
+  pure $ do
+    residueScopes <- mapLeft
+      GrammarV1SemanticCallableOutcomePropositionScopeError
+      scoped
+    mapM (checkResidue staticContext select) residueScopes
+
+checkedCategoryAfterResult
+  :: (GrammarV1OutcomeResidueClause -> Maybe (Located GrammarV1Proposition))
+  -> StaticContext
+  -> DeclarationKey
+  -> GrammarV1CallableContractDecl
+  -> Maybe
+      (Either
+        GrammarV1SemanticCallableOutcomePropositionError
+        [(GrammarV1OutcomeKind, [GrammarV1CheckedSemanticCallableProposition])])
+checkedCategoryAfterResult select staticContext declarationKey source = do
+  scoped <- grammarV1SemanticCallableOutcomeScopesAfterResult
+    staticContext declarationKey source
   pure $ do
     residueScopes <- mapLeft
       GrammarV1SemanticCallableOutcomePropositionScopeError

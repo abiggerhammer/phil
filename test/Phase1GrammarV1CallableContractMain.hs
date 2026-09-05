@@ -27,7 +27,8 @@ import Phil.Core.Syntax
 import Phil.Surface.Check.Support (emptySurfaceState)
 import Phil.Surface.Check.Types (SurfaceState (..))
 import Phil.Surface.GrammarV1.BinderScope
-  ( GrammarV1BinderKind (..)
+  ( GrammarV1BinderKey (..)
+  , GrammarV1BinderKind (..)
   , GrammarV1BinderScopeError (..)
   , GrammarV1ResolvedBinder (..)
   )
@@ -44,6 +45,17 @@ import Phil.Surface.GrammarV1.LexicalReferenceScope
   ( GrammarV1CheckedLexicalReference (..)
   )
 import Phil.Surface.GrammarV1.Parser
+import Phil.Surface.GrammarV1.SemanticCallableOutcomePropositions
+  ( grammarV1CheckedSemanticCallableOutcomeEnsuresAfterResult
+  )
+import Phil.Surface.GrammarV1.SemanticCallableOutcomeState
+  ( GrammarV1SemanticCallableOutcomeResidueScope (..)
+  , GrammarV1SemanticCallableOutcomeStateScope (..)
+  , grammarV1SemanticCallableOutcomeScopesAfterResult
+  )
+import Phil.Surface.GrammarV1.SemanticCallablePropositions
+  ( GrammarV1CheckedSemanticCallableProposition (..)
+  )
 import Phil.Surface.GrammarV1.SemanticCallableSignature
   ( GrammarV1CheckedSemanticCallableSignature (..)
   , GrammarV1SemanticCallableSignatureError (..)
@@ -67,6 +79,8 @@ main = do
         semanticCallableUsesGeneratedNames
     , test "SURF-009 semantic callable signatures are alpha-stable for dependent results"
         semanticCallableAlphaStable
+    , test "SURF-009 callable result refinements compose before outcome-state binders"
+        semanticCallableResultRefinementComposesWithOutcomes
     , test "SURF-009 semantic callable signatures preserve duplicate-binder diagnostics"
         semanticCallableDuplicatePreserved
     , test "SURF-009 semantic callable signatures preserve Core focusing errors"
@@ -322,6 +336,80 @@ semanticCallableAlphaStable = do
   assert
     (map grammarV1ResolvedBinderDisplayName renamedBinders == ["count", "ready"])
     "renamed callable display spellings changed"
+
+semanticCallableResultRefinementComposesWithOutcomes :: Either String ()
+semanticCallableResultRefinementComposesWithOutcomes = do
+  source <- onlyCallable "semantic-callable-composition" $ Text.unlines
+    [ "callable RefinedOutcome(x : U8) -> {v : U8 | v <= x} {"
+    , "  outcome success Done {"
+    , "    state (s : U8);"
+    , "    ensures PairOk(x, s);"
+    , "  }"
+    , "}"
+    ]
+  let declarationKey = DeclarationKey "decl.SemanticCallableComposition"
+  signature <- checkedSemanticCallable declarationKey source
+  xBinder <- exactlyOne
+    "semantic callable composition parameter"
+    (map fst (checkedSemanticCallableParameters signature))
+  vBinder <- maybe
+    (Left "callable result refinement lost semantic binder evidence")
+    Right
+    (checkedSemanticCallableResultRefinementBinder signature)
+  let xName = grammarV1ResolvedBinderCoreName xBinder
+      vName = grammarV1ResolvedBinderCoreName vBinder
+  assert
+    ( grammarV1BinderOrdinal (grammarV1ResolvedBinderKey xBinder) == 0
+      && grammarV1BinderOrdinal (grammarV1ResolvedBinderKey vBinder) == 1 )
+    "callable parameter/result-refinement ordinal order changed"
+  assert
+    ( checkedSemanticCallableResultType signature
+        == TyRefined
+          vName
+          (TyUInt 8)
+          (LessEqual (RefVar vName) (RefVar xName)) )
+    "callable result refinement lost exact semantic parameter/binder identity"
+  residueScopes <- case grammarV1SemanticCallableOutcomeScopesAfterResult
+      emptyStaticContext declarationKey source of
+    Just (Right scopes) -> Right scopes
+    other -> Left ("expected composed callable outcome scopes, got " <> show other)
+  residue <- exactlyOne "composed callable outcome residue" residueScopes
+  stateScope <- exactlyOne
+    "composed callable outcome state scope"
+    (semanticCallableOutcomeResidueStateScopes residue)
+  stateBinding <- exactlyOne
+    "composed callable outcome state binding"
+    (semanticCallableOutcomeStateBindings stateScope)
+  sBinder <- case stateBinding of
+    (binder, TyUInt 8) -> Right binder
+    other -> Left
+      ("unexpected composed callable outcome state binding: " <> show other)
+  assert
+    (grammarV1BinderOrdinal (grammarV1ResolvedBinderKey sBinder) == 2)
+    "callable outcome state reused the closed result-refinement ordinal"
+  context <- mapLeft show $
+    declareOpaqueClaim
+      "PairOk"
+      [(Name "x", SortUInt 8), (Name "s", SortUInt 8)]
+      emptyStaticContext
+  ensured <- case grammarV1CheckedSemanticCallableOutcomeEnsuresAfterResult
+      context declarationKey source of
+    Just (Right checked) -> Right checked
+    other -> Left ("expected composed callable outcome ensures, got " <> show other)
+  checked <- case ensured of
+    [(GrammarV1SuccessOutcome, [value])] -> Right value
+    other -> Left ("unexpected composed callable ensures shape: " <> show other)
+  let sName = grammarV1ResolvedBinderCoreName sBinder
+  assert
+    (checkedSemanticCallablePropositionCore checked
+      == Atom "PairOk" [RefVar xName, RefVar sName])
+    "composed callable outcome proposition lost semantic parameter/state names"
+  assert
+    ( map
+        (grammarV1ResolvedBinderKey . grammarV1CheckedLexicalReferenceBinder)
+        (checkedSemanticCallablePropositionReferences checked)
+        == [grammarV1ResolvedBinderKey xBinder, grammarV1ResolvedBinderKey sBinder] )
+    "composed callable outcome proposition lost exact binder reference evidence"
 
 semanticCallableDuplicatePreserved :: Either String ()
 semanticCallableDuplicatePreserved = do

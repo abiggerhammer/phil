@@ -6,7 +6,6 @@ module Phil.Surface.GrammarV1.SemanticCallableSignature
   , grammarV1CheckedSemanticCallableSignature
   ) where
 
-import qualified Data.Set as Set
 import Data.Text (Text)
 import Phil.Core.Focusing
   ( FocusStep
@@ -33,12 +32,10 @@ import Phil.Surface.GrammarV1.BinderScope
   , GrammarV1ResolvedBinder
   , grammarV1CallableParameterBinderScope
   )
-import Phil.Surface.GrammarV1.CheckedType (grammarV1CheckedType)
 import Phil.Surface.GrammarV1.Elaborate (grammarV1PrimitiveType)
 import Phil.Surface.GrammarV1.LexicalReferenceScope
   ( GrammarV1CheckedLexicalReference
   , GrammarV1LexicalReferenceError
-  , grammarV1CheckedTypeReferences
   )
 import Phil.Surface.GrammarV1.Parser
   ( GrammarV1CallableContractDecl (..)
@@ -47,7 +44,14 @@ import Phil.Surface.GrammarV1.Parser
   )
 import Phil.Surface.GrammarV1.SemanticBindingState
   ( grammarV1InsertSemanticBinding
-  , grammarV1RewriteTypeReferences
+  )
+import Phil.Surface.GrammarV1.SemanticCheckedType
+  ( GrammarV1CheckedSemanticType (..)
+  , GrammarV1SemanticCheckedTypeError (..)
+  , grammarV1CheckedSemanticType
+  )
+import Phil.Surface.GrammarV1.SemanticRefinementType
+  ( GrammarV1SemanticRefinementTypeError
   )
 import Phil.Surface.Syntax (Located (..))
 
@@ -65,13 +69,18 @@ data GrammarV1SemanticCallableScope = GrammarV1SemanticCallableScope
 -- | A callable contract signature whose runtime term parameters carry exact
 -- SURF-009 semantic identity. The source display name remains diagnostic, while
 -- the retained parameter state and dependent result type use generated Core names.
+-- The retained lexical scope is post-result: a result refinement binder has
+-- closed, but its declaration-wide ordinal remains consumed for later outcome or
+-- body binders.
 data GrammarV1CheckedSemanticCallableSignature = GrammarV1CheckedSemanticCallableSignature
   { checkedSemanticCallableDeclarationKey :: DeclarationKey
   , checkedSemanticCallableDisplayName :: Text
   , checkedSemanticCallableParameters :: [(GrammarV1ResolvedBinder, Ty)]
   , checkedSemanticCallableResultType :: Ty
   , checkedSemanticCallableResultReferences :: [GrammarV1CheckedLexicalReference]
+  , checkedSemanticCallableResultRefinementBinder :: Maybe GrammarV1ResolvedBinder
   , checkedSemanticCallableState :: SurfaceState
+  , checkedSemanticCallableLexicalScope :: GrammarV1LexicalScope
   }
   deriving (Eq, Show)
 
@@ -81,6 +90,8 @@ data GrammarV1SemanticCallableSignatureError
   | GrammarV1SemanticCallableResultReferenceError GrammarV1LexicalReferenceError
   | GrammarV1SemanticCallableResultRewriteNonCompetent (Located GrammarV1Type)
   | GrammarV1SemanticCallableResultFocusingError FocusingError
+  | GrammarV1SemanticCallableResultRefinementError
+      GrammarV1SemanticRefinementTypeError
   deriving (Eq, Show)
 
 -- | Build only the callable term-parameter semantic environment. Generic
@@ -118,11 +129,13 @@ grammarV1SemanticCallableParameterScope declarationKey source
 -- parameters are inserted into a fresh SurfaceState under their generated Core
 -- names rather than source spelling.
 --
--- The result type is reference-checked against the exact callable lexical scope,
--- rewritten only at certified local occurrences, and delegated to the ordinary
--- checked type authority. Callable proposition/effect/failure clauses remain owned
--- by their existing projections; the reusable parameter-scope helper above lets
--- those later composition paths consume the identical semantic environment.
+-- Result checking delegates to SemanticCheckedType. Ordinary dependent types keep
+-- exact lexical-reference evidence and semantic-name rewriting. A top-level
+-- primitive-base refinement additionally consumes one declaration-wide binder
+-- ordinal in a child scope, rewrites its predicate to generated names, and returns
+-- the enclosing callable scope with that ordinal still consumed. Independent
+-- clause-checking APIs may still consume only the parameter scope; whole-callable
+-- composition must consume the post-result scope retained here.
 grammarV1CheckedSemanticCallableSignature
   :: StaticContext
   -> DeclarationKey
@@ -139,47 +152,32 @@ grammarV1CheckedSemanticCallableSignature staticContext declarationKey source = 
       let resultSource = grammarV1CallableResultType source
           lexicalScope = semanticCallableScopeLexicalScope semanticScope
           semanticState = semanticCallableScopeState semanticScope
-      checkedReferences <- grammarV1CheckedTypeReferences
-        Set.empty
+      checkedResult <- grammarV1CheckedSemanticType
+        staticContext
         lexicalScope
+        semanticState
         resultSource
-      case checkedReferences of
-        Left referenceError ->
-          Just
-            (Left
-              (GrammarV1SemanticCallableResultReferenceError
-                referenceError))
-        Right references ->
-          case grammarV1RewriteTypeReferences references resultSource of
-            Nothing ->
-              Just
-                (Left
-                  (GrammarV1SemanticCallableResultRewriteNonCompetent
-                    resultSource))
-            Just rewrittenResult -> do
-              checkedResult <- grammarV1CheckedType
-                staticContext
-                semanticState
-                (locatedValue rewrittenResult)
-              pure $ case checkedResult of
-                Left focusingError ->
-                  Left
-                    (GrammarV1SemanticCallableResultFocusingError
-                      focusingError)
-                Right (resultType, focusSteps) ->
-                  Right
-                    ( GrammarV1CheckedSemanticCallableSignature
-                        { checkedSemanticCallableDeclarationKey = declarationKey
-                        , checkedSemanticCallableDisplayName =
-                            locatedValue (grammarV1CallableName source)
-                        , checkedSemanticCallableParameters =
-                            semanticCallableScopeParameters semanticScope
-                        , checkedSemanticCallableResultType = resultType
-                        , checkedSemanticCallableResultReferences = references
-                        , checkedSemanticCallableState = semanticState
-                        }
-                    , focusSteps
-                    )
+      pure $ case checkedResult of
+        Left typeError -> Left (mapResultTypeError typeError)
+        Right (semanticResult, nextLexicalScope) ->
+          Right
+            ( GrammarV1CheckedSemanticCallableSignature
+                { checkedSemanticCallableDeclarationKey = declarationKey
+                , checkedSemanticCallableDisplayName =
+                    locatedValue (grammarV1CallableName source)
+                , checkedSemanticCallableParameters =
+                    semanticCallableScopeParameters semanticScope
+                , checkedSemanticCallableResultType =
+                    checkedSemanticTypeValue semanticResult
+                , checkedSemanticCallableResultReferences =
+                    checkedSemanticTypeReferences semanticResult
+                , checkedSemanticCallableResultRefinementBinder =
+                    checkedSemanticTypeRefinementBinder semanticResult
+                , checkedSemanticCallableState = semanticState
+                , checkedSemanticCallableLexicalScope = nextLexicalScope
+                }
+            , checkedSemanticTypeFocusSteps semanticResult
+            )
 
 buildSemanticParameters
   :: [GrammarV1ResolvedBinder]
@@ -203,3 +201,16 @@ buildSemanticParameters = go [] emptySurfaceState
         Right nextState ->
           go ((binder, ty) : reversed) nextState binders parameters
     go _ _ _ _ = Nothing
+
+mapResultTypeError
+  :: GrammarV1SemanticCheckedTypeError
+  -> GrammarV1SemanticCallableSignatureError
+mapResultTypeError typeError = case typeError of
+  GrammarV1SemanticCheckedTypeReferenceError referenceError ->
+    GrammarV1SemanticCallableResultReferenceError referenceError
+  GrammarV1SemanticCheckedTypeRewriteNonCompetent source ->
+    GrammarV1SemanticCallableResultRewriteNonCompetent source
+  GrammarV1SemanticCheckedTypeFocusingError focusingError ->
+    GrammarV1SemanticCallableResultFocusingError focusingError
+  GrammarV1SemanticCheckedTypeRefinementError refinementError ->
+    GrammarV1SemanticCallableResultRefinementError refinementError
