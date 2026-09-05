@@ -267,7 +267,9 @@ Corollary phase1_surface_shift_expression_derivation_is_relation_neutral :
       relation_neutral_scan 0 consumed = Some 0.
 Proof.
   intros path input rest tree Hderive.
-  eapply phase1_surface_safe_nonterminal_derivation_is_relation_neutral.
+  eapply
+    (phase1_surface_safe_nonterminal_derivation_is_relation_neutral
+      path "shift_expression" input rest tree).
   - vm_compute.
     reflexivity.
   - exact Hderive.
