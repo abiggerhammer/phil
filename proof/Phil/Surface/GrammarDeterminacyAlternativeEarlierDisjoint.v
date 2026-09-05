@@ -120,7 +120,7 @@ Definition alternative_exception_coverageb
       orb
         (nat_memb index exceptions)
         (selected_earlier_first_disjointb items index))
-    (seq 0 (length items)).
+    (seq 0 (List.length items)).
 
 Lemma alternative_exception_coverage_selected :
   forall items exceptions index selected,
@@ -132,13 +132,13 @@ Proof.
   intros items exceptions index selected Hcoverage Hselected.
   unfold alternative_exception_coverageb in Hcoverage.
   apply forallb_forall in Hcoverage.
-  assert (Hlt : index < length items).
+  assert (Hlt : index < List.length items).
   {
     apply nth_error_Some.
     rewrite Hselected.
     discriminate.
   }
-  assert (Hin : In index (seq 0 (length items))).
+  assert (Hin : In index (seq 0 (List.length items))).
   {
     apply in_seq.
     lia.
