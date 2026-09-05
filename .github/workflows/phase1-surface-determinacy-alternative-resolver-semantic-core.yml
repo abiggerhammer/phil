@@ -47,6 +47,7 @@ jobs:
           compile proof/Phil/Surface/GrammarDeterminacySimpleResolvers.v
           compile proof/Phil/Surface/GrammarDeterminacySimpleResolverSoundness.v
           compile proof/Phil/Surface/GrammarDeterminacyStructuralResolvers.v
+          compile proof/Phil/Surface/GrammarDeterminacyPredictiveOracle.v
           compile proof/Phil/Surface/GrammarDerivationLookahead.v
           compile proof/Phil/Surface/GrammarDeterminacyWitnessSoundness.v
           compile proof/Phil/Surface/GrammarDeterminacyStructuralScannerSoundness.v
