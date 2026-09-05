@@ -217,7 +217,7 @@ Definition decideSteveProviderQualificationWitnessByFacts
                 (andb partialPublicationForbidden
                   (andb blobAuthorityDispositioned
                     (andb obligationManifestsExact
-                      conditionsExplicit)))))))))).
+                      conditionsExplicit))))))))).
 
 Theorem decideSteveProviderQualificationWitnessByFacts_classifies :
   forall witness
