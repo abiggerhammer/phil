@@ -69,7 +69,7 @@ Proof.
       * simpl in Hnth.
         eapply IH.
         -- exact Hrest.
-        -- change (earlier_index < count) in Hlt. exact Hlt.
+        -- apply Nat.succ_lt_mono in Hlt. exact Hlt.
         -- exact Hnth.
 Qed.
 
