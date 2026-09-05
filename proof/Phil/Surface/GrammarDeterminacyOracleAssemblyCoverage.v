@@ -269,6 +269,11 @@ Proof.
   reflexivity.
 Qed.
 
+(* Keep successful rule lookup symbolic below.  Unfolding the generated rule
+   table while instantiating the generic forallb lookup lemma is needlessly
+   expensive and can exhaust the dedicated proof timeout. *)
+Opaque phase1_surface_rules.
+
 Theorem phase1_surface_rule_body_oracle_assembly_covered :
   forall name body,
     lookupRule name phase1_surface_rules = Some body ->
@@ -279,14 +284,10 @@ Theorem phase1_surface_rule_body_oracle_assembly_covered :
       body = true.
 Proof.
   intros name body Hlookup.
-  pose proof
-    (lookupRule_forallb
-      oracle_assembly_coverage_rule
-      phase1_surface_rules
-      name body
-      phase1_surface_all_rule_bodies_have_oracle_assembly_coverage
-      Hlookup) as Hcovered.
-  exact Hcovered.
+  change (oracle_assembly_coverage_rule (name, body) = true).
+  eapply lookupRule_forallb.
+  - exact phase1_surface_all_rule_bodies_have_oracle_assembly_coverage.
+  - exact Hlookup.
 Qed.
 
 Lemma oracle_assembly_sequence_cons_covered :
