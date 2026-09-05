@@ -46,6 +46,22 @@ Proof.
   - discriminate Hempty.
 Qed.
 
+Lemma expression_first_disjointb_equation :
+  forall left right,
+    expression_first_disjointb left right =
+    token_intersection_emptyb
+      (first_expression
+        phase1_surface_nullable_facts
+        phase1_surface_first_facts
+        left)
+      (first_expression
+        phase1_surface_nullable_facts
+        phase1_surface_first_facts
+        right).
+Proof.
+  reflexivity.
+Qed.
+
 Lemma expression_first_disjointb_sound :
   forall left right,
     expression_first_disjointb left right = true ->
@@ -60,9 +76,22 @@ Lemma expression_first_disjointb_sound :
         right) = [].
 Proof.
   intros left right Hdisjoint.
-  unfold expression_first_disjointb in Hdisjoint.
+  rewrite expression_first_disjointb_equation in Hdisjoint.
   apply token_intersection_emptyb_sound in Hdisjoint.
   exact Hdisjoint.
+Qed.
+
+Lemma expression_follow_disjointb_equation :
+  forall expression outer_follow,
+    expression_follow_disjointb expression outer_follow =
+    token_intersection_emptyb
+      (first_expression
+        phase1_surface_nullable_facts
+        phase1_surface_first_facts
+        expression)
+      outer_follow.
+Proof.
+  reflexivity.
 Qed.
 
 Lemma expression_follow_disjointb_sound :
@@ -76,7 +105,7 @@ Lemma expression_follow_disjointb_sound :
       outer_follow = [].
 Proof.
   intros expression outer_follow Hdisjoint.
-  unfold expression_follow_disjointb in Hdisjoint.
+  rewrite expression_follow_disjointb_equation in Hdisjoint.
   apply token_intersection_emptyb_sound in Hdisjoint.
   exact Hdisjoint.
 Qed.
