@@ -145,6 +145,10 @@ Proof.
         destruct optional_body as
           [comma | class_name | name | seq_items | alt_items |
            nested_optional | nested_repeat];
+          try (simpl in Hshape; discriminate Hshape).
+        destruct second as
+          [close | class_name | name | seq_items | alt_items |
+           optional_body | repeat_body];
           simpl in Hshape;
           discriminate Hshape.
 Qed.
