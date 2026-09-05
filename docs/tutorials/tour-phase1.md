@@ -245,7 +245,7 @@ fn identity(x : U32) -> U32 satisfies Identity {
 }
 ```
 
-`fn` introduces the named executable function declaration. `satisfies Identity` is not optional documentation: it names the public callable contract against which the function body is checked. A function that calls itself can additionally be declared `recursive fn`; recursion therefore remains contract-visible rather than acquiring secret privileges from the implementation.
+`fn` introduces the named executable function declaration. `satisfies Identity` is not optional documentation: it names the public callable contract against which the function body is checked. A named function that calls itself **must** be declared `recursive fn`; an unmarked self-recursive `fn` does not typecheck. Mutual recursion likewise has to be declared as an explicit recursive group so the public callable contracts can be stabilized before any member body is checked. Recursion therefore remains contract-visible rather than acquiring secret privileges from implementation bodies.
 
 A closure can explicitly satisfy a callable contract too:
 
