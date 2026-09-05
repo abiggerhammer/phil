@@ -69,7 +69,7 @@ Proof.
       * simpl in Hnth.
         eapply IH.
         -- exact Hrest.
-        -- lia.
+        -- change (earlier_index < count) in Hlt. exact Hlt.
         -- exact Hnth.
 Qed.
 
