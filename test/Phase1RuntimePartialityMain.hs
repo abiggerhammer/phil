@@ -12,11 +12,13 @@ import Phil.Examples.Phase1.TargetStrengtheningWitnesses
 import Phil.Examples.Phase1.SystemsWitnesses
   ( steveHostAbiObligationRevision
   )
+import Phil.Systems.IR (DecisionId (..))
 import Phil.Systems.RuntimePartialityRelation
 import Phil.Systems.TargetStrengthening
   ( TargetPreconditionRef (..)
+  , TargetStrengthening (..)
+  , TargetStrengtheningStageBundle (..)
   )
-import Phil.Systems.IR (DecisionId (..))
 import System.Exit (exitFailure)
 
 main :: IO ()
@@ -161,7 +163,7 @@ hazardKindSubstitutionRejects = do
         ]
       relation = baseRelation base actual
   case checkRuntimePartialityRelation relation of
-    Left RuntimePartialityDispositionDomainMismatch {} -> Right ()
+    Left (RuntimePartialityDispositionDomainMismatch _ _) -> Right ()
     other -> Left ("exceptional-halt identity substituted for target trap: " <> show other)
 
 undeclaredSourceOutcomeRejects :: Either String ()
@@ -230,7 +232,7 @@ emptyDeploymentRequirementRejects = do
     other -> Left ("empty deployment identity closed target UB: " <> show other)
 
 baseRelation
-  :: Phil.Systems.TargetStrengthening.TargetStrengtheningStageBundle
+  :: TargetStrengtheningStageBundle
   -> Map.Map RuntimePartialityHazardRef RuntimePartialityDisposition
   -> RuntimePartialityRelation
 baseRelation base dispositions = RuntimePartialityRelation
@@ -249,16 +251,13 @@ baseRelation base dispositions = RuntimePartialityRelation
 hazard :: TargetPartialityKind -> RuntimePartialityHazardRef
 hazard = RuntimePartialityHazardRef steveHostAbiStrengtheningRef
 
-steveStage :: Either String Phil.Systems.TargetStrengthening.TargetStrengtheningStageBundle
+steveStage :: Either String TargetStrengtheningStageBundle
 steveStage = do
   stage <- steveTargetStrengtheningStage
-  assert
-    ( steveHostAbiObligationRevision
-        == maybe steveHostAbiObligationRevision id
-            (Map.lookup steveHostAbiStrengtheningRef
-              (Phil.Systems.TargetStrengthening.targetStrengtheningStageFacts stage)
-              >>= Phil.Systems.TargetStrengthening.targetStrengtheningDerivedObligation)
-    )
+  let retained = Map.lookup steveHostAbiStrengtheningRef
+        (targetStrengtheningStageFacts stage)
+        >>= targetStrengtheningDerivedObligation
+  assert (retained == Just steveHostAbiObligationRevision)
     "Steve target-strengthening witness lost the host-ABI derived obligation"
   Right stage
 
