@@ -1,6 +1,6 @@
 From Stdlib Require Import Bool.Bool Setoids.Setoid.
 
-From Phil.Core Require Import CheckedBindingMode.
+From Phil.Core Require Import Context CheckedBindingMode.
 
 (*
   Machine-facing decision surface for PHIL-RES-BIND-MODE-001.
