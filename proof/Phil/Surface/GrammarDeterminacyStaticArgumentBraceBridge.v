@@ -182,7 +182,9 @@ Proof.
                                          as [tail_items Htuple].
                                        destruct
                                          (derives_nonterminal_sequence_literal_head_starts
-                                           _ "tuple_type" "(" tail_items
+                                           _ "tuple_type" "("
+                                           (ENonterminal "type_expression" ::
+                                            ELiteral "," :: tail_items)
                                            input rest branch_tree Htuple Hbranch)
                                          as [suffix Hstart].
                                        rewrite Hinput_brace in Hstart.
