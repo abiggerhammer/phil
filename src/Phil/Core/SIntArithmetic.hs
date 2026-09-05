@@ -1,7 +1,13 @@
 {-# LANGUAGE OverloadedStrings #-}
 
 module Phil.Core.SIntArithmetic
-  ( SIntArithmeticOperator (..)
+  ( SIntType (..)
+  , SIntLiteral (..)
+  , SIntTerm (..)
+  , sIntCoreType
+  , sIntTypeFromCoreType
+  , sIntLiteralInRange
+  , SIntArithmeticOperator (..)
   , PlainSIntArithmeticSite (..)
   , PlainSIntArithmeticDecision (..)
   , SIntArithmeticError (..)
@@ -13,15 +19,9 @@ module Phil.Core.SIntArithmetic
 
 import Control.Monad (foldM)
 import Data.Text (Text)
+import qualified Data.Text as Text
+import qualified Data.Text.Read as TextRead
 import Phil.Core.Checker (CheckState)
-import Phil.Core.Scalar
-  ( ScalarLiteral (..)
-  , scalarLiteralInRange
-  )
-import Phil.Core.SortCheck
-  ( SortError
-  , sortOfRefTerm
-  )
 import Phil.Core.Static
   ( ClaimDecl (..)
   , ClaimDefinition (..)
@@ -37,11 +37,47 @@ import Phil.Core.Syntax
   , Proposition (..)
   , RefSort (..)
   , RefTerm (..)
+  , Ty (..)
   )
 
--- | Runtime signed arithmetic is mathematical arithmetic. The source language
--- therefore has no hidden wrap, saturation, target trap, poison, or signed-UB
--- mode attached to an operator.
+-- | EXEC-016's signed scalar identity is intentionally local to the signed
+-- numeric authority. It does not widen the Phase-0 Systems/LLVM scalar carrier;
+-- backend realization remains a later checked relation.
+newtype SIntType = SIntType { sIntWidth :: Int }
+  deriving (Eq, Ord, Show)
+
+data SIntLiteral = SIntLiteral
+  { sIntLiteralType :: SIntType
+  , sIntLiteralValue :: Integer
+  }
+  deriving (Eq, Ord, Show)
+
+data SIntTerm
+  = SIntKnown SIntLiteral
+  | SIntSymbolic SIntType Text
+  deriving (Eq, Ord, Show)
+
+-- | Reuse Core's exact opaque-sorted type identity without pretending that the
+-- existing backend ScalarType already admits signed realization.
+sIntCoreType :: SIntType -> Ty
+sIntCoreType ty@(SIntType width) =
+  TyOpaqueSorted (renderType ty) (SortOpaque ("phil.sint.v1:" <> Text.pack (show width)))
+
+sIntTypeFromCoreType :: Ty -> Maybe SIntType
+sIntTypeFromCoreType ty = case ty of
+  TyOpaqueSorted display (SortOpaque semantic) -> do
+    width <- parseWidth display
+    if semantic == "phil.sint.v1:" <> Text.pack (show width)
+      then Just (SIntType width)
+      else Nothing
+  _ -> Nothing
+
+sIntLiteralInRange :: SIntLiteral -> Bool
+sIntLiteralInRange (SIntLiteral (SIntType width) value) =
+  width > 0
+    && value >= negate (2 ^ (width - 1))
+    && value < 2 ^ (width - 1)
+
 data SIntArithmeticOperator
   = SIntAdd
   | SIntSubtract
@@ -57,110 +93,90 @@ data PlainSIntArithmeticSite = PlainSIntArithmeticSite
   deriving (Eq, Ord, Show)
 
 data PlainSIntArithmeticDecision
-  = PlainSIntArithmeticEstablished ScalarLiteral
+  = PlainSIntArithmeticEstablished SIntLiteral
   | PlainSIntArithmeticRequiresProof Obligation
   deriving (Eq, Show)
 
 data SIntArithmeticError
-  = SIntArithmeticSortError SortError
-  | SIntArithmeticOperandSortMismatch RefTerm RefSort Int
-  | SIntArithmeticResultSortMismatch RefTerm RefSort Int
+  = SIntArithmeticInvalidWidth Int
+  | SIntArithmeticOperandTypeMismatch SIntTerm SIntType
+  | SIntArithmeticResultTypeMismatch SIntTerm SIntType
+  | SIntArithmeticEmptySymbolicIdentity SIntTerm
   | SIntArithmeticKnownResultOutOfRange
-      SIntArithmeticOperator
-      Int
-      Integer
-      Integer
-      Integer
+      SIntArithmeticOperator Int Integer Integer Integer
   | SIntArithmeticKnownResultMismatch
-      SIntArithmeticOperator
-      Int
-      Integer
-      Integer
-      Integer
-      Integer
+      SIntArithmeticOperator Int Integer Integer Integer Integer
   deriving (Eq, Show)
 
--- | Check one plain I[w] arithmetic step with unbounded Integer arithmetic.
--- Closed terms must equal the exact mathematical result and that result must be
--- representable in [-2^(w-1), 2^(w-1)-1]. Symbolic terms retain an ordinary Core
--- obligation instead of acquiring a target overflow convention.
 checkPlainSIntArithmetic
   :: CheckState
   -> SIntArithmeticOperator
-  -> Int
-  -> RefTerm
-  -> RefTerm
-  -> RefTerm
+  -> SIntType
+  -> SIntTerm
+  -> SIntTerm
+  -> SIntTerm
   -> PlainSIntArithmeticSite
   -> Either SIntArithmeticError PlainSIntArithmeticDecision
-checkPlainSIntArithmetic state operator width left right result site = do
-  checkOperand state width left
-  checkOperand state width right
-  checkResult state width result
-  case (knownSInt left, knownSInt right, knownSInt result) of
-    (Just (_, leftValue), Just (_, rightValue), Just (_, actualResult)) -> do
+checkPlainSIntArithmetic _state operator ty@(SIntType width) left right result site = do
+  if width > 0 then Right () else Left (SIntArithmeticInvalidWidth width)
+  checkTerm SIntArithmeticOperandTypeMismatch ty left
+  checkTerm SIntArithmeticOperandTypeMismatch ty right
+  checkTerm SIntArithmeticResultTypeMismatch ty result
+  case (knownValue left, knownValue right, knownValue result) of
+    (Just leftValue, Just rightValue, Just actualResult) -> do
       let mathematicalResult = applySIntArithmeticOperator operator leftValue rightValue
-          literal = ScalarSIntLiteral width mathematicalResult
-      if not (scalarLiteralInRange literal)
-        then Left
-          (SIntArithmeticKnownResultOutOfRange
-            operator width leftValue rightValue mathematicalResult)
+          literal = SIntLiteral ty mathematicalResult
+      if not (sIntLiteralInRange literal)
+        then Left (SIntArithmeticKnownResultOutOfRange
+          operator width leftValue rightValue mathematicalResult)
         else if actualResult /= mathematicalResult
-          then Left
-            (SIntArithmeticKnownResultMismatch
-              operator width leftValue rightValue mathematicalResult actualResult)
+          then Left (SIntArithmeticKnownResultMismatch
+            operator width leftValue rightValue mathematicalResult actualResult)
           else Right (PlainSIntArithmeticEstablished literal)
     _ -> Right (PlainSIntArithmeticRequiresProof Obligation
       { obligationId = plainSIntArithmeticObligationId site
-      , obligationProposition =
-          plainSIntArithmeticProposition operator width left right result
+      , obligationProposition = plainSIntArithmeticProposition operator ty left right result
       , obligationOrigin = plainSIntArithmeticOrigin site
       , obligationScope = plainSIntArithmeticScope site
       , obligationRequiredPoint = plainSIntArithmeticRequiredPoint site
       })
 
--- | Width stays an exact Nat coordinate while values enter the mathematical
--- integer domain only through explicit RefToInteger views. This keeps one claim
--- declaration width-generic without erasing signedness from the source terms.
+-- | The opaque arithmetic claim receives a canonical biased-Nat encoding of
+-- signed semantic values. This is proof identity, not target representation:
+-- v maps to v + 2^(w-1), so the entire I[w] range is represented exactly while
+-- existing Core proposition machinery remains unchanged.
 plainSIntArithmeticProposition
   :: SIntArithmeticOperator
-  -> Int
-  -> RefTerm
-  -> RefTerm
-  -> RefTerm
+  -> SIntType
+  -> SIntTerm
+  -> SIntTerm
+  -> SIntTerm
   -> Proposition
-plainSIntArithmeticProposition operator width left right result =
+plainSIntArithmeticProposition operator ty@(SIntType width) left right result =
   Atom (operatorAtom operator)
     [ RefNat (toInteger width)
-    , RefToInteger left
-    , RefToInteger right
-    , RefToInteger result
+    , encodeTerm ty left
+    , encodeTerm ty right
+    , encodeTerm ty result
     ]
 
-applySIntArithmeticOperator
-  :: SIntArithmeticOperator
-  -> Integer
-  -> Integer
-  -> Integer
+applySIntArithmeticOperator :: SIntArithmeticOperator -> Integer -> Integer -> Integer
 applySIntArithmeticOperator operator left right = case operator of
   SIntAdd -> left + right
   SIntSubtract -> left - right
   SIntMultiply -> left * right
 
-registerSIntArithmeticClaims
-  :: StaticContext
-  -> Either StaticError StaticContext
+registerSIntArithmeticClaims :: StaticContext -> Either StaticError StaticContext
 registerSIntArithmeticClaims context =
   foldM ensureClaim context [SIntAdd, SIntSubtract, SIntMultiply]
   where
     parameters =
       [ (Name "width", SortNat)
-      , (Name "left", SortInteger)
-      , (Name "right", SortInteger)
-      , (Name "result", SortInteger)
+      , (Name "left-biased", SortNat)
+      , (Name "right-biased", SortNat)
+      , (Name "result-biased", SortNat)
       ]
     expected = ClaimDecl parameters OpaqueClaim
-
     ensureClaim current operator =
       let claimName = operatorAtom operator
       in case lookupClaim claimName current of
@@ -169,38 +185,49 @@ registerSIntArithmeticClaims context =
             | actual == expected -> Right current
             | otherwise -> Left (DuplicateClaim claimName)
 
-checkOperand
-  :: CheckState
-  -> Int
-  -> RefTerm
+checkTerm
+  :: (SIntTerm -> SIntType -> SIntArithmeticError)
+  -> SIntType
+  -> SIntTerm
   -> Either SIntArithmeticError ()
-checkOperand state width term = do
-  actual <- mapLeft SIntArithmeticSortError (sortOfRefTerm state term)
-  if actual == SortSInt width
-    then Right ()
-    else Left (SIntArithmeticOperandSortMismatch term actual width)
+checkTerm mismatch expected term = do
+  if termType term == expected then Right () else Left (mismatch term expected)
+  case term of
+    SIntSymbolic _ identity
+      | Text.null (Text.strip identity) -> Left (SIntArithmeticEmptySymbolicIdentity term)
+    _ -> Right ()
 
-checkResult
-  :: CheckState
-  -> Int
-  -> RefTerm
-  -> Either SIntArithmeticError ()
-checkResult state width term = do
-  actual <- mapLeft SIntArithmeticSortError (sortOfRefTerm state term)
-  if actual == SortSInt width
-    then Right ()
-    else Left (SIntArithmeticResultSortMismatch term actual width)
+termType :: SIntTerm -> SIntType
+termType term = case term of
+  SIntKnown literal -> sIntLiteralType literal
+  SIntSymbolic ty _ -> ty
 
-knownSInt :: RefTerm -> Maybe (Int, Integer)
-knownSInt term = case term of
-  RefSInt width value -> Just (width, value)
-  _ -> Nothing
+knownValue :: SIntTerm -> Maybe Integer
+knownValue term = case term of
+  SIntKnown literal -> Just (sIntLiteralValue literal)
+  SIntSymbolic {} -> Nothing
+
+encodeTerm :: SIntType -> SIntTerm -> RefTerm
+encodeTerm ty@(SIntType width) term = case term of
+  SIntKnown literal -> RefNat (sIntLiteralValue literal + 2 ^ (width - 1))
+  SIntSymbolic _ identity ->
+    RefOpaque SortNat ("phil.sint.bias.v1:" <> renderType ty <> ":" <> identity)
+
+renderType :: SIntType -> Text
+renderType (SIntType width) = "I" <> Text.pack (show width)
+
+parseWidth :: Text -> Maybe Int
+parseWidth display = do
+  digits <- Text.stripPrefix "I" display
+  case TextRead.decimal digits :: Either String (Integer, Text) of
+    Right (width, rest)
+      | Text.null rest
+      , width > 0
+      , width <= toInteger (maxBound :: Int) -> Just (fromInteger width)
+    _ -> Nothing
 
 operatorAtom :: SIntArithmeticOperator -> Text
 operatorAtom operator = case operator of
   SIntAdd -> "phil.sint.add.exact.v1"
   SIntSubtract -> "phil.sint.sub.exact.v1"
   SIntMultiply -> "phil.sint.mul.exact.v1"
-
-mapLeft :: (a -> b) -> Either a c -> Either b c
-mapLeft f = either (Left . f) Right
