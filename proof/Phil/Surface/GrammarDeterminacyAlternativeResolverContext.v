@@ -63,6 +63,7 @@ Proof.
     (path_has_single_nonterminal_suffix_shape path name Hsuffix)
     as [prefix Hshape].
   subst path.
+  pose proof Hpath as Hfinal.
   unfold phase1_surface_expression_at_path in Hpath.
   rewrite expression_at_path_app in Hpath.
   destruct
@@ -70,10 +71,28 @@ Proof.
       phase1_surface_rules phase1_surface_root_expression prefix)
     as [middle |] eqn:Hprefix.
   - destruct middle as
-      [literal | class_name | actual | items | items | body | body];
-      simpl in Hpath; try discriminate Hpath.
-    destruct (String.eqb name actual) eqn:Hname.
-    + exact Hpath.
+      [literal | class_name | actual | items | items | body | body].
+    + discriminate Hpath.
+    + discriminate Hpath.
+    + change
+        (phase1_surface_expression_at_path prefix =
+          Some (ENonterminal actual)) in Hprefix.
+      pose proof
+        (phase1_surface_expression_at_descend
+          prefix (ENonterminal actual) (AtNonterminal name) Hprefix)
+        as Hstep.
+      unfold descend in Hstep.
+      rewrite Hfinal in Hstep.
+      unfold step_expression in Hstep.
+      destruct (String.eqb name actual) eqn:Hname.
+      * rewrite Hname in Hstep.
+        symmetry.
+        exact Hstep.
+      * rewrite Hname in Hstep.
+        discriminate Hstep.
+    + discriminate Hpath.
+    + discriminate Hpath.
+    + discriminate Hpath.
     + discriminate Hpath.
   - discriminate Hpath.
 Qed.
