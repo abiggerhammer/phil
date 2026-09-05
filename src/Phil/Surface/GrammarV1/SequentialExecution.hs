@@ -9,7 +9,6 @@ module Phil.Surface.GrammarV1.SequentialExecution
 import Phil.Surface.GrammarV1.Parser
   ( GrammarV1Block (..)
   , GrammarV1BranchValue (..)
-  , GrammarV1Closure (..)
   , GrammarV1Expression (..)
   , GrammarV1FailureTarget (..)
   , GrammarV1Fallback (..)
