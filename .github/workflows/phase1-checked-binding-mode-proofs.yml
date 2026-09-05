@@ -98,6 +98,8 @@ jobs:
         with:
           ghc-version: '9.6.7'
           cabal-version: 'latest'
+      - name: Initialize Cabal package database
+        run: cabal build exe:phil-certify-core-scalar --ghc-options=-Werror
       - uses: actions/download-artifact@v4
         with:
           name: rocq-checked-binding-mode-proof
