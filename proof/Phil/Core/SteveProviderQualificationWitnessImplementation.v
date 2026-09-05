@@ -125,57 +125,74 @@ Theorem steve_provider_qualification_witness_boundary_certified :
 Proof.
   intros witness.
   unfold SteveProviderQualificationWitnessBoundary.
-  repeat split.
+  split.
   - apply both_steve_providers_are_admitted.
-  - apply digest_matches_retains_stable_owner_subject.
-  - apply digest_scoped_borrow_maps_to_stable_subject.
-  - apply digest_candidate_bytes_remain_borrowed.
-  - intros outcome.
-    destruct outcome.
-    + apply blob_installed_outcome_preserves_candidate_borrow.
-    + apply blob_already_exists_outcome_preserves_candidate_borrow.
-    + apply blob_storage_failure_outcome_preserves_candidate_borrow.
-  - apply blob_whole_provider_layers_are_present.
-  - apply blob_second_installed_event_violates_no_replace.
-  - apply blob_partial_publication_is_forbidden.
-  - pose proof
-      (blob_overwrite_authority_is_explicitly_dispositioned witness)
-      as Hoverwrite.
-    pose proof
-      (blob_delete_authority_is_explicitly_dispositioned witness)
-      as Hdelete.
-    destruct Hoverwrite as [HoverwriteExtra HoverwriteDisposition].
-    destruct Hdelete as [HdeleteExtra HdeleteDisposition].
-    repeat split; assumption.
   - split.
-    + intros key.
-      apply digest_obligation_manifest_closes_exactly.
-    + intros key.
-      apply blob_obligation_manifest_closes_exactly.
-  - repeat split.
-    + intros condition.
-      apply digest_conditions_remain_explicit_in_evidence.
-    + intros condition.
-      apply digest_conditions_remain_explicit_in_admission.
-    + intros condition.
-      apply blob_conditions_remain_explicit_in_evidence.
-    + intros condition.
-      apply blob_conditions_remain_explicit_in_admission.
-    + pose proof
-        (digest_sha256_profile_remains_an_explicit_condition witness)
-        as Hsha.
-      destruct Hsha as [Hclaim [Hevidence Hadmission]].
-      exact Hclaim.
-    + pose proof
-        (digest_sha256_profile_remains_an_explicit_condition witness)
-        as Hsha.
-      destruct Hsha as [Hclaim [Hevidence Hadmission]].
-      exact Hevidence.
-    + pose proof
-        (digest_sha256_profile_remains_an_explicit_condition witness)
-        as Hsha.
-      destruct Hsha as [Hclaim [Hevidence Hadmission]].
-      exact Hadmission.
+    + apply digest_matches_retains_stable_owner_subject.
+    + split.
+      * apply digest_scoped_borrow_maps_to_stable_subject.
+      * split.
+        -- apply digest_candidate_bytes_remain_borrowed.
+        -- split.
+           ++ intros outcome.
+              destruct outcome.
+              ** apply blob_installed_outcome_preserves_candidate_borrow.
+              ** apply blob_already_exists_outcome_preserves_candidate_borrow.
+              ** apply blob_storage_failure_outcome_preserves_candidate_borrow.
+           ++ split.
+              ** apply blob_whole_provider_layers_are_present.
+              ** split.
+                 --- apply blob_second_installed_event_violates_no_replace.
+                 --- split.
+                     +++ apply blob_partial_publication_is_forbidden.
+                     +++ split.
+                         *** unfold BlobAuthorityExplicitlyDispositioned.
+                             pose proof
+                               (blob_overwrite_authority_is_explicitly_dispositioned witness)
+                               as Hoverwrite.
+                             pose proof
+                               (blob_delete_authority_is_explicitly_dispositioned witness)
+                               as Hdelete.
+                             destruct Hoverwrite as
+                               [HoverwriteExtra HoverwriteDisposition].
+                             destruct Hdelete as
+                               [HdeleteExtra HdeleteDisposition].
+                             repeat split; assumption.
+                         *** split.
+                             ---- unfold SteveObligationManifestsExact.
+                                  split.
+                                  ++++ intros key.
+                                       apply digest_obligation_manifest_closes_exactly.
+                                  ++++ intros key.
+                                       apply blob_obligation_manifest_closes_exactly.
+                             ---- unfold SteveConditionsRemainExplicit.
+                                  repeat split.
+                                  ++++ intros condition.
+                                       apply digest_conditions_remain_explicit_in_evidence.
+                                  ++++ intros condition.
+                                       apply digest_conditions_remain_explicit_in_admission.
+                                  ++++ intros condition.
+                                       apply blob_conditions_remain_explicit_in_evidence.
+                                  ++++ intros condition.
+                                       apply blob_conditions_remain_explicit_in_admission.
+                                  ++++ pose proof
+                                       (digest_sha256_profile_remains_an_explicit_condition witness)
+                                       as Hsha.
+                                       destruct Hsha as
+                                         [Hclaim [Hevidence Hadmission]].
+                                       exact Hclaim.
+                                  ++++ pose proof
+                                       (digest_sha256_profile_remains_an_explicit_condition witness)
+                                       as Hsha.
+                                       destruct Hsha as
+                                         [Hclaim [Hevidence Hadmission]].
+                                       exact Hevidence.
+                                  ++++ pose proof
+                                       (digest_sha256_profile_remains_an_explicit_condition witness)
+                                       as Hsha.
+                                       destruct Hsha as
+                                         [Hclaim [Hevidence Hadmission]].
+                                       exact Hadmission.
 Qed.
 
 Definition decideSteveProviderQualificationWitnessByFacts
