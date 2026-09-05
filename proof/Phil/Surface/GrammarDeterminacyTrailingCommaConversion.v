@@ -138,7 +138,8 @@ Proof.
         subst comma close.
         left.
         reflexivity.
-      * discriminate Hshape.
+      * simpl in Hshape.
+        discriminate Hshape.
 Qed.
 
 Lemma trailing_comma_body_derivation_has_identifier_prefix :
