@@ -14,18 +14,19 @@ module Phil.Surface.GrammarV1.CallableEffects
   , grammarV1CheckedSubjectIndexedCallableEffectBounds
   ) where
 
-import qualified Data.Map.Strict as Map
 import qualified Data.Set as Set
 import qualified Data.Text as Text
 import Phil.Core.Callable (SemanticEffect (..))
+import Phil.Core.Effect
+  ( CheckedSemanticEffect (..)
+  , SemanticEffectCheckError
+  , SemanticEffectSubjectKey (..)
+  , checkedSemanticEffect
+  )
 import Phil.Core.Generic (GenericStaticParameterKey)
 import Phil.Core.Generic.StaticActual
   ( GenericStaticKind (..)
   , GenericStaticParameter (..)
-  )
-import Phil.Core.Static
-  ( SemanticForm (..)
-  , canonicalSemanticForm
   )
 import Phil.Core.Syntax (Name (..))
 import Phil.Surface.GrammarV1.BinderScope
@@ -107,6 +108,7 @@ data GrammarV1CheckedSubjectIndexedEffect = GrammarV1CheckedSubjectIndexedEffect
 data GrammarV1SubjectIndexedEffectError
   = GrammarV1EffectSubjectReferenceError GrammarV1LexicalReferenceError
   | GrammarV1EffectSubjectNotLocal (Located GrammarV1Expression)
+  | GrammarV1EffectCoreError SemanticEffectCheckError
   deriving (Eq, Show)
 
 -- | Preserve the first exact Grammar-v1 effect identity fragment as Core's
@@ -196,11 +198,9 @@ grammarV1ResolvedCallableEffectBounds parameterEvidence useEvidence source =
 
 -- | Resolve one argument-bearing effect only when every effect argument is one
 -- simple active lexical subject. Argument-free effects preserve their established
--- Core identity byte-for-byte. Subject-bearing effects use a versioned canonical
--- SemanticForm containing the checked effect label and resolver-issued Core Name
--- of each exact subject, so alpha-renaming cannot change effect identity and two
--- equal-typed local subjects cannot collapse merely because their representation
--- or source spelling happens to coincide.
+-- Core identity byte-for-byte. Subject-bearing effects are now constructed by
+-- Phil.Core.Effect from resolver-issued semantic subject keys, so Surface owns
+-- only reference resolution and never owns the effect identity encoding.
 grammarV1CheckedSubjectIndexedSemanticEffect
   :: GrammarV1LexicalScope
   -> Located GrammarV1EffectExpression
@@ -219,11 +219,15 @@ grammarV1CheckedSubjectIndexedSemanticEffect scope (Located _ effect)
       pure $ do
         references <- sequence checkedArguments
         let subjects = map
-              (grammarV1ResolvedBinderCoreName . grammarV1CheckedLexicalReferenceBinder)
+              ( effectSubjectKey
+                . grammarV1ResolvedBinderCoreName
+                . grammarV1CheckedLexicalReferenceBinder
+              )
               references
+        checkedCore <- mapLeft GrammarV1EffectCoreError
+          (checkedSemanticEffect labelParts subjects)
         Right GrammarV1CheckedSubjectIndexedEffect
-          { checkedSubjectIndexedEffectCore =
-              canonicalSubjectIndexedEffect labelParts subjects
+          { checkedSubjectIndexedEffectCore = checkedSemanticEffectCore checkedCore
           , checkedSubjectIndexedEffectReferences = references
           }
   where
@@ -291,18 +295,8 @@ checkedEffectSubject scope source@(Located _ expression) = case expression of
           Right _ -> Left (GrammarV1EffectSubjectNotLocal source)
   _ -> Nothing
 
-canonicalSubjectIndexedEffect :: [Text.Text] -> [Name] -> SemanticEffect
-canonicalSubjectIndexedEffect labelParts subjects =
-  SemanticEffect
-    ( Text.pack "phil.effect.subject.v1:"
-      <> canonicalSemanticForm
-        (SemanticRecord (Map.fromList
-          [ (Text.pack "label", SemanticOrdered (map SemanticAtom labelParts))
-          , (Text.pack "subjects", SemanticOrdered (map subjectForm subjects))
-          ]))
-    )
-  where
-    subjectForm (Name name) = SemanticAtom name
+effectSubjectKey :: Name -> SemanticEffectSubjectKey
+effectSubjectKey (Name name) = SemanticEffectSubjectKey name
 
 validateEffectsParameterEvidence
   :: [Located GrammarV1GenericParam]
@@ -403,3 +397,6 @@ firstUnexpectedEffectUseEvidence used = firstUnexpected
     firstUnexpected (entry : rest)
       | resolvedCallableEffectSourceUse entry `elem` used = firstUnexpected rest
       | otherwise = Just entry
+
+mapLeft :: (a -> b) -> Either a c -> Either b c
+mapLeft f = either (Left . f) Right

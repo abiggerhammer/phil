@@ -6,6 +6,15 @@ import qualified Data.Set as Set
 import qualified Data.Text as Text
 import Phil.Core.Callable (SemanticEffect (..))
 import Phil.Core.CallableRefinement (CallableAuthorityRequirement (..))
+import Phil.Core.Effect
+  ( CheckedSemanticEffect (..)
+  , SemanticEffectCheckError (..)
+  , SemanticEffectRelationRevision (..)
+  , SemanticEffectSubjectKey (..)
+  , checkedSemanticEffect
+  , checkedSemanticEffectSubjectCorrespondence
+  , retargetCheckedSemanticEffectSubject
+  )
 import Phil.Core.Generic (GenericStaticParameterKey (..))
 import Phil.Core.Generic.StaticActual
   ( GenericStaticKind (..)
@@ -58,6 +67,8 @@ main = do
         resolvedEffectParameterSemantics
     , test "EFF-001 subject-indexed effects use exact semantic subjects"
         subjectIndexedEffectSemantics
+    , test "EFF-002 effect subject retargeting requires exact checked correspondence"
+        effectSubjectCorrespondenceSemantics
     , test "SURF-008 simple callable authority types preserve exact Core identities"
         simpleAuthoritySemantics
     , test "SURF-008 callable consumes and borrows preserve exact unresolved resource intent"
@@ -347,7 +358,7 @@ subjectIndexedEffectSemantics = do
         == map grammarV1ResolvedBinderCoreName renamedBinders )
     "alpha-renaming changed callable subject Core identities"
   assert
-    (map fst renamedBounds == [(effectSet)])
+    (map fst renamedBounds == [effectSet])
     "alpha-renaming changed subject-indexed semantic effect identity"
 
   unbound <- onlyCallable
@@ -366,6 +377,68 @@ subjectIndexedEffectSemantics = do
         grammarV1CheckedSubjectIndexedSemanticEffect scope source of
       Just (Right checked) -> Right checked
       other -> Left ("expected checked subject-indexed effect, got " <> show other)
+
+effectSubjectCorrespondenceSemantics :: Either String ()
+effectSubjectCorrespondenceSemantics = do
+  let storeA = SemanticEffectSubjectKey "semantic.subject.store-a"
+      storeB = SemanticEffectSubjectKey "semantic.subject.store-b"
+      peer = SemanticEffectSubjectKey "semantic.subject.peer"
+  readA <- mapLeft show (checkedSemanticEffect ["Read"] [storeA])
+  readB <- mapLeft show (checkedSemanticEffect ["Read"] [storeB])
+  io <- mapLeft show (checkedSemanticEffect ["IO"] [])
+  assert
+    (checkedSemanticEffectCore io == SemanticEffect "IO")
+    "Core subject checker changed the established zero-subject effect identity"
+  assert
+    (checkedSemanticEffectCore readA /= checkedSemanticEffectCore readB)
+    "Core effect identity collapsed distinct exact semantic subject keys"
+  same <- mapLeft show
+    (retargetCheckedSemanticEffectSubject 0 storeA Nothing readA)
+  assert (same == readA)
+    "exact same-subject substitution unexpectedly required correspondence"
+  case retargetCheckedSemanticEffectSubject 0 storeB Nothing readA of
+    Left (SemanticEffectSubjectRetargetRequiresCorrespondence source target) -> do
+      assert (source == storeA) "missing-correspondence error lost exact source subject"
+      assert (target == storeB) "missing-correspondence error lost exact target subject"
+    other -> Left
+      ("cross-subject retargeting without correspondence was not rejected: " <> show other)
+  relation <- mapLeft show
+    (checkedSemanticEffectSubjectCorrespondence
+      storeA storeB (SemanticEffectRelationRevision "relation.store-a-to-b.v1"))
+  retargeted <- mapLeft show
+    (retargetCheckedSemanticEffectSubject 0 storeB (Just relation) readA)
+  assert
+    (checkedSemanticEffectCore retargeted == checkedSemanticEffectCore readB)
+    "accepted exact correspondence did not reconstruct the target semantic effect"
+  wrongSource <- mapLeft show
+    (checkedSemanticEffectSubjectCorrespondence
+      peer storeB (SemanticEffectRelationRevision "relation.peer-to-b.v1"))
+  case retargetCheckedSemanticEffectSubject 0 storeB (Just wrongSource) readA of
+    Left (SemanticEffectSubjectCorrespondenceSourceMismatch expected actual) -> do
+      assert (expected == storeA) "wrong-source error lost current exact subject"
+      assert (actual == peer) "wrong-source error lost correspondence source"
+    other -> Left
+      ("mismatched-source correspondence was accepted: " <> show other)
+  wrongTarget <- mapLeft show
+    (checkedSemanticEffectSubjectCorrespondence
+      storeA peer (SemanticEffectRelationRevision "relation.store-a-to-peer.v1"))
+  case retargetCheckedSemanticEffectSubject 0 storeB (Just wrongTarget) readA of
+    Left (SemanticEffectSubjectCorrespondenceTargetMismatch expected actual) -> do
+      assert (expected == storeB) "wrong-target error lost requested target subject"
+      assert (actual == peer) "wrong-target error lost correspondence target"
+    other -> Left
+      ("mismatched-target correspondence was accepted: " <> show other)
+  assert
+    ( checkedSemanticEffectSubjectCorrespondence
+        storeA storeB (SemanticEffectRelationRevision "")
+        == Left EmptySemanticEffectRelationRevision
+    )
+    "empty/fabricated correspondence revision was accepted"
+  assert
+    ( retargetCheckedSemanticEffectSubject 1 storeB Nothing readA
+        == Left (SemanticEffectSubjectIndexOutOfRange 1)
+    )
+    "out-of-range effect subject retarget did not fail closed"
 
 callableLiteralEffects
   :: GrammarV1CallableContractDecl
