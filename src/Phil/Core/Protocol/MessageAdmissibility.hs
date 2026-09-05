@@ -97,9 +97,6 @@ checkBoundaryMessageContract actualType actualSemantics contract =
       Nothing -> True
       Just _ -> False
 
--- These are fail-closed bridge sentinels. Under the byte-checked extracted
--- kernel they are unreachable because the reflected booleans and cached native
--- diagnostics agree by construction.
 kernelShapeInvariantFailure :: BoundaryMessageError
 kernelShapeInvariantFailure =
   BoundaryMessageInadmissible [] LiveEndpointNotCommunicable
@@ -109,8 +106,10 @@ kernelHardTypeInvariantFailure =
   BoundaryMessageInadmissible [] InternalReceiveStateNotCommunicable
 
 -- | Bare concrete session-message types are admitted only when the type itself
--- is sufficient to establish boundary competence. Native recursive traversal
--- computes the fact; the extracted kernel owns the final admission choice.
+-- is sufficient to establish boundary competence. Signed fixed-width integers
+-- are the same primitive immutable Message class as unsigned integers; this says
+-- nothing about their physical target representation and does not erase
+-- signedness from exact Ty equality.
 intrinsicBoundaryMessageType :: Ty -> Bool
 intrinsicBoundaryMessageType ty =
   case Kernel.decideIntrinsicBoundaryMessageByFact (intrinsicBoundaryMessageTypeFact ty) of
@@ -122,6 +121,7 @@ intrinsicBoundaryMessageTypeFact ty = case ty of
   TyUnit -> True
   TyBool -> True
   TyUInt _ -> True
+  TySInt _ -> True
   TyProduct elements -> all (intrinsicBoundaryMessageTypeFact . productElementType) elements
   TyRefined _ inner _ -> intrinsicBoundaryMessageTypeFact inner
   _ -> False
@@ -140,9 +140,6 @@ firstForbiddenShape path shape = case shape of
   BoundaryMessageLiveAuthority authority ->
     Just (BoundaryMessageInadmissible path (LiveAuthorityNotCommunicable authority))
 
--- Endpoint and pending-receive state have enough structure in Core to reject
--- even if a malformed external classifier calls them an admitted leaf. Loans
--- and authority-bearing opaque occurrences require the semantic shape above.
 firstHardTypeFailure :: [Int] -> Ty -> Maybe BoundaryMessageError
 firstHardTypeFailure path ty = case ty of
   TyEndpoint _ ->
