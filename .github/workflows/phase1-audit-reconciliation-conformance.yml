@@ -83,6 +83,8 @@ jobs:
         run: cabal exec -- runghc -Wall -Werror -isrc test/Phase1EnvironmentObservationMain.hs
       - name: EXEC-012 target-independent UB/poison/trap partiality
         run: cabal exec -- runghc -Wall -Werror -isrc test/Phase1RuntimePartialityMain.hs
+      - name: EXEC-013 realization capacity/resource exhaustion disposition
+        run: cabal exec -- runghc -Wall -Werror -isrc test/Phase1RuntimeCapacityPartialityMain.hs
       - name: EXEC-014 resource-specific release competence
         run: cabal exec -- runghc -Wall -Werror -isrc test/Phase1ExplicitReleaseMain.hs
       - name: EXEC-015 omitted else identity predecessor
