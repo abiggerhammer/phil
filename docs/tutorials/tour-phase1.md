@@ -156,6 +156,21 @@ component Inspect(value : MaybeByte) {
 
 Here `Some(byte)` binds the variant payload to the local name `byte` inside that arm. Arm-local names remain local to their arm.
 
+Phil also retains `decide` as a convenience form for decision-shaped values. It does not introduce a second privileged decision semantics: it elaborates through the same ordinary sum/elimination and resource-join discipline.
+
+```phil
+data Decision = Yes(U32) | No(U32);
+
+component ReadDecision(choice : Decision) provides U32 {
+    decide choice {
+        Yes(value) => return value;
+        No(value) => return value;
+    };
+}
+```
+
+The keyword `decide` says that the scrutinee is being eliminated as a checked decision/result value. Its arms still have to be exhaustive and resource-correct; writing `decide` does not turn an arbitrary assertion into proof.
+
 Later we will see why Phil sometimes adds an explicit `join` state contract when multiple continuing branches have to reconverge with restricted resources. For unrestricted examples like these, the familiar branching intuition is enough to start.
 
 But Phil asks another question about values that ordinary machine-layout types do not answer:
@@ -193,6 +208,79 @@ A linear type lets the checker reject that structural mistake before it becomes 
 The important point is not that everything in Phil is linear. Most ordinary values need not be. The point is that **ownership is part of the type discipline when it matters**.
 
 That rule survives abstraction. Putting a linear value inside a record, closure, branch, loop, or generic does not make it stop being linear.
+
+### Borrowing lets you inspect without transferring ownership
+
+Sometimes code needs temporary access to a restricted value without taking ownership away from its current owner. Phil makes that scope explicit with `borrow ... as ... { ... }`.
+
+```phil
+record Inspectable mode affine {
+    id : U64
+}
+
+component ReadId(item : Inspectable) provides U64 {
+    let id = borrow item as view {
+        return view.id;
+    };
+    return id;
+}
+```
+
+The keyword `borrow` opens a scoped shared loan of `item`. The keyword `as` introduces the local name `view` for that borrowed view.
+
+The view is not a second owner. While the loan is live, operations that would consume or invalidate the owner are blocked. The borrowed view is scoped to the borrow body and cannot simply escape as a longer-lived value. When the borrow scope ends, the unique owner remains the owner.
+
+This is deliberately much narrower than a general aliasing or mutable-reference system. The point is to make temporary inspection compatible with exact ownership rather than to make ownership disappear.
+
+### Branches that continue must agree about what remains
+
+With unrestricted values, two branches can often reconverge without saying anything special. With restricted resources, evidence, authority, or session state, there may be more than one plausible way to describe the state after the branches rejoin.
+
+When the checker can infer one canonical answer, Phil can keep the source compact. When the programmer has to choose the post-branch meaning, the source uses an explicit `join` contract. The canonical shape is:
+
+```phil
+component Joiner(x : U32) {
+    if true join state (x_next : U32) invariant x_next >= 0 {
+        x;
+    } else {
+        x;
+    };
+}
+```
+
+Here `join` says that the continuing predecessors reconverge through an explicit checked state contract. The `state` telescope names and types the state expected after reconvergence. The `invariant` is a proposition that must hold of that joined state.
+
+Those declarations do not create `x_next`, resurrect a consumed owner, or prove the invariant by assertion. Every continuing predecessor must actually project into the stated join state through the ordinary resource checker.
+
+This is why Phil does not resolve an ownership disagreement by silently inventing an optional value or by choosing whichever branch happened to be checked first.
+
+### Loops carry state explicitly too
+
+A loop is a join with a backedge, so the same ownership problem appears every time execution goes around again.
+
+Grammar v1 therefore lets a loop declare the state carried from one iteration to the next:
+
+```phil
+component Counter(n : U32) {
+    loop state (i : U32 = n) invariant i >= 0 {
+        continue(i);
+    };
+}
+```
+
+The keyword `loop` introduces the loop. `state (i : U32 = n)` says that the loop carries one state slot named `i`, of type `U32`, initially supplied by `n`. The `invariant` must hold on entry and on every backedge.
+
+Term-level `continue(...)` supplies the exact successor values for the next iteration. It is not assignment to mutable locals: the old loop state is succeeded by the new loop state, and the checker verifies that the successor fits the same declared contract.
+
+The other loop-control keyword is `break`, which exits the loop and, where the surrounding exit contract carries values, supplies those values explicitly:
+
+```phil
+break(i)
+```
+
+One detail is intentionally strict: bare `continue`, `continue()`, `break`, and `break()` supply **zero** state values. They do not mean “reuse whatever loop variables are currently in scope.” If a loop carries state, the source must spell the successor or exit values that the relevant contract requires.
+
+That rule matters for linear resources. A live owner cannot survive a backedge merely because a same-spelled local variable still exists; the exact successor owner has to be part of the checked loop state.
 
 ## 4. Functions can have public contracts
 
@@ -909,9 +997,9 @@ If you already understand Phase 0 and want the design delta rather than another 
 
 If you remember only a few things from this tour, remember these:
 
-- **Phil is still an ordinary programming language.** Modules, types, local bindings, construction, functions, branches, and pattern matches work alongside the systems contracts rather than being replaced by them.
+- **Phil is still an ordinary programming language.** Modules, types, local bindings, construction, functions, branches, pattern matches, borrows, joins, and loops work alongside the systems contracts rather than being replaced by them.
 - **Phil makes system rules part of the program.** Protocols, ownership, authority, effects, obligations, and architecture are checked objects rather than comments.
-- **Ownership can be structural.** Unrestricted, affine, and linear values have different copy/drop permissions.
+- **Ownership can be structural.** Unrestricted, affine, and linear values have different copy/drop permissions, and borrowing or looping does not erase those rules.
 - **Contracts describe semantic boundaries.** A machine signature is often only one part of a callable or provider interface.
 - **Effects are not authority.** What code may do and what it is permitted to do are separate facts.
 - **Protocols constrain communication; component code performs it.** Assigning a process to a protocol role does not inject a `send` or `receive` into its body.
