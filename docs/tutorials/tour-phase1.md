@@ -271,7 +271,15 @@ Server: receive U8 → done
 
 There is an important distinction here: the `send` inside the **protocol declaration** describes a legal session transition. It does not itself execute a send.
 
-Actual component code performs communication with the term-level `send ... on ...` operation. In source, the shape looks like this:
+Actual component code performs communication with the term-level `send ... on ...` operation. Here `send` is a Phil keyword, not a library function or a method supplied by the component. Its basic source form is:
+
+```phil
+send value on endpoint
+```
+
+Read that as: **send this value through this live session endpoint, and advance the endpoint to its next protocol state.** The checker verifies that the endpoint is currently at a `send` state and that the value has the required message type.
+
+In a component, that looks like this:
 
 ```phil
 component ClientWorker(endpoint : Client[Ping], payload : U8) {
@@ -280,7 +288,9 @@ component ClientWorker(endpoint : Client[Ping], payload : U8) {
 }
 ```
 
-Here `endpoint` is a live client-side session endpoint and `payload` is the byte to send. `send payload on endpoint` consumes the current endpoint and produces the successor endpoint for the `end Done` state; `close done` then closes that terminal endpoint.
+Here `endpoint` is a live client-side session endpoint and `payload` is the byte to send. `send payload on endpoint` consumes the current endpoint and produces the successor endpoint for the `end Done` state.
+
+`close` is another Phil keyword. Its form is simply `close endpoint`; it consumes a live endpoint whose protocol state is terminal and closes that session endpoint. So `close done;` does not mean “close some arbitrary OS handle”: the checker requires `done` to be a session endpoint at an `end` state.
 
 So there are already two separate layers:
 
