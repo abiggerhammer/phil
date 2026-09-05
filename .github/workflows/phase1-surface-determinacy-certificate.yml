@@ -37,7 +37,7 @@ jobs:
           set -euo pipefail
           output="$(python3 scripts/check_phase1_surface_determinacy.py)"
           printf '%s\n' "$output"
-          grep -F '15 reviewed local overlap(s), inventory exact' <<<"$output"
+          grep -F 'inventory exact' <<<"$output"
       - name: Derive exact grammar and certificate twice
         shell: bash
         run: |

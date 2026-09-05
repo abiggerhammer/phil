@@ -20,11 +20,30 @@
 #   alphanumerics, "_", or "'"; it excludes every alphabetic literal keyword
 #   appearing in this grammar;
 # - <DECIMAL_INTEGER> is one or more ASCII decimal digits;
-# - keyword literals and <UINT_TYPE> take lexical priority over <IDENTIFIER>;
-# - <UINT_TYPE> is "U" followed by one or more ASCII decimal digits; supported
-#   widths are checked semantically, not by the grammar;
+# - <DECIMAL_FLOAT> is one or more ASCII decimal digits, ".", then one or more
+#   ASCII decimal digits; a decimal point is required so an unsuffixed token such
+#   as 1 remains an integer literal while 1.0 is a floating literal;
+# - keyword literals, <UINT_TYPE>, and <SINT_TYPE> take lexical priority over
+#   <IDENTIFIER>;
+# - <UINT_TYPE> is "U" followed by one or more ASCII decimal digits; <SINT_TYPE>
+#   is "I" followed by one or more ASCII decimal digits; supported widths are
+#   checked semantically, not by the grammar;
+# - F32 and F64 are reserved primitive-type keywords;
 # - <STRING_LITERAL> is a double-quoted UTF-8 string with escapes for \", \\,
 #   \n, \r, and \t; other escapes are rejected.
+#
+# Numeric surface:
+# - runtime fixed-width integer types are written U<w> and I<w>;
+# - strict floating runtime types are F32 and F64;
+# - unary "-" is the explicit source route for negative signed values and
+#   floating negation; the lexer never folds a sign into a numeric literal;
+# - runtime multiplication, division, and remainder share multiplicative
+#   precedence and are written "*", "/", and "%" respectively;
+# - explicit numeric-domain/width/signedness conversion is written
+#     convert e to T
+#   and is distinct from transport ... to ... using ... and accept ... as ...;
+# - parsing these forms never proves numeric range, division preconditions,
+#   floating-point behavior, or conversion admissibility.
 #
 # Separators:
 # - commas separate parameter/argument/field lists;
@@ -130,7 +149,10 @@ qualified_name = identifier, { ".", identifier } ;
 identifier_list = identifier, { ",", identifier } ;
 identifier = <IDENTIFIER> ;
 integer_literal = <DECIMAL_INTEGER> ;
+float_literal = <DECIMAL_FLOAT> ;
 uint_type = <UINT_TYPE> ;
+sint_type = <SINT_TYPE> ;
+float_type = "F32" | "F64" ;
 string_literal = <STRING_LITERAL> ;
 structural_mode = "unrestricted" | "affine" | "linear" ;
 
@@ -177,6 +199,8 @@ nonreference_type_expression =
     "Unit"
   | "Bool"
   | uint_type
+  | sint_type
+  | float_type
   | "Bytes", "[", expression, "]"
   | "Frame", "[", static_reference, "]"
   | "Proof", "[", proposition, "]"
@@ -472,6 +496,7 @@ command_expression =
   | fail_expression
   | close_expression
   | release_expression
+  | convert_expression
   | transport_expression
   | accept_expression
   | prove_expression
@@ -482,7 +507,12 @@ additive_expression =
   { ( "+" | "-" ), multiplicative_expression } ;
 
 multiplicative_expression =
-  postfix_expression, { "*", postfix_expression } ;
+  unary_expression, { ( "*" | "/" | "%" ), unary_expression } ;
+
+unary_expression =
+    "-", unary_expression
+  | postfix_expression
+  ;
 
 postfix_expression =
     named_postfix_expression
@@ -500,8 +530,12 @@ primary_expression =
   | "true"
   | "false"
   | "unit"
+  | float_literal
   | integer_literal
   ;
+
+convert_expression =
+  "convert", expression, "to", type_expression ;
 
 construct_expression =
   "construct", static_reference,

@@ -1,6 +1,6 @@
 {
   "authority": "grammar/phase1-surface.ebnf",
-  "grammar_sha256": "1bc73beb296475f96d739181c0a7609eaf53a61362b2aa0cf7bd7184d06e67ac",
+  "grammar_sha256": "cf957c4cc27f8f2814e312eca8885a76bce09deaa0a9977904963130c76a145e",
   "reviewed_overlaps": [
     {
       "kind": "alternative-first-overlap",

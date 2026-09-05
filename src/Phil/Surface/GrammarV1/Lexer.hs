@@ -1,7 +1,11 @@
 {-# LANGUAGE OverloadedStrings #-}
+{-# LANGUAGE PatternSynonyms #-}
+{-# LANGUAGE ViewPatterns #-}
 
 module Phil.Surface.GrammarV1.Lexer
   ( GrammarV1Token (..)
+  , pattern GrammarSIntType
+  , pattern GrammarDecimalFloat
   , GrammarV1LexDiagnostic (..)
   , grammarV1ReservedWords
   , lexGrammarV1
@@ -27,6 +31,11 @@ import qualified Text.Megaparsec.Char.Lexer as Lexer
 
 type Parser = MP.Parsec Void Text
 
+-- | The original production parser pattern-matches this closed carrier under
+-- -Wall -Werror.  New numeric lexical categories are therefore exposed below
+-- as checked pattern synonyms over representations that the incremental parser
+-- already renders and rejects safely.  The immediate parser slice can consume
+-- the patterns without turning unsupported new source into a partial match.
 data GrammarV1Token
   = GrammarKeyword Text
   | GrammarIdentifier Text
@@ -35,6 +44,52 @@ data GrammarV1Token
   | GrammarString Text
   | GrammarSymbol Text
   deriving (Eq, Ord, Show)
+
+-- | Exact I<digits> lexical category.  Its underlying keyword representation
+-- is intentionally not in grammarV1ReservedWords: pSIntType owns recognition
+-- before ordinary identifiers, and the current parser therefore fails closed
+-- on the unfamiliar keyword until signed-type parsing lands.
+pattern GrammarSIntType :: Text -> GrammarV1Token
+pattern GrammarSIntType value <- (sIntTokenValue -> Just value)
+  where
+    GrammarSIntType value = GrammarKeyword value
+
+-- | Exact digits '.' digits lexical category.  The underlying symbol carrier
+-- keeps the pre-numeric parser exhaustive and fail-closed; parser support will
+-- consume this pattern directly rather than treating it as punctuation.
+pattern GrammarDecimalFloat :: Text -> GrammarV1Token
+pattern GrammarDecimalFloat value <- (decimalFloatTokenValue -> Just value)
+  where
+    GrammarDecimalFloat value = GrammarSymbol value
+
+sIntTokenValue :: GrammarV1Token -> Maybe Text
+sIntTokenValue token = case token of
+  GrammarKeyword value
+    | isSIntSpelling value -> Just value
+  _ -> Nothing
+
+decimalFloatTokenValue :: GrammarV1Token -> Maybe Text
+decimalFloatTokenValue token = case token of
+  GrammarSymbol value
+    | isDecimalFloatSpelling value -> Just value
+  _ -> Nothing
+
+isSIntSpelling :: Text -> Bool
+isSIntSpelling value = case Text.uncons value of
+  Just ('I', digits) -> not (Text.null digits) && Text.all asciiDigit digits
+  _ -> False
+
+isDecimalFloatSpelling :: Text -> Bool
+isDecimalFloatSpelling value = case Text.splitOn "." value of
+  [whole, fractional] ->
+    not (Text.null whole)
+      && not (Text.null fractional)
+      && Text.all asciiDigit whole
+      && Text.all asciiDigit fractional
+  _ -> False
+
+asciiDigit :: Char -> Bool
+asciiDigit character = character >= '0' && character <= '9'
 
 data GrammarV1LexDiagnostic = GrammarV1LexDiagnostic
   { grammarV1LexDiagnosticPoint :: SourcePoint
@@ -47,6 +102,8 @@ grammarV1ReservedWords = Set.fromList
   [ "Bool"
   , "Bytes"
   , "Effects"
+  , "F32"
+  , "F64"
   , "Frame"
   , "Message"
   , "Nat"
@@ -84,6 +141,7 @@ grammarV1ReservedWords = Set.fromList
   , "consume"
   , "consumes"
   , "continue"
+  , "convert"
   , "correspondence"
   , "cost"
   , "data"
@@ -201,6 +259,8 @@ pToken :: Parser GrammarV1Token
 pToken = MP.choice
   [ MP.try pString
   , MP.try pUIntType
+  , MP.try pSIntType
+  , MP.try pDecimalFloat
   , MP.try pDecimalInteger
   , MP.try pIdentifierOrKeyword
   , pSymbol
@@ -212,6 +272,21 @@ pUIntType = do
   digits <- Text.pack <$> MP.some MPC.digitChar
   MP.notFollowedBy identifierContinue
   pure (GrammarUIntType ("U" <> digits))
+
+pSIntType :: Parser GrammarV1Token
+pSIntType = do
+  void (MPC.char 'I')
+  digits <- Text.pack <$> MP.some MPC.digitChar
+  MP.notFollowedBy identifierContinue
+  pure (GrammarSIntType ("I" <> digits))
+
+pDecimalFloat :: Parser GrammarV1Token
+pDecimalFloat = do
+  whole <- Text.pack <$> MP.some MPC.digitChar
+  void (MPC.char '.')
+  fractional <- Text.pack <$> MP.some MPC.digitChar
+  MP.notFollowedBy identifierContinue
+  pure (GrammarDecimalFloat (whole <> "." <> fractional))
 
 pDecimalInteger :: Parser GrammarV1Token
 pDecimalInteger = do
@@ -258,7 +333,7 @@ pSymbol = GrammarSymbol <$> MP.choice (map MP.chunk orderedSymbols)
     orderedSymbols = sortOn (negate . Text.length)
       [ "->", "=>", "==", "!=", "<=", ">="
       , "@", "(", ")", "{", "}", ".", ",", ":", ";"
-      , "[", "]", "|", "+", "-", "*", "=", "<", ">"
+      , "[", "]", "|", "+", "-", "*", "/", "%", "=", "<", ">"
       ]
 
 currentPoint :: Parser SourcePoint
