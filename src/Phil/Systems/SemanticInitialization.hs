@@ -19,7 +19,7 @@ import qualified Data.Text as Text
 import Phil.Assurance.Types (Digest)
 import Phil.Systems.IR
   ( StageContract (..)
-  , ValueId
+  , ValueId (..)
   )
 
 -- | Exact semantic identity of reserved realization storage.  This is not a
@@ -193,7 +193,7 @@ renderEvent event = case event of
     ]
 
 renderValue :: ValueId -> Text
-renderValue = Text.pack . show
+renderValue = unValueId
 
 renderOrigin :: SemanticInitializationOrigin -> Text
 renderOrigin origin = case origin of
