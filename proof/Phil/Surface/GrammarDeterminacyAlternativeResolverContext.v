@@ -6,6 +6,7 @@ From Phil.Surface Require Import
   GrammarDerivationOracle
   GrammarDeterminacyCertificate
   GrammarDeterminacyNullableFirst
+  GrammarDeterminacyFollowOverlap
   GrammarDeterminacySimpleResolvers
   GrammarDeterminacyStructuralResolvers
   GrammarDeterminacyPredictiveOracle
