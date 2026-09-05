@@ -46,6 +46,13 @@ Definition selected_earlier_first_disjointb
   | None => false
   end.
 
+(*
+  Keep the large generated FIRST computation out of kernel conversion while
+  proving this purely structural list lemma.  It is made transparent again
+  immediately afterwards for the executable certificates below.
+*)
+Opaque expression_first_disjointb.
+
 Lemma earlier_first_disjointb_nth_lt :
   forall items selected count earlier_index earlier,
     earlier_first_disjointb selected items count = true ->
@@ -72,6 +79,8 @@ Proof.
         -- apply Nat.succ_lt_mono in Hlt. exact Hlt.
         -- exact Hnth.
 Qed.
+
+Transparent expression_first_disjointb.
 
 Theorem selected_earlier_first_disjointb_sound :
   forall items index selected earlier_index earlier,
