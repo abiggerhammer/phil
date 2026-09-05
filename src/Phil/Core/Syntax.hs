@@ -52,9 +52,7 @@ newtype ProductValue = ProductValue
 data RefSort
   = SortBool
   | SortNat
-  | SortInteger
   | SortUInt Int
-  | SortSInt Int
   | SortEnum Text
   | SortFiniteSeq RefSort
   | SortFiniteSet RefSort
@@ -62,19 +60,18 @@ data RefSort
   | SortOpaque Text
   deriving (Eq, Ord, Show)
 
--- | Structured terms in the Phase 0/1 refinement fragment. These are semantic
--- terms, not source syntax. Fixed-width integer values retain width and
--- signedness until an explicit/canonical mathematical view is requested.
+-- | Structured terms in the Phase 0 refinement fragment. These are semantic
+-- terms, not source syntax. UInt values remain distinct from Nat until an
+-- explicit/canonical RefToNat node is present. Field/opaque leaves carry the
+-- sort established by elaboration so Core never has to infer it from spelling.
 data RefTerm
   = RefVar Name
   | RefNat Integer
   | RefUInt Int Integer
-  | RefSInt Int Integer
   | RefBool Bool
   | RefField RefTerm Text RefSort
   | RefLen RefTerm
   | RefToNat RefTerm
-  | RefToInteger RefTerm
   | RefAdd RefTerm RefTerm
   | RefSub RefTerm RefTerm
   | RefScale Integer RefTerm
@@ -85,7 +82,6 @@ data Ty
   = TyUnit
   | TyBool
   | TyUInt Int
-  | TySInt Int
   | TyBytes RefTerm
   | TyFrame GrammarId
   | TyPendingRecv PendingRecvSpec
@@ -98,9 +94,6 @@ data Ty
   | TyOpaqueSorted Text RefSort
   deriving (Eq, Ord, Show)
 
--- | The legacy Core Value carrier remains the Phase-0 executable value surface.
--- Phase-1 fixed-width signed literals travel through ScalarLiteral/RefTerm until
--- the general executable Value carrier is widened in its own compatibility pass.
 data Value
   = VVar Name
   | VUnit
