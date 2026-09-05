@@ -1,6 +1,12 @@
 From Stdlib Require Import Bool.Bool Lists.List Lia.
 
 From Phil.Surface Require Import
+  Grammar
+  GrammarDerivationOracle
+  GrammarDeterminacyNullableFirst
+  GrammarDeterminacyFollowOverlap
+  GrammarDeterminacySimpleResolvers
+  GrammarDeterminacyWitnessSoundness
   GrammarDeterminacyOracleAssemblyCoverage.
 
 Import ListNotations.
