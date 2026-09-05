@@ -62,9 +62,6 @@ import Phil.Core.Syntax
   , RefTerm (..)
   )
 
--- | Integer quotient and remainder are one paired semantic family. For signed
--- values the quotient truncates toward zero and the remainder is defined by
--- a = q*b + r, so r is zero or has the dividend's sign.
 data IntegerDivisionOperator
   = IntegerQuotient
   | IntegerRemainder
@@ -145,10 +142,6 @@ checkedSIntDivisionFailures operator = case operator of
     ]
   IntegerRemainder -> Set.singleton checkedIntegerDivideByZeroFailure
 
--- | Plain UInt quotient/remainder is admitted only when the exact semantic
--- relation is established. A closed zero divisor rejects immediately; a
--- symbolic operation carries one ordinary proof obligation whose claim includes
--- nonzero-divisor and exact quotient/remainder semantics.
 checkPlainUIntDivision
   :: CheckState
   -> IntegerDivisionOperator
@@ -175,10 +168,6 @@ checkPlainUIntDivision state operator width left right result site = do
     _ -> Right (PlainUIntDivisionRequiresProof (siteObligation site
       (plainUIntDivisionProposition operator width left right result)))
 
--- | Plain signed quotient/remainder uses a target-independent truncation-toward-
--- zero definition. The only nonzero-divisor representability failure is the
--- minimum signed value divided by -1 on the quotient path; it rejects rather
--- than becoming target overflow, poison, or a trap.
 checkPlainSIntDivision
   :: CheckState
   -> IntegerDivisionOperator
@@ -301,10 +290,6 @@ plainSIntDivisionProposition operator ty@(SIntType width) left right result =
     , encodeSIntTerm ty result
     ]
 
--- | Define signed quotient without relying on a host signed-division rule: divide
--- absolute values in Nat, restore the quotient sign, then derive the paired
--- remainder from a = q*b + r. This yields truncation toward zero and the
--- dividend-sign remainder rule for every nonzero divisor.
 signedQuotientRemainder :: Integer -> Integer -> (Integer, Integer)
 signedQuotientRemainder dividend divisor
   | divisor == 0 = error "signedQuotientRemainder: zero divisor"
@@ -394,7 +379,7 @@ knownSInt term = case term of
   SIntSymbolic {} -> Nothing
 
 encodeSIntTerm :: SIntType -> SIntTerm -> RefTerm
-encodeSIntTerm ty@(SIntType width) term = case term of
+encodeSIntTerm (SIntType width) term = case term of
   SIntKnown literal -> RefNat (sIntLiteralValue literal + 2 ^ (width - 1))
   SIntSymbolic _ identity ->
     RefOpaque SortNat ("phil.sint.bias.v1:I" <> Text.pack (show width) <> ":" <> identity)
