@@ -11,6 +11,7 @@ module Phil.Core.Protocol.MessageAdmissibility
 
 import Data.Text (Text)
 import qualified Data.Text as Text
+import Phil.Core.SIntArithmetic (sIntTypeFromCoreType)
 import Phil.Core.Static (SemanticForm)
 import Phil.Core.Syntax
   ( ProductElementType (..)
@@ -18,10 +19,6 @@ import Phil.Core.Syntax
   )
 import qualified ProtocolMessageAdmissibilityKernel as Kernel
 
--- | Semantic shape established by the competent boundary-message checker.
--- Structural mode is deliberately absent: movability/linearity is not Message
--- competence. Aggregates are transparent for admissibility, so a forbidden
--- constituent cannot be laundered by record/product wrapping.
 data BoundaryMessageShape
   = BoundaryMessageAdmittedLeaf Text
   | BoundaryMessageAggregate [BoundaryMessageShape]
@@ -30,10 +27,6 @@ data BoundaryMessageShape
   | BoundaryMessageLiveAuthority Text
   deriving (Eq, Ord, Show)
 
--- | Exact semantic contract carried by one protocol Message actual. The type and
--- semantic identity are repeated intentionally so a contract admitted for one
--- value cannot be attached to a different actual merely because its runtime
--- representation is convenient.
 data BoundaryMessageContract = BoundaryMessageContract
   { boundaryMessageContractRevision :: Text
   , boundaryMessageContractType :: Ty
@@ -56,9 +49,6 @@ data BoundaryMessageError
   | BoundaryMessageInadmissible [Int] BoundaryMessageInadmissibility
   deriving (Eq, Ord, Show)
 
--- | Check one exact Message actual before protocol instantiation/session
--- substitution. Concrete equality and recursive path discovery remain native;
--- the exact extracted kernel owns which reflected gate wins.
 checkBoundaryMessageContract
   :: Ty
   -> SemanticForm
@@ -97,9 +87,6 @@ checkBoundaryMessageContract actualType actualSemantics contract =
       Nothing -> True
       Just _ -> False
 
--- These are fail-closed bridge sentinels. Under the byte-checked extracted
--- kernel they are unreachable because the reflected booleans and cached native
--- diagnostics agree by construction.
 kernelShapeInvariantFailure :: BoundaryMessageError
 kernelShapeInvariantFailure =
   BoundaryMessageInadmissible [] LiveEndpointNotCommunicable
@@ -108,23 +95,25 @@ kernelHardTypeInvariantFailure :: BoundaryMessageError
 kernelHardTypeInvariantFailure =
   BoundaryMessageInadmissible [] InternalReceiveStateNotCommunicable
 
--- | Bare concrete session-message types are admitted only when the type itself
--- is sufficient to establish boundary competence. Native recursive traversal
--- computes the fact; the extracted kernel owns the final admission choice.
 intrinsicBoundaryMessageType :: Ty -> Bool
 intrinsicBoundaryMessageType ty =
   case Kernel.decideIntrinsicBoundaryMessageByFact (intrinsicBoundaryMessageTypeFact ty) of
     Kernel.IntrinsicBoundaryMessageAcceptedDecision -> True
     Kernel.IntrinsicBoundaryMessageRequiresContractDecision -> False
 
+-- | EXEC-016 signed integers use an exact semantic Ty identity recognized only
+-- by their checked smart recognizer. They are primitive immutable Message values
+-- without implying that the Phase-0 backend ScalarType already realizes them.
 intrinsicBoundaryMessageTypeFact :: Ty -> Bool
-intrinsicBoundaryMessageTypeFact ty = case ty of
-  TyUnit -> True
-  TyBool -> True
-  TyUInt _ -> True
-  TyProduct elements -> all (intrinsicBoundaryMessageTypeFact . productElementType) elements
-  TyRefined _ inner _ -> intrinsicBoundaryMessageTypeFact inner
-  _ -> False
+intrinsicBoundaryMessageTypeFact ty
+  | Just _ <- sIntTypeFromCoreType ty = True
+  | otherwise = case ty of
+      TyUnit -> True
+      TyBool -> True
+      TyUInt _ -> True
+      TyProduct elements -> all (intrinsicBoundaryMessageTypeFact . productElementType) elements
+      TyRefined _ inner _ -> intrinsicBoundaryMessageTypeFact inner
+      _ -> False
 
 firstForbiddenShape
   :: [Int]
@@ -140,9 +129,6 @@ firstForbiddenShape path shape = case shape of
   BoundaryMessageLiveAuthority authority ->
     Just (BoundaryMessageInadmissible path (LiveAuthorityNotCommunicable authority))
 
--- Endpoint and pending-receive state have enough structure in Core to reject
--- even if a malformed external classifier calls them an admitted leaf. Loans
--- and authority-bearing opaque occurrences require the semantic shape above.
 firstHardTypeFailure :: [Int] -> Ty -> Maybe BoundaryMessageError
 firstHardTypeFailure path ty = case ty of
   TyEndpoint _ ->
