@@ -85,11 +85,9 @@ Proof.
       rewrite Hfinal in Hstep.
       unfold step_expression in Hstep.
       destruct (String.eqb name actual) eqn:Hname.
-      * rewrite Hname in Hstep.
-        symmetry.
+      * symmetry.
         exact Hstep.
-      * rewrite Hname in Hstep.
-        discriminate Hstep.
+      * discriminate Hstep.
     + discriminate Hpath.
     + discriminate Hpath.
     + discriminate Hpath.
