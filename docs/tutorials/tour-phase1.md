@@ -238,21 +238,30 @@ This is deliberately much narrower than a general aliasing or mutable-reference 
 
 With unrestricted values, two branches can often reconverge without saying anything special. With restricted resources, evidence, authority, or session state, there may be more than one plausible way to describe the state after the branches rejoin.
 
-When the checker can infer one canonical answer, Phil can keep the source compact. When the programmer has to choose the post-branch meaning, the source uses an explicit `join` contract. The canonical shape is:
+When the checker can infer one canonical answer, Phil can keep the source compact. When the programmer has to choose the post-branch meaning, the source uses an explicit `join` contract. Here the two branches deliberately carry different values forward:
 
 ```phil
-component Joiner(x : U32) {
-    if true join state (x_next : U32) invariant x_next >= 0 {
+component Joiner(condition : Bool, x : U32) provides U32 {
+    if condition
+        join state (x_next : U32)
+        invariant x_next == x or x_next == 0
+    {
         x;
     } else {
-        x;
+        0;
     };
+
+    return x_next;
 }
 ```
 
-Here `join` says that the continuing predecessors reconverge through an explicit checked state contract. The `state` telescope names and types the state expected after reconvergence. The `invariant` is a proposition that must hold of that joined state.
+Here `join` says that the continuing predecessors reconverge through an explicit checked state contract. The `state` telescope introduces `x_next` as the name of the state slot *after* reconvergence; neither branch can refer to `x_next` itself. If `condition` is true, the true predecessor supplies the incoming `x` to that slot. If `condition` is false, the false predecessor supplies `0`. Either way, code after the join sees the selected predecessor's value through the single post-join name `x_next`.
 
-Those declarations do not create `x_next`, resurrect a consumed owner, or prove the invariant by assertion. Every continuing predecessor must actually project into the stated join state through the ordinary resource checker.
+The `invariant` is the proposition every continuing predecessor must establish for the value it projects into the joined state. Here that common contract is `x_next == x or x_next == 0`, so both branches fit it even though they carry different concrete values. The invariant is not a hidden runtime assertion and does not make itself true: if a predecessor cannot establish it, that predecessor cannot legally enter the join.
+
+A branch that terminates instead of continuing contributes no join state at all; code after the join is simply unreachable on that path.
+
+The state declaration does not manufacture an owner, resurrect a consumed resource, or infer whichever value would be convenient. Every continuing predecessor must actually project into the stated join state through the ordinary resource checker.
 
 This is why Phil does not resolve an ownership disagreement by silently inventing an optional value or by choosing whichever branch happened to be checked first.
 
