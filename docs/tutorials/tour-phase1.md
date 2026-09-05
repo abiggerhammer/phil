@@ -20,6 +20,8 @@ That includes ordinary things such as values and functions, but also things that
 
 You do not need formal logic, compiler theory, or security terminology to follow this tour. We will start with very small Phil programs and introduce each larger idea only when the previous one gives us a reason to need it.
 
+For a complete grouped lookup table of Phil's reserved words, see the [Phase 1 keyword lexicon](../reference/keywords-phase1.md). The Tour introduces those words in context; the lexicon is the place to look one up afterward.
+
 ## 1. A first Phil component
 
 Here is about the smallest useful piece of canonical Phase 1 Phil:
@@ -40,11 +42,26 @@ So the body does exactly what it looks like it does:
 return unit;
 ```
 
+The keyword `return` finishes this execution path with the value that follows it. Here that value is the literal `unit`.
+
 Nothing very exotic has happened yet. That is intentional. Phil still has ordinary values, expressions, functions, records, branches, loops, and so on.
 
 What makes Phil unusual is what happens when ordinary computation meets resources, communication, authority, and claims about correctness.
 
 We will add those one at a time.
+
+### Source files can name modules and imports
+
+A larger Phil source file can begin by naming its module and importing declarations from another one:
+
+```phil
+module demo.basics;
+import demo.geometry {Point};
+```
+
+The keyword `module` gives the current source module its qualified name. The keyword `import` makes declarations from another module available to this source file; the optional brace list restricts the imported names.
+
+These are source-organization constructs. Importing a name does not create a runtime object, grant authority, or manufacture semantic identity.
 
 ## 2. Types say more than how many bits a value occupies
 
@@ -58,6 +75,8 @@ U64
 Unit
 ```
 
+`Bool` is the Boolean type. Its two literal values are the keywords `true` and `false`. `Unit` is the singleton type we already saw. Spellings such as `U8`, `U32`, and `U64` are unsigned-integer type tokens; the exact supported widths are checked semantically rather than being a fixed list baked into the lexer.
+
 It also has records, sums, tuples, byte sequences, refinements, evidence-bearing types, protocol/session types, and named architectural contracts.
 
 A record can look ordinary:
@@ -68,6 +87,76 @@ record Point {
     y : U32
 }
 ```
+
+The keyword `record` declares a product-like named type with named fields.
+
+Phil also has sum types. The keyword `data` declares a type whose values may come from different named variants:
+
+```phil
+data MaybeByte = None | Some(U8);
+```
+
+A `MaybeByte` is either `None` or `Some` carrying one `U8`.
+
+When an existing type already says exactly what you mean, `type` declares an alias:
+
+```phil
+type Byte = U8;
+```
+
+The alias gives the type another source-level name; it does not create a new runtime representation merely because a new spelling exists.
+
+### Values can be bound and constructed
+
+The keyword `let` introduces a local binding from an expression result:
+
+```phil
+let answer = 42;
+```
+
+For a record-like value, `construct` explicitly names the constructor target and its field initializers:
+
+```phil
+let origin = construct Point {
+    x = 0,
+    y = 0,
+};
+```
+
+`construct` does not bypass the type's ownership or refinement rules. It is simply the source form for building a value whose declared fields must check.
+
+### Branches are ordinary source constructs too
+
+Phil has ordinary conditional branching:
+
+```phil
+if true {
+    return unit;
+} else {
+    return unit;
+};
+```
+
+`if` evaluates its condition and executes only the selected branch. `else` introduces the false branch. Untaken branches do not secretly execute effects or consume resources.
+
+For a sum type, `match` selects an arm by constructor shape and can bind the payload carried by that constructor:
+
+```phil
+component Inspect(value : MaybeByte) {
+    match value {
+        None => {
+            return unit;
+        }
+        Some(byte) => {
+            return unit;
+        }
+    };
+}
+```
+
+Here `Some(byte)` binds the variant payload to the local name `byte` inside that arm. Arm-local names remain local to their arm.
+
+Later we will see why Phil sometimes adds an explicit `join` state contract when multiple continuing branches have to reconverge with restricted resources. For unrestricted examples like these, the familiar branching intuition is enough to start.
 
 But Phil asks another question about values that ordinary machine-layout types do not answer:
 
@@ -93,7 +182,7 @@ record FireOnceToken mode linear {
 }
 ```
 
-The keyword `mode` introduces the record's structural-use contract; `linear` is the selected mode. The field `id` is just a `U64`, but the record as a whole therefore has a stronger contract: a `FireOnceToken` is linear.
+The keyword `mode` introduces the record's structural-use contract; `linear` is the selected mode. The other two mode keywords are `unrestricted` and `affine`. The field `id` is just a `U64`, but the record as a whole therefore has a stronger contract: a `FireOnceToken` is linear.
 
 Why would that be useful?
 
@@ -144,7 +233,21 @@ The singular `outcome success U32 { ... }` block then gives details that apply s
 
 So the contract tells us something a normal arrow type would not: this callable is consumed by the successful call. It is a one-shot callable.
 
-A closure can explicitly satisfy that contract:
+A named function uses the keyword `fn` and states which callable contract it satisfies:
+
+```phil
+callable Identity(x : U32) -> U32 {
+    outcomes { success U32 };
+}
+
+fn identity(x : U32) -> U32 satisfies Identity {
+    return x;
+}
+```
+
+`fn` introduces the named executable function declaration. `satisfies Identity` is not optional documentation: it names the public callable contract against which the function body is checked. A function that calls itself can additionally be declared `recursive fn`; recursion therefore remains contract-visible rather than acquiring secret privileges from the implementation.
+
+A closure can explicitly satisfy a callable contract too:
 
 ```phil
 component Demo() {
@@ -509,7 +612,7 @@ structural T : discard;
 structural T : duplicate;
 ```
 
-`discard` means the generic body is allowed to use **weakening** on a `T`: it may decide not to use that value at all.
+`discard` and `duplicate` are language-defined permission names rather than reserved lexer keywords. `discard` means the generic body is allowed to use **weakening** on a `T`: it may decide not to use that value at all.
 
 `duplicate` means the generic body is allowed to use **contraction** on a `T`: it may make the same value available to more than one use.
 
@@ -707,7 +810,7 @@ A top-level declaration can carry an explicit key:
 record UploadId {}
 ```
 
-The `@key(...)` attribute supplies stable declaration lineage for this declaration. The quoted text is an identity carrier, not a display label and not evidence for any semantic claim.
+The `@key(...)` attribute supplies stable declaration lineage for this declaration. The quoted text is an identity carrier, not a display label and not evidence for any semantic claim. `key` is the admitted semantic attribute name, but it is not itself a reserved lexer keyword.
 
 Other occurrence lineage can travel with the source in a **SourceBundle**.
 
@@ -806,6 +909,7 @@ If you already understand Phase 0 and want the design delta rather than another 
 
 If you remember only a few things from this tour, remember these:
 
+- **Phil is still an ordinary programming language.** Modules, types, local bindings, construction, functions, branches, and pattern matches work alongside the systems contracts rather than being replaced by them.
 - **Phil makes system rules part of the program.** Protocols, ownership, authority, effects, obligations, and architecture are checked objects rather than comments.
 - **Ownership can be structural.** Unrestricted, affine, and linear values have different copy/drop permissions.
 - **Contracts describe semantic boundaries.** A machine signature is often only one part of a callable or provider interface.
