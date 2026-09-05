@@ -294,11 +294,11 @@ checkedEffectSubject scope source@(Located _ expression) = case expression of
 canonicalSubjectIndexedEffect :: [Text.Text] -> [Name] -> SemanticEffect
 canonicalSubjectIndexedEffect labelParts subjects =
   SemanticEffect
-    ( "phil.effect.subject.v1:"
+    ( Text.pack "phil.effect.subject.v1:"
       <> canonicalSemanticForm
         (SemanticRecord (Map.fromList
-          [ ("label", SemanticOrdered (map SemanticAtom labelParts))
-          , ("subjects", SemanticOrdered (map subjectForm subjects))
+          [ (Text.pack "label", SemanticOrdered (map SemanticAtom labelParts))
+          , (Text.pack "subjects", SemanticOrdered (map subjectForm subjects))
           ]))
     )
   where
