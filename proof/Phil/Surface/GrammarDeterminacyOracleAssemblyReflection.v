@@ -2,6 +2,7 @@ From Stdlib Require Import Bool.Bool Lists.List Lia.
 
 From Phil.Surface Require Import
   Grammar
+  GrammarDerivation
   GrammarDerivationOracle
   GrammarDeterminacyNullableFirst
   GrammarDeterminacyFollowOverlap
