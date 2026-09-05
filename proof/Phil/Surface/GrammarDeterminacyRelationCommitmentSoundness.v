@@ -22,7 +22,7 @@ Open Scope string_scope.
   Semantic soundness for the final structural resolver family:
   proposition_atom relation commitment.
 
-  A relation_proposition exposes a relation-neutral additive-expression prefix
+  A relation_proposition exposes a relation-neutral shift-expression prefix
   followed by an exact top-level relation operator, so the scanner must commit
   branch 0.  The nonrelation branches use the accepting continuation of
   proposition_atom; a computed FOLLOW certificate proves that every such
@@ -258,13 +258,30 @@ Proof.
   repeat split; assumption.
 Qed.
 
+Corollary phase1_surface_shift_expression_derivation_is_relation_neutral :
+  forall path input rest tree,
+    Derives phase1_surface_rules path
+      (ENonterminal "shift_expression") input rest tree ->
+    exists consumed,
+      input = List.app consumed rest /\
+      relation_neutral_scan 0 consumed = Some 0.
+Proof.
+  intros path input rest tree Hderive.
+  eapply
+    (phase1_surface_safe_nonterminal_derivation_is_relation_neutral
+      path "shift_expression" input rest tree).
+  - vm_compute.
+    reflexivity.
+  - exact Hderive.
+Qed.
+
 Lemma phase1_surface_relation_proposition_lookup_exact :
   lookupRule "relation_proposition" phase1_surface_rules =
     Some
       (ESequence
-        [ ENonterminal "additive_expression"
+        [ ENonterminal "shift_expression"
         ; ENonterminal "relation_operator"
-        ; ENonterminal "additive_expression"
+        ; ENonterminal "shift_expression"
         ]).
 Proof.
   vm_compute.
@@ -289,9 +306,9 @@ Proof.
     (derives_sequence_expression_exposes_items
       phase1_surface_rules
       (descend path (AtNonterminal "relation_proposition"))
-      [ ENonterminal "additive_expression"
+      [ ENonterminal "shift_expression"
       ; ENonterminal "relation_operator"
-      ; ENonterminal "additive_expression"
+      ; ENonterminal "shift_expression"
       ]
       input rest subtree Hbody)
     as [trees [_ Hitems]].
@@ -299,14 +316,14 @@ Proof.
     (derives_sequence_cons_exposes_head
       phase1_surface_rules
       (descend path (AtNonterminal "relation_proposition")) 0
-      (ENonterminal "additive_expression")
+      (ENonterminal "shift_expression")
       [ ENonterminal "relation_operator"
-      ; ENonterminal "additive_expression"
+      ; ENonterminal "shift_expression"
       ]
       input rest trees Hitems)
     as [after_left [left_tree [tail_trees [Hleft Htail]]]].
   destruct
-    (phase1_surface_additive_expression_derivation_is_relation_neutral
+    (phase1_surface_shift_expression_derivation_is_relation_neutral
       (descend
         (descend path (AtNonterminal "relation_proposition"))
         (AtSequence 0))
@@ -317,7 +334,7 @@ Proof.
       phase1_surface_rules
       (descend path (AtNonterminal "relation_proposition")) 1
       (ENonterminal "relation_operator")
-      [ENonterminal "additive_expression"]
+      [ENonterminal "shift_expression"]
       after_left rest tail_trees Htail)
     as [after_operator
         [operator_tree [right_trees [Hoperator Hright]]]].

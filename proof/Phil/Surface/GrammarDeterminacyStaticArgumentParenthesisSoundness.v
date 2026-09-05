@@ -436,52 +436,52 @@ Proof.
       * vm_compute in Hnth.
         inversion Hnth; subst item.
         destruct
-          (derives_nonterminal_lexical_starts
-            _ "uint_type" "UINT_TYPE" input rest branch_tree
-            phase1_surface_uint_type_lookup_exact Hbranch)
-          as [lexeme [suffix Hstart]].
+          (literal_derivation_is_exact
+            phase1_surface_rules _ "Char" input rest branch_tree Hbranch)
+          as [suffix [Hstart _]].
         rewrite Hinput_open in Hstart.
         discriminate Hstart.
       * destruct index as [| index].
         -- vm_compute in Hnth.
            inversion Hnth; subst item.
            destruct
-             (derives_nonterminal_lexical_starts
-               _ "sint_type" "SINT_TYPE" input rest branch_tree
-               phase1_surface_sint_type_lookup_exact Hbranch)
-             as [lexeme [suffix Hstart]].
+             (literal_derivation_is_exact
+               phase1_surface_rules _ "String" input rest branch_tree Hbranch)
+             as [suffix [Hstart _]].
            rewrite Hinput_open in Hstart.
            discriminate Hstart.
         -- destruct index as [| index].
            ++ vm_compute in Hnth.
               inversion Hnth; subst item.
-              exfalso.
-              eapply phase1_surface_float_type_open_derivation_impossible.
-              ** exact Hbranch.
-              ** exact Hinput_open.
+              destruct
+                (derives_nonterminal_lexical_starts
+                  _ "uint_type" "UINT_TYPE" input rest branch_tree
+                  phase1_surface_uint_type_lookup_exact Hbranch)
+                as [lexeme [suffix Hstart]].
+              rewrite Hinput_open in Hstart.
+              discriminate Hstart.
            ++ destruct index as [| index].
               ** vm_compute in Hnth.
                  inversion Hnth; subst item.
                  destruct
-                   (derives_sequence_literal_head_starts _ "Bytes" _
-                     input rest branch_tree Hbranch)
-                   as [suffix Hstart].
+                   (derives_nonterminal_lexical_starts
+                     _ "sint_type" "SINT_TYPE" input rest branch_tree
+                     phase1_surface_sint_type_lookup_exact Hbranch)
+                   as [lexeme [suffix Hstart]].
                  rewrite Hinput_open in Hstart.
                  discriminate Hstart.
               ** destruct index as [| index].
                  --- vm_compute in Hnth.
                      inversion Hnth; subst item.
-                     destruct
-                       (derives_sequence_literal_head_starts _ "Frame" _
-                         input rest branch_tree Hbranch)
-                       as [suffix Hstart].
-                     rewrite Hinput_open in Hstart.
-                     discriminate Hstart.
+                     exfalso.
+                     eapply phase1_surface_float_type_open_derivation_impossible.
+                     +++ exact Hbranch.
+                     +++ exact Hinput_open.
                  --- destruct index as [| index].
                      +++ vm_compute in Hnth.
                          inversion Hnth; subst item.
                          destruct
-                           (derives_sequence_literal_head_starts _ "Proof" _
+                           (derives_sequence_literal_head_starts _ "Bytes" _
                              input rest branch_tree Hbranch)
                            as [suffix Hstart].
                          rewrite Hinput_open in Hstart.
@@ -490,7 +490,7 @@ Proof.
                          *** vm_compute in Hnth.
                              inversion Hnth; subst item.
                              destruct
-                               (derives_sequence_literal_head_starts _ "Validated" _
+                               (derives_sequence_literal_head_starts _ "Frame" _
                                  input rest branch_tree Hbranch)
                                as [suffix Hstart].
                              rewrite Hinput_open in Hstart.
@@ -498,21 +498,39 @@ Proof.
                          *** destruct index as [| index].
                              ---- vm_compute in Hnth.
                                   inversion Hnth; subst item.
-                                  destruct phase1_surface_refinement_type_lookup_prefix
-                                    as [tail_items Hrefinement].
                                   destruct
-                                    (derives_nonterminal_sequence_literal_head_starts
-                                      _ "refinement_type" "{" tail_items
-                                      input rest branch_tree Hrefinement Hbranch)
+                                    (derives_sequence_literal_head_starts _ "Proof" _
+                                      input rest branch_tree Hbranch)
                                     as [suffix Hstart].
                                   rewrite Hinput_open in Hstart.
                                   discriminate Hstart.
                              ---- destruct index as [| index].
                                   ++++ vm_compute in Hnth.
                                        inversion Hnth; subst item.
-                                       eapply phase1_surface_tuple_type_derivation_commits_static_argument_tuple_branch.
-                                       exact Hbranch.
-                                  ++++ destruct index; vm_compute in Hnth; discriminate Hnth.
+                                       destruct
+                                         (derives_sequence_literal_head_starts _ "Validated" _
+                                           input rest branch_tree Hbranch)
+                                         as [suffix Hstart].
+                                       rewrite Hinput_open in Hstart.
+                                       discriminate Hstart.
+                                  ++++ destruct index as [| index].
+                                       ----- vm_compute in Hnth.
+                                            inversion Hnth; subst item.
+                                            destruct phase1_surface_refinement_type_lookup_prefix
+                                              as [tail_items Hrefinement].
+                                            destruct
+                                              (derives_nonterminal_sequence_literal_head_starts
+                                                _ "refinement_type" "{" tail_items
+                                                input rest branch_tree Hrefinement Hbranch)
+                                              as [suffix Hstart].
+                                            rewrite Hinput_open in Hstart.
+                                            discriminate Hstart.
+                                       ----- destruct index as [| index].
+                                            ***** vm_compute in Hnth.
+                                                  inversion Hnth; subst item.
+                                                  eapply phase1_surface_tuple_type_derivation_commits_static_argument_tuple_branch.
+                                                  exact Hbranch.
+                                            ***** destruct index; vm_compute in Hnth; discriminate Hnth.
 Qed.
 
 Lemma phase1_surface_static_value_expression_lookup_exact :

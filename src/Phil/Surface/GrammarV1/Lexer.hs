@@ -6,6 +6,7 @@ module Phil.Surface.GrammarV1.Lexer
   ( GrammarV1Token (..)
   , pattern GrammarSIntType
   , pattern GrammarDecimalFloat
+  , pattern GrammarChar
   , GrammarV1LexDiagnostic (..)
   , grammarV1ReservedWords
   , lexGrammarV1
@@ -13,7 +14,8 @@ module Phil.Surface.GrammarV1.Lexer
 
 import Control.Applicative (empty)
 import Control.Monad (void)
-import Data.List (sortOn)
+import Data.Char (chr, digitToInt, ord)
+import Data.List (foldl', sortOn)
 import qualified Data.List.NonEmpty as NonEmpty
 import qualified Data.Set as Set
 import Data.Text (Text)
@@ -32,10 +34,10 @@ import qualified Text.Megaparsec.Char.Lexer as Lexer
 type Parser = MP.Parsec Void Text
 
 -- | The original production parser pattern-matches this closed carrier under
--- -Wall -Werror.  New numeric lexical categories are therefore exposed below
--- as checked pattern synonyms over representations that the incremental parser
--- already renders and rejects safely.  The immediate parser slice can consume
--- the patterns without turning unsupported new source into a partial match.
+-- -Wall -Werror. New lexical categories are therefore exposed below as checked
+-- pattern synonyms over representations that the incremental parser already
+-- renders and rejects safely. Immediate parser slices can consume the patterns
+-- without turning unsupported new source into a partial match.
 data GrammarV1Token
   = GrammarKeyword Text
   | GrammarIdentifier Text
@@ -45,22 +47,34 @@ data GrammarV1Token
   | GrammarSymbol Text
   deriving (Eq, Ord, Show)
 
--- | Exact I<digits> lexical category.  Its underlying keyword representation
--- is intentionally not in grammarV1ReservedWords: pSIntType owns recognition
--- before ordinary identifiers, and the current parser therefore fails closed
--- on the unfamiliar keyword until signed-type parsing lands.
+-- | Exact I<digits> lexical category. Its underlying keyword representation is
+-- intentionally not in grammarV1ReservedWords: pSIntType owns recognition
+-- before ordinary identifiers, and an incremental parser can fail closed on an
+-- unfamiliar signed type until signed-type parsing lands.
 pattern GrammarSIntType :: Text -> GrammarV1Token
 pattern GrammarSIntType value <- (sIntTokenValue -> Just value)
   where
     GrammarSIntType value = GrammarKeyword value
 
--- | Exact digits '.' digits lexical category.  The underlying symbol carrier
--- keeps the pre-numeric parser exhaustive and fail-closed; parser support will
--- consume this pattern directly rather than treating it as punctuation.
+-- | Exact digits '.' digits lexical category. The underlying symbol carrier
+-- keeps incremental parsers exhaustive and fail-closed; parser support consumes
+-- this pattern directly rather than treating the value as punctuation.
 pattern GrammarDecimalFloat :: Text -> GrammarV1Token
 pattern GrammarDecimalFloat value <- (decimalFloatTokenValue -> Just value)
   where
     GrammarDecimalFloat value = GrammarSymbol value
+
+-- | Exact runtime character literal after lexical escape decoding. The hidden
+-- symbol prefix is not source syntax and cannot be produced by pSymbol. This
+-- keeps the pre-text parser exhaustive while giving the text parser a distinct
+-- semantic token category for EXEC-024.
+pattern GrammarChar :: Text -> GrammarV1Token
+pattern GrammarChar value <- (charTokenValue -> Just value)
+  where
+    GrammarChar value = GrammarSymbol (charTokenPrefix <> value)
+
+charTokenPrefix :: Text
+charTokenPrefix = "\NULphil-char:"
 
 sIntTokenValue :: GrammarV1Token -> Maybe Text
 sIntTokenValue token = case token of
@@ -72,6 +86,11 @@ decimalFloatTokenValue :: GrammarV1Token -> Maybe Text
 decimalFloatTokenValue token = case token of
   GrammarSymbol value
     | isDecimalFloatSpelling value -> Just value
+  _ -> Nothing
+
+charTokenValue :: GrammarV1Token -> Maybe Text
+charTokenValue token = case token of
+  GrammarSymbol value -> Text.stripPrefix charTokenPrefix value
   _ -> Nothing
 
 isSIntSpelling :: Text -> Bool
@@ -101,6 +120,7 @@ grammarV1ReservedWords :: Set.Set Text
 grammarV1ReservedWords = Set.fromList
   [ "Bool"
   , "Bytes"
+  , "Char"
   , "Effects"
   , "F32"
   , "F64"
@@ -109,6 +129,7 @@ grammarV1ReservedWords = Set.fromList
   , "Nat"
   , "Proof"
   , "Session"
+  , "String"
   , "Type"
   , "Unit"
   , "Validated"
@@ -257,7 +278,8 @@ pLocatedToken = do
 
 pToken :: Parser GrammarV1Token
 pToken = MP.choice
-  [ MP.try pString
+  [ MP.try pChar
+  , MP.try pString
   , MP.try pUIntType
   , MP.try pSIntType
   , MP.try pDecimalFloat
@@ -309,29 +331,63 @@ identifierContinue :: Parser Char
 identifierContinue = MPC.alphaNumChar <|> MPC.char '_' <|> MPC.char '\''
 
 pString :: Parser GrammarV1Token
-pString = GrammarString . Text.pack <$> MP.between (MPC.char '"') (MPC.char '"') (MP.many pStringChar)
+pString =
+  GrammarString . Text.pack
+    <$> MP.between (MPC.char '"') (MPC.char '"') (MP.many (pQuotedScalar '"'))
 
-pStringChar :: Parser Char
-pStringChar =
+pChar :: Parser GrammarV1Token
+pChar = do
+  scalar <- MP.between (MPC.char '\'') (MPC.char '\'') (pQuotedScalar '\'')
+  pure (GrammarChar (Text.singleton scalar))
+
+pQuotedScalar :: Char -> Parser Char
+pQuotedScalar delimiter =
   MP.choice
-    [ MPC.char '\\' *> pEscape
-    , MP.satisfy (\character -> character /= '"' && character /= '\\' && character /= '\n' && character /= '\r')
+    [ MPC.char '\\' *> pEscape delimiter
+    , MP.satisfy
+        (\character ->
+          character /= delimiter
+            && character /= '\\'
+            && character /= '\n'
+            && character /= '\r'
+            && isUnicodeScalar character)
     ]
 
-pEscape :: Parser Char
-pEscape = MP.choice
-  [ '"' <$ MPC.char '"'
+pEscape :: Char -> Parser Char
+pEscape delimiter = MP.choice
+  [ delimiter <$ MPC.char delimiter
   , '\\' <$ MPC.char '\\'
   , '\n' <$ MPC.char 'n'
   , '\r' <$ MPC.char 'r'
   , '\t' <$ MPC.char 't'
+  , MP.try pUnicodeScalarEscape
   ]
+
+pUnicodeScalarEscape :: Parser Char
+pUnicodeScalarEscape = do
+  void (MPC.char 'u')
+  void (MPC.char '{')
+  digits <- MP.some MPC.hexDigitChar
+  void (MPC.char '}')
+  let value = foldl' (\acc digit -> acc * 16 + digitToInt digit) 0 digits
+  if length digits <= 6 && isUnicodeScalarCodePoint value
+    then pure (chr value)
+    else fail "invalid Unicode scalar escape"
+
+isUnicodeScalar :: Char -> Bool
+isUnicodeScalar = isUnicodeScalarCodePoint . ord
+
+isUnicodeScalarCodePoint :: Int -> Bool
+isUnicodeScalarCodePoint value =
+  value >= 0
+    && value <= 0x10ffff
+    && not (value >= 0xd800 && value <= 0xdfff)
 
 pSymbol :: Parser GrammarV1Token
 pSymbol = GrammarSymbol <$> MP.choice (map MP.chunk orderedSymbols)
   where
     orderedSymbols = sortOn (negate . Text.length)
-      [ "->", "=>", "==", "!=", "<=", ">="
+      [ "->", "=>", "==", "!=", "<=", ">=", "<<", ">>"
       , "@", "(", ")", "{", "}", ".", ",", ":", ";"
       , "[", "]", "|", "+", "-", "*", "/", "%", "=", "<", ">"
       ]
