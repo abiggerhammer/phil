@@ -47,14 +47,14 @@ data GrammarV1Token
   | GrammarSymbol Text
   deriving (Eq, Ord, Show)
 
--- | Exact I<digits> lexical category. Its underlying keyword representation is
--- intentionally not in grammarV1ReservedWords: pSIntType owns recognition
--- before ordinary identifiers, and an incremental parser can fail closed on an
--- unfamiliar signed type until signed-type parsing lands.
+-- | Exact I<digits> lexical category. During the incremental parser transition,
+-- U<w> and I<w> share the closed GrammarUIntType token carrier while preserving
+-- the exact source prefix. Semantic elaboration must inspect that prefix and
+-- therefore cannot infer signedness from a target representation or host type.
 pattern GrammarSIntType :: Text -> GrammarV1Token
 pattern GrammarSIntType value <- (sIntTokenValue -> Just value)
   where
-    GrammarSIntType value = GrammarKeyword value
+    GrammarSIntType value = GrammarUIntType value
 
 -- | Exact digits '.' digits lexical category. The underlying symbol carrier
 -- keeps incremental parsers exhaustive and fail-closed; parser support consumes
@@ -78,7 +78,7 @@ charTokenPrefix = "\NULphil-char:"
 
 sIntTokenValue :: GrammarV1Token -> Maybe Text
 sIntTokenValue token = case token of
-  GrammarKeyword value
+  GrammarUIntType value
     | isSIntSpelling value -> Just value
   _ -> Nothing
 
@@ -260,8 +260,49 @@ grammarV1ReservedWords = Set.fromList
 lexGrammarV1 :: Text -> Text -> Either GrammarV1LexDiagnostic [Located GrammarV1Token]
 lexGrammarV1 source input =
   case MP.runParser (spaceConsumer *> MP.many pLocatedToken <* MP.eof) (Text.unpack source) input of
-    Right tokens -> Right tokens
+    Right tokens -> Right (mergeNegativeIntegerLiterals tokens)
     Left bundle -> Left (diagnosticFromBundle bundle)
+
+-- | The normative grammar has unary minus, while the incremental production AST
+-- already has an exact integer-literal carrier. For the bounded signed-integer
+-- slice, merge only a minus immediately followed by a decimal literal when the
+-- preceding token cannot terminate an expression. Binary subtraction therefore
+-- remains a distinct '-' token (including `x-1` and `x - 1`), while `-128`,
+-- `return -1`, and `x * -2` reach the existing literal parser with their sign
+-- preserved. Non-literal unary negation remains fail-closed for a later parser
+-- slice rather than being guessed here.
+mergeNegativeIntegerLiterals
+  :: [Located GrammarV1Token]
+  -> [Located GrammarV1Token]
+mergeNegativeIntegerLiterals = go Nothing
+  where
+    go _ [] = []
+    go previous (minus : integer : rest)
+      | locatedValue minus == GrammarSymbol "-"
+      , GrammarDecimalInteger digits <- locatedValue integer
+      , unaryPosition previous =
+          let merged = Located
+                (SourceSpan
+                  (sourceSpanStart (locatedSpan minus))
+                  (sourceSpanEnd (locatedSpan integer)))
+                (GrammarDecimalInteger ("-" <> digits))
+          in merged : go (Just merged) rest
+    go _ [token] = [token]
+    go previous (token : rest) = token : go (Just token) rest
+
+    unaryPosition Nothing = True
+    unaryPosition (Just token) = not (canTerminateExpression (locatedValue token))
+
+canTerminateExpression :: GrammarV1Token -> Bool
+canTerminateExpression token = case token of
+  GrammarIdentifier _ -> True
+  GrammarDecimalInteger _ -> True
+  GrammarDecimalFloat _ -> True
+  GrammarChar _ -> True
+  GrammarString _ -> True
+  GrammarKeyword keyword -> keyword `elem` ["true", "false", "unit"]
+  GrammarSymbol symbol -> symbol `elem` [")", "]", "}"]
+  GrammarUIntType _ -> False
 
 spaceConsumer :: Parser ()
 spaceConsumer = Lexer.space MPC.space1 (Lexer.skipLineComment "//") empty
