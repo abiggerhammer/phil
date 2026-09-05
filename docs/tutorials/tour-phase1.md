@@ -32,7 +32,7 @@ component Worker provides Unit {
 
 A **component** is an executable part of a Phil system.
 
-This one is named `Worker`. It **provides** `Unit`, the simplest value type: there is only one ordinary value of that type, written `unit`.
+This one is named `Worker`. The keyword `provides` names the value type the component presents at its public boundary. Here it provides `Unit`, the simplest value type: there is only one ordinary value of that type, written `unit`.
 
 So the body does exactly what it looks like it does:
 
@@ -93,7 +93,7 @@ record FireOnceToken mode linear {
 }
 ```
 
-The field `id` is just a `U64`, but the record as a whole has a stronger contract: a `FireOnceToken` is linear.
+The keyword `mode` introduces the record's structural-use contract; `linear` is the selected mode. The field `id` is just a `U64`, but the record as a whole therefore has a stronger contract: a `FireOnceToken` is linear.
 
 Why would that be useful?
 
@@ -138,7 +138,11 @@ callable OneShot(x : U32) -> U32 {
 
 Read the first line just like a function signature: `OneShot` accepts a `U32` and returns a `U32` on success.
 
-The rest tells us something a normal arrow type would not: this callable is consumed by the successful call. It is a one-shot callable.
+The keyword `outcomes` declares the callable's public set of possible result classes. Here there is one: `success U32`, meaning ordinary successful completion carries a `U32`. Phil can also distinguish typed-negative, terminal, and fatal outcomes when a contract needs those cases to have different meanings.
+
+The singular `outcome success U32 { ... }` block then gives details that apply specifically to that success branch. `state ();` says that this branch exposes no named successor-state slots. `callee consume;` says that taking this branch consumes the callable value itself instead of leaving it available for another call.
+
+So the contract tells us something a normal arrow type would not: this callable is consumed by the successful call. It is a one-shot callable.
 
 A closure can explicitly satisfy that contract:
 
@@ -150,6 +154,10 @@ component Demo() {
     };
 }
 ```
+
+A **closure** is a function value that may carry values from the surrounding lexical environment with it. The keyword `satisfies` names the callable contract this closure claims to implement; the checker still has to verify that the closure really fits that contract. It is not a cast or a self-certification escape hatch.
+
+The keyword `captures` makes the closure's captured environment explicit. `captures ()` means this closure carries no surrounding values. If it captured names, those captured values would remain subject to their ordinary ownership rules; putting a linear value inside a closure does not make it copyable.
 
 The closure is itself a value. `mode linear` says possession of that callable is linear: the program cannot silently duplicate it into two independent call sites.
 
@@ -176,6 +184,8 @@ callable EffectCarrier() -> Unit {
     effects {IO, Audit};
 }
 ```
+
+The keyword `effects` introduces the callable's effect bound; the braces contain the effects that invocation is allowed to contribute.
 
 An effect bound is a **may-effect upper bound**. It says what invocation is permitted to do, not what every execution must do.
 
@@ -221,6 +231,8 @@ callable StoreOperation() -> Unit {
 }
 ```
 
+The keyword `authority` lists authority that the caller must make available for a legal invocation. It does not say that the operation necessarily exercises all of that authority, just as `effects` does not say every allowed effect necessarily happens.
+
 The exact names here stand for ordinary static contracts in the surrounding program. The key point is the shape: authority and effects occupy different parts of the interface.
 
 That lets Phil express useful negative facts. A component that has no path to delete authority is stronger than a component that merely happened not to call delete during testing.
@@ -248,7 +260,7 @@ protocol Ping {
 
 A **protocol** is the rulebook for a conversation.
 
-It says which role may send or receive, what kind of message is involved, and what state follows the action.
+Each `role` gives the conversation as seen from one participant. `send (x : U8)` means that role sends a `U8`; `receive (x : U8)` means it receives one. `then` introduces the session state that follows the communication, and `end Done` says the conversation is locally finished with terminal label `Done`.
 
 The two roles above are dual descriptions of the same one-message conversation:
 
@@ -290,21 +302,25 @@ program main = instantiate Pair;
 
 Read it from the middle outward.
 
-The architecture `Pair` creates two occurrences of the reusable `Worker` component:
+The keyword `instance` creates a concrete architecture occurrence from a reusable declaration. The architecture `Pair` creates two occurrences of `Worker`:
 
 ```phil
 instance left = Worker;
 instance right = Worker;
 ```
 
-Then it activates each occurrence as a member of the program's static Phil process network:
+Those are two semantic occurrences even though they came from the same reusable component definition.
+
+The keyword `process` activates an already-created executable occurrence as a member of the program's static Phil process network:
 
 ```phil
 process left_run = left;
 process right_run = right;
 ```
 
-Finally the root program selects that architecture:
+It does **not** instantiate `Worker` again, and it does not prescribe an OS process or thread.
+
+Finally, `program` declares a root program and `instantiate Pair` selects a fresh root occurrence of the `Pair` architecture:
 
 ```phil
 program main = instantiate Pair;
@@ -358,7 +374,9 @@ architecture ExternalPeer {
 }
 ```
 
-The first role is internal: it is bound to a Phil occurrence.
+Inside an architecture, `protocol ping = Ping;` creates a protocol occurrence named `ping` from the reusable `Ping` family. The `role` bindings then say who participates in each side of that occurrence.
+
+The first role is internal: it is bound to the Phil occurrence `client`.
 
 The second role is explicitly `external`.
 
@@ -394,11 +412,13 @@ provider implementation MemoryStore satisfies Store {}
 opaque provider implementation RemoteStore satisfies Store;
 ```
 
+`provider Store {}` declares the public provider contract. `provider implementation ...` declares an implementation whose body is represented in ordinary Phil source. `opaque provider implementation ...;` declares an implementation whose internals are outside the ordinary source body and must therefore be justified through the relevant external/assurance boundary.
+
+In both implementation forms, `satisfies Store` names the public provider contract the implementation is claiming to refine. As with `satisfies` on a closure, the keyword names the intended contract; it does not prove the claim by itself.
+
 Why distinguish a provider from an ordinary concrete library?
 
 Because Phil wants the architecture to depend on the public contract rather than accidentally depend on one implementation.
-
-But the source word `satisfies` is not magic. It does not let an implementation certify itself.
 
 A provider may need evidence about:
 
@@ -438,6 +458,10 @@ record Routed[T : Type] requires {
 }
 ```
 
+`[T : Type]` introduces a generic parameter named `T` whose kind is `Type`. The keyword `requires` opens the set of facts and capabilities that must be supplied when this generic declaration is instantiated.
+
+Inside that block, `structural T : duplicate;` is an ownership requirement, `proposition true;` is a logical requirement, and `provider P : ProviderContract;` is a provider-contract requirement. They are different requirement categories even though they share one `requires` block.
+
 The important line for ownership is:
 
 ```phil
@@ -466,15 +490,17 @@ callable KeepPositive(x : {v : U32 | v > 0}) -> U32 {
 }
 ```
 
+The keyword `claim` declares a reusable proposition. Here `Positive(x)` names the proposition `x > 0`.
+
 The type:
 
 ```phil
 {v : U32 | v > 0}
 ```
 
-is a **refinement type**. It describes a `U32` together with the proposition that its value is greater than zero.
+is a **refinement type**. It describes a `U32` together with the proposition that its value is greater than zero. The name `v` is the refinement-local name for the value while the proposition is being stated.
 
-The `claim` declaration gives a proposition a reusable name. The `ensures` clause states a postcondition of the callable.
+The keyword `ensures` introduces a postcondition: a proposition the callable contract promises on the relevant successful return boundary.
 
 This does not mean Phil's type checker runs arbitrary theorem search until it feels convinced.
 
@@ -597,6 +623,8 @@ A top-level declaration can carry an explicit key:
 @key("decl:upload-id")
 record UploadId {}
 ```
+
+The `@key(...)` attribute supplies stable declaration lineage for this declaration. The quoted text is an identity carrier, not a display label and not evidence for any semantic claim.
 
 Other occurrence lineage can travel with the source in a **SourceBundle**.
 
