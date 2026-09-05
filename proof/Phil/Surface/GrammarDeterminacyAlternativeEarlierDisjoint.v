@@ -131,7 +131,15 @@ Lemma alternative_exception_coverage_selected :
 Proof.
   intros items exceptions index selected Hcoverage Hselected.
   unfold alternative_exception_coverageb in Hcoverage.
-  apply forallb_forall in Hcoverage.
+  pose proof
+    (proj1
+      (@forallb_forall nat
+        (fun candidate =>
+          orb
+            (nat_memb candidate exceptions)
+            (selected_earlier_first_disjointb items candidate))
+        (seq 0 (List.length items)))
+      Hcoverage) as Hcoverage_all.
   assert (Hlt : index < List.length items).
   {
     apply nth_error_Some.
@@ -143,9 +151,9 @@ Proof.
     apply in_seq.
     lia.
   }
-  specialize (Hcoverage index Hin).
-  apply orb_true_iff in Hcoverage.
-  exact Hcoverage.
+  specialize (Hcoverage_all index Hin).
+  apply orb_true_iff in Hcoverage_all.
+  exact Hcoverage_all.
 Qed.
 
 Definition phase1_surface_resolver_declaration_items : list EbnfExpression :=
