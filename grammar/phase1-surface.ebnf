@@ -9,7 +9,7 @@
 #   "text"     literal token
 #   <CLASS>    lexical token class
 #   a, b       sequence
-#   a | b      alternatives
+#   a | b       alternatives
 #   [ a ]      optional
 #   { a }      zero or more
 #   ( a )      grouping
@@ -29,8 +29,12 @@
 #   is "I" followed by one or more ASCII decimal digits; supported widths are
 #   checked semantically, not by the grammar;
 # - F32 and F64 are reserved primitive-type keywords;
-# - <STRING_LITERAL> is a double-quoted UTF-8 string with escapes for \", \\,
-#   \n, \r, and \t; other escapes are rejected.
+# - <STRING_LITERAL> is a double-quoted Unicode-scalar sequence with escapes for
+#   \", \\, \n, \r, \t, and exact Unicode scalars written \u{hex}; surrogate,
+#   out-of-range, malformed escapes, raw newline, and raw carriage return reject;
+# - <CHAR_LITERAL> is a single-quoted source form that decodes to exactly one
+#   Unicode scalar, with escapes for \', \\, \n, \r, \t, and \u{hex}; empty,
+#   multi-scalar, surrogate, out-of-range, and malformed forms reject.
 #
 # Numeric surface:
 # - runtime fixed-width integer types are written U<w> and I<w>;
@@ -39,11 +43,23 @@
 #   floating negation; the lexer never folds a sign into a numeric literal;
 # - runtime multiplication, division, and remainder share multiplicative
 #   precedence and are written "*", "/", and "%" respectively;
+# - runtime shifts are written "<<" and ">>" and have lower precedence than
+#   additive +/-, so a + b << k parses as (a + b) << k;
 # - explicit numeric-domain/width/signedness conversion is written
 #     convert e to T
 #   and is distinct from transport ... to ... using ... and accept ... as ...;
-# - parsing these forms never proves numeric range, division preconditions,
-#   floating-point behavior, or conversion admissibility.
+# - parsing these forms never proves numeric range, shift-count validity,
+#   division preconditions, floating-point behavior, or conversion admissibility.
+#
+# Text surface:
+# - runtime Char denotes one Unicode scalar and runtime String denotes an exact
+#   immutable finite scalar sequence; encoding/normalization is not parser work;
+# - metadata strings and runtime String literals share one double-quoted lexical
+#   shape but occupy distinct grammar nonterminals and semantic categories;
+# - runtime Char literals use single quotes and runtime String literals use
+#   double quotes; lexical escape decoding never performs Unicode normalization;
+# - codecs, normalization, Unicode properties, grapheme algorithms, and text
+#   indexing/slicing are explicit later library/provider operations, not syntax.
 #
 # Separators:
 # - commas separate parameter/argument/field lists;
@@ -125,7 +141,7 @@ module_decl = "module", qualified_name, ";" ;
 import_decl = "import", qualified_name, [ "{", identifier_list, "}" ], ";" ;
 
 top_level_decl = { attribute }, declaration ;
-attribute = "@", identifier, "(", string_literal, ")" ;
+attribute = "@", identifier, "(", metadata_string_literal, ")" ;
 
 declaration =
     record_decl
@@ -150,10 +166,12 @@ identifier_list = identifier, { ",", identifier } ;
 identifier = <IDENTIFIER> ;
 integer_literal = <DECIMAL_INTEGER> ;
 float_literal = <DECIMAL_FLOAT> ;
+char_literal = <CHAR_LITERAL> ;
+metadata_string_literal = <STRING_LITERAL> ;
+runtime_string_literal = <STRING_LITERAL> ;
 uint_type = <UINT_TYPE> ;
 sint_type = <SINT_TYPE> ;
 float_type = "F32" | "F64" ;
-string_literal = <STRING_LITERAL> ;
 structural_mode = "unrestricted" | "affine" | "linear" ;
 
 generic_params = "[", generic_param, { ",", generic_param }, "]" ;
@@ -198,6 +216,8 @@ type_expression =
 nonreference_type_expression =
     "Unit"
   | "Bool"
+  | "Char"
+  | "String"
   | uint_type
   | sint_type
   | float_type
@@ -470,7 +490,7 @@ field_pattern = identifier, [ "=", pattern ] ;
 expression = base_expression, [ "or", fallback ] ;
 fallback = "fail", failure_target | "reject", base_expression ;
 
-base_expression = command_expression | additive_expression ;
+base_expression = command_expression | shift_expression ;
 
 command_expression =
     construct_expression
@@ -502,6 +522,10 @@ command_expression =
   | prove_expression
   ;
 
+shift_expression =
+  additive_expression,
+  { ( "<<" | ">>" ), additive_expression } ;
+
 additive_expression =
   multiplicative_expression,
   { ( "+" | "-" ), multiplicative_expression } ;
@@ -530,6 +554,8 @@ primary_expression =
   | "true"
   | "false"
   | "unit"
+  | char_literal
+  | runtime_string_literal
   | float_literal
   | integer_literal
   ;
@@ -670,7 +696,7 @@ proposition_atom =
   ;
 
 relation_proposition =
-  additive_expression, relation_operator, additive_expression ;
+  shift_expression, relation_operator, shift_expression ;
 
 relation_operator =
     "=="
