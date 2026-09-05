@@ -160,7 +160,8 @@ plainUIntArithmeticProposition operator width left right result =
 registerUIntArithmeticClaims
   :: StaticContext
   -> Either StaticError StaticContext
-registerUIntArithmeticClaims = foldM ensureClaim
+registerUIntArithmeticClaims context =
+  foldM ensureClaim context [UIntAdd, UIntSubtract, UIntMultiply]
   where
     parameters =
       [ (Name "width", SortNat)
@@ -170,12 +171,12 @@ registerUIntArithmeticClaims = foldM ensureClaim
       ]
     expected = ClaimDecl parameters OpaqueClaim
 
-    ensureClaim context operator =
+    ensureClaim current operator =
       let claimName = operatorAtom operator
-      in case lookupClaim claimName context of
-          Nothing -> declareOpaqueClaim claimName parameters context
+      in case lookupClaim claimName current of
+          Nothing -> declareOpaqueClaim claimName parameters current
           Just actual
-            | actual == expected -> Right context
+            | actual == expected -> Right current
             | otherwise -> Left (DuplicateClaim claimName)
 
 checkOperand
