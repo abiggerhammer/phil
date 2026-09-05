@@ -1,0 +1,147 @@
+name: Phase 1 Steve Provider Witness Production Binding
+
+on:
+  pull_request:
+    paths:
+      - 'generated/SteveProviderQualificationWitnessKernel.hs'
+      - 'src/SteveProviderQualificationWitnessKernel.hs'
+      - 'src/Phil/Examples/Steve/ProviderQualifications.hs'
+      - 'test/Phase1SteveProviderQualificationMain.hs'
+      - 'proof/Phil/Core/SteveProviderQualificationWitness.v'
+      - 'proof/Phil/Core/SteveProviderQualificationWitnessImplementation.v'
+      - 'proof/Phil/Core/SteveProviderQualificationWitnessImplementationExtraction.v'
+      - 'app/SteveProviderQualificationWitnessDecisionCorrespondenceMain.hs'
+      - 'app/SteveProviderQualificationWitnessProductionBindingMain.hs'
+      - 'docs/phase-1/steve-provider-witness-implementation-refinement-v1.md'
+      - 'docs/phase-1/steve-provider-witness-production-binding-v1.md'
+      - '.github/workflows/phase1-steve-provider-witness-production-binding.yml'
+  push:
+    branches: [main]
+    paths:
+      - 'generated/SteveProviderQualificationWitnessKernel.hs'
+      - 'src/SteveProviderQualificationWitnessKernel.hs'
+      - 'src/Phil/Examples/Steve/ProviderQualifications.hs'
+      - 'test/Phase1SteveProviderQualificationMain.hs'
+      - 'proof/Phil/Core/SteveProviderQualificationWitness.v'
+      - 'proof/Phil/Core/SteveProviderQualificationWitnessImplementation.v'
+      - 'proof/Phil/Core/SteveProviderQualificationWitnessImplementationExtraction.v'
+      - 'app/SteveProviderQualificationWitnessDecisionCorrespondenceMain.hs'
+      - 'app/SteveProviderQualificationWitnessProductionBindingMain.hs'
+      - 'docs/phase-1/steve-provider-witness-implementation-refinement-v1.md'
+      - 'docs/phase-1/steve-provider-witness-production-binding-v1.md'
+      - '.github/workflows/phase1-steve-provider-witness-production-binding.yml'
+
+permissions:
+  contents: read
+
+jobs:
+  exact-steve-provider-witness-kernel:
+    runs-on: ubuntu-latest
+    container:
+      image: rocq/rocq-prover:9.2.0
+      options: --user root
+    steps:
+      - uses: actions/checkout@v4
+      - name: Freshly extract exact Steve provider witness kernel
+        shell: bash
+        run: |
+          set -euo pipefail
+          export PATH="/home/rocq/.opam/${COMPILER}/bin:$PATH"
+          rocq c -Q proof/Phil Phil proof/Phil/Core/SteveProviderQualificationWitness.v
+          rocq c -Q proof/Phil Phil proof/Phil/Core/SteveProviderQualificationWitnessImplementation.v
+          rm -f SteveProviderQualificationWitnessKernel.hs
+          rocq c -Q proof/Phil Phil proof/Phil/Core/SteveProviderQualificationWitnessImplementationExtraction.v
+          test -s SteveProviderQualificationWitnessKernel.hs
+          test "$(wc -c < SteveProviderQualificationWitnessKernel.hs)" -eq 1717
+          echo 'f13bc891587300ab3f7d05ff1b40f72103e4a0bc854995f3f49d987b39d19214  SteveProviderQualificationWitnessKernel.hs' | sha256sum -c -
+          cmp SteveProviderQualificationWitnessKernel.hs generated/SteveProviderQualificationWitnessKernel.hs
+          cmp SteveProviderQualificationWitnessKernel.hs src/SteveProviderQualificationWitnessKernel.hs
+      - name: Record exact-kernel identities
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p phase1-steve-provider-witness-exact-kernel
+          cp SteveProviderQualificationWitnessKernel.hs phase1-steve-provider-witness-exact-kernel/
+          sha256sum \
+            SteveProviderQualificationWitnessKernel.hs \
+            generated/SteveProviderQualificationWitnessKernel.hs \
+            src/SteveProviderQualificationWitnessKernel.hs \
+            proof/Phil/Core/SteveProviderQualificationWitness.v \
+            proof/Phil/Core/SteveProviderQualificationWitnessImplementation.v \
+            proof/Phil/Core/SteveProviderQualificationWitnessImplementation.vo \
+            proof/Phil/Core/SteveProviderQualificationWitnessImplementationExtraction.v \
+            > phase1-steve-provider-witness-exact-kernel/PHIL-PROV-STEVE-WITNESS-001.exact.sha256
+          cat phase1-steve-provider-witness-exact-kernel/PHIL-PROV-STEVE-WITNESS-001.exact.sha256
+      - uses: actions/upload-artifact@v4
+        with:
+          name: phil-phase1-steve-provider-witness-exact-kernel
+          path: phase1-steve-provider-witness-exact-kernel
+          if-no-files-found: error
+
+  verify-steve-provider-witness-production-binding:
+    needs: exact-steve-provider-witness-kernel
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: haskell-actions/setup@v2
+        with:
+          ghc-version: '9.6.7'
+          cabal-version: 'latest'
+      - name: Build existing proof certifier substrate with warnings as errors
+        run: cabal build exe:phil-certify-core-scalar --ghc-options=-Werror
+      - uses: actions/download-artifact@v4
+        with:
+          name: phil-phase1-steve-provider-witness-exact-kernel
+          path: phase1-steve-provider-witness-exact-kernel
+      - name: Strict typecheck exact kernel and production-bound Steve witness
+        run: |
+          set -euo pipefail
+          ghc -Wall -Werror -fno-code \
+            phase1-steve-provider-witness-exact-kernel/SteveProviderQualificationWitnessKernel.hs
+          ghc -Wall -Werror -fno-code src/SteveProviderQualificationWitnessKernel.hs
+          cabal exec -- ghc -isrc -Wall -Werror -fno-code \
+            src/Phil/Examples/Steve/ProviderQualifications.hs
+          cabal exec -- ghc \
+            -iphase1-steve-provider-witness-exact-kernel -isrc \
+            -Wall -Werror -fno-code \
+            app/SteveProviderQualificationWitnessDecisionCorrespondenceMain.hs
+          cabal exec -- ghc -isrc -Wall -Werror -fno-code \
+            app/SteveProviderQualificationWitnessProductionBindingMain.hs
+          cabal exec -- ghc -isrc -Wall -Werror -fno-code \
+            test/Phase1SteveProviderQualificationMain.hs
+      - name: Execute #722 exact-kernel controls
+        run: |
+          cabal exec -- runghc \
+            -iphase1-steve-provider-witness-exact-kernel -isrc \
+            -Wall -Werror \
+            app/SteveProviderQualificationWitnessDecisionCorrespondenceMain.hs
+      - name: Execute production binding controls
+        run: |
+          cabal exec -- runghc -isrc -Wall -Werror \
+            app/SteveProviderQualificationWitnessProductionBindingMain.hs
+      - name: Re-run unchanged PROV-016 correspondence
+        run: |
+          cabal exec -- runghc -isrc -Wall -Werror \
+            test/Phase1SteveProviderQualificationMain.hs
+      - name: Record production-binding identities
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p phase1-steve-provider-witness-production-binding
+          sha256sum \
+            phase1-steve-provider-witness-exact-kernel/SteveProviderQualificationWitnessKernel.hs \
+            generated/SteveProviderQualificationWitnessKernel.hs \
+            src/SteveProviderQualificationWitnessKernel.hs \
+            src/Phil/Examples/Steve/ProviderQualifications.hs \
+            test/Phase1SteveProviderQualificationMain.hs \
+            app/SteveProviderQualificationWitnessDecisionCorrespondenceMain.hs \
+            app/SteveProviderQualificationWitnessProductionBindingMain.hs \
+            docs/phase-1/steve-provider-witness-implementation-refinement-v1.md \
+            docs/phase-1/steve-provider-witness-production-binding-v1.md \
+            > phase1-steve-provider-witness-production-binding/PHIL-PROV-STEVE-WITNESS-001.production.sha256
+          cat phase1-steve-provider-witness-production-binding/PHIL-PROV-STEVE-WITNESS-001.production.sha256
+      - uses: actions/upload-artifact@v4
+        with:
+          name: phil-phase1-steve-provider-witness-production-binding
+          path: phase1-steve-provider-witness-production-binding
+          if-no-files-found: error
