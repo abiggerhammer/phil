@@ -2,6 +2,7 @@ From Stdlib Require Import Lists.List Strings.String.
 
 From Phil.Surface Require Import Grammar GrammarDeterminacyCertificate.
 
+Import ListNotations.
 Open Scope string_scope.
 
 (*
