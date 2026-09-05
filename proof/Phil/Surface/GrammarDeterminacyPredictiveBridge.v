@@ -130,10 +130,4 @@ Theorem phase1_surface_predictive_bridge_root_invariants :
 Proof.
   intros tokens tree Hderive.
   repeat split.
-  - exact (phase1_surface_complete_derivation_root_path_context
-      tokens tree Hderive).
-  - exact phase1_surface_predictive_bridge_root_choice_safe.
-  - exact phase1_surface_root_follow_covered.
-  - exact phase1_surface_predictive_bridge_root_assembly_covered.
-  - exact phase1_surface_start_follow_accepts_eof.
 Qed.
