@@ -53,6 +53,11 @@ import Phil.Surface.GrammarV1.LexicalReferenceScope
   ( GrammarV1CheckedLexicalReference (..)
   )
 import Phil.Surface.GrammarV1.Parser
+import Phil.Surface.GrammarV1.SemanticEffectSubjects
+  ( GrammarV1ResolvedEffectSubjectError (..)
+  , GrammarV1ResolvedExternalEffectSubject (..)
+  , grammarV1CheckedResolvedSubjectCallableEffectBounds
+  )
 import Phil.Surface.Syntax (Located (..))
 import System.Exit (exitFailure)
 
@@ -69,6 +74,8 @@ main = do
         subjectIndexedEffectSemantics
     , test "EFF-002 effect subject retargeting requires exact checked correspondence"
         effectSubjectCorrespondenceSemantics
+    , test "EFF-001 nonlocal effect subjects consume exact resolver evidence"
+        externalEffectSubjectSemantics
     , test "SURF-008 simple callable authority types preserve exact Core identities"
         simpleAuthoritySemantics
     , test "SURF-008 callable consumes and borrows preserve exact unresolved resource intent"
@@ -439,6 +446,74 @@ effectSubjectCorrespondenceSemantics = do
         == Left (SemanticEffectSubjectIndexOutOfRange 1)
     )
     "out-of-range effect subject retarget did not fail closed"
+
+externalEffectSubjectSemantics :: Either String ()
+externalEffectSubjectSemantics = do
+  callable <- onlyCallable $ Text.unlines
+    [ "callable ExternalSubjectEffects(local : U8) -> Unit {"
+    , "  effects {Read(local), Read(pkg.store), Read(alias.store)};"
+    , "}"
+    ]
+  (_, lexicalScope) <- mapLeft show
+    (grammarV1CallableParameterBinderScope
+      (DeclarationKey "decl.ExternalEffectSubjects")
+      callable)
+  effects <- callableLiteralEffects callable
+  case effects of
+    [localEffect, packageEffect, aliasEffect] -> do
+      localArg <- oneEffectArgument localEffect
+      packageArg <- oneEffectArgument packageEffect
+      aliasArg <- oneEffectArgument aliasEffect
+      let globalKey = SemanticEffectSubjectKey "semantic.subject.global-store"
+          packageEvidence = GrammarV1ResolvedExternalEffectSubject
+            packageArg globalKey
+          aliasEvidence = GrammarV1ResolvedExternalEffectSubject
+            aliasArg globalKey
+          evidence = [packageEvidence, aliasEvidence]
+      (effectSet, lexicalReferences, usedExternal) <- case
+          grammarV1CheckedResolvedSubjectCallableEffectBounds
+            lexicalScope evidence callable of
+        Just (Right [checked]) -> Right checked
+        other -> Left
+          ("expected mixed local/external effect subjects, got " <> show other)
+      assert (Set.size effectSet == 2)
+        "different global spellings with one semantic key failed to collapse identity"
+      assert (length lexicalReferences == 1)
+        "local effect subject did not retain exactly one lexical witness"
+      assert (usedExternal == evidence)
+        "external effect subject evidence lost exact source occurrence order"
+      case grammarV1CheckedResolvedSubjectCallableEffectBounds
+          lexicalScope [packageEvidence] callable of
+        Just (Left (GrammarV1MissingExternalEffectSubjectEvidence missing)) ->
+          assert (missing == aliasArg)
+            "missing external subject diagnostic did not name the exact occurrence"
+        other -> Left
+          ("missing external subject evidence was not rejected: " <> show other)
+      case grammarV1CheckedResolvedSubjectCallableEffectBounds
+          lexicalScope [packageEvidence, packageEvidence, aliasEvidence] callable of
+        Just (Left (GrammarV1DuplicateExternalEffectSubjectEvidence duplicate)) ->
+          assert (duplicate == packageArg)
+            "duplicate external subject diagnostic lost exact source occurrence"
+        other -> Left
+          ("duplicate external subject evidence was not rejected: " <> show other)
+      let strayLocalEvidence = GrammarV1ResolvedExternalEffectSubject
+            localArg (SemanticEffectSubjectKey "semantic.subject.fake-local")
+      case grammarV1CheckedResolvedSubjectCallableEffectBounds
+          lexicalScope (evidence <> [strayLocalEvidence]) callable of
+        Just (Left (GrammarV1UnexpectedExternalEffectSubjectEvidence stray)) ->
+          assert (stray == localArg)
+            "stray evidence rejection did not preserve lexical-precedence occurrence"
+        other -> Left
+          ("external evidence overrode or escaped an active lexical binder: " <> show other)
+    other -> Left
+      ("expected three source effects in external-subject fixture, got " <> show other)
+
+oneEffectArgument
+  :: Located GrammarV1EffectExpression
+  -> Either String (Located GrammarV1Expression)
+oneEffectArgument (Located _ effect) = case grammarV1EffectArguments effect of
+  [argument] -> Right argument
+  arguments -> Left ("expected exactly one effect argument, got " <> show arguments)
 
 callableLiteralEffects
   :: GrammarV1CallableContractDecl
