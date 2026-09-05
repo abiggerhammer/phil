@@ -375,11 +375,11 @@ structuralDiscardHasNoHiddenFinalizer = do
       affineTarget = (discardTarget Affine "cache")
         { targetStructuralDiscardPhysicalReclamation = Set.singleton "drop-stack-slot" }
       affineContract = discardContractFor affine
-  mapLeft show (checkStructuralDiscardCorrespondence affineContract affine affineTarget)
+  _ <- mapLeft show (checkStructuralDiscardCorrespondence affineContract affine affineTarget)
 
   let unrestricted = discardTrace Unrestricted "counter"
       unrestrictedTarget = discardTarget Unrestricted "counter"
-  mapLeft show
+  _ <- mapLeft show
     (checkStructuralDiscardCorrespondence
       (discardContractFor unrestricted)
       unrestricted
