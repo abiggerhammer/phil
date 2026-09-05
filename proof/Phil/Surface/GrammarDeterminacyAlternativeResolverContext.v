@@ -38,7 +38,8 @@ Proof.
   - discriminate Hsuffix.
   - destruct last as [actual | index | index | |].
     + simpl in Hsuffix.
-      apply String.eqb_eq in Hsuffix.
+      apply andb_true_iff in Hsuffix as [Hname _].
+      apply String.eqb_eq in Hname.
       subst actual.
       exists (List.rev reversed).
       pose proof (f_equal (@List.rev SyntaxPathStep) Hrev) as Hshape.
