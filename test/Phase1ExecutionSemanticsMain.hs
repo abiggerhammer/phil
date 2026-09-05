@@ -5,6 +5,14 @@ module Main (main) where
 import qualified Data.Map.Strict as Map
 import qualified Data.Set as Set
 import Phil.Assurance.Types (Digest (..))
+import Phil.Core.CheckedUIntArithmetic
+  ( CheckedUIntArithmeticDecision (..)
+  , CheckedUIntArithmeticError (..)
+  , CheckedUIntArithmeticSuccess (..)
+  , checkedUIntOverflowFailure
+  , checkedUIntUnderflowFailure
+  , checkCheckedUIntArithmetic
+  )
 import Phil.Core.Checker (emptyCheckState)
 import Phil.Core.Discharge
   ( DischargeError (..)
@@ -73,6 +81,8 @@ main = do
         contextualUIntLiteralRange
     , test "EXEC-008 plain UInt arithmetic is exact or remains an explicit obligation"
         exactPlainUIntArithmetic
+    , test "EXEC-009 checked UInt arithmetic exposes exact success and explicit range outcomes"
+        checkedUIntArithmeticOutcomes
     ]
   if and results then pure () else exitFailure
 
@@ -307,6 +317,45 @@ exactPlainUIntArithmetic = do
         "ADR-025 unresolved arithmetic obligation lost its exact proposition"
     other -> Left
       ("plain symbolic arithmetic selected target behavior without proof/policy: " <> show other)
+
+checkedUIntArithmeticOutcomes :: Either String ()
+checkedUIntArithmeticOutcomes = do
+  case checkCheckedUIntArithmetic
+      UIntAdd 8 (ScalarUIntLiteral 8 10) (ScalarUIntLiteral 8 20) of
+    Right (CheckedUIntArithmeticSucceeded success) -> do
+      assert
+        (checkedUIntArithmeticResult success == ScalarUIntLiteral 8 30)
+        "checked U8 addition lost its exact mathematical success result"
+      assert
+        ( checkedUIntArithmeticExactProposition success
+            == plainUIntArithmeticProposition
+                UIntAdd 8 (RefUInt 8 10) (RefUInt 8 20) (RefUInt 8 30)
+        )
+        "checked U8 addition success lost its exact arithmetic evidence proposition"
+    other -> Left ("checked U8 addition did not take the success branch: " <> show other)
+
+  assert
+    ( checkCheckedUIntArithmetic
+        UIntAdd 8 (ScalarUIntLiteral 8 255) (ScalarUIntLiteral 8 1)
+        == Right (CheckedUIntArithmeticNegative checkedUIntOverflowFailure)
+    )
+    "checked U8 addition overflow did not select its explicit typed-negative outcome"
+  assert
+    ( checkCheckedUIntArithmetic
+        UIntSubtract 8 (ScalarUIntLiteral 8 0) (ScalarUIntLiteral 8 1)
+        == Right (CheckedUIntArithmeticNegative checkedUIntUnderflowFailure)
+    )
+    "checked U8 subtraction underflow did not select its explicit typed-negative outcome"
+  assert
+    ( checkCheckedUIntArithmetic
+        UIntMultiply 8 (ScalarUIntLiteral 8 16) (ScalarUIntLiteral 8 16)
+        == Right (CheckedUIntArithmeticNegative checkedUIntOverflowFailure)
+    )
+    "checked U8 multiplication overflow did not select its explicit typed-negative outcome"
+  case checkCheckedUIntArithmetic
+      UIntAdd 8 (ScalarUIntLiteral 16 1) (ScalarUIntLiteral 8 1) of
+    Left (CheckedUIntArithmeticOperandTypeMismatch _ (ScalarUIntLiteral 16 1) 8) -> Right ()
+    other -> Left ("checked arithmetic coerced a wrong-width operand: " <> show other)
 
 baseTrace :: [SemanticInitializationEvent] -> SemanticInitializationTrace
 baseTrace events = SemanticInitializationTrace
