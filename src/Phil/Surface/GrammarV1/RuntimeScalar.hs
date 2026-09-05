@@ -6,20 +6,23 @@ module Phil.Surface.GrammarV1.RuntimeScalar
 
 import qualified Data.Text as Text
 import qualified Data.Text.Read as TextRead
+import Phil.Core.SIntArithmetic
+  ( SIntLiteral (..)
+  , SIntType (..)
+  , sIntLiteralInRange
+  , sIntTypeFromCoreType
+  )
 import Phil.Core.Scalar
   ( ScalarLiteral (..)
   , scalarLiteralInRange
   )
-import Phil.Core.Syntax (Ty (..))
+import Phil.Core.Syntax (Ty (TyUInt))
 import Phil.Surface.GrammarV1.Elaborate (grammarV1PrimitiveType)
 import Phil.Surface.GrammarV1.Parser
   ( GrammarV1Expression (..)
   , GrammarV1Type
   )
 
--- | Fail-closed contextual runtime-scalar elaboration errors. Grammar-v1 integer
--- literals are intentionally unsuffixed; width and signedness come only from the
--- competent contextual type judgment.
 data GrammarV1RuntimeScalarError
   = GrammarV1RuntimeUIntContextRequired GrammarV1Type
   | GrammarV1RuntimeSIntContextRequired GrammarV1Type
@@ -29,8 +32,6 @@ data GrammarV1RuntimeScalarError
   | GrammarV1RuntimeSIntLiteralOutOfRange Int Integer
   deriving (Eq, Show)
 
--- | Elaborate one unsuffixed Grammar-v1 integer literal under an exact UInt[w]
--- context. Signed source literals cannot be reinterpreted as unsigned values.
 grammarV1ContextualUIntLiteral
   :: GrammarV1Type
   -> GrammarV1Expression
@@ -46,24 +47,20 @@ grammarV1ContextualUIntLiteral contextualType expression = do
     then Right literal
     else Left (GrammarV1RuntimeUIntLiteralOutOfRange width value)
 
--- | Elaborate one unsuffixed Grammar-v1 integer literal under an exact I[w]
--- context. The negative sign is source-semantic data, not a target signedness
--- reinterpretation. Range admission is the exact mathematical interval
--- [-2^(w-1), 2^(w-1)-1].
 grammarV1ContextualSIntLiteral
   :: GrammarV1Type
   -> GrammarV1Expression
-  -> Either GrammarV1RuntimeScalarError ScalarLiteral
+  -> Either GrammarV1RuntimeScalarError SIntLiteral
 grammarV1ContextualSIntLiteral contextualType expression = do
-  width <- case grammarV1PrimitiveType contextualType of
-    Just (TySInt exactWidth) -> Right exactWidth
-    _ -> Left (GrammarV1RuntimeSIntContextRequired contextualType)
+  ty <- case grammarV1PrimitiveType contextualType >>= sIntTypeFromCoreType of
+    Just exactType -> Right exactType
+    Nothing -> Left (GrammarV1RuntimeSIntContextRequired contextualType)
   literalText <- integerLiteralText expression
   value <- exactSignedDecimal literalText
-  let literal = ScalarSIntLiteral width value
-  if scalarLiteralInRange literal
+  let literal = SIntLiteral ty value
+  if sIntLiteralInRange literal
     then Right literal
-    else Left (GrammarV1RuntimeSIntLiteralOutOfRange width value)
+    else Left (GrammarV1RuntimeSIntLiteralOutOfRange (sIntWidth ty) value)
 
 integerLiteralText
   :: GrammarV1Expression
