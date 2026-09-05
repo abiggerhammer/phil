@@ -72,10 +72,15 @@ Bool
 U8
 U32
 U64
+I8
+I32
+I64
+F32
+F64
 Unit
 ```
 
-`Bool` is the Boolean type. Its two literal values are the keywords `true` and `false`. `Unit` is the singleton type we already saw. Spellings such as `U8`, `U32`, and `U64` are unsigned-integer type tokens; the exact supported widths are checked semantically rather than being a fixed list baked into the lexer.
+`Bool` is the Boolean type. Its two literal values are the keywords `true` and `false`. `Unit` is the singleton type we already saw. Spellings such as `U8`, `U32`, and `U64` are fixed-width unsigned integers; `I8`, `I32`, and `I64` are their signed counterparts. `F32` and `F64` are the two basic floating-point scalar types. Integer widths and floating-point semantics are part of the checked language contract rather than being inherited from a host or backend default.
 
 It also has records, sums, tuples, byte sequences, refinements, evidence-bearing types, protocol/session types, and named architectural contracts.
 
