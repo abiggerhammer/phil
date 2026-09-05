@@ -228,7 +228,9 @@ component ReadId(item : Inspectable) provides U64 {
 
 The keyword `borrow` opens a scoped shared loan of `item`. The keyword `as` introduces the local name `view` for that borrowed view.
 
-The view is not a second owner. While the loan is live, operations that would consume or invalidate the owner are blocked. The borrowed view is scoped to the borrow body and cannot simply escape as a longer-lived value. When the borrow scope ends, the unique owner remains the owner.
+The `return` inside the borrow body is easy to misread. It returns the **result of the borrow body** to the enclosing `borrow` expression; it does not return ownership of `item`. In this example, `view.id` is a `U64`, and `U64` is unrestricted, so the code is allowed to obtain that ordinary value through the view and return it from the borrow scope. No second `Inspectable` owner is created and the original owner has not moved.
+
+The view itself is different. It is a temporary loan tied to this borrow scope, not an owned value that may outlive the scope. Replacing `return view.id;` with `return view;` would try to make the loan escape and is rejected. Likewise, trying to consume or invalidate `item` while `view` is live is rejected. When the borrow scope ends, the loan disappears and the unique owner remains the owner.
 
 This is deliberately much narrower than a general aliasing or mutable-reference system. The point is to make temporary inspection compatible with exact ownership rather than to make ownership disappear.
 
@@ -997,9 +999,9 @@ If you already understand Phase 0 and want the design delta rather than another 
 
 If you remember only a few things from this tour, remember these:
 
-- **Phil is still an ordinary programming language.** Modules, types, local bindings, construction, functions, branches, pattern matches, borrows, joins, and loops work alongside the systems contracts rather than being replaced by them.
+- **Phil is still an ordinary programming language.** Modules, types, local bindings, construction, functions, branches, and pattern matches work alongside the systems contracts rather than being replaced by them.
 - **Phil makes system rules part of the program.** Protocols, ownership, authority, effects, obligations, and architecture are checked objects rather than comments.
-- **Ownership can be structural.** Unrestricted, affine, and linear values have different copy/drop permissions, and borrowing or looping does not erase those rules.
+- **Ownership can be structural.** Unrestricted, affine, and linear values have different copy/drop permissions, and those rules survive borrows, branches, joins, and loop backedges.
 - **Contracts describe semantic boundaries.** A machine signature is often only one part of a callable or provider interface.
 - **Effects are not authority.** What code may do and what it is permitted to do are separate facts.
 - **Protocols constrain communication; component code performs it.** Assigning a process to a protocol role does not inject a `send` or `receive` into its body.
