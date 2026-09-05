@@ -372,7 +372,7 @@ checkedUIntArithmeticOutcomes = do
 structuralDiscardHasNoHiddenFinalizer :: Either String ()
 structuralDiscardHasNoHiddenFinalizer = do
   let affine = discardTrace Affine "cache"
-      affineTarget = discardTarget Affine "cache"
+      affineTarget = (discardTarget Affine "cache")
         { targetStructuralDiscardPhysicalReclamation = Set.singleton "drop-stack-slot" }
       affineContract = discardContractFor affine
   mapLeft show (checkStructuralDiscardCorrespondence affineContract affine affineTarget)
