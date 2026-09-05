@@ -1,6 +1,6 @@
 {
   "authority": "grammar/phase1-surface.ebnf",
-  "grammar_sha256": "cf957c4cc27f8f2814e312eca8885a76bce09deaa0a9977904963130c76a145e",
+  "grammar_sha256": "5c2b140cc2f20748f1c42c680899d6e003d5fb4112e8feb7828ee6f06516369f",
   "reviewed_overlaps": [
     {
       "kind": "alternative-first-overlap",
@@ -44,7 +44,7 @@
       "path": "proposition_atom",
       "tokens": ["class:<IDENTIFIER>"],
       "detail": "branches 0 and 4",
-      "disposition": "A name-shaped additive expression is a relation only when an explicit relation operator follows its complete left operand; otherwise the claim-application form is selected by its required argument list.",
+      "disposition": "A name-shaped shift expression is a relation only when an explicit relation operator follows its complete left operand; otherwise the claim-application form is selected by its required argument list.",
       "pressure": ["test/Phase1GrammarV1OutcomeCalleeMain.hs", "test/Phase1GrammarV1StructuralParserMain.hs"]
     },
     {
@@ -53,7 +53,7 @@
       "path": "proposition_atom",
       "tokens": ["literal:\"(\""],
       "detail": "branches 0 and 1",
-      "disposition": "A following relation operator after the balanced left additive operand commits relation_proposition; otherwise balanced parenthesized proposition syntax closes the atom.",
+      "disposition": "A following relation operator after the balanced left shift expression commits relation_proposition; otherwise balanced parenthesized proposition syntax closes the atom.",
       "pressure": ["test/Phase1GrammarV1StructuralParserMain.hs", "test/Phase1GrammarV1DeterminacyMain.hs"]
     },
     {
@@ -62,7 +62,7 @@
       "path": "proposition_atom",
       "tokens": ["literal:\"false\""],
       "detail": "branches 0 and 3",
-      "disposition": "Bare 'false' is the literal proposition only when no relation operator follows; with a relation operator it is the complete left additive operand of relation_proposition.",
+      "disposition": "Bare 'false' is the literal proposition only when no relation operator follows; with a relation operator it is the complete left shift operand of relation_proposition.",
       "pressure": ["test/Phase1GrammarV1StructuralParserMain.hs"]
     },
     {
@@ -71,7 +71,7 @@
       "path": "proposition_atom",
       "tokens": ["literal:\"true\""],
       "detail": "branches 0 and 2",
-      "disposition": "Bare 'true' is the literal proposition only when no relation operator follows; with a relation operator it is the complete left additive operand of relation_proposition.",
+      "disposition": "Bare 'true' is the literal proposition only when no relation operator follows; with a relation operator it is the complete left shift operand of relation_proposition.",
       "pressure": ["test/Phase1GrammarV1StructuralParserMain.hs"]
     },
     {
