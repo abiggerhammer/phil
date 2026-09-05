@@ -79,6 +79,8 @@ jobs:
         run: cabal exec -- runghc -Wall -Werror -isrc test/Phase1ExecutionSemanticsMain.hs
       - name: EXEC-009 checked UInt outcome lowering fidelity
         run: cabal exec -- runghc -Wall -Werror -isrc test/Phase1CheckedUIntArithmeticLoweringMain.hs
+      - name: EXEC-011 explicit environmental observation boundary
+        run: cabal exec -- runghc -Wall -Werror -isrc test/Phase1EnvironmentObservationMain.hs
       - name: EXEC-014 resource-specific release competence
         run: cabal exec -- runghc -Wall -Werror -isrc test/Phase1ExplicitReleaseMain.hs
       - name: EXEC-015 omitted else identity predecessor
