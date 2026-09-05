@@ -1,6 +1,6 @@
 {
   "authority": "grammar/phase1-surface.ebnf",
-  "grammar_sha256": "251139cbde8bcb54effdea8130ae9d668db0b52d8e8687cec8e61d91bea56437",
+  "grammar_sha256": "cf957c4cc27f8f2814e312eca8885a76bce09deaa0a9977904963130c76a145e",
   "reviewed_overlaps": [
     {
       "kind": "alternative-first-overlap",
@@ -109,15 +109,6 @@
       "detail": "another repetition can begin with a token that can also follow the repetition",
       "disposition": "Inside construct fields, comma followed by an identifier assignment continues the list; comma followed by '}' is the admitted trailing comma.",
       "pressure": ["test/Phase1GrammarV1OfferCaseMain.hs"]
-    },
-    {
-      "kind": "repeat-follow-overlap",
-      "rule": "qualified_name",
-      "path": "qualified_name/seq[1]",
-      "tokens": ["literal:\".\""],
-      "detail": "another repetition can begin with a token that can also follow the repetition",
-      "disposition": "A qualified name consumes the maximal dot-identifier chain. The same token shape is therefore never reinterpreted as a postfix projection inside that name; postfix projection begins only after the maximal qualified-name occurrence has closed in its surrounding production.",
-      "pressure": ["test/Phase1GrammarV1DeterminacyMain.hs", "test/Phase1GrammarV1ProductFunctionMain.hs"]
     },
     {
       "kind": "repeat-follow-overlap",
