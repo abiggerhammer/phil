@@ -154,21 +154,24 @@ grammarV1LogicalProposition source = case source of
       <*> grammarV1LogicalProposition right
   _ -> Nothing
 
--- | Elaborate only intrinsic primitive type forms whose Core representation is
--- independent of names, expressions, propositions, or static-reference
--- resolution. Grammar-v1 deliberately accepts arbitrary U<digits> tokens, so
--- zero and widths that cannot be represented by Core's Int carrier fail closed
--- instead of wrapping, truncating, or being guessed as another type.
+-- | Elaborate intrinsic primitive types without representation guessing. The
+-- closed parser carrier retains the exact U/I prefix, and this bridge is the
+-- semantic point that distinguishes unsigned from signed fixed-width integers.
+-- Width zero and widths that cannot fit Core's Int carrier fail closed.
 grammarV1PrimitiveType :: GrammarV1Type -> Maybe Ty
 grammarV1PrimitiveType sourceType = case sourceType of
   GrammarV1UnitType -> Just TyUnit
   GrammarV1BoolType -> Just TyBool
-  GrammarV1UnsignedType widthText -> TyUInt <$> grammarV1UIntWidth widthText
+  GrammarV1UnsignedType widthText ->
+    case Text.uncons widthText of
+      Just ('U', _) -> TyUInt <$> grammarV1IntegerWidth 'U' widthText
+      Just ('I', _) -> TySInt <$> grammarV1IntegerWidth 'I' widthText
+      _ -> Nothing
   _ -> Nothing
 
-grammarV1UIntWidth :: Text.Text -> Maybe Int
-grammarV1UIntWidth widthText = do
-  digits <- Text.stripPrefix (Text.singleton 'U') widthText
+grammarV1IntegerWidth :: Char -> Text.Text -> Maybe Int
+grammarV1IntegerWidth prefix widthText = do
+  digits <- Text.stripPrefix (Text.singleton prefix) widthText
   case TextRead.decimal digits :: Either String (Integer, Text.Text) of
     Right (width, rest)
       | Text.null rest
@@ -178,9 +181,9 @@ grammarV1UIntWidth widthText = do
 
 -- | Elaborate only scalar literal expressions whose Core reference-term meaning
 -- is intrinsic and context-free. Integer literals become Nat terms and Boolean
--- literals remain Boolean terms. Names, calls, projections, unit, and compound
--- expressions remain unresolved for a competent contextual elaborator rather
--- than being guessed into RefVar or another semantic category.
+-- literals remain Boolean terms. A negative decimal literal is intentionally not
+-- a Nat; signed fixed-width interpretation is contextual and handled by the
+-- signed runtime-scalar bridge.
 grammarV1IntrinsicRefLiteral :: GrammarV1Expression -> Maybe RefTerm
 grammarV1IntrinsicRefLiteral expression = case expression of
   GrammarV1IntegerExpression literalText ->
