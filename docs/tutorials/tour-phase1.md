@@ -260,7 +260,7 @@ protocol Ping {
 
 A **protocol** is the rulebook for a conversation.
 
-Each `role` gives the conversation as seen from one participant. `send (x : U8)` means that role sends a `U8`; `receive (x : U8)` means it receives one. `then` introduces the session state that follows the communication, and `end Done` says the conversation is locally finished with terminal label `Done`.
+Each `role` gives the conversation as seen from one participant. `send (x : U8)` means that role is allowed and required to send a `U8` at this point in the session; `receive (x : U8)` is the dual receive state. `then` introduces the session state that follows the communication, and `end Done` says the conversation is locally finished with terminal label `Done`.
 
 The two roles above are dual descriptions of the same one-message conversation:
 
@@ -268,6 +268,28 @@ The two roles above are dual descriptions of the same one-message conversation:
 Client: send U8 → done
 Server: receive U8 → done
 ```
+
+There is an important distinction here: the `send` inside the **protocol declaration** describes a legal session transition. It does not itself execute a send.
+
+Actual component code performs communication with the term-level `send ... on ...` operation. In source, the shape looks like this:
+
+```phil
+component ClientWorker(endpoint : Client[Ping], payload : U8) {
+    let done = send payload on endpoint;
+    close done;
+}
+```
+
+Here `endpoint` is a live client-side session endpoint and `payload` is the byte to send. `send payload on endpoint` consumes the current endpoint and produces the successor endpoint for the `end Done` state; `close done` then closes that terminal endpoint.
+
+So there are already two separate layers:
+
+```text
+protocol declaration   says which send is legal
+component body         actually performs the send
+```
+
+A surrounding architecture still has to supply the **exact** endpoint occurrence and payload to the component. Merely assigning a component to a protocol role does not synthesize the `send` expression or silently inject arbitrary runtime values into its body.
 
 One actual use of `Ping` is a **protocol instance**. Two different instances of the same protocol family are still different conversations.
 
@@ -374,9 +396,9 @@ architecture ExternalPeer {
 }
 ```
 
-Inside an architecture, `protocol ping = Ping;` creates a protocol occurrence named `ping` from the reusable `Ping` family. The `role` bindings then say who participates in each side of that occurrence.
+Inside an architecture, `protocol ping = Ping;` creates a protocol occurrence named `ping` from the reusable `Ping` family. The `role` bindings then say who is responsible for each side of that occurrence.
 
-The first role is internal: it is bound to the Phil occurrence `client`.
+The first role is internal: it is assigned to the Phil occurrence `client`. That assignment does **not** execute the Client role and does not inject an endpoint into `ClientWorker` by magic; the component body still has to perform the appropriate `send`/`receive` operations using the exact endpoint values supplied at its execution boundary.
 
 The second role is explicitly `external`.
 
@@ -685,20 +707,31 @@ The rule to remember is simpler than the machinery:
 
 > **Looking the same is not the same as being the same.**
 
-## 18. A complete small source file
+## 18. How the Ping pieces fit
 
-We can now read a complete canonical Phase 1 example without introducing new concepts halfway through it:
+We now have enough vocabulary to put the three different responsibilities next to one another without pretending they are the same thing.
+
+First, the protocol says what communication is legal:
 
 ```phil
 protocol Ping {
     role Client = send (x : U8) then end Done;
     role Server = receive (x : U8) then end Done;
 }
+```
 
-component ClientWorker provides Unit {
-    return unit;
+Second, executable component code performs the communication when it is given the appropriate runtime values:
+
+```phil
+component ClientWorker(endpoint : Client[Ping], payload : U8) {
+    let done = send payload on endpoint;
+    close done;
 }
+```
 
+Third, the architecture says which semantic occurrence is responsible for which protocol role:
+
+```phil
 architecture ExternalPeer {
     instance client = ClientWorker;
     process client_run = client;
@@ -710,22 +743,27 @@ architecture ExternalPeer {
 program main = instantiate ExternalPeer;
 ```
 
-From top to bottom:
+Read those as three separate statements of meaning:
 
-1. `Ping` describes a legal one-byte conversation.
-2. `ClientWorker` is an executable Phil component.
-3. `ExternalPeer` creates one occurrence of that component.
-4. `client_run` activates that occurrence in the Phil process population.
-5. `ping` creates a protocol occurrence from the reusable family.
-6. The client role is internal and belongs to `client`.
-7. The server role is explicitly outside Phil.
-8. `main` selects the architecture as the root program.
+```text
+Ping                 says the Client role must send one U8
+ClientWorker         contains code that actually performs a send
+role ping.Client ... says the client occurrence is responsible for that role
+```
 
-Notice how much of the system is now inspectable from source without choosing a physical implementation.
+The earlier version of this Tour accidentally collapsed the last two. It showed a `ClientWorker` that merely returned `unit`, then assigned that occurrence to `ping.Client`, which made it look as though role assignment automatically supplied behavior. It does not.
 
-We have not said TCP or Unix sockets. We have not assigned an OS thread. We have not selected a serialization library. We have not smuggled in ambient network authority. Those are later competent choices.
+There is still one boundary this compact example intentionally leaves visible: **runtime provisioning**. `ClientWorker` needs the exact `Ping.Client` endpoint occurrence and a `U8` payload. The architecture/entry machinery has to supply those exact runtime values; the role declaration alone is not a constructor call, dependency injector, or hidden endpoint parameter.
 
-That is what “building systems from the outside in” means in Phil: establish the semantic boundaries first, then choose implementations that satisfy them.
+The current Phase 1 production corpus checks the term-level `send value on endpoint` form and separately checks architecture process/role participation. Until the canonical whole-source path has a single small fixture that closes that runtime-provisioning seam end to end, this Tour should not pretend that the seam is implicit.
+
+That distinction is useful in its own right:
+
+> **The protocol constrains behavior. The component performs behavior. The architecture assigns responsibility and supplies the surrounding resources.**
+
+Notice also what none of those layers has chosen yet. We have not said TCP or Unix sockets. We have not assigned an OS thread. We have not selected a serialization library. We have not smuggled in ambient network authority. Those are later competent choices.
+
+That is what “building systems from the outside in” means in Phil: establish the semantic boundaries first, then choose implementations and runtime bindings that satisfy them.
 
 ## 19. Where the bigger examples fit
 
@@ -762,6 +800,7 @@ If you remember only a few things from this tour, remember these:
 - **Ownership can be structural.** Unrestricted, affine, and linear values have different copy/drop permissions.
 - **Contracts describe semantic boundaries.** A machine signature is often only one part of a callable or provider interface.
 - **Effects are not authority.** What code may do and what it is permitted to do are separate facts.
+- **Protocols constrain communication; component code performs it.** Assigning a process to a protocol role does not inject a `send` or `receive` into its body.
 - **Protocols are conversations with state.** Two instances of the same protocol are still different sessions.
 - **Architecture says which semantic occurrences exist.** Equal-looking instances do not merge.
 - **Phil processes are not threads.** Threads, event loops, and placement belong to realization.
