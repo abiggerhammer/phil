@@ -391,6 +391,18 @@ Proof.
   exact Hguard.
 Qed.
 
+Lemma oracle_assembly_optional_equation :
+  forall fuel path outer_follow body,
+    oracle_assembly_coverage_fuel
+      (S fuel) path outer_follow (EOptional body) =
+    andb
+      (expression_follow_disjointb body outer_follow)
+      (oracle_assembly_coverage_fuel
+        fuel (descend path AtOptionalBody) outer_follow body).
+Proof.
+  reflexivity.
+Qed.
+
 Lemma oracle_assembly_optional_covered :
   forall fuel path outer_follow body,
     oracle_assembly_coverage_fuel
@@ -400,9 +412,24 @@ Lemma oracle_assembly_optional_covered :
       fuel (descend path AtOptionalBody) outer_follow body = true.
 Proof.
   intros fuel path outer_follow body Hcovered.
-  simpl in Hcovered.
+  rewrite oracle_assembly_optional_equation in Hcovered.
   apply andb_true_iff in Hcovered as [Hdisjoint Hbody].
   split; assumption.
+Qed.
+
+Lemma oracle_assembly_repetition_equation :
+  forall fuel path outer_follow body,
+    oracle_assembly_coverage_fuel
+      (S fuel) path outer_follow (ERepetition body) =
+    andb
+      (repetition_assembly_guardb path outer_follow body)
+      (oracle_assembly_coverage_fuel
+        fuel
+        (descend path AtRepetitionBody)
+        (phase1_surface_repetition_local_follow body outer_follow)
+        body).
+Proof.
+  reflexivity.
 Qed.
 
 Lemma oracle_assembly_repetition_covered :
@@ -417,7 +444,7 @@ Lemma oracle_assembly_repetition_covered :
       body = true.
 Proof.
   intros fuel path outer_follow body Hcovered.
-  simpl in Hcovered.
+  rewrite oracle_assembly_repetition_equation in Hcovered.
   apply andb_true_iff in Hcovered as [Hguard Hbody].
   split; assumption.
 Qed.
