@@ -5,8 +5,15 @@ module Main (main) where
 import qualified Data.Map.Strict as Map
 import qualified Data.Set as Set
 import Phil.Assurance.Types (Digest (..))
+import Phil.Core.Scalar (ScalarLiteral (..))
 import Phil.Surface.GrammarV1.Parser
-  ( parseGrammarV1StructuralSource
+  ( GrammarV1Expression (..)
+  , GrammarV1Type (..)
+  , parseGrammarV1StructuralSource
+  )
+import Phil.Surface.GrammarV1.RuntimeScalar
+  ( GrammarV1RuntimeScalarError (..)
+  , grammarV1ContextualUIntLiteral
   )
 import Phil.Systems.IR
   ( StageContract (..)
@@ -40,6 +47,8 @@ main = do
         semanticValueReinitializationRejects
     , test "EXEC-006 initialization evidence must be bound into the exact StageContract"
         missingInitializationRelationRejects
+    , test "EXEC-007 unsuffixed runtime integer literals use exact contextual UInt range"
+        contextualUIntLiteralRange
     ]
   if and results then pure () else exitFailure
 
@@ -150,6 +159,55 @@ missingInitializationRelationRejects = do
         "missing-relation rejection did not preserve the exact initialization trace"
     other -> Left
       ("unbound semantic initialization evidence was accepted: " <> show other)
+
+contextualUIntLiteralRange :: Either String ()
+contextualUIntLiteralRange = do
+  assert
+    ( grammarV1ContextualUIntLiteral
+        (GrammarV1UnsignedType "U8")
+        (GrammarV1IntegerExpression "0")
+        == Right (ScalarUIntLiteral 8 0)
+    )
+    "U8 zero did not elaborate to exact Core scalar identity"
+  assert
+    ( grammarV1ContextualUIntLiteral
+        (GrammarV1UnsignedType "U8")
+        (GrammarV1IntegerExpression "255")
+        == Right (ScalarUIntLiteral 8 255)
+    )
+    "U8 maximum did not elaborate to exact Core scalar identity"
+  case grammarV1ContextualUIntLiteral
+      (GrammarV1UnsignedType "U8")
+      (GrammarV1IntegerExpression "256") of
+    Left (GrammarV1RuntimeUIntLiteralOutOfRange 8 256) -> Right ()
+    other -> Left ("U8 out-of-range literal did not reject exactly: " <> show other)
+  assert
+    ( grammarV1ContextualUIntLiteral
+        (GrammarV1UnsignedType "U32")
+        (GrammarV1IntegerExpression "256")
+        == Right (ScalarUIntLiteral 32 256)
+    )
+    "same unsuffixed literal did not receive its exact contextual U32 identity"
+  case grammarV1ContextualUIntLiteral
+      (GrammarV1UnsignedType "U8")
+      (GrammarV1IntegerExpression "12x") of
+    Left (GrammarV1RuntimeIntegerLiteralMalformed "12x") -> Right ()
+    other -> Left ("malformed integer text was partially consumed: " <> show other)
+  case grammarV1ContextualUIntLiteral
+      GrammarV1BoolType
+      (GrammarV1IntegerExpression "1") of
+    Left (GrammarV1RuntimeUIntContextRequired GrammarV1BoolType) -> Right ()
+    other -> Left ("integer literal acquired a non-UInt runtime context: " <> show other)
+  case grammarV1ContextualUIntLiteral
+      (GrammarV1UnsignedType "U0")
+      (GrammarV1IntegerExpression "0") of
+    Left (GrammarV1RuntimeUIntContextRequired (GrammarV1UnsignedType "U0")) -> Right ()
+    other -> Left ("invalid UInt width became a runtime scalar context: " <> show other)
+  case grammarV1ContextualUIntLiteral
+      (GrammarV1UnsignedType "U8")
+      (GrammarV1BoolExpression True) of
+    Left (GrammarV1RuntimeIntegerLiteralRequired (GrammarV1BoolExpression True)) -> Right ()
+    other -> Left ("non-integer expression entered UInt literal elaboration: " <> show other)
 
 baseTrace :: [SemanticInitializationEvent] -> SemanticInitializationTrace
 baseTrace events = SemanticInitializationTrace
