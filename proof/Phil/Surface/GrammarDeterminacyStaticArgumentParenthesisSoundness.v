@@ -312,8 +312,7 @@ Proof.
         as [suffix [Hstart _]].
       rewrite Hinput_open in Hstart.
       discriminate Hstart.
-    + vm_compute in Hnth.
-      discriminate Hnth.
+    + destruct index; vm_compute in Hnth; discriminate Hnth.
 Qed.
 
 Lemma phase1_surface_integer_literal_lookup_exact :
