@@ -1,4 +1,4 @@
-From Stdlib Require Import Lists.List.
+From Stdlib Require Import Lists.List Strings.String.
 
 From Phil.Surface Require Import
   Grammar
@@ -10,6 +10,7 @@ From Phil.Surface Require Import
   GrammarDeterminacyAlternativeResolverLift.
 
 Import ListNotations.
+Open Scope string_scope.
 
 (*
   Semantic core for the resolver-backed alternative half of the final
