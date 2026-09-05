@@ -98,12 +98,14 @@ data Ty
   | TyOpaqueSorted Text RefSort
   deriving (Eq, Ord, Show)
 
+-- | The legacy Core Value carrier remains the Phase-0 executable value surface.
+-- Phase-1 fixed-width signed literals travel through ScalarLiteral/RefTerm until
+-- the general executable Value carrier is widened in its own compatibility pass.
 data Value
   = VVar Name
   | VUnit
   | VBool Bool
   | VUInt Int Integer
-  | VSInt Int Integer
   | VAscribe Value Ty
   | VTransport Value Name Ty
   deriving (Eq, Ord, Show)
