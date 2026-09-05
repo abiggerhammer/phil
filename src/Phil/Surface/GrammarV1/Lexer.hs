@@ -31,7 +31,9 @@ data GrammarV1Token
   = GrammarKeyword Text
   | GrammarIdentifier Text
   | GrammarUIntType Text
+  | GrammarSIntType Text
   | GrammarDecimalInteger Text
+  | GrammarDecimalFloat Text
   | GrammarString Text
   | GrammarSymbol Text
   deriving (Eq, Ord, Show)
@@ -47,6 +49,8 @@ grammarV1ReservedWords = Set.fromList
   [ "Bool"
   , "Bytes"
   , "Effects"
+  , "F32"
+  , "F64"
   , "Frame"
   , "Message"
   , "Nat"
@@ -84,6 +88,7 @@ grammarV1ReservedWords = Set.fromList
   , "consume"
   , "consumes"
   , "continue"
+  , "convert"
   , "correspondence"
   , "cost"
   , "data"
@@ -201,6 +206,8 @@ pToken :: Parser GrammarV1Token
 pToken = MP.choice
   [ MP.try pString
   , MP.try pUIntType
+  , MP.try pSIntType
+  , MP.try pDecimalFloat
   , MP.try pDecimalInteger
   , MP.try pIdentifierOrKeyword
   , pSymbol
@@ -212,6 +219,21 @@ pUIntType = do
   digits <- Text.pack <$> MP.some MPC.digitChar
   MP.notFollowedBy identifierContinue
   pure (GrammarUIntType ("U" <> digits))
+
+pSIntType :: Parser GrammarV1Token
+pSIntType = do
+  void (MPC.char 'I')
+  digits <- Text.pack <$> MP.some MPC.digitChar
+  MP.notFollowedBy identifierContinue
+  pure (GrammarSIntType ("I" <> digits))
+
+pDecimalFloat :: Parser GrammarV1Token
+pDecimalFloat = do
+  whole <- Text.pack <$> MP.some MPC.digitChar
+  void (MPC.char '.')
+  fractional <- Text.pack <$> MP.some MPC.digitChar
+  MP.notFollowedBy identifierContinue
+  pure (GrammarDecimalFloat (whole <> "." <> fractional))
 
 pDecimalInteger :: Parser GrammarV1Token
 pDecimalInteger = do
@@ -258,7 +280,7 @@ pSymbol = GrammarSymbol <$> MP.choice (map MP.chunk orderedSymbols)
     orderedSymbols = sortOn (negate . Text.length)
       [ "->", "=>", "==", "!=", "<=", ">="
       , "@", "(", ")", "{", "}", ".", ",", ":", ";"
-      , "[", "]", "|", "+", "-", "*", "=", "<", ">"
+      , "[", "]", "|", "+", "-", "*", "/", "%", "=", "<", ">"
       ]
 
 currentPoint :: Parser SourcePoint

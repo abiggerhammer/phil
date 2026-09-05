@@ -19,6 +19,8 @@ main = do
         (reservedWordsMatchGrammar grammar)
     , test "SURF-004 keyword and identifier boundary is exact" keywordBoundary
     , test "SURF-004 UINT_TYPE takes priority over identifiers" uintPriority
+    , test "SURF-004 SINT_TYPE and floating type keywords take exact priority" numericTypePriority
+    , test "SURF-004 integer and floating literal classes remain distinct" numericLiteralPriority
     , test "SURF-004 decimal token cannot split an adjacent identifier" decimalBoundary
     , test "SURF-004 Unicode identifier contract is accepted" unicodeIdentifier
     , test "SURF-003 string literal admitted escapes decode exactly" stringEscapes
@@ -26,6 +28,7 @@ main = do
     , test "SURF-003 raw newline in string rejects" rawNewlineRejects
     , test "SURF-003 Unicode whitespace and line comments are trivia" triviaIsNonsemantic
     , test "SURF-004 longest punctuation tokens win" punctuationPriority
+    , test "SURF-004 division/remainder punctuation coexists with line comments" numericPunctuation
     , test "SURF-003 unknown lexical character fails closed" unknownCharacterRejects
     ]
   if and results then pure () else exitFailure
@@ -73,13 +76,15 @@ isIdentifierLiteral value = case Text.uncons value of
 
 keywordBoundary :: Either String ()
 keywordBoundary = do
-  tokens <- tokenValues "mode modeX record record_type"
+  tokens <- tokenValues "mode modeX record record_type convert convertX"
   assert
     (tokens ==
       [ GrammarKeyword "mode"
       , GrammarIdentifier "modeX"
       , GrammarKeyword "record"
       , GrammarIdentifier "record_type"
+      , GrammarKeyword "convert"
+      , GrammarIdentifier "convertX"
       ])
     ("unexpected keyword boundary tokens: " <> show tokens)
 
@@ -93,6 +98,34 @@ uintPriority = do
       , GrammarUIntType "U999999999999999999999999"
       ])
     ("unexpected UINT priority tokens: " <> show tokens)
+
+numericTypePriority :: Either String ()
+numericTypePriority = do
+  tokens <- tokenValues "I8 I32 I32name I999999999999999999999999 F32 F32name F64"
+  assert
+    (tokens ==
+      [ GrammarSIntType "I8"
+      , GrammarSIntType "I32"
+      , GrammarIdentifier "I32name"
+      , GrammarSIntType "I999999999999999999999999"
+      , GrammarKeyword "F32"
+      , GrammarIdentifier "F32name"
+      , GrammarKeyword "F64"
+      ])
+    ("unexpected signed/float type priority tokens: " <> show tokens)
+
+numericLiteralPriority :: Either String ()
+numericLiteralPriority = do
+  tokens <- tokenValues "0 1.0 255.25 999999999999999999999999.0001"
+  assert
+    (tokens ==
+      [ GrammarDecimalInteger "0"
+      , GrammarDecimalFloat "1.0"
+      , GrammarDecimalFloat "255.25"
+      , GrammarDecimalFloat "999999999999999999999999.0001"
+      ])
+    ("unexpected numeric literal tokens: " <> show tokens)
+  expectLexReject "1.0x"
 
 decimalBoundary :: Either String ()
 decimalBoundary =
@@ -146,6 +179,21 @@ punctuationPriority = do
       , GrammarDecimalInteger "1"
       ])
     ("unexpected punctuation tokens: " <> show tokens)
+
+numericPunctuation :: Either String ()
+numericPunctuation = do
+  tokens <- tokenValues "x / y % z // comment\n * w"
+  assert
+    (tokens ==
+      [ GrammarIdentifier "x"
+      , GrammarSymbol "/"
+      , GrammarIdentifier "y"
+      , GrammarSymbol "%"
+      , GrammarIdentifier "z"
+      , GrammarSymbol "*"
+      , GrammarIdentifier "w"
+      ])
+    ("unexpected numeric punctuation/comment tokens: " <> show tokens)
 
 unknownCharacterRejects :: Either String ()
 unknownCharacterRejects =
