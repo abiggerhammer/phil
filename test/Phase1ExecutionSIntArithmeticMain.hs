@@ -13,14 +13,15 @@ import Phil.Core.SIntArithmetic
   , PlainSIntArithmeticSite (..)
   , SIntArithmeticError (..)
   , SIntArithmeticOperator (..)
+  , SIntLiteral (..)
+  , SIntTerm (..)
+  , SIntType (..)
   , plainSIntArithmeticProposition
+  , sIntCoreType
   )
-import Phil.Core.Scalar (ScalarLiteral (..))
 import Phil.Core.Syntax
   ( Obligation (..)
   , ObligationId (..)
-  , RefSort (..)
-  , RefTerm (..)
   , Ty (..)
   )
 import Phil.Surface.GrammarV1.Elaborate (grammarV1PrimitiveType)
@@ -89,8 +90,9 @@ signedTypeWidthsParse = do
         [ locatedValue (grammarV1TermParamType (locatedValue parameter))
         | parameter <- maybe [] id (grammarV1ComponentTermParams component)
         ]
+      expected = map (Just . sIntCoreType . SIntType) [8, 32, 64]
   assert
-    (map grammarV1PrimitiveType types == [Just (TySInt 8), Just (TySInt 32), Just (TySInt 64)])
+    (map grammarV1PrimitiveType types == expected)
     ("I<w> parser carrier lost signed width identity: " <> show types)
 
 negativeBoundaryLiteral :: Either String ()
@@ -104,7 +106,7 @@ negativeBoundaryLiteral = do
   literal <- mapLeft show
     (grammarV1ContextualSIntLiteral (signedType "I8") expression)
   assert
-    (literal == ScalarSIntLiteral 8 (-128))
+    (literal == SIntLiteral (SIntType 8) (-128))
     "I8 minimum literal did not elaborate exactly"
 
 positiveBoundaryLiteral :: Either String ()
@@ -115,7 +117,7 @@ positiveBoundaryLiteral = do
   literal <- mapLeft show
     (grammarV1ContextualSIntLiteral (signedType "I8") expression)
   assert
-    (literal == ScalarSIntLiteral 8 127)
+    (literal == SIntLiteral (SIntType 8) 127)
     "I8 maximum literal did not elaborate exactly"
 
 signedLiteralRangeRejects :: Either String ()
@@ -138,16 +140,17 @@ signedAddition = do
   expression <- parseComponentExpression
     "exec-016-add"
     "component Signed(x : I8) { -40 + 10; }"
+  let result = known 8 (-30)
   (decision, nextState) <- mapLeft show
     (checkGrammarV1PlainSIntArithmetic
       emptyCheckState
       (signedType "I8")
       Map.empty
       expression
-      (RefSInt 8 (-30))
+      result
       (site "exec016.signed.add"))
   assert
-    (decision == PlainSIntArithmeticEstablished (ScalarSIntLiteral 8 (-30)))
+    (decision == PlainSIntArithmeticEstablished (SIntLiteral (SIntType 8) (-30)))
     "signed addition did not establish exact mathematical result"
   assert (Map.null (residualObligations nextState))
     "closed signed arithmetic invented a residual obligation"
@@ -162,7 +165,7 @@ signedOverflowRejects = do
       (signedType "I8")
       Map.empty
       expression
-      (RefSInt 8 (-128))
+      (known 8 (-128))
       (site "exec016.signed.overflow") of
     Left
       (GrammarV1PlainSIntCoreError
@@ -180,7 +183,7 @@ signedUnderflowRejects = do
       (signedType "I8")
       Map.empty
       expression
-      (RefSInt 8 127)
+      (known 8 127)
       (site "exec016.signed.underflow") of
     Left
       (GrammarV1PlainSIntCoreError
@@ -195,11 +198,12 @@ symbolicSignedArithmetic = do
     "component Signed(left : I32, right : I32) { left * right; }"
   let leftReference = staticReference "left"
       rightReference = staticReference "right"
+      ty = SIntType 32
       environment = Map.fromList
-        [ (leftReference, RefOpaque (SortSInt 32) "exec016.left")
-        , (rightReference, RefOpaque (SortSInt 32) "exec016.right")
+        [ (leftReference, SIntSymbolic ty "exec016.left")
+        , (rightReference, SIntSymbolic ty "exec016.right")
         ]
-      result = RefOpaque (SortSInt 32) "exec016.result"
+      result = SIntSymbolic ty "exec016.result"
   (decision, nextState) <- mapLeft show
     (checkGrammarV1PlainSIntArithmetic
       emptyCheckState
@@ -217,7 +221,7 @@ symbolicSignedArithmetic = do
   assert
     (obligationProposition obligation
       == plainSIntArithmeticProposition
-          SIntMultiply 32
+          SIntMultiply ty
           (environment Map.! leftReference)
           (environment Map.! rightReference)
           result)
@@ -228,6 +232,9 @@ signednessMismatchRejects = do
   expression <- parseComponentExpression
     "exec-016-signedness"
     "component Signed(x : I8) { 1; }"
+  assert
+    (sIntCoreType (SIntType 8) /= TyUInt 8)
+    "I8 semantic type collapsed to U8"
   case grammarV1ContextualSIntLiteral (GrammarV1UnsignedType "U8") expression of
     Left (GrammarV1RuntimeSIntContextRequired (GrammarV1UnsignedType "U8")) -> Right ()
     other -> Left ("U8 was accepted as an I8 context: " <> show other)
@@ -243,6 +250,9 @@ binarySubtractionStillParses = do
       _
       (Located _ (GrammarV1IntegerExpression "1")) -> Right ()
     other -> Left ("binary subtraction was swallowed by signed literal lexing: " <> show other)
+
+known :: Int -> Integer -> SIntTerm
+known width value = SIntKnown (SIntLiteral (SIntType width) value)
 
 signedType :: Text -> GrammarV1Type
 signedType = GrammarV1UnsignedType
