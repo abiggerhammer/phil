@@ -3,9 +3,13 @@ module Phil.Surface.GrammarV1.SemanticCallableOutcomeState
   , GrammarV1SemanticCallableOutcomeResidueScope (..)
   , GrammarV1SemanticCallableOutcomeStateError (..)
   , grammarV1SemanticCallableOutcomeScopes
+  , grammarV1SemanticCallableOutcomeScopesAfterResult
   ) where
 
-import Phil.Core.Static (DeclarationKey)
+import Phil.Core.Static
+  ( DeclarationKey
+  , StaticContext
+  )
 import Phil.Core.Syntax
   ( Mode (..)
   , Ty
@@ -38,8 +42,10 @@ import Phil.Surface.GrammarV1.SemanticBindingState
   ( grammarV1InsertSemanticBinding
   )
 import Phil.Surface.GrammarV1.SemanticCallableSignature
-  ( GrammarV1SemanticCallableScope (..)
+  ( GrammarV1CheckedSemanticCallableSignature (..)
+  , GrammarV1SemanticCallableScope (..)
   , GrammarV1SemanticCallableSignatureError
+  , grammarV1CheckedSemanticCallableSignature
   , grammarV1SemanticCallableParameterScope
   )
 import Phil.Surface.Syntax (Located (..))
@@ -57,10 +63,11 @@ data GrammarV1SemanticCallableOutcomeStateScope =
   deriving (Eq, Show)
 
 -- | Semantic scope information for one source outcome residue. The base lexical
--- scope contains only the callable parameters (plus the advanced fresh ordinal),
--- while each explicit state clause receives its own child scope. Repeated state
--- clauses remain repeated rather than being merged or assigned an invented
--- cardinality rule.
+-- scope contains the active callable parameters plus the declaration-wide fresh
+-- ordinal supplied by the caller. In independent clause mode that ordinal follows
+-- the parameter telescope; in whole-callable composition it also reflects any
+-- closed result-refinement binder. Each explicit state clause receives its own
+-- child scope, while repeated state clauses remain repeated rather than merged.
 data GrammarV1SemanticCallableOutcomeResidueScope =
   GrammarV1SemanticCallableOutcomeResidueScope
     { semanticCallableOutcomeResidueSource :: Located GrammarV1OutcomeResidue
@@ -75,6 +82,8 @@ data GrammarV1SemanticCallableOutcomeResidueScope =
 data GrammarV1SemanticCallableOutcomeStateError
   = GrammarV1SemanticCallableOutcomeParameterScopeError
       GrammarV1SemanticCallableSignatureError
+  | GrammarV1SemanticCallableOutcomeSignatureError
+      GrammarV1SemanticCallableSignatureError
   | GrammarV1SemanticCallableOutcomeBinderScopeError
       GrammarV1BinderScopeError
   | GrammarV1SemanticCallableOutcomeBindingInsertError
@@ -82,11 +91,11 @@ data GrammarV1SemanticCallableOutcomeStateError
   deriving (Eq, Show)
 
 -- | Allocate exact semantic identities for every callable outcome-state slot in
--- source order. Generic/requirement-bearing callables and nonprimitive state-slot
--- types remain outside this bounded route. Each state clause is a fresh sibling
--- lexical region, but the returned parent scope carries the advanced ordinal into
--- later state clauses and later residues so two distinct slots can never receive
--- one BinderKey/Core name merely because their branch scopes are disjoint.
+-- source order from the parameter-only callable scope. This independent API is
+-- intentionally retained for clause-local checking: result-type success or binder
+-- allocation must not poison an otherwise independently meaningful outcome clause.
+-- Whole-callable source-order composition uses
+-- 'grammarV1SemanticCallableOutcomeScopesAfterResult' below instead.
 grammarV1SemanticCallableOutcomeScopes
   :: DeclarationKey
   -> GrammarV1CallableContractDecl
@@ -107,11 +116,45 @@ grammarV1SemanticCallableOutcomeScopes declarationKey source = do
         (semanticCallableScopeState callableScope)
         residues
   where
-    residues =
-      [ residue
-      | Located _ (GrammarV1CallableOutcomeResidue residue) <-
-          grammarV1CallableClauses source
-      ]
+    residues = outcomeResidues source
+
+-- | Allocate outcome-state identities after the callable result type has been
+-- semantically checked. A top-level result refinement may have consumed and then
+-- closed a binder; the checked signature retains the resulting parent scope so the
+-- first state slot cannot reuse that declaration-wide ordinal. The parameter
+-- SurfaceState remains the base state because result-refinement bindings do not
+-- escape their predicates.
+grammarV1SemanticCallableOutcomeScopesAfterResult
+  :: StaticContext
+  -> DeclarationKey
+  -> GrammarV1CallableContractDecl
+  -> Maybe
+      (Either
+        GrammarV1SemanticCallableOutcomeStateError
+        [GrammarV1SemanticCallableOutcomeResidueScope])
+grammarV1SemanticCallableOutcomeScopesAfterResult
+    staticContext declarationKey source = do
+  checked <- grammarV1CheckedSemanticCallableSignature
+    staticContext declarationKey source
+  case checked of
+    Left signatureError ->
+      Just
+        (Left
+          (GrammarV1SemanticCallableOutcomeSignatureError signatureError))
+    Right (signature, _focusSteps) ->
+      buildResidues
+        (checkedSemanticCallableLexicalScope signature)
+        (checkedSemanticCallableState signature)
+        (outcomeResidues source)
+
+outcomeResidues
+  :: GrammarV1CallableContractDecl
+  -> [Located GrammarV1OutcomeResidue]
+outcomeResidues source =
+  [ residue
+  | Located _ (GrammarV1CallableOutcomeResidue residue) <-
+      grammarV1CallableClauses source
+  ]
 
 buildResidues
   :: GrammarV1LexicalScope
