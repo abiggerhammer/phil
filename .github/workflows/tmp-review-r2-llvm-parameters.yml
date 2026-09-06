@@ -46,19 +46,9 @@ jobs:
               '          Left (LLVMFunctionParametersMismatch\n'
               '            functionName expectedParameters actualParameters)\n'
               '        forM_ (Map.toAscList (llvmFunctionBlocks expectedFunction)) $ \\(blockId, expectedBlock) ->\n')
-
-          audit = Path('.github/workflows/phase1-audit-reconciliation-conformance.yml')
-          replace_once(
-              audit,
-              '      - name: REVIEW-R01 LLVM source-name injectivity\n'
-              '        run: cabal exec -- runghc -Wall -Werror -isrc test/Phase1ReviewR1LLVMNamesMain.hs\n',
-              '      - name: REVIEW-R01 LLVM source-name injectivity\n'
-              '        run: cabal exec -- runghc -Wall -Werror -isrc test/Phase1ReviewR1LLVMNamesMain.hs\n'
-              '      - name: REVIEW-R02 LLVM function-parameter preservation\n'
-              '        run: cabal exec -- runghc -Wall -Werror -isrc test/Phase1ReviewR2LLVMParametersMain.hs\n')
           PY
           git diff --check
-          git diff -- src/Phil/LLVM/Verify.hs .github/workflows/phase1-audit-reconciliation-conformance.yml
+          git diff -- src/Phil/LLVM/Verify.hs
       - name: Commit remediation
         run: |
           if git diff --quiet; then
@@ -67,6 +57,6 @@ jobs:
           fi
           git config user.name "Meredith L. Patterson"
           git config user.email "clonearmy@gmail.com"
-          git add src/Phil/LLVM/Verify.hs .github/workflows/phase1-audit-reconciliation-conformance.yml
+          git add src/Phil/LLVM/Verify.hs
           git commit -m "review: preserve LLVM function parameters in translation validation"
           git push origin HEAD:phase1-review-r2-llvm-parameter-preservation
