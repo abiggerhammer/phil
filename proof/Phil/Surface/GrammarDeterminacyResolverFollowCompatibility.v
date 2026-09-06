@@ -95,13 +95,16 @@ Proof.
   split.
   - intro Hpattern.
     unfold pattern_suffix, path_has_suffixb in Hpattern.
-    simpl in Hpattern.
+    change (String.eqb "pattern" name && true = true) in Hpattern.
+    apply andb_true_iff in Hpattern as [Hpattern _].
     apply String.eqb_eq in Hpattern.
     subst name.
     reflexivity.
   - intro Hproposition.
     unfold proposition_atom_suffix, path_has_suffixb in Hproposition.
-    simpl in Hproposition.
+    change (String.eqb "proposition_atom" name && true = true)
+      in Hproposition.
+    apply andb_true_iff in Hproposition as [Hproposition _].
     apply String.eqb_eq in Hproposition.
     subst name.
     reflexivity.
