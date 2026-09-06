@@ -2,6 +2,8 @@
 
 module Main (main) where
 
+import Data.Text (Text)
+import qualified Data.Text as Text
 import Phil.Core.Checker (emptyCheckState)
 import Phil.Core.IntegerDivision
   ( IntegerDivisionOperator (..)
@@ -181,10 +183,10 @@ known = SIntKnown . literal
 symbolic :: String -> SIntTerm
 symbolic = SIntSymbolic i8 . fromStringText
 
-fromStringText :: String -> Data.Text.Text
-fromStringText = Data.Text.pack
+fromStringText :: String -> Text
+fromStringText = Text.pack
 
-arithSite :: Data.Text.Text -> PlainSIntArithmeticSite
+arithSite :: Text -> PlainSIntArithmeticSite
 arithSite identifier = PlainSIntArithmeticSite
   { plainSIntArithmeticObligationId = ObligationId identifier
   , plainSIntArithmeticOrigin = "REVIEW-R08"
@@ -192,7 +194,7 @@ arithSite identifier = PlainSIntArithmeticSite
   , plainSIntArithmeticRequiredPoint = "before accepting any raw known term"
   }
 
-divSite :: Data.Text.Text -> PlainIntegerDivisionSite
+divSite :: Text -> PlainIntegerDivisionSite
 divSite identifier = PlainIntegerDivisionSite
   { plainIntegerDivisionObligationId = ObligationId identifier
   , plainIntegerDivisionOrigin = "REVIEW-R08"
