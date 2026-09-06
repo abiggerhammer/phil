@@ -8,10 +8,12 @@ module Phil.Surface.GrammarV1.RuntimeScalar
 import qualified Data.Text as Text
 import qualified Data.Text.Read as TextRead
 import Phil.Core.FloatArithmetic
-  ( FloatSemanticError
+  ( FloatFormat
+  , FloatSemanticError
   , FloatValue
   , floatDecimalLiteral
   , floatTypeFromCoreType
+  , negateFloatValue
   )
 import Phil.Core.SIntArithmetic
   ( SIntLiteral (..)
@@ -29,6 +31,7 @@ import Phil.Surface.GrammarV1.Parser
   ( GrammarV1Expression (..)
   , GrammarV1Type
   )
+import Phil.Surface.Syntax (Located (..))
 
 data GrammarV1RuntimeScalarError
   = GrammarV1RuntimeUIntContextRequired GrammarV1Type
@@ -65,8 +68,7 @@ grammarV1ContextualSIntLiteral contextualType expression = do
   ty <- case grammarV1PrimitiveType contextualType >>= sIntTypeFromCoreType of
     Just exactType -> Right exactType
     Nothing -> Left (GrammarV1RuntimeSIntContextRequired contextualType)
-  literalText <- integerLiteralText expression
-  value <- exactSignedDecimal literalText
+  value <- signedIntegerLiteralValue expression
   let literal = SIntLiteral ty value
   if sIntLiteralInRange literal
     then Right literal
@@ -80,8 +82,7 @@ grammarV1ContextualFloatLiteral contextualType expression = do
   format <- case grammarV1PrimitiveType contextualType >>= floatTypeFromCoreType of
     Just exactFormat -> Right exactFormat
     Nothing -> Left (GrammarV1RuntimeFloatContextRequired contextualType)
-  literalText <- floatLiteralText expression
-  mapLeft GrammarV1RuntimeFloatLiteralError (floatDecimalLiteral format literalText)
+  floatLiteralValue format expression
 
 integerLiteralText
   :: GrammarV1Expression
@@ -90,11 +91,28 @@ integerLiteralText expression = case expression of
   GrammarV1IntegerExpression text -> Right text
   _ -> Left (GrammarV1RuntimeIntegerLiteralRequired expression)
 
-floatLiteralText
+signedIntegerLiteralValue
   :: GrammarV1Expression
-  -> Either GrammarV1RuntimeScalarError Text.Text
-floatLiteralText expression = case expression of
-  GrammarV1IntegerExpression text -> Right text
+  -> Either GrammarV1RuntimeScalarError Integer
+signedIntegerLiteralValue expression = case expression of
+  GrammarV1IntegerExpression text -> exactSignedDecimal text
+  GrammarV1NegateExpression (Located _ inner) ->
+    negate <$> signedIntegerLiteralValue inner
+  GrammarV1ParenthesizedExpression (Located _ inner) ->
+    signedIntegerLiteralValue inner
+  _ -> Left (GrammarV1RuntimeIntegerLiteralRequired expression)
+
+floatLiteralValue
+  :: FloatFormat
+  -> GrammarV1Expression
+  -> Either GrammarV1RuntimeScalarError FloatValue
+floatLiteralValue format expression = case expression of
+  GrammarV1IntegerExpression text ->
+    mapLeft GrammarV1RuntimeFloatLiteralError (floatDecimalLiteral format text)
+  GrammarV1NegateExpression (Located _ inner) ->
+    negateFloatValue <$> floatLiteralValue format inner
+  GrammarV1ParenthesizedExpression (Located _ inner) ->
+    floatLiteralValue format inner
   _ -> Left (GrammarV1RuntimeFloatLiteralRequired expression)
 
 exactUnsignedDecimal :: Text.Text -> Either GrammarV1RuntimeScalarError Integer

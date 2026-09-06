@@ -310,6 +310,7 @@ expressionBinderSites (Located _ expression) = case expression of
   GrammarV1BoolExpression _ -> []
   GrammarV1UnitExpression -> []
   GrammarV1IntegerExpression _ -> []
+  GrammarV1NegateExpression inner -> expressionBinderSites inner
   GrammarV1ProjectionExpression receiver _ -> expressionBinderSites receiver
   GrammarV1ShiftExpression left _ right ->
     expressionBinderSites left <> expressionBinderSites right

@@ -12,6 +12,7 @@ import Phil.Core.FloatArithmetic
   , FloatValue
   , applyFloatOperator
   , floatFormat
+  , negateFloatValue
   )
 import Phil.Core.IntegerDivision
   ( IntegerDivisionOperator (..)
@@ -53,6 +54,7 @@ type GrammarV1NumericEnvironment = Map GrammarV1StaticReference NumericValue
 data GrammarV1NumericEvaluationError
   = GrammarV1NumericUnknownReference GrammarV1StaticReference
   | GrammarV1NumericUnsupportedExpression GrammarV1Expression
+  | GrammarV1NumericNegationUnsupported NumericType
   | GrammarV1NumericConversionTargetRequired
   | GrammarV1NumericConversionError NumericConversionError
   | GrammarV1NumericMixedDomainRequiresConversion NumericType NumericType
@@ -84,6 +86,7 @@ evaluateGrammarV1NumericExpression environment = evaluate
             Nothing -> Left (GrammarV1NumericUnknownReference reference)
         | otherwise -> Left (GrammarV1NumericUnsupportedExpression expression)
       GrammarV1ParenthesizedExpression (Located _ inner) -> evaluate inner
+      GrammarV1NegateExpression (Located _ inner) -> evaluate inner >>= applyNegation
       GrammarV1ConvertExpression value targetSource -> do
         sourceValue <- evaluate (locatedValue value)
         target <- case grammarV1PrimitiveType (locatedValue targetSource)
@@ -102,6 +105,22 @@ evaluateGrammarV1NumericExpression environment = evaluate
         rightValue <- evaluate (locatedValue right)
         applyBinary (locatedValue operator) leftValue rightValue
       _ -> Left (GrammarV1NumericUnsupportedExpression expression)
+
+applyNegation
+  :: NumericValue
+  -> Either GrammarV1NumericEvaluationError NumericValue
+applyNegation value = case value of
+  NumericUIntValue width _ ->
+    Left (GrammarV1NumericNegationUnsupported (NumericUIntType width))
+  NumericSIntValue literal ->
+    let result = SIntLiteral (sIntLiteralType literal) (negate (sIntLiteralValue literal))
+    in if sIntLiteralInRange result
+        then Right (NumericSIntValue result)
+        else Left (GrammarV1NumericArithmeticOutOfRange
+          (NumericSIntType (sIntLiteralType literal))
+          (sIntLiteralValue result))
+  NumericFloatValue floatValue ->
+    Right (NumericFloatValue (negateFloatValue floatValue))
 
 applyShift
   :: GrammarV1ShiftOperator

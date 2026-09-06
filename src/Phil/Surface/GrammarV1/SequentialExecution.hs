@@ -161,6 +161,8 @@ executeExpression source@(Located _ expression) state0 = do
     GrammarV1BoolExpression _ -> finishExpression source state
     GrammarV1UnitExpression -> finishExpression source state
     GrammarV1IntegerExpression _ -> finishExpression source state
+    GrammarV1NegateExpression value ->
+      finishAfterChildren source [value] state
     GrammarV1ProjectionExpression base _ ->
       finishAfterChildren source [base] state
     GrammarV1ShiftExpression left _ right ->

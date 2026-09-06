@@ -650,6 +650,7 @@ data GrammarV1Expression
   | GrammarV1BoolExpression Bool
   | GrammarV1UnitExpression
   | GrammarV1IntegerExpression Text
+  | GrammarV1NegateExpression (Located GrammarV1Expression)
   | GrammarV1ProjectionExpression
       (Located GrammarV1Expression)
       (Located Text)
@@ -2635,9 +2636,23 @@ parseMoreAdditiveExpression left = do
       parseMoreAdditiveExpression combined
     else pure left
 
+parseUnaryExpression :: Parser (Located GrammarV1Expression)
+parseUnaryExpression = do
+  hasMinus <- peekSymbol "-"
+  if hasMinus
+    then do
+      minus <- takeToken
+      operand <- parseUnaryExpression
+      pure (Located
+        (SourceSpan
+          (sourceSpanStart (locatedSpan minus))
+          (sourceSpanEnd (locatedSpan operand)))
+        (GrammarV1NegateExpression operand))
+    else parsePostfixExpression
+
 parseMultiplicativeExpression :: Parser (Located GrammarV1Expression)
 parseMultiplicativeExpression = do
-  first <- parsePostfixExpression
+  first <- parseUnaryExpression
   parseMoreMultiplicativeExpression first
 
 parseMoreMultiplicativeExpression
@@ -2656,7 +2671,7 @@ parseMoreMultiplicativeExpression left = do
         GrammarSymbol "%" -> pure GrammarV1Remainder
         other -> failParser $
           "internal multiplicative operator dispatch error for " <> renderToken other
-      right <- parsePostfixExpression
+      right <- parseUnaryExpression
       let operator = Located (locatedSpan token) operatorValue
           combined = Located
             (SourceSpan
