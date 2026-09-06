@@ -1,0 +1,202 @@
+name: Temporary R2 LLVM parameter remediation
+
+on:
+  push:
+    branches: [phase1-review-r2-llvm-parameter-preservation]
+
+permissions:
+  contents: write
+
+jobs:
+  patch:
+    if: github.actor != 'github-actions[bot]'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: phase1-review-r2-llvm-parameter-preservation
+      - name: Apply guarded verifier and regression patch
+        run: |
+          python3 - <<'PY'
+          from pathlib import Path
+
+          def replace_once(path, old, new):
+              text = path.read_text()
+              count = text.count(old)
+              if count != 1:
+                  raise SystemExit(f'expected one anchor in {path}, found {count}: {old!r}')
+              path.write_text(text.replace(old, new, 1))
+
+          verify = Path('src/Phil/LLVM/Verify.hs')
+          replace_once(
+              verify,
+              '  | LLVMFunctionEntryMismatch Text LLVMBlockId LLVMBlockId\n  | LLVMMissingEntryBlock Text LLVMBlockId\n',
+              '  | LLVMFunctionEntryMismatch Text LLVMBlockId LLVMBlockId\n'
+              '  | LLVMFunctionParametersMismatch Text [LLVMParameter] [LLVMParameter]\n'
+              '  | LLVMMissingEntryBlock Text LLVMBlockId\n')
+
+          replace_once(
+              verify,
+              '      Just actualFunction ->\n'
+              '        forM_ (Map.toAscList (llvmFunctionBlocks expectedFunction)) $ \\(blockId, expectedBlock) ->\n',
+              '      Just actualFunction -> do\n'
+              '        let expectedParameters = llvmFunctionParameters expectedFunction\n'
+              '            actualParameters = llvmFunctionParameters actualFunction\n'
+              '        unless (actualParameters == expectedParameters) $\n'
+              '          Left (LLVMFunctionParametersMismatch\n'
+              '            functionName expectedParameters actualParameters)\n'
+              '        forM_ (Map.toAscList (llvmFunctionBlocks expectedFunction)) $ \\(blockId, expectedBlock) ->\n')
+
+          test = r'''{-# LANGUAGE OverloadedStrings #-}
+
+module Main (main) where
+
+import qualified Data.Map.Strict as Map
+import Phil.Core.Scalar (ScalarType (ScalarUInt))
+import Phil.LLVM.BeginPolicyChoice
+  ( lowerSystemsBeginPolicyChoice
+  , phase0BeginPolicyChoiceLLVMTarget
+  , phase0BeginPolicyChoiceLLVMVerificationContext
+  )
+import Phil.LLVM.IR
+import Phil.LLVM.Verify
+  ( LLVMVerificationError (..)
+  , verifyLLVMEmissionWith
+  )
+import Phil.Systems.BeginPolicySessionChoice
+  ( BeginPolicySessionChoiceBundle (..)
+  , phase0BeginPolicySessionChoiceBundle
+  )
+import System.Exit (exitFailure)
+
+main :: IO ()
+main = do
+  results <- sequence
+    [ testCase "R2 unchanged parameter correspondence passes" unchangedPasses
+    , testCase "R2 parameter omission rejects" (mutationRejects omitOne)
+    , testCase "R2 parameter name drift rejects" (mutationRejects driftName)
+    , testCase "R2 parameter type drift rejects" (mutationRejects driftType)
+    , testCase "R2 parameter order drift rejects" (mutationRejects swapFirstTwo)
+    ]
+  if and results then pure () else exitFailure
+
+unchangedPasses :: Bool
+unchangedPasses = withFixture $ \bundle systemsArtifact llvmArtifact ->
+  verifyLLVMEmissionWith
+    lowerSystemsBeginPolicyChoice
+    (phase0BeginPolicyChoiceLLVMVerificationContext bundle)
+    systemsArtifact
+    llvmArtifact
+    == Right ()
+
+mutationRejects :: ([LLVMParameter] -> Maybe [LLVMParameter]) -> Bool
+mutationRejects transform = withFixture $ \bundle systemsArtifact llvmArtifact ->
+  case mutateFirstApplicableParameters transform llvmArtifact of
+    Nothing -> False
+    Just badArtifact ->
+      case verifyLLVMEmissionWith
+          lowerSystemsBeginPolicyChoice
+          (phase0BeginPolicyChoiceLLVMVerificationContext bundle)
+          systemsArtifact
+          badArtifact of
+        Left (LLVMFunctionParametersMismatch _ expected actual) -> expected /= actual
+        _ -> False
+
+withFixture
+  :: (BeginPolicySessionChoiceBundle -> Phil.Systems.IR.SystemsArtifact -> LLVMArtifact -> Bool)
+  -> Bool
+withFixture action = case phase0BeginPolicySessionChoiceBundle of
+  Left _ -> False
+  Right bundle ->
+    let systemsArtifact = beginPolicySessionChoiceArtifact bundle
+        llvmArtifact = lowerSystemsBeginPolicyChoice
+          phase0BeginPolicyChoiceLLVMTarget
+          systemsArtifact
+    in action bundle systemsArtifact llvmArtifact
+
+mutateFirstApplicableParameters
+  :: ([LLVMParameter] -> Maybe [LLVMParameter])
+  -> LLVMArtifact
+  -> Maybe LLVMArtifact
+mutateFirstApplicableParameters transform artifact =
+  go (Map.toAscList (llvmFunctions moduleValue))
+  where
+    moduleValue = llvmArtifactModule artifact
+
+    go [] = Nothing
+    go ((functionName, functionValue) : rest) =
+      case transform (llvmFunctionParameters functionValue) of
+        Just changed
+          | changed /= llvmFunctionParameters functionValue ->
+              let changedFunction = functionValue { llvmFunctionParameters = changed }
+                  changedModule = moduleValue
+                    { llvmFunctions = Map.insert functionName changedFunction (llvmFunctions moduleValue) }
+              in Just (rebindModule changedModule artifact)
+        _ -> go rest
+
+rebindModule :: LLVMModule -> LLVMArtifact -> LLVMArtifact
+rebindModule moduleValue artifact = artifact
+  { llvmArtifactModule = moduleValue
+  , llvmArtifactText = renderLLVMModule moduleValue
+  , llvmArtifactContract = contract
+      { llvmContractTargetDigest = llvmModuleDigest moduleValue }
+  }
+  where
+    contract = llvmArtifactContract artifact
+
+omitOne :: [LLVMParameter] -> Maybe [LLVMParameter]
+omitOne (_ : rest) = Just rest
+omitOne [] = Nothing
+
+driftName :: [LLVMParameter] -> Maybe [LLVMParameter]
+driftName (parameter : rest) = Just
+  (parameter { llvmParameterName = llvmParameterName parameter <> ".review-r2" } : rest)
+driftName [] = Nothing
+
+driftType :: [LLVMParameter] -> Maybe [LLVMParameter]
+driftType (parameter : rest) = Just
+  (parameter { llvmParameterType = otherType (llvmParameterType parameter) } : rest)
+driftType [] = Nothing
+
+otherType :: LLVMParameterType -> LLVMParameterType
+otherType parameterType = case parameterType of
+  LLVMPointerParameter -> LLVMScalarParameter (ScalarUInt 32)
+  LLVMScalarParameter _ -> LLVMPointerParameter
+
+swapFirstTwo :: [LLVMParameter] -> Maybe [LLVMParameter]
+swapFirstTwo (first : second : rest) = Just (second : first : rest)
+swapFirstTwo _ = Nothing
+
+testCase :: String -> Bool -> IO Bool
+testCase label passed = do
+  putStrLn ((if passed then "PASS: " else "FAIL: ") <> label)
+  pure passed
+'''
+          test_path = Path('test/Phase1ReviewR2LLVMParametersMain.hs')
+          if test_path.exists():
+              raise SystemExit(f'{test_path} already exists')
+          test_path.write_text(test)
+
+          audit = Path('.github/workflows/phase1-audit-reconciliation-conformance.yml')
+          replace_once(
+              audit,
+              '      - name: REVIEW-R01 LLVM source-name injectivity\n'
+              '        run: cabal exec -- runghc -Wall -Werror -isrc test/Phase1ReviewR1LLVMNamesMain.hs\n',
+              '      - name: REVIEW-R01 LLVM source-name injectivity\n'
+              '        run: cabal exec -- runghc -Wall -Werror -isrc test/Phase1ReviewR1LLVMNamesMain.hs\n'
+              '      - name: REVIEW-R02 LLVM function-parameter preservation\n'
+              '        run: cabal exec -- runghc -Wall -Werror -isrc test/Phase1ReviewR2LLVMParametersMain.hs\n')
+          PY
+          git diff --check
+          git diff -- src/Phil/LLVM/Verify.hs test/Phase1ReviewR2LLVMParametersMain.hs .github/workflows/phase1-audit-reconciliation-conformance.yml
+      - name: Commit remediation
+        run: |
+          if git diff --quiet; then
+            echo 'No source changes to commit'
+            exit 0
+          fi
+          git config user.name "Meredith L. Patterson"
+          git config user.email "clonearmy@gmail.com"
+          git add src/Phil/LLVM/Verify.hs test/Phase1ReviewR2LLVMParametersMain.hs .github/workflows/phase1-audit-reconciliation-conformance.yml
+          git commit -m "review: preserve LLVM function parameters in translation validation"
+          git push origin HEAD:phase1-review-r2-llvm-parameter-preservation
