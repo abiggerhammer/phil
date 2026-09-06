@@ -255,7 +255,7 @@ parseReturn :: String -> Either String GrammarV1Expression
 parseReturn source = do
   parsed <- mapLeft show $ parseGrammarV1StructuralSource "exec-020.phil" (fromString source)
   case grammarV1TopLevelDecls parsed of
-    [Located _ top] -> case grammarV1Declaration top of
+    [Located _ top] -> case locatedValue (grammarV1Declaration top) of
       GrammarV1ComponentDeclaration component ->
         case grammarV1BlockStatements (locatedValue (grammarV1ComponentBody component)) of
           [Located _ (GrammarV1ReturnStatement expression)] -> Right (locatedValue expression)
