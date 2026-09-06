@@ -1,3 +1,5 @@
+{-# LANGUAGE OverloadedStrings #-}
+
 module Phil.Core.UnicodeChar
   ( UnicodeScalar
   , UnicodeCharError (..)
@@ -11,7 +13,6 @@ module Phil.Core.UnicodeChar
   , checkUnicodeCharRealization
   ) where
 
-import Data.Text (Text)
 import Phil.Core.Syntax
   ( RefSort (..)
   , Ty (..)

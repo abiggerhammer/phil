@@ -2,6 +2,7 @@
 
 module Main (main) where
 
+import qualified Data.Text as Text
 import Phil.Core.CheckedBindingMode (CheckedTypeMode (..))
 import Phil.Core.Protocol.MessageAdmissibility (intrinsicBoundaryMessageType)
 import Phil.Core.Static (emptyStaticContext)
@@ -161,8 +162,8 @@ parseAliasType source = do
       other -> Left ("expected type alias, got " <> show other)
     declarations -> Left ("expected one declaration, got " <> show declarations)
 
-fromString :: String -> Data.Text.Text
-fromString = Data.Text.pack
+fromString :: String -> Text.Text
+fromString = Text.pack
 
 assert :: Bool -> String -> Either String ()
 assert True _ = Right ()
