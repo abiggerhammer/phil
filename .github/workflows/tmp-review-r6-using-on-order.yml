@@ -22,6 +22,9 @@ jobs:
           ghc-version: '9.6.7'
           cabal-version: 'latest'
 
+      - name: Build ordinary regression substrate
+        run: cabal build all --enable-tests
+
       - name: Apply R6 source repair
         shell: bash
         run: |
