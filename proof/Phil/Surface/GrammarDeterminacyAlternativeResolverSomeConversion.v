@@ -874,7 +874,7 @@ Proof.
   subst path.
   assert (Hlocal : proposition_atom_decision input = Some decision).
   {
-    rewrite <- phase1_surface_certified_resolver_proposition_atom_equation.
+    rewrite <- (phase1_surface_certified_resolver_proposition_atom_equation root_prefix input).
     exact Hresolver.
   }
   destruct input as [| first tail]; try discriminate Hlocal.
@@ -993,7 +993,7 @@ Proof.
   subst path.
   assert (Hlocal : static_argument_decision input = Some decision).
   {
-    rewrite <- phase1_surface_certified_resolver_static_argument_equation.
+    rewrite <- (phase1_surface_certified_resolver_static_argument_equation root_prefix input).
     exact Hresolver.
   }
   destruct input as [| first tail]; try discriminate Hlocal.
@@ -1029,7 +1029,7 @@ Proof.
   subst path.
   assert (Hlocal : static_argument_decision input = Some decision).
   {
-    rewrite <- phase1_surface_certified_resolver_static_argument_equation.
+    rewrite <- (phase1_surface_certified_resolver_static_argument_equation root_prefix input).
     exact Hresolver.
   }
   destruct input as [| first tail]; try discriminate Hlocal.
