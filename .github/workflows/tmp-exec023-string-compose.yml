@@ -1,0 +1,89 @@
+name: Temporary EXEC-023 String composition
+
+on:
+  push:
+    branches: [phase1-exec-023-semantic-string]
+
+permissions:
+  contents: write
+
+jobs:
+  patch:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: phase1-exec-023-semantic-string
+      - name: Apply guarded EXEC-023 source patches
+        run: |
+          python3 - <<'PY'
+          from pathlib import Path
+
+          def replace_once(path_s, old, new):
+              path = Path(path_s)
+              text = path.read_text()
+              count = text.count(old)
+              if count == 0 and new in text:
+                  print(f'{path_s}: already patched')
+                  return
+              if count != 1:
+                  raise SystemExit(f'{path_s}: expected one anchor, found {count}: {old!r}')
+              path.write_text(text.replace(old, new, 1))
+
+          parser = 'src/Phil/Surface/GrammarV1/Parser.hs'
+          replace_once(parser,
+            '''    Just (GrammarKeyword "Char") -> do\n      value <- expectKeyword "Char"\n      pure (Located (locatedSpan value) (GrammarV1UnsignedType "Char"))\n    Just (GrammarUIntType _) -> do\n''',
+            '''    Just (GrammarKeyword "Char") -> do\n      value <- expectKeyword "Char"\n      pure (Located (locatedSpan value) (GrammarV1UnsignedType "Char"))\n    Just (GrammarKeyword "String") -> do\n      value <- expectKeyword "String"\n      pure (Located (locatedSpan value) (GrammarV1UnsignedType "String"))\n    Just (GrammarUIntType _) -> do\n''')
+          replace_once(parser,
+            '''    Just (GrammarKeyword "Char") -> GrammarV1StaticTypeArgument . locatedValue <$> parseType\n    Just (GrammarUIntType _) -> GrammarV1StaticTypeArgument . locatedValue <$> parseType\n''',
+            '''    Just (GrammarKeyword "Char") -> GrammarV1StaticTypeArgument . locatedValue <$> parseType\n    Just (GrammarKeyword "String") -> GrammarV1StaticTypeArgument . locatedValue <$> parseType\n    Just (GrammarUIntType _) -> GrammarV1StaticTypeArgument . locatedValue <$> parseType\n''')
+
+          elaborate = 'src/Phil/Surface/GrammarV1/Elaborate.hs'
+          replace_once(elaborate,
+            'import Phil.Core.UnicodeChar (unicodeCharCoreType)\n',
+            'import Phil.Core.UnicodeChar (unicodeCharCoreType)\nimport Phil.Core.UnicodeString (unicodeStringCoreType)\n')
+          replace_once(elaborate,
+            '''  GrammarV1UnsignedType widthText\n    | widthText == Text.pack "Char" -> Just unicodeCharCoreType\n    | widthText == Text.pack "F32" -> Just (floatCoreType Float32)\n''',
+            '''  GrammarV1UnsignedType widthText\n    | widthText == Text.pack "Char" -> Just unicodeCharCoreType\n    | widthText == Text.pack "String" -> Just unicodeStringCoreType\n    | widthText == Text.pack "F32" -> Just (floatCoreType Float32)\n''')
+
+          checked = 'src/Phil/Surface/GrammarV1/CheckedType.hs'
+          replace_once(checked,
+            'import Phil.Core.UnicodeChar (unicodeCharTypeFromCoreType)\n',
+            'import Phil.Core.UnicodeChar (unicodeCharTypeFromCoreType)\nimport Phil.Core.UnicodeString (unicodeStringTypeFromCoreType)\n')
+          replace_once(checked,
+            '''checkedCoreTypeMode ty\n  | unicodeCharTypeFromCoreType ty = Just Unrestricted\n  | Just _ <- floatTypeFromCoreType ty = Just Unrestricted\n''',
+            '''checkedCoreTypeMode ty\n  | unicodeCharTypeFromCoreType ty = Just Unrestricted\n  | unicodeStringTypeFromCoreType ty = Just Unrestricted\n  | Just _ <- floatTypeFromCoreType ty = Just Unrestricted\n''')
+
+          message = 'src/Phil/Core/Protocol/MessageAdmissibility.hs'
+          replace_once(message,
+            'import Phil.Core.UnicodeChar (unicodeCharTypeFromCoreType)\n',
+            'import Phil.Core.UnicodeChar (unicodeCharTypeFromCoreType)\nimport Phil.Core.UnicodeString (unicodeStringTypeFromCoreType)\n')
+          replace_once(message,
+            '''intrinsicBoundaryMessageTypeFact ty\n  | unicodeCharTypeFromCoreType ty = True\n  | Just _ <- floatTypeFromCoreType ty = True\n''',
+            '''intrinsicBoundaryMessageTypeFact ty\n  | unicodeCharTypeFromCoreType ty = True\n  | unicodeStringTypeFromCoreType ty = True\n  | Just _ <- floatTypeFromCoreType ty = True\n''')
+
+          test = 'test/Phase1UnicodeStringMain.hs'
+          replace_once(test,
+            '''import Phil.Core.UnicodeString\n  ( UnicodeStringRealizationError (..)\n''',
+            '''import Phil.Core.UnicodeString\n  ( UnicodeString\n  , UnicodeStringRealizationError (..)\n''')
+          replace_once(test,
+            'stringValue :: [Integer] -> Either String Phil.Core.UnicodeString.UnicodeString\n',
+            'stringValue :: [Integer] -> Either String UnicodeString\n')
+          PY
+          git diff --check
+          git diff --stat
+      - name: Commit source composition
+        run: |
+          if git diff --quiet; then
+            echo 'No changes to commit'
+            exit 0
+          fi
+          git config user.name "Meredith L. Patterson"
+          git config user.email "clonearmy@gmail.com"
+          git add src/Phil/Surface/GrammarV1/Parser.hs \
+                  src/Phil/Surface/GrammarV1/Elaborate.hs \
+                  src/Phil/Surface/GrammarV1/CheckedType.hs \
+                  src/Phil/Core/Protocol/MessageAdmissibility.hs \
+                  test/Phase1UnicodeStringMain.hs
+          git commit -m "phase1: compose immutable semantic String"
+          git push origin HEAD:phase1-exec-023-semantic-string
