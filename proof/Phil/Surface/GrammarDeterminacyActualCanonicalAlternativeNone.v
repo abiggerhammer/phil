@@ -14,6 +14,8 @@ From Phil.Surface Require Import
   GrammarDeterminacyAlternativeResolverTotalConversion
   GrammarDeterminacyActualCanonicalPath.
 
+Import ListNotations.
+
 (*
   Resolver-None conversion across the actual/canonical path boundary for the
   final PHIL-SURFACE-DETERM-001 ordinary-derivation -> predictive-oracle
