@@ -1,4 +1,4 @@
-From Stdlib Require Import Lists.List.
+From Stdlib Require Import Lists.List Strings.String.
 
 From Phil.Surface Require Import
   GrammarDerivation
@@ -9,6 +9,7 @@ From Phil.Surface Require Import
   GrammarDeterminacyAlternativeResolverSomeSuffix.
 
 Import ListNotations.
+Open Scope string_scope.
 
 (*
   Transport the six-way certified-resolver-Some path classification from the
