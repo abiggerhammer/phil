@@ -93,6 +93,8 @@ jobs:
         run: cabal exec -- runghc -Wall -Werror -isrc test/Phase1ExecutionSIntArithmeticMain.hs
       - name: EXEC-017 exact integer division/remainder core
         run: cabal exec -- runghc -Wall -Werror -isrc test/Phase1IntegerDivisionCoreMain.hs
+      - name: EXEC-017 Grammar-v1 integer division/remainder composition
+        run: cabal exec -- runghc -Wall -Werror -isrc test/Phase1IntegerDivisionSourceMain.hs
       - name: VER-013 prove competence and no assertion fallback
         run: cabal exec -- runghc -Wall -Werror -isrc test/Phase1ProveCompetenceMain.hs
       - name: SURF-010 portable persisted lineage competence
