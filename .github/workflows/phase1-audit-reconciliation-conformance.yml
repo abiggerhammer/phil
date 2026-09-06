@@ -109,6 +109,8 @@ jobs:
         run: cabal exec -- runghc -Wall -Werror -isrc test/Phase1UnicodeCharMain.hs
       - name: EXEC-023 immutable semantic String
         run: cabal exec -- runghc -Wall -Werror -isrc test/Phase1UnicodeStringMain.hs
+      - name: EXEC-024 exact runtime Char/String literal elaboration
+        run: cabal exec -- runghc -Wall -Werror -isrc test/Phase1TextLiteralMain.hs
       - name: VER-013 prove competence and no assertion fallback
         run: cabal exec -- runghc -Wall -Werror -isrc test/Phase1ProveCompetenceMain.hs
       - name: SURF-010 portable persisted lineage competence
