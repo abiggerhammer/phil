@@ -36,7 +36,6 @@ import Phil.Core.Scalar (ScalarLiteral (..))
 import Phil.Core.SIntArithmetic
   ( SIntLiteral
   , SIntTerm (..)
-  , SIntType
   , sIntTypeFromCoreType
   )
 import Phil.Core.Syntax
