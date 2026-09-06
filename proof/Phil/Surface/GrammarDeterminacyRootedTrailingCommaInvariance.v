@@ -139,7 +139,7 @@ Proof.
   intros path step Hpath Hstep.
   destruct Hpath as [name [tail [Hpath Htail]]].
   subst path.
-  exists name, (tail ++ [step]).
+  exists name, (List.app tail [step]).
   split.
   - unfold descend.
     simpl.
