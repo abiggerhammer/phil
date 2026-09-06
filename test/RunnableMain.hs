@@ -126,7 +126,7 @@ bindingIdentitySurvivesSystems = case compileRunnable "binding.phil" bindingSour
     case mainFunction (runnableSystemsArtifact runnable) of
       Nothing -> False
       Just functionValue ->
-        case Map.lookup (ValueId "answer") (systemsFunctionValues functionValue) of
+        case Map.lookup (ValueId "source.value.answer") (systemsFunctionValues functionValue) of
           Just value -> systemsValueRole value == TypedScalar (ScalarUInt 32)
           Nothing -> False
 
@@ -135,17 +135,17 @@ bindingIdentitySurvivesLLVM = case compileRunnable "binding.phil" bindingSource 
   Left _ -> False
   Right runnable ->
     let llvm = llvmArtifactText (runnableLLVMArtifact runnable)
-    in Text.isInfixOf "%answer = add i32 0, 42" llvm
-        && Text.isInfixOf "ret i32 %answer" llvm
+    in Text.isInfixOf "%source_value_answer = add i32 0, 42" llvm
+        && Text.isInfixOf "ret i32 %source_value_answer" llvm
 
 scalarAliasDoesNotCopy :: Bool
 scalarAliasDoesNotCopy = case compileRunnable "alias.phil" aliasSource of
   Left _ -> False
   Right runnable ->
     let llvm = llvmArtifactText (runnableLLVMArtifact runnable)
-    in Text.isInfixOf "%original = add i32 0, 42" llvm
-        && Text.isInfixOf "ret i32 %original" llvm
-        && not (Text.isInfixOf "%answer =" llvm)
+    in Text.isInfixOf "%source_value_original = add i32 0, 42" llvm
+        && Text.isInfixOf "ret i32 %source_value_original" llvm
+        && not (Text.isInfixOf "%source_value_answer =" llvm)
 
 u32TypeSurvivesSystems :: Bool
 u32TypeSurvivesSystems = case compileRunnable "u32.phil" u32Source of
@@ -164,8 +164,8 @@ u32ValueSurvivesLLVM = case compileRunnable "u32.phil" u32Source of
   Right runnable ->
     let llvm = llvmArtifactText (runnableLLVMArtifact runnable)
     in Text.isInfixOf "define i32 @main() {" llvm
-        && Text.isInfixOf "%return_value_0 = add i32 0, 42" llvm
-        && Text.isInfixOf "ret i32 %return_value_0" llvm
+        && Text.isInfixOf "%synthetic_return_value_0 = add i32 0, 42" llvm
+        && Text.isInfixOf "ret i32 %synthetic_return_value_0" llvm
 
 missingScalarDefinitionRejects :: Bool
 missingScalarDefinitionRejects =
@@ -200,7 +200,7 @@ nonDominatingScalarDefinitionRejects =
       case mainFunction (runnableSystemsArtifact runnable) of
         Nothing -> False
         Just functionValue ->
-          case Map.lookup (BlockId "entry") (systemsFunctionBlocks functionValue) of
+          case Map.lookup (BlockId "block.entry") (systemsFunctionBlocks functionValue) of
             Nothing -> False
             Just entryBlock ->
               let lateBlockId = BlockId "late.definition"
@@ -211,7 +211,7 @@ nonDominatingScalarDefinitionRejects =
                     }
                   changedFunction = functionValue
                     { systemsFunctionBlocks = Map.fromList
-                        [ (BlockId "entry", entryBlock { systemsBlockOps = [] })
+                        [ (BlockId "block.entry", entryBlock { systemsBlockOps = [] })
                         , (lateBlockId, lateBlock)
                         ]
                     }
@@ -233,8 +233,8 @@ sourceLiteralDriftRejects =
     changeLiteral blockValue = blockValue
       { systemsBlockOps = map rewrite (systemsBlockOps blockValue) }
     rewrite operation = case operation of
-      OpScalarLiteral (ValueId "answer") _ ->
-        OpScalarLiteral (ValueId "answer") (ScalarUIntLiteral 32 43)
+      OpScalarLiteral (ValueId "source.value.answer") _ ->
+        OpScalarLiteral (ValueId "source.value.answer") (ScalarUIntLiteral 32 43)
       _ -> operation
 
 sourceReturnTargetDriftRejects :: Bool
@@ -244,7 +244,7 @@ sourceReturnTargetDriftRejects =
     Right runnable ->
       let bad = adjustEntryBlock
             (\blockValue -> blockValue
-              { systemsBlockTerminator = TermReturnScalar (ValueId "wrong") })
+              { systemsBlockTerminator = TermReturnScalar (ValueId "source.value.wrong") })
             (runnableSystemsArtifact runnable)
       in case verifyRunnableSourceProjection "return-choice.phil" returnChoiceSource bad of
           Left (RunnableSourceProjectionError SourceProjectionReturnTargetMismatch {}) -> True
@@ -354,7 +354,7 @@ adjustEntryBlock modify artifact =
     Nothing -> artifact
     Just functionValue ->
       let changed = functionValue
-            { systemsFunctionBlocks = Map.adjust modify (BlockId "entry")
+            { systemsFunctionBlocks = Map.adjust modify (BlockId "block.entry")
                 (systemsFunctionBlocks functionValue)
             }
       in replaceMainFunction changed artifact
