@@ -27,7 +27,6 @@ jobs:
                   raise SystemExit(f'{path_s}: expected one anchor, found {count}: {old!r}')
               path.write_text(text.replace(old, new, 1))
 
-          # Review fixes in newly-added semantic files.
           replace_once(
               'src/Phil/Core/NumericConversion.hs',
               'convertToSInt signedType@(SIntType width) source = do',
@@ -59,7 +58,6 @@ jobs:
               'fromString :: String -> Data.Text.Text\nfromString = Data.Text.pack',
               'fromString :: String -> Text.Text\nfromString = Text.pack')
 
-          # Production Grammar-v1 parser: canonical convert expression.
           replace_once(
               'src/Phil/Surface/GrammarV1/Parser.hs',
               '  | GrammarV1ReleaseExpression (Located GrammarV1Expression)\n  | GrammarV1AcceptExpression',
@@ -73,7 +71,6 @@ jobs:
               'parseAcceptExpression :: Parser (Located GrammarV1Expression)\n',
               'parseConvertExpression :: Parser (Located GrammarV1Expression)\nparseConvertExpression = do\n  start <- expectKeyword "convert"\n  value <- parseExpression\n  _ <- expectKeyword "to"\n  target <- parseType\n  pure $ Located\n    (SourceSpan\n      (sourceSpanStart (locatedSpan start))\n      (sourceSpanEnd (locatedSpan target)))\n    (GrammarV1ConvertExpression value target)\n\nparseAcceptExpression :: Parser (Located GrammarV1Expression)\n')
 
-          # Closed traversals that inventory strict child evaluation / lexical use.
           replace_once(
               'src/Phil/Surface/GrammarV1/GenericTermScope.hs',
               '  GrammarV1ReleaseExpression resource -> expressionBinderSites resource\n  GrammarV1AcceptExpression value _ -> expressionBinderSites value',
@@ -90,17 +87,11 @@ jobs:
               'src/Phil/Surface/GrammarV1/SemanticBindingState.hs',
               '    GrammarV1FallbackExpression primary fallback ->\n      GrammarV1FallbackExpression\n        <$> rewriteExpression renames primary\n        <*> rewriteFallback renames fallback\n    GrammarV1TupleExpression elements ->',
               '    GrammarV1FallbackExpression primary fallback ->\n      GrammarV1FallbackExpression\n        <$> rewriteExpression renames primary\n        <*> rewriteFallback renames fallback\n    GrammarV1ConvertExpression value target ->\n      GrammarV1ConvertExpression\n        <$> rewriteExpression renames value\n        <*> pure target\n    GrammarV1TupleExpression elements ->')
-
-          # Existing Audit job owns the focused implementation corpus.
-          replace_once(
-              '.github/workflows/phase1-audit-reconciliation-conformance.yml',
-              '      - name: EXEC-019 numeric proposition competence boundary\n        run: cabal exec -- runghc -Wall -Werror -isrc test/Phase1NumericPropositionCompetenceMain.hs\n      - name: VER-013 prove competence and no assertion fallback',
-              '      - name: EXEC-019 numeric proposition competence boundary\n        run: cabal exec -- runghc -Wall -Werror -isrc test/Phase1NumericPropositionCompetenceMain.hs\n      - name: EXEC-020 explicit numeric conversions\n        run: cabal exec -- runghc -Wall -Werror -isrc test/Phase1NumericConversionMain.hs\n      - name: VER-013 prove competence and no assertion fallback')
           PY
 
           git diff --check
           git diff --stat
-      - name: Commit guarded EXEC-020 patch
+      - name: Commit guarded EXEC-020 source patch
         run: |
           git config user.name "Meredith L. Patterson"
           git config user.email "clonearmy@gmail.com"
@@ -111,7 +102,6 @@ jobs:
                   src/Phil/Surface/GrammarV1/SequentialExecution.hs \
                   src/Phil/Surface/GrammarV1/LexicalReferenceScope.hs \
                   src/Phil/Surface/GrammarV1/SemanticBindingState.hs \
-                  test/Phase1NumericConversionMain.hs \
-                  .github/workflows/phase1-audit-reconciliation-conformance.yml
+                  test/Phase1NumericConversionMain.hs
           git commit -m "phase1: compose explicit numeric conversions"
           git push origin HEAD:phase1-exec-020-explicit-numeric-conversions
