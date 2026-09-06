@@ -1,0 +1,102 @@
+name: Temporary EXEC-022 Char composition
+
+on:
+  push:
+    branches: [phase1-exec-022-unicode-char]
+
+permissions:
+  contents: write
+
+jobs:
+  patch:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: phase1-exec-022-unicode-char
+      - name: Apply guarded EXEC-022 source patches
+        run: |
+          python3 - <<'PY'
+          from pathlib import Path
+
+          def replace_once(path_s, old, new):
+              path = Path(path_s)
+              text = path.read_text()
+              count = text.count(old)
+              if count == 0 and new in text:
+                  print(f'{path_s}: already patched')
+                  return
+              if count != 1:
+                  raise SystemExit(f'{path_s}: expected one anchor, found {count}: {old!r}')
+              path.write_text(text.replace(old, new, 1))
+
+          # Core authority hygiene.
+          replace_once('src/Phil/Core/UnicodeChar.hs',
+            'module Phil.Core.UnicodeChar\n',
+            '{-# LANGUAGE OverloadedStrings #-}\n\nmodule Phil.Core.UnicodeChar\n')
+          replace_once('src/Phil/Core/UnicodeChar.hs',
+            'import Data.Text (Text)\nimport Phil.Core.Syntax\n',
+            'import Phil.Core.Syntax\n')
+
+          # Focused test hygiene.
+          replace_once('test/Phase1UnicodeCharMain.hs',
+            'module Main (main) where\n\nimport Phil.Core.CheckedBindingMode',
+            'module Main (main) where\n\nimport qualified Data.Text as Text\nimport Phil.Core.CheckedBindingMode')
+          replace_once('test/Phase1UnicodeCharMain.hs',
+            'fromString :: String -> Data.Text.Text\nfromString = Data.Text.pack\n',
+            'fromString :: String -> Text.Text\nfromString = Text.pack\n')
+
+          # Reuse the closed primitive-type carrier for Char without widening AST.
+          parser = 'src/Phil/Surface/GrammarV1/Parser.hs'
+          replace_once(parser,
+            '''    Just (GrammarKeyword "Bool") -> do\n      value <- expectKeyword "Bool"\n      pure (Located (locatedSpan value) GrammarV1BoolType)\n    Just (GrammarUIntType _) -> do\n''',
+            '''    Just (GrammarKeyword "Bool") -> do\n      value <- expectKeyword "Bool"\n      pure (Located (locatedSpan value) GrammarV1BoolType)\n    Just (GrammarKeyword "Char") -> do\n      value <- expectKeyword "Char"\n      pure (Located (locatedSpan value) (GrammarV1UnsignedType "Char"))\n    Just (GrammarUIntType _) -> do\n''')
+          replace_once(parser,
+            '''    Just (GrammarKeyword "Unit") -> GrammarV1StaticTypeArgument . locatedValue <$> parseType\n    Just (GrammarKeyword "Bool") -> GrammarV1StaticTypeArgument . locatedValue <$> parseType\n    Just (GrammarUIntType _) -> GrammarV1StaticTypeArgument . locatedValue <$> parseType\n''',
+            '''    Just (GrammarKeyword "Unit") -> GrammarV1StaticTypeArgument . locatedValue <$> parseType\n    Just (GrammarKeyword "Bool") -> GrammarV1StaticTypeArgument . locatedValue <$> parseType\n    Just (GrammarKeyword "Char") -> GrammarV1StaticTypeArgument . locatedValue <$> parseType\n    Just (GrammarUIntType _) -> GrammarV1StaticTypeArgument . locatedValue <$> parseType\n''')
+
+          elaborate = 'src/Phil/Surface/GrammarV1/Elaborate.hs'
+          replace_once(elaborate,
+            'import Phil.Core.SIntArithmetic (SIntType (..), sIntCoreType)\n',
+            'import Phil.Core.SIntArithmetic (SIntType (..), sIntCoreType)\nimport Phil.Core.UnicodeChar (unicodeCharCoreType)\n')
+          replace_once(elaborate,
+            '-- identities owned by their dedicated numeric authorities without widening the\n-- Phase-0 backend ScalarType carrier.\n',
+            '-- identities owned by their dedicated scalar authorities without widening the\n-- Phase-0 backend ScalarType carrier. Char shares this closed primitive spelling\n-- carrier but denotes one Unicode scalar rather than an integer representation.\n')
+          replace_once(elaborate,
+            '''  GrammarV1UnsignedType widthText\n    | widthText == Text.pack "F32" -> Just (floatCoreType Float32)\n''',
+            '''  GrammarV1UnsignedType widthText\n    | widthText == Text.pack "Char" -> Just unicodeCharCoreType\n    | widthText == Text.pack "F32" -> Just (floatCoreType Float32)\n''')
+
+          checked = 'src/Phil/Surface/GrammarV1/CheckedType.hs'
+          replace_once(checked,
+            'import Phil.Core.SIntArithmetic (sIntTypeFromCoreType)\n',
+            'import Phil.Core.SIntArithmetic (sIntTypeFromCoreType)\nimport Phil.Core.UnicodeChar (unicodeCharTypeFromCoreType)\n')
+          replace_once(checked,
+            '''checkedCoreTypeMode ty\n  | Just _ <- floatTypeFromCoreType ty = Just Unrestricted\n''',
+            '''checkedCoreTypeMode ty\n  | unicodeCharTypeFromCoreType ty = Just Unrestricted\n  | Just _ <- floatTypeFromCoreType ty = Just Unrestricted\n''')
+
+          message = 'src/Phil/Core/Protocol/MessageAdmissibility.hs'
+          replace_once(message,
+            'import Phil.Core.SIntArithmetic (sIntTypeFromCoreType)\n',
+            'import Phil.Core.SIntArithmetic (sIntTypeFromCoreType)\nimport Phil.Core.UnicodeChar (unicodeCharTypeFromCoreType)\n')
+          replace_once(message,
+            '''intrinsicBoundaryMessageTypeFact ty\n  | Just _ <- floatTypeFromCoreType ty = True\n''',
+            '''intrinsicBoundaryMessageTypeFact ty\n  | unicodeCharTypeFromCoreType ty = True\n  | Just _ <- floatTypeFromCoreType ty = True\n''')
+          PY
+          git diff --check
+          git diff --stat
+      - name: Commit source composition
+        run: |
+          if git diff --quiet; then
+            echo 'No changes to commit'
+            exit 0
+          fi
+          git config user.name "Meredith L. Patterson"
+          git config user.email "clonearmy@gmail.com"
+          git add src/Phil/Core/UnicodeChar.hs \
+                  test/Phase1UnicodeCharMain.hs \
+                  src/Phil/Surface/GrammarV1/Parser.hs \
+                  src/Phil/Surface/GrammarV1/Elaborate.hs \
+                  src/Phil/Surface/GrammarV1/CheckedType.hs \
+                  src/Phil/Core/Protocol/MessageAdmissibility.hs
+          git commit -m "phase1: compose Unicode scalar Char source semantics"
+          git push origin HEAD:phase1-exec-022-unicode-char
