@@ -111,6 +111,7 @@ Proof.
   unfold path_has_suffixb.
   rewrite List.rev_app_distr.
   simpl.
+  rewrite <- List.app_assoc.
   apply reversed_path_prefixb_rule_local_boundary_irrelevant.
   - apply phase1_surface_rule_local_structural_steps_rev.
     exact Hsuffix.
