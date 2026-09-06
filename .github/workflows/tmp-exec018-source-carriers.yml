@@ -84,23 +84,14 @@ jobs:
               "intrinsicBoundaryMessageTypeFact ty\n  | Just _ <- sIntTypeFromCoreType ty = True\n",
               "intrinsicBoundaryMessageTypeFact ty\n  | Just _ <- floatTypeFromCoreType ty = True\n  | Just _ <- sIntTypeFromCoreType ty = True\n",
           )
-
-          audit = ".github/workflows/phase1-audit-reconciliation-conformance.yml"
-          replace_once(
-              audit,
-              "      - name: EXEC-018 strict F32/F64 Core semantic authority and realization gate\n        run: cabal exec -- runghc -Wall -Werror -isrc test/Phase1FloatArithmeticCoreMain.hs\n",
-              "      - name: EXEC-018 strict F32/F64 Core semantic authority and realization gate\n        run: cabal exec -- runghc -Wall -Werror -isrc test/Phase1FloatArithmeticCoreMain.hs\n      - name: EXEC-018 Grammar-v1 F32/F64 source composition\n        run: cabal exec -- runghc -Wall -Werror -isrc test/Phase1FloatArithmeticSourceMain.hs\n",
-          )
           PY
-      - name: Commit composition and remove temporary workflow
+      - name: Commit source carrier composition
         run: |
           git config user.name "Meredith L. Patterson"
           git config user.email "clonearmy@gmail.com"
-          git rm .github/workflows/tmp-exec018-source-carriers.yml
           git add src/Phil/Surface/GrammarV1/Lexer.hs \
                   test/Phase1GrammarV1LexerMain.hs \
                   src/Phil/Surface/GrammarV1/CheckedType.hs \
-                  src/Phil/Core/Protocol/MessageAdmissibility.hs \
-                  .github/workflows/phase1-audit-reconciliation-conformance.yml
+                  src/Phil/Core/Protocol/MessageAdmissibility.hs
           git commit -m "phase1: compose F32/F64 source carriers"
           git push origin HEAD:phase1-exec-018-float-source
