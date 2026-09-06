@@ -29,6 +29,7 @@ data UnicodeTextAlgorithm
   = UnicodeNormalizeNFC
   | UnicodeNormalizeNFD
   | UnicodeCaseFold
+  | UnicodeCaseMap Text
   | UnicodePropertyLookup Text
   | UnicodeGraphemeSegmentation
   | UnicodeCollation Text
@@ -91,6 +92,9 @@ validateAlgorithmParameter
   :: UnicodeTextAlgorithm
   -> Either UnicodeTextPolicyError ()
 validateAlgorithmParameter algorithm = case algorithm of
+  UnicodeCaseMap locale
+    | Text.null (Text.strip locale) ->
+        Left (UnicodeAlgorithmParameterRequired algorithm)
   UnicodePropertyLookup propertyName
     | Text.null (Text.strip propertyName) ->
         Left (UnicodeAlgorithmParameterRequired algorithm)
