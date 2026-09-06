@@ -1,0 +1,81 @@
+name: Phase 1 Surface Determinacy Nonterminal Reset
+
+on:
+  pull_request:
+  push:
+    branches: [main]
+
+permissions:
+  contents: read
+
+jobs:
+  rocq-nonterminal-reset:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    container:
+      image: rocq/rocq-prover:9.2.0
+      options: --user root
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Derive exact Grammar-v1 inputs
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 scripts/derive_phase1_surface_grammar.py --write
+          python3 scripts/derive_phase1_surface_determinacy_certificate.py --write
+          python3 scripts/derive_phase1_surface_grammar.py --check
+          python3 scripts/derive_phase1_surface_determinacy_certificate.py --check
+
+      - name: Compile nonterminal reset proof
+        shell: bash
+        run: |
+          set -euo pipefail
+          export PATH="/home/rocq/.opam/${COMPILER}/bin:$PATH"
+          compile() {
+            file="$1"
+            echo "=== compiling ${file} at $(date -u +%FT%TZ) ==="
+            rocq c -Q proof/Phil Phil "${file}"
+            echo "=== finished ${file} at $(date -u +%FT%TZ) ==="
+          }
+          compile proof/Phil/Surface/Grammar.v
+          compile proof/Phil/Surface/GrammarDerivation.v
+          compile proof/Phil/Surface/GrammarDerivationOracle.v
+          compile proof/Phil/Surface/GrammarDeterminacyCertificate.v
+          compile proof/Phil/Surface/GrammarDeterminacyNullableFirst.v
+          compile proof/Phil/Surface/GrammarDeterminacyFollowOverlap.v
+          compile proof/Phil/Surface/GrammarDeterminacySimpleResolvers.v
+          compile proof/Phil/Surface/GrammarDeterminacyStructuralResolvers.v
+          compile proof/Phil/Surface/GrammarDeterminacyPredictiveOracle.v
+          compile proof/Phil/Surface/GrammarDerivationLookahead.v
+          compile proof/Phil/Surface/GrammarDeterminacyWitnessSoundness.v
+          compile proof/Phil/Surface/GrammarDeterminacyContinuationSoundness.v
+          compile proof/Phil/Surface/GrammarDeterminacyFollowCoverage.v
+          compile proof/Phil/Surface/GrammarDeterminacyDerivationPathSoundness.v
+          compile proof/Phil/Surface/GrammarDeterminacyOracleAssemblyCoverage.v
+          compile proof/Phil/Surface/GrammarDeterminacyPathPrefixInvariance.v
+          timeout 300s rocq c -time -Q proof/Phil Phil \
+            proof/Phil/Surface/GrammarDeterminacyNonterminalReset.v
+
+      - name: Record nonterminal reset proof identities
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p surface-determinacy-nonterminal-reset
+          cp \
+            proof/Phil/Surface/GrammarDeterminacyNonterminalReset.v \
+            proof/Phil/Surface/GrammarDeterminacyNonterminalReset.vo \
+            surface-determinacy-nonterminal-reset/
+          sha256sum \
+            grammar/phase1-surface.ebnf \
+            grammar/phase1-surface-determinacy.json \
+            proof/Phil/Surface/GrammarDeterminacyNonterminalReset.v \
+            proof/Phil/Surface/GrammarDeterminacyNonterminalReset.vo \
+            > surface-determinacy-nonterminal-reset/identities.sha256
+          cat surface-determinacy-nonterminal-reset/identities.sha256
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: rocq-surface-determinacy-nonterminal-reset
+          path: surface-determinacy-nonterminal-reset
+          if-no-files-found: error
