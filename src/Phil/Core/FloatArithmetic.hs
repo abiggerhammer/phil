@@ -31,6 +31,7 @@ module Phil.Core.FloatArithmetic
   , checkFloatRealizationProfile
   ) where
 
+import Prelude hiding (exponent, significand)
 import Data.Bits
   ( (.&.)
   , (.|.)
