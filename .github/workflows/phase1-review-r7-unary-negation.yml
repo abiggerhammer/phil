@@ -1,0 +1,63 @@
+name: Phase 1 Review R7 Unary Negation
+
+on:
+  pull_request:
+    paths:
+      - 'src/Phil/Surface/GrammarV1/FloatArithmetic.hs'
+      - 'src/Phil/Surface/GrammarV1/GenericTermScope.hs'
+      - 'src/Phil/Surface/GrammarV1/IntegerDivision.hs'
+      - 'src/Phil/Surface/GrammarV1/Lexer.hs'
+      - 'src/Phil/Surface/GrammarV1/LexicalReferenceScope.hs'
+      - 'src/Phil/Surface/GrammarV1/NumericConversion.hs'
+      - 'src/Phil/Surface/GrammarV1/Parser.hs'
+      - 'src/Phil/Surface/GrammarV1/RuntimeScalar.hs'
+      - 'src/Phil/Surface/GrammarV1/SIntArithmetic.hs'
+      - 'src/Phil/Surface/GrammarV1/SemanticBindingState.hs'
+      - 'src/Phil/Surface/GrammarV1/SequentialExecution.hs'
+      - 'test/Phase1ExecutionSIntArithmeticMain.hs'
+      - 'test/Phase1FloatArithmeticSourceMain.hs'
+      - 'test/Phase1IntegerDivisionSourceMain.hs'
+      - 'test/Phase1ReviewR7UnaryNegationMain.hs'
+      - '.github/workflows/phase1-review-r7-unary-negation.yml'
+  push:
+    branches: [main]
+    paths:
+      - 'src/Phil/Surface/GrammarV1/FloatArithmetic.hs'
+      - 'src/Phil/Surface/GrammarV1/GenericTermScope.hs'
+      - 'src/Phil/Surface/GrammarV1/IntegerDivision.hs'
+      - 'src/Phil/Surface/GrammarV1/Lexer.hs'
+      - 'src/Phil/Surface/GrammarV1/LexicalReferenceScope.hs'
+      - 'src/Phil/Surface/GrammarV1/NumericConversion.hs'
+      - 'src/Phil/Surface/GrammarV1/Parser.hs'
+      - 'src/Phil/Surface/GrammarV1/RuntimeScalar.hs'
+      - 'src/Phil/Surface/GrammarV1/SIntArithmetic.hs'
+      - 'src/Phil/Surface/GrammarV1/SemanticBindingState.hs'
+      - 'src/Phil/Surface/GrammarV1/SequentialExecution.hs'
+      - 'test/Phase1ExecutionSIntArithmeticMain.hs'
+      - 'test/Phase1FloatArithmeticSourceMain.hs'
+      - 'test/Phase1IntegerDivisionSourceMain.hs'
+      - 'test/Phase1ReviewR7UnaryNegationMain.hs'
+      - '.github/workflows/phase1-review-r7-unary-negation.yml'
+
+permissions:
+  contents: read
+
+jobs:
+  review-r7-unary-negation:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: haskell-actions/setup@v2
+        with:
+          ghc-version: '9.6.7'
+          cabal-version: 'latest'
+      - name: Build ordinary regression substrate
+        run: cabal build all --enable-tests
+      - name: REVIEW-R07 general unary negation
+        run: cabal exec -- runghc -Wall -Werror -isrc test/Phase1ReviewR7UnaryNegationMain.hs
+      - name: REVIEW-R07 affected signed, float, and division controls
+        run: |
+          set -euo pipefail
+          cabal exec -- runghc -Wall -Werror -isrc test/Phase1ExecutionSIntArithmeticMain.hs
+          cabal exec -- runghc -Wall -Werror -isrc test/Phase1FloatArithmeticSourceMain.hs
+          cabal exec -- runghc -Wall -Werror -isrc test/Phase1IntegerDivisionSourceMain.hs
