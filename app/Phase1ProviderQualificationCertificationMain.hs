@@ -55,7 +55,7 @@ certifyWith :: RocqCertificationSpec -> FilePath -> FilePath -> FilePath -> IO (
 certifyWith spec sourcePath compiledPath outputPath = do
   sourceBytes <- ByteString.readFile sourcePath
   compiledBytes <- ByteString.readFile compiledPath
-  case certifyRocqProof spec sourceBytes compiledBytes of
+  case packageTrustedRocqProof spec sourceBytes compiledBytes of
     Left err -> hPutStrLn stderr ("Rocq certification failed: " <> show err) >> exitFailure
     Right bundle -> do
       let certificate = rocqBundleCertificate bundle

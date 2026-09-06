@@ -15,17 +15,19 @@ main :: IO ()
 main = do
   args <- getArgs
   case args of
-    [sourcePath, compiledPath, outputPath] ->
-      certifyWith coreScalarCertificationSpec sourcePath compiledPath outputPath
-    [profileText, sourcePath, compiledPath, outputPath] ->
+    ["--trusted-checked-inputs", sourcePath, compiledPath, outputPath] ->
+      packageWith coreScalarCertificationSpec sourcePath compiledPath outputPath
+    ["--trusted-checked-inputs", profileText, sourcePath, compiledPath, outputPath] ->
       case certificationSpecFor (Text.pack profileText) of
         Nothing -> do
           hPutStrLn stderr ("unknown Rocq certification profile: " <> profileText)
           exitFailure
-        Just spec -> certifyWith spec sourcePath compiledPath outputPath
+        Just spec -> packageWith spec sourcePath compiledPath outputPath
     _ -> do
       hPutStrLn stderr
-        "usage: phil-certify-core-scalar [PROFILE] SOURCE.v COMPILED.vo OUTPUT.cert"
+        "usage: phil-certify-core-scalar --trusted-checked-inputs [PROFILE] SOURCE.v COMPILED.vo OUTPUT.cert"
+      hPutStrLn stderr
+        "This command packages proof authority only for inputs already checked by a trusted Rocq producer; it does not run Rocq itself."
       exitFailure
 
 certificationSpecFor :: Text.Text -> Maybe RocqCertificationSpec
@@ -180,11 +182,11 @@ phase1GenericRequirementsCertificationSpec = RocqCertificationSpec
       "PHIL-GEN-STRUCT-001 supplies the imported structural algebra. Rocq kernel/toolchain correctness and reviewed correspondence from Phil.Core.Generic's concrete parameter-key maps, Set normalization, explicit-vs-implicit published-list normalization, and duplicate/unknown-key checks to the normalized proof model remain explicit trust boundaries. Provider/callable/proposition requirements and final generic syntax are outside this theorem family."
   }
 
-certifyWith :: RocqCertificationSpec -> FilePath -> FilePath -> FilePath -> IO ()
-certifyWith spec sourcePath compiledPath outputPath = do
+packageWith :: RocqCertificationSpec -> FilePath -> FilePath -> FilePath -> IO ()
+packageWith spec sourcePath compiledPath outputPath = do
   sourceBytes <- ByteString.readFile sourcePath
   compiledBytes <- ByteString.readFile compiledPath
-  case certifyRocqProof spec sourceBytes compiledBytes of
+  case packageTrustedRocqProof spec sourceBytes compiledBytes of
     Left err -> do
       hPutStrLn stderr ("Rocq certification failed: " <> show err)
       exitFailure
@@ -195,8 +197,9 @@ certifyWith spec sourcePath compiledPath outputPath = do
       ByteString.writeFile outputPath
         (TextEncoding.encodeUtf8 (renderRocqProofCertificate certificate))
       putStrLn
-        ("certified " <> Text.unpack obligation <>
+        ("packaged trusted checked proof " <> Text.unpack obligation <>
           " as ProofAssistantTheorem evidence")
+      putStrLn "trusted packaging precondition: caller established successful Rocq checking before this command"
       putStrLn
         ("certificate artifact: " <>
           Text.unpack (unArtifactRef (artifactReference artifact)))

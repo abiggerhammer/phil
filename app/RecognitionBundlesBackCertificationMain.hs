@@ -24,7 +24,7 @@ main = do
 certifyOne :: FilePath -> FilePath -> RocqProofBundleSpec -> IO ()
 certifyOne checkedRoot outputRoot spec = do
   inputs <- mapM (readPart checkedRoot) (rocqBundleParts spec)
-  case certifyRocqProofBundle spec inputs of
+  case packageTrustedRocqProofBundle spec inputs of
     Left err ->
       failWith
         ("Recognition proof-bundle back-certification failed for " <>
