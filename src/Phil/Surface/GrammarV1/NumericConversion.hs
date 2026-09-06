@@ -17,6 +17,12 @@ import Phil.Core.IntegerDivision
   ( IntegerDivisionOperator (..)
   , signedQuotientRemainder
   )
+import Phil.Core.IntegerShift
+  ( IntegerShiftError
+  , IntegerShiftOperator (..)
+  , applySIntShift
+  , applyUIntShift
+  )
 import Phil.Core.NumericConversion
   ( NumericConversionError
   , NumericConversionResult (..)
@@ -37,6 +43,7 @@ import Phil.Surface.GrammarV1.Elaborate (grammarV1PrimitiveType)
 import Phil.Surface.GrammarV1.Parser
   ( GrammarV1BinaryOperator (..)
   , GrammarV1Expression (..)
+  , GrammarV1ShiftOperator (..)
   , GrammarV1StaticReference
   )
 import Phil.Surface.Syntax (Located (..))
@@ -53,12 +60,17 @@ data GrammarV1NumericEvaluationError
   | GrammarV1NumericDivideByZero NumericType IntegerDivisionOperator
   | GrammarV1NumericUnsupportedOperator NumericType GrammarV1BinaryOperator
   | GrammarV1NumericFloatError FloatSemanticError
+  | GrammarV1NumericShiftOperandIntegerRequired NumericType
+  | GrammarV1NumericShiftCountIntegerRequired NumericType
+  | GrammarV1NumericShiftError IntegerShiftError
   deriving (Eq, Show)
 
 -- | Evaluate the bounded numeric expression fragment after parsing. Every leaf in
 -- the environment already has exact semantic numeric identity. Binary operators
 -- require identical domains; crossing width/signedness/integer-float boundaries
--- is possible only through an explicit GrammarV1ConvertExpression node.
+-- is possible only through an explicit GrammarV1ConvertExpression node. Shifts
+-- preserve the left operand's integer domain and delegate all count/range meaning
+-- to EXEC-021's exact Core shift authority.
 evaluateGrammarV1NumericExpression
   :: GrammarV1NumericEnvironment
   -> GrammarV1Expression
@@ -81,11 +93,48 @@ evaluateGrammarV1NumericExpression environment = evaluate
         result <- mapLeft GrammarV1NumericConversionError
           (convertNumericValue target sourceValue)
         Right (numericConversionValue result)
+      GrammarV1ShiftExpression left operator right -> do
+        leftValue <- evaluate (locatedValue left)
+        rightValue <- evaluate (locatedValue right)
+        applyShift (locatedValue operator) leftValue rightValue
       GrammarV1BinaryExpression left operator right -> do
         leftValue <- evaluate (locatedValue left)
         rightValue <- evaluate (locatedValue right)
         applyBinary (locatedValue operator) leftValue rightValue
       _ -> Left (GrammarV1NumericUnsupportedExpression expression)
+
+applyShift
+  :: GrammarV1ShiftOperator
+  -> NumericValue
+  -> NumericValue
+  -> Either GrammarV1NumericEvaluationError NumericValue
+applyShift sourceOperator value countValue = do
+  count <- integerShiftCount countValue
+  let operator = case sourceOperator of
+        GrammarV1ShiftLeft -> IntegerShiftLeft
+        GrammarV1ShiftRight -> IntegerShiftRight
+  case value of
+    NumericUIntValue width integerValue ->
+      NumericUIntValue width <$> mapLeft GrammarV1NumericShiftError
+        (applyUIntShift operator width integerValue count)
+    NumericSIntValue literal -> do
+      result <- mapLeft GrammarV1NumericShiftError
+        (applySIntShift operator (sIntLiteralType literal)
+          (sIntLiteralValue literal) count)
+      Right (NumericSIntValue (SIntLiteral (sIntLiteralType literal) result))
+    NumericFloatValue floatValue ->
+      Left (GrammarV1NumericShiftOperandIntegerRequired
+        (NumericFloatType (floatFormat floatValue)))
+
+integerShiftCount
+  :: NumericValue
+  -> Either GrammarV1NumericEvaluationError Integer
+integerShiftCount value = case value of
+  NumericUIntValue _ count -> Right count
+  NumericSIntValue literal -> Right (sIntLiteralValue literal)
+  NumericFloatValue floatValue ->
+    Left (GrammarV1NumericShiftCountIntegerRequired
+      (NumericFloatType (floatFormat floatValue)))
 
 applyBinary
   :: GrammarV1BinaryOperator
@@ -124,10 +173,10 @@ applyUInt operator width left right = case operator of
     | otherwise -> exact (left `mod` right)
   where
     target = NumericUIntType width
-    exact value
-      | width > 0 && value >= 0 && value < 2 ^ width =
-          Right (NumericUIntValue width value)
-      | otherwise = Left (GrammarV1NumericArithmeticOutOfRange target value)
+    exact result
+      | width > 0 && result >= 0 && result < 2 ^ width =
+          Right (NumericUIntValue width result)
+      | otherwise = Left (GrammarV1NumericArithmeticOutOfRange target result)
     divideByZero divisionOperator =
       Left (GrammarV1NumericDivideByZero target divisionOperator)
 
@@ -149,11 +198,11 @@ applySInt operator signedType left right = case operator of
     | otherwise -> exact (snd (signedQuotientRemainder left right))
   where
     target = NumericSIntType signedType
-    exact value =
-      let literal = SIntLiteral signedType value
+    exact result =
+      let literal = SIntLiteral signedType result
       in if sIntLiteralInRange literal
           then Right (NumericSIntValue literal)
-          else Left (GrammarV1NumericArithmeticOutOfRange target value)
+          else Left (GrammarV1NumericArithmeticOutOfRange target result)
     divideByZero divisionOperator =
       Left (GrammarV1NumericDivideByZero target divisionOperator)
 
