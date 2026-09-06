@@ -2461,7 +2461,7 @@ peekCommandExpressionStart = do
       [ "construct", "borrow", "if", "match", "decide", "closure", "loop"
       , "continue", "break", "receive_frame", "receive_exact", "receive"
       , "recognize", "validate", "send_exact", "send", "select", "offer"
-      , "commit_receive", "reject", "fail", "close", "release", "transport"
+      , "commit_receive", "reject", "fail", "close", "release", "convert", "transport"
       , "accept", "prove"
       ]
     _ -> False
