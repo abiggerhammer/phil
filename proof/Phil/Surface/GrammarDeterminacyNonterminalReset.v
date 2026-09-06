@@ -69,12 +69,12 @@ Proof.
   - eapply phase1_surface_rule_body_oracle_assembly_covered; eauto.
   - eapply follow_coverage_lifts_nonterminal_continuation; eauto.
   - change
-      alternative_resolver_contextb
+      (alternative_resolver_contextb
         (path ++ [AtNonterminal name])
         (lookup_tokens name phase1_surface_follow_facts) =
-      alternative_resolver_contextb
+       alternative_resolver_contextb
         [AtNonterminal name]
-        (lookup_tokens name phase1_surface_follow_facts).
+        (lookup_tokens name phase1_surface_follow_facts)).
     apply alternative_resolver_contextb_prefix_irrelevant.
     discriminate.
 Qed.
