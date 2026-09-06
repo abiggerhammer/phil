@@ -193,8 +193,10 @@ convertFiniteToFloat targetFormat source exactValue = do
   precision <- case classifyFloat converted of
     FloatFinite roundedValue -> Right
       (if roundedValue == exactValue then NumericConversionExact else NumericConversionRounded)
-    FloatPositiveZero -> Right NumericConversionRounded
-    FloatNegativeZero -> Right NumericConversionRounded
+    FloatPositiveZero -> Right
+      (if exactValue == 0 then NumericConversionExact else NumericConversionRounded)
+    FloatNegativeZero -> Right
+      (if exactValue == 0 then NumericConversionExact else NumericConversionRounded)
     FloatPositiveInfinity ->
       Left (NumericConversionOutOfRange (NumericFloatType targetFormat) source)
     FloatNegativeInfinity ->
