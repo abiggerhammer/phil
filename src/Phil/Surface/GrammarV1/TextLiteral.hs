@@ -1,3 +1,5 @@
+{-# LANGUAGE PatternSynonyms #-}
+
 module Phil.Surface.GrammarV1.TextLiteral
   ( GrammarV1TextLiteralError (..)
   , grammarV1RuntimeCharLiteral
