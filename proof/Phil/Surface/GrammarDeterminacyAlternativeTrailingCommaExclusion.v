@@ -49,7 +49,7 @@ Proof.
         split.
         -- reflexivity.
         -- split.
-           ++ exact Hlookup.
+           ++ reflexivity.
            ++ exact Hpath.
       * simpl in Hpath.
         discriminate Hpath.
