@@ -1,0 +1,38 @@
+name: Temporary EXEC-018 shadow fix
+
+on:
+  push:
+    branches: [phase1-exec-018-strict-float-semantics]
+
+permissions:
+  contents: write
+
+jobs:
+  patch:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: phase1-exec-018-strict-float-semantics
+      - name: Hide Prelude float helpers shadowed by semantic names
+        run: |
+          python3 - <<'PY'
+          from pathlib import Path
+          path = Path('src/Phil/Core/FloatArithmetic.hs')
+          text = path.read_text()
+          needle = 'import Data.Bits\n'
+          replacement = 'import Prelude hiding (exponent, significand)\nimport Data.Bits\n'
+          if 'import Prelude hiding (exponent, significand)' not in text:
+              if needle not in text:
+                  raise SystemExit('expected Data.Bits import not found')
+              text = text.replace(needle, replacement, 1)
+              path.write_text(text)
+          PY
+      - name: Commit fix and remove temporary workflow
+        run: |
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git rm .github/workflows/tmp-exec018-shadow-fix.yml
+          git add src/Phil/Core/FloatArithmetic.hs
+          git commit -m 'fix: avoid Prelude float helper shadowing'
+          git push origin HEAD:phase1-exec-018-strict-float-semantics
