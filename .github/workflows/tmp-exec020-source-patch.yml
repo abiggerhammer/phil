@@ -94,8 +94,8 @@ jobs:
           # Existing Audit job owns the focused implementation corpus.
           replace_once(
               '.github/workflows/phase1-audit-reconciliation-conformance.yml',
-              '      - name: EXEC-018 Grammar-v1 F32/F64 source composition\n        run: cabal exec -- runghc -Wall -Werror -isrc test/Phase1FloatArithmeticSourceMain.hs\n      - name: VER-013 prove competence and no assertion fallback',
-              '      - name: EXEC-018 Grammar-v1 F32/F64 source composition\n        run: cabal exec -- runghc -Wall -Werror -isrc test/Phase1FloatArithmeticSourceMain.hs\n      - name: EXEC-020 explicit numeric conversions\n        run: cabal exec -- runghc -Wall -Werror -isrc test/Phase1NumericConversionMain.hs\n      - name: VER-013 prove competence and no assertion fallback')
+              '      - name: EXEC-019 numeric proposition competence boundary\n        run: cabal exec -- runghc -Wall -Werror -isrc test/Phase1NumericPropositionCompetenceMain.hs\n      - name: VER-013 prove competence and no assertion fallback',
+              '      - name: EXEC-019 numeric proposition competence boundary\n        run: cabal exec -- runghc -Wall -Werror -isrc test/Phase1NumericPropositionCompetenceMain.hs\n      - name: EXEC-020 explicit numeric conversions\n        run: cabal exec -- runghc -Wall -Werror -isrc test/Phase1NumericConversionMain.hs\n      - name: VER-013 prove competence and no assertion fallback')
           PY
 
           git diff --check
