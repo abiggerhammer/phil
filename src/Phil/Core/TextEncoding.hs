@@ -8,6 +8,7 @@ module Phil.Core.TextEncoding
   , encodedTextBytesType
   , encodeText
   , decodeText
+  , checkTextEncodingCorrespondence
   , checkEncodedTextCorrespondence
   ) where
 
@@ -82,17 +83,28 @@ decodeText encoding bytes = case encoding of
   UTF8 -> unicodeString <$> decodeUtf8 bytes
   unsupported -> Left (TextEncodingUnsupported unsupported)
 
+checkTextEncodingCorrespondence
+  :: TextEncoding
+  -> UnicodeString
+  -> [Word8]
+  -> Ty
+  -> Either TextEncodingError ()
+checkTextEncodingCorrespondence encoding source bytes bytesType = do
+  expected <- encodeText encoding source
+  if bytes == encodedTextBytes expected
+      && bytesType == encodedTextBytesType expected
+    then Right ()
+    else Left TextEncodingCorrespondenceMismatch
+
 checkEncodedTextCorrespondence
   :: EncodedText
   -> Either TextEncodingError ()
-checkEncodedTextCorrespondence witness = do
-  expected <- encodeText
+checkEncodedTextCorrespondence witness =
+  checkTextEncodingCorrespondence
     (encodedTextEncoding witness)
     (encodedTextSource witness)
-  if encodedTextBytes witness == encodedTextBytes expected
-      && encodedTextBytesType witness == encodedTextBytesType expected
-    then Right ()
-    else Left TextEncodingCorrespondenceMismatch
+    (encodedTextBytes witness)
+    (encodedTextBytesType witness)
 
 encodeUtf8Scalar :: Integer -> [Word8]
 encodeUtf8Scalar codePoint
