@@ -52,9 +52,11 @@ data UnicodeAlgorithmContract = UnicodeAlgorithmContract
   deriving (Eq, Ord, Show)
 
 -- | A later String indexing/slicing surface must state a semantic unit. Byte
--- indexing is not one of these units because byte positions belong to Bytes.
+-- indexing is represented only so this boundary can reject it explicitly:
+-- byte positions belong to Bytes, not semantic String values.
 data StringIndexUnit
-  = StringUnicodeScalarIndex
+  = StringByteIndex
+  | StringUnicodeScalarIndex
   | StringGraphemeClusterIndex UnicodeDataVersion
   deriving (Eq, Ord, Show)
 
@@ -82,6 +84,7 @@ checkStringIndexUnit
   -> Either UnicodeTextPolicyError StringIndexUnit
 checkStringIndexUnit maybeUnit = case maybeUnit of
   Nothing -> Left StringIndexUnitRequired
+  Just StringByteIndex -> Left StringByteIndexingRequiresBytes
   Just unit -> Right unit
 
 validateAlgorithmParameter
