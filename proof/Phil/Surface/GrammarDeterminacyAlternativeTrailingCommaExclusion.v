@@ -40,7 +40,7 @@ Proof.
     as [middle |] eqn:Hmiddle.
   - destruct middle as
       [literal | class_name | name | sequence | alternatives | body | body];
-      simpl in Hpath; try discriminate Hpath.
+      try (vm_compute in Hpath; discriminate Hpath).
     destruct (String.eqb "case_pattern" name) eqn:Hname;
       try discriminate Hpath.
     apply String.eqb_eq in Hname.
@@ -67,7 +67,7 @@ Proof.
     as [middle |] eqn:Hmiddle.
   - destruct middle as
       [literal | class_name | name | sequence | alternatives | body | body];
-      simpl in Hpath; try discriminate Hpath.
+      try (vm_compute in Hpath; discriminate Hpath).
     destruct (String.eqb "construct_expression" name) eqn:Hname;
       try discriminate Hpath.
     apply String.eqb_eq in Hname.
@@ -94,7 +94,7 @@ Proof.
     as [middle |] eqn:Hmiddle.
   - destruct middle as
       [literal | class_name | name | sequence | alternatives | body | body];
-      simpl in Hpath; try discriminate Hpath.
+      try (vm_compute in Hpath; discriminate Hpath).
     destruct (String.eqb "record_decl" name) eqn:Hname;
       try discriminate Hpath.
     apply String.eqb_eq in Hname.
@@ -121,7 +121,7 @@ Proof.
     as [middle |] eqn:Hmiddle.
   - destruct middle as
       [literal | class_name | name | sequence | alternatives | body | body];
-      simpl in Hpath; try discriminate Hpath.
+      try (vm_compute in Hpath; discriminate Hpath).
     destruct (String.eqb "record_pattern" name) eqn:Hname;
       try discriminate Hpath.
     apply String.eqb_eq in Hname.
@@ -148,7 +148,7 @@ Proof.
     as [middle |] eqn:Hmiddle.
   - destruct middle as
       [literal | class_name | name | sequence | alternatives | body | body];
-      simpl in Hpath; try discriminate Hpath.
+      try (vm_compute in Hpath; discriminate Hpath).
     destruct (String.eqb "variant_payload" name) eqn:Hname;
       try discriminate Hpath.
     apply String.eqb_eq in Hname.
