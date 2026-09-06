@@ -30,6 +30,7 @@ import Phil.Core.Generic.StaticActual
   , GenericStaticKind (..)
   )
 import Phil.Core.SIntArithmetic (SIntType (..), sIntCoreType)
+import Phil.Core.UnicodeChar (unicodeCharCoreType)
 import Phil.Core.Syntax
   ( Mode (..)
   , Proposition (..)
@@ -136,13 +137,15 @@ grammarV1LogicalProposition source = case source of
 
 -- | The closed parser carrier preserves exact primitive spelling. U[w] keeps
 -- its existing Core constructor; I[w] and F32/F64 receive exact semantic type
--- identities owned by their dedicated numeric authorities without widening the
--- Phase-0 backend ScalarType carrier.
+-- identities owned by their dedicated scalar authorities without widening the
+-- Phase-0 backend ScalarType carrier. Char shares this closed primitive spelling
+-- carrier but denotes one Unicode scalar rather than an integer representation.
 grammarV1PrimitiveType :: GrammarV1Type -> Maybe Ty
 grammarV1PrimitiveType sourceType = case sourceType of
   GrammarV1UnitType -> Just TyUnit
   GrammarV1BoolType -> Just TyBool
   GrammarV1UnsignedType widthText
+    | widthText == Text.pack "Char" -> Just unicodeCharCoreType
     | widthText == Text.pack "F32" -> Just (floatCoreType Float32)
     | widthText == Text.pack "F64" -> Just (floatCoreType Float64)
     | otherwise ->

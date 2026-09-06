@@ -3902,6 +3902,9 @@ parseType = do
     Just (GrammarKeyword "Bool") -> do
       value <- expectKeyword "Bool"
       pure (Located (locatedSpan value) GrammarV1BoolType)
+    Just (GrammarKeyword "Char") -> do
+      value <- expectKeyword "Char"
+      pure (Located (locatedSpan value) (GrammarV1UnsignedType "Char"))
     Just (GrammarUIntType _) -> do
       value <- takeToken
       case locatedValue value of
@@ -4051,6 +4054,7 @@ parseStaticArgument = do
   case fmap locatedValue token of
     Just (GrammarKeyword "Unit") -> GrammarV1StaticTypeArgument . locatedValue <$> parseType
     Just (GrammarKeyword "Bool") -> GrammarV1StaticTypeArgument . locatedValue <$> parseType
+    Just (GrammarKeyword "Char") -> GrammarV1StaticTypeArgument . locatedValue <$> parseType
     Just (GrammarUIntType _) -> GrammarV1StaticTypeArgument . locatedValue <$> parseType
     Just (GrammarKeyword "Bytes") -> GrammarV1StaticTypeArgument . locatedValue <$> parseType
     Just (GrammarKeyword "Frame") -> GrammarV1StaticTypeArgument . locatedValue <$> parseType

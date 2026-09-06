@@ -13,6 +13,7 @@ import Data.Text (Text)
 import qualified Data.Text as Text
 import Phil.Core.FloatArithmetic (floatTypeFromCoreType)
 import Phil.Core.SIntArithmetic (sIntTypeFromCoreType)
+import Phil.Core.UnicodeChar (unicodeCharTypeFromCoreType)
 import Phil.Core.Static (SemanticForm)
 import Phil.Core.Syntax
   ( ProductElementType (..)
@@ -107,6 +108,7 @@ intrinsicBoundaryMessageType ty =
 -- without implying that the Phase-0 backend ScalarType already realizes them.
 intrinsicBoundaryMessageTypeFact :: Ty -> Bool
 intrinsicBoundaryMessageTypeFact ty
+  | unicodeCharTypeFromCoreType ty = True
   | Just _ <- floatTypeFromCoreType ty = True
   | Just _ <- sIntTypeFromCoreType ty = True
   | otherwise = case ty of
