@@ -4,18 +4,15 @@ module Main (main) where
 
 import qualified Data.Map.Strict as Map
 import Data.Text (Text)
-import Phil.Core.CallableRefinement (CallableFailure)
 import Phil.Core.Checker
   ( CheckState (..)
   , emptyCheckState
   )
 import Phil.Core.IntegerDivision
   ( CheckedDivisionResult (..)
-  , IntegerDivisionOperator (..)
   , PlainIntegerDivisionSite (..)
   , PlainSIntDivisionDecision (..)
   , PlainUIntDivisionDecision (..)
-  , SIntDivisionError (..)
   , UIntDivisionError (..)
   , checkedIntegerDivideByZeroFailure
   , checkedSignedDivisionOverflowFailure
@@ -33,9 +30,7 @@ import Phil.Core.Syntax
   , RefTerm (..)
   )
 import Phil.Surface.GrammarV1.IntegerDivision
-  ( GrammarV1CheckedDivisionSourceError (..)
-  , GrammarV1PlainSIntDivisionError (..)
-  , GrammarV1PlainUIntDivisionError (..)
+  ( GrammarV1PlainUIntDivisionError (..)
   , checkGrammarV1CheckedSIntDivision
   , checkGrammarV1CheckedUIntDivision
   , checkGrammarV1PlainSIntDivision
@@ -358,6 +353,3 @@ assert condition detail
 
 mapLeft :: (a -> b) -> Either a c -> Either b c
 mapLeft f = either (Left . f) Right
-
-_failureTypeWitness :: CallableFailure -> CallableFailure
-_failureTypeWitness = id
