@@ -1,0 +1,157 @@
+name: Temporary R4 assurance provenance remediation
+
+on:
+  push:
+    branches: [phase1-review-r4-assurance-provenance]
+
+permissions:
+  contents: write
+
+jobs:
+  patch:
+    if: github.actor != 'github-actions[bot]'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: phase1-review-r4-assurance-provenance
+      - name: Apply guarded provenance/justification split
+        run: |
+          python3 - <<'PY'
+          from pathlib import Path
+
+          def replace_once(path, old, new):
+              text = path.read_text()
+              count = text.count(old)
+              if count != 1:
+                  raise SystemExit(f'expected one anchor in {path}, found {count}: {old!r}')
+              path.write_text(text.replace(old, new, 1))
+
+          verify = Path('src/Phil/Assurance/Verify.hs')
+          replace_once(
+              verify,
+              '  | JustificationCycle [GraphNode]\n  | AcceptanceRuleUnsatisfied RevisionId\n',
+              '  | JustificationCycle [GraphNode]\n'
+              '  | ProvenanceCycle [RevisionId]\n'
+              '  | AcceptanceRuleUnsatisfied RevisionId\n')
+
+          replace_once(
+              verify,
+              '  verifyDependencies evidence\n  verifyAcyclic evidence\n',
+              '  verifyDependencies evidence\n'
+              '  verifyProvenanceAcyclic revisions\n'
+              '  verifyAcyclic evidence\n')
+
+          replace_once(
+              verify,
+              '    verifyAcyclic evidence =\n'
+              '      case findCycle (graphEdges ledger evidence manifest) of\n'
+              '        Nothing -> Right ()\n'
+              '        Just cyclePath -> Left (JustificationCycle cyclePath)\n',
+              '    verifyProvenanceAcyclic revisions =\n'
+              '      case findCycle (provenanceEdges revisions) of\n'
+              '        Nothing -> Right ()\n'
+              '        Just cyclePath -> Left (ProvenanceCycle cyclePath)\n\n'
+              '    verifyAcyclic evidence =\n'
+              '      case findCycle (graphEdges ledger evidence manifest) of\n'
+              '        Nothing -> Right ()\n'
+              '        Just cyclePath -> Left (JustificationCycle cyclePath)\n')
+
+          replace_once(
+              verify,
+              'graphEdges ledger evidence manifest = Map.fromListWith (<>)\n'
+              '  (obligationEvidenceEdges <> lineageEdges <> evidenceEdges)\n',
+              'graphEdges _ledger evidence manifest = Map.fromListWith (<>)\n'
+              '  (obligationEvidenceEdges <> evidenceEdges)\n')
+
+          lineage_block = '''\n    lineageEdges =\n      [ (ObligationNode revision, map ObligationNode (revisionGeneratedFrom obligationRevision))\n      | revision <- Set.toList (manifestObligationRevisions manifest)\n      , Just obligationRevision <- [Map.lookup revision (ledgerRevisions ledger)]\n      ]\n'''
+          replace_once(verify, lineage_block, '')
+
+          replace_once(
+              verify,
+              'graphEdges\n  :: AssuranceLedger\n',
+              'provenanceEdges\n'
+              '  :: Map RevisionId ObligationRevision\n'
+              '  -> Map RevisionId [RevisionId]\n'
+              'provenanceEdges revisions = Map.fromList\n'
+              '  [ (revision, revisionGeneratedFrom obligationRevision)\n'
+              '  | (revision, obligationRevision) <- Map.toList revisions\n'
+              '  ]\n\n'
+              'graphEdges\n'
+              '  :: AssuranceLedger\n')
+
+          replace_once(
+              verify,
+              'findCycle :: Map GraphNode [GraphNode] -> Maybe [GraphNode]\n',
+              'findCycle :: Ord node => Map node [node] -> Maybe [node]\n')
+
+          app = Path('app/LineageAuthorityProofCorrespondenceMain.hs')
+          replace_once(
+              app,
+              '    [ test "explicit in-scope obligation dependency verifies" explicitDependencyVerifies\n',
+              '    [ test "explicit in-scope obligation dependency verifies" explicitDependencyVerifies\n'
+              '    , test "generated prerequisite may justify its parent without false cycle" generatedPrerequisiteDependencyPasses\n'
+              '    , test "genuine two-way obligation justification cycle rejects" genuineObligationCycleRejects\n')
+
+          replace_once(
+              app,
+              'explicitDependencyVerifies :: Bool\n'
+              'explicitDependencyVerifies =\n'
+              '  let (ledger, manifest, context, _) = fixture True True True\n'
+              '  in verifyManifest context ledger manifest == Right ()\n\n',
+              'explicitDependencyVerifies :: Bool\n'
+              'explicitDependencyVerifies =\n'
+              '  let (ledger, manifest, context, _) = fixture True True True\n'
+              '  in verifyManifest context ledger manifest == Right ()\n\n'
+              'generatedPrerequisiteDependencyPasses :: Bool\n'
+              'generatedPrerequisiteDependencyPasses =\n'
+              '  let (ledger0, manifest0, context, ids) = fixture True False True\n'
+              '      ledger = adjustEvidence (parentEvidenceId ids)\n'
+              '        (\\entry -> entry\n'
+              '          { evidenceDependsOn = [DependsOnObligation (childRevisionId ids)] })\n'
+              '        ledger0\n'
+              '      manifest = seal ledger manifest0\n'
+              '  in verifyManifest context ledger manifest == Right ()\n\n'
+              'genuineObligationCycleRejects :: Bool\n'
+              'genuineObligationCycleRejects =\n'
+              '  let (ledger0, manifest0, context, ids) = fixture True True True\n'
+              '      ledger = adjustEvidence (parentEvidenceId ids)\n'
+              '        (\\entry -> entry\n'
+              '          { evidenceDependsOn = [DependsOnObligation (childRevisionId ids)] })\n'
+              '        ledger0\n'
+              '      manifest = seal ledger manifest0\n'
+              '  in case verifyManifest context ledger manifest of\n'
+              '      Left (JustificationCycle _) -> True\n'
+              '      _ -> False\n\n')
+
+          replace_once(
+              app,
+              'seal :: AssuranceLedger -> AssuranceManifest -> AssuranceManifest\n'
+              'seal ledger manifest = manifest { manifestId = deriveManifestId ledger manifest }\n\n',
+              'seal :: AssuranceLedger -> AssuranceManifest -> AssuranceManifest\n'
+              'seal ledger manifest = manifest { manifestId = deriveManifestId ledger manifest }\n\n'
+              'adjustEvidence\n'
+              '  :: EvidenceEntryId\n'
+              '  -> (EvidenceEntry -> EvidenceEntry)\n'
+              '  -> AssuranceLedger\n'
+              '  -> AssuranceLedger\n'
+              'adjustEvidence key modify ledger = ledger\n'
+              '  { ledgerEvidence = Map.adjust update key (ledgerEvidence ledger) }\n'
+              '  where\n'
+              '    update entry =\n'
+              '      let changed = modify entry\n'
+              '      in changed { evidenceEntryDigest = deriveEvidenceEntryDigest changed }\n\n')
+          PY
+          git diff --check
+          git diff -- src/Phil/Assurance/Verify.hs app/LineageAuthorityProofCorrespondenceMain.hs
+      - name: Commit remediation
+        run: |
+          if git diff --quiet; then
+            echo 'No source changes to commit'
+            exit 0
+          fi
+          git config user.name "Meredith L. Patterson"
+          git config user.email "clonearmy@gmail.com"
+          git add src/Phil/Assurance/Verify.hs app/LineageAuthorityProofCorrespondenceMain.hs
+          git commit -m "review: separate assurance provenance from justification cycles"
+          git push origin HEAD:phase1-review-r4-assurance-provenance
