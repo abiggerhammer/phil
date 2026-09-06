@@ -11,6 +11,7 @@ module Phil.Core.Protocol.MessageAdmissibility
 
 import Data.Text (Text)
 import qualified Data.Text as Text
+import Phil.Core.FloatArithmetic (floatTypeFromCoreType)
 import Phil.Core.SIntArithmetic (sIntTypeFromCoreType)
 import Phil.Core.Static (SemanticForm)
 import Phil.Core.Syntax
@@ -106,6 +107,7 @@ intrinsicBoundaryMessageType ty =
 -- without implying that the Phase-0 backend ScalarType already realizes them.
 intrinsicBoundaryMessageTypeFact :: Ty -> Bool
 intrinsicBoundaryMessageTypeFact ty
+  | Just _ <- floatTypeFromCoreType ty = True
   | Just _ <- sIntTypeFromCoreType ty = True
   | otherwise = case ty of
       TyUnit -> True

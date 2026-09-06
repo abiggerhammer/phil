@@ -5,6 +5,7 @@
 module Phil.Surface.GrammarV1.Lexer
   ( GrammarV1Token (..)
   , pattern GrammarSIntType
+  , pattern GrammarFloatType
   , pattern GrammarDecimalFloat
   , pattern GrammarChar
   , GrammarV1LexDiagnostic (..)
@@ -56,13 +57,23 @@ pattern GrammarSIntType value <- (sIntTokenValue -> Just value)
   where
     GrammarSIntType value = GrammarUIntType value
 
--- | Exact digits '.' digits lexical category. The underlying symbol carrier
--- keeps incremental parsers exhaustive and fail-closed; parser support consumes
--- this pattern directly rather than treating the value as punctuation.
+-- | Exact F32/F64 lexical category. Like I<w>, the float type keywords use
+-- the closed GrammarUIntType carrier while preserving exact spelling. The parser
+-- therefore reaches its existing primitive-type path without growing a new AST
+-- constructor; semantic elaboration is solely responsible for float identity.
+pattern GrammarFloatType :: Text -> GrammarV1Token
+pattern GrammarFloatType value <- (floatTypeTokenValue -> Just value)
+  where
+    GrammarFloatType value = GrammarUIntType value
+
+-- | Exact digits '.' digits lexical category. The closed decimal-literal carrier
+-- already preserves arbitrary Text, so float source can reach the existing literal
+-- parser without widening GrammarV1Expression. Contextual scalar elaboration checks
+-- the decimal point and selects F32/F64 semantics; integer contexts still reject it.
 pattern GrammarDecimalFloat :: Text -> GrammarV1Token
 pattern GrammarDecimalFloat value <- (decimalFloatTokenValue -> Just value)
   where
-    GrammarDecimalFloat value = GrammarSymbol value
+    GrammarDecimalFloat value = GrammarDecimalInteger value
 
 -- | Exact runtime character literal after lexical escape decoding. The hidden
 -- symbol prefix is not source syntax and cannot be produced by pSymbol. This
@@ -82,9 +93,15 @@ sIntTokenValue token = case token of
     | isSIntSpelling value -> Just value
   _ -> Nothing
 
+floatTypeTokenValue :: GrammarV1Token -> Maybe Text
+floatTypeTokenValue token = case token of
+  GrammarUIntType value
+    | isFloatTypeSpelling value -> Just value
+  _ -> Nothing
+
 decimalFloatTokenValue :: GrammarV1Token -> Maybe Text
 decimalFloatTokenValue token = case token of
-  GrammarSymbol value
+  GrammarDecimalInteger value
     | isDecimalFloatSpelling value -> Just value
   _ -> Nothing
 
@@ -97,6 +114,9 @@ isSIntSpelling :: Text -> Bool
 isSIntSpelling value = case Text.uncons value of
   Just ('I', digits) -> not (Text.null digits) && Text.all asciiDigit digits
   _ -> False
+
+isFloatTypeSpelling :: Text -> Bool
+isFloatTypeSpelling value = value == "F32" || value == "F64"
 
 isDecimalFloatSpelling :: Text -> Bool
 isDecimalFloatSpelling value = case Text.splitOn "." value of
@@ -297,7 +317,6 @@ canTerminateExpression :: GrammarV1Token -> Bool
 canTerminateExpression token = case token of
   GrammarIdentifier _ -> True
   GrammarDecimalInteger _ -> True
-  GrammarDecimalFloat _ -> True
   GrammarChar _ -> True
   GrammarString _ -> True
   GrammarKeyword keyword -> keyword `elem` ["true", "false", "unit"]
@@ -361,9 +380,11 @@ pIdentifierOrKeyword :: Parser GrammarV1Token
 pIdentifierOrKeyword = do
   name <- Text.pack <$> ((:) <$> identifierStart <*> MP.many identifierContinue)
   pure $
-    if Set.member name grammarV1ReservedWords
-      then GrammarKeyword name
-      else GrammarIdentifier name
+    if isFloatTypeSpelling name
+      then GrammarFloatType name
+      else if Set.member name grammarV1ReservedWords
+        then GrammarKeyword name
+        else GrammarIdentifier name
 
 identifierStart :: Parser Char
 identifierStart = MPC.letterChar <|> MPC.char '_'
