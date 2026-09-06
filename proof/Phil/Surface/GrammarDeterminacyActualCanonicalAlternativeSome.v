@@ -11,6 +11,7 @@ From Phil.Surface Require Import
   GrammarDeterminacyPredictiveOracle
   GrammarDeterminacyContinuationSoundness
   GrammarDeterminacyDerivationPathSoundness
+  GrammarDeterminacyOracleAssemblyCoverage
   GrammarDeterminacyPathPrefixInvariance
   GrammarDeterminacyActualCanonicalPath
   GrammarDeterminacyAlternativeResolverSomeConversion
