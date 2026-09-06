@@ -31,6 +31,7 @@ import Phil.Core.Generic.StaticActual
   )
 import Phil.Core.SIntArithmetic (SIntType (..), sIntCoreType)
 import Phil.Core.UnicodeChar (unicodeCharCoreType)
+import Phil.Core.UnicodeString (unicodeStringCoreType)
 import Phil.Core.Syntax
   ( Mode (..)
   , Proposition (..)
@@ -146,6 +147,7 @@ grammarV1PrimitiveType sourceType = case sourceType of
   GrammarV1BoolType -> Just TyBool
   GrammarV1UnsignedType widthText
     | widthText == Text.pack "Char" -> Just unicodeCharCoreType
+    | widthText == Text.pack "String" -> Just unicodeStringCoreType
     | widthText == Text.pack "F32" -> Just (floatCoreType Float32)
     | widthText == Text.pack "F64" -> Just (floatCoreType Float64)
     | otherwise ->

@@ -14,6 +14,7 @@ import qualified Data.Text as Text
 import Phil.Core.FloatArithmetic (floatTypeFromCoreType)
 import Phil.Core.SIntArithmetic (sIntTypeFromCoreType)
 import Phil.Core.UnicodeChar (unicodeCharTypeFromCoreType)
+import Phil.Core.UnicodeString (unicodeStringTypeFromCoreType)
 import Phil.Core.Static (SemanticForm)
 import Phil.Core.Syntax
   ( ProductElementType (..)
@@ -109,6 +110,7 @@ intrinsicBoundaryMessageType ty =
 intrinsicBoundaryMessageTypeFact :: Ty -> Bool
 intrinsicBoundaryMessageTypeFact ty
   | unicodeCharTypeFromCoreType ty = True
+  | unicodeStringTypeFromCoreType ty = True
   | Just _ <- floatTypeFromCoreType ty = True
   | Just _ <- sIntTypeFromCoreType ty = True
   | otherwise = case ty of
