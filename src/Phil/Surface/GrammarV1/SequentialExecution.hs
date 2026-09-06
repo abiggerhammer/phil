@@ -225,6 +225,8 @@ executeExpression source@(Located _ expression) state0 = do
       finishAfterChildren source [endpoint] state
     GrammarV1ReleaseExpression value ->
       finishAfterChildren source [value] state
+    GrammarV1ConvertExpression value _ ->
+      finishAfterChildren source [value] state
     GrammarV1AcceptExpression value _ ->
       finishAfterChildren source [value] state
     GrammarV1ProveExpression _ -> finishExpression source state

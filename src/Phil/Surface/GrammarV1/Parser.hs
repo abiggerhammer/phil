@@ -698,6 +698,9 @@ data GrammarV1Expression
       (Located GrammarV1Expression)
   | GrammarV1CloseExpression (Located GrammarV1Expression)
   | GrammarV1ReleaseExpression (Located GrammarV1Expression)
+  | GrammarV1ConvertExpression
+      (Located GrammarV1Expression)
+      (Located GrammarV1Type)
   | GrammarV1AcceptExpression
       (Located GrammarV1Expression)
       (Located GrammarV1Type)
@@ -2458,7 +2461,7 @@ peekCommandExpressionStart = do
       [ "construct", "borrow", "if", "match", "decide", "closure", "loop"
       , "continue", "break", "receive_frame", "receive_exact", "receive"
       , "recognize", "validate", "send_exact", "send", "select", "offer"
-      , "commit_receive", "reject", "fail", "close", "release", "transport"
+      , "commit_receive", "reject", "fail", "close", "release", "convert", "transport"
       , "accept", "prove"
       ]
     _ -> False
@@ -2705,6 +2708,7 @@ parseCommandExpression = do
     Just (GrammarKeyword "fail") -> parseFailExpression
     Just (GrammarKeyword "close") -> parseCloseExpression
     Just (GrammarKeyword "release") -> parseReleaseExpression
+    Just (GrammarKeyword "convert") -> parseConvertExpression
     Just (GrammarKeyword "transport") -> parseTransportExpression
     Just (GrammarKeyword "accept") -> parseAcceptExpression
     Just (GrammarKeyword "prove") -> parseProveExpression
@@ -2881,6 +2885,18 @@ parseReleaseExpression = do
       (sourceSpanStart (locatedSpan start))
       (sourceSpanEnd (locatedSpan value)))
     (GrammarV1ReleaseExpression value)
+
+parseConvertExpression :: Parser (Located GrammarV1Expression)
+parseConvertExpression = do
+  start <- expectKeyword "convert"
+  value <- parseExpression
+  _ <- expectKeyword "to"
+  target <- parseType
+  pure $ Located
+    (SourceSpan
+      (sourceSpanStart (locatedSpan start))
+      (sourceSpanEnd (locatedSpan target)))
+    (GrammarV1ConvertExpression value target)
 
 parseAcceptExpression :: Parser (Located GrammarV1Expression)
 parseAcceptExpression = do
