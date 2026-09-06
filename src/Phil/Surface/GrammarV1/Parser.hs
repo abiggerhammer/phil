@@ -63,6 +63,7 @@ module Phil.Surface.GrammarV1.Parser
   , GrammarV1StateBinding (..)
   , GrammarV1Closure (..)
   , GrammarV1BinaryOperator (..)
+  , GrammarV1ShiftOperator (..)
   , GrammarV1FailureTarget (..)
   , GrammarV1Fallback (..)
   , GrammarV1BranchValue (..)
@@ -618,6 +619,11 @@ data GrammarV1BinaryOperator
   | GrammarV1Remainder
   deriving (Eq, Ord, Show)
 
+data GrammarV1ShiftOperator
+  = GrammarV1ShiftLeft
+  | GrammarV1ShiftRight
+  deriving (Eq, Ord, Show)
+
 data GrammarV1FailureTarget = GrammarV1FailureTarget
   { grammarV1FailureTargetReference :: GrammarV1StaticReference
   , grammarV1FailureTargetArguments :: [Located GrammarV1Expression]
@@ -643,6 +649,10 @@ data GrammarV1Expression
   | GrammarV1ProjectionExpression
       (Located GrammarV1Expression)
       (Located Text)
+  | GrammarV1ShiftExpression
+      (Located GrammarV1Expression)
+      (Located GrammarV1ShiftOperator)
+      (Located GrammarV1Expression)
   | GrammarV1BinaryExpression
       (Located GrammarV1Expression)
       (Located GrammarV1BinaryOperator)
@@ -2469,7 +2479,7 @@ peekCommandExpressionStart = do
 parseBaseExpression :: Parser (Located GrammarV1Expression)
 parseBaseExpression = do
   command <- peekCommandExpressionStart
-  if command then parseCommandExpression else parseAdditiveExpression
+  if command then parseCommandExpression else parseShiftExpression
 
 parseExpression :: Parser (Located GrammarV1Expression)
 parseExpression = do
@@ -2531,6 +2541,33 @@ parseFailureTarget = do
         { grammarV1FailureTargetReference = locatedValue reference
         , grammarV1FailureTargetArguments = []
         }
+
+parseShiftExpression :: Parser (Located GrammarV1Expression)
+parseShiftExpression = do
+  first <- parseAdditiveExpression
+  parseMoreShiftExpression first
+
+parseMoreShiftExpression
+  :: Located GrammarV1Expression
+  -> Parser (Located GrammarV1Expression)
+parseMoreShiftExpression left = do
+  hasLeft <- peekSymbol "<<"
+  hasRight <- peekSymbol ">>"
+  if hasLeft || hasRight
+    then do
+      token <- if hasLeft then expectSymbol "<<" else expectSymbol ">>"
+      right <- parseAdditiveExpression
+      let operator = if hasLeft then GrammarV1ShiftLeft else GrammarV1ShiftRight
+          combined = Located
+            (SourceSpan
+              (sourceSpanStart (locatedSpan left))
+              (sourceSpanEnd (locatedSpan right)))
+            (GrammarV1ShiftExpression
+              left
+              (Located (locatedSpan token) operator)
+              right)
+      parseMoreShiftExpression combined
+    else pure left
 
 parseAdditiveExpression :: Parser (Located GrammarV1Expression)
 parseAdditiveExpression = do

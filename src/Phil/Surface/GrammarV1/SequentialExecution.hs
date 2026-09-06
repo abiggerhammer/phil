@@ -163,6 +163,8 @@ executeExpression source@(Located _ expression) state0 = do
     GrammarV1IntegerExpression _ -> finishExpression source state
     GrammarV1ProjectionExpression base _ ->
       finishAfterChildren source [base] state
+    GrammarV1ShiftExpression left _ right ->
+      finishAfterChildren source [left, right] state
     GrammarV1BinaryExpression left _ right ->
       finishAfterChildren source [left, right] state
     GrammarV1FallbackExpression base fallback ->

@@ -103,6 +103,8 @@ jobs:
         run: cabal exec -- runghc -Wall -Werror -isrc test/Phase1NumericPropositionCompetenceMain.hs
       - name: EXEC-020 explicit numeric conversions
         run: cabal exec -- runghc -Wall -Werror -isrc test/Phase1NumericConversionMain.hs
+      - name: EXEC-021 exact fixed-width integer shifts
+        run: cabal exec -- runghc -Wall -Werror -isrc test/Phase1IntegerShiftMain.hs
       - name: VER-013 prove competence and no assertion fallback
         run: cabal exec -- runghc -Wall -Werror -isrc test/Phase1ProveCompetenceMain.hs
       - name: SURF-010 portable persisted lineage competence

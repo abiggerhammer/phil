@@ -311,6 +311,8 @@ expressionBinderSites (Located _ expression) = case expression of
   GrammarV1UnitExpression -> []
   GrammarV1IntegerExpression _ -> []
   GrammarV1ProjectionExpression receiver _ -> expressionBinderSites receiver
+  GrammarV1ShiftExpression left _ right ->
+    expressionBinderSites left <> expressionBinderSites right
   GrammarV1BinaryExpression left _ right ->
     expressionBinderSites left <> expressionBinderSites right
   GrammarV1FallbackExpression primary fallback ->
