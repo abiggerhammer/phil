@@ -237,7 +237,7 @@ buildRunnableSystems sourceDigest result locatedComponent = do
     RunnableUnit -> lowerUnitBody (componentBody (locatedValue locatedComponent))
     RunnableScalar scalarType ->
       lowerScalarBody scalarType (componentBody (locatedValue locatedComponent))
-  let entryBlock = BlockId "entry"
+  let entryBlock = BlockId "block.entry"
       blockValue = SystemsBlock
         { systemsBlockId = entryBlock
         , systemsBlockOps = loweredOperations body
@@ -431,13 +431,16 @@ scalarIntegerLiteral scalarType value =
       Right literal
     ScalarBool -> fragment "boolean scalar lowering does not accept integer literals"
 
+sourceScalarValueId :: Text -> ValueId
+sourceScalarValueId name = ValueId ("source.value." <> name)
+
 defineNamedScalar
   :: Text
   -> ScalarLiteral
   -> ScalarLowerState
   -> Either RunnableCompileError ScalarLowerState
 defineNamedScalar name literal state = do
-  let valueId = ValueId name
+  let valueId = sourceScalarValueId name
   unless (Map.notMember valueId (scalarValues state)) $
     fragment ("Systems scalar value identity is already defined: " <> name)
   Right (appendScalarDefinition name valueId literal state)
@@ -456,7 +459,7 @@ freshSyntheticValue :: ScalarLowerState -> (ValueId, Int)
 freshSyntheticValue state = choose (scalarSyntheticIndex state)
   where
     choose index =
-      let candidate = ValueId ("return.value." <> Text.pack (show index))
+      let candidate = ValueId ("synthetic.return.value." <> Text.pack (show index))
       in if Map.member candidate (scalarValues state)
           then choose (index + 1)
           else (candidate, index + 1)
@@ -609,7 +612,7 @@ expectedScalarProjection scalarType = go Map.empty Map.empty
               case locatedValue expression of
                 IntegerExpression value -> do
                   literal <- projectionIntegerLiteral scalarType value
-                  let valueId = ValueId name
+                  let valueId = sourceScalarValueId name
                   go
                     (Map.insert name valueId bindings)
                     (Map.insert valueId literal definitions)
