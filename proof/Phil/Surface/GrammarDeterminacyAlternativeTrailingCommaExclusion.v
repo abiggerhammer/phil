@@ -23,6 +23,48 @@ Open Scope string_scope.
   node, never an alternative.
 *)
 
+Lemma expression_at_path_nonterminal_head_inv :
+  forall rules expression name rest result,
+    expression_at_path rules expression
+      (AtNonterminal name :: rest) = Some result ->
+    exists body,
+      expression = ENonterminal name /\
+      lookupRule name rules = Some body /\
+      expression_at_path rules body rest = Some result.
+Proof.
+  intros rules expression name rest result Hpath.
+  destruct expression as
+      [literal | class_name | actual | sequence | alternatives | body | body].
+  - simpl in Hpath.
+    discriminate Hpath.
+  - simpl in Hpath.
+    discriminate Hpath.
+  - simpl in Hpath.
+    destruct (String.eqb name actual) eqn:Hname.
+    + apply String.eqb_eq in Hname.
+      subst actual.
+      destruct (lookupRule name rules) as [found |] eqn:Hlookup.
+      * simpl in Hpath.
+        exists found.
+        split.
+        -- reflexivity.
+        -- split.
+           ++ exact Hlookup.
+           ++ exact Hpath.
+      * simpl in Hpath.
+        discriminate Hpath.
+    + simpl in Hpath.
+      discriminate Hpath.
+  - simpl in Hpath.
+    discriminate Hpath.
+  - simpl in Hpath.
+    discriminate Hpath.
+  - simpl in Hpath.
+    discriminate Hpath.
+  - simpl in Hpath.
+    discriminate Hpath.
+Qed.
+
 Lemma case_pattern_comma_repeat_suffix_not_alternative :
   forall prefix items,
     phase1_surface_expression_path_context
@@ -38,15 +80,15 @@ Proof.
     (expression_at_path
       phase1_surface_rules phase1_surface_root_expression prefix)
     as [middle |] eqn:Hmiddle.
-  - destruct middle as
-      [literal | class_name | name | sequence | alternatives | body | body];
-      try (vm_compute in Hpath; discriminate Hpath).
-    destruct (String.eqb "case_pattern" name) eqn:Hname;
-      try discriminate Hpath.
-    apply String.eqb_eq in Hname.
-    subst name.
-    vm_compute in Hpath.
-    discriminate Hpath.
+  - unfold case_pattern_comma_repeat_suffix in Hpath.
+    apply expression_at_path_nonterminal_head_inv in Hpath.
+    destruct Hpath as [body [Hmiddle_shape [Hlookup Htail]]].
+    subst middle.
+    vm_compute in Hlookup.
+    inversion Hlookup.
+    subst body.
+    vm_compute in Htail.
+    discriminate Htail.
   - discriminate Hpath.
 Qed.
 
@@ -65,15 +107,15 @@ Proof.
     (expression_at_path
       phase1_surface_rules phase1_surface_root_expression prefix)
     as [middle |] eqn:Hmiddle.
-  - destruct middle as
-      [literal | class_name | name | sequence | alternatives | body | body];
-      try (vm_compute in Hpath; discriminate Hpath).
-    destruct (String.eqb "construct_expression" name) eqn:Hname;
-      try discriminate Hpath.
-    apply String.eqb_eq in Hname.
-    subst name.
-    vm_compute in Hpath.
-    discriminate Hpath.
+  - unfold construct_expression_comma_repeat_suffix in Hpath.
+    apply expression_at_path_nonterminal_head_inv in Hpath.
+    destruct Hpath as [body [Hmiddle_shape [Hlookup Htail]]].
+    subst middle.
+    vm_compute in Hlookup.
+    inversion Hlookup.
+    subst body.
+    vm_compute in Htail.
+    discriminate Htail.
   - discriminate Hpath.
 Qed.
 
@@ -92,15 +134,15 @@ Proof.
     (expression_at_path
       phase1_surface_rules phase1_surface_root_expression prefix)
     as [middle |] eqn:Hmiddle.
-  - destruct middle as
-      [literal | class_name | name | sequence | alternatives | body | body];
-      try (vm_compute in Hpath; discriminate Hpath).
-    destruct (String.eqb "record_decl" name) eqn:Hname;
-      try discriminate Hpath.
-    apply String.eqb_eq in Hname.
-    subst name.
-    vm_compute in Hpath.
-    discriminate Hpath.
+  - unfold record_decl_comma_repeat_suffix in Hpath.
+    apply expression_at_path_nonterminal_head_inv in Hpath.
+    destruct Hpath as [body [Hmiddle_shape [Hlookup Htail]]].
+    subst middle.
+    vm_compute in Hlookup.
+    inversion Hlookup.
+    subst body.
+    vm_compute in Htail.
+    discriminate Htail.
   - discriminate Hpath.
 Qed.
 
@@ -119,15 +161,15 @@ Proof.
     (expression_at_path
       phase1_surface_rules phase1_surface_root_expression prefix)
     as [middle |] eqn:Hmiddle.
-  - destruct middle as
-      [literal | class_name | name | sequence | alternatives | body | body];
-      try (vm_compute in Hpath; discriminate Hpath).
-    destruct (String.eqb "record_pattern" name) eqn:Hname;
-      try discriminate Hpath.
-    apply String.eqb_eq in Hname.
-    subst name.
-    vm_compute in Hpath.
-    discriminate Hpath.
+  - unfold record_pattern_comma_repeat_suffix in Hpath.
+    apply expression_at_path_nonterminal_head_inv in Hpath.
+    destruct Hpath as [body [Hmiddle_shape [Hlookup Htail]]].
+    subst middle.
+    vm_compute in Hlookup.
+    inversion Hlookup.
+    subst body.
+    vm_compute in Htail.
+    discriminate Htail.
   - discriminate Hpath.
 Qed.
 
@@ -146,15 +188,15 @@ Proof.
     (expression_at_path
       phase1_surface_rules phase1_surface_root_expression prefix)
     as [middle |] eqn:Hmiddle.
-  - destruct middle as
-      [literal | class_name | name | sequence | alternatives | body | body];
-      try (vm_compute in Hpath; discriminate Hpath).
-    destruct (String.eqb "variant_payload" name) eqn:Hname;
-      try discriminate Hpath.
-    apply String.eqb_eq in Hname.
-    subst name.
-    vm_compute in Hpath.
-    discriminate Hpath.
+  - unfold variant_payload_comma_repeat_suffix in Hpath.
+    apply expression_at_path_nonterminal_head_inv in Hpath.
+    destruct Hpath as [body [Hmiddle_shape [Hlookup Htail]]].
+    subst middle.
+    vm_compute in Hlookup.
+    inversion Hlookup.
+    subst body.
+    vm_compute in Htail.
+    discriminate Htail.
   - discriminate Hpath.
 Qed.
 
