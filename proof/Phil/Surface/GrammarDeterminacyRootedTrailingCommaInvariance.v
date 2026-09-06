@@ -92,11 +92,15 @@ Proof.
 Qed.
 
 Lemma path_has_rule_local_suffixb_prefix_irrelevant :
-  forall prefix local_root local_tail suffix_root suffix_tail,
+  forall (prefix : SyntaxPath)
+         (local_root : string)
+         (local_tail : list SyntaxPathStep)
+         (suffix_root : string)
+         (suffix_tail : list SyntaxPathStep),
     Forall phase1_surface_rule_local_structural_step local_tail ->
     Forall phase1_surface_rule_local_structural_step suffix_tail ->
     path_has_suffixb
-      (prefix ++ (AtNonterminal local_root :: local_tail))
+      (List.app prefix (AtNonterminal local_root :: local_tail))
       (AtNonterminal suffix_root :: suffix_tail) =
     path_has_suffixb
       (AtNonterminal local_root :: local_tail)
@@ -148,10 +152,12 @@ Proof.
 Qed.
 
 Theorem trailing_comma_repeat_pathb_rule_local_prefix_irrelevant :
-  forall prefix local_root local_tail,
+  forall (prefix : SyntaxPath)
+         (local_root : string)
+         (local_tail : list SyntaxPathStep),
     Forall phase1_surface_rule_local_structural_step local_tail ->
     trailing_comma_repeat_pathb
-      (prefix ++ (AtNonterminal local_root :: local_tail)) =
+      (List.app prefix (AtNonterminal local_root :: local_tail)) =
     trailing_comma_repeat_pathb
       (AtNonterminal local_root :: local_tail).
 Proof.
