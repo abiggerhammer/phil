@@ -16,6 +16,10 @@ module Phil.Surface.GrammarV1.Elaborate
 
 import qualified Data.Text as Text
 import qualified Data.Text.Read as TextRead
+import Phil.Core.FloatArithmetic
+  ( FloatFormat (..)
+  , floatCoreType
+  )
 import Phil.Core.Generic.RequirementCategory
   ( GenericRequirementCategory (..)
   , GenericRequirementCompetence
@@ -130,18 +134,22 @@ grammarV1LogicalProposition source = case source of
       <*> grammarV1LogicalProposition right
   _ -> Nothing
 
--- | The closed parser carrier preserves the U/I prefix. UInt keeps its existing
--- Core constructor; I[w] receives an exact signed semantic type identity owned
--- by EXEC-016 without widening the backend ScalarType carrier.
+-- | The closed parser carrier preserves exact primitive spelling. U[w] keeps
+-- its existing Core constructor; I[w] and F32/F64 receive exact semantic type
+-- identities owned by their dedicated numeric authorities without widening the
+-- Phase-0 backend ScalarType carrier.
 grammarV1PrimitiveType :: GrammarV1Type -> Maybe Ty
 grammarV1PrimitiveType sourceType = case sourceType of
   GrammarV1UnitType -> Just TyUnit
   GrammarV1BoolType -> Just TyBool
-  GrammarV1UnsignedType widthText ->
-    case Text.uncons widthText of
-      Just ('U', _) -> TyUInt <$> grammarV1IntegerWidth 'U' widthText
-      Just ('I', _) -> sIntCoreType . SIntType <$> grammarV1IntegerWidth 'I' widthText
-      _ -> Nothing
+  GrammarV1UnsignedType widthText
+    | widthText == Text.pack "F32" -> Just (floatCoreType Float32)
+    | widthText == Text.pack "F64" -> Just (floatCoreType Float64)
+    | otherwise ->
+        case Text.uncons widthText of
+          Just ('U', _) -> TyUInt <$> grammarV1IntegerWidth 'U' widthText
+          Just ('I', _) -> sIntCoreType . SIntType <$> grammarV1IntegerWidth 'I' widthText
+          _ -> Nothing
   _ -> Nothing
 
 grammarV1IntegerWidth :: Char -> Text.Text -> Maybe Int

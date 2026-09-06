@@ -113,9 +113,9 @@ numericTypePriority = do
       , GrammarSIntType "I32"
       , GrammarIdentifier "I32name"
       , GrammarSIntType "I999999999999999999999999"
-      , GrammarKeyword "F32"
+      , GrammarFloatType "F32"
       , GrammarIdentifier "F32name"
-      , GrammarKeyword "F64"
+      , GrammarFloatType "F64"
       ])
     ("unexpected signed/float type priority tokens: " <> show tokens)
 

@@ -14,6 +14,7 @@ import Phil.Core.CheckedBindingMode
 import Phil.Core.DataMode
   ( deriveRecordMode
   )
+import Phil.Core.FloatArithmetic (floatTypeFromCoreType)
 import Phil.Core.Focusing
   ( FocusStep
   , FocusingError
@@ -209,6 +210,7 @@ resolveNamedTypeMode sourceReference checkedType resolutions =
 
 checkedCoreTypeMode :: Ty -> Maybe Mode
 checkedCoreTypeMode ty
+  | Just _ <- floatTypeFromCoreType ty = Just Unrestricted
   | Just _ <- sIntTypeFromCoreType ty = Just Unrestricted
   | otherwise = case ty of
       TyUnit -> Just Unrestricted
