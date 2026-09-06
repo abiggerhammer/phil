@@ -862,15 +862,15 @@ Proof.
 Qed.
 
 Lemma phase1_surface_relation_resolver_some_oracle_alternative :
-  forall root_prefix path index input rest tree decision,
+  forall root_prefix path input rest tree decision,
     path = descend root_prefix (AtNonterminal "proposition_atom") ->
     phase1_surface_certified_overlap_resolver path input = Some decision ->
     Derives phase1_surface_rules
-      (descend path (AtAlternative index))
+      (descend path (AtAlternative 0))
       (ENonterminal "relation_proposition") input rest tree ->
-    phase1_surface_predictive_oracle path input = Some (ChooseAlternative index).
+    phase1_surface_predictive_oracle path input = Some (ChooseAlternative 0).
 Proof.
-  intros root_prefix path index input rest tree decision Hpath Hresolver Hderive.
+  intros root_prefix path input rest tree decision Hpath Hresolver Hderive.
   subst path.
   assert (Hlocal : proposition_atom_decision input = Some decision).
   {
@@ -981,15 +981,15 @@ Proof.
 Qed.
 
 Lemma phase1_surface_static_type_resolver_some_oracle_alternative :
-  forall root_prefix path index input rest tree decision,
+  forall root_prefix path input rest tree decision,
     path = descend root_prefix (AtNonterminal "static_argument") ->
     phase1_surface_certified_overlap_resolver path input = Some decision ->
     Derives phase1_surface_rules
-      (descend path (AtAlternative index))
+      (descend path (AtAlternative 0))
       (ENonterminal "nonreference_type_expression") input rest tree ->
-    phase1_surface_predictive_oracle path input = Some (ChooseAlternative index).
+    phase1_surface_predictive_oracle path input = Some (ChooseAlternative 0).
 Proof.
-  intros root_prefix path index input rest tree decision Hpath Hresolver Hderive.
+  intros root_prefix path input rest tree decision Hpath Hresolver Hderive.
   subst path.
   assert (Hlocal : static_argument_decision input = Some decision).
   {
@@ -1017,15 +1017,15 @@ Proof.
 Qed.
 
 Lemma phase1_surface_static_value_resolver_some_oracle_alternative :
-  forall root_prefix path index input rest tree decision,
+  forall root_prefix path input rest tree decision,
     path = descend root_prefix (AtNonterminal "static_argument") ->
     phase1_surface_certified_overlap_resolver path input = Some decision ->
     Derives phase1_surface_rules
-      (descend path (AtAlternative index))
+      (descend path (AtAlternative 2))
       (ENonterminal "static_value_expression") input rest tree ->
-    phase1_surface_predictive_oracle path input = Some (ChooseAlternative index).
+    phase1_surface_predictive_oracle path input = Some (ChooseAlternative 2).
 Proof.
-  intros root_prefix path index input rest tree decision Hpath Hresolver Hderive.
+  intros root_prefix path input rest tree decision Hpath Hresolver Hderive.
   subst path.
   assert (Hlocal : static_argument_decision input = Some decision).
   {
