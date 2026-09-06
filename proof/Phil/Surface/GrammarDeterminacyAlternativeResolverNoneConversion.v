@@ -438,10 +438,60 @@ Proof.
     | Hsuffix Hlookup
     | Hsuffix Hlookup Hfollow
     | Hsuffix Hlookup].
-  - eapply phase1_surface_declaration_resolver_none_oracle_alternative; eauto.
-  - eapply phase1_surface_generic_requirement_resolver_none_oracle_alternative; eauto.
-  - eapply phase1_surface_pattern_resolver_none_oracle_alternative; eauto.
-  - eapply phase1_surface_primary_expression_resolver_none_oracle_alternative; eauto.
-  - eapply phase1_surface_proposition_atom_resolver_none_oracle_alternative; eauto.
-  - eapply phase1_surface_static_argument_resolver_none_oracle_alternative; eauto.
+  - eapply phase1_surface_declaration_resolver_none_oracle_alternative.
+    + exact Hpath.
+    + exact Hsuffix.
+    + exact Hlookup.
+    + exact Hresolver.
+    + exact Hnth.
+    + exact Hderive.
+    + exact Hsafe.
+    + exact Hnonnullable.
+  - eapply phase1_surface_generic_requirement_resolver_none_oracle_alternative.
+    + exact Hpath.
+    + exact Hsuffix.
+    + exact Hlookup.
+    + exact Hresolver.
+    + exact Hnth.
+    + exact Hderive.
+    + exact Hsafe.
+    + exact Hnonnullable.
+  - eapply phase1_surface_pattern_resolver_none_oracle_alternative.
+    + exact Hpath.
+    + exact Hsuffix.
+    + exact Hlookup.
+    + exact Hresolver.
+    + exact Hnth.
+    + exact Hderive.
+    + exact Hsafe.
+    + exact Hnonnullable.
+  - eapply phase1_surface_primary_expression_resolver_none_oracle_alternative.
+    + exact Hpath.
+    + exact Hsuffix.
+    + exact Hlookup.
+    + exact Hresolver.
+    + exact Hnth.
+    + exact Hderive.
+    + exact Hsafe.
+    + exact Hnonnullable.
+  - eapply phase1_surface_proposition_atom_resolver_none_oracle_alternative.
+    + exact Hpath.
+    + exact Hsuffix.
+    + exact Hlookup.
+    + exact Hfollow.
+    + exact Hresolver.
+    + exact Hnth.
+    + exact Hderive.
+    + exact Hsafe.
+    + exact Hnonnullable.
+    + exact Hcontinuation.
+  - eapply phase1_surface_static_argument_resolver_none_oracle_alternative.
+    + exact Hpath.
+    + exact Hsuffix.
+    + exact Hlookup.
+    + exact Hresolver.
+    + exact Hnth.
+    + exact Hderive.
+    + exact Hsafe.
+    + exact Hnonnullable.
 Qed.
