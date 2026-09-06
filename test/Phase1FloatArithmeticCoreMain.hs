@@ -100,9 +100,9 @@ signedZero = do
   assert (positive == positiveZero Float32)
     "positive decimal zero changed identity"
   minusThree <- mapLeft show (floatDecimalLiteral Float32 "-3.0")
-  product <- mapLeft show (applyFloatOperator FloatMultiply positive minusThree)
-  assert (product == negativeZero Float32)
-    ("+0 * -3 did not produce -0: " <> show (classifyFloat product))
+  productValue <- mapLeft show (applyFloatOperator FloatMultiply positive minusThree)
+  assert (productValue == negativeZero Float32)
+    ("+0 * -3 did not produce -0: " <> show (classifyFloat productValue))
 
 finiteArithmetic :: Either String ()
 finiteArithmetic = do
