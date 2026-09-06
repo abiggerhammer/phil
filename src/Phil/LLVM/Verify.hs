@@ -51,6 +51,7 @@ data LLVMVerificationError
   | LLVMFunctionMapKeyMismatch Text Text
   | LLVMFunctionMissing Text
   | LLVMFunctionEntryMismatch Text LLVMBlockId LLVMBlockId
+  | LLVMFunctionParametersMismatch Text [LLVMParameter] [LLVMParameter]
   | LLVMMissingEntryBlock Text LLVMBlockId
   | LLVMBlockMapKeyMismatch Text LLVMBlockId LLVMBlockId
   | LLVMUnknownControlTarget Text LLVMBlockId LLVMBlockId
@@ -182,7 +183,12 @@ verifyOrdinaryProjectionWith lowerer context systemsArtifact actualModule = do
   forM_ (Map.toAscList (llvmFunctions expectedModule)) $ \(functionName, expectedFunction) ->
     case Map.lookup functionName (llvmFunctions actualModule) of
       Nothing -> Left (LLVMFunctionMissing functionName)
-      Just actualFunction ->
+      Just actualFunction -> do
+        let expectedParameters = llvmFunctionParameters expectedFunction
+            actualParameters = llvmFunctionParameters actualFunction
+        unless (actualParameters == expectedParameters) $
+          Left (LLVMFunctionParametersMismatch
+            functionName expectedParameters actualParameters)
         forM_ (Map.toAscList (llvmFunctionBlocks expectedFunction)) $ \(blockId, expectedBlock) ->
           case Map.lookup blockId (llvmFunctionBlocks actualFunction) of
             Nothing -> Left (LLVMEdgeWitnessBlockMissing functionName blockId)

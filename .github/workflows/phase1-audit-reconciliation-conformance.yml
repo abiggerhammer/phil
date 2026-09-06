@@ -117,6 +117,8 @@ jobs:
         run: cabal exec -- runghc -Wall -Werror -isrc test/Phase1UnicodeTextPolicyMain.hs
       - name: REVIEW-R01 LLVM source-name injectivity
         run: cabal exec -- runghc -Wall -Werror -isrc test/Phase1ReviewR1LLVMNamesMain.hs
+      - name: REVIEW-R02 LLVM function-parameter preservation
+        run: cabal exec -- runghc -Wall -Werror -isrc test/Phase1ReviewR2LLVMParametersMain.hs
       - name: VER-013 prove competence and no assertion fallback
         run: cabal exec -- runghc -Wall -Werror -isrc test/Phase1ProveCompetenceMain.hs
       - name: SURF-010 portable persisted lineage competence
