@@ -24,6 +24,7 @@ import Phil.Core.Syntax
   )
 import Phil.Core.UnicodeChar
   ( UnicodeCharError
+  , UnicodeScalar
   , unicodeScalar
   )
 import Phil.Core.UnicodeString
@@ -113,7 +114,7 @@ encodeUtf8Scalar codePoint
       , fromInteger (0x80 .|. (codePoint .&. 0x3f))
       ]
 
-decodeUtf8 :: [Word8] -> Either TextEncodingError [Phil.Core.UnicodeChar.UnicodeScalar]
+decodeUtf8 :: [Word8] -> Either TextEncodingError [UnicodeScalar]
 decodeUtf8 = go 0
   where
     go _ [] = Right []
