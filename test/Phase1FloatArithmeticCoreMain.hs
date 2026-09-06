@@ -13,6 +13,7 @@ import Phil.Core.FloatArithmetic
   , FloatRealizationWeakening (..)
   , FloatRoundingMode (..)
   , FloatSemanticError (..)
+  , FloatValue
   , applyFloatOperator
   , canonicalNaN
   , checkFloatRealizationProfile
@@ -220,7 +221,7 @@ targetModeRejects = do
     Left FloatRealizationFlushesSubnormals -> Right ()
     other -> Left ("flush-to-zero target was admitted: " <> show other)
 
-bits :: FloatFormat -> Integer -> Either String (Phil.Core.FloatArithmetic.FloatValue)
+bits :: FloatFormat -> Integer -> Either String FloatValue
 bits format raw = mapLeft show (floatFromBits format (fromInteger raw))
 
 assert :: Bool -> String -> Either String ()
