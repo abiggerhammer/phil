@@ -34,6 +34,7 @@ module Phil.Core.FloatArithmetic
 import Data.Bits
   ( (.&.)
   , (.|.)
+  , complement
   , shiftL
   , shiftR
   , xor
@@ -53,10 +54,9 @@ import Phil.Core.Syntax
   , Ty (..)
   )
 
--- | EXEC-018 owns strict floating semantic identity independently of host and
--- backend floating carriers. A FloatValue is the exact IEEE interchange bit
--- pattern for its declared format; no Haskell Float/Double value is semantic
--- authority for parsing, arithmetic, comparison, or realization checking.
+-- | EXEC-018 owns strict floating identity independently of host/backend float
+-- carriers. The raw bits are the exact IEEE interchange value for the format;
+-- Haskell Float/Double never decides source semantics in this module.
 data FloatFormat
   = Float32
   | Float64
@@ -97,16 +97,11 @@ data FloatSemanticError
   | FloatFormatMismatch FloatFormat FloatFormat
   deriving (Eq, Show)
 
--- | The source contract fixes round-to-nearest, ties-to-even. Other rounding
--- modes may exist in a target, but they do not realize ordinary Phil floating
--- arithmetic without a separately admitted semantic relation.
 data FloatRoundingMode
   = FloatRoundNearestTiesToEven
   | FloatOtherRounding Text
   deriving (Eq, Ord, Show)
 
--- | Target switches commonly grouped under "fast math" are named separately so
--- no backend can hide a semantic weakening behind one opaque optimization bit.
 data FloatRealizationWeakening
   = FloatReassociation
   | FloatContraction
@@ -154,9 +149,8 @@ floatTypeFromCoreType ty = case ty of
     , semantic == "phil.float.v1:F64" -> Just Float64
   _ -> Nothing
 
--- | Parse the exact Grammar-v1 digits.digits literal language, with an optional
--- sign supplied by the unary-minus source route, then round the exact decimal
--- rational directly to the declared format using ties-to-even.
+-- | Parse the exact Grammar-v1 digits.digits language (plus the unary-minus
+-- literal route) as a rational and round it directly to the source format.
 floatDecimalLiteral
   :: FloatFormat
   -> Text
@@ -225,9 +219,9 @@ compareFloatValues left right = do
       | leftNegative == rightNegative -> FloatEqual
       | leftNegative -> FloatLess
       | otherwise -> FloatGreater
-    (DecodedInfinity leftNegative, DecodedFinite {}) ->
+    (DecodedInfinity leftNegative, DecodedFinite _ _) ->
       if leftNegative then FloatLess else FloatGreater
-    (DecodedFinite {}, DecodedInfinity rightNegative) ->
+    (DecodedFinite _ _, DecodedInfinity rightNegative) ->
       if rightNegative then FloatGreater else FloatLess
     (DecodedFinite leftNegative leftMagnitude, DecodedFinite rightNegative rightMagnitude) ->
       compareFinite
@@ -421,7 +415,7 @@ divideValues left right =
   in case (decode left, decode right) of
       (DecodedNaN, _) -> canonicalNaN format
       (_, DecodedNaN) -> canonicalNaN format
-      (DecodedInfinity {}, DecodedInfinity {}) -> canonicalNaN format
+      (DecodedInfinity _, DecodedInfinity _) -> canonicalNaN format
       (DecodedFinite _ leftMagnitude, DecodedFinite _ rightMagnitude)
         | leftMagnitude == 0 && rightMagnitude == 0 -> canonicalNaN format
       (DecodedInfinity leftNegative, DecodedFinite rightNegative _) ->
