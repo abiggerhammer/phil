@@ -144,7 +144,7 @@ jobs:
         run: |
           mkdir -p proof-certificates
           CERTIFIER="$(cabal list-bin phil-certify-core-scalar)"
-          "$CERTIFIER" \
+          "$CERTIFIER" --trusted-checked-inputs \
             rocq-checked/core-scalar/Scalar.v \
             rocq-checked/core-scalar/Scalar.vo \
             proof-certificates/PHIL-CORE-SCALAR-001.rocq.cert
@@ -185,12 +185,12 @@ jobs:
         run: |
           mkdir -p proof-certificates
           CERTIFIER="$(cabal list-bin phil-certify-core-scalar)"
-          "$CERTIFIER" \
+          "$CERTIFIER" --trusted-checked-inputs \
             systems-field-projection \
             rocq-checked/systems-field-projection/FieldProjection.v \
             rocq-checked/systems-field-projection/FieldProjection.vo \
             proof-certificates/PHIL-SYS-FIELD-PROJ-001.rocq.cert
-          "$CERTIFIER" \
+          "$CERTIFIER" --trusted-checked-inputs \
             llvm-field-projection \
             rocq-checked/llvm-field-projection/FieldProjection.v \
             rocq-checked/llvm-field-projection/FieldProjection.vo \
