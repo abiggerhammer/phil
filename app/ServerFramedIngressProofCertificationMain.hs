@@ -21,7 +21,7 @@ main = do
       finalPath = output </> "PHIL-LLVM-CERT-015.proof-bound.cert"
   sourceBytes <- ByteString.readFile sourcePath
   objectBytes <- ByteString.readFile objectPath
-  case certifyRocqProof llvmServerFramedIngressCertificationSpec sourceBytes objectBytes of
+  case packageTrustedRocqProof llvmServerFramedIngressCertificationSpec sourceBytes objectBytes of
     Left err -> failWith ("Server Framed Ingress Rocq certification failed: " <> show err)
     Right proofBundle -> do
       let proofCertificate = rocqBundleCertificate proofBundle

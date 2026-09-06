@@ -78,7 +78,7 @@ jobs:
           set -euo pipefail
           mkdir -p phase1-generic-structural-certification
           CERTIFIER="$(cabal list-bin exe:phil-certify-core-scalar)"
-          "$CERTIFIER" \
+          "$CERTIFIER" --trusted-checked-inputs \
             phase1-generic-structural \
             phase1-generic-structural-proof/GenericStructural.v \
             phase1-generic-structural-proof/GenericStructural.vo \

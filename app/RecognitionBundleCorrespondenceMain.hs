@@ -26,7 +26,7 @@ main = do
 checkBundle :: FilePath -> RocqProofBundleSpec -> IO Bool
 checkBundle checkedRoot spec = do
   inputs <- mapM (readPart checkedRoot) (rocqBundleParts spec)
-  case certifyRocqProofBundle spec inputs of
+  case packageTrustedRocqProofBundle spec inputs of
     Left err -> do
       hPutStrLn stderr ("bundle unexpectedly rejected: " <> show err)
       pure False
@@ -68,7 +68,7 @@ duplicateRoleRejects spec inputs =
     firstPart : secondPart : rest ->
       let duplicate = secondPart { rocqPartRole = rocqPartRole firstPart }
           badSpec = spec { rocqBundleParts = firstPart : duplicate : rest }
-      in case certifyRocqProofBundle badSpec inputs of
+      in case packageTrustedRocqProofBundle badSpec inputs of
           Left (RocqBundleDuplicateRole role) -> role == rocqPartRole firstPart
           _ -> False
     _ -> False

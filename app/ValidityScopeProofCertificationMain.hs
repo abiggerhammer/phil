@@ -19,7 +19,7 @@ main = do
     [sourcePath, objectPath, outputPath] -> do
       sourceBytes <- ByteString.readFile sourcePath
       objectBytes <- ByteString.readFile objectPath
-      case certifyRocqProof validityScopeCertificationSpec sourceBytes objectBytes of
+      case packageTrustedRocqProof validityScopeCertificationSpec sourceBytes objectBytes of
         Left err -> failWith ("validity-scope proof certification failed: " <> show err)
         Right bundle -> do
           let certificate = rocqBundleCertificate bundle

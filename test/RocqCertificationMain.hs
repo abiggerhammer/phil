@@ -48,6 +48,7 @@ main = do
     , test "missing expected theorem rejects certification" missingTheoremRejects
     , test "cross-profile obligation marker rejects certification" wrongMarkerRejects
     , test "compiled proof object is content-bound" compiledObjectIsBound
+    , test "trusted Rocq packaging names its external-check precondition" trustedPackagingNamesPrecondition
     , test "certificate artifact digest is checked by the manifest" certificateTamperRejects
     ]
   if and results then pure () else exitFailure
@@ -235,7 +236,7 @@ digestValidationProofCandidates = do
 
 missingTheoremRejects :: Bool
 missingTheoremRejects =
-  case certifyRocqProof
+  case packageTrustedRocqProof
       coreScalarCertificationSpec
       (ByteString.pack (Text.unpack sourceWithoutLastCoreTheorem))
       (ByteString.pack "compiled") of
@@ -244,7 +245,7 @@ missingTheoremRejects =
 
 wrongMarkerRejects :: Bool
 wrongMarkerRejects =
-  case certifyRocqProof
+  case packageTrustedRocqProof
       systemsFieldProjectionCertificationSpec
       (ByteString.pack (Text.unpack (validSourceFor coreScalarCertificationSpec)))
       (ByteString.pack "compiled") of
@@ -260,6 +261,16 @@ compiledObjectIsBound = case
     artifactDigest (rocqBundleCertificateArtifact first)
       /= artifactDigest (rocqBundleCertificateArtifact second)
   _ -> False
+
+trustedPackagingNamesPrecondition :: Bool
+trustedPackagingNamesPrecondition = case candidate coreScalarCertificationSpec "compiled-one" of
+  Left _ -> False
+  Right bundle ->
+    "trusted-packaging" `Text.isInfixOf`
+      rocqCertificateCheckerProfile (rocqBundleCertificate bundle)
+      && all
+        (Text.isInfixOf "explicit caller precondition" . evidenceChecker)
+        (Map.elems (ledgerEvidence (rocqBundleLedger bundle)))
 
 certificateTamperRejects :: Bool
 certificateTamperRejects = case candidate llvmFieldProjectionCertificationSpec "compiled-one" of
@@ -279,7 +290,7 @@ candidate
   :: RocqCertificationSpec
   -> String
   -> Either RocqCertificationError RocqCertificationBundle
-candidate spec compiled = certifyRocqProof
+candidate spec compiled = packageTrustedRocqProof
   spec
   (ByteString.pack (Text.unpack (validSourceFor spec)))
   (ByteString.pack compiled)

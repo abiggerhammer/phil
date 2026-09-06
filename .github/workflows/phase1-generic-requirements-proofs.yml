@@ -84,7 +84,7 @@ jobs:
           set -euo pipefail
           mkdir -p phase1-generic-requirements-certification
           CERTIFIER="$(cabal list-bin exe:phil-certify-core-scalar)"
-          "$CERTIFIER" \
+          "$CERTIFIER" --trusted-checked-inputs \
             phase1-generic-requirements \
             phase1-generic-requirements-proof/GenericRequirements.v \
             phase1-generic-requirements-proof/GenericRequirements.vo \

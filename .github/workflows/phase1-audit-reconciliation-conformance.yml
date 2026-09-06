@@ -121,6 +121,26 @@ jobs:
         run: cabal exec -- runghc -Wall -Werror -isrc test/Phase1ReviewR2LLVMParametersMain.hs
       - name: REVIEW-R03 LLVM closed-world function coverage
         run: cabal exec -- runghc -Wall -Werror -isrc test/Phase1ReviewR3LLVMFunctionCoverageMain.hs
+      - name: REVIEW-R05 public Rocq proof authority requires explicit trusted packaging
+        run: |
+          set -euo pipefail
+          cat > /tmp/review-r5.v <<'EOF'
+          (* PHIL-CORE-SCALAR-001 *)
+          Theorem scalar_literal_has_intrinsic_type.
+          Theorem scalar_literal_type_is_deterministic.
+          Theorem boolean_literals_are_valid.
+          Theorem valid_uint_has_positive_width.
+          Theorem valid_uint_is_below_modulus.
+          Theorem zero_width_uint_is_invalid.
+          Theorem uint_at_modulus_is_invalid.
+          EOF
+          printf 'not-a-rocq-object' > /tmp/review-r5.vo
+          if cabal run exe:phil-certify-core-scalar -- /tmp/review-r5.v /tmp/review-r5.vo /tmp/review-r5.cert; then
+            echo 'legacy unchecked certification invocation unexpectedly succeeded' >&2
+            exit 1
+          fi
+          cabal run exe:phil-certify-core-scalar -- --trusted-checked-inputs /tmp/review-r5.v /tmp/review-r5.vo /tmp/review-r5.cert
+          grep -q 'trusted-packaging' /tmp/review-r5.cert
       - name: VER-013 prove competence and no assertion fallback
         run: cabal exec -- runghc -Wall -Werror -isrc test/Phase1ProveCompetenceMain.hs
       - name: SURF-010 portable persisted lineage competence
