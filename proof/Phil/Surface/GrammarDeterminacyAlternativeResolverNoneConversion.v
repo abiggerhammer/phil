@@ -10,6 +10,7 @@ From Phil.Surface Require Import
   GrammarDeterminacyStructuralResolvers
   GrammarDeterminacyPredictiveOracle
   GrammarDeterminacyContinuationSoundness
+  GrammarDeterminacyRelationCommitmentSoundness
   GrammarDeterminacyPredictiveFallbackSoundness
   GrammarDeterminacyDerivationPathSoundness
   GrammarDeterminacyOracleAssemblyCoverage
