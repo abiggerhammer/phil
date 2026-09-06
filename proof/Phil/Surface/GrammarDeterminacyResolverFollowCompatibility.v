@@ -2,6 +2,7 @@ From Stdlib Require Import Bool.Bool Lists.List Strings.String.
 
 From Phil.Surface Require Import
   GrammarDerivation
+  GrammarDeterminacyCertificate
   GrammarDeterminacyNullableFirst
   GrammarDeterminacyFollowOverlap
   GrammarDeterminacySimpleResolvers
