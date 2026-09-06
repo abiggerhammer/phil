@@ -8,9 +8,11 @@ import Phil.Core.CheckedBindingMode (CheckedTypeMode (..))
 import Phil.Core.FloatArithmetic
   ( FloatFormat (..)
   , FloatSemanticError (..)
+  , FloatValue
   , canonicalNaN
   , floatBits
   , floatCoreType
+  , floatDecimalLiteral
   , negativeZero
   , positiveInfinity
   )
@@ -25,7 +27,8 @@ import Phil.Surface.GrammarV1.FloatArithmetic
   , evaluateGrammarV1FloatExpression
   )
 import Phil.Surface.GrammarV1.Parser
-  ( GrammarV1Block (..)
+  ( GrammarV1BinaryOperator (..)
+  , GrammarV1Block (..)
   , GrammarV1ComponentDecl (..)
   , GrammarV1Declaration (..)
   , GrammarV1Expression (..)
@@ -117,18 +120,18 @@ sourceNegativeZero = do
 
 sourceArithmetic :: Either String ()
 sourceArithmetic = do
-  add <- evaluate "exec018-add" "component C() { 1.5 + 2.25; }"
-  subtract <- evaluate "exec018-sub" "component C() { 5.0 - 1.5; }"
-  multiply <- evaluate "exec018-mul" "component C() { 1.5 * 2.0; }"
-  divide <- evaluate "exec018-div" "component C() { 7.0 / 2.0; }"
-  assert (floatBits add == 0x40700000)
-    ("1.5+2.25 did not produce F32 3.75: " <> show (floatBits add))
-  assert (floatBits subtract == 0x40600000)
-    ("5.0-1.5 did not produce F32 3.5: " <> show (floatBits subtract))
-  assert (floatBits multiply == 0x40400000)
-    ("1.5*2.0 did not produce F32 3.0: " <> show (floatBits multiply))
-  assert (floatBits divide == 0x40600000)
-    ("7.0/2.0 did not produce F32 3.5: " <> show (floatBits divide))
+  addValue <- evaluate "exec018-add" "component C() { 1.5 + 2.25; }"
+  subtractValue <- evaluate "exec018-sub" "component C() { 5.0 - 1.5; }"
+  multiplyValue <- evaluate "exec018-mul" "component C() { 1.5 * 2.0; }"
+  divideValue <- evaluate "exec018-div" "component C() { 7.0 / 2.0; }"
+  assert (floatBits addValue == 0x40700000)
+    ("1.5+2.25 did not produce F32 3.75: " <> show (floatBits addValue))
+  assert (floatBits subtractValue == 0x40600000)
+    ("5.0-1.5 did not produce F32 3.5: " <> show (floatBits subtractValue))
+  assert (floatBits multiplyValue == 0x40400000)
+    ("1.5*2.0 did not produce F32 3.0: " <> show (floatBits multiplyValue))
+  assert (floatBits divideValue == 0x40600000)
+    ("7.0/2.0 did not produce F32 3.5: " <> show (floatBits divideValue))
 
 sourceDivisionSpecialCases :: Either String ()
 sourceDivisionSpecialCases = do
@@ -195,14 +198,13 @@ checkedMode sourceType =
     Just (Right (checked, _)) -> Right checked
     other -> Left ("checked float mode unavailable: " <> show other)
 
-evaluate :: Text -> Text -> Either String Phil.Core.FloatArithmetic.FloatValue
+evaluate :: Text -> Text -> Either String FloatValue
 evaluate label source = do
   expression <- parseExpression label source
   mapLeft show (evaluateGrammarV1FloatExpression (floatType "F32") Map.empty expression)
 
-literal :: FloatFormat -> Text -> Either String Phil.Core.FloatArithmetic.FloatValue
-literal format text =
-  mapLeft show (Phil.Core.FloatArithmetic.floatDecimalLiteral format text)
+literal :: FloatFormat -> Text -> Either String FloatValue
+literal format text = mapLeft show (floatDecimalLiteral format text)
 
 parseParameterTypes :: Text -> Text -> Either String [GrammarV1Type]
 parseParameterTypes label source = do
