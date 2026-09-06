@@ -20,7 +20,6 @@ import Phil.Core.SortCheck
 import Phil.Core.Syntax
   ( Proposition (..)
   , RefSort (..)
-  , RefTerm
   )
 
 -- | The built-in numeric decision competence is intentionally smaller than the
