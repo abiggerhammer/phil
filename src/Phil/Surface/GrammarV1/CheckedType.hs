@@ -25,6 +25,7 @@ import Phil.Core.Generic.StaticActual
   )
 import Phil.Core.SIntArithmetic (sIntTypeFromCoreType)
 import Phil.Core.UnicodeChar (unicodeCharTypeFromCoreType)
+import Phil.Core.UnicodeString (unicodeStringTypeFromCoreType)
 import Phil.Core.Static
   ( DeclarationKey
   , InterfaceRevision
@@ -212,6 +213,7 @@ resolveNamedTypeMode sourceReference checkedType resolutions =
 checkedCoreTypeMode :: Ty -> Maybe Mode
 checkedCoreTypeMode ty
   | unicodeCharTypeFromCoreType ty = Just Unrestricted
+  | unicodeStringTypeFromCoreType ty = Just Unrestricted
   | Just _ <- floatTypeFromCoreType ty = Just Unrestricted
   | Just _ <- sIntTypeFromCoreType ty = Just Unrestricted
   | otherwise = case ty of

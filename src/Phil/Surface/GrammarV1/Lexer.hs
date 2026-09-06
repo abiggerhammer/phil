@@ -6,6 +6,7 @@ module Phil.Surface.GrammarV1.Lexer
   ( GrammarV1Token (..)
   , pattern GrammarSIntType
   , pattern GrammarFloatType
+  , pattern GrammarStringType
   , pattern GrammarDecimalFloat
   , pattern GrammarChar
   , GrammarV1LexDiagnostic (..)
@@ -66,6 +67,14 @@ pattern GrammarFloatType value <- (floatTypeTokenValue -> Just value)
   where
     GrammarFloatType value = GrammarUIntType value
 
+-- | Exact String primitive type keyword routed through the same closed primitive
+-- carrier. Runtime string literals remain GrammarString and are separately gated
+-- by EXEC-024, so type identity and literal identity cannot collapse here.
+pattern GrammarStringType :: Text -> GrammarV1Token
+pattern GrammarStringType value <- (stringTypeTokenValue -> Just value)
+  where
+    GrammarStringType value = GrammarUIntType value
+
 -- | Exact digits '.' digits lexical category. The closed decimal-literal carrier
 -- already preserves arbitrary Text, so float source can reach the existing literal
 -- parser without widening GrammarV1Expression. Contextual scalar elaboration checks
@@ -99,6 +108,12 @@ floatTypeTokenValue token = case token of
     | isFloatTypeSpelling value -> Just value
   _ -> Nothing
 
+stringTypeTokenValue :: GrammarV1Token -> Maybe Text
+stringTypeTokenValue token = case token of
+  GrammarUIntType value
+    | isStringTypeSpelling value -> Just value
+  _ -> Nothing
+
 decimalFloatTokenValue :: GrammarV1Token -> Maybe Text
 decimalFloatTokenValue token = case token of
   GrammarDecimalInteger value
@@ -117,6 +132,9 @@ isSIntSpelling value = case Text.uncons value of
 
 isFloatTypeSpelling :: Text -> Bool
 isFloatTypeSpelling value = value == "F32" || value == "F64"
+
+isStringTypeSpelling :: Text -> Bool
+isStringTypeSpelling value = value == "String"
 
 isDecimalFloatSpelling :: Text -> Bool
 isDecimalFloatSpelling value = case Text.splitOn "." value of
@@ -382,9 +400,11 @@ pIdentifierOrKeyword = do
   pure $
     if isFloatTypeSpelling name
       then GrammarFloatType name
-      else if Set.member name grammarV1ReservedWords
-        then GrammarKeyword name
-        else GrammarIdentifier name
+      else if isStringTypeSpelling name
+        then GrammarStringType name
+        else if Set.member name grammarV1ReservedWords
+          then GrammarKeyword name
+          else GrammarIdentifier name
 
 identifierStart :: Parser Char
 identifierStart = MPC.letterChar <|> MPC.char '_'

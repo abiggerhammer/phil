@@ -14,6 +14,7 @@ import qualified Data.Text as Text
 import Phil.Core.FloatArithmetic (floatTypeFromCoreType)
 import Phil.Core.SIntArithmetic (sIntTypeFromCoreType)
 import Phil.Core.UnicodeChar (unicodeCharTypeFromCoreType)
+import Phil.Core.UnicodeString (unicodeStringTypeFromCoreType)
 import Phil.Core.Static (SemanticForm)
 import Phil.Core.Syntax
   ( ProductElementType (..)
@@ -103,12 +104,12 @@ intrinsicBoundaryMessageType ty =
     Kernel.IntrinsicBoundaryMessageAcceptedDecision -> True
     Kernel.IntrinsicBoundaryMessageRequiresContractDecision -> False
 
--- | EXEC-016 signed integers use an exact semantic Ty identity recognized only
--- by their checked smart recognizer. They are primitive immutable Message values
--- without implying that the Phase-0 backend ScalarType already realizes them.
+-- | Exact immutable semantic scalar/value identities can be intrinsic Message
+-- values without claiming any particular Phase-0 backend carrier realization.
 intrinsicBoundaryMessageTypeFact :: Ty -> Bool
 intrinsicBoundaryMessageTypeFact ty
   | unicodeCharTypeFromCoreType ty = True
+  | unicodeStringTypeFromCoreType ty = True
   | Just _ <- floatTypeFromCoreType ty = True
   | Just _ <- sIntTypeFromCoreType ty = True
   | otherwise = case ty of
