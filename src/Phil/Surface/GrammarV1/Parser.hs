@@ -1,4 +1,6 @@
 {-# LANGUAGE OverloadedStrings #-}
+{-# LANGUAGE PatternSynonyms #-}
+{-# LANGUAGE ViewPatterns #-}
 
 module Phil.Surface.GrammarV1.Parser
   ( GrammarV1ParseDiagnostic (..)
@@ -68,6 +70,8 @@ module Phil.Surface.GrammarV1.Parser
   , GrammarV1Fallback (..)
   , GrammarV1BranchValue (..)
   , GrammarV1Expression (..)
+  , pattern GrammarV1CharExpression
+  , pattern GrammarV1StringExpression
   , GrammarV1Statement (..)
   , GrammarV1Block (..)
   , GrammarV1ComponentDecl (..)
@@ -737,6 +741,37 @@ data GrammarV1Expression
   | GrammarV1ClosureExpression GrammarV1Closure
   | GrammarV1RejectExpression (Located GrammarV1Expression)
   deriving (Eq, Ord, Show)
+
+-- | EXEC-024 runtime text literals reuse the closed literal leaf carrier with
+-- private prefixes that cannot be produced by decimal source syntax. Public
+-- pattern synonyms preserve semantic category without widening the expression AST.
+pattern GrammarV1CharExpression :: Text -> GrammarV1Expression
+pattern GrammarV1CharExpression value <- (charExpressionValue -> Just value)
+  where
+    GrammarV1CharExpression value =
+      GrammarV1IntegerExpression (charExpressionPrefix <> value)
+
+pattern GrammarV1StringExpression :: Text -> GrammarV1Expression
+pattern GrammarV1StringExpression value <- (stringExpressionValue -> Just value)
+  where
+    GrammarV1StringExpression value =
+      GrammarV1IntegerExpression (stringExpressionPrefix <> value)
+
+charExpressionPrefix :: Text
+charExpressionPrefix = "\NULphil-char-expression:"
+
+stringExpressionPrefix :: Text
+stringExpressionPrefix = "\NULphil-string-expression:"
+
+charExpressionValue :: GrammarV1Expression -> Maybe Text
+charExpressionValue expression = case expression of
+  GrammarV1IntegerExpression value -> Text.stripPrefix charExpressionPrefix value
+  _ -> Nothing
+
+stringExpressionValue :: GrammarV1Expression -> Maybe Text
+stringExpressionValue expression = case expression of
+  GrammarV1IntegerExpression value -> Text.stripPrefix stringExpressionPrefix value
+  _ -> Nothing
 
 data GrammarV1Statement
   = GrammarV1LetStatement (Located GrammarV1Pattern) (Located GrammarV1Expression)
@@ -2707,6 +2742,18 @@ parsePrimaryExpression = do
     Just (GrammarKeyword "unit") -> do
       value <- expectKeyword "unit"
       pure (Located (locatedSpan value) GrammarV1UnitExpression)
+    Just (GrammarChar _) -> do
+      value <- takeToken
+      case locatedValue value of
+        GrammarChar textValue ->
+          pure (Located (locatedSpan value) (GrammarV1CharExpression textValue))
+        _ -> failParser "internal CHAR_LITERAL expression dispatch error"
+    Just (GrammarString _) -> do
+      value <- takeToken
+      case locatedValue value of
+        GrammarString textValue ->
+          pure (Located (locatedSpan value) (GrammarV1StringExpression textValue))
+        _ -> failParser "internal STRING_LITERAL expression dispatch error"
     Just (GrammarDecimalInteger _) -> do
       value <- takeToken
       case locatedValue value of
