@@ -1,4 +1,5 @@
 name: Phase 1 Surface Determinacy Alternative Resolver Some Conversion
+# Retrigger exact-head CI after the proposition alternative bound proof.
 
 on:
   pull_request:
