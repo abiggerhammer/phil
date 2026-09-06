@@ -17,14 +17,19 @@ jobs:
           ref: phase1-review-r6-using-on-order
           fetch-depth: 0
 
-      - name: Apply R6 repair and audit registration
+      - uses: haskell-actions/setup@v2
+        with:
+          ghc-version: '9.6.7'
+          cabal-version: 'latest'
+
+      - name: Apply R6 source repair
         shell: bash
         run: |
           set -euo pipefail
           python3 - <<'PY'
           from pathlib import Path
-          sequential = Path('src/Phil/Surface/GrammarV1/SequentialExecution.hs')
-          text = sequential.read_text()
+          path = Path('src/Phil/Surface/GrammarV1/SequentialExecution.hs')
+          text = path.read_text()
           old_receive = "    GrammarV1ReceiveExactExpression first second third ->\n      finishAfterChildren source ([first, second] <> maybe [] pure third) state\n"
           new_receive = "    GrammarV1ReceiveExactExpression amount endpoint evidence ->\n      finishAfterChildren source ([amount] <> maybe [] pure evidence <> [endpoint]) state\n"
           if old_receive not in text:
@@ -34,19 +39,18 @@ jobs:
           new_select = "    GrammarV1SelectExpression branch endpoint boundary ->\n      finishAfterChildren source\n        ( grammarV1BranchValueArguments (locatedValue branch)\n          <> maybe [] pure boundary\n          <> [endpoint]\n        )\n        state\n"
           if old_select not in text:
               raise SystemExit('R6 select anchor not found')
-          sequential.write_text(text.replace(old_select, new_select, 1))
-          audit = Path('.github/workflows/phase1-audit-reconciliation-conformance.yml')
-          text = audit.read_text()
-          anchor = "      - name: VER-013 prove competence and no assertion fallback\n        run: cabal exec -- runghc -Wall -Werror -isrc test/Phase1ProveCompetenceMain.hs\n"
-          insertion = "      - name: REVIEW-R06 textual using/on operand order\n        run: cabal exec -- runghc -Wall -Werror -isrc test/Phase1ReviewR6OperandOrderMain.hs\n" + anchor
-          if anchor not in text:
-              raise SystemExit('R6 audit anchor not found')
-          audit.write_text(text.replace(anchor, insertion, 1))
+          path.write_text(text.replace(old_select, new_select, 1))
           PY
+
+      - name: Run R6 regression
+        run: cabal exec -- runghc -Wall -Werror -isrc test/Phase1ReviewR6OperandOrderMain.hs
+
+      - name: Commit source repair
+        shell: bash
+        run: |
+          set -euo pipefail
           git config user.name github-actions[bot]
           git config user.email 41898282+github-actions[bot]@users.noreply.github.com
-          git add src/Phil/Surface/GrammarV1/SequentialExecution.hs \
-                  test/Phase1ReviewR6OperandOrderMain.hs \
-                  .github/workflows/phase1-audit-reconciliation-conformance.yml
+          git add src/Phil/Surface/GrammarV1/SequentialExecution.hs
           git commit -m 'review: preserve using/on textual operand order'
           git push origin HEAD:phase1-review-r6-using-on-order
