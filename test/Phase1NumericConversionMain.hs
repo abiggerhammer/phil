@@ -3,6 +3,7 @@
 module Main (main) where
 
 import qualified Data.Map.Strict as Map
+import qualified Data.Text as Text
 import Phil.Core.FloatArithmetic
   ( FloatClass (..)
   , FloatFormat (..)
@@ -279,8 +280,8 @@ assert :: Bool -> String -> Either String ()
 assert True _ = Right ()
 assert False detail = Left detail
 
-fromString :: String -> Data.Text.Text
-fromString = Data.Text.pack
+fromString :: String -> Text.Text
+fromString = Text.pack
 
 mapLeft :: (a -> b) -> Either a c -> Either b c
 mapLeft f = either (Left . f) Right

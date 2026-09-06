@@ -9,6 +9,7 @@ import qualified Data.Map.Strict as Map
 import Phil.Core.FloatArithmetic
   ( FloatOperator (..)
   , FloatSemanticError
+  , FloatValue
   , applyFloatOperator
   , floatFormat
   )
@@ -18,10 +19,12 @@ import Phil.Core.IntegerDivision
   )
 import Phil.Core.NumericConversion
   ( NumericConversionError
-  , NumericType
+  , NumericConversionResult (..)
+  , NumericType (..)
   , NumericValue (..)
   , convertNumericValue
   , numericTypeFromCoreType
+  , numericValueType
   )
 import Phil.Core.SIntArithmetic
   ( SIntLiteral (..)
@@ -156,8 +159,8 @@ applySInt operator signedType left right = case operator of
 
 applyFloat
   :: GrammarV1BinaryOperator
-  -> Phil.Core.FloatArithmetic.FloatValue
-  -> Phil.Core.FloatArithmetic.FloatValue
+  -> FloatValue
+  -> FloatValue
   -> Either GrammarV1NumericEvaluationError NumericValue
 applyFloat operator left right = do
   coreOperator <- case operator of

@@ -138,6 +138,10 @@ rewriteExpression renames (Located span' expression) =
       GrammarV1FallbackExpression
         <$> rewriteExpression renames primary
         <*> rewriteFallback renames fallback
+    GrammarV1ConvertExpression value target ->
+      GrammarV1ConvertExpression
+        <$> rewriteExpression renames value
+        <*> pure target
     GrammarV1TupleExpression elements ->
       GrammarV1TupleExpression <$> mapM (rewriteExpression renames) elements
     GrammarV1ParenthesizedExpression inner ->

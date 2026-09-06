@@ -132,7 +132,7 @@ convertToSInt
   :: SIntType
   -> NumericValue
   -> Either NumericConversionError NumericConversionResult
-convertToSInt signedType@(SIntType width) source = do
+convertToSInt signedType source = do
   value <- exactIntegerSource (NumericSIntType signedType) source
   let literal = SIntLiteral signedType value
   if sIntLiteralInRange literal
@@ -259,7 +259,7 @@ renderExactBinaryDecimal value = do
                 (whole, fractional) = splitAt split digits
             in whole <> "." <> fractional
       prefix = if signedNumerator < 0 then "-" else ""
-  Right (Text.pack (prefix <> decimalMagnitude))
+  Just (Text.pack (prefix <> decimalMagnitude))
 
 powerOfTwoExponent :: Integer -> Maybe Int
 powerOfTwoExponent value

@@ -79,6 +79,8 @@ grammarV1CheckedExpressionReferences pending scope (Located sourceSpan expressio
     GrammarV1FallbackExpression primary fallback -> combineChecked
       (grammarV1CheckedExpressionReferences pending scope primary)
       (checkedFallbackReferences pending scope fallback)
+    GrammarV1ConvertExpression value _ ->
+      grammarV1CheckedExpressionReferences pending scope value
     GrammarV1TupleExpression elements -> checkedMany
       (map (grammarV1CheckedExpressionReferences pending scope) elements)
     GrammarV1ParenthesizedExpression inner ->
