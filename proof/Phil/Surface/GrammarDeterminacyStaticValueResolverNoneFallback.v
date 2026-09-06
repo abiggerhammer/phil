@@ -14,6 +14,7 @@ From Phil.Surface Require Import
   GrammarDeterminacyContinuationSoundness
   GrammarDeterminacyFollowCoverage
   GrammarDeterminacyPredictiveFallbackSoundness
+  GrammarDeterminacyDerivationPathSoundness
   GrammarDeterminacyAlternativeEarlierDisjoint
   GrammarDeterminacyAlternativeResolverContext
   GrammarDeterminacyAlternativeResolverNoneSemantic
@@ -243,7 +244,7 @@ Theorem phase1_surface_static_value_resolver_none_fallback :
       Some (ChooseAlternative 2).
 Proof.
   intros path items input rest tree Hsuffix Hlookup Hresolver Hderive.
-  assert (Hlookup_copy := Hlookup).
+  pose proof Hlookup as Hlookup_copy.
   rewrite phase1_surface_resolver_static_argument_lookup_exact in Hlookup_copy.
   inversion Hlookup_copy; subst items.
   eapply predictive_fallback_alternative_from_derivation.
