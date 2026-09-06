@@ -126,7 +126,7 @@ textTypePriority = do
     (tokens ==
       [ GrammarKeyword "Char"
       , GrammarIdentifier "CharValue"
-      , GrammarKeyword "String"
+      , GrammarStringType "String"
       , GrammarIdentifier "StringValue"
       ])
     ("unexpected text type priority tokens: " <> show tokens)
