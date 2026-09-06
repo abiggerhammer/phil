@@ -1,0 +1,36 @@
+name: Temporary EXEC-018 type fix
+
+on:
+  push:
+    branches: [phase1-exec-018-strict-float-semantics]
+
+permissions:
+  contents: write
+
+jobs:
+  patch:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: phase1-exec-018-strict-float-semantics
+      - name: Apply guarded type fix
+        run: |
+          python3 - <<'PY'
+          from pathlib import Path
+          path = Path('src/Phil/Core/FloatArithmetic.hs')
+          text = path.read_text()
+          old = 'let exponentBits = toWord64 (finalExponent + exponentBias parameters)'
+          new = 'let exponentBits = fromIntegral (finalExponent + exponentBias parameters)'
+          if text.count(old) != 1:
+              raise SystemExit(f'expected exactly one exponent packing site, found {text.count(old)}')
+          path.write_text(text.replace(old, new))
+          PY
+      - name: Commit fix and remove temporary workflow
+        run: |
+          git config user.name 'Meredith L. Patterson'
+          git config user.email 'clonearmy@gmail.com'
+          git rm .github/workflows/tmp-exec018-type-fix.yml
+          git add src/Phil/Core/FloatArithmetic.hs
+          git commit -m 'phase1: fix float exponent field packing type'
+          git push origin HEAD:phase1-exec-018-strict-float-semantics
