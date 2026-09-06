@@ -1,0 +1,31 @@
+name: Phase 1 Review R6 Operand Order
+
+on:
+  pull_request:
+    paths:
+      - 'src/Phil/Surface/GrammarV1/SequentialExecution.hs'
+      - 'test/Phase1ReviewR6OperandOrderMain.hs'
+      - '.github/workflows/phase1-review-r6-operand-order.yml'
+  push:
+    branches: [main]
+    paths:
+      - 'src/Phil/Surface/GrammarV1/SequentialExecution.hs'
+      - 'test/Phase1ReviewR6OperandOrderMain.hs'
+      - '.github/workflows/phase1-review-r6-operand-order.yml'
+
+permissions:
+  contents: read
+
+jobs:
+  review-r6-operand-order:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: haskell-actions/setup@v2
+        with:
+          ghc-version: '9.6.7'
+          cabal-version: 'latest'
+      - name: Build ordinary regression substrate
+        run: cabal build all --enable-tests
+      - name: REVIEW-R06 textual using/on operand order
+        run: cabal exec -- runghc -Wall -Werror -isrc test/Phase1ReviewR6OperandOrderMain.hs
