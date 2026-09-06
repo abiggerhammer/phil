@@ -976,8 +976,17 @@ Proof.
     eapply phase1_surface_claim_application_certified_commitment.
     + exact Hderive.
     + exact Hproposition_continuation.
-  - vm_compute in Hnth.
-    discriminate Hnth.
+  - exfalso.
+    assert (Hlt :
+      S (S (S (S (S index)))) <
+      List.length phase1_surface_resolver_proposition_atom_items).
+    {
+      apply nth_error_Some.
+      rewrite Hnth.
+      discriminate.
+    }
+    vm_compute in Hlt.
+    lia.
 Qed.
 
 Lemma phase1_surface_static_type_resolver_some_oracle_alternative :
