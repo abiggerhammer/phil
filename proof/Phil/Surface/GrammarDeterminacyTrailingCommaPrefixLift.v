@@ -1,4 +1,4 @@
-From Stdlib Require Import Lists.List Lia.
+From Stdlib Require Import Bool.Bool Lists.List Lia.
 
 From Phil.Surface Require Import
   GrammarDerivation
