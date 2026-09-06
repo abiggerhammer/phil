@@ -16,7 +16,8 @@ import Phil.Core.UnicodeChar
   , unicodeScalar
   )
 import Phil.Core.UnicodeString
-  ( UnicodeStringRealizationError (..)
+  ( UnicodeString
+  , UnicodeStringRealizationError (..)
   , UnicodeStringRealizationProfile (..)
   , checkUnicodeStringRealization
   , strictUnicodeStringRealizationProfile
@@ -145,7 +146,7 @@ realizationMutationsReject = do
       == Left UnicodeStringRealizationImplicitEncoding)
     "implicit text encoding was admitted"
 
-stringValue :: [Integer] -> Either String Phil.Core.UnicodeString.UnicodeString
+stringValue :: [Integer] -> Either String UnicodeString
 stringValue codePoints = do
   scalars <- mapM scalarValue codePoints
   Right (unicodeString scalars)
