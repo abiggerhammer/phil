@@ -129,6 +129,11 @@ rewriteExpression renames (Located span' expression) =
       GrammarV1ProjectionExpression
         <$> rewriteExpression renames receiver
         <*> pure field
+    GrammarV1ShiftExpression left operator right ->
+      GrammarV1ShiftExpression
+        <$> rewriteExpression renames left
+        <*> pure operator
+        <*> rewriteExpression renames right
     GrammarV1BinaryExpression left operator right ->
       GrammarV1BinaryExpression
         <$> rewriteExpression renames left

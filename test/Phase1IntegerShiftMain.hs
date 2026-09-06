@@ -4,6 +4,7 @@ module Main (main) where
 
 import qualified Data.Map.Strict as Map
 import qualified Data.Text as Text
+import Phil.Core.FloatArithmetic (FloatFormat (..), floatDecimalLiteral)
 import Phil.Core.IntegerShift
   ( IntegerShiftError (..)
   )
@@ -171,17 +172,12 @@ explicitUnsignedSelectsLogical = do
 
 floatShiftRejects :: Either String ()
 floatShiftRejects = do
+  floatValue <- mapLeft show $ floatDecimalLiteral Float32 "1.0"
   expression <- parseReturn "component C { return f >> k; }"
   case evaluateGrammarV1NumericExpression (environment
-      [("f", NumericFloatValueStub), ("k", NumericUIntValue 8 1)]) expression of
-    _ -> Right ()
-
--- The float rejection case is populated without inventing a FloatValue by
--- parsing a conversion target that yields a float semantic value from an exact
--- integer source.
-pattern NumericFloatValueStub :: NumericValue
-pattern NumericFloatValueStub <- _ where
-  NumericFloatValueStub = error "NumericFloatValueStub is not evaluated"
+      [("f", NumericFloatValue floatValue), ("k", NumericUIntValue 8 1)]) expression of
+    Left (GrammarV1NumericShiftOperandIntegerRequired (NumericFloatType Float32)) -> Right ()
+    other -> Left ("floating operand entered shift semantics: " <> show other)
 
 evaluate :: String -> [(String, NumericValue)] -> Either String NumericValue
 evaluate source bindings = do

@@ -73,6 +73,9 @@ grammarV1CheckedExpressionReferences pending scope (Located sourceSpan expressio
     GrammarV1IntegerExpression _ -> Just (Right [])
     GrammarV1ProjectionExpression receiver _ ->
       grammarV1CheckedExpressionReferences pending scope receiver
+    GrammarV1ShiftExpression left _ right -> combineChecked
+      (grammarV1CheckedExpressionReferences pending scope left)
+      (grammarV1CheckedExpressionReferences pending scope right)
     GrammarV1BinaryExpression left _ right -> combineChecked
       (grammarV1CheckedExpressionReferences pending scope left)
       (grammarV1CheckedExpressionReferences pending scope right)
