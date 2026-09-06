@@ -99,6 +99,7 @@ data SIntDivisionError
   | SIntDivisionOperandTypeMismatch SIntTerm SIntType
   | SIntDivisionResultTypeMismatch SIntTerm SIntType
   | SIntDivisionEmptySymbolicIdentity SIntTerm
+  | SIntDivisionKnownTermOutOfRange SIntLiteral
   | SIntDivisionKnownZeroDivisor Int Integer
   | SIntDivisionKnownResultOutOfRange
       IntegerDivisionOperator Int Integer Integer Integer
@@ -364,6 +365,9 @@ checkSIntTerm
 checkSIntTerm mismatch expected term = do
   if sIntTermType term == expected then Right () else Left (mismatch term expected)
   case term of
+    SIntKnown literal
+      | not (sIntLiteralInRange literal) ->
+          Left (SIntDivisionKnownTermOutOfRange literal)
     SIntSymbolic _ identity
       | Text.null (Text.strip identity) -> Left (SIntDivisionEmptySymbolicIdentity term)
     _ -> Right ()

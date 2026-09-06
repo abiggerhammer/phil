@@ -102,6 +102,7 @@ data SIntArithmeticError
   | SIntArithmeticOperandTypeMismatch SIntTerm SIntType
   | SIntArithmeticResultTypeMismatch SIntTerm SIntType
   | SIntArithmeticEmptySymbolicIdentity SIntTerm
+  | SIntArithmeticKnownTermOutOfRange SIntLiteral
   | SIntArithmeticKnownResultOutOfRange
       SIntArithmeticOperator Int Integer Integer Integer
   | SIntArithmeticKnownResultMismatch
@@ -193,6 +194,9 @@ checkTerm
 checkTerm mismatch expected term = do
   if termType term == expected then Right () else Left (mismatch term expected)
   case term of
+    SIntKnown literal
+      | not (sIntLiteralInRange literal) ->
+          Left (SIntArithmeticKnownTermOutOfRange literal)
     SIntSymbolic _ identity
       | Text.null (Text.strip identity) -> Left (SIntArithmeticEmptySymbolicIdentity term)
     _ -> Right ()
