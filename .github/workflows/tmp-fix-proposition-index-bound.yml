@@ -1,0 +1,39 @@
+name: Temporary Proposition Index Bound Fix
+
+on:
+  push:
+    branches:
+      - prove-surface-alternative-resolver-some-conversion
+
+permissions:
+  contents: write
+
+jobs:
+  patch:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: prove-surface-alternative-resolver-some-conversion
+
+      - name: Replace reduction-dependent impossible branch
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 - <<'PY'
+          from pathlib import Path
+
+          p = Path('proof/Phil/Surface/GrammarDeterminacyAlternativeResolverSomeConversion.v')
+          s = p.read_text()
+          old = '''  - vm_compute in Hnth.\n    discriminate Hnth.\nQed.\n\nLemma phase1_surface_static_type_resolver_some_oracle_alternative :'''
+          new = '''  - exfalso.\n    assert (Hlt :\n      S (S (S (S (S index)))) <\n      List.length phase1_surface_resolver_proposition_atom_items).\n    {\n      apply nth_error_Some.\n      rewrite Hnth.\n      discriminate.\n    }\n    vm_compute in Hlt.\n    lia.\nQed.\n\nLemma phase1_surface_static_type_resolver_some_oracle_alternative :'''
+          if s.count(old) != 1:
+              raise SystemExit(f'unexpected replacement count: {s.count(old)}')
+          p.write_text(s.replace(old, new))
+          PY
+          rm .github/workflows/tmp-fix-proposition-index-bound.yml
+          git config user.name github-actions[bot]
+          git config user.email 41898282+github-actions[bot]@users.noreply.github.com
+          git add proof/Phil/Surface/GrammarDeterminacyAlternativeResolverSomeConversion.v .github/workflows/tmp-fix-proposition-index-bound.yml
+          git commit -m "Prove proposition alternative index bound"
+          git push origin HEAD:prove-surface-alternative-resolver-some-conversion
