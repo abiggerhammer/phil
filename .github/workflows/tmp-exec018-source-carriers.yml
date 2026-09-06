@@ -1,0 +1,106 @@
+name: Temporary EXEC-018 source carrier composition
+
+on:
+  push:
+    branches: [phase1-exec-018-float-source]
+
+permissions:
+  contents: write
+
+jobs:
+  patch:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: phase1-exec-018-float-source
+      - name: Apply guarded source-carrier composition
+        run: |
+          python3 - <<'PY'
+          from pathlib import Path
+
+          def replace_once(path, old, new):
+              p = Path(path)
+              text = p.read_text()
+              count = text.count(old)
+              if count != 1:
+                  raise SystemExit(f"{path}: expected one match, found {count}: {old!r}")
+              p.write_text(text.replace(old, new, 1))
+
+          lexer = "src/Phil/Surface/GrammarV1/Lexer.hs"
+          replace_once(
+              lexer,
+              "  , pattern GrammarSIntType\n  , pattern GrammarDecimalFloat\n",
+              "  , pattern GrammarSIntType\n  , pattern GrammarFloatType\n  , pattern GrammarDecimalFloat\n",
+          )
+          replace_once(
+              lexer,
+              "-- | Exact digits '.' digits lexical category. The underlying symbol carrier\n-- keeps incremental parsers exhaustive and fail-closed; parser support consumes\n-- this pattern directly rather than treating the value as punctuation.\npattern GrammarDecimalFloat :: Text -> GrammarV1Token\npattern GrammarDecimalFloat value <- (decimalFloatTokenValue -> Just value)\n  where\n    GrammarDecimalFloat value = GrammarSymbol value\n",
+              "-- | Exact F32/F64 lexical category. Like I<w>, the float type keywords use\n-- the closed GrammarUIntType carrier while preserving exact spelling. The parser\n-- therefore reaches its existing primitive-type path without growing a new AST\n-- constructor; semantic elaboration is solely responsible for float identity.\npattern GrammarFloatType :: Text -> GrammarV1Token\npattern GrammarFloatType value <- (floatTypeTokenValue -> Just value)\n  where\n    GrammarFloatType value = GrammarUIntType value\n\n-- | Exact digits '.' digits lexical category. The closed decimal-literal carrier\n-- already preserves arbitrary Text, so float source can reach the existing literal\n-- parser without widening GrammarV1Expression. Contextual scalar elaboration checks\n-- the decimal point and selects F32/F64 semantics; integer contexts still reject it.\npattern GrammarDecimalFloat :: Text -> GrammarV1Token\npattern GrammarDecimalFloat value <- (decimalFloatTokenValue -> Just value)\n  where\n    GrammarDecimalFloat value = GrammarDecimalInteger value\n",
+          )
+          replace_once(
+              lexer,
+              "decimalFloatTokenValue :: GrammarV1Token -> Maybe Text\ndecimalFloatTokenValue token = case token of\n  GrammarSymbol value\n    | isDecimalFloatSpelling value -> Just value\n  _ -> Nothing\n",
+              "floatTypeTokenValue :: GrammarV1Token -> Maybe Text\nfloatTypeTokenValue token = case token of\n  GrammarUIntType value\n    | isFloatTypeSpelling value -> Just value\n  _ -> Nothing\n\ndecimalFloatTokenValue :: GrammarV1Token -> Maybe Text\ndecimalFloatTokenValue token = case token of\n  GrammarDecimalInteger value\n    | isDecimalFloatSpelling value -> Just value\n  _ -> Nothing\n",
+          )
+          replace_once(
+              lexer,
+              "isDecimalFloatSpelling :: Text -> Bool\n",
+              "isFloatTypeSpelling :: Text -> Bool\nisFloatTypeSpelling value = value == \"F32\" || value == \"F64\"\n\nisDecimalFloatSpelling :: Text -> Bool\n",
+          )
+          replace_once(lexer, "  GrammarDecimalFloat _ -> True\n", "")
+          replace_once(
+              lexer,
+              "  pure $\n    if Set.member name grammarV1ReservedWords\n      then GrammarKeyword name\n      else GrammarIdentifier name\n",
+              "  pure $\n    if isFloatTypeSpelling name\n      then GrammarFloatType name\n      else if Set.member name grammarV1ReservedWords\n        then GrammarKeyword name\n        else GrammarIdentifier name\n",
+          )
+
+          replace_once(
+              "test/Phase1GrammarV1LexerMain.hs",
+              "      , GrammarKeyword \"F32\"\n      , GrammarIdentifier \"F32name\"\n      , GrammarKeyword \"F64\"\n",
+              "      , GrammarFloatType \"F32\"\n      , GrammarIdentifier \"F32name\"\n      , GrammarFloatType \"F64\"\n",
+          )
+
+          checked = "src/Phil/Surface/GrammarV1/CheckedType.hs"
+          replace_once(
+              checked,
+              "import Phil.Core.Focusing\n",
+              "import Phil.Core.FloatArithmetic (floatTypeFromCoreType)\nimport Phil.Core.Focusing\n",
+          )
+          replace_once(
+              checked,
+              "checkedCoreTypeMode ty\n  | Just _ <- sIntTypeFromCoreType ty = Just Unrestricted\n",
+              "checkedCoreTypeMode ty\n  | Just _ <- floatTypeFromCoreType ty = Just Unrestricted\n  | Just _ <- sIntTypeFromCoreType ty = Just Unrestricted\n",
+          )
+
+          message = "src/Phil/Core/Protocol/MessageAdmissibility.hs"
+          replace_once(
+              message,
+              "import Data.Text (Text)\nimport qualified Data.Text as Text\n",
+              "import Data.Text (Text)\nimport qualified Data.Text as Text\nimport Phil.Core.FloatArithmetic (floatTypeFromCoreType)\n",
+          )
+          replace_once(
+              message,
+              "intrinsicBoundaryMessageTypeFact ty\n  | Just _ <- sIntTypeFromCoreType ty = True\n",
+              "intrinsicBoundaryMessageTypeFact ty\n  | Just _ <- floatTypeFromCoreType ty = True\n  | Just _ <- sIntTypeFromCoreType ty = True\n",
+          )
+
+          audit = ".github/workflows/phase1-audit-reconciliation-conformance.yml"
+          replace_once(
+              audit,
+              "      - name: EXEC-018 strict F32/F64 Core semantic authority and realization gate\n        run: cabal exec -- runghc -Wall -Werror -isrc test/Phase1FloatArithmeticCoreMain.hs\n",
+              "      - name: EXEC-018 strict F32/F64 Core semantic authority and realization gate\n        run: cabal exec -- runghc -Wall -Werror -isrc test/Phase1FloatArithmeticCoreMain.hs\n      - name: EXEC-018 Grammar-v1 F32/F64 source composition\n        run: cabal exec -- runghc -Wall -Werror -isrc test/Phase1FloatArithmeticSourceMain.hs\n",
+          )
+          PY
+      - name: Commit composition and remove temporary workflow
+        run: |
+          git config user.name "Meredith L. Patterson"
+          git config user.email "clonearmy@gmail.com"
+          git rm .github/workflows/tmp-exec018-source-carriers.yml
+          git add src/Phil/Surface/GrammarV1/Lexer.hs \
+                  test/Phase1GrammarV1LexerMain.hs \
+                  src/Phil/Surface/GrammarV1/CheckedType.hs \
+                  src/Phil/Core/Protocol/MessageAdmissibility.hs \
+                  .github/workflows/phase1-audit-reconciliation-conformance.yml
+          git commit -m "phase1: compose F32/F64 source carriers"
+          git push origin HEAD:phase1-exec-018-float-source
