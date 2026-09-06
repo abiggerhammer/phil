@@ -86,10 +86,9 @@ Proof.
         reflexivity.
     + inversion Hlocal as [| ? ? Hlocal_head Hlocal_rest]; subst.
       simpl.
-      rewrite
-        (IH expected_root local_rest local_root extra
-          Hexpected_rest Hlocal_rest).
-      reflexivity.
+      f_equal.
+      apply IH;
+        assumption.
 Qed.
 
 Lemma path_has_rule_local_suffixb_prefix_irrelevant :
