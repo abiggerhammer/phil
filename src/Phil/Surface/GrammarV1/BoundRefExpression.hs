@@ -22,8 +22,8 @@ import Phil.Surface.Syntax (Located (..))
 -- and literal scaling map to their designated RefTerm constructors. Sort and
 -- coercion competence remains with Core focusing when a consumer supplies an
 -- expected sort; projection remains unresolved until its declared result sort is
--- available. Unknown names, specialized/called non-intrinsics, and
--- symbolic-by-symbolic multiplication therefore fail closed.
+-- available. Unknown names, specialized/called non-intrinsics, division,
+-- remainder, and symbolic-by-symbolic multiplication therefore fail closed.
 grammarV1BoundRefExpression
   :: SurfaceState
   -> Located GrammarV1Expression
@@ -55,6 +55,8 @@ grammarV1BoundRefExpression state located@(Located _ expression) =
               <$> grammarV1BoundRefExpression state left
               <*> grammarV1BoundRefExpression state right
           GrammarV1Multiply -> scale left right
+          GrammarV1Divide -> Nothing
+          GrammarV1Remainder -> Nothing
       _ -> Nothing
 
     scale left right =

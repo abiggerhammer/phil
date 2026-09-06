@@ -38,6 +38,7 @@ type GrammarV1SIntEnvironment = Map GrammarV1StaticReference SIntTerm
 data GrammarV1PlainSIntArithmeticError
   = GrammarV1PlainSIntContextRequired GrammarV1Type
   | GrammarV1PlainSIntBinaryExpressionRequired GrammarV1Expression
+  | GrammarV1PlainSIntOperatorNotPlainArithmetic GrammarV1BinaryOperator
   | GrammarV1PlainSIntUnsupportedOperand GrammarV1Expression
   | GrammarV1PlainSIntUnknownReference GrammarV1StaticReference
   | GrammarV1PlainSIntLiteralError GrammarV1RuntimeScalarError
@@ -65,10 +66,12 @@ checkGrammarV1PlainSIntArithmetic state contextualType environment expression re
     _ -> Left (GrammarV1PlainSIntBinaryExpressionRequired expression)
   left <- resolveOperand contextualType environment leftExpression
   right <- resolveOperand contextualType environment rightExpression
-  let coreOperator = case operator of
-        GrammarV1Add -> SIntAdd
-        GrammarV1Subtract -> SIntSubtract
-        GrammarV1Multiply -> SIntMultiply
+  coreOperator <- case operator of
+    GrammarV1Add -> Right SIntAdd
+    GrammarV1Subtract -> Right SIntSubtract
+    GrammarV1Multiply -> Right SIntMultiply
+    GrammarV1Divide -> Left (GrammarV1PlainSIntOperatorNotPlainArithmetic operator)
+    GrammarV1Remainder -> Left (GrammarV1PlainSIntOperatorNotPlainArithmetic operator)
   decision <- mapLeft GrammarV1PlainSIntCoreError
     (checkPlainSIntArithmetic state coreOperator ty left right result site)
   nextState <- case decision of

@@ -614,6 +614,8 @@ data GrammarV1BinaryOperator
   = GrammarV1Add
   | GrammarV1Subtract
   | GrammarV1Multiply
+  | GrammarV1Divide
+  | GrammarV1Remainder
   deriving (Eq, Ord, Show)
 
 data GrammarV1FailureTarget = GrammarV1FailureTarget
@@ -2568,11 +2570,19 @@ parseMoreMultiplicativeExpression
   -> Parser (Located GrammarV1Expression)
 parseMoreMultiplicativeExpression left = do
   hasMultiply <- peekSymbol "*"
-  if hasMultiply
+  hasDivide <- peekSymbol "/"
+  hasRemainder <- peekSymbol "%"
+  if hasMultiply || hasDivide || hasRemainder
     then do
       token <- takeToken
+      operatorValue <- case locatedValue token of
+        GrammarSymbol "*" -> pure GrammarV1Multiply
+        GrammarSymbol "/" -> pure GrammarV1Divide
+        GrammarSymbol "%" -> pure GrammarV1Remainder
+        other -> failParser $
+          "internal multiplicative operator dispatch error for " <> renderToken other
       right <- parsePostfixExpression
-      let operator = Located (locatedSpan token) GrammarV1Multiply
+      let operator = Located (locatedSpan token) operatorValue
           combined = Located
             (SourceSpan
               (sourceSpanStart (locatedSpan left))
