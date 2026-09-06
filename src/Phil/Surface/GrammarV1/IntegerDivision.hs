@@ -233,6 +233,11 @@ resolveSIntOperand contextualType environment expression = case expression of
   GrammarV1IntegerExpression _ ->
     SIntKnown <$> mapLeft GrammarV1PlainSIntDivisionLiteralError
       (grammarV1ContextualSIntLiteral contextualType expression)
+  GrammarV1NegateExpression _ ->
+    SIntKnown <$> mapLeft GrammarV1PlainSIntDivisionLiteralError
+      (grammarV1ContextualSIntLiteral contextualType expression)
+  GrammarV1ParenthesizedExpression (Located _ inner) ->
+    resolveSIntOperand contextualType environment inner
   GrammarV1NameExpression reference arguments
     | null arguments -> case Map.lookup reference environment of
         Just term -> Right term

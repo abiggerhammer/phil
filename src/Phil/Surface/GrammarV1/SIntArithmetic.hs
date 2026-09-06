@@ -16,7 +16,9 @@ import Phil.Core.SIntArithmetic
   , PlainSIntArithmeticSite
   , SIntArithmeticError
   , SIntArithmeticOperator (..)
+  , SIntLiteral (..)
   , SIntTerm (..)
+  , sIntLiteralInRange
   , checkPlainSIntArithmetic
   , sIntTypeFromCoreType
   )
@@ -28,7 +30,7 @@ import Phil.Surface.GrammarV1.Parser
   , GrammarV1Type
   )
 import Phil.Surface.GrammarV1.RuntimeScalar
-  ( GrammarV1RuntimeScalarError
+  ( GrammarV1RuntimeScalarError (..)
   , grammarV1ContextualSIntLiteral
   )
 import Phil.Surface.Syntax (Located (..))
@@ -42,6 +44,7 @@ data GrammarV1PlainSIntArithmeticError
   | GrammarV1PlainSIntUnsupportedOperand GrammarV1Expression
   | GrammarV1PlainSIntUnknownReference GrammarV1StaticReference
   | GrammarV1PlainSIntLiteralError GrammarV1RuntimeScalarError
+  | GrammarV1PlainSIntNegationOutOfRange SIntLiteral
   | GrammarV1PlainSIntCoreError SIntArithmeticError
   | GrammarV1PlainSIntObligationError CheckerError
   deriving (Eq, Show)
@@ -96,6 +99,23 @@ resolveOperand contextualType environment expression =
             Just term -> Right term
             Nothing -> Left (GrammarV1PlainSIntUnknownReference reference)
       | otherwise -> Left (GrammarV1PlainSIntUnsupportedOperand expression)
+    GrammarV1NegateExpression operand ->
+      case grammarV1ContextualSIntLiteral contextualType expression of
+        Right literal -> Right (SIntKnown literal)
+        Left (GrammarV1RuntimeIntegerLiteralRequired _) -> do
+          term <- resolveOperand contextualType environment (locatedValue operand)
+          case term of
+            SIntKnown literal ->
+              let negated = SIntLiteral
+                    (sIntLiteralType literal)
+                    (negate (sIntLiteralValue literal))
+              in if sIntLiteralInRange negated
+                  then Right (SIntKnown negated)
+                  else Left (GrammarV1PlainSIntNegationOutOfRange negated)
+            SIntSymbolic {} -> Left (GrammarV1PlainSIntUnsupportedOperand expression)
+        Left err -> Left (GrammarV1PlainSIntLiteralError err)
+    GrammarV1ParenthesizedExpression (Located _ inner) ->
+      resolveOperand contextualType environment inner
     _ -> Left (GrammarV1PlainSIntUnsupportedOperand expression)
 
 mapLeft :: (a -> b) -> Either a c -> Either b c

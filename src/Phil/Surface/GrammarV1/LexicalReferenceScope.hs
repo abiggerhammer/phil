@@ -71,6 +71,8 @@ grammarV1CheckedExpressionReferences pending scope (Located sourceSpan expressio
     GrammarV1BoolExpression _ -> Just (Right [])
     GrammarV1UnitExpression -> Just (Right [])
     GrammarV1IntegerExpression _ -> Just (Right [])
+    GrammarV1NegateExpression inner ->
+      grammarV1CheckedExpressionReferences pending scope inner
     GrammarV1ProjectionExpression receiver _ ->
       grammarV1CheckedExpressionReferences pending scope receiver
     GrammarV1ShiftExpression left _ right -> combineChecked

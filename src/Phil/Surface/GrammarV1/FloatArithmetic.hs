@@ -14,6 +14,7 @@ import Phil.Core.FloatArithmetic
   , applyFloatOperator
   , floatFormat
   , floatTypeFromCoreType
+  , negateFloatValue
   )
 import Phil.Surface.GrammarV1.Elaborate (grammarV1PrimitiveType)
 import Phil.Surface.GrammarV1.Parser
@@ -69,6 +70,8 @@ evaluateGrammarV1FloatExpression contextualType environment expression = do
               else Left
                 (GrammarV1FloatOperandFormatMismatch format (floatFormat value))
         | otherwise -> Left (GrammarV1FloatUnsupportedOperand source)
+      GrammarV1NegateExpression (Located _ inner) ->
+        negateFloatValue <$> evaluate format inner
       GrammarV1BinaryExpression left locatedOperator right -> do
         operator <- case locatedValue locatedOperator of
           GrammarV1Add -> Right FloatAdd

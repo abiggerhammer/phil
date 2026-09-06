@@ -125,6 +125,8 @@ rewriteExpression renames (Located span' expression) =
     GrammarV1BoolExpression value -> pure (GrammarV1BoolExpression value)
     GrammarV1UnitExpression -> pure GrammarV1UnitExpression
     GrammarV1IntegerExpression value -> pure (GrammarV1IntegerExpression value)
+    GrammarV1NegateExpression inner ->
+      GrammarV1NegateExpression <$> rewriteExpression renames inner
     GrammarV1ProjectionExpression receiver field ->
       GrammarV1ProjectionExpression
         <$> rewriteExpression renames receiver

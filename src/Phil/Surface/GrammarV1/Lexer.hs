@@ -298,48 +298,8 @@ grammarV1ReservedWords = Set.fromList
 lexGrammarV1 :: Text -> Text -> Either GrammarV1LexDiagnostic [Located GrammarV1Token]
 lexGrammarV1 source input =
   case MP.runParser (spaceConsumer *> MP.many pLocatedToken <* MP.eof) (Text.unpack source) input of
-    Right tokens -> Right (mergeNegativeIntegerLiterals tokens)
+    Right tokens -> Right tokens
     Left bundle -> Left (diagnosticFromBundle bundle)
-
--- | The normative grammar has unary minus, while the incremental production AST
--- already has an exact integer-literal carrier. For the bounded signed-integer
--- slice, merge only a minus immediately followed by a decimal literal when the
--- preceding token cannot terminate an expression. Binary subtraction therefore
--- remains a distinct '-' token (including `x-1` and `x - 1`), while `-128`,
--- `return -1`, and `x * -2` reach the existing literal parser with their sign
--- preserved. Non-literal unary negation remains fail-closed for a later parser
--- slice rather than being guessed here.
-mergeNegativeIntegerLiterals
-  :: [Located GrammarV1Token]
-  -> [Located GrammarV1Token]
-mergeNegativeIntegerLiterals = go Nothing
-  where
-    go _ [] = []
-    go previous (minus : integer : rest)
-      | locatedValue minus == GrammarSymbol "-"
-      , GrammarDecimalInteger digits <- locatedValue integer
-      , unaryPosition previous =
-          let merged = Located
-                (SourceSpan
-                  (sourceSpanStart (locatedSpan minus))
-                  (sourceSpanEnd (locatedSpan integer)))
-                (GrammarDecimalInteger ("-" <> digits))
-          in merged : go (Just merged) rest
-    go _ [token] = [token]
-    go _ (token : rest) = token : go (Just token) rest
-
-    unaryPosition Nothing = True
-    unaryPosition (Just token) = not (canTerminateExpression (locatedValue token))
-
-canTerminateExpression :: GrammarV1Token -> Bool
-canTerminateExpression token = case token of
-  GrammarIdentifier _ -> True
-  GrammarDecimalInteger _ -> True
-  GrammarChar _ -> True
-  GrammarString _ -> True
-  GrammarKeyword keyword -> keyword `elem` ["true", "false", "unit"]
-  GrammarSymbol symbol -> symbol `elem` [")", "]", "}"]
-  GrammarUIntType _ -> False
 
 spaceConsumer :: Parser ()
 spaceConsumer = Lexer.space MPC.space1 (Lexer.skipLineComment "//") empty

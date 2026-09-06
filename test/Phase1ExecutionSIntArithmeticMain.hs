@@ -101,8 +101,10 @@ negativeBoundaryLiteral = do
     "exec-016-negative-boundary"
     "component Signed(x : I8) { -128; }"
   assert
-    (expression == GrammarV1IntegerExpression "-128")
-    ("negative literal sign was not preserved by source parsing: " <> show expression)
+    (case expression of
+      GrammarV1NegateExpression (Located _ (GrammarV1IntegerExpression "128")) -> True
+      _ -> False)
+    ("negative literal did not use normative unary syntax: " <> show expression)
   literal <- mapLeft show
     (grammarV1ContextualSIntLiteral (signedType "I8") expression)
   assert

@@ -112,8 +112,11 @@ sourceLiteralRounding = do
 sourceNegativeZero :: Either String ()
 sourceNegativeZero = do
   expression <- parseExpression "exec018-neg-zero" "component C() { -0.0; }"
-  assert (expression == GrammarV1IntegerExpression "-0.0")
-    ("negative float literal did not retain exact spelling: " <> show expression)
+  assert
+    (case expression of
+      GrammarV1NegateExpression (Located _ (GrammarV1IntegerExpression "0.0")) -> True
+      _ -> False)
+    ("negative float literal did not use normative unary syntax: " <> show expression)
   value <- mapLeft show (grammarV1ContextualFloatLiteral (floatType "F32") expression)
   assert (value == negativeZero Float32)
     "source -0.0 lost its signed-zero identity"
