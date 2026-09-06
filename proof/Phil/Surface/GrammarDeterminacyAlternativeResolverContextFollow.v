@@ -54,7 +54,7 @@ Proof.
       eqn:Hgeneric.
     + reflexivity.
     + destruct (path_has_suffixb path pattern_suffix) eqn:Hpattern.
-      * rewrite (Hpattern_follow Hpattern).
+      * rewrite (Hpattern_follow eq_refl).
         apply overlap_token_list_eqb_refl.
       * destruct
           (path_has_suffixb path primary_expression_suffix)
@@ -63,7 +63,7 @@ Proof.
         -- destruct
             (path_has_suffixb path proposition_atom_suffix)
             eqn:Hproposition.
-           ++ rewrite (Hproposition_follow Hproposition).
+           ++ rewrite (Hproposition_follow eq_refl).
               apply overlap_token_list_eqb_refl.
            ++ destruct
                 (path_has_suffixb path static_argument_suffix)
