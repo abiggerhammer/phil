@@ -484,7 +484,7 @@ roundNormal parameters format negative magnitude exponent =
   in if finalExponent > maximumExponent
       then infinityWithSign format negative
       else
-        let exponentBits = toWord64 (finalExponent + exponentBias parameters)
+        let exponentBits = fromIntegral (finalExponent + exponentBias parameters)
             fractionBitsValue = toWord64 (finalSignificand - 2 ^ fractionBits)
             raw = signBits parameters negative
               .|. (exponentBits `shiftL` fractionBits)
