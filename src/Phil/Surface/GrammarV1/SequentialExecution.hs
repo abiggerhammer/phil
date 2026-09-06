@@ -193,8 +193,8 @@ executeExpression source@(Located _ expression) state0 = do
         _ -> Right (control, next)
     GrammarV1ReceiveFrameExpression input ->
       finishAfterChildren source [input] state
-    GrammarV1ReceiveExactExpression first second third ->
-      finishAfterChildren source ([first, second] <> maybe [] pure third) state
+    GrammarV1ReceiveExactExpression amount endpoint evidence ->
+      finishAfterChildren source ([amount] <> maybe [] pure evidence <> [endpoint]) state
     GrammarV1ReceiveExpression _ input ->
       finishAfterChildren source [input] state
     GrammarV1RecognizeExpression _ input ->
@@ -208,8 +208,8 @@ executeExpression source@(Located _ expression) state0 = do
     GrammarV1SelectExpression branch endpoint boundary ->
       finishAfterChildren source
         ( grammarV1BranchValueArguments (locatedValue branch)
-          <> [endpoint]
           <> maybe [] pure boundary
+          <> [endpoint]
         )
         state
     GrammarV1CommitReceiveExpression first second ->
