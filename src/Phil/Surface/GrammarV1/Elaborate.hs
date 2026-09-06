@@ -143,8 +143,8 @@ grammarV1PrimitiveType sourceType = case sourceType of
   GrammarV1UnitType -> Just TyUnit
   GrammarV1BoolType -> Just TyBool
   GrammarV1UnsignedType widthText
-    | widthText == "F32" -> Just (floatCoreType Float32)
-    | widthText == "F64" -> Just (floatCoreType Float64)
+    | widthText == Text.pack "F32" -> Just (floatCoreType Float32)
+    | widthText == Text.pack "F64" -> Just (floatCoreType Float64)
     | otherwise ->
         case Text.uncons widthText of
           Just ('U', _) -> TyUInt <$> grammarV1IntegerWidth 'U' widthText
