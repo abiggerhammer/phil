@@ -1,0 +1,172 @@
+name: Temporary R7 general unary-negation remediation
+
+on:
+  push:
+    branches: [phase1-review-r7-general-unary-negation]
+
+permissions:
+  contents: write
+
+jobs:
+  patch:
+    if: github.actor != 'github-actions[bot]'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: phase1-review-r7-general-unary-negation
+          fetch-depth: 0
+
+      - uses: haskell-actions/setup@v2
+        with:
+          ghc-version: '9.6.7'
+          cabal-version: 'latest'
+
+      - name: Apply R7 source repair
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 - <<'PY'
+          from pathlib import Path
+
+          def edit(path, old, new):
+              p = Path(path)
+              text = p.read_text()
+              if old not in text:
+                  raise SystemExit(f'anchor not found in {path}: {old[:100]!r}')
+              p.write_text(text.replace(old, new, 1))
+
+          # The lexer obeys Grammar-v1: '-' remains syntax, never part of a numeric token.
+          lexer = Path('src/Phil/Surface/GrammarV1/Lexer.hs')
+          text = lexer.read_text()
+          text = text.replace('    Right tokens -> Right (mergeNegativeIntegerLiterals tokens)\n',
+                              '    Right tokens -> Right tokens\n', 1)
+          start = text.find('-- | The normative grammar has unary minus')
+          end = text.find('spaceConsumer :: Parser ()', start)
+          if start < 0 or end < 0:
+              raise SystemExit('lexer unary-folding block anchors not found')
+          lexer.write_text(text[:start] + text[end:])
+
+          # Add a real recursive unary AST node and precedence layer.
+          edit('src/Phil/Surface/GrammarV1/Parser.hs',
+               '  | GrammarV1IntegerExpression Text\n  | GrammarV1ProjectionExpression\n',
+               '  | GrammarV1IntegerExpression Text\n  | GrammarV1NegateExpression (Located GrammarV1Expression)\n  | GrammarV1ProjectionExpression\n')
+          edit('src/Phil/Surface/GrammarV1/Parser.hs',
+               'parseMultiplicativeExpression :: Parser (Located GrammarV1Expression)\nparseMultiplicativeExpression = do\n  first <- parsePostfixExpression\n',
+               '''parseUnaryExpression :: Parser (Located GrammarV1Expression)\nparseUnaryExpression = do\n  hasMinus <- peekSymbol "-"\n  if hasMinus\n    then do\n      minus <- takeToken\n      operand <- parseUnaryExpression\n      pure (Located\n        (SourceSpan\n          (sourceSpanStart (locatedSpan minus))\n          (sourceSpanEnd (locatedSpan operand)))\n        (GrammarV1NegateExpression operand))\n    else parsePostfixExpression\n\nparseMultiplicativeExpression :: Parser (Located GrammarV1Expression)\nparseMultiplicativeExpression = do\n  first <- parseUnaryExpression\n''')
+          edit('src/Phil/Surface/GrammarV1/Parser.hs',
+               '      right <- parsePostfixExpression\n      let operator = Located (locatedSpan token) operatorValue\n',
+               '      right <- parseUnaryExpression\n      let operator = Located (locatedSpan token) operatorValue\n')
+
+          # Contextual literals interpret unary syntax in the full target context.
+          edit('src/Phil/Surface/GrammarV1/RuntimeScalar.hs',
+               '  , floatDecimalLiteral\n  , floatTypeFromCoreType\n',
+               '  , floatDecimalLiteral\n  , floatTypeFromCoreType\n  , negateFloatValue\n')
+          edit('src/Phil/Surface/GrammarV1/RuntimeScalar.hs',
+               'import Phil.Surface.GrammarV1.Parser\n  ( GrammarV1Expression (..)\n  , GrammarV1Type\n  )\n',
+               'import Phil.Surface.GrammarV1.Parser\n  ( GrammarV1Expression (..)\n  , GrammarV1Type\n  )\nimport Phil.Surface.Syntax (Located (..))\n')
+          edit('src/Phil/Surface/GrammarV1/RuntimeScalar.hs',
+               '  literalText <- integerLiteralText expression\n  value <- exactSignedDecimal literalText\n',
+               '  value <- signedIntegerLiteralValue expression\n')
+          edit('src/Phil/Surface/GrammarV1/RuntimeScalar.hs',
+               '  literalText <- floatLiteralText expression\n  mapLeft GrammarV1RuntimeFloatLiteralError (floatDecimalLiteral format literalText)\n',
+               '  floatLiteralValue format expression\n')
+          edit('src/Phil/Surface/GrammarV1/RuntimeScalar.hs',
+               '''floatLiteralText\n  :: GrammarV1Expression\n  -> Either GrammarV1RuntimeScalarError Text.Text\nfloatLiteralText expression = case expression of\n  GrammarV1IntegerExpression text -> Right text\n  _ -> Left (GrammarV1RuntimeFloatLiteralRequired expression)\n\n''',
+               '''signedIntegerLiteralValue\n  :: GrammarV1Expression\n  -> Either GrammarV1RuntimeScalarError Integer\nsignedIntegerLiteralValue expression = case expression of\n  GrammarV1IntegerExpression text -> exactSignedDecimal text\n  GrammarV1NegateExpression (Located _ inner) ->\n    negate <$> signedIntegerLiteralValue inner\n  GrammarV1ParenthesizedExpression (Located _ inner) ->\n    signedIntegerLiteralValue inner\n  _ -> Left (GrammarV1RuntimeIntegerLiteralRequired expression)\n\nfloatLiteralValue\n  :: Phil.Core.FloatArithmetic.FloatFormat\n  -> GrammarV1Expression\n  -> Either GrammarV1RuntimeScalarError FloatValue\nfloatLiteralValue format expression = case expression of\n  GrammarV1IntegerExpression text ->\n    mapLeft GrammarV1RuntimeFloatLiteralError (floatDecimalLiteral format text)\n  GrammarV1NegateExpression (Located _ inner) ->\n    negateFloatValue <$> floatLiteralValue format inner\n  GrammarV1ParenthesizedExpression (Located _ inner) ->\n    floatLiteralValue format inner\n  _ -> Left (GrammarV1RuntimeFloatLiteralRequired expression)\n\n''')
+          # RuntimeScalar needs the FloatFormat type name explicitly.
+          edit('src/Phil/Surface/GrammarV1/RuntimeScalar.hs',
+               '  ( FloatSemanticError\n  , FloatValue\n',
+               '  ( FloatFormat\n  , FloatSemanticError\n  , FloatValue\n')
+          edit('src/Phil/Surface/GrammarV1/RuntimeScalar.hs',
+               '  :: Phil.Core.FloatArithmetic.FloatFormat\n',
+               '  :: FloatFormat\n')
+
+          # Strict float source evaluation delegates unary meaning to Core bit-exact negation.
+          edit('src/Phil/Surface/GrammarV1/FloatArithmetic.hs',
+               '  , floatFormat\n  , floatTypeFromCoreType\n',
+               '  , floatFormat\n  , floatTypeFromCoreType\n  , negateFloatValue\n')
+          edit('src/Phil/Surface/GrammarV1/FloatArithmetic.hs',
+               '      GrammarV1BinaryExpression left locatedOperator right -> do\n',
+               '      GrammarV1NegateExpression (Located _ inner) ->\n        negateFloatValue <$> evaluate format inner\n      GrammarV1BinaryExpression left locatedOperator right -> do\n')
+
+          # General numeric evaluation handles SInt and Float negation; UInt rejects.
+          edit('src/Phil/Surface/GrammarV1/NumericConversion.hs',
+               '  , floatFormat\n  )\n',
+               '  , floatFormat\n  , negateFloatValue\n  )\n')
+          edit('src/Phil/Surface/GrammarV1/NumericConversion.hs',
+               '  | GrammarV1NumericUnsupportedExpression GrammarV1Expression\n',
+               '  | GrammarV1NumericUnsupportedExpression GrammarV1Expression\n  | GrammarV1NumericNegationUnsupported NumericType\n')
+          edit('src/Phil/Surface/GrammarV1/NumericConversion.hs',
+               '      GrammarV1ParenthesizedExpression (Located _ inner) -> evaluate inner\n',
+               '      GrammarV1ParenthesizedExpression (Located _ inner) -> evaluate inner\n      GrammarV1NegateExpression (Located _ inner) -> evaluate inner >>= applyNegation\n')
+          edit('src/Phil/Surface/GrammarV1/NumericConversion.hs',
+               'applyShift\n  :: GrammarV1ShiftOperator\n',
+               '''applyNegation\n  :: NumericValue\n  -> Either GrammarV1NumericEvaluationError NumericValue\napplyNegation value = case value of\n  NumericUIntValue width _ ->\n    Left (GrammarV1NumericNegationUnsupported (NumericUIntType width))\n  NumericSIntValue literal ->\n    let result = SIntLiteral (sIntLiteralType literal) (negate (sIntLiteralValue literal))\n    in if sIntLiteralInRange result\n        then Right (NumericSIntValue result)\n        else Left (GrammarV1NumericArithmeticOutOfRange\n          (NumericSIntType (sIntLiteralType literal))\n          (sIntLiteralValue result))\n  NumericFloatValue floatValue ->\n    Right (NumericFloatValue (negateFloatValue floatValue))\n\napplyShift\n  :: GrammarV1ShiftOperator\n''')
+
+          # Existing signed arithmetic accepts unary literals and known unary operands.
+          edit('src/Phil/Surface/GrammarV1/SIntArithmetic.hs',
+               '  , SIntArithmeticOperator (..)\n  , SIntTerm (..)\n',
+               '  , SIntArithmeticOperator (..)\n  , SIntLiteral (..)\n  , SIntTerm (..)\n  , sIntLiteralInRange\n')
+          edit('src/Phil/Surface/GrammarV1/SIntArithmetic.hs',
+               '  ( GrammarV1RuntimeScalarError\n',
+               '  ( GrammarV1RuntimeScalarError (..)\n')
+          edit('src/Phil/Surface/GrammarV1/SIntArithmetic.hs',
+               '  | GrammarV1PlainSIntLiteralError GrammarV1RuntimeScalarError\n',
+               '  | GrammarV1PlainSIntLiteralError GrammarV1RuntimeScalarError\n  | GrammarV1PlainSIntNegationOutOfRange SIntLiteral\n')
+          edit('src/Phil/Surface/GrammarV1/SIntArithmetic.hs',
+               '''    GrammarV1NameExpression reference arguments\n      | null arguments ->\n          case Map.lookup reference environment of\n            Just term -> Right term\n            Nothing -> Left (GrammarV1PlainSIntUnknownReference reference)\n      | otherwise -> Left (GrammarV1PlainSIntUnsupportedOperand expression)\n    _ -> Left (GrammarV1PlainSIntUnsupportedOperand expression)\n''',
+               '''    GrammarV1NameExpression reference arguments\n      | null arguments ->\n          case Map.lookup reference environment of\n            Just term -> Right term\n            Nothing -> Left (GrammarV1PlainSIntUnknownReference reference)\n      | otherwise -> Left (GrammarV1PlainSIntUnsupportedOperand expression)\n    GrammarV1NegateExpression operand ->\n      case grammarV1ContextualSIntLiteral contextualType expression of\n        Right literal -> Right (SIntKnown literal)\n        Left (GrammarV1RuntimeIntegerLiteralRequired _) -> do\n          term <- resolveOperand contextualType environment (locatedValue operand)\n          case term of\n            SIntKnown literal ->\n              let negated = SIntLiteral\n                    (sIntLiteralType literal)\n                    (negate (sIntLiteralValue literal))\n              in if sIntLiteralInRange negated\n                  then Right (SIntKnown negated)\n                  else Left (GrammarV1PlainSIntNegationOutOfRange negated)\n            SIntSymbolic {} -> Left (GrammarV1PlainSIntUnsupportedOperand expression)\n        Left err -> Left (GrammarV1PlainSIntLiteralError err)\n    GrammarV1ParenthesizedExpression (Located _ inner) ->\n      resolveOperand contextualType environment inner\n    _ -> Left (GrammarV1PlainSIntUnsupportedOperand expression)\n''')
+
+          # Signed division retains existing negative-literal behavior under the real unary AST.
+          edit('src/Phil/Surface/GrammarV1/IntegerDivision.hs',
+               '''resolveSIntOperand contextualType environment expression = case expression of\n  GrammarV1IntegerExpression _ ->\n    SIntKnown <$> mapLeft GrammarV1PlainSIntDivisionLiteralError\n      (grammarV1ContextualSIntLiteral contextualType expression)\n''',
+               '''resolveSIntOperand contextualType environment expression = case expression of\n  GrammarV1IntegerExpression _ ->\n    SIntKnown <$> mapLeft GrammarV1PlainSIntDivisionLiteralError\n      (grammarV1ContextualSIntLiteral contextualType expression)\n  GrammarV1NegateExpression _ ->\n    SIntKnown <$> mapLeft GrammarV1PlainSIntDivisionLiteralError\n      (grammarV1ContextualSIntLiteral contextualType expression)\n  GrammarV1ParenthesizedExpression (Located _ inner) ->\n    resolveSIntOperand contextualType environment inner\n''')
+
+          # One-child plumbing through source visitors.
+          edit('src/Phil/Surface/GrammarV1/SequentialExecution.hs',
+               '    GrammarV1IntegerExpression _ -> finishExpression source state\n',
+               '    GrammarV1IntegerExpression _ -> finishExpression source state\n    GrammarV1NegateExpression value ->\n      finishAfterChildren source [value] state\n')
+          edit('src/Phil/Surface/GrammarV1/LexicalReferenceScope.hs',
+               '    GrammarV1IntegerExpression _ -> Just (Right [])\n',
+               '    GrammarV1IntegerExpression _ -> Just (Right [])\n    GrammarV1NegateExpression inner ->\n      grammarV1CheckedExpressionReferences pending scope inner\n')
+          edit('src/Phil/Surface/GrammarV1/SemanticBindingState.hs',
+               '    GrammarV1IntegerExpression value -> pure (GrammarV1IntegerExpression value)\n',
+               '    GrammarV1IntegerExpression value -> pure (GrammarV1IntegerExpression value)\n    GrammarV1NegateExpression inner ->\n      GrammarV1NegateExpression <$> rewriteExpression renames inner\n')
+          edit('src/Phil/Surface/GrammarV1/GenericTermScope.hs',
+               '  GrammarV1IntegerExpression _ -> []\n',
+               '  GrammarV1IntegerExpression _ -> []\n  GrammarV1NegateExpression inner -> expressionBinderSites inner\n')
+
+          # Existing exact source tests now expect the normative unary AST.
+          edit('test/Phase1ExecutionSIntArithmeticMain.hs',
+               '    (expression == GrammarV1IntegerExpression "-128")\n    ("negative literal sign was not preserved by source parsing: " <> show expression)\n',
+               '''    (case expression of\n      GrammarV1NegateExpression (Located _ (GrammarV1IntegerExpression "128")) -> True\n      _ -> False)\n    ("negative literal did not use normative unary syntax: " <> show expression)\n''')
+          edit('test/Phase1FloatArithmeticSourceMain.hs',
+               '  assert (expression == GrammarV1IntegerExpression "-0.0")\n    ("negative float literal did not retain exact spelling: " <> show expression)\n',
+               '''  assert\n    (case expression of\n      GrammarV1NegateExpression (Located _ (GrammarV1IntegerExpression "0.0")) -> True\n      _ -> False)\n    ("negative float literal did not use normative unary syntax: " <> show expression)\n''')
+          PY
+
+      - name: Build complete Haskell substrate
+        run: cabal build all --enable-tests
+
+      - name: Run R7 regression
+        run: cabal exec -- runghc -Wall -Werror -isrc test/Phase1ReviewR7UnaryNegationMain.hs
+
+      - name: Run affected signed/float/division controls
+        run: |
+          set -euo pipefail
+          cabal exec -- runghc -Wall -Werror -isrc test/Phase1ExecutionSIntArithmeticMain.hs
+          cabal exec -- runghc -Wall -Werror -isrc test/Phase1FloatArithmeticSourceMain.hs
+          cabal exec -- runghc -Wall -Werror -isrc test/Phase1IntegerDivisionSourceMain.hs
+
+      - name: Commit R7 source repair
+        shell: bash
+        run: |
+          set -euo pipefail
+          git config user.name github-actions[bot]
+          git config user.email 41898282+github-actions[bot]@users.noreply.github.com
+          git add src/Phil/Surface/GrammarV1 \
+                  test/Phase1ExecutionSIntArithmeticMain.hs \
+                  test/Phase1FloatArithmeticSourceMain.hs
+          git commit -m 'review: implement general unary negation'
+          git push origin HEAD:phase1-review-r7-general-unary-negation
