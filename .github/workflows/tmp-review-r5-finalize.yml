@@ -22,12 +22,16 @@ jobs:
 
           proofs = Path('.github/workflows/proofs.yml')
           text = proofs.read_text()
+          marker = '  certify-recognized-record:\n'
+          if text.count(marker) != 1:
+              raise SystemExit('expected one recognized-record job marker')
+          prefix, suffix = text.split(marker, 1)
           old = '          "$CERTIFIER" \\\n'
           new = '          "$CERTIFIER" --trusted-checked-inputs \\\n'
-          count = text.count(old)
+          count = prefix.count(old)
           if count != 3:
-              raise SystemExit(f'expected three phil-certify-core-scalar invocations, found {count}')
-          proofs.write_text(text.replace(old, new))
+              raise SystemExit(f'expected three phil-certify-core-scalar invocations before recognized-record job, found {count}')
+          proofs.write_text(prefix.replace(old, new) + marker + suffix)
 
           audit = Path('.github/workflows/phase1-audit-reconciliation-conformance.yml')
           text = audit.read_text()
@@ -62,10 +66,10 @@ jobs:
           audit.write_text(text.replace(anchor, addition, 1))
           PY
           git diff --check
-          git grep -n 'certifyRocqProof' -- '*.hs' && {
-            echo 'legacy certifyRocqProof symbol remains' >&2
+          if git grep -n -E 'certify(CoreScalar)?RocqProof|certifyRocqProofBundle' -- '*.hs'; then
+            echo 'legacy misleading Rocq certification symbol remains' >&2
             exit 1
-          } || true
+          fi
           rm .github/workflows/tmp-review-r5-finalize.yml
           git diff --check
           git diff --stat
