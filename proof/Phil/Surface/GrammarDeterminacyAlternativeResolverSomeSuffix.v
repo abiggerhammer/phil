@@ -1,6 +1,7 @@
 From Stdlib Require Import Bool.Bool Lists.List.
 
 From Phil.Surface Require Import
+  Grammar
   GrammarDerivation
   GrammarDeterminacySimpleResolvers
   GrammarDeterminacyStructuralResolvers
