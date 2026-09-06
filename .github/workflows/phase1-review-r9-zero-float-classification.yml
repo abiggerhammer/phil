@@ -1,0 +1,35 @@
+name: Phase 1 Review R9 Zero Float Classification
+
+on:
+  pull_request:
+    paths:
+      - 'src/Phil/Core/NumericConversion.hs'
+      - 'test/Phase1ReviewR9ZeroFloatPrecisionMain.hs'
+      - 'test/Phase1NumericConversionMain.hs'
+      - '.github/workflows/phase1-review-r9-zero-float-classification.yml'
+  push:
+    branches: [main]
+    paths:
+      - 'src/Phil/Core/NumericConversion.hs'
+      - 'test/Phase1ReviewR9ZeroFloatPrecisionMain.hs'
+      - 'test/Phase1NumericConversionMain.hs'
+      - '.github/workflows/phase1-review-r9-zero-float-classification.yml'
+
+permissions:
+  contents: read
+
+jobs:
+  review-r9-zero-float-classification:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: haskell-actions/setup@v2
+        with:
+          ghc-version: '9.6.7'
+          cabal-version: 'latest'
+      - name: Build ordinary regression substrate
+        run: cabal build all --enable-tests
+      - name: REVIEW-R09 exact zero float precision classification
+        run: cabal exec -- runghc -Wall -Werror -isrc test/Phase1ReviewR9ZeroFloatPrecisionMain.hs
+      - name: EXEC-020 numeric conversion control
+        run: cabal exec -- runghc -Wall -Werror -isrc test/Phase1NumericConversionMain.hs
