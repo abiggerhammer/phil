@@ -9,7 +9,7 @@ permissions:
 
 jobs:
   patch:
-    if: github.actor != 'github-actions[bot]'
+    if: github.actor != 'github-actions[bot]' && github.event.head_commit.message == 'ci: stage guarded R3 LLVM function-coverage remediation'
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
