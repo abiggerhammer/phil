@@ -45,6 +45,7 @@ type GrammarV1UIntEnvironment = Map GrammarV1StaticReference RefTerm
 data GrammarV1PlainUIntArithmeticError
   = GrammarV1PlainUIntContextRequired GrammarV1Type
   | GrammarV1PlainUIntBinaryExpressionRequired GrammarV1Expression
+  | GrammarV1PlainUIntOperatorNotPlainArithmetic GrammarV1BinaryOperator
   | GrammarV1PlainUIntUnsupportedOperand GrammarV1Expression
   | GrammarV1PlainUIntUnknownReference GrammarV1StaticReference
   | GrammarV1PlainUIntLiteralError GrammarV1RuntimeScalarError
@@ -54,20 +55,9 @@ data GrammarV1PlainUIntArithmeticError
   deriving (Eq, Show)
 
 -- | Compose one canonical Grammar-v1 plain UInt '+', '-', or '*' expression
--- with the Core EXEC-008 arithmetic judgment.
---
--- The surrounding semantic elaborator supplies the exact result term.  This is
--- deliberate: result identity is semantic state and must not be invented from
--- source spelling or source position here.  Literal operands are elaborated by
--- the contextual EXEC-007 path; simple resolved references come only from the
--- explicit environment.  Calls, projections, and other expression forms remain
--- outside this bounded leaf-composition slice and fail closed.
---
--- A closed exact operation leaves the checker state unchanged.  A symbolic
--- operation emits the Core arithmetic obligation into the ordinary residual
--- obligation map, so existing RES-011 branch reconvergence preserves it and
--- ADR-025 remains the only authority that may later discharge, runtime-bind,
--- assume, or export it.  No machine overflow behavior is selected here.
+-- with the Core EXEC-008 arithmetic judgment. Division and remainder are owned
+-- by the separate EXEC-017 integer-division bridge and cannot be reinterpreted
+-- here as multiplication or another already-supported arithmetic operation.
 checkGrammarV1PlainUIntArithmetic
   :: CheckState
   -> GrammarV1Type
@@ -88,10 +78,12 @@ checkGrammarV1PlainUIntArithmetic state contextualType environment expression re
     _ -> Left (GrammarV1PlainUIntBinaryExpressionRequired expression)
   left <- resolveOperand contextualType environment leftExpression
   right <- resolveOperand contextualType environment rightExpression
-  let coreOperator = case operator of
-        GrammarV1Add -> UIntAdd
-        GrammarV1Subtract -> UIntSubtract
-        GrammarV1Multiply -> UIntMultiply
+  coreOperator <- case operator of
+    GrammarV1Add -> Right UIntAdd
+    GrammarV1Subtract -> Right UIntSubtract
+    GrammarV1Multiply -> Right UIntMultiply
+    GrammarV1Divide -> Left (GrammarV1PlainUIntOperatorNotPlainArithmetic operator)
+    GrammarV1Remainder -> Left (GrammarV1PlainUIntOperatorNotPlainArithmetic operator)
   decision <- mapLeft GrammarV1PlainUIntCoreError
     (checkPlainUIntArithmetic state coreOperator width left right result site)
   nextState <- case decision of
