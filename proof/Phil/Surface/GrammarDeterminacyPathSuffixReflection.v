@@ -32,7 +32,7 @@ Lemma reversed_path_prefixb_true_shape :
   forall expected actual,
     reversed_path_prefixb expected actual = true ->
     exists rest,
-      actual = expected ++ rest.
+      actual = List.app expected rest.
 Proof.
   induction expected as [| expected_step expected_rest IH];
     intros actual Hprefix.
@@ -54,7 +54,7 @@ Theorem path_has_suffixb_true_shape :
   forall path suffix,
     path_has_suffixb path suffix = true ->
     exists prefix,
-      path = prefix ++ suffix.
+      path = List.app prefix suffix.
 Proof.
   intros path suffix Hsuffix.
   unfold path_has_suffixb in Hsuffix.
