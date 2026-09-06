@@ -16,6 +16,7 @@ import Phil.Core.UnicodeString
   )
 import Phil.Core.UnicodeTextPolicy
   ( StringIndexUnit (..)
+  , UnicodeDataVersion
   , UnicodeTextAlgorithm (..)
   , UnicodeTextPolicyError (..)
   , checkStringIndexUnit
@@ -141,7 +142,7 @@ graphemeIndexingIsVersioned = do
     "grapheme indexing lost exact Unicode-data version"
 
 expectAlgorithmParameterReject
-  :: Phil.Core.UnicodeTextPolicy.UnicodeDataVersion
+  :: UnicodeDataVersion
   -> UnicodeTextAlgorithm
   -> Either String ()
 expectAlgorithmParameterReject version algorithm =
