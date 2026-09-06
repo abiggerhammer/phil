@@ -85,6 +85,7 @@ versionSensitiveContractsDistinct = do
 ambientParametersReject :: Either String ()
 ambientParametersReject = do
   version <- mapLeft show (unicodeDataVersion "15.1.0")
+  expectAlgorithmParameterReject version (UnicodeCaseMap "")
   expectAlgorithmParameterReject version (UnicodePropertyLookup "")
   expectAlgorithmParameterReject version (UnicodeCollation "")
   expectAlgorithmParameterReject version (UnicodeDisplayWidth "")
@@ -92,6 +93,8 @@ ambientParametersReject = do
 explicitParametersAccept :: Either String ()
 explicitParametersAccept = do
   version <- mapLeft show (unicodeDataVersion "15.1.0")
+  _ <- mapLeft show $
+    unicodeAlgorithmContract version (UnicodeCaseMap "und")
   _ <- mapLeft show $
     unicodeAlgorithmContract version (UnicodePropertyLookup "General_Category")
   _ <- mapLeft show $
