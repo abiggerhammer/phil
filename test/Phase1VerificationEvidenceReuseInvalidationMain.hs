@@ -32,7 +32,8 @@ import Phil.Verification
   , buildVerificationObligationGraph
   )
 import Phil.Verification.ProofEvidence
-  ( EvidenceReuseDecision (..)
+  ( CheckedProofEvidence
+  , EvidenceReuseDecision (..)
   , EvidenceReuseError (..)
   , EvidenceReuseStaleness (..)
   , ProofProposal (..)
@@ -80,11 +81,11 @@ main = do
         , ("declared dependency change invalidates affected evidence",
             testDependencyChange dependencyChanged reusable)
         , ("generic DefinitionRevision change invalidates affected evidence",
-            testValidityChange "generic_definition_revision" "def.rev.2" reusable)
+            testValidityChange baseline "generic_definition_revision" "def.rev.2" reusable)
         , ("qualification revision change invalidates affected evidence",
-            testValidityChange "qualification_revision" "qual.rev.2" reusable)
+            testValidityChange baseline "qualification_revision" "qual.rev.2" reusable)
         , ("missing declared validity dimension is reported stale",
-            testMissingValidityDimension reusable)
+            testMissingValidityDimension baseline reusable)
         , ("removing target from certification scope invalidates reuse",
             testScopeChange scopeChanged reusable)
         , ("old evidence cannot be rebound to a changed graph before caching",
@@ -288,16 +289,39 @@ testDependencyChange current reusable =
       ReuseDependencySetChanged _ _ -> True
       _ -> False
 
-testValidityChange :: Text -> Text -> ReusableProofEvidence -> Bool
-testValidityChange dimension newValue reusable =
+testValidityChange
+  :: VerificationObligationGraph
+  -> Text
+  -> Text
+  -> ReusableProofEvidence
+  -> Bool
+testValidityChange graph dimension newValue reusable =
   let ValidityScope original = baseValidity
       current = ValidityScope (Map.insert dimension newValue original)
-  in case evaluateReusableProofEvidence
-      (error "VER-006 graph supplied by testValidityChange wrapper") current reusable of
+  in case evaluateReusableProofEvidence graph current reusable of
+      EvidenceStale reasons -> any isDimensionChange reasons
+      EvidenceReusable -> False
+  where
+    isDimensionChange reason = case reason of
+      ReuseValidityDimensionChanged changedDimension _ actualValue ->
+        changedDimension == dimension && actualValue == newValue
       _ -> False
 
-testMissingValidityDimension :: ReusableProofEvidence -> Bool
-testMissingValidityDimension _ = True
+testMissingValidityDimension
+  :: VerificationObligationGraph
+  -> ReusableProofEvidence
+  -> Bool
+testMissingValidityDimension graph reusable =
+  let ValidityScope original = baseValidity
+      current = ValidityScope (Map.delete "qualification_revision" original)
+  in case evaluateReusableProofEvidence graph current reusable of
+      EvidenceStale reasons -> any isMissing reasons
+      EvidenceReusable -> False
+  where
+    isMissing reason = case reason of
+      ReuseValidityDimensionMissing dimension expectedValue ->
+        dimension == "qualification_revision" && expectedValue == "qual.rev.1"
+      _ -> False
 
 testScopeChange :: VerificationObligationGraph -> ReusableProofEvidence -> Bool
 testScopeChange current reusable =
@@ -311,7 +335,7 @@ testScopeChange current reusable =
 
 testPreparationGraphBinding
   :: VerificationObligationGraph
-  -> Phil.Verification.ProofEvidence.CheckedProofEvidence
+  -> CheckedProofEvidence
   -> Bool
 testPreparationGraphBinding changedGraph checked =
   case prepareReusableProofEvidence changedGraph baseValidity checked of
