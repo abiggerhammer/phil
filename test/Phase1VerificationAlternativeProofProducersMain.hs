@@ -4,6 +4,7 @@ module Main (main) where
 
 import Control.Monad (unless)
 import qualified Data.Set as Set
+import Data.Text (Text)
 import Phil.Assurance
   ( AcceptanceRule (..)
   , AssuranceKind (..)
@@ -88,7 +89,7 @@ failCase message = putStrLn ("FAIL: VER-011 " ++ message) >> exitFailure
 checkedOrFail
   :: VerificationObligationGraph
   -> RevisionId
-  -> String
+  -> Text
   -> DecisionCertificate
   -> IO CheckedProofEvidence
 checkedOrFail graph revision producer certificate =
@@ -135,19 +136,19 @@ certificateA = CertificateConjunction CertificateTruth CertificateTruth
 certificateB :: DecisionCertificate
 certificateB = CertificateAssumption (PrerequisiteFact rootId) rootProposition
 
-producerA :: String
+producerA :: Text
 producerA = "producer.ver011.direct"
 
-producerB :: String
+producerB :: Text
 producerB = "producer.ver011.assumption-backed"
 
 proposalFor
-  :: String
+  :: Text
   -> RevisionId
   -> DecisionCertificate
   -> ProofProposal
 proposalFor producer revision certificate = ProofProposal
-  { proofProposalProducer = fromString producer
+  { proofProposalProducer = producer
   , proofProposalObligationRevision = revision
   , proofProposalEvidenceFormat = decisionCertificateEvidenceFormat
   , proofProposalSubjectIds = ["subject:ver011"]
@@ -155,6 +156,3 @@ proposalFor producer revision certificate = ProofProposal
   , proofProposalProposition = rootProposition
   , proofProposalCertificate = certificate
   }
-
-fromString :: String -> Data.Text.Text
-fromString = Data.Text.pack
