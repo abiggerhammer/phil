@@ -486,6 +486,15 @@ Proof.
   exact Hsafe_items.
 Qed.
 
+Lemma andb_true_right :
+  forall left right,
+    andb left right = true ->
+    right = true.
+Proof.
+  intros left right H.
+  destruct left, right; simpl in H; try discriminate; reflexivity.
+Qed.
+
 Lemma phase1_surface_optional_body_choice_safe :
   forall fuel path body,
     phase1_surface_parser_goal_choice_safeb
@@ -496,8 +505,8 @@ Proof.
   intros fuel path body Hsafe.
   unfold phase1_surface_parser_goal_choice_safeb in *.
   rewrite choice_safe_first_optional_safety_equation in Hsafe.
-  apply andb_true_iff in Hsafe as [_ Hbody].
-  exact Hbody.
+  eapply andb_true_right.
+  exact Hsafe.
 Qed.
 
 Lemma phase1_surface_repetition_wrapper_choice_safe :
@@ -510,8 +519,8 @@ Proof.
   intros fuel path body Hsafe.
   unfold phase1_surface_parser_goal_choice_safeb in *.
   rewrite choice_safe_first_repetition_safety_equation in Hsafe.
-  apply andb_true_iff in Hsafe as [_ Hbody].
-  exact Hbody.
+  eapply andb_true_right.
+  exact Hsafe.
 Qed.
 
 Lemma phase1_surface_sequence_cons_choice_safe :
