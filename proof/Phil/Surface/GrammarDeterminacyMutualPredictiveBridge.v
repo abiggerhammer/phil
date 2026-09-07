@@ -632,7 +632,7 @@ Proof.
             + exact Htrail.
             + exact Hmiddle_continuation.
         }
-        apply oracle_sequence_cons.
+        apply oracle_sequence_cons with (middle := middle).
         -- eapply IHitem.
            ++ exact Hitem_actual.
            ++ exact Hitem_local.
@@ -750,7 +750,7 @@ Proof.
             + exact Htrail.
             + exact Hbody.
         }
-        apply oracle_repetition_step.
+        apply oracle_repetition_step with (middle := middle).
         -- exact Hdecision.
         -- eapply IHbody.
            ++ exact Hbody_actual.
