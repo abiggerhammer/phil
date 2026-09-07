@@ -5,7 +5,6 @@ From Phil.Surface Require Import
   GrammarDerivation
   GrammarDerivationOracle
   GrammarDeterminacyPredictiveOracle
-  GrammarDeterminacyMutualPredictiveBridge
   GrammarParserRecognizer.
 
 Import ListNotations.
@@ -150,19 +149,5 @@ Proof.
     OracleResolvedExpression in Hderive.
   unfold phase1_surface_predictive_parse_fuel.
   eapply oracle_parse_fuel_eventually_complete.
-  exact Hderive.
-Qed.
-
-Corollary phase1_surface_complete_derivation_eventually_recognized :
-  forall tokens tree,
-    Phase1CompleteDerivation tokens tree ->
-    exists required,
-      forall extra,
-        phase1_surface_predictive_parse_fuel (required + extra) tokens =
-          Some ([], ResultTree tree).
-Proof.
-  intros tokens tree Hderive.
-  apply phase1_surface_predictive_parse_eventually_complete.
-  apply phase1_surface_complete_derivation_predictive_oracle.
   exact Hderive.
 Qed.
