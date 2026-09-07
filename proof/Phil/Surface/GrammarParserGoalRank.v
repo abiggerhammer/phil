@@ -13,8 +13,8 @@ Open Scope string_scope.
 
   GrammarParserRank.v computes the exact same-input nonterminal fixed point.
   This file exposes the structural ranks hidden inside its fuelled expression
-  traversal so the total-fuel proof can reason about the recognizer's three
-  recursive goal forms directly.
+  traversal so the total-fuel proof can reason about the recognizer's recursive
+  expression, sequence, and repetition goals directly.
 *)
 
 Fixpoint parser_sequence_goal_rank_fuel
@@ -34,6 +34,23 @@ Fixpoint parser_sequence_goal_rank_fuel
             | None => None
             end
           else Some (S head_rank)
+      end
+  end.
+
+Fixpoint parser_alternative_goal_rank_fuel
+  (fuel : nat)
+  (facts : list (string * nat))
+  (items : list EbnfExpression) : option nat :=
+  match items with
+  | [] => Some 0
+  | item :: rest =>
+      match
+        parser_expression_rank_fuel fuel facts item,
+        parser_alternative_goal_rank_fuel fuel facts rest
+      with
+      | Some head_rank, Some tail_rank =>
+          Some (Nat.max head_rank tail_rank)
+      | _, _ => None
       end
   end.
 
@@ -61,6 +78,23 @@ Proof.
       eqn:Hhead; simpl; try reflexivity.
     destruct (nullable_expression phase1_surface_nullable_facts item) eqn:Hnull;
       simpl; try reflexivity.
+    rewrite IH.
+    reflexivity.
+Qed.
+
+Lemma parser_expression_alternative_rank_equation :
+  forall fuel facts items,
+    parser_expression_rank_fuel (S fuel) facts (EAlternative items) =
+    match parser_alternative_goal_rank_fuel fuel facts items with
+    | Some rank => Some (S rank)
+    | None => None
+    end.
+Proof.
+  intros fuel facts items.
+  induction items as [|item rest IH]; simpl.
+  - reflexivity.
+  - destruct (parser_expression_rank_fuel fuel facts item) as [head_rank|]
+      eqn:Hhead; simpl; try reflexivity.
     rewrite IH.
     reflexivity.
 Qed.
@@ -134,6 +168,20 @@ Proof.
   reflexivity.
 Qed.
 
+Lemma parser_sequence_wrapper_rank_decreases :
+  forall fuel facts items parent_rank sequence_rank,
+    parser_expression_rank_fuel (S fuel) facts (ESequence items) =
+      Some parent_rank ->
+    parser_sequence_goal_rank_fuel fuel facts items = Some sequence_rank ->
+    sequence_rank < parent_rank.
+Proof.
+  intros fuel facts items parent_rank sequence_rank Hparent Hsequence.
+  rewrite parser_expression_sequence_rank_equation in Hparent.
+  rewrite Hsequence in Hparent.
+  inversion Hparent; subst.
+  lia.
+Qed.
+
 Lemma parser_sequence_head_rank_decreases :
   forall fuel facts item rest sequence_rank head_rank,
     parser_sequence_goal_rank_fuel fuel facts (item :: rest) =
@@ -167,6 +215,58 @@ Proof.
     eqn:Hhead; try discriminate.
   rewrite Hnullable, Htail in Hsequence.
   inversion Hsequence; subst.
+  lia.
+Qed.
+
+Lemma parser_alternative_member_rank_le :
+  forall fuel facts items index item alternative_rank item_rank,
+    nth_error items index = Some item ->
+    parser_alternative_goal_rank_fuel fuel facts items = Some alternative_rank ->
+    parser_expression_rank_fuel fuel facts item = Some item_rank ->
+    item_rank <= alternative_rank.
+Proof.
+  intros fuel facts items.
+  induction items as [|head tail IH];
+    intros index item alternative_rank item_rank Hnth Halternative Hitem.
+  - destruct index; discriminate.
+  - destruct index as [|index].
+    + simpl in Hnth. inversion Hnth; subst item.
+      simpl in Halternative.
+      rewrite Hitem in Halternative.
+      destruct (parser_alternative_goal_rank_fuel fuel facts tail)
+        as [tail_rank|] eqn:Htail; try discriminate.
+      inversion Halternative; subst alternative_rank.
+      apply Nat.le_max_l.
+    + simpl in Hnth.
+      simpl in Halternative.
+      destruct (parser_expression_rank_fuel fuel facts head)
+        as [head_rank|] eqn:Hhead; try discriminate.
+      destruct (parser_alternative_goal_rank_fuel fuel facts tail)
+        as [tail_rank|] eqn:Htail; try discriminate.
+      inversion Halternative; subst alternative_rank.
+      eapply Nat.le_trans.
+      * eapply IH; eauto.
+      * apply Nat.le_max_r.
+Qed.
+
+Lemma parser_alternative_member_rank_decreases :
+  forall fuel facts items index item parent_rank alternative_rank item_rank,
+    parser_expression_rank_fuel (S fuel) facts (EAlternative items) =
+      Some parent_rank ->
+    parser_alternative_goal_rank_fuel fuel facts items = Some alternative_rank ->
+    nth_error items index = Some item ->
+    parser_expression_rank_fuel fuel facts item = Some item_rank ->
+    item_rank < parent_rank.
+Proof.
+  intros fuel facts items index item parent_rank alternative_rank item_rank
+    Hparent Halternative Hnth Hitem.
+  rewrite parser_expression_alternative_rank_equation in Hparent.
+  rewrite Halternative in Hparent.
+  inversion Hparent; subst parent_rank.
+  pose proof
+    (parser_alternative_member_rank_le
+      fuel facts items index item alternative_rank item_rank
+      Hnth Halternative Hitem) as Hle.
   lia.
 Qed.
 
