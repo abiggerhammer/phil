@@ -33,6 +33,7 @@ jobs:
           set -euo pipefail
           export PATH="/home/rocq/.opam/${COMPILER}/bin:$PATH"
           rocq c -Q proof/Phil Phil proof/Phil/Surface/Grammar.v
+          rocq c -Q proof/Phil Phil proof/Phil/Surface/GrammarDerivation.v
           rocq c -Q proof/Phil Phil proof/Phil/Surface/GrammarDeterminacyCertificate.v
           rocq c -Q proof/Phil Phil proof/Phil/Surface/GrammarDeterminacyNullableFirst.v
           rocq c -Q proof/Phil Phil proof/Phil/Surface/GrammarParserRank.v
