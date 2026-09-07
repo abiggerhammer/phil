@@ -264,23 +264,29 @@ transportValue value proofName targetTy state = do
                 Left (TransportNotRequired sourceTy)
               _ -> resourceLoopKernelInvariant "definitional-transport"
           TransportUnsupported -> Left (UnsupportedTransport sourceTy targetTy)
-          TransportRequires proposition -> do
-            evidenceUses <- mapLeft ValueRefinementError $
-              dischargePropositionUsing proofName proposition (valueResultState source)
-            let explicitEvidenceAccepted = not (null evidenceUses)
-            case ResourceLoopKernel.decideStateTransportByFacts
-                (definitionallyEqualTy sourceTy targetTy)
-                explicitEvidenceAccepted of
-              ResourceLoopKernel.StateTransportAcceptedDecision ->
-                Right source
-                  { valueResultType = targetTy
-                  , valueResultEvidence = appendEvidenceList evidenceUses (valueResultEvidence source)
-                  }
-              _ -> resourceLoopKernelInvariant "explicit-transport"
+          TransportRequires proposition ->
+            dischargeAndAcceptTransport (valueResultState source) source sourceTy proposition
+          TransportRequiresPreConsumption proposition ->
+            dischargeAndAcceptTransport state source sourceTy proposition
+  where
+    dischargeAndAcceptTransport evidenceState source sourceTy proposition = do
+      evidenceUses <- mapLeft ValueRefinementError $
+        dischargePropositionUsing proofName proposition evidenceState
+      let explicitEvidenceAccepted = not (null evidenceUses)
+      case ResourceLoopKernel.decideStateTransportByFacts
+          (definitionallyEqualTy sourceTy targetTy)
+          explicitEvidenceAccepted of
+        ResourceLoopKernel.StateTransportAcceptedDecision ->
+          Right source
+            { valueResultType = targetTy
+            , valueResultEvidence = appendEvidenceList evidenceUses (valueResultEvidence source)
+            }
+        _ -> resourceLoopKernelInvariant "explicit-transport"
 
 data TransportRequirement
   = TransportDefinitionallyEqual
   | TransportRequires Proposition
+  | TransportRequiresPreConsumption Proposition
   | TransportUnsupported
 
 transportRequirement :: Maybe RefTerm -> Ty -> Ty -> TransportRequirement
@@ -292,7 +298,8 @@ transportRequirement subject source target
           | isRuntimeBytesType source
           , not (isRuntimeBytesType target) ->
               case subject of
-                Just valueTerm -> TransportRequires (Equal (RefLen valueTerm) targetIndex)
+                Just valueTerm ->
+                  TransportRequiresPreConsumption (Equal (RefLen valueTerm) targetIndex)
                 Nothing -> TransportUnsupported
         (TyBytes sourceIndex, TyBytes targetIndex) ->
           TransportRequires (Equal sourceIndex targetIndex)
