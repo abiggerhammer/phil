@@ -5,6 +5,7 @@ From Phil.Surface Require Import
   GrammarDerivation
   GrammarDeterminacyNullableFirst
   GrammarDeterminacyFollowOverlap
+  GrammarDeterminacyContinuationSoundness
   GrammarDeterminacyFollowCoverage
   GrammarDeterminacyDerivationPathSoundness
   GrammarDeterminacyOracleAssemblyCoverage
