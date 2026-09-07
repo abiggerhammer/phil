@@ -37,7 +37,6 @@ import Phil.Core.Generic
   , GenericDischargeLineage (..)
   , GenericRequirement (..)
   , GenericStaticParameterKey (..)
-  , GenericStructuralRequirements
   , GenericValueParameterKey (..)
   , StructuralPermission (..)
   )
