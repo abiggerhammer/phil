@@ -27,6 +27,7 @@ import Phil.IO.Bytes
   )
 import Phil.IO.Console
   ( CheckedConsoleWrite
+  , ConsoleCheckError
   , ConsoleProviderOccurrence
   , ConsoleWriteOutcome
   , checkConsoleWrite
@@ -152,7 +153,7 @@ checkWriteLine
   -> AuthorityState
   -> Text
   -> ConsoleWriteOutcome
-  -> Either Phil.IO.Console.ConsoleCheckError CheckedWriteLine
+  -> Either ConsoleCheckError CheckedWriteLine
 checkWriteLine occurrence authoritySource authorityState text observed = do
   let requested = text <> "\n"
   checkedWrite <- checkConsoleWrite
