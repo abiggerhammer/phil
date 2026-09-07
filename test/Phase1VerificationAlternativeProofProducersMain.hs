@@ -131,7 +131,7 @@ sharedAssumption = SolverAssumption
   rootProposition
 
 certificateA :: DecisionCertificate
-certificateA = CertificateConjunction CertificateTruth CertificateTruth
+certificateA = CertificateTruth
 
 certificateB :: DecisionCertificate
 certificateB = CertificateAssumption (PrerequisiteFact rootId) rootProposition
