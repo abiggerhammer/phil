@@ -1,4 +1,4 @@
-From Stdlib Require Import Arith.PeanoNat Bool.Bool Lists.List Lia.
+From Stdlib Require Import Arith.PeanoNat Bool.Bool Lists.List Strings.String Lia.
 
 From Phil.Surface Require Import
   Grammar
@@ -129,10 +129,13 @@ Proof.
     destruct Hin as [Hequal | Hin].
     + subst value.
       simpl.
+      pose proof (Nat.le_max_l rank (parser_option_rank_max rest)) as Hmax.
       lia.
     + destruct value as [head_rank |].
       * simpl.
         pose proof (IH rank Hin) as Htail.
+        pose proof
+          (Nat.le_max_r head_rank (parser_option_rank_max rest)) as Hmax.
         lia.
       * simpl.
         exact (IH rank Hin).
