@@ -1,0 +1,37 @@
+name: Phase 1 IO-PATH Provider-relative Path
+
+on:
+  pull_request:
+    paths:
+      - 'src/Phil/Systems.hs'
+      - 'test/Phase1IOPathProviderRelativeMain.hs'
+      - '.github/workflows/phase1-io-path-provider-relative.yml'
+  push:
+    branches: [main]
+    paths:
+      - 'src/Phil/Systems.hs'
+      - 'test/Phase1IOPathProviderRelativeMain.hs'
+      - '.github/workflows/phase1-io-path-provider-relative.yml'
+
+permissions:
+  contents: read
+
+jobs:
+  io-path:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: haskell-actions/setup@v2
+        with:
+          ghc-version: '9.6.7'
+          cabal-version: 'latest'
+
+      - name: Build complete Haskell substrate
+        run: cabal build all --enable-tests
+
+      - name: Strict typecheck IO-PATH pressure corpus
+        run: cabal exec -- ghc -Wall -Werror -fno-code test/Phase1IOPathProviderRelativeMain.hs
+
+      - name: Run IO-PATH provider-relative path pressure corpus
+        run: cabal exec -- runghc -Wall -Werror test/Phase1IOPathProviderRelativeMain.hs
