@@ -5,7 +5,6 @@ module Main (main) where
 import Control.Monad (unless)
 import qualified Data.Map.Strict as Map
 import qualified Data.Set as Set
-import qualified Data.Text as Text
 import Phil.Assurance
   ( ArtifactIdentity (..)
   , ArtifactRef (..)
@@ -13,8 +12,7 @@ import Phil.Assurance
   )
 import Phil.Assurance.Types (RevisionId (..))
 import Phil.Core.Generic
-  ( GenericApplicationIdentity
-  , GenericEvidence (..)
+  ( GenericEvidence (..)
   , GenericRequirement (..)
   , GenericRequirementDisposition (..)
   , GenericStaticParameterKey (..)
@@ -61,14 +59,13 @@ import Phil.Systems.TargetStrengthening
   )
 import Phil.Verification.ArtifactClosure
   ( ArtifactCertificationError (..)
-  , CertifiedApplicationArtifact
   , certifiedApplicationSourceAssurance
   , certifyApplicationArtifact
   )
 import Phil.Verification.GenericAssurance
   ( GenericApplicationAssurance
-  , prepareReusableGenericBodyAssurance
   , composeGenericApplicationAssurance
+  , prepareReusableGenericBodyAssurance
   )
 import System.Exit (exitFailure)
 
