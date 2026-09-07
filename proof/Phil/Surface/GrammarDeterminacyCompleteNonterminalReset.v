@@ -81,14 +81,21 @@ Proof.
       path name
       (lookup_tokens name phase1_surface_follow_facts))
     as [Hactual_canonical _].
-  repeat split.
+  split.
   - exact Hactual_canonical.
-  - apply phase1_surface_rule_local_path_reset.
-  - apply phase1_surface_nonterminal_reset_resolver_follow_compatible.
-  - exact Hchild_path.
-  - exact Hsafe.
-  - exact Hchild_follow.
-  - exact Hassembly.
-  - exact Hchild_continuation.
-  - exact Hresolver_context.
+  - split.
+    + apply phase1_surface_rule_local_path_reset.
+    + split.
+      * apply phase1_surface_nonterminal_reset_resolver_follow_compatible.
+      * split.
+        -- exact Hchild_path.
+        -- split.
+           ++ exact Hsafe.
+           ++ split.
+              ** exact Hchild_follow.
+              ** split.
+                 --- exact Hassembly.
+                 --- split.
+                     +++ exact Hchild_continuation.
+                     +++ exact Hresolver_context.
 Qed.
