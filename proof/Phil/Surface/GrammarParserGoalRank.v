@@ -72,9 +72,10 @@ Lemma parser_expression_sequence_rank_equation :
     end.
 Proof.
   intros fuel facts items.
-  induction items as [|item rest IH]; simpl.
+  induction items as [|item rest IH].
   - reflexivity.
-  - destruct (parser_expression_rank_fuel fuel facts item) as [head_rank|]
+  - simpl in IH |- *.
+    destruct (parser_expression_rank_fuel fuel facts item) as [head_rank|]
       eqn:Hhead; simpl; try reflexivity.
     destruct (nullable_expression phase1_surface_nullable_facts item) eqn:Hnull;
       simpl; try reflexivity.
@@ -91,9 +92,10 @@ Lemma parser_expression_alternative_rank_equation :
     end.
 Proof.
   intros fuel facts items.
-  induction items as [|item rest IH]; simpl.
+  induction items as [|item rest IH].
   - reflexivity.
-  - destruct (parser_expression_rank_fuel fuel facts item) as [head_rank|]
+  - simpl in IH |- *.
+    destruct (parser_expression_rank_fuel fuel facts item) as [head_rank|]
       eqn:Hhead; simpl; try reflexivity.
     rewrite IH.
     reflexivity.
