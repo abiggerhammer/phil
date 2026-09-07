@@ -36,11 +36,15 @@ import Phil.Verification.ProofEvidence
   , checkedProofAssumptions
   , checkedProofCertificate
   , checkedProofChecker
+  , checkedProofContextIds
+  , checkedProofEvidenceFormat
   , checkedProofGraphRevision
   , checkedProofObligationRevision
   , checkedProofProducer
   , checkedProofProposition
   , checkedProofState
+  , checkedProofSubjectIds
+  , decisionCertificateEvidenceFormat
   )
 import System.Exit (exitFailure)
 
@@ -109,6 +113,9 @@ proposalFor :: RevisionId -> DecisionCertificate -> ProofProposal
 proposalFor revision certificate = ProofProposal
   { proofProposalProducer = "untrusted.external.producer"
   , proofProposalObligationRevision = revision
+  , proofProposalEvidenceFormat = decisionCertificateEvidenceFormat
+  , proofProposalSubjectIds = ["subject:ver003"]
+  , proofProposalContextIds = ["context:ver003"]
   , proofProposalProposition = rootProposition
   , proofProposalCertificate = certificate
   }
@@ -126,6 +133,9 @@ testAccepted graph revision certificate =
         && checkedProofObligationRevision checked == revision
         && checkedProofProducer checked == "untrusted.external.producer"
         && checkedProofChecker checked == certificateCheckerId
+        && checkedProofEvidenceFormat checked == decisionCertificateEvidenceFormat
+        && checkedProofSubjectIds checked == ["subject:ver003"]
+        && checkedProofContextIds checked == ["context:ver003"]
         && checkedProofCertificate checked == certificate
         && checkedProofProposition checked == rootProposition
         && checkedProofState checked == emptyCheckState
