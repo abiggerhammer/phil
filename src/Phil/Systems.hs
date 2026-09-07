@@ -1,3 +1,5 @@
+{-# LANGUAGE OverloadedStrings #-}
+
 module Phil.Systems
   ( module Phil.Systems.IR
   , module Phil.Systems.Verify
@@ -19,8 +21,19 @@ module Phil.Systems
   , module Phil.Systems.ClientOutbound
   , module Phil.Systems.RecognitionFailure
   , module Phil.Systems.StorageFailure
+  , FileSystemOccurrence
+  , unFileSystemOccurrence
+  , ProviderRelativePath
+  , providerRelativePathOccurrence
+  , providerRelativePathSegments
+  , ProviderRelativePathError (..)
+  , fileSystemOccurrence
+  , checkProviderRelativePath
+  , renderProviderRelativePath
   ) where
 
+import Data.Text (Text)
+import qualified Data.Text as Text
 import Phil.Systems.AcceptedResponse
 import Phil.Systems.BeginPolicySessionChoice
 import Phil.Systems.ClientOutbound
@@ -41,3 +54,60 @@ import Phil.Systems.StorageFailure
 import Phil.Systems.VersionChoiceOperands
 import Phil.Systems.VersionSessionChoice
 import Phil.Systems.Verify
+
+-- | Exact semantic occurrence of one FileSystem provider. Paths are qualified
+-- by this identity rather than by a host current working directory or ambient
+-- filesystem namespace.
+newtype FileSystemOccurrence = FileSystemOccurrence
+  { unFileSystemOccurrence :: Text
+  }
+  deriving (Eq, Ord, Show)
+
+-- | Canonical source-level path relative to exactly one FileSystem occurrence.
+-- The constructor is hidden so accepted paths cannot contain empty, dot, or
+-- parent segments. Source '/' is the only separator; host separators are data.
+data ProviderRelativePath = ProviderRelativePath
+  { providerRelativePathOccurrence :: FileSystemOccurrence
+  , providerRelativePathSegments :: [Text]
+  }
+  deriving (Eq, Ord, Show)
+
+data ProviderRelativePathError
+  = EmptyFileSystemOccurrence
+  | EmptyProviderRelativePath
+  | AbsoluteProviderRelativePath Text
+  | EmptyProviderRelativePathSegment Int
+  | DotProviderRelativePathSegment Int
+  | ParentProviderRelativePathSegment Int
+  deriving (Eq, Ord, Show)
+
+fileSystemOccurrence
+  :: Text
+  -> Either ProviderRelativePathError FileSystemOccurrence
+fileSystemOccurrence occurrence
+  | Text.null occurrence = Left EmptyFileSystemOccurrence
+  | otherwise = Right (FileSystemOccurrence occurrence)
+
+checkProviderRelativePath
+  :: FileSystemOccurrence
+  -> Text
+  -> Either ProviderRelativePathError ProviderRelativePath
+checkProviderRelativePath occurrence raw
+  | Text.null raw = Left EmptyProviderRelativePath
+  | "/" `Text.isPrefixOf` raw = Left (AbsoluteProviderRelativePath raw)
+  | otherwise = do
+      let segments = Text.splitOn "/" raw
+      mapM_ validateSegment (zip [1 ..] segments)
+      Right ProviderRelativePath
+        { providerRelativePathOccurrence = occurrence
+        , providerRelativePathSegments = segments
+        }
+  where
+    validateSegment (index, segment)
+      | Text.null segment = Left (EmptyProviderRelativePathSegment index)
+      | segment == "." = Left (DotProviderRelativePathSegment index)
+      | segment == ".." = Left (ParentProviderRelativePathSegment index)
+      | otherwise = Right ()
+
+renderProviderRelativePath :: ProviderRelativePath -> Text
+renderProviderRelativePath = Text.intercalate "/" . providerRelativePathSegments
