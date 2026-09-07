@@ -38,21 +38,17 @@ import Phil.Verification
   , buildVerificationObligationGraph
   )
 import Phil.Verification.ProofEvidence
-  ( AssumptionClosureRecord
-  , ExportClosureRecord
-  , MissingProofDispositionDecision (..)
+  ( MissingProofDispositionDecision (..)
   , MissingProofDispositionProposal (..)
   , MissingProofDispositionRejection (..)
   , ProofAttemptResult (..)
   , ProofProducerAttempt (..)
   , ProofProducerFailure (..)
-  , assumptionClosureAssumption
   , assumptionClosureGraphRevision
   , assumptionClosureObligationRevision
   , assumptionClosurePolicyRevision
   , assumptionClosureRole
   , evaluateMissingProofDisposition
-  , exportClosureExport
   , exportClosureGraphRevision
   , exportClosureObligationRevision
   , exportClosurePolicyRevision
@@ -63,11 +59,15 @@ import System.Exit (exitFailure)
 
 main :: IO ()
 main = do
-  graph <- graphOrFail [assumptionInput, exportInput] (Set.singleton assumptionId)
-  staticOnlyGraph <- graphOrFail [staticOnlyAssumptionInput] (Set.singleton assumptionId)
-  let assumptionRevision = revisionFor graph assumptionId
-      exportRevision = revisionFor graph exportIdObligation
-      staticOnlyRevision = revisionFor staticOnlyGraph assumptionId
+  graph <- graphOrFail
+    [assumptionInput, exportInput]
+    (Set.singleton assumptionObligationId)
+  staticOnlyGraph <- graphOrFail
+    [staticOnlyAssumptionInput]
+    (Set.singleton assumptionObligationId)
+  let assumptionRevision = revisionFor graph assumptionObligationId
+      exportRevision = revisionFor graph exportObligationId
+      staticOnlyRevision = revisionFor staticOnlyGraph assumptionObligationId
       assumption = validAssumption
       exportEntry = validExport exportRevision
       checks =
@@ -78,27 +78,27 @@ main = do
         , ("explicit permitted assumption boundary is admitted",
             testAssumptionAdmitted graph assumptionRevision assumption)
         , ("assumption requires exact ADR-010 acceptance rule and role",
-            testAssumptionAcceptanceBinding graph staticOnlyGraph assumptionRevision staticOnlyRevision assumption)
-        , ("unpermitted assumption boundary rejects",
-            testAssumptionPermissionRequired graph assumptionRevision assumption)
-        , ("assumption validity scope must match exact build context",
-            testAssumptionValidityRequired graph assumptionRevision assumption)
-        , ("policy must independently permit AssumptionDependent",
-            testAssumptionPolicyRequired graph assumptionRevision assumption)
+            testAssumptionAcceptanceBinding
+              graph
+              staticOnlyGraph
+              assumptionRevision
+              staticOnlyRevision
+              assumption)
+        , ("assumption permission, validity, and policy are independent gates",
+            testAssumptionGates graph assumptionRevision assumption)
         , ("explicit permitted export boundary is admitted",
             testExportAdmitted graph exportRevision exportEntry)
         , ("in-scope obligation cannot silently become export",
             testInScopeExportRejected graph assumptionRevision)
-        , ("export must name the exact obligation revision",
-            testExportRevisionBinding graph exportRevision)
-        , ("unpermitted export destination rejects",
-            testExportPermissionRequired graph exportRevision exportEntry)
-        , ("export validity scope must match exact build context",
-            testExportValidityRequired graph exportRevision exportEntry)
+        , ("export revision, destination, validity, and policy are independent gates",
+            testExportGates graph exportRevision exportEntry)
         , ("content-bound assumption and export records reject stale digests",
-            testDigestBinding graph assumptionRevision exportRevision assumption exportEntry)
-        , ("policy must independently permit Exported",
-            testExportPolicyRequired graph exportRevision exportEntry)
+            testDigestBinding
+              graph
+              assumptionRevision
+              exportRevision
+              assumption
+              exportEntry)
         , ("unknown revision cannot receive any missing-proof disposition",
             testUnknownRevision graph)
         ]
@@ -120,15 +120,15 @@ graphOrFail inputs scope =
 failCase :: String -> IO a
 failCase message = putStrLn ("FAIL: VER-008 " ++ message) >> exitFailure
 
-assumptionId :: ObligationId
-assumptionId = ObligationId "ver008.assumption"
+assumptionObligationId :: ObligationId
+assumptionObligationId = ObligationId "ver008.assumption"
 
-exportIdObligation :: ObligationId
-exportIdObligation = ObligationId "ver008.export"
+exportObligationId :: ObligationId
+exportObligationId = ObligationId "ver008.export"
 
 assumptionObligation :: Obligation
 assumptionObligation = Obligation
-  { obligationId = assumptionId
+  { obligationId = assumptionObligationId
   , obligationProposition = LessEqual (RefNat 1) (RefNat 2)
   , obligationOrigin = "checked.callable:ver008.assumption"
   , obligationScope = "application:ver008"
@@ -137,7 +137,7 @@ assumptionObligation = Obligation
 
 exportObligation :: Obligation
 exportObligation = Obligation
-  { obligationId = exportIdObligation
+  { obligationId = exportObligationId
   , obligationProposition = Equal (RefNat 2) (RefNat 2)
   , obligationOrigin = "checked.callable:ver008.export"
   , obligationScope = "application:ver008"
@@ -264,9 +264,11 @@ testNoProposalRemainsUnresolved
   -> RevisionId
   -> Bool
 testNoProposalRemainsUnresolved graph assumptionRevision exportRevision =
-  evaluateMissingProofDisposition graph permissivePolicy verificationContext assumptionRevision Nothing
+  evaluateMissingProofDisposition
+      graph permissivePolicy verificationContext assumptionRevision Nothing
       == MissingProofRemainsUnresolved assumptionRevision
-    && evaluateMissingProofDisposition graph permissivePolicy verificationContext exportRevision Nothing
+    && evaluateMissingProofDisposition
+      graph permissivePolicy verificationContext exportRevision Nothing
       == MissingProofRemainsUnresolved exportRevision
 
 testProducerFailureRemainsUnresolved
@@ -282,7 +284,8 @@ testProducerFailureRemainsUnresolved graph revision =
         }) of
     Right (ProofAttemptUnresolved unresolved) ->
       unresolvedProofObligationRevision unresolved == revision
-        && evaluateMissingProofDisposition graph permissivePolicy verificationContext revision Nothing
+        && evaluateMissingProofDisposition
+          graph permissivePolicy verificationContext revision Nothing
           == MissingProofRemainsUnresolved revision
     _ -> False
 
@@ -292,24 +295,19 @@ testAssumptionAdmitted
   -> Assumption
   -> Bool
 testAssumptionAdmitted graph revision assumption =
-  case evaluateMissingProofDisposition graph permissivePolicy verificationContext revision
+  case evaluateMissingProofDisposition
+      graph
+      permissivePolicy
+      verificationContext
+      revision
       (Just (SelectAssumptionBoundary assumptionRole assumption)) of
-    MissingProofAssumptionAdmitted record -> assumptionRecordMatches graph revision assumption record
+    MissingProofAssumptionAdmitted record ->
+      assumptionClosureGraphRevision record == verificationGraphRevision graph
+        && assumptionClosureObligationRevision record == revision
+        && assumptionClosurePolicyRevision record
+          == applicationAssurancePolicyRevision permissivePolicy
+        && assumptionClosureRole record == assumptionRole
     _ -> False
-
-assumptionRecordMatches
-  :: VerificationObligationGraph
-  -> RevisionId
-  -> Assumption
-  -> AssumptionClosureRecord
-  -> Bool
-assumptionRecordMatches graph revision assumption record =
-  assumptionClosureGraphRevision record == verificationGraphRevision graph
-    && assumptionClosureObligationRevision record == revision
-    && assumptionClosurePolicyRevision record
-      == applicationAssurancePolicyRevision permissivePolicy
-    && assumptionClosureRole record == assumptionRole
-    && assumptionClosureAssumption record == assumption
 
 testAssumptionAcceptanceBinding
   :: VerificationObligationGraph
@@ -321,55 +319,55 @@ testAssumptionAcceptanceBinding
 testAssumptionAcceptanceBinding graph staticOnlyGraph revision staticOnlyRevision assumption =
   let wrongRole = EvidenceRole "static-proof"
       wrongRoleRejected =
-        evaluateMissingProofDisposition graph permissivePolicy verificationContext revision
+        evaluateMissingProofDisposition
+          graph
+          permissivePolicy
+          verificationContext
+          revision
           (Just (SelectAssumptionBoundary wrongRole assumption))
           == MissingProofDispositionRejected
               (MissingProofAssumptionRoleRejected revision wrongRole)
       staticOnlyRejected =
-        evaluateMissingProofDisposition staticOnlyGraph permissivePolicy verificationContext staticOnlyRevision
+        evaluateMissingProofDisposition
+          staticOnlyGraph
+          permissivePolicy
+          verificationContext
+          staticOnlyRevision
           (Just (SelectAssumptionBoundary assumptionRole assumption))
           == MissingProofDispositionRejected
-              (MissingProofAssumptionAcceptanceRuleRejected staticOnlyRevision assumptionRole)
+              (MissingProofAssumptionAcceptanceRuleRejected
+                staticOnlyRevision
+                assumptionRole)
   in wrongRoleRejected && staticOnlyRejected
 
-testAssumptionPermissionRequired
+testAssumptionGates
   :: VerificationObligationGraph
   -> RevisionId
   -> Assumption
   -> Bool
-testAssumptionPermissionRequired graph revision assumption =
-  let deniedContext = verificationContext { verificationPermittedAssumptions = Set.empty }
-  in evaluateMissingProofDisposition graph permissivePolicy deniedContext revision
-      (Just (SelectAssumptionBoundary assumptionRole assumption))
-      == MissingProofDispositionRejected
-          (MissingProofAssumptionNotPermitted assumptionKey)
-
-testAssumptionValidityRequired
-  :: VerificationObligationGraph
-  -> RevisionId
-  -> Assumption
-  -> Bool
-testAssumptionValidityRequired graph revision assumption =
-  let staleContext = verificationContext
-        { verificationValidityContext = Map.singleton "architecture_revision" "arch.ver008.v2" }
-  in evaluateMissingProofDisposition graph permissivePolicy staleContext revision
-      (Just (SelectAssumptionBoundary assumptionRole assumption))
-      == MissingProofDispositionRejected
-          (MissingProofAssumptionValidityScopeMismatch assumptionKey)
-
-testAssumptionPolicyRequired
-  :: VerificationObligationGraph
-  -> RevisionId
-  -> Assumption
-  -> Bool
-testAssumptionPolicyRequired graph revision assumption =
-  evaluateMissingProofDisposition graph strictPolicy verificationContext revision
-      (Just (SelectAssumptionBoundary assumptionRole assumption))
-    == MissingProofDispositionRejected
-        (MissingProofPolicyRejected
-          revision
-          AssumptionDependent
-          (applicationAssurancePolicyRevision strictPolicy))
+testAssumptionGates graph revision assumption =
+  let deniedContext = verificationContext
+        { verificationPermittedAssumptions = Set.empty }
+      staleContext = verificationContext
+        { verificationValidityContext =
+            Map.singleton "architecture_revision" "arch.ver008.v2" }
+      proposal = Just (SelectAssumptionBoundary assumptionRole assumption)
+      denied =
+        evaluateMissingProofDisposition graph permissivePolicy deniedContext revision proposal
+          == MissingProofDispositionRejected
+              (MissingProofAssumptionNotPermitted assumptionKey)
+      stale =
+        evaluateMissingProofDisposition graph permissivePolicy staleContext revision proposal
+          == MissingProofDispositionRejected
+              (MissingProofAssumptionValidityScopeMismatch assumptionKey)
+      strict =
+        evaluateMissingProofDisposition graph strictPolicy verificationContext revision proposal
+          == MissingProofDispositionRejected
+              (MissingProofPolicyRejected
+                revision
+                AssumptionDependent
+                (applicationAssurancePolicyRevision strictPolicy))
+  in denied && stale && strict
 
 testExportAdmitted
   :: VerificationObligationGraph
@@ -377,66 +375,76 @@ testExportAdmitted
   -> ExportEntry
   -> Bool
 testExportAdmitted graph revision exportEntry =
-  case evaluateMissingProofDisposition graph permissivePolicy verificationContext revision
+  case evaluateMissingProofDisposition
+      graph
+      permissivePolicy
+      verificationContext
+      revision
       (Just (SelectExportBoundary exportEntry)) of
-    MissingProofExportAdmitted record -> exportRecordMatches graph revision exportEntry record
+    MissingProofExportAdmitted record ->
+      exportClosureGraphRevision record == verificationGraphRevision graph
+        && exportClosureObligationRevision record == revision
+        && exportClosurePolicyRevision record
+          == applicationAssurancePolicyRevision permissivePolicy
     _ -> False
-
-exportRecordMatches
-  :: VerificationObligationGraph
-  -> RevisionId
-  -> ExportEntry
-  -> ExportClosureRecord
-  -> Bool
-exportRecordMatches graph revision exportEntry record =
-  exportClosureGraphRevision record == verificationGraphRevision graph
-    && exportClosureObligationRevision record == revision
-    && exportClosurePolicyRevision record
-      == applicationAssurancePolicyRevision permissivePolicy
-    && exportClosureExport record == exportEntry
 
 testInScopeExportRejected :: VerificationObligationGraph -> RevisionId -> Bool
 testInScopeExportRejected graph revision =
-  evaluateMissingProofDisposition graph permissivePolicy verificationContext revision
+  evaluateMissingProofDisposition
+      graph
+      permissivePolicy
+      verificationContext
+      revision
       (Just (SelectExportBoundary (validExport revision)))
     == MissingProofDispositionRejected
         (MissingProofExportInsideCertificationScope revision)
 
-testExportRevisionBinding :: VerificationObligationGraph -> RevisionId -> Bool
-testExportRevisionBinding graph revision =
+testExportGates
+  :: VerificationObligationGraph
+  -> RevisionId
+  -> ExportEntry
+  -> Bool
+testExportGates graph revision exportEntry =
   let wrongRevision = RevisionId "rev.ver008.wrong-export-target"
-      wrongEntry = validExport wrongRevision
-  in evaluateMissingProofDisposition graph permissivePolicy verificationContext revision
-      (Just (SelectExportBoundary wrongEntry))
-      == MissingProofDispositionRejected
-          (MissingProofExportRevisionMismatch revision wrongRevision)
-
-testExportPermissionRequired
-  :: VerificationObligationGraph
-  -> RevisionId
-  -> ExportEntry
-  -> Bool
-testExportPermissionRequired graph revision exportEntry =
-  let changed = exportEntry { exportDestinationBoundary = "deployment:other" }
-      redigested = changed { exportDigest = deriveExportDigest changed }
-  in evaluateMissingProofDisposition graph permissivePolicy verificationContext revision
-      (Just (SelectExportBoundary redigested))
-      == MissingProofDispositionRejected
-          (MissingProofExportBoundaryNotPermitted exportKey "deployment:other")
-
-testExportValidityRequired
-  :: VerificationObligationGraph
-  -> RevisionId
-  -> ExportEntry
-  -> Bool
-testExportValidityRequired graph revision exportEntry =
-  let staleScope = ValidityScope (Map.singleton "architecture_revision" "arch.ver008.v2")
-      changed = exportEntry { exportValidityScope = staleScope }
-      redigested = changed { exportDigest = deriveExportDigest changed }
-  in evaluateMissingProofDisposition graph permissivePolicy verificationContext revision
-      (Just (SelectExportBoundary redigested))
-      == MissingProofDispositionRejected
-          (MissingProofExportValidityScopeMismatch exportKey)
+      wrongRevisionEntry = validExport wrongRevision
+      wrongBoundary0 = exportEntry
+        { exportDestinationBoundary = "deployment:other" }
+      wrongBoundary = wrongBoundary0
+        { exportDigest = deriveExportDigest wrongBoundary0 }
+      staleScope = ValidityScope
+        (Map.singleton "architecture_revision" "arch.ver008.v2")
+      stale0 = exportEntry { exportValidityScope = staleScope }
+      stale = stale0 { exportDigest = deriveExportDigest stale0 }
+      wrongRevisionRejected =
+        evaluateMissingProofDisposition
+          graph permissivePolicy verificationContext revision
+          (Just (SelectExportBoundary wrongRevisionEntry))
+          == MissingProofDispositionRejected
+              (MissingProofExportRevisionMismatch revision wrongRevision)
+      boundaryRejected =
+        evaluateMissingProofDisposition
+          graph permissivePolicy verificationContext revision
+          (Just (SelectExportBoundary wrongBoundary))
+          == MissingProofDispositionRejected
+              (MissingProofExportBoundaryNotPermitted
+                exportKey
+                "deployment:other")
+      staleRejected =
+        evaluateMissingProofDisposition
+          graph permissivePolicy verificationContext revision
+          (Just (SelectExportBoundary stale))
+          == MissingProofDispositionRejected
+              (MissingProofExportValidityScopeMismatch exportKey)
+      policyRejected =
+        evaluateMissingProofDisposition
+          graph strictPolicy verificationContext revision
+          (Just (SelectExportBoundary exportEntry))
+          == MissingProofDispositionRejected
+              (MissingProofPolicyRejected
+                revision
+                Exported
+                (applicationAssurancePolicyRevision strictPolicy))
+  in wrongRevisionRejected && boundaryRejected && staleRejected && policyRejected
 
 testDigestBinding
   :: VerificationObligationGraph
@@ -446,38 +454,35 @@ testDigestBinding
   -> ExportEntry
   -> Bool
 testDigestBinding graph assumptionRevision exportRevision assumption exportEntry =
-  let staleAssumption = assumption { assumptionStatement = "silently changed" }
-      staleExport = exportEntry { exportDestinationBoundary = "deployment:changed" }
+  let staleAssumption = assumption
+        { assumptionStatement = "silently changed" }
+      staleExport = exportEntry
+        { exportDestinationBoundary = "deployment:changed" }
       assumptionRejected =
-        case evaluateMissingProofDisposition graph permissivePolicy verificationContext assumptionRevision
+        case evaluateMissingProofDisposition
+            graph
+            permissivePolicy
+            verificationContext
+            assumptionRevision
             (Just (SelectAssumptionBoundary assumptionRole staleAssumption)) of
           MissingProofDispositionRejected
             (MissingProofAssumptionDigestMismatch key _ _) -> key == assumptionKey
           _ -> False
       exportRejected =
-        case evaluateMissingProofDisposition graph permissivePolicy verificationContext exportRevision
+        case evaluateMissingProofDisposition
+            graph
+            permissivePolicy
+            verificationContext
+            exportRevision
             (Just (SelectExportBoundary staleExport)) of
           MissingProofDispositionRejected
             (MissingProofExportDigestMismatch key _ _) -> key == exportKey
           _ -> False
   in assumptionRejected && exportRejected
 
-testExportPolicyRequired
-  :: VerificationObligationGraph
-  -> RevisionId
-  -> ExportEntry
-  -> Bool
-testExportPolicyRequired graph revision exportEntry =
-  evaluateMissingProofDisposition graph strictPolicy verificationContext revision
-      (Just (SelectExportBoundary exportEntry))
-    == MissingProofDispositionRejected
-        (MissingProofPolicyRejected
-          revision
-          Exported
-          (applicationAssurancePolicyRevision strictPolicy))
-
 testUnknownRevision :: VerificationObligationGraph -> Bool
 testUnknownRevision graph =
   let unknown = RevisionId "rev.ver008.unknown"
-  in evaluateMissingProofDisposition graph permissivePolicy verificationContext unknown Nothing
+  in evaluateMissingProofDisposition
+      graph permissivePolicy verificationContext unknown Nothing
       == MissingProofDispositionRejected (MissingProofUnknownRevision unknown)
