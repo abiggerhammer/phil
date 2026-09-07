@@ -81,6 +81,7 @@ jobs:
           compile proof/Phil/Surface/GrammarDeterminacyEffectSetBraceSoundness.v
           compile proof/Phil/Surface/GrammarDeterminacyAlternativeResolverSemanticComplex.v
           compile proof/Phil/Surface/GrammarDeterminacyAlternativeResolverNoneSemantic.v
+          compile proof/Phil/Surface/GrammarDeterminacyStaticValueResolverNoneFallback.v
           compile proof/Phil/Surface/GrammarDeterminacyAlternativeResolverNoneConversion.v
           compile proof/Phil/Surface/GrammarDeterminacyActualCanonicalAlternativeNone.v
           compile proof/Phil/Surface/GrammarDeterminacyAlternativeResolverSomeSuffix.v
