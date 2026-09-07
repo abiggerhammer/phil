@@ -1,0 +1,3 @@
+PHIL-SURFACE-GRAMMAR-CORR-001 parser-progress proof slice.
+
+This marker keeps the proof-only PR visibly tied to the active correspondence obligation.
