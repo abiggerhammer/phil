@@ -397,7 +397,7 @@ Proof.
   specialize (Hall_defined _ Hmember).
   destruct (phase1_surface_parser_goal_rank_fuel fuel goal)
     as [rank |] eqn:Hrank.
-  - exists rank. exact Hrank.
+  - exists rank. reflexivity.
   - simpl in Hall_defined. discriminate.
 Qed.
 
