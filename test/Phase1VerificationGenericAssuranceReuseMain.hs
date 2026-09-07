@@ -292,6 +292,9 @@ testRealizationNonsemantic body =
           == reusableGenericBodyAssuranceId wasmBody
     _ -> False
   where
+    prepareForRealization
+      :: Text.Text
+      -> Either GenericBodyAssuranceError ReusableGenericBodyAssurance
     prepareForRealization _ = prepareReusableGenericBodyAssurance
       genericDeclarationKey
       interfaceRevision
