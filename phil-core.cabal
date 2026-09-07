@@ -55,6 +55,7 @@ library
       Phil.Systems
       Phil.LLVM
       Phil.Compiler
+      Phil.Verification
   other-modules:
       ArchitectureIdentityKernel
       ArchitectureImportKernel
