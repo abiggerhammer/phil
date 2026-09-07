@@ -376,8 +376,9 @@ Proof.
   - exact Hpath.
   - intros items Hshape.
     discriminate Hshape.
-  - apply phase1_surface_optional_excludes_trailing_comma_path.
-    exact Hpath.
+  - exact
+      (phase1_surface_optional_excludes_trailing_comma_path
+        path body Hpath).
 Qed.
 
 Corollary phase1_surface_nontrailing_repetition_resolver_none :
