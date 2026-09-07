@@ -116,6 +116,35 @@ jobs:
       - name: Apply R15 Certified contextual-binding repair
         run: python3 scripts/tmp_review_r15_contextual_applicability.py
 
+      - name: Normalize generated R15 append blocks
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 - <<'PY'
+          from pathlib import Path
+
+          proof = Path('proof/Phil/Core/ProviderQualificationLineageTargetImplementation.v')
+          text = proof.read_text()
+          marker = r'\n\nInductive AdmissionContextDecision'
+          if marker not in text:
+              raise SystemExit('R15 generated Rocq append marker not found')
+          prefix, tail = text.split(marker, 1)
+          tail = marker + tail
+          tail = tail.replace(r'\n', '\n')
+          tail = tail.replace('/\\\\', '/\\')
+          proof.write_text(prefix + tail)
+
+          app = Path('app/ProviderLineageTargetDecisionCorrespondenceMain.hs')
+          text = app.read_text()
+          marker = r'\n  assert "REVIEW-R15 exact contextual admission binding accepts"'
+          if marker not in text:
+              raise SystemExit('R15 generated Haskell append marker not found')
+          prefix, tail = text.split(marker, 1)
+          tail = marker + tail
+          tail = tail.replace(r'\n', '\n')
+          app.write_text(prefix + tail)
+          PY
+
       - name: Fresh-compile and extract strengthened Rocq kernel
         shell: bash
         run: |
