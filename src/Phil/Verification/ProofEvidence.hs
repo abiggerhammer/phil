@@ -35,6 +35,21 @@ module Phil.Verification.ProofEvidence
   , EvidenceReuseDecision (..)
   , prepareReusableProofEvidence
   , evaluateReusableProofEvidence
+  , MissingProofDispositionProposal (..)
+  , MissingProofDispositionRejection (..)
+  , AssumptionClosureRecord
+  , assumptionClosureGraphRevision
+  , assumptionClosureObligationRevision
+  , assumptionClosurePolicyRevision
+  , assumptionClosureRole
+  , assumptionClosureAssumption
+  , ExportClosureRecord
+  , exportClosureGraphRevision
+  , exportClosureObligationRevision
+  , exportClosurePolicyRevision
+  , exportClosureExport
+  , MissingProofDispositionDecision (..)
+  , evaluateMissingProofDisposition
   ) where
 
 import Data.List (sort)
@@ -44,10 +59,19 @@ import Data.Set (Set)
 import Data.Text (Text)
 import qualified Data.Text as Text
 import Phil.Assurance.Types
-  ( Digest
+  ( Assumption (..)
+  , AssumptionId (..)
+  , AssuranceKind (..)
+  , Digest
+  , EvidenceRole (..)
+  , ExportEntry (..)
+  , ExportId (..)
   , ObligationRevision (..)
   , RevisionId
   , ValidityScope (..)
+  , VerificationContext (..)
+  , deriveAssumptionDigest
+  , deriveExportDigest
   , renderPropositionCanonical
   )
 import Phil.Core.Checker (CheckState)
@@ -60,7 +84,10 @@ import Phil.Core.Decision
   )
 import Phil.Core.Syntax (Proposition)
 import Phil.Verification
-  ( VerificationObligationGraph (..)
+  ( ApplicationAssurancePolicy (..)
+  , AssurancePolicyRevision
+  , VerificationDisposition (..)
+  , VerificationObligationGraph (..)
   )
 
 -- | Canonical application-verification evidence format accepted by this
@@ -447,3 +474,215 @@ targetDependencies graph target = Set.fromList
   | (owner, dependency) <- Set.toAscList (verificationGraphDependencies graph)
   , owner == target
   ]
+
+-- | A missing proof artifact is not itself permission to choose a semantic
+-- disposition.  VER-008 requires a separate, explicit boundary proposal.  The
+-- proposal is either an ADR-010 assumption node plus its exact acceptance role,
+-- or an ADR-010 export entry naming the exact obligation and destination.
+data MissingProofDispositionProposal
+  = SelectAssumptionBoundary EvidenceRole Assumption
+  | SelectExportBoundary ExportEntry
+  deriving (Eq, Show)
+
+-- | Structured reasons an explicit non-proof disposition is not admissible.
+-- These remain closure-stage results: none of them changes proposition truth or
+-- retroactively turns an intrinsically invalid source program into a residual
+-- obligation.
+data MissingProofDispositionRejection
+  = MissingProofUnknownRevision RevisionId
+  | MissingProofAssumptionOutsideCertificationScope RevisionId
+  | MissingProofAssumptionRoleRejected RevisionId EvidenceRole
+  | MissingProofAssumptionAcceptanceRuleRejected RevisionId EvidenceRole
+  | MissingProofAssumptionMalformedId AssumptionId
+  | MissingProofAssumptionDigestMismatch AssumptionId Digest Digest
+  | MissingProofAssumptionNotPermitted AssumptionId
+  | MissingProofAssumptionValidityScopeMismatch AssumptionId
+  | MissingProofExportInsideCertificationScope RevisionId
+  | MissingProofExportRevisionMismatch RevisionId RevisionId
+  | MissingProofExportMalformedId ExportId
+  | MissingProofExportDigestMismatch ExportId Digest Digest
+  | MissingProofExportBoundaryMissing ExportId
+  | MissingProofExportBoundaryNotPermitted ExportId Text
+  | MissingProofExportValidityScopeMismatch ExportId
+  | MissingProofPolicyRejected RevisionId VerificationDisposition AssurancePolicyRevision
+  deriving (Eq, Show)
+
+-- | Opaque admitted assumption-dependent closure.  The exact canonical graph,
+-- target revision, selected policy, acceptance role, and content-bound
+-- assumption node remain independently inspectable.
+data AssumptionClosureRecord = AssumptionClosureRecord
+  Digest
+  RevisionId
+  AssurancePolicyRevision
+  EvidenceRole
+  Assumption
+  deriving (Eq, Show)
+
+assumptionClosureGraphRevision :: AssumptionClosureRecord -> Digest
+assumptionClosureGraphRevision (AssumptionClosureRecord graphRevision _ _ _ _) = graphRevision
+
+assumptionClosureObligationRevision :: AssumptionClosureRecord -> RevisionId
+assumptionClosureObligationRevision (AssumptionClosureRecord _ revision _ _ _) = revision
+
+assumptionClosurePolicyRevision :: AssumptionClosureRecord -> AssurancePolicyRevision
+assumptionClosurePolicyRevision (AssumptionClosureRecord _ _ policyRevision _ _) = policyRevision
+
+assumptionClosureRole :: AssumptionClosureRecord -> EvidenceRole
+assumptionClosureRole (AssumptionClosureRecord _ _ _ role _) = role
+
+assumptionClosureAssumption :: AssumptionClosureRecord -> Assumption
+assumptionClosureAssumption (AssumptionClosureRecord _ _ _ _ assumption) = assumption
+
+-- | Opaque admitted export closure.  Export permission is a declared boundary
+-- transfer, not proof evidence, so its ADR-010 ExportEntry remains explicit and
+-- content-bound separately from source semantic identity.
+data ExportClosureRecord = ExportClosureRecord
+  Digest
+  RevisionId
+  AssurancePolicyRevision
+  ExportEntry
+  deriving (Eq, Show)
+
+exportClosureGraphRevision :: ExportClosureRecord -> Digest
+exportClosureGraphRevision (ExportClosureRecord graphRevision _ _ _) = graphRevision
+
+exportClosureObligationRevision :: ExportClosureRecord -> RevisionId
+exportClosureObligationRevision (ExportClosureRecord _ revision _ _) = revision
+
+exportClosurePolicyRevision :: ExportClosureRecord -> AssurancePolicyRevision
+exportClosurePolicyRevision (ExportClosureRecord _ _ policyRevision _) = policyRevision
+
+exportClosureExport :: ExportClosureRecord -> ExportEntry
+exportClosureExport (ExportClosureRecord _ _ _ exportEntry) = exportEntry
+
+-- | The first constructor is the critical VER-008 invariant: even when policy
+-- and architecture context look permissive, proof absence with no explicit
+-- boundary proposal remains exactly unresolved.
+data MissingProofDispositionDecision
+  = MissingProofRemainsUnresolved RevisionId
+  | MissingProofAssumptionAdmitted AssumptionClosureRecord
+  | MissingProofExportAdmitted ExportClosureRecord
+  | MissingProofDispositionRejected MissingProofDispositionRejection
+  deriving (Eq, Show)
+
+-- | Evaluate the optional explicit boundary selected after static proof is
+-- absent.  'Nothing' never consults policy defaults and cannot synthesize an
+-- assumption or export.  Explicit proposals must independently satisfy exact
+-- graph/scope identity, ADR-010 boundary identity and validity scope, and the
+-- selected assurance policy.
+evaluateMissingProofDisposition
+  :: VerificationObligationGraph
+  -> ApplicationAssurancePolicy
+  -> VerificationContext
+  -> RevisionId
+  -> Maybe MissingProofDispositionProposal
+  -> MissingProofDispositionDecision
+evaluateMissingProofDisposition graph policy context revision maybeProposal =
+  case Map.lookup revision (verificationGraphNodes graph) of
+    Nothing -> reject (MissingProofUnknownRevision revision)
+    Just target -> case maybeProposal of
+      Nothing -> MissingProofRemainsUnresolved revision
+      Just (SelectAssumptionBoundary role assumption) ->
+        evaluateAssumption target role assumption
+      Just (SelectExportBoundary exportEntry) ->
+        evaluateExport exportEntry
+  where
+    reject = MissingProofDispositionRejected
+    policyRevision = applicationAssurancePolicyRevision policy
+    permittedDispositions = applicationAssurancePolicyPermittedDispositions policy
+
+    evaluateAssumption target role assumption
+      | not (Set.member revision (verificationGraphCertificationScope graph)) =
+          reject (MissingProofAssumptionOutsideCertificationScope revision)
+      | role /= EvidenceRole "assumption_boundary" =
+          reject (MissingProofAssumptionRoleRejected revision role)
+      | not (acceptanceAllowsAssumption role (revisionAcceptanceRule target)) =
+          reject (MissingProofAssumptionAcceptanceRuleRejected revision role)
+      | Text.null (Text.strip (unAssumptionId assumptionKey)) =
+          reject (MissingProofAssumptionMalformedId assumptionKey)
+      | assumptionDigest assumption /= expectedDigest =
+          reject
+            (MissingProofAssumptionDigestMismatch
+              assumptionKey
+              expectedDigest
+              (assumptionDigest assumption))
+      | not (Set.member assumptionKey (verificationPermittedAssumptions context)) =
+          reject (MissingProofAssumptionNotPermitted assumptionKey)
+      | not (closureValidityScopeMatches context (assumptionValidityScope assumption)) =
+          reject (MissingProofAssumptionValidityScopeMismatch assumptionKey)
+      | not (Set.member AssumptionDependent permittedDispositions) =
+          reject
+            (MissingProofPolicyRejected
+              revision
+              AssumptionDependent
+              policyRevision)
+      | otherwise = MissingProofAssumptionAdmitted
+          (AssumptionClosureRecord
+            (verificationGraphRevision graph)
+            revision
+            policyRevision
+            role
+            assumption)
+      where
+        assumptionKey = assumptionId assumption
+        expectedDigest = deriveAssumptionDigest assumption
+
+    evaluateExport exportEntry
+      | Set.member revision (verificationGraphCertificationScope graph) =
+          reject (MissingProofExportInsideCertificationScope revision)
+      | exportObligationRevision exportEntry /= revision =
+          reject
+            (MissingProofExportRevisionMismatch
+              revision
+              (exportObligationRevision exportEntry))
+      | Text.null (Text.strip (unExportId exportKey)) =
+          reject (MissingProofExportMalformedId exportKey)
+      | exportDigest exportEntry /= expectedDigest =
+          reject
+            (MissingProofExportDigestMismatch
+              exportKey
+              expectedDigest
+              (exportDigest exportEntry))
+      | Text.null (Text.strip destination) =
+          reject (MissingProofExportBoundaryMissing exportKey)
+      | not (Set.member destination (verificationPermittedExportBoundaries context)) =
+          reject (MissingProofExportBoundaryNotPermitted exportKey destination)
+      | not (closureValidityScopeMatches context (exportValidityScope exportEntry)) =
+          reject (MissingProofExportValidityScopeMismatch exportKey)
+      | not (Set.member Exported permittedDispositions) =
+          reject
+            (MissingProofPolicyRejected
+              revision
+              Exported
+              policyRevision)
+      | otherwise = MissingProofExportAdmitted
+          (ExportClosureRecord
+            (verificationGraphRevision graph)
+            revision
+            policyRevision
+            exportEntry)
+      where
+        exportKey = exportId exportEntry
+        expectedDigest = deriveExportDigest exportEntry
+        destination = exportDestinationBoundary exportEntry
+
+acceptanceAllowsAssumption :: EvidenceRole -> AcceptanceRule -> Bool
+acceptanceAllowsAssumption role rule = case rule of
+  AcceptEntry kind expectedRole -> kind == Assumed && expectedRole == role
+  AcceptAll rules -> not (null rules) && all (acceptanceAllowsAssumption role) rules
+  AcceptAny rules -> any (acceptanceAllowsAssumption role) rules
+
+-- | Match the same effective validity dimensions consumed by the final
+-- manifest verifier: declared context plus target and compilation profile.
+-- Undeclared dimensions are intentionally irrelevant; every declared dimension
+-- must match exactly.
+closureValidityScopeMatches :: VerificationContext -> ValidityScope -> Bool
+closureValidityScopeMatches context (ValidityScope dimensions) =
+  all dimensionMatches (Map.toAscList dimensions)
+  where
+    effectiveValidity =
+      Map.insert "target" (verificationTarget context)
+        . Map.insert "compilation_profile" (verificationCompilationProfile context)
+        $ verificationValidityContext context
+    dimensionMatches (dimension, expected) =
+      Map.lookup dimension effectiveValidity == Just expected
