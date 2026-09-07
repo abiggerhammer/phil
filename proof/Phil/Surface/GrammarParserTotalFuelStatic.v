@@ -495,7 +495,7 @@ Lemma phase1_surface_optional_body_choice_safe :
 Proof.
   intros fuel path body Hsafe.
   unfold phase1_surface_parser_goal_choice_safeb in *.
-  simpl in Hsafe.
+  rewrite choice_safe_first_optional_safety_equation in Hsafe.
   apply andb_true_iff in Hsafe as [_ Hbody].
   exact Hbody.
 Qed.
@@ -509,7 +509,7 @@ Lemma phase1_surface_repetition_wrapper_choice_safe :
 Proof.
   intros fuel path body Hsafe.
   unfold phase1_surface_parser_goal_choice_safeb in *.
-  simpl in Hsafe.
+  rewrite choice_safe_first_repetition_safety_equation in Hsafe.
   apply andb_true_iff in Hsafe as [_ Hbody].
   exact Hbody.
 Qed.
