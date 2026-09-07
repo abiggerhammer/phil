@@ -53,7 +53,8 @@ import Phil.Systems.StagingEffect
   ( StagingEffectStageBundle (..)
   )
 import Phil.Systems.TargetStrengthening
-  ( TargetStrengthening (..)
+  ( DerivedObligation (..)
+  , TargetStrengthening (..)
   , TargetStrengtheningStageBundle (..)
   , makeTargetStrengtheningStageBundle
   )
@@ -73,14 +74,14 @@ main :: IO ()
 main = do
   sourceAssurance <- sourceAssuranceOrFail
   validStage <- stageOrFail uploadStageClosureBundle
-  changedStage <- stageOrFail (introduceUnresolvedTargetObligation validStage)
-  let checks =
+  let changedStage = introduceUnsupportedTargetObligation validStage
+      checks =
         [ ("closed source assurance plus valid exact StageClosure certifies",
             testValidArtifactCertification sourceAssurance validStage)
-        , ("same exact closed source assurance rejects changed realization with unresolved target obligation",
+        , ("same exact closed source assurance rejects changed realization with unsupported target obligation",
             testSourceClosureIsNotArtifactClosure sourceAssurance validStage changedStage)
-        , ("changed realization really carries a new unregistered derived obligation",
-            testUnresolvedTargetObligation changedStage)
+        , ("changed realization really carries an orphan derived obligation",
+            testUnsupportedTargetObligation changedStage)
         , ("artifact identity mutation rejects without changing source assurance",
             testArtifactIdentityMutation sourceAssurance validStage)
         ]
@@ -152,18 +153,18 @@ testSourceClosureIsNotArtifactClosure source validStage changedStage =
       certifiedApplicationSourceAssurance certified == source
     _ -> False
 
-testUnresolvedTargetObligation :: StageClosureBundle -> Bool
-testUnresolvedTargetObligation stage =
+testUnsupportedTargetObligation :: StageClosureBundle -> Bool
+testUnsupportedTargetObligation stage =
   let target = targetStageFromNext (stageClosureNextStage stage)
-      requiredDerived = Set.fromList
+      referencedDerived = Set.fromList
         [ revision
         | strengthening <- Map.elems (targetStrengtheningStageFacts target)
         , Just revision <- [targetStrengtheningDerivedObligation strengthening]
         ]
       registeredDerived = Map.keysSet
         (targetStrengtheningStageDerivedObligations target)
-  in Set.member unresolvedTargetObligation requiredDerived
-      && not (Set.member unresolvedTargetObligation registeredDerived)
+  in Set.member unsupportedTargetObligation registeredDerived
+      && not (Set.member unsupportedTargetObligation referencedDerived)
 
 testArtifactIdentityMutation
   :: GenericApplicationAssurance
@@ -180,37 +181,37 @@ testArtifactIdentityMutation source validStage =
         certifiedApplicationSourceAssurance certified == source
       _ -> False
 
-introduceUnresolvedTargetObligation
+introduceUnsupportedTargetObligation
   :: StageClosureBundle
-  -> Either String StageClosureBundle
-introduceUnresolvedTargetObligation bundle = do
+  -> StageClosureBundle
+introduceUnsupportedTargetObligation bundle =
   let next = stageClosureNextStage bundle
       cost = nextStageRequirementStageBase next
       staging = costAttributionStageBase cost
       primitive = stagingEffectStageBase staging
       runtime = runtimePrimitiveStageBase primitive
       target = runtimeClaimStageBase runtime
-  (ref, strengthening) <- maybe
-    (Left "upload realization has no target-strengthening facts")
-    Right
-    (Map.lookupMin (targetStrengtheningStageFacts target))
-  let changedStrengthening = strengthening
-        { targetStrengtheningSourceAssurance = Set.empty
-        , targetStrengtheningDerivedObligation =
-            Just unresolvedTargetObligation
+      unsupported = DerivedObligation
+        { derivedObligationRevision = unsupportedTargetObligation
+        , derivedObligationIntroducedBy = Set.empty
+        , derivedObligationSemanticSubjects = Set.singleton "ver010.target"
+        , derivedObligationStatement =
+            "unsupported realization-derived obligation must not certify"
+        , derivedObligationAcceptanceRule =
+            "requires an exact target-strengthening introducer"
         }
-      changedFacts = Map.insert ref changedStrengthening
-        (targetStrengtheningStageFacts target)
+      changedObligations = Map.insert unsupportedTargetObligation unsupported
+        (targetStrengtheningStageDerivedObligations target)
       changedTarget = makeTargetStrengtheningStageBundle
         (targetStrengtheningStageBase target)
-        changedFacts
-        (targetStrengtheningStageDerivedObligations target)
+        (targetStrengtheningStageFacts target)
+        changedObligations
       changedRuntime = runtime { runtimeClaimStageBase = changedTarget }
       changedPrimitive = primitive { runtimePrimitiveStageBase = changedRuntime }
       changedStaging = staging { stagingEffectStageBase = changedPrimitive }
       changedCost = cost { costAttributionStageBase = changedStaging }
       changedNext = next { nextStageRequirementStageBase = changedCost }
-  pure bundle { stageClosureNextStage = changedNext }
+  in bundle { stageClosureNextStage = changedNext }
 
 targetStageFromNext
   :: NextStageRequirementStageBundle
@@ -222,8 +223,8 @@ targetStageFromNext =
   . costAttributionStageBase
   . nextStageRequirementStageBase
 
-unresolvedTargetObligation :: RevisionId
-unresolvedTargetObligation = RevisionId "ver010.target-strengthening.unresolved.v1"
+unsupportedTargetObligation :: RevisionId
+unsupportedTargetObligation = RevisionId "ver010.target-strengthening.unsupported.v1"
 
 genericDeclarationKey :: DeclarationKey
 genericDeclarationKey = DeclarationKey "generic.map"
