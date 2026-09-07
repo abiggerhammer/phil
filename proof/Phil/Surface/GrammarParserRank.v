@@ -8,17 +8,26 @@ Import ListNotations.
 Open Scope string_scope.
 
 (*
-  Grammar-v1 parser recursion rank for PHIL-SURFACE-GRAMMAR-CORR-001.
+  Grammar-v1 parser same-input recursion rank for
+  PHIL-SURFACE-GRAMMAR-CORR-001.
 
   The fuel-bounded reference recognizer from GrammarParserRecognizer.v only
-  needs fuel because Rocq's structural termination checker cannot see that the
-  exact Grammar-v1 parser recursion is well founded.  This file computes that
-  missing well-founded rank inside Rocq.
+  needs a global fuel because Rocq's structural termination checker cannot see
+  the semantic decrease that happens when a recursive parse consumes input.
+  Parser recursion therefore has two independent decreases:
 
-  Structural descent strictly lowers the rank.  Nonterminal descent is ranked
-  through a finite fixed point over the exact generated Grammar-v1 rules.  A
-  non-consuming nonterminal cycle would keep increasing this pass and therefore
-  fail the checked stability theorem below.
+  - a recursive call may consume at least one ConcreteToken; or
+  - while the input is unchanged, the exact Grammar-v1 call graph must descend
+    through a finite zero-consumption rank.
+
+  This file computes the second component inside Rocq.  In a sequence, the tail
+  can be reached with the same input only when the head is nullable, so tail rank
+  is propagated only across nullable prefixes.  Repetition recursively parses
+  its tail only after its body makes progress, so that consuming recursive edge
+  is deliberately excluded from the same-input rank.  Ordinary guarded grammar
+  recursion such as parenthesized expressions therefore does not create a false
+  rank cycle, while a genuine left/non-consuming recursive cycle would keep the
+  rank pass increasing and fail the checked stability theorem below.
 *)
 
 Fixpoint parser_rank_lookup
@@ -50,13 +59,18 @@ Fixpoint parser_expression_rank_fuel
             match pending with
             | [] => Some 1
             | item :: rest =>
-                match
-                  parser_expression_rank_fuel remaining facts item,
-                  sequence_rank rest
-                with
-                | Some head_rank, Some tail_rank =>
-                    Some (S (Nat.max head_rank tail_rank))
-                | _, _ => None
+                match parser_expression_rank_fuel remaining facts item with
+                | None => None
+                | Some head_rank =>
+                    if nullable_expression
+                         phase1_surface_nullable_facts item
+                    then
+                      match sequence_rank rest with
+                      | Some tail_rank =>
+                          Some (S (Nat.max head_rank tail_rank))
+                      | None => None
+                      end
+                    else Some (S head_rank)
                 end
             end
           in
