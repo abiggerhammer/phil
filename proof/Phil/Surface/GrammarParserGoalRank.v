@@ -63,6 +63,25 @@ Definition parser_repetition_goal_rank_fuel
   | None => None
   end.
 
+Lemma option_successor_match_injective :
+  forall left right,
+    (match left with
+     | Some rank => Some (S rank)
+     | None => None
+     end) =
+    (match right with
+     | Some rank => Some (S rank)
+     | None => None
+     end) ->
+    left = right.
+Proof.
+  intros left right Hequal.
+  destruct left as [left|], right as [right|];
+    simpl in Hequal; try discriminate; try reflexivity.
+  inversion Hequal.
+  reflexivity.
+Qed.
+
 Lemma parser_expression_sequence_rank_equation :
   forall fuel facts items,
     parser_expression_rank_fuel (S fuel) facts (ESequence items) =
@@ -79,7 +98,8 @@ Proof.
       eqn:Hhead; simpl; try reflexivity.
     destruct (nullable_expression phase1_surface_nullable_facts item) eqn:Hnull;
       simpl; try reflexivity.
-    rewrite IH.
+    pose proof (option_successor_match_injective _ _ IH) as Hraw.
+    rewrite Hraw.
     reflexivity.
 Qed.
 
@@ -97,7 +117,8 @@ Proof.
   - simpl in IH |- *.
     destruct (parser_expression_rank_fuel fuel facts item) as [head_rank|]
       eqn:Hhead; simpl; try reflexivity.
-    rewrite IH.
+    pose proof (option_successor_match_injective _ _ IH) as Hraw.
+    rewrite Hraw.
     reflexivity.
 Qed.
 
