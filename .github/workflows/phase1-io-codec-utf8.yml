@@ -1,0 +1,47 @@
+name: Phase 1 IO-CODEC UTF-8 and Convenience
+
+on:
+  pull_request:
+    paths:
+      - 'src/Phil/IO/Bytes.hs'
+      - 'src/Phil/IO/Console.hs'
+      - 'src/Phil/IO/FileSystem.hs'
+      - 'src/Phil/IO/UTF8.hs'
+      - 'test/Phase1IOCodecUTF8Main.hs'
+      - '.github/workflows/phase1-io-codec-utf8.yml'
+  push:
+    branches: [main]
+    paths:
+      - 'src/Phil/IO/Bytes.hs'
+      - 'src/Phil/IO/Console.hs'
+      - 'src/Phil/IO/FileSystem.hs'
+      - 'src/Phil/IO/UTF8.hs'
+      - 'test/Phase1IOCodecUTF8Main.hs'
+      - '.github/workflows/phase1-io-codec-utf8.yml'
+
+permissions:
+  contents: read
+
+jobs:
+  io-codec:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: haskell-actions/setup@v2
+        with:
+          ghc-version: '9.6.7'
+          cabal-version: 'latest'
+
+      - name: Build complete Haskell substrate
+        run: cabal build all --enable-tests
+
+      - name: Strict typecheck IO-CODEC production and pressure corpus
+        run: |
+          set -euo pipefail
+          cabal exec -- ghc -isrc -Wall -Werror -fno-code \
+            src/Phil/IO/UTF8.hs \
+            test/Phase1IOCodecUTF8Main.hs
+
+      - name: Run IO-CODEC UTF-8 and convenience pressure corpus
+        run: cabal exec -- runghc -isrc -Wall -Werror test/Phase1IOCodecUTF8Main.hs
