@@ -5,6 +5,7 @@ module Main (main) where
 import Control.Monad (unless)
 import qualified Data.Map.Strict as Map
 import qualified Data.Set as Set
+import Data.Text (Text)
 import Phil.Assurance
   ( AcceptanceRule (..)
   , AssuranceKind (..)
@@ -42,7 +43,10 @@ import System.Exit (exitFailure)
 
 main :: IO ()
 main =
-  case (buildGraph currentInput, buildGraph staleInput) of
+  case
+      ( buildVerificationObligationGraph [currentInput] (Set.singleton rootId)
+      , buildVerificationObligationGraph [staleInput] (Set.singleton rootId)
+      ) of
     (Right currentGraph, Right staleGraph) ->
       case proposeDecisionCertificate emptyCheckState [] rootProposition of
         Nothing -> failCase "competent certificate fixture returned no certificate"
@@ -93,10 +97,10 @@ rootObligation = Obligation
   , obligationRequiredPoint = "before:ver005"
   }
 
-currentSubjects :: [String]
+currentSubjects :: [Text]
 currentSubjects = ["subject:ver005.b", "subject:ver005.a"]
 
-currentContexts :: [String]
+currentContexts :: [Text]
 currentContexts = ["context:ver005.b", "context:ver005.a"]
 
 currentInput :: VerificationObligationInput
@@ -104,8 +108,8 @@ currentInput = VerificationObligationInput
   { verificationInputObligation = rootObligation
   , verificationInputKind = "semantic"
   , verificationInputRepresentation = "phil-core/proposition-v1"
-  , verificationInputSubjectIds = map fromStringText currentSubjects
-  , verificationInputContextIds = map fromStringText currentContexts
+  , verificationInputSubjectIds = currentSubjects
+  , verificationInputContextIds = currentContexts
   , verificationInputAcceptanceRule =
       AcceptEntry CertificateChecked (EvidenceRole "static-proof")
   , verificationInputDependencies = Set.empty
@@ -116,23 +120,14 @@ staleInput = currentInput
   { verificationInputSubjectIds = ["subject:ver005.old"]
   }
 
-fromStringText :: String -> Data.Text.Text
-fromStringText = Data.Text.pack
-
-buildGraph :: VerificationObligationInput -> Either a VerificationObligationGraph
-buildGraph input =
-  case buildVerificationObligationGraph [input] (Set.singleton rootId) of
-    Left errorValue -> error (show errorValue)
-    Right graph -> Right graph
-
 onlyScopeRevision :: VerificationObligationGraph -> RevisionId
 onlyScopeRevision = Set.findMin . verificationGraphCertificationScope
 
 proposalFor
   :: RevisionId
-  -> [Data.Text.Text]
-  -> [Data.Text.Text]
-  -> Data.Text.Text
+  -> [Text]
+  -> [Text]
+  -> Text
   -> DecisionCertificate
   -> ProofProposal
 proposalFor revision subjects contexts evidenceFormat certificate = ProofProposal
