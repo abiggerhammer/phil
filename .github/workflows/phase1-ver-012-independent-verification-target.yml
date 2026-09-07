@@ -1,0 +1,54 @@
+name: Phase 1 VER-012 Independent Verification Target
+
+on:
+  pull_request:
+    paths:
+      - 'src/Phil/Verification.hs'
+      - 'src/Phil/Verification/Bundle.hs'
+      - 'src/Phil/Assurance/Types.hs'
+      - 'src/Phil/Core/Static.hs'
+      - 'test/Phase1VerificationIndependentTargetMain.hs'
+      - 'test/Phase1VerificationCanonicalObligationGraphMain.hs'
+      - 'test/Phase1VerificationAlternativeProofProducersMain.hs'
+      - 'test/Phase1VerificationEvidenceSubjectRevisionCompetenceMain.hs'
+      - '.github/workflows/phase1-ver-012-independent-verification-target.yml'
+  push:
+    branches: [main]
+    paths:
+      - 'src/Phil/Verification.hs'
+      - 'src/Phil/Verification/Bundle.hs'
+      - 'src/Phil/Assurance/Types.hs'
+      - 'src/Phil/Core/Static.hs'
+      - 'test/Phase1VerificationIndependentTargetMain.hs'
+      - 'test/Phase1VerificationCanonicalObligationGraphMain.hs'
+      - 'test/Phase1VerificationAlternativeProofProducersMain.hs'
+      - 'test/Phase1VerificationEvidenceSubjectRevisionCompetenceMain.hs'
+      - '.github/workflows/phase1-ver-012-independent-verification-target.yml'
+
+permissions:
+  contents: read
+
+jobs:
+  ver-012:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: haskell-actions/setup@v2
+        with:
+          ghc-version: '9.6.7'
+          cabal-version: 'latest'
+
+      - name: Build complete Haskell substrate
+        run: cabal build all --enable-tests
+
+      - name: Run VER-012 independent verification target regression
+        run: cabal exec -- runghc -Wall -Werror -isrc test/Phase1VerificationIndependentTargetMain.hs
+
+      - name: Re-run canonical obligation graph control
+        run: cabal exec -- runghc -Wall -Werror -isrc test/Phase1VerificationCanonicalObligationGraphMain.hs
+
+      - name: Re-run alternative evidence identity and competence controls
+        run: |
+          cabal exec -- runghc -Wall -Werror -isrc test/Phase1VerificationAlternativeProofProducersMain.hs
+          cabal exec -- runghc -Wall -Werror -isrc test/Phase1VerificationEvidenceSubjectRevisionCompetenceMain.hs
