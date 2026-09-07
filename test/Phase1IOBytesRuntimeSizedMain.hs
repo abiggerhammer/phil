@@ -3,12 +3,12 @@
 module Main (main) where
 
 import qualified Data.Map.Strict as Map
-import qualified Data.Set as Set
 import qualified Data.Text as Text
 import Phil.Core.CheckedBindingMode (CheckedTypeMode (..))
 import Phil.Core.Checker (CheckState (..), emptyCheckState)
 import Phil.Core.Context
   ( CheckError (..)
+  , ResourceContext (..)
   , emptyContext
   , ensureComplete
   , insertBinding
