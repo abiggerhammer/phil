@@ -3,6 +3,7 @@ From Stdlib Require Import Arith.PeanoNat Bool.Bool Lists.List Strings.String Li
 From Phil.Surface Require Import
   Grammar
   GrammarDerivation
+  GrammarDeterminacyNullableFirst
   GrammarParserRank
   GrammarParserGoalRank.
 
