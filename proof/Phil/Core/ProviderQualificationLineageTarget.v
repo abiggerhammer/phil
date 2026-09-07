@@ -290,6 +290,8 @@ Record CheckedProviderQualificationAdmission : Type :=
   mkCheckedProviderQualificationAdmission {
     checkedAdmissionClaimRevision : QualificationClaimRevision;
     checkedAdmissionRevision : QualificationAdmissionRevision;
+    checkedAdmissionProviderOccurrence : ProviderRequirementOccurrenceKey;
+    checkedAdmissionRealizationContext : RealizationRevision;
     checkedAdmissionDecision : ProviderQualificationAdmissionDecision
   }.
 
@@ -373,6 +375,45 @@ Record AdmissionApplicable
     selected_runtime_abi_exact :
       selectedRuntimeAbi selected = applicabilityRuntimeAbi applicability
   }.
+
+(* REVIEW-R15 closes the context edge deliberately left implicit by the
+   relative PROV-014 relation.  The normalized proof model projects the provider
+   occurrence and realization-context coordinates carried by the checked
+   admission into the exact requirement-occurrence/realization coordinates used
+   by applicability. *)
+Record AdmissionContextBound
+  (admission : CheckedProviderQualificationAdmission)
+  (applicability : ProviderConcreteAdmissionApplicability) : Prop :=
+  mkAdmissionContextBound {
+    applicability_occurrence_bound_to_admission :
+      applicabilityRequirementOccurrence applicability =
+        checkedAdmissionProviderOccurrence admission;
+    applicability_realization_bound_to_admission :
+      applicabilityRealizationRevision applicability =
+        checkedAdmissionRealizationContext admission
+  }.
+
+Theorem stale_admission_occurrence_cannot_be_relocated :
+  forall admission applicability,
+    applicabilityRequirementOccurrence applicability <>
+      checkedAdmissionProviderOccurrence admission ->
+    ~ AdmissionContextBound admission applicability.
+Proof.
+  intros admission applicability Hneq Hbound.
+  destruct Hbound as [Hoccurrence _].
+  apply Hneq. exact Hoccurrence.
+Qed.
+
+Theorem stale_admission_realization_cannot_be_relocated :
+  forall admission applicability,
+    applicabilityRealizationRevision applicability <>
+      checkedAdmissionRealizationContext admission ->
+    ~ AdmissionContextBound admission applicability.
+Proof.
+  intros admission applicability Hneq Hbound.
+  destruct Hbound as [_ Hrealization].
+  apply Hneq. exact Hrealization.
+Qed.
 
 Theorem applicability_requires_admitted_qualification :
   forall admission evidence applicability selected,

@@ -5,8 +5,10 @@ on:
     paths:
       - 'src/Phil/Core/ProviderQualificationTargetReuse.hs'
       - 'src/Phil/Core/ProviderQualificationApplicability.hs'
+      - 'src/Phil/Core/ProviderQualificationIdentity.hs'
       - 'test/Phase1ProviderQualificationTargetReuseMain.hs'
       - 'test/Phase1ProviderQualificationApplicabilityMain.hs'
+      - 'test/Phase1ReviewR15ContextualApplicabilityMain.hs'
       - 'docs/phase-1/provider-cross-target-reuse-v1.md'
       - 'docs/phase-1/provider-admission-applicability-v1.md'
       - 'docs/phase-1/provider-lineage-target-implementation-refinement-v1.md'
@@ -21,8 +23,10 @@ on:
     paths:
       - 'src/Phil/Core/ProviderQualificationTargetReuse.hs'
       - 'src/Phil/Core/ProviderQualificationApplicability.hs'
+      - 'src/Phil/Core/ProviderQualificationIdentity.hs'
       - 'test/Phase1ProviderQualificationTargetReuseMain.hs'
       - 'test/Phase1ProviderQualificationApplicabilityMain.hs'
+      - 'test/Phase1ReviewR15ContextualApplicabilityMain.hs'
       - 'docs/phase-1/provider-cross-target-reuse-v1.md'
       - 'docs/phase-1/provider-admission-applicability-v1.md'
       - 'docs/phase-1/provider-lineage-target-implementation-refinement-v1.md'
@@ -56,6 +60,7 @@ jobs:
           test -s ProviderQualificationLineageTargetKernel.hs
           grep -q 'decideTargetReuseByFacts' ProviderQualificationLineageTargetKernel.hs
           grep -q 'decideAdmissionApplicabilityByFacts' ProviderQualificationLineageTargetKernel.hs
+          grep -q 'decideAdmissionContextByFacts' ProviderQualificationLineageTargetKernel.hs
       - name: Record proof and extraction identities
         shell: bash
         run: |
@@ -95,11 +100,12 @@ jobs:
           cabal-version: 'latest'
       - name: Build existing proof certifier substrate with warnings as errors
         run: cabal build exe:phil-certify-core-scalar --ghc-options=-Werror
-      - name: Typecheck certifier and unchanged production modules
+      - name: Typecheck certifier and production modules
         run: |
           set -euo pipefail
           cabal exec -- ghc -isrc -Wall -Werror -fno-code app/Phase1ProviderLineageTargetCertificationMain.hs
           cabal exec -- ghc -isrc -Wall -Werror -fno-code src/Phil/Core/ProviderQualificationTargetReuse.hs
+          cabal exec -- ghc -isrc -Wall -Werror -fno-code src/Phil/Core/ProviderQualificationIdentity.hs
           cabal exec -- ghc -isrc -Wall -Werror -fno-code src/Phil/Core/ProviderQualificationApplicability.hs
       - uses: actions/download-artifact@v4
         with:
@@ -114,16 +120,18 @@ jobs:
             app/ProviderLineageTargetDecisionCorrespondenceMain.hs \
             -o provider-lineage-target-kernel-controls
           ./provider-lineage-target-kernel-controls
-      - name: Strict typecheck unchanged PROV-013 and PROV-014 correspondence
+      - name: Strict typecheck PROV-013, PROV-014, and REVIEW-R15 correspondence
         run: |
           set -euo pipefail
           cabal exec -- ghc -isrc -Wall -Werror -fno-code test/Phase1ProviderQualificationTargetReuseMain.hs
           cabal exec -- ghc -isrc -Wall -Werror -fno-code test/Phase1ProviderQualificationApplicabilityMain.hs
-      - name: Re-run unchanged PROV-013 and PROV-014 correspondence
+          cabal exec -- ghc -isrc -Wall -Werror -fno-code test/Phase1ReviewR15ContextualApplicabilityMain.hs
+      - name: Re-run PROV-013, PROV-014, and REVIEW-R15 correspondence
         run: |
           set -euo pipefail
           cabal exec -- runghc -Wall -Werror -isrc test/Phase1ProviderQualificationTargetReuseMain.hs
           cabal exec -- runghc -Wall -Werror -isrc test/Phase1ProviderQualificationApplicabilityMain.hs
+          cabal exec -- runghc -Wall -Werror -isrc test/Phase1ReviewR15ContextualApplicabilityMain.hs
       - name: Emit PHIL-PROV-LINEAGE-TARGET-001 certificate
         shell: bash
         run: |
@@ -135,9 +143,11 @@ jobs:
             phase1-provider-lineage-target-certification/PHIL-PROV-LINEAGE-TARGET-001.rocq.cert
           sha256sum \
             src/Phil/Core/ProviderQualificationTargetReuse.hs \
+            src/Phil/Core/ProviderQualificationIdentity.hs \
             src/Phil/Core/ProviderQualificationApplicability.hs \
             test/Phase1ProviderQualificationTargetReuseMain.hs \
             test/Phase1ProviderQualificationApplicabilityMain.hs \
+            test/Phase1ReviewR15ContextualApplicabilityMain.hs \
             docs/phase-1/provider-cross-target-reuse-v1.md \
             docs/phase-1/provider-admission-applicability-v1.md \
             proof/Phil/Core/ProviderQualificationLineageTarget.v \
@@ -152,9 +162,11 @@ jobs:
           sha256sum \
             phase1-provider-lineage-target-proof/ProviderQualificationLineageTargetKernel.hs \
             src/Phil/Core/ProviderQualificationTargetReuse.hs \
+            src/Phil/Core/ProviderQualificationIdentity.hs \
             src/Phil/Core/ProviderQualificationApplicability.hs \
             test/Phase1ProviderQualificationTargetReuseMain.hs \
             test/Phase1ProviderQualificationApplicabilityMain.hs \
+            test/Phase1ReviewR15ContextualApplicabilityMain.hs \
             app/ProviderLineageTargetDecisionCorrespondenceMain.hs \
             proof/Phil/Core/ProviderQualificationLineageTargetImplementation.v \
             docs/phase-1/provider-lineage-target-implementation-refinement-v1.md \
