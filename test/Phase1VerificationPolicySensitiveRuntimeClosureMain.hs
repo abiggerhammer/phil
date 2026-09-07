@@ -4,10 +4,12 @@ module Main (main) where
 
 import Control.Monad (unless)
 import qualified Data.Set as Set
+import Data.Text (Text)
 import Phil.Assurance
   ( AcceptanceRule (..)
   , AssuranceKind (..)
   , EvidenceRole (..)
+  , RevisionId
   , RuntimeMechanism (..)
   )
 import Phil.Core.Syntax
@@ -136,7 +138,7 @@ certifiedReleasePolicy = ApplicationAssurancePolicy
       ]
   }
 
-knownCostRefs :: Set.Set Data.Text.Text
+knownCostRefs :: Set.Set Text
 knownCostRefs = Set.singleton "cost.runtime.guard"
 
 validMechanism :: RuntimeMechanism
@@ -148,7 +150,7 @@ validMechanism = RuntimeMechanism
   , runtimeImplementation = Nothing
   }
 
-validProposal :: Phil.Assurance.RevisionId -> RuntimeClosureProposal
+validProposal :: RevisionId -> RuntimeClosureProposal
 validProposal revision = RuntimeClosureProposal
   { runtimeClosureProposalRevision = revision
   , runtimeClosureProposalRole = runtimeRole
@@ -157,7 +159,7 @@ validProposal revision = RuntimeClosureProposal
   , runtimeClosureProposalCostRefs = ["cost.runtime.guard", "cost.runtime.guard"]
   }
 
-onlyRevision :: VerificationObligationGraph -> Phil.Assurance.RevisionId
+onlyRevision :: VerificationObligationGraph -> RevisionId
 onlyRevision = Set.findMin . verificationGraphCertificationScope
 
 testCheckedRuntimeAdmits
@@ -206,7 +208,7 @@ testPolicyPreservesSemanticIdentity graph proposal =
 
 testAcceptanceRuleRequired
   :: VerificationObligationGraph
-  -> Phil.Assurance.RevisionId
+  -> RevisionId
   -> Bool
 testAcceptanceRuleRequired graph revision =
   case evaluateRuntimeClosure graph checkedRuntimePolicy knownCostRefs
@@ -215,7 +217,7 @@ testAcceptanceRuleRequired graph revision =
       rejected == revision && role == runtimeRole
     _ -> False
 
-testRoleBinding :: VerificationObligationGraph -> Phil.Assurance.RevisionId -> Bool
+testRoleBinding :: VerificationObligationGraph -> RevisionId -> Bool
 testRoleBinding graph revision =
   let proposal = (validProposal revision)
         { runtimeClosureProposalRole = EvidenceRole "wrong-runtime-role" }
@@ -226,7 +228,7 @@ testRoleBinding graph revision =
 
 testIncompleteMechanism
   :: VerificationObligationGraph
-  -> Phil.Assurance.RevisionId
+  -> RevisionId
   -> Bool
 testIncompleteMechanism graph revision =
   let incomplete = validMechanism { runtimeFailureContract = "" }
@@ -235,19 +237,19 @@ testIncompleteMechanism graph revision =
   in evaluateRuntimeClosure graph checkedRuntimePolicy knownCostRefs proposal
       == RuntimeClosureNotAdmitted (RuntimeClosureMechanismIncomplete revision)
 
-testMissingResidue :: VerificationObligationGraph -> Phil.Assurance.RevisionId -> Bool
+testMissingResidue :: VerificationObligationGraph -> RevisionId -> Bool
 testMissingResidue graph revision =
   let proposal = (validProposal revision) { runtimeClosureProposalResidue = [] }
   in evaluateRuntimeClosure graph checkedRuntimePolicy knownCostRefs proposal
       == RuntimeClosureNotAdmitted (RuntimeClosureResidueMissing revision)
 
-testMissingCostRef :: VerificationObligationGraph -> Phil.Assurance.RevisionId -> Bool
+testMissingCostRef :: VerificationObligationGraph -> RevisionId -> Bool
 testMissingCostRef graph revision =
   let proposal = (validProposal revision) { runtimeClosureProposalCostRefs = [] }
   in evaluateRuntimeClosure graph checkedRuntimePolicy knownCostRefs proposal
       == RuntimeClosureNotAdmitted (RuntimeClosureCostReferenceMissing revision)
 
-testUnknownCostRef :: VerificationObligationGraph -> Phil.Assurance.RevisionId -> Bool
+testUnknownCostRef :: VerificationObligationGraph -> RevisionId -> Bool
 testUnknownCostRef graph revision =
   let proposal = (validProposal revision)
         { runtimeClosureProposalCostRefs = ["cost.runtime.unknown"] }
