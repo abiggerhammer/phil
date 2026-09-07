@@ -134,7 +134,7 @@ testAccepted graph revision certificate =
 testInvalidArtifact :: VerificationObligationGraph -> RevisionId -> Bool
 testInvalidArtifact graph revision =
   case checkProofProposal graph emptyCheckState []
-      (proposalFor revision CertificateTruth) of
+      (proposalFor revision (CertificateConjunction CertificateTruth CertificateTruth)) of
     Left (ProofCertificateRejected rejectedRevision _) -> rejectedRevision == revision
     _ -> False
 
