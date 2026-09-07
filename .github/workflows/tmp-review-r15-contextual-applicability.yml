@@ -1,0 +1,165 @@
+name: Temporary R15 contextual applicability remediation
+
+on:
+  push:
+    branches: [phase1-review-r15-contextual-applicability]
+
+permissions:
+  contents: write
+
+jobs:
+  patch:
+    if: github.actor != 'github-actions[bot]'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: phase1-review-r15-contextual-applicability
+          fetch-depth: 0
+
+      - uses: haskell-actions/setup@v2
+        with:
+          ghc-version: '9.6.7'
+          cabal-version: 'latest'
+
+      - name: Demonstrate pre-repair coordinated relocation acceptance
+        shell: bash
+        run: |
+          set -euo pipefail
+          cat > /tmp/r15-pre-repair.hs <<'HS'
+          {-# LANGUAGE OverloadedStrings #-}
+          import qualified Data.Set as Set
+          import Phil.Core.ProviderQualificationApplicability
+          import Phil.Core.ProviderQualificationIdentity
+          import Phil.Core.ProviderQualificationTargetReuse
+          import Phil.Core.Static
+
+          claimRevision = QualificationClaimRevision "provider-claim:v1"
+          admissionRevision = QualificationAdmissionRevision "provider-admission:v1"
+          targetEvidence = ProviderTargetRealizationEvidence
+            { targetEvidenceClaimRevision = claimRevision
+            , targetEvidenceRequiredInterface = InterfaceRevision "provider.blob:v1"
+            , targetEvidenceSemanticImplementation = DefinitionRevision "provider.blob.impl:v1"
+            , targetEvidenceTargetProfileRevision = "target:v1"
+            , targetEvidenceArtifactRevision = "artifact:v1"
+            , targetEvidenceRuntimeAbiRevision = "abi:v1"
+            , targetEvidenceRealizationRelationRevision = "relation:v1"
+            , targetEvidenceTranslationValidationRefs = Set.singleton "translation:v1"
+            , targetEvidenceTargetAssumptions = Set.empty
+            }
+          targetRevision = deriveTargetRealizationEvidenceRevision targetEvidence
+          admitted = CheckedProviderQualificationAdmissionIdentity
+            { checkedQualificationAdmissionClaimRevision = claimRevision
+            , checkedQualificationAdmissionEvidenceRevision = QualificationEvidenceRevision "evidence:v1"
+            , checkedQualificationAdmissionRevision = admissionRevision
+            , checkedQualificationAdmissionDecision = QualificationAdmitted
+            }
+          baseApplicability = ProviderConcreteAdmissionApplicability
+            { providerApplicabilityAdmissionRevision = admissionRevision
+            , providerApplicabilityClaimRevision = claimRevision
+            , providerApplicabilityTargetEvidenceRevision = targetRevision
+            , providerApplicabilityRequirementOccurrence = ProviderRequirementOccurrenceKey "provider.original"
+            , providerApplicabilityInstanceRevision = InstanceRevision "instance:v1"
+            , providerApplicabilityRealizationRevision = RealizationRevision "realization.original"
+            , providerApplicabilityRequiredInterface = InterfaceRevision "provider.blob:v1"
+            , providerApplicabilityImplementationDefinition = DefinitionRevision "provider.blob.impl:v1"
+            , providerApplicabilityTargetProfileRevision = "target:v1"
+            , providerApplicabilityArtifactRevision = "artifact:v1"
+            , providerApplicabilityRuntimeAbiRevision = "abi:v1"
+            , providerApplicabilityExportedSymbols = Set.empty
+            }
+          selectedFrom a = SelectedProviderRealization
+            { selectedProviderAdmissionRevision = providerApplicabilityAdmissionRevision a
+            , selectedProviderTargetEvidenceRevision = providerApplicabilityTargetEvidenceRevision a
+            , selectedProviderRequirementOccurrence = providerApplicabilityRequirementOccurrence a
+            , selectedProviderInstanceRevision = providerApplicabilityInstanceRevision a
+            , selectedProviderRealizationRevision = providerApplicabilityRealizationRevision a
+            , selectedProviderRequiredInterface = providerApplicabilityRequiredInterface a
+            , selectedProviderImplementationDefinition = providerApplicabilityImplementationDefinition a
+            , selectedProviderTargetProfileRevision = providerApplicabilityTargetProfileRevision a
+            , selectedProviderArtifactRevision = providerApplicabilityArtifactRevision a
+            , selectedProviderRuntimeAbiRevision = providerApplicabilityRuntimeAbiRevision a
+            , selectedProviderExportedSymbols = Set.empty
+            }
+          main = do
+            let occurrenceRelocated = baseApplicability
+                  { providerApplicabilityRequirementOccurrence = ProviderRequirementOccurrenceKey "provider.relocated" }
+                realizationRelocated = baseApplicability
+                  { providerApplicabilityRealizationRevision = RealizationRevision "realization.relocated" }
+            case checkProviderAdmissionApplicability admitted targetEvidence occurrenceRelocated (selectedFrom occurrenceRelocated) of
+              Right _ -> putStrLn "CONFIRMED: stale admission accepted coordinated provider-occurrence relocation"
+              other -> error ("R15 occurrence counterexample no longer reproduces pre-repair: " ++ show other)
+            case checkProviderAdmissionApplicability admitted targetEvidence realizationRelocated (selectedFrom realizationRelocated) of
+              Right _ -> putStrLn "CONFIRMED: stale admission accepted coordinated realization relocation"
+              other -> error ("R15 realization counterexample no longer reproduces pre-repair: " ++ show other)
+          HS
+          cabal exec -- runghc -Wall -Werror -isrc /tmp/r15-pre-repair.hs
+
+      - name: Apply R15 Certified contextual-binding repair
+        run: python3 scripts/tmp_review_r15_contextual_applicability.py
+
+      - name: Fresh-compile and extract strengthened Rocq kernel
+        shell: bash
+        run: |
+          set -euo pipefail
+          docker run --rm \
+            -v "$PWD:/work" -w /work \
+            rocq/rocq-prover:9.2.0 \
+            bash -lc 'set -euo pipefail; export PATH="/home/rocq/.opam/${COMPILER}/bin:$PATH"; \
+              rocq c -Q proof/Phil Phil proof/Phil/Core/ProviderQualificationLineageTarget.v; \
+              rocq c -Q proof/Phil Phil proof/Phil/Core/ProviderQualificationLineageTargetImplementation.v; \
+              rm -f ProviderQualificationLineageTargetKernel.hs; \
+              rocq c -Q proof/Phil Phil proof/Phil/Core/ProviderQualificationLineageTargetImplementationExtraction.v'
+          test -s ProviderQualificationLineageTargetKernel.hs
+          grep -q 'decideAdmissionContextByFacts' ProviderQualificationLineageTargetKernel.hs
+          cp ProviderQualificationLineageTargetKernel.hs src/ProviderQualificationLineageTargetKernel.hs
+          kernel_sha="$(sha256sum src/ProviderQualificationLineageTargetKernel.hs | cut -d' ' -f1)"
+          python3 - "$kernel_sha" <<'PY'
+          from pathlib import Path
+          import sys
+          sha = sys.argv[1]
+          p = Path('.github/workflows/phase1-provider-lineage-target-production-binding.yml')
+          text = p.read_text()
+          old = '829e98d3b1653b0f4ca1a3fd64f570206df0a05e5500467d82f13a75a4d0f030'
+          if text.count(old) != 2:
+              raise SystemExit(f'expected two old kernel checksum pins, found {text.count(old)}')
+          p.write_text(text.replace(old, sha))
+          print(f'R15 extracted kernel sha256: {sha}')
+          PY
+
+      - name: Build complete Haskell substrate
+        run: cabal build all --enable-tests
+
+      - name: Run R15 regression and existing lineage controls
+        shell: bash
+        run: |
+          set -euo pipefail
+          cabal exec -- runghc -Wall -Werror -isrc test/Phase1ReviewR15ContextualApplicabilityMain.hs
+          cabal exec -- runghc -Wall -Werror -isrc test/Phase1ProviderQualificationApplicabilityMain.hs
+          cabal exec -- runghc -Wall -Werror -isrc test/Phase1ProviderQualificationTargetReuseMain.hs
+          ghc -Wall -Werror -isrc app/ProviderLineageTargetDecisionCorrespondenceMain.hs -o /tmp/r15-kernel-controls
+          /tmp/r15-kernel-controls
+
+      - name: Commit R15 semantic and proof repair
+        shell: bash
+        run: |
+          set -euo pipefail
+          git config user.name github-actions[bot]
+          git config user.email 41898282+github-actions[bot]@users.noreply.github.com
+          git add \
+            src/Phil/Core/ProviderQualificationIdentity.hs \
+            src/Phil/Core/ProviderQualificationApplicability.hs \
+            src/ProviderQualificationLineageTargetKernel.hs \
+            test/Phase1ProviderQualificationApplicabilityMain.hs \
+            test/Phase1ReviewR15ContextualApplicabilityMain.hs \
+            proof/Phil/Core/ProviderQualificationLineageTarget.v \
+            proof/Phil/Core/ProviderQualificationLineageTargetImplementation.v \
+            proof/Phil/Core/ProviderQualificationLineageTargetImplementationExtraction.v \
+            app/ProviderLineageTargetDecisionCorrespondenceMain.hs \
+            docs/phase-1/provider-admission-applicability-v1.md \
+            docs/phase-1/provider-lineage-target-implementation-refinement-v1.md \
+            docs/phase-1/provider-lineage-target-production-binding-v1.md \
+            .github/workflows/phase1-provider-lineage-target-proofs.yml \
+            .github/workflows/phase1-provider-lineage-target-production-binding.yml
+          git commit -m 'review: bind applicability to contextual admission'
+          git push origin HEAD:phase1-review-r15-contextual-applicability
