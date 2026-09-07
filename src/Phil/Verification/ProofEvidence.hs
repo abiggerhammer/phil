@@ -92,10 +92,16 @@ import Phil.Verification
   )
 
 -- | Canonical application-verification evidence format accepted by this
--- competent checker boundary. Other proof formats require their own checker.
+-- competent checker boundary.  Other proof formats may exist, but they require
+-- their own declared competent checker rather than being silently retargeted to
+-- this one.
 decisionCertificateEvidenceFormat :: Text
 decisionCertificateEvidenceFormat = "phil-core/decision-certificate-v1"
 
+-- | Replaceable producers may construct these freely. A proposal is not
+-- evidence and carries no checker authority.  VER-005 makes the competence
+-- metadata explicit: accepted evidence must name the exact supported format,
+-- semantic subjects, contexts, and obligation revision it claims to justify.
 data ProofProposal = ProofProposal
   { proofProposalProducer :: Text
   , proofProposalObligationRevision :: RevisionId
@@ -119,6 +125,10 @@ data ProofEvidenceError
   | ProofCertificateRejected RevisionId CertificateError
   deriving (Eq, Show)
 
+-- | Opaque accepted static evidence. The constructor is deliberately not
+-- exported: the only public constructor path is 'checkProofProposal'. The
+-- value retains every semantic input consumed by the competent checker, plus
+-- the exact target graph/revision and producer/checker identities.
 data CheckedProofEvidence = CheckedProofEvidence
   Digest
   RevisionId
@@ -166,6 +176,11 @@ checkedProofState (CheckedProofEvidence _ _ _ _ _ _ _ _ _ state _) = state
 checkedProofAssumptions :: CheckedProofEvidence -> [SolverAssumption]
 checkedProofAssumptions (CheckedProofEvidence _ _ _ _ _ _ _ _ _ _ assumptions) = assumptions
 
+-- | Accept a producer proposal only after binding it to an exact canonical
+-- obligation-graph revision, exact evidence competence metadata, and the
+-- declared competent Phil Core certificate checker over the exact
+-- proposition/checker state/assumptions.  Equal proposition text or runtime
+-- representation is never enough to retarget stale/wrong-subject evidence.
 checkProofProposal
   :: VerificationObligationGraph
   -> CheckState
@@ -243,6 +258,11 @@ canonicalEvidenceIds label values
       Left (MalformedProofEvidence ("empty " <> label <> " id"))
   | otherwise = Right (sort values)
 
+-- | Search/prover outcomes that carry no semantic conclusion.  In particular,
+-- timeout, unknown, tool failure, and refusal are not refutations.  A proposed
+-- certificate rejected by the competent checker is recorded the same way: the
+-- producer failed to close this exact obligation, but the proposition was not
+-- thereby shown false.
 data ProofProducerFailure
   = ProducerTimedOut
   | ProducerReturnedUnknown
@@ -251,6 +271,9 @@ data ProofProducerFailure
   | ProducerArtifactRejected CertificateError
   deriving (Eq, Show)
 
+-- | One replaceable producer attempt.  The producer either returns an artifact
+-- to be checked or reports that it did not produce one.  Neither constructor is
+-- itself evidence or an assurance disposition.
 data ProofProducerAttempt
   = ProofProducerProposed ProofProposal
   | ProofProducerDidNotProduce
@@ -260,6 +283,10 @@ data ProofProducerAttempt
       }
   deriving (Eq, Show)
 
+-- | Opaque record of a search attempt that left the exact obligation open.
+-- There is intentionally no field for assumption, export, runtime binding, or
+-- proposition falsehood.  Those are separate assurance-policy decisions and
+-- cannot be manufactured by proof-search failure.
 data UnresolvedProofAttempt = UnresolvedProofAttempt
   Digest
   RevisionId
@@ -279,6 +306,9 @@ unresolvedProofProducer (UnresolvedProofAttempt _ _ producer _) = producer
 unresolvedProofFailure :: UnresolvedProofAttempt -> ProofProducerFailure
 unresolvedProofFailure (UnresolvedProofAttempt _ _ _ failure) = failure
 
+-- | VER-004 orchestration result.  Only competent checker acceptance closes the
+-- proof attempt.  All producer/search failures preserve an exact unresolved
+-- obligation that may subsequently be attempted by another producer.
 data ProofAttemptResult
   = ProofAttemptAccepted CheckedProofEvidence
   | ProofAttemptUnresolved UnresolvedProofAttempt
@@ -332,6 +362,10 @@ requireProofTarget graph revision = do
     then Right target
     else Left (ProofRevisionOutsideCertificationScope revision)
 
+-- | Opaque cacheable form of already checked proof evidence.  Whole-graph
+-- identity is deliberately not a reuse key.  It is consulted only during
+-- preparation so the dependency set is captured from the exact graph in which
+-- the evidence was originally accepted.
 data ReusableProofEvidence = ReusableProofEvidence
   { reusableCheckedProofEvidence :: CheckedProofEvidence
   , reusableProofDependencies :: Set RevisionId
@@ -359,6 +393,9 @@ data EvidenceReuseDecision
   | EvidenceStale [EvidenceReuseStaleness]
   deriving (Eq, Show)
 
+-- | Prepare checked evidence for cache reuse against the exact graph revision
+-- where it was accepted.  This prevents an old checked artifact from being
+-- rebound to a newly changed dependency set before the cache record is made.
 prepareReusableProofEvidence
   :: VerificationObligationGraph
   -> ValidityScope
@@ -384,6 +421,10 @@ prepareReusableProofEvidence graph validityScope checked = do
     , reusableProofValidityScope = validityScope
     }
 
+-- | Evaluate cached proof evidence in a current semantic context.  Reuse checks
+-- the exact target revision, exact direct dependency revisions, and every
+-- validity dimension declared by the cached evidence.  Extra unrelated graph
+-- nodes or undeclared context dimensions do not invalidate the evidence.
 evaluateReusableProofEvidence
   :: VerificationObligationGraph
   -> ValidityScope
@@ -435,11 +476,19 @@ targetDependencies graph target = Set.fromList
   , owner == target
   ]
 
+-- | A missing proof artifact is not itself permission to choose a semantic
+-- disposition.  VER-008 requires a separate, explicit boundary proposal.  The
+-- proposal is either an ADR-010 assumption node plus its exact acceptance role,
+-- or an ADR-010 export entry naming the exact obligation and destination.
 data MissingProofDispositionProposal
   = SelectAssumptionBoundary EvidenceRole Assumption
   | SelectExportBoundary ExportEntry
   deriving (Eq, Show)
 
+-- | Structured reasons an explicit non-proof disposition is not admissible.
+-- These remain closure-stage results: none of them changes proposition truth or
+-- retroactively turns an intrinsically invalid source program into a residual
+-- obligation.
 data MissingProofDispositionRejection
   = MissingProofUnknownRevision RevisionId
   | MissingProofAssumptionOutsideCertificationScope RevisionId
@@ -459,6 +508,9 @@ data MissingProofDispositionRejection
   | MissingProofPolicyRejected RevisionId VerificationDisposition AssurancePolicyRevision
   deriving (Eq, Show)
 
+-- | Opaque admitted assumption-dependent closure.  The exact canonical graph,
+-- target revision, selected policy, acceptance role, and content-bound
+-- assumption node remain independently inspectable.
 data AssumptionClosureRecord = AssumptionClosureRecord
   Digest
   RevisionId
@@ -482,6 +534,9 @@ assumptionClosureRole (AssumptionClosureRecord _ _ _ role _) = role
 assumptionClosureAssumption :: AssumptionClosureRecord -> Assumption
 assumptionClosureAssumption (AssumptionClosureRecord _ _ _ _ assumption) = assumption
 
+-- | Opaque admitted export closure.  Export permission is a declared boundary
+-- transfer, not proof evidence, so its ADR-010 ExportEntry remains explicit and
+-- content-bound separately from source semantic identity.
 data ExportClosureRecord = ExportClosureRecord
   Digest
   RevisionId
@@ -501,6 +556,9 @@ exportClosurePolicyRevision (ExportClosureRecord _ _ policyRevision _) = policyR
 exportClosureExport :: ExportClosureRecord -> ExportEntry
 exportClosureExport (ExportClosureRecord _ _ _ exportEntry) = exportEntry
 
+-- | The first constructor is the critical VER-008 invariant: even when policy
+-- and architecture context look permissive, proof absence with no explicit
+-- boundary proposal remains exactly unresolved.
 data MissingProofDispositionDecision
   = MissingProofRemainsUnresolved RevisionId
   | MissingProofAssumptionAdmitted AssumptionClosureRecord
@@ -508,11 +566,11 @@ data MissingProofDispositionDecision
   | MissingProofDispositionRejected MissingProofDispositionRejection
   deriving (Eq, Show)
 
--- | Proof absence alone is never a semantic choice. With no explicit proposal,
--- the exact known obligation remains unresolved regardless of permissive policy
--- or context. Explicit assumption/export proposals must independently satisfy
--- exact graph/scope identity, ADR-010 boundary identity and validity scope, and
--- the selected assurance policy.
+-- | Evaluate the optional explicit boundary selected after static proof is
+-- absent.  'Nothing' never consults policy defaults and cannot synthesize an
+-- assumption or export.  Explicit proposals must independently satisfy exact
+-- graph/scope identity, ADR-010 boundary identity and validity scope, and the
+-- selected assurance policy.
 evaluateMissingProofDisposition
   :: VerificationObligationGraph
   -> ApplicationAssurancePolicy
@@ -615,6 +673,10 @@ acceptanceAllowsAssumption role rule = case rule of
   AcceptAll rules -> not (null rules) && all (acceptanceAllowsAssumption role) rules
   AcceptAny rules -> any (acceptanceAllowsAssumption role) rules
 
+-- | Match the same effective validity dimensions consumed by the final
+-- manifest verifier: declared context plus target and compilation profile.
+-- Undeclared dimensions are intentionally irrelevant; every declared dimension
+-- must match exactly.
 closureValidityScopeMatches :: VerificationContext -> ValidityScope -> Bool
 closureValidityScopeMatches context (ValidityScope dimensions) =
   all dimensionMatches (Map.toAscList dimensions)
