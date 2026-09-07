@@ -7,6 +7,7 @@ From Phil.Surface Require Import
   GrammarDeterminacyNullableFirst
   GrammarDeterminacyPredictiveOracle
   GrammarDeterminacyContinuationSoundness
+  GrammarDeterminacyDerivationPathSoundness
   GrammarDeterminacyOracleAssemblyCoverage
   GrammarDeterminacyOracleAssemblyReflection
   GrammarDeterminacyPredictiveBridge
