@@ -15,6 +15,7 @@ module Phil.Systems.AuthorityEffectCorrespondence
   , deriveAuthorityEffectStageRevision
   , makeAuthorityEffectStageBundle
   , verifyAuthorityEffectStageBundle
+  , verifyAuthorityEffectStageBundleAgainst
   ) where
 
 import qualified Data.Map.Strict as Map
@@ -57,9 +58,11 @@ import Phil.Systems.ProviderCallCorrespondence
   , ProviderCallLink (..)
   , ProviderCallStageBundle (..)
   , ProviderCallStageRevision (..)
+  , ProviderCallExpectationMap
   , ProviderCallStageVerificationError
   , SelectedProviderAdmission (..)
   , verifyProviderCallStageBundle
+  , verifyProviderCallStageBundleCompleteAgainst
   )
 import qualified SystemsSubjectAuthorityKernel as Kernel
 
@@ -222,6 +225,20 @@ verifyAuthorityEffectStageBundle bundle = do
       True True True True True True True True of
     Kernel.AuthorityEffectStageAcceptedDecision -> Right ()
     _ -> kernelInvariant "authority-effect-final"
+
+-- | Independent full-coverage entry point.  The ordinary verifier remains
+-- a relative validator for explicitly supplied subsets; this entry point binds
+-- that subset to the separately established provider-call inventory before the
+-- effect/authority stage is accepted.
+verifyAuthorityEffectStageBundleAgainst
+  :: ProviderCallExpectationMap
+  -> AuthorityEffectStageBundle
+  -> Either AuthorityEffectStageVerificationError ()
+verifyAuthorityEffectStageBundleAgainst expectations bundle = do
+  mapLeft AuthorityEffectBaseStageError $
+    verifyProviderCallStageBundleCompleteAgainst
+      expectations (authorityEffectStageBase bundle)
+  verifyAuthorityEffectStageBundle bundle
 
 checkSurface
   :: Map Text SelectedProviderAdmission

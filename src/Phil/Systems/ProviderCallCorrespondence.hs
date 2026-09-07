@@ -13,6 +13,7 @@ module Phil.Systems.ProviderCallCorrespondence
   , makeProviderCallStageBundle
   , verifyProviderCallStageBundle
   , verifyProviderCallStageBundleAgainst
+  , verifyProviderCallStageBundleCompleteAgainst
   ) where
 
 import qualified Data.Map.Strict as Map
@@ -131,6 +132,8 @@ data ProviderCallStageVerificationError
   | ProviderCallLinkDomainMismatch (Set SystemsMechanismKey) (Set SystemsMechanismKey)
   | ProviderCallLinkMapKeyMismatch SystemsMechanismKey SystemsMechanismKey
   | ProviderCallExpectedSiteMissing SystemsMechanismKey
+  | ProviderCallRequiredSiteDomainMismatch
+      (Set SystemsMechanismKey) (Set SystemsMechanismKey)
   | ProviderCallExpectedOccurrenceMismatch SystemsMechanismKey Text Text
   | ProviderCallExpectedOperationMismatch SystemsMechanismKey ProviderOperationKey ProviderOperationKey
   | ProviderCallRuntimeSymbolInferenceRejected SystemsMechanismKey Text Text
@@ -287,6 +290,19 @@ verifyProviderCallStageBundleAgainst expectations bundle = do
             (expectedProviderOccurrence expected) occurrence
           requireEqual (ProviderCallExpectedOperationMismatch site)
             (expectedProviderOperation expected) operation
+
+-- | Independent completeness gate for a provider-call stage.  REVIEW-R13
+-- establishes the semantic meaning of each represented call; REVIEW-R14 adds
+-- equality with the separately supplied required provider-call inventory.
+verifyProviderCallStageBundleCompleteAgainst
+  :: ProviderCallExpectationMap
+  -> ProviderCallStageBundle
+  -> Either ProviderCallStageVerificationError ()
+verifyProviderCallStageBundleCompleteAgainst expectations bundle = do
+  verifyProviderCallStageBundleAgainst expectations bundle
+  requireEqual ProviderCallRequiredSiteDomainMismatch
+    (Map.keysSet expectations)
+    (providerCallStageCallSites bundle)
 
 kernelProviderBindingBasis
   :: Map SystemsMechanismKey ProviderCallLink
