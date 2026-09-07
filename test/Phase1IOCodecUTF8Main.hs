@@ -31,7 +31,6 @@ import Phil.IO.FileSystem
   , FileReplaceOutcome (..)
   , FileSystemFailure (..)
   , FileSystemOperation (..)
-  , FileSystemState
   , checkFileSystemRead
   , checkFileSystemReplace
   , emptyFileSystemState
