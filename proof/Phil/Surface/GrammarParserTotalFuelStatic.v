@@ -116,11 +116,12 @@ Lemma parser_expression_sequence_goal_rank_options_equation :
     parser_sequence_goal_rank_options_fuel fuel facts items.
 Proof.
   intros fuel facts items.
-  simpl.
   induction items as [| item rest IH].
   - reflexivity.
-  - simpl in IH |- *.
-    rewrite IH.
+  - simpl.
+    pose proof (f_equal (@List.tl (option nat)) IH) as Htail.
+    simpl in Htail.
+    rewrite Htail.
     reflexivity.
 Qed.
 
@@ -132,11 +133,12 @@ Lemma parser_expression_alternative_goal_rank_options_equation :
     parser_alternative_member_rank_options_fuel fuel facts items.
 Proof.
   intros fuel facts items.
-  simpl.
   induction items as [| item rest IH].
   - reflexivity.
-  - simpl in IH |- *.
-    rewrite IH.
+  - simpl.
+    pose proof (f_equal (@List.tl (option nat)) IH) as Htail.
+    simpl in Htail.
+    rewrite Htail.
     reflexivity.
 Qed.
 
