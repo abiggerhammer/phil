@@ -171,23 +171,14 @@ Proof.
 Qed.
 
 Lemma parser_nonterminal_child_rank_decreases :
-  forall name body body_rank,
+  forall name body,
     lookupRule name phase1_surface_rules = Some body ->
-    parser_expression_rank_fuel
-      expression_fuel phase1_surface_parser_rank_facts body = Some body_rank ->
-    parser_expression_rank_fuel
-      expression_fuel phase1_surface_parser_rank_facts (ENonterminal name) =
-      Some (S body_rank).
+    parser_expression_rank phase1_surface_parser_rank_facts body <
+      S (parser_rank_lookup name phase1_surface_parser_rank_facts).
 Proof.
-  intros name body body_rank Hlookup Hbody.
-  pose proof (phase1_surface_parser_rank_lookup_rule name body Hlookup) as Hrank.
-  unfold parser_expression_rank in Hrank.
-  rewrite Hbody in Hrank.
-  simpl in Hrank.
-  unfold expression_fuel.
-  simpl.
-  rewrite Hrank.
-  reflexivity.
+  intros name body Hlookup.
+  rewrite (phase1_surface_parser_rank_lookup_rule name body Hlookup).
+  apply Nat.lt_succ_diag_r.
 Qed.
 
 Lemma parser_sequence_wrapper_rank_decreases :
