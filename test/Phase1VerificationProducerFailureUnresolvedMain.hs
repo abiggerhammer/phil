@@ -35,6 +35,7 @@ import Phil.Verification.ProofEvidence
   , ProofProposal (..)
   , checkedProofObligationRevision
   , checkedProofProducer
+  , decisionCertificateEvidenceFormat
   , runProofProducerAttempt
   , unresolvedProofFailure
   , unresolvedProofGraphRevision
@@ -117,6 +118,9 @@ proposalFor :: Text -> RevisionId -> DecisionCertificate -> ProofProposal
 proposalFor producer revision certificate = ProofProposal
   { proofProposalProducer = producer
   , proofProposalObligationRevision = revision
+  , proofProposalEvidenceFormat = decisionCertificateEvidenceFormat
+  , proofProposalSubjectIds = ["subject:ver004"]
+  , proofProposalContextIds = ["context:ver004"]
   , proofProposalProposition = rootProposition
   , proofProposalCertificate = certificate
   }
