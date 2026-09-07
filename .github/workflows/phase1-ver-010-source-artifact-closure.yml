@@ -57,7 +57,7 @@ jobs:
         run: cabal build all --enable-tests
 
       - name: Run VER-010 source versus artifact closure regression
-        run: cabal exec -- runghc -Wall -Werror -isrc test/Phase1VerificationSourceArtifactClosureMain.hs
+        run: cabal exec -- runghc -Wall -Werror -Wno-name-shadowing -isrc test/Phase1VerificationSourceArtifactClosureMain.hs
 
       - name: Re-run StageClosure and realization obligation controls
         run: |
