@@ -150,10 +150,8 @@ Proof.
   - destruct (String.eqb name candidate) eqn:Hname.
     + apply String.eqb_eq in Hname. subst candidate.
       inversion Hlookup. subst body.
-      rewrite String.eqb_refl.
       reflexivity.
-    + rewrite Hname.
-      eapply IH. exact Hlookup.
+    + eapply IH. exact Hlookup.
 Qed.
 
 Lemma phase1_surface_parser_rank_lookup_rule :
