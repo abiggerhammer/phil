@@ -31,7 +31,7 @@ jobs:
         run: cabal build all --enable-tests
 
       - name: Strict typecheck IO-PATH pressure corpus
-        run: cabal exec -- ghc -Wall -Werror -fno-code test/Phase1IOPathProviderRelativeMain.hs
+        run: cabal exec -- ghc -Wall -Werror -isrc -fno-code test/Phase1IOPathProviderRelativeMain.hs
 
       - name: Run IO-PATH provider-relative path pressure corpus
-        run: cabal exec -- runghc -Wall -Werror test/Phase1IOPathProviderRelativeMain.hs
+        run: cabal exec -- runghc -Wall -Werror -isrc test/Phase1IOPathProviderRelativeMain.hs
