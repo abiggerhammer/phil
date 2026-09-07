@@ -37,8 +37,13 @@ jobs:
           import Phil.Core.ProviderQualificationTargetReuse
           import Phil.Core.Static
 
+          claimRevision :: QualificationClaimRevision
           claimRevision = QualificationClaimRevision "provider-claim:v1"
+
+          admissionRevision :: QualificationAdmissionRevision
           admissionRevision = QualificationAdmissionRevision "provider-admission:v1"
+
+          targetEvidence :: ProviderTargetRealizationEvidence
           targetEvidence = ProviderTargetRealizationEvidence
             { targetEvidenceClaimRevision = claimRevision
             , targetEvidenceRequiredInterface = InterfaceRevision "provider.blob:v1"
@@ -50,13 +55,19 @@ jobs:
             , targetEvidenceTranslationValidationRefs = Set.singleton "translation:v1"
             , targetEvidenceTargetAssumptions = Set.empty
             }
+
+          targetRevision :: TargetRealizationEvidenceRevision
           targetRevision = deriveTargetRealizationEvidenceRevision targetEvidence
+
+          admitted :: CheckedProviderQualificationAdmissionIdentity
           admitted = CheckedProviderQualificationAdmissionIdentity
             { checkedQualificationAdmissionClaimRevision = claimRevision
             , checkedQualificationAdmissionEvidenceRevision = QualificationEvidenceRevision "evidence:v1"
             , checkedQualificationAdmissionRevision = admissionRevision
             , checkedQualificationAdmissionDecision = QualificationAdmitted
             }
+
+          baseApplicability :: ProviderConcreteAdmissionApplicability
           baseApplicability = ProviderConcreteAdmissionApplicability
             { providerApplicabilityAdmissionRevision = admissionRevision
             , providerApplicabilityClaimRevision = claimRevision
@@ -71,6 +82,8 @@ jobs:
             , providerApplicabilityRuntimeAbiRevision = "abi:v1"
             , providerApplicabilityExportedSymbols = Set.empty
             }
+
+          selectedFrom :: ProviderConcreteAdmissionApplicability -> SelectedProviderRealization
           selectedFrom a = SelectedProviderRealization
             { selectedProviderAdmissionRevision = providerApplicabilityAdmissionRevision a
             , selectedProviderTargetEvidenceRevision = providerApplicabilityTargetEvidenceRevision a
@@ -84,6 +97,8 @@ jobs:
             , selectedProviderRuntimeAbiRevision = providerApplicabilityRuntimeAbiRevision a
             , selectedProviderExportedSymbols = Set.empty
             }
+
+          main :: IO ()
           main = do
             let occurrenceRelocated = baseApplicability
                   { providerApplicabilityRequirementOccurrence = ProviderRequirementOccurrenceKey "provider.relocated" }
