@@ -486,13 +486,19 @@ Proof.
   intros fuel path items index item Hnth Hsafe.
   unfold phase1_surface_parser_goal_choice_safeb in *.
   simpl in Hsafe.
-  apply forallb_forall in Hsafe.
+  destruct
+    (forallb_forall
+      EbnfExpression
+      (choice_bodies_nonnullable_fuel fuel)
+      items)
+    as [Hsafe_to _].
+  pose proof (Hsafe_to Hsafe) as Hsafe_items.
   assert (Hin : In item items).
   {
     eapply nth_error_In. exact Hnth.
   }
-  specialize (Hsafe item Hin).
-  apply andb_true_iff in Hsafe as [_ Hitem].
+  specialize (Hsafe_items item Hin).
+  apply andb_true_iff in Hsafe_items as [_ Hitem].
   exact Hitem.
 Qed.
 
