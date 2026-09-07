@@ -38,7 +38,7 @@ import Phil.Verification
   ( VerificationObligationGraph (..)
   )
 
--- | Replaceable producers may construct these freely.  A proposal is not
+-- | Replaceable producers may construct these freely. A proposal is not
 -- evidence and carries no checker authority.
 data ProofProposal = ProofProposal
   { proofProposalProducer :: Text
@@ -56,8 +56,8 @@ data ProofEvidenceError
   | ProofCertificateRejected RevisionId CertificateError
   deriving (Eq, Show)
 
--- | Opaque accepted static evidence.  The constructor is deliberately not
--- exported: the only public constructor path is 'checkProofProposal'.  The
+-- | Opaque accepted static evidence. The constructor is deliberately not
+-- exported: the only public constructor path is 'checkProofProposal'. The
 -- value retains every semantic input consumed by the competent checker, plus
 -- the exact target graph/revision and producer/checker identities.
 data CheckedProofEvidence = CheckedProofEvidence
@@ -132,19 +132,15 @@ checkProofProposal graph state rawAssumptions proposal
           proposition
           (proofProposalCertificate proposal) of
         Left errorValue -> Left (ProofCertificateRejected targetRevision errorValue)
-        Right () -> Right CheckedProofEvidence
-          {-
-          The positional constructor is intentional: field labels would create
-          exported selector names that could obscure which public functions are
-          the stable read-only interface to this opaque checked value.
-          -}
-          (verificationGraphRevision graph)
-          targetRevision
-          (proofProposalProducer proposal)
-          certificateCheckerId
-          (proofProposalCertificate proposal)
-          proposition
-          state
-          assumptions
+        Right () -> Right
+          (CheckedProofEvidence
+            (verificationGraphRevision graph)
+            targetRevision
+            (proofProposalProducer proposal)
+            certificateCheckerId
+            (proofProposalCertificate proposal)
+            proposition
+            state
+            assumptions)
   where
     targetRevision = proofProposalObligationRevision proposal
