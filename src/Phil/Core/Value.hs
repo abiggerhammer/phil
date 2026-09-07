@@ -46,6 +46,7 @@ import Phil.Core.Syntax
   , Session (..)
   , Ty (..)
   , Value (..)
+  , isRuntimeBytesType
   )
 import qualified ResourceLoopKernel as ResourceLoopKernel
 
@@ -190,13 +191,15 @@ checkValueInternal explicitEvidence residualSpec value expected state =
       mapLeft valueSortError (checkTypeSorts state expected)
       synthesized <- synthValue value state
       let actual = valueResultType synthesized
-      case compareTypes actual expected of
-        DefinitionallyEqual -> Right synthesized { valueResultType = expected }
-        RequiresPropositionalEquality -> Left (ExplicitTransportRequired actual expected)
-        IncompatibleTypes
-          | refinementErasesTo actual expected ->
-              Right synthesized { valueResultType = expected }
-          | otherwise -> Left (ValueTypeMismatch actual expected)
+      if bytesLengthForgetting actual expected
+        then Right synthesized { valueResultType = expected }
+        else case compareTypes actual expected of
+          DefinitionallyEqual -> Right synthesized { valueResultType = expected }
+          RequiresPropositionalEquality -> Left (ExplicitTransportRequired actual expected)
+          IncompatibleTypes
+            | refinementErasesTo actual expected ->
+                Right synthesized { valueResultType = expected }
+            | otherwise -> Left (ValueTypeMismatch actual expected)
 
 matchingCarriedEvidence :: Proposition -> [EvidenceUse] -> Maybe EvidenceUse
 matchingCarriedEvidence required = go
@@ -251,41 +254,59 @@ transportValue value proofName targetTy state = do
     TyRefined _ _ _ -> Left (TransportTargetRefined targetTy)
     _ -> do
       mapLeft valueSortError (checkTypeSorts state targetTy)
-      case transportRequirement sourceTy targetTy of
-        TransportDefinitionallyEqual ->
-          case ResourceLoopKernel.decideStateTransportByFacts
-              (definitionallyEqualTy sourceTy targetTy) False of
-            ResourceLoopKernel.StateTransportAcceptedDecision ->
-              Left (TransportNotRequired sourceTy)
-            _ -> resourceLoopKernelInvariant "definitional-transport"
-        TransportUnsupported -> Left (UnsupportedTransport sourceTy targetTy)
-        TransportRequires proposition -> do
-          evidenceUses <- mapLeft ValueRefinementError $
-            dischargePropositionUsing proofName proposition (valueResultState source)
-          let explicitEvidenceAccepted = not (null evidenceUses)
-          case ResourceLoopKernel.decideStateTransportByFacts
-              (definitionallyEqualTy sourceTy targetTy)
-              explicitEvidenceAccepted of
-            ResourceLoopKernel.StateTransportAcceptedDecision ->
-              Right source
-                { valueResultType = targetTy
-                , valueResultEvidence = appendEvidenceList evidenceUses (valueResultEvidence source)
-                }
-            _ -> resourceLoopKernelInvariant "explicit-transport"
+      if bytesLengthForgetting sourceTy targetTy
+        then Left (TransportNotRequired sourceTy)
+        else case transportRequirement (valueResultTerm source) sourceTy targetTy of
+          TransportDefinitionallyEqual ->
+            case ResourceLoopKernel.decideStateTransportByFacts
+                (definitionallyEqualTy sourceTy targetTy) False of
+              ResourceLoopKernel.StateTransportAcceptedDecision ->
+                Left (TransportNotRequired sourceTy)
+              _ -> resourceLoopKernelInvariant "definitional-transport"
+          TransportUnsupported -> Left (UnsupportedTransport sourceTy targetTy)
+          TransportRequires proposition -> do
+            evidenceUses <- mapLeft ValueRefinementError $
+              dischargePropositionUsing proofName proposition (valueResultState source)
+            let explicitEvidenceAccepted = not (null evidenceUses)
+            case ResourceLoopKernel.decideStateTransportByFacts
+                (definitionallyEqualTy sourceTy targetTy)
+                explicitEvidenceAccepted of
+              ResourceLoopKernel.StateTransportAcceptedDecision ->
+                Right source
+                  { valueResultType = targetTy
+                  , valueResultEvidence = appendEvidenceList evidenceUses (valueResultEvidence source)
+                  }
+              _ -> resourceLoopKernelInvariant "explicit-transport"
 
 data TransportRequirement
   = TransportDefinitionallyEqual
   | TransportRequires Proposition
   | TransportUnsupported
 
-transportRequirement :: Ty -> Ty -> TransportRequirement
-transportRequirement source target
+transportRequirement :: Maybe RefTerm -> Ty -> Ty -> TransportRequirement
+transportRequirement subject source target
   | definitionallyEqualTy source target = TransportDefinitionallyEqual
   | otherwise =
       case (source, target) of
+        (TyBytes _, TyBytes targetIndex)
+          | isRuntimeBytesType source
+          , not (isRuntimeBytesType target) ->
+              case subject of
+                Just valueTerm -> TransportRequires (Equal (RefLen valueTerm) targetIndex)
+                Nothing -> TransportUnsupported
         (TyBytes sourceIndex, TyBytes targetIndex) ->
           TransportRequires (Equal sourceIndex targetIndex)
         _ -> TransportUnsupported
+
+-- | Dropping an exact Bytes index is directional type forgetting, not equality:
+-- it preserves the same linear value while intentionally discarding only the
+-- tracked length fact. The reverse direction therefore cannot use this path.
+bytesLengthForgetting :: Ty -> Ty -> Bool
+bytesLengthForgetting source target =
+  case (source, target) of
+    (TyBytes _, TyBytes _) ->
+      not (isRuntimeBytesType source) && isRuntimeBytesType target
+    _ -> False
 
 resourceLoopKernelInvariant :: String -> Either e a
 resourceLoopKernelInvariant label =
