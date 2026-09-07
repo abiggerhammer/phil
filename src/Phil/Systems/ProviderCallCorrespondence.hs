@@ -5,11 +5,14 @@ module Phil.Systems.ProviderCallCorrespondence
   , SelectedProviderAdmission (..)
   , ProviderCallBindingBasis (..)
   , ProviderCallLink (..)
+  , ProviderCallExpectation (..)
+  , ProviderCallExpectationMap
   , ProviderCallStageBundle (..)
   , ProviderCallStageVerificationError (..)
   , deriveProviderCallStageRevision
   , makeProviderCallStageBundle
   , verifyProviderCallStageBundle
+  , verifyProviderCallStageBundleAgainst
   ) where
 
 import qualified Data.Map.Strict as Map
@@ -87,6 +90,17 @@ data ProviderCallLink = ProviderCallLink
   }
   deriving (Eq, Ord, Show)
 
+-- | Independent semantic expectation for one already-classified provider call
+-- site.  This authority is supplied separately from the candidate link, so a
+-- link cannot define which qualified operation it was supposed to denote.
+data ProviderCallExpectation = ProviderCallExpectation
+  { expectedProviderOccurrence :: Text
+  , expectedProviderOperation :: ProviderOperationKey
+  }
+  deriving (Eq, Ord, Show)
+
+type ProviderCallExpectationMap = Map SystemsMechanismKey ProviderCallExpectation
+
 data ProviderCallStageBundle = ProviderCallStageBundle
   { providerCallStageBase :: SubjectStageBundle
   , providerCallStageRevision :: ProviderCallStageRevision
@@ -116,6 +130,9 @@ data ProviderCallStageVerificationError
   | ProviderCallSiteUnknown (Set SystemsMechanismKey)
   | ProviderCallLinkDomainMismatch (Set SystemsMechanismKey) (Set SystemsMechanismKey)
   | ProviderCallLinkMapKeyMismatch SystemsMechanismKey SystemsMechanismKey
+  | ProviderCallExpectedSiteMissing SystemsMechanismKey
+  | ProviderCallExpectedOccurrenceMismatch SystemsMechanismKey Text Text
+  | ProviderCallExpectedOperationMismatch SystemsMechanismKey ProviderOperationKey ProviderOperationKey
   | ProviderCallRuntimeSymbolInferenceRejected SystemsMechanismKey Text Text
   | ProviderCallUnknownSelection SystemsMechanismKey Text
   | ProviderCallAdmissionMismatch
@@ -246,6 +263,30 @@ verifyProviderCallStageBundle bundle = do
 
     checkLinkStructure (key, link) =
       requireEqual ProviderCallLinkMapKeyMismatch key (providerCallMechanism link)
+
+-- | Independent correspondence gate layered over the relative SYS-005
+-- structural/qualification checker.  Every represented call must agree with an
+-- expectation supplied by a separate source/Core classification authority.
+-- Extra expectations are intentionally ignored here; exact inventory equality
+-- is REVIEW-R14 rather than REVIEW-R13.
+verifyProviderCallStageBundleAgainst
+  :: ProviderCallExpectationMap
+  -> ProviderCallStageBundle
+  -> Either ProviderCallStageVerificationError ()
+verifyProviderCallStageBundleAgainst expectations bundle = do
+  verifyProviderCallStageBundle bundle
+  mapM_ checkExpected (Map.toAscList (providerCallStageLinks bundle))
+  where
+    checkExpected (site, link) = do
+      expected <- maybe (Left (ProviderCallExpectedSiteMissing site)) Right
+        (Map.lookup site expectations)
+      case providerCallBindingBasis link of
+        RuntimeSymbolOnlyProviderCall _ _ -> Right ()
+        ExactProviderCallBinding occurrence _ _ operation _ -> do
+          requireEqual (ProviderCallExpectedOccurrenceMismatch site)
+            (expectedProviderOccurrence expected) occurrence
+          requireEqual (ProviderCallExpectedOperationMismatch site)
+            (expectedProviderOperation expected) operation
 
 kernelProviderBindingBasis
   :: Map SystemsMechanismKey ProviderCallLink
