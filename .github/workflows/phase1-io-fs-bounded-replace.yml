@@ -1,0 +1,49 @@
+name: Phase 1 IO-FS Bounded Read and Replace
+
+on:
+  pull_request:
+    paths:
+      - 'src/Phil/IO/Bytes.hs'
+      - 'src/Phil/IO/FileSystem.hs'
+      - 'src/Phil/Systems.hs'
+      - 'src/Phil/Core/Authority.hs'
+      - 'src/Phil/Core/Syntax.hs'
+      - 'test/Phase1IOFileSystemMain.hs'
+      - '.github/workflows/phase1-io-fs-bounded-replace.yml'
+  push:
+    branches: [main]
+    paths:
+      - 'src/Phil/IO/Bytes.hs'
+      - 'src/Phil/IO/FileSystem.hs'
+      - 'src/Phil/Systems.hs'
+      - 'src/Phil/Core/Authority.hs'
+      - 'src/Phil/Core/Syntax.hs'
+      - 'test/Phase1IOFileSystemMain.hs'
+      - '.github/workflows/phase1-io-fs-bounded-replace.yml'
+
+permissions:
+  contents: read
+
+jobs:
+  io-fs:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: haskell-actions/setup@v2
+        with:
+          ghc-version: '9.6.7'
+          cabal-version: 'latest'
+
+      - name: Build complete Haskell substrate
+        run: cabal build all --enable-tests
+
+      - name: Strict typecheck IO-FS semantic contract and pressure corpus
+        run: |
+          cabal exec -- ghc -isrc -Wall -Werror -fno-code \
+            src/Phil/IO/Bytes.hs \
+            src/Phil/IO/FileSystem.hs \
+            test/Phase1IOFileSystemMain.hs
+
+      - name: Run IO-FS bounded read and replace pressure corpus
+        run: cabal exec -- runghc -isrc -Wall -Werror test/Phase1IOFileSystemMain.hs
