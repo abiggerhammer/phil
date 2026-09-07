@@ -120,7 +120,7 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
-          docker run --rm \
+          docker run --rm --user root \
             -v "$PWD:/work" -w /work \
             rocq/rocq-prover:9.2.0 \
             bash -lc 'set -euo pipefail; export PATH="/home/rocq/.opam/${COMPILER}/bin:$PATH"; \
