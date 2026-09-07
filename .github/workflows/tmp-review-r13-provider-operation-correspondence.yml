@@ -1,0 +1,92 @@
+name: Temporary R13 provider operation correspondence remediation
+
+on:
+  push:
+    branches: [phase1-review-r13-provider-operation-correspondence]
+
+permissions:
+  contents: write
+
+jobs:
+  patch:
+    if: github.actor != 'github-actions[bot]'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: phase1-review-r13-provider-operation-correspondence
+          fetch-depth: 0
+
+      - uses: haskell-actions/setup@v2
+        with:
+          ghc-version: '9.6.7'
+          cabal-version: 'latest'
+
+      - name: Apply R13 independent expected-operation repair
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 - <<'PY'
+          from pathlib import Path
+
+          def edit(path, old, new):
+              p = Path(path)
+              text = p.read_text()
+              if old not in text:
+                  raise SystemExit(f'anchor not found in {path}: {old[:120]!r}')
+              p.write_text(text.replace(old, new, 1))
+
+          edit(
+              'src/Phil/Systems/ProviderCallCorrespondence.hs',
+              '''  , ProviderCallBindingBasis (..)\n  , ProviderCallLink (..)\n  , ProviderCallStageBundle (..)\n''',
+              '''  , ProviderCallBindingBasis (..)\n  , ProviderCallLink (..)\n  , ProviderCallExpectation (..)\n  , ProviderCallExpectationMap\n  , ProviderCallStageBundle (..)\n''')
+          edit(
+              'src/Phil/Systems/ProviderCallCorrespondence.hs',
+              '''  , makeProviderCallStageBundle\n  , verifyProviderCallStageBundle\n  ) where\n''',
+              '''  , makeProviderCallStageBundle\n  , verifyProviderCallStageBundle\n  , verifyProviderCallStageBundleAgainst\n  ) where\n''')
+          edit(
+              'src/Phil/Systems/ProviderCallCorrespondence.hs',
+              '''data ProviderCallLink = ProviderCallLink\n  { providerCallMechanism :: SystemsMechanismKey\n  , providerCallBindingBasis :: ProviderCallBindingBasis\n  , providerCallRuntimeSymbol :: Text\n  , providerCallRuntimeSignature :: Text\n  }\n  deriving (Eq, Ord, Show)\n\n''',
+              '''data ProviderCallLink = ProviderCallLink\n  { providerCallMechanism :: SystemsMechanismKey\n  , providerCallBindingBasis :: ProviderCallBindingBasis\n  , providerCallRuntimeSymbol :: Text\n  , providerCallRuntimeSignature :: Text\n  }\n  deriving (Eq, Ord, Show)\n\n-- | Independent semantic expectation for one already-classified provider call\n-- site.  This authority is supplied separately from the candidate link, so a\n-- link cannot define which qualified operation it was supposed to denote.\ndata ProviderCallExpectation = ProviderCallExpectation\n  { expectedProviderOccurrence :: Text\n  , expectedProviderOperation :: ProviderOperationKey\n  }\n  deriving (Eq, Ord, Show)\n\ntype ProviderCallExpectationMap = Map SystemsMechanismKey ProviderCallExpectation\n\n''')
+          edit(
+              'src/Phil/Systems/ProviderCallCorrespondence.hs',
+              '''  | ProviderCallLinkMapKeyMismatch SystemsMechanismKey SystemsMechanismKey\n  | ProviderCallRuntimeSymbolInferenceRejected SystemsMechanismKey Text Text\n''',
+              '''  | ProviderCallLinkMapKeyMismatch SystemsMechanismKey SystemsMechanismKey\n  | ProviderCallExpectedSiteMissing SystemsMechanismKey\n  | ProviderCallExpectedOccurrenceMismatch SystemsMechanismKey Text Text\n  | ProviderCallExpectedOperationMismatch SystemsMechanismKey ProviderOperationKey ProviderOperationKey\n  | ProviderCallRuntimeSymbolInferenceRejected SystemsMechanismKey Text Text\n''')
+          edit(
+              'src/Phil/Systems/ProviderCallCorrespondence.hs',
+              '''kernelProviderBindingBasis\n  :: Map SystemsMechanismKey ProviderCallLink\n''',
+              '''-- | Independent correspondence gate layered over the relative SYS-005\n-- structural/qualification checker.  Every represented call must agree with an\n-- expectation supplied by a separate source/Core classification authority.\n-- Extra expectations are intentionally ignored here; exact inventory equality\n-- is REVIEW-R14 rather than REVIEW-R13.\nverifyProviderCallStageBundleAgainst\n  :: ProviderCallExpectationMap\n  -> ProviderCallStageBundle\n  -> Either ProviderCallStageVerificationError ()\nverifyProviderCallStageBundleAgainst expectations bundle = do\n  verifyProviderCallStageBundle bundle\n  mapM_ checkExpected (Map.toAscList (providerCallStageLinks bundle))\n  where\n    checkExpected (site, link) = do\n      expected <- maybe (Left (ProviderCallExpectedSiteMissing site)) Right\n        (Map.lookup site expectations)\n      case providerCallBindingBasis link of\n        RuntimeSymbolOnlyProviderCall _ _ -> Right ()\n        ExactProviderCallBinding occurrence _ _ operation _ -> do\n          requireEqual (ProviderCallExpectedOccurrenceMismatch site)\n            (expectedProviderOccurrence expected) occurrence\n          requireEqual (ProviderCallExpectedOperationMismatch site)\n            (expectedProviderOperation expected) operation\n\nkernelProviderBindingBasis\n  :: Map SystemsMechanismKey ProviderCallLink\n''')
+
+          edit(
+              'src/Phil/Examples/Phase1/ProviderCallWitnesses.hs',
+              '''module Phil.Examples.Phase1.ProviderCallWitnesses\n  ( uploadProviderCallStageBundle\n  , steveProviderCallStageBundle\n  ) where\n''',
+              '''module Phil.Examples.Phase1.ProviderCallWitnesses\n  ( uploadProviderCallStageBundle\n  , steveProviderCallStageBundle\n  , uploadProviderCallExpectations\n  , steveProviderCallExpectations\n  ) where\n''')
+          edit(
+              'src/Phil/Examples/Phase1/ProviderCallWitnesses.hs',
+              '''selectionFromSteveArtifact\n  :: SteveProviderQualificationArtifact\n''',
+              '''-- Independent call-site semantic expectations.  These are source/Core\n-- correspondence data, not projections of providerCallStageLinks; runtime\n-- symbol spelling therefore has no authority over semantic operation identity.\nuploadProviderCallExpectations :: ProviderCallExpectationMap\nuploadProviderCallExpectations = Map.singleton uploadStoreMechanism\n  (ProviderCallExpectation\n    "upload.storage-provider"\n    (ProviderOperationKey "upload.store"))\n\nsteveProviderCallExpectations :: ProviderCallExpectationMap\nsteveProviderCallExpectations = Map.fromList\n  [ (steveDigestComputeMechanism, ProviderCallExpectation\n      "steve.digest-provider" (ProviderOperationKey "digest.compute"))\n  , (steveBlobInstallMechanism, ProviderCallExpectation\n      "steve.blob-provider" (ProviderOperationKey "blob.install-if-absent"))\n  , (steveBlobReadMechanism, ProviderCallExpectation\n      "steve.blob-provider" (ProviderOperationKey "blob.read"))\n  , (steveDigestCheckMechanism, ProviderCallExpectation\n      "steve.digest-provider" (ProviderOperationKey "digest.check"))\n  ]\n\nselectionFromSteveArtifact\n  :: SteveProviderQualificationArtifact\n''')
+          PY
+
+      - name: Build complete Haskell substrate
+        run: cabal build all --enable-tests
+
+      - name: Run R13 regression
+        run: cabal exec -- runghc -Wall -Werror -isrc test/Phase1ReviewR13ProviderOperationCorrespondenceMain.hs
+
+      - name: Run existing provider correspondence controls
+        run: |
+          set -euo pipefail
+          cabal exec -- runghc -Wall -Werror -isrc test/Phase1ProviderCallCorrespondenceMain.hs
+          cabal exec -- runghc -Wall -Werror -isrc test/Phase1AuthorityEffectCorrespondenceMain.hs
+
+      - name: Commit R13 repair
+        shell: bash
+        run: |
+          set -euo pipefail
+          git config user.name github-actions[bot]
+          git config user.email 41898282+github-actions[bot]@users.noreply.github.com
+          git add \
+            src/Phil/Systems/ProviderCallCorrespondence.hs \
+            src/Phil/Examples/Phase1/ProviderCallWitnesses.hs
+          git commit -m 'review: bind provider calls to independent expected operations'
+          git push origin HEAD:phase1-review-r13-provider-operation-correspondence
