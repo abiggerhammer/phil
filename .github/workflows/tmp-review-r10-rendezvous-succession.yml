@@ -1,0 +1,159 @@
+name: Temporary R10 rendezvous succession remediation
+
+on:
+  push:
+    branches: [phase1-review-r10-rendezvous-succession]
+
+permissions:
+  contents: write
+
+jobs:
+  patch:
+    if: github.actor != 'github-actions[bot]'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: phase1-review-r10-rendezvous-succession
+          fetch-depth: 0
+
+      - uses: haskell-actions/setup@v2
+        with:
+          ghc-version: '9.6.7'
+          cabal-version: 'latest'
+
+      - name: Apply R10 live-successor and orientation repair
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 - <<'PY'
+          from pathlib import Path
+
+          def edit(path, old, new):
+              p = Path(path)
+              text = p.read_text()
+              if old not in text:
+                  raise SystemExit(f'anchor not found in {path}: {old[:160]!r}')
+              p.write_text(text.replace(old, new, 1))
+
+          # Native rendezvous: keep activation entry strict, add a live-state transition.
+          edit('src/Phil/Core/ProcessRendezvous.hs',
+               '  , checkProcessCommunication\n  , checkRestrictedProcessRendezvous\n',
+               '  , checkProcessCommunication\n  , checkProcessCommunicationSuccessor\n  , checkRestrictedProcessRendezvous\n')
+          edit('src/Phil/Core/ProcessRendezvous.hs',
+               '''    JointProcessRendezvous request ->\n      checkJointRendezvous instanceValue network contexts request\n\n-- | CONC-005: perform one exact send/receive rendezvous and move one exact\n''',
+               '''    JointProcessRendezvous request ->\n      checkJointRendezvous instanceValue network contexts request\n\n-- | Advance an already-checked live communication state. Initial protocol\n-- projection is an initialization invariant; successor steps retain exact\n-- instance/role identity, current duality, and local action admissibility\n-- without comparing a continuation to the immutable initial projection.\ncheckProcessCommunicationSuccessor\n  :: BinaryProtocolInstance\n  -> ProcessNetwork\n  -> ProcessCommunicationState\n  -> ProcessRendezvousRequest\n  -> Either ProcessRendezvousError ProcessCommunicationState\ncheckProcessCommunicationSuccessor instanceValue network state request = do\n  updatedContexts <- checkJointRendezvousLive\n    instanceValue network (communicationProtocolContexts state) request\n  pure state { communicationProtocolContexts = updatedContexts }\n\n-- | CONC-005: perform one exact send/receive rendezvous and move one exact\n''')
+          edit('src/Phil/Core/ProcessRendezvous.hs',
+               '''checkJointRendezvous\n  :: BinaryProtocolInstance\n  -> ProcessNetwork\n  -> Map.Map ProcessKey ProtocolContext\n  -> ProcessRendezvousRequest\n  -> Either ProcessRendezvousError (Map.Map ProcessKey ProtocolContext)\ncheckJointRendezvous instanceValue network contexts request = do\n''',
+               '''checkJointRendezvous\n  :: BinaryProtocolInstance\n  -> ProcessNetwork\n  -> Map.Map ProcessKey ProtocolContext\n  -> ProcessRendezvousRequest\n  -> Either ProcessRendezvousError (Map.Map ProcessKey ProtocolContext)\ncheckJointRendezvous = checkJointRendezvousWith validateSide\n\ncheckJointRendezvousLive\n  :: BinaryProtocolInstance\n  -> ProcessNetwork\n  -> Map.Map ProcessKey ProtocolContext\n  -> ProcessRendezvousRequest\n  -> Either ProcessRendezvousError (Map.Map ProcessKey ProtocolContext)\ncheckJointRendezvousLive = checkJointRendezvousWith validateLiveSide\n\ncheckJointRendezvousWith\n  :: (BinaryProtocolInstance\n      -> ProcessRendezvousSide\n      -> ProtocolContext\n      -> Either ProcessRendezvousError ProtocolEndpointBinding)\n  -> BinaryProtocolInstance\n  -> ProcessNetwork\n  -> Map.Map ProcessKey ProtocolContext\n  -> ProcessRendezvousRequest\n  -> Either ProcessRendezvousError (Map.Map ProcessKey ProtocolContext)\ncheckJointRendezvousWith validate instanceValue network contexts request = do\n''')
+          edit('src/Phil/Core/ProcessRendezvous.hs',
+               '  leftBinding <- validateSide instanceValue left leftContext\n  rightBinding <- validateSide instanceValue right rightContext\n',
+               '  leftBinding <- validate instanceValue left leftContext\n  rightBinding <- validate instanceValue right rightContext\n')
+          edit('src/Phil/Core/ProcessRendezvous.hs',
+               '''validateSide instanceValue side context = do\n  let processKey = rendezvousProcess side\n      exactInstance = binaryProtocolInstanceRevision instanceValue\n  requireEqual\n    (RendezvousProtocolInstanceMismatch processKey)\n    exactInstance\n    (rendezvousInstance side)\n  binding <- maybe\n    (Left (RendezvousEndpointNotOwnedByProcess processKey (rendezvousEndpoint side)))\n    Right\n    (lookupProtocolEndpoint (rendezvousEndpoint side) context)\n  requireEqual\n    (RendezvousProtocolInstanceMismatch processKey)\n    exactInstance\n    (protocolEndpointInstance binding)\n  requireEqual\n    (RendezvousProtocolRoleMismatch processKey)\n    (rendezvousRole side)\n    (protocolEndpointRole binding)\n  projection <- mapLeft RendezvousProjectionError $\n    projectProtocolRole instanceValue (rendezvousRole side)\n  requireEqual\n    (RendezvousProjectionSessionMismatch processKey)\n    (protocolProjectionSession projection)\n    (protocolEndpointSession binding)\n  pure binding\n''',
+               '''validateSide instanceValue side context = do\n  binding <- validateLiveSide instanceValue side context\n  let processKey = rendezvousProcess side\n  projection <- mapLeft RendezvousProjectionError $\n    projectProtocolRole instanceValue (rendezvousRole side)\n  requireEqual\n    (RendezvousProjectionSessionMismatch processKey)\n    (protocolProjectionSession projection)\n    (protocolEndpointSession binding)\n  pure binding\n\nvalidateLiveSide\n  :: BinaryProtocolInstance\n  -> ProcessRendezvousSide\n  -> ProtocolContext\n  -> Either ProcessRendezvousError ProtocolEndpointBinding\nvalidateLiveSide instanceValue side context = do\n  let processKey = rendezvousProcess side\n      exactInstance = binaryProtocolInstanceRevision instanceValue\n  requireEqual\n    (RendezvousProtocolInstanceMismatch processKey)\n    exactInstance\n    (rendezvousInstance side)\n  binding <- maybe\n    (Left (RendezvousEndpointNotOwnedByProcess processKey (rendezvousEndpoint side)))\n    Right\n    (lookupProtocolEndpoint (rendezvousEndpoint side) context)\n  requireEqual\n    (RendezvousProtocolInstanceMismatch processKey)\n    exactInstance\n    (protocolEndpointInstance binding)\n  requireEqual\n    (RendezvousProtocolRoleMismatch processKey)\n    (rendezvousRole side)\n    (protocolEndpointRole binding)\n  pure binding\n''')
+
+          # Certified wrapper: successor accepts only an opaque certified predecessor.
+          edit('src/Phil/Core/ConcurrencyRendezvousCertification.hs',
+               '  , certifyProcessRendezvous\n  , certifyRestrictedProcessRendezvous\n',
+               '  , certifyProcessRendezvous\n  , certifyProcessRendezvousSuccessor\n  , certifyRestrictedProcessRendezvous\n')
+          edit('src/Phil/Core/ConcurrencyRendezvousCertification.hs',
+               '  , checkProcessCommunication\n  , checkRestrictedProcessRendezvous\n',
+               '  , checkProcessCommunication\n  , checkProcessCommunicationSuccessor\n  , checkRestrictedProcessRendezvous\n')
+          edit('src/Phil/Core/ConcurrencyRendezvousCertification.hs',
+               '''  certifyAcceptedRendezvous activation protocol beforeState afterState request Nothing evidence\n\ncertifyRestrictedProcessRendezvous\n''',
+               '''  certifyAcceptedRendezvous activation protocol beforeState afterState request Nothing evidence\n\n-- | Certify one rendezvous from the exact live successor of a previous\n-- certified rendezvous. The opaque predecessor supplies state provenance; the\n-- native live transition rechecks exact instance/role identity, current\n-- duality, and both local protocol actions.\ncertifyProcessRendezvousSuccessor\n  :: CertifiedRendezvousActivation\n  -> CertifiedRendezvousProtocol\n  -> CertifiedRendezvousResult\n  -> ProcessRendezvousRequest\n  -> RendezvousMessageEvidence\n  -> Either ConcurrencyRendezvousCertificationError CertifiedRendezvousResult\ncertifyProcessRendezvousSuccessor activation protocol predecessor request evidence = do\n  let beforeState = certifiedRendezvousState predecessor\n  afterState <- mapLeft ConcurrencyRendezvousNativeError $\n    checkProcessCommunicationSuccessor\n      (certifiedRendezvousProtocolInstance protocol)\n      (certifiedRendezvousActivationNetwork activation)\n      beforeState\n      request\n  certifyAcceptedRendezvous activation protocol beforeState afterState request Nothing evidence\n\ncertifyRestrictedProcessRendezvous\n''')
+          edit('src/Phil/Core/ConcurrencyRendezvousCertification.hs',
+               '''    , rendezvousSenderRoleExact =\n        protocolEndpointRole (checkedProtocolPredecessor senderStep)\n          == certifiedRendezvousPrimaryRole protocol\n          && rendezvousRole sender == certifiedRendezvousPrimaryRole protocol\n    , rendezvousReceiverRoleExact =\n        protocolEndpointRole (checkedProtocolPredecessor receiverStep)\n          == certifiedRendezvousPeerRole protocol\n          && rendezvousRole receiver == certifiedRendezvousPeerRole protocol\n''',
+               '''    , rendezvousSenderRoleExact =\n        protocolEndpointRole (checkedProtocolPredecessor senderStep)\n          == rendezvousRole sender\n          && certifiedRoleMember protocol (rendezvousRole sender)\n    , rendezvousReceiverRoleExact =\n        protocolEndpointRole (checkedProtocolPredecessor receiverStep)\n          == rendezvousRole receiver\n          && certifiedRolePairExact protocol\n              (rendezvousRole sender) (rendezvousRole receiver)\n''')
+          edit('src/Phil/Core/ConcurrencyRendezvousCertification.hs',
+               '''rendezvousParticipantFacts\n  :: CertifiedRendezvousActivation\n''',
+               '''certifiedRoleMember :: CertifiedRendezvousProtocol -> ProtocolRoleKey -> Bool\ncertifiedRoleMember protocol role =\n  role == certifiedRendezvousPrimaryRole protocol\n    || role == certifiedRendezvousPeerRole protocol\n\ncertifiedRolePairExact\n  :: CertifiedRendezvousProtocol\n  -> ProtocolRoleKey\n  -> ProtocolRoleKey\n  -> Bool\ncertifiedRolePairExact protocol senderRole receiverRole =\n  (senderRole == certifiedRendezvousPrimaryRole protocol\n    && receiverRole == certifiedRendezvousPeerRole protocol)\n  || (senderRole == certifiedRendezvousPeerRole protocol\n    && receiverRole == certifiedRendezvousPrimaryRole protocol)\n\nrendezvousParticipantFacts\n  :: CertifiedRendezvousActivation\n''')
+
+          # Rocq semantic authority: preserve the nine-boolean ABI, but define
+          # role facts as membership + exact opposite-role pairing.
+          edit('proof/Phil/Core/ConcurrencyRendezvous.v',
+               '''Record ExactInternalRendezvous\n  (witness : DualRendezvousWitness) : Prop := mkExactInternalRendezvous {\n''',
+               '''Definition BinaryRoleMember\n  (instance : BinaryProtocolInstance)\n  (role : ProtocolRoleKey) : Prop :=\n  role = binaryProtocolPrimaryRole instance \/\n  role = binaryProtocolPeerRole instance.\n\nDefinition BinaryRolePairExact\n  (instance : BinaryProtocolInstance)\n  (senderRole receiverRole : ProtocolRoleKey) : Prop :=\n  (senderRole = binaryProtocolPrimaryRole instance /\\\n   receiverRole = binaryProtocolPeerRole instance) \/\n  (senderRole = binaryProtocolPeerRole instance /\\\n   receiverRole = binaryProtocolPrimaryRole instance).\n\nRecord ExactInternalRendezvous\n  (witness : DualRendezvousWitness) : Prop := mkExactInternalRendezvous {\n''')
+          edit('proof/Phil/Core/ConcurrencyRendezvous.v',
+               '''  exactRendezvousSenderRole :\n    protocolContractRole\n      (protocolOccurrenceContract\n        (endpointProgressionPredecessor\n          (dualRendezvousSenderEndpoint witness))) =\n    binaryProtocolPrimaryRole (dualRendezvousInstance witness);\n  exactRendezvousReceiverRole :\n    protocolContractRole\n      (protocolOccurrenceContract\n        (endpointProgressionPredecessor\n          (dualRendezvousReceiverEndpoint witness))) =\n    binaryProtocolPeerRole (dualRendezvousInstance witness);\n''',
+               '''  exactRendezvousSenderRole :\n    BinaryRoleMember\n      (dualRendezvousInstance witness)\n      (protocolContractRole\n        (protocolOccurrenceContract\n          (endpointProgressionPredecessor\n            (dualRendezvousSenderEndpoint witness))));\n  exactRendezvousReceiverRole :\n    BinaryRolePairExact\n      (dualRendezvousInstance witness)\n      (protocolContractRole\n        (protocolOccurrenceContract\n          (endpointProgressionPredecessor\n            (dualRendezvousSenderEndpoint witness))))\n      (protocolContractRole\n        (protocolOccurrenceContract\n          (endpointProgressionPredecessor\n            (dualRendezvousReceiverEndpoint witness))));\n''')
+          edit('proof/Phil/Core/ConcurrencyRendezvous.v',
+               '''    + pose proof (exactRendezvousBinaryWellFormed witness Haccepted) as Hwell.\n      destruct Hwell as [Hroles _].\n      rewrite (exactRendezvousSenderRole witness Haccepted).\n      rewrite (exactRendezvousReceiverRole witness Haccepted).\n      exact Hroles.\n''',
+               '''    + pose proof (exactRendezvousBinaryWellFormed witness Haccepted) as Hwell.\n      destruct Hwell as [Hroles _].\n      pose proof (exactRendezvousReceiverRole witness Haccepted) as Hpair.\n      unfold BinaryRolePairExact in Hpair.\n      destruct Hpair as [[Hsender Hreceiver] | [Hsender Hreceiver]].\n      * rewrite Hsender, Hreceiver. exact Hroles.\n      * rewrite Hsender, Hreceiver.\n        intro Hequal. apply Hroles. symmetry. exact Hequal.\n''')
+
+          edit('proof/Phil/Core/ConcurrencyRendezvousImplementation.v',
+               '''  protocolContractRole\n    (protocolOccurrenceContract\n      (endpointProgressionPredecessor\n        (dualRendezvousSenderEndpoint witness))) =\n    binaryProtocolPrimaryRole (dualRendezvousInstance witness) /\\\n  protocolContractRole\n    (protocolOccurrenceContract\n      (endpointProgressionPredecessor\n        (dualRendezvousReceiverEndpoint witness))) =\n    binaryProtocolPeerRole (dualRendezvousInstance witness) /\\\n''',
+               '''  BinaryRoleMember\n    (dualRendezvousInstance witness)\n    (protocolContractRole\n      (protocolOccurrenceContract\n        (endpointProgressionPredecessor\n          (dualRendezvousSenderEndpoint witness)))) /\\\n  BinaryRolePairExact\n    (dualRendezvousInstance witness)\n    (protocolContractRole\n      (protocolOccurrenceContract\n        (endpointProgressionPredecessor\n          (dualRendezvousSenderEndpoint witness))))\n    (protocolContractRole\n      (protocolOccurrenceContract\n        (endpointProgressionPredecessor\n          (dualRendezvousReceiverEndpoint witness)))) /\\\n''')
+          edit('proof/Phil/Core/ConcurrencyRendezvousImplementation.v',
+               '''    (senderRoleExact = true <->\n      protocolContractRole\n        (protocolOccurrenceContract\n          (endpointProgressionPredecessor\n            (dualRendezvousSenderEndpoint witness))) =\n      binaryProtocolPrimaryRole (dualRendezvousInstance witness)) ->\n    (receiverRoleExact = true <->\n      protocolContractRole\n        (protocolOccurrenceContract\n          (endpointProgressionPredecessor\n            (dualRendezvousReceiverEndpoint witness))) =\n      binaryProtocolPeerRole (dualRendezvousInstance witness)) ->\n''',
+               '''    (senderRoleExact = true <->\n      BinaryRoleMember\n        (dualRendezvousInstance witness)\n        (protocolContractRole\n          (protocolOccurrenceContract\n            (endpointProgressionPredecessor\n              (dualRendezvousSenderEndpoint witness))))) ->\n    (receiverRoleExact = true <->\n      BinaryRolePairExact\n        (dualRendezvousInstance witness)\n        (protocolContractRole\n          (protocolOccurrenceContract\n            (endpointProgressionPredecessor\n              (dualRendezvousSenderEndpoint witness))))\n        (protocolContractRole\n          (protocolOccurrenceContract\n            (endpointProgressionPredecessor\n              (dualRendezvousReceiverEndpoint witness))))) ->\n''')
+          PY
+
+      - name: Build complete Haskell substrate
+        run: cabal build all --enable-tests
+
+      - name: Run R10 regression and existing rendezvous controls
+        run: |
+          set -euo pipefail
+          cabal exec -- runghc -Wall -Werror -isrc test/Phase1ReviewR10RendezvousSuccessionMain.hs
+          cabal exec -- runghc -Wall -Werror -isrc test/Phase1ExactProcessRendezvousMain.hs
+          cabal exec -- runghc -Wall -Werror -isrc app/ConcurrencyRendezvousProductionBindingMain.hs
+
+      - name: Compile refined Rocq rendezvous authority and verify stable extraction
+        shell: bash
+        run: |
+          set -euo pipefail
+          docker run --rm -u root -v "$PWD:/work" -w /work rocq/rocq-prover:9.2.0 bash -lc '
+            set -euo pipefail
+            export PATH="/home/rocq/.opam/${COMPILER}/bin:$PATH"
+            rocq c -Q proof/Phil Phil proof/Phil/Core/Syntax.v
+            rocq c -Q proof/Phil Phil proof/Phil/Core/Session.v
+            rocq c -Q proof/Phil Phil proof/Phil/Core/ProtocolIdentity.v
+            rocq c -Q proof/Phil Phil proof/Phil/Core/ProtocolProjection.v
+            rocq c -Q proof/Phil Phil proof/Phil/Core/ProtocolProgressionGuard.v
+            rocq c -Q proof/Phil Phil proof/Phil/Core/ProtocolMessageAdmissibility.v
+            rocq c -Q proof/Phil Phil proof/Phil/Core/Context.v
+            rocq c -Q proof/Phil Phil proof/Phil/Core/ContextJoin.v
+            rocq c -Q proof/Phil Phil proof/Phil/Core/ProcessJoin.v
+            rocq c -Q proof/Phil Phil proof/Phil/Core/ProcessTerminal.v
+            rocq c -Q proof/Phil Phil proof/Phil/Core/ArchitectureIdentity.v
+            rocq c -Q proof/Phil Phil proof/Phil/Core/ArchitectureInstantiation.v
+            rocq c -Q proof/Phil Phil proof/Phil/Core/ProviderReplacementQualification.v
+            rocq c -Q proof/Phil Phil proof/Phil/Core/ArchitectureRealization.v
+            rocq c -Q proof/Phil Phil proof/Phil/Systems/FactDisposition.v
+            rocq c -Q proof/Phil Phil proof/Phil/Assurance/ValidityScope.v
+            rocq c -Q proof/Phil Phil proof/Phil/Core/SystemsStageClosure.v
+            rocq c -Q proof/Phil Phil proof/Phil/Core/SystemsGenericLowering.v
+            rocq c -Q proof/Phil Phil proof/Phil/Core/ConcurrencySemantics.v
+            rocq c -Q proof/Phil Phil proof/Phil/Core/ConcurrencyActivation.v
+            rocq c -Q proof/Phil Phil proof/Phil/Core/ConcurrencyRendezvous.v
+            rocq c -Q proof/Phil Phil \
+              -ri Phil.Core.Session \
+              -ri Phil.Core.ProtocolIdentity \
+              -ri Phil.Core.ProtocolProjection \
+              -ri Phil.Core.ProtocolMessageAdmissibility \
+              -ri Phil.Core.ConcurrencySemantics \
+              -ri Phil.Core.ConcurrencyActivation \
+              proof/Phil/Core/ConcurrencyRendezvousImplementation.v
+            rm -f ConcurrencyRendezvousKernel.hs
+            rocq c -Q proof/Phil Phil proof/Phil/Core/ConcurrencyRendezvousImplementationExtraction.v
+            test "$(wc -c < ConcurrencyRendezvousKernel.hs)" -eq 2693
+            echo "38ba061829cc7b4f85f678833da1ba8afa7fc2fb713ef0204b306dd1becc0a64  ConcurrencyRendezvousKernel.hs" | sha256sum -c -
+            cmp ConcurrencyRendezvousKernel.hs generated/ConcurrencyRendezvousKernel.hs
+            cmp ConcurrencyRendezvousKernel.hs src/ConcurrencyRendezvousKernel.hs
+          '
+
+      - name: Commit R10 repair
+        shell: bash
+        run: |
+          set -euo pipefail
+          git config user.name github-actions[bot]
+          git config user.email 41898282+github-actions[bot]@users.noreply.github.com
+          git add \
+            src/Phil/Core/ProcessRendezvous.hs \
+            src/Phil/Core/ConcurrencyRendezvousCertification.hs \
+            proof/Phil/Core/ConcurrencyRendezvous.v \
+            proof/Phil/Core/ConcurrencyRendezvousImplementation.v
+          git commit -m 'review: compose certified rendezvous successors'
+          git push origin HEAD:phase1-review-r10-rendezvous-succession
