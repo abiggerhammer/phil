@@ -1,0 +1,49 @@
+name: Phase 1 VER-003 Proof Producer Checker Separation
+
+on:
+  pull_request:
+    paths:
+      - 'src/Phil/Verification.hs'
+      - 'src/Phil/Verification/ProofEvidence.hs'
+      - 'src/Phil/Core/Decision.hs'
+      - 'src/Phil/Core/Checker.hs'
+      - 'test/Phase1VerificationProofProducerCheckerSeparationMain.hs'
+      - 'test/Phase1VerificationCanonicalObligationGraphMain.hs'
+      - 'test/Phase1VerificationIntrinsicInvalidityMain.hs'
+      - 'phil-core.cabal'
+      - '.github/workflows/phase1-ver-003-proof-producer-checker-separation.yml'
+  push:
+    branches: [main]
+    paths:
+      - 'src/Phil/Verification.hs'
+      - 'src/Phil/Verification/ProofEvidence.hs'
+      - 'src/Phil/Core/Decision.hs'
+      - 'src/Phil/Core/Checker.hs'
+      - 'test/Phase1VerificationProofProducerCheckerSeparationMain.hs'
+      - 'test/Phase1VerificationCanonicalObligationGraphMain.hs'
+      - 'test/Phase1VerificationIntrinsicInvalidityMain.hs'
+      - 'phil-core.cabal'
+      - '.github/workflows/phase1-ver-003-proof-producer-checker-separation.yml'
+
+permissions:
+  contents: read
+
+jobs:
+  ver-003:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: haskell-actions/setup@v2
+        with:
+          ghc-version: '9.6.7'
+          cabal-version: 'latest'
+      - name: Build verification proof-evidence boundary
+        run: cabal build lib:phil-core --ghc-options=-Werror
+      - name: Run VER-003 producer/checker separation regression
+        run: cabal exec -- runghc -Wall -Werror -isrc test/Phase1VerificationProofProducerCheckerSeparationMain.hs
+      - name: Re-run VER-002 and VER-001 verification controls
+        run: |
+          cabal exec -- runghc -Wall -Werror -isrc test/Phase1VerificationCanonicalObligationGraphMain.hs
+          cabal exec -- runghc -Wall -Werror -isrc test/Phase1VerificationIntrinsicInvalidityMain.hs
+      - name: Run decision and assurance controls
+        run: cabal test phil-decision-tests phil-assurance-handoff-tests
