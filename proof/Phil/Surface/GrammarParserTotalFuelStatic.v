@@ -390,7 +390,6 @@ Proof.
   pose proof phase1_surface_parser_all_goal_ranks_are_defined as Hall.
   destruct
     (forallb_forall
-      (option nat)
       option_nat_definedb
       phase1_surface_parser_all_goal_rank_options)
     as [Hall_to _].
@@ -443,7 +442,6 @@ Proof.
   pose proof phase1_surface_all_choice_bodies_are_nonnullable as Hall.
   destruct
     (forallb_forall
-      GrammarRule
       choice_bodies_nonnullable_rule
       phase1_surface_rules)
     as [Hall_to _].
@@ -488,7 +486,6 @@ Proof.
   simpl in Hsafe.
   destruct
     (forallb_forall
-      EbnfExpression
       (choice_bodies_nonnullable_fuel fuel)
       items)
     as [Hsafe_to _].
