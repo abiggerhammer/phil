@@ -458,19 +458,32 @@ Proof.
   intros fuel path items index item Hnth Hsafe.
   unfold phase1_surface_parser_goal_choice_safeb in *.
   simpl in Hsafe.
+  assert (Hchoices :
+    forallb (choice_bodies_nonnullable_fuel fuel) items = true).
+  {
+    eapply
+      (forallb_andb_right
+        EbnfExpression
+        (fun candidate =>
+          negb
+            (nullable_expression
+              phase1_surface_nullable_facts candidate))
+        (choice_bodies_nonnullable_fuel fuel)
+        items).
+    exact Hsafe.
+  }
   destruct
     (forallb_forall
       (choice_bodies_nonnullable_fuel fuel)
       items)
     as [Hsafe_to _].
-  pose proof (Hsafe_to Hsafe) as Hsafe_items.
+  pose proof (Hsafe_to Hchoices) as Hsafe_items.
   assert (Hin : In item items).
   {
     eapply nth_error_In. exact Hnth.
   }
   specialize (Hsafe_items item Hin).
-  apply andb_true_iff in Hsafe_items as [_ Hitem].
-  exact Hitem.
+  exact Hsafe_items.
 Qed.
 
 Lemma phase1_surface_optional_body_choice_safe :
