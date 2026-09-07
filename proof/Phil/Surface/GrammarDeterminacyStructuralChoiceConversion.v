@@ -116,8 +116,7 @@ Proof.
       fuel body Hsafe)
     as [Hnonnullable Hbody].
   eapply predictive_bridge_optional_present_oracle_fallback.
-  - apply phase1_surface_optional_resolver_none.
-    exact Hpath.
+  - exact (phase1_surface_optional_resolver_none path body input Hpath).
   - exact Hpath.
   - exact Hderive.
   - eapply choice_bodies_nonnullable_fuel_monotone.
@@ -152,8 +151,7 @@ Proof.
     (expression_follow_disjointb_sound body outer_follow Hdisjointb)
     as Hdisjoint.
   eapply predictive_bridge_optional_absent_oracle_fallback.
-  - apply phase1_surface_optional_resolver_none.
-    exact Hpath.
+  - exact (phase1_surface_optional_resolver_none actual body input Hpath).
   - exact Hpath.
   - exact Hnonnullable.
   - exact Hdisjoint.
@@ -202,9 +200,9 @@ Proof.
       Hactual_canonical Hlocal Hcanonical)
     as Hactual.
   eapply predictive_bridge_repetition_continue_oracle_fallback.
-  - apply phase1_surface_nontrailing_repetition_resolver_none.
-    + exact Hpath.
-    + exact Hactual.
+  - exact
+      (phase1_surface_nontrailing_repetition_resolver_none
+        actual body input Hpath Hactual).
   - exact Hpath.
   - exact Hderive.
   - eapply choice_bodies_nonnullable_fuel_monotone.
@@ -254,9 +252,9 @@ Proof.
     (expression_follow_disjointb_sound body outer_follow Hdisjointb)
     as Hdisjoint.
   eapply predictive_bridge_repetition_stop_oracle_fallback.
-  - apply phase1_surface_nontrailing_repetition_resolver_none.
-    + exact Hpath.
-    + exact Hactual.
+  - exact
+      (phase1_surface_nontrailing_repetition_resolver_none
+        actual body input Hpath Hactual).
   - exact Hpath.
   - exact Hnonnullable.
   - exact Hdisjoint.
