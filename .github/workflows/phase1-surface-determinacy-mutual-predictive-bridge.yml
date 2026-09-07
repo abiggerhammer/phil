@@ -69,6 +69,7 @@ jobs:
           compile proof/Phil/Surface/GrammarDeterminacyQualifiedNameSoundness.v
           compile proof/Phil/Surface/GrammarDeterminacyRelationNeutralSoundness.v
           compile proof/Phil/Surface/GrammarDeterminacyRelationCommitmentSoundness.v
+          compile proof/Phil/Surface/GrammarDeterminacyAlternativeEarlierDisjoint.v
           compile proof/Phil/Surface/GrammarDeterminacyAlternativeResolverNoneSemantic.v
           compile proof/Phil/Surface/GrammarDeterminacyAlternativeResolverNoneConversion.v
           compile proof/Phil/Surface/GrammarDeterminacyActualCanonicalAlternativeNone.v
