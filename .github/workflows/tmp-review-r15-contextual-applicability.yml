@@ -193,6 +193,12 @@ jobs:
           set -euo pipefail
           git config user.name github-actions[bot]
           git config user.email 41898282+github-actions[bot]@users.noreply.github.com
+          # The staging token may write repository contents but GitHub forbids it
+          # from pushing workflow-file changes. Those are installed manually after
+          # the semantic/proof repair has been staged successfully.
+          git restore \
+            .github/workflows/phase1-provider-lineage-target-proofs.yml \
+            .github/workflows/phase1-provider-lineage-target-production-binding.yml
           git add \
             src/Phil/Core/ProviderQualificationIdentity.hs \
             src/Phil/Core/ProviderQualificationApplicability.hs \
@@ -205,8 +211,6 @@ jobs:
             app/ProviderLineageTargetDecisionCorrespondenceMain.hs \
             docs/phase-1/provider-admission-applicability-v1.md \
             docs/phase-1/provider-lineage-target-implementation-refinement-v1.md \
-            docs/phase-1/provider-lineage-target-production-binding-v1.md \
-            .github/workflows/phase1-provider-lineage-target-proofs.yml \
-            .github/workflows/phase1-provider-lineage-target-production-binding.yml
+            docs/phase-1/provider-lineage-target-production-binding-v1.md
           git commit -m 'review: bind applicability to contextual admission'
           git push origin HEAD:phase1-review-r15-contextual-applicability
