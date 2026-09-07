@@ -10,6 +10,18 @@ module Phil.Verification
   , VerificationObligationGraph (..)
   , VerificationGraphError (..)
   , buildVerificationObligationGraph
+  , RuntimeClosureProposal (..)
+  , RuntimeClosureRejection (..)
+  , RuntimeClosureRecord
+  , runtimeClosureGraphRevision
+  , runtimeClosureObligationRevision
+  , runtimeClosurePolicyRevision
+  , runtimeClosureRole
+  , runtimeClosureMechanism
+  , runtimeClosureResidue
+  , runtimeClosureCostRefs
+  , RuntimeClosureDecision (..)
+  , evaluateRuntimeClosure
   , verifySurfaceApplication
   ) where
 
@@ -21,11 +33,17 @@ import qualified Data.Set as Set
 import Data.Set (Set)
 import Data.Text (Text)
 import qualified Data.Text as Text
+import Phil.Assurance.EvidenceAuthorityKernelBridge
+  ( runtimeAuthorityKernelAccepts
+  )
 import Phil.Assurance.Types
   ( AcceptanceRule (..)
+  , AssuranceKind (RuntimeEnforced)
   , Digest
+  , EvidenceRole
   , ObligationRevision (..)
   , RevisionId (..)
+  , RuntimeMechanism (..)
   , digestText
   , revisionFromCoreObligation
   )
@@ -258,6 +276,145 @@ renderGraphIdentity nodes edges scope = Text.intercalate "\n"
   where
     renderEdge (fromRevision, toRevision) =
       unRevisionId fromRevision <> "->" <> unRevisionId toRevision
+
+-- | Exact runtime-enforcement candidate considered by VER-007.  A proposal is
+-- not itself a disposition: the obligation's acceptance rule, the competent
+-- runtime-evidence authority boundary, and the selected assurance policy must
+-- all independently admit it.
+data RuntimeClosureProposal = RuntimeClosureProposal
+  { runtimeClosureProposalRevision :: RevisionId
+  , runtimeClosureProposalRole :: EvidenceRole
+  , runtimeClosureProposalMechanism :: RuntimeMechanism
+  , runtimeClosureProposalResidue :: [Text]
+  , runtimeClosureProposalCostRefs :: [Text]
+  }
+  deriving (Eq, Show)
+
+-- | Policy/runtime closure failures are closure-stage results, never intrinsic
+-- program rejection.  In particular, a strict policy rejecting RuntimeBound
+-- leaves the exact source obligation open for another accepted closure path.
+data RuntimeClosureRejection
+  = RuntimeClosureUnknownRevision RevisionId
+  | RuntimeClosureOutsideCertificationScope RevisionId
+  | RuntimeClosureAcceptanceRuleRejected RevisionId EvidenceRole
+  | RuntimeClosureMechanismIncomplete RevisionId
+  | RuntimeClosureResidueMissing RevisionId
+  | RuntimeClosureCostReferenceMissing RevisionId
+  | RuntimeClosureUnknownCostReference RevisionId Text
+  | RuntimeClosureAuthorityRejected RevisionId
+  | RuntimeClosurePolicyRejected RevisionId AssurancePolicyRevision
+  deriving (Eq, Show)
+
+-- | Opaque admitted RuntimeBound record.  Source semantic identity remains the
+-- canonical graph/obligation revision; policy identity is retained separately
+-- as an explicit build/assurance input.
+data RuntimeClosureRecord = RuntimeClosureRecord
+  Digest
+  RevisionId
+  AssurancePolicyRevision
+  EvidenceRole
+  RuntimeMechanism
+  [Text]
+  [Text]
+  deriving (Eq, Show)
+
+runtimeClosureGraphRevision :: RuntimeClosureRecord -> Digest
+runtimeClosureGraphRevision (RuntimeClosureRecord graphRevision _ _ _ _ _ _) = graphRevision
+
+runtimeClosureObligationRevision :: RuntimeClosureRecord -> RevisionId
+runtimeClosureObligationRevision (RuntimeClosureRecord _ revision _ _ _ _ _) = revision
+
+runtimeClosurePolicyRevision :: RuntimeClosureRecord -> AssurancePolicyRevision
+runtimeClosurePolicyRevision (RuntimeClosureRecord _ _ policyRevision _ _ _ _) = policyRevision
+
+runtimeClosureRole :: RuntimeClosureRecord -> EvidenceRole
+runtimeClosureRole (RuntimeClosureRecord _ _ _ role _ _ _) = role
+
+runtimeClosureMechanism :: RuntimeClosureRecord -> RuntimeMechanism
+runtimeClosureMechanism (RuntimeClosureRecord _ _ _ _ mechanism _ _) = mechanism
+
+runtimeClosureResidue :: RuntimeClosureRecord -> [Text]
+runtimeClosureResidue (RuntimeClosureRecord _ _ _ _ _ residue _) = residue
+
+runtimeClosureCostRefs :: RuntimeClosureRecord -> [Text]
+runtimeClosureCostRefs (RuntimeClosureRecord _ _ _ _ _ _ costRefs) = costRefs
+
+data RuntimeClosureDecision
+  = RuntimeClosureAdmitted RuntimeClosureRecord
+  | RuntimeClosureNotAdmitted RuntimeClosureRejection
+  deriving (Eq, Show)
+
+-- | Evaluate one exact RuntimeBound candidate without changing source semantic
+-- identity.  The competent runtime-authority kernel is reused from ADR-010
+-- assurance verification.  Policy is consulted only after the semantic target,
+-- acceptance rule, mechanism, residue, and cost-reference facts are valid.
+evaluateRuntimeClosure
+  :: VerificationObligationGraph
+  -> ApplicationAssurancePolicy
+  -> Set Text
+  -> RuntimeClosureProposal
+  -> RuntimeClosureDecision
+evaluateRuntimeClosure graph policy knownCostRefs proposal =
+  case Map.lookup revision (verificationGraphNodes graph) of
+    Nothing -> reject (RuntimeClosureUnknownRevision revision)
+    Just target
+      | not (Set.member revision (verificationGraphCertificationScope graph)) ->
+          reject (RuntimeClosureOutsideCertificationScope revision)
+      | not (acceptanceAllowsRuntime role (revisionAcceptanceRule target)) ->
+          reject (RuntimeClosureAcceptanceRuleRejected revision role)
+      | not mechanismComplete ->
+          reject (RuntimeClosureMechanismIncomplete revision)
+      | null residue ->
+          reject (RuntimeClosureResidueMissing revision)
+      | null costRefs ->
+          reject (RuntimeClosureCostReferenceMissing revision)
+      | Just missing <- Set.lookupMin unknownCostRefs ->
+          reject (RuntimeClosureUnknownCostReference revision missing)
+      | not authorityAccepted ->
+          reject (RuntimeClosureAuthorityRejected revision)
+      | not (Set.member RuntimeBound permittedDispositions) ->
+          reject (RuntimeClosurePolicyRejected revision policyRevision)
+      | otherwise -> RuntimeClosureAdmitted
+          (RuntimeClosureRecord
+            (verificationGraphRevision graph)
+            revision
+            policyRevision
+            role
+            mechanism
+            residue
+            canonicalCostRefs)
+  where
+    revision = runtimeClosureProposalRevision proposal
+    role = runtimeClosureProposalRole proposal
+    mechanism = runtimeClosureProposalMechanism proposal
+    residue = runtimeClosureProposalResidue proposal
+    costRefs = runtimeClosureProposalCostRefs proposal
+    canonicalCostRefs = Set.toAscList (Set.fromList costRefs)
+    unknownCostRefs = Set.fromList costRefs `Set.difference` knownCostRefs
+    policyRevision = applicationAssurancePolicyRevision policy
+    permittedDispositions = applicationAssurancePolicyPermittedDispositions policy
+    mechanismComplete = runtimeMechanismComplete mechanism
+    authorityAccepted = runtimeAuthorityKernelAccepts
+      True
+      mechanismComplete
+      (not (null residue))
+      (not (null costRefs))
+      (Set.null unknownCostRefs)
+    reject = RuntimeClosureNotAdmitted
+
+acceptanceAllowsRuntime :: EvidenceRole -> AcceptanceRule -> Bool
+acceptanceAllowsRuntime role rule = case rule of
+  AcceptEntry kind expectedRole -> kind == RuntimeEnforced && expectedRole == role
+  AcceptAll rules -> not (null rules) && all (acceptanceAllowsRuntime role) rules
+  AcceptAny rules -> any (acceptanceAllowsRuntime role) rules
+
+runtimeMechanismComplete :: RuntimeMechanism -> Bool
+runtimeMechanismComplete mechanism = all (not . Text.null . Text.strip)
+  [ runtimeMechanismName mechanism
+  , runtimeExecutionPoint mechanism
+  , runtimeSuccessEvidenceType mechanism
+  , runtimeFailureContract mechanism
+  ]
 
 -- | Run competent intrinsic checking before assurance disposition.  In
 -- particular, even a policy that permits every Phase-1 disposition cannot turn
