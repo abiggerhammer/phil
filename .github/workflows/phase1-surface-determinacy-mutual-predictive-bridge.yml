@@ -63,6 +63,12 @@ jobs:
           compile proof/Phil/Surface/GrammarDeterminacyPathSuffixReflection.v
           compile proof/Phil/Surface/GrammarDeterminacyAlternativeResolverContext.v
           compile proof/Phil/Surface/GrammarDeterminacyAlternativeTrailingCommaExclusion.v
+          compile proof/Phil/Surface/GrammarDeterminacySimpleResolverSoundness.v
+          compile proof/Phil/Surface/GrammarDeterminacyStructuralScannerSoundness.v
+          compile proof/Phil/Surface/GrammarDeterminacyDelimiterBalance.v
+          compile proof/Phil/Surface/GrammarDeterminacyQualifiedNameSoundness.v
+          compile proof/Phil/Surface/GrammarDeterminacyRelationNeutralSoundness.v
+          compile proof/Phil/Surface/GrammarDeterminacyRelationCommitmentSoundness.v
           compile proof/Phil/Surface/GrammarDeterminacyAlternativeResolverNoneSemantic.v
           compile proof/Phil/Surface/GrammarDeterminacyAlternativeResolverNoneConversion.v
           compile proof/Phil/Surface/GrammarDeterminacyActualCanonicalAlternativeNone.v
@@ -78,7 +84,6 @@ jobs:
           compile proof/Phil/Surface/GrammarDeterminacySequenceHeadTrailingContext.v
           compile proof/Phil/Surface/GrammarDeterminacyTrailingCommaConversion.v
           compile proof/Phil/Surface/GrammarDeterminacyTrailingCommaStop.v
-          compile proof/Phil/Surface/GrammarDeterminacySimpleResolverSoundness.v
           compile proof/Phil/Surface/GrammarDeterminacyTrailingCommaOracleLift.v
           compile proof/Phil/Surface/GrammarDeterminacyChoiceSiteResolverExclusion.v
           compile proof/Phil/Surface/GrammarDeterminacyStructuralChoiceConversion.v
