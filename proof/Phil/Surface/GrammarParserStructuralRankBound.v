@@ -151,7 +151,7 @@ Proof.
     destruct (nullable_expression phase1_surface_nullable_facts item) eqn:Hnullable.
     + destruct (parser_sequence_goal_rank_fuel fuel facts rest)
         as [tail_rank |] eqn:Htail; try discriminate.
-      pose proof (IH tail_rank Htail) as Htail_bound.
+      pose proof (IH tail_rank eq_refl) as Htail_bound.
       inversion Hrank; subst rank.
       assert
         (Hmax :
@@ -191,7 +191,7 @@ Proof.
     destruct (parser_alternative_goal_rank_fuel fuel facts rest)
       as [tail_rank |] eqn:Htail; try discriminate.
     pose proof (Hexpr item head_rank Hhead) as Hhead_bound.
-    pose proof (IH tail_rank Htail) as Htail_bound.
+    pose proof (IH tail_rank eq_refl) as Htail_bound.
     inversion Hrank; subst rank.
     assert
       (Hmax :
