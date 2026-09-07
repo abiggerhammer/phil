@@ -79,7 +79,7 @@ Lemma phase1_surface_sequence_choice_safe_for_continuation :
 Proof.
   intros items Hsafe.
   unfold expression_fuel in Hsafe.
-  simpl in Hsafe.
+  rewrite continuation_choice_bodies_nonnullable_sequence_step in Hsafe.
   exact Hsafe.
 Qed.
 
