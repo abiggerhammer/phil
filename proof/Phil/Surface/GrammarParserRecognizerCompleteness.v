@@ -30,20 +30,21 @@ Theorem oracle_parse_fuel_eventually_complete :
           oracle rules goal input = Some (rest, result).
 Proof.
   intros oracle rules goal input rest result Hderive.
-  fix IH 7.
-  destruct Hderive as
+  induction Hderive as
     [ path literal tail
     | path class lexeme tail
-    | path name body input rest tree Hlookup Hbody
-    | path items input rest trees Hitems
-    | path items index item input rest tree Hdecision Hnth Hitem
+    | path name body input rest tree Hlookup Hbody IHbody
+    | path items input rest trees Hitems IHitems
+    | path items index item input rest tree Hdecision Hnth Hitem IHitem
     | path body input Hdecision
-    | path body input rest tree Hdecision Hbody
-    | path body input rest trees Hrepeat
+    | path body input rest tree Hdecision Hbody IHbody
+    | path body input rest trees Hrepeat IHrepeat
     | path index input
-    | path index item items input middle rest tree trees Hhead Htail
+    | path index item items input middle rest tree trees
+        Hhead IHhead Htail IHtail
     | path body input Hdecision
-    | path body input middle rest tree trees Hdecision Hbody Hprogress Htail
+    | path body input middle rest tree trees
+        Hdecision Hbody IHbody Hprogress Htail IHtail
     ].
   - exists 1.
     intros extra.
@@ -55,20 +56,20 @@ Proof.
     simpl.
     rewrite String.eqb_refl.
     reflexivity.
-  - destruct (IH _ _ _ _ _ _ Hbody) as [required Hcomplete].
+  - destruct IHbody as [required Hcomplete].
     exists (S required).
     intros extra.
     simpl.
     rewrite Hlookup.
     rewrite (Hcomplete extra).
     reflexivity.
-  - destruct (IH _ _ _ _ _ _ Hitems) as [required Hcomplete].
+  - destruct IHitems as [required Hcomplete].
     exists (S required).
     intros extra.
     simpl.
     rewrite (Hcomplete extra).
     reflexivity.
-  - destruct (IH _ _ _ _ _ _ Hitem) as [required Hcomplete].
+  - destruct IHitem as [required Hcomplete].
     exists (S required).
     intros extra.
     simpl.
@@ -81,14 +82,14 @@ Proof.
     simpl.
     rewrite Hdecision.
     reflexivity.
-  - destruct (IH _ _ _ _ _ _ Hbody) as [required Hcomplete].
+  - destruct IHbody as [required Hcomplete].
     exists (S required).
     intros extra.
     simpl.
     rewrite Hdecision.
     rewrite (Hcomplete extra).
     reflexivity.
-  - destruct (IH _ _ _ _ _ _ Hrepeat) as [required Hcomplete].
+  - destruct IHrepeat as [required Hcomplete].
     exists (S required).
     intros extra.
     simpl.
@@ -98,8 +99,8 @@ Proof.
     intros extra.
     simpl.
     reflexivity.
-  - destruct (IH _ _ _ _ _ _ Hhead) as [head_required Hhead_complete].
-    destruct (IH _ _ _ _ _ _ Htail) as [tail_required Htail_complete].
+  - destruct IHhead as [head_required Hhead_complete].
+    destruct IHtail as [tail_required Htail_complete].
     exists (S (head_required + tail_required)).
     intros extra.
     simpl.
@@ -115,8 +116,8 @@ Proof.
     simpl.
     rewrite Hdecision.
     reflexivity.
-  - destruct (IH _ _ _ _ _ _ Hbody) as [body_required Hbody_complete].
-    destruct (IH _ _ _ _ _ _ Htail) as [tail_required Htail_complete].
+  - destruct IHbody as [body_required Hbody_complete].
+    destruct IHtail as [tail_required Htail_complete].
     exists (S (body_required + tail_required)).
     intros extra.
     simpl.
