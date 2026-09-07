@@ -75,6 +75,11 @@ jobs:
           compile proof/Phil/Surface/GrammarDeterminacyRelationCommitmentSoundness.v
           compile proof/Phil/Surface/GrammarDeterminacyAlternativeEarlierDisjoint.v
           compile proof/Phil/Surface/GrammarDeterminacyAlternativeResolverSemanticCore.v
+          compile proof/Phil/Surface/GrammarDeterminacyStaticArgumentParenthesisSoundness.v
+          compile proof/Phil/Surface/GrammarDeterminacyRefinementBraceSoundness.v
+          compile proof/Phil/Surface/GrammarDeterminacyStaticArgumentBraceBridge.v
+          compile proof/Phil/Surface/GrammarDeterminacyEffectSetBraceSoundness.v
+          compile proof/Phil/Surface/GrammarDeterminacyAlternativeResolverSemanticComplex.v
           compile proof/Phil/Surface/GrammarDeterminacyAlternativeResolverNoneSemantic.v
           compile proof/Phil/Surface/GrammarDeterminacyAlternativeResolverNoneConversion.v
           compile proof/Phil/Surface/GrammarDeterminacyActualCanonicalAlternativeNone.v
