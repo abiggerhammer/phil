@@ -3,11 +3,15 @@
 module Phil.Verification.ProofEvidence
   ( ProofProposal (..)
   , ProofEvidenceError (..)
+  , decisionCertificateEvidenceFormat
   , CheckedProofEvidence
   , checkedProofGraphRevision
   , checkedProofObligationRevision
   , checkedProofProducer
   , checkedProofChecker
+  , checkedProofEvidenceFormat
+  , checkedProofSubjectIds
+  , checkedProofContextIds
   , checkedProofCertificate
   , checkedProofProposition
   , checkedProofState
@@ -24,6 +28,7 @@ module Phil.Verification.ProofEvidence
   , runProofProducerAttempt
   ) where
 
+import Data.List (sort)
 import qualified Data.Map.Strict as Map
 import qualified Data.Set as Set
 import Data.Text (Text)
@@ -47,11 +52,23 @@ import Phil.Verification
   ( VerificationObligationGraph (..)
   )
 
+-- | Canonical application-verification evidence format accepted by this
+-- competent checker boundary.  Other proof formats may exist, but they require
+-- their own declared competent checker rather than being silently retargeted to
+-- this one.
+decisionCertificateEvidenceFormat :: Text
+decisionCertificateEvidenceFormat = "phil-core/decision-certificate-v1"
+
 -- | Replaceable producers may construct these freely. A proposal is not
--- evidence and carries no checker authority.
+-- evidence and carries no checker authority.  VER-005 makes the competence
+-- metadata explicit: accepted evidence must name the exact supported format,
+-- semantic subjects, contexts, and obligation revision it claims to justify.
 data ProofProposal = ProofProposal
   { proofProposalProducer :: Text
   , proofProposalObligationRevision :: RevisionId
+  , proofProposalEvidenceFormat :: Text
+  , proofProposalSubjectIds :: [Text]
+  , proofProposalContextIds :: [Text]
   , proofProposalProposition :: Proposition
   , proofProposalCertificate :: DecisionCertificate
   }
@@ -61,6 +78,10 @@ data ProofEvidenceError
   = EmptyProofProducerId
   | UnknownProofObligationRevision RevisionId
   | ProofRevisionOutsideCertificationScope RevisionId
+  | MalformedProofEvidence Text
+  | UnsupportedProofEvidenceFormat Text
+  | ProofEvidenceSubjectMismatch RevisionId [Text] [Text]
+  | ProofEvidenceContextMismatch RevisionId [Text] [Text]
   | ProofPropositionRevisionMismatch RevisionId Text Text
   | ProofCertificateRejected RevisionId CertificateError
   deriving (Eq, Show)
@@ -74,6 +95,9 @@ data CheckedProofEvidence = CheckedProofEvidence
   RevisionId
   Text
   Text
+  Text
+  [Text]
+  [Text]
   DecisionCertificate
   Proposition
   CheckState
@@ -81,34 +105,43 @@ data CheckedProofEvidence = CheckedProofEvidence
   deriving (Eq, Show)
 
 checkedProofGraphRevision :: CheckedProofEvidence -> Digest
-checkedProofGraphRevision (CheckedProofEvidence graphRevision _ _ _ _ _ _ _) = graphRevision
+checkedProofGraphRevision (CheckedProofEvidence graphRevision _ _ _ _ _ _ _ _ _ _) = graphRevision
 
 checkedProofObligationRevision :: CheckedProofEvidence -> RevisionId
-checkedProofObligationRevision (CheckedProofEvidence _ revision _ _ _ _ _ _) = revision
+checkedProofObligationRevision (CheckedProofEvidence _ revision _ _ _ _ _ _ _ _ _) = revision
 
 checkedProofProducer :: CheckedProofEvidence -> Text
-checkedProofProducer (CheckedProofEvidence _ _ producer _ _ _ _ _) = producer
+checkedProofProducer (CheckedProofEvidence _ _ producer _ _ _ _ _ _ _ _) = producer
 
 checkedProofChecker :: CheckedProofEvidence -> Text
-checkedProofChecker (CheckedProofEvidence _ _ _ checker _ _ _ _) = checker
+checkedProofChecker (CheckedProofEvidence _ _ _ checker _ _ _ _ _ _ _) = checker
+
+checkedProofEvidenceFormat :: CheckedProofEvidence -> Text
+checkedProofEvidenceFormat (CheckedProofEvidence _ _ _ _ evidenceFormat _ _ _ _ _ _) = evidenceFormat
+
+checkedProofSubjectIds :: CheckedProofEvidence -> [Text]
+checkedProofSubjectIds (CheckedProofEvidence _ _ _ _ _ subjects _ _ _ _ _) = subjects
+
+checkedProofContextIds :: CheckedProofEvidence -> [Text]
+checkedProofContextIds (CheckedProofEvidence _ _ _ _ _ _ contexts _ _ _ _) = contexts
 
 checkedProofCertificate :: CheckedProofEvidence -> DecisionCertificate
-checkedProofCertificate (CheckedProofEvidence _ _ _ _ certificate _ _ _) = certificate
+checkedProofCertificate (CheckedProofEvidence _ _ _ _ _ _ _ certificate _ _ _) = certificate
 
 checkedProofProposition :: CheckedProofEvidence -> Proposition
-checkedProofProposition (CheckedProofEvidence _ _ _ _ _ proposition _ _) = proposition
+checkedProofProposition (CheckedProofEvidence _ _ _ _ _ _ _ _ proposition _ _) = proposition
 
 checkedProofState :: CheckedProofEvidence -> CheckState
-checkedProofState (CheckedProofEvidence _ _ _ _ _ _ state _) = state
+checkedProofState (CheckedProofEvidence _ _ _ _ _ _ _ _ _ state _) = state
 
 checkedProofAssumptions :: CheckedProofEvidence -> [SolverAssumption]
-checkedProofAssumptions (CheckedProofEvidence _ _ _ _ _ _ _ assumptions) = assumptions
+checkedProofAssumptions (CheckedProofEvidence _ _ _ _ _ _ _ _ _ _ assumptions) = assumptions
 
 -- | Accept a producer proposal only after binding it to an exact canonical
--- obligation-graph revision and running the declared competent Phil Core
--- certificate checker over the exact proposition/checker state/assumptions.
--- Producer success is therefore only a search result; it cannot manufacture
--- 'CheckedProofEvidence'.
+-- obligation-graph revision, exact evidence competence metadata, and the
+-- declared competent Phil Core certificate checker over the exact
+-- proposition/checker state/assumptions.  Equal proposition text or runtime
+-- representation is never enough to retarget stale/wrong-subject evidence.
 checkProofProposal
   :: VerificationObligationGraph
   -> CheckState
@@ -116,9 +149,28 @@ checkProofProposal
   -> ProofProposal
   -> Either ProofEvidenceError CheckedProofEvidence
 checkProofProposal graph state rawAssumptions proposal
-  | Text.null (proofProposalProducer proposal) = Left EmptyProofProducerId
+  | Text.null (Text.strip (proofProposalProducer proposal)) = Left EmptyProofProducerId
   | otherwise = do
       target <- requireProofTarget graph targetRevision
+      evidenceFormat <- validateEvidenceFormat (proofProposalEvidenceFormat proposal)
+      subjects <- canonicalEvidenceIds "subject" (proofProposalSubjectIds proposal)
+      contexts <- canonicalEvidenceIds "context" (proofProposalContextIds proposal)
+      let expectedSubjects = sort (revisionSubjectIds target)
+          expectedContexts = sort (revisionContextIds target)
+      if subjects == expectedSubjects
+        then Right ()
+        else Left
+          (ProofEvidenceSubjectMismatch
+            targetRevision
+            expectedSubjects
+            subjects)
+      if contexts == expectedContexts
+        then Right ()
+        else Left
+          (ProofEvidenceContextMismatch
+            targetRevision
+            expectedContexts
+            contexts)
       let proposition = proofProposalProposition proposal
           expectedStatement = revisionStatement target
           actualStatement = renderPropositionCanonical proposition
@@ -142,12 +194,30 @@ checkProofProposal graph state rawAssumptions proposal
             targetRevision
             (proofProposalProducer proposal)
             certificateCheckerId
+            evidenceFormat
+            subjects
+            contexts
             (proofProposalCertificate proposal)
             proposition
             state
             assumptions)
   where
     targetRevision = proofProposalObligationRevision proposal
+
+validateEvidenceFormat :: Text -> Either ProofEvidenceError Text
+validateEvidenceFormat evidenceFormat
+  | Text.null normalized = Left (MalformedProofEvidence "empty evidence format")
+  | normalized /= decisionCertificateEvidenceFormat =
+      Left (UnsupportedProofEvidenceFormat normalized)
+  | otherwise = Right normalized
+  where
+    normalized = Text.strip evidenceFormat
+
+canonicalEvidenceIds :: Text -> [Text] -> Either ProofEvidenceError [Text]
+canonicalEvidenceIds label values
+  | any (Text.null . Text.strip) values =
+      Left (MalformedProofEvidence ("empty " <> label <> " id"))
+  | otherwise = Right (sort values)
 
 -- | Search/prover outcomes that carry no semantic conclusion.  In particular,
 -- timeout, unknown, tool failure, and refusal are not refutations.  A proposed
@@ -238,7 +308,7 @@ runProofProducerAttempt graph state assumptions attempt =
 
 validateProducerId :: Text -> Either ProofEvidenceError ()
 validateProducerId producer
-  | Text.null producer = Left EmptyProofProducerId
+  | Text.null (Text.strip producer) = Left EmptyProofProducerId
   | otherwise = Right ()
 
 requireProofTarget
