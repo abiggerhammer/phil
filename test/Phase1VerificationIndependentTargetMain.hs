@@ -14,6 +14,7 @@ import Phil.Assurance
   , EvidenceEntryId (..)
   , EvidenceResult (..)
   , EvidenceRole (..)
+  , ObligationRevision (..)
   , RevisionId (..)
   , ValidityScope (..)
   , deriveEvidenceEntryDigest
@@ -44,7 +45,6 @@ import Phil.Verification
   ( ApplicationAssurancePolicy (..)
   , AssurancePolicyRevision (..)
   , VerificationDisposition (..)
-  , VerificationGraphError
   , VerificationObligationGraph (..)
   , VerificationObligationInput (..)
   , buildVerificationObligationGraph
@@ -156,9 +156,7 @@ main = do
     report (label, True) = putStrLn ("PASS: VER-012 " ++ label)
     report (label, False) = putStrLn ("FAIL: VER-012 " ++ label)
 
-graphOrFail
-  :: [VerificationObligationInput]
-  -> IO VerificationObligationGraph
+graphOrFail :: [VerificationObligationInput] -> IO VerificationObligationGraph
 graphOrFail inputs =
   case buildVerificationObligationGraph inputs (Set.singleton rootId) of
     Left errorValue -> failCase ("could not build graph: " ++ show errorValue)
@@ -243,12 +241,14 @@ declarationMain :: DeclarationIdentity
 declarationMain = deriveDeclarationIdentity baseDeclaration
 
 declarationPresentationVariant :: DeclarationIdentity
-declarationPresentationVariant = deriveDeclarationIdentity baseDeclaration
-  { declarationPresentation = DeclarationPresentation "renamed" ["Elsewhere", "Module"] }
+declarationPresentationVariant = deriveDeclarationIdentity
+  (baseDeclaration
+    { declarationPresentation =
+        DeclarationPresentation "renamed" ["Elsewhere", "Module"] })
 
 declarationChanged :: DeclarationIdentity
-declarationChanged = deriveDeclarationIdentity baseDeclaration
-  { declarationDefinitionSemantics = SemanticAtom "definition-v2" }
+declarationChanged = deriveDeclarationIdentity
+  (baseDeclaration { declarationDefinitionSemantics = SemanticAtom "definition-v2" })
 
 declarationAux :: DeclarationIdentity
 declarationAux = deriveDeclarationIdentity DeclarationDescriptor
@@ -305,10 +305,20 @@ realizationFor instanceIdentity target = deriveArchitectureRealizationIdentity
     }
 
 evidenceRoot :: EvidenceEntry
-evidenceRoot = mkEvidence "root" rootRevisionId "producer.ver012.root"
+evidenceRoot = mkEvidence
+  "root"
+  rootRevisionId
+  CertificateChecked
+  (EvidenceRole "static-proof")
+  "producer.ver012.root"
 
 evidenceDep :: EvidenceEntry
-evidenceDep = mkEvidence "dep" depRevisionId "producer.ver012.dep"
+evidenceDep = mkEvidence
+  "dep"
+  depRevisionId
+  KernelChecked
+  (EvidenceRole "semantic")
+  "producer.ver012.dep"
 
 rootRevisionId :: RevisionId
 rootRevisionId = revisionFor rootId
@@ -328,16 +338,22 @@ revisionFor targetId =
       [revision] -> revision
       _ -> error "VER-012 fixture could not resolve obligation revision"
 
-mkEvidence :: Text -> RevisionId -> Text -> EvidenceEntry
-mkEvidence suffix revision producer = provisional
+mkEvidence
+  :: Text
+  -> RevisionId
+  -> AssuranceKind
+  -> EvidenceRole
+  -> Text
+  -> EvidenceEntry
+mkEvidence suffix revision kind role producer = provisional
   { evidenceEntryDigest = deriveEvidenceEntryDigest provisional }
   where
     provisional = EvidenceEntry
       { evidenceEntryId = EvidenceEntryId ("evidence.ver012." <> suffix)
       , evidenceEntryDigest = Digest ""
       , evidenceObligationRevision = revision
-      , evidenceAssuranceKind = CertificateChecked
-      , evidenceRole = EvidenceRole "static-proof"
+      , evidenceAssuranceKind = kind
+      , evidenceRole = role
       , evidenceProducer = producer
       , evidenceChecker = "checker.ver012.competent"
       , evidenceArtifact = Nothing
@@ -390,7 +406,12 @@ testStaleEvidenceDigest graph =
 
 testUnknownEvidenceTarget :: VerificationObligationGraph -> Bool
 testUnknownEvidenceTarget graph =
-  let unknown = (mkEvidence "unknown" (RevisionId "rev.ver012.unknown") "producer.ver012.unknown")
+  let unknown = mkEvidence
+        "unknown"
+        (RevisionId "rev.ver012.unknown")
+        CertificateChecked
+        (EvidenceRole "static-proof")
+        "producer.ver012.unknown"
   in case buildVerificationBundle
       sourceRevision
       [declarationMain]
