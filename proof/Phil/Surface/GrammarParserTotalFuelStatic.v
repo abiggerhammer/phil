@@ -6,6 +6,7 @@ From Phil.Surface Require Import
   GrammarDerivationOracle
   GrammarDeterminacyNullableFirst
   GrammarDeterminacyPredictiveOracle
+  GrammarDeterminacyWitnessSoundness
   GrammarDeterminacyContinuationSoundness
   GrammarParserGoalRank
   GrammarParserGlobalGoalRank.
@@ -416,41 +417,14 @@ Proof.
   exact Hlocal.
 Qed.
 
-Lemma lookup_rule_pair_in :
-  forall rules name body,
-    lookupRule name rules = Some body ->
-    In (name, body) rules.
-Proof.
-  intros rules.
-  induction rules as [| [candidate expression] rest IH];
-    intros name body Hlookup; simpl in Hlookup.
-  - discriminate.
-  - destruct (String.eqb name candidate) eqn:Hname.
-    + apply String.eqb_eq in Hname. subst candidate.
-      inversion Hlookup. subst body.
-      left. reflexivity.
-    + right.
-      eapply IH. exact Hlookup.
-Qed.
-
 Lemma phase1_surface_lookup_rule_choice_safe :
   forall name body,
     lookupRule name phase1_surface_rules = Some body ->
     choice_bodies_nonnullable_fuel expression_fuel body = true.
 Proof.
   intros name body Hlookup.
-  pose proof phase1_surface_all_choice_bodies_are_nonnullable as Hall.
-  destruct
-    (forallb_forall
-      choice_bodies_nonnullable_rule
-      phase1_surface_rules)
-    as [Hall_to _].
-  pose proof (Hall_to Hall) as Hall_safe.
-  specialize
-    (Hall_safe (name, body)
-      (lookup_rule_pair_in phase1_surface_rules name body Hlookup)).
-  unfold choice_bodies_nonnullable_rule in Hall_safe.
-  exact Hall_safe.
+  eapply phase1_surface_rule_body_choice_safe.
+  exact Hlookup.
 Qed.
 
 Lemma phase1_surface_root_goal_choice_safe :
