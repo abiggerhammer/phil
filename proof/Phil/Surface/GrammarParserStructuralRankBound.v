@@ -325,10 +325,13 @@ Lemma lookup_rule_weight_le_max :
       parser_rule_weight_max rules.
 Proof.
   intros rules.
-  induction rules as [| [candidate expression] rest IH];
-    intros name body Hlookup; simpl in *.
-  - discriminate.
-  - destruct (String.eqb name candidate) eqn:Hname.
+  induction rules as [| [candidate expression] rest IH].
+  - intros name body Hlookup.
+    cbn [lookupRule parser_rule_weight_max] in Hlookup |- *.
+    discriminate Hlookup.
+  - intros name body Hlookup.
+    cbn [lookupRule parser_rule_weight_max] in Hlookup |- *.
+    destruct (String.eqb name candidate) eqn:Hname.
     + inversion Hlookup; subst body.
       apply Nat.le_max_l.
     + eapply Nat.le_trans.
