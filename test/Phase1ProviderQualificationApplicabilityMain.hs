@@ -161,6 +161,8 @@ admitted = CheckedProviderQualificationAdmissionIdentity
   { checkedQualificationAdmissionClaimRevision = claimRevision
   , checkedQualificationAdmissionEvidenceRevision = QualificationEvidenceRevision "evidence:v1"
   , checkedQualificationAdmissionRevision = admissionRevision
+  , checkedQualificationAdmissionProviderOccurrence = "provider.requirement.blob"
+  , checkedQualificationAdmissionRealizationContextRevision = "architecture.realization:v1"
   , checkedQualificationAdmissionDecision = QualificationAdmitted
   }
 rejected = admitted

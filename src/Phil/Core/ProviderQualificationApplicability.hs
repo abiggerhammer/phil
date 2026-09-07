@@ -30,7 +30,9 @@ import Phil.Core.Static
   )
 import ProviderQualificationLineageTargetKernel
   ( AdmissionApplicabilityDecision (..)
+  , AdmissionContextDecision (..)
   , decideAdmissionApplicabilityByFacts
+  , decideAdmissionContextByFacts
   )
 
 newtype ProviderRequirementOccurrenceKey = ProviderRequirementOccurrenceKey
@@ -101,6 +103,8 @@ data ProviderAdmissionApplicabilityError
       ProviderRequirementOccurrenceKey ProviderRequirementOccurrenceKey
   | ProviderApplicabilityInstanceRevisionMismatch InstanceRevision InstanceRevision
   | ProviderApplicabilityRealizationRevisionMismatch RealizationRevision RealizationRevision
+  | ProviderApplicabilityAdmissionOccurrenceMismatch Text Text
+  | ProviderApplicabilityAdmissionRealizationContextMismatch Text Text
   | ProviderApplicabilitySelectionAdmissionMismatch
       QualificationAdmissionRevision QualificationAdmissionRevision
   | ProviderApplicabilitySelectionTargetEvidenceMismatch
@@ -116,17 +120,25 @@ checkProviderAdmissionApplicability
 checkProviderAdmissionApplicability admission targetEvidence applicability selected =
   case decision of
     AdmissionApplicabilityAcceptedDecision ->
-      Right CheckedProviderAdmissionApplicability
-        { checkedProviderApplicabilityAdmissionRevision = expectedAdmission
-        , checkedProviderApplicabilityClaimRevision = expectedClaim
-        , checkedProviderApplicabilityTargetEvidenceRevision = expectedTargetEvidence
-        , checkedProviderApplicabilityRequirementOccurrence =
-            providerApplicabilityRequirementOccurrence applicability
-        , checkedProviderApplicabilityInstanceRevision =
-            providerApplicabilityInstanceRevision applicability
-        , checkedProviderApplicabilityRealizationRevision =
-            providerApplicabilityRealizationRevision applicability
-        }
+      case contextDecision of
+        AdmissionContextAcceptedDecision ->
+          Right CheckedProviderAdmissionApplicability
+            { checkedProviderApplicabilityAdmissionRevision = expectedAdmission
+            , checkedProviderApplicabilityClaimRevision = expectedClaim
+            , checkedProviderApplicabilityTargetEvidenceRevision = expectedTargetEvidence
+            , checkedProviderApplicabilityRequirementOccurrence =
+                providerApplicabilityRequirementOccurrence applicability
+            , checkedProviderApplicabilityInstanceRevision =
+                providerApplicabilityInstanceRevision applicability
+            , checkedProviderApplicabilityRealizationRevision =
+                providerApplicabilityRealizationRevision applicability
+            }
+        AdmissionContextOccurrenceDecision ->
+          Left (ProviderApplicabilityAdmissionOccurrenceMismatch
+            expectedAdmissionOccurrence actualApplicabilityOccurrence)
+        AdmissionContextRealizationDecision ->
+          Left (ProviderApplicabilityAdmissionRealizationContextMismatch
+            expectedAdmissionRealization actualApplicabilityRealization)
     AdmissionApplicabilityRejectedDecision ->
       Left ProviderApplicabilityAdmissionRejected
     AdmissionApplicabilityAdmissionRevisionDecision ->
@@ -205,6 +217,16 @@ checkProviderAdmissionApplicability admission targetEvidence applicability selec
     expectedAdmission = checkedQualificationAdmissionRevision admission
     expectedClaim = checkedQualificationAdmissionClaimRevision admission
     expectedTargetEvidence = deriveTargetRealizationEvidenceRevision targetEvidence
+    expectedAdmissionOccurrence = checkedQualificationAdmissionProviderOccurrence admission
+    expectedAdmissionRealization =
+      checkedQualificationAdmissionRealizationContextRevision admission
+    actualApplicabilityOccurrence = unProviderRequirementOccurrenceKey
+      (providerApplicabilityRequirementOccurrence applicability)
+    actualApplicabilityRealization = case providerApplicabilityRealizationRevision applicability of
+      RealizationRevision value -> value
+    contextDecision = decideAdmissionContextByFacts
+      (actualApplicabilityOccurrence == expectedAdmissionOccurrence)
+      (actualApplicabilityRealization == expectedAdmissionRealization)
     admitted = case checkedQualificationAdmissionDecision admission of
       QualificationAdmitted -> True
       QualificationRejected _ -> False

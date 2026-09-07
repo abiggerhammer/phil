@@ -7,4 +7,5 @@ Extract Inductive bool => "Prelude.Bool" [ "Prelude.True" "Prelude.False" ].
 
 Extraction "ProviderQualificationLineageTargetKernel.hs"
   decideTargetReuseByFacts
-  decideAdmissionApplicabilityByFacts.
+  decideAdmissionApplicabilityByFacts
+  decideAdmissionContextByFacts.
