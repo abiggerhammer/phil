@@ -11,6 +11,7 @@ module Phil.Surface.GrammarV1.Lexer
   , pattern GrammarChar
   , GrammarV1LexDiagnostic (..)
   , grammarV1ReservedWords
+  , runtimeBytesLengthMarker
   , lexGrammarV1
   ) where
 
@@ -95,6 +96,13 @@ pattern GrammarChar value <- (charTokenValue -> Just value)
 
 charTokenPrefix :: Text
 charTokenPrefix = "\NULphil-char:"
+
+-- | Source-unspellable marker inserted only when the source writes bare Bytes.
+-- The stable parser continues to consume its existing Bytes[expression] carrier;
+-- elaboration interprets this marker as “exact length not tracked”, never as an
+-- integer literal, existential witness, or host-buffer size.
+runtimeBytesLengthMarker :: Text
+runtimeBytesLengthMarker = "\NULphil-bytes-runtime-length"
 
 sIntTokenValue :: GrammarV1Token -> Maybe Text
 sIntTokenValue token = case token of
@@ -298,8 +306,36 @@ grammarV1ReservedWords = Set.fromList
 lexGrammarV1 :: Text -> Text -> Either GrammarV1LexDiagnostic [Located GrammarV1Token]
 lexGrammarV1 source input =
   case MP.runParser (spaceConsumer *> MP.many pLocatedToken <* MP.eof) (Text.unpack source) input of
-    Right tokens -> Right tokens
+    Right tokens -> Right (expandRuntimeBytes tokens)
     Left bundle -> Left (diagnosticFromBundle bundle)
+
+-- | Normalize omitted Bytes length syntax before the stable structural parser.
+-- Explicit Bytes[...] is byte-for-byte token preserving. For bare Bytes we add
+-- an unspellable synthetic integer carrier so no source expression can collide
+-- with the “index not tracked” case.
+expandRuntimeBytes :: [Located GrammarV1Token] -> [Located GrammarV1Token]
+expandRuntimeBytes [] = []
+expandRuntimeBytes (token : rest)
+  | locatedValue token == GrammarKeyword "Bytes"
+  , not (startsExplicitBytesIndex rest) =
+      token : syntheticIndexTokens token ++ expandRuntimeBytes rest
+  | otherwise = token : expandRuntimeBytes rest
+  where
+    startsExplicitBytesIndex candidates = case candidates of
+      Located _ (GrammarSymbol "[") : _ -> True
+      _ -> False
+
+syntheticIndexTokens :: Located GrammarV1Token -> [Located GrammarV1Token]
+syntheticIndexTokens sourceToken =
+  [ synthetic (GrammarSymbol "[")
+  , synthetic (GrammarDecimalInteger runtimeBytesLengthMarker)
+  , synthetic (GrammarSymbol "]")
+  ]
+  where
+    sourceSpan = locatedSpan sourceToken
+    point = sourceSpanEnd sourceSpan
+    spanAtEnd = SourceSpan point point
+    synthetic = Located spanAtEnd
 
 spaceConsumer :: Parser ()
 spaceConsumer = Lexer.space MPC.space1 (Lexer.skipLineComment "//") empty

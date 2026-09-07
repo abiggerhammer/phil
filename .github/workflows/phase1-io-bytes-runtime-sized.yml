@@ -1,0 +1,65 @@
+name: Phase 1 IO-BYTES Runtime-sized Bytes
+
+on:
+  pull_request:
+    paths:
+      - 'src/Phil/Core/Syntax.hs'
+      - 'src/Phil/Core/Value.hs'
+      - 'src/Phil/Surface/GrammarV1/Lexer.hs'
+      - 'src/Phil/Surface/GrammarV1/Elaborate.hs'
+      - 'src/Phil/Surface/GrammarV1/IntrinsicType.hs'
+      - 'src/Phil/Surface/GrammarV1/BoundBytesType.hs'
+      - 'src/Phil/Surface/GrammarV1/CheckedType.hs'
+      - 'test/Phase1IOBytesRuntimeSizedMain.hs'
+      - 'test/Phase1GrammarV1LexerMain.hs'
+      - 'test/Phase1GrammarV1IntrinsicBytesTypeElaborationMain.hs'
+      - 'test/Phase1GrammarV1BoundBytesTypeElaborationMain.hs'
+      - 'test/ValueMain.hs'
+      - 'grammar/phase1-surface.ebnf'
+      - '.github/workflows/phase1-io-bytes-runtime-sized.yml'
+  push:
+    branches: [main]
+    paths:
+      - 'src/Phil/Core/Syntax.hs'
+      - 'src/Phil/Core/Value.hs'
+      - 'src/Phil/Surface/GrammarV1/Lexer.hs'
+      - 'src/Phil/Surface/GrammarV1/Elaborate.hs'
+      - 'src/Phil/Surface/GrammarV1/IntrinsicType.hs'
+      - 'src/Phil/Surface/GrammarV1/BoundBytesType.hs'
+      - 'src/Phil/Surface/GrammarV1/CheckedType.hs'
+      - 'test/Phase1IOBytesRuntimeSizedMain.hs'
+      - 'test/Phase1GrammarV1LexerMain.hs'
+      - 'test/Phase1GrammarV1IntrinsicBytesTypeElaborationMain.hs'
+      - 'test/Phase1GrammarV1BoundBytesTypeElaborationMain.hs'
+      - 'test/ValueMain.hs'
+      - 'grammar/phase1-surface.ebnf'
+      - '.github/workflows/phase1-io-bytes-runtime-sized.yml'
+
+permissions:
+  contents: read
+
+jobs:
+  io-bytes:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: haskell-actions/setup@v2
+        with:
+          ghc-version: '9.6.7'
+          cabal-version: 'latest'
+
+      - name: Build complete Haskell substrate
+        run: cabal build all --enable-tests
+
+      - name: Run IO-BYTES runtime-sized Bytes pressure corpus
+        run: cabal exec -- runghc -Wall -Werror -isrc test/Phase1IOBytesRuntimeSizedMain.hs
+
+      - name: Re-run Grammar-v1 Bytes and lexer controls
+        run: |
+          cabal exec -- runghc -Wall -Werror -isrc test/Phase1GrammarV1LexerMain.hs
+          cabal exec -- runghc -Wall -Werror -isrc test/Phase1GrammarV1IntrinsicBytesTypeElaborationMain.hs
+          cabal exec -- runghc -Wall -Werror -isrc test/Phase1GrammarV1BoundBytesTypeElaborationMain.hs
+
+      - name: Re-run Core value/resource controls
+        run: cabal exec -- runghc -Wall -Werror -isrc test/ValueMain.hs

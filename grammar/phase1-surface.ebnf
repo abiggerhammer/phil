@@ -221,7 +221,7 @@ nonreference_type_expression =
   | uint_type
   | sint_type
   | float_type
-  | "Bytes", "[", expression, "]"
+  | "Bytes", [ "[", expression, "]" ]
   | "Frame", "[", static_reference, "]"
   | "Proof", "[", proposition, "]"
   | "Validated", "[", static_reference, ",", expression, ",", expression, "]"

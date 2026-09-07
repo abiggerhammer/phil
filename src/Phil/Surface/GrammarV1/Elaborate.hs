@@ -37,7 +37,9 @@ import Phil.Core.Syntax
   , Proposition (..)
   , RefTerm (..)
   , Ty (..)
+  , runtimeBytesType
   )
+import Phil.Surface.GrammarV1.Lexer (runtimeBytesLengthMarker)
 import Phil.Surface.GrammarV1.Parser
   ( GrammarV1Expression (..)
   , GrammarV1GenericKind (..)
@@ -181,12 +183,18 @@ grammarV1NaturalLiteral literalText =
       | Text.null rest -> Just literal
     _ -> Nothing
 
+-- | Bytes and Bytes[n] share the existing Core TyBytes family. The source lexer
+-- normalizes omitted syntax to an unspellable marker; only that marker maps to
+-- runtimeBytesType. Explicit source indices retain the existing exact Nat path.
 grammarV1IntrinsicBytesType :: GrammarV1Type -> Maybe Ty
 grammarV1IntrinsicBytesType sourceType = case sourceType of
   GrammarV1BytesType (Located _ sizeExpression) ->
-    case grammarV1IntrinsicRefLiteral sizeExpression of
-      Just size@(RefNat _) -> Just (TyBytes size)
-      _ -> Nothing
+    case sizeExpression of
+      GrammarV1IntegerExpression marker
+        | marker == runtimeBytesLengthMarker -> Just runtimeBytesType
+      _ -> case grammarV1IntrinsicRefLiteral sizeExpression of
+        Just size@(RefNat _) -> Just (TyBytes size)
+        _ -> Nothing
   _ -> Nothing
 
 grammarV1LogicalProofType :: GrammarV1Type -> Maybe Ty
