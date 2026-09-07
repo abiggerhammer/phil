@@ -2,6 +2,7 @@ From Stdlib Require Import Lists.List.
 
 From Phil.Surface Require Import
   Grammar
+  GrammarDerivation
   GrammarDeterminacySimpleResolvers
   GrammarDeterminacyOracleAssemblyCoverage
   GrammarDeterminacyOracleAssemblyReflection
