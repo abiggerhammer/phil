@@ -179,10 +179,10 @@ Lemma phase1_surface_parser_goal_rank_option_is_collected :
       (phase1_surface_parser_goal_rank_options_fuel fuel goal).
 Proof.
   intros fuel goal.
-  destruct goal as [path expression | path index items | path body]; simpl.
-  - apply parser_expression_rank_option_is_collected.
-  - left. reflexivity.
-  - left. reflexivity.
+  destruct goal as [path expression | path index items | path body].
+  - simpl. apply parser_expression_rank_option_is_collected.
+  - simpl. destruct items as [| item rest]; simpl; auto.
+  - simpl. auto.
 Qed.
 
 Lemma parser_sequence_goal_options_head_subset :
