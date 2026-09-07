@@ -388,12 +388,18 @@ Proof.
     (phase1_surface_parser_goal_rank_option_is_collected fuel goal) as Hlocal.
   pose proof (Hglobal _ Hlocal) as Hmember.
   pose proof phase1_surface_parser_all_goal_ranks_are_defined as Hall.
-  apply forallb_forall in Hall.
-  specialize (Hall _ Hmember).
+  destruct
+    (forallb_forall
+      (option nat)
+      option_nat_definedb
+      phase1_surface_parser_all_goal_rank_options)
+    as [Hall_to _].
+  pose proof (Hall_to Hall) as Hall_defined.
+  specialize (Hall_defined _ Hmember).
   destruct (phase1_surface_parser_goal_rank_fuel fuel goal)
     as [rank |] eqn:Hrank.
   - exists rank. exact Hrank.
-  - simpl in Hall. discriminate.
+  - simpl in Hall_defined. discriminate.
 Qed.
 
 Lemma phase1_surface_parser_goal_rank_below_global_bound :
@@ -435,12 +441,18 @@ Lemma phase1_surface_lookup_rule_choice_safe :
 Proof.
   intros name body Hlookup.
   pose proof phase1_surface_all_choice_bodies_are_nonnullable as Hall.
-  apply forallb_forall in Hall.
+  destruct
+    (forallb_forall
+      GrammarRule
+      choice_bodies_nonnullable_rule
+      phase1_surface_rules)
+    as [Hall_to _].
+  pose proof (Hall_to Hall) as Hall_safe.
   specialize
-    (Hall (name, body)
+    (Hall_safe (name, body)
       (lookup_rule_pair_in phase1_surface_rules name body Hlookup)).
-  unfold choice_bodies_nonnullable_rule in Hall.
-  exact Hall.
+  unfold choice_bodies_nonnullable_rule in Hall_safe.
+  exact Hall_safe.
 Qed.
 
 Lemma phase1_surface_root_goal_choice_safe :
