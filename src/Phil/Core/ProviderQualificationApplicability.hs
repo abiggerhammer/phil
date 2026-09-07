@@ -26,7 +26,7 @@ import Phil.Core.Static
   ( DefinitionRevision
   , InstanceRevision
   , InterfaceRevision
-  , RealizationRevision
+  , RealizationRevision (..)
   )
 import ProviderQualificationLineageTargetKernel
   ( AdmissionApplicabilityDecision (..)
