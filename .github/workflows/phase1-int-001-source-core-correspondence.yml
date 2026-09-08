@@ -1,0 +1,47 @@
+name: Phase 1 INT-001 Source Core Correspondence
+
+on:
+  push:
+    branches: [phase1-int-001-source-core-correspondence]
+    paths:
+      - 'src/Phil/Compiler/SourceCore.hs'
+      - 'src/Phil/Compiler/SourceArchitecture.hs'
+      - 'src/Phil/Compiler/SourceBundle.hs'
+      - 'src/Phil/Systems/GenericLowering.hs'
+      - 'test/Phase1INT001SourceCoreMain.hs'
+      - 'test/Phase1INT001SourceArchitectureMain.hs'
+      - 'test/Phase1INT001OrdinarySourceBundleMain.hs'
+      - '.github/workflows/phase1-int-001-source-core-correspondence.yml'
+  pull_request:
+    paths:
+      - 'src/Phil/Compiler/SourceCore.hs'
+      - 'src/Phil/Compiler/SourceArchitecture.hs'
+      - 'src/Phil/Compiler/SourceBundle.hs'
+      - 'src/Phil/Systems/GenericLowering.hs'
+      - 'test/Phase1INT001SourceCoreMain.hs'
+      - 'test/Phase1INT001SourceArchitectureMain.hs'
+      - 'test/Phase1INT001OrdinarySourceBundleMain.hs'
+      - '.github/workflows/phase1-int-001-source-core-correspondence.yml'
+
+jobs:
+  source-core-correspondence:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: haskell-actions/setup@v2
+        with:
+          ghc-version: '9.6.7'
+          cabal-version: 'latest'
+      - name: Build complete Haskell substrate
+        run: cabal build all --enable-tests
+      - name: Strict typecheck source-Core correspondence
+        run: |
+          cabal exec -- ghc -isrc -Wall -Werror -fno-code \
+            src/Phil/Compiler/SourceCore.hs \
+            test/Phase1INT001SourceCoreMain.hs
+      - name: Execute source-Core correspondence pressure corpus
+        run: cabal exec -- runghc -isrc -Wall -Werror test/Phase1INT001SourceCoreMain.hs
+      - name: Replay ordinary-source and source-architecture controls
+        run: |
+          cabal exec -- runghc -isrc -Wall -Werror test/Phase1INT001OrdinarySourceBundleMain.hs
+          cabal exec -- runghc -isrc -Wall -Werror test/Phase1INT001SourceArchitectureMain.hs
