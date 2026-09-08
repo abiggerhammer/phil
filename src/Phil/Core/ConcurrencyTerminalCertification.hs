@@ -28,6 +28,7 @@ import Phil.Core.ConcurrencyRendezvousCertification
   ( CertifiedRendezvousActivation
   , CertifiedRendezvousResult
   , certifiedRendezvousActivationNetwork
+  , certifiedRendezvousActivationState
   , certifiedRendezvousCausality
   , certifiedRendezvousReceiverProcess
   , certifiedRendezvousSenderProcess
@@ -39,6 +40,7 @@ import Phil.Core.Process
   , ProcessNetwork (..)
   , ProcessOccurrence (..)
   )
+import Phil.Core.ProcessActivation (ProcessActivationState (..))
 import Phil.Core.ProcessLifecycle
   ( DeclaredTerminalTransition (..)
   , EnabledProcessTransition (..)
@@ -111,6 +113,10 @@ data NetworkStuckKernelFacts = NetworkStuckKernelFacts
 data ConcurrencyTerminalCertificationError
   = ConcurrencyTerminalNativeError ProcessLifecycleError
   | ConcurrencyTerminalRuntimeInvariant
+  | ConcurrencyTerminalActivationContextMissing ProcessKey
+  | ConcurrencyTerminalActivationContextUnexpected ProcessKey
+  | ConcurrencyTerminalActivationResourceMismatch
+      ProcessKey ResourceContext ResourceContext
   | ConcurrencyTerminalDeclaredIsolationDisagreement ProcessKey
   | ConcurrencyTerminalProcessKernelDisagreement ProcessTerminalKernelFacts
   | ConcurrencyTerminalFailureKernelDisagreement FailureIsolationKernelFacts
@@ -128,11 +134,40 @@ initializeCertifiedTerminalRuntime
   -> Either ConcurrencyTerminalCertificationError CertifiedTerminalRuntime
 initializeCertifiedTerminalRuntime activation contexts obligations = do
   let network = certifiedRendezvousActivationNetwork activation
+      activationState = certifiedRendezvousActivationState activation
+  validateActivationPredecessor activationState contexts
   state <- mapLeft ConcurrencyTerminalNativeError $
     initializeProcessRuntimeWithObligations network contexts obligations
   if runtimeInvariant state && runtimeNetwork state == network
     then Right (CertifiedTerminalRuntime state)
     else Left ConcurrencyTerminalRuntimeInvariant
+
+validateActivationPredecessor
+  :: ProcessActivationState
+  -> Map.Map ProcessKey ProtocolContext
+  -> Either ConcurrencyTerminalCertificationError ()
+validateActivationPredecessor activationState contexts = do
+  case Set.lookupMin missing of
+    Just processKey -> Left (ConcurrencyTerminalActivationContextMissing processKey)
+    Nothing -> Right ()
+  case Set.lookupMin unexpected of
+    Just processKey -> Left (ConcurrencyTerminalActivationContextUnexpected processKey)
+    Nothing -> Right ()
+  mapM_ requireExactResources (Map.toList expectedContexts)
+  where
+    expectedContexts = activationProcessContexts activationState
+    expectedKeys = Map.keysSet expectedContexts
+    actualKeys = Map.keysSet contexts
+    missing = expectedKeys `Set.difference` actualKeys
+    unexpected = actualKeys `Set.difference` expectedKeys
+
+    requireExactResources (processKey, expectedResources) =
+      case Map.lookup processKey contexts of
+        Nothing -> Left (ConcurrencyTerminalActivationContextMissing processKey)
+        Just context
+          | protocolResources context == expectedResources -> Right ()
+          | otherwise -> Left (ConcurrencyTerminalActivationResourceMismatch
+              processKey expectedResources (protocolResources context))
 
 certifyEnabledLocalStep
   :: CertifiedTerminalRuntime
