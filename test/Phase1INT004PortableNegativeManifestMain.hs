@@ -8,6 +8,7 @@ import qualified Data.Set as Set
 import qualified Data.Text as Text
 import Data.Text (Text)
 import qualified Data.Text.IO as TextIO
+import Phase1INT004ProfileEnvironmentCompat (phase0ProfileEnvironment)
 import Phil.Surface.Check
   ( RejectionClass (..)
   , SurfaceCheckError (..)
@@ -16,7 +17,6 @@ import Phil.Surface.Check
 import Phil.Surface.Parser (parseSurfaceFile)
 import Phil.Surface.Phase0
   ( FixtureExpectation (..)
-  , phase0EnvironmentFor
   , phase0ExpectationFor
   )
 import Phil.Surface.Syntax (SurfaceFile (..))
@@ -107,6 +107,9 @@ checkIntegrity cases = do
       layersExact = all ((== "surface-check") . negativeCaseLayer) cases
       authoritiesPresent = all ((== "INT-004") . negativeCaseAuthority) cases
       profilesNamed = all (Text.isPrefixOf "phase0." . negativeCaseEnvironmentProfile) cases
+      profilesResolve = all
+        (either (const False) (const True) . phase0ProfileEnvironment . negativeCaseEnvironmentProfile)
+        cases
   filesPresent <- and <$> mapM doesFileExist paths
   report "20 frozen negative fixtures are manifest-owned" exactFrozenCount
   report "stable fixture IDs are unique" uniqueIds
@@ -114,6 +117,7 @@ checkIntegrity cases = do
   report "every fixture names surface-check as competent layer" layersExact
   report "every fixture names its governing INT-004 matrix authority" authoritiesPresent
   report "every fixture names an explicit environment profile" profilesNamed
+  report "every named environment profile resolves independently of fixture path" profilesResolve
   report "every portable fixture path exists" filesPresent
   pure (and
     [ exactFrozenCount
@@ -122,6 +126,7 @@ checkIntegrity cases = do
     , layersExact
     , authoritiesPresent
     , profilesNamed
+    , profilesResolve
     , filesPresent
     ])
 
@@ -140,8 +145,8 @@ replayCase negativeCase = do
     _ -> putStrLn
       ("FAIL: " <> Text.unpack (negativeCaseId negativeCase)
         <> " -- frozen legacy fixture missing during migration") >> pure False
-  case phase0EnvironmentFor path of
-    Left detail -> failCase ("environment adapter failed: " <> Text.unpack detail)
+  case phase0ProfileEnvironment (negativeCaseEnvironmentProfile negativeCase) of
+    Left detail -> failCase ("environment profile failed: " <> Text.unpack detail)
     Right environment -> case parseSurfaceFile (Text.pack path) source of
       Left diagnostic -> failCase
         ("rejected before recorded competent layer: syntax -- " <> show diagnostic)
