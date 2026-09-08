@@ -5,6 +5,7 @@ From Phil.Surface Require Import
   GrammarDerivation
   GrammarDerivationOracle
   GrammarDeterminacyContinuationSoundness
+  GrammarDeterminacyNullableFirst
   GrammarDeterminacyMutualPredictiveBridge
   GrammarDeterminacyPredictiveOracle
   GrammarParserGoalRank
