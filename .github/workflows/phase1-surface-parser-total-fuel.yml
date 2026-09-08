@@ -27,7 +27,7 @@ jobs:
           python3 scripts/derive_phase1_surface_grammar.py --check
           python3 scripts/derive_phase1_surface_determinacy_certificate.py --check
 
-      - name: Seal nonterminal proof obligations
+      - name: Split nonterminal total-fuel proof modules
         shell: bash
         run: |
           set -euo pipefail
@@ -116,6 +116,15 @@ jobs:
           echo "=== timing GrammarParserTotalFuelStatic.v at $(date -u +%FT%TZ) ==="
           timeout 300s rocq c -time -Q proof/Phil Phil \
             proof/Phil/Surface/GrammarParserTotalFuelStatic.v
+          echo "=== timing GrammarParserTotalFuelBase.v at $(date -u +%FT%TZ) ==="
+          timeout 300s rocq c -time -Q proof/Phil Phil \
+            proof/Phil/Surface/GrammarParserTotalFuelBase.v
+          echo "=== timing GrammarParserTotalFuelNonterminalSupport.v at $(date -u +%FT%TZ) ==="
+          timeout 300s rocq c -time -Q proof/Phil Phil \
+            proof/Phil/Surface/GrammarParserTotalFuelNonterminalSupport.v
+          echo "=== timing GrammarParserTotalFuelNonterminal.v at $(date -u +%FT%TZ) ==="
+          timeout 300s rocq c -time -Q proof/Phil Phil \
+            proof/Phil/Surface/GrammarParserTotalFuelNonterminal.v
           echo "=== timing GrammarParserTotalFuel.v at $(date -u +%FT%TZ) ==="
           timeout 300s rocq c -time -Q proof/Phil Phil \
             proof/Phil/Surface/GrammarParserTotalFuel.v
@@ -128,6 +137,12 @@ jobs:
           cp \
             proof/Phil/Surface/GrammarParserTotalFuelStatic.v \
             proof/Phil/Surface/GrammarParserTotalFuelStatic.vo \
+            proof/Phil/Surface/GrammarParserTotalFuelBase.v \
+            proof/Phil/Surface/GrammarParserTotalFuelBase.vo \
+            proof/Phil/Surface/GrammarParserTotalFuelNonterminalSupport.v \
+            proof/Phil/Surface/GrammarParserTotalFuelNonterminalSupport.vo \
+            proof/Phil/Surface/GrammarParserTotalFuelNonterminal.v \
+            proof/Phil/Surface/GrammarParserTotalFuelNonterminal.vo \
             proof/Phil/Surface/GrammarParserTotalFuel.v \
             proof/Phil/Surface/GrammarParserTotalFuel.vo \
             surface-parser-total-fuel/
@@ -141,6 +156,12 @@ jobs:
             proof/Phil/Surface/GrammarParserZeroConsumeNullable.v \
             proof/Phil/Surface/GrammarParserTotalFuelStatic.v \
             proof/Phil/Surface/GrammarParserTotalFuelStatic.vo \
+            proof/Phil/Surface/GrammarParserTotalFuelBase.v \
+            proof/Phil/Surface/GrammarParserTotalFuelBase.vo \
+            proof/Phil/Surface/GrammarParserTotalFuelNonterminalSupport.v \
+            proof/Phil/Surface/GrammarParserTotalFuelNonterminalSupport.vo \
+            proof/Phil/Surface/GrammarParserTotalFuelNonterminal.v \
+            proof/Phil/Surface/GrammarParserTotalFuelNonterminal.vo \
             proof/Phil/Surface/GrammarParserTotalFuel.v \
             proof/Phil/Surface/GrammarParserTotalFuel.vo \
             > surface-parser-total-fuel/identities.sha256
