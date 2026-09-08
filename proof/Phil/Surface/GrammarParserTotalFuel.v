@@ -70,6 +70,29 @@ Proof.
   nia.
 Qed.
 
+Lemma oracle_parse_fuel_nonterminal_step :
+  forall fuel oracle rules path name input,
+    oracle_parse_fuel
+      (S fuel) oracle rules
+      (GoalExpression path (ENonterminal name)) input =
+    match lookupRule name rules with
+    | Some body =>
+        match
+          oracle_parse_fuel fuel oracle rules
+            (GoalExpression
+              (descend path (AtNonterminal name)) body)
+            input
+        with
+        | Some (rest, ResultTree tree) =>
+            Some (rest, ResultTree (PTNonterminal name tree))
+        | _ => None
+        end
+    | None => None
+    end.
+Proof.
+  reflexivity.
+Qed.
+
 Theorem phase1_surface_oracle_parse_fuel_bounded_complete :
   forall goal input rest result,
     OracleDerives
@@ -171,7 +194,9 @@ Proof.
     + unfold phase1_surface_parser_local_measure in *.
       lia.
     + intros extra.
-      cbn [oracle_parse_fuel].
+      replace (S child_required + extra)
+        with (S (child_required + extra)) by lia.
+      rewrite oracle_parse_fuel_nonterminal_step.
       rewrite Hlookup.
       rewrite (Hchild_complete extra).
       reflexivity.
