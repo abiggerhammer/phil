@@ -128,7 +128,7 @@ exactlyOneComponent
   :: SourceUnitId
   -> SurfaceFile
   -> Either SourceBundleCheckError (Located Component)
-exactlyOneComponent unitId (SurfaceFile [component]) = Right component
+exactlyOneComponent _unitId (SurfaceFile [component]) = Right component
 exactlyOneComponent unitId (SurfaceFile components) =
   Left (SourceBundleDeclarationCountMismatch unitId (length components))
 
