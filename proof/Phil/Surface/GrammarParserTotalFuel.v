@@ -6,6 +6,7 @@ From Phil.Surface Require Import
   GrammarDerivationOracle
   GrammarDeterminacyContinuationSoundness
   GrammarDeterminacyMutualPredictiveBridge
+  GrammarDeterminacyPredictiveOracle
   GrammarParserGoalRank
   GrammarParserGlobalGoalRank
   GrammarParserRecognizer
