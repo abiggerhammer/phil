@@ -6,6 +6,8 @@ module Phil.Surface.Check.Types
   , FieldInfo (..)
   , SurfaceShape (..)
   , InitialBinding (..)
+  , PrimitiveArgumentDiscipline (..)
+  , ProviderOutcomeSpec (..)
   , PrimitiveSemantics (..)
   , ReleaseRequirement (..)
   , ReleaseSemanticAccount (..)
@@ -114,6 +116,17 @@ data InitialBinding = InitialBinding
   }
   deriving (Eq, Show)
 
+data PrimitiveArgumentDiscipline
+  = PrimitiveReadOnly
+  | PrimitiveConsume
+  deriving (Eq, Ord, Show)
+
+data ProviderOutcomeSpec = ProviderOutcomeSpec
+  { providerOutcomeLabel :: Text
+  , providerOutcomePayload :: [(Mode, Ty)]
+  }
+  deriving (Eq, Ord, Show)
+
 data PrimitiveSemantics
   = PrimitiveSupportedVersions
   | PrimitiveSha256
@@ -131,6 +144,7 @@ data PrimitiveSemantics
   | PrimitiveAuthorizeStore
   | PrimitiveDelegate
   | PrimitiveContinueCommonState
+  | PrimitiveProviderDecision [PrimitiveArgumentDiscipline] [ProviderOutcomeSpec]
   | PrimitiveHandlePayload
   deriving (Eq, Ord, Show)
 
@@ -318,4 +332,5 @@ data DecisionKind
   | ValidationDecision Text Name Name
   | DigestDecision Proposition
   | StoreDecision
+  | ProviderDecision [ProviderOutcomeSpec]
   deriving (Eq, Show)

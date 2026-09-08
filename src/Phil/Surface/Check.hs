@@ -4,6 +4,8 @@ module Phil.Surface.Check
   , FieldInfo (..)
   , SurfaceShape (..)
   , InitialBinding (..)
+  , PrimitiveArgumentDiscipline (..)
+  , ProviderOutcomeSpec (..)
   , PrimitiveSemantics (..)
   , ReleaseRequirement (..)
   , ReleaseSemanticAccount (..)

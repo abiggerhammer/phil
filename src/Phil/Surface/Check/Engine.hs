@@ -412,6 +412,20 @@ evalPrimitiveRule environment state located primitive arguments =
     PrimitiveAuthorizeStore -> consumeOne
     PrimitiveDelegate -> consumeOne
     PrimitiveContinueCommonState -> readArguments 1 >> unit
+    PrimitiveProviderDecision disciplines outcomes -> do
+      arity (length disciplines)
+      when (null outcomes) $
+        throw located TypeMismatch "provider decision declares no outcomes"
+      let labels = map providerOutcomeLabel outcomes
+      unless (Set.size (Set.fromList labels) == length labels) $
+        throw located TypeMismatch "provider decision outcome labels are not unique"
+      next <- foldM applyProviderArgument state (zip disciplines arguments)
+      Right
+        [ valuePath next (RuntimeScalar
+            (ScalarValue Unrestricted
+              (TyOpaque "ProviderDecision")
+              (DecisionShape (ProviderDecision outcomes))))
+        ]
     PrimitiveHandlePayload -> unit
   where
     arity expected = unless (length arguments == expected) $
@@ -438,6 +452,18 @@ evalPrimitiveRule environment state located primitive arguments =
           snd <$> moveVariable expression name current
         _ -> Right current
       _ -> Right current
+
+    applyProviderArgument current (discipline, expression) =
+      case discipline of
+        PrimitiveReadOnly -> do
+          _ <- inferReadOnlyScalar environment current expression
+          Right current
+        PrimitiveConsume -> do
+          (value, next) <- moveVariableArgument current expression
+          when (scalarMode value == Unrestricted) $
+            throw expression StructuralUse
+              "provider consume argument requires an affine or linear owner"
+          Right next
 
 moveVariableArgument
   :: SurfaceState
@@ -879,6 +905,7 @@ decisionLabels decision = case decision of
   ValidationDecision {} -> ["rejected", "accepted"]
   DigestDecision {} -> ["rejected", "accepted"]
   StoreDecision -> ["failure", "success"]
+  ProviderDecision outcomes -> map providerOutcomeLabel outcomes
 
 bindDecisionPattern
   :: SurfaceState
@@ -948,6 +975,23 @@ bindDecisionPattern state decision label binders located =
     (StoreDecision, "failure", [reason]) ->
       insertBindingMeta (locatedSpan located) reason
         (BindingMeta Unrestricted (TyOpaque "StorageFailure") PlainShape) state
+    (ProviderDecision outcomes, providerLabel, providerBinders) ->
+      case
+        [ providerOutcomePayload outcome
+        | outcome <- outcomes
+        , providerOutcomeLabel outcome == providerLabel
+        ] of
+        [payload]
+          | length payload == length providerBinders ->
+              foldM
+                (\current (name, (mode, ty)) ->
+                  insertBindingMeta (locatedSpan located) name
+                    (BindingMeta mode ty (shapeForBinding name (shapeForType ty)))
+                    current)
+                state
+                (zip providerBinders payload)
+        _ -> throw located TypeMismatch
+          "provider decision arm binder shape is incompatible with the declared outcome"
     _ -> throw located TypeMismatch
       "decision arm binder shape is incompatible with the decision result"
 
