@@ -9,6 +9,7 @@ import qualified Data.Text as Text
 import Phil.Compiler.SourceArchitecture
 import Phil.Compiler.SourceBundle
 import Phil.Compiler.SourceCore
+import Phil.Compiler.SourceCorePolicy
 import Phil.Compiler.SourceSystems
 import Phil.Core.Static
   ( DeclarationKey (..)
@@ -90,7 +91,7 @@ tamperedCoreCannotBeSealed = do
   let betaFunction = alphaFunction { coreFunctionKey = "Beta" }
       tampered = goodCore
         { coreProgramFunctions = Map.singleton "Beta" betaFunction }
-  case prepareSourceSystemsAdmission architecture tampered of
+  case prepareSourceSystemsAdmission emptySourceCoreCorrespondencePolicy architecture tampered of
     Left (SourceSystemsCorrespondenceRejected
       (SourceCoreFunctionSetMismatch expected actual)) ->
         assert (expected /= actual) "tampered Core rejection lost function-domain mismatch"
@@ -99,7 +100,8 @@ tamperedCoreCannotBeSealed = do
 admissionIdentityIsExact :: Either String ()
 admissionIdentityIsExact = do
   architecture <- checkedArchitecture
-  admission <- mapLeft show (prepareSourceSystemsAdmission architecture goodCore)
+  admission <- mapLeft show
+    (prepareSourceSystemsAdmission emptySourceCoreCorrespondencePolicy architecture goodCore)
   correspondence <- mapLeft show (verifySourceCoreCorrespondence architecture goodCore)
   assert
     (sourceSystemsArchitectureIdentity admission
@@ -113,7 +115,8 @@ admissionIdentityIsExact = do
 admissionFor :: CoreSystemsProgram -> Either String SourceSystemsAdmission
 admissionFor program = do
   architecture <- checkedArchitecture
-  mapLeft show (prepareSourceSystemsAdmission architecture program)
+  mapLeft show
+    (prepareSourceSystemsAdmission emptySourceCoreCorrespondencePolicy architecture program)
 
 checkedArchitecture :: Either String CheckedSourceArchitecture
 checkedArchitecture = do
