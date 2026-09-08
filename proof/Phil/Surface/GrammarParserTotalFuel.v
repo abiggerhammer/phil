@@ -613,7 +613,10 @@ Proof.
     assert (Hparent_bound :
       rank < phase1_surface_parser_global_goal_rank_bound).
     {
-      eapply phase1_surface_parser_goal_rank_below_global_bound; eauto.
+      exact
+        (phase1_surface_parser_goal_rank_below_global_bound
+          static_fuel (GoalRepetition path body)
+          rank Hglobal Hrank).
     }
     pose proof
       (oracle_derivation_progress_decreases_length
