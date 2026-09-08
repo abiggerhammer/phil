@@ -1,0 +1,61 @@
+name: Temporary R11 code-only transport
+
+on:
+  push:
+    branches: [phase1-review-r11-rendezvous-ownership]
+
+permissions:
+  contents: write
+
+jobs:
+  transport:
+    if: github.actor != 'github-actions[bot]'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: phase1-review-r11-rendezvous-ownership
+          fetch-depth: 0
+
+      - uses: haskell-actions/setup@v2
+        with:
+          ghc-version: '9.6.7'
+          cabal-version: 'latest'
+
+      - name: Replay validated R11 code/test patch only
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 - <<'PY'
+          from pathlib import Path
+          from textwrap import dedent
+
+          source = Path('.github/workflows/tmp-review-r11-rendezvous-ownership.yml').read_text()
+          marker = "python3 - <<'PY'\n"
+          script = source.split(marker, 1)[1]
+          script = script.split("\n          # Make the review regression permanent", 1)[0]
+          exec(dedent(script))
+          PY
+
+      - name: Re-run exact R10/R11 rendezvous controls
+        run: |
+          set -euo pipefail
+          cabal build all --enable-tests
+          cabal exec -- runghc -Wall -Werror -isrc test/Phase1ReviewR10RendezvousSuccessionMain.hs
+          cabal exec -- runghc -Wall -Werror -isrc test/Phase1RestrictedMessageTransferMain.hs
+          cabal exec -- runghc -Wall -Werror -isrc test/Phase1ExactProcessRendezvousMain.hs
+          cabal exec -- runghc -Wall -Werror -isrc app/ConcurrencyRendezvousProductionBindingMain.hs
+
+      - name: Commit validated R11 code/test repair
+        shell: bash
+        run: |
+          set -euo pipefail
+          git config user.name github-actions[bot]
+          git config user.email 41898282+github-actions[bot]@users.noreply.github.com
+          git add \
+            src/Phil/Core/ProcessRendezvous.hs \
+            src/Phil/Core/ConcurrencyRendezvousCertification.hs \
+            app/ConcurrencyRendezvousProductionBindingMain.hs \
+            test/Phase1ReviewR10RendezvousSuccessionMain.hs
+          git commit -m 'review: bind rendezvous payload and owner succession'
+          git push origin HEAD:phase1-review-r11-rendezvous-ownership
