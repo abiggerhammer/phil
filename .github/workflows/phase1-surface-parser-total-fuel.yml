@@ -3,12 +3,10 @@ name: Phase 1 Surface Parser Total Fuel
 on:
   pull_request:
   push:
-    branches:
-      - main
-      - prove-surface-parser-total-fuel-completeness
+    branches: [main]
 
 permissions:
-  contents: write
+  contents: read
 
 jobs:
   rocq-parser-total-fuel:
@@ -19,9 +17,6 @@ jobs:
       options: --user root
     steps:
       - uses: actions/checkout@v4
-        with:
-          ref: ${{ github.event_name == 'push' && github.ref_name || '' }}
-          fetch-depth: 0
 
       - name: Derive exact Grammar-v1 inputs
         shell: bash
@@ -37,22 +32,6 @@ jobs:
         run: |
           set -euo pipefail
           python3 scripts/patch_total_fuel_nonterminal.py
-          git diff --check
-          git diff -- proof/Phil/Surface/GrammarParserTotalFuel.v
-
-      - name: Commit sealed nonterminal proof
-        if: github.event_name == 'push' && github.ref_name == 'prove-surface-parser-total-fuel-completeness'
-        shell: bash
-        run: |
-          set -euo pipefail
-          if git diff --quiet -- proof/Phil/Surface/GrammarParserTotalFuel.v; then
-            exit 0
-          fi
-          git config user.name 'github-actions[bot]'
-          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
-          git add proof/Phil/Surface/GrammarParserTotalFuel.v
-          git commit -m 'Seal nonterminal fuel obligations'
-          git push origin HEAD:prove-surface-parser-total-fuel-completeness
 
       - name: Compile total parser fuel completeness
         shell: bash
