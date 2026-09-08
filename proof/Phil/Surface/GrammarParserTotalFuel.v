@@ -134,7 +134,8 @@ Proof.
         (GoalExpression (descend path (AtNonterminal name)) body)).
     {
       constructor.
-      unfold phase1_surface_parser_goal_choice_safeb.
+      unfold phase1_surface_parser_goal_choice_safe_structural.
+      apply phase1_surface_expression_choice_safe_of_bool.
       eapply phase1_surface_lookup_rule_choice_safe.
       exact Hlookup.
     }
