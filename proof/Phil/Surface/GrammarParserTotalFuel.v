@@ -556,12 +556,16 @@ Proof.
       unfold phase1_surface_parser_local_measure in *;
       lia).
   - intros extra.
-    exact
-      (oracle_parse_fuel_nonterminal_complete_lift
-        child_required
-        phase1_surface_predictive_oracle phase1_surface_rules
-        path name body input rest tree
-        Hlookup Hchild_complete extra).
+    clear Hrank Hglobal Hsafe Hsfuel static_fuel
+      Hchild_global Hchild_safe Hchild_rank Hchild_rank_raw
+      Hdecrease Hchild_required Hchild_fit child_rank IHbody.
+    abstract (
+      exact
+        (oracle_parse_fuel_nonterminal_complete_lift
+          child_required
+          phase1_surface_predictive_oracle phase1_surface_rules
+          path name body input rest tree
+          Hlookup Hchild_complete extra)).
 Qed.
 
 Transparent oracle_parse_fuel.
