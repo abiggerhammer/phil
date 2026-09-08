@@ -76,7 +76,7 @@ Theorem phase1_surface_oracle_parse_fuel_bounded_complete :
     forall static_fuel rank,
       phase1_surface_parser_goal_rank_fuel static_fuel goal = Some rank ->
       phase1_surface_parser_goal_options_global static_fuel goal ->
-      phase1_surface_parser_goal_choice_safeb static_fuel goal = true ->
+      phase1_surface_parser_goal_choice_safe static_fuel goal ->
       static_fuel <= expression_fuel ->
       exists required,
         required <= phase1_surface_parser_local_measure input rank /\
@@ -129,10 +129,11 @@ Proof.
       exact Hlookup.
     }
     assert (Hchild_safe :
-      phase1_surface_parser_goal_choice_safeb
+      phase1_surface_parser_goal_choice_safe
         expression_fuel
-        (GoalExpression (descend path (AtNonterminal name)) body) = true).
+        (GoalExpression (descend path (AtNonterminal name)) body)).
     {
+      constructor.
       unfold phase1_surface_parser_goal_choice_safeb.
       eapply phase1_surface_lookup_rule_choice_safe.
       exact Hlookup.
@@ -180,8 +181,8 @@ Proof.
       exact Hglobal.
     }
     assert (Hchild_safe :
-      phase1_surface_parser_goal_choice_safeb
-        static_fuel (GoalSequence path 0 items) = true).
+      phase1_surface_parser_goal_choice_safe
+        static_fuel (GoalSequence path 0 items)).
     {
       eapply phase1_surface_sequence_wrapper_choice_safe.
       exact Hsafe.
@@ -226,9 +227,9 @@ Proof.
       eapply phase1_surface_alternative_member_options_global; eauto.
     }
     assert (Hchild_safe :
-      phase1_surface_parser_goal_choice_safeb
+      phase1_surface_parser_goal_choice_safe
         static_fuel
-        (GoalExpression (descend path (AtAlternative index)) item) = true).
+        (GoalExpression (descend path (AtAlternative index)) item)).
     {
       eapply phase1_surface_alternative_member_choice_safe; eauto.
     }
@@ -288,9 +289,9 @@ Proof.
       exact Hglobal.
     }
     assert (Hchild_safe :
-      phase1_surface_parser_goal_choice_safeb
+      phase1_surface_parser_goal_choice_safe
         static_fuel
-        (GoalExpression (descend path AtOptionalBody) body) = true).
+        (GoalExpression (descend path AtOptionalBody) body)).
     {
       eapply phase1_surface_optional_body_choice_safe.
       exact Hsafe.
@@ -338,8 +339,8 @@ Proof.
       exact Hglobal.
     }
     assert (Hchild_safe :
-      phase1_surface_parser_goal_choice_safeb
-        static_fuel (GoalRepetition path body) = true).
+      phase1_surface_parser_goal_choice_safe
+        static_fuel (GoalRepetition path body)).
     {
       eapply phase1_surface_repetition_wrapper_choice_safe.
       exact Hsafe.
@@ -445,12 +446,18 @@ Proof.
       destruct (list_eq_dec concrete_token_eq_dec input middle)
         as [Hequal | Hprogress].
       - subst middle.
+        assert (Hhead_safe_static :
+          choice_bodies_nonnullable_fuel static_fuel item = true).
+        {
+          eapply phase1_surface_expression_goal_choice_safe_bool.
+          exact Hhead_safe.
+        }
         assert (Hhead_safe_full :
           choice_bodies_nonnullable_fuel expression_fuel item = true).
         {
           eapply choice_bodies_nonnullable_fuel_monotone.
           + exact Hsfuel.
-          + exact Hhead_safe.
+          + exact Hhead_safe_static.
         }
         pose proof
           (phase1_surface_zero_consume_oracle_expression_is_nullable
@@ -529,9 +536,9 @@ Proof.
       exact Hglobal.
     }
     assert (Hbody_safe :
-      phase1_surface_parser_goal_choice_safeb
+      phase1_surface_parser_goal_choice_safe
         static_fuel
-        (GoalExpression (descend path AtRepetitionBody) body) = true).
+        (GoalExpression (descend path AtRepetitionBody) body)).
     {
       eapply phase1_surface_repetition_body_choice_safe.
       exact Hsafe.
