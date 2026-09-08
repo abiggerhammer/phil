@@ -16,7 +16,7 @@ import Phil.Surface.Check
 import Phil.Surface.Parser (parseSurfaceFile)
 import Phil.Surface.Phase0
   ( FixtureExpectation (..)
-  , phase0EnvironmentFor
+  , phase0EnvironmentProfile
   , phase0ExpectationFor
   )
 import Phil.Surface.Syntax (SurfaceFile (..))
@@ -140,8 +140,8 @@ replayCase negativeCase = do
     _ -> putStrLn
       ("FAIL: " <> Text.unpack (negativeCaseId negativeCase)
         <> " -- frozen legacy fixture missing during migration") >> pure False
-  case phase0EnvironmentFor path of
-    Left detail -> failCase ("environment adapter failed: " <> Text.unpack detail)
+  case phase0EnvironmentProfile (negativeCaseEnvironmentProfile negativeCase) of
+    Left detail -> failCase ("environment profile failed: " <> Text.unpack detail)
     Right environment -> case parseSurfaceFile (Text.pack path) source of
       Left diagnostic -> failCase
         ("rejected before recorded competent layer: syntax -- " <> show diagnostic)

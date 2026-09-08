@@ -3,6 +3,7 @@
 module Phil.Surface.Phase0
   ( FixtureExpectation (..)
   , phase0EnvironmentFor
+  , phase0EnvironmentProfile
   , phase0ExpectationFor
   , serverUploadSession
   , clientUploadSession
@@ -80,33 +81,59 @@ phase0ExpectationFor path =
     reject = Just . FixtureReject
 
 phase0EnvironmentFor :: FilePath -> Either Text SurfaceEnvironment
-phase0EnvironmentFor path = do
+phase0EnvironmentFor path = case fileName path of
+  "client.phil" -> phase0EnvironmentProfile "phase0.client"
+  "server.phil" -> phase0EnvironmentProfile "phase0.server"
+  "01-reuse-consumed-endpoint.phil" -> phase0EnvironmentProfile "phase0.simple-receive"
+  "02-drop-live-endpoint.phil" -> phase0EnvironmentProfile "phase0.simple-receive"
+  "03-wrong-protocol-order.phil" -> phase0EnvironmentProfile "phase0.wrong-order"
+  "04-nonexhaustive-offer.phil" -> phase0EnvironmentProfile "phase0.nonexhaustive-offer"
+  "05-raw-field-access.phil" -> phase0EnvironmentProfile "phase0.legacy-raw"
+  "06-parsed-used-as-validated.phil" -> phase0EnvironmentProfile "phase0.parsed-validation-bypass"
+  "07-unrelated-payload-length.phil" -> phase0EnvironmentProfile "phase0.unrelated-length"
+  "08-incompatible-branch-join.phil" -> phase0EnvironmentProfile "phase0.incompatible-join"
+  "09-continue-after-fatal-recognition-failure.phil" -> phase0EnvironmentProfile "phase0.failure-reuse"
+  "10-accept-before-digest-check.phil" -> phase0EnvironmentProfile "phase0.premature-acceptance"
+  "11-copy-authority-capability.phil" -> phase0EnvironmentProfile "phase0.common"
+  "12-ignore-cancellation-cleanup.phil" -> phase0EnvironmentProfile "phase0.common"
+  "13-commit-unrelated-parsed.phil" -> phase0EnvironmentProfile "phase0.pending-commit"
+  "14-copy-owned-payload.phil" -> phase0EnvironmentProfile "phase0.common"
+  "15-drop-pending-receive.phil" -> phase0EnvironmentProfile "phase0.pending-drop"
+  "16-escape-shared-loan.phil" -> phase0EnvironmentProfile "phase0.common"
+  "17-use-evidence-wrong-context.phil" -> phase0EnvironmentProfile "phase0.stale-policy"
+  "18-prove-opaque-digest.phil" -> phase0EnvironmentProfile "phase0.opaque-proof"
+  "19-label-does-not-transfer-proof.phil" -> phase0EnvironmentProfile "phase0.label-proof"
+  "20-unchecked-wraparound-proof.phil" -> phase0EnvironmentProfile "phase0.common"
+  _ -> Left ("no Phase 0 checking environment for " <> Text.pack path)
+
+-- | Stable semantic environment profiles for portable conformance fixtures.
+-- Fixture paths are deliberately not inputs: a portable manifest selects a
+-- profile by semantic name, and this resolver materializes the corresponding
+-- checker boundary.  The legacy filename adapter above is retained only for
+-- pre-INT-004 callers while they migrate.
+phase0EnvironmentProfile :: Text -> Either Text SurfaceEnvironment
+phase0EnvironmentProfile profile = do
   staticContext <- phase0StaticContext
   let base = commonEnvironment staticContext
-  case fileName path of
-    "client.phil" -> Right (clientEnvironment base)
-    "server.phil" -> Right (serverEnvironment base)
-    "01-reuse-consumed-endpoint.phil" -> Right (simpleReceiveEnvironment base)
-    "02-drop-live-endpoint.phil" -> Right (simpleReceiveEnvironment base)
-    "03-wrong-protocol-order.phil" -> Right (wrongOrderEnvironment base)
-    "04-nonexhaustive-offer.phil" -> Right (nonexhaustiveOfferEnvironment base)
-    "05-raw-field-access.phil" -> Right (legacyRawEnvironment base)
-    "06-parsed-used-as-validated.phil" -> Right (parsedValidationBypassEnvironment base)
-    "07-unrelated-payload-length.phil" -> Right (unrelatedLengthEnvironment base)
-    "08-incompatible-branch-join.phil" -> Right (incompatibleJoinEnvironment base)
-    "09-continue-after-fatal-recognition-failure.phil" -> Right (failureReuseEnvironment base)
-    "10-accept-before-digest-check.phil" -> Right (prematureAcceptanceEnvironment base)
-    "11-copy-authority-capability.phil" -> Right base
-    "12-ignore-cancellation-cleanup.phil" -> Right base
-    "13-commit-unrelated-parsed.phil" -> Right (pendingCommitEnvironment base)
-    "14-copy-owned-payload.phil" -> Right base
-    "15-drop-pending-receive.phil" -> Right (pendingDropEnvironment base)
-    "16-escape-shared-loan.phil" -> Right base
-    "17-use-evidence-wrong-context.phil" -> Right (stalePolicyEnvironment base)
-    "18-prove-opaque-digest.phil" -> Right (opaqueProofEnvironment base)
-    "19-label-does-not-transfer-proof.phil" -> Right (labelProofEnvironment base)
-    "20-unchecked-wraparound-proof.phil" -> Right base
-    _ -> Left ("no Phase 0 checking environment for " <> Text.pack path)
+  case profile of
+    "phase0.common" -> Right base
+    "phase0.client" -> Right (clientEnvironment base)
+    "phase0.server" -> Right (serverEnvironment base)
+    "phase0.simple-receive" -> Right (simpleReceiveEnvironment base)
+    "phase0.wrong-order" -> Right (wrongOrderEnvironment base)
+    "phase0.nonexhaustive-offer" -> Right (nonexhaustiveOfferEnvironment base)
+    "phase0.legacy-raw" -> Right (legacyRawEnvironment base)
+    "phase0.parsed-validation-bypass" -> Right (parsedValidationBypassEnvironment base)
+    "phase0.unrelated-length" -> Right (unrelatedLengthEnvironment base)
+    "phase0.incompatible-join" -> Right (incompatibleJoinEnvironment base)
+    "phase0.failure-reuse" -> Right (failureReuseEnvironment base)
+    "phase0.premature-acceptance" -> Right (prematureAcceptanceEnvironment base)
+    "phase0.pending-commit" -> Right (pendingCommitEnvironment base)
+    "phase0.pending-drop" -> Right (pendingDropEnvironment base)
+    "phase0.stale-policy" -> Right (stalePolicyEnvironment base)
+    "phase0.opaque-proof" -> Right (opaqueProofEnvironment base)
+    "phase0.label-proof" -> Right (labelProofEnvironment base)
+    _ -> Left ("unknown Phase 0 environment profile " <> profile)
 
 phase0StaticContext :: Either Text StaticContext
 phase0StaticContext =
