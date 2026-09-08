@@ -28,7 +28,21 @@ jobs:
           cabal-version: 'latest'
 
       - name: Apply staged Upload manifest binding repairs
-        run: python3 scripts/staging/int002_upload_manifest.py
+        run: |
+          python3 scripts/staging/int002_upload_manifest.py
+          python3 - <<'PY'
+          from pathlib import Path
+
+          path = Path('test/Phase1INT002UploadManifestMain.hs')
+          text = path.read_text()
+          marker = 'import Phil.Core.Static\n  ( CheckedArchitectureInstance (..)\n'
+          replacement = 'import Phil.Core.Static\n  ( ArchitectureInstanceIdentity (..)\n  , CheckedArchitectureInstance (..)\n'
+          if 'ArchitectureInstanceIdentity (..)' not in text:
+              if marker not in text:
+                  raise SystemExit('INT-002 Upload import insertion point not found')
+              text = text.replace(marker, replacement, 1)
+              path.write_text(text)
+          PY
 
       - name: Build complete Haskell substrate
         run: cabal build all --enable-tests
@@ -66,7 +80,8 @@ jobs:
           git add \
             src/Phil/Verification.hs \
             src/Phil/Verification/Bundle.hs \
-            src/Phil/Verification/ManifestClosure.hs
-          git diff --cached --quiet && { echo 'no semantic repairs to transport'; exit 1; }
+            src/Phil/Verification/ManifestClosure.hs \
+            test/Phase1INT002UploadManifestMain.hs
+          git diff --cached --quiet && { echo 'no validated repairs to transport'; exit 1; }
           git commit -m 'int: bind Upload manifest to ordinary source verification'
           git push origin HEAD:phase1-int-002-witness-manifests
