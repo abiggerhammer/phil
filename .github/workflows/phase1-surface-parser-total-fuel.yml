@@ -32,6 +32,7 @@ jobs:
         run: |
           set -euo pipefail
           python3 scripts/patch_total_fuel_nonterminal.py
+          python3 scripts/generate_total_fuel_nonterminal_budget_probe.py
 
       - name: Compile total parser fuel completeness
         shell: bash
@@ -122,6 +123,9 @@ jobs:
           echo "=== timing GrammarParserTotalFuelNonterminalSupport.v at $(date -u +%FT%TZ) ==="
           timeout 300s rocq c -time -Q proof/Phil Phil \
             proof/Phil/Surface/GrammarParserTotalFuelNonterminalSupport.v
+          echo "=== timing GrammarParserTotalFuelNonterminalBudget.v at $(date -u +%FT%TZ) ==="
+          timeout 300s rocq c -time -Q proof/Phil Phil \
+            proof/Phil/Surface/GrammarParserTotalFuelNonterminalBudget.v
           echo "=== timing GrammarParserTotalFuelNonterminal.v at $(date -u +%FT%TZ) ==="
           timeout 300s rocq c -time -Q proof/Phil Phil \
             proof/Phil/Surface/GrammarParserTotalFuelNonterminal.v
@@ -141,6 +145,8 @@ jobs:
             proof/Phil/Surface/GrammarParserTotalFuelBase.vo \
             proof/Phil/Surface/GrammarParserTotalFuelNonterminalSupport.v \
             proof/Phil/Surface/GrammarParserTotalFuelNonterminalSupport.vo \
+            proof/Phil/Surface/GrammarParserTotalFuelNonterminalBudget.v \
+            proof/Phil/Surface/GrammarParserTotalFuelNonterminalBudget.vo \
             proof/Phil/Surface/GrammarParserTotalFuelNonterminal.v \
             proof/Phil/Surface/GrammarParserTotalFuelNonterminal.vo \
             proof/Phil/Surface/GrammarParserTotalFuel.v \
@@ -160,6 +166,8 @@ jobs:
             proof/Phil/Surface/GrammarParserTotalFuelBase.vo \
             proof/Phil/Surface/GrammarParserTotalFuelNonterminalSupport.v \
             proof/Phil/Surface/GrammarParserTotalFuelNonterminalSupport.vo \
+            proof/Phil/Surface/GrammarParserTotalFuelNonterminalBudget.v \
+            proof/Phil/Surface/GrammarParserTotalFuelNonterminalBudget.vo \
             proof/Phil/Surface/GrammarParserTotalFuelNonterminal.v \
             proof/Phil/Surface/GrammarParserTotalFuelNonterminal.vo \
             proof/Phil/Surface/GrammarParserTotalFuel.v \
