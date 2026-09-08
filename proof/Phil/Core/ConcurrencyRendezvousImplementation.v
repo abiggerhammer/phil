@@ -32,16 +32,22 @@ Definition RendezvousEndpointFacts
       (endpointProgressionPredecessor
         (dualRendezvousReceiverEndpoint witness))) =
     binaryProtocolInstanceRevision (dualRendezvousInstance witness) /\
-  protocolContractRole
-    (protocolOccurrenceContract
-      (endpointProgressionPredecessor
-        (dualRendezvousSenderEndpoint witness))) =
-    binaryProtocolPrimaryRole (dualRendezvousInstance witness) /\
-  protocolContractRole
-    (protocolOccurrenceContract
-      (endpointProgressionPredecessor
-        (dualRendezvousReceiverEndpoint witness))) =
-    binaryProtocolPeerRole (dualRendezvousInstance witness) /\
+  BinaryRoleMember
+    (dualRendezvousInstance witness)
+    (protocolContractRole
+      (protocolOccurrenceContract
+        (endpointProgressionPredecessor
+          (dualRendezvousSenderEndpoint witness)))) /\
+  BinaryRolePairExact
+    (dualRendezvousInstance witness)
+    (protocolContractRole
+      (protocolOccurrenceContract
+        (endpointProgressionPredecessor
+          (dualRendezvousSenderEndpoint witness))))
+    (protocolContractRole
+      (protocolOccurrenceContract
+        (endpointProgressionPredecessor
+          (dualRendezvousReceiverEndpoint witness)))) /\
   protocolContractSession
     (protocolOccurrenceContract
       (endpointProgressionPredecessor
@@ -172,17 +178,23 @@ Theorem decideRendezvousEndpointFactsByFacts_classifies :
             (dualRendezvousReceiverEndpoint witness))) =
       binaryProtocolInstanceRevision (dualRendezvousInstance witness)) ->
     (senderRoleExact = true <->
-      protocolContractRole
-        (protocolOccurrenceContract
-          (endpointProgressionPredecessor
-            (dualRendezvousSenderEndpoint witness))) =
-      binaryProtocolPrimaryRole (dualRendezvousInstance witness)) ->
+      BinaryRoleMember
+        (dualRendezvousInstance witness)
+        (protocolContractRole
+          (protocolOccurrenceContract
+            (endpointProgressionPredecessor
+              (dualRendezvousSenderEndpoint witness))))) ->
     (receiverRoleExact = true <->
-      protocolContractRole
-        (protocolOccurrenceContract
-          (endpointProgressionPredecessor
-            (dualRendezvousReceiverEndpoint witness))) =
-      binaryProtocolPeerRole (dualRendezvousInstance witness)) ->
+      BinaryRolePairExact
+        (dualRendezvousInstance witness)
+        (protocolContractRole
+          (protocolOccurrenceContract
+            (endpointProgressionPredecessor
+              (dualRendezvousSenderEndpoint witness))))
+        (protocolContractRole
+          (protocolOccurrenceContract
+            (endpointProgressionPredecessor
+              (dualRendezvousReceiverEndpoint witness))))) ->
     (currentSessionsDual = true <->
       protocolContractSession
         (protocolOccurrenceContract
