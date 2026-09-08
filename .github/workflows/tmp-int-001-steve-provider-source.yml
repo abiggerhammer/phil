@@ -28,6 +28,9 @@ jobs:
           python3 - <<'PY'
           from pathlib import Path
 
+          def lines(*xs):
+              return "\n".join(xs) + "\n"
+
           def replace_once(path, old, new):
               p = Path(path)
               text = p.read_text()
@@ -38,151 +41,151 @@ jobs:
 
           replace_once(
               'src/Phil/Surface/Check/Types.hs',
-              '  , PrimitiveSemantics (..)\n  , ReleaseRequirement (..)\n',
-              '  , PrimitiveArgumentDiscipline (..)\n  , ProviderOutcomeSpec (..)\n  , PrimitiveSemantics (..)\n  , ReleaseRequirement (..)\n')
+              lines('  , PrimitiveSemantics (..)', '  , ReleaseRequirement (..)'),
+              lines('  , PrimitiveArgumentDiscipline (..)', '  , ProviderOutcomeSpec (..)', '  , PrimitiveSemantics (..)', '  , ReleaseRequirement (..)'))
 
           replace_once(
               'src/Phil/Surface/Check/Types.hs',
-              'data PrimitiveSemantics\n  = PrimitiveSupportedVersions\n',
-              '''data PrimitiveArgumentDiscipline
-          = PrimitiveReadOnly
-          | PrimitiveConsume
-          deriving (Eq, Ord, Show)
-
-          data ProviderOutcomeSpec = ProviderOutcomeSpec
-            { providerOutcomeLabel :: Text
-            , providerOutcomePayload :: [(Mode, Ty)]
-            }
-            deriving (Eq, Ord, Show)
-
-          data PrimitiveSemantics
-            = PrimitiveSupportedVersions
-          '''.replace('          ', ''))
-
-          replace_once(
-              'src/Phil/Surface/Check/Types.hs',
-              '  | PrimitiveContinueCommonState\n  | PrimitiveHandlePayload\n  deriving (Eq, Ord, Show)\n',
-              '  | PrimitiveContinueCommonState\n  | PrimitiveProviderDecision [PrimitiveArgumentDiscipline] [ProviderOutcomeSpec]\n  | PrimitiveHandlePayload\n  deriving (Eq, Ord, Show)\n')
+              lines('data PrimitiveSemantics', '  = PrimitiveSupportedVersions'),
+              lines(
+                  'data PrimitiveArgumentDiscipline',
+                  '  = PrimitiveReadOnly',
+                  '  | PrimitiveConsume',
+                  '  deriving (Eq, Ord, Show)',
+                  '',
+                  'data ProviderOutcomeSpec = ProviderOutcomeSpec',
+                  '  { providerOutcomeLabel :: Text',
+                  '  , providerOutcomePayload :: [(Mode, Ty)]',
+                  '  }',
+                  '  deriving (Eq, Ord, Show)',
+                  '',
+                  'data PrimitiveSemantics',
+                  '  = PrimitiveSupportedVersions'))
 
           replace_once(
               'src/Phil/Surface/Check/Types.hs',
-              '  | DigestDecision Proposition\n  | StoreDecision\n  deriving (Eq, Show)\n',
-              '  | DigestDecision Proposition\n  | StoreDecision\n  | ProviderDecision [ProviderOutcomeSpec]\n  deriving (Eq, Show)\n')
+              lines('  | PrimitiveContinueCommonState', '  | PrimitiveHandlePayload', '  deriving (Eq, Ord, Show)'),
+              lines('  | PrimitiveContinueCommonState', '  | PrimitiveProviderDecision [PrimitiveArgumentDiscipline] [ProviderOutcomeSpec]', '  | PrimitiveHandlePayload', '  deriving (Eq, Ord, Show)'))
+
+          replace_once(
+              'src/Phil/Surface/Check/Types.hs',
+              lines('  | DigestDecision Proposition', '  | StoreDecision', '  deriving (Eq, Show)'),
+              lines('  | DigestDecision Proposition', '  | StoreDecision', '  | ProviderDecision [ProviderOutcomeSpec]', '  deriving (Eq, Show)'))
 
           replace_once(
               'src/Phil/Surface/Check.hs',
-              '  , PrimitiveSemantics (..)\n  , ReleaseRequirement (..)\n',
-              '  , PrimitiveArgumentDiscipline (..)\n  , ProviderOutcomeSpec (..)\n  , PrimitiveSemantics (..)\n  , ReleaseRequirement (..)\n')
+              lines('  , PrimitiveSemantics (..)', '  , ReleaseRequirement (..)'),
+              lines('  , PrimitiveArgumentDiscipline (..)', '  , ProviderOutcomeSpec (..)', '  , PrimitiveSemantics (..)', '  , ReleaseRequirement (..)'))
 
           replace_once(
               'src/Phil/Surface/Parser.hs',
-              '''pCasePattern :: Parser CasePattern
-          pCasePattern = do
-            label <- rawIdentifier
-            binders <- optional (parens (identifier `MP.sepBy` symbol ","))
-            pure (CasePattern label (maybe [] id binders))
-          '''.replace('          ', ''),
-              '''pCasePattern :: Parser CasePattern
-          pCasePattern = do
-            label <- caseLabel
-            binders <- optional (parens (identifier `MP.sepBy` symbol ","))
-            pure (CasePattern label (maybe [] id binders))
-
-          -- Case labels are protocol/provider outcome tokens, not ordinary term
-          -- identifiers. Hyphens are admitted only here so `not-found` and
-          -- `storage-failure` remain single semantic labels without changing
-          -- subtraction or ordinary identifier lexing.
-          caseLabel :: Parser Text
-          caseLabel = lexeme $
-            Text.pack <$> ((:) <$> identifierStart <*> MP.many caseLabelContinue)
-            where
-              caseLabelContinue = identifierContinue <|> MPC.char '-'
-          '''.replace('          ', ''))
-
-          replace_once(
-              'src/Phil/Surface/Check/Engine.hs',
-              '    PrimitiveContinueCommonState -> readArguments 1 >> unit\n    PrimitiveHandlePayload -> unit\n',
-              '''    PrimitiveContinueCommonState -> readArguments 1 >> unit
-    PrimitiveProviderDecision disciplines outcomes -> do
-      arity (length disciplines)
-      when (null outcomes) $
-        throw located TypeMismatch "provider decision declares no outcomes"
-      let labels = map providerOutcomeLabel outcomes
-      unless (Set.size (Set.fromList labels) == length labels) $
-        throw located TypeMismatch "provider decision outcome labels are not unique"
-      next <- foldM applyProviderArgument state (zip disciplines arguments)
-      Right
-        [ valuePath next (RuntimeScalar
-            (ScalarValue Unrestricted
-              (TyOpaque "ProviderDecision")
-              (DecisionShape (ProviderDecision outcomes))))
-        ]
-    PrimitiveHandlePayload -> unit
-''')
+              lines(
+                  'pCasePattern :: Parser CasePattern',
+                  'pCasePattern = do',
+                  '  label <- rawIdentifier',
+                  '  binders <- optional (parens (identifier `MP.sepBy` symbol ","))',
+                  '  pure (CasePattern label (maybe [] id binders))'),
+              lines(
+                  'pCasePattern :: Parser CasePattern',
+                  'pCasePattern = do',
+                  '  label <- caseLabel',
+                  '  binders <- optional (parens (identifier `MP.sepBy` symbol ","))',
+                  '  pure (CasePattern label (maybe [] id binders))',
+                  '',
+                  '-- Case labels are protocol/provider outcome tokens, not ordinary term',
+                  '-- identifiers. Hyphens are admitted only here so `not-found` and',
+                  '-- `storage-failure` remain single semantic labels without changing',
+                  '-- subtraction or ordinary identifier lexing.',
+                  'caseLabel :: Parser Text',
+                  'caseLabel = lexeme $',
+                  '  Text.pack <$> ((:) <$> identifierStart <*> MP.many caseLabelContinue)',
+                  '  where',
+                  "    caseLabelContinue = identifierContinue <|> MPC.char '-'"))
 
           replace_once(
               'src/Phil/Surface/Check/Engine.hs',
-              '''    consumeRestrictedIfNamed current expression = case locatedValue expression of
-      VariableExpression name -> case Map.lookup name (stateBindings current) of
-        Just meta | bindingMode meta /= Unrestricted ->
-          snd <$> moveVariable expression name current
-        _ -> Right current
-      _ -> Right current
-''',
-              '''    consumeRestrictedIfNamed current expression = case locatedValue expression of
-      VariableExpression name -> case Map.lookup name (stateBindings current) of
-        Just meta | bindingMode meta /= Unrestricted ->
-          snd <$> moveVariable expression name current
-        _ -> Right current
-      _ -> Right current
-
-    applyProviderArgument current (discipline, expression) =
-      case discipline of
-        PrimitiveReadOnly -> do
-          _ <- inferReadOnlyScalar environment current expression
-          Right current
-        PrimitiveConsume -> do
-          (value, next) <- moveVariableArgument current expression
-          when (scalarMode value == Unrestricted) $
-            throw expression StructuralUse
-              "provider consume argument requires an affine or linear owner"
-          Right next
-''')
+              lines('    PrimitiveContinueCommonState -> readArguments 1 >> unit', '    PrimitiveHandlePayload -> unit'),
+              lines(
+                  '    PrimitiveContinueCommonState -> readArguments 1 >> unit',
+                  '    PrimitiveProviderDecision disciplines outcomes -> do',
+                  '      arity (length disciplines)',
+                  '      when (null outcomes) $',
+                  '        throw located TypeMismatch "provider decision declares no outcomes"',
+                  '      let labels = map providerOutcomeLabel outcomes',
+                  '      unless (Set.size (Set.fromList labels) == length labels) $',
+                  '        throw located TypeMismatch "provider decision outcome labels are not unique"',
+                  '      next <- foldM applyProviderArgument state (zip disciplines arguments)',
+                  '      Right',
+                  '        [ valuePath next (RuntimeScalar',
+                  '            (ScalarValue Unrestricted',
+                  '              (TyOpaque "ProviderDecision")',
+                  '              (DecisionShape (ProviderDecision outcomes))))',
+                  '        ]',
+                  '    PrimitiveHandlePayload -> unit'))
 
           replace_once(
               'src/Phil/Surface/Check/Engine.hs',
-              '  DigestDecision {} -> ["rejected", "accepted"]\n  StoreDecision -> ["failure", "success"]\n',
-              '  DigestDecision {} -> ["rejected", "accepted"]\n  StoreDecision -> ["failure", "success"]\n  ProviderDecision outcomes -> map providerOutcomeLabel outcomes\n')
+              lines(
+                  '    consumeRestrictedIfNamed current expression = case locatedValue expression of',
+                  '      VariableExpression name -> case Map.lookup name (stateBindings current) of',
+                  '        Just meta | bindingMode meta /= Unrestricted ->',
+                  '          snd <$> moveVariable expression name current',
+                  '        _ -> Right current',
+                  '      _ -> Right current'),
+              lines(
+                  '    consumeRestrictedIfNamed current expression = case locatedValue expression of',
+                  '      VariableExpression name -> case Map.lookup name (stateBindings current) of',
+                  '        Just meta | bindingMode meta /= Unrestricted ->',
+                  '          snd <$> moveVariable expression name current',
+                  '        _ -> Right current',
+                  '      _ -> Right current',
+                  '',
+                  '    applyProviderArgument current (discipline, expression) =',
+                  '      case discipline of',
+                  '        PrimitiveReadOnly -> do',
+                  '          _ <- inferReadOnlyScalar environment current expression',
+                  '          Right current',
+                  '        PrimitiveConsume -> do',
+                  '          (value, next) <- moveVariableArgument current expression',
+                  '          when (scalarMode value == Unrestricted) $',
+                  '            throw expression StructuralUse',
+                  '              "provider consume argument requires an affine or linear owner"',
+                  '          Right next'))
 
           replace_once(
               'src/Phil/Surface/Check/Engine.hs',
-              '''    (StoreDecision, "failure", [reason]) ->
-      insertBindingMeta (locatedSpan located) reason
-        (BindingMeta Unrestricted (TyOpaque "StorageFailure") PlainShape) state
-    _ -> throw located TypeMismatch
-''',
-              '''    (StoreDecision, "failure", [reason]) ->
-      insertBindingMeta (locatedSpan located) reason
-        (BindingMeta Unrestricted (TyOpaque "StorageFailure") PlainShape) state
-    (ProviderDecision outcomes, providerLabel, providerBinders) ->
-      case
-        [ providerOutcomePayload outcome
-        | outcome <- outcomes
-        , providerOutcomeLabel outcome == providerLabel
-        ] of
-        [payload]
-          | length payload == length providerBinders ->
-              foldM
-                (\current (name, (mode, ty)) ->
-                  insertBindingMeta (locatedSpan located) name
-                    (BindingMeta mode ty (shapeForBinding name (shapeForType ty)))
-                    current)
-                state
-                (zip providerBinders payload)
-        _ -> throw located TypeMismatch
-          "provider decision arm binder shape is incompatible with the declared outcome"
-    _ -> throw located TypeMismatch
-''')
+              lines('  DigestDecision {} -> ["rejected", "accepted"]', '  StoreDecision -> ["failure", "success"]'),
+              lines('  DigestDecision {} -> ["rejected", "accepted"]', '  StoreDecision -> ["failure", "success"]', '  ProviderDecision outcomes -> map providerOutcomeLabel outcomes'))
+
+          replace_once(
+              'src/Phil/Surface/Check/Engine.hs',
+              lines(
+                  '    (StoreDecision, "failure", [reason]) ->',
+                  '      insertBindingMeta (locatedSpan located) reason',
+                  '        (BindingMeta Unrestricted (TyOpaque "StorageFailure") PlainShape) state',
+                  '    _ -> throw located TypeMismatch'),
+              lines(
+                  '    (StoreDecision, "failure", [reason]) ->',
+                  '      insertBindingMeta (locatedSpan located) reason',
+                  '        (BindingMeta Unrestricted (TyOpaque "StorageFailure") PlainShape) state',
+                  '    (ProviderDecision outcomes, providerLabel, providerBinders) ->',
+                  '      case',
+                  '        [ providerOutcomePayload outcome',
+                  '        | outcome <- outcomes',
+                  '        , providerOutcomeLabel outcome == providerLabel',
+                  '        ] of',
+                  '        [payload]',
+                  '          | length payload == length providerBinders ->',
+                  '              foldM',
+                  '                (\\current (name, (mode, ty)) ->',
+                  '                  insertBindingMeta (locatedSpan located) name',
+                  '                    (BindingMeta mode ty (shapeForBinding name (shapeForType ty)))',
+                  '                    current)',
+                  '                state',
+                  '                (zip providerBinders payload)',
+                  '        _ -> throw located TypeMismatch',
+                  '          "provider decision arm binder shape is incompatible with the declared outcome"',
+                  '    _ -> throw located TypeMismatch'))
           PY
 
       - name: Build complete Haskell substrate
