@@ -215,13 +215,24 @@ Proof.
     + rewrite continuation_choice_bodies_nonnullable_sequence_step.
       apply forallb_forall.
       intros item Hin.
-      rewrite Forall_forall in Hsafe.
+      change
+        (Forall (phase1_surface_expression_choice_safe fuel) items)
+        in Hsafe.
+      apply Forall_forall in Hsafe.
       apply IH.
       exact (Hsafe item Hin).
     + rewrite choice_bodies_nonnullable_alternative_step.
       apply forallb_forall.
       intros item Hin.
-      rewrite Forall_forall in Hsafe.
+      change
+        (Forall
+          (fun candidate =>
+            nullable_expression
+              phase1_surface_nullable_facts candidate = false /\
+            phase1_surface_expression_choice_safe fuel candidate)
+          items)
+        in Hsafe.
+      apply Forall_forall in Hsafe.
       specialize (Hsafe item Hin).
       destruct Hsafe as [Hnonnullable Hchild].
       apply andb_true_iff.
