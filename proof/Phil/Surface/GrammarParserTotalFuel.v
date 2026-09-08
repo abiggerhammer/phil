@@ -482,19 +482,21 @@ Proof.
       expression_fuel
       (GoalExpression (descend path (AtNonterminal name)) body)).
   {
-    eapply phase1_surface_lookup_rule_goal_options_global.
-    exact Hlookup.
+    abstract (
+      eapply phase1_surface_lookup_rule_goal_options_global;
+      exact Hlookup).
   }
   assert (Hchild_safe :
     phase1_surface_parser_goal_choice_safe
       expression_fuel
       (GoalExpression (descend path (AtNonterminal name)) body)).
   {
-    constructor.
-    unfold phase1_surface_parser_goal_choice_safe_structural.
-    apply phase1_surface_expression_choice_safe_of_bool.
-    eapply phase1_surface_lookup_rule_choice_safe.
-    exact Hlookup.
+    abstract (
+      constructor;
+      unfold phase1_surface_parser_goal_choice_safe_structural;
+      apply phase1_surface_expression_choice_safe_of_bool;
+      eapply phase1_surface_lookup_rule_choice_safe;
+      exact Hlookup).
   }
   destruct
     (phase1_surface_parser_goal_rank_exists
@@ -506,7 +508,8 @@ Proof.
   unfold phase1_surface_parser_goal_rank_fuel in Hchild_rank_raw.
   assert (Hdecrease : child_rank < rank).
   {
-    eapply phase1_surface_nonterminal_child_rank_decreases_fuel; eauto.
+    abstract (
+      eapply phase1_surface_nonterminal_child_rank_decreases_fuel; eauto).
   }
   destruct
     (IHbody
@@ -517,20 +520,23 @@ Proof.
     phase1_surface_parser_local_measure input child_rank <=
       List.length input * phase1_surface_parser_global_goal_rank_bound + rank).
   {
-    eapply phase1_surface_same_input_measure_fits_parent_remaining.
-    exact Hdecrease.
+    abstract (
+      eapply phase1_surface_same_input_measure_fits_parent_remaining;
+      exact Hdecrease).
   }
   exists (S child_required).
   split.
-  - unfold phase1_surface_parser_local_measure in *.
-    lia.
+  - abstract (
+      unfold phase1_surface_parser_local_measure in *;
+      lia).
   - intros extra.
-    replace (S child_required + extra)
-      with (S (child_required + extra)) by lia.
-    rewrite oracle_parse_fuel_nonterminal_step.
-    rewrite Hlookup.
-    rewrite (Hchild_complete extra).
-    reflexivity.
+    abstract (
+      replace (S child_required + extra)
+        with (S (child_required + extra)) by lia;
+      rewrite oracle_parse_fuel_nonterminal_step;
+      rewrite Hlookup;
+      rewrite (Hchild_complete extra);
+      reflexivity).
 Qed.
 
 Lemma phase1_surface_sequence_wrapper_bounded_complete :
