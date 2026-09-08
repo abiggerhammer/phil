@@ -1,0 +1,51 @@
+name: Temporary INT-004 Profile-Keyed Replay
+
+on:
+  push:
+    branches: [phase1-int-004-profile-keyed-replay]
+    paths:
+      - 'test/Phase1INT004ProfileEnvironmentCompat.hs'
+      - 'test/Phase1INT004PortableNegativeManifestMain.hs'
+      - 'test/fixtures/phase1-negative/**'
+      - '.github/workflows/tmp-int-004-profile-keyed-replay.yml'
+
+permissions:
+  contents: read
+
+jobs:
+  profile-keyed-replay:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: haskell-actions/setup@v2
+        with:
+          ghc-version: '9.6.7'
+          cabal-version: 'latest'
+
+      - name: Build complete Haskell substrate
+        run: cabal build all --enable-tests
+
+      - name: Strict typecheck INT-004 profile-keyed replay
+        run: |
+          cabal exec -- ghc -isrc -itest -Wall -Werror -fno-code \
+            test/Phase1INT004ProfileEnvironmentCompat.hs \
+            test/Phase1INT004PortableNegativeManifestMain.hs
+
+      - name: Replay frozen negatives by manifest environment profile
+        run: |
+          cabal exec -- runghc -isrc -itest -Wall -Werror \
+            test/Phase1INT004PortableNegativeManifestMain.hs
+
+      - name: Guard replay against fixture-path environment selection
+        run: |
+          python3 - <<'PY'
+          from pathlib import Path
+          replay = Path('test/Phase1INT004PortableNegativeManifestMain.hs').read_text()
+          assert 'phase0EnvironmentFor' not in replay
+          assert 'phase0ProfileEnvironment (negativeCaseEnvironmentProfile negativeCase)' in replay
+          compat = Path('test/Phase1INT004ProfileEnvironmentCompat.hs').read_text()
+          assert 'phase0ProfileEnvironment :: Text -> Either Text SurfaceEnvironment' in compat
+          PY
+
+      - name: Replay legacy surface conformance harness
+        run: cabal test phil-surface-conformance-tests
