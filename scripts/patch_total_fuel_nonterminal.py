@@ -3,6 +3,16 @@ from pathlib import Path
 path = Path("proof/Phil/Surface/GrammarParserTotalFuel.v")
 text = path.read_text()
 
+start_marker = "Lemma phase1_surface_nonterminal_bounded_sufficient :"
+end_marker = "Lemma phase1_surface_sequence_wrapper_bounded_sufficient :"
+
+if text.count(start_marker) != 1 or text.count(end_marker) != 1:
+    raise SystemExit("could not uniquely locate nonterminal bounded-sufficient lemma")
+
+start = text.index(start_marker)
+end = text.index(end_marker, start)
+segment = text[start:end]
+
 replacements = [
     (
         '''  assert (Hchild_global :
@@ -91,10 +101,13 @@ replacements = [
     ),
 ]
 
-for old, new in replacements:
-    count = text.count(old)
+for index, (old, new) in enumerate(replacements, start=1):
+    count = segment.count(old)
     if count != 1:
-        raise SystemExit(f"expected exactly one match, found {count}")
-    text = text.replace(old, new)
+        raise SystemExit(
+            f"nonterminal replacement {index}: expected exactly one match, found {count}"
+        )
+    segment = segment.replace(old, new)
 
+text = text[:start] + segment + text[end:]
 path.write_text(text)
