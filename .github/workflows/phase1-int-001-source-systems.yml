@@ -1,0 +1,65 @@
+name: Phase 1 INT-001 Corresponded Systems Admission
+
+on:
+  push:
+    paths:
+      - 'src/Phil/Compiler/SourceBundle.hs'
+      - 'src/Phil/Compiler/SourceArchitecture.hs'
+      - 'src/Phil/Compiler/SourceCore.hs'
+      - 'src/Phil/Compiler/SourceSystems.hs'
+      - 'test/Phase1INT001SourceBundleMain.hs'
+      - 'test/Phase1INT001SourceArchitectureMain.hs'
+      - 'test/Phase1INT001SourceCoreMain.hs'
+      - 'test/Phase1INT001SourceSystemsMain.hs'
+      - '.github/workflows/phase1-int-001-source-systems.yml'
+  pull_request:
+    paths:
+      - 'src/Phil/Compiler/SourceBundle.hs'
+      - 'src/Phil/Compiler/SourceArchitecture.hs'
+      - 'src/Phil/Compiler/SourceCore.hs'
+      - 'src/Phil/Compiler/SourceSystems.hs'
+      - 'test/Phase1INT001SourceBundleMain.hs'
+      - 'test/Phase1INT001SourceArchitectureMain.hs'
+      - 'test/Phase1INT001SourceCoreMain.hs'
+      - 'test/Phase1INT001SourceSystemsMain.hs'
+      - '.github/workflows/phase1-int-001-source-systems.yml'
+
+jobs:
+  corresponded-systems-admission:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: haskell-actions/setup@v2
+        with:
+          ghc-version: '9.6.7'
+          cabal-version: 'latest'
+      - name: Build complete Haskell substrate
+        run: cabal build all --enable-tests
+      - name: Require opaque source Systems admission API
+        shell: bash
+        run: |
+          set -euo pipefail
+          if grep -Eq 'CheckedSourceSystemsAdmission|SourceSystemsAdmission \(\.\.\)' src/Phil/Compiler/SourceSystems.hs; then
+            echo 'SourceSystemsAdmission constructor must remain opaque'
+            exit 1
+          fi
+          grep -q '^lowerSourceSystems$' src/Phil/Compiler/SourceSystems.hs
+          if grep -A4 '^lowerSourceSystems$' src/Phil/Compiler/SourceSystems.hs | grep -q 'CoreSystemsProgram'; then
+            echo 'lowerSourceSystems must not accept a replacement CoreSystemsProgram'
+            exit 1
+          fi
+      - name: Strict typecheck source integration chain
+        run: |
+          cabal exec -- ghc -isrc -Wall -Werror -fno-code \
+            src/Phil/Compiler/SourceBundle.hs \
+            src/Phil/Compiler/SourceArchitecture.hs \
+            src/Phil/Compiler/SourceCore.hs \
+            src/Phil/Compiler/SourceSystems.hs \
+            test/Phase1INT001SourceSystemsMain.hs
+      - name: Execute source Systems admission pressure corpus
+        run: cabal exec -- runghc -isrc -Wall -Werror test/Phase1INT001SourceSystemsMain.hs
+      - name: Replay earlier INT-001 front-half controls
+        run: |
+          cabal exec -- runghc -isrc -Wall -Werror test/Phase1INT001SourceBundleMain.hs
+          cabal exec -- runghc -isrc -Wall -Werror test/Phase1INT001SourceArchitectureMain.hs
+          cabal exec -- runghc -isrc -Wall -Werror test/Phase1INT001SourceCoreMain.hs
