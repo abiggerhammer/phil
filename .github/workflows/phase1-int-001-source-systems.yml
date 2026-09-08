@@ -7,7 +7,7 @@ on:
       - 'src/Phil/Compiler/SourceArchitecture.hs'
       - 'src/Phil/Compiler/SourceCore.hs'
       - 'src/Phil/Compiler/SourceSystems.hs'
-      - 'test/Phase1INT001SourceBundleMain.hs'
+      - 'test/Phase1INT001OrdinarySourceBundleMain.hs'
       - 'test/Phase1INT001SourceArchitectureMain.hs'
       - 'test/Phase1INT001SourceCoreMain.hs'
       - 'test/Phase1INT001SourceSystemsMain.hs'
@@ -18,7 +18,7 @@ on:
       - 'src/Phil/Compiler/SourceArchitecture.hs'
       - 'src/Phil/Compiler/SourceCore.hs'
       - 'src/Phil/Compiler/SourceSystems.hs'
-      - 'test/Phase1INT001SourceBundleMain.hs'
+      - 'test/Phase1INT001OrdinarySourceBundleMain.hs'
       - 'test/Phase1INT001SourceArchitectureMain.hs'
       - 'test/Phase1INT001SourceCoreMain.hs'
       - 'test/Phase1INT001SourceSystemsMain.hs'
@@ -60,6 +60,6 @@ jobs:
         run: cabal exec -- runghc -isrc -Wall -Werror test/Phase1INT001SourceSystemsMain.hs
       - name: Replay earlier INT-001 front-half controls
         run: |
-          cabal exec -- runghc -isrc -Wall -Werror test/Phase1INT001SourceBundleMain.hs
+          cabal exec -- runghc -isrc -Wall -Werror test/Phase1INT001OrdinarySourceBundleMain.hs
           cabal exec -- runghc -isrc -Wall -Werror test/Phase1INT001SourceArchitectureMain.hs
           cabal exec -- runghc -isrc -Wall -Werror test/Phase1INT001SourceCoreMain.hs
