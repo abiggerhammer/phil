@@ -3,6 +3,10 @@
 module Phil.Examples.Phase1.SystemsWitnesses
   ( uploadPhase1StageBundle
   , stevePhase1StageBundle
+  , uploadCoreProgram
+  , uploadRealizationContext
+  , steveCoreProgram
+  , steveQualifiedRealizationContext
   , steveHostAbiDecisionId
   , steveHostAbiTargetPrecondition
   , steveHostAbiObligationRevision
@@ -40,6 +44,19 @@ uploadPhase1StageBundle =
 
 stevePhase1StageBundle :: Either String Phase1StageBundle
 stevePhase1StageBundle = do
+  context <- steveQualifiedRealizationContext
+  lowerWitness
+    (InstanceKey "instance.phase1.steve")
+    (DeclarationKey "decl.phase1.steve")
+    "Steve"
+    steveCoreProgram
+    context
+
+-- | Exact current Steve realization context after provider qualification.
+-- This is fixture data, not compiler dispatch; source-safe integration
+-- verifies the ordinary checked source/Core pair before consuming it.
+steveQualifiedRealizationContext :: Either String GenericRealizationContext
+steveQualifiedRealizationContext = do
   qualifications <- mapLeft (show . unSteveProviderQualificationError)
     materializeSteveProviderQualifications
   let digestArtifact = steveDigestProviderQualification qualifications
@@ -52,13 +69,7 @@ stevePhase1StageBundle = do
         [ qualificationEvidenceAssumptions digestArtifact
         , qualificationEvidenceAssumptions blobArtifact
         ]
-      context = steveRealizationContext qualificationRefs assumptions
-  lowerWitness
-    (InstanceKey "instance.phase1.steve")
-    (DeclarationKey "decl.phase1.steve")
-    "Steve"
-    steveCoreProgram
-    context
+  Right (steveRealizationContext qualificationRefs assumptions)
 
 -- | Witness adapters end at exact checked ArchitectureInstances.  The generic
 -- producer receives only that identity, checked Core execution, and explicit
