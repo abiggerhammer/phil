@@ -6,10 +6,12 @@ on:
       - 'src/Phil/Compiler/SourceBundle.hs'
       - 'src/Phil/Compiler/SourceArchitecture.hs'
       - 'src/Phil/Compiler/SourceCore.hs'
+      - 'src/Phil/Compiler/SourceCorePolicy.hs'
       - 'src/Phil/Compiler/SourceSystems.hs'
       - 'test/Phase1INT001OrdinarySourceBundleMain.hs'
       - 'test/Phase1INT001SourceArchitectureMain.hs'
       - 'test/Phase1INT001SourceCoreMain.hs'
+      - 'test/Phase1INT001SourceCorePolicyMain.hs'
       - 'test/Phase1INT001SourceSystemsMain.hs'
       - '.github/workflows/phase1-int-001-source-systems.yml'
   pull_request:
@@ -17,10 +19,12 @@ on:
       - 'src/Phil/Compiler/SourceBundle.hs'
       - 'src/Phil/Compiler/SourceArchitecture.hs'
       - 'src/Phil/Compiler/SourceCore.hs'
+      - 'src/Phil/Compiler/SourceCorePolicy.hs'
       - 'src/Phil/Compiler/SourceSystems.hs'
       - 'test/Phase1INT001OrdinarySourceBundleMain.hs'
       - 'test/Phase1INT001SourceArchitectureMain.hs'
       - 'test/Phase1INT001SourceCoreMain.hs'
+      - 'test/Phase1INT001SourceCorePolicyMain.hs'
       - 'test/Phase1INT001SourceSystemsMain.hs'
       - '.github/workflows/phase1-int-001-source-systems.yml'
 
@@ -48,14 +52,20 @@ jobs:
             echo 'lowerSourceSystems must not accept a replacement CoreSystemsProgram'
             exit 1
           fi
+          grep -q '^prepareSourceSystemsAdmission$' src/Phil/Compiler/SourceSystems.hs
+          grep -A5 '^prepareSourceSystemsAdmission$' src/Phil/Compiler/SourceSystems.hs | grep -q 'SourceCoreCorrespondencePolicy'
       - name: Strict typecheck source integration chain
         run: |
           cabal exec -- ghc -isrc -Wall -Werror -fno-code \
             src/Phil/Compiler/SourceBundle.hs \
             src/Phil/Compiler/SourceArchitecture.hs \
             src/Phil/Compiler/SourceCore.hs \
+            src/Phil/Compiler/SourceCorePolicy.hs \
             src/Phil/Compiler/SourceSystems.hs \
+            test/Phase1INT001SourceCorePolicyMain.hs \
             test/Phase1INT001SourceSystemsMain.hs
+      - name: Execute source-Core call and branch policy pressure corpus
+        run: cabal exec -- runghc -isrc -Wall -Werror test/Phase1INT001SourceCorePolicyMain.hs
       - name: Execute source Systems admission pressure corpus
         run: cabal exec -- runghc -isrc -Wall -Werror test/Phase1INT001SourceSystemsMain.hs
       - name: Replay earlier INT-001 front-half controls
