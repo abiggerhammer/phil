@@ -7,6 +7,7 @@ From Phil.Surface Require Import
   GrammarDeterminacyContinuationSoundness
   GrammarDeterminacyMutualPredictiveBridge
   GrammarParserGoalRank
+  GrammarParserGlobalGoalRank
   GrammarParserRecognizer
   GrammarParserProgress
   GrammarParserTotalFuelStatic
