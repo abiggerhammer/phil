@@ -13,6 +13,57 @@ start = text.index(start_marker)
 end = text.index(end_marker, start)
 segment = text[start:end]
 
+helper = '''Lemma phase1_surface_nonterminal_required_lift :
+  forall path name body input rest tree child_rank rank,
+    lookupRule name phase1_surface_rules = Some body ->
+    child_rank < rank ->
+    phase1_surface_parser_bounded_sufficient
+      (GoalExpression (descend path (AtNonterminal name)) body)
+      input rest (ResultTree tree) ->
+    phase1_surface_parser_goal_rank_fuel
+      expression_fuel
+      (GoalExpression (descend path (AtNonterminal name)) body) =
+      Some child_rank ->
+    phase1_surface_parser_goal_options_global
+      expression_fuel
+      (GoalExpression (descend path (AtNonterminal name)) body) ->
+    phase1_surface_parser_goal_choice_safe
+      expression_fuel
+      (GoalExpression (descend path (AtNonterminal name)) body) ->
+    exists required,
+      required <= phase1_surface_parser_local_measure input rank /\\
+      OracleParseFuelSufficient
+        phase1_surface_predictive_oracle
+        phase1_surface_rules
+        (GoalExpression path (ENonterminal name))
+        input rest (ResultTree (PTNonterminal name tree)) required.
+Proof.
+  intros path name body input rest tree child_rank rank
+    Hlookup Hdecrease IHbody Hchild_rank Hchild_global Hchild_safe.
+  destruct
+    (phase1_surface_parser_bounded_sufficient_elim
+      (GoalExpression (descend path (AtNonterminal name)) body)
+      input rest (ResultTree tree) IHbody
+      expression_fuel child_rank
+      Hchild_rank Hchild_global Hchild_safe (Nat.le_refl _))
+    as [child_required [Hchild_required Hchild_sufficient]].
+  exists (S child_required).
+  split.
+  - unfold phase1_surface_parser_local_measure in *.
+    lia.
+  - eapply FuelNonterminal.
+    + exact Hlookup.
+    + exact Hchild_sufficient.
+Qed.
+
+'''
+
+if "Lemma phase1_surface_nonterminal_required_lift :" not in text:
+    text = text[:start] + helper + text[start:]
+    start += len(helper)
+    end += len(helper)
+    segment = text[start:end]
+
 replacements = [
     (
         '''  assert (Hchild_global :
@@ -71,7 +122,14 @@ replacements = [
 ''',
     ),
     (
-        '''  assert (Hchild_fit :
+        '''  destruct
+    (phase1_surface_parser_bounded_sufficient_elim
+      (GoalExpression (descend path (AtNonterminal name)) body)
+      input rest (ResultTree tree) IHbody
+      expression_fuel child_rank
+      Hchild_rank Hchild_global Hchild_safe (Nat.le_refl _))
+    as [child_required [Hchild_required Hchild_sufficient]].
+  assert (Hchild_fit :
     phase1_surface_parser_local_measure input child_rank <=
       List.length input * phase1_surface_parser_global_goal_rank_bound + rank).
   {
@@ -82,21 +140,21 @@ replacements = [
   split.
   - unfold phase1_surface_parser_local_measure in *.
     lia.
+  - eapply FuelNonterminal.
+    + exact Hlookup.
+    + exact Hchild_sufficient.
+Qed.
+
 ''',
-        '''  assert (Hchild_fit :
-    phase1_surface_parser_local_measure input child_rank <=
-      List.length input * phase1_surface_parser_global_goal_rank_bound + rank) by
-    abstract (
-      eapply phase1_surface_same_input_measure_fits_parent_remaining;
-      exact Hdecrease).
-  assert (Hrequired_bound :
-    S child_required <= phase1_surface_parser_local_measure input rank) by
-    abstract (
-      unfold phase1_surface_parser_local_measure in *;
-      lia).
-  exists (S child_required).
-  split.
-  - exact Hrequired_bound.
+        '''  eapply phase1_surface_nonterminal_required_lift.
+  - exact Hlookup.
+  - exact Hdecrease.
+  - exact IHbody.
+  - exact Hchild_rank.
+  - exact Hchild_global.
+  - exact Hchild_safe.
+Qed.
+
 ''',
     ),
 ]
