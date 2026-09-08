@@ -1,0 +1,63 @@
+name: Temporary INT-004 Portable Negative Manifest
+
+on:
+  push:
+    branches: [phase1-int-004-competent-rejection-layer]
+    paths:
+      - 'examples/rejected/**'
+      - 'src/Phil/Surface/**'
+      - 'test/fixtures/phase1-negative/**'
+      - 'test/Phase1INT004PortableNegativeManifestMain.hs'
+      - 'test/SurfaceConformanceMain.hs'
+      - '.github/workflows/tmp-int-004-portable-negative-manifest.yml'
+
+permissions:
+  contents: read
+
+jobs:
+  portable-negative-manifest:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: haskell-actions/setup@v2
+        with:
+          ghc-version: '9.6.7'
+          cabal-version: 'latest'
+
+      - name: Build complete Haskell substrate
+        run: cabal build all --enable-tests
+
+      - name: Strict typecheck INT-004 portable manifest replay
+        run: |
+          cabal exec -- ghc -isrc -Wall -Werror -fno-code \
+            test/Phase1INT004PortableNegativeManifestMain.hs
+
+      - name: Replay frozen negative corpus from portable manifest
+        run: |
+          cabal exec -- runghc -isrc -Wall -Werror \
+            test/Phase1INT004PortableNegativeManifestMain.hs
+
+      - name: Replay legacy surface conformance harness during migration
+        run: cabal test phil-surface-conformance-tests
+
+      - name: Guard portable manifest shape
+        run: |
+          python3 - <<'PY'
+          from pathlib import Path
+
+          path = Path('test/fixtures/phase1-negative/manifest.tsv')
+          rows = [line.split('\t') for line in path.read_text().splitlines() if line]
+          assert rows[0] == [
+              'fixture_id', 'path', 'expect', 'competent_layer',
+              'environment_profile', 'governing_authority'
+          ]
+          body = rows[1:]
+          assert len(body) == 20
+          assert len({row[0] for row in body}) == 20
+          assert len({row[1] for row in body}) == 20
+          assert all(row[0].startswith('P1-NEG-P0-') for row in body)
+          assert all(row[3] == 'surface-check' for row in body)
+          assert all(row[4].startswith('phase0.') for row in body)
+          assert all(row[5] == 'INT-004' for row in body)
+          assert all(Path(row[1]).is_file() for row in body)
+          PY

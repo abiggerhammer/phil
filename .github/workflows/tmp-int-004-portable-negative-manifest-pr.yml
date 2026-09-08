@@ -1,0 +1,32 @@
+name: Temporary INT-004 Portable Negative Manifest PR
+
+on:
+  pull_request:
+    paths:
+      - 'examples/rejected/**'
+      - 'src/Phil/Surface/**'
+      - 'test/fixtures/phase1-negative/**'
+      - 'test/Phase1INT004PortableNegativeManifestMain.hs'
+      - 'test/SurfaceConformanceMain.hs'
+      - '.github/workflows/tmp-int-004-portable-negative-manifest-pr.yml'
+
+permissions:
+  contents: read
+
+jobs:
+  portable-negative-manifest-pr:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: haskell-actions/setup@v2
+        with:
+          ghc-version: '9.6.7'
+          cabal-version: 'latest'
+      - name: Build complete Haskell substrate
+        run: cabal build all --enable-tests
+      - name: Strict typecheck INT-004 portable manifest replay
+        run: cabal exec -- ghc -isrc -Wall -Werror -fno-code test/Phase1INT004PortableNegativeManifestMain.hs
+      - name: Replay frozen negative corpus from portable manifest
+        run: cabal exec -- runghc -isrc -Wall -Werror test/Phase1INT004PortableNegativeManifestMain.hs
+      - name: Replay legacy surface conformance harness during migration
+        run: cabal test phil-surface-conformance-tests
