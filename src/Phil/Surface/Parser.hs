@@ -395,9 +395,19 @@ pSingleStatementBlock = do
 
 pCasePattern :: Parser CasePattern
 pCasePattern = do
-  label <- rawIdentifier
+  label <- caseLabel
   binders <- optional (parens (identifier `MP.sepBy` symbol ","))
   pure (CasePattern label (maybe [] id binders))
+
+-- Case labels are protocol/provider outcome tokens, not ordinary term
+-- identifiers. Hyphens are admitted only here so `not-found` and
+-- `storage-failure` remain single semantic labels without changing
+-- subtraction or ordinary identifier lexing.
+caseLabel :: Parser Text
+caseLabel = lexeme $
+  Text.pack <$> ((:) <$> identifierStart <*> MP.many caseLabelContinue)
+  where
+    caseLabelContinue = identifierContinue <|> MPC.char '-'
 
 pReceiveFrameExpression :: Parser SurfaceExpression
 pReceiveFrameExpression = do
