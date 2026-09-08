@@ -5,6 +5,7 @@ module Main (main) where
 import qualified Data.Map.Strict as Map
 import qualified Data.Set as Set
 import Data.Text (Text)
+import qualified Data.Text as Text
 import qualified Data.Text.IO as TextIO
 import Phil.Compiler.SourceArchitecture
 import Phil.Compiler.SourceBundle
@@ -15,8 +16,7 @@ import Phil.Core.Static
   , emptyStaticContext
   )
 import Phil.Core.Syntax
-  ( GrammarId (..)
-  , Mode (..)
+  ( Mode (..)
   , Name (..)
   , Proposition (..)
   , RefSort (..)
@@ -131,7 +131,7 @@ uploadBaseEnvironment = do
       , (Name "payload_id", SortStableId "OwnedBytes")
       ]
       emptyStaticContext of
-        Left err -> Left (fromStringShow err)
+        Left err -> Left (Text.pack (show err))
         Right context -> Right context
   pure (emptySurfaceEnvironment staticContext)
     { surfacePrimitives = Map.fromList
@@ -218,12 +218,6 @@ emptyReleaseAccount subject = ReleaseSemanticAccount
   , releaseAccountCostRefs = Set.empty
   , releaseAccountSubjectRef = subject
   }
-
-fromStringShow :: Show a => a -> Text
-fromStringShow = fromString . show
-
-fromString :: String -> Text
-fromString = Data.Text.pack
 
 mapLeft :: (a -> b) -> Either a c -> Either b c
 mapLeft f = either (Left . f) Right
