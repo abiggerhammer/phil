@@ -99,6 +99,331 @@ Proof.
   reflexivity.
 Qed.
 
+Definition phase1_surface_parser_bounded_complete
+  (goal : DerivationGoal)
+  (input rest : list ConcreteToken)
+  (result : DerivationResult) : Prop :=
+  forall static_fuel rank,
+    phase1_surface_parser_goal_rank_fuel static_fuel goal = Some rank ->
+    phase1_surface_parser_goal_options_global static_fuel goal ->
+    phase1_surface_parser_goal_choice_safe static_fuel goal ->
+    static_fuel <= expression_fuel ->
+    exists required,
+      required <= phase1_surface_parser_local_measure input rank /\
+      forall extra,
+        oracle_parse_fuel
+          (required + extra)
+          phase1_surface_predictive_oracle
+          phase1_surface_rules
+          goal input = Some (rest, result).
+
+Lemma phase1_surface_sequence_cons_bounded_complete :
+  forall path index item items input middle rest tree trees,
+    OracleDerives
+      phase1_surface_predictive_oracle phase1_surface_rules
+      (GoalExpression (descend path (AtSequence index)) item)
+      input middle (ResultTree tree) ->
+    phase1_surface_parser_bounded_complete
+      (GoalExpression (descend path (AtSequence index)) item)
+      input middle (ResultTree tree) ->
+    OracleDerives
+      phase1_surface_predictive_oracle phase1_surface_rules
+      (GoalSequence path (S index) items)
+      middle rest (ResultTrees trees) ->
+    phase1_surface_parser_bounded_complete
+      (GoalSequence path (S index) items)
+      middle rest (ResultTrees trees) ->
+    phase1_surface_parser_bounded_complete
+      (GoalSequence path index (item :: items))
+      input rest (ResultTrees (tree :: trees)).
+Proof.
+  intros path index item items input middle rest tree trees
+    Hhead IHhead Htail IHtail.
+  unfold phase1_surface_parser_bounded_complete in IHhead, IHtail |- *.
+  intros static_fuel rank Hrank Hglobal Hsafe Hsfuel.
+  assert (Hhead_global :
+    phase1_surface_parser_goal_options_global
+      static_fuel
+      (GoalExpression (descend path (AtSequence index)) item)).
+  {
+    eapply phase1_surface_sequence_head_options_global.
+    exact Hglobal.
+  }
+  assert (Htail_global :
+    phase1_surface_parser_goal_options_global
+      static_fuel (GoalSequence path (S index) items)).
+  {
+    eapply phase1_surface_sequence_tail_options_global.
+    exact Hglobal.
+  }
+  destruct
+    (phase1_surface_sequence_cons_choice_safe
+      static_fuel path index item items Hsafe)
+    as [Hhead_safe Htail_safe].
+  destruct
+    (phase1_surface_parser_goal_rank_exists
+      static_fuel
+      (GoalExpression (descend path (AtSequence index)) item)
+      Hhead_global)
+    as [head_rank Hhead_rank].
+  destruct
+    (phase1_surface_parser_goal_rank_exists
+      static_fuel (GoalSequence path (S index) items)
+      Htail_global)
+    as [tail_rank Htail_rank].
+  pose proof Hrank as Hparent_rank_raw.
+  pose proof Hhead_rank as Hhead_rank_raw.
+  pose proof Htail_rank as Htail_rank_raw.
+  unfold phase1_surface_parser_goal_rank_fuel in
+    Hparent_rank_raw, Hhead_rank_raw, Htail_rank_raw.
+  assert (Hhead_decrease : head_rank < rank).
+  {
+    eapply parser_sequence_head_rank_decreases; eauto.
+  }
+  destruct
+    (IHhead
+      static_fuel head_rank
+      Hhead_rank Hhead_global Hhead_safe Hsfuel)
+    as [head_required [Hhead_required Hhead_complete]].
+  destruct
+    (IHtail
+      static_fuel tail_rank
+      Htail_rank Htail_global Htail_safe Hsfuel)
+    as [tail_required [Htail_required Htail_complete]].
+  assert (Hhead_fit :
+    head_required <=
+      List.length input * phase1_surface_parser_global_goal_rank_bound + rank).
+  {
+    eapply Nat.le_trans.
+    - exact Hhead_required.
+    - eapply phase1_surface_same_input_measure_fits_parent_remaining.
+      exact Hhead_decrease.
+  }
+  assert (Htail_fit :
+    tail_required <=
+      List.length input * phase1_surface_parser_global_goal_rank_bound + rank).
+  {
+    destruct (list_eq_dec concrete_token_eq_dec input middle)
+      as [Hequal | Hprogress].
+    - subst middle.
+      assert (Hhead_safe_static :
+        choice_bodies_nonnullable_fuel static_fuel item = true).
+      {
+        eapply phase1_surface_expression_goal_choice_safe_bool.
+        exact Hhead_safe.
+      }
+      assert (Hhead_safe_full :
+        choice_bodies_nonnullable_fuel expression_fuel item = true).
+      {
+        eapply choice_bodies_nonnullable_fuel_monotone.
+        + exact Hsfuel.
+        + exact Hhead_safe_static.
+      }
+      pose proof
+        (phase1_surface_zero_consume_oracle_expression_is_nullable
+          phase1_surface_predictive_oracle
+          (descend path (AtSequence index))
+          item input tree Hhead Hhead_safe_full)
+        as Hnullable.
+      assert (Htail_decrease : tail_rank < rank).
+      {
+        eapply parser_sequence_nullable_tail_rank_decreases; eauto.
+      }
+      eapply Nat.le_trans.
+      + exact Htail_required.
+      + eapply phase1_surface_same_input_measure_fits_parent_remaining.
+        exact Htail_decrease.
+    - pose proof
+        (oracle_derivation_progress_decreases_length
+          phase1_surface_predictive_oracle phase1_surface_rules
+          (GoalExpression (descend path (AtSequence index)) item)
+          input middle (ResultTree tree) Hhead Hprogress)
+        as Hlength.
+      pose proof
+        (phase1_surface_parser_goal_rank_below_global_bound
+          static_fuel (GoalSequence path (S index) items)
+          tail_rank Htail_global Htail_rank)
+        as Htail_bound.
+      eapply Nat.le_trans.
+      + exact Htail_required.
+      + eapply phase1_surface_progress_measure_fits_parent_remaining; eauto.
+  }
+  assert (Hmax_fit :
+    Nat.max head_required tail_required <=
+      List.length input * phase1_surface_parser_global_goal_rank_bound + rank).
+  {
+    apply Nat.max_lub; assumption.
+  }
+  exists (S (Nat.max head_required tail_required)).
+  split.
+  - unfold phase1_surface_parser_local_measure.
+    lia.
+  - intros extra.
+    simpl.
+    replace
+      (Nat.max head_required tail_required + extra)
+      with
+      (head_required +
+        ((Nat.max head_required tail_required - head_required) + extra))
+      by lia.
+    rewrite
+      (Hhead_complete
+        ((Nat.max head_required tail_required - head_required) + extra)).
+    replace
+      (head_required +
+        ((Nat.max head_required tail_required - head_required) + extra))
+      with
+      (tail_required +
+        ((Nat.max head_required tail_required - tail_required) + extra))
+      by lia.
+    rewrite
+      (Htail_complete
+        ((Nat.max head_required tail_required - tail_required) + extra)).
+    reflexivity.
+Qed.
+
+Lemma phase1_surface_repetition_step_bounded_complete :
+  forall path body input middle rest tree trees,
+    phase1_surface_predictive_oracle path input =
+      Some ChooseRepetitionContinue ->
+    OracleDerives
+      phase1_surface_predictive_oracle phase1_surface_rules
+      (GoalExpression (descend path AtRepetitionBody) body)
+      input middle (ResultTree tree) ->
+    phase1_surface_parser_bounded_complete
+      (GoalExpression (descend path AtRepetitionBody) body)
+      input middle (ResultTree tree) ->
+    input <> middle ->
+    OracleDerives
+      phase1_surface_predictive_oracle phase1_surface_rules
+      (GoalRepetition path body)
+      middle rest (ResultTrees trees) ->
+    phase1_surface_parser_bounded_complete
+      (GoalRepetition path body)
+      middle rest (ResultTrees trees) ->
+    phase1_surface_parser_bounded_complete
+      (GoalRepetition path body)
+      input rest (ResultTrees (tree :: trees)).
+Proof.
+  intros path body input middle rest tree trees
+    Hdecision Hbody IHbody Hprogress Htail IHtail.
+  unfold phase1_surface_parser_bounded_complete in IHbody, IHtail |- *.
+  intros static_fuel rank Hrank Hglobal Hsafe Hsfuel.
+  assert (Hbody_global :
+    phase1_surface_parser_goal_options_global
+      static_fuel
+      (GoalExpression (descend path AtRepetitionBody) body)).
+  {
+    eapply phase1_surface_repetition_body_options_global.
+    exact Hglobal.
+  }
+  assert (Hbody_safe :
+    phase1_surface_parser_goal_choice_safe
+      static_fuel
+      (GoalExpression (descend path AtRepetitionBody) body)).
+  {
+    eapply phase1_surface_repetition_body_choice_safe.
+    exact Hsafe.
+  }
+  destruct
+    (phase1_surface_parser_goal_rank_exists
+      static_fuel
+      (GoalExpression (descend path AtRepetitionBody) body)
+      Hbody_global)
+    as [body_rank Hbody_rank].
+  pose proof Hrank as Hparent_rank_raw.
+  pose proof Hbody_rank as Hbody_rank_raw.
+  unfold phase1_surface_parser_goal_rank_fuel in
+    Hparent_rank_raw, Hbody_rank_raw.
+  assert (Hbody_decrease : body_rank < rank).
+  {
+    eapply parser_repetition_body_rank_decreases; eauto.
+  }
+  destruct
+    (IHbody
+      static_fuel body_rank
+      Hbody_rank Hbody_global Hbody_safe Hsfuel)
+    as [body_required [Hbody_required Hbody_complete]].
+  destruct
+    (IHtail
+      static_fuel rank
+      Hrank Hglobal Hsafe Hsfuel)
+    as [tail_required [Htail_required Htail_complete]].
+  assert (Hbody_fit :
+    body_required <=
+      List.length input * phase1_surface_parser_global_goal_rank_bound + rank).
+  {
+    eapply Nat.le_trans.
+    - exact Hbody_required.
+    - eapply phase1_surface_same_input_measure_fits_parent_remaining.
+      exact Hbody_decrease.
+  }
+  assert (Hparent_bound :
+    rank < phase1_surface_parser_global_goal_rank_bound).
+  {
+    exact
+      (phase1_surface_parser_goal_rank_below_global_bound
+        static_fuel (GoalRepetition path body)
+        rank Hglobal Hrank).
+  }
+  pose proof
+    (oracle_derivation_progress_decreases_length
+      phase1_surface_predictive_oracle phase1_surface_rules
+      (GoalExpression (descend path AtRepetitionBody) body)
+      input middle (ResultTree tree) Hbody Hprogress)
+    as Hlength.
+  assert (Htail_fit :
+    tail_required <=
+      List.length input * phase1_surface_parser_global_goal_rank_bound + rank).
+  {
+    eapply Nat.le_trans.
+    - exact Htail_required.
+    - eapply phase1_surface_progress_measure_fits_parent_remaining; eauto.
+  }
+  assert (Hmax_fit :
+    Nat.max body_required tail_required <=
+      List.length input * phase1_surface_parser_global_goal_rank_bound + rank).
+  {
+    apply Nat.max_lub; assumption.
+  }
+  exists (S (Nat.max body_required tail_required)).
+  split.
+  - unfold phase1_surface_parser_local_measure.
+    lia.
+  - intros extra.
+    simpl.
+    rewrite Hdecision.
+    replace
+      (Nat.max body_required tail_required + extra)
+      with
+      (body_required +
+        ((Nat.max body_required tail_required - body_required) + extra))
+      by lia.
+    rewrite
+      (Hbody_complete
+        ((Nat.max body_required tail_required - body_required) + extra)).
+    destruct (list_eq_dec concrete_token_eq_dec input middle)
+      as [Hequal | Hdifferent].
+    {
+      exfalso.
+      apply Hprogress.
+      exact Hequal.
+    }
+    {
+      replace
+        (body_required +
+          ((Nat.max body_required tail_required - body_required) + extra))
+        with
+        (tail_required +
+          ((Nat.max body_required tail_required - tail_required) + extra))
+        by lia.
+      rewrite
+        (Htail_complete
+          ((Nat.max body_required tail_required - tail_required) + extra)).
+      reflexivity.
+    }
+Qed.
+
 Theorem phase1_surface_oracle_parse_fuel_bounded_complete :
   forall goal input rest result,
     OracleDerives
@@ -421,145 +746,13 @@ Proof.
     + intros extra.
       simpl.
       reflexivity.
-  - assert (Hhead_global :
-      phase1_surface_parser_goal_options_global
-        static_fuel
-        (GoalExpression (descend path (AtSequence index)) item)).
-    {
-      eapply phase1_surface_sequence_head_options_global.
-      exact Hglobal.
-    }
-    assert (Htail_global :
-      phase1_surface_parser_goal_options_global
-        static_fuel (GoalSequence path (S index) items)).
-    {
-      eapply phase1_surface_sequence_tail_options_global.
-      exact Hglobal.
-    }
-    destruct
-      (phase1_surface_sequence_cons_choice_safe
-        static_fuel path index item items Hsafe)
-      as [Hhead_safe Htail_safe].
-    destruct
-      (phase1_surface_parser_goal_rank_exists
-        static_fuel
-        (GoalExpression (descend path (AtSequence index)) item)
-        Hhead_global)
-      as [head_rank Hhead_rank].
-    destruct
-      (phase1_surface_parser_goal_rank_exists
-        static_fuel (GoalSequence path (S index) items)
-        Htail_global)
-      as [tail_rank Htail_rank].
-    pose proof Hrank as Hparent_rank_raw.
-    pose proof Hhead_rank as Hhead_rank_raw.
-    pose proof Htail_rank as Htail_rank_raw.
-    unfold phase1_surface_parser_goal_rank_fuel in
-      Hparent_rank_raw, Hhead_rank_raw, Htail_rank_raw.
-    assert (Hhead_decrease : head_rank < rank).
-    {
-      eapply parser_sequence_head_rank_decreases; eauto.
-    }
-    destruct
-      (IHhead
-        static_fuel head_rank
-        Hhead_rank Hhead_global Hhead_safe Hsfuel)
-      as [head_required [Hhead_required Hhead_complete]].
-    destruct
-      (IHtail
-        static_fuel tail_rank
-        Htail_rank Htail_global Htail_safe Hsfuel)
-      as [tail_required [Htail_required Htail_complete]].
-    assert (Hhead_fit :
-      head_required <=
-        List.length input * phase1_surface_parser_global_goal_rank_bound + rank).
-    {
-      eapply Nat.le_trans.
-      - exact Hhead_required.
-      - eapply phase1_surface_same_input_measure_fits_parent_remaining.
-        exact Hhead_decrease.
-    }
-    assert (Htail_fit :
-      tail_required <=
-        List.length input * phase1_surface_parser_global_goal_rank_bound + rank).
-    {
-      destruct (list_eq_dec concrete_token_eq_dec input middle)
-        as [Hequal | Hprogress].
-      - subst middle.
-        assert (Hhead_safe_static :
-          choice_bodies_nonnullable_fuel static_fuel item = true).
-        {
-          eapply phase1_surface_expression_goal_choice_safe_bool.
-          exact Hhead_safe.
-        }
-        assert (Hhead_safe_full :
-          choice_bodies_nonnullable_fuel expression_fuel item = true).
-        {
-          eapply choice_bodies_nonnullable_fuel_monotone.
-          + exact Hsfuel.
-          + exact Hhead_safe_static.
-        }
-        pose proof
-          (phase1_surface_zero_consume_oracle_expression_is_nullable
-            phase1_surface_predictive_oracle
-            (descend path (AtSequence index))
-            item input tree Hhead Hhead_safe_full)
-          as Hnullable.
-        assert (Htail_decrease : tail_rank < rank).
-        {
-          eapply parser_sequence_nullable_tail_rank_decreases; eauto.
-        }
-        eapply Nat.le_trans.
-        + exact Htail_required.
-        + eapply phase1_surface_same_input_measure_fits_parent_remaining.
-          exact Htail_decrease.
-      - pose proof
-          (oracle_derivation_progress_decreases_length
-            phase1_surface_predictive_oracle phase1_surface_rules
-            (GoalExpression (descend path (AtSequence index)) item)
-            input middle (ResultTree tree) Hhead Hprogress)
-          as Hlength.
-        pose proof
-          (phase1_surface_parser_goal_rank_below_global_bound
-            static_fuel (GoalSequence path (S index) items)
-            tail_rank Htail_global Htail_rank)
-          as Htail_bound.
-        eapply Nat.le_trans.
-        + exact Htail_required.
-        + eapply phase1_surface_progress_measure_fits_parent_remaining; eauto.
-    }
-    assert (Hmax_fit :
-      Nat.max head_required tail_required <=
-        List.length input * phase1_surface_parser_global_goal_rank_bound + rank).
-    {
-      apply Nat.max_lub; assumption.
-    }
-    exists (S (Nat.max head_required tail_required)).
-    split.
-    + unfold phase1_surface_parser_local_measure.
-      lia.
-    + intros extra.
-      simpl.
-      replace
-        (Nat.max head_required tail_required + extra)
-        with
-        (head_required +
-          ((Nat.max head_required tail_required - head_required) + extra))
-        by lia.
-      rewrite
-        (Hhead_complete
-          ((Nat.max head_required tail_required - head_required) + extra)).
-      replace
-        (head_required +
-          ((Nat.max head_required tail_required - head_required) + extra))
-        with
-        (tail_required +
-          ((Nat.max head_required tail_required - tail_required) + extra))
-        by lia.
-      rewrite
-        (Htail_complete
-          ((Nat.max head_required tail_required - tail_required) + extra)).
-      reflexivity.
+  - pose proof
+      (phase1_surface_sequence_cons_bounded_complete
+        path index item items input middle rest tree trees
+        Hhead IHhead Htail IHtail)
+      as Hcase.
+    unfold phase1_surface_parser_bounded_complete in Hcase.
+    exact (Hcase static_fuel rank Hrank Hglobal Hsafe Hsfuel).
   - exists 1.
     split.
     + unfold phase1_surface_parser_local_measure. lia.
@@ -567,119 +760,13 @@ Proof.
       simpl.
       rewrite Hdecision.
       reflexivity.
-  - assert (Hbody_global :
-      phase1_surface_parser_goal_options_global
-        static_fuel
-        (GoalExpression (descend path AtRepetitionBody) body)).
-    {
-      eapply phase1_surface_repetition_body_options_global.
-      exact Hglobal.
-    }
-    assert (Hbody_safe :
-      phase1_surface_parser_goal_choice_safe
-        static_fuel
-        (GoalExpression (descend path AtRepetitionBody) body)).
-    {
-      eapply phase1_surface_repetition_body_choice_safe.
-      exact Hsafe.
-    }
-    destruct
-      (phase1_surface_parser_goal_rank_exists
-        static_fuel
-        (GoalExpression (descend path AtRepetitionBody) body)
-        Hbody_global)
-      as [body_rank Hbody_rank].
-    pose proof Hrank as Hparent_rank_raw.
-    pose proof Hbody_rank as Hbody_rank_raw.
-    unfold phase1_surface_parser_goal_rank_fuel in
-      Hparent_rank_raw, Hbody_rank_raw.
-    assert (Hbody_decrease : body_rank < rank).
-    {
-      eapply parser_repetition_body_rank_decreases; eauto.
-    }
-    destruct
-      (IHbody
-        static_fuel body_rank
-        Hbody_rank Hbody_global Hbody_safe Hsfuel)
-      as [body_required [Hbody_required Hbody_complete]].
-    destruct
-      (IHtail
-        static_fuel rank
-        Hrank Hglobal Hsafe Hsfuel)
-      as [tail_required [Htail_required Htail_complete]].
-    assert (Hbody_fit :
-      body_required <=
-        List.length input * phase1_surface_parser_global_goal_rank_bound + rank).
-    {
-      eapply Nat.le_trans.
-      - exact Hbody_required.
-      - eapply phase1_surface_same_input_measure_fits_parent_remaining.
-        exact Hbody_decrease.
-    }
-    assert (Hparent_bound :
-      rank < phase1_surface_parser_global_goal_rank_bound).
-    {
-      exact
-        (phase1_surface_parser_goal_rank_below_global_bound
-          static_fuel (GoalRepetition path body)
-          rank Hglobal Hrank).
-    }
-    pose proof
-      (oracle_derivation_progress_decreases_length
-        phase1_surface_predictive_oracle phase1_surface_rules
-        (GoalExpression (descend path AtRepetitionBody) body)
-        input middle (ResultTree tree) Hbody Hprogress)
-      as Hlength.
-    assert (Htail_fit :
-      tail_required <=
-        List.length input * phase1_surface_parser_global_goal_rank_bound + rank).
-    {
-      eapply Nat.le_trans.
-      - exact Htail_required.
-      - eapply phase1_surface_progress_measure_fits_parent_remaining; eauto.
-    }
-    assert (Hmax_fit :
-      Nat.max body_required tail_required <=
-        List.length input * phase1_surface_parser_global_goal_rank_bound + rank).
-    {
-      apply Nat.max_lub; assumption.
-    }
-    exists (S (Nat.max body_required tail_required)).
-    split.
-    + unfold phase1_surface_parser_local_measure.
-      lia.
-    + intros extra.
-      simpl.
-      rewrite Hdecision.
-      replace
-        (Nat.max body_required tail_required + extra)
-        with
-        (body_required +
-          ((Nat.max body_required tail_required - body_required) + extra))
-        by lia.
-      rewrite
-        (Hbody_complete
-          ((Nat.max body_required tail_required - body_required) + extra)).
-      destruct (list_eq_dec concrete_token_eq_dec input middle)
-        as [Hequal | Hdifferent].
-      {
-        exfalso.
-        apply Hprogress.
-        exact Hequal.
-      }
-      {
-        replace
-          (body_required +
-            ((Nat.max body_required tail_required - body_required) + extra))
-          with
-          (tail_required +
-            ((Nat.max body_required tail_required - tail_required) + extra))
-          by lia.
-        rewrite
-          (Htail_complete
-            ((Nat.max body_required tail_required - tail_required) + extra)).
-        reflexivity.
-      }
+  - pose proof
+      (phase1_surface_repetition_step_bounded_complete
+        path body input middle rest tree trees
+        Hdecision Hbody IHbody Hprogress Htail IHtail)
+      as Hcase.
+    unfold phase1_surface_parser_bounded_complete in Hcase.
+    exact (Hcase static_fuel rank Hrank Hglobal Hsafe Hsfuel).
 Qed.
 
 Theorem phase1_surface_predictive_parse_total_fuel_oracle_complete :
