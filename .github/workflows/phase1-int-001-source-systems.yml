@@ -61,8 +61,10 @@ jobs:
             src/Phil/Compiler/SourceArchitecture.hs \
             src/Phil/Compiler/SourceCore.hs \
             src/Phil/Compiler/SourceCorePolicy.hs \
-            src/Phil/Compiler/SourceSystems.hs \
-            test/Phase1INT001SourceCorePolicyMain.hs \
+            src/Phil/Compiler/SourceSystems.hs
+          cabal exec -- ghc -isrc -Wall -Werror -fno-code \
+            test/Phase1INT001SourceCorePolicyMain.hs
+          cabal exec -- ghc -isrc -Wall -Werror -fno-code \
             test/Phase1INT001SourceSystemsMain.hs
       - name: Execute source-Core call and branch policy pressure corpus
         run: cabal exec -- runghc -isrc -Wall -Werror test/Phase1INT001SourceCorePolicyMain.hs
