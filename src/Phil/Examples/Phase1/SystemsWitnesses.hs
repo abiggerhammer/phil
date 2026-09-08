@@ -278,6 +278,10 @@ uploadClientFunction = CoreSystemsFunction
       [ value "client.transport" CoreTransportHandle (Just "transport.client")
       , value "client.payload" (CoreOwnedBuffer "Bytes[payload.length]")
           (Just "payload.client")
+      , value "client.payload_view" (CoreBorrowedValue "client.payload") Nothing
+      , value "client.supported_versions" (CoreRuntimeScalar "VersionSet") Nothing
+      , value "client.declared_digest" (CoreRuntimeScalar "SHA256Digest") Nothing
+      , value "client.upload_id" (CoreRuntimeScalar "UploadId") Nothing
       , value "client.version_branch" (CoreRuntimeScalar "Bool") Nothing
       , value "client.begin_branch" (CoreRuntimeScalar "Bool") Nothing
       , value "client.should_cancel" (CoreRuntimeScalar "Bool") Nothing
@@ -285,7 +289,9 @@ uploadClientFunction = CoreSystemsFunction
       ]
   , coreFunctionBlocks = blockMap
       [ block "client.entry"
-          [ CoreRuntimeCall "semantic-call" "send Hello"
+          [ CoreRuntimeCall "semantic-call" "supported_versions"
+              [] ["client.supported_versions"] Nothing
+          , CoreRuntimeCall "semantic-call" "send Hello"
               ["client.transport"] [] Nothing
           , CoreRuntimeCall "semantic-call" "receive version/unsupported label"
               ["client.transport"] ["client.version_branch"] Nothing
@@ -301,7 +307,10 @@ uploadClientFunction = CoreSystemsFunction
       , block "client.version_failure" []
           (CoreSystemsFatal "VersionRefinementFailure")
       , block "client.version"
-          [ CoreRuntimeCall "semantic-call" "send Begin"
+          [ CoreBorrowView "payload-borrow" "client.payload_view" "client.payload"
+          , CoreRuntimeCall "semantic-call" "sha256"
+              ["client.payload_view"] ["client.declared_digest"] Nothing
+          , CoreRuntimeCall "semantic-call" "send Begin"
               ["client.transport"] [] Nothing
           , CoreRuntimeCall "semantic-call" "receive proceed/reject label"
               ["client.transport"] ["client.begin_branch"] Nothing
@@ -334,7 +343,11 @@ uploadClientFunction = CoreSystemsFunction
           ]
           (CoreSystemsBranch "client.result_branch"
             "client.accepted" "client.rejected")
-      , block "client.accepted" [] (CoreSystemsEnd "success")
+      , block "client.accepted"
+          [ CoreRuntimeCall "semantic-call" "record_upload_id"
+              ["client.upload_id"] [] Nothing
+          ]
+          (CoreSystemsEnd "success")
       , block "client.rejected" [] (CoreSystemsEnd "failure")
       ]
   }
@@ -502,9 +515,15 @@ steveGetFunction = CoreSystemsFunction
               [ ("accepted", "get.ok")
               , ("rejected", "get.integrity-failure")
               ]))
-      , block "get.ok" [CoreTrace "steve.get.commit"] (CoreSystemsEnd "success")
+      , block "get.ok"
+          [ CoreReleaseOwner "cleanup" "get.bytes"
+          , CoreTrace "steve.get.commit"
+          ]
+          (CoreSystemsEnd "success")
       , block "get.not-found" [] (CoreSystemsEnd "not-found")
-      , block "get.integrity-failure" [] (CoreSystemsEnd "integrity-failure")
+      , block "get.integrity-failure"
+          [CoreReleaseOwner "cleanup" "get.bytes"]
+          (CoreSystemsEnd "integrity-failure")
       , block "get.failure" [] (CoreSystemsEnd "storage-failure")
       ]
   }
@@ -520,22 +539,24 @@ steveRealizationContext qualificationRefs assumptions = GenericRealizationContex
   , genericContextRealizationRefs = Set.singleton "realization:steve.host.v1"
   , genericContextQualificationRefs = qualificationRefs
   , genericContextAssumptions = assumptions
-  , genericContextDecisions = Map.singleton "host-abi"
-      GenericDecisionSpec
-        { genericDecisionId = steveHostAbiDecisionId
-        , genericDecisionSourceRepresentation =
-            "Steve BlobProvider semantic byte slice"
-        , genericDecisionTargetRepresentation =
-            "host pointer/length byte-slice ABI"
-        , genericDecisionSemanticEntities = ["steve.blob.byte-slice"]
-        , genericDecisionAction = ChooseLayout
-        , genericDecisionCostClass = Just TargetRequired
-        , genericDecisionCostShape =
-            emptyCostShape { costFrequency = Just "per provider ABI realization" }
-        , genericDecisionTargetPreconditions = [steveHostAbiTargetPrecondition]
-        , genericDecisionAssumptions = []
-        , genericDecisionDerivedObligations = [steveHostAbiObligationRevision]
-        }
+  , genericContextDecisions = Map.fromList
+      [ ("host-abi", GenericDecisionSpec
+          { genericDecisionId = steveHostAbiDecisionId
+          , genericDecisionSourceRepresentation =
+              "Steve BlobProvider semantic byte slice"
+          , genericDecisionTargetRepresentation =
+              "host pointer/length byte-slice ABI"
+          , genericDecisionSemanticEntities = ["steve.blob.byte-slice"]
+          , genericDecisionAction = ChooseLayout
+          , genericDecisionCostClass = Just TargetRequired
+          , genericDecisionCostShape =
+              emptyCostShape { costFrequency = Just "per provider ABI realization" }
+          , genericDecisionTargetPreconditions = [steveHostAbiTargetPrecondition]
+          , genericDecisionAssumptions = []
+          , genericDecisionDerivedObligations = [steveHostAbiObligationRevision]
+          })
+      , ordinaryDecision "cleanup" "lower.resource.cleanup" Cleanup
+      ]
   , genericContextRuntimeSites = Map.empty
   }
 
