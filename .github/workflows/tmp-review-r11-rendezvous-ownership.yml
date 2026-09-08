@@ -1,0 +1,134 @@
+name: Temporary R11 rendezvous ownership remediation
+
+on:
+  push:
+    branches: [phase1-review-r11-rendezvous-ownership]
+
+permissions:
+  contents: write
+
+jobs:
+  patch:
+    if: github.actor != 'github-actions[bot]'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: phase1-review-r11-rendezvous-ownership
+          fetch-depth: 0
+
+      - uses: haskell-actions/setup@v2
+        with:
+          ghc-version: '9.6.7'
+          cabal-version: 'latest'
+
+      - name: Apply R11 complete-ownership repair
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 - <<'PY'
+          from pathlib import Path
+
+          def edit(path, old, new):
+              p = Path(path)
+              text = p.read_text()
+              if old not in text:
+                  raise SystemExit(f'anchor not found in {path}: {old[:180]!r}')
+              p.write_text(text.replace(old, new, 1))
+
+          # Full native communication state transitions always advance endpoint owners.
+          edit('src/Phil/Core/ProcessRendezvous.hs',
+               '  , checkProcessCommunication\n  , checkProcessCommunicationSuccessor\n',
+               '  , checkProcessCommunication\n  , checkProcessCommunicationState\n  , checkProcessCommunicationSuccessor\n')
+          edit('src/Phil/Core/ProcessRendezvous.hs',
+               '''    JointProcessRendezvous request ->\n      checkJointRendezvous instanceValue network contexts request\n\n-- | Advance an already-checked live communication state. Initial protocol\n''',
+               '''    JointProcessRendezvous request ->\n      checkJointRendezvous instanceValue network contexts request\n\n-- | Complete initial-state rendezvous transition. Unlike the endpoint-only\n-- checker above, this consumes the activation-derived ownership index and\n-- advances both endpoint occurrence owners to their exact successor names.\ncheckProcessCommunicationState\n  :: BinaryProtocolInstance\n  -> ProcessNetwork\n  -> ProcessCommunicationState\n  -> ProcessRendezvousRequest\n  -> Either ProcessRendezvousError ProcessCommunicationState\ncheckProcessCommunicationState instanceValue network state request = do\n  updatedContexts <- checkJointRendezvous\n    instanceValue network (communicationProtocolContexts state) request\n  updatedOwners <- advanceRendezvousEndpointOwners\n    (communicationRestrictedOwners state) request\n  pure state\n    { communicationProtocolContexts = updatedContexts\n    , communicationRestrictedOwners = updatedOwners\n    }\n\n-- | Advance an already-checked live communication state. Initial protocol\n''')
+          edit('src/Phil/Core/ProcessRendezvous.hs',
+               '''checkProcessCommunicationSuccessor instanceValue network state request = do\n  updatedContexts <- checkJointRendezvousLive\n    instanceValue network (communicationProtocolContexts state) request\n  pure state { communicationProtocolContexts = updatedContexts }\n''',
+               '''checkProcessCommunicationSuccessor instanceValue network state request = do\n  updatedContexts <- checkJointRendezvousLive\n    instanceValue network (communicationProtocolContexts state) request\n  updatedOwners <- advanceRendezvousEndpointOwners\n    (communicationRestrictedOwners state) request\n  pure state\n    { communicationProtocolContexts = updatedContexts\n    , communicationRestrictedOwners = updatedOwners\n    }\n''')
+          edit('src/Phil/Core/ProcessRendezvous.hs',
+               '''advanceEndpointOwner\n  :: RestrictedOwnerIndex\n''',
+               '''advanceRendezvousEndpointOwners\n  :: RestrictedOwnerIndex\n  -> ProcessRendezvousRequest\n  -> Either ProcessRendezvousError RestrictedOwnerIndex\nadvanceRendezvousEndpointOwners owners request = do\n  leftOwners <- advanceEndpointOwner owners (requestLeft request)\n  advanceEndpointOwner leftOwners (requestRight request)\n\nadvanceEndpointOwner\n  :: RestrictedOwnerIndex\n''')
+
+          # Full certification uses complete state transitions and refuses to infer
+          # transfer-free semantics for non-intrinsic/ownership-sensitive messages.
+          edit('src/Phil/Core/ConcurrencyRendezvousCertification.hs',
+               '''  ( ProcessCommunicationAttempt (JointProcessRendezvous)\n  , ProcessCommunicationState (..)\n''',
+               '''  ( ProcessCommunicationState (..)\n''')
+          edit('src/Phil/Core/ConcurrencyRendezvousCertification.hs',
+               '''  , checkProcessCommunication\n  , checkProcessCommunicationSuccessor\n''',
+               '''  , checkProcessCommunicationState\n  , checkProcessCommunicationSuccessor\n''')
+          edit('src/Phil/Core/ConcurrencyRendezvousCertification.hs',
+               '''  | ConcurrencyRendezvousMessageNotBoundToProtocol RendezvousMessageEvidence\n  | ConcurrencyRendezvousMessageMissing ProcessKey\n''',
+               '''  | ConcurrencyRendezvousMessageNotBoundToProtocol RendezvousMessageEvidence\n  | ConcurrencyRendezvousMessageTransferRequired Ty\n  | ConcurrencyRendezvousMessageMissing ProcessKey\n''')
+          edit('src/Phil/Core/ConcurrencyRendezvousCertification.hs',
+               '''certifyProcessRendezvous activation protocol contexts request evidence = do\n  beforeState <- mapLeft ConcurrencyRendezvousNativeError $\n    communicationStateFromActivation\n      (certifiedRendezvousActivationState activation) contexts\n  updatedContexts <- mapLeft ConcurrencyRendezvousNativeError $\n    checkProcessCommunication\n      (certifiedRendezvousProtocolInstance protocol)\n      (certifiedRendezvousActivationNetwork activation)\n      contexts\n      (JointProcessRendezvous request)\n  let afterState = beforeState { communicationProtocolContexts = updatedContexts }\n  certifyAcceptedRendezvous activation protocol beforeState afterState request Nothing evidence\n''',
+               '''certifyProcessRendezvous activation protocol contexts request evidence = do\n  beforeState <- mapLeft ConcurrencyRendezvousNativeError $\n    communicationStateFromActivation\n      (certifiedRendezvousActivationState activation) contexts\n  afterState <- mapLeft ConcurrencyRendezvousNativeError $\n    checkProcessCommunicationState\n      (certifiedRendezvousProtocolInstance protocol)\n      (certifiedRendezvousActivationNetwork activation)\n      beforeState\n      request\n  certifyAcceptedRendezvous activation protocol beforeState afterState request Nothing evidence\n''')
+          edit('src/Phil/Core/ConcurrencyRendezvousCertification.hs',
+               '''  actualType <- reflectedMessageType senderProcess receiverProcess senderStep receiverStep\n  verifyMessageEvidence protocol actualType evidence\n\n  let endpointFacts = rendezvousEndpointFacts\n''',
+               '''  actualType <- reflectedMessageType senderProcess receiverProcess senderStep receiverStep\n  verifyMessageEvidence protocol actualType evidence\n  verifyTransferEvidence actualType transfer\n\n  let endpointFacts = rendezvousEndpointFacts\n''')
+          edit('src/Phil/Core/ConcurrencyRendezvousCertification.hs',
+               '''verifyMessageEvidence\n  :: CertifiedRendezvousProtocol\n''',
+               '''verifyTransferEvidence\n  :: Ty\n  -> Maybe RestrictedMessageTransfer\n  -> Either ConcurrencyRendezvousCertificationError ()\nverifyTransferEvidence actualType transfer =\n  case transfer of\n    Nothing\n      | intrinsicBoundaryMessageType actualType -> Right ()\n      | otherwise -> Left (ConcurrencyRendezvousMessageTransferRequired actualType)\n    Just moved\n      | restrictedMessageType moved == actualType -> Right ()\n      | otherwise -> Left (ConcurrencyRendezvousMessageTypeMismatch\n          actualType (restrictedMessageType moved))\n\nverifyMessageEvidence\n  :: CertifiedRendezvousProtocol\n''')
+
+          # Permanent production fixture: weak restricted path must reject and
+          # explicit restricted success must retain endpoint-owner succession.
+          edit('app/ConcurrencyRendezvousProductionBindingMain.hs',
+               '''    [ test "certified restricted rendezvous accepts exact production composition"\n        certifiedRestrictedRendezvousAccepts\n    , test "native missing-owner diagnostic precedes rendezvous kernel"\n''',
+               '''    [ test "certified restricted rendezvous accepts exact production composition"\n        certifiedRestrictedRendezvousAccepts\n    , test "general certifier rejects restricted payload without transfer"\n        restrictedPayloadWeakPathRejects\n    , test "native missing-owner diagnostic precedes rendezvous kernel"\n''')
+          edit('app/ConcurrencyRendezvousProductionBindingMain.hs',
+               '''  assert\n    (Map.lookup payloadOccurrence (communicationRestrictedOwners state)\n      == Just (fixtureServerProcess fx, receivedPayload))\n    "certified rendezvous did not preserve exact transferred occurrence identity"\n\nnativeMissingOwnerPrecedence :: Either String ()\n''',
+               '''  assert\n    (Map.lookup payloadOccurrence (communicationRestrictedOwners state)\n      == Just (fixtureServerProcess fx, receivedPayload))\n    "certified rendezvous did not preserve exact transferred occurrence identity"\n  assert\n    (Map.lookup clientEndpointOccurrence (communicationRestrictedOwners state)\n      == Just (fixtureClientProcess fx, clientSuccessor))\n    "certified restricted rendezvous left the sender endpoint owner at its predecessor"\n  assert\n    (Map.lookup serverEndpointOccurrence (communicationRestrictedOwners state)\n      == Just (fixtureServerProcess fx, serverSuccessor))\n    "certified restricted rendezvous left the receiver endpoint owner at its predecessor"\n\nrestrictedPayloadWeakPathRejects :: Either String ()\nrestrictedPayloadWeakPathRejects = do\n  fx <- fixture\n  case certifyProcessRendezvous\n      (fixtureActivation fx)\n      (fixtureProtocol fx)\n      (fixtureContexts fx)\n      (fixtureRequest fx)\n      (fixtureEvidence fx) of\n    Left (ConcurrencyRendezvousMessageTransferRequired actualType) ->\n      assert (actualType == payloadTy)\n        "weak-path rejection lost exact restricted payload type"\n    other -> Left ("restricted payload used transfer-free certification path: " <> show other)\n\nnativeMissingOwnerPrecedence :: Either String ()\n''')
+
+          # The finite Unit request/reply witness now doubles as the transfer-free
+          # endpoint-owner succession regression, including a missing-owner negative.
+          edit('test/Phase1ReviewR10RendezvousSuccessionMain.hs',
+               '''    , test "REVIEW-R10 activation-only checker remains strict on live successor"\n        activationOnlyPathRemainsStrict\n    ]\n''',
+               '''    , test "REVIEW-R10 activation-only checker remains strict on live successor"\n        activationOnlyPathRemainsStrict\n    , test "REVIEW-R11 transfer-free rendezvous rejects missing endpoint owner"\n        missingEndpointOwnerRejects\n    ]\n''')
+          edit('test/Phase1ReviewR10RendezvousSuccessionMain.hs',
+               '''  second <- mapLeft show $ certifyProcessRendezvousSuccessor\n    (fixtureActivation fx)\n    (fixtureProtocol fx)\n    first\n    (fixtureReplyRequest fx)\n    (fixtureEvidence fx)\n  let contexts = communicationProtocolContexts (certifiedRendezvousState second)\n''',
+               '''  let firstOwners = communicationRestrictedOwners (certifiedRendezvousState first)\n  assert\n    (Map.lookup clientEndpointOccurrence firstOwners\n      == Just (fixtureClientProcess fx, clientFirstSuccessor))\n    "first transfer-free rendezvous left the client endpoint owner at its predecessor"\n  assert\n    (Map.lookup serverEndpointOccurrence firstOwners\n      == Just (fixtureServerProcess fx, serverFirstSuccessor))\n    "first transfer-free rendezvous left the server endpoint owner at its predecessor"\n  second <- mapLeft show $ certifyProcessRendezvousSuccessor\n    (fixtureActivation fx)\n    (fixtureProtocol fx)\n    first\n    (fixtureReplyRequest fx)\n    (fixtureEvidence fx)\n  let secondState = certifiedRendezvousState second\n      secondOwners = communicationRestrictedOwners secondState\n      contexts = communicationProtocolContexts secondState\n  assert\n    (Map.lookup clientEndpointOccurrence secondOwners\n      == Just (fixtureClientProcess fx, clientSecondSuccessor))\n    "reply rendezvous did not advance the client endpoint owner to its second successor"\n  assert\n    (Map.lookup serverEndpointOccurrence secondOwners\n      == Just (fixtureServerProcess fx, serverSecondSuccessor))\n    "reply rendezvous did not advance the server endpoint owner to its second successor"\n''')
+          edit('test/Phase1ReviewR10RendezvousSuccessionMain.hs',
+               '''activationOnlyPathRemainsStrict :: Either String ()\n''',
+               '''missingEndpointOwnerRejects :: Either String ()\nmissingEndpointOwnerRejects = do\n  fx <- fixture\n  state <- mapLeft show $ communicationStateFromActivation\n    (certifiedRendezvousActivationState (fixtureActivation fx))\n    (fixtureContexts fx)\n  let drifted = state\n        { communicationRestrictedOwners = Map.delete\n            clientEndpointOccurrence (communicationRestrictedOwners state)\n        }\n      instanceValue = certifiedRendezvousProtocolInstance (fixtureProtocol fx)\n      network = certifiedRendezvousActivationNetwork (fixtureActivation fx)\n  case checkProcessCommunicationState\n      instanceValue network drifted (fixtureFirstRequest fx) of\n    Left (RendezvousEndpointOccurrenceUnknown processKey endpoint) ->\n      assert\n        (processKey == fixtureClientProcess fx && endpoint == clientEndpoint)\n        "missing endpoint-owner rejection lost exact process/predecessor identity"\n    other -> Left ("missing endpoint owner did not reject complete rendezvous: " <> show other)\n\nactivationOnlyPathRemainsStrict :: Either String ()\n''')
+
+          # Make the review regression permanent in the exact rendezvous production gate.
+          edit('.github/workflows/phase1-concurrency-rendezvous-production-binding.yml',
+               '''      - 'test/Phase1RestrictedMessageTransferMain.hs'\n      - 'test/Phase1SchedulerIndependentOrderMain.hs'\n''',
+               '''      - 'test/Phase1RestrictedMessageTransferMain.hs'\n      - 'test/Phase1ReviewR10RendezvousSuccessionMain.hs'\n      - 'test/Phase1SchedulerIndependentOrderMain.hs'\n''')
+          edit('.github/workflows/phase1-concurrency-rendezvous-production-binding.yml',
+               '''          cabal exec -- ghc -isrc -Wall -Werror -fno-code app/ConcurrencyRendezvousProductionBindingMain.hs\n''',
+               '''          cabal exec -- ghc -isrc -Wall -Werror -fno-code app/ConcurrencyRendezvousProductionBindingMain.hs\n          cabal exec -- ghc -isrc -Wall -Werror -fno-code test/Phase1ReviewR10RendezvousSuccessionMain.hs\n''')
+          edit('.github/workflows/phase1-concurrency-rendezvous-production-binding.yml',
+               '''            test/Phase1RestrictedMessageTransferMain.hs \\\n            test/Phase1SchedulerIndependentOrderMain.hs\n''',
+               '''            test/Phase1RestrictedMessageTransferMain.hs \\\n            test/Phase1ReviewR10RendezvousSuccessionMain.hs \\\n            test/Phase1SchedulerIndependentOrderMain.hs\n''')
+          edit('.github/workflows/phase1-concurrency-rendezvous-production-binding.yml',
+               '''            test/Phase1RestrictedMessageTransferMain.hs \\\n            test/Phase1SchedulerIndependentOrderMain.hs \\\n            docs/phase-1/concurrency-rendezvous-production-binding-v1.md \\\n''',
+               '''            test/Phase1RestrictedMessageTransferMain.hs \\\n            test/Phase1ReviewR10RendezvousSuccessionMain.hs \\\n            test/Phase1SchedulerIndependentOrderMain.hs \\\n            docs/phase-1/concurrency-rendezvous-production-binding-v1.md \\\n''')
+          PY
+
+      - name: Build complete Haskell substrate
+        run: cabal build all --enable-tests
+
+      - name: Execute R10/R11 and existing rendezvous controls
+        run: |
+          set -euo pipefail
+          cabal exec -- runghc -Wall -Werror -isrc test/Phase1ReviewR10RendezvousSuccessionMain.hs
+          cabal exec -- runghc -Wall -Werror -isrc test/Phase1RestrictedMessageTransferMain.hs
+          cabal exec -- runghc -Wall -Werror -isrc test/Phase1ExactProcessRendezvousMain.hs
+          cabal exec -- runghc -Wall -Werror -isrc app/ConcurrencyRendezvousProductionBindingMain.hs
+
+      - name: Commit R11 repair
+        shell: bash
+        run: |
+          set -euo pipefail
+          git config user.name github-actions[bot]
+          git config user.email 41898282+github-actions[bot]@users.noreply.github.com
+          git add \
+            src/Phil/Core/ProcessRendezvous.hs \
+            src/Phil/Core/ConcurrencyRendezvousCertification.hs \
+            app/ConcurrencyRendezvousProductionBindingMain.hs \
+            test/Phase1ReviewR10RendezvousSuccessionMain.hs \
+            .github/workflows/phase1-concurrency-rendezvous-production-binding.yml
+          git commit -m 'review: bind rendezvous payload and owner succession'
+          git push origin HEAD:phase1-review-r11-rendezvous-ownership
