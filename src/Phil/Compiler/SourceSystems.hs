@@ -19,6 +19,11 @@ import Phil.Compiler.SourceCore
   , sourceCoreProgramSemantics
   , verifySourceCoreCorrespondence
   )
+import Phil.Compiler.SourceCorePolicy
+  ( SourceCoreCorrespondencePolicy
+  , SourceCorePolicyError
+  , verifySourceCorePolicy
+  )
 import Phil.Core.Static
   ( ArchitectureInstanceIdentity
   , SemanticForm
@@ -34,8 +39,9 @@ import Phil.Systems.GenericLowering
 import Phil.Systems.Phase1Stage (Phase1StageBundle)
 
 -- | Opaque admission object sealing the exact source-derived Architecture and
--- CoreSystemsProgram pair that passed source/Core correspondence checking.
--- Callers cannot replace either member between verification and lowering.
+-- CoreSystemsProgram pair that passed both structural correspondence and the
+-- complete independent source-call/branch correspondence policy. Callers cannot
+-- replace either member between verification and lowering.
 data SourceSystemsAdmission = SourceSystemsAdmission
   CheckedSourceArchitecture
   CoreSystemsProgram
@@ -44,18 +50,22 @@ data SourceSystemsAdmission = SourceSystemsAdmission
 
 data SourceSystemsError
   = SourceSystemsCorrespondenceRejected SourceCoreCorrespondenceError
+  | SourceSystemsPolicyRejected SourceCorePolicyError
   | SourceSystemsAdmissionArchitectureDrift
   | SourceSystemsAdmissionProgramDrift
   | SourceSystemsLoweringRejected GenericLoweringError
   deriving (Eq, Show)
 
 prepareSourceSystemsAdmission
-  :: CheckedSourceArchitecture
+  :: SourceCoreCorrespondencePolicy
+  -> CheckedSourceArchitecture
   -> CoreSystemsProgram
   -> Either SourceSystemsError SourceSystemsAdmission
-prepareSourceSystemsAdmission architecture program = do
+prepareSourceSystemsAdmission policy architecture program = do
   correspondence <- mapLeft SourceSystemsCorrespondenceRejected
     (verifySourceCoreCorrespondence architecture program)
+  mapLeft SourceSystemsPolicyRejected
+    (verifySourceCorePolicy policy architecture program)
   Right (SourceSystemsAdmission architecture program correspondence)
 
 lowerSourceSystems
