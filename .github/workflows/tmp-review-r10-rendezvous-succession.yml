@@ -104,8 +104,10 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
-          docker run --rm -u root -v "$PWD:/work" -w /work rocq/rocq-prover:9.2.0 bash -lc '
+          docker run --rm -v "$PWD:/src:ro" rocq/rocq-prover:9.2.0 bash -lc '
             set -euo pipefail
+            cp -a /src /tmp/phil
+            cd /tmp/phil
             export PATH="/home/rocq/.opam/${COMPILER}/bin:$PATH"
             rocq c -Q proof/Phil Phil proof/Phil/Core/Syntax.v
             rocq c -Q proof/Phil Phil proof/Phil/Core/Session.v
