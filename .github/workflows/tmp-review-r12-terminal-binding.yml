@@ -1,0 +1,98 @@
+name: Temporary R12 terminal activation binding remediation
+
+on:
+  push:
+    branches: [phase1-review-r12-terminal-activation-binding]
+
+permissions:
+  contents: write
+
+jobs:
+  patch:
+    if: github.actor != 'github-actions[bot]'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: phase1-review-r12-terminal-activation-binding
+          fetch-depth: 0
+
+      - uses: haskell-actions/setup@v2
+        with:
+          ghc-version: '9.6.7'
+          cabal-version: 'latest'
+
+      - name: Apply R12 activation-predecessor binding repair
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 - <<'PY'
+          from pathlib import Path
+
+          def edit(path, old, new):
+              p = Path(path)
+              text = p.read_text()
+              if old not in text:
+                  raise SystemExit(f'anchor not found in {path}: {old[:180]!r}')
+              p.write_text(text.replace(old, new, 1))
+
+          path = 'src/Phil/Core/ConcurrencyTerminalCertification.hs'
+          edit(path,
+               '''  , certifiedRendezvousActivationNetwork\n  , certifiedRendezvousCausality\n''',
+               '''  , certifiedRendezvousActivationNetwork\n  , certifiedRendezvousActivationState\n  , certifiedRendezvousCausality\n''')
+          edit(path,
+               '''import Phil.Core.ProcessLifecycle\n''',
+               '''import Phil.Core.ProcessActivation (ProcessActivationState (..))\nimport Phil.Core.ProcessLifecycle\n''')
+          edit(path,
+               '''  | ConcurrencyTerminalRuntimeInvariant\n  | ConcurrencyTerminalDeclaredIsolationDisagreement ProcessKey\n''',
+               '''  | ConcurrencyTerminalRuntimeInvariant\n  | ConcurrencyTerminalActivationContextMissing ProcessKey\n  | ConcurrencyTerminalActivationContextUnexpected ProcessKey\n  | ConcurrencyTerminalActivationResourceMismatch\n      ProcessKey ResourceContext ResourceContext\n  | ConcurrencyTerminalDeclaredIsolationDisagreement ProcessKey\n''')
+          edit(path,
+               '''initializeCertifiedTerminalRuntime activation contexts obligations = do\n  let network = certifiedRendezvousActivationNetwork activation\n  state <- mapLeft ConcurrencyTerminalNativeError $\n''',
+               '''initializeCertifiedTerminalRuntime activation contexts obligations = do\n  let network = certifiedRendezvousActivationNetwork activation\n      activationState = certifiedRendezvousActivationState activation\n  validateActivationPredecessor activationState contexts\n  state <- mapLeft ConcurrencyTerminalNativeError $\n''')
+          edit(path,
+               '''certifyEnabledLocalStep\n  :: CertifiedTerminalRuntime\n''',
+               '''validateActivationPredecessor\n  :: ProcessActivationState\n  -> Map.Map ProcessKey ProtocolContext\n  -> Either ConcurrencyTerminalCertificationError ()\nvalidateActivationPredecessor activationState contexts = do\n  case Set.lookupMin missing of\n    Just processKey -> Left (ConcurrencyTerminalActivationContextMissing processKey)\n    Nothing -> Right ()\n  case Set.lookupMin unexpected of\n    Just processKey -> Left (ConcurrencyTerminalActivationContextUnexpected processKey)\n    Nothing -> Right ()\n  mapM_ requireExactResources (Map.toList expectedContexts)\n  where\n    expectedContexts = activationProcessContexts activationState\n    expectedKeys = Map.keysSet expectedContexts\n    actualKeys = Map.keysSet contexts\n    missing = expectedKeys `Set.difference` actualKeys\n    unexpected = actualKeys `Set.difference` expectedKeys\n\n    requireExactResources (processKey, expectedResources) =\n      case Map.lookup processKey contexts of\n        Nothing -> Left (ConcurrencyTerminalActivationContextMissing processKey)\n        Just context\n          | protocolResources context == expectedResources -> Right ()\n          | otherwise -> Left (ConcurrencyTerminalActivationResourceMismatch\n              processKey expectedResources (protocolResources context))\n\ncertifyEnabledLocalStep\n  :: CertifiedTerminalRuntime\n''')
+
+          path = 'app/ConcurrencyTerminalProductionBindingMain.hs'
+          edit(path,
+               '''import Data.Text (Text)\nimport Phil.Core.ConcurrencyRendezvousCertification\n''',
+               '''import Data.Text (Text)\nimport Phil.Core.CheckedBindingMode (CheckedTypeMode (..))\nimport Phil.Core.ConcurrencyRendezvousCertification\n''')
+          edit(path,
+               '''import Phil.Core.ProcessActivation (ProcessActivationContract (..))\n''',
+               '''import Phil.Core.ProcessActivation\n  ( ActivationBinding (..)\n  , ActivationBindingOrigin (..)\n  , ActivationOccurrenceKey (..)\n  , ActivationReachability (..)\n  , ProcessActivationContract (..)\n  , ProcessActivationState (..)\n  )\n''')
+          edit(path,
+               '''import Phil.Core.Protocol (emptyProtocolContext)\n''',
+               '''import Phil.Core.Protocol (ProtocolContext (..), emptyProtocolContext)\n''')
+          edit(path,
+               '''    [ test "certified declared Closed transition accepts" declaredClosedAccepts\n''',
+               '''    [ test "REVIEW-R12 terminal initializer preserves exact activation resources"\n        activationBindingAccepts\n    , test "REVIEW-R12 empty replacement context cannot erase live activation resource"\n        emptyReplacementRejects\n    , test "certified declared Closed transition accepts" declaredClosedAccepts\n''')
+          edit(path,
+               '''declaredClosedAccepts :: Either String ()\n''',
+               '''activationBindingAccepts :: Either String ()\nactivationBindingAccepts = do\n  (activation, processA, processB) <- boundActivationFixture\n  let activationContexts = activationProcessContexts\n        (certifiedRendezvousActivationState activation)\n  resourcesA <- requireActivationContext processA activationContexts\n  resourcesB <- requireActivationContext processB activationContexts\n  runtime <- mapLeft show $ initializeCertifiedTerminalRuntime\n    activation\n    (Map.fromList\n      [ (processA, emptyProtocolContext { protocolResources = resourcesA })\n      , (processB, emptyProtocolContext { protocolResources = resourcesB })\n      ])\n    Map.empty\n  let runtimeContexts = runtimeProtocolContexts (certifiedTerminalRuntimeState runtime)\n  assert\n    (fmap protocolResources (Map.lookup processA runtimeContexts) == Just resourcesA)\n    "terminal initializer did not retain exact activation resources"\n\nemptyReplacementRejects :: Either String ()\nemptyReplacementRejects = do\n  (activation, processA, processB) <- boundActivationFixture\n  let activationContexts = activationProcessContexts\n        (certifiedRendezvousActivationState activation)\n  resourcesB <- requireActivationContext processB activationContexts\n  case initializeCertifiedTerminalRuntime\n      activation\n      (Map.fromList\n        [ (processA, emptyProtocolContext)\n        , (processB, emptyProtocolContext { protocolResources = resourcesB })\n        ])\n      Map.empty of\n    Left (ConcurrencyTerminalActivationResourceMismatch actual expected replacement) ->\n      assert\n        ( actual == processA\n          && expected /= replacement\n          && replacement == protocolResources emptyProtocolContext )\n        "activation-resource mismatch lost exact process/expected/replacement context"\n    other -> Left ("empty replacement context erased a live activation resource: " <> show other)\n\nboundActivationFixture\n  :: Either String (CertifiedRendezvousActivation, ProcessKey, ProcessKey)\nboundActivationFixture = do\n  graph <- mapLeft show rootGraph\n  network0 <- mapLeft show $ elaborateProcessNetwork graph [siteA, siteB]\n  let (processA, processB) = processKeys network0\n      liveOccurrence = ActivationOccurrenceKey "review-r12-live-resource"\n      liveBinding = ActivationBinding\n        { activationOccurrenceKey = liveOccurrence\n        , activationLocalName = Name "live-resource"\n        , activationCheckedTypeMode = CheckedTypeMode (TyOpaque "LiveResource") Linear\n        , activationBindingOrigin = TargetParameterOrigin "review-r12.live-resource"\n        , activationReachability = DirectStatefulReachability liveOccurrence\n        , activationStartsSharedLoan = False\n        }\n      contracts =\n        [ ProcessActivationContract processA [liveBinding]\n        , ProcessActivationContract processB []\n        ]\n  activation <- mapLeft show $\n    certifyRendezvousActivation graph network0 contracts [] []\n  pure (activation, processA, processB)\n\nrequireActivationContext\n  :: ProcessKey\n  -> Map.Map ProcessKey ResourceContext\n  -> Either String ResourceContext\nrequireActivationContext processKey contexts =\n  maybe (Left "missing certified activation context") Right (Map.lookup processKey contexts)\n\ndeclaredClosedAccepts :: Either String ()\n''')
+          edit(path,
+               '''import Phil.Core.ConcurrencyTerminalCertification\nimport Phil.Core.Process\n''',
+               '''import Phil.Core.ConcurrencyTerminalCertification\nimport Phil.Core.Context (ResourceContext)\nimport Phil.Core.Process\n''')
+          PY
+
+      - name: Build complete Haskell substrate
+        run: cabal build all --enable-tests
+
+      - name: Execute R12 and existing terminal/rendezvous controls
+        run: |
+          set -euo pipefail
+          cabal exec -- runghc -Wall -Werror -isrc app/ConcurrencyTerminalProductionBindingMain.hs
+          cabal exec -- runghc -Wall -Werror -isrc app/ConcurrencyRendezvousProductionBindingMain.hs
+          cabal exec -- runghc -Wall -Werror -isrc test/Phase1ReviewR10RendezvousSuccessionMain.hs
+          cabal exec -- runghc -Wall -Werror -isrc test/Phase1RestrictedMessageTransferMain.hs
+
+      - name: Commit validated R12 code/test repair
+        shell: bash
+        run: |
+          set -euo pipefail
+          git config user.name github-actions[bot]
+          git config user.email 41898282+github-actions[bot]@users.noreply.github.com
+          git add \
+            src/Phil/Core/ConcurrencyTerminalCertification.hs \
+            app/ConcurrencyTerminalProductionBindingMain.hs
+          git commit -m 'review: bind terminal initialization to activation resources'
+          git push origin HEAD:phase1-review-r12-terminal-activation-binding
