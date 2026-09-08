@@ -23,10 +23,12 @@ Open Scope string_scope.
   Grammar v1.  This file gives the runtime derivation goals a public view onto
   that collection and proves that every recursive child remains inside it.
 
-  The same structural lemmas propagate the exact choice-body safety certificate
-  used by the zero-consumption -> nullable bridge.  Nonterminal expansion is the
-  one reset edge: it returns to expression_fuel and obtains both certificates
-  from the exact rule tables.
+  Choice-body safety is exposed to the total-fuel induction through an opaque
+  Prop-valued certificate.  The executable boolean remains the checked source
+  of truth, but recursive theorem statements no longer carry the reflected
+  computation directly.  Nonterminal expansion is the one reset edge: it
+  returns to expression_fuel and obtains both certificates from the exact rule
+  tables.
 *)
 
 Fixpoint parser_sequence_goal_rank_options_fuel
@@ -109,6 +111,36 @@ Definition phase1_surface_parser_goal_choice_safeb
   | GoalRepetition _ body =>
       choice_bodies_nonnullable_fuel fuel body
   end.
+
+Inductive phase1_surface_parser_goal_choice_safe
+  (fuel : nat)
+  (goal : DerivationGoal) : Prop :=
+| Phase1SurfaceParserGoalChoiceSafe :
+    phase1_surface_parser_goal_choice_safeb fuel goal = true ->
+    phase1_surface_parser_goal_choice_safe fuel goal.
+
+Lemma phase1_surface_parser_goal_choice_safe_bool :
+  forall fuel goal,
+    phase1_surface_parser_goal_choice_safe fuel goal ->
+    phase1_surface_parser_goal_choice_safeb fuel goal = true.
+Proof.
+  intros fuel goal Hsafe.
+  destruct Hsafe as [Hsafe].
+  exact Hsafe.
+Qed.
+
+Lemma phase1_surface_expression_goal_choice_safe_bool :
+  forall fuel path expression,
+    phase1_surface_parser_goal_choice_safe
+      fuel (GoalExpression path expression) ->
+    choice_bodies_nonnullable_fuel fuel expression = true.
+Proof.
+  intros fuel path expression Hsafe.
+  pose proof
+    (phase1_surface_parser_goal_choice_safe_bool
+      fuel (GoalExpression path expression) Hsafe) as Hbool.
+  exact Hbool.
+Qed.
 
 Lemma parser_expression_sequence_goal_rank_options_equation :
   forall fuel facts items,
@@ -429,122 +461,116 @@ Proof.
 Qed.
 
 Lemma phase1_surface_root_goal_choice_safe :
-  phase1_surface_parser_goal_choice_safeb
+  phase1_surface_parser_goal_choice_safe
     expression_fuel
-    (GoalExpression [] (ENonterminal phase1_surface_start)) = true.
+    (GoalExpression [] (ENonterminal phase1_surface_start)).
 Proof.
+  constructor.
   unfold phase1_surface_parser_goal_choice_safeb, expression_fuel.
   reflexivity.
 Qed.
 
 Lemma phase1_surface_sequence_wrapper_choice_safe :
   forall fuel path items,
-    phase1_surface_parser_goal_choice_safeb
-      (S fuel) (GoalExpression path (ESequence items)) = true ->
-    phase1_surface_parser_goal_choice_safeb
-      fuel (GoalSequence path 0 items) = true.
+    phase1_surface_parser_goal_choice_safe
+      (S fuel) (GoalExpression path (ESequence items)) ->
+    phase1_surface_parser_goal_choice_safe
+      fuel (GoalSequence path 0 items).
 Proof.
   intros fuel path items Hsafe.
-  exact Hsafe.
+  constructor.
+  pose proof
+    (phase1_surface_parser_goal_choice_safe_bool
+      (S fuel) (GoalExpression path (ESequence items)) Hsafe) as Hbool.
+  exact Hbool.
 Qed.
 
 Lemma phase1_surface_alternative_member_choice_safe :
   forall fuel path items index item,
     nth_error items index = Some item ->
-    phase1_surface_parser_goal_choice_safeb
-      (S fuel) (GoalExpression path (EAlternative items)) = true ->
-    phase1_surface_parser_goal_choice_safeb
-      fuel (GoalExpression (descend path (AtAlternative index)) item) = true.
+    phase1_surface_parser_goal_choice_safe
+      (S fuel) (GoalExpression path (EAlternative items)) ->
+    phase1_surface_parser_goal_choice_safe
+      fuel (GoalExpression (descend path (AtAlternative index)) item).
 Proof.
   intros fuel path items index item Hnth Hsafe.
-  unfold phase1_surface_parser_goal_choice_safeb in *.
-  simpl in Hsafe.
-  assert (Hchoices :
-    forallb (choice_bodies_nonnullable_fuel fuel) items = true).
-  {
-    eapply
-      (forallb_andb_right
-        EbnfExpression
-        (fun candidate =>
-          negb
-            (nullable_expression
-              phase1_surface_nullable_facts candidate))
-        (choice_bodies_nonnullable_fuel fuel)
-        items).
-    exact Hsafe.
-  }
-  destruct
-    (forallb_forall
-      (choice_bodies_nonnullable_fuel fuel)
-      items)
-    as [Hsafe_to _].
-  pose proof (Hsafe_to Hchoices) as Hsafe_items.
-  assert (Hin : In item items).
-  {
-    eapply nth_error_In. exact Hnth.
-  }
-  specialize (Hsafe_items item Hin).
-  exact Hsafe_items.
-Qed.
-
-Lemma andb_true_right :
-  forall left right,
-    andb left right = true ->
-    right = true.
-Proof.
-  intros left right H.
-  destruct left, right; simpl in H; try discriminate; reflexivity.
+  constructor.
+  pose proof
+    (phase1_surface_parser_goal_choice_safe_bool
+      (S fuel) (GoalExpression path (EAlternative items)) Hsafe) as Hbool.
+  unfold phase1_surface_parser_goal_choice_safeb in Hbool |- *.
+  exact
+    (proj2
+      (predictive_bridge_choice_safe_alternative_member
+        fuel items index item Hbool Hnth)).
 Qed.
 
 Lemma phase1_surface_optional_body_choice_safe :
   forall fuel path body,
-    phase1_surface_parser_goal_choice_safeb
-      (S fuel) (GoalExpression path (EOptional body)) = true ->
-    phase1_surface_parser_goal_choice_safeb
-      fuel (GoalExpression (descend path AtOptionalBody) body) = true.
+    phase1_surface_parser_goal_choice_safe
+      (S fuel) (GoalExpression path (EOptional body)) ->
+    phase1_surface_parser_goal_choice_safe
+      fuel (GoalExpression (descend path AtOptionalBody) body).
 Proof.
   intros fuel path body Hsafe.
-  unfold phase1_surface_parser_goal_choice_safeb in *.
-  exact (proj2 (predictive_bridge_choice_safe_optional_body fuel body Hsafe)).
+  constructor.
+  pose proof
+    (phase1_surface_parser_goal_choice_safe_bool
+      (S fuel) (GoalExpression path (EOptional body)) Hsafe) as Hbool.
+  unfold phase1_surface_parser_goal_choice_safeb in Hbool |- *.
+  exact (proj2 (predictive_bridge_choice_safe_optional_body fuel body Hbool)).
 Qed.
 
 Lemma phase1_surface_repetition_wrapper_choice_safe :
   forall fuel path body,
-    phase1_surface_parser_goal_choice_safeb
-      (S fuel) (GoalExpression path (ERepetition body)) = true ->
-    phase1_surface_parser_goal_choice_safeb
-      fuel (GoalRepetition path body) = true.
+    phase1_surface_parser_goal_choice_safe
+      (S fuel) (GoalExpression path (ERepetition body)) ->
+    phase1_surface_parser_goal_choice_safe
+      fuel (GoalRepetition path body).
 Proof.
   intros fuel path body Hsafe.
-  unfold phase1_surface_parser_goal_choice_safeb in *.
-  exact (proj2 (predictive_bridge_choice_safe_repetition_body fuel body Hsafe)).
+  constructor.
+  pose proof
+    (phase1_surface_parser_goal_choice_safe_bool
+      (S fuel) (GoalExpression path (ERepetition body)) Hsafe) as Hbool.
+  unfold phase1_surface_parser_goal_choice_safeb in Hbool |- *.
+  exact (proj2 (predictive_bridge_choice_safe_repetition_body fuel body Hbool)).
 Qed.
 
 Lemma phase1_surface_sequence_cons_choice_safe :
   forall fuel path index item rest,
-    phase1_surface_parser_goal_choice_safeb
-      fuel (GoalSequence path index (item :: rest)) = true ->
-    phase1_surface_parser_goal_choice_safeb
-      fuel (GoalExpression (descend path (AtSequence index)) item) = true /\
-    phase1_surface_parser_goal_choice_safeb
-      fuel (GoalSequence path (S index) rest) = true.
+    phase1_surface_parser_goal_choice_safe
+      fuel (GoalSequence path index (item :: rest)) ->
+    phase1_surface_parser_goal_choice_safe
+      fuel (GoalExpression (descend path (AtSequence index)) item) /\
+    phase1_surface_parser_goal_choice_safe
+      fuel (GoalSequence path (S index) rest).
 Proof.
   intros fuel path index item rest Hsafe.
-  unfold phase1_surface_parser_goal_choice_safeb in *.
-  simpl in Hsafe.
-  apply andb_true_iff in Hsafe.
-  exact Hsafe.
+  pose proof
+    (phase1_surface_parser_goal_choice_safe_bool
+      fuel (GoalSequence path index (item :: rest)) Hsafe) as Hbool.
+  unfold phase1_surface_parser_goal_choice_safeb in Hbool.
+  simpl in Hbool.
+  apply andb_true_iff in Hbool as [Hhead Htail].
+  split.
+  - constructor. exact Hhead.
+  - constructor. exact Htail.
 Qed.
 
 Lemma phase1_surface_repetition_body_choice_safe :
   forall fuel path body,
-    phase1_surface_parser_goal_choice_safeb
-      fuel (GoalRepetition path body) = true ->
-    phase1_surface_parser_goal_choice_safeb
-      fuel (GoalExpression (descend path AtRepetitionBody) body) = true.
+    phase1_surface_parser_goal_choice_safe
+      fuel (GoalRepetition path body) ->
+    phase1_surface_parser_goal_choice_safe
+      fuel (GoalExpression (descend path AtRepetitionBody) body).
 Proof.
   intros fuel path body Hsafe.
-  exact Hsafe.
+  constructor.
+  pose proof
+    (phase1_surface_parser_goal_choice_safe_bool
+      fuel (GoalRepetition path body) Hsafe) as Hbool.
+  exact Hbool.
 Qed.
 
 Lemma phase1_surface_nonterminal_child_rank_decreases_fuel :
