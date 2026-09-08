@@ -57,10 +57,13 @@ data SourceCallDisposition
 -- The map is source arm label -> exact Core successor block. For a Core
 -- RuntimeChoice the labeled map must match exactly. For a binary Branch or
 -- RuntimeCheck the successor set must match exactly.
-data SourceBranchDisposition = SourceBranchDisposition
-  { sourceBranchCoreBlock :: Text
-  , sourceBranchTargets :: Map Text Text
-  }
+data SourceBranchDisposition
+  = SourceBranchDisposition Text (Map Text Text)
+  -- | A source `primary or fail` branch whose fallback is absorbed by the
+  -- selected framed-receive ABI: receive_frame either returns a complete frame
+  -- or does not return normally.  The Core block must still contain the exact
+  -- receive-frame operation, so this cannot erase an arbitrary source branch.
+  | SourceBranchReceiveFrameNonreturningFallback Text
   deriving (Eq, Ord, Show)
 
 data SourceCoreCorrespondencePolicy = SourceCoreCorrespondencePolicy
@@ -156,25 +159,50 @@ verifyBranch
 verifyBranch branchSites program (site, disposition) = do
   sourceLabels <- maybe (Left (SourceCoreBranchSiteMissing site)) Right
     (Map.lookup site branchSites)
-  let expectedLabels = Map.keysSet (sourceBranchTargets disposition)
-  if sourceLabels == expectedLabels
-    then Right ()
-    else Left (SourceCoreBranchLabelMismatch site sourceLabels expectedLabels)
-  function <- coreFunction site program
-  blockValue <- maybe
-    (Left (SourceCoreBranchBlockMissing site (sourceBranchCoreBlock disposition)))
-    Right
-    (Map.lookup (sourceBranchCoreBlock disposition) (coreFunctionBlocks function))
-  let expectedTargets = sourceBranchTargets disposition
-  case coreBlockTerminator blockValue of
-    CoreSystemsRuntimeChoice _ _ _ actualTargets
-      | actualTargets == expectedTargets -> Right ()
-      | otherwise -> Left (SourceCoreBranchTargetsMismatch site expectedTargets actualTargets)
-    CoreSystemsBranch _ yesTarget noTarget ->
-      compareUnlabeledTargets site expectedTargets [yesTarget, noTarget]
-    CoreSystemsRuntimeCheck _ _ yesTarget noTarget ->
-      compareUnlabeledTargets site expectedTargets [yesTarget, noTarget]
-    _ -> Left (SourceCoreBranchNotNormalized site (sourceBranchCoreBlock disposition))
+  case disposition of
+    SourceBranchDisposition blockName expectedTargets -> do
+      let expectedLabels = Map.keysSet expectedTargets
+      if sourceLabels == expectedLabels
+        then Right ()
+        else Left (SourceCoreBranchLabelMismatch site sourceLabels expectedLabels)
+      function <- coreFunction site program
+      blockValue <- maybe
+        (Left (SourceCoreBranchBlockMissing site blockName))
+        Right
+        (Map.lookup blockName (coreFunctionBlocks function))
+      case coreBlockTerminator blockValue of
+        CoreSystemsRuntimeChoice _ _ _ actualTargets
+          | actualTargets == expectedTargets -> Right ()
+          | otherwise -> Left
+              (SourceCoreBranchTargetsMismatch site expectedTargets actualTargets)
+        CoreSystemsBranch _ yesTarget noTarget ->
+          compareUnlabeledTargets site expectedTargets [yesTarget, noTarget]
+        CoreSystemsRuntimeCheck _ _ yesTarget noTarget ->
+          compareUnlabeledTargets site expectedTargets [yesTarget, noTarget]
+        CoreSystemsRecognize _ _ _ successTarget failureTarget ->
+          compareUnlabeledTargets site expectedTargets [successTarget, failureTarget]
+        CoreSystemsReceiveExact _ _ _ _ successTarget failureTarget ->
+          compareUnlabeledTargets site expectedTargets [successTarget, failureTarget]
+        CoreSystemsStore _ _ _ successTarget failureTarget ->
+          compareUnlabeledTargets site expectedTargets [successTarget, failureTarget]
+        _ -> Left (SourceCoreBranchNotNormalized site blockName)
+    SourceBranchReceiveFrameNonreturningFallback blockName -> do
+      let expectedLabels = Set.fromList ["primary", "fallback"]
+      if sourceLabels == expectedLabels
+        then Right ()
+        else Left (SourceCoreBranchLabelMismatch site sourceLabels expectedLabels)
+      function <- coreFunction site program
+      blockValue <- maybe
+        (Left (SourceCoreBranchBlockMissing site blockName))
+        Right
+        (Map.lookup blockName (coreFunctionBlocks function))
+      if any isReceiveFrame (coreBlockOperations blockValue)
+        then Right ()
+        else Left (SourceCoreBranchNotNormalized site blockName)
+  where
+    isReceiveFrame operation = case operation of
+      CoreReceiveFrame {} -> True
+      _ -> False
 
 compareUnlabeledTargets
   :: SourceCoreSite

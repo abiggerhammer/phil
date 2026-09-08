@@ -1,0 +1,72 @@
+name: Phase 1 INT-001 Witness End-to-End
+
+on:
+  push:
+    paths:
+      - 'examples/upload/*.phil'
+      - 'examples/steve/*.phil'
+      - 'src/Phil/Compiler/SourceBundle.hs'
+      - 'src/Phil/Compiler/SourceArchitecture.hs'
+      - 'src/Phil/Compiler/SourceCore.hs'
+      - 'src/Phil/Compiler/SourceCorePolicy.hs'
+      - 'src/Phil/Compiler/SourceSystems.hs'
+      - 'src/Phil/Examples/Phase1/SystemsWitnesses.hs'
+      - 'src/Phil/Systems/GenericLowering.hs'
+      - 'src/Phil/LLVM/Lower.hs'
+      - 'test/Phase1INT001WitnessE2EMain.hs'
+      - '.github/workflows/phase1-int-001-witness-e2e.yml'
+  pull_request:
+    paths:
+      - 'examples/upload/*.phil'
+      - 'examples/steve/*.phil'
+      - 'src/Phil/Compiler/SourceBundle.hs'
+      - 'src/Phil/Compiler/SourceArchitecture.hs'
+      - 'src/Phil/Compiler/SourceCore.hs'
+      - 'src/Phil/Compiler/SourceCorePolicy.hs'
+      - 'src/Phil/Compiler/SourceSystems.hs'
+      - 'src/Phil/Examples/Phase1/SystemsWitnesses.hs'
+      - 'src/Phil/Systems/GenericLowering.hs'
+      - 'src/Phil/LLVM/Lower.hs'
+      - 'test/Phase1INT001WitnessE2EMain.hs'
+      - '.github/workflows/phase1-int-001-witness-e2e.yml'
+
+jobs:
+  witness-e2e:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: haskell-actions/setup@v2
+        with:
+          ghc-version: '9.6.7'
+          cabal-version: 'latest'
+
+      - name: Build complete Haskell substrate
+        run: cabal build all --enable-tests
+
+      - name: Strict typecheck INT-001 witness integration boundary
+        run: |
+          cabal exec -- ghc -isrc -Wall -Werror -fno-code \
+            src/Phil/Compiler/SourceCorePolicy.hs \
+            src/Phil/Examples/Phase1/SystemsWitnesses.hs \
+            test/Phase1INT001WitnessE2EMain.hs
+
+      - name: Replay source/Core correspondence and sealed admission controls
+        run: |
+          cabal exec -- runghc -isrc -Wall -Werror test/Phase1INT001SourceCorePolicyMain.hs
+          cabal exec -- runghc -isrc -Wall -Werror test/Phase1INT001SourceSystemsMain.hs
+          cabal exec -- runghc -isrc -Wall -Werror test/Phase1INT001SteveOrdinaryProviderSourceMain.hs
+
+      - name: Replay generic Core-to-Systems witness gate
+        run: cabal exec -- runghc -isrc -Wall -Werror test/Phase1GenericSystemsLoweringMain.hs
+
+      - name: Require witness-neutral compiler path
+        shell: bash
+        run: |
+          set -euo pipefail
+          if grep -Eq 'Upload|Steve|examples/upload|examples/steve' src/Phil/Compiler/SourceSystems.hs; then
+            echo 'SourceSystems must remain witness-neutral'
+            exit 1
+          fi
+
+      - name: Execute ordinary-source witness end-to-end gate
+        run: cabal exec -- runghc -isrc -Wall -Werror test/Phase1INT001WitnessE2EMain.hs
