@@ -17,7 +17,8 @@ import Phil.Assurance.Verify (verifyManifest)
 import Phil.Compiler.SourceArchitecture
 import Phil.Compiler.SourceBundle
 import Phil.Core.Static
-  ( CheckedArchitectureInstance (..)
+  ( ArchitectureInstanceIdentity (..)
+  , CheckedArchitectureInstance (..)
   , DeclarationDescriptor (..)
   , DeclarationIdentity (..)
   , DeclarationKey (..)

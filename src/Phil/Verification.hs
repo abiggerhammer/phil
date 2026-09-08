@@ -10,6 +10,7 @@ module Phil.Verification
   , VerificationObligationGraph (..)
   , VerificationGraphError (..)
   , buildVerificationObligationGraph
+  , buildVerificationRevisionGraph
   , RuntimeClosureProposal (..)
   , RuntimeClosureRejection (..)
   , RuntimeClosureRecord
@@ -44,6 +45,7 @@ import Phil.Assurance.Types
   , ObligationRevision (..)
   , RevisionId (..)
   , RuntimeMechanism (..)
+  , deriveRevisionId
   , digestText
   , revisionFromCoreObligation
   )
@@ -141,6 +143,11 @@ data VerificationGraphError
   | UnknownObligationDependency ObligationId ObligationId
   | UnknownCertificationScopeObligation ObligationId
   | CyclicObligationDependencies (Set ObligationId)
+  | ConflictingObligationRevisions RevisionId
+  | InvalidObligationRevisionIdentity RevisionId RevisionId
+  | UnknownRevisionDependency RevisionId RevisionId
+  | UnknownCertificationScopeRevision RevisionId
+  | CyclicRevisionDependencies (Set RevisionId)
   deriving (Eq, Show)
 
 -- | Build the canonical residual-obligation/dependency graph before proof
@@ -179,6 +186,97 @@ buildVerificationObligationGraph rawInputs requestedScope = do
     , verificationGraphDependencies = edges
     , verificationGraphCertificationScope = scope
     }
+
+-- | Build the same canonical VerificationObligationGraph from already competent
+-- exact ObligationRevision records.  This is the bridge used when an assurance
+-- ledger is the authoritative carrier of obligation identity: revision identity,
+-- provenance dependencies, scope, and graph revision are still checked and
+-- canonicalized rather than reconstructed from presentation or Haskell object
+-- identity.
+buildVerificationRevisionGraph
+  :: [ObligationRevision]
+  -> Set RevisionId
+  -> Either VerificationGraphError VerificationObligationGraph
+buildVerificationRevisionGraph rawRevisions requestedScope = do
+  revisions <- foldM insertExactRevision Map.empty rawRevisions
+  validateRevisionScope revisions requestedScope
+  validateRevisionDependencies revisions
+  case cyclicRevisionRegion revisions of
+    Nothing -> pure ()
+    Just region -> Left (CyclicRevisionDependencies region)
+  let edges = Set.fromList
+        [ (revisionKey, dependency)
+        | (revisionKey, revision) <- Map.toAscList revisions
+        , dependency <- revisionGeneratedFrom revision
+        ]
+      graphDigest = digestText (renderGraphIdentity revisions edges requestedScope)
+  Right VerificationObligationGraph
+    { verificationGraphRevision = graphDigest
+    , verificationGraphNodes = revisions
+    , verificationGraphDependencies = edges
+    , verificationGraphCertificationScope = requestedScope
+    }
+
+insertExactRevision
+  :: Map RevisionId ObligationRevision
+  -> ObligationRevision
+  -> Either VerificationGraphError (Map RevisionId ObligationRevision)
+insertExactRevision revisions revision = do
+  let actual = revisionId revision
+      expectedStatementDigest = digestText (revisionStatement revision)
+      canonicalRevision = revision
+        { revisionStatementDigest = expectedStatementDigest }
+      expected = deriveRevisionId canonicalRevision
+  if revisionStatementDigest revision == expectedStatementDigest && actual == expected
+    then Right ()
+    else Left (InvalidObligationRevisionIdentity expected actual)
+  case Map.lookup actual revisions of
+    Nothing -> Right (Map.insert actual revision revisions)
+    Just existing
+      | existing == revision -> Right revisions
+      | otherwise -> Left (ConflictingObligationRevisions actual)
+
+validateRevisionScope
+  :: Map RevisionId ObligationRevision
+  -> Set RevisionId
+  -> Either VerificationGraphError ()
+validateRevisionScope revisions requestedScope =
+  case Set.lookupMin (requestedScope `Set.difference` Map.keysSet revisions) of
+    Nothing -> Right ()
+    Just missing -> Left (UnknownCertificationScopeRevision missing)
+
+validateRevisionDependencies
+  :: Map RevisionId ObligationRevision
+  -> Either VerificationGraphError ()
+validateRevisionDependencies revisions = mapM_ verifyRevision
+  (Map.toAscList revisions)
+  where
+    known = Map.keysSet revisions
+    verifyRevision (revisionKey, revision) =
+      case Set.lookupMin
+          (Set.fromList (revisionGeneratedFrom revision) `Set.difference` known) of
+        Nothing -> Right ()
+        Just missing -> Left (UnknownRevisionDependency revisionKey missing)
+
+cyclicRevisionRegion
+  :: Map RevisionId ObligationRevision
+  -> Maybe (Set RevisionId)
+cyclicRevisionRegion revisions = go dependencyMap
+  where
+    dependencyMap = Map.map (Set.fromList . revisionGeneratedFrom) revisions
+
+    go remaining
+      | Map.null remaining = Nothing
+      | null roots = Just (Map.keysSet remaining)
+      | otherwise = go $ Map.map (`Set.difference` rootSet) withoutRoots
+      where
+        roots =
+          [ revisionKey
+          | (revisionKey, dependencies) <- Map.toAscList remaining
+          , Set.null dependencies
+          ]
+        rootSet = Set.fromList roots
+        withoutRoots = foldr Map.delete remaining roots
 
 insertCanonicalInput
   :: Map ObligationId VerificationObligationInput

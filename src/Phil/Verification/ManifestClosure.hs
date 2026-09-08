@@ -21,6 +21,7 @@ import Phil.Verification
 import Phil.Verification.Bundle
   ( AcceptedEvidenceReference (..)
   , VerificationBundle (..)
+  , verificationBundleArchitectureDigest
   )
 
 -- | Exact assurance artifacts selected to close one VerificationBundle.
@@ -37,6 +38,7 @@ data ManifestClosureSelection = ManifestClosureSelection
 
 data ManifestClosureError
   = ManifestClosurePolicyRevisionMismatch AssurancePolicyRevision AssurancePolicyRevision
+  | ManifestClosureArchitectureDigestMismatch Digest Digest
   | ManifestClosureExpectedObligationsMismatch (Set RevisionId) (Set RevisionId)
   | ManifestClosureRevisionMissing RevisionId
   | ManifestClosureRevisionMismatch RevisionId
@@ -67,6 +69,7 @@ closeVerificationBundle
   -> Either ManifestClosureError AssuranceManifest
 closeVerificationBundle bundle policy context ledger selection = do
   verifyPolicyRevision
+  verifyArchitectureDigest
   verifyContextObligations
   verifyBundleRevisions
   verifyBundleEvidenceReferences
@@ -109,6 +112,13 @@ closeVerificationBundle bundle policy context ledger selection = do
           then Right ()
           else Left
             (ManifestClosurePolicyRevisionMismatch bundleRevision selectedRevision)
+
+    verifyArchitectureDigest =
+      let expected = verificationBundleArchitectureDigest bundle
+          actual = verificationArchitectureDigest context
+      in if actual == expected
+          then Right ()
+          else Left (ManifestClosureArchitectureDigestMismatch expected actual)
 
     verifyContextObligations =
       let expected = verificationExpectedObligations context
