@@ -1,4 +1,4 @@
-profile_id	binding_name	binding_mode	session_kind	message_name	message_type	terminal_outcome	branches	primitives
+profile_id	binding_name	binding_mode	session_kind	message_name	message_type	terminal_outcome	branches	primitive_bindings
 phase0.simple-receive	s0	linear	receive	hello	opaque:Hello	success	-	-
 phase0.wrong-order	s0	linear	receive	hello	opaque:Hello	success	-	-
-phase0.nonexhaustive-offer	s0	linear	offer	-	-	-	payload:success;cancel:cancelled	handle-payload
+phase0.nonexhaustive-offer	s0	linear	offer	-	-	-	payload:success;cancel:cancelled	handle_payload:handle-payload
