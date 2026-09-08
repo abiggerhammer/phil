@@ -158,6 +158,21 @@ Inductive phase1_surface_parser_goal_choice_safe
     phase1_surface_parser_goal_choice_safe_structural fuel goal ->
     phase1_surface_parser_goal_choice_safe fuel goal.
 
+Lemma forall_member_of_Forall :
+  forall (A : Type) (P : A -> Prop) items item,
+    Forall P items ->
+    In item items ->
+    P item.
+Proof.
+  intros A P items item Hforall Hin.
+  induction Hforall as [| head tail Hhead Htail IH].
+  - contradiction.
+  - simpl in Hin.
+    destruct Hin as [Heq | Hin].
+    + subst item. exact Hhead.
+    + apply IH. exact Hin.
+Qed.
+
 Lemma phase1_surface_expression_choice_safe_of_bool :
   forall fuel expression,
     choice_bodies_nonnullable_fuel fuel expression = true ->
@@ -218,9 +233,8 @@ Proof.
       change
         (Forall (phase1_surface_expression_choice_safe fuel) items)
         in Hsafe.
-      apply Forall_forall in Hsafe.
       apply IH.
-      exact (Hsafe item Hin).
+      eapply forall_member_of_Forall; eauto.
     + rewrite choice_bodies_nonnullable_alternative_step.
       apply forallb_forall.
       intros item Hin.
@@ -232,9 +246,15 @@ Proof.
             phase1_surface_expression_choice_safe fuel candidate)
           items)
         in Hsafe.
-      apply Forall_forall in Hsafe.
-      specialize (Hsafe item Hin).
-      destruct Hsafe as [Hnonnullable Hchild].
+      pose proof
+        (forall_member_of_Forall
+          EbnfExpression
+          (fun candidate =>
+            nullable_expression
+              phase1_surface_nullable_facts candidate = false /\
+            phase1_surface_expression_choice_safe fuel candidate)
+          items item Hsafe Hin) as Hitem.
+      destruct Hitem as [Hnonnullable Hchild].
       apply andb_true_iff.
       split.
       * apply negb_true_iff. exact Hnonnullable.
@@ -268,10 +288,9 @@ Proof.
   - unfold phase1_surface_parser_goal_choice_safe_structural in Hsafe.
     unfold phase1_surface_parser_goal_choice_safeb.
     apply forallb_forall.
-    rewrite Forall_forall in Hsafe.
     intros item Hin.
     apply phase1_surface_expression_choice_safe_bool.
-    exact (Hsafe item Hin).
+    eapply forall_member_of_Forall; eauto.
   - unfold phase1_surface_parser_goal_choice_safe_structural in Hsafe.
     unfold phase1_surface_parser_goal_choice_safeb.
     apply phase1_surface_expression_choice_safe_bool.
@@ -646,12 +665,18 @@ Proof.
   destruct Hsafe as [Hsafe].
   constructor.
   unfold phase1_surface_parser_goal_choice_safe_structural in Hsafe |- *.
-  rewrite Forall_forall in Hsafe.
   assert (Hin : In item items).
   {
     eapply nth_error_In. exact Hnth.
   }
-  exact (proj2 (Hsafe item Hin)).
+  pose proof
+    (forall_member_of_Forall
+      EbnfExpression
+      (fun candidate =>
+        nullable_expression phase1_surface_nullable_facts candidate = false /\
+        phase1_surface_expression_choice_safe fuel candidate)
+      items item Hsafe Hin) as Hitem.
+  exact (proj2 Hitem).
 Qed.
 
 Lemma phase1_surface_optional_body_choice_safe :
