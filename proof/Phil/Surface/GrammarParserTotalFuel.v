@@ -99,6 +99,30 @@ Proof.
   reflexivity.
 Qed.
 
+Lemma oracle_parse_fuel_nonterminal_complete_lift :
+  forall child_required oracle rules path name body input rest tree,
+    lookupRule name rules = Some body ->
+    (forall extra,
+      oracle_parse_fuel
+        (child_required + extra) oracle rules
+        (GoalExpression (descend path (AtNonterminal name)) body)
+        input = Some (rest, ResultTree tree)) ->
+    forall extra,
+      oracle_parse_fuel
+        (S child_required + extra) oracle rules
+        (GoalExpression path (ENonterminal name)) input =
+      Some (rest, ResultTree (PTNonterminal name tree)).
+Proof.
+  intros child_required oracle rules path name body input rest tree
+    Hlookup Hchild_complete extra.
+  replace (S child_required + extra)
+    with (S (child_required + extra)) by lia.
+  rewrite oracle_parse_fuel_nonterminal_step.
+  rewrite Hlookup.
+  rewrite (Hchild_complete extra).
+  reflexivity.
+Qed.
+
 Definition phase1_surface_parser_bounded_complete
   (goal : DerivationGoal)
   (input rest : list ConcreteToken)
@@ -530,13 +554,12 @@ Proof.
       unfold phase1_surface_parser_local_measure in *;
       lia).
   - intros extra.
-    abstract (
-      replace (S child_required + extra)
-        with (S (child_required + extra)) by lia;
-      rewrite oracle_parse_fuel_nonterminal_step;
-      rewrite Hlookup;
-      rewrite (Hchild_complete extra);
-      reflexivity).
+    exact
+      (oracle_parse_fuel_nonterminal_complete_lift
+        child_required
+        phase1_surface_predictive_oracle phase1_surface_rules
+        path name body input rest tree
+        Hlookup Hchild_complete extra).
 Qed.
 
 Lemma phase1_surface_sequence_wrapper_bounded_complete :
