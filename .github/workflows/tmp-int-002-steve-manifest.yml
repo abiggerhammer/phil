@@ -70,7 +70,64 @@ jobs:
           if new not in text:
               if old not in text:
                   raise SystemExit('Steve OwnedBytes release fixture does not match expected staged form')
-              path.write_text(text.replace(old, new, 1))
+              text = text.replace(old, new, 1)
+          path.write_text(text)
+          PY
+
+      - name: Bind qualified provider evidence to explicit assumptions
+        run: |
+          python3 - <<'PY'
+          from pathlib import Path
+
+          path = Path('test/Phase1INT002SteveManifestMain.hs')
+          text = path.read_text()
+
+          old_revision = '''providerObligationRevision artifact key disposition = revision
+            where
+              kind = evidenceKindFor disposition
+              role = providerEvidenceRole artifact
+          '''
+          new_revision = '''providerObligationRevision artifact key disposition = revision
+            where
+              kind = KernelChecked
+              role = providerEvidenceRole artifact
+          '''
+          if new_revision not in text:
+              if old_revision not in text:
+                  raise SystemExit('Steve provider obligation adapter does not match expected staged form')
+              text = text.replace(old_revision, new_revision, 1)
+
+          old_evidence = '''providerEvidenceEntry validity artifact key disposition revision = entry
+            where
+              kind = evidenceKindFor disposition
+              assumptions
+                | kind == Assumed = map AssumptionId
+                    (Set.toAscList (providerAssumptionRefs artifact))
+                | otherwise = []
+              evidenceId = EvidenceEntryId (Text.intercalate ":"
+          '''
+          new_evidence = '''providerEvidenceEntry validity artifact key disposition revision = entry
+            where
+              kind = KernelChecked
+              assumptions = map AssumptionId
+                (Set.toAscList (providerAssumptionRefs artifact))
+              evidenceId = EvidenceEntryId (Text.intercalate ":"
+          '''
+          if new_evidence not in text:
+              if old_evidence not in text:
+                  raise SystemExit('Steve provider evidence adapter does not match expected staged form')
+              text = text.replace(old_evidence, new_evidence, 1)
+
+          old_classifier = '''evidenceKindFor :: SemanticForm -> AssuranceKind
+          evidenceKindFor disposition
+            | "assumption" `Text.isInfixOf` canonicalSemanticForm disposition = Assumed
+            | otherwise = KernelChecked
+
+          '''
+          if old_classifier in text:
+              text = text.replace(old_classifier, '', 1)
+
+          path.write_text(text)
           PY
 
       - name: Build complete Haskell substrate
@@ -108,16 +165,16 @@ jobs:
           cabal exec -- runghc -isrc -Wall -Werror test/Phase1VerificationPolicySensitiveRuntimeClosureMain.hs
           cabal exec -- runghc -isrc -Wall -Werror test/Phase1VerificationIndependentTargetMain.hs
 
-      - name: Transport validated release-fixture repair
+      - name: Transport validated Steve manifest repair
         shell: bash
         run: |
           set -euo pipefail
           git add test/Phase1INT002SteveManifestMain.hs
           if git diff --cached --quiet; then
-            echo 'release fixture already committed; replay head needs no transport'
+            echo 'Steve manifest adapter already committed; replay head needs no transport'
             exit 0
           fi
           git config user.name 'github-actions[bot]'
           git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
-          git commit -m 'test: complete Steve OwnedBytes release semantics'
+          git commit -m 'test: bind Steve qualified evidence assumptions explicitly'
           git push origin HEAD:phase1-int-002-steve-manifest
