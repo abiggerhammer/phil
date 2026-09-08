@@ -281,7 +281,7 @@ providerObligationRevision
   -> ObligationRevision
 providerObligationRevision artifact key disposition = revision
   where
-    kind = evidenceKindFor disposition
+    kind = KernelChecked
     role = providerEvidenceRole artifact
     statement = Text.intercalate " | "
       [ "Steve provider qualification obligation"
@@ -323,11 +323,9 @@ providerEvidenceEntry
   -> EvidenceEntry
 providerEvidenceEntry validity artifact key disposition revision = entry
   where
-    kind = evidenceKindFor disposition
-    assumptions
-      | kind == Assumed = map AssumptionId
-          (Set.toAscList (providerAssumptionRefs artifact))
-      | otherwise = []
+    kind = KernelChecked
+    assumptions = map AssumptionId
+      (Set.toAscList (providerAssumptionRefs artifact))
     evidenceId = EvidenceEntryId (Text.intercalate ":"
       [ "evidence"
       , providerOccurrence artifact
@@ -395,11 +393,6 @@ providerEvidenceRole artifact = EvidenceRole
 
 providerOccurrence :: SteveProviderQualificationArtifact -> Text
 providerOccurrence = checkedQualificationAdmissionProviderOccurrence . steveProviderCheckedAdmission
-
-evidenceKindFor :: SemanticForm -> AssuranceKind
-evidenceKindFor disposition
-  | "assumption" `Text.isInfixOf` canonicalSemanticForm disposition = Assumed
-  | otherwise = KernelChecked
 
 steveValidityContext
   :: SteveProviderQualificationArtifact
@@ -545,7 +538,11 @@ ownedBytesRelease = ReleaseTransitionContract
       , releaseAccountEvidenceRefs = Set.empty
       , releaseAccountEffectRefs = Set.empty
       , releaseAccountAssumptionRefs = Set.empty
+      , releaseAccountCostRefs = Set.empty
+      , releaseAccountSubjectRef = "owned-bytes"
       }
+  , releaseTransitionOutcome = ReleaseContinuesUnit
+  , releaseTransitionResidue = ReleaseConsumesOwner
   }
 
 sourceDeclarationIdentity :: CheckedSourceUnit -> DeclarationIdentity
