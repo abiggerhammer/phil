@@ -11,7 +11,7 @@ import Phil.Compiler.SourceCore
 import Phil.Core.Static
   ( ArchitectureInstanceIdentity
   , DeclarationKey (..)
-  , InstanceKey (..)
+  , checkedArchitectureIdentity
   , emptyStaticContext
   )
 import Phil.Core.Syntax (Ty (..))
@@ -26,7 +26,7 @@ import Phil.Surface.Lineage
   , decodePortableSourceBundle
   )
 import Phil.Surface.Parser (parseSurfaceFile)
-import Phil.Surface.Syntax (SurfaceFile (..))
+import Phil.Surface.Syntax (Component, Located, SurfaceFile (..))
 import Phil.Systems.GenericLowering
 import Phil.Systems.IR (CompilationProfile (CheckedRuntime))
 import System.Exit (exitFailure)
@@ -190,7 +190,7 @@ alphaFunction = CoreSystemsFunction
       (CoreSystemsBlock "entry" [] (CoreSystemsEnd "return"))
   }
 
-parseSingle :: Text -> Either String (Phil.Surface.Syntax.Located Phil.Surface.Syntax.Component)
+parseSingle :: Text -> Either String (Located Component)
 parseSingle source = do
   parsed <- mapLeft show (parseSurfaceFile "mutation.phil" source)
   case parsed of
@@ -199,7 +199,7 @@ parseSingle source = do
       ("mutation fixture expected one component, found " <> show (length components))
 
 architectureIdentity :: CheckedSourceArchitecture -> ArchitectureInstanceIdentity
-architectureIdentity = Phil.Core.Static.checkedArchitectureIdentity . checkedSourceArchitectureRoot
+architectureIdentity = checkedArchitectureIdentity . checkedSourceArchitectureRoot
 
 assert :: Bool -> String -> Either String ()
 assert condition detail
