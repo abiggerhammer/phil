@@ -8,6 +8,7 @@ From Phil.Surface Require Import
   GrammarDeterminacyPredictiveOracle
   GrammarDeterminacyWitnessSoundness
   GrammarDeterminacyContinuationSoundness
+  GrammarDeterminacyPredictiveBridge
   GrammarParserGoalRank
   GrammarParserGlobalGoalRank.
 
@@ -504,12 +505,7 @@ Lemma phase1_surface_optional_body_choice_safe :
 Proof.
   intros fuel path body Hsafe.
   unfold phase1_surface_parser_goal_choice_safeb in *.
-  pose proof
-    (eq_trans
-      (eq_sym (choice_safe_first_optional_safety_equation fuel body))
-      Hsafe) as Hstep.
-  eapply andb_true_right.
-  exact Hstep.
+  exact (proj2 (predictive_bridge_choice_safe_optional_body fuel body Hsafe)).
 Qed.
 
 Lemma phase1_surface_repetition_wrapper_choice_safe :
@@ -521,12 +517,7 @@ Lemma phase1_surface_repetition_wrapper_choice_safe :
 Proof.
   intros fuel path body Hsafe.
   unfold phase1_surface_parser_goal_choice_safeb in *.
-  pose proof
-    (eq_trans
-      (eq_sym (choice_safe_first_repetition_safety_equation fuel body))
-      Hsafe) as Hstep.
-  eapply andb_true_right.
-  exact Hstep.
+  exact (proj2 (predictive_bridge_choice_safe_repetition_body fuel body Hsafe)).
 Qed.
 
 Lemma phase1_surface_sequence_cons_choice_safe :
