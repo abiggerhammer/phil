@@ -5,6 +5,8 @@ on:
     paths:
       - 'examples/upload/client.phil'
       - 'examples/upload/server.phil'
+      - 'examples/steve/put.phil'
+      - 'examples/steve/get.phil'
       - 'src/Phil/Assurance/Phase0.hs'
       - 'src/Phil/Assurance/Types.hs'
       - 'src/Phil/Assurance/Verify.hs'
@@ -12,6 +14,7 @@ on:
       - 'src/Phil/Compiler/SourceBundle.hs'
       - 'src/Phil/Core/Static.hs'
       - 'src/Phil/Examples/Phase1/SystemsWitnesses.hs'
+      - 'src/Phil/Examples/Steve/ProviderQualifications.hs'
       - 'src/Phil/Surface/Lineage.hs'
       - 'src/Phil/Surface/Phase0.hs'
       - 'src/Phil/Systems/GenericLowering.hs'
@@ -23,6 +26,9 @@ on:
       - 'test/Phase1INT001WitnessE2EMain.hs'
       - 'test/Phase1INT002ManifestClosureMain.hs'
       - 'test/Phase1INT002UploadManifestMain.hs'
+      - 'test/Phase1INT002SteveManifestMain.hs'
+      - 'test/Phase1SteveProviderQualificationMain.hs'
+      - 'app/SteveProviderQualificationWitnessProductionBindingMain.hs'
       - 'test/AssuranceMain.hs'
       - 'test/Phase1VerificationNoSilentAssumptionExportMain.hs'
       - 'test/Phase1VerificationPolicySensitiveRuntimeClosureMain.hs'
@@ -32,6 +38,8 @@ on:
     paths:
       - 'examples/upload/client.phil'
       - 'examples/upload/server.phil'
+      - 'examples/steve/put.phil'
+      - 'examples/steve/get.phil'
       - 'src/Phil/Assurance/Phase0.hs'
       - 'src/Phil/Assurance/Types.hs'
       - 'src/Phil/Assurance/Verify.hs'
@@ -39,6 +47,7 @@ on:
       - 'src/Phil/Compiler/SourceBundle.hs'
       - 'src/Phil/Core/Static.hs'
       - 'src/Phil/Examples/Phase1/SystemsWitnesses.hs'
+      - 'src/Phil/Examples/Steve/ProviderQualifications.hs'
       - 'src/Phil/Surface/Lineage.hs'
       - 'src/Phil/Surface/Phase0.hs'
       - 'src/Phil/Systems/GenericLowering.hs'
@@ -50,6 +59,9 @@ on:
       - 'test/Phase1INT001WitnessE2EMain.hs'
       - 'test/Phase1INT002ManifestClosureMain.hs'
       - 'test/Phase1INT002UploadManifestMain.hs'
+      - 'test/Phase1INT002SteveManifestMain.hs'
+      - 'test/Phase1SteveProviderQualificationMain.hs'
+      - 'app/SteveProviderQualificationWitnessProductionBindingMain.hs'
       - 'test/AssuranceMain.hs'
       - 'test/Phase1VerificationNoSilentAssumptionExportMain.hs'
       - 'test/Phase1VerificationPolicySensitiveRuntimeClosureMain.hs'
@@ -85,14 +97,30 @@ jobs:
             src/Phil/Verification/ManifestClosure.hs \
             test/Phase1INT002UploadManifestMain.hs
 
+      - name: Strict typecheck ordinary-source Steve manifest boundary
+        run: |
+          cabal exec -- ghc -isrc -Wall -Werror -fno-code \
+            src/Phil/Verification.hs \
+            src/Phil/Verification/Bundle.hs \
+            src/Phil/Verification/ManifestClosure.hs \
+            test/Phase1INT002SteveManifestMain.hs
+
       - name: Execute INT-002 generic manifest closure pressure corpus
         run: cabal exec -- runghc -isrc -Wall -Werror test/Phase1INT002ManifestClosureMain.hs
 
       - name: Execute ordinary-source Upload manifest closure
         run: cabal exec -- runghc -isrc -Wall -Werror test/Phase1INT002UploadManifestMain.hs
 
+      - name: Execute ordinary-source Steve manifest closure
+        run: cabal exec -- runghc -isrc -Wall -Werror test/Phase1INT002SteveManifestMain.hs
+
       - name: Replay INT-001 ordinary witness source path
         run: cabal exec -- runghc -isrc -Wall -Werror test/Phase1INT001WitnessE2EMain.hs
+
+      - name: Replay Steve provider qualification corpus
+        run: |
+          cabal exec -- runghc -isrc -Wall -Werror test/Phase1SteveProviderQualificationMain.hs
+          cabal exec -- runghc -isrc -Wall -Werror app/SteveProviderQualificationWitnessProductionBindingMain.hs
 
       - name: Replay assurance manifest verifier corpus
         run: cabal exec -- runghc -isrc -Wall -Werror test/AssuranceMain.hs
