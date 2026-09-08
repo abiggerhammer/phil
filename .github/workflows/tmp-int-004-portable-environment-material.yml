@@ -1,0 +1,76 @@
+name: Temporary INT-004 Portable Environment Material
+
+on:
+  push:
+    branches: [phase1-int-004-portable-environment-material]
+    paths:
+      - 'test/Phase1INT004PortableNegativeManifestMain.hs'
+      - 'test/fixtures/phase1-negative/**'
+      - '.github/workflows/tmp-int-004-portable-environment-material.yml'
+
+permissions:
+  contents: read
+
+jobs:
+  portable-environment-material:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: haskell-actions/setup@v2
+        with:
+          ghc-version: '9.6.7'
+          cabal-version: 'latest'
+
+      - name: Build complete Haskell substrate
+        run: cabal build all --enable-tests
+
+      - name: Strict typecheck INT-004 portable environment replay
+        run: |
+          cabal exec -- ghc -isrc -Wall -Werror -fno-code \
+            test/Phase1INT004PortableNegativeManifestMain.hs
+
+      - name: Replay all frozen negatives with portable seed environments
+        run: |
+          cabal exec -- runghc -isrc -Wall -Werror \
+            test/Phase1INT004PortableNegativeManifestMain.hs
+
+      - name: Guard portable environment material against implementation identity
+        run: |
+          python3 - <<'PY'
+          from pathlib import Path
+
+          profiles_path = Path('test/fixtures/phase1-negative/environment-profiles-v1.tsv')
+          text = profiles_path.read_text()
+          forbidden = ['.phil', 'examples/rejected', 'phase0EnvironmentFor', 'Phil.Surface', 'TyEndpoint']
+          for token in forbidden:
+              assert token not in text, f'portable environment data contains implementation/path token: {token}'
+
+          rows = [line.split('\t') for line in text.splitlines() if line]
+          assert rows[0] == [
+              'profile_id', 'binding_name', 'binding_mode', 'session_kind',
+              'message_name', 'message_type', 'terminal_outcome', 'branches',
+              'primitive_bindings'
+          ]
+          body = rows[1:]
+          assert {row[0] for row in body} == {
+              'phase0.simple-receive',
+              'phase0.wrong-order',
+              'phase0.nonexhaustive-offer',
+          }
+          assert len(body) == 3
+          assert all(len(row) == 9 for row in body)
+
+          manifest = [line.split('\t') for line in Path('test/fixtures/phase1-negative/manifest.tsv').read_text().splitlines() if line]
+          by_id = {row[0]: row for row in manifest[1:]}
+          seed_ids = ['P1-NEG-P0-001', 'P1-NEG-P0-002', 'P1-NEG-P0-003', 'P1-NEG-P0-004']
+          portable_ids = {row[0] for row in body}
+          assert all(by_id[fixture_id][4] in portable_ids for fixture_id in seed_ids)
+
+          replay = Path('test/Phase1INT004PortableNegativeManifestMain.hs').read_text()
+          legacy_section = replay.split('legacyProfileEnvironment ::', 1)[1].split('checkIntegrity ::', 1)[0]
+          for profile in portable_ids:
+              assert profile not in legacy_section, f'seed profile can still fall back through legacy adapter: {profile}'
+          PY
+
+      - name: Replay legacy surface conformance harness
+        run: cabal test phil-surface-conformance-tests
