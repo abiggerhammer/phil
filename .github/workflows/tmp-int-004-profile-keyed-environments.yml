@@ -1,0 +1,74 @@
+name: Temporary INT-004 Profile-Keyed Environments
+
+on:
+  push:
+    branches: [phase1-int-004-portable-environments]
+    paths:
+      - 'src/Phil/Surface/Phase0.hs'
+      - 'test/Phase1INT004PortableNegativeManifestMain.hs'
+      - 'test/fixtures/phase1-negative/**'
+      - 'test/SurfaceConformanceMain.hs'
+      - 'scripts/staging/int004_profile_keyed_environments.py'
+      - '.github/workflows/tmp-int-004-profile-keyed-environments.yml'
+
+permissions:
+  contents: write
+
+jobs:
+  profile-keyed-environments:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: phase1-int-004-portable-environments
+          fetch-depth: 0
+      - uses: haskell-actions/setup@v2
+        with:
+          ghc-version: '9.6.7'
+          cabal-version: 'latest'
+
+      - name: Apply profile-keyed environment migration
+        run: python3 scripts/staging/int004_profile_keyed_environments.py
+
+      - name: Build complete Haskell substrate
+        run: cabal build all --enable-tests
+
+      - name: Strict typecheck Phase0 profile resolver and portable replay
+        run: |
+          cabal exec -- ghc -isrc -Wall -Werror -fno-code \
+            src/Phil/Surface/Phase0.hs \
+            test/Phase1INT004PortableNegativeManifestMain.hs
+
+      - name: Replay frozen negatives through manifest-selected profiles
+        run: cabal exec -- runghc -isrc -Wall -Werror test/Phase1INT004PortableNegativeManifestMain.hs
+
+      - name: Guard portable replay against filename environment dispatch
+        run: |
+          if grep -q 'phase0EnvironmentFor' test/Phase1INT004PortableNegativeManifestMain.hs; then
+            echo 'portable INT-004 replay still depends on filename environment dispatch'
+            exit 1
+          fi
+          grep -q 'phase0EnvironmentProfile (negativeCaseEnvironmentProfile negativeCase)' \
+            test/Phase1INT004PortableNegativeManifestMain.hs
+          grep -q 'phase0EnvironmentProfile :: Text -> Either Text SurfaceEnvironment' \
+            src/Phil/Surface/Phase0.hs
+
+      - name: Replay legacy surface conformance harness
+        run: cabal test phil-surface-conformance-tests
+
+      - name: Transport validated profile-keyed semantics
+        shell: bash
+        run: |
+          set -euo pipefail
+          git add \
+            src/Phil/Surface/Phase0.hs \
+            test/Phase1INT004PortableNegativeManifestMain.hs \
+            test/fixtures/phase1-negative/README.md
+          if git diff --cached --quiet; then
+            echo 'profile-keyed environment semantics already committed; this is a committed-head replay'
+            exit 0
+          fi
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git commit -m 'int: key frozen negative environments by portable profile'
+          git push origin HEAD:phase1-int-004-portable-environments
