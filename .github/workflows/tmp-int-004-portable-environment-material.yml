@@ -11,6 +11,7 @@ on:
 permissions:
   contents: read
 
+# Branch-only staging for portable environment schema v1.
 jobs:
   portable-environment-material:
     runs-on: ubuntu-latest
