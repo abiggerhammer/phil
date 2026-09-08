@@ -9,7 +9,6 @@ module Phil.Compiler.SourceCore
 
 import qualified Data.Map.Strict as Map
 import Data.Map.Strict (Map)
-import qualified Data.Set as Set
 import Data.Set (Set)
 import Data.Text (Text)
 import Phil.Compiler.SourceArchitecture
@@ -37,10 +36,6 @@ import Phil.Systems.GenericLowering
   , coreSystemsProgramSemanticForm
   )
 
--- | Independently recoverable source/Core actions whose representation is
--- already unambiguous at the current INT-001 seam. This intentionally excludes
--- operations whose source-to-Core realization still needs a later refinement
--- (for example general provider calls and branch normalization).
 data SourceCoreInventory = SourceCoreInventory
   { sourceCoreReceiveFrames :: Int
   , sourceCoreRecognitions :: Int
@@ -71,10 +66,6 @@ data SourceCoreCorrespondenceError
   | SourceCoreInventoryUnderrepresented Text SourceCoreInventory SourceCoreInventory
   deriving (Eq, Show)
 
--- | Bind one already checked ordinary-source Architecture occurrence to one
--- concrete CoreSystemsProgram only after independently reconstructible facts
--- agree. Source presentation names outside component/function identity, source
--- carrier paths, and witness/program labels are not consulted.
 verifySourceCoreCorrespondence
   :: CheckedSourceArchitecture
   -> CoreSystemsProgram
