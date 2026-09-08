@@ -11,6 +11,7 @@ import qualified Data.Text.IO as TextIO
 import Phil.Surface.Check
   ( RejectionClass (..)
   , SurfaceCheckError (..)
+  , SurfaceEnvironment
   , checkSurfaceComponent
   )
 import Phil.Surface.Parser (parseSurfaceFile)
@@ -97,6 +98,33 @@ parseRejectionClass value = case value of
   "unchecked-arithmetic" -> Right UncheckedArithmetic
   _ -> Left ("unknown portable rejection class: " <> Text.unpack value)
 
+-- Transitional INT-004 compatibility boundary. The portable manifest selects
+-- a stable environment profile; this adapter alone maps that profile onto the
+-- frozen Phase-0 environment table. The fixture path never selects the checker
+-- environment. A later INT-004 slice will replace this adapter with genuinely
+-- portable environment material.
+phase0ProfileEnvironment :: Text -> Either Text SurfaceEnvironment
+phase0ProfileEnvironment profile =
+  case profile of
+    "phase0.simple-receive" -> legacy "01-reuse-consumed-endpoint.phil"
+    "phase0.wrong-order" -> legacy "03-wrong-protocol-order.phil"
+    "phase0.nonexhaustive-offer" -> legacy "04-nonexhaustive-offer.phil"
+    "phase0.legacy-raw" -> legacy "05-raw-field-access.phil"
+    "phase0.parsed-validation-bypass" -> legacy "06-parsed-used-as-validated.phil"
+    "phase0.unrelated-length" -> legacy "07-unrelated-payload-length.phil"
+    "phase0.incompatible-join" -> legacy "08-incompatible-branch-join.phil"
+    "phase0.failure-reuse" -> legacy "09-continue-after-fatal-recognition-failure.phil"
+    "phase0.premature-acceptance" -> legacy "10-accept-before-digest-check.phil"
+    "phase0.common" -> legacy "11-copy-authority-capability.phil"
+    "phase0.pending-commit" -> legacy "13-commit-unrelated-parsed.phil"
+    "phase0.pending-drop" -> legacy "15-drop-pending-receive.phil"
+    "phase0.stale-policy" -> legacy "17-use-evidence-wrong-context.phil"
+    "phase0.opaque-proof" -> legacy "18-prove-opaque-digest.phil"
+    "phase0.label-proof" -> legacy "19-label-does-not-transfer-proof.phil"
+    _ -> Left ("unknown Phase-0 environment profile: " <> profile)
+  where
+    legacy name = phase0EnvironmentFor ("examples/rejected/" <> Text.unpack name)
+
 checkIntegrity :: [NegativeCase] -> IO Bool
 checkIntegrity cases = do
   let ids = map negativeCaseId cases
@@ -107,6 +135,9 @@ checkIntegrity cases = do
       layersExact = all ((== "surface-check") . negativeCaseLayer) cases
       authoritiesPresent = all ((== "INT-004") . negativeCaseAuthority) cases
       profilesNamed = all (Text.isPrefixOf "phase0." . negativeCaseEnvironmentProfile) cases
+      profilesResolve = all
+        (either (const False) (const True) . phase0ProfileEnvironment . negativeCaseEnvironmentProfile)
+        cases
   filesPresent <- and <$> mapM doesFileExist paths
   report "20 frozen negative fixtures are manifest-owned" exactFrozenCount
   report "stable fixture IDs are unique" uniqueIds
@@ -114,6 +145,7 @@ checkIntegrity cases = do
   report "every fixture names surface-check as competent layer" layersExact
   report "every fixture names its governing INT-004 matrix authority" authoritiesPresent
   report "every fixture names an explicit environment profile" profilesNamed
+  report "every named environment profile resolves independently of fixture path" profilesResolve
   report "every portable fixture path exists" filesPresent
   pure (and
     [ exactFrozenCount
@@ -122,6 +154,7 @@ checkIntegrity cases = do
     , layersExact
     , authoritiesPresent
     , profilesNamed
+    , profilesResolve
     , filesPresent
     ])
 
@@ -140,8 +173,8 @@ replayCase negativeCase = do
     _ -> putStrLn
       ("FAIL: " <> Text.unpack (negativeCaseId negativeCase)
         <> " -- frozen legacy fixture missing during migration") >> pure False
-  case phase0EnvironmentFor path of
-    Left detail -> failCase ("environment adapter failed: " <> Text.unpack detail)
+  case phase0ProfileEnvironment (negativeCaseEnvironmentProfile negativeCase) of
+    Left detail -> failCase ("environment profile failed: " <> Text.unpack detail)
     Right environment -> case parseSurfaceFile (Text.pack path) source of
       Left diagnostic -> failCase
         ("rejected before recorded competent layer: syntax -- " <> show diagnostic)
