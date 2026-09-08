@@ -29,6 +29,7 @@ module Phil.Core.ConcurrencyRendezvousCertification
   , verifyRendezvousMessageCoarseKernelFacts
   , verifyExactInternalRendezvousKernelFacts
   , certifyProcessRendezvous
+  , certifyProcessRendezvousSuccessor
   , certifyRestrictedProcessRendezvous
   ) where
 
@@ -68,6 +69,7 @@ import Phil.Core.ProcessRendezvous
   , ProcessRendezvousSide (..)
   , RestrictedMessageTransfer (..)
   , checkProcessCommunication
+  , checkProcessCommunicationSuccessor
   , checkRestrictedProcessRendezvous
   , communicationStateFromActivation
   )
@@ -343,6 +345,27 @@ certifyProcessRendezvous activation protocol contexts request evidence = do
   let afterState = beforeState { communicationProtocolContexts = updatedContexts }
   certifyAcceptedRendezvous activation protocol beforeState afterState request Nothing evidence
 
+-- | Certify one rendezvous from the exact live successor of a previous
+-- certified rendezvous. The opaque predecessor supplies state provenance; the
+-- native live transition rechecks exact instance/role identity, current
+-- duality, and both local protocol actions.
+certifyProcessRendezvousSuccessor
+  :: CertifiedRendezvousActivation
+  -> CertifiedRendezvousProtocol
+  -> CertifiedRendezvousResult
+  -> ProcessRendezvousRequest
+  -> RendezvousMessageEvidence
+  -> Either ConcurrencyRendezvousCertificationError CertifiedRendezvousResult
+certifyProcessRendezvousSuccessor activation protocol predecessor request evidence = do
+  let beforeState = certifiedRendezvousState predecessor
+  afterState <- mapLeft ConcurrencyRendezvousNativeError $
+    checkProcessCommunicationSuccessor
+      (certifiedRendezvousProtocolInstance protocol)
+      (certifiedRendezvousActivationNetwork activation)
+      beforeState
+      request
+  certifyAcceptedRendezvous activation protocol beforeState afterState request Nothing evidence
+
 certifyRestrictedProcessRendezvous
   :: CertifiedRendezvousActivation
   -> CertifiedRendezvousProtocol
@@ -447,12 +470,13 @@ rendezvousEndpointFacts protocol sender receiver senderBefore receiverBefore sen
           && rendezvousInstance receiver == exactInstance
     , rendezvousSenderRoleExact =
         protocolEndpointRole (checkedProtocolPredecessor senderStep)
-          == certifiedRendezvousPrimaryRole protocol
-          && rendezvousRole sender == certifiedRendezvousPrimaryRole protocol
+          == rendezvousRole sender
+          && certifiedRoleMember protocol (rendezvousRole sender)
     , rendezvousReceiverRoleExact =
         protocolEndpointRole (checkedProtocolPredecessor receiverStep)
-          == certifiedRendezvousPeerRole protocol
-          && rendezvousRole receiver == certifiedRendezvousPeerRole protocol
+          == rendezvousRole receiver
+          && certifiedRolePairExact protocol
+              (rendezvousRole sender) (rendezvousRole receiver)
     , rendezvousCurrentSessionsDual =
         protocolEndpointSession (checkedProtocolPredecessor receiverStep)
           == dualSession (protocolEndpointSession (checkedProtocolPredecessor senderStep))
@@ -461,6 +485,22 @@ rendezvousEndpointFacts protocol sender receiver senderBefore receiverBefore sen
   where
     exactInstance = binaryProtocolInstanceRevision
       (certifiedRendezvousProtocolInstance protocol)
+
+certifiedRoleMember :: CertifiedRendezvousProtocol -> ProtocolRoleKey -> Bool
+certifiedRoleMember protocol role =
+  role == certifiedRendezvousPrimaryRole protocol
+    || role == certifiedRendezvousPeerRole protocol
+
+certifiedRolePairExact
+  :: CertifiedRendezvousProtocol
+  -> ProtocolRoleKey
+  -> ProtocolRoleKey
+  -> Bool
+certifiedRolePairExact protocol senderRole receiverRole =
+  (senderRole == certifiedRendezvousPrimaryRole protocol
+    && receiverRole == certifiedRendezvousPeerRole protocol)
+  || (senderRole == certifiedRendezvousPeerRole protocol
+    && receiverRole == certifiedRendezvousPrimaryRole protocol)
 
 rendezvousParticipantFacts
   :: CertifiedRendezvousActivation

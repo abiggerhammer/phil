@@ -9,6 +9,7 @@ module Phil.Core.ProcessRendezvous
   , ProcessRendezvousError (..)
   , communicationStateFromActivation
   , checkProcessCommunication
+  , checkProcessCommunicationSuccessor
   , checkRestrictedProcessRendezvous
   ) where
 
@@ -185,6 +186,21 @@ checkProcessCommunication instanceValue network contexts attempt =
     JointProcessRendezvous request ->
       checkJointRendezvous instanceValue network contexts request
 
+-- | Advance an already-checked live communication state. Initial protocol
+-- projection is an initialization invariant; successor steps retain exact
+-- instance/role identity, current duality, and local action admissibility
+-- without comparing a continuation to the immutable initial projection.
+checkProcessCommunicationSuccessor
+  :: BinaryProtocolInstance
+  -> ProcessNetwork
+  -> ProcessCommunicationState
+  -> ProcessRendezvousRequest
+  -> Either ProcessRendezvousError ProcessCommunicationState
+checkProcessCommunicationSuccessor instanceValue network state request = do
+  updatedContexts <- checkJointRendezvousLive
+    instanceValue network (communicationProtocolContexts state) request
+  pure state { communicationProtocolContexts = updatedContexts }
+
 -- | CONC-005: perform one exact send/receive rendezvous and move one exact
 -- affine/linear payload occurrence sender -> receiver in the same pure checked
 -- transition. Endpoint progression, endpoint occurrence identity, resource
@@ -256,7 +272,27 @@ checkJointRendezvous
   -> Map.Map ProcessKey ProtocolContext
   -> ProcessRendezvousRequest
   -> Either ProcessRendezvousError (Map.Map ProcessKey ProtocolContext)
-checkJointRendezvous instanceValue network contexts request = do
+checkJointRendezvous = checkJointRendezvousWith validateSide
+
+checkJointRendezvousLive
+  :: BinaryProtocolInstance
+  -> ProcessNetwork
+  -> Map.Map ProcessKey ProtocolContext
+  -> ProcessRendezvousRequest
+  -> Either ProcessRendezvousError (Map.Map ProcessKey ProtocolContext)
+checkJointRendezvousLive = checkJointRendezvousWith validateLiveSide
+
+checkJointRendezvousWith
+  :: (BinaryProtocolInstance
+      -> ProcessRendezvousSide
+      -> ProtocolContext
+      -> Either ProcessRendezvousError ProtocolEndpointBinding)
+  -> BinaryProtocolInstance
+  -> ProcessNetwork
+  -> Map.Map ProcessKey ProtocolContext
+  -> ProcessRendezvousRequest
+  -> Either ProcessRendezvousError (Map.Map ProcessKey ProtocolContext)
+checkJointRendezvousWith validate instanceValue network contexts request = do
   let left = requestLeft request
       right = requestRight request
   if rendezvousProcess left == rendezvousProcess right
@@ -266,8 +302,8 @@ checkJointRendezvous instanceValue network contexts request = do
   requireActive network (rendezvousProcess right)
   leftContext <- requireContext contexts (rendezvousProcess left)
   rightContext <- requireContext contexts (rendezvousProcess right)
-  leftBinding <- validateSide instanceValue left leftContext
-  rightBinding <- validateSide instanceValue right rightContext
+  leftBinding <- validate instanceValue left leftContext
+  rightBinding <- validate instanceValue right rightContext
   if rendezvousRole left == rendezvousRole right
     then Left (RendezvousSameRole (rendezvousRole left))
     else Right ()
@@ -292,6 +328,22 @@ validateSide
   -> ProtocolContext
   -> Either ProcessRendezvousError ProtocolEndpointBinding
 validateSide instanceValue side context = do
+  binding <- validateLiveSide instanceValue side context
+  let processKey = rendezvousProcess side
+  projection <- mapLeft RendezvousProjectionError $
+    projectProtocolRole instanceValue (rendezvousRole side)
+  requireEqual
+    (RendezvousProjectionSessionMismatch processKey)
+    (protocolProjectionSession projection)
+    (protocolEndpointSession binding)
+  pure binding
+
+validateLiveSide
+  :: BinaryProtocolInstance
+  -> ProcessRendezvousSide
+  -> ProtocolContext
+  -> Either ProcessRendezvousError ProtocolEndpointBinding
+validateLiveSide instanceValue side context = do
   let processKey = rendezvousProcess side
       exactInstance = binaryProtocolInstanceRevision instanceValue
   requireEqual
@@ -310,12 +362,6 @@ validateSide instanceValue side context = do
     (RendezvousProtocolRoleMismatch processKey)
     (rendezvousRole side)
     (protocolEndpointRole binding)
-  projection <- mapLeft RendezvousProjectionError $
-    projectProtocolRole instanceValue (rendezvousRole side)
-  requireEqual
-    (RendezvousProjectionSessionMismatch processKey)
-    (protocolProjectionSession projection)
-    (protocolEndpointSession binding)
   pure binding
 
 requireActive :: ProcessNetwork -> ProcessKey -> Either ProcessRendezvousError ()
