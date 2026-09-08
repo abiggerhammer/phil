@@ -55,7 +55,7 @@ Proof.
 Qed.
 
 Lemma phase1_surface_progress_measure_fits_parent_remaining :
-  forall input middle child_rank parent_rank,
+  forall (input middle : list ConcreteToken) child_rank parent_rank,
     List.length middle < List.length input ->
     child_rank < phase1_surface_parser_global_goal_rank_bound ->
     phase1_surface_parser_local_measure middle child_rank <=
