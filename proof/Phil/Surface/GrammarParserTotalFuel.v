@@ -171,7 +171,7 @@ Proof.
     + unfold phase1_surface_parser_local_measure in *.
       lia.
     + intros extra.
-      simpl.
+      cbn [oracle_parse_fuel].
       rewrite Hlookup.
       rewrite (Hchild_complete extra).
       reflexivity.
