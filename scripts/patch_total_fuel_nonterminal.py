@@ -13,33 +13,72 @@ start = text.index(start_marker)
 end = text.index(end_marker, start)
 segment = text[start:end]
 
-canonical_helper = '''Lemma phase1_surface_expression_goal_canonical_rank :
-  forall path expression,
-    phase1_surface_parser_goal_options_global
-      expression_fuel (GoalExpression path expression) ->
-    phase1_surface_parser_goal_rank_fuel
-      expression_fuel (GoalExpression path expression) =
-    Some
-      (parser_expression_rank
-        phase1_surface_parser_rank_facts expression).
+lookup_member_helper = """Lemma lookup_rule_member :
+  forall rules name body,
+    lookupRule name rules = Some body ->
+    In (name, body) rules.
 Proof.
-  intros path expression Hglobal.
-  destruct
-    (phase1_surface_parser_goal_rank_exists
-      expression_fuel (GoalExpression path expression) Hglobal)
-    as [rank Hrank].
-  pose proof Hrank as Hraw.
-  unfold phase1_surface_parser_goal_rank_fuel in Hraw.
-  pose proof
-    (parser_expression_rank_of_fuel_some
-      phase1_surface_parser_rank_facts expression rank Hraw) as Hequal.
-  rewrite Hequal.
-  exact Hrank.
+  induction rules as [| [candidate expression] rest IH];
+    intros name body Hlookup; simpl in Hlookup.
+  - discriminate.
+  - destruct (String.eqb name candidate) eqn:Hname.
+    + apply String.eqb_eq in Hname.
+      subst candidate.
+      inversion Hlookup.
+      subst body.
+      left.
+      reflexivity.
+    + right.
+      eapply IH.
+      exact Hlookup.
 Qed.
 
-'''
+"""
 
-required_helper = '''Lemma phase1_surface_nonterminal_required_lift :
+rank_sufficient_helper = """Lemma phase1_surface_lookup_rule_rank_fuel_sufficient :
+  forall name body,
+    lookupRule name phase1_surface_rules = Some body ->
+    parser_rank_rule_fuel_sufficient (name, body) = true.
+Proof.
+  intros name body Hlookup.
+  pose proof
+    phase1_surface_parser_rank_expression_fuel_is_sufficient as Hall.
+  rewrite forallb_forall in Hall.
+  apply Hall.
+  eapply lookup_rule_member.
+  exact Hlookup.
+Qed.
+
+"""
+
+canonical_helper = """Lemma phase1_surface_lookup_rule_canonical_rank :
+  forall name body,
+    lookupRule name phase1_surface_rules = Some body ->
+    parser_expression_rank_fuel
+      expression_fuel phase1_surface_parser_rank_facts body =
+    Some
+      (parser_expression_rank
+        phase1_surface_parser_rank_facts body).
+Proof.
+  intros name body Hlookup.
+  pose proof
+    (phase1_surface_lookup_rule_rank_fuel_sufficient
+      name body Hlookup) as Hsufficient.
+  unfold parser_rank_rule_fuel_sufficient in Hsufficient.
+  destruct
+    (parser_expression_rank_fuel
+      expression_fuel phase1_surface_parser_rank_facts body)
+    as [rank |] eqn:Hrank.
+  - unfold parser_expression_rank.
+    rewrite Hrank.
+    reflexivity.
+  - simpl in Hsufficient.
+    discriminate.
+Qed.
+
+"""
+
+required_helper = """Lemma phase1_surface_nonterminal_required_lift :
   forall path name body input rest tree child_rank rank,
     lookupRule name phase1_surface_rules = Some body ->
     child_rank < rank ->
@@ -82,22 +121,17 @@ Proof.
     + exact Hchild_sufficient.
 Qed.
 
-'''
+"""
 
-prefix = ""
-if "Lemma phase1_surface_expression_goal_canonical_rank :" not in text:
-    prefix += canonical_helper
-if "Lemma phase1_surface_nonterminal_required_lift :" not in text:
-    prefix += required_helper
-if prefix:
-    text = text[:start] + prefix + text[start:]
-    start += len(prefix)
-    end += len(prefix)
-    segment = text[start:end]
+prefix = lookup_member_helper + rank_sufficient_helper + canonical_helper + required_helper
+text = text[:start] + prefix + text[start:]
+start += len(prefix)
+end += len(prefix)
+segment = text[start:end]
 
 replacements = [
     (
-        '''  assert (Hchild_global :
+"""  assert (Hchild_global :
     phase1_surface_parser_goal_options_global
       expression_fuel
       (GoalExpression (descend path (AtNonterminal name)) body)).
@@ -105,18 +139,17 @@ replacements = [
     eapply phase1_surface_lookup_rule_goal_options_global.
     exact Hlookup.
   }
-''',
-        '''  assert (Hchild_global :
+""",
+"""  assert (Hchild_global :
     phase1_surface_parser_goal_options_global
       expression_fuel
       (GoalExpression (descend path (AtNonterminal name)) body)) by
     abstract (
       eapply phase1_surface_lookup_rule_goal_options_global;
       exact Hlookup).
-''',
-    ),
+"""),
     (
-        '''  assert (Hchild_safe :
+"""  assert (Hchild_safe :
     phase1_surface_parser_goal_choice_safe
       expression_fuel
       (GoalExpression (descend path (AtNonterminal name)) body)).
@@ -127,8 +160,8 @@ replacements = [
     eapply phase1_surface_lookup_rule_choice_safe.
     exact Hlookup.
   }
-''',
-        '''  assert (Hchild_safe :
+""",
+"""  assert (Hchild_safe :
     phase1_surface_parser_goal_choice_safe
       expression_fuel
       (GoalExpression (descend path (AtNonterminal name)) body)) by
@@ -138,10 +171,9 @@ replacements = [
       apply phase1_surface_expression_choice_safe_of_bool;
       eapply phase1_surface_lookup_rule_choice_safe;
       exact Hlookup).
-''',
-    ),
+"""),
     (
-        '''  destruct
+"""  destruct
     (phase1_surface_parser_goal_rank_exists
       expression_fuel
       (GoalExpression (descend path (AtNonterminal name)) body)
@@ -153,8 +185,8 @@ replacements = [
   {
     eapply phase1_surface_nonterminal_child_rank_decreases_fuel; eauto.
   }
-''',
-        '''  set
+""",
+"""  set
     (child_rank :=
       parser_expression_rank phase1_surface_parser_rank_facts body).
   assert (Hchild_rank :
@@ -164,18 +196,18 @@ replacements = [
     Some child_rank) by
     abstract (
       unfold child_rank;
-      eapply phase1_surface_expression_goal_canonical_rank;
-      exact Hchild_global).
+      unfold phase1_surface_parser_goal_rank_fuel;
+      eapply phase1_surface_lookup_rule_canonical_rank;
+      exact Hlookup).
   pose proof Hchild_rank as Hchild_rank_raw.
   unfold phase1_surface_parser_goal_rank_fuel in Hchild_rank_raw.
   assert (Hdecrease : child_rank < rank) by
     abstract (
       eapply phase1_surface_nonterminal_child_rank_decreases_fuel;
       eauto).
-''',
-    ),
+"""),
     (
-        '''  destruct
+"""  destruct
     (phase1_surface_parser_bounded_sufficient_elim
       (GoalExpression (descend path (AtNonterminal name)) body)
       input rest (ResultTree tree) IHbody
@@ -198,8 +230,8 @@ replacements = [
     + exact Hchild_sufficient.
 Qed.
 
-''',
-        '''  eapply phase1_surface_nonterminal_required_lift.
+""",
+"""  eapply phase1_surface_nonterminal_required_lift.
   - exact Hlookup.
   - exact Hdecrease.
   - exact IHbody.
@@ -208,8 +240,7 @@ Qed.
   - exact Hchild_safe.
 Qed.
 
-''',
-    ),
+""")
 ]
 
 for index, (old, new) in enumerate(replacements, start=1):
