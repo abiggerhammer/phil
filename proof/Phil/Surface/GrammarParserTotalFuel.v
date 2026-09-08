@@ -486,6 +486,8 @@ Proof.
     reflexivity.
 Qed.
 
+Opaque oracle_parse_fuel.
+
 Lemma phase1_surface_nonterminal_bounded_complete :
   forall path name body input rest tree,
     lookupRule name phase1_surface_rules = Some body ->
@@ -561,6 +563,8 @@ Proof.
         path name body input rest tree
         Hlookup Hchild_complete extra).
 Qed.
+
+Transparent oracle_parse_fuel.
 
 Lemma phase1_surface_sequence_wrapper_bounded_complete :
   forall path items input rest trees,
