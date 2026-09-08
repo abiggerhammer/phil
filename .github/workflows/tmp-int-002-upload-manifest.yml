@@ -48,13 +48,20 @@ jobs:
       - name: Build complete Haskell substrate
         run: cabal build all --enable-tests
 
-      - name: Strict typecheck INT-002 manifest boundaries
+      - name: Strict typecheck INT-002 Upload manifest boundary
         run: |
           cabal exec -- ghc -isrc -Wall -Werror -fno-code \
             src/Phil/Verification.hs \
             src/Phil/Verification/Bundle.hs \
             src/Phil/Verification/ManifestClosure.hs \
-            test/Phase1INT002UploadManifestMain.hs \
+            test/Phase1INT002UploadManifestMain.hs
+
+      - name: Strict typecheck INT-002 generic manifest closure corpus
+        run: |
+          cabal exec -- ghc -isrc -Wall -Werror -fno-code \
+            src/Phil/Verification.hs \
+            src/Phil/Verification/Bundle.hs \
+            src/Phil/Verification/ManifestClosure.hs \
             test/Phase1INT002ManifestClosureMain.hs
 
       - name: Execute real ordinary-source Upload manifest closure
