@@ -9,6 +9,7 @@ import Phil.Compiler.SourceArchitecture
 import Phil.Compiler.SourceBundle
 import Phil.Core.Static
   ( ArchitectureInstanceIdentity (..)
+  , CheckedArchitectureInstance (..)
   , DeclarationIdentity (..)
   , DeclarationKey (..)
   , InstanceKey (..)
@@ -22,7 +23,6 @@ import Phil.Surface.Check
 import Phil.Surface.Lineage
   ( GrammarRevision (..)
   , InstanceLineageSiteId (..)
-  , PortableSourceBundle
   , canonicalGrammarRevisionV1
   , decodePortableSourceBundle
   )
