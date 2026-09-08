@@ -6,11 +6,17 @@ on:
       - 'test/Phase1INT001UploadInventoryMain.hs'
       - '.github/workflows/tmp-int-001-upload-inventory.yml'
 
+permissions:
+  contents: write
+
 jobs:
   upload-inventory:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
+        with:
+          ref: phase1-int-001-witness-e2e
+          fetch-depth: 0
       - uses: haskell-actions/setup@v2
         with:
           ghc-version: '9.6.7'
@@ -19,5 +25,21 @@ jobs:
         run: cabal build all --enable-tests
       - name: Strict typecheck inventory probe
         run: cabal exec -- ghc -isrc -Wall -Werror -fno-code test/Phase1INT001UploadInventoryMain.hs
-      - name: Print ordinary Upload source occurrence inventory
-        run: cabal exec -- runghc -isrc -Wall -Werror test/Phase1INT001UploadInventoryMain.hs
+      - name: Capture ordinary Upload source occurrence inventory
+        shell: bash
+        run: |
+          set -euo pipefail
+          cabal exec -- runghc -isrc -Wall -Werror test/Phase1INT001UploadInventoryMain.hs \
+            | tee /tmp/phase1-int-001-upload-inventory.txt
+      - name: Transport inventory report
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p tmp
+          cp /tmp/phase1-int-001-upload-inventory.txt tmp/phase1-int-001-upload-inventory.txt
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git add tmp/phase1-int-001-upload-inventory.txt
+          git diff --cached --quiet && exit 0
+          git commit -m 'ci: preserve INT-001 upload inventory report'
+          git push origin HEAD:phase1-int-001-witness-e2e
