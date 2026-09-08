@@ -1,0 +1,23 @@
+name: Temporary INT-001 upload source inventory
+
+on:
+  push:
+    paths:
+      - 'test/Phase1INT001UploadInventoryMain.hs'
+      - '.github/workflows/tmp-int-001-upload-inventory.yml'
+
+jobs:
+  upload-inventory:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: haskell-actions/setup@v2
+        with:
+          ghc-version: '9.6.7'
+          cabal-version: 'latest'
+      - name: Build complete Haskell substrate
+        run: cabal build all --enable-tests
+      - name: Strict typecheck inventory probe
+        run: cabal exec -- ghc -isrc -Wall -Werror -fno-code test/Phase1INT001UploadInventoryMain.hs
+      - name: Print ordinary Upload source occurrence inventory
+        run: cabal exec -- runghc -isrc -Wall -Werror test/Phase1INT001UploadInventoryMain.hs
