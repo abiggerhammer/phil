@@ -424,6 +424,436 @@ Proof.
     }
 Qed.
 
+Lemma phase1_surface_literal_bounded_complete :
+  forall path literal tail,
+    phase1_surface_parser_bounded_complete
+      (GoalExpression path (ELiteral literal))
+      (TLiteral literal :: tail) tail
+      (ResultTree (PTLiteral literal)).
+Proof.
+  intros path literal tail.
+  unfold phase1_surface_parser_bounded_complete.
+  intros static_fuel rank Hrank Hglobal Hsafe Hsfuel.
+  exists 1.
+  split.
+  - unfold phase1_surface_parser_local_measure. lia.
+  - intros extra.
+    simpl.
+    rewrite String.eqb_refl.
+    reflexivity.
+Qed.
+
+Lemma phase1_surface_lexical_bounded_complete :
+  forall path class lexeme tail,
+    phase1_surface_parser_bounded_complete
+      (GoalExpression path (ELexicalClass class))
+      (TLexical class lexeme :: tail) tail
+      (ResultTree (PTLexical class lexeme)).
+Proof.
+  intros path class lexeme tail.
+  unfold phase1_surface_parser_bounded_complete.
+  intros static_fuel rank Hrank Hglobal Hsafe Hsfuel.
+  exists 1.
+  split.
+  - unfold phase1_surface_parser_local_measure. lia.
+  - intros extra.
+    simpl.
+    rewrite String.eqb_refl.
+    reflexivity.
+Qed.
+
+Lemma phase1_surface_nonterminal_bounded_complete :
+  forall path name body input rest tree,
+    lookupRule name phase1_surface_rules = Some body ->
+    phase1_surface_parser_bounded_complete
+      (GoalExpression (descend path (AtNonterminal name)) body)
+      input rest (ResultTree tree) ->
+    phase1_surface_parser_bounded_complete
+      (GoalExpression path (ENonterminal name))
+      input rest (ResultTree (PTNonterminal name tree)).
+Proof.
+  intros path name body input rest tree Hlookup IHbody.
+  unfold phase1_surface_parser_bounded_complete in IHbody |- *.
+  intros static_fuel rank Hrank Hglobal Hsafe Hsfuel.
+  unfold phase1_surface_parser_goal_rank_fuel in Hrank.
+  destruct static_fuel as [| static_fuel]; try discriminate Hrank.
+  assert (Hchild_global :
+    phase1_surface_parser_goal_options_global
+      expression_fuel
+      (GoalExpression (descend path (AtNonterminal name)) body)).
+  {
+    eapply phase1_surface_lookup_rule_goal_options_global.
+    exact Hlookup.
+  }
+  assert (Hchild_safe :
+    phase1_surface_parser_goal_choice_safe
+      expression_fuel
+      (GoalExpression (descend path (AtNonterminal name)) body)).
+  {
+    constructor.
+    unfold phase1_surface_parser_goal_choice_safe_structural.
+    apply phase1_surface_expression_choice_safe_of_bool.
+    eapply phase1_surface_lookup_rule_choice_safe.
+    exact Hlookup.
+  }
+  destruct
+    (phase1_surface_parser_goal_rank_exists
+      expression_fuel
+      (GoalExpression (descend path (AtNonterminal name)) body)
+      Hchild_global)
+    as [child_rank Hchild_rank].
+  pose proof Hchild_rank as Hchild_rank_raw.
+  unfold phase1_surface_parser_goal_rank_fuel in Hchild_rank_raw.
+  assert (Hdecrease : child_rank < rank).
+  {
+    eapply phase1_surface_nonterminal_child_rank_decreases_fuel; eauto.
+  }
+  destruct
+    (IHbody
+      expression_fuel child_rank
+      Hchild_rank Hchild_global Hchild_safe (Nat.le_refl _))
+    as [child_required [Hchild_required Hchild_complete]].
+  assert (Hchild_fit :
+    phase1_surface_parser_local_measure input child_rank <=
+      List.length input * phase1_surface_parser_global_goal_rank_bound + rank).
+  {
+    eapply phase1_surface_same_input_measure_fits_parent_remaining.
+    exact Hdecrease.
+  }
+  exists (S child_required).
+  split.
+  - unfold phase1_surface_parser_local_measure in *.
+    lia.
+  - intros extra.
+    replace (S child_required + extra)
+      with (S (child_required + extra)) by lia.
+    rewrite oracle_parse_fuel_nonterminal_step.
+    rewrite Hlookup.
+    rewrite (Hchild_complete extra).
+    reflexivity.
+Qed.
+
+Lemma phase1_surface_sequence_wrapper_bounded_complete :
+  forall path items input rest trees,
+    phase1_surface_parser_bounded_complete
+      (GoalSequence path 0 items)
+      input rest (ResultTrees trees) ->
+    phase1_surface_parser_bounded_complete
+      (GoalExpression path (ESequence items))
+      input rest (ResultTree (PTSequence trees)).
+Proof.
+  intros path items input rest trees IHitems.
+  unfold phase1_surface_parser_bounded_complete in IHitems |- *.
+  intros static_fuel rank Hrank Hglobal Hsafe Hsfuel.
+  unfold phase1_surface_parser_goal_rank_fuel in Hrank.
+  destruct static_fuel as [| static_fuel]; try discriminate Hrank.
+  assert (Hchild_global :
+    phase1_surface_parser_goal_options_global
+      static_fuel (GoalSequence path 0 items)).
+  {
+    eapply phase1_surface_sequence_wrapper_options_global.
+    exact Hglobal.
+  }
+  assert (Hchild_safe :
+    phase1_surface_parser_goal_choice_safe
+      static_fuel (GoalSequence path 0 items)).
+  {
+    eapply phase1_surface_sequence_wrapper_choice_safe.
+    exact Hsafe.
+  }
+  destruct
+    (phase1_surface_parser_goal_rank_exists
+      static_fuel (GoalSequence path 0 items) Hchild_global)
+    as [child_rank Hchild_rank].
+  pose proof Hchild_rank as Hchild_rank_raw.
+  unfold phase1_surface_parser_goal_rank_fuel in Hchild_rank_raw.
+  assert (Hdecrease : child_rank < rank).
+  {
+    eapply parser_sequence_wrapper_rank_decreases; eauto.
+  }
+  assert (Hchild_fuel : static_fuel <= expression_fuel) by lia.
+  destruct
+    (IHitems
+      static_fuel child_rank
+      Hchild_rank Hchild_global Hchild_safe Hchild_fuel)
+    as [child_required [Hchild_required Hchild_complete]].
+  assert (Hchild_fit :
+    phase1_surface_parser_local_measure input child_rank <=
+      List.length input * phase1_surface_parser_global_goal_rank_bound + rank).
+  {
+    eapply phase1_surface_same_input_measure_fits_parent_remaining.
+    exact Hdecrease.
+  }
+  exists (S child_required).
+  split.
+  - unfold phase1_surface_parser_local_measure in *.
+    lia.
+  - intros extra.
+    simpl.
+    rewrite (Hchild_complete extra).
+    reflexivity.
+Qed.
+
+Lemma phase1_surface_alternative_bounded_complete :
+  forall path items index item input rest tree,
+    phase1_surface_predictive_oracle path input =
+      Some (ChooseAlternative index) ->
+    nth_error items index = Some item ->
+    phase1_surface_parser_bounded_complete
+      (GoalExpression (descend path (AtAlternative index)) item)
+      input rest (ResultTree tree) ->
+    phase1_surface_parser_bounded_complete
+      (GoalExpression path (EAlternative items))
+      input rest (ResultTree (PTAlternative index tree)).
+Proof.
+  intros path items index item input rest tree Hdecision Hnth IHitem.
+  unfold phase1_surface_parser_bounded_complete in IHitem |- *.
+  intros static_fuel rank Hrank Hglobal Hsafe Hsfuel.
+  unfold phase1_surface_parser_goal_rank_fuel in Hrank.
+  destruct static_fuel as [| static_fuel]; try discriminate Hrank.
+  assert (Hchild_global :
+    phase1_surface_parser_goal_options_global
+      static_fuel
+      (GoalExpression (descend path (AtAlternative index)) item)).
+  {
+    eapply phase1_surface_alternative_member_options_global; eauto.
+  }
+  assert (Hchild_safe :
+    phase1_surface_parser_goal_choice_safe
+      static_fuel
+      (GoalExpression (descend path (AtAlternative index)) item)).
+  {
+    eapply phase1_surface_alternative_member_choice_safe; eauto.
+  }
+  destruct
+    (phase1_surface_parser_goal_rank_exists
+      static_fuel
+      (GoalExpression (descend path (AtAlternative index)) item)
+      Hchild_global)
+    as [child_rank Hchild_rank].
+  pose proof Hchild_rank as Hchild_rank_raw.
+  unfold phase1_surface_parser_goal_rank_fuel in Hchild_rank_raw.
+  destruct
+    (parser_alternative_goal_rank_fuel
+      static_fuel phase1_surface_parser_rank_facts items)
+    as [alternative_rank |] eqn:Halternative.
+  2: {
+    rewrite parser_expression_alternative_rank_equation in Hrank.
+    rewrite Halternative in Hrank.
+    discriminate Hrank.
+  }
+  assert (Hdecrease : child_rank < rank).
+  {
+    eapply parser_alternative_member_rank_decreases; eauto.
+  }
+  assert (Hchild_fuel : static_fuel <= expression_fuel) by lia.
+  destruct
+    (IHitem
+      static_fuel child_rank
+      Hchild_rank Hchild_global Hchild_safe Hchild_fuel)
+    as [child_required [Hchild_required Hchild_complete]].
+  assert (Hchild_fit :
+    phase1_surface_parser_local_measure input child_rank <=
+      List.length input * phase1_surface_parser_global_goal_rank_bound + rank).
+  {
+    eapply phase1_surface_same_input_measure_fits_parent_remaining.
+    exact Hdecrease.
+  }
+  exists (S child_required).
+  split.
+  - unfold phase1_surface_parser_local_measure in *.
+    lia.
+  - intros extra.
+    simpl.
+    rewrite Hdecision.
+    rewrite Hnth.
+    rewrite (Hchild_complete extra).
+    reflexivity.
+Qed.
+
+Lemma phase1_surface_optional_none_bounded_complete :
+  forall path body input,
+    phase1_surface_predictive_oracle path input = Some ChooseOptionalAbsent ->
+    phase1_surface_parser_bounded_complete
+      (GoalExpression path (EOptional body))
+      input input (ResultTree PTOptionalNone).
+Proof.
+  intros path body input Hdecision.
+  unfold phase1_surface_parser_bounded_complete.
+  intros static_fuel rank Hrank Hglobal Hsafe Hsfuel.
+  exists 1.
+  split.
+  - unfold phase1_surface_parser_local_measure. lia.
+  - intros extra.
+    simpl.
+    rewrite Hdecision.
+    reflexivity.
+Qed.
+
+Lemma phase1_surface_optional_some_bounded_complete :
+  forall path body input rest tree,
+    phase1_surface_predictive_oracle path input = Some ChooseOptionalPresent ->
+    phase1_surface_parser_bounded_complete
+      (GoalExpression (descend path AtOptionalBody) body)
+      input rest (ResultTree tree) ->
+    phase1_surface_parser_bounded_complete
+      (GoalExpression path (EOptional body))
+      input rest (ResultTree (PTOptionalSome tree)).
+Proof.
+  intros path body input rest tree Hdecision IHbody.
+  unfold phase1_surface_parser_bounded_complete in IHbody |- *.
+  intros static_fuel rank Hrank Hglobal Hsafe Hsfuel.
+  unfold phase1_surface_parser_goal_rank_fuel in Hrank.
+  destruct static_fuel as [| static_fuel]; try discriminate Hrank.
+  assert (Hchild_global :
+    phase1_surface_parser_goal_options_global
+      static_fuel
+      (GoalExpression (descend path AtOptionalBody) body)).
+  {
+    eapply phase1_surface_optional_body_options_global.
+    exact Hglobal.
+  }
+  assert (Hchild_safe :
+    phase1_surface_parser_goal_choice_safe
+      static_fuel
+      (GoalExpression (descend path AtOptionalBody) body)).
+  {
+    eapply phase1_surface_optional_body_choice_safe.
+    exact Hsafe.
+  }
+  destruct
+    (phase1_surface_parser_goal_rank_exists
+      static_fuel
+      (GoalExpression (descend path AtOptionalBody) body)
+      Hchild_global)
+    as [child_rank Hchild_rank].
+  pose proof Hchild_rank as Hchild_rank_raw.
+  unfold phase1_surface_parser_goal_rank_fuel in Hchild_rank_raw.
+  assert (Hdecrease : child_rank < rank).
+  {
+    eapply parser_optional_body_rank_decreases; eauto.
+  }
+  assert (Hchild_fuel : static_fuel <= expression_fuel) by lia.
+  destruct
+    (IHbody
+      static_fuel child_rank
+      Hchild_rank Hchild_global Hchild_safe Hchild_fuel)
+    as [child_required [Hchild_required Hchild_complete]].
+  assert (Hchild_fit :
+    phase1_surface_parser_local_measure input child_rank <=
+      List.length input * phase1_surface_parser_global_goal_rank_bound + rank).
+  {
+    eapply phase1_surface_same_input_measure_fits_parent_remaining.
+    exact Hdecrease.
+  }
+  exists (S child_required).
+  split.
+  - unfold phase1_surface_parser_local_measure in *.
+    lia.
+  - intros extra.
+    simpl.
+    rewrite Hdecision.
+    rewrite (Hchild_complete extra).
+    reflexivity.
+Qed.
+
+Lemma phase1_surface_repetition_wrapper_bounded_complete :
+  forall path body input rest trees,
+    phase1_surface_parser_bounded_complete
+      (GoalRepetition path body)
+      input rest (ResultTrees trees) ->
+    phase1_surface_parser_bounded_complete
+      (GoalExpression path (ERepetition body))
+      input rest (ResultTree (PTRepetition trees)).
+Proof.
+  intros path body input rest trees IHrepeat.
+  unfold phase1_surface_parser_bounded_complete in IHrepeat |- *.
+  intros static_fuel rank Hrank Hglobal Hsafe Hsfuel.
+  unfold phase1_surface_parser_goal_rank_fuel in Hrank.
+  destruct static_fuel as [| static_fuel]; try discriminate Hrank.
+  assert (Hchild_global :
+    phase1_surface_parser_goal_options_global
+      static_fuel (GoalRepetition path body)).
+  {
+    eapply phase1_surface_repetition_wrapper_options_global.
+    exact Hglobal.
+  }
+  assert (Hchild_safe :
+    phase1_surface_parser_goal_choice_safe
+      static_fuel (GoalRepetition path body)).
+  {
+    eapply phase1_surface_repetition_wrapper_choice_safe.
+    exact Hsafe.
+  }
+  destruct
+    (phase1_surface_parser_goal_rank_exists
+      static_fuel (GoalRepetition path body) Hchild_global)
+    as [child_rank Hchild_rank].
+  pose proof Hchild_rank as Hchild_rank_raw.
+  unfold phase1_surface_parser_goal_rank_fuel in Hchild_rank_raw.
+  assert (Hdecrease : child_rank < rank).
+  {
+    eapply parser_repetition_wrapper_rank_decreases; eauto.
+  }
+  assert (Hchild_fuel : static_fuel <= expression_fuel) by lia.
+  destruct
+    (IHrepeat
+      static_fuel child_rank
+      Hchild_rank Hchild_global Hchild_safe Hchild_fuel)
+    as [child_required [Hchild_required Hchild_complete]].
+  assert (Hchild_fit :
+    phase1_surface_parser_local_measure input child_rank <=
+      List.length input * phase1_surface_parser_global_goal_rank_bound + rank).
+  {
+    eapply phase1_surface_same_input_measure_fits_parent_remaining.
+    exact Hdecrease.
+  }
+  exists (S child_required).
+  split.
+  - unfold phase1_surface_parser_local_measure in *.
+    lia.
+  - intros extra.
+    simpl.
+    rewrite (Hchild_complete extra).
+    reflexivity.
+Qed.
+
+Lemma phase1_surface_sequence_nil_bounded_complete :
+  forall path index input,
+    phase1_surface_parser_bounded_complete
+      (GoalSequence path index [])
+      input input (ResultTrees []).
+Proof.
+  intros path index input.
+  unfold phase1_surface_parser_bounded_complete.
+  intros static_fuel rank Hrank Hglobal Hsafe Hsfuel.
+  exists 1.
+  split.
+  - unfold phase1_surface_parser_local_measure. lia.
+  - intros extra.
+    simpl.
+    reflexivity.
+Qed.
+
+Lemma phase1_surface_repetition_stop_bounded_complete :
+  forall path body input,
+    phase1_surface_predictive_oracle path input = Some ChooseRepetitionStop ->
+    phase1_surface_parser_bounded_complete
+      (GoalRepetition path body)
+      input input (ResultTrees []).
+Proof.
+  intros path body input Hdecision.
+  unfold phase1_surface_parser_bounded_complete.
+  intros static_fuel rank Hrank Hglobal Hsafe Hsfuel.
+  exists 1.
+  split.
+  - unfold phase1_surface_parser_local_measure. lia.
+  - intros extra.
+    simpl.
+    rewrite Hdecision.
+    reflexivity.
+Qed.
+
 Theorem phase1_surface_oracle_parse_fuel_bounded_complete :
   forall goal input rest result,
     OracleDerives
@@ -445,6 +875,7 @@ Theorem phase1_surface_oracle_parse_fuel_bounded_complete :
             goal input = Some (rest, result).
 Proof.
   intros goal input rest result Hderive.
+  change (phase1_surface_parser_bounded_complete goal input rest result).
   induction Hderive as
     [ path literal tail
     | path class lexeme tail
@@ -460,313 +891,40 @@ Proof.
     | path body input Hdecision
     | path body input middle rest tree trees
         Hdecision Hbody IHbody Hprogress Htail IHtail
-    ]; intros static_fuel rank Hrank Hglobal Hsafe Hsfuel.
-  - exists 1.
-    split.
-    + unfold phase1_surface_parser_local_measure. lia.
-    + intros extra.
-      simpl.
-      rewrite String.eqb_refl.
-      reflexivity.
-  - exists 1.
-    split.
-    + unfold phase1_surface_parser_local_measure. lia.
-    + intros extra.
-      simpl.
-      rewrite String.eqb_refl.
-      reflexivity.
-  - unfold phase1_surface_parser_goal_rank_fuel in Hrank.
-    destruct static_fuel as [| static_fuel]; try discriminate Hrank.
-    assert (Hchild_global :
-      phase1_surface_parser_goal_options_global
-        expression_fuel
-        (GoalExpression (descend path (AtNonterminal name)) body)).
-    {
-      eapply phase1_surface_lookup_rule_goal_options_global.
-      exact Hlookup.
-    }
-    assert (Hchild_safe :
-      phase1_surface_parser_goal_choice_safe
-        expression_fuel
-        (GoalExpression (descend path (AtNonterminal name)) body)).
-    {
-      constructor.
-      unfold phase1_surface_parser_goal_choice_safe_structural.
-      apply phase1_surface_expression_choice_safe_of_bool.
-      eapply phase1_surface_lookup_rule_choice_safe.
-      exact Hlookup.
-    }
-    destruct
-      (phase1_surface_parser_goal_rank_exists
-        expression_fuel
-        (GoalExpression (descend path (AtNonterminal name)) body)
-        Hchild_global)
-      as [child_rank Hchild_rank].
-    pose proof Hchild_rank as Hchild_rank_raw.
-    unfold phase1_surface_parser_goal_rank_fuel in Hchild_rank_raw.
-    assert (Hdecrease : child_rank < rank).
-    {
-      eapply phase1_surface_nonterminal_child_rank_decreases_fuel; eauto.
-    }
-    destruct
-      (IHbody
-        expression_fuel child_rank
-        Hchild_rank Hchild_global Hchild_safe (Nat.le_refl _))
-      as [child_required [Hchild_required Hchild_complete]].
-    assert (Hchild_fit :
-      phase1_surface_parser_local_measure input child_rank <=
-        List.length input * phase1_surface_parser_global_goal_rank_bound + rank).
-    {
-      eapply phase1_surface_same_input_measure_fits_parent_remaining.
-      exact Hdecrease.
-    }
-    exists (S child_required).
-    split.
-    + unfold phase1_surface_parser_local_measure in *.
-      lia.
-    + intros extra.
-      replace (S child_required + extra)
-        with (S (child_required + extra)) by lia.
-      rewrite oracle_parse_fuel_nonterminal_step.
-      rewrite Hlookup.
-      rewrite (Hchild_complete extra).
-      reflexivity.
-  - unfold phase1_surface_parser_goal_rank_fuel in Hrank.
-    destruct static_fuel as [| static_fuel]; try discriminate Hrank.
-    assert (Hchild_global :
-      phase1_surface_parser_goal_options_global
-        static_fuel (GoalSequence path 0 items)).
-    {
-      eapply phase1_surface_sequence_wrapper_options_global.
-      exact Hglobal.
-    }
-    assert (Hchild_safe :
-      phase1_surface_parser_goal_choice_safe
-        static_fuel (GoalSequence path 0 items)).
-    {
-      eapply phase1_surface_sequence_wrapper_choice_safe.
-      exact Hsafe.
-    }
-    destruct
-      (phase1_surface_parser_goal_rank_exists
-        static_fuel (GoalSequence path 0 items) Hchild_global)
-      as [child_rank Hchild_rank].
-    pose proof Hchild_rank as Hchild_rank_raw.
-    unfold phase1_surface_parser_goal_rank_fuel in Hchild_rank_raw.
-    assert (Hdecrease : child_rank < rank).
-    {
-      eapply parser_sequence_wrapper_rank_decreases; eauto.
-    }
-    destruct
-      (IHitems
-        static_fuel child_rank
-        Hchild_rank Hchild_global Hchild_safe)
-      as [child_required [Hchild_required Hchild_complete]]; try lia.
-    assert (Hchild_fit :
-      phase1_surface_parser_local_measure input child_rank <=
-        List.length input * phase1_surface_parser_global_goal_rank_bound + rank).
-    {
-      eapply phase1_surface_same_input_measure_fits_parent_remaining.
-      exact Hdecrease.
-    }
-    exists (S child_required).
-    split.
-    + unfold phase1_surface_parser_local_measure in *.
-      lia.
-    + intros extra.
-      simpl.
-      rewrite (Hchild_complete extra).
-      reflexivity.
-  - unfold phase1_surface_parser_goal_rank_fuel in Hrank.
-    destruct static_fuel as [| static_fuel]; try discriminate Hrank.
-    assert (Hchild_global :
-      phase1_surface_parser_goal_options_global
-        static_fuel
-        (GoalExpression (descend path (AtAlternative index)) item)).
-    {
-      eapply phase1_surface_alternative_member_options_global; eauto.
-    }
-    assert (Hchild_safe :
-      phase1_surface_parser_goal_choice_safe
-        static_fuel
-        (GoalExpression (descend path (AtAlternative index)) item)).
-    {
-      eapply phase1_surface_alternative_member_choice_safe; eauto.
-    }
-    destruct
-      (phase1_surface_parser_goal_rank_exists
-        static_fuel
-        (GoalExpression (descend path (AtAlternative index)) item)
-        Hchild_global)
-      as [child_rank Hchild_rank].
-    pose proof Hchild_rank as Hchild_rank_raw.
-    unfold phase1_surface_parser_goal_rank_fuel in Hchild_rank_raw.
-    destruct
-      (parser_alternative_goal_rank_fuel
-        static_fuel phase1_surface_parser_rank_facts items)
-      as [alternative_rank |] eqn:Halternative.
-    2: {
-      rewrite parser_expression_alternative_rank_equation in Hrank.
-      rewrite Halternative in Hrank.
-      discriminate Hrank.
-    }
-    assert (Hdecrease : child_rank < rank).
-    {
-      eapply parser_alternative_member_rank_decreases; eauto.
-    }
-    destruct
-      (IHitem
-        static_fuel child_rank
-        Hchild_rank Hchild_global Hchild_safe)
-      as [child_required [Hchild_required Hchild_complete]]; try lia.
-    assert (Hchild_fit :
-      phase1_surface_parser_local_measure input child_rank <=
-        List.length input * phase1_surface_parser_global_goal_rank_bound + rank).
-    {
-      eapply phase1_surface_same_input_measure_fits_parent_remaining.
-      exact Hdecrease.
-    }
-    exists (S child_required).
-    split.
-    + unfold phase1_surface_parser_local_measure in *.
-      lia.
-    + intros extra.
-      simpl.
-      rewrite Hdecision.
-      rewrite Hnth.
-      rewrite (Hchild_complete extra).
-      reflexivity.
-  - exists 1.
-    split.
-    + unfold phase1_surface_parser_local_measure. lia.
-    + intros extra.
-      simpl.
-      rewrite Hdecision.
-      reflexivity.
-  - unfold phase1_surface_parser_goal_rank_fuel in Hrank.
-    destruct static_fuel as [| static_fuel]; try discriminate Hrank.
-    assert (Hchild_global :
-      phase1_surface_parser_goal_options_global
-        static_fuel
-        (GoalExpression (descend path AtOptionalBody) body)).
-    {
-      eapply phase1_surface_optional_body_options_global.
-      exact Hglobal.
-    }
-    assert (Hchild_safe :
-      phase1_surface_parser_goal_choice_safe
-        static_fuel
-        (GoalExpression (descend path AtOptionalBody) body)).
-    {
-      eapply phase1_surface_optional_body_choice_safe.
-      exact Hsafe.
-    }
-    destruct
-      (phase1_surface_parser_goal_rank_exists
-        static_fuel
-        (GoalExpression (descend path AtOptionalBody) body)
-        Hchild_global)
-      as [child_rank Hchild_rank].
-    pose proof Hchild_rank as Hchild_rank_raw.
-    unfold phase1_surface_parser_goal_rank_fuel in Hchild_rank_raw.
-    assert (Hdecrease : child_rank < rank).
-    {
-      eapply parser_optional_body_rank_decreases; eauto.
-    }
-    destruct
-      (IHbody
-        static_fuel child_rank
-        Hchild_rank Hchild_global Hchild_safe)
-      as [child_required [Hchild_required Hchild_complete]]; try lia.
-    assert (Hchild_fit :
-      phase1_surface_parser_local_measure input child_rank <=
-        List.length input * phase1_surface_parser_global_goal_rank_bound + rank).
-    {
-      eapply phase1_surface_same_input_measure_fits_parent_remaining.
-      exact Hdecrease.
-    }
-    exists (S child_required).
-    split.
-    + unfold phase1_surface_parser_local_measure in *.
-      lia.
-    + intros extra.
-      simpl.
-      rewrite Hdecision.
-      rewrite (Hchild_complete extra).
-      reflexivity.
-  - unfold phase1_surface_parser_goal_rank_fuel in Hrank.
-    destruct static_fuel as [| static_fuel]; try discriminate Hrank.
-    assert (Hchild_global :
-      phase1_surface_parser_goal_options_global
-        static_fuel (GoalRepetition path body)).
-    {
-      eapply phase1_surface_repetition_wrapper_options_global.
-      exact Hglobal.
-    }
-    assert (Hchild_safe :
-      phase1_surface_parser_goal_choice_safe
-        static_fuel (GoalRepetition path body)).
-    {
-      eapply phase1_surface_repetition_wrapper_choice_safe.
-      exact Hsafe.
-    }
-    destruct
-      (phase1_surface_parser_goal_rank_exists
-        static_fuel (GoalRepetition path body) Hchild_global)
-      as [child_rank Hchild_rank].
-    pose proof Hchild_rank as Hchild_rank_raw.
-    unfold phase1_surface_parser_goal_rank_fuel in Hchild_rank_raw.
-    assert (Hdecrease : child_rank < rank).
-    {
-      eapply parser_repetition_wrapper_rank_decreases; eauto.
-    }
-    destruct
-      (IHrepeat
-        static_fuel child_rank
-        Hchild_rank Hchild_global Hchild_safe)
-      as [child_required [Hchild_required Hchild_complete]]; try lia.
-    assert (Hchild_fit :
-      phase1_surface_parser_local_measure input child_rank <=
-        List.length input * phase1_surface_parser_global_goal_rank_bound + rank).
-    {
-      eapply phase1_surface_same_input_measure_fits_parent_remaining.
-      exact Hdecrease.
-    }
-    exists (S child_required).
-    split.
-    + unfold phase1_surface_parser_local_measure in *.
-      lia.
-    + intros extra.
-      simpl.
-      rewrite (Hchild_complete extra).
-      reflexivity.
-  - exists 1.
-    split.
-    + unfold phase1_surface_parser_local_measure. lia.
-    + intros extra.
-      simpl.
-      reflexivity.
-  - pose proof
+    ].
+  - exact (phase1_surface_literal_bounded_complete path literal tail).
+  - exact (phase1_surface_lexical_bounded_complete path class lexeme tail).
+  - exact
+      (phase1_surface_nonterminal_bounded_complete
+        path name body input rest tree Hlookup IHbody).
+  - exact
+      (phase1_surface_sequence_wrapper_bounded_complete
+        path items input rest trees IHitems).
+  - exact
+      (phase1_surface_alternative_bounded_complete
+        path items index item input rest tree Hdecision Hnth IHitem).
+  - exact
+      (phase1_surface_optional_none_bounded_complete
+        path body input Hdecision).
+  - exact
+      (phase1_surface_optional_some_bounded_complete
+        path body input rest tree Hdecision IHbody).
+  - exact
+      (phase1_surface_repetition_wrapper_bounded_complete
+        path body input rest trees IHrepeat).
+  - exact
+      (phase1_surface_sequence_nil_bounded_complete path index input).
+  - exact
       (phase1_surface_sequence_cons_bounded_complete
         path index item items input middle rest tree trees
-        Hhead IHhead Htail IHtail)
-      as Hcase.
-    unfold phase1_surface_parser_bounded_complete in Hcase.
-    exact (Hcase static_fuel rank Hrank Hglobal Hsafe Hsfuel).
-  - exists 1.
-    split.
-    + unfold phase1_surface_parser_local_measure. lia.
-    + intros extra.
-      simpl.
-      rewrite Hdecision.
-      reflexivity.
-  - pose proof
+        Hhead IHhead Htail IHtail).
+  - exact
+      (phase1_surface_repetition_stop_bounded_complete
+        path body input Hdecision).
+  - exact
       (phase1_surface_repetition_step_bounded_complete
         path body input middle rest tree trees
-        Hdecision Hbody IHbody Hprogress Htail IHtail)
-      as Hcase.
-    unfold phase1_surface_parser_bounded_complete in Hcase.
-    exact (Hcase static_fuel rank Hrank Hglobal Hsafe Hsfuel).
+        Hdecision Hbody IHbody Hprogress Htail IHtail).
 Qed.
 
 Theorem phase1_surface_predictive_parse_total_fuel_oracle_complete :
