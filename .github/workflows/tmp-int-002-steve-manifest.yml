@@ -14,15 +14,64 @@ on:
       - 'src/Phil/Verification/ManifestClosure.hs'
       - '.github/workflows/tmp-int-002-steve-manifest.yml'
 
+permissions:
+  contents: write
+
 jobs:
   steve-manifest:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
+        with:
+          ref: phase1-int-002-steve-manifest
+          fetch-depth: 0
       - uses: haskell-actions/setup@v2
         with:
           ghc-version: '9.6.7'
           cabal-version: 'latest'
+
+      - name: Apply canonical OwnedBytes release fixture
+        run: |
+          python3 - <<'PY'
+          from pathlib import Path
+
+          path = Path('test/Phase1INT002SteveManifestMain.hs')
+          text = path.read_text()
+          old = '''ownedBytesRelease :: ReleaseTransitionContract
+          ownedBytesRelease = ReleaseTransitionContract
+            { releaseTransitionKey = "provider.owned-bytes.release"
+            , releaseTransitionOwnerType = ownedBytesType
+            , releaseTransitionRequirements = Set.empty
+            , releaseTransitionSemanticAccount = ReleaseSemanticAccount
+                { releaseAccountAuthorityRefs = Set.empty
+                , releaseAccountEvidenceRefs = Set.empty
+                , releaseAccountEffectRefs = Set.empty
+                , releaseAccountAssumptionRefs = Set.empty
+                }
+            }
+          '''
+          new = '''ownedBytesRelease :: ReleaseTransitionContract
+          ownedBytesRelease = ReleaseTransitionContract
+            { releaseTransitionKey = "provider.owned-bytes.release"
+            , releaseTransitionOwnerType = ownedBytesType
+            , releaseTransitionRequirements = Set.empty
+            , releaseTransitionSemanticAccount = ReleaseSemanticAccount
+                { releaseAccountAuthorityRefs = Set.empty
+                , releaseAccountEvidenceRefs = Set.empty
+                , releaseAccountEffectRefs = Set.empty
+                , releaseAccountAssumptionRefs = Set.empty
+                , releaseAccountCostRefs = Set.empty
+                , releaseAccountSubjectRef = "owned-bytes"
+                }
+            , releaseTransitionOutcome = ReleaseContinuesUnit
+            , releaseTransitionResidue = ReleaseConsumesOwner
+            }
+          '''
+          if new not in text:
+              if old not in text:
+                  raise SystemExit('Steve OwnedBytes release fixture does not match expected staged form')
+              path.write_text(text.replace(old, new, 1))
+          PY
 
       - name: Build complete Haskell substrate
         run: cabal build all --enable-tests
@@ -58,3 +107,17 @@ jobs:
           cabal exec -- runghc -isrc -Wall -Werror test/Phase1VerificationNoSilentAssumptionExportMain.hs
           cabal exec -- runghc -isrc -Wall -Werror test/Phase1VerificationPolicySensitiveRuntimeClosureMain.hs
           cabal exec -- runghc -isrc -Wall -Werror test/Phase1VerificationIndependentTargetMain.hs
+
+      - name: Transport validated release-fixture repair
+        shell: bash
+        run: |
+          set -euo pipefail
+          git add test/Phase1INT002SteveManifestMain.hs
+          if git diff --cached --quiet; then
+            echo 'release fixture already committed; replay head needs no transport'
+            exit 0
+          fi
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git commit -m 'test: complete Steve OwnedBytes release semantics'
+          git push origin HEAD:phase1-int-002-steve-manifest
