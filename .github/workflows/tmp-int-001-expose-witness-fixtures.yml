@@ -1,0 +1,118 @@
+name: Temporary INT-001 witness fixture exports
+
+on:
+  push:
+    paths:
+      - '.github/workflows/tmp-int-001-expose-witness-fixtures.yml'
+
+permissions:
+  contents: write
+
+jobs:
+  expose-witness-fixtures:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: phase1-int-001-witness-e2e
+          fetch-depth: 0
+      - uses: haskell-actions/setup@v2
+        with:
+          ghc-version: '9.6.7'
+          cabal-version: 'latest'
+      - name: Expose existing witness Core and realization fixtures
+        shell: bash
+        run: |
+          python3 - <<'PY'
+          from pathlib import Path
+
+          path = Path('src/Phil/Examples/Phase1/SystemsWitnesses.hs')
+          text = path.read_text()
+
+          old_header = '''module Phil.Examples.Phase1.SystemsWitnesses
+            ( uploadPhase1StageBundle
+            , stevePhase1StageBundle
+            , steveHostAbiDecisionId
+          '''.replace('            ', '  ')
+          new_header = '''module Phil.Examples.Phase1.SystemsWitnesses
+            ( uploadPhase1StageBundle
+            , stevePhase1StageBundle
+            , uploadCoreProgram
+            , uploadRealizationContext
+            , steveCoreProgram
+            , steveQualifiedRealizationContext
+            , steveHostAbiDecisionId
+          '''.replace('            ', '  ')
+          if text.count(old_header) != 1:
+              raise SystemExit('expected one SystemsWitnesses export header')
+          text = text.replace(old_header, new_header, 1)
+
+          old_steve = '''stevePhase1StageBundle :: Either String Phase1StageBundle
+          stevePhase1StageBundle = do
+            qualifications <- mapLeft (show . unSteveProviderQualificationError)
+              materializeSteveProviderQualifications
+            let digestArtifact = steveDigestProviderQualification qualifications
+                blobArtifact = steveBlobProviderQualification qualifications
+                qualificationRefs = Set.fromList
+                  [ admissionText (steveProviderCheckedAdmission digestArtifact)
+                  , admissionText (steveProviderCheckedAdmission blobArtifact)
+                  ]
+                assumptions = Set.unions
+                  [ qualificationEvidenceAssumptions digestArtifact
+                  , qualificationEvidenceAssumptions blobArtifact
+                  ]
+                context = steveRealizationContext qualificationRefs assumptions
+            lowerWitness
+              (InstanceKey "instance.phase1.steve")
+              (DeclarationKey "decl.phase1.steve")
+              "Steve"
+              steveCoreProgram
+              context
+          '''.replace('          ', '')
+          new_steve = '''stevePhase1StageBundle :: Either String Phase1StageBundle
+          stevePhase1StageBundle = do
+            context <- steveQualifiedRealizationContext
+            lowerWitness
+              (InstanceKey "instance.phase1.steve")
+              (DeclarationKey "decl.phase1.steve")
+              "Steve"
+              steveCoreProgram
+              context
+
+          -- | Exact current Steve realization context after provider qualification.
+          -- This is fixture data, not compiler dispatch; source-safe integration
+          -- verifies the ordinary checked source/Core pair before consuming it.
+          steveQualifiedRealizationContext :: Either String GenericRealizationContext
+          steveQualifiedRealizationContext = do
+            qualifications <- mapLeft (show . unSteveProviderQualificationError)
+              materializeSteveProviderQualifications
+            let digestArtifact = steveDigestProviderQualification qualifications
+                blobArtifact = steveBlobProviderQualification qualifications
+                qualificationRefs = Set.fromList
+                  [ admissionText (steveProviderCheckedAdmission digestArtifact)
+                  , admissionText (steveProviderCheckedAdmission blobArtifact)
+                  ]
+                assumptions = Set.unions
+                  [ qualificationEvidenceAssumptions digestArtifact
+                  , qualificationEvidenceAssumptions blobArtifact
+                  ]
+            Right (steveRealizationContext qualificationRefs assumptions)
+          '''.replace('          ', '')
+          if text.count(old_steve) != 1:
+              raise SystemExit('expected one Steve stage-bundle construction block')
+          path.write_text(text.replace(old_steve, new_steve, 1))
+          PY
+      - name: Build complete Haskell substrate
+        run: cabal build all --enable-tests
+      - name: Strict typecheck witness fixture exports
+        run: cabal exec -- ghc -isrc -Wall -Werror -fno-code src/Phil/Examples/Phase1/SystemsWitnesses.hs
+      - name: Transport validated fixture exports
+        shell: bash
+        run: |
+          set -euo pipefail
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git add src/Phil/Examples/Phase1/SystemsWitnesses.hs
+          git diff --cached --quiet && { echo 'no fixture export repair to transport'; exit 1; }
+          git commit -m 'int: expose source-safe witness Core fixtures'
+          git push origin HEAD:phase1-int-001-witness-e2e
