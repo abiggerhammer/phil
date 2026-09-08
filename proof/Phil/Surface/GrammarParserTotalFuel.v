@@ -357,6 +357,26 @@ Inductive phase1_surface_parser_bounded_sufficient
           goal input rest result required) ->
     phase1_surface_parser_bounded_sufficient goal input rest result.
 
+Lemma phase1_surface_parser_bounded_sufficient_elim :
+  forall goal input rest result,
+    phase1_surface_parser_bounded_sufficient goal input rest result ->
+    forall static_fuel rank,
+      phase1_surface_parser_goal_rank_fuel static_fuel goal = Some rank ->
+      phase1_surface_parser_goal_options_global static_fuel goal ->
+      phase1_surface_parser_goal_choice_safe static_fuel goal ->
+      static_fuel <= expression_fuel ->
+      exists required,
+        required <= phase1_surface_parser_local_measure input rank /\
+        OracleParseFuelSufficient
+          phase1_surface_predictive_oracle
+          phase1_surface_rules
+          goal input rest result required.
+Proof.
+  intros goal input rest result Hbounded.
+  destruct Hbounded as [Hbounded].
+  exact Hbounded.
+Qed.
+
 Lemma phase1_surface_literal_bounded_sufficient :
   forall path literal tail,
     phase1_surface_parser_bounded_sufficient
@@ -400,7 +420,6 @@ Lemma phase1_surface_nonterminal_bounded_sufficient :
       input rest (ResultTree (PTNonterminal name tree)).
 Proof.
   intros path name body input rest tree Hlookup IHbody.
-  destruct IHbody as [IHbody].
   constructor.
   intros static_fuel rank Hrank Hglobal Hsafe Hsfuel.
   unfold phase1_surface_parser_goal_rank_fuel in Hrank.
@@ -437,7 +456,9 @@ Proof.
     eapply phase1_surface_nonterminal_child_rank_decreases_fuel; eauto.
   }
   destruct
-    (IHbody
+    (phase1_surface_parser_bounded_sufficient_elim
+      (GoalExpression (descend path (AtNonterminal name)) body)
+      input rest (ResultTree tree) IHbody
       expression_fuel child_rank
       Hchild_rank Hchild_global Hchild_safe (Nat.le_refl _))
     as [child_required [Hchild_required Hchild_sufficient]].
@@ -467,7 +488,6 @@ Lemma phase1_surface_sequence_wrapper_bounded_sufficient :
       input rest (ResultTree (PTSequence trees)).
 Proof.
   intros path items input rest trees IHitems.
-  destruct IHitems as [IHitems].
   constructor.
   intros static_fuel rank Hrank Hglobal Hsafe Hsfuel.
   unfold phase1_surface_parser_goal_rank_fuel in Hrank.
@@ -498,7 +518,9 @@ Proof.
   }
   assert (Hchild_fuel : static_fuel <= expression_fuel) by lia.
   destruct
-    (IHitems
+    (phase1_surface_parser_bounded_sufficient_elim
+      (GoalSequence path 0 items)
+      input rest (ResultTrees trees) IHitems
       static_fuel child_rank
       Hchild_rank Hchild_global Hchild_safe Hchild_fuel)
     as [child_required [Hchild_required Hchild_sufficient]].
@@ -530,7 +552,6 @@ Lemma phase1_surface_alternative_bounded_sufficient :
       input rest (ResultTree (PTAlternative index tree)).
 Proof.
   intros path items index item input rest tree Hdecision Hnth IHitem.
-  destruct IHitem as [IHitem].
   constructor.
   intros static_fuel rank Hrank Hglobal Hsafe Hsfuel.
   unfold phase1_surface_parser_goal_rank_fuel in Hrank.
@@ -572,7 +593,9 @@ Proof.
   }
   assert (Hchild_fuel : static_fuel <= expression_fuel) by lia.
   destruct
-    (IHitem
+    (phase1_surface_parser_bounded_sufficient_elim
+      (GoalExpression (descend path (AtAlternative index)) item)
+      input rest (ResultTree tree) IHitem
       static_fuel child_rank
       Hchild_rank Hchild_global Hchild_safe Hchild_fuel)
     as [child_required [Hchild_required Hchild_sufficient]].
@@ -621,7 +644,6 @@ Lemma phase1_surface_optional_some_bounded_sufficient :
       input rest (ResultTree (PTOptionalSome tree)).
 Proof.
   intros path body input rest tree Hdecision IHbody.
-  destruct IHbody as [IHbody].
   constructor.
   intros static_fuel rank Hrank Hglobal Hsafe Hsfuel.
   unfold phase1_surface_parser_goal_rank_fuel in Hrank.
@@ -656,7 +678,9 @@ Proof.
   }
   assert (Hchild_fuel : static_fuel <= expression_fuel) by lia.
   destruct
-    (IHbody
+    (phase1_surface_parser_bounded_sufficient_elim
+      (GoalExpression (descend path AtOptionalBody) body)
+      input rest (ResultTree tree) IHbody
       static_fuel child_rank
       Hchild_rank Hchild_global Hchild_safe Hchild_fuel)
     as [child_required [Hchild_required Hchild_sufficient]].
@@ -686,7 +710,6 @@ Lemma phase1_surface_repetition_wrapper_bounded_sufficient :
       input rest (ResultTree (PTRepetition trees)).
 Proof.
   intros path body input rest trees IHrepeat.
-  destruct IHrepeat as [IHrepeat].
   constructor.
   intros static_fuel rank Hrank Hglobal Hsafe Hsfuel.
   unfold phase1_surface_parser_goal_rank_fuel in Hrank.
@@ -717,7 +740,9 @@ Proof.
   }
   assert (Hchild_fuel : static_fuel <= expression_fuel) by lia.
   destruct
-    (IHrepeat
+    (phase1_surface_parser_bounded_sufficient_elim
+      (GoalRepetition path body)
+      input rest (ResultTrees trees) IHrepeat
       static_fuel child_rank
       Hchild_rank Hchild_global Hchild_safe Hchild_fuel)
     as [child_required [Hchild_required Hchild_sufficient]].
@@ -773,8 +798,6 @@ Lemma phase1_surface_sequence_cons_bounded_sufficient :
 Proof.
   intros path index item items input middle rest tree trees
     Hhead IHhead Htail IHtail.
-  destruct IHhead as [IHhead].
-  destruct IHtail as [IHtail].
   constructor.
   intros static_fuel rank Hrank Hglobal Hsafe Hsfuel.
   assert (Hhead_global :
@@ -817,12 +840,16 @@ Proof.
     eapply parser_sequence_head_rank_decreases; eauto.
   }
   destruct
-    (IHhead
+    (phase1_surface_parser_bounded_sufficient_elim
+      (GoalExpression (descend path (AtSequence index)) item)
+      input middle (ResultTree tree) IHhead
       static_fuel head_rank
       Hhead_rank Hhead_global Hhead_safe Hsfuel)
     as [head_required [Hhead_required Hhead_sufficient]].
   destruct
-    (IHtail
+    (phase1_surface_parser_bounded_sufficient_elim
+      (GoalSequence path (S index) items)
+      middle rest (ResultTrees trees) IHtail
       static_fuel tail_rank
       Htail_rank Htail_global Htail_safe Hsfuel)
     as [tail_required [Htail_required Htail_sufficient]].
@@ -941,8 +968,6 @@ Lemma phase1_surface_repetition_step_bounded_sufficient :
 Proof.
   intros path body input middle rest tree trees
     Hdecision Hbody IHbody Hprogress Htail IHtail.
-  destruct IHbody as [IHbody].
-  destruct IHtail as [IHtail].
   constructor.
   intros static_fuel rank Hrank Hglobal Hsafe Hsfuel.
   assert (Hbody_global :
@@ -976,12 +1001,16 @@ Proof.
     eapply parser_repetition_body_rank_decreases; eauto.
   }
   destruct
-    (IHbody
+    (phase1_surface_parser_bounded_sufficient_elim
+      (GoalExpression (descend path AtRepetitionBody) body)
+      input middle (ResultTree tree) IHbody
       static_fuel body_rank
       Hbody_rank Hbody_global Hbody_safe Hsfuel)
     as [body_required [Hbody_required Hbody_sufficient]].
   destruct
-    (IHtail
+    (phase1_surface_parser_bounded_sufficient_elim
+      (GoalRepetition path body)
+      middle rest (ResultTrees trees) IHtail
       static_fuel rank
       Hrank Hglobal Hsafe Hsfuel)
     as [tail_required [Htail_required Htail_sufficient]].
@@ -1113,11 +1142,12 @@ Theorem phase1_surface_oracle_parse_fuel_bounded_sufficient :
 Proof.
   intros goal input rest result Hderive
     static_fuel rank Hrank Hglobal Hsafe Hsfuel.
-  destruct
-    (phase1_surface_oracle_parse_fuel_bounded_sufficient_certificate
-      goal input rest result Hderive)
-    as [Hbounded].
-  exact (Hbounded static_fuel rank Hrank Hglobal Hsafe Hsfuel).
+  exact
+    (phase1_surface_parser_bounded_sufficient_elim
+      goal input rest result
+      (phase1_surface_oracle_parse_fuel_bounded_sufficient_certificate
+        goal input rest result Hderive)
+      static_fuel rank Hrank Hglobal Hsafe Hsfuel).
 Qed.
 
 Theorem phase1_surface_oracle_parse_fuel_bounded_complete :
