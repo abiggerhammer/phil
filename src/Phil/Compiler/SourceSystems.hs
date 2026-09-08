@@ -62,7 +62,7 @@ lowerSourceSystems
   :: SourceSystemsAdmission
   -> GenericRealizationContext
   -> Either SourceSystemsError Phase1StageBundle
-lowerSourceSystems admission@(SourceSystemsAdmission architecture program correspondence) context = do
+lowerSourceSystems (SourceSystemsAdmission architecture program correspondence) context = do
   if checkedArchitectureIdentity (checkedSourceArchitectureRoot architecture)
       == sourceCoreArchitectureIdentity correspondence
     then Right ()
