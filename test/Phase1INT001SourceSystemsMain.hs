@@ -11,9 +11,7 @@ import Phil.Compiler.SourceBundle
 import Phil.Compiler.SourceCore
 import Phil.Compiler.SourceSystems
 import Phil.Core.Static
-  ( ArchitectureInstanceIdentity (..)
-  , DeclarationKey (..)
-  , InstanceKey (..)
+  ( DeclarationKey (..)
   , SemanticForm (..)
   , emptyStaticContext
   , identityInstanceRevision
@@ -32,8 +30,7 @@ import Phil.Surface.Lineage
 import Phil.Systems.GenericLowering
 import Phil.Systems.IR (CompilationProfile (CheckedRuntime))
 import Phil.Systems.Phase1Stage
-  ( Phase1StageBundle
-  , phase1StageInstanceRevision
+  ( phase1StageInstanceRevision
   , phase1StageRealizationRevision
   , verifyPhase1StageBundle
   )
