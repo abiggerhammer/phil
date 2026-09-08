@@ -273,7 +273,12 @@ Proof.
     destruct
       (parser_alternative_goal_rank_fuel
         static_fuel phase1_surface_parser_rank_facts items)
-      as [alternative_rank |] eqn:Halternative; try discriminate Hrank.
+      as [alternative_rank |] eqn:Halternative.
+    2: {
+      rewrite parser_expression_alternative_rank_equation in Hrank.
+      rewrite Halternative in Hrank.
+      discriminate Hrank.
+    }
     assert (Hdecrease : child_rank < rank).
     {
       eapply parser_alternative_member_rank_decreases; eauto.
