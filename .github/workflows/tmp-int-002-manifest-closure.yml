@@ -1,0 +1,43 @@
+name: Temporary INT-002 generic manifest closure staging
+
+on:
+  push:
+    branches: [phase1-int-002-manifest-closure]
+    paths:
+      - 'src/Phil/Verification/ManifestClosure.hs'
+      - 'test/Phase1INT002ManifestClosureMain.hs'
+      - '.github/workflows/tmp-int-002-manifest-closure.yml'
+
+jobs:
+  manifest-closure:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: haskell-actions/setup@v2
+        with:
+          ghc-version: '9.6.7'
+          cabal-version: 'latest'
+
+      - name: Build complete Haskell substrate
+        run: cabal build all --enable-tests
+
+      - name: Strict typecheck generic manifest closure boundary
+        run: |
+          cabal exec -- ghc -isrc -Wall -Werror -fno-code \
+            src/Phil/Verification/ManifestClosure.hs \
+            test/Phase1INT002ManifestClosureMain.hs
+
+      - name: Execute INT-002 generic manifest closure pressure corpus
+        run: cabal exec -- runghc -isrc -Wall -Werror test/Phase1INT002ManifestClosureMain.hs
+
+      - name: Replay assurance manifest verifier corpus
+        run: cabal exec -- runghc -isrc -Wall -Werror test/AssuranceMain.hs
+
+      - name: Replay ADR-025 no-silent-assumption/export controls
+        run: cabal exec -- runghc -isrc -Wall -Werror test/Phase1VerificationNoSilentAssumptionExportMain.hs
+
+      - name: Replay ADR-025 runtime policy controls
+        run: cabal exec -- runghc -isrc -Wall -Werror test/Phase1VerificationPolicySensitiveRuntimeClosureMain.hs
+
+      - name: Replay canonical VerificationBundle target controls
+        run: cabal exec -- runghc -isrc -Wall -Werror test/Phase1VerificationIndependentTargetMain.hs
