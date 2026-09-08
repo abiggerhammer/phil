@@ -51,6 +51,19 @@ Qed.
 
 '''
 
+expression_goal_rank_helper = '''Lemma phase1_surface_expression_goal_rank_from_raw :
+  forall fuel path expression rank,
+    parser_expression_rank_fuel
+      fuel phase1_surface_parser_rank_facts expression = Some rank ->
+    phase1_surface_parser_goal_rank_fuel
+      fuel (GoalExpression path expression) = Some rank.
+Proof.
+  intros fuel path expression rank Hrank.
+  exact Hrank.
+Qed.
+
+'''
+
 required_helper = '''Lemma phase1_surface_nonterminal_required_lift :
   forall path name body input rest tree child_rank rank,
     lookupRule name phase1_surface_rules = Some body ->
@@ -58,9 +71,8 @@ required_helper = '''Lemma phase1_surface_nonterminal_required_lift :
     phase1_surface_parser_bounded_sufficient
       (GoalExpression (descend path (AtNonterminal name)) body)
       input rest (ResultTree tree) ->
-    phase1_surface_parser_goal_rank_fuel
-      expression_fuel
-      (GoalExpression (descend path (AtNonterminal name)) body) =
+    parser_expression_rank_fuel
+      expression_fuel phase1_surface_parser_rank_facts body =
       Some child_rank ->
     phase1_surface_parser_goal_options_global
       expression_fuel
@@ -77,7 +89,12 @@ required_helper = '''Lemma phase1_surface_nonterminal_required_lift :
         input rest (ResultTree (PTNonterminal name tree)) required.
 Proof.
   intros path name body input rest tree child_rank rank
-    Hlookup Hdecrease IHbody Hchild_rank Hchild_global Hchild_safe.
+    Hlookup Hdecrease IHbody Hchild_rank_raw Hchild_global Hchild_safe.
+  pose proof
+    (phase1_surface_expression_goal_rank_from_raw
+      expression_fuel
+      (descend path (AtNonterminal name))
+      body child_rank Hchild_rank_raw) as Hchild_rank.
   destruct
     (phase1_surface_parser_bounded_sufficient_elim
       (GoalExpression (descend path (AtNonterminal name)) body)
@@ -96,7 +113,7 @@ Qed.
 
 '''
 
-prefix = lookup_member_helper + rank_sufficient_helper + required_helper
+prefix = lookup_member_helper + rank_sufficient_helper + expression_goal_rank_helper + required_helper
 text = text[:start] + prefix + text[start:]
 start += len(prefix)
 end += len(prefix)
@@ -144,10 +161,7 @@ new_safe = '''  assert (Hchild_safe :
       exact Hlookup).
 '''
 
-for label, old, new in [
-    ("global", old_global, new_global),
-    ("safe", old_safe, new_safe),
-]:
+for label, old, new in [("global", old_global, new_global), ("safe", old_safe, new_safe)]:
     count = segment.count(old)
     if count != 1:
         raise SystemExit(f"{label}: expected exactly one match, found {count}")
@@ -165,15 +179,7 @@ new_tail = '''  pose proof
     (parser_expression_rank_fuel
       expression_fuel phase1_surface_parser_rank_facts body)
     as [child_rank |] eqn:Hchild_rank_raw.
-  - assert (Hchild_rank :
-      phase1_surface_parser_goal_rank_fuel
-        expression_fuel
-        (GoalExpression (descend path (AtNonterminal name)) body) =
-      Some child_rank) by
-      abstract (
-        unfold phase1_surface_parser_goal_rank_fuel;
-        exact Hchild_rank_raw).
-    assert (Hdecrease : child_rank < rank) by
+  - assert (Hdecrease : child_rank < rank) by
       abstract (
         eapply phase1_surface_nonterminal_child_rank_decreases_fuel;
         eauto).
@@ -181,7 +187,7 @@ new_tail = '''  pose proof
     + exact Hlookup.
     + exact Hdecrease.
     + exact IHbody.
-    + exact Hchild_rank.
+    + exact Hchild_rank_raw.
     + exact Hchild_global.
     + exact Hchild_safe.
   - simpl in Hchild_defined.
