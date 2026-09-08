@@ -106,8 +106,11 @@ insertExactRevision
   -> Either VerificationGraphError (Map RevisionId ObligationRevision)
 insertExactRevision revisions revision = do
   let actual = revisionId revision
-      expected = deriveRevisionId revision
-  if actual == expected
+      expectedStatementDigest = digestText (revisionStatement revision)
+      canonicalRevision = revision
+        { revisionStatementDigest = expectedStatementDigest }
+      expected = deriveRevisionId canonicalRevision
+  if revisionStatementDigest revision == expectedStatementDigest && actual == expected
     then Right ()
     else Left (InvalidObligationRevisionIdentity expected actual)
   case Map.lookup actual revisions of
