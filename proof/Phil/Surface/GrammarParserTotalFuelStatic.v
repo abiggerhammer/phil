@@ -750,7 +750,10 @@ Lemma phase1_surface_nonterminal_child_rank_decreases_fuel :
     child_rank < parent_rank.
 Proof.
   intros fuel name body parent_rank child_rank Hlookup Hparent Hchild.
-  simpl in Hparent.
+  change
+    (Some (S (parser_rank_lookup name phase1_surface_parser_rank_facts)) =
+      Some parent_rank)
+    in Hparent.
   inversion Hparent; subst parent_rank.
   pose proof
     (parser_nonterminal_child_rank_decreases name body Hlookup) as Hdecrease.
