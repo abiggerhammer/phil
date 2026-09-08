@@ -6,6 +6,7 @@ module Phil.Verification.Bundle
   , VerificationBundle (..)
   , VerificationBundleError (..)
   , buildVerificationBundle
+  , verificationBundleArchitectureDigest
   ) where
 
 import Control.Monad (foldM)
@@ -124,6 +125,37 @@ buildVerificationBundle sourceRevision declarations instances realizations graph
     { verificationBundleRevision = deriveVerificationBundleRevision provisional }
   where
     policyRevision = applicationAssurancePolicyRevision policy
+
+-- | Canonical architecture identity carried by a VerificationBundle.
+-- Manifest closure compares the caller's build context against this digest so
+-- an unrelated Architecture cannot be substituted after source verification.
+verificationBundleArchitectureDigest :: VerificationBundle -> Digest
+verificationBundleArchitectureDigest bundle = digestText (Text.intercalate "\n"
+  [ "verification-bundle-architecture-v1"
+  , "declarations=" <> Text.intercalate ","
+      (map renderDeclaration
+        (Set.toAscList (verificationBundleDeclarations bundle)))
+  , "instances=" <> Text.intercalate ","
+      (map renderInstance
+        (Set.toAscList (verificationBundleArchitectureInstances bundle)))
+  , "realizations=" <> Text.intercalate ","
+      (map renderRealization
+        (Set.toAscList (verificationBundleArchitectureRealizations bundle)))
+  ])
+  where
+    renderDeclaration identity = Text.intercalate "@"
+      [ unDeclarationKey (identityDeclarationKey identity)
+      , unInterfaceRevision (identityInterfaceRevision identity)
+      , unDefinitionRevision (identityDefinitionRevision identity)
+      ]
+
+    renderInstance identity = Text.intercalate "@"
+      [ unInstanceKey (identityInstanceKey identity)
+      , unInstanceRevision (identityInstanceRevision identity)
+      ]
+
+    renderRealization identity =
+      unRealizationRevision (identityRealizationRevision identity)
 
 validateSourceRevision :: Digest -> Either VerificationBundleError ()
 validateSourceRevision (Digest sourceRevision)

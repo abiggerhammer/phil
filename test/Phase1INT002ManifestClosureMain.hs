@@ -198,7 +198,7 @@ baseFixture policy = do
     policy
     [staticEvidence, runtimeEvidence]
   let context = emptyVerificationContext
-        { verificationArchitectureDigest = digestText "int002-architecture"
+        { verificationArchitectureDigest = verificationBundleArchitectureDigest bundle
         , verificationPhilCoreDigest = digestText "int002-core"
         , verificationImplementationDigest = digestText "int002-implementation"
         , verificationTarget = "int002-test-target"
