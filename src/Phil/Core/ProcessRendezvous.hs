@@ -9,6 +9,7 @@ module Phil.Core.ProcessRendezvous
   , ProcessRendezvousError (..)
   , communicationStateFromActivation
   , checkProcessCommunication
+  , checkProcessCommunicationState
   , checkProcessCommunicationSuccessor
   , checkRestrictedProcessRendezvous
   ) where
@@ -186,6 +187,25 @@ checkProcessCommunication instanceValue network contexts attempt =
     JointProcessRendezvous request ->
       checkJointRendezvous instanceValue network contexts request
 
+-- | Complete initial-state rendezvous transition. Unlike the endpoint-only
+-- checker above, this consumes the activation-derived ownership index and
+-- advances both endpoint occurrence owners to their exact successor names.
+checkProcessCommunicationState
+  :: BinaryProtocolInstance
+  -> ProcessNetwork
+  -> ProcessCommunicationState
+  -> ProcessRendezvousRequest
+  -> Either ProcessRendezvousError ProcessCommunicationState
+checkProcessCommunicationState instanceValue network state request = do
+  updatedContexts <- checkJointRendezvous
+    instanceValue network (communicationProtocolContexts state) request
+  updatedOwners <- advanceRendezvousEndpointOwners
+    (communicationRestrictedOwners state) request
+  pure state
+    { communicationProtocolContexts = updatedContexts
+    , communicationRestrictedOwners = updatedOwners
+    }
+
 -- | Advance an already-checked live communication state. Initial protocol
 -- projection is an initialization invariant; successor steps retain exact
 -- instance/role identity, current duality, and local action admissibility
@@ -199,7 +219,12 @@ checkProcessCommunicationSuccessor
 checkProcessCommunicationSuccessor instanceValue network state request = do
   updatedContexts <- checkJointRendezvousLive
     instanceValue network (communicationProtocolContexts state) request
-  pure state { communicationProtocolContexts = updatedContexts }
+  updatedOwners <- advanceRendezvousEndpointOwners
+    (communicationRestrictedOwners state) request
+  pure state
+    { communicationProtocolContexts = updatedContexts
+    , communicationRestrictedOwners = updatedOwners
+    }
 
 -- | CONC-005: perform one exact send/receive rendezvous and move one exact
 -- affine/linear payload occurrence sender -> receiver in the same pure checked
@@ -481,6 +506,14 @@ ensureExactSenderOwner owners sender transfer =
   where
     expectedProcess = rendezvousProcess sender
     expectedName = restrictedMessageSenderName transfer
+
+advanceRendezvousEndpointOwners
+  :: RestrictedOwnerIndex
+  -> ProcessRendezvousRequest
+  -> Either ProcessRendezvousError RestrictedOwnerIndex
+advanceRendezvousEndpointOwners owners request = do
+  leftOwners <- advanceEndpointOwner owners (requestLeft request)
+  advanceEndpointOwner leftOwners (requestRight request)
 
 advanceEndpointOwner
   :: RestrictedOwnerIndex

@@ -62,13 +62,12 @@ import Phil.Core.ProcessParticipants
   , ProtocolRoleOccurrence (..)
   )
 import Phil.Core.ProcessRendezvous
-  ( ProcessCommunicationAttempt (JointProcessRendezvous)
-  , ProcessCommunicationState (..)
+  ( ProcessCommunicationState (..)
   , ProcessRendezvousError (..)
   , ProcessRendezvousRequest (..)
   , ProcessRendezvousSide (..)
   , RestrictedMessageTransfer (..)
-  , checkProcessCommunication
+  , checkProcessCommunicationState
   , checkProcessCommunicationSuccessor
   , checkRestrictedProcessRendezvous
   , communicationStateFromActivation
@@ -221,6 +220,7 @@ data ConcurrencyRendezvousCertificationError
   | ConcurrencyRendezvousMessageError BoundaryMessageError
   | ConcurrencyRendezvousMessageTypeMismatch Ty Ty
   | ConcurrencyRendezvousMessageNotBoundToProtocol RendezvousMessageEvidence
+  | ConcurrencyRendezvousMessageTransferRequired Ty
   | ConcurrencyRendezvousMessageMissing ProcessKey
   | ConcurrencyRendezvousEndpointKernelDisagreement RendezvousEndpointKernelFacts
   | ConcurrencyRendezvousParticipantKernelDisagreement RendezvousParticipantKernelFacts
@@ -336,13 +336,12 @@ certifyProcessRendezvous activation protocol contexts request evidence = do
   beforeState <- mapLeft ConcurrencyRendezvousNativeError $
     communicationStateFromActivation
       (certifiedRendezvousActivationState activation) contexts
-  updatedContexts <- mapLeft ConcurrencyRendezvousNativeError $
-    checkProcessCommunication
+  afterState <- mapLeft ConcurrencyRendezvousNativeError $
+    checkProcessCommunicationState
       (certifiedRendezvousProtocolInstance protocol)
       (certifiedRendezvousActivationNetwork activation)
-      contexts
-      (JointProcessRendezvous request)
-  let afterState = beforeState { communicationProtocolContexts = updatedContexts }
+      beforeState
+      request
   certifyAcceptedRendezvous activation protocol beforeState afterState request Nothing evidence
 
 -- | Certify one rendezvous from the exact live successor of a previous
@@ -416,6 +415,7 @@ certifyAcceptedRendezvous activation protocol beforeState afterState request tra
     checkProtocolAction receiverAction receiverBefore
   actualType <- reflectedMessageType senderProcess receiverProcess senderStep receiverStep
   verifyMessageEvidence protocol actualType evidence
+  verifyTransferEvidence actualType transfer
 
   let endpointFacts = rendezvousEndpointFacts
         protocol sender receiver
@@ -581,6 +581,20 @@ rendezvousMessageCoarseFacts protocol beforeState afterState sender receiver tra
           (restrictedMessageOccurrence moved)
           (communicationRestrictedOwners afterState)
           == Just (rendezvousProcess receiver, restrictedMessageReceiverName moved)
+
+verifyTransferEvidence
+  :: Ty
+  -> Maybe RestrictedMessageTransfer
+  -> Either ConcurrencyRendezvousCertificationError ()
+verifyTransferEvidence actualType transfer =
+  case transfer of
+    Nothing
+      | intrinsicBoundaryMessageType actualType -> Right ()
+      | otherwise -> Left (ConcurrencyRendezvousMessageTransferRequired actualType)
+    Just moved
+      | restrictedMessageType moved == actualType -> Right ()
+      | otherwise -> Left (ConcurrencyRendezvousMessageTypeMismatch
+          actualType (restrictedMessageType moved))
 
 verifyMessageEvidence
   :: CertifiedRendezvousProtocol

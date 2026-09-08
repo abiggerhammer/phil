@@ -40,6 +40,8 @@ main = do
         stalePredecessorRejects
     , test "REVIEW-R10 activation-only checker remains strict on live successor"
         activationOnlyPathRemainsStrict
+    , test "REVIEW-R11 transfer-free rendezvous rejects missing endpoint owner"
+        missingEndpointOwnerRejects
     ]
   if and results then pure () else exitFailure
 
@@ -57,13 +59,32 @@ requestReplyComposes = do
     (fixtureContexts fx)
     (fixtureFirstRequest fx)
     (fixtureEvidence fx)
+  let firstOwners = communicationRestrictedOwners (certifiedRendezvousState first)
+  assert
+    (Map.lookup clientEndpointOccurrence firstOwners
+      == Just (fixtureClientProcess fx, clientFirstSuccessor))
+    "first transfer-free rendezvous left the client endpoint owner at its predecessor"
+  assert
+    (Map.lookup serverEndpointOccurrence firstOwners
+      == Just (fixtureServerProcess fx, serverFirstSuccessor))
+    "first transfer-free rendezvous left the server endpoint owner at its predecessor"
   second <- mapLeft show $ certifyProcessRendezvousSuccessor
     (fixtureActivation fx)
     (fixtureProtocol fx)
     first
     (fixtureReplyRequest fx)
     (fixtureEvidence fx)
-  let contexts = communicationProtocolContexts (certifiedRendezvousState second)
+  let secondState = certifiedRendezvousState second
+      secondOwners = communicationRestrictedOwners secondState
+      contexts = communicationProtocolContexts secondState
+  assert
+    (Map.lookup clientEndpointOccurrence secondOwners
+      == Just (fixtureClientProcess fx, clientSecondSuccessor))
+    "reply rendezvous did not advance the client endpoint owner to its second successor"
+  assert
+    (Map.lookup serverEndpointOccurrence secondOwners
+      == Just (fixtureServerProcess fx, serverSecondSuccessor))
+    "reply rendezvous did not advance the server endpoint owner to its second successor"
   clientContext <- requireProtocolContext (fixtureClientProcess fx) contexts
   serverContext <- requireProtocolContext (fixtureServerProcess fx) contexts
   assert
@@ -100,6 +121,26 @@ stalePredecessorRejects = do
           (processKey == fixtureClientProcess fx && endpoint == clientEndpoint)
           "stale-predecessor rejection lost exact process/endpoint identity"
     other -> Left ("stale predecessor endpoint names were accepted: " <> show other)
+
+missingEndpointOwnerRejects :: Either String ()
+missingEndpointOwnerRejects = do
+  fx <- fixture
+  state <- mapLeft show $ communicationStateFromActivation
+    (certifiedRendezvousActivationState (fixtureActivation fx))
+    (fixtureContexts fx)
+  let drifted = state
+        { communicationRestrictedOwners = Map.delete
+            clientEndpointOccurrence (communicationRestrictedOwners state)
+        }
+      instanceValue = certifiedRendezvousProtocolInstance (fixtureProtocol fx)
+      network = certifiedRendezvousActivationNetwork (fixtureActivation fx)
+  case checkProcessCommunicationState
+      instanceValue network drifted (fixtureFirstRequest fx) of
+    Left (RendezvousEndpointOccurrenceUnknown processKey endpoint) ->
+      assert
+        (processKey == fixtureClientProcess fx && endpoint == clientEndpoint)
+        "missing endpoint-owner rejection lost exact process/predecessor identity"
+    other -> Left ("missing endpoint owner did not reject complete rendezvous: " <> show other)
 
 activationOnlyPathRemainsStrict :: Either String ()
 activationOnlyPathRemainsStrict = do
