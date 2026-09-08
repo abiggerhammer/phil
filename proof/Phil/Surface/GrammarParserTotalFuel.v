@@ -656,8 +656,13 @@ Proof.
           ((Nat.max body_required tail_required - body_required) + extra)).
       destruct (list_eq_dec concrete_token_eq_dec input middle)
         as [Hequal | Hdifferent].
-      + exfalso. apply Hprogress. exact Hequal.
-      + replace
+      {
+        exfalso.
+        apply Hprogress.
+        exact Hequal.
+      }
+      {
+        replace
           (body_required +
             ((Nat.max body_required tail_required - body_required) + extra))
           with
@@ -668,6 +673,7 @@ Proof.
           (Htail_complete
             ((Nat.max body_required tail_required - tail_required) + extra)).
         reflexivity.
+      }
 Qed.
 
 Theorem phase1_surface_predictive_parse_total_fuel_oracle_complete :
