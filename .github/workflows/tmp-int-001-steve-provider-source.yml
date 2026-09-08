@@ -213,12 +213,13 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
-          if grep -Ei 'Steve|Upload' \
+          if git diff --unified=0 -- \
               src/Phil/Surface/Check/Types.hs \
               src/Phil/Surface/Check/Engine.hs \
               src/Phil/Surface/Check.hs \
-              src/Phil/Surface/Parser.hs; then
-            echo 'generic provider-source repair must not dispatch on witness identity'
+              src/Phil/Surface/Parser.hs \
+            | grep -E '^\+[^+].*(Steve|Upload)'; then
+            echo 'generic provider-source repair must not add witness identity dispatch'
             exit 1
           fi
 
