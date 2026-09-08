@@ -1,0 +1,63 @@
+name: Phase 1 INT-001 Source Architecture
+
+on:
+  push:
+    paths:
+      - 'src/Phil/Compiler/SourceBundle.hs'
+      - 'src/Phil/Compiler/SourceArchitecture.hs'
+      - 'src/Phil/Surface/Lineage.hs'
+      - 'src/Phil/Surface/Parser.hs'
+      - 'src/Phil/Surface/Check/**'
+      - 'src/Phil/Surface/Syntax.hs'
+      - 'src/Phil/Core/Static.hs'
+      - 'test/Phase1INT001OrdinarySourceBundleMain.hs'
+      - 'test/Phase1INT001SourceArchitectureMain.hs'
+      - '.github/workflows/phase1-int-001-source-architecture.yml'
+  pull_request:
+    paths:
+      - 'src/Phil/Compiler/SourceBundle.hs'
+      - 'src/Phil/Compiler/SourceArchitecture.hs'
+      - 'src/Phil/Surface/Lineage.hs'
+      - 'src/Phil/Surface/Parser.hs'
+      - 'src/Phil/Surface/Check/**'
+      - 'src/Phil/Surface/Syntax.hs'
+      - 'src/Phil/Core/Static.hs'
+      - 'test/Phase1INT001OrdinarySourceBundleMain.hs'
+      - 'test/Phase1INT001SourceArchitectureMain.hs'
+      - '.github/workflows/phase1-int-001-source-architecture.yml'
+
+jobs:
+  source-architecture:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: haskell-actions/setup@v2
+        with:
+          ghc-version: '9.6.7'
+          cabal-version: 'latest'
+
+      - name: Build complete Haskell substrate
+        run: cabal build all --enable-tests
+
+      - name: Reject witness-specific identity in source architecture bridge
+        shell: bash
+        run: |
+          set -euo pipefail
+          if grep -En 'Upload|Steve|phase0EnvironmentFor|examples/' src/Phil/Compiler/SourceArchitecture.hs; then
+            echo 'source architecture bridge contains witness/path-specific dispatch' >&2
+            exit 1
+          fi
+
+      - name: Strict typecheck source architecture bridge and pressure corpus
+        run: |
+          cabal exec -- ghc -isrc -igenerated -Wall -Werror -fno-code \
+            src/Phil/Compiler/SourceBundle.hs \
+            src/Phil/Compiler/SourceArchitecture.hs \
+            test/Phase1INT001SourceArchitectureMain.hs
+
+      - name: Execute source architecture pressure corpus
+        run: cabal exec -- runghc -isrc -igenerated -Wall -Werror test/Phase1INT001SourceArchitectureMain.hs
+
+      - name: Replay ordinary SourceBundle front-half controls
+        run: cabal exec -- runghc -isrc -igenerated -Wall -Werror test/Phase1INT001OrdinarySourceBundleMain.hs
