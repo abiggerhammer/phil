@@ -117,8 +117,11 @@ exactTransferUnderrepresentationRejects = do
   mutatedComponent <- parseSingle
     "component Alpha provides Unit { send_exact payload on session0 return unit }"
   let checkedBundle0 = checkedSourceArchitectureBundle architecture0
-      [unit0] = checkedSourceUnits checkedBundle0
-      unit1 = unit0 { checkedSourceComponent = mutatedComponent }
+  unit0 <- case checkedSourceUnits checkedBundle0 of
+    [unitValue] -> Right unitValue
+    units -> Left
+      ("expected one checked source unit in mutation fixture, found " <> show (length units))
+  let unit1 = unit0 { checkedSourceComponent = mutatedComponent }
       checkedBundle1 = checkedBundle0 { checkedSourceUnits = [unit1] }
       architecture1 = architecture0
         { checkedSourceArchitectureBundle = checkedBundle1 }
