@@ -339,21 +339,23 @@ Proof.
       reflexivity.
 Qed.
 
-Definition phase1_surface_parser_bounded_sufficient
+Inductive phase1_surface_parser_bounded_sufficient
   (goal : DerivationGoal)
   (input rest : list ConcreteToken)
   (result : DerivationResult) : Prop :=
-  forall static_fuel rank,
-    phase1_surface_parser_goal_rank_fuel static_fuel goal = Some rank ->
-    phase1_surface_parser_goal_options_global static_fuel goal ->
-    phase1_surface_parser_goal_choice_safe static_fuel goal ->
-    static_fuel <= expression_fuel ->
-    exists required,
-      required <= phase1_surface_parser_local_measure input rank /\
-      OracleParseFuelSufficient
-        phase1_surface_predictive_oracle
-        phase1_surface_rules
-        goal input rest result required.
+| Phase1SurfaceParserBoundedSufficient :
+    (forall static_fuel rank,
+      phase1_surface_parser_goal_rank_fuel static_fuel goal = Some rank ->
+      phase1_surface_parser_goal_options_global static_fuel goal ->
+      phase1_surface_parser_goal_choice_safe static_fuel goal ->
+      static_fuel <= expression_fuel ->
+      exists required,
+        required <= phase1_surface_parser_local_measure input rank /\
+        OracleParseFuelSufficient
+          phase1_surface_predictive_oracle
+          phase1_surface_rules
+          goal input rest result required) ->
+    phase1_surface_parser_bounded_sufficient goal input rest result.
 
 Lemma phase1_surface_literal_bounded_sufficient :
   forall path literal tail,
@@ -363,7 +365,7 @@ Lemma phase1_surface_literal_bounded_sufficient :
       (ResultTree (PTLiteral literal)).
 Proof.
   intros path literal tail.
-  unfold phase1_surface_parser_bounded_sufficient.
+  constructor.
   intros static_fuel rank Hrank Hglobal Hsafe Hsfuel.
   exists 1.
   split.
@@ -379,7 +381,7 @@ Lemma phase1_surface_lexical_bounded_sufficient :
       (ResultTree (PTLexical class lexeme)).
 Proof.
   intros path class lexeme tail.
-  unfold phase1_surface_parser_bounded_sufficient.
+  constructor.
   intros static_fuel rank Hrank Hglobal Hsafe Hsfuel.
   exists 1.
   split.
@@ -398,7 +400,8 @@ Lemma phase1_surface_nonterminal_bounded_sufficient :
       input rest (ResultTree (PTNonterminal name tree)).
 Proof.
   intros path name body input rest tree Hlookup IHbody.
-  unfold phase1_surface_parser_bounded_sufficient in IHbody |- *.
+  destruct IHbody as [IHbody].
+  constructor.
   intros static_fuel rank Hrank Hglobal Hsafe Hsfuel.
   unfold phase1_surface_parser_goal_rank_fuel in Hrank.
   destruct static_fuel as [| static_fuel]; try discriminate Hrank.
@@ -464,7 +467,8 @@ Lemma phase1_surface_sequence_wrapper_bounded_sufficient :
       input rest (ResultTree (PTSequence trees)).
 Proof.
   intros path items input rest trees IHitems.
-  unfold phase1_surface_parser_bounded_sufficient in IHitems |- *.
+  destruct IHitems as [IHitems].
+  constructor.
   intros static_fuel rank Hrank Hglobal Hsafe Hsfuel.
   unfold phase1_surface_parser_goal_rank_fuel in Hrank.
   destruct static_fuel as [| static_fuel]; try discriminate Hrank.
@@ -526,7 +530,8 @@ Lemma phase1_surface_alternative_bounded_sufficient :
       input rest (ResultTree (PTAlternative index tree)).
 Proof.
   intros path items index item input rest tree Hdecision Hnth IHitem.
-  unfold phase1_surface_parser_bounded_sufficient in IHitem |- *.
+  destruct IHitem as [IHitem].
+  constructor.
   intros static_fuel rank Hrank Hglobal Hsafe Hsfuel.
   unfold phase1_surface_parser_goal_rank_fuel in Hrank.
   destruct static_fuel as [| static_fuel]; try discriminate Hrank.
@@ -596,7 +601,7 @@ Lemma phase1_surface_optional_none_bounded_sufficient :
       input input (ResultTree PTOptionalNone).
 Proof.
   intros path body input Hdecision.
-  unfold phase1_surface_parser_bounded_sufficient.
+  constructor.
   intros static_fuel rank Hrank Hglobal Hsafe Hsfuel.
   exists 1.
   split.
@@ -616,7 +621,8 @@ Lemma phase1_surface_optional_some_bounded_sufficient :
       input rest (ResultTree (PTOptionalSome tree)).
 Proof.
   intros path body input rest tree Hdecision IHbody.
-  unfold phase1_surface_parser_bounded_sufficient in IHbody |- *.
+  destruct IHbody as [IHbody].
+  constructor.
   intros static_fuel rank Hrank Hglobal Hsafe Hsfuel.
   unfold phase1_surface_parser_goal_rank_fuel in Hrank.
   destruct static_fuel as [| static_fuel]; try discriminate Hrank.
@@ -680,7 +686,8 @@ Lemma phase1_surface_repetition_wrapper_bounded_sufficient :
       input rest (ResultTree (PTRepetition trees)).
 Proof.
   intros path body input rest trees IHrepeat.
-  unfold phase1_surface_parser_bounded_sufficient in IHrepeat |- *.
+  destruct IHrepeat as [IHrepeat].
+  constructor.
   intros static_fuel rank Hrank Hglobal Hsafe Hsfuel.
   unfold phase1_surface_parser_goal_rank_fuel in Hrank.
   destruct static_fuel as [| static_fuel]; try discriminate Hrank.
@@ -736,7 +743,7 @@ Lemma phase1_surface_sequence_nil_bounded_sufficient :
       input input (ResultTrees []).
 Proof.
   intros path index input.
-  unfold phase1_surface_parser_bounded_sufficient.
+  constructor.
   intros static_fuel rank Hrank Hglobal Hsafe Hsfuel.
   exists 1.
   split.
@@ -766,7 +773,9 @@ Lemma phase1_surface_sequence_cons_bounded_sufficient :
 Proof.
   intros path index item items input middle rest tree trees
     Hhead IHhead Htail IHtail.
-  unfold phase1_surface_parser_bounded_sufficient in IHhead, IHtail |- *.
+  destruct IHhead as [IHhead].
+  destruct IHtail as [IHtail].
+  constructor.
   intros static_fuel rank Hrank Hglobal Hsafe Hsfuel.
   assert (Hhead_global :
     phase1_surface_parser_goal_options_global
@@ -898,7 +907,7 @@ Lemma phase1_surface_repetition_stop_bounded_sufficient :
       input input (ResultTrees []).
 Proof.
   intros path body input Hdecision.
-  unfold phase1_surface_parser_bounded_sufficient.
+  constructor.
   intros static_fuel rank Hrank Hglobal Hsafe Hsfuel.
   exists 1.
   split.
@@ -932,7 +941,9 @@ Lemma phase1_surface_repetition_step_bounded_sufficient :
 Proof.
   intros path body input middle rest tree trees
     Hdecision Hbody IHbody Hprogress Htail IHtail.
-  unfold phase1_surface_parser_bounded_sufficient in IHbody, IHtail |- *.
+  destruct IHbody as [IHbody].
+  destruct IHtail as [IHtail].
+  constructor.
   intros static_fuel rank Hrank Hglobal Hsafe Hsfuel.
   assert (Hbody_global :
     phase1_surface_parser_goal_options_global
@@ -1022,26 +1033,15 @@ Proof.
     + exact Htail_sufficient.
 Qed.
 
-Theorem phase1_surface_oracle_parse_fuel_bounded_sufficient :
+Theorem phase1_surface_oracle_parse_fuel_bounded_sufficient_certificate :
   forall goal input rest result,
     OracleDerives
       phase1_surface_predictive_oracle
       phase1_surface_rules
       goal input rest result ->
-    forall static_fuel rank,
-      phase1_surface_parser_goal_rank_fuel static_fuel goal = Some rank ->
-      phase1_surface_parser_goal_options_global static_fuel goal ->
-      phase1_surface_parser_goal_choice_safe static_fuel goal ->
-      static_fuel <= expression_fuel ->
-      exists required,
-        required <= phase1_surface_parser_local_measure input rank /\
-        OracleParseFuelSufficient
-          phase1_surface_predictive_oracle
-          phase1_surface_rules
-          goal input rest result required.
+    phase1_surface_parser_bounded_sufficient goal input rest result.
 Proof.
   intros goal input rest result Hderive.
-  change (phase1_surface_parser_bounded_sufficient goal input rest result).
   induction Hderive as
     [ path literal tail
     | path class lexeme tail
@@ -1091,6 +1091,33 @@ Proof.
       (phase1_surface_repetition_step_bounded_sufficient
         path body input middle rest tree trees
         Hdecision Hbody IHbody Hprogress Htail IHtail).
+Qed.
+
+Theorem phase1_surface_oracle_parse_fuel_bounded_sufficient :
+  forall goal input rest result,
+    OracleDerives
+      phase1_surface_predictive_oracle
+      phase1_surface_rules
+      goal input rest result ->
+    forall static_fuel rank,
+      phase1_surface_parser_goal_rank_fuel static_fuel goal = Some rank ->
+      phase1_surface_parser_goal_options_global static_fuel goal ->
+      phase1_surface_parser_goal_choice_safe static_fuel goal ->
+      static_fuel <= expression_fuel ->
+      exists required,
+        required <= phase1_surface_parser_local_measure input rank /\
+        OracleParseFuelSufficient
+          phase1_surface_predictive_oracle
+          phase1_surface_rules
+          goal input rest result required.
+Proof.
+  intros goal input rest result Hderive
+    static_fuel rank Hrank Hglobal Hsafe Hsfuel.
+  destruct
+    (phase1_surface_oracle_parse_fuel_bounded_sufficient_certificate
+      goal input rest result Hderive)
+    as [Hbounded].
+  exact (Hbounded static_fuel rank Hrank Hglobal Hsafe Hsfuel).
 Qed.
 
 Theorem phase1_surface_oracle_parse_fuel_bounded_complete :
