@@ -1,18 +1,55 @@
 from pathlib import Path
 
-path = Path("proof/Phil/Surface/GrammarParserTotalFuel.v")
-text = path.read_text()
+surface = Path("proof/Phil/Surface")
+main_path = surface / "GrammarParserTotalFuel.v"
+text = main_path.read_text()
 
-start_marker = "Lemma phase1_surface_nonterminal_bounded_sufficient :"
-end_marker = "Lemma phase1_surface_sequence_wrapper_bounded_sufficient :"
+measure_marker = "Definition phase1_surface_parser_local_measure"
+literal_marker = "Lemma phase1_surface_literal_bounded_sufficient :"
+nonterminal_marker = "Lemma phase1_surface_nonterminal_bounded_sufficient :"
+sequence_marker = "Lemma phase1_surface_sequence_wrapper_bounded_sufficient :"
 
-if text.count(start_marker) != 1 or text.count(end_marker) != 1:
-    raise SystemExit("could not uniquely locate nonterminal bounded-sufficient lemma")
+for marker in [measure_marker, literal_marker, nonterminal_marker, sequence_marker]:
+    if text.count(marker) != 1:
+        raise SystemExit(f"expected exactly one {marker!r}, found {text.count(marker)}")
 
-start = text.index(start_marker)
-end = text.index(end_marker, start)
+measure_start = text.index(measure_marker)
+literal_start = text.index(literal_marker)
+nonterminal_start = text.index(nonterminal_marker)
+sequence_start = text.index(sequence_marker)
 
-lookup_member_helper = '''Lemma lookup_rule_member :
+if not (measure_start < literal_start < nonterminal_start < sequence_start):
+    raise SystemExit("total-fuel source markers are out of order")
+
+# The base module owns the symbolic fuel relation, its executable bridge, the
+# concrete local measure, and the bounded-sufficiency certificate.  Keeping
+# these in a separately compiled module makes every use below an imported
+# opaque constant rather than a same-file proof term.
+base_text = text[:literal_start]
+(surface / "GrammarParserTotalFuelBase.v").write_text(base_text)
+
+support_text = r'''From Stdlib Require Import Arith.PeanoNat Bool.Bool Lia Lists.List Strings.String.
+
+From Phil.Surface Require Import
+  Grammar
+  GrammarDerivation
+  GrammarDerivationOracle
+  GrammarDeterminacyNullableFirst
+  GrammarParserGoalRank
+  GrammarParserRank
+  GrammarParserTotalFuelBase
+  GrammarParserTotalFuelStatic.
+
+Import ListNotations.
+Open Scope string_scope.
+
+Opaque phase1_surface_rules
+  phase1_surface_nullable_facts
+  phase1_surface_parser_rank_facts
+  phase1_surface_parser_global_goal_rank_bound
+  phase1_surface_predictive_oracle.
+
+Lemma lookup_rule_member :
   forall rules name body,
     lookupRule name rules = Some body ->
     In (name, body) rules.
@@ -32,9 +69,7 @@ Proof.
       exact Hlookup.
 Qed.
 
-'''
-
-rank_sufficient_helper = '''Lemma phase1_surface_lookup_rule_rank_fuel_sufficient :
+Lemma phase1_surface_lookup_rule_rank_fuel_sufficient :
   forall name body,
     lookupRule name phase1_surface_rules = Some body ->
     parser_rank_rule_fuel_sufficient (name, body) = true.
@@ -48,9 +83,7 @@ Proof.
   exact Hlookup.
 Qed.
 
-'''
-
-expression_goal_rank_helper = '''Lemma phase1_surface_expression_goal_rank_from_raw :
+Lemma phase1_surface_expression_goal_rank_from_raw :
   forall fuel path expression rank,
     parser_expression_rank_fuel
       fuel phase1_surface_parser_rank_facts expression = Some rank ->
@@ -61,9 +94,7 @@ Proof.
   exact Hrank.
 Qed.
 
-'''
-
-required_helper = '''Lemma phase1_surface_nonterminal_required_lift :
+Lemma phase1_surface_nonterminal_required_lift :
   forall path name body input rest tree child_rank rank,
     lookupRule name phase1_surface_rules = Some body ->
     child_rank < rank ->
@@ -80,7 +111,7 @@ required_helper = '''Lemma phase1_surface_nonterminal_required_lift :
       expression_fuel
       (GoalExpression (descend path (AtNonterminal name)) body) ->
     exists required,
-      required <= phase1_surface_parser_local_measure input rank /\\
+      required <= phase1_surface_parser_local_measure input rank /\
       OracleParseFuelSufficient
         phase1_surface_predictive_oracle
         phase1_surface_rules
@@ -109,10 +140,31 @@ Proof.
     + exact Hlookup.
     + exact Hchild_sufficient.
 Qed.
-
 '''
+(surface / "GrammarParserTotalFuelNonterminalSupport.v").write_text(support_text)
 
-payload_helper = '''Lemma phase1_surface_nonterminal_bounded_payload :
+nonterminal_text = r'''From Stdlib Require Import Arith.PeanoNat Bool.Bool Lia Lists.List Strings.String.
+
+From Phil.Surface Require Import
+  Grammar
+  GrammarDerivation
+  GrammarDeterminacyNullableFirst
+  GrammarParserGoalRank
+  GrammarParserRank
+  GrammarParserTotalFuelBase
+  GrammarParserTotalFuelNonterminalSupport
+  GrammarParserTotalFuelStatic.
+
+Import ListNotations.
+Open Scope string_scope.
+
+Opaque phase1_surface_rules
+  phase1_surface_nullable_facts
+  phase1_surface_parser_rank_facts
+  phase1_surface_parser_global_goal_rank_bound
+  phase1_surface_predictive_oracle.
+
+Lemma phase1_surface_nonterminal_bounded_payload :
   forall path name body input rest tree,
     lookupRule name phase1_surface_rules = Some body ->
     phase1_surface_parser_bounded_sufficient
@@ -127,7 +179,7 @@ payload_helper = '''Lemma phase1_surface_nonterminal_bounded_payload :
         static_fuel (GoalExpression path (ENonterminal name)) ->
       static_fuel <= expression_fuel ->
       exists required,
-        required <= phase1_surface_parser_local_measure input rank /\\
+        required <= phase1_surface_parser_local_measure input rank /\
         OracleParseFuelSufficient
           phase1_surface_predictive_oracle
           phase1_surface_rules
@@ -178,9 +230,7 @@ Proof.
     discriminate.
 Qed.
 
-'''
-
-wrapper_helper = '''Lemma phase1_surface_nonterminal_bounded_sufficient :
+Lemma phase1_surface_nonterminal_bounded_sufficient :
   forall path name body input rest tree,
     lookupRule name phase1_surface_rules = Some body ->
     phase1_surface_parser_bounded_sufficient
@@ -192,21 +242,24 @@ wrapper_helper = '''Lemma phase1_surface_nonterminal_bounded_sufficient :
 Proof.
   intros path name body input rest tree Hlookup IHbody.
   constructor.
-  eapply phase1_surface_nonterminal_bounded_payload.
-  - exact Hlookup.
-  - exact IHbody.
+  eapply phase1_surface_nonterminal_bounded_payload; eauto.
 Qed.
-
 '''
+(surface / "GrammarParserTotalFuelNonterminal.v").write_text(nonterminal_text)
 
+# The main module keeps its original imports and comments, but imports the
+# compiled base/reset modules and omits the definitions they now own.
+header = text[:measure_start]
+needle = "  GrammarParserTotalFuelStatic\n  GrammarParserZeroConsumeNullable."
 replacement = (
-    lookup_member_helper
-    + rank_sufficient_helper
-    + expression_goal_rank_helper
-    + required_helper
-    + payload_helper
-    + wrapper_helper
+    "  GrammarParserTotalFuelStatic\n"
+    "  GrammarParserTotalFuelBase\n"
+    "  GrammarParserTotalFuelNonterminal\n"
+    "  GrammarParserZeroConsumeNullable."
 )
+if header.count(needle) != 1:
+    raise SystemExit(f"expected exactly one import insertion point, found {header.count(needle)}")
+header = header.replace(needle, replacement)
 
-text = text[:start] + replacement + text[end:]
-path.write_text(text)
+main_body = text[literal_start:nonterminal_start] + text[sequence_start:]
+main_path.write_text(header + main_body)
