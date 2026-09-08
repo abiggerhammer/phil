@@ -13,7 +13,33 @@ start = text.index(start_marker)
 end = text.index(end_marker, start)
 segment = text[start:end]
 
-helper = '''Lemma phase1_surface_nonterminal_required_lift :
+canonical_helper = '''Lemma phase1_surface_expression_goal_canonical_rank :
+  forall path expression,
+    phase1_surface_parser_goal_options_global
+      expression_fuel (GoalExpression path expression) ->
+    phase1_surface_parser_goal_rank_fuel
+      expression_fuel (GoalExpression path expression) =
+    Some
+      (parser_expression_rank
+        phase1_surface_parser_rank_facts expression).
+Proof.
+  intros path expression Hglobal.
+  destruct
+    (phase1_surface_parser_goal_rank_exists
+      expression_fuel (GoalExpression path expression) Hglobal)
+    as [rank Hrank].
+  pose proof Hrank as Hraw.
+  unfold phase1_surface_parser_goal_rank_fuel in Hraw.
+  pose proof
+    (parser_expression_rank_of_fuel_some
+      phase1_surface_parser_rank_facts expression rank Hraw) as Hequal.
+  rewrite Hequal.
+  exact Hrank.
+Qed.
+
+'''
+
+required_helper = '''Lemma phase1_surface_nonterminal_required_lift :
   forall path name body input rest tree child_rank rank,
     lookupRule name phase1_surface_rules = Some body ->
     child_rank < rank ->
@@ -58,10 +84,15 @@ Qed.
 
 '''
 
+prefix = ""
+if "Lemma phase1_surface_expression_goal_canonical_rank :" not in text:
+    prefix += canonical_helper
 if "Lemma phase1_surface_nonterminal_required_lift :" not in text:
-    text = text[:start] + helper + text[start:]
-    start += len(helper)
-    end += len(helper)
+    prefix += required_helper
+if prefix:
+    text = text[:start] + prefix + text[start:]
+    start += len(prefix)
+    end += len(prefix)
     segment = text[start:end]
 
 replacements = [
@@ -110,12 +141,34 @@ replacements = [
 ''',
     ),
     (
-        '''  assert (Hdecrease : child_rank < rank).
+        '''  destruct
+    (phase1_surface_parser_goal_rank_exists
+      expression_fuel
+      (GoalExpression (descend path (AtNonterminal name)) body)
+      Hchild_global)
+    as [child_rank Hchild_rank].
+  pose proof Hchild_rank as Hchild_rank_raw.
+  unfold phase1_surface_parser_goal_rank_fuel in Hchild_rank_raw.
+  assert (Hdecrease : child_rank < rank).
   {
     eapply phase1_surface_nonterminal_child_rank_decreases_fuel; eauto.
   }
 ''',
-        '''  assert (Hdecrease : child_rank < rank) by
+        '''  set
+    (child_rank :=
+      parser_expression_rank phase1_surface_parser_rank_facts body).
+  assert (Hchild_rank :
+    phase1_surface_parser_goal_rank_fuel
+      expression_fuel
+      (GoalExpression (descend path (AtNonterminal name)) body) =
+    Some child_rank) by
+    abstract (
+      unfold child_rank;
+      eapply phase1_surface_expression_goal_canonical_rank;
+      exact Hchild_global).
+  pose proof Hchild_rank as Hchild_rank_raw.
+  unfold phase1_surface_parser_goal_rank_fuel in Hchild_rank_raw.
+  assert (Hdecrease : child_rank < rank) by
     abstract (
       eapply phase1_surface_nonterminal_child_rank_decreases_fuel;
       eauto).
