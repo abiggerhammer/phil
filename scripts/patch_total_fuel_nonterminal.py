@@ -35,7 +35,9 @@ From Phil.Surface Require Import
   GrammarDerivation
   GrammarDerivationOracle
   GrammarDeterminacyNullableFirst
+  GrammarDeterminacyPredictiveOracle
   GrammarParserGoalRank
+  GrammarParserGlobalGoalRank
   GrammarParserRank
   GrammarParserTotalFuelBase
   GrammarParserTotalFuelStatic.
@@ -149,7 +151,9 @@ From Phil.Surface Require Import
   Grammar
   GrammarDerivation
   GrammarDeterminacyNullableFirst
+  GrammarDeterminacyPredictiveOracle
   GrammarParserGoalRank
+  GrammarParserGlobalGoalRank
   GrammarParserRank
   GrammarParserTotalFuelBase
   GrammarParserTotalFuelNonterminalSupport
