@@ -150,6 +150,7 @@ nonterminal_text = r'''From Stdlib Require Import Arith.PeanoNat Bool.Bool Lia L
 From Phil.Surface Require Import
   Grammar
   GrammarDerivation
+  GrammarDerivationOracle
   GrammarDeterminacyNullableFirst
   GrammarDeterminacyPredictiveOracle
   GrammarParserGoalRank
