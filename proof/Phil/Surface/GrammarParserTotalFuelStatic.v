@@ -173,6 +173,27 @@ Proof.
     + apply IH. exact Hin.
 Qed.
 
+Lemma option_some_injective_nat :
+  forall left right : nat,
+    Some left = Some right ->
+    left = right.
+Proof.
+  intros left right Hequal.
+  injection Hequal.
+  trivial.
+Qed.
+
+Lemma parser_expression_rank_of_fuel_some :
+  forall facts expression rank,
+    parser_expression_rank_fuel expression_fuel facts expression = Some rank ->
+    parser_expression_rank facts expression = rank.
+Proof.
+  intros facts expression rank Hrank.
+  unfold parser_expression_rank.
+  rewrite Hrank.
+  reflexivity.
+Qed.
+
 Lemma phase1_surface_expression_choice_safe_of_bool :
   forall fuel expression,
     choice_bodies_nonnullable_fuel fuel expression = true ->
@@ -754,10 +775,13 @@ Proof.
     (Some (S (parser_rank_lookup name phase1_surface_parser_rank_facts)) =
       Some parent_rank)
     in Hparent.
-  inversion Hparent; subst parent_rank.
+  pose proof (option_some_injective_nat _ _ Hparent) as Hparent_rank.
   pose proof
     (parser_nonterminal_child_rank_decreases name body Hlookup) as Hdecrease.
-  unfold parser_expression_rank in Hdecrease.
-  rewrite Hchild in Hdecrease.
+  pose proof
+    (parser_expression_rank_of_fuel_some
+      phase1_surface_parser_rank_facts body child_rank Hchild) as Hchild_rank.
+  rewrite Hchild_rank in Hdecrease.
+  rewrite <- Hparent_rank.
   exact Hdecrease.
 Qed.
