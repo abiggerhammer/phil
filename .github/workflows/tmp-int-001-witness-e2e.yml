@@ -10,9 +10,6 @@ on:
       - 'src/Phil/Examples/Phase1/SystemsWitnesses.hs'
       - '.github/workflows/tmp-int-001-witness-e2e.yml'
 
-permissions:
-  contents: write
-
 jobs:
   witness-e2e:
     runs-on: ubuntu-latest
@@ -26,8 +23,14 @@ jobs:
           ghc-version: '9.6.7'
           cabal-version: 'latest'
 
-      - name: Apply staged correspondence repairs
-        run: python3 scripts/staging/int001_witness_e2e.py
+      - name: Confirm staged correspondence repairs are transported
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 scripts/staging/int001_witness_e2e.py
+          git diff --exit-code -- \
+            src/Phil/Compiler/SourceCorePolicy.hs \
+            src/Phil/Examples/Phase1/SystemsWitnesses.hs
 
       - name: Build complete Haskell substrate
         run: cabal build all --enable-tests
@@ -49,17 +52,3 @@ jobs:
 
       - name: Run real witness end-to-end gate
         run: cabal exec -- runghc -isrc -Wall -Werror test/Phase1INT001WitnessE2EMain.hs
-
-      - name: Transport validated semantic repairs
-        shell: bash
-        run: |
-          set -euo pipefail
-          git config user.name 'github-actions[bot]'
-          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
-          git add src/Phil/Compiler/SourceCorePolicy.hs src/Phil/Examples/Phase1/SystemsWitnesses.hs
-          if git diff --cached --quiet; then
-            echo 'staged semantic repairs already transported'
-            exit 0
-          fi
-          git commit -m 'int: bind ordinary witnesses through SourceSystems'
-          git push origin HEAD:phase1-int-001-witness-e2e
