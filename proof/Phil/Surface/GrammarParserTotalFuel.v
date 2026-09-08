@@ -18,6 +18,12 @@ From Phil.Surface Require Import
 Import ListNotations.
 Open Scope string_scope.
 
+Opaque phase1_surface_rules
+  phase1_surface_nullable_facts
+  phase1_surface_parser_rank_facts
+  phase1_surface_parser_global_goal_rank_bound
+  phase1_surface_predictive_oracle.
+
 (*
   Concrete finite-fuel completeness for PHIL-SURFACE-GRAMMAR-CORR-001.
 
