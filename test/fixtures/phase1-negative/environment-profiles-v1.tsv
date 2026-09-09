@@ -8,5 +8,9 @@ phase0.unrelated-length	s0	linear	receive	body	bytes:nat:4096	success	-	-	false
 phase0.incompatible-join	s0	linear	select	-	-	-	left:left;right:right	continue_with_common_state:continue-common-state	false
 phase0.failure-reuse	s0	linear	receive	begin	frame:Begin	success	-	-	true
 phase0.common	-	-	none	-	-	-	-	authorize_store:authorize-store;delegate:delegate;new_cancellation_scope:new-cancellation-scope;allocate_linear_buffer:allocate-linear-buffer;inspect:inspect;unchecked_u32_add:unchecked-u32-add	false
+phase0.premature-acceptance	-	-	none	-	-	-	-	store:store	false
+phase0.pending-commit	-	-	none	-	-	-	-	fixture_bytes:fixture-bytes	false
+phase0.pending-drop	-	-	none	-	-	-	-	-	false
 phase0.stale-policy	session	linear	select	-	-	-	proceed:success	-	false
 phase0.opaque-proof	-	-	none	-	-	-	-	-	false
+phase0.label-proof	-	-	none	-	-	-	-	consume_begin_policy_evidence:consume-begin-policy-evidence	false

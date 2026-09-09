@@ -39,7 +39,6 @@ import Phil.Surface.Check
 import Phil.Surface.Parser (parseSurfaceFile)
 import Phil.Surface.Phase0
   ( FixtureExpectation (..)
-  , phase0EnvironmentFor
   , phase0ExpectationFor
   )
 import Phil.Surface.Syntax (SurfaceFile (..))
@@ -95,6 +94,35 @@ data PortableStaticClaim = PortableStaticClaim
   }
   deriving (Eq, Show)
 
+data PortableSessionNode = PortableSessionNode
+  { portableSessionNodeSessionId :: Text
+  , portableSessionNodeId :: Text
+  , portableSessionNodeIsRoot :: Text
+  , portableSessionNodeKind :: Text
+  , portableSessionNodeMessageName :: Text
+  , portableSessionNodeMessageType :: Text
+  , portableSessionNodeTerminalOutcome :: Text
+  , portableSessionNodeNext :: Text
+  }
+  deriving (Eq, Show)
+
+data PortableSessionBranch = PortableSessionBranch
+  { portableSessionBranchSessionId :: Text
+  , portableSessionBranchSourceNode :: Text
+  , portableSessionBranchLabel :: Text
+  , portableSessionBranchPayloadName :: Text
+  , portableSessionBranchPayloadType :: Text
+  , portableSessionBranchNext :: Text
+  }
+  deriving (Eq, Show)
+
+data PortableTypeAlias = PortableTypeAlias
+  { portableAliasProfileId :: Text
+  , portableAliasName :: Text
+  , portableAliasSessionId :: Text
+  }
+  deriving (Eq, Show)
+
 manifestPath :: FilePath
 manifestPath = "test/fixtures/phase1-negative/manifest.tsv"
 
@@ -110,6 +138,15 @@ environmentRequirementsPath = "test/fixtures/phase1-negative/environment-require
 environmentStaticClaimsPath :: FilePath
 environmentStaticClaimsPath = "test/fixtures/phase1-negative/environment-static-claims-v1.tsv"
 
+environmentSessionNodesPath :: FilePath
+environmentSessionNodesPath = "test/fixtures/phase1-negative/environment-session-nodes-v1.tsv"
+
+environmentSessionBranchesPath :: FilePath
+environmentSessionBranchesPath = "test/fixtures/phase1-negative/environment-session-branches-v1.tsv"
+
+environmentTypeAliasesPath :: FilePath
+environmentTypeAliasesPath = "test/fixtures/phase1-negative/environment-type-aliases-v1.tsv"
+
 seedPortableProfiles :: Set Text
 seedPortableProfiles = Set.fromList
   [ "phase0.simple-receive"
@@ -121,8 +158,12 @@ seedPortableProfiles = Set.fromList
   , "phase0.incompatible-join"
   , "phase0.parsed-validation-bypass"
   , "phase0.unrelated-length"
+  , "phase0.premature-acceptance"
+  , "phase0.pending-commit"
+  , "phase0.pending-drop"
   , "phase0.stale-policy"
   , "phase0.opaque-proof"
+  , "phase0.label-proof"
   ]
 
 seedPortableFixtures :: Set Text
@@ -136,12 +177,16 @@ seedPortableFixtures = Set.fromList
   , "P1-NEG-P0-007"
   , "P1-NEG-P0-008"
   , "P1-NEG-P0-009"
+  , "P1-NEG-P0-010"
   , "P1-NEG-P0-011"
   , "P1-NEG-P0-012"
+  , "P1-NEG-P0-013"
   , "P1-NEG-P0-014"
+  , "P1-NEG-P0-015"
   , "P1-NEG-P0-016"
   , "P1-NEG-P0-017"
   , "P1-NEG-P0-018"
+  , "P1-NEG-P0-019"
   , "P1-NEG-P0-020"
   ]
 
@@ -170,8 +215,23 @@ main = do
   staticContext <- case materializePortableStaticContext staticClaims of
     Left detail -> putStrLn ("FAIL: static context -- " <> Text.unpack detail) >> exitFailure
     Right value -> pure value
-  integrityOk <- checkIntegrity staticClaims requirements bindings profiles cases
-  results <- forM cases (replayCase staticContext requirements bindings profiles)
+  sessionNodeText <- TextIO.readFile environmentSessionNodesPath
+  sessionNodes <- case parsePortableSessionNodes sessionNodeText of
+    Left detail -> putStrLn ("FAIL: session nodes -- " <> detail) >> exitFailure
+    Right value -> pure value
+  sessionBranchText <- TextIO.readFile environmentSessionBranchesPath
+  sessionBranches <- case parsePortableSessionBranches sessionBranchText of
+    Left detail -> putStrLn ("FAIL: session branches -- " <> detail) >> exitFailure
+    Right value -> pure value
+  sessions <- case materializePortableSessions sessionNodes sessionBranches of
+    Left detail -> putStrLn ("FAIL: portable sessions -- " <> Text.unpack detail) >> exitFailure
+    Right value -> pure value
+  aliasText <- TextIO.readFile environmentTypeAliasesPath
+  typeAliases <- case parseEnvironmentTypeAliases aliasText of
+    Left detail -> putStrLn ("FAIL: type aliases -- " <> detail) >> exitFailure
+    Right value -> pure value
+  integrityOk <- checkIntegrity staticClaims sessions typeAliases requirements bindings profiles cases
+  results <- forM cases (replayCase staticContext sessions typeAliases requirements bindings profiles)
   unless (integrityOk && and results) exitFailure
   putStrLn ("PASS: INT-004 portable frozen negative manifest (" <> show (length cases) <> " fixtures)")
 
@@ -337,6 +397,105 @@ parsePortableStaticClaimRow row = case Text.splitOn "\t" row of
         }
   _ -> Left ("invalid portable static claim TSV row: " <> Text.unpack row)
 
+parsePortableSessionNodes :: Text -> Either String (Map Text [PortableSessionNode])
+parsePortableSessionNodes input = case Text.lines input of
+  [] -> Left "empty portable session node file"
+  header : rows
+    | header /= Text.intercalate "\t"
+        [ "session_id", "node_id", "is_root", "node_kind", "message_name"
+        , "message_type", "terminal_outcome", "next_node"
+        ] -> Left ("unexpected session node header: " <> Text.unpack header)
+    | otherwise -> do
+        parsed <- traverse parsePortableSessionNodeRow (filter (not . Text.null) rows)
+        let grouped = Map.fromListWith (++)
+              [(portableSessionNodeSessionId node, [node]) | node <- parsed]
+            unique nodes =
+              Set.size (Set.fromList (map portableSessionNodeId nodes)) == length nodes
+        if all unique (Map.elems grouped)
+          then Right grouped
+          else Left "duplicate portable session node id within session"
+
+parsePortableSessionNodeRow :: Text -> Either String PortableSessionNode
+parsePortableSessionNodeRow row = case Text.splitOn "\t" row of
+  [sessionId, nodeId, isRoot, nodeKind, messageName, messageType, terminalOutcome, nextNode]
+    | any Text.null [sessionId, nodeId, isRoot, nodeKind, messageName, messageType, terminalOutcome, nextNode] ->
+        Left ("empty portable session node field: " <> Text.unpack row)
+    | otherwise -> Right PortableSessionNode
+        { portableSessionNodeSessionId = sessionId
+        , portableSessionNodeId = nodeId
+        , portableSessionNodeIsRoot = isRoot
+        , portableSessionNodeKind = nodeKind
+        , portableSessionNodeMessageName = messageName
+        , portableSessionNodeMessageType = messageType
+        , portableSessionNodeTerminalOutcome = terminalOutcome
+        , portableSessionNodeNext = nextNode
+        }
+  _ -> Left ("invalid portable session node TSV row: " <> Text.unpack row)
+
+parsePortableSessionBranches :: Text -> Either String (Map Text [PortableSessionBranch])
+parsePortableSessionBranches input = case Text.lines input of
+  [] -> Left "empty portable session branch file"
+  header : rows
+    | header /= Text.intercalate "\t"
+        [ "session_id", "source_node", "branch_label", "payload_name", "payload_type", "next_node" ] ->
+        Left ("unexpected session branch header: " <> Text.unpack header)
+    | otherwise -> do
+        parsed <- traverse parsePortableSessionBranchRow (filter (not . Text.null) rows)
+        let grouped = foldl
+              (\acc branch -> Map.insertWith (flip (++))
+                (portableSessionBranchSessionId branch) [branch] acc)
+              Map.empty
+              parsed
+            unique branches =
+              let keys = [(portableSessionBranchSourceNode branch, portableSessionBranchLabel branch) | branch <- branches]
+              in Set.size (Set.fromList keys) == length keys
+        if all unique (Map.elems grouped)
+          then Right grouped
+          else Left "duplicate portable session branch label at source node"
+
+parsePortableSessionBranchRow :: Text -> Either String PortableSessionBranch
+parsePortableSessionBranchRow row = case Text.splitOn "\t" row of
+  [sessionId, sourceNode, branchLabel, payloadName, payloadType, nextNode]
+    | any Text.null [sessionId, sourceNode, branchLabel, payloadName, payloadType, nextNode] ->
+        Left ("empty portable session branch field: " <> Text.unpack row)
+    | otherwise -> Right PortableSessionBranch
+        { portableSessionBranchSessionId = sessionId
+        , portableSessionBranchSourceNode = sourceNode
+        , portableSessionBranchLabel = branchLabel
+        , portableSessionBranchPayloadName = payloadName
+        , portableSessionBranchPayloadType = payloadType
+        , portableSessionBranchNext = nextNode
+        }
+  _ -> Left ("invalid portable session branch TSV row: " <> Text.unpack row)
+
+parseEnvironmentTypeAliases :: Text -> Either String (Map Text [PortableTypeAlias])
+parseEnvironmentTypeAliases input = case Text.lines input of
+  [] -> Left "empty portable type alias file"
+  header : rows
+    | header /= Text.intercalate "\t" ["profile_id", "alias_name", "session_id"] ->
+        Left ("unexpected type alias header: " <> Text.unpack header)
+    | otherwise -> do
+        parsed <- traverse parseEnvironmentTypeAliasRow (filter (not . Text.null) rows)
+        let grouped = Map.fromListWith (++)
+              [(portableAliasProfileId alias, [alias]) | alias <- parsed]
+            unique aliases =
+              Set.size (Set.fromList (map portableAliasName aliases)) == length aliases
+        if all unique (Map.elems grouped)
+          then Right grouped
+          else Left "duplicate portable type alias within profile"
+
+parseEnvironmentTypeAliasRow :: Text -> Either String PortableTypeAlias
+parseEnvironmentTypeAliasRow row = case Text.splitOn "\t" row of
+  [profileId, aliasName, sessionId]
+    | any Text.null [profileId, aliasName, sessionId] ->
+        Left ("empty portable type alias field: " <> Text.unpack row)
+    | otherwise -> Right PortableTypeAlias
+        { portableAliasProfileId = profileId
+        , portableAliasName = aliasName
+        , portableAliasSessionId = sessionId
+        }
+  _ -> Left ("invalid portable type alias TSV row: " <> Text.unpack row)
+
 parseEnvironmentRow :: Text -> Either String PortableEnvironmentProfile
 parseEnvironmentRow row = case Text.splitOn "\t" row of
   [profileId, bindingName, bindingMode, sessionKind, messageName, messageType, terminalOutcome, branches, primitiveBindings, legacyReceiveFrameRaw]
@@ -358,12 +517,17 @@ parseEnvironmentRow row = case Text.splitOn "\t" row of
 
 materializePortableProfile
   :: StaticContext
+  -> Map Text Session
+  -> Map Text [PortableTypeAlias]
   -> Map Text [PortableEnvironmentRequirement]
   -> Map Text [PortableEnvironmentBinding]
   -> PortableEnvironmentProfile
   -> Either Text SurfaceEnvironment
-materializePortableProfile staticContext requirements extraBindings profile = do
-  bindings <- materializePortableBindings extraBindings profile
+materializePortableProfile staticContext sessions aliases requirements extraBindings profile = do
+  bindings <- materializePortableBindings sessions extraBindings profile
+  typeAliases <- materializePortableTypeAliases
+    sessions
+    (Map.findWithDefault [] (portableProfileId profile) aliases)
   primitives <- parsePrimitiveBindings (portablePrimitiveBindings profile)
   legacyReceiveFrameRaw <- parsePortableBool
     "legacy_receive_frame_raw"
@@ -373,16 +537,18 @@ materializePortableProfile staticContext requirements extraBindings profile = do
   pure (emptySurfaceEnvironment staticContext)
     { surfaceInitialBindings = bindings
     , surfacePrimitives = primitives
+    , surfaceTypeAliases = typeAliases
     , surfaceLegacyReceiveFrameRaw = legacyReceiveFrameRaw
     , surfaceReceiveExactRequirement = receiveExactRequirement
     , surfaceSelectRequirements = selectRequirements
     }
 
 materializePortableBindings
-  :: Map Text [PortableEnvironmentBinding]
+  :: Map Text Session
+  -> Map Text [PortableEnvironmentBinding]
   -> PortableEnvironmentProfile
   -> Either Text (Map Text InitialBinding)
-materializePortableBindings extraBindings profile = do
+materializePortableBindings sessions extraBindings profile = do
   primary <- case portableSessionKind profile of
     "none" -> do
       requireDash "binding_name" (portableBindingName profile)
@@ -398,7 +564,7 @@ materializePortableBindings extraBindings profile = do
       session <- parsePortableSession profile
       let binding = InitialBinding mode (TyEndpoint session) PlainShape
       Right (Map.singleton bindingName binding)
-  extras <- traverse materializePortableExtraBinding
+  extras <- traverse (materializePortableExtraBinding sessions)
     (Map.findWithDefault [] (portableProfileId profile) extraBindings)
   let extrasMap = Map.fromList extras
   if Map.size extrasMap /= length extras
@@ -408,11 +574,12 @@ materializePortableBindings extraBindings profile = do
       else Right (Map.union primary extrasMap)
 
 materializePortableExtraBinding
-  :: PortableEnvironmentBinding
+  :: Map Text Session
+  -> PortableEnvironmentBinding
   -> Either Text (Text, InitialBinding)
-materializePortableExtraBinding binding = do
+materializePortableExtraBinding sessions binding = do
   mode <- parsePortableMode (portableExtraBindingMode binding)
-  ty <- parsePortableBindingType (portableExtraBindingType binding)
+  ty <- parsePortableBindingType sessions (portableExtraBindingType binding)
   shape <- parsePortableBindingShape
     (portableExtraBindingName binding)
     ty
@@ -422,9 +589,13 @@ materializePortableExtraBinding binding = do
     , InitialBinding mode ty shape
     )
 
-parsePortableBindingType :: Text -> Either Text Ty
-parsePortableBindingType value
+parsePortableBindingType :: Map Text Session -> Text -> Either Text Ty
+parsePortableBindingType sessions value
   | value == "bool" = Right TyBool
+  | Just sessionId <- Text.stripPrefix "endpoint-session:" value
+  , not (Text.null sessionId) = case Map.lookup sessionId sessions of
+      Just session -> Right (TyEndpoint session)
+      Nothing -> Left ("unknown portable endpoint session: " <> sessionId)
   | Just grammar <- Text.stripPrefix "frame:" value
   , not (Text.null grammar) = Right (TyFrame (GrammarId grammar))
   | Just rest <- Text.stripPrefix "validated:" value =
@@ -443,11 +614,141 @@ parsePortableBindingType value
 parsePortableSort :: Text -> Either Text RefSort
 parsePortableSort value
   | value == "finite-seq-u8" = Right (SortFiniteSeq (SortUInt 8))
+  | value == "finite-set-u16" = Right (SortFiniteSet (SortUInt 16))
   | Just name <- Text.stripPrefix "opaque-" value
   , not (Text.null name) = Right (SortOpaque name)
   | Just name <- Text.stripPrefix "stable-id-" value
   , not (Text.null name) = Right (SortStableId name)
   | otherwise = Left ("unsupported portable sort: " <> value)
+
+materializePortableSessions
+  :: Map Text [PortableSessionNode]
+  -> Map Text [PortableSessionBranch]
+  -> Either Text (Map Text Session)
+materializePortableSessions nodesBySession branchesBySession
+  | not (Map.keysSet branchesBySession `Set.isSubsetOf` Map.keysSet nodesBySession) =
+      Left "portable session branch references undeclared session"
+  | otherwise = Map.fromList <$> traverse materializeOne (Map.toList nodesBySession)
+  where
+    materializeOne (sessionId, nodes) = do
+      let nodeMap = Map.fromList [(portableSessionNodeId node, node) | node <- nodes]
+          branchRows = Map.findWithDefault [] sessionId branchesBySession
+      rootFlags <- traverse
+        (\node -> do
+          flag <- parsePortableBool "is_root" (portableSessionNodeIsRoot node)
+          Right (portableSessionNodeId node, flag))
+        nodes
+      rootId <- case [nodeId | (nodeId, True) <- rootFlags] of
+        [nodeId] -> Right nodeId
+        [] -> Left ("portable session has no root: " <> sessionId)
+        _ -> Left ("portable session has multiple roots: " <> sessionId)
+      _ <- traverse (validateBranchReference sessionId nodeMap) branchRows
+      _ <- traverse (validateNodeReference sessionId) nodes
+      (session, visited) <- buildSession sessionId nodeMap branchRows Set.empty rootId
+      if visited == Map.keysSet nodeMap
+        then Right (sessionId, session)
+        else Left ("portable session has unreachable nodes: " <> sessionId)
+
+    validateBranchReference sessionId nodeMap branch = do
+      source <- case Map.lookup (portableSessionBranchSourceNode branch) nodeMap of
+        Nothing -> Left ("portable session branch has unknown source in " <> sessionId)
+        Just node -> Right node
+      if portableSessionNodeKind source `elem` ["offer", "select"]
+        then Right ()
+        else Left ("portable branch source is not offer/select in " <> sessionId)
+      if Map.member (portableSessionBranchNext branch) nodeMap
+        then Right ()
+        else Left ("portable session branch has unknown target in " <> sessionId)
+
+    validateNodeReference sessionId node = case portableSessionNodeKind node of
+      "receive" ->
+        if Map.member (portableSessionNodeNext node) nodeMap
+          then Right ()
+          else Left ("portable receive node has unknown target in " <> sessionId)
+        where nodeMap = Map.fromList
+                [(portableSessionNodeId candidate, candidate)
+                | candidate <- Map.findWithDefault [] sessionId nodesBySession]
+      "offer" -> Right ()
+      "select" -> Right ()
+      "end" -> Right ()
+      other -> Left ("unsupported portable session node kind: " <> other)
+
+    buildSession sessionId nodeMap branchRows visiting nodeId
+      | Set.member nodeId visiting = Left ("portable session cycle is unsupported in " <> sessionId)
+      | otherwise = case Map.lookup nodeId nodeMap of
+          Nothing -> Left ("portable session references missing node in " <> sessionId <> ": " <> nodeId)
+          Just node -> do
+            let ownedBranches = filter
+                  ((== nodeId) . portableSessionBranchSourceNode)
+                  branchRows
+                visitingNext = Set.insert nodeId visiting
+            case portableSessionNodeKind node of
+              "end" -> do
+                requireDash "end message_name" (portableSessionNodeMessageName node)
+                requireDash "end message_type" (portableSessionNodeMessageType node)
+                requireDash "end next_node" (portableSessionNodeNext node)
+                outcome <- requireValue "end terminal_outcome" (portableSessionNodeTerminalOutcome node)
+                if null ownedBranches
+                  then Right (End (Outcome outcome), Set.singleton nodeId)
+                  else Left ("end node owns portable branches in " <> sessionId)
+              "receive" -> do
+                if null ownedBranches
+                  then Right ()
+                  else Left ("receive node owns portable branches in " <> sessionId)
+                messageName <- requireValue "receive message_name" (portableSessionNodeMessageName node)
+                messageType <- parsePortableType (portableSessionNodeMessageType node)
+                requireDash "receive terminal_outcome" (portableSessionNodeTerminalOutcome node)
+                nextNode <- requireValue "receive next_node" (portableSessionNodeNext node)
+                (continuation, visited) <- buildSession sessionId nodeMap branchRows visitingNext nextNode
+                Right
+                  ( Receive (Name messageName) messageType continuation
+                  , Set.insert nodeId visited
+                  )
+              kind | kind `elem` ["offer", "select"] -> do
+                requireDash (kind <> " message_name") (portableSessionNodeMessageName node)
+                requireDash (kind <> " message_type") (portableSessionNodeMessageType node)
+                requireDash (kind <> " terminal_outcome") (portableSessionNodeTerminalOutcome node)
+                requireDash (kind <> " next_node") (portableSessionNodeNext node)
+                if null ownedBranches
+                  then Left ("portable " <> kind <> " node has no branches in " <> sessionId)
+                  else do
+                    built <- traverse
+                      (materializeBranch sessionId nodeMap branchRows visitingNext)
+                      ownedBranches
+                    let branches = map fst built
+                        visited = Set.unions (Set.singleton nodeId : map snd built)
+                        constructor = if kind == "offer" then Offer else Select
+                    Right (constructor branches, visited)
+              other -> Left ("unsupported portable session node kind: " <> other)
+
+    materializeBranch sessionId nodeMap branchRows visiting branch = do
+      label <- requireValue "session branch label" (portableSessionBranchLabel branch)
+      payload <- case
+          (portableSessionBranchPayloadName branch, portableSessionBranchPayloadType branch) of
+        ("-", "-") -> Right Nothing
+        (name, tyText)
+          | name /= "-" && tyText /= "-" -> do
+              ty <- parsePortableType tyText
+              Right (Just (Name name, ty))
+        _ -> Left ("portable session branch payload name/type must both be populated or '-' in " <> sessionId)
+      nextNode <- requireValue "session branch next_node" (portableSessionBranchNext branch)
+      (continuation, visited) <- buildSession sessionId nodeMap branchRows visiting nextNode
+      Right (Branch label payload continuation, visited)
+
+materializePortableTypeAliases
+  :: Map Text Session
+  -> [PortableTypeAlias]
+  -> Either Text (Map Text Ty)
+materializePortableTypeAliases sessions aliases = do
+  pairs <- traverse materialize aliases
+  let result = Map.fromList pairs
+  if Map.size result == length pairs
+    then Right result
+    else Left "duplicate materialized portable type alias"
+  where
+    materialize alias = case Map.lookup (portableAliasSessionId alias) sessions of
+      Nothing -> Left ("portable type alias references unknown session: " <> portableAliasSessionId alias)
+      Just session -> Right (portableAliasName alias, TyEndpoint session)
 
 materializePortableStaticContext :: [PortableStaticClaim] -> Either Text StaticContext
 materializePortableStaticContext claims = foldM addClaim emptyStaticContext claims
@@ -552,6 +853,20 @@ parsePortableType value
                   (SortUInt 64))))
           _ -> Left ("invalid portable byte field path: " <> fieldSpec)
         _ -> Left ("invalid portable byte-index type: " <> value)
+  | Just refined <- Text.stripPrefix "refined-member-field:" value =
+      case Text.splitOn ":" refined of
+        ["u16", binder, pathSpec, sortEncoding] -> case Text.splitOn "." pathSpec of
+          [recordName, fieldName]
+            | all (not . Text.null) [binder, recordName, fieldName, sortEncoding] -> do
+                sortValue <- parsePortableSort sortEncoding
+                Right (TyRefined
+                  (Name binder)
+                  (TyUInt 16)
+                  (Member
+                    (RefVar (Name binder))
+                    (RefField (RefVar (Name recordName)) fieldName sortValue)))
+          _ -> Left ("invalid portable refined field path: " <> refined)
+        _ -> Left ("invalid portable refined member type: " <> value)
   | otherwise = Left ("unsupported portable message type: " <> value)
 
 parsePortableBranches :: Text -> Either Text [Branch]
@@ -591,6 +906,9 @@ parsePrimitiveBindings value
           "inspect" -> Right (name, PrimitiveInspect)
           "unchecked-u32-add" -> Right (name, PrimitiveUncheckedU32Add)
           "continue-common-state" -> Right (name, PrimitiveContinueCommonState)
+          "store" -> Right (name, PrimitiveStore)
+          "fixture-bytes" -> Right (name, PrimitiveFixtureBytes)
+          "consume-begin-policy-evidence" -> Right (name, PrimitiveConsumeBeginPolicyEvidence)
           _ -> Left ("unsupported portable primitive semantic: " <> semantic)
       _ -> Left ("unsupported portable primitive binding: " <> entry)
 
@@ -641,7 +959,14 @@ parsePortableProposition value = case Text.stripPrefix "atom:" value of
   where
     parseArgument argument = case Text.stripPrefix "var:" argument of
       Just name | not (Text.null name) -> Right (RefVar (Name name))
-      _ -> Left ("unsupported portable proposition argument: " <> argument)
+      _ -> case Text.stripPrefix "opaque:" argument of
+        Just rest -> case Text.splitOn ":" rest of
+          [sortEncoding, label]
+            | not (Text.null sortEncoding) && not (Text.null label) -> do
+                sortValue <- parsePortableSort sortEncoding
+                Right (RefOpaque sortValue label)
+          _ -> Left ("invalid portable opaque proposition argument: " <> argument)
+        Nothing -> Left ("unsupported portable proposition argument: " <> argument)
 
 requireValue :: Text -> Text -> Either Text Text
 requireValue field value
@@ -655,41 +980,29 @@ requireDash field value
 
 resolveProfileEnvironment
   :: StaticContext
+  -> Map Text Session
+  -> Map Text [PortableTypeAlias]
   -> Map Text [PortableEnvironmentRequirement]
   -> Map Text [PortableEnvironmentBinding]
   -> Map Text PortableEnvironmentProfile
   -> Text
   -> Either Text SurfaceEnvironment
-resolveProfileEnvironment staticContext requirements bindings profiles profile =
+resolveProfileEnvironment staticContext sessions aliases requirements bindings profiles profile =
   case Map.lookup profile profiles of
-    Just portable -> materializePortableProfile staticContext requirements bindings portable
-    Nothing
-      | Set.member profile seedPortableProfiles ->
-          Left ("seed profile missing portable environment material: " <> profile)
-      | otherwise -> legacyProfileEnvironment profile
-
--- Remaining frozen profiles still use a compatibility adapter while their
--- environment material is migrated in later INT-004 slices. Seed profiles are
--- deliberately absent here so they cannot silently fall back to filenames.
-legacyProfileEnvironment :: Text -> Either Text SurfaceEnvironment
-legacyProfileEnvironment profile =
-  case profile of
-    "phase0.premature-acceptance" -> legacy "10-accept-before-digest-check.phil"
-    "phase0.pending-commit" -> legacy "13-commit-unrelated-parsed.phil"
-    "phase0.pending-drop" -> legacy "15-drop-pending-receive.phil"
-    "phase0.label-proof" -> legacy "19-label-does-not-transfer-proof.phil"
-    _ -> Left ("unknown Phase-0 environment profile: " <> profile)
-  where
-    legacy name = phase0EnvironmentFor ("examples/rejected/" <> Text.unpack name)
+    Just portable -> materializePortableProfile
+      staticContext sessions aliases requirements bindings portable
+    Nothing -> Left ("portable environment profile missing: " <> profile)
 
 checkIntegrity
   :: [PortableStaticClaim]
+  -> Map Text Session
+  -> Map Text [PortableTypeAlias]
   -> Map Text [PortableEnvironmentRequirement]
   -> Map Text [PortableEnvironmentBinding]
   -> Map Text PortableEnvironmentProfile
   -> [NegativeCase]
   -> IO Bool
-checkIntegrity staticClaims requirements bindings profiles cases = do
+checkIntegrity staticClaims sessions aliases requirements bindings profiles cases = do
   let ids = map negativeCaseId cases
       paths = map negativeCasePath cases
       uniqueIds = Set.size (Set.fromList ids) == length ids
@@ -701,21 +1014,36 @@ checkIntegrity staticClaims requirements bindings profiles cases = do
       seedProfileDomainExact = Map.keysSet profiles == seedPortableProfiles
       seedFixturesPortable = all
         (\negativeCase ->
-          not (Set.member (negativeCaseId negativeCase) seedPortableFixtures)
-            || Map.member (negativeCaseEnvironmentProfile negativeCase) profiles)
+          Set.member (negativeCaseId negativeCase) seedPortableFixtures
+            && Map.member (negativeCaseEnvironmentProfile negativeCase) profiles)
         cases
       bindingProfilesDeclared = Map.keysSet bindings `Set.isSubsetOf` Map.keysSet profiles
       requirementProfilesDeclared = Map.keysSet requirements `Set.isSubsetOf` Map.keysSet profiles
+      aliasProfilesDeclared = Map.keysSet aliases `Set.isSubsetOf` Map.keysSet profiles
       multibindingDomainExact = Map.keysSet bindings == Set.fromList
         [ "phase0.incompatible-join"
         , "phase0.parsed-validation-bypass"
         , "phase0.unrelated-length"
+        , "phase0.premature-acceptance"
+        , "phase0.pending-commit"
+        , "phase0.pending-drop"
         , "phase0.stale-policy"
         , "phase0.opaque-proof"
+        , "phase0.label-proof"
         ]
       requirementDomainExact = Map.keysSet requirements == Set.fromList
         [ "phase0.parsed-validation-bypass"
+        , "phase0.premature-acceptance"
         , "phase0.stale-policy"
+        ]
+      sessionDomainExact = Map.keysSet sessions == Set.fromList
+        [ "phase0.premature-acceptance"
+        , "phase0.label-proof"
+        , "phase0.server-upload"
+        ]
+      aliasDomainExact = Map.keysSet aliases == Set.fromList
+        [ "phase0.pending-commit"
+        , "phase0.pending-drop"
         ]
       staticClaimDomainExact = map portableStaticClaimName staticClaims == ["DigestMatches"]
       staticContextResult = materializePortableStaticContext staticClaims
@@ -723,7 +1051,7 @@ checkIntegrity staticClaims requirements bindings profiles cases = do
         Left _ -> False
         Right staticContext -> all
           (either (const False) (const True)
-            . resolveProfileEnvironment staticContext requirements bindings profiles
+            . resolveProfileEnvironment staticContext sessions aliases requirements bindings profiles
             . negativeCaseEnvironmentProfile)
           cases
   filesPresent <- and <$> mapM doesFileExist paths
@@ -733,14 +1061,17 @@ checkIntegrity staticClaims requirements bindings profiles cases = do
   report "every fixture names surface-check as competent layer" layersExact
   report "every fixture names its governing INT-004 matrix authority" authoritiesPresent
   report "every fixture names an explicit environment profile" profilesNamed
-  report "portable environment seed has exact profile domain" seedProfileDomainExact
+  report "portable environment set has exact frozen profile domain" seedProfileDomainExact
   report "portable extra bindings reference declared profiles" bindingProfilesDeclared
   report "portable requirements reference declared profiles" requirementProfilesDeclared
-  report "portable extra-binding domain is exact for this slice" multibindingDomainExact
-  report "portable requirement domain is exact for this slice" requirementDomainExact
+  report "portable aliases reference declared profiles" aliasProfilesDeclared
+  report "portable extra-binding domain is exact for frozen corpus" multibindingDomainExact
+  report "portable requirement domain is exact for frozen corpus" requirementDomainExact
+  report "portable nested-session domain is exact for frozen corpus" sessionDomainExact
+  report "portable type-alias domain is exact for frozen corpus" aliasDomainExact
   report "portable static claim domain is exact for frozen Phase 0" staticClaimDomainExact
-  report "fixtures 001-009, 011, 012, 014, 016-018, and 020 use portable environment material" seedFixturesPortable
-  report "every named environment profile resolves" profilesResolve
+  report "all 20 frozen fixtures use portable environment material" seedFixturesPortable
+  report "every named environment profile resolves without compatibility fallback" profilesResolve
   report "every portable fixture path exists" filesPresent
   pure (and
     [ exactFrozenCount
@@ -752,8 +1083,11 @@ checkIntegrity staticClaims requirements bindings profiles cases = do
     , seedProfileDomainExact
     , bindingProfilesDeclared
     , requirementProfilesDeclared
+    , aliasProfilesDeclared
     , multibindingDomainExact
     , requirementDomainExact
+    , sessionDomainExact
+    , aliasDomainExact
     , staticClaimDomainExact
     , seedFixturesPortable
     , profilesResolve
@@ -762,12 +1096,14 @@ checkIntegrity staticClaims requirements bindings profiles cases = do
 
 replayCase
   :: StaticContext
+  -> Map Text Session
+  -> Map Text [PortableTypeAlias]
   -> Map Text [PortableEnvironmentRequirement]
   -> Map Text [PortableEnvironmentBinding]
   -> Map Text PortableEnvironmentProfile
   -> NegativeCase
   -> IO Bool
-replayCase staticContext requirements bindings profiles negativeCase = do
+replayCase staticContext sessions aliases requirements bindings profiles negativeCase = do
   source <- TextIO.readFile (negativeCasePath negativeCase)
   let path = negativeCasePath negativeCase
       expected = negativeCaseExpectedClass negativeCase
@@ -781,7 +1117,9 @@ replayCase staticContext requirements bindings profiles negativeCase = do
     _ -> putStrLn
       ("FAIL: " <> Text.unpack (negativeCaseId negativeCase)
         <> " -- frozen legacy fixture missing during migration") >> pure False
-  case resolveProfileEnvironment staticContext requirements bindings profiles (negativeCaseEnvironmentProfile negativeCase) of
+  case resolveProfileEnvironment
+      staticContext sessions aliases requirements bindings profiles
+      (negativeCaseEnvironmentProfile negativeCase) of
     Left detail -> failCase ("environment profile failed: " <> Text.unpack detail)
     Right environment -> case parseSurfaceFile (Text.pack path) source of
       Left diagnostic -> failCase

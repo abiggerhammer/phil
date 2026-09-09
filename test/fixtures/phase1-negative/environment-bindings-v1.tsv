@@ -3,7 +3,14 @@ phase0.parsed-validation-bypass	raw	unrestricted	opaque-sorted:RawBytes:finite-s
 phase0.unrelated-length	begin	unrestricted	frame:Begin	record:Begin
 phase0.unrelated-length	beginPolicy	unrestricted	validated:BeginPolicy:policyContext:begin	plain
 phase0.incompatible-join	condition	unrestricted	bool	plain
+phase0.premature-acceptance	begin	unrestricted	frame:Begin	record:Begin
+phase0.premature-acceptance	beginPolicy	unrestricted	validated:BeginPolicy:policyContext:begin	plain
+phase0.premature-acceptance	s0	linear	endpoint-session:phase0.premature-acceptance	plain
+phase0.pending-commit	s0	linear	endpoint-session:phase0.server-upload	plain
+phase0.pending-drop	s0	linear	endpoint-session:phase0.server-upload	plain
 phase0.stale-policy	begin	unrestricted	frame:Begin	record:Begin
 phase0.stale-policy	oldPolicy	unrestricted	validated:BeginPolicy:kappa1:begin	plain
 phase0.opaque-proof	begin	unrestricted	frame:Begin	record:Begin
 phase0.opaque-proof	payload	linear	opaque-sorted:OwnedPayload:opaque-OwnedPayload	owned-bytes:nat:0
+phase0.label-proof	begin	unrestricted	frame:Begin	record:Begin
+phase0.label-proof	session	linear	endpoint-session:phase0.label-proof	plain
