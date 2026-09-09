@@ -174,5 +174,7 @@ Proof.
         eapply oracle_parse_fuel_nonterminal_success;
         [exact Hlookup | exact Hchild_parse]).
     exact Hparent_parse.
-Qed.
+Defined.
+
+Opaque phase1_surface_nonterminal_budget_complete_raw.
 ''')
