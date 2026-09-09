@@ -14,7 +14,6 @@ From Phil.Surface Require Import
   GrammarParserRank
   GrammarParserRecognizer
   GrammarParserTotalFuelBase
-  GrammarParserTotalFuelNonterminalSupport
   GrammarParserTotalFuelStatic.
 
 Import ListNotations.
@@ -25,6 +24,22 @@ Opaque phase1_surface_rules
   phase1_surface_parser_rank_facts
   phase1_surface_parser_global_goal_rank_bound
   phase1_surface_predictive_oracle.
+
+Definition option_nat_value (value : option nat) : nat :=
+  match value with
+  | Some result => result
+  | None => 0
+  end.
+
+Lemma option_nat_value_some_of_exists :
+  forall value : option nat,
+    (exists result, value = Some result) ->
+    value = Some (option_nat_value value).
+Proof.
+  intros value [result Hvalue].
+  rewrite Hvalue.
+  reflexivity.
+Qed.
 
 Definition phase1_surface_parser_budget_complete
   (goal : DerivationGoal)
@@ -76,46 +91,45 @@ Proof.
     eapply phase1_surface_lookup_rule_choice_safe.
     exact Hlookup.
   }
-  pose proof
-    (phase1_surface_lookup_rule_rank_fuel_sufficient
-      name body Hlookup) as Hchild_defined.
-  unfold parser_rank_rule_fuel_sufficient in Hchild_defined.
-  destruct
-    (parser_expression_rank_fuel
-      expression_fuel phase1_surface_parser_rank_facts body)
-    as [child_rank |] eqn:Hchild_rank_raw.
-  - assert (Hdecrease : child_rank < rank).
+  set (child_goal :=
+    GoalExpression (descend path (AtNonterminal name)) body).
+  set (child_rank :=
+    option_nat_value
+      (phase1_surface_parser_goal_rank_fuel expression_fuel child_goal)).
+  assert (Hchild_rank :
+    phase1_surface_parser_goal_rank_fuel expression_fuel child_goal =
+    Some child_rank).
+  {
+    subst child_rank.
+    eapply option_nat_value_some_of_exists.
+    eapply phase1_surface_parser_goal_rank_exists.
+    subst child_goal.
+    exact Hchild_global.
+  }
+  pose proof Hchild_rank as Hchild_rank_raw.
+  subst child_goal.
+  unfold phase1_surface_parser_goal_rank_fuel in Hchild_rank_raw.
+  assert (Hdecrease : child_rank < rank).
+  {
+    eapply phase1_surface_nonterminal_child_rank_decreases_fuel; eauto.
+  }
+  destruct budget as [| remaining].
+  - unfold phase1_surface_parser_local_measure in Hbudget.
+    lia.
+  - assert (Hchild_fit :
+      phase1_surface_parser_local_measure input child_rank <= remaining).
     {
-      eapply phase1_surface_nonterminal_child_rank_decreases_fuel; eauto.
-    }
-    destruct budget as [| remaining].
-    + unfold phase1_surface_parser_local_measure in Hbudget.
+      unfold phase1_surface_parser_local_measure in *.
       lia.
-    + assert (Hchild_rank :
-        phase1_surface_parser_goal_rank_fuel
-          expression_fuel
-          (GoalExpression (descend path (AtNonterminal name)) body) =
-        Some child_rank).
-      {
-        eapply phase1_surface_expression_goal_rank_from_raw.
-        exact Hchild_rank_raw.
-      }
-      assert (Hchild_fit :
-        phase1_surface_parser_local_measure input child_rank <= remaining).
-      {
-        unfold phase1_surface_parser_local_measure in *.
-        lia.
-      }
-      pose proof
-        (IHbody
-          expression_fuel child_rank remaining
-          Hchild_rank Hchild_global Hchild_safe
-          (Nat.le_refl _) Hchild_fit) as Hchild_parse.
-      simpl.
-      rewrite Hlookup.
-      rewrite Hchild_parse.
-      reflexivity.
-  - simpl in Hchild_defined.
-    discriminate.
+    }
+    pose proof
+      (IHbody
+        expression_fuel child_rank remaining
+        Hchild_rank Hchild_global Hchild_safe
+        (Nat.le_refl _) Hchild_fit) as Hchild_parse.
+    simpl.
+    rewrite Hlookup.
+    rewrite Hchild_parse.
+    reflexivity.
 Qed.
 ''')
