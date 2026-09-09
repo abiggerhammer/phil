@@ -12,7 +12,7 @@ probes = r'''
    nonterminal child/parent budget step on that side of the boundary. *)
 
 Lemma phase1_surface_lookup_rule_raw_rank_exists_probe :
-  forall path name body,
+  forall (path : SyntaxPath) name body,
     lookupRule name phase1_surface_rules = Some body ->
     exists rank,
       parser_expression_rank_fuel
