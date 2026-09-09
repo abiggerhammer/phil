@@ -1,6 +1,6 @@
 fixture_id	use_kind	parameter_name
-P1-NEG-GEN-002-001	discard	T
-P1-NEG-GEN-003-001	duplicate	T
-P1-NEG-GEN-003-002	duplicate	T
+P1-NEG-GEN-002-001	duplicate	T
+P1-NEG-GEN-002-002	duplicate	T
+P1-NEG-GEN-003-001	discard	T
 P1-NEG-GEN-006-001	duplicate	T
 P1-NEG-GEN-006-002	discard	T
