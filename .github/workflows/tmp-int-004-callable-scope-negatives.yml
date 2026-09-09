@@ -1,0 +1,123 @@
+name: Temporary INT-004 Callable Scope Negatives
+
+on:
+  push:
+    branches: [phase1-int-004-callable-scope-negatives]
+    paths:
+      - 'test/fixtures/phase1-negative/callable-scope-v1/**'
+      - 'test/Phase1INT004PortableCallableScopeNegativeMain.hs'
+      - '.github/workflows/tmp-int-004-callable-scope-negatives.yml'
+
+jobs:
+  portable-callable-scope-negatives:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: haskell-actions/setup@v2
+        with:
+          ghc-version: '9.6.7'
+          cabal-version: 'latest'
+
+      - name: Build complete Haskell substrate
+        run: cabal build all --enable-tests
+
+      - name: Strict typecheck portable callable scope replay
+        run: |
+          cabal exec -- ghc -isrc -Wall -Werror -fno-code \
+            test/Phase1INT004PortableCallableScopeNegativeMain.hs
+
+      - name: Replay portable callable scope negatives
+        run: |
+          cabal exec -- runghc -isrc -Wall -Werror \
+            test/Phase1INT004PortableCallableScopeNegativeMain.hs
+
+      - name: Guard portable data against Haskell-private authority
+        run: |
+          if grep -R -n -E 'EscapingClosureCapturesScopedLoan|ClosureOutsideScopedLoanValidity|RestrictedRecursiveClosureCycle|UnknownRecursiveClosureReference|DuplicateRecursiveClosureNode|Phil\.Core|\.hs' \
+              test/fixtures/phase1-negative/callable-scope-v1/*.tsv; then
+            echo 'portable callable-scope TSV contains implementation-private identity' >&2
+            exit 1
+          fi
+
+      - name: Reject unknown closure extent vocabulary
+        run: |
+          cp test/fixtures/phase1-negative/callable-scope-v1/scope-captures-v1.tsv /tmp/scope.tsv
+          sed -i '0,/escaping/s//not-an-extent/' test/fixtures/phase1-negative/callable-scope-v1/scope-captures-v1.tsv
+          if cabal exec -- runghc -isrc -Wall -Werror test/Phase1INT004PortableCallableScopeNegativeMain.hs >/tmp/int004-call-scope.log 2>&1; then
+            cat /tmp/int004-call-scope.log
+            echo 'unknown closure extent unexpectedly accepted' >&2
+            exit 1
+          fi
+          mv /tmp/scope.tsv test/fixtures/phase1-negative/callable-scope-v1/scope-captures-v1.tsv
+
+      - name: Reject missing scope fixture row
+        run: |
+          cp test/fixtures/phase1-negative/callable-scope-v1/scope-captures-v1.tsv /tmp/scope.tsv
+          sed -i '/P1-NEG-CALL-010-002/d' test/fixtures/phase1-negative/callable-scope-v1/scope-captures-v1.tsv
+          if cabal exec -- runghc -isrc -Wall -Werror test/Phase1INT004PortableCallableScopeNegativeMain.hs >/tmp/int004-call-scope.log 2>&1; then
+            cat /tmp/int004-call-scope.log
+            echo 'missing scope row unexpectedly accepted' >&2
+            exit 1
+          fi
+          mv /tmp/scope.tsv test/fixtures/phase1-negative/callable-scope-v1/scope-captures-v1.tsv
+
+      - name: Reject earlier unrelated recursive-graph failure
+        run: |
+          cp test/fixtures/phase1-negative/callable-scope-v1/recursion-nodes-v1.tsv /tmp/nodes.tsv
+          printf 'P1-NEG-CALL-014-001\tclosure.recursive.a\t-\n' >> test/fixtures/phase1-negative/callable-scope-v1/recursion-nodes-v1.tsv
+          if cabal exec -- runghc -isrc -Wall -Werror test/Phase1INT004PortableCallableScopeNegativeMain.hs >/tmp/int004-call-scope.log 2>&1; then
+            cat /tmp/int004-call-scope.log
+            echo 'earlier duplicate-node failure unexpectedly counted as restricted-cycle rejection' >&2
+            exit 1
+          fi
+          mv /tmp/nodes.tsv test/fixtures/phase1-negative/callable-scope-v1/recursion-nodes-v1.tsv
+
+      - name: Reject malformed restricted-capture list
+        run: |
+          cp test/fixtures/phase1-negative/callable-scope-v1/recursion-nodes-v1.tsv /tmp/nodes.tsv
+          sed -i '0,/owner.linear.recursive.001/s//owner.linear.recursive.001,/' test/fixtures/phase1-negative/callable-scope-v1/recursion-nodes-v1.tsv
+          if cabal exec -- runghc -isrc -Wall -Werror test/Phase1INT004PortableCallableScopeNegativeMain.hs >/tmp/int004-call-scope.log 2>&1; then
+            cat /tmp/int004-call-scope.log
+            echo 'malformed restricted-capture list unexpectedly accepted' >&2
+            exit 1
+          fi
+          mv /tmp/nodes.tsv test/fixtures/phase1-negative/callable-scope-v1/recursion-nodes-v1.tsv
+
+      - name: Reject unknown authority
+        run: |
+          cp test/fixtures/phase1-negative/callable-scope-v1/manifest.tsv /tmp/manifest.tsv
+          sed -i '0,/matrix:CALL-010/s//matrix:NOT-A-CASE/' test/fixtures/phase1-negative/callable-scope-v1/manifest.tsv
+          if cabal exec -- runghc -isrc -Wall -Werror test/Phase1INT004PortableCallableScopeNegativeMain.hs >/tmp/int004-call-scope.log 2>&1; then
+            cat /tmp/int004-call-scope.log
+            echo 'unknown authority unexpectedly accepted' >&2
+            exit 1
+          fi
+          mv /tmp/manifest.tsv test/fixtures/phase1-negative/callable-scope-v1/manifest.tsv
+
+      - name: Reject missing Certified proof artifact
+        run: |
+          cp test/fixtures/phase1-negative/callable-scope-v1/authority-registry-v1.tsv /tmp/authority.tsv
+          sed -i '0,/proof\/Phil\/Core\/CallableScope.v/s//proof\/Phil\/Core\/DefinitelyMissing.v/' \
+            test/fixtures/phase1-negative/callable-scope-v1/authority-registry-v1.tsv
+          if cabal exec -- runghc -isrc -Wall -Werror test/Phase1INT004PortableCallableScopeNegativeMain.hs >/tmp/int004-call-scope.log 2>&1; then
+            cat /tmp/int004-call-scope.log
+            echo 'missing Certified proof unexpectedly accepted' >&2
+            exit 1
+          fi
+          mv /tmp/authority.tsv test/fixtures/phase1-negative/callable-scope-v1/authority-registry-v1.tsv
+
+      - name: Replay restored portable callable scope corpus
+        run: cabal exec -- runghc -isrc -Wall -Werror test/Phase1INT004PortableCallableScopeNegativeMain.hs
+
+      - name: Replay legacy callable scope corpus
+        run: cabal exec -- runghc -isrc -Wall -Werror test/Phase1CallableScopeMain.hs
+
+      - name: Replay prior portable Phase-1 corpora
+        run: |
+          cabal exec -- runghc -isrc -Wall -Werror test/Phase1INT004PortableGenericNegativeMain.hs
+          cabal exec -- runghc -isrc -Wall -Werror test/Phase1INT004PortableGenericInstantiationNegativeMain.hs
+          cabal exec -- runghc -isrc -Wall -Werror test/Phase1INT004PortableCallableLifecycleNegativeMain.hs
+          cabal exec -- runghc -isrc -Wall -Werror test/Phase1INT004PortableCallableStructuralModeNegativeMain.hs
+
+      - name: Replay frozen INT-004 corpus
+        run: cabal exec -- runghc -isrc -Wall -Werror test/Phase1INT004PortableNegativeManifestMain.hs
