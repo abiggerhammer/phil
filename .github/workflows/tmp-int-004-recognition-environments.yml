@@ -1,0 +1,146 @@
+name: Temporary INT-004 Recognition Environments
+
+on:
+  push:
+    branches: [phase1-int-004-recognition-environments]
+    paths:
+      - 'test/Phase1INT004PortableNegativeManifestMain.hs'
+      - 'test/fixtures/phase1-negative/**'
+      - 'scripts/staging/int004_recognition_environments.py'
+      - '.github/workflows/tmp-int-004-recognition-environments.yml'
+
+permissions:
+  contents: write
+
+jobs:
+  recognition-environments:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: haskell-actions/setup@v2
+        with:
+          ghc-version: '9.6.7'
+          cabal-version: 'latest'
+
+      - name: Apply portable recognition environment decoder
+        run: python3 scripts/staging/int004_recognition_environments.py
+
+      - name: Build complete Haskell substrate
+        run: cabal build all --enable-tests
+
+      - name: Strict typecheck INT-004 recognition environment replay
+        run: |
+          cabal exec -- ghc -isrc -Wall -Werror -fno-code \
+            test/Phase1INT004PortableNegativeManifestMain.hs
+
+      - name: Replay all frozen negatives with recognition profiles portable
+        run: |
+          cabal exec -- runghc -isrc -Wall -Werror \
+            test/Phase1INT004PortableNegativeManifestMain.hs
+
+      - name: Guard recognition profile portability and fallback exclusion
+        run: |
+          python3 - <<'PY'
+          from pathlib import Path
+
+          profiles_path = Path('test/fixtures/phase1-negative/environment-profiles-v1.tsv')
+          text = profiles_path.read_text()
+          forbidden = ['.phil', 'examples/rejected', 'phase0EnvironmentFor', 'Phil.Surface', 'TyEndpoint']
+          for token in forbidden:
+              assert token not in text, f'portable environment data contains implementation/path token: {token}'
+
+          rows = [line.split('\t') for line in text.splitlines() if line]
+          assert rows[0] == [
+              'profile_id', 'binding_name', 'binding_mode', 'session_kind',
+              'message_name', 'message_type', 'terminal_outcome', 'branches',
+              'primitive_bindings', 'legacy_receive_frame_raw'
+          ]
+          body = rows[1:]
+          portable_ids = {row[0] for row in body}
+          assert portable_ids == {
+              'phase0.simple-receive',
+              'phase0.wrong-order',
+              'phase0.nonexhaustive-offer',
+              'phase0.legacy-raw',
+              'phase0.failure-reuse',
+          }
+          assert len(body) == 5
+          assert all(len(row) == 10 for row in body)
+          by_profile = {row[0]: row for row in body}
+          assert by_profile['phase0.legacy-raw'][5] == 'frame:Begin'
+          assert by_profile['phase0.legacy-raw'][9] == 'true'
+          assert by_profile['phase0.failure-reuse'][5] == 'frame:Begin'
+          assert by_profile['phase0.failure-reuse'][9] == 'true'
+
+          manifest = [line.split('\t') for line in Path('test/fixtures/phase1-negative/manifest.tsv').read_text().splitlines() if line]
+          by_id = {row[0]: row for row in manifest[1:]}
+          portable_fixture_ids = [
+              'P1-NEG-P0-001', 'P1-NEG-P0-002', 'P1-NEG-P0-003',
+              'P1-NEG-P0-004', 'P1-NEG-P0-005', 'P1-NEG-P0-009',
+          ]
+          assert all(by_id[fixture_id][4] in portable_ids for fixture_id in portable_fixture_ids)
+
+          replay = Path('test/Phase1INT004PortableNegativeManifestMain.hs').read_text()
+          legacy_section = replay.split('legacyProfileEnvironment ::', 1)[1].split('checkIntegrity ::', 1)[0]
+          for profile in portable_ids:
+              assert profile not in legacy_section, f'portable profile can still fall back through legacy adapter: {profile}'
+          assert 'TyFrame (GrammarId grammar)' in replay
+          assert 'surfaceLegacyReceiveFrameRaw = legacyReceiveFrameRaw' in replay
+          PY
+
+      - name: Reject duplicate offer labels and primitive bindings
+        run: |
+          set -euo pipefail
+          cp test/fixtures/phase1-negative/environment-profiles-v1.tsv /tmp/environment-profiles-v1.tsv
+
+          python3 - <<'PY'
+          from pathlib import Path
+          p = Path('test/fixtures/phase1-negative/environment-profiles-v1.tsv')
+          text = p.read_text().replace(
+              'payload:success;cancel:cancelled\thandle_payload:handle-payload',
+              'payload:success;payload:cancelled\thandle_payload:handle-payload',
+              1,
+          )
+          p.write_text(text)
+          PY
+          if cabal exec -- runghc -isrc -Wall -Werror test/Phase1INT004PortableNegativeManifestMain.hs; then
+            echo 'duplicate offer label was accepted' >&2
+            exit 1
+          fi
+          cp /tmp/environment-profiles-v1.tsv test/fixtures/phase1-negative/environment-profiles-v1.tsv
+
+          python3 - <<'PY'
+          from pathlib import Path
+          p = Path('test/fixtures/phase1-negative/environment-profiles-v1.tsv')
+          text = p.read_text().replace(
+              'handle_payload:handle-payload\tfalse',
+              'handle_payload:handle-payload;handle_payload:handle-payload\tfalse',
+              1,
+          )
+          p.write_text(text)
+          PY
+          if cabal exec -- runghc -isrc -Wall -Werror test/Phase1INT004PortableNegativeManifestMain.hs; then
+            echo 'duplicate primitive binding was accepted' >&2
+            exit 1
+          fi
+          cp /tmp/environment-profiles-v1.tsv test/fixtures/phase1-negative/environment-profiles-v1.tsv
+
+      - name: Replay restored portable corpus
+        run: |
+          cabal exec -- runghc -isrc -Wall -Werror \
+            test/Phase1INT004PortableNegativeManifestMain.hs
+
+      - name: Replay legacy surface conformance harness
+        run: cabal test phil-surface-conformance-tests
+
+      - name: Transport validated decoder semantics
+        run: |
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git add test/Phase1INT004PortableNegativeManifestMain.hs
+          if git diff --cached --quiet; then
+            echo 'Committed semantic head already contains recognition decoder.'
+          else
+            git commit -m 'int: materialize recognition environments portably'
+            git push origin HEAD:phase1-int-004-recognition-environments
+          fi
