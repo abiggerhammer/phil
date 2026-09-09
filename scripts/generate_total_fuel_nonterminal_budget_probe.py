@@ -14,6 +14,7 @@ From Phil.Surface Require Import
   GrammarParserRank
   GrammarParserRecognizer
   GrammarParserTotalFuelBase
+  GrammarParserTotalFuelNonterminalSupport
   GrammarParserTotalFuelStatic.
 
 Import ListNotations.
