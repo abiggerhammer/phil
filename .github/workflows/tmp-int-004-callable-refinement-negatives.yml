@@ -1,0 +1,124 @@
+name: Temporary INT-004 Callable Refinement Negatives
+
+on:
+  push:
+    branches: [phase1-int-004-callable-refinement-negatives]
+    paths:
+      - 'test/fixtures/phase1-negative/callable-refinement-v1/**'
+      - 'test/Phase1INT004PortableCallableRefinementNegativeMain.hs'
+      - '.github/workflows/tmp-int-004-callable-refinement-negatives.yml'
+
+jobs:
+  portable-callable-refinement-negatives:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: haskell-actions/setup@v2
+        with:
+          ghc-version: '9.6.7'
+          cabal-version: 'latest'
+
+      - name: Build complete Haskell substrate
+        run: cabal build all --enable-tests
+
+      - name: Strict typecheck portable callable refinement replay
+        run: |
+          cabal exec -- ghc -isrc -Wall -Werror -fno-code \
+            test/Phase1INT004PortableCallableRefinementNegativeMain.hs
+
+      - name: Replay portable callable refinement negatives
+        run: |
+          cabal exec -- runghc -isrc -Wall -Werror \
+            test/Phase1INT004PortableCallableRefinementNegativeMain.hs
+
+      - name: Guard portable data against Haskell-private authority
+        run: |
+          if grep -R -n -E 'CallableMachineShapeMismatch|CallableAuthorityRequirementTooStrong|CallableEffectBoundTooWide|CallableFailureSetTooWide|CallableCalleeTransitionIncompatible|Phil\.Core|\.hs' \
+              test/fixtures/phase1-negative/callable-refinement-v1/*.tsv; then
+            echo 'portable callable-refinement TSV contains implementation-private identity' >&2
+            exit 1
+          fi
+
+      - name: Reject unknown transition vocabulary
+        run: |
+          cp test/fixtures/phase1-negative/callable-refinement-v1/surfaces-v1.tsv /tmp/surfaces.tsv
+          sed -i '0,/preserve/s//not-a-transition/' test/fixtures/phase1-negative/callable-refinement-v1/surfaces-v1.tsv
+          if cabal exec -- runghc -isrc -Wall -Werror test/Phase1INT004PortableCallableRefinementNegativeMain.hs >/tmp/int004-call-refine.log 2>&1; then
+            cat /tmp/int004-call-refine.log
+            echo 'unknown transition vocabulary unexpectedly accepted' >&2
+            exit 1
+          fi
+          mv /tmp/surfaces.tsv test/fixtures/phase1-negative/callable-refinement-v1/surfaces-v1.tsv
+
+      - name: Reject missing actual surface
+        run: |
+          cp test/fixtures/phase1-negative/callable-refinement-v1/surfaces-v1.tsv /tmp/surfaces.tsv
+          sed -i '/P1-NEG-CALL-012-006\tactual/d' test/fixtures/phase1-negative/callable-refinement-v1/surfaces-v1.tsv
+          if cabal exec -- runghc -isrc -Wall -Werror test/Phase1INT004PortableCallableRefinementNegativeMain.hs >/tmp/int004-call-refine.log 2>&1; then
+            cat /tmp/int004-call-refine.log
+            echo 'missing actual surface unexpectedly accepted' >&2
+            exit 1
+          fi
+          mv /tmp/surfaces.tsv test/fixtures/phase1-negative/callable-refinement-v1/surfaces-v1.tsv
+
+      - name: Reject earlier unrelated refinement failure
+        run: |
+          cp test/fixtures/phase1-negative/callable-refinement-v1/surfaces-v1.tsv /tmp/surfaces.tsv
+          sed -i 's/P1-NEG-CALL-012-002\tactual\tbytes -> result/P1-NEG-CALL-012-002\tactual\tu64 -> result/' test/fixtures/phase1-negative/callable-refinement-v1/surfaces-v1.tsv
+          if cabal exec -- runghc -isrc -Wall -Werror test/Phase1INT004PortableCallableRefinementNegativeMain.hs >/tmp/int004-call-refine.log 2>&1; then
+            cat /tmp/int004-call-refine.log
+            echo 'earlier machine-shape mismatch unexpectedly counted as effect-bound rejection' >&2
+            exit 1
+          fi
+          mv /tmp/surfaces.tsv test/fixtures/phase1-negative/callable-refinement-v1/surfaces-v1.tsv
+
+      - name: Reject malformed failure vocabulary
+        run: |
+          cp test/fixtures/phase1-negative/callable-refinement-v1/failures-v1.tsv /tmp/failures.tsv
+          sed -i '0,/typed-negative/s//not-a-failure-kind/' test/fixtures/phase1-negative/callable-refinement-v1/failures-v1.tsv
+          if cabal exec -- runghc -isrc -Wall -Werror test/Phase1INT004PortableCallableRefinementNegativeMain.hs >/tmp/int004-call-refine.log 2>&1; then
+            cat /tmp/int004-call-refine.log
+            echo 'malformed failure vocabulary unexpectedly accepted' >&2
+            exit 1
+          fi
+          mv /tmp/failures.tsv test/fixtures/phase1-negative/callable-refinement-v1/failures-v1.tsv
+
+      - name: Reject unknown authority
+        run: |
+          cp test/fixtures/phase1-negative/callable-refinement-v1/manifest.tsv /tmp/manifest.tsv
+          sed -i '0,/matrix:CALL-012/s//matrix:NOT-A-CASE/' test/fixtures/phase1-negative/callable-refinement-v1/manifest.tsv
+          if cabal exec -- runghc -isrc -Wall -Werror test/Phase1INT004PortableCallableRefinementNegativeMain.hs >/tmp/int004-call-refine.log 2>&1; then
+            cat /tmp/int004-call-refine.log
+            echo 'unknown authority unexpectedly accepted' >&2
+            exit 1
+          fi
+          mv /tmp/manifest.tsv test/fixtures/phase1-negative/callable-refinement-v1/manifest.tsv
+
+      - name: Reject missing Certified proof artifact
+        run: |
+          cp test/fixtures/phase1-negative/callable-refinement-v1/authority-registry-v1.tsv /tmp/authority.tsv
+          sed -i '0,/proof\/Phil\/Core\/CallableRefinement.v/s//proof\/Phil\/Core\/DefinitelyMissing.v/' \
+            test/fixtures/phase1-negative/callable-refinement-v1/authority-registry-v1.tsv
+          if cabal exec -- runghc -isrc -Wall -Werror test/Phase1INT004PortableCallableRefinementNegativeMain.hs >/tmp/int004-call-refine.log 2>&1; then
+            cat /tmp/int004-call-refine.log
+            echo 'missing Certified proof unexpectedly accepted' >&2
+            exit 1
+          fi
+          mv /tmp/authority.tsv test/fixtures/phase1-negative/callable-refinement-v1/authority-registry-v1.tsv
+
+      - name: Replay restored portable callable refinement corpus
+        run: cabal exec -- runghc -isrc -Wall -Werror test/Phase1INT004PortableCallableRefinementNegativeMain.hs
+
+      - name: Replay legacy callable refinement corpus
+        run: cabal exec -- runghc -isrc -Wall -Werror test/Phase1CallableRefinementMain.hs
+
+      - name: Replay prior portable Phase-1 corpora
+        run: |
+          cabal exec -- runghc -isrc -Wall -Werror test/Phase1INT004PortableGenericNegativeMain.hs
+          cabal exec -- runghc -isrc -Wall -Werror test/Phase1INT004PortableGenericInstantiationNegativeMain.hs
+          cabal exec -- runghc -isrc -Wall -Werror test/Phase1INT004PortableCallableLifecycleNegativeMain.hs
+          cabal exec -- runghc -isrc -Wall -Werror test/Phase1INT004PortableCallableStructuralModeNegativeMain.hs
+          cabal exec -- runghc -isrc -Wall -Werror test/Phase1INT004PortableCallableScopeNegativeMain.hs
+
+      - name: Replay frozen INT-004 corpus
+        run: cabal exec -- runghc -isrc -Wall -Werror test/Phase1INT004PortableNegativeManifestMain.hs
