@@ -10,6 +10,7 @@ on:
       - 'test/Phase1INT004PortableNegativeManifestMain.hs'
       - 'test/SurfaceConformanceMain.hs'
       - 'scripts/staging/int004_final_frozen_environments.py'
+      - 'scripts/staging/int004_final_frozen_typefix.py'
       - '.github/workflows/tmp-int-004-final-frozen-environments.yml'
 
 permissions:
@@ -27,6 +28,9 @@ jobs:
 
       - name: Apply staged portable nested-session decoder
         run: python3 scripts/staging/int004_final_frozen_environments.py
+
+      - name: Apply staged typecheck repair
+        run: python3 scripts/staging/int004_final_frozen_typefix.py
 
       - name: Build complete Haskell substrate
         run: cabal build all --enable-tests
