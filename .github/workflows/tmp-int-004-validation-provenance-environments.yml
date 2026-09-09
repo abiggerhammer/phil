@@ -1,0 +1,151 @@
+name: Temporary INT-004 Validation Provenance Environments
+
+on:
+  push:
+    branches: [phase1-int-004-validation-provenance-environments]
+    paths:
+      - 'test/Phase1INT004PortableNegativeManifestMain.hs'
+      - 'test/fixtures/phase1-negative/**'
+      - 'scripts/staging/int004_validation_provenance_environments.py'
+      - '.github/workflows/tmp-int-004-validation-provenance-environments.yml'
+
+permissions:
+  contents: write
+
+jobs:
+  validation-provenance-environments:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: haskell-actions/setup@v2
+        with:
+          ghc-version: '9.6.7'
+          cabal-version: 'latest'
+
+      - name: Apply portable validation/provenance decoder
+        run: python3 scripts/staging/int004_validation_provenance_environments.py
+
+      - name: Build complete Haskell substrate
+        run: cabal build all --enable-tests
+
+      - name: Strict typecheck INT-004 validation/provenance replay
+        run: |
+          cabal exec -- ghc -isrc -Wall -Werror -fno-code \
+            test/Phase1INT004PortableNegativeManifestMain.hs
+
+      - name: Replay all frozen negatives with validation/provenance profiles portable
+        run: |
+          cabal exec -- runghc -isrc -Wall -Werror \
+            test/Phase1INT004PortableNegativeManifestMain.hs
+
+      - name: Guard typed bindings and requirements against implementation identity
+        run: |
+          python3 - <<'PY'
+          from pathlib import Path
+
+          root = Path('test/fixtures/phase1-negative')
+          for filename in [
+              'environment-profiles-v1.tsv',
+              'environment-bindings-v1.tsv',
+              'environment-requirements-v1.tsv',
+          ]:
+              text = (root / filename).read_text()
+              for token in ['.phil', 'examples/rejected', 'phase0EnvironmentFor', 'Phil.Surface', 'TyEndpoint']:
+                  assert token not in text, f'{filename} contains implementation/path token: {token}'
+
+          profiles = [line.split('\t') for line in (root / 'environment-profiles-v1.tsv').read_text().splitlines() if line]
+          by_profile = {row[0]: row for row in profiles[1:]}
+          assert by_profile['phase0.parsed-validation-bypass'][5] == 'bytes:toNat-field:begin.length:u64'
+          assert by_profile['phase0.unrelated-length'][5] == 'bytes:nat:4096'
+          assert by_profile['phase0.stale-policy'][3] == 'select'
+          assert by_profile['phase0.opaque-proof'][3] == 'none'
+
+          bindings = [line.split('\t') for line in (root / 'environment-bindings-v1.tsv').read_text().splitlines() if line]
+          assert bindings[0] == ['profile_id','binding_name','binding_mode','binding_type','binding_shape']
+          binding_profiles = {row[0] for row in bindings[1:]}
+          assert binding_profiles == {
+              'phase0.parsed-validation-bypass',
+              'phase0.unrelated-length',
+              'phase0.incompatible-join',
+              'phase0.stale-policy',
+              'phase0.opaque-proof',
+          }
+
+          requirements = [line.split('\t') for line in (root / 'environment-requirements-v1.tsv').read_text().splitlines() if line]
+          assert requirements[0] == ['profile_id','site_kind','site_name','proposition']
+          assert requirements[1:] == [
+              ['phase0.parsed-validation-bypass','receive-exact','-','atom:BeginPolicy:var:policyContext,var:begin'],
+              ['phase0.stale-policy','select','proceed','atom:BeginPolicy:var:kappa2,var:begin'],
+          ]
+
+          replay = Path('test/Phase1INT004PortableNegativeManifestMain.hs').read_text()
+          legacy_section = replay.split('legacyProfileEnvironment ::', 1)[1].split('checkIntegrity', 1)[0]
+          for profile in [
+              'phase0.parsed-validation-bypass',
+              'phase0.unrelated-length',
+              'phase0.stale-policy',
+              'phase0.opaque-proof',
+          ]:
+              assert profile not in legacy_section, f'{profile} can still fall back to legacy setup'
+          assert 'environment-requirements-v1.tsv' in replay
+          assert 'TyValidated claim (Name context) (Name subject)' in replay
+          assert 'surfaceReceiveExactRequirement = receiveExactRequirement' in replay
+          assert 'surfaceSelectRequirements = selectRequirements' in replay
+          PY
+
+      - name: Requirement and typed-binding corruption fail closed
+        run: |
+          set -euo pipefail
+          ROOT=test/fixtures/phase1-negative
+          cp "$ROOT/environment-requirements-v1.tsv" /tmp/environment-requirements-v1.tsv
+          cp "$ROOT/environment-bindings-v1.tsv" /tmp/environment-bindings-v1.tsv
+
+          cat >> "$ROOT/environment-requirements-v1.tsv" <<'EOF'
+          phase0.parsed-validation-bypass	receive-exact	-	atom:BeginPolicy:var:policyContext,var:begin
+          EOF
+          if cabal exec -- runghc -isrc -Wall -Werror test/Phase1INT004PortableNegativeManifestMain.hs; then
+            echo 'duplicate portable receive-exact requirement was accepted' >&2
+            exit 1
+          fi
+          cp /tmp/environment-requirements-v1.tsv "$ROOT/environment-requirements-v1.tsv"
+
+          sed 's/atom:BeginPolicy:var:kappa2,var:begin/not-a-portable-proposition/' /tmp/environment-requirements-v1.tsv > "$ROOT/environment-requirements-v1.tsv"
+          if cabal exec -- runghc -isrc -Wall -Werror test/Phase1INT004PortableNegativeManifestMain.hs; then
+            echo 'unknown portable proposition syntax was accepted' >&2
+            exit 1
+          fi
+          cp /tmp/environment-requirements-v1.tsv "$ROOT/environment-requirements-v1.tsv"
+
+          sed 's/finite-seq-u8/not-a-sort/' /tmp/environment-bindings-v1.tsv > "$ROOT/environment-bindings-v1.tsv"
+          if cabal exec -- runghc -isrc -Wall -Werror test/Phase1INT004PortableNegativeManifestMain.hs; then
+            echo 'unknown portable binding sort was accepted' >&2
+            exit 1
+          fi
+          cp /tmp/environment-bindings-v1.tsv "$ROOT/environment-bindings-v1.tsv"
+
+          sed 's/owned-bytes:nat:0/not-a-shape/' /tmp/environment-bindings-v1.tsv > "$ROOT/environment-bindings-v1.tsv"
+          if cabal exec -- runghc -isrc -Wall -Werror test/Phase1INT004PortableNegativeManifestMain.hs; then
+            echo 'unknown portable binding shape was accepted' >&2
+            exit 1
+          fi
+          cp /tmp/environment-bindings-v1.tsv "$ROOT/environment-bindings-v1.tsv"
+
+      - name: Replay restored portable corpus
+        run: |
+          cabal exec -- runghc -isrc -Wall -Werror \
+            test/Phase1INT004PortableNegativeManifestMain.hs
+
+      - name: Replay legacy surface conformance harness
+        run: cabal test phil-surface-conformance-tests
+
+      - name: Transport validated validation/provenance decoder semantics
+        run: |
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git add test/Phase1INT004PortableNegativeManifestMain.hs
+          if git diff --cached --quiet; then
+            echo 'Committed semantic head already contains validation/provenance decoder.'
+          else
+            git commit -m 'int: materialize validation provenance environments portably'
+            git push origin HEAD:phase1-int-004-validation-provenance-environments
+          fi
