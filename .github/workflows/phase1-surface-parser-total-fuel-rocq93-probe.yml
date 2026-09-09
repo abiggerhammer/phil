@@ -41,6 +41,7 @@ jobs:
           python3 scripts/patch_total_fuel_nonterminal.py
           python3 scripts/generate_total_fuel_statement_probe.py
           python3 scripts/generate_total_fuel_nonterminal_budget_probe.py
+          python3 scripts/inject_total_fuel_higher_order_application_probes.py
 
       - name: Compile through total-fuel probes
         shell: bash
@@ -128,5 +129,5 @@ jobs:
           timeout 300s rocq c -time -Q proof/Phil Phil proof/Phil/Surface/GrammarParserTotalFuelNonterminalSupport.v
           echo "=== timing statement-only identity probes ==="
           timeout 60s rocq c -time -Q proof/Phil Phil proof/Phil/Surface/GrammarParserTotalFuelStatementProbe.v
-          echo "=== timing constructed nonterminal transport theorem ==="
+          echo "=== timing higher-order application ladder ==="
           timeout 300s rocq c -time -Q proof/Phil Phil proof/Phil/Surface/GrammarParserTotalFuelNonterminalBudget.v
