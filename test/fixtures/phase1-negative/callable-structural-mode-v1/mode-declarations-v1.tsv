@@ -1,0 +1,5 @@
+fixture_id	contract_revision	declared_mode	justification_kind	justification_revision	detail
+P1-NEG-CALL-017-001	callable.mode.v1	unrestricted	none	-	-
+P1-NEG-CALL-017-002	callable.mode.v1	linear	none	-	-
+P1-NEG-CALL-017-003	callable.mode.v1	affine	lifecycle	callable.other.v1	other-lifecycle
+P1-NEG-CALL-017-004	callable.mode.v1	affine	target	-	temporary-is-destroyed-by-call
