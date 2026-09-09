@@ -1,0 +1,6 @@
+authority_ref	authority_kind	canonical_id	canonical_source
+matrix:GEN-002	matrix	GEN-002	Phil Phase 1 Conformance Matrix
+matrix:GEN-003	matrix	GEN-003	Phil Phase 1 Conformance Matrix
+matrix:GEN-006	matrix	GEN-006	Phil Phase 1 Conformance Matrix
+certified:PHIL-GEN-STRUCT-001	certified	PHIL-GEN-STRUCT-001	proof/Phil/Core/GenericStructural.v
+certified:PHIL-GEN-REQ-001	certified	PHIL-GEN-REQ-001	proof/Phil/Core/GenericRequirements.v

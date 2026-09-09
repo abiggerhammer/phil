@@ -1,0 +1,6 @@
+fixture_id	check_kind	expect	competent_layer	governing_authority	expected_parameter	expected_permission	expected_mode
+P1-NEG-GEN-002-001	structural-actual	missing-structural-permission	generic-structural	matrix:GEN-002;certified:PHIL-GEN-STRUCT-001	T	contraction	affine
+P1-NEG-GEN-002-002	structural-actual	missing-structural-permission	generic-structural	matrix:GEN-002;certified:PHIL-GEN-STRUCT-001	T	contraction	linear
+P1-NEG-GEN-003-001	structural-actual	missing-structural-permission	generic-structural	matrix:GEN-003;certified:PHIL-GEN-STRUCT-001	T	weakening	linear
+P1-NEG-GEN-006-001	structural-interface	published-structural-requirement-too-weak	generic-requirements	matrix:GEN-006;certified:PHIL-GEN-REQ-001	T	contraction	-
+P1-NEG-GEN-006-002	structural-interface	published-structural-requirement-too-weak	generic-requirements	matrix:GEN-006;certified:PHIL-GEN-REQ-001	T	weakening	-
