@@ -1,0 +1,14 @@
+fixture_id	role	effect
+P1-NEG-CALL-012-001	expected	read
+P1-NEG-CALL-012-001	actual	read
+P1-NEG-CALL-012-002	expected	read
+P1-NEG-CALL-012-002	actual	read
+P1-NEG-CALL-012-002	actual	delete
+P1-NEG-CALL-012-003	expected	read
+P1-NEG-CALL-012-003	actual	read
+P1-NEG-CALL-012-004	expected	read
+P1-NEG-CALL-012-004	actual	read
+P1-NEG-CALL-012-005	expected	read
+P1-NEG-CALL-012-005	actual	read
+P1-NEG-CALL-012-006	expected	read
+P1-NEG-CALL-012-006	actual	read
