@@ -202,3 +202,7 @@ Proof.
     + exact Hchild_parse.
 Qed.
 ''')
+
+# Run the all-raw rank representation probes before later injectors add the
+# known-bad goal-rank conversion controls at the same marker.
+exec(Path("scripts/inject_total_fuel_raw_rank_probes.py").read_text())
