@@ -11,30 +11,36 @@ probes = r'''
    that computation for an arbitrary rule body.  Instead recover the rule
    body's total parser_expression_rank from the stable rank table. *)
 
+Lemma parser_rank_lookup_of_pass :
+  forall rules facts name body,
+    lookupRule name rules = Some body ->
+    parser_rank_lookup name (parser_rank_pass rules facts) =
+    parser_expression_rank facts body.
+Proof.
+  induction rules as [| [candidate candidate_body] rest IH];
+    intros facts name body Hlookup.
+  - simpl in Hlookup.
+    discriminate.
+  - simpl in Hlookup |- *.
+    destruct (String.eqb name candidate) eqn:Hsame.
+    + inversion Hlookup.
+      subst body.
+      reflexivity.
+    + eapply IH.
+      exact Hlookup.
+Qed.
+
 Lemma parser_rank_lookup_of_stable_pass :
   forall rules facts name body,
     parser_rank_pass rules facts = facts ->
     lookupRule name rules = Some body ->
     parser_rank_lookup name facts = parser_expression_rank facts body.
 Proof.
-  induction rules as [| [candidate candidate_body] rest IH];
-    intros facts name body Hstable Hlookup.
-  - simpl in Hlookup.
-    discriminate.
-  - destruct facts as [| [fact_name fact_rank] fact_rest].
-    + simpl in Hstable.
-      discriminate.
-    + simpl in Hstable.
-      inversion Hstable as [[Hname Hrank] Htail].
-      subst fact_name fact_rank.
-      simpl in Hlookup |- *.
-      destruct (String.eqb name candidate) eqn:Hsame.
-      * inversion Hlookup.
-        subst body.
-        exact Hrank.
-      * eapply IH.
-        -- exact Htail.
-        -- exact Hlookup.
+  intros rules facts name body Hstable Hlookup.
+  pose proof
+    (parser_rank_lookup_of_pass rules facts name body Hlookup) as Hrank.
+  rewrite Hstable in Hrank.
+  exact Hrank.
 Qed.
 
 Lemma phase1_surface_lookup_rule_total_rank :
