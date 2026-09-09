@@ -21,7 +21,7 @@ Opaque phase1_surface_rules
   phase1_surface_predictive_oracle.
 
 Definition phase1_surface_child_budget_claim
-  (path : DerivationPath)
+  (path : SyntaxPath)
   (name : string)
   (body : EbnfExpression)
   (input rest : list ConcreteToken)
@@ -47,7 +47,7 @@ Definition phase1_surface_child_budget_claim
       input = Some (rest, ResultTree tree).
 
 Definition phase1_surface_parent_budget_claim
-  (path : DerivationPath)
+  (path : SyntaxPath)
   (name : string)
   (input rest : list ConcreteToken)
   (tree : ParseTree) : Prop :=
