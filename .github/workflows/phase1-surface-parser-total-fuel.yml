@@ -33,6 +33,7 @@ jobs:
           set -euo pipefail
           python3 scripts/patch_total_fuel_nonterminal.py
           python3 scripts/generate_total_fuel_nonterminal_budget_probe.py
+          python3 scripts/patch_total_fuel_value_nonterminal.py
 
       - name: Compile total parser fuel completeness
         shell: bash
