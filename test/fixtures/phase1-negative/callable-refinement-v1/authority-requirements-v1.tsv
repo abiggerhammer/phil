@@ -1,0 +1,14 @@
+fixture_id	role	requirement
+P1-NEG-CALL-012-001	expected	storage.read
+P1-NEG-CALL-012-001	actual	storage.read
+P1-NEG-CALL-012-001	actual	storage.delete
+P1-NEG-CALL-012-002	expected	storage.read
+P1-NEG-CALL-012-002	actual	storage.read
+P1-NEG-CALL-012-003	expected	storage.read
+P1-NEG-CALL-012-003	actual	storage.read
+P1-NEG-CALL-012-004	expected	storage.read
+P1-NEG-CALL-012-004	actual	storage.read
+P1-NEG-CALL-012-005	expected	storage.read
+P1-NEG-CALL-012-005	actual	storage.read
+P1-NEG-CALL-012-006	expected	storage.read
+P1-NEG-CALL-012-006	actual	storage.read
