@@ -126,6 +126,8 @@ jobs:
           compile proof/Phil/Surface/GrammarParserProgress.v
           compile proof/Phil/Surface/GrammarParserZeroConsumeNullable.v
           timeout 300s rocq c -time -Q proof/Phil Phil proof/Phil/Surface/GrammarParserTotalFuelStatic.v
+          echo "=== timing rank-value full induction ==="
+          timeout 300s rocq c -time -Q proof/Phil Phil proof/Phil/Surface/GrammarParserTotalFuelValue.v
           timeout 300s rocq c -time -Q proof/Phil Phil proof/Phil/Surface/GrammarParserTotalFuelBase.v
           timeout 300s rocq c -time -Q proof/Phil Phil proof/Phil/Surface/GrammarParserTotalFuelNonterminalSupport.v
           echo "=== timing statement-only identity probes ==="
