@@ -27,12 +27,11 @@ jobs:
           python3 scripts/derive_phase1_surface_grammar.py --check
           python3 scripts/derive_phase1_surface_determinacy_certificate.py --check
 
-      - name: Split nonterminal total-fuel proof modules
+      - name: Prepare kernel-friendly total-fuel proof modules
         shell: bash
         run: |
           set -euo pipefail
           python3 scripts/patch_total_fuel_nonterminal.py
-          python3 scripts/generate_total_fuel_nonterminal_budget_probe.py
           python3 scripts/patch_total_fuel_value_nonterminal.py
 
       - name: Compile total parser fuel completeness
@@ -121,13 +120,11 @@ jobs:
           echo "=== timing GrammarParserTotalFuelValue.v at $(date -u +%FT%TZ) ==="
           timeout 300s rocq c -time -Q proof/Phil Phil \
             proof/Phil/Surface/GrammarParserTotalFuelValue.v
-          echo "=== timing legacy diagnostic modules at $(date -u +%FT%TZ) ==="
+          echo "=== compiling split canonical total-fuel proof at $(date -u +%FT%TZ) ==="
           timeout 300s rocq c -time -Q proof/Phil Phil \
             proof/Phil/Surface/GrammarParserTotalFuelBase.v
           timeout 300s rocq c -time -Q proof/Phil Phil \
             proof/Phil/Surface/GrammarParserTotalFuelNonterminalSupport.v
-          timeout 300s rocq c -time -Q proof/Phil Phil \
-            proof/Phil/Surface/GrammarParserTotalFuelNonterminalBudget.v
           timeout 300s rocq c -time -Q proof/Phil Phil \
             proof/Phil/Surface/GrammarParserTotalFuelNonterminal.v
           timeout 300s rocq c -time -Q proof/Phil Phil \
