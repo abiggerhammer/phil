@@ -61,35 +61,47 @@ Proof.
   reflexivity.
 Qed.
 
-Definition phase1_surface_parser_budget_complete
-  (goal : DerivationGoal)
-  (input rest : list ConcreteToken)
-  (result : DerivationResult) : Prop :=
-  forall static_fuel rank budget,
-    phase1_surface_parser_goal_rank_fuel static_fuel goal = Some rank ->
-    phase1_surface_parser_goal_options_global static_fuel goal ->
-    phase1_surface_parser_goal_choice_safe static_fuel goal ->
-    static_fuel <= expression_fuel ->
-    phase1_surface_parser_local_measure input rank <= budget ->
-    oracle_parse_fuel
-      budget
-      phase1_surface_predictive_oracle
-      phase1_surface_rules
-      goal input = Some (rest, result).
-
-Lemma phase1_surface_nonterminal_budget_complete :
+Lemma phase1_surface_nonterminal_budget_complete_raw :
   forall path name body input rest tree,
     lookupRule name phase1_surface_rules = Some body ->
-    phase1_surface_parser_budget_complete
-      (GoalExpression (descend path (AtNonterminal name)) body)
-      input rest (ResultTree tree) ->
-    phase1_surface_parser_budget_complete
-      (GoalExpression path (ENonterminal name))
-      input rest (ResultTree (PTNonterminal name tree)).
+    (forall static_fuel rank budget,
+      phase1_surface_parser_goal_rank_fuel
+        static_fuel
+        (GoalExpression (descend path (AtNonterminal name)) body) =
+        Some rank ->
+      phase1_surface_parser_goal_options_global
+        static_fuel
+        (GoalExpression (descend path (AtNonterminal name)) body) ->
+      phase1_surface_parser_goal_choice_safe
+        static_fuel
+        (GoalExpression (descend path (AtNonterminal name)) body) ->
+      static_fuel <= expression_fuel ->
+      phase1_surface_parser_local_measure input rank <= budget ->
+      oracle_parse_fuel
+        budget
+        phase1_surface_predictive_oracle
+        phase1_surface_rules
+        (GoalExpression (descend path (AtNonterminal name)) body)
+        input = Some (rest, ResultTree tree)) ->
+    forall static_fuel rank budget,
+      phase1_surface_parser_goal_rank_fuel
+        static_fuel (GoalExpression path (ENonterminal name)) =
+        Some rank ->
+      phase1_surface_parser_goal_options_global
+        static_fuel (GoalExpression path (ENonterminal name)) ->
+      phase1_surface_parser_goal_choice_safe
+        static_fuel (GoalExpression path (ENonterminal name)) ->
+      static_fuel <= expression_fuel ->
+      phase1_surface_parser_local_measure input rank <= budget ->
+      oracle_parse_fuel
+        budget
+        phase1_surface_predictive_oracle
+        phase1_surface_rules
+        (GoalExpression path (ENonterminal name))
+        input = Some (rest, ResultTree (PTNonterminal name tree)).
 Proof.
-  intros path name body input rest tree Hlookup IHbody.
-  unfold phase1_surface_parser_budget_complete in *.
-  intros static_fuel rank budget Hrank Hglobal Hsafe Hsfuel Hbudget.
+  intros path name body input rest tree Hlookup IHbody
+    static_fuel rank budget Hrank Hglobal Hsafe Hsfuel Hbudget.
   unfold phase1_surface_parser_goal_rank_fuel in Hrank.
   destruct static_fuel as [| static_fuel]; try discriminate Hrank.
   assert (Hchild_global :
