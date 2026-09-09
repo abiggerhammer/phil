@@ -5,173 +5,87 @@ text = path.read_text()
 marker = "Lemma phase1_surface_nonterminal_child_parse_from_budget :"
 
 probes = r'''
-(* Raw-rank diagnostics.  Goal-rank -> expression-rank conversion is the
-   minimal closure pathology isolated by the preceding probes.  Keep the
-   recursive hypothesis and both rank equations entirely in the raw
-   parser_expression_rank_fuel representation and test the complete
-   nonterminal child/parent budget step on that side of the boundary. *)
+(* Total-rank diagnostics.  Do not expose the concrete
+   parser_expression_rank_fuel computation in any theorem interface: Rocq
+   9.2 and 9.3-rc1 both spend >300s closing even tiny theorems that package
+   that computation for an arbitrary rule body.  Instead recover the rule
+   body's total parser_expression_rank from the stable rank table. *)
 
-Lemma phase1_surface_lookup_rule_raw_rank_value_probe :
+Lemma parser_rank_lookup_of_stable_pass :
+  forall rules facts name body,
+    parser_rank_pass rules facts = facts ->
+    lookupRule name rules = Some body ->
+    parser_rank_lookup name facts = parser_expression_rank facts body.
+Proof.
+  induction rules as [| [candidate candidate_body] rest IH];
+    intros facts name body Hstable Hlookup.
+  - simpl in Hlookup.
+    discriminate.
+  - destruct facts as [| [fact_name fact_rank] fact_rest].
+    + simpl in Hstable.
+      discriminate.
+    + simpl in Hstable.
+      inversion Hstable as [[Hname Hrank] Htail].
+      subst fact_name fact_rank.
+      simpl in Hlookup |- *.
+      destruct (String.eqb name candidate) eqn:Hsame.
+      * inversion Hlookup.
+        subst body.
+        exact Hrank.
+      * eapply IH.
+        -- exact Htail.
+        -- exact Hlookup.
+Qed.
+
+Lemma phase1_surface_lookup_rule_total_rank :
   forall name body,
     lookupRule name phase1_surface_rules = Some body ->
-    parser_expression_rank_fuel
-      expression_fuel phase1_surface_parser_rank_facts body =
-    Some (parser_expression_rank phase1_surface_parser_rank_facts body).
+    parser_rank_lookup name phase1_surface_parser_rank_facts =
+    parser_expression_rank phase1_surface_parser_rank_facts body.
+Proof.
+  intros name body Hlookup.
+  eapply parser_rank_lookup_of_stable_pass.
+  - exact phase1_surface_parser_rank_facts_are_stable.
+  - exact Hlookup.
+Qed.
+
+Lemma phase1_surface_nonterminal_total_rank_decreases_probe :
+  forall name body,
+    lookupRule name phase1_surface_rules = Some body ->
+    parser_expression_rank phase1_surface_parser_rank_facts body <
+    parser_expression_rank
+      phase1_surface_parser_rank_facts (ENonterminal name).
 Proof.
   intros name body Hlookup.
   pose proof
-    (phase1_surface_lookup_rule_rank_fuel_sufficient
-      name body Hlookup) as Hdefined.
-  unfold parser_rank_rule_fuel_sufficient in Hdefined.
-  unfold parser_expression_rank.
-  destruct
-    (parser_expression_rank_fuel
-      expression_fuel phase1_surface_parser_rank_facts body)
-    as [rank |] eqn:Hrank.
-  - reflexivity.
-  - simpl in Hdefined.
-    discriminate.
+    (phase1_surface_lookup_rule_total_rank name body Hlookup) as Hrank.
+  change
+    (parser_expression_rank phase1_surface_parser_rank_facts body <
+      S (parser_rank_lookup name phase1_surface_parser_rank_facts)).
+  rewrite Hrank.
+  apply Nat.lt_succ_diag_r.
 Qed.
 
-Lemma phase1_surface_raw_rank_budget_hypothesis_apply_supplied :
-  forall path name body input rest tree child_rank parent_rank remaining fuel,
-    lookupRule name phase1_surface_rules = Some body ->
-    (forall child_static_fuel rank budget,
-      parser_expression_rank_fuel
-        child_static_fuel phase1_surface_parser_rank_facts body =
-        Some rank ->
-      phase1_surface_parser_goal_options_global
-        child_static_fuel
-        (GoalExpression (descend path (AtNonterminal name)) body) ->
-      phase1_surface_parser_goal_choice_safe
-        child_static_fuel
-        (GoalExpression (descend path (AtNonterminal name)) body) ->
-      child_static_fuel <= expression_fuel ->
-      phase1_surface_parser_local_measure input rank <= budget ->
-      oracle_parse_fuel
-        budget
-        phase1_surface_predictive_oracle
-        phase1_surface_rules
-        (GoalExpression (descend path (AtNonterminal name)) body)
-        input = Some (rest, ResultTree tree)) ->
-    parser_expression_rank_fuel
-      expression_fuel phase1_surface_parser_rank_facts body =
-      Some child_rank ->
-    parser_expression_rank_fuel
-      (S fuel) phase1_surface_parser_rank_facts (ENonterminal name) =
-      Some parent_rank ->
-    phase1_surface_parser_local_measure input parent_rank <= S remaining ->
-    oracle_parse_fuel
-      remaining
-      phase1_surface_predictive_oracle
-      phase1_surface_rules
-      (GoalExpression (descend path (AtNonterminal name)) body)
-      input = Some (rest, ResultTree tree).
-Proof.
-  intros path name body input rest tree child_rank parent_rank remaining fuel
-    Hlookup IHbody Hchild_rank Hparent_rank Hbudget.
-  assert (Hchild_global :
-    phase1_surface_parser_goal_options_global
-      expression_fuel
-      (GoalExpression (descend path (AtNonterminal name)) body)) by
-    abstract (
-      eapply phase1_surface_lookup_rule_goal_options_global;
-      exact Hlookup).
-  assert (Hchild_safe :
-    phase1_surface_parser_goal_choice_safe
-      expression_fuel
-      (GoalExpression (descend path (AtNonterminal name)) body)) by
-    abstract (
-      constructor;
-      unfold phase1_surface_parser_goal_choice_safe_structural;
-      apply phase1_surface_expression_choice_safe_of_bool;
-      eapply phase1_surface_lookup_rule_choice_safe;
-      exact Hlookup).
-  assert (Hdecrease : child_rank < parent_rank) by
-    abstract (
-      eapply phase1_surface_nonterminal_child_rank_decreases_fuel;
-      eauto).
-  assert (Hchild_fit :
-    phase1_surface_parser_local_measure input child_rank <= remaining) by
-    abstract (
-      unfold phase1_surface_parser_local_measure in *;
-      lia).
-  exact
-    (IHbody
-      expression_fuel child_rank remaining
-      Hchild_rank Hchild_global Hchild_safe
-      (Nat.le_refl _) Hchild_fit).
-Qed.
-
-Lemma phase1_surface_raw_rank_budget_hypothesis_apply_child_derived :
-  forall path name body input rest tree parent_rank remaining fuel,
-    lookupRule name phase1_surface_rules = Some body ->
-    (forall child_static_fuel rank budget,
-      parser_expression_rank_fuel
-        child_static_fuel phase1_surface_parser_rank_facts body =
-        Some rank ->
-      phase1_surface_parser_goal_options_global
-        child_static_fuel
-        (GoalExpression (descend path (AtNonterminal name)) body) ->
-      phase1_surface_parser_goal_choice_safe
-        child_static_fuel
-        (GoalExpression (descend path (AtNonterminal name)) body) ->
-      child_static_fuel <= expression_fuel ->
-      phase1_surface_parser_local_measure input rank <= budget ->
-      oracle_parse_fuel
-        budget
-        phase1_surface_predictive_oracle
-        phase1_surface_rules
-        (GoalExpression (descend path (AtNonterminal name)) body)
-        input = Some (rest, ResultTree tree)) ->
-    parser_expression_rank_fuel
-      (S fuel) phase1_surface_parser_rank_facts (ENonterminal name) =
-      Some parent_rank ->
-    phase1_surface_parser_local_measure input parent_rank <= S remaining ->
-    oracle_parse_fuel
-      remaining
-      phase1_surface_predictive_oracle
-      phase1_surface_rules
-      (GoalExpression (descend path (AtNonterminal name)) body)
-      input = Some (rest, ResultTree tree).
-Proof.
-  intros path name body input rest tree parent_rank remaining fuel
-    Hlookup IHbody Hparent_rank Hbudget.
-  pose proof
-    (phase1_surface_lookup_rule_raw_rank_value_probe
-      name body Hlookup) as Hchild_rank.
-  eapply phase1_surface_raw_rank_budget_hypothesis_apply_supplied
-    with
-      (child_rank := parser_expression_rank phase1_surface_parser_rank_facts body);
-    eauto.
-Qed.
-
-Lemma phase1_surface_nonterminal_raw_rank_budget_complete_probe :
+Lemma phase1_surface_nonterminal_total_rank_budget_probe :
   forall path name body input rest tree,
     lookupRule name phase1_surface_rules = Some body ->
-    (forall child_static_fuel rank budget,
-      parser_expression_rank_fuel
-        child_static_fuel phase1_surface_parser_rank_facts body =
-        Some rank ->
-      phase1_surface_parser_goal_options_global
-        child_static_fuel
-        (GoalExpression (descend path (AtNonterminal name)) body) ->
-      phase1_surface_parser_goal_choice_safe
-        child_static_fuel
-        (GoalExpression (descend path (AtNonterminal name)) body) ->
-      child_static_fuel <= expression_fuel ->
-      phase1_surface_parser_local_measure input rank <= budget ->
+    (forall budget,
+      phase1_surface_parser_local_measure
+        input
+        (parser_expression_rank phase1_surface_parser_rank_facts body) <=
+      budget ->
       oracle_parse_fuel
         budget
         phase1_surface_predictive_oracle
         phase1_surface_rules
         (GoalExpression (descend path (AtNonterminal name)) body)
         input = Some (rest, ResultTree tree)) ->
-    forall fuel rank budget,
-      parser_expression_rank_fuel
-        (S fuel) phase1_surface_parser_rank_facts (ENonterminal name) =
-        Some rank ->
-      phase1_surface_parser_local_measure input rank <= budget ->
+    forall budget,
+      phase1_surface_parser_local_measure
+        input
+        (parser_expression_rank
+          phase1_surface_parser_rank_facts (ENonterminal name)) <=
+      budget ->
       oracle_parse_fuel
         budget
         phase1_surface_predictive_oracle
@@ -179,15 +93,26 @@ Lemma phase1_surface_nonterminal_raw_rank_budget_complete_probe :
         (GoalExpression path (ENonterminal name))
         input = Some (rest, ResultTree (PTNonterminal name tree)).
 Proof.
-  intros path name body input rest tree Hlookup IHbody
-    fuel rank budget Hrank Hbudget.
+  intros path name body input rest tree Hlookup IHbody budget Hbudget.
   destruct budget as [| remaining].
   - unfold phase1_surface_parser_local_measure in Hbudget.
     lia.
-  - pose proof
-      (phase1_surface_raw_rank_budget_hypothesis_apply_child_derived
-        path name body input rest tree rank remaining fuel
-        Hlookup IHbody Hrank Hbudget) as Hchild_parse.
+  - assert (Hdecrease :
+      parser_expression_rank phase1_surface_parser_rank_facts body <
+      parser_expression_rank
+        phase1_surface_parser_rank_facts (ENonterminal name)) by
+      abstract (
+        eapply phase1_surface_nonterminal_total_rank_decreases_probe;
+        exact Hlookup).
+    assert (Hchild_fit :
+      phase1_surface_parser_local_measure
+        input
+        (parser_expression_rank phase1_surface_parser_rank_facts body) <=
+      remaining) by
+      abstract (
+        unfold phase1_surface_parser_local_measure in *;
+        lia).
+    pose proof (IHbody remaining Hchild_fit) as Hchild_parse.
     eapply oracle_parse_fuel_nonterminal_success.
     + exact Hlookup.
     + exact Hchild_parse.
