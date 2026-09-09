@@ -26,6 +26,7 @@ shim = r'''From Phil.Surface Require Export GrammarParserTotalFuelValue.
 
 From Phil.Surface Require Import
   GrammarDerivation
+  GrammarDerivationOracle
   GrammarDeterminacyMutualPredictiveBridge
   GrammarDeterminacyPredictiveOracle
   GrammarParserProgress
