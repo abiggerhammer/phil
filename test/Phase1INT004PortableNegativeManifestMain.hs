@@ -66,11 +66,23 @@ data PortableEnvironmentProfile = PortableEnvironmentProfile
   }
   deriving (Eq, Show)
 
+data PortableEnvironmentBinding = PortableEnvironmentBinding
+  { portableExtraProfileId :: Text
+  , portableExtraBindingName :: Text
+  , portableExtraBindingMode :: Text
+  , portableExtraBindingType :: Text
+  , portableExtraBindingShape :: Text
+  }
+  deriving (Eq, Show)
+
 manifestPath :: FilePath
 manifestPath = "test/fixtures/phase1-negative/manifest.tsv"
 
 environmentProfilesPath :: FilePath
 environmentProfilesPath = "test/fixtures/phase1-negative/environment-profiles-v1.tsv"
+
+environmentBindingsPath :: FilePath
+environmentBindingsPath = "test/fixtures/phase1-negative/environment-bindings-v1.tsv"
 
 seedPortableProfiles :: Set Text
 seedPortableProfiles = Set.fromList
@@ -80,6 +92,7 @@ seedPortableProfiles = Set.fromList
   , "phase0.legacy-raw"
   , "phase0.failure-reuse"
   , "phase0.common"
+  , "phase0.incompatible-join"
   ]
 
 seedPortableFixtures :: Set Text
@@ -89,6 +102,7 @@ seedPortableFixtures = Set.fromList
   , "P1-NEG-P0-003"
   , "P1-NEG-P0-004"
   , "P1-NEG-P0-005"
+  , "P1-NEG-P0-008"
   , "P1-NEG-P0-009"
   , "P1-NEG-P0-011"
   , "P1-NEG-P0-012"
@@ -107,8 +121,12 @@ main = do
   profiles <- case parseEnvironmentProfiles profileText of
     Left detail -> putStrLn ("FAIL: environment profiles -- " <> detail) >> exitFailure
     Right value -> pure value
-  integrityOk <- checkIntegrity profiles cases
-  results <- forM cases (replayCase profiles)
+  bindingText <- TextIO.readFile environmentBindingsPath
+  bindings <- case parseEnvironmentBindings bindingText of
+    Left detail -> putStrLn ("FAIL: environment bindings -- " <> detail) >> exitFailure
+    Right value -> pure value
+  integrityOk <- checkIntegrity bindings profiles cases
+  results <- forM cases (replayCase bindings profiles)
   unless (integrityOk && and results) exitFailure
   putStrLn ("PASS: INT-004 portable frozen negative manifest (" <> show (length cases) <> " fixtures)")
 
@@ -186,6 +204,44 @@ parseEnvironmentProfiles input = case Text.lines input of
       , "legacy_receive_frame_raw"
       ]
 
+parseEnvironmentBindings :: Text -> Either String (Map Text [PortableEnvironmentBinding])
+parseEnvironmentBindings input = case Text.lines input of
+  [] -> Left "empty environment binding file"
+  header : rows
+    | header /= expectedHeader -> Left ("unexpected binding header: " <> Text.unpack header)
+    | otherwise -> do
+        parsed <- traverse parseEnvironmentBindingRow (filter (not . Text.null) rows)
+        let grouped = Map.fromListWith (++)
+              [(portableExtraProfileId binding, [binding]) | binding <- parsed]
+            names bindingsForProfile = map portableExtraBindingName bindingsForProfile
+            unique bindingsForProfile =
+              Set.size (Set.fromList (names bindingsForProfile)) == length bindingsForProfile
+        if all unique (Map.elems grouped)
+          then Right grouped
+          else Left "duplicate portable extra binding name within profile"
+  where
+    expectedHeader = Text.intercalate "\t"
+      [ "profile_id"
+      , "binding_name"
+      , "binding_mode"
+      , "binding_type"
+      , "binding_shape"
+      ]
+
+parseEnvironmentBindingRow :: Text -> Either String PortableEnvironmentBinding
+parseEnvironmentBindingRow row = case Text.splitOn "\t" row of
+  [profileId, bindingName, bindingMode, bindingType, bindingShape]
+    | any Text.null [profileId, bindingName, bindingMode, bindingType, bindingShape] ->
+        Left ("empty portable binding field: " <> Text.unpack row)
+    | otherwise -> Right PortableEnvironmentBinding
+        { portableExtraProfileId = profileId
+        , portableExtraBindingName = bindingName
+        , portableExtraBindingMode = bindingMode
+        , portableExtraBindingType = bindingType
+        , portableExtraBindingShape = bindingShape
+        }
+  _ -> Left ("invalid portable binding TSV row: " <> Text.unpack row)
+
 parseEnvironmentRow :: Text -> Either String PortableEnvironmentProfile
 parseEnvironmentRow row = case Text.splitOn "\t" row of
   [profileId, bindingName, bindingMode, sessionKind, messageName, messageType, terminalOutcome, branches, primitiveBindings, legacyReceiveFrameRaw]
@@ -205,9 +261,12 @@ parseEnvironmentRow row = case Text.splitOn "\t" row of
         }
   _ -> Left ("invalid portable environment TSV row: " <> Text.unpack row)
 
-materializePortableProfile :: PortableEnvironmentProfile -> Either Text SurfaceEnvironment
-materializePortableProfile profile = do
-  bindings <- materializePortableBindings profile
+materializePortableProfile
+  :: Map Text [PortableEnvironmentBinding]
+  -> PortableEnvironmentProfile
+  -> Either Text SurfaceEnvironment
+materializePortableProfile extraBindings profile = do
+  bindings <- materializePortableBindings extraBindings profile
   primitives <- parsePrimitiveBindings (portablePrimitiveBindings profile)
   legacyReceiveFrameRaw <- parsePortableBool
     "legacy_receive_frame_raw"
@@ -219,10 +278,11 @@ materializePortableProfile profile = do
     }
 
 materializePortableBindings
-  :: PortableEnvironmentProfile
+  :: Map Text [PortableEnvironmentBinding]
+  -> PortableEnvironmentProfile
   -> Either Text (Map Text InitialBinding)
-materializePortableBindings profile =
-  case portableSessionKind profile of
+materializePortableBindings extraBindings profile = do
+  primary <- case portableSessionKind profile of
     "none" -> do
       requireDash "binding_name" (portableBindingName profile)
       requireDash "binding_mode" (portableBindingMode profile)
@@ -237,6 +297,33 @@ materializePortableBindings profile =
       session <- parsePortableSession profile
       let binding = InitialBinding mode (TyEndpoint session) PlainShape
       Right (Map.singleton bindingName binding)
+  extras <- traverse materializePortableExtraBinding
+    (Map.findWithDefault [] (portableProfileId profile) extraBindings)
+  let extrasMap = Map.fromList extras
+  if Map.size extrasMap /= length extras
+    then Left "duplicate materialized portable extra binding"
+    else if not (Set.null (Map.keysSet primary `Set.intersection` Map.keysSet extrasMap))
+      then Left "portable extra binding conflicts with primary binding"
+      else Right (Map.union primary extrasMap)
+
+materializePortableExtraBinding
+  :: PortableEnvironmentBinding
+  -> Either Text (Text, InitialBinding)
+materializePortableExtraBinding binding = do
+  mode <- parsePortableMode (portableExtraBindingMode binding)
+  ty <- parsePortableBindingType (portableExtraBindingType binding)
+  shape <- case portableExtraBindingShape binding of
+    "plain" -> Right PlainShape
+    other -> Left ("unsupported portable binding shape: " <> other)
+  Right
+    ( portableExtraBindingName binding
+    , InitialBinding mode ty shape
+    )
+
+parsePortableBindingType :: Text -> Either Text Ty
+parsePortableBindingType value = case value of
+  "bool" -> Right TyBool
+  _ -> Left ("unsupported portable binding type: " <> value)
 
 parsePortableMode :: Text -> Either Text Mode
 parsePortableMode value = case value of
@@ -265,6 +352,12 @@ parsePortableSession profile = case portableSessionKind profile of
     requireDash "terminal_outcome" (portableTerminalOutcome profile)
     branches <- parsePortableBranches (portableBranches profile)
     pure (Offer branches)
+  "select" -> do
+    requireDash "message_name" (portableMessageName profile)
+    requireDash "message_type" (portableMessageType profile)
+    requireDash "terminal_outcome" (portableTerminalOutcome profile)
+    branches <- parsePortableBranches (portableBranches profile)
+    pure (Select branches)
   other -> Left ("unknown portable session kind: " <> other)
 
 parsePortableType :: Text -> Either Text Ty
@@ -311,6 +404,7 @@ parsePrimitiveBindings value
           "allocate-linear-buffer" -> Right (name, PrimitiveAllocateLinearBuffer)
           "inspect" -> Right (name, PrimitiveInspect)
           "unchecked-u32-add" -> Right (name, PrimitiveUncheckedU32Add)
+          "continue-common-state" -> Right (name, PrimitiveContinueCommonState)
           _ -> Left ("unsupported portable primitive semantic: " <> semantic)
       _ -> Left ("unsupported portable primitive binding: " <> entry)
 
@@ -325,12 +419,13 @@ requireDash field value
   | otherwise = Left (field <> " must be '-' for this session kind")
 
 resolveProfileEnvironment
-  :: Map Text PortableEnvironmentProfile
+  :: Map Text [PortableEnvironmentBinding]
+  -> Map Text PortableEnvironmentProfile
   -> Text
   -> Either Text SurfaceEnvironment
-resolveProfileEnvironment profiles profile =
+resolveProfileEnvironment bindings profiles profile =
   case Map.lookup profile profiles of
-    Just portable -> materializePortableProfile portable
+    Just portable -> materializePortableProfile bindings portable
     Nothing
       | Set.member profile seedPortableProfiles ->
           Left ("seed profile missing portable environment material: " <> profile)
@@ -344,7 +439,6 @@ legacyProfileEnvironment profile =
   case profile of
     "phase0.parsed-validation-bypass" -> legacy "06-parsed-used-as-validated.phil"
     "phase0.unrelated-length" -> legacy "07-unrelated-payload-length.phil"
-    "phase0.incompatible-join" -> legacy "08-incompatible-branch-join.phil"
     "phase0.premature-acceptance" -> legacy "10-accept-before-digest-check.phil"
     "phase0.pending-commit" -> legacy "13-commit-unrelated-parsed.phil"
     "phase0.pending-drop" -> legacy "15-drop-pending-receive.phil"
@@ -355,8 +449,12 @@ legacyProfileEnvironment profile =
   where
     legacy name = phase0EnvironmentFor ("examples/rejected/" <> Text.unpack name)
 
-checkIntegrity :: Map Text PortableEnvironmentProfile -> [NegativeCase] -> IO Bool
-checkIntegrity profiles cases = do
+checkIntegrity
+  :: Map Text [PortableEnvironmentBinding]
+  -> Map Text PortableEnvironmentProfile
+  -> [NegativeCase]
+  -> IO Bool
+checkIntegrity bindings profiles cases = do
   let ids = map negativeCaseId cases
       paths = map negativeCasePath cases
       uniqueIds = Set.size (Set.fromList ids) == length ids
@@ -371,9 +469,11 @@ checkIntegrity profiles cases = do
           not (Set.member (negativeCaseId negativeCase) seedPortableFixtures)
             || Map.member (negativeCaseEnvironmentProfile negativeCase) profiles)
         cases
+      bindingProfilesDeclared = Map.keysSet bindings `Set.isSubsetOf` Map.keysSet profiles
+      multibindingDomainExact = Map.keysSet bindings == Set.singleton "phase0.incompatible-join"
       profilesResolve = all
         (either (const False) (const True)
-          . resolveProfileEnvironment profiles
+          . resolveProfileEnvironment bindings profiles
           . negativeCaseEnvironmentProfile)
         cases
   filesPresent <- and <$> mapM doesFileExist paths
@@ -384,7 +484,9 @@ checkIntegrity profiles cases = do
   report "every fixture names its governing INT-004 matrix authority" authoritiesPresent
   report "every fixture names an explicit environment profile" profilesNamed
   report "portable environment seed has exact profile domain" seedProfileDomainExact
-  report "fixtures 001-005, 009, 011, 012, 014, 016, and 020 use portable environment material" seedFixturesPortable
+  report "portable extra bindings reference declared profiles" bindingProfilesDeclared
+  report "portable extra-binding domain is exact for this slice" multibindingDomainExact
+  report "fixtures 001-005, 008, 009, 011, 012, 014, 016, and 020 use portable environment material" seedFixturesPortable
   report "every named environment profile resolves" profilesResolve
   report "every portable fixture path exists" filesPresent
   pure (and
@@ -395,13 +497,19 @@ checkIntegrity profiles cases = do
     , authoritiesPresent
     , profilesNamed
     , seedProfileDomainExact
+    , bindingProfilesDeclared
+    , multibindingDomainExact
     , seedFixturesPortable
     , profilesResolve
     , filesPresent
     ])
 
-replayCase :: Map Text PortableEnvironmentProfile -> NegativeCase -> IO Bool
-replayCase profiles negativeCase = do
+replayCase
+  :: Map Text [PortableEnvironmentBinding]
+  -> Map Text PortableEnvironmentProfile
+  -> NegativeCase
+  -> IO Bool
+replayCase bindings profiles negativeCase = do
   source <- TextIO.readFile (negativeCasePath negativeCase)
   let path = negativeCasePath negativeCase
       expected = negativeCaseExpectedClass negativeCase
@@ -415,7 +523,7 @@ replayCase profiles negativeCase = do
     _ -> putStrLn
       ("FAIL: " <> Text.unpack (negativeCaseId negativeCase)
         <> " -- frozen legacy fixture missing during migration") >> pure False
-  case resolveProfileEnvironment profiles (negativeCaseEnvironmentProfile negativeCase) of
+  case resolveProfileEnvironment bindings profiles (negativeCaseEnvironmentProfile negativeCase) of
     Left detail -> failCase ("environment profile failed: " <> Text.unpack detail)
     Right environment -> case parseSurfaceFile (Text.pack path) source of
       Left diagnostic -> failCase

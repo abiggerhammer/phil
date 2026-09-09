@@ -1,0 +1,2 @@
+profile_id	binding_name	binding_mode	binding_type	binding_shape
+phase0.incompatible-join	condition	unrestricted	bool	plain
