@@ -43,6 +43,7 @@ jobs:
           python3 scripts/generate_total_fuel_nonterminal_budget_probe.py
           python3 scripts/inject_total_fuel_higher_order_application_probes.py
           python3 scripts/inject_total_fuel_rank_path_probes.py
+          python3 scripts/patch_total_fuel_value_nonterminal.py
 
       - name: Compile through total-fuel probes
         shell: bash
