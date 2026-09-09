@@ -1,0 +1,3 @@
+fixture_id	closure_id	extent_kind	extent_scope	capture_kind	capture_id	loan_scope
+P1-NEG-CALL-010-001	closure.escape.001	escaping	-	scoped-loan	loan.view.001	scope.loan.001
+P1-NEG-CALL-010-002	closure.local.001	contained	scope.other.001	scoped-loan	loan.view.001	scope.loan.001
