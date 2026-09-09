@@ -1,0 +1,140 @@
+name: Temporary INT-004 Portable Generic Negatives
+
+on:
+  push:
+    branches: [phase1-int-004-phase1-portable-negatives]
+    paths:
+      - 'test/fixtures/phase1-negative/generic-v1/**'
+      - 'test/Phase1INT004PortableGenericNegativeMain.hs'
+      - '.github/workflows/tmp-int-004-portable-generic-negative.yml'
+
+jobs:
+  portable-generic-negatives:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: haskell-actions/setup@v2
+        with:
+          ghc-version: '9.6.7'
+          cabal-version: 'latest'
+
+      - name: Build complete Haskell substrate
+        run: cabal build all --enable-tests
+
+      - name: Strict typecheck portable generic replay
+        run: |
+          cabal exec -- ghc -isrc -Wall -Werror -fno-code \
+            test/Phase1INT004PortableGenericNegativeMain.hs
+
+      - name: Replay portable generic negative corpus
+        run: |
+          cabal exec -- runghc -isrc -Wall -Werror \
+            test/Phase1INT004PortableGenericNegativeMain.hs
+
+      - name: Guard portable generic data against Haskell-private setup
+        run: |
+          if grep -R -n -E 'MissingStructuralPermission|PublishedStructuralRequirementTooWeak|GenericStructuralUse|Phase1Generic|\.hs|Phil\.Core' \
+              test/fixtures/phase1-negative/generic-v1/*.tsv; then
+            echo 'portable generic TSV contains implementation-private identity' >&2
+            exit 1
+          fi
+          python3 - <<'PY'
+          from pathlib import Path
+          p = Path('test/fixtures/phase1-negative/generic-v1/manifest.tsv')
+          rows = [line.split('\t') for line in p.read_text().splitlines()]
+          assert len(rows) == 6
+          assert rows[0][0] == 'fixture_id'
+          assert all(row[4] != 'INT-004' for row in rows[1:])
+          published = Path('test/fixtures/phase1-negative/generic-v1/published-v1.tsv').read_text()
+          assert 'P1-NEG-GEN-006-002' not in published
+          PY
+
+      - name: Reject unknown portable use kind
+        run: |
+          cp test/fixtures/phase1-negative/generic-v1/uses-v1.tsv /tmp/uses.tsv
+          sed -i '0,/duplicate/s//not-a-use/' test/fixtures/phase1-negative/generic-v1/uses-v1.tsv
+          if cabal exec -- runghc -isrc -Wall -Werror test/Phase1INT004PortableGenericNegativeMain.hs >/tmp/int004-generic.log 2>&1; then
+            cat /tmp/int004-generic.log
+            echo 'unknown use kind unexpectedly accepted' >&2
+            exit 1
+          fi
+          mv /tmp/uses.tsv test/fixtures/phase1-negative/generic-v1/uses-v1.tsv
+
+      - name: Reject undeclared portable parameter reference
+        run: |
+          cp test/fixtures/phase1-negative/generic-v1/uses-v1.tsv /tmp/uses.tsv
+          python3 - <<'PY'
+          from pathlib import Path
+          p = Path('test/fixtures/phase1-negative/generic-v1/uses-v1.tsv')
+          rows = p.read_text().splitlines()
+          cols = rows[1].split('\t')
+          cols[-1] = 'U'
+          rows[1] = '\t'.join(cols)
+          p.write_text('\n'.join(rows) + '\n')
+          PY
+          if cabal exec -- runghc -isrc -Wall -Werror test/Phase1INT004PortableGenericNegativeMain.hs >/tmp/int004-generic.log 2>&1; then
+            cat /tmp/int004-generic.log
+            echo 'undeclared parameter unexpectedly accepted' >&2
+            exit 1
+          fi
+          mv /tmp/uses.tsv test/fixtures/phase1-negative/generic-v1/uses-v1.tsv
+
+      - name: Reject duplicate portable parameter declaration
+        run: |
+          cp test/fixtures/phase1-negative/generic-v1/parameters-v1.tsv /tmp/parameters.tsv
+          sed -n '2p' test/fixtures/phase1-negative/generic-v1/parameters-v1.tsv >> test/fixtures/phase1-negative/generic-v1/parameters-v1.tsv
+          if cabal exec -- runghc -isrc -Wall -Werror test/Phase1INT004PortableGenericNegativeMain.hs >/tmp/int004-generic.log 2>&1; then
+            cat /tmp/int004-generic.log
+            echo 'duplicate parameter unexpectedly accepted' >&2
+            exit 1
+          fi
+          mv /tmp/parameters.tsv test/fixtures/phase1-negative/generic-v1/parameters-v1.tsv
+
+      - name: Reject invalid portable actual mode
+        run: |
+          cp test/fixtures/phase1-negative/generic-v1/actuals-v1.tsv /tmp/actuals.tsv
+          sed -i '0,/affine/s//not-a-mode/' test/fixtures/phase1-negative/generic-v1/actuals-v1.tsv
+          if cabal exec -- runghc -isrc -Wall -Werror test/Phase1INT004PortableGenericNegativeMain.hs >/tmp/int004-generic.log 2>&1; then
+            cat /tmp/int004-generic.log
+            echo 'invalid actual mode unexpectedly accepted' >&2
+            exit 1
+          fi
+          mv /tmp/actuals.tsv test/fixtures/phase1-negative/generic-v1/actuals-v1.tsv
+
+      - name: Reject unknown portable authority
+        run: |
+          cp test/fixtures/phase1-negative/generic-v1/manifest.tsv /tmp/manifest.tsv
+          sed -i '0,/matrix:GEN-002/s//matrix:NOT-A-CASE/' test/fixtures/phase1-negative/generic-v1/manifest.tsv
+          if cabal exec -- runghc -isrc -Wall -Werror test/Phase1INT004PortableGenericNegativeMain.hs >/tmp/int004-generic.log 2>&1; then
+            cat /tmp/int004-generic.log
+            echo 'unknown authority unexpectedly accepted' >&2
+            exit 1
+          fi
+          mv /tmp/manifest.tsv test/fixtures/phase1-negative/generic-v1/manifest.tsv
+
+      - name: Reject missing Certified proof artifact
+        run: |
+          cp test/fixtures/phase1-negative/generic-v1/authority-registry-v1.tsv /tmp/authority.tsv
+          sed -i '0,/proof\/Phil\/Core\/GenericStructural.v/s//proof\/Phil\/Core\/DefinitelyMissing.v/' \
+            test/fixtures/phase1-negative/generic-v1/authority-registry-v1.tsv
+          if cabal exec -- runghc -isrc -Wall -Werror test/Phase1INT004PortableGenericNegativeMain.hs >/tmp/int004-generic.log 2>&1; then
+            cat /tmp/int004-generic.log
+            echo 'missing Certified proof unexpectedly accepted' >&2
+            exit 1
+          fi
+          mv /tmp/authority.tsv test/fixtures/phase1-negative/generic-v1/authority-registry-v1.tsv
+
+      - name: Replay restored portable generic corpus
+        run: |
+          cabal exec -- runghc -isrc -Wall -Werror \
+            test/Phase1INT004PortableGenericNegativeMain.hs
+
+      - name: Replay legacy generic structural and requirement corpora
+        run: |
+          cabal exec -- runghc -isrc -Wall -Werror test/Phase1GenericStructuralMain.hs
+          cabal exec -- runghc -isrc -Wall -Werror test/Phase1GenericRequirementsMain.hs
+
+      - name: Replay frozen INT-004 portable corpus
+        run: |
+          cabal exec -- runghc -isrc -Wall -Werror \
+            test/Phase1INT004PortableNegativeManifestMain.hs
