@@ -1,0 +1,188 @@
+name: Temporary INT-004 Exact Authorities
+
+on:
+  push:
+    branches: [phase1-int-004-exact-authorities]
+    paths:
+      - 'test/fixtures/phase1-negative/**'
+      - 'test/Phase1INT004PortableNegativeManifestMain.hs'
+      - 'scripts/staging/int004_exact_authorities.py'
+      - '.github/workflows/tmp-int-004-exact-authorities.yml'
+
+permissions:
+  contents: write
+
+jobs:
+  exact-authorities:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: haskell-actions/setup@v2
+        with:
+          ghc-version: '9.6.7'
+          cabal-version: 'latest'
+
+      - name: Apply staged exact-authority decoder
+        run: python3 scripts/staging/int004_exact_authorities.py
+
+      - name: Build complete Haskell substrate
+        run: cabal build all --enable-tests
+
+      - name: Strict typecheck INT-004 authority replay
+        run: |
+          cabal exec -- ghc -isrc -Wall -Werror -fno-code \
+            test/Phase1INT004PortableNegativeManifestMain.hs
+
+      - name: Replay frozen corpus with exact authorities
+        run: |
+          cabal exec -- runghc -isrc -Wall -Werror \
+            test/Phase1INT004PortableNegativeManifestMain.hs
+
+      - name: Guard manifest authority shape
+        run: |
+          python3 - <<'PY'
+          from pathlib import Path
+          rows = [line.split('\t') for line in Path('test/fixtures/phase1-negative/manifest.tsv').read_text().splitlines()]
+          assert rows[0][-1] == 'governing_authority'
+          assert len(rows) == 21
+          for row in rows[1:]:
+              refs = row[-1].split(';')
+              assert refs and len(refs) == len(set(refs))
+              assert all(ref.startswith(('matrix:', 'certified:')) for ref in refs)
+              assert all(ref.split(':', 1)[1] != 'INT-004' for ref in refs)
+          assert all(row[-1] != 'INT-004' for row in rows[1:])
+          PY
+
+      - name: Reject unknown manifest authority
+        run: |
+          cp test/fixtures/phase1-negative/manifest.tsv /tmp/manifest.tsv
+          python3 - <<'PY'
+          from pathlib import Path
+          p = Path('test/fixtures/phase1-negative/manifest.tsv')
+          rows = p.read_text().splitlines()
+          cols = rows[1].split('\t')
+          cols[-1] = 'matrix:NOT-A-CASE'
+          rows[1] = '\t'.join(cols)
+          p.write_text('\n'.join(rows) + '\n')
+          PY
+          if cabal exec -- runghc -isrc -Wall -Werror test/Phase1INT004PortableNegativeManifestMain.hs >/tmp/int004-authority.log 2>&1; then
+            cat /tmp/int004-authority.log
+            echo 'unknown authority unexpectedly accepted' >&2
+            exit 1
+          fi
+          mv /tmp/manifest.tsv test/fixtures/phase1-negative/manifest.tsv
+
+      - name: Reject duplicate fixture authority
+        run: |
+          cp test/fixtures/phase1-negative/manifest.tsv /tmp/manifest.tsv
+          python3 - <<'PY'
+          from pathlib import Path
+          p = Path('test/fixtures/phase1-negative/manifest.tsv')
+          rows = p.read_text().splitlines()
+          cols = rows[1].split('\t')
+          first = cols[-1].split(';')[0]
+          cols[-1] = cols[-1] + ';' + first
+          rows[1] = '\t'.join(cols)
+          p.write_text('\n'.join(rows) + '\n')
+          PY
+          if cabal exec -- runghc -isrc -Wall -Werror test/Phase1INT004PortableNegativeManifestMain.hs >/tmp/int004-authority.log 2>&1; then
+            cat /tmp/int004-authority.log
+            echo 'duplicate authority unexpectedly accepted' >&2
+            exit 1
+          fi
+          mv /tmp/manifest.tsv test/fixtures/phase1-negative/manifest.tsv
+
+      - name: Reject meta-level INT-004 authority
+        run: |
+          cp test/fixtures/phase1-negative/manifest.tsv /tmp/manifest.tsv
+          python3 - <<'PY'
+          from pathlib import Path
+          p = Path('test/fixtures/phase1-negative/manifest.tsv')
+          rows = p.read_text().splitlines()
+          cols = rows[1].split('\t')
+          cols[-1] = 'INT-004'
+          rows[1] = '\t'.join(cols)
+          p.write_text('\n'.join(rows) + '\n')
+          PY
+          if cabal exec -- runghc -isrc -Wall -Werror test/Phase1INT004PortableNegativeManifestMain.hs >/tmp/int004-authority.log 2>&1; then
+            cat /tmp/int004-authority.log
+            echo 'INT-004 meta authority unexpectedly accepted' >&2
+            exit 1
+          fi
+          mv /tmp/manifest.tsv test/fixtures/phase1-negative/manifest.tsv
+
+      - name: Reject registry ref/id mismatch
+        run: |
+          cp test/fixtures/phase1-negative/authority-registry-v1.tsv /tmp/authority-registry.tsv
+          python3 - <<'PY'
+          from pathlib import Path
+          p = Path('test/fixtures/phase1-negative/authority-registry-v1.tsv')
+          text = p.read_text().replace('matrix:PROT-005\tmatrix\tPROT-005\t', 'matrix:PROT-005\tmatrix\tPROT-999\t', 1)
+          p.write_text(text)
+          PY
+          if cabal exec -- runghc -isrc -Wall -Werror test/Phase1INT004PortableNegativeManifestMain.hs >/tmp/int004-authority.log 2>&1; then
+            cat /tmp/int004-authority.log
+            echo 'registry ref/id mismatch unexpectedly accepted' >&2
+            exit 1
+          fi
+          mv /tmp/authority-registry.tsv test/fixtures/phase1-negative/authority-registry-v1.tsv
+
+      - name: Reject missing Certified proof artifact
+        run: |
+          cp test/fixtures/phase1-negative/authority-registry-v1.tsv /tmp/authority-registry.tsv
+          python3 - <<'PY'
+          from pathlib import Path
+          p = Path('test/fixtures/phase1-negative/authority-registry-v1.tsv')
+          text = p.read_text().replace('proof/Phil/Core/SessionStep.v', 'proof/Phil/Core/DefinitelyMissing.v', 1)
+          p.write_text(text)
+          PY
+          if cabal exec -- runghc -isrc -Wall -Werror test/Phase1INT004PortableNegativeManifestMain.hs >/tmp/int004-authority.log 2>&1; then
+            cat /tmp/int004-authority.log
+            echo 'missing Certified proof unexpectedly accepted' >&2
+            exit 1
+          fi
+          mv /tmp/authority-registry.tsv test/fixtures/phase1-negative/authority-registry-v1.tsv
+
+      - name: Replay restored authority corpus
+        run: |
+          cabal exec -- runghc -isrc -Wall -Werror \
+            test/Phase1INT004PortableNegativeManifestMain.hs
+
+      - name: Replay legacy surface conformance harness
+        run: cabal test phil-surface-conformance-tests
+
+      - name: Transport exact tested authority decoder
+        env:
+          GITHUB_TOKEN: ${{ github.token }}
+        run: |
+          python3 - <<'PY'
+          import base64
+          import json
+          import os
+          import urllib.request
+
+          repo = os.environ['GITHUB_REPOSITORY']
+          branch = os.environ['GITHUB_REF_NAME']
+          token = os.environ['GITHUB_TOKEN']
+          path = 'test/Phase1INT004PortableNegativeManifestMain.hs'
+          api = f'https://api.github.com/repos/{repo}/contents/{path}'
+          headers = {
+              'Authorization': f'Bearer {token}',
+              'Accept': 'application/vnd.github+json',
+              'X-GitHub-Api-Version': '2022-11-28',
+              'User-Agent': 'phil-int004-authority-staging',
+          }
+          req = urllib.request.Request(api + '?ref=' + branch, headers=headers)
+          with urllib.request.urlopen(req) as response:
+              current = json.load(response)
+          payload = json.dumps({
+              'message': 'INT-004: resolve frozen negative authorities exactly',
+              'content': base64.b64encode(open(path, 'rb').read()).decode(),
+              'branch': branch,
+              'sha': current['sha'],
+          }).encode()
+          req = urllib.request.Request(api, data=payload, method='PUT', headers={**headers, 'Content-Type': 'application/json'})
+          with urllib.request.urlopen(req) as response:
+              result = json.load(response)
+          print(result['commit']['sha'])
+          PY
