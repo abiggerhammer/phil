@@ -123,8 +123,19 @@ data PortableTypeAlias = PortableTypeAlias
   }
   deriving (Eq, Show)
 
+data PortableAuthority = PortableAuthority
+  { portableAuthorityRef :: Text
+  , portableAuthorityKind :: Text
+  , portableAuthorityCanonicalId :: Text
+  , portableAuthorityCanonicalSource :: Text
+  }
+  deriving (Eq, Show)
+
 manifestPath :: FilePath
 manifestPath = "test/fixtures/phase1-negative/manifest.tsv"
+
+authorityRegistryPath :: FilePath
+authorityRegistryPath = "test/fixtures/phase1-negative/authority-registry-v1.tsv"
 
 environmentProfilesPath :: FilePath
 environmentProfilesPath = "test/fixtures/phase1-negative/environment-profiles-v1.tsv"
@@ -196,6 +207,10 @@ main = do
   cases <- case parseManifest manifest of
     Left detail -> putStrLn ("FAIL: manifest -- " <> detail) >> exitFailure
     Right value -> pure value
+  authorityText <- TextIO.readFile authorityRegistryPath
+  authorities <- case parseAuthorityRegistry authorityText of
+    Left detail -> putStrLn ("FAIL: authority registry -- " <> detail) >> exitFailure
+    Right value -> pure value
   profileText <- TextIO.readFile environmentProfilesPath
   profiles <- case parseEnvironmentProfiles profileText of
     Left detail -> putStrLn ("FAIL: environment profiles -- " <> detail) >> exitFailure
@@ -230,10 +245,67 @@ main = do
   typeAliases <- case parseEnvironmentTypeAliases aliasText of
     Left detail -> putStrLn ("FAIL: type aliases -- " <> detail) >> exitFailure
     Right value -> pure value
-  integrityOk <- checkIntegrity staticClaims sessions typeAliases requirements bindings profiles cases
+  integrityOk <- checkIntegrity authorities staticClaims sessions typeAliases requirements bindings profiles cases
   results <- forM cases (replayCase staticContext sessions typeAliases requirements bindings profiles)
   unless (integrityOk && and results) exitFailure
   putStrLn ("PASS: INT-004 portable frozen negative manifest (" <> show (length cases) <> " fixtures)")
+
+parseAuthorityRegistry :: Text -> Either String (Map Text PortableAuthority)
+parseAuthorityRegistry input = case Text.lines input of
+  [] -> Left "empty authority registry"
+  header : rows
+    | header /= Text.intercalate "\t"
+        [ "authority_ref", "authority_kind", "canonical_id", "canonical_source" ] ->
+        Left ("unexpected authority registry header: " <> Text.unpack header)
+    | otherwise -> do
+        parsed <- traverse parseAuthorityRow (filter (not . Text.null) rows)
+        let registry = Map.fromList [(portableAuthorityRef authority, authority) | authority <- parsed]
+            ids = map portableAuthorityCanonicalId parsed
+        if Map.size registry /= length parsed
+          then Left "duplicate portable authority_ref"
+          else if Set.size (Set.fromList ids) /= length ids
+            then Left "duplicate portable canonical authority id"
+            else Right registry
+
+parseAuthorityRow :: Text -> Either String PortableAuthority
+parseAuthorityRow row = case Text.splitOn "\t" row of
+  [authorityRef, authorityKind, canonicalId, canonicalSource]
+    | any Text.null [authorityRef, authorityKind, canonicalId, canonicalSource] ->
+        Left ("empty portable authority field: " <> Text.unpack row)
+    | authorityKind `notElem` ["matrix", "certified"] ->
+        Left ("unknown portable authority kind: " <> Text.unpack authorityKind)
+    | authorityRef /= authorityKind <> ":" <> canonicalId ->
+        Left ("authority ref/kind/id mismatch: " <> Text.unpack row)
+    | canonicalId == "INT-004" ->
+        Left "INT-004 is a meta-level conformance case, not fixture semantic authority"
+    | otherwise -> Right PortableAuthority
+        { portableAuthorityRef = authorityRef
+        , portableAuthorityKind = authorityKind
+        , portableAuthorityCanonicalId = canonicalId
+        , portableAuthorityCanonicalSource = canonicalSource
+        }
+  _ -> Left ("invalid portable authority TSV row: " <> Text.unpack row)
+
+caseAuthorityRefs :: NegativeCase -> Either Text [Text]
+caseAuthorityRefs negativeCase = do
+  let refs = Text.splitOn ";" (negativeCaseAuthority negativeCase)
+  when (null refs || any Text.null refs) $
+    Left ("fixture has empty governing authority reference: " <> negativeCaseId negativeCase)
+  parsed <- traverse parseRef refs
+  when (Set.size (Set.fromList parsed) /= length parsed) $
+    Left ("fixture repeats governing authority reference: " <> negativeCaseId negativeCase)
+  Right parsed
+  where
+    parseRef ref = case Text.breakOn ":" ref of
+      (kind, rest) -> case Text.stripPrefix ":" rest of
+        Nothing -> Left ("untyped governing authority reference: " <> ref)
+        Just canonicalId
+          | kind `notElem` ["matrix", "certified"] ->
+              Left ("unknown governing authority kind: " <> kind)
+          | Text.null canonicalId -> Left ("empty governing authority id: " <> ref)
+          | canonicalId == "INT-004" ->
+              Left "INT-004 is a meta-level conformance case, not fixture semantic authority"
+          | otherwise -> Right ref
 
 parseManifest :: Text -> Either String [NegativeCase]
 parseManifest input = case Text.lines input of
@@ -994,7 +1066,8 @@ resolveProfileEnvironment staticContext sessions aliases requirements bindings p
     Nothing -> Left ("portable environment profile missing: " <> profile)
 
 checkIntegrity
-  :: [PortableStaticClaim]
+  :: Map Text PortableAuthority
+  -> [PortableStaticClaim]
   -> Map Text Session
   -> Map Text [PortableTypeAlias]
   -> Map Text [PortableEnvironmentRequirement]
@@ -1002,14 +1075,33 @@ checkIntegrity
   -> Map Text PortableEnvironmentProfile
   -> [NegativeCase]
   -> IO Bool
-checkIntegrity staticClaims sessions aliases requirements bindings profiles cases = do
+checkIntegrity authorities staticClaims sessions aliases requirements bindings profiles cases = do
   let ids = map negativeCaseId cases
       paths = map negativeCasePath cases
       uniqueIds = Set.size (Set.fromList ids) == length ids
       uniquePaths = Set.size (Set.fromList paths) == length paths
       exactFrozenCount = length cases == 20
       layersExact = all ((== "surface-check") . negativeCaseLayer) cases
-      authoritiesPresent = all ((== "INT-004") . negativeCaseAuthority) cases
+      parsedAuthorities = traverse caseAuthorityRefs cases
+      authoritySyntaxValid = either (const False) (const True) parsedAuthorities
+      usedAuthorityRefs = case parsedAuthorities of
+        Left _ -> Set.empty
+        Right refsByCase -> Set.fromList (concat refsByCase)
+      authorityDomainExact = authoritySyntaxValid && usedAuthorityRefs == Map.keysSet authorities
+      matrixSourcesExact = all
+        (\authority -> portableAuthorityKind authority /= "matrix"
+          || portableAuthorityCanonicalSource authority == "Phil Phase 1 Conformance Matrix")
+        (Map.elems authorities)
+      certifiedSourcesPortable = all
+        (\authority -> portableAuthorityKind authority /= "certified"
+          || ("proof/" `Text.isPrefixOf` portableAuthorityCanonicalSource authority
+            && ".v" `Text.isSuffixOf` portableAuthorityCanonicalSource authority))
+        (Map.elems authorities)
+      certifiedSourcePaths =
+        [ Text.unpack (portableAuthorityCanonicalSource authority)
+        | authority <- Map.elems authorities
+        , portableAuthorityKind authority == "certified"
+        ]
       profilesNamed = all (Text.isPrefixOf "phase0." . negativeCaseEnvironmentProfile) cases
       seedProfileDomainExact = Map.keysSet profiles == seedPortableProfiles
       seedFixturesPortable = all
@@ -1055,11 +1147,16 @@ checkIntegrity staticClaims sessions aliases requirements bindings profiles case
             . negativeCaseEnvironmentProfile)
           cases
   filesPresent <- and <$> mapM doesFileExist paths
+  certifiedSourcesPresent <- and <$> mapM doesFileExist certifiedSourcePaths
   report "20 frozen negative fixtures are manifest-owned" exactFrozenCount
   report "stable fixture IDs are unique" uniqueIds
   report "portable fixture paths are unique" uniquePaths
   report "every fixture names surface-check as competent layer" layersExact
-  report "every fixture names its governing INT-004 matrix authority" authoritiesPresent
+  report "every fixture has typed non-meta governing authority references" authoritySyntaxValid
+  report "manifest authority domain resolves exactly to portable registry" authorityDomainExact
+  report "Matrix authority registry rows name the canonical Matrix source" matrixSourcesExact
+  report "Certified authority registry rows name portable proof artifacts" certifiedSourcesPortable
+  report "every Certified authority proof artifact exists" certifiedSourcesPresent
   report "every fixture names an explicit environment profile" profilesNamed
   report "portable environment set has exact frozen profile domain" seedProfileDomainExact
   report "portable extra bindings reference declared profiles" bindingProfilesDeclared
@@ -1078,7 +1175,11 @@ checkIntegrity staticClaims sessions aliases requirements bindings profiles case
     , uniqueIds
     , uniquePaths
     , layersExact
-    , authoritiesPresent
+    , authoritySyntaxValid
+    , authorityDomainExact
+    , matrixSourcesExact
+    , certifiedSourcesPortable
+    , certifiedSourcesPresent
     , profilesNamed
     , seedProfileDomainExact
     , bindingProfilesDeclared
