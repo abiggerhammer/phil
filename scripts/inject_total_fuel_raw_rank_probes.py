@@ -11,24 +11,24 @@ probes = r'''
    parser_expression_rank_fuel representation and test the complete
    nonterminal child/parent budget step on that side of the boundary. *)
 
-Lemma phase1_surface_lookup_rule_raw_rank_exists_probe :
-  forall (path : SyntaxPath) name body,
+Lemma phase1_surface_lookup_rule_raw_rank_value_probe :
+  forall name body,
     lookupRule name phase1_surface_rules = Some body ->
-    exists rank,
-      parser_expression_rank_fuel
-        expression_fuel phase1_surface_parser_rank_facts body = Some rank.
+    parser_expression_rank_fuel
+      expression_fuel phase1_surface_parser_rank_facts body =
+    Some (parser_expression_rank phase1_surface_parser_rank_facts body).
 Proof.
-  intros path name body Hlookup.
+  intros name body Hlookup.
   pose proof
     (phase1_surface_lookup_rule_rank_fuel_sufficient
       name body Hlookup) as Hdefined.
   unfold parser_rank_rule_fuel_sufficient in Hdefined.
+  unfold parser_expression_rank.
   destruct
     (parser_expression_rank_fuel
       expression_fuel phase1_surface_parser_rank_facts body)
     as [rank |] eqn:Hrank.
-  - exists rank.
-    reflexivity.
+  - reflexivity.
   - simpl in Hdefined.
     discriminate.
 Qed.
@@ -137,10 +137,12 @@ Lemma phase1_surface_raw_rank_budget_hypothesis_apply_child_derived :
 Proof.
   intros path name body input rest tree parent_rank remaining fuel
     Hlookup IHbody Hparent_rank Hbudget.
-  destruct
-    (phase1_surface_lookup_rule_raw_rank_exists_probe
-      path name body Hlookup) as [child_rank Hchild_rank].
-  eapply phase1_surface_raw_rank_budget_hypothesis_apply_supplied;
+  pose proof
+    (phase1_surface_lookup_rule_raw_rank_value_probe
+      name body Hlookup) as Hchild_rank.
+  eapply phase1_surface_raw_rank_budget_hypothesis_apply_supplied
+    with
+      (child_rank := parser_expression_rank phase1_surface_parser_rank_facts body);
     eauto.
 Qed.
 
