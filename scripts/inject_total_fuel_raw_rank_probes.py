@@ -19,21 +19,18 @@ Lemma phase1_surface_lookup_rule_raw_rank_exists_probe :
         expression_fuel phase1_surface_parser_rank_facts body = Some rank.
 Proof.
   intros path name body Hlookup.
-  assert (Hchild_global :
-    phase1_surface_parser_goal_options_global
-      expression_fuel
-      (GoalExpression (descend path (AtNonterminal name)) body)).
-  {
-    eapply phase1_surface_lookup_rule_goal_options_global.
-    exact Hlookup.
-  }
+  pose proof
+    (phase1_surface_lookup_rule_rank_fuel_sufficient
+      name body Hlookup) as Hdefined.
+  unfold parser_rank_rule_fuel_sufficient in Hdefined.
   destruct
-    (phase1_surface_parser_goal_rank_exists
-      expression_fuel
-      (GoalExpression (descend path (AtNonterminal name)) body)
-      Hchild_global) as [rank Hrank].
-  exists rank.
-  exact Hrank.
+    (parser_expression_rank_fuel
+      expression_fuel phase1_surface_parser_rank_facts body)
+    as [rank |] eqn:Hrank.
+  - exists rank.
+    exact Hrank.
+  - simpl in Hdefined.
+    discriminate.
 Qed.
 
 Lemma phase1_surface_raw_rank_budget_hypothesis_apply_supplied :
