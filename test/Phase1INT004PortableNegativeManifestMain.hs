@@ -79,6 +79,7 @@ seedPortableProfiles = Set.fromList
   , "phase0.nonexhaustive-offer"
   , "phase0.legacy-raw"
   , "phase0.failure-reuse"
+  , "phase0.common"
   ]
 
 seedPortableFixtures :: Set Text
@@ -89,6 +90,11 @@ seedPortableFixtures = Set.fromList
   , "P1-NEG-P0-004"
   , "P1-NEG-P0-005"
   , "P1-NEG-P0-009"
+  , "P1-NEG-P0-011"
+  , "P1-NEG-P0-012"
+  , "P1-NEG-P0-014"
+  , "P1-NEG-P0-016"
+  , "P1-NEG-P0-020"
   ]
 
 main :: IO ()
@@ -201,18 +207,36 @@ parseEnvironmentRow row = case Text.splitOn "\t" row of
 
 materializePortableProfile :: PortableEnvironmentProfile -> Either Text SurfaceEnvironment
 materializePortableProfile profile = do
-  mode <- parsePortableMode (portableBindingMode profile)
-  session <- parsePortableSession profile
+  bindings <- materializePortableBindings profile
   primitives <- parsePrimitiveBindings (portablePrimitiveBindings profile)
   legacyReceiveFrameRaw <- parsePortableBool
     "legacy_receive_frame_raw"
     (portableLegacyReceiveFrameRaw profile)
-  let binding = InitialBinding mode (TyEndpoint session) PlainShape
   pure (emptySurfaceEnvironment emptyStaticContext)
-    { surfaceInitialBindings = Map.singleton (portableBindingName profile) binding
+    { surfaceInitialBindings = bindings
     , surfacePrimitives = primitives
     , surfaceLegacyReceiveFrameRaw = legacyReceiveFrameRaw
     }
+
+materializePortableBindings
+  :: PortableEnvironmentProfile
+  -> Either Text (Map Text InitialBinding)
+materializePortableBindings profile =
+  case portableSessionKind profile of
+    "none" -> do
+      requireDash "binding_name" (portableBindingName profile)
+      requireDash "binding_mode" (portableBindingMode profile)
+      requireDash "message_name" (portableMessageName profile)
+      requireDash "message_type" (portableMessageType profile)
+      requireDash "terminal_outcome" (portableTerminalOutcome profile)
+      requireDash "branches" (portableBranches profile)
+      Right Map.empty
+    _ -> do
+      bindingName <- requireValue "binding_name" (portableBindingName profile)
+      mode <- parsePortableMode (portableBindingMode profile)
+      session <- parsePortableSession profile
+      let binding = InitialBinding mode (TyEndpoint session) PlainShape
+      Right (Map.singleton bindingName binding)
 
 parsePortableMode :: Text -> Either Text Mode
 parsePortableMode value = case value of
@@ -278,7 +302,16 @@ parsePrimitiveBindings value
         else Right result
   where
     parsePrimitive entry = case Text.splitOn ":" entry of
-      [name, "handle-payload"] | not (Text.null name) -> Right (name, PrimitiveHandlePayload)
+      [name, semantic] | not (Text.null name) ->
+        case semantic of
+          "handle-payload" -> Right (name, PrimitiveHandlePayload)
+          "authorize-store" -> Right (name, PrimitiveAuthorizeStore)
+          "delegate" -> Right (name, PrimitiveDelegate)
+          "new-cancellation-scope" -> Right (name, PrimitiveNewCancellationScope)
+          "allocate-linear-buffer" -> Right (name, PrimitiveAllocateLinearBuffer)
+          "inspect" -> Right (name, PrimitiveInspect)
+          "unchecked-u32-add" -> Right (name, PrimitiveUncheckedU32Add)
+          _ -> Left ("unsupported portable primitive semantic: " <> semantic)
       _ -> Left ("unsupported portable primitive binding: " <> entry)
 
 requireValue :: Text -> Text -> Either Text Text
@@ -313,7 +346,6 @@ legacyProfileEnvironment profile =
     "phase0.unrelated-length" -> legacy "07-unrelated-payload-length.phil"
     "phase0.incompatible-join" -> legacy "08-incompatible-branch-join.phil"
     "phase0.premature-acceptance" -> legacy "10-accept-before-digest-check.phil"
-    "phase0.common" -> legacy "11-copy-authority-capability.phil"
     "phase0.pending-commit" -> legacy "13-commit-unrelated-parsed.phil"
     "phase0.pending-drop" -> legacy "15-drop-pending-receive.phil"
     "phase0.stale-policy" -> legacy "17-use-evidence-wrong-context.phil"
@@ -352,7 +384,7 @@ checkIntegrity profiles cases = do
   report "every fixture names its governing INT-004 matrix authority" authoritiesPresent
   report "every fixture names an explicit environment profile" profilesNamed
   report "portable environment seed has exact profile domain" seedProfileDomainExact
-  report "fixtures 001-005 and 009 use portable environment material" seedFixturesPortable
+  report "fixtures 001-005, 009, 011, 012, 014, 016, and 020 use portable environment material" seedFixturesPortable
   report "every named environment profile resolves" profilesResolve
   report "every portable fixture path exists" filesPresent
   pure (and
