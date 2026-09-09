@@ -1,0 +1,9 @@
+fixture_id	expect	competent_layer	governing_authority	expected_a	expected_b	expected_c
+P1-NEG-CALL-007-001	preserve-residue-mismatch	callable-lifecycle	matrix:CALL-007;certified:PHIL-CALL-LIFE-001	callable.linear-preserved.001	capture.owner.linear	-
+P1-NEG-CALL-007-002	preserve-produced-successor	callable-lifecycle	matrix:CALL-007;certified:PHIL-CALL-LIFE-001	callable.linear-preserved.001	callable.successor.007	-
+P1-NEG-CALL-008-001	unavailable-callable	callable-lifecycle	matrix:CALL-008;certified:PHIL-CALL-LIFE-001	callable.one-shot.001	-	-
+P1-NEG-CALL-008-002	consume-produced-successor	callable-lifecycle	matrix:CALL-008;certified:PHIL-CALL-LIFE-001	callable.one-shot.001	callable.successor.008	-
+P1-NEG-CALL-009-001	unavailable-callable	callable-lifecycle	matrix:CALL-009;certified:PHIL-CALL-LIFE-001	callable.stream.001	-	-
+P1-NEG-CALL-009-002	replace-reused-predecessor-key	callable-lifecycle	matrix:CALL-009;certified:PHIL-CALL-LIFE-001	callable.stream.001	-	-
+P1-NEG-CALL-009-003	replace-interface-mismatch	callable-lifecycle	matrix:CALL-009;certified:PHIL-CALL-LIFE-001	callable.stream.interface.v1	callable.stream.other.v1	-
+P1-NEG-CALL-009-004	replace-state-mismatch	callable-lifecycle	matrix:CALL-009;certified:PHIL-CALL-LIFE-001	stream.S1	stream.S2	-
