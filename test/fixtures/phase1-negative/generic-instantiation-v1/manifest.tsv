@@ -1,0 +1,8 @@
+fixture_id	expect	competent_layer	governing_authority	expected_a	expected_b	expected_c	expected_d
+P1-NEG-GEN-007-001	provider-interface-mismatch	generic-instantiation	matrix:GEN-007;certified:PHIL-GEN-INST-001	provider.compare	provider.compare.v1	provider.compare-plus-hash.v1	-
+P1-NEG-GEN-007-002	provider-refinement-mismatch	generic-instantiation	matrix:GEN-007;certified:PHIL-GEN-INST-001	provider.compare	provider.compare.v1	provider.compare-plus-hash.v1	provider.storage.v1
+P1-NEG-GEN-008-001	missing-requirement	generic-instantiation	matrix:GEN-008;certified:PHIL-GEN-INST-001	proposition:StrictWeakOrdering	-	-	-
+P1-NEG-GEN-008-002	proposition-evidence-mismatch	generic-instantiation	matrix:GEN-008;certified:PHIL-GEN-INST-001	StrictWeakOrdering	HashStable	-	-
+P1-NEG-GEN-012-001	missing-requirement	generic-instantiation	matrix:GEN-012;certified:PHIL-GEN-INST-001	proposition:StrictWeakOrdering	-	-	-
+P1-NEG-GEN-012-002	assumption-not-permitted	generic-instantiation	matrix:GEN-012;certified:PHIL-GEN-INST-001	proposition:StrictWeakOrdering	-	-	-
+P1-NEG-GEN-012-003	export-not-permitted	generic-instantiation	matrix:GEN-012;certified:PHIL-GEN-INST-001	proposition:StrictWeakOrdering	-	-	-
