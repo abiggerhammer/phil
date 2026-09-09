@@ -95,22 +95,20 @@ Proof.
   assert (Hchild_global :
     phase1_surface_parser_goal_options_global
       expression_fuel
-      (GoalExpression (descend path (AtNonterminal name)) body)).
-  {
-    eapply phase1_surface_lookup_rule_goal_options_global.
-    exact Hlookup.
-  }
+      (GoalExpression (descend path (AtNonterminal name)) body)) by
+    abstract (
+      eapply phase1_surface_lookup_rule_goal_options_global;
+      exact Hlookup).
   assert (Hchild_safe :
     phase1_surface_parser_goal_choice_safe
       expression_fuel
-      (GoalExpression (descend path (AtNonterminal name)) body)).
-  {
-    constructor.
-    unfold phase1_surface_parser_goal_choice_safe_structural.
-    apply phase1_surface_expression_choice_safe_of_bool.
-    eapply phase1_surface_lookup_rule_choice_safe.
-    exact Hlookup.
-  }
+      (GoalExpression (descend path (AtNonterminal name)) body)) by
+    abstract (
+      constructor;
+      unfold phase1_surface_parser_goal_choice_safe_structural;
+      apply phase1_surface_expression_choice_safe_of_bool;
+      eapply phase1_surface_lookup_rule_choice_safe;
+      exact Hlookup).
   set (child_goal :=
     GoalExpression (descend path (AtNonterminal name)) body).
   set (child_rank :=
@@ -118,37 +116,51 @@ Proof.
       (phase1_surface_parser_goal_rank_fuel expression_fuel child_goal)).
   assert (Hchild_rank :
     phase1_surface_parser_goal_rank_fuel expression_fuel child_goal =
-    Some child_rank).
-  {
-    subst child_rank.
-    eapply option_nat_value_some_of_exists.
-    eapply phase1_surface_parser_goal_rank_exists.
-    subst child_goal.
-    exact Hchild_global.
-  }
+    Some child_rank) by
+    abstract (
+      subst child_rank;
+      eapply option_nat_value_some_of_exists;
+      eapply phase1_surface_parser_goal_rank_exists;
+      subst child_goal;
+      exact Hchild_global).
   pose proof Hchild_rank as Hchild_rank_raw.
   subst child_goal.
   unfold phase1_surface_parser_goal_rank_fuel in Hchild_rank_raw.
-  assert (Hdecrease : child_rank < rank).
-  {
-    eapply phase1_surface_nonterminal_child_rank_decreases_fuel; eauto.
-  }
+  assert (Hdecrease : child_rank < rank) by
+    abstract (
+      eapply phase1_surface_nonterminal_child_rank_decreases_fuel;
+      eauto).
   destruct budget as [| remaining].
   - unfold phase1_surface_parser_local_measure in Hbudget.
     lia.
   - assert (Hchild_fit :
-      phase1_surface_parser_local_measure input child_rank <= remaining).
-    {
-      unfold phase1_surface_parser_local_measure in *.
-      lia.
-    }
-    pose proof
-      (IHbody
-        expression_fuel child_rank remaining
-        Hchild_rank Hchild_global Hchild_safe
-        (Nat.le_refl _) Hchild_fit) as Hchild_parse.
-    eapply oracle_parse_fuel_nonterminal_success.
-    + exact Hlookup.
-    + exact Hchild_parse.
+      phase1_surface_parser_local_measure input child_rank <= remaining) by
+      abstract (
+        unfold phase1_surface_parser_local_measure in *;
+        lia).
+    assert (Hchild_parse :
+      oracle_parse_fuel
+        remaining
+        phase1_surface_predictive_oracle
+        phase1_surface_rules
+        (GoalExpression (descend path (AtNonterminal name)) body)
+        input = Some (rest, ResultTree tree)) by
+      abstract (
+        exact
+          (IHbody
+            expression_fuel child_rank remaining
+            Hchild_rank Hchild_global Hchild_safe
+            (Nat.le_refl _) Hchild_fit)).
+    assert (Hparent_parse :
+      oracle_parse_fuel
+        (S remaining)
+        phase1_surface_predictive_oracle
+        phase1_surface_rules
+        (GoalExpression path (ENonterminal name))
+        input = Some (rest, ResultTree (PTNonterminal name tree))) by
+      abstract (
+        eapply oracle_parse_fuel_nonterminal_success;
+        [exact Hlookup | exact Hchild_parse]).
+    exact Hparent_parse.
 Qed.
 ''')
