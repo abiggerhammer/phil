@@ -1,2 +1,9 @@
 profile_id	binding_name	binding_mode	binding_type	binding_shape
+phase0.parsed-validation-bypass	raw	unrestricted	opaque-sorted:RawBytes:finite-seq-u8	fixture-raw:fixture
+phase0.unrelated-length	begin	unrestricted	frame:Begin	record:Begin
+phase0.unrelated-length	beginPolicy	unrestricted	validated:BeginPolicy:policyContext:begin	plain
 phase0.incompatible-join	condition	unrestricted	bool	plain
+phase0.stale-policy	begin	unrestricted	frame:Begin	record:Begin
+phase0.stale-policy	oldPolicy	unrestricted	validated:BeginPolicy:kappa1:begin	plain
+phase0.opaque-proof	begin	unrestricted	frame:Begin	record:Begin
+phase0.opaque-proof	payload	linear	opaque-sorted:OwnedPayload:opaque-OwnedPayload	owned-bytes:nat:0
