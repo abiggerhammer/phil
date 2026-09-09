@@ -1,0 +1,5 @@
+fixture_id	definition_id	capture_key	capture_transfer	capture_mode
+P1-NEG-CALL-007-001	pred	capture.owner.linear	move	linear
+P1-NEG-CALL-007-002	pred	capture.owner.linear	move	linear
+P1-NEG-CALL-008-001	pred	capture.owner.linear	move	linear
+P1-NEG-CALL-008-002	pred	capture.owner.linear	move	linear
