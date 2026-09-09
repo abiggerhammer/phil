@@ -1,4 +1,4 @@
-name: Phase 1 Surface Parser Total Fuel Rocq 9.3 RC1 Probe
+name: Phase 1 Surface Parser Total Fuel Rocq Version Probe
 
 on:
   pull_request:
@@ -7,11 +7,20 @@ permissions:
   contents: read
 
 jobs:
-  rocq93-parser-total-fuel-probe:
+  parser-total-fuel-version-probe:
+    name: ${{ matrix.label }} total-fuel probe
     runs-on: ubuntu-latest
     timeout-minutes: 20
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - label: Rocq 9.2.0
+            image: rocq/rocq-prover:9.2.0
+          - label: Rocq 9.3-rc1
+            image: rocq/rocq-prover:9.3-rc1
     container:
-      image: rocq/rocq-prover:9.3-rc1
+      image: ${{ matrix.image }}
       options: --user root
     steps:
       - uses: actions/checkout@v4
@@ -25,14 +34,15 @@ jobs:
           python3 scripts/derive_phase1_surface_grammar.py --check
           python3 scripts/derive_phase1_surface_determinacy_certificate.py --check
 
-      - name: Generate nonterminal total-fuel probe modules
+      - name: Generate total-fuel diagnostic modules
         shell: bash
         run: |
           set -euo pipefail
           python3 scripts/patch_total_fuel_nonterminal.py
+          python3 scripts/generate_total_fuel_statement_probe.py
           python3 scripts/generate_total_fuel_nonterminal_budget_probe.py
 
-      - name: Compile through nonterminal budget probe
+      - name: Compile through total-fuel probes
         shell: bash
         run: |
           set -euo pipefail
@@ -116,5 +126,7 @@ jobs:
           timeout 300s rocq c -time -Q proof/Phil Phil proof/Phil/Surface/GrammarParserTotalFuelStatic.v
           timeout 300s rocq c -time -Q proof/Phil Phil proof/Phil/Surface/GrammarParserTotalFuelBase.v
           timeout 300s rocq c -time -Q proof/Phil Phil proof/Phil/Surface/GrammarParserTotalFuelNonterminalSupport.v
-          echo "=== timing raw nonterminal budget theorem on Rocq 9.3+rc1 ==="
+          echo "=== timing statement-only identity probes ==="
+          timeout 60s rocq c -time -Q proof/Phil Phil proof/Phil/Surface/GrammarParserTotalFuelStatementProbe.v
+          echo "=== timing constructed nonterminal transport theorem ==="
           timeout 300s rocq c -time -Q proof/Phil Phil proof/Phil/Surface/GrammarParserTotalFuelNonterminalBudget.v
