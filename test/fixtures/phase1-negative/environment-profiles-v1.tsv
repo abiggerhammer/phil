@@ -4,3 +4,4 @@ phase0.wrong-order	s0	linear	receive	hello	opaque:Hello	success	-	-	false
 phase0.nonexhaustive-offer	s0	linear	offer	-	-	-	payload:success;cancel:cancelled	handle_payload:handle-payload	false
 phase0.legacy-raw	s0	linear	receive	raw	frame:Begin	success	-	-	true
 phase0.failure-reuse	s0	linear	receive	begin	frame:Begin	success	-	-	true
+phase0.common	-	-	none	-	-	-	-	authorize_store:authorize-store;delegate:delegate;new_cancellation_scope:new-cancellation-scope;allocate_linear_buffer:allocate-linear-buffer;inspect:inspect;unchecked_u32_add:unchecked-u32-add	false
