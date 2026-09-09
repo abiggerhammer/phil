@@ -1,0 +1,196 @@
+name: Temporary INT-004 Final Frozen Environments
+
+on:
+  push:
+    branches: [phase1-int-004-final-frozen-environments]
+    paths:
+      - 'examples/rejected/**'
+      - 'src/Phil/Surface/**'
+      - 'test/fixtures/phase1-negative/**'
+      - 'test/Phase1INT004PortableNegativeManifestMain.hs'
+      - 'test/SurfaceConformanceMain.hs'
+      - 'scripts/staging/int004_final_frozen_environments.py'
+      - '.github/workflows/tmp-int-004-final-frozen-environments.yml'
+
+permissions:
+  contents: write
+
+jobs:
+  final-frozen-environments:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: haskell-actions/setup@v2
+        with:
+          ghc-version: '9.6.7'
+          cabal-version: 'latest'
+
+      - name: Apply staged portable nested-session decoder
+        run: python3 scripts/staging/int004_final_frozen_environments.py
+
+      - name: Build complete Haskell substrate
+        run: cabal build all --enable-tests
+
+      - name: Strict typecheck INT-004 portable replay
+        run: |
+          cabal exec -- ghc -isrc -Wall -Werror -fno-code \
+            test/Phase1INT004PortableNegativeManifestMain.hs
+
+      - name: Replay all frozen negatives from portable environments
+        run: |
+          cabal exec -- runghc -isrc -Wall -Werror \
+            test/Phase1INT004PortableNegativeManifestMain.hs
+
+      - name: Guard final frozen corpus against filename environment fallback
+        run: |
+          if grep -n 'phase0EnvironmentFor' test/Phase1INT004PortableNegativeManifestMain.hs; then
+            echo 'portable replay still references phase0EnvironmentFor' >&2
+            exit 1
+          fi
+          python3 - <<'PY'
+          from pathlib import Path
+          root = Path('test/fixtures/phase1-negative')
+          for path in root.glob('environment-*.tsv'):
+              text = path.read_text()
+              assert '.phil' not in text, path
+              assert 'Phil.' not in text, path
+              assert '.hs' not in text, path
+          PY
+
+      - name: Reject duplicate portable session node
+        run: |
+          cp test/fixtures/phase1-negative/environment-session-nodes-v1.tsv /tmp/session-nodes.tsv
+          python3 - <<'PY'
+          from pathlib import Path
+          p = Path('test/fixtures/phase1-negative/environment-session-nodes-v1.tsv')
+          lines = p.read_text().splitlines()
+          lines.append(lines[1])
+          p.write_text('\n'.join(lines) + '\n')
+          PY
+          if cabal exec -- runghc -isrc -Wall -Werror test/Phase1INT004PortableNegativeManifestMain.hs >/tmp/int004-corrupt.log 2>&1; then
+            cat /tmp/int004-corrupt.log
+            echo 'duplicate session node unexpectedly accepted' >&2
+            exit 1
+          fi
+          mv /tmp/session-nodes.tsv test/fixtures/phase1-negative/environment-session-nodes-v1.tsv
+
+      - name: Reject missing portable session target
+        run: |
+          cp test/fixtures/phase1-negative/environment-session-branches-v1.tsv /tmp/session-branches.tsv
+          python3 - <<'PY'
+          from pathlib import Path
+          p = Path('test/fixtures/phase1-negative/environment-session-branches-v1.tsv')
+          rows = [line.split('\t') for line in p.read_text().splitlines()]
+          for row in rows[1:]:
+              if row[0:3] == ['phase0.label-proof', 'root', 'proceed']:
+                  row[5] = 'missing-node'
+                  break
+          else:
+              raise SystemExit('label-proof proceed branch not found')
+          p.write_text('\n'.join('\t'.join(row) for row in rows) + '\n')
+          PY
+          if cabal exec -- runghc -isrc -Wall -Werror test/Phase1INT004PortableNegativeManifestMain.hs >/tmp/int004-corrupt.log 2>&1; then
+            cat /tmp/int004-corrupt.log
+            echo 'missing session target unexpectedly accepted' >&2
+            exit 1
+          fi
+          mv /tmp/session-branches.tsv test/fixtures/phase1-negative/environment-session-branches-v1.tsv
+
+      - name: Reject invalid portable session root
+        run: |
+          cp test/fixtures/phase1-negative/environment-session-nodes-v1.tsv /tmp/session-nodes.tsv
+          python3 - <<'PY'
+          from pathlib import Path
+          p = Path('test/fixtures/phase1-negative/environment-session-nodes-v1.tsv')
+          rows = [line.split('\t') for line in p.read_text().splitlines()]
+          for row in rows[1:]:
+              if row[0] == 'phase0.label-proof':
+                  row[2] = 'false'
+          p.write_text('\n'.join('\t'.join(row) for row in rows) + '\n')
+          PY
+          if cabal exec -- runghc -isrc -Wall -Werror test/Phase1INT004PortableNegativeManifestMain.hs >/tmp/int004-corrupt.log 2>&1; then
+            cat /tmp/int004-corrupt.log
+            echo 'rootless session unexpectedly accepted' >&2
+            exit 1
+          fi
+          mv /tmp/session-nodes.tsv test/fixtures/phase1-negative/environment-session-nodes-v1.tsv
+
+      - name: Reject type alias to unknown portable session
+        run: |
+          cp test/fixtures/phase1-negative/environment-type-aliases-v1.tsv /tmp/type-aliases.tsv
+          python3 - <<'PY'
+          from pathlib import Path
+          p = Path('test/fixtures/phase1-negative/environment-type-aliases-v1.tsv')
+          text = p.read_text().replace(
+              'phase0.pending-commit\tServer[Upload]\tphase0.server-upload',
+              'phase0.pending-commit\tServer[Upload]\tphase0.missing-session',
+              1,
+          )
+          p.write_text(text)
+          PY
+          if cabal exec -- runghc -isrc -Wall -Werror test/Phase1INT004PortableNegativeManifestMain.hs >/tmp/int004-corrupt.log 2>&1; then
+            cat /tmp/int004-corrupt.log
+            echo 'unknown type-alias session unexpectedly accepted' >&2
+            exit 1
+          fi
+          mv /tmp/type-aliases.tsv test/fixtures/phase1-negative/environment-type-aliases-v1.tsv
+
+      - name: Reject missing final portable profile
+        run: |
+          cp test/fixtures/phase1-negative/environment-profiles-v1.tsv /tmp/environment-profiles.tsv
+          python3 - <<'PY'
+          from pathlib import Path
+          p = Path('test/fixtures/phase1-negative/environment-profiles-v1.tsv')
+          lines = [line for line in p.read_text().splitlines() if not line.startswith('phase0.label-proof\t')]
+          p.write_text('\n'.join(lines) + '\n')
+          PY
+          if cabal exec -- runghc -isrc -Wall -Werror test/Phase1INT004PortableNegativeManifestMain.hs >/tmp/int004-corrupt.log 2>&1; then
+            cat /tmp/int004-corrupt.log
+            echo 'missing final portable profile unexpectedly accepted' >&2
+            exit 1
+          fi
+          mv /tmp/environment-profiles.tsv test/fixtures/phase1-negative/environment-profiles-v1.tsv
+
+      - name: Replay restored frozen corpus after corruption tests
+        run: |
+          cabal exec -- runghc -isrc -Wall -Werror \
+            test/Phase1INT004PortableNegativeManifestMain.hs
+
+      - name: Replay legacy surface conformance harness
+        run: cabal test phil-surface-conformance-tests
+
+      - name: Transport exact tested decoder
+        env:
+          GITHUB_TOKEN: ${{ github.token }}
+        run: |
+          python3 - <<'PY'
+          import base64
+          import json
+          import os
+          import urllib.request
+
+          repo = os.environ['GITHUB_REPOSITORY']
+          branch = os.environ['GITHUB_REF_NAME']
+          token = os.environ['GITHUB_TOKEN']
+          path = 'test/Phase1INT004PortableNegativeManifestMain.hs'
+          api = f'https://api.github.com/repos/{repo}/contents/{path}'
+          headers = {
+              'Authorization': f'Bearer {token}',
+              'Accept': 'application/vnd.github+json',
+              'X-GitHub-Api-Version': '2022-11-28',
+              'User-Agent': 'phil-int004-staging',
+          }
+          req = urllib.request.Request(api + '?ref=' + branch, headers=headers)
+          with urllib.request.urlopen(req) as response:
+              current = json.load(response)
+          payload = json.dumps({
+              'message': 'INT-004: materialize final frozen environment decoder',
+              'content': base64.b64encode(open(path, 'rb').read()).decode(),
+              'branch': branch,
+              'sha': current['sha'],
+          }).encode()
+          req = urllib.request.Request(api, data=payload, method='PUT', headers={**headers, 'Content-Type': 'application/json'})
+          with urllib.request.urlopen(req) as response:
+              result = json.load(response)
+          print(result['commit']['sha'])
+          PY
