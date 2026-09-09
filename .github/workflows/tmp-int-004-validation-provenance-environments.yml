@@ -7,6 +7,7 @@ on:
       - 'test/Phase1INT004PortableNegativeManifestMain.hs'
       - 'test/fixtures/phase1-negative/**'
       - 'scripts/staging/int004_validation_provenance_environments.py'
+      - 'scripts/staging/int004_validation_provenance_typefix.py'
       - '.github/workflows/tmp-int-004-validation-provenance-environments.yml'
 
 permissions:
@@ -23,7 +24,9 @@ jobs:
           cabal-version: 'latest'
 
       - name: Apply portable validation/provenance decoder
-        run: python3 scripts/staging/int004_validation_provenance_environments.py
+        run: |
+          python3 scripts/staging/int004_validation_provenance_environments.py
+          python3 scripts/staging/int004_validation_provenance_typefix.py
 
       - name: Build complete Haskell substrate
         run: cabal build all --enable-tests
