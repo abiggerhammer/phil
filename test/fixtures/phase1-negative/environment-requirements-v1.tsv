@@ -1,3 +1,5 @@
 profile_id	site_kind	site_name	proposition
 phase0.parsed-validation-bypass	receive-exact	-	atom:BeginPolicy:var:policyContext,var:begin
+phase0.premature-acceptance	receive-exact	-	atom:BeginPolicy:var:policyContext,var:begin
+phase0.premature-acceptance	select	accepted	atom:DigestMatches:var:begin,opaque:stable-id-OwnedBytes:payload
 phase0.stale-policy	select	proceed	atom:BeginPolicy:var:kappa2,var:begin
