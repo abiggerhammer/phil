@@ -82,26 +82,30 @@ Proof.
       * reflexivity.
       * reflexivity.
       * reflexivity.
-      * unfold phase1_surface_parser_goal_rank_fuel.
-        simpl [phase1_surface_parser_goal_rank_value].
+      * unfold phase1_surface_parser_goal_rank_value,
+          phase1_surface_parser_goal_rank_fuel.
+        rewrite parser_expression_sequence_rank_equation.
         destruct
           (parser_sequence_goal_rank_fuel
             fuel phase1_surface_parser_rank_facts items);
           reflexivity.
-      * unfold phase1_surface_parser_goal_rank_fuel.
-        simpl [phase1_surface_parser_goal_rank_value].
+      * unfold phase1_surface_parser_goal_rank_value,
+          phase1_surface_parser_goal_rank_fuel.
+        rewrite parser_expression_alternative_rank_equation.
         destruct
           (parser_alternative_goal_rank_fuel
             fuel phase1_surface_parser_rank_facts items);
           reflexivity.
-      * unfold phase1_surface_parser_goal_rank_fuel.
-        simpl [phase1_surface_parser_goal_rank_value].
+      * unfold phase1_surface_parser_goal_rank_value,
+          phase1_surface_parser_goal_rank_fuel.
+        simpl.
         destruct
           (parser_expression_rank_fuel
             fuel phase1_surface_parser_rank_facts body);
           reflexivity.
-      * unfold phase1_surface_parser_goal_rank_fuel.
-        simpl [phase1_surface_parser_goal_rank_value].
+      * unfold phase1_surface_parser_goal_rank_value,
+          phase1_surface_parser_goal_rank_fuel.
+        simpl.
         destruct
           (parser_expression_rank_fuel
             fuel phase1_surface_parser_rank_facts body);
