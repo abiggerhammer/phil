@@ -6,7 +6,6 @@ import Control.Monad (forM, unless)
 import qualified Data.Map.Strict as Map
 import Data.Map.Strict (Map)
 import qualified Data.Set as Set
-import Data.Set (Set)
 import qualified Data.Text as Text
 import Data.Text (Text)
 import qualified Data.Text.IO as TextIO
@@ -143,9 +142,6 @@ parseTable expectedHeader parseRow input = case Text.lines input of
   header : rows
     | Text.splitOn "\t" header /= expectedHeader -> Left ("unexpected header: " <> Text.unpack header)
     | otherwise -> traverse (parseRow . Text.splitOn "\t") (filter (not . Text.null) rows)
-
-groupRows :: Ord k => (a -> k) -> [a] -> Map k [a]
-groupRows key = Map.fromListWith (++) . map (\value -> (key value, [value]))
 
 checkIntegrity
   :: [PortableCase]
