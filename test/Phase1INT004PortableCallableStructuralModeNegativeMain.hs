@@ -4,7 +4,6 @@ module Main (main) where
 
 import Control.Monad (forM, unless)
 import qualified Data.Map.Strict as Map
-import Data.Map.Strict (Map)
 import qualified Data.Set as Set
 import qualified Data.Text as Text
 import Data.Text (Text)
