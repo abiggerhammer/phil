@@ -1,0 +1,118 @@
+name: Temporary INT-004 Common Environment
+
+on:
+  push:
+    branches: [phase1-int-004-validation-environments]
+    paths:
+      - 'test/Phase1INT004PortableNegativeManifestMain.hs'
+      - 'test/fixtures/phase1-negative/**'
+      - 'scripts/staging/int004_common_environment.py'
+      - '.github/workflows/tmp-int-004-common-environment.yml'
+
+permissions:
+  contents: write
+
+jobs:
+  common-environment:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: haskell-actions/setup@v2
+        with:
+          ghc-version: '9.6.7'
+          cabal-version: 'latest'
+
+      - name: Apply portable common environment decoder
+        run: python3 scripts/staging/int004_common_environment.py
+
+      - name: Build complete Haskell substrate
+        run: cabal build all --enable-tests
+
+      - name: Strict typecheck INT-004 common environment replay
+        run: |
+          cabal exec -- ghc -isrc -Wall -Werror -fno-code \
+            test/Phase1INT004PortableNegativeManifestMain.hs
+
+      - name: Replay all frozen negatives with common profile portable
+        run: |
+          cabal exec -- runghc -isrc -Wall -Werror \
+            test/Phase1INT004PortableNegativeManifestMain.hs
+
+      - name: Guard common profile portability and fallback exclusion
+        run: |
+          python3 - <<'PY'
+          from pathlib import Path
+
+          profiles_path = Path('test/fixtures/phase1-negative/environment-profiles-v1.tsv')
+          text = profiles_path.read_text()
+          forbidden = ['.phil', 'examples/rejected', 'phase0EnvironmentFor', 'Phil.Surface', 'TyEndpoint']
+          for token in forbidden:
+              assert token not in text, f'portable environment data contains implementation/path token: {token}'
+
+          rows = [line.split('\t') for line in text.splitlines() if line]
+          assert rows[0] == [
+              'profile_id', 'binding_name', 'binding_mode', 'session_kind',
+              'message_name', 'message_type', 'terminal_outcome', 'branches',
+              'primitive_bindings', 'legacy_receive_frame_raw'
+          ]
+          body = rows[1:]
+          by_profile = {row[0]: row for row in body}
+          common = by_profile['phase0.common']
+          assert common[1:8] == ['-', '-', 'none', '-', '-', '-', '-']
+          assert common[9] == 'false'
+
+          expected_semantics = {
+              'authorize_store:authorize-store',
+              'delegate:delegate',
+              'new_cancellation_scope:new-cancellation-scope',
+              'allocate_linear_buffer:allocate-linear-buffer',
+              'inspect:inspect',
+              'unchecked_u32_add:unchecked-u32-add',
+          }
+          assert set(common[8].split(';')) == expected_semantics
+
+          manifest = [line.split('\t') for line in Path('test/fixtures/phase1-negative/manifest.tsv').read_text().splitlines() if line]
+          by_id = {row[0]: row for row in manifest[1:]}
+          for fixture_id in ['P1-NEG-P0-011','P1-NEG-P0-012','P1-NEG-P0-014','P1-NEG-P0-016','P1-NEG-P0-020']:
+              assert by_id[fixture_id][4] == 'phase0.common'
+
+          replay = Path('test/Phase1INT004PortableNegativeManifestMain.hs').read_text()
+          legacy_section = replay.split('legacyProfileEnvironment ::', 1)[1].split('checkIntegrity ::', 1)[0]
+          assert 'phase0.common' not in legacy_section
+          assert '"none" -> do' in replay
+          PY
+
+      - name: Unknown primitive semantics fail closed
+        run: |
+          set -euo pipefail
+          cp test/fixtures/phase1-negative/environment-profiles-v1.tsv /tmp/environment-profiles-v1.tsv
+          python3 - <<'PY'
+          from pathlib import Path
+          p = Path('test/fixtures/phase1-negative/environment-profiles-v1.tsv')
+          p.write_text(p.read_text().replace('authorize_store:authorize-store', 'authorize_store:not-a-semantic-operation', 1))
+          PY
+          if cabal exec -- runghc -isrc -Wall -Werror test/Phase1INT004PortableNegativeManifestMain.hs; then
+            echo 'unknown portable primitive semantic was accepted' >&2
+            exit 1
+          fi
+          cp /tmp/environment-profiles-v1.tsv test/fixtures/phase1-negative/environment-profiles-v1.tsv
+
+      - name: Replay restored portable corpus
+        run: |
+          cabal exec -- runghc -isrc -Wall -Werror \
+            test/Phase1INT004PortableNegativeManifestMain.hs
+
+      - name: Replay legacy surface conformance harness
+        run: cabal test phil-surface-conformance-tests
+
+      - name: Transport validated common decoder semantics
+        run: |
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git add test/Phase1INT004PortableNegativeManifestMain.hs
+          if git diff --cached --quiet; then
+            echo 'Committed semantic head already contains common decoder.'
+          else
+            git commit -m 'int: materialize common negative environment portably'
+            git push origin HEAD:phase1-int-004-validation-environments
+          fi
