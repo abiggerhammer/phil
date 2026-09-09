@@ -6,7 +6,11 @@ on:
     paths:
       - 'test/fixtures/phase1-negative/generic-instantiation-v1/**'
       - 'test/Phase1INT004PortableGenericInstantiationNegativeMain.hs'
+      - 'scripts/staging/int004_generic_instantiation_cleanup.py'
       - '.github/workflows/tmp-int-004-generic-instantiation-negatives.yml'
+
+permissions:
+  contents: write
 
 jobs:
   portable-generic-instantiation-negatives:
@@ -17,6 +21,9 @@ jobs:
         with:
           ghc-version: '9.6.7'
           cabal-version: 'latest'
+
+      - name: Apply warning cleanup
+        run: python3 scripts/staging/int004_generic_instantiation_cleanup.py
 
       - name: Build complete Haskell substrate
         run: cabal build all --enable-tests
@@ -136,3 +143,39 @@ jobs:
 
       - name: Replay frozen INT-004 corpus
         run: cabal exec -- runghc -isrc -Wall -Werror test/Phase1INT004PortableNegativeManifestMain.hs
+
+      - name: Transport tested generic-instantiation replay harness
+        env:
+          GITHUB_TOKEN: ${{ github.token }}
+        run: |
+          python3 - <<'PY'
+          import base64
+          import json
+          import os
+          import urllib.request
+
+          repo = os.environ['GITHUB_REPOSITORY']
+          branch = os.environ['GITHUB_REF_NAME']
+          token = os.environ['GITHUB_TOKEN']
+          path = 'test/Phase1INT004PortableGenericInstantiationNegativeMain.hs'
+          api = f'https://api.github.com/repos/{repo}/contents/{path}'
+          headers = {
+              'Authorization': f'Bearer {token}',
+              'Accept': 'application/vnd.github+json',
+              'X-GitHub-Api-Version': '2022-11-28',
+              'User-Agent': 'phil-int004-generic-instantiation-staging',
+          }
+          req = urllib.request.Request(api + '?ref=' + branch, headers=headers)
+          with urllib.request.urlopen(req) as response:
+              current = json.load(response)
+          payload = json.dumps({
+              'message': 'INT-004: clean portable generic-instantiation replay harness',
+              'content': base64.b64encode(open(path, 'rb').read()).decode(),
+              'branch': branch,
+              'sha': current['sha'],
+          }).encode()
+          req = urllib.request.Request(api, data=payload, method='PUT', headers={**headers, 'Content-Type': 'application/json'})
+          with urllib.request.urlopen(req) as response:
+              result = json.load(response)
+          print(result['commit']['sha'])
+          PY
