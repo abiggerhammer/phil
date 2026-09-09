@@ -28,7 +28,7 @@ Proof.
       expression_fuel phase1_surface_parser_rank_facts body)
     as [rank |] eqn:Hrank.
   - exists rank.
-    exact Hrank.
+    reflexivity.
   - simpl in Hdefined.
     discriminate.
 Qed.
