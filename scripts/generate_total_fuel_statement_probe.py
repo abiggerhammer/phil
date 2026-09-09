@@ -8,6 +8,7 @@ From Phil.Surface Require Import
   GrammarDerivation
   GrammarDerivationOracle
   GrammarDeterminacyPredictiveOracle
+  GrammarParserGlobalGoalRank
   GrammarParserRecognizer
   GrammarParserTotalFuelBase
   GrammarParserTotalFuelStatic.
