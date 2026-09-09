@@ -1,0 +1,135 @@
+name: Temporary INT-004 Callable Structural Mode Negatives
+
+on:
+  push:
+    branches: [phase1-int-004-callable-structural-mode-negatives]
+    paths:
+      - 'test/fixtures/phase1-negative/callable-structural-mode-v1/**'
+      - 'test/Phase1INT004PortableCallableStructuralModeNegativeMain.hs'
+      - '.github/workflows/tmp-int-004-callable-structural-mode-negatives.yml'
+
+jobs:
+  portable-callable-structural-mode-negatives:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: haskell-actions/setup@v2
+        with:
+          ghc-version: '9.6.7'
+          cabal-version: 'latest'
+
+      - name: Build complete Haskell substrate
+        run: cabal build all --enable-tests
+
+      - name: Strict typecheck portable callable structural-mode replay
+        run: |
+          cabal exec -- ghc -isrc -Wall -Werror -fno-code \
+            test/Phase1INT004PortableCallableStructuralModeNegativeMain.hs
+
+      - name: Replay portable callable structural-mode negatives
+        run: |
+          cabal exec -- runghc -isrc -Wall -Werror \
+            test/Phase1INT004PortableCallableStructuralModeNegativeMain.hs
+
+      - name: Guard portable data against Haskell-private authority
+        run: |
+          if grep -R -n -E 'RestrictedCaptureMustMove|DuplicateRestrictedCapture|ExplicitClosureModeWeakens|StricterClosureMode|TargetImplementationCannot|Phil\.Core|\.hs' \
+              test/fixtures/phase1-negative/callable-structural-mode-v1/*.tsv; then
+            echo 'portable callable structural-mode TSV contains implementation-private identity' >&2
+            exit 1
+          fi
+
+      - name: Reject unknown capture transfer
+        run: |
+          cp test/fixtures/phase1-negative/callable-structural-mode-v1/captures-v1.tsv /tmp/captures.tsv
+          sed -i '0,/copy/s//not-a-transfer/' test/fixtures/phase1-negative/callable-structural-mode-v1/captures-v1.tsv
+          if cabal exec -- runghc -isrc -Wall -Werror test/Phase1INT004PortableCallableStructuralModeNegativeMain.hs >/tmp/int004-call-mode.log 2>&1; then
+            cat /tmp/int004-call-mode.log
+            echo 'unknown capture transfer unexpectedly accepted' >&2
+            exit 1
+          fi
+          mv /tmp/captures.tsv test/fixtures/phase1-negative/callable-structural-mode-v1/captures-v1.tsv
+
+      - name: Reject unknown structural mode
+        run: |
+          cp test/fixtures/phase1-negative/callable-structural-mode-v1/captures-v1.tsv /tmp/captures.tsv
+          sed -i '0,/linear/s//not-a-mode/' test/fixtures/phase1-negative/callable-structural-mode-v1/captures-v1.tsv
+          if cabal exec -- runghc -isrc -Wall -Werror test/Phase1INT004PortableCallableStructuralModeNegativeMain.hs >/tmp/int004-call-mode.log 2>&1; then
+            cat /tmp/int004-call-mode.log
+            echo 'unknown structural mode unexpectedly accepted' >&2
+            exit 1
+          fi
+          mv /tmp/captures.tsv test/fixtures/phase1-negative/callable-structural-mode-v1/captures-v1.tsv
+
+      - name: Reject unknown justification kind
+        run: |
+          cp test/fixtures/phase1-negative/callable-structural-mode-v1/mode-declarations-v1.tsv /tmp/declarations.tsv
+          sed -i '0,/lifecycle/s//not-a-justification/' test/fixtures/phase1-negative/callable-structural-mode-v1/mode-declarations-v1.tsv
+          if cabal exec -- runghc -isrc -Wall -Werror test/Phase1INT004PortableCallableStructuralModeNegativeMain.hs >/tmp/int004-call-mode.log 2>&1; then
+            cat /tmp/int004-call-mode.log
+            echo 'unknown justification kind unexpectedly accepted' >&2
+            exit 1
+          fi
+          mv /tmp/declarations.tsv test/fixtures/phase1-negative/callable-structural-mode-v1/mode-declarations-v1.tsv
+
+      - name: Reject missing mode-declaration row
+        run: |
+          cp test/fixtures/phase1-negative/callable-structural-mode-v1/mode-declarations-v1.tsv /tmp/declarations.tsv
+          sed -i '/P1-NEG-CALL-017-004/d' test/fixtures/phase1-negative/callable-structural-mode-v1/mode-declarations-v1.tsv
+          if cabal exec -- runghc -isrc -Wall -Werror test/Phase1INT004PortableCallableStructuralModeNegativeMain.hs >/tmp/int004-call-mode.log 2>&1; then
+            cat /tmp/int004-call-mode.log
+            echo 'missing declaration row unexpectedly accepted' >&2
+            exit 1
+          fi
+          mv /tmp/declarations.tsv test/fixtures/phase1-negative/callable-structural-mode-v1/mode-declarations-v1.tsv
+
+      - name: Reject earlier unrelated CALL-017 capture failure
+        run: |
+          cp test/fixtures/phase1-negative/callable-structural-mode-v1/captures-v1.tsv /tmp/captures.tsv
+          sed -i 's/P1-NEG-CALL-017-001\towner.affine\tmove\taffine/P1-NEG-CALL-017-001\towner.affine\tcopy\taffine/' test/fixtures/phase1-negative/callable-structural-mode-v1/captures-v1.tsv
+          if cabal exec -- runghc -isrc -Wall -Werror test/Phase1INT004PortableCallableStructuralModeNegativeMain.hs >/tmp/int004-call-mode.log 2>&1; then
+            cat /tmp/int004-call-mode.log
+            echo 'earlier unrelated capture failure unexpectedly counted as competent rejection' >&2
+            exit 1
+          fi
+          mv /tmp/captures.tsv test/fixtures/phase1-negative/callable-structural-mode-v1/captures-v1.tsv
+
+      - name: Reject unknown authority
+        run: |
+          cp test/fixtures/phase1-negative/callable-structural-mode-v1/manifest.tsv /tmp/manifest.tsv
+          sed -i '0,/matrix:CALL-003/s//matrix:NOT-A-CASE/' test/fixtures/phase1-negative/callable-structural-mode-v1/manifest.tsv
+          if cabal exec -- runghc -isrc -Wall -Werror test/Phase1INT004PortableCallableStructuralModeNegativeMain.hs >/tmp/int004-call-mode.log 2>&1; then
+            cat /tmp/int004-call-mode.log
+            echo 'unknown authority unexpectedly accepted' >&2
+            exit 1
+          fi
+          mv /tmp/manifest.tsv test/fixtures/phase1-negative/callable-structural-mode-v1/manifest.tsv
+
+      - name: Reject missing Certified proof artifact
+        run: |
+          cp test/fixtures/phase1-negative/callable-structural-mode-v1/authority-registry-v1.tsv /tmp/authority.tsv
+          sed -i '0,/proof\/Phil\/Core\/CallableMode.v/s//proof\/Phil\/Core\/DefinitelyMissing.v/' \
+            test/fixtures/phase1-negative/callable-structural-mode-v1/authority-registry-v1.tsv
+          if cabal exec -- runghc -isrc -Wall -Werror test/Phase1INT004PortableCallableStructuralModeNegativeMain.hs >/tmp/int004-call-mode.log 2>&1; then
+            cat /tmp/int004-call-mode.log
+            echo 'missing Certified proof unexpectedly accepted' >&2
+            exit 1
+          fi
+          mv /tmp/authority.tsv test/fixtures/phase1-negative/callable-structural-mode-v1/authority-registry-v1.tsv
+
+      - name: Replay restored portable callable structural-mode corpus
+        run: cabal exec -- runghc -isrc -Wall -Werror test/Phase1INT004PortableCallableStructuralModeNegativeMain.hs
+
+      - name: Replay legacy callable structural-mode corpora
+        run: |
+          cabal exec -- runghc -isrc -Wall -Werror test/Phase1CallableCaptureEffectsMain.hs
+          cabal exec -- runghc -isrc -Wall -Werror test/Phase1ExplicitClosureModeMain.hs
+
+      - name: Replay prior portable Phase-1 corpora
+        run: |
+          cabal exec -- runghc -isrc -Wall -Werror test/Phase1INT004PortableGenericNegativeMain.hs
+          cabal exec -- runghc -isrc -Wall -Werror test/Phase1INT004PortableGenericInstantiationNegativeMain.hs
+          cabal exec -- runghc -isrc -Wall -Werror test/Phase1INT004PortableCallableLifecycleNegativeMain.hs
+
+      - name: Replay frozen INT-004 corpus
+        run: cabal exec -- runghc -isrc -Wall -Werror test/Phase1INT004PortableNegativeManifestMain.hs
