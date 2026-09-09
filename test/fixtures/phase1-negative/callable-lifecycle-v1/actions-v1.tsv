@@ -1,0 +1,11 @@
+fixture_id	step	invoke_occurrence_key	restricted_capture_residue	successor_definition_id
+P1-NEG-CALL-007-001	1	callable.linear-preserved.001	-	-
+P1-NEG-CALL-007-002	1	callable.linear-preserved.001	capture.owner.linear	succ
+P1-NEG-CALL-008-001	1	callable.one-shot.001	-	-
+P1-NEG-CALL-008-001	2	callable.one-shot.001	-	-
+P1-NEG-CALL-008-002	1	callable.one-shot.001	-	succ
+P1-NEG-CALL-009-001	1	callable.stream.001	-	succ
+P1-NEG-CALL-009-001	2	callable.stream.001	-	succ
+P1-NEG-CALL-009-002	1	callable.stream.001	-	succ
+P1-NEG-CALL-009-003	1	callable.stream.001	-	succ
+P1-NEG-CALL-009-004	1	callable.stream.001	-	succ
