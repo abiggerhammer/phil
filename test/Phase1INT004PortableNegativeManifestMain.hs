@@ -3,7 +3,7 @@
 module Main (main) where
 
 import Control.Exception (evaluate)
-import Control.Monad (forM, unless, when)
+import Control.Monad (foldM, forM, unless, when)
 import qualified Data.Map.Strict as Map
 import Data.Map.Strict (Map)
 import qualified Data.Set as Set
@@ -11,18 +11,23 @@ import Data.Set (Set)
 import qualified Data.Text as Text
 import Data.Text (Text)
 import qualified Data.Text.IO as TextIO
-import Phil.Core.Static (emptyStaticContext)
+import Phil.Core.Static (StaticContext, declareOpaqueClaim, emptyStaticContext)
 import Phil.Core.Syntax
   ( Branch (..)
+  , FrameId (..)
   , GrammarId (..)
   , Mode (..)
   , Name (..)
   , Outcome (..)
+  , Proposition (..)
+  , RefSort (..)
+  , RefTerm (..)
   , Session (..)
   , Ty (..)
   )
 import Phil.Surface.Check
-  ( InitialBinding (..)
+  ( FieldInfo (..)
+  , InitialBinding (..)
   , PrimitiveSemantics (..)
   , RejectionClass (..)
   , SurfaceCheckError (..)
@@ -75,6 +80,21 @@ data PortableEnvironmentBinding = PortableEnvironmentBinding
   }
   deriving (Eq, Show)
 
+data PortableEnvironmentRequirement = PortableEnvironmentRequirement
+  { portableRequirementProfileId :: Text
+  , portableRequirementSiteKind :: Text
+  , portableRequirementSiteName :: Text
+  , portableRequirementProposition :: Text
+  }
+  deriving (Eq, Show)
+
+data PortableStaticClaim = PortableStaticClaim
+  { portableStaticClaimName :: Text
+  , portableStaticClaimDefinitionKind :: Text
+  , portableStaticClaimParameters :: Text
+  }
+  deriving (Eq, Show)
+
 manifestPath :: FilePath
 manifestPath = "test/fixtures/phase1-negative/manifest.tsv"
 
@@ -83,6 +103,12 @@ environmentProfilesPath = "test/fixtures/phase1-negative/environment-profiles-v1
 
 environmentBindingsPath :: FilePath
 environmentBindingsPath = "test/fixtures/phase1-negative/environment-bindings-v1.tsv"
+
+environmentRequirementsPath :: FilePath
+environmentRequirementsPath = "test/fixtures/phase1-negative/environment-requirements-v1.tsv"
+
+environmentStaticClaimsPath :: FilePath
+environmentStaticClaimsPath = "test/fixtures/phase1-negative/environment-static-claims-v1.tsv"
 
 seedPortableProfiles :: Set Text
 seedPortableProfiles = Set.fromList
@@ -93,6 +119,10 @@ seedPortableProfiles = Set.fromList
   , "phase0.failure-reuse"
   , "phase0.common"
   , "phase0.incompatible-join"
+  , "phase0.parsed-validation-bypass"
+  , "phase0.unrelated-length"
+  , "phase0.stale-policy"
+  , "phase0.opaque-proof"
   ]
 
 seedPortableFixtures :: Set Text
@@ -102,12 +132,16 @@ seedPortableFixtures = Set.fromList
   , "P1-NEG-P0-003"
   , "P1-NEG-P0-004"
   , "P1-NEG-P0-005"
+  , "P1-NEG-P0-006"
+  , "P1-NEG-P0-007"
   , "P1-NEG-P0-008"
   , "P1-NEG-P0-009"
   , "P1-NEG-P0-011"
   , "P1-NEG-P0-012"
   , "P1-NEG-P0-014"
   , "P1-NEG-P0-016"
+  , "P1-NEG-P0-017"
+  , "P1-NEG-P0-018"
   , "P1-NEG-P0-020"
   ]
 
@@ -125,8 +159,19 @@ main = do
   bindings <- case parseEnvironmentBindings bindingText of
     Left detail -> putStrLn ("FAIL: environment bindings -- " <> detail) >> exitFailure
     Right value -> pure value
-  integrityOk <- checkIntegrity bindings profiles cases
-  results <- forM cases (replayCase bindings profiles)
+  requirementText <- TextIO.readFile environmentRequirementsPath
+  requirements <- case parseEnvironmentRequirements requirementText of
+    Left detail -> putStrLn ("FAIL: environment requirements -- " <> detail) >> exitFailure
+    Right value -> pure value
+  staticClaimText <- TextIO.readFile environmentStaticClaimsPath
+  staticClaims <- case parsePortableStaticClaims staticClaimText of
+    Left detail -> putStrLn ("FAIL: static claims -- " <> detail) >> exitFailure
+    Right value -> pure value
+  staticContext <- case materializePortableStaticContext staticClaims of
+    Left detail -> putStrLn ("FAIL: static context -- " <> Text.unpack detail) >> exitFailure
+    Right value -> pure value
+  integrityOk <- checkIntegrity staticClaims requirements bindings profiles cases
+  results <- forM cases (replayCase staticContext requirements bindings profiles)
   unless (integrityOk && and results) exitFailure
   putStrLn ("PASS: INT-004 portable frozen negative manifest (" <> show (length cases) <> " fixtures)")
 
@@ -242,6 +287,56 @@ parseEnvironmentBindingRow row = case Text.splitOn "\t" row of
         }
   _ -> Left ("invalid portable binding TSV row: " <> Text.unpack row)
 
+parseEnvironmentRequirements :: Text -> Either String (Map Text [PortableEnvironmentRequirement])
+parseEnvironmentRequirements input = case Text.lines input of
+  [] -> Left "empty environment requirement file"
+  header : rows
+    | header /= expectedHeader -> Left ("unexpected requirement header: " <> Text.unpack header)
+    | otherwise -> do
+        parsed <- traverse parseEnvironmentRequirementRow (filter (not . Text.null) rows)
+        Right (Map.fromListWith (++)
+          [(portableRequirementProfileId requirement, [requirement]) | requirement <- parsed])
+  where
+    expectedHeader = Text.intercalate "\t"
+      [ "profile_id"
+      , "site_kind"
+      , "site_name"
+      , "proposition"
+      ]
+
+parseEnvironmentRequirementRow :: Text -> Either String PortableEnvironmentRequirement
+parseEnvironmentRequirementRow row = case Text.splitOn "\t" row of
+  [profileId, siteKind, siteName, proposition]
+    | any Text.null [profileId, siteKind, siteName, proposition] ->
+        Left ("empty portable requirement field: " <> Text.unpack row)
+    | otherwise -> Right PortableEnvironmentRequirement
+        { portableRequirementProfileId = profileId
+        , portableRequirementSiteKind = siteKind
+        , portableRequirementSiteName = siteName
+        , portableRequirementProposition = proposition
+        }
+  _ -> Left ("invalid portable requirement TSV row: " <> Text.unpack row)
+
+parsePortableStaticClaims :: Text -> Either String [PortableStaticClaim]
+parsePortableStaticClaims input = case Text.lines input of
+  [] -> Left "empty static claim file"
+  header : rows
+    | header /= Text.intercalate "\t" ["claim_name", "definition_kind", "parameters"] ->
+        Left ("unexpected static claim header: " <> Text.unpack header)
+    | otherwise -> traverse parsePortableStaticClaimRow (filter (not . Text.null) rows)
+
+parsePortableStaticClaimRow :: Text -> Either String PortableStaticClaim
+parsePortableStaticClaimRow row = case Text.splitOn "\t" row of
+  [claimName, definitionKind, parameters]
+    | any Text.null [claimName, definitionKind, parameters] ->
+        Left ("empty portable static claim field: " <> Text.unpack row)
+    | otherwise -> Right PortableStaticClaim
+        { portableStaticClaimName = claimName
+        , portableStaticClaimDefinitionKind = definitionKind
+        , portableStaticClaimParameters = parameters
+        }
+  _ -> Left ("invalid portable static claim TSV row: " <> Text.unpack row)
+
 parseEnvironmentRow :: Text -> Either String PortableEnvironmentProfile
 parseEnvironmentRow row = case Text.splitOn "\t" row of
   [profileId, bindingName, bindingMode, sessionKind, messageName, messageType, terminalOutcome, branches, primitiveBindings, legacyReceiveFrameRaw]
@@ -262,19 +357,25 @@ parseEnvironmentRow row = case Text.splitOn "\t" row of
   _ -> Left ("invalid portable environment TSV row: " <> Text.unpack row)
 
 materializePortableProfile
-  :: Map Text [PortableEnvironmentBinding]
+  :: StaticContext
+  -> Map Text [PortableEnvironmentRequirement]
+  -> Map Text [PortableEnvironmentBinding]
   -> PortableEnvironmentProfile
   -> Either Text SurfaceEnvironment
-materializePortableProfile extraBindings profile = do
+materializePortableProfile staticContext requirements extraBindings profile = do
   bindings <- materializePortableBindings extraBindings profile
   primitives <- parsePrimitiveBindings (portablePrimitiveBindings profile)
   legacyReceiveFrameRaw <- parsePortableBool
     "legacy_receive_frame_raw"
     (portableLegacyReceiveFrameRaw profile)
-  pure (emptySurfaceEnvironment emptyStaticContext)
+  (receiveExactRequirement, selectRequirements) <- materializePortableRequirements
+    (Map.findWithDefault [] (portableProfileId profile) requirements)
+  pure (emptySurfaceEnvironment staticContext)
     { surfaceInitialBindings = bindings
     , surfacePrimitives = primitives
     , surfaceLegacyReceiveFrameRaw = legacyReceiveFrameRaw
+    , surfaceReceiveExactRequirement = receiveExactRequirement
+    , surfaceSelectRequirements = selectRequirements
     }
 
 materializePortableBindings
@@ -312,18 +413,90 @@ materializePortableExtraBinding
 materializePortableExtraBinding binding = do
   mode <- parsePortableMode (portableExtraBindingMode binding)
   ty <- parsePortableBindingType (portableExtraBindingType binding)
-  shape <- case portableExtraBindingShape binding of
-    "plain" -> Right PlainShape
-    other -> Left ("unsupported portable binding shape: " <> other)
+  shape <- parsePortableBindingShape
+    (portableExtraBindingName binding)
+    ty
+    (portableExtraBindingShape binding)
   Right
     ( portableExtraBindingName binding
     , InitialBinding mode ty shape
     )
 
 parsePortableBindingType :: Text -> Either Text Ty
-parsePortableBindingType value = case value of
-  "bool" -> Right TyBool
-  _ -> Left ("unsupported portable binding type: " <> value)
+parsePortableBindingType value
+  | value == "bool" = Right TyBool
+  | Just grammar <- Text.stripPrefix "frame:" value
+  , not (Text.null grammar) = Right (TyFrame (GrammarId grammar))
+  | Just rest <- Text.stripPrefix "validated:" value =
+      case Text.splitOn ":" rest of
+        [claim, context, subject]
+          | all (not . Text.null) [claim, context, subject] ->
+              Right (TyValidated claim (Name context) (Name subject))
+        _ -> Left ("invalid portable validated binding type: " <> value)
+  | Just rest <- Text.stripPrefix "opaque-sorted:" value =
+      case Text.splitOn ":" rest of
+        [name, sortEncoding] | not (Text.null name) ->
+          TyOpaqueSorted name <$> parsePortableSort sortEncoding
+        _ -> Left ("invalid portable sorted opaque binding type: " <> value)
+  | otherwise = Left ("unsupported portable binding type: " <> value)
+
+parsePortableSort :: Text -> Either Text RefSort
+parsePortableSort value
+  | value == "finite-seq-u8" = Right (SortFiniteSeq (SortUInt 8))
+  | Just name <- Text.stripPrefix "opaque-" value
+  , not (Text.null name) = Right (SortOpaque name)
+  | Just name <- Text.stripPrefix "stable-id-" value
+  , not (Text.null name) = Right (SortStableId name)
+  | otherwise = Left ("unsupported portable sort: " <> value)
+
+materializePortableStaticContext :: [PortableStaticClaim] -> Either Text StaticContext
+materializePortableStaticContext claims = foldM addClaim emptyStaticContext claims
+  where
+    addClaim context claim = do
+      parameters <- parsePortableStaticClaimParameters (portableStaticClaimParameters claim)
+      case portableStaticClaimDefinitionKind claim of
+        "opaque" -> case declareOpaqueClaim (portableStaticClaimName claim) parameters context of
+          Left errorValue -> Left (Text.pack (show errorValue))
+          Right next -> Right next
+        other -> Left ("unsupported portable static claim definition: " <> other)
+
+parsePortableStaticClaimParameters :: Text -> Either Text [(Name, RefSort)]
+parsePortableStaticClaimParameters value
+  | value == "-" = Right []
+  | otherwise = traverse parseParameter (Text.splitOn ";" value)
+  where
+    parseParameter entry = case Text.splitOn ":" entry of
+      [name, sortEncoding]
+        | not (Text.null name) && not (Text.null sortEncoding) -> do
+            sortValue <- parsePortableSort sortEncoding
+            Right (Name name, sortValue)
+      _ -> Left ("invalid portable static claim parameter: " <> entry)
+
+parsePortableBindingShape :: Text -> Ty -> Text -> Either Text SurfaceShape
+parsePortableBindingShape bindingName ty value
+  | value == "plain" = Right PlainShape
+  | Just grammar <- Text.stripPrefix "record:" value =
+      case ty of
+        TyFrame (GrammarId actual) | actual == grammar -> portableRecordShape bindingName grammar
+        _ -> Left ("record shape/type mismatch for " <> bindingName)
+  | Just frame <- Text.stripPrefix "fixture-raw:" value
+  , not (Text.null frame) = Right (FixtureRawShape (FrameId frame))
+  | Just amount <- Text.stripPrefix "owned-bytes:nat:" value =
+      OwnedBytesShape . RefNat <$> parsePortableNat amount
+  | otherwise = Left ("unsupported portable binding shape: " <> value)
+
+portableRecordShape :: Text -> Text -> Either Text SurfaceShape
+portableRecordShape bindingName grammar = case grammar of
+  "Begin" -> Right (RecordShape "Begin" (Map.singleton "length" (FieldInfo
+      (TyUInt 64)
+      (SortUInt 64)
+      (Just (RefField (RefVar (Name bindingName)) "length" (SortUInt 64))))))
+  _ -> Left ("unsupported portable record shape: " <> grammar)
+
+parsePortableNat :: Text -> Either Text Integer
+parsePortableNat value = case reads (Text.unpack value) of
+  [(number, "")] | number >= 0 -> Right number
+  _ -> Left ("invalid portable natural: " <> value)
 
 parsePortableMode :: Text -> Either Text Mode
 parsePortableMode value = case value of
@@ -366,6 +539,19 @@ parsePortableType value
   , not (Text.null name) = Right (TyOpaque name)
   | Just grammar <- Text.stripPrefix "frame:" value
   , not (Text.null grammar) = Right (TyFrame (GrammarId grammar))
+  | Just amount <- Text.stripPrefix "bytes:nat:" value =
+      TyBytes . RefNat <$> parsePortableNat amount
+  | Just fieldSpec <- Text.stripPrefix "bytes:toNat-field:" value =
+      case Text.splitOn ":" fieldSpec of
+        [pathSpec, "u64"] -> case Text.splitOn "." pathSpec of
+          [bindingName, fieldName]
+            | all (not . Text.null) [bindingName, fieldName] ->
+                Right (TyBytes (RefToNat (RefField
+                  (RefVar (Name bindingName))
+                  fieldName
+                  (SortUInt 64))))
+          _ -> Left ("invalid portable byte field path: " <> fieldSpec)
+        _ -> Left ("invalid portable byte-index type: " <> value)
   | otherwise = Left ("unsupported portable message type: " <> value)
 
 parsePortableBranches :: Text -> Either Text [Branch]
@@ -408,6 +594,55 @@ parsePrimitiveBindings value
           _ -> Left ("unsupported portable primitive semantic: " <> semantic)
       _ -> Left ("unsupported portable primitive binding: " <> entry)
 
+materializePortableRequirements
+  :: [PortableEnvironmentRequirement]
+  -> Either Text (Maybe Proposition, Map Text [Proposition])
+materializePortableRequirements requirements = do
+  materialized <- traverse materializeRequirement requirements
+  let receiveRequirements = [proposition | ("receive-exact", _, proposition) <- materialized]
+      selectEntries = [(siteName, [proposition]) | ("select", siteName, proposition) <- materialized]
+      selectMap = Map.fromList selectEntries
+  if length receiveRequirements > 1
+    then Left "duplicate portable receive-exact requirement"
+    else if Map.size selectMap /= length selectEntries
+      then Left "duplicate portable select requirement site"
+      else Right
+        ( case receiveRequirements of
+            [] -> Nothing
+            [proposition] -> Just proposition
+            _ -> Nothing
+        , selectMap
+        )
+  where
+    materializeRequirement
+      :: PortableEnvironmentRequirement
+      -> Either Text (Text, Text, Proposition)
+    materializeRequirement requirement = do
+      proposition <- parsePortableProposition (portableRequirementProposition requirement)
+      case portableRequirementSiteKind requirement of
+        "receive-exact" -> do
+          requireDash "receive-exact site_name" (portableRequirementSiteName requirement)
+          Right ("receive-exact", "-", proposition)
+        "select" -> do
+          siteName <- requireValue "select site_name" (portableRequirementSiteName requirement)
+          Right ("select", siteName, proposition)
+        other -> Left ("unsupported portable requirement site kind: " <> other)
+
+parsePortableProposition :: Text -> Either Text Proposition
+parsePortableProposition value = case Text.stripPrefix "atom:" value of
+  Nothing -> Left ("unsupported portable proposition: " <> value)
+  Just body ->
+    let (claim, argumentTextWithColon) = Text.breakOn ":" body
+    in case Text.stripPrefix ":" argumentTextWithColon of
+      Nothing -> Left ("portable atom requires arguments: " <> value)
+      Just argumentText
+        | Text.null claim || Text.null argumentText -> Left ("invalid portable atom: " <> value)
+        | otherwise -> Atom claim <$> traverse parseArgument (Text.splitOn "," argumentText)
+  where
+    parseArgument argument = case Text.stripPrefix "var:" argument of
+      Just name | not (Text.null name) -> Right (RefVar (Name name))
+      _ -> Left ("unsupported portable proposition argument: " <> argument)
+
 requireValue :: Text -> Text -> Either Text Text
 requireValue field value
   | value == "-" = Left (field <> " must be populated")
@@ -419,13 +654,15 @@ requireDash field value
   | otherwise = Left (field <> " must be '-' for this session kind")
 
 resolveProfileEnvironment
-  :: Map Text [PortableEnvironmentBinding]
+  :: StaticContext
+  -> Map Text [PortableEnvironmentRequirement]
+  -> Map Text [PortableEnvironmentBinding]
   -> Map Text PortableEnvironmentProfile
   -> Text
   -> Either Text SurfaceEnvironment
-resolveProfileEnvironment bindings profiles profile =
+resolveProfileEnvironment staticContext requirements bindings profiles profile =
   case Map.lookup profile profiles of
-    Just portable -> materializePortableProfile bindings portable
+    Just portable -> materializePortableProfile staticContext requirements bindings portable
     Nothing
       | Set.member profile seedPortableProfiles ->
           Left ("seed profile missing portable environment material: " <> profile)
@@ -437,24 +674,22 @@ resolveProfileEnvironment bindings profiles profile =
 legacyProfileEnvironment :: Text -> Either Text SurfaceEnvironment
 legacyProfileEnvironment profile =
   case profile of
-    "phase0.parsed-validation-bypass" -> legacy "06-parsed-used-as-validated.phil"
-    "phase0.unrelated-length" -> legacy "07-unrelated-payload-length.phil"
     "phase0.premature-acceptance" -> legacy "10-accept-before-digest-check.phil"
     "phase0.pending-commit" -> legacy "13-commit-unrelated-parsed.phil"
     "phase0.pending-drop" -> legacy "15-drop-pending-receive.phil"
-    "phase0.stale-policy" -> legacy "17-use-evidence-wrong-context.phil"
-    "phase0.opaque-proof" -> legacy "18-prove-opaque-digest.phil"
     "phase0.label-proof" -> legacy "19-label-does-not-transfer-proof.phil"
     _ -> Left ("unknown Phase-0 environment profile: " <> profile)
   where
     legacy name = phase0EnvironmentFor ("examples/rejected/" <> Text.unpack name)
 
 checkIntegrity
-  :: Map Text [PortableEnvironmentBinding]
+  :: [PortableStaticClaim]
+  -> Map Text [PortableEnvironmentRequirement]
+  -> Map Text [PortableEnvironmentBinding]
   -> Map Text PortableEnvironmentProfile
   -> [NegativeCase]
   -> IO Bool
-checkIntegrity bindings profiles cases = do
+checkIntegrity staticClaims requirements bindings profiles cases = do
   let ids = map negativeCaseId cases
       paths = map negativeCasePath cases
       uniqueIds = Set.size (Set.fromList ids) == length ids
@@ -470,12 +705,27 @@ checkIntegrity bindings profiles cases = do
             || Map.member (negativeCaseEnvironmentProfile negativeCase) profiles)
         cases
       bindingProfilesDeclared = Map.keysSet bindings `Set.isSubsetOf` Map.keysSet profiles
-      multibindingDomainExact = Map.keysSet bindings == Set.singleton "phase0.incompatible-join"
-      profilesResolve = all
-        (either (const False) (const True)
-          . resolveProfileEnvironment bindings profiles
-          . negativeCaseEnvironmentProfile)
-        cases
+      requirementProfilesDeclared = Map.keysSet requirements `Set.isSubsetOf` Map.keysSet profiles
+      multibindingDomainExact = Map.keysSet bindings == Set.fromList
+        [ "phase0.incompatible-join"
+        , "phase0.parsed-validation-bypass"
+        , "phase0.unrelated-length"
+        , "phase0.stale-policy"
+        , "phase0.opaque-proof"
+        ]
+      requirementDomainExact = Map.keysSet requirements == Set.fromList
+        [ "phase0.parsed-validation-bypass"
+        , "phase0.stale-policy"
+        ]
+      staticClaimDomainExact = map portableStaticClaimName staticClaims == ["DigestMatches"]
+      staticContextResult = materializePortableStaticContext staticClaims
+      profilesResolve = case staticContextResult of
+        Left _ -> False
+        Right staticContext -> all
+          (either (const False) (const True)
+            . resolveProfileEnvironment staticContext requirements bindings profiles
+            . negativeCaseEnvironmentProfile)
+          cases
   filesPresent <- and <$> mapM doesFileExist paths
   report "20 frozen negative fixtures are manifest-owned" exactFrozenCount
   report "stable fixture IDs are unique" uniqueIds
@@ -485,8 +735,11 @@ checkIntegrity bindings profiles cases = do
   report "every fixture names an explicit environment profile" profilesNamed
   report "portable environment seed has exact profile domain" seedProfileDomainExact
   report "portable extra bindings reference declared profiles" bindingProfilesDeclared
+  report "portable requirements reference declared profiles" requirementProfilesDeclared
   report "portable extra-binding domain is exact for this slice" multibindingDomainExact
-  report "fixtures 001-005, 008, 009, 011, 012, 014, 016, and 020 use portable environment material" seedFixturesPortable
+  report "portable requirement domain is exact for this slice" requirementDomainExact
+  report "portable static claim domain is exact for frozen Phase 0" staticClaimDomainExact
+  report "fixtures 001-009, 011, 012, 014, 016-018, and 020 use portable environment material" seedFixturesPortable
   report "every named environment profile resolves" profilesResolve
   report "every portable fixture path exists" filesPresent
   pure (and
@@ -498,18 +751,23 @@ checkIntegrity bindings profiles cases = do
     , profilesNamed
     , seedProfileDomainExact
     , bindingProfilesDeclared
+    , requirementProfilesDeclared
     , multibindingDomainExact
+    , requirementDomainExact
+    , staticClaimDomainExact
     , seedFixturesPortable
     , profilesResolve
     , filesPresent
     ])
 
 replayCase
-  :: Map Text [PortableEnvironmentBinding]
+  :: StaticContext
+  -> Map Text [PortableEnvironmentRequirement]
+  -> Map Text [PortableEnvironmentBinding]
   -> Map Text PortableEnvironmentProfile
   -> NegativeCase
   -> IO Bool
-replayCase bindings profiles negativeCase = do
+replayCase staticContext requirements bindings profiles negativeCase = do
   source <- TextIO.readFile (negativeCasePath negativeCase)
   let path = negativeCasePath negativeCase
       expected = negativeCaseExpectedClass negativeCase
@@ -523,7 +781,7 @@ replayCase bindings profiles negativeCase = do
     _ -> putStrLn
       ("FAIL: " <> Text.unpack (negativeCaseId negativeCase)
         <> " -- frozen legacy fixture missing during migration") >> pure False
-  case resolveProfileEnvironment bindings profiles (negativeCaseEnvironmentProfile negativeCase) of
+  case resolveProfileEnvironment staticContext requirements bindings profiles (negativeCaseEnvironmentProfile negativeCase) of
     Left detail -> failCase ("environment profile failed: " <> Text.unpack detail)
     Right environment -> case parseSurfaceFile (Text.pack path) source of
       Left diagnostic -> failCase
