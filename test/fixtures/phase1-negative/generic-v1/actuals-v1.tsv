@@ -1,4 +1,4 @@
 fixture_id	parameter_name	actual_mode
-P1-NEG-GEN-002-001	T	linear
-P1-NEG-GEN-003-001	T	affine
-P1-NEG-GEN-003-002	T	linear
+P1-NEG-GEN-002-001	T	affine
+P1-NEG-GEN-002-002	T	linear
+P1-NEG-GEN-003-001	T	linear
