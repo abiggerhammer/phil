@@ -41,6 +41,26 @@ Proof.
   reflexivity.
 Qed.
 
+Lemma oracle_parse_fuel_nonterminal_success :
+  forall remaining oracle rules path name body input rest tree,
+    lookupRule name rules = Some body ->
+    oracle_parse_fuel
+      remaining oracle rules
+      (GoalExpression (descend path (AtNonterminal name)) body)
+      input = Some (rest, ResultTree tree) ->
+    oracle_parse_fuel
+      (S remaining) oracle rules
+      (GoalExpression path (ENonterminal name))
+      input = Some (rest, ResultTree (PTNonterminal name tree)).
+Proof.
+  intros remaining oracle rules path name body input rest tree
+    Hlookup Hchild.
+  simpl.
+  rewrite Hlookup.
+  rewrite Hchild.
+  reflexivity.
+Qed.
+
 Definition phase1_surface_parser_budget_complete
   (goal : DerivationGoal)
   (input rest : list ConcreteToken)
@@ -127,9 +147,8 @@ Proof.
         expression_fuel child_rank remaining
         Hchild_rank Hchild_global Hchild_safe
         (Nat.le_refl _) Hchild_fit) as Hchild_parse.
-    simpl.
-    rewrite Hlookup.
-    rewrite Hchild_parse.
-    reflexivity.
+    eapply oracle_parse_fuel_nonterminal_success.
+    + exact Hlookup.
+    + exact Hchild_parse.
 Qed.
 ''')
