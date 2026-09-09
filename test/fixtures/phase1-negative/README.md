@@ -2,7 +2,9 @@
 
 This directory carries the INT-004 migration from implementation-private negative tests to portable conformance fixtures.
 
-`manifest.tsv` is normative for the migrated frozen Phase-0 semantic negatives. Each row gives a stable fixture identity, portable `.phil` input path, implementation-independent rejection class label, earliest competent rejection layer, explicit environment profile name, and governing Matrix authority.
+`manifest.tsv` is normative for the migrated frozen Phase-0 semantic negatives. Each row gives a stable fixture identity, portable `.phil` input path, implementation-independent rejection class label, earliest competent rejection layer, explicit environment profile name, and exact governing authority reference(s). `governing_authority` is a semicolon-separated nonempty set of typed references: `matrix:<Case-ID>` for a Phase-1 Conformance Matrix case and `certified:<Obligation-ID>` for an inherited or Phase-1 Certified obligation. The meta-level `INT-004` case is not a semantic authority for an individual fixture and is forbidden in this column.
+
+`authority-registry-v1.tsv` is the portable exact-resolution registry for every authority reference used by the manifest. Each row records the complete typed reference, its kind, canonical ID, and canonical source. Matrix references resolve to the Phil Phase 1 Conformance Matrix. Certified references resolve to checked-in proof artifacts; those proof paths must exist. The registry is identity metadata, not a substitute semantic authority: the Matrix case or Certified obligation named by the reference remains authoritative. Unknown references, kind/prefix disagreement, duplicate references within a fixture, unused registry entries, or missing Certified proof artifacts are invalid corpus material.
 
 `environment-profiles-v1.tsv` is the portable representation of profile-level checker environment data. Its fields are semantic data rather than Haskell constructor text or fixture filenames:
 
@@ -24,7 +26,7 @@ This directory carries the INT-004 migration from implementation-private negativ
 
 `environment-static-claims-v1.tsv` carries the corpus-level static claim context inherited by every frozen Phase-0 checking environment. Each row gives a claim name, declaration kind, and ordered parameter list with portable sorts. The corpus declares `DigestMatches` as opaque with `begin : opaque Frame` and `payload_id : stable-id OwnedBytes`. This is portable semantic context, not a Haskell fixture alias; removing or corrupting it must fail closed rather than causing a fixture to reject earlier as an unknown claim.
 
-A literal `-` means the field is not applicable to that profile shape. All portable data is path-free and contains no Haskell implementation identity; another checker can reconstruct the same competent-layer context from these tables alone.
+A literal `-` means the field is not applicable to that profile shape. All portable environment data is path-free and contains no Haskell implementation identity; another checker can reconstruct the same competent-layer context from these tables alone.
 
 `phase0.common` is intentionally represented as a no-initial-binding profile. The affected fixtures get their resource modes from intrinsic surface types (`StoreCap`, `OwnedBytes`, `U32`) and require only explicit primitive semantics for authority exercise, cancellation allocation, borrowing/inspection, and unchecked arithmetic.
 
@@ -32,6 +34,6 @@ A literal `-` means the field is not applicable to that profile shape. All porta
 
 The validation/provenance tranche uses the same machinery for raw recognition input, `Begin` records, validation evidence, explicit receive/select requirements, an owned payload witness, and the shared opaque `DigestMatches` declaration required for the intended opaque-proof rejection.
 
-The final frozen-environment tranche moves `phase0.premature-acceptance`, `phase0.pending-commit`, `phase0.pending-drop`, and `phase0.label-proof` onto normalized nested session graphs. `phase0.pending-commit` and `phase0.pending-drop` share one exact `phase0.server-upload` graph and reconstruct the `Server[Upload]` source alias from portable data. Once this tranche is promoted, no frozen Phase-0 negative environment may fall back to `phase0EnvironmentFor`; missing or corrupt portable material must fail closed.
+The final frozen-environment tranche moves `phase0.premature-acceptance`, `phase0.pending-commit`, `phase0.pending-drop`, and `phase0.label-proof` onto normalized nested session graphs. `phase0.pending-commit` and `phase0.pending-drop` share one exact `phase0.server-upload` graph and reconstruct the `Server[Upload]` source alias from portable data. No frozen Phase-0 negative environment may fall back to `phase0EnvironmentFor`; missing or corrupt portable material must fail closed.
 
 The manifest, not the legacy filename table, owns expected rejection classes. Legacy classification parity remains a migration regression only. Exact diagnostic strings and Haskell exception constructors are not conformance authority; the portable class labels are semantic labels that implementations map to their own diagnostics.
