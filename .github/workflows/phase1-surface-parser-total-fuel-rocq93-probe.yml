@@ -42,6 +42,7 @@ jobs:
           python3 scripts/generate_total_fuel_statement_probe.py
           python3 scripts/generate_total_fuel_nonterminal_budget_probe.py
           python3 scripts/inject_total_fuel_higher_order_application_probes.py
+          python3 scripts/inject_total_fuel_rank_path_probes.py
 
       - name: Compile through total-fuel probes
         shell: bash
@@ -129,5 +130,5 @@ jobs:
           timeout 300s rocq c -time -Q proof/Phil Phil proof/Phil/Surface/GrammarParserTotalFuelNonterminalSupport.v
           echo "=== timing statement-only identity probes ==="
           timeout 60s rocq c -time -Q proof/Phil Phil proof/Phil/Surface/GrammarParserTotalFuelStatementProbe.v
-          echo "=== timing higher-order application ladder ==="
+          echo "=== timing higher-order and rank-path application ladder ==="
           timeout 300s rocq c -time -Q proof/Phil Phil proof/Phil/Surface/GrammarParserTotalFuelNonterminalBudget.v
