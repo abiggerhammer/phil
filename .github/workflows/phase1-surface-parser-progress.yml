@@ -45,6 +45,8 @@ jobs:
           compile proof/Phil/Surface/GrammarDerivationLookahead.v
           compile proof/Phil/Surface/GrammarDerivationOracle.v
           compile proof/Phil/Surface/GrammarParserRank.v
+          compile proof/Phil/Surface/GrammarParserGoalRank.v
+          compile proof/Phil/Surface/GrammarParserGlobalGoalRank.v
           timeout 300s rocq c -time -Q proof/Phil Phil \
             proof/Phil/Surface/GrammarParserProgress.v
 
@@ -60,6 +62,8 @@ jobs:
           sha256sum \
             grammar/phase1-surface.ebnf \
             proof/Phil/Surface/GrammarParserRank.v \
+            proof/Phil/Surface/GrammarParserGoalRank.v \
+            proof/Phil/Surface/GrammarParserGlobalGoalRank.v \
             proof/Phil/Surface/GrammarParserProgress.v \
             proof/Phil/Surface/GrammarParserProgress.vo \
             > surface-parser-progress/identities.sha256

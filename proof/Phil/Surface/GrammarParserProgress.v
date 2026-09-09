@@ -5,7 +5,7 @@ From Phil.Surface Require Import
   GrammarDerivation
   GrammarDerivationLookahead
   GrammarDerivationOracle
-  GrammarParserRank.
+  GrammarParserGlobalGoalRank.
 
 Import ListNotations.
 
@@ -18,8 +18,9 @@ Import ListNotations.
   oracle-resolved derivation consumes a prefix, hence any recursive parse that
   actually changes its input strictly decreases the remaining token count.
 
-  The successor slice combines token-count descent with the certified
-  same-input rank to obtain a uniform finite recognizer fuel bound.
+  The concrete total-fuel bound uses the exact global internal-goal rank bound
+  from GrammarParserGlobalGoalRank.v.  One rank block is reserved for each
+  remaining token plus the final zero-token block.
 *)
 
 Theorem oracle_derivation_consumes_prefix :
@@ -122,7 +123,7 @@ Definition phase1_surface_parser_total_fuel
   (tokens : list ConcreteToken) : nat :=
   S
     ((S (List.length tokens)) *
-      phase1_surface_parser_max_goal_rank).
+      phase1_surface_parser_global_goal_rank_bound).
 
 Theorem phase1_surface_parser_total_fuel_positive :
   forall tokens,
@@ -141,7 +142,7 @@ Theorem phase1_surface_parser_total_fuel_decreases_on_token_progress :
 Proof.
   intros input rest Hlength.
   unfold phase1_surface_parser_total_fuel,
-    phase1_surface_parser_max_goal_rank.
+    phase1_surface_parser_global_goal_rank_bound.
   nia.
 Qed.
 

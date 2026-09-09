@@ -194,3 +194,11 @@ Proof.
   unfold phase1_surface_parser_global_goal_rank_bound.
   lia.
 Qed.
+
+(*
+  Downstream parser proofs use the certified nullable equations, not reduction of
+  the concrete 128-pass fixed point itself.  Keeping these definitions opaque
+  prevents kernel conversion from expanding that table while checking small
+  structural lemmas in GrammarParserTotalFuelStatic.v.
+*)
+Opaque phase1_surface_nullable_facts nullable_expression.

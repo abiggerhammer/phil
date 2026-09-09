@@ -3,8 +3,8 @@ From Stdlib Require Import Arith.PeanoNat Bool.Bool Lists.List Strings.String Li
 From Phil.Surface Require Import
   Grammar
   GrammarDerivation
-  GrammarDeterminacyNullableFirst
-  GrammarParserRank.
+  GrammarDeterminacyNullableFirst.
+From Phil.Surface Require Export GrammarParserRank.
 
 Import ListNotations.
 Open Scope string_scope.
