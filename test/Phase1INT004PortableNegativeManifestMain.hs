@@ -14,6 +14,7 @@ import qualified Data.Text.IO as TextIO
 import Phil.Core.Static (emptyStaticContext)
 import Phil.Core.Syntax
   ( Branch (..)
+  , GrammarId (..)
   , Mode (..)
   , Name (..)
   , Outcome (..)
@@ -61,6 +62,7 @@ data PortableEnvironmentProfile = PortableEnvironmentProfile
   , portableTerminalOutcome :: Text
   , portableBranches :: Text
   , portablePrimitiveBindings :: Text
+  , portableLegacyReceiveFrameRaw :: Text
   }
   deriving (Eq, Show)
 
@@ -75,6 +77,8 @@ seedPortableProfiles = Set.fromList
   [ "phase0.simple-receive"
   , "phase0.wrong-order"
   , "phase0.nonexhaustive-offer"
+  , "phase0.legacy-raw"
+  , "phase0.failure-reuse"
   ]
 
 seedPortableFixtures :: Set Text
@@ -83,6 +87,8 @@ seedPortableFixtures = Set.fromList
   , "P1-NEG-P0-002"
   , "P1-NEG-P0-003"
   , "P1-NEG-P0-004"
+  , "P1-NEG-P0-005"
+  , "P1-NEG-P0-009"
   ]
 
 main :: IO ()
@@ -171,12 +177,13 @@ parseEnvironmentProfiles input = case Text.lines input of
       , "terminal_outcome"
       , "branches"
       , "primitive_bindings"
+      , "legacy_receive_frame_raw"
       ]
 
 parseEnvironmentRow :: Text -> Either String PortableEnvironmentProfile
 parseEnvironmentRow row = case Text.splitOn "\t" row of
-  [profileId, bindingName, bindingMode, sessionKind, messageName, messageType, terminalOutcome, branches, primitiveBindings]
-    | any Text.null [profileId, bindingName, bindingMode, sessionKind, messageName, messageType, terminalOutcome, branches, primitiveBindings] ->
+  [profileId, bindingName, bindingMode, sessionKind, messageName, messageType, terminalOutcome, branches, primitiveBindings, legacyReceiveFrameRaw]
+    | any Text.null [profileId, bindingName, bindingMode, sessionKind, messageName, messageType, terminalOutcome, branches, primitiveBindings, legacyReceiveFrameRaw] ->
         Left ("empty portable environment field: " <> Text.unpack row)
     | otherwise -> Right PortableEnvironmentProfile
         { portableProfileId = profileId
@@ -188,6 +195,7 @@ parseEnvironmentRow row = case Text.splitOn "\t" row of
         , portableTerminalOutcome = terminalOutcome
         , portableBranches = branches
         , portablePrimitiveBindings = primitiveBindings
+        , portableLegacyReceiveFrameRaw = legacyReceiveFrameRaw
         }
   _ -> Left ("invalid portable environment TSV row: " <> Text.unpack row)
 
@@ -196,10 +204,14 @@ materializePortableProfile profile = do
   mode <- parsePortableMode (portableBindingMode profile)
   session <- parsePortableSession profile
   primitives <- parsePrimitiveBindings (portablePrimitiveBindings profile)
+  legacyReceiveFrameRaw <- parsePortableBool
+    "legacy_receive_frame_raw"
+    (portableLegacyReceiveFrameRaw profile)
   let binding = InitialBinding mode (TyEndpoint session) PlainShape
   pure (emptySurfaceEnvironment emptyStaticContext)
     { surfaceInitialBindings = Map.singleton (portableBindingName profile) binding
     , surfacePrimitives = primitives
+    , surfaceLegacyReceiveFrameRaw = legacyReceiveFrameRaw
     }
 
 parsePortableMode :: Text -> Either Text Mode
@@ -208,6 +220,12 @@ parsePortableMode value = case value of
   "affine" -> Right Affine
   "unrestricted" -> Right Unrestricted
   _ -> Left ("unknown portable binding mode: " <> value)
+
+parsePortableBool :: Text -> Text -> Either Text Bool
+parsePortableBool field value = case value of
+  "true" -> Right True
+  "false" -> Right False
+  _ -> Left ("invalid portable boolean for " <> field <> ": " <> value)
 
 parsePortableSession :: PortableEnvironmentProfile -> Either Text Session
 parsePortableSession profile = case portableSessionKind profile of
@@ -226,14 +244,22 @@ parsePortableSession profile = case portableSessionKind profile of
   other -> Left ("unknown portable session kind: " <> other)
 
 parsePortableType :: Text -> Either Text Ty
-parsePortableType value = case Text.stripPrefix "opaque:" value of
-  Just name | not (Text.null name) -> Right (TyOpaque name)
-  _ -> Left ("unsupported portable message type: " <> value)
+parsePortableType value
+  | Just name <- Text.stripPrefix "opaque:" value
+  , not (Text.null name) = Right (TyOpaque name)
+  | Just grammar <- Text.stripPrefix "frame:" value
+  , not (Text.null grammar) = Right (TyFrame (GrammarId grammar))
+  | otherwise = Left ("unsupported portable message type: " <> value)
 
 parsePortableBranches :: Text -> Either Text [Branch]
 parsePortableBranches value
   | value == "-" = Left "offer session requires at least one branch"
-  | otherwise = traverse parseBranch (Text.splitOn ";" value)
+  | otherwise = do
+      branches <- traverse parseBranch (Text.splitOn ";" value)
+      let labels = [label | Branch label _ _ <- branches]
+      if Set.size (Set.fromList labels) /= length labels
+        then Left "duplicate portable offer branch label"
+        else Right branches
   where
     parseBranch branchText = case Text.splitOn ":" branchText of
       [label, outcome]
@@ -244,7 +270,12 @@ parsePortableBranches value
 parsePrimitiveBindings :: Text -> Either Text (Map Text PrimitiveSemantics)
 parsePrimitiveBindings value
   | value == "-" = Right Map.empty
-  | otherwise = Map.fromList <$> traverse parsePrimitive (Text.splitOn ";" value)
+  | otherwise = do
+      bindings <- traverse parsePrimitive (Text.splitOn ";" value)
+      let result = Map.fromList bindings
+      if Map.size result /= length bindings
+        then Left "duplicate portable primitive binding name"
+        else Right result
   where
     parsePrimitive entry = case Text.splitOn ":" entry of
       [name, "handle-payload"] | not (Text.null name) -> Right (name, PrimitiveHandlePayload)
@@ -278,11 +309,9 @@ resolveProfileEnvironment profiles profile =
 legacyProfileEnvironment :: Text -> Either Text SurfaceEnvironment
 legacyProfileEnvironment profile =
   case profile of
-    "phase0.legacy-raw" -> legacy "05-raw-field-access.phil"
     "phase0.parsed-validation-bypass" -> legacy "06-parsed-used-as-validated.phil"
     "phase0.unrelated-length" -> legacy "07-unrelated-payload-length.phil"
     "phase0.incompatible-join" -> legacy "08-incompatible-branch-join.phil"
-    "phase0.failure-reuse" -> legacy "09-continue-after-fatal-recognition-failure.phil"
     "phase0.premature-acceptance" -> legacy "10-accept-before-digest-check.phil"
     "phase0.common" -> legacy "11-copy-authority-capability.phil"
     "phase0.pending-commit" -> legacy "13-commit-unrelated-parsed.phil"
@@ -323,7 +352,7 @@ checkIntegrity profiles cases = do
   report "every fixture names its governing INT-004 matrix authority" authoritiesPresent
   report "every fixture names an explicit environment profile" profilesNamed
   report "portable environment seed has exact profile domain" seedProfileDomainExact
-  report "fixtures 001-004 use portable environment material" seedFixturesPortable
+  report "fixtures 001-005 and 009 use portable environment material" seedFixturesPortable
   report "every named environment profile resolves" profilesResolve
   report "every portable fixture path exists" filesPresent
   pure (and
