@@ -34,18 +34,14 @@ jobs:
           python3 scripts/derive_phase1_surface_grammar.py --check
           python3 scripts/derive_phase1_surface_determinacy_certificate.py --check
 
-      - name: Generate total-fuel diagnostic modules
+      - name: Prepare kernel-friendly total-fuel proof modules
         shell: bash
         run: |
           set -euo pipefail
           python3 scripts/patch_total_fuel_nonterminal.py
-          python3 scripts/generate_total_fuel_statement_probe.py
-          python3 scripts/generate_total_fuel_nonterminal_budget_probe.py
-          python3 scripts/inject_total_fuel_higher_order_application_probes.py
-          python3 scripts/inject_total_fuel_rank_path_probes.py
           python3 scripts/patch_total_fuel_value_nonterminal.py
 
-      - name: Compile through total-fuel probes
+      - name: Compile permanent total-fuel proof
         shell: bash
         run: |
           set -euo pipefail
@@ -129,9 +125,8 @@ jobs:
           timeout 300s rocq c -time -Q proof/Phil Phil proof/Phil/Surface/GrammarParserTotalFuelStatic.v
           echo "=== timing rank-value full induction ==="
           timeout 300s rocq c -time -Q proof/Phil Phil proof/Phil/Surface/GrammarParserTotalFuelValue.v
+          echo "=== timing split canonical proof ==="
           timeout 300s rocq c -time -Q proof/Phil Phil proof/Phil/Surface/GrammarParserTotalFuelBase.v
           timeout 300s rocq c -time -Q proof/Phil Phil proof/Phil/Surface/GrammarParserTotalFuelNonterminalSupport.v
-          echo "=== timing statement-only identity probes ==="
-          timeout 60s rocq c -time -Q proof/Phil Phil proof/Phil/Surface/GrammarParserTotalFuelStatementProbe.v
-          echo "=== timing higher-order and rank-path application ladder ==="
-          timeout 300s rocq c -time -Q proof/Phil Phil proof/Phil/Surface/GrammarParserTotalFuelNonterminalBudget.v
+          timeout 300s rocq c -time -Q proof/Phil Phil proof/Phil/Surface/GrammarParserTotalFuelNonterminal.v
+          timeout 300s rocq c -time -Q proof/Phil Phil proof/Phil/Surface/GrammarParserTotalFuel.v
