@@ -50,10 +50,10 @@ main :: IO ()
 main = do
   let directCases =
         [ ( "reference-and-end"
-          , "protocol P { role A = Session[U8]; role B = end Done; }"
+          , "protocol P { role A = Sess[U8]; role B = end Done; }"
           , [[ role "A"
                 (GrammarV1ReferenceSessionReference
-                  (reference ["Session"]
+                  (reference ["Sess"]
                     [GrammarV1ReferenceStaticTypeArgument
                       (GrammarV1ReferencePrimitiveSpelling "U8")]))
              , role "B" (GrammarV1ReferenceSessionEnd "Done")
