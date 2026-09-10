@@ -23,11 +23,20 @@ component SteveGetCLI provides Unit {
                                                         fs_replace(path, outputView)
                                                     }
                                                     decide replaceDecision {
-                                                        replaced => { release bytes; return unit }
-                                                        file-failure(reason) => { release bytes; return unit }
+                                                        replaced => {
+                                                            release bytes
+                                                            return unit
+                                                        }
+                                                        file-failure(reason) => {
+                                                            release bytes
+                                                            return unit
+                                                        }
                                                     }
                                                 }
-                                                rejected(reason) => { release bytes; return unit }
+                                                rejected(reason) => {
+                                                    release bytes
+                                                    return unit
+                                                }
                                             }
                                         }
                                         not-found => { return unit }
