@@ -21,13 +21,12 @@ import Data.ByteString (ByteString)
 import Data.Char (digitToInt, isHexDigit, toLower)
 import Data.Text (Text)
 import qualified Data.Text as Text
-import qualified Data.Text.Encoding as Text
+import qualified Data.Text.Encoding as TextEncoding
 import System.Directory
   ( createDirectoryIfMissing
   , doesFileExist
   , removeFile
   )
-import System.FilePath ((</>))
 import System.IO (hClose, openBinaryTempFile)
 import System.IO.Error (isAlreadyExistsError, isDoesNotExistError)
 import System.Posix.Files (createLink)
@@ -61,7 +60,8 @@ checkContentId :: ContentId -> ByteString -> Bool
 checkContentId expected bytes = computeContentId bytes == expected
 
 renderContentId :: ContentId -> Text
-renderContentId (ContentId bytes) = Text.decodeUtf8 (ByteString.concatMap hexByte bytes)
+renderContentId (ContentId bytes) =
+  TextEncoding.decodeUtf8 (ByteString.concatMap hexByte bytes)
   where
     hexByte byte = ByteString.pack
       [ hexDigit (byte `shiftR` 4)
@@ -134,7 +134,7 @@ readBlob root contentId = do
           | otherwise -> pure (Left (ioErrorText err))
 
 blobPath :: FilePath -> ContentId -> FilePath
-blobPath root = (root </>) . Text.unpack . renderContentId
+blobPath root contentId = root <> "/" <> Text.unpack (renderContentId contentId)
 
 tryRemove :: FilePath -> IO (Either IOException ())
 tryRemove = try . removeFile
