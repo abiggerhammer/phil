@@ -1,3 +1,6 @@
+{-# LANGUAGE PatternSynonyms #-}
+{-# LANGUAGE ViewPatterns #-}
+
 module Phil.Surface.Syntax
   ( SourcePoint (..)
   , SourceSpan (..)
@@ -11,6 +14,7 @@ module Phil.Surface.Syntax
   , SurfaceType (..)
   , BinaryOperator (..)
   , SurfaceExpression (..)
+  , pattern InvokeExpression
   , SurfaceProposition (..)
   , CasePattern (..)
   , CaseArm (..)
@@ -20,6 +24,7 @@ module Phil.Surface.Syntax
   ) where
 
 import Data.Text (Text)
+import qualified Data.Text as Text
 
 data SourcePoint = SourcePoint
   { sourcePointFile :: Text
@@ -125,6 +130,26 @@ data SurfaceExpression
   | ProveExpression (Located SurfaceProposition)
   | FallbackExpression (Located SurfaceExpression) Fallback
   deriving (Eq, Show)
+
+-- | CALL-019 keeps direct callable invocation distinct from provider/primitive
+-- calls without widening the legacy closed SurfaceExpression carrier. The marker
+-- cannot be written by the source identifier grammar, so an InvokeExpression can
+-- only be produced by the dedicated `invoke` parser route.
+pattern InvokeExpression :: Text -> [Located SurfaceExpression] -> SurfaceExpression
+pattern InvokeExpression name arguments <- (invokeExpressionView -> Just (name, arguments))
+  where
+    InvokeExpression name arguments = CallExpression (invokeExpressionMarker <> name) arguments
+
+invokeExpressionMarker :: Text
+invokeExpressionMarker = "\NULphil-invoke:"
+
+invokeExpressionView :: SurfaceExpression -> Maybe (Text, [Located SurfaceExpression])
+invokeExpressionView expression = case expression of
+  CallExpression encoded arguments ->
+    case Text.stripPrefix invokeExpressionMarker encoded of
+      Just name -> Just (name, arguments)
+      Nothing -> Nothing
+  _ -> Nothing
 
 data SurfaceProposition
   = PropositionTrue
