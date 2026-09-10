@@ -270,7 +270,7 @@ parseCommandExpression tree = do
     _ -> failExpression "command_expression body is not an alternative node"
 
 commandAlternativeName
-  :: Int
+  :: Integer
   -> Either GrammarV1ReferenceExpressionCoreError Text
 commandAlternativeName index = case index of
   0 -> pure "construct_expression"
