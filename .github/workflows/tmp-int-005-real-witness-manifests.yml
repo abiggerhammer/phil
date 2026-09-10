@@ -1,0 +1,45 @@
+name: Temporary INT-005 Real Witness Manifests
+
+on:
+  push:
+    branches: [phase1-int-005-real-witness-manifests]
+    paths:
+      - 'test/Phil/Test/Phase1/ManifestWitnesses.hs'
+      - 'test/Phase1INT005RealWitnessManifestMain.hs'
+      - 'src/Phil/Verification/CertifiedRelease.hs'
+      - '.github/workflows/tmp-int-005-real-witness-manifests.yml'
+
+jobs:
+  real-witness-manifests:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: haskell-actions/setup@v2
+        with:
+          ghc-version: '9.6.7'
+          cabal-version: 'latest'
+
+      - name: Build complete Haskell substrate
+        run: cabal build all --enable-tests
+
+      - name: Strict typecheck real witness manifest release path
+        run: |
+          cabal exec -- ghc -isrc -itest -Wall -Werror -fno-code \
+            test/Phase1INT005RealWitnessManifestMain.hs
+
+      - name: Exercise real witness manifest release path
+        run: |
+          cabal exec -- runghc -isrc -itest -Wall -Werror \
+            test/Phase1INT005RealWitnessManifestMain.hs
+
+      - name: Replay INT-002 ordinary-source manifest closure
+        run: |
+          cabal exec -- runghc -isrc -Wall -Werror \
+            test/Phase1INT002UploadManifestMain.hs
+          cabal exec -- runghc -isrc -Wall -Werror \
+            test/Phase1INT002SteveManifestMain.hs
+
+      - name: Replay INT-005 certified release envelope
+        run: |
+          cabal exec -- runghc -isrc -Wall -Werror \
+            test/Phase1INT005CertifiedReleaseEnvelopeMain.hs
