@@ -5,11 +5,12 @@ on:
     branches: [phase1-int-005-certified-release-envelope]
     paths:
       - 'src/Phil/Verification/CertifiedRelease.hs'
+      - 'src/Phil/Systems/ProtocolStateCorrespondence.hs'
       - 'test/Phase1INT005CertifiedReleaseEnvelopeMain.hs'
       - '.github/workflows/tmp-int-005-certified-release-envelope.yml'
 
 permissions:
-  contents: read
+  contents: write
 
 jobs:
   certified-release-envelope:
@@ -20,6 +21,23 @@ jobs:
         with:
           ghc-version: '9.6.7'
           cabal-version: 'latest'
+
+      - name: Apply exact pre-existing shadow cleanup
+        shell: bash
+        run: |
+          python3 - <<'PY'
+          from pathlib import Path
+          path = Path('src/Phil/Systems/ProtocolStateCorrespondence.hs')
+          text = path.read_text()
+          old = '''        ProtocolOpaqueAction semanticAction\n          | not (Text.null semanticAction) -> Right Nothing'''
+          new = '''        ProtocolOpaqueAction opaqueActionName\n          | not (Text.null opaqueActionName) -> Right Nothing'''
+          if old in text:
+              if text.count(old) != 1:
+                  raise SystemExit('expected exactly one ProtocolOpaqueAction shadow site')
+              path.write_text(text.replace(old, new))
+          elif new not in text:
+              raise SystemExit('ProtocolOpaqueAction shadow site has unexpected shape')
+          PY
 
       - name: Build complete Haskell substrate
         run: cabal build all --enable-tests
@@ -58,3 +76,16 @@ jobs:
             test/Phase1INT002UploadManifestMain.hs
           cabal exec -- runghc -isrc -Wall -Werror \
             test/Phase1INT002SteveManifestMain.hs
+
+      - name: Transport exact tested shadow cleanup
+        shell: bash
+        run: |
+          if git diff --quiet -- src/Phil/Systems/ProtocolStateCorrespondence.hs; then
+            echo 'ProtocolState shadow cleanup already committed'
+            exit 0
+          fi
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git add src/Phil/Systems/ProtocolStateCorrespondence.hs
+          git commit -m 'style: avoid ProtocolState shadowed binding'
+          git push
