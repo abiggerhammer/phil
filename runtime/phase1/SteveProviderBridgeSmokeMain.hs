@@ -4,7 +4,7 @@ module Main (main) where
 
 import qualified Data.ByteString as ByteString
 import qualified Data.ByteString.Char8 as Char8
-import Foreign.C.Types (CInt)
+import Foreign.C.Types (CInt (..))
 import Foreign.Ptr (Ptr)
 import Phil.Compiler.SteveCAS (computeContentId)
 import SteveProviderBridge
