@@ -115,20 +115,20 @@ parseProjections = parseTable expected parseRow
       , "cost-accounting"
       ]
     parseRow row = case row of
-      [ fixtureId, contract, machineShape, occurrence, structuralMode, captures
-        , transition, callerAuthority, internalAuthority, effectBound, failureSurface
+      [ fixtureId, contract, machineShapeRelation, occurrence, structuralMode, captures
+        , transition, callerAuthority, internalAuthorityRelation, effectBound, failureSurface
         , loanScope, effectAccounting, failureAccounting, assumptionAccounting
         , carrierAccounting, costAccounting
         ]
         | not (Text.null fixtureId) -> do
             contract' <- parseRelation contract
-            machineShape' <- parseRelation machineShape
+            machineShape' <- parseRelation machineShapeRelation
             occurrence' <- parseRelation occurrence
             structuralMode' <- parseRelation structuralMode
             captures' <- parseRelation captures
             transition' <- parseRelation transition
             callerAuthority' <- parseRelation callerAuthority
-            internalAuthority' <- parseRelation internalAuthority
+            internalAuthority' <- parseRelation internalAuthorityRelation
             effectBound' <- parseRelation effectBound
             failureSurface' <- parseRelation failureSurface
             loanScope' <- parseRelation loanScope
