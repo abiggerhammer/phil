@@ -1,0 +1,58 @@
+component StevePutCLI provides Unit {
+    let inputDecision = console_read_line()
+    decide inputDecision {
+        line(pathText) => {
+            let pathDecision = path_parse(pathText)
+            decide pathDecision {
+                path(path) => {
+                    let readDecision = fs_read(path)
+                    decide readDecision {
+                        found(candidate) => {
+                            let digestDecision = borrow candidate as digestView {
+                                digest_compute(digestView)
+                            }
+                            decide digestDecision {
+                                computed(contentId) => {
+                                    let installDecision = blob_install(contentId, candidate)
+                                    decide installDecision {
+                                        installed => {
+                                            let renderDecision = content_id_render(contentId)
+                                            decide renderDecision {
+                                                rendered(contentIdText) => {
+                                                    let writeDecision = console_write(contentIdText)
+                                                    decide writeDecision {
+                                                        written => { return unit }
+                                                        console-failure(reason) => { return unit }
+                                                    }
+                                                }
+                                            }
+                                        }
+                                        already-exists => {
+                                            let renderDecision = content_id_render(contentId)
+                                            decide renderDecision {
+                                                rendered(contentIdText) => {
+                                                    let writeDecision = console_write(contentIdText)
+                                                    decide writeDecision {
+                                                        written => { return unit }
+                                                        console-failure(reason) => { return unit }
+                                                    }
+                                                }
+                                            }
+                                        }
+                                        storage-failure(reason) => { return unit }
+                                    }
+                                }
+                            }
+                        }
+                        not-found => { return unit }
+                        too-large => { return unit }
+                        file-failure(reason) => { return unit }
+                    }
+                }
+                invalid-path(reason) => { return unit }
+            }
+        }
+        end-of-input => { return unit }
+        console-failure(reason) => { return unit }
+    }
+}
