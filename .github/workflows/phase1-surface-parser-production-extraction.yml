@@ -46,13 +46,13 @@ jobs:
         run: |
           set -euo pipefail
           export PATH="/home/rocq/.opam/${COMPILER}/bin:$PATH"
-          cat > _CoqProject.surface-recognizer <<'EOF'
-          -Q proof/Phil Phil
-          proof/Phil/Surface/GrammarParserProductionKernel.v
-          proof/Phil/Surface/GrammarParserProductionExtraction.v
-          EOF
+          {
+            echo '-Q proof/Phil Phil'
+            find proof/Phil/Surface -maxdepth 1 -type f -name 'Grammar*.v' -print | sort
+          } > _CoqProject.surface-recognizer
           rocq makefile -f _CoqProject.surface-recognizer -o Makefile.surface-recognizer
-          make -f Makefile.surface-recognizer -j2
+          make -f Makefile.surface-recognizer -j2 \
+            proof/Phil/Surface/GrammarParserProductionExtraction.vo
           test -s SurfaceGrammarRecognizerKernel.hs
 
       - name: Record extraction identities
