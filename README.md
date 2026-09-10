@@ -6,9 +6,13 @@ Phil is part of the broader Logics to Order research program. It starts from sys
 
 ## Start here
 
-New to Phil? Read **[A Tour of Phil — Phase 0](docs/tutorials/tour-phase0.md)** first. It follows the frozen Phase 0 upload program from its client/server conversation through recognition, validation, evidence, ownership, native execution, and certification, while defining the terminology as it goes.
+New to Phil? Start with **[A Tour of Phil](docs/tutorials/tour-phase1.md)**. It begins with a tiny component and builds outward through ownership, callable contracts, effects and authority, protocols, architectures, processes, providers, generics, verification, and lowering. Each concept is introduced only after the preceding examples give it a reason to exist.
 
-Phase 0 demonstrates one architecture end to end. **[A Tour of Phil — Phase 1](docs/tutorials/tour-phase1.md)** is the work-in-progress semantic tour of the generalized language: stable architecture/process identity, generics, first-class callables/effects/authority, reusable protocols, static process networks, provider replacement, deterministic execution, checked lowering, and application verification. It deliberately avoids claimed executable Phase 1 source listings until the canonical Grammar-v1 parser/elaborator path can check those examples and keep them under CI.
+The frozen **[Phase 0 framed-upload tour](docs/tutorials/tour-phase0.md)** is the deeper historical worked example: it follows one client/server architecture through recognition, validation, evidence, ownership, native execution, and certification.
+
+Already familiar with Phase 0? **[From Phil Phase 0 to Phase 1](docs/tutorials/from-phase0-to-phase1.md)** explains the conceptual generalization: stable architecture/process identity, structural generics, first-class callable/effect/authority contracts, reusable protocol families, static process networks, provider replacement, target-independent execution, and the source-verification/artifact-certification split.
+
+Looking up a spelling? The **[Phase 1 keyword lexicon](docs/reference/keywords-phase1.md)** groups every canonical Grammar-v1 reserved word by category and gives its short meaning. The Tour remains the place for first-use explanations in context.
 
 ## Core formulations
 
@@ -34,11 +38,11 @@ Phase 0 demonstrates one architecture end to end. **[A Tour of Phil — Phase 1]
 
 ## Current implementation slice
 
-Phase 0 is frozen as the first complete design/execution snapshot. Phase 1 is active and is removing the witness-specific assumptions. The repository now contains substantial generalized machinery for stable architecture identity and instantiation, structural generics, first-class callable/effect and explicit-authority checking, reusable protocols, bounded static CSP-style process networks with explicit internal/external participant classification, provider qualification/replacement, ordinary data/resource-state checking, a witness-neutral Systems/StageContract stack, the normative Phase 1 Surface Grammar v1, and growing mechanized correspondence between checked semantic kernels and the implementation.
+Phase 0 is frozen as the first complete design/execution snapshot. Phase 1 is active and is removing the witness-specific assumptions. The repository now contains substantial generalized machinery for stable architecture identity and instantiation, structural generics, first-class callable/effect and explicit-authority checking, reusable protocols, bounded static CSP-style process networks with explicit internal/external participant classification, provider qualification/replacement, ordinary data/resource-state checking, a witness-neutral Systems/StageContract stack, the normative Phase 1 Surface Grammar v1, the canonical Grammar-v1 parser/elaborator/front-end path, and growing mechanized correspondence between checked semantic kernels and the implementation.
 
 The accepted Phase 1 design also fixes the programmer-facing application-verification boundary and target-independent ordinary execution rules: intrinsic Phil invalidity is distinct from residual proof/runtime/assumption/export obligations; source verification is distinct from artifact certification; local evaluation order and `UInt` arithmetic are language semantics rather than host accidents; and target UB/traps/resource exhaustion require an explicit permitted disposition rather than silently widening valid-source behavior.
 
-The canonical Phase 1 source/SourceBundle front end, portable persisted-lineage handoff artifacts, remaining verification/realization integration, representation/deployment-profile cases, and the full ordinary-source upload/Steve exit witnesses are still in progress. `docs/implementation-status.md` is therefore a **Phase 0 bootstrap-checker status snapshot**, not the global Phase 1 roadmap. For current claims, prefer checked proof/certification artifacts, Phase 1 conformance tests, and the corresponding `docs/phase-1/` slice records; human-facing project status is maintained in the Phase 1 Logic Ledger and Conformance Matrix.
+Portable Phase 1 handoff artifacts, remaining verification/realization integration, representation/deployment-profile cases, and the full ordinary-source upload/Steve exit witnesses are still in progress. `docs/implementation-status.md` is therefore a **Phase 0 bootstrap-checker status snapshot**, not the global Phase 1 roadmap. For current claims, prefer checked proof/certification artifacts, Phase 1 conformance tests, and the corresponding `docs/phase-1/` slice records; human-facing project status is maintained in the Phase 1 Logic Ledger and Conformance Matrix.
 
 ## Repository map
 
@@ -51,8 +55,10 @@ The canonical Phase 1 source/SourceBundle front end, portable persisted-lineage 
 - `proof/Phil/` — Rocq proof corpus
 - `app/` — checker, certification, and bootstrap executables
 - `test/` — conformance and correspondence tests
-- `docs/tutorials/tour-phase0.md` — beginner-facing executable tour of the frozen Phase 0 reference program
-- `docs/tutorials/tour-phase1.md` — work-in-progress semantic tour of the generalized Phase 1 language
+- `docs/tutorials/tour-phase1.md` — beginner-facing source-first tour of the current Phil language
+- `docs/tutorials/tour-phase0.md` — frozen Phase 0 framed-upload worked example
+- `docs/tutorials/from-phase0-to-phase1.md` — conceptual migration guide for readers who already know Phase 0
+- `docs/reference/keywords-phase1.md` — grouped explanatory lexicon for every canonical Grammar-v1 reserved word
 - `docs/implementation-status.md` — Phase 0 bootstrap-checker status snapshot
 - `docs/phase-0/assurance-status.md` — Phase 0 proof-certification snapshot
 - `docs/phase-0/` — checker-facing frozen Phase 0 design/ABI snapshot
