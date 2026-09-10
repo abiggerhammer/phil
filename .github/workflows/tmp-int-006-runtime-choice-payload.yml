@@ -1,0 +1,50 @@
+name: Temporary INT-006 Runtime Choice Payload
+
+on:
+  workflow_dispatch:
+  push:
+    branches: [phase1-int-006-steve-release]
+    paths:
+      - 'src/Phil/Compiler/RuntimeChoicePayload.hs'
+      - 'test/Phase1INT006RuntimeChoicePayloadMain.hs'
+      - 'src/Phil/Systems/GenericLowering.hs'
+      - 'src/Phil/Examples/Phase1/SystemsWitnesses.hs'
+      - 'test/Phase1INT001WitnessE2EMain.hs'
+      - 'test/Phase1INT005RealWitnessManifestMain.hs'
+      - '.github/workflows/tmp-int-006-runtime-choice-payload.yml'
+
+permissions:
+  contents: read
+
+jobs:
+  runtime-choice-payload:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: haskell-actions/setup@v2
+        with:
+          ghc-version: '9.6.7'
+          cabal-version: 'latest'
+
+      - name: Build complete Haskell substrate
+        run: cabal build all --enable-tests
+
+      - name: Strict typecheck INT-006 payload plan
+        run: |
+          cabal exec -- ghc -isrc -itest -Wall -Werror -fno-code \
+            test/Phase1INT006RuntimeChoicePayloadMain.hs
+
+      - name: Exercise INT-006 payload-plan controls
+        run: |
+          cabal exec -- runghc -isrc -itest -Wall -Werror \
+            test/Phase1INT006RuntimeChoicePayloadMain.hs
+
+      - name: Replay ordinary-source Steve INT-001 witness
+        run: |
+          cabal exec -- runghc -isrc -itest -Wall -Werror \
+            test/Phase1INT001WitnessE2EMain.hs
+
+      - name: Replay real-manifest INT-005 witnesses
+        run: |
+          cabal exec -- runghc -isrc -itest -Wall -Werror \
+            test/Phase1INT005RealWitnessManifestMain.hs
