@@ -1,0 +1,41 @@
+name: Phase 1 Surface Grammar Reference Token Bridge
+
+on:
+  pull_request:
+    paths:
+      - 'grammar/phase1-surface.ebnf'
+      - 'src/Phil/Surface/GrammarV1/Lexer.hs'
+      - 'src/Phil/Surface/GrammarV1/ReferenceToken.hs'
+      - 'test/Phase1GrammarV1ReferenceTokenMain.hs'
+      - 'docs/phase-1/surface-parser-reference-token-bridge-v1.md'
+      - '.github/workflows/phase1-surface-grammar-reference-token.yml'
+  push:
+    branches: [main]
+    paths:
+      - 'grammar/phase1-surface.ebnf'
+      - 'src/Phil/Surface/GrammarV1/Lexer.hs'
+      - 'src/Phil/Surface/GrammarV1/ReferenceToken.hs'
+      - 'test/Phase1GrammarV1ReferenceTokenMain.hs'
+      - 'docs/phase-1/surface-parser-reference-token-bridge-v1.md'
+      - '.github/workflows/phase1-surface-grammar-reference-token.yml'
+
+permissions:
+  contents: read
+
+jobs:
+  reference-token-bridge:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Haskell
+        uses: haskell-actions/setup@v2
+        with:
+          ghc-version: '9.6.7'
+          cabal-version: 'latest'
+
+      - name: Build ordinary regression substrate
+        run: cabal build all --enable-tests
+
+      - name: Check Grammar-v1 reference-token correspondence
+        run: cabal exec -- runghc -Wall -Werror -isrc test/Phase1GrammarV1ReferenceTokenMain.hs

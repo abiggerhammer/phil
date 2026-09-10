@@ -12,6 +12,7 @@ module Phil.Surface.GrammarV1.Lexer
   , GrammarV1LexDiagnostic (..)
   , grammarV1ReservedWords
   , runtimeBytesLengthMarker
+  , lexGrammarV1SourceTokens
   , lexGrammarV1
   ) where
 
@@ -303,11 +304,21 @@ grammarV1ReservedWords = Set.fromList
   , "within"
   ]
 
+-- | Lex the exact source token stream admitted by Grammar v1, before any
+-- production-only parser normalization.  This is the token boundary that can
+-- be compared to the Rocq ConcreteToken model without changing source syntax.
+lexGrammarV1SourceTokens
+  :: Text
+  -> Text
+  -> Either GrammarV1LexDiagnostic [Located GrammarV1Token]
+lexGrammarV1SourceTokens source input =
+  case MP.runParser (spaceConsumer *> MP.many pLocatedToken <* MP.eof) (Text.unpack source) input of
+    Right tokens -> Right tokens
+    Left bundle -> Left (diagnosticFromBundle bundle)
+
 lexGrammarV1 :: Text -> Text -> Either GrammarV1LexDiagnostic [Located GrammarV1Token]
 lexGrammarV1 source input =
-  case MP.runParser (spaceConsumer *> MP.many pLocatedToken <* MP.eof) (Text.unpack source) input of
-    Right tokens -> Right (expandRuntimeBytes tokens)
-    Left bundle -> Left (diagnosticFromBundle bundle)
+  expandRuntimeBytes <$> lexGrammarV1SourceTokens source input
 
 -- | Normalize omitted Bytes length syntax before the stable structural parser.
 -- Explicit Bytes[...] is byte-for-byte token preserving. For bare Bytes we add
