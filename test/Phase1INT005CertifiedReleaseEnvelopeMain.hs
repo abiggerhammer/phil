@@ -124,7 +124,7 @@ wrongLoweringRootRejected fixture =
         , manifestLoweringLedgerRoot = wrongRoot
         }
       manifest = provisional
-        { manifestId = deriveManifestId fixtureLedger provisional }
+        { manifestId = deriveManifestId (fixtureLedger fixture) provisional }
       expected = stageLoweringRoot (fixtureStage fixture)
   in case runReleaseWith fixture context manifest
       (fixtureLLVM fixture) (fixtureTrust fixture) of
