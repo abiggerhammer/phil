@@ -398,8 +398,8 @@ checkOperationSite key transition function operation =
       requireOpaqueBasis key basis
       requireTransportExactlyOnce key transport inputs
       case action of
-        ProtocolOpaqueAction semanticAction
-          | not (Text.null semanticAction) -> Right Nothing
+        ProtocolOpaqueAction opaqueActionName
+          | not (Text.null opaqueActionName) -> Right Nothing
         _ -> targetMismatch (ProtocolTransitionActionMismatch key action)
     _ -> targetMismatch
       (ProtocolTransitionUnsupportedTarget key (protocolTransitionTargetSite transition))
