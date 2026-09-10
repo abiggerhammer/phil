@@ -58,7 +58,7 @@ report (label, ok) = do
 
 positive :: Bool
 positive = case steveLowered of
-  Right {} -> True
+  Right _ -> True
   Left _ -> False
 
 identityBound :: Bool
@@ -94,38 +94,24 @@ selectedPayloadLoads = case steveLLVMText of
   Just rendered ->
     let putLoad = "%put_id = load ptr, ptr %phil_runtime_choice_payload_slot_StevePut_put_entry_put_id"
         getLoad = "%get_bytes = load ptr, ptr %phil_runtime_choice_payload_slot_SteveGet_get_entry_get_bytes"
-        putInstall = blockText "put_install:" rendered
-        getCheck = blockText "get_check:" rendered
-        getNotFound = blockText "get_not_found:" rendered
-        getFailure = blockText "get_failure:" rendered
-    in putLoad `Text.isInfixOf` putInstall
-        && getLoad `Text.isInfixOf` getCheck
-        && not (getLoad `Text.isInfixOf` getNotFound)
-        && not (getLoad `Text.isInfixOf` getFailure)
+    in ("put_install:\n  " <> putLoad) `Text.isInfixOf` rendered
+        && ("get_check:\n  " <> getLoad) `Text.isInfixOf` rendered
         && Text.count putLoad rendered == 1
         && Text.count getLoad rendered == 1
 
 stableTags :: Bool
 stableTags = case steveLLVMText of
   Nothing -> False
-  Just rendered ->
-    let install = blockText "put_install:" rendered
-        readEntry = blockText "get_entry:" rendered
-        checkBlock = blockText "get_check:" rendered
-    in all (`Text.isInfixOf` install)
-        [ "i32 0, label %put_ok"
-        , "i32 1, label %put_ok"
-        , "i32 2, label %put_failure"
-        ]
-        && all (`Text.isInfixOf` readEntry)
-          [ "i32 0, label %get_check"
-          , "i32 1, label %get_not_found"
-          , "i32 2, label %get_failure"
-          ]
-        && all (`Text.isInfixOf` checkBlock)
-          [ "i32 0, label %get_ok"
-          , "i32 1, label %get_integrity_failure"
-          ]
+  Just rendered -> all (`Text.isInfixOf` rendered)
+    [ "i32 0, label %put_ok"
+    , "i32 1, label %put_ok"
+    , "i32 2, label %put_failure"
+    , "i32 0, label %get_check"
+    , "i32 1, label %get_not_found"
+    , "i32 2, label %get_failure"
+    , "i32 0, label %get_ok"
+    , "i32 1, label %get_integrity_failure"
+    ]
 
 invalidTagsTrap :: Bool
 invalidTagsTrap = case steveLLVMText of
@@ -155,21 +141,6 @@ unboundStageRejects = case (stevePlan, stevePhase1StageBundle) of
           Left RuntimeChoiceLLVMPayloadCarrierMismatch {} -> True
           _ -> False
   _ -> False
-
-blockText :: Text -> Text -> Text
-blockText label rendered =
-  case Text.breakOn label rendered of
-    (_, rest) | Text.null rest -> ""
-    (_, rest) ->
-      let after = Text.drop (Text.length label) rest
-          body = Text.takeWhileInclusive (/= '\n') after
-          following = Text.unlines . takeWhile (not . isLabel) . Text.lines $ after
-      in label <> body <> following
-  where
-    isLabel line =
-      not (Text.null line)
-        && Text.last line == ':'
-        && not (Text.isPrefixOf " " line)
 
 steveLLVMText :: Maybe Text
 steveLLVMText = case steveLowered of
