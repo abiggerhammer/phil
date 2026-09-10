@@ -69,7 +69,8 @@ jobs:
           make -f Makefile.surface-reference-bridge -j2 \
             proof/Phil/Surface/GrammarParserProductionExtraction.vo
           test -s SurfaceGrammarRecognizerKernel.hs
-          sha256sum SurfaceGrammarRecognizerKernel.hs
+          echo 'fe9ae9159c61e2cb2fe5054b8e068a4fdfbd7be2bf9644f90f22bf1605329ff2  SurfaceGrammarRecognizerKernel.hs' \
+            | sha256sum -c -
 
       - uses: actions/upload-artifact@v4
         with:
