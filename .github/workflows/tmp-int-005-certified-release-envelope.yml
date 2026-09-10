@@ -7,6 +7,7 @@ on:
       - 'src/Phil/Verification/CertifiedRelease.hs'
       - 'src/Phil/Systems/ProtocolStateCorrespondence.hs'
       - 'src/Phil/Systems/BoundaryCommitCorrespondence.hs'
+      - 'test/Phase1VerificationSourceArtifactClosureMain.hs'
       - 'test/Phase1INT005CertifiedReleaseEnvelopeMain.hs'
       - '.github/workflows/tmp-int-005-certified-release-envelope.yml'
 
@@ -47,6 +48,30 @@ jobs:
               if text.count(old_import) != 1:
                   raise SystemExit('expected exactly one redundant Data.Set(Set) import')
               boundary.write_text(text.replace(old_import, '', 1))
+
+          ver010 = Path('test/Phase1VerificationSourceArtifactClosureMain.hs')
+          text = ver010.read_text()
+          replacements = [
+              ('  sourceAssurance <- sourceAssuranceOrFail\n',
+               '  closedSourceAssurance <- sourceAssuranceOrFail\n'),
+              ('testValidArtifactCertification sourceAssurance validStage',
+               'testValidArtifactCertification closedSourceAssurance validStage'),
+              ('testSourceClosureIsNotArtifactClosure sourceAssurance validStage changedStage',
+               'testSourceClosureIsNotArtifactClosure closedSourceAssurance validStage changedStage'),
+              ('testArtifactIdentityMutation sourceAssurance validStage',
+               'testArtifactIdentityMutation closedSourceAssurance validStage'),
+          ]
+          changed = False
+          for old_text, new_text in replacements:
+              if old_text in text:
+                  if text.count(old_text) != 1:
+                      raise SystemExit(f'expected exactly one VER-010 shadow site: {old_text!r}')
+                  text = text.replace(old_text, new_text, 1)
+                  changed = True
+              elif new_text not in text:
+                  raise SystemExit(f'VER-010 shadow site has unexpected shape: {old_text!r}')
+          if changed:
+              ver010.write_text(text)
           PY
 
       - name: Build complete Haskell substrate
@@ -92,7 +117,8 @@ jobs:
         run: |
           if git diff --quiet -- \
               src/Phil/Systems/ProtocolStateCorrespondence.hs \
-              src/Phil/Systems/BoundaryCommitCorrespondence.hs; then
+              src/Phil/Systems/BoundaryCommitCorrespondence.hs \
+              test/Phase1VerificationSourceArtifactClosureMain.hs; then
             echo 'warning cleanups already committed'
             exit 0
           fi
@@ -100,6 +126,7 @@ jobs:
           git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
           git add \
             src/Phil/Systems/ProtocolStateCorrespondence.hs \
-            src/Phil/Systems/BoundaryCommitCorrespondence.hs
+            src/Phil/Systems/BoundaryCommitCorrespondence.hs \
+            test/Phase1VerificationSourceArtifactClosureMain.hs
           git commit -m 'style: clear INT-005 strict warning blockers'
           git push
