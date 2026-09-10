@@ -1,0 +1,45 @@
+component SteveGetCLI provides Unit {
+    decide console_read_line() {
+        line(contentIdText) => {
+            decide content_id_parse(contentIdText) {
+                content-id(contentId) => {
+                    decide console_read_line() {
+                        line(pathText) => {
+                            decide path_parse(pathText) {
+                                path(path) => {
+                                    decide blob_read(contentId) {
+                                        found(bytes) => {
+                                            let digestDecision = borrow bytes as bytesView {
+                                                digest_check(contentId, bytesView)
+                                            }
+                                            decide digestDecision {
+                                                accepted => {
+                                                    let replaceDecision = borrow bytes as outputView {
+                                                        fs_replace(path, outputView)
+                                                    }
+                                                    decide replaceDecision {
+                                                        replaced => { release bytes; return unit }
+                                                        file-failure(reason) => { release bytes; return unit }
+                                                    }
+                                                }
+                                                rejected(reason) => { release bytes; return unit }
+                                            }
+                                        }
+                                        not-found => { return unit }
+                                        storage-failure(reason) => { return unit }
+                                    }
+                                }
+                                invalid-path(reason) => { return unit }
+                            }
+                        }
+                        end-of-input => { return unit }
+                        console-failure(reason) => { return unit }
+                    }
+                }
+                invalid-content-id(reason) => { return unit }
+            }
+        }
+        end-of-input => { return unit }
+        console-failure(reason) => { return unit }
+    }
+}
