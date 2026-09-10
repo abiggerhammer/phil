@@ -1,0 +1,56 @@
+name: Phase 1 Surface Grammar Reference Tree Bridge
+
+on:
+  pull_request:
+    paths:
+      - 'src/Phil/Surface/GrammarV1/ReferenceKernelBridge.hs'
+      - 'src/Phil/Surface/GrammarV1/ReferenceToken.hs'
+      - 'src/Phil/Surface/GrammarV1/Lexer.hs'
+      - 'src/SurfaceGrammarRecognizerKernel.hs'
+      - 'generated/SurfaceGrammarRecognizerKernel.hs'
+      - 'scripts/check_phase1_surface_corpus.py'
+      - 'test/Phase1GrammarV1ReferenceParseTreeMain.hs'
+      - 'test/fixtures/phase1-surface/**'
+      - '.github/workflows/phase1-surface-grammar-reference-tree-bridge.yml'
+  push:
+    branches: [main]
+    paths:
+      - 'src/Phil/Surface/GrammarV1/ReferenceKernelBridge.hs'
+      - 'src/Phil/Surface/GrammarV1/ReferenceToken.hs'
+      - 'src/Phil/Surface/GrammarV1/Lexer.hs'
+      - 'src/SurfaceGrammarRecognizerKernel.hs'
+      - 'generated/SurfaceGrammarRecognizerKernel.hs'
+      - 'scripts/check_phase1_surface_corpus.py'
+      - 'test/Phase1GrammarV1ReferenceParseTreeMain.hs'
+      - 'test/fixtures/phase1-surface/**'
+      - '.github/workflows/phase1-surface-grammar-reference-tree-bridge.yml'
+
+permissions:
+  contents: read
+
+jobs:
+  reference-tree-bridge:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: haskell-actions/setup@v2
+        with:
+          ghc-version: '9.6.7'
+          cabal-version: 'latest'
+
+      - name: Build ordinary regression substrate
+        run: cabal build all --enable-tests
+
+      - name: Strictly compile certified tree bridge harness
+        run: |
+          cabal exec -- ghc --make \
+            -Wall -Werror \
+            -isrc \
+            test/Phase1GrammarV1ReferenceParseTreeMain.hs \
+            -o /tmp/phase1-surface-reference-tree-bridge
+
+      - name: Check lossless certified tree bridge over full corpus
+        run: |
+          python3 scripts/check_phase1_surface_corpus.py --emit-parser-cases \
+            | /tmp/phase1-surface-reference-tree-bridge
