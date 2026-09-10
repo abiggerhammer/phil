@@ -12,6 +12,7 @@ module Phil.Surface.GrammarV1.Lexer
   , GrammarV1LexDiagnostic (..)
   , grammarV1ReservedWords
   , runtimeBytesLengthMarker
+  , grammarV1ParserTokensFromSourceTokens
   , lexGrammarV1SourceTokens
   , lexGrammarV1
   ) where
@@ -316,9 +317,16 @@ lexGrammarV1SourceTokens source input =
     Right tokens -> Right tokens
     Left bundle -> Left (diagnosticFromBundle bundle)
 
+-- | Apply the production-only normalization to an already-lexed canonical
+-- source token stream.  Certified grammar admission must run before this step.
+grammarV1ParserTokensFromSourceTokens
+  :: [Located GrammarV1Token]
+  -> [Located GrammarV1Token]
+grammarV1ParserTokensFromSourceTokens = expandRuntimeBytes
+
 lexGrammarV1 :: Text -> Text -> Either GrammarV1LexDiagnostic [Located GrammarV1Token]
 lexGrammarV1 source input =
-  expandRuntimeBytes <$> lexGrammarV1SourceTokens source input
+  grammarV1ParserTokensFromSourceTokens <$> lexGrammarV1SourceTokens source input
 
 -- | Normalize omitted Bytes length syntax before the stable structural parser.
 -- Explicit Bytes[...] is byte-for-byte token preserving. For bare Bytes we add
