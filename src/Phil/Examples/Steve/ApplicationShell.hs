@@ -41,8 +41,7 @@ import Phil.Surface.Check
   , emptySurfaceEnvironment
   )
 import Phil.Systems
-  ( FileSystemOccurrence
-  , fileSystemOccurrence
+  ( fileSystemOccurrence
   , unFileSystemOccurrence
   )
 
