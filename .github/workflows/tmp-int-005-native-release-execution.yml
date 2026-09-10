@@ -1,0 +1,50 @@
+name: Temporary INT-005 Native Release Execution
+
+on:
+  workflow_dispatch:
+  push:
+    branches: [phase1-int-005-native-release-execution]
+    paths:
+      - 'test/Phil/Test/Phase1/ManifestWitnesses.hs'
+      - 'test/Phil/Test/Phase1/CertifiedReleaseWitnesses.hs'
+      - 'test/Phase1INT005RealWitnessManifestMain.hs'
+      - 'test/Phase1INT005EmitCertifiedReleaseMain.hs'
+      - 'src/Phil/Verification/CertifiedRelease.hs'
+      - 'src/Phil/LLVM/**'
+      - 'scripts/ci/resolve-llvm18.sh'
+      - 'scripts/ci/phase1-int-005-native-release-smoke.sh'
+      - '.github/workflows/tmp-int-005-native-release-execution.yml'
+
+permissions:
+  contents: read
+
+jobs:
+  native-release-execution:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: haskell-actions/setup@v2
+        with:
+          ghc-version: '9.6.7'
+          cabal-version: 'latest'
+
+      - name: Build complete Haskell substrate
+        run: cabal build all --enable-tests
+
+      - name: Strict typecheck certified release emitter
+        run: |
+          cabal exec -- ghc -isrc -itest -Wall -Werror -fno-code \
+            test/Phase1INT005EmitCertifiedReleaseMain.hs
+
+      - name: Replay real witness manifest certification
+        run: |
+          cabal exec -- runghc -isrc -itest -Wall -Werror \
+            test/Phase1INT005RealWitnessManifestMain.hs
+
+      - name: Assemble link and execute certified native witnesses
+        run: bash scripts/ci/phase1-int-005-native-release-smoke.sh
+
+      - name: Replay certified release envelope controls
+        run: |
+          cabal exec -- runghc -isrc -Wall -Werror \
+            test/Phase1INT005CertifiedReleaseEnvelopeMain.hs
