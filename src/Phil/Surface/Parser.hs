@@ -89,6 +89,7 @@ reservedWords = Set.fromList
   , "let"
   , "return"
   , "construct"
+  , "invoke"
   , "receive"
   , "on"
   , "receive_frame"
@@ -318,7 +319,8 @@ pPostfix = pPrimary >>= addFields
 
 pPrimary :: Parser (Located SurfaceExpression)
 pPrimary = locatedParser $ MP.choice
-  [ MP.try pConstructExpression
+  [ MP.try pInvokeExpression
+  , MP.try pConstructExpression
   , MP.try pBorrowExpression
   , MP.try pDecideExpression
   , MP.try pOfferExpression
@@ -341,6 +343,13 @@ pPrimary = locatedParser $ MP.choice
   , MP.try pIntegerExpression
   , pCallOrVariableExpression
   ]
+
+pInvokeExpression :: Parser SurfaceExpression
+pInvokeExpression = do
+  keyword "invoke"
+  name <- identifier
+  arguments <- parens (pExpression `MP.sepBy` symbol ",")
+  pure (InvokeExpression name arguments)
 
 pConstructExpression :: Parser SurfaceExpression
 pConstructExpression = do
