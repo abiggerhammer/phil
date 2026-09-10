@@ -1,0 +1,234 @@
+{-# LANGUAGE OverloadedStrings #-}
+
+module Main (main) where
+
+import Control.Exception (IOException, try)
+import Data.Text (Text)
+import qualified Data.Text as Text
+import qualified Data.Text.IO as TextIO
+import Phil.Surface.GrammarV1.Lexer (lexGrammarV1SourceTokens)
+import Phil.Surface.GrammarV1.Parser (parseGrammarV1StructuralSource)
+import Phil.Surface.GrammarV1.ReferenceAstStaticReference
+  ( GrammarV1ReferenceStaticArgumentTag (..)
+  , GrammarV1ReferenceStaticReferenceSpine (..)
+  )
+import Phil.Surface.GrammarV1.ReferenceAstStaticValue
+  ( GrammarV1ReferenceStaticValue (..)
+  , GrammarV1ReferenceStaticValueOperator (..)
+  , grammarV1ProductionTypeAliasStaticValues
+  , grammarV1ReferenceStaticValue
+  , grammarV1ReferenceTypeAliasStaticValues
+  )
+import Phil.Surface.GrammarV1.ReferenceAstTypeAlias
+  ( GrammarV1ReferenceTypeTag (..)
+  )
+import Phil.Surface.GrammarV1.ReferenceKernelBridge
+  ( GrammarV1ReferenceParseTree (..)
+  , grammarV1ReferenceParseSourceTokens
+  )
+import System.Exit (exitFailure)
+
+corpusRoot :: FilePath
+corpusRoot = "test/fixtures/phase1-surface"
+
+data CorpusCase = CorpusCase
+  { corpusCaseId :: Text
+  , corpusCasePath :: FilePath
+  , corpusCaseExpectation :: Text
+  }
+
+main :: IO ()
+main = do
+  let directCases =
+        [ ( "leaves"
+          , "type Leaves = Box[unit, true, false, 7];"
+          , [[ staticUnit
+             , staticBool True
+             , staticBool False
+             , staticInteger "7"
+             ]]
+          )
+        , ( "arithmetic"
+          , "type Arithmetic = Box[1 + 2 * 3 - 4];"
+          , [[ binary
+                (binary (staticInteger "1") GrammarV1ReferenceStaticAdd
+                  (binary (staticInteger "2") GrammarV1ReferenceStaticMultiply
+                    (staticInteger "3")))
+                GrammarV1ReferenceStaticSubtract
+                (staticInteger "4")
+             ]]
+          )
+        , ( "parentheses"
+          , "type Grouped = Box[(1 + 2) * 3];"
+          , [[ binary
+                (GrammarV1ReferenceStaticParenthesized
+                  (binary (staticInteger "1") GrammarV1ReferenceStaticAdd
+                    (staticInteger "2")))
+                GrammarV1ReferenceStaticMultiply
+                (staticInteger "3")
+             ]]
+          )
+        , ( "projection"
+          , "type Projected = Box[(Cfg[N]).field.more];"
+          , [[ GrammarV1ReferenceStaticProjection
+                (GrammarV1ReferenceStaticProjection
+                  (GrammarV1ReferenceStaticParenthesized
+                    (staticReference
+                      ["Cfg"]
+                      [GrammarV1ReferenceStaticValueArgument]))
+                  "field")
+                "more"
+             ]]
+          )
+        , ( "qualified-reference"
+          , "type Qualified = Box[Foo.Bar];"
+          , [[staticReference ["Foo", "Bar"] []]]
+          )
+        , ( "typed-reference"
+          , "type Typed = Box[Cfg[U32]];"
+          , [[staticReference
+                ["Cfg"]
+                [GrammarV1ReferenceStaticTypeArgument
+                  (GrammarV1ReferencePrimitiveSpelling "U32")]]]
+          )
+        , ( "unicode-reference"
+          , "type Unicode = Box[Δ.λ];"
+          , [[staticReference ["Δ", "λ"] []]]
+          )
+        ]
+      directResults =
+        [ checkDirect label source expected
+        | (label, source, expected) <- directCases
+        ]
+      malformedResult =
+        case grammarV1ReferenceStaticValue (GrammarV1ReferenceLiteral "true") of
+          Left _ -> Right ()
+          Right value -> Left
+            ("malformed-tree -- non-static-value root decoded as " <> show value)
+      directFailures =
+        [detail | Left detail <- malformedResult : directResults]
+  mapM_ (putStrLn . ("FAIL: " <>)) directFailures
+  if null directFailures then pure () else exitFailure
+
+  input <- TextIO.getContents
+  case traverse parseCaseLine (filter (not . Text.null) (Text.lines input)) of
+    Left detail -> putStrLn ("FAIL: manifest stream -- " <> detail) >> exitFailure
+    Right [] -> putStrLn "FAIL: manifest stream -- no corpus cases" >> exitFailure
+    Right cases -> do
+      results <- traverse runCase cases
+      let failures = [detail | Left detail <- results]
+      mapM_ (putStrLn . ("FAIL: " <>)) failures
+      if null failures
+        then putStrLn
+          ("PASS: certified Grammar-v1 static-value AST agrees with production AST ("
+            <> show (length cases) <> " fixtures)")
+        else exitFailure
+
+staticUnit :: GrammarV1ReferenceStaticValue
+staticUnit = GrammarV1ReferenceStaticUnit
+
+staticBool :: Bool -> GrammarV1ReferenceStaticValue
+staticBool = GrammarV1ReferenceStaticBool
+
+staticInteger :: Text -> GrammarV1ReferenceStaticValue
+staticInteger = GrammarV1ReferenceStaticInteger
+
+staticReference
+  :: [Text]
+  -> [GrammarV1ReferenceStaticArgumentTag]
+  -> GrammarV1ReferenceStaticValue
+staticReference name arguments =
+  GrammarV1ReferenceStaticReference GrammarV1ReferenceStaticReferenceSpine
+    { grammarV1ReferenceStaticReferenceName = name
+    , grammarV1ReferenceStaticReferenceArguments = arguments
+    }
+
+binary
+  :: GrammarV1ReferenceStaticValue
+  -> GrammarV1ReferenceStaticValueOperator
+  -> GrammarV1ReferenceStaticValue
+  -> GrammarV1ReferenceStaticValue
+binary = GrammarV1ReferenceStaticBinary
+
+checkDirect
+  :: String
+  -> Text
+  -> [[GrammarV1ReferenceStaticValue]]
+  -> Either String ()
+checkDirect label source expected = do
+  (referenceValues, productionValues) <- parseValues label source
+  if referenceValues /= productionValues
+    then Left
+      (label <> " -- certified/production static-value mismatch\nreference: "
+        <> show referenceValues <> "\nproduction: " <> show productionValues)
+    else if referenceValues /= expected
+      then Left
+        (label <> " -- unexpected static-value projection\nexpected: "
+          <> show expected <> "\nactual: " <> show referenceValues)
+      else Right ()
+
+parseValues
+  :: String
+  -> Text
+  -> Either String
+      ( [[GrammarV1ReferenceStaticValue]]
+      , [[GrammarV1ReferenceStaticValue]]
+      )
+parseValues label source = do
+  sourceTokens <- mapLeft show
+    (lexGrammarV1SourceTokens (Text.pack label) source)
+  tree <- mapLeft show (grammarV1ReferenceParseSourceTokens sourceTokens)
+  referenceValues <- mapLeft show
+    (grammarV1ReferenceTypeAliasStaticValues tree)
+  production <- mapLeft show
+    (parseGrammarV1StructuralSource (Text.pack label) source)
+  pure
+    ( referenceValues
+    , grammarV1ProductionTypeAliasStaticValues production
+    )
+
+parseCaseLine :: Text -> Either String CorpusCase
+parseCaseLine line = case Text.splitOn "\t" line of
+  [fixtureId, path, expectation]
+    | not (Text.null fixtureId)
+    , not (Text.null path)
+    , expectation == "parse" || expectation == "reject-syntax" ->
+        Right CorpusCase
+          { corpusCaseId = fixtureId
+          , corpusCasePath = Text.unpack path
+          , corpusCaseExpectation = expectation
+          }
+  _ -> Left ("invalid TSV row " <> show line)
+
+runCase :: CorpusCase -> IO (Either String ())
+runCase corpusCase
+  | corpusCaseExpectation corpusCase == "reject-syntax" = pure (Right ())
+  | otherwise = do
+      let relativePath = corpusCasePath corpusCase
+          path = corpusRoot <> "/" <> relativePath
+          label = Text.unpack (corpusCaseId corpusCase) <> " " <> relativePath
+          sourceName = Text.pack relativePath
+      sourceResult <- try (TextIO.readFile path) :: IO (Either IOException Text)
+      pure $ case sourceResult of
+        Left exception -> Left
+          (label <> " -- unable to read fixture: " <> show exception)
+        Right source -> do
+          sourceTokens <- mapLeft show
+            (lexGrammarV1SourceTokens sourceName source)
+          tree <- mapLeft show
+            (grammarV1ReferenceParseSourceTokens sourceTokens)
+          referenceValues <- mapLeft show
+            (grammarV1ReferenceTypeAliasStaticValues tree)
+          production <- mapLeft show
+            (parseGrammarV1StructuralSource sourceName source)
+          let productionValues = grammarV1ProductionTypeAliasStaticValues production
+          if referenceValues == productionValues
+            then Right ()
+            else Left
+              (label <> " -- certified/production static-value mismatch\nreference: "
+                <> show referenceValues <> "\nproduction: " <> show productionValues)
+
+mapLeft :: (a -> b) -> Either a c -> Either b c
+mapLeft transform result = case result of
+  Left value -> Left (transform value)
+  Right value -> Right value
