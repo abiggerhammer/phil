@@ -1,20 +1,26 @@
 component StevePutCLI provides Unit {
-    decide console_read_line() {
+    let inputDecision = console_read_line()
+    decide inputDecision {
         line(pathText) => {
-            decide path_parse(pathText) {
+            let pathDecision = path_parse(pathText)
+            decide pathDecision {
                 path(path) => {
-                    decide fs_read(path) {
+                    let readDecision = fs_read(path)
+                    decide readDecision {
                         found(candidate) => {
                             let digestDecision = borrow candidate as digestView {
                                 digest_compute(digestView)
                             }
                             decide digestDecision {
                                 computed(contentId) => {
-                                    decide blob_install(contentId, candidate) {
+                                    let installDecision = blob_install(contentId, candidate)
+                                    decide installDecision {
                                         installed => {
-                                            decide content_id_render(contentId) {
+                                            let renderDecision = content_id_render(contentId)
+                                            decide renderDecision {
                                                 rendered(contentIdText) => {
-                                                    decide console_write(contentIdText) {
+                                                    let writeDecision = console_write(contentIdText)
+                                                    decide writeDecision {
                                                         written => { return unit }
                                                         console-failure(reason) => { return unit }
                                                     }
@@ -22,9 +28,11 @@ component StevePutCLI provides Unit {
                                             }
                                         }
                                         already-exists => {
-                                            decide content_id_render(contentId) {
+                                            let renderDecision = content_id_render(contentId)
+                                            decide renderDecision {
                                                 rendered(contentIdText) => {
-                                                    decide console_write(contentIdText) {
+                                                    let writeDecision = console_write(contentIdText)
+                                                    decide writeDecision {
                                                         written => { return unit }
                                                         console-failure(reason) => { return unit }
                                                     }
