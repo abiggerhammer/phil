@@ -12,6 +12,7 @@ module Phil.Surface.GrammarV1.ReferenceAstTopLevel
   ) where
 
 import Data.Text (Text)
+import qualified Data.Text as Text
 import Phil.Surface.GrammarV1.Parser
   ( GrammarV1Attribute (..)
   , GrammarV1Declaration (..)
@@ -260,9 +261,7 @@ expectLiteral expected tree = case tree of
   _ -> failTopLevel ("expected literal " <> expected)
 
 showText :: Show a => a -> Text
-showText = fromString . show
-  where
-    fromString = Data.Text.pack
+showText = Text.pack . show
 
 failTopLevel :: Text -> Either GrammarV1ReferenceTopLevelError a
 failTopLevel = Left . GrammarV1ReferenceTopLevelError
