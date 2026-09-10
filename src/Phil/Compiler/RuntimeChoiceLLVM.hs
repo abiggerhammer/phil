@@ -8,7 +8,7 @@ module Phil.Compiler.RuntimeChoiceLLVM
   , lowerRuntimeChoiceABIToLLVM
   ) where
 
-import Control.Monad (forM, forM_, unless)
+import Control.Monad (forM_, unless)
 import Data.Char (isAlphaNum)
 import Data.List (sort)
 import qualified Data.Map.Strict as Map
