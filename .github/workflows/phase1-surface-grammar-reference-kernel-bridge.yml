@@ -1,0 +1,120 @@
+name: Phase 1 Surface Grammar Reference Kernel Bridge
+
+on:
+  pull_request:
+    paths:
+      - 'grammar/phase1-surface.ebnf'
+      - 'grammar/phase1-surface-determinacy.json'
+      - 'scripts/derive_phase1_surface_grammar.py'
+      - 'scripts/derive_phase1_surface_determinacy_certificate.py'
+      - 'scripts/check_phase1_surface_corpus.py'
+      - 'proof/Phil/Surface/Grammar*.v'
+      - 'src/Phil/Surface/GrammarV1/Lexer.hs'
+      - 'src/Phil/Surface/GrammarV1/ReferenceToken.hs'
+      - 'src/Phil/Surface/GrammarV1/ReferenceKernelBridge.hs'
+      - 'src/Phil/Surface/GrammarV1/Parser.hs'
+      - 'test/Phase1GrammarV1ReferenceKernelBridgeMain.hs'
+      - 'test/fixtures/phase1-surface/**'
+      - '.github/workflows/phase1-surface-grammar-reference-kernel-bridge.yml'
+  push:
+    branches: [main]
+    paths:
+      - 'grammar/phase1-surface.ebnf'
+      - 'grammar/phase1-surface-determinacy.json'
+      - 'scripts/derive_phase1_surface_grammar.py'
+      - 'scripts/derive_phase1_surface_determinacy_certificate.py'
+      - 'scripts/check_phase1_surface_corpus.py'
+      - 'proof/Phil/Surface/Grammar*.v'
+      - 'src/Phil/Surface/GrammarV1/Lexer.hs'
+      - 'src/Phil/Surface/GrammarV1/ReferenceToken.hs'
+      - 'src/Phil/Surface/GrammarV1/ReferenceKernelBridge.hs'
+      - 'src/Phil/Surface/GrammarV1/Parser.hs'
+      - 'test/Phase1GrammarV1ReferenceKernelBridgeMain.hs'
+      - 'test/fixtures/phase1-surface/**'
+      - '.github/workflows/phase1-surface-grammar-reference-kernel-bridge.yml'
+
+permissions:
+  contents: read
+
+jobs:
+  extract-reference-recognizer:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    container:
+      image: rocq/rocq-prover:9.2.0
+      options: --user root
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Derive exact Grammar-v1 inputs
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 scripts/derive_phase1_surface_grammar.py --write
+          python3 scripts/derive_phase1_surface_determinacy_certificate.py --write
+          python3 scripts/derive_phase1_surface_grammar.py --check
+          python3 scripts/derive_phase1_surface_determinacy_certificate.py --check
+
+      - name: Fresh-extract certified recognizer
+        shell: bash
+        run: |
+          set -euo pipefail
+          export PATH="/home/rocq/.opam/${COMPILER}/bin:$PATH"
+          {
+            echo '-Q proof/Phil Phil'
+            find proof/Phil/Surface -maxdepth 1 -type f -name 'Grammar*.v' -print | sort
+          } > _CoqProject.surface-reference-bridge
+          rocq makefile -f _CoqProject.surface-reference-bridge \
+            -o Makefile.surface-reference-bridge
+          make -f Makefile.surface-reference-bridge -j2 \
+            proof/Phil/Surface/GrammarParserProductionExtraction.vo
+          test -s SurfaceGrammarRecognizerKernel.hs
+          sha256sum SurfaceGrammarRecognizerKernel.hs
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: surface-grammar-recognizer-kernel-bridge
+          path: SurfaceGrammarRecognizerKernel.hs
+          if-no-files-found: error
+
+  reference-kernel-bridge:
+    needs: extract-reference-recognizer
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/download-artifact@v4
+        with:
+          name: surface-grammar-recognizer-kernel-bridge
+          path: exact-kernel
+
+      - uses: haskell-actions/setup@v2
+        with:
+          ghc-version: '9.6.7'
+          cabal-version: 'latest'
+
+      - name: Build ordinary Haskell regression substrate
+        run: cabal build all --enable-tests
+
+      - name: Compile exact extracted kernel with generator warning policy
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p build-kernel
+          {
+            echo '{-# OPTIONS_GHC -Wno-name-shadowing #-}'
+            cat exact-kernel/SurfaceGrammarRecognizerKernel.hs
+          } > build-kernel/SurfaceGrammarRecognizerKernel.hs
+          ghc -Wall -Werror -fno-code build-kernel/SurfaceGrammarRecognizerKernel.hs
+
+      - name: Strict-typecheck bridge and full corpus differential harness
+        shell: bash
+        run: |
+          set -euo pipefail
+          cabal exec -- ghc --make \
+            -Wall -Werror \
+            -isrc -ibuild-kernel \
+            test/Phase1GrammarV1ReferenceKernelBridgeMain.hs \
+            -o /tmp/phase1-surface-reference-kernel-bridge
+          python3 scripts/check_phase1_surface_corpus.py --emit-parser-cases \
+            | /tmp/phase1-surface-reference-kernel-bridge
