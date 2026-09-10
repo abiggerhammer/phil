@@ -7,7 +7,6 @@ module SteveProviderBridge
   , freeContentIdHandle
   ) where
 
-import qualified Data.ByteString as ByteString
 import Data.ByteString (ByteString)
 import Foreign.C.Types (CInt)
 import Foreign.Ptr (Ptr)
