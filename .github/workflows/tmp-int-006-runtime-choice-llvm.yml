@@ -1,0 +1,69 @@
+name: Temporary INT-006 Runtime Choice LLVM
+
+on:
+  workflow_dispatch:
+  push:
+    branches: [phase1-int-006-runtime-choice-llvm-lowering]
+    paths:
+      - 'src/Phil/Compiler/RuntimeChoicePayload.hs'
+      - 'src/Phil/Compiler/RuntimeChoiceSystems.hs'
+      - 'src/Phil/Compiler/RuntimeChoiceABI.hs'
+      - 'src/Phil/Compiler/RuntimeChoiceLLVM.hs'
+      - 'test/Phase1INT006RuntimeChoicePayloadMain.hs'
+      - 'test/Phase1INT006RuntimeChoiceSystemsMain.hs'
+      - 'test/Phase1INT006RuntimeChoiceABIMain.hs'
+      - 'test/Phase1INT006RuntimeChoiceLLVMMain.hs'
+      - 'src/Phil/Systems/**'
+      - 'src/Phil/Examples/Phase1/SystemsWitnesses.hs'
+      - 'src/Phil/LLVM/Phase0.hs'
+      - 'scripts/ci/resolve-llvm18.sh'
+      - '.github/workflows/tmp-int-006-runtime-choice-llvm.yml'
+
+permissions:
+  contents: read
+
+jobs:
+  runtime-choice-llvm:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: haskell-actions/setup@v2
+        with:
+          ghc-version: '9.6.7'
+          cabal-version: 'latest'
+
+      - name: Build complete Haskell substrate
+        run: cabal build all --enable-tests
+
+      - name: Strict typecheck INT-006 runtime-choice path
+        run: |
+          cabal exec -- ghc -isrc -itest -Wall -Werror -fno-code \
+            test/Phase1INT006RuntimeChoicePayloadMain.hs
+          cabal exec -- ghc -isrc -itest -Wall -Werror -fno-code \
+            test/Phase1INT006RuntimeChoiceSystemsMain.hs
+          cabal exec -- ghc -isrc -itest -Wall -Werror -fno-code \
+            test/Phase1INT006RuntimeChoiceABIMain.hs
+          cabal exec -- ghc -isrc -itest -Wall -Werror -fno-code \
+            test/Phase1INT006RuntimeChoiceLLVMMain.hs
+
+      - name: Exercise INT-006 runtime-choice certificates and lowering
+        run: |
+          cabal exec -- runghc -isrc -itest -Wall -Werror test/Phase1INT006RuntimeChoicePayloadMain.hs
+          cabal exec -- runghc -isrc -itest -Wall -Werror test/Phase1INT006RuntimeChoiceSystemsMain.hs
+          cabal exec -- runghc -isrc -itest -Wall -Werror test/Phase1INT006RuntimeChoiceABIMain.hs
+          cabal exec -- runghc -isrc -itest -Wall -Werror test/Phase1INT006RuntimeChoiceLLVMMain.hs
+
+      - name: Assemble exact emitted provider LLVM with LLVM 18
+        run: |
+          PHIL_LLVM18_TOOLS="llvm-as"
+          source scripts/ci/resolve-llvm18.sh
+          unset PHIL_LLVM18_TOOLS
+          llvm="$RUNNER_TEMP/int006-runtime-choice.ll"
+          bc="$RUNNER_TEMP/int006-runtime-choice.bc"
+          cabal exec -- runghc -isrc -itest -Wall -Werror \
+            test/Phase1INT006RuntimeChoiceLLVMMain.hs emit > "$llvm"
+          "$LLVM_AS" "$llvm" -o "$bc"
+          test -s "$bc"
+
+      - name: Replay real Steve manifest closure
+        run: cabal exec -- runghc -isrc -itest -Wall -Werror test/Phase1INT005RealWitnessManifestMain.hs
