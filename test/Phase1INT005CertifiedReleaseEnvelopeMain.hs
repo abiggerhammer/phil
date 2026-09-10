@@ -28,7 +28,8 @@ import Phil.LLVM.IR
 import Phil.LLVM.Lower (lowerSystemsConservative)
 import Phil.LLVM.Phase0 (phase0LLVMTarget)
 import Phil.Systems.IR
-  ( loweringLedgerRoot
+  ( SystemsArtifact
+  , loweringLedgerRoot
   , systemsArtifactDigest
   , systemsArtifactLoweringLedger
   )
@@ -51,26 +52,27 @@ main = do
   steveStage <- requireStage "Steve" steveStageClosureBundle
   let upload = releaseFixture "upload" uploadStage
       steve = releaseFixture "steve" steveStage
-      results =
-        [ test "INT-005 Upload exact certified-release envelope closes"
-            (releaseCloses upload)
-        , test "INT-005 Steve exact certified-release envelope closes"
-            (releaseCloses steve)
-        , test "INT-005 emitted LLVM cannot be rebound to another Systems artifact"
-            (wrongLLVMSourceRejected upload)
-        , test "INT-005 changed lowering lineage cannot hide behind a self-consistent manifest"
-            (wrongLoweringRootRejected upload)
-        , test "INT-005 canonical emitted LLVM text is release identity"
-            (noncanonicalLLVMTextRejected upload)
-        , test "INT-005 selected LLVM target profile is exact"
-            (wrongLLVMProfileRejected upload)
-        , test "INT-005 residual TCB kind omission rejects"
-            (missingTrustKindRejected upload)
-        , test "INT-005 duplicate residual TCB identity rejects"
-            (duplicateTrustIdentityRejected upload)
-        , test "INT-005 residual TCB entries must name their trusted basis"
-            (blankTrustBasisRejected upload)
+      checks =
+        [ ( "INT-005 Upload exact certified-release envelope closes"
+          , releaseCloses upload)
+        , ( "INT-005 Steve exact certified-release envelope closes"
+          , releaseCloses steve)
+        , ( "INT-005 emitted LLVM cannot be rebound to another Systems artifact"
+          , wrongLLVMSourceRejected upload)
+        , ( "INT-005 changed lowering lineage cannot hide behind a self-consistent manifest"
+          , wrongLoweringRootRejected upload)
+        , ( "INT-005 canonical emitted LLVM text is release identity"
+          , noncanonicalLLVMTextRejected upload)
+        , ( "INT-005 selected LLVM target profile is exact"
+          , wrongLLVMProfileRejected upload)
+        , ( "INT-005 residual TCB kind omission rejects"
+          , missingTrustKindRejected upload)
+        , ( "INT-005 duplicate residual TCB identity rejects"
+          , duplicateTrustIdentityRejected upload)
+        , ( "INT-005 residual TCB entries must name their trusted basis"
+          , blankTrustBasisRejected upload)
         ]
+  results <- mapM (uncurry report) checks
   if and results then pure () else exitFailure
 
 requireStage :: String -> Either String StageClosureBundle -> IO StageClosureBundle
@@ -78,17 +80,10 @@ requireStage label result = case result of
   Left detail -> putStrLn ("FAIL: INT-005 " <> label <> " stage fixture -- " <> detail) >> exitFailure
   Right stage -> pure stage
 
-test :: String -> Bool -> Bool
-test label result = result `seq` result
-
 report :: String -> Bool -> IO Bool
 report label result = do
   putStrLn ((if result then "PASS: " else "FAIL: ") <> label)
   pure result
-
--- Keep the test declarations pure, but report all controls from main.
--- This wrapper is intentionally separate from the release constructor.
-{-# NOINLINE test #-}
 
 releaseCloses :: ReleaseFixture -> Bool
 releaseCloses fixture =
@@ -301,6 +296,7 @@ runReleaseWith fixture context manifest artifact trust = certifyReleaseArtifact
   artifact
   trust
 
+stageSystemsArtifact :: StageClosureBundle -> SystemsArtifact
 stageSystemsArtifact stage =
   phase1StageSystemsArtifact
     . subjectStageBase
