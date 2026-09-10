@@ -8,6 +8,7 @@ import qualified Data.Text as Text
 import qualified Data.Text.IO as TextIO
 import Phil.Compiler.SourceArchitecture
 import Phil.Compiler.SourceBundle
+import Phil.Compiler.SourceCorePolicy (sourceCoreCallSites)
 import Phil.Core.Callable (SemanticEffect (..))
 import Phil.Core.Static (DeclarationKey (..))
 import Phil.Examples.Steve.ApplicationShell
