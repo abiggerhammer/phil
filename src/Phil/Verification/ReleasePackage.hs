@@ -39,7 +39,6 @@ import Phil.LLVM.IR
   ( LLVMArtifact (..)
   , LLVMEmissionContract (..)
   , LLVMModule (..)
-  , LLVMTargetProfile (..)
   , llvmModuleDigest
   )
 import Phil.Systems.IR
