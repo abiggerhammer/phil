@@ -1,0 +1,65 @@
+name: Temporary CALL-019 Invoke Syntax
+
+on:
+  workflow_dispatch:
+  push:
+    branches: [phase1-call-019-invoke-syntax]
+    paths:
+      - 'grammar/phase1-surface.ebnf'
+      - 'grammar/phase1-surface-determinacy.json'
+      - 'src/Phil/Surface/**'
+      - 'src/Phil/Compiler/CallableInvocation.hs'
+      - 'test/Phase1CALL019InvokeSyntaxMain.hs'
+      - '.github/workflows/tmp-call-019-invoke-syntax.yml'
+
+permissions:
+  contents: read
+
+jobs:
+  invoke-syntax:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: haskell-actions/setup@v2
+        with:
+          ghc-version: '9.6.7'
+          cabal-version: 'latest'
+
+      - name: Build complete Haskell substrate
+        run: cabal build all --enable-tests
+
+      - name: Require ordinary invoke syntax
+        run: |
+          cat > /tmp/Call019InvokeSmoke.hs <<'EOF'
+          {-# LANGUAGE OverloadedStrings #-}
+          import Phil.Surface.Parser (parseSurfaceExpression)
+          import Phil.Surface.Syntax (Located(..), SurfaceExpression(..))
+          import System.Exit (die)
+
+          main :: IO ()
+          main = case parseSurfaceExpression "call019-smoke.phil" "invoke StevePut(candidate)" of
+            Right _ -> pure ()
+            Left diagnostic -> die ("CALL-019 invoke syntax is not admitted: " <> show diagnostic)
+          EOF
+          cabal exec -- runghc -isrc -Wall -Werror /tmp/Call019InvokeSmoke.hs
+
+      - name: Strict typecheck CALL-019 syntax corpus
+        run: |
+          if [ -f test/Phase1CALL019InvokeSyntaxMain.hs ]; then
+            cabal exec -- ghc -isrc -itest -Wall -Werror -fno-code test/Phase1CALL019InvokeSyntaxMain.hs
+          fi
+
+      - name: Exercise CALL-019 syntax/resolution corpus
+        run: |
+          if [ -f test/Phase1CALL019InvokeSyntaxMain.hs ]; then
+            cabal exec -- runghc -isrc -itest -Wall -Werror test/Phase1CALL019InvokeSyntaxMain.hs
+          fi
+
+      - name: Replay exact callable resolution substrate
+        run: cabal exec -- runghc -isrc -itest -Wall -Werror test/Phase1CALL019CallableResolutionMain.hs
+
+      - name: Replay Grammar-v1 revision binding
+        run: cabal exec -- runghc -isrc -itest -Wall -Werror test/Phase1GrammarRevisionBindingMain.hs
+
+      - name: Replay Steve application-shell foundation
+        run: cabal exec -- runghc -isrc -itest -Wall -Werror test/Phase1INT006SteveApplicationShellMain.hs
