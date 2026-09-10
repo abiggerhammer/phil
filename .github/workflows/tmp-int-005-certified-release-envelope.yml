@@ -6,6 +6,7 @@ on:
     paths:
       - 'src/Phil/Verification/CertifiedRelease.hs'
       - 'src/Phil/Systems/ProtocolStateCorrespondence.hs'
+      - 'src/Phil/Systems/BoundaryCommitCorrespondence.hs'
       - 'test/Phase1INT005CertifiedReleaseEnvelopeMain.hs'
       - '.github/workflows/tmp-int-005-certified-release-envelope.yml'
 
@@ -22,21 +23,30 @@ jobs:
           ghc-version: '9.6.7'
           cabal-version: 'latest'
 
-      - name: Apply exact pre-existing shadow cleanup
+      - name: Apply exact pre-existing warning cleanups
         shell: bash
         run: |
           python3 - <<'PY'
           from pathlib import Path
-          path = Path('src/Phil/Systems/ProtocolStateCorrespondence.hs')
-          text = path.read_text()
+
+          protocol = Path('src/Phil/Systems/ProtocolStateCorrespondence.hs')
+          text = protocol.read_text()
           old = '''        ProtocolOpaqueAction semanticAction\n          | not (Text.null semanticAction) -> Right Nothing'''
           new = '''        ProtocolOpaqueAction opaqueActionName\n          | not (Text.null opaqueActionName) -> Right Nothing'''
           if old in text:
               if text.count(old) != 1:
                   raise SystemExit('expected exactly one ProtocolOpaqueAction shadow site')
-              path.write_text(text.replace(old, new))
+              protocol.write_text(text.replace(old, new))
           elif new not in text:
               raise SystemExit('ProtocolOpaqueAction shadow site has unexpected shape')
+
+          boundary = Path('src/Phil/Systems/BoundaryCommitCorrespondence.hs')
+          text = boundary.read_text()
+          old_import = 'import Data.Set (Set)\n'
+          if old_import in text:
+              if text.count(old_import) != 1:
+                  raise SystemExit('expected exactly one redundant Data.Set(Set) import')
+              boundary.write_text(text.replace(old_import, '', 1))
           PY
 
       - name: Build complete Haskell substrate
@@ -77,15 +87,19 @@ jobs:
           cabal exec -- runghc -isrc -Wall -Werror \
             test/Phase1INT002SteveManifestMain.hs
 
-      - name: Transport exact tested shadow cleanup
+      - name: Transport exact tested warning cleanups
         shell: bash
         run: |
-          if git diff --quiet -- src/Phil/Systems/ProtocolStateCorrespondence.hs; then
-            echo 'ProtocolState shadow cleanup already committed'
+          if git diff --quiet -- \
+              src/Phil/Systems/ProtocolStateCorrespondence.hs \
+              src/Phil/Systems/BoundaryCommitCorrespondence.hs; then
+            echo 'warning cleanups already committed'
             exit 0
           fi
           git config user.name 'github-actions[bot]'
           git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
-          git add src/Phil/Systems/ProtocolStateCorrespondence.hs
-          git commit -m 'style: avoid ProtocolState shadowed binding'
+          git add \
+            src/Phil/Systems/ProtocolStateCorrespondence.hs \
+            src/Phil/Systems/BoundaryCommitCorrespondence.hs
+          git commit -m 'style: clear INT-005 strict warning blockers'
           git push
