@@ -1,6 +1,7 @@
 name: Temporary INT-005 Real Witness Manifests
 
 on:
+  workflow_dispatch:
   push:
     branches: [phase1-int-005-real-witness-manifests]
     paths:
