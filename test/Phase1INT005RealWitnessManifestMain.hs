@@ -7,9 +7,7 @@ import qualified Data.Set as Set
 import qualified Data.Text.IO as TextIO
 import Phil.Assurance.Types
   ( AssuranceManifest (..)
-  , VerificationContext (..)
   )
-import Phil.LLVM.IR (LLVMArtifact)
 import Phil.LLVM.Lower (lowerSystemsConservative)
 import Phil.LLVM.Phase0 (phase0LLVMTarget)
 import Phil.Systems.IR (SystemsArtifact)
