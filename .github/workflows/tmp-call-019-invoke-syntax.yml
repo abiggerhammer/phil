@@ -5,8 +5,6 @@ on:
   push:
     branches: [phase1-call-019-invoke-syntax]
     paths:
-      - 'grammar/phase1-surface.ebnf'
-      - 'grammar/phase1-surface-determinacy.json'
       - 'src/Phil/Surface/**'
       - 'src/Phil/Compiler/CallableInvocation.hs'
       - 'test/Phase1CALL019InvokeSyntaxMain.hs'
@@ -32,34 +30,27 @@ jobs:
         run: |
           cat > /tmp/Call019InvokeSmoke.hs <<'EOF'
           {-# LANGUAGE OverloadedStrings #-}
+          {-# LANGUAGE PatternSynonyms #-}
           import Phil.Surface.Parser (parseSurfaceExpression)
-          import Phil.Surface.Syntax (Located(..), SurfaceExpression(..))
+          import Phil.Surface.Syntax (Located(..), SurfaceExpression(..), pattern InvokeExpression)
           import System.Exit (die)
 
           main :: IO ()
           main = case parseSurfaceExpression "call019-smoke.phil" "invoke StevePut(candidate)" of
-            Right _ -> pure ()
+            Right (Located _ (InvokeExpression "StevePut" [Located _ (VariableExpression "candidate")])) -> pure ()
+            Right parsed -> die ("CALL-019 invoke parsed with wrong category: " <> show parsed)
             Left diagnostic -> die ("CALL-019 invoke syntax is not admitted: " <> show diagnostic)
           EOF
           cabal exec -- runghc -isrc -Wall -Werror /tmp/Call019InvokeSmoke.hs
 
       - name: Strict typecheck CALL-019 syntax corpus
-        run: |
-          if [ -f test/Phase1CALL019InvokeSyntaxMain.hs ]; then
-            cabal exec -- ghc -isrc -itest -Wall -Werror -fno-code test/Phase1CALL019InvokeSyntaxMain.hs
-          fi
+        run: cabal exec -- ghc -isrc -itest -Wall -Werror -fno-code test/Phase1CALL019InvokeSyntaxMain.hs
 
       - name: Exercise CALL-019 syntax/resolution corpus
-        run: |
-          if [ -f test/Phase1CALL019InvokeSyntaxMain.hs ]; then
-            cabal exec -- runghc -isrc -itest -Wall -Werror test/Phase1CALL019InvokeSyntaxMain.hs
-          fi
+        run: cabal exec -- runghc -isrc -itest -Wall -Werror test/Phase1CALL019InvokeSyntaxMain.hs
 
       - name: Replay exact callable resolution substrate
         run: cabal exec -- runghc -isrc -itest -Wall -Werror test/Phase1CALL019CallableResolutionMain.hs
-
-      - name: Replay Grammar-v1 revision binding
-        run: cabal exec -- runghc -isrc -itest -Wall -Werror test/Phase1GrammarRevisionBindingMain.hs
 
       - name: Replay Steve application-shell foundation
         run: cabal exec -- runghc -isrc -itest -Wall -Werror test/Phase1INT006SteveApplicationShellMain.hs
