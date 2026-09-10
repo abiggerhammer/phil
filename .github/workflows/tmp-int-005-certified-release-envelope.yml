@@ -1,0 +1,60 @@
+name: Temporary INT-005 Certified Release Envelope
+
+on:
+  push:
+    branches: [phase1-int-005-certified-release-envelope]
+    paths:
+      - 'src/Phil/Verification/CertifiedRelease.hs'
+      - 'test/Phase1INT005CertifiedReleaseEnvelopeMain.hs'
+      - '.github/workflows/tmp-int-005-certified-release-envelope.yml'
+
+permissions:
+  contents: read
+
+jobs:
+  certified-release-envelope:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: haskell-actions/setup@v2
+        with:
+          ghc-version: '9.6.7'
+          cabal-version: 'latest'
+
+      - name: Build complete Haskell substrate
+        run: cabal build all --enable-tests
+
+      - name: Strict typecheck INT-005 release envelope
+        run: |
+          cabal exec -- ghc -isrc -Wall -Werror -fno-code \
+            test/Phase1INT005CertifiedReleaseEnvelopeMain.hs
+
+      - name: Exercise INT-005 release-envelope controls
+        run: |
+          cabal exec -- runghc -isrc -Wall -Werror \
+            test/Phase1INT005CertifiedReleaseEnvelopeMain.hs
+
+      - name: Guard release constructor against witness identity dispatch
+        run: |
+          if grep -n -E 'Upload|Steve|program:upload|program:steve' \
+              src/Phil/Verification/CertifiedRelease.hs; then
+            echo 'certified-release constructor contains witness-specific identity' >&2
+            exit 1
+          fi
+
+      - name: Replay VER-010 source/artifact closure
+        run: |
+          cabal exec -- runghc -isrc -Wall -Werror \
+            test/Phase1VerificationSourceArtifactClosureMain.hs
+
+      - name: Replay INT-001 shared witness backend path
+        run: |
+          cabal exec -- runghc -isrc -Wall -Werror \
+            test/Phase1INT001WitnessE2EMain.hs
+
+      - name: Replay INT-002 final manifest closure
+        run: |
+          cabal exec -- runghc -isrc -Wall -Werror \
+            test/Phase1INT002UploadManifestMain.hs
+          cabal exec -- runghc -isrc -Wall -Werror \
+            test/Phase1INT002SteveManifestMain.hs
