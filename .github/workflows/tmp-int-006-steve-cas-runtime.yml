@@ -35,8 +35,10 @@ jobs:
 
       - name: Exercise real content-addressed artifacts
         run: |
-          cabal exec -- runghc -isrc -itest -package directory -package unix \
-            -Wall -Werror test/Phase1INT006SteveCASMain.hs
+          cabal exec -- runghc \
+            --ghc-arg=-package --ghc-arg=directory \
+            --ghc-arg=-package --ghc-arg=unix \
+            -isrc -itest -Wall -Werror test/Phase1INT006SteveCASMain.hs
 
       - name: Replay certified runtime-choice LLVM lowering
         run: cabal exec -- runghc -isrc -itest -Wall -Werror test/Phase1INT006RuntimeChoiceLLVMMain.hs
