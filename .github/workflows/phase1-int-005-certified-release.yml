@@ -19,7 +19,6 @@ on:
   push:
     branches:
       - main
-      - phase1-int-005-permanent-gate
     paths:
       - 'src/Phil/**'
       - 'test/Phil/Test/Phase1/**'
