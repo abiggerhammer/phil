@@ -1,13 +1,18 @@
 component SteveGetCLI provides Unit {
-    decide console_read_line() {
+    let inputDecision = console_read_line()
+    decide inputDecision {
         line(contentIdText) => {
-            decide content_id_parse(contentIdText) {
+            let contentIdDecision = content_id_parse(contentIdText)
+            decide contentIdDecision {
                 content-id(contentId) => {
-                    decide console_read_line() {
+                    let outputDecision = console_read_line()
+                    decide outputDecision {
                         line(pathText) => {
-                            decide path_parse(pathText) {
+                            let pathDecision = path_parse(pathText)
+                            decide pathDecision {
                                 path(path) => {
-                                    decide blob_read(contentId) {
+                                    let readDecision = blob_read(contentId)
+                                    decide readDecision {
                                         found(bytes) => {
                                             let digestDecision = borrow bytes as bytesView {
                                                 digest_check(contentId, bytesView)
