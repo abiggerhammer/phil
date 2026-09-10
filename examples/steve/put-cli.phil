@@ -1,0 +1,50 @@
+component StevePutCLI provides Unit {
+    decide console_read_line() {
+        line(pathText) => {
+            decide path_parse(pathText) {
+                path(path) => {
+                    decide fs_read(path) {
+                        found(candidate) => {
+                            let digestDecision = borrow candidate as digestView {
+                                digest_compute(digestView)
+                            }
+                            decide digestDecision {
+                                computed(contentId) => {
+                                    decide blob_install(contentId, candidate) {
+                                        installed => {
+                                            decide content_id_render(contentId) {
+                                                rendered(contentIdText) => {
+                                                    decide console_write(contentIdText) {
+                                                        written => { return unit }
+                                                        console-failure(reason) => { return unit }
+                                                    }
+                                                }
+                                            }
+                                        }
+                                        already-exists => {
+                                            decide content_id_render(contentId) {
+                                                rendered(contentIdText) => {
+                                                    decide console_write(contentIdText) {
+                                                        written => { return unit }
+                                                        console-failure(reason) => { return unit }
+                                                    }
+                                                }
+                                            }
+                                        }
+                                        storage-failure(reason) => { return unit }
+                                    }
+                                }
+                            }
+                        }
+                        not-found => { return unit }
+                        too-large => { return unit }
+                        file-failure(reason) => { return unit }
+                    }
+                }
+                invalid-path(reason) => { return unit }
+            }
+        }
+        end-of-input => { return unit }
+        console-failure(reason) => { return unit }
+    }
+}
