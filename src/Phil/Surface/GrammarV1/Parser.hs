@@ -3834,7 +3834,7 @@ parseNamedPropositionAtom = do
 
 parseRelationProposition :: Parser (Located GrammarV1Proposition)
 parseRelationProposition = do
-  left <- parseAdditiveExpression
+  left <- parseShiftExpression
   parseRelationFromLeft left
 
 parseRelationFromLeft
@@ -3842,7 +3842,7 @@ parseRelationFromLeft
   -> Parser (Located GrammarV1Proposition)
 parseRelationFromLeft left = do
   operator <- parseRelationOperator
-  right <- parseAdditiveExpression
+  right <- parseShiftExpression
   pure $ Located
     (SourceSpan
       (sourceSpanStart (locatedSpan left))
