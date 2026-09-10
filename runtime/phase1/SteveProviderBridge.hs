@@ -8,7 +8,7 @@ module SteveProviderBridge
   ) where
 
 import Data.ByteString (ByteString)
-import Foreign.C.Types (CInt)
+import Foreign.C.Types (CInt (..))
 import Foreign.Ptr (Ptr)
 import Foreign.StablePtr
   ( StablePtr
