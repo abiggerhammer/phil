@@ -73,4 +73,4 @@ storeRoot :: FilePath
 storeRoot = "/tmp/phil-int006-steve-cas"
 
 cleanRoot :: IO ()
-cleanRoot = removePathForcibly storeRoot `catchIOError` const (pure ())
+cleanRoot = catchIOError (removePathForcibly storeRoot) (const (pure ()))
