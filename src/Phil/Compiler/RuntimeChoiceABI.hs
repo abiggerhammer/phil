@@ -19,7 +19,6 @@ import Data.Text (Text)
 import qualified Data.Text as Text
 import Phil.Assurance.Types (Digest (..), digestText)
 import Phil.Compiler.RuntimeChoicePayload
-import Phil.Core.Scalar (ScalarType)
 import Phil.Systems.GenericLowering (CoreSystemsProgram)
 import Phil.Systems.IR
 import Phil.Systems.Phase1Stage
