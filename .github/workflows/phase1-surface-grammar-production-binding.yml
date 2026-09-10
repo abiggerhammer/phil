@@ -1,0 +1,130 @@
+name: Phase 1 Surface Grammar Production Binding
+
+on:
+  pull_request:
+    paths:
+      - 'grammar/phase1-surface.ebnf'
+      - 'grammar/phase1-surface-determinacy.json'
+      - 'scripts/derive_phase1_surface_grammar.py'
+      - 'scripts/derive_phase1_surface_determinacy_certificate.py'
+      - 'scripts/check_phase1_surface_corpus.py'
+      - 'proof/Phil/Surface/Grammar*.v'
+      - 'generated/SurfaceGrammarRecognizerKernel.hs'
+      - 'src/SurfaceGrammarRecognizerKernel.hs'
+      - 'src/Phil/Surface/GrammarV1/**'
+      - 'test/Phase1GrammarV1CertifiedAdmissionMain.hs'
+      - 'test/Phase1GrammarV1ReferenceKernelBridgeMain.hs'
+      - 'test/fixtures/phase1-surface/**'
+      - 'test/fakes/SurfaceGrammarRecognizerKernel.hs'
+      - '.github/workflows/phase1-surface-grammar-production-binding.yml'
+  push:
+    branches: [main]
+    paths:
+      - 'grammar/phase1-surface.ebnf'
+      - 'grammar/phase1-surface-determinacy.json'
+      - 'scripts/derive_phase1_surface_grammar.py'
+      - 'scripts/derive_phase1_surface_determinacy_certificate.py'
+      - 'scripts/check_phase1_surface_corpus.py'
+      - 'proof/Phil/Surface/Grammar*.v'
+      - 'generated/SurfaceGrammarRecognizerKernel.hs'
+      - 'src/SurfaceGrammarRecognizerKernel.hs'
+      - 'src/Phil/Surface/GrammarV1/**'
+      - 'test/Phase1GrammarV1CertifiedAdmissionMain.hs'
+      - 'test/Phase1GrammarV1ReferenceKernelBridgeMain.hs'
+      - 'test/fixtures/phase1-surface/**'
+      - 'test/fakes/SurfaceGrammarRecognizerKernel.hs'
+      - '.github/workflows/phase1-surface-grammar-production-binding.yml'
+
+permissions:
+  contents: read
+
+jobs:
+  kernel-identity:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    container:
+      image: rocq/rocq-prover:9.2.0
+      options: --user root
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Derive exact Grammar-v1 inputs
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 scripts/derive_phase1_surface_grammar.py --write
+          python3 scripts/derive_phase1_surface_determinacy_certificate.py --write
+          python3 scripts/derive_phase1_surface_grammar.py --check
+          python3 scripts/derive_phase1_surface_determinacy_certificate.py --check
+
+      - name: Fresh-extract and match checked-in certified kernel
+        shell: bash
+        run: |
+          set -euo pipefail
+          export PATH="/home/rocq/.opam/${COMPILER}/bin:$PATH"
+          {
+            echo '-Q proof/Phil Phil'
+            find proof/Phil/Surface -maxdepth 1 -type f -name 'Grammar*.v' -print | sort
+          } > _CoqProject.surface-production-binding
+          rocq makefile -f _CoqProject.surface-production-binding \
+            -o Makefile.surface-production-binding
+          make -f Makefile.surface-production-binding -j2 \
+            proof/Phil/Surface/GrammarParserProductionExtraction.vo
+          echo 'fe9ae9159c61e2cb2fe5054b8e068a4fdfbd7be2bf9644f90f22bf1605329ff2  SurfaceGrammarRecognizerKernel.hs' | sha256sum -c -
+          echo 'fe9ae9159c61e2cb2fe5054b8e068a4fdfbd7be2bf9644f90f22bf1605329ff2  generated/SurfaceGrammarRecognizerKernel.hs' | sha256sum -c -
+          cmp SurfaceGrammarRecognizerKernel.hs generated/SurfaceGrammarRecognizerKernel.hs
+
+      - name: Check production mirror is exact kernel plus warning policy
+        shell: bash
+        run: |
+          set -euo pipefail
+          test "$(head -n 1 src/SurfaceGrammarRecognizerKernel.hs)" = \
+            '{-# OPTIONS_GHC -Wno-name-shadowing #-}'
+          tail -n +2 src/SurfaceGrammarRecognizerKernel.hs > /tmp/production-kernel-body.hs
+          cmp generated/SurfaceGrammarRecognizerKernel.hs /tmp/production-kernel-body.hs
+
+  production-binding:
+    needs: kernel-identity
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: haskell-actions/setup@v2
+        with:
+          ghc-version: '9.6.7'
+          cabal-version: 'latest'
+
+      - name: Build ordinary regression substrate
+        run: cabal build all --enable-tests
+
+      - name: Strict-typecheck checked-in production kernel
+        run: ghc -Wall -Werror -fno-code src/SurfaceGrammarRecognizerKernel.hs
+
+      - name: Check real certified kernel and production parser on full corpus
+        shell: bash
+        run: |
+          set -euo pipefail
+          cabal exec -- ghc --make \
+            -Wall -Werror \
+            -isrc \
+            test/Phase1GrammarV1ReferenceKernelBridgeMain.hs \
+            -o /tmp/phase1-surface-production-binding
+          python3 scripts/check_phase1_surface_corpus.py --emit-parser-cases \
+            | /tmp/phase1-surface-production-binding
+
+      - name: Prove public parser cannot bypass certified rejection
+        shell: bash
+        run: |
+          set -euo pipefail
+          mv src/SurfaceGrammarRecognizerKernel.hs /tmp/SurfaceGrammarRecognizerKernel.real.hs
+          trap 'mv /tmp/SurfaceGrammarRecognizerKernel.real.hs src/SurfaceGrammarRecognizerKernel.hs' EXIT
+          rm -rf /tmp/phase1-surface-fake-kernel-build
+          mkdir -p /tmp/phase1-surface-fake-kernel-build
+          cabal exec -- ghc --make \
+            -fforce-recomp \
+            -outputdir /tmp/phase1-surface-fake-kernel-build \
+            -Wall -Werror \
+            -itest/fakes -isrc \
+            test/Phase1GrammarV1CertifiedAdmissionMain.hs \
+            -o /tmp/phase1-surface-certified-admission
+          /tmp/phase1-surface-certified-admission

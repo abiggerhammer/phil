@@ -2,6 +2,7 @@
 
 module Phil.Surface.GrammarV1.ReferenceKernelBridge
   ( grammarV1ReferenceAcceptsSource
+  , grammarV1ReferenceAcceptsSourceTokens
   , grammarV1ReferenceAcceptsTokens
   , grammarV1ReferenceTokenToKernel
   , textToKernelString
@@ -12,9 +13,13 @@ import qualified Data.ByteString as ByteString
 import Data.Text (Text)
 import qualified Data.Text.Encoding as TextEncoding
 import Data.Word (Word8)
-import Phil.Surface.GrammarV1.Lexer (GrammarV1LexDiagnostic)
+import Phil.Surface.GrammarV1.Lexer
+  ( GrammarV1LexDiagnostic
+  , GrammarV1Token
+  )
 import Phil.Surface.GrammarV1.ReferenceToken
   ( GrammarV1ReferenceToken (..)
+  , grammarV1ReferenceToken
   , lexGrammarV1ReferenceTokens
   )
 import Phil.Surface.Syntax (Located (..))
@@ -62,6 +67,16 @@ grammarV1ReferenceAcceptsTokens
 grammarV1ReferenceAcceptsTokens =
   Kernel.phase1_surface_reference_accepts
     . map grammarV1ReferenceTokenToKernel
+
+-- | Admit an already-lexed canonical source token stream.  This is the
+-- production parser binding point: it cannot observe the synthetic bare-Bytes
+-- normalization because the caller supplies #865's pre-normalization tokens.
+grammarV1ReferenceAcceptsSourceTokens
+  :: [Located GrammarV1Token]
+  -> Bool
+grammarV1ReferenceAcceptsSourceTokens =
+  grammarV1ReferenceAcceptsTokens
+    . map (grammarV1ReferenceToken . locatedValue)
 
 -- | Lex at the exact pre-normalization Grammar-v1 source-token boundary from
 -- #865, erase source spans, then invoke the extracted certified recognizer.

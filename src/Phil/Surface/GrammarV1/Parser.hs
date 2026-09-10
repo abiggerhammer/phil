@@ -87,6 +87,9 @@ import Data.Maybe (listToMaybe)
 import Data.Text (Text)
 import qualified Data.Text as Text
 import Phil.Surface.GrammarV1.Lexer
+import Phil.Surface.GrammarV1.ReferenceKernelBridge
+  ( grammarV1ReferenceAcceptsSourceTokens
+  )
 import Phil.Surface.Syntax
   ( Located (..)
   , SourceSpan (..)
@@ -98,6 +101,7 @@ import Phil.Surface.Syntax
 
 data GrammarV1ParseDiagnostic
   = GrammarV1LexicalDiagnostic GrammarV1LexDiagnostic
+  | GrammarV1CertifiedGrammarDiagnostic
   | GrammarV1SyntaxDiagnostic (Maybe SourceSpan) Text
   deriving (Eq, Show)
 
@@ -901,9 +905,13 @@ parseGrammarV1StructuralSource
   -> Text
   -> Either GrammarV1ParseDiagnostic GrammarV1SourceFile
 parseGrammarV1StructuralSource source input = do
-  tokens <- case lexGrammarV1 source input of
+  sourceTokens <- case lexGrammarV1SourceTokens source input of
     Left diagnostic -> Left (GrammarV1LexicalDiagnostic diagnostic)
     Right values -> Right values
+  if grammarV1ReferenceAcceptsSourceTokens sourceTokens
+    then pure ()
+    else Left GrammarV1CertifiedGrammarDiagnostic
+  let tokens = grammarV1ParserTokensFromSourceTokens sourceTokens
   (parsed, rest) <- runParser parseSourceFile tokens
   case rest of
     [] -> Right parsed
