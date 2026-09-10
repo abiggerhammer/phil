@@ -3,14 +3,10 @@
 module Main (main) where
 
 import qualified Data.ByteString as ByteString
-import Data.ByteString (ByteString)
 import qualified Data.ByteString.Char8 as Char8
 import Foreign.C.Types (CInt)
 import Foreign.Ptr (Ptr)
-import Phil.Compiler.SteveCAS
-  ( computeContentId
-  , renderContentId
-  )
+import Phil.Compiler.SteveCAS (computeContentId)
 import SteveProviderBridge
   ( freeContentIdHandle
   , freeOwnedBytesHandle
@@ -45,7 +41,7 @@ nativeLifecycle :: IO [(String, Bool)]
 nativeLifecycle = do
   let payload = Char8.pack "Steve native provider bridge artifact\n"
       contentId = computeContentId payload
-      objectPath = storeRoot </> showContentId contentId
+      objectPath = storeRoot </> show contentId
   candidate <- newOwnedBytesHandle storeRoot payload
   firstPut <- nativeStevePut candidate
   secondPut <- nativeStevePut candidate
@@ -75,9 +71,6 @@ nativeLifecycle = do
     , ("native SteveGet reports a missing content ID as non-success", missingGet /= 0)
     , ("native SteveGet rejects content whose bytes no longer match its ID", corruptGet /= 0)
     ]
-
-showContentId :: Show a => a -> FilePath
-showContentId = show
 
 report :: (String, Bool) -> IO ()
 report (label, ok) =
