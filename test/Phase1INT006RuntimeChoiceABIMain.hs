@@ -12,7 +12,6 @@ import Phil.Examples.Phase1.SystemsWitnesses
   , stevePhase1StageBundle
   )
 import Phil.Systems.IR (ValueId (..))
-import Phil.Systems.Phase1Stage (Phase1StageBundle)
 import System.Exit (exitFailure)
 
 main :: IO ()
@@ -108,15 +107,15 @@ armPayload
 armPayload functionName blockName label = do
   plan <- either (const Nothing) Just steveABI
   site <- Map.lookup (RuntimeChoiceSite functionName blockName) (runtimeChoiceABISites plan)
-  arm <- Map.lookup label (runtimeChoiceABIArms site)
-  runtimeChoiceABIArmPayload arm
+  abiArm <- Map.lookup label (runtimeChoiceABIArms site)
+  runtimeChoiceABIArmPayload abiArm
 
 armTag :: Text.Text -> Text.Text -> Text.Text -> Maybe Int
 armTag functionName blockName label = do
   plan <- either (const Nothing) Just steveABI
   site <- Map.lookup (RuntimeChoiceSite functionName blockName) (runtimeChoiceABISites plan)
-  arm <- Map.lookup label (runtimeChoiceABIArms site)
-  pure (runtimeChoiceABIArmTag arm)
+  abiArm <- Map.lookup label (runtimeChoiceABIArms site)
+  pure (runtimeChoiceABIArmTag abiArm)
 
 steveABI :: Either String RuntimeChoiceABIPlan
 steveABI = steveABIWith stevePayloadSpecs
