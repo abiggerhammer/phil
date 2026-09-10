@@ -1,0 +1,56 @@
+name: Phase 1 Surface Grammar AST Spine Correspondence
+
+on:
+  pull_request:
+    paths:
+      - 'src/Phil/Surface/GrammarV1/ReferenceAstSpine.hs'
+      - 'src/Phil/Surface/GrammarV1/ReferenceKernelBridge.hs'
+      - 'src/Phil/Surface/GrammarV1/Parser.hs'
+      - 'src/Phil/Surface/GrammarV1/Lexer.hs'
+      - 'src/SurfaceGrammarRecognizerKernel.hs'
+      - 'test/Phase1GrammarV1ReferenceAstSpineMain.hs'
+      - 'test/fixtures/phase1-surface/**'
+      - 'scripts/check_phase1_surface_corpus.py'
+      - '.github/workflows/phase1-surface-grammar-ast-spine.yml'
+  push:
+    branches: [main]
+    paths:
+      - 'src/Phil/Surface/GrammarV1/ReferenceAstSpine.hs'
+      - 'src/Phil/Surface/GrammarV1/ReferenceKernelBridge.hs'
+      - 'src/Phil/Surface/GrammarV1/Parser.hs'
+      - 'src/Phil/Surface/GrammarV1/Lexer.hs'
+      - 'src/SurfaceGrammarRecognizerKernel.hs'
+      - 'test/Phase1GrammarV1ReferenceAstSpineMain.hs'
+      - 'test/fixtures/phase1-surface/**'
+      - 'scripts/check_phase1_surface_corpus.py'
+      - '.github/workflows/phase1-surface-grammar-ast-spine.yml'
+
+permissions:
+  contents: read
+
+jobs:
+  ast-spine-correspondence:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: haskell-actions/setup@v2
+        with:
+          ghc-version: '9.6.7'
+          cabal-version: 'latest'
+
+      - name: Build ordinary regression substrate
+        run: cabal build all --enable-tests
+
+      - name: Strictly compile AST spine correspondence harness
+        run: |
+          cabal exec -- ghc --make \
+            -Wall -Werror \
+            -isrc \
+            test/Phase1GrammarV1ReferenceAstSpineMain.hs \
+            -o /tmp/phase1-surface-grammar-ast-spine
+
+      - name: Check certified source-file spine against production AST
+        run: |
+          python3 scripts/check_phase1_surface_corpus.py --emit-parser-cases \
+            | /tmp/phase1-surface-grammar-ast-spine
