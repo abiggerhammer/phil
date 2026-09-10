@@ -3,9 +3,9 @@
 module Main (main) where
 
 import qualified Data.Map.Strict as Map
-import qualified Data.Set as Set
-import Phil.Examples.Phase1.SystemsWitnesses (steveCoreProgram)
+import qualified Data.Text as Text
 import Phil.Compiler.RuntimeChoicePayload
+import Phil.Examples.Phase1.SystemsWitnesses (steveCoreProgram)
 import System.Exit (exitFailure)
 
 main :: IO ()
@@ -95,8 +95,8 @@ retainedValue
   -> Maybe String
 retainedValue plan site label = do
   payloadSpec <- Map.lookup site (runtimeChoicePayloadPlanSpecs plan)
-  payloadArm <- Map.lookup (fromString label) (runtimeChoicePayloadArms payloadSpec)
-  fmap toString (runtimeChoicePayloadValue payloadArm)
+  payloadArm <- Map.lookup (Text.pack label) (runtimeChoicePayloadArms payloadSpec)
+  fmap Text.unpack (runtimeChoicePayloadValue payloadArm)
 
 stevePayloadSpecs :: [RuntimeChoicePayloadSpec]
 stevePayloadSpecs =
@@ -120,16 +120,16 @@ stevePayloadSpecs =
 
 spec :: String -> String -> [(String, RuntimeChoicePayloadArm)] -> RuntimeChoicePayloadSpec
 spec functionName blockName arms = RuntimeChoicePayloadSpec
-  { runtimeChoicePayloadSite = RuntimeChoiceSite (fromString functionName) (fromString blockName)
-  , runtimeChoicePayloadArms = Map.fromList [(fromString label, value) | (label, value) <- arms]
+  { runtimeChoicePayloadSite = RuntimeChoiceSite (Text.pack functionName) (Text.pack blockName)
+  , runtimeChoicePayloadArms = Map.fromList [(Text.pack label, value) | (label, value) <- arms]
   }
 
 arm :: String -> String -> Maybe String -> (String, RuntimeChoicePayloadArm)
 arm label target payload =
   ( label
   , RuntimeChoicePayloadArm
-      { runtimeChoicePayloadTarget = fromString target
-      , runtimeChoicePayloadValue = fmap fromString payload
+      { runtimeChoicePayloadTarget = Text.pack target
+      , runtimeChoicePayloadValue = fmap Text.pack payload
       }
   )
 
@@ -138,9 +138,3 @@ replaceSpec wanted replacement =
   [ if runtimeChoicePayloadSite current == wanted then replacement else current
   | current <- stevePayloadSpecs
   ]
-
-fromString :: String -> Data.Text.Text
-fromString = Data.Text.pack
-
-toString :: Data.Text.Text -> String
-toString = Data.Text.unpack
