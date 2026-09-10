@@ -1,6 +1,7 @@
 From Stdlib Require Import Lists.List.
 
 From Phil.Surface Require Import
+  GrammarDerivation
   GrammarDerivationOracle
   GrammarParserProgress
   GrammarParserRecognizer.
