@@ -1,0 +1,56 @@
+name: Phase 1 Surface Grammar AST Block Command Correspondence
+
+on:
+  pull_request:
+    paths:
+      - 'src/Phil/Surface/GrammarV1/ReferenceAstBlockCommands.hs'
+      - 'src/Phil/Surface/GrammarV1/ReferenceAstBlockStructure.hs'
+      - 'src/Phil/Surface/GrammarV1/ReferenceAstExpressionCore.hs'
+      - 'src/Phil/Surface/GrammarV1/ReferenceAstProposition.hs'
+      - 'src/Phil/Surface/GrammarV1/ReferenceAstTypePayload.hs'
+      - 'src/Phil/Surface/GrammarV1/ReferenceKernelBridge.hs'
+      - 'src/Phil/Surface/GrammarV1/Parser.hs'
+      - 'src/SurfaceGrammarRecognizerKernel.hs'
+      - 'test/Phase1GrammarV1ReferenceAstBlockCommandsMain.hs'
+      - '.github/workflows/phase1-surface-grammar-ast-block-commands.yml'
+  push:
+    branches: [main]
+    paths:
+      - 'src/Phil/Surface/GrammarV1/ReferenceAstBlockCommands.hs'
+      - 'src/Phil/Surface/GrammarV1/ReferenceAstBlockStructure.hs'
+      - 'src/Phil/Surface/GrammarV1/ReferenceAstExpressionCore.hs'
+      - 'src/Phil/Surface/GrammarV1/ReferenceAstProposition.hs'
+      - 'src/Phil/Surface/GrammarV1/ReferenceAstTypePayload.hs'
+      - 'src/Phil/Surface/GrammarV1/ReferenceKernelBridge.hs'
+      - 'src/Phil/Surface/GrammarV1/Parser.hs'
+      - 'src/SurfaceGrammarRecognizerKernel.hs'
+      - 'test/Phase1GrammarV1ReferenceAstBlockCommandsMain.hs'
+      - '.github/workflows/phase1-surface-grammar-ast-block-commands.yml'
+
+permissions:
+  contents: read
+
+jobs:
+  ast-block-command-correspondence:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: haskell-actions/setup@v2
+        with:
+          ghc-version: '9.6.7'
+          cabal-version: 'latest'
+
+      - name: Build ordinary regression substrate
+        run: cabal build all --enable-tests
+
+      - name: Strictly compile block-command correspondence harness
+        run: |
+          cabal exec -- ghc --make \
+            -Wall -Werror \
+            -isrc \
+            test/Phase1GrammarV1ReferenceAstBlockCommandsMain.hs \
+            -o /tmp/phase1-surface-grammar-ast-block-commands
+
+      - name: Check certified block-bearing commands against production AST
+        run: /tmp/phase1-surface-grammar-ast-block-commands
