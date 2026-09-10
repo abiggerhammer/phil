@@ -32,7 +32,7 @@ main = do
         , ("nested-command-type", "convert close endpoint to Bytes[send value on channel]", 3)
         , ("static-type-argument", "Call[Bytes[close endpoint]]", 1)
         , ("static-effect-argument", "Call[{Close(close endpoint)}]", 1)
-        , ("static-session-argument", "Call[send (x : Bytes[close endpoint]) => end Done]", 1)
+        , ("static-session-argument", "Call[send (x : Bytes[close endpoint]) then end Done]", 1)
         , ("static-proof-argument", "Call[Proof[Claim(close endpoint)]]", 1)
         , ("block-recursion", "if cond { return close endpoint; } else { return send value on channel; }", 3)
         , ("loop-recursion", "loop state (i = close endpoint) { return convert send value on channel to Bytes[release n]; }", 5)
