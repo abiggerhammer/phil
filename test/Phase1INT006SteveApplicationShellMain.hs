@@ -111,7 +111,9 @@ ioBindingsAreExact = do
 
 unreleasedGetRejects :: Text.Text -> Text.Text -> Either String ()
 unreleasedGetRejects putSource getSource = do
-  let brokenGet = Text.replace "release bytes; " "" getSource
+  let brokenGet = Text.replace "release bytes" "" getSource
+  assert (brokenGet /= getSource)
+    "linearity negative fixture did not remove any release"
   putEnvironment <- mapLeft Text.unpack stevePutShellEnvironment
   getEnvironment <- mapLeft Text.unpack steveGetShellEnvironment
   let environments = Map.fromList
