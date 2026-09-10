@@ -72,18 +72,18 @@ import System.Exit (exitFailure)
 
 main :: IO ()
 main = do
-  sourceAssurance <- sourceAssuranceOrFail
+  closedSourceAssurance <- sourceAssuranceOrFail
   validStage <- stageOrFail uploadStageClosureBundle
   let changedStage = introduceUnsupportedTargetObligation validStage
       checks =
         [ ("closed source assurance plus valid exact StageClosure certifies",
-            testValidArtifactCertification sourceAssurance validStage)
+            testValidArtifactCertification closedSourceAssurance validStage)
         , ("same exact closed source assurance rejects changed realization with unsupported target obligation",
-            testSourceClosureIsNotArtifactClosure sourceAssurance validStage changedStage)
+            testSourceClosureIsNotArtifactClosure closedSourceAssurance validStage changedStage)
         , ("changed realization really carries an orphan derived obligation",
             testUnsupportedTargetObligation changedStage)
         , ("artifact identity mutation rejects without changing source assurance",
-            testArtifactIdentityMutation sourceAssurance validStage)
+            testArtifactIdentityMutation closedSourceAssurance validStage)
         ]
   mapM_ report checks
   unless (and (map snd checks)) exitFailure
