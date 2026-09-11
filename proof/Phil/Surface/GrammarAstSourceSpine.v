@@ -125,6 +125,65 @@ Proof.
              discriminate Hnormalize.
 Qed.
 
+Lemma phase1_surface_start_rule :
+  lookupRule phase1_surface_start phase1_surface_rules =
+    Some
+      (ESequence
+        [ EOptional (ENonterminal "module_decl");
+          ERepetition (ENonterminal "import_decl");
+          ERepetition (ENonterminal "top_level_decl")
+        ]).
+Proof.
+  reflexivity.
+Qed.
+
+Theorem phase1_surface_normalize_source_spine_total :
+  forall tokens tree,
+    Phase1CompleteDerivation tokens tree ->
+    exists spine,
+      phase1_surface_normalize_source_spine tree = Some spine /\
+      phase1_surface_source_spine_tree spine = tree.
+Proof.
+  intros tokens tree Hcomplete.
+  unfold Phase1CompleteDerivation, CompleteDerivation in Hcomplete.
+  inversion Hcomplete; subst.
+  match goal with
+  | Hlookup : lookupRule phase1_surface_start phase1_surface_rules = Some ?body,
+    Hbody : Derives phase1_surface_rules _ ?body _ _ ?body_tree |- _ =>
+      rewrite phase1_surface_start_rule in Hlookup;
+      inversion Hlookup; subst body
+  end.
+  match goal with
+  | Hbody : Derives phase1_surface_rules _ (ESequence _) _ _ _ |- _ =>
+      inversion Hbody; subst; clear Hbody
+  end.
+  repeat match goal with
+  | Hseq : DerivesSequence phase1_surface_rules _ _ (_ :: _) _ _ _ |- _ =>
+      inversion Hseq; subst; clear Hseq
+  end.
+  match goal with
+  | Hseq : DerivesSequence phase1_surface_rules _ _ [] _ _ _ |- _ =>
+      inversion Hseq; subst; clear Hseq
+  end.
+  match goal with
+  | Himports : Derives phase1_surface_rules _
+      (ERepetition (ENonterminal "import_decl")) _ _ _ |- _ =>
+      inversion Himports; subst; clear Himports
+  end.
+  match goal with
+  | Htops : Derives phase1_surface_rules _
+      (ERepetition (ENonterminal "top_level_decl")) _ _ _ |- _ =>
+      inversion Htops; subst; clear Htops
+  end.
+  match goal with
+  | Hmodule : Derives phase1_surface_rules _
+      (EOptional (ENonterminal "module_decl")) _ _ _ |- _ =>
+      inversion Hmodule; subst; clear Hmodule
+  end.
+  - eexists. split; reflexivity.
+  - eexists. split; reflexivity.
+Qed.
+
 Definition phase1_surface_reference_source_spine
   (tokens : list ConcreteToken) : option Phase1SurfaceSourceSpine :=
   match phase1_surface_reference_parse tokens with
