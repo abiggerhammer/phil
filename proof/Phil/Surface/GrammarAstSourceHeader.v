@@ -33,17 +33,239 @@ Record Phase1SurfaceSourceHeader : Type := {
   phase1_source_header_top_levels : list ParseTree
 }.
 
+(* Small structural destructors keep the normalization proofs independent of
+   Rocq's compilation order for nested constructor patterns. *)
+
+Definition phase1_surface_expect_nonterminal
+  (expected : string)
+  (tree : ParseTree) : option ParseTree :=
+  match tree with
+  | PTNonterminal actual body =>
+      if String.eqb actual expected then Some body else None
+  | _ => None
+  end.
+
+Lemma phase1_surface_expect_nonterminal_round_trip :
+  forall expected tree body,
+    phase1_surface_expect_nonterminal expected tree = Some body ->
+    tree = PTNonterminal expected body.
+Proof.
+  intros expected tree body Hexpect.
+  destruct tree as
+    [root_literal
+    | root_class root_lexeme
+    | actual actual_body
+    | root_trees
+    | root_index root_branch
+    |
+    | root_optional_body
+    | root_repeated];
+    cbn in Hexpect; try discriminate Hexpect.
+  destruct (String.eqb actual expected) eqn:Heq;
+    cbn in Hexpect; try discriminate Hexpect.
+  apply String.eqb_eq in Heq.
+  inversion Hexpect; subst.
+  subst actual.
+  reflexivity.
+Qed.
+
+Definition phase1_surface_expect_sequence
+  (tree : ParseTree) : option (list ParseTree) :=
+  match tree with
+  | PTSequence items => Some items
+  | _ => None
+  end.
+
+Lemma phase1_surface_expect_sequence_round_trip :
+  forall tree items,
+    phase1_surface_expect_sequence tree = Some items ->
+    tree = PTSequence items.
+Proof.
+  intros tree items Hexpect.
+  destruct tree;
+    cbn in Hexpect; try discriminate Hexpect.
+  inversion Hexpect; subst.
+  reflexivity.
+Qed.
+
+Definition phase1_surface_expect_literal
+  (expected : string)
+  (tree : ParseTree) : option unit :=
+  match tree with
+  | PTLiteral actual =>
+      if String.eqb actual expected then Some tt else None
+  | _ => None
+  end.
+
+Lemma phase1_surface_expect_literal_round_trip :
+  forall expected tree,
+    phase1_surface_expect_literal expected tree = Some tt ->
+    tree = PTLiteral expected.
+Proof.
+  intros expected tree Hexpect.
+  destruct tree as
+    [actual
+    | root_class root_lexeme
+    | root_name root_body
+    | root_trees
+    | root_index root_branch
+    |
+    | root_optional_body
+    | root_repeated];
+    cbn in Hexpect; try discriminate Hexpect.
+  destruct (String.eqb actual expected) eqn:Heq;
+    cbn in Hexpect; try discriminate Hexpect.
+  apply String.eqb_eq in Heq.
+  subst actual.
+  reflexivity.
+Qed.
+
+Definition phase1_surface_expect_lexical
+  (expected_class : string)
+  (tree : ParseTree) : option string :=
+  match tree with
+  | PTLexical actual_class value =>
+      if String.eqb actual_class expected_class then Some value else None
+  | _ => None
+  end.
+
+Lemma phase1_surface_expect_lexical_round_trip :
+  forall expected_class tree value,
+    phase1_surface_expect_lexical expected_class tree = Some value ->
+    tree = PTLexical expected_class value.
+Proof.
+  intros expected_class tree value Hexpect.
+  destruct tree as
+    [root_literal
+    | actual_class actual_value
+    | root_name root_body
+    | root_trees
+    | root_index root_branch
+    |
+    | root_optional_body
+    | root_repeated];
+    cbn in Hexpect; try discriminate Hexpect.
+  destruct (String.eqb actual_class expected_class) eqn:Heq;
+    cbn in Hexpect; try discriminate Hexpect.
+  apply String.eqb_eq in Heq.
+  inversion Hexpect; subst.
+  subst actual_class.
+  reflexivity.
+Qed.
+
+Definition phase1_surface_expect_repetition
+  (tree : ParseTree) : option (list ParseTree) :=
+  match tree with
+  | PTRepetition items => Some items
+  | _ => None
+  end.
+
+Lemma phase1_surface_expect_repetition_round_trip :
+  forall tree items,
+    phase1_surface_expect_repetition tree = Some items ->
+    tree = PTRepetition items.
+Proof.
+  intros tree items Hexpect.
+  destruct tree;
+    cbn in Hexpect; try discriminate Hexpect.
+  inversion Hexpect; subst.
+  reflexivity.
+Qed.
+
+Definition phase1_surface_expect_optional
+  (tree : ParseTree) : option (option ParseTree) :=
+  match tree with
+  | PTOptionalNone => Some None
+  | PTOptionalSome body => Some (Some body)
+  | _ => None
+  end.
+
+Lemma phase1_surface_expect_optional_round_trip :
+  forall tree body,
+    phase1_surface_expect_optional tree = Some body ->
+    tree =
+      match body with
+      | None => PTOptionalNone
+      | Some body_tree => PTOptionalSome body_tree
+      end.
+Proof.
+  intros tree body Hexpect.
+  destruct tree;
+    cbn in Hexpect; try discriminate Hexpect;
+    inversion Hexpect; subst; reflexivity.
+Qed.
+
+Definition phase1_surface_exact2 {A : Type}
+  (items : list A) : option (A * A) :=
+  match items with
+  | [a; b] => Some (a, b)
+  | _ => None
+  end.
+
+Lemma phase1_surface_exact2_round_trip {A : Type} :
+  forall items a b,
+    phase1_surface_exact2 items = Some (a, b) ->
+    items = [a; b].
+Proof.
+  intros items a b Hitems.
+  destruct items as [|x xs]; cbn in Hitems; try discriminate Hitems.
+  destruct xs as [|y ys]; cbn in Hitems; try discriminate Hitems.
+  destruct ys as [|z zs]; cbn in Hitems; try discriminate Hitems.
+  inversion Hitems; subst.
+  reflexivity.
+Qed.
+
+Definition phase1_surface_exact3 {A : Type}
+  (items : list A) : option (A * A * A) :=
+  match items with
+  | [a; b; c] => Some (a, b, c)
+  | _ => None
+  end.
+
+Lemma phase1_surface_exact3_round_trip {A : Type} :
+  forall items a b c,
+    phase1_surface_exact3 items = Some (a, b, c) ->
+    items = [a; b; c].
+Proof.
+  intros items a b c Hitems.
+  destruct items as [|w ws]; cbn in Hitems; try discriminate Hitems.
+  destruct ws as [|x xs]; cbn in Hitems; try discriminate Hitems.
+  destruct xs as [|y ys]; cbn in Hitems; try discriminate Hitems.
+  destruct ys as [|z zs]; cbn in Hitems; try discriminate Hitems.
+  inversion Hitems; subst.
+  reflexivity.
+Qed.
+
+Definition phase1_surface_exact4 {A : Type}
+  (items : list A) : option (A * A * A * A) :=
+  match items with
+  | [a; b; c; d] => Some (a, b, c, d)
+  | _ => None
+  end.
+
+Lemma phase1_surface_exact4_round_trip {A : Type} :
+  forall items a b c d,
+    phase1_surface_exact4 items = Some (a, b, c, d) ->
+    items = [a; b; c; d].
+Proof.
+  intros items a b c d Hitems.
+  destruct items as [|v vs]; cbn in Hitems; try discriminate Hitems.
+  destruct vs as [|w ws]; cbn in Hitems; try discriminate Hitems.
+  destruct ws as [|x xs]; cbn in Hitems; try discriminate Hitems.
+  destruct xs as [|y ys]; cbn in Hitems; try discriminate Hitems.
+  destruct ys as [|z zs]; cbn in Hitems; try discriminate Hitems.
+  inversion Hitems; subst.
+  reflexivity.
+Qed.
+
 Definition phase1_surface_identifier_tree (value : string) : ParseTree :=
   PTNonterminal "identifier" (PTLexical "IDENTIFIER" value).
 
 Definition phase1_surface_normalize_identifier
   (tree : ParseTree) : option string :=
-  match tree with
-  | PTNonterminal name (PTLexical class value) =>
-      if String.eqb name "identifier" then
-        if String.eqb class "IDENTIFIER" then Some value else None
-      else None
-  | _ => None
+  match phase1_surface_expect_nonterminal "identifier" tree with
+  | Some body => phase1_surface_expect_lexical "IDENTIFIER" body
+  | None => None
   end.
 
 Theorem phase1_surface_normalize_identifier_round_trip :
@@ -52,35 +274,16 @@ Theorem phase1_surface_normalize_identifier_round_trip :
     phase1_surface_identifier_tree value = tree.
 Proof.
   intros tree value Hnormalize.
-  destruct tree as
-    [root_literal
-    | root_class root_lexeme
-    | name body
-    | root_trees
-    | root_index root_branch
-    |
-    | root_optional_body
-    | root_repeated];
-    cbn in Hnormalize; try discriminate Hnormalize.
-  destruct body as
-    [body_literal
-    | class lexeme
-    | body_child_name body_child_body
-    | body_trees
-    | body_index body_branch
-    |
-    | body_optional_body
-    | body_repeated];
-    cbn in Hnormalize; try discriminate Hnormalize.
-  destruct (String.eqb name "identifier") eqn:Hname;
-    cbn in Hnormalize; try discriminate Hnormalize.
-  destruct (String.eqb class "IDENTIFIER") eqn:Hclass;
-    cbn in Hnormalize; try discriminate Hnormalize.
-  apply String.eqb_eq in Hname.
-  apply String.eqb_eq in Hclass.
-  subst name.
-  subst class.
-  inversion Hnormalize; subst.
+  unfold phase1_surface_normalize_identifier in Hnormalize.
+  destruct (phase1_surface_expect_nonterminal "identifier" tree)
+    as [body |] eqn:Hnode; try discriminate Hnormalize.
+  destruct (phase1_surface_expect_lexical "IDENTIFIER" body)
+    as [actual |] eqn:Hlex; try discriminate Hnormalize.
+  inversion Hnormalize; subst actual.
+  rewrite (phase1_surface_expect_nonterminal_round_trip
+    "identifier" tree body Hnode).
+  rewrite (phase1_surface_expect_lexical_round_trip
+    "IDENTIFIER" body value Hlex).
   reflexivity.
 Qed.
 
@@ -94,12 +297,17 @@ Definition phase1_surface_name_suffix_tree
 Definition phase1_surface_normalize_name_suffix
   (separator : string)
   (tree : ParseTree) : option string :=
-  match tree with
-  | PTSequence [PTLiteral actual_separator; identifier_tree] =>
-      if String.eqb actual_separator separator then
-        phase1_surface_normalize_identifier identifier_tree
-      else None
-  | _ => None
+  match phase1_surface_expect_sequence tree with
+  | Some items =>
+      match phase1_surface_exact2 items with
+      | Some (separator_tree, identifier_tree) =>
+          match phase1_surface_expect_literal separator separator_tree with
+          | Some tt => phase1_surface_normalize_identifier identifier_tree
+          | None => None
+          end
+      | None => None
+      end
+  | None => None
   end.
 
 Theorem phase1_surface_normalize_name_suffix_round_trip :
@@ -108,42 +316,24 @@ Theorem phase1_surface_normalize_name_suffix_round_trip :
     phase1_surface_name_suffix_tree separator value = tree.
 Proof.
   intros separator tree value Hnormalize.
-  destruct tree as
-    [root_literal
-    | root_class root_lexeme
-    | root_name root_body
-    | fields
-    | root_index root_branch
-    |
-    | root_optional_body
-    | root_repeated];
-    cbn in Hnormalize; try discriminate Hnormalize.
-  destruct fields as [| first fields].
-  - discriminate Hnormalize.
-  - destruct fields as [| second fields].
-    + discriminate Hnormalize.
-    + destruct fields as [| extra rest].
-      * destruct first as
-          [actual_separator
-          | first_class first_lexeme
-          | first_name first_body
-          | first_trees
-          | first_index first_branch
-          |
-          | first_optional_body
-          | first_repeated];
-          cbn in Hnormalize; try discriminate Hnormalize.
-        destruct (String.eqb actual_separator separator) eqn:Hseparator;
-          cbn in Hnormalize; try discriminate Hnormalize.
-        apply String.eqb_eq in Hseparator.
-        subst actual_separator.
-        pose proof
-          (phase1_surface_normalize_identifier_round_trip
-            second value Hnormalize) as Hidentifier.
-        cbn.
-        rewrite Hidentifier.
-        reflexivity.
-      * discriminate Hnormalize.
+  unfold phase1_surface_normalize_name_suffix in Hnormalize.
+  destruct (phase1_surface_expect_sequence tree)
+    as [items |] eqn:Hsequence; try discriminate Hnormalize.
+  destruct (phase1_surface_exact2 items)
+    as [[separator_tree identifier_tree] |] eqn:Hitems;
+    try discriminate Hnormalize.
+  destruct (phase1_surface_expect_literal separator separator_tree)
+    as [[] |] eqn:Hseparator; try discriminate Hnormalize.
+  pose proof
+    (phase1_surface_normalize_identifier_round_trip
+      identifier_tree value Hnormalize) as Hidentifier.
+  rewrite (phase1_surface_expect_sequence_round_trip tree items Hsequence).
+  rewrite (phase1_surface_exact2_round_trip
+    items separator_tree identifier_tree Hitems).
+  rewrite (phase1_surface_expect_literal_round_trip
+    separator separator_tree Hseparator).
+  rewrite Hidentifier.
+  reflexivity.
 Qed.
 
 Fixpoint phase1_surface_normalize_name_suffixes
@@ -165,17 +355,15 @@ Theorem phase1_surface_normalize_name_suffixes_round_trip :
     map (phase1_surface_name_suffix_tree separator) values = trees.
 Proof.
   intros separator trees.
-  induction trees as [| tree rest IH]; intros values Hnormalize.
+  induction trees as [|tree rest IH]; intros values Hnormalize.
   - cbn in Hnormalize.
     inversion Hnormalize; subst.
     reflexivity.
   - cbn in Hnormalize.
     destruct (phase1_surface_normalize_name_suffix separator tree)
-      as [value |] eqn:Htree;
-      try discriminate Hnormalize.
+      as [value |] eqn:Htree; try discriminate Hnormalize.
     destruct (phase1_surface_normalize_name_suffixes separator rest)
-      as [rest_values |] eqn:Hrest;
-      try discriminate Hnormalize.
+      as [rest_values |] eqn:Hrest; try discriminate Hnormalize.
     inversion Hnormalize; subst.
     cbn.
     f_equal.
@@ -200,20 +388,29 @@ Definition phase1_surface_name_list_tree
 Definition phase1_surface_normalize_name_list
   (nonterminal separator : string)
   (tree : ParseTree) : option Phase1SurfaceNameList :=
-  match tree with
-  | PTNonterminal actual_name
-      (PTSequence [first_tree; PTRepetition suffix_trees]) =>
-      if String.eqb actual_name nonterminal then
-        match phase1_surface_normalize_identifier first_tree,
-              phase1_surface_normalize_name_suffixes separator suffix_trees with
-        | Some first_value, Some rest_values =>
-            Some
-              {| phase1_name_list_first := first_value;
-                 phase1_name_list_rest := rest_values |}
-        | _, _ => None
-        end
-      else None
-  | _ => None
+  match phase1_surface_expect_nonterminal nonterminal tree with
+  | Some body =>
+      match phase1_surface_expect_sequence body with
+      | Some items =>
+          match phase1_surface_exact2 items with
+          | Some (first_tree, suffix_tree) =>
+              match phase1_surface_expect_repetition suffix_tree with
+              | Some suffix_trees =>
+                  match phase1_surface_normalize_identifier first_tree,
+                        phase1_surface_normalize_name_suffixes separator suffix_trees with
+                  | Some first_value, Some rest_values =>
+                      Some
+                        {| phase1_name_list_first := first_value;
+                           phase1_name_list_rest := rest_values |}
+                  | _, _ => None
+                  end
+              | None => None
+              end
+          | None => None
+          end
+      | None => None
+      end
+  | None => None
   end.
 
 Theorem phase1_surface_normalize_name_list_round_trip :
@@ -222,61 +419,32 @@ Theorem phase1_surface_normalize_name_list_round_trip :
     phase1_surface_name_list_tree nonterminal separator names = tree.
 Proof.
   intros nonterminal separator tree names Hnormalize.
-  destruct tree as
-    [root_literal
-    | root_class root_lexeme
-    | actual_name body
-    | root_trees
-    | root_index root_branch
-    |
-    | root_optional_body
-    | root_repeated];
-    cbn in Hnormalize; try discriminate Hnormalize.
-  destruct body as
-    [body_literal
-    | body_class body_lexeme
-    | body_child_name body_child_body
-    | fields
-    | body_index body_branch
-    |
-    | body_optional_body
-    | body_repeated];
-    cbn in Hnormalize; try discriminate Hnormalize.
-  destruct fields as [| first_tree fields].
-  - discriminate Hnormalize.
-  - destruct fields as [| suffix_tree fields].
-    + discriminate Hnormalize.
-    + destruct fields as [| extra rest].
-      * destruct suffix_tree as
-          [suffix_literal
-          | suffix_class suffix_lexeme
-          | suffix_name suffix_body
-          | suffix_sequence
-          | suffix_index suffix_branch
-          |
-          | suffix_optional_body
-          | suffix_trees];
-          cbn in Hnormalize; try discriminate Hnormalize.
-        destruct (String.eqb actual_name nonterminal) eqn:Hname;
-          cbn in Hnormalize; try discriminate Hnormalize.
-        destruct (phase1_surface_normalize_identifier first_tree)
-          as [first_value |] eqn:Hfirst;
-          try discriminate Hnormalize.
-        destruct (phase1_surface_normalize_name_suffixes separator suffix_trees)
-          as [rest_values |] eqn:Hsuffixes;
-          try discriminate Hnormalize.
-        inversion Hnormalize; subst.
-        apply String.eqb_eq in Hname.
-        subst actual_name.
-        cbn.
-        rewrite
-          (phase1_surface_normalize_identifier_round_trip
-            first_tree first_value Hfirst).
-        rewrite
-          (phase1_surface_normalize_name_suffixes_round_trip
-            separator suffix_trees rest_values Hsuffixes).
-        reflexivity.
-      * discriminate Hnormalize.
+  unfold phase1_surface_normalize_name_list in Hnormalize.
+  destruct (phase1_surface_expect_nonterminal nonterminal tree)
+    as [body |] eqn:Hnode; try discriminate Hnormalize.
+  destruct (phase1_surface_expect_sequence body)
+    as [items |] eqn:Hsequence; try discriminate Hnormalize.
+  destruct (phase1_surface_exact2 items)
+    as [[first_tree suffix_tree] |] eqn:Hitems; try discriminate Hnormalize.
+  destruct (phase1_surface_expect_repetition suffix_tree)
+    as [suffix_trees |] eqn:Hrepetition; try discriminate Hnormalize.
+  destruct (phase1_surface_normalize_identifier first_tree)
+    as [first_value |] eqn:Hfirst; try discriminate Hnormalize.
+  destruct (phase1_surface_normalize_name_suffixes separator suffix_trees)
+    as [rest_values |] eqn:Hrest; try discriminate Hnormalize.
+  inversion Hnormalize; subst names.
+  unfold phase1_surface_name_list_tree.
+  rewrite (phase1_surface_expect_nonterminal_round_trip
+    nonterminal tree body Hnode).
+  rewrite (phase1_surface_expect_sequence_round_trip body items Hsequence).
+  rewrite (phase1_surface_exact2_round_trip items first_tree suffix_tree Hitems).
+  rewrite (phase1_surface_expect_repetition_round_trip
+    suffix_tree suffix_trees Hrepetition).
+  rewrite (phase1_surface_normalize_identifier_round_trip
+    first_tree first_value Hfirst).
+  rewrite (phase1_surface_normalize_name_suffixes_round_trip
+    separator suffix_trees rest_values Hrest).
+  reflexivity.
 Qed.
 
 Definition phase1_surface_qualified_name_tree :=
@@ -302,21 +470,23 @@ Definition phase1_surface_module_decl_tree
 
 Definition phase1_surface_normalize_module_decl
   (tree : ParseTree) : option Phase1SurfaceNameList :=
-  match tree with
-  | PTNonterminal actual_name
-      (PTSequence
-        [ PTLiteral keyword;
-          qualified_name_tree;
-          PTLiteral terminator
-        ]) =>
-      if String.eqb actual_name "module_decl" then
-        if String.eqb keyword "module" then
-          if String.eqb terminator ";" then
-            phase1_surface_normalize_qualified_name qualified_name_tree
-          else None
-        else None
-      else None
-  | _ => None
+  match phase1_surface_expect_nonterminal "module_decl" tree with
+  | Some body =>
+      match phase1_surface_expect_sequence body with
+      | Some items =>
+          match phase1_surface_exact3 items with
+          | Some (keyword_tree, qualified_name_tree, terminator_tree) =>
+              match phase1_surface_expect_literal "module" keyword_tree,
+                    phase1_surface_expect_literal ";" terminator_tree with
+              | Some tt, Some tt =>
+                  phase1_surface_normalize_qualified_name qualified_name_tree
+              | _, _ => None
+              end
+          | None => None
+          end
+      | None => None
+      end
+  | None => None
   end.
 
 Theorem phase1_surface_normalize_module_decl_round_trip :
@@ -325,72 +495,34 @@ Theorem phase1_surface_normalize_module_decl_round_trip :
     phase1_surface_module_decl_tree name = tree.
 Proof.
   intros tree name Hnormalize.
-  destruct tree as
-    [root_literal
-    | root_class root_lexeme
-    | actual_name body
-    | root_trees
-    | root_index root_branch
-    |
-    | root_optional_body
-    | root_repeated];
-    cbn in Hnormalize; try discriminate Hnormalize.
-  destruct body as
-    [body_literal
-    | body_class body_lexeme
-    | body_child_name body_child_body
-    | fields
-    | body_index body_branch
-    |
-    | body_optional_body
-    | body_repeated];
-    cbn in Hnormalize; try discriminate Hnormalize.
-  destruct fields as [| keyword_tree fields].
-  - discriminate Hnormalize.
-  - destruct fields as [| qualified_name_tree fields].
-    + discriminate Hnormalize.
-    + destruct fields as [| terminator_tree fields].
-      * discriminate Hnormalize.
-      * destruct fields as [| extra rest].
-        -- destruct keyword_tree as
-             [keyword
-             | keyword_class keyword_lexeme
-             | keyword_name keyword_body
-             | keyword_trees
-             | keyword_index keyword_branch
-             |
-             | keyword_optional_body
-             | keyword_repeated];
-             cbn in Hnormalize; try discriminate Hnormalize.
-           destruct terminator_tree as
-             [terminator
-             | terminator_class terminator_lexeme
-             | terminator_name terminator_body
-             | terminator_trees
-             | terminator_index terminator_branch
-             |
-             | terminator_optional_body
-             | terminator_repeated];
-             cbn in Hnormalize; try discriminate Hnormalize.
-           destruct (String.eqb actual_name "module_decl") eqn:Hnode;
-             cbn in Hnormalize; try discriminate Hnormalize.
-           destruct (String.eqb keyword "module") eqn:Hkeyword;
-             cbn in Hnormalize; try discriminate Hnormalize.
-           destruct (String.eqb terminator ";") eqn:Hterminator;
-             cbn in Hnormalize; try discriminate Hnormalize.
-           apply String.eqb_eq in Hnode.
-           apply String.eqb_eq in Hkeyword.
-           apply String.eqb_eq in Hterminator.
-           subst actual_name.
-           subst keyword.
-           subst terminator.
-           unfold phase1_surface_qualified_name_tree,
-             phase1_surface_normalize_qualified_name.
-           rewrite
-             (phase1_surface_normalize_name_list_round_trip
-               "qualified_name" "." qualified_name_tree name Hnormalize).
-           reflexivity.
-        -- discriminate Hnormalize.
+  unfold phase1_surface_normalize_module_decl in Hnormalize.
+  destruct (phase1_surface_expect_nonterminal "module_decl" tree)
+    as [body |] eqn:Hnode; try discriminate Hnormalize.
+  destruct (phase1_surface_expect_sequence body)
+    as [items |] eqn:Hsequence; try discriminate Hnormalize.
+  destruct (phase1_surface_exact3 items)
+    as [[[keyword_tree qualified_name_tree] terminator_tree] |] eqn:Hitems;
+    try discriminate Hnormalize.
+  destruct (phase1_surface_expect_literal "module" keyword_tree)
+    as [[] |] eqn:Hkeyword; try discriminate Hnormalize.
+  destruct (phase1_surface_expect_literal ";" terminator_tree)
+    as [[] |] eqn:Hterminator; try discriminate Hnormalize.
+  pose proof
+    (phase1_surface_normalize_name_list_round_trip
+      "qualified_name" "." qualified_name_tree name Hnormalize) as Hname.
+  unfold phase1_surface_module_decl_tree,
+    phase1_surface_qualified_name_tree.
+  rewrite (phase1_surface_expect_nonterminal_round_trip
+    "module_decl" tree body Hnode).
+  rewrite (phase1_surface_expect_sequence_round_trip body items Hsequence).
+  rewrite (phase1_surface_exact3_round_trip
+    items keyword_tree qualified_name_tree terminator_tree Hitems).
+  rewrite (phase1_surface_expect_literal_round_trip
+    "module" keyword_tree Hkeyword).
+  rewrite (phase1_surface_expect_literal_round_trip
+    ";" terminator_tree Hterminator).
+  rewrite Hname.
+  reflexivity.
 Qed.
 
 Definition phase1_surface_import_selection_tree
@@ -408,23 +540,27 @@ Definition phase1_surface_import_selection_tree
 
 Definition phase1_surface_normalize_import_selection
   (tree : ParseTree) : option (option Phase1SurfaceNameList) :=
-  match tree with
-  | PTOptionalNone => Some None
-  | PTOptionalSome
-      (PTSequence
-        [ PTLiteral open_brace;
-          identifiers_tree;
-          PTLiteral close_brace
-        ]) =>
-      if String.eqb open_brace "{" then
-        if String.eqb close_brace "}" then
-          match phase1_surface_normalize_identifier_list identifiers_tree with
-          | Some identifiers => Some (Some identifiers)
+  match phase1_surface_expect_optional tree with
+  | Some None => Some None
+  | Some (Some body) =>
+      match phase1_surface_expect_sequence body with
+      | Some items =>
+          match phase1_surface_exact3 items with
+          | Some (open_tree, identifiers_tree, close_tree) =>
+              match phase1_surface_expect_literal "{" open_tree,
+                    phase1_surface_expect_literal "}" close_tree with
+              | Some tt, Some tt =>
+                  match phase1_surface_normalize_identifier_list identifiers_tree with
+                  | Some identifiers => Some (Some identifiers)
+                  | None => None
+                  end
+              | _, _ => None
+              end
           | None => None
           end
-        else None
-      else None
-  | _ => None
+      | None => None
+      end
+  | None => None
   end.
 
 Theorem phase1_surface_normalize_import_selection_round_trip :
@@ -433,74 +569,41 @@ Theorem phase1_surface_normalize_import_selection_round_trip :
     phase1_surface_import_selection_tree selection = tree.
 Proof.
   intros tree selection Hnormalize.
-  destruct tree as
-    [root_literal
-    | root_class root_lexeme
-    | root_name root_body
-    | root_trees
-    | root_index root_branch
-    |
-    | body
-    | root_repeated];
-    cbn in Hnormalize; try discriminate Hnormalize.
-  - inversion Hnormalize; subst.
+  unfold phase1_surface_normalize_import_selection in Hnormalize.
+  destruct (phase1_surface_expect_optional tree)
+    as [[body |] |] eqn:Hoptional; try discriminate Hnormalize.
+  - destruct (phase1_surface_expect_sequence body)
+      as [items |] eqn:Hsequence; try discriminate Hnormalize.
+    destruct (phase1_surface_exact3 items)
+      as [[[open_tree identifiers_tree] close_tree] |] eqn:Hitems;
+      try discriminate Hnormalize.
+    destruct (phase1_surface_expect_literal "{" open_tree)
+      as [[] |] eqn:Hopen; try discriminate Hnormalize.
+    destruct (phase1_surface_expect_literal "}" close_tree)
+      as [[] |] eqn:Hclose; try discriminate Hnormalize.
+    destruct (phase1_surface_normalize_identifier_list identifiers_tree)
+      as [identifiers |] eqn:Hidentifiers; try discriminate Hnormalize.
+    inversion Hnormalize; subst selection.
+    cbn.
+    rewrite (phase1_surface_expect_optional_round_trip
+      tree (Some body) Hoptional).
+    rewrite (phase1_surface_expect_sequence_round_trip body items Hsequence).
+    rewrite (phase1_surface_exact3_round_trip
+      items open_tree identifiers_tree close_tree Hitems).
+    rewrite (phase1_surface_expect_literal_round_trip
+      "{" open_tree Hopen).
+    rewrite (phase1_surface_expect_literal_round_trip
+      "}" close_tree Hclose).
+    unfold phase1_surface_identifier_list_tree,
+      phase1_surface_normalize_identifier_list in Hidentifiers.
+    rewrite (phase1_surface_normalize_name_list_round_trip
+      "identifier_list" "," identifiers_tree identifiers Hidentifiers).
     reflexivity.
-  - destruct body as
-      [body_literal
-      | body_class body_lexeme
-      | body_name body_body
-      | fields
-      | body_index body_branch
-      |
-      | body_optional_body
-      | body_repeated];
-      cbn in Hnormalize; try discriminate Hnormalize.
-    destruct fields as [| open_tree fields].
-    + discriminate Hnormalize.
-    + destruct fields as [| identifiers_tree fields].
-      * discriminate Hnormalize.
-      * destruct fields as [| close_tree fields].
-        -- discriminate Hnormalize.
-        -- destruct fields as [| extra rest].
-           ++ destruct open_tree as
-                [open_brace
-                | open_class open_lexeme
-                | open_name open_body
-                | open_trees
-                | open_index open_branch
-                |
-                | open_optional_body
-                | open_repeated];
-                cbn in Hnormalize; try discriminate Hnormalize.
-              destruct close_tree as
-                [close_brace
-                | close_class close_lexeme
-                | close_name close_body
-                | close_trees
-                | close_index close_branch
-                |
-                | close_optional_body
-                | close_repeated];
-                cbn in Hnormalize; try discriminate Hnormalize.
-              destruct (String.eqb open_brace "{") eqn:Hopen;
-                cbn in Hnormalize; try discriminate Hnormalize.
-              destruct (String.eqb close_brace "}") eqn:Hclose;
-                cbn in Hnormalize; try discriminate Hnormalize.
-              destruct (phase1_surface_normalize_identifier_list identifiers_tree)
-                as [identifiers |] eqn:Hidentifiers;
-                try discriminate Hnormalize.
-              inversion Hnormalize; subst.
-              apply String.eqb_eq in Hopen.
-              apply String.eqb_eq in Hclose.
-              subst open_brace.
-              subst close_brace.
-              unfold phase1_surface_identifier_list_tree,
-                phase1_surface_normalize_identifier_list in *.
-              rewrite
-                (phase1_surface_normalize_name_list_round_trip
-                  "identifier_list" "," identifiers_tree identifiers Hidentifiers).
-              reflexivity.
-           ++ discriminate Hnormalize.
+  - inversion Hnormalize; subst selection.
+    cbn.
+    rewrite (phase1_surface_expect_optional_round_trip
+      tree None Hoptional).
+    reflexivity.
 Qed.
 
 Definition phase1_surface_import_decl_tree
@@ -517,29 +620,30 @@ Definition phase1_surface_import_decl_tree
 
 Definition phase1_surface_normalize_import_decl
   (tree : ParseTree) : option Phase1SurfaceImportHeader :=
-  match tree with
-  | PTNonterminal actual_name
-      (PTSequence
-        [ PTLiteral keyword;
-          qualified_name_tree;
-          selection_tree;
-          PTLiteral terminator
-        ]) =>
-      if String.eqb actual_name "import_decl" then
-        if String.eqb keyword "import" then
-          if String.eqb terminator ";" then
-            match phase1_surface_normalize_qualified_name qualified_name_tree,
-                  phase1_surface_normalize_import_selection selection_tree with
-            | Some name, Some selection =>
-                Some
-                  {| phase1_import_header_name := name;
-                     phase1_import_header_selection := selection |}
-            | _, _ => None
-            end
-          else None
-        else None
-      else None
-  | _ => None
+  match phase1_surface_expect_nonterminal "import_decl" tree with
+  | Some body =>
+      match phase1_surface_expect_sequence body with
+      | Some items =>
+          match phase1_surface_exact4 items with
+          | Some (keyword_tree, qualified_name_tree, selection_tree, terminator_tree) =>
+              match phase1_surface_expect_literal "import" keyword_tree,
+                    phase1_surface_expect_literal ";" terminator_tree with
+              | Some tt, Some tt =>
+                  match phase1_surface_normalize_qualified_name qualified_name_tree,
+                        phase1_surface_normalize_import_selection selection_tree with
+                  | Some name, Some selection =>
+                      Some
+                        {| phase1_import_header_name := name;
+                           phase1_import_header_selection := selection |}
+                  | _, _ => None
+                  end
+              | _, _ => None
+              end
+          | None => None
+          end
+      | None => None
+      end
+  | None => None
   end.
 
 Theorem phase1_surface_normalize_import_decl_round_trip :
@@ -548,85 +652,40 @@ Theorem phase1_surface_normalize_import_decl_round_trip :
     phase1_surface_import_decl_tree import_header = tree.
 Proof.
   intros tree import_header Hnormalize.
-  destruct tree as
-    [root_literal
-    | root_class root_lexeme
-    | actual_name body
-    | root_trees
-    | root_index root_branch
-    |
-    | root_optional_body
-    | root_repeated];
-    cbn in Hnormalize; try discriminate Hnormalize.
-  destruct body as
-    [body_literal
-    | body_class body_lexeme
-    | body_child_name body_child_body
-    | fields
-    | body_index body_branch
-    |
-    | body_optional_body
-    | body_repeated];
-    cbn in Hnormalize; try discriminate Hnormalize.
-  destruct fields as [| keyword_tree fields].
-  - discriminate Hnormalize.
-  - destruct fields as [| qualified_name_tree fields].
-    + discriminate Hnormalize.
-    + destruct fields as [| selection_tree fields].
-      * discriminate Hnormalize.
-      * destruct fields as [| terminator_tree fields].
-        -- discriminate Hnormalize.
-        -- destruct fields as [| extra rest].
-           ++ destruct keyword_tree as
-                [keyword
-                | keyword_class keyword_lexeme
-                | keyword_name keyword_body
-                | keyword_trees
-                | keyword_index keyword_branch
-                |
-                | keyword_optional_body
-                | keyword_repeated];
-                cbn in Hnormalize; try discriminate Hnormalize.
-              destruct terminator_tree as
-                [terminator
-                | terminator_class terminator_lexeme
-                | terminator_name terminator_body
-                | terminator_trees
-                | terminator_index terminator_branch
-                |
-                | terminator_optional_body
-                | terminator_repeated];
-                cbn in Hnormalize; try discriminate Hnormalize.
-              destruct (String.eqb actual_name "import_decl") eqn:Hnode;
-                cbn in Hnormalize; try discriminate Hnormalize.
-              destruct (String.eqb keyword "import") eqn:Hkeyword;
-                cbn in Hnormalize; try discriminate Hnormalize.
-              destruct (String.eqb terminator ";") eqn:Hterminator;
-                cbn in Hnormalize; try discriminate Hnormalize.
-              destruct (phase1_surface_normalize_qualified_name qualified_name_tree)
-                as [name |] eqn:Hname;
-                try discriminate Hnormalize.
-              destruct (phase1_surface_normalize_import_selection selection_tree)
-                as [selection |] eqn:Hselection;
-                try discriminate Hnormalize.
-              inversion Hnormalize; subst.
-              apply String.eqb_eq in Hnode.
-              apply String.eqb_eq in Hkeyword.
-              apply String.eqb_eq in Hterminator.
-              subst actual_name.
-              subst keyword.
-              subst terminator.
-              cbn.
-              unfold phase1_surface_qualified_name_tree,
-                phase1_surface_normalize_qualified_name in *.
-              rewrite
-                (phase1_surface_normalize_name_list_round_trip
-                  "qualified_name" "." qualified_name_tree name Hname).
-              rewrite
-                (phase1_surface_normalize_import_selection_round_trip
-                  selection_tree selection Hselection).
-              reflexivity.
-           ++ discriminate Hnormalize.
+  unfold phase1_surface_normalize_import_decl in Hnormalize.
+  destruct (phase1_surface_expect_nonterminal "import_decl" tree)
+    as [body |] eqn:Hnode; try discriminate Hnormalize.
+  destruct (phase1_surface_expect_sequence body)
+    as [items |] eqn:Hsequence; try discriminate Hnormalize.
+  destruct (phase1_surface_exact4 items)
+    as [[[[keyword_tree qualified_name_tree] selection_tree] terminator_tree] |]
+      eqn:Hitems; try discriminate Hnormalize.
+  destruct (phase1_surface_expect_literal "import" keyword_tree)
+    as [[] |] eqn:Hkeyword; try discriminate Hnormalize.
+  destruct (phase1_surface_expect_literal ";" terminator_tree)
+    as [[] |] eqn:Hterminator; try discriminate Hnormalize.
+  destruct (phase1_surface_normalize_qualified_name qualified_name_tree)
+    as [name |] eqn:Hname; try discriminate Hnormalize.
+  destruct (phase1_surface_normalize_import_selection selection_tree)
+    as [selection |] eqn:Hselection; try discriminate Hnormalize.
+  inversion Hnormalize; subst import_header.
+  cbn.
+  rewrite (phase1_surface_expect_nonterminal_round_trip
+    "import_decl" tree body Hnode).
+  rewrite (phase1_surface_expect_sequence_round_trip body items Hsequence).
+  rewrite (phase1_surface_exact4_round_trip
+    items keyword_tree qualified_name_tree selection_tree terminator_tree Hitems).
+  rewrite (phase1_surface_expect_literal_round_trip
+    "import" keyword_tree Hkeyword).
+  rewrite (phase1_surface_expect_literal_round_trip
+    ";" terminator_tree Hterminator).
+  unfold phase1_surface_qualified_name_tree,
+    phase1_surface_normalize_qualified_name in Hname.
+  rewrite (phase1_surface_normalize_name_list_round_trip
+    "qualified_name" "." qualified_name_tree name Hname).
+  rewrite (phase1_surface_normalize_import_selection_round_trip
+    selection_tree selection Hselection).
+  reflexivity.
 Qed.
 
 Fixpoint phase1_surface_normalize_import_decls
@@ -648,17 +707,15 @@ Theorem phase1_surface_normalize_import_decls_round_trip :
     map phase1_surface_import_decl_tree import_headers = trees.
 Proof.
   intros trees.
-  induction trees as [| tree rest IH]; intros import_headers Hnormalize.
+  induction trees as [|tree rest IH]; intros import_headers Hnormalize.
   - cbn in Hnormalize.
     inversion Hnormalize; subst.
     reflexivity.
   - cbn in Hnormalize.
     destruct (phase1_surface_normalize_import_decl tree)
-      as [import_header |] eqn:Htree;
-      try discriminate Hnormalize.
+      as [import_header |] eqn:Htree; try discriminate Hnormalize.
     destruct (phase1_surface_normalize_import_decls rest)
-      as [rest_headers |] eqn:Hrest;
-      try discriminate Hnormalize.
+      as [rest_headers |] eqn:Hrest; try discriminate Hnormalize.
     inversion Hnormalize; subst.
     cbn.
     f_equal.
@@ -695,13 +752,11 @@ Proof.
   destruct module_tree as [tree |].
   - cbn in Hnormalize.
     destruct (phase1_surface_normalize_module_decl tree)
-      as [name |] eqn:Htree;
-      try discriminate Hnormalize.
+      as [name |] eqn:Htree; try discriminate Hnormalize.
     inversion Hnormalize; subst.
     cbn.
-    rewrite
-      (phase1_surface_normalize_module_decl_round_trip
-        tree name Htree).
+    rewrite (phase1_surface_normalize_module_decl_round_trip
+      tree name Htree).
     reflexivity.
   - cbn in Hnormalize.
     inversion Hnormalize; subst.
@@ -748,16 +803,13 @@ Proof.
   destruct spine as [module_tree import_trees top_levels].
   cbn in Hnormalize.
   destruct (phase1_surface_normalize_optional_module module_tree)
-    as [module_name |] eqn:Hmodule;
-    try discriminate Hnormalize.
+    as [module_name |] eqn:Hmodule; try discriminate Hnormalize.
   destruct (phase1_surface_normalize_import_decls import_trees)
-    as [import_headers |] eqn:Himports;
-    try discriminate Hnormalize.
+    as [import_headers |] eqn:Himports; try discriminate Hnormalize.
   inversion Hnormalize; subst.
   cbn.
-  rewrite
-    (phase1_surface_normalize_import_decls_round_trip
-      import_trees import_headers Himports).
+  rewrite (phase1_surface_normalize_import_decls_round_trip
+    import_trees import_headers Himports).
   pose proof
     (phase1_surface_normalize_optional_module_round_trip
       module_tree module_name Hmodule) as Hmodule_round_trip.
@@ -784,8 +836,7 @@ Proof.
   intros tree header Hnormalize.
   unfold phase1_surface_normalize_source_header_tree in Hnormalize.
   destruct (phase1_surface_normalize_source_spine tree)
-    as [spine |] eqn:Hspine;
-    try discriminate Hnormalize.
+    as [spine |] eqn:Hspine; try discriminate Hnormalize.
   transitivity (phase1_surface_source_spine_tree spine).
   - eapply phase1_surface_normalize_source_header_round_trip.
     exact Hnormalize.
@@ -813,9 +864,8 @@ Proof.
   intros tokens header Hnormalize.
   unfold phase1_surface_reference_source_header in Hnormalize.
   destruct (phase1_surface_reference_parse tokens)
-    as [[rest result] |] eqn:Hparse;
-    try discriminate Hnormalize.
-  destruct rest as [| token rest]; try discriminate Hnormalize.
+    as [[rest result] |] eqn:Hparse; try discriminate Hnormalize.
+  destruct rest as [|token rest]; try discriminate Hnormalize.
   destruct result as [tree | trees]; try discriminate Hnormalize.
   exists tree.
   split.
