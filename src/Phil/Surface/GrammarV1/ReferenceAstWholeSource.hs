@@ -56,13 +56,7 @@ import Phil.Surface.GrammarV1.ReferenceAstSpine
   , grammarV1ProductionSourceSpine
   , grammarV1ReferenceSourceSpine
   )
-import Phil.Surface.GrammarV1.ReferenceAstTopLevel
-  ( GrammarV1ReferenceAttributeSpine
-  , GrammarV1ReferenceDeclarationTag (..)
-  , GrammarV1ReferenceTopLevelSpine (..)
-  , grammarV1ProductionTopLevelSpines
-  , grammarV1ReferenceTopLevelSpine
-  )
+import qualified Phil.Surface.GrammarV1.ReferenceAstTopLevel as Top
 import Phil.Surface.GrammarV1.ReferenceAstTypeClaimDeclarations
   ( GrammarV1ReferenceTypeClaimDeclaration (..)
   , grammarV1ProductionTypeClaimDeclaration
@@ -92,7 +86,7 @@ data GrammarV1ReferenceDeclarationCore
   deriving (Eq, Show)
 
 data GrammarV1ReferenceTopLevelCore = GrammarV1ReferenceTopLevelCore
-  { grammarV1ReferenceWholeTopLevelAttributes :: [GrammarV1ReferenceAttributeSpine]
+  { grammarV1ReferenceWholeTopLevelAttributes :: [Top.GrammarV1ReferenceAttributeSpine]
   , grammarV1ReferenceWholeTopLevelDeclaration :: GrammarV1ReferenceDeclarationCore
   }
   deriving (Eq, Show)
@@ -108,7 +102,7 @@ grammarV1ProductionSourceCore
   -> Either GrammarV1ReferenceWholeSourceError GrammarV1ReferenceSourceCore
 grammarV1ProductionSourceCore sourceFile = do
   let topLevels = grammarV1TopLevelDecls sourceFile
-      topLevelSpines = grammarV1ProductionTopLevelSpines sourceFile
+      topLevelSpines = Top.grammarV1ProductionTopLevelSpines sourceFile
   if length topLevels /= length topLevelSpines
     then failWhole "production top-level spine count disagrees with production AST"
     else pure ()
@@ -122,11 +116,11 @@ grammarV1ProductionSourceCore sourceFile = do
       declaration <- productionDeclaration
         (locatedValue (grammarV1Declaration (locatedValue locatedTopLevel)))
       requireTagAgreement
-        (grammarV1ReferenceTopLevelDeclarationTag spine)
+        (Top.grammarV1ReferenceTopLevelDeclarationTag spine)
         declaration
       pure GrammarV1ReferenceTopLevelCore
         { grammarV1ReferenceWholeTopLevelAttributes =
-            grammarV1ReferenceTopLevelAttributes spine
+            Top.grammarV1ReferenceTopLevelAttributes spine
         , grammarV1ReferenceWholeTopLevelDeclaration = declaration
         }
 
@@ -177,7 +171,7 @@ referenceTopLevel
   :: GrammarV1ReferenceParseTree
   -> Either GrammarV1ReferenceWholeSourceError GrammarV1ReferenceTopLevelCore
 referenceTopLevel tree = do
-  spine <- mapNested "top-level spine" (grammarV1ReferenceTopLevelSpine tree)
+  spine <- mapNested "top-level spine" (Top.grammarV1ReferenceTopLevelSpine tree)
   body <- expectNonterminal "top_level_decl" tree
   fields <- expectSequence "top_level_decl" body
   declarationTree <- case fields of
@@ -185,11 +179,11 @@ referenceTopLevel tree = do
     _ -> failWhole "top_level_decl body is not a two-item sequence"
   declaration <- referenceDeclaration declarationTree
   requireTagAgreement
-    (grammarV1ReferenceTopLevelDeclarationTag spine)
+    (Top.grammarV1ReferenceTopLevelDeclarationTag spine)
     declaration
   pure GrammarV1ReferenceTopLevelCore
     { grammarV1ReferenceWholeTopLevelAttributes =
-        grammarV1ReferenceTopLevelAttributes spine
+        Top.grammarV1ReferenceTopLevelAttributes spine
     , grammarV1ReferenceWholeTopLevelDeclaration = declaration
     }
 
@@ -226,7 +220,7 @@ referenceDeclaration tree = do
       ]
 
 requireTagAgreement
-  :: GrammarV1ReferenceDeclarationTag
+  :: Top.GrammarV1ReferenceDeclarationTag
   -> GrammarV1ReferenceDeclarationCore
   -> Either GrammarV1ReferenceWholeSourceError ()
 requireTagAgreement expected declaration
@@ -236,33 +230,35 @@ requireTagAgreement expected declaration
         <> Text.pack (show expected)
         <> ", body " <> Text.pack (show (declarationTag declaration)))
 
-declarationTag :: GrammarV1ReferenceDeclarationCore -> GrammarV1ReferenceDeclarationTag
+declarationTag
+  :: GrammarV1ReferenceDeclarationCore
+  -> Top.GrammarV1ReferenceDeclarationTag
 declarationTag declaration = case declaration of
   GrammarV1ReferenceRecordDataCore value -> case value of
-    GrammarV1ReferenceRecordDeclaration {} -> GrammarV1ReferenceRecordDeclaration
-    GrammarV1ReferenceDataDeclaration {} -> GrammarV1ReferenceDataDeclaration
+    GrammarV1ReferenceRecordDeclaration {} -> Top.GrammarV1ReferenceRecordDeclaration
+    GrammarV1ReferenceDataDeclaration {} -> Top.GrammarV1ReferenceDataDeclaration
   GrammarV1ReferenceTypeClaimCore value -> case value of
-    GrammarV1ReferenceTypeAliasDeclarationCore {} -> GrammarV1ReferenceTypeAliasDeclaration
-    GrammarV1ReferenceClaimDeclarationCore {} -> GrammarV1ReferenceClaimDeclaration
+    GrammarV1ReferenceTypeAliasDeclarationCore {} -> Top.GrammarV1ReferenceTypeAliasDeclaration
+    GrammarV1ReferenceClaimDeclarationCore {} -> Top.GrammarV1ReferenceClaimDeclaration
   GrammarV1ReferenceCallableContractCore _ ->
-    GrammarV1ReferenceCallableContractDeclaration
+    Top.GrammarV1ReferenceCallableContractDeclaration
   GrammarV1ReferenceProviderCore value -> case value of
     GrammarV1ReferenceProviderContractDeclaration {} ->
-      GrammarV1ReferenceProviderContractDeclaration
+      Top.GrammarV1ReferenceProviderContractDeclaration
     GrammarV1ReferenceProviderImplementationDeclaration {} ->
-      GrammarV1ReferenceProviderImplementationDeclaration
+      Top.GrammarV1ReferenceProviderImplementationDeclaration
     GrammarV1ReferenceOpaqueProviderImplementationDeclaration {} ->
-      GrammarV1ReferenceOpaqueProviderImplementationDeclaration
+      Top.GrammarV1ReferenceOpaqueProviderImplementationDeclaration
   GrammarV1ReferenceCapabilityBoundaryCore value -> case value of
-    GrammarV1ReferenceCapabilityDeclaration {} -> GrammarV1ReferenceCapabilityDeclaration
-    GrammarV1ReferenceBoundaryDeclaration {} -> GrammarV1ReferenceBoundaryDeclaration
+    GrammarV1ReferenceCapabilityDeclaration {} -> Top.GrammarV1ReferenceCapabilityDeclaration
+    GrammarV1ReferenceBoundaryDeclaration {} -> Top.GrammarV1ReferenceBoundaryDeclaration
   GrammarV1ReferenceFunctionComponentCore value -> case value of
-    GrammarV1ReferenceFunctionDeclarationCore {} -> GrammarV1ReferenceFunctionDeclaration
-    GrammarV1ReferenceComponentDeclarationCore {} -> GrammarV1ReferenceComponentDeclaration
-  GrammarV1ReferenceProtocolCore _ -> GrammarV1ReferenceProtocolDeclaration
+    GrammarV1ReferenceFunctionDeclarationCore {} -> Top.GrammarV1ReferenceFunctionDeclaration
+    GrammarV1ReferenceComponentDeclarationCore {} -> Top.GrammarV1ReferenceComponentDeclaration
+  GrammarV1ReferenceProtocolCore _ -> Top.GrammarV1ReferenceProtocolDeclaration
   GrammarV1ReferenceArchitectureProgramCore value -> case value of
-    GrammarV1ReferenceArchitectureDeclarationCore {} -> GrammarV1ReferenceArchitectureDeclaration
-    GrammarV1ReferenceProgramDeclarationCore {} -> GrammarV1ReferenceProgramDeclaration
+    GrammarV1ReferenceArchitectureDeclarationCore {} -> Top.GrammarV1ReferenceArchitectureDeclaration
+    GrammarV1ReferenceProgramDeclarationCore {} -> Top.GrammarV1ReferenceProgramDeclaration
 
 wrap :: (a -> b) -> Maybe a -> [b]
 wrap constructor value = case value of
