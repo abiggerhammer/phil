@@ -103,7 +103,9 @@ Proof.
   - destruct fields as [| imports_part fields].
     + discriminate Hnormalize.
     + destruct fields as [| top_levels_part fields].
-      * discriminate Hnormalize.
+      * destruct imports_part;
+          cbn in Hnormalize;
+          discriminate Hnormalize.
       * destruct fields as [| extra rest].
         -- destruct imports_part;
              destruct top_levels_part;
@@ -117,8 +119,10 @@ Proof.
              cbn in Hnormalize; try discriminate Hnormalize.
            ++ inversion Hnormalize; subst; reflexivity.
            ++ inversion Hnormalize; subst; reflexivity.
-        -- cbn in Hnormalize.
-           discriminate Hnormalize.
+        -- destruct imports_part;
+             destruct top_levels_part;
+             cbn in Hnormalize;
+             discriminate Hnormalize.
 Qed.
 
 Definition phase1_surface_reference_source_spine
