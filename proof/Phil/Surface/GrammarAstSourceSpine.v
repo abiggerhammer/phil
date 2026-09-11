@@ -79,24 +79,24 @@ Theorem phase1_surface_normalize_source_spine_round_trip :
 Proof.
   intros tree spine Hnormalize.
   destruct tree as
-    [literal
-    | class lexeme
+    [root_literal
+    | root_class root_lexeme
     | name body
-    | trees
-    | index branch
+    | root_trees
+    | root_index root_branch
     |
-    | optional_body
-    | repeated];
+    | root_optional_body
+    | root_repeated];
     cbn in Hnormalize; try discriminate Hnormalize.
   destruct body as
-    [literal
-    | class lexeme
-    | child_name child_body
+    [body_literal
+    | body_class body_lexeme
+    | body_child_name body_child_body
     | fields
-    | index branch
+    | body_index body_branch
     |
-    | optional_body
-    | repeated];
+    | body_optional_body
+    | body_repeated];
     cbn in Hnormalize; try discriminate Hnormalize.
   destruct fields as [| module_part fields];
     cbn in Hnormalize; try discriminate Hnormalize.
@@ -105,23 +105,23 @@ Proof.
   destruct fields as [| top_levels_part fields];
     cbn in Hnormalize; try discriminate Hnormalize.
   destruct imports_part as
-    [literal
-    | class lexeme
-    | child_name child_body
-    | sequence
-    | index branch
+    [import_literal
+    | import_class import_lexeme
+    | import_child_name import_child_body
+    | import_sequence
+    | import_index import_branch
     |
-    | optional_body
+    | import_optional_body
     | imports];
     cbn in Hnormalize; try discriminate Hnormalize.
   destruct top_levels_part as
-    [literal
-    | class lexeme
-    | child_name child_body
-    | sequence
-    | index branch
+    [top_literal
+    | top_class top_lexeme
+    | top_child_name top_child_body
+    | top_sequence
+    | top_index top_branch
     |
-    | optional_body
+    | top_optional_body
     | top_levels];
     cbn in Hnormalize; try discriminate Hnormalize.
   destruct (String.eqb name phase1_surface_start) eqn:Hname;
@@ -129,14 +129,14 @@ Proof.
   apply String.eqb_eq in Hname.
   subst name.
   destruct module_part as
-    [literal
-    | class lexeme
-    | child_name child_body
-    | sequence
-    | index branch
+    [module_literal
+    | module_class module_lexeme
+    | module_child_name module_child_body
+    | module_sequence
+    | module_index module_branch
     |
     | module_tree
-    | repeated];
+    | module_repeated];
     cbn in Hnormalize; try discriminate Hnormalize;
     inversion Hnormalize; subst; reflexivity.
 Qed.
