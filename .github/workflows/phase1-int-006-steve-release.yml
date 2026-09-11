@@ -1,0 +1,110 @@
+name: Phase 1 INT-006 Steve Release
+
+on:
+  workflow_dispatch:
+  pull_request:
+    paths:
+      - 'src/Phil/**'
+      - 'runtime/phase1/**'
+      - 'test/Phil/Test/Phase1/**'
+      - 'test/Phase1INT005*.hs'
+      - 'test/Phase1INT006*.hs'
+      - 'examples/steve/**'
+      - 'docs/tutorials/steve-provider-put-get.md'
+      - 'docs/phase-1/steve-external-smoke-v1.md'
+      - 'scripts/release/build-steve-phase1-package.sh'
+      - 'scripts/release/smoke-steve-phase1-package.sh'
+      - 'scripts/ci/resolve-llvm18.sh'
+      - 'phil-core.cabal'
+      - '.github/workflows/phase1-int-006-steve-release.yml'
+  push:
+    branches:
+      - main
+    paths:
+      - 'src/Phil/**'
+      - 'runtime/phase1/**'
+      - 'test/Phil/Test/Phase1/**'
+      - 'test/Phase1INT005*.hs'
+      - 'test/Phase1INT006*.hs'
+      - 'examples/steve/**'
+      - 'docs/tutorials/steve-provider-put-get.md'
+      - 'docs/phase-1/steve-external-smoke-v1.md'
+      - 'scripts/release/build-steve-phase1-package.sh'
+      - 'scripts/release/smoke-steve-phase1-package.sh'
+      - 'scripts/ci/resolve-llvm18.sh'
+      - 'phil-core.cabal'
+      - '.github/workflows/phase1-int-006-steve-release.yml'
+
+permissions:
+  contents: read
+
+jobs:
+  steve-release:
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: haskell-actions/setup@v2
+        with:
+          ghc-version: '9.6.7'
+          cabal-version: 'latest'
+
+      - name: Replay Steve provider manifest lineage
+        run: |
+          cabal exec -- runghc -isrc -itest -Wall -Werror \
+            test/Phase1INT006SteveProviderManifestLineageMain.hs
+
+      - name: Build distributable Steve release
+        run: |
+          out="$RUNNER_TEMP/phil-int006-steve-release"
+          mkdir -p "$out"
+          scripts/release/build-steve-phase1-package.sh "$out"
+
+          archive="phil-steve-0.1.0-phase1-x86_64-linux.tar.gz"
+          test -s "$out/$archive"
+          test -s "$out/$archive.sha256"
+          (
+            cd "$out"
+            sha256sum -c "$archive.sha256"
+          )
+          tar -tzf "$out/$archive" | grep -q '/smoke-test.sh$'
+          tar -tzf "$out/$archive" | grep -q '/bin/steve$'
+          tar -tzf "$out/$archive" | grep -q '/bin/philc$'
+          tar -tzf "$out/$archive" | grep -q '/share/phil-steve/steve.release-package$'
+          tar -tzf "$out/$archive" | grep -q '/TCB.txt$'
+
+      - name: Smoke only the unpacked release
+        run: |
+          out="$RUNNER_TEMP/phil-int006-steve-release"
+          archive="$out/phil-steve-0.1.0-phase1-x86_64-linux.tar.gz"
+          consumer="$RUNNER_TEMP/phil-int006-steve-release-consumer"
+          rm -rf "$consumer"
+          mkdir -p "$consumer"
+          tar -xzf "$archive" -C "$consumer"
+
+          package="$consumer/phil-steve-0.1.0-phase1-x86_64-linux"
+          (
+            cd "$package"
+            ./smoke-test.sh
+          ) | tee "$out/smoke-evidence.txt"
+
+          grep -q '^PASS: packaged Phase-1 Steve put/get and corruption smoke$' \
+            "$out/smoke-evidence.txt"
+          grep -Eq '^platform=Linux .*x86_64$' "$out/smoke-evidence.txt"
+          grep -Eq '^release_package_sha256=[0-9a-f]{64}$' "$out/smoke-evidence.txt"
+          grep -Eq '^package_manifest_sha256=[0-9a-f]{64}$' "$out/smoke-evidence.txt"
+
+      - name: Replay real Steve manifest closure
+        run: |
+          cabal exec -- runghc -isrc -itest -Wall -Werror \
+            test/Phase1INT005RealWitnessManifestMain.hs
+
+      - name: Upload Steve release candidate
+        uses: actions/upload-artifact@v4
+        with:
+          name: phil-steve-0.1.0-phase1-x86_64-linux
+          path: |
+            ${{ runner.temp }}/phil-int006-steve-release/phil-steve-0.1.0-phase1-x86_64-linux.tar.gz
+            ${{ runner.temp }}/phil-int006-steve-release/phil-steve-0.1.0-phase1-x86_64-linux.tar.gz.sha256
+            ${{ runner.temp }}/phil-int006-steve-release/smoke-evidence.txt
+          if-no-files-found: error
