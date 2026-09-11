@@ -9,7 +9,7 @@ import Data.ByteString (ByteString)
 import Data.Text (Text)
 import qualified Data.Text as Text
 import qualified Data.Text.IO as TextIO
-import Foreign.C.Types (CInt)
+import Foreign.C.Types (CInt (..))
 import Foreign.Ptr (Ptr)
 import Phil.Compiler.SteveCAS
   ( ContentId
