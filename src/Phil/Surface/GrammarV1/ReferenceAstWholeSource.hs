@@ -17,7 +17,7 @@ import Phil.Surface.GrammarV1.Parser
   , GrammarV1TopLevelDecl (..)
   )
 import Phil.Surface.GrammarV1.ReferenceAstArchitectureProgram
-  ( GrammarV1ReferenceArchitectureProgramDeclaration (..)
+  ( GrammarV1ReferenceArchitectureProgramDeclaration
   , grammarV1ProductionArchitectureProgramDeclaration
   , grammarV1ReferenceArchitectureProgramDeclaration
   )
@@ -27,12 +27,12 @@ import Phil.Surface.GrammarV1.ReferenceAstCallableContract
   , grammarV1ReferenceCallableContractDeclaration
   )
 import Phil.Surface.GrammarV1.ReferenceAstCapabilityBoundary
-  ( GrammarV1ReferenceCapabilityBoundaryDeclaration (..)
+  ( GrammarV1ReferenceCapabilityBoundaryDeclaration
   , grammarV1ProductionCapabilityBoundaryDeclaration
   , grammarV1ReferenceCapabilityBoundaryDeclaration
   )
 import Phil.Surface.GrammarV1.ReferenceAstFunctionComponent
-  ( GrammarV1ReferenceFunctionComponentDeclaration (..)
+  ( GrammarV1ReferenceFunctionComponentDeclaration
   , grammarV1ProductionFunctionComponentDeclaration
   , grammarV1ReferenceFunctionComponentDeclaration
   )
@@ -42,12 +42,12 @@ import Phil.Surface.GrammarV1.ReferenceAstProtocolDeclaration
   , grammarV1ReferenceProtocolDeclaration
   )
 import Phil.Surface.GrammarV1.ReferenceAstProviderDeclarations
-  ( GrammarV1ReferenceProviderDeclaration (..)
+  ( GrammarV1ReferenceProviderDeclaration
   , grammarV1ProductionProviderDeclaration
   , grammarV1ReferenceProviderDeclaration
   )
 import Phil.Surface.GrammarV1.ReferenceAstRecordData
-  ( GrammarV1ReferenceRecordDataDeclaration (..)
+  ( GrammarV1ReferenceRecordDataDeclaration
   , grammarV1ProductionRecordDataDeclaration
   , grammarV1ReferenceRecordDataDeclaration
   )
@@ -58,7 +58,7 @@ import Phil.Surface.GrammarV1.ReferenceAstSpine
   )
 import qualified Phil.Surface.GrammarV1.ReferenceAstTopLevel as Top
 import Phil.Surface.GrammarV1.ReferenceAstTypeClaimDeclarations
-  ( GrammarV1ReferenceTypeClaimDeclaration (..)
+  ( GrammarV1ReferenceTypeClaimDeclaration
   , grammarV1ProductionTypeClaimDeclaration
   , grammarV1ReferenceTypeClaimDeclaration
   )
@@ -71,18 +71,25 @@ newtype GrammarV1ReferenceWholeSourceError =
   GrammarV1ReferenceWholeSourceError Text
   deriving (Eq, Show)
 
--- | Span-insensitive complete declaration payload. Eight grouping constructors
--- cover the exact fifteen Grammar-v1 declaration alternatives without erasing
--- which family-specific correspondence layer supplied the body.
+-- | Span-insensitive complete declaration payload.  There is one constructor
+-- for each exact Grammar-v1 declaration alternative.  Family-specific payload
+-- types are deliberately reused rather than reinterpreted here.
 data GrammarV1ReferenceDeclarationCore
-  = GrammarV1ReferenceRecordDataCore GrammarV1ReferenceRecordDataDeclaration
-  | GrammarV1ReferenceTypeClaimCore GrammarV1ReferenceTypeClaimDeclaration
-  | GrammarV1ReferenceCallableContractCore GrammarV1ReferenceCallableContractDeclaration
-  | GrammarV1ReferenceProviderCore GrammarV1ReferenceProviderDeclaration
-  | GrammarV1ReferenceCapabilityBoundaryCore GrammarV1ReferenceCapabilityBoundaryDeclaration
-  | GrammarV1ReferenceFunctionComponentCore GrammarV1ReferenceFunctionComponentDeclaration
-  | GrammarV1ReferenceProtocolCore GrammarV1ReferenceProtocolDeclarationCore
-  | GrammarV1ReferenceArchitectureProgramCore GrammarV1ReferenceArchitectureProgramDeclaration
+  = GrammarV1ReferenceWholeRecord GrammarV1ReferenceRecordDataDeclaration
+  | GrammarV1ReferenceWholeData GrammarV1ReferenceRecordDataDeclaration
+  | GrammarV1ReferenceWholeTypeAlias GrammarV1ReferenceTypeClaimDeclaration
+  | GrammarV1ReferenceWholeClaim GrammarV1ReferenceTypeClaimDeclaration
+  | GrammarV1ReferenceWholeCallableContract GrammarV1ReferenceCallableContractDeclaration
+  | GrammarV1ReferenceWholeFunction GrammarV1ReferenceFunctionComponentDeclaration
+  | GrammarV1ReferenceWholeProviderContract GrammarV1ReferenceProviderDeclaration
+  | GrammarV1ReferenceWholeProviderImplementation GrammarV1ReferenceProviderDeclaration
+  | GrammarV1ReferenceWholeOpaqueProviderImplementation GrammarV1ReferenceProviderDeclaration
+  | GrammarV1ReferenceWholeProtocol GrammarV1ReferenceProtocolDeclarationCore
+  | GrammarV1ReferenceWholeCapability GrammarV1ReferenceCapabilityBoundaryDeclaration
+  | GrammarV1ReferenceWholeBoundary GrammarV1ReferenceCapabilityBoundaryDeclaration
+  | GrammarV1ReferenceWholeArchitecture GrammarV1ReferenceArchitectureProgramDeclaration
+  | GrammarV1ReferenceWholeComponent GrammarV1ReferenceFunctionComponentDeclaration
+  | GrammarV1ReferenceWholeProgram GrammarV1ReferenceArchitectureProgramDeclaration
   deriving (Eq, Show)
 
 data GrammarV1ReferenceTopLevelCore = GrammarV1ReferenceTopLevelCore
@@ -113,39 +120,67 @@ grammarV1ProductionSourceCore sourceFile = do
     }
   where
     productionTopLevel (spine, locatedTopLevel) = do
-      declaration <- productionDeclaration
-        (locatedValue (grammarV1Declaration (locatedValue locatedTopLevel)))
-      requireTagAgreement
-        (Top.grammarV1ReferenceTopLevelDeclarationTag spine)
-        declaration
+      let tag = Top.grammarV1ReferenceTopLevelDeclarationTag spine
+          declaration = locatedValue
+            (grammarV1Declaration (locatedValue locatedTopLevel))
+      body <- productionDeclaration tag declaration
       pure GrammarV1ReferenceTopLevelCore
         { grammarV1ReferenceWholeTopLevelAttributes =
             Top.grammarV1ReferenceTopLevelAttributes spine
-        , grammarV1ReferenceWholeTopLevelDeclaration = declaration
+        , grammarV1ReferenceWholeTopLevelDeclaration = body
         }
 
 productionDeclaration
-  :: GrammarV1Declaration
+  :: Top.GrammarV1ReferenceDeclarationTag
+  -> GrammarV1Declaration
   -> Either GrammarV1ReferenceWholeSourceError GrammarV1ReferenceDeclarationCore
-productionDeclaration declaration = exactlyOne "production declaration" $
-  concat
-    [ wrap GrammarV1ReferenceRecordDataCore
-        (grammarV1ProductionRecordDataDeclaration declaration)
-    , wrap GrammarV1ReferenceTypeClaimCore
-        (grammarV1ProductionTypeClaimDeclaration declaration)
-    , wrap GrammarV1ReferenceCallableContractCore
-        (grammarV1ProductionCallableContractDeclaration declaration)
-    , wrap GrammarV1ReferenceProviderCore
-        (grammarV1ProductionProviderDeclaration declaration)
-    , wrap GrammarV1ReferenceCapabilityBoundaryCore
-        (grammarV1ProductionCapabilityBoundaryDeclaration declaration)
-    , wrap GrammarV1ReferenceFunctionComponentCore
-        (grammarV1ProductionFunctionComponentDeclaration declaration)
-    , wrap GrammarV1ReferenceProtocolCore
-        (grammarV1ProductionProtocolDeclaration declaration)
-    , wrap GrammarV1ReferenceArchitectureProgramCore
-        (grammarV1ProductionArchitectureProgramDeclaration declaration)
-    ]
+productionDeclaration tag declaration = case tag of
+  Top.GrammarV1ReferenceRecordDeclaration ->
+    requireProduction "record" GrammarV1ReferenceWholeRecord
+      (grammarV1ProductionRecordDataDeclaration declaration)
+  Top.GrammarV1ReferenceDataDeclaration ->
+    requireProduction "data" GrammarV1ReferenceWholeData
+      (grammarV1ProductionRecordDataDeclaration declaration)
+  Top.GrammarV1ReferenceTypeAliasDeclaration ->
+    requireProduction "type alias" GrammarV1ReferenceWholeTypeAlias
+      (grammarV1ProductionTypeClaimDeclaration declaration)
+  Top.GrammarV1ReferenceClaimDeclaration ->
+    requireProduction "claim" GrammarV1ReferenceWholeClaim
+      (grammarV1ProductionTypeClaimDeclaration declaration)
+  Top.GrammarV1ReferenceCallableContractDeclaration ->
+    requireProduction "callable contract" GrammarV1ReferenceWholeCallableContract
+      (grammarV1ProductionCallableContractDeclaration declaration)
+  Top.GrammarV1ReferenceFunctionDeclaration ->
+    requireProduction "function" GrammarV1ReferenceWholeFunction
+      (grammarV1ProductionFunctionComponentDeclaration declaration)
+  Top.GrammarV1ReferenceProviderContractDeclaration ->
+    requireProduction "provider contract" GrammarV1ReferenceWholeProviderContract
+      (grammarV1ProductionProviderDeclaration declaration)
+  Top.GrammarV1ReferenceProviderImplementationDeclaration ->
+    requireProduction "provider implementation" GrammarV1ReferenceWholeProviderImplementation
+      (grammarV1ProductionProviderDeclaration declaration)
+  Top.GrammarV1ReferenceOpaqueProviderImplementationDeclaration ->
+    requireProduction "opaque provider implementation"
+      GrammarV1ReferenceWholeOpaqueProviderImplementation
+      (grammarV1ProductionProviderDeclaration declaration)
+  Top.GrammarV1ReferenceProtocolDeclaration ->
+    requireProduction "protocol" GrammarV1ReferenceWholeProtocol
+      (grammarV1ProductionProtocolDeclaration declaration)
+  Top.GrammarV1ReferenceCapabilityDeclaration ->
+    requireProduction "capability" GrammarV1ReferenceWholeCapability
+      (grammarV1ProductionCapabilityBoundaryDeclaration declaration)
+  Top.GrammarV1ReferenceBoundaryDeclaration ->
+    requireProduction "boundary" GrammarV1ReferenceWholeBoundary
+      (grammarV1ProductionCapabilityBoundaryDeclaration declaration)
+  Top.GrammarV1ReferenceArchitectureDeclaration ->
+    requireProduction "architecture" GrammarV1ReferenceWholeArchitecture
+      (grammarV1ProductionArchitectureProgramDeclaration declaration)
+  Top.GrammarV1ReferenceComponentDeclaration ->
+    requireProduction "component" GrammarV1ReferenceWholeComponent
+      (grammarV1ProductionFunctionComponentDeclaration declaration)
+  Top.GrammarV1ReferenceProgramDeclaration ->
+    requireProduction "program" GrammarV1ReferenceWholeProgram
+      (grammarV1ProductionArchitectureProgramDeclaration declaration)
 
 grammarV1ReferenceSourceCore
   :: GrammarV1ReferenceParseTree
@@ -177,10 +212,8 @@ referenceTopLevel tree = do
   declarationTree <- case fields of
     [_attributesTree, value] -> pure value
     _ -> failWhole "top_level_decl body is not a two-item sequence"
-  declaration <- referenceDeclaration declarationTree
-  requireTagAgreement
-    (Top.grammarV1ReferenceTopLevelDeclarationTag spine)
-    declaration
+  let tag = Top.grammarV1ReferenceTopLevelDeclarationTag spine
+  declaration <- referenceDeclaration tag declarationTree
   pure GrammarV1ReferenceTopLevelCore
     { grammarV1ReferenceWholeTopLevelAttributes =
         Top.grammarV1ReferenceTopLevelAttributes spine
@@ -188,91 +221,81 @@ referenceTopLevel tree = do
     }
 
 referenceDeclaration
-  :: GrammarV1ReferenceParseTree
-  -> Either GrammarV1ReferenceWholeSourceError GrammarV1ReferenceDeclarationCore
-referenceDeclaration tree = do
-  recordData <- mapNested "record/data declaration"
-    (grammarV1ReferenceRecordDataDeclaration tree)
-  typeClaim <- mapNested "type/claim declaration"
-    (grammarV1ReferenceTypeClaimDeclaration tree)
-  callable <- mapNested "callable declaration"
-    (grammarV1ReferenceCallableContractDeclaration tree)
-  provider <- mapNested "provider declaration"
-    (grammarV1ReferenceProviderDeclaration tree)
-  capabilityBoundary <- mapNested "capability/boundary declaration"
-    (grammarV1ReferenceCapabilityBoundaryDeclaration tree)
-  functionComponent <- mapNested "function/component declaration"
-    (grammarV1ReferenceFunctionComponentDeclaration tree)
-  protocol <- mapNested "protocol declaration"
-    (grammarV1ReferenceProtocolDeclaration tree)
-  architectureProgram <- mapNested "architecture/program declaration"
-    (grammarV1ReferenceArchitectureProgramDeclaration tree)
-  exactlyOne "certified declaration" $
-    concat
-      [ wrap GrammarV1ReferenceRecordDataCore recordData
-      , wrap GrammarV1ReferenceTypeClaimCore typeClaim
-      , wrap GrammarV1ReferenceCallableContractCore callable
-      , wrap GrammarV1ReferenceProviderCore provider
-      , wrap GrammarV1ReferenceCapabilityBoundaryCore capabilityBoundary
-      , wrap GrammarV1ReferenceFunctionComponentCore functionComponent
-      , wrap GrammarV1ReferenceProtocolCore protocol
-      , wrap GrammarV1ReferenceArchitectureProgramCore architectureProgram
-      ]
-
-requireTagAgreement
   :: Top.GrammarV1ReferenceDeclarationTag
-  -> GrammarV1ReferenceDeclarationCore
-  -> Either GrammarV1ReferenceWholeSourceError ()
-requireTagAgreement expected declaration
-  | declarationTag declaration == expected = pure ()
-  | otherwise = failWhole
-      ("top-level declaration tag disagrees with body: expected "
-        <> Text.pack (show expected)
-        <> ", body " <> Text.pack (show (declarationTag declaration)))
+  -> GrammarV1ReferenceParseTree
+  -> Either GrammarV1ReferenceWholeSourceError GrammarV1ReferenceDeclarationCore
+referenceDeclaration tag tree = case tag of
+  Top.GrammarV1ReferenceRecordDeclaration ->
+    requireReference "record" GrammarV1ReferenceWholeRecord
+      (grammarV1ReferenceRecordDataDeclaration tree)
+  Top.GrammarV1ReferenceDataDeclaration ->
+    requireReference "data" GrammarV1ReferenceWholeData
+      (grammarV1ReferenceRecordDataDeclaration tree)
+  Top.GrammarV1ReferenceTypeAliasDeclaration ->
+    requireReference "type alias" GrammarV1ReferenceWholeTypeAlias
+      (grammarV1ReferenceTypeClaimDeclaration tree)
+  Top.GrammarV1ReferenceClaimDeclaration ->
+    requireReference "claim" GrammarV1ReferenceWholeClaim
+      (grammarV1ReferenceTypeClaimDeclaration tree)
+  Top.GrammarV1ReferenceCallableContractDeclaration ->
+    requireReference "callable contract" GrammarV1ReferenceWholeCallableContract
+      (grammarV1ReferenceCallableContractDeclaration tree)
+  Top.GrammarV1ReferenceFunctionDeclaration ->
+    requireReference "function" GrammarV1ReferenceWholeFunction
+      (grammarV1ReferenceFunctionComponentDeclaration tree)
+  Top.GrammarV1ReferenceProviderContractDeclaration ->
+    requireReference "provider contract" GrammarV1ReferenceWholeProviderContract
+      (grammarV1ReferenceProviderDeclaration tree)
+  Top.GrammarV1ReferenceProviderImplementationDeclaration ->
+    requireReference "provider implementation" GrammarV1ReferenceWholeProviderImplementation
+      (grammarV1ReferenceProviderDeclaration tree)
+  Top.GrammarV1ReferenceOpaqueProviderImplementationDeclaration ->
+    requireReference "opaque provider implementation"
+      GrammarV1ReferenceWholeOpaqueProviderImplementation
+      (grammarV1ReferenceProviderDeclaration tree)
+  Top.GrammarV1ReferenceProtocolDeclaration ->
+    requireReference "protocol" GrammarV1ReferenceWholeProtocol
+      (grammarV1ReferenceProtocolDeclaration tree)
+  Top.GrammarV1ReferenceCapabilityDeclaration ->
+    requireReference "capability" GrammarV1ReferenceWholeCapability
+      (grammarV1ReferenceCapabilityBoundaryDeclaration tree)
+  Top.GrammarV1ReferenceBoundaryDeclaration ->
+    requireReference "boundary" GrammarV1ReferenceWholeBoundary
+      (grammarV1ReferenceCapabilityBoundaryDeclaration tree)
+  Top.GrammarV1ReferenceArchitectureDeclaration ->
+    requireReference "architecture" GrammarV1ReferenceWholeArchitecture
+      (grammarV1ReferenceArchitectureProgramDeclaration tree)
+  Top.GrammarV1ReferenceComponentDeclaration ->
+    requireReference "component" GrammarV1ReferenceWholeComponent
+      (grammarV1ReferenceFunctionComponentDeclaration tree)
+  Top.GrammarV1ReferenceProgramDeclaration ->
+    requireReference "program" GrammarV1ReferenceWholeProgram
+      (grammarV1ReferenceArchitectureProgramDeclaration tree)
 
-declarationTag
-  :: GrammarV1ReferenceDeclarationCore
-  -> Top.GrammarV1ReferenceDeclarationTag
-declarationTag declaration = case declaration of
-  GrammarV1ReferenceRecordDataCore value -> case value of
-    GrammarV1ReferenceRecordDeclaration {} -> Top.GrammarV1ReferenceRecordDeclaration
-    GrammarV1ReferenceDataDeclaration {} -> Top.GrammarV1ReferenceDataDeclaration
-  GrammarV1ReferenceTypeClaimCore value -> case value of
-    GrammarV1ReferenceTypeAliasDeclarationCore {} -> Top.GrammarV1ReferenceTypeAliasDeclaration
-    GrammarV1ReferenceClaimDeclarationCore {} -> Top.GrammarV1ReferenceClaimDeclaration
-  GrammarV1ReferenceCallableContractCore _ ->
-    Top.GrammarV1ReferenceCallableContractDeclaration
-  GrammarV1ReferenceProviderCore value -> case value of
-    GrammarV1ReferenceProviderContractDeclaration {} ->
-      Top.GrammarV1ReferenceProviderContractDeclaration
-    GrammarV1ReferenceProviderImplementationDeclaration {} ->
-      Top.GrammarV1ReferenceProviderImplementationDeclaration
-    GrammarV1ReferenceOpaqueProviderImplementationDeclaration {} ->
-      Top.GrammarV1ReferenceOpaqueProviderImplementationDeclaration
-  GrammarV1ReferenceCapabilityBoundaryCore value -> case value of
-    GrammarV1ReferenceCapabilityDeclaration {} -> Top.GrammarV1ReferenceCapabilityDeclaration
-    GrammarV1ReferenceBoundaryDeclaration {} -> Top.GrammarV1ReferenceBoundaryDeclaration
-  GrammarV1ReferenceFunctionComponentCore value -> case value of
-    GrammarV1ReferenceFunctionDeclarationCore {} -> Top.GrammarV1ReferenceFunctionDeclaration
-    GrammarV1ReferenceComponentDeclarationCore {} -> Top.GrammarV1ReferenceComponentDeclaration
-  GrammarV1ReferenceProtocolCore _ -> Top.GrammarV1ReferenceProtocolDeclaration
-  GrammarV1ReferenceArchitectureProgramCore value -> case value of
-    GrammarV1ReferenceArchitectureDeclarationCore {} -> Top.GrammarV1ReferenceArchitectureDeclaration
-    GrammarV1ReferenceProgramDeclarationCore {} -> Top.GrammarV1ReferenceProgramDeclaration
-
-wrap :: (a -> b) -> Maybe a -> [b]
-wrap constructor value = case value of
-  Nothing -> []
-  Just payload -> [constructor payload]
-
-exactlyOne
+requireProduction
   :: Text
-  -> [a]
-  -> Either GrammarV1ReferenceWholeSourceError a
-exactlyOne label values = case values of
-  [value] -> pure value
-  [] -> failWhole (label <> " matched no declaration-family translator")
-  _ -> failWhole (label <> " matched more than one declaration-family translator")
+  -> (a -> GrammarV1ReferenceDeclarationCore)
+  -> Maybe a
+  -> Either GrammarV1ReferenceWholeSourceError GrammarV1ReferenceDeclarationCore
+requireProduction label constructor value = case value of
+  Just payload -> pure (constructor payload)
+  Nothing -> failWhole
+    ("production top-level tag selected " <> label
+      <> " but its declaration translator rejected the body")
+
+requireReference
+  :: Show e
+  => Text
+  -> (a -> GrammarV1ReferenceDeclarationCore)
+  -> Either e (Maybe a)
+  -> Either GrammarV1ReferenceWholeSourceError GrammarV1ReferenceDeclarationCore
+requireReference label constructor result = do
+  value <- mapNested (label <> " declaration") result
+  case value of
+    Just payload -> pure (constructor payload)
+    Nothing -> failWhole
+      ("certified top-level tag selected " <> label
+        <> " but its declaration translator rejected the body")
 
 expectNonterminal
   :: Text
