@@ -1,0 +1,99 @@
+name: Temporary Phase 1 AArch64 Apple Darwin Release Envelope
+
+on:
+  push:
+    branches:
+      - phase1-target-aarch64-apple-darwin-release-envelope
+  workflow_dispatch:
+
+jobs:
+  release-envelope:
+    runs-on: macos-26
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Verify native Apple Silicon runner
+        shell: bash
+        run: |
+          set -euo pipefail
+          test "$(uname -m)" = "arm64"
+          sw_vers
+
+      - name: Resolve LLVM 18
+        shell: bash
+        run: |
+          set -euo pipefail
+          if ! brew list llvm@18 >/dev/null 2>&1; then
+            brew install llvm@18
+          fi
+          llvm_prefix="$(brew --prefix llvm@18)"
+          echo "LLVM_PREFIX=$llvm_prefix" >> "$GITHUB_ENV"
+          "$llvm_prefix/bin/clang" --version
+          "$llvm_prefix/bin/llvm-as" --version
+
+      - name: Set up Haskell
+        uses: haskell-actions/setup@v2
+        with:
+          ghc-version: '9.6.7'
+          cabal-version: 'latest'
+
+      - name: Build complete Haskell substrate
+        shell: bash
+        run: |
+          set -euo pipefail
+          cabal build all --enable-tests
+
+      - name: Check Darwin certified release package
+        shell: bash
+        run: |
+          set -euo pipefail
+          cabal -v0 exec -- runghc -isrc -itest -Wall -Werror \
+            test/Phase1TargetAArch64AppleDarwinReleasePackageMain.hs
+
+      - name: Emit and inspect Darwin release package
+        shell: bash
+        run: |
+          set -euo pipefail
+          out="$RUNNER_TEMP/phil-aarch64-apple-darwin-release"
+          mkdir -p "$out"
+          package="$out/steve-darwin.release-package"
+
+          cabal -v0 exec -- runghc -isrc -itest -Wall -Werror \
+            test/Phase1TargetAArch64AppleDarwinReleasePackageMain.hs emit-package \
+            > "$package"
+
+          grep -Fx $'release-profile\trevision=phase1.target.aarch64-apple-darwin.v1' "$package"
+          grep -F $'llvm\t' "$package" | grep -F 'target-triple=aarch64-apple-darwin' \
+            | grep -F 'data-layout=e-m:o-i64:64-i128:128-n32:64-S128' \
+            | grep -F 'runtime-abi-profile=phil-runtime/phase1/runtime-choice-provider-v1'
+          test "$(grep -c '^tcb'"$'\t' "$package")" -eq 6
+          grep -F $'tcb\tid=target-assumptions\tkind=TargetAssumptionTrust\tname=aarch64 Apple Darwin target assumptions\trevision=phase1-aarch64-apple-darwin-v1\tbasis=selected Apple Silicon Darwin ABI/tool/runtime assumptions' "$package"
+          ! grep -q 'x86_64 Linux target assumptions' "$package"
+
+      - name: Assemble exact certified Darwin LLVM artifact
+        shell: bash
+        run: |
+          set -euo pipefail
+          out="$RUNNER_TEMP/phil-aarch64-apple-darwin-release"
+          llvm="$out/steve-certified.ll"
+
+          cabal -v0 exec -- runghc -isrc -itest -Wall -Werror \
+            test/Phase1TargetAArch64AppleDarwinReleasePackageMain.hs emit-llvm \
+            > "$llvm"
+
+          grep -Fx 'target datalayout = "e-m:o-i64:64-i128:128-n32:64-S128"' "$llvm"
+          grep -Fx 'target triple = "aarch64-apple-darwin"' "$llvm"
+          "$LLVM_PREFIX/bin/llvm-as" "$llvm" -o "$out/steve-certified.bc"
+          "$LLVM_PREFIX/bin/clang" --target=aarch64-apple-darwin \
+            -c "$llvm" -o "$out/steve-certified.o"
+          file "$out/steve-certified.o" | tee "$out/object-file.txt"
+          grep -q 'Mach-O 64-bit object arm64' "$out/object-file.txt"
+
+      - name: Upload Darwin release-envelope evidence
+        uses: actions/upload-artifact@v4
+        with:
+          name: phase1-aarch64-apple-darwin-release-envelope
+          path: |
+            ${{ runner.temp }}/phil-aarch64-apple-darwin-release/steve-darwin.release-package
+            ${{ runner.temp }}/phil-aarch64-apple-darwin-release/object-file.txt
+          if-no-files-found: error
