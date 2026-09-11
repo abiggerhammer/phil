@@ -15,7 +15,7 @@ on:
       - 'grammar/phase1-surface.ebnf'
       - 'grammar/phase1-surface-determinacy.json'
       - 'scripts/derive_phase1_surface_grammar.py'
-      - 'scripts/derive_phase1-surface-determinacy_certificate.py'
+      - 'scripts/derive_phase1_surface_determinacy_certificate.py'
       - 'proof/Phil/Surface/Grammar*.v'
       - '.github/workflows/phase1-surface-grammar-rocq-source-spine-correspondence.yml'
 
