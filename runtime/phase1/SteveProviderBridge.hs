@@ -5,6 +5,9 @@ module SteveProviderBridge
   , newContentIdHandle
   , freeOwnedBytesHandle
   , freeContentIdHandle
+  , providerComputeContentId
+  , providerReadBlob
+  , providerCheckContentId
   ) where
 
 import Data.ByteString (ByteString)
@@ -23,6 +26,7 @@ import Phil.Compiler.SteveCAS
   ( ContentId
   , InstallResult (..)
   , ReadResult (..)
+  , SteveCASError
   , checkContentId
   , computeContentId
   , installBlob
@@ -60,6 +64,23 @@ freeOwnedBytesHandle = freeStablePtr . ownedBytesStablePtr
 freeContentIdHandle :: Ptr () -> IO ()
 freeContentIdHandle = freeStablePtr . contentIdStablePtr
 
+-- | Haskell-side entry points for the same conventional provider realization
+-- exported below through the qualified Phase-1 C ABI. The public Steve shell
+-- uses these for its source-level digest/read/check primitives so the command
+-- path and the compiled Steve callables do not silently select different
+-- provider implementations.
+providerComputeContentId :: ByteString -> ContentId
+providerComputeContentId = computeContentId
+
+providerReadBlob
+  :: FilePath
+  -> ContentId
+  -> IO (Either SteveCASError ReadResult)
+providerReadBlob = readBlob
+
+providerCheckContentId :: ContentId -> ByteString -> Bool
+providerCheckContentId = checkContentId
+
 foreign export ccall
   "phil_runtime_choice_StevePut_put_entry_DigestProvider_compute"
   steveDigestCompute
@@ -68,7 +89,7 @@ foreign export ccall
 steveDigestCompute :: Ptr () -> Ptr (Ptr ()) -> IO CInt
 steveDigestCompute candidatePtr resultSlot = do
   candidate <- deRefStablePtr (ownedBytesStablePtr candidatePtr)
-  let contentId = computeContentId (nativeBytesPayload candidate)
+  let contentId = providerComputeContentId (nativeBytesPayload candidate)
   resultPtr <- newContentIdHandle (nativeBytesRoot candidate) contentId
   poke resultSlot resultPtr
   pure digestComputedTag
@@ -102,7 +123,7 @@ foreign export ccall
 steveBlobRead :: Ptr () -> Ptr (Ptr ()) -> IO CInt
 steveBlobRead contentIdPtr resultSlot = do
   content <- deRefStablePtr (contentIdStablePtr contentIdPtr)
-  result <- readBlob (nativeContentRoot content) (nativeContentId content)
+  result <- providerReadBlob (nativeContentRoot content) (nativeContentId content)
   case result of
     Right (BlobFound bytes) -> do
       resultPtr <- newOwnedBytesHandle (nativeContentRoot content) bytes
@@ -121,7 +142,7 @@ steveDigestCheck contentIdPtr bytesPtr = do
   content <- deRefStablePtr (contentIdStablePtr contentIdPtr)
   bytes <- deRefStablePtr (ownedBytesStablePtr bytesPtr)
   if nativeContentRoot content == nativeBytesRoot bytes
-      && checkContentId (nativeContentId content) (nativeBytesPayload bytes)
+      && providerCheckContentId (nativeContentId content) (nativeBytesPayload bytes)
     then pure digestAcceptedTag
     else pure digestRejectedTag
 
