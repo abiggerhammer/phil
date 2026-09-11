@@ -1,0 +1,283 @@
+name: Phase 1 Steve GitHub Release
+
+on:
+  workflow_dispatch:
+  pull_request:
+    paths:
+      - '.github/workflows/phase1-steve-github-release.yml'
+      - 'scripts/release/build-steve-phase1-package.sh'
+      - 'scripts/release/build-steve-phase1-darwin-package.sh'
+      - 'scripts/release/smoke-steve-phase1-package.sh'
+      - 'docs/phase-1/steve-external-smoke-v1.md'
+  push:
+    branches:
+      - main
+    paths:
+      - '.github/workflows/phase1-steve-github-release.yml'
+      - 'scripts/release/build-steve-phase1-package.sh'
+      - 'scripts/release/build-steve-phase1-darwin-package.sh'
+      - 'scripts/release/smoke-steve-phase1-package.sh'
+      - 'docs/phase-1/steve-external-smoke-v1.md'
+
+permissions:
+  contents: read
+
+env:
+  RELEASE_TAG: steve-v0.1.0-phase1
+
+jobs:
+  linux-package:
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: haskell-actions/setup@v2
+        with:
+          ghc-version: '9.6.7'
+          cabal-version: 'latest'
+
+      - name: Build Linux release asset
+        shell: bash
+        run: |
+          set -euo pipefail
+          out="$RUNNER_TEMP/steve-release-linux"
+          mkdir -p "$out"
+          scripts/release/build-steve-phase1-package.sh "$out"
+
+      - name: Verify and smoke Linux release asset
+        shell: bash
+        run: |
+          set -euo pipefail
+          out="$RUNNER_TEMP/steve-release-linux"
+          archive="phil-steve-0.1.0-phase1-x86_64-linux.tar.gz"
+          (
+            cd "$out"
+            sha256sum -c "$archive.sha256"
+          )
+          consumer="$RUNNER_TEMP/steve-release-linux-consumer"
+          mkdir -p "$consumer"
+          tar -xzf "$out/$archive" -C "$consumer"
+          (
+            cd "$consumer/phil-steve-0.1.0-phase1-x86_64-linux"
+            ./smoke-test.sh
+          ) | tee "$out/smoke-evidence.txt"
+          grep -q '^PASS: packaged Phase-1 Steve put/get and corruption smoke$' \
+            "$out/smoke-evidence.txt"
+          grep -Eq '^platform=Linux .*x86_64$' "$out/smoke-evidence.txt"
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: steve-release-platform-linux
+          path: |
+            ${{ runner.temp }}/steve-release-linux/phil-steve-0.1.0-phase1-x86_64-linux.tar.gz
+            ${{ runner.temp }}/steve-release-linux/phil-steve-0.1.0-phase1-x86_64-linux.tar.gz.sha256
+            ${{ runner.temp }}/steve-release-linux/smoke-evidence.txt
+          if-no-files-found: error
+
+  darwin-package:
+    runs-on: macos-26
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Verify native Apple Silicon runner
+        shell: bash
+        run: |
+          set -euo pipefail
+          test "$(uname -m)" = "arm64"
+          sw_vers
+
+      - uses: haskell-actions/setup@v2
+        with:
+          ghc-version: '9.6.7'
+          cabal-version: 'latest'
+
+      - name: Build Darwin release asset
+        shell: bash
+        run: |
+          set -euo pipefail
+          out="$RUNNER_TEMP/steve-release-darwin"
+          mkdir -p "$out"
+          scripts/release/build-steve-phase1-darwin-package.sh "$out"
+
+      - name: Verify and smoke Darwin release asset
+        shell: bash
+        run: |
+          set -euo pipefail
+          out="$RUNNER_TEMP/steve-release-darwin"
+          archive="phil-steve-0.1.0-phase1-aarch64-apple-darwin.tar.gz"
+          (
+            cd "$out"
+            shasum -a 256 -c "$archive.sha256"
+          )
+          consumer="$RUNNER_TEMP/steve-release-darwin-consumer"
+          mkdir -p "$consumer"
+          tar -xzf "$out/$archive" -C "$consumer"
+          package="$consumer/phil-steve-0.1.0-phase1-aarch64-apple-darwin"
+          file "$package/bin/steve" | grep -q 'Mach-O 64-bit executable arm64'
+          file "$package/bin/philc" | grep -q 'Mach-O 64-bit executable arm64'
+          (
+            cd "$package"
+            ./smoke-test.sh
+          ) | tee "$out/smoke-evidence.txt"
+          grep -q '^PASS: packaged Phase-1 Steve put/get and corruption smoke$' \
+            "$out/smoke-evidence.txt"
+          grep -Eq '^platform=Darwin .*arm64$' "$out/smoke-evidence.txt"
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: steve-release-platform-darwin
+          path: |
+            ${{ runner.temp }}/steve-release-darwin/phil-steve-0.1.0-phase1-aarch64-apple-darwin.tar.gz
+            ${{ runner.temp }}/steve-release-darwin/phil-steve-0.1.0-phase1-aarch64-apple-darwin.tar.gz.sha256
+            ${{ runner.temp }}/steve-release-darwin/smoke-evidence.txt
+          if-no-files-found: error
+
+  release-bundle:
+    needs:
+      - linux-package
+      - darwin-package
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/download-artifact@v4
+        with:
+          pattern: steve-release-platform-*
+          path: incoming
+
+      - name: Compose exact browser-download release bundle
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p release-assets
+          find incoming -type f \( -name '*.tar.gz' -o -name '*.tar.gz.sha256' \) \
+            -exec cp '{}' release-assets/ \;
+
+          linux='phil-steve-0.1.0-phase1-x86_64-linux.tar.gz'
+          darwin='phil-steve-0.1.0-phase1-aarch64-apple-darwin.tar.gz'
+          test -s "release-assets/$linux"
+          test -s "release-assets/$linux.sha256"
+          test -s "release-assets/$darwin"
+          test -s "release-assets/$darwin.sha256"
+          test "$(find release-assets -maxdepth 1 -type f | wc -l)" -eq 4
+
+          (
+            cd release-assets
+            sha256sum -c "$linux.sha256"
+            sha256sum -c "$darwin.sha256"
+          )
+
+          cat > release-assets/release-notes.md <<'EOF'
+          # Phil Steve 0.1 — Phase 1
+
+          This is the Phase-1 Steve content-addressed-store release. Each package
+          contains native `steve` and `philc` executables, canonical Phil source,
+          certified release/TCB records, and `./smoke-test.sh`. No GitHub CLI,
+          repository checkout, GHC, Cabal, or LLVM installation is required to use
+          the downloaded package.
+
+          ## Apple Silicon macOS
+
+          Download these two assets from this release page:
+
+          - `phil-steve-0.1.0-phase1-aarch64-apple-darwin.tar.gz`
+          - `phil-steve-0.1.0-phase1-aarch64-apple-darwin.tar.gz.sha256`
+
+          Then run:
+
+          ```sh
+          shasum -a 256 -c phil-steve-0.1.0-phase1-aarch64-apple-darwin.tar.gz.sha256
+          tar -xzf phil-steve-0.1.0-phase1-aarch64-apple-darwin.tar.gz
+          cd phil-steve-0.1.0-phase1-aarch64-apple-darwin
+          ./smoke-test.sh
+          ```
+
+          ## x86-64 Linux
+
+          Download these two assets:
+
+          - `phil-steve-0.1.0-phase1-x86_64-linux.tar.gz`
+          - `phil-steve-0.1.0-phase1-x86_64-linux.tar.gz.sha256`
+
+          Then run:
+
+          ```sh
+          sha256sum -c phil-steve-0.1.0-phase1-x86_64-linux.tar.gz.sha256
+          tar -xzf phil-steve-0.1.0-phase1-x86_64-linux.tar.gz
+          cd phil-steve-0.1.0-phase1-x86_64-linux
+          ./smoke-test.sh
+          ```
+
+          Phase 1 intentionally retains the Haskell compiler/checker and the other
+          TCB components named inside each package rather than claiming Phase-2
+          independent-compiler assurance.
+          EOF
+
+          {
+            echo 'Linux package smoke:'
+            cat incoming/steve-release-platform-linux/smoke-evidence.txt
+            echo
+            echo 'Darwin package smoke:'
+            cat incoming/steve-release-platform-darwin/smoke-evidence.txt
+          } > release-assets/build-evidence.txt
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: steve-github-release-bundle
+          path: release-assets/
+          if-no-files-found: error
+
+  publish:
+    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+    needs:
+      - release-bundle
+    runs-on: ubuntu-24.04
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/download-artifact@v4
+        with:
+          name: steve-github-release-bundle
+          path: dist
+
+      - name: Publish immutable GitHub Release assets
+        shell: bash
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          set -euo pipefail
+          cd dist
+          linux='phil-steve-0.1.0-phase1-x86_64-linux.tar.gz'
+          darwin='phil-steve-0.1.0-phase1-aarch64-apple-darwin.tar.gz'
+
+          sha256sum -c "$linux.sha256"
+          sha256sum -c "$darwin.sha256"
+
+          if gh release view "$RELEASE_TAG" >/dev/null 2>&1; then
+            draft="$(gh release view "$RELEASE_TAG" --json isDraft --jq '.isDraft')"
+            if [[ "$draft" != 'true' ]]; then
+              echo "GitHub Release $RELEASE_TAG is already published; leaving the immutable release unchanged."
+              exit 0
+            fi
+            tag_sha="$(gh api "repos/$GITHUB_REPOSITORY/git/ref/tags/$RELEASE_TAG" --jq '.object.sha')"
+            test "$tag_sha" = "$GITHUB_SHA"
+          else
+            gh release create "$RELEASE_TAG" \
+              --target "$GITHUB_SHA" \
+              --title 'Phil Steve 0.1 — Phase 1' \
+              --notes-file release-notes.md \
+              --draft
+          fi
+
+          gh release upload "$RELEASE_TAG" \
+            "$linux" "$linux.sha256" \
+            "$darwin" "$darwin.sha256" \
+            --clobber
+
+          tag_sha="$(gh api "repos/$GITHUB_REPOSITORY/git/ref/tags/$RELEASE_TAG" --jq '.object.sha')"
+          test "$tag_sha" = "$GITHUB_SHA"
+
+          expected="$(printf '%s\n' "$darwin" "$darwin.sha256" "$linux" "$linux.sha256" | sort)"
+          actual="$(gh release view "$RELEASE_TAG" --json assets --jq '.assets[].name' | sort)"
+          test "$actual" = "$expected"
+
+          gh release edit "$RELEASE_TAG" --draft=false
+          gh release view "$RELEASE_TAG" --json url --jq '.url'
