@@ -1,0 +1,107 @@
+name: Temporary Phase 1 AArch64 Apple Darwin Steve Native
+
+on:
+  push:
+    branches:
+      - phase1-target-aarch64-apple-darwin-steve-native
+  workflow_dispatch:
+
+jobs:
+  steve-native:
+    runs-on: macos-26
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Verify native Apple Silicon runner
+        shell: bash
+        run: |
+          set -euo pipefail
+          test "$(uname -m)" = "arm64"
+          sw_vers
+
+      - name: Resolve LLVM 18
+        shell: bash
+        run: |
+          set -euo pipefail
+          if ! brew list llvm@18 >/dev/null 2>&1; then
+            brew install llvm@18
+          fi
+          llvm_prefix="$(brew --prefix llvm@18)"
+          echo "LLVM_PREFIX=$llvm_prefix" >> "$GITHUB_ENV"
+          "$llvm_prefix/bin/clang" --version
+
+      - name: Set up Haskell
+        uses: haskell-actions/setup@v2
+        with:
+          ghc-version: '9.6.7'
+          cabal-version: 'latest'
+
+      - name: Build complete Haskell substrate
+        shell: bash
+        run: |
+          set -euo pipefail
+          cabal build all --enable-tests
+
+      - name: Build native Darwin Steve
+        shell: bash
+        run: |
+          set -euo pipefail
+          out="$RUNNER_TEMP/phil-aarch64-apple-darwin-steve"
+          mkdir -p "$out"
+
+          cabal -v0 exec -- runghc -isrc -itest -Wall -Werror \
+            test/Phase1TargetAArch64AppleDarwinMain.hs emit > "$out/steve.ll"
+
+          "$LLVM_PREFIX/bin/clang" \
+            --target=aarch64-apple-darwin \
+            -c "$out/steve.ll" \
+            -o "$out/steve.o"
+
+          cabal exec -- ghc -isrc -iruntime/phase1 \
+            -package directory -package unix \
+            -Wall -Werror \
+            runtime/phase1/StevePublicMain.hs "$out/steve.o" \
+            -o "$out/steve"
+
+          file "$out/steve" | tee "$out/executable-file.txt"
+          grep -q 'Mach-O 64-bit executable arm64' "$out/executable-file.txt"
+
+      - name: Exercise native Steve PUT and GET
+        shell: bash
+        run: |
+          set -euo pipefail
+          out="$RUNNER_TEMP/phil-aarch64-apple-darwin-steve"
+          work="$out/smoke"
+          mkdir -p "$work/store" "$work/files"
+          printf 'hello from native Darwin Steve\n' > "$work/files/input.txt"
+
+          content_id="$(printf 'input.txt\n' | "$out/steve" put "$work/store" "$work/files")"
+          printf '%s\n' "$content_id" | tee "$out/content-id.txt"
+          printf '%s\n' "$content_id" | grep -Eq '^[0-9a-f]{64}$'
+
+          printf '%s\noutput.txt\n' "$content_id" | \
+            "$out/steve" get "$work/store" "$work/files"
+          cmp "$work/files/input.txt" "$work/files/output.txt"
+
+          object="$(find "$work/store" -type f -name "$content_id" -print -quit)"
+          test -n "$object"
+          printf 'DO NOT REPLACE\n' > "$work/files/guard.txt"
+          printf 'corrupted\n' > "$object"
+          printf '%s\nguard.txt\n' "$content_id" | \
+            "$out/steve" get "$work/store" "$work/files"
+          grep -Fx 'DO NOT REPLACE' "$work/files/guard.txt"
+
+          printf 'PASS: native aarch64 Apple Darwin Steve put/get and corruption smoke\n' \
+            | tee "$out/smoke-evidence.txt"
+          uname -a | tee -a "$out/smoke-evidence.txt"
+          sw_vers | tee -a "$out/smoke-evidence.txt"
+
+      - name: Upload native Darwin Steve evidence
+        uses: actions/upload-artifact@v4
+        with:
+          name: phase1-aarch64-apple-darwin-steve-native
+          path: |
+            ${{ runner.temp }}/phil-aarch64-apple-darwin-steve/executable-file.txt
+            ${{ runner.temp }}/phil-aarch64-apple-darwin-steve/content-id.txt
+            ${{ runner.temp }}/phil-aarch64-apple-darwin-steve/smoke-evidence.txt
+          if-no-files-found: error
