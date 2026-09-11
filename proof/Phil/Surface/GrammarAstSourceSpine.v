@@ -104,8 +104,6 @@ Proof.
     cbn in Hnormalize; try discriminate Hnormalize.
   destruct fields as [| top_levels_part fields];
     cbn in Hnormalize; try discriminate Hnormalize.
-  destruct fields as [| extra fields];
-    cbn in Hnormalize; try discriminate Hnormalize.
   destruct imports_part as
     [literal
     | class lexeme
