@@ -10,6 +10,8 @@ New to Phil? Read **[A Tour of Phil — Phase 0](docs/tutorials/tour-phase0.md)*
 
 Phase 0 demonstrates one architecture end to end. **[A Tour of Phil — Phase 1](docs/tutorials/tour-phase1.md)** is the work-in-progress semantic tour of the generalized language: stable architecture/process identity, generics, first-class callables/effects/authority, reusable protocols, static process networks, provider replacement, deterministic execution, checked lowering, and application verification. It deliberately avoids claimed executable Phase 1 source listings until the canonical Grammar-v1 parser/elaborator path can check those examples and keep them under CI.
 
+For a focused checked Phase 1 example, **[Steve provider put/get walkthrough](docs/tutorials/steve-provider-put-get.md)** follows the current content-addressed-store witness in both directions and explains where provider replacement, ownership, and digest checking meet the canonical source.
+
 ## Core formulations
 
 **What Phil is**
@@ -53,6 +55,7 @@ The canonical Phase 1 source/SourceBundle front end, portable persisted-lineage 
 - `test/` — conformance and correspondence tests
 - `docs/tutorials/tour-phase0.md` — beginner-facing executable tour of the frozen Phase 0 reference program
 - `docs/tutorials/tour-phase1.md` — work-in-progress semantic tour of the generalized Phase 1 language
+- `docs/tutorials/steve-provider-put-get.md` — checked Phase 1 Steve provider put/get walkthrough
 - `docs/implementation-status.md` — Phase 0 bootstrap-checker status snapshot
 - `docs/phase-0/assurance-status.md` — Phase 0 proof-certification snapshot
 - `docs/phase-0/` — checker-facing frozen Phase 0 design/ABI snapshot
