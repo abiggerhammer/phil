@@ -56,7 +56,7 @@ main = do
               , "}"
               , "program main = instantiate Mesh[U8] {"
               , "  entry input : U8;"
-              , "  assume true within program.scope;"
+              , "  assume true within app.scope;"
               , "  export obligation proof.ready to audit.sink;"
               , "  observable metrics.bytes;"
               , "};"
@@ -132,7 +132,7 @@ checkMismatch = do
   (_, productionValues) <- parseValues
     "mismatch-production"
     (Text.unlines
-      [ "architecture A { role p.Server = internal.worker; constraint false; }"
+      [ "architecture A { role p.Server = worker.node; constraint false; }"
       , "program main = instantiate A { observable metrics.bad; };"
       ])
   if referenceValues /= productionValues
