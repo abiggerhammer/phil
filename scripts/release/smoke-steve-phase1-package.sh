@@ -6,7 +6,18 @@ cd "$package_root"
 
 release="share/phil-steve/steve.release-package"
 
-sha256sum -c SHA256SUMS
+if command -v sha256sum >/dev/null 2>&1; then
+  verify_checksums() { sha256sum -c "$1"; }
+  sha256_file() { sha256sum "$1" | awk '{print $1}'; }
+elif command -v shasum >/dev/null 2>&1; then
+  verify_checksums() { shasum -a 256 -c "$1"; }
+  sha256_file() { shasum -a 256 "$1" | awk '{print $1}'; }
+else
+  echo 'need sha256sum or shasum for package verification' >&2
+  exit 1
+fi
+
+verify_checksums SHA256SUMS
 
 test -x bin/steve
 test -x bin/philc
@@ -56,5 +67,5 @@ grep -qx 'must survive corrupt GET' "$work/user-files/guard.bin"
 
 printf 'PASS: packaged Phase-1 Steve put/get and corruption smoke\n'
 printf 'platform=%s\n' "$(uname -srm)"
-printf 'release_package_sha256=%s\n' "$(sha256sum "$release" | awk '{print $1}')"
-printf 'package_manifest_sha256=%s\n' "$(sha256sum SHA256SUMS | awk '{print $1}')"
+printf 'release_package_sha256=%s\n' "$(sha256_file "$release")"
+printf 'package_manifest_sha256=%s\n' "$(sha256_file SHA256SUMS)"

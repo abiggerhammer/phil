@@ -1,0 +1,106 @@
+name: Temporary Phase 1 AArch64 Apple Darwin Steve Package
+
+on:
+  push:
+    branches:
+      - phase1-target-aarch64-apple-darwin-steve-package
+  workflow_dispatch:
+
+jobs:
+  package:
+    runs-on: macos-26
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Verify native Apple Silicon runner
+        shell: bash
+        run: |
+          set -euo pipefail
+          test "$(uname -m)" = "arm64"
+          sw_vers
+
+      - name: Resolve LLVM 18
+        shell: bash
+        run: |
+          set -euo pipefail
+          if ! brew list llvm@18 >/dev/null 2>&1; then
+            brew install llvm@18
+          fi
+          llvm_prefix="$(brew --prefix llvm@18)"
+          echo "LLVM_PREFIX=$llvm_prefix" >> "$GITHUB_ENV"
+          "$llvm_prefix/bin/clang" --version
+
+      - name: Set up Haskell
+        uses: haskell-actions/setup@v2
+        with:
+          ghc-version: '9.6.7'
+          cabal-version: 'latest'
+
+      - name: Build Darwin Steve package
+        shell: bash
+        run: |
+          set -euo pipefail
+          out="$RUNNER_TEMP/phil-steve-darwin-package"
+          mkdir -p "$out"
+          scripts/release/build-steve-phase1-darwin-package.sh "$out"
+
+      - name: Verify archive checksum and contents
+        shell: bash
+        run: |
+          set -euo pipefail
+          out="$RUNNER_TEMP/phil-steve-darwin-package"
+          archive="$out/phil-steve-0.1.0-phase1-aarch64-apple-darwin.tar.gz"
+          checksum="$archive.sha256"
+
+          (cd "$out" && shasum -a 256 -c "$(basename "$checksum")")
+          tar -tzf "$archive" | grep -Fx 'phil-steve-0.1.0-phase1-aarch64-apple-darwin/bin/steve'
+          tar -tzf "$archive" | grep -Fx 'phil-steve-0.1.0-phase1-aarch64-apple-darwin/bin/philc'
+          tar -tzf "$archive" | grep -Fx 'phil-steve-0.1.0-phase1-aarch64-apple-darwin/smoke-test.sh'
+          tar -tzf "$archive" | grep -Fx 'phil-steve-0.1.0-phase1-aarch64-apple-darwin/share/phil-steve/steve.release-package'
+
+      - name: Smoke only the unpacked package
+        shell: bash
+        run: |
+          set -euo pipefail
+          out="$RUNNER_TEMP/phil-steve-darwin-package"
+          consumer="$RUNNER_TEMP/phil-steve-darwin-consumer"
+          mkdir -p "$consumer"
+          tar -xzf "$out/phil-steve-0.1.0-phase1-aarch64-apple-darwin.tar.gz" -C "$consumer"
+          package="$consumer/phil-steve-0.1.0-phase1-aarch64-apple-darwin"
+
+          test "$(file "$package/bin/steve")" != ""
+          file "$package/bin/steve" | grep -q 'Mach-O 64-bit executable arm64'
+          file "$package/bin/philc" | grep -q 'Mach-O 64-bit executable arm64'
+
+          (
+            cd "$package"
+            ./smoke-test.sh
+          ) | tee "$out/smoke-evidence.txt"
+
+      - name: Verify packaged Darwin release and TCB identity
+        shell: bash
+        run: |
+          set -euo pipefail
+          out="$RUNNER_TEMP/phil-steve-darwin-package"
+          consumer="$RUNNER_TEMP/phil-steve-darwin-consumer"
+          package="$consumer/phil-steve-0.1.0-phase1-aarch64-apple-darwin"
+          release="$package/share/phil-steve/steve.release-package"
+
+          grep -Fx $'release-profile\trevision=phase1.target.aarch64-apple-darwin.v1' "$release"
+          grep -F $'llvm\t' "$release" | grep -F 'target-triple=aarch64-apple-darwin' \
+            | grep -F 'data-layout=e-m:o-i64:64-i128:128-n32:64-S128' \
+            | grep -F 'runtime-abi-profile=phil-runtime/phase1/runtime-choice-provider-v1'
+          test "$(grep -c $'^tcb\t' "$release")" -eq 6
+          grep -F 'name=aarch64 Apple Darwin target assumptions' "$package/TCB.txt"
+          grep -F 'revision=phase1-aarch64-apple-darwin-v1' "$package/TCB.txt"
+          ! grep -q 'x86_64 Linux target assumptions' "$package/TCB.txt"
+
+      - name: Upload Darwin Steve package evidence
+        uses: actions/upload-artifact@v4
+        with:
+          name: phil-steve-0.1.0-phase1-aarch64-apple-darwin
+          path: |
+            ${{ runner.temp }}/phil-steve-darwin-package/phil-steve-0.1.0-phase1-aarch64-apple-darwin.tar.gz
+            ${{ runner.temp }}/phil-steve-darwin-package/phil-steve-0.1.0-phase1-aarch64-apple-darwin.tar.gz.sha256
+            ${{ runner.temp }}/phil-steve-darwin-package/smoke-evidence.txt
+          if-no-files-found: error
