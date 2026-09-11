@@ -1,0 +1,55 @@
+name: Phase 1 Surface Grammar Rocq Source Spine Correspondence
+
+on:
+  pull_request:
+    paths:
+      - 'grammar/phase1-surface.ebnf'
+      - 'grammar/phase1-surface-determinacy.json'
+      - 'scripts/derive_phase1_surface_grammar.py'
+      - 'scripts/derive_phase1_surface_determinacy_certificate.py'
+      - 'proof/Phil/Surface/Grammar*.v'
+      - '.github/workflows/phase1-surface-grammar-rocq-source-spine-correspondence.yml'
+  push:
+    branches: [main]
+    paths:
+      - 'grammar/phase1-surface.ebnf'
+      - 'grammar/phase1-surface-determinacy.json'
+      - 'scripts/derive_phase1_surface_grammar.py'
+      - 'scripts/derive_phase1_surface_determinacy_certificate.py'
+      - 'proof/Phil/Surface/Grammar*.v'
+      - '.github/workflows/phase1-surface-grammar-rocq-source-spine-correspondence.yml'
+
+permissions:
+  contents: read
+
+jobs:
+  rocq-source-spine-correspondence:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    container:
+      image: rocq/rocq-prover:9.2.0
+      options: --user root
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Derive exact Grammar-v1 inputs
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 scripts/derive_phase1_surface_grammar.py --write
+          python3 scripts/derive_phase1_surface_determinacy_certificate.py --write
+          python3 scripts/derive_phase1_surface_grammar.py --check
+          python3 scripts/derive_phase1_surface_determinacy_certificate.py --check
+
+      - name: Compile proof-side source spine correspondence
+        shell: bash
+        run: |
+          set -euo pipefail
+          export PATH="/home/rocq/.opam/${COMPILER}/bin:$PATH"
+          {
+            echo '-Q proof/Phil Phil'
+            find proof/Phil/Surface -maxdepth 1 -type f -name 'Grammar*.v' -print | sort
+          } > _CoqProject.surface-source-spine
+          rocq makefile -f _CoqProject.surface-source-spine -o Makefile.surface-source-spine
+          make -f Makefile.surface-source-spine -j2 \
+            proof/Phil/Surface/GrammarAstSourceSpine.vo
