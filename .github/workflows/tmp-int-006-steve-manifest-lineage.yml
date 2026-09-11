@@ -1,0 +1,44 @@
+name: Temporary INT-006 Steve Provider Manifest Lineage
+
+on:
+  workflow_dispatch:
+  push:
+    branches: [phase1-int-006-steve-manifest-lineage]
+    paths:
+      - 'test/Phase1INT006SteveProviderManifestLineageMain.hs'
+      - '.github/workflows/tmp-int-006-steve-manifest-lineage.yml'
+
+permissions:
+  contents: read
+
+jobs:
+  steve-provider-manifest-lineage:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: haskell-actions/setup@v2
+        with:
+          ghc-version: '9.6.7'
+          cabal-version: 'latest'
+
+      - name: Build complete Haskell substrate
+        run: cabal build all --enable-tests
+
+      - name: Strict typecheck Steve provider manifest lineage witness
+        run: |
+          cabal exec -- ghc -isrc -itest -Wall -Werror -fno-code \
+            test/Phase1INT006SteveProviderManifestLineageMain.hs
+
+      - name: Exercise Steve provider manifest lineage witness
+        run: |
+          cabal exec -- runghc -isrc -itest -Wall -Werror \
+            test/Phase1INT006SteveProviderManifestLineageMain.hs
+
+      - name: Replay Steve provider substitution boundary
+        run: cabal exec -- runghc -isrc -itest -Wall -Werror test/Phase1INT006SteveProviderSubstitutionMain.hs
+
+      - name: Replay real-witness AssuranceManifest release envelope
+        run: cabal exec -- runghc -isrc -itest -Wall -Werror test/Phase1INT005RealWitnessManifestMain.hs
+
+      - name: Replay materialized Steve provider qualifications
+        run: cabal exec -- runghc -isrc -itest -Wall -Werror test/Phase1SteveProviderQualificationMain.hs
