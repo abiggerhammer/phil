@@ -70,8 +70,8 @@ jobs:
             -o Makefile.surface-production-binding
           make -f Makefile.surface-production-binding -j2 \
             proof/Phil/Surface/GrammarParserProductionExtraction.vo
-          echo 'fe9ae9159c61e2cb2fe5054b8e068a4fdfbd7be2bf9644f90f22bf1605329ff2  SurfaceGrammarRecognizerKernel.hs' | sha256sum -c -
-          echo 'fe9ae9159c61e2cb2fe5054b8e068a4fdfbd7be2bf9644f90f22bf1605329ff2  generated/SurfaceGrammarRecognizerKernel.hs' | sha256sum -c -
+          echo 'bd1bfb3cf517fe09bdaa9dbf5ceb034780e280488baf1cbc97a34ee5a8a2d19f  SurfaceGrammarRecognizerKernel.hs' | sha256sum -c -
+          echo 'bd1bfb3cf517fe09bdaa9dbf5ceb034780e280488baf1cbc97a34ee5a8a2d19f  generated/SurfaceGrammarRecognizerKernel.hs' | sha256sum -c -
           cmp SurfaceGrammarRecognizerKernel.hs generated/SurfaceGrammarRecognizerKernel.hs
 
       - name: Check production mirror is exact kernel plus warning policy
