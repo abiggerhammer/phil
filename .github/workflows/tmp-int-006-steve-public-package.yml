@@ -1,0 +1,95 @@
+name: Temporary INT-006 Steve Public Package
+
+on:
+  workflow_dispatch:
+  push:
+    branches: [phase1-int-006-steve-public-package]
+
+permissions:
+  contents: read
+
+jobs:
+  steve-public-package:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: haskell-actions/setup@v2
+        with:
+          ghc-version: '9.6.7'
+          cabal-version: 'latest'
+
+      - name: Build complete Haskell substrate
+        run: cabal build all --enable-tests
+
+      - name: Replay canonical Steve application shell
+        run: |
+          cabal exec -- runghc -isrc -itest -Wall -Werror \
+            test/Phase1INT006SteveApplicationShellMain.hs
+
+      - name: Replay real Steve provider substitution
+        run: |
+          cabal exec -- runghc -isrc -itest -Wall -Werror \
+            test/Phase1INT006SteveProviderSubstitutionMain.hs
+
+      - name: Replay Steve provider manifest lineage
+        run: |
+          cabal exec -- runghc -isrc -itest -Wall -Werror \
+            test/Phase1INT006SteveProviderManifestLineageMain.hs
+
+      - name: Replay direct Steve CAS semantics
+        run: |
+          cabal exec -- runghc \
+            --ghc-arg=-package --ghc-arg=directory \
+            --ghc-arg=-package --ghc-arg=unix \
+            -isrc -itest -Wall -Werror test/Phase1INT006SteveCASMain.hs
+
+      - name: Exercise certified runtime-choice LLVM checks
+        run: |
+          cabal exec -- runghc -isrc -itest -Wall -Werror \
+            test/Phase1INT006RuntimeChoiceLLVMMain.hs
+
+      - name: Build and execute exact native Steve provider bridge
+        run: |
+          PHIL_LLVM18_TOOLS="clang"
+          source scripts/ci/resolve-llvm18.sh
+          unset PHIL_LLVM18_TOOLS
+
+          work="$RUNNER_TEMP/phil-int006-steve-public-package"
+          mkdir -p "$work"
+          llvm="$work/steve-runtime-choice.ll"
+          object="$work/steve-runtime-choice.o"
+          executable="$work/steve-native-provider-smoke"
+
+          cabal exec -- runghc -isrc -itest -Wall -Werror \
+            test/Phase1INT006RuntimeChoiceLLVMMain.hs emit > "$llvm"
+          "$CLANG" --target=x86_64-unknown-linux-gnu -c "$llvm" -o "$object"
+
+          cabal exec -- ghc -isrc -iruntime/phase1 \
+            -package directory -package unix \
+            -Wall -Werror \
+            runtime/phase1/SteveProviderBridgeSmokeMain.hs "$object" \
+            -o "$executable"
+
+          "$executable"
+
+      - name: Exercise current certified Steve package and TCB disclosure
+        run: |
+          work="$RUNNER_TEMP/phil-int006-steve-public-package"
+          package="$work/steve.release-package"
+
+          cabal exec -- runghc -isrc -itest -Wall -Werror \
+            test/Phase1INT005ReleasePackageMain.hs emit steve > "$package"
+
+          test -s "$package"
+          grep -q '^package[[:space:]]id=' "$package"
+          grep -q '^manifest[[:space:]]' "$package"
+          grep -q '^llvm[[:space:]]' "$package"
+          test "$(grep -c '^tcb[[:space:]]' "$package")" -eq 6
+          grep -q 'name=Phil Haskell compiler/checker' "$package"
+          grep -q 'basis=first implementation remains trusted until Phase 2' "$package"
+
+      - name: Replay real Steve manifest closure
+        run: |
+          cabal exec -- runghc -isrc -itest -Wall -Werror \
+            test/Phase1INT005RealWitnessManifestMain.hs
