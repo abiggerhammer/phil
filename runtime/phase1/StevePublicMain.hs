@@ -7,6 +7,7 @@ import Control.Exception (IOException, finally, try)
 import qualified Data.ByteString as ByteString
 import Data.ByteString (ByteString)
 import Data.Text (Text)
+import qualified Data.Text as Text
 import qualified Data.Text.IO as TextIO
 import Foreign.C.Types (CInt)
 import Foreign.Ptr (Ptr)
@@ -144,9 +145,7 @@ replaceUserFile root path bytes = do
 
 resolveUserPath :: FilePath -> ProviderRelativePath -> FilePath
 resolveUserPath root path =
-  foldl (</>) root (map showSegment (providerRelativePathSegments path))
-  where
-    showSegment = TextIO.unpack
+  foldl (</>) root (map Text.unpack (providerRelativePathSegments path))
 
 eitherToMaybe :: Either a b -> Maybe b
 eitherToMaybe = either (const Nothing) Just
