@@ -53,6 +53,8 @@ cp examples/steve/put-cli.phil "$stage/share/phil-steve/source/"
 cp examples/steve/get-cli.phil "$stage/share/phil-steve/source/"
 cp docs/tutorials/steve-provider-put-get.md \
   "$stage/share/phil-steve/docs/provider-put-get.md"
+cp scripts/release/smoke-steve-phase1-package.sh "$stage/smoke-test.sh"
+chmod 0755 "$stage/smoke-test.sh"
 cp LICENSE "$stage/LICENSE"
 
 {
@@ -79,6 +81,18 @@ compiler/checker remains trusted until Phase 2; the package states that rather
 than hiding it. The conventional host runtime, qualified provider realization,
 LLVM toolchain, external checkers, and x86_64 Linux target assumptions are also
 named there.
+
+## Quick smoke
+
+After unpacking the archive, run:
+
+    ./smoke-test.sh
+
+The smoke verifies every packaged file against `SHA256SUMS`, checks that the
+human-readable TCB is an exact copy of the certified TCB records, exercises
+`philc`, performs real Steve PUT and GET operations, and verifies that corrupt
+CAS content cannot replace an existing output file. Its final lines report the
+platform and package evidence digests suitable for an external-use report.
 
 ## PUT
 
@@ -112,6 +126,7 @@ replace an existing output file.
 
 - `bin/steve` — runnable Phase-1 Steve command for x86_64 Linux.
 - `bin/philc` — ordinary Phil checker/compiler executable shipped with Steve.
+- `smoke-test.sh` — package-only external-use smoke.
 - `share/phil-steve/source/` — canonical `StevePut`, `SteveGet`, and CLI Phil source.
 - `share/phil-steve/steve.release-package` — certified machine-readable release/TCB record.
 - `share/phil-steve/docs/provider-put-get.md` — provider-path tutorial.
@@ -134,6 +149,9 @@ epoch="${SOURCE_DATE_EPOCH:-$(git log -1 --format=%ct)}"
 archive="$output_dir/$archive_name"
 tar --sort=name --owner=0 --group=0 --numeric-owner --mtime="@$epoch" \
   -C "$work" -cf - "$package_name" | gzip -n > "$archive"
-sha256sum "$archive" > "$archive.sha256"
+(
+  cd "$output_dir"
+  sha256sum "$archive_name" > "$archive_name.sha256"
+)
 
 printf '%s\n' "$archive"
