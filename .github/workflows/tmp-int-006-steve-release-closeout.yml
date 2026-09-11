@@ -19,6 +19,9 @@ jobs:
           ghc-version: '9.6.7'
           cabal-version: 'latest'
 
+      - name: Build complete Haskell substrate
+        run: cabal build all --enable-tests
+
       - name: Replay Steve provider manifest lineage
         run: |
           cabal exec -- runghc -isrc -itest -Wall -Werror \
