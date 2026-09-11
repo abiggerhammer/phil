@@ -179,14 +179,6 @@ digestComputePrimitive :: PrimitiveSemantics
 digestComputePrimitive = PrimitiveProviderDecision [PrimitiveReadOnly]
   [ProviderOutcomeSpec "computed" [(Unrestricted, contentIdType)]]
 
-blobInstallPrimitive :: PrimitiveSemantics
-blobInstallPrimitive = PrimitiveProviderDecision
-  [PrimitiveReadOnly, PrimitiveConsume]
-  [ ProviderOutcomeSpec "installed" []
-  , ProviderOutcomeSpec "already-exists" []
-  , ProviderOutcomeSpec "storage-failure" [(Unrestricted, storageFailureType)]
-  ]
-
 blobReadPrimitive :: PrimitiveSemantics
 blobReadPrimitive = PrimitiveProviderDecision [PrimitiveReadOnly]
   [ ProviderOutcomeSpec "found" [(Linear, ownedBytesType)]
