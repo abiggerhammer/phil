@@ -13,7 +13,7 @@ import qualified Data.Set as Set
 import Data.Text (Text)
 import qualified Data.Text as Text
 import Phil.Core.Callable (SemanticEffect)
-import Phil.Core.Static (emptyStaticContext)
+import Phil.Core.Static (DeclarationKey (..), emptyStaticContext)
 import Phil.Core.Syntax (Mode (..), Ty (..))
 import Phil.IO.Console
   ( ConsoleOperation (..)
@@ -37,6 +37,7 @@ import Phil.Surface.Check
   , ReleaseSemanticAccount (..)
   , ReleaseTransitionContract (..)
   , ReleaseTransitionOutcome (..)
+  , SurfaceCallableSignature (..)
   , SurfaceEnvironment (..)
   , emptySurfaceEnvironment
   )
@@ -102,10 +103,10 @@ stevePutShellEnvironment = do
         , ("path_parse", pathParsePrimitive)
         , ("fs_read", fileReadPrimitive)
         , ("digest_compute", digestComputePrimitive)
-        , ("blob_install", blobInstallPrimitive)
         , ("content_id_render", contentIdRenderPrimitive)
         , ("console_write", consoleWritePrimitive)
         ]
+    , surfaceCallables = Map.singleton "StevePut" stevePutCallable
     , surfaceExpectedProvides = Just TyUnit
     }
 
@@ -121,9 +122,24 @@ steveGetShellEnvironment = do
         , ("digest_check", digestCheckPrimitive)
         , ("fs_replace", fileReplacePrimitive)
         ]
+    , surfaceCallables = Map.singleton "SteveGet" steveGetCallable
     , surfaceExpectedProvides = Just TyUnit
     , surfaceReleaseTransitions = [ownedBytesRelease]
     }
+
+stevePutCallable :: SurfaceCallableSignature
+stevePutCallable = SurfaceCallableSignature
+  { surfaceCallableDeclarationKey = DeclarationKey "decl:steve.put"
+  , surfaceCallableParameters = [(Linear, ownedBytesType)]
+  , surfaceCallableResult = Nothing
+  }
+
+steveGetCallable :: SurfaceCallableSignature
+steveGetCallable = SurfaceCallableSignature
+  { surfaceCallableDeclarationKey = DeclarationKey "decl:steve.get"
+  , surfaceCallableParameters = [(Unrestricted, contentIdType)]
+  , surfaceCallableResult = Nothing
+  }
 
 consoleReadLinePrimitive :: PrimitiveSemantics
 consoleReadLinePrimitive = PrimitiveProviderDecision []
@@ -162,14 +178,6 @@ fileReplacePrimitive = PrimitiveProviderDecision
 digestComputePrimitive :: PrimitiveSemantics
 digestComputePrimitive = PrimitiveProviderDecision [PrimitiveReadOnly]
   [ProviderOutcomeSpec "computed" [(Unrestricted, contentIdType)]]
-
-blobInstallPrimitive :: PrimitiveSemantics
-blobInstallPrimitive = PrimitiveProviderDecision
-  [PrimitiveReadOnly, PrimitiveConsume]
-  [ ProviderOutcomeSpec "installed" []
-  , ProviderOutcomeSpec "already-exists" []
-  , ProviderOutcomeSpec "storage-failure" [(Unrestricted, storageFailureType)]
-  ]
 
 blobReadPrimitive :: PrimitiveSemantics
 blobReadPrimitive = PrimitiveProviderDecision [PrimitiveReadOnly]
