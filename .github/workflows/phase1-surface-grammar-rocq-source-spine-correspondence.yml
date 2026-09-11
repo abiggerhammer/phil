@@ -39,6 +39,7 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
+          cd "$GITHUB_WORKSPACE"
           python3 - <<'PY'
           from pathlib import Path
           p = Path('proof/Phil/Surface/GrammarAstSourceHeader.v')
@@ -59,12 +60,13 @@ jobs:
           if changed:
               p.write_text(s)
           PY
-          git config user.name 'github-actions[bot]'
-          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
-          git add proof/Phil/Surface/GrammarAstSourceHeader.v
-          if ! git diff --cached --quiet; then
-            git commit -m 'Annotate exact-list lemma binder types'
-            git push origin HEAD:phase1-surface-grammar-corr-source-header
+          git config --global --add safe.directory "$GITHUB_WORKSPACE"
+          git -C "$GITHUB_WORKSPACE" config user.name 'github-actions[bot]'
+          git -C "$GITHUB_WORKSPACE" config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git -C "$GITHUB_WORKSPACE" add proof/Phil/Surface/GrammarAstSourceHeader.v
+          if ! git -C "$GITHUB_WORKSPACE" diff --cached --quiet; then
+            git -C "$GITHUB_WORKSPACE" commit -m 'Annotate exact-list lemma binder types'
+            git -C "$GITHUB_WORKSPACE" push origin HEAD:phase1-surface-grammar-corr-source-header
           fi
 
       - name: Derive exact Grammar-v1 inputs
