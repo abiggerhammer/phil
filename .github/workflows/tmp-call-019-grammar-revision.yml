@@ -1,0 +1,188 @@
+name: Temporary CALL-019 Grammar-v1 Invoke Revision
+
+on:
+  workflow_dispatch:
+  push:
+    branches: [phase1-call-019-grammar-revision]
+    paths:
+      - 'grammar/phase1-surface.ebnf'
+      - 'grammar/phase1-surface-determinacy.json'
+      - 'src/Phil/Surface/Lineage.hs'
+      - 'proof/Phil/Surface/Grammar*.v'
+      - 'generated/SurfaceGrammarRecognizerKernel.hs'
+      - 'src/SurfaceGrammarRecognizerKernel.hs'
+      - 'test/fixtures/phase1/**'
+      - '.github/workflows/phase1-surface-grammar-production-binding.yml'
+      - '.github/workflows/tmp-call-019-grammar-revision.yml'
+
+permissions:
+  contents: write
+
+jobs:
+  prepare-revision:
+    runs-on: ubuntu-latest
+    container:
+      image: rocq/rocq-prover:9.2.0
+      options: --user root
+    outputs:
+      pushed: ${{ steps.prepare.outputs.pushed }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - id: prepare
+        name: Regenerate canonical revision if needed
+        shell: bash
+        run: |
+          set -euo pipefail
+          if grep -q '^invoke_expression =' grammar/phase1-surface.ebnf; then
+            echo 'pushed=false' >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+
+          python3 - <<'PY'
+          from pathlib import Path
+          import hashlib
+
+          grammar_path = Path('grammar/phase1-surface.ebnf')
+          text = grammar_path.read_text(encoding='utf-8')
+          command_anchor = '''  | transport_expression
+  | accept_expression
+  | prove_expression
+  ;'''
+          command_replacement = '''  | transport_expression
+  | accept_expression
+  | invoke_expression
+  | prove_expression
+  ;'''
+          if command_anchor not in text:
+              raise SystemExit('CALL-019 command-expression insertion anchor not found')
+          text = text.replace(command_anchor, command_replacement, 1)
+          production_anchor = '\nconvert_expression =\n'
+          production = '''\ninvoke_expression =
+  "invoke", static_reference, term_arguments ;
+
+convert_expression =
+'''
+          if production_anchor not in text:
+              raise SystemExit('CALL-019 invoke production insertion anchor not found')
+          text = text.replace(production_anchor, production, 1)
+          grammar_path.write_text(text, encoding='utf-8')
+
+          old_digest = 'ca8843a10915b8b21cc2131b42a17ded213d2713bec81989350a9e7127b22159'
+          new_digest = hashlib.sha256(text.encode('utf-8')).hexdigest()
+          print(f'Grammar-v1 SHA-256: {new_digest}')
+          for path in Path('.').rglob('*'):
+              if not path.is_file() or '.git' in path.parts:
+                  continue
+              try:
+                  data = path.read_text(encoding='utf-8')
+              except (UnicodeDecodeError, OSError):
+                  continue
+              if old_digest in data:
+                  path.write_text(data.replace(old_digest, new_digest), encoding='utf-8')
+          PY
+
+          python3 scripts/derive_phase1_surface_grammar.py --write
+          python3 scripts/derive_phase1_surface_determinacy_certificate.py --write
+          python3 scripts/derive_phase1_surface_grammar.py --check
+          python3 scripts/derive_phase1_surface_determinacy_certificate.py --check
+
+          export PATH="/home/rocq/.opam/${COMPILER}/bin:$PATH"
+          {
+            echo '-Q proof/Phil Phil'
+            find proof/Phil/Surface -maxdepth 1 -type f -name 'Grammar*.v' -print | sort
+          } > _CoqProject.call019-grammar
+          rocq makefile -f _CoqProject.call019-grammar -o Makefile.call019-grammar
+          make -f Makefile.call019-grammar -j2 proof/Phil/Surface/GrammarParserProductionExtraction.vo
+
+          cp SurfaceGrammarRecognizerKernel.hs generated/SurfaceGrammarRecognizerKernel.hs
+          {
+            echo '{-# OPTIONS_GHC -Wno-name-shadowing #-}'
+            cat SurfaceGrammarRecognizerKernel.hs
+          } > src/SurfaceGrammarRecognizerKernel.hs
+
+          NEW_KERNEL_SHA="$(sha256sum SurfaceGrammarRecognizerKernel.hs | awk '{print $1}')"
+          OLD_KERNEL_SHA='fe9ae9159c61e2cb2fe5054b8e068a4fdfbd7be2bf9644f90f22bf1605329ff2'
+          echo "Recognizer kernel SHA-256: $NEW_KERNEL_SHA"
+          python3 - "$OLD_KERNEL_SHA" "$NEW_KERNEL_SHA" <<'PY'
+          from pathlib import Path
+          import sys
+          old, new = sys.argv[1:3]
+          for path in Path('.').rglob('*'):
+              if not path.is_file() or '.git' in path.parts:
+                  continue
+              try:
+                  data = path.read_text(encoding='utf-8')
+              except (UnicodeDecodeError, OSError):
+                  continue
+              if old in data:
+                  path.write_text(data.replace(old, new), encoding='utf-8')
+          PY
+
+          python3 scripts/derive_phase1_surface_grammar.py --check
+          python3 scripts/derive_phase1_surface_determinacy_certificate.py --check
+          cmp SurfaceGrammarRecognizerKernel.hs generated/SurfaceGrammarRecognizerKernel.hs
+          tail -n +2 src/SurfaceGrammarRecognizerKernel.hs | cmp SurfaceGrammarRecognizerKernel.hs -
+
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git add -A
+          git commit -m 'surface: bind CALL-019 invoke into Grammar-v1 revision'
+          git push origin HEAD:phase1-call-019-grammar-revision
+          echo 'pushed=true' >> "$GITHUB_OUTPUT"
+
+  kernel-identity:
+    needs: prepare-revision
+    if: needs.prepare-revision.outputs.pushed != 'true'
+    runs-on: ubuntu-latest
+    container:
+      image: rocq/rocq-prover:9.2.0
+      options: --user root
+    steps:
+      - uses: actions/checkout@v4
+      - name: Re-derive exact grammar inputs
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 scripts/derive_phase1_surface_grammar.py --check
+          python3 scripts/derive_phase1_surface_determinacy_certificate.py --check
+      - name: Fresh-extract recognizer and match production mirrors
+        shell: bash
+        run: |
+          set -euo pipefail
+          export PATH="/home/rocq/.opam/${COMPILER}/bin:$PATH"
+          {
+            echo '-Q proof/Phil Phil'
+            find proof/Phil/Surface -maxdepth 1 -type f -name 'Grammar*.v' -print | sort
+          } > _CoqProject.call019-grammar
+          rocq makefile -f _CoqProject.call019-grammar -o Makefile.call019-grammar
+          make -f Makefile.call019-grammar -j2 proof/Phil/Surface/GrammarParserProductionExtraction.vo
+          cmp SurfaceGrammarRecognizerKernel.hs generated/SurfaceGrammarRecognizerKernel.hs
+          tail -n +2 src/SurfaceGrammarRecognizerKernel.hs | cmp SurfaceGrammarRecognizerKernel.hs -
+
+  haskell-and-corpus:
+    needs: prepare-revision
+    if: needs.prepare-revision.outputs.pushed != 'true'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: haskell-actions/setup@v2
+        with:
+          ghc-version: '9.6.7'
+          cabal-version: 'latest'
+      - name: Build complete Haskell substrate
+        run: cabal build all --enable-tests
+      - name: Verify exact Grammar-v1 revision binding
+        run: cabal exec -- runghc -isrc -itest -Wall -Werror test/Phase1GrammarRevisionBindingMain.hs
+      - name: Replay CALL-019 explicit invoke syntax
+        run: cabal exec -- runghc -isrc -itest -Wall -Werror test/Phase1CALL019InvokeSyntaxMain.hs
+      - name: Replay exact callable resolution substrate
+        run: cabal exec -- runghc -isrc -itest -Wall -Werror test/Phase1CALL019CallableResolutionMain.hs
+      - name: Replay certified surface corpus bridge
+        shell: bash
+        run: |
+          set -euo pipefail
+          cabal exec -- ghc --make -Wall -Werror -isrc test/Phase1GrammarV1ReferenceKernelBridgeMain.hs -o /tmp/call019-grammar-bridge
+          python3 scripts/check_phase1_surface_corpus.py --emit-parser-cases | /tmp/call019-grammar-bridge
