@@ -1,4 +1,5 @@
 {-# LANGUAGE OverloadedStrings #-}
+{-# LANGUAGE PatternSynonyms #-}
 
 module Phil.Surface.Check.Engine
   ( checkSurfaceComponent
@@ -101,6 +102,7 @@ import Phil.Surface.Syntax
   , SourceSpan
   , Statement (..)
   , SurfaceExpression (..)
+  , pattern InvokeExpression
   , SurfaceProposition
   , SurfaceType
   )
@@ -293,6 +295,8 @@ evalExpression environment state locatedExpression =
     ConstructExpression constructor fields -> do
       scalar <- constructValue environment state locatedExpression constructor fields
       Right [valuePath state (RuntimeScalar scalar)]
+    InvokeExpression name arguments ->
+      evalCallable environment state locatedExpression name arguments
     CallExpression name arguments ->
       evalPrimitive environment state locatedExpression name arguments
     ReceiveExpression messageTy endpoint ->
@@ -331,6 +335,56 @@ evalExpression environment state locatedExpression =
       evalProve environment state locatedExpression proposition
     FallbackExpression base fallback ->
       evalFallback environment state locatedExpression base fallback
+
+evalCallable
+  :: SurfaceEnvironment
+  -> SurfaceState
+  -> Located SurfaceExpression
+  -> Text
+  -> [Located SurfaceExpression]
+  -> Either SurfaceCheckError [SurfacePath]
+evalCallable environment state located name arguments =
+  case Map.lookup name (surfaceCallables environment) of
+    Nothing -> throw located UnknownCallable
+      ("callable is not declared in invocation Sigma: " <> name)
+    Just signature -> do
+      let parameters = surfaceCallableParameters signature
+      unless (length arguments == length parameters) $
+        throw located TypeMismatch
+          ("callable arity mismatch; expected " <> Text.pack (show (length parameters)))
+      next <- foldM checkArgument state (zip parameters arguments)
+      result <- callableResultValue signature
+      Right [valuePath next result]
+  where
+    checkArgument current ((expectedMode, expectedType), expression) = do
+      paths <- evalExpression environment current expression
+      case paths of
+        [SurfacePath PathContinue next (Just value)] -> do
+          unless (compareTypes (runtimeType value) expectedType == DefinitionallyEqual) $
+            throw expression TypeMismatch "callable argument type mismatch"
+          actualMode <- callableRuntimeMode expression value
+          unless (actualMode == expectedMode) $
+            throw expression StructuralUse "callable argument structural mode mismatch"
+          Right next
+        _ -> throw expression TypeMismatch
+          "callable argument must produce exactly one continuing value"
+
+    callableRuntimeMode expression value = case value of
+      RuntimeUnit -> Right Unrestricted
+      RuntimeScalar scalar -> Right (scalarMode scalar)
+      RuntimeTuple _ -> throw expression TypeMismatch
+        "tuple-valued callable arguments require an explicit product signature"
+
+    callableResultValue signature = case surfaceCallableResult signature of
+      Nothing -> Right RuntimeUnit
+      Just (mode, ty)
+        | compareTypes ty TyUnit == DefinitionallyEqual ->
+            if mode == Unrestricted
+              then Right RuntimeUnit
+              else throw located TypeMismatch
+                "callable signature cannot return restricted Unit"
+        | otherwise -> Right
+            (RuntimeScalar (ScalarValue mode ty (shapeForType ty)))
 
 evalPrimitive
   :: SurfaceEnvironment

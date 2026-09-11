@@ -1,4 +1,5 @@
 {-# LANGUAGE OverloadedStrings #-}
+{-# LANGUAGE PatternSynonyms #-}
 
 module Phil.Compiler.SourceArchitecture
   ( SourceArchitectureRootMap
@@ -194,6 +195,10 @@ expressionSemantics expression = case expression of
   UnitExpression -> tagged "unit" []
   TupleExpression values -> tagged "tuple"
     [SemanticOrdered (map (expressionSemantics . locatedValue) values)]
+  InvokeExpression name arguments -> tagged "invoke"
+    [ atom name
+    , SemanticOrdered (map (expressionSemantics . locatedValue) arguments)
+    ]
   CallExpression name arguments -> tagged "call"
     [ atom name
     , SemanticOrdered (map (expressionSemantics . locatedValue) arguments)
