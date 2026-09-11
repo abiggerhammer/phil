@@ -123,7 +123,6 @@ jobs:
           git -C "$GITHUB_WORKSPACE" add \
             grammar/phase1-surface.ebnf \
             grammar/phase1-surface-determinacy.json \
-            proof/Phil/Surface/Grammar.v \
             generated/SurfaceGrammarRecognizerKernel.hs \
             src/SurfaceGrammarRecognizerKernel.hs \
             src/Phil/Surface/Lineage.hs \
