@@ -251,8 +251,8 @@ jobs:
           sha256sum -c "$linux.sha256"
           sha256sum -c "$darwin.sha256"
 
-          if gh release view "$RELEASE_TAG" >/dev/null 2>&1; then
-            draft="$(gh release view "$RELEASE_TAG" --json isDraft --jq '.isDraft')"
+          if gh release view "$RELEASE_TAG" --repo "$GITHUB_REPOSITORY" >/dev/null 2>&1; then
+            draft="$(gh release view "$RELEASE_TAG" --repo "$GITHUB_REPOSITORY" --json isDraft --jq '.isDraft')"
             if [[ "$draft" != 'true' ]]; then
               echo "GitHub Release $RELEASE_TAG is already published; leaving the immutable release unchanged."
               exit 0
@@ -261,6 +261,7 @@ jobs:
             test "$tag_sha" = "$GITHUB_SHA"
           else
             gh release create "$RELEASE_TAG" \
+              --repo "$GITHUB_REPOSITORY" \
               --target "$GITHUB_SHA" \
               --title 'Phil Steve 0.1 — Phase 1' \
               --notes-file release-notes.md \
@@ -268,6 +269,7 @@ jobs:
           fi
 
           gh release upload "$RELEASE_TAG" \
+            --repo "$GITHUB_REPOSITORY" \
             "$linux" "$linux.sha256" \
             "$darwin" "$darwin.sha256" \
             --clobber
@@ -276,8 +278,8 @@ jobs:
           test "$tag_sha" = "$GITHUB_SHA"
 
           expected="$(printf '%s\n' "$darwin" "$darwin.sha256" "$linux" "$linux.sha256" | sort)"
-          actual="$(gh release view "$RELEASE_TAG" --json assets --jq '.assets[].name' | sort)"
+          actual="$(gh release view "$RELEASE_TAG" --repo "$GITHUB_REPOSITORY" --json assets --jq '.assets[].name' | sort)"
           test "$actual" = "$expected"
 
-          gh release edit "$RELEASE_TAG" --draft=false
-          gh release view "$RELEASE_TAG" --json url --jq '.url'
+          gh release edit "$RELEASE_TAG" --repo "$GITHUB_REPOSITORY" --draft=false
+          gh release view "$RELEASE_TAG" --repo "$GITHUB_REPOSITORY" --json url --jq '.url'
