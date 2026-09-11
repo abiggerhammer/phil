@@ -64,8 +64,8 @@ Proof.
   destruct (String.eqb actual expected) eqn:Heq;
     cbn in Hexpect; try discriminate Hexpect.
   apply String.eqb_eq in Heq.
-  inversion Hexpect; subst.
   subst actual.
+  inversion Hexpect; subst.
   reflexivity.
 Qed.
 
@@ -148,8 +148,8 @@ Proof.
   destruct (String.eqb actual_class expected_class) eqn:Heq;
     cbn in Hexpect; try discriminate Hexpect.
   apply String.eqb_eq in Heq.
-  inversion Hexpect; subst.
   subst actual_class.
+  inversion Hexpect; subst.
   reflexivity.
 Qed.
 
