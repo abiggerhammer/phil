@@ -7,6 +7,7 @@ module Phil.Surface.Check
   , PrimitiveArgumentDiscipline (..)
   , ProviderOutcomeSpec (..)
   , PrimitiveSemantics (..)
+  , SurfaceCallableSignature (..)
   , ReleaseRequirement (..)
   , ReleaseSemanticAccount (..)
   , ReleaseTransitionOutcome (..)

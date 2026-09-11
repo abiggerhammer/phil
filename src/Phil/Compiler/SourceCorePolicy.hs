@@ -1,4 +1,5 @@
 {-# LANGUAGE OverloadedStrings #-}
+{-# LANGUAGE PatternSynonyms #-}
 
 module Phil.Compiler.SourceCorePolicy
   ( SourceCoreSite (..)
@@ -279,6 +280,7 @@ callNamesExpression expression = case expression of
   BooleanExpression _ -> []
   UnitExpression -> []
   TupleExpression values -> calls values
+  InvokeExpression _ arguments -> calls arguments
   CallExpression name arguments -> name : calls arguments
   FieldExpression base _ -> callNamesExpression (locatedValue base)
   BinaryExpression _ left right -> calls [left, right]

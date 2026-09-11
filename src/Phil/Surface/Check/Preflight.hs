@@ -1,4 +1,5 @@
 {-# LANGUAGE OverloadedStrings #-}
+{-# LANGUAGE PatternSynonyms #-}
 
 module Phil.Surface.Check.Preflight
   ( preflightComponent
@@ -27,6 +28,7 @@ import Phil.Surface.Syntax
   , Pattern (..)
   , Statement (..)
   , SurfaceExpression (..)
+  , pattern InvokeExpression
   , SurfaceProposition (..)
   )
 
@@ -79,6 +81,7 @@ preflightComponent environment locatedComponent =
         BooleanExpression _ -> Right ()
         UnitExpression -> Right ()
         TupleExpression values -> mapM_ (checkExpression bound) values
+        InvokeExpression _ arguments -> mapM_ (checkExpression bound) arguments
         CallExpression name arguments -> do
           case Map.lookup name (surfacePrimitives environment) of
             Just PrimitiveConsumeBeginPolicyEvidence ->
