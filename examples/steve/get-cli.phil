@@ -11,6 +11,7 @@ component SteveGetCLI provides Unit {
                             let pathDecision = path_parse(pathText)
                             decide pathDecision {
                                 path(path) => {
+                                    invoke SteveGet(contentId)
                                     let readDecision = blob_read(contentId)
                                     decide readDecision {
                                         found(bytes) => {
