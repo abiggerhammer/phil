@@ -1,0 +1,48 @@
+name: Fix PR 926 name-suffix proof
+
+on:
+  push:
+    branches:
+      - phase1-surface-grammar-corr-source-header
+    paths:
+      - '.github/workflows/fix-926-name-suffix-proof.yml'
+
+permissions:
+  contents: write
+
+jobs:
+  patch:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: phase1-surface-grammar-corr-source-header
+      - name: Patch brittle list-shape proof
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 - <<'PY'
+          from pathlib import Path
+          p = Path('proof/Phil/Surface/GrammarAstSourceHeader.v')
+          s = p.read_text()
+          old = '''  - destruct fields as [| second fields].
+            + discriminate Hnormalize.
+            + destruct fields as [| extra rest].
+'''
+          new = '''  - destruct fields as [| second fields].
+            + destruct first; cbn in Hnormalize; discriminate Hnormalize.
+            + destruct fields as [| extra rest].
+'''
+          if old not in s:
+              raise SystemExit('target proof fragment not found')
+          s = s.replace(old, new, 1)
+          p.write_text(s)
+          PY
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git add proof/Phil/Surface/GrammarAstSourceHeader.v
+          if git diff --cached --quiet; then
+            exit 0
+          fi
+          git commit -m 'Fix name-suffix impossible branch proof'
+          git push origin HEAD:phase1-surface-grammar-corr-source-header
