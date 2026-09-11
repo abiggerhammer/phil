@@ -169,8 +169,8 @@ grammarV1ReferenceFixedCommand tree = do
       23 -> Just <$> parseConvert selected
       24 -> Just <$> parseTransport selected
       25 -> Just <$> parseAccept selected
-      26 -> Just <$> parseProve selected
-      _ | index >= 0 && index <= 26 -> pure Nothing
+      27 -> Just <$> parseProve selected
+      _ | index >= 0 && index <= 27 -> pure Nothing
         | otherwise -> failFixed
             ("command_expression alternative out of range: " <> showText index)
     _ -> failFixed "command_expression body is not an alternative node"
