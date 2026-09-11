@@ -1,0 +1,70 @@
+name: Phase 1 Surface Grammar AST Whole Source Correspondence
+
+on:
+  pull_request:
+    paths:
+      - 'src/Phil/Surface/GrammarV1/ReferenceAstWholeSource.hs'
+      - 'src/Phil/Surface/GrammarV1/ReferenceAstSpine.hs'
+      - 'src/Phil/Surface/GrammarV1/ReferenceAstTopLevel.hs'
+      - 'src/Phil/Surface/GrammarV1/ReferenceAstRecordData.hs'
+      - 'src/Phil/Surface/GrammarV1/ReferenceAstTypeClaimDeclarations.hs'
+      - 'src/Phil/Surface/GrammarV1/ReferenceAstCallableContract.hs'
+      - 'src/Phil/Surface/GrammarV1/ReferenceAstProviderDeclarations.hs'
+      - 'src/Phil/Surface/GrammarV1/ReferenceAstCapabilityBoundary.hs'
+      - 'src/Phil/Surface/GrammarV1/ReferenceAstFunctionComponent.hs'
+      - 'src/Phil/Surface/GrammarV1/ReferenceAstProtocolDeclaration.hs'
+      - 'src/Phil/Surface/GrammarV1/ReferenceAstArchitectureProgram.hs'
+      - 'src/Phil/Surface/GrammarV1/ReferenceAst**.hs'
+      - 'src/Phil/Surface/GrammarV1/ReferenceKernelBridge.hs'
+      - 'src/Phil/Surface/GrammarV1/Parser.hs'
+      - 'src/Phil/Surface/GrammarV1/Lexer.hs'
+      - 'src/SurfaceGrammarRecognizerKernel.hs'
+      - 'test/Phase1GrammarV1ReferenceAstWholeSourceMain.hs'
+      - 'test/fixtures/phase1-surface/**'
+      - 'scripts/check_phase1_surface_corpus.py'
+      - '.github/workflows/phase1-surface-grammar-ast-whole-source-correspondence.yml'
+  push:
+    branches: [main]
+    paths:
+      - 'src/Phil/Surface/GrammarV1/ReferenceAstWholeSource.hs'
+      - 'src/Phil/Surface/GrammarV1/ReferenceAstSpine.hs'
+      - 'src/Phil/Surface/GrammarV1/ReferenceAstTopLevel.hs'
+      - 'src/Phil/Surface/GrammarV1/ReferenceAst**.hs'
+      - 'src/Phil/Surface/GrammarV1/ReferenceKernelBridge.hs'
+      - 'src/Phil/Surface/GrammarV1/Parser.hs'
+      - 'src/Phil/Surface/GrammarV1/Lexer.hs'
+      - 'src/SurfaceGrammarRecognizerKernel.hs'
+      - 'test/Phase1GrammarV1ReferenceAstWholeSourceMain.hs'
+      - 'test/fixtures/phase1-surface/**'
+      - 'scripts/check_phase1_surface_corpus.py'
+      - '.github/workflows/phase1-surface-grammar-ast-whole-source-correspondence.yml'
+
+permissions:
+  contents: read
+
+jobs:
+  ast-whole-source-correspondence:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: haskell-actions/setup@v2
+        with:
+          ghc-version: '9.6.7'
+          cabal-version: 'latest'
+
+      - name: Build ordinary regression substrate
+        run: cabal build all --enable-tests
+
+      - name: Strictly compile whole-source correspondence harness
+        run: |
+          cabal exec -- ghc --make \
+            -Wall -Werror \
+            -isrc \
+            test/Phase1GrammarV1ReferenceAstWholeSourceMain.hs \
+            -o /tmp/phase1-surface-grammar-ast-whole-source
+
+      - name: Check certified whole-source AST against production AST
+        run: |
+          python3 scripts/check_phase1_surface_corpus.py --emit-parser-cases \
+            | /tmp/phase1-surface-grammar-ast-whole-source
