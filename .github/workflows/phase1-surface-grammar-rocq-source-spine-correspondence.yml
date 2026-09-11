@@ -20,7 +20,7 @@ on:
       - '.github/workflows/phase1-surface-grammar-rocq-source-spine-correspondence.yml'
 
 permissions:
-  contents: write
+  contents: read
 
 jobs:
   rocq-source-spine-correspondence:
@@ -31,43 +31,6 @@ jobs:
       options: --user root
     steps:
       - uses: actions/checkout@v4
-        with:
-          ref: phase1-surface-grammar-corr-source-header
-
-      - name: Repair exact-list lemma binder types
-        if: github.event_name == 'pull_request'
-        shell: bash
-        run: |
-          set -euo pipefail
-          cd "$GITHUB_WORKSPACE"
-          python3 - <<'PY'
-          from pathlib import Path
-          p = Path('proof/Phil/Surface/GrammarAstSourceHeader.v')
-          s = p.read_text()
-          replacements = {
-              '''Lemma phase1_surface_exact2_round_trip {A : Type} :\n  forall items a b,\n''':
-              '''Lemma phase1_surface_exact2_round_trip {A : Type} :\n  forall (items : list A) (a b : A),\n''',
-              '''Lemma phase1_surface_exact3_round_trip {A : Type} :\n  forall items a b c,\n''':
-              '''Lemma phase1_surface_exact3_round_trip {A : Type} :\n  forall (items : list A) (a b c : A),\n''',
-              '''Lemma phase1_surface_exact4_round_trip {A : Type} :\n  forall items a b c d,\n''':
-              '''Lemma phase1_surface_exact4_round_trip {A : Type} :\n  forall (items : list A) (a b c d : A),\n''',
-          }
-          changed = False
-          for old, new in replacements.items():
-              if old in s:
-                  s = s.replace(old, new, 1)
-                  changed = True
-          if changed:
-              p.write_text(s)
-          PY
-          git config --global --add safe.directory "$GITHUB_WORKSPACE"
-          git -C "$GITHUB_WORKSPACE" config user.name 'github-actions[bot]'
-          git -C "$GITHUB_WORKSPACE" config user.email '41898282+github-actions[bot]@users.noreply.github.com'
-          git -C "$GITHUB_WORKSPACE" add proof/Phil/Surface/GrammarAstSourceHeader.v
-          if ! git -C "$GITHUB_WORKSPACE" diff --cached --quiet; then
-            git -C "$GITHUB_WORKSPACE" commit -m 'Annotate exact-list lemma binder types'
-            git -C "$GITHUB_WORKSPACE" push origin HEAD:phase1-surface-grammar-corr-source-header
-          fi
 
       - name: Derive exact Grammar-v1 inputs
         shell: bash
