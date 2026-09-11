@@ -116,11 +116,12 @@ jobs:
           cmp SurfaceGrammarRecognizerKernel.hs generated/SurfaceGrammarRecognizerKernel.hs
           tail -n +2 src/SurfaceGrammarRecognizerKernel.hs | cmp SurfaceGrammarRecognizerKernel.hs -
 
-          git config user.name 'github-actions[bot]'
-          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
-          git add -A
-          git commit -m 'surface: bind CALL-019 invoke into Grammar-v1 revision'
-          git push origin HEAD:phase1-call-019-grammar-revision
+          git -C "$GITHUB_WORKSPACE" status --short
+          git -C "$GITHUB_WORKSPACE" config user.name 'github-actions[bot]'
+          git -C "$GITHUB_WORKSPACE" config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git -C "$GITHUB_WORKSPACE" add -A
+          git -C "$GITHUB_WORKSPACE" commit -m 'surface: bind CALL-019 invoke into Grammar-v1 revision'
+          git -C "$GITHUB_WORKSPACE" push origin HEAD:phase1-call-019-grammar-revision
           echo 'pushed=true' >> "$GITHUB_OUTPUT"
 
   kernel_identity:
