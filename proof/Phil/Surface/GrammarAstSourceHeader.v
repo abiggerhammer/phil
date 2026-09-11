@@ -203,7 +203,7 @@ Definition phase1_surface_exact2 {A : Type}
   end.
 
 Lemma phase1_surface_exact2_round_trip {A : Type} :
-  forall items a b,
+  forall (items : list A) (a b : A),
     phase1_surface_exact2 items = Some (a, b) ->
     items = [a; b].
 Proof.
@@ -223,7 +223,7 @@ Definition phase1_surface_exact3 {A : Type}
   end.
 
 Lemma phase1_surface_exact3_round_trip {A : Type} :
-  forall items a b c,
+  forall (items : list A) (a b c : A),
     phase1_surface_exact3 items = Some (a, b, c) ->
     items = [a; b; c].
 Proof.
@@ -244,7 +244,7 @@ Definition phase1_surface_exact4 {A : Type}
   end.
 
 Lemma phase1_surface_exact4_round_trip {A : Type} :
-  forall items a b c d,
+  forall (items : list A) (a b c d : A),
     phase1_surface_exact4 items = Some (a, b, c, d) ->
     items = [a; b; c; d].
 Proof.
