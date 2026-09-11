@@ -66,7 +66,7 @@ jobs:
           grep -F $'llvm\t' "$package" | grep -F 'target-triple=aarch64-apple-darwin' \
             | grep -F 'data-layout=e-m:o-i64:64-i128:128-n32:64-S128' \
             | grep -F 'runtime-abi-profile=phil-runtime/phase1/runtime-choice-provider-v1'
-          test "$(grep -c '^tcb'"$'\t' "$package")" -eq 6
+          test "$(grep -c $'^tcb\t' "$package")" -eq 6
           grep -F $'tcb\tid=target-assumptions\tkind=TargetAssumptionTrust\tname=aarch64 Apple Darwin target assumptions\trevision=phase1-aarch64-apple-darwin-v1\tbasis=selected Apple Silicon Darwin ABI/tool/runtime assumptions' "$package"
           ! grep -q 'x86_64 Linux target assumptions' "$package"
 
