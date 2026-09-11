@@ -1,4 +1,4 @@
-name: Temporary Phase 1 AArch64 Apple Darwin Target Discovery
+name: Temporary Phase 1 AArch64 Apple Darwin Target
 
 on:
   push:
@@ -7,7 +7,7 @@ on:
   workflow_dispatch:
 
 jobs:
-  discover-target:
+  target-profile:
     runs-on: macos-26
     steps:
       - uses: actions/checkout@v4
@@ -32,42 +32,57 @@ jobs:
           "$llvm_prefix/bin/clang" --version
           "$llvm_prefix/bin/llvm-as" --version
 
-      - name: Probe canonical Darwin target profile
+      - name: Set up Haskell
+        uses: haskell-actions/setup@v2
+        with:
+          ghc-version: '9.6.7'
+          cabal-version: 'latest'
+
+      - name: Build complete Haskell substrate
         shell: bash
         run: |
           set -euo pipefail
-          probe_dir="$RUNNER_TEMP/phil-aarch64-apple-darwin-probe"
-          mkdir -p "$probe_dir"
-          cat > "$probe_dir/probe.c" <<'EOF'
-          int phil_target_probe(void) { return 0; }
-          EOF
+          cabal build all --enable-tests
 
-          "$LLVM_PREFIX/bin/clang" \
-            --target=aarch64-apple-darwin \
-            -S -emit-llvm -O0 \
-            "$probe_dir/probe.c" \
-            -o "$probe_dir/probe.ll"
+      - name: Check Darwin target profile
+        shell: bash
+        run: |
+          set -euo pipefail
+          cabal -v0 exec -- runghc -isrc -itest -Wall -Werror \
+            test/Phase1TargetAArch64AppleDarwinMain.hs
 
-          grep '^target datalayout = ' "$probe_dir/probe.ll" | tee "$probe_dir/target-profile.txt"
-          grep '^target triple = ' "$probe_dir/probe.ll" | tee -a "$probe_dir/target-profile.txt"
-          grep -Eq '^target triple = "(arm64|aarch64)-apple-' "$probe_dir/probe.ll"
+      - name: Lower canonical Steve for Darwin
+        shell: bash
+        run: |
+          set -euo pipefail
+          out="$RUNNER_TEMP/phil-aarch64-apple-darwin"
+          mkdir -p "$out"
+          cabal -v0 exec -- runghc -isrc -itest -Wall -Werror \
+            test/Phase1TargetAArch64AppleDarwinMain.hs emit > "$out/steve.ll"
+
+          grep -Fx 'target datalayout = "e-m:o-i64:64-i128:128-n32:64-S128"' "$out/steve.ll"
+          grep -Fx 'target triple = "aarch64-apple-darwin"' "$out/steve.ll"
+          grep -q '@phil_runtime_choice_StevePut_put_entry_DigestProvider_compute' "$out/steve.ll"
+          grep -q '@phil_runtime_choice_SteveGet_get_check_DigestProvider_check' "$out/steve.ll"
 
           "$LLVM_PREFIX/bin/llvm-as" \
-            "$probe_dir/probe.ll" \
-            -o "$probe_dir/probe.bc"
+            "$out/steve.ll" \
+            -o "$out/steve.bc"
           "$LLVM_PREFIX/bin/clang" \
             --target=aarch64-apple-darwin \
-            -c "$probe_dir/probe.ll" \
-            -o "$probe_dir/probe.o"
-          file "$probe_dir/probe.o" | tee "$probe_dir/object-file.txt"
-          grep -q 'Mach-O 64-bit object arm64' "$probe_dir/object-file.txt"
+            -c "$out/steve.ll" \
+            -o "$out/steve.o"
+          file "$out/steve.o" | tee "$out/object-file.txt"
+          grep -q 'Mach-O 64-bit object arm64' "$out/object-file.txt"
 
-          "$LLVM_PREFIX/bin/clang" --version > "$probe_dir/clang-version.txt"
-          sw_vers > "$probe_dir/macos-version.txt"
-          uname -a > "$probe_dir/uname.txt"
+          "$LLVM_PREFIX/bin/clang" --version > "$out/clang-version.txt"
+          printf '%s\n' 'e-m:o-i64:64-i128:128-n32:64-S128' > "$out/data-layout.txt"
+          printf '%s\n' 'aarch64-apple-darwin' > "$out/phil-target-triple.txt"
+          sw_vers > "$out/macos-version.txt"
+          uname -a > "$out/uname.txt"
 
-      - name: Upload target discovery evidence
+      - name: Upload Darwin target evidence
         uses: actions/upload-artifact@v4
         with:
-          name: aarch64-apple-darwin-target-discovery
-          path: ${{ runner.temp }}/phil-aarch64-apple-darwin-probe
+          name: phase1-aarch64-apple-darwin-target
+          path: ${{ runner.temp }}/phil-aarch64-apple-darwin
