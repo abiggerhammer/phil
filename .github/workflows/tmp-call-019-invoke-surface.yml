@@ -1,5 +1,6 @@
 name: Temporary CALL-019 Invoke Surface Semantics
 
+# Staging checkpoint: expose SurfaceCallableSignature through the public checker API.
 on:
   push:
     branches: [phase1-call-019-invoke-semantics]
