@@ -19,7 +19,7 @@ permissions:
   contents: write
 
 jobs:
-  prepare-revision:
+  prepare_revision:
     runs-on: ubuntu-latest
     container:
       image: rocq/rocq-prover:9.2.0
@@ -133,9 +133,9 @@ convert_expression =
           git push origin HEAD:phase1-call-019-grammar-revision
           echo 'pushed=true' >> "$GITHUB_OUTPUT"
 
-  kernel-identity:
-    needs: prepare-revision
-    if: needs.prepare-revision.outputs.pushed != 'true'
+  kernel_identity:
+    needs: prepare_revision
+    if: needs.prepare_revision.outputs.pushed != 'true'
     runs-on: ubuntu-latest
     container:
       image: rocq/rocq-prover:9.2.0
@@ -162,9 +162,9 @@ convert_expression =
           cmp SurfaceGrammarRecognizerKernel.hs generated/SurfaceGrammarRecognizerKernel.hs
           tail -n +2 src/SurfaceGrammarRecognizerKernel.hs | cmp SurfaceGrammarRecognizerKernel.hs -
 
-  haskell-and-corpus:
-    needs: prepare-revision
-    if: needs.prepare-revision.outputs.pushed != 'true'
+  haskell_and_corpus:
+    needs: prepare_revision
+    if: needs.prepare_revision.outputs.pushed != 'true'
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
