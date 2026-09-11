@@ -17,7 +17,7 @@ import Phil.Surface.GrammarV1.Parser
   , GrammarV1TopLevelDecl (..)
   )
 import Phil.Surface.GrammarV1.ReferenceAstArchitectureProgram
-  ( GrammarV1ReferenceArchitectureProgramDeclaration
+  ( GrammarV1ReferenceArchitectureProgramDeclaration (..)
   , grammarV1ProductionArchitectureProgramDeclaration
   , grammarV1ReferenceArchitectureProgramDeclaration
   )
@@ -27,12 +27,12 @@ import Phil.Surface.GrammarV1.ReferenceAstCallableContract
   , grammarV1ReferenceCallableContractDeclaration
   )
 import Phil.Surface.GrammarV1.ReferenceAstCapabilityBoundary
-  ( GrammarV1ReferenceCapabilityBoundaryDeclaration
+  ( GrammarV1ReferenceCapabilityBoundaryDeclaration (..)
   , grammarV1ProductionCapabilityBoundaryDeclaration
   , grammarV1ReferenceCapabilityBoundaryDeclaration
   )
 import Phil.Surface.GrammarV1.ReferenceAstFunctionComponent
-  ( GrammarV1ReferenceFunctionComponentDeclaration
+  ( GrammarV1ReferenceFunctionComponentDeclaration (..)
   , grammarV1ProductionFunctionComponentDeclaration
   , grammarV1ReferenceFunctionComponentDeclaration
   )
@@ -42,12 +42,12 @@ import Phil.Surface.GrammarV1.ReferenceAstProtocolDeclaration
   , grammarV1ReferenceProtocolDeclaration
   )
 import Phil.Surface.GrammarV1.ReferenceAstProviderDeclarations
-  ( GrammarV1ReferenceProviderDeclaration
+  ( GrammarV1ReferenceProviderDeclaration (..)
   , grammarV1ProductionProviderDeclaration
   , grammarV1ReferenceProviderDeclaration
   )
 import Phil.Surface.GrammarV1.ReferenceAstRecordData
-  ( GrammarV1ReferenceRecordDataDeclaration
+  ( GrammarV1ReferenceRecordDataDeclaration (..)
   , grammarV1ProductionRecordDataDeclaration
   , grammarV1ReferenceRecordDataDeclaration
   )
@@ -64,7 +64,7 @@ import Phil.Surface.GrammarV1.ReferenceAstTopLevel
   , grammarV1ReferenceTopLevelSpine
   )
 import Phil.Surface.GrammarV1.ReferenceAstTypeClaimDeclarations
-  ( GrammarV1ReferenceTypeClaimDeclaration
+  ( GrammarV1ReferenceTypeClaimDeclaration (..)
   , grammarV1ProductionTypeClaimDeclaration
   , grammarV1ReferenceTypeClaimDeclaration
   )
@@ -239,35 +239,30 @@ requireTagAgreement expected declaration
 declarationTag :: GrammarV1ReferenceDeclarationCore -> GrammarV1ReferenceDeclarationTag
 declarationTag declaration = case declaration of
   GrammarV1ReferenceRecordDataCore value -> case value of
-    -- The family-specific carrier preserves record versus data explicitly.
-    _ | "GrammarV1ReferenceRecordDeclaration" `Text.isPrefixOf` Text.pack (show value) ->
-          GrammarV1ReferenceRecordDeclaration
-      | otherwise -> GrammarV1ReferenceDataDeclaration
-  GrammarV1ReferenceTypeClaimCore value
-    | "GrammarV1ReferenceTypeAliasDeclaration" `Text.isPrefixOf` Text.pack (show value) ->
-        GrammarV1ReferenceTypeAliasDeclaration
-    | otherwise -> GrammarV1ReferenceClaimDeclaration
+    GrammarV1ReferenceRecordDeclaration {} -> GrammarV1ReferenceRecordDeclaration
+    GrammarV1ReferenceDataDeclaration {} -> GrammarV1ReferenceDataDeclaration
+  GrammarV1ReferenceTypeClaimCore value -> case value of
+    GrammarV1ReferenceTypeAliasDeclarationCore {} -> GrammarV1ReferenceTypeAliasDeclaration
+    GrammarV1ReferenceClaimDeclarationCore {} -> GrammarV1ReferenceClaimDeclaration
   GrammarV1ReferenceCallableContractCore _ ->
     GrammarV1ReferenceCallableContractDeclaration
-  GrammarV1ReferenceProviderCore value
-    | "GrammarV1ReferenceProviderContractDeclaration" `Text.isPrefixOf` Text.pack (show value) ->
-        GrammarV1ReferenceProviderContractDeclaration
-    | "GrammarV1ReferenceProviderImplementationDeclaration" `Text.isPrefixOf` Text.pack (show value) ->
-        GrammarV1ReferenceProviderImplementationDeclaration
-    | otherwise -> GrammarV1ReferenceOpaqueProviderImplementationDeclaration
-  GrammarV1ReferenceCapabilityBoundaryCore value
-    | "GrammarV1ReferenceCapabilityDeclaration" `Text.isPrefixOf` Text.pack (show value) ->
-        GrammarV1ReferenceCapabilityDeclaration
-    | otherwise -> GrammarV1ReferenceBoundaryDeclaration
-  GrammarV1ReferenceFunctionComponentCore value
-    | "GrammarV1ReferenceFunctionDeclaration" `Text.isPrefixOf` Text.pack (show value) ->
-        GrammarV1ReferenceFunctionDeclaration
-    | otherwise -> GrammarV1ReferenceComponentDeclaration
+  GrammarV1ReferenceProviderCore value -> case value of
+    GrammarV1ReferenceProviderContractDeclaration {} ->
+      GrammarV1ReferenceProviderContractDeclaration
+    GrammarV1ReferenceProviderImplementationDeclaration {} ->
+      GrammarV1ReferenceProviderImplementationDeclaration
+    GrammarV1ReferenceOpaqueProviderImplementationDeclaration {} ->
+      GrammarV1ReferenceOpaqueProviderImplementationDeclaration
+  GrammarV1ReferenceCapabilityBoundaryCore value -> case value of
+    GrammarV1ReferenceCapabilityDeclaration {} -> GrammarV1ReferenceCapabilityDeclaration
+    GrammarV1ReferenceBoundaryDeclaration {} -> GrammarV1ReferenceBoundaryDeclaration
+  GrammarV1ReferenceFunctionComponentCore value -> case value of
+    GrammarV1ReferenceFunctionDeclarationCore {} -> GrammarV1ReferenceFunctionDeclaration
+    GrammarV1ReferenceComponentDeclarationCore {} -> GrammarV1ReferenceComponentDeclaration
   GrammarV1ReferenceProtocolCore _ -> GrammarV1ReferenceProtocolDeclaration
-  GrammarV1ReferenceArchitectureProgramCore value
-    | "GrammarV1ReferenceArchitectureDeclarationCore" `Text.isPrefixOf` Text.pack (show value) ->
-        GrammarV1ReferenceArchitectureDeclaration
-    | otherwise -> GrammarV1ReferenceProgramDeclaration
+  GrammarV1ReferenceArchitectureProgramCore value -> case value of
+    GrammarV1ReferenceArchitectureDeclarationCore {} -> GrammarV1ReferenceArchitectureDeclaration
+    GrammarV1ReferenceProgramDeclarationCore {} -> GrammarV1ReferenceProgramDeclaration
 
 wrap :: (a -> b) -> Maybe a -> [b]
 wrap constructor value = case value of
