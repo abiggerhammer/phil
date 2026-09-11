@@ -519,6 +519,7 @@ command_expression =
   | convert_expression
   | transport_expression
   | accept_expression
+  | invoke_expression
   | prove_expression
   ;
 
@@ -559,6 +560,9 @@ primary_expression =
   | float_literal
   | integer_literal
   ;
+
+invoke_expression =
+  "invoke", static_reference, term_arguments ;
 
 convert_expression =
   "convert", expression, "to", type_expression ;

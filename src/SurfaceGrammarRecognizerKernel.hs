@@ -15040,37 +15040,68 @@ phase1_surface_rules =
     Prelude.False Prelude.True Prelude.True Prelude.False) (String0 (Ascii
     Prelude.False Prelude.True Prelude.True Prelude.True Prelude.False
     Prelude.True Prelude.True Prelude.False) EmptyString))))))))))))))))))
-    ((:) (ENonterminal (String0 (Ascii Prelude.False Prelude.False
-    Prelude.False Prelude.False Prelude.True Prelude.True Prelude.True
-    Prelude.False) (String0 (Ascii Prelude.False Prelude.True Prelude.False
-    Prelude.False Prelude.True Prelude.True Prelude.True Prelude.False)
-    (String0 (Ascii Prelude.True Prelude.True Prelude.True Prelude.True
-    Prelude.False Prelude.True Prelude.True Prelude.False) (String0 (Ascii
-    Prelude.False Prelude.True Prelude.True Prelude.False Prelude.True
+    ((:) (ENonterminal (String0 (Ascii Prelude.True Prelude.False
+    Prelude.False Prelude.True Prelude.False Prelude.True Prelude.True
+    Prelude.False) (String0 (Ascii Prelude.False Prelude.True Prelude.True
+    Prelude.True Prelude.False Prelude.True Prelude.True Prelude.False)
+    (String0 (Ascii Prelude.False Prelude.True Prelude.True Prelude.False
+    Prelude.True Prelude.True Prelude.True Prelude.False) (String0 (Ascii
+    Prelude.True Prelude.True Prelude.True Prelude.True Prelude.False
     Prelude.True Prelude.True Prelude.False) (String0 (Ascii Prelude.True
-    Prelude.False Prelude.True Prelude.False Prelude.False Prelude.True
-    Prelude.True Prelude.False) (String0 (Ascii Prelude.True Prelude.True
-    Prelude.True Prelude.True Prelude.True Prelude.False Prelude.True
+    Prelude.True Prelude.False Prelude.True Prelude.False Prelude.True
+    Prelude.True Prelude.False) (String0 (Ascii Prelude.True Prelude.False
+    Prelude.True Prelude.False Prelude.False Prelude.True Prelude.True
+    Prelude.False) (String0 (Ascii Prelude.True Prelude.True Prelude.True
+    Prelude.True Prelude.True Prelude.False Prelude.True Prelude.False)
+    (String0 (Ascii Prelude.True Prelude.False Prelude.True Prelude.False
+    Prelude.False Prelude.True Prelude.True Prelude.False) (String0 (Ascii
+    Prelude.False Prelude.False Prelude.False Prelude.True Prelude.True
+    Prelude.True Prelude.True Prelude.False) (String0 (Ascii Prelude.False
+    Prelude.False Prelude.False Prelude.False Prelude.True Prelude.True
+    Prelude.True Prelude.False) (String0 (Ascii Prelude.False Prelude.True
+    Prelude.False Prelude.False Prelude.True Prelude.True Prelude.True
     Prelude.False) (String0 (Ascii Prelude.True Prelude.False Prelude.True
     Prelude.False Prelude.False Prelude.True Prelude.True Prelude.False)
-    (String0 (Ascii Prelude.False Prelude.False Prelude.False Prelude.True
+    (String0 (Ascii Prelude.True Prelude.True Prelude.False Prelude.False
     Prelude.True Prelude.True Prelude.True Prelude.False) (String0 (Ascii
+    Prelude.True Prelude.True Prelude.False Prelude.False Prelude.True
+    Prelude.True Prelude.True Prelude.False) (String0 (Ascii Prelude.True
+    Prelude.False Prelude.False Prelude.True Prelude.False Prelude.True
+    Prelude.True Prelude.False) (String0 (Ascii Prelude.True Prelude.True
+    Prelude.True Prelude.True Prelude.False Prelude.True Prelude.True
+    Prelude.False) (String0 (Ascii Prelude.False Prelude.True Prelude.True
+    Prelude.True Prelude.False Prelude.True Prelude.True Prelude.False)
+    EmptyString)))))))))))))))))) ((:) (ENonterminal (String0 (Ascii
     Prelude.False Prelude.False Prelude.False Prelude.False Prelude.True
     Prelude.True Prelude.True Prelude.False) (String0 (Ascii Prelude.False
     Prelude.True Prelude.False Prelude.False Prelude.True Prelude.True
-    Prelude.True Prelude.False) (String0 (Ascii Prelude.True Prelude.False
-    Prelude.True Prelude.False Prelude.False Prelude.True Prelude.True
-    Prelude.False) (String0 (Ascii Prelude.True Prelude.True Prelude.False
-    Prelude.False Prelude.True Prelude.True Prelude.True Prelude.False)
-    (String0 (Ascii Prelude.True Prelude.True Prelude.False Prelude.False
-    Prelude.True Prelude.True Prelude.True Prelude.False) (String0 (Ascii
-    Prelude.True Prelude.False Prelude.False Prelude.True Prelude.False
-    Prelude.True Prelude.True Prelude.False) (String0 (Ascii Prelude.True
-    Prelude.True Prelude.True Prelude.True Prelude.False Prelude.True
-    Prelude.True Prelude.False) (String0 (Ascii Prelude.False Prelude.True
+    Prelude.True Prelude.False) (String0 (Ascii Prelude.True Prelude.True
     Prelude.True Prelude.True Prelude.False Prelude.True Prelude.True
-    Prelude.False) EmptyString)))))))))))))))))
-    []))))))))))))))))))))))))))))) ((:) ((,) (String0 (Ascii Prelude.True
+    Prelude.False) (String0 (Ascii Prelude.False Prelude.True Prelude.True
+    Prelude.False Prelude.True Prelude.True Prelude.True Prelude.False)
+    (String0 (Ascii Prelude.True Prelude.False Prelude.True Prelude.False
+    Prelude.False Prelude.True Prelude.True Prelude.False) (String0 (Ascii
+    Prelude.True Prelude.True Prelude.True Prelude.True Prelude.True
+    Prelude.False Prelude.True Prelude.False) (String0 (Ascii Prelude.True
+    Prelude.False Prelude.True Prelude.False Prelude.False Prelude.True
+    Prelude.True Prelude.False) (String0 (Ascii Prelude.False Prelude.False
+    Prelude.False Prelude.True Prelude.True Prelude.True Prelude.True
+    Prelude.False) (String0 (Ascii Prelude.False Prelude.False Prelude.False
+    Prelude.False Prelude.True Prelude.True Prelude.True Prelude.False)
+    (String0 (Ascii Prelude.False Prelude.True Prelude.False Prelude.False
+    Prelude.True Prelude.True Prelude.True Prelude.False) (String0 (Ascii
+    Prelude.True Prelude.False Prelude.True Prelude.False Prelude.False
+    Prelude.True Prelude.True Prelude.False) (String0 (Ascii Prelude.True
+    Prelude.True Prelude.False Prelude.False Prelude.True Prelude.True
+    Prelude.True Prelude.False) (String0 (Ascii Prelude.True Prelude.True
+    Prelude.False Prelude.False Prelude.True Prelude.True Prelude.True
+    Prelude.False) (String0 (Ascii Prelude.True Prelude.False Prelude.False
+    Prelude.True Prelude.False Prelude.True Prelude.True Prelude.False)
+    (String0 (Ascii Prelude.True Prelude.True Prelude.True Prelude.True
+    Prelude.False Prelude.True Prelude.True Prelude.False) (String0 (Ascii
+    Prelude.False Prelude.True Prelude.True Prelude.True Prelude.False
+    Prelude.True Prelude.True Prelude.False) EmptyString)))))))))))))))))
+    [])))))))))))))))))))))))))))))) ((:) ((,) (String0 (Ascii Prelude.True
     Prelude.True Prelude.False Prelude.False Prelude.True Prelude.True
     Prelude.True Prelude.False) (String0 (Ascii Prelude.False Prelude.False
     Prelude.False Prelude.True Prelude.False Prelude.True Prelude.True
@@ -16095,18 +16126,180 @@ phase1_surface_rules =
     Prelude.False) (String0 (Ascii Prelude.False Prelude.False Prelude.True
     Prelude.True Prelude.False Prelude.True Prelude.True Prelude.False)
     EmptyString)))))))))))))))) []))))))))))) ((:) ((,) (String0 (Ascii
-    Prelude.True Prelude.True Prelude.False Prelude.False Prelude.False
-    Prelude.True Prelude.True Prelude.False) (String0 (Ascii Prelude.True
+    Prelude.True Prelude.False Prelude.False Prelude.True Prelude.False
+    Prelude.True Prelude.True Prelude.False) (String0 (Ascii Prelude.False
     Prelude.True Prelude.True Prelude.True Prelude.False Prelude.True
     Prelude.True Prelude.False) (String0 (Ascii Prelude.False Prelude.True
-    Prelude.True Prelude.True Prelude.False Prelude.True Prelude.True
-    Prelude.False) (String0 (Ascii Prelude.False Prelude.True Prelude.True
+    Prelude.True Prelude.False Prelude.True Prelude.True Prelude.True
+    Prelude.False) (String0 (Ascii Prelude.True Prelude.True Prelude.True
+    Prelude.True Prelude.False Prelude.True Prelude.True Prelude.False)
+    (String0 (Ascii Prelude.True Prelude.True Prelude.False Prelude.True
+    Prelude.False Prelude.True Prelude.True Prelude.False) (String0 (Ascii
+    Prelude.True Prelude.False Prelude.True Prelude.False Prelude.False
+    Prelude.True Prelude.True Prelude.False) (String0 (Ascii Prelude.True
+    Prelude.True Prelude.True Prelude.True Prelude.True Prelude.False
+    Prelude.True Prelude.False) (String0 (Ascii Prelude.True Prelude.False
+    Prelude.True Prelude.False Prelude.False Prelude.True Prelude.True
+    Prelude.False) (String0 (Ascii Prelude.False Prelude.False Prelude.False
+    Prelude.True Prelude.True Prelude.True Prelude.True Prelude.False)
+    (String0 (Ascii Prelude.False Prelude.False Prelude.False Prelude.False
+    Prelude.True Prelude.True Prelude.True Prelude.False) (String0 (Ascii
+    Prelude.False Prelude.True Prelude.False Prelude.False Prelude.True
+    Prelude.True Prelude.True Prelude.False) (String0 (Ascii Prelude.True
+    Prelude.False Prelude.True Prelude.False Prelude.False Prelude.True
+    Prelude.True Prelude.False) (String0 (Ascii Prelude.True Prelude.True
+    Prelude.False Prelude.False Prelude.True Prelude.True Prelude.True
+    Prelude.False) (String0 (Ascii Prelude.True Prelude.True Prelude.False
+    Prelude.False Prelude.True Prelude.True Prelude.True Prelude.False)
+    (String0 (Ascii Prelude.True Prelude.False Prelude.False Prelude.True
+    Prelude.False Prelude.True Prelude.True Prelude.False) (String0 (Ascii
+    Prelude.True Prelude.True Prelude.True Prelude.True Prelude.False
+    Prelude.True Prelude.True Prelude.False) (String0 (Ascii Prelude.False
+    Prelude.True Prelude.True Prelude.True Prelude.False Prelude.True
+    Prelude.True Prelude.False) EmptyString))))))))))))))))) (ESequence ((:)
+    (ELiteral (String0 (Ascii Prelude.True Prelude.False Prelude.False
+    Prelude.True Prelude.False Prelude.True Prelude.True Prelude.False)
+    (String0 (Ascii Prelude.False Prelude.True Prelude.True Prelude.True
+    Prelude.False Prelude.True Prelude.True Prelude.False) (String0 (Ascii
+    Prelude.False Prelude.True Prelude.True Prelude.False Prelude.True
+    Prelude.True Prelude.True Prelude.False) (String0 (Ascii Prelude.True
+    Prelude.True Prelude.True Prelude.True Prelude.False Prelude.True
+    Prelude.True Prelude.False) (String0 (Ascii Prelude.True Prelude.True
+    Prelude.False Prelude.True Prelude.False Prelude.True Prelude.True
+    Prelude.False) (String0 (Ascii Prelude.True Prelude.False Prelude.True
+    Prelude.False Prelude.False Prelude.True Prelude.True Prelude.False)
+    EmptyString))))))) ((:) (ENonterminal (String0 (Ascii Prelude.True
+    Prelude.True Prelude.False Prelude.False Prelude.True Prelude.True
+    Prelude.True Prelude.False) (String0 (Ascii Prelude.False Prelude.False
+    Prelude.True Prelude.False Prelude.True Prelude.True Prelude.True
+    Prelude.False) (String0 (Ascii Prelude.True Prelude.False Prelude.False
+    Prelude.False Prelude.False Prelude.True Prelude.True Prelude.False)
+    (String0 (Ascii Prelude.False Prelude.False Prelude.True Prelude.False
+    Prelude.True Prelude.True Prelude.True Prelude.False) (String0 (Ascii
+    Prelude.True Prelude.False Prelude.False Prelude.True Prelude.False
+    Prelude.True Prelude.True Prelude.False) (String0 (Ascii Prelude.True
+    Prelude.True Prelude.False Prelude.False Prelude.False Prelude.True
+    Prelude.True Prelude.False) (String0 (Ascii Prelude.True Prelude.True
+    Prelude.True Prelude.True Prelude.True Prelude.False Prelude.True
+    Prelude.False) (String0 (Ascii Prelude.False Prelude.True Prelude.False
+    Prelude.False Prelude.True Prelude.True Prelude.True Prelude.False)
+    (String0 (Ascii Prelude.True Prelude.False Prelude.True Prelude.False
+    Prelude.False Prelude.True Prelude.True Prelude.False) (String0 (Ascii
+    Prelude.False Prelude.True Prelude.True Prelude.False Prelude.False
+    Prelude.True Prelude.True Prelude.False) (String0 (Ascii Prelude.True
+    Prelude.False Prelude.True Prelude.False Prelude.False Prelude.True
+    Prelude.True Prelude.False) (String0 (Ascii Prelude.False Prelude.True
+    Prelude.False Prelude.False Prelude.True Prelude.True Prelude.True
+    Prelude.False) (String0 (Ascii Prelude.True Prelude.False Prelude.True
+    Prelude.False Prelude.False Prelude.True Prelude.True Prelude.False)
+    (String0 (Ascii Prelude.False Prelude.True Prelude.True Prelude.True
+    Prelude.False Prelude.True Prelude.True Prelude.False) (String0 (Ascii
+    Prelude.True Prelude.True Prelude.False Prelude.False Prelude.False
+    Prelude.True Prelude.True Prelude.False) (String0 (Ascii Prelude.True
+    Prelude.False Prelude.True Prelude.False Prelude.False Prelude.True
+    Prelude.True Prelude.False) EmptyString))))))))))))))))) ((:)
+    (ENonterminal (String0 (Ascii Prelude.False Prelude.False Prelude.True
     Prelude.False Prelude.True Prelude.True Prelude.True Prelude.False)
     (String0 (Ascii Prelude.True Prelude.False Prelude.True Prelude.False
     Prelude.False Prelude.True Prelude.True Prelude.False) (String0 (Ascii
     Prelude.False Prelude.True Prelude.False Prelude.False Prelude.True
-    Prelude.True Prelude.True Prelude.False) (String0 (Ascii Prelude.False
+    Prelude.True Prelude.True Prelude.False) (String0 (Ascii Prelude.True
+    Prelude.False Prelude.True Prelude.True Prelude.False Prelude.True
+    Prelude.True Prelude.False) (String0 (Ascii Prelude.True Prelude.True
+    Prelude.True Prelude.True Prelude.True Prelude.False Prelude.True
+    Prelude.False) (String0 (Ascii Prelude.True Prelude.False Prelude.False
+    Prelude.False Prelude.False Prelude.True Prelude.True Prelude.False)
+    (String0 (Ascii Prelude.False Prelude.True Prelude.False Prelude.False
+    Prelude.True Prelude.True Prelude.True Prelude.False) (String0 (Ascii
+    Prelude.True Prelude.True Prelude.True Prelude.False Prelude.False
+    Prelude.True Prelude.True Prelude.False) (String0 (Ascii Prelude.True
     Prelude.False Prelude.True Prelude.False Prelude.True Prelude.True
+    Prelude.True Prelude.False) (String0 (Ascii Prelude.True Prelude.False
+    Prelude.True Prelude.True Prelude.False Prelude.True Prelude.True
+    Prelude.False) (String0 (Ascii Prelude.True Prelude.False Prelude.True
+    Prelude.False Prelude.False Prelude.True Prelude.True Prelude.False)
+    (String0 (Ascii Prelude.False Prelude.True Prelude.True Prelude.True
+    Prelude.False Prelude.True Prelude.True Prelude.False) (String0 (Ascii
+    Prelude.False Prelude.False Prelude.True Prelude.False Prelude.True
+    Prelude.True Prelude.True Prelude.False) (String0 (Ascii Prelude.True
+    Prelude.True Prelude.False Prelude.False Prelude.True Prelude.True
+    Prelude.True Prelude.False) EmptyString))))))))))))))) []))))) ((:) ((,)
+    (String0 (Ascii Prelude.True Prelude.True Prelude.False Prelude.False
+    Prelude.False Prelude.True Prelude.True Prelude.False) (String0 (Ascii
+    Prelude.True Prelude.True Prelude.True Prelude.True Prelude.False
+    Prelude.True Prelude.True Prelude.False) (String0 (Ascii Prelude.False
+    Prelude.True Prelude.True Prelude.True Prelude.False Prelude.True
+    Prelude.True Prelude.False) (String0 (Ascii Prelude.False Prelude.True
+    Prelude.True Prelude.False Prelude.True Prelude.True Prelude.True
+    Prelude.False) (String0 (Ascii Prelude.True Prelude.False Prelude.True
+    Prelude.False Prelude.False Prelude.True Prelude.True Prelude.False)
+    (String0 (Ascii Prelude.False Prelude.True Prelude.False Prelude.False
+    Prelude.True Prelude.True Prelude.True Prelude.False) (String0 (Ascii
+    Prelude.False Prelude.False Prelude.True Prelude.False Prelude.True
+    Prelude.True Prelude.True Prelude.False) (String0 (Ascii Prelude.True
+    Prelude.True Prelude.True Prelude.True Prelude.True Prelude.False
+    Prelude.True Prelude.False) (String0 (Ascii Prelude.True Prelude.False
+    Prelude.True Prelude.False Prelude.False Prelude.True Prelude.True
+    Prelude.False) (String0 (Ascii Prelude.False Prelude.False Prelude.False
+    Prelude.True Prelude.True Prelude.True Prelude.True Prelude.False)
+    (String0 (Ascii Prelude.False Prelude.False Prelude.False Prelude.False
+    Prelude.True Prelude.True Prelude.True Prelude.False) (String0 (Ascii
+    Prelude.False Prelude.True Prelude.False Prelude.False Prelude.True
+    Prelude.True Prelude.True Prelude.False) (String0 (Ascii Prelude.True
+    Prelude.False Prelude.True Prelude.False Prelude.False Prelude.True
+    Prelude.True Prelude.False) (String0 (Ascii Prelude.True Prelude.True
+    Prelude.False Prelude.False Prelude.True Prelude.True Prelude.True
+    Prelude.False) (String0 (Ascii Prelude.True Prelude.True Prelude.False
+    Prelude.False Prelude.True Prelude.True Prelude.True Prelude.False)
+    (String0 (Ascii Prelude.True Prelude.False Prelude.False Prelude.True
+    Prelude.False Prelude.True Prelude.True Prelude.False) (String0 (Ascii
+    Prelude.True Prelude.True Prelude.True Prelude.True Prelude.False
+    Prelude.True Prelude.True Prelude.False) (String0 (Ascii Prelude.False
+    Prelude.True Prelude.True Prelude.True Prelude.False Prelude.True
+    Prelude.True Prelude.False) EmptyString)))))))))))))))))) (ESequence ((:)
+    (ELiteral (String0 (Ascii Prelude.True Prelude.True Prelude.False
+    Prelude.False Prelude.False Prelude.True Prelude.True Prelude.False)
+    (String0 (Ascii Prelude.True Prelude.True Prelude.True Prelude.True
+    Prelude.False Prelude.True Prelude.True Prelude.False) (String0 (Ascii
+    Prelude.False Prelude.True Prelude.True Prelude.True Prelude.False
+    Prelude.True Prelude.True Prelude.False) (String0 (Ascii Prelude.False
+    Prelude.True Prelude.True Prelude.False Prelude.True Prelude.True
+    Prelude.True Prelude.False) (String0 (Ascii Prelude.True Prelude.False
+    Prelude.True Prelude.False Prelude.False Prelude.True Prelude.True
+    Prelude.False) (String0 (Ascii Prelude.False Prelude.True Prelude.False
+    Prelude.False Prelude.True Prelude.True Prelude.True Prelude.False)
+    (String0 (Ascii Prelude.False Prelude.False Prelude.True Prelude.False
+    Prelude.True Prelude.True Prelude.True Prelude.False) EmptyString))))))))
+    ((:) (ENonterminal (String0 (Ascii Prelude.True Prelude.False
+    Prelude.True Prelude.False Prelude.False Prelude.True Prelude.True
+    Prelude.False) (String0 (Ascii Prelude.False Prelude.False Prelude.False
+    Prelude.True Prelude.True Prelude.True Prelude.True Prelude.False)
+    (String0 (Ascii Prelude.False Prelude.False Prelude.False Prelude.False
+    Prelude.True Prelude.True Prelude.True Prelude.False) (String0 (Ascii
+    Prelude.False Prelude.True Prelude.False Prelude.False Prelude.True
+    Prelude.True Prelude.True Prelude.False) (String0 (Ascii Prelude.True
+    Prelude.False Prelude.True Prelude.False Prelude.False Prelude.True
+    Prelude.True Prelude.False) (String0 (Ascii Prelude.True Prelude.True
+    Prelude.False Prelude.False Prelude.True Prelude.True Prelude.True
+    Prelude.False) (String0 (Ascii Prelude.True Prelude.True Prelude.False
+    Prelude.False Prelude.True Prelude.True Prelude.True Prelude.False)
+    (String0 (Ascii Prelude.True Prelude.False Prelude.False Prelude.True
+    Prelude.False Prelude.True Prelude.True Prelude.False) (String0 (Ascii
+    Prelude.True Prelude.True Prelude.True Prelude.True Prelude.False
+    Prelude.True Prelude.True Prelude.False) (String0 (Ascii Prelude.False
+    Prelude.True Prelude.True Prelude.True Prelude.False Prelude.True
+    Prelude.True Prelude.False) EmptyString))))))))))) ((:) (ELiteral
+    (String0 (Ascii Prelude.False Prelude.False Prelude.True Prelude.False
+    Prelude.True Prelude.True Prelude.True Prelude.False) (String0 (Ascii
+    Prelude.True Prelude.True Prelude.True Prelude.True Prelude.False
+    Prelude.True Prelude.True Prelude.False) EmptyString))) ((:)
+    (ENonterminal (String0 (Ascii Prelude.False Prelude.False Prelude.True
+    Prelude.False Prelude.True Prelude.True Prelude.True Prelude.False)
+    (String0 (Ascii Prelude.True Prelude.False Prelude.False Prelude.True
+    Prelude.True Prelude.True Prelude.True Prelude.False) (String0 (Ascii
+    Prelude.False Prelude.False Prelude.False Prelude.False Prelude.True
+    Prelude.True Prelude.True Prelude.False) (String0 (Ascii Prelude.True
+    Prelude.False Prelude.True Prelude.False Prelude.False Prelude.True
     Prelude.True Prelude.False) (String0 (Ascii Prelude.True Prelude.True
     Prelude.True Prelude.True Prelude.True Prelude.False Prelude.True
     Prelude.False) (String0 (Ascii Prelude.True Prelude.False Prelude.True
@@ -16127,50 +16320,23 @@ phase1_surface_rules =
     Prelude.True Prelude.True Prelude.True Prelude.False Prelude.True
     Prelude.True Prelude.False) (String0 (Ascii Prelude.False Prelude.True
     Prelude.True Prelude.True Prelude.False Prelude.True Prelude.True
-    Prelude.False) EmptyString)))))))))))))))))) (ESequence ((:) (ELiteral
-    (String0 (Ascii Prelude.True Prelude.True Prelude.False Prelude.False
+    Prelude.False) EmptyString)))))))))))))))) [])))))) ((:) ((,) (String0
+    (Ascii Prelude.True Prelude.True Prelude.False Prelude.False
     Prelude.False Prelude.True Prelude.True Prelude.False) (String0 (Ascii
     Prelude.True Prelude.True Prelude.True Prelude.True Prelude.False
     Prelude.True Prelude.True Prelude.False) (String0 (Ascii Prelude.False
     Prelude.True Prelude.True Prelude.True Prelude.False Prelude.True
-    Prelude.True Prelude.False) (String0 (Ascii Prelude.False Prelude.True
-    Prelude.True Prelude.False Prelude.True Prelude.True Prelude.True
-    Prelude.False) (String0 (Ascii Prelude.True Prelude.False Prelude.True
-    Prelude.False Prelude.False Prelude.True Prelude.True Prelude.False)
+    Prelude.True Prelude.False) (String0 (Ascii Prelude.True Prelude.True
+    Prelude.False Prelude.False Prelude.True Prelude.True Prelude.True
+    Prelude.False) (String0 (Ascii Prelude.False Prelude.False Prelude.True
+    Prelude.False Prelude.True Prelude.True Prelude.True Prelude.False)
     (String0 (Ascii Prelude.False Prelude.True Prelude.False Prelude.False
     Prelude.True Prelude.True Prelude.True Prelude.False) (String0 (Ascii
-    Prelude.False Prelude.False Prelude.True Prelude.False Prelude.True
-    Prelude.True Prelude.True Prelude.False) EmptyString)))))))) ((:)
-    (ENonterminal (String0 (Ascii Prelude.True Prelude.False Prelude.True
-    Prelude.False Prelude.False Prelude.True Prelude.True Prelude.False)
-    (String0 (Ascii Prelude.False Prelude.False Prelude.False Prelude.True
-    Prelude.True Prelude.True Prelude.True Prelude.False) (String0 (Ascii
-    Prelude.False Prelude.False Prelude.False Prelude.False Prelude.True
-    Prelude.True Prelude.True Prelude.False) (String0 (Ascii Prelude.False
-    Prelude.True Prelude.False Prelude.False Prelude.True Prelude.True
-    Prelude.True Prelude.False) (String0 (Ascii Prelude.True Prelude.False
-    Prelude.True Prelude.False Prelude.False Prelude.True Prelude.True
-    Prelude.False) (String0 (Ascii Prelude.True Prelude.True Prelude.False
-    Prelude.False Prelude.True Prelude.True Prelude.True Prelude.False)
-    (String0 (Ascii Prelude.True Prelude.True Prelude.False Prelude.False
-    Prelude.True Prelude.True Prelude.True Prelude.False) (String0 (Ascii
-    Prelude.True Prelude.False Prelude.False Prelude.True Prelude.False
+    Prelude.True Prelude.False Prelude.True Prelude.False Prelude.True
     Prelude.True Prelude.True Prelude.False) (String0 (Ascii Prelude.True
-    Prelude.True Prelude.True Prelude.True Prelude.False Prelude.True
-    Prelude.True Prelude.False) (String0 (Ascii Prelude.False Prelude.True
-    Prelude.True Prelude.True Prelude.False Prelude.True Prelude.True
-    Prelude.False) EmptyString))))))))))) ((:) (ELiteral (String0 (Ascii
-    Prelude.False Prelude.False Prelude.True Prelude.False Prelude.True
-    Prelude.True Prelude.True Prelude.False) (String0 (Ascii Prelude.True
-    Prelude.True Prelude.True Prelude.True Prelude.False Prelude.True
-    Prelude.True Prelude.False) EmptyString))) ((:) (ENonterminal (String0
-    (Ascii Prelude.False Prelude.False Prelude.True Prelude.False
-    Prelude.True Prelude.True Prelude.True Prelude.False) (String0 (Ascii
-    Prelude.True Prelude.False Prelude.False Prelude.True Prelude.True
-    Prelude.True Prelude.True Prelude.False) (String0 (Ascii Prelude.False
-    Prelude.False Prelude.False Prelude.False Prelude.True Prelude.True
-    Prelude.True Prelude.False) (String0 (Ascii Prelude.True Prelude.False
-    Prelude.True Prelude.False Prelude.False Prelude.True Prelude.True
+    Prelude.True Prelude.False Prelude.False Prelude.False Prelude.True
+    Prelude.True Prelude.False) (String0 (Ascii Prelude.False Prelude.False
+    Prelude.True Prelude.False Prelude.True Prelude.True Prelude.True
     Prelude.False) (String0 (Ascii Prelude.True Prelude.True Prelude.True
     Prelude.True Prelude.True Prelude.False Prelude.True Prelude.False)
     (String0 (Ascii Prelude.True Prelude.False Prelude.True Prelude.False
@@ -16191,43 +16357,6 @@ phase1_surface_rules =
     Prelude.True Prelude.True Prelude.False Prelude.True Prelude.True
     Prelude.False) (String0 (Ascii Prelude.False Prelude.True Prelude.True
     Prelude.True Prelude.False Prelude.True Prelude.True Prelude.False)
-    EmptyString)))))))))))))))) [])))))) ((:) ((,) (String0 (Ascii
-    Prelude.True Prelude.True Prelude.False Prelude.False Prelude.False
-    Prelude.True Prelude.True Prelude.False) (String0 (Ascii Prelude.True
-    Prelude.True Prelude.True Prelude.True Prelude.False Prelude.True
-    Prelude.True Prelude.False) (String0 (Ascii Prelude.False Prelude.True
-    Prelude.True Prelude.True Prelude.False Prelude.True Prelude.True
-    Prelude.False) (String0 (Ascii Prelude.True Prelude.True Prelude.False
-    Prelude.False Prelude.True Prelude.True Prelude.True Prelude.False)
-    (String0 (Ascii Prelude.False Prelude.False Prelude.True Prelude.False
-    Prelude.True Prelude.True Prelude.True Prelude.False) (String0 (Ascii
-    Prelude.False Prelude.True Prelude.False Prelude.False Prelude.True
-    Prelude.True Prelude.True Prelude.False) (String0 (Ascii Prelude.True
-    Prelude.False Prelude.True Prelude.False Prelude.True Prelude.True
-    Prelude.True Prelude.False) (String0 (Ascii Prelude.True Prelude.True
-    Prelude.False Prelude.False Prelude.False Prelude.True Prelude.True
-    Prelude.False) (String0 (Ascii Prelude.False Prelude.False Prelude.True
-    Prelude.False Prelude.True Prelude.True Prelude.True Prelude.False)
-    (String0 (Ascii Prelude.True Prelude.True Prelude.True Prelude.True
-    Prelude.True Prelude.False Prelude.True Prelude.False) (String0 (Ascii
-    Prelude.True Prelude.False Prelude.True Prelude.False Prelude.False
-    Prelude.True Prelude.True Prelude.False) (String0 (Ascii Prelude.False
-    Prelude.False Prelude.False Prelude.True Prelude.True Prelude.True
-    Prelude.True Prelude.False) (String0 (Ascii Prelude.False Prelude.False
-    Prelude.False Prelude.False Prelude.True Prelude.True Prelude.True
-    Prelude.False) (String0 (Ascii Prelude.False Prelude.True Prelude.False
-    Prelude.False Prelude.True Prelude.True Prelude.True Prelude.False)
-    (String0 (Ascii Prelude.True Prelude.False Prelude.True Prelude.False
-    Prelude.False Prelude.True Prelude.True Prelude.False) (String0 (Ascii
-    Prelude.True Prelude.True Prelude.False Prelude.False Prelude.True
-    Prelude.True Prelude.True Prelude.False) (String0 (Ascii Prelude.True
-    Prelude.True Prelude.False Prelude.False Prelude.True Prelude.True
-    Prelude.True Prelude.False) (String0 (Ascii Prelude.True Prelude.False
-    Prelude.False Prelude.True Prelude.False Prelude.True Prelude.True
-    Prelude.False) (String0 (Ascii Prelude.True Prelude.True Prelude.True
-    Prelude.True Prelude.False Prelude.True Prelude.True Prelude.False)
-    (String0 (Ascii Prelude.False Prelude.True Prelude.True Prelude.True
-    Prelude.False Prelude.True Prelude.True Prelude.False)
     EmptyString)))))))))))))))))))) (ESequence ((:) (ELiteral (String0 (Ascii
     Prelude.True Prelude.True Prelude.False Prelude.False Prelude.False
     Prelude.True Prelude.True Prelude.False) (String0 (Ascii Prelude.True
@@ -20858,7 +20987,7 @@ phase1_surface_rules =
     EmptyString))))))))))) [])))) [])))) ((:) (ELiteral (String0 (Ascii
     Prelude.True Prelude.False Prelude.False Prelude.True Prelude.False
     Prelude.True Prelude.False Prelude.False) EmptyString)) []))))))
-    []))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))
+    [])))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))
 
 data ConcreteToken =
    TLiteral String

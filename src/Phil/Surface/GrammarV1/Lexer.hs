@@ -238,6 +238,7 @@ grammarV1ReservedWords = Set.fromList
   , "instance"
   , "instantiate"
   , "invariant"
+  , "invoke"
   , "join"
   , "law"
   , "let"

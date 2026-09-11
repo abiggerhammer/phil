@@ -8,7 +8,7 @@ This slice continues `PHIL-SURFACE-GRAMMAR-CORR-001` after #867.
 
 The green extracted `SurfaceGrammarRecognizerKernel.hs` artifact has SHA-256:
 
-`fe9ae9159c61e2cb2fe5054b8e068a4fdfbd7be2bf9644f90f22bf1605329ff2`
+`bd1bfb3cf517fe09bdaa9dbf5ceb034780e280488baf1cbc97a34ee5a8a2d19f`
 
 The bridge workflow fresh-extracts the kernel and requires byte identity with that artifact before exercising the Haskell adapter.
 

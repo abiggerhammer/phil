@@ -25,7 +25,7 @@ Grammar-v1 token stream while avoiding a second lexer pass.
 `generated/SurfaceGrammarRecognizerKernel.hs` is the exact Rocq 9.2 extraction
 staged in #867.  Its SHA-256 is:
 
-`fe9ae9159c61e2cb2fe5054b8e068a4fdfbd7be2bf9644f90f22bf1605329ff2`
+`bd1bfb3cf517fe09bdaa9dbf5ceb034780e280488baf1cbc97a34ee5a8a2d19f`
 
 `src/SurfaceGrammarRecognizerKernel.hs` is the production compile mirror: one
 module-local `-Wno-name-shadowing` pragma, followed byte-for-byte by the exact
