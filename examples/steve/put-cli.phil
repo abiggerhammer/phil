@@ -13,33 +13,16 @@ component StevePutCLI provides Unit {
                             }
                             decide digestDecision {
                                 computed(contentId) => {
-                                    let installDecision = blob_install(contentId, candidate)
-                                    decide installDecision {
-                                        installed => {
-                                            let renderDecision = content_id_render(contentId)
-                                            decide renderDecision {
-                                                rendered(contentIdText) => {
-                                                    let writeDecision = console_write(contentIdText)
-                                                    decide writeDecision {
-                                                        written => { return unit }
-                                                        console-failure(reason) => { return unit }
-                                                    }
-                                                }
+                                    invoke StevePut(candidate)
+                                    let renderDecision = content_id_render(contentId)
+                                    decide renderDecision {
+                                        rendered(contentIdText) => {
+                                            let writeDecision = console_write(contentIdText)
+                                            decide writeDecision {
+                                                written => { return unit }
+                                                console-failure(reason) => { return unit }
                                             }
                                         }
-                                        already-exists => {
-                                            let renderDecision = content_id_render(contentId)
-                                            decide renderDecision {
-                                                rendered(contentIdText) => {
-                                                    let writeDecision = console_write(contentIdText)
-                                                    decide writeDecision {
-                                                        written => { return unit }
-                                                        console-failure(reason) => { return unit }
-                                                    }
-                                                }
-                                            }
-                                        }
-                                        storage-failure(reason) => { return unit }
                                     }
                                 }
                             }
