@@ -1,0 +1,62 @@
+name: Phase 1 Surface Grammar AST Type Claim Correspondence
+
+on:
+  pull_request:
+    paths:
+      - 'src/Phil/Surface/GrammarV1/ReferenceAstTypeClaimDeclarations.hs'
+      - 'src/Phil/Surface/GrammarV1/ReferenceAstTermParams.hs'
+      - 'src/Phil/Surface/GrammarV1/ReferenceAstDeclarationCommon.hs'
+      - 'src/Phil/Surface/GrammarV1/ReferenceAstTypePayload.hs'
+      - 'src/Phil/Surface/GrammarV1/ReferenceAstProposition.hs'
+      - 'src/Phil/Surface/GrammarV1/ReferenceKernelBridge.hs'
+      - 'src/Phil/Surface/GrammarV1/Parser.hs'
+      - 'src/SurfaceGrammarRecognizerKernel.hs'
+      - 'test/Phase1GrammarV1ReferenceAstTypeClaimDeclarationsMain.hs'
+      - 'test/fixtures/phase1-surface/**'
+      - 'scripts/check_phase1_surface_corpus.py'
+      - '.github/workflows/phase1-surface-grammar-ast-type-claim.yml'
+  push:
+    branches: [main]
+    paths:
+      - 'src/Phil/Surface/GrammarV1/ReferenceAstTypeClaimDeclarations.hs'
+      - 'src/Phil/Surface/GrammarV1/ReferenceAstTermParams.hs'
+      - 'src/Phil/Surface/GrammarV1/ReferenceAstDeclarationCommon.hs'
+      - 'src/Phil/Surface/GrammarV1/ReferenceAstTypePayload.hs'
+      - 'src/Phil/Surface/GrammarV1/ReferenceAstProposition.hs'
+      - 'src/Phil/Surface/GrammarV1/ReferenceKernelBridge.hs'
+      - 'src/Phil/Surface/GrammarV1/Parser.hs'
+      - 'src/SurfaceGrammarRecognizerKernel.hs'
+      - 'test/Phase1GrammarV1ReferenceAstTypeClaimDeclarationsMain.hs'
+      - 'test/fixtures/phase1-surface/**'
+      - 'scripts/check_phase1_surface_corpus.py'
+      - '.github/workflows/phase1-surface-grammar-ast-type-claim.yml'
+
+permissions:
+  contents: read
+
+jobs:
+  ast-type-claim-correspondence:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: haskell-actions/setup@v2
+        with:
+          ghc-version: '9.6.7'
+          cabal-version: 'latest'
+
+      - name: Build ordinary regression substrate
+        run: cabal build all --enable-tests
+
+      - name: Strictly compile type/claim correspondence harness
+        run: |
+          cabal exec -- ghc --make \
+            -Wall -Werror \
+            -isrc \
+            test/Phase1GrammarV1ReferenceAstTypeClaimDeclarationsMain.hs \
+            -o /tmp/phase1-surface-grammar-ast-type-claim
+
+      - name: Check certified type/claim declarations against production AST
+        run: |
+          python3 scripts/check_phase1_surface_corpus.py --emit-parser-cases \
+            | /tmp/phase1-surface-grammar-ast-type-claim
