@@ -1,0 +1,73 @@
+name: Temporary Phase 1 AArch64 Apple Darwin Target Discovery
+
+on:
+  push:
+    branches:
+      - phase1-target-aarch64-apple-darwin-profile
+  workflow_dispatch:
+
+jobs:
+  discover-target:
+    runs-on: macos-26
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Verify native Apple Silicon runner
+        shell: bash
+        run: |
+          set -euo pipefail
+          test "$(uname -m)" = "arm64"
+          uname -a
+          sw_vers
+
+      - name: Resolve LLVM 18
+        shell: bash
+        run: |
+          set -euo pipefail
+          if ! brew list llvm@18 >/dev/null 2>&1; then
+            brew install llvm@18
+          fi
+          llvm_prefix="$(brew --prefix llvm@18)"
+          echo "LLVM_PREFIX=$llvm_prefix" >> "$GITHUB_ENV"
+          "$llvm_prefix/bin/clang" --version
+          "$llvm_prefix/bin/llvm-as" --version
+
+      - name: Probe canonical Darwin target profile
+        shell: bash
+        run: |
+          set -euo pipefail
+          probe_dir="$RUNNER_TEMP/phil-aarch64-apple-darwin-probe"
+          mkdir -p "$probe_dir"
+          cat > "$probe_dir/probe.c" <<'EOF'
+          int phil_target_probe(void) { return 0; }
+          EOF
+
+          "$LLVM_PREFIX/bin/clang" \
+            --target=aarch64-apple-darwin \
+            -S -emit-llvm -O0 \
+            "$probe_dir/probe.c" \
+            -o "$probe_dir/probe.ll"
+
+          grep '^target datalayout = ' "$probe_dir/probe.ll" | tee "$probe_dir/target-profile.txt"
+          grep '^target triple = ' "$probe_dir/probe.ll" | tee -a "$probe_dir/target-profile.txt"
+          grep -Eq '^target triple = "(arm64|aarch64)-apple-' "$probe_dir/probe.ll"
+
+          "$LLVM_PREFIX/bin/llvm-as" \
+            "$probe_dir/probe.ll" \
+            -o "$probe_dir/probe.bc"
+          "$LLVM_PREFIX/bin/clang" \
+            --target=aarch64-apple-darwin \
+            -c "$probe_dir/probe.ll" \
+            -o "$probe_dir/probe.o"
+          file "$probe_dir/probe.o" | tee "$probe_dir/object-file.txt"
+          grep -q 'Mach-O 64-bit object arm64' "$probe_dir/object-file.txt"
+
+          "$LLVM_PREFIX/bin/clang" --version > "$probe_dir/clang-version.txt"
+          sw_vers > "$probe_dir/macos-version.txt"
+          uname -a > "$probe_dir/uname.txt"
+
+      - name: Upload target discovery evidence
+        uses: actions/upload-artifact@v4
+        with:
+          name: aarch64-apple-darwin-target-discovery
+          path: ${{ runner.temp }}/phil-aarch64-apple-darwin-probe
