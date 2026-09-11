@@ -1,0 +1,51 @@
+name: Temporary INT-006 Steve Application Shell
+
+on:
+  workflow_dispatch:
+  push:
+    branches: [phase1-int-006-steve-shell-callable-binding]
+    paths:
+      - 'examples/steve/put-cli.phil'
+      - 'examples/steve/get-cli.phil'
+      - 'src/Phil/Examples/Steve/ApplicationShell.hs'
+      - 'test/Phase1INT006SteveApplicationShellMain.hs'
+      - '.github/workflows/tmp-int-006-steve-application-shell.yml'
+
+permissions:
+  contents: read
+
+jobs:
+  steve-application-shell:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: haskell-actions/setup@v2
+        with:
+          ghc-version: '9.6.7'
+          cabal-version: 'latest'
+
+      - name: Build complete Haskell substrate
+        run: cabal build all --enable-tests
+
+      - name: Strict typecheck Phil-side Steve application shell
+        run: |
+          cabal exec -- ghc -isrc -itest -Wall -Werror -fno-code \
+            test/Phase1INT006SteveApplicationShellMain.hs
+
+      - name: Exercise Phil-side Steve application shell
+        run: |
+          cabal exec -- runghc -isrc -itest -Wall -Werror \
+            test/Phase1INT006SteveApplicationShellMain.hs
+
+      - name: Replay ordinary Steve provider source path
+        run: cabal exec -- runghc -isrc -itest -Wall -Werror test/Phase1INT001SteveOrdinaryProviderSourceMain.hs
+
+      - name: Replay certified runtime-choice LLVM checks
+        run: cabal exec -- runghc -isrc -itest -Wall -Werror test/Phase1INT006RuntimeChoiceLLVMMain.hs
+
+      - name: Replay real Steve CAS semantics
+        run: |
+          cabal exec -- runghc \
+            --ghc-arg=-package --ghc-arg=directory \
+            --ghc-arg=-package --ghc-arg=unix \
+            -isrc -itest -Wall -Werror test/Phase1INT006SteveCASMain.hs
