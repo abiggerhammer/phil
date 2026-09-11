@@ -41,7 +41,7 @@ jobs:
           python3 scripts/derive_phase1_surface_grammar.py --check
           python3 scripts/derive_phase1_surface_determinacy_certificate.py --check
 
-      - name: Compile proof-side source header correspondence
+      - name: Compile proof-side source spine correspondence
         shell: bash
         run: |
           set -euo pipefail
@@ -52,4 +52,4 @@ jobs:
           } > _CoqProject.surface-source-spine
           rocq makefile -f _CoqProject.surface-source-spine -o Makefile.surface-source-spine
           make -f Makefile.surface-source-spine -j2 \
-            proof/Phil/Surface/GrammarAstSourceHeader.vo
+            proof/Phil/Surface/GrammarAstSourceSpine.vo
