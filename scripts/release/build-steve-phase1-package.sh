@@ -26,7 +26,10 @@ cabal build all --enable-tests
 llvm="$work/steve-runtime-choice.ll"
 object="$work/steve-runtime-choice.o"
 
-cabal exec -- runghc -isrc -itest -Wall -Werror \
+# These commands emit machine-consumed artifacts on stdout. Keep Cabal's own
+# dependency/status chatter off that channel so the resulting files contain
+# only the emitter output.
+cabal -v0 exec -- runghc -isrc -itest -Wall -Werror \
   test/Phase1INT006RuntimeChoiceLLVMMain.hs emit > "$llvm"
 "$CLANG" --target=x86_64-unknown-linux-gnu -c "$llvm" -o "$object"
 
@@ -40,7 +43,7 @@ philc="$(cabal list-bin exe:philc)"
 cp "$philc" "$stage/bin/philc"
 chmod 0755 "$stage/bin/steve" "$stage/bin/philc"
 
-cabal exec -- runghc -isrc -itest -Wall -Werror \
+cabal -v0 exec -- runghc -isrc -itest -Wall -Werror \
   test/Phase1INT005ReleasePackageMain.hs emit steve \
   > "$stage/share/phil-steve/steve.release-package"
 
