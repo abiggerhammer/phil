@@ -151,7 +151,7 @@ Proof.
   destruct result as [tree | trees]; try discriminate Hnormalize.
   exists tree.
   split.
-  - exact Hparse.
+  - reflexivity.
   - split.
     + eapply phase1_surface_normalize_source_spine_round_trip.
       exact Hnormalize.
