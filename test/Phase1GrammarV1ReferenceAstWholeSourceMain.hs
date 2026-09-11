@@ -139,7 +139,6 @@ runCase corpusCase
       let relativePath = corpusCasePath corpusCase
           path = corpusRoot <> "/" <> relativePath
           label = Text.unpack (corpusCaseId corpusCase) <> " " <> relativePath
-          sourceName = Text.pack relativePath
       sourceResult <- try (TextIO.readFile path) :: IO (Either IOException Text)
       pure $ case sourceResult of
         Left exception -> Left
