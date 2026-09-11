@@ -73,6 +73,40 @@ jobs:
 
           "$executable"
 
+      - name: Exercise public Steve command path through external providers
+        run: |
+          work="$RUNNER_TEMP/phil-int006-steve-public-package"
+          object="$work/steve-runtime-choice.o"
+          executable="$work/steve"
+          user_root="$work/user-files"
+          store_root="$work/store"
+          mkdir -p "$user_root" "$store_root"
+
+          cabal exec -- ghc -isrc -iruntime/phase1 \
+            -package directory -package unix \
+            -Wall -Werror \
+            runtime/phase1/StevePublicMain.hs "$object" \
+            -o "$executable"
+
+          printf 'real Steve external-provider artifact\n' > "$user_root/input.bin"
+          content_id="$(printf 'input.bin\n' | \
+            "$executable" put "$store_root" "$user_root")"
+
+          test "${#content_id}" -eq 64
+          printf '%s' "$content_id" | grep -Eq '^[0-9a-f]{64}$'
+          test -f "$store_root/$content_id"
+          cmp "$user_root/input.bin" "$store_root/$content_id"
+
+          printf '%s\noutput.bin\n' "$content_id" | \
+            "$executable" get "$store_root" "$user_root"
+          cmp "$user_root/input.bin" "$user_root/output.bin"
+
+          printf 'must survive corrupt GET\n' > "$user_root/guard.bin"
+          printf 'tampered bytes\n' > "$store_root/$content_id"
+          printf '%s\nguard.bin\n' "$content_id" | \
+            "$executable" get "$store_root" "$user_root"
+          grep -qx 'must survive corrupt GET' "$user_root/guard.bin"
+
       - name: Exercise current certified Steve package and TCB disclosure
         run: |
           work="$RUNNER_TEMP/phil-int006-steve-public-package"
