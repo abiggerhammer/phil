@@ -11,10 +11,13 @@ import Phil.Compiler.SourceBundle
 import Phil.Compiler.SourceCorePolicy (sourceCoreCallSites)
 import Phil.Core.Callable (SemanticEffect (..))
 import Phil.Core.Static (DeclarationKey (..))
+import Phil.Core.Syntax (Mode (..), Ty (..))
 import Phil.Examples.Steve.ApplicationShell
 import Phil.Surface.Check
   ( RejectionClass (..)
+  , SurfaceCallableSignature (..)
   , SurfaceCheckError (..)
+  , SurfaceEnvironment (..)
   )
 import Phil.Surface.Lineage
   ( DeclarationSiteId (..)
@@ -34,8 +37,10 @@ main = do
   let checks =
         [ ("Phil-side Steve put/get shells pass the ordinary source path",
             ordinaryShellChecks putSource getSource)
-        , ("shell call inventory contains IO and CAS operations in Phil source",
+        , ("shell direct-call inventory excludes composed StevePut CAS authority",
             shellCallInventory putSource getSource)
+        , ("shell invokes bind exact Steve callable declarations",
+            callableBindingsAreExact)
         , ("console and filesystem spellings retain exact IO provider identity",
             ioBindingsAreExact)
         , ("retrieved linear bytes must be released on every terminal path",
@@ -67,9 +72,6 @@ shellCallInventory putSource getSource = do
         , "path_parse"
         , "fs_read"
         , "digest_compute"
-        , "blob_install"
-        , "content_id_render"
-        , "console_write"
         , "content_id_render"
         , "console_write"
         , "console_read_line"
@@ -81,7 +83,24 @@ shellCallInventory putSource getSource = do
         , "fs_replace"
         ]
   assert (actual == expected)
-    ("shell call inventory drifted: " <> show actual)
+    ("shell direct-call inventory drifted: " <> show actual)
+
+callableBindingsAreExact :: Either String ()
+callableBindingsAreExact = do
+  putEnvironment <- mapLeft Text.unpack stevePutShellEnvironment
+  getEnvironment <- mapLeft Text.unpack steveGetShellEnvironment
+  putCallable <- needCallable "StevePut" (surfaceCallables putEnvironment)
+  getCallable <- needCallable "SteveGet" (surfaceCallables getEnvironment)
+  assert
+    (surfaceCallableDeclarationKey putCallable == DeclarationKey "decl:steve.put"
+      && surfaceCallableParameters putCallable == [(Linear, TyOpaque "OwnedBytes")]
+      && surfaceCallableResult putCallable == Nothing)
+    "StevePut callable binding drifted from the ordinary Steve declaration"
+  assert
+    (surfaceCallableDeclarationKey getCallable == DeclarationKey "decl:steve.get"
+      && surfaceCallableParameters getCallable == [(Unrestricted, TyOpaque "ContentId[SHA256]")]
+      && surfaceCallableResult getCallable == Nothing)
+    "SteveGet callable binding drifted from the ordinary Steve declaration"
 
 ioBindingsAreExact :: Either String ()
 ioBindingsAreExact = do
@@ -174,6 +193,15 @@ need
   -> Either String SteveShellIOBinding
 need name bindings = maybe
   (Left ("missing shell IO binding: " <> Text.unpack name))
+  Right
+  (Map.lookup name bindings)
+
+needCallable
+  :: Text.Text
+  -> Map.Map Text.Text SurfaceCallableSignature
+  -> Either String SurfaceCallableSignature
+needCallable name bindings = maybe
+  (Left ("missing shell callable binding: " <> Text.unpack name))
   Right
   (Map.lookup name bindings)
 
