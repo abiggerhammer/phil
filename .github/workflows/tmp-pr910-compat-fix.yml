@@ -1,0 +1,49 @@
+name: Temporary PR910 Grammar Compatibility Fix
+
+on:
+  push:
+    branches: [phase1-call-019-grammar-revision]
+    paths:
+      - '.github/workflows/tmp-pr910-compat-fix.yml'
+
+permissions:
+  contents: write
+
+jobs:
+  patch:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - name: Patch Grammar-v1 compatibility surfaces
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 - <<'PY'
+          from pathlib import Path
+
+          lexer = Path('src/Phil/Surface/GrammarV1/Lexer.hs')
+          text = lexer.read_text()
+          old = '  , "invariant"\n  , "join"'
+          new = '  , "invariant"\n  , "invoke"\n  , "join"'
+          if old not in text:
+              raise SystemExit('lexer insertion anchor not found')
+          lexer.write_text(text.replace(old, new, 1))
+
+          fixed = Path('src/Phil/Surface/GrammarV1/ReferenceAstFixedCommands.hs')
+          text = fixed.read_text()
+          if '      26 -> Just <$> parseProve selected' not in text:
+              raise SystemExit('fixed-command prove index anchor not found')
+          text = text.replace('      26 -> Just <$> parseProve selected', '      27 -> Just <$> parseProve selected', 1)
+          if '_ | index >= 0 && index <= 26 -> pure Nothing' not in text:
+              raise SystemExit('fixed-command range anchor not found')
+          text = text.replace('_ | index >= 0 && index <= 26 -> pure Nothing', '_ | index >= 0 && index <= 27 -> pure Nothing', 1)
+          fixed.write_text(text)
+          PY
+
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git add src/Phil/Surface/GrammarV1/Lexer.hs src/Phil/Surface/GrammarV1/ReferenceAstFixedCommands.hs
+          git commit -m 'surface: reconcile invoke grammar consumers'
+          git push origin HEAD:phase1-call-019-grammar-revision
