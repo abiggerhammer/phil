@@ -98,47 +98,51 @@ Proof.
     | body_optional_body
     | body_repeated];
     cbn in Hnormalize; try discriminate Hnormalize.
-  destruct fields as [| module_part fields];
-    cbn in Hnormalize; try discriminate Hnormalize.
-  destruct fields as [| imports_part fields];
-    cbn in Hnormalize; try discriminate Hnormalize.
-  destruct fields as [| top_levels_part fields];
-    cbn in Hnormalize; try discriminate Hnormalize.
-  destruct imports_part as
-    [import_literal
-    | import_class import_lexeme
-    | import_child_name import_child_body
-    | import_sequence
-    | import_index import_branch
-    |
-    | import_optional_body
-    | imports];
-    cbn in Hnormalize; try discriminate Hnormalize.
-  destruct top_levels_part as
-    [top_literal
-    | top_class top_lexeme
-    | top_child_name top_child_body
-    | top_sequence
-    | top_index top_branch
-    |
-    | top_optional_body
-    | top_levels];
-    cbn in Hnormalize; try discriminate Hnormalize.
-  destruct (String.eqb name phase1_surface_start) eqn:Hname;
-    cbn in Hnormalize; try discriminate Hnormalize.
-  apply String.eqb_eq in Hname.
-  subst name.
-  destruct module_part as
-    [module_literal
-    | module_class module_lexeme
-    | module_child_name module_child_body
-    | module_sequence
-    | module_index module_branch
-    |
-    | module_tree
-    | module_repeated];
-    cbn in Hnormalize; try discriminate Hnormalize;
-    inversion Hnormalize; subst; reflexivity.
+  destruct fields as [| module_part fields].
+  - discriminate Hnormalize.
+  destruct fields as [| imports_part fields].
+  - discriminate Hnormalize.
+  destruct fields as [| top_levels_part fields].
+  - discriminate Hnormalize.
+  destruct fields as [| extra rest].
+  - destruct imports_part as
+      [import_literal
+      | import_class import_lexeme
+      | import_child_name import_child_body
+      | import_sequence
+      | import_index import_branch
+      |
+      | import_optional_body
+      | imports];
+      cbn in Hnormalize; try discriminate Hnormalize.
+    destruct top_levels_part as
+      [top_literal
+      | top_class top_lexeme
+      | top_child_name top_child_body
+      | top_sequence
+      | top_index top_branch
+      |
+      | top_optional_body
+      | top_levels];
+      cbn in Hnormalize; try discriminate Hnormalize.
+    destruct (String.eqb name phase1_surface_start) eqn:Hname;
+      cbn in Hnormalize; try discriminate Hnormalize.
+    apply String.eqb_eq in Hname.
+    subst name.
+    destruct module_part as
+      [module_literal
+      | module_class module_lexeme
+      | module_child_name module_child_body
+      | module_sequence
+      | module_index module_branch
+      |
+      | module_tree
+      | module_repeated];
+      cbn in Hnormalize; try discriminate Hnormalize.
+    + inversion Hnormalize; subst; reflexivity.
+    + inversion Hnormalize; subst; reflexivity.
+  - cbn in Hnormalize.
+    discriminate Hnormalize.
 Qed.
 
 Definition phase1_surface_reference_source_spine
