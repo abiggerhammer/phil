@@ -116,6 +116,7 @@ jobs:
           cmp SurfaceGrammarRecognizerKernel.hs generated/SurfaceGrammarRecognizerKernel.hs
           tail -n +2 src/SurfaceGrammarRecognizerKernel.hs | cmp SurfaceGrammarRecognizerKernel.hs -
 
+          git config --global --add safe.directory "$GITHUB_WORKSPACE"
           git -C "$GITHUB_WORKSPACE" status --short
           git -C "$GITHUB_WORKSPACE" config user.name 'github-actions[bot]'
           git -C "$GITHUB_WORKSPACE" config user.email '41898282+github-actions[bot]@users.noreply.github.com'
