@@ -120,7 +120,17 @@ jobs:
           git -C "$GITHUB_WORKSPACE" status --short
           git -C "$GITHUB_WORKSPACE" config user.name 'github-actions[bot]'
           git -C "$GITHUB_WORKSPACE" config user.email '41898282+github-actions[bot]@users.noreply.github.com'
-          git -C "$GITHUB_WORKSPACE" add -A
+          git -C "$GITHUB_WORKSPACE" add \
+            grammar/phase1-surface.ebnf \
+            grammar/phase1-surface-determinacy.json \
+            proof/Phil/Surface/Grammar.v \
+            generated/SurfaceGrammarRecognizerKernel.hs \
+            src/SurfaceGrammarRecognizerKernel.hs \
+            src/Phil/Surface/Lineage.hs \
+            test/fixtures/phase1/surf010-inline.bundle \
+            test/fixtures/phase1/surf010-metadata.bundle \
+            docs/phase-1/surface-parser-production-binding-v1.md \
+            docs/phase-1/surface-parser-reference-kernel-bridge-v1.md
           git -C "$GITHUB_WORKSPACE" commit -m 'surface: bind CALL-019 invoke into Grammar-v1 revision'
           git -C "$GITHUB_WORKSPACE" push origin HEAD:phase1-call-019-grammar-revision
           echo 'pushed=true' >> "$GITHUB_OUTPUT"
