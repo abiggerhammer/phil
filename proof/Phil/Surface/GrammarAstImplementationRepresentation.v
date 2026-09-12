@@ -207,7 +207,7 @@ Qed.
 
 Theorem phase1_surface_certified_source_header_has_implementation_view :
   forall tokens tree,
-    Phase1CompleteDerivation tokens tree ->
+    GrammarDerivation.Phase1CompleteDerivation tokens tree ->
     exists header,
       phase1_surface_normalize_source_header_tree tree = Some header /\
       phase1_surface_source_header_from_implementation
