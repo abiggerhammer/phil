@@ -6,100 +6,23 @@ on:
       - phase1-int-011-compiler-target-selection-core
 
 permissions:
-  contents: write
+  contents: read
 
 jobs:
-  patch-and-test:
+  test-committed-head:
     runs-on: ubuntu-24.04
     steps:
       - uses: actions/checkout@v4
         with:
           ref: ${{ github.ref_name }}
-          fetch-depth: 0
 
       - uses: haskell-actions/setup@v2
         with:
           ghc-version: '9.6.7'
           cabal-version: 'latest'
 
-      - name: Apply INT-011 target-selection core patch when absent
-        shell: bash
-        run: |
-          set -euo pipefail
-          python3 - <<'PY'
-          from pathlib import Path
-
-          def replace_once(path, old, new):
-              p = Path(path)
-              text = p.read_text()
-              count = text.count(old)
-              if count == 0:
-                  if new in text:
-                      return False
-                  raise SystemExit(f"expected patch anchor missing in {path}")
-              if count != 1:
-                  raise SystemExit(f"patch anchor occurs {count} times in {path}")
-              p.write_text(text.replace(old, new, 1))
-              return True
-
-          changed = False
-
-          changed |= replace_once(
-              "src/Phil/Compiler.hs",
-              """  , RunnableProgram (..)\n  , compileRunnable\n""",
-              """  , RunnableProgram (..)\n  , CompilerTarget (..)\n  , supportedCompilerTargets\n  , compilerTargetName\n  , parseCompilerTarget\n  , compilerTargetLLVMProfile\n  , compileRunnable\n  , compileRunnableForTarget\n""",
-          )
-
-          changed |= replace_once(
-              "src/Phil/Compiler.hs",
-              """data RunnableProgram = RunnableProgram\n  { runnableSourceDigest :: Digest\n  , runnableResult :: RunnableResult\n  , runnableSystemsArtifact :: SystemsArtifact\n  , runnableLLVMArtifact :: LLVMArtifact\n  }\n  deriving (Eq, Show)\n\ndata LoweredBody = LoweredBody\n""",
-              """data RunnableProgram = RunnableProgram\n  { runnableSourceDigest :: Digest\n  , runnableResult :: RunnableResult\n  , runnableSystemsArtifact :: SystemsArtifact\n  , runnableLLVMArtifact :: LLVMArtifact\n  }\n  deriving (Eq, Show)\n\n-- | Public host-target identity for the ordinary conservative compiler path.\n--\n-- This is deliberately separate from the Steve/runtime-choice target profile:\n-- ordinary runnable lowering does not acquire the provider ABI merely because\n-- it is emitted for the same host architecture.\ndata CompilerTarget\n  = CompilerTargetX86_64UnknownLinuxGNU\n  | CompilerTargetAArch64AppleDarwin\n  deriving (Bounded, Enum, Eq, Ord, Show)\n\nsupportedCompilerTargets :: [CompilerTarget]\nsupportedCompilerTargets = [minBound .. maxBound]\n\ncompilerTargetName :: CompilerTarget -> Text\ncompilerTargetName target = case target of\n  CompilerTargetX86_64UnknownLinuxGNU -> \"x86_64-unknown-linux-gnu\"\n  CompilerTargetAArch64AppleDarwin -> \"aarch64-apple-darwin\"\n\nparseCompilerTarget :: Text -> Maybe CompilerTarget\nparseCompilerTarget targetName = case targetName of\n  \"x86_64-unknown-linux-gnu\" -> Just CompilerTargetX86_64UnknownLinuxGNU\n  \"aarch64-apple-darwin\" -> Just CompilerTargetAArch64AppleDarwin\n  _ -> Nothing\n\ncompilerTargetLLVMProfile :: CompilerTarget -> LLVMTargetProfile\ncompilerTargetLLVMProfile target = case target of\n  CompilerTargetX86_64UnknownLinuxGNU -> phase0LLVMTarget\n  CompilerTargetAArch64AppleDarwin -> phase0LLVMTarget\n    { llvmTargetTripleName = \"aarch64-apple-darwin\"\n    , llvmTargetDataLayout = \"e-m:o-i64:64-i128:128-n32:64-S128\"\n    }\n\ndata LoweredBody = LoweredBody\n""",
-          )
-
-          changed |= replace_once(
-              "src/Phil/Compiler.hs",
-              """compileRunnable :: Text -> Text -> Either RunnableCompileError RunnableProgram\ncompileRunnable sourceName source = do\n  surfaceFile <- mapLeft RunnableParseError (parseSurfaceFile sourceName source)\n  component <- requireSingleComponent surfaceFile\n  result <- requireRunnableHeader component\n  _ <- mapLeft RunnableSurfaceCheckError $\n    checkSurfaceComponent (runnableSurfaceEnvironment result) component\n  let sourceDigest = digestText source\n  (systemsArtifact, systemsContext) <- buildRunnableSystems sourceDigest result component\n  mapLeft RunnableSystemsVerificationError $\n    verifySystemsArtifact systemsContext systemsArtifact\n  mapLeft RunnableScalarDataflowError $\n    verifyScalarDataflow systemsArtifact\n  mapLeft RunnableSourceProjectionError $\n    verifySourceProjection result component systemsArtifact\n  let llvmArtifact = lowerSystemsConservative phase0LLVMTarget systemsArtifact\n      llvmContext = runnableLLVMContext systemsContext phase0LLVMTarget\n  mapLeft RunnableLLVMVerificationError $\n    verifyLLVMEmission llvmContext systemsArtifact llvmArtifact\n  Right RunnableProgram\n    { runnableSourceDigest = sourceDigest\n    , runnableResult = result\n    , runnableSystemsArtifact = systemsArtifact\n    , runnableLLVMArtifact = llvmArtifact\n    }\n""",
-              """compileRunnable :: Text -> Text -> Either RunnableCompileError RunnableProgram\ncompileRunnable = compileRunnableForTarget CompilerTargetX86_64UnknownLinuxGNU\n\ncompileRunnableForTarget\n  :: CompilerTarget\n  -> Text\n  -> Text\n  -> Either RunnableCompileError RunnableProgram\ncompileRunnableForTarget target sourceName source = do\n  surfaceFile <- mapLeft RunnableParseError (parseSurfaceFile sourceName source)\n  component <- requireSingleComponent surfaceFile\n  result <- requireRunnableHeader component\n  _ <- mapLeft RunnableSurfaceCheckError $\n    checkSurfaceComponent (runnableSurfaceEnvironment result) component\n  let sourceDigest = digestText source\n  (systemsArtifact, systemsContext) <- buildRunnableSystems sourceDigest result component\n  mapLeft RunnableSystemsVerificationError $\n    verifySystemsArtifact systemsContext systemsArtifact\n  mapLeft RunnableScalarDataflowError $\n    verifyScalarDataflow systemsArtifact\n  mapLeft RunnableSourceProjectionError $\n    verifySourceProjection result component systemsArtifact\n  let targetProfile = compilerTargetLLVMProfile target\n      llvmArtifact = lowerSystemsConservative targetProfile systemsArtifact\n      llvmContext = runnableLLVMContext systemsContext targetProfile\n  mapLeft RunnableLLVMVerificationError $\n    verifyLLVMEmission llvmContext systemsArtifact llvmArtifact\n  Right RunnableProgram\n    { runnableSourceDigest = sourceDigest\n    , runnableResult = result\n    , runnableSystemsArtifact = systemsArtifact\n    , runnableLLVMArtifact = llvmArtifact\n    }\n""",
-          )
-
-          changed |= replace_once(
-              "test/RunnableMain.hs",
-              """import Phil.LLVM (llvmArtifactText)\n""",
-              """import Phil.LLVM\n  ( LLVMArtifact (llvmArtifactModule, llvmArtifactText)\n  , LLVMModule (llvmDataLayout, llvmRuntimeABIProfile, llvmTargetTriple)\n  )\n""",
-          )
-
-          changed |= replace_once(
-              "test/RunnableMain.hs",
-              """  results <- sequence\n    [ test \"runnable Unit source compiles through verified LLVM\" validUnitCompiles\n""",
-              """  results <- sequence\n    [ test \"ordinary compiler target names are exact and closed\" compilerTargetNamesExact\n    , test \"compatibility compiler remains the exact Linux target path\" compatibilityCompilerIsLinuxTarget\n    , test \"ordinary Linux target profile is exact\" linuxTargetProfileExact\n    , test \"ordinary Darwin target profile is exact and provider-ABI-free\" darwinTargetProfileExact\n    , test \"target selection preserves pre-LLVM Systems identity\" targetSelectionPreservesSystemsIdentity\n    , test \"runnable Unit source compiles through verified LLVM\" validUnitCompiles\n""",
-          )
-
-          changed |= replace_once(
-              "test/RunnableMain.hs",
-              """validUnitCompiles :: Bool\nvalidUnitCompiles = case compileRunnable \"unit.phil\" unitSource of\n""",
-              """compilerTargetNamesExact :: Bool\ncompilerTargetNamesExact =\n  map compilerTargetName supportedCompilerTargets\n    == [\"x86_64-unknown-linux-gnu\", \"aarch64-apple-darwin\"]\n    && parseCompilerTarget \"x86_64-unknown-linux-gnu\"\n      == Just CompilerTargetX86_64UnknownLinuxGNU\n    && parseCompilerTarget \"aarch64-apple-darwin\"\n      == Just CompilerTargetAArch64AppleDarwin\n    && parseCompilerTarget \"x86_64-apple-darwin\" == Nothing\n\ncompatibilityCompilerIsLinuxTarget :: Bool\ncompatibilityCompilerIsLinuxTarget =\n  compileRunnable \"unit.phil\" unitSource\n    == compileRunnableForTarget\n      CompilerTargetX86_64UnknownLinuxGNU\n      \"unit.phil\"\n      unitSource\n\nlinuxTargetProfileExact :: Bool\nlinuxTargetProfileExact =\n  targetProfileMatches\n    CompilerTargetX86_64UnknownLinuxGNU\n    \"x86_64-unknown-linux-gnu\"\n    \"e-m:e-p270:32:32-p271:32:32-p272:64:64-i64:64-f80:128-n8:16:32:64-S128\"\n\ndarwinTargetProfileExact :: Bool\ndarwinTargetProfileExact =\n  case compileRunnableForTarget\n      CompilerTargetAArch64AppleDarwin\n      \"unit.phil\"\n      unitSource of\n    Left _ -> False\n    Right runnable ->\n      let llvmModule = llvmArtifactModule (runnableLLVMArtifact runnable)\n      in llvmTargetTriple llvmModule == \"aarch64-apple-darwin\"\n          && llvmDataLayout llvmModule == \"e-m:o-i64:64-i128:128-n32:64-S128\"\n          && llvmRuntimeABIProfile llvmModule == \"phil-runtime/phase0/reference-v1\"\n\ntargetSelectionPreservesSystemsIdentity :: Bool\ntargetSelectionPreservesSystemsIdentity =\n  case ( compileRunnableForTarget\n           CompilerTargetX86_64UnknownLinuxGNU\n           \"binding.phil\"\n           bindingSource\n       , compileRunnableForTarget\n           CompilerTargetAArch64AppleDarwin\n           \"binding.phil\"\n           bindingSource\n       ) of\n    (Right linux, Right darwin) ->\n      runnableSystemsArtifact linux == runnableSystemsArtifact darwin\n        && runnableLLVMArtifact linux /= runnableLLVMArtifact darwin\n    _ -> False\n\ntargetProfileMatches :: CompilerTarget -> Text -> Text -> Bool\ntargetProfileMatches target expectedTriple expectedLayout =\n  case compileRunnableForTarget target \"unit.phil\" unitSource of\n    Left _ -> False\n    Right runnable ->\n      let llvmModule = llvmArtifactModule (runnableLLVMArtifact runnable)\n      in llvmTargetTriple llvmModule == expectedTriple\n          && llvmDataLayout llvmModule == expectedLayout\n\nvalidUnitCompiles :: Bool\nvalidUnitCompiles = case compileRunnable \"unit.phil\" unitSource of\n""",
-          )
-
-          if not changed:
-              print("INT-011 target-selection patch already present")
-          PY
-
       - name: Run focused runnable compiler tests
         shell: bash
         run: |
           set -euo pipefail
           cabal test phil-runnable-tests
-
-      - name: Commit semantic patch when newly applied
-        shell: bash
-        run: |
-          set -euo pipefail
-          if git diff --quiet -- src/Phil/Compiler.hs test/RunnableMain.hs; then
-            echo 'No semantic patch to commit.'
-            exit 0
-          fi
-          git config user.name 'github-actions[bot]'
-          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
-          git add src/Phil/Compiler.hs test/RunnableMain.hs
-          git commit -m 'INT-011: add ordinary compiler target-selection core'
-          git push origin HEAD:${GITHUB_REF_NAME}
