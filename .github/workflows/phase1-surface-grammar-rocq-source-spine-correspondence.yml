@@ -41,7 +41,7 @@ jobs:
           python3 scripts/derive_phase1_surface_grammar.py --check
           python3 scripts/derive_phase1_surface_determinacy_certificate.py --check
 
-      - name: Compile proof-side source spine correspondence
+      - name: Compile proof-side source correspondence and representation bridge
         shell: bash
         run: |
           set -euo pipefail
@@ -52,4 +52,27 @@ jobs:
           } > _CoqProject.surface-source-spine
           rocq makefile -f _CoqProject.surface-source-spine -o Makefile.surface-source-spine
           make -f Makefile.surface-source-spine -j2 \
-            proof/Phil/Surface/GrammarAstSourceSpine.vo
+            proof/Phil/Surface/GrammarAstSourceSpine.vo \
+            proof/Phil/Surface/GrammarAstImplementationRepresentation.vo \
+            proof/Phil/Surface/GrammarAstImplementationRepresentationExtraction.vo
+
+      - name: Record source-header representation identities
+        shell: bash
+        run: |
+          set -euo pipefail
+          test -f SurfaceGrammarAstRepresentationKernel.hs
+          mkdir -p surface-grammar-ast-representation
+          cp SurfaceGrammarAstRepresentationKernel.hs surface-grammar-ast-representation/
+          sha256sum \
+            grammar/phase1-surface.ebnf \
+            proof/Phil/Surface/GrammarAstImplementationRepresentation.v \
+            proof/Phil/Surface/GrammarAstImplementationRepresentation.vo \
+            SurfaceGrammarAstRepresentationKernel.hs \
+            > surface-grammar-ast-representation/identities.sha256
+          cat surface-grammar-ast-representation/identities.sha256
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: rocq-surface-grammar-ast-representation
+          path: surface-grammar-ast-representation
+          if-no-files-found: error

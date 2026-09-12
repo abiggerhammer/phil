@@ -1,6 +1,6 @@
 From Stdlib Require Import Arith.PeanoNat Lists.List Strings.String.
 
-From Phil.Surface Require Import Grammar.
+From Phil.Surface Require Export Grammar.
 
 Import ListNotations.
 Open Scope string_scope.
