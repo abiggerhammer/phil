@@ -349,7 +349,6 @@ Proof.
     phase1_surface_expect_nonterminal,
     phase1_surface_expect_alternative.
   cbn.
-  rewrite String.eqb_refl.
   rewrite Htag.
   rewrite String.eqb_refl.
   reflexivity.
