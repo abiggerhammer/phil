@@ -44,7 +44,7 @@ if HOME="$work/home" bin/philc >"$work/philc.stdout" 2>"$work/philc.stderr"; the
   echo 'philc unexpectedly accepted an empty invocation' >&2
   exit 1
 fi
-grep -q 'usage: philc emit-llvm FILE' "$work/philc.stderr"
+grep -q 'usage: philc emit-llvm --target TARGET FILE' "$work/philc.stderr"
 
 printf 'external Steve smoke artifact\n' > "$work/user-files/input.bin"
 content_id="$(printf 'input.bin\n' | \
