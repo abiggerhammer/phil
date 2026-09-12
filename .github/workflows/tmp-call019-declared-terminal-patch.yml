@@ -1,0 +1,34 @@
+name: Temporary CALL-019 Declared Terminal Patcher
+
+on:
+  push:
+    branches:
+      - phase1-call019-declared-terminal-surface-control
+
+permissions:
+  contents: write
+
+jobs:
+  patch:
+    if: github.actor != 'github-actions[bot]'
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Apply declared-terminal Surface control patch
+        run: python tools/tmp-call019-declared-terminal-patch.py
+
+      - name: Commit patch
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add src/Phil/Surface/Check/Types.hs src/Phil/Surface/Check.hs src/Phil/Surface/Check/Engine.hs src/Phil/Compiler/CallableOutcomeDispatch.hs test/Phase1CALL019OutcomeControlBoundaryMain.hs
+          if git diff --cached --quiet; then
+            echo "No patch changes to commit"
+          else
+            git commit -m "CALL-019: represent declared-terminal Surface control"
+            git push
+          fi
