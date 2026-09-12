@@ -51,6 +51,29 @@ Proof.
   reflexivity.
 Qed.
 
+Lemma phase1_surface_declaration_items_exact :
+  phase1_surface_declaration_items =
+    [ ENonterminal "record_decl";
+      ENonterminal "data_decl";
+      ENonterminal "type_alias_decl";
+      ENonterminal "claim_decl";
+      ENonterminal "callable_contract_decl";
+      ENonterminal "function_decl";
+      ENonterminal "provider_contract_decl";
+      ENonterminal "provider_implementation_decl";
+      ENonterminal "opaque_provider_implementation_decl";
+      ENonterminal "protocol_decl";
+      ENonterminal "capability_decl";
+      ENonterminal "boundary_decl";
+      ENonterminal "architecture_decl";
+      ENonterminal "component_decl";
+      ENonterminal "program_decl"
+    ].
+Proof.
+  vm_compute.
+  reflexivity.
+Qed.
+
 Lemma phase1_surface_declaration_item_matches_tag :
   forall index item,
     nth_error phase1_surface_declaration_items index = Some item ->
@@ -59,75 +82,76 @@ Lemma phase1_surface_declaration_item_matches_tag :
       item = ENonterminal (phase1_surface_declaration_tag_name tag).
 Proof.
   intros index item Hnth.
+  rewrite phase1_surface_declaration_items_exact in Hnth.
   destruct index as [|index].
-  - vm_compute in Hnth.
+  - cbn in Hnth.
     inversion Hnth; subst item.
     exists Phase1RecordDeclaration. split; reflexivity.
   - destruct index as [|index].
-    + vm_compute in Hnth.
+    + cbn in Hnth.
       inversion Hnth; subst item.
       exists Phase1DataDeclaration. split; reflexivity.
     + destruct index as [|index].
-      * vm_compute in Hnth.
+      * cbn in Hnth.
         inversion Hnth; subst item.
         exists Phase1TypeAliasDeclaration. split; reflexivity.
       * destruct index as [|index].
-        -- vm_compute in Hnth.
+        -- cbn in Hnth.
            inversion Hnth; subst item.
            exists Phase1ClaimDeclaration. split; reflexivity.
         -- destruct index as [|index].
-           ++ vm_compute in Hnth.
+           ++ cbn in Hnth.
               inversion Hnth; subst item.
               exists Phase1CallableContractDeclaration. split; reflexivity.
            ++ destruct index as [|index].
-              ** vm_compute in Hnth.
+              ** cbn in Hnth.
                  inversion Hnth; subst item.
                  exists Phase1FunctionDeclaration. split; reflexivity.
               ** destruct index as [|index].
-                 --- vm_compute in Hnth.
+                 --- cbn in Hnth.
                      inversion Hnth; subst item.
                      exists Phase1ProviderContractDeclaration. split; reflexivity.
                  --- destruct index as [|index].
-                     +++ vm_compute in Hnth.
+                     +++ cbn in Hnth.
                          inversion Hnth; subst item.
                          exists Phase1ProviderImplementationDeclaration.
                          split; reflexivity.
                      +++ destruct index as [|index].
-                         *** vm_compute in Hnth.
+                         *** cbn in Hnth.
                              inversion Hnth; subst item.
                              exists Phase1OpaqueProviderImplementationDeclaration.
                              split; reflexivity.
                          *** destruct index as [|index].
-                             ---- vm_compute in Hnth.
+                             ---- cbn in Hnth.
                                   inversion Hnth; subst item.
                                   exists Phase1ProtocolDeclaration.
                                   split; reflexivity.
                              ---- destruct index as [|index].
-                                  ++++ vm_compute in Hnth.
+                                  ++++ cbn in Hnth.
                                        inversion Hnth; subst item.
                                        exists Phase1CapabilityDeclaration.
                                        split; reflexivity.
                                   ++++ destruct index as [|index].
-                                       ***** vm_compute in Hnth.
+                                       ***** cbn in Hnth.
                                              inversion Hnth; subst item.
                                              exists Phase1BoundaryDeclaration.
                                              split; reflexivity.
                                        ***** destruct index as [|index].
-                                             ------ vm_compute in Hnth.
+                                             ------ cbn in Hnth.
                                                     inversion Hnth; subst item.
                                                     exists Phase1ArchitectureDeclaration.
                                                     split; reflexivity.
                                              ------ destruct index as [|index].
-                                                    ++++++ vm_compute in Hnth.
+                                                    ++++++ cbn in Hnth.
                                                            inversion Hnth; subst item.
                                                            exists Phase1ComponentDeclaration.
                                                            split; reflexivity.
                                                     ++++++ destruct index as [|index].
-                                                           ******* vm_compute in Hnth.
+                                                           ******* cbn in Hnth.
                                                                    inversion Hnth; subst item.
                                                                    exists Phase1ProgramDeclaration.
                                                                    split; reflexivity.
-                                                           ******* change (None = Some item) in Hnth.
+                                                           ******* cbn in Hnth.
                                                                    discriminate Hnth.
 Qed.
 
