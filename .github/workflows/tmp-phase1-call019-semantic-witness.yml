@@ -1,0 +1,40 @@
+name: Temporary CALL-019 Semantic Witness Binding
+
+on:
+  push:
+    branches:
+      - phase1-call019-semantic-witness
+
+permissions:
+  contents: read
+
+jobs:
+  call019-semantic-witness:
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: haskell-actions/setup@v2
+        with:
+          ghc-version: '9.6.7'
+          cabal-version: 'latest'
+
+      - name: Build complete Haskell substrate
+        shell: bash
+        run: |
+          set -euo pipefail
+          cabal build all --enable-tests
+
+      - name: Exercise complete resolved invocation semantic witness
+        shell: bash
+        run: |
+          set -euo pipefail
+          cabal exec -- runghc -isrc -itest -Wall -Werror \
+            test/Phase1CALL019CallableResolutionMain.hs
+
+      - name: Replay CALL-019 invoke surface path
+        shell: bash
+        run: |
+          set -euo pipefail
+          cabal exec -- runghc -isrc -itest -Wall -Werror \
+            test/Phase1CALL019InvokeSurfaceMain.hs
