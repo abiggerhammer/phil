@@ -828,14 +828,15 @@ Theorem phase1_surface_normalize_source_header_round_trip :
     phase1_surface_source_header_tree header =
       phase1_surface_source_spine_tree spine.
 Proof.
-  intros spine header Hnormalize.
-  destruct spine as [module_tree import_trees top_levels].
+  intros [module_tree import_trees top_levels] header Hnormalize.
+  unfold phase1_surface_normalize_source_header in Hnormalize.
   cbn in Hnormalize.
   destruct (phase1_surface_normalize_optional_module module_tree)
     as [module_name |] eqn:Hmodule; try discriminate Hnormalize.
   destruct (phase1_surface_normalize_import_decls import_trees)
     as [import_headers |] eqn:Himports; try discriminate Hnormalize.
-  inversion Hnormalize; subst.
+  cbn in Hnormalize.
+  inversion Hnormalize; subst header.
   pose proof
     (phase1_surface_normalize_import_decls_round_trip
       import_trees import_headers Himports) as Himports_round_trip.
