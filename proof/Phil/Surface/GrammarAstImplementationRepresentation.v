@@ -168,7 +168,7 @@ Definition phase1_surface_source_header_to_implementation
 
 Definition phase1_surface_source_header_from_implementation
   (header : Phase1SurfaceImplementationSourceHeader)
-  (top_levels : list ParseTree)
+  (top_levels : list GrammarDerivation.ParseTree)
   : option Phase1SurfaceSourceHeader :=
   if Nat.eqb
       (List.length top_levels)
