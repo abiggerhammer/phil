@@ -140,13 +140,34 @@ fi
 echo "PASS: runtime ABI checker rejects ambient nullary digest validation"
 
 PHILC="$(cabal list-bin philc)"
+LINUX_TARGET="x86_64-unknown-linux-gnu"
+DARWIN_TARGET="aarch64-apple-darwin"
 
-"$PHILC" emit-llvm examples/run/return-unit.phil > return-unit.ll
+if "$PHILC" emit-llvm examples/run/return-unit.phil > implicit-target.stdout 2> implicit-target.stderr; then
+  echo "expected philc to reject implicit target selection" >&2
+  exit 1
+fi
+grep -q 'usage: philc emit-llvm --target TARGET FILE' implicit-target.stderr
+
+if "$PHILC" emit-llvm --target x86_64-apple-darwin examples/run/return-unit.phil \
+    > unknown-target.stdout 2> unknown-target.stderr; then
+  echo "expected philc to reject an unknown target" >&2
+  exit 1
+fi
+grep -q 'unknown target: x86_64-apple-darwin' unknown-target.stderr
+grep -q 'supported targets: x86_64-unknown-linux-gnu, aarch64-apple-darwin' unknown-target.stderr
+
+"$PHILC" emit-llvm --target "$DARWIN_TARGET" examples/run/return-unit.phil > return-unit-darwin.ll
+grep -Fq 'target datalayout = "e-m:o-i64:64-i128:128-n32:64-S128"' return-unit-darwin.ll
+grep -Fq 'target triple = "aarch64-apple-darwin"' return-unit-darwin.ll
+"$LLVM_AS" return-unit-darwin.ll -o /dev/null
+
+"$PHILC" emit-llvm --target "$LINUX_TARGET" examples/run/return-unit.phil > return-unit.ll
 "$LLVM_AS" return-unit.ll -o return-unit.bc
 "$CLANG" return-unit.bc -o return-unit
 ./return-unit
 
-"$PHILC" emit-llvm examples/run/return-42.phil > return-42.ll
+"$PHILC" emit-llvm --target "$LINUX_TARGET" examples/run/return-42.phil > return-42.ll
 "$LLVM_AS" return-42.ll -o return-42.bc
 "$CLANG" return-42.bc -o return-42
 set +e
@@ -158,7 +179,7 @@ if [ "$SCALAR_STATUS" -ne 42 ]; then
   exit 1
 fi
 
-"$PHILC" emit-llvm examples/run/scalar-binding-42.phil > scalar-binding-42.ll
+"$PHILC" emit-llvm --target "$LINUX_TARGET" examples/run/scalar-binding-42.phil > scalar-binding-42.ll
 "$LLVM_AS" scalar-binding-42.ll -o scalar-binding-42.bc
 "$CLANG" scalar-binding-42.bc -o scalar-binding-42
 set +e
@@ -174,6 +195,7 @@ echo "Phase 0 reference, recognized-record, exact-receive, and digest-validation
 echo "recognized-record runtime signatures verified, linked, and executed successfully"
 echo "transport exact-receive runtime signatures verified, linked, and executed successfully"
 echo "SHA-256 digest-validation runtime signatures verified, linked, and executed successfully"
+echo "public philc target selection rejects implicit/unknown targets and emits exact Darwin metadata"
 echo "direct and bound scalar Phil programs returned 42 successfully"
 "$LLVM_AS" --version | head -n 1
 "$CLANG" --version | head -n 1
