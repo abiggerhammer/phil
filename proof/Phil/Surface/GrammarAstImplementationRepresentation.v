@@ -89,11 +89,7 @@ Theorem phase1_surface_optional_name_list_implementation_round_trip :
     phase1_surface_optional_name_list_from_implementation
       (phase1_surface_optional_name_list_to_implementation names) = Some names.
 Proof.
-  intros [names |].
-  - simpl.
-    rewrite phase1_surface_name_list_implementation_round_trip.
-    reflexivity.
-  - reflexivity.
+  intros [[first rest] |]; reflexivity.
 Qed.
 
 Definition phase1_surface_import_header_to_implementation
@@ -127,13 +123,7 @@ Theorem phase1_surface_import_header_implementation_round_trip :
     phase1_surface_import_header_from_implementation
       (phase1_surface_import_header_to_implementation header) = Some header.
 Proof.
-  intros [name selection].
-  unfold phase1_surface_import_header_from_implementation,
-    phase1_surface_import_header_to_implementation.
-  simpl.
-  rewrite phase1_surface_name_list_implementation_round_trip.
-  rewrite phase1_surface_optional_name_list_implementation_round_trip.
-  reflexivity.
+  intros [[first rest] [[selection_first selection_rest] |]]; reflexivity.
 Qed.
 
 Fixpoint phase1_surface_import_headers_from_implementation
