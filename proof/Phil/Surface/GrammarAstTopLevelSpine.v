@@ -476,9 +476,9 @@ Proof.
     items attribute_tree declaration_tree Hitems).
   rewrite (phase1_surface_expect_repetition_round_trip
     attribute_tree attribute_trees Hrepetition).
-  rewrite (phase1_surface_normalize_attribute_spines_round_trip
+  rewrite <- (phase1_surface_normalize_attribute_spines_round_trip
     attribute_trees attributes Hattributes).
-  rewrite (phase1_surface_normalize_declaration_spine_round_trip
+  rewrite <- (phase1_surface_normalize_declaration_spine_round_trip
     declaration_tree declaration Hdeclaration).
   reflexivity.
 Qed.
