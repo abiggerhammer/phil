@@ -506,35 +506,49 @@ Proof.
       _ (ENonterminal "top_level_decl")
       _ _ top_trees Htops_body eq_refl)
     as [top_levels Htop_levels_normalize].
+  pose (header :=
+    {| phase1_source_header_module := module_name;
+       phase1_source_header_imports := import_headers;
+       phase1_source_header_top_levels := top_trees |}).
   pose (source :=
     {| phase1_source_top_level_module := module_name;
        phase1_source_top_level_imports := import_headers;
        phase1_source_top_level_declarations := top_levels |}).
   exists source.
+  assert (Hheader_normalize :
+    phase1_surface_normalize_source_header_tree
+      (PTNonterminal phase1_surface_start
+        (PTSequence [module_part; imports_part; tops_part])) =
+    Some header).
+  {
+    rewrite Hmodule_tree.
+    rewrite Himports_tree.
+    rewrite Htops_tree.
+    unfold phase1_surface_normalize_source_header_tree,
+      GrammarAstSourceSpine.phase1_surface_normalize_source_spine,
+      phase1_surface_normalize_source_header.
+    rewrite String.eqb_refl.
+    destruct module_tree as [module_body |]; cbn in *.
+    - rewrite Hmodule_normalize.
+      rewrite Himports_normalize.
+      reflexivity.
+    - injection Hmodule_normalize as Hmodule_name.
+      rewrite <- Hmodule_name.
+      rewrite Himports_normalize.
+      reflexivity.
+  }
   assert (Hnormalize :
     phase1_surface_normalize_source_top_level_tree
       (PTNonterminal phase1_surface_start
         (PTSequence [module_part; imports_part; tops_part])) =
     Some source).
   {
-    rewrite Hmodule_tree.
-    rewrite Himports_tree.
-    rewrite Htops_tree.
-    unfold phase1_surface_normalize_source_top_level_tree,
-      phase1_surface_normalize_source_header_tree,
-      GrammarAstSourceSpine.phase1_surface_normalize_source_spine,
-      phase1_surface_normalize_source_header,
-      phase1_surface_normalize_source_top_level.
-    rewrite String.eqb_refl.
-    destruct module_tree as [module_body |]; cbn in *.
-    - rewrite Hmodule_normalize.
-      rewrite Himports_normalize.
-      rewrite Htop_levels_normalize.
-      reflexivity.
-    - rewrite Hmodule_normalize.
-      rewrite Himports_normalize.
-      rewrite Htop_levels_normalize.
-      reflexivity.
+    unfold phase1_surface_normalize_source_top_level_tree.
+    rewrite Hheader_normalize.
+    unfold phase1_surface_normalize_source_top_level.
+    cbn.
+    rewrite Htop_levels_normalize.
+    reflexivity.
   }
   split.
   - exact Hnormalize.
