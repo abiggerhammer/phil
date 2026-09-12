@@ -11,7 +11,10 @@ import Phil.Core.Scalar
   ( ScalarLiteral (ScalarUIntLiteral)
   , ScalarType (ScalarUInt)
   )
-import Phil.LLVM (llvmArtifactText)
+import Phil.LLVM
+  ( LLVMArtifact (llvmArtifactModule, llvmArtifactText)
+  , LLVMModule (llvmDataLayout, llvmRuntimeABIProfile, llvmTargetTriple)
+  )
 import Phil.Systems
   ( BlockId (..)
   , ScalarDataflowError (..)
@@ -31,7 +34,12 @@ import System.Exit (exitFailure)
 main :: IO ()
 main = do
   results <- sequence
-    [ test "runnable Unit source compiles through verified LLVM" validUnitCompiles
+    [ test "ordinary compiler target names are exact and closed" compilerTargetNamesExact
+    , test "compatibility compiler remains the exact Linux target path" compatibilityCompilerIsLinuxTarget
+    , test "ordinary Linux target profile is exact" linuxTargetProfileExact
+    , test "ordinary Darwin target profile is exact and provider-ABI-free" darwinTargetProfileExact
+    , test "target selection preserves pre-LLVM Systems identity" targetSelectionPreservesSystemsIdentity
+    , test "runnable Unit source compiles through verified LLVM" validUnitCompiles
     , test "direct U32 return compiles through verified LLVM" validU32Compiles
     , test "checked scalar let binding compiles through verified LLVM" scalarBindingCompiles
     , test "source scalar binding identity survives into Systems IR" bindingIdentitySurvivesSystems
@@ -98,6 +106,69 @@ returnChoiceSource = Text.unlines
   , "    return answer"
   , "}"
   ]
+
+compilerTargetNamesExact :: Bool
+compilerTargetNamesExact =
+  map compilerTargetName supportedCompilerTargets
+    == ["x86_64-unknown-linux-gnu", "aarch64-apple-darwin"]
+    && parseCompilerTarget "x86_64-unknown-linux-gnu"
+      == Just CompilerTargetX86_64UnknownLinuxGNU
+    && parseCompilerTarget "aarch64-apple-darwin"
+      == Just CompilerTargetAArch64AppleDarwin
+    && parseCompilerTarget "x86_64-apple-darwin" == Nothing
+
+compatibilityCompilerIsLinuxTarget :: Bool
+compatibilityCompilerIsLinuxTarget =
+  compileRunnable "unit.phil" unitSource
+    == compileRunnableForTarget
+      CompilerTargetX86_64UnknownLinuxGNU
+      "unit.phil"
+      unitSource
+
+linuxTargetProfileExact :: Bool
+linuxTargetProfileExact =
+  targetProfileMatches
+    CompilerTargetX86_64UnknownLinuxGNU
+    "x86_64-unknown-linux-gnu"
+    "e-m:e-p270:32:32-p271:32:32-p272:64:64-i64:64-f80:128-n8:16:32:64-S128"
+
+darwinTargetProfileExact :: Bool
+darwinTargetProfileExact =
+  case compileRunnableForTarget
+      CompilerTargetAArch64AppleDarwin
+      "unit.phil"
+      unitSource of
+    Left _ -> False
+    Right runnable ->
+      let llvmModule = llvmArtifactModule (runnableLLVMArtifact runnable)
+      in llvmTargetTriple llvmModule == "aarch64-apple-darwin"
+          && llvmDataLayout llvmModule == "e-m:o-i64:64-i128:128-n32:64-S128"
+          && llvmRuntimeABIProfile llvmModule == "phil-runtime/phase0/reference-v1"
+
+targetSelectionPreservesSystemsIdentity :: Bool
+targetSelectionPreservesSystemsIdentity =
+  case ( compileRunnableForTarget
+           CompilerTargetX86_64UnknownLinuxGNU
+           "binding.phil"
+           bindingSource
+       , compileRunnableForTarget
+           CompilerTargetAArch64AppleDarwin
+           "binding.phil"
+           bindingSource
+       ) of
+    (Right linux, Right darwin) ->
+      runnableSystemsArtifact linux == runnableSystemsArtifact darwin
+        && runnableLLVMArtifact linux /= runnableLLVMArtifact darwin
+    _ -> False
+
+targetProfileMatches :: CompilerTarget -> Text -> Text -> Bool
+targetProfileMatches target expectedTriple expectedLayout =
+  case compileRunnableForTarget target "unit.phil" unitSource of
+    Left _ -> False
+    Right runnable ->
+      let llvmModule = llvmArtifactModule (runnableLLVMArtifact runnable)
+      in llvmTargetTriple llvmModule == expectedTriple
+          && llvmDataLayout llvmModule == expectedLayout
 
 validUnitCompiles :: Bool
 validUnitCompiles = case compileRunnable "unit.phil" unitSource of
