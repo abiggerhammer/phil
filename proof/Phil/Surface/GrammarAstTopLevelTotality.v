@@ -127,8 +127,8 @@ Proof.
                                                                    inversion Hnth; subst item.
                                                                    exists Phase1ProgramDeclaration.
                                                                    split; reflexivity.
-                                                           ******* vm_compute in Hnth.
-                                                                   inversion Hnth.
+                                                           ******* change None = Some item in Hnth.
+                                                                   discriminate Hnth.
 Qed.
 
 Lemma phase1_surface_normalize_metadata_string_total_from_derivation :
