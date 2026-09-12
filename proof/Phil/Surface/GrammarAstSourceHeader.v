@@ -371,7 +371,7 @@ Proof.
     + eapply phase1_surface_normalize_name_suffix_round_trip.
       exact Htree.
     + eapply IH.
-      exact Hrest.
+      reflexivity.
 Qed.
 
 Definition phase1_surface_name_list_tree
@@ -723,7 +723,7 @@ Proof.
     + eapply phase1_surface_normalize_import_decl_round_trip.
       exact Htree.
     + eapply IH.
-      exact Hrest.
+      reflexivity.
 Qed.
 
 Definition phase1_surface_normalize_optional_module
