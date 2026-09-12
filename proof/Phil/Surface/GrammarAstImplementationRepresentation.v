@@ -164,14 +164,14 @@ Definition phase1_surface_source_header_to_implementation
        map phase1_surface_import_header_to_implementation
          (phase1_source_header_imports header);
      phase1_impl_source_top_level_count :=
-       length (phase1_source_header_top_levels header) |}.
+       List.length (phase1_source_header_top_levels header) |}.
 
 Definition phase1_surface_source_header_from_implementation
   (header : Phase1SurfaceImplementationSourceHeader)
   (top_levels : list ParseTree)
   : option Phase1SurfaceSourceHeader :=
   if Nat.eqb
-      (length top_levels)
+      (List.length top_levels)
       (phase1_impl_source_top_level_count header)
   then
     match
