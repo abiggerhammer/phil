@@ -22,6 +22,7 @@ import Phil.Core.Authority
   , AuthorityContractKey (..)
   , AuthorityOperationKey (..)
   , AuthorityRequirement (..)
+  , AuthorityState
   , AuthoritySubjectKey (..)
   , CapabilityOccurrenceKey (..)
   , CheckedAuthorityExercise (..)
@@ -115,6 +116,7 @@ exactCapability = AuthorityCapability
   , authorityCapabilityOperations = Set.singleton operationKey
   }
 
+authorityState :: Either String AuthorityState
 authorityState = mapLeft show $
   insertAuthorityCapability exactCapability emptyAuthorityState
 
@@ -293,7 +295,7 @@ effectBoundStillRejects = do
 expectError
   :: (SurfaceCallableAuthorityContextError -> Bool)
   -> Map.Map CallableAuthorityRequirement CallableAuthorityPossessionBinding
-  -> Phil.Core.Authority.AuthorityState
+  -> AuthorityState
   -> CallableRefinementSurface
   -> String
   -> Either String ()
