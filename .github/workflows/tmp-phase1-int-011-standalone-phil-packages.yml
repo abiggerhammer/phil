@@ -1,0 +1,116 @@
+name: Temporary INT-011 Standalone Phil Packages
+
+on:
+  push:
+    branches:
+      - phase1-int-011-standalone-phil-packages
+
+permissions:
+  contents: read
+
+jobs:
+  linux-package:
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: haskell-actions/setup@v2
+        with:
+          ghc-version: '9.6.7'
+          cabal-version: 'latest'
+
+      - name: Build standalone Linux Phil package
+        shell: bash
+        run: |
+          set -euo pipefail
+          out="$RUNNER_TEMP/phil-linux"
+          mkdir -p "$out"
+          bash scripts/release/build-phil-phase1-package.sh "$out"
+
+      - name: Verify package-only Linux consumer smoke
+        shell: bash
+        run: |
+          set -euo pipefail
+          out="$RUNNER_TEMP/phil-linux"
+          archive='phil-0.1.0-phase1-x86_64-linux.tar.gz'
+          (
+            cd "$out"
+            sha256sum -c "$archive.sha256"
+          )
+          consumer="$RUNNER_TEMP/phil-linux-consumer"
+          mkdir -p "$consumer"
+          tar -xzf "$out/$archive" -C "$consumer"
+          package="$consumer/phil-0.1.0-phase1-x86_64-linux"
+          file "$package/bin/philc" | grep -Eq 'ELF 64-bit .*x86-64'
+          (
+            cd "$package"
+            ./smoke-test.sh
+          ) | tee "$out/smoke-evidence.txt"
+          grep -q '^PASS: packaged Phase-1 Phil public compiler smoke$' "$out/smoke-evidence.txt"
+          grep -q '^target=x86_64-unknown-linux-gnu$' "$out/smoke-evidence.txt"
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: int011-phil-package-linux
+          path: |
+            ${{ runner.temp }}/phil-linux/phil-0.1.0-phase1-x86_64-linux.tar.gz
+            ${{ runner.temp }}/phil-linux/phil-0.1.0-phase1-x86_64-linux.tar.gz.sha256
+            ${{ runner.temp }}/phil-linux/smoke-evidence.txt
+          if-no-files-found: error
+
+  darwin-package:
+    runs-on: macos-26
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Verify native Apple Silicon runner
+        shell: bash
+        run: |
+          set -euo pipefail
+          test "$(uname -m)" = arm64
+          sw_vers
+
+      - uses: haskell-actions/setup@v2
+        with:
+          ghc-version: '9.6.7'
+          cabal-version: 'latest'
+
+      - name: Build standalone Darwin Phil package
+        shell: bash
+        run: |
+          set -euo pipefail
+          out="$RUNNER_TEMP/phil-darwin"
+          mkdir -p "$out"
+          bash scripts/release/build-phil-phase1-darwin-package.sh "$out"
+
+      - name: Verify package-only Darwin consumer smoke
+        shell: bash
+        run: |
+          set -euo pipefail
+          out="$RUNNER_TEMP/phil-darwin"
+          archive='phil-0.1.0-phase1-aarch64-apple-darwin.zip'
+          (
+            cd "$out"
+            shasum -a 256 -c "$archive.sha256"
+          )
+          consumer="$RUNNER_TEMP/phil-darwin-consumer"
+          mkdir -p "$consumer"
+          ditto -x -k "$out/$archive" "$consumer"
+          package="$consumer/phil-0.1.0-phase1-aarch64-apple-darwin"
+          file "$package/bin/philc" | grep -q 'Mach-O 64-bit executable arm64'
+          otool -l "$package/bin/philc" | grep -A6 LC_BUILD_VERSION | grep -q 'minos 11.0'
+          (
+            cd "$package"
+            ./smoke-test.sh
+          ) | tee "$out/smoke-evidence.txt"
+          grep -q '^PASS: packaged Phase-1 Phil public compiler smoke$' "$out/smoke-evidence.txt"
+          grep -q '^target=aarch64-apple-darwin$' "$out/smoke-evidence.txt"
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: int011-phil-package-darwin-unsigned-staging
+          path: |
+            ${{ runner.temp }}/phil-darwin/phil-0.1.0-phase1-aarch64-apple-darwin.zip
+            ${{ runner.temp }}/phil-darwin/phil-0.1.0-phase1-aarch64-apple-darwin.zip.sha256
+            ${{ runner.temp }}/phil-darwin/smoke-evidence.txt
+          if-no-files-found: error
