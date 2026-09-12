@@ -130,40 +130,31 @@ Proof.
       [ELiteral separator; ENonterminal "identifier"]
       input rest tree Hderive)
     as [trees [Htree Hitems]].
-  inversion Hitems; subst; clear Hitems.
-  match goal with
-  | Htail : DerivesSequence phase1_surface_rules _ 1
-      [ENonterminal "identifier"] _ _ _ |- _ =>
-      inversion Htail; subst; clear Htail
-  end.
-  match goal with
-  | Hnil : DerivesSequence phase1_surface_rules _ 2 [] _ _ _ |- _ =>
-      inversion Hnil; subst; clear Hnil
-  end.
-  match goal with
-  | Hliteral : Derives phase1_surface_rules _
-      (ELiteral separator) _ _ ?literal_tree,
-    Hidentifier : Derives phase1_surface_rules _
-      (ENonterminal "identifier") _ _ ?identifier_tree |- _ =>
-      destruct
-        (literal_derivation_is_exact
-          phase1_surface_rules _ separator _ _ literal_tree Hliteral)
-        as [tail [_ [_ Hliteral_tree]]];
-      destruct
-        (phase1_surface_normalize_identifier_total_from_derivation
-          _ _ _ identifier_tree Hidentifier)
-        as [value Hidentifier_normalize];
-      exists value;
-      rewrite Htree;
-      rewrite Hliteral_tree;
-      unfold phase1_surface_normalize_name_suffix,
-        phase1_surface_expect_sequence,
-        phase1_surface_exact2,
-        phase1_surface_expect_literal;
-      cbn;
-      rewrite String.eqb_refl;
-      exact Hidentifier_normalize
-  end.
+  inversion Hitems as
+    [| path0 index0 item0 items0 input0 middle0 rest0
+       literal_tree tail_trees Hliteral Htail]; subst.
+  inversion Htail as
+    [| path1 index1 item1 items1 input1 middle1 rest1
+       identifier_tree nil_trees Hidentifier Hnil]; subst.
+  inversion Hnil; subst.
+  destruct
+    (literal_derivation_is_exact
+      phase1_surface_rules _ separator _ _ literal_tree Hliteral)
+    as [tail [_ [_ Hliteral_tree]]].
+  destruct
+    (phase1_surface_normalize_identifier_total_from_derivation
+      _ _ _ identifier_tree Hidentifier)
+    as [value Hidentifier_normalize].
+  exists value.
+  rewrite Htree.
+  rewrite Hliteral_tree.
+  unfold phase1_surface_normalize_name_suffix,
+    phase1_surface_expect_sequence,
+    phase1_surface_exact2,
+    phase1_surface_expect_literal.
+  cbn.
+  rewrite String.eqb_refl.
+  exact Hidentifier_normalize.
 Qed.
 
 Lemma phase1_surface_normalize_name_suffixes_total_from_repetition :
@@ -229,58 +220,45 @@ Proof.
       ]
       input rest subtree Hbody)
     as [trees [Hsubtree Hitems]].
-  inversion Hitems; subst; clear Hitems.
-  match goal with
-  | Htail : DerivesSequence phase1_surface_rules _ 1
-      [ERepetition
-        (ESequence [ELiteral separator; ENonterminal "identifier"])]
-      _ _ _ |- _ =>
-      inversion Htail; subst; clear Htail
-  end.
-  match goal with
-  | Hnil : DerivesSequence phase1_surface_rules _ 2 [] _ _ _ |- _ =>
-      inversion Hnil; subst; clear Hnil
-  end.
-  match goal with
-  | Hidentifier : Derives phase1_surface_rules _
-      (ENonterminal "identifier") _ _ ?identifier_tree,
-    Hrepetition : Derives phase1_surface_rules _
-      (ERepetition
-        (ESequence [ELiteral separator; ENonterminal "identifier"]))
-      _ _ ?repetition_tree |- _ =>
-      destruct
-        (phase1_surface_normalize_identifier_total_from_derivation
-          _ _ _ identifier_tree Hidentifier)
-        as [first_value Hfirst];
-      destruct
-        (phase1_surface_repetition_derivation_exposes
-          _
-          (ESequence [ELiteral separator; ENonterminal "identifier"])
-          _ _ repetition_tree Hrepetition)
-        as [suffix_trees [Hrepetition_tree Hrepetition_body]];
-      destruct
-        (phase1_surface_normalize_name_suffixes_total_from_repetition
-          separator _
-          (ESequence [ELiteral separator; ENonterminal "identifier"])
-          _ _ suffix_trees Hrepetition_body eq_refl)
-        as [rest_values Hrest];
-      exists
-        {| phase1_name_list_first := first_value;
-           phase1_name_list_rest := rest_values |};
-      rewrite Htree;
-      rewrite Hsubtree;
-      rewrite Hrepetition_tree;
-      unfold phase1_surface_normalize_name_list,
-        phase1_surface_expect_nonterminal,
-        phase1_surface_expect_sequence,
-        phase1_surface_exact2,
-        phase1_surface_expect_repetition;
-      cbn;
-      rewrite String.eqb_refl;
-      rewrite Hfirst;
-      rewrite Hrest;
-      reflexivity
-  end.
+  inversion Hitems as
+    [| path0 index0 item0 items0 input0 middle0 rest0
+       identifier_tree tail_trees Hidentifier Htail]; subst.
+  inversion Htail as
+    [| path1 index1 item1 items1 input1 middle1 rest1
+       repetition_tree nil_trees Hrepetition Hnil]; subst.
+  inversion Hnil; subst.
+  destruct
+    (phase1_surface_normalize_identifier_total_from_derivation
+      _ _ _ identifier_tree Hidentifier)
+    as [first_value Hfirst].
+  destruct
+    (phase1_surface_repetition_derivation_exposes
+      _
+      (ESequence [ELiteral separator; ENonterminal "identifier"])
+      _ _ repetition_tree Hrepetition)
+    as [suffix_trees [Hrepetition_tree Hrepetition_body]].
+  destruct
+    (phase1_surface_normalize_name_suffixes_total_from_repetition
+      separator _
+      (ESequence [ELiteral separator; ENonterminal "identifier"])
+      _ _ suffix_trees Hrepetition_body eq_refl)
+    as [rest_values Hrest].
+  exists
+    {| phase1_name_list_first := first_value;
+       phase1_name_list_rest := rest_values |}.
+  rewrite Htree.
+  rewrite Hsubtree.
+  rewrite Hrepetition_tree.
+  unfold phase1_surface_normalize_name_list,
+    phase1_surface_expect_nonterminal,
+    phase1_surface_expect_sequence,
+    phase1_surface_exact2,
+    phase1_surface_expect_repetition.
+  cbn.
+  rewrite String.eqb_refl.
+  rewrite Hfirst.
+  rewrite Hrest.
+  reflexivity.
 Qed.
 
 Lemma phase1_surface_normalize_qualified_name_total_from_derivation :
