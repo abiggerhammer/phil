@@ -2,6 +2,7 @@ module Phil.Compiler.CallableInvocationContext
   ( SurfaceCallableCallerContext (..)
   , CheckedSurfaceCallableInvocationContext (..)
   , SurfaceCallableInvocationContextError (..)
+  , checkSurfaceCallableInvocationSummary
   , checkSurfaceComponentWithInvocationContext
   ) where
 
@@ -45,21 +46,12 @@ import Phil.Surface.Syntax
   , SourceSpan
   )
 
--- | Caller facts supplied by competent layers around ordinary source invocation.
--- `surfaceCallerAvailableAuthority` is intentionally already normalized to the
--- callable-level authority identity. This module does not manufacture possession
--- from names: a later bridge from `Phil.Core.Authority` must establish that set
--- from actually possessed capability/provider values.
 data SurfaceCallableCallerContext = SurfaceCallableCallerContext
   { surfaceCallerAvailableAuthority :: Set CallableAuthorityRequirement
   , surfaceCallerPublicContract :: CallableRefinementSurface
   }
   deriving (Eq, Show)
 
--- | Successful composition of accepted source invocations with the enclosing
--- caller contract. The complete semantic summary remains available, while the
--- effect-bound witness proves that all reachable invocation effects fit inside
--- the caller's stabilized public may-effect bound.
 data CheckedSurfaceCallableInvocationContext = CheckedSurfaceCallableInvocationContext
   { checkedInvocationSemanticSummary :: SurfaceCallableSemanticSummary
   , checkedInvocationEffectBound :: CheckedCallableEffects
@@ -85,35 +77,15 @@ data SurfaceCallableInvocationContextError
       CalleeTransition
   deriving (Eq, Show)
 
--- | Check ordinary source invocation through the complete CALL-019 composition
--- path currently representable by the surface evaluator.
---
--- The ordinary surface checker still owns syntax, parameter/result type shape,
--- and restricted argument transfer. CALL-019 then binds every explicit invoke to
--- an exact semantic contract and projects its caller-visible account. This layer
--- additionally checks that:
---
--- * caller-required authority is available from an explicitly supplied
---   possession-derived authority set;
--- * reachable invocation effects fit the enclosing callable's public bound via
---   the existing CALL effect checker;
--- * modeled callee failures fit the enclosing callable's public failure set; and
--- * the current direct named-invoke execution shape is used only when its outcome
---   and callee lifecycle can be represented faithfully.
---
--- Branch-sensitive invocation and consuming/replacing first-class callee owners
--- are rejected here rather than silently flattened. Later CALL-019 slices can
--- replace those rejections with explicit branch/resource-state composition.
-checkSurfaceComponentWithInvocationContext
-  :: Map DeclarationKey SourceCallableSemanticContract
-  -> SurfaceCallableCallerContext
-  -> SurfaceEnvironment
-  -> Located Component
+-- | Check one already-derived CALL-019 semantic summary against the enclosing
+-- caller context. Keeping this entry point separate lets competent upstream
+-- bridges establish authority possession before invoking the same effect,
+-- failure, lifecycle, and outcome checks, without re-running source evaluation.
+checkSurfaceCallableInvocationSummary
+  :: SurfaceCallableCallerContext
+  -> SurfaceCallableSemanticSummary
   -> Either SurfaceCallableInvocationContextError CheckedSurfaceCallableInvocationContext
-checkSurfaceComponentWithInvocationContext contracts callerContext environment component = do
-  checked <- mapLeft SurfaceInvocationRejected $
-    checkSurfaceComponentWithCallableSemantics contracts environment component
-  let summary = summarizeSurfaceCallableSemantics checked
+checkSurfaceCallableInvocationSummary callerContext summary = do
   mapM_ checkDirectAccount (surfaceCallableSemanticAccounts summary)
   let missingAuthority = Set.difference
         (surfaceRequiredCallerAuthority summary)
@@ -135,6 +107,19 @@ checkSurfaceComponentWithInvocationContext contracts callerContext environment c
     { checkedInvocationSemanticSummary = summary
     , checkedInvocationEffectBound = checkedEffects
     }
+
+checkSurfaceComponentWithInvocationContext
+  :: Map DeclarationKey SourceCallableSemanticContract
+  -> SurfaceCallableCallerContext
+  -> SurfaceEnvironment
+  -> Located Component
+  -> Either SurfaceCallableInvocationContextError CheckedSurfaceCallableInvocationContext
+checkSurfaceComponentWithInvocationContext contracts callerContext environment component = do
+  checked <- mapLeft SurfaceInvocationRejected $
+    checkSurfaceComponentWithCallableSemantics contracts environment component
+  checkSurfaceCallableInvocationSummary
+    callerContext
+    (summarizeSurfaceCallableSemantics checked)
 
 checkDirectAccount
   :: SurfaceCallableInvocationSemanticAccount
