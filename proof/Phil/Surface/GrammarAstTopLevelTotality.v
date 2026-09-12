@@ -218,53 +218,61 @@ Proof.
   end.
   match goal with
   | Hat : Derives phase1_surface_rules _
-      (ELiteral "@") _ _ ?at_tree,
-    Hname : Derives phase1_surface_rules _
-      (ENonterminal "identifier") _ _ ?name_tree,
-    Hopen : Derives phase1_surface_rules _
-      (ELiteral "(") _ _ ?open_tree,
-    Hvalue : Derives phase1_surface_rules _
-      (ENonterminal "metadata_string_literal") _ _ ?value_tree,
-    Hclose : Derives phase1_surface_rules _
-      (ELiteral ")") _ _ ?close_tree |- _ =>
+      (ELiteral "@") _ _ ?at_tree |- _ =>
       destruct
         (literal_derivation_is_exact
           phase1_surface_rules _ "@" _ _ at_tree Hat)
-        as [at_tail [_ [_ Hat_tree]]];
+        as [at_tail [_ [_ Hat_tree]]]
+  end.
+  match goal with
+  | Hopen : Derives phase1_surface_rules _
+      (ELiteral "(") _ _ ?open_tree |- _ =>
       destruct
         (literal_derivation_is_exact
           phase1_surface_rules _ "(" _ _ open_tree Hopen)
-        as [open_tail [_ [_ Hopen_tree]]];
+        as [open_tail [_ [_ Hopen_tree]]]
+  end.
+  match goal with
+  | Hclose : Derives phase1_surface_rules _
+      (ELiteral ")") _ _ ?close_tree |- _ =>
       destruct
         (literal_derivation_is_exact
           phase1_surface_rules _ ")" _ _ close_tree Hclose)
-        as [close_tail [_ [_ Hclose_tree]]];
+        as [close_tail [_ [_ Hclose_tree]]]
+  end.
+  match goal with
+  | Hname : Derives phase1_surface_rules _
+      (ENonterminal "identifier") _ _ ?name_tree |- _ =>
       destruct
         (phase1_surface_normalize_identifier_total_from_derivation
           _ _ _ name_tree Hname)
-        as [name Hname_normalize];
+        as [name Hname_normalize]
+  end.
+  match goal with
+  | Hvalue : Derives phase1_surface_rules _
+      (ENonterminal "metadata_string_literal") _ _ ?value_tree |- _ =>
       destruct
         (phase1_surface_normalize_metadata_string_total_from_derivation
           _ _ _ value_tree Hvalue)
-        as [value Hvalue_normalize];
-      exists
-        {| phase1_attribute_spine_name := name;
-           phase1_attribute_spine_value := value |};
-      rewrite Htree;
-      rewrite Hsubtree;
-      rewrite Hat_tree;
-      rewrite Hopen_tree;
-      rewrite Hclose_tree;
-      unfold phase1_surface_normalize_attribute_spine,
-        phase1_surface_expect_nonterminal,
-        phase1_surface_expect_sequence,
-        phase1_surface_exact5,
-        phase1_surface_expect_literal;
-      cbn;
-      rewrite Hname_normalize;
-      rewrite Hvalue_normalize;
-      reflexivity
+        as [value Hvalue_normalize]
   end.
+  exists
+    {| phase1_attribute_spine_name := name;
+       phase1_attribute_spine_value := value |}.
+  rewrite Htree.
+  rewrite Hsubtree.
+  rewrite Hat_tree.
+  rewrite Hopen_tree.
+  rewrite Hclose_tree.
+  unfold phase1_surface_normalize_attribute_spine,
+    phase1_surface_expect_nonterminal,
+    phase1_surface_expect_sequence,
+    phase1_surface_exact5,
+    phase1_surface_expect_literal.
+  cbn.
+  rewrite Hname_normalize.
+  rewrite Hvalue_normalize.
+  reflexivity.
 Qed.
 
 Lemma phase1_surface_normalize_attribute_spines_total_from_repetition :
