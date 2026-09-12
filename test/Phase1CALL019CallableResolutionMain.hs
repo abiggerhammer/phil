@@ -32,7 +32,7 @@ import Phil.Core.Static
   , InterfaceRevision (..)
   , emptyStaticContext
   )
-import Phil.Core.Syntax (Outcome (..), Ty (..))
+import Phil.Core.Syntax (Ty (..))
 import Phil.Surface.Check
   ( SurfaceEnvironment (..)
   , emptySurfaceEnvironment
@@ -173,10 +173,9 @@ incompatibleRefinementRejects = do
   (checked, contracts) <- baseChecked
   catalog <- mapLeft show $
     buildCallableInvocationCatalog Set.empty contracts checked
-  let incompatible = CallableInvocationExpectation
-        workerKey
-        workerContract
-          { sourceCallableRefinementSurface = callableSurface "worker.v1" "Bytes->Unit" }
+  let expectedContract = workerContract
+        { sourceCallableRefinementSurface = callableSurface "worker.v1" "Bytes->Unit" }
+      incompatible = CallableInvocationExpectation workerKey expectedContract
   case resolveCallableInvocation catalog "Worker" incompatible of
     Left (CallableRefinementRejected "Worker" (CallableMachineShapeMismatch expected actual))
       | expected == CallableMachineShape "Bytes->Unit"
