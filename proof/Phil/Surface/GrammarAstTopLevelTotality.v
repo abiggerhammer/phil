@@ -519,10 +519,10 @@ Proof.
         tree =
           PTNonterminal phase1_surface_start
             (PTSequence
-              [ match module_tree with
-                | None => PTOptionalNone
-                | Some body => PTOptionalSome body
-                end;
+              [ (match module_tree with
+                 | None => PTOptionalNone
+                 | Some body => PTOptionalSome body
+                 end);
                 PTRepetition import_trees;
                 PTRepetition top_trees
               ])).
