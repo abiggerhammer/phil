@@ -1,0 +1,2 @@
+Stage the committed INT-011 ordinary compiler target-selection core.
+Semantic commit: 61bb31e442a46cd4a69cfc38b68e302534a66546
