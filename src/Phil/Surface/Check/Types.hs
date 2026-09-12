@@ -8,6 +8,7 @@ module Phil.Surface.Check.Types
   , InitialBinding (..)
   , PrimitiveArgumentDiscipline (..)
   , ProviderOutcomeSpec (..)
+  , CallableOutcomeControlSpec (..)
   , CallableOutcomeSpec (..)
   , PrimitiveSemantics (..)
   , SurfaceCallableSignature (..)
@@ -130,12 +131,23 @@ data ProviderOutcomeSpec = ProviderOutcomeSpec
   }
   deriving (Eq, Ord, Show)
 
+-- | Neutral caller-control shape for an already checked callable outcome.
+-- Surface may continue ordinary checking or close with the exact declared
+-- terminal outcome. Fatal control remains outside this carrier until Core has
+-- an exact fatal `Control` constructor.
+data CallableOutcomeControlSpec
+  = CallableOutcomeContinues
+  | CallableOutcomeCloses Outcome
+  deriving (Eq, Ord, Show)
+
 -- | Neutral source-level branch shape for an already checked callable.
 -- Semantic outcome identity remains compiler-side; Surface receives only the
--- explicit labels and typed/mode-aware payload telescope needed by `decide`.
+-- explicit label, typed/mode-aware payload telescope, and exact representable
+-- caller-control shape needed by `decide`.
 data CallableOutcomeSpec = CallableOutcomeSpec
   { callableOutcomeLabel :: Text
   , callableOutcomePayload :: [(Mode, Ty)]
+  , callableOutcomeControl :: CallableOutcomeControlSpec
   }
   deriving (Eq, Ord, Show)
 
