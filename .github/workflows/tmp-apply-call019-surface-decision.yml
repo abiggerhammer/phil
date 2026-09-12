@@ -10,7 +10,6 @@ permissions:
 
 jobs:
   apply-call019-surface-decision:
-    if: github.event.head_commit.message != 'CALL-019: wire callable outcomes through decide'
     runs-on: ubuntu-24.04
     steps:
       - uses: actions/checkout@v4
