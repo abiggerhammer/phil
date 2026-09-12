@@ -836,9 +836,11 @@ Proof.
   destruct (phase1_surface_normalize_import_decls import_trees)
     as [import_headers |] eqn:Himports; try discriminate Hnormalize.
   inversion Hnormalize; subst.
-  cbn.
-  rewrite (phase1_surface_normalize_import_decls_round_trip
-    import_trees import_headers Himports).
+  pose proof
+    (phase1_surface_normalize_import_decls_round_trip
+      import_trees import_headers Himports) as Himports_round_trip.
+  symmetry in Himports_round_trip.
+  subst import_trees.
   pose proof
     (phase1_surface_normalize_optional_module_round_trip
       module_tree module_name Hmodule) as Hmodule_round_trip.
@@ -846,6 +848,7 @@ Proof.
     destruct module_name as [name |];
     cbn in Hmodule_round_trip;
     try discriminate Hmodule_round_trip;
+    cbn;
     rewrite Hmodule_round_trip;
     reflexivity.
 Qed.
