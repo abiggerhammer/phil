@@ -10,9 +10,20 @@ import Phil.Compiler.SourceBundle
 import Phil.Core.Callable
   ( CallableContract (..)
   , CalleeTransition (..)
+  , SemanticEffect (..)
+  )
+import Phil.Core.CallableOutcome
+  ( CallableOutcomeAtom (..)
+  , CallableOutcomeClass (..)
+  , CallableOutcomeContract (..)
+  , CallableOutcomeError (..)
+  , CallableOutcomeState (..)
+  , CheckedCallableOutcomeContract (..)
   )
 import Phil.Core.CallableRefinement
-  ( CallableMachineShape (..)
+  ( CallableAuthorityRequirement (..)
+  , CallableFailure (..)
+  , CallableMachineShape (..)
   , CallableRefinementError (..)
   , CallableRefinementSurface (..)
   )
@@ -21,7 +32,7 @@ import Phil.Core.Static
   , InterfaceRevision (..)
   , emptyStaticContext
   )
-import Phil.Core.Syntax (Ty (..))
+import Phil.Core.Syntax (Outcome (..), Ty (..))
 import Phil.Surface.Check
   ( SurfaceEnvironment (..)
   , emptySurfaceEnvironment
@@ -38,14 +49,21 @@ import System.Exit (exitFailure)
 main :: IO ()
 main = do
   let checks =
-        [ ("exact named callable resolves to persisted declaration identity", exactResolution)
+        [ ("exact named callable resolves to persisted declaration identity and complete semantic witness", exactResolution)
         , ("explicit callable lookup remains distinct from colliding provider primitive", namespaceCollision)
         , ("provider-only spelling is rejected as wrong callable category", primitiveOnlyRejects)
         , ("unknown callable fails closed", unknownRejects)
         , ("duplicate display spelling is rejected as ambiguous", ambiguousRejects)
         , ("stale declaration identity rejects", staleIdentityRejects)
         , ("stale callable interface revision rejects", staleRevisionRejects)
-        , ("incompatible callable surface reuses refinement rejection", incompatibleRefinementRejects)
+        , ("incompatible callable machine shape reuses refinement rejection", incompatibleRefinementRejects)
+        , ("stronger caller authority rejects through callable refinement", authorityWideningRejects)
+        , ("wider public may-effect rejects through callable refinement", effectWideningRejects)
+        , ("wider modeled failure set rejects through callable refinement", failureWideningRejects)
+        , ("incompatible global callee lifecycle rejects through callable refinement", lifecycleMismatchRejects)
+        , ("branch-sensitive callee lifecycle mismatch rejects through outcome fidelity", outcomeLifecycleMismatchRejects)
+        , ("residual obligation mismatch rejects through outcome fidelity", residualMismatchRejects)
+        , ("residual obligation cannot be reclassified as a postcondition", residualReclassificationRejects)
         , ("missing callable contract rejects catalog construction", missingContractRejects)
         , ("out-of-bundle callable contract rejects catalog construction", outsideContractRejects)
         ]
@@ -65,10 +83,15 @@ exactResolution = do
   resolved <- mapLeft show $
     resolveCallableInvocation catalog "Worker" workerExpectation
   let binding = resolvedCallableBinding resolved
+      checkedOutcomes = resolvedCallableOutcomes resolved
   assert (sourceCallableDeclarationKey binding == workerKey)
     "resolved callable did not retain exact worker DeclarationKey"
-  assert (sourceCallableInterface binding == workerInterface)
-    "resolved callable did not retain exact checked worker interface"
+  assert (sourceCallableContract binding == workerContract)
+    "resolved callable did not retain exact checked worker semantic contract"
+  assert
+    (Map.keysSet (checkedCallableActualOutcomes checkedOutcomes)
+      == Set.singleton CallableSuccessOutcome)
+    "resolved invocation did not retain the exact checked outcome domain"
 
 namespaceCollision :: Either String ()
 namespaceCollision = do
@@ -107,9 +130,9 @@ ambiguousRejects = do
     , (workerOtherKey, "unit.worker-b", "site.worker-b", "Worker")
     ]
   let contracts = Map.fromList
-        [ (callerKey, callerInterface)
-        , (workerKey, workerInterface)
-        , (workerOtherKey, workerInterface)
+        [ (callerKey, callerContract)
+        , (workerKey, workerContract)
+        , (workerOtherKey, workerContract)
         ]
   catalog <- mapLeft show $
     buildCallableInvocationCatalog Set.empty contracts checked
@@ -136,8 +159,9 @@ staleRevisionRejects = do
   (checked, contracts) <- baseChecked
   catalog <- mapLeft show $
     buildCallableInvocationCatalog Set.empty contracts checked
-  let expectedInterface = callableSurface "worker.v2" "Unit->Unit"
-      expectation = CallableInvocationExpectation workerKey expectedInterface
+  let expectedContract = workerContract
+        { sourceCallableRefinementSurface = callableSurface "worker.v2" "Unit->Unit" }
+      expectation = CallableInvocationExpectation workerKey expectedContract
   case resolveCallableInvocation catalog "Worker" expectation of
     Left (CallableInterfaceRevisionMismatch "Worker" expected actual)
       | expected == InterfaceRevision "worker.v2"
@@ -151,17 +175,160 @@ incompatibleRefinementRejects = do
     buildCallableInvocationCatalog Set.empty contracts checked
   let incompatible = CallableInvocationExpectation
         workerKey
-        (callableSurface "worker.v1" "Bytes->Unit")
+        workerContract
+          { sourceCallableRefinementSurface = callableSurface "worker.v1" "Bytes->Unit" }
   case resolveCallableInvocation catalog "Worker" incompatible of
     Left (CallableRefinementRejected "Worker" (CallableMachineShapeMismatch expected actual))
       | expected == CallableMachineShape "Bytes->Unit"
           && actual == CallableMachineShape "Unit->Unit" -> Right ()
     other -> Left ("expected callable refinement rejection, got " <> show other)
 
+authorityWideningRejects :: Either String ()
+authorityWideningRejects =
+  expectWorkerRefinementReject
+    (workerInterface
+      { callableRefinementCallerAuthority =
+          Set.singleton (CallableAuthorityRequirement "authority:extra") })
+    (\err -> case err of
+      CallableAuthorityRequirementTooStrong extra ->
+        extra == Set.singleton (CallableAuthorityRequirement "authority:extra")
+      _ -> False)
+    "authority widening"
+
+effectWideningRejects :: Either String ()
+effectWideningRejects =
+  let actual = workerInterface
+        { callableRefinementContract =
+            (callableRefinementContract workerInterface)
+              { callableContractEffectBound =
+                  Set.singleton (SemanticEffect "effect:extra") } }
+  in expectWorkerRefinementReject
+      actual
+      (\err -> case err of
+        CallableEffectBoundTooWide extra ->
+          extra == Set.singleton (SemanticEffect "effect:extra")
+        _ -> False)
+      "effect widening"
+
+failureWideningRejects :: Either String ()
+failureWideningRejects =
+  expectWorkerRefinementReject
+    (workerInterface
+      { callableRefinementFailures =
+          Set.singleton (CallableFatal "fatal:extra") })
+    (\err -> case err of
+      CallableFailureSetTooWide extra ->
+        extra == Set.singleton (CallableFatal "fatal:extra")
+      _ -> False)
+    "failure widening"
+
+lifecycleMismatchRejects :: Either String ()
+lifecycleMismatchRejects =
+  let actual = workerInterface
+        { callableRefinementContract =
+            (callableRefinementContract workerInterface)
+              { callableContractCalleeTransition = ConsumeCallee } }
+  in expectWorkerRefinementReject
+      actual
+      (\err -> case err of
+        CallableCalleeTransitionIncompatible PreserveCallee ConsumeCallee -> True
+        _ -> False)
+      "callee lifecycle mismatch"
+
+expectWorkerRefinementReject
+  :: CallableRefinementSurface
+  -> (CallableRefinementError -> Bool)
+  -> String
+  -> Either String ()
+expectWorkerRefinementReject actualSurface matches label = do
+  checked <- checkedBundle baseUnits
+  let actualContract = workerContract
+        { sourceCallableRefinementSurface = actualSurface }
+      contracts = Map.fromList
+        [ (callerKey, callerContract)
+        , (workerKey, actualContract)
+        ]
+  catalog <- mapLeft show $
+    buildCallableInvocationCatalog Set.empty contracts checked
+  case resolveCallableInvocation catalog "Worker" workerExpectation of
+    Left (CallableRefinementRejected "Worker" err)
+      | matches err -> Right ()
+    other -> Left ("expected " <> label <> " rejection, got " <> show other)
+
+outcomeLifecycleMismatchRejects :: Either String ()
+outcomeLifecycleMismatchRejects = do
+  let actualOutcome = successOutcome
+        { callableOutcomeCalleeTransition = ConsumeCallee }
+  expectWorkerOutcomeReject
+    [actualOutcome]
+    (\err -> case err of
+      CallableOutcomeCalleeTransitionMismatch
+          CallableSuccessOutcome PreserveCallee ConsumeCallee -> True
+      _ -> False)
+    "outcome lifecycle mismatch"
+
+residualMismatchRejects :: Either String ()
+residualMismatchRejects = do
+  let actualOutcome = successOutcome
+        { callableOutcomeResidualObligations = Set.singleton residualAtom }
+  expectWorkerOutcomeReject
+    [actualOutcome]
+    (\err -> case err of
+      CallableResidualObligationMismatch CallableSuccessOutcome expected actual ->
+        Set.null expected && actual == Set.singleton residualAtom
+      _ -> False)
+    "residual obligation mismatch"
+
+residualReclassificationRejects :: Either String ()
+residualReclassificationRejects = do
+  checked <- checkedBundle baseUnits
+  let expectedOutcome = successOutcome
+        { callableOutcomeResidualObligations = Set.singleton residualAtom }
+      actualOutcome = successOutcome
+        { callableOutcomePostconditions = Set.singleton residualAtom }
+      expectedContract = workerContract
+        { sourceCallableOutcomeContracts = [expectedOutcome] }
+      actualContract = workerContract
+        { sourceCallableOutcomeContracts = [actualOutcome] }
+      contracts = Map.fromList
+        [ (callerKey, callerContract)
+        , (workerKey, actualContract)
+        ]
+      expectation = CallableInvocationExpectation workerKey expectedContract
+  catalog <- mapLeft show $
+    buildCallableInvocationCatalog Set.empty contracts checked
+  case resolveCallableInvocation catalog "Worker" expectation of
+    Left (CallableOutcomeFidelityRejected "Worker"
+      (CallableResidualObligationReclassified
+        CallableSuccessOutcome atom _))
+      | atom == residualAtom -> Right ()
+    other -> Left
+      ("expected residual-obligation reclassification rejection, got " <> show other)
+
+expectWorkerOutcomeReject
+  :: [CallableOutcomeContract]
+  -> (CallableOutcomeError -> Bool)
+  -> String
+  -> Either String ()
+expectWorkerOutcomeReject actualOutcomes matches label = do
+  checked <- checkedBundle baseUnits
+  let actualContract = workerContract
+        { sourceCallableOutcomeContracts = actualOutcomes }
+      contracts = Map.fromList
+        [ (callerKey, callerContract)
+        , (workerKey, actualContract)
+        ]
+  catalog <- mapLeft show $
+    buildCallableInvocationCatalog Set.empty contracts checked
+  case resolveCallableInvocation catalog "Worker" workerExpectation of
+    Left (CallableOutcomeFidelityRejected "Worker" err)
+      | matches err -> Right ()
+    other -> Left ("expected " <> label <> " rejection, got " <> show other)
+
 missingContractRejects :: Either String ()
 missingContractRejects = do
   checked <- checkedBundle baseUnits
-  let contracts = Map.singleton callerKey callerInterface
+  let contracts = Map.singleton callerKey callerContract
   case buildCallableInvocationCatalog Set.empty contracts checked of
     Left (CallableContractMissing key) | key == workerKey -> Right ()
     other -> Left ("expected missing contract rejection, got " <> show other)
@@ -170,19 +337,22 @@ outsideContractRejects :: Either String ()
 outsideContractRejects = do
   (checked, contracts) <- baseChecked
   let outsideKey = DeclarationKey "decl:outside"
-      withOutside = Map.insert outsideKey workerInterface contracts
+      withOutside = Map.insert outsideKey workerContract contracts
   case buildCallableInvocationCatalog Set.empty withOutside checked of
     Left (CallableContractOutsideBundle key) | key == outsideKey -> Right ()
     other -> Left ("expected outside-bundle contract rejection, got " <> show other)
 
-baseChecked :: Either String (CheckedSourceBundle, Map.Map DeclarationKey CallableRefinementSurface)
+baseChecked
+  :: Either
+      String
+      (CheckedSourceBundle, Map.Map DeclarationKey SourceCallableSemanticContract)
 baseChecked = do
   checked <- checkedBundle baseUnits
   pure
     ( checked
     , Map.fromList
-        [ (callerKey, callerInterface)
-        , (workerKey, workerInterface)
+        [ (callerKey, callerContract)
+        , (workerKey, workerContract)
         ]
     )
 
@@ -220,7 +390,11 @@ unitEnvironment = (emptySurfaceEnvironment emptyStaticContext)
   { surfaceExpectedProvides = Just TyUnit }
 
 workerExpectation :: CallableInvocationExpectation
-workerExpectation = CallableInvocationExpectation workerKey workerInterface
+workerExpectation = CallableInvocationExpectation workerKey workerContract
+
+callerContract, workerContract :: SourceCallableSemanticContract
+callerContract = SourceCallableSemanticContract callerInterface [successOutcome]
+workerContract = SourceCallableSemanticContract workerInterface [successOutcome]
 
 callerInterface, workerInterface :: CallableRefinementSurface
 callerInterface = callableSurface "caller.v1" "Unit->Unit"
@@ -237,6 +411,21 @@ callableSurface revision shape = CallableRefinementSurface
   , callableRefinementCallerAuthority = Set.empty
   , callableRefinementFailures = Set.empty
   }
+
+successOutcome :: CallableOutcomeContract
+successOutcome = CallableOutcomeContract
+  { callableOutcomeClass = CallableSuccessOutcome
+  , callableOutcomeState = CallableOutcomeState "state:unit"
+  , callableOutcomeCalleeTransition = PreserveCallee
+  , callableOutcomePostconditions = Set.empty
+  , callableOutcomeResidualObligations = Set.empty
+  , callableOutcomeAssumptions = Set.empty
+  , callableOutcomeEffects = Set.empty
+  , callableOutcomeDischargedFacts = Set.empty
+  }
+
+residualAtom :: CallableOutcomeAtom
+residualAtom = CallableOutcomeAtom "obligation:worker-output"
 
 callerKey, workerKey, workerOtherKey :: DeclarationKey
 callerKey = DeclarationKey "decl:caller"
