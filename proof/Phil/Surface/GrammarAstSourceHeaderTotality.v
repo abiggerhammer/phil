@@ -658,8 +658,7 @@ Proof.
     + rewrite Hmodule_normalize.
       rewrite Himports_normalize.
       reflexivity.
-    + rewrite Hmodule_normalize.
-      rewrite Himports_normalize.
+    + rewrite Himports_normalize.
       reflexivity.
   }
   split.
