@@ -128,7 +128,7 @@ Proof.
                                                                    exists Phase1ProgramDeclaration.
                                                                    split; reflexivity.
                                                            ******* vm_compute in Hnth.
-                                                                   discriminate Hnth.
+                                                                   inversion Hnth.
 Qed.
 
 Lemma phase1_surface_normalize_metadata_string_total_from_derivation :
