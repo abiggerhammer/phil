@@ -259,8 +259,6 @@ Proof.
   exists
     {| phase1_attribute_spine_name := name;
        phase1_attribute_spine_value := value |}.
-  rewrite Htree.
-  rewrite Hsubtree.
   rewrite Hat_tree.
   rewrite Hopen_tree.
   rewrite Hclose_tree.
