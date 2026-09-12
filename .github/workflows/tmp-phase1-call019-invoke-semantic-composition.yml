@@ -1,0 +1,47 @@
+name: Temporary CALL-019 Invoke Semantic Composition
+
+on:
+  push:
+    branches:
+      - phase1-call019-invoke-semantic-composition
+
+permissions:
+  contents: read
+
+jobs:
+  call019-invoke-semantic-composition:
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: haskell-actions/setup@v2
+        with:
+          ghc-version: '9.6.7'
+          cabal-version: 'latest'
+
+      - name: Build complete Haskell substrate
+        shell: bash
+        run: |
+          set -euo pipefail
+          cabal build all --enable-tests
+
+      - name: Replay CALL-019 resolved semantic witness
+        shell: bash
+        run: |
+          set -euo pipefail
+          cabal exec -- runghc -isrc -itest -Wall -Werror \
+            test/Phase1CALL019CallableResolutionMain.hs
+
+      - name: Exercise CALL-019 surface semantic composition
+        shell: bash
+        run: |
+          set -euo pipefail
+          cabal exec -- runghc -isrc -itest -Wall -Werror \
+            test/Phase1CALL019InvokeSurfaceMain.hs
+
+      - name: Replay Steve invoke integration
+        shell: bash
+        run: |
+          set -euo pipefail
+          cabal exec -- runghc -isrc -itest -Wall -Werror \
+            test/Phase1INT006SteveApplicationShellMain.hs
