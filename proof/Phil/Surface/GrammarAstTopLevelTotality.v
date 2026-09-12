@@ -127,7 +127,7 @@ Proof.
                                                                    inversion Hnth; subst item.
                                                                    exists Phase1ProgramDeclaration.
                                                                    split; reflexivity.
-                                                           ******* change None = Some item in Hnth.
+                                                           ******* change (None = Some item) in Hnth.
                                                                    discriminate Hnth.
 Qed.
 
