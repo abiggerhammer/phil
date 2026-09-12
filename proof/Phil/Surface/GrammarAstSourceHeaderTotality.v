@@ -599,7 +599,7 @@ Proof.
       phase1_surface_rules [] phase1_surface_start
       tokens [] tree Hcomplete)
     as [body [subtree [Hlookup [Htree Hbody]]]].
-  rewrite phase1_surface_start_rule in Hlookup.
+  rewrite GrammarAstSourceSpine.phase1_surface_start_rule in Hlookup.
   inversion Hlookup; subst body.
   destruct
     (derives_sequence_expression_exposes_items
