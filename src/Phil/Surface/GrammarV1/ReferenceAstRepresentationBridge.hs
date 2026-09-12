@@ -37,12 +37,13 @@ grammarV1ReferenceSourceSpineToImplementationHeader
 grammarV1ReferenceSourceSpineToImplementationHeader spine = do
   topLevelCount <- intToRepresentationNat
     (grammarV1ReferenceTopLevelCount spine)
-  pure Representation.Build_Phase1SurfaceImplementationSourceHeader
-    (fmap qualifiedNameToRepresentation
-      (grammarV1ReferenceModuleName spine))
-    (map importSpineToRepresentation
-      (grammarV1ReferenceImports spine))
-    topLevelCount
+  pure
+    (Representation.Build_Phase1SurfaceImplementationSourceHeader
+      (fmap qualifiedNameToRepresentation
+        (grammarV1ReferenceModuleName spine))
+      (map importSpineToRepresentation
+        (grammarV1ReferenceImports spine))
+      topLevelCount)
 
 -- | Production binding for the same extracted header carrier.  Going through
 -- 'grammarV1ProductionSourceSpine' makes the equality boundary explicit: the
