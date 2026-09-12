@@ -847,10 +847,10 @@ Proof.
   destruct module_tree as [module_body |];
     destruct module_name as [name |];
     cbn in Hmodule_round_trip;
-    try discriminate Hmodule_round_trip;
-    cbn;
-    rewrite Hmodule_round_trip;
+    try discriminate Hmodule_round_trip.
+  - inversion Hmodule_round_trip; subst module_body.
     reflexivity.
+  - reflexivity.
 Qed.
 
 Definition phase1_surface_normalize_source_header_tree
