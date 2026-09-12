@@ -10,6 +10,7 @@ module Phil.Surface.Check.Types
   , ProviderOutcomeSpec (..)
   , PrimitiveSemantics (..)
   , SurfaceCallableSignature (..)
+  , SurfaceCallableInvocationWitness (..)
   , ReleaseRequirement (..)
   , ReleaseSemanticAccount (..)
   , ReleaseTransitionOutcome (..)
@@ -19,6 +20,7 @@ module Phil.Surface.Check.Types
   , selectReleaseTransition
   , SurfaceEnvironment (..)
   , SurfaceCheckResult (..)
+  , SurfaceSemanticCheckResult (..)
   , emptySurfaceEnvironment
   , BindingMeta (..)
   , SurfaceState (..)
@@ -34,6 +36,7 @@ import qualified Data.Map.Strict as Map
 import Data.Set (Set)
 import qualified Data.Set as Set
 import Data.Text (Text)
+import Phil.Core.CallableSemanticContract (SourceCallableSemanticContract)
 import Phil.Core.Checker (CheckState)
 import Phil.Core.Recognition
   ( ParsedWitness
@@ -162,6 +165,17 @@ data SurfaceCallableSignature = SurfaceCallableSignature
   }
   deriving (Eq, Show)
 
+-- | Exact semantic contract retained for one ordinary source invocation after
+-- the existing surface checker has accepted its lookup, arity, type, and
+-- structural transfer. The display spelling is diagnostic only; declaration
+-- identity and the complete Core semantic contract are the authority.
+data SurfaceCallableInvocationWitness = SurfaceCallableInvocationWitness
+  { surfaceInvocationDisplayName :: Text
+  , surfaceInvocationDeclarationKey :: DeclarationKey
+  , surfaceInvocationSemanticContract :: SourceCallableSemanticContract
+  }
+  deriving (Eq, Ord, Show)
+
 -- | Exact prerequisites established by the competent resource/callable/provider
 -- layer before the surface `release` shorthand may select a transition.
 data ReleaseRequirement
@@ -222,6 +236,11 @@ data SurfaceEnvironment = SurfaceEnvironment
   , surfaceInitialBindings :: Map Text InitialBinding
   , surfacePrimitives :: Map Text PrimitiveSemantics
   , surfaceCallables :: Map Text SurfaceCallableSignature
+  -- | `Nothing` is the compatibility surface used by pre-CALL-019 callers.
+  -- `Just contracts` opts this environment into strict semantic invocation:
+  -- every explicit `invoke` must resolve its exact DeclarationKey in this map.
+  , surfaceCallableSemanticContracts
+      :: Maybe (Map DeclarationKey SourceCallableSemanticContract)
   , surfaceTypeAliases :: Map Text Ty
   , surfaceSelectRequirements :: Map Text [Proposition]
   , surfaceReceiveExactRequirement :: Maybe Proposition
@@ -281,12 +300,25 @@ data SurfaceCheckResult = SurfaceCheckResult
   }
   deriving (Eq, Show)
 
+-- | CALL-019 enrichment of an ordinary successful surface check. The base
+-- result remains byte-for-byte compatible with existing callers, while the
+-- semantic path additionally retains every exact callable contract reached by
+-- explicit `invoke` syntax. Subsequent slices can consume this set for authority,
+-- may-effect, lifecycle, and outcome composition without reconstructing a
+-- weaker name-only contract.
+data SurfaceSemanticCheckResult = SurfaceSemanticCheckResult
+  { checkedSurfaceResult :: SurfaceCheckResult
+  , checkedCallableInvocations :: Set SurfaceCallableInvocationWitness
+  }
+  deriving (Eq, Show)
+
 emptySurfaceEnvironment :: StaticContext -> SurfaceEnvironment
 emptySurfaceEnvironment staticContext = SurfaceEnvironment
   { surfaceStaticContext = staticContext
   , surfaceInitialBindings = Map.empty
   , surfacePrimitives = Map.empty
   , surfaceCallables = Map.empty
+  , surfaceCallableSemanticContracts = Nothing
   , surfaceTypeAliases = Map.empty
   , surfaceSelectRequirements = Map.empty
   , surfaceReceiveExactRequirement = Nothing
