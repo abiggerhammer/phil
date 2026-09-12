@@ -1,10 +1,11 @@
 From Stdlib Require Import Lists.List.
 
-From Phil.Surface Require Export GrammarDerivationOracle.
+From Phil.Surface Require Export
+  GrammarDerivationOracle
+  GrammarParserRecognizer.
 From Phil.Surface Require Import
   GrammarDerivation
-  GrammarParserProgress
-  GrammarParserRecognizer.
+  GrammarParserProgress.
 
 Import ListNotations.
 
