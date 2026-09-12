@@ -441,8 +441,11 @@ Proof.
   rewrite (phase1_surface_exact2_round_trip items first_tree suffix_tree Hitems).
   rewrite (phase1_surface_expect_repetition_round_trip
     suffix_tree suffix_trees Hrepetition).
-  rewrite (phase1_surface_normalize_identifier_round_trip
-    first_tree first_value Hfirst).
+  pose proof
+    (phase1_surface_normalize_identifier_round_trip
+      first_tree first_value Hfirst) as Hfirst_round_trip.
+  unfold phase1_surface_identifier_tree in Hfirst_round_trip.
+  rewrite Hfirst_round_trip.
   rewrite (phase1_surface_normalize_name_suffixes_round_trip
     separator suffix_trees rest_values Hrest).
   reflexivity.
