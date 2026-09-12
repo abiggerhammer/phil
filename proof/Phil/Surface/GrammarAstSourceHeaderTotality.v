@@ -651,7 +651,7 @@ Proof.
     rewrite Himports_tree.
     rewrite Htops_tree.
     unfold phase1_surface_normalize_source_header_tree,
-      phase1_surface_normalize_source_spine,
+      GrammarAstSourceSpine.phase1_surface_normalize_source_spine,
       phase1_surface_normalize_source_header.
     rewrite String.eqb_refl.
     destruct module_tree as [module_body |]; cbn in *.
