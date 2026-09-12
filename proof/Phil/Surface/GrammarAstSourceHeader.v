@@ -434,20 +434,26 @@ Proof.
   destruct (phase1_surface_normalize_name_suffixes separator suffix_trees)
     as [rest_values |] eqn:Hrest; try discriminate Hnormalize.
   inversion Hnormalize; subst names.
+  pose proof
+    (phase1_surface_normalize_identifier_round_trip
+      first_tree first_value Hfirst) as Hfirst_round_trip.
+  pose proof
+    (phase1_surface_normalize_name_suffixes_round_trip
+      separator suffix_trees rest_values Hrest) as Hrest_round_trip.
+  symmetry in Hfirst_round_trip.
+  symmetry in Hrest_round_trip.
+  subst first_tree.
+  subst suffix_trees.
   unfold phase1_surface_name_list_tree.
   rewrite (phase1_surface_expect_nonterminal_round_trip
     nonterminal tree body Hnode).
   rewrite (phase1_surface_expect_sequence_round_trip body items Hsequence).
-  rewrite (phase1_surface_exact2_round_trip items first_tree suffix_tree Hitems).
+  rewrite (phase1_surface_exact2_round_trip items
+    (phase1_surface_identifier_tree first_value) suffix_tree Hitems).
   rewrite (phase1_surface_expect_repetition_round_trip
-    suffix_tree suffix_trees Hrepetition).
-  pose proof
-    (phase1_surface_normalize_identifier_round_trip
-      first_tree first_value Hfirst) as Hfirst_round_trip.
-  unfold phase1_surface_identifier_tree in Hfirst_round_trip.
-  rewrite Hfirst_round_trip.
-  rewrite (phase1_surface_normalize_name_suffixes_round_trip
-    separator suffix_trees rest_values Hrest).
+    suffix_tree
+    (map (phase1_surface_name_suffix_tree separator) rest_values)
+    Hrepetition).
   reflexivity.
 Qed.
 
@@ -511,21 +517,25 @@ Proof.
     as [[] |] eqn:Hkeyword; try discriminate Hnormalize.
   destruct (phase1_surface_expect_literal ";" terminator_tree)
     as [[] |] eqn:Hterminator; try discriminate Hnormalize.
+  unfold phase1_surface_normalize_qualified_name in Hnormalize.
   pose proof
     (phase1_surface_normalize_name_list_round_trip
       "qualified_name" "." qualified_name_tree name Hnormalize) as Hname.
+  symmetry in Hname.
+  subst qualified_name_tree.
   unfold phase1_surface_module_decl_tree,
     phase1_surface_qualified_name_tree.
   rewrite (phase1_surface_expect_nonterminal_round_trip
     "module_decl" tree body Hnode).
   rewrite (phase1_surface_expect_sequence_round_trip body items Hsequence).
   rewrite (phase1_surface_exact3_round_trip
-    items keyword_tree qualified_name_tree terminator_tree Hitems).
+    items keyword_tree
+      (phase1_surface_name_list_tree "qualified_name" "." name)
+      terminator_tree Hitems).
   rewrite (phase1_surface_expect_literal_round_trip
     "module" keyword_tree Hkeyword).
   rewrite (phase1_surface_expect_literal_round_trip
     ";" terminator_tree Hterminator).
-  rewrite Hname.
   reflexivity.
 Qed.
 
@@ -587,21 +597,27 @@ Proof.
       as [[] |] eqn:Hclose; try discriminate Hnormalize.
     destruct (phase1_surface_normalize_identifier_list identifiers_tree)
       as [identifiers |] eqn:Hidentifiers; try discriminate Hnormalize.
+    unfold phase1_surface_normalize_identifier_list in Hidentifiers.
+    pose proof
+      (phase1_surface_normalize_name_list_round_trip
+        "identifier_list" "," identifiers_tree identifiers Hidentifiers)
+      as Hidentifiers_round_trip.
+    symmetry in Hidentifiers_round_trip.
+    subst identifiers_tree.
     inversion Hnormalize; subst selection.
     cbn.
+    unfold phase1_surface_identifier_list_tree.
     rewrite (phase1_surface_expect_optional_round_trip
       tree (Some body) Hoptional).
     rewrite (phase1_surface_expect_sequence_round_trip body items Hsequence).
     rewrite (phase1_surface_exact3_round_trip
-      items open_tree identifiers_tree close_tree Hitems).
+      items open_tree
+        (phase1_surface_name_list_tree "identifier_list" "," identifiers)
+        close_tree Hitems).
     rewrite (phase1_surface_expect_literal_round_trip
       "{" open_tree Hopen).
     rewrite (phase1_surface_expect_literal_round_trip
       "}" close_tree Hclose).
-    unfold phase1_surface_identifier_list_tree,
-      phase1_surface_normalize_identifier_list in Hidentifiers.
-    rewrite (phase1_surface_normalize_name_list_round_trip
-      "identifier_list" "," identifiers_tree identifiers Hidentifiers).
     reflexivity.
   - inversion Hnormalize; subst selection.
     cbn.
@@ -672,23 +688,32 @@ Proof.
     as [name |] eqn:Hname; try discriminate Hnormalize.
   destruct (phase1_surface_normalize_import_selection selection_tree)
     as [selection |] eqn:Hselection; try discriminate Hnormalize.
+  unfold phase1_surface_normalize_qualified_name in Hname.
+  pose proof
+    (phase1_surface_normalize_name_list_round_trip
+      "qualified_name" "." qualified_name_tree name Hname) as Hname_round_trip.
+  pose proof
+    (phase1_surface_normalize_import_selection_round_trip
+      selection_tree selection Hselection) as Hselection_round_trip.
+  symmetry in Hname_round_trip.
+  symmetry in Hselection_round_trip.
+  subst qualified_name_tree.
+  subst selection_tree.
   inversion Hnormalize; subst import_header.
   cbn.
+  unfold phase1_surface_qualified_name_tree.
   rewrite (phase1_surface_expect_nonterminal_round_trip
     "import_decl" tree body Hnode).
   rewrite (phase1_surface_expect_sequence_round_trip body items Hsequence).
   rewrite (phase1_surface_exact4_round_trip
-    items keyword_tree qualified_name_tree selection_tree terminator_tree Hitems).
+    items keyword_tree
+      (phase1_surface_name_list_tree "qualified_name" "." name)
+      (phase1_surface_import_selection_tree selection)
+      terminator_tree Hitems).
   rewrite (phase1_surface_expect_literal_round_trip
     "import" keyword_tree Hkeyword).
   rewrite (phase1_surface_expect_literal_round_trip
     ";" terminator_tree Hterminator).
-  unfold phase1_surface_qualified_name_tree,
-    phase1_surface_normalize_qualified_name in Hname.
-  rewrite (phase1_surface_normalize_name_list_round_trip
-    "qualified_name" "." qualified_name_tree name Hname).
-  rewrite (phase1_surface_normalize_import_selection_round_trip
-    selection_tree selection Hselection).
   reflexivity.
 Qed.
 
