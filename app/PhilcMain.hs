@@ -5,12 +5,13 @@ module Main (main) where
 import qualified Data.Text as Text
 import qualified Data.Text.IO as TextIO
 import Phil.Compiler
-  ( RunnableProgram (runnableLLVMArtifact)
+  ( CompilerTarget
+  , RunnableProgram (runnableLLVMArtifact)
   , compileRunnableForTarget
-  , parseCompilerTarget
-  , supportedCompilerTargets
   , compilerTargetName
+  , parseCompilerTarget
   , renderRunnableCompileError
+  , supportedCompilerTargets
   )
 import Phil.LLVM (llvmArtifactText)
 import System.Environment (getArgs)
@@ -36,6 +37,7 @@ usage = do
     ("supported targets: " <> Text.intercalate ", " (map compilerTargetName supportedCompilerTargets))
   exitFailure
 
+emitLLVM :: CompilerTarget -> FilePath -> IO ()
 emitLLVM target path = do
   source <- TextIO.readFile path
   case compileRunnableForTarget target (Text.pack path) source of
