@@ -9,8 +9,6 @@ module Phil.Compiler.CallableSurfaceSemantics
 
 import qualified Data.Map.Strict as Map
 import Data.Map.Strict (Map)
-import qualified Data.Set as Set
-import Data.Set (Set)
 import Data.Text (Text)
 import Phil.Core.CallableSemanticContract
   ( SourceCallableSemanticContract
@@ -32,6 +30,7 @@ import Phil.Surface.Syntax
   , FailureTarget (..)
   , Fallback (..)
   , Located (..)
+  , SourceSpan
   , Statement (..)
   , SurfaceExpression (..)
   , pattern InvokeExpression
@@ -41,10 +40,11 @@ import Phil.Surface.Syntax
 
 -- | Exact semantic contract retained for one ordinary source invocation after
 -- the surface checker has accepted lookup, arity, type, and structural transfer.
--- The display spelling is diagnostic only; declaration identity and the complete
--- semantic contract are the authority.
+-- The source span is part of the witness so repeated calls to the same callable
+-- remain distinct occurrences for later lifecycle/effect/outcome composition.
 data SurfaceCallableInvocationWitness = SurfaceCallableInvocationWitness
-  { surfaceInvocationDisplayName :: Text
+  { surfaceInvocationSpan :: SourceSpan
+  , surfaceInvocationDisplayName :: Text
   , surfaceInvocationDeclarationKey :: DeclarationKey
   , surfaceInvocationSemanticContract :: SourceCallableSemanticContract
   }
@@ -52,12 +52,13 @@ data SurfaceCallableInvocationWitness = SurfaceCallableInvocationWitness
 
 -- | CALL-019 semantic enrichment of an ordinary successful surface check.
 -- Surface checking remains responsible for syntax, type, and resource shape;
--- this compiler-side bridge binds every explicit `invoke` to its exact semantic
--- contract without forcing the newer callable subsystem into the legacy surface
--- package boundary.
+-- this compiler-side bridge binds every explicit `invoke` occurrence to its
+-- exact semantic contract without forcing the newer callable subsystem into the
+-- legacy surface package boundary. Occurrence order follows source evaluation
+-- order within each expression: nested argument invocations precede the caller.
 data SurfaceSemanticCheckResult = SurfaceSemanticCheckResult
   { checkedSurfaceResult :: SurfaceCheckResult
-  , checkedCallableInvocations :: Set SurfaceCallableInvocationWitness
+  , checkedCallableInvocations :: [SurfaceCallableInvocationWitness]
   }
   deriving (Eq, Show)
 
@@ -83,9 +84,9 @@ collectBlock
   :: Map DeclarationKey SourceCallableSemanticContract
   -> SurfaceEnvironment
   -> Located Block
-  -> Either SurfaceCheckError (Set SurfaceCallableInvocationWitness)
+  -> Either SurfaceCheckError [SurfaceCallableInvocationWitness]
 collectBlock contracts environment block =
-  unionsM
+  concatM
     (map
       (collectStatement contracts environment)
       (blockStatements (locatedValue block)))
@@ -94,7 +95,7 @@ collectStatement
   :: Map DeclarationKey SourceCallableSemanticContract
   -> SurfaceEnvironment
   -> Located Statement
-  -> Either SurfaceCheckError (Set SurfaceCallableInvocationWitness)
+  -> Either SurfaceCheckError [SurfaceCallableInvocationWitness]
 collectStatement contracts environment statement = case locatedValue statement of
   LetStatement _ expression -> collectExpression contracts environment expression
   ReturnStatement expression -> collectExpression contracts environment expression
@@ -104,10 +105,10 @@ collectExpression
   :: Map DeclarationKey SourceCallableSemanticContract
   -> SurfaceEnvironment
   -> Located SurfaceExpression
-  -> Either SurfaceCheckError (Set SurfaceCallableInvocationWitness)
+  -> Either SurfaceCheckError [SurfaceCallableInvocationWitness]
 collectExpression contracts environment expression = case locatedValue expression of
   InvokeExpression name arguments -> do
-    nested <- unionsM (map (collectExpression contracts environment) arguments)
+    nested <- concatM (map (collectExpression contracts environment) arguments)
     signature <- maybe
       (Left SurfaceCheckError
         { surfaceErrorSpan = locatedSpan expression
@@ -127,13 +128,14 @@ collectExpression contracts environment expression = case locatedValue expressio
         })
       Right
       (Map.lookup declarationKey contracts)
-    Right (Set.insert
-      SurfaceCallableInvocationWitness
-        { surfaceInvocationDisplayName = name
-        , surfaceInvocationDeclarationKey = declarationKey
-        , surfaceInvocationSemanticContract = contract
-        }
-      nested)
+    Right (nested <>
+      [ SurfaceCallableInvocationWitness
+          { surfaceInvocationSpan = locatedSpan expression
+          , surfaceInvocationDisplayName = name
+          , surfaceInvocationDeclarationKey = declarationKey
+          , surfaceInvocationSemanticContract = contract
+          }
+      ])
   VariableExpression _ -> empty
   IntegerExpression _ -> empty
   BooleanExpression _ -> empty
@@ -143,77 +145,77 @@ collectExpression contracts environment expression = case locatedValue expressio
   FieldExpression base _ -> collectExpression contracts environment base
   BinaryExpression _ left right -> expressions [left, right]
   ConstructExpression _ fields -> expressions (map snd fields)
-  ReceiveExpression messageType endpoint -> unionsM
+  ReceiveExpression messageType endpoint -> concatM
     [ collectType contracts environment messageType
     , collectExpression contracts environment endpoint
     ]
   ReceiveFrameExpression endpoint -> collectExpression contracts environment endpoint
   RecognizeExpression _ raw -> collectExpression contracts environment raw
-  ValidateExpression _ context subject -> unionsM
+  ValidateExpression _ context subject -> concatM
     ( collectExpression contracts environment subject
       : maybe [] (pure . collectExpression contracts environment) context)
   SendExpression value endpoint -> expressions [value, endpoint]
   SendExactExpression value endpoint -> expressions [value, endpoint]
-  ReceiveExactExpression count endpoint evidence -> unionsM
+  ReceiveExactExpression count endpoint evidence -> concatM
     ( [ collectExpression contracts environment count
       , collectExpression contracts environment endpoint
       ]
       <> maybe [] (pure . collectExpression contracts environment) evidence)
-  SelectExpression branch endpoint evidence -> unionsM
+  SelectExpression branch endpoint evidence -> concatM
     ( collectBranchValue contracts environment branch
       : collectExpression contracts environment endpoint
       : maybe [] (pure . collectExpression contracts environment) evidence)
   CommitReceiveExpression pending evidence -> expressions [pending, evidence]
-  BorrowExpression owner _ body -> unionsM
+  BorrowExpression owner _ body -> concatM
     [ collectExpression contracts environment owner
     , collectBlock contracts environment body
     ]
-  DecideExpression scrutinee arms -> unionsM
+  DecideExpression scrutinee arms -> concatM
     ( collectExpression contracts environment scrutinee
       : map (collectArm contracts environment) arms)
-  OfferExpression endpoint arms -> unionsM
+  OfferExpression endpoint arms -> concatM
     ( collectExpression contracts environment endpoint
       : map (collectArm contracts environment) arms)
-  FailExpression target resource -> unionsM
+  FailExpression target resource -> concatM
     [ collectFailureTarget contracts environment target
     , collectExpression contracts environment resource
     ]
   CloseExpression endpoint -> collectExpression contracts environment endpoint
   ReleaseExpression owner -> collectExpression contracts environment owner
-  AcceptExpression value acceptedType -> unionsM
+  AcceptExpression value acceptedType -> concatM
     [ collectExpression contracts environment value
     , collectType contracts environment acceptedType
     ]
   ProveExpression proposition -> collectProposition contracts environment proposition
-  FallbackExpression primary fallback -> unionsM
+  FallbackExpression primary fallback -> concatM
     [ collectExpression contracts environment primary
     , collectFallback contracts environment fallback
     ]
   where
-    empty = Right Set.empty
-    expressions = unionsM . map (collectExpression contracts environment)
+    empty = Right []
+    expressions = concatM . map (collectExpression contracts environment)
 
 collectType
   :: Map DeclarationKey SourceCallableSemanticContract
   -> SurfaceEnvironment
   -> Located SurfaceType
-  -> Either SurfaceCheckError (Set SurfaceCallableInvocationWitness)
+  -> Either SurfaceCheckError [SurfaceCallableInvocationWitness]
 collectType contracts environment surfaceType = case locatedValue surfaceType of
   SurfaceBytesType index -> collectExpression contracts environment index
   SurfaceProofType proposition -> collectProposition contracts environment proposition
-  SurfaceValidatedType _ context subject -> unionsM
+  SurfaceValidatedType _ context subject -> concatM
     [ collectExpression contracts environment context
     , collectExpression contracts environment subject
     ]
   SurfaceNamedType _ arguments ->
-    unionsM (map (collectExpression contracts environment) arguments)
-  _ -> Right Set.empty
+    concatM (map (collectExpression contracts environment) arguments)
+  _ -> Right []
 
 collectProposition
   :: Map DeclarationKey SourceCallableSemanticContract
   -> SurfaceEnvironment
   -> Located SurfaceProposition
-  -> Either SurfaceCheckError (Set SurfaceCallableInvocationWitness)
+  -> Either SurfaceCheckError [SurfaceCallableInvocationWitness]
 collectProposition contracts environment proposition = case locatedValue proposition of
   PropositionEqual left right -> binary left right
   PropositionNotEqual left right -> binary left right
@@ -222,17 +224,17 @@ collectProposition contracts environment proposition = case locatedValue proposi
   PropositionGreaterThan left right -> binary left right
   PropositionGreaterEqual left right -> binary left right
   PropositionAtom _ arguments ->
-    unionsM (map (collectExpression contracts environment) arguments)
+    concatM (map (collectExpression contracts environment) arguments)
   PropositionConjunction left right -> propositions left right
   PropositionDisjunction left right -> propositions left right
   PropositionNegation inner -> collectProposition contracts environment inner
-  _ -> Right Set.empty
+  _ -> Right []
   where
-    binary left right = unionsM
+    binary left right = concatM
       [ collectExpression contracts environment left
       , collectExpression contracts environment right
       ]
-    propositions left right = unionsM
+    propositions left right = concatM
       [ collectProposition contracts environment left
       , collectProposition contracts environment right
       ]
@@ -241,7 +243,7 @@ collectArm
   :: Map DeclarationKey SourceCallableSemanticContract
   -> SurfaceEnvironment
   -> Located CaseArm
-  -> Either SurfaceCheckError (Set SurfaceCallableInvocationWitness)
+  -> Either SurfaceCheckError [SurfaceCallableInvocationWitness]
 collectArm contracts environment arm =
   collectBlock contracts environment (caseArmBody (locatedValue arm))
 
@@ -249,9 +251,9 @@ collectBranchValue
   :: Map DeclarationKey SourceCallableSemanticContract
   -> SurfaceEnvironment
   -> BranchValue
-  -> Either SurfaceCheckError (Set SurfaceCallableInvocationWitness)
+  -> Either SurfaceCheckError [SurfaceCallableInvocationWitness]
 collectBranchValue contracts environment =
-  unionsM
+  concatM
     . map (collectExpression contracts environment)
     . branchValueArguments
 
@@ -259,9 +261,9 @@ collectFailureTarget
   :: Map DeclarationKey SourceCallableSemanticContract
   -> SurfaceEnvironment
   -> FailureTarget
-  -> Either SurfaceCheckError (Set SurfaceCallableInvocationWitness)
+  -> Either SurfaceCheckError [SurfaceCallableInvocationWitness]
 collectFailureTarget contracts environment =
-  unionsM
+  concatM
     . map (collectExpression contracts environment)
     . failureTargetArguments
 
@@ -269,12 +271,12 @@ collectFallback
   :: Map DeclarationKey SourceCallableSemanticContract
   -> SurfaceEnvironment
   -> Fallback
-  -> Either SurfaceCheckError (Set SurfaceCallableInvocationWitness)
+  -> Either SurfaceCheckError [SurfaceCallableInvocationWitness]
 collectFallback contracts environment fallback = case fallback of
-  FailFallback _ -> Right Set.empty
+  FailFallback _ -> Right []
   RejectFallback expression -> collectExpression contracts environment expression
 
-unionsM
-  :: [Either SurfaceCheckError (Set SurfaceCallableInvocationWitness)]
-  -> Either SurfaceCheckError (Set SurfaceCallableInvocationWitness)
-unionsM = fmap Set.unions . sequence
+concatM
+  :: [Either SurfaceCheckError [SurfaceCallableInvocationWitness]]
+  -> Either SurfaceCheckError [SurfaceCallableInvocationWitness]
+concatM = fmap concat . sequence
