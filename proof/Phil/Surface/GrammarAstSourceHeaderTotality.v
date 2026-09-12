@@ -311,46 +311,54 @@ Proof.
       ]
       input rest subtree Hbody)
     as [trees [Hsubtree Hitems]].
-  repeat match goal with
-  | Hseq : DerivesSequence phase1_surface_rules _ _ (_ :: _) _ _ _ |- _ =>
-      inversion Hseq; subst; clear Hseq
-  end.
-  match goal with
-  | Hnil : DerivesSequence phase1_surface_rules _ _ [] _ _ _ |- _ =>
-      inversion Hnil; subst; clear Hnil
-  end.
-  match goal with
-  | Hkeyword : Derives phase1_surface_rules _
-      (ELiteral "module") _ _ ?keyword_tree,
-    Hname : Derives phase1_surface_rules _
-      (ENonterminal "qualified_name") _ _ ?name_tree,
-    Hterminator : Derives phase1_surface_rules _
-      (ELiteral ";") _ _ ?terminator_tree |- _ =>
-      destruct
-        (literal_derivation_is_exact
-          phase1_surface_rules _ "module" _ _ keyword_tree Hkeyword)
-        as [keyword_tail [_ [_ Hkeyword_tree]]];
-      destruct
-        (literal_derivation_is_exact
-          phase1_surface_rules _ ";" _ _ terminator_tree Hterminator)
-        as [terminator_tail [_ [_ Hterminator_tree]]];
-      destruct
-        (phase1_surface_normalize_qualified_name_total_from_derivation
-          _ _ _ name_tree Hname)
-        as [name Hname_normalize];
-      exists name;
-      rewrite Htree;
-      rewrite Hsubtree;
-      rewrite Hkeyword_tree;
-      rewrite Hterminator_tree;
-      unfold phase1_surface_normalize_module_decl,
-        phase1_surface_expect_nonterminal,
-        phase1_surface_expect_sequence,
-        phase1_surface_exact3,
-        phase1_surface_expect_literal;
-      cbn;
-      exact Hname_normalize
-  end.
+  destruct
+    (derives_sequence_cons_exposes_head
+      phase1_surface_rules
+      (descend path (AtNonterminal "module_decl"))
+      0 (ELiteral "module")
+      [ENonterminal "qualified_name"; ELiteral ";"]
+      input rest trees Hitems)
+    as [after_keyword [keyword_tree [tail_trees [Hkeyword Htail]]]].
+  destruct
+    (derives_sequence_cons_exposes_head
+      phase1_surface_rules
+      (descend path (AtNonterminal "module_decl"))
+      1 (ENonterminal "qualified_name")
+      [ELiteral ";"]
+      after_keyword rest tail_trees Htail)
+    as [after_name [name_tree [terminator_trees [Hname Hterminator_tail]]]].
+  destruct
+    (derives_sequence_cons_exposes_head
+      phase1_surface_rules
+      (descend path (AtNonterminal "module_decl"))
+      2 (ELiteral ";") []
+      after_name rest terminator_trees Hterminator_tail)
+    as [after_terminator [terminator_tree [nil_trees [Hterminator Hnil]]]].
+  inversion Hnil; subst.
+  destruct
+    (literal_derivation_is_exact
+      phase1_surface_rules _ "module" _ _ keyword_tree Hkeyword)
+    as [keyword_tail [_ [_ Hkeyword_tree]]].
+  destruct
+    (literal_derivation_is_exact
+      phase1_surface_rules _ ";" _ _ terminator_tree Hterminator)
+    as [terminator_tail [_ [_ Hterminator_tree]]].
+  destruct
+    (phase1_surface_normalize_qualified_name_total_from_derivation
+      _ _ _ name_tree Hname)
+    as [name Hname_normalize].
+  exists name.
+  rewrite Htree.
+  rewrite Hsubtree.
+  rewrite Hkeyword_tree.
+  rewrite Hterminator_tree.
+  unfold phase1_surface_normalize_module_decl,
+    phase1_surface_expect_nonterminal,
+    phase1_surface_expect_sequence,
+    phase1_surface_exact3,
+    phase1_surface_expect_literal.
+  cbn.
+  exact Hname_normalize.
 Qed.
 
 Lemma phase1_surface_normalize_import_selection_total_from_derivation :
@@ -390,47 +398,55 @@ Proof.
         ]
         input rest body Hbody)
       as [trees [Hsequence Hitems]].
-    repeat match goal with
-    | Hseq : DerivesSequence phase1_surface_rules _ _ (_ :: _) _ _ _ |- _ =>
-        inversion Hseq; subst; clear Hseq
-    end.
-    match goal with
-    | Hnil : DerivesSequence phase1_surface_rules _ _ [] _ _ _ |- _ =>
-        inversion Hnil; subst; clear Hnil
-    end.
-    match goal with
-    | Hopen : Derives phase1_surface_rules _
-        (ELiteral "{") _ _ ?open_tree,
-      Hidentifiers : Derives phase1_surface_rules _
-        (ENonterminal "identifier_list") _ _ ?identifiers_tree,
-      Hclose : Derives phase1_surface_rules _
-        (ELiteral "}") _ _ ?close_tree |- _ =>
-        destruct
-          (literal_derivation_is_exact
-            phase1_surface_rules _ "{" _ _ open_tree Hopen)
-          as [open_tail [_ [_ Hopen_tree]]];
-        destruct
-          (literal_derivation_is_exact
-            phase1_surface_rules _ "}" _ _ close_tree Hclose)
-          as [close_tail [_ [_ Hclose_tree]]];
-        destruct
-          (phase1_surface_normalize_identifier_list_total_from_derivation
-            _ _ _ identifiers_tree Hidentifiers)
-          as [identifiers Hidentifiers_normalize];
-        exists (Some identifiers);
-        rewrite Hsome;
-        rewrite Hsequence;
-        rewrite Hopen_tree;
-        rewrite Hclose_tree;
-        unfold phase1_surface_normalize_import_selection,
-          phase1_surface_expect_optional,
-          phase1_surface_expect_sequence,
-          phase1_surface_exact3,
-          phase1_surface_expect_literal;
-        cbn;
-        rewrite Hidentifiers_normalize;
-        reflexivity
-    end.
+    destruct
+      (derives_sequence_cons_exposes_head
+        phase1_surface_rules
+        (descend path AtOptionalBody)
+        0 (ELiteral "{")
+        [ENonterminal "identifier_list"; ELiteral "}"]
+        input rest trees Hitems)
+      as [after_open [open_tree [tail_trees [Hopen Htail]]]].
+    destruct
+      (derives_sequence_cons_exposes_head
+        phase1_surface_rules
+        (descend path AtOptionalBody)
+        1 (ENonterminal "identifier_list")
+        [ELiteral "}"]
+        after_open rest tail_trees Htail)
+      as [after_identifiers [identifiers_tree [close_trees [Hidentifiers Hclose_tail]]]].
+    destruct
+      (derives_sequence_cons_exposes_head
+        phase1_surface_rules
+        (descend path AtOptionalBody)
+        2 (ELiteral "}") []
+        after_identifiers rest close_trees Hclose_tail)
+      as [after_close [close_tree [nil_trees [Hclose Hnil]]]].
+    inversion Hnil; subst.
+    destruct
+      (literal_derivation_is_exact
+        phase1_surface_rules _ "{" _ _ open_tree Hopen)
+      as [open_tail [_ [_ Hopen_tree]]].
+    destruct
+      (literal_derivation_is_exact
+        phase1_surface_rules _ "}" _ _ close_tree Hclose)
+      as [close_tail [_ [_ Hclose_tree]]].
+    destruct
+      (phase1_surface_normalize_identifier_list_total_from_derivation
+        _ _ _ identifiers_tree Hidentifiers)
+      as [identifiers Hidentifiers_normalize].
+    exists (Some identifiers).
+    rewrite Hsome.
+    rewrite Hsequence.
+    rewrite Hopen_tree.
+    rewrite Hclose_tree.
+    unfold phase1_surface_normalize_import_selection,
+      phase1_surface_expect_optional,
+      phase1_surface_expect_sequence,
+      phase1_surface_exact3,
+      phase1_surface_expect_literal.
+    cbn.
+    rewrite Hidentifiers_normalize.
+    reflexivity.
 Qed.
 
 Lemma phase1_surface_normalize_import_decl_total_from_derivation :
@@ -464,61 +480,91 @@ Proof.
       ]
       input rest subtree Hbody)
     as [trees [Hsubtree Hitems]].
-  repeat match goal with
-  | Hseq : DerivesSequence phase1_surface_rules _ _ (_ :: _) _ _ _ |- _ =>
-      inversion Hseq; subst; clear Hseq
-  end.
-  match goal with
-  | Hnil : DerivesSequence phase1_surface_rules _ _ [] _ _ _ |- _ =>
-      inversion Hnil; subst; clear Hnil
-  end.
-  match goal with
-  | Hkeyword : Derives phase1_surface_rules _
-      (ELiteral "import") _ _ ?keyword_tree,
-    Hname : Derives phase1_surface_rules _
-      (ENonterminal "qualified_name") _ _ ?name_tree,
-    Hselection : Derives phase1_surface_rules _
+  destruct
+    (derives_sequence_cons_exposes_head
+      phase1_surface_rules
+      (descend path (AtNonterminal "import_decl"))
+      0 (ELiteral "import")
+      [ ENonterminal "qualified_name";
+        EOptional
+          (ESequence
+            [ ELiteral "{";
+              ENonterminal "identifier_list";
+              ELiteral "}"
+            ]);
+        ELiteral ";"
+      ]
+      input rest trees Hitems)
+    as [after_keyword [keyword_tree [tail1 [Hkeyword Htail1]]]].
+  destruct
+    (derives_sequence_cons_exposes_head
+      phase1_surface_rules
+      (descend path (AtNonterminal "import_decl"))
+      1 (ENonterminal "qualified_name")
+      [ EOptional
+          (ESequence
+            [ ELiteral "{";
+              ENonterminal "identifier_list";
+              ELiteral "}"
+            ]);
+        ELiteral ";"
+      ]
+      after_keyword rest tail1 Htail1)
+    as [after_name [name_tree [tail2 [Hname Htail2]]]].
+  destruct
+    (derives_sequence_cons_exposes_head
+      phase1_surface_rules
+      (descend path (AtNonterminal "import_decl"))
+      2
       (EOptional
         (ESequence
           [ ELiteral "{";
             ENonterminal "identifier_list";
             ELiteral "}"
-          ])) _ _ ?selection_tree,
-    Hterminator : Derives phase1_surface_rules _
-      (ELiteral ";") _ _ ?terminator_tree |- _ =>
-      destruct
-        (literal_derivation_is_exact
-          phase1_surface_rules _ "import" _ _ keyword_tree Hkeyword)
-        as [keyword_tail [_ [_ Hkeyword_tree]]];
-      destruct
-        (literal_derivation_is_exact
-          phase1_surface_rules _ ";" _ _ terminator_tree Hterminator)
-        as [terminator_tail [_ [_ Hterminator_tree]]];
-      destruct
-        (phase1_surface_normalize_qualified_name_total_from_derivation
-          _ _ _ name_tree Hname)
-        as [name Hname_normalize];
-      destruct
-        (phase1_surface_normalize_import_selection_total_from_derivation
-          _ _ _ selection_tree Hselection)
-        as [selection Hselection_normalize];
-      exists
-        {| phase1_import_header_name := name;
-           phase1_import_header_selection := selection |};
-      rewrite Htree;
-      rewrite Hsubtree;
-      rewrite Hkeyword_tree;
-      rewrite Hterminator_tree;
-      unfold phase1_surface_normalize_import_decl,
-        phase1_surface_expect_nonterminal,
-        phase1_surface_expect_sequence,
-        phase1_surface_exact4,
-        phase1_surface_expect_literal;
-      cbn;
-      rewrite Hname_normalize;
-      rewrite Hselection_normalize;
-      reflexivity
-  end.
+          ]))
+      [ELiteral ";"]
+      after_name rest tail2 Htail2)
+    as [after_selection [selection_tree [tail3 [Hselection Htail3]]]].
+  destruct
+    (derives_sequence_cons_exposes_head
+      phase1_surface_rules
+      (descend path (AtNonterminal "import_decl"))
+      3 (ELiteral ";") []
+      after_selection rest tail3 Htail3)
+    as [after_terminator [terminator_tree [nil_trees [Hterminator Hnil]]]].
+  inversion Hnil; subst.
+  destruct
+    (literal_derivation_is_exact
+      phase1_surface_rules _ "import" _ _ keyword_tree Hkeyword)
+    as [keyword_tail [_ [_ Hkeyword_tree]]].
+  destruct
+    (literal_derivation_is_exact
+      phase1_surface_rules _ ";" _ _ terminator_tree Hterminator)
+    as [terminator_tail [_ [_ Hterminator_tree]]].
+  destruct
+    (phase1_surface_normalize_qualified_name_total_from_derivation
+      _ _ _ name_tree Hname)
+    as [name Hname_normalize].
+  destruct
+    (phase1_surface_normalize_import_selection_total_from_derivation
+      _ _ _ selection_tree Hselection)
+    as [selection Hselection_normalize].
+  exists
+    {| phase1_import_header_name := name;
+       phase1_import_header_selection := selection |}.
+  rewrite Htree.
+  rewrite Hsubtree.
+  rewrite Hkeyword_tree.
+  rewrite Hterminator_tree.
+  unfold phase1_surface_normalize_import_decl,
+    phase1_surface_expect_nonterminal,
+    phase1_surface_expect_sequence,
+    phase1_surface_exact4,
+    phase1_surface_expect_literal.
+  cbn.
+  rewrite Hname_normalize.
+  rewrite Hselection_normalize.
+  reflexivity.
 Qed.
 
 Lemma phase1_surface_normalize_import_decls_total_from_repetition :
@@ -639,70 +685,80 @@ Proof.
       ]
       tokens [] subtree Hbody)
     as [trees [Hsubtree Hitems]].
-  repeat match goal with
-  | Hseq : DerivesSequence phase1_surface_rules _ _ (_ :: _) _ _ _ |- _ =>
-      inversion Hseq; subst; clear Hseq
-  end.
-  match goal with
-  | Hnil : DerivesSequence phase1_surface_rules _ _ [] _ _ _ |- _ =>
-      inversion Hnil; subst; clear Hnil
-  end.
-  match goal with
-  | Hmodule : Derives phase1_surface_rules _
-      (EOptional (ENonterminal "module_decl")) _ _ ?module_part,
-    Himports : Derives phase1_surface_rules _
-      (ERepetition (ENonterminal "import_decl")) _ _ ?imports_part,
-    Htops : Derives phase1_surface_rules _
-      (ERepetition (ENonterminal "top_level_decl")) _ _ ?tops_part |- _ =>
-      destruct
-        (phase1_surface_normalize_optional_module_total_from_derivation
-          _ _ _ module_part Hmodule)
-        as [module_tree [module_name [Hmodule_tree Hmodule_normalize]]];
-      destruct
-        (phase1_surface_normalize_import_repetition_total_from_derivation
-          _ _ _ imports_part Himports)
-        as [import_trees [import_headers [Himports_tree Himports_normalize]]];
-      destruct
-        (phase1_surface_repetition_derivation_exposes
-          _ (ENonterminal "top_level_decl")
-          _ _ tops_part Htops)
-        as [top_trees [Htops_tree Htops_body]];
-      exists
-        {| phase1_source_header_module := module_name;
-           phase1_source_header_imports := import_headers;
-           phase1_source_header_top_levels := top_trees |};
-      assert (Hsource_shape :
-        tree =
-          PTNonterminal phase1_surface_start
-            (PTSequence
-              [ match module_tree with
-                | None => PTOptionalNone
-                | Some body => PTOptionalSome body
-                end;
-                PTRepetition import_trees;
-                PTRepetition top_trees
-              ])).
-      {
-        rewrite Htree.
-        rewrite Hsubtree.
-        rewrite Hmodule_tree.
-        rewrite Himports_tree.
-        rewrite Htops_tree.
-        reflexivity.
-      }
-      split;
-      [| eapply phase1_surface_normalize_source_header_tree_round_trip].
-      rewrite Hsource_shape.
-      unfold phase1_surface_normalize_source_header_tree,
-        phase1_surface_normalize_source_spine,
-        phase1_surface_normalize_source_header.
-      rewrite String.eqb_refl.
-      destruct module_tree as [module_body |]; cbn in *.
-      + rewrite Hmodule_normalize.
-        rewrite Himports_normalize.
-        reflexivity.
-      + rewrite Hmodule_normalize.
-        rewrite Himports_normalize.
-        reflexivity.
-  end.
+  destruct
+    (derives_sequence_cons_exposes_head
+      phase1_surface_rules
+      (descend [] (AtNonterminal phase1_surface_start))
+      0 (EOptional (ENonterminal "module_decl"))
+      [ ERepetition (ENonterminal "import_decl");
+        ERepetition (ENonterminal "top_level_decl")
+      ]
+      tokens [] trees Hitems)
+    as [after_module [module_part [tail1 [Hmodule Htail1]]]].
+  destruct
+    (derives_sequence_cons_exposes_head
+      phase1_surface_rules
+      (descend [] (AtNonterminal phase1_surface_start))
+      1 (ERepetition (ENonterminal "import_decl"))
+      [ERepetition (ENonterminal "top_level_decl")]
+      after_module [] tail1 Htail1)
+    as [after_imports [imports_part [tail2 [Himports Htail2]]]].
+  destruct
+    (derives_sequence_cons_exposes_head
+      phase1_surface_rules
+      (descend [] (AtNonterminal phase1_surface_start))
+      2 (ERepetition (ENonterminal "top_level_decl")) []
+      after_imports [] tail2 Htail2)
+    as [after_tops [tops_part [nil_trees [Htops Hnil]]]].
+  inversion Hnil; subst.
+  destruct
+    (phase1_surface_normalize_optional_module_total_from_derivation
+      _ _ _ module_part Hmodule)
+    as [module_tree [module_name [Hmodule_tree Hmodule_normalize]]].
+  destruct
+    (phase1_surface_normalize_import_repetition_total_from_derivation
+      _ _ _ imports_part Himports)
+    as [import_trees [import_headers [Himports_tree Himports_normalize]]].
+  destruct
+    (phase1_surface_repetition_derivation_exposes
+      _ (ENonterminal "top_level_decl")
+      _ _ tops_part Htops)
+    as [top_trees [Htops_tree Htops_body]].
+  exists
+    {| phase1_source_header_module := module_name;
+       phase1_source_header_imports := import_headers;
+       phase1_source_header_top_levels := top_trees |}.
+  assert (Hsource_shape :
+    tree =
+      PTNonterminal phase1_surface_start
+        (PTSequence
+          [ match module_tree with
+            | None => PTOptionalNone
+            | Some body => PTOptionalSome body
+            end;
+            PTRepetition import_trees;
+            PTRepetition top_trees
+          ])).
+  {
+    rewrite Htree.
+    rewrite Hsubtree.
+    rewrite Hmodule_tree.
+    rewrite Himports_tree.
+    rewrite Htops_tree.
+    reflexivity.
+  }
+  split.
+  - rewrite Hsource_shape.
+    unfold phase1_surface_normalize_source_header_tree,
+      phase1_surface_normalize_source_spine,
+      phase1_surface_normalize_source_header.
+    rewrite String.eqb_refl.
+    destruct module_tree as [module_body |]; cbn in *.
+    + rewrite Hmodule_normalize.
+      rewrite Himports_normalize.
+      reflexivity.
+    + rewrite Hmodule_normalize.
+      rewrite Himports_normalize.
+      reflexivity.
+  - eapply phase1_surface_normalize_source_header_tree_round_trip.
 Qed.
