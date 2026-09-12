@@ -1,7 +1,8 @@
 {-# LANGUAGE OverloadedStrings #-}
 
 module Phil.Compiler.CallableInvocation
-  ( SourceCallableBinding (..)
+  ( SourceCallableSemanticContract (..)
+  , SourceCallableBinding (..)
   , CallableInvocationCatalog
   , CallableInvocationExpectation (..)
   , ResolvedCallableInvocation (..)
@@ -22,6 +23,12 @@ import Phil.Compiler.SourceBundle
 import Phil.Core.Callable
   ( CallableContract (..)
   )
+import Phil.Core.CallableOutcome
+  ( CallableOutcomeContract
+  , CallableOutcomeError
+  , CheckedCallableOutcomeContract
+  , checkCallableOutcomeContract
+  )
 import Phil.Core.CallableRefinement
   ( CallableRefinementError
   , CallableRefinementSurface (..)
@@ -37,13 +44,28 @@ import Phil.Surface.Syntax
   , Located (..)
   )
 
+-- | Complete already-checked semantic surface attached to one ordinary source
+-- callable for CALL-019 resolution. The bounded refinement surface owns machine
+-- shape, caller authority, public may-effects, modeled failures, and the global
+-- callee transition. The outcome contracts retain the branch-sensitive state,
+-- callee transition, postconditions, residual obligations, assumptions, effects,
+-- and discharged facts established by CALL-018. Keeping the two authorities in
+-- one value prevents ordinary invocation lookup from silently dropping either
+-- semantic layer while retaining only a name/parameter shape.
+data SourceCallableSemanticContract = SourceCallableSemanticContract
+  { sourceCallableRefinementSurface :: CallableRefinementSurface
+  , sourceCallableOutcomeContracts :: [CallableOutcomeContract]
+  }
+  deriving (Eq, Ord, Show)
+
 -- | Exact ordinary-source callable identity available to an `invoke` expression.
 -- The display name is only a lookup spelling. Persisted DeclarationKey and the
--- checked callable surface remain the semantic identity and interface authority.
+-- complete checked callable contract remain the semantic identity/interface
+-- authority.
 data SourceCallableBinding = SourceCallableBinding
   { sourceCallableDisplayName :: Text
   , sourceCallableDeclarationKey :: DeclarationKey
-  , sourceCallableInterface :: CallableRefinementSurface
+  , sourceCallableContract :: SourceCallableSemanticContract
   }
   deriving (Eq, Ord, Show)
 
@@ -58,17 +80,19 @@ data CallableInvocationCatalog = CallableInvocationCatalog
 
 -- | Caller-side exact expectation. Direct named invocation is stricter than
 -- higher-order substitution about identity: the declaration key and interface
--- revision must be exact, after which the existing callable refinement kernel
--- checks the semantic surface itself.
+-- revision must be exact. Existing callable-refinement and outcome-fidelity
+-- authorities then check the complete semantic contract rather than allowing
+-- source invocation to erase lifecycle/effect/outcome residue information.
 data CallableInvocationExpectation = CallableInvocationExpectation
   { callableInvocationExpectedDeclarationKey :: DeclarationKey
-  , callableInvocationExpectedInterface :: CallableRefinementSurface
+  , callableInvocationExpectedContract :: SourceCallableSemanticContract
   }
   deriving (Eq, Ord, Show)
 
 data ResolvedCallableInvocation = ResolvedCallableInvocation
   { resolvedCallableBinding :: SourceCallableBinding
   , resolvedCallableRefinement :: CheckedCallableRefinement
+  , resolvedCallableOutcomes :: CheckedCallableOutcomeContract
   }
   deriving (Eq, Show)
 
@@ -87,16 +111,17 @@ data CallableInvocationResolutionError
       InterfaceRevision
       InterfaceRevision
   | CallableRefinementRejected Text CallableRefinementError
-  deriving (Eq, Ord, Show)
+  | CallableOutcomeFidelityRejected Text CallableOutcomeError
+  deriving (Eq, Show)
 
 -- | Build the exact callable lookup surface from checked source lineage. Every
--- checked component must have exactly one contract supplied by DeclarationKey,
--- and the contract map may not smuggle in declarations outside the bundle.
--- Duplicate display names remain representable so resolution can reject them as
--- ambiguity at the competent lookup layer.
+-- checked component must have exactly one complete semantic contract supplied by
+-- DeclarationKey, and the contract map may not smuggle in declarations outside
+-- the bundle. Duplicate display names remain representable so resolution can
+-- reject them as ambiguity at the competent lookup layer.
 buildCallableInvocationCatalog
   :: Set Text
-  -> Map DeclarationKey CallableRefinementSurface
+  -> Map DeclarationKey SourceCallableSemanticContract
   -> CheckedSourceBundle
   -> Either CallableInvocationResolutionError CallableInvocationCatalog
 buildCallableInvocationCatalog primitiveNames contracts bundle = do
@@ -131,14 +156,16 @@ buildCallableInvocationCatalog primitiveNames contracts bundle = do
       pure SourceCallableBinding
         { sourceCallableDisplayName = name
         , sourceCallableDeclarationKey = key
-        , sourceCallableInterface = contract
+        , sourceCallableContract = contract
         }
 
 -- | Resolve an explicit source `invoke` through the callable namespace only.
 -- A provider primitive with the same spelling never competes with or replaces a
 -- callable. If no callable exists but a primitive does, report wrong-category
--- lookup explicitly. Exact declaration and interface revision are then checked
--- before delegating semantic compatibility to the existing refinement kernel.
+-- lookup explicitly. Exact declaration and interface revision are checked first;
+-- then the already-certified refinement and outcome-fidelity checkers must both
+-- accept. The returned witness retains both successful checks so a later surface
+-- or lowering stage cannot legitimately reconstruct a weaker name-only contract.
 resolveCallableInvocation
   :: CallableInvocationCatalog
   -> Text
@@ -161,19 +188,26 @@ resolveCallableInvocation catalog name expectation = do
   if actualKey == expectedKey
     then pure ()
     else Left (CallableDeclarationIdentityMismatch name expectedKey actualKey)
-  let expectedInterface = callableInvocationExpectedInterface expectation
-      actualInterface = sourceCallableInterface binding
+  let expectedContract = callableInvocationExpectedContract expectation
+      actualContract = sourceCallableContract binding
+      expectedInterface = sourceCallableRefinementSurface expectedContract
+      actualInterface = sourceCallableRefinementSurface actualContract
       expectedRevision = interfaceRevision expectedInterface
       actualRevision = interfaceRevision actualInterface
   if actualRevision == expectedRevision
     then pure ()
     else Left
       (CallableInterfaceRevisionMismatch name expectedRevision actualRevision)
-  checked <- mapLeft (CallableRefinementRejected name) $
+  checkedRefinement <- mapLeft (CallableRefinementRejected name) $
     checkCallableRefinement expectedInterface actualInterface
+  checkedOutcomes <- mapLeft (CallableOutcomeFidelityRejected name) $
+    checkCallableOutcomeContract
+      (sourceCallableOutcomeContracts expectedContract)
+      (sourceCallableOutcomeContracts actualContract)
   pure ResolvedCallableInvocation
     { resolvedCallableBinding = binding
-    , resolvedCallableRefinement = checked
+    , resolvedCallableRefinement = checkedRefinement
+    , resolvedCallableOutcomes = checkedOutcomes
     }
 
 interfaceRevision :: CallableRefinementSurface -> InterfaceRevision
