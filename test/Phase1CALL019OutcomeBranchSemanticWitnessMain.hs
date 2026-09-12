@@ -42,8 +42,7 @@ import Phil.Core.Syntax
   , Ty (..)
   )
 import Phil.Surface.Check
-  ( CallableOutcomeSpec
-  , SurfaceCallableSignature (..)
+  ( SurfaceCallableSignature (..)
   , SurfaceEnvironment (..)
   , checkSurfaceComponent
   , emptySurfaceEnvironment
