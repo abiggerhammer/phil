@@ -506,10 +506,10 @@ Proof.
       _ (ENonterminal "top_level_decl")
       _ _ top_trees Htops_body eq_refl)
     as [top_levels Htop_levels_normalize].
-  let source := constr:(
+  pose (source :=
     {| phase1_source_top_level_module := module_name;
        phase1_source_top_level_imports := import_headers;
-       phase1_source_top_level_declarations := top_levels |}) in
+       phase1_source_top_level_declarations := top_levels |}).
   exists source.
   assert (Hnormalize :
     phase1_surface_normalize_source_top_level_tree
