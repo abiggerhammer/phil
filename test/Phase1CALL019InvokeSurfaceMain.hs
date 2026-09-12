@@ -60,6 +60,7 @@ main = do
     , test "CALL-019 ordinary call remains provider primitive lookup" ordinaryCallRemainsPrimitive
     , test "CALL-019 callable result carries declared restricted mode" restrictedResultReturns
     , test "CALL-019 semantic bridge retains the exact complete callable contract" semanticWitnessRetained
+    , test "CALL-019 semantic bridge preserves repeated invocation occurrences" semanticOccurrencesPreserved
     , test "CALL-019 semantic bridge fails closed when an exact contract is missing" semanticContractMissingRejects
     , test "CALL-019 semantic bridge does not reinterpret ordinary provider calls" semanticOrdinaryCallIgnored
     ]
@@ -85,6 +86,9 @@ callable key parameters result = SurfaceCallableSignature
 
 takeSignature :: SurfaceCallableSignature
 takeSignature = callable "decl.take" [(Linear, blobType)] Nothing
+
+pingSignature :: SurfaceCallableSignature
+pingSignature = callable "decl.ping" [] Nothing
 
 takeSemanticContract :: SourceCallableSemanticContract
 takeSemanticContract = SourceCallableSemanticContract
@@ -118,15 +122,37 @@ takeSemanticContract = SourceCallableSemanticContract
       ]
   }
 
+pingSemanticContract :: SourceCallableSemanticContract
+pingSemanticContract = takeSemanticContract
+  { sourceCallableRefinementSurface =
+      (sourceCallableRefinementSurface takeSemanticContract)
+        { callableRefinementMachineShape = CallableMachineShape "Unit->Unit"
+        , callableRefinementContract =
+            (callableRefinementContract
+              (sourceCallableRefinementSurface takeSemanticContract))
+              { callableContractInterfaceRevision = InterfaceRevision "ping.v1"
+              }
+        }
+  }
+
 baseWithCandidate :: SurfaceEnvironment
 baseWithCandidate = (emptySurfaceEnvironment emptyStaticContext)
   { surfaceInitialBindings = Map.singleton "candidate" candidateBinding
   , surfaceCallables = Map.singleton "Take" takeSignature
   }
 
+pingEnvironment :: SurfaceEnvironment
+pingEnvironment = (emptySurfaceEnvironment emptyStaticContext)
+  { surfaceCallables = Map.singleton "Ping" pingSignature
+  }
+
 semanticContracts :: Map.Map DeclarationKey SourceCallableSemanticContract
 semanticContracts =
   Map.singleton (DeclarationKey "decl.take") takeSemanticContract
+
+pingContracts :: Map.Map DeclarationKey SourceCallableSemanticContract
+pingContracts =
+  Map.singleton (DeclarationKey "decl.ping") pingSemanticContract
 
 validLinearInvoke :: Either String ()
 validLinearInvoke = expectAccept baseWithCandidate
@@ -174,7 +200,7 @@ semanticWitnessRetained = do
       semanticContracts
       baseWithCandidate
       component
-  case Set.toAscList (checkedCallableInvocations checked) of
+  case checkedCallableInvocations checked of
     [witness] -> do
       assert
         (surfaceInvocationDisplayName witness == "Take")
@@ -187,6 +213,24 @@ semanticWitnessRetained = do
         "semantic witness weakened or reconstructed the complete callable contract"
     witnesses -> Left
       ("expected one retained semantic invocation witness, got " <> show witnesses)
+
+semanticOccurrencesPreserved :: Either String ()
+semanticOccurrencesPreserved = do
+  component <- parseOne
+    "component Caller { invoke Ping() invoke Ping() return unit }"
+  checked <- mapLeft show $
+    checkSurfaceComponentWithCallableSemantics pingContracts pingEnvironment component
+  case checkedCallableInvocations checked of
+    [first, second] -> do
+      assert
+        (surfaceInvocationDeclarationKey first == DeclarationKey "decl.ping"
+          && surfaceInvocationDeclarationKey second == DeclarationKey "decl.ping")
+        "repeated calls did not retain the exact callable identity"
+      assert
+        (surfaceInvocationSpan first /= surfaceInvocationSpan second)
+        "repeated calls collapsed to one source occurrence"
+    witnesses -> Left
+      ("expected two retained invocation occurrences, got " <> show witnesses)
 
 semanticContractMissingRejects :: Either String ()
 semanticContractMissingRejects = do
@@ -206,7 +250,7 @@ semanticOrdinaryCallIgnored = do
   checked <- mapLeft show $
     checkSurfaceComponentWithCallableSemantics Map.empty namespaceEnvironment component
   assert
-    (Set.null (checkedCallableInvocations checked))
+    (null (checkedCallableInvocations checked))
     "ordinary provider call was incorrectly promoted to a source callable witness"
 
 expectAccept :: SurfaceEnvironment -> Text -> Either String ()
