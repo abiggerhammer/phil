@@ -562,7 +562,7 @@ Proof.
     as [top_levels |] eqn:Htop_levels; try discriminate Hnormalize.
   inversion Hnormalize.
   cbn.
-  rewrite (phase1_surface_normalize_top_level_spines_round_trip
+  rewrite <- (phase1_surface_normalize_top_level_spines_round_trip
     top_level_trees top_levels Htop_levels).
   reflexivity.
 Qed.
