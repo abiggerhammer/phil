@@ -9,7 +9,7 @@ permissions:
   contents: read
 
 jobs:
-  sign-notarize:
+  build-submit:
     runs-on: macos-26
     environment: macos-release
     env:
@@ -19,8 +19,6 @@ jobs:
       APPLE_NOTARY_KEY_P8_BASE64: ${{ secrets.APPLE_NOTARY_KEY_P8_BASE64 }}
       APPLE_NOTARY_KEY_ID: ${{ secrets.APPLE_NOTARY_KEY_ID }}
       APPLE_NOTARY_ISSUER_ID: ${{ secrets.APPLE_NOTARY_ISSUER_ID }}
-      PHIL_NOTARY_TIMEOUT_SECONDS: '1200'
-      PHIL_NOTARY_POLL_SECONDS: '30'
     steps:
       - uses: actions/checkout@v4
 
@@ -70,7 +68,7 @@ jobs:
           security list-keychains -d user -s "$keychain"
 
           identity="$(security find-identity -v -p codesigning "$keychain" \
-            | awk -F'"' '/Developer ID Application/ {print $2; exit}')"
+            | awk -F'\"' '/Developer ID Application/ {print $2; exit}')"
           test -n "$identity"
           printf 'Developer ID identity: %s\n' "$identity"
 
@@ -101,6 +99,63 @@ jobs:
           test -s "$out/$(basename "$archive").notary-id"
           test -s "$out/$(basename "$archive").notary-submit.json"
 
+      - name: Preserve exact signed submission bundle
+        uses: actions/upload-artifact@v4
+        with:
+          name: int006-steve-darwin-notary-submission
+          path: |
+            ${{ runner.temp }}/steve-notarized/phil-steve-0.1.1-phase1-aarch64-apple-darwin.zip
+            ${{ runner.temp }}/steve-notarized/phil-steve-0.1.1-phase1-aarch64-apple-darwin.zip.sha256
+            ${{ runner.temp }}/steve-notarized/phil-steve-0.1.1-phase1-aarch64-apple-darwin.zip.notary-id
+            ${{ runner.temp }}/steve-notarized/phil-steve-0.1.1-phase1-aarch64-apple-darwin.zip.notary-submit.json
+            ${{ runner.temp }}/steve-notarized/build-sign-evidence.txt
+          if-no-files-found: error
+          retention-days: 7
+
+  poll-assess:
+    needs:
+      - build-submit
+    runs-on: macos-26
+    environment: macos-release
+    env:
+      APPLE_TEAM_ID: ${{ secrets.APPLE_TEAM_ID }}
+      APPLE_NOTARY_KEY_P8_BASE64: ${{ secrets.APPLE_NOTARY_KEY_P8_BASE64 }}
+      APPLE_NOTARY_KEY_ID: ${{ secrets.APPLE_NOTARY_KEY_ID }}
+      APPLE_NOTARY_ISSUER_ID: ${{ secrets.APPLE_NOTARY_ISSUER_ID }}
+      PHIL_NOTARY_TIMEOUT_SECONDS: '1200'
+      PHIL_NOTARY_POLL_SECONDS: '30'
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Verify native Apple Silicon runner
+        shell: bash
+        run: |
+          set -euo pipefail
+          test "$(uname -m)" = arm64
+          sw_vers
+
+      - name: Restore exact signed submission bundle
+        uses: actions/download-artifact@v4
+        with:
+          name: int006-steve-darwin-notary-submission
+          path: ${{ runner.temp }}/steve-notarized
+
+      - name: Materialize notarization credentials
+        shell: bash
+        run: |
+          set -euo pipefail
+          p8="$RUNNER_TEMP/AuthKey.p8"
+          export P8_PATH="$p8"
+          python3 <<'PY'
+          import base64
+          import os
+
+          with open(os.environ['P8_PATH'], 'wb') as output:
+              output.write(base64.b64decode(os.environ['APPLE_NOTARY_KEY_P8_BASE64']))
+          PY
+          chmod 600 "$p8"
+          echo "APPLE_NOTARY_KEY_PATH=$p8" >> "$GITHUB_ENV"
+
       - name: Poll notarization to a bounded result
         timeout-minutes: 22
         shell: bash
@@ -123,7 +178,8 @@ jobs:
           grep -q '^PASS: Developer-ID signed, notarized, quarantined Phase-1 Steve package$' \
             "$out/smoke-evidence.txt"
 
-      - uses: actions/upload-artifact@v4
+      - name: Preserve accepted notarization and quarantine smoke evidence
+        uses: actions/upload-artifact@v4
         with:
           name: int006-steve-darwin-signed-notarized-staging
           path: |
@@ -137,3 +193,4 @@ jobs:
             ${{ runner.temp }}/steve-notarized/notarization-evidence.txt
             ${{ runner.temp }}/steve-notarized/smoke-evidence.txt
           if-no-files-found: warn
+          retention-days: 7
