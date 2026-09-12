@@ -517,16 +517,12 @@ Proof.
            phase1_source_top_level_declarations := top_levels |}) in
       assert (Hsource_shape :
         tree =
-          PTNonterminal phase1_surface_start
-            (PTSequence
-              [ (match module_tree with
-                 | None => PTOptionalNone
-                 | Some body => PTOptionalSome body
-                 end);
-                PTRepetition import_trees;
-                PTRepetition top_trees
-              ])).
+          phase1_surface_source_spine_tree
+            {| phase1_source_spine_module := module_tree;
+               phase1_source_spine_imports := import_trees;
+               phase1_source_spine_top_levels := top_trees |}).
       {
+        unfold phase1_surface_source_spine_tree.
         rewrite Htree.
         rewrite Hsubtree.
         rewrite Hmodule_tree.
