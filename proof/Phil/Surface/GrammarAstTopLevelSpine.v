@@ -404,7 +404,7 @@ Proof.
     "declaration" tree body Hnode).
   rewrite (phase1_surface_expect_alternative_round_trip
     body index selected Halternative).
-  rewrite (phase1_surface_declaration_tag_index_round_trip
+  rewrite <- (phase1_surface_declaration_tag_index_round_trip
     index tag Htag).
   reflexivity.
 Qed.
