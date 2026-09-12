@@ -257,8 +257,12 @@ jobs:
               echo "GitHub Release $RELEASE_TAG is already published; leaving the immutable release unchanged."
               exit 0
             fi
-            tag_sha="$(gh api "repos/$GITHUB_REPOSITORY/git/ref/tags/$RELEASE_TAG" --jq '.object.sha')"
-            test "$tag_sha" = "$GITHUB_SHA"
+            gh release edit "$RELEASE_TAG" \
+              --repo "$GITHUB_REPOSITORY" \
+              --target "$GITHUB_SHA" \
+              --title 'Phil Steve 0.1 — Phase 1' \
+              --notes-file release-notes.md \
+              --draft
           else
             gh release create "$RELEASE_TAG" \
               --repo "$GITHUB_REPOSITORY" \
@@ -268,18 +272,23 @@ jobs:
               --draft
           fi
 
+          target="$(gh release view "$RELEASE_TAG" --repo "$GITHUB_REPOSITORY" \
+            --json targetCommitish --jq '.targetCommitish')"
+          test "$target" = "$GITHUB_SHA"
+
           gh release upload "$RELEASE_TAG" \
             --repo "$GITHUB_REPOSITORY" \
             "$linux" "$linux.sha256" \
             "$darwin" "$darwin.sha256" \
             --clobber
 
-          tag_sha="$(gh api "repos/$GITHUB_REPOSITORY/git/ref/tags/$RELEASE_TAG" --jq '.object.sha')"
-          test "$tag_sha" = "$GITHUB_SHA"
-
           expected="$(printf '%s\n' "$darwin" "$darwin.sha256" "$linux" "$linux.sha256" | sort)"
           actual="$(gh release view "$RELEASE_TAG" --repo "$GITHUB_REPOSITORY" --json assets --jq '.assets[].name' | sort)"
           test "$actual" = "$expected"
 
           gh release edit "$RELEASE_TAG" --repo "$GITHUB_REPOSITORY" --draft=false
+
+          tag_sha="$(gh api "repos/$GITHUB_REPOSITORY/git/ref/tags/$RELEASE_TAG" --jq '.object.sha')"
+          test "$tag_sha" = "$GITHUB_SHA"
+
           gh release view "$RELEASE_TAG" --repo "$GITHUB_REPOSITORY" --json url --jq '.url'
