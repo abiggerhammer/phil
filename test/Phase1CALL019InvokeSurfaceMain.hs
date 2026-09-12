@@ -5,6 +5,11 @@ module Main (main) where
 import qualified Data.Map.Strict as Map
 import qualified Data.Set as Set
 import Data.Text (Text)
+import Phil.Compiler.CallableSurfaceSemantics
+  ( SurfaceCallableInvocationWitness (..)
+  , SurfaceSemanticCheckResult (..)
+  , checkSurfaceComponentWithCallableSemantics
+  )
 import Phil.Core.Callable
   ( CallableContract (..)
   , CalleeTransition (..)
@@ -34,14 +39,11 @@ import Phil.Surface.Check
   ( InitialBinding (..)
   , PrimitiveSemantics (..)
   , RejectionClass (..)
-  , SurfaceCallableInvocationWitness (..)
   , SurfaceCallableSignature (..)
   , SurfaceCheckError (..)
   , SurfaceEnvironment (..)
-  , SurfaceSemanticCheckResult (..)
   , SurfaceShape (..)
   , checkSurfaceComponent
-  , checkSurfaceComponentWithCallableSemantics
   , emptySurfaceEnvironment
   )
 import Phil.Surface.Parser (parseSurfaceFile)
@@ -57,8 +59,9 @@ main = do
     , test "CALL-019 provider primitive cannot rescue invoke lookup" primitiveCannotRescueInvoke
     , test "CALL-019 ordinary call remains provider primitive lookup" ordinaryCallRemainsPrimitive
     , test "CALL-019 callable result carries declared restricted mode" restrictedResultReturns
-    , test "CALL-019 semantic mode retains the exact complete callable contract" semanticWitnessRetained
-    , test "CALL-019 semantic mode fails closed when an exact contract is missing" semanticContractMissingRejects
+    , test "CALL-019 semantic bridge retains the exact complete callable contract" semanticWitnessRetained
+    , test "CALL-019 semantic bridge fails closed when an exact contract is missing" semanticContractMissingRejects
+    , test "CALL-019 semantic bridge does not reinterpret ordinary provider calls" semanticOrdinaryCallIgnored
     ]
   if and results then pure () else exitFailure
 
@@ -121,11 +124,9 @@ baseWithCandidate = (emptySurfaceEnvironment emptyStaticContext)
   , surfaceCallables = Map.singleton "Take" takeSignature
   }
 
-semanticEnvironment :: SurfaceEnvironment
-semanticEnvironment = baseWithCandidate
-  { surfaceCallableSemanticContracts = Just
-      (Map.singleton (DeclarationKey "decl.take") takeSemanticContract)
-  }
+semanticContracts :: Map.Map DeclarationKey SourceCallableSemanticContract
+semanticContracts =
+  Map.singleton (DeclarationKey "decl.take") takeSemanticContract
 
 validLinearInvoke :: Either String ()
 validLinearInvoke = expectAccept baseWithCandidate
@@ -169,7 +170,10 @@ semanticWitnessRetained = do
   component <- parseOne
     "component Caller(candidate) { invoke Take(candidate) return unit }"
   checked <- mapLeft show $
-    checkSurfaceComponentWithCallableSemantics semanticEnvironment component
+    checkSurfaceComponentWithCallableSemantics
+      semanticContracts
+      baseWithCandidate
+      component
   case Set.toAscList (checkedCallableInvocations checked) of
     [witness] -> do
       assert
@@ -185,9 +189,25 @@ semanticWitnessRetained = do
       ("expected one retained semantic invocation witness, got " <> show witnesses)
 
 semanticContractMissingRejects :: Either String ()
-semanticContractMissingRejects = expectReject UnknownCallable
-  (baseWithCandidate { surfaceCallableSemanticContracts = Just Map.empty })
-  "component Caller(candidate) { invoke Take(candidate) return unit }"
+semanticContractMissingRejects = do
+  component <- parseOne
+    "component Caller(candidate) { invoke Take(candidate) return unit }"
+  case checkSurfaceComponentWithCallableSemantics Map.empty baseWithCandidate component of
+    Left err
+      | surfaceErrorClass err == UnknownCallable -> Right ()
+      | otherwise -> Left ("expected UnknownCallable, got " <> show err)
+    Right result -> Left
+      ("expected missing semantic contract rejection, got " <> show result)
+
+semanticOrdinaryCallIgnored :: Either String ()
+semanticOrdinaryCallIgnored = do
+  component <- parseOne
+    "component Caller(candidate) { Worker(candidate) return unit }"
+  checked <- mapLeft show $
+    checkSurfaceComponentWithCallableSemantics Map.empty namespaceEnvironment component
+  assert
+    (Set.null (checkedCallableInvocations checked))
+    "ordinary provider call was incorrectly promoted to a source callable witness"
 
 expectAccept :: SurfaceEnvironment -> Text -> Either String ()
 expectAccept environment source = do
