@@ -6,6 +6,7 @@ module Phil.Surface.Check
   , InitialBinding (..)
   , PrimitiveArgumentDiscipline (..)
   , ProviderOutcomeSpec (..)
+  , CallableOutcomeControlSpec (..)
   , CallableOutcomeSpec (..)
   , PrimitiveSemantics (..)
   , SurfaceCallableSignature (..)

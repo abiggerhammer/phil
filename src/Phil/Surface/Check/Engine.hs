@@ -959,17 +959,51 @@ checkDecisionArm
   -> Either SurfaceCheckError [SurfacePath]
 checkDecisionArm environment state decision locatedArm = do
   let pattern' = caseArmPattern (locatedValue locatedArm)
-  withBinders <- bindDecisionPattern
-    state
-    decision
-    (casePatternLabel pattern')
-    (casePatternBinders pattern')
-    locatedArm
-  checkScopedValueBlock
-    environment
-    state
-    withBinders
-    (caseArmBody (locatedValue locatedArm))
+      label = casePatternLabel pattern'
+  case callableDecisionControl decision label of
+    Just (CallableOutcomeCloses outcome) ->
+      checkDeclaredTerminalCallableArm environment state outcome locatedArm
+    _ -> do
+      withBinders <- bindDecisionPattern
+        state
+        decision
+        label
+        (casePatternBinders pattern')
+        locatedArm
+      checkScopedValueBlock
+        environment
+        state
+        withBinders
+        (caseArmBody (locatedValue locatedArm))
+
+callableDecisionControl :: DecisionKind -> Text -> Maybe CallableOutcomeControlSpec
+callableDecisionControl decision label = case decision of
+  CallableDecision outcomes -> case
+      [ callableOutcomeControl outcome
+      | outcome <- outcomes
+      , callableOutcomeLabel outcome == label
+      ] of
+    [control] -> Just control
+    _ -> Nothing
+  _ -> Nothing
+
+checkDeclaredTerminalCallableArm
+  :: SurfaceEnvironment
+  -> SurfaceState
+  -> Outcome
+  -> Located CaseArm
+  -> Either SurfaceCheckError [SurfacePath]
+checkDeclaredTerminalCallableArm environment state outcome locatedArm = do
+  let pattern' = caseArmPattern (locatedValue locatedArm)
+      body = caseArmBody (locatedValue locatedArm)
+  unless (null (casePatternBinders pattern')) $
+    throw locatedArm TypeMismatch
+      "declared-terminal callable outcome cannot bind a caller payload"
+  unless (null (blockStatements (locatedValue body))) $
+    throw locatedArm ControlAfterTerminal
+      "declared-terminal callable outcome arm cannot continue"
+  ensureTerminalState environment (locatedSpan locatedArm) (Just outcome) state
+  Right [SurfacePath (PathClosed outcome) state Nothing]
 
 decisionLabels :: DecisionKind -> [Text]
 decisionLabels decision = case decision of
@@ -1073,6 +1107,7 @@ bindDecisionPattern state decision label binders located =
         [ callableOutcomePayload outcome
         | outcome <- outcomes
         , callableOutcomeLabel outcome == callableLabel
+        , callableOutcomeControl outcome == CallableOutcomeContinues
         ] of
         [payload]
           | length payload == length callableBinders ->

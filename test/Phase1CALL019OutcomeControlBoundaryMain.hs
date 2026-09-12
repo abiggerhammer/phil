@@ -34,7 +34,9 @@ import Phil.Core.Syntax
   ( Outcome (..)
   )
 import Phil.Surface.Check
-  ( SurfaceCallableSignature (..)
+  ( CallableOutcomeControlSpec (..)
+  , CallableOutcomeSpec (..)
+  , SurfaceCallableSignature (..)
   , SurfaceEnvironment (..)
   , emptySurfaceEnvironment
   )
@@ -49,8 +51,8 @@ main = do
   results <- sequence
     [ test "CALL-019 continuing outcomes remain surface-representable"
         continuingOutcomesInstall
-    , test "CALL-019 declared-terminal outcome rejects before Surface installation"
-        declaredTerminalRejects
+    , test "CALL-019 declared-terminal outcome installs exact close control"
+        declaredTerminalInstalls
     , test "CALL-019 fatal outcome rejects before Surface installation"
         fatalRejects
     ]
@@ -141,18 +143,24 @@ continuingOutcomesInstall = do
       | otherwise -> Left ("unexpected installed outcome count: " <> show (length specs))
     Nothing -> Left "continuing outcome dispatch was not installed"
 
-declaredTerminalRejects :: Either String ()
-declaredTerminalRejects = do
+declaredTerminalInstalls :: Either String ()
+declaredTerminalInstalls = do
   let outcomes = [outcome "success" successClass, outcome "closed" terminalClass]
       bindings = Map.fromList
         [ (successClass, binding successClass "ok")
         , (terminalClass, binding terminalClass "closed")
         ]
   plan <- mapLeft show (planSurfaceCallableOutcomeDispatch bindings (account outcomes))
-  expectControlError
-    terminalClass
-    SurfaceCallableOutcomeDeclaredTerminal
-    (installSurfaceCallableOutcomeDispatch plan environment)
+  installed <- mapLeft show (installSurfaceCallableOutcomeDispatch plan environment)
+  case Map.lookup workerKey (surfaceCallableOutcomes installed) of
+    Just [successSpec, terminalSpec]
+      | callableOutcomeControl successSpec == CallableOutcomeContinues
+          && callableOutcomeControl terminalSpec
+            == CallableOutcomeCloses (Outcome "closed") -> Right ()
+      | otherwise -> Left
+          ("wrong installed controls: "
+            <> show (callableOutcomeControl successSpec, callableOutcomeControl terminalSpec))
+    other -> Left ("unexpected installed outcomes: " <> show other)
 
 fatalRejects :: Either String ()
 fatalRejects = do

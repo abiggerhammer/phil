@@ -30,7 +30,8 @@ import Phil.Core.Syntax
   , Ty
   )
 import Phil.Surface.Check
-  ( CallableOutcomeSpec (..)
+  ( CallableOutcomeControlSpec (..)
+  , CallableOutcomeSpec (..)
   , SurfaceCallableSignature (..)
   , SurfaceEnvironment (..)
   )
@@ -92,6 +93,10 @@ data SurfaceCallableOutcomeDispatchError
   | SurfaceCallableOutcomeDeclarationMismatch DeclarationKey DeclarationKey
   | SurfaceCallableOutcomeDispatchConflict DeclarationKey
   | SurfaceCallableOutcomeControlRequiresSurfaceRepresentation
+      CallableOutcomeClass
+      SurfaceCallableOutcomeControl
+  | SurfaceCallableTerminalOutcomePayloadUnsupported CallableOutcomeClass
+  | SurfaceCallableOutcomeControlMismatch
       CallableOutcomeClass
       SurfaceCallableOutcomeControl
   deriving (Eq, Ord, Show)
@@ -179,27 +184,20 @@ makeBranch bindings outcome = do
 -- different plan for the same declaration rejects rather than changing branch
 -- meaning after checking.
 --
--- The current neutral Surface carrier represents only branch labels and payload
--- telescopes, so it is competent only for branches that really continue caller
--- checking. Declared-terminal and fatal callable outcomes must reject here until
--- Surface has an exact terminal-control carrier; silently installing either as
--- an ordinary decision arm would invent a continuation forbidden by CALL-019.
+-- Surface can now represent ordinary continuation and exact declared-terminal
+-- closure. Terminal outcomes cannot expose a caller payload because there is no
+-- continuation in which such a payload could be bound. Fatal outcomes still
+-- reject here: Core's current `Control` has no exact fatal constructor, so using
+-- generic `Failed` would invent a failure class and violate CALL-019.
 installSurfaceCallableOutcomeDispatch
   :: SurfaceCallableOutcomeDispatchPlan
   -> SurfaceEnvironment
   -> Either SurfaceCallableOutcomeDispatchError SurfaceEnvironment
 installSurfaceCallableOutcomeDispatch plan environment = do
-  mapM_ requireSurfaceRepresentable (surfaceOutcomeDispatchBranches plan)
+  specs <- mapM surfaceSpec (surfaceOutcomeDispatchBranches plan)
   let invocation = surfaceOutcomeDispatchInvocation plan
       displayName = surfaceSemanticInvocationDisplayName invocation
       declarationKey = surfaceSemanticInvocationDeclarationKey invocation
-      specs =
-        [ CallableOutcomeSpec
-            { callableOutcomeLabel = surfaceOutcomeBranchLabel branch
-            , callableOutcomePayload = surfaceOutcomeBranchPayload branch
-            }
-        | branch <- surfaceOutcomeDispatchBranches plan
-        ]
   signature <- maybe
     (Left (SurfaceCallableOutcomeUnknownSurfaceCallable displayName))
     Right
@@ -219,16 +217,41 @@ installSurfaceCallableOutcomeDispatch plan environment = do
       | existing == specs -> Right environment
       | otherwise -> Left (SurfaceCallableOutcomeDispatchConflict declarationKey)
 
-requireSurfaceRepresentable
+surfaceSpec
   :: SurfaceCallableOutcomeBranch
-  -> Either SurfaceCallableOutcomeDispatchError ()
-requireSurfaceRepresentable branch =
-  case surfaceOutcomeBranchControl branch of
-    SurfaceCallableOutcomeContinues -> Right ()
-    control -> Left
-      (SurfaceCallableOutcomeControlRequiresSurfaceRepresentation
-        (surfaceOutcomeBranchClass branch)
-        control)
+  -> Either SurfaceCallableOutcomeDispatchError CallableOutcomeSpec
+surfaceSpec branch =
+  case (surfaceOutcomeBranchControl branch, surfaceOutcomeBranchClass branch) of
+    (SurfaceCallableOutcomeContinues, CallableSuccessOutcome) ->
+      Right (continuingSpec branch)
+    (SurfaceCallableOutcomeContinues,
+        CallableNonSuccessOutcome (CallableTypedNegative _)) ->
+      Right (continuingSpec branch)
+    (SurfaceCallableOutcomeDeclaredTerminal,
+        CallableNonSuccessOutcome (CallableDeclaredTerminal outcome))
+      | null (surfaceOutcomeBranchPayload branch) ->
+          Right CallableOutcomeSpec
+            { callableOutcomeLabel = surfaceOutcomeBranchLabel branch
+            , callableOutcomePayload = []
+            , callableOutcomeControl = CallableOutcomeCloses outcome
+            }
+      | otherwise -> Left
+          (SurfaceCallableTerminalOutcomePayloadUnsupported
+            (surfaceOutcomeBranchClass branch))
+    (SurfaceCallableOutcomeFatalTerminal,
+        CallableNonSuccessOutcome (CallableFatal _)) -> Left
+          (SurfaceCallableOutcomeControlRequiresSurfaceRepresentation
+            (surfaceOutcomeBranchClass branch)
+            SurfaceCallableOutcomeFatalTerminal)
+    (control, outcomeClass) -> Left
+      (SurfaceCallableOutcomeControlMismatch outcomeClass control)
+
+continuingSpec :: SurfaceCallableOutcomeBranch -> CallableOutcomeSpec
+continuingSpec branch = CallableOutcomeSpec
+  { callableOutcomeLabel = surfaceOutcomeBranchLabel branch
+  , callableOutcomePayload = surfaceOutcomeBranchPayload branch
+  , callableOutcomeControl = CallableOutcomeContinues
+  }
 
 outcomeControl :: CallableOutcomeClass -> SurfaceCallableOutcomeControl
 outcomeControl outcomeClass = case outcomeClass of
