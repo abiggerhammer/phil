@@ -388,39 +388,39 @@ Proof.
   end.
   match goal with
   | Hattributes : Derives phase1_surface_rules _
-      (ERepetition (ENonterminal "attribute")) _ _ ?attribute_tree,
-    Hdeclaration : Derives phase1_surface_rules _
-      (ENonterminal "declaration") _ _ ?declaration_tree |- _ =>
+      (ERepetition (ENonterminal "attribute")) _ _ ?attribute_tree |- _ =>
       destruct
         (phase1_surface_repetition_derivation_exposes
           _ (ENonterminal "attribute")
           _ _ attribute_tree Hattributes)
-        as [attribute_trees [Hattribute_tree Hattribute_body]];
-      destruct
-        (phase1_surface_normalize_attribute_spines_total_from_repetition
-          _ (ENonterminal "attribute")
-          _ _ attribute_trees Hattribute_body eq_refl)
-        as [attributes Hattributes_normalize];
+        as [attribute_trees [Hattribute_tree Hattribute_body]]
+  end.
+  destruct
+    (phase1_surface_normalize_attribute_spines_total_from_repetition
+      _ (ENonterminal "attribute")
+      _ _ attribute_trees Hattribute_body eq_refl)
+    as [attributes Hattributes_normalize].
+  match goal with
+  | Hdeclaration : Derives phase1_surface_rules _
+      (ENonterminal "declaration") _ _ ?declaration_tree |- _ =>
       destruct
         (phase1_surface_normalize_declaration_spine_total_from_derivation
           _ _ _ declaration_tree Hdeclaration)
-        as [declaration Hdeclaration_normalize];
-      exists
-        {| phase1_top_level_spine_attributes := attributes;
-           phase1_top_level_spine_declaration := declaration |};
-      rewrite Htree;
-      rewrite Hsubtree;
-      rewrite Hattribute_tree;
-      unfold phase1_surface_normalize_top_level_spine,
-        phase1_surface_expect_nonterminal,
-        phase1_surface_expect_sequence,
-        phase1_surface_exact2,
-        phase1_surface_expect_repetition;
-      cbn;
-      rewrite Hattributes_normalize;
-      rewrite Hdeclaration_normalize;
-      reflexivity
+        as [declaration Hdeclaration_normalize]
   end.
+  exists
+    {| phase1_top_level_spine_attributes := attributes;
+       phase1_top_level_spine_declaration := declaration |}.
+  rewrite Hattribute_tree.
+  unfold phase1_surface_normalize_top_level_spine,
+    phase1_surface_expect_nonterminal,
+    phase1_surface_expect_sequence,
+    phase1_surface_exact2,
+    phase1_surface_expect_repetition.
+  cbn.
+  rewrite Hattributes_normalize.
+  rewrite Hdeclaration_normalize.
+  reflexivity.
 Qed.
 
 Lemma phase1_surface_normalize_top_level_spines_total_from_repetition :
