@@ -167,7 +167,7 @@ jobs:
             | tee "$out/notarization-evidence.txt"
           grep -q '^notarization=Accepted$' "$out/notarization-evidence.txt"
 
-      - name: Quarantine, Gatekeeper-assess and smoke Steve
+      - name: Quarantine-launch and smoke Steve
         timeout-minutes: 5
         shell: bash
         run: |
