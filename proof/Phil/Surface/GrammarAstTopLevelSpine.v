@@ -560,7 +560,7 @@ Proof.
   cbn in Hnormalize.
   destruct (phase1_surface_normalize_top_level_spines top_level_trees)
     as [top_levels |] eqn:Htop_levels; try discriminate Hnormalize.
-  inversion Hnormalize; subst source.
+  inversion Hnormalize.
   cbn.
   rewrite (phase1_surface_normalize_top_level_spines_round_trip
     top_level_trees top_levels Htop_levels).
