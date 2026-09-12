@@ -334,7 +334,9 @@ Proof.
       2 (ELiteral ";") []
       after_name rest terminator_trees Hterminator_tail)
     as [after_terminator [terminator_tree [nil_trees [Hterminator Hnil]]]].
-  inversion Hnil; subst.
+  inversion Hnil.
+  try subst after_terminator.
+  try subst nil_trees.
   destruct
     (literal_derivation_is_exact
       phase1_surface_rules _ "module" _ _ keyword_tree Hkeyword)
@@ -421,7 +423,9 @@ Proof.
         2 (ELiteral "}") []
         after_identifiers rest close_trees Hclose_tail)
       as [after_close [close_tree [nil_trees [Hclose Hnil]]]].
-    inversion Hnil; subst.
+    inversion Hnil.
+    try subst after_close.
+    try subst nil_trees.
     destruct
       (literal_derivation_is_exact
         phase1_surface_rules _ "{" _ _ open_tree Hopen)
@@ -532,7 +536,9 @@ Proof.
       3 (ELiteral ";") []
       after_selection rest tail3 Htail3)
     as [after_terminator [terminator_tree [nil_trees [Hterminator Hnil]]]].
-  inversion Hnil; subst.
+  inversion Hnil.
+  try subst after_terminator.
+  try subst nil_trees.
   destruct
     (literal_derivation_is_exact
       phase1_surface_rules _ "import" _ _ keyword_tree Hkeyword)
@@ -710,7 +716,9 @@ Proof.
       2 (ERepetition (ENonterminal "top_level_decl")) []
       after_imports [] tail2 Htail2)
     as [after_tops [tops_part [nil_trees [Htops Hnil]]]].
-  inversion Hnil; subst.
+  inversion Hnil.
+  try subst after_tops.
+  try subst nil_trees.
   destruct
     (phase1_surface_normalize_optional_module_total_from_derivation
       _ _ _ module_part Hmodule)
