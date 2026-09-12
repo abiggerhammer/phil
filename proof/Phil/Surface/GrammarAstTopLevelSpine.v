@@ -557,12 +557,13 @@ Theorem phase1_surface_normalize_source_top_level_round_trip :
 Proof.
   intros header source Hnormalize.
   destruct header as [module_name import_headers top_level_trees].
+  unfold phase1_surface_normalize_source_top_level in Hnormalize.
   cbn in Hnormalize.
   destruct (phase1_surface_normalize_top_level_spines top_level_trees)
     as [top_levels |] eqn:Htop_levels; try discriminate Hnormalize.
-  inversion Hnormalize.
+  inversion Hnormalize; subst source.
   cbn.
-  rewrite <- (phase1_surface_normalize_top_level_spines_round_trip
+  rewrite (phase1_surface_normalize_top_level_spines_round_trip
     top_level_trees top_levels Htop_levels).
   reflexivity.
 Qed.
