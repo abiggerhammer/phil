@@ -311,32 +311,16 @@ Proof.
       ]
       input rest subtree Hbody)
     as [trees [Hsubtree Hitems]].
-  destruct
-    (derives_sequence_cons_exposes_head
-      phase1_surface_rules
-      (descend path (AtNonterminal "module_decl"))
-      0 (ELiteral "module")
-      [ENonterminal "qualified_name"; ELiteral ";"]
-      input rest trees Hitems)
-    as [after_keyword [keyword_tree [tail_trees [Hkeyword Htail]]]].
-  destruct
-    (derives_sequence_cons_exposes_head
-      phase1_surface_rules
-      (descend path (AtNonterminal "module_decl"))
-      1 (ENonterminal "qualified_name")
-      [ELiteral ";"]
-      after_keyword rest tail_trees Htail)
-    as [after_name [name_tree [terminator_trees [Hname Hterminator_tail]]]].
-  destruct
-    (derives_sequence_cons_exposes_head
-      phase1_surface_rules
-      (descend path (AtNonterminal "module_decl"))
-      2 (ELiteral ";") []
-      after_name rest terminator_trees Hterminator_tail)
-    as [after_terminator [terminator_tree [nil_trees [Hterminator Hnil]]]].
-  inversion Hnil.
-  try subst after_terminator.
-  try subst nil_trees.
+  inversion Hitems as
+    [| path0 index0 item0 items0 input0 middle0 rest0
+       keyword_tree tail1 Hkeyword Htail1]; subst.
+  inversion Htail1 as
+    [| path1 index1 item1 items1 input1 middle1 rest1
+       name_tree tail2 Hname Htail2]; subst.
+  inversion Htail2 as
+    [| path2 index2 item2 items2 input2 middle2 rest2
+       terminator_tree nil_trees Hterminator Hnil]; subst.
+  inversion Hnil; subst.
   destruct
     (literal_derivation_is_exact
       phase1_surface_rules _ "module" _ _ keyword_tree Hkeyword)
@@ -350,8 +334,6 @@ Proof.
       _ _ _ name_tree Hname)
     as [name Hname_normalize].
   exists name.
-  rewrite Htree.
-  rewrite Hsubtree.
   rewrite Hkeyword_tree.
   rewrite Hterminator_tree.
   unfold phase1_surface_normalize_module_decl,
@@ -400,32 +382,16 @@ Proof.
         ]
         input rest body Hbody)
       as [trees [Hsequence Hitems]].
-    destruct
-      (derives_sequence_cons_exposes_head
-        phase1_surface_rules
-        (descend path AtOptionalBody)
-        0 (ELiteral "{")
-        [ENonterminal "identifier_list"; ELiteral "}"]
-        input rest trees Hitems)
-      as [after_open [open_tree [tail_trees [Hopen Htail]]]].
-    destruct
-      (derives_sequence_cons_exposes_head
-        phase1_surface_rules
-        (descend path AtOptionalBody)
-        1 (ENonterminal "identifier_list")
-        [ELiteral "}"]
-        after_open rest tail_trees Htail)
-      as [after_identifiers [identifiers_tree [close_trees [Hidentifiers Hclose_tail]]]].
-    destruct
-      (derives_sequence_cons_exposes_head
-        phase1_surface_rules
-        (descend path AtOptionalBody)
-        2 (ELiteral "}") []
-        after_identifiers rest close_trees Hclose_tail)
-      as [after_close [close_tree [nil_trees [Hclose Hnil]]]].
-    inversion Hnil.
-    try subst after_close.
-    try subst nil_trees.
+    inversion Hitems as
+      [| path0 index0 item0 items0 input0 middle0 rest0
+         open_tree tail1 Hopen Htail1]; subst.
+    inversion Htail1 as
+      [| path1 index1 item1 items1 input1 middle1 rest1
+         identifiers_tree tail2 Hidentifiers Htail2]; subst.
+    inversion Htail2 as
+      [| path2 index2 item2 items2 input2 middle2 rest2
+         close_tree nil_trees Hclose Hnil]; subst.
+    inversion Hnil; subst.
     destruct
       (literal_derivation_is_exact
         phase1_surface_rules _ "{" _ _ open_tree Hopen)
@@ -439,8 +405,6 @@ Proof.
         _ _ _ identifiers_tree Hidentifiers)
       as [identifiers Hidentifiers_normalize].
     exists (Some identifiers).
-    rewrite Hsome.
-    rewrite Hsequence.
     rewrite Hopen_tree.
     rewrite Hclose_tree.
     unfold phase1_surface_normalize_import_selection,
@@ -484,61 +448,19 @@ Proof.
       ]
       input rest subtree Hbody)
     as [trees [Hsubtree Hitems]].
-  destruct
-    (derives_sequence_cons_exposes_head
-      phase1_surface_rules
-      (descend path (AtNonterminal "import_decl"))
-      0 (ELiteral "import")
-      [ ENonterminal "qualified_name";
-        EOptional
-          (ESequence
-            [ ELiteral "{";
-              ENonterminal "identifier_list";
-              ELiteral "}"
-            ]);
-        ELiteral ";"
-      ]
-      input rest trees Hitems)
-    as [after_keyword [keyword_tree [tail1 [Hkeyword Htail1]]]].
-  destruct
-    (derives_sequence_cons_exposes_head
-      phase1_surface_rules
-      (descend path (AtNonterminal "import_decl"))
-      1 (ENonterminal "qualified_name")
-      [ EOptional
-          (ESequence
-            [ ELiteral "{";
-              ENonterminal "identifier_list";
-              ELiteral "}"
-            ]);
-        ELiteral ";"
-      ]
-      after_keyword rest tail1 Htail1)
-    as [after_name [name_tree [tail2 [Hname Htail2]]]].
-  destruct
-    (derives_sequence_cons_exposes_head
-      phase1_surface_rules
-      (descend path (AtNonterminal "import_decl"))
-      2
-      (EOptional
-        (ESequence
-          [ ELiteral "{";
-            ENonterminal "identifier_list";
-            ELiteral "}"
-          ]))
-      [ELiteral ";"]
-      after_name rest tail2 Htail2)
-    as [after_selection [selection_tree [tail3 [Hselection Htail3]]]].
-  destruct
-    (derives_sequence_cons_exposes_head
-      phase1_surface_rules
-      (descend path (AtNonterminal "import_decl"))
-      3 (ELiteral ";") []
-      after_selection rest tail3 Htail3)
-    as [after_terminator [terminator_tree [nil_trees [Hterminator Hnil]]]].
-  inversion Hnil.
-  try subst after_terminator.
-  try subst nil_trees.
+  inversion Hitems as
+    [| path0 index0 item0 items0 input0 middle0 rest0
+       keyword_tree tail1 Hkeyword Htail1]; subst.
+  inversion Htail1 as
+    [| path1 index1 item1 items1 input1 middle1 rest1
+       name_tree tail2 Hname Htail2]; subst.
+  inversion Htail2 as
+    [| path2 index2 item2 items2 input2 middle2 rest2
+       selection_tree tail3 Hselection Htail3]; subst.
+  inversion Htail3 as
+    [| path3 index3 item3 items3 input3 middle3 rest3
+       terminator_tree nil_trees Hterminator Hnil]; subst.
+  inversion Hnil; subst.
   destruct
     (literal_derivation_is_exact
       phase1_surface_rules _ "import" _ _ keyword_tree Hkeyword)
@@ -558,8 +480,6 @@ Proof.
   exists
     {| phase1_import_header_name := name;
        phase1_import_header_selection := selection |}.
-  rewrite Htree.
-  rewrite Hsubtree.
   rewrite Hkeyword_tree.
   rewrite Hterminator_tree.
   unfold phase1_surface_normalize_import_decl,
@@ -691,34 +611,16 @@ Proof.
       ]
       tokens [] subtree Hbody)
     as [trees [Hsubtree Hitems]].
-  destruct
-    (derives_sequence_cons_exposes_head
-      phase1_surface_rules
-      (descend [] (AtNonterminal phase1_surface_start))
-      0 (EOptional (ENonterminal "module_decl"))
-      [ ERepetition (ENonterminal "import_decl");
-        ERepetition (ENonterminal "top_level_decl")
-      ]
-      tokens [] trees Hitems)
-    as [after_module [module_part [tail1 [Hmodule Htail1]]]].
-  destruct
-    (derives_sequence_cons_exposes_head
-      phase1_surface_rules
-      (descend [] (AtNonterminal phase1_surface_start))
-      1 (ERepetition (ENonterminal "import_decl"))
-      [ERepetition (ENonterminal "top_level_decl")]
-      after_module [] tail1 Htail1)
-    as [after_imports [imports_part [tail2 [Himports Htail2]]]].
-  destruct
-    (derives_sequence_cons_exposes_head
-      phase1_surface_rules
-      (descend [] (AtNonterminal phase1_surface_start))
-      2 (ERepetition (ENonterminal "top_level_decl")) []
-      after_imports [] tail2 Htail2)
-    as [after_tops [tops_part [nil_trees [Htops Hnil]]]].
-  inversion Hnil.
-  try subst after_tops.
-  try subst nil_trees.
+  inversion Hitems as
+    [| path0 index0 item0 items0 input0 middle0 rest0
+       module_part tail1 Hmodule Htail1]; subst.
+  inversion Htail1 as
+    [| path1 index1 item1 items1 input1 middle1 rest1
+       imports_part tail2 Himports Htail2]; subst.
+  inversion Htail2 as
+    [| path2 index2 item2 items2 input2 middle2 rest2
+       tops_part nil_trees Htops Hnil]; subst.
+  inversion Hnil; subst.
   destruct
     (phase1_surface_normalize_optional_module_total_from_derivation
       _ _ _ module_part Hmodule)
@@ -748,8 +650,6 @@ Proof.
             PTRepetition top_trees
           ])).
   {
-    rewrite Htree.
-    rewrite Hsubtree.
     rewrite Hmodule_tree.
     rewrite Himports_tree.
     rewrite Htops_tree.
