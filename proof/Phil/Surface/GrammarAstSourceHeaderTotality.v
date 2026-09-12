@@ -146,7 +146,6 @@ Proof.
       _ _ _ identifier_tree Hidentifier)
     as [value Hidentifier_normalize].
   exists value.
-  rewrite Htree.
   rewrite Hliteral_tree.
   unfold phase1_surface_normalize_name_suffix,
     phase1_surface_expect_sequence,
