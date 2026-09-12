@@ -1,3 +1,5 @@
+{-# LANGUAGE PatternSynonyms #-}
+
 module Phil.Surface.Check
   ( RejectionClass (..)
   , SurfaceCheckError (..)
@@ -8,6 +10,7 @@ module Phil.Surface.Check
   , ProviderOutcomeSpec (..)
   , PrimitiveSemantics (..)
   , SurfaceCallableSignature (..)
+  , SurfaceCallableInvocationWitness (..)
   , ReleaseRequirement (..)
   , ReleaseSemanticAccount (..)
   , ReleaseTransitionOutcome (..)
@@ -17,6 +20,7 @@ module Phil.Surface.Check
   , selectReleaseTransition
   , SurfaceEnvironment (..)
   , SurfaceCheckResult (..)
+  , SurfaceSemanticCheckResult (..)
   , ModuleName (..)
   , ModuleTable
   , ResolutionScope
@@ -26,6 +30,7 @@ module Phil.Surface.Check
   , ModuleResolutionError (..)
   , emptySurfaceEnvironment
   , checkSurfaceComponent
+  , checkSurfaceComponentWithCallableSemantics
   , emptyModuleTable
   , emptyResolutionScope
   , declareModule
@@ -43,15 +48,238 @@ import Phil.Core.Static (DeclarationIdentity)
 import qualified Phil.Surface.Check.Engine as Engine
 import Phil.Surface.Check.Preflight (preflightComponent)
 import Phil.Surface.Check.Types
-import Phil.Surface.Syntax (Component, Located)
+import Phil.Surface.Syntax
+  ( Block (..)
+  , BranchValue (..)
+  , CaseArm (..)
+  , Component (..)
+  , FailureTarget (..)
+  , Fallback (..)
+  , Located (..)
+  , Statement (..)
+  , SurfaceExpression (..)
+  , pattern InvokeExpression
+  , SurfaceProposition (..)
+  , SurfaceType (..)
+  )
 
 checkSurfaceComponent
   :: SurfaceEnvironment
   -> Located Component
   -> Either SurfaceCheckError SurfaceCheckResult
-checkSurfaceComponent environment component = do
+checkSurfaceComponent environment component =
+  checkedSurfaceResult <$> checkSurfaceComponentWithCallableSemantics environment component
+
+-- | Run the ordinary surface checker and, when the environment opts into the
+-- CALL-019 semantic map, retain the exact complete contract for every explicit
+-- source invocation. `Nothing` preserves the compatibility path used by callers
+-- that have not yet been migrated. `Just contracts` is strict: a successful
+-- shape-level invoke whose exact DeclarationKey has no semantic contract fails
+-- closed rather than silently degrading to the old name/shape-only surface.
+checkSurfaceComponentWithCallableSemantics
+  :: SurfaceEnvironment
+  -> Located Component
+  -> Either SurfaceCheckError SurfaceSemanticCheckResult
+checkSurfaceComponentWithCallableSemantics environment component = do
   preflightComponent environment component
-  Engine.checkSurfaceComponent environment component
+  checked <- Engine.checkSurfaceComponent environment component
+  invocations <- collectCallableInvocations environment component
+  pure SurfaceSemanticCheckResult
+    { checkedSurfaceResult = checked
+    , checkedCallableInvocations = invocations
+    }
+
+collectCallableInvocations
+  :: SurfaceEnvironment
+  -> Located Component
+  -> Either SurfaceCheckError (Set.Set SurfaceCallableInvocationWitness)
+collectCallableInvocations environment component =
+  collectBlock environment (componentBody (locatedValue component))
+
+collectBlock
+  :: SurfaceEnvironment
+  -> Located Block
+  -> Either SurfaceCheckError (Set.Set SurfaceCallableInvocationWitness)
+collectBlock environment block =
+  unionsM (map (collectStatement environment) (blockStatements (locatedValue block)))
+
+collectStatement
+  :: SurfaceEnvironment
+  -> Located Statement
+  -> Either SurfaceCheckError (Set.Set SurfaceCallableInvocationWitness)
+collectStatement environment statement = case locatedValue statement of
+  LetStatement _ expression -> collectExpression environment expression
+  ReturnStatement expression -> collectExpression environment expression
+  ExpressionStatement expression -> collectExpression environment expression
+
+collectExpression
+  :: SurfaceEnvironment
+  -> Located SurfaceExpression
+  -> Either SurfaceCheckError (Set.Set SurfaceCallableInvocationWitness)
+collectExpression environment expression = case locatedValue expression of
+  InvokeExpression name arguments -> do
+    nested <- unionsM (map (collectExpression environment) arguments)
+    case surfaceCallableSemanticContracts environment of
+      Nothing -> Right nested
+      Just contracts -> do
+        signature <- maybe
+          (Left SurfaceCheckError
+            { surfaceErrorSpan = locatedSpan expression
+            , surfaceErrorClass = UnknownCallable
+            , surfaceErrorDetail =
+                "callable disappeared before semantic invocation composition: " <> name
+            })
+          Right
+          (Map.lookup name (surfaceCallables environment))
+        let declarationKey = surfaceCallableDeclarationKey signature
+        contract <- maybe
+          (Left SurfaceCheckError
+            { surfaceErrorSpan = locatedSpan expression
+            , surfaceErrorClass = UnknownCallable
+            , surfaceErrorDetail =
+                "callable semantic contract missing for exact declaration identity"
+            })
+          Right
+          (Map.lookup declarationKey contracts)
+        Right (Set.insert
+          SurfaceCallableInvocationWitness
+            { surfaceInvocationDisplayName = name
+            , surfaceInvocationDeclarationKey = declarationKey
+            , surfaceInvocationSemanticContract = contract
+            }
+          nested)
+  VariableExpression _ -> empty
+  IntegerExpression _ -> empty
+  BooleanExpression _ -> empty
+  UnitExpression -> empty
+  TupleExpression values -> expressions values
+  CallExpression _ arguments -> expressions arguments
+  FieldExpression base _ -> collectExpression environment base
+  BinaryExpression _ left right -> expressions [left, right]
+  ConstructExpression _ fields -> expressions (map snd fields)
+  ReceiveExpression messageType endpoint -> unionsM
+    [ collectType environment messageType
+    , collectExpression environment endpoint
+    ]
+  ReceiveFrameExpression endpoint -> collectExpression environment endpoint
+  RecognizeExpression _ raw -> collectExpression environment raw
+  ValidateExpression _ context subject -> unionsM
+    ( collectExpression environment subject
+      : maybe [] (pure . collectExpression environment) context)
+  SendExpression value endpoint -> expressions [value, endpoint]
+  SendExactExpression value endpoint -> expressions [value, endpoint]
+  ReceiveExactExpression count endpoint evidence -> unionsM
+    ( [ collectExpression environment count
+      , collectExpression environment endpoint
+      ]
+      <> maybe [] (pure . collectExpression environment) evidence)
+  SelectExpression branch endpoint evidence -> unionsM
+    ( collectBranchValue environment branch
+      : collectExpression environment endpoint
+      : maybe [] (pure . collectExpression environment) evidence)
+  CommitReceiveExpression pending evidence -> expressions [pending, evidence]
+  BorrowExpression owner _ body -> unionsM
+    [ collectExpression environment owner
+    , collectBlock environment body
+    ]
+  DecideExpression scrutinee arms -> unionsM
+    (collectExpression environment scrutinee : map (collectArm environment) arms)
+  OfferExpression endpoint arms -> unionsM
+    (collectExpression environment endpoint : map (collectArm environment) arms)
+  FailExpression target resource -> unionsM
+    [ collectFailureTarget environment target
+    , collectExpression environment resource
+    ]
+  CloseExpression endpoint -> collectExpression environment endpoint
+  ReleaseExpression owner -> collectExpression environment owner
+  AcceptExpression value acceptedType -> unionsM
+    [ collectExpression environment value
+    , collectType environment acceptedType
+    ]
+  ProveExpression proposition -> collectProposition environment proposition
+  FallbackExpression primary fallback -> unionsM
+    [ collectExpression environment primary
+    , collectFallback environment fallback
+    ]
+  where
+    empty = Right Set.empty
+    expressions = unionsM . map (collectExpression environment)
+
+collectType
+  :: SurfaceEnvironment
+  -> Located SurfaceType
+  -> Either SurfaceCheckError (Set.Set SurfaceCallableInvocationWitness)
+collectType environment surfaceType = case locatedValue surfaceType of
+  SurfaceBytesType index -> collectExpression environment index
+  SurfaceProofType proposition -> collectProposition environment proposition
+  SurfaceValidatedType _ context subject -> unionsM
+    [ collectExpression environment context
+    , collectExpression environment subject
+    ]
+  SurfaceNamedType _ arguments ->
+    unionsM (map (collectExpression environment) arguments)
+  _ -> Right Set.empty
+
+collectProposition
+  :: SurfaceEnvironment
+  -> Located SurfaceProposition
+  -> Either SurfaceCheckError (Set.Set SurfaceCallableInvocationWitness)
+collectProposition environment proposition = case locatedValue proposition of
+  PropositionEqual left right -> binary left right
+  PropositionNotEqual left right -> binary left right
+  PropositionLessThan left right -> binary left right
+  PropositionLessEqual left right -> binary left right
+  PropositionGreaterThan left right -> binary left right
+  PropositionGreaterEqual left right -> binary left right
+  PropositionAtom _ arguments ->
+    unionsM (map (collectExpression environment) arguments)
+  PropositionConjunction left right -> propositions left right
+  PropositionDisjunction left right -> propositions left right
+  PropositionNegation inner -> collectProposition environment inner
+  _ -> Right Set.empty
+  where
+    binary left right = unionsM
+      [ collectExpression environment left
+      , collectExpression environment right
+      ]
+    propositions left right = unionsM
+      [ collectProposition environment left
+      , collectProposition environment right
+      ]
+
+collectArm
+  :: SurfaceEnvironment
+  -> Located CaseArm
+  -> Either SurfaceCheckError (Set.Set SurfaceCallableInvocationWitness)
+collectArm environment arm =
+  collectBlock environment (caseArmBody (locatedValue arm))
+
+collectBranchValue
+  :: SurfaceEnvironment
+  -> BranchValue
+  -> Either SurfaceCheckError (Set.Set SurfaceCallableInvocationWitness)
+collectBranchValue environment =
+  unionsM . map (collectExpression environment) . branchValueArguments
+
+collectFailureTarget
+  :: SurfaceEnvironment
+  -> FailureTarget
+  -> Either SurfaceCheckError (Set.Set SurfaceCallableInvocationWitness)
+collectFailureTarget environment =
+  unionsM . map (collectExpression environment) . failureTargetArguments
+
+collectFallback
+  :: SurfaceEnvironment
+  -> Fallback
+  -> Either SurfaceCheckError (Set.Set SurfaceCallableInvocationWitness)
+collectFallback environment fallback = case fallback of
+  FailFallback _ -> Right Set.empty
+  RejectFallback expression -> collectExpression environment expression
+
+unionsM
+  :: [Either SurfaceCheckError (Set.Set SurfaceCallableInvocationWitness)]
+  -> Either SurfaceCheckError (Set.Set SurfaceCallableInvocationWitness)
+unionsM = fmap Set.unions . sequence
 
 -- Phase 1 module/import resolution -------------------------------------------
 
