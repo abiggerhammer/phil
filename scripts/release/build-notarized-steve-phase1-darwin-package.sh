@@ -83,7 +83,7 @@ case "$command_name" in
 
   assess)
     : "${APPLE_TEAM_ID:?set APPLE_TEAM_ID}"
-    for tool in codesign ditto shasum spctl xattr; do
+    for tool in codesign ditto shasum xattr; do
       command -v "$tool" >/dev/null 2>&1 || { echo "missing required tool: $tool" >&2; exit 1; }
     done
     test -s "$archive"
@@ -93,12 +93,12 @@ case "$command_name" in
       shasum -a 256 -c "$archive_name.sha256"
     )
 
-    work="$(mktemp -d "${TMPDIR:-/tmp}/phil-steve-gatekeeper.XXXXXX")"
+    work="$(mktemp -d "${TMPDIR:-/tmp}/phil-steve-quarantine.XXXXXX")"
     trap 'rm -rf "$work"' EXIT
     ditto -x -k "$archive" "$work"
     package="$work/$package_name"
 
-    printf 'stage=quarantine-gatekeeper-assessment\n'
+    printf 'stage=quarantine-launch-assessment\n'
     quarantine="0081;$(printf '%x' "$(date +%s)");GitHub-Actions;https://github.com/abiggerhammer/phil/"
     for executable in "$package/bin/philc" "$package/bin/steve"; do
       codesign --verify --strict --verbose=4 "$executable"
@@ -106,9 +106,25 @@ case "$command_name" in
         | grep -Fq "TeamIdentifier=$APPLE_TEAM_ID"
       xattr -w com.apple.quarantine "$quarantine" "$executable"
       xattr -p com.apple.quarantine "$executable" >/dev/null
-      spctl -a -vv -t execute "$executable"
+
+      # `spctl --type execute` is app-bundle-oriented on current macOS and may
+      # report a correctly signed/notarized bare CLI as "valid but does not seem
+      # to be an app". Keep it as diagnostic evidence, but make actual launch
+      # under quarantine the authoritative Gatekeeper boundary below.
+      if command -v spctl >/dev/null 2>&1; then
+        set +e
+        spctl_output="$(spctl -a -vv -t execute "$executable" 2>&1)"
+        spctl_status=$?
+        set -e
+        printf 'spctl_path=%s status=%s\n' "$executable" "$spctl_status"
+        printf '%s\n' "$spctl_output"
+      fi
     done
 
+    # This is the decisive regression for the failure seen by the outside user:
+    # both shipped executables retain com.apple.quarantine while the package
+    # smoke launches philc and performs real Steve PUT/GET operations. If
+    # Gatekeeper blocks or kills either process, the smoke fails.
     printf 'stage=package-smoke-with-quarantine-intact\n'
     (
       cd "$package"
