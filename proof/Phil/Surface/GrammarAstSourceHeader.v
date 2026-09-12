@@ -327,6 +327,7 @@ Proof.
   pose proof
     (phase1_surface_normalize_identifier_round_trip
       identifier_tree value Hnormalize) as Hidentifier.
+  unfold phase1_surface_name_suffix_tree.
   rewrite (phase1_surface_expect_sequence_round_trip tree items Hsequence).
   rewrite (phase1_surface_exact2_round_trip
     items separator_tree identifier_tree Hitems).
