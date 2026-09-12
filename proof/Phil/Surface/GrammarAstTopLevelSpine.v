@@ -347,7 +347,7 @@ Proof.
     + eapply phase1_surface_normalize_attribute_spine_round_trip.
       exact Htree.
     + eapply IH.
-      exact Hrest.
+      reflexivity.
 Qed.
 
 Definition phase1_surface_declaration_spine_tree
@@ -516,7 +516,7 @@ Proof.
     + eapply phase1_surface_normalize_top_level_spine_round_trip.
       exact Htree.
     + eapply IH.
-      exact Hrest.
+      reflexivity.
 Qed.
 
 Definition phase1_surface_source_top_level_tree
