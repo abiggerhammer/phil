@@ -638,25 +638,18 @@ Proof.
     {| phase1_source_header_module := module_name;
        phase1_source_header_imports := import_headers;
        phase1_source_header_top_levels := top_trees |}.
-  assert (Hsource_shape :
-    tree =
-      PTNonterminal phase1_surface_start
-        (PTSequence
-          [ match module_tree with
-            | None => PTOptionalNone
-            | Some body => PTOptionalSome body
-            end;
-            PTRepetition import_trees;
-            PTRepetition top_trees
-          ])).
+  assert (Hnormalize :
+    phase1_surface_normalize_source_header_tree
+      (PTNonterminal phase1_surface_start
+        (PTSequence [module_part; imports_part; tops_part])) =
+    Some
+      {| phase1_source_header_module := module_name;
+         phase1_source_header_imports := import_headers;
+         phase1_source_header_top_levels := top_trees |}).
   {
     rewrite Hmodule_tree.
     rewrite Himports_tree.
     rewrite Htops_tree.
-    reflexivity.
-  }
-  split.
-  - rewrite Hsource_shape.
     unfold phase1_surface_normalize_source_header_tree,
       phase1_surface_normalize_source_spine,
       phase1_surface_normalize_source_header.
@@ -668,5 +661,9 @@ Proof.
     + rewrite Hmodule_normalize.
       rewrite Himports_normalize.
       reflexivity.
+  }
+  split.
+  - exact Hnormalize.
   - eapply phase1_surface_normalize_source_header_tree_round_trip.
+    exact Hnormalize.
 Qed.
