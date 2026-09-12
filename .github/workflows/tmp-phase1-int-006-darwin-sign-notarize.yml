@@ -19,6 +19,8 @@ jobs:
       APPLE_NOTARY_KEY_P8_BASE64: ${{ secrets.APPLE_NOTARY_KEY_P8_BASE64 }}
       APPLE_NOTARY_KEY_ID: ${{ secrets.APPLE_NOTARY_KEY_ID }}
       APPLE_NOTARY_ISSUER_ID: ${{ secrets.APPLE_NOTARY_ISSUER_ID }}
+      PHIL_NOTARY_TIMEOUT_SECONDS: '1200'
+      PHIL_NOTARY_POLL_SECONDS: '30'
     steps:
       - uses: actions/checkout@v4
 
@@ -75,21 +77,51 @@ jobs:
           echo "PHIL_DARWIN_CODESIGN_IDENTITY=$identity" >> "$GITHUB_ENV"
           echo "APPLE_NOTARY_KEY_PATH=$p8" >> "$GITHUB_ENV"
 
-      - name: Build, sign, notarize, quarantine-assess and smoke Steve
+      - name: Build and Developer-ID sign Steve archive
+        timeout-minutes: 15
         shell: bash
         run: |
           set -euo pipefail
           out="$RUNNER_TEMP/steve-notarized"
           mkdir -p "$out"
-          bash scripts/release/build-notarized-steve-phase1-darwin-package.sh "$out" \
-            | tee "$out/smoke-evidence.txt"
+          bash scripts/release/build-notarized-steve-phase1-darwin-package.sh build "$out" \
+            | tee "$out/build-sign-evidence.txt"
           archive='phil-steve-0.1.1-phase1-aarch64-apple-darwin.zip'
           test -s "$out/$archive"
           test -s "$out/$archive.sha256"
-          test -s "$out/$archive.notary.json"
+
+      - name: Submit signed Steve archive for notarization
+        timeout-minutes: 5
+        shell: bash
+        run: |
+          set -euo pipefail
+          out="$RUNNER_TEMP/steve-notarized"
+          archive="$out/phil-steve-0.1.1-phase1-aarch64-apple-darwin.zip"
+          bash scripts/release/notarize-darwin-archive.sh submit "$archive" "$out"
+          test -s "$out/$(basename "$archive").notary-id"
+          test -s "$out/$(basename "$archive").notary-submit.json"
+
+      - name: Poll notarization to a bounded result
+        timeout-minutes: 22
+        shell: bash
+        run: |
+          set -euo pipefail
+          out="$RUNNER_TEMP/steve-notarized"
+          archive="$out/phil-steve-0.1.1-phase1-aarch64-apple-darwin.zip"
+          bash scripts/release/notarize-darwin-archive.sh poll "$archive" "$out" \
+            | tee "$out/notarization-evidence.txt"
+          grep -q '^notarization=Accepted$' "$out/notarization-evidence.txt"
+
+      - name: Quarantine, Gatekeeper-assess and smoke Steve
+        timeout-minutes: 5
+        shell: bash
+        run: |
+          set -euo pipefail
+          out="$RUNNER_TEMP/steve-notarized"
+          bash scripts/release/build-notarized-steve-phase1-darwin-package.sh assess "$out" \
+            | tee "$out/smoke-evidence.txt"
           grep -q '^PASS: Developer-ID signed, notarized, quarantined Phase-1 Steve package$' \
             "$out/smoke-evidence.txt"
-          grep -q '^notarization=Accepted$' "$out/smoke-evidence.txt"
 
       - uses: actions/upload-artifact@v4
         with:
@@ -97,6 +129,11 @@ jobs:
           path: |
             ${{ runner.temp }}/steve-notarized/phil-steve-0.1.1-phase1-aarch64-apple-darwin.zip
             ${{ runner.temp }}/steve-notarized/phil-steve-0.1.1-phase1-aarch64-apple-darwin.zip.sha256
-            ${{ runner.temp }}/steve-notarized/phil-steve-0.1.1-phase1-aarch64-apple-darwin.zip.notary.json
+            ${{ runner.temp }}/steve-notarized/phil-steve-0.1.1-phase1-aarch64-apple-darwin.zip.notary-id
+            ${{ runner.temp }}/steve-notarized/phil-steve-0.1.1-phase1-aarch64-apple-darwin.zip.notary-submit.json
+            ${{ runner.temp }}/steve-notarized/phil-steve-0.1.1-phase1-aarch64-apple-darwin.zip.notary-info.json
+            ${{ runner.temp }}/steve-notarized/phil-steve-0.1.1-phase1-aarch64-apple-darwin.zip.notary-log.json
+            ${{ runner.temp }}/steve-notarized/build-sign-evidence.txt
+            ${{ runner.temp }}/steve-notarized/notarization-evidence.txt
             ${{ runner.temp }}/steve-notarized/smoke-evidence.txt
-          if-no-files-found: error
+          if-no-files-found: warn
