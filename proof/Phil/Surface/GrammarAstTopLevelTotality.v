@@ -478,82 +478,66 @@ Proof.
       ]
       tokens [] subtree Hbody)
     as [trees [Hsubtree Hitems]].
-  repeat match goal with
-  | Hseq : DerivesSequence phase1_surface_rules _ _ (_ :: _) _ _ _ |- _ =>
-      inversion Hseq; subst; clear Hseq
-  end.
-  match goal with
-  | Hnil : DerivesSequence phase1_surface_rules _ _ [] _ _ _ |- _ =>
-      inversion Hnil; subst; clear Hnil
-  end.
-  match goal with
-  | Hmodule : Derives phase1_surface_rules _
-      (EOptional (ENonterminal "module_decl")) _ _ ?module_part,
-    Himports : Derives phase1_surface_rules _
-      (ERepetition (ENonterminal "import_decl")) _ _ ?imports_part,
-    Htops : Derives phase1_surface_rules _
-      (ERepetition (ENonterminal "top_level_decl")) _ _ ?tops_part |- _ =>
-      destruct
-        (phase1_surface_normalize_optional_module_total_from_derivation
-          _ _ _ module_part Hmodule)
-        as [module_tree [module_name [Hmodule_tree Hmodule_normalize]]];
-      destruct
-        (phase1_surface_normalize_import_repetition_total_from_derivation
-          _ _ _ imports_part Himports)
-        as [import_trees [import_headers [Himports_tree Himports_normalize]]];
-      destruct
-        (phase1_surface_repetition_derivation_exposes
-          _ (ENonterminal "top_level_decl")
-          _ _ tops_part Htops)
-        as [top_trees [Htops_tree Htops_body]];
-      destruct
-        (phase1_surface_normalize_top_level_spines_total_from_repetition
-          _ (ENonterminal "top_level_decl")
-          _ _ top_trees Htops_body eq_refl)
-        as [top_levels Htop_levels_normalize];
-      let source := constr:(
-        {| phase1_source_top_level_module := module_name;
-           phase1_source_top_level_imports := import_headers;
-           phase1_source_top_level_declarations := top_levels |}) in
-      assert (Hsource_shape :
-        tree =
-          phase1_surface_source_spine_tree
-            {| phase1_source_spine_module := module_tree;
-               phase1_source_spine_imports := import_trees;
-               phase1_source_spine_top_levels := top_trees |}).
-      {
-        unfold phase1_surface_source_spine_tree.
-        rewrite Htree.
-        rewrite Hsubtree.
-        rewrite Hmodule_tree.
-        rewrite Himports_tree.
-        rewrite Htops_tree.
-        reflexivity.
-      }
-      assert (Hnormalize :
-        phase1_surface_normalize_source_top_level_tree tree = Some source).
-      {
-        rewrite Hsource_shape.
-        unfold phase1_surface_normalize_source_top_level_tree,
-          phase1_surface_normalize_source_header_tree,
-          phase1_surface_normalize_source_spine,
-          phase1_surface_normalize_source_header,
-          phase1_surface_normalize_source_top_level.
-        rewrite String.eqb_refl.
-        destruct module_tree as [module_body |]; cbn in *.
-        - rewrite Hmodule_normalize.
-          rewrite Himports_normalize.
-          rewrite Htop_levels_normalize.
-          reflexivity.
-        - rewrite Hmodule_normalize.
-          rewrite Himports_normalize.
-          rewrite Htop_levels_normalize.
-          reflexivity.
-      }
-      exists source.
-      split.
-      + exact Hnormalize.
-      + eapply phase1_surface_normalize_source_top_level_tree_round_trip.
-        exact Hnormalize
-  end.
+  inversion Hitems as
+    [| path0 index0 item0 items0 input0 middle0 rest0
+       module_part tail1 Hmodule Htail1]; subst.
+  inversion Htail1 as
+    [| path1 index1 item1 items1 input1 middle1 rest1
+       imports_part tail2 Himports Htail2]; subst.
+  inversion Htail2 as
+    [| path2 index2 item2 items2 input2 middle2 rest2
+       tops_part nil_trees Htops Hnil]; subst.
+  inversion Hnil; subst.
+  destruct
+    (phase1_surface_normalize_optional_module_total_from_derivation
+      _ _ _ module_part Hmodule)
+    as [module_tree [module_name [Hmodule_tree Hmodule_normalize]]].
+  destruct
+    (phase1_surface_normalize_import_repetition_total_from_derivation
+      _ _ _ imports_part Himports)
+    as [import_trees [import_headers [Himports_tree Himports_normalize]]].
+  destruct
+    (phase1_surface_repetition_derivation_exposes
+      _ (ENonterminal "top_level_decl")
+      _ _ tops_part Htops)
+    as [top_trees [Htops_tree Htops_body]].
+  destruct
+    (phase1_surface_normalize_top_level_spines_total_from_repetition
+      _ (ENonterminal "top_level_decl")
+      _ _ top_trees Htops_body eq_refl)
+    as [top_levels Htop_levels_normalize].
+  let source := constr:(
+    {| phase1_source_top_level_module := module_name;
+       phase1_source_top_level_imports := import_headers;
+       phase1_source_top_level_declarations := top_levels |}) in
+  exists source.
+  assert (Hnormalize :
+    phase1_surface_normalize_source_top_level_tree
+      (PTNonterminal phase1_surface_start
+        (PTSequence [module_part; imports_part; tops_part])) =
+    Some source).
+  {
+    rewrite Hmodule_tree.
+    rewrite Himports_tree.
+    rewrite Htops_tree.
+    unfold phase1_surface_normalize_source_top_level_tree,
+      phase1_surface_normalize_source_header_tree,
+      GrammarAstSourceSpine.phase1_surface_normalize_source_spine,
+      phase1_surface_normalize_source_header,
+      phase1_surface_normalize_source_top_level.
+    rewrite String.eqb_refl.
+    destruct module_tree as [module_body |]; cbn in *.
+    - rewrite Hmodule_normalize.
+      rewrite Himports_normalize.
+      rewrite Htop_levels_normalize.
+      reflexivity.
+    - rewrite Hmodule_normalize.
+      rewrite Himports_normalize.
+      rewrite Htop_levels_normalize.
+      reflexivity.
+  }
+  split.
+  - exact Hnormalize.
+  - eapply phase1_surface_normalize_source_top_level_tree_round_trip.
+    exact Hnormalize.
 Qed.
