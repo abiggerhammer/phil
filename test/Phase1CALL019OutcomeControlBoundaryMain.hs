@@ -38,6 +38,7 @@ import Phil.Core.Syntax
   )
 import Phil.Surface.Check
   ( CallableOutcomeControlSpec (..)
+  , CallableOutcomeSpec (..)
   , RejectionClass (..)
   , SurfaceCallableSignature (..)
   , SurfaceCheckError (..)
