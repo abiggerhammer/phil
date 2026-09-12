@@ -7,6 +7,7 @@ module Phil.Compiler.CallableOutcomeDispatch
   , SurfaceCallableOutcomeDispatchPlan (..)
   , SurfaceCallableOutcomeDispatchError (..)
   , planSurfaceCallableOutcomeDispatch
+  , installSurfaceCallableOutcomeDispatch
   ) where
 
 import qualified Data.Map.Strict as Map
@@ -23,9 +24,15 @@ import Phil.Core.CallableOutcome
 import Phil.Core.CallableRefinement
   ( CallableFailure (..)
   )
+import Phil.Core.Static (DeclarationKey)
 import Phil.Core.Syntax
   ( Mode
   , Ty
+  )
+import Phil.Surface.Check
+  ( CallableOutcomeSpec (..)
+  , SurfaceCallableSignature (..)
+  , SurfaceEnvironment (..)
   )
 
 -- | Explicit source-dispatch binding for one exact callable outcome class.
@@ -81,6 +88,9 @@ data SurfaceCallableOutcomeDispatchError
       CallableOutcomeClass
   | SurfaceCallableOutcomeEmptyLabel CallableOutcomeClass
   | SurfaceCallableDuplicateOutcomeLabel Text
+  | SurfaceCallableOutcomeUnknownSurfaceCallable Text
+  | SurfaceCallableOutcomeDeclarationMismatch DeclarationKey DeclarationKey
+  | SurfaceCallableOutcomeDispatchConflict DeclarationKey
   deriving (Eq, Ord, Show)
 
 -- | Bind the exact semantic branch domain of one invocation to explicit source
@@ -159,6 +169,45 @@ makeBranch bindings outcome = do
     , surfaceOutcomeBranchControl = outcomeControl outcomeClass
     , surfaceOutcomeBranchContract = outcome
     }
+
+-- | Install one already checked dispatch plan into the neutral Surface table.
+-- The display spelling must still select the exact declaration identity retained
+-- by the invocation witness. Reinstalling an identical plan is idempotent; a
+-- different plan for the same declaration rejects rather than changing branch
+-- meaning after checking.
+installSurfaceCallableOutcomeDispatch
+  :: SurfaceCallableOutcomeDispatchPlan
+  -> SurfaceEnvironment
+  -> Either SurfaceCallableOutcomeDispatchError SurfaceEnvironment
+installSurfaceCallableOutcomeDispatch plan environment = do
+  let invocation = surfaceOutcomeDispatchInvocation plan
+      displayName = surfaceSemanticInvocationDisplayName invocation
+      declarationKey = surfaceSemanticInvocationDeclarationKey invocation
+      specs =
+        [ CallableOutcomeSpec
+            { callableOutcomeLabel = surfaceOutcomeBranchLabel branch
+            , callableOutcomePayload = surfaceOutcomeBranchPayload branch
+            }
+        | branch <- surfaceOutcomeDispatchBranches plan
+        ]
+  signature <- maybe
+    (Left (SurfaceCallableOutcomeUnknownSurfaceCallable displayName))
+    Right
+    (Map.lookup displayName (surfaceCallables environment))
+  if surfaceCallableDeclarationKey signature == declarationKey
+    then pure ()
+    else Left
+      (SurfaceCallableOutcomeDeclarationMismatch
+        declarationKey
+        (surfaceCallableDeclarationKey signature))
+  case Map.lookup declarationKey (surfaceCallableOutcomes environment) of
+    Nothing -> Right environment
+      { surfaceCallableOutcomes =
+          Map.insert declarationKey specs (surfaceCallableOutcomes environment)
+      }
+    Just existing
+      | existing == specs -> Right environment
+      | otherwise -> Left (SurfaceCallableOutcomeDispatchConflict declarationKey)
 
 outcomeControl :: CallableOutcomeClass -> SurfaceCallableOutcomeControl
 outcomeControl outcomeClass = case outcomeClass of

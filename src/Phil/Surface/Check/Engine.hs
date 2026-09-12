@@ -353,8 +353,13 @@ evalCallable environment state located name arguments =
         throw located TypeMismatch
           ("callable arity mismatch; expected " <> Text.pack (show (length parameters)))
       next <- foldM checkArgument state (zip parameters arguments)
-      result <- callableResultValue signature
-      Right [valuePath next result]
+      case Map.lookup
+          (surfaceCallableDeclarationKey signature)
+          (surfaceCallableOutcomes environment) of
+        Nothing -> do
+          result <- callableResultValue signature
+          Right [valuePath next result]
+        Just outcomes -> callableDecision next signature outcomes
   where
     checkArgument current ((expectedMode, expectedType), expression) = do
       paths <- evalExpression environment current expression
@@ -385,6 +390,22 @@ evalCallable environment state located name arguments =
                 "callable signature cannot return restricted Unit"
         | otherwise -> Right
             (RuntimeScalar (ScalarValue mode ty (shapeForType ty)))
+
+    callableDecision next signature outcomes = do
+      when (null outcomes) $
+        throw located TypeMismatch "callable decision declares no outcomes"
+      let labels = map callableOutcomeLabel outcomes
+      unless (Set.size (Set.fromList labels) == length labels) $
+        throw located TypeMismatch "callable decision outcome labels are not unique"
+      case surfaceCallableResult signature of
+        Nothing -> Right
+          [ valuePath next (RuntimeScalar
+              (ScalarValue Unrestricted
+                (TyOpaque "CallableDecision")
+                (DecisionShape (CallableDecision outcomes))))
+          ]
+        Just _ -> throw located TypeMismatch
+          "branch-dispatched callable cannot also expose one unbranched result"
 
 evalPrimitive
   :: SurfaceEnvironment
@@ -960,6 +981,7 @@ decisionLabels decision = case decision of
   DigestDecision {} -> ["rejected", "accepted"]
   StoreDecision -> ["failure", "success"]
   ProviderDecision outcomes -> map providerOutcomeLabel outcomes
+  CallableDecision outcomes -> map callableOutcomeLabel outcomes
 
 bindDecisionPattern
   :: SurfaceState
@@ -1046,6 +1068,23 @@ bindDecisionPattern state decision label binders located =
                 (zip providerBinders payload)
         _ -> throw located TypeMismatch
           "provider decision arm binder shape is incompatible with the declared outcome"
+    (CallableDecision outcomes, callableLabel, callableBinders) ->
+      case
+        [ callableOutcomePayload outcome
+        | outcome <- outcomes
+        , callableOutcomeLabel outcome == callableLabel
+        ] of
+        [payload]
+          | length payload == length callableBinders ->
+              foldM
+                (\current (name, (mode, ty)) ->
+                  insertBindingMeta (locatedSpan located) name
+                    (BindingMeta mode ty (shapeForBinding name (shapeForType ty)))
+                    current)
+                state
+                (zip callableBinders payload)
+        _ -> throw located TypeMismatch
+          "callable decision arm binder shape is incompatible with the declared outcome"
     _ -> throw located TypeMismatch
       "decision arm binder shape is incompatible with the decision result"
 

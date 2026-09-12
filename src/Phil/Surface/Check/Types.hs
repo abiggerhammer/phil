@@ -8,6 +8,7 @@ module Phil.Surface.Check.Types
   , InitialBinding (..)
   , PrimitiveArgumentDiscipline (..)
   , ProviderOutcomeSpec (..)
+  , CallableOutcomeSpec (..)
   , PrimitiveSemantics (..)
   , SurfaceCallableSignature (..)
   , ReleaseRequirement (..)
@@ -129,6 +130,15 @@ data ProviderOutcomeSpec = ProviderOutcomeSpec
   }
   deriving (Eq, Ord, Show)
 
+-- | Neutral source-level branch shape for an already checked callable.
+-- Semantic outcome identity remains compiler-side; Surface receives only the
+-- explicit labels and typed/mode-aware payload telescope needed by `decide`.
+data CallableOutcomeSpec = CallableOutcomeSpec
+  { callableOutcomeLabel :: Text
+  , callableOutcomePayload :: [(Mode, Ty)]
+  }
+  deriving (Eq, Ord, Show)
+
 data PrimitiveSemantics
   = PrimitiveSupportedVersions
   | PrimitiveSha256
@@ -222,6 +232,7 @@ data SurfaceEnvironment = SurfaceEnvironment
   , surfaceInitialBindings :: Map Text InitialBinding
   , surfacePrimitives :: Map Text PrimitiveSemantics
   , surfaceCallables :: Map Text SurfaceCallableSignature
+  , surfaceCallableOutcomes :: Map DeclarationKey [CallableOutcomeSpec]
   , surfaceTypeAliases :: Map Text Ty
   , surfaceSelectRequirements :: Map Text [Proposition]
   , surfaceReceiveExactRequirement :: Maybe Proposition
@@ -287,6 +298,7 @@ emptySurfaceEnvironment staticContext = SurfaceEnvironment
   , surfaceInitialBindings = Map.empty
   , surfacePrimitives = Map.empty
   , surfaceCallables = Map.empty
+  , surfaceCallableOutcomes = Map.empty
   , surfaceTypeAliases = Map.empty
   , surfaceSelectRequirements = Map.empty
   , surfaceReceiveExactRequirement = Nothing
@@ -349,4 +361,5 @@ data DecisionKind
   | DigestDecision Proposition
   | StoreDecision
   | ProviderDecision [ProviderOutcomeSpec]
+  | CallableDecision [CallableOutcomeSpec]
   deriving (Eq, Show)
