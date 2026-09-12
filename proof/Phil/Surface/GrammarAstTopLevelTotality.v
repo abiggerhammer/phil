@@ -151,8 +151,7 @@ Proof.
                                                                    inversion Hnth; subst item.
                                                                    exists Phase1ProgramDeclaration.
                                                                    split; reflexivity.
-                                                           ******* cbn in Hnth.
-                                                                   discriminate Hnth.
+                                                           ******* destruct index; cbn in Hnth; discriminate Hnth.
 Qed.
 
 Lemma phase1_surface_normalize_metadata_string_total_from_derivation :
