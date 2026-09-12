@@ -3,8 +3,37 @@
 module Main (main) where
 
 import qualified Data.Map.Strict as Map
+import qualified Data.Set as Set
 import Data.Text (Text)
-import Phil.Core.Static (DeclarationKey (..), emptyStaticContext)
+import Phil.Compiler.CallableSurfaceSemantics
+  ( SurfaceCallableInvocationWitness (..)
+  , SurfaceSemanticCheckResult (..)
+  , checkSurfaceComponentWithCallableSemantics
+  )
+import Phil.Core.Callable
+  ( CallableContract (..)
+  , CalleeTransition (..)
+  , SemanticEffect (..)
+  )
+import Phil.Core.CallableOutcome
+  ( CallableOutcomeAtom (..)
+  , CallableOutcomeClass (..)
+  , CallableOutcomeContract (..)
+  , CallableOutcomeState (..)
+  )
+import Phil.Core.CallableRefinement
+  ( CallableAuthorityRequirement (..)
+  , CallableMachineShape (..)
+  , CallableRefinementSurface (..)
+  )
+import Phil.Core.CallableSemanticContract
+  ( SourceCallableSemanticContract (..)
+  )
+import Phil.Core.Static
+  ( DeclarationKey (..)
+  , InterfaceRevision (..)
+  , emptyStaticContext
+  )
 import Phil.Core.Syntax (Mode (..), Ty (..))
 import Phil.Surface.Check
   ( InitialBinding (..)
@@ -30,6 +59,10 @@ main = do
     , test "CALL-019 provider primitive cannot rescue invoke lookup" primitiveCannotRescueInvoke
     , test "CALL-019 ordinary call remains provider primitive lookup" ordinaryCallRemainsPrimitive
     , test "CALL-019 callable result carries declared restricted mode" restrictedResultReturns
+    , test "CALL-019 semantic bridge retains the exact complete callable contract" semanticWitnessRetained
+    , test "CALL-019 semantic bridge preserves repeated invocation occurrences" semanticOccurrencesPreserved
+    , test "CALL-019 semantic bridge fails closed when an exact contract is missing" semanticContractMissingRejects
+    , test "CALL-019 semantic bridge does not reinterpret ordinary provider calls" semanticOrdinaryCallIgnored
     ]
   if and results then pure () else exitFailure
 
@@ -54,11 +87,72 @@ callable key parameters result = SurfaceCallableSignature
 takeSignature :: SurfaceCallableSignature
 takeSignature = callable "decl.take" [(Linear, blobType)] Nothing
 
+pingSignature :: SurfaceCallableSignature
+pingSignature = callable "decl.ping" [] Nothing
+
+takeSemanticContract :: SourceCallableSemanticContract
+takeSemanticContract = SourceCallableSemanticContract
+  { sourceCallableRefinementSurface = CallableRefinementSurface
+      { callableRefinementMachineShape = CallableMachineShape "Blob->Unit"
+      , callableRefinementContract = CallableContract
+          { callableContractInterfaceRevision = InterfaceRevision "take.v1"
+          , callableContractCalleeTransition = PreserveCallee
+          , callableContractEffectBound = Set.singleton (SemanticEffect "effect:write")
+          }
+      , callableRefinementCallerAuthority =
+          Set.singleton (CallableAuthorityRequirement "authority:write")
+      , callableRefinementFailures = Set.empty
+      }
+  , sourceCallableOutcomeContracts =
+      [ CallableOutcomeContract
+          { callableOutcomeClass = CallableSuccessOutcome
+          , callableOutcomeState = CallableOutcomeState "take.success"
+          , callableOutcomeCalleeTransition = PreserveCallee
+          , callableOutcomePostconditions =
+              Set.singleton (CallableOutcomeAtom "post:stored")
+          , callableOutcomeResidualObligations =
+              Set.singleton (CallableOutcomeAtom "residual:audit")
+          , callableOutcomeAssumptions =
+              Set.singleton (CallableOutcomeAtom "assumption:storage-live")
+          , callableOutcomeEffects =
+              Set.singleton (CallableOutcomeAtom "effect:write")
+          , callableOutcomeDischargedFacts =
+              Set.singleton (CallableOutcomeAtom "fact:authorized")
+          }
+      ]
+  }
+
+pingSemanticContract :: SourceCallableSemanticContract
+pingSemanticContract = takeSemanticContract
+  { sourceCallableRefinementSurface =
+      (sourceCallableRefinementSurface takeSemanticContract)
+        { callableRefinementMachineShape = CallableMachineShape "Unit->Unit"
+        , callableRefinementContract =
+            (callableRefinementContract
+              (sourceCallableRefinementSurface takeSemanticContract))
+              { callableContractInterfaceRevision = InterfaceRevision "ping.v1"
+              }
+        }
+  }
+
 baseWithCandidate :: SurfaceEnvironment
 baseWithCandidate = (emptySurfaceEnvironment emptyStaticContext)
   { surfaceInitialBindings = Map.singleton "candidate" candidateBinding
   , surfaceCallables = Map.singleton "Take" takeSignature
   }
+
+pingEnvironment :: SurfaceEnvironment
+pingEnvironment = (emptySurfaceEnvironment emptyStaticContext)
+  { surfaceCallables = Map.singleton "Ping" pingSignature
+  }
+
+semanticContracts :: Map.Map DeclarationKey SourceCallableSemanticContract
+semanticContracts =
+  Map.singleton (DeclarationKey "decl.take") takeSemanticContract
+
+pingContracts :: Map.Map DeclarationKey SourceCallableSemanticContract
+pingContracts =
+  Map.singleton (DeclarationKey "decl.ping") pingSemanticContract
 
 validLinearInvoke :: Either String ()
 validLinearInvoke = expectAccept baseWithCandidate
@@ -97,6 +191,68 @@ restrictedResultReturns = expectAccept
     })
   "component Caller { let result = invoke Maker() return result }"
 
+semanticWitnessRetained :: Either String ()
+semanticWitnessRetained = do
+  component <- parseOne
+    "component Caller(candidate) { invoke Take(candidate) return unit }"
+  checked <- mapLeft show $
+    checkSurfaceComponentWithCallableSemantics
+      semanticContracts
+      baseWithCandidate
+      component
+  case checkedCallableInvocations checked of
+    [witness] -> do
+      assert
+        (surfaceInvocationDisplayName witness == "Take")
+        "semantic witness lost source lookup spelling"
+      assert
+        (surfaceInvocationDeclarationKey witness == DeclarationKey "decl.take")
+        "semantic witness lost exact DeclarationKey"
+      assert
+        (surfaceInvocationSemanticContract witness == takeSemanticContract)
+        "semantic witness weakened or reconstructed the complete callable contract"
+    witnesses -> Left
+      ("expected one retained semantic invocation witness, got " <> show witnesses)
+
+semanticOccurrencesPreserved :: Either String ()
+semanticOccurrencesPreserved = do
+  component <- parseOne
+    "component Caller { invoke Ping() invoke Ping() return unit }"
+  checked <- mapLeft show $
+    checkSurfaceComponentWithCallableSemantics pingContracts pingEnvironment component
+  case checkedCallableInvocations checked of
+    [first, second] -> do
+      assert
+        (surfaceInvocationDeclarationKey first == DeclarationKey "decl.ping"
+          && surfaceInvocationDeclarationKey second == DeclarationKey "decl.ping")
+        "repeated calls did not retain the exact callable identity"
+      assert
+        (surfaceInvocationSpan first /= surfaceInvocationSpan second)
+        "repeated calls collapsed to one source occurrence"
+    witnesses -> Left
+      ("expected two retained invocation occurrences, got " <> show witnesses)
+
+semanticContractMissingRejects :: Either String ()
+semanticContractMissingRejects = do
+  component <- parseOne
+    "component Caller(candidate) { invoke Take(candidate) return unit }"
+  case checkSurfaceComponentWithCallableSemantics Map.empty baseWithCandidate component of
+    Left err
+      | surfaceErrorClass err == UnknownCallable -> Right ()
+      | otherwise -> Left ("expected UnknownCallable, got " <> show err)
+    Right result -> Left
+      ("expected missing semantic contract rejection, got " <> show result)
+
+semanticOrdinaryCallIgnored :: Either String ()
+semanticOrdinaryCallIgnored = do
+  component <- parseOne
+    "component Caller(candidate) { Worker(candidate) return unit }"
+  checked <- mapLeft show $
+    checkSurfaceComponentWithCallableSemantics Map.empty namespaceEnvironment component
+  assert
+    (null (checkedCallableInvocations checked))
+    "ordinary provider call was incorrectly promoted to a source callable witness"
+
 expectAccept :: SurfaceEnvironment -> Text -> Either String ()
 expectAccept environment source = do
   component <- parseOne source
@@ -111,6 +267,10 @@ expectReject expected environment source = do
       | surfaceErrorClass err == expected -> Right ()
       | otherwise -> Left ("expected " <> show expected <> ", got " <> show err)
     Right result -> Left ("expected rejection, got acceptance: " <> show result)
+
+assert :: Bool -> String -> Either String ()
+assert True _ = Right ()
+assert False detail = Left detail
 
 parseOne :: Text -> Either String (Located Component)
 parseOne source = do

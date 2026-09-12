@@ -24,8 +24,7 @@ import Phil.Core.Callable
   ( CallableContract (..)
   )
 import Phil.Core.CallableOutcome
-  ( CallableOutcomeContract
-  , CallableOutcomeError
+  ( CallableOutcomeError
   , CheckedCallableOutcomeContract
   , checkCallableOutcomeContract
   )
@@ -35,6 +34,9 @@ import Phil.Core.CallableRefinement
   , CheckedCallableRefinement
   , checkCallableRefinement
   )
+import Phil.Core.CallableSemanticContract
+  ( SourceCallableSemanticContract (..)
+  )
 import Phil.Core.Static
   ( DeclarationKey
   , InterfaceRevision
@@ -43,20 +45,6 @@ import Phil.Surface.Syntax
   ( Component (..)
   , Located (..)
   )
-
--- | Complete already-checked semantic surface attached to one ordinary source
--- callable for CALL-019 resolution. The bounded refinement surface owns machine
--- shape, caller authority, public may-effects, modeled failures, and the global
--- callee transition. The outcome contracts retain the branch-sensitive state,
--- callee transition, postconditions, residual obligations, assumptions, effects,
--- and discharged facts established by CALL-018. Keeping the two authorities in
--- one value prevents ordinary invocation lookup from silently dropping either
--- semantic layer while retaining only a name/parameter shape.
-data SourceCallableSemanticContract = SourceCallableSemanticContract
-  { sourceCallableRefinementSurface :: CallableRefinementSurface
-  , sourceCallableOutcomeContracts :: [CallableOutcomeContract]
-  }
-  deriving (Eq, Ord, Show)
 
 -- | Exact ordinary-source callable identity available to an `invoke` expression.
 -- The display name is only a lookup spelling. Persisted DeclarationKey and the
