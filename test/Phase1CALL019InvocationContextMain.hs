@@ -222,21 +222,13 @@ completeContext = SurfaceCallableCallerContext
       (Set.singleton writeFailure)
   }
 
-checkSource
-  :: SurfaceCallableCallerContext
-  -> Text
-  -> Either SurfaceCallableInvocationContextError CheckedSurfaceCallableInvocationContext
-checkSource context source = do
-  component <- either (Left . errorToContext) Right (parseOne source)
-  checkSurfaceComponentWithInvocationContext contracts context callEnvironment component
-  where
-    errorToContext detail = error ("parse failure in fixture: " <> detail)
-
 completeContextAccepts :: Either String ()
 completeContextAccepts = do
+  component <- parseOne
+    "component Caller { invoke Read() invoke Write() return unit }"
   checked <- mapLeft show $
-    checkSource completeContext
-      "component Caller { invoke Read() invoke Write() return unit }"
+    checkSurfaceComponentWithInvocationContext
+      contracts completeContext callEnvironment component
   let summary = checkedInvocationSemanticSummary checked
   assert
     (surfaceRequiredCallerAuthority summary == Set.fromList [readAuthority, writeAuthority])
