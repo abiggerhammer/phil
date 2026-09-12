@@ -1,0 +1,52 @@
+name: Temporary INT-006 Notary Status Probe
+
+on:
+  push:
+    branches:
+      - phase1-int-006-notary-status-probe
+
+permissions:
+  contents: read
+
+jobs:
+  probe:
+    runs-on: macos-26
+    environment: macos-release
+    env:
+      APPLE_NOTARY_KEY_P8_BASE64: ${{ secrets.APPLE_NOTARY_KEY_P8_BASE64 }}
+      APPLE_NOTARY_KEY_ID: ${{ secrets.APPLE_NOTARY_KEY_ID }}
+      APPLE_NOTARY_ISSUER_ID: ${{ secrets.APPLE_NOTARY_ISSUER_ID }}
+      NOTARY_SUBMISSION_ID: 9b526e90-4a8d-4459-8b07-c78e4549c822
+    steps:
+      - name: Materialize notarization key
+        shell: bash
+        run: |
+          set -euo pipefail
+          p8="$RUNNER_TEMP/AuthKey.p8"
+          export P8_PATH="$p8"
+          python3 <<'PY'
+          import base64, os
+          with open(os.environ['P8_PATH'], 'wb') as output:
+              output.write(base64.b64decode(os.environ['APPLE_NOTARY_KEY_P8_BASE64']))
+          PY
+          chmod 600 "$p8"
+          echo "APPLE_NOTARY_KEY_PATH=$p8" >> "$GITHUB_ENV"
+
+      - name: Query existing notarization submission
+        shell: bash
+        run: |
+          set -euo pipefail
+          xcrun notarytool info "$NOTARY_SUBMISSION_ID" \
+            --key "$APPLE_NOTARY_KEY_PATH" \
+            --key-id "$APPLE_NOTARY_KEY_ID" \
+            --issuer "$APPLE_NOTARY_ISSUER_ID" \
+            --output-format json \
+            | tee "$RUNNER_TEMP/notary-status.json"
+
+          python3 - "$RUNNER_TEMP/notary-status.json" <<'PY'
+          import json, sys
+          with open(sys.argv[1], encoding='utf-8') as source:
+              result = json.load(source)
+          print('notarization_id=' + str(result.get('id')))
+          print('notarization_status=' + str(result.get('status')))
+          PY
