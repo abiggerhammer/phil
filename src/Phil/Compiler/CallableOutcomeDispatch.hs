@@ -91,6 +91,9 @@ data SurfaceCallableOutcomeDispatchError
   | SurfaceCallableOutcomeUnknownSurfaceCallable Text
   | SurfaceCallableOutcomeDeclarationMismatch DeclarationKey DeclarationKey
   | SurfaceCallableOutcomeDispatchConflict DeclarationKey
+  | SurfaceCallableOutcomeControlRequiresSurfaceRepresentation
+      CallableOutcomeClass
+      SurfaceCallableOutcomeControl
   deriving (Eq, Ord, Show)
 
 -- | Bind the exact semantic branch domain of one invocation to explicit source
@@ -175,11 +178,18 @@ makeBranch bindings outcome = do
 -- by the invocation witness. Reinstalling an identical plan is idempotent; a
 -- different plan for the same declaration rejects rather than changing branch
 -- meaning after checking.
+--
+-- The current neutral Surface carrier represents only branch labels and payload
+-- telescopes, so it is competent only for branches that really continue caller
+-- checking. Declared-terminal and fatal callable outcomes must reject here until
+-- Surface has an exact terminal-control carrier; silently installing either as
+-- an ordinary decision arm would invent a continuation forbidden by CALL-019.
 installSurfaceCallableOutcomeDispatch
   :: SurfaceCallableOutcomeDispatchPlan
   -> SurfaceEnvironment
   -> Either SurfaceCallableOutcomeDispatchError SurfaceEnvironment
 installSurfaceCallableOutcomeDispatch plan environment = do
+  mapM_ requireSurfaceRepresentable (surfaceOutcomeDispatchBranches plan)
   let invocation = surfaceOutcomeDispatchInvocation plan
       displayName = surfaceSemanticInvocationDisplayName invocation
       declarationKey = surfaceSemanticInvocationDeclarationKey invocation
@@ -208,6 +218,17 @@ installSurfaceCallableOutcomeDispatch plan environment = do
     Just existing
       | existing == specs -> Right environment
       | otherwise -> Left (SurfaceCallableOutcomeDispatchConflict declarationKey)
+
+requireSurfaceRepresentable
+  :: SurfaceCallableOutcomeBranch
+  -> Either SurfaceCallableOutcomeDispatchError ()
+requireSurfaceRepresentable branch =
+  case surfaceOutcomeBranchControl branch of
+    SurfaceCallableOutcomeContinues -> Right ()
+    control -> Left
+      (SurfaceCallableOutcomeControlRequiresSurfaceRepresentation
+        (surfaceOutcomeBranchClass branch)
+        control)
 
 outcomeControl :: CallableOutcomeClass -> SurfaceCallableOutcomeControl
 outcomeControl outcomeClass = case outcomeClass of
