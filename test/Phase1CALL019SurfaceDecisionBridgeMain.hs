@@ -163,7 +163,7 @@ exactDispatchChecks = do
     "component Caller { decide invoke Lookup() { ok(blob) => { Use(blob) return unit } missing(reason) => { return unit } } }"
   checked <- mapLeft show (checkSurfaceComponent environment component)
   assert
-    (checkedTerminalControls checked == [Return TyUnit])
+    (checkedTerminalControls checked == [Return TyUnit, Return TyUnit])
     ("unexpected terminal controls: " <> show (checkedTerminalControls checked))
 
 missingArmRejects :: Either String ()
