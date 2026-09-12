@@ -245,7 +245,6 @@ Proof.
   exists
     {| phase1_name_list_first := first_value;
        phase1_name_list_rest := rest_values |}.
-  rewrite Hsubtree.
   rewrite Hrepetition_tree.
   unfold phase1_surface_normalize_name_list,
     phase1_surface_expect_nonterminal,
