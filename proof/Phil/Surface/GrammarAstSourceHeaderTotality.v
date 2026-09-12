@@ -658,7 +658,9 @@ Proof.
     + rewrite Hmodule_normalize.
       rewrite Himports_normalize.
       reflexivity.
-    + rewrite Himports_normalize.
+    + injection Hmodule_normalize as Hmodule_name.
+      rewrite <- Hmodule_name.
+      rewrite Himports_normalize.
       reflexivity.
   }
   split.
