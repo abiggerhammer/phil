@@ -3,10 +3,12 @@ name: Phase 1 Surface Grammar AST Spine Correspondence
 on:
   pull_request:
     paths:
+      - 'src/Phil/Surface/GrammarV1/ReferenceAstRepresentationBridge.hs'
       - 'src/Phil/Surface/GrammarV1/ReferenceAstSpine.hs'
       - 'src/Phil/Surface/GrammarV1/ReferenceKernelBridge.hs'
       - 'src/Phil/Surface/GrammarV1/Parser.hs'
       - 'src/Phil/Surface/GrammarV1/Lexer.hs'
+      - 'src/SurfaceGrammarAstRepresentationKernel.hs'
       - 'src/SurfaceGrammarRecognizerKernel.hs'
       - 'test/Phase1GrammarV1ReferenceAstSpineMain.hs'
       - 'test/fixtures/phase1-surface/**'
@@ -15,10 +17,12 @@ on:
   push:
     branches: [main]
     paths:
+      - 'src/Phil/Surface/GrammarV1/ReferenceAstRepresentationBridge.hs'
       - 'src/Phil/Surface/GrammarV1/ReferenceAstSpine.hs'
       - 'src/Phil/Surface/GrammarV1/ReferenceKernelBridge.hs'
       - 'src/Phil/Surface/GrammarV1/Parser.hs'
       - 'src/Phil/Surface/GrammarV1/Lexer.hs'
+      - 'src/SurfaceGrammarAstRepresentationKernel.hs'
       - 'src/SurfaceGrammarRecognizerKernel.hs'
       - 'test/Phase1GrammarV1ReferenceAstSpineMain.hs'
       - 'test/fixtures/phase1-surface/**'
@@ -50,7 +54,7 @@ jobs:
             test/Phase1GrammarV1ReferenceAstSpineMain.hs \
             -o /tmp/phase1-surface-grammar-ast-spine
 
-      - name: Check certified source-file spine against production AST
+      - name: Check certified source-file spine and extracted header against production AST
         run: |
           python3 scripts/check_phase1_surface_corpus.py --emit-parser-cases \
             | /tmp/phase1-surface-grammar-ast-spine
