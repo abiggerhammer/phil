@@ -305,10 +305,10 @@ Proof.
   rewrite (phase1_surface_exact5_round_trip
     items at_tree name_tree open_tree value_tree close_tree Hitems).
   rewrite (phase1_surface_expect_literal_round_trip "@" at_tree Hat).
-  rewrite (phase1_surface_normalize_identifier_round_trip
+  rewrite <- (phase1_surface_normalize_identifier_round_trip
     name_tree name Hname).
   rewrite (phase1_surface_expect_literal_round_trip "(" open_tree Hopen).
-  rewrite (phase1_surface_normalize_metadata_string_round_trip
+  rewrite <- (phase1_surface_normalize_metadata_string_round_trip
     value_tree value Hvalue).
   rewrite (phase1_surface_expect_literal_round_trip ")" close_tree Hclose).
   reflexivity.
