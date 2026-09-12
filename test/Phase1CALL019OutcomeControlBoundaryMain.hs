@@ -31,18 +31,28 @@ import Phil.Core.Static
   , emptyStaticContext
   )
 import Phil.Core.Syntax
-  ( Outcome (..)
+  ( Control (..)
+  , Mode (..)
+  , Outcome (..)
+  , Ty (..)
   )
 import Phil.Surface.Check
   ( CallableOutcomeControlSpec (..)
-  , CallableOutcomeSpec (..)
+  , RejectionClass (..)
   , SurfaceCallableSignature (..)
+  , SurfaceCheckError (..)
+  , SurfaceCheckResult (..)
   , SurfaceEnvironment (..)
+  , checkSurfaceComponent
   , emptySurfaceEnvironment
   )
+import Phil.Surface.Parser (parseSurfaceFile)
 import Phil.Surface.Syntax
-  ( SourcePoint (..)
+  ( Component
+  , Located
+  , SourcePoint (..)
   , SourceSpan (..)
+  , SurfaceFile (..)
   )
 import System.Exit (exitFailure)
 
@@ -53,7 +63,15 @@ main = do
         continuingOutcomesInstall
     , test "CALL-019 declared-terminal outcome installs exact close control"
         declaredTerminalInstalls
-    , test "CALL-019 fatal outcome rejects before Surface installation"
+    , test "CALL-019 decide invoke closes exact declared-terminal branch"
+        declaredTerminalCloses
+    , test "CALL-019 declared-terminal arm cannot contain continuation statements"
+        declaredTerminalBodyRejects
+    , test "CALL-019 declared-terminal arm cannot bind a caller payload"
+        declaredTerminalBinderRejects
+    , test "CALL-019 declared-terminal contract cannot expose a payload telescope"
+        declaredTerminalPayloadRejects
+    , test "CALL-019 fatal outcome remains fail-closed without exact Core fatal control"
         fatalRejects
     ]
   if and results then pure () else exitFailure
@@ -143,15 +161,20 @@ continuingOutcomesInstall = do
       | otherwise -> Left ("unexpected installed outcome count: " <> show (length specs))
     Nothing -> Left "continuing outcome dispatch was not installed"
 
-declaredTerminalInstalls :: Either String ()
-declaredTerminalInstalls = do
+declaredTerminalPlan
+  :: Either String SurfaceEnvironment
+declaredTerminalPlan = do
   let outcomes = [outcome "success" successClass, outcome "closed" terminalClass]
       bindings = Map.fromList
         [ (successClass, binding successClass "ok")
         , (terminalClass, binding terminalClass "closed")
         ]
   plan <- mapLeft show (planSurfaceCallableOutcomeDispatch bindings (account outcomes))
-  installed <- mapLeft show (installSurfaceCallableOutcomeDispatch plan environment)
+  mapLeft show (installSurfaceCallableOutcomeDispatch plan environment)
+
+declaredTerminalInstalls :: Either String ()
+declaredTerminalInstalls = do
+  installed <- declaredTerminalPlan
   case Map.lookup workerKey (surfaceCallableOutcomes installed) of
     Just [successSpec, terminalSpec]
       | callableOutcomeControl successSpec == CallableOutcomeContinues
@@ -161,6 +184,47 @@ declaredTerminalInstalls = do
           ("wrong installed controls: "
             <> show (callableOutcomeControl successSpec, callableOutcomeControl terminalSpec))
     other -> Left ("unexpected installed outcomes: " <> show other)
+
+declaredTerminalCloses :: Either String ()
+declaredTerminalCloses = do
+  installed <- declaredTerminalPlan
+  component <- parseOne
+    "component Caller { decide invoke Worker() { ok => { return unit } closed => { } } }"
+  checked <- mapLeft show (checkSurfaceComponent installed component)
+  assert
+    (checkedTerminalControls checked == [Return TyUnit, Closed (Outcome "closed")])
+    ("unexpected terminal controls: " <> show (checkedTerminalControls checked))
+
+declaredTerminalBodyRejects :: Either String ()
+declaredTerminalBodyRejects = do
+  installed <- declaredTerminalPlan
+  component <- parseOne
+    "component Caller { decide invoke Worker() { ok => { return unit } closed => { return unit } } }"
+  expectSurfaceError ControlAfterTerminal installed component
+
+declaredTerminalBinderRejects :: Either String ()
+declaredTerminalBinderRejects = do
+  installed <- declaredTerminalPlan
+  component <- parseOne
+    "component Caller { decide invoke Worker() { ok => { return unit } closed(reason) => { } } }"
+  expectSurfaceError TypeMismatch installed component
+
+declaredTerminalPayloadRejects :: Either String ()
+declaredTerminalPayloadRejects = do
+  let outcomes = [outcome "success" successClass, outcome "closed" terminalClass]
+      terminalBinding = (binding terminalClass "closed")
+        { surfaceOutcomeBindingPayload = [(Unrestricted, TyOpaque "Never")]
+        }
+      bindings = Map.fromList
+        [ (successClass, binding successClass "ok")
+        , (terminalClass, terminalBinding)
+        ]
+  plan <- mapLeft show (planSurfaceCallableOutcomeDispatch bindings (account outcomes))
+  case installSurfaceCallableOutcomeDispatch plan environment of
+    Left (SurfaceCallableTerminalOutcomePayloadUnsupported actual)
+      | actual == terminalClass -> Right ()
+    Left other -> Left ("wrong terminal payload rejection: " <> show other)
+    Right installed -> Left ("terminal payload was accepted: " <> show installed)
 
 fatalRejects :: Either String ()
 fatalRejects = do
@@ -187,7 +251,29 @@ expectControlError expectedClass expectedControl result = case result of
     | otherwise -> Left
         ("wrong control rejection: " <> show (actualClass, actualControl))
   Left other -> Left ("wrong rejection: " <> show other)
-  Right _ -> Left "terminal callable outcome was accepted by neutral Surface dispatch"
+  Right _ -> Left "fatal callable outcome was accepted without exact Surface/Core control"
+
+expectSurfaceError
+  :: RejectionClass
+  -> SurfaceEnvironment
+  -> Located Component
+  -> Either String ()
+expectSurfaceError expected env component =
+  case checkSurfaceComponent env component of
+    Left err | surfaceErrorClass err == expected -> Right ()
+    Left err -> Left ("unexpected surface error: " <> show err)
+    Right checked -> Left ("expected rejection, got " <> show checked)
+
+parseOne :: Text -> Either String (Located Component)
+parseOne source = do
+  parsed <- mapLeft show (parseSurfaceFile "call019-outcome-control" source)
+  case surfaceComponents parsed of
+    [component] -> Right component
+    components -> Left ("expected one component, got " <> show (length components))
+
+assert :: Bool -> String -> Either String ()
+assert True _ = Right ()
+assert False detail = Left detail
 
 mapLeft :: (a -> b) -> Either a c -> Either b c
 mapLeft f = either (Left . f) Right
