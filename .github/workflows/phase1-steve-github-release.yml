@@ -7,6 +7,8 @@ on:
       - '.github/workflows/phase1-steve-github-release.yml'
       - 'scripts/release/build-steve-phase1-package.sh'
       - 'scripts/release/build-steve-phase1-darwin-package.sh'
+      - 'scripts/release/build-notarized-steve-phase1-darwin-package.sh'
+      - 'scripts/release/notarize-darwin-archive.sh'
       - 'scripts/release/smoke-steve-phase1-package.sh'
       - 'docs/phase-1/steve-external-smoke-v1.md'
   push:
@@ -16,6 +18,8 @@ on:
       - '.github/workflows/phase1-steve-github-release.yml'
       - 'scripts/release/build-steve-phase1-package.sh'
       - 'scripts/release/build-steve-phase1-darwin-package.sh'
+      - 'scripts/release/build-notarized-steve-phase1-darwin-package.sh'
+      - 'scripts/release/notarize-darwin-archive.sh'
       - 'scripts/release/smoke-steve-phase1-package.sh'
       - 'docs/phase-1/steve-external-smoke-v1.md'
 
@@ -23,7 +27,10 @@ permissions:
   contents: read
 
 env:
-  RELEASE_TAG: steve-v0.1.0-phase1
+  RELEASE_TAG: steve-v0.1.1-phase1
+  PHIL_STEVE_PACKAGE_VERSION: 0.1.1-phase1
+  PHIL_NOTARY_TIMEOUT_SECONDS: '1200'
+  PHIL_NOTARY_POLL_SECONDS: '30'
 
 jobs:
   linux-package:
@@ -49,7 +56,7 @@ jobs:
         run: |
           set -euo pipefail
           out="$RUNNER_TEMP/steve-release-linux"
-          archive="phil-steve-0.1.0-phase1-x86_64-linux.tar.gz"
+          archive="phil-steve-0.1.1-phase1-x86_64-linux.tar.gz"
           (
             cd "$out"
             sha256sum -c "$archive.sha256"
@@ -58,7 +65,7 @@ jobs:
           mkdir -p "$consumer"
           tar -xzf "$out/$archive" -C "$consumer"
           (
-            cd "$consumer/phil-steve-0.1.0-phase1-x86_64-linux"
+            cd "$consumer/phil-steve-0.1.1-phase1-x86_64-linux"
             ./smoke-test.sh
           ) | tee "$out/smoke-evidence.txt"
           grep -q '^PASS: packaged Phase-1 Steve put/get and corruption smoke$' \
@@ -69,13 +76,21 @@ jobs:
         with:
           name: steve-release-platform-linux
           path: |
-            ${{ runner.temp }}/steve-release-linux/phil-steve-0.1.0-phase1-x86_64-linux.tar.gz
-            ${{ runner.temp }}/steve-release-linux/phil-steve-0.1.0-phase1-x86_64-linux.tar.gz.sha256
+            ${{ runner.temp }}/steve-release-linux/phil-steve-0.1.1-phase1-x86_64-linux.tar.gz
+            ${{ runner.temp }}/steve-release-linux/phil-steve-0.1.1-phase1-x86_64-linux.tar.gz.sha256
             ${{ runner.temp }}/steve-release-linux/smoke-evidence.txt
           if-no-files-found: error
 
-  darwin-package:
+  darwin-build-submit:
     runs-on: macos-26
+    environment: macos-release
+    env:
+      APPLE_DEVELOPER_ID_P12_BASE64: ${{ secrets.APPLE_DEVELOPER_ID_P12_BASE64 }}
+      APPLE_DEVELOPER_ID_P12_PASSWORD: ${{ secrets.APPLE_DEVELOPER_ID_P12_PASSWORD }}
+      APPLE_TEAM_ID: ${{ secrets.APPLE_TEAM_ID }}
+      APPLE_NOTARY_KEY_P8_BASE64: ${{ secrets.APPLE_NOTARY_KEY_P8_BASE64 }}
+      APPLE_NOTARY_KEY_ID: ${{ secrets.APPLE_NOTARY_KEY_ID }}
+      APPLE_NOTARY_ISSUER_ID: ${{ secrets.APPLE_NOTARY_ISSUER_ID }}
     steps:
       - uses: actions/checkout@v4
 
@@ -83,7 +98,7 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
-          test "$(uname -m)" = "arm64"
+          test "$(uname -m)" = arm64
           sw_vers
 
       - uses: haskell-actions/setup@v2
@@ -91,51 +106,166 @@ jobs:
           ghc-version: '9.6.7'
           cabal-version: 'latest'
 
-      - name: Build Darwin release asset
+      - name: Import Developer ID and notarization credentials
+        shell: bash
+        run: |
+          set -euo pipefail
+          p12="$RUNNER_TEMP/phil-developer-id.p12"
+          p8="$RUNNER_TEMP/AuthKey.p8"
+          export P12_PATH="$p12" P8_PATH="$p8"
+          python3 <<'PY'
+          import base64
+          import os
+
+          with open(os.environ['P12_PATH'], 'wb') as output:
+              output.write(base64.b64decode(os.environ['APPLE_DEVELOPER_ID_P12_BASE64']))
+          with open(os.environ['P8_PATH'], 'wb') as output:
+              output.write(base64.b64decode(os.environ['APPLE_NOTARY_KEY_P8_BASE64']))
+          PY
+          chmod 600 "$p12" "$p8"
+
+          keychain="$RUNNER_TEMP/phil-signing.keychain-db"
+          keychain_password="$(openssl rand -hex 24)"
+          security create-keychain -p "$keychain_password" "$keychain"
+          security set-keychain-settings -lut 21600 "$keychain"
+          security unlock-keychain -p "$keychain_password" "$keychain"
+          security import "$p12" \
+            -k "$keychain" \
+            -P "$APPLE_DEVELOPER_ID_P12_PASSWORD" \
+            -T /usr/bin/codesign \
+            -T /usr/bin/security
+          security set-key-partition-list \
+            -S apple-tool:,apple:,codesign: \
+            -s -k "$keychain_password" "$keychain"
+          security list-keychains -d user -s "$keychain"
+
+          identity="$(security find-identity -v -p codesigning "$keychain" \
+            | awk -F'\"' '/Developer ID Application/ {print $2; exit}')"
+          test -n "$identity"
+          printf 'Developer ID identity: %s\n' "$identity"
+          echo "PHIL_DARWIN_CODESIGN_IDENTITY=$identity" >> "$GITHUB_ENV"
+          echo "APPLE_NOTARY_KEY_PATH=$p8" >> "$GITHUB_ENV"
+
+      - name: Build and Developer-ID sign Darwin release asset
+        timeout-minutes: 15
         shell: bash
         run: |
           set -euo pipefail
           out="$RUNNER_TEMP/steve-release-darwin"
           mkdir -p "$out"
-          scripts/release/build-steve-phase1-darwin-package.sh "$out"
+          bash scripts/release/build-notarized-steve-phase1-darwin-package.sh build "$out" \
+            | tee "$out/build-sign-evidence.txt"
+          archive='phil-steve-0.1.1-phase1-aarch64-apple-darwin.zip'
+          test -s "$out/$archive"
+          test -s "$out/$archive.sha256"
 
-      - name: Verify and smoke Darwin release asset
+      - name: Submit exact signed Darwin asset for notarization
+        timeout-minutes: 5
         shell: bash
         run: |
           set -euo pipefail
           out="$RUNNER_TEMP/steve-release-darwin"
-          archive="phil-steve-0.1.0-phase1-aarch64-apple-darwin.tar.gz"
-          (
-            cd "$out"
-            shasum -a 256 -c "$archive.sha256"
-          )
-          consumer="$RUNNER_TEMP/steve-release-darwin-consumer"
-          mkdir -p "$consumer"
-          tar -xzf "$out/$archive" -C "$consumer"
-          package="$consumer/phil-steve-0.1.0-phase1-aarch64-apple-darwin"
-          file "$package/bin/steve" | grep -q 'Mach-O 64-bit executable arm64'
-          file "$package/bin/philc" | grep -q 'Mach-O 64-bit executable arm64'
-          (
-            cd "$package"
-            ./smoke-test.sh
-          ) | tee "$out/smoke-evidence.txt"
-          grep -q '^PASS: packaged Phase-1 Steve put/get and corruption smoke$' \
+          archive="$out/phil-steve-0.1.1-phase1-aarch64-apple-darwin.zip"
+          bash scripts/release/notarize-darwin-archive.sh submit "$archive" "$out"
+          test -s "$out/$(basename "$archive").notary-id"
+          test -s "$out/$(basename "$archive").notary-submit.json"
+
+      - name: Preserve exact signed notarization submission
+        uses: actions/upload-artifact@v4
+        with:
+          name: steve-release-darwin-notary-submission
+          path: |
+            ${{ runner.temp }}/steve-release-darwin/phil-steve-0.1.1-phase1-aarch64-apple-darwin.zip
+            ${{ runner.temp }}/steve-release-darwin/phil-steve-0.1.1-phase1-aarch64-apple-darwin.zip.sha256
+            ${{ runner.temp }}/steve-release-darwin/phil-steve-0.1.1-phase1-aarch64-apple-darwin.zip.notary-id
+            ${{ runner.temp }}/steve-release-darwin/phil-steve-0.1.1-phase1-aarch64-apple-darwin.zip.notary-submit.json
+            ${{ runner.temp }}/steve-release-darwin/build-sign-evidence.txt
+          if-no-files-found: error
+          retention-days: 7
+
+  darwin-poll-assess:
+    needs:
+      - darwin-build-submit
+    runs-on: macos-26
+    environment: macos-release
+    env:
+      APPLE_TEAM_ID: ${{ secrets.APPLE_TEAM_ID }}
+      APPLE_NOTARY_KEY_P8_BASE64: ${{ secrets.APPLE_NOTARY_KEY_P8_BASE64 }}
+      APPLE_NOTARY_KEY_ID: ${{ secrets.APPLE_NOTARY_KEY_ID }}
+      APPLE_NOTARY_ISSUER_ID: ${{ secrets.APPLE_NOTARY_ISSUER_ID }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Verify native Apple Silicon runner
+        shell: bash
+        run: |
+          set -euo pipefail
+          test "$(uname -m)" = arm64
+          sw_vers
+
+      - name: Restore exact signed notarization submission
+        uses: actions/download-artifact@v4
+        with:
+          name: steve-release-darwin-notary-submission
+          path: ${{ runner.temp }}/steve-release-darwin
+
+      - name: Materialize notarization credentials
+        shell: bash
+        run: |
+          set -euo pipefail
+          p8="$RUNNER_TEMP/AuthKey.p8"
+          export P8_PATH="$p8"
+          python3 <<'PY'
+          import base64
+          import os
+
+          with open(os.environ['P8_PATH'], 'wb') as output:
+              output.write(base64.b64decode(os.environ['APPLE_NOTARY_KEY_P8_BASE64']))
+          PY
+          chmod 600 "$p8"
+          echo "APPLE_NOTARY_KEY_PATH=$p8" >> "$GITHUB_ENV"
+
+      - name: Poll notarization to a bounded result
+        timeout-minutes: 22
+        shell: bash
+        run: |
+          set -euo pipefail
+          out="$RUNNER_TEMP/steve-release-darwin"
+          archive="$out/phil-steve-0.1.1-phase1-aarch64-apple-darwin.zip"
+          bash scripts/release/notarize-darwin-archive.sh poll "$archive" "$out" \
+            | tee "$out/notarization-evidence.txt"
+          grep -q '^notarization=Accepted$' "$out/notarization-evidence.txt"
+
+      - name: Verify quarantined Darwin release asset
+        timeout-minutes: 5
+        shell: bash
+        run: |
+          set -euo pipefail
+          out="$RUNNER_TEMP/steve-release-darwin"
+          bash scripts/release/build-notarized-steve-phase1-darwin-package.sh assess "$out" \
+            | tee "$out/smoke-evidence.txt"
+          grep -q '^PASS: Developer-ID signed, notarized, quarantined Phase-1 Steve package$' \
             "$out/smoke-evidence.txt"
-          grep -Eq '^platform=Darwin .*arm64$' "$out/smoke-evidence.txt"
 
       - uses: actions/upload-artifact@v4
         with:
           name: steve-release-platform-darwin
           path: |
-            ${{ runner.temp }}/steve-release-darwin/phil-steve-0.1.0-phase1-aarch64-apple-darwin.tar.gz
-            ${{ runner.temp }}/steve-release-darwin/phil-steve-0.1.0-phase1-aarch64-apple-darwin.tar.gz.sha256
+            ${{ runner.temp }}/steve-release-darwin/phil-steve-0.1.1-phase1-aarch64-apple-darwin.zip
+            ${{ runner.temp }}/steve-release-darwin/phil-steve-0.1.1-phase1-aarch64-apple-darwin.zip.sha256
+            ${{ runner.temp }}/steve-release-darwin/phil-steve-0.1.1-phase1-aarch64-apple-darwin.zip.notary-id
+            ${{ runner.temp }}/steve-release-darwin/phil-steve-0.1.1-phase1-aarch64-apple-darwin.zip.notary-submit.json
+            ${{ runner.temp }}/steve-release-darwin/phil-steve-0.1.1-phase1-aarch64-apple-darwin.zip.notary-info.json
+            ${{ runner.temp }}/steve-release-darwin/build-sign-evidence.txt
+            ${{ runner.temp }}/steve-release-darwin/notarization-evidence.txt
             ${{ runner.temp }}/steve-release-darwin/smoke-evidence.txt
           if-no-files-found: error
+          retention-days: 7
 
   release-bundle:
     needs:
       - linux-package
-      - darwin-package
+      - darwin-poll-assess
     runs-on: ubuntu-24.04
     steps:
       - uses: actions/download-artifact@v4
@@ -148,11 +278,13 @@ jobs:
         run: |
           set -euo pipefail
           mkdir -p release-assets
-          find incoming -type f \( -name '*.tar.gz' -o -name '*.tar.gz.sha256' \) \
-            -exec cp '{}' release-assets/ \;
+          find incoming -type f \( \
+              -name '*.tar.gz' -o -name '*.tar.gz.sha256' -o \
+              -name '*.zip' -o -name '*.zip.sha256' \
+            \) -exec cp '{}' release-assets/ \;
 
-          linux='phil-steve-0.1.0-phase1-x86_64-linux.tar.gz'
-          darwin='phil-steve-0.1.0-phase1-aarch64-apple-darwin.tar.gz'
+          linux='phil-steve-0.1.1-phase1-x86_64-linux.tar.gz'
+          darwin='phil-steve-0.1.1-phase1-aarch64-apple-darwin.zip'
           test -s "release-assets/$linux"
           test -s "release-assets/$linux.sha256"
           test -s "release-assets/$darwin"
@@ -166,27 +298,31 @@ jobs:
           )
 
           cat > release-assets/release-notes.md <<'EOF'
-          # Phil Steve 0.1 — Phase 1
+          # Phil Steve 0.1.1 — Phase 1
 
-          This is the Phase-1 Steve content-addressed-store release. Each package
-          contains native `steve` and `philc` executables, canonical Phil source,
-          certified release/TCB records, and `./smoke-test.sh`. No GitHub CLI,
-          repository checkout, GHC, Cabal, or LLVM installation is required to use
-          the downloaded package.
+          This is the corrected Phase-1 Steve content-addressed-store release.
+          The Apple Silicon package is Developer-ID signed and Apple-notarized;
+          `steve-v0.1.0-phase1` remains published unchanged as historical evidence
+          of the original unsigned distribution boundary.
+
+          Each package contains native `steve` and `philc` executables, canonical
+          Phil source, certified release/TCB records, and `./smoke-test.sh`. No
+          GitHub CLI, repository checkout, GHC, Cabal, or LLVM installation is
+          required to use the downloaded package.
 
           ## Apple Silicon macOS
 
           Download these two assets from this release page:
 
-          - `phil-steve-0.1.0-phase1-aarch64-apple-darwin.tar.gz`
-          - `phil-steve-0.1.0-phase1-aarch64-apple-darwin.tar.gz.sha256`
+          - `phil-steve-0.1.1-phase1-aarch64-apple-darwin.zip`
+          - `phil-steve-0.1.1-phase1-aarch64-apple-darwin.zip.sha256`
 
-          Then run:
+          Then run, without removing quarantine or using Gatekeeper bypasses:
 
           ```sh
-          shasum -a 256 -c phil-steve-0.1.0-phase1-aarch64-apple-darwin.tar.gz.sha256
-          tar -xzf phil-steve-0.1.0-phase1-aarch64-apple-darwin.tar.gz
-          cd phil-steve-0.1.0-phase1-aarch64-apple-darwin
+          shasum -a 256 -c phil-steve-0.1.1-phase1-aarch64-apple-darwin.zip.sha256
+          ditto -x -k phil-steve-0.1.1-phase1-aarch64-apple-darwin.zip .
+          cd phil-steve-0.1.1-phase1-aarch64-apple-darwin
           ./smoke-test.sh
           ```
 
@@ -194,15 +330,15 @@ jobs:
 
           Download these two assets:
 
-          - `phil-steve-0.1.0-phase1-x86_64-linux.tar.gz`
-          - `phil-steve-0.1.0-phase1-x86_64-linux.tar.gz.sha256`
+          - `phil-steve-0.1.1-phase1-x86_64-linux.tar.gz`
+          - `phil-steve-0.1.1-phase1-x86_64-linux.tar.gz.sha256`
 
           Then run:
 
           ```sh
-          sha256sum -c phil-steve-0.1.0-phase1-x86_64-linux.tar.gz.sha256
-          tar -xzf phil-steve-0.1.0-phase1-x86_64-linux.tar.gz
-          cd phil-steve-0.1.0-phase1-x86_64-linux
+          sha256sum -c phil-steve-0.1.1-phase1-x86_64-linux.tar.gz.sha256
+          tar -xzf phil-steve-0.1.1-phase1-x86_64-linux.tar.gz
+          cd phil-steve-0.1.1-phase1-x86_64-linux
           ./smoke-test.sh
           ```
 
@@ -215,7 +351,10 @@ jobs:
             echo 'Linux package smoke:'
             cat incoming/steve-release-platform-linux/smoke-evidence.txt
             echo
-            echo 'Darwin package smoke:'
+            echo 'Darwin notarization:'
+            cat incoming/steve-release-platform-darwin/notarization-evidence.txt
+            echo
+            echo 'Darwin quarantine-intact package smoke:'
             cat incoming/steve-release-platform-darwin/smoke-evidence.txt
           } > release-assets/build-evidence.txt
 
@@ -245,8 +384,8 @@ jobs:
         run: |
           set -euo pipefail
           cd dist
-          linux='phil-steve-0.1.0-phase1-x86_64-linux.tar.gz'
-          darwin='phil-steve-0.1.0-phase1-aarch64-apple-darwin.tar.gz'
+          linux='phil-steve-0.1.1-phase1-x86_64-linux.tar.gz'
+          darwin='phil-steve-0.1.1-phase1-aarch64-apple-darwin.zip'
 
           sha256sum -c "$linux.sha256"
           sha256sum -c "$darwin.sha256"
@@ -260,14 +399,14 @@ jobs:
             gh release edit "$RELEASE_TAG" \
               --repo "$GITHUB_REPOSITORY" \
               --target "$GITHUB_SHA" \
-              --title 'Phil Steve 0.1 — Phase 1' \
+              --title 'Phil Steve 0.1.1 — Phase 1' \
               --notes-file release-notes.md \
               --draft
           else
             gh release create "$RELEASE_TAG" \
               --repo "$GITHUB_REPOSITORY" \
               --target "$GITHUB_SHA" \
-              --title 'Phil Steve 0.1 — Phase 1' \
+              --title 'Phil Steve 0.1.1 — Phase 1' \
               --notes-file release-notes.md \
               --draft
           fi
