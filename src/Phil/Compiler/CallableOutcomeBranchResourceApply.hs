@@ -1,3 +1,5 @@
+{-# LANGUAGE OverloadedStrings #-}
+
 module Phil.Compiler.CallableOutcomeBranchResourceApply
   ( applySurfaceCallableOutcomeResourceResidue
   ) where
