@@ -28,6 +28,15 @@ Record Phase1SurfaceExact8 (A : Type) : Type := {
   phase1_exact8_8 : A
 }.
 
+Arguments phase1_exact8_1 {A} _.
+Arguments phase1_exact8_2 {A} _.
+Arguments phase1_exact8_3 {A} _.
+Arguments phase1_exact8_4 {A} _.
+Arguments phase1_exact8_5 {A} _.
+Arguments phase1_exact8_6 {A} _.
+Arguments phase1_exact8_7 {A} _.
+Arguments phase1_exact8_8 {A} _.
+
 Definition phase1_surface_exact8 {A : Type}
   (items : list A) : option (Phase1SurfaceExact8 A) :=
   match items with
