@@ -1,0 +1,33 @@
+name: Temporary CALL-019 Branch Local Fact Bindings
+
+on:
+  push:
+    branches:
+      - phase1-call019-branch-local-fact-bindings
+
+permissions:
+  contents: read
+
+jobs:
+  branch-local-fact-bindings:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v4
+      - name: Set up Haskell
+        uses: haskell-actions/setup@v2
+        with:
+          ghc-version: '9.6.7'
+          cabal-version: 'latest'
+      - name: Build Haskell substrate
+        run: cabal build all --enable-tests
+      - name: Check CALL-019 branch-local fact bindings
+        run: cabal exec -- runghc -Wall -Werror -isrc -itest test/Phase1CALL019OutcomeBranchFactsMain.hs
+      - name: Replay CALL-019 outcome continuation state
+        run: cabal exec -- runghc -Wall -Werror -isrc -itest test/Phase1CALL019OutcomeContinuationStateMain.hs
+      - name: Replay CALL-019 branch-aware invocation context
+        run: cabal exec -- runghc -Wall -Werror -isrc -itest test/Phase1CALL019BranchAwareInvocationContextMain.hs
+      - name: Replay CALL-019 branch semantic witness
+        run: cabal exec -- runghc -Wall -Werror -isrc -itest test/Phase1CALL019OutcomeBranchSemanticWitnessMain.hs
+      - name: Replay Steve invoke integration
+        run: cabal exec -- runghc -Wall -Werror -isrc -itest test/Phase1INT006SteveApplicationShellMain.hs
