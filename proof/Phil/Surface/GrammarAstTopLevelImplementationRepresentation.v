@@ -102,17 +102,9 @@ Theorem phase1_surface_top_level_implementation_round_trip :
       (phase1_surface_top_level_selected_tree top_level) = top_level.
 Proof.
   intros [attributes [tag selected_tree]].
-  change
-    {| phase1_top_level_spine_attributes :=
-         map phase1_surface_attribute_from_implementation
-           (map phase1_surface_attribute_to_implementation attributes);
-       phase1_top_level_spine_declaration :=
-         {| phase1_declaration_spine_tag := tag;
-            phase1_declaration_spine_selected_tree := selected_tree |} |} =
-    {| phase1_top_level_spine_attributes := attributes;
-       phase1_top_level_spine_declaration :=
-         {| phase1_declaration_spine_tag := tag;
-            phase1_declaration_spine_selected_tree := selected_tree |} |}.
+  unfold phase1_surface_top_level_from_implementation.
+  unfold phase1_surface_top_level_to_implementation.
+  unfold phase1_surface_top_level_selected_tree.
   rewrite phase1_surface_attributes_implementation_round_trip.
   reflexivity.
 Qed.
