@@ -20,7 +20,7 @@ import Phil.Compiler.CallableOutcomeDispatch
   )
 import Phil.Core.CallableOutcome
   ( CallableOutcomeClass (..)
-  , CallableOutcomeContract
+  , CallableOutcomeContract (..)
   )
 import Phil.Core.CallableRefinement
   ( CallableFailure (..)
@@ -169,6 +169,9 @@ neutralBranchMatches
 neutralBranchMatches branch spec =
   callableOutcomeLabel spec == surfaceOutcomeBranchLabel branch
     && callableOutcomePayload spec == surfaceOutcomeBranchPayload branch
+    && callableOutcomeResidualObligationArity spec
+      == Set.size (callableOutcomeResidualObligations
+        (surfaceOutcomeBranchContract branch))
     && neutralControlMatches branch (callableOutcomeControl spec)
 
 neutralControlMatches

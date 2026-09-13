@@ -96,6 +96,7 @@ data SurfaceCallableOutcomeDispatchError
       CallableOutcomeClass
       SurfaceCallableOutcomeControl
   | SurfaceCallableTerminalOutcomePayloadUnsupported CallableOutcomeClass
+  | SurfaceCallableTerminalResidualObligationsUnsupported CallableOutcomeClass
   | SurfaceCallableOutcomeControlMismatch
       CallableOutcomeClass
       SurfaceCallableOutcomeControl
@@ -229,12 +230,18 @@ surfaceSpec branch =
       Right (continuingSpec branch)
     (SurfaceCallableOutcomeDeclaredTerminal,
         CallableNonSuccessOutcome (CallableDeclaredTerminal outcome))
+      | not (Set.null (callableOutcomeResidualObligations
+          (surfaceOutcomeBranchContract branch))) -> Left
+          (SurfaceCallableTerminalResidualObligationsUnsupported
+            (surfaceOutcomeBranchClass branch))
       | null (surfaceOutcomeBranchPayload branch) ->
           Right CallableOutcomeSpec
             { callableOutcomeLabel = surfaceOutcomeBranchLabel branch
             , callableOutcomePayload = []
             , callableOutcomeControl = CallableOutcomeCloses outcome
             , callableOutcomeFacts = []
+            , callableOutcomeResidualObligationArity = 0
+            , callableOutcomeObligations = []
             }
       | otherwise -> Left
           (SurfaceCallableTerminalOutcomePayloadUnsupported
@@ -253,6 +260,10 @@ continuingSpec branch = CallableOutcomeSpec
   , callableOutcomePayload = surfaceOutcomeBranchPayload branch
   , callableOutcomeControl = CallableOutcomeContinues
   , callableOutcomeFacts = []
+  , callableOutcomeResidualObligationArity =
+      Set.size (callableOutcomeResidualObligations
+        (surfaceOutcomeBranchContract branch))
+  , callableOutcomeObligations = []
   }
 
 outcomeControl :: CallableOutcomeClass -> SurfaceCallableOutcomeControl
