@@ -8,7 +8,7 @@ Extraction Language Haskell.
 Extract Inductive bool => "Prelude.Bool" [ "Prelude.True" "Prelude.False" ].
 Extract Inductive list => "[]" [ "[]" "(:)" ].
 Extract Inductive option => "Prelude.Maybe" [ "Prelude.Just" "Prelude.Nothing" ].
-Extract Inductive unit => "Prelude.()" [ "Prelude.()" ].
+Extract Inductive unit => "()" [ "()" ].
 
 Extraction "SurfaceGrammarAstRecordDataCarrierKernel"
   phase1_surface_make_production_generic_param
