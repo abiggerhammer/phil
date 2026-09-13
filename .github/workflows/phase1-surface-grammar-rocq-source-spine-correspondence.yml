@@ -41,7 +41,7 @@ jobs:
           python3 scripts/derive_phase1_surface_grammar.py --check
           python3 scripts/derive_phase1_surface_determinacy_certificate.py --check
 
-      - name: Compile proof-side source correspondence and representation bridge
+      - name: Compile proof-side source correspondence and representation bridges
         shell: bash
         run: |
           set -euo pipefail
@@ -54,20 +54,27 @@ jobs:
           make -f Makefile.surface-source-spine -j2 \
             proof/Phil/Surface/GrammarAstSourceSpine.vo \
             proof/Phil/Surface/GrammarAstImplementationRepresentation.vo \
-            proof/Phil/Surface/GrammarAstImplementationRepresentationExtraction.vo
+            proof/Phil/Surface/GrammarAstImplementationRepresentationExtraction.vo \
+            proof/Phil/Surface/GrammarAstTopLevelImplementationRepresentation.vo \
+            proof/Phil/Surface/GrammarAstTopLevelImplementationRepresentationExtraction.vo
 
-      - name: Record source-header representation identities
+      - name: Record source and top-level representation identities
         shell: bash
         run: |
           set -euo pipefail
           test -f SurfaceGrammarAstRepresentationKernel.hs
+          test -f SurfaceGrammarAstTopLevelRepresentationKernel.hs
           mkdir -p surface-grammar-ast-representation
           cp SurfaceGrammarAstRepresentationKernel.hs surface-grammar-ast-representation/
+          cp SurfaceGrammarAstTopLevelRepresentationKernel.hs surface-grammar-ast-representation/
           sha256sum \
             grammar/phase1-surface.ebnf \
             proof/Phil/Surface/GrammarAstImplementationRepresentation.v \
             proof/Phil/Surface/GrammarAstImplementationRepresentation.vo \
             SurfaceGrammarAstRepresentationKernel.hs \
+            proof/Phil/Surface/GrammarAstTopLevelImplementationRepresentation.v \
+            proof/Phil/Surface/GrammarAstTopLevelImplementationRepresentation.vo \
+            SurfaceGrammarAstTopLevelRepresentationKernel.hs \
             > surface-grammar-ast-representation/identities.sha256
           cat surface-grammar-ast-representation/identities.sha256
 
