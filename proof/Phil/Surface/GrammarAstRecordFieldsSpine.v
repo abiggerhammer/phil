@@ -130,7 +130,7 @@ Proof.
   rewrite (phase1_surface_expect_sequence_round_trip tree items Hsequence).
   rewrite (phase1_surface_exact2_round_trip items comma_tree field_tree Hitems).
   rewrite (phase1_surface_expect_literal_round_trip "," comma_tree Hcomma).
-  rewrite (phase1_surface_normalize_field_spine_round_trip
+  rewrite <- (phase1_surface_normalize_field_spine_round_trip
     field_tree actual Hfield).
   reflexivity.
 Qed.
@@ -280,13 +280,13 @@ Proof.
   rewrite (phase1_surface_expect_sequence_round_trip tree items Hsequence).
   rewrite (phase1_surface_exact3_round_trip
     items first_tree rest_tree trailing_tree Hitems).
-  rewrite (phase1_surface_normalize_field_spine_round_trip
+  rewrite <- (phase1_surface_normalize_field_spine_round_trip
     first_tree first Hfirst).
   rewrite (phase1_surface_expect_repetition_round_trip
     rest_tree rest_trees Hrest_trees).
-  rewrite (phase1_surface_normalize_field_suffixes_round_trip
+  rewrite <- (phase1_surface_normalize_field_suffixes_round_trip
     rest_trees rest Hrest).
-  rewrite (phase1_surface_normalize_trailing_comma_round_trip
+  rewrite <- (phase1_surface_normalize_trailing_comma_round_trip
     trailing_tree trailing Htrailing).
   reflexivity.
 Qed.
@@ -325,7 +325,7 @@ Proof.
     unfold phase1_surface_optional_fields_tree.
     rewrite (phase1_surface_expect_optional_round_trip
       tree (Some body) Hoptional).
-    rewrite (phase1_surface_normalize_field_list_spine_round_trip
+    rewrite <- (phase1_surface_normalize_field_list_spine_round_trip
       body actual Hfields).
     reflexivity.
   - inversion Hnormalize; subst fields.
