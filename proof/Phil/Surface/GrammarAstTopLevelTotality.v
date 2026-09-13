@@ -1,6 +1,7 @@
 From Stdlib Require Import Lists.List Strings.String.
 
 From Phil.Surface Require Import
+  GrammarAstSourceHeader
   GrammarAstSourceHeaderTotality
   GrammarAstTopLevelSpine
   GrammarDeterminacySimpleResolverSoundness.
@@ -51,6 +52,29 @@ Proof.
   reflexivity.
 Qed.
 
+Lemma phase1_surface_declaration_items_exact :
+  phase1_surface_declaration_items =
+    [ ENonterminal "record_decl";
+      ENonterminal "data_decl";
+      ENonterminal "type_alias_decl";
+      ENonterminal "claim_decl";
+      ENonterminal "callable_contract_decl";
+      ENonterminal "function_decl";
+      ENonterminal "provider_contract_decl";
+      ENonterminal "provider_implementation_decl";
+      ENonterminal "opaque_provider_implementation_decl";
+      ENonterminal "protocol_decl";
+      ENonterminal "capability_decl";
+      ENonterminal "boundary_decl";
+      ENonterminal "architecture_decl";
+      ENonterminal "component_decl";
+      ENonterminal "program_decl"
+    ].
+Proof.
+  vm_compute.
+  reflexivity.
+Qed.
+
 Lemma phase1_surface_declaration_item_matches_tag :
   forall index item,
     nth_error phase1_surface_declaration_items index = Some item ->
@@ -59,76 +83,76 @@ Lemma phase1_surface_declaration_item_matches_tag :
       item = ENonterminal (phase1_surface_declaration_tag_name tag).
 Proof.
   intros index item Hnth.
+  rewrite phase1_surface_declaration_items_exact in Hnth.
   destruct index as [|index].
-  - vm_compute in Hnth.
+  - cbn in Hnth.
     inversion Hnth; subst item.
     exists Phase1RecordDeclaration. split; reflexivity.
   - destruct index as [|index].
-    + vm_compute in Hnth.
+    + cbn in Hnth.
       inversion Hnth; subst item.
       exists Phase1DataDeclaration. split; reflexivity.
     + destruct index as [|index].
-      * vm_compute in Hnth.
+      * cbn in Hnth.
         inversion Hnth; subst item.
         exists Phase1TypeAliasDeclaration. split; reflexivity.
       * destruct index as [|index].
-        -- vm_compute in Hnth.
+        -- cbn in Hnth.
            inversion Hnth; subst item.
            exists Phase1ClaimDeclaration. split; reflexivity.
         -- destruct index as [|index].
-           ++ vm_compute in Hnth.
+           ++ cbn in Hnth.
               inversion Hnth; subst item.
               exists Phase1CallableContractDeclaration. split; reflexivity.
            ++ destruct index as [|index].
-              ** vm_compute in Hnth.
+              ** cbn in Hnth.
                  inversion Hnth; subst item.
                  exists Phase1FunctionDeclaration. split; reflexivity.
               ** destruct index as [|index].
-                 --- vm_compute in Hnth.
+                 --- cbn in Hnth.
                      inversion Hnth; subst item.
                      exists Phase1ProviderContractDeclaration. split; reflexivity.
                  --- destruct index as [|index].
-                     +++ vm_compute in Hnth.
+                     +++ cbn in Hnth.
                          inversion Hnth; subst item.
                          exists Phase1ProviderImplementationDeclaration.
                          split; reflexivity.
                      +++ destruct index as [|index].
-                         *** vm_compute in Hnth.
+                         *** cbn in Hnth.
                              inversion Hnth; subst item.
                              exists Phase1OpaqueProviderImplementationDeclaration.
                              split; reflexivity.
                          *** destruct index as [|index].
-                             ---- vm_compute in Hnth.
+                             ---- cbn in Hnth.
                                   inversion Hnth; subst item.
                                   exists Phase1ProtocolDeclaration.
                                   split; reflexivity.
                              ---- destruct index as [|index].
-                                  ++++ vm_compute in Hnth.
+                                  ++++ cbn in Hnth.
                                        inversion Hnth; subst item.
                                        exists Phase1CapabilityDeclaration.
                                        split; reflexivity.
                                   ++++ destruct index as [|index].
-                                       ***** vm_compute in Hnth.
+                                       ***** cbn in Hnth.
                                              inversion Hnth; subst item.
                                              exists Phase1BoundaryDeclaration.
                                              split; reflexivity.
                                        ***** destruct index as [|index].
-                                             ------ vm_compute in Hnth.
+                                             ------ cbn in Hnth.
                                                     inversion Hnth; subst item.
                                                     exists Phase1ArchitectureDeclaration.
                                                     split; reflexivity.
                                              ------ destruct index as [|index].
-                                                    ++++++ vm_compute in Hnth.
+                                                    ++++++ cbn in Hnth.
                                                            inversion Hnth; subst item.
                                                            exists Phase1ComponentDeclaration.
                                                            split; reflexivity.
                                                     ++++++ destruct index as [|index].
-                                                           ******* vm_compute in Hnth.
+                                                           ******* cbn in Hnth.
                                                                    inversion Hnth; subst item.
                                                                    exists Phase1ProgramDeclaration.
                                                                    split; reflexivity.
-                                                           ******* vm_compute in Hnth.
-                                                                   discriminate Hnth.
+                                                           ******* destruct index; cbn in Hnth; discriminate Hnth.
 Qed.
 
 Lemma phase1_surface_normalize_metadata_string_total_from_derivation :
@@ -195,53 +219,59 @@ Proof.
   end.
   match goal with
   | Hat : Derives phase1_surface_rules _
-      (ELiteral "@") _ _ ?at_tree,
-    Hname : Derives phase1_surface_rules _
-      (ENonterminal "identifier") _ _ ?name_tree,
-    Hopen : Derives phase1_surface_rules _
-      (ELiteral "(") _ _ ?open_tree,
-    Hvalue : Derives phase1_surface_rules _
-      (ENonterminal "metadata_string_literal") _ _ ?value_tree,
-    Hclose : Derives phase1_surface_rules _
-      (ELiteral ")") _ _ ?close_tree |- _ =>
+      (ELiteral "@") _ _ ?at_tree |- _ =>
       destruct
         (literal_derivation_is_exact
           phase1_surface_rules _ "@" _ _ at_tree Hat)
-        as [at_tail [_ [_ Hat_tree]]];
+        as [at_tail [_ [_ Hat_tree]]]
+  end.
+  match goal with
+  | Hopen : Derives phase1_surface_rules _
+      (ELiteral "(") _ _ ?open_tree |- _ =>
       destruct
         (literal_derivation_is_exact
           phase1_surface_rules _ "(" _ _ open_tree Hopen)
-        as [open_tail [_ [_ Hopen_tree]]];
+        as [open_tail [_ [_ Hopen_tree]]]
+  end.
+  match goal with
+  | Hclose : Derives phase1_surface_rules _
+      (ELiteral ")") _ _ ?close_tree |- _ =>
       destruct
         (literal_derivation_is_exact
           phase1_surface_rules _ ")" _ _ close_tree Hclose)
-        as [close_tail [_ [_ Hclose_tree]]];
+        as [close_tail [_ [_ Hclose_tree]]]
+  end.
+  match goal with
+  | Hname : Derives phase1_surface_rules _
+      (ENonterminal "identifier") _ _ ?name_tree |- _ =>
       destruct
         (phase1_surface_normalize_identifier_total_from_derivation
           _ _ _ name_tree Hname)
-        as [name Hname_normalize];
+        as [name Hname_normalize]
+  end.
+  match goal with
+  | Hvalue : Derives phase1_surface_rules _
+      (ENonterminal "metadata_string_literal") _ _ ?value_tree |- _ =>
       destruct
         (phase1_surface_normalize_metadata_string_total_from_derivation
           _ _ _ value_tree Hvalue)
-        as [value Hvalue_normalize];
-      exists
-        {| phase1_attribute_spine_name := name;
-           phase1_attribute_spine_value := value |};
-      rewrite Htree;
-      rewrite Hsubtree;
-      rewrite Hat_tree;
-      rewrite Hopen_tree;
-      rewrite Hclose_tree;
-      unfold phase1_surface_normalize_attribute_spine,
-        phase1_surface_expect_nonterminal,
-        phase1_surface_expect_sequence,
-        phase1_surface_exact5,
-        phase1_surface_expect_literal;
-      cbn;
-      rewrite Hname_normalize;
-      rewrite Hvalue_normalize;
-      reflexivity
+        as [value Hvalue_normalize]
   end.
+  exists
+    {| phase1_attribute_spine_name := name;
+       phase1_attribute_spine_value := value |}.
+  rewrite Hat_tree.
+  rewrite Hopen_tree.
+  rewrite Hclose_tree.
+  unfold phase1_surface_normalize_attribute_spine,
+    phase1_surface_expect_nonterminal,
+    phase1_surface_expect_sequence,
+    phase1_surface_exact5,
+    phase1_surface_expect_literal.
+  cbn.
+  rewrite Hname_normalize.
+  rewrite Hvalue_normalize.
+  reflexivity.
 Qed.
 
 Lemma phase1_surface_normalize_attribute_spines_total_from_repetition :
@@ -319,7 +349,6 @@ Proof.
     phase1_surface_expect_nonterminal,
     phase1_surface_expect_alternative.
   cbn.
-  rewrite String.eqb_refl.
   rewrite Htag.
   rewrite String.eqb_refl.
   reflexivity.
@@ -359,39 +388,39 @@ Proof.
   end.
   match goal with
   | Hattributes : Derives phase1_surface_rules _
-      (ERepetition (ENonterminal "attribute")) _ _ ?attribute_tree,
-    Hdeclaration : Derives phase1_surface_rules _
-      (ENonterminal "declaration") _ _ ?declaration_tree |- _ =>
+      (ERepetition (ENonterminal "attribute")) _ _ ?attribute_tree |- _ =>
       destruct
         (phase1_surface_repetition_derivation_exposes
           _ (ENonterminal "attribute")
           _ _ attribute_tree Hattributes)
-        as [attribute_trees [Hattribute_tree Hattribute_body]];
-      destruct
-        (phase1_surface_normalize_attribute_spines_total_from_repetition
-          _ (ENonterminal "attribute")
-          _ _ attribute_trees Hattribute_body eq_refl)
-        as [attributes Hattributes_normalize];
+        as [attribute_trees [Hattribute_tree Hattribute_body]]
+  end.
+  destruct
+    (phase1_surface_normalize_attribute_spines_total_from_repetition
+      _ (ENonterminal "attribute")
+      _ _ attribute_trees Hattribute_body eq_refl)
+    as [attributes Hattributes_normalize].
+  match goal with
+  | Hdeclaration : Derives phase1_surface_rules _
+      (ENonterminal "declaration") _ _ ?declaration_tree |- _ =>
       destruct
         (phase1_surface_normalize_declaration_spine_total_from_derivation
           _ _ _ declaration_tree Hdeclaration)
-        as [declaration Hdeclaration_normalize];
-      exists
-        {| phase1_top_level_spine_attributes := attributes;
-           phase1_top_level_spine_declaration := declaration |};
-      rewrite Htree;
-      rewrite Hsubtree;
-      rewrite Hattribute_tree;
-      unfold phase1_surface_normalize_top_level_spine,
-        phase1_surface_expect_nonterminal,
-        phase1_surface_expect_sequence,
-        phase1_surface_exact2,
-        phase1_surface_expect_repetition;
-      cbn;
-      rewrite Hattributes_normalize;
-      rewrite Hdeclaration_normalize;
-      reflexivity
+        as [declaration Hdeclaration_normalize]
   end.
+  exists
+    {| phase1_top_level_spine_attributes := attributes;
+       phase1_top_level_spine_declaration := declaration |}.
+  rewrite Hattribute_tree.
+  unfold phase1_surface_normalize_top_level_spine,
+    phase1_surface_expect_nonterminal,
+    phase1_surface_expect_sequence,
+    phase1_surface_exact2,
+    phase1_surface_expect_repetition.
+  cbn.
+  rewrite Hattributes_normalize.
+  rewrite Hdeclaration_normalize.
+  reflexivity.
 Qed.
 
 Lemma phase1_surface_normalize_top_level_spines_total_from_repetition :
@@ -437,7 +466,7 @@ Proof.
       phase1_surface_rules [] phase1_surface_start
       tokens [] tree Hcomplete)
     as [body [subtree [Hlookup [Htree Hbody]]]].
-  rewrite phase1_surface_start_rule in Hlookup.
+  rewrite GrammarAstSourceSpine.phase1_surface_start_rule in Hlookup.
   inversion Hlookup; subst body.
   destruct
     (derives_sequence_expression_exposes_items
@@ -449,86 +478,81 @@ Proof.
       ]
       tokens [] subtree Hbody)
     as [trees [Hsubtree Hitems]].
-  repeat match goal with
-  | Hseq : DerivesSequence phase1_surface_rules _ _ (_ :: _) _ _ _ |- _ =>
-      inversion Hseq; subst; clear Hseq
-  end.
-  match goal with
-  | Hnil : DerivesSequence phase1_surface_rules _ _ [] _ _ _ |- _ =>
-      inversion Hnil; subst; clear Hnil
-  end.
-  match goal with
-  | Hmodule : Derives phase1_surface_rules _
-      (EOptional (ENonterminal "module_decl")) _ _ ?module_part,
-    Himports : Derives phase1_surface_rules _
-      (ERepetition (ENonterminal "import_decl")) _ _ ?imports_part,
-    Htops : Derives phase1_surface_rules _
-      (ERepetition (ENonterminal "top_level_decl")) _ _ ?tops_part |- _ =>
-      destruct
-        (phase1_surface_normalize_optional_module_total_from_derivation
-          _ _ _ module_part Hmodule)
-        as [module_tree [module_name [Hmodule_tree Hmodule_normalize]]];
-      destruct
-        (phase1_surface_normalize_import_repetition_total_from_derivation
-          _ _ _ imports_part Himports)
-        as [import_trees [import_headers [Himports_tree Himports_normalize]]];
-      destruct
-        (phase1_surface_repetition_derivation_exposes
-          _ (ENonterminal "top_level_decl")
-          _ _ tops_part Htops)
-        as [top_trees [Htops_tree Htops_body]];
-      destruct
-        (phase1_surface_normalize_top_level_spines_total_from_repetition
-          _ (ENonterminal "top_level_decl")
-          _ _ top_trees Htops_body eq_refl)
-        as [top_levels Htop_levels_normalize];
-      let source := constr:(
-        {| phase1_source_top_level_module := module_name;
-           phase1_source_top_level_imports := import_headers;
-           phase1_source_top_level_declarations := top_levels |}) in
-      assert (Hsource_shape :
-        tree =
-          PTNonterminal phase1_surface_start
-            (PTSequence
-              [ match module_tree with
-                | None => PTOptionalNone
-                | Some body => PTOptionalSome body
-                end;
-                PTRepetition import_trees;
-                PTRepetition top_trees
-              ])).
-      {
-        rewrite Htree.
-        rewrite Hsubtree.
-        rewrite Hmodule_tree.
-        rewrite Himports_tree.
-        rewrite Htops_tree.
-        reflexivity.
-      }
-      assert (Hnormalize :
-        phase1_surface_normalize_source_top_level_tree tree = Some source).
-      {
-        rewrite Hsource_shape.
-        unfold phase1_surface_normalize_source_top_level_tree,
-          phase1_surface_normalize_source_header_tree,
-          phase1_surface_normalize_source_spine,
-          phase1_surface_normalize_source_header,
-          phase1_surface_normalize_source_top_level.
-        rewrite String.eqb_refl.
-        destruct module_tree as [module_body |]; cbn in *.
-        - rewrite Hmodule_normalize.
-          rewrite Himports_normalize.
-          rewrite Htop_levels_normalize.
-          reflexivity.
-        - rewrite Hmodule_normalize.
-          rewrite Himports_normalize.
-          rewrite Htop_levels_normalize.
-          reflexivity.
-      }
-      exists source.
-      split.
-      + exact Hnormalize.
-      + eapply phase1_surface_normalize_source_top_level_tree_round_trip.
-        exact Hnormalize
-  end.
+  inversion Hitems as
+    [| path0 index0 item0 items0 input0 middle0 rest0
+       module_part tail1 Hmodule Htail1]; subst.
+  inversion Htail1 as
+    [| path1 index1 item1 items1 input1 middle1 rest1
+       imports_part tail2 Himports Htail2]; subst.
+  inversion Htail2 as
+    [| path2 index2 item2 items2 input2 middle2 rest2
+       tops_part nil_trees Htops Hnil]; subst.
+  inversion Hnil; subst.
+  destruct
+    (phase1_surface_normalize_optional_module_total_from_derivation
+      _ _ _ module_part Hmodule)
+    as [module_tree [module_name [Hmodule_tree Hmodule_normalize]]].
+  destruct
+    (phase1_surface_normalize_import_repetition_total_from_derivation
+      _ _ _ imports_part Himports)
+    as [import_trees [import_headers [Himports_tree Himports_normalize]]].
+  destruct
+    (phase1_surface_repetition_derivation_exposes
+      _ (ENonterminal "top_level_decl")
+      _ _ tops_part Htops)
+    as [top_trees [Htops_tree Htops_body]].
+  destruct
+    (phase1_surface_normalize_top_level_spines_total_from_repetition
+      _ (ENonterminal "top_level_decl")
+      _ _ top_trees Htops_body eq_refl)
+    as [top_levels Htop_levels_normalize].
+  pose (header :=
+    {| phase1_source_header_module := module_name;
+       phase1_source_header_imports := import_headers;
+       phase1_source_header_top_levels := top_trees |}).
+  pose (source :=
+    {| phase1_source_top_level_module := module_name;
+       phase1_source_top_level_imports := import_headers;
+       phase1_source_top_level_declarations := top_levels |}).
+  exists source.
+  assert (Hheader_normalize :
+    phase1_surface_normalize_source_header_tree
+      (PTNonterminal phase1_surface_start
+        (PTSequence [module_part; imports_part; tops_part])) =
+    Some header).
+  {
+    rewrite Hmodule_tree.
+    rewrite Himports_tree.
+    rewrite Htops_tree.
+    unfold phase1_surface_normalize_source_header_tree,
+      GrammarAstSourceSpine.phase1_surface_normalize_source_spine,
+      phase1_surface_normalize_source_header.
+    rewrite String.eqb_refl.
+    unfold header.
+    destruct module_tree as [module_body |]; cbn in *.
+    - rewrite Hmodule_normalize.
+      rewrite Himports_normalize.
+      reflexivity.
+    - injection Hmodule_normalize as Hmodule_name.
+      rewrite <- Hmodule_name.
+      rewrite Himports_normalize.
+      reflexivity.
+  }
+  assert (Hnormalize :
+    phase1_surface_normalize_source_top_level_tree
+      (PTNonterminal phase1_surface_start
+        (PTSequence [module_part; imports_part; tops_part])) =
+    Some source).
+  {
+    unfold phase1_surface_normalize_source_top_level_tree.
+    rewrite Hheader_normalize.
+    unfold phase1_surface_normalize_source_top_level.
+    cbn.
+    rewrite Htop_levels_normalize.
+    reflexivity.
+  }
+  split.
+  - exact Hnormalize.
+  - eapply phase1_surface_normalize_source_top_level_tree_round_trip.
+    exact Hnormalize.
 Qed.
