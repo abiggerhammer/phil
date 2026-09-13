@@ -1,0 +1,237 @@
+name: Temporary CALL-019 Surface Arm Proof Bindings Author 3
+
+on:
+  push:
+    branches:
+      - phase1-call019-surface-arm-proof-bindings
+    paths:
+      - '.github/workflows/tmp-phase1-call019-surface-arm-proof-bindings-author3.yml'
+
+permissions:
+  contents: write
+
+jobs:
+  author:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check out branch
+        uses: actions/checkout@v4
+        with:
+          ref: phase1-call019-surface-arm-proof-bindings
+          fetch-depth: 0
+
+      - name: Patch exact occurrence-local arm facts
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 - <<'PY'
+          from pathlib import Path
+
+          def replace_once(path, old, new):
+              p = Path(path)
+              text = p.read_text()
+              count = text.count(old)
+              if count != 1:
+                  raise SystemExit(f'{path}: expected one replacement site, found {count}')
+              p.write_text(text.replace(old, new, 1))
+
+          replace_once(
+              'src/Phil/Surface/Check/Types.hs',
+              '  , callableOutcomeControl :: CallableOutcomeControlSpec\n  }\n',
+              '  , callableOutcomeControl :: CallableOutcomeControlSpec\n  , callableOutcomeFacts :: [(Text, Proposition)]\n  }\n')
+          replace_once(
+              'src/Phil/Surface/Check/Types.hs',
+              '  , surfaceCallableOutcomes :: Map DeclarationKey [CallableOutcomeSpec]\n  , surfaceTypeAliases :: Map Text Ty\n',
+              '  , surfaceCallableOutcomes :: Map DeclarationKey [CallableOutcomeSpec]\n  , surfaceCallableOutcomeFacts :: Map (SourceSpan, DeclarationKey, Text) [(Text, Proposition)]\n  , surfaceTypeAliases :: Map Text Ty\n')
+          replace_once(
+              'src/Phil/Surface/Check/Types.hs',
+              '  , surfaceCallableOutcomes = Map.empty\n  , surfaceTypeAliases = Map.empty\n',
+              '  , surfaceCallableOutcomes = Map.empty\n  , surfaceCallableOutcomeFacts = Map.empty\n  , surfaceTypeAliases = Map.empty\n')
+
+          p = Path('src/Phil/Compiler/CallableOutcomeDispatch.hs')
+          text = p.read_text()
+          close_line = '            , callableOutcomeControl = CallableOutcomeCloses outcome\n'
+          if text.count(close_line) != 1:
+              raise SystemExit(f'close-control site count {text.count(close_line)}')
+          text = text.replace(close_line, close_line + '            , callableOutcomeFacts = []\n', 1)
+          continue_line = '  , callableOutcomeControl = CallableOutcomeContinues\n'
+          if text.count(continue_line) != 1:
+              raise SystemExit(f'continue-control site count {text.count(continue_line)}')
+          text = text.replace(continue_line, continue_line + '  , callableOutcomeFacts = []\n', 1)
+          p.write_text(text)
+
+          replace_once(
+              'src/Phil/Surface/Check/Engine.hs',
+              '        Just outcomes -> callableDecision next signature outcomes\n',
+              ''.join([
+                  '        Just outcomes ->\n',
+                  '          let invocationSpan = locatedSpan located\n',
+                  '              declarationKey = surfaceCallableDeclarationKey signature\n',
+                  '              withFacts outcome = outcome\n',
+                  '                { callableOutcomeFacts = Map.findWithDefault\n',
+                  '                    []\n',
+                  '                    (invocationSpan, declarationKey, callableOutcomeLabel outcome)\n',
+                  '                    (surfaceCallableOutcomeFacts environment)\n',
+                  '                }\n',
+                  '          in callableDecision next signature (map withFacts outcomes)\n',
+              ]))
+          p = Path('src/Phil/Surface/Check/Engine.hs')
+          text = p.read_text()
+          start_marker = '    (CallableDecision outcomes, callableLabel, callableBinders) ->\n'
+          end_marker = '    _ -> throw located TypeMismatch\n      "decision arm binder shape is incompatible with the decision result"\n'
+          start = text.find(start_marker)
+          end = text.find(end_marker, start)
+          if start < 0 or end < 0:
+              raise SystemExit('callable decision arm block not found')
+          replacement = ''.join([
+              '    (CallableDecision outcomes, callableLabel, callableBinders) ->\n',
+              '      case\n',
+              '        [ (callableOutcomePayload outcome, callableOutcomeFacts outcome)\n',
+              '        | outcome <- outcomes\n',
+              '        , callableOutcomeLabel outcome == callableLabel\n',
+              '        , callableOutcomeControl outcome == CallableOutcomeContinues\n',
+              '        ] of\n',
+              '        [(payload, facts)]\n',
+              '          | length payload == length callableBinders -> do\n',
+              '              withPayload <- foldM\n',
+              '                (\\current (name, (mode, ty)) ->\n',
+              '                  insertBindingMeta (locatedSpan located) name\n',
+              '                    (BindingMeta mode ty (shapeForBinding name (shapeForType ty)))\n',
+              '                    current)\n',
+              '                state\n',
+              '                (zip callableBinders payload)\n',
+              '              foldM\n',
+              '                (\\current (name, proposition) ->\n',
+              '                  insertProof located name proposition current)\n',
+              '                withPayload\n',
+              '                facts\n',
+              '        _ -> throw located TypeMismatch\n',
+              '          "callable decision arm binder shape is incompatible with the declared outcome"\n',
+          ])
+          p.write_text(text[:start] + replacement + text[end:])
+
+          replace_once(
+              'src/Phil/Compiler/CallableOutcomeBranchFacts.hs',
+              '  , bindSurfaceCallableOutcomeBranchFacts\n  ) where\n\nimport qualified Data.Map.Strict as Map\n',
+              '  , bindSurfaceCallableOutcomeBranchFacts\n  , installSurfaceCallableOutcomeBranchFacts\n  ) where\n\nimport Control.Monad (foldM)\nimport qualified Data.Map.Strict as Map\n')
+          replace_once(
+              'src/Phil/Compiler/CallableOutcomeBranchFacts.hs',
+              'import Phil.Core.Syntax (Proposition)\nimport Phil.Surface.Syntax (SourceSpan)\n',
+              ''.join([
+                  'import Phil.Core.Syntax (Proposition)\n',
+                  'import Phil.Surface.Check\n',
+                  '  ( CallableOutcomeControlSpec (..)\n',
+                  '  , CallableOutcomeSpec (..)\n',
+                  '  , SurfaceEnvironment (..)\n',
+                  '  )\n',
+                  'import Phil.Surface.Syntax (SourceSpan)\n',
+              ]))
+          replace_once(
+              'src/Phil/Compiler/CallableOutcomeBranchFacts.hs',
+              '  deriving (Eq, Ord, Show)\n\n-- | Build branch-local neutral fact environments',
+              ''.join([
+                  '  | SurfaceCallableOutcomeFactEnvironmentIdentityMismatch SourceSpan\n',
+                  '  | SurfaceCallableOutcomeFactDispatchMissing DeclarationKey\n',
+                  '  | SurfaceCallableOutcomeFactSourceLabelMissing DeclarationKey Text\n',
+                  '  | SurfaceCallableOutcomeFactControlMismatch DeclarationKey Text CallableOutcomeControlSpec\n',
+                  '  | SurfaceCallableOutcomeFactTerminalFactsUnsupported SourceSpan Text\n',
+                  '  | SurfaceCallableOutcomeFactInstallConflict SourceSpan DeclarationKey Text\n',
+                  '  deriving (Eq, Ord, Show)\n\n',
+                  '-- | Build branch-local neutral fact environments',
+              ]))
+          p = Path('src/Phil/Compiler/CallableOutcomeBranchFacts.hs')
+          text = p.read_text()
+          marker = 'continuingUsableAtoms :: SurfaceCallableOutcomeContinuation -> Set CallableOutcomeAtom\n'
+          if text.count(marker) != 1:
+              raise SystemExit('branch-facts installer marker mismatch')
+          installer = ''.join([
+              '-- | Install already-validated branch-local neutral proof facts for the exact\n',
+              '-- invocation occurrence. Declaration-wide outcome specs remain fact-free.\n',
+              'installSurfaceCallableOutcomeBranchFacts\n',
+              '  :: [SurfaceCallableOutcomeBranchFactEnvironment]\n',
+              '  -> SurfaceEnvironment\n',
+              '  -> Either SurfaceCallableOutcomeBranchFactError SurfaceEnvironment\n',
+              'installSurfaceCallableOutcomeBranchFacts branchEnvironments initialEnvironment =\n',
+              '  foldM installOne initialEnvironment branchEnvironments\n',
+              '  where\n',
+              '    installOne environment branchEnvironment = do\n',
+              '      let continuation = surfaceBranchFactContinuation branchEnvironment\n',
+              '          invocationSpan = surfaceBranchFactInvocationSpan branchEnvironment\n',
+              '          declarationKey = surfaceBranchFactDeclarationKey branchEnvironment\n',
+              '          sourceLabel = surfaceBranchFactSourceLabel branchEnvironment\n',
+              '          usable = usableFactBindings branchEnvironment\n',
+              '          facts = map neutralFactBinding usable\n',
+              '      if invocationSpan == surfaceContinuationInvocationSpan continuation\n',
+              '          && declarationKey == surfaceContinuationDeclarationKey continuation\n',
+              '          && sourceLabel == surfaceContinuationSourceLabel continuation\n',
+              '        then pure ()\n',
+              '        else Left (SurfaceCallableOutcomeFactEnvironmentIdentityMismatch\n',
+              '          (surfaceBranchFactArmSpan branchEnvironment))\n',
+              '      specs <- maybe\n',
+              '        (Left (SurfaceCallableOutcomeFactDispatchMissing declarationKey))\n',
+              '        Right\n',
+              '        (Map.lookup declarationKey (surfaceCallableOutcomes environment))\n',
+              '      spec <- case\n',
+              '          [ candidate\n',
+              '          | candidate <- specs\n',
+              '          , callableOutcomeLabel candidate == sourceLabel\n',
+              '          ] of\n',
+              '        [candidate] -> Right candidate\n',
+              '        _ -> Left (SurfaceCallableOutcomeFactSourceLabelMissing declarationKey sourceLabel)\n',
+              '      case surfaceBranchFactDisposition branchEnvironment of\n',
+              '        SurfaceCallableOutcomeCallerTerminates _ -> do\n',
+              '          if null usable\n',
+              '            then pure ()\n',
+              '            else Left (SurfaceCallableOutcomeFactTerminalFactsUnsupported\n',
+              '              (surfaceBranchFactArmSpan branchEnvironment) sourceLabel)\n',
+              '          case callableOutcomeControl spec of\n',
+              '            CallableOutcomeCloses _ -> Right environment\n',
+              '            actual -> Left (SurfaceCallableOutcomeFactControlMismatch declarationKey sourceLabel actual)\n',
+              '        SurfaceCallableOutcomeCallerContinues -> case callableOutcomeControl spec of\n',
+              '          CallableOutcomeContinues ->\n',
+              '            let key = (invocationSpan, declarationKey, sourceLabel)\n',
+              '            in case Map.lookup key (surfaceCallableOutcomeFacts environment) of\n',
+              '              Nothing -> Right environment\n',
+              '                { surfaceCallableOutcomeFacts = Map.insert key facts\n',
+              '                    (surfaceCallableOutcomeFacts environment)\n',
+              '                }\n',
+              '              Just existing\n',
+              '                | existing == facts -> Right environment\n',
+              '                | otherwise -> Left\n',
+              '                    (SurfaceCallableOutcomeFactInstallConflict invocationSpan declarationKey sourceLabel)\n',
+              '          actual -> Left (SurfaceCallableOutcomeFactControlMismatch declarationKey sourceLabel actual)\n',
+              '\n',
+              'usableFactBindings\n',
+              '  :: SurfaceCallableOutcomeBranchFactEnvironment\n',
+              '  -> [SurfaceCallableOutcomeFactBinding]\n',
+              'usableFactBindings branchEnvironment =\n',
+              '  surfaceBranchPostconditions branchEnvironment\n',
+              '    <> surfaceBranchAssumptions branchEnvironment\n',
+              '    <> surfaceBranchDischargedFacts branchEnvironment\n',
+              '\n',
+              'neutralFactBinding :: SurfaceCallableOutcomeFactBinding -> (Text, Proposition)\n',
+              'neutralFactBinding binding =\n',
+              '  (surfaceOutcomeFactEvidenceName binding, surfaceOutcomeFactProposition binding)\n',
+              '\n',
+          ])
+          p.write_text(text.replace(marker, installer + marker, 1))
+          PY
+
+      - name: Set up Haskell
+        uses: haskell-actions/setup@v2
+        with:
+          ghc-version: '9.6.7'
+          cabal-version: 'latest'
+
+      - name: Build Haskell substrate
+        run: cabal build all --enable-tests
+
+      - name: Commit semantic slice
+        shell: bash
+        run: |
+          set -euo pipefail
+          git config user.name 'Meredith L. Patterson'
+          git config user.email 'clonearmy@gmail.com'
+          git add src/Phil/Surface/Check/Types.hs src/Phil/Surface/Check/Engine.hs src/Phil/Compiler/CallableOutcomeDispatch.hs src/Phil/Compiler/CallableOutcomeBranchFacts.hs
+          git commit -m 'Bind CALL-019 facts into exact Surface arms'
+          git push origin HEAD:phase1-call019-surface-arm-proof-bindings
