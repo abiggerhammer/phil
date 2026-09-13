@@ -244,7 +244,7 @@ Proof.
   unfold phase1_surface_record_mode_spine_tree,
     phase1_surface_record_generic_spine_tree.
   cbn.
-  rewrite (phase1_surface_normalize_optional_mode_round_trip
+  rewrite <- (phase1_surface_normalize_optional_mode_round_trip
     mode_tree mode Hmode).
   reflexivity.
 Qed.
