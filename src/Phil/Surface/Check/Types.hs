@@ -148,6 +148,7 @@ data CallableOutcomeSpec = CallableOutcomeSpec
   { callableOutcomeLabel :: Text
   , callableOutcomePayload :: [(Mode, Ty)]
   , callableOutcomeControl :: CallableOutcomeControlSpec
+  , callableOutcomeFacts :: [(Text, Proposition)]
   }
   deriving (Eq, Ord, Show)
 
@@ -245,6 +246,7 @@ data SurfaceEnvironment = SurfaceEnvironment
   , surfacePrimitives :: Map Text PrimitiveSemantics
   , surfaceCallables :: Map Text SurfaceCallableSignature
   , surfaceCallableOutcomes :: Map DeclarationKey [CallableOutcomeSpec]
+  , surfaceCallableOutcomeFacts :: Map (SourceSpan, DeclarationKey, Text) [(Text, Proposition)]
   , surfaceTypeAliases :: Map Text Ty
   , surfaceSelectRequirements :: Map Text [Proposition]
   , surfaceReceiveExactRequirement :: Maybe Proposition
@@ -311,6 +313,7 @@ emptySurfaceEnvironment staticContext = SurfaceEnvironment
   , surfacePrimitives = Map.empty
   , surfaceCallables = Map.empty
   , surfaceCallableOutcomes = Map.empty
+  , surfaceCallableOutcomeFacts = Map.empty
   , surfaceTypeAliases = Map.empty
   , surfaceSelectRequirements = Map.empty
   , surfaceReceiveExactRequirement = Nothing

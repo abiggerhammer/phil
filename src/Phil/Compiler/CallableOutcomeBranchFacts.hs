@@ -3,8 +3,10 @@ module Phil.Compiler.CallableOutcomeBranchFacts
   , SurfaceCallableOutcomeBranchFactEnvironment (..)
   , SurfaceCallableOutcomeBranchFactError (..)
   , bindSurfaceCallableOutcomeBranchFacts
+  , installSurfaceCallableOutcomeBranchFacts
   ) where
 
+import Control.Monad (foldM)
 import qualified Data.Map.Strict as Map
 import Data.Map.Strict (Map)
 import qualified Data.Set as Set
@@ -18,6 +20,11 @@ import Phil.Compiler.CallableOutcomeContinuation
 import Phil.Core.CallableOutcome (CallableOutcomeAtom)
 import Phil.Core.Static (DeclarationKey)
 import Phil.Core.Syntax (Proposition)
+import Phil.Surface.Check
+  ( CallableOutcomeControlSpec (..)
+  , CallableOutcomeSpec (..)
+  , SurfaceEnvironment (..)
+  )
 import Phil.Surface.Syntax (SourceSpan)
 
 -- | Explicit competent binding from one opaque CALL outcome atom to the neutral
@@ -66,6 +73,12 @@ data SurfaceCallableOutcomeBranchFactError
       SourceSpan
       Text
       (Set CallableOutcomeAtom)
+  | SurfaceCallableOutcomeFactEnvironmentIdentityMismatch SourceSpan
+  | SurfaceCallableOutcomeFactDispatchMissing DeclarationKey
+  | SurfaceCallableOutcomeFactSourceLabelMissing DeclarationKey Text
+  | SurfaceCallableOutcomeFactControlMismatch DeclarationKey Text CallableOutcomeControlSpec
+  | SurfaceCallableOutcomeFactTerminalFactsUnsupported SourceSpan Text
+  | SurfaceCallableOutcomeFactInstallConflict SourceSpan DeclarationKey Text
   deriving (Eq, Ord, Show)
 
 -- | Build branch-local neutral fact environments from exact admitted outcome
@@ -131,6 +144,74 @@ bindSurfaceCallableOutcomeBranchFacts bindings continuations = do
         , surfaceBranchDischargedFacts = discharged
         , surfaceBranchFactContinuation = continuation
         }
+
+-- | Install already-validated branch-local neutral proof facts for the exact
+-- invocation occurrence. Declaration-wide outcome specs remain fact-free.
+installSurfaceCallableOutcomeBranchFacts
+  :: [SurfaceCallableOutcomeBranchFactEnvironment]
+  -> SurfaceEnvironment
+  -> Either SurfaceCallableOutcomeBranchFactError SurfaceEnvironment
+installSurfaceCallableOutcomeBranchFacts branchEnvironments initialEnvironment =
+  foldM installOne initialEnvironment branchEnvironments
+  where
+    installOne environment branchEnvironment = do
+      let continuation = surfaceBranchFactContinuation branchEnvironment
+          invocationSpan = surfaceBranchFactInvocationSpan branchEnvironment
+          declarationKey = surfaceBranchFactDeclarationKey branchEnvironment
+          sourceLabel = surfaceBranchFactSourceLabel branchEnvironment
+          usable = usableFactBindings branchEnvironment
+          facts = map neutralFactBinding usable
+      if invocationSpan == surfaceContinuationInvocationSpan continuation
+          && declarationKey == surfaceContinuationDeclarationKey continuation
+          && sourceLabel == surfaceContinuationSourceLabel continuation
+        then pure ()
+        else Left (SurfaceCallableOutcomeFactEnvironmentIdentityMismatch
+          (surfaceBranchFactArmSpan branchEnvironment))
+      specs <- maybe
+        (Left (SurfaceCallableOutcomeFactDispatchMissing declarationKey))
+        Right
+        (Map.lookup declarationKey (surfaceCallableOutcomes environment))
+      spec <- case
+          [ candidate
+          | candidate <- specs
+          , callableOutcomeLabel candidate == sourceLabel
+          ] of
+        [candidate] -> Right candidate
+        _ -> Left (SurfaceCallableOutcomeFactSourceLabelMissing declarationKey sourceLabel)
+      case surfaceBranchFactDisposition branchEnvironment of
+        SurfaceCallableOutcomeCallerTerminates _ -> do
+          if null usable
+            then pure ()
+            else Left (SurfaceCallableOutcomeFactTerminalFactsUnsupported
+              (surfaceBranchFactArmSpan branchEnvironment) sourceLabel)
+          case callableOutcomeControl spec of
+            CallableOutcomeCloses _ -> Right environment
+            actual -> Left (SurfaceCallableOutcomeFactControlMismatch declarationKey sourceLabel actual)
+        SurfaceCallableOutcomeCallerContinues -> case callableOutcomeControl spec of
+          CallableOutcomeContinues ->
+            let key = (invocationSpan, declarationKey, sourceLabel)
+            in case Map.lookup key (surfaceCallableOutcomeFacts environment) of
+              Nothing -> Right environment
+                { surfaceCallableOutcomeFacts = Map.insert key facts
+                    (surfaceCallableOutcomeFacts environment)
+                }
+              Just existing
+                | existing == facts -> Right environment
+                | otherwise -> Left
+                    (SurfaceCallableOutcomeFactInstallConflict invocationSpan declarationKey sourceLabel)
+          actual -> Left (SurfaceCallableOutcomeFactControlMismatch declarationKey sourceLabel actual)
+
+usableFactBindings
+  :: SurfaceCallableOutcomeBranchFactEnvironment
+  -> [SurfaceCallableOutcomeFactBinding]
+usableFactBindings branchEnvironment =
+  surfaceBranchPostconditions branchEnvironment
+    <> surfaceBranchAssumptions branchEnvironment
+    <> surfaceBranchDischargedFacts branchEnvironment
+
+neutralFactBinding :: SurfaceCallableOutcomeFactBinding -> (Text, Proposition)
+neutralFactBinding binding =
+  (surfaceOutcomeFactEvidenceName binding, surfaceOutcomeFactProposition binding)
 
 continuingUsableAtoms :: SurfaceCallableOutcomeContinuation -> Set CallableOutcomeAtom
 continuingUsableAtoms continuation = case surfaceContinuationDisposition continuation of

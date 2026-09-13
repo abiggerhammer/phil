@@ -234,6 +234,7 @@ surfaceSpec branch =
             { callableOutcomeLabel = surfaceOutcomeBranchLabel branch
             , callableOutcomePayload = []
             , callableOutcomeControl = CallableOutcomeCloses outcome
+            , callableOutcomeFacts = []
             }
       | otherwise -> Left
           (SurfaceCallableTerminalOutcomePayloadUnsupported
@@ -251,6 +252,7 @@ continuingSpec branch = CallableOutcomeSpec
   { callableOutcomeLabel = surfaceOutcomeBranchLabel branch
   , callableOutcomePayload = surfaceOutcomeBranchPayload branch
   , callableOutcomeControl = CallableOutcomeContinues
+  , callableOutcomeFacts = []
   }
 
 outcomeControl :: CallableOutcomeClass -> SurfaceCallableOutcomeControl

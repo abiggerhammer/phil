@@ -359,7 +359,16 @@ evalCallable environment state located name arguments =
         Nothing -> do
           result <- callableResultValue signature
           Right [valuePath next result]
-        Just outcomes -> callableDecision next signature outcomes
+        Just outcomes ->
+          let invocationSpan = locatedSpan located
+              declarationKey = surfaceCallableDeclarationKey signature
+              withFacts outcome = outcome
+                { callableOutcomeFacts = Map.findWithDefault
+                    []
+                    (invocationSpan, declarationKey, callableOutcomeLabel outcome)
+                    (surfaceCallableOutcomeFacts environment)
+                }
+          in callableDecision next signature (map withFacts outcomes)
   where
     checkArgument current ((expectedMode, expectedType), expression) = do
       paths <- evalExpression environment current expression
@@ -1104,20 +1113,25 @@ bindDecisionPattern state decision label binders located =
           "provider decision arm binder shape is incompatible with the declared outcome"
     (CallableDecision outcomes, callableLabel, callableBinders) ->
       case
-        [ callableOutcomePayload outcome
+        [ (callableOutcomePayload outcome, callableOutcomeFacts outcome)
         | outcome <- outcomes
         , callableOutcomeLabel outcome == callableLabel
         , callableOutcomeControl outcome == CallableOutcomeContinues
         ] of
-        [payload]
-          | length payload == length callableBinders ->
-              foldM
+        [(payload, facts)]
+          | length payload == length callableBinders -> do
+              withPayload <- foldM
                 (\current (name, (mode, ty)) ->
                   insertBindingMeta (locatedSpan located) name
                     (BindingMeta mode ty (shapeForBinding name (shapeForType ty)))
                     current)
                 state
                 (zip callableBinders payload)
+              foldM
+                (\current (name, proposition) ->
+                  insertProof located name proposition current)
+                withPayload
+                facts
         _ -> throw located TypeMismatch
           "callable decision arm binder shape is incompatible with the declared outcome"
     _ -> throw located TypeMismatch
