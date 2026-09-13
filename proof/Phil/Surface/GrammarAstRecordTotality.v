@@ -78,6 +78,7 @@ Proof.
   | Hnil : DerivesSequence phase1_surface_rules _ _ [] _ _ _ |- _ =>
       inversion Hnil; subst; clear Hnil
   end.
+  Show.
   match goal with
   | Hkeyword : Derives phase1_surface_rules
       (descend _ (AtSequence 0))
