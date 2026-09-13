@@ -305,10 +305,10 @@ Proof.
   rewrite (phase1_surface_exact5_round_trip
     items at_tree name_tree open_tree value_tree close_tree Hitems).
   rewrite (phase1_surface_expect_literal_round_trip "@" at_tree Hat).
-  rewrite (phase1_surface_normalize_identifier_round_trip
+  rewrite <- (phase1_surface_normalize_identifier_round_trip
     name_tree name Hname).
   rewrite (phase1_surface_expect_literal_round_trip "(" open_tree Hopen).
-  rewrite (phase1_surface_normalize_metadata_string_round_trip
+  rewrite <- (phase1_surface_normalize_metadata_string_round_trip
     value_tree value Hvalue).
   rewrite (phase1_surface_expect_literal_round_trip ")" close_tree Hclose).
   reflexivity.
@@ -347,7 +347,7 @@ Proof.
     + eapply phase1_surface_normalize_attribute_spine_round_trip.
       exact Htree.
     + eapply IH.
-      exact Hrest.
+      reflexivity.
 Qed.
 
 Definition phase1_surface_declaration_spine_tree
@@ -404,7 +404,7 @@ Proof.
     "declaration" tree body Hnode).
   rewrite (phase1_surface_expect_alternative_round_trip
     body index selected Halternative).
-  rewrite (phase1_surface_declaration_tag_index_round_trip
+  rewrite <- (phase1_surface_declaration_tag_index_round_trip
     index tag Htag).
   reflexivity.
 Qed.
@@ -476,9 +476,9 @@ Proof.
     items attribute_tree declaration_tree Hitems).
   rewrite (phase1_surface_expect_repetition_round_trip
     attribute_tree attribute_trees Hrepetition).
-  rewrite (phase1_surface_normalize_attribute_spines_round_trip
+  rewrite <- (phase1_surface_normalize_attribute_spines_round_trip
     attribute_trees attributes Hattributes).
-  rewrite (phase1_surface_normalize_declaration_spine_round_trip
+  rewrite <- (phase1_surface_normalize_declaration_spine_round_trip
     declaration_tree declaration Hdeclaration).
   reflexivity.
 Qed.
@@ -516,7 +516,7 @@ Proof.
     + eapply phase1_surface_normalize_top_level_spine_round_trip.
       exact Htree.
     + eapply IH.
-      exact Hrest.
+      reflexivity.
 Qed.
 
 Definition phase1_surface_source_top_level_tree
@@ -557,12 +557,13 @@ Theorem phase1_surface_normalize_source_top_level_round_trip :
 Proof.
   intros header source Hnormalize.
   destruct header as [module_name import_headers top_level_trees].
+  unfold phase1_surface_normalize_source_top_level in Hnormalize.
   cbn in Hnormalize.
   destruct (phase1_surface_normalize_top_level_spines top_level_trees)
     as [top_levels |] eqn:Htop_levels; try discriminate Hnormalize.
   inversion Hnormalize; subst source.
   cbn.
-  rewrite (phase1_surface_normalize_top_level_spines_round_trip
+  rewrite <- (phase1_surface_normalize_top_level_spines_round_trip
     top_level_trees top_levels Htop_levels).
   reflexivity.
 Qed.
