@@ -80,28 +80,28 @@ Proof.
   end.
   match goal with
   | Hkeyword : Derives phase1_surface_rules
-      (descend ?sequence_path (AtSequence 0))
+      (descend _ (AtSequence 0))
       (ELiteral "record") _ _ ?keyword_tree,
     Hname : Derives phase1_surface_rules
-      (descend sequence_path (AtSequence 1))
+      (descend _ (AtSequence 1))
       (ENonterminal "identifier") _ _ ?name_tree,
     Hgeneric : Derives phase1_surface_rules
-      (descend sequence_path (AtSequence 2))
+      (descend _ (AtSequence 2))
       _ _ _ ?generic_tree,
     Hmode : Derives phase1_surface_rules
-      (descend sequence_path (AtSequence 3))
+      (descend _ (AtSequence 3))
       _ _ _ ?mode_tree,
     Hrequirements : Derives phase1_surface_rules
-      (descend sequence_path (AtSequence 4))
+      (descend _ (AtSequence 4))
       _ _ _ ?requirements_tree,
     Hopen : Derives phase1_surface_rules
-      (descend sequence_path (AtSequence 5))
+      (descend _ (AtSequence 5))
       (ELiteral "{") _ _ ?open_tree,
     Hfields : Derives phase1_surface_rules
-      (descend sequence_path (AtSequence 6))
+      (descend _ (AtSequence 6))
       _ _ _ ?fields_tree,
     Hclose : Derives phase1_surface_rules
-      (descend sequence_path (AtSequence 7))
+      (descend _ (AtSequence 7))
       (ELiteral "}") _ _ ?close_tree |- _ =>
       destruct
         (literal_derivation_is_exact
