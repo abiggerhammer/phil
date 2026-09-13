@@ -47,7 +47,7 @@ data Phase1SurfaceProductionGenericParam =
 
 data Phase1SurfaceProductionVariantPayload =
    Phase1ProductionRecordPayload ([] String)
- | Phase1ProductionTuplePayload ([] Prelude.())
+ | Phase1ProductionTuplePayload ([] ())
 
 data Phase1SurfaceProductionVariant =
    Build_Phase1SurfaceProductionVariant String
@@ -76,7 +76,7 @@ phase1_surface_make_production_record_payload :: ([] String) ->
 phase1_surface_make_production_record_payload fields =
   Phase1ProductionRecordPayload fields
 
-phase1_surface_make_production_tuple_payload :: ([] Prelude.()) ->
+phase1_surface_make_production_tuple_payload :: ([] ()) ->
                                                 Phase1SurfaceProductionVariantPayload
 phase1_surface_make_production_tuple_payload types =
   Phase1ProductionTuplePayload types
