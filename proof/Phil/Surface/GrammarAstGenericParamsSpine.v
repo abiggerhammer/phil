@@ -341,7 +341,7 @@ Proof.
     + eapply phase1_surface_normalize_generic_param_suffix_round_trip.
       exact Htree.
     + eapply IH.
-      exact Hrest.
+      reflexivity.
 Qed.
 
 Record Phase1SurfaceGenericParamsSpine : Type := {
