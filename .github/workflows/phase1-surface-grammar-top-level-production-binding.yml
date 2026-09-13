@@ -1,0 +1,112 @@
+name: Phase 1 Surface Grammar Top-Level Production Binding
+
+on:
+  pull_request:
+    paths:
+      - 'grammar/phase1-surface.ebnf'
+      - 'scripts/derive_phase1_surface_grammar.py'
+      - 'scripts/derive_phase1_surface_determinacy_certificate.py'
+      - 'scripts/check_phase1_surface_corpus.py'
+      - 'proof/Phil/Surface/GrammarAstImplementationRepresentation*.v'
+      - 'proof/Phil/Surface/GrammarAstTopLevel*.v'
+      - 'generated/SurfaceGrammarAstTopLevelCarrierKernel.hs'
+      - 'src/SurfaceGrammarAstTopLevelCarrierKernel.hs'
+      - 'src/SurfaceGrammarRecognizerKernel.hs'
+      - 'src/Phil/Surface/GrammarV1/ReferenceAstTopLevel.hs'
+      - 'src/Phil/Surface/GrammarV1/ReferenceAstTopLevelRepresentationBridge.hs'
+      - 'src/Phil/Surface/GrammarV1/ReferenceKernelBridge.hs'
+      - 'test/Phase1GrammarV1ReferenceAstTopLevelRepresentationMain.hs'
+      - 'test/fixtures/phase1-surface/**'
+      - '.github/workflows/phase1-surface-grammar-top-level-production-binding.yml'
+  push:
+    branches: [main]
+    paths:
+      - 'grammar/phase1-surface.ebnf'
+      - 'scripts/derive_phase1_surface_grammar.py'
+      - 'scripts/derive_phase1_surface_determinacy_certificate.py'
+      - 'scripts/check_phase1_surface_corpus.py'
+      - 'proof/Phil/Surface/GrammarAstImplementationRepresentation*.v'
+      - 'proof/Phil/Surface/GrammarAstTopLevel*.v'
+      - 'generated/SurfaceGrammarAstTopLevelCarrierKernel.hs'
+      - 'src/SurfaceGrammarAstTopLevelCarrierKernel.hs'
+      - 'src/SurfaceGrammarRecognizerKernel.hs'
+      - 'src/Phil/Surface/GrammarV1/ReferenceAstTopLevel.hs'
+      - 'src/Phil/Surface/GrammarV1/ReferenceAstTopLevelRepresentationBridge.hs'
+      - 'src/Phil/Surface/GrammarV1/ReferenceKernelBridge.hs'
+      - 'test/Phase1GrammarV1ReferenceAstTopLevelRepresentationMain.hs'
+      - 'test/fixtures/phase1-surface/**'
+      - '.github/workflows/phase1-surface-grammar-top-level-production-binding.yml'
+
+permissions:
+  contents: read
+
+jobs:
+  kernel-identity:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    container:
+      image: rocq/rocq-prover:9.2.0
+      options: --user root
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Derive exact Grammar-v1 inputs
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 scripts/derive_phase1_surface_grammar.py --write
+          python3 scripts/derive_phase1_surface_determinacy_certificate.py --write
+          python3 scripts/derive_phase1_surface_grammar.py --check
+          python3 scripts/derive_phase1_surface_determinacy_certificate.py --check
+
+      - name: Fresh-extract staged and compact top-level kernels
+        shell: bash
+        run: |
+          set -euo pipefail
+          export PATH="/home/rocq/.opam/${COMPILER}/bin:$PATH"
+          {
+            echo '-Q proof/Phil Phil'
+            find proof/Phil/Surface -maxdepth 1 -type f -name 'Grammar*.v' -print | sort
+          } > _CoqProject.surface-top-level-production-binding
+          rocq makefile -f _CoqProject.surface-top-level-production-binding \
+            -o Makefile.surface-top-level-production-binding
+          make -f Makefile.surface-top-level-production-binding -j2 \
+            proof/Phil/Surface/GrammarAstTopLevelImplementationRepresentationExtraction.vo \
+            proof/Phil/Surface/GrammarAstTopLevelImplementationCarrierExtraction.vo
+          echo 'f912067f823bb55902898cb0238602b3801b7fb142adb98bcf012021a21852b4  SurfaceGrammarAstTopLevelRepresentationKernel.hs' | sha256sum -c -
+          sha256sum SurfaceGrammarAstTopLevelCarrierKernel.hs
+          diff -u \
+            SurfaceGrammarAstTopLevelCarrierKernel.hs \
+            generated/SurfaceGrammarAstTopLevelCarrierKernel.hs
+          diff -u \
+            generated/SurfaceGrammarAstTopLevelCarrierKernel.hs \
+            src/SurfaceGrammarAstTopLevelCarrierKernel.hs
+
+  production-binding:
+    needs: kernel-identity
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: haskell-actions/setup@v2
+        with:
+          ghc-version: '9.6.7'
+          cabal-version: 'latest'
+
+      - name: Build ordinary regression substrate
+        run: cabal build all --enable-tests
+
+      - name: Strict-typecheck checked-in compact top-level carrier
+        run: ghc -Wall -Werror -Wno-name-shadowing -fno-code src/SurfaceGrammarAstTopLevelCarrierKernel.hs
+
+      - name: Check certified and production top-level representations on full corpus
+        shell: bash
+        run: |
+          set -euo pipefail
+          cabal exec -- ghc --make \
+            -Wall -Werror -Wno-name-shadowing \
+            -isrc \
+            test/Phase1GrammarV1ReferenceAstTopLevelRepresentationMain.hs \
+            -o /tmp/phase1-surface-top-level-production-binding
+          python3 scripts/check_phase1_surface_corpus.py --emit-parser-cases \
+            | /tmp/phase1-surface-top-level-production-binding
