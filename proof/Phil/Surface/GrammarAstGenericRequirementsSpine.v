@@ -435,7 +435,7 @@ Proof.
   rewrite (phase1_surface_expect_literal_round_trip "{" open_tree Hopen).
   rewrite (phase1_surface_expect_repetition_round_trip
     entries_tree entries Hentries).
-  rewrite (phase1_surface_normalize_generic_requirement_spines_round_trip
+  rewrite <- (phase1_surface_normalize_generic_requirement_spines_round_trip
     entries normalized Hnormalized).
   rewrite (phase1_surface_expect_literal_round_trip "}" close_tree Hclose).
   reflexivity.
@@ -476,7 +476,7 @@ Proof.
     unfold phase1_surface_optional_generic_requirements_tree.
     rewrite (phase1_surface_expect_optional_round_trip
       tree (Some body) Hoptional).
-    rewrite (phase1_surface_normalize_generic_requirements_spine_round_trip
+    rewrite <- (phase1_surface_normalize_generic_requirements_spine_round_trip
       body actual Hrequirements).
     reflexivity.
   - inversion Hnormalize; subst requirements.
