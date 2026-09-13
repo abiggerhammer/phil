@@ -362,13 +362,16 @@ evalCallable environment state located name arguments =
         Just outcomes ->
           let invocationSpan = locatedSpan located
               declarationKey = surfaceCallableDeclarationKey signature
-              withFacts outcome = outcome
-                { callableOutcomeFacts = Map.findWithDefault
-                    []
-                    (invocationSpan, declarationKey, callableOutcomeLabel outcome)
-                    (surfaceCallableOutcomeFacts environment)
-                }
-          in callableDecision next signature (map withFacts outcomes)
+              withOccurrenceState outcome =
+                let key =
+                      (invocationSpan, declarationKey, callableOutcomeLabel outcome)
+                in outcome
+                  { callableOutcomeFacts = Map.findWithDefault
+                      [] key (surfaceCallableOutcomeFacts environment)
+                  , callableOutcomeObligations = Map.findWithDefault
+                      [] key (surfaceCallableOutcomeObligations environment)
+                  }
+          in callableDecision next signature (map withOccurrenceState outcomes)
   where
     checkArgument current ((expectedMode, expectedType), expression) = do
       paths <- evalExpression environment current expression
@@ -406,6 +409,9 @@ evalCallable environment state located name arguments =
       let labels = map callableOutcomeLabel outcomes
       unless (Set.size (Set.fromList labels) == length labels) $
         throw located TypeMismatch "callable decision outcome labels are not unique"
+      unless (all exactObligationArity outcomes) $
+        throw located MissingEvidence
+          "CALL-019 residual obligation bindings are missing or substituted"
       case surfaceCallableResult signature of
         Nothing -> Right
           [ valuePath next (RuntimeScalar
@@ -415,6 +421,10 @@ evalCallable environment state located name arguments =
           ]
         Just _ -> throw located TypeMismatch
           "branch-dispatched callable cannot also expose one unbranched result"
+
+    exactObligationArity outcome =
+      length (callableOutcomeObligations outcome)
+        == callableOutcomeResidualObligationArity outcome
 
 evalPrimitive
   :: SurfaceEnvironment
@@ -979,11 +989,63 @@ checkDecisionArm environment state decision locatedArm = do
         label
         (casePatternBinders pattern')
         locatedArm
-      checkScopedValueBlock
-        environment
-        state
-        withBinders
-        (caseArmBody (locatedValue locatedArm))
+      case callableDecisionObligations decision label of
+        Just obligations ->
+          checkCallableDecisionArm
+            environment
+            state
+            withBinders
+            obligations
+            (caseArmBody (locatedValue locatedArm))
+        Nothing ->
+          checkScopedValueBlock
+            environment
+            state
+            withBinders
+            (caseArmBody (locatedValue locatedArm))
+
+callableDecisionObligations
+  :: DecisionKind
+  -> Text
+  -> Maybe [(Text, Proposition)]
+callableDecisionObligations decision label = case decision of
+  CallableDecision outcomes -> case
+      [ callableOutcomeObligations outcome
+      | outcome <- outcomes
+      , callableOutcomeLabel outcome == label
+      , callableOutcomeControl outcome == CallableOutcomeContinues
+      ] of
+    [obligations] -> Just obligations
+    _ -> Nothing
+  _ -> Nothing
+
+checkCallableDecisionArm
+  :: SurfaceEnvironment
+  -> SurfaceState
+  -> SurfaceState
+  -> [(Text, Proposition)]
+  -> Located Block
+  -> Either SurfaceCheckError [SurfacePath]
+checkCallableDecisionArm environment incoming scoped obligations body = do
+  paths <- checkValueBlock environment scoped body
+  mapM checkAndPrune paths
+  where
+    checkAndPrune path = do
+      mapM_ (checkObligation (pathState path)) obligations
+      pruneScopedPath
+        (locatedSpan body)
+        (Map.keysSet (stateBindings incoming))
+        path
+
+    checkObligation branchState (name, proposition) =
+      let required = rewriteProposition branchState proposition
+      in unless (hasExactEvidence required branchState) $
+        Left SurfaceCheckError
+          { surfaceErrorSpan = locatedSpan body
+          , surfaceErrorClass = MissingEvidence
+          , surfaceErrorDetail =
+              "CALL-019 residual obligation is not discharged: " <> name
+          }
 
 callableDecisionControl :: DecisionKind -> Text -> Maybe CallableOutcomeControlSpec
 callableDecisionControl decision label = case decision of
