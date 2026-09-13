@@ -187,7 +187,7 @@ Proof.
     Hitems).
   rewrite (phase1_surface_expect_literal_round_trip
     "record" keyword_tree Hkeyword).
-  rewrite (phase1_surface_normalize_identifier_round_trip
+  rewrite <- (phase1_surface_normalize_identifier_round_trip
     name_tree name Hname).
   rewrite (phase1_surface_expect_literal_round_trip "{" open_tree Hopen).
   rewrite (phase1_surface_expect_literal_round_trip "}" close_tree Hclose).
