@@ -81,7 +81,7 @@ Proof.
   rewrite (phase1_surface_expect_sequence_round_trip body items Hsequence).
   rewrite (phase1_surface_exact3_round_trip
     items name_tree colon_tree type_tree Hitems).
-  rewrite (phase1_surface_normalize_identifier_round_trip
+  rewrite <- (phase1_surface_normalize_identifier_round_trip
     name_tree name Hname).
   rewrite (phase1_surface_expect_literal_round_trip ":" colon_tree Hcolon).
   reflexivity.
