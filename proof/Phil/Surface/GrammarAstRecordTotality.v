@@ -2,7 +2,8 @@ From Stdlib Require Import Lists.List Strings.String.
 
 From Phil.Surface Require Import
   GrammarAstRecordSpine
-  GrammarAstTopLevelTotality.
+  GrammarAstTopLevelTotality
+  GrammarDeterminacySimpleResolverSoundness.
 
 Import ListNotations.
 Open Scope string_scope.
