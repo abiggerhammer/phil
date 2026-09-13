@@ -110,7 +110,7 @@ Proof.
     "structural_mode" tree body Hnode).
   rewrite (phase1_surface_expect_alternative_round_trip
     body index selected Halternative).
-  rewrite (phase1_surface_structural_mode_index_round_trip index actual Hmode).
+  rewrite <- (phase1_surface_structural_mode_index_round_trip index actual Hmode).
   rewrite (phase1_surface_expect_literal_round_trip
     (phase1_surface_structural_mode_literal actual) selected Hselected).
   reflexivity.
