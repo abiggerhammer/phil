@@ -19,6 +19,11 @@ import Phil.Compiler.CallableInvocationSemantics
 import Phil.Compiler.CallableOutcomeBranchSemantics
   ( SurfaceCallableOutcomeArmSemanticWitness (..)
   )
+import Phil.Compiler.CallableOutcomeContinuation
+  ( SurfaceCallableOutcomeContinuation
+  , SurfaceCallableOutcomeContinuationError
+  , composeSurfaceCallableOutcomeContinuations
+  )
 import Phil.Compiler.CallableOutcomeDispatch
   ( SurfaceCallableOutcomeControl (..)
   )
@@ -63,6 +68,7 @@ data SurfaceCallableCallerContext = SurfaceCallableCallerContext
 data CheckedSurfaceCallableInvocationContext = CheckedSurfaceCallableInvocationContext
   { checkedInvocationSemanticSummary :: SurfaceCallableSemanticSummary
   , checkedInvocationEffectBound :: CheckedCallableEffects
+  , checkedInvocationOutcomeContinuations :: [SurfaceCallableOutcomeContinuation]
   }
   deriving (Eq, Show)
 
@@ -102,6 +108,8 @@ data SurfaceCallableInvocationContextError
   | SurfaceInvocationOutcomeWitnessUnowned
       SourceSpan
       DeclarationKey
+  | SurfaceInvocationOutcomeContinuationRejected
+      SurfaceCallableOutcomeContinuationError
   deriving (Eq, Show)
 
 -- | Check one already-derived CALL-019 semantic summary against the enclosing
@@ -118,12 +126,18 @@ checkSurfaceCallableInvocationSummary
   -> Either SurfaceCallableInvocationContextError CheckedSurfaceCallableInvocationContext
 checkSurfaceCallableInvocationSummary callerContext summary = do
   mapM_ checkDirectAccount (surfaceCallableSemanticAccounts summary)
-  checkCallerContext callerContext summary
+  checkCallerContext [] callerContext summary
 
 -- | Branch-aware CALL-019 context admission. Multi-outcome direct invocations
 -- are accepted only when compiler-side arm witnesses cover the exact semantic
 -- branch domain for that invocation occurrence and retain each complete outcome
 -- contract unchanged. No branch buckets are unioned or reconstructed here.
+--
+-- After admission, the exact witnesses are projected into branch-local outcome
+-- continuation records. This makes state, postconditions, residual obligations,
+-- assumptions, effects, discharged facts, lifecycle, and caller-control
+-- disposition available to successor compiler passes without teaching Surface
+-- about CALL semantic types or flattening sibling outcomes together.
 --
 -- Direct named lifecycle remains fail-closed except for PreserveCallee, and
 -- fatal outcomes remain inadmissible because Surface still has no exact fatal
@@ -138,13 +152,16 @@ checkSurfaceCallableInvocationSummaryWithOutcomeBranches witnesses callerContext
   let accounts = surfaceCallableSemanticAccounts summary
   mapM_ (checkWitnessOwned accounts) witnesses
   mapM_ (checkDirectAccountWithOutcomeBranches witnesses) accounts
-  checkCallerContext callerContext summary
+  continuations <- mapLeft SurfaceInvocationOutcomeContinuationRejected
+    (composeSurfaceCallableOutcomeContinuations witnesses)
+  checkCallerContext continuations callerContext summary
 
 checkCallerContext
-  :: SurfaceCallableCallerContext
+  :: [SurfaceCallableOutcomeContinuation]
+  -> SurfaceCallableCallerContext
   -> SurfaceCallableSemanticSummary
   -> Either SurfaceCallableInvocationContextError CheckedSurfaceCallableInvocationContext
-checkCallerContext callerContext summary = do
+checkCallerContext continuations callerContext summary = do
   let missingAuthority = Set.difference
         (surfaceRequiredCallerAuthority summary)
         (surfaceCallerAvailableAuthority callerContext)
@@ -164,6 +181,7 @@ checkCallerContext callerContext summary = do
   pure CheckedSurfaceCallableInvocationContext
     { checkedInvocationSemanticSummary = summary
     , checkedInvocationEffectBound = checkedEffects
+    , checkedInvocationOutcomeContinuations = continuations
     }
 
 checkSurfaceComponentWithInvocationContext
