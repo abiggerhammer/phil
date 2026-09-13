@@ -102,75 +102,93 @@ Proof.
   end.
   match goal with
   | Hkeyword : Derives phase1_surface_rules _
-      (ELiteral "record") _ _ ?keyword_tree,
-    Hname : Derives phase1_surface_rules _
-      (ENonterminal "identifier") _ _ ?name_tree,
-    Hgeneric : Derives phase1_surface_rules _
-      (EOptional (ENonterminal "generic_params")) _ _ ?generic_tree,
-    Hmode : Derives phase1_surface_rules _
-      (EOptional
-        (ESequence
-          [ ELiteral "mode";
-            ENonterminal "structural_mode"
-          ])) _ _ ?mode_tree,
-    Hrequirements : Derives phase1_surface_rules _
-      (EOptional (ENonterminal "generic_requirements")) _ _ ?requirements_tree,
-    Hopen : Derives phase1_surface_rules _
-      (ELiteral "{") _ _ ?open_tree,
-    Hfields : Derives phase1_surface_rules _
-      (EOptional
-        (ESequence
-          [ ENonterminal "field_decl";
-            ERepetition
+      (ELiteral "record") _ _ ?keyword_tree |- _ =>
+    match goal with
+    | Hname : Derives phase1_surface_rules _
+        (ENonterminal "identifier") _ _ ?name_tree |- _ =>
+      match goal with
+      | Hgeneric : Derives phase1_surface_rules _
+          (EOptional (ENonterminal "generic_params")) _ _ ?generic_tree |- _ =>
+        match goal with
+        | Hmode : Derives phase1_surface_rules _
+            (EOptional
               (ESequence
-                [ ELiteral ",";
-                  ENonterminal "field_decl"
-                ]);
-            EOptional (ELiteral ",")
-          ])) _ _ ?fields_tree,
-    Hclose : Derives phase1_surface_rules _
-      (ELiteral "}") _ _ ?close_tree |- _ =>
-      destruct
-        (literal_derivation_is_exact
-          phase1_surface_rules _ "record" _ _ keyword_tree Hkeyword)
-        as [keyword_tail [_ [_ Hkeyword_tree]]];
-      destruct
-        (literal_derivation_is_exact
-          phase1_surface_rules _ "{" _ _ open_tree Hopen)
-        as [open_tail [_ [_ Hopen_tree]]];
-      destruct
-        (literal_derivation_is_exact
-          phase1_surface_rules _ "}" _ _ close_tree Hclose)
-        as [close_tail [_ [_ Hclose_tree]]];
-      destruct
-        (phase1_surface_normalize_identifier_total_from_derivation
-          _ _ _ name_tree Hname)
-        as [name Hname_normalize];
-      exists
-        {| phase1_record_spine_name := name;
-           phase1_record_spine_generic_params_tree := generic_tree;
-           phase1_record_spine_mode_tree := mode_tree;
-           phase1_record_spine_requirements_tree := requirements_tree;
-           phase1_record_spine_fields_tree := fields_tree |};
-      split;
-      [ rewrite Htree, Hsubtree, Hkeyword_tree, Hopen_tree, Hclose_tree;
-        unfold phase1_surface_normalize_record_spine,
-          phase1_surface_expect_nonterminal,
-          phase1_surface_expect_sequence,
-          phase1_surface_exact8,
-          phase1_surface_expect_literal;
-        cbn;
-        rewrite Hname_normalize;
-        reflexivity
-      | eapply phase1_surface_normalize_record_spine_round_trip;
-        rewrite Htree, Hsubtree, Hkeyword_tree, Hopen_tree, Hclose_tree;
-        unfold phase1_surface_normalize_record_spine,
-          phase1_surface_expect_nonterminal,
-          phase1_surface_expect_sequence,
-          phase1_surface_exact8,
-          phase1_surface_expect_literal;
-        cbn;
-        rewrite Hname_normalize;
-        reflexivity ]
+                [ ELiteral "mode";
+                  ENonterminal "structural_mode"
+                ])) _ _ ?mode_tree |- _ =>
+          match goal with
+          | Hrequirements : Derives phase1_surface_rules _
+              (EOptional (ENonterminal "generic_requirements"))
+              _ _ ?requirements_tree |- _ =>
+            match goal with
+            | Hopen : Derives phase1_surface_rules _
+                (ELiteral "{") _ _ ?open_tree |- _ =>
+              match goal with
+              | Hfields : Derives phase1_surface_rules _
+                  (EOptional
+                    (ESequence
+                      [ ENonterminal "field_decl";
+                        ERepetition
+                          (ESequence
+                            [ ELiteral ",";
+                              ENonterminal "field_decl"
+                            ]);
+                        EOptional (ELiteral ",")
+                      ])) _ _ ?fields_tree |- _ =>
+                match goal with
+                | Hclose : Derives phase1_surface_rules _
+                    (ELiteral "}") _ _ ?close_tree |- _ =>
+                  destruct
+                    (literal_derivation_is_exact
+                      phase1_surface_rules _ "record" _ _
+                      keyword_tree Hkeyword)
+                    as [keyword_tail [_ [_ Hkeyword_tree]]];
+                  destruct
+                    (literal_derivation_is_exact
+                      phase1_surface_rules _ "{" _ _ open_tree Hopen)
+                    as [open_tail [_ [_ Hopen_tree]]];
+                  destruct
+                    (literal_derivation_is_exact
+                      phase1_surface_rules _ "}" _ _ close_tree Hclose)
+                    as [close_tail [_ [_ Hclose_tree]]];
+                  destruct
+                    (phase1_surface_normalize_identifier_total_from_derivation
+                      _ _ _ name_tree Hname)
+                    as [name Hname_normalize];
+                  exists
+                    {| phase1_record_spine_name := name;
+                       phase1_record_spine_generic_params_tree := generic_tree;
+                       phase1_record_spine_mode_tree := mode_tree;
+                       phase1_record_spine_requirements_tree := requirements_tree;
+                       phase1_record_spine_fields_tree := fields_tree |};
+                  split;
+                  [ rewrite Htree, Hsubtree,
+                      Hkeyword_tree, Hopen_tree, Hclose_tree;
+                    unfold phase1_surface_normalize_record_spine,
+                      phase1_surface_expect_nonterminal,
+                      phase1_surface_expect_sequence,
+                      phase1_surface_exact8,
+                      phase1_surface_expect_literal;
+                    cbn;
+                    rewrite Hname_normalize;
+                    reflexivity
+                  | eapply phase1_surface_normalize_record_spine_round_trip;
+                    rewrite Htree, Hsubtree,
+                      Hkeyword_tree, Hopen_tree, Hclose_tree;
+                    unfold phase1_surface_normalize_record_spine,
+                      phase1_surface_expect_nonterminal,
+                      phase1_surface_expect_sequence,
+                      phase1_surface_exact8,
+                      phase1_surface_expect_literal;
+                    cbn;
+                    rewrite Hname_normalize;
+                    reflexivity ]
+                end
+              end
+            end
+          end
+        end
+      end
+    end
   end.
 Qed.
