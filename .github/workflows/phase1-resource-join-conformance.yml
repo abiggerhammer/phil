@@ -58,3 +58,6 @@ jobs:
 
       - name: RES-014 zero-actual loop control conformance
         run: cabal exec -- runghc -Wall -Werror -isrc test/Phase1ZeroActualLoopControlMain.hs
+
+      - name: CALL-019 branch-local callable resource residue application
+        run: cabal exec -- runghc -Wall -Werror -isrc test/Phase1CALL019OutcomeBranchResourceApplyMain.hs
