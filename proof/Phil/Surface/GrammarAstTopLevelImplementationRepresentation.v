@@ -105,8 +105,8 @@ Proof.
   unfold phase1_surface_top_level_from_implementation.
   unfold phase1_surface_top_level_to_implementation.
   unfold phase1_surface_top_level_selected_tree.
-  rewrite phase1_surface_attributes_implementation_round_trip.
-  reflexivity.
+  f_equal.
+  apply phase1_surface_attributes_implementation_round_trip.
 Qed.
 
 Fixpoint phase1_surface_top_levels_from_implementation
