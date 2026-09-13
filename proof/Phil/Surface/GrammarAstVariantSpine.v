@@ -119,7 +119,7 @@ Proof.
   rewrite (phase1_surface_expect_sequence_round_trip body items Hsequence).
   rewrite (phase1_surface_exact2_round_trip
     items name_tree payload_tree Hitems).
-  rewrite (phase1_surface_normalize_identifier_round_trip
+  rewrite <- (phase1_surface_normalize_identifier_round_trip
     name_tree name Hname).
   rewrite (phase1_surface_normalize_optional_variant_payload_round_trip
     payload_tree payload Hpayload).
