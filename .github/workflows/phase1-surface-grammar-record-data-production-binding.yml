@@ -100,7 +100,6 @@ jobs:
             src/SurfaceGrammarAstRecordDataCarrierKernel.hs
 
   production-binding:
-    needs: kernel-identity
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
