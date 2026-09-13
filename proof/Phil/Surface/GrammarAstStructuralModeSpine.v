@@ -237,14 +237,15 @@ Theorem phase1_surface_normalize_record_mode_spine_round_trip :
 Proof.
   intros [name generic_params mode_tree requirements_tree fields_tree]
     refined Hnormalize.
+  unfold phase1_surface_normalize_record_mode_spine in Hnormalize.
   cbn in Hnormalize.
   destruct (phase1_surface_normalize_optional_mode mode_tree)
     as [mode |] eqn:Hmode; try discriminate Hnormalize.
-  inversion Hnormalize; subst.
+  injection Hnormalize as <-.
   unfold phase1_surface_record_mode_spine_tree,
     phase1_surface_record_generic_spine_tree.
   cbn.
-  rewrite <- (phase1_surface_normalize_optional_mode_round_trip
+  rewrite (phase1_surface_normalize_optional_mode_round_trip
     mode_tree mode Hmode).
   reflexivity.
 Qed.
