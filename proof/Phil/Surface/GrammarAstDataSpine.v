@@ -29,6 +29,16 @@ Record Phase1SurfaceExact9 (A : Type) : Type := {
   phase1_exact9_9 : A
 }.
 
+Arguments phase1_exact9_1 {A} _.
+Arguments phase1_exact9_2 {A} _.
+Arguments phase1_exact9_3 {A} _.
+Arguments phase1_exact9_4 {A} _.
+Arguments phase1_exact9_5 {A} _.
+Arguments phase1_exact9_6 {A} _.
+Arguments phase1_exact9_7 {A} _.
+Arguments phase1_exact9_8 {A} _.
+Arguments phase1_exact9_9 {A} _.
+
 Definition phase1_surface_exact9 {A : Type}
   (items : list A) : option (Phase1SurfaceExact9 A) :=
   match items with
