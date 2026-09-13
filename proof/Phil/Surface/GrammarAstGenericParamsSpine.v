@@ -180,7 +180,7 @@ Proof.
     "generic_kind" tree body Hnode).
   rewrite (phase1_surface_expect_alternative_round_trip
     body index selected Halternative).
-  rewrite (phase1_surface_generic_kind_tag_index_round_trip index tag Htag).
+  rewrite <- (phase1_surface_generic_kind_tag_index_round_trip index tag Htag).
   reflexivity.
 Qed.
 
@@ -254,7 +254,7 @@ Proof.
   rewrite (phase1_surface_expect_sequence_round_trip body items Hsequence).
   rewrite (phase1_surface_exact3_round_trip
     items name_tree colon_tree kind_tree Hitems).
-  rewrite (phase1_surface_normalize_identifier_round_trip name_tree name Hname).
+  rewrite <- (phase1_surface_normalize_identifier_round_trip name_tree name Hname).
   rewrite (phase1_surface_expect_literal_round_trip ":" colon_tree Hcolon).
   rewrite (phase1_surface_normalize_generic_kind_spine_round_trip
     kind_tree kind Hkind).
