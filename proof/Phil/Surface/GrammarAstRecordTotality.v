@@ -18,22 +18,33 @@ Open Scope string_scope.
 *)
 
 Lemma phase1_surface_record_decl_lookup_for_totality :
-  exists generic_expr mode_expr requirements_expr fields_expr,
-    lookupRule "record_decl" phase1_surface_rules =
-      Some
-        (ESequence
-          [ ELiteral "record";
-            ENonterminal "identifier";
-            generic_expr;
-            mode_expr;
-            requirements_expr;
-            ELiteral "{";
-            fields_expr;
-            ELiteral "}"
-          ]).
+  lookupRule "record_decl" phase1_surface_rules =
+    Some
+      (ESequence
+        [ ELiteral "record";
+          ENonterminal "identifier";
+          EOptional (ENonterminal "generic_params");
+          EOptional
+            (ESequence
+              [ ELiteral "mode";
+                ENonterminal "structural_mode"
+              ]);
+          EOptional (ENonterminal "generic_requirements");
+          ELiteral "{";
+          EOptional
+            (ESequence
+              [ ENonterminal "field_decl";
+                ERepetition
+                  (ESequence
+                    [ ELiteral ",";
+                      ENonterminal "field_decl"
+                    ]);
+                EOptional (ELiteral ",")
+              ]);
+          ELiteral "}"
+        ]).
 Proof.
   vm_compute.
-  do 4 eexists.
   reflexivity.
 Qed.
 
@@ -46,14 +57,12 @@ Theorem phase1_surface_normalize_record_spine_total_from_derivation :
       phase1_surface_record_spine_tree record = tree.
 Proof.
   intros path input rest tree Hderive.
-  destruct phase1_surface_record_decl_lookup_for_totality
-    as [generic_expr [mode_expr [requirements_expr [fields_expr Hlookup_exact]]]].
   destruct
     (derives_nonterminal_exposes_body
       phase1_surface_rules path "record_decl"
       input rest tree Hderive)
     as [body [subtree [Hlookup [Htree Hbody]]]].
-  rewrite Hlookup_exact in Hlookup.
+  rewrite phase1_surface_record_decl_lookup_for_totality in Hlookup.
   inversion Hlookup; subst body.
   destruct
     (derives_sequence_expression_exposes_items
@@ -61,11 +70,24 @@ Proof.
       (descend path (AtNonterminal "record_decl"))
       [ ELiteral "record";
         ENonterminal "identifier";
-        generic_expr;
-        mode_expr;
-        requirements_expr;
+        EOptional (ENonterminal "generic_params");
+        EOptional
+          (ESequence
+            [ ELiteral "mode";
+              ENonterminal "structural_mode"
+            ]);
+        EOptional (ENonterminal "generic_requirements");
         ELiteral "{";
-        fields_expr;
+        EOptional
+          (ESequence
+            [ ENonterminal "field_decl";
+              ERepetition
+                (ESequence
+                  [ ELiteral ",";
+                    ENonterminal "field_decl"
+                  ]);
+              EOptional (ELiteral ",")
+            ]);
         ELiteral "}"
       ]
       input rest subtree Hbody)
@@ -78,31 +100,35 @@ Proof.
   | Hnil : DerivesSequence phase1_surface_rules _ _ [] _ _ _ |- _ =>
       inversion Hnil; subst; clear Hnil
   end.
-  Show.
   match goal with
-  | Hkeyword : Derives phase1_surface_rules
-      (descend _ (AtSequence 0))
+  | Hkeyword : Derives phase1_surface_rules _
       (ELiteral "record") _ _ ?keyword_tree,
-    Hname : Derives phase1_surface_rules
-      (descend _ (AtSequence 1))
+    Hname : Derives phase1_surface_rules _
       (ENonterminal "identifier") _ _ ?name_tree,
-    Hgeneric : Derives phase1_surface_rules
-      (descend _ (AtSequence 2))
-      _ _ _ ?generic_tree,
-    Hmode : Derives phase1_surface_rules
-      (descend _ (AtSequence 3))
-      _ _ _ ?mode_tree,
-    Hrequirements : Derives phase1_surface_rules
-      (descend _ (AtSequence 4))
-      _ _ _ ?requirements_tree,
-    Hopen : Derives phase1_surface_rules
-      (descend _ (AtSequence 5))
+    Hgeneric : Derives phase1_surface_rules _
+      (EOptional (ENonterminal "generic_params")) _ _ ?generic_tree,
+    Hmode : Derives phase1_surface_rules _
+      (EOptional
+        (ESequence
+          [ ELiteral "mode";
+            ENonterminal "structural_mode"
+          ])) _ _ ?mode_tree,
+    Hrequirements : Derives phase1_surface_rules _
+      (EOptional (ENonterminal "generic_requirements")) _ _ ?requirements_tree,
+    Hopen : Derives phase1_surface_rules _
       (ELiteral "{") _ _ ?open_tree,
-    Hfields : Derives phase1_surface_rules
-      (descend _ (AtSequence 6))
-      _ _ _ ?fields_tree,
-    Hclose : Derives phase1_surface_rules
-      (descend _ (AtSequence 7))
+    Hfields : Derives phase1_surface_rules _
+      (EOptional
+        (ESequence
+          [ ENonterminal "field_decl";
+            ERepetition
+              (ESequence
+                [ ELiteral ",";
+                  ENonterminal "field_decl"
+                ]);
+            EOptional (ELiteral ",")
+          ])) _ _ ?fields_tree,
+    Hclose : Derives phase1_surface_rules _
       (ELiteral "}") _ _ ?close_tree |- _ =>
       destruct
         (literal_derivation_is_exact
