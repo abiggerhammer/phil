@@ -10,6 +10,7 @@ import Data.Map.Strict (Map)
 import qualified Data.Set as Set
 import Data.Set (Set)
 import Data.Text (Text)
+import qualified Data.Text as Text
 import Phil.Compiler.CallableOutcomeContinuation
   ( SurfaceCallableOutcomeContinuation (..)
   , SurfaceCallableOutcomeContinuationDisposition (..)
@@ -95,7 +96,7 @@ bindSurfaceCallableOutcomeBranchFacts bindings continuations = do
           Left (SurfaceCallableOutcomeFactBindingKeyMismatch
             key
             (surfaceOutcomeFactAtom binding))
-      | surfaceOutcomeFactEvidenceName binding == "" =
+      | Text.null (surfaceOutcomeFactEvidenceName binding) =
           Left (SurfaceCallableOutcomeFactBindingEmptyEvidenceName key)
       | otherwise = Right ()
 
