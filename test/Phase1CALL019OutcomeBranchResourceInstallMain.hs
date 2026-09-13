@@ -10,8 +10,7 @@ import Phil.Compiler.CallableOutcomeBranchResourceInstall
   , installSurfaceCallableOutcomeBranchResources
   )
 import Phil.Compiler.CallableOutcomeBranchResources
-  ( SurfaceCallableOutcomeBranchResourceEnvironment (..)
-  , SurfaceCallableOutcomeResourceExpectation (..)
+  ( SurfaceCallableOutcomeResourceExpectation (..)
   , SurfaceCallableOutcomeResourceResidueBinding (..)
   , bindSurfaceCallableOutcomeBranchResources
   )
@@ -147,9 +146,8 @@ continuation label line disposition outcomeContract =
     , surfaceContinuationContract = outcomeContract
     }
 
-ownerMeta, endpointMeta :: BindingMeta
+ownerMeta :: BindingMeta
 ownerMeta = BindingMeta Linear (TyOpaque "Owner") PlainShape
-endpointMeta = BindingMeta Linear (TyEndpoint (error "endpoint session is intentionally opaque in installer test")) PlainShape
 
 successBinding, retryBinding :: SurfaceCallableOutcomeResourceResidueBinding
 successBinding = resourceBinding
