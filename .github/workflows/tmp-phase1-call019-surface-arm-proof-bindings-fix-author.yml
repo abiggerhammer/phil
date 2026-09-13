@@ -1,0 +1,68 @@
+name: Temporary CALL-019 Surface Arm Proof Bindings Fix Author
+
+on:
+  push:
+    branches:
+      - phase1-call019-surface-arm-proof-bindings
+    paths:
+      - '.github/workflows/tmp-phase1-call019-surface-arm-proof-bindings-fix-author.yml'
+
+permissions:
+  contents: write
+
+jobs:
+  fix-author:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check out branch
+        uses: actions/checkout@v4
+        with:
+          ref: phase1-call019-surface-arm-proof-bindings
+          fetch-depth: 0
+
+      - name: Make Dispatch authoring robust
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 - <<'PY'
+          from pathlib import Path
+
+          path = Path('.github/workflows/tmp-phase1-call019-surface-arm-proof-bindings-author.yml')
+          text = path.read_text()
+          start_marker = "          replace_once(\n              'src/Phil/Compiler/CallableOutcomeDispatch.hs',"
+          end_marker = "          replace_once(\n              'src/Phil/Surface/Check/Engine.hs',"
+          start = text.find(start_marker)
+          end = text.find(end_marker, start)
+          if start < 0 or end < 0:
+              raise SystemExit('could not locate Dispatch authoring block')
+          replacement = '''          p_dispatch = Path('src/Phil/Compiler/CallableOutcomeDispatch.hs')
+          dispatch = p_dispatch.read_text()
+          close_line = "            , callableOutcomeControl = CallableOutcomeCloses outcome\\n"
+          if dispatch.count(close_line) != 1:
+              raise SystemExit(f"CallableOutcomeDispatch.hs: close-control site count {dispatch.count(close_line)}")
+          dispatch = dispatch.replace(
+              close_line,
+              close_line + "            , callableOutcomeFacts = []\\n",
+              1)
+          continue_line = "  , callableOutcomeControl = CallableOutcomeContinues\\n"
+          if dispatch.count(continue_line) != 1:
+              raise SystemExit(f"CallableOutcomeDispatch.hs: continue-control site count {dispatch.count(continue_line)}")
+          dispatch = dispatch.replace(
+              continue_line,
+              continue_line + "  , callableOutcomeFacts = []\\n",
+              1)
+          p_dispatch.write_text(dispatch)
+
+'''
+          path.write_text(text[:start] + replacement + text[end:])
+          PY
+
+      - name: Commit fixed author workflow
+        shell: bash
+        run: |
+          set -euo pipefail
+          git config user.name 'Meredith L. Patterson'
+          git config user.email 'clonearmy@gmail.com'
+          git add .github/workflows/tmp-phase1-call019-surface-arm-proof-bindings-author.yml
+          git commit -m 'Fix CALL-019 arm proof binding authoring'
+          git push origin HEAD:phase1-call019-surface-arm-proof-bindings
