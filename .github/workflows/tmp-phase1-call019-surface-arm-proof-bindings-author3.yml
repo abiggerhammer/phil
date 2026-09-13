@@ -23,14 +23,14 @@ jobs:
       - name: Build Haskell substrate
         run: cabal build all --enable-tests
       - name: Check CALL-019 Surface arm proof bindings
-        run: runghc -Wall -Werror -isrc test/Phase1CALL019SurfaceArmProofBindingsMain.hs
+        run: cabal exec -- runghc -Wall -Werror -isrc test/Phase1CALL019SurfaceArmProofBindingsMain.hs
       - name: Replay CALL-019 branch-local fact binding
-        run: runghc -Wall -Werror -isrc test/Phase1CALL019OutcomeBranchFactsMain.hs
+        run: cabal exec -- runghc -Wall -Werror -isrc test/Phase1CALL019OutcomeBranchFactsMain.hs
       - name: Replay CALL-019 outcome continuation state
-        run: runghc -Wall -Werror -isrc test/Phase1CALL019OutcomeContinuationStateMain.hs
+        run: cabal exec -- runghc -Wall -Werror -isrc test/Phase1CALL019OutcomeContinuationStateMain.hs
       - name: Replay CALL-019 branch-aware invocation context
-        run: runghc -Wall -Werror -isrc test/Phase1CALL019BranchAwareInvocationContextMain.hs
+        run: cabal exec -- runghc -Wall -Werror -isrc test/Phase1CALL019BranchAwareInvocationContextMain.hs
       - name: Replay CALL-019 branch semantic witness
-        run: runghc -Wall -Werror -isrc test/Phase1CALL019OutcomeBranchSemanticWitnessMain.hs
+        run: cabal exec -- runghc -Wall -Werror -isrc test/Phase1CALL019OutcomeBranchSemanticWitnessMain.hs
       - name: Replay CALL-019 declared-terminal control
-        run: runghc -Wall -Werror -isrc test/Phase1CALL019OutcomeControlBoundaryMain.hs
+        run: cabal exec -- runghc -Wall -Werror -isrc test/Phase1CALL019OutcomeControlBoundaryMain.hs
