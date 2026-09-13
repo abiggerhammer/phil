@@ -24,7 +24,7 @@ jobs:
       - name: Apply CALL-019 residue join slice
         run: python3 scripts/tmp_call019_branch_residue_join.py
 
-      - name: Fix focused test import
+      - name: Fix focused test imports
         shell: bash
         run: |
           set -euo pipefail
@@ -36,7 +36,11 @@ jobs:
           new = '  , RejectionClass (..)\n  , SurfaceCheckError (..)\n  , SurfaceCallableSignature (..)\n'
           if text.count(old) != 1:
               raise SystemExit(f'focused test import site count {text.count(old)}')
-          path.write_text(text.replace(old, new, 1))
+          text = text.replace(old, new, 1)
+          redundant = '  , Pattern (..)\n'
+          if text.count(redundant) != 1:
+              raise SystemExit(f'focused test redundant Pattern import count {text.count(redundant)}')
+          path.write_text(text.replace(redundant, '', 1))
           PY
 
       - name: Set up Haskell
