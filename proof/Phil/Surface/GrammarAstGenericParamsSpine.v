@@ -525,14 +525,15 @@ Theorem phase1_surface_normalize_record_generic_spine_round_trip :
 Proof.
   intros [name generic_tree mode_tree requirements_tree fields_tree]
     refined Hnormalize.
+  unfold phase1_surface_normalize_record_generic_spine in Hnormalize.
   cbn in Hnormalize.
   destruct (phase1_surface_normalize_optional_generic_params generic_tree)
     as [parameters |] eqn:Hgeneric; try discriminate Hnormalize.
-  inversion Hnormalize; subst.
+  injection Hnormalize as <-.
   unfold phase1_surface_record_generic_spine_tree,
     phase1_surface_record_spine_tree.
   cbn.
-  rewrite <- (phase1_surface_normalize_optional_generic_params_round_trip
+  rewrite (phase1_surface_normalize_optional_generic_params_round_trip
     generic_tree parameters Hgeneric).
   reflexivity.
 Qed.
