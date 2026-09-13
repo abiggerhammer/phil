@@ -277,9 +277,10 @@ Proof.
       (ELiteral "}") []
       middle6 rest trees7 Hitems7)
     as [middle7 [close_tree [trees8 [Htrees7 [Hclose Hitems8]]]]].
-  inversion Hitems8; subst.
+  rewrite Hsubtree in Htree.
   rewrite Htrees0, Htrees1, Htrees2, Htrees3,
-    Htrees4, Htrees5, Htrees6, Htrees7 in Hsubtree.
+    Htrees4, Htrees5, Htrees6, Htrees7 in Htree.
+  inversion Hitems8; subst.
   destruct
     (literal_derivation_is_exact
       phase1_surface_rules _ "record" _ _ keyword_tree Hkeyword)
@@ -303,7 +304,7 @@ Proof.
        phase1_record_spine_requirements_tree := requirements_tree;
        phase1_record_spine_fields_tree := fields_tree |}.
   split.
-  - rewrite Htree, Hsubtree, Hkeyword_tree, Hopen_tree, Hclose_tree.
+  - rewrite Htree, Hkeyword_tree, Hopen_tree, Hclose_tree.
     unfold phase1_surface_normalize_record_spine,
       phase1_surface_expect_nonterminal,
       phase1_surface_expect_sequence,
@@ -313,7 +314,7 @@ Proof.
     rewrite Hname_normalize.
     reflexivity.
   - eapply phase1_surface_normalize_record_spine_round_trip.
-    rewrite Htree, Hsubtree, Hkeyword_tree, Hopen_tree, Hclose_tree.
+    rewrite Htree, Hkeyword_tree, Hopen_tree, Hclose_tree.
     unfold phase1_surface_normalize_record_spine,
       phase1_surface_expect_nonterminal,
       phase1_surface_expect_sequence,
