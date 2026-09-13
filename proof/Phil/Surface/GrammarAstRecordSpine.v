@@ -1,8 +1,9 @@
 From Stdlib Require Import Lists.List Strings.String.
 
-From Phil.Surface Require Import
+From Phil.Surface Require Export
   GrammarDerivation
-  GrammarAstSourceHeader
+  GrammarAstSourceHeader.
+From Phil.Surface Require Import
   GrammarAstTopLevelSpine.
 
 Import ListNotations.
