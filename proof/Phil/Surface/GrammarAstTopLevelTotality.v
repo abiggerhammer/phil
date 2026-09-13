@@ -528,6 +528,7 @@ Proof.
       GrammarAstSourceSpine.phase1_surface_normalize_source_spine,
       phase1_surface_normalize_source_header.
     rewrite String.eqb_refl.
+    unfold header.
     destruct module_tree as [module_body |]; cbn in *.
     - rewrite Hmodule_normalize.
       rewrite Himports_normalize.
