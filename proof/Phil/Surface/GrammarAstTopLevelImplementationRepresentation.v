@@ -187,7 +187,7 @@ Proof.
     phase1_surface_source_top_level_as_header,
     phase1_surface_source_header_to_implementation.
   cbn.
-  repeat rewrite map_length.
+  repeat rewrite length_map.
   reflexivity.
 Qed.
 
