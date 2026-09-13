@@ -133,19 +133,11 @@ data ProviderOutcomeSpec = ProviderOutcomeSpec
   }
   deriving (Eq, Ord, Show)
 
--- | Neutral caller-control shape for an already checked callable outcome.
--- Surface may continue ordinary checking or close with the exact declared
--- terminal outcome. Fatal control remains outside this carrier until Core has
--- an exact fatal `Control` constructor.
 data CallableOutcomeControlSpec
   = CallableOutcomeContinues
   | CallableOutcomeCloses Outcome
   deriving (Eq, Ord, Show)
 
--- | Neutral source-level branch shape for an already checked callable.
--- Semantic outcome identity remains compiler-side; Surface receives only the
--- explicit label, typed/mode-aware payload telescope, and exact representable
--- caller-control shape needed by `decide`.
 data CallableOutcomeSpec = CallableOutcomeSpec
   { callableOutcomeLabel :: Text
   , callableOutcomePayload :: [(Mode, Ty)]
@@ -177,11 +169,6 @@ data PrimitiveSemantics
   | PrimitiveHandlePayload
   deriving (Eq, Ord, Show)
 
--- | Already-resolved ordinary callable signature available to the surface
--- checker. The display spelling remains only the map key: exact declaration
--- identity is carried explicitly and provider primitives live in a separate map.
--- Parameter/result structural modes are checked together with semantic types so
--- restricted ownership transfer cannot be erased by a name-only invocation.
 data SurfaceCallableSignature = SurfaceCallableSignature
   { surfaceCallableDeclarationKey :: DeclarationKey
   , surfaceCallableParameters :: [(Mode, Ty)]
@@ -189,17 +176,12 @@ data SurfaceCallableSignature = SurfaceCallableSignature
   }
   deriving (Eq, Show)
 
--- | Exact prerequisites established by the competent resource/callable/provider
--- layer before the surface `release` shorthand may select a transition.
 data ReleaseRequirement
   = ReleaseAuthorityRequirement Text
   | ReleaseEvidenceRequirement Text
   | ReleaseAssumptionRequirement Text
   deriving (Eq, Ord, Show)
 
--- | Semantic dimensions of the selected resource-specific release operation.
--- These stay attached to the transition even when the source shorthand has a
--- Unit-valued continuing result.
 data ReleaseSemanticAccount = ReleaseSemanticAccount
   { releaseAccountAuthorityRefs :: Set Text
   , releaseAccountEvidenceRefs :: Set Text
@@ -210,8 +192,6 @@ data ReleaseSemanticAccount = ReleaseSemanticAccount
   }
   deriving (Eq, Show)
 
--- | A single deterministic release outcome can be represented by the shorthand.
--- A branch-sensitive operation must be called explicitly instead.
 data ReleaseTransitionOutcome
   = ReleaseContinuesUnit
   | ReleaseTerminates Outcome
@@ -219,8 +199,6 @@ data ReleaseTransitionOutcome
   | ReleaseBranchSensitive [Outcome]
   deriving (Eq, Show)
 
--- | `release e` consumes the owner. A transition that replaces it with a live
--- successor cannot be faithfully hidden behind Unit-valued release sugar.
 data ReleaseResidue
   = ReleaseConsumesOwner
   | ReleaseReplacesOwner Ty
@@ -266,12 +244,6 @@ data SurfaceEnvironment = SurfaceEnvironment
   }
   deriving (Eq, Show)
 
--- | Select exactly one already-checked release transition applicable to the
--- owner's exact semantic type. This function deliberately does not inspect the
--- owner's structural mode: mode controls use-count discipline, not disposal
--- competence. The exact contract object is returned unchanged so authority,
--- evidence, effects, assumptions, subject residue, outcome and cost metadata
--- cannot be replaced by a generic "drop" fact.
 selectReleaseTransition
   :: SurfaceEnvironment
   -> Ty
@@ -341,15 +313,11 @@ data BindingMeta = BindingMeta
   }
   deriving (Eq, Show)
 
--- | Surface-owned neutral form of one already validated CALL-019 branch
--- resource expectation. Compiler semantic-state and callee-lifecycle keys do
--- not cross this boundary.
 data CallableOutcomeResourceBinding
   = CallableOutcomeResourcePresent BindingMeta
   | CallableOutcomeResourceAbsent
   deriving (Eq, Show)
 
--- | Exact caller-visible resource residue for one continuing callable outcome.
 data CallableOutcomeResourceSpec = CallableOutcomeResourceSpec
   { callableOutcomeResourceBindings :: Map Text CallableOutcomeResourceBinding
   , callableOutcomeResourceActiveEndpoint :: Maybe Text
@@ -401,5 +369,5 @@ data DecisionKind
   | DigestDecision Proposition
   | StoreDecision
   | ProviderDecision [ProviderOutcomeSpec]
-  | CallableDecision SourceSpan DeclarationKey [CallableOutcomeSpec]
+  | CallableDecision [CallableOutcomeSpec]
   deriving (Eq, Show)
