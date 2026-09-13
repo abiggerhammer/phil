@@ -1,0 +1,684 @@
+name: Temporary CALL-019 Surface Arm Proof Bindings Author
+
+on:
+  push:
+    branches:
+      - phase1-call019-surface-arm-proof-bindings
+    paths:
+      - '.github/workflows/tmp-phase1-call019-surface-arm-proof-bindings-author.yml'
+
+permissions:
+  contents: write
+
+jobs:
+  author-and-check:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check out branch
+        uses: actions/checkout@v4
+        with:
+          ref: phase1-call019-surface-arm-proof-bindings
+          fetch-depth: 0
+
+      - name: Apply exact CALL-019 arm-fact bridge
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 - <<'PY'
+          from pathlib import Path
+
+          def replace_once(path, old, new):
+              p = Path(path)
+              text = p.read_text()
+              count = text.count(old)
+              if count != 1:
+                  raise SystemExit(f"{path}: expected exactly one replacement site, found {count}")
+              p.write_text(text.replace(old, new, 1))
+
+          replace_once(
+              'src/Phil/Surface/Check/Types.hs',
+              '''data CallableOutcomeSpec = CallableOutcomeSpec
+            { callableOutcomeLabel :: Text
+            , callableOutcomePayload :: [(Mode, Ty)]
+            , callableOutcomeControl :: CallableOutcomeControlSpec
+            }
+          ''',
+              '''data CallableOutcomeSpec = CallableOutcomeSpec
+            { callableOutcomeLabel :: Text
+            , callableOutcomePayload :: [(Mode, Ty)]
+            , callableOutcomeControl :: CallableOutcomeControlSpec
+            , callableOutcomeFacts :: [(Text, Proposition)]
+            }
+          ''')
+
+          replace_once(
+              'src/Phil/Surface/Check/Types.hs',
+              '''  , surfaceCallableOutcomes :: Map DeclarationKey [CallableOutcomeSpec]
+            , surfaceTypeAliases :: Map Text Ty
+          ''',
+              '''  , surfaceCallableOutcomes :: Map DeclarationKey [CallableOutcomeSpec]
+            , surfaceCallableOutcomeFacts ::
+                Map (SourceSpan, DeclarationKey, Text) [(Text, Proposition)]
+            , surfaceTypeAliases :: Map Text Ty
+          ''')
+
+          replace_once(
+              'src/Phil/Surface/Check/Types.hs',
+              '''  , surfaceCallableOutcomes = Map.empty
+            , surfaceTypeAliases = Map.empty
+          ''',
+              '''  , surfaceCallableOutcomes = Map.empty
+            , surfaceCallableOutcomeFacts = Map.empty
+            , surfaceTypeAliases = Map.empty
+          ''')
+
+          replace_once(
+              'src/Phil/Compiler/CallableOutcomeDispatch.hs',
+              '''            , callableOutcomeControl = CallableOutcomeCloses outcome
+            }
+          ''',
+              '''            , callableOutcomeControl = CallableOutcomeCloses outcome
+            , callableOutcomeFacts = []
+            }
+          ''')
+
+          replace_once(
+              'src/Phil/Compiler/CallableOutcomeDispatch.hs',
+              '''  , callableOutcomeControl = CallableOutcomeContinues
+            }
+          ''',
+              '''  , callableOutcomeControl = CallableOutcomeContinues
+            , callableOutcomeFacts = []
+            }
+          ''')
+
+          replace_once(
+              'src/Phil/Surface/Check/Engine.hs',
+              '''        Just outcomes -> callableDecision next signature outcomes
+          ''',
+              '''        Just outcomes ->
+              let invocationSpan = locatedSpan located
+                  declarationKey = surfaceCallableDeclarationKey signature
+                  withFacts outcome = outcome
+                    { callableOutcomeFacts = Map.findWithDefault
+                        []
+                        (invocationSpan, declarationKey, callableOutcomeLabel outcome)
+                        (surfaceCallableOutcomeFacts environment)
+                    }
+              in callableDecision next signature (map withFacts outcomes)
+          ''')
+
+          replace_once(
+              'src/Phil/Surface/Check/Engine.hs',
+              '''    (CallableDecision outcomes, callableLabel, callableBinders) ->
+              case
+                [ callableOutcomePayload outcome
+                | outcome <- outcomes
+                , callableOutcomeLabel outcome == callableLabel
+                , callableOutcomeControl outcome == CallableOutcomeContinues
+                ] of
+                [payload]
+                  | length payload == length callableBinders ->
+                      foldM
+                        (\\current (name, (mode, ty)) ->
+                          insertBindingMeta (locatedSpan located) name
+                            (BindingMeta mode ty (shapeForBinding name (shapeForType ty)))
+                            current)
+                        state
+                        (zip callableBinders payload)
+                _ -> throw located TypeMismatch
+                  "callable decision arm binder shape is incompatible with the declared outcome"
+          ''',
+              '''    (CallableDecision outcomes, callableLabel, callableBinders) ->
+              case
+                [ (callableOutcomePayload outcome, callableOutcomeFacts outcome)
+                | outcome <- outcomes
+                , callableOutcomeLabel outcome == callableLabel
+                , callableOutcomeControl outcome == CallableOutcomeContinues
+                ] of
+                [(payload, facts)]
+                  | length payload == length callableBinders -> do
+                      withPayload <- foldM
+                        (\\current (name, (mode, ty)) ->
+                          insertBindingMeta (locatedSpan located) name
+                            (BindingMeta mode ty (shapeForBinding name (shapeForType ty)))
+                            current)
+                        state
+                        (zip callableBinders payload)
+                      foldM
+                        (\\current (name, proposition) ->
+                          insertProof located name proposition current)
+                        withPayload
+                        facts
+                _ -> throw located TypeMismatch
+                  "callable decision arm binder shape is incompatible with the declared outcome"
+          ''')
+
+          replace_once(
+              'src/Phil/Compiler/CallableOutcomeBranchFacts.hs',
+              '''  , bindSurfaceCallableOutcomeBranchFacts
+            ) where
+
+          import qualified Data.Map.Strict as Map
+          ''',
+              '''  , bindSurfaceCallableOutcomeBranchFacts
+            , installSurfaceCallableOutcomeBranchFacts
+            ) where
+
+          import Control.Monad (foldM)
+          import qualified Data.Map.Strict as Map
+          ''')
+
+          replace_once(
+              'src/Phil/Compiler/CallableOutcomeBranchFacts.hs',
+              '''import Phil.Core.Syntax (Proposition)
+          import Phil.Surface.Syntax (SourceSpan)
+          ''',
+              '''import Phil.Core.Syntax (Proposition)
+          import Phil.Surface.Check
+            ( CallableOutcomeControlSpec (..)
+            , CallableOutcomeSpec (..)
+            , SurfaceEnvironment (..)
+            )
+          import Phil.Surface.Syntax (SourceSpan)
+          ''')
+
+          replace_once(
+              'src/Phil/Compiler/CallableOutcomeBranchFacts.hs',
+              '''  | SurfaceCallableOutcomeFactEvidenceNameCollision
+                SourceSpan
+                Text
+                (Set CallableOutcomeAtom)
+            deriving (Eq, Ord, Show)
+          ''',
+              '''  | SurfaceCallableOutcomeFactEvidenceNameCollision
+                SourceSpan
+                Text
+                (Set CallableOutcomeAtom)
+            | SurfaceCallableOutcomeFactEnvironmentIdentityMismatch SourceSpan
+            | SurfaceCallableOutcomeFactDispatchMissing DeclarationKey
+            | SurfaceCallableOutcomeFactSourceLabelMissing DeclarationKey Text
+            | SurfaceCallableOutcomeFactControlMismatch
+                DeclarationKey
+                Text
+                CallableOutcomeControlSpec
+            | SurfaceCallableOutcomeFactTerminalFactsUnsupported SourceSpan Text
+            | SurfaceCallableOutcomeFactInstallConflict
+                SourceSpan
+                DeclarationKey
+                Text
+            deriving (Eq, Ord, Show)
+          ''')
+
+          marker = '''continuingUsableAtoms :: SurfaceCallableOutcomeContinuation -> Set CallableOutcomeAtom
+          '''
+          installer = '''-- | Install already-validated branch-local neutral propositions into the
+          -- Surface environment for the exact invocation occurrence that produced them.
+          -- The lookup key contains source occurrence, declaration identity, and source
+          -- outcome label, so two calls to the same declaration may carry different
+          -- subject/context/revision propositions without contaminating each other.
+          installSurfaceCallableOutcomeBranchFacts
+            :: [SurfaceCallableOutcomeBranchFactEnvironment]
+            -> SurfaceEnvironment
+            -> Either SurfaceCallableOutcomeBranchFactError SurfaceEnvironment
+          installSurfaceCallableOutcomeBranchFacts branchEnvironments initialEnvironment =
+            foldM installOne initialEnvironment branchEnvironments
+            where
+              installOne environment branchEnvironment = do
+                let continuation = surfaceBranchFactContinuation branchEnvironment
+                    invocationSpan = surfaceBranchFactInvocationSpan branchEnvironment
+                    declarationKey = surfaceBranchFactDeclarationKey branchEnvironment
+                    sourceLabel = surfaceBranchFactSourceLabel branchEnvironment
+                    usable = usableFactBindings branchEnvironment
+                if invocationSpan == surfaceContinuationInvocationSpan continuation
+                    && declarationKey == surfaceContinuationDeclarationKey continuation
+                    && sourceLabel == surfaceContinuationSourceLabel continuation
+                  then pure ()
+                  else Left (SurfaceCallableOutcomeFactEnvironmentIdentityMismatch
+                    (surfaceBranchFactArmSpan branchEnvironment))
+                specs <- maybe
+                  (Left (SurfaceCallableOutcomeFactDispatchMissing declarationKey))
+                  Right
+                  (Map.lookup declarationKey (surfaceCallableOutcomes environment))
+                spec <- case
+                    [ candidate
+                    | candidate <- specs
+                    , callableOutcomeLabel candidate == sourceLabel
+                    ] of
+                  [candidate] -> Right candidate
+                  _ -> Left
+                    (SurfaceCallableOutcomeFactSourceLabelMissing declarationKey sourceLabel)
+                case surfaceBranchFactDisposition branchEnvironment of
+                  SurfaceCallableOutcomeCallerTerminates _ -> do
+                    if null usable
+                      then pure ()
+                      else Left
+                        (SurfaceCallableOutcomeFactTerminalFactsUnsupported
+                          (surfaceBranchFactArmSpan branchEnvironment)
+                          sourceLabel)
+                    case callableOutcomeControl spec of
+                      CallableOutcomeCloses _ -> Right environment
+                      actualControl -> Left
+                        (SurfaceCallableOutcomeFactControlMismatch
+                          declarationKey sourceLabel actualControl)
+                  SurfaceCallableOutcomeCallerContinues -> do
+                    case callableOutcomeControl spec of
+                      CallableOutcomeContinues -> pure ()
+                      actualControl -> Left
+                        (SurfaceCallableOutcomeFactControlMismatch
+                          declarationKey sourceLabel actualControl)
+                    let facts = map neutralFactBinding usable
+                        occurrenceKey = (invocationSpan, declarationKey, sourceLabel)
+                    case Map.lookup occurrenceKey (surfaceCallableOutcomeFacts environment) of
+                      Nothing -> Right environment
+                        { surfaceCallableOutcomeFacts = Map.insert
+                            occurrenceKey facts (surfaceCallableOutcomeFacts environment)
+                        }
+                      Just existing
+                        | existing == facts -> Right environment
+                        | otherwise -> Left
+                            (SurfaceCallableOutcomeFactInstallConflict
+                              invocationSpan declarationKey sourceLabel)
+
+          usableFactBindings
+            :: SurfaceCallableOutcomeBranchFactEnvironment
+            -> [SurfaceCallableOutcomeFactBinding]
+          usableFactBindings branchEnvironment =
+            surfaceBranchPostconditions branchEnvironment
+              <> surfaceBranchAssumptions branchEnvironment
+              <> surfaceBranchDischargedFacts branchEnvironment
+
+          neutralFactBinding :: SurfaceCallableOutcomeFactBinding -> (Text, Proposition)
+          neutralFactBinding binding =
+            ( surfaceOutcomeFactEvidenceName binding
+            , surfaceOutcomeFactProposition binding
+            )
+
+          '''
+          p = Path('src/Phil/Compiler/CallableOutcomeBranchFacts.hs')
+          text = p.read_text()
+          if text.count(marker) != 1:
+              raise SystemExit('CallableOutcomeBranchFacts.hs: installer marker mismatch')
+          p.write_text(text.replace(marker, installer + marker, 1))
+
+          Path('test/Phase1CALL019SurfaceArmProofBindingsMain.hs').write_text(r'''{-# LANGUAGE OverloadedStrings #-}
+
+          module Main (main) where
+
+          import qualified Data.Map.Strict as Map
+          import qualified Data.Set as Set
+          import Data.Text (Text)
+          import Phil.Compiler.CallableInvocationSemantics
+            ( SurfaceCallableInvocationSemanticAccount (..)
+            )
+          import Phil.Compiler.CallableOutcomeBranchFacts
+            ( SurfaceCallableOutcomeBranchFactError (..)
+            , SurfaceCallableOutcomeFactBinding (..)
+            , bindSurfaceCallableOutcomeBranchFacts
+            , installSurfaceCallableOutcomeBranchFacts
+            )
+          import Phil.Compiler.CallableOutcomeContinuation
+            ( SurfaceCallableOutcomeContinuation (..)
+            , SurfaceCallableOutcomeContinuationDisposition (..)
+            )
+          import Phil.Compiler.CallableOutcomeDispatch
+            ( SurfaceCallableOutcomeBinding (..)
+            , installSurfaceCallableOutcomeDispatch
+            , planSurfaceCallableOutcomeDispatch
+            )
+          import Phil.Core.Callable (CalleeTransition (..))
+          import Phil.Core.CallableOutcome
+            ( CallableOutcomeAtom (..)
+            , CallableOutcomeClass (..)
+            , CallableOutcomeContract (..)
+            , CallableOutcomeState (..)
+            )
+          import Phil.Core.CallableRefinement
+            ( CallableFailure (..)
+            )
+          import Phil.Core.Static
+            ( DeclarationKey (..)
+            , emptyStaticContext
+            )
+          import Phil.Core.Syntax
+            ( Outcome (..)
+            , Proposition (..)
+            )
+          import Phil.Surface.Check
+            ( CallableOutcomeSpec (..)
+            , SurfaceCallableSignature (..)
+            , SurfaceEnvironment (..)
+            , checkSurfaceComponent
+            , emptySurfaceEnvironment
+            )
+          import Phil.Surface.Parser (parseSurfaceFile)
+          import Phil.Surface.Syntax
+            ( Block (..)
+            , Component (..)
+            , Located (..)
+            , SourcePoint (..)
+            , SourceSpan (..)
+            , Statement (..)
+            , SurfaceExpression (..)
+            , SurfaceFile (..)
+            )
+          import System.Exit (exitFailure)
+
+          main :: IO ()
+          main = do
+            results <- sequence
+              [ test "CALL-019 exact occurrence facts are visible inside matching Surface arms"
+                  exactFactsReachArmBodies
+              , test "CALL-019 arm facts are unavailable before compiler installation"
+                  factsUnavailableBeforeInstall
+              , test "CALL-019 sibling outcome facts do not leak into another Surface arm"
+                  siblingFactsDoNotLeak
+              , test "CALL-019 invocation span participates in neutral fact lookup"
+                  wrongOccurrenceDoesNotBind
+              , test "CALL-019 declaration-wide dispatch remains free of occurrence facts"
+                  declarationDispatchStaysNeutral
+              , test "CALL-019 conflicting occurrence fact reinstall rejects"
+                  conflictingOccurrenceInstallRejects
+              ]
+            if and results then pure () else exitFailure
+
+          test :: String -> Either String () -> IO Bool
+          test label result = case result of
+            Right () -> putStrLn ("PASS: " <> label) >> pure True
+            Left detail -> putStrLn ("FAIL: " <> label <> " -- " <> detail) >> pure False
+
+          workerKey :: DeclarationKey
+          workerKey = DeclarationKey "decl.worker"
+
+          successClass, retryClass :: CallableOutcomeClass
+          successClass = CallableSuccessOutcome
+          retryClass = CallableNonSuccessOutcome retryFailure
+
+          retryFailure :: CallableFailure
+          retryFailure = CallableTypedNegative (Outcome "retry")
+
+          atom :: Text -> CallableOutcomeAtom
+          atom = CallableOutcomeAtom
+
+          okPost, okAssume, okFact, retryPost :: CallableOutcomeAtom
+          okPost = atom "semantic.ok.post"
+          okAssume = atom "semantic.ok.assume"
+          okFact = atom "semantic.ok.fact"
+          retryPost = atom "semantic.retry.post"
+
+          successContract, retryContract :: CallableOutcomeContract
+          successContract = CallableOutcomeContract
+            { callableOutcomeClass = successClass
+            , callableOutcomeState = CallableOutcomeState "success"
+            , callableOutcomeCalleeTransition = PreserveCallee
+            , callableOutcomePostconditions = Set.singleton okPost
+            , callableOutcomeResidualObligations = Set.empty
+            , callableOutcomeAssumptions = Set.singleton okAssume
+            , callableOutcomeEffects = Set.empty
+            , callableOutcomeDischargedFacts = Set.singleton okFact
+            }
+          retryContract = CallableOutcomeContract
+            { callableOutcomeClass = retryClass
+            , callableOutcomeState = CallableOutcomeState "retry"
+            , callableOutcomeCalleeTransition = PreserveCallee
+            , callableOutcomePostconditions = Set.singleton retryPost
+            , callableOutcomeResidualObligations = Set.empty
+            , callableOutcomeAssumptions = Set.empty
+            , callableOutcomeEffects = Set.empty
+            , callableOutcomeDischargedFacts = Set.empty
+            }
+
+          baseEnvironment :: SurfaceEnvironment
+          baseEnvironment = (emptySurfaceEnvironment emptyStaticContext)
+            { surfaceCallables = Map.singleton "Worker" SurfaceCallableSignature
+                { surfaceCallableDeclarationKey = workerKey
+                , surfaceCallableParameters = []
+                , surfaceCallableResult = Nothing
+                }
+            }
+
+          dispatchBinding :: CallableOutcomeClass -> Text -> SurfaceCallableOutcomeBinding
+          dispatchBinding outcomeClass label = SurfaceCallableOutcomeBinding
+            { surfaceOutcomeBindingClass = outcomeClass
+            , surfaceOutcomeBindingLabel = label
+            , surfaceOutcomeBindingPayload = []
+            }
+
+          account :: SourceSpan -> SurfaceCallableInvocationSemanticAccount
+          account invocationSpan = SurfaceCallableInvocationSemanticAccount
+            { surfaceSemanticInvocationSpan = invocationSpan
+            , surfaceSemanticInvocationDisplayName = "Worker"
+            , surfaceSemanticInvocationDeclarationKey = workerKey
+            , surfaceSemanticInvocationCallerAuthority = Set.empty
+            , surfaceSemanticInvocationPublicEffectBound = Set.empty
+            , surfaceSemanticInvocationCalleeTransition = PreserveCallee
+            , surfaceSemanticInvocationModeledFailures = Set.singleton retryFailure
+            , surfaceSemanticInvocationOutcomes = [successContract, retryContract]
+            }
+
+          dispatchEnvironment :: SourceSpan -> Either String SurfaceEnvironment
+          dispatchEnvironment invocationSpan = do
+            let bindings = Map.fromList
+                  [ (successClass, dispatchBinding successClass "ok")
+                  , (retryClass, dispatchBinding retryClass "retry")
+                  ]
+            plan <- mapLeft show
+              (planSurfaceCallableOutcomeDispatch bindings (account invocationSpan))
+            mapLeft show (installSurfaceCallableOutcomeDispatch plan baseEnvironment)
+
+          continuation
+            :: SourceSpan
+            -> Text
+            -> CallableOutcomeContract
+            -> SurfaceCallableOutcomeContinuation
+          continuation invocationSpan label outcomeContract =
+            SurfaceCallableOutcomeContinuation
+              { surfaceContinuationInvocationSpan = invocationSpan
+              , surfaceContinuationArmSpan = invocationSpan
+              , surfaceContinuationDeclarationKey = workerKey
+              , surfaceContinuationSourceLabel = label
+              , surfaceContinuationPayload = []
+              , surfaceContinuationOutcomeClass = callableOutcomeClass outcomeContract
+              , surfaceContinuationDisposition = SurfaceCallableOutcomeCallerContinues
+              , surfaceContinuationState = callableOutcomeState outcomeContract
+              , surfaceContinuationCalleeTransition = callableOutcomeCalleeTransition outcomeContract
+              , surfaceContinuationPostconditions = callableOutcomePostconditions outcomeContract
+              , surfaceContinuationResidualObligations = callableOutcomeResidualObligations outcomeContract
+              , surfaceContinuationAssumptions = callableOutcomeAssumptions outcomeContract
+              , surfaceContinuationEffects = callableOutcomeEffects outcomeContract
+              , surfaceContinuationDischargedFacts = callableOutcomeDischargedFacts outcomeContract
+              , surfaceContinuationContract = outcomeContract
+              }
+
+          explicitFactBindings :: Map.Map CallableOutcomeAtom SurfaceCallableOutcomeFactBinding
+          explicitFactBindings = Map.fromList
+            [ (okPost, factBinding okPost "ok_post" "OkPost")
+            , (okAssume, factBinding okAssume "ok_assume" "OkAssume")
+            , (okFact, factBinding okFact "ok_fact" "OkFact")
+            , (retryPost, factBinding retryPost "retry_post" "RetryPost")
+            ]
+
+          factBinding
+            :: CallableOutcomeAtom
+            -> Text
+            -> Text
+            -> SurfaceCallableOutcomeFactBinding
+          factBinding semanticAtom evidenceName propositionName = SurfaceCallableOutcomeFactBinding
+            { surfaceOutcomeFactAtom = semanticAtom
+            , surfaceOutcomeFactEvidenceName = evidenceName
+            , surfaceOutcomeFactProposition = Atom propositionName []
+            }
+
+          installFactsFor
+            :: SourceSpan
+            -> SurfaceEnvironment
+            -> Either String SurfaceEnvironment
+          installFactsFor invocationSpan environment = do
+            branchFacts <- mapLeft show $
+              bindSurfaceCallableOutcomeBranchFacts
+                explicitFactBindings
+                [ continuation invocationSpan "ok" successContract
+                , continuation invocationSpan "retry" retryContract
+                ]
+            mapLeft show (installSurfaceCallableOutcomeBranchFacts branchFacts environment)
+
+          validSource :: Text
+          validSource =
+            "component Caller { decide invoke Worker() { "
+              <> "ok => { let a = ok_post let b = ok_assume let c = ok_fact return unit } "
+              <> "retry => { let d = retry_post return unit } } }"
+
+          leakingSource :: Text
+          leakingSource =
+            "component Caller { decide invoke Worker() { "
+              <> "ok => { let a = ok_post return unit } "
+              <> "retry => { let d = ok_post return unit } } }"
+
+          exactFactsReachArmBodies :: Either String ()
+          exactFactsReachArmBodies = do
+            component <- parseOne validSource
+            invocationSpan <- invocationSpanOf component
+            dispatched <- dispatchEnvironment invocationSpan
+            installed <- installFactsFor invocationSpan dispatched
+            _ <- mapLeft show (checkSurfaceComponent installed component)
+            Right ()
+
+          factsUnavailableBeforeInstall :: Either String ()
+          factsUnavailableBeforeInstall = do
+            component <- parseOne validSource
+            invocationSpan <- invocationSpanOf component
+            dispatched <- dispatchEnvironment invocationSpan
+            case checkSurfaceComponent dispatched component of
+              Left _ -> Right ()
+              Right checked -> Left
+                ("branch-local fact was visible before compiler installation: " <> show checked)
+
+          siblingFactsDoNotLeak :: Either String ()
+          siblingFactsDoNotLeak = do
+            component <- parseOne leakingSource
+            invocationSpan <- invocationSpanOf component
+            dispatched <- dispatchEnvironment invocationSpan
+            installed <- installFactsFor invocationSpan dispatched
+            case checkSurfaceComponent installed component of
+              Left _ -> Right ()
+              Right checked -> Left
+                ("success-only fact leaked into retry arm: " <> show checked)
+
+          wrongOccurrenceDoesNotBind :: Either String ()
+          wrongOccurrenceDoesNotBind = do
+            component <- parseOne validSource
+            invocationSpan <- invocationSpanOf component
+            dispatched <- dispatchEnvironment invocationSpan
+            let wrongSpan = SourceSpan
+                  (SourcePoint "wrong-occurrence" 9 1 900)
+                  (SourcePoint "wrong-occurrence" 9 2 901)
+            installed <- installFactsFor wrongSpan dispatched
+            case checkSurfaceComponent installed component of
+              Left _ -> Right ()
+              Right checked -> Left
+                ("facts from a different invocation occurrence became visible: " <> show checked)
+
+          declarationDispatchStaysNeutral :: Either String ()
+          declarationDispatchStaysNeutral = do
+            component <- parseOne validSource
+            invocationSpan <- invocationSpanOf component
+            dispatched <- dispatchEnvironment invocationSpan
+            installed <- installFactsFor invocationSpan dispatched
+            specs <- maybe
+              (Left "callable dispatch disappeared during fact installation")
+              Right
+              (Map.lookup workerKey (surfaceCallableOutcomes installed))
+            assert
+              (all (null . callableOutcomeFacts) specs)
+              "occurrence-specific facts contaminated declaration-wide outcome specs"
+            assert
+              (Map.size (surfaceCallableOutcomeFacts installed) == 2)
+              "expected one exact occurrence-fact entry per continuing source outcome"
+
+          conflictingOccurrenceInstallRejects :: Either String ()
+          conflictingOccurrenceInstallRejects = do
+            component <- parseOne validSource
+            invocationSpan <- invocationSpanOf component
+            dispatched <- dispatchEnvironment invocationSpan
+            branchFacts <- mapLeft show $
+              bindSurfaceCallableOutcomeBranchFacts
+                explicitFactBindings
+                [ continuation invocationSpan "ok" successContract
+                , continuation invocationSpan "retry" retryContract
+                ]
+            installed <- mapLeft show
+              (installSurfaceCallableOutcomeBranchFacts branchFacts dispatched)
+            let key = (invocationSpan, workerKey, "ok")
+                poisoned = installed
+                  { surfaceCallableOutcomeFacts = Map.insert
+                      key [("wrong", Atom "Wrong" [])]
+                      (surfaceCallableOutcomeFacts installed)
+                  }
+            case installSurfaceCallableOutcomeBranchFacts branchFacts poisoned of
+              Left (SurfaceCallableOutcomeFactInstallConflict
+                  actualSpan actualKey actualLabel)
+                | actualSpan == invocationSpan
+                    && actualKey == workerKey
+                    && actualLabel == "ok" -> Right ()
+              Left other -> Left ("wrong occurrence-fact conflict rejection: " <> show other)
+              Right accepted -> Left ("conflicting occurrence facts were accepted: " <> show accepted)
+
+          invocationSpanOf :: Located Component -> Either String SourceSpan
+          invocationSpanOf locatedComponent =
+            case blockStatements (locatedValue (componentBody (locatedValue locatedComponent))) of
+              [Located _ (ExpressionStatement decision)] ->
+                case locatedValue decision of
+                  DecideExpression scrutinee _ -> Right (locatedSpan scrutinee)
+                  other -> Left ("expected decide expression, got " <> show other)
+              statements -> Left
+                ("expected one decision statement, got " <> show (length statements))
+
+          parseOne :: Text -> Either String (Located Component)
+          parseOne source = do
+            parsed <- mapLeft show (parseSurfaceFile "call019-surface-arm-facts" source)
+            case surfaceComponents parsed of
+              [component] -> Right component
+              components -> Left ("expected one component, got " <> show (length components))
+
+          assert :: Bool -> String -> Either String ()
+          assert True _ = Right ()
+          assert False detail = Left detail
+
+          mapLeft :: (a -> b) -> Either a c -> Either b c
+          mapLeft f = either (Left . f) Right
+          ''')
+          PY
+
+      - name: Commit authored slice locally
+        shell: bash
+        run: |
+          set -euo pipefail
+          git config user.name 'Meredith L. Patterson'
+          git config user.email 'clonearmy@gmail.com'
+          git add src/Phil/Surface/Check/Types.hs \
+                  src/Phil/Surface/Check/Engine.hs \
+                  src/Phil/Compiler/CallableOutcomeDispatch.hs \
+                  src/Phil/Compiler/CallableOutcomeBranchFacts.hs \
+                  test/Phase1CALL019SurfaceArmProofBindingsMain.hs
+          git commit -m 'CALL-019: scope exact outcome facts into Surface arms'
+
+      - name: Build Haskell substrate
+        run: cabal build all --enable-tests
+
+      - name: Check CALL-019 Surface arm proof bindings
+        run: cabal exec -- runghc -Wall -Werror -isrc -itest test/Phase1CALL019SurfaceArmProofBindingsMain.hs
+
+      - name: Replay CALL-019 branch-local fact binding
+        run: cabal exec -- runghc -Wall -Werror -isrc -itest test/Phase1CALL019OutcomeBranchFactsMain.hs
+
+      - name: Replay CALL-019 outcome control boundary
+        run: cabal exec -- runghc -Wall -Werror -isrc -itest test/Phase1CALL019OutcomeControlBoundaryMain.hs
+
+      - name: Replay CALL-019 outcome continuation state
+        run: cabal exec -- runghc -Wall -Werror -isrc -itest test/Phase1CALL019OutcomeContinuationStateMain.hs
+
+      - name: Push authored slice
+        shell: bash
+        run: |
+          set -euo pipefail
+          git push origin HEAD:phase1-call019-surface-arm-proof-bindings
