@@ -294,7 +294,7 @@ Proof.
   rewrite (phase1_surface_exact9_round_trip items fields Hitems).
   rewrite (phase1_surface_expect_literal_round_trip
     "data" (phase1_exact9_1 fields) Hkeyword).
-  rewrite (phase1_surface_normalize_identifier_round_trip
+  rewrite <- (phase1_surface_normalize_identifier_round_trip
     (phase1_exact9_2 fields) name Hname).
   rewrite (phase1_surface_normalize_optional_generic_params_round_trip
     (phase1_exact9_3 fields) generic_params Hgeneric).
