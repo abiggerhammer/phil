@@ -176,7 +176,7 @@ Proof.
       items keyword_tree mode_tree Hitems).
     rewrite (phase1_surface_expect_literal_round_trip
       "mode" keyword_tree Hkeyword).
-    rewrite (phase1_surface_normalize_structural_mode_round_trip
+    rewrite <- (phase1_surface_normalize_structural_mode_round_trip
       mode_tree actual Hmode).
     reflexivity.
   - inversion Hnormalize; subst mode.
