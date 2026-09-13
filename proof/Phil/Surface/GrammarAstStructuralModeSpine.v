@@ -240,7 +240,7 @@ Proof.
   cbn in Hnormalize.
   destruct (phase1_surface_normalize_optional_mode mode_tree)
     as [mode |] eqn:Hmode; try discriminate Hnormalize.
-  inversion Hnormalize; subst refined.
+  inversion Hnormalize; subst.
   unfold phase1_surface_record_mode_spine_tree,
     phase1_surface_record_generic_spine_tree.
   cbn.
