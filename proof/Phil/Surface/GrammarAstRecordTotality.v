@@ -79,21 +79,29 @@ Proof.
       inversion Hnil; subst; clear Hnil
   end.
   match goal with
-  | Hkeyword : Derives phase1_surface_rules _
+  | Hkeyword : Derives phase1_surface_rules
+      (descend ?sequence_path (AtSequence 0))
       (ELiteral "record") _ _ ?keyword_tree,
-    Hname : Derives phase1_surface_rules _
+    Hname : Derives phase1_surface_rules
+      (descend sequence_path (AtSequence 1))
       (ENonterminal "identifier") _ _ ?name_tree,
-    Hgeneric : Derives phase1_surface_rules _
-      generic_expr _ _ ?generic_tree,
-    Hmode : Derives phase1_surface_rules _
-      mode_expr _ _ ?mode_tree,
-    Hrequirements : Derives phase1_surface_rules _
-      requirements_expr _ _ ?requirements_tree,
-    Hopen : Derives phase1_surface_rules _
+    Hgeneric : Derives phase1_surface_rules
+      (descend sequence_path (AtSequence 2))
+      _ _ _ ?generic_tree,
+    Hmode : Derives phase1_surface_rules
+      (descend sequence_path (AtSequence 3))
+      _ _ _ ?mode_tree,
+    Hrequirements : Derives phase1_surface_rules
+      (descend sequence_path (AtSequence 4))
+      _ _ _ ?requirements_tree,
+    Hopen : Derives phase1_surface_rules
+      (descend sequence_path (AtSequence 5))
       (ELiteral "{") _ _ ?open_tree,
-    Hfields : Derives phase1_surface_rules _
-      fields_expr _ _ ?fields_tree,
-    Hclose : Derives phase1_surface_rules _
+    Hfields : Derives phase1_surface_rules
+      (descend sequence_path (AtSequence 6))
+      _ _ _ ?fields_tree,
+    Hclose : Derives phase1_surface_rules
+      (descend sequence_path (AtSequence 7))
       (ELiteral "}") _ _ ?close_tree |- _ =>
       destruct
         (literal_derivation_is_exact
