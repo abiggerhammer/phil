@@ -296,17 +296,17 @@ Proof.
     "data" (phase1_exact9_1 fields) Hkeyword).
   rewrite <- (phase1_surface_normalize_identifier_round_trip
     (phase1_exact9_2 fields) name Hname).
-  rewrite (phase1_surface_normalize_optional_generic_params_round_trip
+  rewrite <- (phase1_surface_normalize_optional_generic_params_round_trip
     (phase1_exact9_3 fields) generic_params Hgeneric).
-  rewrite (phase1_surface_normalize_optional_mode_round_trip
+  rewrite <- (phase1_surface_normalize_optional_mode_round_trip
     (phase1_exact9_4 fields) mode Hmode).
-  rewrite (phase1_surface_normalize_optional_generic_requirements_round_trip
+  rewrite <- (phase1_surface_normalize_optional_generic_requirements_round_trip
     (phase1_exact9_5 fields) requirements Hrequirements).
   rewrite (phase1_surface_expect_literal_round_trip
     "=" (phase1_exact9_6 fields) Hequals).
   rewrite (phase1_surface_expect_repetition_round_trip
     (phase1_exact9_8 fields) rest_trees Hrest_trees).
-  rewrite (phase1_surface_normalize_data_variant_suffixes_round_trip
+  rewrite <- (phase1_surface_normalize_data_variant_suffixes_round_trip
     rest_trees rest_variants Hrest).
   rewrite (phase1_surface_expect_literal_round_trip
     ";" (phase1_exact9_9 fields) Hterminator).
