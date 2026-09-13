@@ -10,6 +10,8 @@ module Phil.Surface.Check.Types
   , ProviderOutcomeSpec (..)
   , CallableOutcomeControlSpec (..)
   , CallableOutcomeSpec (..)
+  , CallableOutcomeResourceBinding (..)
+  , CallableOutcomeResourceSpec (..)
   , PrimitiveSemantics (..)
   , SurfaceCallableSignature (..)
   , ReleaseRequirement (..)
@@ -251,6 +253,8 @@ data SurfaceEnvironment = SurfaceEnvironment
   , surfaceCallableOutcomeFacts :: Map (SourceSpan, DeclarationKey, Text) [(Text, Proposition)]
   , surfaceCallableOutcomeObligations ::
       Map (SourceSpan, DeclarationKey, Text) [(Text, Proposition)]
+  , surfaceCallableOutcomeResources ::
+      Map (SourceSpan, DeclarationKey, Text) CallableOutcomeResourceSpec
   , surfaceTypeAliases :: Map Text Ty
   , surfaceSelectRequirements :: Map Text [Proposition]
   , surfaceReceiveExactRequirement :: Maybe Proposition
@@ -319,6 +323,7 @@ emptySurfaceEnvironment staticContext = SurfaceEnvironment
   , surfaceCallableOutcomes = Map.empty
   , surfaceCallableOutcomeFacts = Map.empty
   , surfaceCallableOutcomeObligations = Map.empty
+  , surfaceCallableOutcomeResources = Map.empty
   , surfaceTypeAliases = Map.empty
   , surfaceSelectRequirements = Map.empty
   , surfaceReceiveExactRequirement = Nothing
@@ -333,6 +338,20 @@ data BindingMeta = BindingMeta
   { bindingMode :: Mode
   , bindingType :: Ty
   , bindingShape :: SurfaceShape
+  }
+  deriving (Eq, Show)
+
+-- | Neutral caller-visible branch resource expectation. Compiler-owned semantic
+-- state and callee lifecycle are validated before this value is installed.
+data CallableOutcomeResourceBinding
+  = CallableOutcomeResourcePresent BindingMeta
+  | CallableOutcomeResourceAbsent
+  deriving (Eq, Show)
+
+-- | Exact resource residue for one continuing CALL-019 invocation outcome.
+data CallableOutcomeResourceSpec = CallableOutcomeResourceSpec
+  { callableOutcomeResourceBindings :: Map Text CallableOutcomeResourceBinding
+  , callableOutcomeResourceActiveEndpoint :: Maybe Text
   }
   deriving (Eq, Show)
 
