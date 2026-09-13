@@ -36,13 +36,16 @@ data Phase1SurfaceImplementationTopLevel =
  Phase1SurfaceDeclarationTag
 
 phase1_surface_make_implementation_attribute :: String -> String ->
-                                                 Phase1SurfaceImplementationAttribute
+                                                Phase1SurfaceImplementationAttribute
 phase1_surface_make_implementation_attribute name value =
   Build_Phase1SurfaceImplementationAttribute name value
 
 phase1_surface_make_implementation_top_level :: ([]
                                                 Phase1SurfaceImplementationAttribute)
-                                                -> Phase1SurfaceDeclarationTag ->
+                                                ->
+                                                Phase1SurfaceDeclarationTag
+                                                ->
                                                 Phase1SurfaceImplementationTopLevel
 phase1_surface_make_implementation_top_level attributes tag =
   Build_Phase1SurfaceImplementationTopLevel attributes tag
+
