@@ -528,7 +528,7 @@ Proof.
   cbn in Hnormalize.
   destruct (phase1_surface_normalize_optional_generic_params generic_tree)
     as [parameters |] eqn:Hgeneric; try discriminate Hnormalize.
-  inversion Hnormalize; subst refined.
+  inversion Hnormalize; subst.
   unfold phase1_surface_record_generic_spine_tree,
     phase1_surface_record_spine_tree.
   cbn.
