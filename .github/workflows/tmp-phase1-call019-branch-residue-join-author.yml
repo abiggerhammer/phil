@@ -24,6 +24,21 @@ jobs:
       - name: Apply CALL-019 residue join slice
         run: python3 scripts/tmp_call019_branch_residue_join.py
 
+      - name: Fix focused test import
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 - <<'PY'
+          from pathlib import Path
+          path = Path('test/Phase1CALL019BranchResidueJoinMain.hs')
+          text = path.read_text()
+          old = '  , RejectionClass (..)\n  , SurfaceCallableSignature (..)\n'
+          new = '  , RejectionClass (..)\n  , SurfaceCheckError (..)\n  , SurfaceCallableSignature (..)\n'
+          if text.count(old) != 1:
+              raise SystemExit(f'focused test import site count {text.count(old)}')
+          path.write_text(text.replace(old, new, 1))
+          PY
+
       - name: Set up Haskell
         uses: haskell-actions/setup@v2
         with:
