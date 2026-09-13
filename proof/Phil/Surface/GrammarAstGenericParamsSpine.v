@@ -256,7 +256,7 @@ Proof.
     items name_tree colon_tree kind_tree Hitems).
   rewrite <- (phase1_surface_normalize_identifier_round_trip name_tree name Hname).
   rewrite (phase1_surface_expect_literal_round_trip ":" colon_tree Hcolon).
-  rewrite (phase1_surface_normalize_generic_kind_spine_round_trip
+  rewrite <- (phase1_surface_normalize_generic_kind_spine_round_trip
     kind_tree kind Hkind).
   reflexivity.
 Qed.
@@ -304,7 +304,7 @@ Proof.
   rewrite (phase1_surface_exact2_round_trip
     items comma_tree parameter_tree Hitems).
   rewrite (phase1_surface_expect_literal_round_trip "," comma_tree Hcomma).
-  rewrite Hparameter.
+  rewrite <- Hparameter.
   reflexivity.
 Qed.
 
@@ -423,11 +423,11 @@ Proof.
   rewrite (phase1_surface_exact4_round_trip
     items open_tree first_tree rest_tree close_tree Hitems).
   rewrite (phase1_surface_expect_literal_round_trip "[" open_tree Hopen).
-  rewrite (phase1_surface_normalize_generic_param_spine_round_trip
+  rewrite <- (phase1_surface_normalize_generic_param_spine_round_trip
     first_tree first Hfirst).
   rewrite (phase1_surface_expect_repetition_round_trip
     rest_tree rest_trees Hrepetition).
-  rewrite (phase1_surface_normalize_generic_param_suffixes_round_trip
+  rewrite <- (phase1_surface_normalize_generic_param_suffixes_round_trip
     rest_trees rest Hrest).
   rewrite (phase1_surface_expect_literal_round_trip "]" close_tree Hclose).
   reflexivity.
@@ -467,7 +467,7 @@ Proof.
     unfold phase1_surface_optional_generic_params_tree.
     rewrite (phase1_surface_expect_optional_round_trip
       tree (Some body) Hoptional).
-    rewrite (phase1_surface_normalize_generic_params_spine_round_trip
+    rewrite <- (phase1_surface_normalize_generic_params_spine_round_trip
       body actual Hparams).
     reflexivity.
   - inversion Hnormalize; subst parameters.
