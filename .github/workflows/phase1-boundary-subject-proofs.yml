@@ -138,15 +138,13 @@ jobs:
       - name: Strict typecheck unchanged 15-case correspondence corpus
         run: |
           set -euo pipefail
-          # Phase1EvidenceSubjectTransferMain transitively compiles existing
-          # SYS-009/010 correspondence modules with pre-existing warning debt.
-          cabal exec -- ghc -isrc -Wall -Werror -Wno-name-shadowing -Wno-unused-imports -fno-code test/Phase1EvidenceSubjectTransferMain.hs
+          cabal exec -- ghc -isrc -Wall -Werror -fno-code test/Phase1EvidenceSubjectTransferMain.hs
           cabal exec -- ghc -isrc -Wall -Werror -fno-code test/Phase1BoundaryTargetRelationMain.hs
 
       - name: Re-run unchanged BND-012 and BND-013 correspondence corpus
         run: |
           set -euo pipefail
-          cabal exec -- runghc -Wall -Werror -Wno-name-shadowing -Wno-unused-imports -isrc test/Phase1EvidenceSubjectTransferMain.hs
+          cabal exec -- runghc -Wall -Werror -isrc test/Phase1EvidenceSubjectTransferMain.hs
           cabal exec -- runghc -Wall -Werror -isrc test/Phase1BoundaryTargetRelationMain.hs
 
       - name: Record production-binding identities
