@@ -549,8 +549,8 @@ Proof.
   inversion Hnormalize.
   unfold phase1_surface_record_requirements_spine_tree,
     phase1_surface_record_mode_spine_tree.
-  simpl only [phase1_record_requirements_spine_requirements
-              phase1_record_mode_spine_requirements_tree].
+  cbn [phase1_record_requirements_spine_requirements
+       phase1_record_mode_spine_requirements_tree].
   rewrite (phase1_surface_normalize_optional_generic_requirements_round_trip
     requirements_tree requirements Hrequirements).
   reflexivity.
