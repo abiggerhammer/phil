@@ -6,6 +6,7 @@ From Phil.Surface Require Import
   GrammarAstSourceHeader
   GrammarAstSourceHeaderTotality
   GrammarAstTopLevelSpine
+  GrammarAstRecordSpine
   GrammarAstGenericParamsSpine
   GrammarAstRecordTotality.
 
