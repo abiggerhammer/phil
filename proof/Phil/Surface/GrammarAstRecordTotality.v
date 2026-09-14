@@ -281,7 +281,9 @@ Proof.
   rewrite Hsubtree in Htree.
   rewrite Htrees0, Htrees1, Htrees2, Htrees3,
     Htrees4, Htrees5, Htrees6, Htrees7 in Htree.
-  inversion Hitems8; subst.
+  assert (Htrees8 : trees8 = []).
+  { inversion Hitems8; reflexivity. }
+  rewrite Htrees8 in Htree.
   destruct
     (literal_derivation_is_exact
       phase1_surface_rules _ "record" _ _ keyword_tree Hkeyword)
