@@ -131,15 +131,12 @@ jobs:
       - name: Strict typecheck unchanged 36-case closure corpus
         run: |
           set -euo pipefail
-          # The generic SYS-001/002/003 fixture carries one pre-existing
-          # redundant Phil.Core.Static import. Keep the exemption local to
-          # this unchanged test file; production Phase1Stage remains strict.
-          cabal exec -- ghc -isrc -Wall -Werror -Wno-unused-imports -fno-code test/Phase1GenericSystemsStageMain.hs
+          cabal exec -- ghc -isrc -Wall -Werror -fno-code test/Phase1GenericSystemsStageMain.hs
           cabal exec -- ghc -isrc -Wall -Werror -fno-code test/Phase1StageClosureMain.hs
       - name: Re-run unchanged coarse and final closure corpus
         run: |
           set -euo pipefail
-          cabal exec -- runghc -Wall -Werror -Wno-unused-imports -isrc test/Phase1GenericSystemsStageMain.hs
+          cabal exec -- runghc -Wall -Werror -isrc test/Phase1GenericSystemsStageMain.hs
           cabal exec -- runghc -Wall -Werror -isrc test/Phase1StageClosureMain.hs
       - name: Record implementation-refinement staging identities
         run: |
