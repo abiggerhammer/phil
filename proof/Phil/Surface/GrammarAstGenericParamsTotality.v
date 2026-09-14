@@ -740,7 +740,7 @@ Proof.
     unfold phase1_surface_normalize_record_generic_tree.
     rewrite Hrecord_normalize.
     unfold phase1_surface_normalize_record_generic_spine.
-    cbn only [phase1_record_spine_name
+    cbn [phase1_record_spine_name
       phase1_record_spine_generic_params_tree
       phase1_record_spine_mode_tree
       phase1_record_spine_requirements_tree
