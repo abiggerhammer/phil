@@ -25,7 +25,6 @@ import Phil.Core.Callable
   , CallableInvocationBodySummary (..)
   , CallableOccurrence (..)
   , CallableOccurrenceKey (..)
-  , CallableResourceState
   , CallableStateKey (..)
   , ClosureCaptureSummary
   , checkClosureCaptures
