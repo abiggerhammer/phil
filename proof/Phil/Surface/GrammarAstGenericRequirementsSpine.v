@@ -542,20 +542,18 @@ Theorem phase1_surface_normalize_record_requirements_spine_round_trip :
 Proof.
   intros [name generic_params mode requirements_tree fields_tree]
     refined Hnormalize.
-  cbn in Hnormalize.
+  unfold phase1_surface_normalize_record_requirements_spine in Hnormalize.
+  cbn [phase1_record_mode_spine_requirements_tree] in Hnormalize.
   destruct
     (phase1_surface_normalize_optional_generic_requirements requirements_tree)
     as [requirements |] eqn:Hrequirements; try discriminate Hnormalize.
-  inversion Hnormalize.
+  injection Hnormalize as Hrefined.
+  subst refined.
   unfold phase1_surface_record_requirements_spine_tree,
     phase1_surface_record_mode_spine_tree.
-  cbn [phase1_record_requirements_spine_requirements
-       phase1_record_mode_spine_requirements_tree].
-  pose proof
-    (phase1_surface_normalize_optional_generic_requirements_round_trip
-      requirements_tree requirements Hrequirements)
-    as Hrequirements_round_trip.
-  rewrite <- Hrequirements_round_trip.
+  cbn.
+  rewrite (phase1_surface_normalize_optional_generic_requirements_round_trip
+    requirements_tree requirements Hrequirements).
   reflexivity.
 Qed.
 
