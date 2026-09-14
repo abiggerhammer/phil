@@ -139,9 +139,9 @@ jobs:
       - name: Strict typecheck runtime graph implementation
         run: |
           set -euo pipefail
-          cabal exec -- ghc -isrc -Wall -Werror -Wno-name-shadowing -fno-code src/Phil/Systems/RuntimeClaimBinding.hs
-          cabal exec -- ghc -isrc -Wall -Werror -Wno-name-shadowing -fno-code src/Phil/Systems/RuntimePrimitiveReuse.hs
-          cabal exec -- ghc -isrc -Wall -Werror -Wno-name-shadowing -fno-code src/Phil/Systems/CostAttribution.hs
+          cabal exec -- ghc -isrc -Wall -Werror -fno-code src/Phil/Systems/RuntimeClaimBinding.hs
+          cabal exec -- ghc -isrc -Wall -Werror -fno-code src/Phil/Systems/RuntimePrimitiveReuse.hs
+          cabal exec -- ghc -isrc -Wall -Werror -fno-code src/Phil/Systems/CostAttribution.hs
       - name: Strict typecheck unchanged 77-case runtime graph corpus
         run: |
           set -euo pipefail
