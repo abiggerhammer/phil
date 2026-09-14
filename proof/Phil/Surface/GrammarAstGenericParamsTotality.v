@@ -740,11 +740,7 @@ Proof.
     unfold phase1_surface_normalize_record_generic_tree.
     rewrite Hrecord_normalize.
     unfold phase1_surface_normalize_record_generic_spine.
-    cbn [phase1_record_spine_name
-      phase1_record_spine_generic_params_tree
-      phase1_record_spine_mode_tree
-      phase1_record_spine_requirements_tree
-      phase1_record_spine_fields_tree].
+    unfold record, refined.
     rewrite Hgeneric_normalize.
     reflexivity.
   }
