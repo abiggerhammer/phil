@@ -392,10 +392,12 @@ Theorem phase1_surface_normalize_record_fields_spine_round_trip :
 Proof.
   intros [name generic_params mode requirements fields_tree]
     refined Hnormalize.
+  unfold phase1_surface_normalize_record_fields_spine in Hnormalize.
   cbn in Hnormalize.
   destruct (phase1_surface_normalize_optional_fields fields_tree)
     as [fields |] eqn:Hfields; try discriminate Hnormalize.
-  inversion Hnormalize; subst refined.
+  injection Hnormalize as Hrefined.
+  subst refined.
   unfold phase1_surface_record_fields_spine_tree,
     phase1_surface_record_requirements_spine_tree.
   cbn.
