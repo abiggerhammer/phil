@@ -132,22 +132,20 @@ jobs:
         run: |
           set -euo pipefail
           cabal exec -- ghc -isrc -Wall -Werror -fno-code src/Phil/Systems/TargetStrengthening.hs
-          # StagingEffect and NextStageRequirement traverse RuntimeClaimBinding,
-          # whose pre-existing `reverse` local bindings are tracked warning debt.
-          cabal exec -- ghc -isrc -Wall -Werror -Wno-name-shadowing -fno-code src/Phil/Systems/StagingEffect.hs
-          cabal exec -- ghc -isrc -Wall -Werror -Wno-name-shadowing -fno-code src/Phil/Systems/NextStageRequirement.hs
+          cabal exec -- ghc -isrc -Wall -Werror -fno-code src/Phil/Systems/StagingEffect.hs
+          cabal exec -- ghc -isrc -Wall -Werror -fno-code src/Phil/Systems/NextStageRequirement.hs
       - name: Strict typecheck unchanged 68-case realization corpus
         run: |
           set -euo pipefail
           cabal exec -- ghc -isrc -Wall -Werror -fno-code test/Phase1TargetStrengtheningMain.hs
-          cabal exec -- ghc -isrc -Wall -Werror -Wno-name-shadowing -fno-code test/Phase1StagingEffectMain.hs
-          cabal exec -- ghc -isrc -Wall -Werror -Wno-name-shadowing -fno-code test/Phase1NextStageRequirementMain.hs
+          cabal exec -- ghc -isrc -Wall -Werror -fno-code test/Phase1StagingEffectMain.hs
+          cabal exec -- ghc -isrc -Wall -Werror -fno-code test/Phase1NextStageRequirementMain.hs
       - name: Re-run unchanged realization corpus
         run: |
           set -euo pipefail
           cabal exec -- runghc -Wall -Werror -isrc test/Phase1TargetStrengtheningMain.hs
-          cabal exec -- runghc -Wall -Werror -Wno-name-shadowing -isrc test/Phase1StagingEffectMain.hs
-          cabal exec -- runghc -Wall -Werror -Wno-name-shadowing -isrc test/Phase1NextStageRequirementMain.hs
+          cabal exec -- runghc -Wall -Werror -isrc test/Phase1StagingEffectMain.hs
+          cabal exec -- runghc -Wall -Werror -isrc test/Phase1NextStageRequirementMain.hs
       - name: Record implementation-refinement staging identities
         run: |
           set -euo pipefail
