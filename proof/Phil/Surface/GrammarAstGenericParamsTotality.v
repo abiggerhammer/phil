@@ -328,7 +328,7 @@ Proof.
     as [after_kind [kind_tree [nil_trees
       [Htail2_trees [Hkind Hnil]]]]].
   rewrite Htrees, Htail1_trees, Htail2_trees in Hsubtree.
-  inversion Hnil; subst.
+  inversion Hnil; subst nil_trees.
   destruct
     (literal_derivation_is_exact
       phase1_surface_rules _ ":" _ _ colon_tree Hcolon)
