@@ -140,19 +140,15 @@ jobs:
       - name: Strict typecheck unchanged 36-case correspondence corpus
         run: |
           set -euo pipefail
-          # These cumulative test paths transitively compile the already
-          # documented SYS-009/010 warning debt: ProtocolStateCorrespondence
-          # name shadowing and BoundaryCommitCorrespondence's redundant Set
-          # type import. Production SYS-011--013 remains strict above.
-          cabal exec -- ghc -isrc -Wall -Werror -Wno-name-shadowing -Wno-unused-imports -fno-code test/Phase1EvidenceSubjectTransferMain.hs
-          cabal exec -- ghc -isrc -Wall -Werror -Wno-name-shadowing -Wno-unused-imports -fno-code test/Phase1EvidenceErasureMain.hs
-          cabal exec -- ghc -isrc -Wall -Werror -Wno-name-shadowing -Wno-unused-imports -fno-code test/Phase1AssumptionDependencyMain.hs
+          cabal exec -- ghc -isrc -Wall -Werror -fno-code test/Phase1EvidenceSubjectTransferMain.hs
+          cabal exec -- ghc -isrc -Wall -Werror -fno-code test/Phase1EvidenceErasureMain.hs
+          cabal exec -- ghc -isrc -Wall -Werror -fno-code test/Phase1AssumptionDependencyMain.hs
       - name: Re-run unchanged SYS-011 through SYS-013 correspondence corpus
         run: |
           set -euo pipefail
-          cabal exec -- runghc -Wall -Werror -Wno-name-shadowing -Wno-unused-imports -isrc test/Phase1EvidenceSubjectTransferMain.hs
-          cabal exec -- runghc -Wall -Werror -Wno-name-shadowing -Wno-unused-imports -isrc test/Phase1EvidenceErasureMain.hs
-          cabal exec -- runghc -Wall -Werror -Wno-name-shadowing -Wno-unused-imports -isrc test/Phase1AssumptionDependencyMain.hs
+          cabal exec -- runghc -Wall -Werror -isrc test/Phase1EvidenceSubjectTransferMain.hs
+          cabal exec -- runghc -Wall -Werror -isrc test/Phase1EvidenceErasureMain.hs
+          cabal exec -- runghc -Wall -Werror -isrc test/Phase1AssumptionDependencyMain.hs
       - name: Record implementation-refinement staging identities
         run: |
           set -euo pipefail
