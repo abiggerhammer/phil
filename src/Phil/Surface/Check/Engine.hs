@@ -616,7 +616,6 @@ evalSequentialValues environment = go []
 evalReceive
   :: SurfaceEnvironment
   -> SurfaceState
-  -> Located SurfaceExpression
   -> Located SurfaceType
   -> Located SurfaceExpression
   -> Either SurfaceCheckError [SurfacePath]
@@ -773,7 +772,7 @@ evalSend environment exact state located valueExpression endpointExpression = do
   let (temp, state2) = freshName "$send" state1
   step <- mapSession located $
     sendEndpoint (Name endpoint) temp (resourceContext (stateCore state2))
-  let state3 = applySessionContext endpoint (stepContext step) state1
+  let state3 = applySessionContext endpoint (stepContext step) state2
   (successor, state4) <- extractLinearTemp (locatedSpan located) temp state3
   Right [valuePath state4 (RuntimeScalar successor)]
 
@@ -844,7 +843,7 @@ evalSelect environment state located branch endpointExpression explicitEvidence 
       temp
       (branchValueLabel branch)
       (resourceContext (stateCore state2))
-  let state3 = applySessionContext endpoint (stepContext step) state1
+  let state3 = applySessionContext endpoint (stepContext step) state2
   (successor, state4) <- extractLinearTemp (locatedSpan located) temp state3
   Right [valuePath state4 (RuntimeScalar successor)]
 
