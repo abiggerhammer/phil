@@ -616,6 +616,7 @@ evalSequentialValues environment = go []
 evalReceive
   :: SurfaceEnvironment
   -> SurfaceState
+  -> Located SurfaceExpression
   -> Located SurfaceType
   -> Located SurfaceExpression
   -> Either SurfaceCheckError [SurfacePath]
@@ -1725,7 +1726,7 @@ hasExactEvidence proposition state =
   any matches $ Map.elems $ unrestrictedBindings $ resourceContext $ stateCore state
   where
     required = normalizeProposition proposition
-    matches ty = case evidenceProposition ty of
+    matches ty = case evidenceProposition (bindingType ty) of
       Just actual ->
         normalizeProposition (rewriteProposition state actual) == required
       Nothing -> False
