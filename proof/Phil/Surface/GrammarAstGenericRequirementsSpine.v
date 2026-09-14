@@ -4,6 +4,7 @@ From Phil.Surface Require Import
   GrammarDerivation
   GrammarAstSourceHeader
   GrammarAstTopLevelSpine
+  GrammarAstGenericParamsSpine
   GrammarAstStructuralModeSpine.
 
 Import ListNotations.
