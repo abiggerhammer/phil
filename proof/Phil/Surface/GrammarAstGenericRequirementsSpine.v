@@ -546,7 +546,7 @@ Proof.
   destruct
     (phase1_surface_normalize_optional_generic_requirements requirements_tree)
     as [requirements |] eqn:Hrequirements; try discriminate Hnormalize.
-  inversion Hnormalize; subst refined.
+  inversion Hnormalize.
   unfold phase1_surface_record_requirements_spine_tree,
     phase1_surface_record_mode_spine_tree.
   cbn.
