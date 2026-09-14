@@ -1,0 +1,61 @@
+name: Phase 1 Warning-Free Haskell Integration
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: true
+
+on:
+  pull_request:
+    paths:
+      - 'src/**/*.hs'
+      - 'app/**/*.hs'
+      - 'test/**/*.hs'
+      - 'generated/**/*.hs'
+      - 'phil-core.cabal'
+      - '.github/workflows/*.yml'
+      - 'docs/phase-1/warning-free-haskell-integration-v1.md'
+  push:
+    branches: [main]
+    paths:
+      - 'src/**/*.hs'
+      - 'app/**/*.hs'
+      - 'test/**/*.hs'
+      - 'generated/**/*.hs'
+      - 'phil-core.cabal'
+      - '.github/workflows/*.yml'
+      - 'docs/phase-1/warning-free-haskell-integration-v1.md'
+
+permissions:
+  contents: read
+
+jobs:
+  warning-free-haskell:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: haskell-actions/setup@v2
+        with:
+          ghc-version: '9.6.7'
+          cabal-version: 'latest'
+
+      - name: Canonical project-owned build with warnings fatal
+        run: cabal build all --enable-tests --ghc-options=-Werror
+
+      - name: Strictly recheck historical warning-debt seams without exemptions
+        run: |
+          set -euo pipefail
+          cabal exec -- ghc -isrc -Wall -Werror -fno-code src/Phil/Systems/ProtocolStateCorrespondence.hs
+          cabal exec -- ghc -isrc -Wall -Werror -fno-code src/Phil/Systems/BoundaryCommitCorrespondence.hs
+          cabal exec -- ghc -isrc -Wall -Werror -fno-code src/Phil/Systems/RuntimeClaimBinding.hs
+          cabal exec -- ghc -isrc -Wall -Werror -fno-code src/Phil/Systems/StageClosure.hs
+          cabal exec -- ghc -isrc -Wall -Werror -fno-code src/Phil/Systems/StagingEffect.hs
+          cabal exec -- ghc -isrc -Wall -Werror -fno-code src/Phil/Systems/NextStageRequirement.hs
+          cabal exec -- ghc -isrc -Wall -Werror -fno-code test/Phase1EvidenceSubjectTransferMain.hs
+          cabal exec -- ghc -isrc -Wall -Werror -fno-code test/Phase1StageClosureMain.hs
+
+      - name: Execute representative cumulative warning-debt regressions strictly
+        run: |
+          set -euo pipefail
+          cabal exec -- runghc -isrc -Wall -Werror test/Phase1EvidenceSubjectTransferMain.hs
+          cabal exec -- runghc -isrc -Wall -Werror test/Phase1StageClosureMain.hs

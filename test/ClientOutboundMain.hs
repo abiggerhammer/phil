@@ -149,7 +149,7 @@ wrongBeginDigestRejects = withBundle $ \bundle ->
   in isLeft (verifyClientOutboundWitness mutated witness)
   where
     mutateConstruct witness operation = case operation of
-      OpRuntimeCall name inputs outputs site decision
+      OpRuntimeCall name _ outputs site decision
         | name == clientOutboundConstructBeginCall witness ->
             OpRuntimeCall name
               [ clientOutboundPayloadLength witness
