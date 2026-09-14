@@ -4,10 +4,12 @@ on:
   pull_request:
     paths:
       - 'src/Phil/Core/Callable.hs'
+      - 'src/Phil/Compiler/CallableInvocationContext.hs'
       - 'src/Phil/Compiler/CallableInvocationLifecycle.hs'
       - 'src/Phil/Compiler/CallableInvocationSemantics.hs'
       - 'test/Phase1CallableTransitionsMain.hs'
       - 'test/Phase1CALL019InvocationLifecycleMain.hs'
+      - 'test/Phase1CALL019LifecycleAwareInvocationContextMain.hs'
       - 'docs/phase-1/callable-transitions-v1.md'
       - 'proof/Phil/Core/GenericStructural.v'
       - 'proof/Phil/Core/CallableMode.v'
@@ -18,10 +20,12 @@ on:
     branches: [main]
     paths:
       - 'src/Phil/Core/Callable.hs'
+      - 'src/Phil/Compiler/CallableInvocationContext.hs'
       - 'src/Phil/Compiler/CallableInvocationLifecycle.hs'
       - 'src/Phil/Compiler/CallableInvocationSemantics.hs'
       - 'test/Phase1CallableTransitionsMain.hs'
       - 'test/Phase1CALL019InvocationLifecycleMain.hs'
+      - 'test/Phase1CALL019LifecycleAwareInvocationContextMain.hs'
       - 'docs/phase-1/callable-transitions-v1.md'
       - 'proof/Phil/Core/GenericStructural.v'
       - 'proof/Phil/Core/CallableMode.v'
@@ -73,6 +77,8 @@ jobs:
         run: cabal exec -- runghc -isrc test/Phase1CallableTransitionsMain.hs
       - name: Check CALL-019 source invocation lifecycle witnesses
         run: cabal exec -- runghc -isrc -Wall -Werror test/Phase1CALL019InvocationLifecycleMain.hs
+      - name: Check CALL-019 lifecycle-aware invocation context
+        run: cabal exec -- runghc -isrc -Wall -Werror test/Phase1CALL019LifecycleAwareInvocationContextMain.hs
       - uses: actions/download-artifact@v4
         with:
           name: rocq-phase1-callable-lifecycle-proof
