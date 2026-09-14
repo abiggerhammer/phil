@@ -118,7 +118,7 @@ Proof.
                          *** inversion Hnth; subst item.
                              exists Phase1ArchitectureGenericKind.
                              split; reflexivity.
-                         *** discriminate Hnth.
+                         *** destruct index; cbn in Hnth; discriminate Hnth.
 Qed.
 
 Lemma phase1_surface_validate_typed_generic_kind_total_from_derivation :
