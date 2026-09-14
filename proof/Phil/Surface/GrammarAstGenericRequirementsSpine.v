@@ -551,9 +551,11 @@ Proof.
     phase1_surface_record_mode_spine_tree.
   cbn [phase1_record_requirements_spine_requirements
        phase1_record_mode_spine_requirements_tree].
-  fold (phase1_surface_optional_generic_requirements_tree requirements).
-  rewrite (phase1_surface_normalize_optional_generic_requirements_round_trip
-    requirements_tree requirements Hrequirements).
+  pose proof
+    (phase1_surface_normalize_optional_generic_requirements_round_trip
+      requirements_tree requirements Hrequirements)
+    as Hrequirements_round_trip.
+  rewrite <- Hrequirements_round_trip.
   reflexivity.
 Qed.
 
