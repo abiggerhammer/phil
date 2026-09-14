@@ -728,6 +728,7 @@ Proof.
       phase1_surface_normalize_record_generic_spine.
     cbn.
     rewrite Hname_normalize.
+    fold phase1_surface_normalize_optional_generic_params.
     rewrite Hgeneric_normalize.
     reflexivity.
   }
