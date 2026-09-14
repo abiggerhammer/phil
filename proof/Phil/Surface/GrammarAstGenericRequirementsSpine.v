@@ -546,11 +546,30 @@ Proof.
   destruct
     (phase1_surface_normalize_optional_generic_requirements requirements_tree)
     as [requirements |] eqn:Hrequirements; try discriminate Hnormalize.
-  injection Hnormalize as Hrefined.
-  rewrite <- Hrefined.
-  unfold phase1_surface_record_requirements_spine_tree,
-    phase1_surface_record_mode_spine_tree.
-  cbn.
+  inversion Hnormalize.
+  change
+    PTNonterminal "record_decl"
+      (PTSequence
+        [ PTLiteral "record";
+          phase1_surface_identifier_tree name;
+          phase1_surface_optional_generic_params_tree generic_params;
+          phase1_surface_optional_mode_tree mode;
+          phase1_surface_optional_generic_requirements_tree requirements;
+          PTLiteral "{";
+          fields_tree;
+          PTLiteral "}"
+        ]) =
+    PTNonterminal "record_decl"
+      (PTSequence
+        [ PTLiteral "record";
+          phase1_surface_identifier_tree name;
+          phase1_surface_optional_generic_params_tree generic_params;
+          phase1_surface_optional_mode_tree mode;
+          requirements_tree;
+          PTLiteral "{";
+          fields_tree;
+          PTLiteral "}"
+        ]).
   rewrite (phase1_surface_normalize_optional_generic_requirements_round_trip
     requirements_tree requirements Hrequirements).
   reflexivity.
