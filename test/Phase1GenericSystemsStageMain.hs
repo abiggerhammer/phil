@@ -4,7 +4,6 @@ module Main (main) where
 
 import qualified Data.Map.Strict as Map
 import qualified Data.Set as Set
-import Phil.Core.Static (InstanceRevision (..), RealizationRevision (..))
 import Phil.Examples.Phase1.SystemsWitnesses
 import Phil.Systems.Phase1Stage
 import System.Exit (exitFailure)
