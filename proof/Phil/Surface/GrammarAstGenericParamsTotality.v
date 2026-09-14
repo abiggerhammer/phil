@@ -709,6 +709,25 @@ Proof.
     (phase1_surface_normalize_optional_generic_params_total_from_derivation
       _ _ _ generic_tree Hgeneric)
     as [parameters [Hgeneric_normalize Hgeneric_round_trip]].
+  pose (record :=
+    {| phase1_record_spine_name := name;
+       phase1_record_spine_generic_params_tree := generic_tree;
+       phase1_record_spine_mode_tree := mode_tree;
+       phase1_record_spine_requirements_tree := requirements_tree;
+       phase1_record_spine_fields_tree := fields_tree |}).
+  assert (Hrecord_normalize :
+    phase1_surface_normalize_record_spine tree = Some record).
+  {
+    rewrite Htree, Hsubtree, Hkeyword_tree, Hopen_tree, Hclose_tree.
+    unfold phase1_surface_normalize_record_spine,
+      phase1_surface_expect_nonterminal,
+      phase1_surface_expect_sequence,
+      phase1_surface_exact8,
+      phase1_surface_expect_literal.
+    cbn.
+    rewrite Hname_normalize.
+    reflexivity.
+  }
   pose (refined :=
     {| phase1_record_generic_spine_name := name;
        phase1_record_generic_spine_generic_params := parameters;
@@ -718,17 +737,14 @@ Proof.
   assert (Hnormalize :
     phase1_surface_normalize_record_generic_tree tree = Some refined).
   {
-    rewrite Htree, Hsubtree, Hkeyword_tree, Hopen_tree, Hclose_tree.
-    unfold phase1_surface_normalize_record_generic_tree,
-      phase1_surface_normalize_record_spine,
-      phase1_surface_expect_nonterminal,
-      phase1_surface_expect_sequence,
-      phase1_surface_exact8,
-      phase1_surface_expect_literal,
-      phase1_surface_normalize_record_generic_spine.
-    cbn.
-    rewrite Hname_normalize.
-    fold phase1_surface_normalize_optional_generic_params.
+    unfold phase1_surface_normalize_record_generic_tree.
+    rewrite Hrecord_normalize.
+    unfold phase1_surface_normalize_record_generic_spine.
+    cbn only [phase1_record_spine_name
+      phase1_record_spine_generic_params_tree
+      phase1_record_spine_mode_tree
+      phase1_record_spine_requirements_tree
+      phase1_record_spine_fields_tree].
     rewrite Hgeneric_normalize.
     reflexivity.
   }
