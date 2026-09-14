@@ -150,6 +150,7 @@ Proof.
       middle rest tail_trees Htail)
     as [final [type_tree [nil_trees
       [Htail_trees [Htype Hnil]]]]].
+  rewrite Htree, Htrees, Htail_trees.
   inversion Hnil; subst.
   destruct
     (literal_derivation_is_exact
@@ -160,7 +161,7 @@ Proof.
       phase1_surface_rules _ "type_expression"
       _ _ type_tree Htype)
     as [type_body [type_subtree [_ [Htype_tree Htype_body]]]].
-  rewrite Htree, Htrees, Htail_trees, Hkeyword_tree, Htype_tree.
+  rewrite Hkeyword_tree, Htype_tree.
   unfold phase1_surface_validate_typed_generic_kind,
     phase1_surface_expect_sequence,
     phase1_surface_exact2,
