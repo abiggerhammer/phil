@@ -135,40 +135,40 @@ Proof.
       [ELiteral keyword; ENonterminal "type_expression"]
       input rest tree Hderive)
     as [trees [Htree Hitems]].
-  repeat match goal with
-  | Hseq : DerivesSequence phase1_surface_rules _ _ (_ :: _) _ _ _ |- _ =>
-      inversion Hseq; subst; clear Hseq
-  end.
-  match goal with
-  | Hnil : DerivesSequence phase1_surface_rules _ _ [] _ _ _ |- _ =>
-      inversion Hnil; subst; clear Hnil
-  end.
-  match goal with
-  | Hkeyword : Derives phase1_surface_rules _
-      (ELiteral keyword) _ _ ?keyword_tree,
-    Htype : Derives phase1_surface_rules _
-      (ENonterminal "type_expression") _ _ ?type_tree |- _ =>
-      destruct
-        (literal_derivation_is_exact
-          phase1_surface_rules _ keyword _ _ keyword_tree Hkeyword)
-        as [keyword_tail [_ [_ Hkeyword_tree]]];
-      destruct
-        (derives_nonterminal_exposes_body
-          phase1_surface_rules _ "type_expression"
-          _ _ type_tree Htype)
-        as [type_body [type_subtree [_ [Htype_tree Htype_body]]]];
-      rewrite Htree;
-      rewrite Hkeyword_tree;
-      rewrite Htype_tree;
-      unfold phase1_surface_validate_typed_generic_kind,
-        phase1_surface_expect_sequence,
-        phase1_surface_exact2,
-        phase1_surface_expect_literal,
-        phase1_surface_expect_nonterminal;
-      cbn;
-      rewrite String.eqb_refl;
-      reflexivity
-  end.
+  destruct
+    (derives_sequence_cons_exposes_head_exact
+      phase1_surface_rules path 0
+      (ELiteral keyword)
+      [ENonterminal "type_expression"]
+      input rest trees Hitems)
+    as [middle [keyword_tree [tail_trees
+      [Htrees [Hkeyword Htail]]]]].
+  destruct
+    (derives_sequence_cons_exposes_head_exact
+      phase1_surface_rules path 1
+      (ENonterminal "type_expression") []
+      middle rest tail_trees Htail)
+    as [final [type_tree [nil_trees
+      [Htail_trees [Htype Hnil]]]]].
+  inversion Hnil; subst.
+  destruct
+    (literal_derivation_is_exact
+      phase1_surface_rules _ keyword _ _ keyword_tree Hkeyword)
+    as [keyword_tail [_ [_ Hkeyword_tree]]].
+  destruct
+    (derives_nonterminal_exposes_body
+      phase1_surface_rules _ "type_expression"
+      _ _ type_tree Htype)
+    as [type_body [type_subtree [_ [Htype_tree Htype_body]]]].
+  rewrite Htree, Htrees, Htail_trees, Hkeyword_tree, Htype_tree.
+  unfold phase1_surface_validate_typed_generic_kind,
+    phase1_surface_expect_sequence,
+    phase1_surface_exact2,
+    phase1_surface_expect_literal,
+    phase1_surface_expect_nonterminal.
+  cbn.
+  rewrite String.eqb_refl.
+  reflexivity.
 Qed.
 
 Lemma phase1_surface_validate_generic_kind_selected_total_from_derivation :
