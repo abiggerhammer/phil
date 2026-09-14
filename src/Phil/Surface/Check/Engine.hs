@@ -371,7 +371,18 @@ evalCallable environment state located name arguments =
                   , callableOutcomeObligations = Map.findWithDefault
                       [] key (surfaceCallableOutcomeObligations environment)
                   }
-          in callableDecision next signature (map withOccurrenceState outcomes)
+              occurrenceResources = Map.fromList
+                [ (label, spec)
+                | ((resourceSpan, resourceKey, label), spec) <-
+                    Map.toList (surfaceCallableOutcomeResources environment)
+                , resourceSpan == invocationSpan
+                , resourceKey == declarationKey
+                ]
+          in callableDecision
+              next
+              signature
+              (map withOccurrenceState outcomes)
+              occurrenceResources
   where
     checkArgument current ((expectedMode, expectedType), expression) = do
       paths <- evalExpression environment current expression
@@ -403,21 +414,30 @@ evalCallable environment state located name arguments =
         | otherwise -> Right
             (RuntimeScalar (ScalarValue mode ty (shapeForType ty)))
 
-    callableDecision next signature outcomes = do
+    callableDecision next signature outcomes resources = do
       when (null outcomes) $
         throw located TypeMismatch "callable decision declares no outcomes"
       let labels = map callableOutcomeLabel outcomes
+          continuingLabels = Set.fromList
+            [ callableOutcomeLabel outcome
+            | outcome <- outcomes
+            , callableOutcomeControl outcome == CallableOutcomeContinues
+            ]
+          resourceLabels = Map.keysSet resources
       unless (Set.size (Set.fromList labels) == length labels) $
         throw located TypeMismatch "callable decision outcome labels are not unique"
       unless (all exactObligationArity outcomes) $
         throw located MissingEvidence
           "CALL-019 residual obligation bindings are missing or substituted"
+      unless (Set.null resourceLabels || resourceLabels == continuingLabels) $
+        throw located IncompatibleBranchResidue
+          "CALL-019 occurrence resource residue does not exactly cover continuing outcomes"
       case surfaceCallableResult signature of
         Nothing -> Right
           [ valuePath next (RuntimeScalar
               (ScalarValue Unrestricted
                 (TyOpaque "CallableDecision")
-                (DecisionShape (CallableDecision outcomes))))
+                (DecisionShape (CallableDecision outcomes resources))))
           ]
         Just _ -> throw located TypeMismatch
           "branch-dispatched callable cannot also expose one unbranched result"
@@ -983,8 +1003,10 @@ checkDecisionArm environment state decision locatedArm = do
     Just (CallableOutcomeCloses outcome) ->
       checkDeclaredTerminalCallableArm environment state outcome locatedArm
     _ -> do
+      resourceState <- applyCallableDecisionResources
+        (locatedSpan locatedArm) decision label state
       withBinders <- bindDecisionPattern
-        state
+        resourceState
         decision
         label
         (casePatternBinders pattern')
@@ -993,23 +1015,79 @@ checkDecisionArm environment state decision locatedArm = do
         Just obligations ->
           checkCallableDecisionArm
             environment
-            state
+            resourceState
             withBinders
             obligations
             (caseArmBody (locatedValue locatedArm))
         Nothing ->
           checkScopedValueBlock
             environment
-            state
+            resourceState
             withBinders
             (caseArmBody (locatedValue locatedArm))
+
+applyCallableDecisionResources
+  :: SourceSpan
+  -> DecisionKind
+  -> Text
+  -> SurfaceState
+  -> Either SurfaceCheckError SurfaceState
+applyCallableDecisionResources span' decision label state = case decision of
+  CallableDecision _ resources -> case Map.lookup label resources of
+    Nothing -> Right state
+    Just resourceSpec -> applyCallableOutcomeResourceSpec span' resourceSpec state
+  _ -> Right state
+
+applyCallableOutcomeResourceSpec
+  :: SourceSpan
+  -> CallableOutcomeResourceSpec
+  -> SurfaceState
+  -> Either SurfaceCheckError SurfaceState
+applyCallableOutcomeResourceSpec span' resourceSpec initial = do
+  next <- foldM applyOne initial $
+    Map.toAscList (callableOutcomeResourceBindings resourceSpec)
+  applyActiveEndpoint next
+  where
+    applyOne current (name, expectation) = case expectation of
+      CallableOutcomeResourceAbsent -> removeExisting name current
+      CallableOutcomeResourcePresent expected ->
+        case Map.lookup name (stateBindings current) of
+          Just actual | actual == expected -> Right current
+          _ -> do
+            cleared <- removeExisting name current
+            insertBindingMeta span' name expected cleared
+
+    removeExisting name current = case Map.lookup name (stateBindings current) of
+      Nothing -> Right current
+      Just meta -> case bindingMode meta of
+        Unrestricted -> removeScopedBinding span' name current
+        Affine -> snd <$> moveVariable (Located span' ()) name current
+        Linear -> snd <$> moveVariable (Located span' ()) name current
+
+    applyActiveEndpoint current = case
+        callableOutcomeResourceActiveEndpoint resourceSpec of
+      Nothing -> Right current { stateActiveEndpoint = Nothing }
+      Just name -> case Map.lookup name (stateBindings current) of
+        Just meta -> case bindingType meta of
+          TyEndpoint _ -> Right current { stateActiveEndpoint = Just name }
+          actual -> resourceError
+            ("CALL-019 active endpoint residue names non-endpoint binding "
+              <> name <> ": " <> Text.pack (show actual))
+        Nothing -> resourceError
+          ("CALL-019 active endpoint residue names absent binding " <> name)
+
+    resourceError detail = Left SurfaceCheckError
+      { surfaceErrorSpan = span'
+      , surfaceErrorClass = IncompatibleBranchResidue
+      , surfaceErrorDetail = detail
+      }
 
 callableDecisionObligations
   :: DecisionKind
   -> Text
   -> Maybe [(Text, Proposition)]
 callableDecisionObligations decision label = case decision of
-  CallableDecision outcomes -> case
+  CallableDecision outcomes _ -> case
       [ callableOutcomeObligations outcome
       | outcome <- outcomes
       , callableOutcomeLabel outcome == label
@@ -1049,7 +1127,7 @@ checkCallableDecisionArm environment incoming scoped obligations body = do
 
 callableDecisionControl :: DecisionKind -> Text -> Maybe CallableOutcomeControlSpec
 callableDecisionControl decision label = case decision of
-  CallableDecision outcomes -> case
+  CallableDecision outcomes _ -> case
       [ callableOutcomeControl outcome
       | outcome <- outcomes
       , callableOutcomeLabel outcome == label
@@ -1086,7 +1164,7 @@ decisionLabels decision = case decision of
   DigestDecision {} -> ["rejected", "accepted"]
   StoreDecision -> ["failure", "success"]
   ProviderDecision outcomes -> map providerOutcomeLabel outcomes
-  CallableDecision outcomes -> map callableOutcomeLabel outcomes
+  CallableDecision outcomes _ -> map callableOutcomeLabel outcomes
 
 bindDecisionPattern
   :: SurfaceState
@@ -1173,7 +1251,7 @@ bindDecisionPattern state decision label binders located =
                 (zip providerBinders payload)
         _ -> throw located TypeMismatch
           "provider decision arm binder shape is incompatible with the declared outcome"
-    (CallableDecision outcomes, callableLabel, callableBinders) ->
+    (CallableDecision outcomes _, callableLabel, callableBinders) ->
       case
         [ (callableOutcomePayload outcome, callableOutcomeFacts outcome)
         | outcome <- outcomes

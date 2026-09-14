@@ -400,5 +400,5 @@ data DecisionKind
   | DigestDecision Proposition
   | StoreDecision
   | ProviderDecision [ProviderOutcomeSpec]
-  | CallableDecision [CallableOutcomeSpec]
+  | CallableDecision [CallableOutcomeSpec] (Map Text CallableOutcomeResourceSpec)
   deriving (Eq, Show)

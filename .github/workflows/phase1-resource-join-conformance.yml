@@ -64,3 +64,6 @@ jobs:
 
       - name: CALL-019 occurrence-scoped callable resource residue installation
         run: cabal exec -- runghc -Wall -Werror -isrc test/Phase1CALL019OutcomeBranchResourceInstallMain.hs
+
+      - name: CALL-019 occurrence-scoped callable resource residue at Surface arms
+        run: cabal exec -- runghc -Wall -Werror -isrc test/Phase1CALL019SurfaceArmResourceResidueMain.hs
