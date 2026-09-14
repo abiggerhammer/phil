@@ -740,9 +740,13 @@ Proof.
     unfold phase1_surface_normalize_record_generic_tree.
     rewrite Hrecord_normalize.
     unfold phase1_surface_normalize_record_generic_spine.
-    unfold record, refined.
-    rewrite Hgeneric_normalize.
-    reflexivity.
+    replace (phase1_record_spine_generic_params_tree record)
+      with generic_tree.
+    - rewrite Hgeneric_normalize.
+      unfold record, refined.
+      reflexivity.
+    - unfold record.
+      reflexivity.
   }
   exists refined.
   split.
