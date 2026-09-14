@@ -172,7 +172,7 @@ Proof.
     + eapply phase1_surface_normalize_field_suffix_round_trip.
       exact Hfield.
     + eapply IH.
-      exact Hrest.
+      reflexivity.
 Qed.
 
 Definition phase1_surface_trailing_comma_tree
