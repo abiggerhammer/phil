@@ -9,7 +9,8 @@ import Phil.LLVM
 import System.Exit (exitFailure)
 import qualified System.IO as IO
 
-main :: IO () = case phase0FinalResponseReceiveLLVMCertification of
+main :: IO ()
+main = case phase0FinalResponseReceiveLLVMCertification of
   Left verificationError -> do
     IO.hPutStrLn IO.stderr $
       "Phase 0 final-response receive LLVM certification failed: " <> show verificationError
