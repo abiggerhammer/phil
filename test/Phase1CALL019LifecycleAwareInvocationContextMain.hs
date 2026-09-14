@@ -27,6 +27,7 @@ import Phil.Core.Callable
   , CallableOccurrenceKey (..)
   , CallableResourceState
   , CallableStateKey (..)
+  , ClosureCaptureSummary
   , checkClosureCaptures
   , lookupCallableOccurrence
   , singletonCallableResourceState
@@ -91,7 +92,7 @@ replaceInterface = InterfaceRevision "callable.replace.v1"
 replaceState :: CallableStateKey
 replaceState = CallableStateKey "replace.S1"
 
-emptyCaptures :: Either String Phil.Core.Callable.ClosureCaptureSummary
+emptyCaptures :: Either String ClosureCaptureSummary
 emptyCaptures = mapLeft show (checkClosureCaptures [])
 
 contract :: InterfaceRevision -> CalleeTransition -> CallableContract
