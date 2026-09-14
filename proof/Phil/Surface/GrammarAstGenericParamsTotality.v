@@ -1,6 +1,9 @@
 From Stdlib Require Import Lists.List Strings.String.
 
 From Phil.Surface Require Import
+  GrammarDerivation
+  GrammarDeterminacySimpleResolverSoundness
+  GrammarAstSourceHeaderTotality
   GrammarAstGenericParamsSpine
   GrammarAstRecordTotality.
 
@@ -555,7 +558,7 @@ Proof.
       (phase1_surface_normalize_generic_params_spine_total_from_derivation
         (descend path AtOptionalBody)
         input rest body Hbody)
-      as [parameters [Hparameters Hparameters_round_trip]].
+    as [parameters [Hparameters Hparameters_round_trip]].
     assert (Hnormalize :
       phase1_surface_normalize_optional_generic_params tree =
         Some (Some parameters)).
