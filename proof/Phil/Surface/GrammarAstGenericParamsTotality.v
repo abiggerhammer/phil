@@ -252,9 +252,9 @@ Proof.
         (descend path (AtNonterminal "generic_kind"))
         (AtAlternative index))
       input rest selected Hselected) as Hvalidate.
-  let kind := constr:(
+  pose (kind :=
     {| phase1_generic_kind_spine_tag := tag;
-       phase1_generic_kind_spine_selected_tree := selected |}) in
+       phase1_generic_kind_spine_selected_tree := selected |}).
   assert (Hnormalize :
     phase1_surface_normalize_generic_kind_spine tree = Some kind).
   {
