@@ -301,54 +301,68 @@ Proof.
       ]
       input rest subtree Hbody)
     as [trees [Hsubtree Hitems]].
-  repeat match goal with
-  | Hseq : DerivesSequence phase1_surface_rules _ _ (_ :: _) _ _ _ |- _ =>
-      inversion Hseq; subst; clear Hseq
-  end.
-  match goal with
-  | Hnil : DerivesSequence phase1_surface_rules _ _ [] _ _ _ |- _ =>
-      inversion Hnil; subst; clear Hnil
-  end.
-  match goal with
-  | Hname : Derives phase1_surface_rules _
-      (ENonterminal "identifier") _ _ ?name_tree,
-    Hcolon : Derives phase1_surface_rules _
-      (ELiteral ":") _ _ ?colon_tree,
-    Hkind : Derives phase1_surface_rules _
-      (ENonterminal "generic_kind") _ _ ?kind_tree |- _ =>
-      destruct
-        (literal_derivation_is_exact
-          phase1_surface_rules _ ":" _ _ colon_tree Hcolon)
-        as [colon_tail [_ [_ Hcolon_tree]]];
-      destruct
-        (phase1_surface_normalize_identifier_total_from_derivation
-          _ _ _ name_tree Hname)
-        as [name Hname_normalize];
-      destruct
-        (phase1_surface_normalize_generic_kind_spine_total_from_derivation
-          _ _ _ kind_tree Hkind)
-        as [kind [Hkind_normalize Hkind_round_trip]];
-      let parameter := constr:(
-        {| phase1_generic_param_spine_name := name;
-           phase1_generic_param_spine_kind := kind |}) in
-      assert (Hnormalize :
-        phase1_surface_normalize_generic_param_spine tree = Some parameter);
-      [ rewrite Htree, Hsubtree, Hcolon_tree;
-        unfold phase1_surface_normalize_generic_param_spine,
-          phase1_surface_expect_nonterminal,
-          phase1_surface_expect_sequence,
-          phase1_surface_exact3,
-          phase1_surface_expect_literal;
-        cbn;
-        rewrite Hname_normalize;
-        rewrite Hkind_normalize;
-        reflexivity
-      | exists parameter;
-        split;
-        [ exact Hnormalize
-        | eapply phase1_surface_normalize_generic_param_spine_round_trip;
-          exact Hnormalize ] ]
-  end.
+  destruct
+    (derives_sequence_cons_exposes_head_exact
+      phase1_surface_rules
+      (descend path (AtNonterminal "generic_param")) 0
+      (ENonterminal "identifier")
+      [ELiteral ":"; ENonterminal "generic_kind"]
+      input rest trees Hitems)
+    as [after_name [name_tree [tail1
+      [Htrees [Hname Htail1]]]]].
+  destruct
+    (derives_sequence_cons_exposes_head_exact
+      phase1_surface_rules
+      (descend path (AtNonterminal "generic_param")) 1
+      (ELiteral ":")
+      [ENonterminal "generic_kind"]
+      after_name rest tail1 Htail1)
+    as [after_colon [colon_tree [tail2
+      [Htail1_trees [Hcolon Htail2]]]]].
+  destruct
+    (derives_sequence_cons_exposes_head_exact
+      phase1_surface_rules
+      (descend path (AtNonterminal "generic_param")) 2
+      (ENonterminal "generic_kind") []
+      after_colon rest tail2 Htail2)
+    as [after_kind [kind_tree [nil_trees
+      [Htail2_trees [Hkind Hnil]]]]].
+  rewrite Htrees, Htail1_trees, Htail2_trees in Hsubtree.
+  inversion Hnil; subst.
+  destruct
+    (literal_derivation_is_exact
+      phase1_surface_rules _ ":" _ _ colon_tree Hcolon)
+    as [colon_tail [_ [_ Hcolon_tree]]].
+  destruct
+    (phase1_surface_normalize_identifier_total_from_derivation
+      _ _ _ name_tree Hname)
+    as [name Hname_normalize].
+  destruct
+    (phase1_surface_normalize_generic_kind_spine_total_from_derivation
+      _ _ _ kind_tree Hkind)
+    as [kind [Hkind_normalize Hkind_round_trip]].
+  pose (parameter :=
+    {| phase1_generic_param_spine_name := name;
+       phase1_generic_param_spine_kind := kind |}).
+  assert (Hnormalize :
+    phase1_surface_normalize_generic_param_spine tree = Some parameter).
+  {
+    rewrite Htree, Hsubtree, Hcolon_tree.
+    unfold phase1_surface_normalize_generic_param_spine,
+      phase1_surface_expect_nonterminal,
+      phase1_surface_expect_sequence,
+      phase1_surface_exact3,
+      phase1_surface_expect_literal.
+    cbn.
+    rewrite Hname_normalize.
+    rewrite Hkind_normalize.
+    reflexivity.
+  }
+  exists parameter.
+  split.
+  - exact Hnormalize.
+  - eapply phase1_surface_normalize_generic_param_spine_round_trip.
+    exact Hnormalize.
 Qed.
 
 Lemma phase1_surface_normalize_generic_param_suffix_total_from_derivation :
