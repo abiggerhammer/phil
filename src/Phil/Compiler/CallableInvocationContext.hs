@@ -1,9 +1,11 @@
 module Phil.Compiler.CallableInvocationContext
   ( SurfaceCallableCallerContext (..)
   , CheckedSurfaceCallableInvocationContext (..)
+  , CheckedSurfaceCallableInvocationLifecycleContext (..)
   , SurfaceCallableInvocationContextError (..)
   , checkSurfaceCallableInvocationSummary
   , checkSurfaceCallableInvocationSummaryWithOutcomeBranches
+  , checkSurfaceCallableInvocationSummaryWithOutcomeBranchesAndLifecycle
   , checkSurfaceComponentWithInvocationContext
   ) where
 
@@ -11,6 +13,12 @@ import qualified Data.Map.Strict as Map
 import Data.Map.Strict (Map)
 import qualified Data.Set as Set
 import Data.Set (Set)
+import Phil.Compiler.CallableInvocationLifecycle
+  ( SurfaceCallableInvocationLifecycleBinding
+  , SurfaceCallableInvocationLifecycleError
+  , SurfaceCallableInvocationLifecycleWitness
+  , applySurfaceCallableInvocationLifecycles
+  )
 import Phil.Compiler.CallableInvocationSemantics
   ( SurfaceCallableInvocationSemanticAccount (..)
   , SurfaceCallableSemanticSummary (..)
@@ -33,6 +41,7 @@ import Phil.Compiler.CallableSurfaceSemantics
 import Phil.Core.Callable
   ( CalleeTransition (..)
   , CallableCheckError
+  , CallableResourceState
   , CheckedCallableEffects
   , checkCallableEffectBound
   )
@@ -70,6 +79,19 @@ data CheckedSurfaceCallableInvocationContext = CheckedSurfaceCallableInvocationC
   , checkedInvocationEffectBound :: CheckedCallableEffects
   , checkedInvocationOutcomeContinuations :: [SurfaceCallableOutcomeContinuation]
   }
+  deriving (Eq, Show)
+
+-- | CALL-019 invocation context plus exact executable callee-lifecycle evidence.
+-- The legacy/branch-aware context remains available unchanged for callers that
+-- are only competent to admit PreserveCallee. Consume/Replace admission must
+-- pass through this carrier so the certified Core lifecycle transition is
+-- applied to concrete callable occurrence state in exact source order.
+data CheckedSurfaceCallableInvocationLifecycleContext =
+  CheckedSurfaceCallableInvocationLifecycleContext
+    { checkedLifecycleInvocationContext :: CheckedSurfaceCallableInvocationContext
+    , checkedInvocationLifecycleWitnesses :: [SurfaceCallableInvocationLifecycleWitness]
+    , checkedInvocationFinalCallableState :: CallableResourceState
+    }
   deriving (Eq, Show)
 
 data SurfaceCallableInvocationContextError
@@ -110,6 +132,8 @@ data SurfaceCallableInvocationContextError
       DeclarationKey
   | SurfaceInvocationOutcomeContinuationRejected
       SurfaceCallableOutcomeContinuationError
+  | SurfaceInvocationLifecycleRejected
+      SurfaceCallableInvocationLifecycleError
   deriving (Eq, Show)
 
 -- | Check one already-derived CALL-019 semantic summary against the enclosing
@@ -139,10 +163,9 @@ checkSurfaceCallableInvocationSummary callerContext summary = do
 -- disposition available to successor compiler passes without teaching Surface
 -- about CALL semantic types or flattening sibling outcomes together.
 --
--- Direct named lifecycle remains fail-closed except for PreserveCallee, and
--- fatal outcomes remain inadmissible because Surface still has no exact fatal
--- control representation. The witness list may cover multiple invocation
--- occurrences in one component; every witness must belong to one exact account.
+-- This entry point intentionally retains the old PreserveCallee-only lifecycle
+-- boundary. Consume/Replace callers must use the lifecycle-aware entry point
+-- below and provide exact concrete occurrence/body witnesses.
 checkSurfaceCallableInvocationSummaryWithOutcomeBranches
   :: [SurfaceCallableOutcomeArmSemanticWitness]
   -> SurfaceCallableCallerContext
@@ -155,6 +178,43 @@ checkSurfaceCallableInvocationSummaryWithOutcomeBranches witnesses callerContext
   continuations <- mapLeft SurfaceInvocationOutcomeContinuationRejected
     (composeSurfaceCallableOutcomeContinuations witnesses)
   checkCallerContext continuations callerContext summary
+
+-- | Lifecycle-aware branch admission. Outcome/control/refinement checks are the
+-- same as the branch-aware path, but the coarse PreserveCallee guard is replaced
+-- by exact #1010 occurrence-state evidence. The lifecycle bridge independently
+-- checks binding domain/identity, concrete predecessor availability, transition
+-- equality and the certified Preserve/Consume/Replace state mutation.
+--
+-- Supplying no outcome-arm witnesses remains valid for a single ordinary success
+-- outcome, matching the branch-aware path. Branch-sensitive invocations still
+-- require their exact arm witness domain, and fatal outcomes remain fail-closed.
+checkSurfaceCallableInvocationSummaryWithOutcomeBranchesAndLifecycle
+  :: Map (SourceSpan, DeclarationKey) SurfaceCallableInvocationLifecycleBinding
+  -> CallableResourceState
+  -> [SurfaceCallableOutcomeArmSemanticWitness]
+  -> SurfaceCallableCallerContext
+  -> SurfaceCallableSemanticSummary
+  -> Either SurfaceCallableInvocationContextError
+       CheckedSurfaceCallableInvocationLifecycleContext
+checkSurfaceCallableInvocationSummaryWithOutcomeBranchesAndLifecycle
+    lifecycleBindings initialCallableState witnesses callerContext summary = do
+  let accounts = surfaceCallableSemanticAccounts summary
+  mapM_ (checkWitnessOwned accounts) witnesses
+  mapM_ (checkDirectAccountWithOutcomeBranchesAfterLifecycle witnesses) accounts
+  continuations <- mapLeft SurfaceInvocationOutcomeContinuationRejected
+    (composeSurfaceCallableOutcomeContinuations witnesses)
+  checkedContext <- checkCallerContext continuations callerContext summary
+  (lifecycleWitnesses, finalCallableState) <-
+    mapLeft SurfaceInvocationLifecycleRejected $
+      applySurfaceCallableInvocationLifecycles
+        lifecycleBindings
+        accounts
+        initialCallableState
+  pure CheckedSurfaceCallableInvocationLifecycleContext
+    { checkedLifecycleInvocationContext = checkedContext
+    , checkedInvocationLifecycleWitnesses = lifecycleWitnesses
+    , checkedInvocationFinalCallableState = finalCallableState
+    }
 
 checkCallerContext
   :: [SurfaceCallableOutcomeContinuation]
@@ -217,6 +277,16 @@ checkDirectAccountWithOutcomeBranches
   -> Either SurfaceCallableInvocationContextError ()
 checkDirectAccountWithOutcomeBranches witnesses account = do
   checkDirectCalleeTransition account
+  checkDirectAccountWithOutcomeBranchesAfterLifecycle witnesses account
+
+-- | Branch/outcome validation after a competent lifecycle layer has taken
+-- responsibility for the callee transition. This deliberately omits only the
+-- PreserveCallee guard; exact outcome-transition equality is still required.
+checkDirectAccountWithOutcomeBranchesAfterLifecycle
+  :: [SurfaceCallableOutcomeArmSemanticWitness]
+  -> SurfaceCallableInvocationSemanticAccount
+  -> Either SurfaceCallableInvocationContextError ()
+checkDirectAccountWithOutcomeBranchesAfterLifecycle witnesses account = do
   let matching = filter (witnessBelongsTo account) witnesses
       outcomes = surfaceSemanticInvocationOutcomes account
   case (outcomes, matching) of
