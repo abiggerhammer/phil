@@ -90,11 +90,11 @@ jobs:
           cabal exec -- ghc -isrc -Wall -Werror -Wno-unused-imports -fno-code src/CallableModeStrengtheningKernel.hs
           cabal exec -- ghc -isrc -Wall -Werror -fno-code src/Phil/Core/CallableModeStrengtheningKernelBridge.hs
           cabal exec -- ghc -isrc -Wall -Werror -fno-code src/Phil/Core/Callable/ModeDeclaration.hs
-          cabal exec -- ghc -isrc -Wall -Werror -Wno-unused-imports -fno-code app/CallableModeStrengtheningDecisionCorrespondenceMain.hs
+          cabal exec -- ghc -isrc -Wall -Werror -fno-code app/CallableModeStrengtheningDecisionCorrespondenceMain.hs
           cabal exec -- ghc -isrc -Wall -Werror -fno-code app/CallableModeStrengtheningProductionBindingMain.hs
           cabal exec -- ghc -isrc -Wall -Werror -fno-code test/Phase1ExplicitClosureModeMain.hs
       - name: Execute exact extracted-kernel controls
-        run: cabal exec -- runghc -Wall -Werror -Wno-unused-imports -isrc app/CallableModeStrengtheningDecisionCorrespondenceMain.hs
+        run: cabal exec -- runghc -Wall -Werror -isrc app/CallableModeStrengtheningDecisionCorrespondenceMain.hs
       - name: Execute production-binding controls
         run: cabal exec -- runghc -Wall -Werror -isrc app/CallableModeStrengtheningProductionBindingMain.hs
       - name: Re-run unchanged CALL-017 corpus
