@@ -93,7 +93,7 @@ jobs:
           ghc -Wall -Werror -fno-code src/SystemsGenericLoweringKernel.hs
           cabal exec -- ghc -isrc -Wall -Werror -fno-code src/Phil/Systems/GenericLowering.hs
           cabal exec -- ghc -isrc -Wall -Werror -fno-code src/Phil/Examples/Phase1/SystemsWitnesses.hs
-          cabal exec -- ghc -isrc -Wall -Werror -Wno-name-shadowing -Wno-unused-imports -fno-code src/Phil/Systems/StageClosure.hs
+          cabal exec -- ghc -isrc -Wall -Werror -fno-code src/Phil/Systems/StageClosure.hs
       - name: Execute 7 direct controls through production kernel
         run: |
           set -euo pipefail
@@ -105,14 +105,14 @@ jobs:
         run: |
           set -euo pipefail
           cabal exec -- ghc -isrc -Wall -Werror -fno-code test/Phase1GenericSystemsLoweringMain.hs
-          cabal exec -- ghc -isrc -Wall -Werror -Wno-unused-imports -fno-code test/Phase1GenericSystemsStageMain.hs
-          cabal exec -- ghc -isrc -Wall -Werror -Wno-name-shadowing -Wno-unused-imports -fno-code test/Phase1StageClosureMain.hs
+          cabal exec -- ghc -isrc -Wall -Werror -fno-code test/Phase1GenericSystemsStageMain.hs
+          cabal exec -- ghc -isrc -Wall -Werror -fno-code test/Phase1StageClosureMain.hs
       - name: Re-run unchanged Generic producer/witness corpora and 20-case final closure corpus
         run: |
           set -euo pipefail
           cabal exec -- runghc -isrc -Wall -Werror test/Phase1GenericSystemsLoweringMain.hs
-          cabal exec -- runghc -isrc -Wall -Werror -Wno-unused-imports test/Phase1GenericSystemsStageMain.hs
-          cabal exec -- runghc -isrc -Wall -Werror -Wno-name-shadowing -Wno-unused-imports test/Phase1StageClosureMain.hs
+          cabal exec -- runghc -isrc -Wall -Werror test/Phase1GenericSystemsStageMain.hs
+          cabal exec -- runghc -isrc -Wall -Werror test/Phase1StageClosureMain.hs
       - name: Record production-binding identities
         run: |
           set -euo pipefail
