@@ -84,11 +84,11 @@ jobs:
           cabal exec -- ghc -isrc -Wall -Werror -Wno-unused-imports -fno-code src/CallableOutcomeKernel.hs
           cabal exec -- ghc -isrc -Wall -Werror -fno-code src/Phil/Core/CallableOutcomeKernelBridge.hs
           cabal exec -- ghc -isrc -Wall -Werror -fno-code src/Phil/Core/CallableOutcome.hs
-          cabal exec -- ghc -isrc -Wall -Werror -Wno-unused-imports -fno-code app/CallableOutcomeDecisionCorrespondenceMain.hs
+          cabal exec -- ghc -isrc -Wall -Werror -fno-code app/CallableOutcomeDecisionCorrespondenceMain.hs
           cabal exec -- ghc -isrc -Wall -Werror -fno-code app/CallableOutcomeProductionBindingMain.hs
           cabal exec -- ghc -isrc -Wall -Werror -fno-code test/Phase1CallableOutcomeFidelityMain.hs
       - name: Execute exact extracted-kernel controls
-        run: cabal exec -- runghc -Wall -Werror -Wno-unused-imports -isrc app/CallableOutcomeDecisionCorrespondenceMain.hs
+        run: cabal exec -- runghc -Wall -Werror -isrc app/CallableOutcomeDecisionCorrespondenceMain.hs
       - name: Execute production-binding controls
         run: cabal exec -- runghc -Wall -Werror -isrc app/CallableOutcomeProductionBindingMain.hs
       - name: Re-run unchanged CALL-018 corpus
