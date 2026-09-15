@@ -7,6 +7,7 @@ From Phil.Surface Require Import
   GrammarAstGenericParamsTotality
   GrammarAstStructuralModeTotality
   GrammarAstRecordFieldsSpine
+  GrammarAstGenericRequirementsSpine
   GrammarAstGenericRequirementsTotality.
 
 Import ListNotations.
