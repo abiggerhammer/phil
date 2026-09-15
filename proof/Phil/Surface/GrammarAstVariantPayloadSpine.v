@@ -662,6 +662,7 @@ Proof.
   intros
     [name generic_params mode requirements first_variant rest_variants]
     refined Hnormalize.
+  unfold phase1_surface_normalize_data_variant_payload_spine in Hnormalize.
   cbn in Hnormalize.
   destruct (phase1_surface_normalize_variant_payload_variant_spine first_variant)
     as [first_refined |] eqn:Hfirst; try discriminate Hnormalize.
