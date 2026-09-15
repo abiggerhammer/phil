@@ -888,9 +888,9 @@ Proof.
         (descend path (AtNonterminal "generic_requirement"))
         (AtAlternative index))
       input rest selected Hselected) as Hvalidate.
-  let requirement := constr:(
+  pose (requirement :=
     {| phase1_generic_requirement_spine_tag := tag;
-       phase1_generic_requirement_spine_selected_tree := selected |}) in
+       phase1_generic_requirement_spine_selected_tree := selected |}).
   assert (Hnormalize :
     phase1_surface_normalize_generic_requirement_spine tree = Some requirement).
   {
@@ -1201,12 +1201,12 @@ Proof.
         (phase1_surface_normalize_optional_generic_requirements_total_from_derivation
           _ _ _ requirements_tree Hrequirements)
         as [requirements [Hrequirements_normalize Hrequirements_round_trip]];
-      let refined := constr:(
+      pose (refined :=
         {| phase1_record_requirements_spine_name := name;
            phase1_record_requirements_spine_generic_params := parameters;
            phase1_record_requirements_spine_mode := mode;
            phase1_record_requirements_spine_requirements := requirements;
-           phase1_record_requirements_spine_fields_tree := fields_tree |}) in
+           phase1_record_requirements_spine_fields_tree := fields_tree |});
       assert (Hnormalize :
         phase1_surface_normalize_record_requirements_tree tree = Some refined).
       {
