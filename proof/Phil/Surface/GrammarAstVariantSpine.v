@@ -278,11 +278,38 @@ Proof.
   pose proof
     (phase1_surface_normalize_variant_spines_suffix_round_trip
       rest_variant_trees rest_variants Hrest) as Hrest_trees.
-  cbn [phase1_surface_data_variant_spine_tree
-       phase1_surface_data_spine_tree].
-  rewrite Hfirst_tree.
-  rewrite Hrest_trees.
-  reflexivity.
+  assert (Hitems :
+    [ PTLiteral "data";
+      phase1_surface_identifier_tree name;
+      phase1_surface_optional_generic_params_tree generic_params;
+      phase1_surface_optional_mode_tree mode;
+      phase1_surface_optional_generic_requirements_tree requirements;
+      PTLiteral "=";
+      phase1_surface_variant_spine_tree first_variant;
+      PTRepetition
+        (map phase1_surface_refined_data_variant_suffix_tree rest_variants);
+      PTLiteral ";" ] =
+    [ PTLiteral "data";
+      phase1_surface_identifier_tree name;
+      phase1_surface_optional_generic_params_tree generic_params;
+      phase1_surface_optional_mode_tree mode;
+      phase1_surface_optional_generic_requirements_tree requirements;
+      PTLiteral "=";
+      first_variant_tree;
+      PTRepetition
+        (map phase1_surface_data_variant_suffix_tree rest_variant_trees);
+      PTLiteral ";" ]).
+  {
+    rewrite Hfirst_tree.
+    rewrite Hrest_trees.
+    reflexivity.
+  }
+  unfold phase1_surface_data_variant_spine_tree,
+    phase1_surface_data_spine_tree.
+  apply (f_equal
+    (fun items : list ParseTree =>
+      PTNonterminal "data_decl" (PTSequence items))).
+  exact Hitems.
 Qed.
 
 Definition phase1_surface_normalize_data_variant_tree
