@@ -6,10 +6,12 @@ From Phil.Surface Require Import
   GrammarAstSourceHeader
   GrammarAstSourceHeaderTotality
   GrammarAstTopLevelSpine
+  GrammarAstGenericParamsTotality.
+
+From Phil.Surface Require Export
   GrammarAstRecordSpine
   GrammarAstGenericParamsSpine
-  GrammarAstStructuralModeSpine
-  GrammarAstGenericParamsTotality.
+  GrammarAstStructuralModeSpine.
 
 Import ListNotations.
 Open Scope string_scope.
