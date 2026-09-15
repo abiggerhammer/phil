@@ -198,8 +198,8 @@ duplicateTransitionIdRejects = do
   f <- fixture
   case fixtureTransitions f of
     [] -> Left "fixture unexpectedly had no transitions"
-    transition : _ ->
-      case verifyFixture f { fixtureTransitions = transition : fixtureTransitions f } of
+    existingTransition : _ ->
+      case verifyFixture f { fixtureTransitions = existingTransition : fixtureTransitions f } of
         Left detail
           | "RuntimeCarrierCertificationDuplicateTransitionId" `contains` detail -> Right ()
         other -> Left ("duplicate transition identity was accepted: " <> show other)
