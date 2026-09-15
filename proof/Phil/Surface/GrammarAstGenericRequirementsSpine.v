@@ -1,6 +1,10 @@
 From Stdlib Require Import Lists.List Strings.String.
 
 From Phil.Surface Require Import
+  GrammarDerivation
+  GrammarAstSourceHeader
+  GrammarAstTopLevelSpine
+  GrammarAstGenericParamsSpine
   GrammarAstStructuralModeSpine.
 
 Import ListNotations.
@@ -312,7 +316,7 @@ Proof.
     "generic_requirement" tree body Hnode).
   rewrite (phase1_surface_expect_alternative_round_trip
     body index selected Halternative).
-  rewrite (phase1_surface_generic_requirement_tag_index_round_trip
+  rewrite <- (phase1_surface_generic_requirement_tag_index_round_trip
     index tag Htag).
   reflexivity.
 Qed.
@@ -351,7 +355,7 @@ Proof.
     + eapply phase1_surface_normalize_generic_requirement_spine_round_trip.
       exact Htree.
     + eapply IH.
-      exact Hrest.
+      reflexivity.
 Qed.
 
 Record Phase1SurfaceGenericRequirementsSpine : Type := {
@@ -435,7 +439,7 @@ Proof.
   rewrite (phase1_surface_expect_literal_round_trip "{" open_tree Hopen).
   rewrite (phase1_surface_expect_repetition_round_trip
     entries_tree entries Hentries).
-  rewrite (phase1_surface_normalize_generic_requirement_spines_round_trip
+  rewrite <- (phase1_surface_normalize_generic_requirement_spines_round_trip
     entries normalized Hnormalized).
   rewrite (phase1_surface_expect_literal_round_trip "}" close_tree Hclose).
   reflexivity.
@@ -476,7 +480,7 @@ Proof.
     unfold phase1_surface_optional_generic_requirements_tree.
     rewrite (phase1_surface_expect_optional_round_trip
       tree (Some body) Hoptional).
-    rewrite (phase1_surface_normalize_generic_requirements_spine_round_trip
+    rewrite <- (phase1_surface_normalize_generic_requirements_spine_round_trip
       body actual Hrequirements).
     reflexivity.
   - inversion Hnormalize; subst requirements.
@@ -538,11 +542,13 @@ Theorem phase1_surface_normalize_record_requirements_spine_round_trip :
 Proof.
   intros [name generic_params mode requirements_tree fields_tree]
     refined Hnormalize.
-  cbn in Hnormalize.
+  unfold phase1_surface_normalize_record_requirements_spine in Hnormalize.
+  cbn [phase1_record_mode_spine_requirements_tree] in Hnormalize.
   destruct
     (phase1_surface_normalize_optional_generic_requirements requirements_tree)
     as [requirements |] eqn:Hrequirements; try discriminate Hnormalize.
-  inversion Hnormalize; subst refined.
+  injection Hnormalize as Hrefined.
+  subst refined.
   unfold phase1_surface_record_requirements_spine_tree,
     phase1_surface_record_mode_spine_tree.
   cbn.

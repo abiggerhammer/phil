@@ -1,6 +1,9 @@
 From Stdlib Require Import Lists.List Strings.String.
 
 From Phil.Surface Require Import
+  GrammarDerivation
+  GrammarAstSourceHeader
+  GrammarAstTopLevelSpine
   GrammarAstGenericParamsSpine.
 
 Import ListNotations.
@@ -110,7 +113,7 @@ Proof.
     "structural_mode" tree body Hnode).
   rewrite (phase1_surface_expect_alternative_round_trip
     body index selected Halternative).
-  rewrite (phase1_surface_structural_mode_index_round_trip index actual Hmode).
+  rewrite <- (phase1_surface_structural_mode_index_round_trip index actual Hmode).
   rewrite (phase1_surface_expect_literal_round_trip
     (phase1_surface_structural_mode_literal actual) selected Hselected).
   reflexivity.
@@ -176,7 +179,7 @@ Proof.
       items keyword_tree mode_tree Hitems).
     rewrite (phase1_surface_expect_literal_round_trip
       "mode" keyword_tree Hkeyword).
-    rewrite (phase1_surface_normalize_structural_mode_round_trip
+    rewrite <- (phase1_surface_normalize_structural_mode_round_trip
       mode_tree actual Hmode).
     reflexivity.
   - inversion Hnormalize; subst mode.
@@ -237,10 +240,11 @@ Theorem phase1_surface_normalize_record_mode_spine_round_trip :
 Proof.
   intros [name generic_params mode_tree requirements_tree fields_tree]
     refined Hnormalize.
+  unfold phase1_surface_normalize_record_mode_spine in Hnormalize.
   cbn in Hnormalize.
   destruct (phase1_surface_normalize_optional_mode mode_tree)
     as [mode |] eqn:Hmode; try discriminate Hnormalize.
-  inversion Hnormalize; subst refined.
+  injection Hnormalize as <-.
   unfold phase1_surface_record_mode_spine_tree,
     phase1_surface_record_generic_spine_tree.
   cbn.

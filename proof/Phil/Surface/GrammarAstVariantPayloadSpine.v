@@ -1,6 +1,14 @@
 From Stdlib Require Import Lists.List Strings.String.
 
 From Phil.Surface Require Import
+  GrammarDerivation
+  GrammarAstSourceHeader
+  GrammarAstTopLevelSpine
+  GrammarAstGenericParamsSpine
+  GrammarAstStructuralModeSpine
+  GrammarAstDataSpine
+  GrammarAstGenericRequirementsSpine
+  GrammarAstRecordFieldsSpine
   GrammarAstVariantSpine.
 
 Import ListNotations.
@@ -98,7 +106,7 @@ Proof.
     + eapply phase1_surface_normalize_tuple_type_suffix_round_trip.
       exact Htree.
     + eapply IH.
-      exact Hrest.
+      reflexivity.
 Qed.
 
 Record Phase1SurfaceTupleTypeListSpine : Type := {
@@ -156,14 +164,24 @@ Proof.
   destruct (phase1_surface_normalize_tuple_type_suffixes rest_trees)
     as [rest |] eqn:Hrest; try discriminate Hnormalize.
   inversion Hnormalize; subst types.
-  unfold phase1_surface_tuple_type_list_spine_tree.
-  rewrite (phase1_surface_expect_sequence_round_trip tree items Hsequence).
-  rewrite (phase1_surface_exact2_round_trip items first_tree rest_tree Hitems).
-  rewrite (phase1_surface_expect_repetition_round_trip
-    rest_tree rest_trees Hrest_trees).
-  rewrite (phase1_surface_normalize_tuple_type_suffixes_round_trip
-    rest_trees rest Hrest).
-  reflexivity.
+  pose proof
+    (phase1_surface_normalize_tuple_type_suffixes_round_trip
+      rest_trees rest Hrest) as Hrest_round_trip.
+  transitivity (PTSequence [first_tree; PTRepetition rest_trees]).
+  - unfold phase1_surface_tuple_type_list_spine_tree.
+    change
+      (PTSequence
+        [ first_tree;
+          PTRepetition (map phase1_surface_tuple_type_suffix_tree rest)
+        ] =
+       PTSequence [first_tree; PTRepetition rest_trees]).
+    rewrite Hrest_round_trip.
+    reflexivity.
+  - rewrite (phase1_surface_expect_sequence_round_trip tree items Hsequence).
+    rewrite (phase1_surface_exact2_round_trip items first_tree rest_tree Hitems).
+    rewrite (phase1_surface_expect_repetition_round_trip
+      rest_tree rest_trees Hrest_trees).
+    reflexivity.
 Qed.
 
 Definition phase1_surface_optional_tuple_types_tree
@@ -284,16 +302,17 @@ Proof.
   destruct (phase1_surface_expect_literal "}" close_tree)
     as [[] |] eqn:Hclose; try discriminate Hnormalize.
   inversion Hnormalize; subst payload.
-  split; first reflexivity.
-  cbn.
-  rewrite (phase1_surface_expect_sequence_round_trip tree items Hsequence).
-  rewrite (phase1_surface_exact3_round_trip
-    items open_tree fields_tree close_tree Hitems).
-  rewrite (phase1_surface_expect_literal_round_trip "{" open_tree Hopen).
-  rewrite (phase1_surface_normalize_optional_fields_round_trip
-    fields_tree fields Hfields).
-  rewrite (phase1_surface_expect_literal_round_trip "}" close_tree Hclose).
-  reflexivity.
+  split.
+  - reflexivity.
+  - cbn.
+    rewrite (phase1_surface_expect_sequence_round_trip tree items Hsequence).
+    rewrite (phase1_surface_exact3_round_trip
+      items open_tree fields_tree close_tree Hitems).
+    rewrite (phase1_surface_expect_literal_round_trip "{" open_tree Hopen).
+    rewrite (phase1_surface_normalize_optional_fields_round_trip
+      fields_tree fields Hfields).
+    rewrite (phase1_surface_expect_literal_round_trip "}" close_tree Hclose).
+    reflexivity.
 Qed.
 
 Definition phase1_surface_normalize_tuple_variant_payload_selected
@@ -334,16 +353,17 @@ Proof.
   destruct (phase1_surface_expect_literal ")" close_tree)
     as [[] |] eqn:Hclose; try discriminate Hnormalize.
   inversion Hnormalize; subst payload.
-  split; first reflexivity.
-  cbn.
-  rewrite (phase1_surface_expect_sequence_round_trip tree items Hsequence).
-  rewrite (phase1_surface_exact3_round_trip
-    items open_tree types_tree close_tree Hitems).
-  rewrite (phase1_surface_expect_literal_round_trip "(" open_tree Hopen).
-  rewrite (phase1_surface_normalize_optional_tuple_types_round_trip
-    types_tree types Htypes).
-  rewrite (phase1_surface_expect_literal_round_trip ")" close_tree Hclose).
-  reflexivity.
+  split.
+  - reflexivity.
+  - cbn.
+    rewrite (phase1_surface_expect_sequence_round_trip tree items Hsequence).
+    rewrite (phase1_surface_exact3_round_trip
+      items open_tree types_tree close_tree Hitems).
+    rewrite (phase1_surface_expect_literal_round_trip "(" open_tree Hopen).
+    rewrite (phase1_surface_normalize_optional_tuple_types_round_trip
+      types_tree types Htypes).
+    rewrite (phase1_surface_expect_literal_round_trip ")" close_tree Hclose).
+    reflexivity.
 Qed.
 
 Definition phase1_surface_normalize_variant_payload_spine
@@ -542,7 +562,7 @@ Proof.
     + eapply phase1_surface_normalize_variant_payload_variant_spine_round_trip.
       exact Hvariant.
     + eapply IH.
-      exact Hrest.
+      reflexivity.
 Qed.
 
 Definition phase1_surface_variant_payload_data_suffix_tree
@@ -569,13 +589,13 @@ Proof.
     inversion Hnormalize; subst refined.
     cbn.
     f_equal.
-    - unfold phase1_surface_variant_payload_data_suffix_tree,
+    + unfold phase1_surface_variant_payload_data_suffix_tree,
         phase1_surface_refined_data_variant_suffix_tree.
       rewrite (phase1_surface_normalize_variant_payload_variant_spine_round_trip
         variant actual Hvariant).
       reflexivity.
-    - eapply IH.
-      exact Hrest.
+    + eapply IH.
+      reflexivity.
 Qed.
 
 Record Phase1SurfaceDataVariantPayloadSpine : Type := {
@@ -642,21 +662,51 @@ Proof.
   intros
     [name generic_params mode requirements first_variant rest_variants]
     refined Hnormalize.
+  unfold phase1_surface_normalize_data_variant_payload_spine in Hnormalize.
   cbn in Hnormalize.
   destruct (phase1_surface_normalize_variant_payload_variant_spine first_variant)
     as [first_refined |] eqn:Hfirst; try discriminate Hnormalize.
   destruct (phase1_surface_normalize_variant_payload_variant_spines rest_variants)
     as [rest_refined |] eqn:Hrest; try discriminate Hnormalize.
   inversion Hnormalize; subst refined.
+  pose proof
+    (phase1_surface_normalize_variant_payload_variant_spine_round_trip
+      first_variant first_refined Hfirst) as Hfirst_tree.
+  pose proof
+    (phase1_surface_normalize_variant_payload_variant_spines_suffix_round_trip
+      rest_variants rest_refined Hrest) as Hrest_trees.
+  assert (Hitems :
+    [ PTLiteral "data";
+      phase1_surface_identifier_tree name;
+      phase1_surface_optional_generic_params_tree generic_params;
+      phase1_surface_optional_mode_tree mode;
+      phase1_surface_optional_generic_requirements_tree requirements;
+      PTLiteral "=";
+      phase1_surface_variant_payload_variant_spine_tree first_refined;
+      PTRepetition
+        (map phase1_surface_variant_payload_data_suffix_tree rest_refined);
+      PTLiteral ";" ] =
+    [ PTLiteral "data";
+      phase1_surface_identifier_tree name;
+      phase1_surface_optional_generic_params_tree generic_params;
+      phase1_surface_optional_mode_tree mode;
+      phase1_surface_optional_generic_requirements_tree requirements;
+      PTLiteral "=";
+      phase1_surface_variant_spine_tree first_variant;
+      PTRepetition
+        (map phase1_surface_refined_data_variant_suffix_tree rest_variants);
+      PTLiteral ";" ]).
+  {
+    rewrite Hfirst_tree.
+    rewrite Hrest_trees.
+    reflexivity.
+  }
   unfold phase1_surface_data_variant_payload_spine_tree,
     phase1_surface_data_variant_spine_tree.
-  cbn.
-  rewrite (phase1_surface_normalize_variant_payload_variant_spine_round_trip
-    first_variant first_refined Hfirst).
-  rewrite
-    (phase1_surface_normalize_variant_payload_variant_spines_suffix_round_trip
-      rest_variants rest_refined Hrest).
-  reflexivity.
+  apply (f_equal
+    (fun items : list ParseTree =>
+      PTNonterminal "data_decl" (PTSequence items))).
+  exact Hitems.
 Qed.
 
 Definition phase1_surface_normalize_data_variant_payload_tree
