@@ -171,7 +171,7 @@ Proof.
     + eapply phase1_surface_normalize_data_variant_suffix_round_trip.
       exact Htree.
     + eapply IH.
-      exact Hrest.
+      reflexivity.
 Qed.
 
 Record Phase1SurfaceDataSpine : Type := {
