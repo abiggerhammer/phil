@@ -266,12 +266,13 @@ Proof.
   intros
     [name generic_params mode requirements first_variant_tree rest_variant_trees]
     refined Hnormalize.
+  unfold phase1_surface_normalize_data_variant_spine in Hnormalize.
   cbn in Hnormalize.
   destruct (phase1_surface_normalize_variant_spine first_variant_tree)
     as [first_variant |] eqn:Hfirst; try discriminate Hnormalize.
   destruct (phase1_surface_normalize_variant_spines rest_variant_trees)
     as [rest_variants |] eqn:Hrest; try discriminate Hnormalize.
-  inversion Hnormalize; subst.
+  inversion Hnormalize; subst refined.
   pose proof
     (phase1_surface_normalize_variant_spine_round_trip
       first_variant_tree first_variant Hfirst) as Hfirst_tree.
