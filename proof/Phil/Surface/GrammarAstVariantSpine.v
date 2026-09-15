@@ -272,7 +272,7 @@ Proof.
   destruct (phase1_surface_normalize_variant_spines rest_variant_trees)
     as [rest_variants |] eqn:Hrest; try discriminate Hnormalize.
   inversion Hnormalize; subst.
-  change
+  change (
     PTNonterminal "data_decl"
       (PTSequence
         [ PTLiteral "data";
@@ -298,7 +298,7 @@ Proof.
           PTRepetition
             (map phase1_surface_data_variant_suffix_tree rest_variant_trees);
           PTLiteral ";"
-        ]).
+        ])).
   rewrite (phase1_surface_normalize_variant_spine_round_trip
     first_variant_tree first_variant Hfirst).
   rewrite (phase1_surface_normalize_variant_spines_suffix_round_trip
