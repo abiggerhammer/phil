@@ -262,7 +262,7 @@ Proof.
                                              ------ inversion Hnth; subst item.
                                                     exists Phase1EnvironmentRequirement.
                                                     split; reflexivity.
-                                             ------ discriminate Hnth.
+                                             ------ destruct index; cbn in Hnth; discriminate Hnth.
 Qed.
 
 Lemma phase1_surface_validate_named_node_total_from_derivation :
