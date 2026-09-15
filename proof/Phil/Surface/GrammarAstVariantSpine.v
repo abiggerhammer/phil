@@ -271,7 +271,7 @@ Proof.
     as [first_variant |] eqn:Hfirst; try discriminate Hnormalize.
   destruct (phase1_surface_normalize_variant_spines rest_variant_trees)
     as [rest_variants |] eqn:Hrest; try discriminate Hnormalize.
-  inversion Hnormalize; subst refined.
+  inversion Hnormalize; subst.
   unfold phase1_surface_data_variant_spine_tree,
     phase1_surface_data_spine_tree.
   cbn.
