@@ -969,67 +969,91 @@ Proof.
       ]
       input rest subtree Hbody)
     as [trees [Hsubtree Hitems]].
-  repeat match goal with
-  | Hseq : DerivesSequence phase1_surface_rules _ _ (_ :: _) _ _ _ |- _ =>
-      inversion Hseq; subst; clear Hseq
-  end.
-  match goal with
-  | Hnil : DerivesSequence phase1_surface_rules _ _ [] _ _ _ |- _ =>
-      inversion Hnil; subst; clear Hnil
-  end.
-  match goal with
-  | Hrequires : Derives phase1_surface_rules _
-      (ELiteral "requires") _ _ ?requires_tree,
-    Hopen : Derives phase1_surface_rules _
-      (ELiteral "{") _ _ ?open_tree,
-    Hentries : Derives phase1_surface_rules _
-      (ERepetition (ENonterminal "generic_requirement")) _ _ ?entries_tree,
-    Hclose : Derives phase1_surface_rules _
-      (ELiteral "}") _ _ ?close_tree |- _ =>
-      destruct
-        (literal_derivation_is_exact
-          phase1_surface_rules _ "requires" _ _ requires_tree Hrequires)
-        as [requires_tail [_ [_ Hrequires_tree]]];
-      destruct
-        (literal_derivation_is_exact
-          phase1_surface_rules _ "{" _ _ open_tree Hopen)
-        as [open_tail [_ [_ Hopen_tree]]];
-      destruct
-        (literal_derivation_is_exact
-          phase1_surface_rules _ "}" _ _ close_tree Hclose)
-        as [close_tail [_ [_ Hclose_tree]]];
-      destruct
-        (phase1_surface_repetition_derivation_exposes
-          _ (ENonterminal "generic_requirement")
-          _ _ entries_tree Hentries)
-        as [entries [Hentries_tree Hentries_body]];
-      destruct
-        (phase1_surface_normalize_generic_requirement_spines_total_from_repetition
-          _ (ENonterminal "generic_requirement")
-          _ _ entries Hentries_body eq_refl)
-        as [normalized Hnormalized];
-      let requirements := constr:(
-        {| phase1_generic_requirements_spine_entries := normalized |}) in
-      assert (Hnormalize :
-        phase1_surface_normalize_generic_requirements_spine tree =
-          Some requirements);
-      [ rewrite Htree, Hsubtree, Hrequires_tree, Hopen_tree,
-          Hentries_tree, Hclose_tree;
-        unfold phase1_surface_normalize_generic_requirements_spine,
-          phase1_surface_expect_nonterminal,
-          phase1_surface_expect_sequence,
-          phase1_surface_exact4,
-          phase1_surface_expect_literal,
-          phase1_surface_expect_repetition;
-        cbn;
-        rewrite Hnormalized;
-        reflexivity
-      | exists requirements;
-        split;
-        [ exact Hnormalize
-        | eapply phase1_surface_normalize_generic_requirements_spine_round_trip;
-          exact Hnormalize ] ]
-  end.
+  destruct
+    (derives_sequence_cons_exposes_head_exact
+      phase1_surface_rules
+      (descend path (AtNonterminal "generic_requirements")) 0
+      (ELiteral "requires")
+      [ ELiteral "{";
+        ERepetition (ENonterminal "generic_requirement");
+        ELiteral "}" ]
+      input rest trees Hitems)
+    as [after_requires [requires_tree [tail1_trees
+      [Htrees [Hrequires Htail1]]]]].
+  destruct
+    (derives_sequence_cons_exposes_head_exact
+      phase1_surface_rules
+      (descend path (AtNonterminal "generic_requirements")) 1
+      (ELiteral "{")
+      [ ERepetition (ENonterminal "generic_requirement");
+        ELiteral "}" ]
+      after_requires rest tail1_trees Htail1)
+    as [after_open [open_tree [tail2_trees
+      [Htail1_trees [Hopen Htail2]]]]].
+  destruct
+    (derives_sequence_cons_exposes_head_exact
+      phase1_surface_rules
+      (descend path (AtNonterminal "generic_requirements")) 2
+      (ERepetition (ENonterminal "generic_requirement"))
+      [ ELiteral "}" ]
+      after_open rest tail2_trees Htail2)
+    as [after_entries [entries_tree [tail3_trees
+      [Htail2_trees [Hentries Htail3]]]]].
+  destruct
+    (derives_sequence_cons_exposes_head_exact
+      phase1_surface_rules
+      (descend path (AtNonterminal "generic_requirements")) 3
+      (ELiteral "}") []
+      after_entries rest tail3_trees Htail3)
+    as [after_close [close_tree [nil_trees
+      [Htail3_trees [Hclose Hnil]]]]].
+  rewrite Htrees, Htail1_trees, Htail2_trees, Htail3_trees in Hsubtree.
+  inversion Hnil; subst nil_trees.
+  destruct
+    (literal_derivation_is_exact
+      phase1_surface_rules _ "requires" _ _ requires_tree Hrequires)
+    as [requires_tail [_ [_ Hrequires_tree]]].
+  destruct
+    (literal_derivation_is_exact
+      phase1_surface_rules _ "{" _ _ open_tree Hopen)
+    as [open_tail [_ [_ Hopen_tree]]].
+  destruct
+    (literal_derivation_is_exact
+      phase1_surface_rules _ "}" _ _ close_tree Hclose)
+    as [close_tail [_ [_ Hclose_tree]]].
+  destruct
+    (phase1_surface_repetition_derivation_exposes
+      _ (ENonterminal "generic_requirement")
+      _ _ entries_tree Hentries)
+    as [entries [Hentries_tree Hentries_body]].
+  destruct
+    (phase1_surface_normalize_generic_requirement_spines_total_from_repetition
+      _ (ENonterminal "generic_requirement")
+      _ _ entries Hentries_body eq_refl)
+    as [normalized Hnormalized].
+  pose (requirements :=
+    {| phase1_generic_requirements_spine_entries := normalized |}).
+  assert (Hnormalize :
+    phase1_surface_normalize_generic_requirements_spine tree =
+      Some requirements).
+  {
+    rewrite Htree, Hsubtree, Hrequires_tree, Hopen_tree,
+      Hentries_tree, Hclose_tree.
+    unfold phase1_surface_normalize_generic_requirements_spine,
+      phase1_surface_expect_nonterminal,
+      phase1_surface_expect_sequence,
+      phase1_surface_exact4,
+      phase1_surface_expect_literal,
+      phase1_surface_expect_repetition.
+    cbn.
+    rewrite Hnormalized.
+    reflexivity.
+  }
+  exists requirements.
+  split.
+  - exact Hnormalize.
+  - eapply phase1_surface_normalize_generic_requirements_spine_round_trip.
+    exact Hnormalize.
 Qed.
 
 Lemma phase1_surface_normalize_optional_generic_requirements_total_from_derivation :
