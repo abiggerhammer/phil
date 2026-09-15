@@ -102,11 +102,11 @@ jobs:
           cabal exec -- ghc -isrc -Wall -Werror -Wno-unused-imports -fno-code src/StorageRealizationKernel.hs
           cabal exec -- ghc -isrc -Wall -Werror -fno-code src/Phil/Systems/Storage.hs
           cabal exec -- ghc -isrc -Wall -Werror -fno-code src/Phil/Systems/StorageRealizationCertification.hs
-          cabal exec -- ghc -isrc -Wall -Werror -Wno-unused-imports -fno-code app/StorageRealizationDecisionCorrespondenceMain.hs
+          cabal exec -- ghc -isrc -Wall -Werror -fno-code app/StorageRealizationDecisionCorrespondenceMain.hs
           cabal exec -- ghc -isrc -Wall -Werror -fno-code app/StorageRealizationProductionBindingMain.hs
           cabal exec -- ghc -isrc -Wall -Werror -fno-code test/Phase1StorageRealizationMain.hs
       - name: Execute exact extracted-kernel controls
-        run: cabal exec -- runghc -Wall -Werror -Wno-unused-imports -isrc app/StorageRealizationDecisionCorrespondenceMain.hs
+        run: cabal exec -- runghc -Wall -Werror -isrc app/StorageRealizationDecisionCorrespondenceMain.hs
       - name: Execute production-binding controls
         run: cabal exec -- runghc -Wall -Werror -isrc app/StorageRealizationProductionBindingMain.hs
       - name: Re-run unchanged MEM-001 through MEM-006 corpus
