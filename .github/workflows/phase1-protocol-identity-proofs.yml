@@ -129,7 +129,7 @@ jobs:
           cmp protocol-identity-proof/ProtocolIdentityKernel.hs src/ProtocolIdentityKernel.hs
           ghc -Wall -Werror -fno-code src/ProtocolIdentityKernel.hs
           cabal exec -- ghc -isrc -Wall -Werror -fno-code src/Phil/Core/Protocol.hs
-          cabal exec -- ghc -isrc -Wall -Werror -Wno-name-shadowing -fno-code src/Phil/Systems/ProtocolStateCorrespondence.hs
+          cabal exec -- ghc -isrc -Wall -Werror -fno-code src/Phil/Systems/ProtocolStateCorrespondence.hs
 
       - name: Execute extracted protocol identity controls against production kernel
         run: |
@@ -149,7 +149,7 @@ jobs:
           do
             cabal exec -- ghc -isrc -Wall -Werror -fno-code "$test_main"
           done
-          cabal exec -- ghc -isrc -Wall -Werror -Wno-name-shadowing -fno-code \
+          cabal exec -- ghc -isrc -Wall -Werror -fno-code \
             test/Phase1ProtocolStateCorrespondenceMain.hs
 
       - name: Re-run unchanged PROT-001, PROT-002, and SYS-009 pressure corpora
