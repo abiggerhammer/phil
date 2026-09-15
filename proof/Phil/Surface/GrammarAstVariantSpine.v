@@ -272,12 +272,16 @@ Proof.
   destruct (phase1_surface_normalize_variant_spines rest_variant_trees)
     as [rest_variants |] eqn:Hrest; try discriminate Hnormalize.
   inversion Hnormalize; subst.
+  pose proof
+    (phase1_surface_normalize_variant_spine_round_trip
+      first_variant_tree first_variant Hfirst) as Hfirst_tree.
+  pose proof
+    (phase1_surface_normalize_variant_spines_suffix_round_trip
+      rest_variant_trees rest_variants Hrest) as Hrest_trees.
   unfold phase1_surface_data_variant_spine_tree,
     phase1_surface_data_spine_tree.
-  rewrite (phase1_surface_normalize_variant_spine_round_trip
-    first_variant_tree first_variant Hfirst).
-  rewrite (phase1_surface_normalize_variant_spines_suffix_round_trip
-    rest_variant_trees rest_variants Hrest).
+  rewrite <- Hfirst_tree.
+  rewrite <- Hrest_trees.
   reflexivity.
 Qed.
 
