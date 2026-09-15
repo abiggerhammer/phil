@@ -272,38 +272,15 @@ Proof.
   destruct (phase1_surface_normalize_variant_spines rest_variant_trees)
     as [rest_variants |] eqn:Hrest; try discriminate Hnormalize.
   inversion Hnormalize; subst.
-  change (
-    PTNonterminal "data_decl"
-      (PTSequence
-        [ PTLiteral "data";
-          phase1_surface_identifier_tree name;
-          phase1_surface_optional_generic_params_tree generic_params;
-          phase1_surface_optional_mode_tree mode;
-          phase1_surface_optional_generic_requirements_tree requirements;
-          PTLiteral "=";
-          phase1_surface_variant_spine_tree first_variant;
-          PTRepetition
-            (map phase1_surface_refined_data_variant_suffix_tree rest_variants);
-          PTLiteral ";"
-        ]) =
-    PTNonterminal "data_decl"
-      (PTSequence
-        [ PTLiteral "data";
-          phase1_surface_identifier_tree name;
-          phase1_surface_optional_generic_params_tree generic_params;
-          phase1_surface_optional_mode_tree mode;
-          phase1_surface_optional_generic_requirements_tree requirements;
-          PTLiteral "=";
-          first_variant_tree;
-          PTRepetition
-            (map phase1_surface_data_variant_suffix_tree rest_variant_trees);
-          PTLiteral ";"
-        ])).
-  rewrite (phase1_surface_normalize_variant_spine_round_trip
-    first_variant_tree first_variant Hfirst).
-  rewrite (phase1_surface_normalize_variant_spines_suffix_round_trip
-    rest_variant_trees rest_variants Hrest).
-  reflexivity.
+  pose proof
+    (phase1_surface_normalize_variant_spine_round_trip
+      first_variant_tree first_variant Hfirst) as Hfirst_tree.
+  pose proof
+    (phase1_surface_normalize_variant_spines_suffix_round_trip
+      rest_variant_trees rest_variants Hrest) as Hrest_trees.
+  unfold phase1_surface_data_variant_spine_tree,
+    phase1_surface_data_spine_tree.
+  congruence.
 Qed.
 
 Definition phase1_surface_normalize_data_variant_tree
