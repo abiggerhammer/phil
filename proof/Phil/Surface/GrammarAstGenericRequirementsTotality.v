@@ -1307,6 +1307,65 @@ Proof.
     (phase1_surface_normalize_optional_generic_requirements_total_from_derivation
       _ _ _ requirements_tree Hrequirements)
     as [requirements [Hrequirements_normalize Hrequirements_round_trip]].
+  pose (record :=
+    {| phase1_record_spine_name := name;
+       phase1_record_spine_generic_params_tree := generic_tree;
+       phase1_record_spine_mode_tree := mode_tree;
+       phase1_record_spine_requirements_tree := requirements_tree;
+       phase1_record_spine_fields_tree := fields_tree |}).
+  assert (Hrecord_normalize :
+    phase1_surface_normalize_record_spine tree = Some record).
+  {
+    rewrite Htree, Hsubtree, Hkeyword_tree, Hopen_tree, Hclose_tree.
+    unfold phase1_surface_normalize_record_spine,
+      phase1_surface_expect_nonterminal,
+      phase1_surface_expect_sequence,
+      phase1_surface_exact8,
+      phase1_surface_expect_literal.
+    cbn.
+    rewrite Hname_normalize.
+    reflexivity.
+  }
+  pose (generic_refined :=
+    {| phase1_record_generic_spine_name := name;
+       phase1_record_generic_spine_generic_params := parameters;
+       phase1_record_generic_spine_mode_tree := mode_tree;
+       phase1_record_generic_spine_requirements_tree := requirements_tree;
+       phase1_record_generic_spine_fields_tree := fields_tree |}).
+  assert (Hgeneric_tree_normalize :
+    phase1_surface_normalize_record_generic_tree tree = Some generic_refined).
+  {
+    unfold phase1_surface_normalize_record_generic_tree.
+    rewrite Hrecord_normalize.
+    unfold phase1_surface_normalize_record_generic_spine.
+    replace (phase1_record_spine_generic_params_tree record)
+      with generic_tree.
+    - rewrite Hgeneric_normalize.
+      unfold record, generic_refined.
+      reflexivity.
+    - unfold record.
+      reflexivity.
+  }
+  pose (mode_refined :=
+    {| phase1_record_mode_spine_name := name;
+       phase1_record_mode_spine_generic_params := parameters;
+       phase1_record_mode_spine_mode := mode;
+       phase1_record_mode_spine_requirements_tree := requirements_tree;
+       phase1_record_mode_spine_fields_tree := fields_tree |}).
+  assert (Hmode_tree_normalize :
+    phase1_surface_normalize_record_mode_tree tree = Some mode_refined).
+  {
+    unfold phase1_surface_normalize_record_mode_tree.
+    rewrite Hgeneric_tree_normalize.
+    unfold phase1_surface_normalize_record_mode_spine.
+    replace (phase1_record_generic_spine_mode_tree generic_refined)
+      with mode_tree.
+    - rewrite Hmode_normalize.
+      unfold generic_refined, mode_refined.
+      reflexivity.
+    - unfold generic_refined.
+      reflexivity.
+  }
   pose (refined :=
     {| phase1_record_requirements_spine_name := name;
        phase1_record_requirements_spine_generic_params := parameters;
@@ -1316,24 +1375,16 @@ Proof.
   assert (Hnormalize :
     phase1_surface_normalize_record_requirements_tree tree = Some refined).
   {
-    rewrite Htree, Hsubtree, Hkeyword_tree, Hopen_tree, Hclose_tree.
-    unfold phase1_surface_normalize_record_requirements_tree,
-      phase1_surface_normalize_record_mode_tree,
-      phase1_surface_normalize_record_generic_tree,
-      phase1_surface_normalize_record_spine,
-      phase1_surface_expect_nonterminal,
-      phase1_surface_expect_sequence,
-      phase1_surface_exact8,
-      phase1_surface_expect_literal,
-      phase1_surface_normalize_record_generic_spine,
-      phase1_surface_normalize_record_mode_spine,
-      phase1_surface_normalize_record_requirements_spine.
-    cbn.
-    rewrite Hname_normalize.
-    rewrite Hgeneric_normalize.
-    rewrite Hmode_normalize.
-    rewrite Hrequirements_normalize.
-    reflexivity.
+    unfold phase1_surface_normalize_record_requirements_tree.
+    rewrite Hmode_tree_normalize.
+    unfold phase1_surface_normalize_record_requirements_spine.
+    replace (phase1_record_mode_spine_requirements_tree mode_refined)
+      with requirements_tree.
+    - rewrite Hrequirements_normalize.
+      unfold mode_refined, refined.
+      reflexivity.
+    - unfold mode_refined.
+      reflexivity.
   }
   exists refined.
   split.
