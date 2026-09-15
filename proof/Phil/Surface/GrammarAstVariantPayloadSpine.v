@@ -589,12 +589,12 @@ Proof.
     inversion Hnormalize; subst refined.
     cbn.
     f_equal.
-    - unfold phase1_surface_variant_payload_data_suffix_tree,
+    + unfold phase1_surface_variant_payload_data_suffix_tree,
         phase1_surface_refined_data_variant_suffix_tree.
       rewrite (phase1_surface_normalize_variant_payload_variant_spine_round_trip
         variant actual Hvariant).
       reflexivity.
-    - eapply IH.
+    + eapply IH.
       reflexivity.
 Qed.
 
