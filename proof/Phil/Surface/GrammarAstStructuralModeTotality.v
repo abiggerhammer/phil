@@ -46,7 +46,7 @@ Proof.
     + destruct index as [|index]; cbn in Hnth.
       * inversion Hnth; subst item.
         exists Phase1LinearMode. split; reflexivity.
-      * discriminate Hnth.
+      * destruct index; cbn in Hnth; discriminate Hnth.
 Qed.
 
 Lemma phase1_surface_normalize_structural_mode_total_from_derivation :
