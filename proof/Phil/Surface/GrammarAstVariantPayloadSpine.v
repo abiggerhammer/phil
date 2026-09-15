@@ -300,16 +300,17 @@ Proof.
   destruct (phase1_surface_expect_literal "}" close_tree)
     as [[] |] eqn:Hclose; try discriminate Hnormalize.
   inversion Hnormalize; subst payload.
-  split; first reflexivity.
-  cbn.
-  rewrite (phase1_surface_expect_sequence_round_trip tree items Hsequence).
-  rewrite (phase1_surface_exact3_round_trip
-    items open_tree fields_tree close_tree Hitems).
-  rewrite (phase1_surface_expect_literal_round_trip "{" open_tree Hopen).
-  rewrite (phase1_surface_normalize_optional_fields_round_trip
-    fields_tree fields Hfields).
-  rewrite (phase1_surface_expect_literal_round_trip "}" close_tree Hclose).
-  reflexivity.
+  split.
+  - reflexivity.
+  - cbn.
+    rewrite (phase1_surface_expect_sequence_round_trip tree items Hsequence).
+    rewrite (phase1_surface_exact3_round_trip
+      items open_tree fields_tree close_tree Hitems).
+    rewrite (phase1_surface_expect_literal_round_trip "{" open_tree Hopen).
+    rewrite (phase1_surface_normalize_optional_fields_round_trip
+      fields_tree fields Hfields).
+    rewrite (phase1_surface_expect_literal_round_trip "}" close_tree Hclose).
+    reflexivity.
 Qed.
 
 Definition phase1_surface_normalize_tuple_variant_payload_selected
@@ -350,16 +351,17 @@ Proof.
   destruct (phase1_surface_expect_literal ")" close_tree)
     as [[] |] eqn:Hclose; try discriminate Hnormalize.
   inversion Hnormalize; subst payload.
-  split; first reflexivity.
-  cbn.
-  rewrite (phase1_surface_expect_sequence_round_trip tree items Hsequence).
-  rewrite (phase1_surface_exact3_round_trip
-    items open_tree types_tree close_tree Hitems).
-  rewrite (phase1_surface_expect_literal_round_trip "(" open_tree Hopen).
-  rewrite (phase1_surface_normalize_optional_tuple_types_round_trip
-    types_tree types Htypes).
-  rewrite (phase1_surface_expect_literal_round_trip ")" close_tree Hclose).
-  reflexivity.
+  split.
+  - reflexivity.
+  - cbn.
+    rewrite (phase1_surface_expect_sequence_round_trip tree items Hsequence).
+    rewrite (phase1_surface_exact3_round_trip
+      items open_tree types_tree close_tree Hitems).
+    rewrite (phase1_surface_expect_literal_round_trip "(" open_tree Hopen).
+    rewrite (phase1_surface_normalize_optional_tuple_types_round_trip
+      types_tree types Htypes).
+    rewrite (phase1_surface_expect_literal_round_trip ")" close_tree Hclose).
+    reflexivity.
 Qed.
 
 Definition phase1_surface_normalize_variant_payload_spine
