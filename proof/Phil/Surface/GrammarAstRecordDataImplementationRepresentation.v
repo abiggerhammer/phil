@@ -1,6 +1,11 @@
 From Stdlib Require Import Lists.List Strings.String.
 
 From Phil.Surface Require Import
+  GrammarDerivation
+  GrammarAstTopLevelSpine
+  GrammarAstGenericParamsSpine
+  GrammarAstStructuralModeSpine
+  GrammarAstGenericRequirementsSpine
   GrammarAstRecordFieldsSpine
   GrammarAstRecordFieldsTotality
   GrammarAstVariantPayloadSpine
