@@ -170,7 +170,7 @@ Proof.
     + eapply phase1_surface_normalize_variant_spine_round_trip.
       exact Htree.
     + eapply IH.
-      exact Hrest.
+      reflexivity.
 Qed.
 
 Definition phase1_surface_refined_data_variant_suffix_tree
@@ -202,7 +202,7 @@ Proof.
         tree variant Htree).
       reflexivity.
     - eapply IH.
-      exact Hrest.
+      reflexivity.
 Qed.
 
 Record Phase1SurfaceDataVariantSpine : Type := {
