@@ -278,7 +278,7 @@ Proof.
   pose proof
     (phase1_surface_normalize_variant_spines_suffix_round_trip
       rest_variant_trees rest_variants Hrest) as Hrest_trees.
-  cbn [phase1_surface_data_variant_spine_tree,
+  cbn [phase1_surface_data_variant_spine_tree
        phase1_surface_data_spine_tree].
   rewrite Hfirst_tree.
   rewrite Hrest_trees.
