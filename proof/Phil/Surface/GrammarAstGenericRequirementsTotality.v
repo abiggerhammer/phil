@@ -685,41 +685,52 @@ Proof.
       ]
       input rest tree Hderive)
     as [trees [Htree Hitems]].
-  repeat match goal with
-  | Hseq : DerivesSequence phase1_surface_rules _ _ (_ :: _) _ _ _ |- _ =>
-      inversion Hseq; subst; clear Hseq
-  end.
-  match goal with
-  | Hnil : DerivesSequence phase1_surface_rules _ _ [] _ _ _ |- _ =>
-      inversion Hnil; subst; clear Hnil
-  end.
-  match goal with
-  | Hkeyword : Derives phase1_surface_rules _
-      (ELiteral keyword) _ _ ?keyword_tree,
-    Htype : Derives phase1_surface_rules _
-      (ENonterminal "type_expression") _ _ ?type_tree,
-    Hterminator : Derives phase1_surface_rules _
-      (ELiteral ";") _ _ ?terminator_tree |- _ =>
-      destruct
-        (literal_derivation_is_exact
-          phase1_surface_rules _ keyword _ _ keyword_tree Hkeyword)
-        as [keyword_tail [_ [_ Hkeyword_tree]]];
-      destruct
-        (literal_derivation_is_exact
-          phase1_surface_rules _ ";" _ _ terminator_tree Hterminator)
-        as [terminator_tail [_ [_ Hterminator_tree]]];
-      pose proof
-        (phase1_surface_validate_named_node_total_from_derivation
-          "type_expression" _ _ _ type_tree Htype) as Htype_validate;
-      rewrite Htree, Hkeyword_tree, Hterminator_tree;
-      unfold phase1_surface_validate_type_only_requirement,
-        phase1_surface_expect_sequence,
-        phase1_surface_exact3,
-        phase1_surface_expect_literal;
-      cbn;
-      rewrite Htype_validate;
-      reflexivity
-  end.
+  destruct
+    (derives_sequence_cons_exposes_head_exact
+      phase1_surface_rules path 0
+      (ELiteral keyword)
+      [ ENonterminal "type_expression";
+        ELiteral ";" ]
+      input rest trees Hitems)
+    as [after_keyword [keyword_tree [tail1_trees
+      [Htrees [Hkeyword Htail1]]]]].
+  destruct
+    (derives_sequence_cons_exposes_head_exact
+      phase1_surface_rules path 1
+      (ENonterminal "type_expression")
+      [ ELiteral ";" ]
+      after_keyword rest tail1_trees Htail1)
+    as [after_type [type_tree [tail2_trees
+      [Htail1_trees [Htype Htail2]]]]].
+  destruct
+    (derives_sequence_cons_exposes_head_exact
+      phase1_surface_rules path 2
+      (ELiteral ";") []
+      after_type rest tail2_trees Htail2)
+    as [after_terminator [terminator_tree [nil_trees
+      [Htail2_trees [Hterminator Hnil]]]]].
+  rewrite Htrees, Htail1_trees, Htail2_trees in Htree.
+  inversion Hnil; subst nil_trees.
+  destruct
+    (literal_derivation_is_exact
+      phase1_surface_rules _ keyword _ _ keyword_tree Hkeyword)
+    as [keyword_tail [_ [_ Hkeyword_tree]]].
+  destruct
+    (literal_derivation_is_exact
+      phase1_surface_rules _ ";" _ _ terminator_tree Hterminator)
+    as [terminator_tail [_ [_ Hterminator_tree]]].
+  pose proof
+    (phase1_surface_validate_named_node_total_from_derivation
+      "type_expression" _ _ _ type_tree Htype) as Htype_validate.
+  rewrite Htree, Hkeyword_tree, Hterminator_tree.
+  unfold phase1_surface_validate_type_only_requirement,
+    phase1_surface_expect_sequence,
+    phase1_surface_exact3,
+    phase1_surface_expect_literal.
+  cbn.
+  rewrite String.eqb_refl.
+  rewrite Htype_validate.
+  reflexivity.
 Qed.
 
 Lemma phase1_surface_validate_boundary_representation_requirement_total_from_derivation :
@@ -745,47 +756,65 @@ Proof.
       ]
       input rest tree Hderive)
     as [trees [Htree Hitems]].
-  repeat match goal with
-  | Hseq : DerivesSequence phase1_surface_rules _ _ (_ :: _) _ _ _ |- _ =>
-      inversion Hseq; subst; clear Hseq
-  end.
-  match goal with
-  | Hnil : DerivesSequence phase1_surface_rules _ _ [] _ _ _ |- _ =>
-      inversion Hnil; subst; clear Hnil
-  end.
-  match goal with
-  | Hboundary : Derives phase1_surface_rules _
-      (ELiteral "boundary") _ _ ?boundary_tree,
-    Hrepresentation : Derives phase1_surface_rules _
-      (ELiteral "representation") _ _ ?representation_tree,
-    Htype : Derives phase1_surface_rules _
-      (ENonterminal "type_expression") _ _ ?type_tree,
-    Hterminator : Derives phase1_surface_rules _
-      (ELiteral ";") _ _ ?terminator_tree |- _ =>
-      destruct
-        (literal_derivation_is_exact
-          phase1_surface_rules _ "boundary" _ _ boundary_tree Hboundary)
-        as [boundary_tail [_ [_ Hboundary_tree]]];
-      destruct
-        (literal_derivation_is_exact
-          phase1_surface_rules _ "representation" _ _ representation_tree Hrepresentation)
-        as [representation_tail [_ [_ Hrepresentation_tree]]];
-      destruct
-        (literal_derivation_is_exact
-          phase1_surface_rules _ ";" _ _ terminator_tree Hterminator)
-        as [terminator_tail [_ [_ Hterminator_tree]]];
-      pose proof
-        (phase1_surface_validate_named_node_total_from_derivation
-          "type_expression" _ _ _ type_tree Htype) as Htype_validate;
-      rewrite Htree, Hboundary_tree, Hrepresentation_tree, Hterminator_tree;
-      unfold phase1_surface_validate_boundary_representation_requirement,
-        phase1_surface_expect_sequence,
-        phase1_surface_exact4,
-        phase1_surface_expect_literal;
-      cbn;
-      rewrite Htype_validate;
-      reflexivity
-  end.
+  destruct
+    (derives_sequence_cons_exposes_head_exact
+      phase1_surface_rules path 0
+      (ELiteral "boundary")
+      [ ELiteral "representation";
+        ENonterminal "type_expression";
+        ELiteral ";" ]
+      input rest trees Hitems)
+    as [after_boundary [boundary_tree [tail1_trees
+      [Htrees [Hboundary Htail1]]]]].
+  destruct
+    (derives_sequence_cons_exposes_head_exact
+      phase1_surface_rules path 1
+      (ELiteral "representation")
+      [ ENonterminal "type_expression";
+        ELiteral ";" ]
+      after_boundary rest tail1_trees Htail1)
+    as [after_representation [representation_tree [tail2_trees
+      [Htail1_trees [Hrepresentation Htail2]]]]].
+  destruct
+    (derives_sequence_cons_exposes_head_exact
+      phase1_surface_rules path 2
+      (ENonterminal "type_expression")
+      [ ELiteral ";" ]
+      after_representation rest tail2_trees Htail2)
+    as [after_type [type_tree [tail3_trees
+      [Htail2_trees [Htype Htail3]]]]].
+  destruct
+    (derives_sequence_cons_exposes_head_exact
+      phase1_surface_rules path 3
+      (ELiteral ";") []
+      after_type rest tail3_trees Htail3)
+    as [after_terminator [terminator_tree [nil_trees
+      [Htail3_trees [Hterminator Hnil]]]]].
+  rewrite Htrees, Htail1_trees, Htail2_trees, Htail3_trees in Htree.
+  inversion Hnil; subst nil_trees.
+  destruct
+    (literal_derivation_is_exact
+      phase1_surface_rules _ "boundary" _ _ boundary_tree Hboundary)
+    as [boundary_tail [_ [_ Hboundary_tree]]].
+  destruct
+    (literal_derivation_is_exact
+      phase1_surface_rules _ "representation" _ _ representation_tree Hrepresentation)
+    as [representation_tail [_ [_ Hrepresentation_tree]]].
+  destruct
+    (literal_derivation_is_exact
+      phase1_surface_rules _ ";" _ _ terminator_tree Hterminator)
+    as [terminator_tail [_ [_ Hterminator_tree]]].
+  pose proof
+    (phase1_surface_validate_named_node_total_from_derivation
+      "type_expression" _ _ _ type_tree Htype) as Htype_validate.
+  rewrite Htree, Hboundary_tree, Hrepresentation_tree, Hterminator_tree.
+  unfold phase1_surface_validate_boundary_representation_requirement,
+    phase1_surface_expect_sequence,
+    phase1_surface_exact4,
+    phase1_surface_expect_literal.
+  cbn.
+  rewrite Htype_validate.
+  reflexivity.
 Qed.
 
 Lemma phase1_surface_validate_generic_requirement_selected_total_from_derivation :
