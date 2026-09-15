@@ -129,10 +129,9 @@ jobs:
         run: |
           set -euo pipefail
           cp storage-realization-proof/StorageRealizationKernel.hs .
-          cabal exec -- ghc -i. -Wall -Werror -Wno-unused-imports -fno-code \
-            StorageRealizationKernel.hs \
-            app/StorageRealizationDecisionCorrespondenceMain.hs
-          cabal exec -- runghc -i. -Wall -Werror -Wno-unused-imports \
+          cabal exec -- ghc -i. -Wall -Werror -Wno-unused-imports -fno-code StorageRealizationKernel.hs
+          cabal exec -- ghc -i. -Wall -Werror -fno-code app/StorageRealizationDecisionCorrespondenceMain.hs
+          cabal exec -- runghc -i. -Wall -Werror \
             app/StorageRealizationDecisionCorrespondenceMain.hs
       - name: Strict typecheck unchanged storage realization implementation and corpus
         run: |
