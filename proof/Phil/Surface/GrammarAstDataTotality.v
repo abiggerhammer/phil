@@ -562,8 +562,7 @@ Proof.
       * exact Hnormalize.
       * eapply phase1_surface_normalize_variant_payload_spine_round_trip.
         exact Hnormalize.
-    + cbn in Hnth.
-      discriminate Hnth.
+    + destruct index; cbn in Hnth; discriminate Hnth.
 Qed.
 
 Lemma phase1_surface_normalize_variant_layers_total_from_derivation :
