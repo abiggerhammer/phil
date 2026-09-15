@@ -104,7 +104,7 @@ Proof.
     + eapply phase1_surface_normalize_tuple_type_suffix_round_trip.
       exact Htree.
     + eapply IH.
-      exact Hrest.
+      reflexivity.
 Qed.
 
 Record Phase1SurfaceTupleTypeListSpine : Type := {
@@ -548,7 +548,7 @@ Proof.
     + eapply phase1_surface_normalize_variant_payload_variant_spine_round_trip.
       exact Hvariant.
     + eapply IH.
-      exact Hrest.
+      reflexivity.
 Qed.
 
 Definition phase1_surface_variant_payload_data_suffix_tree
@@ -581,7 +581,7 @@ Proof.
         variant actual Hvariant).
       reflexivity.
     - eapply IH.
-      exact Hrest.
+      reflexivity.
 Qed.
 
 Record Phase1SurfaceDataVariantPayloadSpine : Type := {
