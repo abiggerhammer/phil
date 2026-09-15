@@ -588,52 +588,80 @@ Proof.
       ]
       input rest tree Hderive)
     as [trees [Htree Hitems]].
-  repeat match goal with
-  | Hseq : DerivesSequence phase1_surface_rules _ _ (_ :: _) _ _ _ |- _ =>
-      inversion Hseq; subst; clear Hseq
-  end.
-  match goal with
-  | Hnil : DerivesSequence phase1_surface_rules _ _ [] _ _ _ |- _ =>
-      inversion Hnil; subst; clear Hnil
-  end.
-  match goal with
-  | Hkeyword : Derives phase1_surface_rules _
-      (ELiteral "effects") _ _ ?keyword_tree,
-    Hname : Derives phase1_surface_rules _
-      (ENonterminal "identifier") _ _ ?name_tree,
-    Hwithin : Derives phase1_surface_rules _
-      (ELiteral "within") _ _ ?within_tree,
-    Heffects : Derives phase1_surface_rules _
-      (ENonterminal "effect_set_expression") _ _ ?effects_tree,
-    Hterminator : Derives phase1_surface_rules _
-      (ELiteral ";") _ _ ?terminator_tree |- _ =>
-      destruct
-        (literal_derivation_is_exact
-          phase1_surface_rules _ "effects" _ _ keyword_tree Hkeyword)
-        as [keyword_tail [_ [_ Hkeyword_tree]]];
-      destruct
-        (literal_derivation_is_exact
-          phase1_surface_rules _ "within" _ _ within_tree Hwithin)
-        as [within_tail [_ [_ Hwithin_tree]]];
-      destruct
-        (literal_derivation_is_exact
-          phase1_surface_rules _ ";" _ _ terminator_tree Hterminator)
-        as [terminator_tail [_ [_ Hterminator_tree]]];
-      pose proof
-        (phase1_surface_validate_named_node_total_from_derivation
-          "identifier" _ _ _ name_tree Hname) as Hname_validate;
-      pose proof
-        (phase1_surface_validate_named_node_total_from_derivation
-          "effect_set_expression" _ _ _ effects_tree Heffects) as Heffects_validate;
-      rewrite Htree, Hkeyword_tree, Hwithin_tree, Hterminator_tree;
-      unfold phase1_surface_validate_effects_requirement,
-        phase1_surface_expect_sequence,
-        phase1_surface_exact5,
-        phase1_surface_expect_literal;
-      cbn;
-      rewrite Hname_validate, Heffects_validate;
-      reflexivity
-  end.
+  destruct
+    (derives_sequence_cons_exposes_head_exact
+      phase1_surface_rules path 0
+      (ELiteral "effects")
+      [ ENonterminal "identifier";
+        ELiteral "within";
+        ENonterminal "effect_set_expression";
+        ELiteral ";" ]
+      input rest trees Hitems)
+    as [after_keyword [keyword_tree [tail1_trees
+      [Htrees [Hkeyword Htail1]]]]].
+  destruct
+    (derives_sequence_cons_exposes_head_exact
+      phase1_surface_rules path 1
+      (ENonterminal "identifier")
+      [ ELiteral "within";
+        ENonterminal "effect_set_expression";
+        ELiteral ";" ]
+      after_keyword rest tail1_trees Htail1)
+    as [after_name [name_tree [tail2_trees
+      [Htail1_trees [Hname Htail2]]]]].
+  destruct
+    (derives_sequence_cons_exposes_head_exact
+      phase1_surface_rules path 2
+      (ELiteral "within")
+      [ ENonterminal "effect_set_expression";
+        ELiteral ";" ]
+      after_name rest tail2_trees Htail2)
+    as [after_within [within_tree [tail3_trees
+      [Htail2_trees [Hwithin Htail3]]]]].
+  destruct
+    (derives_sequence_cons_exposes_head_exact
+      phase1_surface_rules path 3
+      (ENonterminal "effect_set_expression")
+      [ ELiteral ";" ]
+      after_within rest tail3_trees Htail3)
+    as [after_effects [effects_tree [tail4_trees
+      [Htail3_trees [Heffects Htail4]]]]].
+  destruct
+    (derives_sequence_cons_exposes_head_exact
+      phase1_surface_rules path 4
+      (ELiteral ";") []
+      after_effects rest tail4_trees Htail4)
+    as [after_terminator [terminator_tree [nil_trees
+      [Htail4_trees [Hterminator Hnil]]]]].
+  rewrite Htrees, Htail1_trees, Htail2_trees, Htail3_trees,
+    Htail4_trees in Htree.
+  inversion Hnil; subst nil_trees.
+  destruct
+    (literal_derivation_is_exact
+      phase1_surface_rules _ "effects" _ _ keyword_tree Hkeyword)
+    as [keyword_tail [_ [_ Hkeyword_tree]]].
+  destruct
+    (literal_derivation_is_exact
+      phase1_surface_rules _ "within" _ _ within_tree Hwithin)
+    as [within_tail [_ [_ Hwithin_tree]]].
+  destruct
+    (literal_derivation_is_exact
+      phase1_surface_rules _ ";" _ _ terminator_tree Hterminator)
+    as [terminator_tail [_ [_ Hterminator_tree]]].
+  pose proof
+    (phase1_surface_validate_named_node_total_from_derivation
+      "identifier" _ _ _ name_tree Hname) as Hname_validate.
+  pose proof
+    (phase1_surface_validate_named_node_total_from_derivation
+      "effect_set_expression" _ _ _ effects_tree Heffects) as Heffects_validate.
+  rewrite Htree, Hkeyword_tree, Hwithin_tree, Hterminator_tree.
+  unfold phase1_surface_validate_effects_requirement,
+    phase1_surface_expect_sequence,
+    phase1_surface_exact5,
+    phase1_surface_expect_literal.
+  cbn.
+  rewrite Hname_validate, Heffects_validate.
+  reflexivity.
 Qed.
 
 Lemma phase1_surface_validate_type_only_requirement_total_from_derivation :
