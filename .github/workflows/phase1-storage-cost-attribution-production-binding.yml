@@ -116,16 +116,14 @@ jobs:
           cabal exec -- ghc -isrc -Wall -Werror -fno-code src/StorageCostAttributionKernel.hs
           cabal exec -- ghc -isrc -Wall -Werror -fno-code src/Phil/Systems/Storage.hs
           cabal exec -- ghc -isrc -Wall -Werror -fno-code src/Phil/Systems/StorageRealizationCertification.hs
-          cabal exec -- ghc -isrc -Wall -Werror -Wno-name-shadowing -fno-code src/Phil/Systems/CostAttribution.hs
-          # StageClosure's transitive baseline contains known name-shadowing and
-          # redundant-import warnings outside this PR; keep every other warning fatal.
-          cabal exec -- ghc -isrc -Wall -Werror -Wno-name-shadowing -Wno-unused-imports -fno-code src/Phil/Systems/StageClosure.hs
+          cabal exec -- ghc -isrc -Wall -Werror -fno-code src/Phil/Systems/CostAttribution.hs
+          cabal exec -- ghc -isrc -Wall -Werror -fno-code src/Phil/Systems/StageClosure.hs
           cabal exec -- ghc -isrc -Wall -Werror -Wno-name-shadowing -Wno-unused-imports -fno-code src/Phil/Systems/StorageCostAttributionCertification.hs
           cabal exec -- ghc -isrc -Wall -Werror -fno-code app/StorageCostAttributionDecisionCorrespondenceMain.hs
           cabal exec -- ghc -isrc -Wall -Werror -Wno-name-shadowing -Wno-unused-imports -fno-code app/StorageCostAttributionProductionBindingMain.hs
           cabal exec -- ghc -isrc -Wall -Werror -fno-code test/Phase1StorageRealizationMain.hs
-          cabal exec -- ghc -isrc -Wall -Werror -Wno-name-shadowing -fno-code test/Phase1CostAttributionMain.hs
-          cabal exec -- ghc -isrc -Wall -Werror -Wno-name-shadowing -Wno-unused-imports -fno-code test/Phase1StageClosureMain.hs
+          cabal exec -- ghc -isrc -Wall -Werror -fno-code test/Phase1CostAttributionMain.hs
+          cabal exec -- ghc -isrc -Wall -Werror -fno-code test/Phase1StageClosureMain.hs
       - name: Execute exact extracted-kernel controls
         run: cabal exec -- runghc -Wall -Werror -isrc app/StorageCostAttributionDecisionCorrespondenceMain.hs
       - name: Re-run implementation-refined StorageRealization predecessor
@@ -138,8 +136,8 @@ jobs:
         run: |
           set -euo pipefail
           cabal exec -- runghc -Wall -Werror -isrc test/Phase1StorageRealizationMain.hs
-          cabal exec -- runghc -Wall -Werror -Wno-name-shadowing -isrc test/Phase1CostAttributionMain.hs
-          cabal exec -- runghc -Wall -Werror -Wno-name-shadowing -Wno-unused-imports -isrc test/Phase1StageClosureMain.hs
+          cabal exec -- runghc -Wall -Werror -isrc test/Phase1CostAttributionMain.hs
+          cabal exec -- runghc -Wall -Werror -isrc test/Phase1StageClosureMain.hs
       - name: Record production binding identities
         shell: bash
         run: |
