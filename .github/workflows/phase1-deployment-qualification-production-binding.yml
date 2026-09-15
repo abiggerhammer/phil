@@ -82,17 +82,17 @@ jobs:
         run: |
           set -euo pipefail
           cabal exec -- ghc -isrc -Wall -Werror -Wno-unused-imports -fno-code src/DeploymentQualificationKernel.hs
-          cabal exec -- ghc -isrc -Wall -Werror -Wno-name-shadowing -fno-code src/Phil/Assurance/DeploymentQualification.hs
-          cabal exec -- ghc -isrc -Wall -Werror -Wno-name-shadowing -fno-code src/Phil/Assurance/DeploymentQualificationCertification.hs
-          cabal exec -- ghc -isrc -Wall -Werror -Wno-name-shadowing -Wno-unused-imports -fno-code app/DeploymentQualificationDecisionCorrespondenceMain.hs
-          cabal exec -- ghc -isrc -Wall -Werror -Wno-name-shadowing -fno-code app/DeploymentQualificationProductionBindingMain.hs
-          cabal exec -- ghc -isrc -Wall -Werror -Wno-name-shadowing -fno-code test/Phase1DeploymentQualificationMain.hs
+          cabal exec -- ghc -isrc -Wall -Werror -fno-code src/Phil/Assurance/DeploymentQualification.hs
+          cabal exec -- ghc -isrc -Wall -Werror -fno-code src/Phil/Assurance/DeploymentQualificationCertification.hs
+          cabal exec -- ghc -isrc -Wall -Werror -fno-code app/DeploymentQualificationDecisionCorrespondenceMain.hs
+          cabal exec -- ghc -isrc -Wall -Werror -fno-code app/DeploymentQualificationProductionBindingMain.hs
+          cabal exec -- ghc -isrc -Wall -Werror -fno-code test/Phase1DeploymentQualificationMain.hs
       - name: Execute exact extracted-kernel controls
-        run: cabal exec -- runghc -Wall -Werror -Wno-name-shadowing -Wno-unused-imports -isrc app/DeploymentQualificationDecisionCorrespondenceMain.hs
+        run: cabal exec -- runghc -Wall -Werror -isrc app/DeploymentQualificationDecisionCorrespondenceMain.hs
       - name: Execute production-binding controls
-        run: cabal exec -- runghc -Wall -Werror -Wno-name-shadowing -isrc app/DeploymentQualificationProductionBindingMain.hs
+        run: cabal exec -- runghc -Wall -Werror -isrc app/DeploymentQualificationProductionBindingMain.hs
       - name: Re-run unchanged DEP-003 through DEP-005 corpus
-        run: cabal exec -- runghc -Wall -Werror -Wno-name-shadowing -isrc test/Phase1DeploymentQualificationMain.hs
+        run: cabal exec -- runghc -Wall -Werror -isrc test/Phase1DeploymentQualificationMain.hs
       - name: Record production binding identities
         shell: bash
         run: |
