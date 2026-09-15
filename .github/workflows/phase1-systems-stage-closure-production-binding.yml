@@ -110,8 +110,7 @@ jobs:
           set -euo pipefail
           ghc -Wall -Werror -fno-code generated/SystemsStageClosureKernel.hs
           ghc -Wall -Werror -fno-code src/SystemsStageClosureKernel.hs
-          cabal exec -- ghc -isrc -Wall -Werror \
-            -Wno-name-shadowing -Wno-unused-imports -fno-code \
+          cabal exec -- ghc -isrc -Wall -Werror -fno-code \
             src/Phil/Systems/StageClosure.hs
       - name: Execute exact Stage Closure controls through production kernel
         run: |
@@ -123,9 +122,9 @@ jobs:
       - name: Re-run unchanged 36-case closure correspondence corpus
         run: |
           set -euo pipefail
-          cabal exec -- runghc -Wall -Werror -Wno-unused-imports -isrc \
+          cabal exec -- runghc -Wall -Werror -isrc \
             test/Phase1GenericSystemsStageMain.hs
-          cabal exec -- runghc -Wall -Werror -Wno-name-shadowing -Wno-unused-imports -isrc \
+          cabal exec -- runghc -Wall -Werror -isrc \
             test/Phase1StageClosureMain.hs
       - name: Record production-binding identities
         run: |
