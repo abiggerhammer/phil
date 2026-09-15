@@ -274,7 +274,6 @@ Proof.
   inversion Hnormalize; subst.
   unfold phase1_surface_data_variant_spine_tree,
     phase1_surface_data_spine_tree.
-  cbn.
   rewrite (phase1_surface_normalize_variant_spine_round_trip
     first_variant_tree first_variant Hfirst).
   rewrite (phase1_surface_normalize_variant_spines_suffix_round_trip
