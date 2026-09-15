@@ -146,7 +146,7 @@ jobs:
           cabal exec -- ghc -i. -Wall -Werror -Wno-unused-imports -fno-code StorageCostAttributionKernel.hs
           cabal exec -- ghc -isrc -Wall -Werror -fno-code src/Phil/Systems/Storage.hs
           cabal exec -- ghc -isrc -Wall -Werror -fno-code src/Phil/Systems/StorageRealizationCertification.hs
-          cabal exec -- ghc -isrc -Wall -Werror -Wno-name-shadowing -fno-code src/Phil/Systems/CostAttribution.hs
+          cabal exec -- ghc -isrc -Wall -Werror -fno-code src/Phil/Systems/CostAttribution.hs
           cabal exec -- ghc -i. -Wall -Werror -Wno-unused-imports -fno-code app/StorageCostAttributionDecisionCorrespondenceMain.hs
       - name: Execute exact extracted-kernel controls
         run: cabal exec -- runghc -i. -Wall -Werror -Wno-unused-imports app/StorageCostAttributionDecisionCorrespondenceMain.hs
