@@ -115,16 +115,25 @@ Proof.
   destruct (phase1_surface_normalize_optional_variant_payload payload_tree)
     as [payload |] eqn:Hpayload; try discriminate Hnormalize.
   inversion Hnormalize; subst variant.
+  pose proof
+    (phase1_surface_normalize_identifier_round_trip
+      name_tree name Hname) as Hname_tree.
+  pose proof
+    (phase1_surface_normalize_optional_variant_payload_round_trip
+      payload_tree payload Hpayload) as Hpayload_tree.
+  symmetry in Hname_tree.
+  symmetry in Hpayload_tree.
+  subst name_tree.
+  subst payload_tree.
   unfold phase1_surface_variant_spine_tree.
   rewrite (phase1_surface_expect_nonterminal_round_trip
     "variant_decl" tree body Hnode).
   rewrite (phase1_surface_expect_sequence_round_trip body items Hsequence).
   rewrite (phase1_surface_exact2_round_trip
-    items name_tree payload_tree Hitems).
-  rewrite <- (phase1_surface_normalize_identifier_round_trip
-    name_tree name Hname).
-  rewrite (phase1_surface_normalize_optional_variant_payload_round_trip
-    payload_tree payload Hpayload).
+    items
+    (phase1_surface_identifier_tree name)
+    (phase1_surface_optional_variant_payload_tree payload)
+    Hitems).
   reflexivity.
 Qed.
 
