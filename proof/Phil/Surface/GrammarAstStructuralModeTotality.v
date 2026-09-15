@@ -157,46 +157,53 @@ Proof.
         ]
         input rest body Hbody)
       as [trees [Hbody_tree Hitems]].
-    repeat match goal with
-    | Hseq : DerivesSequence phase1_surface_rules _ _ (_ :: _) _ _ _ |- _ =>
-        inversion Hseq; subst; clear Hseq
-    end.
-    match goal with
-    | Hnil : DerivesSequence phase1_surface_rules _ _ [] _ _ _ |- _ =>
-        inversion Hnil; subst; clear Hnil
-    end.
-    match goal with
-    | Hkeyword : Derives phase1_surface_rules _
-        (ELiteral "mode") _ _ ?keyword_tree,
-      Hmode : Derives phase1_surface_rules _
-        (ENonterminal "structural_mode") _ _ ?mode_tree |- _ =>
-        destruct
-          (literal_derivation_is_exact
-            phase1_surface_rules _ "mode" _ _ keyword_tree Hkeyword)
-          as [keyword_tail [_ [_ Hkeyword_tree]]];
-        destruct
-          (phase1_surface_normalize_structural_mode_total_from_derivation
-            _ _ _ mode_tree Hmode)
-          as [mode [Hmode_normalize Hmode_round_trip]];
-        assert (Hnormalize :
-          phase1_surface_normalize_optional_mode tree = Some (Some mode));
-        [ rewrite Hsome;
-          rewrite Hbody_tree;
-          rewrite Hkeyword_tree;
-          unfold phase1_surface_normalize_optional_mode,
-            phase1_surface_expect_optional,
-            phase1_surface_expect_sequence,
-            phase1_surface_exact2,
-            phase1_surface_expect_literal;
-          cbn;
-          rewrite Hmode_normalize;
-          reflexivity
-        | exists (Some mode);
-          split;
-          [ exact Hnormalize
-          | eapply phase1_surface_normalize_optional_mode_round_trip;
-            exact Hnormalize ] ]
-    end.
+    destruct
+      (derives_sequence_cons_exposes_head_exact
+        phase1_surface_rules
+        (descend path AtOptionalBody) 0
+        (ELiteral "mode")
+        [ENonterminal "structural_mode"]
+        input rest trees Hitems)
+      as [after_keyword [keyword_tree [tail_trees
+        [Htrees [Hkeyword Htail]]]]].
+    destruct
+      (derives_sequence_cons_exposes_head_exact
+        phase1_surface_rules
+        (descend path AtOptionalBody) 1
+        (ENonterminal "structural_mode") []
+        after_keyword rest tail_trees Htail)
+      as [after_mode [mode_tree [nil_trees
+        [Htail_trees [Hmode Hnil]]]]].
+    rewrite Htrees, Htail_trees in Hbody_tree.
+    inversion Hnil; subst nil_trees.
+    destruct
+      (literal_derivation_is_exact
+        phase1_surface_rules _ "mode" _ _ keyword_tree Hkeyword)
+      as [keyword_tail [_ [_ Hkeyword_tree]]].
+    destruct
+      (phase1_surface_normalize_structural_mode_total_from_derivation
+        _ _ _ mode_tree Hmode)
+      as [mode [Hmode_normalize Hmode_round_trip]].
+    assert (Hnormalize :
+      phase1_surface_normalize_optional_mode tree = Some (Some mode)).
+    {
+      rewrite Hsome.
+      rewrite Hbody_tree.
+      rewrite Hkeyword_tree.
+      unfold phase1_surface_normalize_optional_mode,
+        phase1_surface_expect_optional,
+        phase1_surface_expect_sequence,
+        phase1_surface_exact2,
+        phase1_surface_expect_literal.
+      cbn.
+      rewrite Hmode_normalize.
+      reflexivity.
+    }
+    exists (Some mode).
+    split.
+    + exact Hnormalize.
+    + eapply phase1_surface_normalize_optional_mode_round_trip.
+      exact Hnormalize.
 Qed.
 
 Lemma phase1_surface_record_decl_mode_lookup_for_totality :
