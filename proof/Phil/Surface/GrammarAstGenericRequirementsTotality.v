@@ -456,6 +456,7 @@ Proof.
     phase1_surface_exact3,
     phase1_surface_expect_literal.
   cbn.
+  rewrite String.eqb_refl.
   rewrite Hproposition_validate.
   reflexivity.
 Qed.
