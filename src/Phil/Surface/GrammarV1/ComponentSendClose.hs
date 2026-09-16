@@ -1,3 +1,5 @@
+{-# LANGUAGE OverloadedStrings #-}
+
 module Phil.Surface.GrammarV1.ComponentSendClose
   ( GrammarV1CheckedComponentSendClose (..)
   , GrammarV1ComponentSendCloseError (..)
