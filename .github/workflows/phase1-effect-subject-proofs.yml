@@ -73,6 +73,9 @@ jobs:
           ghc-version: '9.6.7'
           cabal-version: 'latest'
 
+      - name: Build ordinary regression substrate
+        run: cabal build all --enable-tests
+
       - name: Typecheck Core effect authority and unchanged EFF corpus
         run: |
           set -euo pipefail
