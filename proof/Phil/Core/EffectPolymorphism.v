@@ -160,11 +160,10 @@ Proof.
       bound actualKey actual checked Hchecked)
     as Hsubset.
   exists effect.
-  repeat split.
+  split.
   - apply Hsubset.
     exact Heffect.
-  - reflexivity.
-  - reflexivity.
+  - split; reflexivity.
 Qed.
 
 Definition instantiatedEffectSetOccurrence
@@ -181,7 +180,8 @@ Theorem instantiated_effect_occurrence_cannot_invent_subject_identity :
       semanticEffectLabel upperEffect = semanticEffectLabel effect /\
       semanticEffectSubjects upperEffect = semanticEffectSubjects effect.
 Proof.
-  intros bound actualKey actual checked effect Hchecked Hoccurs.
-  unfold instantiatedEffectSetOccurrence in Hoccurs.
-  eapply checked_effect_member_preserves_full_semantic_identity; eauto.
+  intros bound actualKey actual checked effect Hchecked Heffect.
+  unfold instantiatedEffectSetOccurrence in Heffect.
+  eapply checked_effect_member_preserves_full_semantic_identity;
+    eauto.
 Qed.
