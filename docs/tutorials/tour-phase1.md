@@ -4,7 +4,15 @@
 
 *Phase 1 edition.*
 
-Phil is a systems programming language built around a simple idea:
+Phil is a systems programming language for building systems from the outside in. Instead of starting with “what instructions should the computer run?”, Phil starts with questions like:
+
+- What parts does this system have?
+- What may those parts say to each other?
+- What is each part allowed to do?
+- What must be true before the program can take the next step?
+- What happens when something goes wrong?
+
+This tour builds up the answers one example at a time. Phil's central idea is:
 
 > **The important rules of a system should be part of the program, not just comments about the program.**
 
@@ -156,6 +164,8 @@ So far, types have told us what a value contains. Next we need a different quest
 > **May this value be copied or left unused?**
 
 ## 3. Some values have ownership rules
+
+> **Phil asks: “Who is responsible for this thing?”**
 
 Copying a number is usually harmless. Copying permission to perform a one-time action might not be.
 
@@ -319,7 +329,9 @@ fn identity(x : U32) -> U32 satisfies Identity {
 
 `Identity(x : U32) -> U32` describes a call that accepts a `U32` and returns a `U32` on success. The arrow separates input from output.
 
-`outcomes` lists the possible **kinds of result**. Here the only listed kind is `success`, carrying a `U32`. More detailed contracts can distinguish ordinary success from different kinds of failure.
+> **Phil asks: “What happens when something goes wrong?”**
+
+`outcomes` lists the possible **kinds of result**. This small example lists only `success`, carrying a `U32`. More detailed contracts can distinguish ordinary success from different kinds of failure, so callers know which results they must be ready to handle.
 
 `fn` introduces the function implementation. `satisfies Identity` names the contract the checker must compare that implementation against. It is not just a comment, and it does not make the implementation correct by declaration.
 
@@ -393,6 +405,8 @@ Carrying a callable around does not perform its effects. Those effects belong to
 
 ## 6. Permission is not the same thing as an effect
 
+> **Phil asks: “What is each part allowed to do?”**
+
 An effect declaration saying “this call may write the store” does not give the call permission to write it.
 
 Phil keeps these questions separate:
@@ -416,6 +430,8 @@ callable StoreOperation() -> Unit {
 This lets Phil check more than “our tests never saw a deletion.” A checked component with no access to delete authority cannot simply decide to acquire that permission. Passing it a callable also does not grant permission to invoke that callable without meeting its contract.
 
 ## 7. Protocols make conversations part of the program
+
+> **Phil asks: “What may those parts say to each other?”**
 
 Imagine a client that sends one byte to a server. A **protocol** is the rulebook for that conversation:
 
@@ -459,6 +475,8 @@ Two sessions using `Ping` remain two different conversations. An endpoint from o
 Also, permission to move a value locally is not automatically permission to send it as a message. Borrowed views, live endpoints, or authority-bearing values cannot gain that permission merely by being wrapped inside a record.
 
 ## 8. Architecture says which parts actually exist
+
+> **Phil asks: “What parts does this system have?”**
 
 A component declaration describes a reusable part. An **architecture** says which particular parts a system contains.
 
@@ -616,6 +634,8 @@ Generic code gains no secret privileges from not yet knowing its arguments.
 
 ## 13. Phil can carry checked facts in types and contracts
 
+> **Phil asks: “What must be true before the program can take the next step?”**
+
 Sometimes “this is a number” is not enough. A calculation may need a number greater than zero.
 
 ```phil
@@ -655,6 +675,8 @@ Depending on the obligation and policy, that answer may be a proof, runtime enfo
 > **“Still needs evidence” and “not a valid Phil program” are different results.**
 
 ## 15. Source verification is not artifact certification
+
+> **Phil asks: “What exactly do we know, why do we think we know it, and where does that claim stop?”**
 
 Suppose the source follows Phil's rules and its application-level obligations have been handled. Why is that not the end?
 
@@ -785,13 +807,15 @@ Readers who already know Phase 0 can instead follow [From Phil Phase 0 to Phase 
 
 ## 20. The ideas to keep
 
-You do not need to memorize every keyword from this tour. Keep these connections:
+You do not need to memorize every keyword from this tour. Keep asking the questions we started with:
 
-- **Values have rules.** Types describe both data and, where needed, restrictions on copying, discarding, and transferring it.
-- **Contracts make promises explicit.** Implementations must meet them; naming a contract is not proving that they do.
-- **System parts have distinct responsibilities.** Protocols describe conversations, components perform actions, and architectures identify participants. Their real inputs still have to be supplied.
-- **Evidence has a scope.** A claim, a proof, a runtime check, and an assumption are different things. Each concerns particular objects and requirements.
-- **Changing implementation must preserve meaning.** Checking the source and justifying a particular compiled artifact are connected but separate jobs.
+- **What parts does this system have?** Components describe reusable parts. Architectures identify the particular participants and their responsibilities. Their real inputs still have to be supplied.
+- **What may those parts say to each other?** Protocols describe the allowed conversations, including what may happen next. Components perform the actual communication.
+- **What is each part allowed to do?** Contracts limit actions and state the permissions a call needs. Ownership rules say whether a value may be copied, discarded, or transferred.
+- **What must be true before the program can take the next step?** Contracts make requirements explicit. A claim, a proof, a runtime check, and an assumption are different things; naming a claim does not prove it.
+- **What happens when something goes wrong?** Contracts can distinguish failure from success. Each path must still obey the rules for its resources, permissions, and conversations.
+
+Those answers must still hold when the implementation changes. Evidence applies to particular objects and requirements, not to everything that looks similar. Checking the source and justifying a particular compiled artifact are connected but separate jobs.
 
 That is the idea behind Phil's slogan:
 
