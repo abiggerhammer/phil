@@ -101,10 +101,9 @@ jobs:
         run: |
           set -euo pipefail
           cp assurance-evidence-authority-proof/AssuranceEvidenceAuthorityKernel.hs .
-          cabal exec -- ghc -i. -Wall -Werror -Wno-unused-imports -fno-code \
-            AssuranceEvidenceAuthorityKernel.hs \
-            app/AssuranceEvidenceAuthorityDecisionCorrespondenceMain.hs
-          cabal exec -- runghc -i. -Wall -Werror -Wno-unused-imports \
+          cabal exec -- ghc -i. -Wall -Werror -Wno-unused-imports -fno-code AssuranceEvidenceAuthorityKernel.hs
+          cabal exec -- ghc -i. -Wall -Werror -fno-code app/AssuranceEvidenceAuthorityDecisionCorrespondenceMain.hs
+          cabal exec -- runghc -i. -Wall -Werror \
             app/AssuranceEvidenceAuthorityDecisionCorrespondenceMain.hs
       - name: Strict typecheck unchanged production assurance path
         run: |
