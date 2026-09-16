@@ -5,6 +5,7 @@ module Phil.Surface.GrammarV1.ProtocolEndpointType
   , grammarV1ResolvedProtocolEndpointType
   ) where
 
+import Data.Text (Text)
 import Phil.Core.CheckedBindingMode
   ( CheckedTypeMode (..)
   )
@@ -115,7 +116,7 @@ endpointSourceShape sourceType = case sourceType of
     pure (ProtocolRoleKey role, protocolReference)
   _ -> Nothing
 
-singleRoleName :: GrammarV1StaticReference -> Maybe Data.Text.Text
+singleRoleName :: GrammarV1StaticReference -> Maybe Text
 singleRoleName reference = case grammarV1QualifiedNameParts
     (grammarV1StaticReferenceName reference) of
   [role] -> Just role
