@@ -1,6 +1,10 @@
 From Stdlib Require Import Lists.List Strings.String.
 
 From Phil.Surface Require Import
+  GrammarDerivation
+  GrammarAstSourceHeader
+  GrammarAstGenericParamsSpine
+  GrammarAstStructuralModeSpine
   GrammarAstDataSpine
   GrammarAstGenericRequirementsSpine.
 
@@ -113,16 +117,25 @@ Proof.
   destruct (phase1_surface_normalize_optional_variant_payload payload_tree)
     as [payload |] eqn:Hpayload; try discriminate Hnormalize.
   inversion Hnormalize; subst variant.
+  pose proof
+    (phase1_surface_normalize_identifier_round_trip
+      name_tree name Hname) as Hname_tree.
+  pose proof
+    (phase1_surface_normalize_optional_variant_payload_round_trip
+      payload_tree payload Hpayload) as Hpayload_tree.
+  symmetry in Hname_tree.
+  symmetry in Hpayload_tree.
+  subst name_tree.
+  subst payload_tree.
   unfold phase1_surface_variant_spine_tree.
   rewrite (phase1_surface_expect_nonterminal_round_trip
     "variant_decl" tree body Hnode).
   rewrite (phase1_surface_expect_sequence_round_trip body items Hsequence).
   rewrite (phase1_surface_exact2_round_trip
-    items name_tree payload_tree Hitems).
-  rewrite (phase1_surface_normalize_identifier_round_trip
-    name_tree name Hname).
-  rewrite (phase1_surface_normalize_optional_variant_payload_round_trip
-    payload_tree payload Hpayload).
+    items
+    (phase1_surface_identifier_tree name)
+    (phase1_surface_optional_variant_payload_tree payload)
+    Hitems).
   reflexivity.
 Qed.
 
@@ -159,7 +172,7 @@ Proof.
     + eapply phase1_surface_normalize_variant_spine_round_trip.
       exact Htree.
     + eapply IH.
-      exact Hrest.
+      reflexivity.
 Qed.
 
 Definition phase1_surface_refined_data_variant_suffix_tree
@@ -186,12 +199,12 @@ Proof.
     inversion Hnormalize; subst variants.
     cbn.
     f_equal.
-    - unfold phase1_surface_refined_data_variant_suffix_tree.
+    + unfold phase1_surface_refined_data_variant_suffix_tree.
       rewrite (phase1_surface_normalize_variant_spine_round_trip
         tree variant Htree).
       reflexivity.
-    - eapply IH.
-      exact Hrest.
+    + eapply IH.
+      reflexivity.
 Qed.
 
 Record Phase1SurfaceDataVariantSpine : Type := {
@@ -253,20 +266,51 @@ Proof.
   intros
     [name generic_params mode requirements first_variant_tree rest_variant_trees]
     refined Hnormalize.
+  unfold phase1_surface_normalize_data_variant_spine in Hnormalize.
   cbn in Hnormalize.
   destruct (phase1_surface_normalize_variant_spine first_variant_tree)
     as [first_variant |] eqn:Hfirst; try discriminate Hnormalize.
   destruct (phase1_surface_normalize_variant_spines rest_variant_trees)
     as [rest_variants |] eqn:Hrest; try discriminate Hnormalize.
   inversion Hnormalize; subst refined.
+  pose proof
+    (phase1_surface_normalize_variant_spine_round_trip
+      first_variant_tree first_variant Hfirst) as Hfirst_tree.
+  pose proof
+    (phase1_surface_normalize_variant_spines_suffix_round_trip
+      rest_variant_trees rest_variants Hrest) as Hrest_trees.
+  assert (Hitems :
+    [ PTLiteral "data";
+      phase1_surface_identifier_tree name;
+      phase1_surface_optional_generic_params_tree generic_params;
+      phase1_surface_optional_mode_tree mode;
+      phase1_surface_optional_generic_requirements_tree requirements;
+      PTLiteral "=";
+      phase1_surface_variant_spine_tree first_variant;
+      PTRepetition
+        (map phase1_surface_refined_data_variant_suffix_tree rest_variants);
+      PTLiteral ";" ] =
+    [ PTLiteral "data";
+      phase1_surface_identifier_tree name;
+      phase1_surface_optional_generic_params_tree generic_params;
+      phase1_surface_optional_mode_tree mode;
+      phase1_surface_optional_generic_requirements_tree requirements;
+      PTLiteral "=";
+      first_variant_tree;
+      PTRepetition
+        (map phase1_surface_data_variant_suffix_tree rest_variant_trees);
+      PTLiteral ";" ]).
+  {
+    rewrite Hfirst_tree.
+    rewrite Hrest_trees.
+    reflexivity.
+  }
   unfold phase1_surface_data_variant_spine_tree,
     phase1_surface_data_spine_tree.
-  cbn.
-  rewrite (phase1_surface_normalize_variant_spine_round_trip
-    first_variant_tree first_variant Hfirst).
-  rewrite (phase1_surface_normalize_variant_spines_suffix_round_trip
-    rest_variant_trees rest_variants Hrest).
-  reflexivity.
+  apply (f_equal
+    (fun items : list ParseTree =>
+      PTNonterminal "data_decl" (PTSequence items))).
+  exact Hitems.
 Qed.
 
 Definition phase1_surface_normalize_data_variant_tree

@@ -1,6 +1,8 @@
 From Stdlib Require Import Lists.List Strings.String.
 
-From Phil.Surface Require Import
+From Phil.Surface Require Export
+  GrammarDerivation
+  GrammarAstSourceHeader
   GrammarAstTopLevelSpine.
 
 Import ListNotations.
@@ -27,6 +29,15 @@ Record Phase1SurfaceExact8 (A : Type) : Type := {
   phase1_exact8_7 : A;
   phase1_exact8_8 : A
 }.
+
+Arguments phase1_exact8_1 {A} _.
+Arguments phase1_exact8_2 {A} _.
+Arguments phase1_exact8_3 {A} _.
+Arguments phase1_exact8_4 {A} _.
+Arguments phase1_exact8_5 {A} _.
+Arguments phase1_exact8_6 {A} _.
+Arguments phase1_exact8_7 {A} _.
+Arguments phase1_exact8_8 {A} _.
 
 Definition phase1_surface_exact8 {A : Type}
   (items : list A) : option (Phase1SurfaceExact8 A) :=
@@ -176,7 +187,7 @@ Proof.
     Hitems).
   rewrite (phase1_surface_expect_literal_round_trip
     "record" keyword_tree Hkeyword).
-  rewrite (phase1_surface_normalize_identifier_round_trip
+  rewrite <- (phase1_surface_normalize_identifier_round_trip
     name_tree name Hname).
   rewrite (phase1_surface_expect_literal_round_trip "{" open_tree Hopen).
   rewrite (phase1_surface_expect_literal_round_trip "}" close_tree Hclose).

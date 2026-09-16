@@ -1,6 +1,11 @@
 From Stdlib Require Import Lists.List Strings.String.
 
 From Phil.Surface Require Import
+  GrammarDerivation
+  GrammarAstSourceHeader
+  GrammarAstGenericParamsSpine
+  GrammarAstStructuralModeSpine
+  GrammarAstGenericRequirementsSpine
   GrammarAstRecordFieldsSpine.
 
 Import ListNotations.
@@ -28,6 +33,16 @@ Record Phase1SurfaceExact9 (A : Type) : Type := {
   phase1_exact9_8 : A;
   phase1_exact9_9 : A
 }.
+
+Arguments phase1_exact9_1 {A} _.
+Arguments phase1_exact9_2 {A} _.
+Arguments phase1_exact9_3 {A} _.
+Arguments phase1_exact9_4 {A} _.
+Arguments phase1_exact9_5 {A} _.
+Arguments phase1_exact9_6 {A} _.
+Arguments phase1_exact9_7 {A} _.
+Arguments phase1_exact9_8 {A} _.
+Arguments phase1_exact9_9 {A} _.
 
 Definition phase1_surface_exact9 {A : Type}
   (items : list A) : option (Phase1SurfaceExact9 A) :=
@@ -156,7 +171,7 @@ Proof.
     + eapply phase1_surface_normalize_data_variant_suffix_round_trip.
       exact Htree.
     + eapply IH.
-      exact Hrest.
+      reflexivity.
 Qed.
 
 Record Phase1SurfaceDataSpine : Type := {
@@ -284,19 +299,19 @@ Proof.
   rewrite (phase1_surface_exact9_round_trip items fields Hitems).
   rewrite (phase1_surface_expect_literal_round_trip
     "data" (phase1_exact9_1 fields) Hkeyword).
-  rewrite (phase1_surface_normalize_identifier_round_trip
+  rewrite <- (phase1_surface_normalize_identifier_round_trip
     (phase1_exact9_2 fields) name Hname).
-  rewrite (phase1_surface_normalize_optional_generic_params_round_trip
+  rewrite <- (phase1_surface_normalize_optional_generic_params_round_trip
     (phase1_exact9_3 fields) generic_params Hgeneric).
-  rewrite (phase1_surface_normalize_optional_mode_round_trip
+  rewrite <- (phase1_surface_normalize_optional_mode_round_trip
     (phase1_exact9_4 fields) mode Hmode).
-  rewrite (phase1_surface_normalize_optional_generic_requirements_round_trip
+  rewrite <- (phase1_surface_normalize_optional_generic_requirements_round_trip
     (phase1_exact9_5 fields) requirements Hrequirements).
   rewrite (phase1_surface_expect_literal_round_trip
     "=" (phase1_exact9_6 fields) Hequals).
   rewrite (phase1_surface_expect_repetition_round_trip
     (phase1_exact9_8 fields) rest_trees Hrest_trees).
-  rewrite (phase1_surface_normalize_data_variant_suffixes_round_trip
+  rewrite <- (phase1_surface_normalize_data_variant_suffixes_round_trip
     rest_trees rest_variants Hrest).
   rewrite (phase1_surface_expect_literal_round_trip
     ";" (phase1_exact9_9 fields) Hterminator).

@@ -62,6 +62,22 @@ Proof.
   split; eauto.
 Qed.
 
+Lemma derives_sequence_cons_exposes_head_exact :
+  forall rules path index item items input rest trees,
+    DerivesSequence rules path index (item :: items) input rest trees ->
+    exists middle tree tail_trees,
+      trees = tree :: tail_trees /\
+      Derives rules (descend path (AtSequence index))
+        item input middle tree /\
+      DerivesSequence rules path (S index)
+        items middle rest tail_trees.
+Proof.
+  intros rules path index item items input rest trees Hderive.
+  inversion Hderive; subst.
+  do 3 eexists.
+  repeat split; eauto.
+Qed.
+
 Lemma phase1_surface_identifier_lookup_exact :
   lookupRule "identifier" phase1_surface_rules =
     Some (ELexicalClass "IDENTIFIER").
