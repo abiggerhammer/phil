@@ -74,7 +74,7 @@ test label result = case result of
 exactArchitectureProvisioning :: Either String ()
 exactArchitectureProvisioning = do
   fixture <- checkedFixture exactSource "ClientWorker"
-  result <- resolveFixture fixture
+  result <- mapLeft show (resolveFixture fixture)
   case resolvedProvisioningParameters result of
     [endpoint, payload] -> do
       assert
