@@ -24,6 +24,7 @@ import Phil.Core.Process
 import Phil.Core.ProcessActivation
   ( ActivationBinding (..)
   , ActivationBindingOrigin (..)
+  , ActivationOccurrenceKey
   , ActivationReachability (..)
   , ProcessActivationContract (..)
   , ProcessActivationState (..)
@@ -139,7 +140,7 @@ grammarV1ResolvedComponentActivation provisioning = do
                   }
             Right (binding, [endpoint])
 
-entryReachability :: CheckedTypeMode -> a -> ActivationReachability
+entryReachability :: CheckedTypeMode -> ActivationOccurrenceKey -> ActivationReachability
 entryReachability checked occurrence =
   case checkedBindingMode checked of
     Unrestricted -> ExtensionalImmutableReachability
