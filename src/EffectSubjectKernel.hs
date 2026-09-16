@@ -30,8 +30,8 @@ data EffectSubjectRetargetDecision =
  | EffectSubjectRetargetCorrespondenceSourceMismatch
  | EffectSubjectRetargetCorrespondenceTargetMismatch
 
-decideEffectSubjectRetarget :: Prelude.Bool -> Prelude.Bool -> Prelude.Bool ->
-                               Prelude.Bool -> Prelude.Bool ->
+decideEffectSubjectRetarget :: Prelude.Bool -> Prelude.Bool -> Prelude.Bool
+                               -> Prelude.Bool -> Prelude.Bool ->
                                EffectSubjectRetargetDecision
 decideEffectSubjectRetarget indexInRange sameSubject correspondencePresent correspondenceSourceMatches correspondenceTargetMatches =
   case indexInRange of {
@@ -49,4 +49,3 @@ decideEffectSubjectRetarget indexInRange sameSubject correspondencePresent corre
          Prelude.False -> EffectSubjectRetargetCorrespondenceSourceMismatch};
        Prelude.False -> EffectSubjectRetargetRequiresCorrespondence}};
    Prelude.False -> EffectSubjectRetargetIndexOutOfRange}
-
