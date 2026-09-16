@@ -1,4 +1,4 @@
-name: Phase 1 IO FileSystem Proofs
+name: Phase 1 IO FileSystem Production Binding
 
 on:
   pull_request:
@@ -7,6 +7,8 @@ on:
       - 'proof/Phil/Core/RuntimeBytes.v'
       - 'proof/Phil/Core/FileSystem.v'
       - 'proof/Phil/Core/FileSystemImplementation.v'
+      - 'proof/Phil/Core/FileSystemImplementationExtraction.v'
+      - 'src/FileSystemKernel.hs'
       - 'src/Phil/IO/FileSystem.hs'
       - 'test/Phase1IOFileSystemMain.hs'
       - '.github/workflows/phase1-io-filesystem-proofs.yml'
@@ -17,6 +19,8 @@ on:
       - 'proof/Phil/Core/RuntimeBytes.v'
       - 'proof/Phil/Core/FileSystem.v'
       - 'proof/Phil/Core/FileSystemImplementation.v'
+      - 'proof/Phil/Core/FileSystemImplementationExtraction.v'
+      - 'src/FileSystemKernel.hs'
       - 'src/Phil/IO/FileSystem.hs'
       - 'test/Phase1IOFileSystemMain.hs'
       - '.github/workflows/phase1-io-filesystem-proofs.yml'
@@ -33,7 +37,7 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
-      - name: Compile PHIL-P1-IO-FS-001 semantic and implementation proofs
+      - name: Compile PHIL-P1-IO-FS-001 proof and fresh extracted kernel
         shell: bash
         run: |
           set -euo pipefail
@@ -42,8 +46,14 @@ jobs:
           rocq c -Q proof/Phil Phil proof/Phil/Core/RuntimeBytes.v
           rocq c -Q proof/Phil Phil proof/Phil/Core/FileSystem.v
           rocq c -Q proof/Phil Phil proof/Phil/Core/FileSystemImplementation.v
+          rm -f FileSystemKernel.hs
+          rocq c -Q proof/Phil Phil proof/Phil/Core/FileSystemImplementationExtraction.v
+          test -s FileSystemKernel.hs
+          grep -q 'decideFileSystemReadByFacts' FileSystemKernel.hs
+          grep -q 'decideFileSystemReplaceByFacts' FileSystemKernel.hs
+          grep -q 'replaceShouldInstallBinding' FileSystemKernel.hs
 
-      - name: Record checked proof identities
+      - name: Record checked proof and extraction identities
         shell: bash
         run: |
           set -euo pipefail
@@ -53,18 +63,22 @@ jobs:
             proof/Phil/Core/FileSystem.vo \
             proof/Phil/Core/FileSystemImplementation.v \
             proof/Phil/Core/FileSystemImplementation.vo \
+            proof/Phil/Core/FileSystemImplementationExtraction.v \
+            proof/Phil/Core/FileSystemImplementationExtraction.vo \
+            FileSystemKernel.hs \
             filesystem-proof/
           sha256sum \
             filesystem-proof/FileSystem.v \
             filesystem-proof/FileSystem.vo \
             filesystem-proof/FileSystemImplementation.v \
             filesystem-proof/FileSystemImplementation.vo \
+            filesystem-proof/FileSystemKernel.hs \
             > filesystem-proof/PHIL-P1-IO-FS-001.proof.sha256
           cat filesystem-proof/PHIL-P1-IO-FS-001.proof.sha256
 
       - uses: actions/upload-artifact@v4
         with:
-          name: rocq-filesystem-proof
+          name: rocq-filesystem-production-binding
           path: filesystem-proof
           if-no-files-found: error
 
