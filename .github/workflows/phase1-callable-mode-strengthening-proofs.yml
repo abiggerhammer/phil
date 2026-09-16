@@ -106,10 +106,9 @@ jobs:
         run: |
           set -euo pipefail
           cp callable-mode-strengthening-proof/CallableModeStrengtheningKernel.hs .
-          cabal exec -- ghc -i. -Wall -Werror -Wno-unused-imports -fno-code \
-            CallableModeStrengtheningKernel.hs \
-            app/CallableModeStrengtheningDecisionCorrespondenceMain.hs
-          cabal exec -- runghc -i. -Wall -Werror -Wno-unused-imports \
+          cabal exec -- ghc -i. -Wall -Werror -Wno-unused-imports -fno-code CallableModeStrengtheningKernel.hs
+          cabal exec -- ghc -i. -Wall -Werror -fno-code app/CallableModeStrengtheningDecisionCorrespondenceMain.hs
+          cabal exec -- runghc -i. -Wall -Werror \
             app/CallableModeStrengtheningDecisionCorrespondenceMain.hs
       - name: Strict typecheck unchanged CALL-017 implementation and corpus
         run: |
