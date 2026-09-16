@@ -10,6 +10,9 @@ on:
       - 'proof/Phil/Core/FileSystemImplementationExtraction.v'
       - 'src/FileSystemKernel.hs'
       - 'src/Phil/IO/FileSystem.hs'
+      - 'app/FileSystemDecisionCorrespondenceMain.hs'
+      - 'docs/phase-1/filesystem-implementation-refinement-v1.md'
+      - 'docs/phase-1/filesystem-production-binding-v1.md'
       - 'test/Phase1IOFileSystemMain.hs'
       - '.github/workflows/phase1-io-filesystem-proofs.yml'
   push:
@@ -22,6 +25,9 @@ on:
       - 'proof/Phil/Core/FileSystemImplementationExtraction.v'
       - 'src/FileSystemKernel.hs'
       - 'src/Phil/IO/FileSystem.hs'
+      - 'app/FileSystemDecisionCorrespondenceMain.hs'
+      - 'docs/phase-1/filesystem-implementation-refinement-v1.md'
+      - 'docs/phase-1/filesystem-production-binding-v1.md'
       - 'test/Phase1IOFileSystemMain.hs'
       - '.github/workflows/phase1-io-filesystem-proofs.yml'
 
@@ -52,6 +58,13 @@ jobs:
           grep -q 'decideFileSystemReadByFacts' FileSystemKernel.hs
           grep -q 'decideFileSystemReplaceByFacts' FileSystemKernel.hs
           grep -q 'replaceShouldInstallBinding' FileSystemKernel.hs
+
+      - name: Enforce exact extracted FileSystem kernel
+        shell: bash
+        run: |
+          set -euo pipefail
+          cmp FileSystemKernel.hs src/FileSystemKernel.hs
+          echo '0586a6e10eb8c4e12c2b5b7e80ec228bad911ea8be219ae23ac570948861b645  FileSystemKernel.hs' | sha256sum -c -
 
       - name: Record checked proof and extraction identities
         shell: bash
@@ -88,21 +101,59 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
+      - uses: actions/download-artifact@v4
+        with:
+          name: rocq-filesystem-production-binding
+          path: fresh-filesystem-proof
+
       - uses: haskell-actions/setup@v2
         with:
           ghc-version: '9.6.7'
           cabal-version: 'latest'
 
+      - name: Re-confirm fresh extraction identity
+        run: |
+          set -euo pipefail
+          cmp fresh-filesystem-proof/FileSystemKernel.hs src/FileSystemKernel.hs
+          echo '0586a6e10eb8c4e12c2b5b7e80ec228bad911ea8be219ae23ac570948861b645  src/FileSystemKernel.hs' | sha256sum -c -
+
+      - name: Run direct extracted-kernel controls
+        run: |
+          set -euo pipefail
+          ghc -isrc -Wall -Werror app/FileSystemDecisionCorrespondenceMain.hs -o /tmp/filesystem-kernel-controls
+          /tmp/filesystem-kernel-controls
+
       - name: Build complete Haskell substrate
         run: cabal build all --enable-tests
 
-      - name: Strict-typecheck IO-FS implementation authority
+      - name: Strict-typecheck production-bound IO-FS authority
         run: |
           set -euo pipefail
           cabal exec -- ghc -isrc -Wall -Werror -fno-code \
+            src/FileSystemKernel.hs \
             src/Phil/IO/Bytes.hs \
             src/Phil/IO/FileSystem.hs \
             test/Phase1IOFileSystemMain.hs
 
       - name: Re-run unchanged IO-FS pressure corpus
         run: cabal exec -- runghc -isrc -Wall -Werror test/Phase1IOFileSystemMain.hs
+
+      - name: Record production-binding identities
+        run: |
+          set -euo pipefail
+          mkdir -p filesystem-closeout
+          sha256sum \
+            src/FileSystemKernel.hs \
+            src/Phil/IO/FileSystem.hs \
+            app/FileSystemDecisionCorrespondenceMain.hs \
+            docs/phase-1/filesystem-implementation-refinement-v1.md \
+            docs/phase-1/filesystem-production-binding-v1.md \
+            test/Phase1IOFileSystemMain.hs \
+            > filesystem-closeout/PHIL-P1-IO-FS-001.production-binding.sha256
+          cat filesystem-closeout/PHIL-P1-IO-FS-001.production-binding.sha256
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: filesystem-production-binding-closeout
+          path: filesystem-closeout
+          if-no-files-found: error
