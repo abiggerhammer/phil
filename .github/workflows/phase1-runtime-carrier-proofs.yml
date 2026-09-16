@@ -120,10 +120,9 @@ jobs:
         run: |
           set -euo pipefail
           cp runtime-carrier-proof/RuntimeCarrierKernel.hs .
-          cabal exec -- ghc -i. -Wall -Werror -Wno-unused-imports -fno-code \
-            RuntimeCarrierKernel.hs \
-            app/RuntimeCarrierDecisionCorrespondenceMain.hs
-          cabal exec -- runghc -i. -Wall -Werror -Wno-unused-imports \
+          cabal exec -- ghc -i. -Wall -Werror -Wno-unused-imports -fno-code RuntimeCarrierKernel.hs
+          cabal exec -- ghc -i. -Wall -Werror -fno-code app/RuntimeCarrierDecisionCorrespondenceMain.hs
+          cabal exec -- runghc -i. -Wall -Werror \
             app/RuntimeCarrierDecisionCorrespondenceMain.hs
       - name: Strict typecheck unchanged DEP-001 and DEP-002 implementation/corpora
         run: |
