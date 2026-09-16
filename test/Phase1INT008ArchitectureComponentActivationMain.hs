@@ -3,11 +3,13 @@
 module Main (main) where
 
 import qualified Data.Map.Strict as Map
+import Data.Text (Text)
 import Phil.Core.CheckedBindingMode
   ( CheckedTypeMode (..)
   )
 import Phil.Core.Context
-  ( emptyContext
+  ( ResourceContext
+  , emptyContext
   , insertBinding
   )
 import Phil.Core.Process
@@ -243,7 +245,7 @@ duplicateEndpointNameRejects =
         assert (actual == endpointName) "duplicate endpoint diagnostic changed local name"
       other -> Left ("duplicate endpoint metadata name was accepted: " <> show other)
 
-exactResources :: Either String Phil.Core.Context.ResourceContext
+exactResources :: Either String ResourceContext
 exactResources = do
   resources0 <- mapLeft show $ insertBinding Linear endpointName endpointType emptyContext
   mapLeft show $ insertBinding Unrestricted payloadName (TyUInt 8) resources0
@@ -274,7 +276,7 @@ payloadParameter = GrammarV1ProvisionedComponentParameter
       GrammarV1ComponentProvisioningEntry "payload" (TyUInt 8)
   }
 
-parameterBinder :: Int -> Name -> String -> GrammarV1ResolvedBinder
+parameterBinder :: Int -> Name -> Text -> GrammarV1ResolvedBinder
 parameterBinder ordinal coreName displayName = GrammarV1ResolvedBinder
   { grammarV1ResolvedBinderKey = GrammarV1BinderKey
       { grammarV1BinderDeclarationRoot = DeclarationKey "component.ClientWorker"
@@ -282,12 +284,9 @@ parameterBinder ordinal coreName displayName = GrammarV1ResolvedBinder
       }
   , grammarV1ResolvedBinderCoreName = coreName
   , grammarV1ResolvedBinderKind = GrammarV1ComponentParameterBinder
-  , grammarV1ResolvedBinderDisplayName = fromStringText displayName
+  , grammarV1ResolvedBinderDisplayName = displayName
   , grammarV1ResolvedBinderSourceSpan = dummySpan
   }
-
-fromStringText :: String -> Data.Text.Text
-fromStringText = Data.Text.pack
 
 dummySpan :: SourceSpan
 dummySpan = SourceSpan dummyPoint dummyPoint
