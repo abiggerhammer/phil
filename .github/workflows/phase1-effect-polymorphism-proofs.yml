@@ -6,6 +6,10 @@ on:
       - 'proof/Phil/Core/EffectPolymorphism.v'
       - 'proof/Phil/Core/EffectPolymorphismImplementation.v'
       - 'proof/Phil/Core/EffectPolymorphismImplementationExtraction.v'
+      - 'docs/phase-1/effect-polymorphism-implementation-refinement-v1.md'
+      - 'docs/phase-1/effect-polymorphism-production-binding-v1.md'
+      - 'app/EffectPolymorphismDecisionCorrespondenceMain.hs'
+      - 'src/EffectPolymorphismKernel.hs'
       - 'src/Phil/Core/EffectPolymorphism.hs'
       - 'src/Phil/Surface/GrammarV1/SemanticEffectPolymorphism.hs'
       - 'test/Phase1GrammarV1GenericBinderScopeMain.hs'
@@ -16,6 +20,10 @@ on:
       - 'proof/Phil/Core/EffectPolymorphism.v'
       - 'proof/Phil/Core/EffectPolymorphismImplementation.v'
       - 'proof/Phil/Core/EffectPolymorphismImplementationExtraction.v'
+      - 'docs/phase-1/effect-polymorphism-implementation-refinement-v1.md'
+      - 'docs/phase-1/effect-polymorphism-production-binding-v1.md'
+      - 'app/EffectPolymorphismDecisionCorrespondenceMain.hs'
+      - 'src/EffectPolymorphismKernel.hs'
       - 'src/Phil/Core/EffectPolymorphism.hs'
       - 'src/Phil/Surface/GrammarV1/SemanticEffectPolymorphism.hs'
       - 'test/Phase1GrammarV1GenericBinderScopeMain.hs'
@@ -33,7 +41,7 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
-      - name: Compile PHIL-EFFECT-POLY-001 proof and fresh extracted kernel
+      - name: Compile PHIL-EFFECT-POLY-001 proof and exact production kernel
         shell: bash
         run: |
           set -euo pipefail
@@ -46,7 +54,7 @@ jobs:
           test -s EffectPolymorphismKernel.hs
           grep -q 'decideEffectSetInstantiation' EffectPolymorphismKernel.hs
 
-      - name: Record checked proof and extraction identities
+      - name: Record proof and extracted-kernel identities
         shell: bash
         run: |
           set -euo pipefail
@@ -75,6 +83,14 @@ jobs:
           path: effect-polymorphism-proof
           if-no-files-found: error
 
+      - name: Verify checked-in production kernel is the exact extraction
+        shell: bash
+        run: |
+          set -euo pipefail
+          cmp EffectPolymorphismKernel.hs src/EffectPolymorphismKernel.hs
+          test "$(sha256sum EffectPolymorphismKernel.hs | cut -d' ' -f1)" = \
+            '6e73c70c6fb3455f63f72dcf3a88f11d48d6b6b8c98f038a7a9275cb83cc5db8'
+
   verify-effect-polymorphism-correspondence:
     needs: rocq-effect-polymorphism-proof
     runs-on: ubuntu-latest
@@ -86,10 +102,29 @@ jobs:
           ghc-version: '9.6.7'
           cabal-version: 'latest'
 
+      - uses: actions/download-artifact@v4
+        with:
+          name: rocq-effect-polymorphism-production-binding
+          path: effect-polymorphism-proof
+
+      - name: Verify exact extracted production kernel and direct controls
+        run: |
+          set -euo pipefail
+          cmp effect-polymorphism-proof/EffectPolymorphismKernel.hs src/EffectPolymorphismKernel.hs
+          test "$(sha256sum src/EffectPolymorphismKernel.hs | cut -d' ' -f1)" = \
+            '6e73c70c6fb3455f63f72dcf3a88f11d48d6b6b8c98f038a7a9275cb83cc5db8'
+          ghc -Wall -Werror -fno-code effect-polymorphism-proof/EffectPolymorphismKernel.hs
+          ghc -Wall -Werror -fno-code src/EffectPolymorphismKernel.hs
+          ghc -Wall -Werror \
+            -isrc \
+            app/EffectPolymorphismDecisionCorrespondenceMain.hs \
+            -o effect-polymorphism-kernel-controls
+          ./effect-polymorphism-kernel-controls
+
       - name: Build ordinary regression substrate
         run: cabal build all --enable-tests
 
-      - name: Strict-typecheck effect polymorphism authority and Grammar-v1 bridge
+      - name: Strict-typecheck bound effect polymorphism authority and Grammar-v1 bridge
         run: |
           set -euo pipefail
           cabal exec -- ghc -isrc -Wall -Werror -fno-code src/Phil/Core/EffectPolymorphism.hs
@@ -100,3 +135,26 @@ jobs:
         run: |
           set -euo pipefail
           cabal exec -- runghc -Wall -Werror -isrc test/Phase1GrammarV1GenericBinderScopeMain.hs
+
+      - name: Record implementation-refinement production-binding identities
+        run: |
+          set -euo pipefail
+          mkdir -p effect-polymorphism-production-binding
+          sha256sum \
+            src/EffectPolymorphismKernel.hs \
+            src/Phil/Core/EffectPolymorphism.hs \
+            src/Phil/Surface/GrammarV1/SemanticEffectPolymorphism.hs \
+            test/Phase1GrammarV1GenericBinderScopeMain.hs \
+            app/EffectPolymorphismDecisionCorrespondenceMain.hs \
+            proof/Phil/Core/EffectPolymorphismImplementation.v \
+            proof/Phil/Core/EffectPolymorphismImplementationExtraction.v \
+            docs/phase-1/effect-polymorphism-implementation-refinement-v1.md \
+            docs/phase-1/effect-polymorphism-production-binding-v1.md \
+            > effect-polymorphism-production-binding/PHIL-EFFECT-POLY-001.closeout.sha256
+          cat effect-polymorphism-production-binding/PHIL-EFFECT-POLY-001.closeout.sha256
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: effect-polymorphism-production-binding
+          path: effect-polymorphism-production-binding
+          if-no-files-found: error
