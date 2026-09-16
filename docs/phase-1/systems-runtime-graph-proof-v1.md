@@ -38,7 +38,7 @@ The dedicated workflow reruns the unchanged production correspondence:
 - `src/Phil/Systems/RuntimePrimitiveReuse.hs` + `test/Phase1RuntimePrimitiveReuseMain.hs` for SYS-016;
 - `src/Phil/Systems/CostAttribution.hs` + `test/Phase1CostAttributionMain.hs` for SYS-018.
 
-`RuntimeClaimBinding.hs` currently has two pre-existing local bindings named `reverse`; the correspondence-only strict typecheck keeps the existing narrow `-Wno-name-shadowing` exemption rather than weakening production semantics or changing unrelated code.
+The runtime-graph workflow now typechecks all three implementation modules and all three corpus mains under plain `-Wall -Werror`, and reruns the corpora under the same strict warning policy. The earlier correspondence-only `-Wno-name-shadowing` exception for `RuntimeClaimBinding.hs` has been retired; no project-authored runtime-graph Haskell requires a warning suppression.
 
 ## Downstream use
 
