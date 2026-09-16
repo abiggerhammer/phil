@@ -1,5 +1,5 @@
 From Stdlib Require Import Arith.Arith Lists.List.
-From Phil.Core Require Import RuntimeBytes FileSystem Console.
+From Phil.Core Require Import ProviderRelativePath RuntimeBytes FileSystem Console.
 
 Import ListNotations.
 
