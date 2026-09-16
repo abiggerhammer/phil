@@ -10,7 +10,7 @@ Production checks in:
 
 The required SHA-256 is:
 
-`79e27584a4a8f96d1cc0158ec35e2e259365addf12ab286dca00be71d80fe612`
+`91b982a6891d04a3915d7cb8293c3c39ae3da0789c49f0ced4235a3d4c8f154e`
 
 CI fresh-extracts `EffectSubjectKernel.hs` from `proof/Phil/Core/EffectSubjectImplementationExtraction.v`, compares it byte-for-byte with the checked-in production copy, and rejects any digest drift.
 
