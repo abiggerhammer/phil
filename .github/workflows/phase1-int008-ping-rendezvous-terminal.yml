@@ -1,0 +1,28 @@
+name: Phase 1 INT-008 Ping Rendezvous Terminal
+
+on:
+  pull_request:
+    paths:
+      - 'src/Phil/Core/ProcessEndpointClosure.hs'
+      - 'test/Phase1INT008PingRendezvousTerminalMain.hs'
+      - '.github/workflows/phase1-int008-ping-rendezvous-terminal.yml'
+  workflow_dispatch:
+
+jobs:
+  ping-rendezvous-terminal:
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+      - uses: haskell-actions/setup@v2
+        with:
+          ghc-version: '9.6.7'
+          cabal-version: 'latest'
+      - name: Build ordinary regression substrate under canonical strict warnings
+        run: cabal build all --enable-tests --ghc-options=-Werror
+      - name: Strictly typecheck INT-008 Ping terminal bridge
+        run: |
+          set -euo pipefail
+          cabal exec -- ghc -isrc -Wall -Werror -fno-code src/Phil/Core/ProcessEndpointClosure.hs
+          cabal exec -- ghc -isrc -Wall -Werror -fno-code test/Phase1INT008PingRendezvousTerminalMain.hs
+      - name: Execute INT-008 Ping terminal controls
+        run: cabal exec -- runghc -isrc -Wall -Werror test/Phase1INT008PingRendezvousTerminalMain.hs
