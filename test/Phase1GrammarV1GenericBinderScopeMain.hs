@@ -2,13 +2,34 @@
 
 module Main (main) where
 
+import qualified Data.Set as Set
 import qualified Data.Text as Text
+import Phil.Core.Callable
+  ( CallableContract (..)
+  , CallableUse (..)
+  , CalleeTransition (..)
+  , SemanticEffect (..)
+  , inferReachableCallableEffects
+  )
+import Phil.Core.EffectPolymorphism
+  ( CheckedEffectSetInstantiation (..)
+  , EffectSetInstantiationError (..)
+  , EffectSetParameterBound (..)
+  , checkBoundedEffectSetInstantiation
+  , effectSetSemanticForm
+  )
 import Phil.Core.Generic (GenericStaticParameterKey)
 import Phil.Core.Generic.StaticActual
-  ( GenericStaticKind (..)
+  ( CheckedGenericStaticActual
+  , GenericStaticActual (..)
+  , GenericStaticKind (..)
   , GenericStaticParameter (..)
+  , checkGenericStaticActuals
   )
-import Phil.Core.Static (DeclarationKey (..))
+import Phil.Core.Static
+  ( DeclarationKey (..)
+  , InterfaceRevision (..)
+  )
 import Phil.Surface.GrammarV1.CallableEffects
   ( GrammarV1CallableEffectBoundTemplate (..)
   , GrammarV1ResolvedCallableEffectUse (..)
@@ -25,6 +46,11 @@ import Phil.Surface.GrammarV1.GenericBinderScope
   , grammarV1RootGenericBinderScope
   )
 import Phil.Surface.GrammarV1.Parser
+import Phil.Surface.GrammarV1.SemanticEffectPolymorphism
+  ( GrammarV1CheckedCallableEffectParameterBound (..)
+  , grammarV1CheckedCallableEffectParameterBounds
+  , grammarV1InstantiateCallableEffectBounds
+  )
 import Phil.Surface.Syntax
   ( Located (..)
   , SourcePoint (..)
@@ -47,6 +73,8 @@ main = do
         genericLookupIsExact
     , test "SURF-009 resolved generic identity feeds callable Effects without spelling-derived keys"
         genericIdentityFeedsCallableEffects
+    , test "EFF-003/004 bounded Effects instantiation preserves latent sets and rejects widening"
+        boundedEffectSetInstantiation
     ]
   if and results then pure () else exitFailure
 
@@ -225,6 +253,115 @@ genericIdentityFeedsCallableEffects = do
         == Just (Right expected)
     )
     "callable Effects bridge did not consume the resolver-issued static identity"
+
+boundedEffectSetInstantiation :: Either String ()
+boundedEffectSetInstantiation = do
+  callable <- onlyCallable $ Text.unlines
+    [ "callable Poly[E : Effects] requires {"
+    , "  effects E within {IO, Audit};"
+    , "} () -> Unit {"
+    , "  effects E;"
+    , "}"
+    ]
+  let declarationKey = DeclarationKey "decl.EffectPolymorphism"
+      io = SemanticEffect "IO"
+      audit = SemanticEffect "Audit"
+      network = SemanticEffect "Network"
+      narrower = Set.singleton io
+      upper = Set.fromList [io, audit]
+      wider = Set.fromList [io, audit, network]
+  checkedBound <- case
+      grammarV1CheckedCallableEffectParameterBounds declarationKey callable of
+    Right [bound] -> Right bound
+    other -> Left ("expected one checked Effects parameter bound, got " <> show other)
+  let resolvedE = checkedCallableEffectParameterBoundParameter checkedBound
+      parameter = grammarV1ResolvedGenericParameter resolvedE
+      parameterKey = genericStaticParameterKey parameter
+      coreBound = checkedCallableEffectParameterBoundCore checkedBound
+  assert (genericStaticParameterKind parameter == GenericEffectsKind)
+    "Effects bound resolved to a generic parameter of the wrong kind"
+  assert (effectSetBoundParameterKey coreBound == parameterKey)
+    "Effects bound lost resolver-issued GenericStaticParameterKey"
+  assert (effectSetBoundUpper coreBound == upper)
+    "Effects upper bound changed canonical finite-set identity"
+
+  sourceUse <- case
+      [ effectSet
+      | Located _ (GrammarV1CallableEffects effectSet) <- grammarV1CallableClauses callable
+      ] of
+    [use] -> Right use
+    uses -> Left ("expected one latent Effects use, got " <> show (length uses))
+  let parameterEvidence = GrammarV1ResolvedCallableEffectsParameter
+        { resolvedCallableEffectsSourceParameter = grammarV1ResolvedGenericSource resolvedE
+        , resolvedCallableEffectsParameter = parameter
+        }
+      useEvidence = GrammarV1ResolvedCallableEffectUse
+        { resolvedCallableEffectSourceUse = sourceUse
+        , resolvedCallableEffectUseParameterKey = parameterKey
+        }
+  templates <- case grammarV1ResolvedCallableEffectBounds
+      [parameterEvidence] [useEvidence] callable of
+    Just (Right values) -> Right values
+    other -> Left ("expected one exact callable Effects template, got " <> show other)
+  assert (templates == [GrammarV1CallableEffectsParameterBound parameterKey])
+    "latent callable effect clause changed exact parameter identity"
+
+  narrowActual <- checkedEffectsActual parameter narrower
+  equalActual <- checkedEffectsActual parameter upper
+  wideActual <- checkedEffectsActual parameter wider
+  narrowInstantiation <- mapLeft show
+    (checkBoundedEffectSetInstantiation coreBound narrowActual)
+  equalInstantiation <- mapLeft show
+    (checkBoundedEffectSetInstantiation coreBound equalActual)
+  assert (checkedEffectSetActual narrowInstantiation == narrower)
+    "narrower Effects actual changed during bounded instantiation"
+  assert (checkedEffectSetUpper narrowInstantiation == upper)
+    "narrower Effects actual silently narrowed the public upper bound"
+  assert (checkedEffectSetActual equalInstantiation == upper)
+    "equal Effects actual was not admitted exactly"
+  case checkBoundedEffectSetInstantiation coreBound wideActual of
+    Left (EffectSetBoundExceeded key extra reportedUpper) -> do
+      assert (key == parameterKey)
+        "widening rejection lost exact Effects parameter identity"
+      assert (extra == Set.singleton network)
+        "widening rejection did not report the exact excess effect"
+      assert (reportedUpper == upper)
+        "widening rejection changed the declared upper bound"
+    other -> Left ("wider Effects actual was not rejected exactly: " <> show other)
+
+  instantiated <- mapLeft show
+    (grammarV1InstantiateCallableEffectBounds [narrowInstantiation] templates)
+  assert (instantiated == [narrower])
+    "checked Effects actual did not substitute into the exact callable template"
+
+  let contract = CallableContract
+        { callableContractInterfaceRevision = InterfaceRevision "iface.effect-poly"
+        , callableContractCalleeTransition = PreserveCallee
+        , callableContractEffectBound = narrower
+        }
+      latentUses =
+        [ PossessCallable contract
+        , PassCallable contract
+        , StoreCallable contract
+        , ReturnCallable contract
+        ]
+  assert (inferReachableCallableEffects latentUses == Set.empty)
+    "latent Effects actual incurred invocation effects while only possessed/passed/stored/returned"
+  assert
+    (inferReachableCallableEffects [InvokeCallable contract] == narrower)
+    "invoking an effect-polymorphic callable did not contribute its exact instantiated set"
+
+checkedEffectsActual
+  :: GenericStaticParameter
+  -> Set.Set SemanticEffect
+  -> Either String CheckedGenericStaticActual
+checkedEffectsActual parameter effects = do
+  checked <- mapLeft show
+    (checkGenericStaticActuals
+      [parameter]
+      [DirectGenericStaticActual GenericEffectsKind (effectSetSemanticForm effects)]
+      [])
+  exactlyOne "checked Effects actual" checked
 
 genericParameter
   :: Int

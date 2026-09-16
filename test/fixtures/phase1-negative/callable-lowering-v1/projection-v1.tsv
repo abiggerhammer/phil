@@ -1,0 +1,17 @@
+fixture_id	contract-revision	machine-shape	occurrence	structural-mode	captures	callee-transition	caller-authority	internal-authority	effect-bound	failure-surface	loan-scope	effect-accounting	failure-accounting	assumption-accounting	carrier-accounting	cost-accounting
+P1-NEG-CALL-016-001	mismatch	match	match	match	match	match	match	match	match	match	match	match	match	match	match	match
+P1-NEG-CALL-016-002	match	mismatch	match	match	match	match	match	match	match	match	match	match	match	match	match	match
+P1-NEG-CALL-016-003	match	match	mismatch	match	match	match	match	match	match	match	match	match	match	match	match	match
+P1-NEG-CALL-016-004	match	match	match	mismatch	match	match	match	match	match	match	match	match	match	match	match	match
+P1-NEG-CALL-016-005	match	match	match	match	mismatch	match	match	match	match	match	match	match	match	match	match	match
+P1-NEG-CALL-016-006	match	match	match	match	match	mismatch	match	match	match	match	match	match	match	match	match	match
+P1-NEG-CALL-016-007	match	match	match	match	match	match	mismatch	match	match	match	match	match	match	match	match	match
+P1-NEG-CALL-016-008	match	match	match	match	match	match	match	mismatch	match	match	match	match	match	match	match	match
+P1-NEG-CALL-016-009	match	match	match	match	match	match	match	match	mismatch	match	match	match	match	match	match	match
+P1-NEG-CALL-016-010	match	match	match	match	match	match	match	match	match	mismatch	match	match	match	match	match	match
+P1-NEG-CALL-016-011	match	match	match	match	match	match	match	match	match	match	mismatch	match	match	match	match	match
+P1-NEG-CALL-016-012	match	match	match	match	match	match	match	match	match	match	match	mismatch	match	match	match	match
+P1-NEG-CALL-016-013	match	match	match	match	match	match	match	match	match	match	match	match	mismatch	match	match	match
+P1-NEG-CALL-016-014	match	match	match	match	match	match	match	match	match	match	match	match	match	mismatch	match	match
+P1-NEG-CALL-016-015	match	match	match	match	match	match	match	match	match	match	match	match	match	match	mismatch	match
+P1-NEG-CALL-016-016	match	match	match	match	match	match	match	match	match	match	match	match	match	match	match	mismatch

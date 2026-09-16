@@ -1,0 +1,76 @@
+name: Phase 1 Review R15 Contextual Applicability
+
+on:
+  pull_request:
+    paths:
+      - 'src/Phil/Core/ProviderQualificationIdentity.hs'
+      - 'src/Phil/Core/ProviderQualificationApplicability.hs'
+      - 'src/ProviderQualificationLineageTargetKernel.hs'
+      - 'test/Phase1ReviewR15ContextualApplicabilityMain.hs'
+      - 'test/Phase1ProviderQualificationApplicabilityMain.hs'
+      - 'test/Phase1ProviderQualificationTargetReuseMain.hs'
+      - 'proof/Phil/Core/ProviderQualificationLineageTarget.v'
+      - 'proof/Phil/Core/ProviderQualificationLineageTargetImplementation.v'
+      - 'proof/Phil/Core/ProviderQualificationLineageTargetImplementationExtraction.v'
+      - 'app/ProviderLineageTargetDecisionCorrespondenceMain.hs'
+      - '.github/workflows/phase1-review-r15-contextual-applicability.yml'
+  push:
+    branches: [main]
+    paths:
+      - 'src/Phil/Core/ProviderQualificationIdentity.hs'
+      - 'src/Phil/Core/ProviderQualificationApplicability.hs'
+      - 'src/ProviderQualificationLineageTargetKernel.hs'
+      - 'test/Phase1ReviewR15ContextualApplicabilityMain.hs'
+      - 'test/Phase1ProviderQualificationApplicabilityMain.hs'
+      - 'test/Phase1ProviderQualificationTargetReuseMain.hs'
+      - 'proof/Phil/Core/ProviderQualificationLineageTarget.v'
+      - 'proof/Phil/Core/ProviderQualificationLineageTargetImplementation.v'
+      - 'proof/Phil/Core/ProviderQualificationLineageTargetImplementationExtraction.v'
+      - 'app/ProviderLineageTargetDecisionCorrespondenceMain.hs'
+      - '.github/workflows/phase1-review-r15-contextual-applicability.yml'
+
+permissions:
+  contents: read
+
+jobs:
+  review-r15:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: haskell-actions/setup@v2
+        with:
+          ghc-version: '9.6.7'
+          cabal-version: 'latest'
+      - name: Build complete Haskell substrate
+        run: cabal build all --enable-tests
+      - name: Run R15 and lineage regressions
+        shell: bash
+        run: |
+          set -euo pipefail
+          cabal exec -- runghc -Wall -Werror -isrc test/Phase1ReviewR15ContextualApplicabilityMain.hs
+          cabal exec -- runghc -Wall -Werror -isrc test/Phase1ProviderQualificationApplicabilityMain.hs
+          cabal exec -- runghc -Wall -Werror -isrc test/Phase1ProviderQualificationTargetReuseMain.hs
+          ghc -Wall -Werror -isrc app/ProviderLineageTargetDecisionCorrespondenceMain.hs -o /tmp/review-r15-kernel-controls
+          /tmp/review-r15-kernel-controls
+
+  review-r15-rocq:
+    runs-on: ubuntu-latest
+    container:
+      image: rocq/rocq-prover:9.2.0
+      options: --user root
+    steps:
+      - uses: actions/checkout@v4
+      - name: Recompile and extract contextual applicability kernel
+        shell: bash
+        run: |
+          set -euo pipefail
+          export PATH="/home/rocq/.opam/${COMPILER}/bin:$PATH"
+          rocq c -Q proof/Phil Phil proof/Phil/Core/ProviderQualificationLineageTarget.v
+          rocq c -Q proof/Phil Phil proof/Phil/Core/ProviderQualificationLineageTargetImplementation.v
+          rm -f ProviderQualificationLineageTargetKernel.hs
+          rocq c -Q proof/Phil Phil proof/Phil/Core/ProviderQualificationLineageTargetImplementationExtraction.v
+          test -s ProviderQualificationLineageTargetKernel.hs
+          grep -q 'decideAdmissionContextByFacts' ProviderQualificationLineageTargetKernel.hs
+          test "$(sha256sum ProviderQualificationLineageTargetKernel.hs | cut -d' ' -f1)" = \
+            '4f3c69a02aa36f98cbde41ad2de3b9b29706f5ca281fe71a82bc61272d682999'
+          cmp ProviderQualificationLineageTargetKernel.hs src/ProviderQualificationLineageTargetKernel.hs

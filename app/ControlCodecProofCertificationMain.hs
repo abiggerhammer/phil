@@ -44,7 +44,7 @@ main = do
 
   proofSourceBytes <- ByteString.readFile proofSourcePath
   proofObjectBytes <- ByteString.readFile proofObjectPath
-  proofBundle <- case certifyRocqProof
+  proofBundle <- case packageTrustedRocqProof
       llvmControlCodecCertificationSpec
       proofSourceBytes
       proofObjectBytes of

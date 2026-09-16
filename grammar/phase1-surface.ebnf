@@ -9,7 +9,7 @@
 #   "text"     literal token
 #   <CLASS>    lexical token class
 #   a, b       sequence
-#   a | b      alternatives
+#   a | b       alternatives
 #   [ a ]      optional
 #   { a }      zero or more
 #   ( a )      grouping
@@ -20,11 +20,46 @@
 #   alphanumerics, "_", or "'"; it excludes every alphabetic literal keyword
 #   appearing in this grammar;
 # - <DECIMAL_INTEGER> is one or more ASCII decimal digits;
-# - keyword literals and <UINT_TYPE> take lexical priority over <IDENTIFIER>;
-# - <UINT_TYPE> is "U" followed by one or more ASCII decimal digits; supported
-#   widths are checked semantically, not by the grammar;
-# - <STRING_LITERAL> is a double-quoted UTF-8 string with escapes for \", \\,
-#   \n, \r, and \t; other escapes are rejected.
+# - <DECIMAL_FLOAT> is one or more ASCII decimal digits, ".", then one or more
+#   ASCII decimal digits; a decimal point is required so an unsuffixed token such
+#   as 1 remains an integer literal while 1.0 is a floating literal;
+# - keyword literals, <UINT_TYPE>, and <SINT_TYPE> take lexical priority over
+#   <IDENTIFIER>;
+# - <UINT_TYPE> is "U" followed by one or more ASCII decimal digits; <SINT_TYPE>
+#   is "I" followed by one or more ASCII decimal digits; supported widths are
+#   checked semantically, not by the grammar;
+# - F32 and F64 are reserved primitive-type keywords;
+# - <STRING_LITERAL> is a double-quoted Unicode-scalar sequence with escapes for
+#   \", \\, \n, \r, \t, and exact Unicode scalars written \u{hex}; surrogate,
+#   out-of-range, malformed escapes, raw newline, and raw carriage return reject;
+# - <CHAR_LITERAL> is a single-quoted source form that decodes to exactly one
+#   Unicode scalar, with escapes for \', \\, \n, \r, \t, and \u{hex}; empty,
+#   multi-scalar, surrogate, out-of-range, and malformed forms reject.
+#
+# Numeric surface:
+# - runtime fixed-width integer types are written U<w> and I<w>;
+# - strict floating runtime types are F32 and F64;
+# - unary "-" is the explicit source route for negative signed values and
+#   floating negation; the lexer never folds a sign into a numeric literal;
+# - runtime multiplication, division, and remainder share multiplicative
+#   precedence and are written "*", "/", and "%" respectively;
+# - runtime shifts are written "<<" and ">>" and have lower precedence than
+#   additive +/-, so a + b << k parses as (a + b) << k;
+# - explicit numeric-domain/width/signedness conversion is written
+#     convert e to T
+#   and is distinct from transport ... to ... using ... and accept ... as ...;
+# - parsing these forms never proves numeric range, shift-count validity,
+#   division preconditions, floating-point behavior, or conversion admissibility.
+#
+# Text surface:
+# - runtime Char denotes one Unicode scalar and runtime String denotes an exact
+#   immutable finite scalar sequence; encoding/normalization is not parser work;
+# - metadata strings and runtime String literals share one double-quoted lexical
+#   shape but occupy distinct grammar nonterminals and semantic categories;
+# - runtime Char literals use single quotes and runtime String literals use
+#   double quotes; lexical escape decoding never performs Unicode normalization;
+# - codecs, normalization, Unicode properties, grapheme algorithms, and text
+#   indexing/slicing are explicit later library/provider operations, not syntax.
 #
 # Separators:
 # - commas separate parameter/argument/field lists;
@@ -106,7 +141,7 @@ module_decl = "module", qualified_name, ";" ;
 import_decl = "import", qualified_name, [ "{", identifier_list, "}" ], ";" ;
 
 top_level_decl = { attribute }, declaration ;
-attribute = "@", identifier, "(", string_literal, ")" ;
+attribute = "@", identifier, "(", metadata_string_literal, ")" ;
 
 declaration =
     record_decl
@@ -130,8 +165,13 @@ qualified_name = identifier, { ".", identifier } ;
 identifier_list = identifier, { ",", identifier } ;
 identifier = <IDENTIFIER> ;
 integer_literal = <DECIMAL_INTEGER> ;
+float_literal = <DECIMAL_FLOAT> ;
+char_literal = <CHAR_LITERAL> ;
+metadata_string_literal = <STRING_LITERAL> ;
+runtime_string_literal = <STRING_LITERAL> ;
 uint_type = <UINT_TYPE> ;
-string_literal = <STRING_LITERAL> ;
+sint_type = <SINT_TYPE> ;
+float_type = "F32" | "F64" ;
 structural_mode = "unrestricted" | "affine" | "linear" ;
 
 generic_params = "[", generic_param, { ",", generic_param }, "]" ;
@@ -176,8 +216,12 @@ type_expression =
 nonreference_type_expression =
     "Unit"
   | "Bool"
+  | "Char"
+  | "String"
   | uint_type
-  | "Bytes", "[", expression, "]"
+  | sint_type
+  | float_type
+  | "Bytes", [ "[", expression, "]" ]
   | "Frame", "[", static_reference, "]"
   | "Proof", "[", proposition, "]"
   | "Validated", "[", static_reference, ",", expression, ",", expression, "]"
@@ -446,7 +490,7 @@ field_pattern = identifier, [ "=", pattern ] ;
 expression = base_expression, [ "or", fallback ] ;
 fallback = "fail", failure_target | "reject", base_expression ;
 
-base_expression = command_expression | additive_expression ;
+base_expression = command_expression | shift_expression ;
 
 command_expression =
     construct_expression
@@ -472,17 +516,28 @@ command_expression =
   | fail_expression
   | close_expression
   | release_expression
+  | convert_expression
   | transport_expression
   | accept_expression
+  | invoke_expression
   | prove_expression
   ;
+
+shift_expression =
+  additive_expression,
+  { ( "<<" | ">>" ), additive_expression } ;
 
 additive_expression =
   multiplicative_expression,
   { ( "+" | "-" ), multiplicative_expression } ;
 
 multiplicative_expression =
-  postfix_expression, { "*", postfix_expression } ;
+  unary_expression, { ( "*" | "/" | "%" ), unary_expression } ;
+
+unary_expression =
+    "-", unary_expression
+  | postfix_expression
+  ;
 
 postfix_expression =
     named_postfix_expression
@@ -500,8 +555,17 @@ primary_expression =
   | "true"
   | "false"
   | "unit"
+  | char_literal
+  | runtime_string_literal
+  | float_literal
   | integer_literal
   ;
+
+invoke_expression =
+  "invoke", static_reference, term_arguments ;
+
+convert_expression =
+  "convert", expression, "to", type_expression ;
 
 construct_expression =
   "construct", static_reference,
@@ -636,7 +700,7 @@ proposition_atom =
   ;
 
 relation_proposition =
-  additive_expression, relation_operator, additive_expression ;
+  shift_expression, relation_operator, shift_expression ;
 
 relation_operator =
     "=="

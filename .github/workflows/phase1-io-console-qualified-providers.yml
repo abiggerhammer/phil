@@ -1,0 +1,55 @@
+name: Phase 1 IO-CONSOLE Qualified Providers
+
+on:
+  pull_request:
+    paths:
+      - 'src/Phil/IO/Console.hs'
+      - 'src/Phil/Core/Authority.hs'
+      - 'src/Phil/Core/Callable.hs'
+      - 'src/AuthorityPossessionKernel.hs'
+      - 'test/Phase1IOConsoleProvidersMain.hs'
+      - 'test/Phase1AuthorityPossessionMain.hs'
+      - '.github/workflows/phase1-io-console-qualified-providers.yml'
+  push:
+    branches: [main]
+    paths:
+      - 'src/Phil/IO/Console.hs'
+      - 'src/Phil/Core/Authority.hs'
+      - 'src/Phil/Core/Callable.hs'
+      - 'src/AuthorityPossessionKernel.hs'
+      - 'test/Phase1IOConsoleProvidersMain.hs'
+      - 'test/Phase1AuthorityPossessionMain.hs'
+      - '.github/workflows/phase1-io-console-qualified-providers.yml'
+
+permissions:
+  contents: read
+
+jobs:
+  io-console:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: haskell-actions/setup@v2
+        with:
+          ghc-version: '9.6.7'
+          cabal-version: 'latest'
+
+      - name: Build complete Haskell substrate
+        run: cabal build all --enable-tests
+
+      - name: Strict typecheck authority-bound console production path
+        run: |
+          set -euo pipefail
+          ghc -isrc -Wall -Werror -c src/AuthorityPossessionKernel.hs
+          cabal exec -- ghc -isrc -Wall -Werror -fno-code \
+            src/Phil/Core/Authority.hs \
+            src/Phil/Core/Callable.hs \
+            src/Phil/IO/Console.hs \
+            test/Phase1IOConsoleProvidersMain.hs
+
+      - name: Run IO-CONSOLE provider pressure corpus
+        run: cabal exec -- runghc -isrc -Wall -Werror test/Phase1IOConsoleProvidersMain.hs
+
+      - name: Re-run authority possession control corpus
+        run: cabal exec -- runghc -isrc -Wall -Werror test/Phase1AuthorityPossessionMain.hs

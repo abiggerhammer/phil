@@ -10,6 +10,9 @@ module Phil.Core.Syntax
   , RefSort (..)
   , RefTerm (..)
   , Ty (..)
+  , runtimeBytesLengthIndex
+  , runtimeBytesType
+  , isRuntimeBytesType
   , Value (..)
   , Proposition (..)
   , Outcome (..)
@@ -93,6 +96,21 @@ data Ty
   | TyOpaque Text
   | TyOpaqueSorted Text RefSort
   deriving (Eq, Ord, Show)
+
+-- | Bare Phase-1 Bytes is the same semantic family as Bytes[n], with the exact
+-- length index deliberately not tracked in the type.  This marker is an
+-- internal type-level tag, not an existential value, host-buffer identity, or
+-- claim about any particular runtime length.
+runtimeBytesLengthIndex :: RefTerm
+runtimeBytesLengthIndex = RefOpaque SortNat "phil.bytes.runtime-size-untracked"
+
+runtimeBytesType :: Ty
+runtimeBytesType = TyBytes runtimeBytesLengthIndex
+
+isRuntimeBytesType :: Ty -> Bool
+isRuntimeBytesType ty = case ty of
+  TyBytes index -> index == runtimeBytesLengthIndex
+  _ -> False
 
 data Value
   = VVar Name

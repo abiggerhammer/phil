@@ -1,15 +1,26 @@
 {-# LANGUAGE OverloadedStrings #-}
+{-# LANGUAGE PatternSynonyms #-}
+{-# LANGUAGE ViewPatterns #-}
 
 module Phil.Surface.GrammarV1.Lexer
   ( GrammarV1Token (..)
+  , pattern GrammarSIntType
+  , pattern GrammarFloatType
+  , pattern GrammarStringType
+  , pattern GrammarDecimalFloat
+  , pattern GrammarChar
   , GrammarV1LexDiagnostic (..)
   , grammarV1ReservedWords
+  , runtimeBytesLengthMarker
+  , grammarV1ParserTokensFromSourceTokens
+  , lexGrammarV1SourceTokens
   , lexGrammarV1
   ) where
 
 import Control.Applicative (empty)
 import Control.Monad (void)
-import Data.List (sortOn)
+import Data.Char (chr, digitToInt, ord)
+import Data.List (foldl', sortOn)
 import qualified Data.List.NonEmpty as NonEmpty
 import qualified Data.Set as Set
 import Data.Text (Text)
@@ -27,6 +38,11 @@ import qualified Text.Megaparsec.Char.Lexer as Lexer
 
 type Parser = MP.Parsec Void Text
 
+-- | The original production parser pattern-matches this closed carrier under
+-- -Wall -Werror. New lexical categories are therefore exposed below as checked
+-- pattern synonyms over representations that the incremental parser already
+-- renders and rejects safely. Immediate parser slices can consume the patterns
+-- without turning unsupported new source into a partial match.
 data GrammarV1Token
   = GrammarKeyword Text
   | GrammarIdentifier Text
@@ -35,6 +51,112 @@ data GrammarV1Token
   | GrammarString Text
   | GrammarSymbol Text
   deriving (Eq, Ord, Show)
+
+-- | Exact I<digits> lexical category. During the incremental parser transition,
+-- U<w> and I<w> share the closed GrammarUIntType token carrier while preserving
+-- the exact source prefix. Semantic elaboration must inspect that prefix and
+-- therefore cannot infer signedness from a target representation or host type.
+pattern GrammarSIntType :: Text -> GrammarV1Token
+pattern GrammarSIntType value <- (sIntTokenValue -> Just value)
+  where
+    GrammarSIntType value = GrammarUIntType value
+
+-- | Exact F32/F64 lexical category. Like I<w>, the float type keywords use
+-- the closed GrammarUIntType carrier while preserving exact spelling. The parser
+-- therefore reaches its existing primitive-type path without growing a new AST
+-- constructor; semantic elaboration is solely responsible for float identity.
+pattern GrammarFloatType :: Text -> GrammarV1Token
+pattern GrammarFloatType value <- (floatTypeTokenValue -> Just value)
+  where
+    GrammarFloatType value = GrammarUIntType value
+
+-- | Exact String primitive type keyword routed through the same closed primitive
+-- carrier. Runtime string literals remain GrammarString and are separately gated
+-- by EXEC-024, so type identity and literal identity cannot collapse here.
+pattern GrammarStringType :: Text -> GrammarV1Token
+pattern GrammarStringType value <- (stringTypeTokenValue -> Just value)
+  where
+    GrammarStringType value = GrammarUIntType value
+
+-- | Exact digits '.' digits lexical category. The closed decimal-literal carrier
+-- already preserves arbitrary Text, so float source can reach the existing literal
+-- parser without widening GrammarV1Expression. Contextual scalar elaboration checks
+-- the decimal point and selects F32/F64 semantics; integer contexts still reject it.
+pattern GrammarDecimalFloat :: Text -> GrammarV1Token
+pattern GrammarDecimalFloat value <- (decimalFloatTokenValue -> Just value)
+  where
+    GrammarDecimalFloat value = GrammarDecimalInteger value
+
+-- | Exact runtime character literal after lexical escape decoding. The hidden
+-- symbol prefix is not source syntax and cannot be produced by pSymbol. This
+-- keeps the pre-text parser exhaustive while giving the text parser a distinct
+-- semantic token category for EXEC-024.
+pattern GrammarChar :: Text -> GrammarV1Token
+pattern GrammarChar value <- (charTokenValue -> Just value)
+  where
+    GrammarChar value = GrammarSymbol (charTokenPrefix <> value)
+
+charTokenPrefix :: Text
+charTokenPrefix = "\NULphil-char:"
+
+-- | Source-unspellable marker inserted only when the source writes bare Bytes.
+-- The stable parser continues to consume its existing Bytes[expression] carrier;
+-- elaboration interprets this marker as “exact length not tracked”, never as an
+-- integer literal, existential witness, or host-buffer size.
+runtimeBytesLengthMarker :: Text
+runtimeBytesLengthMarker = "\NULphil-bytes-runtime-length"
+
+sIntTokenValue :: GrammarV1Token -> Maybe Text
+sIntTokenValue token = case token of
+  GrammarUIntType value
+    | isSIntSpelling value -> Just value
+  _ -> Nothing
+
+floatTypeTokenValue :: GrammarV1Token -> Maybe Text
+floatTypeTokenValue token = case token of
+  GrammarUIntType value
+    | isFloatTypeSpelling value -> Just value
+  _ -> Nothing
+
+stringTypeTokenValue :: GrammarV1Token -> Maybe Text
+stringTypeTokenValue token = case token of
+  GrammarUIntType value
+    | isStringTypeSpelling value -> Just value
+  _ -> Nothing
+
+decimalFloatTokenValue :: GrammarV1Token -> Maybe Text
+decimalFloatTokenValue token = case token of
+  GrammarDecimalInteger value
+    | isDecimalFloatSpelling value -> Just value
+  _ -> Nothing
+
+charTokenValue :: GrammarV1Token -> Maybe Text
+charTokenValue token = case token of
+  GrammarSymbol value -> Text.stripPrefix charTokenPrefix value
+  _ -> Nothing
+
+isSIntSpelling :: Text -> Bool
+isSIntSpelling value = case Text.uncons value of
+  Just ('I', digits) -> not (Text.null digits) && Text.all asciiDigit digits
+  _ -> False
+
+isFloatTypeSpelling :: Text -> Bool
+isFloatTypeSpelling value = value == "F32" || value == "F64"
+
+isStringTypeSpelling :: Text -> Bool
+isStringTypeSpelling value = value == "String"
+
+isDecimalFloatSpelling :: Text -> Bool
+isDecimalFloatSpelling value = case Text.splitOn "." value of
+  [whole, fractional] ->
+    not (Text.null whole)
+      && not (Text.null fractional)
+      && Text.all asciiDigit whole
+      && Text.all asciiDigit fractional
+  _ -> False
+
+asciiDigit :: Char -> Bool
+asciiDigit character = character >= '0' && character <= '9'
 
 data GrammarV1LexDiagnostic = GrammarV1LexDiagnostic
   { grammarV1LexDiagnosticPoint :: SourcePoint
@@ -46,12 +168,16 @@ grammarV1ReservedWords :: Set.Set Text
 grammarV1ReservedWords = Set.fromList
   [ "Bool"
   , "Bytes"
+  , "Char"
   , "Effects"
+  , "F32"
+  , "F64"
   , "Frame"
   , "Message"
   , "Nat"
   , "Proof"
   , "Session"
+  , "String"
   , "Type"
   , "Unit"
   , "Validated"
@@ -84,6 +210,7 @@ grammarV1ReservedWords = Set.fromList
   , "consume"
   , "consumes"
   , "continue"
+  , "convert"
   , "correspondence"
   , "cost"
   , "data"
@@ -111,6 +238,7 @@ grammarV1ReservedWords = Set.fromList
   , "instance"
   , "instantiate"
   , "invariant"
+  , "invoke"
   , "join"
   , "law"
   , "let"
@@ -178,11 +306,56 @@ grammarV1ReservedWords = Set.fromList
   , "within"
   ]
 
-lexGrammarV1 :: Text -> Text -> Either GrammarV1LexDiagnostic [Located GrammarV1Token]
-lexGrammarV1 source input =
+-- | Lex the exact source token stream admitted by Grammar v1, before any
+-- production-only parser normalization.  This is the token boundary that can
+-- be compared to the Rocq ConcreteToken model without changing source syntax.
+lexGrammarV1SourceTokens
+  :: Text
+  -> Text
+  -> Either GrammarV1LexDiagnostic [Located GrammarV1Token]
+lexGrammarV1SourceTokens source input =
   case MP.runParser (spaceConsumer *> MP.many pLocatedToken <* MP.eof) (Text.unpack source) input of
     Right tokens -> Right tokens
     Left bundle -> Left (diagnosticFromBundle bundle)
+
+-- | Apply the production-only normalization to an already-lexed canonical
+-- source token stream.  Certified grammar admission must run before this step.
+grammarV1ParserTokensFromSourceTokens
+  :: [Located GrammarV1Token]
+  -> [Located GrammarV1Token]
+grammarV1ParserTokensFromSourceTokens = expandRuntimeBytes
+
+lexGrammarV1 :: Text -> Text -> Either GrammarV1LexDiagnostic [Located GrammarV1Token]
+lexGrammarV1 source input =
+  grammarV1ParserTokensFromSourceTokens <$> lexGrammarV1SourceTokens source input
+
+-- | Normalize omitted Bytes length syntax before the stable structural parser.
+-- Explicit Bytes[...] is byte-for-byte token preserving. For bare Bytes we add
+-- an unspellable synthetic integer carrier so no source expression can collide
+-- with the “index not tracked” case.
+expandRuntimeBytes :: [Located GrammarV1Token] -> [Located GrammarV1Token]
+expandRuntimeBytes [] = []
+expandRuntimeBytes (token : rest)
+  | locatedValue token == GrammarKeyword "Bytes"
+  , not (startsExplicitBytesIndex rest) =
+      token : syntheticIndexTokens token ++ expandRuntimeBytes rest
+  | otherwise = token : expandRuntimeBytes rest
+  where
+    startsExplicitBytesIndex candidates = case candidates of
+      Located _ (GrammarSymbol "[") : _ -> True
+      _ -> False
+
+syntheticIndexTokens :: Located GrammarV1Token -> [Located GrammarV1Token]
+syntheticIndexTokens sourceToken =
+  [ synthetic (GrammarSymbol "[")
+  , synthetic (GrammarDecimalInteger runtimeBytesLengthMarker)
+  , synthetic (GrammarSymbol "]")
+  ]
+  where
+    sourceSpan = locatedSpan sourceToken
+    point = sourceSpanEnd sourceSpan
+    spanAtEnd = SourceSpan point point
+    synthetic = Located spanAtEnd
 
 spaceConsumer :: Parser ()
 spaceConsumer = Lexer.space MPC.space1 (Lexer.skipLineComment "//") empty
@@ -199,8 +372,11 @@ pLocatedToken = do
 
 pToken :: Parser GrammarV1Token
 pToken = MP.choice
-  [ MP.try pString
+  [ MP.try pChar
+  , MP.try pString
   , MP.try pUIntType
+  , MP.try pSIntType
+  , MP.try pDecimalFloat
   , MP.try pDecimalInteger
   , MP.try pIdentifierOrKeyword
   , pSymbol
@@ -213,6 +389,21 @@ pUIntType = do
   MP.notFollowedBy identifierContinue
   pure (GrammarUIntType ("U" <> digits))
 
+pSIntType :: Parser GrammarV1Token
+pSIntType = do
+  void (MPC.char 'I')
+  digits <- Text.pack <$> MP.some MPC.digitChar
+  MP.notFollowedBy identifierContinue
+  pure (GrammarSIntType ("I" <> digits))
+
+pDecimalFloat :: Parser GrammarV1Token
+pDecimalFloat = do
+  whole <- Text.pack <$> MP.some MPC.digitChar
+  void (MPC.char '.')
+  fractional <- Text.pack <$> MP.some MPC.digitChar
+  MP.notFollowedBy identifierContinue
+  pure (GrammarDecimalFloat (whole <> "." <> fractional))
+
 pDecimalInteger :: Parser GrammarV1Token
 pDecimalInteger = do
   digits <- Text.pack <$> MP.some MPC.digitChar
@@ -223,9 +414,13 @@ pIdentifierOrKeyword :: Parser GrammarV1Token
 pIdentifierOrKeyword = do
   name <- Text.pack <$> ((:) <$> identifierStart <*> MP.many identifierContinue)
   pure $
-    if Set.member name grammarV1ReservedWords
-      then GrammarKeyword name
-      else GrammarIdentifier name
+    if isFloatTypeSpelling name
+      then GrammarFloatType name
+      else if isStringTypeSpelling name
+        then GrammarStringType name
+        else if Set.member name grammarV1ReservedWords
+          then GrammarKeyword name
+          else GrammarIdentifier name
 
 identifierStart :: Parser Char
 identifierStart = MPC.letterChar <|> MPC.char '_'
@@ -234,31 +429,65 @@ identifierContinue :: Parser Char
 identifierContinue = MPC.alphaNumChar <|> MPC.char '_' <|> MPC.char '\''
 
 pString :: Parser GrammarV1Token
-pString = GrammarString . Text.pack <$> MP.between (MPC.char '"') (MPC.char '"') (MP.many pStringChar)
+pString =
+  GrammarString . Text.pack
+    <$> MP.between (MPC.char '"') (MPC.char '"') (MP.many (pQuotedScalar '"'))
 
-pStringChar :: Parser Char
-pStringChar =
+pChar :: Parser GrammarV1Token
+pChar = do
+  scalar <- MP.between (MPC.char '\'') (MPC.char '\'') (pQuotedScalar '\'')
+  pure (GrammarChar (Text.singleton scalar))
+
+pQuotedScalar :: Char -> Parser Char
+pQuotedScalar delimiter =
   MP.choice
-    [ MPC.char '\\' *> pEscape
-    , MP.satisfy (\character -> character /= '"' && character /= '\\' && character /= '\n' && character /= '\r')
+    [ MPC.char '\\' *> pEscape delimiter
+    , MP.satisfy
+        (\character ->
+          character /= delimiter
+            && character /= '\\'
+            && character /= '\n'
+            && character /= '\r'
+            && isUnicodeScalar character)
     ]
 
-pEscape :: Parser Char
-pEscape = MP.choice
-  [ '"' <$ MPC.char '"'
+pEscape :: Char -> Parser Char
+pEscape delimiter = MP.choice
+  [ delimiter <$ MPC.char delimiter
   , '\\' <$ MPC.char '\\'
   , '\n' <$ MPC.char 'n'
   , '\r' <$ MPC.char 'r'
   , '\t' <$ MPC.char 't'
+  , MP.try pUnicodeScalarEscape
   ]
+
+pUnicodeScalarEscape :: Parser Char
+pUnicodeScalarEscape = do
+  void (MPC.char 'u')
+  void (MPC.char '{')
+  digits <- MP.some MPC.hexDigitChar
+  void (MPC.char '}')
+  let value = foldl' (\acc digit -> acc * 16 + digitToInt digit) 0 digits
+  if length digits <= 6 && isUnicodeScalarCodePoint value
+    then pure (chr value)
+    else fail "invalid Unicode scalar escape"
+
+isUnicodeScalar :: Char -> Bool
+isUnicodeScalar = isUnicodeScalarCodePoint . ord
+
+isUnicodeScalarCodePoint :: Int -> Bool
+isUnicodeScalarCodePoint value =
+  value >= 0
+    && value <= 0x10ffff
+    && not (value >= 0xd800 && value <= 0xdfff)
 
 pSymbol :: Parser GrammarV1Token
 pSymbol = GrammarSymbol <$> MP.choice (map MP.chunk orderedSymbols)
   where
     orderedSymbols = sortOn (negate . Text.length)
-      [ "->", "=>", "==", "!=", "<=", ">="
+      [ "->", "=>", "==", "!=", "<=", ">=", "<<", ">>"
       , "@", "(", ")", "{", "}", ".", ",", ":", ";"
-      , "[", "]", "|", "+", "-", "*", "=", "<", ">"
+      , "[", "]", "|", "+", "-", "*", "/", "%", "=", "<", ">"
       ]
 
 currentPoint :: Parser SourcePoint

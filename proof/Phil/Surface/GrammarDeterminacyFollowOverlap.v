@@ -15,8 +15,8 @@ Open Scope string_scope.
   #569 established nullable/FIRST fixed points directly over Grammar.v.  This
   file continues the proof-facing audit in Rocq: it computes the FOLLOW fixed
   point, traverses every generated EBNF node with the same local-overlap rules,
-  and checks that the resulting finite set is exactly the generated 15-site
-  certificate from #565 (mutual membership plus exact cardinality).
+  and checks that the resulting finite set is exactly the generated certificate
+  (mutual membership plus exact certificate-relative cardinality).
 
   This still does not prove that any certified overlap is harmless.  Resolver
   lemmas and the admissible-oracle bridge remain successor work.
@@ -445,7 +445,8 @@ Proof.
 Qed.
 
 Theorem phase1_surface_computed_overlap_cardinality_is_exact :
-  List.length phase1_surface_computed_overlaps = 15.
+  List.length phase1_surface_computed_overlaps =
+  List.length phase1_surface_determinacy_certificate.
 Proof.
   vm_compute.
   reflexivity.

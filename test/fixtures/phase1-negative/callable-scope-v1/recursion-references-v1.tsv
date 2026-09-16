@@ -1,0 +1,5 @@
+fixture_id	source_node	target_node
+P1-NEG-CALL-014-001	closure.recursive.a	closure.recursive.a
+P1-NEG-CALL-014-002	closure.recursive.a	closure.recursive.b
+P1-NEG-CALL-014-002	closure.recursive.b	closure.recursive.a
+P1-NEG-CALL-014-003	closure.recursive.a	closure.recursive.missing

@@ -135,7 +135,7 @@ jobs:
           mkdir -p phase1-architecture-import-certification
           mkdir -p architecture-import-production-binding
           CERTIFIER="$(cabal list-bin exe:phil-certify-core-scalar)"
-          "$CERTIFIER" \
+          "$CERTIFIER" --trusted-checked-inputs \
             phase1-arch-import \
             phase1-arch-import-proof/ImportNoninterference.v \
             phase1-arch-import-proof/ImportNoninterference.vo \

@@ -1,0 +1,55 @@
+name: Phase 1 VER-011 Alternative Proof Producers
+
+on:
+  pull_request:
+    paths:
+      - 'src/Phil/Verification/EvidenceLineage.hs'
+      - 'src/Phil/Verification/ProofEvidence.hs'
+      - 'src/Phil/Verification/GenericAssurance.hs'
+      - 'test/Phase1VerificationAlternativeProofProducersMain.hs'
+      - 'test/Phase1VerificationProofProducerCheckerSeparationMain.hs'
+      - 'test/Phase1VerificationEvidenceSubjectRevisionCompetenceMain.hs'
+      - 'test/Phase1VerificationEvidenceReuseInvalidationMain.hs'
+      - 'test/Phase1VerificationGenericAssuranceReuseMain.hs'
+      - '.github/workflows/phase1-ver-011-alternative-proof-producers.yml'
+  push:
+    branches: [main]
+    paths:
+      - 'src/Phil/Verification/EvidenceLineage.hs'
+      - 'src/Phil/Verification/ProofEvidence.hs'
+      - 'src/Phil/Verification/GenericAssurance.hs'
+      - 'test/Phase1VerificationAlternativeProofProducersMain.hs'
+      - 'test/Phase1VerificationProofProducerCheckerSeparationMain.hs'
+      - 'test/Phase1VerificationEvidenceSubjectRevisionCompetenceMain.hs'
+      - 'test/Phase1VerificationEvidenceReuseInvalidationMain.hs'
+      - 'test/Phase1VerificationGenericAssuranceReuseMain.hs'
+      - '.github/workflows/phase1-ver-011-alternative-proof-producers.yml'
+
+permissions:
+  contents: read
+
+jobs:
+  ver-011:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: haskell-actions/setup@v2
+        with:
+          ghc-version: '9.6.7'
+          cabal-version: 'latest'
+
+      - name: Build complete Haskell substrate
+        run: cabal build all --enable-tests
+
+      - name: Run VER-011 alternative proof producer regression
+        run: cabal exec -- runghc -Wall -Werror -isrc test/Phase1VerificationAlternativeProofProducersMain.hs
+
+      - name: Re-run proof producer and evidence competence controls
+        run: |
+          cabal exec -- runghc -Wall -Werror -isrc test/Phase1VerificationProofProducerCheckerSeparationMain.hs
+          cabal exec -- runghc -Wall -Werror -isrc test/Phase1VerificationEvidenceSubjectRevisionCompetenceMain.hs
+          cabal exec -- runghc -Wall -Werror -isrc test/Phase1VerificationEvidenceReuseInvalidationMain.hs
+
+      - name: Re-run generic assurance reuse control
+        run: cabal exec -- runghc -Wall -Werror -isrc test/Phase1VerificationGenericAssuranceReuseMain.hs

@@ -1,0 +1,5 @@
+fixture_id	occurrence_id	transfer	mode
+P1-NEG-CALL-003-001	owner.linear	copy	linear
+P1-NEG-CALL-003-002	owner.linear	move	linear
+P1-NEG-CALL-003-002	owner.linear	move	linear
+P1-NEG-CALL-017-001	owner.affine	move	affine

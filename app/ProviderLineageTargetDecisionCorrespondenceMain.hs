@@ -48,6 +48,13 @@ isApplicability expected actual = case (expected, actual) of
   (AdmissionApplicabilitySelectedAbiDecision, AdmissionApplicabilitySelectedAbiDecision) -> True
   _ -> False
 
+isContext :: AdmissionContextDecision -> AdmissionContextDecision -> Bool
+isContext expected actual = case (expected, actual) of
+  (AdmissionContextAcceptedDecision, AdmissionContextAcceptedDecision) -> True
+  (AdmissionContextOccurrenceDecision, AdmissionContextOccurrenceDecision) -> True
+  (AdmissionContextRealizationDecision, AdmissionContextRealizationDecision) -> True
+  _ -> False
+
 reuse :: Bool -> Bool -> Bool -> Bool -> Bool -> Bool -> Bool -> Bool -> Bool -> Bool -> Bool -> TargetReuseDecision
 reuse = decideTargetReuseByFacts
 
@@ -55,6 +62,9 @@ app :: Bool -> Bool -> Bool -> Bool -> Bool -> Bool -> Bool -> Bool -> Bool -> B
     -> Bool -> Bool -> Bool -> Bool -> Bool -> Bool -> Bool -> Bool -> Bool -> Bool
     -> AdmissionApplicabilityDecision
 app = decideAdmissionApplicabilityByFacts
+
+context :: Bool -> Bool -> AdmissionContextDecision
+context = decideAdmissionContextByFacts
 
 main :: IO ()
 main = do
@@ -158,3 +168,10 @@ main = do
   assert "PROV-014 selected ABI must match" $
     isApplicability AdmissionApplicabilitySelectedAbiDecision
       (app True True True True True True True True True True True True True True True True True True True False)
+
+  assert "REVIEW-R15 exact contextual admission binding accepts" $
+    isContext AdmissionContextAcceptedDecision (context True True)
+  assert "REVIEW-R15 stale provider occurrence rejects" $
+    isContext AdmissionContextOccurrenceDecision (context False True)
+  assert "REVIEW-R15 stale realization context rejects" $
+    isContext AdmissionContextRealizationDecision (context True False)

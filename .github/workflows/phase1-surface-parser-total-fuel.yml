@@ -1,0 +1,167 @@
+name: Phase 1 Surface Parser Total Fuel
+
+on:
+  pull_request:
+  push:
+    branches: [main]
+
+permissions:
+  contents: read
+
+jobs:
+  rocq-parser-total-fuel:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    container:
+      image: rocq/rocq-prover:9.2.0
+      options: --user root
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Derive exact Grammar-v1 inputs
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 scripts/derive_phase1_surface_grammar.py --write
+          python3 scripts/derive_phase1_surface_determinacy_certificate.py --write
+          python3 scripts/derive_phase1_surface_grammar.py --check
+          python3 scripts/derive_phase1_surface_determinacy_certificate.py --check
+
+      - name: Prepare kernel-friendly total-fuel proof modules
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 scripts/patch_total_fuel_nonterminal.py
+          python3 scripts/patch_total_fuel_value_nonterminal.py
+
+      - name: Compile total parser fuel completeness
+        shell: bash
+        run: |
+          set -euo pipefail
+          export PATH="/home/rocq/.opam/${COMPILER}/bin:$PATH"
+          compile() {
+            file="$1"
+            echo "=== compiling ${file} at $(date -u +%FT%TZ) ==="
+            rocq c -Q proof/Phil Phil "${file}"
+            echo "=== finished ${file} at $(date -u +%FT%TZ) ==="
+          }
+          compile proof/Phil/Surface/Grammar.v
+          compile proof/Phil/Surface/GrammarDerivation.v
+          compile proof/Phil/Surface/GrammarDerivationOracle.v
+          compile proof/Phil/Surface/GrammarDeterminacyCertificate.v
+          compile proof/Phil/Surface/GrammarDeterminacyNullableFirst.v
+          compile proof/Phil/Surface/GrammarDeterminacyFollowOverlap.v
+          compile proof/Phil/Surface/GrammarDeterminacySimpleResolvers.v
+          compile proof/Phil/Surface/GrammarDeterminacyStructuralResolvers.v
+          compile proof/Phil/Surface/GrammarDeterminacyPredictiveOracle.v
+          compile proof/Phil/Surface/GrammarDerivationLookahead.v
+          compile proof/Phil/Surface/GrammarDeterminacyWitnessSoundness.v
+          compile proof/Phil/Surface/GrammarDeterminacyContinuationSoundness.v
+          compile proof/Phil/Surface/GrammarDeterminacyFollowCoverage.v
+          compile proof/Phil/Surface/GrammarDeterminacyDerivationPathSoundness.v
+          compile proof/Phil/Surface/GrammarDeterminacyOracleAssemblyCoverage.v
+          compile proof/Phil/Surface/GrammarDeterminacyOracleAssemblyReflection.v
+          compile proof/Phil/Surface/GrammarDeterminacyPredictiveBridge.v
+          compile proof/Phil/Surface/GrammarDeterminacyPredictiveFallbackSoundness.v
+          compile proof/Phil/Surface/GrammarDeterminacyPredictiveConversion.v
+          compile proof/Phil/Surface/GrammarDeterminacyPathPrefixInvariance.v
+          compile proof/Phil/Surface/GrammarDeterminacyActualCanonicalPath.v
+          compile proof/Phil/Surface/GrammarDeterminacyRootedTrailingCommaInvariance.v
+          compile proof/Phil/Surface/GrammarDeterminacyPathSuffixReflection.v
+          compile proof/Phil/Surface/GrammarDeterminacyAlternativeResolverContext.v
+          compile proof/Phil/Surface/GrammarDeterminacyAlternativeTrailingCommaExclusion.v
+          compile proof/Phil/Surface/GrammarDeterminacySimpleResolverSoundness.v
+          compile proof/Phil/Surface/GrammarDeterminacyStructuralScannerSoundness.v
+          compile proof/Phil/Surface/GrammarDeterminacyDelimiterBalance.v
+          compile proof/Phil/Surface/GrammarDeterminacyQualifiedNameSoundness.v
+          compile proof/Phil/Surface/GrammarDeterminacyPatternResolverSoundness.v
+          compile proof/Phil/Surface/GrammarDeterminacyParenthesisNeutralSoundness.v
+          compile proof/Phil/Surface/GrammarDeterminacyPrimaryParenthesisSoundness.v
+          compile proof/Phil/Surface/GrammarDeterminacyAlternativeResolverLift.v
+          compile proof/Phil/Surface/GrammarDeterminacyRelationNeutralSoundness.v
+          compile proof/Phil/Surface/GrammarDeterminacyRelationCommitmentSoundness.v
+          compile proof/Phil/Surface/GrammarDeterminacyAlternativeEarlierDisjoint.v
+          compile proof/Phil/Surface/GrammarDeterminacyAlternativeResolverSemanticCore.v
+          compile proof/Phil/Surface/GrammarDeterminacyStaticArgumentParenthesisSoundness.v
+          compile proof/Phil/Surface/GrammarDeterminacyRefinementBraceSoundness.v
+          compile proof/Phil/Surface/GrammarDeterminacyStaticArgumentBraceBridge.v
+          compile proof/Phil/Surface/GrammarDeterminacyEffectSetBraceSoundness.v
+          compile proof/Phil/Surface/GrammarDeterminacyAlternativeResolverSemanticComplex.v
+          compile proof/Phil/Surface/GrammarDeterminacyAlternativeResolverNoneSemantic.v
+          compile proof/Phil/Surface/GrammarDeterminacyStaticValueResolverNoneFallback.v
+          compile proof/Phil/Surface/GrammarDeterminacyAlternativeResolverNoneConversion.v
+          compile proof/Phil/Surface/GrammarDeterminacyAlternativeResolverSomeSuffix.v
+          compile proof/Phil/Surface/GrammarDeterminacyActualCanonicalResolverSuffix.v
+          compile proof/Phil/Surface/GrammarDeterminacyAlternativeResolverContextFollow.v
+          compile proof/Phil/Surface/GrammarDeterminacyAlternativeResolverSomeConversion.v
+          compile proof/Phil/Surface/GrammarDeterminacyAlternativeResolverTotalConversion.v
+          compile proof/Phil/Surface/GrammarDeterminacyActualCanonicalAlternativeNone.v
+          compile proof/Phil/Surface/GrammarDeterminacyActualCanonicalAlternativeSome.v
+          compile proof/Phil/Surface/GrammarDeterminacyActualCanonicalAlternativeTotal.v
+          compile proof/Phil/Surface/GrammarDeterminacyResolverFollowCompatibility.v
+          compile proof/Phil/Surface/GrammarDeterminacyNonterminalReset.v
+          compile proof/Phil/Surface/GrammarDeterminacyCompleteNonterminalReset.v
+          compile proof/Phil/Surface/GrammarDeterminacySequenceHeadTrailingContext.v
+          compile proof/Phil/Surface/GrammarDeterminacyTrailingCommaConversion.v
+          compile proof/Phil/Surface/GrammarDeterminacyTrailingCommaStop.v
+          compile proof/Phil/Surface/GrammarDeterminacyTrailingCommaOracleLift.v
+          compile proof/Phil/Surface/GrammarDeterminacyChoiceSiteResolverExclusion.v
+          compile proof/Phil/Surface/GrammarDeterminacyStructuralChoiceConversion.v
+          compile proof/Phil/Surface/GrammarDeterminacyMutualPredictiveBridge.v
+          compile proof/Phil/Surface/GrammarParserRecognizer.v
+          compile proof/Phil/Surface/GrammarParserRank.v
+          compile proof/Phil/Surface/GrammarParserGoalRank.v
+          compile proof/Phil/Surface/GrammarParserGlobalGoalRank.v
+          compile proof/Phil/Surface/GrammarParserProgress.v
+          compile proof/Phil/Surface/GrammarParserZeroConsumeNullable.v
+          echo "=== timing GrammarParserTotalFuelStatic.v at $(date -u +%FT%TZ) ==="
+          timeout 300s rocq c -time -Q proof/Phil Phil \
+            proof/Phil/Surface/GrammarParserTotalFuelStatic.v
+          echo "=== timing GrammarParserTotalFuelValue.v at $(date -u +%FT%TZ) ==="
+          timeout 300s rocq c -time -Q proof/Phil Phil \
+            proof/Phil/Surface/GrammarParserTotalFuelValue.v
+          echo "=== compiling split canonical total-fuel proof at $(date -u +%FT%TZ) ==="
+          timeout 300s rocq c -time -Q proof/Phil Phil \
+            proof/Phil/Surface/GrammarParserTotalFuelBase.v
+          timeout 300s rocq c -time -Q proof/Phil Phil \
+            proof/Phil/Surface/GrammarParserTotalFuelNonterminalSupport.v
+          timeout 300s rocq c -time -Q proof/Phil Phil \
+            proof/Phil/Surface/GrammarParserTotalFuelNonterminal.v
+          timeout 300s rocq c -time -Q proof/Phil Phil \
+            proof/Phil/Surface/GrammarParserTotalFuel.v
+
+      - name: Record total-fuel proof identities
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p surface-parser-total-fuel
+          cp \
+            proof/Phil/Surface/GrammarParserTotalFuelStatic.v \
+            proof/Phil/Surface/GrammarParserTotalFuelStatic.vo \
+            proof/Phil/Surface/GrammarParserTotalFuelValue.v \
+            proof/Phil/Surface/GrammarParserTotalFuelValue.vo \
+            proof/Phil/Surface/GrammarParserTotalFuel.v \
+            proof/Phil/Surface/GrammarParserTotalFuel.vo \
+            surface-parser-total-fuel/
+          sha256sum \
+            grammar/phase1-surface.ebnf \
+            proof/Phil/Surface/GrammarParserRecognizer.v \
+            proof/Phil/Surface/GrammarParserRank.v \
+            proof/Phil/Surface/GrammarParserGoalRank.v \
+            proof/Phil/Surface/GrammarParserGlobalGoalRank.v \
+            proof/Phil/Surface/GrammarParserProgress.v \
+            proof/Phil/Surface/GrammarParserZeroConsumeNullable.v \
+            proof/Phil/Surface/GrammarParserTotalFuelStatic.v \
+            proof/Phil/Surface/GrammarParserTotalFuelStatic.vo \
+            proof/Phil/Surface/GrammarParserTotalFuelValue.v \
+            proof/Phil/Surface/GrammarParserTotalFuelValue.vo \
+            proof/Phil/Surface/GrammarParserTotalFuel.v \
+            proof/Phil/Surface/GrammarParserTotalFuel.vo \
+            > surface-parser-total-fuel/identities.sha256
+          cat surface-parser-total-fuel/identities.sha256
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: rocq-surface-parser-total-fuel
+          path: surface-parser-total-fuel
+          if-no-files-found: error

@@ -1,0 +1,15 @@
+fixture_id	definition_id	occurrence_key	interface_revision	callee_transition	declared_successor_interface	declared_successor_state	state_key	initially_available
+P1-NEG-CALL-007-001	pred	callable.linear-preserved.001	callable.linear-preserved.interface.v1	preserve	-	-	-	true
+P1-NEG-CALL-007-002	pred	callable.linear-preserved.001	callable.linear-preserved.interface.v1	preserve	-	-	-	true
+P1-NEG-CALL-007-002	succ	callable.successor.007	callable.successor.interface.v1	preserve	-	-	-	false
+P1-NEG-CALL-008-001	pred	callable.one-shot.001	callable.one-shot.interface.v1	consume	-	-	-	true
+P1-NEG-CALL-008-002	pred	callable.one-shot.001	callable.one-shot.interface.v1	consume	-	-	-	true
+P1-NEG-CALL-008-002	succ	callable.successor.008	callable.successor.interface.v1	preserve	-	-	-	false
+P1-NEG-CALL-009-001	pred	callable.stream.001	callable.stream.interface.v1	replace	callable.stream.interface.v1	stream.S1	stream.S0	true
+P1-NEG-CALL-009-001	succ	callable.stream.002	callable.stream.interface.v1	replace	callable.stream.interface.v1	stream.S1	stream.S1	false
+P1-NEG-CALL-009-002	pred	callable.stream.001	callable.stream.interface.v1	replace	callable.stream.interface.v1	stream.S1	stream.S0	true
+P1-NEG-CALL-009-002	succ	callable.stream.001	callable.stream.interface.v1	replace	callable.stream.interface.v1	stream.S1	stream.S1	false
+P1-NEG-CALL-009-003	pred	callable.stream.001	callable.stream.interface.v1	replace	callable.stream.interface.v1	stream.S1	stream.S0	true
+P1-NEG-CALL-009-003	succ	callable.stream.002	callable.stream.other.v1	replace	callable.stream.other.v1	stream.S1	stream.S1	false
+P1-NEG-CALL-009-004	pred	callable.stream.001	callable.stream.interface.v1	replace	callable.stream.interface.v1	stream.S1	stream.S0	true
+P1-NEG-CALL-009-004	succ	callable.stream.002	callable.stream.interface.v1	replace	callable.stream.interface.v1	stream.S1	stream.S2	false

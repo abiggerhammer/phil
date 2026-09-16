@@ -425,3 +425,65 @@ Proof.
     + apply Nat.eqb_eq. exact H18.
     + apply Nat.eqb_eq. exact H19.
 Qed.
+
+Inductive AdmissionContextDecision : Type :=
+| AdmissionContextAcceptedDecision
+| AdmissionContextOccurrenceDecision
+| AdmissionContextRealizationDecision.
+
+Definition decideAdmissionContextByFacts
+  (occurrence realization : bool) : AdmissionContextDecision :=
+  if occurrence then
+    if realization
+    then AdmissionContextAcceptedDecision
+    else AdmissionContextRealizationDecision
+  else AdmissionContextOccurrenceDecision.
+
+Definition AdmissionContextFactsSatisfied
+  (occurrence realization : bool) : Prop :=
+  occurrence = true /\ realization = true.
+
+Theorem admission_context_decision_accepted_iff :
+  forall occurrence realization,
+    decideAdmissionContextByFacts occurrence realization =
+      AdmissionContextAcceptedDecision <->
+    AdmissionContextFactsSatisfied occurrence realization.
+Proof.
+  intros occurrence realization.
+  unfold decideAdmissionContextByFacts, AdmissionContextFactsSatisfied.
+  destruct occurrence; simpl; [|intuition discriminate].
+  destruct realization; simpl; intuition discriminate.
+Qed.
+
+Definition reflectedAdmissionContextDecision
+  (admission : CheckedProviderQualificationAdmission)
+  (applicability : ProviderConcreteAdmissionApplicability) :
+  AdmissionContextDecision :=
+  decideAdmissionContextByFacts
+    (Nat.eqb
+      (applicabilityRequirementOccurrence applicability)
+      (checkedAdmissionProviderOccurrence admission))
+    (Nat.eqb
+      (applicabilityRealizationRevision applicability)
+      (checkedAdmissionRealizationContext admission)).
+
+Theorem reflected_admission_context_decision_exact :
+  forall admission applicability,
+    reflectedAdmissionContextDecision admission applicability =
+      AdmissionContextAcceptedDecision <->
+    AdmissionContextBound admission applicability.
+Proof.
+  intros admission applicability.
+  unfold reflectedAdmissionContextDecision.
+  rewrite admission_context_decision_accepted_iff.
+  split.
+  - intros [Hoccurrence Hrealization].
+    apply Nat.eqb_eq in Hoccurrence.
+    apply Nat.eqb_eq in Hrealization.
+    constructor; assumption.
+  - intros Hbound.
+    destruct Hbound as [Hoccurrence Hrealization].
+    split.
+    + apply Nat.eqb_eq. exact Hoccurrence.
+    + apply Nat.eqb_eq. exact Hrealization.
+Qed.

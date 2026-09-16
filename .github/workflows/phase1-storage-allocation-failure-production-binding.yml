@@ -109,12 +109,12 @@ jobs:
           cabal exec -- ghc -isrc -Wall -Werror -fno-code src/Phil/Systems/Storage.hs
           cabal exec -- ghc -isrc -Wall -Werror -fno-code src/Phil/Systems/StorageRealizationCertification.hs
           cabal exec -- ghc -isrc -Wall -Werror -fno-code src/Phil/Systems/StorageAllocationFailureCertification.hs
-          cabal exec -- ghc -isrc -Wall -Werror -Wno-unused-imports -fno-code app/StorageAllocationFailureDecisionCorrespondenceMain.hs
+          cabal exec -- ghc -isrc -Wall -Werror -fno-code app/StorageAllocationFailureDecisionCorrespondenceMain.hs
           cabal exec -- ghc -isrc -Wall -Werror -fno-code app/StorageRealizationProductionBindingMain.hs
           cabal exec -- ghc -isrc -Wall -Werror -fno-code app/StorageAllocationFailureProductionBindingMain.hs
           cabal exec -- ghc -isrc -Wall -Werror -fno-code test/Phase1StorageRealizationMain.hs
       - name: Execute exact extracted-kernel controls
-        run: cabal exec -- runghc -Wall -Werror -Wno-unused-imports -isrc app/StorageAllocationFailureDecisionCorrespondenceMain.hs
+        run: cabal exec -- runghc -Wall -Werror -isrc app/StorageAllocationFailureDecisionCorrespondenceMain.hs
       - name: Re-run implementation-refined MEM-001 predecessor controls
         run: cabal exec -- runghc -Wall -Werror -isrc app/StorageRealizationProductionBindingMain.hs
       - name: Execute MEM-002/MEM-003 production-binding controls

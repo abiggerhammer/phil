@@ -6,7 +6,7 @@ module Phil.Assurance.RocqBundle
   , RocqProofPartResult (..)
   , RocqProofBundleResult (..)
   , RocqBundleCertificationError (..)
-  , certifyRocqProofBundle
+  , packageTrustedRocqProofBundle
   ) where
 
 import Control.Monad (unless, when)
@@ -78,7 +78,7 @@ data RocqBundleCertificationError
   deriving (Eq, Show)
 
 checkerProfile :: Text
-checkerProfile = "rocq/9.2.0 container; rocq c; proof-assistant-theorem/v1"
+checkerProfile = "rocq/9.2.0 externally checked; trusted-packaging/proof-assistant-theorem/v1"
 
 certificationValidity :: ValidityScope
 certificationValidity = ValidityScope (Map.fromList
@@ -90,11 +90,15 @@ certificationValidity = ValidityScope (Map.fromList
 certificationValidityContext :: Map.Map Text Text
 certificationValidityContext = validityDimensions certificationValidity
 
-certifyRocqProofBundle
+-- | Package a bundle of proof bytes already checked by a trusted Rocq producer.
+--
+-- This pure boundary hashes and binds supplied source/object bytes but does not
+-- run or authenticate Rocq; successful checking is an explicit caller premise.
+packageTrustedRocqProofBundle
   :: RocqProofBundleSpec
   -> [(ByteString.ByteString, ByteString.ByteString)]
   -> Either RocqBundleCertificationError RocqProofBundleResult
-certifyRocqProofBundle spec inputs = do
+packageTrustedRocqProofBundle spec inputs = do
   validateSpec spec
   let parts = rocqBundleParts spec
   unless (length parts == length inputs) $
@@ -276,8 +280,8 @@ bundleEvidence revision result = provisional
       , evidenceObligationRevision = revisionId revision
       , evidenceAssuranceKind = ProofAssistantTheorem
       , evidenceRole = rocqPartRole part
-      , evidenceProducer = "Rocq 9.2.0"
-      , evidenceChecker = "Rocq kernel through successful `rocq c`, then Phil assurance proof-bundle manifest verification"
+      , evidenceProducer = "trusted externally checked Rocq 9.2.0 inputs"
+      , evidenceChecker = "Phil trusted proof-bundle packaging boundary; successful Rocq checking is an explicit caller precondition"
       , evidenceArtifact = Just (rocqPartResultCertificateArtifact result)
       , evidenceInputDigests =
           [ artifactDigest (rocqCertificateSourceArtifact certificate)

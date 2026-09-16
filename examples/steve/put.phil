@@ -1,0 +1,23 @@
+component StevePut provides Unit {
+    let digestDecision = borrow candidate as digestView {
+        digest_compute(digestView)
+    }
+
+    decide digestDecision {
+        computed(contentId) => {
+            decide blob_install(contentId, candidate) {
+                installed => {
+                    return unit
+                }
+
+                already-exists => {
+                    return unit
+                }
+
+                storage-failure(reason) => {
+                    return unit
+                }
+            }
+        }
+    }
+}

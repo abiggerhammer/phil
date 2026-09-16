@@ -12,8 +12,8 @@ module Phil.Assurance.Rocq
   , coreScalarCertificationClaim
   , coreScalarTheorems
   , renderRocqProofCertificate
-  , certifyRocqProof
-  , certifyCoreScalarRocqProof
+  , packageTrustedRocqProof
+  , packageTrustedCoreScalarRocqProof
   ) where
 
 import Control.Monad (unless)
@@ -78,7 +78,7 @@ data RocqCertificationError
   deriving (Eq, Show)
 
 checkerProfile :: Text
-checkerProfile = "rocq/9.2.0 container; rocq c; proof-assistant-theorem/v1"
+checkerProfile = "rocq/9.2.0 externally checked; trusted-packaging/proof-assistant-theorem/v1"
 
 certificationValidity :: ValidityScope
 certificationValidity = ValidityScope (Map.fromList
@@ -249,8 +249,8 @@ specEvidence spec revision certificate artifact = provisional
       , evidenceObligationRevision = revisionId revision
       , evidenceAssuranceKind = ProofAssistantTheorem
       , evidenceRole = EvidenceRole "establishes"
-      , evidenceProducer = "Rocq 9.2.0"
-      , evidenceChecker = "Rocq kernel through successful `rocq c`, then Phil assurance manifest verification"
+      , evidenceProducer = "trusted externally checked Rocq 9.2.0 inputs"
+      , evidenceChecker = "Phil trusted packaging boundary; successful Rocq checking is an explicit caller precondition"
       , evidenceArtifact = Just artifact
       , evidenceInputDigests =
           [ artifactDigest (rocqCertificateSourceArtifact certificate)
@@ -266,12 +266,18 @@ specEvidence spec revision certificate artifact = provisional
       , evidenceCostRefs = []
       }
 
-certifyRocqProof
+-- | Package proof bytes that a trusted caller has already checked with Rocq.
+--
+-- This function deliberately does not run or authenticate Rocq. Calling it is
+-- an explicit trust assertion, suitable for compile-before-package workflows
+-- whose producer step is already inside the trusted build boundary. It must
+-- not be used as untrusted proof ingress.
+packageTrustedRocqProof
   :: RocqCertificationSpec
   -> ByteString.ByteString
   -> ByteString.ByteString
   -> Either RocqCertificationError RocqCertificationBundle
-certifyRocqProof spec sourceBytes compiledBytes = do
+packageTrustedRocqProof spec sourceBytes compiledBytes = do
   sourceText <- case TextEncoding.decodeUtf8' sourceBytes of
     Left _ -> Left RocqSourceIsNotUtf8
     Right value -> Right value
@@ -348,11 +354,11 @@ certifyRocqProof spec sourceBytes compiledBytes = do
         hasDeclaration keyword =
           (keyword <> " " <> theoremName) `Text.isInfixOf` sourceText
 
-certifyCoreScalarRocqProof
+packageTrustedCoreScalarRocqProof
   :: ByteString.ByteString
   -> ByteString.ByteString
   -> Either RocqCertificationError RocqCertificationBundle
-certifyCoreScalarRocqProof = certifyRocqProof coreScalarCertificationSpec
+packageTrustedCoreScalarRocqProof = packageTrustedRocqProof coreScalarCertificationSpec
 
 digestRawBytes :: ByteString.ByteString -> Digest
 digestRawBytes value = Digest . Text.pack . concatMap hexByte . ByteString.unpack $

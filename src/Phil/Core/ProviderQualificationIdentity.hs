@@ -119,6 +119,8 @@ data CheckedProviderQualificationAdmissionIdentity = CheckedProviderQualificatio
   { checkedQualificationAdmissionClaimRevision :: QualificationClaimRevision
   , checkedQualificationAdmissionEvidenceRevision :: QualificationEvidenceRevision
   , checkedQualificationAdmissionRevision :: QualificationAdmissionRevision
+  , checkedQualificationAdmissionProviderOccurrence :: Text
+  , checkedQualificationAdmissionRealizationContextRevision :: Text
   , checkedQualificationAdmissionDecision :: ProviderQualificationAdmissionDecision
   }
   deriving (Eq, Ord, Show)
@@ -251,6 +253,10 @@ checkQualificationAdmissionIdentity claim evidence admission =
         { checkedQualificationAdmissionClaimRevision = expectedClaim
         , checkedQualificationAdmissionEvidenceRevision = expectedEvidence
         , checkedQualificationAdmissionRevision = deriveQualificationAdmissionRevision admission
+        , checkedQualificationAdmissionProviderOccurrence =
+            qualificationAdmissionProviderOccurrence admission
+        , checkedQualificationAdmissionRealizationContextRevision =
+            qualificationAdmissionRealizationContextRevision admission
         , checkedQualificationAdmissionDecision = qualificationAdmissionDecision admission
         }
   where

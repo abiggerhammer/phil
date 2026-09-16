@@ -5,7 +5,13 @@ module Phil.Compiler
   , SourceProjectionError (..)
   , RunnableResult (..)
   , RunnableProgram (..)
+  , CompilerTarget (..)
+  , supportedCompilerTargets
+  , compilerTargetName
+  , parseCompilerTarget
+  , compilerTargetLLVMProfile
   , compileRunnable
+  , compileRunnableForTarget
   , compileRunnableUnit
   , verifyRunnableSourceProjection
   , renderRunnableCompileError
@@ -112,6 +118,38 @@ data RunnableProgram = RunnableProgram
   }
   deriving (Eq, Show)
 
+-- | Public host-target identity for the ordinary conservative compiler path.
+--
+-- This is deliberately separate from the Steve/runtime-choice target profile:
+-- ordinary runnable lowering does not acquire the provider ABI merely because
+-- it is emitted for the same host architecture.
+data CompilerTarget
+  = CompilerTargetX86_64UnknownLinuxGNU
+  | CompilerTargetAArch64AppleDarwin
+  deriving (Bounded, Enum, Eq, Ord, Show)
+
+supportedCompilerTargets :: [CompilerTarget]
+supportedCompilerTargets = [minBound .. maxBound]
+
+compilerTargetName :: CompilerTarget -> Text
+compilerTargetName target = case target of
+  CompilerTargetX86_64UnknownLinuxGNU -> "x86_64-unknown-linux-gnu"
+  CompilerTargetAArch64AppleDarwin -> "aarch64-apple-darwin"
+
+parseCompilerTarget :: Text -> Maybe CompilerTarget
+parseCompilerTarget targetName = case targetName of
+  "x86_64-unknown-linux-gnu" -> Just CompilerTargetX86_64UnknownLinuxGNU
+  "aarch64-apple-darwin" -> Just CompilerTargetAArch64AppleDarwin
+  _ -> Nothing
+
+compilerTargetLLVMProfile :: CompilerTarget -> LLVMTargetProfile
+compilerTargetLLVMProfile target = case target of
+  CompilerTargetX86_64UnknownLinuxGNU -> phase0LLVMTarget
+  CompilerTargetAArch64AppleDarwin -> phase0LLVMTarget
+    { llvmTargetTripleName = "aarch64-apple-darwin"
+    , llvmTargetDataLayout = "e-m:o-i64:64-i128:128-n32:64-S128"
+    }
+
 data LoweredBody = LoweredBody
   { loweredValues :: Map.Map ValueId SystemsValue
   , loweredOperations :: [SystemsOp]
@@ -138,7 +176,14 @@ data ExpectedScalarProjection = ExpectedScalarProjection
   deriving (Eq, Show)
 
 compileRunnable :: Text -> Text -> Either RunnableCompileError RunnableProgram
-compileRunnable sourceName source = do
+compileRunnable = compileRunnableForTarget CompilerTargetX86_64UnknownLinuxGNU
+
+compileRunnableForTarget
+  :: CompilerTarget
+  -> Text
+  -> Text
+  -> Either RunnableCompileError RunnableProgram
+compileRunnableForTarget target sourceName source = do
   surfaceFile <- mapLeft RunnableParseError (parseSurfaceFile sourceName source)
   component <- requireSingleComponent surfaceFile
   result <- requireRunnableHeader component
@@ -152,8 +197,9 @@ compileRunnable sourceName source = do
     verifyScalarDataflow systemsArtifact
   mapLeft RunnableSourceProjectionError $
     verifySourceProjection result component systemsArtifact
-  let llvmArtifact = lowerSystemsConservative phase0LLVMTarget systemsArtifact
-      llvmContext = runnableLLVMContext systemsContext phase0LLVMTarget
+  let targetProfile = compilerTargetLLVMProfile target
+      llvmArtifact = lowerSystemsConservative targetProfile systemsArtifact
+      llvmContext = runnableLLVMContext systemsContext targetProfile
   mapLeft RunnableLLVMVerificationError $
     verifyLLVMEmission llvmContext systemsArtifact llvmArtifact
   Right RunnableProgram
@@ -237,7 +283,7 @@ buildRunnableSystems sourceDigest result locatedComponent = do
     RunnableUnit -> lowerUnitBody (componentBody (locatedValue locatedComponent))
     RunnableScalar scalarType ->
       lowerScalarBody scalarType (componentBody (locatedValue locatedComponent))
-  let entryBlock = BlockId "entry"
+  let entryBlock = BlockId "block.entry"
       blockValue = SystemsBlock
         { systemsBlockId = entryBlock
         , systemsBlockOps = loweredOperations body
@@ -431,13 +477,16 @@ scalarIntegerLiteral scalarType value =
       Right literal
     ScalarBool -> fragment "boolean scalar lowering does not accept integer literals"
 
+sourceScalarValueId :: Text -> ValueId
+sourceScalarValueId name = ValueId ("source.value." <> name)
+
 defineNamedScalar
   :: Text
   -> ScalarLiteral
   -> ScalarLowerState
   -> Either RunnableCompileError ScalarLowerState
 defineNamedScalar name literal state = do
-  let valueId = ValueId name
+  let valueId = sourceScalarValueId name
   unless (Map.notMember valueId (scalarValues state)) $
     fragment ("Systems scalar value identity is already defined: " <> name)
   Right (appendScalarDefinition name valueId literal state)
@@ -456,7 +505,7 @@ freshSyntheticValue :: ScalarLowerState -> (ValueId, Int)
 freshSyntheticValue state = choose (scalarSyntheticIndex state)
   where
     choose index =
-      let candidate = ValueId ("return.value." <> Text.pack (show index))
+      let candidate = ValueId ("synthetic.return.value." <> Text.pack (show index))
       in if Map.member candidate (scalarValues state)
           then choose (index + 1)
           else (candidate, index + 1)
@@ -609,7 +658,7 @@ expectedScalarProjection scalarType = go Map.empty Map.empty
               case locatedValue expression of
                 IntegerExpression value -> do
                   literal <- projectionIntegerLiteral scalarType value
-                  let valueId = ValueId name
+                  let valueId = sourceScalarValueId name
                   go
                     (Map.insert name valueId bindings)
                     (Map.insert valueId literal definitions)

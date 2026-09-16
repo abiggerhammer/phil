@@ -29,6 +29,7 @@ module Phil.Core.ConcurrencyRendezvousCertification
   , verifyRendezvousMessageCoarseKernelFacts
   , verifyExactInternalRendezvousKernelFacts
   , certifyProcessRendezvous
+  , certifyProcessRendezvousSuccessor
   , certifyRestrictedProcessRendezvous
   ) where
 
@@ -61,13 +62,13 @@ import Phil.Core.ProcessParticipants
   , ProtocolRoleOccurrence (..)
   )
 import Phil.Core.ProcessRendezvous
-  ( ProcessCommunicationAttempt (JointProcessRendezvous)
-  , ProcessCommunicationState (..)
+  ( ProcessCommunicationState (..)
   , ProcessRendezvousError (..)
   , ProcessRendezvousRequest (..)
   , ProcessRendezvousSide (..)
   , RestrictedMessageTransfer (..)
-  , checkProcessCommunication
+  , checkProcessCommunicationState
+  , checkProcessCommunicationSuccessor
   , checkRestrictedProcessRendezvous
   , communicationStateFromActivation
   )
@@ -219,6 +220,7 @@ data ConcurrencyRendezvousCertificationError
   | ConcurrencyRendezvousMessageError BoundaryMessageError
   | ConcurrencyRendezvousMessageTypeMismatch Ty Ty
   | ConcurrencyRendezvousMessageNotBoundToProtocol RendezvousMessageEvidence
+  | ConcurrencyRendezvousMessageTransferRequired Ty
   | ConcurrencyRendezvousMessageMissing ProcessKey
   | ConcurrencyRendezvousEndpointKernelDisagreement RendezvousEndpointKernelFacts
   | ConcurrencyRendezvousParticipantKernelDisagreement RendezvousParticipantKernelFacts
@@ -334,13 +336,33 @@ certifyProcessRendezvous activation protocol contexts request evidence = do
   beforeState <- mapLeft ConcurrencyRendezvousNativeError $
     communicationStateFromActivation
       (certifiedRendezvousActivationState activation) contexts
-  updatedContexts <- mapLeft ConcurrencyRendezvousNativeError $
-    checkProcessCommunication
+  afterState <- mapLeft ConcurrencyRendezvousNativeError $
+    checkProcessCommunicationState
       (certifiedRendezvousProtocolInstance protocol)
       (certifiedRendezvousActivationNetwork activation)
-      contexts
-      (JointProcessRendezvous request)
-  let afterState = beforeState { communicationProtocolContexts = updatedContexts }
+      beforeState
+      request
+  certifyAcceptedRendezvous activation protocol beforeState afterState request Nothing evidence
+
+-- | Certify one rendezvous from the exact live successor of a previous
+-- certified rendezvous. The opaque predecessor supplies state provenance; the
+-- native live transition rechecks exact instance/role identity, current
+-- duality, and both local protocol actions.
+certifyProcessRendezvousSuccessor
+  :: CertifiedRendezvousActivation
+  -> CertifiedRendezvousProtocol
+  -> CertifiedRendezvousResult
+  -> ProcessRendezvousRequest
+  -> RendezvousMessageEvidence
+  -> Either ConcurrencyRendezvousCertificationError CertifiedRendezvousResult
+certifyProcessRendezvousSuccessor activation protocol predecessor request evidence = do
+  let beforeState = certifiedRendezvousState predecessor
+  afterState <- mapLeft ConcurrencyRendezvousNativeError $
+    checkProcessCommunicationSuccessor
+      (certifiedRendezvousProtocolInstance protocol)
+      (certifiedRendezvousActivationNetwork activation)
+      beforeState
+      request
   certifyAcceptedRendezvous activation protocol beforeState afterState request Nothing evidence
 
 certifyRestrictedProcessRendezvous
@@ -393,6 +415,7 @@ certifyAcceptedRendezvous activation protocol beforeState afterState request tra
     checkProtocolAction receiverAction receiverBefore
   actualType <- reflectedMessageType senderProcess receiverProcess senderStep receiverStep
   verifyMessageEvidence protocol actualType evidence
+  verifyTransferEvidence actualType transfer
 
   let endpointFacts = rendezvousEndpointFacts
         protocol sender receiver
@@ -447,12 +470,13 @@ rendezvousEndpointFacts protocol sender receiver senderBefore receiverBefore sen
           && rendezvousInstance receiver == exactInstance
     , rendezvousSenderRoleExact =
         protocolEndpointRole (checkedProtocolPredecessor senderStep)
-          == certifiedRendezvousPrimaryRole protocol
-          && rendezvousRole sender == certifiedRendezvousPrimaryRole protocol
+          == rendezvousRole sender
+          && certifiedRoleMember protocol (rendezvousRole sender)
     , rendezvousReceiverRoleExact =
         protocolEndpointRole (checkedProtocolPredecessor receiverStep)
-          == certifiedRendezvousPeerRole protocol
-          && rendezvousRole receiver == certifiedRendezvousPeerRole protocol
+          == rendezvousRole receiver
+          && certifiedRolePairExact protocol
+              (rendezvousRole sender) (rendezvousRole receiver)
     , rendezvousCurrentSessionsDual =
         protocolEndpointSession (checkedProtocolPredecessor receiverStep)
           == dualSession (protocolEndpointSession (checkedProtocolPredecessor senderStep))
@@ -461,6 +485,22 @@ rendezvousEndpointFacts protocol sender receiver senderBefore receiverBefore sen
   where
     exactInstance = binaryProtocolInstanceRevision
       (certifiedRendezvousProtocolInstance protocol)
+
+certifiedRoleMember :: CertifiedRendezvousProtocol -> ProtocolRoleKey -> Bool
+certifiedRoleMember protocol role =
+  role == certifiedRendezvousPrimaryRole protocol
+    || role == certifiedRendezvousPeerRole protocol
+
+certifiedRolePairExact
+  :: CertifiedRendezvousProtocol
+  -> ProtocolRoleKey
+  -> ProtocolRoleKey
+  -> Bool
+certifiedRolePairExact protocol senderRole receiverRole =
+  (senderRole == certifiedRendezvousPrimaryRole protocol
+    && receiverRole == certifiedRendezvousPeerRole protocol)
+  || (senderRole == certifiedRendezvousPeerRole protocol
+    && receiverRole == certifiedRendezvousPrimaryRole protocol)
 
 rendezvousParticipantFacts
   :: CertifiedRendezvousActivation
@@ -541,6 +581,20 @@ rendezvousMessageCoarseFacts protocol beforeState afterState sender receiver tra
           (restrictedMessageOccurrence moved)
           (communicationRestrictedOwners afterState)
           == Just (rendezvousProcess receiver, restrictedMessageReceiverName moved)
+
+verifyTransferEvidence
+  :: Ty
+  -> Maybe RestrictedMessageTransfer
+  -> Either ConcurrencyRendezvousCertificationError ()
+verifyTransferEvidence actualType transfer =
+  case transfer of
+    Nothing
+      | intrinsicBoundaryMessageType actualType -> Right ()
+      | otherwise -> Left (ConcurrencyRendezvousMessageTransferRequired actualType)
+    Just moved
+      | restrictedMessageType moved == actualType -> Right ()
+      | otherwise -> Left (ConcurrencyRendezvousMessageTypeMismatch
+          actualType (restrictedMessageType moved))
 
 verifyMessageEvidence
   :: CertifiedRendezvousProtocol

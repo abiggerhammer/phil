@@ -1,0 +1,13 @@
+fixture_id	role	machine_shape	interface_revision	transition_kind	successor_revision	successor_state
+P1-NEG-CALL-012-001	expected	bytes -> result	callable.expected.v1	preserve	-	-
+P1-NEG-CALL-012-001	actual	bytes -> result	callable.actual.v7	preserve	-	-
+P1-NEG-CALL-012-002	expected	bytes -> result	callable.expected.v1	preserve	-	-
+P1-NEG-CALL-012-002	actual	bytes -> result	callable.actual.v7	preserve	-	-
+P1-NEG-CALL-012-003	expected	bytes -> result	callable.expected.v1	preserve	-	-
+P1-NEG-CALL-012-003	actual	bytes -> result	callable.actual.v7	preserve	-	-
+P1-NEG-CALL-012-004	expected	bytes -> result	callable.expected.v1	preserve	-	-
+P1-NEG-CALL-012-004	actual	bytes -> result	callable.actual.v7	consume	-	-
+P1-NEG-CALL-012-005	expected	bytes -> result	callable.actual.v7	replace	callable.successor.v1	state-a
+P1-NEG-CALL-012-005	actual	bytes -> result	callable.actual.v7	replace	callable.successor.v1	state-b
+P1-NEG-CALL-012-006	expected	bytes -> result	callable.expected.v1	preserve	-	-
+P1-NEG-CALL-012-006	actual	u64 -> result	callable.actual.v7	preserve	-	-

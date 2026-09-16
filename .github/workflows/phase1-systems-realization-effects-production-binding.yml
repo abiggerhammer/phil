@@ -84,9 +84,9 @@ jobs:
           set -euo pipefail
           ghc -Wall -Werror -fno-code src/SystemsRealizationEffectsKernel.hs
           cabal exec -- ghc -isrc -Wall -Werror -fno-code src/Phil/Systems/TargetStrengthening.hs
-          cabal exec -- ghc -isrc -Wall -Werror -Wno-name-shadowing -fno-code src/Phil/Systems/StagingEffect.hs
-          cabal exec -- ghc -isrc -Wall -Werror -Wno-name-shadowing -fno-code src/Phil/Systems/NextStageRequirement.hs
-          cabal exec -- ghc -isrc -Wall -Werror -Wno-name-shadowing -Wno-unused-imports -fno-code src/Phil/Systems/StageClosure.hs
+          cabal exec -- ghc -isrc -Wall -Werror -fno-code src/Phil/Systems/StagingEffect.hs
+          cabal exec -- ghc -isrc -Wall -Werror -fno-code src/Phil/Systems/NextStageRequirement.hs
+          cabal exec -- ghc -isrc -Wall -Werror -fno-code src/Phil/Systems/StageClosure.hs
       - name: Execute 33 direct controls through production kernel
         run: |
           set -euo pipefail
@@ -98,16 +98,16 @@ jobs:
         run: |
           set -euo pipefail
           cabal exec -- ghc -isrc -Wall -Werror -fno-code test/Phase1TargetStrengtheningMain.hs
-          cabal exec -- ghc -isrc -Wall -Werror -Wno-name-shadowing -fno-code test/Phase1StagingEffectMain.hs
-          cabal exec -- ghc -isrc -Wall -Werror -Wno-name-shadowing -fno-code test/Phase1NextStageRequirementMain.hs
-          cabal exec -- ghc -isrc -Wall -Werror -Wno-name-shadowing -Wno-unused-imports -fno-code test/Phase1StageClosureMain.hs
+          cabal exec -- ghc -isrc -Wall -Werror -fno-code test/Phase1StagingEffectMain.hs
+          cabal exec -- ghc -isrc -Wall -Werror -fno-code test/Phase1NextStageRequirementMain.hs
+          cabal exec -- ghc -isrc -Wall -Werror -fno-code test/Phase1StageClosureMain.hs
       - name: Re-run unchanged 68-case REALIZE corpus and 20-case final closure corpus
         run: |
           set -euo pipefail
           cabal exec -- runghc -Wall -Werror -isrc test/Phase1TargetStrengtheningMain.hs
-          cabal exec -- runghc -Wall -Werror -Wno-name-shadowing -isrc test/Phase1StagingEffectMain.hs
-          cabal exec -- runghc -Wall -Werror -Wno-name-shadowing -isrc test/Phase1NextStageRequirementMain.hs
-          cabal exec -- runghc -Wall -Werror -Wno-name-shadowing -Wno-unused-imports -isrc test/Phase1StageClosureMain.hs
+          cabal exec -- runghc -Wall -Werror -isrc test/Phase1StagingEffectMain.hs
+          cabal exec -- runghc -Wall -Werror -isrc test/Phase1NextStageRequirementMain.hs
+          cabal exec -- runghc -Wall -Werror -isrc test/Phase1StageClosureMain.hs
       - name: Record production-binding identities
         run: |
           set -euo pipefail

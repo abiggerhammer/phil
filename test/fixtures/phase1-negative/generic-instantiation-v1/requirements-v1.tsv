@@ -1,0 +1,9 @@
+fixture_id	requirement_id	requirement_kind	parameter_name	value
+P1-NEG-GEN-007-001	provider	provider-contract	provider.compare	provider.compare.v1
+P1-NEG-GEN-007-002	provider	provider-contract	provider.compare	provider.compare.v1
+P1-NEG-GEN-008-001	provider	provider-contract	provider.compare	provider.compare.v1
+P1-NEG-GEN-008-001	law	proposition	-	StrictWeakOrdering
+P1-NEG-GEN-008-002	law	proposition	-	StrictWeakOrdering
+P1-NEG-GEN-012-001	law	proposition	-	StrictWeakOrdering
+P1-NEG-GEN-012-002	law	proposition	-	StrictWeakOrdering
+P1-NEG-GEN-012-003	law	proposition	-	StrictWeakOrdering

@@ -6,7 +6,14 @@ module Phil.Surface.Check.Types
   , FieldInfo (..)
   , SurfaceShape (..)
   , InitialBinding (..)
+  , PrimitiveArgumentDiscipline (..)
+  , ProviderOutcomeSpec (..)
+  , CallableOutcomeControlSpec (..)
+  , CallableOutcomeSpec (..)
+  , CallableOutcomeResourceBinding (..)
+  , CallableOutcomeResourceSpec (..)
   , PrimitiveSemantics (..)
+  , SurfaceCallableSignature (..)
   , ReleaseRequirement (..)
   , ReleaseSemanticAccount (..)
   , ReleaseTransitionOutcome (..)
@@ -37,7 +44,7 @@ import Phil.Core.Recognition
   , PendingRawView
   , RecognitionFailure
   )
-import Phil.Core.Static (StaticContext)
+import Phil.Core.Static (DeclarationKey, StaticContext)
 import Phil.Core.Syntax
   ( Control
   , FrameId
@@ -71,6 +78,7 @@ data RejectionClass
   | OpaqueProof
   | UncheckedArithmetic
   | UnknownPrimitive
+  | UnknownCallable
   | TypeMismatch
   | ReleaseCompetence
   deriving (Eq, Ord, Show)
@@ -114,6 +122,40 @@ data InitialBinding = InitialBinding
   }
   deriving (Eq, Show)
 
+data PrimitiveArgumentDiscipline
+  = PrimitiveReadOnly
+  | PrimitiveConsume
+  deriving (Eq, Ord, Show)
+
+data ProviderOutcomeSpec = ProviderOutcomeSpec
+  { providerOutcomeLabel :: Text
+  , providerOutcomePayload :: [(Mode, Ty)]
+  }
+  deriving (Eq, Ord, Show)
+
+-- | Neutral caller-control shape for an already checked callable outcome.
+-- Surface may continue ordinary checking or close with the exact declared
+-- terminal outcome. Fatal control remains outside this carrier until Core has
+-- an exact fatal `Control` constructor.
+data CallableOutcomeControlSpec
+  = CallableOutcomeContinues
+  | CallableOutcomeCloses Outcome
+  deriving (Eq, Ord, Show)
+
+-- | Neutral source-level branch shape for an already checked callable.
+-- Semantic outcome identity remains compiler-side; Surface receives only the
+-- explicit label, typed/mode-aware payload telescope, and exact representable
+-- caller-control shape needed by `decide`.
+data CallableOutcomeSpec = CallableOutcomeSpec
+  { callableOutcomeLabel :: Text
+  , callableOutcomePayload :: [(Mode, Ty)]
+  , callableOutcomeControl :: CallableOutcomeControlSpec
+  , callableOutcomeFacts :: [(Text, Proposition)]
+  , callableOutcomeResidualObligationArity :: Int
+  , callableOutcomeObligations :: [(Text, Proposition)]
+  }
+  deriving (Eq, Ord, Show)
+
 data PrimitiveSemantics
   = PrimitiveSupportedVersions
   | PrimitiveSha256
@@ -131,8 +173,21 @@ data PrimitiveSemantics
   | PrimitiveAuthorizeStore
   | PrimitiveDelegate
   | PrimitiveContinueCommonState
+  | PrimitiveProviderDecision [PrimitiveArgumentDiscipline] [ProviderOutcomeSpec]
   | PrimitiveHandlePayload
   deriving (Eq, Ord, Show)
+
+-- | Already-resolved ordinary callable signature available to the surface
+-- checker. The display spelling remains only the map key: exact declaration
+-- identity is carried explicitly and provider primitives live in a separate map.
+-- Parameter/result structural modes are checked together with semantic types so
+-- restricted ownership transfer cannot be erased by a name-only invocation.
+data SurfaceCallableSignature = SurfaceCallableSignature
+  { surfaceCallableDeclarationKey :: DeclarationKey
+  , surfaceCallableParameters :: [(Mode, Ty)]
+  , surfaceCallableResult :: Maybe (Mode, Ty)
+  }
+  deriving (Eq, Show)
 
 -- | Exact prerequisites established by the competent resource/callable/provider
 -- layer before the surface `release` shorthand may select a transition.
@@ -193,6 +248,13 @@ data SurfaceEnvironment = SurfaceEnvironment
   { surfaceStaticContext :: StaticContext
   , surfaceInitialBindings :: Map Text InitialBinding
   , surfacePrimitives :: Map Text PrimitiveSemantics
+  , surfaceCallables :: Map Text SurfaceCallableSignature
+  , surfaceCallableOutcomes :: Map DeclarationKey [CallableOutcomeSpec]
+  , surfaceCallableOutcomeFacts :: Map (SourceSpan, DeclarationKey, Text) [(Text, Proposition)]
+  , surfaceCallableOutcomeObligations ::
+      Map (SourceSpan, DeclarationKey, Text) [(Text, Proposition)]
+  , surfaceCallableOutcomeResources ::
+      Map (SourceSpan, DeclarationKey, Text) CallableOutcomeResourceSpec
   , surfaceTypeAliases :: Map Text Ty
   , surfaceSelectRequirements :: Map Text [Proposition]
   , surfaceReceiveExactRequirement :: Maybe Proposition
@@ -257,6 +319,11 @@ emptySurfaceEnvironment staticContext = SurfaceEnvironment
   { surfaceStaticContext = staticContext
   , surfaceInitialBindings = Map.empty
   , surfacePrimitives = Map.empty
+  , surfaceCallables = Map.empty
+  , surfaceCallableOutcomes = Map.empty
+  , surfaceCallableOutcomeFacts = Map.empty
+  , surfaceCallableOutcomeObligations = Map.empty
+  , surfaceCallableOutcomeResources = Map.empty
   , surfaceTypeAliases = Map.empty
   , surfaceSelectRequirements = Map.empty
   , surfaceReceiveExactRequirement = Nothing
@@ -271,6 +338,20 @@ data BindingMeta = BindingMeta
   { bindingMode :: Mode
   , bindingType :: Ty
   , bindingShape :: SurfaceShape
+  }
+  deriving (Eq, Show)
+
+-- | Neutral caller-visible branch resource expectation. Compiler-owned semantic
+-- state and callee lifecycle are validated before this value is installed.
+data CallableOutcomeResourceBinding
+  = CallableOutcomeResourcePresent BindingMeta
+  | CallableOutcomeResourceAbsent
+  deriving (Eq, Show)
+
+-- | Exact resource residue for one continuing CALL-019 invocation outcome.
+data CallableOutcomeResourceSpec = CallableOutcomeResourceSpec
+  { callableOutcomeResourceBindings :: Map Text CallableOutcomeResourceBinding
+  , callableOutcomeResourceActiveEndpoint :: Maybe Text
   }
   deriving (Eq, Show)
 
@@ -318,4 +399,6 @@ data DecisionKind
   | ValidationDecision Text Name Name
   | DigestDecision Proposition
   | StoreDecision
+  | ProviderDecision [ProviderOutcomeSpec]
+  | CallableDecision [CallableOutcomeSpec] (Map Text CallableOutcomeResourceSpec)
   deriving (Eq, Show)

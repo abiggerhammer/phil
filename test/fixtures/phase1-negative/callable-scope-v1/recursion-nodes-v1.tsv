@@ -1,0 +1,7 @@
+fixture_id	node_id	restricted_captures
+P1-NEG-CALL-014-001	closure.recursive.a	owner.linear.recursive.001
+P1-NEG-CALL-014-002	closure.recursive.a	owner.linear.recursive.001
+P1-NEG-CALL-014-002	closure.recursive.b	-
+P1-NEG-CALL-014-003	closure.recursive.a	-
+P1-NEG-CALL-014-004	closure.recursive.a	-
+P1-NEG-CALL-014-004	closure.recursive.a	-

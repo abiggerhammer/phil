@@ -30,6 +30,8 @@
 
 `reflected_admission_applicability_decision_exact` proves acceptance exactly equivalent to Certified `AdmissionApplicable`.
 
+REVIEW-R15 adds a second extracted decision, `decideAdmissionContextByFacts`, for the two independent contextual coordinates retained from the original checked admission: provider occurrence and realization context. `reflected_admission_context_decision_exact` proves exact equivalence to Certified `AdmissionContextBound`. Production PROV-014 acceptance now requires both the established relative applicability decision and this contextual binding decision.
+
 Exported symbol metadata is deliberately absent from the decision surface, matching the Certified theorem and the existing implementation contract that symbol names are nonsemantic metadata.
 
 ## Representation boundary

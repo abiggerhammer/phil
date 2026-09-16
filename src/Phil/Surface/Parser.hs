@@ -89,6 +89,7 @@ reservedWords = Set.fromList
   , "let"
   , "return"
   , "construct"
+  , "invoke"
   , "receive"
   , "on"
   , "receive_frame"
@@ -318,7 +319,8 @@ pPostfix = pPrimary >>= addFields
 
 pPrimary :: Parser (Located SurfaceExpression)
 pPrimary = locatedParser $ MP.choice
-  [ MP.try pConstructExpression
+  [ MP.try pInvokeExpression
+  , MP.try pConstructExpression
   , MP.try pBorrowExpression
   , MP.try pDecideExpression
   , MP.try pOfferExpression
@@ -341,6 +343,13 @@ pPrimary = locatedParser $ MP.choice
   , MP.try pIntegerExpression
   , pCallOrVariableExpression
   ]
+
+pInvokeExpression :: Parser SurfaceExpression
+pInvokeExpression = do
+  keyword "invoke"
+  name <- identifier
+  arguments <- parens (pExpression `MP.sepBy` symbol ",")
+  pure (InvokeExpression name arguments)
 
 pConstructExpression :: Parser SurfaceExpression
 pConstructExpression = do
@@ -395,9 +404,19 @@ pSingleStatementBlock = do
 
 pCasePattern :: Parser CasePattern
 pCasePattern = do
-  label <- rawIdentifier
+  label <- caseLabel
   binders <- optional (parens (identifier `MP.sepBy` symbol ","))
   pure (CasePattern label (maybe [] id binders))
+
+-- Case labels are protocol/provider outcome tokens, not ordinary term
+-- identifiers. Hyphens are admitted only here so `not-found` and
+-- `storage-failure` remain single semantic labels without changing
+-- subtraction or ordinary identifier lexing.
+caseLabel :: Parser Text
+caseLabel = lexeme $
+  Text.pack <$> ((:) <$> identifierStart <*> MP.many caseLabelContinue)
+  where
+    caseLabelContinue = identifierContinue <|> MPC.char '-'
 
 pReceiveFrameExpression :: Parser SurfaceExpression
 pReceiveFrameExpression = do

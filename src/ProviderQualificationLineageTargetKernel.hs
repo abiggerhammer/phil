@@ -168,3 +168,18 @@ decideAdmissionApplicabilityByFacts admitted admissionRevision claimRevision tar
      Prelude.False -> AdmissionApplicabilityAdmissionRevisionDecision};
    Prelude.False -> AdmissionApplicabilityRejectedDecision}
 
+data AdmissionContextDecision =
+   AdmissionContextAcceptedDecision
+ | AdmissionContextOccurrenceDecision
+ | AdmissionContextRealizationDecision
+
+decideAdmissionContextByFacts :: Prelude.Bool -> Prelude.Bool ->
+                                 AdmissionContextDecision
+decideAdmissionContextByFacts occurrence realization =
+  case occurrence of {
+   Prelude.True ->
+    case realization of {
+     Prelude.True -> AdmissionContextAcceptedDecision;
+     Prelude.False -> AdmissionContextRealizationDecision};
+   Prelude.False -> AdmissionContextOccurrenceDecision}
+

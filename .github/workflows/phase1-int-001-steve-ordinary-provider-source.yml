@@ -1,0 +1,64 @@
+name: Phase 1 INT-001 Steve Ordinary Provider Source
+
+on:
+  pull_request:
+    paths:
+      - 'examples/steve/**'
+      - 'test/Phase1INT001SteveOrdinaryProviderSourceMain.hs'
+      - 'src/Phil/Surface/Check/Types.hs'
+      - 'src/Phil/Surface/Check/Engine.hs'
+      - 'src/Phil/Surface/Check.hs'
+      - 'src/Phil/Surface/Parser.hs'
+      - '.github/workflows/phase1-int-001-steve-ordinary-provider-source.yml'
+  push:
+    branches: [main]
+    paths:
+      - 'examples/steve/**'
+      - 'test/Phase1INT001SteveOrdinaryProviderSourceMain.hs'
+      - 'src/Phil/Surface/Check/Types.hs'
+      - 'src/Phil/Surface/Check/Engine.hs'
+      - 'src/Phil/Surface/Check.hs'
+      - 'src/Phil/Surface/Parser.hs'
+      - '.github/workflows/phase1-int-001-steve-ordinary-provider-source.yml'
+
+jobs:
+  steve-ordinary-provider-source:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: haskell-actions/setup@v2
+        with:
+          ghc-version: '9.6.7'
+          cabal-version: 'latest'
+      - name: Build complete Haskell substrate
+        run: cabal build all --enable-tests
+      - name: Strict typecheck generic provider source surface
+        run: |
+          cabal exec -- ghc -isrc -Wall -Werror -fno-code \
+            src/Phil/Surface/Check/Types.hs \
+            src/Phil/Surface/Check/Engine.hs \
+            src/Phil/Surface/Check.hs \
+            src/Phil/Surface/Parser.hs
+          cabal exec -- ghc -isrc -Wall -Werror -fno-code \
+            test/Phase1INT001SteveOrdinaryProviderSourceMain.hs
+      - name: Execute ordinary Steve provider-source pressure corpus
+        run: cabal exec -- runghc -isrc -Wall -Werror test/Phase1INT001SteveOrdinaryProviderSourceMain.hs
+      - name: Replay corresponded Systems admission controls
+        run: |
+          cabal exec -- runghc -isrc -Wall -Werror test/Phase1INT001SourceCorePolicyMain.hs
+          cabal exec -- runghc -isrc -Wall -Werror test/Phase1INT001SourceSystemsMain.hs
+      - name: Require witness-neutral production diff
+        if: github.event_name == 'pull_request'
+        shell: bash
+        run: |
+          set -euo pipefail
+          git fetch origin "${{ github.base_ref }}"
+          if git diff --unified=0 "origin/${{ github.base_ref }}...HEAD" -- \
+              src/Phil/Surface/Check/Types.hs \
+              src/Phil/Surface/Check/Engine.hs \
+              src/Phil/Surface/Check.hs \
+              src/Phil/Surface/Parser.hs \
+            | grep -E '^\+[^+].*(Steve|Upload)'; then
+            echo 'generic provider-source repair must not add witness identity dispatch'
+            exit 1
+          fi

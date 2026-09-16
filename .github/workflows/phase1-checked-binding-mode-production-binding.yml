@@ -1,0 +1,138 @@
+name: Phase 1 Checked Binding Mode Production Binding
+
+on:
+  pull_request:
+    paths:
+      - 'proof/Phil/Core/Syntax.v'
+      - 'proof/Phil/Core/Context.v'
+      - 'proof/Phil/Core/CheckedBindingMode.v'
+      - 'proof/Phil/Core/CheckedBindingModeImplementation.v'
+      - 'proof/Phil/Core/CheckedBindingModeImplementationExtraction.v'
+      - 'generated/CheckedBindingModeKernel.hs'
+      - 'src/CheckedBindingModeKernel.hs'
+      - 'src/Phil/Core/CheckedBindingMode.hs'
+      - 'test/Phase1CheckedBindingModeMain.hs'
+      - 'app/CheckedBindingModeDecisionCorrespondenceMain.hs'
+      - 'app/CheckedBindingModeProductionBindingMain.hs'
+      - 'docs/phase-1/checked-binding-mode-production-binding-v1.md'
+      - 'phil-core.cabal'
+      - '.github/workflows/phase1-checked-binding-mode-production-binding.yml'
+  push:
+    branches: [main]
+    paths:
+      - 'proof/Phil/Core/CheckedBindingMode.v'
+      - 'proof/Phil/Core/CheckedBindingModeImplementation.v'
+      - 'proof/Phil/Core/CheckedBindingModeImplementationExtraction.v'
+      - 'generated/CheckedBindingModeKernel.hs'
+      - 'src/CheckedBindingModeKernel.hs'
+      - 'src/Phil/Core/CheckedBindingMode.hs'
+      - 'phil-core.cabal'
+      - '.github/workflows/phase1-checked-binding-mode-production-binding.yml'
+
+permissions:
+  contents: read
+
+jobs:
+  exact-checked-binding-mode-kernel:
+    runs-on: ubuntu-latest
+    container:
+      image: rocq/rocq-prover:9.2.0
+      options: --user root
+    steps:
+      - uses: actions/checkout@v4
+      - name: Freshly extract exact Checked Binding Mode kernel
+        shell: bash
+        run: |
+          set -euo pipefail
+          export PATH="/home/rocq/.opam/${COMPILER}/bin:$PATH"
+          rocq c -Q proof/Phil Phil proof/Phil/Core/Syntax.v
+          rocq c -Q proof/Phil Phil proof/Phil/Core/Context.v
+          rocq c -Q proof/Phil Phil proof/Phil/Core/CheckedBindingMode.v
+          rocq c -Q proof/Phil Phil proof/Phil/Core/CheckedBindingModeImplementation.v
+          rm -f CheckedBindingModeKernel.hs
+          rocq c -Q proof/Phil Phil proof/Phil/Core/CheckedBindingModeImplementationExtraction.v
+          test -s CheckedBindingModeKernel.hs
+          test "$(wc -c < CheckedBindingModeKernel.hs)" -eq 463
+          test "$(sha256sum CheckedBindingModeKernel.hs | awk '{print $1}')" = \
+            0a43d3a9d61b0887451b13ec3bb3410ccd898086321fc6d2ee026da11e86fbd9
+          cmp CheckedBindingModeKernel.hs generated/CheckedBindingModeKernel.hs
+          cmp CheckedBindingModeKernel.hs src/CheckedBindingModeKernel.hs
+      - name: Record exact-kernel identities
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p checked-binding-mode-exact-kernel
+          cp CheckedBindingModeKernel.hs checked-binding-mode-exact-kernel/
+          sha256sum \
+            CheckedBindingModeKernel.hs \
+            generated/CheckedBindingModeKernel.hs \
+            src/CheckedBindingModeKernel.hs \
+            proof/Phil/Core/CheckedBindingMode.v \
+            proof/Phil/Core/CheckedBindingModeImplementation.v \
+            > checked-binding-mode-exact-kernel/PHIL-RES-BIND-MODE-001.exact-kernel.sha256
+          cat checked-binding-mode-exact-kernel/PHIL-RES-BIND-MODE-001.exact-kernel.sha256
+      - uses: actions/upload-artifact@v4
+        with:
+          name: phil-phase1-checked-binding-mode-exact-kernel
+          path: checked-binding-mode-exact-kernel
+          if-no-files-found: error
+
+  checked-binding-mode-production-binding:
+    needs: exact-checked-binding-mode-kernel
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: haskell-actions/setup@v2
+        with:
+          ghc-version: '9.6.7'
+          cabal-version: 'latest'
+      - name: Initialize package database and build production library strictly
+        run: |
+          set -euo pipefail
+          cabal build exe:phil-certify-core-scalar --ghc-options=-Werror
+          cabal build lib:phil-core --ghc-options=-Werror
+      - uses: actions/download-artifact@v4
+        with:
+          name: phil-phase1-checked-binding-mode-exact-kernel
+          path: checked-binding-mode-exact-kernel
+      - name: Strict typecheck bound production surface
+        shell: bash
+        run: |
+          set -euo pipefail
+          ghc -Wall -Werror -fno-code \
+            checked-binding-mode-exact-kernel/CheckedBindingModeKernel.hs
+          cabal exec -- ghc -isrc -Wall -Werror -fno-code \
+            src/Phil/Core/CheckedBindingMode.hs
+          cabal exec -- ghc -isrc -Wall -Werror -fno-code \
+            app/CheckedBindingModeProductionBindingMain.hs
+          cabal exec -- ghc -isrc -Wall -Werror -fno-code \
+            test/Phase1CheckedBindingModeMain.hs
+      - name: Re-run exact extracted-kernel controls
+        run: |
+          cabal exec -- runghc \
+            -ichecked-binding-mode-exact-kernel \
+            -Wall -Werror \
+            app/CheckedBindingModeDecisionCorrespondenceMain.hs
+      - name: Execute production binding controls
+        run: cabal exec -- runghc -isrc -Wall -Werror app/CheckedBindingModeProductionBindingMain.hs
+      - name: Re-run unchanged RES-012 corpus
+        run: cabal exec -- runghc -isrc -Wall -Werror test/Phase1CheckedBindingModeMain.hs
+      - name: Record production identities
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p checked-binding-mode-production-binding
+          sha256sum \
+            src/CheckedBindingModeKernel.hs \
+            src/Phil/Core/CheckedBindingMode.hs \
+            app/CheckedBindingModeProductionBindingMain.hs \
+            test/Phase1CheckedBindingModeMain.hs \
+            phil-core.cabal \
+            docs/phase-1/checked-binding-mode-production-binding-v1.md \
+            > checked-binding-mode-production-binding/PHIL-RES-BIND-MODE-001.production.sha256
+          cat checked-binding-mode-production-binding/PHIL-RES-BIND-MODE-001.production.sha256
+      - uses: actions/upload-artifact@v4
+        with:
+          name: phil-phase1-checked-binding-mode-production-binding
+          path: checked-binding-mode-production-binding
+          if-no-files-found: error

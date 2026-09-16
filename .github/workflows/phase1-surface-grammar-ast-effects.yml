@@ -1,0 +1,58 @@
+name: Phase 1 Surface Grammar AST Effect Correspondence
+
+on:
+  pull_request:
+    paths:
+      - 'src/Phil/Surface/GrammarV1/ReferenceAstEffects.hs'
+      - 'src/Phil/Surface/GrammarV1/ReferenceAstExpressionCore.hs'
+      - 'src/Phil/Surface/GrammarV1/ReferenceAstStaticReference.hs'
+      - 'src/Phil/Surface/GrammarV1/ReferenceKernelBridge.hs'
+      - 'src/Phil/Surface/GrammarV1/Parser.hs'
+      - 'src/SurfaceGrammarRecognizerKernel.hs'
+      - 'test/Phase1GrammarV1ReferenceAstEffectsMain.hs'
+      - 'test/fixtures/phase1-surface/**'
+      - 'scripts/check_phase1_surface_corpus.py'
+      - '.github/workflows/phase1-surface-grammar-ast-effects.yml'
+  push:
+    branches: [main]
+    paths:
+      - 'src/Phil/Surface/GrammarV1/ReferenceAstEffects.hs'
+      - 'src/Phil/Surface/GrammarV1/ReferenceAstExpressionCore.hs'
+      - 'src/Phil/Surface/GrammarV1/ReferenceAstStaticReference.hs'
+      - 'src/Phil/Surface/GrammarV1/ReferenceKernelBridge.hs'
+      - 'src/Phil/Surface/GrammarV1/Parser.hs'
+      - 'src/SurfaceGrammarRecognizerKernel.hs'
+      - 'test/Phase1GrammarV1ReferenceAstEffectsMain.hs'
+      - 'test/fixtures/phase1-surface/**'
+      - 'scripts/check_phase1_surface_corpus.py'
+      - '.github/workflows/phase1-surface-grammar-ast-effects.yml'
+
+permissions:
+  contents: read
+
+jobs:
+  ast-effect-correspondence:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: haskell-actions/setup@v2
+        with:
+          ghc-version: '9.6.7'
+          cabal-version: 'latest'
+
+      - name: Build ordinary regression substrate
+        run: cabal build all --enable-tests
+
+      - name: Strictly compile effect correspondence harness
+        run: |
+          cabal exec -- ghc --make \
+            -Wall -Werror \
+            -isrc \
+            test/Phase1GrammarV1ReferenceAstEffectsMain.hs \
+            -o /tmp/phase1-surface-grammar-ast-effects
+
+      - name: Check certified effect sets against production AST
+        run: |
+          python3 scripts/check_phase1_surface_corpus.py --emit-parser-cases \
+            | /tmp/phase1-surface-grammar-ast-effects

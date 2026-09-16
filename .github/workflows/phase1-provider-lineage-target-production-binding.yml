@@ -6,8 +6,10 @@ on:
       - 'src/ProviderQualificationLineageTargetKernel.hs'
       - 'src/Phil/Core/ProviderQualificationTargetReuse.hs'
       - 'src/Phil/Core/ProviderQualificationApplicability.hs'
+      - 'src/Phil/Core/ProviderQualificationIdentity.hs'
       - 'test/Phase1ProviderQualificationTargetReuseMain.hs'
       - 'test/Phase1ProviderQualificationApplicabilityMain.hs'
+      - 'test/Phase1ReviewR15ContextualApplicabilityMain.hs'
       - 'app/ProviderLineageTargetDecisionCorrespondenceMain.hs'
       - 'proof/Phil/Core/ProviderQualificationLineageTarget.v'
       - 'proof/Phil/Core/ProviderQualificationLineageTargetImplementation.v'
@@ -20,8 +22,10 @@ on:
       - 'src/ProviderQualificationLineageTargetKernel.hs'
       - 'src/Phil/Core/ProviderQualificationTargetReuse.hs'
       - 'src/Phil/Core/ProviderQualificationApplicability.hs'
+      - 'src/Phil/Core/ProviderQualificationIdentity.hs'
       - 'test/Phase1ProviderQualificationTargetReuseMain.hs'
       - 'test/Phase1ProviderQualificationApplicabilityMain.hs'
+      - 'test/Phase1ReviewR15ContextualApplicabilityMain.hs'
       - 'app/ProviderLineageTargetDecisionCorrespondenceMain.hs'
       - 'proof/Phil/Core/ProviderQualificationLineageTarget.v'
       - 'proof/Phil/Core/ProviderQualificationLineageTargetImplementation.v'
@@ -50,8 +54,9 @@ jobs:
           rm -f ProviderQualificationLineageTargetKernel.hs
           rocq c -Q proof/Phil Phil proof/Phil/Core/ProviderQualificationLineageTargetImplementationExtraction.v
           test -s ProviderQualificationLineageTargetKernel.hs
+          grep -q 'decideAdmissionContextByFacts' ProviderQualificationLineageTargetKernel.hs
           test "$(sha256sum ProviderQualificationLineageTargetKernel.hs | cut -d' ' -f1)" = \
-            '829e98d3b1653b0f4ca1a3fd64f570206df0a05e5500467d82f13a75a4d0f030'
+            '4f3c69a02aa36f98cbde41ad2de3b9b29706f5ca281fe71a82bc61272d682999'
           cmp ProviderQualificationLineageTargetKernel.hs src/ProviderQualificationLineageTargetKernel.hs
       - name: Stage exact kernel proof artifact
         shell: bash
@@ -94,13 +99,15 @@ jobs:
           cmp provider-lineage-target-exact-kernel/ProviderQualificationLineageTargetKernel.hs \
               src/ProviderQualificationLineageTargetKernel.hs
           test "$(sha256sum src/ProviderQualificationLineageTargetKernel.hs | cut -d' ' -f1)" = \
-            '829e98d3b1653b0f4ca1a3fd64f570206df0a05e5500467d82f13a75a4d0f030'
+            '4f3c69a02aa36f98cbde41ad2de3b9b29706f5ca281fe71a82bc61272d682999'
       - name: Strict typecheck exact kernel and bound production modules
         run: |
           set -euo pipefail
           ghc -Wall -Werror -fno-code src/ProviderQualificationLineageTargetKernel.hs
           cabal exec -- ghc -isrc -Wall -Werror -fno-code \
             src/Phil/Core/ProviderQualificationTargetReuse.hs
+          cabal exec -- ghc -isrc -Wall -Werror -fno-code \
+            src/Phil/Core/ProviderQualificationIdentity.hs
           cabal exec -- ghc -isrc -Wall -Werror -fno-code \
             src/Phil/Core/ProviderQualificationApplicability.hs
       - name: Execute exact extracted decision controls
@@ -110,13 +117,15 @@ jobs:
             app/ProviderLineageTargetDecisionCorrespondenceMain.hs \
             -o provider-lineage-target-kernel-controls
           ./provider-lineage-target-kernel-controls
-      - name: Re-run unchanged PROV-013 and PROV-014 correspondence
+      - name: Re-run PROV-013, PROV-014, and REVIEW-R15 correspondence
         run: |
           set -euo pipefail
           cabal exec -- runghc -Wall -Werror -isrc \
             test/Phase1ProviderQualificationTargetReuseMain.hs
           cabal exec -- runghc -Wall -Werror -isrc \
             test/Phase1ProviderQualificationApplicabilityMain.hs
+          cabal exec -- runghc -Wall -Werror -isrc \
+            test/Phase1ReviewR15ContextualApplicabilityMain.hs
       - name: Record production-binding identities
         run: |
           set -euo pipefail
@@ -124,9 +133,11 @@ jobs:
           sha256sum \
             src/ProviderQualificationLineageTargetKernel.hs \
             src/Phil/Core/ProviderQualificationTargetReuse.hs \
+            src/Phil/Core/ProviderQualificationIdentity.hs \
             src/Phil/Core/ProviderQualificationApplicability.hs \
             test/Phase1ProviderQualificationTargetReuseMain.hs \
             test/Phase1ProviderQualificationApplicabilityMain.hs \
+            test/Phase1ReviewR15ContextualApplicabilityMain.hs \
             app/ProviderLineageTargetDecisionCorrespondenceMain.hs \
             proof/Phil/Core/ProviderQualificationLineageTargetImplementation.v \
             docs/phase-1/provider-lineage-target-production-binding-v1.md \

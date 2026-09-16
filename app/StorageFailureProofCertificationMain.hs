@@ -20,7 +20,7 @@ main = do
       outputPath = output </> "PHIL-SYS-STORAGE-FAIL-DETAIL-001.rocq.cert"
   sourceBytes <- ByteString.readFile sourcePath
   objectBytes <- ByteString.readFile objectPath
-  case certifyRocqProof systemsStorageFailureDetailCertificationSpec sourceBytes objectBytes of
+  case packageTrustedRocqProof systemsStorageFailureDetailCertificationSpec sourceBytes objectBytes of
     Left err -> failWith ("Storage Failure Detail Rocq certification failed: " <> show err)
     Right bundle -> do
       let certificate = rocqBundleCertificate bundle

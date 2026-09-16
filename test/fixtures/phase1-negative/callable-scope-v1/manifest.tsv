@@ -1,0 +1,7 @@
+fixture_id	check_kind	expect	competent_layer	governing_authority	expected_payload
+P1-NEG-CALL-010-001	scope-capture	escaping-scoped-loan	callable-scope	matrix:CALL-010;certified:PHIL-CALL-SCOPE-001	closure.escape.001|loan.view.001|scope.loan.001
+P1-NEG-CALL-010-002	scope-capture	outside-loan-validity	callable-scope	matrix:CALL-010;certified:PHIL-CALL-SCOPE-001	closure.local.001|loan.view.001|scope.loan.001|scope.other.001
+P1-NEG-CALL-014-001	recursive-graph	restricted-recursive-cycle	callable-scope	matrix:CALL-014;certified:PHIL-CALL-SCOPE-001	closure.recursive.a|owner.linear.recursive.001
+P1-NEG-CALL-014-002	recursive-graph	restricted-recursive-cycle	callable-scope	matrix:CALL-014;certified:PHIL-CALL-SCOPE-001	closure.recursive.a,closure.recursive.b|owner.linear.recursive.001
+P1-NEG-CALL-014-003	recursive-graph	unknown-recursive-reference	callable-scope	matrix:CALL-014;certified:PHIL-CALL-SCOPE-001	closure.recursive.a|closure.recursive.missing
+P1-NEG-CALL-014-004	recursive-graph	duplicate-recursive-node	callable-scope	matrix:CALL-014;certified:PHIL-CALL-SCOPE-001	closure.recursive.a

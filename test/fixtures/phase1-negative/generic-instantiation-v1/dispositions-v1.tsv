@@ -1,0 +1,7 @@
+fixture_id	requirement_id	disposition_kind	value1	value2	value3
+P1-NEG-GEN-007-001	provider	exact-provider	provider.compare-plus-hash.v1	-	-
+P1-NEG-GEN-007-002	provider	checked-provider-refinement	provider.compare-plus-hash.v1	provider.storage.v1	portable-refinement-001
+P1-NEG-GEN-008-001	provider	exact-provider	provider.compare.v1	-	-
+P1-NEG-GEN-008-002	law	evidence	HashStable	proof.other-law.portable	-
+P1-NEG-GEN-012-002	law	assumption	deployment-assumption-A	-	-
+P1-NEG-GEN-012-003	law	export	outer-architecture	-	-

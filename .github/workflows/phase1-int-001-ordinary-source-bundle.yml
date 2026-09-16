@@ -1,0 +1,48 @@
+name: Phase 1 INT-001 Ordinary Source Bundle
+
+on:
+  pull_request:
+    paths:
+      - 'src/Phil/Compiler/SourceBundle.hs'
+      - 'test/Phase1INT001OrdinarySourceBundleMain.hs'
+      - '.github/workflows/phase1-int-001-ordinary-source-bundle.yml'
+  push:
+    branches: [main]
+    paths:
+      - 'src/Phil/Compiler/SourceBundle.hs'
+      - 'test/Phase1INT001OrdinarySourceBundleMain.hs'
+      - '.github/workflows/phase1-int-001-ordinary-source-bundle.yml'
+
+permissions:
+  contents: read
+
+jobs:
+  ordinary-source-bundle:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: haskell-actions/setup@v2
+        with:
+          ghc-version: '9.6.7'
+          cabal-version: 'latest'
+
+      - name: Build complete Haskell substrate
+        run: cabal build all --enable-tests
+
+      - name: Reject witness-specific dispatch in generic compiler bridge
+        shell: bash
+        run: |
+          set -euo pipefail
+          if grep -En 'phase0EnvironmentFor|Upload|Steve' src/Phil/Compiler/SourceBundle.hs; then
+            echo 'generic SourceBundle bridge contains witness-specific dispatch/name dependency' >&2
+            exit 1
+          fi
+
+      - name: Strict typecheck generic SourceBundle bridge and pressure corpus
+        run: |
+          set -euo pipefail
+          cabal exec -- ghc -Wall -Werror -isrc -fno-code src/Phil/Compiler/SourceBundle.hs
+          cabal exec -- ghc -Wall -Werror -isrc -fno-code test/Phase1INT001OrdinarySourceBundleMain.hs
+
+      - name: Execute ordinary SourceBundle pressure corpus
+        run: cabal exec -- runghc -Wall -Werror -isrc test/Phase1INT001OrdinarySourceBundleMain.hs

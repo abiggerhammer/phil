@@ -1,0 +1,43 @@
+name: Phase 1 VER-002 Canonical Obligation Graph
+
+on:
+  pull_request:
+    paths:
+      - 'src/Phil/Verification.hs'
+      - 'test/Phase1VerificationCanonicalObligationGraphMain.hs'
+      - 'test/Phase1VerificationIntrinsicInvalidityMain.hs'
+      - 'src/Phil/Assurance/**'
+      - 'src/Phil/Core/Discharge.hs'
+      - 'src/Phil/Core/Syntax.hs'
+      - '.github/workflows/phase1-ver-002-canonical-obligation-graph.yml'
+  push:
+    branches: [main]
+    paths:
+      - 'src/Phil/Verification.hs'
+      - 'test/Phase1VerificationCanonicalObligationGraphMain.hs'
+      - 'test/Phase1VerificationIntrinsicInvalidityMain.hs'
+      - 'src/Phil/Assurance/**'
+      - 'src/Phil/Core/Discharge.hs'
+      - 'src/Phil/Core/Syntax.hs'
+      - '.github/workflows/phase1-ver-002-canonical-obligation-graph.yml'
+
+permissions:
+  contents: read
+
+jobs:
+  ver-002:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: haskell-actions/setup@v2
+        with:
+          ghc-version: '9.6.7'
+          cabal-version: 'latest'
+      - name: Build application verification boundary
+        run: cabal build lib:phil-core --ghc-options=-Werror
+      - name: Run VER-002 canonical obligation graph regression
+        run: cabal exec -- runghc -Wall -Werror -isrc test/Phase1VerificationCanonicalObligationGraphMain.hs
+      - name: Re-run VER-001 intrinsic invalidity boundary
+        run: cabal exec -- runghc -Wall -Werror -isrc test/Phase1VerificationIntrinsicInvalidityMain.hs
+      - name: Run assurance handoff and discharge controls
+        run: cabal test phil-assurance-handoff-tests phil-discharge-tests

@@ -34,6 +34,14 @@ The target evidence supplied to the checker must itself reproduce the claim, int
 
 The `SelectedProviderRealization` must then reproduce the applicability binding exactly.
 
+## Contextual admission binding (REVIEW-R15 reconciliation)
+
+The accepted admission identity is content-bound to the provider occurrence and realization-context revision for which policy admitted it. The checked admission therefore retains those two coordinates. Before the existing relative PROV-014 applicability relation can accept, the checker projects them into the normalized provider-requirement occurrence and `RealizationRevision` coordinates used by the applicability binding and requires exact equality.
+
+Changing the applicability occurrence or realization together with the selected description no longer makes a stale admission applicable. A genuine relocation must produce a fresh contextual admission (and therefore a fresh `QualificationAdmissionRevision`) or use a separately specified checked reuse relation.
+
+This contextual edge is Certified separately as `AdmissionContextBound`; the original `AdmissionApplicable` relation remains the relative target/selection relation. Production acceptance requires both.
+
 ## Symbols are not applicability
 
 Exported/runtime symbols are deliberately carried only as nonsemantic metadata.

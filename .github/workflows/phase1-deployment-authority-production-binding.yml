@@ -89,22 +89,22 @@ jobs:
           set -euo pipefail
           cabal exec -- ghc -isrc -Wall -Werror -Wno-unused-imports -fno-code src/DeploymentQualificationKernel.hs
           cabal exec -- ghc -isrc -Wall -Werror -Wno-unused-imports -fno-code src/DeploymentAuthorityKernel.hs
-          cabal exec -- ghc -isrc -Wall -Werror -Wno-name-shadowing -fno-code src/Phil/Assurance/DeploymentQualification.hs
-          cabal exec -- ghc -isrc -Wall -Werror -Wno-name-shadowing -fno-code src/Phil/Assurance/DeploymentQualificationCertification.hs
-          cabal exec -- ghc -isrc -Wall -Werror -Wno-name-shadowing -fno-code src/Phil/Assurance/DeploymentAuthority.hs
-          cabal exec -- ghc -isrc -Wall -Werror -Wno-name-shadowing -fno-code src/Phil/Assurance/DeploymentAuthorityCertification.hs
-          cabal exec -- ghc -isrc -Wall -Werror -Wno-name-shadowing -Wno-unused-imports -fno-code app/DeploymentAuthorityDecisionCorrespondenceMain.hs
-          cabal exec -- ghc -isrc -Wall -Werror -Wno-name-shadowing -fno-code app/DeploymentAuthorityProductionBindingMain.hs
-          cabal exec -- ghc -isrc -Wall -Werror -Wno-name-shadowing -fno-code test/Phase1DeploymentQualificationMain.hs
-          cabal exec -- ghc -isrc -Wall -Werror -Wno-name-shadowing -fno-code test/Phase1DeploymentAuthorityMain.hs
+          cabal exec -- ghc -isrc -Wall -Werror -fno-code src/Phil/Assurance/DeploymentQualification.hs
+          cabal exec -- ghc -isrc -Wall -Werror -fno-code src/Phil/Assurance/DeploymentQualificationCertification.hs
+          cabal exec -- ghc -isrc -Wall -Werror -fno-code src/Phil/Assurance/DeploymentAuthority.hs
+          cabal exec -- ghc -isrc -Wall -Werror -fno-code src/Phil/Assurance/DeploymentAuthorityCertification.hs
+          cabal exec -- ghc -isrc -Wall -Werror -fno-code app/DeploymentAuthorityDecisionCorrespondenceMain.hs
+          cabal exec -- ghc -isrc -Wall -Werror -fno-code app/DeploymentAuthorityProductionBindingMain.hs
+          cabal exec -- ghc -isrc -Wall -Werror -fno-code test/Phase1DeploymentQualificationMain.hs
+          cabal exec -- ghc -isrc -Wall -Werror -fno-code test/Phase1DeploymentAuthorityMain.hs
       - name: Execute exact extracted-kernel controls
-        run: cabal exec -- runghc -Wall -Werror -Wno-name-shadowing -Wno-unused-imports -isrc app/DeploymentAuthorityDecisionCorrespondenceMain.hs
+        run: cabal exec -- runghc -Wall -Werror -isrc app/DeploymentAuthorityDecisionCorrespondenceMain.hs
       - name: Execute production-binding controls
-        run: cabal exec -- runghc -Wall -Werror -Wno-name-shadowing -isrc app/DeploymentAuthorityProductionBindingMain.hs
+        run: cabal exec -- runghc -Wall -Werror -isrc app/DeploymentAuthorityProductionBindingMain.hs
       - name: Re-run implementation-refined DEP-003 through DEP-005 predecessor corpus
-        run: cabal exec -- runghc -Wall -Werror -Wno-name-shadowing -isrc test/Phase1DeploymentQualificationMain.hs
+        run: cabal exec -- runghc -Wall -Werror -isrc test/Phase1DeploymentQualificationMain.hs
       - name: Re-run unchanged DEP-006 authority corpus
-        run: cabal exec -- runghc -Wall -Werror -Wno-name-shadowing -isrc test/Phase1DeploymentAuthorityMain.hs
+        run: cabal exec -- runghc -Wall -Werror -isrc test/Phase1DeploymentAuthorityMain.hs
       - name: Record production binding identities
         shell: bash
         run: |

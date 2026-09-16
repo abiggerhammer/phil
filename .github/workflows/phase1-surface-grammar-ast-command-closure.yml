@@ -1,0 +1,56 @@
+name: Phase 1 Surface Grammar AST Command Closure Correspondence
+
+on:
+  pull_request:
+    paths:
+      - 'src/Phil/Surface/GrammarV1/ReferenceAstCommandClosure.hs'
+      - 'src/Phil/Surface/GrammarV1/ReferenceAstExpressionCore.hs'
+      - 'src/Phil/Surface/GrammarV1/ReferenceAstFixedCommands.hs'
+      - 'src/Phil/Surface/GrammarV1/ReferenceAstFixedCommandHelpers.hs'
+      - 'src/Phil/Surface/GrammarV1/ReferenceAstBlockCommands.hs'
+      - 'src/Phil/Surface/GrammarV1/ReferenceKernelBridge.hs'
+      - 'src/Phil/Surface/GrammarV1/Parser.hs'
+      - 'src/SurfaceGrammarRecognizerKernel.hs'
+      - 'test/Phase1GrammarV1ReferenceAstCommandClosureMain.hs'
+      - '.github/workflows/phase1-surface-grammar-ast-command-closure.yml'
+  push:
+    branches: [main]
+    paths:
+      - 'src/Phil/Surface/GrammarV1/ReferenceAstCommandClosure.hs'
+      - 'src/Phil/Surface/GrammarV1/ReferenceAstExpressionCore.hs'
+      - 'src/Phil/Surface/GrammarV1/ReferenceAstFixedCommands.hs'
+      - 'src/Phil/Surface/GrammarV1/ReferenceAstFixedCommandHelpers.hs'
+      - 'src/Phil/Surface/GrammarV1/ReferenceAstBlockCommands.hs'
+      - 'src/Phil/Surface/GrammarV1/ReferenceKernelBridge.hs'
+      - 'src/Phil/Surface/GrammarV1/Parser.hs'
+      - 'src/SurfaceGrammarRecognizerKernel.hs'
+      - 'test/Phase1GrammarV1ReferenceAstCommandClosureMain.hs'
+      - '.github/workflows/phase1-surface-grammar-ast-command-closure.yml'
+
+permissions:
+  contents: read
+
+jobs:
+  ast-command-closure-correspondence:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: haskell-actions/setup@v2
+        with:
+          ghc-version: '9.6.7'
+          cabal-version: 'latest'
+
+      - name: Build ordinary regression substrate
+        run: cabal build all --enable-tests
+
+      - name: Strictly compile recursive command-closure harness
+        run: |
+          cabal exec -- ghc --make \
+            -Wall -Werror \
+            -isrc \
+            test/Phase1GrammarV1ReferenceAstCommandClosureMain.hs \
+            -o /tmp/phase1-surface-grammar-ast-command-closure
+
+      - name: Check recursive certified command closure against production AST
+        run: /tmp/phase1-surface-grammar-ast-command-closure

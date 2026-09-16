@@ -76,6 +76,7 @@ data ManifestError
   | MissingCostReference EvidenceEntryId Text
   | EvidenceAuthorityKernelDisagreement EvidenceEntryId AssuranceKind
   | JustificationCycle [GraphNode]
+  | ProvenanceCycle [RevisionId]
   | AcceptanceRuleUnsatisfied RevisionId
   | MissingAssuranceUse AssuranceUseId
   | AssuranceUseMapKeyMismatch AssuranceUseId AssuranceUseId
@@ -133,6 +134,7 @@ verifyManifest context ledger manifest = do
   mapM_ verifyExport (Map.toList exports)
   mapM_ verifyUseDigest (Map.toList uses)
   verifyDependencies evidence
+  verifyProvenanceAcyclic revisions
   verifyAcyclic evidence
   mapM_ (verifyObligationClosure evidence exports) (Set.toAscList (manifestObligationRevisions manifest))
   mapM_ (verifyUse evidence) (Map.toList uses)
@@ -301,6 +303,11 @@ verifyManifest context ledger manifest = do
               Left (MissingObligationDependency owner required)
             unless (Set.member required (manifestCertificationScope manifest)) $
               Left (DependencyOnExportedObligation owner required)
+
+    verifyProvenanceAcyclic revisions =
+      case findCycle (provenanceEdges revisions) of
+        Nothing -> Right ()
+        Just cyclePath -> Left (ProvenanceCycle cyclePath)
 
     verifyAcyclic evidence =
       case findCycle (graphEdges ledger evidence manifest) of
@@ -523,25 +530,27 @@ validAcceptanceRule rule = case rule of
   AcceptAll rules -> not (null rules) && all validAcceptanceRule rules
   AcceptAny rules -> not (null rules) && all validAcceptanceRule rules
 
+provenanceEdges
+  :: Map RevisionId ObligationRevision
+  -> Map RevisionId [RevisionId]
+provenanceEdges revisions = Map.fromList
+  [ (revision, revisionGeneratedFrom obligationRevision)
+  | (revision, obligationRevision) <- Map.toList revisions
+  ]
+
 graphEdges
   :: AssuranceLedger
   -> Map EvidenceEntryId EvidenceEntry
   -> AssuranceManifest
   -> Map GraphNode [GraphNode]
-graphEdges ledger evidence manifest = Map.fromListWith (<>)
-  (obligationEvidenceEdges <> lineageEdges <> evidenceEdges)
+graphEdges _ledger evidence manifest = Map.fromListWith (<>)
+  (obligationEvidenceEdges <> evidenceEdges)
   where
     obligationEvidenceEdges =
       [ (ObligationNode revision, [EvidenceNode entryId])
       | revision <- Set.toList (manifestObligationRevisions manifest)
       , (entryId, entry) <- Map.toList evidence
       , evidenceObligationRevision entry == revision
-      ]
-
-    lineageEdges =
-      [ (ObligationNode revision, map ObligationNode (revisionGeneratedFrom obligationRevision))
-      | revision <- Set.toList (manifestObligationRevisions manifest)
-      , Just obligationRevision <- [Map.lookup revision (ledgerRevisions ledger)]
       ]
 
     evidenceEdges =
@@ -553,7 +562,7 @@ graphEdges ledger evidence manifest = Map.fromListWith (<>)
       DependsOnEvidence entryId -> EvidenceNode entryId
       DependsOnObligation revision -> ObligationNode revision
 
-findCycle :: Map GraphNode [GraphNode] -> Maybe [GraphNode]
+findCycle :: Ord node => Map node [node] -> Maybe [node]
 findCycle edges = go Set.empty (Map.keys edges)
   where
     go _ [] = Nothing

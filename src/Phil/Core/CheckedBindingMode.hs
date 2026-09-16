@@ -5,6 +5,7 @@ module Phil.Core.CheckedBindingMode
   , insertCheckedBinding
   ) where
 
+import qualified CheckedBindingModeKernel as Kernel
 import Phil.Core.Context
   ( CheckError
   , ResourceContext
@@ -36,11 +37,16 @@ data CheckedBindingModeError
   = CheckedBindingTypeMismatch BindingOrigin Name Ty Ty
   | CheckedBindingModeMismatch BindingOrigin Name Mode Mode
   | CheckedBindingContextError BindingOrigin CheckError
+  | CheckedBindingKernelDisagreement BindingOrigin Name
   deriving (Eq, Show)
 
 -- | RES-012 bridge from checked type semantics to ResourceContext placement.
 -- The caller may carry type and mode separately for implementation convenience,
--- but both must agree exactly with the checked type-mode contract.
+-- but both must agree exactly with the checked type-mode contract.  Native
+-- diagnostics run first; a native-success result is then independently
+-- reflected through the exact Rocq-extracted success gate.  Kernel disagreement
+-- can therefore add rejection but can never turn a native rejection into
+-- acceptance.
 insertCheckedBinding
   :: BindingOrigin
   -> CheckedTypeMode
@@ -56,9 +62,19 @@ insertCheckedBinding origin checked suppliedMode name suppliedType context
   | suppliedMode /= checkedBindingMode checked =
       Left (CheckedBindingModeMismatch
         origin name (checkedBindingMode checked) suppliedMode)
-  | otherwise =
-      mapLeft (CheckedBindingContextError origin) $
+  | otherwise = do
+      next <- mapLeft (CheckedBindingContextError origin) $
         insertBinding (checkedBindingMode checked) name suppliedType context
+      let typeMatches = suppliedType == checkedBindingType checked
+          modeMatches = suppliedMode == checkedBindingMode checked
+          contextAccepts = case
+              insertBinding (checkedBindingMode checked) name suppliedType context of
+            Right reflectedNext -> reflectedNext == next
+            Left _ -> False
+      if Kernel.decideCheckedBindingModeByFacts
+          typeMatches modeMatches contextAccepts
+        then Right next
+        else Left (CheckedBindingKernelDisagreement origin name)
 
 mapLeft :: (a -> b) -> Either a c -> Either b c
 mapLeft f = either (Left . f) Right

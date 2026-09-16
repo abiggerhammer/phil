@@ -1,0 +1,72 @@
+name: Phase 1 VER-010 Source Artifact Closure
+
+on:
+  pull_request:
+    paths:
+      - 'src/Phil/Verification/ArtifactClosure.hs'
+      - 'src/Phil/Verification/GenericAssurance.hs'
+      - 'src/Phil/Systems/StageClosure.hs'
+      - 'src/Phil/Systems/TargetStrengthening.hs'
+      - 'src/Phil/Systems/RuntimeClaimBinding.hs'
+      - 'src/Phil/Systems/RuntimePrimitiveReuse.hs'
+      - 'src/Phil/Systems/StagingEffect.hs'
+      - 'src/Phil/Systems/CostAttribution.hs'
+      - 'src/Phil/Systems/NextStageRequirement.hs'
+      - 'src/Phil/Examples/Phase1/StageClosureWitnesses.hs'
+      - 'test/Phase1VerificationSourceArtifactClosureMain.hs'
+      - 'test/Phase1VerificationGenericAssuranceReuseMain.hs'
+      - 'test/Phase1StageClosureMain.hs'
+      - 'test/Phase1TargetStrengtheningMain.hs'
+      - 'test/Phase1NextStageRequirementMain.hs'
+      - '.github/workflows/phase1-ver-010-source-artifact-closure.yml'
+  push:
+    branches: [main]
+    paths:
+      - 'src/Phil/Verification/ArtifactClosure.hs'
+      - 'src/Phil/Verification/GenericAssurance.hs'
+      - 'src/Phil/Systems/StageClosure.hs'
+      - 'src/Phil/Systems/TargetStrengthening.hs'
+      - 'src/Phil/Systems/RuntimeClaimBinding.hs'
+      - 'src/Phil/Systems/RuntimePrimitiveReuse.hs'
+      - 'src/Phil/Systems/StagingEffect.hs'
+      - 'src/Phil/Systems/CostAttribution.hs'
+      - 'src/Phil/Systems/NextStageRequirement.hs'
+      - 'src/Phil/Examples/Phase1/StageClosureWitnesses.hs'
+      - 'test/Phase1VerificationSourceArtifactClosureMain.hs'
+      - 'test/Phase1VerificationGenericAssuranceReuseMain.hs'
+      - 'test/Phase1StageClosureMain.hs'
+      - 'test/Phase1TargetStrengtheningMain.hs'
+      - 'test/Phase1NextStageRequirementMain.hs'
+      - '.github/workflows/phase1-ver-010-source-artifact-closure.yml'
+
+permissions:
+  contents: read
+
+jobs:
+  ver-010:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: haskell-actions/setup@v2
+        with:
+          ghc-version: '9.6.7'
+          cabal-version: 'latest'
+
+      - name: Build complete Haskell substrate
+        run: cabal build all --enable-tests
+
+      - name: Run VER-010 source versus artifact closure regression
+        run: cabal exec -- runghc -Wall -Werror -isrc test/Phase1VerificationSourceArtifactClosureMain.hs
+
+      - name: Re-run StageClosure and realization obligation controls
+        run: |
+          cabal exec -- runghc -isrc test/Phase1StageClosureMain.hs
+          cabal exec -- runghc -isrc test/Phase1TargetStrengtheningMain.hs
+          cabal exec -- runghc -isrc test/Phase1NextStageRequirementMain.hs
+
+      - name: Re-run VER-009 generic assurance reuse control
+        run: cabal exec -- runghc -Wall -Werror -isrc test/Phase1VerificationGenericAssuranceReuseMain.hs
+
+      - name: Run assurance authority controls
+        run: cabal test phil-assurance-tests phil-assurance-handoff-tests phil-decision-tests

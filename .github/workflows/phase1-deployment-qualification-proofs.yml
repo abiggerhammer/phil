@@ -99,10 +99,9 @@ jobs:
         run: |
           set -euo pipefail
           cp deployment-qualification-proof/DeploymentQualificationKernel.hs .
-          cabal exec -- ghc -i. -Wall -Werror -Wno-unused-imports -fno-code \
-            DeploymentQualificationKernel.hs \
-            app/DeploymentQualificationDecisionCorrespondenceMain.hs
-          cabal exec -- runghc -i. -Wall -Werror -Wno-unused-imports \
+          cabal exec -- ghc -i. -Wall -Werror -Wno-unused-imports -fno-code DeploymentQualificationKernel.hs
+          cabal exec -- ghc -i. -Wall -Werror -fno-code app/DeploymentQualificationDecisionCorrespondenceMain.hs
+          cabal exec -- runghc -i. -Wall -Werror \
             app/DeploymentQualificationDecisionCorrespondenceMain.hs
       - name: Strict typecheck unchanged deployment qualification implementation and corpus
         run: |

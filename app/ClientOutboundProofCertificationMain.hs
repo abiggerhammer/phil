@@ -20,7 +20,7 @@ main = do
       outputPath = output </> "PHIL-SYS-CLIENT-OUTBOUND-001.rocq.cert"
   sourceBytes <- ByteString.readFile sourcePath
   objectBytes <- ByteString.readFile objectPath
-  case certifyRocqProof systemsClientOutboundCertificationSpec sourceBytes objectBytes of
+  case packageTrustedRocqProof systemsClientOutboundCertificationSpec sourceBytes objectBytes of
     Left err -> failWith ("ClientOutbound Rocq certification failed: " <> show err)
     Right bundle -> do
       let certificate = rocqBundleCertificate bundle

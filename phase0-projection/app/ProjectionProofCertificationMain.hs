@@ -23,7 +23,7 @@ main = do
 
   proofSourceBytes <- ByteString.readFile proofSourcePath
   proofObjectBytes <- ByteString.readFile proofObjectPath
-  proofBundle <- case certifyRocqProof
+  proofBundle <- case packageTrustedRocqProof
       phase0UploadProjectionCertificationSpec
       proofSourceBytes
       proofObjectBytes of

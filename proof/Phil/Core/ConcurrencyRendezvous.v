@@ -70,6 +70,20 @@ Record DualRendezvousWitness : Type := mkDualRendezvousWitness {
   dualRendezvousOwnershipAfter : RestrictedOwnership
 }.
 
+Definition BinaryRoleMember
+  (instance : BinaryProtocolInstance)
+  (role : ProtocolRoleKey) : Prop :=
+  role = binaryProtocolPrimaryRole instance \/
+  role = binaryProtocolPeerRole instance.
+
+Definition BinaryRolePairExact
+  (instance : BinaryProtocolInstance)
+  (senderRole receiverRole : ProtocolRoleKey) : Prop :=
+  (senderRole = binaryProtocolPrimaryRole instance /\
+   receiverRole = binaryProtocolPeerRole instance) \/
+  (senderRole = binaryProtocolPeerRole instance /\
+   receiverRole = binaryProtocolPrimaryRole instance).
+
 Record ExactInternalRendezvous
   (witness : DualRendezvousWitness) : Prop := mkExactInternalRendezvous {
   exactRendezvousBinaryWellFormed :
@@ -91,17 +105,23 @@ Record ExactInternalRendezvous
           (dualRendezvousReceiverEndpoint witness))) =
     binaryProtocolInstanceRevision (dualRendezvousInstance witness);
   exactRendezvousSenderRole :
-    protocolContractRole
-      (protocolOccurrenceContract
-        (endpointProgressionPredecessor
-          (dualRendezvousSenderEndpoint witness))) =
-    binaryProtocolPrimaryRole (dualRendezvousInstance witness);
+    BinaryRoleMember
+      (dualRendezvousInstance witness)
+      (protocolContractRole
+        (protocolOccurrenceContract
+          (endpointProgressionPredecessor
+            (dualRendezvousSenderEndpoint witness))));
   exactRendezvousReceiverRole :
-    protocolContractRole
-      (protocolOccurrenceContract
-        (endpointProgressionPredecessor
-          (dualRendezvousReceiverEndpoint witness))) =
-    binaryProtocolPeerRole (dualRendezvousInstance witness);
+    BinaryRolePairExact
+      (dualRendezvousInstance witness)
+      (protocolContractRole
+        (protocolOccurrenceContract
+          (endpointProgressionPredecessor
+            (dualRendezvousSenderEndpoint witness))))
+      (protocolContractRole
+        (protocolOccurrenceContract
+          (endpointProgressionPredecessor
+            (dualRendezvousReceiverEndpoint witness))));
   exactRendezvousCurrentSessionsDual :
     protocolContractSession
       (protocolOccurrenceContract
@@ -207,9 +227,12 @@ Proof.
     + exact (exactRendezvousReceiverInstance witness Haccepted).
     + pose proof (exactRendezvousBinaryWellFormed witness Haccepted) as Hwell.
       destruct Hwell as [Hroles _].
-      rewrite (exactRendezvousSenderRole witness Haccepted).
-      rewrite (exactRendezvousReceiverRole witness Haccepted).
-      exact Hroles.
+      pose proof (exactRendezvousReceiverRole witness Haccepted) as Hpair.
+      unfold BinaryRolePairExact in Hpair.
+      destruct Hpair as [[Hsender Hreceiver] | [Hsender Hreceiver]].
+      * rewrite Hsender, Hreceiver. exact Hroles.
+      * rewrite Hsender, Hreceiver.
+        intro Hequal. apply Hroles. symmetry. exact Hequal.
 Qed.
 
 Theorem accepted_rendezvous_current_and_successor_sessions_are_dual :

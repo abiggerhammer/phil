@@ -82,13 +82,13 @@ jobs:
         run: |
           set -euo pipefail
           cabal exec -- ghc -isrc -Wall -Werror -Wno-unused-imports -fno-code src/GenericRequirementCategoryKernel.hs
-          cabal exec -- ghc -isrc -Wall -Werror -Wno-unused-imports -fno-code src/Phil/Core/GenericRequirementCategoryKernelBridge.hs
+          cabal exec -- ghc -isrc -Wall -Werror -fno-code src/Phil/Core/GenericRequirementCategoryKernelBridge.hs
           cabal exec -- ghc -isrc -Wall -Werror -fno-code src/Phil/Core/Generic/RequirementCategory.hs
-          cabal exec -- ghc -isrc -Wall -Werror -Wno-unused-imports -fno-code app/GenericRequirementCategoryDecisionCorrespondenceMain.hs
+          cabal exec -- ghc -isrc -Wall -Werror -fno-code app/GenericRequirementCategoryDecisionCorrespondenceMain.hs
           cabal exec -- ghc -isrc -Wall -Werror -fno-code app/GenericRequirementCategoryProductionBindingMain.hs
           cabal exec -- ghc -isrc -Wall -Werror -fno-code test/Phase1GenericRequirementCategoryMain.hs
       - name: Execute exact extracted-kernel controls
-        run: cabal exec -- runghc -Wall -Werror -Wno-unused-imports -isrc app/GenericRequirementCategoryDecisionCorrespondenceMain.hs
+        run: cabal exec -- runghc -Wall -Werror -isrc app/GenericRequirementCategoryDecisionCorrespondenceMain.hs
       - name: Execute production-binding controls
         run: cabal exec -- runghc -Wall -Werror -isrc app/GenericRequirementCategoryProductionBindingMain.hs
       - name: Re-run unchanged GEN-014 corpus

@@ -14,6 +14,8 @@ main :: IO ()
 main = do
   results <- sequence
     [ test "explicit in-scope obligation dependency verifies" explicitDependencyVerifies
+    , test "generated prerequisite may justify its parent without false cycle" generatedPrerequisiteDependencyPasses
+    , test "genuine two-way obligation justification cycle rejects" genuineObligationCycleRejects
     , test "lineage plus ancestor evidence does not authorize child" lineageWithoutChildEvidenceRejects
     , test "lineage parent must remain present in manifest" missingLineageParentRejects
     , test "exported historical ancestor may remain lineage" exportedHistoricalAncestorPasses
@@ -26,6 +28,28 @@ explicitDependencyVerifies :: Bool
 explicitDependencyVerifies =
   let (ledger, manifest, context, _) = fixture True True True
   in verifyManifest context ledger manifest == Right ()
+
+generatedPrerequisiteDependencyPasses :: Bool
+generatedPrerequisiteDependencyPasses =
+  let (ledger0, manifest0, context, ids) = fixture True False True
+      ledger = adjustEvidence (parentEvidenceId ids)
+        (\entry -> entry
+          { evidenceDependsOn = [DependsOnObligation (childRevisionId ids)] })
+        ledger0
+      manifest = seal ledger manifest0
+  in verifyManifest context ledger manifest == Right ()
+
+genuineObligationCycleRejects :: Bool
+genuineObligationCycleRejects =
+  let (ledger0, manifest0, context, ids) = fixture True True True
+      ledger = adjustEvidence (parentEvidenceId ids)
+        (\entry -> entry
+          { evidenceDependsOn = [DependsOnObligation (childRevisionId ids)] })
+        ledger0
+      manifest = seal ledger manifest0
+  in case verifyManifest context ledger manifest of
+      Left (JustificationCycle _) -> True
+      _ -> False
 
 lineageWithoutChildEvidenceRejects :: Bool
 lineageWithoutChildEvidenceRejects =
@@ -243,6 +267,18 @@ mkExport revision = provisional
 
 seal :: AssuranceLedger -> AssuranceManifest -> AssuranceManifest
 seal ledger manifest = manifest { manifestId = deriveManifestId ledger manifest }
+
+adjustEvidence
+  :: EvidenceEntryId
+  -> (EvidenceEntry -> EvidenceEntry)
+  -> AssuranceLedger
+  -> AssuranceLedger
+adjustEvidence key modify ledger = ledger
+  { ledgerEvidence = Map.adjust update key (ledgerEvidence ledger) }
+  where
+    update entry =
+      let changed = modify entry
+      in changed { evidenceEntryDigest = deriveEvidenceEntryDigest changed }
 
 test :: String -> Bool -> IO Bool
 test label passed = do

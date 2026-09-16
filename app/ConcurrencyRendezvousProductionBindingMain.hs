@@ -39,6 +39,8 @@ main = do
   results <- sequence
     [ test "certified restricted rendezvous accepts exact production composition"
         certifiedRestrictedRendezvousAccepts
+    , test "general certifier rejects restricted payload without transfer"
+        restrictedPayloadWeakPathRejects
     , test "native missing-owner diagnostic precedes rendezvous kernel"
         nativeMissingOwnerPrecedence
     , test "independent Message evidence remains fail-closed"
@@ -76,6 +78,28 @@ certifiedRestrictedRendezvousAccepts = do
     (Map.lookup payloadOccurrence (communicationRestrictedOwners state)
       == Just (fixtureServerProcess fx, receivedPayload))
     "certified rendezvous did not preserve exact transferred occurrence identity"
+  assert
+    (Map.lookup clientEndpointOccurrence (communicationRestrictedOwners state)
+      == Just (fixtureClientProcess fx, clientSuccessor))
+    "certified restricted rendezvous left the sender endpoint owner at its predecessor"
+  assert
+    (Map.lookup serverEndpointOccurrence (communicationRestrictedOwners state)
+      == Just (fixtureServerProcess fx, serverSuccessor))
+    "certified restricted rendezvous left the receiver endpoint owner at its predecessor"
+
+restrictedPayloadWeakPathRejects :: Either String ()
+restrictedPayloadWeakPathRejects = do
+  fx <- fixture
+  case certifyProcessRendezvous
+      (fixtureActivation fx)
+      (fixtureProtocol fx)
+      (fixtureContexts fx)
+      (fixtureRequest fx)
+      (fixtureEvidence fx) of
+    Left (ConcurrencyRendezvousMessageTransferRequired actualType) ->
+      assert (actualType == payloadTy)
+        "weak-path rejection lost exact restricted payload type"
+    other -> Left ("restricted payload used transfer-free certification path: " <> show other)
 
 nativeMissingOwnerPrecedence :: Either String ()
 nativeMissingOwnerPrecedence = do

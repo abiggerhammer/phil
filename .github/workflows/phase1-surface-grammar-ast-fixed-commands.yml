@@ -1,0 +1,56 @@
+name: Phase 1 Surface Grammar AST Fixed Command Correspondence
+
+on:
+  pull_request:
+    paths:
+      - 'src/Phil/Surface/GrammarV1/ReferenceAstFixedCommands.hs'
+      - 'src/Phil/Surface/GrammarV1/ReferenceAstExpressionCore.hs'
+      - 'src/Phil/Surface/GrammarV1/ReferenceAstProposition.hs'
+      - 'src/Phil/Surface/GrammarV1/ReferenceAstStaticReference.hs'
+      - 'src/Phil/Surface/GrammarV1/ReferenceAstTypePayload.hs'
+      - 'src/Phil/Surface/GrammarV1/ReferenceKernelBridge.hs'
+      - 'src/Phil/Surface/GrammarV1/Parser.hs'
+      - 'src/SurfaceGrammarRecognizerKernel.hs'
+      - 'test/Phase1GrammarV1ReferenceAstFixedCommandsMain.hs'
+      - '.github/workflows/phase1-surface-grammar-ast-fixed-commands.yml'
+  push:
+    branches: [main]
+    paths:
+      - 'src/Phil/Surface/GrammarV1/ReferenceAstFixedCommands.hs'
+      - 'src/Phil/Surface/GrammarV1/ReferenceAstExpressionCore.hs'
+      - 'src/Phil/Surface/GrammarV1/ReferenceAstProposition.hs'
+      - 'src/Phil/Surface/GrammarV1/ReferenceAstStaticReference.hs'
+      - 'src/Phil/Surface/GrammarV1/ReferenceAstTypePayload.hs'
+      - 'src/Phil/Surface/GrammarV1/ReferenceKernelBridge.hs'
+      - 'src/Phil/Surface/GrammarV1/Parser.hs'
+      - 'src/SurfaceGrammarRecognizerKernel.hs'
+      - 'test/Phase1GrammarV1ReferenceAstFixedCommandsMain.hs'
+      - '.github/workflows/phase1-surface-grammar-ast-fixed-commands.yml'
+
+permissions:
+  contents: read
+
+jobs:
+  ast-fixed-command-correspondence:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: haskell-actions/setup@v2
+        with:
+          ghc-version: '9.6.7'
+          cabal-version: 'latest'
+
+      - name: Build ordinary regression substrate
+        run: cabal build all --enable-tests
+
+      - name: Strictly compile fixed-command correspondence harness
+        run: |
+          cabal exec -- ghc --make \
+            -Wall -Werror \
+            -isrc \
+            test/Phase1GrammarV1ReferenceAstFixedCommandsMain.hs \
+            -o /tmp/phase1-surface-grammar-ast-fixed-commands
+
+      - name: Check certified fixed commands against production AST
+        run: /tmp/phase1-surface-grammar-ast-fixed-commands

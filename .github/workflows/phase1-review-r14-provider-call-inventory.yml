@@ -1,0 +1,45 @@
+name: Phase 1 Review R14 Provider Call Inventory
+
+on:
+  pull_request:
+    paths:
+      - 'src/Phil/Systems/ProviderCallCorrespondence.hs'
+      - 'src/Phil/Systems/AuthorityEffectCorrespondence.hs'
+      - 'test/Phase1ReviewR14ProviderCallInventoryMain.hs'
+      - 'test/Phase1ReviewR13ProviderOperationCorrespondenceMain.hs'
+      - 'test/Phase1ProviderCallCorrespondenceMain.hs'
+      - 'test/Phase1AuthorityEffectCorrespondenceMain.hs'
+      - '.github/workflows/phase1-review-r14-provider-call-inventory.yml'
+  push:
+    branches: [main]
+    paths:
+      - 'src/Phil/Systems/ProviderCallCorrespondence.hs'
+      - 'src/Phil/Systems/AuthorityEffectCorrespondence.hs'
+      - 'test/Phase1ReviewR14ProviderCallInventoryMain.hs'
+      - 'test/Phase1ReviewR13ProviderOperationCorrespondenceMain.hs'
+      - 'test/Phase1ProviderCallCorrespondenceMain.hs'
+      - 'test/Phase1AuthorityEffectCorrespondenceMain.hs'
+      - '.github/workflows/phase1-review-r14-provider-call-inventory.yml'
+
+permissions:
+  contents: read
+
+jobs:
+  review-r14-provider-call-inventory:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: haskell-actions/setup@v2
+        with:
+          ghc-version: '9.6.7'
+          cabal-version: 'latest'
+      - name: Build complete Haskell substrate
+        run: cabal build all --enable-tests
+      - name: Run R14 regression
+        run: cabal exec -- runghc -Wall -Werror -isrc test/Phase1ReviewR14ProviderCallInventoryMain.hs
+      - name: Re-run R13 and provider correspondence controls
+        run: |
+          set -euo pipefail
+          cabal exec -- runghc -Wall -Werror -isrc test/Phase1ReviewR13ProviderOperationCorrespondenceMain.hs
+          cabal exec -- runghc -Wall -Werror -isrc test/Phase1ProviderCallCorrespondenceMain.hs
+          cabal exec -- runghc -Wall -Werror -isrc test/Phase1AuthorityEffectCorrespondenceMain.hs

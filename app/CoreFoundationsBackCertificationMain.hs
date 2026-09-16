@@ -29,7 +29,7 @@ certifyOne checkedRoot outputRoot spec = do
       outputPath = outputRoot </> Text.unpack obligation <> ".rocq.cert"
   sourceBytes <- ByteString.readFile sourcePath
   objectBytes <- ByteString.readFile objectPath
-  case certifyRocqProof spec sourceBytes objectBytes of
+  case packageTrustedRocqProof spec sourceBytes objectBytes of
     Left err ->
       failWith
         ("core-foundations back-certification failed for " <>

@@ -159,7 +159,7 @@ certify :: RocqCertificationSpec -> FilePath -> FilePath -> IO RocqCertification
 certify spec sourcePath objectPath = do
   sourceBytes <- ByteString.readFile sourcePath
   objectBytes <- ByteString.readFile objectPath
-  case certifyRocqProof spec sourceBytes objectBytes of
+  case packageTrustedRocqProof spec sourceBytes objectBytes of
     Left err -> failWith ("Rocq certification failed: " <> show err)
     Right bundle -> pure bundle
 

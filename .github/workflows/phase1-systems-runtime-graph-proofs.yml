@@ -139,9 +139,9 @@ jobs:
       - name: Strict typecheck runtime graph implementation
         run: |
           set -euo pipefail
-          cabal exec -- ghc -isrc -Wall -Werror -Wno-name-shadowing -fno-code src/Phil/Systems/RuntimeClaimBinding.hs
-          cabal exec -- ghc -isrc -Wall -Werror -Wno-name-shadowing -fno-code src/Phil/Systems/RuntimePrimitiveReuse.hs
-          cabal exec -- ghc -isrc -Wall -Werror -Wno-name-shadowing -fno-code src/Phil/Systems/CostAttribution.hs
+          cabal exec -- ghc -isrc -Wall -Werror -fno-code src/Phil/Systems/RuntimeClaimBinding.hs
+          cabal exec -- ghc -isrc -Wall -Werror -fno-code src/Phil/Systems/RuntimePrimitiveReuse.hs
+          cabal exec -- ghc -isrc -Wall -Werror -fno-code src/Phil/Systems/CostAttribution.hs
       - name: Strict typecheck unchanged 77-case runtime graph corpus
         run: |
           set -euo pipefail
@@ -150,7 +150,7 @@ jobs:
             test/Phase1RuntimePrimitiveReuseMain.hs \
             test/Phase1CostAttributionMain.hs
           do
-            cabal exec -- ghc -Wall -Werror -Wno-name-shadowing -Wno-unused-imports -Wno-missing-signatures -isrc -fno-code "$test_file"
+            cabal exec -- ghc -Wall -Werror -isrc -fno-code "$test_file"
           done
       - name: Re-run unchanged SYS-015 / SYS-016 / SYS-018 corpus
         run: |
@@ -160,7 +160,7 @@ jobs:
             test/Phase1RuntimePrimitiveReuseMain.hs \
             test/Phase1CostAttributionMain.hs
           do
-            cabal exec -- runghc -Wall -Werror -Wno-name-shadowing -Wno-unused-imports -Wno-missing-signatures -isrc "$test_file"
+            cabal exec -- runghc -Wall -Werror -isrc "$test_file"
           done
       - name: Record implementation-refinement staging identities
         run: |

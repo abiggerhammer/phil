@@ -1,0 +1,8 @@
+fixture_id	expect	competent_layer	governing_authority	expected_a	expected_b
+P1-NEG-CALL-015-001	qualification-missing	foreign-callable-qualification	matrix:CALL-015;certified:PHIL-CALL-FOREIGN-001	foreign.read.impl.001	-
+P1-NEG-CALL-015-002	missing-evidence	foreign-callable-qualification	matrix:CALL-015;certified:PHIL-CALL-FOREIGN-001	resource-lifecycle,effect-confinement,authority-confinement,failure-behavior	-
+P1-NEG-CALL-015-003	artifact-mismatch	foreign-callable-qualification	matrix:CALL-015;certified:PHIL-CALL-FOREIGN-001	foreign.read.impl.001	foreign.read.impl.002
+P1-NEG-CALL-015-004	surface-mismatch	foreign-callable-qualification	matrix:CALL-015;certified:PHIL-CALL-FOREIGN-001	observed	qualified
+P1-NEG-CALL-015-005	refinement-effect-too-wide	foreign-callable-qualification	matrix:CALL-015;certified:PHIL-CALL-FOREIGN-001;certified:PHIL-CALL-REFINE-001	write	-
+P1-NEG-CALL-015-006	refinement-authority-too-strong	foreign-callable-qualification	matrix:CALL-015;certified:PHIL-CALL-FOREIGN-001;certified:PHIL-CALL-REFINE-001	storage.delete	-
+P1-NEG-CALL-015-007	refinement-failure-too-wide	foreign-callable-qualification	matrix:CALL-015;certified:PHIL-CALL-FOREIGN-001;certified:PHIL-CALL-REFINE-001	fatal	abort

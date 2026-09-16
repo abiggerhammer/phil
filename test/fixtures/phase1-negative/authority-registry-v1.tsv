@@ -1,0 +1,25 @@
+authority_ref	authority_kind	canonical_id	canonical_source
+matrix:PROT-005	matrix	PROT-005	Phil Phase 1 Conformance Matrix
+certified:PHIL-SESSION-STEP-001	certified	PHIL-SESSION-STEP-001	proof/Phil/Core/SessionStep.v
+certified:PHIL-SURFACE-SCOPE-001	certified	PHIL-SURFACE-SCOPE-001	proof/Phil/Surface/ScopeJoin.v
+matrix:PROT-001	matrix	PROT-001	Phil Phase 1 Conformance Matrix
+certified:PHIL-FOCUS-BRANCH-001	certified	PHIL-FOCUS-BRANCH-001	proof/Phil/Core/Focusing.v
+matrix:BND-001	matrix	BND-001	Phil Phase 1 Conformance Matrix
+certified:PHIL-RECOG-GATE-001	certified	PHIL-RECOG-GATE-001	proof/Phil/Core/Recognition.v
+matrix:PROT-006	matrix	PROT-006	Phil Phase 1 Conformance Matrix
+matrix:RES-010	matrix	RES-010	Phil Phase 1 Conformance Matrix
+matrix:RES-004	matrix	RES-004	Phil Phase 1 Conformance Matrix
+certified:PHIL-CTX-JOIN-001	certified	PHIL-CTX-JOIN-001	proof/Phil/Core/ContextJoin.v
+matrix:BND-003	matrix	BND-003	Phil Phase 1 Conformance Matrix
+certified:PHIL-SURFACE-CTRL-001	certified	PHIL-SURFACE-CTRL-001	proof/Phil/Surface/Checking.v
+certified:PHIL-PROT-STEP-001	certified	PHIL-PROT-STEP-001	proof/Phil/Core/ProtocolProgressionGuard.v
+matrix:AUTH-002	matrix	AUTH-002	Phil Phase 1 Conformance Matrix
+certified:PHIL-AUTH-POSSESS-001	certified	PHIL-AUTH-POSSESS-001	proof/Phil/Core/AuthorityPossession.v
+matrix:BND-012	matrix	BND-012	Phil Phase 1 Conformance Matrix
+certified:PHIL-BND-SUBJECT-001	certified	PHIL-BND-SUBJECT-001	proof/Phil/Core/BoundarySubject.v
+certified:PHIL-CTX-LIN-001	certified	PHIL-CTX-LIN-001	proof/Phil/Core/Context.v
+matrix:DATA-006	matrix	DATA-006	Phil Phase 1 Conformance Matrix
+certified:PHIL-RES-SCOPE-001	certified	PHIL-RES-SCOPE-001	proof/Phil/Core/ResourceScope.v
+matrix:VER-005	matrix	VER-005	Phil Phase 1 Conformance Matrix
+matrix:VER-013	matrix	VER-013	Phil Phase 1 Conformance Matrix
+certified:PHIL-FOCUS-MECH-001	certified	PHIL-FOCUS-MECH-001	proof/Phil/Core/Focusing.v

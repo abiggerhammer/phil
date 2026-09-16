@@ -5,12 +5,21 @@ module Main (main) where
 import qualified Data.Map.Strict as Map
 import qualified Data.Set as Set
 import Data.Text (Text)
+import Phil.Core.CheckedBindingMode (CheckedTypeMode (..))
 import Phil.Core.ConcurrencyRendezvousCertification
 import Phil.Core.ConcurrencyTerminalCertification
+import Phil.Core.Context (ResourceContext)
 import Phil.Core.Process
-import Phil.Core.ProcessActivation (ProcessActivationContract (..))
+import Phil.Core.ProcessActivation
+  ( ActivationBinding (..)
+  , ActivationBindingOrigin (..)
+  , ActivationOccurrenceKey (..)
+  , ActivationReachability (..)
+  , ProcessActivationContract (..)
+  , ProcessActivationState (..)
+  )
 import Phil.Core.ProcessLifecycle
-import Phil.Core.Protocol (emptyProtocolContext)
+import Phil.Core.Protocol (ProtocolContext (..), emptyProtocolContext)
 import Phil.Core.Static
 import Phil.Core.Syntax
 import System.Exit (exitFailure)
@@ -18,7 +27,11 @@ import System.Exit (exitFailure)
 main :: IO ()
 main = do
   results <- sequence
-    [ test "certified declared Closed transition accepts" declaredClosedAccepts
+    [ test "REVIEW-R12 terminal initializer preserves exact activation resources"
+        activationBindingAccepts
+    , test "REVIEW-R12 empty replacement context cannot erase live activation resource"
+        emptyReplacementRejects
+    , test "certified declared Closed transition accepts" declaredClosedAccepts
     , test "native-success Return transition fails closed at terminal kernel" returnFailsClosed
     , test "native Continue rejection preserves diagnostic precedence" continueNativePrecedence
     , test "certified fatal transition preserves peer state" fatalIsolationAccepts
@@ -38,6 +51,76 @@ test :: String -> Either String () -> IO Bool
 test label result = case result of
   Right () -> putStrLn ("PASS: " <> label) >> pure True
   Left detail -> putStrLn ("FAIL: " <> label <> " -- " <> detail) >> pure False
+
+activationBindingAccepts :: Either String ()
+activationBindingAccepts = do
+  (activation, processA, processB) <- boundActivationFixture
+  let activationContexts = activationProcessContexts
+        (certifiedRendezvousActivationState activation)
+  resourcesA <- requireActivationContext processA activationContexts
+  resourcesB <- requireActivationContext processB activationContexts
+  runtime <- mapLeft show $ initializeCertifiedTerminalRuntime
+    activation
+    (Map.fromList
+      [ (processA, emptyProtocolContext { protocolResources = resourcesA })
+      , (processB, emptyProtocolContext { protocolResources = resourcesB })
+      ])
+    Map.empty
+  let runtimeContexts = runtimeProtocolContexts (certifiedTerminalRuntimeState runtime)
+  assert
+    (fmap protocolResources (Map.lookup processA runtimeContexts) == Just resourcesA)
+    "terminal initializer did not retain exact activation resources"
+
+emptyReplacementRejects :: Either String ()
+emptyReplacementRejects = do
+  (activation, processA, processB) <- boundActivationFixture
+  let activationContexts = activationProcessContexts
+        (certifiedRendezvousActivationState activation)
+  resourcesB <- requireActivationContext processB activationContexts
+  case initializeCertifiedTerminalRuntime
+      activation
+      (Map.fromList
+        [ (processA, emptyProtocolContext)
+        , (processB, emptyProtocolContext { protocolResources = resourcesB })
+        ])
+      Map.empty of
+    Left (ConcurrencyTerminalActivationResourceMismatch actual expected replacement) ->
+      assert
+        ( actual == processA
+          && expected /= replacement
+          && replacement == protocolResources emptyProtocolContext )
+        "activation-resource mismatch lost exact process/expected/replacement context"
+    other -> Left ("empty replacement context erased a live activation resource: " <> show other)
+
+boundActivationFixture
+  :: Either String (CertifiedRendezvousActivation, ProcessKey, ProcessKey)
+boundActivationFixture = do
+  graph <- mapLeft show rootGraph
+  network0 <- mapLeft show $ elaborateProcessNetwork graph [siteA, siteB]
+  let (processA, processB) = processKeys network0
+      liveOccurrence = ActivationOccurrenceKey "review-r12-live-resource"
+      liveBinding = ActivationBinding
+        { activationOccurrenceKey = liveOccurrence
+        , activationLocalName = Name "live-resource"
+        , activationCheckedTypeMode = CheckedTypeMode (TyOpaque "LiveResource") Linear
+        , activationBindingOrigin = TargetParameterOrigin "review-r12.live-resource"
+        , activationReachability = DirectStatefulReachability liveOccurrence
+        , activationStartsSharedLoan = False
+        }
+      contracts =
+        [ ProcessActivationContract processA [liveBinding]
+        , ProcessActivationContract processB []
+        ]
+  activation <- mapLeft show $
+    certifyRendezvousActivation graph network0 contracts [] []
+  pure (activation, processA, processB)
+
+requireActivationContext
+  :: ProcessKey
+  -> Map.Map ProcessKey ResourceContext
+  -> Either String ResourceContext
+requireActivationContext processKey contexts =
+  maybe (Left "missing certified activation context") Right (Map.lookup processKey contexts)
 
 declaredClosedAccepts :: Either String ()
 declaredClosedAccepts = do

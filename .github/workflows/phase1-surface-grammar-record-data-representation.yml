@@ -1,0 +1,70 @@
+name: Phase 1 Surface Grammar Record Data Representation
+
+on:
+  pull_request:
+    paths:
+      - 'grammar/phase1-surface.ebnf'
+      - 'scripts/derive_phase1_surface_grammar.py'
+      - 'scripts/derive_phase1_surface_determinacy_certificate.py'
+      - 'proof/Phil/Surface/GrammarAstRecord*.v'
+      - 'proof/Phil/Surface/GrammarAstGeneric*.v'
+      - 'proof/Phil/Surface/GrammarAstStructuralMode*.v'
+      - 'proof/Phil/Surface/GrammarAstData*.v'
+      - 'proof/Phil/Surface/GrammarAstVariant*.v'
+      - 'proof/Phil/Surface/GrammarAstTopLevelImplementation*.v'
+      - '.github/workflows/phase1-surface-grammar-record-data-representation.yml'
+  push:
+    branches: [main]
+    paths:
+      - 'grammar/phase1-surface.ebnf'
+      - 'scripts/derive_phase1_surface_grammar.py'
+      - 'scripts/derive_phase1_surface_determinacy_certificate.py'
+      - 'proof/Phil/Surface/GrammarAstRecord*.v'
+      - 'proof/Phil/Surface/GrammarAstGeneric*.v'
+      - 'proof/Phil/Surface/GrammarAstStructuralMode*.v'
+      - 'proof/Phil/Surface/GrammarAstData*.v'
+      - 'proof/Phil/Surface/GrammarAstVariant*.v'
+      - 'proof/Phil/Surface/GrammarAstTopLevelImplementation*.v'
+      - '.github/workflows/phase1-surface-grammar-record-data-representation.yml'
+
+permissions:
+  contents: read
+
+jobs:
+  representation:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    container:
+      image: rocq/rocq-prover:9.2.0
+      options: --user root
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Derive exact Grammar-v1 inputs
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 scripts/derive_phase1_surface_grammar.py --write
+          python3 scripts/derive_phase1_surface_determinacy_certificate.py --write
+          python3 scripts/derive_phase1_surface_grammar.py --check
+          python3 scripts/derive_phase1_surface_determinacy_certificate.py --check
+
+      - name: Compile and extract record/data representation
+        shell: bash
+        run: |
+          set -euo pipefail
+          export PATH="/home/rocq/.opam/${COMPILER}/bin:$PATH"
+          {
+            echo '-Q proof/Phil Phil'
+            find proof/Phil/Surface -maxdepth 1 -type f -name 'Grammar*.v' -print | sort
+          } > _CoqProject.surface-record-data-representation
+          rocq makefile -f _CoqProject.surface-record-data-representation \
+            -o Makefile.surface-record-data-representation
+          make -f Makefile.surface-record-data-representation -j2 \
+            proof/Phil/Surface/GrammarAstTopLevelImplementationRepresentationExtraction.vo \
+            proof/Phil/Surface/GrammarAstTopLevelImplementationCarrierExtraction.vo \
+            proof/Phil/Surface/GrammarAstRecordDataImplementationRepresentationExtraction.vo
+          echo 'f912067f823bb55902898cb0238602b3801b7fb142adb98bcf012021a21852b4  SurfaceGrammarAstTopLevelRepresentationKernel.hs' | sha256sum -c -
+          echo 'ed31042e87c0a741586a64a4edcb0538d55fa509f1574984c25d375c8be386a2  SurfaceGrammarAstTopLevelCarrierKernel.hs' | sha256sum -c -
+          test -s SurfaceGrammarAstRecordDataRepresentationKernel.hs
+          sha256sum SurfaceGrammarAstRecordDataRepresentationKernel.hs

@@ -1,0 +1,29 @@
+component SteveGet provides Unit {
+    decide blob_read(contentId) {
+        found(bytes) => {
+            let digestDecision = borrow bytes as bytesView {
+                digest_check(contentId, bytesView)
+            }
+
+            decide digestDecision {
+                accepted => {
+                    release bytes
+                    return unit
+                }
+
+                rejected(reason) => {
+                    release bytes
+                    return unit
+                }
+            }
+        }
+
+        not-found => {
+            return unit
+        }
+
+        storage-failure(reason) => {
+            return unit
+        }
+    }
+}

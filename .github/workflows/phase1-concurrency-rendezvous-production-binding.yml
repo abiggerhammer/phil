@@ -139,10 +139,10 @@ jobs:
           cabal exec -- ghc -isrc -Wall -Werror -fno-code src/Phil/Core/ProcessCausality.hs
           cabal exec -- ghc -isrc -Wall -Werror -fno-code src/Phil/Core/ConcurrencyActivationCertification.hs
           cabal exec -- ghc -isrc -Wall -Werror -fno-code src/Phil/Core/ConcurrencyRendezvousCertification.hs
-          cabal exec -- ghc -i. -Wall -Werror -Wno-unused-imports -fno-code app/ConcurrencyRendezvousDecisionCorrespondenceMain.hs
+          cabal exec -- ghc -i. -Wall -Werror -fno-code app/ConcurrencyRendezvousDecisionCorrespondenceMain.hs
           cabal exec -- ghc -isrc -Wall -Werror -fno-code app/ConcurrencyRendezvousProductionBindingMain.hs
       - name: Execute exact staging extracted-kernel controls
-        run: cabal exec -- runghc -i. -Wall -Werror -Wno-unused-imports app/ConcurrencyRendezvousDecisionCorrespondenceMain.hs
+        run: cabal exec -- runghc -i. -Wall -Werror app/ConcurrencyRendezvousDecisionCorrespondenceMain.hs
       - name: Re-run implementation-refined activation predecessor
         run: cabal exec -- runghc -Wall -Werror -isrc app/ConcurrencyActivationProductionBindingMain.hs
       - name: Execute production binding controls

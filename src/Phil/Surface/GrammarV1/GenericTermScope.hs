@@ -310,7 +310,10 @@ expressionBinderSites (Located _ expression) = case expression of
   GrammarV1BoolExpression _ -> []
   GrammarV1UnitExpression -> []
   GrammarV1IntegerExpression _ -> []
+  GrammarV1NegateExpression inner -> expressionBinderSites inner
   GrammarV1ProjectionExpression receiver _ -> expressionBinderSites receiver
+  GrammarV1ShiftExpression left _ right ->
+    expressionBinderSites left <> expressionBinderSites right
   GrammarV1BinaryExpression left _ right ->
     expressionBinderSites left <> expressionBinderSites right
   GrammarV1FallbackExpression primary fallback ->
@@ -351,6 +354,7 @@ expressionBinderSites (Located _ expression) = case expression of
     failureTargetBinderSites target <> expressionBinderSites resource
   GrammarV1CloseExpression endpoint -> expressionBinderSites endpoint
   GrammarV1ReleaseExpression resource -> expressionBinderSites resource
+  GrammarV1ConvertExpression value _ -> expressionBinderSites value
   GrammarV1AcceptExpression value _ -> expressionBinderSites value
   GrammarV1ProveExpression _ -> []
   GrammarV1TransportExpression value _ evidence ->

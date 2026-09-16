@@ -1,0 +1,34 @@
+name: Phase 1 Surface Grammar AST Static Argument Closure Correspondence
+
+on:
+  pull_request:
+    paths:
+      - 'src/Phil/Surface/GrammarV1/**'
+      - 'test/Phase1GrammarV1ReferenceAstStaticArgumentClosureMain.hs'
+      - '.github/workflows/phase1-surface-grammar-ast-static-argument-closure.yml'
+      - 'phil-core.cabal'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  ast-static-argument-closure-correspondence:
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+      - uses: haskell-actions/setup@v2
+        with:
+          ghc-version: '9.6.7'
+          cabal-version: 'latest'
+      - name: Build ordinary regression substrate
+        run: cabal build all --enable-tests
+      - name: Strictly compile recursive static-argument closure harness
+        run: |
+          cabal exec -- ghc --make \
+            -Wall -Werror \
+            -isrc \
+            test/Phase1GrammarV1ReferenceAstStaticArgumentClosureMain.hs \
+            -o /tmp/phase1-surface-grammar-ast-static-argument-closure
+      - name: Check recursive certified static arguments against production AST
+        run: /tmp/phase1-surface-grammar-ast-static-argument-closure

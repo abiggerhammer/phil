@@ -55,6 +55,8 @@ library
       Phil.Systems
       Phil.LLVM
       Phil.Compiler
+      Phil.Verification
+      Phil.Verification.ProofEvidence
   other-modules:
       ArchitectureIdentityKernel
       ArchitectureImportKernel
@@ -64,6 +66,7 @@ library
       ProviderReplacementQualificationKernel
       AssuranceEvidenceAuthorityKernel
       AssuranceValidityScopeKernel
+      CheckedBindingModeKernel
       SystemsIdentityKernel
       ResourceInvariantKernel
       ResourceJoinKernel

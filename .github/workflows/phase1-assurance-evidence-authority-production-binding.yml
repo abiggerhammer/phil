@@ -86,11 +86,11 @@ jobs:
           cabal exec -- ghc -isrc -Wall -Werror -Wno-unused-imports -fno-code src/AssuranceEvidenceAuthorityKernel.hs
           cabal exec -- ghc -isrc -Wall -Werror -fno-code src/Phil/Assurance/EvidenceAuthorityKernelBridge.hs
           cabal exec -- ghc -isrc -Wall -Werror -fno-code src/Phil/Assurance/Verify.hs
-          cabal exec -- ghc -isrc -Wall -Werror -Wno-unused-imports -fno-code app/AssuranceEvidenceAuthorityDecisionCorrespondenceMain.hs
+          cabal exec -- ghc -isrc -Wall -Werror -fno-code app/AssuranceEvidenceAuthorityDecisionCorrespondenceMain.hs
           cabal exec -- ghc -isrc -Wall -Werror -fno-code app/AssuranceEvidenceAuthorityProductionBindingMain.hs
           cabal exec -- ghc -isrc -Wall -Werror -fno-code test/AssuranceMain.hs
       - name: Execute exact extracted-kernel controls
-        run: cabal exec -- runghc -Wall -Werror -Wno-unused-imports -isrc app/AssuranceEvidenceAuthorityDecisionCorrespondenceMain.hs
+        run: cabal exec -- runghc -Wall -Werror -isrc app/AssuranceEvidenceAuthorityDecisionCorrespondenceMain.hs
       - name: Execute production-binding controls
         run: cabal exec -- runghc -Wall -Werror -isrc app/AssuranceEvidenceAuthorityProductionBindingMain.hs
       - name: Re-run unchanged 23-case assurance corpus

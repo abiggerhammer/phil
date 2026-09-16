@@ -117,10 +117,10 @@ jobs:
           cabal exec -- ghc -isrc -Wall -Werror -fno-code src/Phil/Core/ProcessActivation.hs
           cabal exec -- ghc -isrc -Wall -Werror -fno-code src/Phil/Core/ProcessParticipants.hs
           cabal exec -- ghc -isrc -Wall -Werror -fno-code src/Phil/Core/ConcurrencyActivationCertification.hs
-          cabal exec -- ghc -i. -Wall -Werror -Wno-unused-imports -fno-code app/ConcurrencyActivationDecisionCorrespondenceMain.hs
+          cabal exec -- ghc -i. -Wall -Werror -fno-code app/ConcurrencyActivationDecisionCorrespondenceMain.hs
           cabal exec -- ghc -isrc -Wall -Werror -fno-code app/ConcurrencyActivationProductionBindingMain.hs
       - name: Execute exact staging extracted-kernel controls
-        run: cabal exec -- runghc -i. -Wall -Werror -Wno-unused-imports app/ConcurrencyActivationDecisionCorrespondenceMain.hs
+        run: cabal exec -- runghc -i. -Wall -Werror app/ConcurrencyActivationDecisionCorrespondenceMain.hs
       - name: Execute production binding controls
         run: cabal exec -- runghc -isrc -Wall -Werror app/ConcurrencyActivationProductionBindingMain.hs
       - name: Re-run unchanged activation / participant / reachability corpus

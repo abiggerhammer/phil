@@ -92,7 +92,7 @@ jobs:
         run: |
           set -euo pipefail
           ghc -Wall -Werror -fno-code src/SystemsRuntimeGraphKernel.hs
-          cabal exec -- ghc -isrc -Wall -Werror -Wno-name-shadowing -Wno-unused-imports -fno-code src/Phil/Systems/StageClosure.hs
+          cabal exec -- ghc -isrc -Wall -Werror -fno-code src/Phil/Systems/StageClosure.hs
       - name: Execute 12 direct controls through production kernel
         run: |
           set -euo pipefail
@@ -108,9 +108,9 @@ jobs:
             test/Phase1RuntimePrimitiveReuseMain.hs \
             test/Phase1CostAttributionMain.hs
           do
-            cabal exec -- ghc -Wall -Werror -Wno-name-shadowing -Wno-unused-imports -Wno-missing-signatures -isrc -fno-code "$test_file"
+            cabal exec -- ghc -Wall -Werror -isrc -fno-code "$test_file"
           done
-          cabal exec -- ghc -isrc -Wall -Werror -Wno-name-shadowing -Wno-unused-imports -fno-code test/Phase1StageClosureMain.hs
+          cabal exec -- ghc -isrc -Wall -Werror -fno-code test/Phase1StageClosureMain.hs
       - name: Re-run unchanged 77-case Runtime Graph corpus and 20-case final closure corpus
         run: |
           set -euo pipefail
@@ -119,9 +119,9 @@ jobs:
             test/Phase1RuntimePrimitiveReuseMain.hs \
             test/Phase1CostAttributionMain.hs
           do
-            cabal exec -- runghc -Wall -Werror -Wno-name-shadowing -Wno-unused-imports -Wno-missing-signatures -isrc "$test_file"
+            cabal exec -- runghc -Wall -Werror -isrc "$test_file"
           done
-          cabal exec -- runghc -Wall -Werror -Wno-name-shadowing -Wno-unused-imports -isrc test/Phase1StageClosureMain.hs
+          cabal exec -- runghc -Wall -Werror -isrc test/Phase1StageClosureMain.hs
       - name: Re-run LLVM target-refinement checks
         run: cabal test phil-llvm-tests --test-show-details=direct
       - name: Record production-binding identities

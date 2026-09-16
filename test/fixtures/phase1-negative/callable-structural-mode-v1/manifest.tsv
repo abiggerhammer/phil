@@ -1,0 +1,7 @@
+fixture_id	check_kind	expect	competent_layer	governing_authority	expected_a	expected_b
+P1-NEG-CALL-003-001	capture	restricted-capture-must-move	callable-capture	matrix:CALL-003;certified:PHIL-CALL-MODE-001	owner.linear	linear
+P1-NEG-CALL-003-002	capture	duplicate-restricted-capture	callable-capture	matrix:CALL-003;certified:PHIL-CALL-MODE-001	owner.linear	linear
+P1-NEG-CALL-017-001	mode-declaration	explicit-mode-weakens-minimum	callable-mode-declaration	matrix:CALL-017;certified:PHIL-CALL-MODE-STRENGTHEN-001	affine	unrestricted
+P1-NEG-CALL-017-002	mode-declaration	stricter-mode-missing-justification	callable-mode-declaration	matrix:CALL-017;certified:PHIL-CALL-MODE-STRENGTHEN-001	unrestricted	linear
+P1-NEG-CALL-017-003	mode-declaration	stricter-mode-wrong-contract	callable-mode-declaration	matrix:CALL-017;certified:PHIL-CALL-MODE-STRENGTHEN-001	callable.mode.v1	callable.other.v1
+P1-NEG-CALL-017-004	mode-declaration	target-implementation-cannot-strengthen	callable-mode-declaration	matrix:CALL-017;certified:PHIL-CALL-MODE-STRENGTHEN-001	temporary-is-destroyed-by-call	-

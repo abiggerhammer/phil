@@ -1,0 +1,42 @@
+name: Phase 1 Review R13 Provider Operation Correspondence
+
+on:
+  pull_request:
+    paths:
+      - 'src/Phil/Systems/ProviderCallCorrespondence.hs'
+      - 'src/Phil/Examples/Phase1/ProviderCallWitnesses.hs'
+      - 'test/Phase1ReviewR13ProviderOperationCorrespondenceMain.hs'
+      - 'test/Phase1ProviderCallCorrespondenceMain.hs'
+      - 'test/Phase1AuthorityEffectCorrespondenceMain.hs'
+      - '.github/workflows/phase1-review-r13-provider-operation-correspondence.yml'
+  push:
+    branches: [main]
+    paths:
+      - 'src/Phil/Systems/ProviderCallCorrespondence.hs'
+      - 'src/Phil/Examples/Phase1/ProviderCallWitnesses.hs'
+      - 'test/Phase1ReviewR13ProviderOperationCorrespondenceMain.hs'
+      - 'test/Phase1ProviderCallCorrespondenceMain.hs'
+      - 'test/Phase1AuthorityEffectCorrespondenceMain.hs'
+      - '.github/workflows/phase1-review-r13-provider-operation-correspondence.yml'
+
+permissions:
+  contents: read
+
+jobs:
+  review-r13-provider-operation-correspondence:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: haskell-actions/setup@v2
+        with:
+          ghc-version: '9.6.7'
+          cabal-version: 'latest'
+      - name: Build complete Haskell substrate
+        run: cabal build all --enable-tests
+      - name: Run REVIEW-R13 regression
+        run: cabal exec -- runghc -Wall -Werror -isrc test/Phase1ReviewR13ProviderOperationCorrespondenceMain.hs
+      - name: Run provider correspondence controls
+        run: |
+          set -euo pipefail
+          cabal exec -- runghc -Wall -Werror -isrc test/Phase1ProviderCallCorrespondenceMain.hs
+          cabal exec -- runghc -Wall -Werror -isrc test/Phase1AuthorityEffectCorrespondenceMain.hs

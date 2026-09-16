@@ -1,0 +1,58 @@
+name: Phase 1 Surface Grammar AST Expression Core Correspondence
+
+on:
+  pull_request:
+    paths:
+      - 'src/Phil/Surface/GrammarV1/ReferenceAstExpressionCore.hs'
+      - 'src/Phil/Surface/GrammarV1/ReferenceAstStaticReference.hs'
+      - 'src/Phil/Surface/GrammarV1/ReferenceKernelBridge.hs'
+      - 'src/Phil/Surface/GrammarV1/Parser.hs'
+      - 'src/Phil/Surface/GrammarV1/Lexer.hs'
+      - 'src/SurfaceGrammarRecognizerKernel.hs'
+      - 'test/Phase1GrammarV1ReferenceAstExpressionCoreMain.hs'
+      - 'test/fixtures/phase1-surface/**'
+      - 'scripts/check_phase1_surface_corpus.py'
+      - '.github/workflows/phase1-surface-grammar-ast-expression-core.yml'
+  push:
+    branches: [main]
+    paths:
+      - 'src/Phil/Surface/GrammarV1/ReferenceAstExpressionCore.hs'
+      - 'src/Phil/Surface/GrammarV1/ReferenceAstStaticReference.hs'
+      - 'src/Phil/Surface/GrammarV1/ReferenceKernelBridge.hs'
+      - 'src/Phil/Surface/GrammarV1/Parser.hs'
+      - 'src/Phil/Surface/GrammarV1/Lexer.hs'
+      - 'src/SurfaceGrammarRecognizerKernel.hs'
+      - 'test/Phase1GrammarV1ReferenceAstExpressionCoreMain.hs'
+      - 'test/fixtures/phase1-surface/**'
+      - 'scripts/check_phase1_surface_corpus.py'
+      - '.github/workflows/phase1-surface-grammar-ast-expression-core.yml'
+
+permissions:
+  contents: read
+
+jobs:
+  ast-expression-core-correspondence:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: haskell-actions/setup@v2
+        with:
+          ghc-version: '9.6.7'
+          cabal-version: 'latest'
+
+      - name: Build ordinary regression substrate
+        run: cabal build all --enable-tests
+
+      - name: Strictly compile expression-core correspondence harness
+        run: |
+          cabal exec -- ghc --make \
+            -Wall -Werror \
+            -isrc \
+            test/Phase1GrammarV1ReferenceAstExpressionCoreMain.hs \
+            -o /tmp/phase1-surface-grammar-ast-expression-core
+
+      - name: Check certified ordinary expressions against production AST
+        run: |
+          python3 scripts/check_phase1_surface_corpus.py --emit-parser-cases \
+            | /tmp/phase1-surface-grammar-ast-expression-core

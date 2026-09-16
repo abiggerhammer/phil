@@ -125,10 +125,17 @@ rewriteExpression renames (Located span' expression) =
     GrammarV1BoolExpression value -> pure (GrammarV1BoolExpression value)
     GrammarV1UnitExpression -> pure GrammarV1UnitExpression
     GrammarV1IntegerExpression value -> pure (GrammarV1IntegerExpression value)
+    GrammarV1NegateExpression inner ->
+      GrammarV1NegateExpression <$> rewriteExpression renames inner
     GrammarV1ProjectionExpression receiver field ->
       GrammarV1ProjectionExpression
         <$> rewriteExpression renames receiver
         <*> pure field
+    GrammarV1ShiftExpression left operator right ->
+      GrammarV1ShiftExpression
+        <$> rewriteExpression renames left
+        <*> pure operator
+        <*> rewriteExpression renames right
     GrammarV1BinaryExpression left operator right ->
       GrammarV1BinaryExpression
         <$> rewriteExpression renames left
@@ -138,6 +145,10 @@ rewriteExpression renames (Located span' expression) =
       GrammarV1FallbackExpression
         <$> rewriteExpression renames primary
         <*> rewriteFallback renames fallback
+    GrammarV1ConvertExpression value target ->
+      GrammarV1ConvertExpression
+        <$> rewriteExpression renames value
+        <*> pure target
     GrammarV1TupleExpression elements ->
       GrammarV1TupleExpression <$> mapM (rewriteExpression renames) elements
     GrammarV1ParenthesizedExpression inner ->

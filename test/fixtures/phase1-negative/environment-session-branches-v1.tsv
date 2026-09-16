@@ -1,0 +1,12 @@
+session_id	source_node	branch_label	payload_name	payload_type	next_node
+phase0.premature-acceptance	choose	accepted	id	opaque:UploadId	success
+phase0.label-proof	root	proceed	-	-	success
+phase0.label-proof	root	reject	reason	opaque:Reason	failure
+phase0.server-upload	version-choice	unsupported	-	-	failure-unsupported
+phase0.server-upload	version-choice	version	selected	refined-member-field:u16:v:hello.versions:finite-set-u16	receive-begin
+phase0.server-upload	begin-choice	reject	reason	opaque:ValidationFailure[BeginPolicy]	failure-reject
+phase0.server-upload	begin-choice	proceed	-	-	payload-offer
+phase0.server-upload	payload-offer	cancel	-	-	cancelled
+phase0.server-upload	payload-offer	payload	-	-	receive-body
+phase0.server-upload	digest-choice	rejected	reason	opaque:DigestFailure	failure-digest
+phase0.server-upload	digest-choice	accepted	id	opaque:UploadId	success

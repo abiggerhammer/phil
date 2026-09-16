@@ -1,0 +1,7 @@
+fixture_id	expect	competent_layer	governing_authority	expected_a	expected_b
+P1-NEG-CALL-012-001	authority-too-strong	callable-refinement	matrix:CALL-012;certified:PHIL-CALL-REFINE-001	storage.delete	-
+P1-NEG-CALL-012-002	effect-bound-too-wide	callable-refinement	matrix:CALL-012;certified:PHIL-CALL-REFINE-001	delete	-
+P1-NEG-CALL-012-003	failure-set-too-wide	callable-refinement	matrix:CALL-012;certified:PHIL-CALL-REFINE-001	fatal	abort
+P1-NEG-CALL-012-004	transition-incompatible	callable-refinement	matrix:CALL-012;certified:PHIL-CALL-REFINE-001	preserve	consume
+P1-NEG-CALL-012-005	transition-incompatible	callable-refinement	matrix:CALL-012;certified:PHIL-CALL-REFINE-001	replace:callable.successor.v1:state-a	replace:callable.successor.v1:state-b
+P1-NEG-CALL-012-006	machine-shape-mismatch	callable-refinement	matrix:CALL-012;certified:PHIL-CALL-REFINE-001	bytes -> result	u64 -> result

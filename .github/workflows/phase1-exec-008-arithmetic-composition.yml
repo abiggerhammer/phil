@@ -1,0 +1,29 @@
+name: Phase 1 EXEC-008 Arithmetic Composition
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: true
+
+on:
+  pull_request:
+  push:
+    branches: [main]
+
+permissions:
+  contents: read
+
+jobs:
+  exec-008-arithmetic-composition:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: haskell-actions/setup@v2
+        with:
+          ghc-version: '9.6.7'
+          cabal-version: 'latest'
+      - name: Build ordinary regression substrate
+        run: cabal build all --enable-tests
+      - name: Typecheck EXEC-008 Grammar-v1 composition under -Werror
+        run: cabal exec -- ghc -isrc -Wall -Werror -fno-code test/Phase1ExecutionUIntArithmeticCompositionMain.hs
+      - name: EXEC-008 exact arithmetic and branch-obligation composition
+        run: cabal exec -- runghc -isrc test/Phase1ExecutionUIntArithmeticCompositionMain.hs

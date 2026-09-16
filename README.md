@@ -14,6 +14,8 @@ Already familiar with Phase 0? **[From Phil Phase 0 to Phase 1](docs/tutorials/f
 
 Looking up a spelling? The **[Phase 1 keyword lexicon](docs/reference/keywords-phase1.md)** groups every canonical Grammar-v1 reserved word by category and gives its short meaning. The Tour remains the place for first-use explanations in context.
 
+For a focused checked Phase 1 example, **[Steve provider put/get walkthrough](docs/tutorials/steve-provider-put-get.md)** follows the current content-addressed-store witness in both directions and explains where provider replacement, ownership, and digest checking meet the canonical source.
+
 ## Core formulations
 
 **What Phil is**
@@ -59,6 +61,7 @@ Portable Phase 1 handoff artifacts, remaining verification/realization integrati
 - `docs/tutorials/tour-phase0.md` — frozen Phase 0 framed-upload worked example
 - `docs/tutorials/from-phase0-to-phase1.md` — conceptual migration guide for readers who already know Phase 0
 - `docs/reference/keywords-phase1.md` — grouped explanatory lexicon for every canonical Grammar-v1 reserved word
+- `docs/tutorials/steve-provider-put-get.md` — checked Phase 1 Steve provider put/get walkthrough
 - `docs/implementation-status.md` — Phase 0 bootstrap-checker status snapshot
 - `docs/phase-0/assurance-status.md` — Phase 0 proof-certification snapshot
 - `docs/phase-0/` — checker-facing frozen Phase 0 design/ABI snapshot

@@ -22,6 +22,8 @@ Canonical `SemanticForm` serialization and target-evidence revision construction
 
 Exported symbols remain deliberately absent from the semantic decision, matching the Certified theorem: symbol rename alone is nonsemantic.
 
+REVIEW-R15 strengthens the production boundary with the separately Certified `AdmissionContextBound` relation. The checked admission retains the provider occurrence and realization-context revision already included in its content-addressed admission identity; `decideAdmissionContextByFacts` requires the applicability requirement occurrence and realization revision to be the exact normalized projections of those coordinates. The existing 20-fact relative PROV-014 decision remains unchanged and is composed with this new context decision.
+
 ## Residual boundary
 
 This closeout does not mechanize canonical serialization/hashing, concrete `Text`/`Set` representation equality, or truth/completeness of translation, artifact/profile/ABI, target-assumption, and realization evidence. Those remain the explicit correspondence/evidence boundaries already recorded by the Certified obligation.

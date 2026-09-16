@@ -1,4 +1,6 @@
 {-# LANGUAGE OverloadedStrings #-}
+{-# LANGUAGE PatternSynonyms #-}
+{-# LANGUAGE ViewPatterns #-}
 
 module Phil.Surface.GrammarV1.Parser
   ( GrammarV1ParseDiagnostic (..)
@@ -63,10 +65,13 @@ module Phil.Surface.GrammarV1.Parser
   , GrammarV1StateBinding (..)
   , GrammarV1Closure (..)
   , GrammarV1BinaryOperator (..)
+  , GrammarV1ShiftOperator (..)
   , GrammarV1FailureTarget (..)
   , GrammarV1Fallback (..)
   , GrammarV1BranchValue (..)
   , GrammarV1Expression (..)
+  , pattern GrammarV1CharExpression
+  , pattern GrammarV1StringExpression
   , GrammarV1Statement (..)
   , GrammarV1Block (..)
   , GrammarV1ComponentDecl (..)
@@ -82,6 +87,9 @@ import Data.Maybe (listToMaybe)
 import Data.Text (Text)
 import qualified Data.Text as Text
 import Phil.Surface.GrammarV1.Lexer
+import Phil.Surface.GrammarV1.ReferenceKernelBridge
+  ( grammarV1ReferenceAcceptsSourceTokens
+  )
 import Phil.Surface.Syntax
   ( Located (..)
   , SourceSpan (..)
@@ -93,6 +101,7 @@ import Phil.Surface.Syntax
 
 data GrammarV1ParseDiagnostic
   = GrammarV1LexicalDiagnostic GrammarV1LexDiagnostic
+  | GrammarV1CertifiedGrammarDiagnostic
   | GrammarV1SyntaxDiagnostic (Maybe SourceSpan) Text
   deriving (Eq, Show)
 
@@ -614,6 +623,13 @@ data GrammarV1BinaryOperator
   = GrammarV1Add
   | GrammarV1Subtract
   | GrammarV1Multiply
+  | GrammarV1Divide
+  | GrammarV1Remainder
+  deriving (Eq, Ord, Show)
+
+data GrammarV1ShiftOperator
+  = GrammarV1ShiftLeft
+  | GrammarV1ShiftRight
   deriving (Eq, Ord, Show)
 
 data GrammarV1FailureTarget = GrammarV1FailureTarget
@@ -638,9 +654,14 @@ data GrammarV1Expression
   | GrammarV1BoolExpression Bool
   | GrammarV1UnitExpression
   | GrammarV1IntegerExpression Text
+  | GrammarV1NegateExpression (Located GrammarV1Expression)
   | GrammarV1ProjectionExpression
       (Located GrammarV1Expression)
       (Located Text)
+  | GrammarV1ShiftExpression
+      (Located GrammarV1Expression)
+      (Located GrammarV1ShiftOperator)
+      (Located GrammarV1Expression)
   | GrammarV1BinaryExpression
       (Located GrammarV1Expression)
       (Located GrammarV1BinaryOperator)
@@ -696,6 +717,9 @@ data GrammarV1Expression
       (Located GrammarV1Expression)
   | GrammarV1CloseExpression (Located GrammarV1Expression)
   | GrammarV1ReleaseExpression (Located GrammarV1Expression)
+  | GrammarV1ConvertExpression
+      (Located GrammarV1Expression)
+      (Located GrammarV1Type)
   | GrammarV1AcceptExpression
       (Located GrammarV1Expression)
       (Located GrammarV1Type)
@@ -722,6 +746,37 @@ data GrammarV1Expression
   | GrammarV1ClosureExpression GrammarV1Closure
   | GrammarV1RejectExpression (Located GrammarV1Expression)
   deriving (Eq, Ord, Show)
+
+-- | EXEC-024 runtime text literals reuse the closed literal leaf carrier with
+-- private prefixes that cannot be produced by decimal source syntax. Public
+-- pattern synonyms preserve semantic category without widening the expression AST.
+pattern GrammarV1CharExpression :: Text -> GrammarV1Expression
+pattern GrammarV1CharExpression value <- (charExpressionValue -> Just value)
+  where
+    GrammarV1CharExpression value =
+      GrammarV1IntegerExpression (charExpressionPrefix <> value)
+
+pattern GrammarV1StringExpression :: Text -> GrammarV1Expression
+pattern GrammarV1StringExpression value <- (stringExpressionValue -> Just value)
+  where
+    GrammarV1StringExpression value =
+      GrammarV1IntegerExpression (stringExpressionPrefix <> value)
+
+charExpressionPrefix :: Text
+charExpressionPrefix = "\NULphil-char-expression:"
+
+stringExpressionPrefix :: Text
+stringExpressionPrefix = "\NULphil-string-expression:"
+
+charExpressionValue :: GrammarV1Expression -> Maybe Text
+charExpressionValue expression = case expression of
+  GrammarV1IntegerExpression value -> Text.stripPrefix charExpressionPrefix value
+  _ -> Nothing
+
+stringExpressionValue :: GrammarV1Expression -> Maybe Text
+stringExpressionValue expression = case expression of
+  GrammarV1IntegerExpression value -> Text.stripPrefix stringExpressionPrefix value
+  _ -> Nothing
 
 data GrammarV1Statement
   = GrammarV1LetStatement (Located GrammarV1Pattern) (Located GrammarV1Expression)
@@ -850,9 +905,13 @@ parseGrammarV1StructuralSource
   -> Text
   -> Either GrammarV1ParseDiagnostic GrammarV1SourceFile
 parseGrammarV1StructuralSource source input = do
-  tokens <- case lexGrammarV1 source input of
+  sourceTokens <- case lexGrammarV1SourceTokens source input of
     Left diagnostic -> Left (GrammarV1LexicalDiagnostic diagnostic)
     Right values -> Right values
+  if grammarV1ReferenceAcceptsSourceTokens sourceTokens
+    then pure ()
+    else Left GrammarV1CertifiedGrammarDiagnostic
+  let tokens = grammarV1ParserTokensFromSourceTokens sourceTokens
   (parsed, rest) <- runParser parseSourceFile tokens
   case rest of
     [] -> Right parsed
@@ -2456,7 +2515,7 @@ peekCommandExpressionStart = do
       [ "construct", "borrow", "if", "match", "decide", "closure", "loop"
       , "continue", "break", "receive_frame", "receive_exact", "receive"
       , "recognize", "validate", "send_exact", "send", "select", "offer"
-      , "commit_receive", "reject", "fail", "close", "release", "transport"
+      , "commit_receive", "reject", "fail", "close", "release", "convert", "transport"
       , "accept", "prove"
       ]
     _ -> False
@@ -2464,7 +2523,7 @@ peekCommandExpressionStart = do
 parseBaseExpression :: Parser (Located GrammarV1Expression)
 parseBaseExpression = do
   command <- peekCommandExpressionStart
-  if command then parseCommandExpression else parseAdditiveExpression
+  if command then parseCommandExpression else parseShiftExpression
 
 parseExpression :: Parser (Located GrammarV1Expression)
 parseExpression = do
@@ -2527,6 +2586,33 @@ parseFailureTarget = do
         , grammarV1FailureTargetArguments = []
         }
 
+parseShiftExpression :: Parser (Located GrammarV1Expression)
+parseShiftExpression = do
+  first <- parseAdditiveExpression
+  parseMoreShiftExpression first
+
+parseMoreShiftExpression
+  :: Located GrammarV1Expression
+  -> Parser (Located GrammarV1Expression)
+parseMoreShiftExpression left = do
+  hasLeft <- peekSymbol "<<"
+  hasRight <- peekSymbol ">>"
+  if hasLeft || hasRight
+    then do
+      token <- if hasLeft then expectSymbol "<<" else expectSymbol ">>"
+      right <- parseAdditiveExpression
+      let operator = if hasLeft then GrammarV1ShiftLeft else GrammarV1ShiftRight
+          combined = Located
+            (SourceSpan
+              (sourceSpanStart (locatedSpan left))
+              (sourceSpanEnd (locatedSpan right)))
+            (GrammarV1ShiftExpression
+              left
+              (Located (locatedSpan token) operator)
+              right)
+      parseMoreShiftExpression combined
+    else pure left
+
 parseAdditiveExpression :: Parser (Located GrammarV1Expression)
 parseAdditiveExpression = do
   first <- parseMultiplicativeExpression
@@ -2558,9 +2644,23 @@ parseMoreAdditiveExpression left = do
       parseMoreAdditiveExpression combined
     else pure left
 
+parseUnaryExpression :: Parser (Located GrammarV1Expression)
+parseUnaryExpression = do
+  hasMinus <- peekSymbol "-"
+  if hasMinus
+    then do
+      minus <- takeToken
+      operand <- parseUnaryExpression
+      pure (Located
+        (SourceSpan
+          (sourceSpanStart (locatedSpan minus))
+          (sourceSpanEnd (locatedSpan operand)))
+        (GrammarV1NegateExpression operand))
+    else parsePostfixExpression
+
 parseMultiplicativeExpression :: Parser (Located GrammarV1Expression)
 parseMultiplicativeExpression = do
-  first <- parsePostfixExpression
+  first <- parseUnaryExpression
   parseMoreMultiplicativeExpression first
 
 parseMoreMultiplicativeExpression
@@ -2568,11 +2668,19 @@ parseMoreMultiplicativeExpression
   -> Parser (Located GrammarV1Expression)
 parseMoreMultiplicativeExpression left = do
   hasMultiply <- peekSymbol "*"
-  if hasMultiply
+  hasDivide <- peekSymbol "/"
+  hasRemainder <- peekSymbol "%"
+  if hasMultiply || hasDivide || hasRemainder
     then do
       token <- takeToken
-      right <- parsePostfixExpression
-      let operator = Located (locatedSpan token) GrammarV1Multiply
+      operatorValue <- case locatedValue token of
+        GrammarSymbol "*" -> pure GrammarV1Multiply
+        GrammarSymbol "/" -> pure GrammarV1Divide
+        GrammarSymbol "%" -> pure GrammarV1Remainder
+        other -> failParser $
+          "internal multiplicative operator dispatch error for " <> renderToken other
+      right <- parseUnaryExpression
+      let operator = Located (locatedSpan token) operatorValue
           combined = Located
             (SourceSpan
               (sourceSpanStart (locatedSpan left))
@@ -2657,6 +2765,18 @@ parsePrimaryExpression = do
     Just (GrammarKeyword "unit") -> do
       value <- expectKeyword "unit"
       pure (Located (locatedSpan value) GrammarV1UnitExpression)
+    Just (GrammarChar _) -> do
+      value <- takeToken
+      case locatedValue value of
+        GrammarChar textValue ->
+          pure (Located (locatedSpan value) (GrammarV1CharExpression textValue))
+        _ -> failParser "internal CHAR_LITERAL expression dispatch error"
+    Just (GrammarString _) -> do
+      value <- takeToken
+      case locatedValue value of
+        GrammarString textValue ->
+          pure (Located (locatedSpan value) (GrammarV1StringExpression textValue))
+        _ -> failParser "internal STRING_LITERAL expression dispatch error"
     Just (GrammarDecimalInteger _) -> do
       value <- takeToken
       case locatedValue value of
@@ -2695,6 +2815,7 @@ parseCommandExpression = do
     Just (GrammarKeyword "fail") -> parseFailExpression
     Just (GrammarKeyword "close") -> parseCloseExpression
     Just (GrammarKeyword "release") -> parseReleaseExpression
+    Just (GrammarKeyword "convert") -> parseConvertExpression
     Just (GrammarKeyword "transport") -> parseTransportExpression
     Just (GrammarKeyword "accept") -> parseAcceptExpression
     Just (GrammarKeyword "prove") -> parseProveExpression
@@ -2871,6 +2992,18 @@ parseReleaseExpression = do
       (sourceSpanStart (locatedSpan start))
       (sourceSpanEnd (locatedSpan value)))
     (GrammarV1ReleaseExpression value)
+
+parseConvertExpression :: Parser (Located GrammarV1Expression)
+parseConvertExpression = do
+  start <- expectKeyword "convert"
+  value <- parseExpression
+  _ <- expectKeyword "to"
+  target <- parseType
+  pure $ Located
+    (SourceSpan
+      (sourceSpanStart (locatedSpan start))
+      (sourceSpanEnd (locatedSpan target)))
+    (GrammarV1ConvertExpression value target)
 
 parseAcceptExpression :: Parser (Located GrammarV1Expression)
 parseAcceptExpression = do
@@ -3701,7 +3834,7 @@ parseNamedPropositionAtom = do
 
 parseRelationProposition :: Parser (Located GrammarV1Proposition)
 parseRelationProposition = do
-  left <- parseAdditiveExpression
+  left <- parseShiftExpression
   parseRelationFromLeft left
 
 parseRelationFromLeft
@@ -3709,7 +3842,7 @@ parseRelationFromLeft
   -> Parser (Located GrammarV1Proposition)
 parseRelationFromLeft left = do
   operator <- parseRelationOperator
-  right <- parseAdditiveExpression
+  right <- parseShiftExpression
   pure $ Located
     (SourceSpan
       (sourceSpanStart (locatedSpan left))
@@ -3839,6 +3972,9 @@ parseType = do
     Just (GrammarKeyword "Bool") -> do
       value <- expectKeyword "Bool"
       pure (Located (locatedSpan value) GrammarV1BoolType)
+    Just (GrammarKeyword "Char") -> do
+      value <- expectKeyword "Char"
+      pure (Located (locatedSpan value) (GrammarV1UnsignedType "Char"))
     Just (GrammarUIntType _) -> do
       value <- takeToken
       case locatedValue value of
@@ -3988,6 +4124,7 @@ parseStaticArgument = do
   case fmap locatedValue token of
     Just (GrammarKeyword "Unit") -> GrammarV1StaticTypeArgument . locatedValue <$> parseType
     Just (GrammarKeyword "Bool") -> GrammarV1StaticTypeArgument . locatedValue <$> parseType
+    Just (GrammarKeyword "Char") -> GrammarV1StaticTypeArgument . locatedValue <$> parseType
     Just (GrammarUIntType _) -> GrammarV1StaticTypeArgument . locatedValue <$> parseType
     Just (GrammarKeyword "Bytes") -> GrammarV1StaticTypeArgument . locatedValue <$> parseType
     Just (GrammarKeyword "Frame") -> GrammarV1StaticTypeArgument . locatedValue <$> parseType

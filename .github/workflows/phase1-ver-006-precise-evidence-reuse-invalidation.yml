@@ -1,0 +1,64 @@
+name: Phase 1 VER-006 Precise Evidence Reuse Invalidation
+
+on:
+  pull_request:
+    paths:
+      - 'src/Phil/Verification/ProofEvidence.hs'
+      - 'src/Phil/Verification.hs'
+      - 'test/Phase1VerificationEvidenceReuseInvalidationMain.hs'
+      - 'test/Phase1VerificationEvidenceSubjectRevisionCompetenceMain.hs'
+      - 'test/Phase1VerificationProducerFailureUnresolvedMain.hs'
+      - 'test/Phase1VerificationProofProducerCheckerSeparationMain.hs'
+      - 'test/Phase1VerificationCanonicalObligationGraphMain.hs'
+      - 'test/Phase1VerificationIntrinsicInvalidityMain.hs'
+      - 'phil-core.cabal'
+      - '.github/workflows/phase1-ver-006-precise-evidence-reuse-invalidation.yml'
+  push:
+    branches: [main]
+    paths:
+      - 'src/Phil/Verification/ProofEvidence.hs'
+      - 'src/Phil/Verification.hs'
+      - 'test/Phase1VerificationEvidenceReuseInvalidationMain.hs'
+      - 'test/Phase1VerificationEvidenceSubjectRevisionCompetenceMain.hs'
+      - 'test/Phase1VerificationProducerFailureUnresolvedMain.hs'
+      - 'test/Phase1VerificationProofProducerCheckerSeparationMain.hs'
+      - 'test/Phase1VerificationCanonicalObligationGraphMain.hs'
+      - 'test/Phase1VerificationIntrinsicInvalidityMain.hs'
+      - 'phil-core.cabal'
+      - '.github/workflows/phase1-ver-006-precise-evidence-reuse-invalidation.yml'
+
+permissions:
+  contents: read
+
+jobs:
+  ver-006:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: haskell-actions/setup@v2
+        with:
+          ghc-version: '9.6.7'
+          cabal-version: 'latest'
+
+      - name: Build complete Haskell substrate
+        run: cabal build all --enable-tests
+
+      - name: Run VER-006 precise evidence reuse/invalidation regression
+        run: cabal exec -- runghc -Wall -Werror -isrc test/Phase1VerificationEvidenceReuseInvalidationMain.hs
+
+      - name: Re-run VER-005 evidence competence
+        run: cabal exec -- runghc -Wall -Werror -isrc test/Phase1VerificationEvidenceSubjectRevisionCompetenceMain.hs
+
+      - name: Re-run VER-004 and VER-003 proof evidence controls
+        run: |
+          cabal exec -- runghc -Wall -Werror -isrc test/Phase1VerificationProducerFailureUnresolvedMain.hs
+          cabal exec -- runghc -Wall -Werror -isrc test/Phase1VerificationProofProducerCheckerSeparationMain.hs
+
+      - name: Re-run VER-002 and VER-001 verification controls
+        run: |
+          cabal exec -- runghc -Wall -Werror -isrc test/Phase1VerificationCanonicalObligationGraphMain.hs
+          cabal exec -- runghc -Wall -Werror -isrc test/Phase1VerificationIntrinsicInvalidityMain.hs
+
+      - name: Run decision and assurance controls
+        run: cabal test phil-decision-tests phil-assurance-handoff-tests

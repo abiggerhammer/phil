@@ -71,14 +71,21 @@ grammarV1CheckedExpressionReferences pending scope (Located sourceSpan expressio
     GrammarV1BoolExpression _ -> Just (Right [])
     GrammarV1UnitExpression -> Just (Right [])
     GrammarV1IntegerExpression _ -> Just (Right [])
+    GrammarV1NegateExpression inner ->
+      grammarV1CheckedExpressionReferences pending scope inner
     GrammarV1ProjectionExpression receiver _ ->
       grammarV1CheckedExpressionReferences pending scope receiver
+    GrammarV1ShiftExpression left _ right -> combineChecked
+      (grammarV1CheckedExpressionReferences pending scope left)
+      (grammarV1CheckedExpressionReferences pending scope right)
     GrammarV1BinaryExpression left _ right -> combineChecked
       (grammarV1CheckedExpressionReferences pending scope left)
       (grammarV1CheckedExpressionReferences pending scope right)
     GrammarV1FallbackExpression primary fallback -> combineChecked
       (grammarV1CheckedExpressionReferences pending scope primary)
       (checkedFallbackReferences pending scope fallback)
+    GrammarV1ConvertExpression value _ ->
+      grammarV1CheckedExpressionReferences pending scope value
     GrammarV1TupleExpression elements -> checkedMany
       (map (grammarV1CheckedExpressionReferences pending scope) elements)
     GrammarV1ParenthesizedExpression inner ->

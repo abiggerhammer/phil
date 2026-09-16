@@ -1,0 +1,40 @@
+name: Phase 1 Review R8 Signed Known Range
+
+on:
+  pull_request:
+    paths:
+      - 'src/Phil/Core/SIntArithmetic.hs'
+      - 'src/Phil/Core/IntegerDivision.hs'
+      - 'test/Phase1ReviewR8SignedKnownRangeMain.hs'
+      - '.github/workflows/phase1-review-r8-signed-known-range.yml'
+  push:
+    branches: [main]
+    paths:
+      - 'src/Phil/Core/SIntArithmetic.hs'
+      - 'src/Phil/Core/IntegerDivision.hs'
+      - 'test/Phase1ReviewR8SignedKnownRangeMain.hs'
+      - '.github/workflows/phase1-review-r8-signed-known-range.yml'
+
+permissions:
+  contents: read
+
+jobs:
+  review-r8-signed-known-range:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: haskell-actions/setup@v2
+        with:
+          ghc-version: '9.6.7'
+          cabal-version: 'latest'
+      - name: Build ordinary regression substrate
+        run: cabal build all --enable-tests
+      - name: REVIEW-R08 raw known signed range validation
+        run: cabal exec -- runghc -Wall -Werror -isrc test/Phase1ReviewR8SignedKnownRangeMain.hs
+      - name: Preserve affected signed numeric controls
+        run: |
+          set -euo pipefail
+          cabal exec -- runghc -Wall -Werror -isrc test/Phase1ExecutionSIntArithmeticMain.hs
+          cabal exec -- runghc -Wall -Werror -isrc test/Phase1IntegerDivisionCoreMain.hs
+          cabal exec -- runghc -Wall -Werror -isrc test/Phase1NumericConversionMain.hs
+          cabal exec -- runghc -Wall -Werror -isrc test/Phase1IntegerShiftMain.hs

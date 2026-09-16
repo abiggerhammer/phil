@@ -1,0 +1,88 @@
+name: Phase 1 Effect Subject Proofs
+
+on:
+  pull_request:
+    paths:
+      - 'proof/Phil/Core/EffectSubject.v'
+      - 'proof/Phil/Core/EffectSubjectImplementation.v'
+      - 'src/Phil/Core/Effect.hs'
+      - 'test/Phase1GrammarV1CallableEffectsMain.hs'
+      - '.github/workflows/phase1-effect-subject-proofs.yml'
+  push:
+    branches: [main]
+    paths:
+      - 'proof/Phil/Core/EffectSubject.v'
+      - 'proof/Phil/Core/EffectSubjectImplementation.v'
+      - 'src/Phil/Core/Effect.hs'
+      - 'test/Phase1GrammarV1CallableEffectsMain.hs'
+      - '.github/workflows/phase1-effect-subject-proofs.yml'
+
+permissions:
+  contents: read
+
+jobs:
+  rocq-effect-subject-proof:
+    runs-on: ubuntu-latest
+    container:
+      image: rocq/rocq-prover:9.2.0
+      options: --user root
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Compile PHIL-EFFECT-SUBJECT-001 semantic and implementation proofs
+        shell: bash
+        run: |
+          set -euo pipefail
+          export PATH="/home/rocq/.opam/${COMPILER}/bin:$PATH"
+          rocq c -Q proof/Phil Phil proof/Phil/Core/EffectSubject.v
+          rocq c -Q proof/Phil Phil proof/Phil/Core/EffectSubjectImplementation.v
+
+      - name: Record checked proof identities
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p effect-subject-proof
+          cp \
+            proof/Phil/Core/EffectSubject.v \
+            proof/Phil/Core/EffectSubject.vo \
+            proof/Phil/Core/EffectSubjectImplementation.v \
+            proof/Phil/Core/EffectSubjectImplementation.vo \
+            effect-subject-proof/
+          sha256sum \
+            effect-subject-proof/EffectSubject.v \
+            effect-subject-proof/EffectSubject.vo \
+            effect-subject-proof/EffectSubjectImplementation.v \
+            effect-subject-proof/EffectSubjectImplementation.vo \
+            > effect-subject-proof/PHIL-EFFECT-SUBJECT-001.proof.sha256
+          cat effect-subject-proof/PHIL-EFFECT-SUBJECT-001.proof.sha256
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: rocq-effect-subject-proof
+          path: effect-subject-proof
+          if-no-files-found: error
+
+  verify-effect-subject-correspondence:
+    needs: rocq-effect-subject-proof
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: haskell-actions/setup@v2
+        with:
+          ghc-version: '9.6.7'
+          cabal-version: 'latest'
+
+      - name: Build ordinary regression substrate
+        run: cabal build all --enable-tests
+
+      - name: Typecheck Core effect authority and unchanged EFF corpus
+        run: |
+          set -euo pipefail
+          cabal exec -- ghc -isrc -Wall -Werror -fno-code src/Phil/Core/Effect.hs
+          cabal exec -- ghc -isrc -Wall -Werror -fno-code test/Phase1GrammarV1CallableEffectsMain.hs
+
+      - name: Re-run unchanged EFF-001/002 callable-effect pressure
+        run: |
+          set -euo pipefail
+          cabal exec -- runghc -Wall -Werror -isrc test/Phase1GrammarV1CallableEffectsMain.hs

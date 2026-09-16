@@ -3,6 +3,8 @@
 module Phil.Examples.Phase1.ProviderCallWitnesses
   ( uploadProviderCallStageBundle
   , steveProviderCallStageBundle
+  , uploadProviderCallExpectations
+  , steveProviderCallExpectations
   ) where
 
 import qualified Data.Map.Strict as Map
@@ -91,6 +93,27 @@ steveProviderCallStageBundle = do
         ]
   pure (makeProviderCallStageBundle
     base selections (Map.keysSet links) links)
+
+-- Independent call-site semantic expectations.  These are source/Core
+-- correspondence data, not projections of providerCallStageLinks; runtime
+-- symbol spelling therefore has no authority over semantic operation identity.
+uploadProviderCallExpectations :: ProviderCallExpectationMap
+uploadProviderCallExpectations = Map.singleton uploadStoreMechanism
+  (ProviderCallExpectation
+    "upload.storage-provider"
+    (ProviderOperationKey "upload.store"))
+
+steveProviderCallExpectations :: ProviderCallExpectationMap
+steveProviderCallExpectations = Map.fromList
+  [ (steveDigestComputeMechanism, ProviderCallExpectation
+      "steve.digest-provider" (ProviderOperationKey "digest.compute"))
+  , (steveBlobInstallMechanism, ProviderCallExpectation
+      "steve.blob-provider" (ProviderOperationKey "blob.install-if-absent"))
+  , (steveBlobReadMechanism, ProviderCallExpectation
+      "steve.blob-provider" (ProviderOperationKey "blob.read"))
+  , (steveDigestCheckMechanism, ProviderCallExpectation
+      "steve.digest-provider" (ProviderOperationKey "digest.check"))
+  ]
 
 selectionFromSteveArtifact
   :: SteveProviderQualificationArtifact
