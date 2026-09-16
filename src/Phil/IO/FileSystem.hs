@@ -22,6 +22,7 @@ import qualified Data.Map.Strict as Map
 import Data.Map.Strict (Map)
 import qualified Data.Set as Set
 import Data.Text (Text)
+import qualified FileSystemKernel as Kernel
 import Phil.Core.Authority
   ( AuthorityCapability (..)
   , AuthorityCheckError
@@ -109,6 +110,7 @@ data FileSystemCheckError
   | FileSystemReadSuccessExceedsLimit Int Int
   | FileSystemReadTooLargeMismatch Int (Maybe Int)
   | FileSystemReadNotFoundMismatch
+  | FileSystemKernelInvariantViolation Text
   deriving (Eq, Ord, Show)
 
 emptyFileSystemState :: FileSystemState
@@ -162,25 +164,64 @@ checkFileSystemRead
   -> FileSystemState
   -> FileReadOutcome
   -> Either FileSystemCheckError CheckedFileSystemRead
-checkFileSystemRead occurrence path limit authoritySource authorityState state observed = do
-  requirePathOccurrence occurrence path
-  if limit < 0
-    then Left (FileSystemNegativeReadLimit limit)
-    else pure ()
-  _ <- mapLeft FileSystemAuthorityError $
-    checkAuthorityExercise
-      (fileSystemAuthorityRequirement occurrence FileSystemReadOp)
-      authoritySource
-      authorityState
-  checkReadOutcome limit state path observed
-  Right CheckedFileSystemRead
-    { checkedFileSystemReadOccurrence = occurrence
-    , checkedFileSystemReadPath = path
-    , checkedFileSystemReadLimit = limit
-    , checkedFileSystemReadOutcome = observed
-    , checkedFileSystemReadEffect = fileSystemOperationEffect occurrence FileSystemReadOp
-    , checkedFileSystemReadState = state
-    }
+checkFileSystemRead occurrence path limit authoritySource authorityState state observed =
+  let actualOccurrence = providerRelativePathOccurrence path
+      pathOccurrenceMatches = actualOccurrence == occurrence
+      limitNonnegative = limit >= 0
+      authorityResult =
+        checkAuthorityExercise
+          (fileSystemAuthorityRequirement occurrence FileSystemReadOp)
+          authoritySource
+          authorityState
+      authorityAccepted = either (const False) (const True) authorityResult
+      binding = lookupFileSystemBinding path state
+      bindingPresent = maybe False (const True) binding
+      contentMatches = case (observed, binding) of
+        (FileReadSucceeded bytes, Just expected) -> bytes == expected
+        _ -> False
+      withinLimit = maybe False ((<= limit) . runtimeBytesLength) binding
+      decision = Kernel.decideFileSystemReadByFacts
+        pathOccurrenceMatches
+        limitNonnegative
+        authorityAccepted
+        (kernelObservedReadKind observed)
+        bindingPresent
+        contentMatches
+        withinLimit
+  in case decision of
+    Kernel.FileSystemReadPathOccurrenceMismatch ->
+      Left (FileSystemPathOccurrenceMismatch occurrence actualOccurrence)
+    Kernel.FileSystemReadNegativeLimit ->
+      Left (FileSystemNegativeReadLimit limit)
+    Kernel.FileSystemReadAuthorityRejected ->
+      authorityFailure "read" authorityResult
+    Kernel.FileSystemReadSuccessMissingBinding ->
+      Left FileSystemReadSuccessMissingBinding
+    Kernel.FileSystemReadSuccessContentMismatch ->
+      case (binding, observed) of
+        (Just expected, FileReadSucceeded bytes) ->
+          Left (FileSystemReadSuccessContentMismatch expected bytes)
+        _ -> kernelInvariant "content mismatch decision lacked concrete success/binding facts"
+    Kernel.FileSystemReadSuccessExceedsLimit ->
+      case observed of
+        FileReadSucceeded bytes ->
+          Left (FileSystemReadSuccessExceedsLimit limit (runtimeBytesLength bytes))
+        _ -> kernelInvariant "success-exceeds-limit decision lacked a successful read"
+    Kernel.FileSystemReadTooLargeMismatch ->
+      Left (FileSystemReadTooLargeMismatch limit (runtimeBytesLength <$> binding))
+    Kernel.FileSystemReadNotFoundMismatch ->
+      Left FileSystemReadNotFoundMismatch
+    Kernel.FileSystemReadAccepted ->
+      case authorityResult of
+        Left _ -> kernelInvariant "read accepted although native authority checker rejected"
+        Right _ -> Right CheckedFileSystemRead
+          { checkedFileSystemReadOccurrence = occurrence
+          , checkedFileSystemReadPath = path
+          , checkedFileSystemReadLimit = limit
+          , checkedFileSystemReadOutcome = observed
+          , checkedFileSystemReadEffect = fileSystemOperationEffect occurrence FileSystemReadOp
+          , checkedFileSystemReadState = state
+          }
 
 checkFileSystemReplace
   :: FileSystemOccurrence
@@ -191,62 +232,62 @@ checkFileSystemReplace
   -> FileSystemState
   -> FileReplaceOutcome
   -> Either FileSystemCheckError CheckedFileSystemReplace
-checkFileSystemReplace occurrence path bytes authoritySource authorityState prior observed = do
-  requirePathOccurrence occurrence path
-  _ <- mapLeft FileSystemAuthorityError $
-    checkAuthorityExercise
-      (fileSystemAuthorityRequirement occurrence FileSystemReplaceOp)
-      authoritySource
-      authorityState
-  let next = case observed of
-        FileReplaceSucceeded -> insertFileSystemBinding path bytes prior
-        FileReplaceFailed _ -> prior
-  Right CheckedFileSystemReplace
-    { checkedFileSystemReplaceOccurrence = occurrence
-    , checkedFileSystemReplacePath = path
-    , checkedFileSystemReplaceBytes = bytes
-    , checkedFileSystemReplaceOutcome = observed
-    , checkedFileSystemReplaceEffect = fileSystemOperationEffect occurrence FileSystemReplaceOp
-    , checkedFileSystemReplacePriorState = prior
-    , checkedFileSystemReplaceNextState = next
-    }
+checkFileSystemReplace occurrence path bytes authoritySource authorityState prior observed =
+  let actualOccurrence = providerRelativePathOccurrence path
+      pathOccurrenceMatches = actualOccurrence == occurrence
+      authorityResult =
+        checkAuthorityExercise
+          (fileSystemAuthorityRequirement occurrence FileSystemReplaceOp)
+          authoritySource
+          authorityState
+      authorityAccepted = either (const False) (const True) authorityResult
+      decision = Kernel.decideFileSystemReplaceByFacts
+        pathOccurrenceMatches
+        authorityAccepted
+  in case decision of
+    Kernel.FileSystemReplacePathOccurrenceMismatch ->
+      Left (FileSystemPathOccurrenceMismatch occurrence actualOccurrence)
+    Kernel.FileSystemReplaceAuthorityRejected ->
+      authorityFailure "replace" authorityResult
+    Kernel.FileSystemReplaceAccepted ->
+      case authorityResult of
+        Left _ -> kernelInvariant "replace accepted although native authority checker rejected"
+        Right _ ->
+          let observedSuccess = case observed of
+                FileReplaceSucceeded -> True
+                FileReplaceFailed _ -> False
+              next =
+                if Kernel.replaceShouldInstallBinding observedSuccess
+                  then insertFileSystemBinding path bytes prior
+                  else prior
+          in Right CheckedFileSystemReplace
+            { checkedFileSystemReplaceOccurrence = occurrence
+            , checkedFileSystemReplacePath = path
+            , checkedFileSystemReplaceBytes = bytes
+            , checkedFileSystemReplaceOutcome = observed
+            , checkedFileSystemReplaceEffect = fileSystemOperationEffect occurrence FileSystemReplaceOp
+            , checkedFileSystemReplacePriorState = prior
+            , checkedFileSystemReplaceNextState = next
+            }
 
-checkReadOutcome
-  :: Int
-  -> FileSystemState
-  -> ProviderRelativePath
-  -> FileReadOutcome
-  -> Either FileSystemCheckError ()
-checkReadOutcome limit state path observed =
-  case observed of
-    FileReadSucceeded bytes ->
-      case lookupFileSystemBinding path state of
-        Nothing -> Left FileSystemReadSuccessMissingBinding
-        Just expected
-          | bytes /= expected -> Left (FileSystemReadSuccessContentMismatch expected bytes)
-          | runtimeBytesLength bytes > limit ->
-              Left (FileSystemReadSuccessExceedsLimit limit (runtimeBytesLength bytes))
-          | otherwise -> Right ()
-    FileReadFailed FileSystemTooLarge ->
-      case lookupFileSystemBinding path state of
-        Just bytes
-          | runtimeBytesLength bytes > limit -> Right ()
-          | otherwise -> Left (FileSystemReadTooLargeMismatch limit (Just (runtimeBytesLength bytes)))
-        Nothing -> Left (FileSystemReadTooLargeMismatch limit Nothing)
-    FileReadFailed FileSystemNotFound ->
-      case lookupFileSystemBinding path state of
-        Nothing -> Right ()
-        Just _ -> Left FileSystemReadNotFoundMismatch
-    FileReadFailed _ -> Right ()
+kernelObservedReadKind :: FileReadOutcome -> Kernel.FileSystemObservedReadKind
+kernelObservedReadKind observed = case observed of
+  FileReadSucceeded _ -> Kernel.ObservedReadSuccess
+  FileReadFailed FileSystemTooLarge -> Kernel.ObservedReadTooLarge
+  FileReadFailed FileSystemNotFound -> Kernel.ObservedReadNotFound
+  FileReadFailed _ -> Kernel.ObservedReadPortableNegative
 
-requirePathOccurrence
-  :: FileSystemOccurrence
-  -> ProviderRelativePath
-  -> Either FileSystemCheckError ()
-requirePathOccurrence expected path
-  | providerRelativePathOccurrence path == expected = Right ()
-  | otherwise = Left
-      (FileSystemPathOccurrenceMismatch expected (providerRelativePathOccurrence path))
+authorityFailure
+  :: Text
+  -> Either AuthorityCheckError a
+  -> Either FileSystemCheckError b
+authorityFailure operation result = case result of
+  Left detail -> Left (FileSystemAuthorityError detail)
+  Right _ -> kernelInvariant
+    ("kernel rejected " <> operation <> " authority although native authority checker accepted")
+
+kernelInvariant :: Text -> Either FileSystemCheckError a
+kernelInvariant = Left . FileSystemKernelInvariantViolation
 
 fileSystemAuthorityContract :: AuthorityContractKey
 fileSystemAuthorityContract = AuthorityContractKey "phil.io.filesystem.v1"
@@ -271,6 +312,3 @@ operationText :: FileSystemOperation -> Text
 operationText operation = case operation of
   FileSystemReadOp -> "read"
   FileSystemReplaceOp -> "replace"
-
-mapLeft :: (a -> b) -> Either a c -> Either b c
-mapLeft f = either (Left . f) Right
