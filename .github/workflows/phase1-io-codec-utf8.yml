@@ -1,8 +1,15 @@
-name: Phase 1 IO-CODEC UTF-8 and Convenience
+name: Phase 1 IO Codec Proofs
 
 on:
   pull_request:
     paths:
+      - 'proof/Phil/Core/ProviderRelativePath.v'
+      - 'proof/Phil/Core/RuntimeBytes.v'
+      - 'proof/Phil/Core/GenericStructural.v'
+      - 'proof/Phil/Core/FileSystem.v'
+      - 'proof/Phil/Core/Console.v'
+      - 'proof/Phil/Core/UTF8.v'
+      - 'proof/Phil/Core/UTF8Implementation.v'
       - 'src/Phil/IO/Bytes.hs'
       - 'src/Phil/IO/Console.hs'
       - 'src/Phil/IO/FileSystem.hs'
@@ -12,6 +19,13 @@ on:
   push:
     branches: [main]
     paths:
+      - 'proof/Phil/Core/ProviderRelativePath.v'
+      - 'proof/Phil/Core/RuntimeBytes.v'
+      - 'proof/Phil/Core/GenericStructural.v'
+      - 'proof/Phil/Core/FileSystem.v'
+      - 'proof/Phil/Core/Console.v'
+      - 'proof/Phil/Core/UTF8.v'
+      - 'proof/Phil/Core/UTF8Implementation.v'
       - 'src/Phil/IO/Bytes.hs'
       - 'src/Phil/IO/Console.hs'
       - 'src/Phil/IO/FileSystem.hs'
@@ -23,7 +37,54 @@ permissions:
   contents: read
 
 jobs:
-  io-codec:
+  rocq-io-codec-proof:
+    runs-on: ubuntu-latest
+    container:
+      image: rocq/rocq-prover:9.2.0
+      options: --user root
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Compile PHIL-P1-IO-CODEC-001 semantic and implementation proofs
+        shell: bash
+        run: |
+          set -euo pipefail
+          export PATH="/home/rocq/.opam/${COMPILER}/bin:$PATH"
+          rocq c -Q proof/Phil Phil proof/Phil/Core/ProviderRelativePath.v
+          rocq c -Q proof/Phil Phil proof/Phil/Core/RuntimeBytes.v
+          rocq c -Q proof/Phil Phil proof/Phil/Core/GenericStructural.v
+          rocq c -Q proof/Phil Phil proof/Phil/Core/FileSystem.v
+          rocq c -Q proof/Phil Phil proof/Phil/Core/Console.v
+          rocq c -Q proof/Phil Phil proof/Phil/Core/UTF8.v
+          rocq c -Q proof/Phil Phil proof/Phil/Core/UTF8Implementation.v
+
+      - name: Record checked proof identities
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p io-codec-proof
+          cp \
+            proof/Phil/Core/UTF8.v \
+            proof/Phil/Core/UTF8.vo \
+            proof/Phil/Core/UTF8Implementation.v \
+            proof/Phil/Core/UTF8Implementation.vo \
+            io-codec-proof/
+          sha256sum \
+            io-codec-proof/UTF8.v \
+            io-codec-proof/UTF8.vo \
+            io-codec-proof/UTF8Implementation.v \
+            io-codec-proof/UTF8Implementation.vo \
+            > io-codec-proof/PHIL-P1-IO-CODEC-001.proof.sha256
+          cat io-codec-proof/PHIL-P1-IO-CODEC-001.proof.sha256
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: rocq-io-codec-proof
+          path: io-codec-proof
+          if-no-files-found: error
+
+  verify-io-codec-correspondence:
+    needs: rocq-io-codec-proof
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
@@ -43,5 +104,11 @@ jobs:
             src/Phil/IO/UTF8.hs \
             test/Phase1IOCodecUTF8Main.hs
 
-      - name: Run IO-CODEC UTF-8 and convenience pressure corpus
+      - name: Run unchanged IO-CODEC UTF-8 and convenience pressure corpus
         run: cabal exec -- runghc -isrc -Wall -Werror test/Phase1IOCodecUTF8Main.hs
+
+      - name: Re-run certified predecessor IO corpora
+        run: |
+          set -euo pipefail
+          cabal exec -- runghc -isrc -Wall -Werror test/Phase1IOFileSystemMain.hs
+          cabal exec -- runghc -isrc -Wall -Werror test/Phase1IOConsoleProvidersMain.hs
