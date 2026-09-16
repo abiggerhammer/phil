@@ -99,10 +99,9 @@ jobs:
         run: |
           set -euo pipefail
           cp generic-requirement-category-proof/GenericRequirementCategoryKernel.hs .
-          cabal exec -- ghc -i. -Wall -Werror -Wno-unused-imports -fno-code \
-            GenericRequirementCategoryKernel.hs \
-            app/GenericRequirementCategoryDecisionCorrespondenceMain.hs
-          cabal exec -- runghc -i. -Wall -Werror -Wno-unused-imports \
+          cabal exec -- ghc -i. -Wall -Werror -Wno-unused-imports -fno-code GenericRequirementCategoryKernel.hs
+          cabal exec -- ghc -i. -Wall -Werror -fno-code app/GenericRequirementCategoryDecisionCorrespondenceMain.hs
+          cabal exec -- runghc -i. -Wall -Werror \
             app/GenericRequirementCategoryDecisionCorrespondenceMain.hs
       - name: Strict typecheck unchanged GEN-014 implementation and corpus
         run: |
