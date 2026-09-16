@@ -10,7 +10,6 @@ module Phil.Surface.GrammarV1.ArchitectureComponentProvisioning
   ) where
 
 import qualified Data.Map.Strict as Map
-import qualified Data.Set as Set
 import Data.Text (Text)
 import qualified Data.Text as Text
 import Phil.Core.CheckedBindingMode
@@ -30,7 +29,7 @@ import Phil.Core.Protocol
   , ProtocolRoleKey (..)
   )
 import Phil.Core.Protocol.Family
-  ( BinaryProtocolInstance (..)
+  ( BinaryProtocolInstance
   , ProtocolProjectionEvidence (..)
   )
 import Phil.Core.Static
@@ -56,7 +55,6 @@ import Phil.Surface.GrammarV1.BinderScope
 import Phil.Surface.GrammarV1.Parser
   ( GrammarV1ComponentDecl (..)
   , GrammarV1TermParam (..)
-  , GrammarV1Type
   )
 import Phil.Surface.GrammarV1.ProtocolEndpointType
   ( GrammarV1ProtocolEndpointResolution (..)
