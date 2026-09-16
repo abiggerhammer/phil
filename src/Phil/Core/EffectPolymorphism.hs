@@ -11,6 +11,7 @@ module Phil.Core.EffectPolymorphism
 
 import qualified Data.Set as Set
 import Data.Set (Set)
+import qualified EffectPolymorphismKernel as Kernel
 import Phil.Core.Callable (SemanticEffect (..))
 import Phil.Core.Generic (GenericStaticParameterKey)
 import Phil.Core.Generic.StaticActual
@@ -71,34 +72,45 @@ effectSetFromSemanticForm semantic = case semantic of
       SemanticAtom effect -> Just (SemanticEffect effect)
       _ -> Nothing
 
--- | Bind one kind-checked static actual to one exact Effects parameter.  Generic
--- kind checking happens first; this authority owns only canonical effect-set
--- representation and bounded subeffecting.  Narrower/equal actuals are accepted;
--- any additional semantic effect rejects explicitly.
+-- | Bind one kind-checked static actual to one exact Effects parameter.  Native
+-- representation work reflects four primitive facts into the Rocq-extracted
+-- decision kernel.  The kernel owns the admission order: exact parameter
+-- identity, Effects kind, canonical finite-set decoding, then subset-of-upper.
 checkBoundedEffectSetInstantiation
   :: EffectSetParameterBound
   -> CheckedGenericStaticActual
   -> Either EffectSetInstantiationError CheckedEffectSetInstantiation
-checkBoundedEffectSetInstantiation bound actual
-  | actualKey /= expectedKey =
+checkBoundedEffectSetInstantiation bound actual =
+  case Kernel.decideEffectSetInstantiation
+      parameterKeyMatches
+      kindIsEffects
+      semanticFormCanonical
+      subsetOfUpper of
+    Kernel.EffectSetInstantiationParameterKeyMismatch ->
       Left (EffectSetParameterKeyMismatch expectedKey actualKey)
-  | checkedGenericStaticKind actual /= GenericEffectsKind =
+    Kernel.EffectSetInstantiationKindMismatch ->
       Left (EffectSetActualKindMismatch (checkedGenericStaticKind actual))
-  | otherwise = do
-      actualEffects <- maybe
-        (Left (EffectSetActualSemanticFormMalformed semanticForm))
-        Right
-        (effectSetFromSemanticForm semanticForm)
-      let upper = effectSetBoundUpper bound
-          extra = Set.difference actualEffects upper
-      if Set.null extra
-        then Right CheckedEffectSetInstantiation
-          { checkedEffectSetParameterKey = expectedKey
-          , checkedEffectSetActual = actualEffects
-          , checkedEffectSetUpper = upper
-          }
-        else Left (EffectSetBoundExceeded expectedKey extra upper)
+    Kernel.EffectSetInstantiationSemanticFormMalformed ->
+      Left (EffectSetActualSemanticFormMalformed semanticForm)
+    Kernel.EffectSetInstantiationBoundExceeded ->
+      Left (EffectSetBoundExceeded expectedKey extra upper)
+    Kernel.EffectSetInstantiationAccepted ->
+      Right CheckedEffectSetInstantiation
+        { checkedEffectSetParameterKey = expectedKey
+        , checkedEffectSetActual = actualEffects
+        , checkedEffectSetUpper = upper
+        }
   where
     expectedKey = effectSetBoundParameterKey bound
     actualKey = checkedGenericStaticParameterKey actual
     semanticForm = checkedGenericStaticSemanticForm actual
+    parameterKeyMatches = actualKey == expectedKey
+    kindIsEffects = checkedGenericStaticKind actual == GenericEffectsKind
+    maybeActualEffects = effectSetFromSemanticForm semanticForm
+    semanticFormCanonical = case maybeActualEffects of
+      Nothing -> False
+      Just _ -> True
+    actualEffects = maybe Set.empty id maybeActualEffects
+    upper = effectSetBoundUpper bound
+    extra = Set.difference actualEffects upper
+    subsetOfUpper = Set.null extra
