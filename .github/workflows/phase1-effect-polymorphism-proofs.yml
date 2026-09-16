@@ -1,0 +1,92 @@
+name: Phase 1 Effect Polymorphism Proofs
+
+on:
+  pull_request:
+    paths:
+      - 'proof/Phil/Core/EffectPolymorphism.v'
+      - 'proof/Phil/Core/EffectPolymorphismImplementation.v'
+      - 'src/Phil/Core/EffectPolymorphism.hs'
+      - 'src/Phil/Surface/GrammarV1/SemanticEffectPolymorphism.hs'
+      - 'test/Phase1GrammarV1GenericBinderScopeMain.hs'
+      - '.github/workflows/phase1-effect-polymorphism-proofs.yml'
+  push:
+    branches: [main]
+    paths:
+      - 'proof/Phil/Core/EffectPolymorphism.v'
+      - 'proof/Phil/Core/EffectPolymorphismImplementation.v'
+      - 'src/Phil/Core/EffectPolymorphism.hs'
+      - 'src/Phil/Surface/GrammarV1/SemanticEffectPolymorphism.hs'
+      - 'test/Phase1GrammarV1GenericBinderScopeMain.hs'
+      - '.github/workflows/phase1-effect-polymorphism-proofs.yml'
+
+permissions:
+  contents: read
+
+jobs:
+  rocq-effect-polymorphism-proof:
+    runs-on: ubuntu-latest
+    container:
+      image: rocq/rocq-prover:9.2.0
+      options: --user root
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Compile PHIL-EFFECT-POLY-001 semantic and implementation proofs
+        shell: bash
+        run: |
+          set -euo pipefail
+          export PATH="/home/rocq/.opam/${COMPILER}/bin:$PATH"
+          rocq c -Q proof/Phil Phil proof/Phil/Core/EffectSubject.v
+          rocq c -Q proof/Phil Phil proof/Phil/Core/EffectPolymorphism.v
+          rocq c -Q proof/Phil Phil proof/Phil/Core/EffectPolymorphismImplementation.v
+
+      - name: Record checked proof identities
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p effect-polymorphism-proof
+          cp \
+            proof/Phil/Core/EffectPolymorphism.v \
+            proof/Phil/Core/EffectPolymorphism.vo \
+            proof/Phil/Core/EffectPolymorphismImplementation.v \
+            proof/Phil/Core/EffectPolymorphismImplementation.vo \
+            effect-polymorphism-proof/
+          sha256sum \
+            effect-polymorphism-proof/EffectPolymorphism.v \
+            effect-polymorphism-proof/EffectPolymorphism.vo \
+            effect-polymorphism-proof/EffectPolymorphismImplementation.v \
+            effect-polymorphism-proof/EffectPolymorphismImplementation.vo \
+            > effect-polymorphism-proof/PHIL-EFFECT-POLY-001.proof.sha256
+          cat effect-polymorphism-proof/PHIL-EFFECT-POLY-001.proof.sha256
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: rocq-effect-polymorphism-proof
+          path: effect-polymorphism-proof
+          if-no-files-found: error
+
+  verify-effect-polymorphism-correspondence:
+    needs: rocq-effect-polymorphism-proof
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: haskell-actions/setup@v2
+        with:
+          ghc-version: '9.6.7'
+          cabal-version: 'latest'
+
+      - name: Build ordinary regression substrate
+        run: cabal build all --enable-tests
+
+      - name: Strict-typecheck effect polymorphism authority and Grammar-v1 bridge
+        run: |
+          set -euo pipefail
+          cabal exec -- ghc -isrc -Wall -Werror -fno-code src/Phil/Core/EffectPolymorphism.hs
+          cabal exec -- ghc -isrc -Wall -Werror -fno-code src/Phil/Surface/GrammarV1/SemanticEffectPolymorphism.hs
+          cabal exec -- ghc -isrc -Wall -Werror -fno-code test/Phase1GrammarV1GenericBinderScopeMain.hs
+
+      - name: Re-run unchanged EFF-003/004 bounded-effect pressure
+        run: |
+          set -euo pipefail
+          cabal exec -- runghc -Wall -Werror -isrc test/Phase1GrammarV1GenericBinderScopeMain.hs
