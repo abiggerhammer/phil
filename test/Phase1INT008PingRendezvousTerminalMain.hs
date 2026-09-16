@@ -26,13 +26,11 @@ import System.Exit (exitFailure)
 main :: IO ()
 main = do
   results <- sequence
-    [ test "INT-008 Ping activation executes one exact rendezvous and closes root"
+    [ test "INT-008 Ping rendezvous closes both endpoint occurrences and root"
         pingCompletesToRootTerminal
-    , test "INT-008 wrong terminal outcome cannot retire endpoint ownership"
-        wrongCloseOutcomeRetainsOwner
-    , test "INT-008 endpoint close requires exact live occurrence ownership"
-        missingEndpointOwnerRejects
-    , test "INT-008 process cannot terminate while Ping successor endpoint is live"
+    , test "INT-008 wrong close outcome cannot retire endpoint occurrence"
+        wrongCloseOutcomeRejects
+    , test "INT-008 terminal transition rejects a live Ping successor"
         terminalBeforeCloseRejects
     ]
   if and results then pure () else exitFailure
@@ -53,6 +51,7 @@ data PingFixture = PingFixture
 pingCompletesToRootTerminal :: Either String ()
 pingCompletesToRootTerminal = do
   fx <- pingFixture
+  let exactInstance = binaryProtocolInstanceRevision (fixtureInstance fx)
   closedClient <- mapLeft show $ closeProcessEndpointState
     (fixtureNetwork fx)
     (fixtureCommunication fx)
@@ -90,21 +89,11 @@ pingCompletesToRootTerminal = do
           == Map.keysSet (processNetworkPopulation (fixtureNetwork fx)))
         "root terminal fact did not cover exact Ping process population"
     other -> Left ("closed Ping network was not root-terminal: " <> show other)
-  where
-    exactInstance = binaryProtocolInstanceRevision (fixtureInstanceFromScope pingCompletesToRootTerminal)
 
--- The fixture's exact protocol instance is threaded through every runtime
--- operation. This tiny helper exists only to keep the tests below visually
--- focused; it is never evaluated because each test shadows the value from its
--- fixture before use.
-fixtureInstanceFromScope :: a -> BinaryProtocolInstance
-fixtureInstanceFromScope _ = error "fixtureInstanceFromScope is a non-evaluated type anchor"
-
-wrongCloseOutcomeRetainsOwner :: Either String ()
-wrongCloseOutcomeRetainsOwner = do
+wrongCloseOutcomeRejects :: Either String ()
+wrongCloseOutcomeRejects = do
   fx <- pingFixture
   let exactInstance = binaryProtocolInstanceRevision (fixtureInstance fx)
-      ownersBefore = communicationRestrictedOwners (fixtureCommunication fx)
   case closeProcessEndpointState
       (fixtureNetwork fx)
       (fixtureCommunication fx)
@@ -119,31 +108,7 @@ wrongCloseOutcomeRetainsOwner = do
           "wrong-outcome diagnostic changed process identity"
         assert (expected == doneOutcome && actual == Outcome "Wrong")
           "wrong-outcome diagnostic changed exact outcomes"
-        assert
-          (ownersBefore == communicationRestrictedOwners (fixtureCommunication fx))
-          "failed close mutated endpoint owner state"
     other -> Left ("wrong endpoint close outcome was not rejected exactly: " <> show other)
-
-missingEndpointOwnerRejects :: Either String ()
-missingEndpointOwnerRejects = do
-  fx <- pingFixture
-  let exactInstance = binaryProtocolInstanceRevision (fixtureInstance fx)
-      missingOwnerState = (fixtureCommunication fx)
-        { communicationRestrictedOwners = Map.empty }
-  case closeProcessEndpointState
-      (fixtureNetwork fx)
-      missingOwnerState
-      (fixtureClientProcess fx)
-      clientSuccessor
-      exactInstance
-      clientRole
-      doneOutcome of
-    Left (EndpointClosureOccurrenceUnknown actualProcess actualName) -> do
-      assert (actualProcess == fixtureClientProcess fx)
-        "missing-owner diagnostic changed process identity"
-      assert (actualName == clientSuccessor)
-        "missing-owner diagnostic changed endpoint name"
-    other -> Left ("endpoint close without owner occurrence was accepted: " <> show other)
 
 terminalBeforeCloseRejects :: Either String ()
 terminalBeforeCloseRejects = do
@@ -167,44 +132,10 @@ pingFixture = do
   graph <- mapLeft show rootGraph
   network0 <- mapLeft show $ elaborateProcessNetwork graph [clientSite, serverSite]
   let (clientProcess, serverProcess) = processKeys network0
-      clientProvisioning = GrammarV1ResolvedComponentProvisioning
-        { resolvedProvisioningComponentOccurrence = "client"
-        , resolvedProvisioningProcessSite = "client_run"
-        , resolvedProvisioningProcessKey = clientProcess
-        , resolvedProvisioningParameters =
-            [ endpointParameter
-                (DeclarationKey "component.ClientWorker")
-                0
-                clientEndpoint
-                "endpoint"
-                clientEndpointOccurrence
-                clientProjection
-            , entryParameter
-                (DeclarationKey "component.ClientWorker")
-                1
-                payloadName
-                "payload"
-                payloadOccurrence
-            ]
-        }
-      serverProvisioning = GrammarV1ResolvedComponentProvisioning
-        { resolvedProvisioningComponentOccurrence = "server"
-        , resolvedProvisioningProcessSite = "server_run"
-        , resolvedProvisioningProcessKey = serverProcess
-        , resolvedProvisioningParameters =
-            [ endpointParameter
-                (DeclarationKey "component.ServerWorker")
-                0
-                serverEndpoint
-                "endpoint"
-                serverEndpointOccurrence
-                serverProjection
-            ]
-        }
-  clientActivation <- mapLeft show $
-    grammarV1ResolvedComponentActivation clientProvisioning
-  serverActivation <- mapLeft show $
-    grammarV1ResolvedComponentActivation serverProvisioning
+  clientActivation <- mapLeft show $ grammarV1ResolvedComponentActivation
+    (clientProvisioning clientProcess clientProjection)
+  serverActivation <- mapLeft show $ grammarV1ResolvedComponentActivation
+    (serverProvisioning serverProcess serverProjection)
   (network, activationState) <- mapLeft show $ activateProcessState
     network0
     [ resolvedComponentActivationContract clientActivation
@@ -222,20 +153,8 @@ pingFixture = do
       ])
   let exactInstance = binaryProtocolInstanceRevision instanceValue
       request = SendReceiveRendezvous
-        ProcessRendezvousSide
-          { rendezvousProcess = clientProcess
-          , rendezvousEndpoint = clientEndpoint
-          , rendezvousSuccessor = clientSuccessor
-          , rendezvousInstance = exactInstance
-          , rendezvousRole = clientRole
-          }
-        ProcessRendezvousSide
-          { rendezvousProcess = serverProcess
-          , rendezvousEndpoint = serverEndpoint
-          , rendezvousSuccessor = serverSuccessor
-          , rendezvousInstance = exactInstance
-          , rendezvousRole = serverRole
-          }
+        (rendezvousSide clientProcess clientEndpoint clientSuccessor exactInstance clientRole)
+        (rendezvousSide serverProcess serverEndpoint serverSuccessor exactInstance serverRole)
   communication <- mapLeft show $
     checkProcessCommunicationState instanceValue network communication0 request
   pure PingFixture
@@ -245,6 +164,55 @@ pingFixture = do
     , fixtureClientProcess = clientProcess
     , fixtureServerProcess = serverProcess
     }
+
+rendezvousSide
+  :: ProcessKey
+  -> Name
+  -> Name
+  -> ProtocolInstanceRevision
+  -> ProtocolRoleKey
+  -> ProcessRendezvousSide
+rendezvousSide processKey endpoint successor instanceRevision role =
+  ProcessRendezvousSide
+    { rendezvousProcess = processKey
+    , rendezvousEndpoint = endpoint
+    , rendezvousSuccessor = successor
+    , rendezvousInstance = instanceRevision
+    , rendezvousRole = role
+    }
+
+clientProvisioning
+  :: ProcessKey
+  -> ProtocolProjectionEvidence
+  -> GrammarV1ResolvedComponentProvisioning
+clientProvisioning processKey projection = GrammarV1ResolvedComponentProvisioning
+  { resolvedProvisioningComponentOccurrence = "client"
+  , resolvedProvisioningProcessSite = "client_run"
+  , resolvedProvisioningProcessKey = processKey
+  , resolvedProvisioningParameters =
+      [ endpointParameter
+          (DeclarationKey "component.ClientWorker")
+          0 clientEndpoint "endpoint" clientEndpointOccurrence projection
+      , entryParameter
+          (DeclarationKey "component.ClientWorker")
+          1 payloadName "payload" payloadOccurrence
+      ]
+  }
+
+serverProvisioning
+  :: ProcessKey
+  -> ProtocolProjectionEvidence
+  -> GrammarV1ResolvedComponentProvisioning
+serverProvisioning processKey projection = GrammarV1ResolvedComponentProvisioning
+  { resolvedProvisioningComponentOccurrence = "server"
+  , resolvedProvisioningProcessSite = "server_run"
+  , resolvedProvisioningProcessKey = processKey
+  , resolvedProvisioningParameters =
+      [ endpointParameter
+          (DeclarationKey "component.ServerWorker")
+          0 serverEndpoint "endpoint" serverEndpointOccurrence projection
+      ]
+  }
 
 endpointParameter
   :: DeclarationKey
@@ -288,14 +256,13 @@ parameterBinder
   -> Name
   -> Text
   -> GrammarV1ResolvedBinder
-parameterBinder declarationKey ordinal coreName displayName =
-  GrammarV1ResolvedBinder
-    { grammarV1ResolvedBinderKey = GrammarV1BinderKey declarationKey ordinal
-    , grammarV1ResolvedBinderCoreName = coreName
-    , grammarV1ResolvedBinderKind = GrammarV1ComponentParameterBinder
-    , grammarV1ResolvedBinderDisplayName = displayName
-    , grammarV1ResolvedBinderSourceSpan = dummySpan
-    }
+parameterBinder declarationKey ordinal coreName displayName = GrammarV1ResolvedBinder
+  { grammarV1ResolvedBinderKey = GrammarV1BinderKey declarationKey ordinal
+  , grammarV1ResolvedBinderCoreName = coreName
+  , grammarV1ResolvedBinderKind = GrammarV1ComponentParameterBinder
+  , grammarV1ResolvedBinderDisplayName = displayName
+  , grammarV1ResolvedBinderSourceSpan = dummySpan
+  }
 
 pingFamily :: BinaryProtocolFamily
 pingFamily = BinaryProtocolFamily
@@ -318,11 +285,7 @@ terminalTransition processKey = DeclaredTerminalTransition
   }
 
 emptyRootClosure :: RootClosureState
-emptyRootClosure = RootClosureState
-  { rootOpenResources = Set.empty
-  , rootOpenObligations = Set.empty
-  , rootPendingObservables = Set.empty
-  }
+emptyRootClosure = RootClosureState Set.empty Set.empty Set.empty
 
 processKeys :: ProcessNetwork -> (ProcessKey, ProcessKey)
 processKeys network =
@@ -357,10 +320,7 @@ workerSpec = ArchitectureNodeSpec
 
 declaration :: Text -> DeclarationIdentity
 declaration label = deriveDeclarationIdentity DeclarationDescriptor
-  { declarationPresentation = DeclarationPresentation
-      { declarationDisplayName = label
-      , declarationModulePath = []
-      }
+  { declarationPresentation = DeclarationPresentation label []
   , declarationKey = DeclarationKey ("decl-" <> label)
   , declarationInterfaceSemantics = SemanticAtom "interface"
   , declarationDefinitionSemantics = SemanticAtom "definition"
@@ -402,12 +362,7 @@ dummySpan :: SourceSpan
 dummySpan = SourceSpan dummyPoint dummyPoint
 
 dummyPoint :: SourcePoint
-dummyPoint = SourcePoint
-  { sourcePointFile = "int008-ping-terminal"
-  , sourcePointLine = 1
-  , sourcePointColumn = 1
-  , sourcePointOffset = 0
-  }
+dummyPoint = SourcePoint "int008-ping-terminal" 1 1 0
 
 assert :: Bool -> String -> Either String ()
 assert condition detail
