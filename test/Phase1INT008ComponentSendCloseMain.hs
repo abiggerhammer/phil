@@ -31,7 +31,7 @@ main = do
         closePredecessorRejects
     , test "INT-008 send payload must resolve to an active local binder"
         missingPayloadRejects
-    , test "INT-008 send successor cannot shadow a live component parameter"
+    , test "INT-008 send successor cannot reuse a live component parameter name"
         successorShadowingRejects
     , test "INT-008 bounded send/close slice requires one identifier successor"
         tupleSuccessorRejects
@@ -87,12 +87,12 @@ successorShadowingRejects = do
   component <- parseComponent shadowingSource
   case grammarV1CheckedComponentSendClose componentKey component of
     Just (Left (GrammarV1ComponentSendCloseBinderError
-      (GrammarV1ActiveShadowing sourceName previous))) -> do
+      (GrammarV1DuplicateBinder sourceName previous))) -> do
         assert (locatedValue sourceName == "payload")
-          "shadowing diagnostic changed successor spelling"
+          "duplicate-binder diagnostic changed successor spelling"
         assert (grammarV1ResolvedBinderDisplayName previous == "payload")
-          "shadowing diagnostic lost active component parameter"
-    other -> Left ("successor shadowing was not rejected exactly: " <> show other)
+          "duplicate-binder diagnostic lost existing component parameter"
+    other -> Left ("successor parameter-name reuse was not rejected exactly: " <> show other)
 
 tupleSuccessorRejects :: Either String ()
 tupleSuccessorRejects = do
