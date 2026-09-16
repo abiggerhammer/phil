@@ -2,9 +2,13 @@ module Phil.Surface.GrammarV1.SemanticComponentHeader
   ( GrammarV1CheckedSemanticComponentHeader (..)
   , GrammarV1SemanticComponentHeaderError (..)
   , grammarV1CheckedSemanticComponentHeader
+  , grammarV1CheckedSemanticComponentHeaderWithProtocolEndpoints
   ) where
 
 import Data.Text (Text)
+import Phil.Core.CheckedBindingMode
+  ( CheckedTypeMode (..)
+  )
 import Phil.Core.Focusing
   ( FocusStep
   , FocusingError
@@ -41,6 +45,12 @@ import Phil.Surface.GrammarV1.Parser
   , GrammarV1TermParam (..)
   , GrammarV1Type
   )
+import Phil.Surface.GrammarV1.ProtocolEndpointType
+  ( GrammarV1ProtocolEndpointResolution
+  , GrammarV1ProtocolEndpointTypeError
+  , GrammarV1ResolvedProtocolEndpointType (..)
+  , grammarV1ResolvedProtocolEndpointType
+  )
 import Phil.Surface.GrammarV1.SemanticBindingState
   ( grammarV1InsertSemanticBinding
   )
@@ -76,6 +86,8 @@ data GrammarV1CheckedSemanticComponentHeader = GrammarV1CheckedSemanticComponent
 data GrammarV1SemanticComponentHeaderError
   = GrammarV1SemanticComponentBinderScopeError GrammarV1BinderScopeError
   | GrammarV1SemanticComponentBindingInsertError SurfaceCheckError
+  | GrammarV1SemanticComponentProtocolEndpointTypeError
+      GrammarV1ProtocolEndpointTypeError
   | GrammarV1SemanticComponentProvidesReferenceError GrammarV1LexicalReferenceError
   | GrammarV1SemanticComponentProvidesRewriteNonCompetent (Located GrammarV1Type)
   | GrammarV1SemanticComponentProvidesFocusingError FocusingError
@@ -83,18 +95,8 @@ data GrammarV1SemanticComponentHeaderError
       GrammarV1SemanticRefinementTypeError
   deriving (Eq, Show)
 
--- | Migrate the bounded closed-component header route onto resolver-issued
--- runtime binder identity without changing the older SURF-008 component API.
--- Generic parameters and generic requirements stay outside this bounded slice.
--- Present term parameters retain the existing primitive unrestricted competence,
--- but are inserted under generated semantic names obtained from BinderScope.
---
--- A present `provides` type now delegates to SemanticCheckedType. Ordinary
--- dependent provides retain exact reference evidence and semantic-name rewriting;
--- a top-level primitive-base refinement additionally allocates its local binder in
--- a child lexical scope and returns the enclosing scope with that ordinal consumed.
--- Absence of a provides clause leaves the parameter lexical scope unchanged and
--- remains distinct from an empty reference set on a present closed type.
+-- | Preserve the established primitive-only SURF-009 competence wall for
+-- callers that do not have an architecture-resolved protocol environment.
 grammarV1CheckedSemanticComponentHeader
   :: StaticContext
   -> DeclarationKey
@@ -104,8 +106,34 @@ grammarV1CheckedSemanticComponentHeader
       (Either
         GrammarV1SemanticComponentHeaderError
         (GrammarV1CheckedSemanticComponentHeader, [FocusStep]))
-grammarV1CheckedSemanticComponentHeader
-    staticContext declarationKey definitionRevision source
+grammarV1CheckedSemanticComponentHeader staticContext =
+  grammarV1CheckedSemanticComponentHeaderWithProtocolEndpoints
+    staticContext
+    []
+
+-- | Extend the semantic component-header route with explicitly resolved
+-- protocol-family endpoint parameters. Primitive parameters keep the exact
+-- established SURF-009 behavior. A source parameter of the bounded form
+-- Role[Protocol] is admitted only when Protocol is present in the supplied
+-- resolution set; Core's exact protocol projection then determines the local
+-- Session and the parameter is inserted as a linear TyEndpoint binding.
+--
+-- The caller owns protocol-family lookup and stable identity. This function does
+-- not infer a protocol from display spelling, instantiate a protocol family, pick
+-- a protocol occurrence, or provision an endpoint value. Those architecture
+-- responsibilities remain separate and are the next INT-008 boundary.
+grammarV1CheckedSemanticComponentHeaderWithProtocolEndpoints
+  :: StaticContext
+  -> [GrammarV1ProtocolEndpointResolution]
+  -> DeclarationKey
+  -> DefinitionRevision
+  -> GrammarV1ComponentDecl
+  -> Maybe
+      (Either
+        GrammarV1SemanticComponentHeaderError
+        (GrammarV1CheckedSemanticComponentHeader, [FocusStep]))
+grammarV1CheckedSemanticComponentHeaderWithProtocolEndpoints
+    staticContext endpointResolutions declarationKey definitionRevision source
   | not (null (grammarV1ComponentGenericParams source)) = Nothing
   | not (null (grammarV1ComponentRequirements source)) = Nothing
   | otherwise =
@@ -114,6 +142,7 @@ grammarV1CheckedSemanticComponentHeader
           Just (Left (GrammarV1SemanticComponentBinderScopeError scopeError))
         Right (maybeBinders, lexicalScope) -> do
           built <- buildSemanticParameters
+            endpointResolutions
             maybeBinders
             (grammarV1ComponentTermParams source)
           case built of
@@ -163,42 +192,65 @@ grammarV1CheckedSemanticComponentHeader
         }
 
 buildSemanticParameters
-  :: Maybe [GrammarV1ResolvedBinder]
+  :: [GrammarV1ProtocolEndpointResolution]
+  -> Maybe [GrammarV1ResolvedBinder]
   -> Maybe [Located GrammarV1TermParam]
   -> Maybe
       (Either
         GrammarV1SemanticComponentHeaderError
         (Maybe [(GrammarV1ResolvedBinder, Ty)], SurfaceState))
-buildSemanticParameters maybeBinders maybeParameters =
+buildSemanticParameters endpointResolutions maybeBinders maybeParameters =
   case (maybeBinders, maybeParameters) of
     (Nothing, Nothing) -> Just (Right (Nothing, emptySurfaceState))
     (Just binders, Just parameters) -> do
-      built <- buildPresentParameters binders parameters
+      built <- buildPresentParameters endpointResolutions binders parameters
       pure (fmap (\(checked, state) -> (Just checked, state)) built)
     _ -> Nothing
 
 buildPresentParameters
-  :: [GrammarV1ResolvedBinder]
+  :: [GrammarV1ProtocolEndpointResolution]
+  -> [GrammarV1ResolvedBinder]
   -> [Located GrammarV1TermParam]
   -> Maybe
       (Either
         GrammarV1SemanticComponentHeaderError
         ([(GrammarV1ResolvedBinder, Ty)], SurfaceState))
-buildPresentParameters = go [] emptySurfaceState
+buildPresentParameters endpointResolutions = go [] emptySurfaceState
   where
     go reversed state [] [] = Just (Right (reverse reversed, state))
     go reversed state (binder : binders) (Located _ parameter : parameters) = do
-      ty <- grammarV1PrimitiveType
+      checked <- checkedParameter
         (locatedValue (grammarV1TermParamType parameter))
-      case grammarV1InsertSemanticBinding
-          binder
-          (BindingMeta Unrestricted ty PlainShape)
-          state of
-        Left insertError ->
-          Just (Left (GrammarV1SemanticComponentBindingInsertError insertError))
-        Right nextState ->
-          go ((binder, ty) : reversed) nextState binders parameters
+      case checked of
+        Left typeError -> Just (Left typeError)
+        Right (mode, ty) ->
+          case grammarV1InsertSemanticBinding
+              binder
+              (BindingMeta mode ty PlainShape)
+              state of
+            Left insertError ->
+              Just (Left (GrammarV1SemanticComponentBindingInsertError insertError))
+            Right nextState ->
+              go ((binder, ty) : reversed) nextState binders parameters
     go _ _ _ _ = Nothing
+
+    checkedParameter sourceType =
+      case grammarV1PrimitiveType sourceType of
+        Just ty -> Just (Right (Unrestricted, ty))
+        Nothing -> do
+          endpoint <- grammarV1ResolvedProtocolEndpointType
+            endpointResolutions
+            sourceType
+          pure $ case endpoint of
+            Left endpointError ->
+              Left
+                (GrammarV1SemanticComponentProtocolEndpointTypeError endpointError)
+            Right resolved ->
+              let checkedMode = resolvedProtocolEndpointCheckedMode resolved
+              in Right
+                ( checkedBindingMode checkedMode
+                , checkedBindingType checkedMode
+                )
 
 mapProvidesTypeError
   :: GrammarV1SemanticCheckedTypeError
