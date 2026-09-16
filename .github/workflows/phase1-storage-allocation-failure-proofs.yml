@@ -130,10 +130,9 @@ jobs:
         run: |
           set -euo pipefail
           cp storage-allocation-failure-proof/StorageAllocationFailureKernel.hs .
-          cabal exec -- ghc -i. -Wall -Werror -Wno-unused-imports -fno-code \
-            StorageAllocationFailureKernel.hs \
-            app/StorageAllocationFailureDecisionCorrespondenceMain.hs
-          cabal exec -- runghc -i. -Wall -Werror -Wno-unused-imports \
+          cabal exec -- ghc -i. -Wall -Werror -Wno-unused-imports -fno-code StorageAllocationFailureKernel.hs
+          cabal exec -- ghc -i. -Wall -Werror -fno-code app/StorageAllocationFailureDecisionCorrespondenceMain.hs
+          cabal exec -- runghc -i. -Wall -Werror \
             app/StorageAllocationFailureDecisionCorrespondenceMain.hs
       - name: Strict typecheck implementation-refined MEM-001 predecessor and unchanged storage corpus
         run: |
