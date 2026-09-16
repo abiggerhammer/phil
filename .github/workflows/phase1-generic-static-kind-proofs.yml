@@ -99,10 +99,9 @@ jobs:
         run: |
           set -euo pipefail
           cp generic-static-kind-proof/GenericStaticKindKernel.hs .
-          cabal exec -- ghc -i. -Wall -Werror -Wno-unused-imports -fno-code \
-            GenericStaticKindKernel.hs \
-            app/GenericStaticKindDecisionCorrespondenceMain.hs
-          cabal exec -- runghc -i. -Wall -Werror -Wno-unused-imports \
+          cabal exec -- ghc -i. -Wall -Werror -Wno-unused-imports -fno-code GenericStaticKindKernel.hs
+          cabal exec -- ghc -i. -Wall -Werror -fno-code app/GenericStaticKindDecisionCorrespondenceMain.hs
+          cabal exec -- runghc -i. -Wall -Werror \
             app/GenericStaticKindDecisionCorrespondenceMain.hs
       - name: Strict typecheck unchanged GEN-013 implementation and corpus
         run: |
