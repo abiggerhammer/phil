@@ -112,11 +112,14 @@ jobs:
       - name: Typecheck and execute extracted revision-construction controls
         run: |
           set -euo pipefail
-          ghc -Wall -Werror -Wno-unused-imports -fno-code \
+          ghc -Wall -Werror -Wno-unused-imports -c \
             systems-revision-canonicalization-proof/SystemsRevisionCanonicalizationKernel.hs
-          ghc -Wall -Werror -Wno-unused-imports \
+          ghc -Wall -Werror -c \
             -isystems-revision-canonicalization-proof \
-            app/SystemsRevisionCanonicalizationConstructionCorrespondenceMain.hs \
+            app/SystemsRevisionCanonicalizationConstructionCorrespondenceMain.hs
+          ghc \
+            systems-revision-canonicalization-proof/SystemsRevisionCanonicalizationKernel.o \
+            app/SystemsRevisionCanonicalizationConstructionCorrespondenceMain.o \
             -o systems-revision-canonicalization-kernel-controls
           ./systems-revision-canonicalization-kernel-controls
       - name: Strict typecheck unchanged canonical Systems revision implementation
