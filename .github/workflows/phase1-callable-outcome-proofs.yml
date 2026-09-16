@@ -105,10 +105,9 @@ jobs:
         run: |
           set -euo pipefail
           cp callable-outcome-proof/CallableOutcomeKernel.hs .
-          cabal exec -- ghc -i. -Wall -Werror -Wno-unused-imports -fno-code \
-            CallableOutcomeKernel.hs \
-            app/CallableOutcomeDecisionCorrespondenceMain.hs
-          cabal exec -- runghc -i. -Wall -Werror -Wno-unused-imports \
+          cabal exec -- ghc -i. -Wall -Werror -Wno-unused-imports -fno-code CallableOutcomeKernel.hs
+          cabal exec -- ghc -i. -Wall -Werror -fno-code app/CallableOutcomeDecisionCorrespondenceMain.hs
+          cabal exec -- runghc -i. -Wall -Werror \
             app/CallableOutcomeDecisionCorrespondenceMain.hs
       - name: Strict typecheck unchanged CALL-018 implementation and corpus
         run: |
