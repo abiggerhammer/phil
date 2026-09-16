@@ -54,6 +54,7 @@ import Phil.Systems.StorageFailure
 import Phil.Systems.VersionChoiceOperands
 import Phil.Systems.VersionSessionChoice
 import Phil.Systems.Verify
+import qualified ProviderRelativePathKernel as ProviderRelativePathKernel
 
 -- | Exact semantic occurrence of one FileSystem provider. Paths are qualified
 -- by this identity rather than by a host current working directory or ambient
@@ -84,30 +85,64 @@ data ProviderRelativePathError
 fileSystemOccurrence
   :: Text
   -> Either ProviderRelativePathError FileSystemOccurrence
-fileSystemOccurrence occurrence
-  | Text.null occurrence = Left EmptyFileSystemOccurrence
-  | otherwise = Right (FileSystemOccurrence occurrence)
+fileSystemOccurrence occurrence =
+  case ProviderRelativePathKernel.decideFileSystemOccurrenceByFacts
+      (Text.null occurrence) of
+    ProviderRelativePathKernel.FileSystemOccurrenceAccepted ->
+      Right (FileSystemOccurrence occurrence)
+    ProviderRelativePathKernel.FileSystemOccurrenceEmpty ->
+      Left EmptyFileSystemOccurrence
 
 checkProviderRelativePath
   :: FileSystemOccurrence
   -> Text
   -> Either ProviderRelativePathError ProviderRelativePath
-checkProviderRelativePath occurrence raw
-  | Text.null raw = Left EmptyProviderRelativePath
-  | "/" `Text.isPrefixOf` raw = Left (AbsoluteProviderRelativePath raw)
-  | otherwise = do
-      let segments = Text.splitOn "/" raw
-      mapM_ validateSegment (zip [1 ..] segments)
+checkProviderRelativePath occurrence raw =
+  let segments = Text.splitOn "/" raw
+      segmentFacts =
+        toProviderRelativePathKernelList
+          (map providerRelativeSegmentFacts segments)
+  in case ProviderRelativePathKernel.decideProviderRelativePathByFacts
+      (Text.null raw)
+      ("/" `Text.isPrefixOf` raw)
+      segmentFacts of
+    ProviderRelativePathKernel.ProviderRelativePathAccepted ->
       Right ProviderRelativePath
         { providerRelativePathOccurrence = occurrence
         , providerRelativePathSegments = segments
         }
-  where
-    validateSegment (index, segment)
-      | Text.null segment = Left (EmptyProviderRelativePathSegment index)
-      | segment == "." = Left (DotProviderRelativePathSegment index)
-      | segment == ".." = Left (ParentProviderRelativePathSegment index)
-      | otherwise = Right ()
+    ProviderRelativePathKernel.ProviderRelativePathEmpty ->
+      Left EmptyProviderRelativePath
+    ProviderRelativePathKernel.ProviderRelativePathAbsolute ->
+      Left (AbsoluteProviderRelativePath raw)
+    ProviderRelativePathKernel.ProviderRelativePathEmptySegment index ->
+      Left (EmptyProviderRelativePathSegment (providerRelativePathKernelNatToInt index))
+    ProviderRelativePathKernel.ProviderRelativePathDotSegment index ->
+      Left (DotProviderRelativePathSegment (providerRelativePathKernelNatToInt index))
+    ProviderRelativePathKernel.ProviderRelativePathParentSegment index ->
+      Left (ParentProviderRelativePathSegment (providerRelativePathKernelNatToInt index))
+
+providerRelativeSegmentFacts
+  :: Text
+  -> ProviderRelativePathKernel.ProviderRelativeSegmentFacts
+providerRelativeSegmentFacts segment =
+  ProviderRelativePathKernel.MkProviderRelativeSegmentFacts
+    (Text.null segment)
+    (segment == ".")
+    (segment == "..")
+
+toProviderRelativePathKernelList
+  :: [a]
+  -> ProviderRelativePathKernel.List a
+toProviderRelativePathKernelList =
+  foldr ProviderRelativePathKernel.Cons ProviderRelativePathKernel.Nil
+
+providerRelativePathKernelNatToInt :: ProviderRelativePathKernel.Nat -> Int
+providerRelativePathKernelNatToInt value =
+  case value of
+    ProviderRelativePathKernel.O -> 0
+    ProviderRelativePathKernel.S predecessor ->
+      1 + providerRelativePathKernelNatToInt predecessor
 
 renderProviderRelativePath :: ProviderRelativePath -> Text
 renderProviderRelativePath = Text.intercalate "/" . providerRelativePathSegments

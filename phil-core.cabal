@@ -63,6 +63,7 @@ library
       ArchitectureInstantiationKernel
       ArchitectureRealizationKernel
       ArchitectureRevisionConstructionKernel
+      ProviderRelativePathKernel
       ProviderReplacementQualificationKernel
       AssuranceEvidenceAuthorityKernel
       AssuranceValidityScopeKernel

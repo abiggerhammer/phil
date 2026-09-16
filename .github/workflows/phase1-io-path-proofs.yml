@@ -1,20 +1,28 @@
-name: Phase 1 IO Path Proofs
+name: Phase 1 IO Path Production Binding
 
 on:
   pull_request:
     paths:
       - 'proof/Phil/Core/ProviderRelativePath.v'
       - 'proof/Phil/Core/ProviderRelativePathImplementation.v'
+      - 'proof/Phil/Core/ProviderRelativePathImplementationExtraction.v'
+      - 'src/ProviderRelativePathKernel.hs'
       - 'src/Phil/Systems.hs'
+      - 'app/ProviderRelativePathDecisionCorrespondenceMain.hs'
       - 'test/Phase1IOPathProviderRelativeMain.hs'
+      - 'phil-core.cabal'
       - '.github/workflows/phase1-io-path-proofs.yml'
   push:
     branches: [main]
     paths:
       - 'proof/Phil/Core/ProviderRelativePath.v'
       - 'proof/Phil/Core/ProviderRelativePathImplementation.v'
+      - 'proof/Phil/Core/ProviderRelativePathImplementationExtraction.v'
+      - 'src/ProviderRelativePathKernel.hs'
       - 'src/Phil/Systems.hs'
+      - 'app/ProviderRelativePathDecisionCorrespondenceMain.hs'
       - 'test/Phase1IOPathProviderRelativeMain.hs'
+      - 'phil-core.cabal'
       - '.github/workflows/phase1-io-path-proofs.yml'
 
 permissions:
@@ -29,15 +37,29 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
-      - name: Compile PHIL-P1-IO-PATH-001 semantic and implementation proofs
+      - name: Compile PHIL-P1-IO-PATH-001 proof and fresh extracted kernel
         shell: bash
         run: |
           set -euo pipefail
           export PATH="/home/rocq/.opam/${COMPILER}/bin:$PATH"
           rocq c -Q proof/Phil Phil proof/Phil/Core/ProviderRelativePath.v
           rocq c -Q proof/Phil Phil proof/Phil/Core/ProviderRelativePathImplementation.v
+          rm -f ProviderRelativePathKernel.hs
+          rocq c -Q proof/Phil Phil proof/Phil/Core/ProviderRelativePathImplementationExtraction.v
+          test -s ProviderRelativePathKernel.hs
+          grep -q 'decideFileSystemOccurrenceByFacts' ProviderRelativePathKernel.hs
+          grep -q 'decideProviderRelativePathByFacts' ProviderRelativePathKernel.hs
 
-      - name: Record checked proof identities
+      - name: Verify checked-in production kernel is exact extraction
+        shell: bash
+        run: |
+          set -euo pipefail
+          cmp ProviderRelativePathKernel.hs src/ProviderRelativePathKernel.hs
+          printf '%s  %s\n' \
+            'ae168907b3a5e28793beca30d802ab3345ac7c37a02b2f241acc0c8a7abbf1d4' \
+            'src/ProviderRelativePathKernel.hs' | sha256sum --check --strict
+
+      - name: Record checked proof and extraction identities
         shell: bash
         run: |
           set -euo pipefail
@@ -47,18 +69,22 @@ jobs:
             proof/Phil/Core/ProviderRelativePath.vo \
             proof/Phil/Core/ProviderRelativePathImplementation.v \
             proof/Phil/Core/ProviderRelativePathImplementation.vo \
+            proof/Phil/Core/ProviderRelativePathImplementationExtraction.v \
+            proof/Phil/Core/ProviderRelativePathImplementationExtraction.vo \
+            ProviderRelativePathKernel.hs \
             provider-relative-path-proof/
           sha256sum \
             provider-relative-path-proof/ProviderRelativePath.v \
             provider-relative-path-proof/ProviderRelativePath.vo \
             provider-relative-path-proof/ProviderRelativePathImplementation.v \
             provider-relative-path-proof/ProviderRelativePathImplementation.vo \
+            provider-relative-path-proof/ProviderRelativePathKernel.hs \
             > provider-relative-path-proof/PHIL-P1-IO-PATH-001.proof.sha256
           cat provider-relative-path-proof/PHIL-P1-IO-PATH-001.proof.sha256
 
       - uses: actions/upload-artifact@v4
         with:
-          name: rocq-provider-relative-path-proof
+          name: rocq-provider-relative-path-production-binding
           path: provider-relative-path-proof
           if-no-files-found: error
 
@@ -73,10 +99,30 @@ jobs:
           ghc-version: '9.6.7'
           cabal-version: 'latest'
 
+      - uses: actions/download-artifact@v4
+        with:
+          name: rocq-provider-relative-path-production-binding
+          path: provider-relative-path-proof
+
+      - name: Verify production kernel identity
+        run: |
+          set -euo pipefail
+          cmp provider-relative-path-proof/ProviderRelativePathKernel.hs src/ProviderRelativePathKernel.hs
+          printf '%s  %s\n' \
+            'ae168907b3a5e28793beca30d802ab3345ac7c37a02b2f241acc0c8a7abbf1d4' \
+            'src/ProviderRelativePathKernel.hs' | sha256sum --check --strict
+          ghc -Wall -Werror -fno-code src/ProviderRelativePathKernel.hs
+          grep -q '^      ProviderRelativePathKernel$' phil-core.cabal
+
+      - name: Run direct extracted-kernel controls
+        run: |
+          set -euo pipefail
+          runghc -Wall -Werror -isrc app/ProviderRelativePathDecisionCorrespondenceMain.hs
+
       - name: Build ordinary regression substrate
         run: cabal build all --enable-tests
 
-      - name: Strict-typecheck provider-relative Path implementation authority
+      - name: Strict-typecheck provider-relative Path production authority
         run: |
           set -euo pipefail
           cabal exec -- ghc -isrc -Wall -Werror -fno-code src/Phil/Systems.hs
@@ -86,3 +132,22 @@ jobs:
         run: |
           set -euo pipefail
           cabal exec -- runghc -Wall -Werror -isrc test/Phase1IOPathProviderRelativeMain.hs
+
+      - name: Record production-binding identities
+        run: |
+          set -euo pipefail
+          mkdir -p provider-relative-path-binding
+          sha256sum \
+            src/ProviderRelativePathKernel.hs \
+            src/Phil/Systems.hs \
+            app/ProviderRelativePathDecisionCorrespondenceMain.hs \
+            test/Phase1IOPathProviderRelativeMain.hs \
+            phil-core.cabal \
+            > provider-relative-path-binding/PHIL-P1-IO-PATH-001.binding.sha256
+          cat provider-relative-path-binding/PHIL-P1-IO-PATH-001.binding.sha256
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: provider-relative-path-production-binding
+          path: provider-relative-path-binding
+          if-no-files-found: error
