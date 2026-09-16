@@ -2,29 +2,29 @@
 
 ## From a tiny component to a checked system
 
-*Phase 1 edition. This is the beginner-facing introduction to the current Phil language. The examples use canonical Grammar-v1 source forms exercised by the Phase 1 front end and production corpus. A source form being shown here does not mean every later backend or realization path for it is complete; this tour introduces the language and its competence boundaries in the order a new reader needs them.*
+*Phase 1 edition.*
 
 Phil is a systems programming language built around a simple idea:
 
-> **The important rules of a system should be part of the program, not folklore around the program.**
+> **The important rules of a system should be part of the program, not just comments about the program.**
 
-That includes ordinary things such as values and functions, but also things that many languages leave to comments, framework conventions, build files, or code review:
+A program might need to follow rules such as “use this permission only once,” “receive a request before sending a reply,” or “never write to this store without permission.” Phil lets you write those rules where its tools can check them.
 
-- who owns a resource;
-- which conversations are legal;
-- which authority a computation may use;
-- what effects it may have;
-- which implementation is allowed to stand behind an interface;
-- which facts have actually been proved or checked;
-- what a compiler backend must preserve.
+We will start with a tiny piece of code, then build up to a system with several parts. You do not need formal logic or compiler theory. When we need a technical word, we will explain it beside an example.
 
-You do not need formal logic, compiler theory, or security terminology to follow this tour. We will start with very small Phil programs and introduce each larger idea only when the previous one gives us a reason to need it.
+### How to read the examples
 
-For a complete grouped lookup table of Phil's reserved words, see the [Phase 1 keyword lexicon](../reference/keywords-phase1.md). The Tour introduces those words in context; the lexicon is the place to look one up afterward.
+A **compiler** translates source code into a form a computer can execute. Phil's **checker** checks whether the source follows the language's rules. Checking a declaration is not the same as running a complete program.
+
+Most code blocks below introduce one declaration or show a fragment of a larger program. They are not one file to paste together: some reuse names, and some need declarations or inputs from their surroundings. We label interface sketches and incomplete wiring explicitly. Section 8 shows a complete small source file; the Ping discussion later explains which pieces it does and does not supply.
+
+This tour uses Phase 1's canonical source syntax, called **Grammar v1**. The language has several implementation stages. Showing a source form here does not claim that every way of compiling or deploying it is finished.
+
+The main path is values → ownership → contracts → communicating parts → checking the whole system. The closer looks at branch and loop state are optional on a first reading. For a word you want to look up later, use the [Phase 1 keyword lexicon](../reference/keywords-phase1.md).
 
 ## 1. A first Phil component
 
-Here is about the smallest useful piece of canonical Phase 1 Phil:
+Here is a tiny component:
 
 ```phil
 component Worker provides Unit {
@@ -32,59 +32,42 @@ component Worker provides Unit {
 }
 ```
 
-A **component** is an executable part of a Phil system.
+A **component** is an executable part of a Phil system. This one is named `Worker`.
 
-This one is named `Worker`. The keyword `provides` names the value type the component presents at its public boundary. Here it provides `Unit`, the simplest value type: there is only one ordinary value of that type, written `unit`.
+The keyword `provides` says what type of value it presents to its surroundings. A **type** describes what kind of value something is. Here the type is `Unit`, which has just one ordinary value, written `unit`. It is useful when finishing a computation matters but there is no information to return.
 
-So the body does exactly what it looks like it does:
+The braces `{ ... }` contain the component's body. Inside them, `return unit;` finishes this execution path with that value. The semicolon ends the statement.
 
-```phil
-return unit;
-```
+Declaring `Worker` does not yet say how many workers a program will have or which ones will run. We will make those choices in section 8.
 
-The keyword `return` finishes this execution path with the value that follows it. Here that value is the literal `unit`.
+### Giving source files names
 
-Nothing very exotic has happened yet. That is intentional. Phil still has ordinary values, expressions, functions, records, branches, loops, and so on.
-
-What makes Phil unusual is what happens when ordinary computation meets resources, communication, authority, and claims about correctness.
-
-We will add those one at a time.
-
-### Source files can name modules and imports
-
-A larger Phil source file can begin by naming its module and importing declarations from another one:
+A larger source file can name its module and import declarations from another module:
 
 ```phil
 module demo.basics;
 import demo.geometry {Point};
 ```
 
-The keyword `module` gives the current source module its qualified name. The keyword `import` makes declarations from another module available to this source file; the optional brace list restricts the imported names.
+A **module** is a named unit of source code. `module` names this one; `import` makes declarations from another one available here. The list `{Point}` limits this import to `Point`.
 
-These are source-organization constructs. Importing a name does not create a runtime object, grant authority, or manufacture semantic identity.
+Importing a name does not run a component or grant permission to use a resource. It just makes the declaration available to the source file.
 
 ## 2. Types say more than how many bits a value occupies
 
-Phil has familiar scalar types such as:
+Some Phil types describe familiar data:
 
-```text
-Bool
-U8
-U32
-U64
-I8
-I32
-I64
-F32
-F64
-Unit
-```
+| Type | What its values represent |
+| --- | --- |
+| `Bool` | Either `true` or `false`. |
+| `U8`, `U32`, `U64` | Whole numbers without a minus sign, stored in 8, 32, or 64 bits. |
+| `I8`, `I32`, `I64` | Whole numbers that can also be negative, in the corresponding widths. |
+| `F32`, `F64` | Floating-point numbers, used to represent a range of fractional values. |
+| `Unit` | The single value `unit`. |
 
-`Bool` is the Boolean type. Its two literal values are the keywords `true` and `false`. `Unit` is the singleton type we already saw. Spellings such as `U8`, `U32`, and `U64` are fixed-width unsigned integers; `I8`, `I32`, and `I64` are their signed counterparts. `F32` and `F64` are the two basic floating-point scalar types. Integer widths and floating-point semantics are part of the checked language contract rather than being inherited from a host or backend default.
+A bit is a binary digit. The widths matter: for example, a `U8` can hold values from 0 to 255. Phil specifies the rules for its number types rather than silently borrowing whichever rules the target machine happens to use.
 
-It also has records, sums, tuples, byte sequences, refinements, evidence-bearing types, protocol/session types, and named architectural contracts.
-
-A record can look ordinary:
+### Records group named fields
 
 ```phil
 record Point {
@@ -93,33 +76,9 @@ record Point {
 }
 ```
 
-The keyword `record` declares a product-like named type with named fields.
+The keyword `record` declares a type with named fields. A `Point` contains both an `x` and a `y`. The colon in `x : U32` means “`x` has type `U32`.”
 
-Phil also has sum types. The keyword `data` declares a type whose values may come from different named variants:
-
-```phil
-data MaybeByte = None | Some(U8);
-```
-
-A `MaybeByte` is either `None` or `Some` carrying one `U8`.
-
-When an existing type already says exactly what you mean, `type` declares an alias:
-
-```phil
-type Byte = U8;
-```
-
-The alias gives the type another source-level name; it does not create a new runtime representation merely because a new spelling exists.
-
-### Values can be bound and constructed
-
-The keyword `let` introduces a local binding from an expression result:
-
-```phil
-let answer = 42;
-```
-
-For a record-like value, `construct` explicitly names the constructor target and its field initializers:
+The keyword `let` gives a local name to the result of an expression. `construct` builds a value of a named type:
 
 ```phil
 let origin = construct Point {
@@ -128,11 +87,27 @@ let origin = construct Point {
 };
 ```
 
-`construct` does not bypass the type's ownership or refinement rules. It is simply the source form for building a value whose declared fields must check.
+This fragment builds a `Point` whose two fields are zero, then names it `origin`. Building a value still has to obey the type's rules.
 
-### Branches are ordinary source constructs too
+### Some types offer a choice
 
-Phil has ordinary conditional branching:
+```phil
+data MaybeByte = None | Some(U8);
+```
+
+The keyword `data` declares a type with named alternatives, also called **variants**. A `MaybeByte` is either `None`, carrying no extra value, or `Some`, carrying one `U8`. The vertical bar separates the alternatives. Such a type is called a **sum type**.
+
+An alias gives an existing type another name:
+
+```phil
+type Byte = U8;
+```
+
+`Byte` is another source-level name for `U8`, not a different representation just because it has a different spelling.
+
+### Branches choose what happens next
+
+Inside a component, `if` chooses a branch using a `Bool`:
 
 ```phil
 if true {
@@ -142,9 +117,9 @@ if true {
 };
 ```
 
-`if` evaluates its condition and executes only the selected branch. `else` introduces the false branch. Untaken branches do not secretly execute effects or consume resources.
+Only the selected branch runs. `else` introduces the branch for a false condition.
 
-For a sum type, `match` selects an arm by constructor shape and can bind the payload carried by that constructor:
+For a sum type, `match` chooses a branch by the variant it receives:
 
 ```phil
 component Inspect(value : MaybeByte) {
@@ -159,9 +134,9 @@ component Inspect(value : MaybeByte) {
 }
 ```
 
-Here `Some(byte)` binds the variant payload to the local name `byte` inside that arm. Arm-local names remain local to their arm.
+`value : MaybeByte` declares an input parameter. In the `Some` branch, `Some(byte)` gives the carried byte a local name. `=>` separates a pattern from the code to run when it matches. That name is available only in its branch.
 
-Phil also retains `decide` as a convenience form for decision-shaped values. It does not introduce a second privileged decision semantics: it elaborates through the same ordinary sum/elimination and resource-join discipline.
+The keyword `decide` is another form for handling decision-shaped results. For example:
 
 ```phil
 data Decision = Yes(U32) | No(U32);
@@ -174,27 +149,27 @@ component ReadDecision(choice : Decision) provides U32 {
 }
 ```
 
-The keyword `decide` says that the scrutinee is being eliminated as a checked decision/result value. Its arms still have to be exhaustive and resource-correct; writing `decide` does not turn an arbitrary assertion into proof.
+Both variants carry a number; each branch returns its number. Like `match`, `decide` must cover the possible cases and obey the ownership rules. Calling something a decision does not make it a proof.
 
-Later we will see why Phil sometimes adds an explicit `join` state contract when multiple continuing branches have to reconverge with restricted resources. For unrestricted examples like these, the familiar branching intuition is enough to start.
+So far, types have told us what a value contains. Next we need a different question:
 
-But Phil asks another question about values that ordinary machine-layout types do not answer:
-
-> **What are you allowed to do with this value structurally?**
-
-Can you copy it? Can you ignore it? Must exactly one continuation receive it?
-
-That question becomes important as soon as a value represents something scarce or stateful rather than just inert data.
+> **May this value be copied or left unused?**
 
 ## 3. Some values have ownership rules
 
-Phil uses three structural modes:
+Copying a number is usually harmless. Copying permission to perform a one-time action might not be.
 
-- **unrestricted** — may be copied and discarded;
-- **affine** — may be discarded, but not copied;
-- **linear** — may be neither copied nor silently discarded.
+Phil has three **structural modes**. “Structural” here means the rules for copying and discarding values, not their shape in memory.
 
-A type can impose a stricter mode when that restriction is part of its meaning. This is real accepted Phase 1 syntax:
+| Mode | May be copied? | May be left unused? |
+| --- | --- | --- |
+| `unrestricted` | Yes. | Yes. |
+| `affine` | No. | Yes. |
+| `linear` | No. | No. |
+
+For a linear value, the program must account for its use. It can transfer the value to code that consumes it, for example, but cannot secretly make another owner or forget the value.
+
+A type can explicitly require a stricter mode:
 
 ```phil
 record FireOnceToken mode linear {
@@ -202,9 +177,15 @@ record FireOnceToken mode linear {
 }
 ```
 
-The keyword `mode` introduces the record's structural-use contract; `linear` is the selected mode. The other two mode keywords are `unrestricted` and `affine`. The field `id` is just a `U64`, but the record as a whole therefore has a stronger contract: a `FireOnceToken` is linear.
+`mode linear` applies to the whole `FireOnceToken`, even though its `id` field is an ordinary number. Think of the token as a one-use permission: two copies must not become two independent permissions.
 
-Omitting `mode` does **not** mean “default to unrestricted.” For ordinary records and sums, Phil derives the minimum structural mode required by the values the type may own. A record containing only unrestricted fields, such as the earlier `Point`, is therefore unrestricted without needing to say so. But a record that owns a linear value is itself at least linear:
+That analogy describes the ownership rule. What using the token actually does is still determined by the rest of the program's contracts.
+
+### A container inherits its contents' restrictions
+
+What happens without a `mode` annotation?
+
+Phil works out the required mode from the contents. The earlier `Point` is unrestricted because both of its fields are unrestricted. This record is different:
 
 ```phil
 record ArmedAction {
@@ -212,23 +193,19 @@ record ArmedAction {
 }
 ```
 
-`ArmedAction` is derived as linear because its `token` field is linear. Sums are conservative in the same way: if any constructor can own a linear payload, the sum as a whole must be treated as linear until pattern matching reveals which constructor is actually present.
+`ArmedAction` owns a linear token, so it must itself be linear. Otherwise, copying the container would copy the token inside it.
 
-An explicit `mode` annotation may preserve that derived minimum or make the type stricter when its checked lifecycle contract justifies the restriction; it may never make the type more permissive than its contents. In short: **omitted mode means derived mode, not unrestricted mode**.
+A sum type also has to allow for its most restricted variant. A variant that *might* contain a linear value cannot be treated as freely copyable. Pattern matching can reveal which variant is actually present.
 
-Why would an explicit stricter mode be useful?
+An explicit mode can make a type stricter when its checked rules allow that, but cannot make it more permissive than its contents.
 
-Imagine the value represented permission to fire a one-shot actuator, consume a cryptographic nonce, commit a transaction, or advance a protocol endpoint. Accidentally duplicating the value could mean doing the protected action twice.
+> **No mode annotation means “work out the mode,” not “allow copying.”**
 
-A linear type lets the checker reject that structural mistake before it becomes a runtime convention.
+The same principle applies to values kept inside functions, branches, loops, and generic code.
 
-The important point is not that everything in Phil is linear. Most ordinary values need not be. The point is that **ownership is part of the type discipline when it matters**.
+### Borrowing lets you inspect without taking ownership
 
-That rule survives abstraction. Putting a linear value inside a record, closure, branch, loop, or generic does not make it stop being linear.
-
-### Borrowing lets you inspect without transferring ownership
-
-Sometimes code needs temporary access to a restricted value without taking ownership away from its current owner. Phil makes that scope explicit with `borrow ... as ... { ... }`.
+A **borrow** gives temporary access to a value while its owner keeps ownership:
 
 ```phil
 record Inspectable mode affine {
@@ -243,19 +220,21 @@ component ReadId(item : Inspectable) provides U64 {
 }
 ```
 
-The keyword `borrow` opens a scoped shared loan of `item`. The keyword `as` introduces the local name `view` for that borrowed view.
+`borrow item as view` makes `view` a temporary way to inspect `item` inside the braces. `view.id` reads its `id` field.
 
-The `return` inside the borrow body is easy to misread. It returns the **result of the borrow body** to the enclosing `borrow` expression; it does not return ownership of `item`. In this example, `view.id` is a `U64`, and `U64` is unrestricted, so the code is allowed to obtain that ordinary value through the view and return it from the borrow scope. No second `Inspectable` owner is created and the original owner has not moved.
+The inner `return` supplies the result of the **borrow expression**. It does not end `ReadId` or return ownership of `item`. Since `U64` is unrestricted, the field's value may be copied out. The outer `return id;` then returns that number from the component.
 
-The view itself is different. It is a temporary loan tied to this borrow scope, not an owned value that may outlive the scope. Replacing `return view.id;` with `return view;` would try to make the loan escape and is rejected. Likewise, trying to consume or invalidate `item` while `view` is live is rejected. When the borrow scope ends, the loan disappears and the unique owner remains the owner.
+The borrowed view itself cannot leave the borrow's scope. Replacing `return view.id;` with `return view;` would try to let that temporary access escape, and is rejected. Code also cannot consume or invalidate `item` while the view is in use.
 
-This is deliberately much narrower than a general aliasing or mutable-reference system. The point is to make temporary inspection compatible with exact ownership rather than to make ownership disappear.
+When the borrow ends, the temporary view ends. The original owner still owns `item`. This example may leave it unused afterward because `Inspectable` is affine, not linear.
 
-### Branches that continue must agree about what remains
+### A closer look: branches that continue
 
-With unrestricted values, two branches can often reconverge without saying anything special. With restricted resources, evidence, authority, or session state, there may be more than one plausible way to describe the state after the branches rejoin.
+*This and the next subsection are optional on a first reading.*
 
-When the checker can infer one canonical answer, Phil can keep the source compact. When the programmer has to choose the post-branch meaning, the source uses an explicit `join` contract. Here the two branches deliberately carry different values forward:
+Suppose two branches continue into the same later code. What values should that later code receive?
+
+When Phil can infer one answer, no extra declaration is needed. When the programmer needs to specify the answer, a **join** gives the branches a shared contract:
 
 ```phil
 component Joiner(condition : Bool, x : U32) provides U32 {
@@ -272,21 +251,21 @@ component Joiner(condition : Bool, x : U32) provides U32 {
 }
 ```
 
-Here `join` says that the continuing predecessors reconverge through an explicit checked state contract. The `state` telescope introduces `x_next` as the name of the state slot *after* reconvergence; neither branch can refer to `x_next` itself. If `condition` is true, the true predecessor supplies the incoming `x` to that slot. If `condition` is false, the false predecessor supplies `0`. Either way, code after the join sees the selected predecessor's value through the single post-join name `x_next`.
+`join state (x_next : U32)` says that code after the branches will receive one `U32`, named `x_next`. The true branch supplies `x`; the false branch supplies `0`. Neither branch may read `x_next` before supplying it.
 
-The `invariant` is the proposition every continuing predecessor must establish for the value it projects into the joined state. Here that common contract is `x_next == x or x_next == 0`, so both branches fit it even though they carry different concrete values. The invariant is not a hidden runtime assertion and does not make itself true: if a predecessor cannot establish it, that predecessor cannot legally enter the join.
+An **invariant** is a claim that must hold whenever execution reaches the point it describes. Here `==` means equality, so the claim says “`x_next` equals `x` or equals zero.” Both branches must establish that claim for the value they supply.
 
-A branch that terminates instead of continuing contributes no join state at all; code after the join is simply unreachable on that path.
+For example, with `x = 7`, the result is 7 when the condition is true and 0 when it is false. The shared claim covers both possibilities.
 
-The state declaration does not manufacture an owner, resurrect a consumed resource, or infer whichever value would be convenient. Every continuing predecessor must actually project into the stated join state through the ordinary resource checker.
+An invariant is not a hidden runtime `if`, and writing it does not make it true. A branch that cannot establish the join's requirements cannot legally continue through that join. A branch that finishes instead of continuing supplies no join state.
 
-This is why Phil does not resolve an ownership disagreement by silently inventing an optional value or by choosing whichever branch happened to be checked first.
+For restricted resources, every continuing branch must also account for the actual owners it carries forward. Writing a name in `state (...)` cannot recreate a resource that the branch already consumed.
 
-### Loops carry state explicitly too
+### A closer look: loops carry values forward
 
-A loop is a join with a backedge, so the same ownership problem appears every time execution goes around again.
+A loop faces a similar question: what values should its next repetition receive?
 
-Grammar v1 therefore lets a loop declare the state carried from one iteration to the next:
+Before the example, one new type notation: `{v : U32 | v > 0}` means “a `U32` whose value is greater than zero.” The name `v` stands for the value while stating that rule. Section 13 explains these **refinement types** in more detail.
 
 ```phil
 component Countdown(n : {v : U32 | v > 0}) {
@@ -302,66 +281,31 @@ component Countdown(n : {v : U32 | v > 0}) {
 }
 ```
 
-The keyword `loop` introduces the loop. `state (i : U32 = n)` says that the loop carries one state slot named `i`, of type `U32`, initially supplied by `n`. The refinement on `n` establishes the loop invariant on the initial entry.
+`loop` starts the loop. `state (i : U32 = n)` declares the value passed from one repetition to the next: a `U32` named `i`, initially equal to `n`.
 
-A loop `invariant` is a **reliable proposition**, not a runtime guard. Phil may rely on `i > 0` while checking the loop body because the initial entry and every backedge must establish it. If a proposed backedge would violate the invariant, that backedge is rejected; Phil does not silently reinterpret the failure as a loop exit.
+The invariant `i > 0` must hold on the first entry and every later entry. The input type establishes it initially.
 
-The `if i > 1` is different: it is an ordinary **runtime guard**. At runtime it chooses which control-flow path executes. When it is true, `continue(i - 1)` supplies the exact successor value for the next iteration. Because that branch knows `i > 1`, the successor `i - 1` still establishes the invariant `i > 0`. When the guard is false, `break` explicitly exits the loop.
+Inside the loop, `if i > 1` makes a runtime choice. When true, `continue(i - 1)` starts the next repetition with a smaller value. This still satisfies the invariant. Otherwise, `break` leaves the loop.
 
-For example, starting with `n = 3`, the loop states are `3 → 2 → 1 → exit`. The invariant describes what is guaranteed to be true at each admitted loop state; the `if` decides at runtime whether there will be another state.
+Starting with `n = 3`, the values are:
 
-Term-level `continue(...)` is not assignment to mutable locals: the old loop state is succeeded by the new loop state, and the checker verifies that the successor fits the same declared contract.
-
-The other loop-control keyword is `break`, which exits the loop and, where the surrounding exit contract carries values, supplies those values explicitly:
-
-```phil
-break(i)
+```text
+3 → 2 → 1 → leave the loop
 ```
 
-One detail is intentionally strict: bare `continue`, `continue()`, `break`, and `break()` supply **zero** state values. They do not mean “reuse whatever loop variables are currently in scope.” If a loop carries state, the source must spell the successor or exit values that the relevant contract requires.
+The distinction matters: **the invariant says what must be true on entry; the `if` decides whether to repeat.** Failing an invariant does not secretly become a loop exit.
 
-That rule matters for linear resources. A live owner cannot survive a backedge merely because a same-spelled local variable still exists; the exact successor owner has to be part of the checked loop state.
+`continue(...)` explicitly supplies the next state, rather than assigning new values to mutable locals. Where an exit contract requires values, `break(...)` supplies those too. Bare `continue`, `continue()`, `break`, and `break()` supply zero values; they do not mean “reuse the current ones.”
+
+For a linear resource to reach the next repetition, it must be passed through this checked state. A local variable with the same spelling is not enough.
 
 ## 4. Functions can have public contracts
 
-A machine-level function type usually tells you something like:
+A function's input and output types answer one question: what values go in, and what value comes back?
 
-```text
-(U32) -> U32
-```
+A **contract** records other rules that callers and implementations must follow. Phil uses the keyword `callable` to declare a contract for something that can be called.
 
-That is useful, but systems code often needs the caller to know more:
-
-- what resources the call consumes;
-- what it merely borrows;
-- what authority it needs;
-- what effects it may perform;
-- which kinds of failure can occur;
-- what remains true afterward.
-
-Phil therefore has first-class **callable contracts**.
-
-Here is a small one:
-
-```phil
-callable OneShot(x : U32) -> U32 {
-    outcomes { success U32 };
-    outcome success U32 {
-        state ();
-        callee consume;
-    }
-}
-```
-
-Read the first line just like a function signature: `OneShot` accepts a `U32` and returns a `U32` on success.
-
-The keyword `outcomes` declares the callable's public set of possible result classes. Here there is one: `success U32`, meaning ordinary successful completion carries a `U32`. Phil can also distinguish typed-negative, terminal, and fatal outcomes when a contract needs those cases to have different meanings.
-
-The singular `outcome success U32 { ... }` block then gives details that apply specifically to that success branch. `state ();` says that this branch exposes no named successor-state slots. `callee consume;` says that taking this branch consumes the callable value itself instead of leaving it available for another call.
-
-So the contract tells us something a normal arrow type would not: this callable is consumed by the successful call. It is a one-shot callable.
-
-A named function uses the keyword `fn` and states which callable contract it satisfies:
+Start with a familiar operation: return the input unchanged.
 
 ```phil
 callable Identity(x : U32) -> U32 {
@@ -373,42 +317,60 @@ fn identity(x : U32) -> U32 satisfies Identity {
 }
 ```
 
-`fn` introduces the named executable function declaration. `satisfies Identity` is not optional documentation: it names the public callable contract against which the function body is checked. A named function that calls itself **must** be declared `recursive fn`; an unmarked self-recursive `fn` does not typecheck. Mutual recursion likewise has to be declared as an explicit recursive group so the public callable contracts can be stabilized before any member body is checked. Recursion therefore remains contract-visible rather than acquiring secret privileges from implementation bodies.
+`Identity(x : U32) -> U32` describes a call that accepts a `U32` and returns a `U32` on success. The arrow separates input from output.
 
-A closure can explicitly satisfy a callable contract too:
+`outcomes` lists the possible **kinds of result**. Here the only listed kind is `success`, carrying a `U32`. More detailed contracts can distinguish ordinary success from different kinds of failure.
+
+`fn` introduces the function implementation. `satisfies Identity` names the contract the checker must compare that implementation against. It is not just a comment, and it does not make the implementation correct by declaration.
+
+### A callable can itself be used up
+
+Some callable values are reusable; others represent a one-time action:
 
 ```phil
-component Demo() {
-    let f = closure mode linear (x : U32)
-        satisfies OneShot captures () {
-        return x;
-    };
+callable OneShot(x : U32) -> U32 {
+    outcomes { success U32 };
+    outcome success U32 {
+        state ();
+        callee consume;
+    }
 }
 ```
 
-A **closure** is a function value that may carry values from the surrounding lexical environment with it. The keyword `satisfies` names the callable contract this closure claims to implement; the checker still has to verify that the closure really fits that contract. It is not a cast or a self-certification escape hatch.
+The plural `outcomes` lists the result kinds. The singular `outcome` gives extra rules for one listed result.
 
-The keyword `captures` makes the closure's captured environment explicit. `captures ()` means this closure carries no surrounding values. If it captured names, those captured values would remain subject to their ordinary ownership rules; putting a linear value inside a closure does not make it copyable.
+`state ();` says that this result exposes no named follow-on state values. `callee` means the callable being invoked. `callee consume;` says that the successful call uses up that callable value: it is not left available for another call.
 
-The closure is itself a value. `mode linear` says possession of that callable is linear: the program cannot silently duplicate it into two independent call sites.
+That is information an input/output arrow alone would not tell the caller.
 
-This gives us a general Phil pattern:
+### Closures are function values
 
-> **An interface describes the semantic boundary a caller may rely on; an implementation has to fit inside that boundary.**
+A **closure** is a function value that can carry values from its surroundings. Here is a closure declaration fragment using `OneShot`:
 
-That idea will reappear for effects, providers, protocols, and lowering.
+```phil
+let f = closure mode linear (x : U32)
+    satisfies OneShot captures () {
+    return x;
+};
+```
+
+`captures` lists the surrounding values it carries with it. `captures ()` means it carries none. If it did capture a linear value, that value would keep its ownership restrictions.
+
+`mode linear` makes the closure value itself linear. Enclosing code must call or otherwise legally consume `f` before its scope ends. **This fragment is not a complete component:** putting it in a component and then silently dropping `f` would violate the rule we just introduced.
+
+A function that calls itself must also make that intent explicit with `recursive fn`. A group of functions that call one another needs an explicitly declared recursive group. The checker uses their public contracts when checking those calls; it does not grant extra permissions because it can see their bodies.
+
+The pattern to remember is:
+
+> **The contract tells callers what they may rely on. The implementation must meet it.**
 
 ## 5. Effects say what a call may do
 
-Suppose two functions both take `Unit` and return `Unit`.
+Two functions can both take `Unit` and return `Unit`, yet behave very differently. One might only calculate locally; another might write a file.
 
-One only computes locally. The other writes storage.
+An **effect** describes an action that can be observed outside the local calculation. A callable's effect list limits which effects invoking it may contribute.
 
-Those functions have the same ordinary input/output shape, but they are not interchangeable in every context.
-
-Phil represents semantically observable actions as **effects**.
-
-A callable can say, for example:
+Here is an interface sketch, using effect names declared elsewhere:
 
 ```phil
 callable EffectCarrier() -> Unit {
@@ -416,44 +378,31 @@ callable EffectCarrier() -> Unit {
 }
 ```
 
-The keyword `effects` introduces the callable's effect bound; the braces contain the effects that invocation is allowed to contribute.
+`effects` introduces that list. Think of it as a ceiling, not a to-do list. An implementation that only performs `Audit` may fit a contract allowing both `IO` and `Audit`. The contract does not permit an extra, undeclared effect.
 
-An effect bound is a **may-effect upper bound**. It says what invocation is permitted to do, not what every execution must do.
-
-So an implementation that performs only `Audit` may still fit a public contract allowing `{IO, Audit}`. An implementation that additionally performs some undeclared network effect does not silently fit.
-
-Effects can also carry exact semantic subjects. Conceptually, these are different claims:
+Some effects also identify the particular resource they affect. In explanatory notation:
 
 ```text
 Write(blob_store)
 Write(log)
-Send(endpoint)
-Read(clock)
 ```
 
-The names matter because Phil does not identify two semantic subjects merely because they happen to share a machine representation.
+Writing the blob store and writing the log are different effects, even if both stores happen to use the same kind of machine handle.
 
-There is one more distinction we need before effects are useful for security reasoning.
+Carrying a callable around does not perform its effects. Those effects belong to invoking it.
 
 ## 6. Permission is not the same thing as an effect
 
-Suppose a callable may have the effect:
+An effect declaration saying “this call may write the store” does not give the call permission to write it.
 
-```text
-Write(blob_store)
-```
+Phil keeps these questions separate:
 
-That does **not** automatically mean it has permission to write the store.
+| Question | Part of the contract |
+| --- | --- |
+| What observable actions might invocation perform? | **Effects**. |
+| What permissions must be available for invocation to be legal? | **Authority**. |
 
-Phil keeps two questions separate:
-
-> **What may this computation do?** — effect
-
-and
-
-> **What is this computation permitted to do?** — authority
-
-A callable contract can name authority separately from effects:
+Here is another interface sketch. The permission and effect names stand for contracts declared in the surrounding program:
 
 ```phil
 callable StoreOperation() -> Unit {
@@ -462,25 +411,13 @@ callable StoreOperation() -> Unit {
 }
 ```
 
-The keyword `authority` lists authority that the caller must make available for a legal invocation. It does not say that the operation necessarily exercises all of that authority, just as `effects` does not say every allowed effect necessarily happens.
+`authority` lists the authority the caller must make available. `effects` bounds what invocation may do. Neither list says that every listed permission or effect is exercised on every call.
 
-The exact names here stand for ordinary static contracts in the surrounding program. The key point is the shape: authority and effects occupy different parts of the interface.
-
-That lets Phil express useful negative facts. A component that has no path to delete authority is stronger than a component that merely happened not to call delete during testing.
-
-It also keeps higher-order code honest. Merely possessing or passing around a callable that *could* write does not perform the write. Its invocation effect remains latent until the callable is actually invoked.
+This lets Phil check more than “our tests never saw a deletion.” A checked component with no access to delete authority cannot simply decide to acquire that permission. Passing it a callable also does not grant permission to invoke that callable without meeting its contract.
 
 ## 7. Protocols make conversations part of the program
 
-Now imagine two parts of a system that communicate.
-
-A comment might say:
-
-```text
-client sends one byte; server receives it
-```
-
-Phil can make that rule a checked language object instead:
+Imagine a client that sends one byte to a server. A **protocol** is the rulebook for that conversation:
 
 ```phil
 protocol Ping {
@@ -489,28 +426,18 @@ protocol Ping {
 }
 ```
 
-A **protocol** is the rulebook for a conversation.
+Each `role` describes one participant's side. The Client sends a `U8`; the Server receives a `U8`. These are matching descriptions of the same exchange.
 
-Each `role` gives the conversation as seen from one participant. `send (x : U8)` means that role is allowed and required to send a `U8` at this point in the session; `receive (x : U8)` is the dual receive state. `then` introduces the session state that follows the communication, and `end Done` says the conversation is locally finished with terminal label `Done`.
-
-The two roles above are dual descriptions of the same one-message conversation:
+`then` introduces what comes next. `end Done` says that this side has reached its final state, named `Done`.
 
 ```text
-Client: send U8 → done
-Server: receive U8 → done
+Client: send one byte    → Done
+Server: receive one byte → Done
 ```
 
-There is an important distinction here: the `send` inside the **protocol declaration** describes a legal session transition. It does not itself execute a send.
+Declaring the protocol does not send anything. In the declaration, `send` describes a legal step. Component code performs that step with `send ... on ...`.
 
-Actual component code performs communication with the term-level `send ... on ...` operation. Here `send` is a Phil keyword, not a library function or a method supplied by the component. Its basic source form is:
-
-```phil
-send value on endpoint
-```
-
-Read that as: **send this value through this live session endpoint, and advance the endpoint to its next protocol state.** The checker verifies that the endpoint is currently at a `send` state and that the value has the required message type.
-
-In a component, that looks like this:
+A **session** is one particular conversation following a protocol. An **endpoint** is a value representing one participant's side of that session, including its current state.
 
 ```phil
 component ClientWorker(endpoint : Client[Ping], payload : U8) {
@@ -519,34 +446,23 @@ component ClientWorker(endpoint : Client[Ping], payload : U8) {
 }
 ```
 
-Here `endpoint` is a live client-side session endpoint and `payload` is the byte to send. `send payload on endpoint` consumes the current endpoint and produces the successor endpoint for the `end Done` state.
+`Client[Ping]` describes the client-side endpoint type. This component needs both a live endpoint and the byte to send.
 
-`close` is another Phil keyword. Its form is simply `close endpoint`; it consumes a live endpoint whose protocol state is terminal and closes that session endpoint. So `close done;` does not mean “close some arbitrary OS handle”: the checker requires `done` to be a session endpoint at an `end` state.
+Read the body in two steps. First, `send payload on endpoint` sends the byte and consumes the old endpoint, producing the endpoint for the next state. `let done = ...` names that successor. Second, `close done;` consumes the terminal endpoint and closes that side of the session.
 
-So there are already two separate layers:
+Both `send` and `close` are Phil keywords, not missing library functions. `close` requires an endpoint that has reached an `end` state; it cannot arbitrarily skip unfinished protocol steps.
 
-```text
-protocol declaration   says which send is legal
-component body         actually performs the send
-```
+This is a component declaration, **not yet a complete communicating program**. Something still has to supply its particular endpoint and payload. Assigning it to the Client role does not invent either value or insert a `send` into its body.
 
-A surrounding architecture still has to supply the **exact** endpoint occurrence and payload to the component. Merely assigning a component to a protocol role does not synthesize the `send` expression or silently inject arbitrary runtime values into its body.
+Two sessions using `Ping` remain two different conversations. An endpoint from one cannot replace a matching-looking endpoint from the other.
 
-One actual use of `Ping` is a **protocol instance**. Two different instances of the same protocol family are still different conversations.
-
-That matters because live endpoints carry state. An endpoint from conversation A cannot be substituted for the matching-looking endpoint from conversation B merely because both are waiting to send a `U8`.
-
-Phil therefore treats the conversation state and instance identity as semantic information, not just runtime handles.
-
-There is another boundary here too: a value being movable does not automatically make it an admissible protocol message. Live endpoints, scoped loans, or authority-bearing occurrences cannot be hidden inside an aggregate to acquire remote-transfer permission by accident.
+Also, permission to move a value locally is not automatically permission to send it as a message. Borrowed views, live endpoints, or authority-bearing values cannot gain that permission merely by being wrapped inside a record.
 
 ## 8. Architecture says which parts actually exist
 
-We now have executable pieces and protocol descriptions, but we have not said which concrete pieces make up a program.
+A component declaration describes a reusable part. An **architecture** says which particular parts a system contains.
 
-That is the job of an **architecture**.
-
-Here is a complete small Phase 1 source file from the production corpus:
+Here is a complete small Phase 1 source file:
 
 ```phil
 component Worker provides Unit {
@@ -563,69 +479,40 @@ architecture Pair {
 program main = instantiate Pair;
 ```
 
-Read it from the middle outward.
+The two `instance` declarations create two distinct uses of `Worker`, named `left` and `right`. We call each particular use an **occurrence**. Same definition, two occurrences.
 
-The keyword `instance` creates a concrete architecture occurrence from a reusable declaration. The architecture `Pair` creates two occurrences of `Worker`:
+The two `process` declarations activate those existing occurrences as members of the program's process network. They do not create another pair of workers.
 
-```phil
-instance left = Worker;
-instance right = Worker;
+Finally, `program main = instantiate Pair;` selects a fresh root occurrence of `Pair` as the program named `main`.
+
+The declaration, its occurrences, and their activation are three different things:
+
+```text
+Worker definition → left occurrence  → left_run process
+                  → right occurrence → right_run process
 ```
 
-Those are two semantic occurrences even though they came from the same reusable component definition.
-
-The keyword `process` activates an already-created executable occurrence as a member of the program's static Phil process network:
-
-```phil
-process left_run = left;
-process right_run = right;
-```
-
-It does **not** instantiate `Worker` again, and it does not prescribe an OS process or thread.
-
-Finally, `program` declares a root program and `instantiate Pair` selects a fresh root occurrence of the `Pair` architecture:
-
-```phil
-program main = instantiate Pair;
-```
-
-Now we have enough vocabulary to state one of Phil's central ideas precisely:
-
-> **Architecture is part of program meaning.**
-
-The two `Worker` occurrences are not the same semantic object merely because they came from the same declaration and currently execute identical code.
+Even though the workers run identical code, the architecture still contains two workers. They do not merge just because they look alike.
 
 ## 9. Phil processes are not OS threads
 
-The word **process** in the previous example is semantic.
+A Phil **process** is one of the executing participants described by the architecture. It has its own identity, execution state, resources, and communication relationships.
 
-A Phil process is a member of the architecture's static concurrent population. It has stable identity, local execution state, ownership, communication relationships, and terminal behavior.
+An operating-system thread is a mechanism a computer might use to run it. They are not the same thing.
 
-It does not mean “create a POSIX process” or “create a thread.”
+A target implementation might use one host thread per Phil process, or run several Phil processes on a shared event loop. An event loop takes turns handling work without requiring a separate thread for each participant. More elaborate implementations may split a process across target stages.
 
-A target realization might run:
+Those choices must preserve the Phil-level rules: who owns each resource, which communication is legal, which actions happen before others, and how the participants finish or fail.
 
-- one Phil process per host thread;
-- several Phil processes on one event loop;
-- one Phil process across several target stages.
+> **The architecture identifies the participants. The implementation chooses how to run them.**
 
-Those are implementation choices.
-
-The checked requirement is that the realization preserve the Phil-level facts that matter: process identity, ownership, causality, communication, effects, failures, and terminal behavior.
-
-So:
-
-> **Process identity belongs to the architecture. Thread identity belongs to the implementation.**
-
-Phil's Phase 1 process network is deliberately bounded and static. There is no source-level `spawn`, scheduler directive, mailbox, or thread API hiding behind the `process` declaration.
+In Phase 1, the source process population is bounded and static: the architecture fixes it. `process` does not hide a source-level thread API or a command to create more processes while running.
 
 ## 10. Some protocol participants can be outside Phil
 
-Not every peer has to be another Phil process.
+A Phil client may talk to a service implemented elsewhere. The architecture can mark that peer as `external`.
 
-Suppose our `Ping` client talks to a service implemented elsewhere.
-
-The architecture can say so explicitly:
+The following is a **role-assignment sketch** using the earlier declarations, not a fully supplied entry point:
 
 ```phil
 architecture ExternalPeer {
@@ -637,35 +524,19 @@ architecture ExternalPeer {
 }
 ```
 
-Inside an architecture, `protocol ping = Ping;` creates a protocol occurrence named `ping` from the reusable `Ping` family. The `role` bindings then say who is responsible for each side of that occurrence.
+Inside the architecture, `protocol ping = Ping;` creates one conversation occurrence named `ping` from the reusable `Ping` protocol. `role ping.Client = client;` assigns responsibility for its Client role to the `client` occurrence.
 
-The first role is internal: it is assigned to the Phil occurrence `client`. That assignment does **not** execute the Client role and does not inject an endpoint into `ClientWorker` by magic; the component body still has to perform the appropriate `send`/`receive` operations using the exact endpoint values supplied at its execution boundary.
+`role ping.Server = external;` says that the Server participant is outside the Phil process population.
 
-The second role is explicitly `external`.
+It does not say how to contact that peer, select TCP, choose a message format, grant network authority, or guarantee the peer behaves correctly. Those need their own contracts. A missing internal participant does not silently become external either: the source has to say so.
 
-That word is intentionally narrow. It does **not** mean:
-
-- use TCP;
-- trust the peer;
-- choose a wire format;
-- grant authority;
-- assume the peer behaves correctly.
-
-It means only:
-
-> this role lies outside the Phil process population.
-
-Those other questions have their own contracts and competence boundaries.
-
-Likewise, a missing or invalid internal binding does not silently become external. Externality has to be stated.
+Remember the remaining input requirement: `ClientWorker` needs its exact endpoint and payload. Role assignment does not supply them by itself. We will put these separate responsibilities side by side in section 18.
 
 ## 11. Providers make implementation replacement explicit
 
-Systems often depend on services whose implementation can vary: storage, clocks, hashing, randomness, transports, operating-system facilities, hardware devices, foreign libraries.
+Suppose a system needs a storage service. Today it uses memory; tomorrow it may use a remote service. The rest of the system should depend on what the service promises, not on private details of one implementation.
 
-Phil calls an architectural implementation boundary of this kind a **provider**.
-
-The source can declare a contract and implementations that intend to satisfy it:
+Phil calls such an architectural implementation boundary a **provider**:
 
 ```phil
 provider Store {}
@@ -675,41 +546,23 @@ provider implementation MemoryStore satisfies Store {}
 opaque provider implementation RemoteStore satisfies Store;
 ```
 
-`provider Store {}` declares the public provider contract. `provider implementation ...` declares an implementation whose body is represented in ordinary Phil source. `opaque provider implementation ...;` declares an implementation whose internals are outside the ordinary source body and must therefore be justified through the relevant external/assurance boundary.
+These empty declarations show the forms, not a complete storage API. `provider Store {}` declares the public contract. `MemoryStore` supplies an implementation represented in Phil source.
 
-In both implementation forms, `satisfies Store` names the public provider contract the implementation is claiming to refine. As with `satisfies` on a closure, the keyword names the intended contract; it does not prove the claim by itself.
+`opaque` means the implementation's internals are not given as an ordinary Phil source body. For example, they might live in an external library. “Opaque” does not mean “automatically trusted.” Claims about those internals still need the appropriate evidence and explicit trust boundary.
 
-Why distinguish a provider from an ordinary concrete library?
+In both forms, `satisfies Store` identifies the contract being claimed. The claim is not its own proof.
 
-Because Phil wants the architecture to depend on the public contract rather than accidentally depend on one implementation.
+An implementation is **qualified** when it has met the requirements needed to stand behind that contract for the claims in question. Those may concern normal operation, permissions, ownership, failure, or behavior over several calls. Two services with the same operation names are not interchangeable unless the required rules match too.
 
-A provider may need evidence about:
-
-- operation behavior;
-- resource transitions;
-- authority confinement;
-- state simulation;
-- crash/lifecycle behavior;
-- history-wide laws;
-- assumptions or trust boundaries.
-
-Only a **qualified** implementation is eligible to stand behind the contract for the claims being made.
-
-This is the small-scale form of Phil's project slogan:
-
-> **Architecture executable, implementation replaceable.**
+> **Replacing an implementation must not quietly change the promises its callers rely on.**
 
 ## 12. Generic code must say what it needs
 
-Reusable code introduces a subtle ownership problem.
+A **generic** declaration works with a type supplied later. It often names that type `T`.
 
-Suppose `T` is an abstract type.
+But knowing only “this is a `T`” does not tell us whether it can be copied. It might turn out to be a number, or it might be a linear token.
 
-May generic code copy a `T`? Drop it? Serialize it? Send it over a protocol? Use some provider associated with it?
-
-Phil's answer is: only if the generic contract provides the required fact or permission.
-
-Here is canonical generic requirement syntax:
+Phil makes generic code state the extra permissions and facts it needs. This declaration sketch shows three kinds of requirement; `ProviderContract` stands for a provider contract declared elsewhere:
 
 ```phil
 record Routed[T : Type] requires {
@@ -721,80 +574,49 @@ record Routed[T : Type] requires {
 }
 ```
 
-`[T : Type]` introduces a generic parameter named `T` whose kind is `Type`. The keyword `requires` opens the set of facts and capabilities that must be supplied when this generic declaration is instantiated.
+`[T : Type]` means “accept a type parameter named `T`.” The final body declares a field of that type. `requires` lists prerequisites that must be met when a particular type and other arguments are supplied.
 
-Inside that block, the three lines are three different kinds of prerequisite:
+### `structural`: may this value be copied or discarded?
 
-- `structural T : duplicate;` requires a structural permission for values of `T`;
-- `proposition true;` requires a logical proposition to hold;
-- `provider P : ProviderContract;` requires an exact provider contract.
+`structural T : duplicate;` requires permission to copy values of `T`. It does not give copying permission to a type that forbids it. Supplying a linear type therefore fails this requirement.
 
-### Structural requirements
+The two language-defined permission names are `duplicate` and `discard`. They are not reserved lexer keywords, but they have these specific meanings in a structural requirement:
 
-Here **structural** does not mean the fields or memory layout of `T`. It comes from structural logic: the rules for whether a value may be *discarded* or *duplicated*.
-
-Phil currently exposes two such generic permissions:
-
-```phil
-structural T : discard;
-structural T : duplicate;
-```
-
-`discard` and `duplicate` are language-defined permission names rather than reserved lexer keywords. `discard` means the generic body is allowed to use **weakening** on a `T`: it may decide not to use that value at all.
-
-`duplicate` means the generic body is allowed to use **contraction** on a `T`: it may make the same value available to more than one use.
-
-Those permissions line up with the structural modes from section 3:
-
-| Actual mode of `T` | May satisfy `discard` | May satisfy `duplicate` |
+| Actual mode of `T` | Satisfies `discard`? | Satisfies `duplicate`? |
 | --- | --- | --- |
-| unrestricted | yes | yes |
-| affine | yes | no |
-| linear | no | no |
+| unrestricted | Yes. | Yes. |
+| affine | Yes. | No. |
+| linear | No. | No. |
 
-So this requirement:
+Here “structural” is the same word we met in ownership: it concerns copying and discarding, not the fields or memory layout of `T`.
 
-```phil
-structural T : duplicate;
-```
+Code that simply passes its `T` onward, without copying or dropping it, needs neither permission. Code that does copy it must not pretend otherwise in its public requirements.
 
-does **not** grant copying to an arbitrary `T`. It says that this generic declaration is only valid for actual types whose mode already permits duplication. A linear actual therefore fails that requirement; an unrestricted actual can satisfy it.
+### `proposition`: what fact must be accounted for?
 
-There is an important zero-requirement case too. If generic code merely transfers an abstract value from one place to another, without dropping or copying it, it needs neither structural permission. Phil's structural checker also compares what the generic body actually does with the public requirements it declares, so a body that duplicates `T` cannot publish an interface pretending that no duplication permission is needed.
+A **proposition** is a statement that can be true or false. A proposition requirement asks for a logical fact, not a copy/drop permission.
 
-### Proposition requirements
+`proposition true;` is deliberately trivial. It shows the syntax without adding another mathematical idea. A useful requirement would usually state something less automatic.
 
-A **proposition** requirement is different. It is not about copy/drop permissions at all. It says:
+Writing `proposition P;` does not make `P` true. It also does not run an `if` test. The required fact must be accounted for when the generic is used: for example, by matching evidence. Where the selected policy permits an explicit assumption or an obligation passed onward, that choice must remain visible rather than masquerading as proof.
 
-> **This generic declaration may be used only in a context where this exact logical fact has been accounted for.**
+### `provider`: which service contract is required?
 
-The example says:
+`provider P : ProviderContract;` names a required provider contract. It is a different prerequisite from either a logical fact or a structural permission.
 
-```phil
-proposition true;
-```
-
-which is deliberately boring: `true` is a proposition that is trivially satisfied. It is present in this conformance fixture mainly to exercise the proposition-requirement path. A useful generic would normally require a nontrivial fact about the objects or contracts it depends on.
-
-Writing `proposition P;` does not make `P` true, and it is not a runtime `Bool` test. The proposition is checked as a Phil logical proposition and becomes part of the generic's public requirement set. At a particular instantiation, that exact requirement must then have an accepted disposition—for example matching evidence, or an explicit assumption/export when the active policy permits one.
-
-So the three requirement categories answer different questions:
+The three lines ask three different questions:
 
 ```text
-structural T : duplicate;       can values of T legally be copied here?
-proposition P;                  has the logical fact P been established/accounted for?
-provider P : ProviderContract;  is the required provider contract available here?
+structural … : duplicate   Are values of this type allowed to be copied?
+proposition …             Has this required fact been accounted for?
+provider … : …            Is the required provider contract available?
 ```
 
-This is why genericity does not become an escape hatch around ownership or proof:
-
-> **Abstract code gets no secret privileges.**
+Generic code gains no secret privileges from not yet knowing its arguments.
 
 ## 13. Phil can carry checked facts in types and contracts
 
-Sometimes a type needs to say more than “this is a `U32`.”
-
-For example:
+Sometimes “this is a number” is not enough. A calculation may need a number greater than zero.
 
 ```phil
 claim Positive(x : U32) = x > 0;
@@ -804,117 +626,69 @@ callable KeepPositive(x : {v : U32 | v > 0}) -> U32 {
 }
 ```
 
-The keyword `claim` declares a reusable proposition. Here `Positive(x)` names the proposition `x > 0`.
+`claim` gives a reusable name to a proposition. Here `Positive(x)` names “`x` is greater than zero.” Naming the claim is not proving it.
 
-The type:
+The type `{v : U32 | v > 0}` is a **refinement type**. Read it as “a value `v` of type `U32`, such that `v > 0`.” The local name `v` is just a way to refer to the value while writing the condition.
 
-```phil
-{v : U32 | v > 0}
-```
+`ensures` states a **postcondition**: a claim the contract promises at the relevant successful return. In this small example it refers to the input `x`; it does **not** say that the returned `U32` is positive. We have deliberately kept the example about one named value.
 
-is a **refinement type**. It describes a `U32` together with the proposition that its value is greater than zero. The name `v` is the refinement-local name for the value while the proposition is being stated.
+How does a claim become something the checker may rely on? Depending on the claim and the rules in force, Phil can use calculation within fixed limits, accepted evidence, a checked proof certificate, explicit runtime enforcement, or an explicit assumption.
 
-The keyword `ensures` introduces a postcondition: a proposition the callable contract promises on the relevant successful return boundary.
+A **proof certificate** is evidence that a checker can examine. An **assumption** is something the system relies on without establishing it itself. These must not be confused.
 
-This does not mean Phil's type checker runs arbitrary theorem search until it feels convinced.
+A runtime check can establish a condition on the path where it succeeds, but the failure path must also be handled. Merely asserting a condition does neither job.
 
-Phil deliberately distinguishes several ways a fact can become available:
-
-- bounded definitional computation;
-- already accepted evidence;
-- certificate-checkable reasoning;
-- an explicit runtime check;
-- an explicit assumption when trust really is required.
-
-The goal is to keep the competence boundary inspectable. A timeout from a proof search tool is not proof that a proposition is false, and a source assertion is not automatically evidence that it is true.
+The important boundary is simple: a claim is not automatically a fact, and a tool failing to prove a claim does not prove it false.
 
 ## 14. Bad Phil is rejected before assurance policy gets a vote
 
-This distinction is important enough to state directly.
+An **assurance policy** says how permitted outstanding claims may be handled. It does not rewrite the language's rules.
 
-Some programs are intrinsically invalid Phil.
+Copying a linear owner, sending at the wrong protocol step, or using authority that is not available are language errors. So is trying to pass a consumed resource into a later branch or loop state.
 
-Examples include:
+These errors cannot be relabeled “assumptions” to make the source valid.
 
-- duplicating a linear owner;
-- performing a session action that is illegal in the current protocol state;
-- using authority that the context does not possess;
-- assigning one restricted occurrence to two processes;
-- failing to re-establish the required resource state at a join or loop backedge.
+After those language checks, some claims may legally remain to be resolved. Phil calls these **residual obligations**: requirements that still need an acceptable answer.
 
-Those are language errors.
+Depending on the obligation and policy, that answer may be a proof, runtime enforcement, an admitted assumption, or an explicit obligation passed to another boundary. Passing an obligation onward is not the same as proving it, and not every obligation permits every answer.
 
-They do not become “proof obligations for later” merely because a build policy is permissive.
-
-Only claims that Phil permits to remain live become **residual obligations** that can be discharged by proof, runtime enforcement, an admitted assumption, or an explicit exported obligation when the architecture permits that disposition.
-
-That separation prevents assurance machinery from becoming an escape hatch around the language itself.
+> **“Still needs evidence” and “not a valid Phil program” are different results.**
 
 ## 15. Source verification is not artifact certification
 
-Suppose the source is valid and all of its application-level obligations have been handled.
+Suppose the source follows Phil's rules and its application-level obligations have been handled. Why is that not the end?
 
-Are we done?
+Because the program still has to be turned into a particular executable artifact. That introduces choices: which provider implementation to use, how values are stored, and how processes are run. Those choices must not break the source's rules.
 
-Not quite.
+**Source verification** checks the source and records the basis for its claims. A **VerificationBundle** is the inspectable record: which exact source was checked, which obligations it had, and which evidence, dependencies, and policy were used.
 
-The compiler still has to choose a concrete realization:
+**Artifact certification** concerns a particular compiled result and its implementation choices. It must account for how those choices preserve the required facts, including any new requirements they introduce.
 
-- which qualified provider implementation to use;
-- how to represent values;
-- how to map processes onto runtime mechanisms;
-- whether to stage or copy data;
-- which target ABI or calling convention to use;
-- which runtime checks or evidence carriers remain necessary.
+An **AssuranceManifest** records the claims and justifications for that artifact, including what still has to be trusted. It is not a blanket statement that every imaginable property has been proved.
 
-Those choices can introduce new requirements that did not exist in the source.
-
-Phil therefore separates:
-
-```text
-source verification
-from
-artifact certification
-```
-
-The source-side result is recorded in a **VerificationBundle**: an inspectable account of the exact source revisions, intrinsic result, obligations, dependencies, policy, and evidence references.
-
-A particular artifact additionally needs its realization and preservation story checked.
-
-The final **AssuranceManifest** says which claims and dispositions justify that artifact and what trusted boundary remains.
-
-This is how Phil avoids a common failure mode in verified systems work: proving something useful about the source, then silently assuming that every compiler and deployment choice preserved it.
+For example, a source-level storage contract might be sound, but the selected storage implementation must still meet it. Proof about the source does not automatically prove every possible implementation choice safe.
 
 ## 16. Lowering may choose representation, not meaning
 
-Eventually Phil has to become machine code or some other executable target representation.
+**Lowering** translates a program into a form closer to its eventual execution. A compiler may perform several such steps.
 
-A backend may legitimately:
+It might replace a general function with a specialized one, choose a qualified provider, or map several Phil processes onto an event loop. Different correct implementations need not look alike.
 
-- inline a function;
-- specialize a generic;
-- choose a qualified provider;
-- insert a staging buffer;
-- map Phil processes onto threads or an event loop;
-- use a runtime enforcement mechanism.
-
-Phil does not require all correct implementations to look alike.
-
-Instead, lowering is treated as a checked **refinement relation**.
-
-The governing rule is:
+Phil treats each such change as a checked **refinement**: the more concrete implementation must still meet the relevant rules of the less concrete one.
 
 > **Lowering may choose representation; it may not choose semantics.**
 
-If a source-level fact is no longer represented directly, the later stage still has to account for what happened to it. It may have been preserved, realized by another mechanism, discharged by evidence, enforced at runtime, exported as an obligation, or strengthened into a new target-specific requirement.
+“Semantics” means the program's meaning: the behavior and guarantees its contracts describe.
 
-It cannot simply vanish because the backend no longer finds it convenient.
+For example, putting two Phil processes on one thread must not merge their resource ownership or allow messages to be swapped between their sessions. Their machine representation changed; their responsibilities did not.
+
+A fact need not remain as a literal annotation in machine code. It may be preserved by the chosen mechanism, justified by evidence, or enforced at runtime. Where a policy allows an obligation to be passed onward, that must be recorded. Later choices may also introduce stricter requirements.
+
+What cannot happen is silently forgetting a source requirement because a later stage finds it inconvenient.
 
 ## 17. Why stable identity appears at all
 
-Only now do we need one of the more abstract-looking Phase 1 ideas.
-
-Consider this architecture again:
+Recall the two workers:
 
 ```phil
 architecture Pair {
@@ -925,34 +699,32 @@ architecture Pair {
 }
 ```
 
-`left` and `right` may have the same type and the same implementation. They are still different occurrences.
+They have the same type and code but are different occurrences. Evidence about one is not automatically evidence about the other.
 
-Likewise, renaming `left_run` should not necessarily mean “destroy this semantic process and create an unrelated one” if the edit is intentionally lineage-preserving.
+There is a second identity problem when source changes. Renaming a process should not necessarily turn it into an unrelated process. Yet reusing an old name should not accidentally reuse evidence about a different object.
 
-Phil therefore carries stable lineage deliberately rather than deriving identity from mutable presentation details such as a path, display name, source offset, pointer, or target symbol.
+Phil therefore tracks **lineage**: identity carried deliberately across revisions, rather than guessed from a file path, display name, or position in the source.
 
-A top-level declaration can carry an explicit key:
+A declaration can carry an explicit key:
 
 ```phil
 @key("decl:upload-id")
 record UploadId {}
 ```
 
-The `@key(...)` attribute supplies stable declaration lineage for this declaration. The quoted text is an identity carrier, not a display label and not evidence for any semantic claim. `key` is the admitted semantic attribute name, but it is not itself a reserved lexer keyword.
+`@key(...)` is an attribute, extra information attached to the declaration. The quoted string carries its stable declaration identity. `key` is the language-defined attribute name, not a reserved lexer keyword.
 
-Other occurrence lineage can travel with the source in a **SourceBundle**.
+The key is not evidence that the declaration is correct. Keeping identity across an edit also does not make old proofs automatically valid for the new body: the exact revision and its dependencies still matter.
 
-This is not something a beginner has to write by hand for every ordinary edit. It is the identity substrate that lets later verification, evidence, realization, and independent implementations agree about which semantic object a claim concerns.
-
-The rule to remember is simpler than the machinery:
+Other occurrence identities can travel with the source in a **SourceBundle**. Beginners need not manually manage every such detail to understand ordinary code. The purpose is to let the tools agree on exactly which declaration, resource, process, or session a claim concerns.
 
 > **Looking the same is not the same as being the same.**
 
 ## 18. How the Ping pieces fit
 
-We now have enough vocabulary to put the three different responsibilities next to one another without pretending they are the same thing.
+There are three responsibilities in the Ping example. Keeping them separate prevents a subtle mistake.
 
-First, the protocol says what communication is legal:
+**The protocol describes the conversation:**
 
 ```phil
 protocol Ping {
@@ -961,7 +733,7 @@ protocol Ping {
 }
 ```
 
-Second, executable component code performs the communication when it is given the appropriate runtime values:
+**The component contains the code that performs its part:**
 
 ```phil
 component ClientWorker(endpoint : Client[Ping], payload : U8) {
@@ -970,7 +742,7 @@ component ClientWorker(endpoint : Client[Ping], payload : U8) {
 }
 ```
 
-Third, the architecture says which semantic occurrence is responsible for which protocol role:
+**The architecture assigns responsibility:**
 
 ```phil
 architecture ExternalPeer {
@@ -980,80 +752,47 @@ architecture ExternalPeer {
     role ping.Client = client;
     role ping.Server = external;
 }
-
-program main = instantiate ExternalPeer;
 ```
 
-Read those as three separate statements of meaning:
+These blocks are a wiring explanation, **not a complete executable Ping listing**. In particular, the role assignment does not pass arguments into `ClientWorker`.
+
+One more responsibility remains: **provisioning**, which means supplying the values a running component needs. Here those are the endpoint belonging to this exact `ping.Client` conversation and the `U8` payload. A complete entry path must supply both explicitly through the appropriate checked machinery.
 
 ```text
-Ping                 says the Client role must send one U8
-ClientWorker         contains code that actually performs a send
-role ping.Client ... says the client occurrence is responsible for that role
+Protocol      What conversation is legal?
+Component     What code performs our part?
+Architecture  Which participant is responsible?
+Provisioning  Where do its actual input values come from?
 ```
 
-The earlier version of this Tour accidentally collapsed the last two. It showed a `ClientWorker` that merely returned `unit`, then assigned that occurrence to `ping.Client`, which made it look as though role assignment automatically supplied behavior. It does not.
+A component that only returned `unit` would not implement the send merely because an architecture assigned it the Client role. Conversely, a correct `send` expression still needs the right endpoint. Neither declaration fills the other gap by magic.
 
-There is still one boundary this compact example intentionally leaves visible: **runtime provisioning**. `ClientWorker` needs the exact `Ping.Client` endpoint occurrence and a `U8` payload. The architecture/entry machinery has to supply those exact runtime values; the role declaration alone is not a constructor call, dependency injector, or hidden endpoint parameter.
+The component action and architecture participation are exercised separately in the Phase 1 corpus. This compact explanation does not add the entry wiring that connects them. Treat it as an explanation of those boundaries, not as evidence that an end-to-end Ping program has run.
 
-The current Phase 1 production corpus checks the term-level `send value on endpoint` form and separately checks architecture process/role participation. Until the canonical whole-source path has a single small fixture that closes that runtime-provisioning seam end to end, this Tour should not pretend that the seam is implicit.
-
-That distinction is useful in its own right:
-
-> **The protocol constrains behavior. The component performs behavior. The architecture assigns responsibility and supplies the surrounding resources.**
-
-Notice also what none of those layers has chosen yet. We have not said TCP or Unix sockets. We have not assigned an OS thread. We have not selected a serialization library. We have not smuggled in ambient network authority. Those are later competent choices.
-
-That is what “building systems from the outside in” means in Phil: establish the semantic boundaries first, then choose implementations and runtime bindings that satisfy them.
+We also have not selected TCP, a message encoding, or an operating-system thread. Those are separate implementation choices that must fit the contracts already stated.
 
 ## 19. Where the bigger examples fit
 
-The tiny examples in this tour are meant to establish vocabulary, not show the largest thing Phil can express.
+The small examples teach vocabulary. Two larger programs put the ideas together in different ways.
 
-The project has two important larger witnesses.
+The **framed upload** is the historical Phase 0 example. It checks a multi-step client/server conversation, recognizes incoming frames before accepting them, validates data, transfers ownership, and handles failures. The [Phase 0 Tour](tour-phase0.md) follows that one system in detail, including its compilation and certification path. It uses the Phase 0 vocabulary, not interchangeable Phase 1 source syntax.
 
-### The framed upload
+**Steve** is a content-addressed store: it names stored data using a digest computed from the data's contents. It makes Phil confront a different set of problems, such as matching evidence to the exact stored object, limiting storage permissions, and handling failed writes.
 
-The Phase 0 upload architecture is the historical end-to-end example. It exercises:
+The compiler should not know either program by name. They should be ordinary programs that use the same language rules.
 
-- a multi-step client/server protocol;
-- frame recognition before receive commit;
-- validation and evidence;
-- explicit ownership transfer;
-- branch-sensitive failure;
-- native lowering and certification.
-
-The [Phase 0 Tour](tour-phase0.md) remains the best place to follow that one system in detail.
-
-### Steve
-
-Steve is a content-addressed store used as a deliberately different Phase 1 pressure case. It exercises digest identity, exact evidence subjects, provider qualification, authority confinement, install-if-absent behavior, lifecycle rules, and storage failure.
-
-The point of keeping both is that the compiler should not know either one by name. They should simply be different Phil programs using the same language machinery.
-
-If you already understand Phase 0 and want the design delta rather than another introduction, read [From Phil Phase 0 to Phase 1](from-phase0-to-phase1.md).
+Readers who already know Phase 0 can instead follow [From Phil Phase 0 to Phase 1](from-phase0-to-phase1.md). For an unfamiliar reserved word, keep the [keyword lexicon](../reference/keywords-phase1.md) nearby.
 
 ## 20. The ideas to keep
 
-If you remember only a few things from this tour, remember these:
+You do not need to memorize every keyword from this tour. Keep these connections:
 
-- **Phil is still an ordinary programming language.** Modules, types, local bindings, construction, functions, branches, and pattern matches work alongside the systems contracts rather than being replaced by them.
-- **Phil makes system rules part of the program.** Protocols, ownership, authority, effects, obligations, and architecture are checked objects rather than comments.
-- **Ownership can be structural.** Unrestricted, affine, and linear values have different copy/drop permissions, and those rules survive borrows, branches, joins, and loop backedges.
-- **Contracts describe semantic boundaries.** A machine signature is often only one part of a callable or provider interface.
-- **Effects are not authority.** What code may do and what it is permitted to do are separate facts.
-- **Protocols constrain communication; component code performs it.** Assigning a process to a protocol role does not inject a `send` or `receive` into its body.
-- **Protocols are conversations with state.** Two instances of the same protocol are still different sessions.
-- **Architecture says which semantic occurrences exist.** Equal-looking instances do not merge.
-- **Phil processes are not threads.** Threads, event loops, and placement belong to realization.
-- **External peers are explicit.** Missing bindings do not silently become external participants.
-- **Provider replacement requires qualification.** Saying `satisfies` is not self-certification.
-- **Generic code gets no secret privileges.** It has to state the structural and semantic requirements it actually uses.
-- **Intrinsic invalidity comes before assurance policy.** A bad Phil program cannot be rescued by calling the error an assumption.
-- **Source verification is not artifact certification.** Compiler and target choices need their own preservation story.
-- **Lowering may choose representation, not meaning.**
-- **Semantic identity is deliberate.** Looking the same does not make two resources, sessions, processes, or claims interchangeable.
+- **Values have rules.** Types describe both data and, where needed, restrictions on copying, discarding, and transferring it.
+- **Contracts make promises explicit.** Implementations must meet them; naming a contract is not proving that they do.
+- **System parts have distinct responsibilities.** Protocols describe conversations, components perform actions, and architectures identify participants. Their real inputs still have to be supplied.
+- **Evidence has a scope.** A claim, a proof, a runtime check, and an assumption are different things. Each concerns particular objects and requirements.
+- **Changing implementation must preserve meaning.** Checking the source and justifying a particular compiled artifact are connected but separate jobs.
 
-The shortest summary of Phil is still:
+That is the idea behind Phil's slogan:
 
-> **Phil is a systems language in which architecture is executable and implementation is replaceable.**
+> **Architecture executable, implementation replaceable.**
