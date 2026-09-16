@@ -110,10 +110,9 @@ jobs:
         run: |
           set -euo pipefail
           cp deployment-authority-proof/DeploymentAuthorityKernel.hs .
-          cabal exec -- ghc -i. -Wall -Werror -Wno-unused-imports -fno-code \
-            DeploymentAuthorityKernel.hs \
-            app/DeploymentAuthorityDecisionCorrespondenceMain.hs
-          cabal exec -- runghc -i. -Wall -Werror -Wno-unused-imports \
+          cabal exec -- ghc -i. -Wall -Werror -Wno-unused-imports -fno-code DeploymentAuthorityKernel.hs
+          cabal exec -- ghc -i. -Wall -Werror -fno-code app/DeploymentAuthorityDecisionCorrespondenceMain.hs
+          cabal exec -- runghc -i. -Wall -Werror \
             app/DeploymentAuthorityDecisionCorrespondenceMain.hs
       - name: Strict typecheck unchanged qualification and authority implementations/corpora
         run: |
