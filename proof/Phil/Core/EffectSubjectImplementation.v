@@ -202,9 +202,10 @@ Proof.
 Qed.
 
 Theorem representation_coincidence_has_no_acceptance_input :
-  forall indexInRange sameSubject correspondencePresent
+  forall (Representation : Type)
+    indexInRange sameSubject correspondencePresent
     correspondenceSourceMatches correspondenceTargetMatches
-    firstRepresentation secondRepresentation,
+    (firstRepresentation secondRepresentation : Representation),
     firstRepresentation = secondRepresentation ->
     decideEffectSubjectRetarget
       indexInRange sameSubject correspondencePresent
