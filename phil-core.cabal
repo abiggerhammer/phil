@@ -71,6 +71,7 @@ library
       ResourceInvariantKernel
       ResourceJoinKernel
       ResourceLoopKernel
+      RuntimeBytesKernel
       ResourceObligationKernel
       ResourceScopeKernel
       Phil.Surface.Check.Types
@@ -299,7 +300,7 @@ executable phil-llvm-phase0-server-framed-ingress
 executable phil-llvm-phase0-storage-failure-detail
   import:   common-settings
   hs-source-dirs:     app
-  main-is:  LLVMStorageFailureDetailMain.hs
+  main-is:            LLVMStorageFailureDetailMain.hs
   build-depends:
       base >=4.17 && <5,
       phil-core,
@@ -308,7 +309,7 @@ executable phil-llvm-phase0-storage-failure-detail
 executable phil-llvm-phase0-control-codec
   import:   common-settings
   hs-source-dirs:     app
-  main-is:  LLVMControlCodecMain.hs
+  main-is:            LLVMControlCodecMain.hs
   build-depends:
       base >=4.17 && <5,
       phil-core,
