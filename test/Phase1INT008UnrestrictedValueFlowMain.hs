@@ -10,6 +10,7 @@ import Phil.Core.Generic.StaticActual (GenericStaticActual (..))
 import Phil.Core.Process
 import Phil.Core.ProcessActivation
 import Phil.Core.ProcessRendezvous
+import Phil.Core.Protocol (ProtocolContext (..))
 import Phil.Core.Protocol.Family
 import Phil.Core.Scalar
   ( ScalarLiteral (..)
