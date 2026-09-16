@@ -1,10 +1,12 @@
-name: Phase 1 IO Bytes Proofs
+name: Phase 1 IO Bytes Production Binding
 
 on:
   pull_request:
     paths:
       - 'proof/Phil/Core/RuntimeBytes.v'
       - 'proof/Phil/Core/RuntimeBytesImplementation.v'
+      - 'proof/Phil/Core/RuntimeBytesImplementationExtraction.v'
+      - 'src/RuntimeBytesKernel.hs'
       - 'src/Phil/Core/Syntax.hs'
       - 'src/Phil/Core/Value.hs'
       - 'src/Phil/Surface/GrammarV1/CheckedType.hs'
@@ -15,6 +17,8 @@ on:
     paths:
       - 'proof/Phil/Core/RuntimeBytes.v'
       - 'proof/Phil/Core/RuntimeBytesImplementation.v'
+      - 'proof/Phil/Core/RuntimeBytesImplementationExtraction.v'
+      - 'src/RuntimeBytesKernel.hs'
       - 'src/Phil/Core/Syntax.hs'
       - 'src/Phil/Core/Value.hs'
       - 'src/Phil/Surface/GrammarV1/CheckedType.hs'
@@ -33,15 +37,20 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
-      - name: Compile PHIL-P1-IO-BYTES-001 semantic and implementation proofs
+      - name: Compile PHIL-P1-IO-BYTES-001 proof and fresh extracted kernel
         shell: bash
         run: |
           set -euo pipefail
           export PATH="/home/rocq/.opam/${COMPILER}/bin:$PATH"
           rocq c -Q proof/Phil Phil proof/Phil/Core/RuntimeBytes.v
           rocq c -Q proof/Phil Phil proof/Phil/Core/RuntimeBytesImplementation.v
+          rm -f RuntimeBytesKernel.hs
+          rocq c -Q proof/Phil Phil proof/Phil/Core/RuntimeBytesImplementationExtraction.v
+          test -s RuntimeBytesKernel.hs
+          grep -q 'decideBytesCheckByFacts' RuntimeBytesKernel.hs
+          grep -q 'decideRuntimeBytesRefinementByFacts' RuntimeBytesKernel.hs
 
-      - name: Record checked proof identities
+      - name: Record checked proof and extraction identities
         shell: bash
         run: |
           set -euo pipefail
@@ -51,18 +60,22 @@ jobs:
             proof/Phil/Core/RuntimeBytes.vo \
             proof/Phil/Core/RuntimeBytesImplementation.v \
             proof/Phil/Core/RuntimeBytesImplementation.vo \
+            proof/Phil/Core/RuntimeBytesImplementationExtraction.v \
+            proof/Phil/Core/RuntimeBytesImplementationExtraction.vo \
+            RuntimeBytesKernel.hs \
             runtime-bytes-proof/
           sha256sum \
             runtime-bytes-proof/RuntimeBytes.v \
             runtime-bytes-proof/RuntimeBytes.vo \
             runtime-bytes-proof/RuntimeBytesImplementation.v \
             runtime-bytes-proof/RuntimeBytesImplementation.vo \
+            runtime-bytes-proof/RuntimeBytesKernel.hs \
             > runtime-bytes-proof/PHIL-P1-IO-BYTES-001.proof.sha256
           cat runtime-bytes-proof/PHIL-P1-IO-BYTES-001.proof.sha256
 
       - uses: actions/upload-artifact@v4
         with:
-          name: rocq-runtime-bytes-proof
+          name: rocq-runtime-bytes-production-binding
           path: runtime-bytes-proof
           if-no-files-found: error
 
