@@ -144,9 +144,9 @@ jobs:
           cp concurrency-terminal-proof/ConcurrencyTerminalKernel.hs .
           cabal exec -- ghc -i. -Wall -Werror -Wno-unused-imports -fno-code ConcurrencyTerminalKernel.hs
           cabal exec -- ghc -isrc -Wall -Werror -fno-code src/Phil/Core/ProcessLifecycle.hs
-          cabal exec -- ghc -i. -Wall -Werror -Wno-unused-imports -fno-code app/ConcurrencyTerminalDecisionCorrespondenceMain.hs
+          cabal exec -- ghc -i. -Wall -Werror -fno-code app/ConcurrencyTerminalDecisionCorrespondenceMain.hs
       - name: Execute exact extracted-kernel controls
-        run: cabal exec -- runghc -i. -Wall -Werror -Wno-unused-imports app/ConcurrencyTerminalDecisionCorrespondenceMain.hs
+        run: cabal exec -- runghc -i. -Wall -Werror app/ConcurrencyTerminalDecisionCorrespondenceMain.hs
       - name: Re-run implementation-refined activation and rendezvous predecessors
         run: |
           set -euo pipefail
