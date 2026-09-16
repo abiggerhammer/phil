@@ -1,0 +1,103 @@
+name: Phase 1 Generic Assurance Proofs
+
+on:
+  pull_request:
+    paths:
+      - 'proof/Phil/Core/GenericStructural.v'
+      - 'proof/Phil/Core/GenericRequirements.v'
+      - 'proof/Phil/Core/GenericInstantiation.v'
+      - 'proof/Phil/Assurance/GenericAssurance.v'
+      - 'proof/Phil/Assurance/GenericAssuranceImplementation.v'
+      - 'src/Phil/Verification/GenericAssurance.hs'
+      - 'src/Phil/Core/Generic.hs'
+      - 'test/Phase1VerificationGenericAssuranceReuseMain.hs'
+      - 'test/Phase1GenericInstantiationMain.hs'
+      - 'docs/phase-1/generic-assurance-proof-boundary-v1.md'
+      - '.github/workflows/phase1-assure-generic-proofs.yml'
+  push:
+    branches: [main]
+    paths:
+      - 'proof/Phil/Core/GenericStructural.v'
+      - 'proof/Phil/Core/GenericRequirements.v'
+      - 'proof/Phil/Core/GenericInstantiation.v'
+      - 'proof/Phil/Assurance/GenericAssurance.v'
+      - 'proof/Phil/Assurance/GenericAssuranceImplementation.v'
+      - 'src/Phil/Verification/GenericAssurance.hs'
+      - 'src/Phil/Core/Generic.hs'
+      - 'test/Phase1VerificationGenericAssuranceReuseMain.hs'
+      - 'test/Phase1GenericInstantiationMain.hs'
+      - 'docs/phase-1/generic-assurance-proof-boundary-v1.md'
+      - '.github/workflows/phase1-assure-generic-proofs.yml'
+
+permissions:
+  contents: read
+
+jobs:
+  rocq-generic-assurance-proof:
+    runs-on: ubuntu-latest
+    container:
+      image: rocq/rocq-prover:9.2.0
+      options: --user root
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Compile PHIL-ASSURE-GENERIC-001 semantic and implementation proofs
+        run: |
+          set -euo pipefail
+          export PATH="/home/rocq/.opam/${COMPILER}/bin:$PATH"
+          rocq c -Q proof/Phil Phil proof/Phil/Core/GenericStructural.v
+          rocq c -Q proof/Phil Phil proof/Phil/Core/GenericRequirements.v
+          rocq c -Q proof/Phil Phil proof/Phil/Core/GenericInstantiation.v
+          rocq c -Q proof/Phil Phil proof/Phil/Assurance/GenericAssurance.v
+          rocq c -Q proof/Phil Phil proof/Phil/Assurance/GenericAssuranceImplementation.v
+
+      - name: Record checked proof identities
+        run: |
+          set -euo pipefail
+          sha256sum \
+            proof/Phil/Assurance/GenericAssurance.v \
+            proof/Phil/Assurance/GenericAssurance.vo \
+            proof/Phil/Assurance/GenericAssuranceImplementation.v \
+            proof/Phil/Assurance/GenericAssuranceImplementation.vo \
+            > generic-assurance-proof-sha256.txt
+          cat generic-assurance-proof-sha256.txt
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: generic-assurance-proof
+          path: |
+            proof/Phil/Assurance/GenericAssurance.v
+            proof/Phil/Assurance/GenericAssurance.vo
+            proof/Phil/Assurance/GenericAssuranceImplementation.v
+            proof/Phil/Assurance/GenericAssuranceImplementation.vo
+            generic-assurance-proof-sha256.txt
+
+  verify-generic-assurance-correspondence:
+    needs: rocq-generic-assurance-proof
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: haskell-actions/setup@v2
+        with:
+          ghc-version: '9.6.7'
+          cabal-version: 'latest'
+
+      - name: Build complete Haskell substrate
+        run: cabal build all --enable-tests
+
+      - name: Strict typecheck generic assurance production and regression
+        run: |
+          set -euo pipefail
+          cabal exec -- ghc -isrc -Wall -Werror -fno-code \
+            src/Phil/Verification/GenericAssurance.hs \
+            test/Phase1VerificationGenericAssuranceReuseMain.hs
+
+      - name: Run unchanged VER-009 generic assurance reuse corpus
+        run: cabal exec -- runghc -Wall -Werror -isrc test/Phase1VerificationGenericAssuranceReuseMain.hs
+
+      - name: Re-run exact generic instantiation predecessor corpus
+        run: cabal exec -- runghc -isrc test/Phase1GenericInstantiationMain.hs
+
+      - name: Run assurance authority controls
+        run: cabal test phil-assurance-tests phil-assurance-handoff-tests phil-decision-tests
