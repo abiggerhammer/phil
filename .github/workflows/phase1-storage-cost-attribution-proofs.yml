@@ -143,13 +143,18 @@ jobs:
         run: |
           set -euo pipefail
           cp storage-cost-attribution-proof/StorageCostAttributionKernel.hs .
-          cabal exec -- ghc -i. -Wall -Werror -Wno-unused-imports -fno-code StorageCostAttributionKernel.hs
+          cabal exec -- ghc -i. -Wall -Werror -Wno-unused-imports -c StorageCostAttributionKernel.hs
           cabal exec -- ghc -isrc -Wall -Werror -fno-code src/Phil/Systems/Storage.hs
           cabal exec -- ghc -isrc -Wall -Werror -fno-code src/Phil/Systems/StorageRealizationCertification.hs
           cabal exec -- ghc -isrc -Wall -Werror -fno-code src/Phil/Systems/CostAttribution.hs
-          cabal exec -- ghc -i. -Wall -Werror -Wno-unused-imports -fno-code app/StorageCostAttributionDecisionCorrespondenceMain.hs
+          cabal exec -- ghc -i. -Wall -Werror -c app/StorageCostAttributionDecisionCorrespondenceMain.hs
       - name: Execute exact extracted-kernel controls
-        run: cabal exec -- runghc -i. -Wall -Werror -Wno-unused-imports app/StorageCostAttributionDecisionCorrespondenceMain.hs
+        run: |
+          cabal exec -- ghc \
+            StorageCostAttributionKernel.o \
+            app/StorageCostAttributionDecisionCorrespondenceMain.o \
+            -o storage-cost-attribution-kernel-controls
+          ./storage-cost-attribution-kernel-controls
       - name: Re-run implementation-refined StorageRealization predecessor
         run: cabal exec -- runghc -Wall -Werror -isrc app/StorageRealizationProductionBindingMain.hs
       - name: Re-run unchanged MEM-006, SYS-018, and production-bound runtime-graph integration corpora
