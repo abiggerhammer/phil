@@ -1,4 +1,4 @@
-name: Phase 1 Effect Subject Proofs
+name: Phase 1 Effect Subject Production Binding
 
 on:
   pull_request:
@@ -6,6 +6,10 @@ on:
       - 'proof/Phil/Core/EffectSubject.v'
       - 'proof/Phil/Core/EffectSubjectImplementation.v'
       - 'proof/Phil/Core/EffectSubjectImplementationExtraction.v'
+      - 'docs/phase-1/effect-subject-implementation-refinement-v1.md'
+      - 'docs/phase-1/effect-subject-production-binding-v1.md'
+      - 'app/EffectSubjectDecisionCorrespondenceMain.hs'
+      - 'src/EffectSubjectKernel.hs'
       - 'src/Phil/Core/Effect.hs'
       - 'test/Phase1GrammarV1CallableEffectsMain.hs'
       - '.github/workflows/phase1-effect-subject-proofs.yml'
@@ -15,6 +19,10 @@ on:
       - 'proof/Phil/Core/EffectSubject.v'
       - 'proof/Phil/Core/EffectSubjectImplementation.v'
       - 'proof/Phil/Core/EffectSubjectImplementationExtraction.v'
+      - 'docs/phase-1/effect-subject-implementation-refinement-v1.md'
+      - 'docs/phase-1/effect-subject-production-binding-v1.md'
+      - 'app/EffectSubjectDecisionCorrespondenceMain.hs'
+      - 'src/EffectSubjectKernel.hs'
       - 'src/Phil/Core/Effect.hs'
       - 'test/Phase1GrammarV1CallableEffectsMain.hs'
       - '.github/workflows/phase1-effect-subject-proofs.yml'
@@ -31,7 +39,7 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
-      - name: Compile PHIL-EFFECT-SUBJECT-001 proofs and exact kernel
+      - name: Compile PHIL-EFFECT-SUBJECT-001 proof and exact production kernel
         shell: bash
         run: |
           set -euo pipefail
@@ -44,7 +52,7 @@ jobs:
           grep -q 'decideEffectSubjectCorrespondence' EffectSubjectKernel.hs
           grep -q 'decideEffectSubjectRetarget' EffectSubjectKernel.hs
 
-      - name: Record checked proof and extracted-kernel identities
+      - name: Record proof and extracted-kernel identities
         shell: bash
         run: |
           set -euo pipefail
@@ -69,9 +77,17 @@ jobs:
 
       - uses: actions/upload-artifact@v4
         with:
-          name: rocq-effect-subject-proof
+          name: rocq-effect-subject-production-binding
           path: effect-subject-proof
           if-no-files-found: error
+
+      - name: Verify checked-in production kernel is the exact extraction
+        shell: bash
+        run: |
+          set -euo pipefail
+          cmp EffectSubjectKernel.hs src/EffectSubjectKernel.hs
+          test "$(sha256sum EffectSubjectKernel.hs | cut -d' ' -f1)" = \
+            '79e27584a4a8f96d1cc0158ec35e2e259365addf12ab286dca00be71d80fe612'
 
   verify-effect-subject-correspondence:
     needs: rocq-effect-subject-proof
@@ -84,18 +100,29 @@ jobs:
           ghc-version: '9.6.7'
           cabal-version: 'latest'
 
+      - uses: actions/download-artifact@v4
+        with:
+          name: rocq-effect-subject-production-binding
+          path: effect-subject-proof
+
+      - name: Verify exact extracted production kernel and direct controls
+        run: |
+          set -euo pipefail
+          cmp effect-subject-proof/EffectSubjectKernel.hs src/EffectSubjectKernel.hs
+          test "$(sha256sum src/EffectSubjectKernel.hs | cut -d' ' -f1)" = \
+            '79e27584a4a8f96d1cc0158ec35e2e259365addf12ab286dca00be71d80fe612'
+          ghc -Wall -Werror -fno-code effect-subject-proof/EffectSubjectKernel.hs
+          ghc -Wall -Werror -fno-code src/EffectSubjectKernel.hs
+          ghc -Wall -Werror \
+            -isrc \
+            app/EffectSubjectDecisionCorrespondenceMain.hs \
+            -o effect-subject-kernel-controls
+          ./effect-subject-kernel-controls
+
       - name: Build ordinary regression substrate
         run: cabal build all --enable-tests
 
-      - uses: actions/download-artifact@v4
-        with:
-          name: rocq-effect-subject-proof
-          path: effect-subject-proof
-
-      - name: Typecheck exact extracted kernel
-        run: ghc -Wall -Werror -fno-code effect-subject-proof/EffectSubjectKernel.hs
-
-      - name: Typecheck Core effect authority and unchanged EFF corpus
+      - name: Typecheck bound EFF-001/002 implementation and corpus
         run: |
           set -euo pipefail
           cabal exec -- ghc -isrc -Wall -Werror -fno-code src/Phil/Core/Effect.hs
@@ -105,3 +132,25 @@ jobs:
         run: |
           set -euo pipefail
           cabal exec -- runghc -Wall -Werror -isrc test/Phase1GrammarV1CallableEffectsMain.hs
+
+      - name: Record implementation-refinement production-binding identities
+        run: |
+          set -euo pipefail
+          mkdir -p effect-subject-production-binding
+          sha256sum \
+            src/EffectSubjectKernel.hs \
+            src/Phil/Core/Effect.hs \
+            test/Phase1GrammarV1CallableEffectsMain.hs \
+            app/EffectSubjectDecisionCorrespondenceMain.hs \
+            proof/Phil/Core/EffectSubjectImplementation.v \
+            proof/Phil/Core/EffectSubjectImplementationExtraction.v \
+            docs/phase-1/effect-subject-implementation-refinement-v1.md \
+            docs/phase-1/effect-subject-production-binding-v1.md \
+            > effect-subject-production-binding/PHIL-EFFECT-SUBJECT-001.closeout.sha256
+          cat effect-subject-production-binding/PHIL-EFFECT-SUBJECT-001.closeout.sha256
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: effect-subject-production-binding
+          path: effect-subject-production-binding
+          if-no-files-found: error
