@@ -1,0 +1,33 @@
+name: Phase 1 INT-008 Client Body Send Binding
+
+on:
+  pull_request:
+    paths:
+      - 'src/Phil/Surface/GrammarV1/ComponentSendClose.hs'
+      - 'test/Phase1INT008ComponentSendCloseMain.hs'
+      - '.github/workflows/phase1-int008-client-body-send-binding.yml'
+  push:
+    branches: [ main ]
+    paths:
+      - 'src/Phil/Surface/GrammarV1/ComponentSendClose.hs'
+      - 'test/Phase1INT008ComponentSendCloseMain.hs'
+      - '.github/workflows/phase1-int008-client-body-send-binding.yml'
+
+jobs:
+  client-body-send-binding:
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+      - uses: haskell-actions/setup@v2
+        with:
+          ghc-version: '9.6.7'
+          cabal-version: 'latest'
+      - name: Build ordinary regression substrate under canonical strict warnings
+        run: cabal build all --enable-tests --ghc-options=-Werror
+      - name: Strictly typecheck INT-008 client body send binding
+        run: |
+          set -euo pipefail
+          cabal exec -- ghc -isrc -Wall -Werror -fno-code src/Phil/Surface/GrammarV1/ComponentSendClose.hs
+          cabal exec -- ghc -isrc -Wall -Werror -fno-code test/Phase1INT008ComponentSendCloseMain.hs
+      - name: Execute INT-008 client body send-binding controls
+        run: cabal exec -- runghc -isrc -Wall -Werror test/Phase1INT008ComponentSendCloseMain.hs
