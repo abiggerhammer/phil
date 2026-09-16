@@ -146,9 +146,7 @@ Theorem read_utf8_successful_invalid_decode_is_explicit :
     codecOutcome = SemanticReadUTF8DecodeFailed.
 Proof.
   intros codec occurrence path limit prior bytes next codecOutcome Hchecked Hinvalid.
-  inversion Hchecked; subst.
-  - rewrite Hinvalid in H0. discriminate.
-  - reflexivity.
+  inversion Hchecked; subst; try reflexivity; congruence.
 Qed.
 
 Theorem read_utf8_successful_decode_preserves_exact_text :
@@ -160,9 +158,7 @@ Theorem read_utf8_successful_decode_preserves_exact_text :
     codecOutcome = SemanticReadUTF8Decoded text.
 Proof.
   intros codec occurrence path limit prior bytes next text codecOutcome Hchecked Hdecoded.
-  inversion Hchecked; subst.
-  - rewrite Hdecoded in H0. inversion H0. reflexivity.
-  - rewrite Hdecoded in H0. discriminate.
+  inversion Hchecked; subst; try reflexivity; congruence.
 Qed.
 
 Inductive CheckedSemanticWriteUTF8
