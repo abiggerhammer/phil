@@ -165,7 +165,9 @@ Theorem failed_console_write_preserves_exact_prefix_progress :
 Proof.
   intros occurrence requestedLength prefixLength observableLength Hchecked.
   inversion Hchecked.
-  split; assumption.
+  split.
+  - reflexivity.
+  - assumption.
 Qed.
 
 Theorem checked_console_write_is_output_only :
