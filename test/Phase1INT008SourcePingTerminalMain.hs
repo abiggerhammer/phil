@@ -20,7 +20,8 @@ import Phil.Core.Syntax
 import Phil.Surface.GrammarV1.ArchitectureComponentActivation
 import Phil.Surface.GrammarV1.ArchitectureComponentProvisioning
 import Phil.Surface.GrammarV1.ArchitectureSurface
-  ( grammarV1CheckedArchitectureSurface
+  ( GrammarV1CheckedArchitectureSurface
+  , grammarV1CheckedArchitectureSurface
   )
 import Phil.Surface.GrammarV1.BinderScope
   ( GrammarV1BinderKind (..)
@@ -38,7 +39,8 @@ import Phil.Surface.GrammarV1.ProtocolRoles
   ( grammarV1ClosedBinaryProtocolFamily
   )
 import Phil.Surface.GrammarV1.SemanticComponentHeader
-  ( grammarV1CheckedSemanticComponentHeaderWithProtocolEndpoints
+  ( GrammarV1CheckedSemanticComponentHeader
+  , grammarV1CheckedSemanticComponentHeaderWithProtocolEndpoints
   )
 import Phil.Surface.Syntax (Located (..))
 import System.Exit (exitFailure)
