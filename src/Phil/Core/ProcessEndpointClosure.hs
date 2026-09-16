@@ -21,7 +21,6 @@ import Phil.Core.ProcessRendezvous
 import Phil.Core.Protocol
   ( ProtocolActionRequest (..)
   , ProtocolCheckError
-  , ProtocolContext
   , ProtocolInstanceRevision
   , ProtocolRoleKey
   , checkedProtocolContext
