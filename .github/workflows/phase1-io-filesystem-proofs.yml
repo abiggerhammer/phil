@@ -1,0 +1,94 @@
+name: Phase 1 IO FileSystem Proofs
+
+on:
+  pull_request:
+    paths:
+      - 'proof/Phil/Core/ProviderRelativePath.v'
+      - 'proof/Phil/Core/RuntimeBytes.v'
+      - 'proof/Phil/Core/FileSystem.v'
+      - 'proof/Phil/Core/FileSystemImplementation.v'
+      - 'src/Phil/IO/FileSystem.hs'
+      - 'test/Phase1IOFileSystemMain.hs'
+      - '.github/workflows/phase1-io-filesystem-proofs.yml'
+  push:
+    branches: [main]
+    paths:
+      - 'proof/Phil/Core/ProviderRelativePath.v'
+      - 'proof/Phil/Core/RuntimeBytes.v'
+      - 'proof/Phil/Core/FileSystem.v'
+      - 'proof/Phil/Core/FileSystemImplementation.v'
+      - 'src/Phil/IO/FileSystem.hs'
+      - 'test/Phase1IOFileSystemMain.hs'
+      - '.github/workflows/phase1-io-filesystem-proofs.yml'
+
+permissions:
+  contents: read
+
+jobs:
+  rocq-filesystem-proof:
+    runs-on: ubuntu-latest
+    container:
+      image: rocq/rocq-prover:9.2.0
+      options: --user root
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Compile PHIL-P1-IO-FS-001 semantic and implementation proofs
+        shell: bash
+        run: |
+          set -euo pipefail
+          export PATH="/home/rocq/.opam/${COMPILER}/bin:$PATH"
+          rocq c -Q proof/Phil Phil proof/Phil/Core/ProviderRelativePath.v
+          rocq c -Q proof/Phil Phil proof/Phil/Core/RuntimeBytes.v
+          rocq c -Q proof/Phil Phil proof/Phil/Core/FileSystem.v
+          rocq c -Q proof/Phil Phil proof/Phil/Core/FileSystemImplementation.v
+
+      - name: Record checked proof identities
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p filesystem-proof
+          cp \
+            proof/Phil/Core/FileSystem.v \
+            proof/Phil/Core/FileSystem.vo \
+            proof/Phil/Core/FileSystemImplementation.v \
+            proof/Phil/Core/FileSystemImplementation.vo \
+            filesystem-proof/
+          sha256sum \
+            filesystem-proof/FileSystem.v \
+            filesystem-proof/FileSystem.vo \
+            filesystem-proof/FileSystemImplementation.v \
+            filesystem-proof/FileSystemImplementation.vo \
+            > filesystem-proof/PHIL-P1-IO-FS-001.proof.sha256
+          cat filesystem-proof/PHIL-P1-IO-FS-001.proof.sha256
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: rocq-filesystem-proof
+          path: filesystem-proof
+          if-no-files-found: error
+
+  verify-filesystem-correspondence:
+    needs: rocq-filesystem-proof
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: haskell-actions/setup@v2
+        with:
+          ghc-version: '9.6.7'
+          cabal-version: 'latest'
+
+      - name: Build complete Haskell substrate
+        run: cabal build all --enable-tests
+
+      - name: Strict-typecheck IO-FS implementation authority
+        run: |
+          set -euo pipefail
+          cabal exec -- ghc -isrc -Wall -Werror -fno-code \
+            src/Phil/IO/Bytes.hs \
+            src/Phil/IO/FileSystem.hs \
+            test/Phase1IOFileSystemMain.hs
+
+      - name: Re-run unchanged IO-FS pressure corpus
+        run: cabal exec -- runghc -isrc -Wall -Werror test/Phase1IOFileSystemMain.hs
