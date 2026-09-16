@@ -1,0 +1,27 @@
+name: Phase 1 INT-008 Source Ping Terminal
+
+on:
+  pull_request:
+  push:
+    branches:
+      - phase1-int008-source-ping-terminal
+
+jobs:
+  source-ping-terminal:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: haskell-actions/setup@v2
+        with:
+          ghc-version: '9.6.7'
+          cabal-version: 'latest'
+      - name: Build ordinary regression substrate under canonical strict warnings
+        run: cabal build all --enable-tests --ghc-options=-Werror
+      - name: Strictly typecheck INT-008 source Ping terminal bridge
+        run: |
+          set -euo pipefail
+          cabal exec -- ghc -isrc -Wall -Werror -fno-code src/Phil/Surface/GrammarV1/ComponentReceiveClose.hs
+          cabal exec -- ghc -isrc -Wall -Werror -fno-code src/Phil/Surface/GrammarV1/ComponentReceiveProvisioning.hs
+          cabal exec -- ghc -isrc -Wall -Werror -fno-code test/Phase1INT008SourcePingTerminalMain.hs
+      - name: Execute INT-008 source Ping terminal controls
+        run: cabal exec -- runghc -isrc -Wall -Werror test/Phase1INT008SourcePingTerminalMain.hs
