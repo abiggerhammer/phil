@@ -3,6 +3,9 @@
 module Main (main) where
 
 import qualified Data.Text as Text
+import Phil.Core.CheckedBindingMode
+  ( CheckedTypeMode (..)
+  )
 import Phil.Core.Generic (strictGenericInstantiationPolicy)
 import Phil.Core.Generic.StaticActual
   ( GenericStaticActual (..)
@@ -12,7 +15,8 @@ import Phil.Core.Protocol
   ( ProtocolRoleKey (..)
   )
 import Phil.Core.Protocol.Family
-  ( instantiateBinaryProtocol
+  ( ProtocolProjectionEvidence (..)
+  , instantiateBinaryProtocol
   )
 import Phil.Core.Static
   ( DeclarationKey (..)
@@ -26,7 +30,8 @@ import Phil.Core.Syntax
   )
 import Phil.Surface.GrammarV1.ArchitectureComponentProvisioning
 import Phil.Surface.GrammarV1.ArchitectureSurface
-  ( grammarV1CheckedArchitectureSurface
+  ( GrammarV1CheckedArchitectureSurface
+  , grammarV1CheckedArchitectureSurface
   )
 import Phil.Surface.GrammarV1.BinderScope
   ( GrammarV1ResolvedBinder (..)
