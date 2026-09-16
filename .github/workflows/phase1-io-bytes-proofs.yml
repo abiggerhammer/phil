@@ -10,6 +10,7 @@ on:
       - 'src/Phil/Core/Syntax.hs'
       - 'src/Phil/Core/Value.hs'
       - 'src/Phil/Surface/GrammarV1/CheckedType.hs'
+      - 'app/RuntimeBytesDecisionCorrespondenceMain.hs'
       - 'test/Phase1IOBytesRuntimeSizedMain.hs'
       - '.github/workflows/phase1-io-bytes-proofs.yml'
   push:
@@ -22,6 +23,7 @@ on:
       - 'src/Phil/Core/Syntax.hs'
       - 'src/Phil/Core/Value.hs'
       - 'src/Phil/Surface/GrammarV1/CheckedType.hs'
+      - 'app/RuntimeBytesDecisionCorrespondenceMain.hs'
       - 'test/Phase1IOBytesRuntimeSizedMain.hs'
       - '.github/workflows/phase1-io-bytes-proofs.yml'
 
@@ -49,6 +51,18 @@ jobs:
           test -s RuntimeBytesKernel.hs
           grep -q 'decideBytesCheckByFacts' RuntimeBytesKernel.hs
           grep -q 'decideRuntimeBytesRefinementByFacts' RuntimeBytesKernel.hs
+
+      - name: Verify checked-in production kernel is exact extraction
+        shell: bash
+        run: |
+          set -euo pipefail
+          cmp RuntimeBytesKernel.hs src/RuntimeBytesKernel.hs
+          printf '%s  %s\n' \
+            'c8d05c29a23b66af9fa45b9d2f413d5b2f02ab904e80b04233ca05a49e261430' \
+            'RuntimeBytesKernel.hs' | sha256sum --check --strict
+          printf '%s  %s\n' \
+            'c8d05c29a23b66af9fa45b9d2f413d5b2f02ab904e80b04233ca05a49e261430' \
+            'src/RuntimeBytesKernel.hs' | sha256sum --check --strict
 
       - name: Record checked proof and extraction identities
         shell: bash
@@ -90,10 +104,29 @@ jobs:
           ghc-version: '9.6.7'
           cabal-version: 'latest'
 
+      - uses: actions/download-artifact@v4
+        with:
+          name: rocq-runtime-bytes-production-binding
+          path: runtime-bytes-proof
+
+      - name: Verify production kernel identity
+        run: |
+          set -euo pipefail
+          cmp runtime-bytes-proof/RuntimeBytesKernel.hs src/RuntimeBytesKernel.hs
+          printf '%s  %s\n' \
+            'c8d05c29a23b66af9fa45b9d2f413d5b2f02ab904e80b04233ca05a49e261430' \
+            'src/RuntimeBytesKernel.hs' | sha256sum --check --strict
+          ghc -Wall -Werror -fno-code src/RuntimeBytesKernel.hs
+
+      - name: Run direct extracted-kernel controls
+        run: |
+          set -euo pipefail
+          runghc -Wall -Werror -isrc app/RuntimeBytesDecisionCorrespondenceMain.hs
+
       - name: Build ordinary regression substrate
         run: cabal build all --enable-tests
 
-      - name: Strict-typecheck runtime Bytes implementation authority
+      - name: Strict-typecheck runtime Bytes production authority
         run: |
           set -euo pipefail
           cabal exec -- ghc -isrc -Wall -Werror -fno-code src/Phil/Core/Syntax.hs
@@ -105,3 +138,21 @@ jobs:
         run: |
           set -euo pipefail
           cabal exec -- runghc -Wall -Werror -isrc test/Phase1IOBytesRuntimeSizedMain.hs
+
+      - name: Record production-binding identities
+        run: |
+          set -euo pipefail
+          mkdir -p runtime-bytes-production-binding
+          sha256sum \
+            src/RuntimeBytesKernel.hs \
+            src/Phil/Core/Value.hs \
+            app/RuntimeBytesDecisionCorrespondenceMain.hs \
+            test/Phase1IOBytesRuntimeSizedMain.hs \
+            > runtime-bytes-production-binding/PHIL-P1-IO-BYTES-001.production.sha256
+          cat runtime-bytes-production-binding/PHIL-P1-IO-BYTES-001.production.sha256
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: runtime-bytes-production-binding
+          path: runtime-bytes-production-binding
+          if-no-files-found: error
