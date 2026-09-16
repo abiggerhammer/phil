@@ -225,7 +225,8 @@ grammarV1ResolveArchitectureComponentProvisioning
       sourceName <- requireBind targetName
       (occurrenceKey, source) <- resolveSource
         parameterName
-        (locatedValue (grammarV1TermParamType sourceParam))
+        (locatedValue
+          (grammarV1TermParamType (locatedValue sourceParam)))
         checkedMode
         sourceName
       Right GrammarV1ProvisionedComponentParameter
