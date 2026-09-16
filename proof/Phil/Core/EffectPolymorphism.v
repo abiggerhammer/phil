@@ -135,8 +135,13 @@ Proof.
     (checked_effect_set_never_widens
       bound actualKey actual checked Hchecked)
     as Hsubset.
+  pose proof
+    (checked_effect_set_actual_is_exact
+      bound actualKey actual checked Hchecked)
+    as HactualExact.
   apply HnotUpper.
   apply Hsubset.
+  rewrite HactualExact.
   exact Hactual.
 Qed.
 
@@ -163,17 +168,20 @@ Proof.
 Qed.
 
 Definition instantiatedEffectSetOccurrence
-  (checked : CheckedSemanticEffectSetInstantiation) : SemanticEffectSet :=
-  checkedEffectSetActual checked.
+  (checked : CheckedSemanticEffectSetInstantiation)
+  (effect : SemanticEffectIdentity) : Prop :=
+  In effect (checkedEffectSetActual checked).
 
-Theorem instantiated_effect_occurrence_is_exact_actual :
-  forall bound actualKey actual checked,
+Theorem instantiated_effect_occurrence_cannot_invent_subject_identity :
+  forall bound actualKey actual checked effect,
     CheckedBoundedEffectSetInstantiation bound actualKey actual checked ->
-    instantiatedEffectSetOccurrence checked = actual.
+    instantiatedEffectSetOccurrence checked effect ->
+    exists upperEffect,
+      In upperEffect (semanticEffectSetUpper bound) /\
+      semanticEffectLabel upperEffect = semanticEffectLabel effect /\
+      semanticEffectSubjects upperEffect = semanticEffectSubjects effect.
 Proof.
-  intros bound actualKey actual checked Hchecked.
-  unfold instantiatedEffectSetOccurrence.
-  apply checked_effect_set_actual_is_exact with
-    (bound := bound) (actualKey := actualKey).
-  exact Hchecked.
+  intros bound actualKey actual checked effect Hchecked Hoccurs.
+  unfold instantiatedEffectSetOccurrence in Hoccurs.
+  eapply checked_effect_member_preserves_full_semantic_identity; eauto.
 Qed.
