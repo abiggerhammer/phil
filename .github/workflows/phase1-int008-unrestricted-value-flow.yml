@@ -1,0 +1,33 @@
+name: Phase 1 INT-008 Unrestricted Value Flow
+
+on:
+  pull_request:
+    paths:
+      - 'src/Phil/Surface/GrammarV1/ComponentUnrestrictedRendezvous.hs'
+      - 'test/Phase1INT008UnrestrictedValueFlowMain.hs'
+      - '.github/workflows/phase1-int008-unrestricted-value-flow.yml'
+  push:
+    branches: [main]
+    paths:
+      - 'src/Phil/Surface/GrammarV1/ComponentUnrestrictedRendezvous.hs'
+      - 'test/Phase1INT008UnrestrictedValueFlowMain.hs'
+      - '.github/workflows/phase1-int008-unrestricted-value-flow.yml'
+
+jobs:
+  unrestricted-value-flow:
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+      - uses: haskell-actions/setup@v2
+        with:
+          ghc-version: '9.6.7'
+          cabal-version: 'latest'
+      - name: Build ordinary regression substrate under canonical strict warnings
+        run: cabal build all --enable-tests --ghc-options=-Werror
+      - name: Strictly typecheck INT-008 unrestricted value flow
+        run: |
+          set -euo pipefail
+          cabal exec -- ghc -isrc -Wall -Werror -fno-code src/Phil/Surface/GrammarV1/ComponentUnrestrictedRendezvous.hs
+          cabal exec -- ghc -isrc -Wall -Werror -fno-code test/Phase1INT008UnrestrictedValueFlowMain.hs
+      - name: Execute INT-008 unrestricted value-flow controls
+        run: cabal exec -- runghc -isrc -Wall -Werror test/Phase1INT008UnrestrictedValueFlowMain.hs
