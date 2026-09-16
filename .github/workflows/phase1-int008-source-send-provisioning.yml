@@ -1,0 +1,26 @@
+name: Phase 1 INT-008 Source Send Provisioning
+
+on:
+  pull_request:
+  push:
+    branches:
+      - main
+
+jobs:
+  source-send-provisioning:
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+      - uses: haskell-actions/setup@v2
+        with:
+          ghc-version: '9.6.7'
+          cabal-version: 'latest'
+      - name: Build ordinary regression substrate under canonical strict warnings
+        run: cabal build all --enable-tests --ghc-options=-Werror
+      - name: Strictly typecheck INT-008 source send provisioning
+        run: |
+          set -euo pipefail
+          cabal exec -- ghc -isrc -Wall -Werror -fno-code src/Phil/Surface/GrammarV1/ComponentSendProvisioning.hs
+          cabal exec -- ghc -isrc -Wall -Werror -fno-code test/Phase1INT008ComponentSendProvisioningMain.hs
+      - name: Execute INT-008 source send provisioning controls
+        run: cabal exec -- runghc -isrc -Wall -Werror test/Phase1INT008ComponentSendProvisioningMain.hs
