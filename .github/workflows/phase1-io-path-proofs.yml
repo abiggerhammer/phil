@@ -1,10 +1,12 @@
-name: Phase 1 IO Path Proofs
+name: Phase 1 IO Path Production Binding
 
 on:
   pull_request:
     paths:
       - 'proof/Phil/Core/ProviderRelativePath.v'
       - 'proof/Phil/Core/ProviderRelativePathImplementation.v'
+      - 'proof/Phil/Core/ProviderRelativePathImplementationExtraction.v'
+      - 'src/ProviderRelativePathKernel.hs'
       - 'src/Phil/Systems.hs'
       - 'test/Phase1IOPathProviderRelativeMain.hs'
       - '.github/workflows/phase1-io-path-proofs.yml'
@@ -13,6 +15,8 @@ on:
     paths:
       - 'proof/Phil/Core/ProviderRelativePath.v'
       - 'proof/Phil/Core/ProviderRelativePathImplementation.v'
+      - 'proof/Phil/Core/ProviderRelativePathImplementationExtraction.v'
+      - 'src/ProviderRelativePathKernel.hs'
       - 'src/Phil/Systems.hs'
       - 'test/Phase1IOPathProviderRelativeMain.hs'
       - '.github/workflows/phase1-io-path-proofs.yml'
@@ -29,15 +33,20 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
-      - name: Compile PHIL-P1-IO-PATH-001 semantic and implementation proofs
+      - name: Compile PHIL-P1-IO-PATH-001 proof and fresh extracted kernel
         shell: bash
         run: |
           set -euo pipefail
           export PATH="/home/rocq/.opam/${COMPILER}/bin:$PATH"
           rocq c -Q proof/Phil Phil proof/Phil/Core/ProviderRelativePath.v
           rocq c -Q proof/Phil Phil proof/Phil/Core/ProviderRelativePathImplementation.v
+          rm -f ProviderRelativePathKernel.hs
+          rocq c -Q proof/Phil Phil proof/Phil/Core/ProviderRelativePathImplementationExtraction.v
+          test -s ProviderRelativePathKernel.hs
+          grep -q 'decideFileSystemOccurrenceByFacts' ProviderRelativePathKernel.hs
+          grep -q 'decideProviderRelativePathByFacts' ProviderRelativePathKernel.hs
 
-      - name: Record checked proof identities
+      - name: Record checked proof and extraction identities
         shell: bash
         run: |
           set -euo pipefail
@@ -47,18 +56,22 @@ jobs:
             proof/Phil/Core/ProviderRelativePath.vo \
             proof/Phil/Core/ProviderRelativePathImplementation.v \
             proof/Phil/Core/ProviderRelativePathImplementation.vo \
+            proof/Phil/Core/ProviderRelativePathImplementationExtraction.v \
+            proof/Phil/Core/ProviderRelativePathImplementationExtraction.vo \
+            ProviderRelativePathKernel.hs \
             provider-relative-path-proof/
           sha256sum \
             provider-relative-path-proof/ProviderRelativePath.v \
             provider-relative-path-proof/ProviderRelativePath.vo \
             provider-relative-path-proof/ProviderRelativePathImplementation.v \
             provider-relative-path-proof/ProviderRelativePathImplementation.vo \
+            provider-relative-path-proof/ProviderRelativePathKernel.hs \
             > provider-relative-path-proof/PHIL-P1-IO-PATH-001.proof.sha256
           cat provider-relative-path-proof/PHIL-P1-IO-PATH-001.proof.sha256
 
       - uses: actions/upload-artifact@v4
         with:
-          name: rocq-provider-relative-path-proof
+          name: rocq-provider-relative-path-production-binding
           path: provider-relative-path-proof
           if-no-files-found: error
 
