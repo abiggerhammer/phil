@@ -23,9 +23,6 @@ import Phil.Surface.GrammarV1.ArchitectureSurface
   ( GrammarV1CheckedArchitectureSurface
   , grammarV1CheckedArchitectureSurface
   )
-import Phil.Surface.GrammarV1.BinderScope
-  ( GrammarV1ResolvedBinder (..)
-  )
 import Phil.Surface.GrammarV1.ComponentReceiveClose
 import Phil.Surface.GrammarV1.ComponentReceiveProvisioning
 import Phil.Surface.GrammarV1.ComponentSendClose
