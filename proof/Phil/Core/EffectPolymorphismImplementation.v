@@ -1,6 +1,6 @@
 From Stdlib Require Import Bool.Bool Lists.List.
 
-From Phil.Core Require Import EffectPolymorphism.
+From Phil.Core Require Import EffectPolymorphism EffectSubject.
 
 (*
   PHIL-EFFECT-POLY-001 — executable implementation correspondence.
