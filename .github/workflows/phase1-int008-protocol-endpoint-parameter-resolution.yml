@@ -1,0 +1,43 @@
+name: Phase 1 INT-008 Protocol Endpoint Parameter Resolution
+
+on:
+  pull_request:
+    paths:
+      - 'src/Phil/Surface/GrammarV1/ProtocolEndpointType.hs'
+      - 'src/Phil/Surface/GrammarV1/SemanticComponentHeader.hs'
+      - 'src/Phil/Surface/GrammarV1/ProtocolRoles.hs'
+      - 'src/Phil/Core/Protocol/Family.hs'
+      - 'test/Phase1INT008ProtocolEndpointParameterMain.hs'
+      - '.github/workflows/phase1-int008-protocol-endpoint-parameter-resolution.yml'
+  push:
+    branches: [main]
+    paths:
+      - 'src/Phil/Surface/GrammarV1/ProtocolEndpointType.hs'
+      - 'src/Phil/Surface/GrammarV1/SemanticComponentHeader.hs'
+      - 'src/Phil/Surface/GrammarV1/ProtocolRoles.hs'
+      - 'src/Phil/Core/Protocol/Family.hs'
+      - 'test/Phase1INT008ProtocolEndpointParameterMain.hs'
+      - '.github/workflows/phase1-int008-protocol-endpoint-parameter-resolution.yml'
+
+permissions:
+  contents: read
+
+jobs:
+  protocol-endpoint-parameter-resolution:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: haskell-actions/setup@v2
+        with:
+          ghc-version: '9.6.7'
+          cabal-version: 'latest'
+      - name: Build ordinary regression substrate under canonical strict warnings
+        run: cabal build all --enable-tests --ghc-options=-Werror
+      - name: Strictly typecheck INT-008 endpoint parameter bridge
+        run: |
+          set -euo pipefail
+          cabal exec -- ghc -isrc -Wall -Werror -fno-code src/Phil/Surface/GrammarV1/ProtocolEndpointType.hs
+          cabal exec -- ghc -isrc -Wall -Werror -fno-code src/Phil/Surface/GrammarV1/SemanticComponentHeader.hs
+          cabal exec -- ghc -isrc -Wall -Werror -fno-code test/Phase1INT008ProtocolEndpointParameterMain.hs
+      - name: Execute INT-008 endpoint parameter correspondence controls
+        run: cabal exec -- runghc -isrc -Wall -Werror test/Phase1INT008ProtocolEndpointParameterMain.hs
