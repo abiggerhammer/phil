@@ -26,6 +26,8 @@ The kernel owns the ordered admission verdict. Haskell then reconstructs the exi
 
 An impossible native/kernel disagreement fails closed through `FileSystemKernelInvariantViolation`.
 
+`Phil.IO.FileSystem` is currently a source-level Phase 1 IO module rather than a module in the Cabal library stanza. The production-binding gate therefore compiles `Phil.IO.FileSystem` and `FileSystemKernel` together directly under strict GHC flags, while also running the complete Cabal build as a repository regression check. This closeout does not silently change the package/public-module boundary.
+
 ## Closeout controls
 
 The production-binding gate must establish all of the following on one exact PR head:
@@ -35,8 +37,8 @@ The production-binding gate must establish all of the following on one exact PR 
 3. fresh extraction and checked-in kernel are byte-identical;
 4. the kernel SHA-256 equals the fixed digest above;
 5. direct controls pin all certified read/replace decision priorities and replace state selection;
-6. the complete Cabal package builds with `FileSystemKernel` registered as a library module;
-7. `Phil.IO.FileSystem` and the unchanged IO-FS pressure corpus pass strict `-Wall -Werror` checks; and
+6. the complete Cabal package still builds unchanged as a repository regression check;
+7. `FileSystemKernel`, `Phil.IO.FileSystem`, and the unchanged IO-FS pressure corpus pass strict `-Wall -Werror` source-level checks; and
 8. the unchanged IO-FS corpus still demonstrates bounded reads, typed negatives, exact namespace authority, process-observable replacement, and failure-state preservation.
 
 Only after the exact-head closeout gate and all attached repository workflows are green may `PHIL-P1-IO-FS-001` move from `Active / Certified` to `Discharged / Implementation Refined`.
