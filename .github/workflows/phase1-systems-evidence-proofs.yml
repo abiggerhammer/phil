@@ -126,7 +126,7 @@ jobs:
           set -euo pipefail
           ghc -Wall -Werror -Wno-unused-imports -fno-code \
             systems-evidence-proof/SystemsEvidencePreservationKernel.hs
-          ghc -Wall -Werror -Wno-unused-imports \
+          ghc -Wall -Werror \
             -isystems-evidence-proof \
             app/SystemsEvidencePreservationDecisionCorrespondenceMain.hs \
             -o systems-evidence-kernel-controls
