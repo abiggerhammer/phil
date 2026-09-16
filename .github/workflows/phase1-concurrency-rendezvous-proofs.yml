@@ -153,9 +153,9 @@ jobs:
           cabal exec -- ghc -i. -Wall -Werror -Wno-unused-imports -fno-code ConcurrencyRendezvousKernel.hs
           cabal exec -- ghc -isrc -Wall -Werror -fno-code src/Phil/Core/ProcessRendezvous.hs
           cabal exec -- ghc -isrc -Wall -Werror -fno-code src/Phil/Core/ProcessCausality.hs
-          cabal exec -- ghc -i. -Wall -Werror -Wno-unused-imports -fno-code app/ConcurrencyRendezvousDecisionCorrespondenceMain.hs
+          cabal exec -- ghc -i. -Wall -Werror -fno-code app/ConcurrencyRendezvousDecisionCorrespondenceMain.hs
       - name: Execute exact extracted-kernel controls
-        run: cabal exec -- runghc -i. -Wall -Werror -Wno-unused-imports app/ConcurrencyRendezvousDecisionCorrespondenceMain.hs
+        run: cabal exec -- runghc -i. -Wall -Werror app/ConcurrencyRendezvousDecisionCorrespondenceMain.hs
       - name: Re-run implementation-refined activation predecessor
         run: cabal exec -- runghc -Wall -Werror -isrc app/ConcurrencyActivationProductionBindingMain.hs
       - name: Re-run unchanged protocol/rendezvous/transfer/causality corpus
