@@ -225,14 +225,14 @@ Proof.
   unfold decideProducerAttempt.
   destruct (andb producerSuppliedArtifact checkerAccepted) eqn:Hboth.
   - split.
-    + intro _.
+    + intros Haccepted.
       apply andb_true_iff in Hboth.
       exact Hboth.
-    + intro _.
+    + intros Hfacts.
       reflexivity.
   - split.
-    + intro H.
-      discriminate H.
+    + intros Haccepted.
+      discriminate Haccepted.
     + intros [Hproducer Hchecker].
       rewrite Hproducer, Hchecker in Hboth.
       discriminate Hboth.
