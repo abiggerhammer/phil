@@ -394,7 +394,7 @@ materializeFailure :: PortableFailure -> Either String CallableFailure
 materializeFailure row = case failureKind row of
   "typed-negative" -> Right (CallableTypedNegative (Outcome (failureValue row)))
   "declared-terminal" -> Right (CallableDeclaredTerminal (Outcome (failureValue row)))
-  "fatal" -> Right (CallableFatal (failureValue row))
+  "fatal" -> Right (CallableFatal (Outcome (failureValue row)))
   other -> Left ("unsupported failure kind: " <> Text.unpack other)
 
 matchExpected :: PortableCase -> CallableRefinementError -> Either String ()
@@ -410,7 +410,7 @@ matchExpected portableCase err = case (caseExpected portableCase, err) of
       _ -> Left ("unexpected effect excess: " <> show excess)
   ("failure-set-too-wide", CallableFailureSetTooWide excess) ->
     case Set.toList excess of
-      [CallableFatal detail] -> compareFields portableCase ["fatal", detail]
+      [CallableFatal (Outcome detail)] -> compareFields portableCase ["fatal", detail]
       [CallableTypedNegative (Outcome outcome)] ->
         compareFields portableCase ["typed-negative", outcome]
       [CallableDeclaredTerminal (Outcome outcome)] ->
