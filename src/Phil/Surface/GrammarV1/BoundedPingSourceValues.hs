@@ -12,7 +12,8 @@ import qualified Data.Text as Text
 import Phil.Core.Scalar (ScalarLiteral (..))
 import Phil.Core.Static (DeclarationKey)
 import Phil.Surface.GrammarV1.BinderScope
-  ( GrammarV1ResolvedBinder (..)
+  ( GrammarV1BinderKey
+  , GrammarV1ResolvedBinder (..)
   , grammarV1ComponentParameterScope
   )
 import Phil.Surface.GrammarV1.LexicalReferenceScope
@@ -233,31 +234,72 @@ requireU8Type :: Located GrammarV1Type -> Either GrammarV1BoundedPingSourceValue
 requireU8Type (Located _ (GrammarV1UnsignedType "U8")) = Right ()
 requireU8Type _ = serverShape "request receive type must be U8"
 
+requireIdentifier
+  :: Text
+  -> Located GrammarV1Pattern
+  -> Either GrammarV1BoundedPingSourceValuesError ()
 requireIdentifier role (Located _ (GrammarV1IdentifierPattern name))
   | locatedValue name == role = Right ()
 requireIdentifier role _ = clientShape ("unexpected binder for " <> role)
 
+requireIdentifierServer
+  :: Text
+  -> Located GrammarV1Pattern
+  -> Either GrammarV1BoundedPingSourceValuesError ()
 requireIdentifierServer role (Located _ (GrammarV1IdentifierPattern name))
   | locatedValue name == role = Right ()
 requireIdentifierServer role _ = serverShape ("unexpected binder for " <> role)
 
+requireTuple2
+  :: Text
+  -> Located GrammarV1Pattern
+  -> Either GrammarV1BoundedPingSourceValuesError ()
 requireTuple2 _ (Located _ (GrammarV1TuplePattern [_, _])) = Right ()
 requireTuple2 role _ = clientShape ("unexpected tuple pattern for " <> role)
 
+requireTuple2Server
+  :: Located GrammarV1Pattern
+  -> Either GrammarV1BoundedPingSourceValuesError ()
 requireTuple2Server (Located _ (GrammarV1TuplePattern [_, _])) = Right ()
 requireTuple2Server _ = serverShape "unexpected server receive tuple pattern"
 
+requireSingleReference
+  :: Text
+  -> GrammarV1ResolvedBinder
+  -> [GrammarV1CheckedLexicalReference]
+  -> Either GrammarV1BoundedPingSourceValuesError ()
 requireSingleReference role expected references = requireReferences role [expected] references
+
+requireSingleReferenceServer
+  :: Text
+  -> GrammarV1ResolvedBinder
+  -> [GrammarV1CheckedLexicalReference]
+  -> Either GrammarV1BoundedPingSourceValuesError ()
 requireSingleReferenceServer role expected references = requireReferencesServer role [expected] references
 
+requireReferences
+  :: Text
+  -> [GrammarV1ResolvedBinder]
+  -> [GrammarV1CheckedLexicalReference]
+  -> Either GrammarV1BoundedPingSourceValuesError ()
 requireReferences role expected references
   | map binderKey expected == map (binderKey . grammarV1CheckedLexicalReferenceBinder) references = Right ()
   | otherwise = Left (GrammarV1BoundedPingSourceValuesReferenceMismatch role)
 
+requireReferencesServer
+  :: Text
+  -> [GrammarV1ResolvedBinder]
+  -> [GrammarV1CheckedLexicalReference]
+  -> Either GrammarV1BoundedPingSourceValuesError ()
 requireReferencesServer role expected references
   | map binderKey expected == map (binderKey . grammarV1CheckedLexicalReferenceBinder) references = Right ()
   | otherwise = Left (GrammarV1BoundedPingSourceValuesReferenceMismatch role)
 
+requireSimpleName
+  :: Text
+  -> Text
+  -> Located GrammarV1Expression
+  -> Either GrammarV1BoundedPingSourceValuesError ()
 requireSimpleName role expected (Located _ expression) =
   case expression of
     GrammarV1NameExpression reference []
@@ -265,6 +307,11 @@ requireSimpleName role expected (Located _ expression) =
     GrammarV1ParenthesizedExpression inner -> requireSimpleName role expected inner
     _ -> clientShape ("unexpected local syntax for " <> role)
 
+requireSimpleNameServer
+  :: Text
+  -> Text
+  -> Located GrammarV1Expression
+  -> Either GrammarV1BoundedPingSourceValuesError ()
 requireSimpleNameServer role expected (Located _ expression) =
   case expression of
     GrammarV1NameExpression reference []
@@ -272,14 +319,23 @@ requireSimpleNameServer role expected (Located _ expression) =
     GrammarV1ParenthesizedExpression inner -> requireSimpleNameServer role expected inner
     _ -> serverShape ("unexpected local syntax for " <> role)
 
+branchName :: Located GrammarV1BranchValue -> Text
 branchName (Located _ branch) =
   case grammarV1QualifiedNameParts (locatedValue (grammarV1BranchValueName branch)) of
     [name] -> name
     _ -> ""
 
+referenceName :: GrammarV1StaticReference -> [Text]
 referenceName = grammarV1QualifiedNameParts . grammarV1StaticReferenceName
+
+binderName :: GrammarV1ResolvedBinder -> Text
 binderName = grammarV1ResolvedBinderDisplayName
+
+binderKey :: GrammarV1ResolvedBinder -> GrammarV1BinderKey
 binderKey = grammarV1ResolvedBinderKey
 
+clientShape :: Text -> Either GrammarV1BoundedPingSourceValuesError a
 clientShape = Left . GrammarV1BoundedPingSourceValuesClientShape
+
+serverShape :: Text -> Either GrammarV1BoundedPingSourceValuesError a
 serverShape = Left . GrammarV1BoundedPingSourceValuesServerShape
