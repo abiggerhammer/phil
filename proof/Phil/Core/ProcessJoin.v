@@ -37,6 +37,7 @@ Fixpoint continuingContexts (paths : list JoinPath) : list ResourceContext :=
       | Continue => joinResources (joinState path) :: continuingContexts rest
       | Return _ => continuingContexts rest
       | Closed _ => continuingContexts rest
+      | Fatal _ => continuingContexts rest
       | Failed _ _ => continuingContexts rest
       end
   end.
@@ -48,6 +49,7 @@ Definition normalizeContinue (joined : ResourceContext) (path : JoinPath) : Join
         (mkJoinState joined (joinPayload (joinState path)))
   | Return _ => path
   | Closed _ => path
+  | Fatal _ => path
   | Failed _ _ => path
   end.
 
@@ -61,6 +63,7 @@ Proof.
   simpl in Hnoncontinuing.
   destruct control; simpl.
   - exfalso. apply Hnoncontinuing. reflexivity.
+  - reflexivity.
   - reflexivity.
   - reflexivity.
   - reflexivity.
@@ -99,6 +102,7 @@ Proof.
       simpl. left. reflexivity.
     + destruct control.
       * simpl. right. eapply IH; eauto.
+      * simpl. eapply IH; eauto.
       * simpl. eapply IH; eauto.
       * simpl. eapply IH; eauto.
       * simpl. eapply IH; eauto.
@@ -142,9 +146,9 @@ Proof.
 Qed.
 
 (*
-  PHIL-PROC-JOIN-001: Return, Closed, and Failed paths survive the join exactly.
-  Since the output is a map over the flattened input, this also preserves their
-  relative order and multiplicity.
+  PHIL-PROC-JOIN-001: Return, Closed, Fatal, and Failed paths survive the join
+  exactly. Since the output is a map over the flattened input, this also
+  preserves their relative order and multiplicity.
 *)
 Theorem process_join_preserves_noncontinuing :
   forall flows output path,
