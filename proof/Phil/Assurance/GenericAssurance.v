@@ -284,7 +284,15 @@ Proof.
       [Hrequirements [Hrevisions Haccepted]]]]]]].
   unfold CheckedGenericApplicationAssurance, replaceGenericApplicationIdentity.
   simpl.
-  repeat split; assumption.
+  repeat split.
+  - reflexivity.
+  - reflexivity.
+  - exact Hdeclaration.
+  - exact Hinterface.
+  - exact Hdefinition.
+  - exact Hrequirements.
+  - exact Hrevisions.
+  - exact Haccepted.
 Qed.
 
 Definition reusableBodyUnderRealization
