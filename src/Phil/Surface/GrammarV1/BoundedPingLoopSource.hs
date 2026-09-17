@@ -34,6 +34,7 @@ import Phil.Surface.GrammarV1.LexicalReferenceScope
 import Phil.Surface.GrammarV1.LoopStateScope
   ( GrammarV1CheckedLoopBodyStep (..)
   , GrammarV1CheckedLoopSlot (..)
+  , GrammarV1CheckedLoopState (..)
   , GrammarV1LoopStateScopeError
   , grammarV1CheckedLoopExpressionInScope
   )
@@ -49,9 +50,6 @@ import Phil.Surface.GrammarV1.Parser
   )
 import Phil.Surface.Syntax (Located (..))
 
--- | Stage-3 protocol contract for bounded ping.  The client owns the choice:
--- every Ping branch performs one U8 request/String reply round trip and returns
--- to the guarded recursion variable; Done terminates the session explicitly.
 data GrammarV1BoundedPingProtocolError
   = GrammarV1BoundedPingProtocolRoleMismatch
       ProtocolRoleKey
@@ -59,10 +57,6 @@ data GrammarV1BoundedPingProtocolError
   | GrammarV1BoundedPingProtocolShapeMismatch ProtocolSessionTemplate
   deriving (Eq, Show)
 
--- | Exact source identities for the bounded client's two loop-state slots.
--- The endpoint and count parameters are entry-edge sources; currentEndpoint and
--- remaining are fresh loop-state binders; the sole backedge must explicitly
--- supply those same two state coordinates in that order.
 data GrammarV1CheckedBoundedPingLoop = GrammarV1CheckedBoundedPingLoop
   { boundedPingEndpointParameter :: GrammarV1ResolvedBinder
   , boundedPingCountParameter :: GrammarV1ResolvedBinder
@@ -91,9 +85,6 @@ data GrammarV1BoundedPingLoopError
       [GrammarV1CheckedLexicalReference]
   deriving (Eq, Show)
 
--- | Check the exact recursive Ping/Done client projection retained in the
--- already-duality-checked BinaryProtocolFamily.  The family relation owns the
--- peer projection; this function only states the Stage-3 source shape we need.
 grammarV1CheckBoundedPingProtocol
   :: BinaryProtocolFamily
   -> Either GrammarV1BoundedPingProtocolError ()
@@ -139,10 +130,6 @@ expectedClientSession =
   where
     loopName = Name "Loop"
 
--- | Check the bounded Stage-3 loop-state spine.  This deliberately stops before
--- checking the Ping body itself: the next slice will compose protocol choice,
--- request/reply execution, arithmetic, and stdout with this exact backedge
--- state.  Here we establish that there is no hidden mutable/ambient loop state.
 grammarV1CheckedBoundedPingLoop
   :: DeclarationKey
   -> GrammarV1ComponentDecl
