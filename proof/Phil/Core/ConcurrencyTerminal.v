@@ -76,10 +76,12 @@ Proof.
   exact Hlive.
 Qed.
 
-Theorem certified_terminal_control_is_closed_or_failed :
+Theorem certified_terminal_control_is_closed_fatal_or_failed :
   forall fact,
     (exists outcome,
       localTerminalControl (certifiedLocalTerminal fact) = Closed outcome) \/
+    (exists outcome,
+      localTerminalControl (certifiedLocalTerminal fact) = Fatal outcome) \/
     (exists failureClass detail,
       localTerminalControl (certifiedLocalTerminal fact) =
         Failed failureClass detail).
@@ -90,7 +92,8 @@ Proof.
   simpl.
   inversion Hterminal; subst.
   - left. eexists. reflexivity.
-  - right. eexists. eexists. reflexivity.
+  - right. left. eexists. reflexivity.
+  - right. right. eexists. eexists. reflexivity.
 Qed.
 
 Record PeerSemanticState : Type := mkPeerSemanticState {
