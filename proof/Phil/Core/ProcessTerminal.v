@@ -9,8 +9,8 @@ From Phil.Core Require Import Syntax Context.
   The existing proof-side ResourceContext represents sets and maps extensionally,
   so this slice states the successful semantic boundary observationally: a
   complete resource context has no name with a live loan and no name with a
-  linear binding. This is exactly the condition required before Closed or Failed
-  may be constructed by terminalFlow.
+  linear binding. This is exactly the condition required before Closed, Fatal,
+  or Failed may be constructed by terminalFlow.
 
   Return is intentionally outside this model. Phil.Core.Process.returnFlow uses
   ensureReturnable, whose current criterion is only that no shared loan escapes;
@@ -39,6 +39,10 @@ Inductive TerminalFlowSuccess : Control -> ResourceContext -> Prop :=
     forall outcome context,
       EnsureCompleteSuccess context ->
       TerminalFlowSuccess (Closed outcome) context
+| TerminalFlow_fatal :
+    forall outcome context,
+      EnsureCompleteSuccess context ->
+      TerminalFlowSuccess (Fatal outcome) context
 | TerminalFlow_failed :
     forall failureClass detail context,
       EnsureCompleteSuccess context ->
@@ -60,8 +64,8 @@ Qed.
 (*
   PHIL-PROC-TERM-001.
 
-  Closed and Failed paths can be constructed successfully only from a resource
-  context with no live shared loans and no remaining linear owners.
+  Closed, Fatal, and Failed paths can be constructed successfully only from a
+  resource context with no live shared loans and no remaining linear owners.
 *)
 Theorem terminal_flow_success_requires_resource_complete :
   forall control context,
@@ -116,11 +120,22 @@ Proof.
   inversion Hterminal.
 Qed.
 
-(* Completeness is sufficient for either terminal constructor. *)
+(* Completeness is sufficient for every terminal constructor. *)
 Theorem resource_complete_allows_closed :
   forall outcome context,
     ResourceComplete context ->
     TerminalFlowSuccess (Closed outcome) context.
+Proof.
+  intros outcome context Hcomplete.
+  constructor.
+  apply ensure_complete_success_exact.
+  exact Hcomplete.
+Qed.
+
+Theorem resource_complete_allows_fatal :
+  forall outcome context,
+    ResourceComplete context ->
+    TerminalFlowSuccess (Fatal outcome) context.
 Proof.
   intros outcome context Hcomplete.
   constructor.
