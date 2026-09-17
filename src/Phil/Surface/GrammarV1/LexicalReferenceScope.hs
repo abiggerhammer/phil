@@ -15,7 +15,8 @@ import Phil.Surface.GrammarV1.BinderScope
   , grammarV1ResolveLocal
   )
 import Phil.Surface.GrammarV1.Parser
-  ( GrammarV1Expression (..)
+  ( GrammarV1BranchValue (..)
+  , GrammarV1Expression (..)
   , GrammarV1Fallback (..)
   , GrammarV1FailureTarget (..)
   , GrammarV1Proposition (..)
@@ -84,6 +85,21 @@ grammarV1CheckedExpressionReferences pending scope (Located sourceSpan expressio
     GrammarV1FallbackExpression primary fallback -> combineChecked
       (grammarV1CheckedExpressionReferences pending scope primary)
       (checkedFallbackReferences pending scope fallback)
+    GrammarV1ReceiveExpression receiveType endpoint -> combineChecked
+      (grammarV1CheckedTypeReferences pending scope receiveType)
+      (grammarV1CheckedExpressionReferences pending scope endpoint)
+    GrammarV1SendExpression value endpoint -> combineChecked
+      (grammarV1CheckedExpressionReferences pending scope value)
+      (grammarV1CheckedExpressionReferences pending scope endpoint)
+    GrammarV1SelectExpression (Located _ branch) endpoint evidence -> checkedMany
+      ( map
+          (grammarV1CheckedExpressionReferences pending scope)
+          (grammarV1BranchValueArguments branch)
+        <> maybe []
+          (pure . grammarV1CheckedExpressionReferences pending scope)
+          evidence
+        <> [grammarV1CheckedExpressionReferences pending scope endpoint]
+      )
     GrammarV1ConvertExpression value _ ->
       grammarV1CheckedExpressionReferences pending scope value
     GrammarV1TupleExpression elements -> checkedMany
