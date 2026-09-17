@@ -91,11 +91,15 @@ jobs:
           set -euo pipefail
           cabal exec -- ghc -isrc -Wall -Werror -fno-code \
             src/Phil/Verification/ProofEvidence.hs \
-            src/Phil/Verification/EvidenceLineage.hs \
+            src/Phil/Verification/EvidenceLineage.hs
+          for test_main in \
             test/Phase1VerificationProofProducerCheckerSeparationMain.hs \
             test/Phase1VerificationProducerFailureUnresolvedMain.hs \
             test/Phase1VerificationEvidenceSubjectRevisionCompetenceMain.hs \
             test/Phase1VerificationAlternativeProofProducersMain.hs
+          do
+            cabal exec -- ghc -isrc -Wall -Werror -fno-code "$test_main"
+          done
 
       - name: Run unchanged VER-003 producer/checker separation corpus
         run: cabal exec -- runghc -Wall -Werror -isrc test/Phase1VerificationProofProducerCheckerSeparationMain.hs
