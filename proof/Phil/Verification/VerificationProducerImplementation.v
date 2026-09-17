@@ -1,6 +1,6 @@
 From Stdlib Require Import Bool.Bool.
 
-From Phil.Verification Require Import VerificationProducer.
+From Phil.Verification Require Import VerificationWorkflow VerificationProducer.
 
 (*
   PHIL-VERIFY-PRODUCER-001 — executable producer/checker correspondence.
