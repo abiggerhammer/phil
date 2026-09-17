@@ -13,7 +13,6 @@ import Phil.Core.Authority
   , emptyAuthorityState
   , insertAuthorityCapability
   )
-import Phil.Core.Callable (SemanticEffect)
 import Phil.Core.Generic (strictGenericInstantiationPolicy)
 import Phil.Core.Generic.StaticActual (GenericStaticActual (..))
 import Phil.Core.Process
@@ -32,9 +31,6 @@ import Phil.Surface.GrammarV1.ArchitectureComponentProvisioning
 import Phil.Surface.GrammarV1.ArchitectureSurface
   ( GrammarV1CheckedArchitectureSurface
   , grammarV1CheckedArchitectureSurface
-  )
-import Phil.Surface.GrammarV1.BinderScope
-  ( GrammarV1ResolvedBinder (..)
   )
 import Phil.Surface.GrammarV1.ComponentRequestReplyOutput
 import Phil.Surface.GrammarV1.ComponentRequestReplyRuntime
