@@ -27,7 +27,9 @@ Definition semanticBinderKey
   (declaration, ordinal).
 
 Theorem binder_identity_ignores_display_spelling_and_source_position :
-  forall declaration ordinal firstDisplay secondDisplay firstPosition secondPosition,
+  forall (declaration : DeclarationIdentity) (ordinal : BinderOrdinal)
+    (firstDisplay secondDisplay : DisplaySpelling)
+    (firstPosition secondPosition : SourcePosition),
     semanticBinderKey declaration ordinal = semanticBinderKey declaration ordinal.
 Proof.
   reflexivity.
@@ -96,7 +98,7 @@ Definition decideInitialization
 Definition observationAllowed (initialized : bool) : bool := initialized.
 
 Theorem reserved_storage_alone_is_not_semantic_initialization :
-  forall storageReserved,
+  forall (storageReserved : bool),
     observationAllowed false = false.
 Proof.
   reflexivity.
