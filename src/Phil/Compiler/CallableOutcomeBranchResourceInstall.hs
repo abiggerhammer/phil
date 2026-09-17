@@ -115,6 +115,17 @@ installSurfaceCallableOutcomeBranchResources branchEnvironments initialEnvironme
             actual -> Left
               (SurfaceCallableOutcomeResourceInstallControlMismatch
                 declarationKey sourceLabel actual)
+        SurfaceCallableOutcomeCallerFatals _ -> do
+          case residue of
+            Nothing -> pure ()
+            Just _ -> Left
+              (SurfaceCallableOutcomeResourceInstallTerminalResidueUnsupported
+                invocationSpan declarationKey sourceLabel)
+          case callableOutcomeControl spec of
+            CallableOutcomeFatals _ -> Right environment
+            actual -> Left
+              (SurfaceCallableOutcomeResourceInstallControlMismatch
+                declarationKey sourceLabel actual)
         SurfaceCallableOutcomeCallerContinues -> do
           binding <- maybe
             (Left
