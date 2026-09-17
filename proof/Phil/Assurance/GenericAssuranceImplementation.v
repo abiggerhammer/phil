@@ -151,7 +151,14 @@ Proof.
   pose proof (proj1 HdomainReflects Hdomain) as HdomainExact.
   unfold CheckedGenericApplicationAssurance.
   simpl.
-  repeat split; try assumption; reflexivity.
+  split; [reflexivity |].
+  split; [reflexivity |].
+  split; [exact HdeclarationExact |].
+  split; [exact HinterfaceExact |].
+  split; [exact HdefinitionExact |].
+  split; [exact Hrequirements |].
+  split; [exact HrequirementRevisions |].
+  exact Haccepted.
 Qed.
 
 Theorem checked_generic_assurance_is_complete_for_reflected_facts :
