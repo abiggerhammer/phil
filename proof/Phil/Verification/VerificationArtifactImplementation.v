@@ -74,7 +74,7 @@ Proof.
     manifestScopeMatches manifestBoundToStage) eqn:Hfacts.
   - split.
     + intros Haccepted.
-      exact Hfacts.
+      reflexivity.
     + intros Htrue.
       reflexivity.
   - split.
