@@ -744,54 +744,80 @@ Other occurrence identities can travel with the source in a **SourceBundle**. Be
 
 ## 18. How the Ping pieces fit
 
-There are three responsibilities in the Ping example. Keeping them separate prevents a subtle mistake.
+> **Phil asks: “Where does every running input actually come from?”**
 
-**The protocol describes the conversation:**
+The earlier Ping fragments can now be put together as one ordinary source path. This is the complete source wiring for an internal, one-shot Ping:
 
 ```phil
 protocol Ping {
     role Client = send (x : U8) then end Done;
     role Server = receive (x : U8) then end Done;
 }
-```
 
-**The component contains the code that performs its part:**
-
-```phil
 component ClientWorker(endpoint : Client[Ping], payload : U8) {
     let done = send payload on endpoint;
     close done;
 }
-```
 
-**The architecture assigns responsibility:**
+component ServerWorker(endpoint : Server[Ping]) {
+    let (done, received) = receive U8 on endpoint;
+    close done;
+}
 
-```phil
-architecture ExternalPeer {
+architecture LocalPing {
     instance client = ClientWorker;
+    instance server = ServerWorker;
     process client_run = client;
+    process server_run = server;
     protocol ping = Ping;
     role ping.Client = client;
-    role ping.Server = external;
+    role ping.Server = server;
+    entry payload : U8;
+    bind client.endpoint = ping.Client;
+    bind client.payload = payload;
+    bind server.endpoint = ping.Server;
 }
+
+program main = instantiate LocalPing;
 ```
 
-These blocks are a wiring explanation, **not a complete executable Ping listing**. In particular, the role assignment does not pass arguments into `ClientWorker`.
-
-One more responsibility remains: **provisioning**, which means supplying the values a running component needs. Here those are the endpoint belonging to this exact `ping.Client` conversation and the `U8` payload. A complete entry path must supply both explicitly through the appropriate checked machinery.
+There are five different jobs here, and none of them secretly performs another one's job:
 
 ```text
 Protocol      What conversation is legal?
-Component     What code performs our part?
-Architecture  Which participant is responsible?
-Provisioning  Where do its actual input values come from?
+Components    What code performs each side?
+Architecture  Which exact occurrences and roles participate?
+Entry/binds   Where do the running component inputs come from?
+Program       Which architecture occurrence is the root program?
 ```
 
-A component that only returned `unit` would not implement the send merely because an architecture assigned it the Client role. Conversely, a correct `send` expression still needs the right endpoint. Neither declaration fills the other gap by magic.
+`protocol ping = Ping;` creates one particular Ping conversation. The two `role` lines assign its two sides to the two component occurrences. That still does not pass values into either component.
 
-The component action and architecture participation are exercised separately in the Phase 1 corpus. This compact explanation does not add the entry wiring that connects them. Treat it as an explanation of those boundaries, not as evidence that an end-to-end Ping program has run.
+The `bind` lines do that wiring explicitly. `bind client.endpoint = ping.Client;` supplies the Client endpoint projected from this exact `ping` occurrence. `bind server.endpoint = ping.Server;` supplies the matching Server endpoint. `bind client.payload = payload;` supplies the client's byte from the architecture entry named `payload`.
 
-We also have not selected TCP, a message encoding, or an operating-system thread. Those are separate implementation choices that must fit the contracts already stated.
+An **entry** is a value supplied to the running architecture from its surrounding realization. `entry payload : U8;` therefore declares a runtime input; it does not quietly choose a constant. If the surrounding run supplies the value 42 for that exact entry, the checked path is:
+
+```text
+entry payload = 42
+        |
+        v
+client.payload
+        |
+        | send on this exact ping.Client endpoint
+        v
+matching receive on this exact ping.Server endpoint
+        |
+        v
+server local name received = 42
+```
+
+The byte and the endpoints obey different ownership rules. A `U8` is unrestricted, so carrying the same byte value through the send/receive does not require pretending that a unique owner moved from client to server. Session endpoints are linear: the send and receive consume their predecessor endpoints and produce exact successor endpoints. Both workers name those successors `done`, and `close done;` consumes the terminal endpoint on each side.
+
+That distinction is useful. Phil checks both **which value participated in the message** and **which exact session occurrence advanced**. Matching types or matching source spellings are not enough to substitute some other entry or some other Ping session.
+
+The Phase 1 integration corpus exercises this whole internal path: ordinary source is parsed, the architecture bind edges are resolved, both component occurrences are activated, a concrete root-entry byte participates in the matching send/receive, both endpoint successors close, and the process network reaches terminal closure.
+
+The external-peer sketch from section 10 is still a different case. Marking `ping.Server = external` identifies responsibility outside the Phil process population, but it does not by itself choose TCP, a wire encoding, network authority, or a transport adapter. Those remain explicit realization boundaries rather than hidden behavior of role assignment.
 
 ## 19. Where the bigger examples fit
 
