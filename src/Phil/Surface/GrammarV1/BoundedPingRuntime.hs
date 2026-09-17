@@ -65,11 +65,11 @@ import Phil.Core.Scalar
   , scalarLiteralInRange
   , scalarLiteralType
   )
-import Phil.Core.Static (ObligationId (..))
 import Phil.Core.Syntax
   ( Control (..)
   , Mode (..)
   , Name (..)
+  , ObligationId (..)
   , Outcome (..)
   , RefTerm (..)
   , Ty (..)
