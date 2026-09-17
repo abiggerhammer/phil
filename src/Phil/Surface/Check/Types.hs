@@ -134,12 +134,12 @@ data ProviderOutcomeSpec = ProviderOutcomeSpec
   deriving (Eq, Ord, Show)
 
 -- | Neutral caller-control shape for an already checked callable outcome.
--- Surface may continue ordinary checking or close with the exact declared
--- terminal outcome. Fatal control remains outside this carrier until Core has
--- an exact fatal `Control` constructor.
+-- Surface preserves whether a noncontinuing branch is ordinary declared closure
+-- or an exact declared fatal outcome; neither is represented as generic failure.
 data CallableOutcomeControlSpec
   = CallableOutcomeContinues
   | CallableOutcomeCloses Outcome
+  | CallableOutcomeFatals Outcome
   deriving (Eq, Ord, Show)
 
 -- | Neutral source-level branch shape for an already checked callable.
@@ -381,6 +381,7 @@ data PathControl
   = PathContinue
   | PathReturn Ty
   | PathClosed Outcome
+  | PathFatal Outcome
   | PathFailed Text Text
   deriving (Eq, Show)
 
