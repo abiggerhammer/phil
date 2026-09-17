@@ -1,0 +1,33 @@
+name: Phase 1 INT-009 Request Reply Source Shape
+
+on:
+  pull_request:
+    paths:
+      - 'src/Phil/Surface/GrammarV1/ComponentRequestReplyOutput.hs'
+      - 'test/Phase1INT009RequestReplySourceShapeMain.hs'
+      - '.github/workflows/phase1-int009-request-reply-source-shape.yml'
+  push:
+    branches: [main]
+    paths:
+      - 'src/Phil/Surface/GrammarV1/ComponentRequestReplyOutput.hs'
+      - 'test/Phase1INT009RequestReplySourceShapeMain.hs'
+      - '.github/workflows/phase1-int009-request-reply-source-shape.yml'
+
+jobs:
+  request-reply-source-shape:
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+      - uses: haskell-actions/setup@v2
+        with:
+          ghc-version: '9.6.7'
+          cabal-version: 'latest'
+      - name: Build ordinary regression substrate under canonical strict warnings
+        run: cabal build all --enable-tests --ghc-options=-Werror
+      - name: Strictly typecheck INT-009 request/reply source shape
+        run: |
+          set -euo pipefail
+          cabal exec -- ghc -isrc -Wall -Werror -fno-code src/Phil/Surface/GrammarV1/ComponentRequestReplyOutput.hs
+          cabal exec -- ghc -isrc -Wall -Werror -fno-code test/Phase1INT009RequestReplySourceShapeMain.hs
+      - name: Execute INT-009 request/reply source-shape controls
+        run: cabal exec -- runghc -isrc -Wall -Werror test/Phase1INT009RequestReplySourceShapeMain.hs
