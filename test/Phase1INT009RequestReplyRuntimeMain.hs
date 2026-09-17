@@ -412,6 +412,9 @@ declarationAsArchitecture top = case locatedValue (grammarV1Declaration top) of
   GrammarV1ArchitectureDeclaration value -> Right value
   other -> Left ("expected architecture declaration, got " <> show other)
 
+doneOutcome :: Outcome
+doneOutcome = Outcome "Done"
+
 terminalTransition :: ProcessKey -> DeclaredTerminalTransition
 terminalTransition processKey = DeclaredTerminalTransition
   { declaredTerminalProcess = processKey
