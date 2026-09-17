@@ -1,0 +1,109 @@
+name: Phase 1 Sequential Execution Order Proofs
+
+on:
+  pull_request:
+    paths:
+      - 'proof/Phil/Core/SequentialExecutionOrder.v'
+      - 'proof/Phil/Core/SequentialExecutionOrderImplementation.v'
+      - 'src/Phil/Surface/GrammarV1/SequentialExecution.hs'
+      - 'src/Phil/Systems/SequentialTrace.hs'
+      - 'src/Phil/Surface/Check/OmittedElse.hs'
+      - 'test/Phase1GrammarV1RejectMain.hs'
+      - 'test/Phase1OmittedElseIdentityMain.hs'
+      - 'docs/phase-1/sequential-execution-order-proof-boundary-v1.md'
+      - 'phil-core.cabal'
+      - '.github/workflows/phase1-exec-order-proofs.yml'
+  push:
+    branches: [main]
+    paths:
+      - 'proof/Phil/Core/SequentialExecutionOrder.v'
+      - 'proof/Phil/Core/SequentialExecutionOrderImplementation.v'
+      - 'src/Phil/Surface/GrammarV1/SequentialExecution.hs'
+      - 'src/Phil/Systems/SequentialTrace.hs'
+      - 'src/Phil/Surface/Check/OmittedElse.hs'
+      - 'test/Phase1GrammarV1RejectMain.hs'
+      - 'test/Phase1OmittedElseIdentityMain.hs'
+      - 'docs/phase-1/sequential-execution-order-proof-boundary-v1.md'
+      - 'phil-core.cabal'
+      - '.github/workflows/phase1-exec-order-proofs.yml'
+
+permissions:
+  contents: read
+
+jobs:
+  rocq-exec-order-proof:
+    runs-on: ubuntu-latest
+    container:
+      image: rocq/rocq-prover:9.2.0
+      options: --user root
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Compile PHIL-EXEC-ORDER-001 semantic and implementation proofs
+        shell: bash
+        run: |
+          set -euo pipefail
+          export PATH="/home/rocq/.opam/${COMPILER}/bin:$PATH"
+          rocq c -Q proof/Phil Phil proof/Phil/Core/SequentialExecutionOrder.v
+          rocq c -Q proof/Phil Phil proof/Phil/Core/SequentialExecutionOrderImplementation.v
+
+      - name: Record checked proof identities
+        shell: bash
+        run: |
+          set -euo pipefail
+          sha256sum \
+            proof/Phil/Core/SequentialExecutionOrder.v \
+            proof/Phil/Core/SequentialExecutionOrder.vo \
+            proof/Phil/Core/SequentialExecutionOrderImplementation.v \
+            proof/Phil/Core/SequentialExecutionOrderImplementation.vo \
+            > sequential-execution-order-proof-sha256.txt
+          cat sequential-execution-order-proof-sha256.txt
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: sequential-execution-order-proof
+          path: |
+            proof/Phil/Core/SequentialExecutionOrder.v
+            proof/Phil/Core/SequentialExecutionOrder.vo
+            proof/Phil/Core/SequentialExecutionOrderImplementation.v
+            proof/Phil/Core/SequentialExecutionOrderImplementation.vo
+            sequential-execution-order-proof-sha256.txt
+
+  verify-exec-order-correspondence:
+    needs: rocq-exec-order-proof
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: haskell-actions/setup@v2
+        with:
+          ghc-version: '9.6.7'
+          cabal-version: 'latest'
+
+      - name: Build complete Haskell substrate
+        run: cabal build all --enable-tests
+
+      - name: Strict typecheck production execution-order surfaces
+        run: |
+          cabal exec -- ghc -isrc -Wall -Werror -fno-code \
+            src/Phil/Surface/GrammarV1/SequentialExecution.hs \
+            src/Phil/Systems/SequentialTrace.hs \
+            src/Phil/Surface/Check/OmittedElse.hs
+
+      - name: Strict typecheck standalone EXEC regressions separately
+        run: |
+          for test_main in \
+            test/Phase1GrammarV1RejectMain.hs \
+            test/Phase1OmittedElseIdentityMain.hs
+          do
+            cabal exec -- ghc -isrc -Wall -Werror -fno-code "$test_main"
+          done
+
+      - name: Replay EXEC-001/002/003 source and StageContract order corpus
+        run: cabal exec -- runghc -Wall -Werror -isrc test/Phase1GrammarV1RejectMain.hs
+
+      - name: Replay EXEC-015 omitted-else identity corpus
+        run: cabal exec -- runghc -Wall -Werror -isrc test/Phase1OmittedElseIdentityMain.hs
+
+      - name: Run authority controls
+        run: cabal test phil-decision-tests phil-assurance-tests phil-assurance-handoff-tests
