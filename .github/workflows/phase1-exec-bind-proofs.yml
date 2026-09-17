@@ -43,12 +43,14 @@ jobs:
     steps:
       - uses: actions/checkout@v4
       - name: Compile PHIL-EXEC-BIND-001 semantic and implementation proofs
+        shell: bash
         run: |
           set -euo pipefail
           export PATH="/home/rocq/.opam/${COMPILER}/bin:$PATH"
           rocq c -Q proof/Phil Phil proof/Phil/Core/BindingSemantics.v
           rocq c -Q proof/Phil Phil proof/Phil/Core/BindingSemanticsImplementation.v
       - name: Record checked proof identities
+        shell: bash
         run: |
           set -euo pipefail
           sha256sum \
