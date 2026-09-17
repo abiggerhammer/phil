@@ -10,6 +10,7 @@ module Phil.Core.Process
   , continueFlow
   , returnFlow
   , closedFlow
+  , fatalFlow
   , failedFlow
   , sequenceFlow
   , joinBranches
@@ -83,6 +84,9 @@ returnFlow returnTy state = do
 closedFlow :: Outcome -> CheckState -> Either ProcessError ProcessFlow
 closedFlow outcome = terminalFlow (Closed outcome)
 
+fatalFlow :: Outcome -> CheckState -> Either ProcessError ProcessFlow
+fatalFlow outcome = terminalFlow (Fatal outcome)
+
 failedFlow :: Text -> Text -> CheckState -> Either ProcessError ProcessFlow
 failedFlow failureClass detail = terminalFlow (Failed failureClass detail)
 
@@ -98,6 +102,7 @@ sequenceFlow (ProcessFlow paths) continuation =
         Continue -> unProcessFlow <$> continuation (pathState path)
         Return _ -> pure [path]
         Closed _ -> pure [path]
+        Fatal _ -> pure [path]
         Failed _ _ -> pure [path]
 
 joinBranches :: [ProcessFlow] -> Either ProcessError ProcessFlow
