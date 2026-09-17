@@ -222,6 +222,25 @@ Theorem only_supplied_checker_accepted_artifact_closes_attempt :
     producerSuppliedArtifact = true /\ checkerAccepted = true.
 Proof.
   intros producerSuppliedArtifact checkerAccepted.
-  destruct producerSuppliedArtifact, checkerAccepted; cbn;
-    split; intro H; try reflexivity; try discriminate; try tauto.
+  destruct producerSuppliedArtifact, checkerAccepted; cbn.
+  - split.
+    + intro H.
+      discriminate H.
+    + intros [H _].
+      discriminate H.
+  - split.
+    + intro H.
+      discriminate H.
+    + intros [H _].
+      discriminate H.
+  - split.
+    + intro H.
+      discriminate H.
+    + intros [_ H].
+      discriminate H.
+  - split.
+    + intro _.
+      split; reflexivity.
+    + intro _.
+      reflexivity.
 Qed.
