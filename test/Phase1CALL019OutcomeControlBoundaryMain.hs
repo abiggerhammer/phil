@@ -10,8 +10,6 @@ import Phil.Compiler.CallableInvocationSemantics
   )
 import Phil.Compiler.CallableOutcomeDispatch
   ( SurfaceCallableOutcomeBinding (..)
-  , SurfaceCallableOutcomeControl (..)
-  , SurfaceCallableOutcomeDispatchError (..)
   , installSurfaceCallableOutcomeDispatch
   , planSurfaceCallableOutcomeDispatch
   )
@@ -72,8 +70,16 @@ main = do
         declaredTerminalBinderRejects
     , test "CALL-019 declared-terminal contract cannot expose a payload telescope"
         declaredTerminalPayloadRejects
-    , test "CALL-019 fatal outcome remains fail-closed without exact Core fatal control"
-        fatalRejects
+    , test "CALL-019 fatal outcome installs exact fatal control"
+        fatalInstalls
+    , test "CALL-019 decide invoke preserves exact fatal outcome"
+        fatalTerminates
+    , test "CALL-019 fatal arm cannot contain continuation statements"
+        fatalBodyRejects
+    , test "CALL-019 fatal arm cannot bind a caller payload"
+        fatalBinderRejects
+    , test "CALL-019 fatal contract cannot expose a payload telescope"
+        fatalPayloadRejects
     ]
   if and results then pure () else exitFailure
 
@@ -162,8 +168,7 @@ continuingOutcomesInstall = do
       | otherwise -> Left ("unexpected installed outcome count: " <> show (length specs))
     Nothing -> Left "continuing outcome dispatch was not installed"
 
-declaredTerminalPlan
-  :: Either String SurfaceEnvironment
+declaredTerminalPlan :: Either String SurfaceEnvironment
 declaredTerminalPlan = do
   let outcomes = [outcome "success" successClass, outcome "closed" terminalClass]
       bindings = Map.fromList
@@ -227,32 +232,69 @@ declaredTerminalPayloadRejects = do
     Left other -> Left ("wrong terminal payload rejection: " <> show other)
     Right installed -> Left ("terminal payload was accepted: " <> show installed)
 
-fatalRejects :: Either String ()
-fatalRejects = do
+fatalPlan :: Either String SurfaceEnvironment
+fatalPlan = do
   let outcomes = [outcome "success" successClass, outcome "fatal" fatalClass]
       bindings = Map.fromList
         [ (successClass, binding successClass "ok")
         , (fatalClass, binding fatalClass "fatal")
         ]
   plan <- mapLeft show (planSurfaceCallableOutcomeDispatch bindings (account outcomes))
-  expectControlError
-    fatalClass
-    SurfaceCallableOutcomeFatalTerminal
-    (installSurfaceCallableOutcomeDispatch plan environment)
+  mapLeft show (installSurfaceCallableOutcomeDispatch plan environment)
 
-expectControlError
-  :: CallableOutcomeClass
-  -> SurfaceCallableOutcomeControl
-  -> Either SurfaceCallableOutcomeDispatchError SurfaceEnvironment
-  -> Either String ()
-expectControlError expectedClass expectedControl result = case result of
-  Left (SurfaceCallableOutcomeControlRequiresSurfaceRepresentation
-      actualClass actualControl)
-    | actualClass == expectedClass && actualControl == expectedControl -> Right ()
-    | otherwise -> Left
-        ("wrong control rejection: " <> show (actualClass, actualControl))
-  Left other -> Left ("wrong rejection: " <> show other)
-  Right _ -> Left "fatal callable outcome was accepted without exact Surface/Core control"
+fatalInstalls :: Either String ()
+fatalInstalls = do
+  installed <- fatalPlan
+  case Map.lookup workerKey (surfaceCallableOutcomes installed) of
+    Just [successSpec, fatalSpec]
+      | callableOutcomeControl successSpec == CallableOutcomeContinues
+          && callableOutcomeControl fatalSpec
+            == CallableOutcomeFatals (Outcome "fatal:worker") -> Right ()
+      | otherwise -> Left
+          ("wrong installed fatal controls: "
+            <> show (callableOutcomeControl successSpec, callableOutcomeControl fatalSpec))
+    other -> Left ("unexpected installed fatal outcomes: " <> show other)
+
+fatalTerminates :: Either String ()
+fatalTerminates = do
+  installed <- fatalPlan
+  component <- parseOne
+    "component Caller { decide invoke Worker() { ok => { return unit } fatal => { } } }"
+  checked <- mapLeft show (checkSurfaceComponent installed component)
+  assert
+    (checkedTerminalControls checked == [Return TyUnit, Fatal (Outcome "fatal:worker")])
+    ("unexpected fatal terminal controls: " <> show (checkedTerminalControls checked))
+
+fatalBodyRejects :: Either String ()
+fatalBodyRejects = do
+  installed <- fatalPlan
+  component <- parseOne
+    "component Caller { decide invoke Worker() { ok => { return unit } fatal => { return unit } } }"
+  expectSurfaceError ControlAfterTerminal installed component
+
+fatalBinderRejects :: Either String ()
+fatalBinderRejects = do
+  installed <- fatalPlan
+  component <- parseOne
+    "component Caller { decide invoke Worker() { ok => { return unit } fatal(reason) => { } } }"
+  expectSurfaceError TypeMismatch installed component
+
+fatalPayloadRejects :: Either String ()
+fatalPayloadRejects = do
+  let outcomes = [outcome "success" successClass, outcome "fatal" fatalClass]
+      fatalBinding = (binding fatalClass "fatal")
+        { surfaceOutcomeBindingPayload = [(Unrestricted, TyOpaque "Never")]
+        }
+      bindings = Map.fromList
+        [ (successClass, binding successClass "ok")
+        , (fatalClass, fatalBinding)
+        ]
+  plan <- mapLeft show (planSurfaceCallableOutcomeDispatch bindings (account outcomes))
+  case installSurfaceCallableOutcomeDispatch plan environment of
+    Left (SurfaceCallableTerminalOutcomePayloadUnsupported actual)
+      | actual == fatalClass -> Right ()
+    Left other -> Left ("wrong fatal payload rejection: " <> show other)
+    Right installed -> Left ("fatal payload was accepted: " <> show installed)
 
 expectSurfaceError
   :: RejectionClass
