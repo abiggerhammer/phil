@@ -1,0 +1,108 @@
+name: Phase 1 Execution Binding Proofs
+
+on:
+  pull_request:
+    paths:
+      - 'proof/Phil/Core/BindingSemantics.v'
+      - 'proof/Phil/Core/BindingSemanticsImplementation.v'
+      - 'src/Phil/Surface/GrammarV1/BinderScope.hs'
+      - 'src/Phil/Systems/SemanticInitialization.hs'
+      - 'src/Phil/Systems/StructuralDiscard.hs'
+      - 'src/Phil/Surface/Check/Types.hs'
+      - 'src/Phil/Surface/Check/Engine.hs'
+      - 'test/Phase1GrammarV1BinderScopeMain.hs'
+      - 'test/Phase1ExecutionSemanticsMain.hs'
+      - 'test/Phase1ExplicitReleaseMain.hs'
+      - 'docs/phase-1/execution-binding-proof-boundary-v1.md'
+      - '.github/workflows/phase1-exec-bind-proofs.yml'
+  push:
+    branches: [main]
+    paths:
+      - 'proof/Phil/Core/BindingSemantics.v'
+      - 'proof/Phil/Core/BindingSemanticsImplementation.v'
+      - 'src/Phil/Surface/GrammarV1/BinderScope.hs'
+      - 'src/Phil/Systems/SemanticInitialization.hs'
+      - 'src/Phil/Systems/StructuralDiscard.hs'
+      - 'src/Phil/Surface/Check/Types.hs'
+      - 'src/Phil/Surface/Check/Engine.hs'
+      - 'test/Phase1GrammarV1BinderScopeMain.hs'
+      - 'test/Phase1ExecutionSemanticsMain.hs'
+      - 'test/Phase1ExplicitReleaseMain.hs'
+      - 'docs/phase-1/execution-binding-proof-boundary-v1.md'
+      - '.github/workflows/phase1-exec-bind-proofs.yml'
+
+permissions:
+  contents: read
+
+jobs:
+  rocq-exec-bind-proof:
+    runs-on: ubuntu-latest
+    container:
+      image: rocq/rocq-prover:9.2.0
+      options: --user root
+    steps:
+      - uses: actions/checkout@v4
+      - name: Compile PHIL-EXEC-BIND-001 semantic and implementation proofs
+        shell: bash
+        run: |
+          set -euo pipefail
+          export PATH="/home/rocq/.opam/${COMPILER}/bin:$PATH"
+          rocq c -Q proof/Phil Phil proof/Phil/Core/BindingSemantics.v
+          rocq c -Q proof/Phil Phil proof/Phil/Core/BindingSemanticsImplementation.v
+      - name: Record checked proof identities
+        shell: bash
+        run: |
+          set -euo pipefail
+          sha256sum \
+            proof/Phil/Core/BindingSemantics.v \
+            proof/Phil/Core/BindingSemantics.vo \
+            proof/Phil/Core/BindingSemanticsImplementation.v \
+            proof/Phil/Core/BindingSemanticsImplementation.vo \
+            > execution-binding-proof.sha256
+          cat execution-binding-proof.sha256
+      - uses: actions/upload-artifact@v4
+        with:
+          name: execution-binding-proof
+          path: execution-binding-proof.sha256
+
+  verify-exec-bind-correspondence:
+    needs: rocq-exec-bind-proof
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: haskell-actions/setup@v2
+        with:
+          ghc-version: '9.6.7'
+          cabal-version: 'latest'
+      - name: Build complete Haskell substrate
+        run: cabal build all --enable-tests
+      - name: Strict typecheck focused production surfaces
+        run: |
+          set -euo pipefail
+          for module in \
+            src/Phil/Surface/GrammarV1/BinderScope.hs \
+            src/Phil/Systems/SemanticInitialization.hs \
+            src/Phil/Systems/StructuralDiscard.hs \
+            src/Phil/Surface/Check/Types.hs \
+            src/Phil/Surface/Check/Engine.hs
+          do
+            cabal exec -- ghc -isrc -Wall -Werror -fno-code "$module"
+          done
+      - name: Strict typecheck each standalone regression Main separately
+        run: |
+          set -euo pipefail
+          for test_main in \
+            test/Phase1GrammarV1BinderScopeMain.hs \
+            test/Phase1ExecutionSemanticsMain.hs \
+            test/Phase1ExplicitReleaseMain.hs
+          do
+            cabal exec -- ghc -isrc -Wall -Werror -fno-code "$test_main"
+          done
+      - name: Replay SURF-009 binder scope corpus
+        run: cabal exec -- runghc -Wall -Werror -isrc test/Phase1GrammarV1BinderScopeMain.hs
+      - name: Replay EXEC-005/006/010 execution semantics corpus
+        run: cabal exec -- runghc -Wall -Werror -isrc test/Phase1ExecutionSemanticsMain.hs
+      - name: Replay EXEC-014 explicit release corpus
+        run: cabal exec -- runghc -Wall -Werror -isrc test/Phase1ExplicitReleaseMain.hs
+      - name: Run assurance and decision authority controls
+        run: cabal test phil-decision-tests phil-assurance-tests phil-assurance-handoff-tests
