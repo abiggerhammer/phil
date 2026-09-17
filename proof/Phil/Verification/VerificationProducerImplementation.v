@@ -222,25 +222,18 @@ Theorem only_supplied_checker_accepted_artifact_closes_attempt :
     producerSuppliedArtifact = true /\ checkerAccepted = true.
 Proof.
   intros producerSuppliedArtifact checkerAccepted.
-  destruct producerSuppliedArtifact, checkerAccepted; cbn.
-  - split.
-    + intro H.
-      discriminate H.
-    + intros [H _].
-      discriminate H.
-  - split.
-    + intro H.
-      discriminate H.
-    + intros [H _].
-      discriminate H.
-  - split.
-    + intro H.
-      discriminate H.
-    + intros [_ H].
-      discriminate H.
+  unfold decideProducerAttempt.
+  destruct (andb producerSuppliedArtifact checkerAccepted) eqn:Hboth.
   - split.
     + intro _.
-      split; reflexivity.
+      apply andb_true_iff in Hboth.
+      exact Hboth.
     + intro _.
       reflexivity.
+  - split.
+    + intro H.
+      discriminate H.
+    + intros [Hproducer Hchecker].
+      rewrite Hproducer, Hchecker in Hboth.
+      discriminate Hboth.
 Qed.
