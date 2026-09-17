@@ -287,11 +287,11 @@ Proof.
   repeat split.
   - reflexivity.
   - reflexivity.
-  - exact Hdeclaration.
-  - exact Hinterface.
-  - exact Hdefinition.
-  - exact Hrequirements.
-  - exact Hrevisions.
+  - congruence.
+  - congruence.
+  - congruence.
+  - congruence.
+  - congruence.
   - exact Haccepted.
 Qed.
 
