@@ -81,7 +81,6 @@ Proof.
     + intros Haccepted.
       discriminate Haccepted.
     + intros Htrue.
-      rewrite Hfacts in Htrue.
       discriminate Htrue.
 Qed.
 
