@@ -1,0 +1,112 @@
+name: Phase 1 Verification Reuse Proofs
+
+on:
+  pull_request:
+    paths:
+      - 'proof/Phil/Core/GenericStructural.v'
+      - 'proof/Phil/Core/GenericRequirements.v'
+      - 'proof/Phil/Core/GenericInstantiation.v'
+      - 'proof/Phil/Assurance/ValidityScope.v'
+      - 'proof/Phil/Assurance/ValidityScopeImplementation.v'
+      - 'proof/Phil/Assurance/GenericAssurance.v'
+      - 'proof/Phil/Assurance/VerificationReuse.v'
+      - 'proof/Phil/Assurance/VerificationReuseImplementation.v'
+      - 'src/Phil/Verification/ProofEvidence.hs'
+      - 'test/Phase1VerificationEvidenceReuseInvalidationMain.hs'
+      - 'test/Phase1VerificationGenericAssuranceReuseMain.hs'
+      - 'docs/phase-1/verification-evidence-reuse-proof-boundary-v1.md'
+      - '.github/workflows/phase1-verify-reuse-proofs.yml'
+  push:
+    branches: [main]
+    paths:
+      - 'proof/Phil/Core/GenericStructural.v'
+      - 'proof/Phil/Core/GenericRequirements.v'
+      - 'proof/Phil/Core/GenericInstantiation.v'
+      - 'proof/Phil/Assurance/ValidityScope.v'
+      - 'proof/Phil/Assurance/ValidityScopeImplementation.v'
+      - 'proof/Phil/Assurance/GenericAssurance.v'
+      - 'proof/Phil/Assurance/VerificationReuse.v'
+      - 'proof/Phil/Assurance/VerificationReuseImplementation.v'
+      - 'src/Phil/Verification/ProofEvidence.hs'
+      - 'test/Phase1VerificationEvidenceReuseInvalidationMain.hs'
+      - 'test/Phase1VerificationGenericAssuranceReuseMain.hs'
+      - 'docs/phase-1/verification-evidence-reuse-proof-boundary-v1.md'
+      - '.github/workflows/phase1-verify-reuse-proofs.yml'
+
+permissions:
+  contents: read
+
+jobs:
+  rocq-verification-reuse-proof:
+    runs-on: ubuntu-latest
+    container:
+      image: rocq/rocq-prover:9.2.0
+      options: --user root
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Compile PHIL-VERIFY-REUSE-001 semantic and implementation proofs
+        shell: bash
+        run: |
+          set -euo pipefail
+          export PATH="/home/rocq/.opam/${COMPILER}/bin:$PATH"
+          rocq c -Q proof/Phil Phil proof/Phil/Core/GenericStructural.v
+          rocq c -Q proof/Phil Phil proof/Phil/Core/GenericRequirements.v
+          rocq c -Q proof/Phil Phil proof/Phil/Core/GenericInstantiation.v
+          rocq c -Q proof/Phil Phil proof/Phil/Assurance/ValidityScope.v
+          rocq c -Q proof/Phil Phil proof/Phil/Assurance/ValidityScopeImplementation.v
+          rocq c -Q proof/Phil Phil proof/Phil/Assurance/GenericAssurance.v
+          rocq c -Q proof/Phil Phil proof/Phil/Assurance/VerificationReuse.v
+          rocq c -Q proof/Phil Phil proof/Phil/Assurance/VerificationReuseImplementation.v
+
+      - name: Record checked proof identities
+        shell: bash
+        run: |
+          set -euo pipefail
+          sha256sum \
+            proof/Phil/Assurance/VerificationReuse.v \
+            proof/Phil/Assurance/VerificationReuse.vo \
+            proof/Phil/Assurance/VerificationReuseImplementation.v \
+            proof/Phil/Assurance/VerificationReuseImplementation.vo \
+            > verification-reuse-proof-sha256.txt
+          cat verification-reuse-proof-sha256.txt
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: verification-reuse-proof
+          path: |
+            proof/Phil/Assurance/VerificationReuse.v
+            proof/Phil/Assurance/VerificationReuse.vo
+            proof/Phil/Assurance/VerificationReuseImplementation.v
+            proof/Phil/Assurance/VerificationReuseImplementation.vo
+            verification-reuse-proof-sha256.txt
+
+  verify-ver006-correspondence:
+    needs: rocq-verification-reuse-proof
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: haskell-actions/setup@v2
+        with:
+          ghc-version: '9.6.7'
+          cabal-version: 'latest'
+
+      - name: Build complete Haskell substrate
+        run: cabal build all --enable-tests
+
+      - name: Strict typecheck VER-006 production and regression
+        run: |
+          set -euo pipefail
+          cabal exec -- ghc -isrc -Wall -Werror -fno-code \
+            src/Phil/Verification/ProofEvidence.hs \
+            test/Phase1VerificationEvidenceReuseInvalidationMain.hs
+
+      - name: Run unchanged VER-006 evidence reuse corpus
+        run: cabal exec -- runghc -Wall -Werror -isrc test/Phase1VerificationEvidenceReuseInvalidationMain.hs
+
+      - name: Re-run generic assurance predecessor corpus
+        run: cabal exec -- runghc -Wall -Werror -isrc test/Phase1VerificationGenericAssuranceReuseMain.hs
+
+      - name: Run assurance authority controls
+        run: cabal test phil-assurance-tests phil-assurance-handoff-tests phil-decision-tests
