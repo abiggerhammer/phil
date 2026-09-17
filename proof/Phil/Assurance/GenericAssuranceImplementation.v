@@ -1,4 +1,5 @@
 From Stdlib Require Import Bool.Bool.
+From Phil.Core Require Import GenericInstantiation.
 From Phil.Assurance Require Import GenericAssurance.
 
 Inductive GenericAssuranceDecision : Type :=
