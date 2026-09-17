@@ -204,11 +204,12 @@ checkedServerRound checked = do
           _ -> serverShape "expected U8 receive"
         reply <- case locatedValue sendSource of
           GrammarV1SendExpression value endpoint -> do
-            requireSingleReferenceServer "server send endpoint" replyEndpoint sendRefs
-            requireSimpleNameServer "server send endpoint syntax" "replyEndpoint" endpoint
-            case locatedValue value of
+            replyText <- case locatedValue value of
               GrammarV1StringExpression text -> Right text
               _ -> serverShape "reply must be a String literal"
+            requireSingleReferenceServer "server send endpoint" replyEndpoint sendRefs
+            requireSimpleNameServer "server send endpoint syntax" "replyEndpoint" endpoint
+            Right replyText
           _ -> serverShape "expected literal reply send"
         requireReferencesServer "server continue" [nextEndpoint] continueRefs
         Right reply
