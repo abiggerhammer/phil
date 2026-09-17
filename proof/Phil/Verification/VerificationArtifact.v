@@ -152,7 +152,11 @@ Theorem exact_composition_certifies_artifact :
     FinalArtifactCertified source stage manifest.
 Proof.
   intros source stage manifest Hsource Hstage Hmanifest.
-  repeat split; assumption.
+  split.
+  - exact Hsource.
+  - split.
+    + exact Hstage.
+    + exact Hmanifest.
 Qed.
 
 Theorem stale_stored_systems_identity_prevents_artifact_certification :
