@@ -28,10 +28,9 @@ import Phil.Surface.GrammarV1.Parser
   , GrammarV1Expression (..)
   , GrammarV1Pattern (..)
   , GrammarV1Statement (..)
+  , GrammarV1StaticReference (..)
   , GrammarV1Type (..)
   , grammarV1QualifiedNameParts
-  , grammarV1StaticReferenceArguments
-  , grammarV1StaticReferenceName
   , pattern GrammarV1StringExpression
   )
 import Phil.Surface.GrammarV1.PatternBinderScope
@@ -39,16 +38,12 @@ import Phil.Surface.GrammarV1.PatternBinderScope
   )
 import Phil.Surface.Syntax (Located (..))
 
--- | Source-semantic carrier for INT-009 stage 2's client shape:
+-- | Exact source-binder carrier for INT-009 stage 2's client:
 --
 --     let awaiting = send payload on endpoint;
 --     let (done, reply) = receive String on awaiting;
 --     let writeDecision = console_write(reply);
 --     close done;
---
--- This slice establishes exact binder flow only. The following slice binds the
--- console_write occurrence to the checked standard.stdout provider semantics and
--- executes the two rendezvous transitions.
 data GrammarV1CheckedRequestReplyClient = GrammarV1CheckedRequestReplyClient
   { requestReplyClientPayload :: GrammarV1ResolvedBinder
   , requestReplyClientInitialEndpoint :: GrammarV1ResolvedBinder
@@ -59,7 +54,7 @@ data GrammarV1CheckedRequestReplyClient = GrammarV1CheckedRequestReplyClient
   }
   deriving (Eq, Show)
 
--- | Source-semantic carrier for the matching server shape:
+-- | Exact source-binder carrier for the matching server:
 --
 --     let (replyEndpoint, request) = receive U8 on endpoint;
 --     let done = send "pong" on replyEndpoint;
@@ -90,6 +85,9 @@ data GrammarV1RequestReplyOutputError
   | GrammarV1RequestReplyReplyLiteralRequired
   deriving (Eq, Show)
 
+-- | Claim competence only for the bounded Stage-2 client shape. Once that
+-- shape matches, every local use must resolve to the exact declaration-rooted
+-- binder produced by the previous operation.
 grammarV1CheckedRequestReplyClient
   :: DeclarationKey
   -> GrammarV1ComponentDecl
@@ -140,7 +138,9 @@ grammarV1CheckedRequestReplyClient declarationKey component =
                 "send successor -> receive endpoint"
                 replyEndpoint
                 (grammarV1CheckedLocalValueBinder receiveEndpoint)
-              requireType GrammarV1StringTypeCompat (locatedValue receiveType)
+              requireType
+                (GrammarV1UnsignedType "String")
+                (locatedValue receiveType)
 
               (terminalEndpoint, replyValue, afterReceive) <- bindTuple2
                 "receive result"
@@ -183,12 +183,8 @@ grammarV1CheckedRequestReplyClient declarationKey component =
                 }
           _ -> Nothing
     _ -> Nothing
-  where
-    -- Parser represents the intrinsic String spelling through the unsigned-type
-    -- compatibility constructor; keep that parser fact local to this bounded
-    -- source-shape checker.
-    GrammarV1StringTypeCompat = GrammarV1UnsignedType "String"
 
+-- | Claim competence only for the bounded Stage-2 server shape.
 grammarV1CheckedRequestReplyServer
   :: DeclarationKey
   -> GrammarV1ComponentDecl
