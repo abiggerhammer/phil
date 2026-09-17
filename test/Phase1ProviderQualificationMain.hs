@@ -159,7 +159,7 @@ widerEffectRejects =
 
 fatalOutcomeRejects :: Either String ()
 fatalOutcomeRejects =
-  let fatal = CallableFatal "abort"
+  let fatal = CallableFatal (Outcome "abort")
       readImpl = providerImplementationEntries providerImplementation Map.! readEntry
       readSurface = providerImplementationCallable readImpl
       implementation = providerImplementation

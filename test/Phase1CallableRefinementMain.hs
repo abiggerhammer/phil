@@ -139,7 +139,7 @@ deleteEffect = SemanticEffect "delete"
 notFoundFailure, terminalShutdown, fatalAbort :: CallableFailure
 notFoundFailure = CallableTypedNegative (Outcome "not-found")
 terminalShutdown = CallableDeclaredTerminal (Outcome "shutdown")
-fatalAbort = CallableFatal "abort"
+fatalAbort = CallableFatal (Outcome "abort")
 
 successorRevision :: InterfaceRevision
 successorRevision = InterfaceRevision "callable.successor.v1"

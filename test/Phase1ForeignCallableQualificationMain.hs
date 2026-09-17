@@ -104,7 +104,7 @@ qualifiedFatalBehaviorReject =
   case checkForeignCallableQualification expectedSurface fatalArtifact
       (Just fatalQualification) of
     Left (ForeignCallableQualificationRefinementError (CallableFailureSetTooWide excess)) ->
-      assert (excess == Set.singleton (CallableFatal "abort"))
+      assert (excess == Set.singleton (CallableFatal (Outcome "abort")))
         "fatal-behavior qualification reported wrong excess failure"
     other -> Left ("qualified fatal callable did not reject: " <> show other)
 
@@ -175,7 +175,7 @@ strongerAuthoritySurface = matchingSurface
   { callableRefinementCallerAuthority = Set.fromList [readAuthority, deleteAuthority] }
 
 fatalSurface = matchingSurface
-  { callableRefinementFailures = Set.fromList [notFound, CallableFatal "abort"] }
+  { callableRefinementFailures = Set.fromList [notFound, CallableFatal (Outcome "abort")] }
 
 matchingArtifact, widerEffectArtifact, strongerAuthorityArtifact, fatalArtifact
   :: ForeignCallableArtifact

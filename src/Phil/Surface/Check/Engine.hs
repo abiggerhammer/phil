@@ -1002,6 +1002,8 @@ checkDecisionArm environment state decision locatedArm = do
   case callableDecisionControl decision label of
     Just (CallableOutcomeCloses outcome) ->
       checkDeclaredTerminalCallableArm environment state outcome locatedArm
+    Just (CallableOutcomeFatals outcome) ->
+      checkDeclaredFatalCallableArm environment state outcome locatedArm
     _ -> do
       resourceState <- applyCallableDecisionResources
         (locatedSpan locatedArm) decision label state
@@ -1153,6 +1155,24 @@ checkDeclaredTerminalCallableArm environment state outcome locatedArm = do
       "declared-terminal callable outcome arm cannot continue"
   ensureTerminalState environment (locatedSpan locatedArm) (Just outcome) state
   Right [SurfacePath (PathClosed outcome) state Nothing]
+
+checkDeclaredFatalCallableArm
+  :: SurfaceEnvironment
+  -> SurfaceState
+  -> Outcome
+  -> Located CaseArm
+  -> Either SurfaceCheckError [SurfacePath]
+checkDeclaredFatalCallableArm environment state outcome locatedArm = do
+  let pattern' = caseArmPattern (locatedValue locatedArm)
+      body = caseArmBody (locatedValue locatedArm)
+  unless (null (casePatternBinders pattern')) $
+    throw locatedArm TypeMismatch
+      "declared-fatal callable outcome cannot bind a caller payload"
+  unless (null (blockStatements (locatedValue body))) $
+    throw locatedArm ControlAfterTerminal
+      "declared-fatal callable outcome arm cannot continue"
+  ensureTerminalState environment (locatedSpan locatedArm) (Just outcome) state
+  Right [SurfacePath (PathFatal outcome) state Nothing]
 
 decisionLabels :: DecisionKind -> [Text]
 decisionLabels decision = case decision of
@@ -1833,6 +1853,8 @@ finalizePath environment span' path = do
     PathReturn _ -> ensureTerminalState environment span' Nothing (pathState path)
     PathClosed outcome ->
       ensureTerminalState environment span' (Just outcome) (pathState path)
+    PathFatal outcome ->
+      ensureTerminalState environment span' (Just outcome) (pathState path)
     PathFailed _ _ ->
       ensureTerminalState environment span' (Just (Outcome "failure")) (pathState path)
   Right path
@@ -1866,6 +1888,7 @@ toCoreControl path = case pathControl path of
   PathContinue -> Continue
   PathReturn ty -> Return ty
   PathClosed outcome -> Closed outcome
+  PathFatal outcome -> Fatal outcome
   PathFailed failureClass detail -> Failed failureClass detail
 
 mapBranchExhaustiveness

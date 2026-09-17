@@ -96,7 +96,7 @@ successClass = CallableSuccessOutcome
 typedFailure, terminalFailure, fatalFailure :: CallableFailure
 typedFailure = CallableTypedNegative (Outcome "retry")
 terminalFailure = CallableDeclaredTerminal (Outcome "closed")
-fatalFailure = CallableFatal "fatal:worker"
+fatalFailure = CallableFatal (Outcome "fatal:worker")
 
 typedClass, terminalClass, fatalClass :: CallableOutcomeClass
 typedClass = CallableNonSuccessOutcome typedFailure

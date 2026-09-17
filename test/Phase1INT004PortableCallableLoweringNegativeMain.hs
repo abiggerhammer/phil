@@ -452,8 +452,8 @@ allocationEffect = SemanticEffect "target.allocate-closure-environment"
 
 notFoundFailure, targetAbortFailure, allocatorFailure :: CallableFailure
 notFoundFailure = CallableTypedNegative (Outcome "not-found")
-targetAbortFailure = CallableFatal "target-abort"
-allocatorFailure = CallableFatal "allocator-failure"
+targetAbortFailure = CallableFatal (Outcome "target-abort")
+allocatorFailure = CallableFatal (Outcome "allocator-failure")
 
 sourceLoan, expiredLoan :: LoanScopeKey
 sourceLoan = LoanScopeKey "loan.local.001"

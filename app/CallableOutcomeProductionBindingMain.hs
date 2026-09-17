@@ -295,7 +295,7 @@ successClass, typedNegativeClass, declaredTerminalClass, fatalClass :: CallableO
 successClass = CallableSuccessOutcome
 typedNegativeClass = CallableNonSuccessOutcome (CallableTypedNegative notFoundOutcome)
 declaredTerminalClass = CallableNonSuccessOutcome (CallableDeclaredTerminal doneOutcome)
-fatalClass = CallableNonSuccessOutcome (CallableFatal "storage.fatal")
+fatalClass = CallableNonSuccessOutcome (CallableFatal (Outcome "storage.fatal"))
 
 successBranch, typedNegativeBranch, declaredTerminalBranch, fatalBranch :: CallableOutcomeContract
 successBranch = mkBranch
