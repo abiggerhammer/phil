@@ -80,9 +80,9 @@ data SurfaceCallableOutcomeBranchSemanticError
 -- exact CALL-019 semantic branches retained by its dispatch plan.
 --
 -- This bridge deliberately remains compiler-side. Surface sees only the neutral
--- label/payload/control carrier installed by #968/#973; this function proves
--- that carrier still corresponds exactly to the semantic plan before exposing
--- branch-local complete contracts to successor composition work.
+-- label/payload/control carrier installed by the dispatch layer; this function
+-- proves that carrier still corresponds exactly to the semantic plan before
+-- exposing branch-local complete contracts to successor composition work.
 bindSurfaceCallableOutcomeDecision
   :: SurfaceEnvironment
   -> SurfaceCallableOutcomeDispatchPlan
@@ -188,6 +188,9 @@ neutralControlMatches branch neutralControl =
     (SurfaceCallableOutcomeDeclaredTerminal,
         CallableNonSuccessOutcome (CallableDeclaredTerminal outcome)) ->
       neutralControl == CallableOutcomeCloses outcome
+    (SurfaceCallableOutcomeFatalTerminal,
+        CallableNonSuccessOutcome (CallableFatal outcome)) ->
+      neutralControl == CallableOutcomeFatals outcome
     _ -> False
 
 witnessArm
