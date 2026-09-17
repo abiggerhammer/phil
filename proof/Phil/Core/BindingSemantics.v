@@ -77,9 +77,8 @@ Theorem disjoint_sibling_binders_with_fresh_ordinals_are_distinct :
       semanticBinderKey declaration secondOrdinal.
 Proof.
   intros declaration firstOrdinal secondOrdinal Hneq Heq.
-  inversion Heq.
-  apply Hneq.
-  reflexivity.
+  inversion Heq as [Hordinal].
+  exact (Hneq Hordinal).
 Qed.
 
 Inductive InitializationDecision : Type :=
