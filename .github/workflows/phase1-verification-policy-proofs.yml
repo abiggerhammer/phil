@@ -1,0 +1,123 @@
+name: Phase 1 Verification Policy Proofs
+
+on:
+  pull_request:
+    paths:
+      - 'proof/Phil/Verification/VerificationWorkflow.v'
+      - 'proof/Phil/Verification/VerificationProducer.v'
+      - 'proof/Phil/Verification/VerificationPolicy.v'
+      - 'proof/Phil/Verification/VerificationPolicyImplementation.v'
+      - 'src/Phil/Verification.hs'
+      - 'src/Phil/Verification/ProofEvidence.hs'
+      - 'test/Phase1VerificationPolicySensitiveRuntimeClosureMain.hs'
+      - 'test/Phase1VerificationNoSilentAssumptionExportMain.hs'
+      - 'docs/phase-1/verification-policy-proof-boundary-v1.md'
+      - '.github/workflows/phase1-verification-policy-proofs.yml'
+  push:
+    branches: [main]
+    paths:
+      - 'proof/Phil/Verification/VerificationWorkflow.v'
+      - 'proof/Phil/Verification/VerificationProducer.v'
+      - 'proof/Phil/Verification/VerificationPolicy.v'
+      - 'proof/Phil/Verification/VerificationPolicyImplementation.v'
+      - 'src/Phil/Verification.hs'
+      - 'src/Phil/Verification/ProofEvidence.hs'
+      - 'test/Phase1VerificationPolicySensitiveRuntimeClosureMain.hs'
+      - 'test/Phase1VerificationNoSilentAssumptionExportMain.hs'
+      - 'docs/phase-1/verification-policy-proof-boundary-v1.md'
+      - '.github/workflows/phase1-verification-policy-proofs.yml'
+
+permissions:
+  contents: read
+
+jobs:
+  rocq-verification-policy-proof:
+    runs-on: ubuntu-latest
+    container:
+      image: rocq/rocq-prover:9.2.0
+      options: --user root
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Compile PHIL-VERIFY-POLICY-001 semantic and implementation proofs
+        shell: bash
+        run: |
+          set -euo pipefail
+          export PATH="/home/rocq/.opam/${COMPILER}/bin:$PATH"
+          rocq c -Q proof/Phil Phil proof/Phil/Verification/VerificationWorkflow.v
+          rocq c -Q proof/Phil Phil proof/Phil/Verification/VerificationProducer.v
+          rocq c -Q proof/Phil Phil proof/Phil/Verification/VerificationPolicy.v
+          rocq c -Q proof/Phil Phil proof/Phil/Verification/VerificationPolicyImplementation.v
+
+      - name: Record checked proof identities
+        shell: bash
+        run: |
+          set -euo pipefail
+          sha256sum \
+            proof/Phil/Verification/VerificationPolicy.v \
+            proof/Phil/Verification/VerificationPolicy.vo \
+            proof/Phil/Verification/VerificationPolicyImplementation.v \
+            proof/Phil/Verification/VerificationPolicyImplementation.vo \
+            > verification-policy-proof-sha256.txt
+          cat verification-policy-proof-sha256.txt
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: verification-policy-proof
+          path: |
+            proof/Phil/Verification/VerificationPolicy.v
+            proof/Phil/Verification/VerificationPolicy.vo
+            proof/Phil/Verification/VerificationPolicyImplementation.v
+            proof/Phil/Verification/VerificationPolicyImplementation.vo
+            verification-policy-proof-sha256.txt
+
+  verify-verification-policy-correspondence:
+    needs: rocq-verification-policy-proof
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: haskell-actions/setup@v2
+        with:
+          ghc-version: '9.6.7'
+          cabal-version: 'latest'
+
+      - name: Build complete Haskell substrate
+        run: cabal build all --enable-tests
+
+      - name: Strict typecheck policy production surfaces
+        run: |
+          set -euo pipefail
+          cabal exec -- ghc -isrc -Wall -Werror -fno-code src/Phil/Verification.hs
+          cabal exec -- ghc -isrc -Wall -Werror -fno-code src/Phil/Verification/ProofEvidence.hs
+
+      - name: Strict typecheck VER-007 and VER-008 regressions separately
+        run: |
+          set -euo pipefail
+          cabal exec -- ghc -isrc -Wall -Werror -fno-code test/Phase1VerificationPolicySensitiveRuntimeClosureMain.hs
+          cabal exec -- ghc -isrc -Wall -Werror -fno-code test/Phase1VerificationNoSilentAssumptionExportMain.hs
+
+      - name: Run unchanged VER-007 runtime policy corpus
+        run: cabal exec -- runghc -Wall -Werror -isrc test/Phase1VerificationPolicySensitiveRuntimeClosureMain.hs
+
+      - name: Run unchanged VER-008 no-silent-disposition corpus
+        run: cabal exec -- runghc -Wall -Werror -isrc test/Phase1VerificationNoSilentAssumptionExportMain.hs
+
+      - name: Re-run Certified producer and evidence controls
+        run: |
+          set -euo pipefail
+          cabal exec -- runghc -Wall -Werror -isrc test/Phase1VerificationProofProducerCheckerSeparationMain.hs
+          cabal exec -- runghc -Wall -Werror -isrc test/Phase1VerificationProducerFailureUnresolvedMain.hs
+          cabal exec -- runghc -Wall -Werror -isrc test/Phase1VerificationEvidenceSubjectRevisionCompetenceMain.hs
+          cabal exec -- runghc -Wall -Werror -isrc test/Phase1VerificationAlternativeProofProducersMain.hs
+          cabal exec -- runghc -Wall -Werror -isrc test/Phase1VerificationEvidenceReuseInvalidationMain.hs
+
+      - name: Re-run Certified workflow controls
+        run: |
+          set -euo pipefail
+          cabal exec -- runghc -Wall -Werror -isrc test/Phase1VerificationIntrinsicInvalidityMain.hs
+          cabal exec -- runghc -Wall -Werror -isrc test/Phase1VerificationCanonicalObligationGraphMain.hs
+          cabal exec -- runghc -Wall -Werror -isrc test/Phase1VerificationIndependentTargetMain.hs
+
+      - name: Run decision and assurance authority controls
+        run: cabal test phil-decision-tests phil-assurance-tests phil-assurance-handoff-tests
