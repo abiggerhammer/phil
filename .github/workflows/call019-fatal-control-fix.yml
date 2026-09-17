@@ -1,0 +1,83 @@
+name: CALL-019 fatal-control integration fix
+
+on:
+  push:
+    branches:
+      - phase1-call019-fatal-control
+
+permissions:
+  contents: write
+
+jobs:
+  patch:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - name: Apply focused fatal-control patch
+        shell: bash
+        run: |
+          python3 - <<'PY'
+          from pathlib import Path
+          import re
+
+          engine_path = Path('src/Phil/Surface/Check/Engine.hs')
+          text = engine_path.read_text()
+
+          replacements = [
+              (
+                  '''    Just (CallableOutcomeCloses outcome) ->\n      checkDeclaredTerminalCallableArm environment state outcome locatedArm\n    _ -> do\n''',
+                  '''    Just (CallableOutcomeCloses outcome) ->\n      checkDeclaredTerminalCallableArm environment state outcome locatedArm\n    Just (CallableOutcomeFatals outcome) ->\n      checkDeclaredFatalCallableArm environment state outcome locatedArm\n    _ -> do\n''',
+              ),
+              (
+                  '''  ensureTerminalState environment (locatedSpan locatedArm) (Just outcome) state\n  Right [SurfacePath (PathClosed outcome) state Nothing]\n\ndecisionLabels :: DecisionKind -> [Text]\n''',
+                  '''  ensureTerminalState environment (locatedSpan locatedArm) (Just outcome) state\n  Right [SurfacePath (PathClosed outcome) state Nothing]\n\ncheckDeclaredFatalCallableArm\n  :: SurfaceEnvironment\n  -> SurfaceState\n  -> Outcome\n  -> Located CaseArm\n  -> Either SurfaceCheckError [SurfacePath]\ncheckDeclaredFatalCallableArm environment state outcome locatedArm = do\n  let pattern' = caseArmPattern (locatedValue locatedArm)\n      body = caseArmBody (locatedValue locatedArm)\n  unless (null (casePatternBinders pattern')) $\n    throw locatedArm TypeMismatch\n      "declared-fatal callable outcome cannot bind a caller payload"\n  unless (null (blockStatements (locatedValue body))) $\n    throw locatedArm ControlAfterTerminal\n      "declared-fatal callable outcome arm cannot continue"\n  ensureTerminalState environment (locatedSpan locatedArm) (Just outcome) state\n  Right [SurfacePath (PathFatal outcome) state Nothing]\n\ndecisionLabels :: DecisionKind -> [Text]\n''',
+              ),
+              (
+                  '''    PathClosed outcome ->\n      ensureTerminalState environment span' (Just outcome) (pathState path)\n    PathFailed _ _ ->\n''',
+                  '''    PathClosed outcome ->\n      ensureTerminalState environment span' (Just outcome) (pathState path)\n    PathFatal outcome ->\n      ensureTerminalState environment span' (Just outcome) (pathState path)\n    PathFailed _ _ ->\n''',
+              ),
+              (
+                  '''  PathReturn ty -> Return ty\n  PathClosed outcome -> Closed outcome\n  PathFailed failureClass detail -> Failed failureClass detail\n''',
+                  '''  PathReturn ty -> Return ty\n  PathClosed outcome -> Closed outcome\n  PathFatal outcome -> Fatal outcome\n  PathFailed failureClass detail -> Failed failureClass detail\n''',
+              ),
+          ]
+
+          for old, new in replacements:
+              count = text.count(old)
+              if count != 1:
+                  raise SystemExit(f'expected exactly one Engine match, found {count}: {old.splitlines()[0]}')
+              text = text.replace(old, new)
+          engine_path.write_text(text)
+
+          changed = []
+          pattern = re.compile(r'CallableFatal "([^"\\n]*)"')
+          for path in Path('.').rglob('*.hs'):
+              source = path.read_text()
+              updated, count = pattern.subn(r'CallableFatal (Outcome "\1")', source)
+              if count:
+                  path.write_text(updated)
+                  changed.append((str(path), count))
+
+          leftovers = []
+          for path in Path('.').rglob('*.hs'):
+              for line_no, line in enumerate(path.read_text().splitlines(), 1):
+                  if 'CallableFatal "' in line:
+                      leftovers.append(f'{path}:{line_no}:{line}')
+          if leftovers:
+              raise SystemExit('stale CallableFatal literals remain:\n' + '\n'.join(leftovers))
+
+          print('migrated CallableFatal literals:', changed)
+          PY
+          git diff --check
+          git status --short
+          git config user.name github-actions[bot]
+          git config user.email 41898282+github-actions[bot]@users.noreply.github.com
+          git add src/Phil/Surface/Check/Engine.hs '*.hs' ':(glob)**/*.hs'
+          if git diff --cached --quiet; then
+            echo 'No changes produced; refusing silent success.' >&2
+            exit 1
+          fi
+          git commit -m 'CALL-019: propagate exact fatal control through Surface'
+          git push origin HEAD:${GITHUB_REF_NAME}
