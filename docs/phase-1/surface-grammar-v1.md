@@ -124,7 +124,7 @@ Backend calls, copies, staging operations, synchronization, or other target-intr
 
 ## Callable outcomes, obligations, and callee transitions
 
-Callable outcome class is source semantic information. Grammar v1 does not permit a plain unclassified outcome set because ADR-005 distinguishes successful continuation, typed-negative recoverable control, declared terminal completion, and fatal failure.
+Callable outcome class is source semantic information. Grammar v1 does not permit a plain unclassified outcome set because ADR-005 distinguishes successful continuation, typed-negative recoverable control, declared terminal completion, and declared fatal completion.
 
 Canonical spelling is:
 
@@ -136,6 +136,12 @@ outcomes {
   fatal Crashed
 };
 ```
+
+These four classes are semantically distinct. `success` and `negative` are caller-visible branches that may continue ordinary caller checking. `terminal` ends the caller branch normally and preserves the exact declared outcome as `Closed Outcome`. `fatal` also ends the caller branch, but it preserves the exact declared fatal outcome as `Fatal Outcome`; it is not silently reclassified as generic process failure.
+
+A declared callable `fatal` outcome is therefore **not** an alias for the term-level `fail` operation. The latter is an explicit fatal resource/control transition and remains represented separately as `Failed failureClass detail`. A later realization may choose how either terminal form maps to target behavior, but the checked Core boundary does not erase their source-semantic distinction.
+
+Declared `terminal` and `fatal` branches have no ordinary caller continuation. They therefore cannot manufacture a caller payload telescope or carry residual obligations past that boundary. Their resource, endpoint, and obligation state must already satisfy the same checked terminal-closure requirements before either control form is admitted.
 
 A branch-sensitive residue repeats the class:
 
@@ -195,7 +201,7 @@ Typed-negative control is also a first-class expression:
 reject reason
 ```
 
-This is distinct from fatal `fail FailureClass(...) on live_resource`, which performs the declared fatal resource transition. The existing `e or reject reason` fallback remains an ergonomic exhaustive-control form over a declared negative result.
+This is distinct both from a callable's declared `fatal Crashed` outcome and from term-level `fail FailureClass(...) on live_resource`. The declared callable outcome becomes exact `Fatal Outcome` at the checked caller boundary; `fail` performs the separate explicit fatal resource transition represented by `Failed failureClass detail`. The existing `e or reject reason` fallback remains an ergonomic exhaustive-control form over a declared negative result.
 
 ## Boundary, architecture, and static process syntax
 

@@ -331,7 +331,27 @@ fn identity(x : U32) -> U32 satisfies Identity {
 
 > **Phil asks: “What happens when something goes wrong?”**
 
-`outcomes` lists the possible **kinds of result**. This small example lists only `success`, carrying a `U32`. More detailed contracts can distinguish ordinary success from different kinds of failure, so callers know which results they must be ready to handle.
+`outcomes` lists the possible **kinds of result**. This small example lists only `success`, carrying a `U32`. More detailed contracts can distinguish four different control classes:
+
+```phil
+outcomes {
+    success Stored,
+    negative Busy,
+    terminal Closed,
+    fatal Crashed
+};
+```
+
+Read them this way:
+
+- `success` means ordinary successful completion. The caller may continue.
+- `negative` means a typed, expected non-success result that the caller may handle and continue from.
+- `terminal` means a named normal end of the call path. There is no ordinary caller continuation after that branch.
+- `fatal` means a named abnormal end of the call path. There is likewise no ordinary caller continuation, but Phil keeps the exact declared outcome identity instead of turning it into a generic failure bucket.
+
+That last distinction is deliberate. A callable declaring `fatal Crashed` produces the exact fatal outcome `Crashed` at the checked caller boundary. It is **not** the same operation as writing `fail FailureClass(...) on resource` inside term code. The latter is an explicit fatal resource/control transition with its own failure class and detail. Keeping those forms separate lets later layers decide how to realize them without the checker inventing meaning that the source did not state.
+
+Because `terminal` and `fatal` have no caller continuation, their dispatch arms cannot pretend to return a caller payload or continue with more statements. Their resources, live endpoints, and obligations must already satisfy terminal-closure rules before Phil accepts either branch as finished.
 
 `fn` introduces the function implementation. `satisfies Identity` names the contract the checker must compare that implementation against. It is not just a comment, and it does not make the implementation correct by declaration.
 
@@ -839,7 +859,7 @@ You do not need to memorize every keyword from this tour. Keep asking the questi
 - **What may those parts say to each other?** Protocols describe the allowed conversations, including what may happen next. Components perform the actual communication.
 - **What is each part allowed to do?** Contracts limit actions and state the permissions a call needs. Ownership rules say whether a value may be copied, discarded, or transferred.
 - **What must be true before the program can take the next step?** Contracts make requirements explicit. A claim, a proof, a runtime check, and an assumption are different things; naming a claim does not prove it.
-- **What happens when something goes wrong?** Contracts can distinguish failure from success. Each path must still obey the rules for its resources, permissions, and conversations.
+- **What happens when something goes wrong?** Contracts distinguish ordinary success, recoverable `negative` outcomes, normal `terminal` completion, declared `fatal` completion, and explicit term-level `fail`. Each path keeps its own exact control meaning and must still obey the rules for its resources, permissions, and conversations.
 
 Those answers must still hold when the implementation changes. Evidence applies to particular objects and requirements, not to everything that looks similar. Checking the source and justifying a particular compiled artifact are connected but separate jobs.
 

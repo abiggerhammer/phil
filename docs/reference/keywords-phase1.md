@@ -83,10 +83,10 @@ The current inventory contains **132 reserved words**. Every reserved word appea
 | `borrows` | Lists caller-visible resources borrowed by a callable contract. |
 | `outcomes` | Declares the public set of possible callable outcome classes. |
 | `outcome` | Introduces branch-specific residue/state facts for one callable outcome. |
-| `success` | Callable outcome class for ordinary successful completion. |
-| `negative` | Callable outcome class for typed negative/non-success completion. |
-| `terminal` | Callable outcome class for declared terminal completion. |
-| `fatal` | Callable outcome class for fatal completion. |
+| `success` | Callable outcome class for ordinary successful completion; the caller may continue. |
+| `negative` | Callable outcome class for typed negative/non-success completion; the caller may handle the branch and continue. |
+| `terminal` | Callable outcome class for declared normal terminal completion; at the checked caller boundary it preserves the exact outcome as `Closed Outcome`. |
+| `fatal` | Callable outcome class for declared abnormal terminal completion; at the checked caller boundary it preserves the exact declared identity as `Fatal Outcome`, distinct from term-level `fail` and generic `Failed`. |
 | `state` | Introduces explicit successor-state slots in callable outcomes or loop/join state. |
 | `callee` | Introduces what happens to the callable value itself across an outcome. |
 | `preserve` | Callee transition that leaves the callable available. |
@@ -172,7 +172,7 @@ The current inventory contains **132 reserved words**. Every reserved word appea
 | `recognize` | Recognizes a structured semantic value from raw/framed input using a named recognizer. |
 | `validate` | Validates a value/input using a named validator, optionally at an explicit position/context. |
 | `reject` | Produces typed-negative control flow. |
-| `fail` | Produces fatal control flow. |
+| `fail` | Performs the explicit fatal resource/control transition, represented separately as `Failed failureClass detail`; it is not shorthand for selecting a callable's declared `fatal` outcome. |
 
 ## Logic and relation words
 
