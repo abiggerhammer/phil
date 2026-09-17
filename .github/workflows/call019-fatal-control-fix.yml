@@ -52,7 +52,7 @@ jobs:
           engine_path.write_text(text)
 
           changed = []
-          pattern = re.compile(r'CallableFatal "([^"\\n]*)"')
+          pattern = re.compile(r'CallableFatal "([^"]*)"')
           for path in Path('.').rglob('*.hs'):
               source = path.read_text()
               updated, count = pattern.subn(r'CallableFatal (Outcome "\1")', source)
