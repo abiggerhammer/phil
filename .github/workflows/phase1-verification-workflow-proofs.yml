@@ -1,0 +1,113 @@
+name: Phase 1 Verification Workflow Proofs
+
+on:
+  pull_request:
+    paths:
+      - 'proof/Phil/Verification/VerificationWorkflow.v'
+      - 'proof/Phil/Verification/VerificationWorkflowImplementation.v'
+      - 'src/Phil/Verification.hs'
+      - 'src/Phil/Verification/Bundle.hs'
+      - 'test/Phase1VerificationIntrinsicInvalidityMain.hs'
+      - 'test/Phase1VerificationCanonicalObligationGraphMain.hs'
+      - 'test/Phase1VerificationIndependentTargetMain.hs'
+      - 'test/Phase1VerificationEvidenceReuseInvalidationMain.hs'
+      - 'docs/phase-1/verification-workflow-proof-boundary-v1.md'
+      - '.github/workflows/phase1-verification-workflow-proofs.yml'
+  push:
+    branches: [main]
+    paths:
+      - 'proof/Phil/Verification/VerificationWorkflow.v'
+      - 'proof/Phil/Verification/VerificationWorkflowImplementation.v'
+      - 'src/Phil/Verification.hs'
+      - 'src/Phil/Verification/Bundle.hs'
+      - 'test/Phase1VerificationIntrinsicInvalidityMain.hs'
+      - 'test/Phase1VerificationCanonicalObligationGraphMain.hs'
+      - 'test/Phase1VerificationIndependentTargetMain.hs'
+      - 'test/Phase1VerificationEvidenceReuseInvalidationMain.hs'
+      - 'docs/phase-1/verification-workflow-proof-boundary-v1.md'
+      - '.github/workflows/phase1-verification-workflow-proofs.yml'
+
+permissions:
+  contents: read
+
+jobs:
+  rocq-verification-workflow-proof:
+    runs-on: ubuntu-latest
+    container:
+      image: rocq/rocq-prover:9.2.0
+      options: --user root
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Compile PHIL-VERIFY-WORKFLOW-001 semantic and implementation proofs
+        shell: bash
+        run: |
+          set -euo pipefail
+          export PATH="/home/rocq/.opam/${COMPILER}/bin:$PATH"
+          rocq c -Q proof/Phil Phil proof/Phil/Verification/VerificationWorkflow.v
+          rocq c -Q proof/Phil Phil proof/Phil/Verification/VerificationWorkflowImplementation.v
+
+      - name: Record checked proof identities
+        shell: bash
+        run: |
+          set -euo pipefail
+          sha256sum \
+            proof/Phil/Verification/VerificationWorkflow.v \
+            proof/Phil/Verification/VerificationWorkflow.vo \
+            proof/Phil/Verification/VerificationWorkflowImplementation.v \
+            proof/Phil/Verification/VerificationWorkflowImplementation.vo \
+            > verification-workflow-proof-sha256.txt
+          cat verification-workflow-proof-sha256.txt
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: verification-workflow-proof
+          path: |
+            proof/Phil/Verification/VerificationWorkflow.v
+            proof/Phil/Verification/VerificationWorkflow.vo
+            proof/Phil/Verification/VerificationWorkflowImplementation.v
+            proof/Phil/Verification/VerificationWorkflowImplementation.vo
+            verification-workflow-proof-sha256.txt
+
+  verify-verification-workflow-correspondence:
+    needs: rocq-verification-workflow-proof
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: haskell-actions/setup@v2
+        with:
+          ghc-version: '9.6.7'
+          cabal-version: 'latest'
+
+      - name: Build complete Haskell substrate
+        run: cabal build all --enable-tests
+
+      - name: Strict typecheck verification workflow production and regressions
+        run: |
+          set -euo pipefail
+          cabal exec -- ghc -isrc -Wall -Werror -fno-code \
+            src/Phil/Verification.hs \
+            src/Phil/Verification/Bundle.hs \
+            test/Phase1VerificationIntrinsicInvalidityMain.hs
+          cabal exec -- ghc -isrc -Wall -Werror -fno-code \
+            test/Phase1VerificationCanonicalObligationGraphMain.hs
+          cabal exec -- ghc -isrc -Wall -Werror -fno-code \
+            test/Phase1VerificationIndependentTargetMain.hs
+          cabal exec -- ghc -isrc -Wall -Werror -fno-code \
+            test/Phase1VerificationEvidenceReuseInvalidationMain.hs
+
+      - name: Run unchanged VER-001 intrinsic-validity corpus
+        run: cabal exec -- runghc -Wall -Werror -isrc test/Phase1VerificationIntrinsicInvalidityMain.hs
+
+      - name: Run unchanged VER-002 canonical obligation graph corpus
+        run: cabal exec -- runghc -Wall -Werror -isrc test/Phase1VerificationCanonicalObligationGraphMain.hs
+
+      - name: Run unchanged VER-012 independent verification target corpus
+        run: cabal exec -- runghc -Wall -Werror -isrc test/Phase1VerificationIndependentTargetMain.hs
+
+      - name: Re-run Certified VER-006 reuse corpus
+        run: cabal exec -- runghc -Wall -Werror -isrc test/Phase1VerificationEvidenceReuseInvalidationMain.hs
+
+      - name: Run assurance authority controls
+        run: cabal test phil-assurance-tests phil-assurance-handoff-tests phil-decision-tests
