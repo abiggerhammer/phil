@@ -273,7 +273,7 @@ requireSimpleNameServer role expected (Located _ expression) =
     _ -> serverShape ("unexpected local syntax for " <> role)
 
 branchName (Located _ branch) =
-  case grammarV1QualifiedNameParts (grammarV1BranchValueName branch) of
+  case grammarV1QualifiedNameParts (locatedValue (grammarV1BranchValueName branch)) of
     [name] -> name
     _ -> ""
 
