@@ -1,0 +1,121 @@
+name: Phase 1 Verification Producer Proofs
+
+on:
+  pull_request:
+    paths:
+      - 'proof/Phil/Verification/VerificationWorkflow.v'
+      - 'proof/Phil/Verification/VerificationProducer.v'
+      - 'proof/Phil/Verification/VerificationProducerImplementation.v'
+      - 'src/Phil/Verification/ProofEvidence.hs'
+      - 'src/Phil/Verification/EvidenceLineage.hs'
+      - 'test/Phase1VerificationProofProducerCheckerSeparationMain.hs'
+      - 'test/Phase1VerificationProducerFailureUnresolvedMain.hs'
+      - 'test/Phase1VerificationEvidenceSubjectRevisionCompetenceMain.hs'
+      - 'test/Phase1VerificationAlternativeProofProducersMain.hs'
+      - 'docs/phase-1/verification-producer-proof-boundary-v1.md'
+      - '.github/workflows/phase1-verify-producer-proofs.yml'
+  push:
+    branches: [main]
+    paths:
+      - 'proof/Phil/Verification/VerificationWorkflow.v'
+      - 'proof/Phil/Verification/VerificationProducer.v'
+      - 'proof/Phil/Verification/VerificationProducerImplementation.v'
+      - 'src/Phil/Verification/ProofEvidence.hs'
+      - 'src/Phil/Verification/EvidenceLineage.hs'
+      - 'test/Phase1VerificationProofProducerCheckerSeparationMain.hs'
+      - 'test/Phase1VerificationProducerFailureUnresolvedMain.hs'
+      - 'test/Phase1VerificationEvidenceSubjectRevisionCompetenceMain.hs'
+      - 'test/Phase1VerificationAlternativeProofProducersMain.hs'
+      - 'docs/phase-1/verification-producer-proof-boundary-v1.md'
+      - '.github/workflows/phase1-verify-producer-proofs.yml'
+
+permissions:
+  contents: read
+
+jobs:
+  rocq-verification-producer-proof:
+    runs-on: ubuntu-latest
+    container:
+      image: rocq/rocq-prover:9.2.0
+      options: --user root
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Compile PHIL-VERIFY-PRODUCER-001 semantic and implementation proofs
+        shell: bash
+        run: |
+          set -euo pipefail
+          export PATH="/home/rocq/.opam/${COMPILER}/bin:$PATH"
+          rocq c -Q proof/Phil Phil proof/Phil/Verification/VerificationWorkflow.v
+          rocq c -Q proof/Phil Phil proof/Phil/Verification/VerificationProducer.v
+          rocq c -Q proof/Phil Phil proof/Phil/Verification/VerificationProducerImplementation.v
+
+      - name: Record checked proof identities
+        shell: bash
+        run: |
+          set -euo pipefail
+          sha256sum \
+            proof/Phil/Verification/VerificationProducer.v \
+            proof/Phil/Verification/VerificationProducer.vo \
+            proof/Phil/Verification/VerificationProducerImplementation.v \
+            proof/Phil/Verification/VerificationProducerImplementation.vo \
+            > verification-producer-proof-sha256.txt
+          cat verification-producer-proof-sha256.txt
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: verification-producer-proof
+          path: |
+            proof/Phil/Verification/VerificationProducer.v
+            proof/Phil/Verification/VerificationProducer.vo
+            proof/Phil/Verification/VerificationProducerImplementation.v
+            proof/Phil/Verification/VerificationProducerImplementation.vo
+            verification-producer-proof-sha256.txt
+
+  verify-verification-producer-correspondence:
+    needs: rocq-verification-producer-proof
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: haskell-actions/setup@v2
+        with:
+          ghc-version: '9.6.7'
+          cabal-version: 'latest'
+
+      - name: Build complete Haskell substrate
+        run: cabal build all --enable-tests
+
+      - name: Strict typecheck verification producer production and regressions
+        run: |
+          set -euo pipefail
+          cabal exec -- ghc -isrc -Wall -Werror -fno-code \
+            src/Phil/Verification/ProofEvidence.hs \
+            src/Phil/Verification/EvidenceLineage.hs \
+            test/Phase1VerificationProofProducerCheckerSeparationMain.hs \
+            test/Phase1VerificationProducerFailureUnresolvedMain.hs \
+            test/Phase1VerificationEvidenceSubjectRevisionCompetenceMain.hs \
+            test/Phase1VerificationAlternativeProofProducersMain.hs
+
+      - name: Run unchanged VER-003 producer/checker separation corpus
+        run: cabal exec -- runghc -Wall -Werror -isrc test/Phase1VerificationProofProducerCheckerSeparationMain.hs
+
+      - name: Run unchanged VER-004 producer failure corpus
+        run: cabal exec -- runghc -Wall -Werror -isrc test/Phase1VerificationProducerFailureUnresolvedMain.hs
+
+      - name: Run unchanged VER-005 evidence competence corpus
+        run: cabal exec -- runghc -Wall -Werror -isrc test/Phase1VerificationEvidenceSubjectRevisionCompetenceMain.hs
+
+      - name: Run unchanged VER-011 alternative producer corpus
+        run: cabal exec -- runghc -Wall -Werror -isrc test/Phase1VerificationAlternativeProofProducersMain.hs
+
+      - name: Re-run Certified verification workflow and reuse corpora
+        run: |
+          set -euo pipefail
+          cabal exec -- runghc -Wall -Werror -isrc test/Phase1VerificationIntrinsicInvalidityMain.hs
+          cabal exec -- runghc -Wall -Werror -isrc test/Phase1VerificationCanonicalObligationGraphMain.hs
+          cabal exec -- runghc -Wall -Werror -isrc test/Phase1VerificationIndependentTargetMain.hs
+          cabal exec -- runghc -Wall -Werror -isrc test/Phase1VerificationEvidenceReuseInvalidationMain.hs
+
+      - name: Run decision and assurance authority controls
+        run: cabal test phil-decision-tests phil-assurance-tests phil-assurance-handoff-tests
