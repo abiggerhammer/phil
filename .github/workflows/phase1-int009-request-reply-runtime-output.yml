@@ -1,0 +1,33 @@
+name: Phase 1 INT-009 Request Reply Runtime Output
+
+on:
+  pull_request:
+    paths:
+      - 'src/Phil/Surface/GrammarV1/ComponentRequestReplyRuntime.hs'
+      - 'test/Phase1INT009RequestReplyRuntimeMain.hs'
+      - '.github/workflows/phase1-int009-request-reply-runtime-output.yml'
+  push:
+    branches: [main]
+    paths:
+      - 'src/Phil/Surface/GrammarV1/ComponentRequestReplyRuntime.hs'
+      - 'test/Phase1INT009RequestReplyRuntimeMain.hs'
+      - '.github/workflows/phase1-int009-request-reply-runtime-output.yml'
+
+jobs:
+  request-reply-runtime-output:
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+      - uses: haskell-actions/setup@v2
+        with:
+          ghc-version: '9.6.7'
+          cabal-version: 'latest'
+      - name: Build ordinary regression substrate under canonical strict warnings
+        run: cabal build all --enable-tests --ghc-options=-Werror
+      - name: Strictly typecheck INT-009 request/reply runtime output
+        run: |
+          set -euo pipefail
+          cabal exec -- ghc -isrc -Wall -Werror -fno-code src/Phil/Surface/GrammarV1/ComponentRequestReplyRuntime.hs
+          cabal exec -- ghc -isrc -Wall -Werror -fno-code test/Phase1INT009RequestReplyRuntimeMain.hs
+      - name: Execute INT-009 request/reply runtime-output controls
+        run: cabal exec -- runghc -isrc -Wall -Werror test/Phase1INT009RequestReplyRuntimeMain.hs
