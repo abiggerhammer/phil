@@ -454,6 +454,7 @@ resourceClosed context =
 terminalControl :: Control -> Bool
 terminalControl control = case control of
   Closed _ -> True
+  Fatal _ -> True
   Failed _ _ -> True
   Continue -> False
   Return _ -> False
