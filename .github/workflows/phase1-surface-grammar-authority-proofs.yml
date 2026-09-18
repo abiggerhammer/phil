@@ -83,7 +83,7 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
-          cp grammar-authority-derived/Grammar.v proof/Phil/Surface/Grammar.v
+          cp grammar-authority-derived/proof/Phil/Surface/Grammar.v proof/Phil/Surface/Grammar.v
 
       - name: Compile generated grammar and authority proofs warning-clean
         shell: bash
