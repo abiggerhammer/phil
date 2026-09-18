@@ -18,6 +18,10 @@ import Phil.Compiler.CallableInvocationSemantics
 import Phil.Compiler.CallableOutcomeBranchSemantics
   ( SurfaceCallableOutcomeArmSemanticWitness (..)
   )
+import Phil.Compiler.CallableOutcomeContinuation
+  ( SurfaceCallableOutcomeContinuation (..)
+  , SurfaceCallableOutcomeContinuationDisposition (..)
+  )
 import Phil.Compiler.CallableOutcomeDispatch
   ( SurfaceCallableOutcomeControl (..)
   )
@@ -70,8 +74,8 @@ main = do
         unownedWitnessRejects
     , test "CALL-019 branch-aware context still checks branch-local callee transition"
         branchTransitionMismatchRejects
-    , test "CALL-019 hand-constructed fatal branch witness cannot bypass Surface fatal seam"
-        fatalWitnessRejects
+    , test "CALL-019 exact fatal witness preserves fatal caller control"
+        fatalWitnessPreserved
     ]
   if and results then pure () else exitFailure
 
@@ -325,21 +329,28 @@ branchTransitionMismatchRejects =
       consumingSummary
       "branch transition mismatch"
 
-fatalWitnessRejects :: Either String ()
-fatalWitnessRejects =
+fatalWitnessPreserved :: Either String ()
+fatalWitnessPreserved = do
   let fatalAccount = accountWith (Set.singleton fatalFailure)
         [successOutcome, fatalOutcome]
       fatalSummary = summaryWith fatalAccount (Set.singleton fatalFailure)
       fatalContext = callerContextWith (Set.singleton fatalFailure)
-  in expectError
-      (\err -> case err of
-        SurfaceInvocationOutcomeWitnessControlMismatch actualSpan outcomeClass ->
-          actualSpan == invocationSpan && outcomeClass == fatalClass
-        _ -> False)
+  checked <- mapLeft show $
+    checkSurfaceCallableInvocationSummaryWithOutcomeBranches
       [successWitness, fatalWitness]
       fatalContext
       fatalSummary
-      "fatal witness"
+  assert
+    (checkedInvocationSemanticSummary checked == fatalSummary)
+    "fatal branch admission changed semantic summary"
+  case filter
+      ((== "fatal") . surfaceContinuationSourceLabel)
+      (checkedInvocationOutcomeContinuations checked) of
+    [continuation] -> assert
+      (surfaceContinuationDisposition continuation
+        == SurfaceCallableOutcomeCallerFatals (Outcome "fatal:branch"))
+      "fatal branch did not retain exact fatal caller-control disposition"
+    other -> Left ("expected one fatal continuation account, got " <> show (length other))
 
 expectError
   :: (SurfaceCallableInvocationContextError -> Bool)

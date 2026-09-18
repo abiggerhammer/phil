@@ -125,10 +125,19 @@ bindSurfaceCallableOutcomeBranchResidue bindings continuations = do
                 (surfaceContinuationArmSpan continuation)
                 (surfaceContinuationSourceLabel continuation)
                 (surfaceContinuationResidualObligations continuation))
+        SurfaceCallableOutcomeCallerFatals _
+          | Set.null (surfaceContinuationResidualObligations continuation) -> Right ()
+          | otherwise -> Left
+              (SurfaceCallableOutcomeTerminalResidualUnsupported
+                (surfaceContinuationArmSpan continuation)
+                (surfaceContinuationSourceLabel continuation)
+                (surfaceContinuationResidualObligations continuation))
 
     makeEnvironment continuation =
       case surfaceContinuationDisposition continuation of
         SurfaceCallableOutcomeCallerTerminates _ ->
+          Right (environment continuation [])
+        SurfaceCallableOutcomeCallerFatals _ ->
           Right (environment continuation [])
         SurfaceCallableOutcomeCallerContinues -> do
           obligations <- mapM lookupObligation
@@ -197,6 +206,12 @@ installSurfaceCallableOutcomeBranchResidue residueEnvironments initialEnvironmen
             actual -> Left
               (SurfaceCallableOutcomeResidueControlMismatch
                 declarationKey sourceLabel actual)
+        SurfaceCallableOutcomeCallerFatals _ ->
+          case callableOutcomeControl spec of
+            CallableOutcomeFatals _ -> Right environment
+            actual -> Left
+              (SurfaceCallableOutcomeResidueControlMismatch
+                declarationKey sourceLabel actual)
         SurfaceCallableOutcomeCallerContinues -> do
           case callableOutcomeControl spec of
             CallableOutcomeContinues -> Right ()
@@ -228,6 +243,7 @@ continuingResidualAtoms
 continuingResidualAtoms continuation =
   case surfaceContinuationDisposition continuation of
     SurfaceCallableOutcomeCallerTerminates _ -> Set.empty
+    SurfaceCallableOutcomeCallerFatals _ -> Set.empty
     SurfaceCallableOutcomeCallerContinues ->
       surfaceContinuationResidualObligations continuation
 

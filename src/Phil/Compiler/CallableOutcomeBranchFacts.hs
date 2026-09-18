@@ -116,6 +116,8 @@ bindSurfaceCallableOutcomeBranchFacts bindings continuations = do
     makeEnvironment continuation = case surfaceContinuationDisposition continuation of
       SurfaceCallableOutcomeCallerTerminates _ ->
         Right (environment continuation [] [] [])
+      SurfaceCallableOutcomeCallerFatals _ ->
+        Right (environment continuation [] [] [])
       SurfaceCallableOutcomeCallerContinues -> do
         postconditions <- lookupFacts (surfaceContinuationPostconditions continuation)
         assumptions <- lookupFacts (surfaceContinuationAssumptions continuation)
@@ -187,6 +189,14 @@ installSurfaceCallableOutcomeBranchFacts branchEnvironments initialEnvironment =
           case callableOutcomeControl spec of
             CallableOutcomeCloses _ -> Right environment
             actual -> Left (SurfaceCallableOutcomeFactControlMismatch declarationKey sourceLabel actual)
+        SurfaceCallableOutcomeCallerFatals _ -> do
+          if null usable
+            then pure ()
+            else Left (SurfaceCallableOutcomeFactTerminalFactsUnsupported
+              (surfaceBranchFactArmSpan branchEnvironment) sourceLabel)
+          case callableOutcomeControl spec of
+            CallableOutcomeFatals _ -> Right environment
+            actual -> Left (SurfaceCallableOutcomeFactControlMismatch declarationKey sourceLabel actual)
         SurfaceCallableOutcomeCallerContinues -> case callableOutcomeControl spec of
           CallableOutcomeContinues ->
             let key = (invocationSpan, declarationKey, sourceLabel)
@@ -216,6 +226,7 @@ neutralFactBinding binding =
 continuingUsableAtoms :: SurfaceCallableOutcomeContinuation -> Set CallableOutcomeAtom
 continuingUsableAtoms continuation = case surfaceContinuationDisposition continuation of
   SurfaceCallableOutcomeCallerTerminates _ -> Set.empty
+  SurfaceCallableOutcomeCallerFatals _ -> Set.empty
   SurfaceCallableOutcomeCallerContinues -> Set.unions
     [ surfaceContinuationPostconditions continuation
     , surfaceContinuationAssumptions continuation
