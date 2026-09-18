@@ -33,7 +33,7 @@ Definition callableInvocationFactsb
                     (andb outcomeBranchesExact
                       (andb callerControlExact
                         (andb residualObligationsExact
-                          (andb callerResourceResidueExact lifecycleExact))))))))))))).
+                          (andb callerResourceResidueExact lifecycleExact)))))))))))).
 
 Definition decideCallableInvocation
   (surfaceAccepted semanticContractPresent exactDeclaration ordinaryNamespace
