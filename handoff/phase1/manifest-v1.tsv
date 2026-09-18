@@ -17,4 +17,9 @@ ping.stage3.round-source.v1	whole-source	handoff/phase1/ping/stage3-round.phil	s
 ping.stage4.source.v1	whole-source	handoff/phase1/ping/stage4-unbounded.phil	sha256:20bebb7db50e98ea820385521f474cf5df0d22f7952f8114c634fdaf9bb55337	matrix:INT-009
 ping.stage5.source.v1	whole-source	handoff/phase1/ping/stage5-interruptible.phil	sha256:c9be1776180714ef357fdf8a31f21370193d66191a672ac5d7d013d02fec8738	matrix:INT-009
 ping.stage5.cancel-source.v1	whole-source	handoff/phase1/ping/stage5-cancel-on-signal.phil	sha256:a9563338a49262c3307387c6e81fa10114e1afba62b2d1cf1d79a33f428872be	matrix:INT-009
+ping.stage1.verification-input.v1	verification-input	handoff/phase1/ping/stage1-verification-v1.tsv	sha256:b8e762f3285aa3ac380db9b4a7009a8d57f545b3b8bc362061faf1a78661da93	matrix:INT-008;matrix:VER-012
+ping.stage2.verification-input.v1	verification-input	handoff/phase1/ping/stage2-verification-v1.tsv	sha256:55f765fec49d826cffeff0e32e2d1775568169fc0e80a27c73ae9cd576b16a82	matrix:INT-009;matrix:VER-012
+ping.stage3.verification-input.v1	verification-input	handoff/phase1/ping/stage3-verification-v1.tsv	sha256:85b9f23ddd318f4e2c713d89fd19e07eec069b3c31a31dac4d13afe7e2fd143e	matrix:INT-009;matrix:VER-012
+ping.stage4.verification-input.v1	verification-input	handoff/phase1/ping/stage4-verification-v1.tsv	sha256:03869bee2ea996b15cb2dfab0e71503ae32a3d24182e470de9cb077d3bdd6549	matrix:INT-009;matrix:VER-012
+ping.stage5.verification-input.v1	verification-input	handoff/phase1/ping/stage5-verification-v1.tsv	sha256:1085b14c3c0187fec13312276c210f86137c8c25d64d699859e17411df27756a	matrix:INT-009;matrix:VER-012
 corpus.negative.v1	conformance-manifest	test/fixtures/phase1-negative/manifest.tsv	sha256:c7cae373d4f6c25ababb779df45316cf0c2b5401be5f7e22e8396ec65d8855ef	matrix:INT-004
