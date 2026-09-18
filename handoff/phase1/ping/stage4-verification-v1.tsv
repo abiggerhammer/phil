@@ -1,0 +1,6 @@
+PHIL-PHASE1-WHOLE-SOURCE-VERIFICATION-V1
+primary	stage4-unbounded	handoff/phase1/ping/stage4-unbounded.phil	sha256:20bebb7db50e98ea820385521f474cf5df0d22f7952f8114c634fdaf9bb55337
+architecture	architecture.BarePing	architecture.bare-ping.v1
+program	program.main
+policy	phase1.int007.ping.stage4.verification.v1
+summary	handoff/phase1/ping/stage4-unbounded-verification-bundle-v1.tsv
