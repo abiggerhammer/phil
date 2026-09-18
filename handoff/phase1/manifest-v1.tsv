@@ -1,0 +1,7 @@
+PHIL-PHASE1-HANDOFF-MANIFEST-V1
+artifact_id	artifact_kind	repository_path	sha256	governing_authority
+grammar.phase1.v1	grammar	grammar/phase1-surface.ebnf	sha256:c352ccc31cd264af42ee7408426fabea871710d4905baef22c4cc209971ac1c5	matrix:SURF-006
+corpus.surface.v1	parser-corpus	test/fixtures/phase1-surface/manifest.json	sha256:0000000000000000000000000000000000000000000000000000000000000000	matrix:SURF-002
+bundle.lineage.inline.v1	source-bundle	test/fixtures/phase1/surf010-inline.bundle	sha256:0000000000000000000000000000000000000000000000000000000000000000	matrix:SURF-010
+bundle.lineage.metadata.v1	source-bundle	test/fixtures/phase1/surf010-metadata.bundle	sha256:0000000000000000000000000000000000000000000000000000000000000000	matrix:SURF-010
+corpus.negative.v1	conformance-manifest	test/fixtures/phase1-negative/manifest.tsv	sha256:0000000000000000000000000000000000000000000000000000000000000000	matrix:INT-004
