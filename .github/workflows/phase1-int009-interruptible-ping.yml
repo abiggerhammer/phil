@@ -1,0 +1,73 @@
+name: Phase 1 INT-009 Interruptible Ping
+
+on:
+  pull_request:
+    paths:
+      - 'src/Phil/IO/SignalCancellation.hs'
+      - 'src/Phil/Surface/GrammarV1/InterruptiblePingSource.hs'
+      - 'src/Phil/Surface/GrammarV1/InterruptiblePingRuntime.hs'
+      - 'test/Phase1INT009InterruptiblePingMain.hs'
+      - '.github/workflows/phase1-int009-interruptible-ping.yml'
+  push:
+    branches: [main]
+    paths:
+      - 'src/Phil/IO/SignalCancellation.hs'
+      - 'src/Phil/Surface/GrammarV1/InterruptiblePingSource.hs'
+      - 'src/Phil/Surface/GrammarV1/InterruptiblePingRuntime.hs'
+      - 'test/Phase1INT009InterruptiblePingMain.hs'
+      - '.github/workflows/phase1-int009-interruptible-ping.yml'
+
+jobs:
+  interruptible-ping:
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+      - uses: haskell-actions/setup@v2
+        with:
+          ghc-version: '9.6.7'
+          cabal-version: 'latest'
+      - name: Build ordinary regression substrate under canonical strict warnings
+        run: cabal build all --enable-tests --ghc-options=-Werror
+      - name: Strictly typecheck INT-009 SIGINT adapter and shutdown
+        run: |
+          cabal exec -- ghc -isrc -Wall -Werror -fno-code src/Phil/IO/SignalCancellation.hs
+          cabal exec -- ghc -isrc -Wall -Werror -fno-code src/Phil/Surface/GrammarV1/InterruptiblePingSource.hs
+          cabal exec -- ghc -isrc -Wall -Werror -fno-code src/Phil/Surface/GrammarV1/InterruptiblePingRuntime.hs
+          cabal exec -- ghc -isrc -Wall -Werror -package unix -fno-code test/Phase1INT009InterruptiblePingMain.hs
+      - name: Execute checked SIGINT-adapter controls
+        run: cabal exec -- runghc -Wall -Werror -package=unix -isrc test/Phase1INT009InterruptiblePingMain.hs
+      - name: Intercept host SIGINT and reach checked Phil terminal closure
+        shell: bash
+        run: |
+          set -euo pipefail
+          cabal exec -- ghc -threaded -isrc -Wall -Werror -package unix             test/Phase1INT009InterruptiblePingMain.hs             -o /tmp/int009-interruptible-ping
+          timeout 20s bash -c '
+            set -euo pipefail
+            log=/tmp/int009-interruptible-host.log
+            /tmp/int009-interruptible-ping --host-sigint-adapter >"$log" 2>&1 &
+            pid=$!
+            ready=0
+            for _ in $(seq 1 100); do
+              if grep -q "^SIGINT_ADAPTER_READY$" "$log"; then
+                ready=1
+                break
+              fi
+              if ! kill -0 "$pid" 2>/dev/null; then
+                cat "$log"
+                echo "interruptible witness exited before SIGINT" >&2
+                exit 1
+              fi
+              sleep 0.1
+            done
+            test "$ready" -eq 1
+            grep -q "^PHIL_NONTERMINAL:NetworkCanStep$" "$log"
+            kill -INT "$pid"
+            set +e
+            wait "$pid"
+            status=$?
+            set -e
+            cat "$log"
+            test "$status" -eq 0
+            grep -q "^SIGINT_REIFIED:provider+capability+boundary+entry$" "$log"
+            grep -q "^PHIL_TERMINAL:Done$" "$log"
+          '
