@@ -1,0 +1,96 @@
+name: Phase 1 Manifest Closure Proofs
+
+on:
+  pull_request:
+    paths:
+      - 'proof/Phil/Verification/ManifestClosure.v'
+      - 'proof/Phil/Verification/ManifestClosureImplementation.v'
+      - 'proof/Phil/Verification/VerificationWorkflow.v'
+      - 'proof/Phil/Assurance/Manifest.v'
+      - 'proof/Phil/Assurance/ValidityScope.v'
+      - 'proof/Phil/Assurance/GenericAssurance.v'
+      - 'proof/Phil/Assurance/LineageAuthority.v'
+      - 'src/Phil/Verification/ManifestClosure.hs'
+      - 'test/Phase1INT002*.hs'
+      - 'test/Phase1INT001WitnessE2EMain.hs'
+      - 'test/AssuranceMain.hs'
+      - 'test/Phase1VerificationNoSilentAssumptionExportMain.hs'
+      - 'test/Phase1VerificationPolicySensitiveRuntimeClosureMain.hs'
+      - 'test/Phase1VerificationIndependentTargetMain.hs'
+      - 'docs/phase-1/manifest-closure-proof-boundary-v1.md'
+      - '.github/workflows/phase1-manifest-closure-proofs.yml'
+  push:
+    branches: [main]
+    paths:
+      - 'proof/Phil/Verification/ManifestClosure.v'
+      - 'proof/Phil/Verification/ManifestClosureImplementation.v'
+      - 'src/Phil/Verification/ManifestClosure.hs'
+      - 'test/Phase1INT002*.hs'
+      - '.github/workflows/phase1-manifest-closure-proofs.yml'
+
+permissions:
+  contents: read
+
+jobs:
+  rocq-manifest-closure-proof:
+    runs-on: ubuntu-latest
+    container:
+      image: rocq/rocq-prover:9.2.0
+      options: --user root
+    steps:
+      - uses: actions/checkout@v4
+      - name: Compile predecessor and manifest closure proofs
+        shell: bash
+        run: |
+          set -euo pipefail
+          export PATH="/home/rocq/.opam/${COMPILER}/bin:$PATH"
+          rocq c -Q proof/Phil Phil proof/Phil/Assurance/Manifest.v
+          rocq c -Q proof/Phil Phil proof/Phil/Assurance/ValidityScope.v
+          rocq c -Q proof/Phil Phil proof/Phil/Assurance/LineageAuthority.v
+          rocq c -Q proof/Phil Phil proof/Phil/Verification/VerificationWorkflow.v
+          rocq c -Q proof/Phil Phil proof/Phil/Core/GenericStructural.v
+          rocq c -Q proof/Phil Phil proof/Phil/Core/GenericRequirements.v
+          rocq c -Q proof/Phil Phil proof/Phil/Core/GenericInstantiation.v
+          rocq c -Q proof/Phil Phil proof/Phil/Assurance/GenericAssurance.v
+          rocq c -Q proof/Phil Phil proof/Phil/Verification/ManifestClosure.v
+          rocq c -Q proof/Phil Phil proof/Phil/Verification/ManifestClosureImplementation.v
+          sha256sum proof/Phil/Verification/ManifestClosure.v             proof/Phil/Verification/ManifestClosure.vo             proof/Phil/Verification/ManifestClosureImplementation.v             proof/Phil/Verification/ManifestClosureImplementation.vo             > manifest-closure-proof.sha256
+      - uses: actions/upload-artifact@v4
+        with:
+          name: manifest-closure-proof
+          path: manifest-closure-proof.sha256
+          if-no-files-found: error
+
+  verify-manifest-closure-correspondence:
+    needs: rocq-manifest-closure-proof
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: haskell-actions/setup@v2
+        with:
+          ghc-version: '9.6.7'
+          cabal-version: 'latest'
+      - name: Build complete Haskell substrate
+        run: cabal build all --enable-tests
+      - name: Strict typecheck manifest closure boundary
+        run: |
+          set -euo pipefail
+          for test_main in \
+            test/Phase1INT002ManifestClosureMain.hs \
+            test/Phase1INT002UploadManifestMain.hs \
+            test/Phase1INT002SteveManifestMain.hs
+          do
+            cabal exec -- ghc -isrc -Wall -Werror -fno-code "$test_main"
+          done
+      - name: Replay permanent INT-002 corpus
+        run: |
+          cabal exec -- runghc -isrc -Wall -Werror test/Phase1INT002ManifestClosureMain.hs
+          cabal exec -- runghc -isrc -Wall -Werror test/Phase1INT002UploadManifestMain.hs
+          cabal exec -- runghc -isrc -Wall -Werror test/Phase1INT002SteveManifestMain.hs
+          cabal exec -- runghc -isrc -Wall -Werror test/Phase1INT001WitnessE2EMain.hs
+          cabal exec -- runghc -isrc -Wall -Werror test/Phase1SteveProviderQualificationMain.hs
+          cabal exec -- runghc -isrc -Wall -Werror app/SteveProviderQualificationWitnessProductionBindingMain.hs
+          cabal exec -- runghc -isrc -Wall -Werror test/AssuranceMain.hs
+          cabal exec -- runghc -isrc -Wall -Werror test/Phase1VerificationNoSilentAssumptionExportMain.hs
+          cabal exec -- runghc -isrc -Wall -Werror test/Phase1VerificationPolicySensitiveRuntimeClosureMain.hs
+          cabal exec -- runghc -isrc -Wall -Werror test/Phase1VerificationIndependentTargetMain.hs
