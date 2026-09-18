@@ -166,6 +166,12 @@ spineCoverage manifest =
           , [HandoffMatrixAuthority "INT-009"]
           )
         )
+      , ( HandoffArtifactId "ping.stage3.round-source.v1"
+        , ( HandoffWholeSource
+          , "handoff/phase1/ping/stage3-round.phil"
+          , [HandoffMatrixAuthority "INT-009"]
+          )
+        )
       , ( HandoffArtifactId "ping.stage4.source.v1"
         , ( HandoffWholeSource
           , "handoff/phase1/ping/stage4-unbounded.phil"
