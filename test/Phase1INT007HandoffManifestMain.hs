@@ -148,6 +148,42 @@ spineCoverage manifest =
             ]
           )
         )
+      , ( HandoffArtifactId "ping.stage1.source.v1"
+        , ( HandoffWholeSource
+          , "handoff/phase1/ping/stage1-one-shot.phil"
+          , [HandoffMatrixAuthority "INT-008"]
+          )
+        )
+      , ( HandoffArtifactId "ping.stage2.source.v1"
+        , ( HandoffWholeSource
+          , "handoff/phase1/ping/stage2-request-reply.phil"
+          , [HandoffMatrixAuthority "INT-009"]
+          )
+        )
+      , ( HandoffArtifactId "ping.stage3.source.v1"
+        , ( HandoffWholeSource
+          , "handoff/phase1/ping/stage3-bounded.phil"
+          , [HandoffMatrixAuthority "INT-009"]
+          )
+        )
+      , ( HandoffArtifactId "ping.stage4.source.v1"
+        , ( HandoffWholeSource
+          , "handoff/phase1/ping/stage4-unbounded.phil"
+          , [HandoffMatrixAuthority "INT-009"]
+          )
+        )
+      , ( HandoffArtifactId "ping.stage5.source.v1"
+        , ( HandoffWholeSource
+          , "handoff/phase1/ping/stage5-interruptible.phil"
+          , [HandoffMatrixAuthority "INT-009"]
+          )
+        )
+      , ( HandoffArtifactId "ping.stage5.cancel-source.v1"
+        , ( HandoffWholeSource
+          , "handoff/phase1/ping/stage5-cancel-on-signal.phil"
+          , [HandoffMatrixAuthority "INT-009"]
+          )
+        )
       , ( HandoffArtifactId "corpus.negative.v1"
         , ( HandoffConformanceManifest
           , "test/fixtures/phase1-negative/manifest.tsv"
