@@ -1,4 +1,4 @@
-From Phil.Core Require Import ArchitectureRealization.
+From Phil.Core Require Import ArchitectureIdentity ArchitectureInstantiation ArchitectureRealization.
 From Phil.Core Require ProviderReplacementQualification.
 
 (*
