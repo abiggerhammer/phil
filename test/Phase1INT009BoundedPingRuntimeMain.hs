@@ -126,13 +126,13 @@ sourceDerivedValuesDriveRuntime = do
     authority
     ConsoleWriteSucceeded
   case boundedPingEvidenceIterations evidence of
-    [round] -> do
-      assert (boundedPingIterationRequestValue round == ScalarUIntLiteral 8 43)
+    [iteration] -> do
+      assert (boundedPingIterationRequestValue iteration == ScalarUIntLiteral 8 43)
         "bounded runtime did not use the request value extracted from source"
-      assert (boundedPingIterationReplyText round == "pong-2")
+      assert (boundedPingIterationReplyText iteration == "pong-2")
         "bounded runtime did not use the reply text extracted from source"
       assert
-        (checkedConsoleWriteRequestedText (boundedPingIterationConsoleWrite round)
+        (checkedConsoleWriteRequestedText (boundedPingIterationConsoleWrite iteration)
           == "pong-2")
         "bounded runtime output did not use the source-derived reply"
     rounds -> Left
