@@ -66,6 +66,7 @@ derivePhase1AssuranceInputs policy ledger selection = do
   mapM_ validateExport (Map.elems exports)
   mapM_ validateUse (Map.elems uses)
   validateEvidenceAssumptions evidence assumptions
+  validateNoUnusedAssumptions evidence assumptions
   validateEvidenceDependencies evidence
   validateUses uses evidence
   let selectedLedger = emptyLedger
@@ -632,6 +633,22 @@ validateEvidenceAssumptions evidence assumptions =
         Just missing -> Left (failure
           ("evidence references missing selected assumption: "
             <> unAssumptionId missing))
+
+validateNoUnusedAssumptions
+  :: Map.Map EvidenceEntryId EvidenceEntry
+  -> Map.Map AssumptionId Assumption
+  -> Either Phase1AssuranceInputsError ()
+validateNoUnusedAssumptions evidence assumptions =
+  case Set.lookupMin (Map.keysSet assumptions `Set.difference` used) of
+    Nothing -> Right ()
+    Just unused -> Left (failure
+      ("selected assumption is unused: " <> unAssumptionId unused))
+  where
+    used = Set.fromList
+      [ assumptionKey
+      | entry <- Map.elems evidence
+      , assumptionKey <- evidenceAssumptions entry
+      ]
 
 validateEvidenceDependencies
   :: Map.Map EvidenceEntryId EvidenceEntry
