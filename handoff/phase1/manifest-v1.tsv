@@ -13,6 +13,7 @@ verification.steve.bundle.v1	verification-bundle	handoff/phase1/witnesses/steve-
 ping.stage1.source.v1	whole-source	handoff/phase1/ping/stage1-one-shot.phil	sha256:6a12f4b2d90648bd4624ced4114d37b18e232db8136a207a72b146b72ce75a2f	matrix:INT-008
 ping.stage2.source.v1	whole-source	handoff/phase1/ping/stage2-request-reply.phil	sha256:95ee0135a3a21aaec234b587ae6ff5ac635f5d68a73d3c025f6b79aeb872ea0e	matrix:INT-009
 ping.stage3.source.v1	whole-source	handoff/phase1/ping/stage3-bounded.phil	sha256:00fcbd07fea16438133e26a29a3409e7abb60ef1060bc419e46d6b2ed4fe9705	matrix:INT-009
+ping.stage3.round-source.v1	whole-source	handoff/phase1/ping/stage3-round.phil	sha256:8a3abed518a91779cdbced884e563cd2ac28f5b709760b45065cdabb6e998371	matrix:INT-009
 ping.stage4.source.v1	whole-source	handoff/phase1/ping/stage4-unbounded.phil	sha256:20bebb7db50e98ea820385521f474cf5df0d22f7952f8114c634fdaf9bb55337	matrix:INT-009
 ping.stage5.source.v1	whole-source	handoff/phase1/ping/stage5-interruptible.phil	sha256:c9be1776180714ef357fdf8a31f21370193d66191a672ac5d7d013d02fec8738	matrix:INT-009
 ping.stage5.cancel-source.v1	whole-source	handoff/phase1/ping/stage5-cancel-on-signal.phil	sha256:a9563338a49262c3307387c6e81fa10114e1afba62b2d1cf1d79a33f428872be	matrix:INT-009
