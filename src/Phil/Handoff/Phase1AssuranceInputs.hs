@@ -20,7 +20,7 @@ import Data.Text (Text)
 import qualified Data.Text as Text
 import qualified Data.Text.Encoding as TextEncoding
 import Data.Word (Word8)
-import Numeric (readHex, showHex)
+import Numeric (showHex)
 import Phil.Assurance.Types
 import Phil.Core.Syntax (ObligationId (..))
 import Phil.Verification
@@ -667,32 +667,29 @@ row :: [Text] -> Text
 row = Text.intercalate "\t"
 
 hexText :: Text -> Text
-hexText = Text.concatMap hexByte . TextEncoding.decodeLatin1 . TextEncoding.encodeUtf8
+hexText value =
+  Text.pack (concatMap hexByte (ByteString.unpack (TextEncoding.encodeUtf8 value)))
   where
-    hexByte character =
-      let value = fromIntegral (fromEnum character) :: Word8
-      in Text.pack (case showHex value "" of
-          [digit] -> ['0', digit]
-          digits -> digits)
+    hexByte byte = case showHex byte "" of
+      [digit] -> ['0', digit]
+      digits -> digits
 
 decodeHex :: Int -> Text -> Either Phase1AssuranceInputsError Text
 decodeHex lineNumber raw
   | odd (Text.length raw) = Left (lineFailure lineNumber "odd-length hex text")
   | Text.any (not . lowerHex) raw = Left (lineFailure lineNumber "invalid hex text")
   | otherwise =
-      case TextEncoding.decodeUtf8' (ByteString.pack bytes) of
+      case TextEncoding.decodeUtf8' (ByteString.pack (decodeBytes (Text.unpack raw))) of
         Left _ -> Left (lineFailure lineNumber "hex text is not valid UTF-8")
         Right value -> Right value
   where
-    chunks [] = []
-    chunks (a:b:rest) = [a,b] : chunks rest
-    chunks _ = []
-    bytes =
-      [ fromIntegral value
-      | pair <- chunks (Text.unpack raw)
-      , let parsed = readHex pair
-      , (value, "") <- take 1 parsed
-      ]
+    decodeBytes [] = []
+    decodeBytes (high : low : rest) =
+      fromIntegral (hexValue high * 16 + hexValue low) : decodeBytes rest
+    decodeBytes _ = []
+    hexValue character
+      | isDigit character = fromEnum character - fromEnum '0'
+      | otherwise = 10 + fromEnum character - fromEnum 'a'
     lowerHex character =
       isDigit character || (character >= 'a' && character <= 'f')
 
