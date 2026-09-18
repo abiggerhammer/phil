@@ -1,0 +1,17 @@
+component ClientRound(endpoint : Client[PingCount], count : U32) {
+  loop state (currentEndpoint = endpoint, remaining : U32 = count) {
+    let selected = select Ping on currentEndpoint;
+    let awaiting = send 42 on selected;
+    let (nextEndpoint, reply) = receive String on awaiting;
+    let writeDecision = console_write(reply);
+    let nextRemaining = remaining - 1;
+    continue (nextEndpoint, nextRemaining);
+  };
+}
+component ServerRound(endpoint : Server[PingCount]) {
+  loop state (currentEndpoint = endpoint) {
+    let (replyEndpoint, request) = receive U8 on currentEndpoint;
+    let nextEndpoint = send "pong" on replyEndpoint;
+    continue (nextEndpoint);
+  };
+}
