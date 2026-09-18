@@ -190,6 +190,46 @@ spineCoverage manifest =
           , [HandoffMatrixAuthority "INT-009"]
           )
         )
+      , ( HandoffArtifactId "ping.stage1.verification-input.v1"
+        , ( HandoffVerificationInput
+          , "handoff/phase1/ping/stage1-verification-v1.tsv"
+          , [ HandoffMatrixAuthority "INT-008"
+            , HandoffMatrixAuthority "VER-012"
+            ]
+          )
+        )
+      , ( HandoffArtifactId "ping.stage2.verification-input.v1"
+        , ( HandoffVerificationInput
+          , "handoff/phase1/ping/stage2-verification-v1.tsv"
+          , [ HandoffMatrixAuthority "INT-009"
+            , HandoffMatrixAuthority "VER-012"
+            ]
+          )
+        )
+      , ( HandoffArtifactId "ping.stage3.verification-input.v1"
+        , ( HandoffVerificationInput
+          , "handoff/phase1/ping/stage3-verification-v1.tsv"
+          , [ HandoffMatrixAuthority "INT-009"
+            , HandoffMatrixAuthority "VER-012"
+            ]
+          )
+        )
+      , ( HandoffArtifactId "ping.stage4.verification-input.v1"
+        , ( HandoffVerificationInput
+          , "handoff/phase1/ping/stage4-verification-v1.tsv"
+          , [ HandoffMatrixAuthority "INT-009"
+            , HandoffMatrixAuthority "VER-012"
+            ]
+          )
+        )
+      , ( HandoffArtifactId "ping.stage5.verification-input.v1"
+        , ( HandoffVerificationInput
+          , "handoff/phase1/ping/stage5-verification-v1.tsv"
+          , [ HandoffMatrixAuthority "INT-009"
+            , HandoffMatrixAuthority "VER-012"
+            ]
+          )
+        )
       , ( HandoffArtifactId "corpus.negative.v1"
         , ( HandoffConformanceManifest
           , "test/fixtures/phase1-negative/manifest.tsv"
