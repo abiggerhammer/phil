@@ -96,6 +96,7 @@ library
       Phil.Assurance.RocqExactReceive
       Phil.Assurance.RocqDigestValidation
       Phil.Assurance.RocqStorage
+      Phil.Verification.Bundle
       Phil.Systems.IR
       Phil.Systems.Verify
       Phil.Systems.Phase0
