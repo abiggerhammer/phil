@@ -1,0 +1,122 @@
+name: Phase 1 Surface Elaboration Authority Proofs
+
+on:
+  pull_request:
+    paths:
+      - 'proof/Phil/Surface/ElaborationAuthority.v'
+      - 'proof/Phil/Surface/ElaborationAuthorityImplementation.v'
+      - 'src/Phil/Surface/GrammarV1/**'
+      - 'src/Phil/Surface/Lineage.hs'
+      - 'test/Phase1GrammarV1*.hs'
+      - 'test/Phase1PortableSourceLineageMain.hs'
+      - 'docs/phase-1/surface-elaboration-authority-proof-boundary-v1.md'
+      - '.github/workflows/phase1-surface-elaboration-authority-proofs.yml'
+  push:
+    branches: [main]
+    paths:
+      - 'proof/Phil/Surface/ElaborationAuthority.v'
+      - 'proof/Phil/Surface/ElaborationAuthorityImplementation.v'
+      - 'src/Phil/Surface/GrammarV1/**'
+      - 'src/Phil/Surface/Lineage.hs'
+      - 'test/Phase1GrammarV1*.hs'
+      - 'test/Phase1PortableSourceLineageMain.hs'
+      - '.github/workflows/phase1-surface-elaboration-authority-proofs.yml'
+
+permissions:
+  contents: read
+
+jobs:
+  rocq-surface-elaboration-authority:
+    runs-on: ubuntu-latest
+    container:
+      image: rocq/rocq-prover:9.2.0
+      options: --user root
+    steps:
+      - uses: actions/checkout@v4
+      - name: Compile PHIL-SURFACE-ELAB-001 aggregate proofs
+        shell: bash
+        run: |
+          set -euo pipefail
+          export PATH="/home/rocq/.opam/${COMPILER}/bin:$PATH"
+          rocq c -Q proof/Phil Phil proof/Phil/Surface/ElaborationAuthority.v
+          rocq c -Q proof/Phil Phil proof/Phil/Surface/ElaborationAuthorityImplementation.v
+          sha256sum \
+            proof/Phil/Surface/ElaborationAuthority.v \
+            proof/Phil/Surface/ElaborationAuthority.vo \
+            proof/Phil/Surface/ElaborationAuthorityImplementation.v \
+            proof/Phil/Surface/ElaborationAuthorityImplementation.vo \
+            > surface-elaboration-authority-proof.sha256
+          cat surface-elaboration-authority-proof.sha256
+      - uses: actions/upload-artifact@v4
+        with:
+          name: surface-elaboration-authority-proof
+          path: surface-elaboration-authority-proof.sha256
+          if-no-files-found: error
+
+  verify-surface-elaboration-authority:
+    needs: rocq-surface-elaboration-authority
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: haskell-actions/setup@v2
+        with:
+          ghc-version: '9.6.7'
+          cabal-version: 'latest'
+      - name: Build complete Haskell substrate
+        run: cabal build all --enable-tests
+      - name: Strict typecheck and replay established SURF-008 authority corpus
+        shell: bash
+        run: |
+          set -euo pipefail
+          harnesses=(
+            test/Phase1GrammarV1StaticKindElaborationMain.hs
+            test/Phase1GrammarV1StructuralModeElaborationMain.hs
+            test/Phase1GrammarV1RelationElaborationMain.hs
+            test/Phase1GrammarV1IntrinsicRelationElaborationMain.hs
+            test/Phase1GrammarV1IntrinsicPropositionCompositionMain.hs
+            test/Phase1GrammarV1LogicalPropositionElaborationMain.hs
+            test/Phase1GrammarV1LogicalProofTypeElaborationMain.hs
+            test/Phase1GrammarV1IntrinsicProofTypeCompositionMain.hs
+            test/Phase1GrammarV1IntrinsicTypeCompositionMain.hs
+            test/Phase1GrammarV1IntrinsicRefinementTypeElaborationMain.hs
+            test/Phase1GrammarV1BareFrameTypeElaborationMain.hs
+            test/Phase1GrammarV1BareNamedTypeElaborationMain.hs
+            test/Phase1GrammarV1BareValidatedTypeElaborationMain.hs
+            test/Phase1GrammarV1IntrinsicClaimApplicationElaborationMain.hs
+            test/Phase1GrammarV1PrimitiveTypeElaborationMain.hs
+            test/Phase1GrammarV1IntrinsicRefLiteralElaborationMain.hs
+            test/Phase1GrammarV1BoundSimpleReferenceElaborationMain.hs
+            test/Phase1GrammarV1BoundRefExpressionCompositionMain.hs
+            test/Phase1GrammarV1BoundBytesTypeElaborationMain.hs
+            test/Phase1GrammarV1IntrinsicBytesTypeElaborationMain.hs
+            test/Phase1GrammarV1GenericRequirementElaborationMain.hs
+            test/Phase1GrammarV1FunctionHeaderMain.hs
+            test/Phase1GrammarV1SemanticComponentHeaderMain.hs
+            test/Phase1GrammarV1CallableContractMain.hs
+            test/Phase1GrammarV1CallableOutcomeStateMain.hs
+            test/Phase1GrammarV1CalleeTransitionElaborationMain.hs
+            test/Phase1GrammarV1CallableEffectsMain.hs
+            test/Phase1GrammarV1ProviderDeclarationsMain.hs
+            test/Phase1GrammarV1OpaqueProviderImplementationMain.hs
+            test/Phase1GrammarV1CheckedTypeAliasMain.hs
+            test/Phase1GrammarV1CheckedRecordFieldsMain.hs
+            test/Phase1GrammarV1CheckedDataVariantsMain.hs
+            test/Phase1GrammarV1CheckedDataModeCompositionMain.hs
+            test/Phase1GrammarV1SpecializedStaticReferenceMain.hs
+            test/Phase1GrammarV1SessionExpressionsMain.hs
+            test/Phase1GrammarV1ProtocolRoleTemplatesMain.hs
+            test/Phase1GrammarV1ProtocolBoundaryAnnotationsMain.hs
+            test/Phase1GrammarV1ProtocolBoundaryCompositionMain.hs
+            test/Phase1GrammarV1ProtocolGuardAnnotationsMain.hs
+            test/Phase1GrammarV1BoundaryStaticReferenceMain.hs
+            test/Phase1GrammarV1BoundaryCodecReferenceElaborationMain.hs
+            test/Phase1GrammarV1ProgramSurfaceMain.hs
+            test/Phase1GrammarV1ArchitectureSurfaceMain.hs
+            test/Phase1GrammarV1StaticProcessNetworkMain.hs
+            test/Phase1GrammarV1ExternalProtocolParticipantMain.hs
+            test/Phase1PortableSourceLineageMain.hs
+          )
+          for harness in "${harnesses[@]}"; do
+            cabal exec -- ghc -isrc -Wall -Werror -fno-code "$harness"
+            cabal exec -- runghc -isrc -Wall -Werror "$harness"
+          done
