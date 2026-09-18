@@ -33,6 +33,7 @@ Record InvocationResolutionFacts : Type := mkInvocationResolutionFacts {
   invocationSurfaceAccepted : bool;
   invocationResolvedDeclaration : InvocationDeclarationKey;
   invocationSemanticContractDeclaration : InvocationDeclarationKey;
+  invocationSemanticContractPresent : bool;
   invocationOrdinaryCallableNamespace : bool
 }.
 
@@ -42,6 +43,7 @@ Definition InvocationResolutionValid
   invocationResolvedDeclaration resolution <> 0 /\
   invocationResolvedDeclaration resolution =
     invocationSemanticContractDeclaration resolution /\
+  invocationSemanticContractPresent resolution = true /\
   invocationOrdinaryCallableNamespace resolution = true.
 
 Definition InvocationAuthorityRequirementSet : Type :=
@@ -232,6 +234,17 @@ Proof.
   exact (proj1 (proj2 (proj2 Hresolution))).
 Qed.
 
+Theorem accepted_invocation_has_exact_semantic_contract :
+  forall facts,
+    CallableInvocationValid facts ->
+    invocationSemanticContractPresent
+      (callableInvocationResolution facts) = true.
+Proof.
+  intros facts Hvalid.
+  destruct Hvalid as [Hresolution _].
+  exact (proj1 (proj2 (proj2 (proj2 Hresolution)))).
+Qed.
+
 Theorem accepted_invocation_is_ordinary_callable_namespace :
   forall facts,
     CallableInvocationValid facts ->
@@ -240,7 +253,7 @@ Theorem accepted_invocation_is_ordinary_callable_namespace :
 Proof.
   intros facts Hvalid.
   destruct Hvalid as [Hresolution _].
-  exact (proj2 (proj2 (proj2 Hresolution))).
+  exact (proj2 (proj2 (proj2 (proj2 Hresolution)))).
 Qed.
 
 Theorem accepted_invocation_authority_is_possession_backed :
