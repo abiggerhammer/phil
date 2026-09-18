@@ -232,8 +232,8 @@ Theorem mapped_partiality_requires_declared_source_outcome :
       (RuntimePartialityMapsToSourceOutcome outcome) ->
     outcome <> 0 /\ sourceOutcomes outcome = true.
 Proof.
-  intros.
-  exact H.
+  intros precondition fact sourceOutcomes assuranceRevisions outcome Hvalid.
+  exact Hvalid.
 Qed.
 
 Theorem proved_partiality_requires_exact_admitted_assurance :
@@ -246,8 +246,8 @@ Theorem proved_partiality_requires_exact_admitted_assurance :
     strengtheningSourceAssuranceKnown fact = true /\
     assuranceRevisions precondition revision = true.
 Proof.
-  intros.
-  exact H.
+  intros precondition fact sourceOutcomes assuranceRevisions revision Hvalid.
+  exact Hvalid.
 Qed.
 
 Theorem runtime_enforcement_requires_retained_realization_obligation :
@@ -257,8 +257,8 @@ Theorem runtime_enforcement_requires_retained_realization_obligation :
       (RuntimePartialityRuntimeEnforced key) ->
     key <> 0 /\ RetainedDerivedRealizationObligation fact.
 Proof.
-  intros.
-  exact H.
+  intros precondition fact sourceOutcomes assuranceRevisions key Hvalid.
+  exact Hvalid.
 Qed.
 
 Theorem assumption_requires_retained_realization_obligation :
@@ -268,8 +268,8 @@ Theorem assumption_requires_retained_realization_obligation :
       (RuntimePartialityAssumption key) ->
     key <> 0 /\ RetainedDerivedRealizationObligation fact.
 Proof.
-  intros.
-  exact H.
+  intros precondition fact sourceOutcomes assuranceRevisions key Hvalid.
+  exact Hvalid.
 Qed.
 
 Theorem deployment_requirement_requires_retained_realization_obligation :
@@ -279,8 +279,8 @@ Theorem deployment_requirement_requires_retained_realization_obligation :
       (RuntimePartialityDeploymentRequirement key) ->
     key <> 0 /\ RetainedDerivedRealizationObligation fact.
 Proof.
-  intros.
-  exact H.
+  intros precondition fact sourceOutcomes assuranceRevisions key Hvalid.
+  exact Hvalid.
 Qed.
 
 Theorem retained_partiality_obligation_keeps_exact_target_introducer :
