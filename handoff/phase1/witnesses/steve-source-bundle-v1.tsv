@@ -1,0 +1,6 @@
+PHIL-PHASE1-WITNESS-SOURCE-BUNDLE-V1
+grammar	sha256:c352ccc31cd264af42ee7408426fabea871710d4905baef22c4cc209971ac1c5
+root	program:steve
+unit	unit.steve.put	site.steve.put	decl:steve.put	examples/steve/put.phil	sha256:e0717a27b274b4ffd8030c26de8418aca1d9d668f4ed13fccc58791eab3c92f4
+unit	unit.steve.get	site.steve.get	decl:steve.get	examples/steve/get.phil	sha256:5ba68f34f55dd0f30d61c5d99b87e50daeec30d6e59b3454ffc8640843f376c9
+instance	instance.steve	inst:phase1.steve
