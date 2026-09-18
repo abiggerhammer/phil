@@ -10,6 +10,7 @@ import Phil.Compiler.CallableInvocationSemantics
   )
 import Phil.Compiler.CallableOutcomeDispatch
   ( SurfaceCallableOutcomeBinding (..)
+  , SurfaceCallableOutcomeDispatchError (..)
   , installSurfaceCallableOutcomeDispatch
   , planSurfaceCallableOutcomeDispatch
   )
