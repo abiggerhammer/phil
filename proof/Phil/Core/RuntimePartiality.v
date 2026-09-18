@@ -301,13 +301,13 @@ Theorem certified_allocation_failure_has_explicit_disposition :
     (exists failure,
       disposition = StorageFailureMapsToSource failure /\
       failure <> 0 /\
-      sourceFailureContains failure surface = true) /
+      sourceFailureContains failure surface = true) \/
     (exists evidence,
       disposition = StorageFailureProvedUnreachable evidence /\
-      evidence <> 0) /
+      evidence <> 0) \/
     (exists assumption,
       disposition = StorageFailureAssumption assumption /\
-      assumption <> 0) /
+      assumption <> 0) \/
     (exists requirement,
       disposition = StorageFailureDeploymentRequirement requirement /\
       requirement <> 0).
