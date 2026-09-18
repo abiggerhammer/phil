@@ -33,6 +33,7 @@ data HandoffArtifactKind
   = HandoffGrammar
   | HandoffParserCorpus
   | HandoffSourceBundle
+  | HandoffWholeSource
   | HandoffCheckedSemantics
   | HandoffArchitectureInstance
   | HandoffVerificationBundle
@@ -171,6 +172,7 @@ parseKind lineNumber raw =
       [ ("grammar", HandoffGrammar)
       , ("parser-corpus", HandoffParserCorpus)
       , ("source-bundle", HandoffSourceBundle)
+      , ("whole-source", HandoffWholeSource)
       , ("checked-semantics", HandoffCheckedSemantics)
       , ("architecture-instance", HandoffArchitectureInstance)
       , ("verification-bundle", HandoffVerificationBundle)
