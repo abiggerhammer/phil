@@ -19,6 +19,8 @@ jobs:
         with:
           ghc-version: '9.6.7'
           cabal-version: 'latest'
+      - name: Build verification handoff substrate
+        run: cabal build lib:phil-core --ghc-options=-Werror
       - name: Strictly typecheck verification handoff
         run: |
           cabal exec -- ghc -isrc -Wall -Werror -fno-code src/Phil/Handoff/Phase1VerificationBundle.hs
