@@ -1,0 +1,223 @@
+name: Phase 1 Callable Invocation Proofs
+
+on:
+  pull_request:
+    paths:
+      - 'proof/Phil/Core/CallableInvocation.v'
+      - 'proof/Phil/Core/CallableInvocationImplementation.v'
+      - 'proof/Phil/Core/GenericStructural.v'
+      - 'proof/Phil/Core/AuthorityPossession.v'
+      - 'proof/Phil/Core/CallableMode.v'
+      - 'proof/Phil/Core/CallableEffects.v'
+      - 'proof/Phil/Core/CallableLifecycle.v'
+      - 'proof/Phil/Core/CallableRefinement.v'
+      - 'proof/Phil/Core/CallableOutcomeFidelity.v'
+      - 'src/Phil/Compiler/CallableSurfaceSemantics.hs'
+      - 'src/Phil/Compiler/CallableInvocationSemantics.hs'
+      - 'src/Phil/Compiler/CallableAuthorityPossession.hs'
+      - 'src/Phil/Compiler/CallableInvocationLifecycle.hs'
+      - 'src/Phil/Compiler/CallableInvocationContext.hs'
+      - 'src/Phil/Compiler/CallableOutcomeDispatch.hs'
+      - 'src/Phil/Compiler/CallableOutcomeBranchSemantics.hs'
+      - 'src/Phil/Compiler/CallableOutcomeContinuation.hs'
+      - 'src/Phil/Compiler/CallableOutcomeBranchFacts.hs'
+      - 'src/Phil/Compiler/CallableOutcomeBranchResidue.hs'
+      - 'src/Phil/Compiler/CallableOutcomeBranchResources.hs'
+      - 'src/Phil/Compiler/CallableOutcomeBranchResourceApply.hs'
+      - 'src/Phil/Compiler/CallableOutcomeBranchResourceInstall.hs'
+      - 'src/Phil/Surface/Check.hs'
+      - 'src/Phil/Surface/Check/Types.hs'
+      - 'src/Phil/Surface/Check/Engine.hs'
+      - 'test/Phase1CALL019*.hs'
+      - 'docs/phase-1/callable-invocation-proof-boundary-v1.md'
+      - '.github/workflows/phase1-callable-invocation-proofs.yml'
+  push:
+    branches: [main]
+    paths:
+      - 'proof/Phil/Core/CallableInvocation.v'
+      - 'proof/Phil/Core/CallableInvocationImplementation.v'
+      - 'proof/Phil/Core/GenericStructural.v'
+      - 'proof/Phil/Core/AuthorityPossession.v'
+      - 'proof/Phil/Core/CallableMode.v'
+      - 'proof/Phil/Core/CallableEffects.v'
+      - 'proof/Phil/Core/CallableLifecycle.v'
+      - 'proof/Phil/Core/CallableRefinement.v'
+      - 'proof/Phil/Core/CallableOutcomeFidelity.v'
+      - 'src/Phil/Compiler/CallableSurfaceSemantics.hs'
+      - 'src/Phil/Compiler/CallableInvocationSemantics.hs'
+      - 'src/Phil/Compiler/CallableAuthorityPossession.hs'
+      - 'src/Phil/Compiler/CallableInvocationLifecycle.hs'
+      - 'src/Phil/Compiler/CallableInvocationContext.hs'
+      - 'src/Phil/Compiler/CallableOutcomeDispatch.hs'
+      - 'src/Phil/Compiler/CallableOutcomeBranchSemantics.hs'
+      - 'src/Phil/Compiler/CallableOutcomeContinuation.hs'
+      - 'src/Phil/Compiler/CallableOutcomeBranchFacts.hs'
+      - 'src/Phil/Compiler/CallableOutcomeBranchResidue.hs'
+      - 'src/Phil/Compiler/CallableOutcomeBranchResources.hs'
+      - 'src/Phil/Compiler/CallableOutcomeBranchResourceApply.hs'
+      - 'src/Phil/Compiler/CallableOutcomeBranchResourceInstall.hs'
+      - 'src/Phil/Surface/Check.hs'
+      - 'src/Phil/Surface/Check/Types.hs'
+      - 'src/Phil/Surface/Check/Engine.hs'
+      - 'test/Phase1CALL019*.hs'
+      - 'docs/phase-1/callable-invocation-proof-boundary-v1.md'
+      - '.github/workflows/phase1-callable-invocation-proofs.yml'
+
+permissions:
+  contents: read
+
+jobs:
+  rocq-callable-invocation-proof:
+    runs-on: ubuntu-latest
+    container:
+      image: rocq/rocq-prover:9.2.0
+      options: --user root
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Compile Certified predecessors and PHIL-CALL-INVOKE-001
+        shell: bash
+        run: |
+          set -euo pipefail
+          export PATH="/home/rocq/.opam/${COMPILER}/bin:$PATH"
+          rocq c -Q proof/Phil Phil proof/Phil/Core/GenericStructural.v
+          rocq c -Q proof/Phil Phil proof/Phil/Core/AuthorityPossession.v
+          rocq c -Q proof/Phil Phil proof/Phil/Core/CallableMode.v
+          rocq c -Q proof/Phil Phil proof/Phil/Core/CallableEffects.v
+          rocq c -Q proof/Phil Phil proof/Phil/Core/CallableLifecycle.v
+          rocq c -Q proof/Phil Phil proof/Phil/Core/CallableRefinement.v
+          rocq c -Q proof/Phil Phil proof/Phil/Core/CallableOutcomeFidelity.v
+          rocq c -Q proof/Phil Phil proof/Phil/Core/CallableInvocation.v
+          rocq c -Q proof/Phil Phil proof/Phil/Core/CallableInvocationImplementation.v
+
+      - name: Record checked proof identities
+        shell: bash
+        run: |
+          set -euo pipefail
+          sha256sum \
+            proof/Phil/Core/AuthorityPossession.v \
+            proof/Phil/Core/CallableMode.v \
+            proof/Phil/Core/CallableEffects.v \
+            proof/Phil/Core/CallableLifecycle.v \
+            proof/Phil/Core/CallableRefinement.v \
+            proof/Phil/Core/CallableOutcomeFidelity.v \
+            proof/Phil/Core/CallableInvocation.v \
+            proof/Phil/Core/CallableInvocation.vo \
+            proof/Phil/Core/CallableInvocationImplementation.v \
+            proof/Phil/Core/CallableInvocationImplementation.vo \
+            > callable-invocation-proof.sha256
+          cat callable-invocation-proof.sha256
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: callable-invocation-proof
+          path: callable-invocation-proof.sha256
+
+  verify-callable-invocation-correspondence:
+    needs: rocq-callable-invocation-proof
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: haskell-actions/setup@v2
+        with:
+          ghc-version: '9.6.7'
+          cabal-version: 'latest'
+
+      - name: Build complete Haskell substrate
+        run: cabal build all --enable-tests
+
+      - name: Strict typecheck CALL-019 production composition
+        run: |
+          set -euo pipefail
+          for module in \
+            src/Phil/Compiler/CallableSurfaceSemantics.hs \
+            src/Phil/Compiler/CallableInvocationSemantics.hs \
+            src/Phil/Compiler/CallableAuthorityPossession.hs \
+            src/Phil/Compiler/CallableInvocationLifecycle.hs \
+            src/Phil/Compiler/CallableInvocationContext.hs \
+            src/Phil/Compiler/CallableOutcomeDispatch.hs \
+            src/Phil/Compiler/CallableOutcomeBranchSemantics.hs \
+            src/Phil/Compiler/CallableOutcomeContinuation.hs \
+            src/Phil/Compiler/CallableOutcomeBranchFacts.hs \
+            src/Phil/Compiler/CallableOutcomeBranchResidue.hs \
+            src/Phil/Compiler/CallableOutcomeBranchResources.hs \
+            src/Phil/Compiler/CallableOutcomeBranchResourceApply.hs \
+            src/Phil/Compiler/CallableOutcomeBranchResourceInstall.hs \
+            src/Phil/Surface/Check.hs \
+            src/Phil/Surface/Check/Types.hs \
+            src/Phil/Surface/Check/Engine.hs
+          do
+            cabal exec -- ghc -isrc -Wall -Werror -fno-code "$module"
+          done
+
+      - name: Strict typecheck focused CALL-019 regressions
+        run: |
+          set -euo pipefail
+          for test_main in \
+            test/Phase1CALL019AuthorityPossessionMain.hs \
+            test/Phase1CALL019BranchAwareInvocationContextMain.hs \
+            test/Phase1CALL019BranchResidueJoinMain.hs \
+            test/Phase1CALL019CallableResolutionMain.hs \
+            test/Phase1CALL019InvocationContextMain.hs \
+            test/Phase1CALL019InvocationLifecycleMain.hs \
+            test/Phase1CALL019InvocationSemanticAccountMain.hs \
+            test/Phase1CALL019InvokeSurfaceMain.hs \
+            test/Phase1CALL019InvokeSyntaxMain.hs \
+            test/Phase1CALL019LifecycleAwareInvocationContextMain.hs \
+            test/Phase1CALL019OutcomeBranchFactsMain.hs \
+            test/Phase1CALL019OutcomeBranchResourceApplyMain.hs \
+            test/Phase1CALL019OutcomeBranchResourceInstallMain.hs \
+            test/Phase1CALL019OutcomeBranchResourcesMain.hs \
+            test/Phase1CALL019OutcomeBranchSemanticWitnessMain.hs \
+            test/Phase1CALL019OutcomeContinuationStateMain.hs \
+            test/Phase1CALL019OutcomeControlBoundaryMain.hs \
+            test/Phase1CALL019OutcomeDispatchMain.hs \
+            test/Phase1CALL019SurfaceArmProofBindingsMain.hs \
+            test/Phase1CALL019SurfaceArmResourceResidueMain.hs \
+            test/Phase1CALL019SurfaceDecisionBridgeMain.hs
+          do
+            cabal exec -- ghc -isrc -Wall -Werror -fno-code "$test_main"
+          done
+
+      - name: Replay complete focused CALL-019 corpus
+        run: |
+          set -euo pipefail
+          for test_main in \
+            test/Phase1CALL019AuthorityPossessionMain.hs \
+            test/Phase1CALL019BranchAwareInvocationContextMain.hs \
+            test/Phase1CALL019BranchResidueJoinMain.hs \
+            test/Phase1CALL019CallableResolutionMain.hs \
+            test/Phase1CALL019InvocationContextMain.hs \
+            test/Phase1CALL019InvocationLifecycleMain.hs \
+            test/Phase1CALL019InvocationSemanticAccountMain.hs \
+            test/Phase1CALL019InvokeSurfaceMain.hs \
+            test/Phase1CALL019InvokeSyntaxMain.hs \
+            test/Phase1CALL019LifecycleAwareInvocationContextMain.hs \
+            test/Phase1CALL019OutcomeBranchFactsMain.hs \
+            test/Phase1CALL019OutcomeBranchResourceApplyMain.hs \
+            test/Phase1CALL019OutcomeBranchResourceInstallMain.hs \
+            test/Phase1CALL019OutcomeBranchResourcesMain.hs \
+            test/Phase1CALL019OutcomeBranchSemanticWitnessMain.hs \
+            test/Phase1CALL019OutcomeContinuationStateMain.hs \
+            test/Phase1CALL019OutcomeControlBoundaryMain.hs \
+            test/Phase1CALL019OutcomeDispatchMain.hs \
+            test/Phase1CALL019SurfaceArmProofBindingsMain.hs \
+            test/Phase1CALL019SurfaceArmResourceResidueMain.hs \
+            test/Phase1CALL019SurfaceDecisionBridgeMain.hs
+          do
+            cabal exec -- runghc -isrc -Wall -Werror "$test_main"
+          done
+
+      - name: Re-run callable predecessor controls
+        run: |
+          set -euo pipefail
+          cabal exec -- runghc -isrc test/Phase1CallableCaptureEffectsMain.hs
+          cabal exec -- runghc -isrc test/Phase1CallableEffectBoundMain.hs
+          cabal exec -- runghc -isrc test/Phase1CallableTransitionsMain.hs
+          cabal exec -- runghc -isrc test/Phase1CallableRefinementMain.hs
+          cabal exec -- runghc -isrc test/Phase1CallableOutcomeFidelityMain.hs
+          cabal exec -- runghc -isrc test/Phase1AuthorityPossessionMain.hs
+
+      - name: Run decision and assurance controls
+        run: cabal test phil-decision-tests phil-assurance-tests
