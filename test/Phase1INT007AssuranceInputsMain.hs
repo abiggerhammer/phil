@@ -4,6 +4,7 @@ module Main (main) where
 
 import qualified Data.Map.Strict as Map
 import qualified Data.Set as Set
+import qualified Data.Set as Set
 import qualified Data.Text.IO as TextIO
 import Phil.Assurance.Types
 import Phil.Handoff.Phase1AssuranceInputs
@@ -18,7 +19,10 @@ import Phil.Test.Phase1.ManifestWitnesses
   )
 import Phil.Verification
   ( ApplicationAssurancePolicy (..)
+  , AssurancePolicyRevision (..)
+  , VerificationDisposition (..)
   )
+import Phil.Verification.ManifestClosure (ManifestClosureSelection (..))
 import Phil.Verification.Bundle
   ( AcceptedEvidenceReference (..)
   , VerificationBundle (..)
@@ -130,51 +134,84 @@ bundleEvidenceMatches inputs bundle =
 
 evidenceDigestDriftRejects :: Either String ()
 evidenceDigestDriftRejects =
-  expectDecodeFailure $ sampleEvidenceFile
-    "sha256:0000000000000000000000000000000000000000000000000000000000000000"
-    ["static"]
+  expectDecodeFailure
+    (Text.replace validDigestToken zeroDigestToken validSampleFile)
 
 unpermittedDispositionRejects :: Either String ()
 unpermittedDispositionRejects =
-  expectDecodeFailure $ sampleEvidenceFile validEvidenceDigest []
+  expectDecodeFailure
+    (Text.replace "permit\tstatic\n" "" validSampleFile)
 
 malformedHexRejects :: Either String ()
 malformedHexRejects =
-  expectDecodeFailure $ TextIOErrorPlaceholder
+  expectDecodeFailure $ Text.unlines
+    [ phase1AssuranceInputsFormatV1
+    , "policy\tzz"
+    ]
 
-sampleEvidenceFile :: String -> [String] -> Text.Text
-sampleEvidenceFile digest permits = Text.unlines $
-  [ phase1AssuranceInputsFormatV1
-  , "policy\t706f6c6963792e74657374"
-  ]
-  <> map (Text.pack . ("permit\t" <>)) permits
-  <> [ "require\tstatic"
-     , Text.intercalate "\t"
-        [ "evidence"
-        , "65766964656e63652e74657374"
-        , Text.pack digest
-        , "7265762e74657374"
-        , "kernel"
-        , "65737461626c6973686573"
-        , "70726f6475636572"
-        , "636865636b6572"
-        ]
-     ]
+validSampleFile :: Text.Text
+validSampleFile =
+  case derivePhase1AssuranceInputs samplePolicy sampleLedger sampleSelection of
+    Left errorValue -> error ("invalid assurance-input test fixture: " <> show errorValue)
+    Right value -> renderPhase1AssuranceInputs value
 
-validEvidenceDigest :: String
-validEvidenceDigest =
-  "sha256:4e0911b54b7246253e09e6633cf4baf81410315c49d286118fd9a39498d6bd07"
+samplePolicy :: ApplicationAssurancePolicy
+samplePolicy = ApplicationAssurancePolicy
+  { applicationAssurancePolicyRevision = AssurancePolicyRevision "policy.test"
+  , applicationAssurancePolicyPermittedDispositions =
+      Set.singleton StaticallyDischarged
+  }
+
+sampleLedger :: AssuranceLedger
+sampleLedger = emptyLedger
+  { ledgerEvidence = Map.singleton sampleEvidenceId sampleEvidence
+  }
+
+sampleSelection :: ManifestClosureSelection
+sampleSelection = ManifestClosureSelection
+  { manifestClosureEvidence = Set.singleton sampleEvidenceId
+  , manifestClosureAssumptions = Set.empty
+  , manifestClosureExports = Map.empty
+  , manifestClosureUses = Set.empty
+  }
+
+sampleEvidenceId :: EvidenceEntryId
+sampleEvidenceId = EvidenceEntryId "evidence.test"
+
+sampleEvidence :: EvidenceEntry
+sampleEvidence = provisional
+  { evidenceEntryDigest = deriveEvidenceEntryDigest provisional }
+  where
+    provisional = EvidenceEntry
+      { evidenceEntryId = sampleEvidenceId
+      , evidenceEntryDigest = Digest ""
+      , evidenceObligationRevision = RevisionId "rev.test"
+      , evidenceAssuranceKind = KernelChecked
+      , evidenceRole = EvidenceRole "establishes"
+      , evidenceProducer = "producer"
+      , evidenceChecker = "checker"
+      , evidenceArtifact = Nothing
+      , evidenceInputDigests = []
+      , evidenceAssumptions = []
+      , evidenceDependsOn = []
+      , evidenceValidityScope = ValidityScope Map.empty
+      , evidenceResult = EvidenceAccepted
+      , evidenceJustifies = []
+      , evidenceRuntimeMechanism = Nothing
+      , evidenceRuntimeResidue = []
+      , evidenceCostRefs = []
+      }
+
+validDigestToken :: Text.Text
+validDigestToken = "sha256:" <> unDigest (evidenceEntryDigest sampleEvidence)
+
+zeroDigestToken :: Text.Text
+zeroDigestToken = "sha256:" <> Text.replicate 64 "0"
 
 expectDecodeFailure :: Text.Text -> Either String ()
 expectDecodeFailure source = case decodePhase1AssuranceInputs source of
   Left _ -> Right ()
   Right value -> Left ("expected assurance-input rejection, decoded: " <> show value)
-
-TextIOErrorPlaceholder :: Text.Text
-TextIOErrorPlaceholder = Text.unlines
-  [ phase1AssuranceInputsFormatV1
-  , "policy\tzz"
-  ]
 
 test :: String -> Either String () -> IO Bool
 test label result = case result of
