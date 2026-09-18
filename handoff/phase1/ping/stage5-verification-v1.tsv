@@ -1,0 +1,7 @@
+PHIL-PHASE1-WHOLE-SOURCE-VERIFICATION-V1
+primary	stage5-interruptible	handoff/phase1/ping/stage5-interruptible.phil	sha256:c9be1776180714ef357fdf8a31f21370193d66191a672ac5d7d013d02fec8738
+supplemental	cancel-on-signal	handoff/phase1/ping/stage5-cancel-on-signal.phil	sha256:a9563338a49262c3307387c6e81fa10114e1afba62b2d1cf1d79a33f428872be
+architecture	architecture.InterruptiblePing	architecture.interruptible-ping.v1
+program	program.main
+policy	phase1.int007.ping.stage5.verification.v1
+summary	handoff/phase1/ping/stage5-interruptible-verification-bundle-v1.tsv

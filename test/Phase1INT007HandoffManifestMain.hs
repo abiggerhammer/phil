@@ -148,6 +148,128 @@ spineCoverage manifest =
             ]
           )
         )
+      , ( HandoffArtifactId "ping.stage1.source.v1"
+        , ( HandoffWholeSource
+          , "handoff/phase1/ping/stage1-one-shot.phil"
+          , [HandoffMatrixAuthority "INT-008"]
+          )
+        )
+      , ( HandoffArtifactId "ping.stage2.source.v1"
+        , ( HandoffWholeSource
+          , "handoff/phase1/ping/stage2-request-reply.phil"
+          , [HandoffMatrixAuthority "INT-009"]
+          )
+        )
+      , ( HandoffArtifactId "ping.stage3.source.v1"
+        , ( HandoffWholeSource
+          , "handoff/phase1/ping/stage3-bounded.phil"
+          , [HandoffMatrixAuthority "INT-009"]
+          )
+        )
+      , ( HandoffArtifactId "ping.stage3.round-source.v1"
+        , ( HandoffWholeSource
+          , "handoff/phase1/ping/stage3-round.phil"
+          , [HandoffMatrixAuthority "INT-009"]
+          )
+        )
+      , ( HandoffArtifactId "ping.stage4.source.v1"
+        , ( HandoffWholeSource
+          , "handoff/phase1/ping/stage4-unbounded.phil"
+          , [HandoffMatrixAuthority "INT-009"]
+          )
+        )
+      , ( HandoffArtifactId "ping.stage5.source.v1"
+        , ( HandoffWholeSource
+          , "handoff/phase1/ping/stage5-interruptible.phil"
+          , [HandoffMatrixAuthority "INT-009"]
+          )
+        )
+      , ( HandoffArtifactId "ping.stage5.cancel-source.v1"
+        , ( HandoffWholeSource
+          , "handoff/phase1/ping/stage5-cancel-on-signal.phil"
+          , [HandoffMatrixAuthority "INT-009"]
+          )
+        )
+      , ( HandoffArtifactId "ping.stage1.verification-input.v1"
+        , ( HandoffVerificationInput
+          , "handoff/phase1/ping/stage1-verification-v1.tsv"
+          , [ HandoffMatrixAuthority "INT-008"
+            , HandoffMatrixAuthority "VER-012"
+            ]
+          )
+        )
+      , ( HandoffArtifactId "ping.stage2.verification-input.v1"
+        , ( HandoffVerificationInput
+          , "handoff/phase1/ping/stage2-verification-v1.tsv"
+          , [ HandoffMatrixAuthority "INT-009"
+            , HandoffMatrixAuthority "VER-012"
+            ]
+          )
+        )
+      , ( HandoffArtifactId "ping.stage3.verification-input.v1"
+        , ( HandoffVerificationInput
+          , "handoff/phase1/ping/stage3-verification-v1.tsv"
+          , [ HandoffMatrixAuthority "INT-009"
+            , HandoffMatrixAuthority "VER-012"
+            ]
+          )
+        )
+      , ( HandoffArtifactId "ping.stage4.verification-input.v1"
+        , ( HandoffVerificationInput
+          , "handoff/phase1/ping/stage4-verification-v1.tsv"
+          , [ HandoffMatrixAuthority "INT-009"
+            , HandoffMatrixAuthority "VER-012"
+            ]
+          )
+        )
+      , ( HandoffArtifactId "ping.stage5.verification-input.v1"
+        , ( HandoffVerificationInput
+          , "handoff/phase1/ping/stage5-verification-v1.tsv"
+          , [ HandoffMatrixAuthority "INT-009"
+            , HandoffMatrixAuthority "VER-012"
+            ]
+          )
+        )
+      , ( HandoffArtifactId "ping.stage1.verification-bundle.v1"
+        , ( HandoffVerificationBundle
+          , "handoff/phase1/ping/stage1-one-shot-verification-bundle-v1.tsv"
+          , [ HandoffMatrixAuthority "INT-008"
+            , HandoffMatrixAuthority "VER-012"
+            ]
+          )
+        )
+      , ( HandoffArtifactId "ping.stage2.verification-bundle.v1"
+        , ( HandoffVerificationBundle
+          , "handoff/phase1/ping/stage2-request-reply-verification-bundle-v1.tsv"
+          , [ HandoffMatrixAuthority "INT-009"
+            , HandoffMatrixAuthority "VER-012"
+            ]
+          )
+        )
+      , ( HandoffArtifactId "ping.stage3.verification-bundle.v1"
+        , ( HandoffVerificationBundle
+          , "handoff/phase1/ping/stage3-bounded-verification-bundle-v1.tsv"
+          , [ HandoffMatrixAuthority "INT-009"
+            , HandoffMatrixAuthority "VER-012"
+            ]
+          )
+        )
+      , ( HandoffArtifactId "ping.stage4.verification-bundle.v1"
+        , ( HandoffVerificationBundle
+          , "handoff/phase1/ping/stage4-unbounded-verification-bundle-v1.tsv"
+          , [ HandoffMatrixAuthority "INT-009"
+            , HandoffMatrixAuthority "VER-012"
+            ]
+          )
+        )
+      , ( HandoffArtifactId "ping.stage5.verification-bundle.v1"
+        , ( HandoffVerificationBundle
+          , "handoff/phase1/ping/stage5-interruptible-verification-bundle-v1.tsv"
+          , [ HandoffMatrixAuthority "INT-009"
+            , HandoffMatrixAuthority "VER-012"
+            ]
+          )
+        )
       , ( HandoffArtifactId "corpus.negative.v1"
         , ( HandoffConformanceManifest
           , "test/fixtures/phase1-negative/manifest.tsv"

@@ -1,0 +1,30 @@
+protocol PingCount {
+  role Client = recursive Loop = select {
+    Ping => send (x : U8) then receive (reply : String) then continue Loop |
+    Done => end Done
+  };
+  role Server = recursive Loop = offer {
+    Ping => receive (x : U8) then send (reply : String) then continue Loop |
+    Done => end Done
+  };
+}
+component ClientCounter(endpoint : Client[PingCount], count : U32) {
+  loop state (currentEndpoint = endpoint, remaining : U32 = count) {
+    continue (currentEndpoint, remaining);
+  };
+}
+component ServerCounter(endpoint : Server[PingCount]) {}
+architecture BoundedPing {
+  instance client = ClientCounter;
+  instance server = ServerCounter;
+  process client_run = client;
+  process server_run = server;
+  protocol ping = PingCount;
+  role ping.Client = client;
+  role ping.Server = server;
+  entry count : U32;
+  bind client.endpoint = ping.Client;
+  bind client.count = count;
+  bind server.endpoint = ping.Server;
+}
+program main = instantiate BoundedPing;

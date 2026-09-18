@@ -1,0 +1,7 @@
+PHIL-PHASE1-WHOLE-SOURCE-VERIFICATION-V1
+primary	stage3-bounded	handoff/phase1/ping/stage3-bounded.phil	sha256:00fcbd07fea16438133e26a29a3409e7abb60ef1060bc419e46d6b2ed4fe9705
+supplemental	bounded-round	handoff/phase1/ping/stage3-round.phil	sha256:8a3abed518a91779cdbced884e563cd2ac28f5b709760b45065cdabb6e998371
+architecture	architecture.BoundedPing	architecture.bounded-ping.v1
+program	program.main
+policy	phase1.int007.ping.stage3.verification.v1
+summary	handoff/phase1/ping/stage3-bounded-verification-bundle-v1.tsv

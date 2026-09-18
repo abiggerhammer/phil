@@ -1,0 +1,29 @@
+protocol PingRoundTrip {
+  role Client = send (x : U8) then receive (reply : String) then end Done;
+  role Server = receive (x : U8) then send (reply : String) then end Done;
+}
+component ClientWorker(endpoint : Client[PingRoundTrip], payload : U8) {
+  let awaiting = send payload on endpoint;
+  let (done, reply) = receive String on awaiting;
+  let writeDecision = console_write(reply);
+  close done;
+}
+component ServerWorker(endpoint : Server[PingRoundTrip]) {
+  let (replyEndpoint, request) = receive U8 on endpoint;
+  let done = send "pong" on replyEndpoint;
+  close done;
+}
+architecture RoundTrip {
+  instance client = ClientWorker;
+  instance server = ServerWorker;
+  process client_run = client;
+  process server_run = server;
+  protocol ping = PingRoundTrip;
+  role ping.Client = client;
+  role ping.Server = server;
+  entry payload : U8;
+  bind client.endpoint = ping.Client;
+  bind client.payload = payload;
+  bind server.endpoint = ping.Server;
+}
+program main = instantiate RoundTrip;

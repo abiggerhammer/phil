@@ -1,0 +1,6 @@
+component CancelOnSignal(endpoint : Client[PingLoop], cancelled : Bool) {
+  if cancelled {
+    let done = select Done on endpoint;
+    close done;
+  };
+}
