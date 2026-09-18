@@ -60,6 +60,7 @@ library
       Phil.Handoff.Phase1Manifest
       Phil.Handoff.Phase1WitnessSourceBundle
       Phil.Handoff.Phase1CheckedArchitecture
+      Phil.Handoff.Phase1VerificationBundle
   other-modules:
       ArchitectureIdentityKernel
       ArchitectureImportKernel
