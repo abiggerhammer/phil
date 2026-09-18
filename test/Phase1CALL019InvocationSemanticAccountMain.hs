@@ -38,6 +38,7 @@ import Phil.Core.Static
   , InterfaceRevision (..)
   , emptyStaticContext
   )
+import Phil.Core.Syntax (Outcome (..))
 import Phil.Surface.Check
   ( PrimitiveSemantics (..)
   , SurfaceCallableSignature (..)
