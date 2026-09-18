@@ -269,7 +269,7 @@ Proof.
   unfold P1DispositionValid, P1EvidenceValidFor in Hvalid.
   destruct Hvalid as
     [facts [Hlookup [Hledger [Hselected [Haccepted
-      [Hbundle [Hrevision [_ Hscope]]]]]]]]].
+      [Hbundle [Hrevision [_ Hscope]]]]]]]].
   exists facts.
   repeat split; assumption.
 Qed.
