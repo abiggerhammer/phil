@@ -7,6 +7,7 @@ module Phil.Surface.GrammarV1.BoundedPingRuntime
   , GrammarV1BoundedPingRuntimeEvidence (..)
   , GrammarV1BoundedPingRuntimeError (..)
   , grammarV1ResolveBoundedPingRuntime
+  , grammarV1RunBoundedPingFromSource
   , grammarV1RunBoundedPing
   ) where
 
@@ -99,6 +100,9 @@ import Phil.Surface.GrammarV1.BinderScope
   )
 import Phil.Surface.GrammarV1.BoundedPingLoopSource
   ( GrammarV1CheckedBoundedPingLoop (..)
+  )
+import Phil.Surface.GrammarV1.BoundedPingSourceValues
+  ( GrammarV1BoundedPingSourceValues (..)
   )
 
 -- | Concrete runtime input for the exact root entry wired to the bounded
@@ -278,6 +282,38 @@ grammarV1ResolveBoundedPingRuntime loopSource clientProvisioning serverProvision
         GrammarV1ComponentProvisioningProtocolEndpoint occurrence projection ->
           Right (occurrence, projection)
         other -> Left (GrammarV1BoundedPingRuntimeEndpointNotProtocol other)
+
+-- | Execute bounded Ping using only values already extracted from checked
+-- positive-round source syntax.  This is the INT-009 Stage-3 composition
+-- boundary: request/reply values can no longer be supplied independently of
+-- the checked source carrier.
+grammarV1RunBoundedPingFromSource
+  :: BinaryProtocolInstance
+  -> ProcessNetwork
+  -> ProcessCommunicationState
+  -> GrammarV1BoundedPingRuntimePlan
+  -> GrammarV1RootCountValue
+  -> GrammarV1BoundedPingSourceValues
+  -> AuthorityExerciseSource
+  -> AuthorityState
+  -> ConsoleWriteOutcome
+  -> Either
+      GrammarV1BoundedPingRuntimeError
+      (ProcessCommunicationState, GrammarV1BoundedPingRuntimeEvidence)
+grammarV1RunBoundedPingFromSource
+    instanceValue network communication plan countInput sourceValues
+    authoritySource authorityState writeOutcome =
+  grammarV1RunBoundedPing
+    instanceValue
+    network
+    communication
+    plan
+    countInput
+    (boundedPingSourceRequestValue sourceValues)
+    (boundedPingSourceReplyText sourceValues)
+    authoritySource
+    authorityState
+    writeOutcome
 
 -- | Execute a bounded recursive Ping run.  A positive remaining count selects
 -- Ping, performs one U8 request/String reply rendezvous, writes the exact reply
