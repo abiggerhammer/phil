@@ -58,6 +58,7 @@ library
       Phil.Verification
       Phil.Verification.ProofEvidence
       Phil.Handoff.Phase1Manifest
+      Phil.Handoff.Phase1WitnessSourceBundle
   other-modules:
       ArchitectureIdentityKernel
       ArchitectureImportKernel
