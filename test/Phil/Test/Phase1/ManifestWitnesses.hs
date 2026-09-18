@@ -8,6 +8,9 @@ module Phil.Test.Phase1.ManifestWitnesses
   , checkedSteveArchitectureFromBundle
   , uploadVerificationBundleFromBundle
   , steveVerificationBundleFromBundle
+  , AssuranceInputFixture (..)
+  , uploadAssuranceInputFixture
+  , steveAssuranceInputFixture
   ) where
 
 import qualified Data.Map.Strict as Map
@@ -85,6 +88,47 @@ data RealManifestFixture = RealManifestFixture
   , realFixtureManifest :: AssuranceManifest
   , realFixtureStage :: StageClosureBundle
   } deriving (Eq, Show)
+
+data AssuranceInputFixture = AssuranceInputFixture
+  { assuranceInputFixturePolicy :: ApplicationAssurancePolicy
+  , assuranceInputFixtureLedger :: AssuranceLedger
+  , assuranceInputFixtureSelection :: ManifestClosureSelection
+  } deriving (Eq, Show)
+
+uploadAssuranceInputFixture :: Either String AssuranceInputFixture
+uploadAssuranceInputFixture = Right AssuranceInputFixture
+  { assuranceInputFixturePolicy = uploadAssurancePolicy
+  , assuranceInputFixtureLedger = phase0UploadLedger
+  , assuranceInputFixtureSelection = ManifestClosureSelection
+      { manifestClosureEvidence = manifestEvidenceEntries phase0UploadManifest
+      , manifestClosureAssumptions = manifestAssumptionNodes phase0UploadManifest
+      , manifestClosureExports = Map.fromSet (const Exported)
+          (manifestExports phase0UploadManifest)
+      , manifestClosureUses = manifestAssuranceUses phase0UploadManifest
+      }
+  }
+
+steveAssuranceInputFixture :: Either String AssuranceInputFixture
+steveAssuranceInputFixture = do
+  qualifications <- mapLeft (show . unSteveProviderQualificationError)
+    materializeSteveProviderQualifications
+  let digestArtifact = steveDigestProviderQualification qualifications
+      blobArtifact = steveBlobProviderQualification qualifications
+      validity = steveValidityContext digestArtifact blobArtifact
+      digestEntries = providerLedgerEntries validity digestArtifact
+      blobEntries = providerLedgerEntries validity blobArtifact
+  (ledger, evidenceIds, assumptionIds) <-
+    mergeProviderLedgerEntries digestEntries blobEntries
+  Right AssuranceInputFixture
+    { assuranceInputFixturePolicy = steveAssurancePolicy
+    , assuranceInputFixtureLedger = ledger
+    , assuranceInputFixtureSelection = ManifestClosureSelection
+        { manifestClosureEvidence = evidenceIds
+        , manifestClosureAssumptions = assumptionIds
+        , manifestClosureExports = Map.empty
+        , manifestClosureUses = Set.empty
+        }
+    }
 
 uploadRealManifestFixture :: Text -> Text -> Either String RealManifestFixture
 uploadRealManifestFixture clientSource serverSource = do
