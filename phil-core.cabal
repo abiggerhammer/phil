@@ -62,6 +62,7 @@ library
       Phil.Handoff.Phase1WitnessSourceBundle
       Phil.Handoff.Phase1CheckedArchitecture
       Phil.Handoff.Phase1VerificationBundle
+      Phil.Handoff.Phase1WholeSourceVerification
   other-modules:
       ArchitectureIdentityKernel
       ArchitectureImportKernel
