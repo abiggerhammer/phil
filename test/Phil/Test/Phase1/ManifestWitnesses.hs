@@ -6,6 +6,8 @@ module Phil.Test.Phase1.ManifestWitnesses
   , steveRealManifestFixture
   , checkedUploadArchitectureFromBundle
   , checkedSteveArchitectureFromBundle
+  , uploadVerificationBundleFromBundle
+  , steveVerificationBundleFromBundle
   ) where
 
 import qualified Data.Map.Strict as Map
@@ -184,6 +186,49 @@ steveRealManifestFixture putSource getSource = do
     , realFixtureManifest = manifest
     , realFixtureStage = stage
     }
+
+uploadVerificationBundleFromBundle
+  :: PortableSourceBundle
+  -> Either String VerificationBundle
+uploadVerificationBundleFromBundle sourceBundle = do
+  architecture <- checkedUploadArchitectureFromBundle sourceBundle
+  graph <- mapLeft show $ buildVerificationRevisionGraph
+    (Map.elems (ledgerRevisions phase0UploadLedger))
+    (manifestCertificationScope phase0UploadManifest)
+  let declarations = map sourceDeclarationIdentity
+        (checkedSourceUnits (checkedSourceArchitectureBundle architecture))
+      architectureIdentity = checkedArchitectureIdentity
+        (checkedSourceArchitectureRoot architecture)
+      sourceRevision = deriveSourceRevision "phase1-int002-upload-source-v1"
+        declarations architectureIdentity
+  mapLeft show $ buildVerificationBundle
+    sourceRevision declarations [architectureIdentity] [] graph
+    uploadAssurancePolicy (Map.elems (ledgerEvidence phase0UploadLedger))
+
+steveVerificationBundleFromBundle
+  :: PortableSourceBundle
+  -> Either String VerificationBundle
+steveVerificationBundleFromBundle sourceBundle = do
+  architecture <- checkedSteveArchitectureFromBundle sourceBundle
+  qualifications <- mapLeft (show . unSteveProviderQualificationError)
+    materializeSteveProviderQualifications
+  let digestArtifact = steveDigestProviderQualification qualifications
+      blobArtifact = steveBlobProviderQualification qualifications
+      validity = steveValidityContext digestArtifact blobArtifact
+      digestEntries = providerLedgerEntries validity digestArtifact
+      blobEntries = providerLedgerEntries validity blobArtifact
+  (ledger, _, _) <- mergeProviderLedgerEntries digestEntries blobEntries
+  graph <- mapLeft show $ buildVerificationRevisionGraph
+    (Map.elems (ledgerRevisions ledger)) (Map.keysSet (ledgerRevisions ledger))
+  let declarations = map sourceDeclarationIdentity
+        (checkedSourceUnits (checkedSourceArchitectureBundle architecture))
+      architectureIdentity = checkedArchitectureIdentity
+        (checkedSourceArchitectureRoot architecture)
+      sourceRevision = deriveSourceRevision "phase1-int002-steve-source-v1"
+        declarations architectureIdentity
+  mapLeft show $ buildVerificationBundle
+    sourceRevision declarations [architectureIdentity] [] graph
+    steveAssurancePolicy (Map.elems (ledgerEvidence ledger))
 
 stageSystemsArtifact :: StageClosureBundle -> SystemsArtifact
 stageSystemsArtifact = phase1StageSystemsArtifact

@@ -6,12 +6,11 @@ on:
       - 'src/Phil/Handoff/Phase1Manifest.hs'
       - 'src/Phil/Handoff/Phase1WitnessSourceBundle.hs'
       - 'src/Phil/Handoff/Phase1CheckedArchitecture.hs'
-      - 'src/Phil/Handoff/Phase1CheckedArchitecture.hs'
+      - 'src/Phil/Handoff/Phase1VerificationBundle.hs'
       - 'test/Phase1INT007HandoffManifestMain.hs'
       - 'test/Phase1INT007WitnessSourceBundleMain.hs'
       - 'test/Phase1INT007CheckedArchitectureMain.hs'
-      - 'test/Phil/Test/Phase1/ManifestWitnesses.hs'
-      - 'test/Phase1INT007CheckedArchitectureMain.hs'
+      - 'test/Phase1INT007VerificationBundleMain.hs'
       - 'test/Phil/Test/Phase1/ManifestWitnesses.hs'
       - 'handoff/phase1/manifest-v1.tsv'
       - 'handoff/phase1/witnesses/*.tsv'
@@ -32,8 +31,13 @@ on:
     paths:
       - 'src/Phil/Handoff/Phase1Manifest.hs'
       - 'src/Phil/Handoff/Phase1WitnessSourceBundle.hs'
+      - 'src/Phil/Handoff/Phase1CheckedArchitecture.hs'
+      - 'src/Phil/Handoff/Phase1VerificationBundle.hs'
       - 'test/Phase1INT007HandoffManifestMain.hs'
       - 'test/Phase1INT007WitnessSourceBundleMain.hs'
+      - 'test/Phase1INT007CheckedArchitectureMain.hs'
+      - 'test/Phase1INT007VerificationBundleMain.hs'
+      - 'test/Phil/Test/Phase1/ManifestWitnesses.hs'
       - 'handoff/phase1/manifest-v1.tsv'
       - 'handoff/phase1/witnesses/*.tsv'
       - 'docs/phase-1/int-007-handoff-manifest-v1.md'
@@ -65,12 +69,16 @@ jobs:
           cabal exec -- ghc -isrc -Wall -Werror -fno-code src/Phil/Handoff/Phase1Manifest.hs
           cabal exec -- ghc -isrc -Wall -Werror -fno-code src/Phil/Handoff/Phase1WitnessSourceBundle.hs
           cabal exec -- ghc -isrc -Wall -Werror -fno-code src/Phil/Handoff/Phase1CheckedArchitecture.hs
+          cabal exec -- ghc -isrc -Wall -Werror -fno-code src/Phil/Handoff/Phase1VerificationBundle.hs
           cabal exec -- ghc -isrc -Wall -Werror -fno-code test/Phase1INT007HandoffManifestMain.hs
           cabal exec -- ghc -isrc -Wall -Werror -fno-code test/Phase1INT007WitnessSourceBundleMain.hs
           cabal exec -- ghc -isrc -itest -Wall -Werror -fno-code test/Phase1INT007CheckedArchitectureMain.hs
+          cabal exec -- ghc -isrc -itest -Wall -Werror -fno-code test/Phase1INT007VerificationBundleMain.hs
       - name: Check exact Phase-1 handoff manifest integrity
         run: cabal exec -- runghc -isrc -Wall -Werror test/Phase1INT007HandoffManifestMain.hs
       - name: Reconstruct Upload and Steve SourceBundles from handoff bytes
         run: cabal exec -- runghc -isrc -Wall -Werror test/Phase1INT007WitnessSourceBundleMain.hs
       - name: Reconstruct checked semantics and ArchitectureInstance identities
         run: cabal exec -- runghc -isrc -itest -Wall -Werror test/Phase1INT007CheckedArchitectureMain.hs
+      - name: Reconstruct VerificationBundles and obligation graphs
+        run: cabal exec -- runghc -isrc -itest -Wall -Werror test/Phase1INT007VerificationBundleMain.hs

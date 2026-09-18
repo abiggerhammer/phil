@@ -60,6 +60,7 @@ library
       Phil.Handoff.Phase1Manifest
       Phil.Handoff.Phase1WitnessSourceBundle
       Phil.Handoff.Phase1CheckedArchitecture
+      Phil.Handoff.Phase1VerificationBundle
   other-modules:
       ArchitectureIdentityKernel
       ArchitectureImportKernel
@@ -95,6 +96,7 @@ library
       Phil.Assurance.RocqExactReceive
       Phil.Assurance.RocqDigestValidation
       Phil.Assurance.RocqStorage
+      Phil.Verification.Bundle
       Phil.Systems.IR
       Phil.Systems.Verify
       Phil.Systems.Phase0

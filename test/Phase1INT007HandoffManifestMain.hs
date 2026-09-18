@@ -132,6 +132,22 @@ spineCoverage manifest =
             ]
           )
         )
+      , ( HandoffArtifactId "verification.upload.bundle.v1"
+        , ( HandoffVerificationBundle
+          , "handoff/phase1/witnesses/upload-verification-bundle-v1.tsv"
+          , [ HandoffMatrixAuthority "INT-002"
+            , HandoffMatrixAuthority "VER-012"
+            ]
+          )
+        )
+      , ( HandoffArtifactId "verification.steve.bundle.v1"
+        , ( HandoffVerificationBundle
+          , "handoff/phase1/witnesses/steve-verification-bundle-v1.tsv"
+          , [ HandoffMatrixAuthority "INT-002"
+            , HandoffMatrixAuthority "VER-012"
+            ]
+          )
+        )
       , ( HandoffArtifactId "corpus.negative.v1"
         , ( HandoffConformanceManifest
           , "test/fixtures/phase1-negative/manifest.tsv"

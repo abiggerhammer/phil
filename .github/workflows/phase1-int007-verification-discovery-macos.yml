@@ -1,0 +1,29 @@
+name: INT-007 Verification Discovery
+
+on:
+  pull_request:
+    paths:
+      - 'src/Phil/Handoff/Phase1VerificationBundle.hs'
+      - 'test/Phase1INT007VerificationBundleMain.hs'
+      - 'test/Phil/Test/Phase1/ManifestWitnesses.hs'
+      - 'handoff/phase1/witnesses/*verification-bundle-v1.tsv'
+      - '.github/workflows/phase1-int007-verification-discovery-macos.yml'
+      - 'phil-core.cabal'
+
+jobs:
+  discover:
+    runs-on: macos-26
+    steps:
+      - uses: actions/checkout@v4
+      - uses: haskell-actions/setup@v2
+        with:
+          ghc-version: '9.6.7'
+          cabal-version: 'latest'
+      - name: Build verification handoff substrate
+        run: cabal build lib:phil-core --ghc-options=-Werror
+      - name: Strictly typecheck verification handoff
+        run: |
+          cabal exec -- ghc -isrc -Wall -Werror -fno-code src/Phil/Handoff/Phase1VerificationBundle.hs
+          cabal exec -- ghc -isrc -itest -Wall -Werror -fno-code test/Phase1INT007VerificationBundleMain.hs
+      - name: Emit exact VerificationBundle handoff summaries
+        run: cabal exec -- runghc -isrc -itest -Wall -Werror test/Phase1INT007VerificationBundleMain.hs

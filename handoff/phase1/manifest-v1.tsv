@@ -8,4 +8,6 @@ bundle.upload.source.v1	source-bundle	handoff/phase1/witnesses/upload-source-bun
 bundle.steve.source.v1	source-bundle	handoff/phase1/witnesses/steve-source-bundle-v1.tsv	sha256:5763040b08d9c0a874e7063b8128718ad096091052dee7f21932592f33c3559c	matrix:INT-001;matrix:SURF-010
 checked.upload.architecture.v1	checked-semantics	handoff/phase1/witnesses/upload-checked-architecture-v1.tsv	sha256:bc7668758313bc36caff38426a1a73b05696a6f07f24bc7eb2527330c39ebf48	matrix:INT-001;certified:PHIL-ARCH-ID-001;certified:PHIL-ARCH-INST-001
 checked.steve.architecture.v1	checked-semantics	handoff/phase1/witnesses/steve-checked-architecture-v1.tsv	sha256:8bb6704a9009c6741093a1f4876074455a1085dd95304e2f12bfad7a6b75a563	matrix:INT-001;certified:PHIL-ARCH-ID-001;certified:PHIL-ARCH-INST-001
+verification.upload.bundle.v1	verification-bundle	handoff/phase1/witnesses/upload-verification-bundle-v1.tsv	sha256:3b1acec86534b6eb35e1f4e78b190f68833bea1b93e5cfc8d87a78a7fcfea7ca	matrix:INT-002;matrix:VER-012
+verification.steve.bundle.v1	verification-bundle	handoff/phase1/witnesses/steve-verification-bundle-v1.tsv	sha256:f6e3bb1916b2777006d3e422c19960b9c2254155bcd5f58cd5efe1b5543ac8e9	matrix:INT-002;matrix:VER-012
 corpus.negative.v1	conformance-manifest	test/fixtures/phase1-negative/manifest.tsv	sha256:c7cae373d4f6c25ababb779df45316cf0c2b5401be5f7e22e8396ec65d8855ef	matrix:INT-004
