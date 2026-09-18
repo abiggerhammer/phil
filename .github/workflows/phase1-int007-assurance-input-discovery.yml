@@ -4,6 +4,7 @@ on:
   pull_request:
     paths:
       - 'src/Phil/Handoff/Phase1AssuranceInputs.hs'
+      - 'src/Phil/Verification/ManifestClosure.hs'
       - 'test/Phase1INT007AssuranceInputsMain.hs'
       - 'test/Phil/Test/Phase1/ManifestWitnesses.hs'
       - 'handoff/phase1/witnesses/*-assurance-inputs-v1.tsv'
