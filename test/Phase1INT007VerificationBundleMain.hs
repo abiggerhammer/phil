@@ -3,6 +3,7 @@
 module Main (main) where
 
 import Data.Text (Text)
+import Phil.Assurance.Types (RevisionId (..))
 import qualified Data.Text as Text
 import qualified Data.Text.IO as TextIO
 import Phil.Handoff.Phase1VerificationBundle
@@ -154,8 +155,8 @@ unknownEvidenceTargetRejects =
       revision == revisionId "rev.missing"
     isUnknown _ = False
 
-revisionId :: Text -> Phil.Assurance.Types.RevisionId
-revisionId = Phil.Assurance.Types.RevisionId
+revisionId :: Text -> RevisionId
+revisionId = RevisionId
 
 bundleLine :: Text
 bundleLine = Text.intercalate "\t"
