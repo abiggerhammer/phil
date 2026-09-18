@@ -35,7 +35,7 @@ jobs:
           cabal exec -- ghc -isrc -Wall -Werror -fno-code src/Phil/Surface/GrammarV1/InterruptiblePingRuntime.hs
           cabal exec -- ghc -isrc -Wall -Werror -package unix -fno-code test/Phase1INT009InterruptiblePingMain.hs
       - name: Execute checked SIGINT-adapter controls
-        run: cabal exec -- runghc -Wall -Werror -package unix -isrc test/Phase1INT009InterruptiblePingMain.hs
+        run: cabal exec -- runghc -Wall -Werror -package=unix -isrc test/Phase1INT009InterruptiblePingMain.hs
       - name: Intercept host SIGINT and reach checked Phil terminal closure
         shell: bash
         run: |
