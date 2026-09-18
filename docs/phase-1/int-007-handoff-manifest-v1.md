@@ -41,9 +41,36 @@ the handoff:
 3. both persisted SURF-010 SourceBundle/lineage carrier fixtures; and
 4. the portable negative-corpus root manifest governed by INT-004.
 
-The permanent gate also requires a bijection with this initial inventory, so a
-row cannot silently disappear or an unreviewed row silently appear while this
-slice is the active handoff spine.
+The permanent gate also requires a bijection with the admitted inventory, so a
+row cannot silently disappear or an unreviewed row silently appear.
+
+## Persisted witness SourceBundles
+
+The second slice adds exact portable descriptors for the two canonical Phase-1
+witnesses:
+
+- `handoff/phase1/witnesses/upload-source-bundle-v1.tsv`
+- `handoff/phase1/witnesses/steve-source-bundle-v1.tsv`
+
+A witness descriptor carries the exact Grammar-v1 revision, selected program
+root, stable source-unit/declaration lineage, repository-relative source path
+plus exact SHA-256, and instance/process lineage records. Source text is not
+flattened or re-encoded into the descriptor: the materializer verifies and
+reads the exact checked-in `.phil` bytes, then constructs the ordinary public
+`PortableSourceBundle`.
+
+The permanent INT-007 gate independently decodes those descriptors, verifies
+every referenced source digest, materializes both bundles, and runs
+`resolveSourceBundleLineage`. Upload must recover
+`decl:upload.client`, `decl:upload.server`, and `inst:phase1.upload`;
+Steve must recover `decl:steve.put`, `decl:steve.get`, and
+`inst:phase1.steve`. Neither descriptor may invent process lineage.
+Traversal paths, source-byte drift, incompatible grammar revisions, and
+duplicate source-unit identities fail closed.
+
+These descriptors are governed by INT-001's ordinary-program witness boundary
+and SURF-010's persisted-lineage authority. They contain no Haskell constructor
+or in-memory fixture state.
 
 ## Deliberate remaining INT-007 work
 
@@ -51,7 +78,6 @@ This slice does not yet materialize or enumerate the full freeze set. Subsequent
 INT-007 slices must add, and independently reconstruct/replay from portable
 bytes:
 
-- framed-upload and Steve persisted SourceBundles and selected roots;
 - checked declaration/semantic and ArchitectureInstance outputs, or exact
   independently reconstructible equivalents;
 - final VerificationBundles and obligation graphs;
