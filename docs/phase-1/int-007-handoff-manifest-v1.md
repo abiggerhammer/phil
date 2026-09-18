@@ -123,6 +123,25 @@ can reconstruct the complete node/edge/scope domain and check that the canonical
 graph and bundle revisions agree. Haskell container order and constructors are
 not part of this representation.
 
+The first VerificationBundle handoff pair is:
+
+- `handoff/phase1/witnesses/upload-verification-bundle-v1.tsv`
+- `handoff/phase1/witnesses/steve-verification-bundle-v1.tsv`
+
+Both are governed by INT-002 and VER-012 and are content-addressed from the
+top-level handoff manifest.
+
+The progressive Ping corpus also needs VerificationBundles for the five distinct
+accepted source programs governed by INT-008/INT-009: one-shot Ping,
+request/reply with explicit output, bounded Ping, productive unbounded Ping, and
+interruptible Ping with explicit cancellation. The conventional host-SIGINT
+termination of the unbounded program is a runtime realization of the same source
+and does not require a second source VerificationBundle. Those programs traverse
+the newer whole-source Grammar-v1 integration path, which currently has no
+explicit bridge into VerificationBundle construction; INT-007 treats that as the
+next integration slice rather than routing Ping through the older Upload/Steve
+SourceBundle helper path.
+
 ## Deliberate remaining INT-007 work
 
 This slice does not yet materialize or enumerate the full freeze set. Subsequent
