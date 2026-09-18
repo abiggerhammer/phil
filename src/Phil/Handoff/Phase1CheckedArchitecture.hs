@@ -12,7 +12,6 @@ module Phil.Handoff.Phase1CheckedArchitecture
 
 import Data.Char (isDigit)
 import Data.List (sortOn)
-import qualified Data.Map.Strict as Map
 import qualified Data.Set as Set
 import Data.Text (Text)
 import qualified Data.Text as Text
@@ -196,7 +195,7 @@ decodePhase1CheckedArchitectureSummary input =
             , handoffCheckedInstanceRevisionSha256 = instanceRevisionDigest
             }
   where
-    step accumulated row = accumulated >>= `decodeRow` row
+    step accumulated row = accumulated >>= \state -> decodeRow state row
 
 decodeRow
   :: DecodeState
