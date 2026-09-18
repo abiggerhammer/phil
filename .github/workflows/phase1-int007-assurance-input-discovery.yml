@@ -1,0 +1,27 @@
+name: INT-007 Assurance Input Discovery
+
+on:
+  pull_request:
+    paths:
+      - 'src/Phil/Handoff/Phase1AssuranceInputs.hs'
+      - 'test/Phase1INT007AssuranceInputsMain.hs'
+      - 'test/Phil/Test/Phase1/ManifestWitnesses.hs'
+      - 'handoff/phase1/witnesses/*-assurance-inputs-v1.tsv'
+      - 'phil-core.cabal'
+      - '.github/workflows/phase1-int007-assurance-input-discovery.yml'
+
+jobs:
+  discover:
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+      - uses: haskell-actions/setup@v2
+        with:
+          ghc-version: '9.6.7'
+          cabal-version: 'latest'
+      - name: Build assurance-input handoff strictly
+        run: cabal build lib:phil-core --ghc-options=-Werror
+      - name: Typecheck assurance-input replay strictly
+        run: cabal exec -- ghc -isrc -itest -Wall -Werror -fno-code test/Phase1INT007AssuranceInputsMain.hs
+      - name: Emit exact assurance-input handoff summaries
+        run: cabal exec -- runghc -isrc -itest -Wall -Werror test/Phase1INT007AssuranceInputsMain.hs
