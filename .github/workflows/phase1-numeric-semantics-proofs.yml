@@ -1,0 +1,169 @@
+name: Phase 1 Numeric Semantics Proofs
+
+on:
+  pull_request:
+    paths:
+      - 'proof/Phil/Core/NumericSemantics.v'
+      - 'proof/Phil/Core/NumericSemanticsImplementation.v'
+      - 'src/Phil/Core/UIntArithmetic.hs'
+      - 'src/Phil/Core/CheckedUIntArithmetic.hs'
+      - 'src/Phil/Core/SIntArithmetic.hs'
+      - 'src/Phil/Core/IntegerDivision.hs'
+      - 'src/Phil/Core/FloatArithmetic.hs'
+      - 'src/Phil/Core/NumericConversion.hs'
+      - 'src/Phil/Core/IntegerShift.hs'
+      - 'src/Phil/Surface/GrammarV1/RuntimeScalar.hs'
+      - 'src/Phil/Surface/GrammarV1/SIntArithmetic.hs'
+      - 'src/Phil/Surface/GrammarV1/IntegerDivision.hs'
+      - 'src/Phil/Surface/GrammarV1/FloatArithmetic.hs'
+      - 'src/Phil/Surface/GrammarV1/NumericConversion.hs'
+      - 'test/Phase1ExecutionSemanticsMain.hs'
+      - 'test/Phase1ExecutionSIntArithmeticMain.hs'
+      - 'test/Phase1IntegerDivisionCoreMain.hs'
+      - 'test/Phase1IntegerDivisionSourceMain.hs'
+      - 'test/Phase1FloatArithmeticCoreMain.hs'
+      - 'test/Phase1FloatArithmeticSourceMain.hs'
+      - 'test/Phase1NumericConversionMain.hs'
+      - 'test/Phase1IntegerShiftMain.hs'
+      - 'test/Phase1ReviewR7UnaryNegationMain.hs'
+      - 'test/Phase1ReviewR8SignedKnownRangeMain.hs'
+      - 'test/Phase1ReviewR9ZeroFloatPrecisionMain.hs'
+      - 'docs/phase-1/numeric-semantics-proof-boundary-v1.md'
+      - '.github/workflows/phase1-numeric-semantics-proofs.yml'
+  push:
+    branches: [main]
+    paths:
+      - 'proof/Phil/Core/NumericSemantics.v'
+      - 'proof/Phil/Core/NumericSemanticsImplementation.v'
+      - 'src/Phil/Core/UIntArithmetic.hs'
+      - 'src/Phil/Core/CheckedUIntArithmetic.hs'
+      - 'src/Phil/Core/SIntArithmetic.hs'
+      - 'src/Phil/Core/IntegerDivision.hs'
+      - 'src/Phil/Core/FloatArithmetic.hs'
+      - 'src/Phil/Core/NumericConversion.hs'
+      - 'src/Phil/Core/IntegerShift.hs'
+      - 'src/Phil/Surface/GrammarV1/RuntimeScalar.hs'
+      - 'src/Phil/Surface/GrammarV1/SIntArithmetic.hs'
+      - 'src/Phil/Surface/GrammarV1/IntegerDivision.hs'
+      - 'src/Phil/Surface/GrammarV1/FloatArithmetic.hs'
+      - 'src/Phil/Surface/GrammarV1/NumericConversion.hs'
+      - 'test/Phase1ExecutionSemanticsMain.hs'
+      - 'test/Phase1ExecutionSIntArithmeticMain.hs'
+      - 'test/Phase1IntegerDivisionCoreMain.hs'
+      - 'test/Phase1IntegerDivisionSourceMain.hs'
+      - 'test/Phase1FloatArithmeticCoreMain.hs'
+      - 'test/Phase1FloatArithmeticSourceMain.hs'
+      - 'test/Phase1NumericConversionMain.hs'
+      - 'test/Phase1IntegerShiftMain.hs'
+      - 'test/Phase1ReviewR7UnaryNegationMain.hs'
+      - 'test/Phase1ReviewR8SignedKnownRangeMain.hs'
+      - 'test/Phase1ReviewR9ZeroFloatPrecisionMain.hs'
+      - 'docs/phase-1/numeric-semantics-proof-boundary-v1.md'
+      - '.github/workflows/phase1-numeric-semantics-proofs.yml'
+
+permissions:
+  contents: read
+
+jobs:
+  rocq-numeric-semantics-proof:
+    runs-on: ubuntu-latest
+    container:
+      image: rocq/rocq-prover:9.2.0
+      options: --user root
+    steps:
+      - uses: actions/checkout@v4
+      - name: Compile PHIL-EXEC-ARITH-001 semantic and implementation proofs
+        shell: bash
+        run: |
+          set -euo pipefail
+          export PATH="/home/rocq/.opam/${COMPILER}/bin:$PATH"
+          rocq c -Q proof/Phil Phil proof/Phil/Core/NumericSemantics.v
+          rocq c -Q proof/Phil Phil proof/Phil/Core/NumericSemanticsImplementation.v
+      - name: Record checked proof identities
+        shell: bash
+        run: |
+          set -euo pipefail
+          sha256sum \
+            proof/Phil/Core/NumericSemantics.v \
+            proof/Phil/Core/NumericSemantics.vo \
+            proof/Phil/Core/NumericSemanticsImplementation.v \
+            proof/Phil/Core/NumericSemanticsImplementation.vo \
+            > numeric-semantics-proof.sha256
+          cat numeric-semantics-proof.sha256
+      - uses: actions/upload-artifact@v4
+        with:
+          name: numeric-semantics-proof
+          path: numeric-semantics-proof.sha256
+
+  verify-numeric-semantics-correspondence:
+    needs: rocq-numeric-semantics-proof
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: haskell-actions/setup@v2
+        with:
+          ghc-version: '9.6.7'
+          cabal-version: 'latest'
+      - name: Build complete Haskell substrate
+        run: cabal build all --enable-tests
+      - name: Strict typecheck numeric production authorities
+        run: |
+          set -euo pipefail
+          for module in \
+            src/Phil/Core/UIntArithmetic.hs \
+            src/Phil/Core/CheckedUIntArithmetic.hs \
+            src/Phil/Core/SIntArithmetic.hs \
+            src/Phil/Core/IntegerDivision.hs \
+            src/Phil/Core/FloatArithmetic.hs \
+            src/Phil/Core/NumericConversion.hs \
+            src/Phil/Core/IntegerShift.hs \
+            src/Phil/Surface/GrammarV1/RuntimeScalar.hs \
+            src/Phil/Surface/GrammarV1/SIntArithmetic.hs \
+            src/Phil/Surface/GrammarV1/IntegerDivision.hs \
+            src/Phil/Surface/GrammarV1/FloatArithmetic.hs \
+            src/Phil/Surface/GrammarV1/NumericConversion.hs
+          do
+            cabal exec -- ghc -isrc -Wall -Werror -fno-code "$module"
+          done
+      - name: Strict typecheck standalone numeric regression Mains separately
+        run: |
+          set -euo pipefail
+          for test_main in \
+            test/Phase1ExecutionSemanticsMain.hs \
+            test/Phase1ExecutionSIntArithmeticMain.hs \
+            test/Phase1IntegerDivisionCoreMain.hs \
+            test/Phase1IntegerDivisionSourceMain.hs \
+            test/Phase1FloatArithmeticCoreMain.hs \
+            test/Phase1FloatArithmeticSourceMain.hs \
+            test/Phase1NumericConversionMain.hs \
+            test/Phase1IntegerShiftMain.hs \
+            test/Phase1ReviewR7UnaryNegationMain.hs \
+            test/Phase1ReviewR8SignedKnownRangeMain.hs \
+            test/Phase1ReviewR9ZeroFloatPrecisionMain.hs
+          do
+            cabal exec -- ghc -isrc -Wall -Werror -fno-code "$test_main"
+          done
+      - name: Replay UInt arithmetic controls
+        run: cabal exec -- runghc -Wall -Werror -isrc test/Phase1ExecutionSemanticsMain.hs
+      - name: Replay signed integer arithmetic controls
+        run: cabal exec -- runghc -Wall -Werror -isrc test/Phase1ExecutionSIntArithmeticMain.hs
+      - name: Replay integer division core controls
+        run: cabal exec -- runghc -Wall -Werror -isrc test/Phase1IntegerDivisionCoreMain.hs
+      - name: Replay integer division source composition
+        run: cabal exec -- runghc -Wall -Werror -isrc test/Phase1IntegerDivisionSourceMain.hs
+      - name: Replay strict float core controls
+        run: cabal exec -- runghc -Wall -Werror -isrc test/Phase1FloatArithmeticCoreMain.hs
+      - name: Replay strict float source composition
+        run: cabal exec -- runghc -Wall -Werror -isrc test/Phase1FloatArithmeticSourceMain.hs
+      - name: Replay explicit numeric conversion controls
+        run: cabal exec -- runghc -Wall -Werror -isrc test/Phase1NumericConversionMain.hs
+      - name: Replay exact integer shift controls
+        run: cabal exec -- runghc -Wall -Werror -isrc test/Phase1IntegerShiftMain.hs
+      - name: Replay current numeric review regressions
+        run: |
+          set -euo pipefail
+          cabal exec -- runghc -Wall -Werror -isrc test/Phase1ReviewR7UnaryNegationMain.hs
+          cabal exec -- runghc -Wall -Werror -isrc test/Phase1ReviewR8SignedKnownRangeMain.hs
+          cabal exec -- runghc -Wall -Werror -isrc test/Phase1ReviewR9ZeroFloatPrecisionMain.hs
+      - name: Run decision and assurance controls
+        run: cabal test phil-decision-tests phil-assurance-tests
