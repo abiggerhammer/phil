@@ -81,6 +81,7 @@ library
       Phil.Surface.Check.Support
       Phil.Surface.Check.Preflight
       Phil.Surface.Check.Engine
+      Phil.Surface.Lineage
       Phil.Assurance.EvidenceAuthorityKernelBridge
       Phil.Assurance.Types
       Phil.Assurance.Handoff
