@@ -21,6 +21,7 @@ import qualified Data.Text as Text
 import Phil.Assurance.Types
   ( Digest (..)
   , EvidenceEntryId (..)
+  , ObligationRevision (..)
   , RevisionId (..)
   )
 import Phil.Verification
