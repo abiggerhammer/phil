@@ -131,16 +131,24 @@ The first VerificationBundle handoff pair is:
 Both are governed by INT-002 and VER-012 and are content-addressed from the
 top-level handoff manifest.
 
-The progressive Ping corpus also needs VerificationBundles for the five distinct
-accepted source programs governed by INT-008/INT-009: one-shot Ping,
+The progressive Ping corpus now carries five distinct VerificationBundles for
+the accepted source programs governed by INT-008/INT-009: one-shot Ping,
 request/reply with explicit output, bounded Ping, productive unbounded Ping, and
 interruptible Ping with explicit cancellation. The conventional host-SIGINT
 termination of the unbounded program is a runtime realization of the same source
-and does not require a second source VerificationBundle. Those programs traverse
-the newer whole-source Grammar-v1 integration path, which currently has no
-explicit bridge into VerificationBundle construction; INT-007 treats that as the
-next integration slice rather than routing Ping through the older Upload/Steve
-SourceBundle helper path.
+and does not require a second source VerificationBundle.
+
+The whole-source bridge checks each exact persisted Grammar-v1 source, requires
+its program root to instantiate the checked architecture, derives the program
+architecture occurrence through the normal ArchitectureInstance identity
+machinery, content-binds the exact source bytes and stable architecture/program
+lineage, and constructs the canonical VerificationBundle. Ping currently has no
+assurance-ledger residual obligations or accepted evidence entries, so these five
+bundles deliberately carry the canonical empty obligation graph rather than
+inventing assurance facts from runtime/conformance tests.
+
+The five bundle summaries are content-addressed from the top-level handoff
+manifest under INT-008/INT-009 and VER-012.
 
 ## Deliberate remaining INT-007 work
 
