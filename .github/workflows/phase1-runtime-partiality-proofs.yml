@@ -1,0 +1,132 @@
+name: Phase 1 Runtime Partiality Proofs
+
+on:
+  pull_request:
+    paths:
+      - 'proof/Phil/Core/RuntimePartiality.v'
+      - 'proof/Phil/Core/RuntimePartialityImplementation.v'
+      - 'proof/Phil/Core/SystemsRealizationEffects.v'
+      - 'proof/Phil/Core/StorageAllocationFailure.v'
+      - 'proof/Phil/Verification/VerificationArtifact.v'
+      - 'src/Phil/Systems/RuntimePartialityRelation.hs'
+      - 'src/Phil/Systems/TargetStrengthening.hs'
+      - 'src/Phil/Systems/Storage.hs'
+      - 'src/Phil/Verification/ArtifactClosure.hs'
+      - 'test/Phase1RuntimePartialityMain.hs'
+      - 'test/Phase1RuntimeCapacityPartialityMain.hs'
+      - 'test/Phase1TargetStrengtheningMain.hs'
+      - 'test/Phase1StorageRealizationMain.hs'
+      - 'test/Phase1VerificationSourceArtifactClosureMain.hs'
+      - 'docs/phase-1/runtime-partiality-proof-boundary-v1.md'
+      - '.github/workflows/phase1-runtime-partiality-proofs.yml'
+  push:
+    branches: [main]
+    paths:
+      - 'proof/Phil/Core/RuntimePartiality.v'
+      - 'proof/Phil/Core/RuntimePartialityImplementation.v'
+      - 'proof/Phil/Core/SystemsRealizationEffects.v'
+      - 'proof/Phil/Core/StorageAllocationFailure.v'
+      - 'proof/Phil/Verification/VerificationArtifact.v'
+      - 'src/Phil/Systems/RuntimePartialityRelation.hs'
+      - 'src/Phil/Systems/TargetStrengthening.hs'
+      - 'src/Phil/Systems/Storage.hs'
+      - 'src/Phil/Verification/ArtifactClosure.hs'
+      - 'test/Phase1RuntimePartialityMain.hs'
+      - 'test/Phase1RuntimeCapacityPartialityMain.hs'
+      - 'test/Phase1TargetStrengtheningMain.hs'
+      - 'test/Phase1StorageRealizationMain.hs'
+      - 'test/Phase1VerificationSourceArtifactClosureMain.hs'
+      - 'docs/phase-1/runtime-partiality-proof-boundary-v1.md'
+      - '.github/workflows/phase1-runtime-partiality-proofs.yml'
+
+permissions:
+  contents: read
+
+jobs:
+  rocq-runtime-partiality-proof:
+    runs-on: ubuntu-latest
+    container:
+      image: rocq/rocq-prover:9.2.0
+      options: --user root
+    steps:
+      - uses: actions/checkout@v4
+      - name: Compile certified predecessors and PHIL-SYS-PARTIALITY-001
+        shell: bash
+        run: |
+          set -euo pipefail
+          export PATH="/home/rocq/.opam/${COMPILER}/bin:$PATH"
+          rocq c -Q proof/Phil Phil proof/Phil/Core/ArchitectureIdentity.v
+          rocq c -Q proof/Phil Phil proof/Phil/Core/ArchitectureInstantiation.v
+          rocq c -Q proof/Phil Phil proof/Phil/Core/ProviderReplacementQualification.v
+          rocq c -Q proof/Phil Phil proof/Phil/Core/ArchitectureRealization.v
+          rocq c -Q proof/Phil Phil proof/Phil/Systems/FactDisposition.v
+          rocq c -Q proof/Phil Phil proof/Phil/Assurance/ValidityScope.v
+          rocq c -Q proof/Phil Phil proof/Phil/Core/SystemsStageClosure.v
+          rocq c -Q proof/Phil Phil proof/Phil/Core/SystemsRealizationEffects.v
+          rocq c -Q proof/Phil Phil proof/Phil/Core/SystemsSubjectAuthority.v
+          rocq c -Q proof/Phil Phil proof/Phil/Core/StorageRealization.v
+          rocq c -Q proof/Phil Phil proof/Phil/Core/StorageAllocationFailure.v
+          rocq c -Q proof/Phil Phil proof/Phil/Verification/VerificationArtifact.v
+          rocq c -Q proof/Phil Phil proof/Phil/Core/RuntimePartiality.v
+          rocq c -Q proof/Phil Phil proof/Phil/Core/RuntimePartialityImplementation.v
+      - name: Record checked proof identities
+        shell: bash
+        run: |
+          set -euo pipefail
+          sha256sum \
+            proof/Phil/Core/SystemsRealizationEffects.v \
+            proof/Phil/Core/StorageAllocationFailure.v \
+            proof/Phil/Verification/VerificationArtifact.v \
+            proof/Phil/Core/RuntimePartiality.v \
+            proof/Phil/Core/RuntimePartiality.vo \
+            proof/Phil/Core/RuntimePartialityImplementation.v \
+            proof/Phil/Core/RuntimePartialityImplementation.vo \
+            > runtime-partiality-proof.sha256
+          cat runtime-partiality-proof.sha256
+      - uses: actions/upload-artifact@v4
+        with:
+          name: runtime-partiality-proof
+          path: runtime-partiality-proof.sha256
+
+  verify-runtime-partiality-correspondence:
+    needs: rocq-runtime-partiality-proof
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: haskell-actions/setup@v2
+        with:
+          ghc-version: '9.6.7'
+          cabal-version: 'latest'
+      - name: Build complete Haskell substrate
+        run: cabal build all --enable-tests
+      - name: Strict typecheck production authorities
+        run: |
+          set -euo pipefail
+          for module in \
+            src/Phil/Systems/RuntimePartialityRelation.hs \
+            src/Phil/Systems/TargetStrengthening.hs \
+            src/Phil/Systems/Storage.hs \
+            src/Phil/Verification/ArtifactClosure.hs
+          do
+            cabal exec -- ghc -isrc -Wall -Werror -fno-code "$module"
+          done
+      - name: Strict typecheck standalone regression Mains separately
+        run: |
+          set -euo pipefail
+          cabal exec -- ghc -isrc -Wall -Werror -fno-code test/Phase1RuntimePartialityMain.hs
+          cabal exec -- ghc -isrc -Wall -Werror -fno-code test/Phase1RuntimeCapacityPartialityMain.hs
+          cabal exec -- ghc -isrc -Wall -Werror -fno-code test/Phase1TargetStrengtheningMain.hs
+          cabal exec -- ghc -isrc -Wall -Werror -fno-code test/Phase1StorageRealizationMain.hs
+          cabal exec -- ghc -isrc -Wall -Werror -Wno-name-shadowing -Wno-unused-imports -fno-code test/Phase1VerificationSourceArtifactClosureMain.hs
+      - name: Replay EXEC-012 target partiality controls
+        run: cabal exec -- runghc -Wall -Werror -isrc test/Phase1RuntimePartialityMain.hs
+      - name: Replay EXEC-013 capacity partiality controls
+        run: cabal exec -- runghc -Wall -Werror -isrc test/Phase1RuntimeCapacityPartialityMain.hs
+      - name: Replay target strengthening predecessor
+        run: cabal exec -- runghc -Wall -Werror -isrc test/Phase1TargetStrengtheningMain.hs
+      - name: Replay storage failure predecessor
+        run: cabal exec -- runghc -Wall -Werror -isrc test/Phase1StorageRealizationMain.hs
+      - name: Replay artifact closure predecessor
+        run: cabal exec -- runghc -Wall -Werror -Wno-name-shadowing -Wno-unused-imports -isrc test/Phase1VerificationSourceArtifactClosureMain.hs
+      - name: Run decision and assurance controls
+        run: cabal test phil-decision-tests phil-assurance-tests phil-assurance-handoff-tests
