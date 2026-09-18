@@ -57,6 +57,7 @@ library
       Phil.Compiler
       Phil.Verification
       Phil.Verification.ProofEvidence
+      Phil.Handoff.Phase1Manifest
   other-modules:
       ArchitectureIdentityKernel
       ArchitectureImportKernel
