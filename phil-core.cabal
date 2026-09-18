@@ -98,6 +98,56 @@ library
       Phil.Assurance.RocqDigestValidation
       Phil.Assurance.RocqStorage
       Phil.Verification.Bundle
+      DataModeKernel
+      DataProductKernel
+      GenericIdentityEqualityKernel
+      GenericInstantiationDomainKernel
+      GenericInstantiationValidityKernel
+      GenericRequirementCategoryKernel
+      GenericRequirementsKernel
+      GenericStaticKindKernel
+      GenericStructuralKernel
+      Phil.Core.CheckedBindingMode
+      Phil.Core.DataMode
+      Phil.Core.DataModeKernelBridge
+      Phil.Core.DataProductKernelBridge
+      Phil.Core.FloatArithmetic
+      Phil.Core.Generic
+      Phil.Core.Generic.RequirementCategory
+      Phil.Core.Generic.StaticActual
+      Phil.Core.GenericRequirementCategoryKernelBridge
+      Phil.Core.GenericStaticKindKernelBridge
+      Phil.Core.SIntArithmetic
+      Phil.Core.UnicodeChar
+      Phil.Core.UnicodeString
+      Phil.Surface.GrammarV1.ArchitectureSurface
+      Phil.Surface.GrammarV1.BoundBytesType
+      Phil.Surface.GrammarV1.BoundClaimApplication
+      Phil.Surface.GrammarV1.BoundProofType
+      Phil.Surface.GrammarV1.BoundProposition
+      Phil.Surface.GrammarV1.BoundRef
+      Phil.Surface.GrammarV1.BoundRefExpression
+      Phil.Surface.GrammarV1.BoundRefinementType
+      Phil.Surface.GrammarV1.BoundRelation
+      Phil.Surface.GrammarV1.BoundType
+      Phil.Surface.GrammarV1.CheckedProofType
+      Phil.Surface.GrammarV1.CheckedProposition
+      Phil.Surface.GrammarV1.CheckedRefinementType
+      Phil.Surface.GrammarV1.CheckedType
+      Phil.Surface.GrammarV1.Elaborate
+      Phil.Surface.GrammarV1.IntrinsicFrameType
+      Phil.Surface.GrammarV1.IntrinsicNamedType
+      Phil.Surface.GrammarV1.IntrinsicProofType
+      Phil.Surface.GrammarV1.IntrinsicProposition
+      Phil.Surface.GrammarV1.IntrinsicRefinementType
+      Phil.Surface.GrammarV1.IntrinsicType
+      Phil.Surface.GrammarV1.IntrinsicValidatedType
+      Phil.Surface.GrammarV1.Lexer
+      Phil.Surface.GrammarV1.Parser
+      Phil.Surface.GrammarV1.ProgramSurface
+      Phil.Surface.GrammarV1.ReferenceKernelBridge
+      Phil.Surface.GrammarV1.ReferenceToken
+      SurfaceGrammarRecognizerKernel
       Phil.Systems.IR
       Phil.Systems.Verify
       Phil.Systems.Phase0
