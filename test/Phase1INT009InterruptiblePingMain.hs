@@ -13,7 +13,8 @@ import Phil.Core.Callable
   , CalleeTransition (..)
   )
 import Phil.Core.CallableRefinement
-  ( CallableMachineShape (..)
+  ( CallableAuthorityRequirement (..)
+  , CallableMachineShape (..)
   , CallableRefinementSurface (..)
   )
 import Phil.Core.EnvironmentObservation
