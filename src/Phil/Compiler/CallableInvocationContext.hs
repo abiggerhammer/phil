@@ -181,13 +181,14 @@ checkSurfaceCallableInvocationSummaryWithOutcomeBranches witnesses callerContext
 
 -- | Lifecycle-aware branch admission. Outcome/control/refinement checks are the
 -- same as the branch-aware path, but the coarse PreserveCallee guard is replaced
--- by exact #1010 occurrence-state evidence. The lifecycle bridge independently
--- checks binding domain/identity, concrete predecessor availability, transition
+-- by exact occurrence-state evidence. The lifecycle bridge independently checks
+-- binding domain/identity, concrete predecessor availability, transition
 -- equality and the certified Preserve/Consume/Replace state mutation.
 --
 -- Supplying no outcome-arm witnesses remains valid for a single ordinary success
 -- outcome, matching the branch-aware path. Branch-sensitive invocations still
--- require their exact arm witness domain, and fatal outcomes remain fail-closed.
+-- require their exact arm witness domain; fatal witnesses are admitted only when
+-- their exact source control is the declared-fatal control class.
 checkSurfaceCallableInvocationSummaryWithOutcomeBranchesAndLifecycle
   :: Map (SourceSpan, DeclarationKey) SurfaceCallableInvocationLifecycleBinding
   -> CallableResourceState
@@ -369,9 +370,9 @@ witnessControlMatches witness =
     ( CallableNonSuccessOutcome (CallableDeclaredTerminal _)
       , SurfaceCallableOutcomeDeclaredTerminal
       ) -> True
-    -- Fatal outcomes cannot be produced by the installed neutral Surface
-    -- dispatch yet; a hand-constructed fatal witness must not bypass that seam.
-    (CallableNonSuccessOutcome (CallableFatal _), _) -> False
+    ( CallableNonSuccessOutcome (CallableFatal _)
+      , SurfaceCallableOutcomeFatalTerminal
+      ) -> True
     _ -> False
 
 checkWitnessOwned

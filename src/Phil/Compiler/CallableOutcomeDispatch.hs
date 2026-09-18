@@ -185,11 +185,10 @@ makeBranch bindings outcome = do
 -- different plan for the same declaration rejects rather than changing branch
 -- meaning after checking.
 --
--- Surface can now represent ordinary continuation and exact declared-terminal
--- closure. Terminal outcomes cannot expose a caller payload because there is no
--- continuation in which such a payload could be bound. Fatal outcomes still
--- reject here: Core's current `Control` has no exact fatal constructor, so using
--- generic `Failed` would invent a failure class and violate CALL-019.
+-- Surface preserves ordinary continuation, exact declared closure, and exact
+-- declared fatal termination as three distinct caller-control shapes. Neither
+-- terminal class may expose a caller payload because there is no continuation
+-- in which such a payload could be bound.
 installSurfaceCallableOutcomeDispatch
   :: SurfaceCallableOutcomeDispatchPlan
   -> SurfaceEnvironment
@@ -229,30 +228,35 @@ surfaceSpec branch =
         CallableNonSuccessOutcome (CallableTypedNegative _)) ->
       Right (continuingSpec branch)
     (SurfaceCallableOutcomeDeclaredTerminal,
-        CallableNonSuccessOutcome (CallableDeclaredTerminal outcome))
-      | not (Set.null (callableOutcomeResidualObligations
-          (surfaceOutcomeBranchContract branch))) -> Left
-          (SurfaceCallableTerminalResidualObligationsUnsupported
-            (surfaceOutcomeBranchClass branch))
-      | null (surfaceOutcomeBranchPayload branch) ->
-          Right CallableOutcomeSpec
-            { callableOutcomeLabel = surfaceOutcomeBranchLabel branch
-            , callableOutcomePayload = []
-            , callableOutcomeControl = CallableOutcomeCloses outcome
-            , callableOutcomeFacts = []
-            , callableOutcomeResidualObligationArity = 0
-            , callableOutcomeObligations = []
-            }
-      | otherwise -> Left
-          (SurfaceCallableTerminalOutcomePayloadUnsupported
-            (surfaceOutcomeBranchClass branch))
+        CallableNonSuccessOutcome (CallableDeclaredTerminal outcome)) ->
+      terminalSpec branch (CallableOutcomeCloses outcome)
     (SurfaceCallableOutcomeFatalTerminal,
-        CallableNonSuccessOutcome (CallableFatal _)) -> Left
-          (SurfaceCallableOutcomeControlRequiresSurfaceRepresentation
-            (surfaceOutcomeBranchClass branch)
-            SurfaceCallableOutcomeFatalTerminal)
+        CallableNonSuccessOutcome (CallableFatal outcome)) ->
+      terminalSpec branch (CallableOutcomeFatals outcome)
     (control, outcomeClass) -> Left
       (SurfaceCallableOutcomeControlMismatch outcomeClass control)
+
+terminalSpec
+  :: SurfaceCallableOutcomeBranch
+  -> CallableOutcomeControlSpec
+  -> Either SurfaceCallableOutcomeDispatchError CallableOutcomeSpec
+terminalSpec branch control
+  | not (Set.null (callableOutcomeResidualObligations
+      (surfaceOutcomeBranchContract branch))) = Left
+      (SurfaceCallableTerminalResidualObligationsUnsupported
+        (surfaceOutcomeBranchClass branch))
+  | null (surfaceOutcomeBranchPayload branch) =
+      Right CallableOutcomeSpec
+        { callableOutcomeLabel = surfaceOutcomeBranchLabel branch
+        , callableOutcomePayload = []
+        , callableOutcomeControl = control
+        , callableOutcomeFacts = []
+        , callableOutcomeResidualObligationArity = 0
+        , callableOutcomeObligations = []
+        }
+  | otherwise = Left
+      (SurfaceCallableTerminalOutcomePayloadUnsupported
+        (surfaceOutcomeBranchClass branch))
 
 continuingSpec :: SurfaceCallableOutcomeBranch -> CallableOutcomeSpec
 continuingSpec branch = CallableOutcomeSpec

@@ -34,6 +34,7 @@ Definition advance {E : Type}
   | Continue => continuation (pathState path)
   | Return _ => FlowOk [path]
   | Closed _ => FlowOk [path]
+  | Fatal _ => FlowOk [path]
   | Failed _ _ => FlowOk [path]
   end.
 
@@ -79,14 +80,15 @@ Proof.
   - reflexivity.
   - reflexivity.
   - reflexivity.
+  - reflexivity.
 Qed.
 
 (*
   PHIL-PROC-SEQ-001.
 
   If sequencing succeeds, every non-Continue input path occurs unchanged in the
-  output. Thus Return, Closed, and Failed paths survive sequencing exactly; only
-  Continue paths can be replaced by continuation output.
+  output. Thus Return, Closed, Fatal, and Failed paths survive sequencing exactly;
+  only Continue paths can be replaced by continuation output.
 *)
 Theorem sequenceFlow_preserves_noncontinuing :
   forall (E : Type)

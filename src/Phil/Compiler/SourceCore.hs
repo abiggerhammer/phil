@@ -61,6 +61,7 @@ data SourceCoreCorrespondenceError
   | SourceCoreFunctionKeyMismatch Text Text
   | SourceCoreMissingSourceFunction Text
   | SourceCoreClosedOutcomeMissing Text Text
+  | SourceCoreFatalOutcomeMissing Text Text
   | SourceCoreFailureTerminalMissing Text
   | SourceCoreReturnTerminalMissing Text
   | SourceCoreInventoryUnderrepresented Text SourceCoreInventory SourceCoreInventory
@@ -136,6 +137,9 @@ verifyTerminal functionName coreTerminals control = case control of
   Closed (Outcome outcome)
     | any (endsWith outcome) coreTerminals -> Right ()
     | otherwise -> Left (SourceCoreClosedOutcomeMissing functionName outcome)
+  Fatal (Outcome outcome)
+    | any (fatalsWith outcome) coreTerminals -> Right ()
+    | otherwise -> Left (SourceCoreFatalOutcomeMissing functionName outcome)
   Failed _ _
     | any isFatal coreTerminals -> Right ()
     | otherwise -> Left (SourceCoreFailureTerminalMissing functionName)
@@ -145,6 +149,9 @@ verifyTerminal functionName coreTerminals control = case control of
       _ -> False
     endsWith expected terminator = case terminator of
       CoreSystemsEnd actual -> actual == expected
+      _ -> False
+    fatalsWith expected terminator = case terminator of
+      CoreSystemsFatal actual -> actual == expected
       _ -> False
     isFatal terminator = case terminator of
       CoreSystemsFatal _ -> True

@@ -158,7 +158,7 @@ effectBoundMismatchRejects =
 
 failureMismatchRejects :: Either String ()
 failureMismatchRejects =
-  let fatal = CallableFatal "target-abort"
+  let fatal = CallableFatal (Outcome "target-abort")
   in case checkCallableLoweringCorrespondence sourceFacts
       (targetFacts { targetCallableFailures = Set.fromList [notFoundFailure, fatal] })
       accounting of
@@ -189,7 +189,7 @@ unaccountedEffectsReject =
 
 unaccountedFailuresReject :: Either String ()
 unaccountedFailuresReject =
-  let targetFailure = CallableFatal "allocator-failure"
+  let targetFailure = CallableFatal (Outcome "allocator-failure")
       targetWithFailure = targetFacts
         { targetCallableIntroducedFailures = Set.singleton targetFailure }
       accountingWithoutFailure = accounting
@@ -229,7 +229,7 @@ unaccountedCostReject =
 
 explicitTargetAccountingAccepts :: Either String ()
 explicitTargetAccountingAccepts =
-  let targetFailure = CallableFatal "runtime-helper-failure"
+  let targetFailure = CallableFatal (Outcome "runtime-helper-failure")
       richerTarget = targetFacts
         { targetCallableIntroducedFailures = Set.singleton targetFailure
         , targetCallableIntroducedEffects = Set.fromList [allocationEffect, helperEffect]

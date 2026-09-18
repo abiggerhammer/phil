@@ -43,4 +43,5 @@ Inductive Control : Type :=
 | Continue : Control
 | Return : Ty -> Control
 | Closed : Outcome -> Control
+| Fatal : Outcome -> Control
 | Failed : string -> string -> Control.

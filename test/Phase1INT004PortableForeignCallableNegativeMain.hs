@@ -510,7 +510,7 @@ materializeFailure :: PortableFailure -> Either String CallableFailure
 materializeFailure row = case failureKind row of
   "typed-negative" -> Right (CallableTypedNegative (Outcome (failureValue row)))
   "declared-terminal" -> Right (CallableDeclaredTerminal (Outcome (failureValue row)))
-  "fatal" -> Right (CallableFatal (failureValue row))
+  "fatal" -> Right (CallableFatal (Outcome (failureValue row)))
   other -> Left ("unsupported failure kind: " <> Text.unpack other)
 
 materializeEvidence
@@ -583,7 +583,7 @@ matchExpected portableCase observed maybeQualification err =
     ( "refinement-failure-too-wide"
       , ForeignCallableQualificationRefinementError (CallableFailureSetTooWide excess) ) ->
         case Set.toList excess of
-          [CallableFatal detail] -> compareFields portableCase ["fatal", detail]
+          [CallableFatal (Outcome detail)] -> compareFields portableCase ["fatal", detail]
           _ -> Left "refinement failure diagnostic did not contain exactly one fatal failure"
     _ -> Left ("unexpected CALL-015 rejection: " <> show err)
 

@@ -77,7 +77,7 @@ span1 = SourceSpan
 negativeFailure, terminalFailure, fatalFailure :: CallableFailure
 negativeFailure = CallableTypedNegative (Outcome "not-found")
 terminalFailure = CallableDeclaredTerminal (Outcome "closed")
-fatalFailure = CallableFatal "panic"
+fatalFailure = CallableFatal (Outcome "panic")
 
 successClass, negativeClass, terminalClass, fatalClass :: CallableOutcomeClass
 successClass = CallableSuccessOutcome

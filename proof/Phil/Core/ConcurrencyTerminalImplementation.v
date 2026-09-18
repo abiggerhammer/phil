@@ -17,7 +17,7 @@ From Phil.Core Require Import
   The Certified terminal layer has four independent safety authorities:
 
   - one process can become terminal only after resource/loan, obligation, and
-    live-endpoint closure, with Closed/Failed rather than Continue/Return;
+    live-endpoint closure, with Closed/Fatal/Failed rather than Continue/Return;
   - one fatal process transition changes the actor and leaves every peer's
     complete semantic state unchanged;
   - whole-root terminal closure has exact process facts/statuses and no root
@@ -39,6 +39,7 @@ Definition ProcessTerminalBoundaryFacts
   LocalObligationClosure payload /\
   (forall endpoint, ~ LiveEndpoint process endpoint) /\
   ((exists outcome, control = Closed outcome) \/
+   (exists outcome, control = Fatal outcome) \/
    (exists failureClass detail,
       control = Failed failureClass detail)).
 
@@ -61,7 +62,9 @@ Proof.
   intros process control context payload.
   split.
   - intros [Hresource [Hobligations [Hendpoints Hcontrol]]].
-    destruct Hcontrol as [[outcome Hclosed] | [failureClass [detail Hfailed]]].
+    destruct Hcontrol as
+      [[outcome Hclosed] |
+        [[outcome Hfatal] | [failureClass [detail Hfailed]]]].
     + subst control.
       exists
         (mkCertifiedProcessTerminalFact
@@ -70,6 +73,18 @@ Proof.
             (Closed outcome)
             context
             (resource_complete_allows_closed outcome context Hresource))
+          payload
+          Hobligations
+          Hendpoints).
+      repeat split; reflexivity.
+    + subst control.
+      exists
+        (mkCertifiedProcessTerminalFact
+          (mkLocalProcessTerminalFact
+            process
+            (Fatal outcome)
+            context
+            (resource_complete_allows_fatal outcome context Hresource))
           payload
           Hobligations
           Hendpoints).
@@ -97,7 +112,7 @@ Proof.
     + rewrite <- Hprocess.
       exact (certifiedTerminalNoLiveEndpoints fact).
     + rewrite <- Hcontrol.
-      exact (certified_terminal_control_is_closed_or_failed fact).
+      exact (certified_terminal_control_is_closed_fatal_or_failed fact).
 Qed.
 
 Definition ExactFailureIsolationFacts
@@ -237,6 +252,7 @@ Theorem decideCertifiedProcessTerminalByFacts_classifies :
       forall endpoint, ~ LiveEndpoint process endpoint) ->
     (controlTerminal = true <->
       (exists outcome, control = Closed outcome) \/
+      (exists outcome, control = Fatal outcome) \/
       (exists failureClass detail,
         control = Failed failureClass detail)) ->
     decideCertifiedProcessTerminalByFacts

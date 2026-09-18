@@ -166,7 +166,7 @@ simpleOutcomeFailures = do
           Just (Set.fromList
             [ CallableTypedNegative (Outcome "Retry")
             , CallableDeclaredTerminal (Outcome "Closed")
-            , CallableFatal "Crashed"
+            , CallableFatal (Outcome "Crashed")
             ])
       )
       "source outcome classes did not preserve exact Core failure identities"
@@ -181,7 +181,7 @@ simpleOutcomeFailures = do
           Just (Set.fromList
             [ CallableTypedNegative (Outcome "pkg.Retry")
             , CallableDeclaredTerminal (Outcome "pkg.Closed")
-            , CallableFatal "pkg.Crashed"
+            , CallableFatal (Outcome "pkg.Crashed")
             ])
       )
       "qualified outcome identities lost exact dotted spelling"

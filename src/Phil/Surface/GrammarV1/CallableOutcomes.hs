@@ -50,7 +50,7 @@ grammarV1CallableFailure source =
       pure (Just (CallableDeclaredTerminal (Outcome identity)))
     GrammarV1FatalOutcome -> do
       identity <- grammarV1OutcomeIdentity outcomeType
-      pure (Just (CallableFatal identity))
+      pure (Just (CallableFatal (Outcome identity)))
   where
     outcomeType = locatedValue (grammarV1OutcomeSpecType source)
 

@@ -56,8 +56,8 @@ data SurfaceCallableOutcomeResourceResidueBinding =
   deriving (Eq, Show)
 
 -- | Exact branch-local resource environment retained for successor Surface
--- composition.  Declared-terminal outcomes retain their complete CALL
--- continuation but intentionally have no caller resource residue: there is no
+-- composition.  Declared-terminal and declared-fatal outcomes retain their
+-- complete CALL continuation but intentionally have no caller resource residue: there is no
 -- caller continuation in which that residue could be observed or joined.
 data SurfaceCallableOutcomeBranchResourceEnvironment =
   SurfaceCallableOutcomeBranchResourceEnvironment
@@ -142,6 +142,8 @@ makeEnvironment
 makeEnvironment bindings continuation =
   case surfaceContinuationDisposition continuation of
     SurfaceCallableOutcomeCallerTerminates _ ->
+      Right (environment Nothing)
+    SurfaceCallableOutcomeCallerFatals _ ->
       Right (environment Nothing)
     SurfaceCallableOutcomeCallerContinues -> do
       let key = continuationIdentity continuation

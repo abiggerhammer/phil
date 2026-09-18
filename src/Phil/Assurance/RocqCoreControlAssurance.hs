@@ -96,7 +96,7 @@ processSeqSpec :: RocqCertificationSpec
 processSeqSpec = mkSpec
   "core-process-sequence"
   "PHIL-PROC-SEQ-001"
-  "sequenceFlow applies its continuation only to Continue paths; Return, Closed, and Failed paths are preserved unchanged."
+  "sequenceFlow applies its continuation only to Continue paths; Return, Closed, Fatal, and Failed paths are preserved unchanged."
   "Core process control-flow preservation"
   "src/Phil/Core/Process.hs::sequenceFlow; proof/Phil/Core/Process.v"
   [ "advance_continue_uses_continuation"
@@ -127,15 +127,16 @@ processTerminalSpec :: RocqCertificationSpec
 processTerminalSpec = mkSpec
   "core-process-terminal"
   "PHIL-PROC-TERM-001"
-  "Closed and Failed terminal flows are constructible only when the resource context has no active loans and no unconsumed linear resources."
+  "Closed, Fatal, and Failed terminal flows are constructible only when the resource context has no active loans and no unconsumed linear resources."
   "Core terminal-state safety"
-  "src/Phil/Core/Process.hs::{closedFlow,failedFlow}; proof/Phil/Core/ProcessTerminal.v"
+  "src/Phil/Core/Process.hs::{closedFlow,fatalFlow,failedFlow}; proof/Phil/Core/ProcessTerminal.v"
   [ "terminal_flow_success_requires_resource_complete"
   , "terminal_flow_success_has_no_loans"
   , "terminal_flow_success_has_no_linear_resources"
   , "terminal_flow_never_returns"
   , "terminal_flow_never_continues"
   , "resource_complete_allows_closed"
+  , "resource_complete_allows_fatal"
   , "resource_complete_allows_failed"
   ]
   "Phil.Core.Process terminalFlow / ensureComplete"

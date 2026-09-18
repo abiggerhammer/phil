@@ -214,10 +214,10 @@ failureWideningRejects =
   expectWorkerRefinementReject
     (workerInterface
       { callableRefinementFailures =
-          Set.singleton (CallableFatal "fatal:extra") })
+          Set.singleton (CallableFatal (Outcome "fatal:extra")) })
     (\err -> case err of
       CallableFailureSetTooWide extra ->
-        extra == Set.singleton (CallableFatal "fatal:extra")
+        extra == Set.singleton (CallableFatal (Outcome "fatal:extra"))
       _ -> False)
     "failure widening"
 

@@ -39,10 +39,11 @@ newtype CallableAuthorityRequirement = CallableAuthorityRequirement
 -- | Caller-visible modeled non-success behavior for the bounded CALL-012 slice.
 -- Success is implicit; typed-negative, declared-terminal, and fatal behavior
 -- remain distinct because introducing a fatal path is not ordinary subtyping.
+-- Every classified non-success keeps an exact semantic outcome identity.
 data CallableFailure
   = CallableTypedNegative Outcome
   | CallableDeclaredTerminal Outcome
-  | CallableFatal Text
+  | CallableFatal Outcome
   deriving (Eq, Ord, Show)
 
 -- | Checker-facing public callable facts needed for the first higher-order

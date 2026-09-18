@@ -91,7 +91,7 @@ readAuthority = CallableAuthorityRequirement "authority:read"
 writeAuthority = CallableAuthorityRequirement "authority:write"
 
 writeFailure :: CallableFailure
-writeFailure = CallableFatal "fatal:write"
+writeFailure = CallableFatal (Outcome "fatal:write")
 
 successOutcome :: Text -> CalleeTransition -> CallableOutcomeContract
 successOutcome state transition = CallableOutcomeContract

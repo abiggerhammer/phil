@@ -33,13 +33,14 @@ import Phil.Core.Syntax
   )
 import Phil.Surface.Syntax (SourceSpan)
 
--- | Caller-control disposition for one exact callable outcome branch. A
--- declared-terminal branch retains its semantic contract, but it does not
--- acquire a fictitious caller continuation merely because the other outcomes
--- of the same invocation continue normally.
+-- | Caller-control disposition for one exact callable outcome branch. Continuing,
+-- declared-terminal, and declared-fatal outcomes remain distinct. A fatal
+-- disposition terminates ordinary caller sequencing without becoming generic
+-- failure or ordinary declared closure.
 data SurfaceCallableOutcomeContinuationDisposition
   = SurfaceCallableOutcomeCallerContinues
   | SurfaceCallableOutcomeCallerTerminates Outcome
+  | SurfaceCallableOutcomeCallerFatals Outcome
   deriving (Eq, Ord, Show)
 
 -- | Exact branch-local semantic state made available to successor compiler
@@ -74,16 +75,12 @@ data SurfaceCallableOutcomeContinuationError
       SourceSpan
       CallableOutcomeClass
       SurfaceCallableOutcomeControl
-  | SurfaceCallableOutcomeContinuationFatalUnsupported
-      SourceSpan
-      CallableOutcomeClass
   deriving (Eq, Ord, Show)
 
 -- | Project exact admitted outcome witnesses into branch-local continuation
 -- state. Witness/source order is preserved. Continuing success and typed-negative
--- branches become ordinary caller continuations; declared-terminal outcomes are
--- retained as terminal dispositions; fatal outcomes remain fail-closed until an
--- exact fatal caller-control representation exists.
+-- branches become ordinary caller continuations; declared-terminal and fatal
+-- outcomes retain distinct noncontinuing dispositions with exact outcome identity.
 composeSurfaceCallableOutcomeContinuations
   :: [SurfaceCallableOutcomeArmSemanticWitness]
   -> Either SurfaceCallableOutcomeContinuationError
@@ -103,11 +100,9 @@ composeOne witness =
     ( CallableNonSuccessOutcome (CallableDeclaredTerminal outcome)
       , SurfaceCallableOutcomeDeclaredTerminal
       ) -> Right (continuation (SurfaceCallableOutcomeCallerTerminates outcome))
-    (CallableNonSuccessOutcome (CallableFatal _), _) ->
-      Left
-        (SurfaceCallableOutcomeContinuationFatalUnsupported
-          (surfaceOutcomeArmSpan witness)
-          outcomeClass)
+    ( CallableNonSuccessOutcome (CallableFatal outcome)
+      , SurfaceCallableOutcomeFatalTerminal
+      ) -> Right (continuation (SurfaceCallableOutcomeCallerFatals outcome))
     (_, actualControl) ->
       Left
         (SurfaceCallableOutcomeContinuationControlMismatch

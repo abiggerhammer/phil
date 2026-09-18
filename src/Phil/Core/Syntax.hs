@@ -165,10 +165,15 @@ data Session
   | SessionVar Name
   deriving (Eq, Ord, Show)
 
+-- | Neutral Core control. `Fatal` records that an exact declared fatal outcome
+-- occurred without laundering it into generic `Failed` control. `Failed`
+-- remains the explicit failure-class/detail form used by term-level `fail` and
+-- existing failure-process machinery.
 data Control
   = Continue
   | Return Ty
   | Closed Outcome
+  | Fatal Outcome
   | Failed Text Text
   deriving (Eq, Ord, Show)
 

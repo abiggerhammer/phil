@@ -97,7 +97,7 @@ spanAt start end = SourceSpan
 negativeFailure, terminalFailure, fatalFailure :: CallableFailure
 negativeFailure = CallableTypedNegative (Outcome "negative")
 terminalFailure = CallableDeclaredTerminal (Outcome "closed")
-fatalFailure = CallableFatal "fatal:branch"
+fatalFailure = CallableFatal (Outcome "fatal:branch")
 
 successClass, negativeClass, terminalClass, fatalClass :: CallableOutcomeClass
 successClass = CallableSuccessOutcome

@@ -80,7 +80,7 @@ readAuthority = CallableAuthorityRequirement "authority:read"
 writeAuthority = CallableAuthorityRequirement "authority:write"
 
 writeFailure :: CallableFailure
-writeFailure = CallableFatal "fatal:write"
+writeFailure = CallableFatal (Outcome "fatal:write")
 
 readOutcome, writeOutcome :: CallableOutcomeContract
 readOutcome = outcome "read.success" "post:read" "residual:read" "assumption:read" "effect:read" "fact:read"
