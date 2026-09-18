@@ -23,7 +23,7 @@ main = do
     Right value -> pure value
 
   pureResults <- sequence
-    [ test "INT-007 manifest spine has the exact admitted initial inventory"
+    [ test "INT-007 manifest spine has the exact admitted current inventory"
         (spineCoverage manifest)
     , test "INT-007 duplicate artifact identity rejects"
         duplicateArtifactIdRejects
@@ -96,6 +96,22 @@ spineCoverage manifest =
         , ( HandoffSourceBundle
           , "test/fixtures/phase1/surf010-metadata.bundle"
           , [HandoffMatrixAuthority "SURF-010"]
+          )
+        )
+      , ( HandoffArtifactId "bundle.upload.source.v1"
+        , ( HandoffSourceBundle
+          , "handoff/phase1/witnesses/upload-source-bundle-v1.tsv"
+          , [ HandoffMatrixAuthority "INT-001"
+            , HandoffMatrixAuthority "SURF-010"
+            ]
+          )
+        )
+      , ( HandoffArtifactId "bundle.steve.source.v1"
+        , ( HandoffSourceBundle
+          , "handoff/phase1/witnesses/steve-source-bundle-v1.tsv"
+          , [ HandoffMatrixAuthority "INT-001"
+            , HandoffMatrixAuthority "SURF-010"
+            ]
           )
         )
       , ( HandoffArtifactId "corpus.negative.v1"
