@@ -7,6 +7,7 @@ import Control.Monad (void)
 import qualified Data.Map.Strict as Map
 import qualified Data.Set as Set
 import Data.Text (Text)
+import qualified Data.Text as Text
 import Phil.Core.Authority
 import Phil.Core.Callable
   ( CallableContract (..)
