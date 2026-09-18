@@ -30,6 +30,7 @@ import Phil.Verification
   )
 import Phil.Verification.ManifestClosure
   ( ManifestClosureSelection (..)
+  , verificationDispositionForAssuranceKind
   )
 
 data Phase1AssuranceInputs = Phase1AssuranceInputs
@@ -105,19 +106,8 @@ requiredAssuranceDispositions evidence assumptions exports =
       <> Map.elems exports)
   where
     evidenceDispositions entry =
-      primaryDisposition (evidenceAssuranceKind entry)
+      verificationDispositionForAssuranceKind (evidenceAssuranceKind entry)
         : [AssumptionDependent | not (null (evidenceAssumptions entry))]
-
-primaryDisposition :: AssuranceKind -> VerificationDisposition
-primaryDisposition kind = case kind of
-  KernelChecked -> StaticallyDischarged
-  ProofAssistantTheorem -> ExternallyDischarged
-  CertificateChecked -> ExternallyDischarged
-  TranslationValidated -> ExternallyDischarged
-  DifferentialTested -> ExternallyDischarged
-  PropertyTested -> ExternallyDischarged
-  RuntimeEnforced -> RuntimeBound
-  Assumed -> AssumptionDependent
 
 renderPhase1AssuranceInputs :: Phase1AssuranceInputs -> Text
 renderPhase1AssuranceInputs inputs = Text.unlines $
