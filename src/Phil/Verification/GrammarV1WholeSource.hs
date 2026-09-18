@@ -69,7 +69,6 @@ data GrammarV1WholeSourceVerificationSpec =
     , wholeSourceArchitectureKey :: DeclarationKey
     , wholeSourceArchitectureRevision :: DefinitionRevision
     , wholeSourceProgramKey :: DeclarationKey
-    , wholeSourceProgramRevision :: DefinitionRevision
     , wholeSourcePolicyRevision :: AssurancePolicyRevision
     }
   deriving (Eq, Show)
@@ -160,7 +159,7 @@ grammarV1WholeSourceVerificationBundle spec = do
       case grammarV1CheckedProgramSurface
           emptyStaticContext
           (wholeSourceProgramKey spec)
-          (wholeSourceProgramRevision spec)
+          (programDefinitionRevision spec)
           source of
         Nothing -> Left WholeSourceProgramNotCompetent
         Just (Left errorValue) ->
@@ -230,9 +229,17 @@ wholeSourceRevision spec = digestText (Text.intercalate "\n"
           (wholeSourceArchitectureRevision spec)
        , "program.key=" <> unDeclarationKey (wholeSourceProgramKey spec)
        , "program.definition=" <> unDefinitionRevision
-          (wholeSourceProgramRevision spec)
+          (programDefinitionRevision spec)
        ]
   ))
+  where
+    digestValue (Digest value) = value
+
+programDefinitionRevision :: GrammarV1WholeSourceVerificationSpec -> DefinitionRevision
+programDefinitionRevision spec =
+  DefinitionRevision
+    ("phil.grammar-v1.program-definition.v1:"
+      <> digestValue (digestText (wholeSourcePrimaryText spec)))
   where
     digestValue (Digest value) = value
 
