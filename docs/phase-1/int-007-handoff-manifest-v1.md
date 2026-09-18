@@ -102,14 +102,35 @@ summary. Another implementation can reproduce the same comparison from the
 documented canonical semantic/revision rules without importing Haskell object
 state.
 
+## VerificationBundle and obligation-graph handoff
+
+The next layer reconstructs each witness's canonical Phase-1
+`VerificationBundle` from the persisted source handoff through the same INT-002
+verification path used by manifest closure. The portable verification summary
+records:
+
+- exact SHA-256 identities for the VerificationBundle, source revision,
+  architecture projection, and obligation graph;
+- the exact selected assurance-policy revision;
+- every obligation RevisionId plus its statement digest;
+- every obligation dependency edge;
+- every certification-scope RevisionId; and
+- every accepted evidence entry ID, evidence digest, and target obligation
+  RevisionId.
+
+The graph root is therefore not the only handoff fact: an independent consumer
+can reconstruct the complete node/edge/scope domain and check that the canonical
+graph and bundle revisions agree. Haskell container order and constructors are
+not part of this representation.
+
 ## Deliberate remaining INT-007 work
 
 This slice does not yet materialize or enumerate the full freeze set. Subsequent
 INT-007 slices must add, and independently reconstruct/replay from portable
 bytes:
 
-- final VerificationBundles and obligation graphs;
-- accepted evidence/certificates plus policy/disposition inputs;
+- accepted evidence/certificates plus policy/disposition inputs beyond the
+  accepted-evidence references already carried by the VerificationBundle;
 - ArchitectureRealization, Systems, StageContract, lowering, and cost artifacts;
 - final per-witness AssuranceManifests and residual TCB;
 - the complete positive/negative conformance corpus with stable fixture IDs,
