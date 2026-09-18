@@ -1,7 +1,7 @@
 PHIL-PHASE1-HANDOFF-MANIFEST-V1
 artifact_id	artifact_kind	repository_path	sha256	governing_authority
 grammar.phase1.v1	grammar	grammar/phase1-surface.ebnf	sha256:c352ccc31cd264af42ee7408426fabea871710d4905baef22c4cc209971ac1c5	matrix:SURF-006
-corpus.surface.v1	parser-corpus	test/fixtures/phase1-surface/manifest.json	sha256:0000000000000000000000000000000000000000000000000000000000000000	matrix:SURF-002
-bundle.lineage.inline.v1	source-bundle	test/fixtures/phase1/surf010-inline.bundle	sha256:0000000000000000000000000000000000000000000000000000000000000000	matrix:SURF-010
-bundle.lineage.metadata.v1	source-bundle	test/fixtures/phase1/surf010-metadata.bundle	sha256:0000000000000000000000000000000000000000000000000000000000000000	matrix:SURF-010
-corpus.negative.v1	conformance-manifest	test/fixtures/phase1-negative/manifest.tsv	sha256:0000000000000000000000000000000000000000000000000000000000000000	matrix:INT-004
+corpus.surface.v1	parser-corpus	test/fixtures/phase1-surface/manifest.json	sha256:22a1ab1ea4746d1e978e693a51581c6b66369b60487ecd0897327c79a511dda5	matrix:SURF-002
+bundle.lineage.inline.v1	source-bundle	test/fixtures/phase1/surf010-inline.bundle	sha256:e7fd131884ddffff37fbafa462d06c4e244efe89d5f9e9f9a6221834eb69b862	matrix:SURF-010
+bundle.lineage.metadata.v1	source-bundle	test/fixtures/phase1/surf010-metadata.bundle	sha256:42d1cee122884ecdb03d8a4497dafa1a05226d26a95c915ef59cce4d72750b89	matrix:SURF-010
+corpus.negative.v1	conformance-manifest	test/fixtures/phase1-negative/manifest.tsv	sha256:c7cae373d4f6c25ababb779df45316cf0c2b5401be5f7e22e8396ec65d8855ef	matrix:INT-004
