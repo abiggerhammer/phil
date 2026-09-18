@@ -4,8 +4,11 @@ on:
   pull_request:
     paths:
       - 'src/Phil/Handoff/Phase1Manifest.hs'
+      - 'src/Phil/Handoff/Phase1WitnessSourceBundle.hs'
       - 'test/Phase1INT007HandoffManifestMain.hs'
+      - 'test/Phase1INT007WitnessSourceBundleMain.hs'
       - 'handoff/phase1/manifest-v1.tsv'
+      - 'handoff/phase1/witnesses/*.tsv'
       - 'docs/phase-1/int-007-handoff-manifest-v1.md'
       - 'phil-core.cabal'
       - '.github/workflows/phase1-int-007-handoff-manifest.yml'
@@ -14,12 +17,19 @@ on:
       - 'test/fixtures/phase1/surf010-inline.bundle'
       - 'test/fixtures/phase1/surf010-metadata.bundle'
       - 'test/fixtures/phase1-negative/manifest.tsv'
+      - 'examples/upload/client.phil'
+      - 'examples/upload/server.phil'
+      - 'examples/steve/put.phil'
+      - 'examples/steve/get.phil'
   push:
     branches: [main]
     paths:
       - 'src/Phil/Handoff/Phase1Manifest.hs'
+      - 'src/Phil/Handoff/Phase1WitnessSourceBundle.hs'
       - 'test/Phase1INT007HandoffManifestMain.hs'
+      - 'test/Phase1INT007WitnessSourceBundleMain.hs'
       - 'handoff/phase1/manifest-v1.tsv'
+      - 'handoff/phase1/witnesses/*.tsv'
       - 'docs/phase-1/int-007-handoff-manifest-v1.md'
       - 'phil-core.cabal'
       - '.github/workflows/phase1-int-007-handoff-manifest.yml'
@@ -28,6 +38,10 @@ on:
       - 'test/fixtures/phase1/surf010-inline.bundle'
       - 'test/fixtures/phase1/surf010-metadata.bundle'
       - 'test/fixtures/phase1-negative/manifest.tsv'
+      - 'examples/upload/client.phil'
+      - 'examples/upload/server.phil'
+      - 'examples/steve/put.phil'
+      - 'examples/steve/get.phil'
 
 jobs:
   handoff-manifest:
@@ -40,9 +54,13 @@ jobs:
           cabal-version: 'latest'
       - name: Build ordinary regression substrate under canonical strict warnings
         run: cabal build all --enable-tests --ghc-options=-Werror
-      - name: Strictly typecheck INT-007 handoff manifest boundary
+      - name: Strictly typecheck INT-007 handoff boundaries
         run: |
           cabal exec -- ghc -isrc -Wall -Werror -fno-code src/Phil/Handoff/Phase1Manifest.hs
+          cabal exec -- ghc -isrc -Wall -Werror -fno-code src/Phil/Handoff/Phase1WitnessSourceBundle.hs
           cabal exec -- ghc -isrc -Wall -Werror -fno-code test/Phase1INT007HandoffManifestMain.hs
+          cabal exec -- ghc -isrc -Wall -Werror -fno-code test/Phase1INT007WitnessSourceBundleMain.hs
       - name: Check exact Phase-1 handoff manifest integrity
         run: cabal exec -- runghc -isrc -Wall -Werror test/Phase1INT007HandoffManifestMain.hs
+      - name: Reconstruct Upload and Steve SourceBundles from handoff bytes
+        run: cabal exec -- runghc -isrc -Wall -Werror test/Phase1INT007WitnessSourceBundleMain.hs
