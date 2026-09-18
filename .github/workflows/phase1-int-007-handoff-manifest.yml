@@ -7,6 +7,8 @@ on:
       - 'src/Phil/Handoff/Phase1WitnessSourceBundle.hs'
       - 'src/Phil/Handoff/Phase1CheckedArchitecture.hs'
       - 'src/Phil/Handoff/Phase1VerificationBundle.hs'
+      - 'src/Phil/Handoff/Phase1WholeSourceVerification.hs'
+      - 'src/Phil/Handoff/Phase1WholeSourceVerification.hs'
       - 'src/Phil/Verification/GrammarV1WholeSource.hs'
       - 'test/Phase1INT007HandoffManifestMain.hs'
       - 'test/Phase1INT007WitnessSourceBundleMain.hs'
@@ -76,6 +78,7 @@ jobs:
           cabal exec -- ghc -isrc -Wall -Werror -fno-code src/Phil/Handoff/Phase1WitnessSourceBundle.hs
           cabal exec -- ghc -isrc -Wall -Werror -fno-code src/Phil/Handoff/Phase1CheckedArchitecture.hs
           cabal exec -- ghc -isrc -Wall -Werror -fno-code src/Phil/Handoff/Phase1VerificationBundle.hs
+          cabal exec -- ghc -isrc -Wall -Werror -fno-code src/Phil/Handoff/Phase1WholeSourceVerification.hs
           cabal exec -- ghc -isrc -Wall -Werror -fno-code src/Phil/Verification/GrammarV1WholeSource.hs
           cabal exec -- ghc -isrc -Wall -Werror -fno-code test/Phase1INT007HandoffManifestMain.hs
           cabal exec -- ghc -isrc -Wall -Werror -fno-code test/Phase1INT007WitnessSourceBundleMain.hs
