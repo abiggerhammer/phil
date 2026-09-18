@@ -74,7 +74,14 @@ jobs:
         run: cabal build all --enable-tests
       - name: Strict typecheck manifest closure boundary
         run: |
-          cabal exec -- ghc -isrc -Wall -Werror -fno-code             src/Phil/Verification.hs             src/Phil/Verification/Bundle.hs             src/Phil/Verification/ManifestClosure.hs             test/Phase1INT002ManifestClosureMain.hs             test/Phase1INT002UploadManifestMain.hs             test/Phase1INT002SteveManifestMain.hs
+          set -euo pipefail
+          for test_main in \
+            test/Phase1INT002ManifestClosureMain.hs \
+            test/Phase1INT002UploadManifestMain.hs \
+            test/Phase1INT002SteveManifestMain.hs
+          do
+            cabal exec -- ghc -isrc -Wall -Werror -fno-code "$test_main"
+          done
       - name: Replay permanent INT-002 corpus
         run: |
           cabal exec -- runghc -isrc -Wall -Werror test/Phase1INT002ManifestClosureMain.hs
