@@ -1,0 +1,38 @@
+protocol PingLoop {
+  role Client = recursive Loop = select {
+    Ping => send (x : U8) then receive (reply : String) then continue Loop |
+    Done => end Done
+  };
+  role Server = recursive Loop = offer {
+    Ping => receive (x : U8) then send (reply : String) then continue Loop |
+    Done => end Done
+  };
+}
+component ClientLoop(endpoint : Client[PingLoop]) {
+  loop state (currentEndpoint = endpoint) {
+    let selected = select Ping on currentEndpoint;
+    let awaiting = send 42 on selected;
+    let (nextEndpoint, reply) = receive String on awaiting;
+    let writeDecision = console_write(reply);
+    continue (nextEndpoint);
+  };
+}
+component ServerLoop(endpoint : Server[PingLoop]) {
+  loop state (currentEndpoint = endpoint) {
+    let (replyEndpoint, request) = receive U8 on currentEndpoint;
+    let nextEndpoint = send "pong" on replyEndpoint;
+    continue (nextEndpoint);
+  };
+}
+architecture InterruptiblePing {
+  instance client = ClientLoop;
+  instance server = ServerLoop;
+  process client_run = client;
+  process server_run = server;
+  protocol ping = PingLoop;
+  role ping.Client = client;
+  role ping.Server = server;
+  bind client.endpoint = ping.Client;
+  bind server.endpoint = ping.Server;
+}
+program main = instantiate InterruptiblePing;
