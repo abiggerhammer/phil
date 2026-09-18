@@ -19,7 +19,6 @@ import qualified Data.Set as Set
 import Data.Text (Text)
 import qualified Data.Text as Text
 import qualified Data.Text.Encoding as TextEncoding
-import Data.Word (Word8)
 import Numeric (showHex)
 import Phil.Assurance.Types
 import Phil.Core.Syntax (ObligationId (..))
