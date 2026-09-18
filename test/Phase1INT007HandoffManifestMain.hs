@@ -22,26 +22,28 @@ main = do
       exitFailure
     Right value -> pure value
 
-  fileErrors <- checkPhase1HandoffManifestFiles "." manifest
-  let pureResults =
-        [ test "INT-007 manifest spine has the exact admitted initial inventory"
-            (spineCoverage manifest)
-        , test "INT-007 duplicate artifact identity rejects"
-            duplicateArtifactIdRejects
-        , test "INT-007 duplicate repository path rejects"
-            duplicatePathRejects
-        , test "INT-007 traversal path rejects"
-            traversalPathRejects
-        , test "INT-007 malformed digest rejects"
-            malformedDigestRejects
-        , test "INT-007 unknown artifact kind rejects"
-            unknownKindRejects
-        , test "INT-007 duplicate governing authority rejects"
-            duplicateAuthorityRejects
-        ]
+  pureResults <- sequence
+    [ test "INT-007 manifest spine has the exact admitted initial inventory"
+        (spineCoverage manifest)
+    , test "INT-007 duplicate artifact identity rejects"
+        duplicateArtifactIdRejects
+    , test "INT-007 duplicate repository path rejects"
+        duplicatePathRejects
+    , test "INT-007 traversal path rejects"
+        traversalPathRejects
+    , test "INT-007 malformed digest rejects"
+        malformedDigestRejects
+    , test "INT-007 unknown artifact kind rejects"
+        unknownKindRejects
+    , test "INT-007 duplicate governing authority rejects"
+        duplicateAuthorityRejects
+    ]
 
+  fileErrors <- checkPhase1HandoffManifestFiles "." manifest
   fileResult <- case fileErrors of
-    [] -> putStrLn "PASS: INT-007 every admitted artifact matches its exact SHA-256" >> pure True
+    [] -> do
+      putStrLn "PASS: INT-007 every admitted artifact matches its exact SHA-256"
+      pure True
     errors -> do
       mapM_ (putStrLn . ("FAIL: INT-007 artifact integrity -- " <>) . show) errors
       pure False
@@ -50,18 +52,10 @@ main = do
     then pure ()
     else exitFailure
 
-test :: String -> Either String () -> Bool
+test :: String -> Either String () -> IO Bool
 test label result = case result of
-  Right () -> True `seq` unsafePass label
-  Left detail -> unsafeFail label detail
-
-unsafePass :: String -> Bool
-unsafePass label =
-  seq (putStrLn ("PASS: " <> label)) True
-
-unsafeFail :: String -> String -> Bool
-unsafeFail label detail =
-  seq (putStrLn ("FAIL: " <> label <> " -- " <> detail)) False
+  Right () -> putStrLn ("PASS: " <> label) >> pure True
+  Left detail -> putStrLn ("FAIL: " <> label <> " -- " <> detail) >> pure False
 
 spineCoverage :: Phase1HandoffManifest -> Either String ()
 spineCoverage manifest =
