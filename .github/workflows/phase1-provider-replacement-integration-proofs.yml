@@ -1,0 +1,162 @@
+name: Phase 1 Provider Replacement Integration Proofs
+
+on:
+  pull_request:
+    paths:
+      - 'proof/Phil/Core/ProviderReplacementIntegration.v'
+      - 'proof/Phil/Core/ProviderReplacementIntegrationImplementation.v'
+      - 'proof/Phil/Core/ProviderReplacementQualification.v'
+      - 'proof/Phil/Core/ProviderReplacementQualificationImplementation.v'
+      - 'proof/Phil/Core/ProviderReplacementQualificationImplementationExtraction.v'
+      - 'proof/Phil/Core/ArchitectureIdentity.v'
+      - 'proof/Phil/Core/ArchitectureInstantiation.v'
+      - 'proof/Phil/Core/ArchitectureRealization.v'
+      - 'proof/Phil/Core/ArchitectureRealizationImplementation.v'
+      - 'proof/Phil/Core/ArchitectureRealizationImplementationExtraction.v'
+      - 'src/ProviderReplacementQualificationKernel.hs'
+      - 'generated/ArchitectureRealizationKernel.hs'
+      - 'src/ArchitectureRealizationKernel.hs'
+      - 'src/Phil/Core/ProviderReplacementQualification.hs'
+      - 'src/Phil/Core/Static.hs'
+      - 'app/ProviderReplacementDecisionCorrespondenceMain.hs'
+      - 'app/ArchitectureRealizationPlanCorrespondenceMain.hs'
+      - 'test/Phase1ProviderReplacementQualificationMain.hs'
+      - 'test/Phase1ArchitectureProviderReplacementMain.hs'
+      - 'docs/phase-1/provider-replacement-integration-proof-v1.md'
+      - '.github/workflows/phase1-provider-replacement-integration-proofs.yml'
+  push:
+    branches: [main]
+    paths:
+      - 'proof/Phil/Core/ProviderReplacementIntegration.v'
+      - 'proof/Phil/Core/ProviderReplacementIntegrationImplementation.v'
+      - 'proof/Phil/Core/ProviderReplacementQualification.v'
+      - 'proof/Phil/Core/ProviderReplacementQualificationImplementation.v'
+      - 'proof/Phil/Core/ProviderReplacementQualificationImplementationExtraction.v'
+      - 'proof/Phil/Core/ArchitectureIdentity.v'
+      - 'proof/Phil/Core/ArchitectureInstantiation.v'
+      - 'proof/Phil/Core/ArchitectureRealization.v'
+      - 'proof/Phil/Core/ArchitectureRealizationImplementation.v'
+      - 'proof/Phil/Core/ArchitectureRealizationImplementationExtraction.v'
+      - 'src/ProviderReplacementQualificationKernel.hs'
+      - 'generated/ArchitectureRealizationKernel.hs'
+      - 'src/ArchitectureRealizationKernel.hs'
+      - 'src/Phil/Core/ProviderReplacementQualification.hs'
+      - 'src/Phil/Core/Static.hs'
+      - 'app/ProviderReplacementDecisionCorrespondenceMain.hs'
+      - 'app/ArchitectureRealizationPlanCorrespondenceMain.hs'
+      - 'test/Phase1ProviderReplacementQualificationMain.hs'
+      - 'test/Phase1ArchitectureProviderReplacementMain.hs'
+      - 'docs/phase-1/provider-replacement-integration-proof-v1.md'
+      - '.github/workflows/phase1-provider-replacement-integration-proofs.yml'
+
+permissions:
+  contents: read
+
+jobs:
+  rocq-provider-replacement-integration:
+    runs-on: ubuntu-latest
+    container:
+      image: rocq/rocq-prover:9.2.0
+      options: --user root
+    steps:
+      - uses: actions/checkout@v4
+      - name: Compile predecessor kernels and PHIL-P1-REPLACE-001
+        shell: bash
+        run: |
+          set -euo pipefail
+          export PATH="/home/rocq/.opam/${COMPILER}/bin:$PATH"
+
+          rocq c -Q proof/Phil Phil proof/Phil/Core/ProviderReplacementQualification.v
+          rocq c -Q proof/Phil Phil proof/Phil/Core/ProviderReplacementQualificationImplementation.v
+          rm -f ProviderReplacementQualificationKernel.hs
+          rocq c -Q proof/Phil Phil proof/Phil/Core/ProviderReplacementQualificationImplementationExtraction.v
+          test -s ProviderReplacementQualificationKernel.hs
+          cmp ProviderReplacementQualificationKernel.hs src/ProviderReplacementQualificationKernel.hs
+
+          rocq c -Q proof/Phil Phil proof/Phil/Core/ArchitectureIdentity.v
+          rocq c -Q proof/Phil Phil proof/Phil/Core/ArchitectureInstantiation.v
+          rocq c -Q proof/Phil Phil proof/Phil/Core/ArchitectureRealization.v
+          rocq c -Q proof/Phil Phil proof/Phil/Core/ArchitectureRealizationImplementation.v
+          rm -f ArchitectureRealizationKernel.hs
+          rocq c -Q proof/Phil Phil proof/Phil/Core/ArchitectureRealizationImplementationExtraction.v
+          test -s ArchitectureRealizationKernel.hs
+          cmp ArchitectureRealizationKernel.hs generated/ArchitectureRealizationKernel.hs
+
+          rocq c -Q proof/Phil Phil proof/Phil/Core/ProviderReplacementIntegration.v
+          rocq c -Q proof/Phil Phil proof/Phil/Core/ProviderReplacementIntegrationImplementation.v
+
+      - name: Record exact aggregate identities
+        shell: bash
+        run: |
+          set -euo pipefail
+          sha256sum \
+            proof/Phil/Core/ProviderReplacementQualification.v \
+            proof/Phil/Core/ProviderReplacementQualificationImplementation.v \
+            src/ProviderReplacementQualificationKernel.hs \
+            proof/Phil/Core/ArchitectureRealization.v \
+            proof/Phil/Core/ArchitectureRealizationImplementation.v \
+            generated/ArchitectureRealizationKernel.hs \
+            proof/Phil/Core/ProviderReplacementIntegration.v \
+            proof/Phil/Core/ProviderReplacementIntegration.vo \
+            proof/Phil/Core/ProviderReplacementIntegrationImplementation.v \
+            proof/Phil/Core/ProviderReplacementIntegrationImplementation.vo \
+            > provider-replacement-integration-proof.sha256
+          cat provider-replacement-integration-proof.sha256
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: provider-replacement-integration-proof
+          path: provider-replacement-integration-proof.sha256
+
+  verify-provider-replacement-integration:
+    needs: rocq-provider-replacement-integration
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: haskell-actions/setup@v2
+        with:
+          ghc-version: '9.6.7'
+          cabal-version: 'latest'
+
+      - name: Verify exact predecessor production kernels
+        run: |
+          set -euo pipefail
+          test "$(sha256sum src/ProviderReplacementQualificationKernel.hs | cut -d' ' -f1)" = \
+            cc88e7fecf48e0a7813dbf1f3247ecefc3e960abff761bb6dfee65bc0b3cfd59
+          test "$(sha256sum generated/ArchitectureRealizationKernel.hs | cut -d' ' -f1)" = \
+            d619e0155565e2337a49d47c10e54653a3d171f79e9ef7773163065f75dee6ae
+          {
+            printf '%s\n' '{-# OPTIONS_GHC -Wno-unused-imports #-}'
+            cat generated/ArchitectureRealizationKernel.hs
+          } > expected-architecture-realization-production.hs
+          cmp expected-architecture-realization-production.hs src/ArchitectureRealizationKernel.hs
+          ghc -Wall -Werror -fno-code src/ProviderReplacementQualificationKernel.hs
+          ghc -Wall -Werror -fno-code src/ArchitectureRealizationKernel.hs
+
+      - name: Build complete Haskell substrate
+        run: cabal build all --enable-tests
+
+      - name: Strict typecheck aggregate production surfaces
+        run: |
+          set -euo pipefail
+          cabal exec -- ghc -isrc -Wall -Werror -fno-code src/Phil/Core/ProviderReplacementQualification.hs
+          cabal exec -- ghc -isrc -Wall -Werror -fno-code src/Phil/Core/Static.hs
+          cabal exec -- ghc -isrc -Wall -Werror -fno-code app/ProviderReplacementDecisionCorrespondenceMain.hs
+          cabal exec -- ghc -isrc -Wall -Werror -fno-code app/ArchitectureRealizationPlanCorrespondenceMain.hs
+          cabal exec -- ghc -isrc -Wall -Werror -fno-code test/Phase1ProviderReplacementQualificationMain.hs
+          cabal exec -- ghc -isrc -Wall -Werror -fno-code test/Phase1ArchitectureProviderReplacementMain.hs
+
+      - name: Replay direct provider replacement kernel correspondence
+        run: cabal exec -- runghc -isrc app/ProviderReplacementDecisionCorrespondenceMain.hs
+
+      - name: Replay direct architecture realization kernel correspondence
+        run: cabal exec -- runghc -isrc app/ArchitectureRealizationPlanCorrespondenceMain.hs
+
+      - name: Replay PROV-015 replacement qualification corpus
+        run: cabal exec -- runghc -isrc test/Phase1ProviderReplacementQualificationMain.hs
+
+      - name: Replay ARCH-010 integration witness
+        run: cabal exec -- runghc -isrc test/Phase1ArchitectureProviderReplacementMain.hs
+
+      - name: Run decision and assurance controls
+        run: cabal test phil-decision-tests phil-assurance-tests
