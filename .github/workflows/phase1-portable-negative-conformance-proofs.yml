@@ -1,0 +1,97 @@
+name: Phase 1 Portable Negative Conformance Proofs
+
+on:
+  pull_request:
+    paths:
+      - 'proof/Phil/Verification/PortableNegativeConformance.v'
+      - 'proof/Phil/Verification/PortableNegativeConformanceImplementation.v'
+      - 'test/Phase1INT004Portable*.hs'
+      - 'test/fixtures/phase1-negative/**'
+      - 'docs/phase-1/portable-negative-conformance-proof-boundary-v1.md'
+      - '.github/workflows/phase1-portable-negative-conformance-proofs.yml'
+  push:
+    branches: [main]
+    paths:
+      - 'proof/Phil/Verification/PortableNegativeConformance.v'
+      - 'proof/Phil/Verification/PortableNegativeConformanceImplementation.v'
+      - 'test/Phase1INT004Portable*.hs'
+      - 'test/fixtures/phase1-negative/**'
+      - '.github/workflows/phase1-portable-negative-conformance-proofs.yml'
+
+permissions:
+  contents: read
+
+jobs:
+  rocq-portable-negative-conformance:
+    runs-on: ubuntu-latest
+    container:
+      image: rocq/rocq-prover:9.2.0
+      options: --user root
+    steps:
+      - uses: actions/checkout@v4
+      - name: Compile PHIL-P1-CONFORMANCE-001 proofs
+        shell: bash
+        run: |
+          set -euo pipefail
+          export PATH="/home/rocq/.opam/${COMPILER}/bin:$PATH"
+          rocq c -Q proof/Phil Phil proof/Phil/Verification/PortableNegativeConformance.v
+          rocq c -Q proof/Phil Phil proof/Phil/Verification/PortableNegativeConformanceImplementation.v
+          sha256sum \
+            proof/Phil/Verification/PortableNegativeConformance.v \
+            proof/Phil/Verification/PortableNegativeConformance.vo \
+            proof/Phil/Verification/PortableNegativeConformanceImplementation.v \
+            proof/Phil/Verification/PortableNegativeConformanceImplementation.vo \
+            > portable-negative-conformance-proof.sha256
+      - uses: actions/upload-artifact@v4
+        with:
+          name: portable-negative-conformance-proof
+          path: portable-negative-conformance-proof.sha256
+          if-no-files-found: error
+
+  verify-portable-negative-conformance:
+    needs: rocq-portable-negative-conformance
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: haskell-actions/setup@v2
+        with:
+          ghc-version: '9.6.7'
+          cabal-version: 'latest'
+      - name: Build complete Haskell substrate
+        run: cabal build all --enable-tests
+      - name: Strict typecheck permanent INT-004 harnesses
+        shell: bash
+        run: |
+          set -euo pipefail
+          harnesses=(
+            test/Phase1INT004PortableNegativeManifestMain.hs
+            test/Phase1INT004PortableGenericNegativeMain.hs
+            test/Phase1INT004PortableGenericInstantiationNegativeMain.hs
+            test/Phase1INT004PortableCallableLifecycleNegativeMain.hs
+            test/Phase1INT004PortableCallableStructuralModeNegativeMain.hs
+            test/Phase1INT004PortableCallableScopeNegativeMain.hs
+            test/Phase1INT004PortableCallableRefinementNegativeMain.hs
+            test/Phase1INT004PortableForeignCallableNegativeMain.hs
+            test/Phase1INT004PortableCallableLoweringNegativeMain.hs
+          )
+          for harness in "${harnesses[@]}"; do
+            cabal exec -- ghc -isrc -Wall -Werror -fno-code "$harness"
+          done
+      - name: Replay complete 81-fixture portable negative corpus
+        shell: bash
+        run: |
+          set -euo pipefail
+          harnesses=(
+            test/Phase1INT004PortableNegativeManifestMain.hs
+            test/Phase1INT004PortableGenericNegativeMain.hs
+            test/Phase1INT004PortableGenericInstantiationNegativeMain.hs
+            test/Phase1INT004PortableCallableLifecycleNegativeMain.hs
+            test/Phase1INT004PortableCallableStructuralModeNegativeMain.hs
+            test/Phase1INT004PortableCallableScopeNegativeMain.hs
+            test/Phase1INT004PortableCallableRefinementNegativeMain.hs
+            test/Phase1INT004PortableForeignCallableNegativeMain.hs
+            test/Phase1INT004PortableCallableLoweringNegativeMain.hs
+          )
+          for harness in "${harnesses[@]}"; do
+            cabal exec -- runghc -isrc -Wall -Werror "$harness"
+          done
