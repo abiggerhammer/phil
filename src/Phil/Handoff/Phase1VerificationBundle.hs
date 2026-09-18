@@ -30,7 +30,6 @@ import Phil.Verification
   )
 import Phil.Verification.Bundle
   ( AcceptedEvidenceReference (..)
-  , IntrinsicVerificationResult (..)
   , VerificationBundle (..)
   , verificationBundleArchitectureDigest
   )
