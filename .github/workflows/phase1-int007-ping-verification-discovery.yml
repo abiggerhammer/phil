@@ -5,6 +5,7 @@ on:
     paths:
       - 'src/Phil/Verification/GrammarV1WholeSource.hs'
       - 'src/Phil/Handoff/Phase1VerificationBundle.hs'
+      - 'src/Phil/Handoff/Phase1WholeSourceVerification.hs'
       - 'test/Phase1INT007PingVerificationBundleMain.hs'
       - 'handoff/phase1/ping/**'
       - 'phil-core.cabal'
