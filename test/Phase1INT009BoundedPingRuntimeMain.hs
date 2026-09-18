@@ -32,6 +32,7 @@ import Phil.Surface.GrammarV1.ArchitectureSurface
   )
 import Phil.Surface.GrammarV1.BoundedPingLoopSource
 import Phil.Surface.GrammarV1.BoundedPingRuntime
+import Phil.Surface.GrammarV1.BoundedPingSourceValues
 import Phil.Surface.GrammarV1.Parser
 import Phil.Surface.GrammarV1.ProtocolEndpointType
   ( GrammarV1ProtocolEndpointResolution (..)
@@ -51,6 +52,8 @@ main = do
   results <- sequence
     [ test "INT-009 bounded Ping count=3 performs exactly three replies then closes"
         countThreeRunsAndTerminates
+    , test "INT-009 bounded Ping runtime uses exact request/reply values derived from source"
+        sourceDerivedValuesDriveRuntime
     , test "INT-009 bounded Ping count=0 selects Done without a Ping round"
         countZeroTerminatesImmediately
     , test "INT-009 bounded Ping retains exact loop-state and count-entry identity"
@@ -98,6 +101,42 @@ countThreeRunsAndTerminates = do
       . boundedPingIterationConsoleWrite) rounds)
     "bounded Ping did not retain successful output outcomes"
   assertBackedgeChain rounds
+  assertClosedAndTerminal fx closed evidence
+
+sourceDerivedValuesDriveRuntime :: Either String ()
+sourceDerivedValuesDriveRuntime = do
+  fx <- sourceFixture
+  authority <- stdoutAuthority
+  values <- roundValuesFromSource $
+    Text.replace "send 42 on selected" "send 43 on selected" $
+      Text.replace "send \"pong\" on replyEndpoint"
+        "send \"pong-2\" on replyEndpoint" roundSource
+  let countInput = GrammarV1RootCountValue
+        { rootCountOccurrence = boundedPingRuntimeCountOccurrence (fixturePlan fx)
+        , rootCountValue = ScalarUIntLiteral 32 1
+        }
+  (closed, evidence) <- mapLeft show $ grammarV1RunBoundedPingFromSource
+    (fixtureInstance fx)
+    (fixtureNetwork fx)
+    (fixtureCommunication fx)
+    (fixturePlan fx)
+    countInput
+    values
+    (PossessedCapability stdoutCapability)
+    authority
+    ConsoleWriteSucceeded
+  case boundedPingEvidenceIterations evidence of
+    [round] -> do
+      assert (boundedPingIterationRequestValue round == ScalarUIntLiteral 8 43)
+        "bounded runtime did not use the request value extracted from source"
+      assert (boundedPingIterationReplyText round == "pong-2")
+        "bounded runtime did not use the reply text extracted from source"
+      assert
+        (checkedConsoleWriteRequestedText (boundedPingIterationConsoleWrite round)
+          == "pong-2")
+        "bounded runtime output did not use the source-derived reply"
+    rounds -> Left
+      ("source-derived count=1 run produced unexpected rounds: " <> show rounds)
   assertClosedAndTerminal fx closed evidence
 
 countZeroTerminatesImmediately :: Either String ()
@@ -178,20 +217,21 @@ runWithCount
   -> AuthorityState
   -> ScalarLiteral
   -> Either String (ProcessCommunicationState, GrammarV1BoundedPingRuntimeEvidence)
-runWithCount fx authority countValue = mapLeft show $ grammarV1RunBoundedPing
-  (fixtureInstance fx)
-  (fixtureNetwork fx)
-  (fixtureCommunication fx)
-  (fixturePlan fx)
-  GrammarV1RootCountValue
-    { rootCountOccurrence = boundedPingRuntimeCountOccurrence (fixturePlan fx)
-    , rootCountValue = countValue
-    }
-  (ScalarUIntLiteral 8 42)
-  "pong"
-  (PossessedCapability stdoutCapability)
-  authority
-  ConsoleWriteSucceeded
+runWithCount fx authority countValue = do
+  values <- roundValuesFromSource roundSource
+  mapLeft show $ grammarV1RunBoundedPingFromSource
+    (fixtureInstance fx)
+    (fixtureNetwork fx)
+    (fixtureCommunication fx)
+    (fixturePlan fx)
+    GrammarV1RootCountValue
+      { rootCountOccurrence = boundedPingRuntimeCountOccurrence (fixturePlan fx)
+      , rootCountValue = countValue
+      }
+    values
+    (PossessedCapability stdoutCapability)
+    authority
+    ConsoleWriteSucceeded
 
 assertBackedgeChain :: [GrammarV1BoundedPingIteration] -> Either String ()
 assertBackedgeChain rounds = mapM_ checkPair (zip rounds (drop 1 rounds))
@@ -343,6 +383,43 @@ parseSource = do
       ("expected protocol/two components/architecture/program, got "
         <> show (length declarations) <> " declarations")
 
+roundValuesFromSource :: Text -> Either String GrammarV1BoundedPingSourceValues
+roundValuesFromSource input = do
+  parsed <- mapLeft show $
+    parseGrammarV1StructuralSource "int009-bounded-ping-runtime-round" input
+  case grammarV1TopLevelDecls parsed of
+    [Located _ clientTop, Located _ serverTop] -> do
+      client <- declarationAsComponent "ClientRound" clientTop
+      server <- declarationAsComponent "ServerRound" serverTop
+      case grammarV1CheckedBoundedPingSourceValues
+          clientRoundKey client serverRoundKey server of
+        Just (Right values) -> Right values
+        other -> Left ("expected checked source round values, got " <> show other)
+    declarations -> Left
+      ("expected two round-template components, got "
+        <> show (length declarations) <> " declarations")
+
+roundSource :: Text
+roundSource = Text.unlines
+  [ "component ClientRound(endpoint : Client[PingCount], count : U32) {"
+  , "  loop state (currentEndpoint = endpoint, remaining : U32 = count) {"
+  , "    let selected = select Ping on currentEndpoint;"
+  , "    let awaiting = send 42 on selected;"
+  , "    let (nextEndpoint, reply) = receive String on awaiting;"
+  , "    let writeDecision = console_write(reply);"
+  , "    let nextRemaining = remaining - 1;"
+  , "    continue (nextEndpoint, nextRemaining);"
+  , "  };"
+  , "}"
+  , "component ServerRound(endpoint : Server[PingCount]) {"
+  , "  loop state (currentEndpoint = endpoint) {"
+  , "    let (replyEndpoint, request) = receive U8 on currentEndpoint;"
+  , "    let nextEndpoint = send \"pong\" on replyEndpoint;"
+  , "    continue (nextEndpoint);"
+  , "  };"
+  , "}"
+  ]
+
 source :: Text
 source = Text.unlines
   [ "protocol PingCount {"
@@ -458,10 +535,13 @@ serverSlot = OccurrenceSlotKey "server"
 stdoutCapability :: CapabilityOccurrenceKey
 stdoutCapability = CapabilityOccurrenceKey "authority.console.stdout"
 
-protocolKey, clientKey, serverKey, architectureKey :: DeclarationKey
+protocolKey, clientKey, serverKey, clientRoundKey, serverRoundKey, architectureKey
+  :: DeclarationKey
 protocolKey = DeclarationKey "protocol.ping-count"
 clientKey = DeclarationKey "component.ClientCounter"
 serverKey = DeclarationKey "component.ServerCounter"
+clientRoundKey = DeclarationKey "component.ClientRound"
+serverRoundKey = DeclarationKey "component.ServerRound"
 architectureKey = DeclarationKey "architecture.BoundedPing"
 
 protocolInterface :: InterfaceRevision
