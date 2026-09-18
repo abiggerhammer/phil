@@ -1,0 +1,8 @@
+PHIL-PHASE1-ASSURANCE-INPUTS-V1
+policy	7068617365312e696e743030322e75706c6f61642e6365727469666965642d72656c656173652e7631
+permit	static
+permit	runtime
+permit	external
+permit	assumption
+permit	exported
+permit	deployment-exported
