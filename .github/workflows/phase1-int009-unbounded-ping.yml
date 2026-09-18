@@ -1,0 +1,52 @@
+name: Phase 1 INT-009 Unbounded Ping
+
+on:
+  pull_request:
+    paths:
+      - 'src/Phil/Surface/GrammarV1/UnboundedPingSource.hs'
+      - 'src/Phil/Surface/GrammarV1/UnboundedPingRuntime.hs'
+      - 'test/Phase1INT009UnboundedPingMain.hs'
+      - '.github/workflows/phase1-int009-unbounded-ping.yml'
+  push:
+    branches: [main]
+    paths:
+      - 'src/Phil/Surface/GrammarV1/UnboundedPingSource.hs'
+      - 'src/Phil/Surface/GrammarV1/UnboundedPingRuntime.hs'
+      - 'test/Phase1INT009UnboundedPingMain.hs'
+      - '.github/workflows/phase1-int009-unbounded-ping.yml'
+
+jobs:
+  unbounded-ping:
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+      - uses: haskell-actions/setup@v2
+        with:
+          ghc-version: '9.6.7'
+          cabal-version: 'latest'
+      - name: Build ordinary regression substrate under canonical strict warnings
+        run: cabal build all --enable-tests --ghc-options=-Werror
+      - name: Strictly typecheck INT-009 unbounded Ping
+        run: |
+          cabal exec -- ghc -isrc -Wall -Werror -fno-code src/Phil/Surface/GrammarV1/UnboundedPingSource.hs
+          cabal exec -- ghc -isrc -Wall -Werror -fno-code src/Phil/Surface/GrammarV1/UnboundedPingRuntime.hs
+          cabal exec -- ghc -isrc -Wall -Werror -fno-code test/Phase1INT009UnboundedPingMain.hs
+      - name: Execute productive nonterminal controls
+        run: cabal exec -- runghc -Wall -Werror -isrc test/Phase1INT009UnboundedPingMain.hs
+      - name: Assert conventional host SIGINT stays out of Phil semantics
+        shell: bash
+        run: |
+          set -euo pipefail
+          cabal exec -- ghc -isrc -Wall -Werror test/Phase1INT009UnboundedPingMain.hs -o /tmp/int009-unbounded-ping
+          set +e
+          timeout --preserve-status --signal=INT --kill-after=2s 5s             /tmp/int009-unbounded-ping --host-wait > /tmp/int009-unbounded-host.log 2>&1
+          status=$?
+          set -e
+          cat /tmp/int009-unbounded-host.log
+          test "$status" -eq 130
+          grep -q '^PHIL_NONTERMINAL:NetworkCanStep$' /tmp/int009-unbounded-host.log
+          grep -q '^HOST_SIGINT_READY$' /tmp/int009-unbounded-host.log
+          if grep -q 'PHIL_TERMINAL' /tmp/int009-unbounded-host.log; then
+            echo "host SIGINT fabricated a Phil terminal marker" >&2
+            exit 1
+          fi
