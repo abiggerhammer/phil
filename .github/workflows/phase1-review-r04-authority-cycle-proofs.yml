@@ -1,0 +1,77 @@
+name: Phase 1 Review R04 Authority Cycle Proofs
+
+on:
+  pull_request:
+    paths:
+      - 'proof/Phil/Assurance/Manifest.v'
+      - 'proof/Phil/Assurance/LineageAuthority.v'
+      - 'proof/Phil/Assurance/ReviewR04AuthorityCycle.v'
+      - 'proof/Phil/Assurance/ReviewR04AuthorityCycleImplementation.v'
+      - 'src/Phil/Assurance/Verify.hs'
+      - 'src/Phil/Assurance/Types.hs'
+      - 'app/LineageAuthorityProofCorrespondenceMain.hs'
+      - 'test/AssuranceMain.hs'
+      - 'docs/phase-1/review-r04-authority-cycle-proof-boundary-v1.md'
+      - '.github/workflows/phase1-review-r04-authority-cycle-proofs.yml'
+  push:
+    branches: [main]
+    paths:
+      - 'proof/Phil/Assurance/Manifest.v'
+      - 'proof/Phil/Assurance/LineageAuthority.v'
+      - 'proof/Phil/Assurance/ReviewR04AuthorityCycle.v'
+      - 'proof/Phil/Assurance/ReviewR04AuthorityCycleImplementation.v'
+      - 'src/Phil/Assurance/Verify.hs'
+      - 'app/LineageAuthorityProofCorrespondenceMain.hs'
+      - '.github/workflows/phase1-review-r04-authority-cycle-proofs.yml'
+
+permissions:
+  contents: read
+
+jobs:
+  rocq-review-r04-authority-cycle:
+    runs-on: ubuntu-latest
+    container:
+      image: rocq/rocq-prover:9.2.0
+      options: --user root
+    steps:
+      - uses: actions/checkout@v4
+      - name: Compile R04 assurance composition proofs
+        shell: bash
+        run: |
+          set -euo pipefail
+          export PATH="/home/rocq/.opam/${COMPILER}/bin:$PATH"
+          rocq c -Q proof/Phil Phil proof/Phil/Assurance/Manifest.v
+          rocq c -Q proof/Phil Phil proof/Phil/Assurance/LineageAuthority.v
+          rocq c -Q proof/Phil Phil proof/Phil/Assurance/ReviewR04AuthorityCycle.v
+          rocq c -Q proof/Phil Phil proof/Phil/Assurance/ReviewR04AuthorityCycleImplementation.v
+          sha256sum \
+            proof/Phil/Assurance/ReviewR04AuthorityCycle.v \
+            proof/Phil/Assurance/ReviewR04AuthorityCycle.vo \
+            proof/Phil/Assurance/ReviewR04AuthorityCycleImplementation.v \
+            proof/Phil/Assurance/ReviewR04AuthorityCycleImplementation.vo \
+            > review-r04-authority-cycle-proof.sha256
+          cat review-r04-authority-cycle-proof.sha256
+      - uses: actions/upload-artifact@v4
+        with:
+          name: review-r04-authority-cycle-proof
+          path: review-r04-authority-cycle-proof.sha256
+          if-no-files-found: error
+
+  verify-review-r04-correspondence:
+    needs: rocq-review-r04-authority-cycle
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: haskell-actions/setup@v2
+        with:
+          ghc-version: '9.6.7'
+          cabal-version: 'latest'
+      - name: Build complete Haskell substrate
+        run: cabal build all --enable-tests
+      - name: Strict typecheck R04 verifier correspondence
+        run: |
+          cabal exec -- ghc -isrc -Wall -Werror -fno-code             app/LineageAuthorityProofCorrespondenceMain.hs
+      - name: Replay exact R04 correspondence fixture
+        run: cabal exec -- runghc -isrc -Wall -Werror app/LineageAuthorityProofCorrespondenceMain.hs
+      - name: Replay assurance verifier regression
+        run: cabal exec -- runghc -isrc -Wall -Werror test/AssuranceMain.hs
