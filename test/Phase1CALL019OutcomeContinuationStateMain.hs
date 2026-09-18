@@ -20,7 +20,6 @@ import Phil.Compiler.CallableOutcomeBranchSemantics
 import Phil.Compiler.CallableOutcomeContinuation
   ( SurfaceCallableOutcomeContinuation (..)
   , SurfaceCallableOutcomeContinuationDisposition (..)
-  , SurfaceCallableOutcomeContinuationError (..)
   , composeSurfaceCallableOutcomeContinuations
   )
 import Phil.Compiler.CallableOutcomeDispatch
@@ -69,8 +68,8 @@ main = do
         semanticBucketsRemainDistinct
     , test "CALL-019 legacy scalar context exposes no invented branch continuation"
         legacyScalarHasNoBranchContinuation
-    , test "CALL-019 continuation composer rejects fatal control"
-        fatalContinuationRejects
+    , test "CALL-019 continuation composer preserves exact fatal control"
+        fatalContinuationPreserved
     ]
   if and results then pure () else exitFailure
 
@@ -290,13 +289,18 @@ legacyScalarHasNoBranchContinuation = do
     (null (checkedInvocationOutcomeContinuations checked))
     "legacy scalar invocation invented branch continuation state"
 
-fatalContinuationRejects :: Either String ()
-fatalContinuationRejects =
-  case composeSurfaceCallableOutcomeContinuations [fatalWitness] of
-    Left (SurfaceCallableOutcomeContinuationFatalUnsupported actualSpan outcomeClass)
-      | actualSpan == fatalSpan && outcomeClass == fatalClass -> Right ()
-    Left other -> Left ("wrong fatal continuation rejection: " <> show other)
-    Right continuations -> Left ("fatal continuation unexpectedly composed: " <> show continuations)
+fatalContinuationPreserved :: Either String ()
+fatalContinuationPreserved = do
+  continuations <- mapLeft show
+    (composeSurfaceCallableOutcomeContinuations [fatalWitness])
+  case continuations of
+    [continuation] -> do
+      assertContinuation continuation fatalWitness fatalOutcome
+      assert
+        (surfaceContinuationDisposition continuation
+          == SurfaceCallableOutcomeCallerFatals (Outcome "fatal:branch"))
+        "fatal branch lost exact fatal caller-control disposition"
+    other -> Left ("expected one fatal continuation account, got " <> show (length other))
 
 assertContinuation
   :: SurfaceCallableOutcomeContinuation
