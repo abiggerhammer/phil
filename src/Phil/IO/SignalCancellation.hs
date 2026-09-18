@@ -19,7 +19,6 @@ import Phil.Core.Authority
   , AuthorityExerciseSource
   , AuthorityRequirement
   , AuthorityState
-  , CheckedAuthorityExercise
   , checkAuthorityExercise
   )
 import Phil.Core.EnvironmentObservation
