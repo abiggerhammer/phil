@@ -4,6 +4,8 @@ module Phil.Test.Phase1.ManifestWitnesses
   ( RealManifestFixture (..)
   , uploadRealManifestFixture
   , steveRealManifestFixture
+  , checkedUploadArchitectureFromBundle
+  , checkedSteveArchitectureFromBundle
   ) where
 
 import qualified Data.Map.Strict as Map
@@ -200,14 +202,8 @@ uploadAssurancePolicy = ApplicationAssurancePolicy
   }
 
 checkedUploadArchitecture :: Text -> Text -> Either String CheckedSourceArchitecture
-checkedUploadArchitecture clientSource serverSource = do
-  clientEnvironment <- mapLeft show (phase0EnvironmentFor "client.phil")
-  serverEnvironment <- mapLeft show (phase0EnvironmentFor "server.phil")
-  checked <- mapLeft show $ checkPortableSourceBundle uploadRoots
-    (Map.fromList
-      [ (uploadClientDeclaration, clientEnvironment)
-      , (uploadServerDeclaration, serverEnvironment)
-      ])
+checkedUploadArchitecture clientSource serverSource =
+  checkedUploadArchitectureFromBundle
     (PortableSourceBundle canonicalGrammarRevisionV1 "program:upload"
       [ PortableSourceUnit (SourceUnitId "unit.upload.client")
           (DeclarationSiteId "site.upload.client") (Just "decl:upload.client") clientSource
@@ -216,6 +212,19 @@ checkedUploadArchitecture clientSource serverSource = do
       ]
       [PortableInstanceLineage (InstanceLineageSiteId "instance.upload") "inst:phase1.upload"]
       [])
+
+checkedUploadArchitectureFromBundle
+  :: PortableSourceBundle
+  -> Either String CheckedSourceArchitecture
+checkedUploadArchitectureFromBundle bundle = do
+  clientEnvironment <- mapLeft show (phase0EnvironmentFor "client.phil")
+  serverEnvironment <- mapLeft show (phase0EnvironmentFor "server.phil")
+  checked <- mapLeft show $ checkPortableSourceBundle uploadRoots
+    (Map.fromList
+      [ (uploadClientDeclaration, clientEnvironment)
+      , (uploadServerDeclaration, serverEnvironment)
+      ])
+    bundle
   mapLeft show $ buildCheckedSourceArchitecture
     (Map.singleton "program:upload" (InstanceLineageSiteId "instance.upload")) checked
 
@@ -235,8 +244,8 @@ steveAssurancePolicy = ApplicationAssurancePolicy
   }
 
 checkedSteveArchitecture :: Text -> Text -> Either String CheckedSourceArchitecture
-checkedSteveArchitecture putSource getSource = do
-  checked <- mapLeft show $ checkPortableSourceBundle steveRoots steveEnvironments
+checkedSteveArchitecture putSource getSource =
+  checkedSteveArchitectureFromBundle
     (PortableSourceBundle canonicalGrammarRevisionV1 "program:steve"
       [ PortableSourceUnit (SourceUnitId "unit.steve.put")
           (DeclarationSiteId "site.steve.put") (Just "decl:steve.put") putSource
@@ -245,6 +254,12 @@ checkedSteveArchitecture putSource getSource = do
       ]
       [PortableInstanceLineage (InstanceLineageSiteId "instance.steve") "inst:phase1.steve"]
       [])
+
+checkedSteveArchitectureFromBundle
+  :: PortableSourceBundle
+  -> Either String CheckedSourceArchitecture
+checkedSteveArchitectureFromBundle bundle = do
+  checked <- mapLeft show $ checkPortableSourceBundle steveRoots steveEnvironments bundle
   mapLeft show $ buildCheckedSourceArchitecture
     (Map.singleton "program:steve" (InstanceLineageSiteId "instance.steve")) checked
 

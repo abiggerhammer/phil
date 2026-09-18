@@ -72,14 +72,42 @@ These descriptors are governed by INT-001's ordinary-program witness boundary
 and SURF-010's persisted-lineage authority. They contain no Haskell constructor
 or in-memory fixture state.
 
+## Checked semantic and ArchitectureInstance summaries
+
+The next slice reconstructs the ordinary checked source products from the two
+persisted witness SourceBundles and records an implementation-independent,
+content-addressed summary for each witness:
+
+- `handoff/phase1/witnesses/upload-checked-architecture-v1.tsv`
+- `handoff/phase1/witnesses/steve-checked-architecture-v1.tsv`
+
+For every checked declaration, the summary records the stable
+`DeclarationKey` plus SHA-256 identities of:
+
+- the exact canonical interface semantic form;
+- the exact canonical definition semantic form;
+- the exact `InterfaceRevision` text; and
+- the exact `DefinitionRevision` text.
+
+The architecture row records the selected program root and declaration, the
+exact persisted `InstanceKey`, and the SHA-256 identity of the exact
+`InstanceRevision`. These are content addresses of the semantic outputs, not
+Haskell `Show` encodings or constructor names.
+
+The permanent replay starts from the persisted witness descriptor, verifies and
+loads the exact source bytes, runs the ordinary parser/checker and
+`buildCheckedSourceArchitecture`, derives the summary through the production
+semantic projection, and requires exact equality with the checked-in portable
+summary. Another implementation can reproduce the same comparison from the
+documented canonical semantic/revision rules without importing Haskell object
+state.
+
 ## Deliberate remaining INT-007 work
 
 This slice does not yet materialize or enumerate the full freeze set. Subsequent
 INT-007 slices must add, and independently reconstruct/replay from portable
 bytes:
 
-- checked declaration/semantic and ArchitectureInstance outputs, or exact
-  independently reconstructible equivalents;
 - final VerificationBundles and obligation graphs;
 - accepted evidence/certificates plus policy/disposition inputs;
 - ArchitectureRealization, Systems, StageContract, lowering, and cost artifacts;

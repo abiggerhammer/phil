@@ -114,6 +114,24 @@ spineCoverage manifest =
             ]
           )
         )
+      , ( HandoffArtifactId "checked.upload.architecture.v1"
+        , ( HandoffCheckedSemantics
+          , "handoff/phase1/witnesses/upload-checked-architecture-v1.tsv"
+          , [ HandoffMatrixAuthority "INT-001"
+            , HandoffCertifiedAuthority "PHIL-ARCH-ID-001"
+            , HandoffCertifiedAuthority "PHIL-ARCH-INST-001"
+            ]
+          )
+        )
+      , ( HandoffArtifactId "checked.steve.architecture.v1"
+        , ( HandoffCheckedSemantics
+          , "handoff/phase1/witnesses/steve-checked-architecture-v1.tsv"
+          , [ HandoffMatrixAuthority "INT-001"
+            , HandoffCertifiedAuthority "PHIL-ARCH-ID-001"
+            , HandoffCertifiedAuthority "PHIL-ARCH-INST-001"
+            ]
+          )
+        )
       , ( HandoffArtifactId "corpus.negative.v1"
         , ( HandoffConformanceManifest
           , "test/fixtures/phase1-negative/manifest.tsv"
