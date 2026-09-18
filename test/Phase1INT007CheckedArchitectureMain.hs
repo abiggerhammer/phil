@@ -5,6 +5,7 @@ module Main (main) where
 import Data.Text (Text)
 import qualified Data.Text as Text
 import qualified Data.Text.IO as TextIO
+import Phil.Compiler.SourceArchitecture (CheckedSourceArchitecture)
 import Phil.Handoff.Phase1CheckedArchitecture
 import Phil.Handoff.Phase1WitnessSourceBundle
 import Phil.Surface.Lineage (PortableSourceBundle)
@@ -67,7 +68,7 @@ loadBundle path = do
 checkWitness
   :: String
   -> FilePath
-  -> Either String a
+  -> Either String CheckedSourceArchitecture
   -> IO Bool
 checkWitness label summaryPath architectureResult =
   case architectureResult of
