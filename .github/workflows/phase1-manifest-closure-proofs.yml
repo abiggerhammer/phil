@@ -48,6 +48,9 @@ jobs:
           rocq c -Q proof/Phil Phil proof/Phil/Assurance/ValidityScope.v
           rocq c -Q proof/Phil Phil proof/Phil/Assurance/LineageAuthority.v
           rocq c -Q proof/Phil Phil proof/Phil/Verification/VerificationWorkflow.v
+          rocq c -Q proof/Phil Phil proof/Phil/Core/GenericStructural.v
+          rocq c -Q proof/Phil Phil proof/Phil/Core/GenericRequirements.v
+          rocq c -Q proof/Phil Phil proof/Phil/Core/GenericInstantiation.v
           rocq c -Q proof/Phil Phil proof/Phil/Assurance/GenericAssurance.v
           rocq c -Q proof/Phil Phil proof/Phil/Verification/ManifestClosure.v
           rocq c -Q proof/Phil Phil proof/Phil/Verification/ManifestClosureImplementation.v
