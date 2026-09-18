@@ -22,4 +22,9 @@ ping.stage2.verification-input.v1	verification-input	handoff/phase1/ping/stage2-
 ping.stage3.verification-input.v1	verification-input	handoff/phase1/ping/stage3-verification-v1.tsv	sha256:85b9f23ddd318f4e2c713d89fd19e07eec069b3c31a31dac4d13afe7e2fd143e	matrix:INT-009;matrix:VER-012
 ping.stage4.verification-input.v1	verification-input	handoff/phase1/ping/stage4-verification-v1.tsv	sha256:03869bee2ea996b15cb2dfab0e71503ae32a3d24182e470de9cb077d3bdd6549	matrix:INT-009;matrix:VER-012
 ping.stage5.verification-input.v1	verification-input	handoff/phase1/ping/stage5-verification-v1.tsv	sha256:1085b14c3c0187fec13312276c210f86137c8c25d64d699859e17411df27756a	matrix:INT-009;matrix:VER-012
+ping.stage1.verification-bundle.v1	verification-bundle	handoff/phase1/ping/stage1-one-shot-verification-bundle-v1.tsv	sha256:22ddbb998dfde71f4f9cd500b283d0620976aa1014f8a097962adc8dc0cd434d	matrix:INT-008;matrix:VER-012
+ping.stage2.verification-bundle.v1	verification-bundle	handoff/phase1/ping/stage2-request-reply-verification-bundle-v1.tsv	sha256:d0dc42afd5e8e2226e9c62c30a6fe35e24465f79f6fd9fbe3c68e20193006d92	matrix:INT-009;matrix:VER-012
+ping.stage3.verification-bundle.v1	verification-bundle	handoff/phase1/ping/stage3-bounded-verification-bundle-v1.tsv	sha256:3f9bf44847a0cd324cc0839e84ee50de097a4a8e26adf99e5a7e588f9ce05801	matrix:INT-009;matrix:VER-012
+ping.stage4.verification-bundle.v1	verification-bundle	handoff/phase1/ping/stage4-unbounded-verification-bundle-v1.tsv	sha256:55012b1b867d3d75979584d7dbc966be292f71e6086b3a6d05dd9cc5b2562e4d	matrix:INT-009;matrix:VER-012
+ping.stage5.verification-bundle.v1	verification-bundle	handoff/phase1/ping/stage5-interruptible-verification-bundle-v1.tsv	sha256:288b596ef3a7f83cd0d4f2dca3b7d0346ddb903de618537dcc73459b2a377ce1	matrix:INT-009;matrix:VER-012
 corpus.negative.v1	conformance-manifest	test/fixtures/phase1-negative/manifest.tsv	sha256:c7cae373d4f6c25ababb779df45316cf0c2b5401be5f7e22e8396ec65d8855ef	matrix:INT-004
