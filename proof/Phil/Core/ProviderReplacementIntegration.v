@@ -116,7 +116,7 @@ Proof.
     prior replacement reuseWitness Hreplacement).
 Qed.
 
-Theorem integrated_ProviderReplacementQualification.replacement_preserves_public_interface_and_occurrence :
+Theorem integrated_replacement_preserves_public_interface_and_occurrence :
   forall prior replacement reuseWitness instance priorSemantics replacementSemantics
          encodeInstance encodeRealization,
     ProviderReplacementIntegrationValid
