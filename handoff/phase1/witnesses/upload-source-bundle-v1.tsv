@@ -1,0 +1,6 @@
+PHIL-PHASE1-WITNESS-SOURCE-BUNDLE-V1
+grammar	sha256:c352ccc31cd264af42ee7408426fabea871710d4905baef22c4cc209971ac1c5
+root	program:upload
+unit	unit.upload.client	site.upload.client	decl:upload.client	examples/upload/client.phil	sha256:2825ac3c9fcebad9d1c7f0cb7af80e8125a89aabf39fce8d79535daff3f786b6
+unit	unit.upload.server	site.upload.server	decl:upload.server	examples/upload/server.phil	sha256:a388bf77a6be139f2773af1fcbf48edc0ebe6f089a4e50b2d1894d462c8037c0
+instance	instance.upload	inst:phase1.upload
