@@ -1,0 +1,6 @@
+PHIL-PHASE1-WHOLE-SOURCE-VERIFICATION-V1
+primary	stage2-request-reply	handoff/phase1/ping/stage2-request-reply.phil	sha256:95ee0135a3a21aaec234b587ae6ff5ac635f5d68a73d3c025f6b79aeb872ea0e
+architecture	architecture.RoundTrip	architecture.round-trip.v1
+program	program.main
+policy	phase1.int007.ping.stage2.verification.v1
+summary	handoff/phase1/ping/stage2-request-reply-verification-bundle-v1.tsv
