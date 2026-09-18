@@ -36,6 +36,7 @@ data HandoffArtifactKind
   | HandoffWholeSource
   | HandoffCheckedSemantics
   | HandoffArchitectureInstance
+  | HandoffVerificationInput
   | HandoffVerificationBundle
   | HandoffEvidence
   | HandoffCertificate
@@ -175,6 +176,7 @@ parseKind lineNumber raw =
       , ("whole-source", HandoffWholeSource)
       , ("checked-semantics", HandoffCheckedSemantics)
       , ("architecture-instance", HandoffArchitectureInstance)
+      , ("verification-input", HandoffVerificationInput)
       , ("verification-bundle", HandoffVerificationBundle)
       , ("evidence", HandoffEvidence)
       , ("certificate", HandoffCertificate)
