@@ -57,6 +57,7 @@ library
       Phil.Compiler
       Phil.Verification
       Phil.Verification.ProofEvidence
+      Phil.Verification.GrammarV1WholeSource
       Phil.Handoff.Phase1Manifest
       Phil.Handoff.Phase1WitnessSourceBundle
       Phil.Handoff.Phase1CheckedArchitecture
