@@ -83,6 +83,8 @@ library
       Phil.Surface.Check.Preflight
       Phil.Surface.Check.Engine
       Phil.Surface.Lineage
+      Phil.Compiler.SourceBundle
+      Phil.Compiler.SourceArchitecture
       Phil.Assurance.EvidenceAuthorityKernelBridge
       Phil.Assurance.Types
       Phil.Assurance.Handoff
