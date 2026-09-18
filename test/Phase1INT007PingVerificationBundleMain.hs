@@ -47,7 +47,7 @@ stages =
       "phase1.int007.ping.stage2.verification.v1"
   , stage "stage3-bounded"
       "handoff/phase1/ping/stage3-bounded.phil"
-      Nothing
+      (Just "handoff/phase1/ping/stage3-round.phil")
       "architecture.BoundedPing"
       "architecture.bounded-ping.v1"
       "phase1.int007.ping.stage3.verification.v1"
