@@ -32,7 +32,7 @@ import Phil.Core.Static
   , InterfaceRevision (..)
   , emptyStaticContext
   )
-import Phil.Core.Syntax (Ty (..))
+import Phil.Core.Syntax (Outcome (..), Ty (..))
 import Phil.Surface.Check
   ( SurfaceEnvironment (..)
   , emptySurfaceEnvironment
