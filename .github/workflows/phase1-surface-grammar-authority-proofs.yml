@@ -1,0 +1,113 @@
+name: Phase 1 Surface Grammar Authority Proofs
+
+on:
+  pull_request:
+    paths:
+      - 'grammar/phase1-surface.ebnf'
+      - 'scripts/derive_phase1_surface_grammar.py'
+      - 'src/Phil/Surface/GrammarV1/Lexer.hs'
+      - 'test/Phase1GrammarV1LexerMain.hs'
+      - 'proof/Phil/Surface/GrammarAuthority.v'
+      - 'proof/Phil/Surface/GrammarAuthorityImplementation.v'
+      - 'docs/phase-1/surface-grammar-authority-proof-boundary-v1.md'
+      - '.github/workflows/phase1-surface-grammar-authority-proofs.yml'
+  push:
+    branches: [main]
+    paths:
+      - 'grammar/phase1-surface.ebnf'
+      - 'scripts/derive_phase1_surface_grammar.py'
+      - 'src/Phil/Surface/GrammarV1/Lexer.hs'
+      - 'test/Phase1GrammarV1LexerMain.hs'
+      - 'proof/Phil/Surface/GrammarAuthority.v'
+      - 'proof/Phil/Surface/GrammarAuthorityImplementation.v'
+      - '.github/workflows/phase1-surface-grammar-authority-proofs.yml'
+
+permissions:
+  contents: read
+
+jobs:
+  derive-grammar-authority-evidence:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Check grammar derivation tool
+        run: python3 -m py_compile scripts/derive_phase1_surface_grammar.py
+
+      - uses: haskell-actions/setup@v2
+        with:
+          ghc-version: '9.6.7'
+          cabal-version: 'latest'
+
+      - name: Build Haskell substrate
+        run: cabal build all --enable-tests
+
+      - name: Check exact Grammar-v1 lexical authority
+        run: cabal exec -- runghc -Wall -Werror -isrc test/Phase1GrammarV1LexerMain.hs
+
+      - name: Derive proof-facing grammar twice
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 scripts/derive_phase1_surface_grammar.py --write
+          cp proof/Phil/Surface/Grammar.v /tmp/Grammar.first.v
+          python3 scripts/derive_phase1_surface_grammar.py --write
+          cmp /tmp/Grammar.first.v proof/Phil/Surface/Grammar.v
+          python3 scripts/derive_phase1_surface_grammar.py --check
+          sha256sum             grammar/phase1-surface.ebnf             proof/Phil/Surface/Grammar.v             > grammar-authority-derivation.sha256
+          cat grammar-authority-derivation.sha256
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: grammar-authority-derived
+          path: |
+            proof/Phil/Surface/Grammar.v
+            grammar-authority-derivation.sha256
+          if-no-files-found: error
+
+  rocq-grammar-authority-proof:
+    needs: derive-grammar-authority-evidence
+    runs-on: ubuntu-latest
+    container:
+      image: rocq/rocq-prover:9.2.0
+      options: --user root
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/download-artifact@v4
+        with:
+          name: grammar-authority-derived
+          path: grammar-authority-derived
+
+      - name: Restore generated grammar
+        shell: bash
+        run: |
+          set -euo pipefail
+          cp grammar-authority-derived/proof/Phil/Surface/Grammar.v proof/Phil/Surface/Grammar.v
+
+      - name: Compile generated grammar and authority proofs warning-clean
+        shell: bash
+        run: |
+          set -euo pipefail
+          export PATH="/home/rocq/.opam/${COMPILER}/bin:$PATH"
+          if ! rocq c -Q proof/Phil Phil proof/Phil/Surface/Grammar.v > /tmp/grammar.log 2>&1; then
+            cat /tmp/grammar.log
+            exit 1
+          fi
+          cat /tmp/grammar.log
+          if grep -q 'Warning:' /tmp/grammar.log; then
+            echo 'Rocq emitted warnings while compiling generated Grammar.v' >&2
+            exit 1
+          fi
+          rocq c -Q proof/Phil Phil proof/Phil/Surface/GrammarAuthority.v
+          rocq c -Q proof/Phil Phil proof/Phil/Surface/GrammarAuthorityImplementation.v
+          sha256sum             proof/Phil/Surface/Grammar.v             proof/Phil/Surface/GrammarAuthority.v             proof/Phil/Surface/GrammarAuthority.vo             proof/Phil/Surface/GrammarAuthorityImplementation.v             proof/Phil/Surface/GrammarAuthorityImplementation.vo             > grammar-authority-proof.sha256
+          cat grammar-authority-proof.sha256
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: surface-grammar-authority-proof
+          path: |
+            grammar-authority-derived/grammar-authority-derivation.sha256
+            grammar-authority-proof.sha256
+          if-no-files-found: error
