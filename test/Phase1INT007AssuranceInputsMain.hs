@@ -4,7 +4,7 @@ module Main (main) where
 
 import qualified Data.Map.Strict as Map
 import qualified Data.Set as Set
-import qualified Data.Set as Set
+import qualified Data.Text as Text
 import qualified Data.Text.IO as TextIO
 import Phil.Assurance.Types
 import Phil.Handoff.Phase1AssuranceInputs
