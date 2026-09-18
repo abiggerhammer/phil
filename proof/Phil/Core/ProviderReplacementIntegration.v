@@ -1,4 +1,5 @@
 From Phil.Core Require Import ArchitectureRealization.
+From Phil.Core Require ProviderReplacementQualification.
 
 (*
   PHIL-P1-REPLACE-001 — provider replacement integration witness.
@@ -14,13 +15,13 @@ From Phil.Core Require Import ArchitectureRealization.
 *)
 
 Definition ProviderReplacementIntegrationValid
-  (prior replacement : ProviderReplacementSide)
-  (reuseWitness : EvidenceReference -> option ProviderReplacementEvidenceReuse)
+  (prior replacement : ProviderReplacementQualification.ProviderReplacementSide)
+  (reuseWitness : ProviderReplacementQualification.EvidenceReference -> option ProviderReplacementQualification.ProviderReplacementEvidenceReuse)
   (instance : ArchitectureInstanceIdentity)
   (priorSemantics replacementSemantics : nat)
   (encodeInstance : InstanceRevision -> nat)
   (encodeRealization : ArchitectureRealizationRevision -> nat) : Prop :=
-  ValidProviderReplacement prior replacement reuseWitness /\
+  ProviderReplacementQualification.ValidProviderReplacement prior replacement reuseWitness /\
   ProviderSideMatchesArchitectureRealization
     prior
     instance
@@ -40,17 +41,17 @@ Theorem integrated_replacement_has_two_independently_admitted_sides :
     ProviderReplacementIntegrationValid
       prior replacement reuseWitness instance priorSemantics replacementSemantics
       encodeInstance encodeRealization ->
-    replacementSideAdmitted prior = true /\
-    replacementSideAdmitted replacement = true.
+    ProviderReplacementQualification.replacementSideAdmitted prior = true /\
+    ProviderReplacementQualification.replacementSideAdmitted replacement = true.
 Proof.
   intros prior replacement reuseWitness instance priorSemantics replacementSemantics
     encodeInstance encodeRealization Hvalid.
   destruct Hvalid as [Hreplacement _].
   split.
-  - apply prior_side_is_independently_admitted with
+  - apply ProviderReplacementQualification.prior_side_is_independently_admitted with
       (replacement := replacement) (reuseWitness := reuseWitness).
     exact Hreplacement.
-  - apply replacement_side_is_independently_admitted with
+  - apply ProviderReplacementQualification.replacement_side_is_independently_admitted with
       (prior := prior) (reuseWitness := reuseWitness).
     exact Hreplacement.
 Qed.
@@ -61,11 +62,11 @@ Theorem integrated_replacement_preserves_exact_architecture_instance :
     ProviderReplacementIntegrationValid
       prior replacement reuseWitness instance priorSemantics replacementSemantics
       encodeInstance encodeRealization ->
-    replacementSideInstance prior =
+    ProviderReplacementQualification.replacementSideInstance prior =
       encodeInstance (identityInstanceRevision instance) /\
-    replacementSideInstance replacement =
+    ProviderReplacementQualification.replacementSideInstance replacement =
       encodeInstance (identityInstanceRevision instance) /\
-    replacementSideInstance prior = replacementSideInstance replacement.
+    ProviderReplacementQualification.replacementSideInstance prior = ProviderReplacementQualification.replacementSideInstance replacement.
 Proof.
   intros prior replacement reuseWitness instance priorSemantics replacementSemantics
     encodeInstance encodeRealization Hvalid.
@@ -76,7 +77,7 @@ Proof.
   - exact HpriorInstance.
   - split.
     + exact HnewInstance.
-    + exact (replacement_preserves_architecture_instance
+    + exact (ProviderReplacementQualification.replacement_preserves_architecture_instance
         prior replacement reuseWitness Hreplacement).
 Qed.
 
@@ -104,9 +105,9 @@ Theorem integrated_replacement_has_fresh_qualification_lineage :
     ProviderReplacementIntegrationValid
       prior replacement reuseWitness instance priorSemantics replacementSemantics
       encodeInstance encodeRealization ->
-    replacementSideClaim prior <> replacementSideClaim replacement /\
-    replacementSideEvidence prior <> replacementSideEvidence replacement /\
-    replacementSideAdmission prior <> replacementSideAdmission replacement.
+    ProviderReplacementQualification.replacementSideClaim prior <> ProviderReplacementQualification.replacementSideClaim replacement /\
+    ProviderReplacementQualification.replacementSideEvidence prior <> ProviderReplacementQualification.replacementSideEvidence replacement /\
+    ProviderReplacementQualification.replacementSideAdmission prior <> ProviderReplacementQualification.replacementSideAdmission replacement.
 Proof.
   intros prior replacement reuseWitness instance priorSemantics replacementSemantics
     encodeInstance encodeRealization Hvalid.
@@ -115,23 +116,23 @@ Proof.
     prior replacement reuseWitness Hreplacement).
 Qed.
 
-Theorem integrated_replacement_preserves_public_interface_and_occurrence :
+Theorem integrated_ProviderReplacementQualification.replacement_preserves_public_interface_and_occurrence :
   forall prior replacement reuseWitness instance priorSemantics replacementSemantics
          encodeInstance encodeRealization,
     ProviderReplacementIntegrationValid
       prior replacement reuseWitness instance priorSemantics replacementSemantics
       encodeInstance encodeRealization ->
-    replacementSideInterface prior = replacementSideInterface replacement /\
-    replacementSideOccurrence prior = replacementSideOccurrence replacement.
+    ProviderReplacementQualification.replacementSideInterface prior = ProviderReplacementQualification.replacementSideInterface replacement /\
+    ProviderReplacementQualification.replacementSideOccurrence prior = ProviderReplacementQualification.replacementSideOccurrence replacement.
 Proof.
   intros prior replacement reuseWitness instance priorSemantics replacementSemantics
     encodeInstance encodeRealization Hvalid.
   destruct Hvalid as [Hreplacement _].
   split.
-  - apply replacement_preserves_public_interface with
+  - apply ProviderReplacementQualification.replacement_preserves_public_interface with
       (reuseWitness := reuseWitness).
     exact Hreplacement.
-  - apply replacement_preserves_provider_occurrence with
+  - apply ProviderReplacementQualification.replacement_preserves_provider_occurrence with
       (reuseWitness := reuseWitness).
     exact Hreplacement.
 Qed.
@@ -139,7 +140,7 @@ Qed.
 Theorem integrated_replacement_rejects_predecessor_evidence_inheritance :
   forall prior replacement reuseWitness instance priorSemantics replacementSemantics
          encodeInstance encodeRealization,
-    replacementSideEvidence prior = replacementSideEvidence replacement ->
+    ProviderReplacementQualification.replacementSideEvidence prior = ProviderReplacementQualification.replacementSideEvidence replacement ->
     ~ ProviderReplacementIntegrationValid
         prior replacement reuseWitness instance priorSemantics replacementSemantics
         encodeInstance encodeRealization.
@@ -155,7 +156,7 @@ Qed.
 Theorem integrated_replacement_rejects_topology_change :
   forall prior replacement reuseWitness instance priorSemantics replacementSemantics
          encodeInstance encodeRealization,
-    replacementSideInstance prior <> replacementSideInstance replacement ->
+    ProviderReplacementQualification.replacementSideInstance prior <> ProviderReplacementQualification.replacementSideInstance replacement ->
     ~ ProviderReplacementIntegrationValid
         prior replacement reuseWitness instance priorSemantics replacementSemantics
         encodeInstance encodeRealization.
@@ -174,11 +175,11 @@ Theorem integrated_shared_evidence_requires_exact_scoped_reuse :
     ProviderReplacementIntegrationValid
       prior replacement reuseWitness instance priorSemantics replacementSemantics
       encodeInstance encodeRealization ->
-    SharedEvidence prior replacement reference ->
+    ProviderReplacementQualification.SharedEvidence prior replacement reference ->
     exists reuse,
       reuseWitness reference = Some reuse /\
-      replacementReuseReference reuse = reference /\
-      ValidEvidenceReuse prior replacement reuse.
+      ProviderReplacementQualification.replacementReuseReference reuse = reference /\
+      ProviderReplacementQualification.ValidEvidenceReuse prior replacement reuse.
 Proof.
   intros prior replacement reuseWitness instance priorSemantics replacementSemantics
     encodeInstance encodeRealization reference Hvalid Hshared.
