@@ -1,0 +1,6 @@
+PHIL-PHASE1-WHOLE-SOURCE-VERIFICATION-V1
+primary	stage1-one-shot	handoff/phase1/ping/stage1-one-shot.phil	sha256:6a12f4b2d90648bd4624ced4114d37b18e232db8136a207a72b146b72ce75a2f
+architecture	architecture.LocalPing	architecture.local-ping.v1
+program	program.main
+policy	phase1.int007.ping.stage1.verification.v1
+summary	handoff/phase1/ping/stage1-one-shot-verification-bundle-v1.tsv
