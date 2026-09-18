@@ -4,6 +4,7 @@ module Phil.Verification.GrammarV1WholeSource
   ( GrammarV1WholeSourceVerificationSpec (..)
   , GrammarV1WholeSourceVerificationError (..)
   , grammarV1ClosedArchitectureInterfaceRevision
+  , grammarV1ClosedProgramInterfaceRevision
   , grammarV1WholeSourceVerificationBundle
   ) where
 
@@ -96,6 +97,10 @@ grammarV1ClosedArchitectureInterfaceRevision :: InterfaceRevision
 grammarV1ClosedArchitectureInterfaceRevision =
   InterfaceRevision "phil.grammar-v1.architecture.closed.v1"
 
+grammarV1ClosedProgramInterfaceRevision :: InterfaceRevision
+grammarV1ClosedProgramInterfaceRevision =
+  InterfaceRevision "phil.grammar-v1.program.closed.v1"
+
 grammarV1WholeSourceVerificationBundle
   :: GrammarV1WholeSourceVerificationSpec
   -> Either GrammarV1WholeSourceVerificationError VerificationBundle
@@ -112,16 +117,21 @@ grammarV1WholeSourceVerificationBundle spec = do
   validateProgramTarget architecture program
   graph <- mapLeft (WholeSourceVerificationGraphError . showText) $
     buildVerificationRevisionGraph [] Set.empty
-  let declarationIdentity = DeclarationIdentity
+  let architectureDeclarationIdentity = DeclarationIdentity
         { identityDeclarationKey = wholeSourceArchitectureKey spec
         , identityInterfaceRevision = grammarV1ClosedArchitectureInterfaceRevision
         , identityDefinitionRevision = wholeSourceArchitectureRevision spec
+        }
+      programDeclarationIdentity = DeclarationIdentity
+        { identityDeclarationKey = wholeSourceProgramKey spec
+        , identityInterfaceRevision = grammarV1ClosedProgramInterfaceRevision
+        , identityDefinitionRevision = programDefinitionRevision spec
         }
       instanceIdentity = deriveArchitectureInstanceIdentity
         ArchitectureInstanceDescriptor
           { architectureInstanceKey = programInstanceKey spec
           , architectureParentInstanceKey = Nothing
-          , architectureDeclarationIdentity = declarationIdentity
+          , architectureDeclarationIdentity = architectureDeclarationIdentity
           , architectureStaticBindings = Map.empty
           }
       policy = ApplicationAssurancePolicy
@@ -131,7 +141,7 @@ grammarV1WholeSourceVerificationBundle spec = do
   mapLeft (WholeSourceVerificationBundleError . showText) $
     buildVerificationBundle
       (wholeSourceRevision spec)
-      [declarationIdentity]
+      [architectureDeclarationIdentity, programDeclarationIdentity]
       [instanceIdentity]
       []
       graph
