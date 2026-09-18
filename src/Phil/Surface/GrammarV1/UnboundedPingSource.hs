@@ -238,7 +238,7 @@ requireIdentifier
   -> Text
   -> Located GrammarV1Pattern
   -> Either GrammarV1UnboundedPingSourceError ()
-requireIdentifier shape expected (Located _ (GrammarV1IdentifierPattern name))
+requireIdentifier _shape expected (Located _ (GrammarV1IdentifierPattern name))
   | locatedValue name == expected = Right ()
 requireIdentifier shape expected _ = shape ("unexpected binder for " <> expected)
 
