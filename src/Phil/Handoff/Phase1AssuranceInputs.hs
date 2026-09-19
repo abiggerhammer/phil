@@ -52,8 +52,9 @@ derivePhase1AssuranceInputs
   -> ManifestClosureSelection
   -> Either Phase1AssuranceInputsError Phase1AssuranceInputs
 derivePhase1AssuranceInputs policy ledger selection = do
-  evidence <- selectMap "evidence" (ledgerEvidence ledger)
+  selectedEvidence <- selectMap "evidence" (ledgerEvidence ledger)
     (manifestClosureEvidence selection)
+  let evidence = Map.map canonicalizeEvidenceEntry selectedEvidence
   assumptions <- selectMap "assumption" (ledgerAssumptions ledger)
     (manifestClosureAssumptions selection)
   exports <- selectMap "export" (ledgerExports ledger)
