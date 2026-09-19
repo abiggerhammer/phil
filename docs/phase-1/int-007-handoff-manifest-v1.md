@@ -150,14 +150,50 @@ inventing assurance facts from runtime/conformance tests.
 The five bundle summaries are content-addressed from the top-level handoff
 manifest under INT-008/INT-009 and VER-012.
 
+## Accepted assurance inputs and closure policy
+
+The next layer persists the exact assurance inputs selected behind the canonical
+Upload and Steve VerificationBundles:
+
+- `handoff/phase1/witnesses/upload-assurance-inputs-v1.tsv`
+- `handoff/phase1/witnesses/steve-assurance-inputs-v1.tsv`
+
+Each portable file records the exact application-assurance policy revision,
+permitted closure dispositions, the disposition set actually required by the
+selected inputs, and the selected accepted `EvidenceEntry`, `Assumption`,
+`ExportEntry`, and `AssuranceUse` records. Evidence rows preserve exact
+obligation revision, assurance kind and role, input digests, assumption and
+evidence/obligation dependencies, validity-scope dimensions, justification
+identities, runtime mechanism/residue/cost identities, and optional evidence or
+runtime artifact identity.
+
+The decoder reconstructs those assurance records and recomputes their canonical
+digests using the ordinary assurance identity functions. It rejects digest drift,
+missing selected dependencies, unused selected assumptions, malformed portable
+text, and any required disposition not permitted by the persisted policy. The
+disposition mapping itself is shared with `ManifestClosure`; the handoff does
+not carry a second policy interpretation.
+
+The permanent replay also reconstructs each corresponding VerificationBundle and
+requires every accepted-evidence reference to match the portable selected ledger
+by exact evidence ID, evidence digest, and obligation revision.
+
+The current Upload and Steve accepted evidence has no external evidence/certificate
+artifact body: its `evidenceArtifact` and runtime implementation artifact fields
+are absent. The format preserves artifact ref/digest identity when present, but
+INT-007 does not invent certificate files that are not inputs to these bundles.
+Any future referenced artifact body must additionally be content-addressed as its
+own top-level `evidence` or `certificate` handoff artifact.
+
+Both assurance-input files are governed by INT-002 and VER-012 and are
+content-addressed from the top-level handoff manifest.
+
 ## Deliberate remaining INT-007 work
 
 This slice does not yet materialize or enumerate the full freeze set. Subsequent
 INT-007 slices must add, and independently reconstruct/replay from portable
 bytes:
 
-- accepted evidence/certificates plus policy/disposition inputs beyond the
-  accepted-evidence references already carried by the VerificationBundle;
 - ArchitectureRealization, Systems, StageContract, lowering, and cost artifacts;
 - final per-witness AssuranceManifests and residual TCB;
 - the complete positive/negative conformance corpus with stable fixture IDs,
