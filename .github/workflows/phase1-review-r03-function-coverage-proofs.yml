@@ -1,0 +1,72 @@
+name: Phase 1 Review R03 Function Coverage Proofs
+
+on:
+  pull_request:
+    paths:
+      - 'proof/Phil/LLVM/Preservation.v'
+      - 'proof/Phil/LLVM/ReviewR03FunctionCoverage.v'
+      - 'proof/Phil/LLVM/ReviewR03FunctionCoverageImplementation.v'
+      - 'src/Phil/LLVM/Verify.hs'
+      - 'src/Phil/LLVM/IR.hs'
+      - 'test/Phase1ReviewR3LLVMFunctionCoverageMain.hs'
+      - 'docs/phase-1/review-r03-function-coverage-proof-boundary-v1.md'
+      - '.github/workflows/phase1-review-r03-function-coverage-proofs.yml'
+  push:
+    branches: [main]
+    paths:
+      - 'proof/Phil/LLVM/Preservation.v'
+      - 'proof/Phil/LLVM/ReviewR03FunctionCoverage.v'
+      - 'proof/Phil/LLVM/ReviewR03FunctionCoverageImplementation.v'
+      - 'src/Phil/LLVM/Verify.hs'
+      - 'src/Phil/LLVM/IR.hs'
+      - 'test/Phase1ReviewR3LLVMFunctionCoverageMain.hs'
+      - 'docs/phase-1/review-r03-function-coverage-proof-boundary-v1.md'
+      - '.github/workflows/phase1-review-r03-function-coverage-proofs.yml'
+
+permissions:
+  contents: read
+
+jobs:
+  rocq-review-r03-function-coverage:
+    runs-on: ubuntu-latest
+    container:
+      image: rocq/rocq-prover:9.2.0
+      options: --user root
+    steps:
+      - uses: actions/checkout@v4
+      - name: Compile R03 function coverage proofs
+        shell: bash
+        run: |
+          set -euo pipefail
+          export PATH="/home/rocq/.opam/${COMPILER}/bin:$PATH"
+          rocq c -Q proof/Phil Phil proof/Phil/LLVM/Preservation.v
+          rocq c -Q proof/Phil Phil proof/Phil/LLVM/ReviewR03FunctionCoverage.v
+          rocq c -Q proof/Phil Phil proof/Phil/LLVM/ReviewR03FunctionCoverageImplementation.v
+          sha256sum \
+            proof/Phil/LLVM/ReviewR03FunctionCoverage.v \
+            proof/Phil/LLVM/ReviewR03FunctionCoverage.vo \
+            proof/Phil/LLVM/ReviewR03FunctionCoverageImplementation.v \
+            proof/Phil/LLVM/ReviewR03FunctionCoverageImplementation.vo \
+            > review-r03-function-coverage-proof.sha256
+          cat review-r03-function-coverage-proof.sha256
+      - uses: actions/upload-artifact@v4
+        with:
+          name: review-r03-function-coverage-proof
+          path: review-r03-function-coverage-proof.sha256
+          if-no-files-found: error
+
+  verify-review-r03-correspondence:
+    needs: rocq-review-r03-function-coverage
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: haskell-actions/setup@v2
+        with:
+          ghc-version: '9.6.7'
+          cabal-version: 'latest'
+      - name: Build complete Haskell substrate
+        run: cabal build all --enable-tests
+      - name: Strict typecheck R03 mutation corpus
+        run: cabal exec -- ghc -isrc -Wall -Werror -fno-code test/Phase1ReviewR3LLVMFunctionCoverageMain.hs
+      - name: Replay R03 function coverage mutations
+        run: cabal exec -- runghc -isrc -Wall -Werror test/Phase1ReviewR3LLVMFunctionCoverageMain.hs
