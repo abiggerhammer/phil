@@ -1,0 +1,76 @@
+name: Phase 1 Review R10 Rendezvous Succession Proofs
+
+on:
+  pull_request:
+    paths:
+      - 'proof/Phil/Core/ConcurrencyRendezvous.v'
+      - 'proof/Phil/Core/ReviewR10RendezvousSuccession.v'
+      - 'proof/Phil/Core/ReviewR10RendezvousSuccessionImplementation.v'
+      - 'src/Phil/Core/ProcessRendezvous.hs'
+      - 'src/Phil/Core/ConcurrencyRendezvousCertification.hs'
+      - 'test/Phase1ReviewR10RendezvousSuccessionMain.hs'
+      - 'test/Phase1ExactProcessRendezvousMain.hs'
+      - 'docs/phase-1/review-r10-rendezvous-succession-proof-boundary-v1.md'
+      - '.github/workflows/phase1-review-r10-rendezvous-succession-proofs.yml'
+  push:
+    branches: [main]
+    paths:
+      - 'proof/Phil/Core/ConcurrencyRendezvous.v'
+      - 'proof/Phil/Core/ReviewR10RendezvousSuccession.v'
+      - 'proof/Phil/Core/ReviewR10RendezvousSuccessionImplementation.v'
+      - 'src/Phil/Core/ProcessRendezvous.hs'
+      - 'src/Phil/Core/ConcurrencyRendezvousCertification.hs'
+      - 'test/Phase1ReviewR10RendezvousSuccessionMain.hs'
+      - 'test/Phase1ExactProcessRendezvousMain.hs'
+      - 'docs/phase-1/review-r10-rendezvous-succession-proof-boundary-v1.md'
+      - '.github/workflows/phase1-review-r10-rendezvous-succession-proofs.yml'
+
+permissions:
+  contents: read
+
+jobs:
+  rocq-review-r10-rendezvous-succession:
+    runs-on: ubuntu-latest
+    container:
+      image: rocq/rocq-prover:9.2.0
+      options: --user root
+    steps:
+      - uses: actions/checkout@v4
+      - name: Compile R10 succession proofs
+        shell: bash
+        run: |
+          set -euo pipefail
+          export PATH="/home/rocq/.opam/${COMPILER}/bin:$PATH"
+          rocq c -Q proof/Phil Phil proof/Phil/Core/ConcurrencyRendezvous.v
+          rocq c -Q proof/Phil Phil proof/Phil/Core/ReviewR10RendezvousSuccession.v
+          rocq c -Q proof/Phil Phil proof/Phil/Core/ReviewR10RendezvousSuccessionImplementation.v
+      - name: Record proof identities
+        run: |
+          sha256sum \
+            proof/Phil/Core/ReviewR10RendezvousSuccession.v \
+            proof/Phil/Core/ReviewR10RendezvousSuccession.vo \
+            proof/Phil/Core/ReviewR10RendezvousSuccessionImplementation.v \
+            proof/Phil/Core/ReviewR10RendezvousSuccessionImplementation.vo \
+            > review-r10-rendezvous-succession-proof.sha256
+          cat review-r10-rendezvous-succession-proof.sha256
+
+  verify-review-r10-correspondence:
+    needs: rocq-review-r10-rendezvous-succession
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: haskell-actions/setup@v2
+        with:
+          ghc-version: '9.6.7'
+          cabal-version: 'latest'
+      - name: Build complete Haskell substrate
+        run: cabal build all --enable-tests
+      - name: Strict typecheck R10 authorities and regression
+        run: |
+          cabal exec -- ghc -isrc -Wall -Werror -fno-code src/Phil/Core/ProcessRendezvous.hs
+          cabal exec -- ghc -isrc -Wall -Werror -fno-code src/Phil/Core/ConcurrencyRendezvousCertification.hs
+          cabal exec -- ghc -isrc -Wall -Werror -fno-code test/Phase1ReviewR10RendezvousSuccessionMain.hs
+      - name: Replay R10 succession regression
+        run: cabal exec -- runghc -Wall -Werror -isrc test/Phase1ReviewR10RendezvousSuccessionMain.hs
+      - name: Replay exact rendezvous predecessor corpus
+        run: cabal exec -- runghc -Wall -Werror -isrc test/Phase1ExactProcessRendezvousMain.hs
