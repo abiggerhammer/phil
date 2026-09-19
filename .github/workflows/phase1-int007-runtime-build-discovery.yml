@@ -5,6 +5,11 @@ on:
     paths:
       - 'src/Phil/Handoff/Phase1RuntimeBuild.hs'
       - 'src/Phil/Systems/GenericLowering.hs'
+      - 'src/Phil/Core/Static.hs'
+      - 'src/Phil/Systems/IR.hs'
+      - 'src/Phil/Systems/Phase1Stage.hs'
+      - 'src/Phil/Systems/StageClosure.hs'
+      - 'src/Phil/Systems/CostAttribution.hs'
       - 'src/Phil/Examples/Phase1/SystemsWitnesses.hs'
       - 'src/Phil/Examples/Phase1/StageClosureWitnesses.hs'
       - 'test/Phase1INT007RuntimeBuildMain.hs'
