@@ -1,0 +1,85 @@
+name: Phase 1 Review R09 Zero Float Precision Proofs
+
+on:
+  pull_request:
+    paths:
+      - 'proof/Phil/Core/NumericSemantics.v'
+      - 'proof/Phil/Core/ReviewR09ZeroFloatPrecision.v'
+      - 'proof/Phil/Core/ReviewR09ZeroFloatPrecisionImplementation.v'
+      - 'src/Phil/Core/NumericConversion.hs'
+      - 'src/Phil/Core/FloatArithmetic.hs'
+      - 'test/Phase1ReviewR9ZeroFloatPrecisionMain.hs'
+      - 'test/Phase1NumericConversionMain.hs'
+      - 'docs/phase-1/review-r09-zero-float-precision-proof-boundary-v1.md'
+      - '.github/workflows/phase1-review-r09-zero-float-precision-proofs.yml'
+  push:
+    branches: [main]
+    paths:
+      - 'proof/Phil/Core/NumericSemantics.v'
+      - 'proof/Phil/Core/ReviewR09ZeroFloatPrecision.v'
+      - 'proof/Phil/Core/ReviewR09ZeroFloatPrecisionImplementation.v'
+      - 'src/Phil/Core/NumericConversion.hs'
+      - 'src/Phil/Core/FloatArithmetic.hs'
+      - 'test/Phase1ReviewR9ZeroFloatPrecisionMain.hs'
+      - 'test/Phase1NumericConversionMain.hs'
+      - 'docs/phase-1/review-r09-zero-float-precision-proof-boundary-v1.md'
+      - '.github/workflows/phase1-review-r09-zero-float-precision-proofs.yml'
+
+permissions:
+  contents: read
+
+jobs:
+  rocq-review-r09-zero-float-precision:
+    runs-on: ubuntu-latest
+    container:
+      image: rocq/rocq-prover:9.2.0
+      options: --user root
+    steps:
+      - uses: actions/checkout@v4
+      - name: Compile R09 zero-float precision proofs
+        shell: bash
+        run: |
+          set -euo pipefail
+          export PATH="/home/rocq/.opam/${COMPILER}/bin:$PATH"
+          rocq c -Q proof/Phil Phil proof/Phil/Core/NumericSemantics.v
+          rocq c -Q proof/Phil Phil proof/Phil/Core/ReviewR09ZeroFloatPrecision.v
+          rocq c -Q proof/Phil Phil proof/Phil/Core/ReviewR09ZeroFloatPrecisionImplementation.v
+          sha256sum \
+            proof/Phil/Core/ReviewR09ZeroFloatPrecision.v \
+            proof/Phil/Core/ReviewR09ZeroFloatPrecision.vo \
+            proof/Phil/Core/ReviewR09ZeroFloatPrecisionImplementation.v \
+            proof/Phil/Core/ReviewR09ZeroFloatPrecisionImplementation.vo \
+            > review-r09-zero-float-precision-proof.sha256
+          cat review-r09-zero-float-precision-proof.sha256
+      - uses: actions/upload-artifact@v4
+        with:
+          name: review-r09-zero-float-precision-proof
+          path: review-r09-zero-float-precision-proof.sha256
+          if-no-files-found: error
+
+  verify-review-r09-correspondence:
+    needs: rocq-review-r09-zero-float-precision
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: haskell-actions/setup@v2
+        with:
+          ghc-version: '9.6.7'
+          cabal-version: 'latest'
+      - name: Build complete Haskell substrate
+        run: cabal build all --enable-tests
+      - name: Strict typecheck R09 authorities and regression
+        run: |
+          set -euo pipefail
+          for module in \
+            src/Phil/Core/NumericConversion.hs \
+            src/Phil/Core/FloatArithmetic.hs \
+            test/Phase1ReviewR9ZeroFloatPrecisionMain.hs \
+            test/Phase1NumericConversionMain.hs
+          do
+            cabal exec -- ghc -isrc -Wall -Werror -fno-code "$module"
+          done
+      - name: Replay R09 zero-float precision regression
+        run: cabal exec -- runghc -Wall -Werror -isrc test/Phase1ReviewR9ZeroFloatPrecisionMain.hs
+      - name: Replay EXEC-020 numeric conversion control
+        run: cabal exec -- runghc -Wall -Werror -isrc test/Phase1NumericConversionMain.hs
