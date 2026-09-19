@@ -63,6 +63,7 @@ library
       Phil.Handoff.Phase1CheckedArchitecture
       Phil.Handoff.Phase1VerificationBundle
       Phil.Handoff.Phase1WholeSourceVerification
+      Phil.Handoff.Phase1AssuranceInputs
   other-modules:
       ArchitectureIdentityKernel
       ArchitectureImportKernel
@@ -99,6 +100,7 @@ library
       Phil.Assurance.RocqDigestValidation
       Phil.Assurance.RocqStorage
       Phil.Verification.Bundle
+      Phil.Verification.ManifestClosure
       DataModeKernel
       DataProductKernel
       GenericIdentityEqualityKernel

@@ -3,6 +3,7 @@
 module Phil.Verification.ManifestClosure
   ( ManifestClosureSelection (..)
   , ManifestClosureError (..)
+  , verificationDispositionForAssuranceKind
   , closeVerificationBundle
   ) where
 
@@ -54,6 +55,19 @@ data ManifestClosureError
   | ManifestClosureUnpermittedDisposition VerificationDisposition
   | ManifestClosureManifestRejected ManifestError
   deriving (Eq, Show)
+
+verificationDispositionForAssuranceKind
+  :: AssuranceKind
+  -> VerificationDisposition
+verificationDispositionForAssuranceKind kind = case kind of
+  KernelChecked -> StaticallyDischarged
+  ProofAssistantTheorem -> ExternallyDischarged
+  CertificateChecked -> ExternallyDischarged
+  TranslationValidated -> ExternallyDischarged
+  DifferentialTested -> ExternallyDischarged
+  PropertyTested -> ExternallyDischarged
+  RuntimeEnforced -> RuntimeBound
+  Assumed -> AssumptionDependent
 
 -- | Close an intrinsically accepted, canonical VerificationBundle through the
 -- ordinary ADR-025 assurance machinery.  Witness identity is deliberately not
@@ -227,18 +241,8 @@ closeVerificationBundle bundle policy context ledger selection = do
       | otherwise = Left (ManifestClosureInvalidExportDisposition exportKey disposition)
 
     evidenceDisposition entry =
-      primaryDisposition (evidenceAssuranceKind entry)
+      verificationDispositionForAssuranceKind (evidenceAssuranceKind entry)
         : [AssumptionDependent | not (null (evidenceAssumptions entry))]
-
-    primaryDisposition kind = case kind of
-      KernelChecked -> StaticallyDischarged
-      ProofAssistantTheorem -> ExternallyDischarged
-      CertificateChecked -> ExternallyDischarged
-      TranslationValidated -> ExternallyDischarged
-      DifferentialTested -> ExternallyDischarged
-      PropertyTested -> ExternallyDischarged
-      RuntimeEnforced -> RuntimeBound
-      Assumed -> AssumptionDependent
 
     requirePermitted disposition =
       if Set.member disposition

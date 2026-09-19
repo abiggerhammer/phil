@@ -27,4 +27,6 @@ ping.stage2.verification-bundle.v1	verification-bundle	handoff/phase1/ping/stage
 ping.stage3.verification-bundle.v1	verification-bundle	handoff/phase1/ping/stage3-bounded-verification-bundle-v1.tsv	sha256:3f9bf44847a0cd324cc0839e84ee50de097a4a8e26adf99e5a7e588f9ce05801	matrix:INT-009;matrix:VER-012
 ping.stage4.verification-bundle.v1	verification-bundle	handoff/phase1/ping/stage4-unbounded-verification-bundle-v1.tsv	sha256:55012b1b867d3d75979584d7dbc966be292f71e6086b3a6d05dd9cc5b2562e4d	matrix:INT-009;matrix:VER-012
 ping.stage5.verification-bundle.v1	verification-bundle	handoff/phase1/ping/stage5-interruptible-verification-bundle-v1.tsv	sha256:288b596ef3a7f83cd0d4f2dca3b7d0346ddb903de618537dcc73459b2a377ce1	matrix:INT-009;matrix:VER-012
+assurance.upload.inputs.v1	policy-input	handoff/phase1/witnesses/upload-assurance-inputs-v1.tsv	sha256:39215723f1bab5552657533d1c835d29ed547f2ed9cee121e8f536363e07033c	matrix:INT-002;matrix:VER-012
+assurance.steve.inputs.v1	policy-input	handoff/phase1/witnesses/steve-assurance-inputs-v1.tsv	sha256:557de2b621903ab48486d0d3fc1c48b330309049a7323a3407b143076b02e95d	matrix:INT-002;matrix:VER-012
 corpus.negative.v1	conformance-manifest	test/fixtures/phase1-negative/manifest.tsv	sha256:c7cae373d4f6c25ababb779df45316cf0c2b5401be5f7e22e8396ec65d8855ef	matrix:INT-004
