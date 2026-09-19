@@ -2,14 +2,11 @@
 
 module Main (main) where
 
-import qualified Data.Map.Strict as Map
-import qualified Data.Set as Set
 import qualified Data.Text as Text
 import qualified Data.Text.IO as TextIO
 import Phil.Assurance.Types
   ( AssuranceLedger
   , AssuranceManifest (..)
-  , Digest (..)
   )
 import Phil.Assurance.Verify (verifyManifest)
 import Phil.Handoff.Phase1AssuranceClosure
