@@ -4,6 +4,10 @@ concurrency:
   group: ${{ github.workflow }}-${{ github.event.pull_request.number || github.ref }}
   cancel-in-progress: true
 
+permissions:
+  contents: read
+  actions: write
+
 on:
   pull_request:
     paths:
@@ -19,6 +23,63 @@ jobs:
   discover:
     runs-on: macos-26
     steps:
+      - name: Cancel superseded runs of this workflow
+        if: github.event_name == 'pull_request'
+        uses: actions/github-script@v8
+        with:
+          script: |
+            const owner = context.repo.owner;
+            const repo = context.repo.repo;
+            const currentRunId = Number(process.env.GITHUB_RUN_ID);
+            const currentRunNumber = Number(process.env.GITHUB_RUN_NUMBER);
+            const prNumber = context.payload.pull_request.number;
+            const workflowName = context.workflow;
+            const headRef = context.payload.pull_request.head.ref;
+            const runs = await github.paginate(
+              github.rest.actions.listWorkflowRunsForRepo,
+              {
+                owner,
+                repo,
+                event: 'pull_request',
+                branch: headRef,
+                per_page: 100
+              }
+            );
+            const active = new Set([
+              'queued',
+              'in_progress',
+              'pending',
+              'waiting',
+              'requested'
+            ]);
+            const stale = runs.filter(run => {
+              const samePullRequest =
+                (run.pull_requests || []).some(pr => pr.number === prNumber)
+                  || run.head_branch === headRef;
+              return run.id !== currentRunId
+                && run.name === workflowName
+                && run.run_number < currentRunNumber
+                && active.has(run.status)
+                && samePullRequest;
+            });
+            for (const run of stale) {
+              core.info(
+                `Cancelling superseded ${workflowName} run ${run.id} (${run.status})`
+              );
+              try {
+                await github.rest.actions.cancelWorkflowRun({
+                  owner,
+                  repo,
+                  run_id: run.id
+                });
+              } catch (error) {
+                if (error.status === 409) {
+                  core.info(`Run ${run.id} already left a cancellable state`);
+                } else {
+                  throw error;
+                }
+              }
+            }
       - uses: actions/checkout@v4
       - uses: haskell-actions/setup@v2
         with:
