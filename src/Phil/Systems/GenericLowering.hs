@@ -12,6 +12,7 @@ module Phil.Systems.GenericLowering
   , GenericRealizationContext (..)
   , GenericLoweringError (..)
   , coreSystemsProgramSemanticForm
+  , genericRealizationSemanticForm
   , lowerGenericSystems
   ) where
 
@@ -203,7 +204,7 @@ lowerGenericSystems checked program context = do
       realizationIdentity = deriveArchitectureRealizationIdentity
         ArchitectureRealizationDescriptor
           { realizationInstanceIdentity = instanceIdentity
-          , realizationSemantics = realizationSemanticForm program context
+          , realizationSemantics = genericRealizationSemanticForm program context
           }
       decisionAssumptions = Set.fromList
         (concatMap genericDecisionAssumptions
@@ -590,11 +591,11 @@ makeStageContract checked sourceDigest targetDigest program context decisions =
   where
     runtimeFacts = genericContextRuntimeSites context
 
-realizationSemanticForm
+genericRealizationSemanticForm
   :: CoreSystemsProgram
   -> GenericRealizationContext
   -> SemanticForm
-realizationSemanticForm program context = SemanticRecord (Map.fromList
+genericRealizationSemanticForm program context = SemanticRecord (Map.fromList
   [ ("core", coreSystemsProgramSemanticForm program)
   , ("context_revision", SemanticAtom (genericContextRevision context))
   , ("context", genericContextSemantics context)
