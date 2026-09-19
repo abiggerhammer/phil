@@ -1,0 +1,7 @@
+PHIL-PHASE1-STAGE-CONTRACT-V1
+phase1-stage	phil.phase1.stage.canonical.v1:seed
+phase1-canonical	73656564
+closed-stage	phil.phase1.stage.closed.canonical.v1:seed
+closed-canonical	73656564
+next-stage	seed
+verifier-profile	seed

@@ -11,6 +11,7 @@ module Phil.Systems.Phase1Stage
   , Phase1StageVerificationError (..)
   , normalizePhase1SystemsArtifact
   , deriveSystemsArtifactRevision
+  , renderPhase1StageContractCanonical
   , derivePhase1StageContractRevision
   , collectSourceFacts
   , collectSystemsMechanisms
@@ -153,8 +154,8 @@ deriveSystemsArtifactRevision artifact =
     source = stageSourceArtifactDigest contract
     ledger = systemsArtifactLoweringLedger normalized
 
-derivePhase1StageContractRevision :: Phase1StageBundle -> Phase1StageContractRevision
-derivePhase1StageContractRevision bundle =
+renderPhase1StageContractCanonical :: Phase1StageBundle -> Text
+renderPhase1StageContractCanonical bundle =
   case RevisionKernel.planPhase1StageContractRevision
       (phase1StageInstanceRevision bundle)
       (phase1StageRealizationRevision bundle)
@@ -168,9 +169,7 @@ derivePhase1StageContractRevision bundle =
       RevisionKernel.Phase1StageContractRevisionNamespace
       instanceRevision realizationRevision systemsRevision verifierProfile
       sourceFacts dispositions mechanisms justifications ->
-        Phase1StageContractRevision
-          ("phil.phase1.stage.canonical.v1:"
-            <> canonicalSemanticForm (SemanticRecord (Map.fromList
+        canonicalSemanticForm (SemanticRecord (Map.fromList
               [ ("instance", SemanticAtom (instanceText instanceRevision))
               , ("realization", SemanticAtom (realizationText realizationRevision))
               , ("systems", SemanticAtom (unSystemsArtifactRevision systemsRevision))
@@ -187,8 +186,14 @@ derivePhase1StageContractRevision bundle =
                     [ (unSystemsMechanismKey key, semanticJustification value)
                     | (key, value) <- Map.toAscList justifications
                     ]))
-              ])))
+              ]))
     _ -> kernelInvariant "phase1-stage-contract-revision-plan"
+
+derivePhase1StageContractRevision :: Phase1StageBundle -> Phase1StageContractRevision
+derivePhase1StageContractRevision bundle =
+  Phase1StageContractRevision
+    ("phil.phase1.stage.canonical.v1:"
+      <> renderPhase1StageContractCanonical bundle)
 
 collectSourceFacts :: SystemsArtifact -> Set SourceFactKey
 collectSourceFacts artifact = Set.fromList

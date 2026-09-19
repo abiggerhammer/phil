@@ -7,6 +7,7 @@ module Phil.Systems.StageClosure
   , StageClosureVerificationError (..)
   , concreteSubjectStage
   , nextStageSubjectStage
+  , renderClosedStageContractCanonical
   , deriveClosedStageContractRevision
   , makeStageClosureBundle
   , verifyStageClosureBundle
@@ -155,12 +156,11 @@ subjectFromBranch =
   . authorityEffectStageBase
   . branchResourceStageBase
 
-deriveClosedStageContractRevision
+renderClosedStageContractCanonical
   :: StageClosureBundle
-  -> ClosedStageContractRevision
-deriveClosedStageContractRevision bundle = ClosedStageContractRevision
-  ("phil.phase1.stage.closed.canonical.v1:"
-    <> canonicalSemanticForm (SemanticRecord (Map.fromList
+  -> Text
+renderClosedStageContractCanonical bundle =
+  canonicalSemanticForm (SemanticRecord (Map.fromList
       [ ("instance", SemanticAtom
           (instanceText (phase1StageInstanceRevision common)))
       , ("realization", SemanticAtom
@@ -176,11 +176,19 @@ deriveClosedStageContractRevision bundle = ClosedStageContractRevision
       , ("next_stage", SemanticAtom
           (unNextStageRequirementStageRevision
             (nextStageRequirementStageRevision (stageClosureNextStage bundle))))
-      ])))
+      ]))
   where
     concrete = stageClosureConcrete bundle
     subject = concreteSubjectStage concrete
     common = subjectStageBase subject
+
+deriveClosedStageContractRevision
+  :: StageClosureBundle
+  -> ClosedStageContractRevision
+deriveClosedStageContractRevision bundle =
+  ClosedStageContractRevision
+    ("phil.phase1.stage.closed.canonical.v1:"
+      <> renderClosedStageContractCanonical bundle)
 
 makeStageClosureBundle
   :: ConcreteStageClosure

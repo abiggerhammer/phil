@@ -64,6 +64,7 @@ library
       Phil.Handoff.Phase1VerificationBundle
       Phil.Handoff.Phase1WholeSourceVerification
       Phil.Handoff.Phase1AssuranceInputs
+      Phil.Handoff.Phase1RuntimeBuild
   other-modules:
       ArchitectureIdentityKernel
       ArchitectureImportKernel

@@ -34,6 +34,7 @@ module Phil.Core.Static
   , canonicalSemanticForm
   , deriveDeclarationIdentity
   , deriveArchitectureInstanceIdentity
+  , renderArchitectureRealizationCanonical
   , deriveArchitectureRealizationIdentity
   , scopedInstanceKey
   , instantiateArchitecture
@@ -391,10 +392,10 @@ deriveArchitectureInstanceIdentity descriptor = ArchitectureInstanceIdentity
         _ -> architectureRevisionConstructionKernelBridgeMismatch
           "instance revision plan"
 
-deriveArchitectureRealizationIdentity
+renderArchitectureRealizationCanonical
   :: ArchitectureRealizationDescriptor
-  -> ArchitectureRealizationIdentity
-deriveArchitectureRealizationIdentity descriptor =
+  -> Text
+renderArchitectureRealizationCanonical descriptor =
   case ArchitectureRealizationKernel.planArchitectureRealization
       (identityInstanceKey instanceIdentity)
       (identityInstanceRevision instanceIdentity)
@@ -403,19 +404,24 @@ deriveArchitectureRealizationIdentity descriptor =
       plannedInstanceKey
       plannedInstanceRevision
       plannedRealizationSemantics ->
-        ArchitectureRealizationIdentity
-          { identityRealizationRevision = RealizationRevision
-              ("phil.realization.canonical.v1:"
-                <> canonicalSemanticForm (SemanticRecord (Map.fromList
-                  [ ("instance_key", SemanticAtom
-                      (unInstanceKey plannedInstanceKey))
-                  , ("instance_revision", SemanticAtom
-                      (unInstanceRevision plannedInstanceRevision))
-                  , ("realization", plannedRealizationSemantics)
-                  ])))
-          }
+        canonicalSemanticForm (SemanticRecord (Map.fromList
+          [ ("instance_key", SemanticAtom (unInstanceKey plannedInstanceKey))
+          , ("instance_revision", SemanticAtom
+              (unInstanceRevision plannedInstanceRevision))
+          , ("realization", plannedRealizationSemantics)
+          ]))
   where
     instanceIdentity = realizationInstanceIdentity descriptor
+
+deriveArchitectureRealizationIdentity
+  :: ArchitectureRealizationDescriptor
+  -> ArchitectureRealizationIdentity
+deriveArchitectureRealizationIdentity descriptor =
+  ArchitectureRealizationIdentity
+    { identityRealizationRevision = RealizationRevision
+        ("phil.realization.canonical.v1:"
+          <> renderArchitectureRealizationCanonical descriptor)
+    }
 
 -- | Deterministically scope one stable occurrence slot under one exact parent
 -- occurrence lineage.  The spelling is intentionally inspectable in Phase 1;
