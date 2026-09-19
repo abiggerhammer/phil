@@ -3,6 +3,8 @@
 module Phil.Examples.Phase1.SystemsWitnesses
   ( uploadPhase1StageBundle
   , stevePhase1StageBundle
+  , uploadStageInstanceKey
+  , steveStageInstanceKey
   , uploadCoreProgram
   , uploadRealizationContext
   , steveCoreProgram
@@ -34,7 +36,7 @@ import Phil.Systems.Phase1Stage (Phase1StageBundle)
 uploadPhase1StageBundle :: Phase1StageBundle
 uploadPhase1StageBundle =
   case lowerWitness
-      (InstanceKey "instance.phase1.upload")
+      uploadStageInstanceKey
       (DeclarationKey "decl.phase1.upload")
       "Upload"
       uploadCoreProgram
@@ -46,11 +48,15 @@ stevePhase1StageBundle :: Either String Phase1StageBundle
 stevePhase1StageBundle = do
   context <- steveQualifiedRealizationContext
   lowerWitness
-    (InstanceKey "instance.phase1.steve")
+    steveStageInstanceKey
     (DeclarationKey "decl.phase1.steve")
     "Steve"
     steveCoreProgram
     context
+
+uploadStageInstanceKey, steveStageInstanceKey :: InstanceKey
+uploadStageInstanceKey = InstanceKey "instance.phase1.upload"
+steveStageInstanceKey = InstanceKey "instance.phase1.steve"
 
 -- | Exact current Steve realization context after provider qualification.
 -- This is fixture data, not compiler dispatch; source-safe integration

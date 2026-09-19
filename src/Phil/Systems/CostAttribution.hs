@@ -16,6 +16,7 @@ module Phil.Systems.CostAttribution
   , deriveRuntimeSiteContributions
   , deriveClaimCharges
   , deriveStagingContributions
+  , renderCostAttributionStageCanonical
   , deriveCostAttributionStageRevision
   , makeCostAttributionStageBundle
   , completeCostAttributionStageBundle
@@ -330,12 +331,11 @@ deriveStagingContributions contributions = Map.fromList
       [costContributionMechanism contribution]
   ]
 
-deriveCostAttributionStageRevision
+renderCostAttributionStageCanonical
   :: CostAttributionStageBundle
-  -> CostAttributionStageRevision
-deriveCostAttributionStageRevision bundle = CostAttributionStageRevision
-  ("phil.phase1.stage.cost-attribution.canonical.v1:"
-    <> canonicalSemanticForm (SemanticRecord (Map.fromList
+  -> Text
+renderCostAttributionStageCanonical bundle =
+  canonicalSemanticForm (SemanticRecord (Map.fromList
       [ ("base_stage", SemanticAtom
           (unStagingEffectStageRevision
             (stagingEffectStageRevision (costAttributionStageBase bundle))))
@@ -396,7 +396,15 @@ deriveCostAttributionStageRevision bundle = CostAttributionStageRevision
             | (key, contribution) <- Map.toAscList
                 (costAttributionStageStagingContributions bundle)
             ]))
-      ])))
+      ]))
+
+deriveCostAttributionStageRevision
+  :: CostAttributionStageBundle
+  -> CostAttributionStageRevision
+deriveCostAttributionStageRevision bundle =
+  CostAttributionStageRevision
+    ("phil.phase1.stage.cost-attribution.canonical.v1:"
+      <> renderCostAttributionStageCanonical bundle)
 
 makeCostAttributionStageBundle
   :: StagingEffectStageBundle

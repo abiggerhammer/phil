@@ -1,4 +1,4 @@
-name: INT-007 Verification Discovery
+name: INT-007 Runtime Build Discovery
 
 concurrency:
   group: int007-v2-${{ github.workflow }}-${{ github.event.pull_request.number || github.ref }}
@@ -11,16 +11,24 @@ permissions:
 on:
   pull_request:
     paths:
-      - 'src/Phil/Handoff/Phase1VerificationBundle.hs'
-      - 'test/Phase1INT007VerificationBundleMain.hs'
-      - 'test/Phil/Test/Phase1/ManifestWitnesses.hs'
-      - 'handoff/phase1/witnesses/*verification-bundle-v1.tsv'
-      - '.github/workflows/phase1-int007-verification-discovery-macos.yml'
+      - 'src/Phil/Handoff/Phase1RuntimeBuild.hs'
+      - 'src/Phil/Systems/GenericLowering.hs'
+      - 'src/Phil/Core/Static.hs'
+      - 'src/Phil/Systems/IR.hs'
+      - 'src/Phil/Systems/Phase1Stage.hs'
+      - 'src/Phil/Systems/StageClosure.hs'
+      - 'src/Phil/Systems/CostAttribution.hs'
+      - 'src/Phil/Examples/Phase1/SystemsWitnesses.hs'
+      - 'src/Phil/Examples/Phase1/StageClosureWitnesses.hs'
+      - 'test/Phase1INT007RuntimeBuildMain.hs'
+      - 'handoff/phase1/runtime/**'
       - 'phil-core.cabal'
+      - '.github/workflows/phase1-int007-runtime-build-discovery.yml'
 
 jobs:
   discover:
     runs-on: macos-26
+    timeout-minutes: 30
     steps:
       - name: Cancel superseded runs of this workflow
         if: github.event_name == 'pull_request'
@@ -84,11 +92,17 @@ jobs:
         with:
           ghc-version: '9.6.7'
           cabal-version: 'latest'
-      - name: Build verification handoff substrate
+      - name: Build runtime/build handoff format strictly
         run: cabal build lib:phil-core --ghc-options=-Werror
-      - name: Strictly typecheck verification handoff
-        run: |
-          cabal exec -- ghc -isrc -Wall -Werror -fno-code src/Phil/Handoff/Phase1VerificationBundle.hs
-          cabal exec -- ghc -isrc -itest -Wall -Werror -fno-code test/Phase1INT007VerificationBundleMain.hs
-      - name: Emit exact VerificationBundle handoff summaries
-        run: cabal exec -- runghc -isrc -itest -Wall -Werror test/Phase1INT007VerificationBundleMain.hs
+      - name: Typecheck runtime/build replay strictly
+        run: cabal exec -- ghc -isrc -itest -Wall -Werror -fno-code test/Phase1INT007RuntimeBuildMain.hs
+      - name: Emit exact runtime/build handoff summaries
+        run: cabal exec -- runghc -isrc -itest -Wall -Werror test/Phase1INT007RuntimeBuildMain.hs
+      - name: Upload exact runtime/build discovery artifacts
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: int007-runtime-build-discovery-${{ github.run_id }}
+          path: dist/int007-runtime-build-discovery/*.tsv
+          if-no-files-found: error
+          retention-days: 7
