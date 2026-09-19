@@ -14,7 +14,6 @@ module Phil.Handoff.Phase1AssuranceClosure
 
 import qualified Data.ByteString as ByteString
 import Data.Char (isDigit)
-import Data.List (sort)
 import qualified Data.Map.Strict as Map
 import Data.Map.Strict (Map)
 import qualified Data.Set as Set
