@@ -97,3 +97,11 @@ jobs:
         run: cabal exec -- ghc -isrc -itest -Wall -Werror -fno-code test/Phase1INT007RuntimeBuildMain.hs
       - name: Emit exact runtime/build handoff summaries
         run: cabal exec -- runghc -isrc -itest -Wall -Werror test/Phase1INT007RuntimeBuildMain.hs
+      - name: Upload exact runtime/build discovery artifacts
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: int007-runtime-build-discovery-${{ github.run_id }}
+          path: dist/int007-runtime-build-discovery/*.tsv
+          if-no-files-found: error
+          retention-days: 7
