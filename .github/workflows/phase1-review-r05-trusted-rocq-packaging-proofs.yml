@@ -1,0 +1,93 @@
+name: Phase 1 Review R05 Trusted Rocq Packaging Proofs
+
+on:
+  pull_request:
+    paths:
+      - 'proof/Phil/Assurance/ReviewR05TrustedRocqPackaging.v'
+      - 'proof/Phil/Assurance/ReviewR05TrustedRocqPackagingImplementation.v'
+      - 'src/Phil/Assurance/Rocq.hs'
+      - 'app/RocqScalarCertificationMain.hs'
+      - 'test/RocqCertificationMain.hs'
+      - 'docs/phase-1/review-r05-trusted-rocq-packaging-proof-boundary-v1.md'
+      - '.github/workflows/phase1-review-r05-trusted-rocq-packaging-proofs.yml'
+  push:
+    branches: [main]
+    paths:
+      - 'proof/Phil/Assurance/ReviewR05TrustedRocqPackaging.v'
+      - 'proof/Phil/Assurance/ReviewR05TrustedRocqPackagingImplementation.v'
+      - 'src/Phil/Assurance/Rocq.hs'
+      - 'app/RocqScalarCertificationMain.hs'
+      - 'test/RocqCertificationMain.hs'
+      - 'docs/phase-1/review-r05-trusted-rocq-packaging-proof-boundary-v1.md'
+      - '.github/workflows/phase1-review-r05-trusted-rocq-packaging-proofs.yml'
+
+permissions:
+  contents: read
+
+jobs:
+  rocq-review-r05-trusted-packaging:
+    runs-on: ubuntu-latest
+    container:
+      image: rocq/rocq-prover:9.2.0
+      options: --user root
+    steps:
+      - uses: actions/checkout@v4
+      - name: Compile R05 trusted packaging proofs
+        shell: bash
+        run: |
+          set -euo pipefail
+          export PATH="/home/rocq/.opam/${COMPILER}/bin:$PATH"
+          rocq c -Q proof/Phil Phil proof/Phil/Assurance/ReviewR05TrustedRocqPackaging.v
+          rocq c -Q proof/Phil Phil proof/Phil/Assurance/ReviewR05TrustedRocqPackagingImplementation.v
+          sha256sum \
+            proof/Phil/Assurance/ReviewR05TrustedRocqPackaging.v \
+            proof/Phil/Assurance/ReviewR05TrustedRocqPackaging.vo \
+            proof/Phil/Assurance/ReviewR05TrustedRocqPackagingImplementation.v \
+            proof/Phil/Assurance/ReviewR05TrustedRocqPackagingImplementation.vo \
+            > review-r05-trusted-rocq-packaging-proof.sha256
+          cat review-r05-trusted-rocq-packaging-proof.sha256
+      - uses: actions/upload-artifact@v4
+        with:
+          name: review-r05-trusted-rocq-packaging-proof
+          path: review-r05-trusted-rocq-packaging-proof.sha256
+          if-no-files-found: error
+
+  verify-review-r05-correspondence:
+    needs: rocq-review-r05-trusted-packaging
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: haskell-actions/setup@v2
+        with:
+          ghc-version: '9.6.7'
+          cabal-version: 'latest'
+      - name: Build complete Haskell substrate
+        run: cabal build all --enable-tests
+      - name: Strict typecheck public certifier and certification regression
+        run: |
+          cabal exec -- ghc -isrc -Wall -Werror -fno-code app/RocqScalarCertificationMain.hs
+          cabal exec -- ghc -isrc -Wall -Werror -fno-code test/RocqCertificationMain.hs
+      - name: Replay Rocq certification boundary regression
+        run: cabal exec -- runghc -isrc -Wall -Werror test/RocqCertificationMain.hs
+      - name: Replay exact R05 public CLI trust gate
+        shell: bash
+        run: |
+          set -euo pipefail
+          CERTIFIER="$(cabal list-bin exe:phil-certify-core-scalar)"
+          cat > /tmp/review-r5.v <<'EOF'
+          (* PHIL-CORE-SCALAR-001 *)
+          Theorem scalar_literal_has_intrinsic_type.
+          Theorem scalar_literal_type_is_deterministic.
+          Theorem boolean_literals_are_valid.
+          Theorem valid_uint_has_positive_width.
+          Theorem valid_uint_is_below_modulus.
+          Theorem zero_width_uint_is_invalid.
+          Theorem uint_at_modulus_is_invalid.
+          EOF
+          printf 'not-a-rocq-object' > /tmp/review-r5.vo
+          if "$CERTIFIER" /tmp/review-r5.v /tmp/review-r5.vo /tmp/review-r5.cert; then
+            echo 'legacy unchecked certification invocation unexpectedly succeeded' >&2
+            exit 1
+          fi
+          "$CERTIFIER" --trusted-checked-inputs /tmp/review-r5.v /tmp/review-r5.vo /tmp/review-r5.cert
+          grep -q 'trusted-packaging' /tmp/review-r5.cert
