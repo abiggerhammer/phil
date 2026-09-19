@@ -32,10 +32,14 @@ module Phil.Systems.IR
   , LoweringLedger (..)
   , SystemsArtifact (..)
   , emptyCostShape
+  , renderLoweringDecisionCanonical
   , deriveLoweringDecisionDigest
   , deriveLoweringLedgerRoot
+  , renderSystemsProgramCanonical
   , systemsProgramDigest
+  , renderStageContractCanonical
   , stageContractDigest
+  , renderSystemsArtifactCanonical
   , systemsArtifactDigest
   , blockSuccessors
   , runtimeSites
@@ -415,8 +419,8 @@ data SystemsArtifact = SystemsArtifact
   }
   deriving (Eq, Show)
 
-deriveLoweringDecisionDigest :: LoweringDecision -> Digest
-deriveLoweringDecisionDigest lowering = digestText (Text.intercalate "|"
+renderLoweringDecisionCanonical :: LoweringDecision -> Text
+renderLoweringDecisionCanonical lowering = Text.intercalate "|"
   [ field "source_artifact" (unDigest (loweringSourceArtifactDigest lowering))
   , field "target_artifact" (unDigest (loweringTargetArtifactDigest lowering))
   , field "source" (loweringSourceRepresentation lowering)
@@ -437,7 +441,10 @@ deriveLoweringDecisionDigest lowering = digestText (Text.intercalate "|"
   , field "assumptions" (renderTexts (loweringAssumptions lowering))
   , field "derived" (renderTexts (map unRevisionId (loweringDerivedObligations lowering)))
   , field "inspection" (renderTexts (loweringInspectionPlan lowering))
-  ])
+  ]
+
+deriveLoweringDecisionDigest :: LoweringDecision -> Digest
+deriveLoweringDecisionDigest = digestText . renderLoweringDecisionCanonical
 
 deriveLoweringLedgerRoot :: Map DecisionId LoweringDecision -> Digest
 deriveLoweringLedgerRoot decisions = digestText . Text.intercalate "|" $
@@ -445,12 +452,12 @@ deriveLoweringLedgerRoot decisions = digestText . Text.intercalate "|" $
   | (key, lowering) <- Map.toAscList decisions
   ]
 
-systemsProgramDigest :: SystemsProgram -> Digest
-systemsProgramDigest program = digestText (Text.intercalate "|"
+renderSystemsProgramCanonical :: SystemsProgram -> Text
+renderSystemsProgramCanonical program = Text.intercalate "|"
   [ field "name" (systemsProgramName program)
   , field "profile" (renderProfile (systemsProgramProfile program))
   , field "functions" (renderList renderFunction (Map.toAscList (systemsProgramFunctions program)))
-  ])
+  ]
   where
     renderFunction (name, function) = Text.intercalate ";"
       [ field "key" name
@@ -474,8 +481,12 @@ systemsProgramDigest program = digestText (Text.intercalate "|"
       , field "term" (renderTerminator (systemsBlockTerminator blockValue))
       ]
 
-stageContractDigest :: StageContract -> Digest
-stageContractDigest contract = digestText (Text.intercalate "|"
+
+systemsProgramDigest :: SystemsProgram -> Digest
+systemsProgramDigest = digestText . renderSystemsProgramCanonical
+
+renderStageContractCanonical :: StageContract -> Text
+renderStageContractCanonical contract = Text.intercalate "|"
   [ field "id" (stageContractId contract)
   , field "source" (unDigest (stageSourceArtifactDigest contract))
   , field "target" (unDigest (stageTargetArtifactDigest contract))
@@ -486,7 +497,7 @@ stageContractDigest contract = digestText (Text.intercalate "|"
   , field "assumptions" (renderTexts (stageAssumptions contract))
   , field "trace" (renderTexts (stageTraceRelation contract))
   , field "resource_failure" (renderTexts (stageResourceFailureRelation contract))
-  ])
+  ]
   where
     renderInvariantEntry (key, invariantValue) = Text.intercalate ";"
       [ field "key" (unInvariantId key)
@@ -494,12 +505,19 @@ stageContractDigest contract = digestText (Text.intercalate "|"
       , field "claim" (renderInvariantClaim (stageInvariantClaim invariantValue))
       ]
 
-systemsArtifactDigest :: SystemsArtifact -> Digest
-systemsArtifactDigest artifact = digestText (Text.intercalate "|"
+
+stageContractDigest :: StageContract -> Digest
+stageContractDigest = digestText . renderStageContractCanonical
+
+renderSystemsArtifactCanonical :: SystemsArtifact -> Text
+renderSystemsArtifactCanonical artifact = Text.intercalate "|"
   [ field "program" (unDigest (systemsProgramDigest (systemsArtifactProgram artifact)))
   , field "stage_contract" (unDigest (stageContractDigest (systemsArtifactStageContract artifact)))
   , field "lowering_ledger" (unDigest (loweringLedgerRoot (systemsArtifactLoweringLedger artifact)))
-  ])
+  ]
+
+systemsArtifactDigest :: SystemsArtifact -> Digest
+systemsArtifactDigest = digestText . renderSystemsArtifactCanonical
 
 blockSuccessors :: SystemsBlock -> [BlockId]
 blockSuccessors blockValue = case systemsBlockTerminator blockValue of
