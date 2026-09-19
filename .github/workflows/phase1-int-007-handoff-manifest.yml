@@ -9,18 +9,24 @@ on:
       - 'src/Phil/Handoff/Phase1VerificationBundle.hs'
       - 'src/Phil/Handoff/Phase1WholeSourceVerification.hs'
       - 'src/Phil/Handoff/Phase1AssuranceInputs.hs'
+      - 'src/Phil/Handoff/Phase1RuntimeBuild.hs'
       - 'src/Phil/Verification/GrammarV1WholeSource.hs'
       - 'src/Phil/Verification/ManifestClosure.hs'
+      - 'src/Phil/Systems/GenericLowering.hs'
+      - 'src/Phil/Examples/Phase1/SystemsWitnesses.hs'
+      - 'src/Phil/Examples/Phase1/StageClosureWitnesses.hs'
       - 'test/Phase1INT007HandoffManifestMain.hs'
       - 'test/Phase1INT007WitnessSourceBundleMain.hs'
       - 'test/Phase1INT007CheckedArchitectureMain.hs'
       - 'test/Phase1INT007VerificationBundleMain.hs'
       - 'test/Phase1INT007PingVerificationBundleMain.hs'
       - 'test/Phase1INT007AssuranceInputsMain.hs'
+      - 'test/Phase1INT007RuntimeBuildMain.hs'
       - 'test/Phil/Test/Phase1/ManifestWitnesses.hs'
       - 'handoff/phase1/manifest-v1.tsv'
       - 'handoff/phase1/witnesses/*.tsv'
       - 'handoff/phase1/ping/**'
+      - 'handoff/phase1/runtime/**'
       - 'docs/phase-1/int-007-handoff-manifest-v1.md'
       - 'phil-core.cabal'
       - '.github/workflows/phase1-int-007-handoff-manifest.yml'
@@ -42,18 +48,24 @@ on:
       - 'src/Phil/Handoff/Phase1VerificationBundle.hs'
       - 'src/Phil/Handoff/Phase1WholeSourceVerification.hs'
       - 'src/Phil/Handoff/Phase1AssuranceInputs.hs'
+      - 'src/Phil/Handoff/Phase1RuntimeBuild.hs'
       - 'src/Phil/Verification/GrammarV1WholeSource.hs'
       - 'src/Phil/Verification/ManifestClosure.hs'
+      - 'src/Phil/Systems/GenericLowering.hs'
+      - 'src/Phil/Examples/Phase1/SystemsWitnesses.hs'
+      - 'src/Phil/Examples/Phase1/StageClosureWitnesses.hs'
       - 'test/Phase1INT007HandoffManifestMain.hs'
       - 'test/Phase1INT007WitnessSourceBundleMain.hs'
       - 'test/Phase1INT007CheckedArchitectureMain.hs'
       - 'test/Phase1INT007VerificationBundleMain.hs'
       - 'test/Phase1INT007PingVerificationBundleMain.hs'
       - 'test/Phase1INT007AssuranceInputsMain.hs'
+      - 'test/Phase1INT007RuntimeBuildMain.hs'
       - 'test/Phil/Test/Phase1/ManifestWitnesses.hs'
       - 'handoff/phase1/manifest-v1.tsv'
       - 'handoff/phase1/witnesses/*.tsv'
       - 'handoff/phase1/ping/**'
+      - 'handoff/phase1/runtime/**'
       - 'docs/phase-1/int-007-handoff-manifest-v1.md'
       - 'phil-core.cabal'
       - '.github/workflows/phase1-int-007-handoff-manifest.yml'
@@ -86,6 +98,7 @@ jobs:
           cabal exec -- ghc -isrc -Wall -Werror -fno-code src/Phil/Handoff/Phase1VerificationBundle.hs
           cabal exec -- ghc -isrc -Wall -Werror -fno-code src/Phil/Handoff/Phase1WholeSourceVerification.hs
           cabal exec -- ghc -isrc -Wall -Werror -fno-code src/Phil/Handoff/Phase1AssuranceInputs.hs
+          cabal exec -- ghc -isrc -Wall -Werror -fno-code src/Phil/Handoff/Phase1RuntimeBuild.hs
           cabal exec -- ghc -isrc -Wall -Werror -fno-code src/Phil/Verification/GrammarV1WholeSource.hs
           cabal exec -- ghc -isrc -Wall -Werror -fno-code test/Phase1INT007HandoffManifestMain.hs
           cabal exec -- ghc -isrc -Wall -Werror -fno-code test/Phase1INT007WitnessSourceBundleMain.hs
@@ -93,6 +106,7 @@ jobs:
           cabal exec -- ghc -isrc -itest -Wall -Werror -fno-code test/Phase1INT007VerificationBundleMain.hs
           cabal exec -- ghc -isrc -itest -Wall -Werror -fno-code test/Phase1INT007PingVerificationBundleMain.hs
           cabal exec -- ghc -isrc -itest -Wall -Werror -fno-code test/Phase1INT007AssuranceInputsMain.hs
+          cabal exec -- ghc -isrc -itest -Wall -Werror -fno-code test/Phase1INT007RuntimeBuildMain.hs
       - name: Check exact Phase-1 handoff manifest integrity
         run: cabal exec -- runghc -isrc -Wall -Werror test/Phase1INT007HandoffManifestMain.hs
       - name: Reconstruct Upload and Steve SourceBundles from handoff bytes
@@ -105,3 +119,5 @@ jobs:
         run: cabal exec -- runghc -isrc -itest -Wall -Werror test/Phase1INT007PingVerificationBundleMain.hs
       - name: Reconstruct Upload and Steve assurance inputs
         run: cabal exec -- runghc -isrc -itest -Wall -Werror test/Phase1INT007AssuranceInputsMain.hs
+      - name: Reconstruct Upload and Steve runtime/build artifacts
+        run: cabal exec -- runghc -isrc -itest -Wall -Werror test/Phase1INT007RuntimeBuildMain.hs
