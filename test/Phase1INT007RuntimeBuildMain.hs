@@ -350,7 +350,7 @@ duplicateCostContributionRejects =
     , "contribution-runtime\tc\tq"
     ]))
 
-expectFailure :: Show a => Either a b -> Either String ()
+expectFailure :: Either a b -> Either String ()
 expectFailure result = case result of
   Left _ -> Right ()
   Right _ -> Left "expected portable runtime/build summary rejection"
