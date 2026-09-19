@@ -66,8 +66,8 @@ Qed.
 Theorem selected_lowerer_may_explicitly_admit_helper :
   forall expectedPrefix helper expectedSuffix,
     FunctionInventoryExact
-      (expectedPrefix ++ helper :: expectedSuffix)
-      (expectedPrefix ++ helper :: expectedSuffix).
+      (expectedPrefix ++ (helper :: expectedSuffix))
+      (expectedPrefix ++ (helper :: expectedSuffix)).
 Proof.
   intros.
   reflexivity.
