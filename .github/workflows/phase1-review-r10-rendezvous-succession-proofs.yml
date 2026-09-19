@@ -41,6 +41,26 @@ jobs:
         run: |
           set -euo pipefail
           export PATH="/home/rocq/.opam/${COMPILER}/bin:$PATH"
+          rocq c -Q proof/Phil Phil proof/Phil/Core/Syntax.v
+          rocq c -Q proof/Phil Phil proof/Phil/Core/Session.v
+          rocq c -Q proof/Phil Phil proof/Phil/Core/ProtocolIdentity.v
+          rocq c -Q proof/Phil Phil proof/Phil/Core/ProtocolProjection.v
+          rocq c -Q proof/Phil Phil proof/Phil/Core/ProtocolProgressionGuard.v
+          rocq c -Q proof/Phil Phil proof/Phil/Core/ProtocolMessageAdmissibility.v
+          rocq c -Q proof/Phil Phil proof/Phil/Core/Context.v
+          rocq c -Q proof/Phil Phil proof/Phil/Core/ContextJoin.v
+          rocq c -Q proof/Phil Phil proof/Phil/Core/ProcessJoin.v
+          rocq c -Q proof/Phil Phil proof/Phil/Core/ProcessTerminal.v
+          rocq c -Q proof/Phil Phil proof/Phil/Core/ArchitectureIdentity.v
+          rocq c -Q proof/Phil Phil proof/Phil/Core/ArchitectureInstantiation.v
+          rocq c -Q proof/Phil Phil proof/Phil/Core/ProviderReplacementQualification.v
+          rocq c -Q proof/Phil Phil proof/Phil/Core/ArchitectureRealization.v
+          rocq c -Q proof/Phil Phil proof/Phil/Systems/FactDisposition.v
+          rocq c -Q proof/Phil Phil proof/Phil/Assurance/ValidityScope.v
+          rocq c -Q proof/Phil Phil proof/Phil/Core/SystemsStageClosure.v
+          rocq c -Q proof/Phil Phil proof/Phil/Core/SystemsGenericLowering.v
+          rocq c -Q proof/Phil Phil proof/Phil/Core/ConcurrencySemantics.v
+          rocq c -Q proof/Phil Phil proof/Phil/Core/ConcurrencyActivation.v
           rocq c -Q proof/Phil Phil proof/Phil/Core/ConcurrencyRendezvous.v
           rocq c -Q proof/Phil Phil proof/Phil/Core/ReviewR10RendezvousSuccession.v
           rocq c -Q proof/Phil Phil proof/Phil/Core/ReviewR10RendezvousSuccessionImplementation.v
