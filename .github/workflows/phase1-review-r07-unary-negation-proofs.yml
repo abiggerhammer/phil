@@ -1,0 +1,92 @@
+name: Phase 1 Review R07 Unary Negation Proofs
+
+on:
+  pull_request:
+    paths:
+      - 'proof/Phil/Core/NumericSemantics.v'
+      - 'proof/Phil/Core/ReviewR07UnaryNegation.v'
+      - 'proof/Phil/Core/ReviewR07UnaryNegationImplementation.v'
+      - 'src/Phil/Surface/GrammarV1/Lexer.hs'
+      - 'src/Phil/Surface/GrammarV1/Parser.hs'
+      - 'src/Phil/Surface/GrammarV1/RuntimeScalar.hs'
+      - 'src/Phil/Surface/GrammarV1/NumericConversion.hs'
+      - 'test/Phase1ReviewR7UnaryNegationMain.hs'
+      - 'docs/phase-1/review-r07-unary-negation-proof-boundary-v1.md'
+      - '.github/workflows/phase1-review-r07-unary-negation-proofs.yml'
+  push:
+    branches: [main]
+    paths:
+      - 'proof/Phil/Core/NumericSemantics.v'
+      - 'proof/Phil/Core/ReviewR07UnaryNegation.v'
+      - 'proof/Phil/Core/ReviewR07UnaryNegationImplementation.v'
+      - 'src/Phil/Surface/GrammarV1/Lexer.hs'
+      - 'src/Phil/Surface/GrammarV1/Parser.hs'
+      - 'src/Phil/Surface/GrammarV1/RuntimeScalar.hs'
+      - 'src/Phil/Surface/GrammarV1/NumericConversion.hs'
+      - 'test/Phase1ReviewR7UnaryNegationMain.hs'
+      - 'docs/phase-1/review-r07-unary-negation-proof-boundary-v1.md'
+      - '.github/workflows/phase1-review-r07-unary-negation-proofs.yml'
+
+permissions:
+  contents: read
+
+jobs:
+  rocq-review-r07-unary-negation:
+    runs-on: ubuntu-latest
+    container:
+      image: rocq/rocq-prover:9.2.0
+      options: --user root
+    steps:
+      - uses: actions/checkout@v4
+      - name: Compile R07 unary-negation proofs
+        shell: bash
+        run: |
+          set -euo pipefail
+          export PATH="/home/rocq/.opam/${COMPILER}/bin:$PATH"
+          rocq c -Q proof/Phil Phil proof/Phil/Core/NumericSemantics.v
+          rocq c -Q proof/Phil Phil proof/Phil/Core/ReviewR07UnaryNegation.v
+          rocq c -Q proof/Phil Phil proof/Phil/Core/ReviewR07UnaryNegationImplementation.v
+          sha256sum \
+            proof/Phil/Core/ReviewR07UnaryNegation.v \
+            proof/Phil/Core/ReviewR07UnaryNegation.vo \
+            proof/Phil/Core/ReviewR07UnaryNegationImplementation.v \
+            proof/Phil/Core/ReviewR07UnaryNegationImplementation.vo \
+            > review-r07-unary-negation-proof.sha256
+          cat review-r07-unary-negation-proof.sha256
+      - uses: actions/upload-artifact@v4
+        with:
+          name: review-r07-unary-negation-proof
+          path: review-r07-unary-negation-proof.sha256
+          if-no-files-found: error
+
+  verify-review-r07-correspondence:
+    needs: rocq-review-r07-unary-negation
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: haskell-actions/setup@v2
+        with:
+          ghc-version: '9.6.7'
+          cabal-version: 'latest'
+      - name: Build complete Haskell substrate
+        run: cabal build all --enable-tests
+      - name: Strict typecheck R07 authorities and regression
+        run: |
+          set -euo pipefail
+          for module in \
+            src/Phil/Surface/GrammarV1/Lexer.hs \
+            src/Phil/Surface/GrammarV1/Parser.hs \
+            src/Phil/Surface/GrammarV1/RuntimeScalar.hs \
+            src/Phil/Surface/GrammarV1/NumericConversion.hs \
+            test/Phase1ReviewR7UnaryNegationMain.hs
+          do
+            cabal exec -- ghc -isrc -Wall -Werror -fno-code "$module"
+          done
+      - name: Replay R07 unary-negation regression
+        run: cabal exec -- runghc -Wall -Werror -isrc test/Phase1ReviewR7UnaryNegationMain.hs
+      - name: Replay affected numeric controls
+        run: |
+          set -euo pipefail
+          cabal exec -- runghc -Wall -Werror -isrc test/Phase1ExecutionSIntArithmeticMain.hs
+          cabal exec -- runghc -Wall -Werror -isrc test/Phase1FloatArithmeticSourceMain.hs
+          cabal exec -- runghc -Wall -Werror -isrc test/Phase1IntegerDivisionSourceMain.hs
