@@ -16,6 +16,8 @@ import Phil.Core.Static
   , canonicalSemanticForm
   , deriveArchitectureRealizationIdentity
   , identityRealizationRevision
+  , renderArchitectureRealizationCanonical
+  , unInstanceKey
   )
 import Phil.Examples.Phase1.StageClosureWitnesses
   ( steveStageClosureBundle
@@ -34,6 +36,7 @@ import Phil.Systems.CostAttribution
   ( AttributedCost (..)
   , CostAttributionStageBundle (..)
   , CostAttributionStageRevision (..)
+  , renderCostAttributionStageCanonical
   , CostContributionIdentity (..)
   , CostChargeIdentity (..)
   , RuntimeCostBasis (..)
@@ -49,6 +52,10 @@ import Phil.Systems.IR
   , LoweringDecision (..)
   , LoweringLedger (..)
   , SystemsArtifact (..)
+  , renderLoweringDecisionCanonical
+  , renderStageContractCanonical
+  , renderSystemsArtifactCanonical
+  , renderSystemsProgramCanonical
   , stageContractDigest
   , systemsArtifactDigest
   , systemsProgramDigest
@@ -61,6 +68,8 @@ import Phil.Systems.Phase1Stage
   ( Phase1StageBundle (..)
   , Phase1StageContractRevision (..)
   , SystemsArtifactRevision (..)
+  , normalizePhase1SystemsArtifact
+  , renderPhase1StageContractCanonical
   )
 import Phil.Systems.RuntimeClaimBinding
   ( PhysicalRuntimeCostIdentity (..)
@@ -72,6 +81,7 @@ import Phil.Systems.StageClosure
   ( ClosedStageContractRevision (..)
   , StageClosureBundle (..)
   , concreteSubjectStage
+  , renderClosedStageContractCanonical
   , verifyStageClosureBundle
   )
 import Phil.Systems.StagingEffect
@@ -221,37 +231,49 @@ deriveWitnessSummaries witness = do
         }
       semantics = genericRealizationSemanticForm
         (witnessProgram witness) (witnessContext witness)
+      realizationDescriptor = ArchitectureRealizationDescriptor
+        { realizationInstanceIdentity = instanceIdentity
+        , realizationSemantics = semantics
+        }
       rederivedRealization = identityRealizationRevision
-        (deriveArchitectureRealizationIdentity ArchitectureRealizationDescriptor
-          { realizationInstanceIdentity = instanceIdentity
-          , realizationSemantics = semantics
-          })
+        (deriveArchitectureRealizationIdentity realizationDescriptor)
   if rederivedRealization /= storedRealization
     then Left ("artifact-side ArchitectureRealization revision mismatch: stored="
       <> show storedRealization <> ", rederived=" <> show rederivedRealization)
     else Right ()
-  let realization = Phase1RealizationSummary
-        { realizationInstanceRevision = unInstanceRevision instanceRevision
+  let normalizedArtifact = normalizePhase1SystemsArtifact artifact
+      realization = Phase1RealizationSummary
+        { realizationInstanceKey = unInstanceKey (witnessInstanceKey witness)
+        , realizationInstanceRevision = unInstanceRevision instanceRevision
         , realizationRevision = unRealizationRevision storedRealization
         , realizationContextRevision =
             genericContextRevision (witnessContext witness)
-        , realizationSemanticsSha256 =
-            digestToken (digestText (canonicalSemanticForm semantics))
+        , realizationCanonical =
+            renderArchitectureRealizationCanonical realizationDescriptor
         }
       systems = Phase1SystemsSummary
         { systemsArtifactRevision =
             unSystemsArtifactRevision (stageClosureSystemsArtifactRevision stage)
+        , systemsRevisionCanonical =
+            renderSystemsArtifactCanonical normalizedArtifact
         , systemsArtifactSha256 = digestToken (systemsArtifactDigest artifact)
+        , systemsArtifactCanonical = renderSystemsArtifactCanonical artifact
         , systemsProgramSha256 =
             digestToken (systemsProgramDigest (systemsArtifactProgram artifact))
+        , systemsProgramCanonical =
+            renderSystemsProgramCanonical (systemsArtifactProgram artifact)
         , systemsStageContractSha256 =
             digestToken (stageContractDigest (systemsArtifactStageContract artifact))
+        , systemsStageContractCanonical =
+            renderStageContractCanonical (systemsArtifactStageContract artifact)
         }
       stageContract = Phase1StageContractSummary
         { stagePhase1Revision =
             unPhase1StageContractRevision (phase1StageContractRevision common)
+        , stagePhase1Canonical = renderPhase1StageContractCanonical common
         , stageClosedRevision =
             unClosedStageContractRevision (stageClosureContractRevision stage)
+        , stageClosedCanonical = renderClosedStageContractCanonical stage
         , stageNextRequirementRevision =
             unNextStageRequirementStageRevision
               (nextStageRequirementStageRevision (stageClosureNextStage stage))
@@ -264,6 +286,7 @@ deriveWitnessSummaries witness = do
             [ Phase1LoweringDecisionSummary
                 (unDecisionId decisionId)
                 (digestToken (loweringDecisionDigest decision))
+                (renderLoweringDecisionCanonical decision)
             | (decisionId, decision) <- Map.toAscList
                 (loweringLedgerDecisions ledger)
             ]
@@ -276,6 +299,7 @@ deriveCostSummary :: CostAttributionStageBundle -> Phase1CostSummary
 deriveCostSummary bundle = Phase1CostSummary
   { costStageRevision =
       unCostAttributionStageRevision (costAttributionStageRevision bundle)
+  , costStageCanonical = renderCostAttributionStageCanonical bundle
   , costRuntimeBases =
       [ Phase1RuntimeCostBasisSummary
           (unRuntimePrimitiveProfileRef profile)
@@ -326,10 +350,11 @@ malformedRealizationDigestRejects :: Either String ()
 malformedRealizationDigestRejects =
   expectFailure (decodeRealizationSummary (Text.unlines
     [ realizationFormatV1
+    , "instance-key\ti"
     , "instance-revision\ti"
-    , "realization-revision\tr"
+    , "realization-revision\tphil.realization.canonical.v1:seed"
     , "context-revision\tc"
-    , "semantics\tsha256:ABC"
+    , "canonical\tzz"
     ]))
 
 duplicateLoweringDecisionRejects :: Either String ()
