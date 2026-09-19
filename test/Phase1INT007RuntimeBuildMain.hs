@@ -33,6 +33,7 @@ import Phil.Handoff.Phase1RuntimeBuild
 import Phil.Systems.CostAttribution
   ( AttributedCost (..)
   , CostAttributionStageBundle (..)
+  , CostAttributionStageRevision (..)
   , CostContributionIdentity (..)
   , CostChargeIdentity (..)
   , RuntimeCostBasis (..)
