@@ -1,4 +1,4 @@
-From Phil.Core Require Import ConcurrencyRendezvous.
+From Phil.Core Require Import ConcurrencyRendezvous ProtocolIdentity ProtocolProgressionGuard Session.
 
 (*
   PHIL-P1-REVIEW-R10 — accepted rendezvous state composes only through the exact
@@ -35,14 +35,14 @@ Theorem review_r10_first_rendezvous_consumes_both_predecessors :
     (ConcurrencyRendezvous.endpointProgressionAfter
       (ConcurrencyRendezvous.dualRendezvousSenderEndpoint
         (chainFirstWitness chain))
-      (ConcurrencyRendezvous.protocolOccurrenceName
+      (protocolOccurrenceName
         (ConcurrencyRendezvous.endpointProgressionPredecessor
           (ConcurrencyRendezvous.dualRendezvousSenderEndpoint
             (chainFirstWitness chain)))) = None) /\
     (ConcurrencyRendezvous.endpointProgressionAfter
       (ConcurrencyRendezvous.dualRendezvousReceiverEndpoint
         (chainFirstWitness chain))
-      (ConcurrencyRendezvous.protocolOccurrenceName
+      (protocolOccurrenceName
         (ConcurrencyRendezvous.endpointProgressionPredecessor
           (ConcurrencyRendezvous.dualRendezvousReceiverEndpoint
             (chainFirstWitness chain)))) = None).
@@ -58,7 +58,7 @@ Theorem review_r10_first_rendezvous_installs_exact_successors :
       ConcurrencyRendezvous.endpointProgressionBefore
         (ConcurrencyRendezvous.dualRendezvousSenderEndpoint
           (chainFirstWitness chain))
-        (ConcurrencyRendezvous.protocolOccurrenceName
+        (protocolOccurrenceName
           (ConcurrencyRendezvous.endpointProgressionPredecessor
             (ConcurrencyRendezvous.dualRendezvousSenderEndpoint
               (chainFirstWitness chain)))) = Some predecessorContract /\
@@ -68,7 +68,7 @@ Theorem review_r10_first_rendezvous_installs_exact_successors :
         (ConcurrencyRendezvous.endpointProgressionSuccessorName
           (ConcurrencyRendezvous.dualRendezvousSenderEndpoint
             (chainFirstWitness chain))) =
-      Some (ConcurrencyRendezvous.continuedContract predecessorContract
+      Some (continuedContract predecessorContract
         (ConcurrencyRendezvous.endpointProgressionSuccessorSession
           (ConcurrencyRendezvous.dualRendezvousSenderEndpoint
             (chainFirstWitness chain))))) /\
@@ -76,7 +76,7 @@ Theorem review_r10_first_rendezvous_installs_exact_successors :
       ConcurrencyRendezvous.endpointProgressionBefore
         (ConcurrencyRendezvous.dualRendezvousReceiverEndpoint
           (chainFirstWitness chain))
-        (ConcurrencyRendezvous.protocolOccurrenceName
+        (protocolOccurrenceName
           (ConcurrencyRendezvous.endpointProgressionPredecessor
             (ConcurrencyRendezvous.dualRendezvousReceiverEndpoint
               (chainFirstWitness chain)))) = Some predecessorContract /\
@@ -86,7 +86,7 @@ Theorem review_r10_first_rendezvous_installs_exact_successors :
         (ConcurrencyRendezvous.endpointProgressionSuccessorName
           (ConcurrencyRendezvous.dualRendezvousReceiverEndpoint
             (chainFirstWitness chain))) =
-      Some (ConcurrencyRendezvous.continuedContract predecessorContract
+      Some (continuedContract predecessorContract
         (ConcurrencyRendezvous.endpointProgressionSuccessorSession
           (ConcurrencyRendezvous.dualRendezvousReceiverEndpoint
             (chainFirstWitness chain))))).
@@ -122,7 +122,7 @@ Theorem review_r10_second_rendezvous_keeps_successor_duality :
     ConcurrencyRendezvous.endpointProgressionSuccessorSession
       (ConcurrencyRendezvous.dualRendezvousReceiverEndpoint
         (chainSecondWitness chain)) =
-    ConcurrencyRendezvous.dualSession
+    dualSession
       (ConcurrencyRendezvous.endpointProgressionSuccessorSession
         (ConcurrencyRendezvous.dualRendezvousSenderEndpoint
           (chainSecondWitness chain))).
@@ -139,7 +139,7 @@ Theorem review_r10_stale_predecessor_absent_from_successor_state :
     ConcurrencyRendezvous.endpointProgressionBefore
       (ConcurrencyRendezvous.dualRendezvousSenderEndpoint
         (chainSecondWitness chain))
-      (ConcurrencyRendezvous.protocolOccurrenceName
+      (protocolOccurrenceName
         (ConcurrencyRendezvous.endpointProgressionPredecessor
           (ConcurrencyRendezvous.dualRendezvousSenderEndpoint
             (chainFirstWitness chain)))) = None.
