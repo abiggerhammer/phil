@@ -1,0 +1,70 @@
+name: Phase 1 Review R02 Parameter Correspondence Proofs
+
+on:
+  pull_request:
+    paths:
+      - 'proof/Phil/LLVM/Preservation.v'
+      - 'proof/Phil/LLVM/ReviewR02ParameterCorrespondence.v'
+      - 'proof/Phil/LLVM/ReviewR02ParameterCorrespondenceImplementation.v'
+      - 'src/Phil/LLVM/Verify.hs'
+      - 'src/Phil/LLVM/IR.hs'
+      - 'test/Phase1ReviewR2LLVMParametersMain.hs'
+      - 'docs/phase-1/review-r02-parameter-correspondence-proof-boundary-v1.md'
+      - '.github/workflows/phase1-review-r02-parameter-correspondence-proofs.yml'
+  push:
+    branches: [main]
+    paths:
+      - 'proof/Phil/LLVM/Preservation.v'
+      - 'proof/Phil/LLVM/ReviewR02ParameterCorrespondence.v'
+      - 'proof/Phil/LLVM/ReviewR02ParameterCorrespondenceImplementation.v'
+      - 'src/Phil/LLVM/Verify.hs'
+      - 'test/Phase1ReviewR2LLVMParametersMain.hs'
+      - '.github/workflows/phase1-review-r02-parameter-correspondence-proofs.yml'
+
+permissions:
+  contents: read
+
+jobs:
+  rocq-review-r02-parameter-correspondence:
+    runs-on: ubuntu-latest
+    container:
+      image: rocq/rocq-prover:9.2.0
+      options: --user root
+    steps:
+      - uses: actions/checkout@v4
+      - name: Compile R02 parameter correspondence proofs
+        shell: bash
+        run: |
+          set -euo pipefail
+          export PATH="/home/rocq/.opam/${COMPILER}/bin:$PATH"
+          rocq c -Q proof/Phil Phil proof/Phil/LLVM/Preservation.v
+          rocq c -Q proof/Phil Phil proof/Phil/LLVM/ReviewR02ParameterCorrespondence.v
+          rocq c -Q proof/Phil Phil proof/Phil/LLVM/ReviewR02ParameterCorrespondenceImplementation.v
+          sha256sum \
+            proof/Phil/LLVM/ReviewR02ParameterCorrespondence.v \
+            proof/Phil/LLVM/ReviewR02ParameterCorrespondence.vo \
+            proof/Phil/LLVM/ReviewR02ParameterCorrespondenceImplementation.v \
+            proof/Phil/LLVM/ReviewR02ParameterCorrespondenceImplementation.vo \
+            > review-r02-parameter-correspondence-proof.sha256
+          cat review-r02-parameter-correspondence-proof.sha256
+      - uses: actions/upload-artifact@v4
+        with:
+          name: review-r02-parameter-correspondence-proof
+          path: review-r02-parameter-correspondence-proof.sha256
+          if-no-files-found: error
+
+  verify-review-r02-correspondence:
+    needs: rocq-review-r02-parameter-correspondence
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: haskell-actions/setup@v2
+        with:
+          ghc-version: '9.6.7'
+          cabal-version: 'latest'
+      - name: Build complete Haskell substrate
+        run: cabal build all --enable-tests
+      - name: Strict typecheck R02 mutation corpus
+        run: cabal exec -- ghc -isrc -Wall -Werror -fno-code test/Phase1ReviewR2LLVMParametersMain.hs
+      - name: Replay R02 parameter correspondence mutations
+        run: cabal exec -- runghc -isrc -Wall -Werror test/Phase1ReviewR2LLVMParametersMain.hs
