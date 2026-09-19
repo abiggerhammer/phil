@@ -30,6 +30,7 @@ module Phil.Handoff.Phase1RuntimeBuild
 
 import Control.Monad (foldM)
 import Data.Char (isDigit)
+import Data.List (sort)
 import qualified Data.Map.Strict as Map
 import qualified Data.Set as Set
 import Data.Text (Text)
@@ -211,7 +212,7 @@ decodeLoweringSummary source = do
   ensureUnique "lowering decision" loweringDecisionKey decisions
   Right Phase1LoweringSummary
     { loweringRootSha256 = root
-    , loweringDecisions = decisions
+    , loweringDecisions = sort decisions
     }
   where
     decodeDecision fields = case fields of
@@ -235,9 +236,9 @@ decodeCostSummary source = do
   ensureUnique "cost charge" costChargeIdentity charges
   Right Phase1CostSummary
     { costStageRevision = stage
-    , costRuntimeBases = bases
-    , costContributions = runtime <> staging
-    , costCharges = charges
+    , costRuntimeBases = sort bases
+    , costContributions = sort (runtime <> staging)
+    , costCharges = sort charges
     }
   where
     decodeBasis fields = case fields of
