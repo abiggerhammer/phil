@@ -1,5 +1,6 @@
 PHIL-PHASE1-ARCHITECTURE-REALIZATION-V1
+instance-key	seed
 instance-revision	seed
-realization-revision	seed
+realization-revision	phil.realization.canonical.v1:seed
 context-revision	seed
-semantics	sha256:0000000000000000000000000000000000000000000000000000000000000000
+canonical	73656564
