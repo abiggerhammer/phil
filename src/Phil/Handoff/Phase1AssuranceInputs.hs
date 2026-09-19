@@ -308,8 +308,9 @@ decodePhase1AssuranceInputs input =
             Right
             (decodePolicyRevision state)
           let policy = ApplicationAssurancePolicy revision (decodePermitted state)
+              evidence = Map.map canonicalizeEvidenceEntry (decodeEvidence state)
               ledger = emptyLedger
-                { ledgerEvidence = decodeEvidence state
+                { ledgerEvidence = evidence
                 , ledgerAssumptions = decodeAssumptions state
                 , ledgerExports = Map.map fst (decodeExports state)
                 , ledgerUses = decodeUses state
@@ -581,6 +582,16 @@ insertUse lineNumber useId useValue state
   | otherwise = Right state
       { decodeUses = Map.insert useId useValue (decodeUses state) }
 
+canonicalizeEvidenceEntry :: EvidenceEntry -> EvidenceEntry
+canonicalizeEvidenceEntry entry = entry
+  { evidenceInputDigests = sort (evidenceInputDigests entry)
+  , evidenceAssumptions = sort (evidenceAssumptions entry)
+  , evidenceDependsOn = sort (evidenceDependsOn entry)
+  , evidenceJustifies = sort (evidenceJustifies entry)
+  , evidenceRuntimeResidue = sort (evidenceRuntimeResidue entry)
+  , evidenceCostRefs = sort (evidenceCostRefs entry)
+  }
+
 validateEvidence :: EvidenceEntry -> Either Phase1AssuranceInputsError ()
 validateEvidence entry
   | evidenceResult entry /= EvidenceAccepted =
@@ -590,14 +601,7 @@ validateEvidence entry
         ("evidence digest mismatch: " <> unEvidenceEntryId (evidenceEntryId entry)))
   | otherwise = Right ()
   where
-    normalized = entry
-      { evidenceInputDigests = sort (evidenceInputDigests entry)
-      , evidenceAssumptions = sort (evidenceAssumptions entry)
-      , evidenceDependsOn = sort (evidenceDependsOn entry)
-      , evidenceJustifies = sort (evidenceJustifies entry)
-      , evidenceRuntimeResidue = sort (evidenceRuntimeResidue entry)
-      , evidenceCostRefs = sort (evidenceCostRefs entry)
-      }
+    normalized = canonicalizeEvidenceEntry entry
 
 validateAssumption :: Assumption -> Either Phase1AssuranceInputsError ()
 validateAssumption value
