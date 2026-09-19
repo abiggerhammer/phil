@@ -1,0 +1,29 @@
+name: INT-007 Runtime Build Discovery
+
+on:
+  pull_request:
+    paths:
+      - 'src/Phil/Handoff/Phase1RuntimeBuild.hs'
+      - 'src/Phil/Systems/GenericLowering.hs'
+      - 'src/Phil/Examples/Phase1/SystemsWitnesses.hs'
+      - 'src/Phil/Examples/Phase1/StageClosureWitnesses.hs'
+      - 'test/Phase1INT007RuntimeBuildMain.hs'
+      - 'handoff/phase1/runtime/**'
+      - 'phil-core.cabal'
+      - '.github/workflows/phase1-int007-runtime-build-discovery.yml'
+
+jobs:
+  discover:
+    runs-on: macos-26
+    steps:
+      - uses: actions/checkout@v4
+      - uses: haskell-actions/setup@v2
+        with:
+          ghc-version: '9.6.7'
+          cabal-version: 'latest'
+      - name: Build runtime/build handoff format strictly
+        run: cabal build lib:phil-core --ghc-options=-Werror
+      - name: Typecheck runtime/build replay strictly
+        run: cabal exec -- ghc -isrc -itest -Wall -Werror -fno-code test/Phase1INT007RuntimeBuildMain.hs
+      - name: Emit exact runtime/build handoff summaries
+        run: cabal exec -- runghc -isrc -itest -Wall -Werror test/Phase1INT007RuntimeBuildMain.hs
