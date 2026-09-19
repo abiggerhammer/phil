@@ -110,8 +110,16 @@ main = do
     steveContext
     "handoff/phase1/runtime/steve"
 
-  results <- mapM checkWitness [upload, steve]
-  if and results then pure () else exitFailure
+  witnessResults <- mapM checkWitness [upload, steve]
+  negativeResults <- sequence
+    [ test "INT-007 runtime/build malformed realization digest fails closed"
+        malformedRealizationDigestRejects
+    , test "INT-007 runtime/build duplicate lowering decision fails closed"
+        duplicateLoweringDecisionRejects
+    , test "INT-007 runtime/build duplicate cost contribution fails closed"
+        duplicateCostContributionRejects
+    ]
+  if and witnessResults && and negativeResults then pure () else exitFailure
 
 requireWitness
   :: String
@@ -312,3 +320,42 @@ costClassToken value = case value of
 
 digestToken :: Digest -> Text.Text
 digestToken (Digest value) = "sha256:" <> value
+
+
+malformedRealizationDigestRejects :: Either String ()
+malformedRealizationDigestRejects =
+  expectFailure (decodeRealizationSummary (Text.unlines
+    [ realizationFormatV1
+    , "instance-revision\ti"
+    , "realization-revision\tr"
+    , "context-revision\tc"
+    , "semantics\tsha256:ABC"
+    ]))
+
+duplicateLoweringDecisionRejects :: Either String ()
+duplicateLoweringDecisionRejects =
+  expectFailure (decodeLoweringSummary (Text.unlines
+    [ loweringFormatV1
+    , "root\tsha256:0000000000000000000000000000000000000000000000000000000000000000"
+    , "decision\td\tsha256:0000000000000000000000000000000000000000000000000000000000000000"
+    , "decision\td\tsha256:0000000000000000000000000000000000000000000000000000000000000000"
+    ]))
+
+duplicateCostContributionRejects :: Either String ()
+duplicateCostContributionRejects =
+  expectFailure (decodeCostSummary (Text.unlines
+    [ costFormatV1
+    , "stage\ts"
+    , "contribution-runtime\tc\tq"
+    , "contribution-runtime\tc\tq"
+    ]))
+
+expectFailure :: Show a => Either a b -> Either String ()
+expectFailure result = case result of
+  Left _ -> Right ()
+  Right _ -> Left "expected portable runtime/build summary rejection"
+
+test :: String -> Either String () -> IO Bool
+test label result = case result of
+  Right () -> putStrLn ("PASS: " <> label) >> pure True
+  Left detail -> putStrLn ("FAIL: " <> label <> " -- " <> detail) >> pure False
