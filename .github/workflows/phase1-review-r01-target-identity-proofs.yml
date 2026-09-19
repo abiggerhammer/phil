@@ -1,0 +1,79 @@
+name: Phase 1 Review R01 Target Identity Proofs
+
+on:
+  pull_request:
+    paths:
+      - 'proof/Phil/Core/Scalar.v'
+      - 'proof/Phil/Surface/SystemsProjection.v'
+      - 'proof/Phil/LLVM/Preservation.v'
+      - 'proof/Phil/LLVM/ReviewR01TargetIdentity.v'
+      - 'proof/Phil/LLVM/ReviewR01TargetIdentityImplementation.v'
+      - 'src/Phil/Compiler.hs'
+      - 'src/Phil/LLVM/**'
+      - 'test/Phase1ReviewR1LLVMNamesMain.hs'
+      - 'test/RunnableMain.hs'
+      - 'docs/phase-1/review-r01-target-identity-proof-boundary-v1.md'
+      - '.github/workflows/phase1-review-r01-target-identity-proofs.yml'
+  push:
+    branches: [main]
+    paths:
+      - 'proof/Phil/Surface/SystemsProjection.v'
+      - 'proof/Phil/LLVM/Preservation.v'
+      - 'proof/Phil/LLVM/ReviewR01TargetIdentity.v'
+      - 'proof/Phil/LLVM/ReviewR01TargetIdentityImplementation.v'
+      - 'src/Phil/Compiler.hs'
+      - 'src/Phil/LLVM/**'
+      - 'test/Phase1ReviewR1LLVMNamesMain.hs'
+      - '.github/workflows/phase1-review-r01-target-identity-proofs.yml'
+
+permissions:
+  contents: read
+
+jobs:
+  rocq-review-r01-target-identity:
+    runs-on: ubuntu-latest
+    container:
+      image: rocq/rocq-prover:9.2.0
+      options: --user root
+    steps:
+      - uses: actions/checkout@v4
+      - name: Compile R01 identity-separation proofs
+        shell: bash
+        run: |
+          set -euo pipefail
+          export PATH="/home/rocq/.opam/${COMPILER}/bin:$PATH"
+          rocq c -Q proof/Phil Phil proof/Phil/Core/Scalar.v
+          rocq c -Q proof/Phil Phil proof/Phil/Surface/SystemsProjection.v
+          rocq c -Q proof/Phil Phil proof/Phil/LLVM/Preservation.v
+          rocq c -Q proof/Phil Phil proof/Phil/LLVM/ReviewR01TargetIdentity.v
+          rocq c -Q proof/Phil Phil proof/Phil/LLVM/ReviewR01TargetIdentityImplementation.v
+          sha256sum \
+            proof/Phil/LLVM/ReviewR01TargetIdentity.v \
+            proof/Phil/LLVM/ReviewR01TargetIdentity.vo \
+            proof/Phil/LLVM/ReviewR01TargetIdentityImplementation.v \
+            proof/Phil/LLVM/ReviewR01TargetIdentityImplementation.vo \
+            > review-r01-target-identity-proof.sha256
+          cat review-r01-target-identity-proof.sha256
+      - uses: actions/upload-artifact@v4
+        with:
+          name: review-r01-target-identity-proof
+          path: review-r01-target-identity-proof.sha256
+          if-no-files-found: error
+
+  verify-review-r01-correspondence:
+    needs: rocq-review-r01-target-identity
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: haskell-actions/setup@v2
+        with:
+          ghc-version: '9.6.7'
+          cabal-version: 'latest'
+      - name: Build complete Haskell substrate
+        run: cabal build all --enable-tests
+      - name: Strict typecheck R01 collision regression
+        run: cabal exec -- ghc -isrc -Wall -Werror -fno-code test/Phase1ReviewR1LLVMNamesMain.hs
+      - name: Replay R01 target-name collision regression
+        run: cabal exec -- runghc -isrc -Wall -Werror test/Phase1ReviewR1LLVMNamesMain.hs
+      - name: Replay ordinary runnable projection regression
+        run: cabal exec -- runghc -isrc -Wall -Werror test/RunnableMain.hs
