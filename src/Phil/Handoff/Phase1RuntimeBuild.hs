@@ -232,7 +232,7 @@ decodeSystemsSummary source = do
   programCanonical <- requireOne "program-canonical" rows >>= decodeHex
   contractDigest <- requireOne "stage-contract" rows >>= requireDigest
   contractCanonical <- requireOne "stage-contract-canonical" rows >>= decodeHex
-  requireDigestMatches "SystemsArtifactRevision" revisionCanonical revision
+  requireBareDigestMatches "SystemsArtifactRevision" revisionCanonical revision
   requireDigestMatches "Systems artifact" artifactCanonical artifactDigest
   requireDigestMatches "Systems program" programCanonical programDigest
   requireDigestMatches "Systems StageContract" contractCanonical contractDigest
@@ -399,6 +399,20 @@ requireDigest raw =
 requireDigestMatches :: Text -> Text -> Text -> Either Phase1RuntimeBuildDecodeError ()
 requireDigestMatches label canonical expected =
   requireEqual label (digestToken (digestText canonical)) expected
+
+requireBareDigestMatches :: Text -> Text -> Text -> Either Phase1RuntimeBuildDecodeError ()
+requireBareDigestMatches label canonical expected = do
+  requireBareDigest expected
+  requireEqual label (bareDigest (digestToken (digestText canonical))) expected
+
+requireBareDigest :: Text -> Either Phase1RuntimeBuildDecodeError ()
+requireBareDigest raw
+  | Text.length raw == 64
+  , Text.all lowerHex raw = Right ()
+  | otherwise = malformed ("malformed bare SHA-256 digest: " <> raw)
+  where
+    lowerHex character =
+      isDigit character || (character >= 'a' && character <= 'f')
 
 requireEqual :: Text -> Text -> Text -> Either Phase1RuntimeBuildDecodeError ()
 requireEqual label expected actual
