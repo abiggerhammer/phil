@@ -99,7 +99,8 @@ Theorem packaging_adapter_does_not_claim_to_establish_external_rocq_check :
   ~ ExternalRocqCheckEstablishedByPackagingAdapter.
 Proof.
   unfold ExternalRocqCheckEstablishedByPackagingAdapter.
-  tauto.
+  intro Hfalse.
+  exact Hfalse.
 Qed.
 
 Definition TrustedRocqAuthorityUse
