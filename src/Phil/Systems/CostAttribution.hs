@@ -396,7 +396,7 @@ renderCostAttributionStageCanonical bundle =
             | (key, contribution) <- Map.toAscList
                 (costAttributionStageStagingContributions bundle)
             ]))
-      ])))
+      ]))
 
 deriveCostAttributionStageRevision
   :: CostAttributionStageBundle
