@@ -1,0 +1,90 @@
+name: Phase 1 Review R08 Signed Known Range Proofs
+
+on:
+  pull_request:
+    paths:
+      - 'proof/Phil/Core/NumericSemantics.v'
+      - 'proof/Phil/Core/ReviewR08SignedKnownRange.v'
+      - 'proof/Phil/Core/ReviewR08SignedKnownRangeImplementation.v'
+      - 'src/Phil/Core/SIntArithmetic.hs'
+      - 'src/Phil/Core/IntegerDivision.hs'
+      - 'src/Phil/Core/NumericConversion.hs'
+      - 'test/Phase1ReviewR8SignedKnownRangeMain.hs'
+      - 'docs/phase-1/review-r08-signed-known-range-proof-boundary-v1.md'
+      - '.github/workflows/phase1-review-r08-signed-known-range-proofs.yml'
+  push:
+    branches: [main]
+    paths:
+      - 'proof/Phil/Core/NumericSemantics.v'
+      - 'proof/Phil/Core/ReviewR08SignedKnownRange.v'
+      - 'proof/Phil/Core/ReviewR08SignedKnownRangeImplementation.v'
+      - 'src/Phil/Core/SIntArithmetic.hs'
+      - 'src/Phil/Core/IntegerDivision.hs'
+      - 'src/Phil/Core/NumericConversion.hs'
+      - 'test/Phase1ReviewR8SignedKnownRangeMain.hs'
+      - 'docs/phase-1/review-r08-signed-known-range-proof-boundary-v1.md'
+      - '.github/workflows/phase1-review-r08-signed-known-range-proofs.yml'
+
+permissions:
+  contents: read
+
+jobs:
+  rocq-review-r08-signed-known-range:
+    runs-on: ubuntu-latest
+    container:
+      image: rocq/rocq-prover:9.2.0
+      options: --user root
+    steps:
+      - uses: actions/checkout@v4
+      - name: Compile R08 signed-known-range proofs
+        shell: bash
+        run: |
+          set -euo pipefail
+          export PATH="/home/rocq/.opam/${COMPILER}/bin:$PATH"
+          rocq c -Q proof/Phil Phil proof/Phil/Core/NumericSemantics.v
+          rocq c -Q proof/Phil Phil proof/Phil/Core/ReviewR08SignedKnownRange.v
+          rocq c -Q proof/Phil Phil proof/Phil/Core/ReviewR08SignedKnownRangeImplementation.v
+          sha256sum \
+            proof/Phil/Core/ReviewR08SignedKnownRange.v \
+            proof/Phil/Core/ReviewR08SignedKnownRange.vo \
+            proof/Phil/Core/ReviewR08SignedKnownRangeImplementation.v \
+            proof/Phil/Core/ReviewR08SignedKnownRangeImplementation.vo \
+            > review-r08-signed-known-range-proof.sha256
+          cat review-r08-signed-known-range-proof.sha256
+      - uses: actions/upload-artifact@v4
+        with:
+          name: review-r08-signed-known-range-proof
+          path: review-r08-signed-known-range-proof.sha256
+          if-no-files-found: error
+
+  verify-review-r08-correspondence:
+    needs: rocq-review-r08-signed-known-range
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: haskell-actions/setup@v2
+        with:
+          ghc-version: '9.6.7'
+          cabal-version: 'latest'
+      - name: Build complete Haskell substrate
+        run: cabal build all --enable-tests
+      - name: Strict typecheck R08 authorities and regression
+        run: |
+          set -euo pipefail
+          for module in \
+            src/Phil/Core/SIntArithmetic.hs \
+            src/Phil/Core/IntegerDivision.hs \
+            src/Phil/Core/NumericConversion.hs \
+            test/Phase1ReviewR8SignedKnownRangeMain.hs
+          do
+            cabal exec -- ghc -isrc -Wall -Werror -fno-code "$module"
+          done
+      - name: Replay R08 raw signed-range regression
+        run: cabal exec -- runghc -Wall -Werror -isrc test/Phase1ReviewR8SignedKnownRangeMain.hs
+      - name: Replay affected numeric controls
+        run: |
+          set -euo pipefail
+          cabal exec -- runghc -Wall -Werror -isrc test/Phase1ExecutionSIntArithmeticMain.hs
+          cabal exec -- runghc -Wall -Werror -isrc test/Phase1IntegerDivisionCoreMain.hs
+          cabal exec -- runghc -Wall -Werror -isrc test/Phase1NumericConversionMain.hs
+          cabal exec -- runghc -Wall -Werror -isrc test/Phase1IntegerShiftMain.hs
