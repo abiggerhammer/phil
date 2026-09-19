@@ -1,0 +1,74 @@
+name: Phase 1 Review R06 Operand Order Proofs
+
+on:
+  pull_request:
+    paths:
+      - 'proof/Phil/Core/SequentialExecutionOrder.v'
+      - 'proof/Phil/Core/ReviewR06OperandOrder.v'
+      - 'proof/Phil/Core/ReviewR06OperandOrderImplementation.v'
+      - 'src/Phil/Surface/GrammarV1/SequentialExecution.hs'
+      - 'test/Phase1ReviewR6OperandOrderMain.hs'
+      - 'docs/phase-1/review-r06-operand-order-proof-boundary-v1.md'
+      - '.github/workflows/phase1-review-r06-operand-order-proofs.yml'
+  push:
+    branches: [main]
+    paths:
+      - 'proof/Phil/Core/SequentialExecutionOrder.v'
+      - 'proof/Phil/Core/ReviewR06OperandOrder.v'
+      - 'proof/Phil/Core/ReviewR06OperandOrderImplementation.v'
+      - 'src/Phil/Surface/GrammarV1/SequentialExecution.hs'
+      - 'test/Phase1ReviewR6OperandOrderMain.hs'
+      - 'docs/phase-1/review-r06-operand-order-proof-boundary-v1.md'
+      - '.github/workflows/phase1-review-r06-operand-order-proofs.yml'
+
+permissions:
+  contents: read
+
+jobs:
+  rocq-review-r06-operand-order:
+    runs-on: ubuntu-latest
+    container:
+      image: rocq/rocq-prover:9.2.0
+      options: --user root
+    steps:
+      - uses: actions/checkout@v4
+      - name: Compile R06 operand-order proofs
+        shell: bash
+        run: |
+          set -euo pipefail
+          export PATH="/home/rocq/.opam/${COMPILER}/bin:$PATH"
+          rocq c -Q proof/Phil Phil proof/Phil/Core/SequentialExecutionOrder.v
+          rocq c -Q proof/Phil Phil proof/Phil/Core/ReviewR06OperandOrder.v
+          rocq c -Q proof/Phil Phil proof/Phil/Core/ReviewR06OperandOrderImplementation.v
+          sha256sum \
+            proof/Phil/Core/ReviewR06OperandOrder.v \
+            proof/Phil/Core/ReviewR06OperandOrder.vo \
+            proof/Phil/Core/ReviewR06OperandOrderImplementation.v \
+            proof/Phil/Core/ReviewR06OperandOrderImplementation.vo \
+            > review-r06-operand-order-proof.sha256
+          cat review-r06-operand-order-proof.sha256
+      - uses: actions/upload-artifact@v4
+        with:
+          name: review-r06-operand-order-proof
+          path: review-r06-operand-order-proof.sha256
+          if-no-files-found: error
+
+  verify-review-r06-correspondence:
+    needs: rocq-review-r06-operand-order
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: haskell-actions/setup@v2
+        with:
+          ghc-version: '9.6.7'
+          cabal-version: 'latest'
+      - name: Build complete Haskell substrate
+        run: cabal build all --enable-tests
+      - name: Strict typecheck production order authority and R06 regression
+        run: |
+          cabal exec -- ghc -isrc -Wall -Werror -fno-code src/Phil/Surface/GrammarV1/SequentialExecution.hs
+          cabal exec -- ghc -isrc -Wall -Werror -fno-code test/Phase1ReviewR6OperandOrderMain.hs
+      - name: Replay R06 operand-order regression
+        run: cabal exec -- runghc -Wall -Werror -isrc test/Phase1ReviewR6OperandOrderMain.hs
+      - name: Replay predecessor source-order corpus
+        run: cabal exec -- runghc -Wall -Werror -isrc test/Phase1GrammarV1RejectMain.hs
