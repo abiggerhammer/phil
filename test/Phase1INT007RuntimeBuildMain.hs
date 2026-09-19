@@ -87,7 +87,9 @@ import Phil.Systems.StagingEffect
   ( StagingCostIdentity (..)
   )
 import Phil.Systems.SubjectCorrespondence (SubjectStageBundle (..))
+import System.Directory (createDirectoryIfMissing)
 import System.Exit (exitFailure)
+import System.FilePath (takeDirectory)
 
 data WitnessRuntimeBuild = WitnessRuntimeBuild
   { witnessLabel :: String
@@ -200,13 +202,14 @@ compareArtifact witness kind decode render actual = do
             <> " reconstructs exactly")
           pure True
       | otherwise -> do
+          let outputPath =
+                "dist/int007-runtime-build-discovery/"
+                  <> witnessLabel witness <> "-" <> kind <> "-v1.tsv"
+              rendered = render actual
+          createDirectoryIfMissing True (takeDirectory outputPath)
+          TextIO.writeFile outputPath rendered
           putStrLn ("FAIL: INT-007 " <> witnessLabel witness <> " " <> kind
-            <> " summary drift")
-          putStrLn ("ACTUAL " <> witnessLabel witness <> " "
-            <> kind <> " SUMMARY BEGIN")
-          TextIO.putStr (render actual)
-          putStrLn ("ACTUAL " <> witnessLabel witness <> " "
-            <> kind <> " SUMMARY END")
+            <> " summary drift; exact actual written to " <> outputPath)
           pure False
 
 deriveWitnessSummaries
