@@ -1,0 +1,91 @@
+name: Phase 1 Review R12 Terminal Activation Resource Proofs
+
+on:
+  pull_request:
+    paths:
+      - 'proof/Phil/Core/ReviewR12TerminalActivationResources.v'
+      - 'proof/Phil/Core/ReviewR12TerminalActivationResourcesImplementation.v'
+      - 'src/Phil/Core/ConcurrencyTerminalCertification.hs'
+      - 'src/Phil/Core/ProcessLifecycle.hs'
+      - 'src/Phil/Core/ProcessActivation.hs'
+      - 'app/ConcurrencyTerminalProductionBindingMain.hs'
+      - 'app/ConcurrencyActivationProductionBindingMain.hs'
+      - 'test/Phase1ProcessTerminalClosureMain.hs'
+      - 'docs/phase-1/review-r12-terminal-activation-resources-proof-boundary-v1.md'
+      - '.github/workflows/phase1-review-r12-terminal-activation-resources-proofs.yml'
+  push:
+    branches: [main]
+    paths:
+      - 'proof/Phil/Core/ReviewR12TerminalActivationResources.v'
+      - 'proof/Phil/Core/ReviewR12TerminalActivationResourcesImplementation.v'
+      - 'src/Phil/Core/ConcurrencyTerminalCertification.hs'
+      - 'src/Phil/Core/ProcessLifecycle.hs'
+      - 'src/Phil/Core/ProcessActivation.hs'
+      - 'app/ConcurrencyTerminalProductionBindingMain.hs'
+      - 'app/ConcurrencyActivationProductionBindingMain.hs'
+      - 'test/Phase1ProcessTerminalClosureMain.hs'
+      - 'docs/phase-1/review-r12-terminal-activation-resources-proof-boundary-v1.md'
+      - '.github/workflows/phase1-review-r12-terminal-activation-resources-proofs.yml'
+
+permissions:
+  contents: read
+
+jobs:
+  rocq-review-r12-terminal-activation-resources:
+    runs-on: ubuntu-latest
+    container:
+      image: rocq/rocq-prover:9.2.0
+      options: --user root
+    steps:
+      - uses: actions/checkout@v4
+      - name: Compile R12 activation-resource handoff proofs
+        shell: bash
+        run: |
+          set -euo pipefail
+          export PATH="/home/rocq/.opam/${COMPILER}/bin:$PATH"
+          rocq c -Q proof/Phil Phil proof/Phil/Core/ReviewR12TerminalActivationResources.v
+          rocq c -Q proof/Phil Phil proof/Phil/Core/ReviewR12TerminalActivationResourcesImplementation.v
+          sha256sum \
+            proof/Phil/Core/ReviewR12TerminalActivationResources.v \
+            proof/Phil/Core/ReviewR12TerminalActivationResources.vo \
+            proof/Phil/Core/ReviewR12TerminalActivationResourcesImplementation.v \
+            proof/Phil/Core/ReviewR12TerminalActivationResourcesImplementation.vo \
+            > review-r12-terminal-activation-resources-proof.sha256
+          cat review-r12-terminal-activation-resources-proof.sha256
+      - uses: actions/upload-artifact@v4
+        with:
+          name: review-r12-terminal-activation-resources-proof
+          path: review-r12-terminal-activation-resources-proof.sha256
+          if-no-files-found: error
+
+  verify-review-r12-correspondence:
+    needs: rocq-review-r12-terminal-activation-resources
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: haskell-actions/setup@v2
+        with:
+          ghc-version: '9.6.7'
+          cabal-version: 'latest'
+      - name: Build complete Haskell substrate
+        run: cabal build all --enable-tests
+      - name: Strict typecheck R12 initialization authorities
+        run: |
+          set -euo pipefail
+          for module in \
+            src/Phil/Core/ConcurrencyTerminalCertification.hs \
+            src/Phil/Core/ProcessLifecycle.hs \
+            src/Phil/Core/ProcessActivation.hs \
+            app/ConcurrencyTerminalProductionBindingMain.hs \
+            app/ConcurrencyActivationProductionBindingMain.hs \
+            test/Phase1ProcessTerminalClosureMain.hs
+          do
+            cabal exec -- ghc -isrc -Wall -Werror -fno-code "$module"
+          done
+      - name: Replay R12 terminal production binding
+        run: cabal exec -- runghc -Wall -Werror -isrc app/ConcurrencyTerminalProductionBindingMain.hs
+      - name: Replay activation predecessor and terminal closure controls
+        run: |
+          set -euo pipefail
+          cabal exec -- runghc -Wall -Werror -isrc app/ConcurrencyActivationProductionBindingMain.hs
+          cabal exec -- runghc -Wall -Werror -isrc test/Phase1ProcessTerminalClosureMain.hs
