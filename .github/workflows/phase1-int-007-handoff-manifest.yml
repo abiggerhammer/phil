@@ -68,6 +68,7 @@ on:
       - 'src/Phil/Handoff/Phase1WholeSourceVerification.hs'
       - 'src/Phil/Handoff/Phase1AssuranceInputs.hs'
       - 'src/Phil/Handoff/Phase1RuntimeBuild.hs'
+      - 'src/Phil/Handoff/Phase1AssuranceClosure.hs'
       - 'src/Phil/Verification/GrammarV1WholeSource.hs'
       - 'src/Phil/Verification/ManifestClosure.hs'
       - 'src/Phil/Systems/GenericLowering.hs'
