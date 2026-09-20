@@ -15,6 +15,21 @@ else
   exit 1
 fi
 
+record_field() {
+  local file="$1" tag="$2" key="$3"
+  awk -F '\t' -v wanted_tag="$tag" -v wanted_key="$key" '
+    $1 == wanted_tag {
+      for (i = 2; i <= NF; ++i) {
+        prefix = wanted_key "="
+        if (index($i, prefix) == 1) {
+          print substr($i, length(prefix) + 1)
+          exit
+        }
+      }
+    }
+  ' "$file"
+}
+
 verify_checksums SHA256SUMS
 
 test -x bin/philc
@@ -22,6 +37,8 @@ test -s README.md
 test -s LICENSE
 test -s TCB.txt
 test -s share/phil/BUILD-INFO
+test -s share/phil/phil.release-package
+test -s share/phil/phase1-handoff-manifest-v1.tsv
 test -s share/phil/docs/tour-phase1.md
 test -s share/phil/docs/surface-grammar-v1.md
 test -s share/phil/examples/return-unit.phil
@@ -30,8 +47,39 @@ test -s share/phil/examples/rejected.phil
 
 target="$(sed -n 's/^target=//p' share/phil/BUILD-INFO)"
 build_commit="$(sed -n 's/^build_commit=//p' share/phil/BUILD-INFO)"
+build_release_id="$(sed -n 's/^distribution_release_id=//p' share/phil/BUILD-INFO)"
+build_handoff_sha256="$(sed -n 's/^handoff_manifest_sha256=//p' share/phil/BUILD-INFO)"
+build_compiler_sha256="$(sed -n 's/^compiler_sha256=//p' share/phil/BUILD-INFO)"
 test -n "$target"
 test -n "$build_commit"
+
+release_file="share/phil/phil.release-package"
+grep -q '^PHIL-PHASE1-DISTRIBUTION-RELEASE-V1$' "$release_file"
+release_id="$(record_field "$release_file" release id)"
+release_target="$(record_field "$release_file" package target)"
+release_commit="$(record_field "$release_file" source commit)"
+release_handoff_sha256="$(record_field "$release_file" handoff sha256)"
+release_compiler_sha256="$(record_field "$release_file" compiler sha256)"
+
+[[ "$release_id" =~ ^sha256:[0-9a-f]{64}$ ]]
+test "$release_target" = "$target"
+test "$release_commit" = "$build_commit"
+test "$release_handoff_sha256" = "sha256:$(sha256_file share/phil/phase1-handoff-manifest-v1.tsv)"
+test "$release_compiler_sha256" = "sha256:$(sha256_file bin/philc)"
+test "$build_release_id" = "$release_id"
+test "$build_handoff_sha256" = "$release_handoff_sha256"
+test "$build_compiler_sha256" = "$release_compiler_sha256"
+
+work="$(mktemp -d "${TMPDIR:-/tmp}/phil-package-smoke.XXXXXX")"
+trap 'rm -rf "$work"' EXIT
+
+grep '^tcb[[:space:]]' "$release_file" > "$work/release.tcb"
+grep '^tcb[[:space:]]' TCB.txt > "$work/human.tcb"
+cmp "$work/release.tcb" "$work/human.tcb"
+test "$(wc -l < "$work/release.tcb" | tr -d ' ')" -eq 4
+for trust_id in compiler-checker build-toolchain llvm-toolchain target-assumptions; do
+  grep -q "^tcb[[:space:]]id=$trust_id[[:space:]]" "$work/release.tcb"
+done
 
 case "$target" in
   x86_64-unknown-linux-gnu)
@@ -45,9 +93,6 @@ case "$target" in
     exit 1
     ;;
 esac
-
-work="$(mktemp -d "${TMPDIR:-/tmp}/phil-package-smoke.XXXXXX")"
-trap 'rm -rf "$work"' EXIT
 
 if HOME="$work/home" bin/philc emit-llvm share/phil/examples/return-unit.phil \
     >"$work/implicit.stdout" 2>"$work/implicit.stderr"; then
@@ -86,4 +131,7 @@ printf 'PASS: packaged Phase-1 Phil public compiler smoke\n'
 printf 'platform=%s\n' "$(uname -srm)"
 printf 'target=%s\n' "$target"
 printf 'build_commit=%s\n' "$build_commit"
-printf 'package_manifest_sha256=%s\n' "$(sha256_file SHA256SUMS)"
+printf 'distribution_release_id=%s\n' "$release_id"
+printf 'handoff_manifest_sha256=%s\n' "$release_handoff_sha256"
+printf 'compiler_sha256=%s\n' "$release_compiler_sha256"
+printf 'package_manifest_sha256=sha256:%s\n' "$(sha256_file SHA256SUMS)"
