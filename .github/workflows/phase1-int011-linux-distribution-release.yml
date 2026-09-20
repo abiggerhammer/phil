@@ -68,7 +68,7 @@ jobs:
           set -euo pipefail
           out="$RUNNER_TEMP/phil-int011-linux"
           mkdir -p "$out"
-          scripts/release/build-phil-phase1-package.sh "$out" | tee "$out/build-evidence.txt"
+          bash scripts/release/build-phil-phase1-package.sh "$out" | tee "$out/build-evidence.txt"
 
       - name: Verify archive binding and package-only smoke
         shell: bash
