@@ -3,8 +3,13 @@ name: Phase 1 Review R14 Provider Call Inventory
 on:
   pull_request:
     paths:
+      - 'src/Phil/Core/ProviderQualification.hs'
+      - 'src/Phil/Examples/Phase1/AuthorityEffectWitnesses.hs'
+      - 'src/Phil/Examples/Phase1/ProviderCallWitnesses.hs'
       - 'src/Phil/Systems/ProviderCallCorrespondence.hs'
       - 'src/Phil/Systems/AuthorityEffectCorrespondence.hs'
+      - 'test/Phase1ReviewR19QualifiedEntryMain.hs'
+      - 'docs/phase-1/review-r19-qualified-entry-correspondence-v1.md'
       - 'test/Phase1ReviewR14ProviderCallInventoryMain.hs'
       - 'test/Phase1ReviewR13ProviderOperationCorrespondenceMain.hs'
       - 'test/Phase1ProviderCallCorrespondenceMain.hs'
@@ -13,8 +18,13 @@ on:
   push:
     branches: [main]
     paths:
+      - 'src/Phil/Core/ProviderQualification.hs'
+      - 'src/Phil/Examples/Phase1/AuthorityEffectWitnesses.hs'
+      - 'src/Phil/Examples/Phase1/ProviderCallWitnesses.hs'
       - 'src/Phil/Systems/ProviderCallCorrespondence.hs'
       - 'src/Phil/Systems/AuthorityEffectCorrespondence.hs'
+      - 'test/Phase1ReviewR19QualifiedEntryMain.hs'
+      - 'docs/phase-1/review-r19-qualified-entry-correspondence-v1.md'
       - 'test/Phase1ReviewR14ProviderCallInventoryMain.hs'
       - 'test/Phase1ReviewR13ProviderOperationCorrespondenceMain.hs'
       - 'test/Phase1ProviderCallCorrespondenceMain.hs'
@@ -35,6 +45,10 @@ jobs:
           cabal-version: 'latest'
       - name: Build complete Haskell substrate
         run: cabal build all --enable-tests
+      - name: Strict typecheck R19 qualified-entry regression
+        run: cabal exec -- ghc -Wall -Werror -fno-code -isrc test/Phase1ReviewR19QualifiedEntryMain.hs
+      - name: Run R19 qualified-entry regression
+        run: cabal exec -- runghc -Wall -Werror -isrc test/Phase1ReviewR19QualifiedEntryMain.hs
       - name: Run R14 regression
         run: cabal exec -- runghc -Wall -Werror -isrc test/Phase1ReviewR14ProviderCallInventoryMain.hs
       - name: Re-run R13 and provider correspondence controls

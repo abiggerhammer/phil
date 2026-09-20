@@ -41,6 +41,7 @@ import Phil.Core.ProviderAuthorityQualification
 import Phil.Core.ProviderQualification
   ( CheckedProviderOperationQualification (..)
   , CheckedProviderSemanticQualification (..)
+  , ProviderImplementationEntryKey
   , ProviderOperationKey (..)
   )
 import Phil.Core.ProviderQualificationIdentity
@@ -307,16 +308,20 @@ checkSurface selections (occurrence, surface) = do
         (Map.keysSet (selectedProviderOperationEntries selection))
         (Map.keysSet operations)
 
+-- Candidate selection/link agreement is not qualification authority. Check the
+-- complete operation-to-entry map against the genuine semantic qualification,
+-- including operations with no represented use in a relative stage subset.
 checkQualifiedEntry
   :: Text
-  -> Map ProviderOperationKey a
+  -> Map ProviderOperationKey ProviderImplementationEntryKey
   -> (ProviderOperationKey, CheckedProviderOperationQualification)
   -> Either AuthorityEffectStageVerificationError ()
 checkQualifiedEntry occurrence selectedOps (operation, checked) =
   case Map.lookup operation selectedOps of
     Nothing -> Left (AuthorityEffectOperationEntryMismatch occurrence operation)
-    Just _ ->
+    Just selectedEntry ->
       if checkedProviderOperationKey checked == operation
+          && checkedProviderImplementationEntry checked == selectedEntry
         then Right ()
         else Left (AuthorityEffectOperationEntryMismatch occurrence operation)
 
