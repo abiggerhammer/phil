@@ -123,7 +123,7 @@ Proof.
 Qed.
 
 Theorem borrow_view_alpha_renaming_preserves_semantic_identity :
-  forall declaration next owner bodyBinderCount
+  forall declaration next
          firstDisplay secondDisplay firstPosition secondPosition,
     surfaceBinderKey
       declaration next firstDisplay firstPosition =
