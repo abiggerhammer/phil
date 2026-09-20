@@ -2,7 +2,6 @@
 
 module Main (main) where
 
-import Data.Text (Text)
 import qualified Data.Text as Text
 import qualified Data.Text.IO as TextIO
 import Phil.Assurance.Types (Digest)
