@@ -62,8 +62,9 @@ Proof.
   revert next.
   induction sites as [|site rest IH]; intros next keys finalOrdinal Hallocate.
   - simpl in Hallocate.
-    inversion Hallocate.
+    inversion Hallocate; subst.
     simpl.
+    rewrite Nat.add_0_r.
     reflexivity.
   - simpl in Hallocate.
     destruct
