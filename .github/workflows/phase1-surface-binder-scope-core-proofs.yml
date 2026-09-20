@@ -1,0 +1,86 @@
+name: Phase 1 Surface Binder Scope Core Proofs
+
+on:
+  pull_request:
+    paths:
+      - 'proof/Phil/Core/BindingSemantics.v'
+      - 'proof/Phil/Surface/SurfaceBinderScopeCore.v'
+      - 'src/Phil/Surface/GrammarV1/BinderScope.hs'
+      - 'src/Phil/Surface/GrammarV1/ParameterBodyScope.hs'
+      - 'src/Phil/Surface/GrammarV1/LexicalReferenceScope.hs'
+      - 'src/Phil/Surface/GrammarV1/SemanticFunctionHeader.hs'
+      - 'test/Phase1GrammarV1BinderScopeMain.hs'
+      - 'test/Phase1ExecutionSemanticsMain.hs'
+      - 'docs/phase-1/surface-binder-scope-core-proof-v1.md'
+      - '.github/workflows/phase1-surface-binder-scope-core-proofs.yml'
+  push:
+    branches: [main]
+    paths:
+      - 'proof/Phil/Core/BindingSemantics.v'
+      - 'proof/Phil/Surface/SurfaceBinderScopeCore.v'
+      - 'src/Phil/Surface/GrammarV1/BinderScope.hs'
+      - 'src/Phil/Surface/GrammarV1/ParameterBodyScope.hs'
+      - 'src/Phil/Surface/GrammarV1/LexicalReferenceScope.hs'
+      - 'src/Phil/Surface/GrammarV1/SemanticFunctionHeader.hs'
+      - 'test/Phase1GrammarV1BinderScopeMain.hs'
+      - 'test/Phase1ExecutionSemanticsMain.hs'
+      - 'docs/phase-1/surface-binder-scope-core-proof-v1.md'
+      - '.github/workflows/phase1-surface-binder-scope-core-proofs.yml'
+
+permissions:
+  contents: read
+
+jobs:
+  rocq-surface-binder-scope-core:
+    runs-on: ubuntu-latest
+    container:
+      image: rocq/rocq-prover:9.2.0
+      options: --user root
+    steps:
+      - uses: actions/checkout@v4
+      - name: Compile binder predecessor and Surface scope core
+        shell: bash
+        run: |
+          set -euo pipefail
+          export PATH="/home/rocq/.opam/${COMPILER}/bin:$PATH"
+          rocq c -Q proof/Phil Phil proof/Phil/Core/BindingSemantics.v
+          rocq c -Q proof/Phil Phil proof/Phil/Surface/SurfaceBinderScopeCore.v
+          sha256sum \
+            proof/Phil/Core/BindingSemantics.v \
+            proof/Phil/Surface/SurfaceBinderScopeCore.v \
+            proof/Phil/Surface/SurfaceBinderScopeCore.vo \
+            > surface-binder-scope-core-proof.sha256
+          cat surface-binder-scope-core-proof.sha256
+      - uses: actions/upload-artifact@v4
+        with:
+          name: surface-binder-scope-core-proof
+          path: surface-binder-scope-core-proof.sha256
+          if-no-files-found: error
+
+  verify-surface-binder-scope-core:
+    needs: rocq-surface-binder-scope-core
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: haskell-actions/setup@v2
+        with:
+          ghc-version: '9.6.7'
+          cabal-version: 'latest'
+      - name: Build complete Haskell substrate
+        run: cabal build all --enable-tests
+      - name: Strict typecheck Surface binder authorities
+        run: |
+          set -euo pipefail
+          for module in \
+            src/Phil/Surface/GrammarV1/BinderScope.hs \
+            src/Phil/Surface/GrammarV1/ParameterBodyScope.hs \
+            src/Phil/Surface/GrammarV1/LexicalReferenceScope.hs \
+            src/Phil/Surface/GrammarV1/SemanticFunctionHeader.hs \
+            test/Phase1GrammarV1BinderScopeMain.hs
+          do
+            cabal exec -- ghc -isrc -Wall -Werror -fno-code "$module"
+          done
+      - name: Replay SURF-009 term binder scope corpus
+        run: cabal exec -- runghc -Wall -Werror -isrc test/Phase1GrammarV1BinderScopeMain.hs
+      - name: Replay PHIL-EXEC-BIND-001 execution predecessor
+        run: cabal exec -- runghc -Wall -Werror -isrc test/Phase1ExecutionSemanticsMain.hs
