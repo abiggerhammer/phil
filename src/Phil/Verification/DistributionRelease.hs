@@ -187,7 +187,7 @@ buildPhase1DistributionRelease packageName version target sourceCommit handoff c
         , distributionReleaseTrustBoundaries = boundaries
         }
       releaseId = digestText (renderDistributionReleaseBody provisional)
-  Right provisional { distributionReleaseId = releaseId }
+  Right (provisional { distributionReleaseId = releaseId })
 
 buildPhase1DistributionArchive
   :: Digest
@@ -208,7 +208,7 @@ buildPhase1DistributionArchive releaseId archiveName archiveDigest packageManife
         , distributionArchivePackageManifestDigest = packageManifestDigest
         }
       bindingId = digestText (renderDistributionArchiveBody provisional)
-  Right provisional { distributionArchiveId = bindingId }
+  Right (provisional { distributionArchiveId = bindingId })
 
 renderPhase1DistributionRelease :: Phase1DistributionRelease -> Text
 renderPhase1DistributionRelease release = Text.unlines
