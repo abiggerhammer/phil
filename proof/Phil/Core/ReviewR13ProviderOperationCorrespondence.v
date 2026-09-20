@@ -106,9 +106,9 @@ Proof.
   simpl.
   split.
   - intros [Hbase [Hoccurrence Hoperation]].
-    repeat split; assumption.
+    exact (conj Hbase (conj Hoccurrence Hoperation)).
   - intros [Hbase [Hoccurrence Hoperation]].
-    repeat split; assumption.
+    exact (conj Hbase (conj Hoccurrence Hoperation)).
 Qed.
 
 Theorem review_r13_acceptance_preserves_sys005_exact_operation :
