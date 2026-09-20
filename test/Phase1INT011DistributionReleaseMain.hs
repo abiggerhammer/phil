@@ -73,7 +73,7 @@ malformedCommitRejects =
   case buildPhase1DistributionRelease
       packageName version target "not-a-commit"
       handoffDigest compilerDigest phase1LinuxDistributionTrust of
-    Left DistributionReleaseMalformedSourceCommit {} -> Right ()
+    Left (DistributionReleaseMalformedSourceCommit _) -> Right ()
     other -> Left ("malformed source commit did not reject exactly: " <> show other)
 
 duplicateTrustRejects :: Either String ()
