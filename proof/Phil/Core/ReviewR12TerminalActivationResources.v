@@ -81,8 +81,9 @@ Proof.
     Hactivation Hsupplied Hdifferent Hexact.
   pose proof (proj1 (Hexact process expected) Hactivation) as Hexpected.
   rewrite Hsupplied in Hexpected.
-  inversion Hexpected.
-  contradiction.
+  inversion Hexpected; subst.
+  apply Hdifferent.
+  reflexivity.
 Qed.
 
 Theorem review_r12_empty_replacement_cannot_erase_live_resource :
