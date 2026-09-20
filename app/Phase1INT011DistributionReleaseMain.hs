@@ -16,20 +16,25 @@ main :: IO ()
 main = do
   args <- getArgs
   case args of
-    ["emit-linux", packageName, version, sourceCommit, handoffPath, compilerPath] -> do
-      handoff <- requireFileDigest handoffPath
-      compiler <- requireFileDigest compilerPath
-      release <- case buildPhase1DistributionRelease
-          (Text.pack packageName)
-          (Text.pack version)
-          "x86_64-unknown-linux-gnu"
-          (Text.pack sourceCommit)
-          handoff
-          compiler
-          phase1LinuxDistributionTrust of
-        Left errorValue -> failWith (show errorValue)
-        Right value -> pure value
-      TextIO.putStr (renderPhase1DistributionRelease release)
+    ["emit-linux", packageName, version, sourceCommit, handoffPath, compilerPath] ->
+      emitRelease
+        (Text.pack packageName)
+        (Text.pack version)
+        "x86_64-unknown-linux-gnu"
+        (Text.pack sourceCommit)
+        handoffPath
+        compilerPath
+        phase1LinuxDistributionTrust
+
+    ["emit-darwin", packageName, version, sourceCommit, handoffPath, compilerPath] ->
+      emitRelease
+        (Text.pack packageName)
+        (Text.pack version)
+        "aarch64-apple-darwin"
+        (Text.pack sourceCommit)
+        handoffPath
+        compilerPath
+        phase1DarwinDistributionTrust
 
     ["emit-archive", releasePath, archivePath, packageManifestPath] -> do
       releaseSource <- TextIO.readFile releasePath
@@ -49,10 +54,34 @@ main = do
 
     _ -> do
       hPutStrLn stderr
-        "usage: Phase1INT011DistributionReleaseMain.hs emit-linux PACKAGE VERSION SOURCE_COMMIT HANDOFF_PATH COMPILER_PATH"
+        "usage: Phase1INT011DistributionReleaseMain.hs emit-linux|emit-darwin PACKAGE VERSION SOURCE_COMMIT HANDOFF_PATH COMPILER_PATH"
       hPutStrLn stderr
         "   or: Phase1INT011DistributionReleaseMain.hs emit-archive RELEASE_PATH ARCHIVE_PATH PACKAGE_MANIFEST_PATH"
       exitFailure
+
+emitRelease
+  :: Text
+  -> Text
+  -> Text
+  -> Text
+  -> FilePath
+  -> FilePath
+  -> [DistributionTrustBoundary]
+  -> IO ()
+emitRelease packageName version target sourceCommit handoffPath compilerPath trust = do
+  handoff <- requireFileDigest handoffPath
+  compiler <- requireFileDigest compilerPath
+  release <- case buildPhase1DistributionRelease
+      packageName
+      version
+      target
+      sourceCommit
+      handoff
+      compiler
+      trust of
+    Left errorValue -> failWith (show errorValue)
+    Right value -> pure value
+  TextIO.putStr (renderPhase1DistributionRelease release)
 
 requireFileDigest :: FilePath -> IO Digest
 requireFileDigest path = do
