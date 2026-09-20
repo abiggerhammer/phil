@@ -292,6 +292,96 @@ spineCoverage manifest =
           , [HandoffMatrixAuthority "INT-004"]
           )
         )
+      , ( HandoffArtifactId "realization.upload.v1"
+        , ( HandoffArchitectureRealization
+          , "handoff/phase1/runtime/upload-realization-v1.tsv"
+          , [HandoffMatrixAuthority "VER-010"]
+          )
+        )
+      , ( HandoffArtifactId "systems.upload.v1"
+        , ( HandoffSystems
+          , "handoff/phase1/runtime/upload-systems-v1.tsv"
+          , [HandoffMatrixAuthority "SYS-001"]
+          )
+        )
+      , ( HandoffArtifactId "stage-contract.upload.v1"
+        , ( HandoffStageContract
+          , "handoff/phase1/runtime/upload-stage-contract-v1.tsv"
+          , [HandoffMatrixAuthority "SYS-020"]
+          )
+        )
+      , ( HandoffArtifactId "lowering.upload.v1"
+        , ( HandoffLowering
+          , "handoff/phase1/runtime/upload-lowering-v1.tsv"
+          , [HandoffMatrixAuthority "SYS-001"]
+          )
+        )
+      , ( HandoffArtifactId "cost.upload.v1"
+        , ( HandoffCost
+          , "handoff/phase1/runtime/upload-cost-v1.tsv"
+          , [HandoffMatrixAuthority "SYS-018"]
+          )
+        )
+      , ( HandoffArtifactId "realization.steve.v1"
+        , ( HandoffArchitectureRealization
+          , "handoff/phase1/runtime/steve-realization-v1.tsv"
+          , [HandoffMatrixAuthority "VER-010"]
+          )
+        )
+      , ( HandoffArtifactId "systems.steve.v1"
+        , ( HandoffSystems
+          , "handoff/phase1/runtime/steve-systems-v1.tsv"
+          , [HandoffMatrixAuthority "SYS-001"]
+          )
+        )
+      , ( HandoffArtifactId "stage-contract.steve.v1"
+        , ( HandoffStageContract
+          , "handoff/phase1/runtime/steve-stage-contract-v1.tsv"
+          , [HandoffMatrixAuthority "SYS-020"]
+          )
+        )
+      , ( HandoffArtifactId "lowering.steve.v1"
+        , ( HandoffLowering
+          , "handoff/phase1/runtime/steve-lowering-v1.tsv"
+          , [HandoffMatrixAuthority "SYS-001"]
+          )
+        )
+      , ( HandoffArtifactId "cost.steve.v1"
+        , ( HandoffCost
+          , "handoff/phase1/runtime/steve-cost-v1.tsv"
+          , [HandoffMatrixAuthority "SYS-018"]
+          )
+        )
+      , ( HandoffArtifactId "assurance.upload.manifest.v1"
+        , ( HandoffAssuranceManifest
+          , "handoff/phase1/witnesses/upload-assurance-manifest-v1.tsv"
+          , [HandoffMatrixAuthority "INT-002"]
+          )
+        )
+      , ( HandoffArtifactId "assurance.steve.manifest.v1"
+        , ( HandoffAssuranceManifest
+          , "handoff/phase1/witnesses/steve-assurance-manifest-v1.tsv"
+          , [HandoffMatrixAuthority "INT-002"]
+          )
+        )
+      , ( HandoffArtifactId "tcb.upload.residual.v1"
+        , ( HandoffTCB
+          , "handoff/phase1/witnesses/upload-residual-tcb-v1.tsv"
+          , [HandoffMatrixAuthority "INT-005"]
+          )
+        )
+      , ( HandoffArtifactId "tcb.steve.residual.v1"
+        , ( HandoffTCB
+          , "handoff/phase1/witnesses/steve-residual-tcb-v1.tsv"
+          , [HandoffMatrixAuthority "INT-005"]
+          )
+        )
+      , ( HandoffArtifactId "conformance.freeze.v1"
+        , ( HandoffConformanceManifest
+          , "handoff/phase1/conformance-freeze-v1.tsv"
+          , [HandoffCertifiedAuthority "PHIL-P1-CONFORMANCE-001"]
+          )
+        )
       ]
 
 duplicateArtifactIdRejects :: Either String ()
