@@ -18,6 +18,7 @@ on:
       - 'src/Phil/Handoff/Phase1WholeSourceVerification.hs'
       - 'src/Phil/Handoff/Phase1AssuranceInputs.hs'
       - 'src/Phil/Handoff/Phase1RuntimeBuild.hs'
+      - 'src/Phil/Handoff/Phase1AssuranceClosure.hs'
       - 'src/Phil/Verification/GrammarV1WholeSource.hs'
       - 'src/Phil/Verification/ManifestClosure.hs'
       - 'src/Phil/Systems/GenericLowering.hs'
@@ -35,8 +36,10 @@ on:
       - 'test/Phase1INT007PingVerificationBundleMain.hs'
       - 'test/Phase1INT007AssuranceInputsMain.hs'
       - 'test/Phase1INT007RuntimeBuildMain.hs'
+      - 'test/Phase1INT007AssuranceClosureMain.hs'
       - 'test/Phil/Test/Phase1/ManifestWitnesses.hs'
       - 'handoff/phase1/manifest-v1.tsv'
+      - 'handoff/phase1/conformance-freeze-v1.tsv'
       - 'handoff/phase1/witnesses/*.tsv'
       - 'handoff/phase1/ping/**'
       - 'handoff/phase1/runtime/**'
@@ -44,10 +47,13 @@ on:
       - 'phil-core.cabal'
       - '.github/workflows/phase1-int-007-handoff-manifest.yml'
       - 'grammar/phase1-surface.ebnf'
-      - 'test/fixtures/phase1-surface/manifest.json'
+      - 'test/fixtures/phase1-surface/**'
       - 'test/fixtures/phase1/surf010-inline.bundle'
       - 'test/fixtures/phase1/surf010-metadata.bundle'
-      - 'test/fixtures/phase1-negative/manifest.tsv'
+      - 'test/fixtures/phase1-negative/**'
+      - 'examples/rejected/**'
+      - 'scripts/build_phase1_conformance_freeze.py'
+      - 'scripts/build_phase1_int007_complete_manifest.py'
       - 'examples/upload/client.phil'
       - 'examples/upload/server.phil'
       - 'examples/steve/put.phil'
@@ -76,6 +82,7 @@ on:
       - 'test/Phase1INT007RuntimeBuildMain.hs'
       - 'test/Phil/Test/Phase1/ManifestWitnesses.hs'
       - 'handoff/phase1/manifest-v1.tsv'
+      - 'handoff/phase1/conformance-freeze-v1.tsv'
       - 'handoff/phase1/witnesses/*.tsv'
       - 'handoff/phase1/ping/**'
       - 'handoff/phase1/runtime/**'
@@ -83,10 +90,13 @@ on:
       - 'phil-core.cabal'
       - '.github/workflows/phase1-int-007-handoff-manifest.yml'
       - 'grammar/phase1-surface.ebnf'
-      - 'test/fixtures/phase1-surface/manifest.json'
+      - 'test/fixtures/phase1-surface/**'
       - 'test/fixtures/phase1/surf010-inline.bundle'
       - 'test/fixtures/phase1/surf010-metadata.bundle'
-      - 'test/fixtures/phase1-negative/manifest.tsv'
+      - 'test/fixtures/phase1-negative/**'
+      - 'examples/rejected/**'
+      - 'scripts/build_phase1_conformance_freeze.py'
+      - 'scripts/build_phase1_int007_complete_manifest.py'
       - 'examples/upload/client.phil'
       - 'examples/upload/server.phil'
       - 'examples/steve/put.phil'
@@ -178,8 +188,14 @@ jobs:
           cabal exec -- ghc -isrc -itest -Wall -Werror -fno-code test/Phase1INT007PingVerificationBundleMain.hs
           cabal exec -- ghc -isrc -itest -Wall -Werror -fno-code test/Phase1INT007AssuranceInputsMain.hs
           cabal exec -- ghc -isrc -itest -Wall -Werror -fno-code test/Phase1INT007RuntimeBuildMain.hs
+          cabal exec -- ghc -isrc -itest -Wall -Werror -fno-code test/Phase1INT007AssuranceClosureMain.hs
       - name: Check exact Phase-1 handoff manifest integrity
         run: cabal exec -- runghc -isrc -Wall -Werror test/Phase1INT007HandoffManifestMain.hs
+      - name: Check complete INT-007 conformance freeze is deterministic
+        run: |
+          python3 scripts/build_phase1_conformance_freeze.py --check
+          python3 scripts/build_phase1_int007_complete_manifest.py --output /tmp/phase1-int007-manifest-v1.tsv
+          cmp handoff/phase1/manifest-v1.tsv /tmp/phase1-int007-manifest-v1.tsv
       - name: Reconstruct Upload and Steve SourceBundles from handoff bytes
         run: cabal exec -- runghc -isrc -Wall -Werror test/Phase1INT007WitnessSourceBundleMain.hs
       - name: Reconstruct checked semantics and ArchitectureInstance identities
@@ -192,3 +208,5 @@ jobs:
         run: cabal exec -- runghc -isrc -itest -Wall -Werror test/Phase1INT007AssuranceInputsMain.hs
       - name: Reconstruct Upload and Steve runtime/build artifacts
         run: cabal exec -- runghc -isrc -itest -Wall -Werror test/Phase1INT007RuntimeBuildMain.hs
+      - name: Reconstruct final AssuranceManifests and residual TCB
+        run: cabal exec -- runghc -isrc -itest -Wall -Werror test/Phase1INT007AssuranceClosureMain.hs
