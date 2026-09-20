@@ -111,7 +111,7 @@ Proof.
   exists (fun _ => True).
   split.
   - intros site Hrepresented.
-    exact Hrepresented.
+    destruct Hrepresented.
   - intro Hexact.
     pose proof (proj1 (Hexact 0) eq_refl) as Hfalse.
     exact Hfalse.
