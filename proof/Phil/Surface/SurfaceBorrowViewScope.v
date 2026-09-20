@@ -1,4 +1,4 @@
-From Stdlib Require Import Arith.PeanoNat.
+From Stdlib Require Import Arith.PeanoNat Lia.
 
 From Phil.Core Require Import BindingSemantics.
 From Phil.Surface Require Import
@@ -88,8 +88,7 @@ Theorem borrow_exit_never_rolls_back_view_ordinal :
 Proof.
   intros declaration next owner bodyBinderCount.
   simpl.
-  apply Nat.lt_add_pos_l.
-  discriminate.
+  lia.
 Qed.
 
 Definition surfaceBorrowLocalsVisibleAfterExit
@@ -110,13 +109,17 @@ Theorem sibling_borrow_view_reuse_gets_fresh_identity :
       (surfaceBorrowNextOrdinal
         (checkSurfaceBorrowView declaration next owner bodyBinderCount)).
 Proof.
-  intros declaration next owner bodyBinderCount Heq.
+  intros declaration next owner bodyBinderCount.
+  apply
+    (disjoint_sibling_binders_with_fresh_ordinals_are_distinct
+      declaration
+      next
+      (surfaceBorrowNextOrdinal
+        (checkSurfaceBorrowView declaration next owner bodyBinderCount))).
   pose proof
     (borrow_exit_never_rolls_back_view_ordinal
       declaration next owner bodyBinderCount) as Hlt.
-  unfold semanticBinderKey in Heq.
-  inversion Heq.
-  exact (Nat.lt_irrefl _ Hlt).
+  lia.
 Qed.
 
 Theorem borrow_view_alpha_renaming_preserves_semantic_identity :
