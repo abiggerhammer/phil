@@ -1,0 +1,91 @@
+name: Phase 1 Review R11 Rendezvous Ownership Proofs
+
+on:
+  pull_request:
+    paths:
+      - 'proof/Phil/Core/ReviewR11RendezvousOwnership.v'
+      - 'proof/Phil/Core/ReviewR11RendezvousOwnershipImplementation.v'
+      - 'src/Phil/Core/ProcessRendezvous.hs'
+      - 'src/Phil/Core/ConcurrencyRendezvousCertification.hs'
+      - 'app/ConcurrencyRendezvousProductionBindingMain.hs'
+      - 'test/Phase1ReviewR10RendezvousSuccessionMain.hs'
+      - 'test/Phase1RestrictedMessageTransferMain.hs'
+      - 'test/Phase1ExactProcessRendezvousMain.hs'
+      - 'docs/phase-1/review-r11-rendezvous-ownership-proof-boundary-v1.md'
+      - '.github/workflows/phase1-review-r11-rendezvous-ownership-proofs.yml'
+  push:
+    branches: [main]
+    paths:
+      - 'proof/Phil/Core/ReviewR11RendezvousOwnership.v'
+      - 'proof/Phil/Core/ReviewR11RendezvousOwnershipImplementation.v'
+      - 'src/Phil/Core/ProcessRendezvous.hs'
+      - 'src/Phil/Core/ConcurrencyRendezvousCertification.hs'
+      - 'app/ConcurrencyRendezvousProductionBindingMain.hs'
+      - 'test/Phase1ReviewR10RendezvousSuccessionMain.hs'
+      - 'test/Phase1RestrictedMessageTransferMain.hs'
+      - 'test/Phase1ExactProcessRendezvousMain.hs'
+      - 'docs/phase-1/review-r11-rendezvous-ownership-proof-boundary-v1.md'
+      - '.github/workflows/phase1-review-r11-rendezvous-ownership-proofs.yml'
+
+permissions:
+  contents: read
+
+jobs:
+  rocq-review-r11-rendezvous-ownership:
+    runs-on: ubuntu-latest
+    container:
+      image: rocq/rocq-prover:9.2.0
+      options: --user root
+    steps:
+      - uses: actions/checkout@v4
+      - name: Compile R11 endpoint-owner proofs
+        shell: bash
+        run: |
+          set -euo pipefail
+          export PATH="/home/rocq/.opam/${COMPILER}/bin:$PATH"
+          rocq c -Q proof/Phil Phil proof/Phil/Core/ReviewR11RendezvousOwnership.v
+          rocq c -Q proof/Phil Phil proof/Phil/Core/ReviewR11RendezvousOwnershipImplementation.v
+          sha256sum \
+            proof/Phil/Core/ReviewR11RendezvousOwnership.v \
+            proof/Phil/Core/ReviewR11RendezvousOwnership.vo \
+            proof/Phil/Core/ReviewR11RendezvousOwnershipImplementation.v \
+            proof/Phil/Core/ReviewR11RendezvousOwnershipImplementation.vo \
+            > review-r11-rendezvous-ownership-proof.sha256
+          cat review-r11-rendezvous-ownership-proof.sha256
+      - uses: actions/upload-artifact@v4
+        with:
+          name: review-r11-rendezvous-ownership-proof
+          path: review-r11-rendezvous-ownership-proof.sha256
+          if-no-files-found: error
+
+  verify-review-r11-correspondence:
+    needs: rocq-review-r11-rendezvous-ownership
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: haskell-actions/setup@v2
+        with:
+          ghc-version: '9.6.7'
+          cabal-version: 'latest'
+      - name: Build complete Haskell substrate
+        run: cabal build all --enable-tests
+      - name: Strict typecheck R11 ownership surfaces
+        run: |
+          set -euo pipefail
+          for module in \
+            src/Phil/Core/ProcessRendezvous.hs \
+            src/Phil/Core/ConcurrencyRendezvousCertification.hs \
+            app/ConcurrencyRendezvousProductionBindingMain.hs \
+            test/Phase1ReviewR10RendezvousSuccessionMain.hs \
+            test/Phase1RestrictedMessageTransferMain.hs \
+            test/Phase1ExactProcessRendezvousMain.hs
+          do
+            cabal exec -- ghc -isrc -Wall -Werror -fno-code "$module"
+          done
+      - name: Replay R10/R11 ownership and rendezvous controls
+        run: |
+          set -euo pipefail
+          cabal exec -- runghc -Wall -Werror -isrc test/Phase1ReviewR10RendezvousSuccessionMain.hs
+          cabal exec -- runghc -Wall -Werror -isrc test/Phase1RestrictedMessageTransferMain.hs
+          cabal exec -- runghc -Wall -Werror -isrc test/Phase1ExactProcessRendezvousMain.hs
+          cabal exec -- runghc -Wall -Werror -isrc app/ConcurrencyRendezvousProductionBindingMain.hs
