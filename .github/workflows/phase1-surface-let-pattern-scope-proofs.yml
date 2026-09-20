@@ -1,0 +1,81 @@
+name: Phase 1 Surface Let Pattern Scope Proofs
+
+on:
+  pull_request:
+    paths:
+      - 'proof/Phil/Core/BindingSemantics.v'
+      - 'proof/Phil/Surface/SurfaceBinderScopeCore.v'
+      - 'proof/Phil/Surface/SurfaceLetPatternScope.v'
+      - 'src/Phil/Surface/GrammarV1/PatternBinderScope.hs'
+      - 'src/Phil/Surface/GrammarV1/LetPatternScope.hs'
+      - 'src/Phil/Surface/GrammarV1/ParameterBodyScope.hs'
+      - 'test/Phase1GrammarV1LetPatternScopeMain.hs'
+      - 'docs/phase-1/surface-let-pattern-scope-proof-v1.md'
+      - '.github/workflows/phase1-surface-let-pattern-scope-proofs.yml'
+  push:
+    branches: [main]
+    paths:
+      - 'proof/Phil/Core/BindingSemantics.v'
+      - 'proof/Phil/Surface/SurfaceBinderScopeCore.v'
+      - 'proof/Phil/Surface/SurfaceLetPatternScope.v'
+      - 'src/Phil/Surface/GrammarV1/PatternBinderScope.hs'
+      - 'src/Phil/Surface/GrammarV1/LetPatternScope.hs'
+      - 'src/Phil/Surface/GrammarV1/ParameterBodyScope.hs'
+      - 'test/Phase1GrammarV1LetPatternScopeMain.hs'
+      - 'docs/phase-1/surface-let-pattern-scope-proof-v1.md'
+      - '.github/workflows/phase1-surface-let-pattern-scope-proofs.yml'
+
+permissions:
+  contents: read
+
+jobs:
+  rocq-surface-let-pattern-scope:
+    runs-on: ubuntu-latest
+    container:
+      image: rocq/rocq-prover:9.2.0
+      options: --user root
+    steps:
+      - uses: actions/checkout@v4
+      - name: Compile Surface let/pattern scope proof
+        shell: bash
+        run: |
+          set -euo pipefail
+          export PATH="/home/rocq/.opam/${COMPILER}/bin:$PATH"
+          rocq c -Q proof/Phil Phil proof/Phil/Core/BindingSemantics.v
+          rocq c -Q proof/Phil Phil proof/Phil/Surface/SurfaceBinderScopeCore.v
+          rocq c -Q proof/Phil Phil proof/Phil/Surface/SurfaceLetPatternScope.v
+          sha256sum \
+            proof/Phil/Surface/SurfaceLetPatternScope.v \
+            proof/Phil/Surface/SurfaceLetPatternScope.vo \
+            > surface-let-pattern-scope-proof.sha256
+          cat surface-let-pattern-scope-proof.sha256
+      - uses: actions/upload-artifact@v4
+        with:
+          name: surface-let-pattern-scope-proof
+          path: surface-let-pattern-scope-proof.sha256
+          if-no-files-found: error
+
+  verify-surface-let-pattern-scope:
+    needs: rocq-surface-let-pattern-scope
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: haskell-actions/setup@v2
+        with:
+          ghc-version: '9.6.7'
+          cabal-version: 'latest'
+      - name: Build complete Haskell substrate
+        run: cabal build all --enable-tests
+      - name: Strict typecheck let/pattern scope authorities
+        run: |
+          set -euo pipefail
+          for module in \
+            src/Phil/Surface/GrammarV1/PatternBinderScope.hs \
+            src/Phil/Surface/GrammarV1/LetPatternScope.hs \
+            src/Phil/Surface/GrammarV1/ParameterBodyScope.hs \
+            test/Phase1GrammarV1LetPatternScopeMain.hs
+          do
+            cabal exec -- ghc -isrc -Wall -Werror -fno-code "$module"
+          done
+      - name: Replay SURF-009 let/pattern scope corpus
+        run: cabal exec -- runghc -Wall -Werror -isrc test/Phase1GrammarV1LetPatternScopeMain.hs
