@@ -74,7 +74,7 @@ Proof.
     specialize (IH (S next) restKeys restFinal Hrest).
     simpl.
     rewrite IH.
-    rewrite Nat.add_succ_l.
+    rewrite Nat.add_succ_r.
     reflexivity.
 Qed.
 
