@@ -16,6 +16,8 @@ main = do
         deterministicRelease
     , test "INT-011 distribution release binds exact compiler and handoff digests"
         exactBindings
+    , test "INT-011 Darwin distribution profile binds exact target and TCB domain"
+        darwinProfileBindings
     , test "INT-011 distribution release rejects malformed source commit"
         malformedCommitRejects
     , test "INT-011 distribution release rejects duplicate TCB identity"
@@ -67,6 +69,34 @@ exactBindings = do
           , DistributionTrustBoundaryId "target-assumptions"
           ])
     "release changed explicit residual distribution TCB"
+
+darwinProfileBindings :: Either String ()
+darwinProfileBindings = do
+  release <- mapLeft show $ buildPhase1DistributionRelease
+    packageName
+    version
+    "aarch64-apple-darwin"
+    sourceCommit
+    handoffDigest
+    compilerDigest
+    phase1DarwinDistributionTrust
+  assert
+    (distributionReleaseTarget release == "aarch64-apple-darwin")
+    "Darwin release changed selected distribution target"
+  assert
+    (Set.fromList
+      (map distributionTrustKind
+        (Map.elems (distributionReleaseTrustBoundaries release)))
+      == requiredPhase1DistributionTrustKinds)
+    "Darwin release changed required distribution trust-kind domain"
+  case Map.lookup
+      (DistributionTrustBoundaryId "target-assumptions")
+      (distributionReleaseTrustBoundaries release) of
+    Just boundary ->
+      assert
+        (distributionTrustRevision boundary == "phase1-aarch64-apple-darwin-v1")
+        "Darwin release changed exact target-assumption revision"
+    Nothing -> Left "Darwin release lost target-assumptions trust boundary"
 
 malformedCommitRejects :: Either String ()
 malformedCommitRejects =
