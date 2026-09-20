@@ -28,6 +28,12 @@ REQUIRED_TCB_KINDS = {
     "llvm-toolchain",
     "target-assumption",
 }
+REQUIRED_TCB_IDS = {
+    "compiler-checker",
+    "build-toolchain",
+    "llvm-toolchain",
+    "target-assumptions",
+}
 
 
 class BundleError(ValueError):
@@ -160,6 +166,12 @@ def parse_release(text: str) -> dict[str, object]:
         id_tag="release",
         id_key="id",
     )
+    unknown_tags = {tag for tag, _ in records} - {
+        "format", "package", "source", "handoff", "compiler", "tcb"
+    }
+    if unknown_tags:
+        raise BundleError(f"unknown release record tags: {sorted(unknown_tags)}")
+
     fmt = singleton(records, "format")
     package = singleton(records, "package")
     source = singleton(records, "source")
@@ -194,6 +206,8 @@ def parse_release(text: str) -> dict[str, object]:
             raise BundleError(f"duplicate TCB id: {row['id']}")
         ids.add(row["id"])
         kinds.add(row["kind"])
+    if ids != REQUIRED_TCB_IDS:
+        raise BundleError(f"wrong distribution TCB identity domain: {sorted(ids)}")
     if kinds != REQUIRED_TCB_KINDS:
         raise BundleError(f"wrong distribution TCB kind domain: {sorted(kinds)}")
 
@@ -215,6 +229,12 @@ def parse_archive_binding(text: str) -> dict[str, str]:
         id_tag="archive-binding",
         id_key="id",
     )
+    unknown_tags = {tag for tag, _ in records} - {
+        "format", "release", "archive", "package-manifest"
+    }
+    if unknown_tags:
+        raise BundleError(f"unknown archive-binding record tags: {sorted(unknown_tags)}")
+
     fmt = singleton(records, "format")
     release = singleton(records, "release")
     archive = singleton(records, "archive")
