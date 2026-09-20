@@ -53,6 +53,7 @@ data LLVMVerificationError
   | LLVMFunctionEntryMismatch Text LLVMBlockId LLVMBlockId
   | LLVMFunctionParametersMismatch Text [LLVMParameter] [LLVMParameter]
   | LLVMFunctionSetMismatch [Text] [Text]
+  | LLVMBlockSetMismatch Text [LLVMBlockId] [LLVMBlockId]
   | LLVMMissingEntryBlock Text LLVMBlockId
   | LLVMBlockMapKeyMismatch Text LLVMBlockId LLVMBlockId
   | LLVMUnknownControlTarget Text LLVMBlockId LLVMBlockId
@@ -196,8 +197,22 @@ verifyOrdinaryProjectionWith lowerer context systemsArtifact actualModule = do
         unless (actualParameters == expectedParameters) $
           Left (LLVMFunctionParametersMismatch
             functionName expectedParameters actualParameters)
-        forM_ (Map.toAscList (llvmFunctionBlocks expectedFunction)) $ \(blockId, expectedBlock) ->
-          case Map.lookup blockId (llvmFunctionBlocks actualFunction) of
+        let expectedEntry = llvmFunctionEntry expectedFunction
+            actualEntry = llvmFunctionEntry actualFunction
+        unless (actualEntry == expectedEntry) $
+          Left (LLVMFunctionEntryMismatch functionName expectedEntry actualEntry)
+        -- The selected lowerer, not the candidate's surviving blocks or edge
+        -- witnesses, supplies the complete target inventory. Disconnected
+        -- blocks still contribute instructions and can change the rendered
+        -- return type. Helpers are allowed only when the lowerer supplies them.
+        let expectedBlocks = llvmFunctionBlocks expectedFunction
+            actualBlocks = llvmFunctionBlocks actualFunction
+            expectedBlockIds = Map.keys expectedBlocks
+            actualBlockIds = Map.keys actualBlocks
+        unless (actualBlockIds == expectedBlockIds) $
+          Left (LLVMBlockSetMismatch functionName expectedBlockIds actualBlockIds)
+        forM_ (Map.toAscList expectedBlocks) $ \(blockId, expectedBlock) ->
+          case Map.lookup blockId actualBlocks of
             Nothing -> Left (LLVMEdgeWitnessBlockMissing functionName blockId)
             Just actualBlock -> do
               let expectedOps = ordinaryOps (llvmBlockOps expectedBlock)
