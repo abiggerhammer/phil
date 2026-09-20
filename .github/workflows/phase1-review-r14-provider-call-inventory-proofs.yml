@@ -1,0 +1,94 @@
+name: Phase 1 Review R14 Provider Call Inventory Proofs
+
+on:
+  pull_request:
+    paths:
+      - 'proof/Phil/Core/ReviewR14ProviderCallInventory.v'
+      - 'proof/Phil/Core/ReviewR14ProviderCallInventoryImplementation.v'
+      - 'proof/Phil/Core/ReviewR13ProviderOperationCorrespondence.v'
+      - 'src/Phil/Systems/ProviderCallCorrespondence.hs'
+      - 'src/Phil/Systems/AuthorityEffectCorrespondence.hs'
+      - 'test/Phase1ReviewR14ProviderCallInventoryMain.hs'
+      - 'test/Phase1ReviewR13ProviderOperationCorrespondenceMain.hs'
+      - 'test/Phase1ProviderCallCorrespondenceMain.hs'
+      - 'test/Phase1AuthorityEffectCorrespondenceMain.hs'
+      - 'docs/phase-1/review-r14-provider-call-inventory-proof-boundary-v1.md'
+      - '.github/workflows/phase1-review-r14-provider-call-inventory-proofs.yml'
+  push:
+    branches: [main]
+    paths:
+      - 'proof/Phil/Core/ReviewR14ProviderCallInventory.v'
+      - 'proof/Phil/Core/ReviewR14ProviderCallInventoryImplementation.v'
+      - 'proof/Phil/Core/ReviewR13ProviderOperationCorrespondence.v'
+      - 'src/Phil/Systems/ProviderCallCorrespondence.hs'
+      - 'src/Phil/Systems/AuthorityEffectCorrespondence.hs'
+      - 'test/Phase1ReviewR14ProviderCallInventoryMain.hs'
+      - 'test/Phase1ReviewR13ProviderOperationCorrespondenceMain.hs'
+      - 'test/Phase1ProviderCallCorrespondenceMain.hs'
+      - 'test/Phase1AuthorityEffectCorrespondenceMain.hs'
+      - 'docs/phase-1/review-r14-provider-call-inventory-proof-boundary-v1.md'
+      - '.github/workflows/phase1-review-r14-provider-call-inventory-proofs.yml'
+
+permissions:
+  contents: read
+
+jobs:
+  rocq-review-r14-provider-call-inventory:
+    runs-on: ubuntu-latest
+    container:
+      image: rocq/rocq-prover:9.2.0
+      options: --user root
+    steps:
+      - uses: actions/checkout@v4
+      - name: Compile R14 provider-inventory proofs
+        shell: bash
+        run: |
+          set -euo pipefail
+          export PATH="/home/rocq/.opam/${COMPILER}/bin:$PATH"
+          rocq c -Q proof/Phil Phil proof/Phil/Core/ReviewR14ProviderCallInventory.v
+          rocq c -Q proof/Phil Phil proof/Phil/Core/ReviewR14ProviderCallInventoryImplementation.v
+          sha256sum \
+            proof/Phil/Core/ReviewR14ProviderCallInventory.v \
+            proof/Phil/Core/ReviewR14ProviderCallInventory.vo \
+            proof/Phil/Core/ReviewR14ProviderCallInventoryImplementation.v \
+            proof/Phil/Core/ReviewR14ProviderCallInventoryImplementation.vo \
+            > review-r14-provider-call-inventory-proof.sha256
+          cat review-r14-provider-call-inventory-proof.sha256
+      - uses: actions/upload-artifact@v4
+        with:
+          name: review-r14-provider-call-inventory-proof
+          path: review-r14-provider-call-inventory-proof.sha256
+          if-no-files-found: error
+
+  verify-review-r14-correspondence:
+    needs: rocq-review-r14-provider-call-inventory
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: haskell-actions/setup@v2
+        with:
+          ghc-version: '9.6.7'
+          cabal-version: 'latest'
+      - name: Build complete Haskell substrate
+        run: cabal build all --enable-tests
+      - name: Strict typecheck R14 inventory surfaces
+        run: |
+          set -euo pipefail
+          for module in \
+            src/Phil/Systems/ProviderCallCorrespondence.hs \
+            src/Phil/Systems/AuthorityEffectCorrespondence.hs \
+            test/Phase1ReviewR14ProviderCallInventoryMain.hs \
+            test/Phase1ReviewR13ProviderOperationCorrespondenceMain.hs \
+            test/Phase1ProviderCallCorrespondenceMain.hs \
+            test/Phase1AuthorityEffectCorrespondenceMain.hs
+          do
+            cabal exec -- ghc -isrc -Wall -Werror -fno-code "$module"
+          done
+      - name: Replay R14 independent-inventory regression
+        run: cabal exec -- runghc -Wall -Werror -isrc test/Phase1ReviewR14ProviderCallInventoryMain.hs
+      - name: Replay R13, SYS-005, and SYS-006 controls
+        run: |
+          set -euo pipefail
+          cabal exec -- runghc -Wall -Werror -isrc test/Phase1ReviewR13ProviderOperationCorrespondenceMain.hs
+          cabal exec -- runghc -Wall -Werror -isrc test/Phase1ProviderCallCorrespondenceMain.hs
+          cabal exec -- runghc -Wall -Werror -isrc test/Phase1AuthorityEffectCorrespondenceMain.hs
