@@ -475,6 +475,7 @@ jobs:
                 echo "A changed distribution requires a new version/tag." >&2
                 exit 1
               fi
+
               actual="$(gh release view "$RELEASE_TAG" --repo "$GITHUB_REPOSITORY" \
                 --json assets --jq '.assets[].name' | sort)"
               test "$actual" = "$expected"
@@ -488,46 +489,7 @@ jobs:
               (
                 cd existing-release
                 sha256sum -c "$bundle.sha256"
-                grep -q '^PHIL-PHASE1-DISTRIBUTION-BUNDLE-V1
-            if [[ "$target" != "$GITHUB_SHA" ]]; then
-              echo "Existing draft $RELEASE_TAG targets $target, not $GITHUB_SHA." >&2
-              exit 1
-            fi
-
-            gh release edit "$RELEASE_TAG" \
-              --repo "$GITHUB_REPOSITORY" \
-              --title 'Phil 0.1.0 — Phase 1' \
-              --notes-file release-notes.md \
-              --draft
-          else
-            gh release create "$RELEASE_TAG" \
-              --repo "$GITHUB_REPOSITORY" \
-              --target "$GITHUB_SHA" \
-              --title 'Phil 0.1.0 — Phase 1' \
-              --notes-file release-notes.md \
-              --draft
-          fi
-
-          gh release upload "$RELEASE_TAG" \
-            --repo "$GITHUB_REPOSITORY" \
-            "$linux" "$linux.sha256" "$linux.release" "$linux.release.sha256" \
-            "$darwin" "$darwin.sha256" "$darwin.release" "$darwin.release.sha256" \
-            "$darwin.notary-info.json" \
-            "$bundle" "$bundle.sha256" \
-            --clobber
-
-          actual="$(gh release view "$RELEASE_TAG" --repo "$GITHUB_REPOSITORY" \
-            --json assets --jq '.assets[].name' | sort)"
-          test "$actual" = "$expected"
-
-          gh release edit "$RELEASE_TAG" --repo "$GITHUB_REPOSITORY" --draft=false
-
-          tag_sha="$(gh api "repos/$GITHUB_REPOSITORY/git/ref/tags/$RELEASE_TAG" --jq '.object.sha')"
-          test "$tag_sha" = "$GITHUB_SHA"
-
-          gh release view "$RELEASE_TAG" --repo "$GITHUB_REPOSITORY" \
-            --json url --jq '.url'
- "$bundle"
+                grep -q '^PHIL-PHASE1-DISTRIBUTION-BUNDLE-V1$' "$bundle"
                 grep -q "^source[[:space:]]commit=$GITHUB_SHA$" "$bundle"
               )
 
