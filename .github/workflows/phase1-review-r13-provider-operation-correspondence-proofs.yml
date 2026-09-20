@@ -1,0 +1,91 @@
+name: Phase 1 Review R13 Provider Operation Correspondence Proofs
+
+on:
+  pull_request:
+    paths:
+      - 'proof/Phil/Core/SystemsSubjectAuthority.v'
+      - 'proof/Phil/Core/ReviewR13ProviderOperationCorrespondence.v'
+      - 'proof/Phil/Core/ReviewR13ProviderOperationCorrespondenceImplementation.v'
+      - 'src/Phil/Systems/ProviderCallCorrespondence.hs'
+      - 'src/Phil/Examples/Phase1/ProviderCallWitnesses.hs'
+      - 'test/Phase1ReviewR13ProviderOperationCorrespondenceMain.hs'
+      - 'test/Phase1ProviderCallCorrespondenceMain.hs'
+      - 'test/Phase1AuthorityEffectCorrespondenceMain.hs'
+      - 'docs/phase-1/review-r13-provider-operation-correspondence-proof-boundary-v1.md'
+      - '.github/workflows/phase1-review-r13-provider-operation-correspondence-proofs.yml'
+  push:
+    branches: [main]
+    paths:
+      - 'proof/Phil/Core/SystemsSubjectAuthority.v'
+      - 'proof/Phil/Core/ReviewR13ProviderOperationCorrespondence.v'
+      - 'proof/Phil/Core/ReviewR13ProviderOperationCorrespondenceImplementation.v'
+      - 'src/Phil/Systems/ProviderCallCorrespondence.hs'
+      - 'src/Phil/Examples/Phase1/ProviderCallWitnesses.hs'
+      - 'test/Phase1ReviewR13ProviderOperationCorrespondenceMain.hs'
+      - 'test/Phase1ProviderCallCorrespondenceMain.hs'
+      - 'test/Phase1AuthorityEffectCorrespondenceMain.hs'
+      - 'docs/phase-1/review-r13-provider-operation-correspondence-proof-boundary-v1.md'
+      - '.github/workflows/phase1-review-r13-provider-operation-correspondence-proofs.yml'
+
+permissions:
+  contents: read
+
+jobs:
+  rocq-review-r13-provider-operation-correspondence:
+    runs-on: ubuntu-latest
+    container:
+      image: rocq/rocq-prover:9.2.0
+      options: --user root
+    steps:
+      - uses: actions/checkout@v4
+      - name: Compile R13 provider-operation correspondence proofs
+        shell: bash
+        run: |
+          set -euo pipefail
+          export PATH="/home/rocq/.opam/${COMPILER}/bin:$PATH"
+          rocq c -Q proof/Phil Phil proof/Phil/Core/SystemsSubjectAuthority.v
+          rocq c -Q proof/Phil Phil proof/Phil/Core/ReviewR13ProviderOperationCorrespondence.v
+          rocq c -Q proof/Phil Phil proof/Phil/Core/ReviewR13ProviderOperationCorrespondenceImplementation.v
+          sha256sum \
+            proof/Phil/Core/ReviewR13ProviderOperationCorrespondence.v \
+            proof/Phil/Core/ReviewR13ProviderOperationCorrespondence.vo \
+            proof/Phil/Core/ReviewR13ProviderOperationCorrespondenceImplementation.v \
+            proof/Phil/Core/ReviewR13ProviderOperationCorrespondenceImplementation.vo \
+            > review-r13-provider-operation-correspondence-proof.sha256
+          cat review-r13-provider-operation-correspondence-proof.sha256
+      - uses: actions/upload-artifact@v4
+        with:
+          name: review-r13-provider-operation-correspondence-proof
+          path: review-r13-provider-operation-correspondence-proof.sha256
+          if-no-files-found: error
+
+  verify-review-r13-correspondence:
+    needs: rocq-review-r13-provider-operation-correspondence
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: haskell-actions/setup@v2
+        with:
+          ghc-version: '9.6.7'
+          cabal-version: 'latest'
+      - name: Build complete Haskell substrate
+        run: cabal build all --enable-tests
+      - name: Strict typecheck R13 provider surfaces
+        run: |
+          set -euo pipefail
+          for module in \
+            src/Phil/Systems/ProviderCallCorrespondence.hs \
+            src/Phil/Examples/Phase1/ProviderCallWitnesses.hs \
+            test/Phase1ReviewR13ProviderOperationCorrespondenceMain.hs \
+            test/Phase1ProviderCallCorrespondenceMain.hs \
+            test/Phase1AuthorityEffectCorrespondenceMain.hs
+          do
+            cabal exec -- ghc -isrc -Wall -Werror -fno-code "$module"
+          done
+      - name: Replay R13 provider-operation regression
+        run: cabal exec -- runghc -Wall -Werror -isrc test/Phase1ReviewR13ProviderOperationCorrespondenceMain.hs
+      - name: Replay SYS-005 and SYS-006 controls
+        run: |
+          set -euo pipefail
+          cabal exec -- runghc -Wall -Werror -isrc test/Phase1ProviderCallCorrespondenceMain.hs
+          cabal exec -- runghc -Wall -Werror -isrc test/Phase1AuthorityEffectCorrespondenceMain.hs
