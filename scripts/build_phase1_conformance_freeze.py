@@ -99,83 +99,96 @@ def load_surface() -> tuple[list[dict[str, str]], set[str]]:
     return rows, seen_ids
 
 
-def load_negative() -> tuple[list[dict[str, str]], set[str]]:
-    manifest_path = NEGATIVE_ROOT / "manifest.tsv"
-    rows: list[dict[str, str]] = []
-    seen_ids: set[str] = set()
-    seen_paths: set[str] = set()
-
-    with manifest_path.open(encoding="utf-8", newline="") as fh:
-        reader = csv.DictReader(fh, delimiter="\t")
-        expected = [
-            "fixture_id",
-            "path",
-            "expect",
-            "competent_layer",
-            "environment_profile",
-            "governing_authority",
-        ]
-        if reader.fieldnames != expected:
-            raise ValueError(f"unexpected negative manifest columns: {reader.fieldnames}")
-        for fixture in reader:
-            fixture_id = fixture["fixture_id"]
-            path = fixture["path"]
-            if fixture_id in seen_ids:
-                raise ValueError(f"duplicate negative fixture id: {fixture_id}")
-            if path in seen_paths:
-                raise ValueError(f"duplicate negative fixture path: {path}")
-            seen_ids.add(fixture_id)
-            seen_paths.add(path)
-
-            source = NEGATIVE_ROOT / path
-            if not source.is_file():
-                raise ValueError(f"negative fixture missing: {path}")
-
-            layer = fixture["competent_layer"]
-            authority = fixture["governing_authority"]
-            if not layer:
-                raise ValueError(f"negative fixture lacks competent layer: {fixture_id}")
-            refs = authority.split(";")
-            if not refs or any(not ref for ref in refs):
-                raise ValueError(f"negative fixture lacks governing authority: {fixture_id}")
-            if len(refs) != len(set(refs)):
-                raise ValueError(f"negative fixture repeats governing authority: {fixture_id}")
-            for ref in refs:
-                if not (ref.startswith("matrix:") or ref.startswith("certified:")):
-                    raise ValueError(
-                        f"negative fixture has untyped governing authority: {fixture_id}: {ref}"
-                    )
-                if ref == "matrix:INT-004":
-                    raise ValueError(
-                        f"negative fixture uses meta-level INT-004 as semantic authority: {fixture_id}"
-                    )
-
-            rows.append(
-                {
-                    "entry_id": fixture_id,
-                    "entry_kind": "semantic-negative-fixture",
-                    "repository_path": rel(source),
-                    "sha256": sha256(source),
-                    "expectation": "reject:" + fixture["expect"],
-                    "competent_layer": layer,
-                    "governing_authority": authority,
-                }
+def validate_authority(fixture_id: str, authority: str) -> None:
+    refs = authority.split(";")
+    if not refs or any(not ref for ref in refs):
+        raise ValueError(f"negative fixture lacks governing authority: {fixture_id}")
+    if len(refs) != len(set(refs)):
+        raise ValueError(f"negative fixture repeats governing authority: {fixture_id}")
+    for ref in refs:
+        if not (ref.startswith("matrix:") or ref.startswith("certified:")):
+            raise ValueError(
+                f"negative fixture has untyped governing authority: {fixture_id}: {ref}"
+            )
+        if ref == "matrix:INT-004":
+            raise ValueError(
+                f"negative fixture uses meta-level INT-004 as semantic authority: {fixture_id}"
             )
 
-    actual = {
-        p.relative_to(NEGATIVE_ROOT).as_posix()
-        for p in NEGATIVE_ROOT.rglob("*.phil")
-        if p.is_file()
-    }
-    if actual != seen_paths:
-        missing = sorted(actual - seen_paths)
-        extra = sorted(seen_paths - actual)
+
+def load_negative() -> tuple[list[dict[str, str]], set[str]]:
+    rows: list[dict[str, str]] = []
+    seen_ids: set[str] = set()
+
+    manifests = sorted(NEGATIVE_ROOT.rglob("manifest.tsv"))
+    if len(manifests) != 9:
         raise ValueError(
-            f"negative manifest/file bijection mismatch: unlisted={missing}, missing={extra}"
+            f"expected 9 portable-negative manifests, found {len(manifests)}"
+        )
+
+    for manifest_path in manifests:
+        with manifest_path.open(encoding="utf-8", newline="") as fh:
+            reader = csv.DictReader(fh, delimiter="\t")
+            fields = reader.fieldnames or []
+            required = {
+                "fixture_id",
+                "expect",
+                "competent_layer",
+                "governing_authority",
+            }
+            if not required.issubset(fields):
+                raise ValueError(
+                    f"negative manifest {rel(manifest_path)} lacks required columns: {fields}"
+                )
+
+            has_source_path = "path" in fields
+            for fixture in reader:
+                fixture_id = fixture["fixture_id"]
+                if fixture_id in seen_ids:
+                    raise ValueError(f"duplicate negative fixture id: {fixture_id}")
+                seen_ids.add(fixture_id)
+
+                layer = fixture["competent_layer"]
+                authority = fixture["governing_authority"]
+                if not layer:
+                    raise ValueError(
+                        f"negative fixture lacks competent layer: {fixture_id}"
+                    )
+                validate_authority(fixture_id, authority)
+
+                if has_source_path:
+                    path_text = fixture["path"]
+                    source = ROOT / path_text
+                    if not source.is_file():
+                        raise ValueError(
+                            f"negative source fixture missing: {path_text}"
+                        )
+                    repository_path = rel(source)
+                    source_digest = sha256(source)
+                    entry_kind = "semantic-negative-source"
+                else:
+                    repository_path = rel(manifest_path)
+                    source_digest = sha256(manifest_path)
+                    entry_kind = "semantic-negative-row"
+
+                rows.append(
+                    {
+                        "entry_id": fixture_id,
+                        "entry_kind": entry_kind,
+                        "repository_path": repository_path,
+                        "sha256": source_digest,
+                        "expectation": "reject:" + fixture["expect"],
+                        "competent_layer": layer,
+                        "governing_authority": authority,
+                    }
+                )
+
+    if len(rows) != 81:
+        raise ValueError(
+            f"expected 81 portable-negative fixtures, found {len(rows)}"
         )
 
     return rows, seen_ids
-
 
 def support_rows() -> list[dict[str, str]]:
     rows = [
@@ -216,11 +229,8 @@ def build_rows() -> list[dict[str, str]]:
 
     rows = surface_rows + negative_rows + support_rows()
     ids = [row["entry_id"] for row in rows]
-    paths = [row["repository_path"] for row in rows]
     if len(ids) != len(set(ids)):
         raise ValueError("duplicate conformance-freeze entry id")
-    if len(paths) != len(set(paths)):
-        raise ValueError("duplicate conformance-freeze repository path")
     return sorted(rows, key=lambda row: row["entry_id"])
 
 
