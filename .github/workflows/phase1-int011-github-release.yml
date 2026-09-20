@@ -318,7 +318,11 @@ jobs:
             --output "$bundle" \
             | tee release-assets/bundle-evidence.txt
 
-          sha256sum "$bundle" > "$bundle.sha256"
+          (
+            cd release-assets
+            sha256sum "phil-${PACKAGE_VERSION}.release-bundle" \
+              > "phil-${PACKAGE_VERSION}.release-bundle.sha256"
+          )
 
           linux="phil-${PACKAGE_VERSION}-x86_64-linux.tar.gz"
           darwin="phil-${PACKAGE_VERSION}-aarch64-apple-darwin.zip"
