@@ -1,0 +1,139 @@
+name: Phase 1 INT-011 Linux Distribution Release
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: true
+
+on:
+  pull_request:
+    paths:
+      - 'src/Phil/Verification/DistributionRelease.hs'
+      - 'app/Phase1INT011DistributionReleaseMain.hs'
+      - 'test/Phase1INT011DistributionReleaseMain.hs'
+      - 'scripts/release/build-phil-phase1-package.sh'
+      - 'scripts/release/smoke-phil-phase1-package.sh'
+      - 'handoff/phase1/manifest-v1.tsv'
+      - 'docs/tutorials/tour-phase1.md'
+      - 'docs/phase-1/surface-grammar-v1.md'
+      - 'examples/run/**'
+      - 'phil-core.cabal'
+      - '.github/workflows/phase1-int011-linux-distribution-release.yml'
+      - 'docs/phase-1/int-011-linux-distribution-release-v1.md'
+  push:
+    branches: [main]
+    paths:
+      - 'src/Phil/Verification/DistributionRelease.hs'
+      - 'app/Phase1INT011DistributionReleaseMain.hs'
+      - 'test/Phase1INT011DistributionReleaseMain.hs'
+      - 'scripts/release/build-phil-phase1-package.sh'
+      - 'scripts/release/smoke-phil-phase1-package.sh'
+      - 'handoff/phase1/manifest-v1.tsv'
+      - 'docs/tutorials/tour-phase1.md'
+      - 'docs/phase-1/surface-grammar-v1.md'
+      - 'examples/run/**'
+      - 'phil-core.cabal'
+      - '.github/workflows/phase1-int011-linux-distribution-release.yml'
+      - 'docs/phase-1/int-011-linux-distribution-release-v1.md'
+
+permissions:
+  contents: read
+
+jobs:
+  linux-distribution:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: haskell-actions/setup@v2
+        with:
+          ghc-version: '9.6.7'
+          cabal-version: 'latest'
+
+      - name: Build project-owned Haskell warning-clean
+        run: cabal build all --enable-tests --ghc-options=-Werror
+
+      - name: Strictly typecheck INT-011 distribution boundary
+        run: |
+          cabal exec -- ghc -isrc -Wall -Werror -fno-code src/Phil/Verification/DistributionRelease.hs
+          cabal exec -- ghc -isrc -Wall -Werror -fno-code app/Phase1INT011DistributionReleaseMain.hs
+          cabal exec -- ghc -isrc -Wall -Werror -fno-code test/Phase1INT011DistributionReleaseMain.hs
+
+      - name: Check canonical distribution release identity
+        run: cabal exec -- runghc -isrc -Wall -Werror test/Phase1INT011DistributionReleaseMain.hs
+
+      - name: Build exact Linux distribution
+        shell: bash
+        run: |
+          set -euo pipefail
+          out="$RUNNER_TEMP/phil-int011-linux"
+          mkdir -p "$out"
+          scripts/release/build-phil-phase1-package.sh "$out" | tee "$out/build-evidence.txt"
+
+      - name: Verify archive binding and package-only smoke
+        shell: bash
+        run: |
+          set -euo pipefail
+          out="$RUNNER_TEMP/phil-int011-linux"
+          archive='phil-0.1.0-phase1-x86_64-linux.tar.gz'
+          release_sidecar="$archive.release"
+
+          (
+            cd "$out"
+            sha256sum -c "$archive.sha256"
+            sha256sum -c "$release_sidecar.sha256"
+          )
+
+          consumer="$RUNNER_TEMP/phil-int011-consumer"
+          mkdir -p "$consumer"
+          tar -xzf "$out/$archive" -C "$consumer"
+          package="$consumer/phil-0.1.0-phase1-x86_64-linux"
+          release_file="$package/share/phil/phil.release-package"
+
+          record_field() {
+            local file="$1" tag="$2" key="$3"
+            awk -F '\t' -v wanted_tag="$tag" -v wanted_key="$key" '
+              $1 == wanted_tag {
+                for (i = 2; i <= NF; ++i) {
+                  prefix = wanted_key "="
+                  if (index($i, prefix) == 1) {
+                    print substr($i, length(prefix) + 1)
+                    exit
+                  }
+                }
+              }
+            ' "$file"
+          }
+
+          internal_release_id="$(record_field "$release_file" release id)"
+          bound_release_id="$(record_field "$out/$release_sidecar" release id)"
+          bound_archive_name="$(record_field "$out/$release_sidecar" archive name)"
+          bound_archive_sha="$(record_field "$out/$release_sidecar" archive sha256)"
+          bound_manifest_sha="$(record_field "$out/$release_sidecar" package-manifest sha256)"
+
+          test "$bound_release_id" = "$internal_release_id"
+          test "$bound_archive_name" = "$archive"
+          test "$bound_archive_sha" = "sha256:$(sha256sum "$out/$archive" | awk '{print $1}')"
+          test "$bound_manifest_sha" = "sha256:$(sha256sum "$package/SHA256SUMS" | awk '{print $1}')"
+
+          (
+            cd "$package"
+            ./smoke-test.sh
+          ) | tee "$out/smoke-evidence.txt"
+
+          grep -q '^PASS: packaged Phase-1 Phil public compiler smoke$' "$out/smoke-evidence.txt"
+          grep -q '^distribution_release_id=sha256:[0-9a-f]\{64\}$' "$out/smoke-evidence.txt"
+          grep -q '^handoff_manifest_sha256=sha256:[0-9a-f]\{64\}$' "$out/smoke-evidence.txt"
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: phil-int011-linux-distribution
+          path: |
+            ${{ runner.temp }}/phil-int011-linux/phil-0.1.0-phase1-x86_64-linux.tar.gz
+            ${{ runner.temp }}/phil-int011-linux/phil-0.1.0-phase1-x86_64-linux.tar.gz.sha256
+            ${{ runner.temp }}/phil-int011-linux/phil-0.1.0-phase1-x86_64-linux.tar.gz.release
+            ${{ runner.temp }}/phil-int011-linux/phil-0.1.0-phase1-x86_64-linux.tar.gz.release.sha256
+            ${{ runner.temp }}/phil-int011-linux/build-evidence.txt
+            ${{ runner.temp }}/phil-int011-linux/smoke-evidence.txt
+          if-no-files-found: error
+          retention-days: 7
