@@ -119,9 +119,9 @@ Theorem distinct_declaration_roots_separate_equal_ordinals :
 Proof.
   intros firstRoot secondRoot ordinal Hroots Hkeys.
   unfold semanticBinderKey in Hkeys.
-  injection Hkeys as Hroot Hordinal.
   apply Hroots.
-  exact Hroot.
+  inversion Hkeys.
+  reflexivity.
 Qed.
 
 Inductive SurfaceLocalReferenceDecision : Type :=
