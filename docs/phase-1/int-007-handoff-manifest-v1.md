@@ -2,8 +2,9 @@
 
 Matrix case **INT-007** requires the Phase-1 freeze to publish one versioned,
 machine-readable handoff manifest whose artifacts can be consumed without
-Haskell-private object state. This slice establishes the manifest and its exact
-byte-integrity boundary. It does **not** claim INT-007 is complete.
+Haskell-private object state. The manifest is now the integrity spine for the
+completed INT-007 freeze: every admitted portable handoff artifact and the
+complete conformance freeze are content-addressed from this root.
 
 ## Format
 
@@ -188,17 +189,81 @@ own top-level `evidence` or `certificate` handoff artifact.
 Both assurance-input files are governed by INT-002 and VER-012 and are
 content-addressed from the top-level handoff manifest.
 
-## Deliberate remaining INT-007 work
+## Runtime/build handoff
 
-This slice does not yet materialize or enumerate the full freeze set. Subsequent
-INT-007 slices must add, and independently reconstruct/replay from portable
-bytes:
+The Upload and Steve freeze now includes five portable runtime/build artifacts
+per witness:
 
-- ArchitectureRealization, Systems, StageContract, lowering, and cost artifacts;
-- final per-witness AssuranceManifests and residual TCB;
-- the complete positive/negative conformance corpus with stable fixture IDs,
-  expected competent layers, and exact Matrix/Certified governing authority.
+- ArchitectureRealization;
+- Systems artifact;
+- final StageContract closure;
+- lowering ledger; and
+- cost attribution.
 
-The full INT-007 exit condition is reached only when a clean consumer can start
-from the handoff manifest and reconstruct/replay the advertised freeze without
+The permanent replay derives these artifacts from the ordinary StageClosure
+witnesses and requires exact equality with the checked-in canonical bytes. The
+top-level manifest binds each artifact under its governing VER/SYS Matrix
+authority rather than treating INT-007 itself as semantic authority.
+
+## Final assurance closure and residual TCB
+
+The final Upload and Steve `AssuranceManifest` values are persisted as portable
+handoff files and reconstructed against the exact selected assurance ledgers.
+Their identities are recomputed with the ordinary `deriveManifestId` logic and
+the manifests are replayed through the ordinary assurance verifier.
+
+Each witness also carries a residual-TCB handoff derived from its certified
+release. The TCB records the exact final manifest identity, release-profile
+revision, required trust-kind domain, and every named trust boundary with its
+kind, name, revision, and basis. The boundary-kind domain must equal the
+release profile's declared trust domain exactly.
+
+All four files are content-addressed from the top-level handoff manifest.
+
+## Complete conformance freeze
+
+`handoff/phase1/conformance-freeze-v1.tsv` is the content-addressed conformance
+inventory for the Phase-1 freeze.
+
+It carries all **145 stable conformance cases** currently in scope:
+
+- 28 accepted Grammar-v1 parser fixtures governed by SURF-002;
+- 36 syntax-negative Grammar-v1 fixtures governed by SURF-003; and
+- 81 portable semantic-negative cases governed by their existing exact
+  Matrix/Certified authorities.
+
+For every case the freeze records a stable ID, the portable fixture carrier,
+its exact SHA-256, expected acceptance/rejection, earliest competent layer, and
+governing authority.
+
+The semantic-negative corpus has two legitimate carrier forms. The original 20
+cases are repository-level `.phil` files under `examples/rejected/`. The newer
+61 cases are stable rows in eight subordinate portable manifests; their manifest
+bytes and all auxiliary TSVs used to materialize and replay those cases are
+content-bound as support entries under certified
+`PHIL-P1-CONFORMANCE-001`.
+
+The generator requires exactly nine semantic-negative manifests and exactly 81
+unique semantic-negative fixture IDs, preserves the surface manifest/file
+bijection, rejects duplicate fixture identities, and rejects use of INT-004 as
+fixture semantic authority.
+
+## INT-007 exit condition
+
+The permanent handoff workflow now checks all of the following from a clean
+checkout:
+
+1. the top-level handoff manifest has exactly the admitted freeze inventory and
+   every referenced artifact matches its exact SHA-256;
+2. the complete conformance freeze regenerates byte-for-byte;
+3. the completed top-level handoff manifest regenerates byte-for-byte from the
+   frozen artifacts;
+4. Upload and Steve source, checked architecture, VerificationBundle, assurance
+   inputs, runtime/build artifacts, final AssuranceManifests, and residual TCB
+   reconstruct through the ordinary production paths; and
+5. the dedicated surface and portable-negative conformance workflows continue
+   to replay the frozen fixture corpora.
+
+That is the INT-007 Phase-1 freeze boundary: a clean consumer can begin with the
+handoff manifest and reconstruct/replay the advertised freeze without requiring
 first-implementation-private fixture state.
