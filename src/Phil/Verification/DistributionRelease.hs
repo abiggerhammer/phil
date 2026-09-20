@@ -13,6 +13,7 @@ module Phil.Verification.DistributionRelease
   , phase1DistributionArchiveRevisionV1
   , requiredPhase1DistributionTrustKinds
   , phase1LinuxDistributionTrust
+  , phase1DarwinDistributionTrust
   , distributionReleaseId
   , distributionReleasePackageName
   , distributionReleasePackageVersion
@@ -147,6 +148,34 @@ phase1LinuxDistributionTrust =
       "x86_64 Linux distribution target assumptions"
       "phase1-x86_64-linux-v1"
       "selected host ABI, loader, operating-system, and runtime assumptions"
+  ]
+  where
+    trust ident kind name revision basis = DistributionTrustBoundary
+      { distributionTrustBoundaryId = DistributionTrustBoundaryId ident
+      , distributionTrustKind = kind
+      , distributionTrustName = name
+      , distributionTrustRevision = revision
+      , distributionTrustBasis = basis
+      }
+
+phase1DarwinDistributionTrust :: [DistributionTrustBoundary]
+phase1DarwinDistributionTrust =
+  [ trust "compiler-checker" DistributionCompilerCheckerTrust
+      "Phil Haskell compiler/checker"
+      "phase1-current"
+      "first implementation remains trusted until Phase 2"
+  , trust "build-toolchain" DistributionBuildToolchainTrust
+      "GHC and conventional Apple Silicon Darwin host linker/runtime"
+      "ghc-9.6.7+phase1-darwin-host-v1"
+      "native signed philc executable is built by the conventional Haskell and Apple host toolchains"
+  , trust "llvm-toolchain" DistributionLLVMToolchainTrust
+      "LLVM semantics and conventional LLVM 18.x tooling"
+      "LLVM 18.x"
+      "emitted LLVM remains subject to the declared LLVM language/tool boundary"
+  , trust "target-assumptions" DistributionTargetAssumptionTrust
+      "Apple Silicon Darwin distribution target assumptions"
+      "phase1-aarch64-apple-darwin-v1"
+      "selected macOS ABI, loader, Gatekeeper, operating-system, and runtime assumptions"
   ]
   where
     trust ident kind name revision basis = DistributionTrustBoundary
