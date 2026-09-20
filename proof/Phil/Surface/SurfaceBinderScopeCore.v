@@ -103,8 +103,12 @@ Proof.
   apply
     (disjoint_sibling_binders_with_fresh_ordinals_are_distinct
       declaration next (S next)).
-  intro Heq.
-  discriminate Heq.
+  induction next as [|next IH].
+  - discriminate.
+  - intro Heq.
+    inversion Heq as [Heq'].
+    apply IH.
+    exact Heq'.
 Qed.
 
 Theorem distinct_declaration_roots_separate_equal_ordinals :
