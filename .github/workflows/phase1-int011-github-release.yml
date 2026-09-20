@@ -1,0 +1,522 @@
+name: Phase 1 INT-011 GitHub Release
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: true
+
+on:
+  workflow_dispatch:
+  pull_request:
+    paths:
+      - 'src/Phil/Verification/DistributionRelease.hs'
+      - 'app/Phase1INT011DistributionReleaseMain.hs'
+      - 'test/Phase1INT011DistributionReleaseMain.hs'
+      - 'scripts/release/build-phil-phase1-package.sh'
+      - 'scripts/release/build-notarized-phil-phase1-darwin-package.sh'
+      - 'scripts/release/notarize-darwin-archive.sh'
+      - 'scripts/release/smoke-phil-phase1-package.sh'
+      - 'scripts/release/compose-phil-phase1-release-bundle.py'
+      - 'handoff/phase1/manifest-v1.tsv'
+      - 'docs/tutorials/tour-phase1.md'
+      - 'docs/phase-1/surface-grammar-v1.md'
+      - 'docs/phase-1/int-011-*.md'
+      - 'examples/run/**'
+      - 'phil-core.cabal'
+      - '.github/workflows/phase1-int011-github-release.yml'
+  push:
+    branches: [main]
+    paths:
+      - 'src/Phil/Verification/DistributionRelease.hs'
+      - 'app/Phase1INT011DistributionReleaseMain.hs'
+      - 'test/Phase1INT011DistributionReleaseMain.hs'
+      - 'scripts/release/build-phil-phase1-package.sh'
+      - 'scripts/release/build-notarized-phil-phase1-darwin-package.sh'
+      - 'scripts/release/notarize-darwin-archive.sh'
+      - 'scripts/release/smoke-phil-phase1-package.sh'
+      - 'scripts/release/compose-phil-phase1-release-bundle.py'
+      - 'handoff/phase1/manifest-v1.tsv'
+      - 'docs/tutorials/tour-phase1.md'
+      - 'docs/phase-1/surface-grammar-v1.md'
+      - 'docs/phase-1/int-011-*.md'
+      - 'examples/run/**'
+      - 'phil-core.cabal'
+      - '.github/workflows/phase1-int011-github-release.yml'
+
+permissions:
+  contents: read
+
+env:
+  RELEASE_TAG: phil-v0.1.0-phase1
+  PACKAGE_VERSION: 0.1.0-phase1
+  PHIL_NOTARY_TIMEOUT_SECONDS: '1200'
+  PHIL_NOTARY_POLL_SECONDS: '30'
+
+jobs:
+  linux-package:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: haskell-actions/setup@v2
+        with:
+          ghc-version: '9.6.7'
+          cabal-version: 'latest'
+
+      - name: Build certified Linux distribution
+        shell: bash
+        run: |
+          set -euo pipefail
+          out="$RUNNER_TEMP/phil-release-linux"
+          mkdir -p "$out"
+          bash scripts/release/build-phil-phase1-package.sh "$out" \
+            | tee "$out/build-evidence.txt"
+
+      - name: Verify Linux archive and package smoke
+        shell: bash
+        run: |
+          set -euo pipefail
+          out="$RUNNER_TEMP/phil-release-linux"
+          archive="phil-${PACKAGE_VERSION}-x86_64-linux.tar.gz"
+          (
+            cd "$out"
+            sha256sum -c "$archive.sha256"
+            sha256sum -c "$archive.release.sha256"
+          )
+
+          consumer="$RUNNER_TEMP/phil-release-linux-consumer"
+          mkdir -p "$consumer"
+          tar -xzf "$out/$archive" -C "$consumer"
+          (
+            cd "$consumer/phil-${PACKAGE_VERSION}-x86_64-linux"
+            ./smoke-test.sh
+          ) | tee "$out/smoke-evidence.txt"
+          grep -q '^PASS: packaged Phase-1 Phil public compiler smoke$' \
+            "$out/smoke-evidence.txt"
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: phil-phase1-release-platform-linux
+          path: |
+            ${{ runner.temp }}/phil-release-linux/phil-0.1.0-phase1-x86_64-linux.tar.gz
+            ${{ runner.temp }}/phil-release-linux/phil-0.1.0-phase1-x86_64-linux.tar.gz.sha256
+            ${{ runner.temp }}/phil-release-linux/phil-0.1.0-phase1-x86_64-linux.tar.gz.release
+            ${{ runner.temp }}/phil-release-linux/phil-0.1.0-phase1-x86_64-linux.tar.gz.release.sha256
+            ${{ runner.temp }}/phil-release-linux/build-evidence.txt
+            ${{ runner.temp }}/phil-release-linux/smoke-evidence.txt
+          if-no-files-found: error
+          retention-days: 7
+
+  darwin-build-submit:
+    runs-on: macos-26
+    environment: macos-release
+    timeout-minutes: 35
+    env:
+      APPLE_DEVELOPER_ID_P12_BASE64: ${{ secrets.APPLE_DEVELOPER_ID_P12_BASE64 }}
+      APPLE_DEVELOPER_ID_P12_PASSWORD: ${{ secrets.APPLE_DEVELOPER_ID_P12_PASSWORD }}
+      APPLE_TEAM_ID: ${{ secrets.APPLE_TEAM_ID }}
+      APPLE_NOTARY_KEY_P8_BASE64: ${{ secrets.APPLE_NOTARY_KEY_P8_BASE64 }}
+      APPLE_NOTARY_KEY_ID: ${{ secrets.APPLE_NOTARY_KEY_ID }}
+      APPLE_NOTARY_ISSUER_ID: ${{ secrets.APPLE_NOTARY_ISSUER_ID }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Verify native Apple Silicon runner
+        shell: bash
+        run: |
+          set -euo pipefail
+          test "$(uname -m)" = arm64
+          sw_vers
+
+      - uses: haskell-actions/setup@v2
+        with:
+          ghc-version: '9.6.7'
+          cabal-version: 'latest'
+
+      - name: Import Developer ID and notarization credentials
+        shell: bash
+        run: |
+          set -euo pipefail
+          p12="$RUNNER_TEMP/phil-developer-id.p12"
+          p8="$RUNNER_TEMP/AuthKey.p8"
+          export P12_PATH="$p12" P8_PATH="$p8"
+          python3 <<'PY'
+          import base64
+          import os
+
+          with open(os.environ['P12_PATH'], 'wb') as output:
+              output.write(base64.b64decode(os.environ['APPLE_DEVELOPER_ID_P12_BASE64']))
+          with open(os.environ['P8_PATH'], 'wb') as output:
+              output.write(base64.b64decode(os.environ['APPLE_NOTARY_KEY_P8_BASE64']))
+          PY
+          chmod 600 "$p12" "$p8"
+
+          keychain="$RUNNER_TEMP/phil-signing.keychain-db"
+          keychain_password="$(openssl rand -hex 24)"
+          security create-keychain -p "$keychain_password" "$keychain"
+          security set-keychain-settings -lut 21600 "$keychain"
+          security unlock-keychain -p "$keychain_password" "$keychain"
+          security import "$p12" \
+            -k "$keychain" \
+            -P "$APPLE_DEVELOPER_ID_P12_PASSWORD" \
+            -T /usr/bin/codesign \
+            -T /usr/bin/security
+          security set-key-partition-list \
+            -S apple-tool:,apple:,codesign: \
+            -s -k "$keychain_password" "$keychain"
+          security list-keychains -d user -s "$keychain"
+
+          identity="$(security find-identity -v -p codesigning "$keychain" \
+            | awk -F'\"' '/Developer ID Application/ {print $2; exit}')"
+          test -n "$identity"
+          printf 'Developer ID identity: %s\n' "$identity"
+          echo "PHIL_DARWIN_CODESIGN_IDENTITY=$identity" >> "$GITHUB_ENV"
+          echo "APPLE_NOTARY_KEY_PATH=$p8" >> "$GITHUB_ENV"
+
+      - name: Build signed Darwin distribution
+        timeout-minutes: 15
+        shell: bash
+        run: |
+          set -euo pipefail
+          out="$RUNNER_TEMP/phil-release-darwin"
+          mkdir -p "$out"
+          bash scripts/release/build-notarized-phil-phase1-darwin-package.sh build "$out" \
+            | tee "$out/build-sign-evidence.txt"
+
+      - name: Submit exact signed Darwin distribution for notarization
+        timeout-minutes: 5
+        shell: bash
+        run: |
+          set -euo pipefail
+          out="$RUNNER_TEMP/phil-release-darwin"
+          archive="$out/phil-${PACKAGE_VERSION}-aarch64-apple-darwin.zip"
+          bash scripts/release/notarize-darwin-archive.sh submit "$archive" "$out"
+          test -s "$out/$(basename "$archive").notary-id"
+          test -s "$out/$(basename "$archive").notary-submit.json"
+
+      - name: Preserve exact Darwin notarization submission
+        uses: actions/upload-artifact@v4
+        with:
+          name: phil-phase1-release-darwin-notary-submission
+          path: |
+            ${{ runner.temp }}/phil-release-darwin/phil-0.1.0-phase1-aarch64-apple-darwin.zip
+            ${{ runner.temp }}/phil-release-darwin/phil-0.1.0-phase1-aarch64-apple-darwin.zip.sha256
+            ${{ runner.temp }}/phil-release-darwin/phil-0.1.0-phase1-aarch64-apple-darwin.zip.release
+            ${{ runner.temp }}/phil-release-darwin/phil-0.1.0-phase1-aarch64-apple-darwin.zip.release.sha256
+            ${{ runner.temp }}/phil-release-darwin/phil-0.1.0-phase1-aarch64-apple-darwin.zip.notary-id
+            ${{ runner.temp }}/phil-release-darwin/phil-0.1.0-phase1-aarch64-apple-darwin.zip.notary-submit.json
+            ${{ runner.temp }}/phil-release-darwin/build-sign-evidence.txt
+          if-no-files-found: error
+          retention-days: 7
+
+  darwin-poll-assess:
+    needs:
+      - darwin-build-submit
+    runs-on: macos-26
+    environment: macos-release
+    timeout-minutes: 35
+    env:
+      APPLE_TEAM_ID: ${{ secrets.APPLE_TEAM_ID }}
+      APPLE_NOTARY_KEY_P8_BASE64: ${{ secrets.APPLE_NOTARY_KEY_P8_BASE64 }}
+      APPLE_NOTARY_KEY_ID: ${{ secrets.APPLE_NOTARY_KEY_ID }}
+      APPLE_NOTARY_ISSUER_ID: ${{ secrets.APPLE_NOTARY_ISSUER_ID }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Restore exact Darwin notarization submission
+        uses: actions/download-artifact@v4
+        with:
+          name: phil-phase1-release-darwin-notary-submission
+          path: ${{ runner.temp }}/phil-release-darwin
+
+      - name: Materialize notarization credentials
+        shell: bash
+        run: |
+          set -euo pipefail
+          p8="$RUNNER_TEMP/AuthKey.p8"
+          export P8_PATH="$p8"
+          python3 <<'PY'
+          import base64
+          import os
+
+          with open(os.environ['P8_PATH'], 'wb') as output:
+              output.write(base64.b64decode(os.environ['APPLE_NOTARY_KEY_P8_BASE64']))
+          PY
+          chmod 600 "$p8"
+          echo "APPLE_NOTARY_KEY_PATH=$p8" >> "$GITHUB_ENV"
+
+      - name: Poll notarization to accepted result
+        timeout-minutes: 22
+        shell: bash
+        run: |
+          set -euo pipefail
+          out="$RUNNER_TEMP/phil-release-darwin"
+          archive="$out/phil-${PACKAGE_VERSION}-aarch64-apple-darwin.zip"
+          bash scripts/release/notarize-darwin-archive.sh poll "$archive" "$out" \
+            | tee "$out/notarization-evidence.txt"
+          grep -q '^notarization=Accepted$' "$out/notarization-evidence.txt"
+
+      - name: Verify quarantine-intact Darwin distribution
+        timeout-minutes: 8
+        shell: bash
+        run: |
+          set -euo pipefail
+          out="$RUNNER_TEMP/phil-release-darwin"
+          bash scripts/release/build-notarized-phil-phase1-darwin-package.sh assess "$out" \
+            | tee "$out/smoke-evidence.txt"
+          grep -q '^PASS: Developer-ID signed, notarized, quarantined Phase-1 Phil distribution$' \
+            "$out/smoke-evidence.txt"
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: phil-phase1-release-platform-darwin
+          path: |
+            ${{ runner.temp }}/phil-release-darwin/phil-0.1.0-phase1-aarch64-apple-darwin.zip
+            ${{ runner.temp }}/phil-release-darwin/phil-0.1.0-phase1-aarch64-apple-darwin.zip.sha256
+            ${{ runner.temp }}/phil-release-darwin/phil-0.1.0-phase1-aarch64-apple-darwin.zip.release
+            ${{ runner.temp }}/phil-release-darwin/phil-0.1.0-phase1-aarch64-apple-darwin.zip.release.sha256
+            ${{ runner.temp }}/phil-release-darwin/phil-0.1.0-phase1-aarch64-apple-darwin.zip.notary-id
+            ${{ runner.temp }}/phil-release-darwin/phil-0.1.0-phase1-aarch64-apple-darwin.zip.notary-submit.json
+            ${{ runner.temp }}/phil-release-darwin/phil-0.1.0-phase1-aarch64-apple-darwin.zip.notary-info.json
+            ${{ runner.temp }}/phil-release-darwin/build-sign-evidence.txt
+            ${{ runner.temp }}/phil-release-darwin/notarization-evidence.txt
+            ${{ runner.temp }}/phil-release-darwin/smoke-evidence.txt
+          if-no-files-found: error
+          retention-days: 7
+
+  release-bundle:
+    needs:
+      - linux-package
+      - darwin-poll-assess
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/download-artifact@v4
+        with:
+          name: phil-phase1-release-platform-linux
+          path: incoming/linux
+
+      - uses: actions/download-artifact@v4
+        with:
+          name: phil-phase1-release-platform-darwin
+          path: incoming/darwin
+
+      - name: Compose and verify canonical release bundle
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 -m py_compile scripts/release/compose-phil-phase1-release-bundle.py
+          mkdir -p release-assets
+          bundle="release-assets/phil-${PACKAGE_VERSION}.release-bundle"
+          python3 scripts/release/compose-phil-phase1-release-bundle.py \
+            --source-commit "$GITHUB_SHA" \
+            --version "$PACKAGE_VERSION" \
+            --linux-dir incoming/linux \
+            --darwin-dir incoming/darwin \
+            --output "$bundle" \
+            | tee release-assets/bundle-evidence.txt
+
+          sha256sum "$bundle" > "$bundle.sha256"
+
+          linux="phil-${PACKAGE_VERSION}-x86_64-linux.tar.gz"
+          darwin="phil-${PACKAGE_VERSION}-aarch64-apple-darwin.zip"
+
+          for name in \
+            "$linux" "$linux.sha256" "$linux.release" "$linux.release.sha256"; do
+            cp "incoming/linux/$name" "release-assets/$name"
+          done
+
+          for name in \
+            "$darwin" "$darwin.sha256" "$darwin.release" "$darwin.release.sha256" \
+            "$darwin.notary-info.json"; do
+            cp "incoming/darwin/$name" "release-assets/$name"
+          done
+
+          (
+            cd release-assets
+            sha256sum -c "$linux.sha256"
+            sha256sum -c "$linux.release.sha256"
+            sha256sum -c "$darwin.sha256"
+            sha256sum -c "$darwin.release.sha256"
+            sha256sum -c "phil-${PACKAGE_VERSION}.release-bundle.sha256"
+          )
+
+      - name: Write final Phase-1 release notes
+        shell: bash
+        run: |
+          cat > release-assets/release-notes.md <<'EOF'
+          # Phil 0.1.0 — Phase 1
+
+          This is the frozen Phase-1 standalone Phil compiler distribution.
+
+          Both platform packages are built from the release tag's exact source
+          commit and bind the same frozen INT-007 handoff root. The top-level
+          `phil-0.1.0-phase1.release-bundle` record content-addresses both
+          platform release identities, archive bindings, compiler digests, and
+          the accepted Apple notarization evidence.
+
+          Phase 1 explicitly retains the bootstrap Haskell compiler/checker,
+          conventional build/LLVM toolchains, and platform assumptions named by
+          each package's machine-readable TCB. This release does not claim the
+          Phase-2 independent-compiler boundary.
+
+          ## x86-64 Linux
+
+          Download:
+
+          - `phil-0.1.0-phase1-x86_64-linux.tar.gz`
+          - `phil-0.1.0-phase1-x86_64-linux.tar.gz.sha256`
+          - `phil-0.1.0-phase1-x86_64-linux.tar.gz.release`
+          - `phil-0.1.0-phase1-x86_64-linux.tar.gz.release.sha256`
+
+          Verify and smoke:
+
+          ```sh
+          sha256sum -c phil-0.1.0-phase1-x86_64-linux.tar.gz.sha256
+          sha256sum -c phil-0.1.0-phase1-x86_64-linux.tar.gz.release.sha256
+          tar -xzf phil-0.1.0-phase1-x86_64-linux.tar.gz
+          cd phil-0.1.0-phase1-x86_64-linux
+          ./smoke-test.sh
+          ```
+
+          ## Apple Silicon macOS
+
+          Download:
+
+          - `phil-0.1.0-phase1-aarch64-apple-darwin.zip`
+          - `phil-0.1.0-phase1-aarch64-apple-darwin.zip.sha256`
+          - `phil-0.1.0-phase1-aarch64-apple-darwin.zip.release`
+          - `phil-0.1.0-phase1-aarch64-apple-darwin.zip.release.sha256`
+          - `phil-0.1.0-phase1-aarch64-apple-darwin.zip.notary-info.json`
+
+          Verify and smoke without removing quarantine or bypassing Gatekeeper:
+
+          ```sh
+          shasum -a 256 -c phil-0.1.0-phase1-aarch64-apple-darwin.zip.sha256
+          shasum -a 256 -c phil-0.1.0-phase1-aarch64-apple-darwin.zip.release.sha256
+          ditto -x -k phil-0.1.0-phase1-aarch64-apple-darwin.zip .
+          cd phil-0.1.0-phase1-aarch64-apple-darwin
+          ./smoke-test.sh
+          ```
+
+          The Apple package is Developer-ID signed and notarized. The final CI
+          release gate additionally launches the shipped `philc` with
+          `com.apple.quarantine` intact.
+
+          ## Cross-platform release identity
+
+          Verify the checksum of:
+
+          - `phil-0.1.0-phase1.release-bundle`
+          - `phil-0.1.0-phase1.release-bundle.sha256`
+
+          The bundle is the machine-readable INT-011 publication record tying
+          both downloadable platform artifacts to one source commit and one
+          frozen Phase-1 handoff root.
+          EOF
+
+      - name: Preserve final release bundle
+        uses: actions/upload-artifact@v4
+        with:
+          name: phil-phase1-github-release-bundle
+          path: release-assets/
+          if-no-files-found: error
+          retention-days: 14
+
+  publish:
+    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+    needs:
+      - release-bundle
+    runs-on: ubuntu-24.04
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/download-artifact@v4
+        with:
+          name: phil-phase1-github-release-bundle
+          path: dist
+
+      - name: Publish immutable Phase-1 GitHub Release
+        shell: bash
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          set -euo pipefail
+          cd dist
+
+          linux="phil-${PACKAGE_VERSION}-x86_64-linux.tar.gz"
+          darwin="phil-${PACKAGE_VERSION}-aarch64-apple-darwin.zip"
+          bundle="phil-${PACKAGE_VERSION}.release-bundle"
+
+          sha256sum -c "$linux.sha256"
+          sha256sum -c "$linux.release.sha256"
+          sha256sum -c "$darwin.sha256"
+          sha256sum -c "$darwin.release.sha256"
+          sha256sum -c "$bundle.sha256"
+
+          expected="$(printf '%s\n' \
+            "$linux" "$linux.sha256" "$linux.release" "$linux.release.sha256" \
+            "$darwin" "$darwin.sha256" "$darwin.release" "$darwin.release.sha256" \
+            "$darwin.notary-info.json" \
+            "$bundle" "$bundle.sha256" | sort)"
+
+          if gh release view "$RELEASE_TAG" --repo "$GITHUB_REPOSITORY" >/dev/null 2>&1; then
+            draft="$(gh release view "$RELEASE_TAG" --repo "$GITHUB_REPOSITORY" \
+              --json isDraft --jq '.isDraft')"
+            target="$(gh release view "$RELEASE_TAG" --repo "$GITHUB_REPOSITORY" \
+              --json targetCommitish --jq '.targetCommitish')"
+
+            if [[ "$draft" != 'true' ]]; then
+              tag_sha="$(gh api "repos/$GITHUB_REPOSITORY/git/ref/tags/$RELEASE_TAG" --jq '.object.sha')"
+              if [[ "$tag_sha" != "$GITHUB_SHA" ]]; then
+                echo "Immutable release $RELEASE_TAG already points at $tag_sha, not $GITHUB_SHA." >&2
+                echo "A changed distribution requires a new version/tag." >&2
+                exit 1
+              fi
+              actual="$(gh release view "$RELEASE_TAG" --repo "$GITHUB_REPOSITORY" \
+                --json assets --jq '.assets[].name' | sort)"
+              test "$actual" = "$expected"
+              echo "Immutable release $RELEASE_TAG already published from this exact commit."
+              exit 0
+            fi
+
+            if [[ "$target" != "$GITHUB_SHA" ]]; then
+              echo "Existing draft $RELEASE_TAG targets $target, not $GITHUB_SHA." >&2
+              exit 1
+            fi
+
+            gh release edit "$RELEASE_TAG" \
+              --repo "$GITHUB_REPOSITORY" \
+              --title 'Phil 0.1.0 — Phase 1' \
+              --notes-file release-notes.md \
+              --draft
+          else
+            gh release create "$RELEASE_TAG" \
+              --repo "$GITHUB_REPOSITORY" \
+              --target "$GITHUB_SHA" \
+              --title 'Phil 0.1.0 — Phase 1' \
+              --notes-file release-notes.md \
+              --draft
+          fi
+
+          gh release upload "$RELEASE_TAG" \
+            --repo "$GITHUB_REPOSITORY" \
+            "$linux" "$linux.sha256" "$linux.release" "$linux.release.sha256" \
+            "$darwin" "$darwin.sha256" "$darwin.release" "$darwin.release.sha256" \
+            "$darwin.notary-info.json" \
+            "$bundle" "$bundle.sha256" \
+            --clobber
+
+          actual="$(gh release view "$RELEASE_TAG" --repo "$GITHUB_REPOSITORY" \
+            --json assets --jq '.assets[].name' | sort)"
+          test "$actual" = "$expected"
+
+          gh release edit "$RELEASE_TAG" --repo "$GITHUB_REPOSITORY" --draft=false
+
+          tag_sha="$(gh api "repos/$GITHUB_REPOSITORY/git/ref/tags/$RELEASE_TAG" --jq '.object.sha')"
+          test "$tag_sha" = "$GITHUB_SHA"
+
+          gh release view "$RELEASE_TAG" --repo "$GITHUB_REPOSITORY" \
+            --json url --jq '.url'
