@@ -1,0 +1,88 @@
+name: Phase 1 Surface Case Arm Scope Proofs
+
+on:
+  pull_request:
+    paths:
+      - 'proof/Phil/Core/BindingSemantics.v'
+      - 'proof/Phil/Surface/SurfaceBinderScopeCore.v'
+      - 'proof/Phil/Surface/SurfaceLetPatternScope.v'
+      - 'proof/Phil/Surface/SurfaceCaseArmScope.v'
+      - 'src/Phil/Surface/GrammarV1/CaseArmScope.hs'
+      - 'src/Phil/Surface/GrammarV1/LetPatternScope.hs'
+      - 'src/Phil/Surface/GrammarV1/PatternBinderScope.hs'
+      - 'test/Phase1GrammarV1CaseArmScopeMain.hs'
+      - 'test/Phase1GrammarV1OfferCaseMain.hs'
+      - 'docs/phase-1/surface-case-arm-scope-proof-v1.md'
+      - '.github/workflows/phase1-surface-case-arm-scope-proofs.yml'
+  push:
+    branches: [main]
+    paths:
+      - 'proof/Phil/Core/BindingSemantics.v'
+      - 'proof/Phil/Surface/SurfaceBinderScopeCore.v'
+      - 'proof/Phil/Surface/SurfaceLetPatternScope.v'
+      - 'proof/Phil/Surface/SurfaceCaseArmScope.v'
+      - 'src/Phil/Surface/GrammarV1/CaseArmScope.hs'
+      - 'src/Phil/Surface/GrammarV1/LetPatternScope.hs'
+      - 'src/Phil/Surface/GrammarV1/PatternBinderScope.hs'
+      - 'test/Phase1GrammarV1CaseArmScopeMain.hs'
+      - 'test/Phase1GrammarV1OfferCaseMain.hs'
+      - 'docs/phase-1/surface-case-arm-scope-proof-v1.md'
+      - '.github/workflows/phase1-surface-case-arm-scope-proofs.yml'
+
+permissions:
+  contents: read
+
+jobs:
+  rocq-surface-case-arm-scope:
+    runs-on: ubuntu-latest
+    container:
+      image: rocq/rocq-prover:9.2.0
+      options: --user root
+    steps:
+      - uses: actions/checkout@v4
+      - name: Compile Surface case-arm scope proof
+        shell: bash
+        run: |
+          set -euo pipefail
+          export PATH="/home/rocq/.opam/${COMPILER}/bin:$PATH"
+          rocq c -Q proof/Phil Phil proof/Phil/Core/BindingSemantics.v
+          rocq c -Q proof/Phil Phil proof/Phil/Surface/SurfaceBinderScopeCore.v
+          rocq c -Q proof/Phil Phil proof/Phil/Surface/SurfaceLetPatternScope.v
+          rocq c -Q proof/Phil Phil proof/Phil/Surface/SurfaceCaseArmScope.v
+          sha256sum \
+            proof/Phil/Surface/SurfaceCaseArmScope.v \
+            proof/Phil/Surface/SurfaceCaseArmScope.vo \
+            > surface-case-arm-scope-proof.sha256
+          cat surface-case-arm-scope-proof.sha256
+      - uses: actions/upload-artifact@v4
+        with:
+          name: surface-case-arm-scope-proof
+          path: surface-case-arm-scope-proof.sha256
+          if-no-files-found: error
+
+  verify-surface-case-arm-scope:
+    needs: rocq-surface-case-arm-scope
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: haskell-actions/setup@v2
+        with:
+          ghc-version: '9.6.7'
+          cabal-version: 'latest'
+      - name: Build complete Haskell substrate
+        run: cabal build all --enable-tests
+      - name: Strict typecheck case-arm scope authorities
+        run: |
+          set -euo pipefail
+          for module in \
+            src/Phil/Surface/GrammarV1/CaseArmScope.hs \
+            src/Phil/Surface/GrammarV1/LetPatternScope.hs \
+            src/Phil/Surface/GrammarV1/PatternBinderScope.hs \
+            test/Phase1GrammarV1CaseArmScopeMain.hs
+          do
+            cabal exec -- ghc -isrc -Wall -Werror -fno-code "$module"
+          done
+      - name: Replay SURF-009 case-arm scope corpus
+        run: cabal exec -- runghc -Wall -Werror -isrc test/Phase1GrammarV1CaseArmScopeMain.hs
+      - name: Replay offer parser controls
+        run: cabal exec -- runghc -Wall -Werror -isrc test/Phase1GrammarV1OfferCaseMain.hs
