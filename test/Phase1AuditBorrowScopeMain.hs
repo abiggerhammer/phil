@@ -85,10 +85,10 @@ safeLocalViewUse :: Text
 safeLocalViewUse = Text.unlines
   [ "component AuditBorrowSafe(payload : OwnedBytes[1024]) {"
   , "    borrow payload as view {"
-  , "        inspect view"
+  , "        inspect(view)"
   , "        ()"
   , "    }"
-  , "    use payload"
+  , "    use(payload)"
   , "}"
   ]
 
@@ -98,8 +98,8 @@ directViewResult = Text.unlines
   , "    let escaped = borrow payload as view {"
   , "        view"
   , "    }"
-  , "    use payload"
-  , "    inspect escaped"
+  , "    use(payload)"
+  , "    inspect(escaped)"
   , "}"
   ]
 
@@ -109,8 +109,8 @@ tupleViewResult = Text.unlines
   , "    let escaped = borrow payload as view {"
   , "        (view, ())"
   , "    }"
-  , "    use payload"
-  , "    inspect escaped"
+  , "    use(payload)"
+  , "    inspect(escaped)"
   , "}"
   ]
 
@@ -118,7 +118,7 @@ ownerConsumptionDuringLoan :: Text
 ownerConsumptionDuringLoan = Text.unlines
   [ "component AuditBorrowOwnerUse(payload : OwnedBytes[1024]) {"
   , "    borrow payload as view {"
-  , "        use payload"
+  , "        use(payload)"
   , "        ()"
   , "    }"
   , "}"
@@ -130,8 +130,8 @@ viewNameAfterExit = Text.unlines
   , "    borrow payload as view {"
   , "        ()"
   , "    }"
-  , "    use payload"
-  , "    inspect view"
+  , "    use(payload)"
+  , "    inspect(view)"
   , "}"
   ]
 
@@ -139,11 +139,11 @@ hiddenLetAlias :: Text
 hiddenLetAlias = Text.unlines
   [ "component AuditBorrowHiddenAlias(payload : OwnedBytes[1024]) {"
   , "    borrow payload as view {"
-  , "        let escaped = view"
+  , "        let escaped = (view)"
   , "        ()"
   , "    }"
-  , "    use payload"
-  , "    inspect escaped"
+  , "    use(payload)"
+  , "    inspect(escaped)"
   , "}"
   ]
 
@@ -154,8 +154,8 @@ hiddenTupleAlias = Text.unlines
   , "        let (escaped, marker) = (view, ())"
   , "        ()"
   , "    }"
-  , "    use payload"
-  , "    inspect escaped"
+  , "    use(payload)"
+  , "    inspect(escaped)"
   , "}"
   ]
 
@@ -167,6 +167,6 @@ closedNameReuse = Text.unlines
   , "        ()"
   , "    }"
   , "    let local = ()"
-  , "    use payload"
+  , "    use(payload)"
   , "}"
   ]
