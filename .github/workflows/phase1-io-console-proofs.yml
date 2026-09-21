@@ -6,6 +6,8 @@ on:
       - 'proof/Phil/Core/GenericStructural.v'
       - 'proof/Phil/Core/Console.v'
       - 'proof/Phil/Core/ConsoleImplementation.v'
+      - 'proof/Phil/Core/ConsoleImplementationExtraction.v'
+      - 'app/ConsoleDecisionCorrespondenceMain.hs'
       - 'docs/phase-1/console-implementation-refinement-v1.md'
       - 'src/Phil/IO/Console.hs'
       - 'src/Phil/Core/Authority.hs'
@@ -19,6 +21,8 @@ on:
       - 'proof/Phil/Core/GenericStructural.v'
       - 'proof/Phil/Core/Console.v'
       - 'proof/Phil/Core/ConsoleImplementation.v'
+      - 'proof/Phil/Core/ConsoleImplementationExtraction.v'
+      - 'app/ConsoleDecisionCorrespondenceMain.hs'
       - 'docs/phase-1/console-implementation-refinement-v1.md'
       - 'src/Phil/IO/Console.hs'
       - 'src/Phil/Core/Authority.hs'
@@ -47,6 +51,9 @@ jobs:
           rocq c -Q proof/Phil Phil proof/Phil/Core/GenericStructural.v
           rocq c -Q proof/Phil Phil proof/Phil/Core/Console.v
           rocq c -Q proof/Phil Phil proof/Phil/Core/ConsoleImplementation.v
+          rm -f ConsoleImplementationKernel.hs
+          rocq c -Q proof/Phil Phil proof/Phil/Core/ConsoleImplementationExtraction.v
+          test -s ConsoleImplementationKernel.hs
 
       - name: Record checked proof identities
         shell: bash
@@ -58,12 +65,14 @@ jobs:
             proof/Phil/Core/Console.vo \
             proof/Phil/Core/ConsoleImplementation.v \
             proof/Phil/Core/ConsoleImplementation.vo \
+            ConsoleImplementationKernel.hs \
             console-proof/
           sha256sum \
             console-proof/Console.v \
             console-proof/Console.vo \
             console-proof/ConsoleImplementation.v \
             console-proof/ConsoleImplementation.vo \
+            console-proof/ConsoleImplementationKernel.hs \
             > console-proof/PHIL-P1-IO-CONSOLE-001.proof.sha256
           cat console-proof/PHIL-P1-IO-CONSOLE-001.proof.sha256
 
@@ -86,6 +95,20 @@ jobs:
 
       - name: Build complete Haskell substrate
         run: cabal build all --enable-tests
+
+      - uses: actions/download-artifact@v4
+        with:
+          name: rocq-console-proof
+          path: console-proof
+
+      - name: Check and execute extracted Console controls
+        run: |
+          set -euo pipefail
+          cp console-proof/ConsoleImplementationKernel.hs .
+          cabal exec -- ghc -i. -Wall -Werror -fno-code ConsoleImplementationKernel.hs
+          cabal exec -- ghc -i. -Wall -Werror -fno-code app/ConsoleDecisionCorrespondenceMain.hs
+          cabal exec -- runghc -Wall -Werror -i. app/ConsoleDecisionCorrespondenceMain.hs
+          sha256sum ConsoleImplementationKernel.hs
 
       - name: Strict-typecheck console implementation authority
         run: |
