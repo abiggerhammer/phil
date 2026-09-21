@@ -9,6 +9,7 @@ import qualified Data.Text as Text
 import Phil.Surface.Check
   ( RejectionClass (..)
   , SurfaceCheckError (..)
+  , SurfaceEnvironment
   , checkSurfaceComponent
   )
 import Phil.Surface.Parser (parseSurfaceFile)
@@ -47,6 +48,7 @@ policy = ApplicationAssurancePolicy
   , applicationAssurancePolicyPermittedDispositions = Set.empty
   }
 
+runCase :: SurfaceEnvironment -> AuditCase -> IO Bool
 runCase environment auditCase =
   case parseSurfaceFile (caseId auditCase <> ".phil") (caseSource auditCase) of
     Left diagnostic -> failCase ("parse failure: " <> show diagnostic)
