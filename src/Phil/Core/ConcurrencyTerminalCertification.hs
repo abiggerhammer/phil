@@ -29,6 +29,7 @@ import Phil.Core.ConcurrencyRendezvousCertification
   , CertifiedRendezvousResult
   , certifiedRendezvousActivationNetwork
   , certifiedRendezvousActivationState
+  , certifiedRendezvousActivationMatches
   , certifiedRendezvousCausality
   , certifiedRendezvousReceiverProcess
   , certifiedRendezvousSenderProcess
@@ -60,8 +61,9 @@ import Phil.Core.ProcessLifecycle
 import Phil.Core.Protocol (ProtocolContext (..))
 import Phil.Core.Syntax (Control (..), ObligationId)
 
-newtype CertifiedTerminalRuntime = CertifiedTerminalRuntime
+data CertifiedTerminalRuntime = CertifiedTerminalRuntime
   { unCertifiedTerminalRuntime :: ProcessRuntimeState
+  , certifiedTerminalActivationAuthority :: CertifiedRendezvousActivation
   }
   deriving (Eq, Show)
 
@@ -124,6 +126,7 @@ data ConcurrencyTerminalCertificationError
   | ConcurrencyTerminalStuckKernelDisagreement NetworkStuckKernelFacts
   | ConcurrencyTerminalEnabledLocalStepInvalid ProcessKey
   | ConcurrencyTerminalEnabledRendezvousInvalid ProcessKey ProcessKey
+  | ConcurrencyTerminalRendezvousActivationLineageMismatch
   | ConcurrencyTerminalDispositionInvariant ProcessNetworkDisposition
   deriving (Eq, Show)
 
@@ -139,7 +142,7 @@ initializeCertifiedTerminalRuntime activation contexts obligations = do
   state <- mapLeft ConcurrencyTerminalNativeError $
     initializeProcessRuntimeWithObligations network contexts obligations
   if runtimeInvariant state && runtimeNetwork state == network
-    then Right (CertifiedTerminalRuntime state)
+    then Right (CertifiedTerminalRuntime state activation)
     else Left ConcurrencyTerminalRuntimeInvariant
 
 validateActivationPredecessor
@@ -185,6 +188,9 @@ certifyEnabledRendezvousStep
   -> CertifiedRendezvousResult
   -> Either ConcurrencyTerminalCertificationError CertifiedTerminalEnabledStep
 certifyEnabledRendezvousStep runtime rendezvous
+  | not (certifiedRendezvousActivationMatches
+      (certifiedTerminalActivationAuthority runtime) rendezvous) =
+      Left ConcurrencyTerminalRendezvousActivationLineageMismatch
   | sender /= receiver
       && processIsRunningStatic state sender
       && processIsRunningStatic state receiver =
@@ -258,7 +264,7 @@ applyDeclaredTerminalTransitionCertified transition runtime = do
     else Left (ConcurrencyTerminalDeclaredIsolationDisagreement actor)
   verifyProcessTerminalKernelFacts
     (processTerminalKernelFacts actor expectedControl after)
-  pure (CertifiedTerminalRuntime after)
+  pure (CertifiedTerminalRuntime after (certifiedTerminalActivationAuthority runtime))
 
 applyFatalProcessTransitionCertified
   :: FatalProcessTransition
@@ -279,7 +285,7 @@ applyFatalProcessTransitionCertified transition runtime = do
     (processTerminalKernelFacts actor expectedControl after)
   verifyFailureIsolationKernelFacts
     (failureIsolationKernelFacts actor before after)
-  pure (CertifiedTerminalRuntime after)
+  pure (CertifiedTerminalRuntime after (certifiedTerminalActivationAuthority runtime))
 
 classifyProcessNetworkCertified
   :: RootClosureState
