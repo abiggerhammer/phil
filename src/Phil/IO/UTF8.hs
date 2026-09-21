@@ -2,6 +2,7 @@
 
 module Phil.IO.UTF8
   ( UTF8DecodeError (..)
+  , UTF8CheckError (..)
   , utf8Encode
   , utf8Decode
   , ReadUTF8Outcome (..)
@@ -14,6 +15,7 @@ module Phil.IO.UTF8
   ) where
 
 import qualified Data.ByteString as ByteString
+import qualified UTF8ImplementationKernel as Kernel
 import Data.Text (Text)
 import qualified Data.Text.Encoding as TextEncoding
 import Phil.Core.Authority
@@ -52,6 +54,14 @@ import Phil.Systems
 -- exception text, locale state, and replacement-character policy are not part
 -- of the Phil contract.
 data UTF8DecodeError = InvalidUTF8
+  deriving (Eq, Ord, Show)
+
+data UTF8CheckError
+  = UTF8FileSystemError FileSystemCheckError
+  | UTF8ConsoleError ConsoleCheckError
+  | UTF8ReadKernelDisagreement
+  | UTF8WriteKernelDisagreement
+  | UTF8WriteLineKernelDisagreement
   deriving (Eq, Ord, Show)
 
 -- | Explicit UTF-8 encoding from Phil String semantics into the finite runtime
@@ -93,20 +103,32 @@ checkReadUTF8
   -> AuthorityState
   -> FileSystemState
   -> FileReadOutcome
-  -> Either FileSystemCheckError CheckedReadUTF8
+  -> Either UTF8CheckError CheckedReadUTF8
 checkReadUTF8 occurrence path limit authoritySource authorityState state observed = do
-  checkedRead <- checkFileSystemRead
-    occurrence path limit authoritySource authorityState state observed
-  let outcome = case checkedFileSystemReadOutcome checkedRead of
-        FileReadSucceeded bytes ->
-          case utf8Decode bytes of
-            Left err -> ReadUTF8DecodeFailed err
-            Right text -> ReadUTF8Decoded text
-        FileReadFailed failure -> ReadUTF8ProviderFailed failure
-  Right CheckedReadUTF8
-    { checkedReadUTF8FileRead = checkedRead
-    , checkedReadUTF8Outcome = outcome
-    }
+  checkedRead <- mapLeft UTF8FileSystemError $
+    checkFileSystemRead
+      occurrence path limit authoritySource authorityState state observed
+  let (providerSucceeded, decodeSucceeded, outcome) =
+        case checkedFileSystemReadOutcome checkedRead of
+          FileReadSucceeded bytes ->
+            case utf8Decode bytes of
+              Left err -> (True, False, ReadUTF8DecodeFailed err)
+              Right text -> (True, True, ReadUTF8Decoded text)
+          FileReadFailed failure ->
+            (False, False, ReadUTF8ProviderFailed failure)
+      kernelDecision =
+        Kernel.decideReadUTF8ByFacts True providerSucceeded decodeSucceeded
+      kernelAgrees = case (outcome, kernelDecision) of
+        (ReadUTF8Decoded _, Kernel.UTF8ReadDecoded) -> True
+        (ReadUTF8DecodeFailed _, Kernel.UTF8ReadDecodeFailed) -> True
+        (ReadUTF8ProviderFailed _, Kernel.UTF8ReadProviderFailed) -> True
+        _ -> False
+  if kernelAgrees
+    then Right CheckedReadUTF8
+      { checkedReadUTF8FileRead = checkedRead
+      , checkedReadUTF8Outcome = outcome
+      }
+    else Left UTF8ReadKernelDisagreement
 
 -- | Ordinary write_utf8 composition. The encoded bytes and the exact checked
 -- FileSystem.replace call are both retained; this layer introduces no new
@@ -126,16 +148,21 @@ checkWriteUTF8
   -> FileSystemState
   -> Text
   -> FileReplaceOutcome
-  -> Either FileSystemCheckError CheckedWriteUTF8
+  -> Either UTF8CheckError CheckedWriteUTF8
 checkWriteUTF8 occurrence path authoritySource authorityState state text observed = do
   let bytes = utf8Encode text
-  checkedReplace <- checkFileSystemReplace
-    occurrence path bytes authoritySource authorityState state observed
-  Right CheckedWriteUTF8
-    { checkedWriteUTF8Text = text
-    , checkedWriteUTF8Bytes = bytes
-    , checkedWriteUTF8FileReplace = checkedReplace
-    }
+  checkedReplace <- mapLeft UTF8FileSystemError $
+    checkFileSystemReplace
+      occurrence path bytes authoritySource authorityState state observed
+  case Kernel.decideWriteUTF8ByFacts True of
+    Kernel.UTF8CompositionAccepted ->
+      Right CheckedWriteUTF8
+        { checkedWriteUTF8Text = text
+        , checkedWriteUTF8Bytes = bytes
+        , checkedWriteUTF8FileReplace = checkedReplace
+        }
+    Kernel.UTF8CompositionPredecessorRejected ->
+      Left UTF8WriteKernelDisagreement
 
 -- | Ordinary write_line composition over ConsoleOutput.write. Exactly one LF is
 -- appended at this library layer; the underlying checked write retains exact
@@ -153,13 +180,21 @@ checkWriteLine
   -> AuthorityState
   -> Text
   -> ConsoleWriteOutcome
-  -> Either ConsoleCheckError CheckedWriteLine
+  -> Either UTF8CheckError CheckedWriteLine
 checkWriteLine occurrence authoritySource authorityState text observed = do
   let requested = text <> "\n"
-  checkedWrite <- checkConsoleWrite
-    occurrence authoritySource authorityState requested observed
-  Right CheckedWriteLine
-    { checkedWriteLineText = text
-    , checkedWriteLineRequestedText = requested
-    , checkedWriteLineConsoleWrite = checkedWrite
-    }
+  checkedWrite <- mapLeft UTF8ConsoleError $
+    checkConsoleWrite
+      occurrence authoritySource authorityState requested observed
+  case Kernel.decideWriteLineByFacts True of
+    Kernel.UTF8CompositionAccepted ->
+      Right CheckedWriteLine
+        { checkedWriteLineText = text
+        , checkedWriteLineRequestedText = requested
+        , checkedWriteLineConsoleWrite = checkedWrite
+        }
+    Kernel.UTF8CompositionPredecessorRejected ->
+      Left UTF8WriteLineKernelDisagreement
+
+mapLeft :: (a -> b) -> Either a c -> Either b c
+mapLeft f = either (Left . f) Right
