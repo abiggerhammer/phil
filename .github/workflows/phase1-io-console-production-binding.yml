@@ -1,0 +1,133 @@
+name: Phase 1 IO Console Production Binding
+
+on:
+  pull_request:
+    paths:
+      - 'proof/Phil/Core/GenericStructural.v'
+      - 'proof/Phil/Core/Console.v'
+      - 'proof/Phil/Core/ConsoleImplementation.v'
+      - 'proof/Phil/Core/ConsoleImplementationExtraction.v'
+      - 'generated/ConsoleImplementationKernel.hs'
+      - 'src/ConsoleImplementationKernel.hs'
+      - 'src/Phil/IO/Console.hs'
+      - 'app/ConsoleDecisionCorrespondenceMain.hs'
+      - 'app/ConsoleProductionBindingMain.hs'
+      - 'test/Phase1IOConsoleProvidersMain.hs'
+      - 'test/Phase1AuthorityPossessionMain.hs'
+      - 'docs/phase-1/console-implementation-refinement-v1.md'
+      - 'docs/phase-1/console-production-binding-v1.md'
+      - '.github/workflows/phase1-io-console-production-binding.yml'
+  push:
+    branches: [main]
+    paths:
+      - 'proof/Phil/Core/Console.v'
+      - 'proof/Phil/Core/ConsoleImplementation.v'
+      - 'proof/Phil/Core/ConsoleImplementationExtraction.v'
+      - 'generated/ConsoleImplementationKernel.hs'
+      - 'src/ConsoleImplementationKernel.hs'
+      - 'src/Phil/IO/Console.hs'
+      - 'app/ConsoleProductionBindingMain.hs'
+      - 'docs/phase-1/console-production-binding-v1.md'
+      - '.github/workflows/phase1-io-console-production-binding.yml'
+
+permissions:
+  contents: read
+
+jobs:
+  exact-console-kernel:
+    runs-on: ubuntu-latest
+    container:
+      image: rocq/rocq-prover:9.2.0
+      options: --user root
+    steps:
+      - uses: actions/checkout@v4
+      - name: Freshly extract exact Console kernel
+        shell: bash
+        run: |
+          set -euo pipefail
+          export PATH="/home/rocq/.opam/${COMPILER}/bin:$PATH"
+          rocq c -Q proof/Phil Phil proof/Phil/Core/GenericStructural.v
+          rocq c -Q proof/Phil Phil proof/Phil/Core/Console.v
+          rocq c -Q proof/Phil Phil proof/Phil/Core/ConsoleImplementation.v
+          rm -f ConsoleImplementationKernel.hs
+          rocq c -Q proof/Phil Phil proof/Phil/Core/ConsoleImplementationExtraction.v
+          test -s ConsoleImplementationKernel.hs
+          test "$(wc -c < ConsoleImplementationKernel.hs)" -eq 3231
+          test "$(sha256sum ConsoleImplementationKernel.hs | awk '{print $1}')" = \
+            81c1216233a1d14390d1b78d469664bf6416dbf3e3fe6ed4e3bfffcc67104093
+          cmp ConsoleImplementationKernel.hs generated/ConsoleImplementationKernel.hs
+          cmp ConsoleImplementationKernel.hs src/ConsoleImplementationKernel.hs
+      - name: Record exact-kernel identities
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p console-exact-kernel
+          cp ConsoleImplementationKernel.hs console-exact-kernel/
+          sha256sum \
+            ConsoleImplementationKernel.hs \
+            generated/ConsoleImplementationKernel.hs \
+            src/ConsoleImplementationKernel.hs \
+            proof/Phil/Core/Console.v \
+            proof/Phil/Core/ConsoleImplementation.v \
+            proof/Phil/Core/ConsoleImplementationExtraction.v \
+            > console-exact-kernel/PHIL-P1-IO-CONSOLE-001.exact-kernel.sha256
+          cat console-exact-kernel/PHIL-P1-IO-CONSOLE-001.exact-kernel.sha256
+      - uses: actions/upload-artifact@v4
+        with:
+          name: phil-phase1-console-exact-kernel
+          path: console-exact-kernel
+          if-no-files-found: error
+
+  console-production-binding:
+    needs: exact-console-kernel
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: haskell-actions/setup@v2
+        with:
+          ghc-version: '9.6.7'
+          cabal-version: 'latest'
+      - name: Initialize package database
+        run: cabal build exe:phil-certify-core-scalar --ghc-options=-Werror
+      - uses: actions/download-artifact@v4
+        with:
+          name: phil-phase1-console-exact-kernel
+          path: console-exact-kernel
+      - name: Strict typecheck bound production surface
+        run: |
+          set -euo pipefail
+          ghc -Wall -Werror -fno-code console-exact-kernel/ConsoleImplementationKernel.hs
+          cabal exec -- ghc -isrc -Wall -Werror -fno-code src/ConsoleImplementationKernel.hs
+          cabal exec -- ghc -isrc -Wall -Werror -fno-code src/Phil/IO/Console.hs
+          cabal exec -- ghc -isrc -Wall -Werror -fno-code app/ConsoleProductionBindingMain.hs
+          cabal exec -- ghc -isrc -Wall -Werror -fno-code test/Phase1IOConsoleProvidersMain.hs
+      - name: Re-run exact extracted-kernel controls
+        run: |
+          cabal exec -- runghc \
+            -iconsole-exact-kernel \
+            -Wall -Werror \
+            app/ConsoleDecisionCorrespondenceMain.hs
+      - name: Execute production-binding controls
+        run: cabal exec -- runghc -isrc -Wall -Werror app/ConsoleProductionBindingMain.hs
+      - name: Re-run unchanged Console pressure corpus
+        run: cabal exec -- runghc -isrc -Wall -Werror test/Phase1IOConsoleProvidersMain.hs
+      - name: Re-run authority-possession predecessor corpus
+        run: cabal exec -- runghc -isrc -Wall -Werror test/Phase1AuthorityPossessionMain.hs
+      - name: Record production identities
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p console-production-binding
+          sha256sum \
+            src/ConsoleImplementationKernel.hs \
+            src/Phil/IO/Console.hs \
+            app/ConsoleProductionBindingMain.hs \
+            test/Phase1IOConsoleProvidersMain.hs \
+            docs/phase-1/console-production-binding-v1.md \
+            > console-production-binding/PHIL-P1-IO-CONSOLE-001.production.sha256
+          cat console-production-binding/PHIL-P1-IO-CONSOLE-001.production.sha256
+      - uses: actions/upload-artifact@v4
+        with:
+          name: phil-phase1-console-production-binding
+          path: console-production-binding
+          if-no-files-found: error
