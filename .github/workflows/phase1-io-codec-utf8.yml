@@ -10,6 +10,9 @@ on:
       - 'proof/Phil/Core/Console.v'
       - 'proof/Phil/Core/UTF8.v'
       - 'proof/Phil/Core/UTF8Implementation.v'
+      - 'proof/Phil/Core/UTF8ImplementationExtraction.v'
+      - 'app/UTF8DecisionCorrespondenceMain.hs'
+      - 'docs/phase-1/utf8-codec-implementation-refinement-v1.md'
       - 'src/Phil/IO/Bytes.hs'
       - 'src/Phil/IO/Console.hs'
       - 'src/Phil/IO/FileSystem.hs'
@@ -26,6 +29,9 @@ on:
       - 'proof/Phil/Core/Console.v'
       - 'proof/Phil/Core/UTF8.v'
       - 'proof/Phil/Core/UTF8Implementation.v'
+      - 'proof/Phil/Core/UTF8ImplementationExtraction.v'
+      - 'app/UTF8DecisionCorrespondenceMain.hs'
+      - 'docs/phase-1/utf8-codec-implementation-refinement-v1.md'
       - 'src/Phil/IO/Bytes.hs'
       - 'src/Phil/IO/Console.hs'
       - 'src/Phil/IO/FileSystem.hs'
@@ -57,6 +63,9 @@ jobs:
           rocq c -Q proof/Phil Phil proof/Phil/Core/Console.v
           rocq c -Q proof/Phil Phil proof/Phil/Core/UTF8.v
           rocq c -Q proof/Phil Phil proof/Phil/Core/UTF8Implementation.v
+          rm -f UTF8ImplementationKernel.hs
+          rocq c -Q proof/Phil Phil proof/Phil/Core/UTF8ImplementationExtraction.v
+          test -s UTF8ImplementationKernel.hs
 
       - name: Record checked proof identities
         shell: bash
@@ -68,12 +77,14 @@ jobs:
             proof/Phil/Core/UTF8.vo \
             proof/Phil/Core/UTF8Implementation.v \
             proof/Phil/Core/UTF8Implementation.vo \
+            UTF8ImplementationKernel.hs \
             io-codec-proof/
           sha256sum \
             io-codec-proof/UTF8.v \
             io-codec-proof/UTF8.vo \
             io-codec-proof/UTF8Implementation.v \
             io-codec-proof/UTF8Implementation.vo \
+            io-codec-proof/UTF8ImplementationKernel.hs \
             > io-codec-proof/PHIL-P1-IO-CODEC-001.proof.sha256
           cat io-codec-proof/PHIL-P1-IO-CODEC-001.proof.sha256
 
@@ -96,6 +107,20 @@ jobs:
 
       - name: Build complete Haskell substrate
         run: cabal build all --enable-tests
+
+      - uses: actions/download-artifact@v4
+        with:
+          name: rocq-io-codec-proof
+          path: io-codec-proof
+
+      - name: Check and execute extracted UTF-8 controls
+        run: |
+          set -euo pipefail
+          cp io-codec-proof/UTF8ImplementationKernel.hs .
+          cabal exec -- ghc -i. -Wall -Werror -fno-code UTF8ImplementationKernel.hs
+          cabal exec -- ghc -i. -Wall -Werror -fno-code app/UTF8DecisionCorrespondenceMain.hs
+          cabal exec -- runghc -Wall -Werror -i. app/UTF8DecisionCorrespondenceMain.hs
+          sha256sum UTF8ImplementationKernel.hs
 
       - name: Strict typecheck IO-CODEC production and pressure corpus
         run: |
