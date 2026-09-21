@@ -4,12 +4,14 @@ module SteveUserFile
   ( replaceFilePreservingFailure
   ) where
 
-import Control.Exception (IOException, mask, onException, try)
+import Control.Exception (IOException, mask, onException, throwIO, try)
 import qualified Data.ByteString as ByteString
 import Data.ByteString (ByteString)
 import System.Directory (removeFile, renameFile)
 import System.FilePath (takeDirectory, takeFileName)
 import System.IO (hClose, openBinaryTempFileWithDefaultPermissions)
+import System.IO.Error (isDoesNotExistError)
+import System.Posix.Files (FileStatus, fileMode, getFileStatus, setFileMode)
 
 -- | Replace one host file without modifying the destination before the new
 -- bytes have been written and closed successfully.
@@ -37,6 +39,7 @@ stageAndPublish destination bytes =
           ignoreIOException (hClose handle)
           ignoreIOException (removeFile temporary)
         prepare = do
+          preserveExistingMode destination temporary
           restore (ByteString.hPut handle bytes)
           restore (hClose handle)
         publish = renameFile temporary destination
@@ -48,3 +51,13 @@ ignoreIOException :: IO () -> IO ()
 ignoreIOException action = do
   _ <- try action :: IO (Either IOException ())
   pure ()
+
+preserveExistingMode :: FilePath -> FilePath -> IO ()
+preserveExistingMode destination temporary = do
+  status <- try (getFileStatus destination)
+    :: IO (Either IOException FileStatus)
+  case status of
+    Right existing -> setFileMode temporary (fileMode existing)
+    Left errorValue
+      | isDoesNotExistError errorValue -> pure ()
+      | otherwise -> throwIO errorValue
