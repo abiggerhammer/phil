@@ -331,6 +331,11 @@ def read_archive_tree(archive: Path) -> tuple[str, dict[str, bytes]]:
                         f"{archive.name} contains unsupported tar member "
                         f"{member.name!r} type={member.type!r}"
                     )
+                canonical = canonical_archive_name(member.name, is_dir=False)
+                if canonical.endswith("/bin/philc") and not (member.mode & 0o111):
+                    raise BundleError(
+                        f"{archive.name} compiler member is not executable: {canonical}"
+                    )
                 extracted = tf.extractfile(member)
                 if extracted is None:
                     raise BundleError(f"cannot read {member.name}")
@@ -348,6 +353,11 @@ def read_archive_tree(archive: Path) -> tuple[str, dict[str, bytes]]:
                     raise BundleError(
                         f"{archive.name} contains unsupported zip member "
                         f"{info.filename!r} mode={oct(unix_mode)}"
+                    )
+                canonical = canonical_archive_name(info.filename, is_dir=False)
+                if canonical.endswith("/bin/philc") and not (unix_mode & 0o111):
+                    raise BundleError(
+                        f"{archive.name} compiler member is not executable: {canonical}"
                     )
                 note_member(info.filename, is_dir=False, data=zf.read(info))
     else:
