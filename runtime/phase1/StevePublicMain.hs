@@ -36,6 +36,7 @@ import System.Environment (getArgs)
 import System.Exit (exitFailure)
 import System.FilePath ((</>))
 import System.IO (hIsEOF, hPutStrLn, stderr, stdin)
+import SteveUserFile (replaceFilePreservingFailure)
 
 foreign import ccall "StevePut"
   nativeStevePut :: Ptr () -> IO CInt
@@ -139,8 +140,7 @@ readUserFile root path = do
 
 replaceUserFile :: FilePath -> ProviderRelativePath -> ByteString -> IO ()
 replaceUserFile root path bytes = do
-  _ <- try (ByteString.writeFile (resolveUserPath root path) bytes)
-    :: IO (Either IOException ())
+  _ <- replaceFilePreservingFailure (resolveUserPath root path) bytes
   pure ()
 
 resolveUserPath :: FilePath -> ProviderRelativePath -> FilePath
