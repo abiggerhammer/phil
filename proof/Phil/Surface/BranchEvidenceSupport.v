@@ -17,8 +17,8 @@ Fixpoint formulaSupport
   | SubjectRef subject =>
       if in_dec Nat.eq_dec subject bound then [] else [subject]
   | SubjectClosed => []
-  | SubjectPair left rhs =>
-      formulaSupport bound left ++ formulaSupport bound rhs
+  | SubjectPair lhs rhs =>
+      formulaSupport bound lhs ++ formulaSupport bound rhs
   | SubjectBind subject body =>
       formulaSupport (subject :: bound) body
   end.
@@ -31,7 +31,7 @@ Proof.
   induction formula as
     [ referenced
     |
-    | left IHleft right IHright
+    | lhs IHlhs rhs IHrhs
     | binder body IHbody ];
     intros bound subject Hbound; simpl.
   - destruct (in_dec Nat.eq_dec referenced bound) as [Hin | Hnotin].
@@ -45,8 +45,8 @@ Proof.
   - intro Hsupport.
     apply in_app_iff in Hsupport.
     destruct Hsupport as [Hleft | Hright].
-    + eapply IHleft; eauto.
-    + eapply IHright; eauto.
+    + eapply IHlhs; eauto.
+    + eapply IHrhs; eauto.
   - eapply IHbody.
     + simpl. right. exact Hbound.
 Qed.
