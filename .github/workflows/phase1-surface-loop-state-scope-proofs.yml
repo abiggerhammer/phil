@@ -6,7 +6,6 @@ on:
       - 'proof/Phil/Core/BindingSemantics.v'
       - 'proof/Phil/Surface/SurfaceBinderScopeCore.v'
       - 'proof/Phil/Surface/SurfaceLetPatternScope.v'
-      - 'proof/Phil/Surface/SurfaceJoinStateScope.v'
       - 'proof/Phil/Surface/SurfaceLoopStateScope.v'
       - 'src/Phil/Surface/GrammarV1/LoopStateScope.hs'
       - 'src/Phil/Surface/GrammarV1/LexicalReferenceScope.hs'
@@ -19,7 +18,6 @@ on:
       - 'proof/Phil/Core/BindingSemantics.v'
       - 'proof/Phil/Surface/SurfaceBinderScopeCore.v'
       - 'proof/Phil/Surface/SurfaceLetPatternScope.v'
-      - 'proof/Phil/Surface/SurfaceJoinStateScope.v'
       - 'proof/Phil/Surface/SurfaceLoopStateScope.v'
       - 'src/Phil/Surface/GrammarV1/LoopStateScope.hs'
       - 'src/Phil/Surface/GrammarV1/LexicalReferenceScope.hs'
@@ -46,7 +44,6 @@ jobs:
           rocq c -Q proof/Phil Phil proof/Phil/Core/BindingSemantics.v
           rocq c -Q proof/Phil Phil proof/Phil/Surface/SurfaceBinderScopeCore.v
           rocq c -Q proof/Phil Phil proof/Phil/Surface/SurfaceLetPatternScope.v
-          rocq c -Q proof/Phil Phil proof/Phil/Surface/SurfaceJoinStateScope.v
           rocq c -Q proof/Phil Phil proof/Phil/Surface/SurfaceLoopStateScope.v
           sha256sum \
             proof/Phil/Surface/SurfaceLoopStateScope.v \
