@@ -7,6 +7,7 @@ import qualified Data.Set as Set
 import Data.Text (Text)
 import Phil.Core.CheckedBindingMode
 import Phil.Core.ConcurrencyRendezvousCertification
+import Phil.Core.ConcurrencyTerminalCertification
 import Phil.Core.Context (ResourceContext (..))
 import Phil.Core.Generic
 import Phil.Core.Process
@@ -51,6 +52,8 @@ main = do
         restrictedDonorActivationRejects
     , test "R16 donor activation preserves its own extra owner on its own chain"
         donorActivationPositiveControl
+    , test "R16 terminal enabled-rendezvous bridge rejects donor lineage"
+        terminalBridgeRejectsDonor
     , test "R10 initial restricted admission remains strict on advanced contexts"
         initialRestrictedPathRemainsStrict
     ]
@@ -185,6 +188,16 @@ donorActivationPositiveControl = do
     (Map.lookup payloadOccurrence owners
       == Just (fixtureClientProcess fx, payloadClient2))
     "donor activation's payload did not complete the same request/reply chain"
+
+terminalBridgeRejectsDonor :: Either String ()
+terminalBridgeRejectsDonor = do
+  fx <- fixture
+  runtime <- mapLeft show $ initializeCertifiedTerminalRuntime
+    (fixtureActivationA fx) (fixtureContextsA fx) Map.empty
+  donorStep <- firstUnder (fixtureActivationB fx) (fixtureContextsB fx) fx
+  case certifyEnabledRendezvousStep runtime donorStep of
+    Left ConcurrencyTerminalRendezvousActivationLineageMismatch -> Right ()
+    other -> Left ("terminal bridge accepted donor rendezvous lineage: " <> show other)
 
 initialRestrictedPathRemainsStrict :: Either String ()
 initialRestrictedPathRemainsStrict = do
