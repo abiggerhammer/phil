@@ -8,6 +8,7 @@ import Phil.Core.Authority
   ( AuthorityCheckError (..)
   , AuthorityExerciseSource (..)
   , CapabilityOccurrenceKey (..)
+  , AuthorityState
   , emptyAuthorityState
   , insertAuthorityCapability
   )
@@ -187,7 +188,7 @@ flushAuthorityRejects =
 stateWithDefault
   :: ConsoleProviderOccurrence
   -> CapabilityOccurrenceKey
-  -> Either String Phil.Core.Authority.AuthorityState
+  -> Either String AuthorityState
 stateWithDefault occurrence capabilityKey = do
   capability <- mapLeft show (defaultConsoleAuthorityCapability capabilityKey occurrence)
   mapLeft show (insertAuthorityCapability capability emptyAuthorityState)
