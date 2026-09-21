@@ -7,12 +7,16 @@ on:
     paths:
       - '.github/workflows/one-shot-int007-stage-contract-reconcile.yml'
 
+concurrency:
+  group: one-shot-int007-stage-contract-reconcile
+  cancel-in-progress: true
+
 permissions:
   contents: write
 
 jobs:
   reconcile:
-    runs-on: ubuntu-latest
+    runs-on: macos-26
     steps:
       - uses: actions/checkout@v4
         with:
