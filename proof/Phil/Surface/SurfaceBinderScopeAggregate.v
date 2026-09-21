@@ -96,6 +96,29 @@ Theorem surface_binder_scope_aggregate_constructs_only_from_all_tranches :
         protocolFacts
         outcomeFacts).
 Proof.
-  intros.
-  repeat split; assumption.
+  intros termFacts genericFacts letFacts caseFacts borrowFacts
+         joinFacts loopFacts refinementFacts protocolFacts outcomeFacts
+         Hterm Hgeneric Hlet Hcase Hborrow Hjoin Hloop Hrefinement
+         Hprotocol Houtcome.
+  unfold SurfaceBinderScopeAggregateValid.
+  simpl.
+  split.
+  - exact Hterm.
+  - split.
+    + exact Hgeneric.
+    + split.
+      * exact Hlet.
+      * split.
+        -- exact Hcase.
+        -- split.
+           ++ exact Hborrow.
+           ++ split.
+              ** exact Hjoin.
+              ** split.
+                 --- exact Hloop.
+                 --- split.
+                     +++ exact Hrefinement.
+                     +++ split.
+                         *** exact Hprotocol.
+                         *** exact Houtcome.
 Qed.
