@@ -1,33 +1,46 @@
-# Console implementation refinement v1
+# PHIL-P1-IO-CONSOLE-001 — implementation refinement staging
 
-This note records the semantic-certification boundary for `PHIL-P1-IO-CONSOLE-001`.
+This slice stages mechanical implementation refinement for the already-Certified explicit Console semantics. It does not change production `Phil.IO.Console` behavior.
 
-## Owned semantic surface
+## Certified predecessor
 
-`proof/Phil/Core/Console.v` certifies the representation-neutral console facts reflected by `src/Phil/IO/Console.hs`:
+`proof/Phil/Core/Console.v` already owns the semantic claims for:
 
-- one console provider occurrence has exact occurrence identity and provider kind;
-- input and output occurrences cannot collapse merely because a representation happens to coincide;
-- input permits `read_line` only, while output permits `write` and `flush` only;
-- the default authority mode reuses the existing structural algebra: input is `Linear`, output is `Affine`;
-- an accepted line read is caller-bounded;
-- EOF and typed portable read failures are ordinary accepted outcomes once operation/authority preconditions hold;
-- a successful write makes the full request observable;
-- a failed write carries an exact observable prefix whose length cannot exceed the request; and
-- flush is an output-provider operation.
+- distinct console occurrence identity and input/output provider kind;
+- legal operation/kind pairs;
+- Linear stdin and Affine output default authority modes;
+- bounded accepted line reads;
+- explicit EOF/provider-failure read outcomes;
+- exact successful-write observability;
+- exact in-range partial-write progress on failure; and
+- output-only flush/write semantics.
 
-`proof/Phil/Core/ConsoleImplementation.v` mirrors the finite decision order used by production:
+`ConsoleImplementation.v` owns the concrete finite decision order reflected by the current Haskell checker. This staging pass adds acceptance-iff-facts theorems for every extracted gate.
 
-- occurrence construction rejects the empty key;
-- operation-kind compatibility is checked before operation execution;
-- read/write/flush kind legality precedes imported authority acceptance;
-- line bounds are checked only for line outcomes;
-- failed-write progress range is checked only for failed writes; and
-- successful versus failed write selects full-request versus reported-prefix observability.
+## Extracted decision surface
 
-## Imported predecessors
+`ConsoleImplementationExtraction.v` extracts six executable functions into `ConsoleImplementationKernel.hs`:
 
-This proof does not introduce a second authority or effect model. Authority possession and operation permission remain imported from the already-certified authority-possession path. Effect identity/permission remains an imported callable/effect predecessor. The structural `Mode` constructors come directly from `GenericStructural.v`.
+1. occurrence non-emptiness;
+2. provider-kind/operation compatibility;
+3. read admission/order;
+4. write admission/order;
+5. successful-vs-partial write observable-length selection; and
+6. flush admission/order.
+
+The kernel takes only Boolean/finite facts already established by native production operations. It does not reimplement Text, Natural, authority-state lookup, provider identity, effects, diagnostics, or observed host I/O.
+
+## Staging evidence
+
+The permanent `Phase 1 IO Console Proofs` workflow now:
+
+- compiles the Certified semantic proof and strengthened implementation proof under Rocq 9.2.0;
+- freshly extracts `ConsoleImplementationKernel.hs`;
+- records the exact extracted bytes with the proof artifact;
+- compiles and runs 20 direct extracted-kernel controls under `-Wall -Werror`; and
+- replays the unchanged Console provider and authority-possession corpora.
+
+This staging PR deliberately does **not** check the kernel into `src/` or route production acceptance through it.
 
 ## Native / realization boundary
 
@@ -43,4 +56,13 @@ The following remain concrete implementation or realization facts:
 - POSIX/WASI/Windows handles and terminal behavior;
 - text encoding, locale, line-ending conventions, buffering, and provider realization.
 
-The next implementation-refinement step may extract only the finite decision surface from `ConsoleImplementation.v` and production-bind those verdicts without moving the native boundaries above into the trusted semantic kernel.
+## Next tranche
+
+Production binding will harvest the exact green extracted kernel, check byte-identical copies into `generated/` and `src/`, and wrap the existing Console checker native-first:
+
+- preserve existing diagnostic order;
+- reflect only native-success facts into the extracted kernel;
+- reject any native-success/kernel-reject disagreement; and
+- retain current concrete result construction unchanged.
+
+Only that later fully green production-binding closeout can promote `PHIL-P1-IO-CONSOLE-001` from **Certified** to **Implementation Refined**.
