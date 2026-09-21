@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-repo_root="$(cd "$(dirname "\${BASH_SOURCE[0]}")/../.." && pwd)"
+repo_root="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"
 cd "$repo_root"
 
 if [[ "$(uname -s)" != "Linux" ]]; then
@@ -9,7 +9,7 @@ if [[ "$(uname -s)" != "Linux" ]]; then
   exit 0
 fi
 
-work="$(mktemp -d "\${TMPDIR:-/tmp}/phil-steve-replace-audit.XXXXXX")"
+work="$(mktemp -d "${TMPDIR:-/tmp}/phil-steve-replace-audit.XXXXXX")"
 trap 'rm -rf "$work"' EXIT
 
 worker="$work/replace-worker"
