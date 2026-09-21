@@ -84,9 +84,11 @@ library
       RuntimeBytesKernel
       ResourceObligationKernel
       ResourceScopeKernel
+      SurfaceDigestSubjectKernel
       Phil.Surface.Check.Types
       Phil.Surface.Check.Support
       Phil.Surface.Check.Preflight
+      Phil.Surface.Check.DigestSubjectCertification
       Phil.Surface.Check.Engine
       Phil.Surface.Lineage
       Phil.Compiler.SourceBundle

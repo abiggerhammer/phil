@@ -1,0 +1,91 @@
+name: Phase 1 Audit Digest Subject Production Binding
+
+on:
+  pull_request:
+    paths:
+      - 'proof/Phil/Surface/DigestSubjectCorrespondence.v'
+      - 'proof/Phil/Surface/DigestSubjectCorrespondenceExtraction.v'
+      - 'generated/SurfaceDigestSubjectKernel.hs'
+      - 'src/SurfaceDigestSubjectKernel.hs'
+      - 'src/Phil/Surface/Check/DigestSubjectCertification.hs'
+      - 'src/Phil/Surface/Check/Engine.hs'
+      - 'app/DigestSubjectDecisionCorrespondenceMain.hs'
+      - 'app/DigestSubjectProductionBindingMain.hs'
+      - 'test/Phase1AuditDigestSubjectMain.hs'
+      - 'docs/phase-1/audit-digest-subject-proof-production-binding-v1.md'
+      - 'phil-core.cabal'
+      - '.github/workflows/phase1-audit-digest-subject-production-binding.yml'
+  push:
+    branches: [main]
+    paths:
+      - 'generated/SurfaceDigestSubjectKernel.hs'
+      - 'src/SurfaceDigestSubjectKernel.hs'
+      - 'src/Phil/Surface/Check/DigestSubjectCertification.hs'
+      - 'src/Phil/Surface/Check/Engine.hs'
+      - 'phil-core.cabal'
+      - '.github/workflows/phase1-audit-digest-subject-production-binding.yml'
+
+permissions:
+  contents: read
+
+jobs:
+  exact-digest-subject-kernel:
+    runs-on: ubuntu-latest
+    container:
+      image: rocq/rocq-prover:9.2.0
+      options: --user root
+    steps:
+      - uses: actions/checkout@v4
+      - name: Freshly extract exact digest-subject kernel
+        shell: bash
+        run: |
+          set -euo pipefail
+          export PATH="/home/rocq/.opam/${COMPILER}/bin:$PATH"
+          rocq c -Q proof/Phil Phil proof/Phil/Surface/DigestSubjectCorrespondence.v
+          rm -f SurfaceDigestSubjectKernel.hs
+          rocq c -Q proof/Phil Phil proof/Phil/Surface/DigestSubjectCorrespondenceExtraction.v
+          test "$(wc -c < SurfaceDigestSubjectKernel.hs)" -eq 1890
+          test "$(sha256sum SurfaceDigestSubjectKernel.hs | awk '{print $1}')" = \
+            9994e5675c20fbad9f0e2aefa66907817ab3bd9db837356b25bc55b878f5023e
+          cmp SurfaceDigestSubjectKernel.hs generated/SurfaceDigestSubjectKernel.hs
+          cmp SurfaceDigestSubjectKernel.hs src/SurfaceDigestSubjectKernel.hs
+      - name: Preserve exact kernel
+        run: |
+          mkdir -p digest-subject-exact-kernel
+          cp SurfaceDigestSubjectKernel.hs digest-subject-exact-kernel/
+      - uses: actions/upload-artifact@v4
+        with:
+          name: phil-phase1-digest-subject-exact-kernel
+          path: digest-subject-exact-kernel
+          if-no-files-found: error
+
+  digest-subject-production-binding:
+    needs: exact-digest-subject-kernel
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: haskell-actions/setup@v2
+        with:
+          ghc-version: '9.6.7'
+          cabal-version: 'latest'
+      - name: Build production library strictly
+        run: cabal build lib:phil-core --ghc-options=-Werror
+      - uses: actions/download-artifact@v4
+        with:
+          name: phil-phase1-digest-subject-exact-kernel
+          path: digest-subject-exact-kernel
+      - name: Strict typecheck production bridge and controls
+        run: |
+          set -euo pipefail
+          ghc -Wall -Werror -fno-code digest-subject-exact-kernel/SurfaceDigestSubjectKernel.hs
+          cabal exec -- ghc -isrc -Wall -Werror -fno-code src/Phil/Surface/Check/DigestSubjectCertification.hs
+          cabal exec -- ghc -isrc -Wall -Werror -fno-code src/Phil/Surface/Check/Engine.hs
+          cabal exec -- ghc -isrc -Wall -Werror -fno-code app/DigestSubjectProductionBindingMain.hs
+      - name: Re-run exact extracted-kernel controls
+        run: cabal exec -- runghc -idigest-subject-exact-kernel -Wall -Werror app/DigestSubjectDecisionCorrespondenceMain.hs
+      - name: Execute production-binding disagreement controls
+        run: cabal exec -- runghc -isrc -Wall -Werror app/DigestSubjectProductionBindingMain.hs
+      - name: Replay repaired public digest-subject corpus
+        run: cabal exec -- runghc -isrc -Wall -Werror test/Phase1AuditDigestSubjectMain.hs
+      - name: Replay frozen Surface conformance controls
+        run: cabal test phil-surface-conformance-tests --test-show-details=direct
