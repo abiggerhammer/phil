@@ -188,7 +188,8 @@ deterministicIdentity :: Either String ()
 deterministicIdentity = do
   bundle <- steveBundle
   let reversed = Map.fromList (reverse (Map.toAscList (branchResourceStageSites bundle)))
-      rebuilt = makeBranchResourceStageBundle (branchResourceStageBase bundle) reversed
+      rebuilt = makeBranchResourceStageBundle
+        (branchResourceStageProviderAuthority bundle) (branchResourceStageBase bundle) reversed
   assert
     (branchResourceStageRevision rebuilt == branchResourceStageRevision bundle)
     "branch resource stage revision changed with map order"
@@ -200,6 +201,7 @@ replaceSite
   -> BranchResourceStageBundle
   -> BranchResourceStageBundle
 replaceSite key site bundle = makeBranchResourceStageBundle
+  (branchResourceStageProviderAuthority bundle)
   (branchResourceStageBase bundle)
   (Map.insert key site (branchResourceStageSites bundle))
 
