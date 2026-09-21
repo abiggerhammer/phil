@@ -182,3 +182,67 @@ Proof. reflexivity. Qed.
 Theorem authorized_output_flush_accepts :
   decideConsoleFlushByFacts true true = ConsoleFlushAccepted.
 Proof. reflexivity. Qed.
+
+Theorem console_occurrence_accepts_iff_nonempty_fact :
+  forall occurrenceEmpty,
+    decideConsoleOccurrenceByFacts occurrenceEmpty =
+      ConsoleOccurrenceAccepted <->
+    occurrenceEmpty = false.
+Proof.
+  intros occurrenceEmpty.
+  destruct occurrenceEmpty; cbn; split; intro H; try discriminate; reflexivity.
+Qed.
+
+Theorem console_operation_accepts_iff_allowed_fact :
+  forall kindAllowsOperation,
+    decideConsoleOperationByFacts kindAllowsOperation =
+      ConsoleOperationAccepted <->
+    kindAllowsOperation = true.
+Proof.
+  intros kindAllowsOperation.
+  destruct kindAllowsOperation; cbn; split; intro H; try discriminate; reflexivity.
+Qed.
+
+Theorem console_read_accepts_iff_ordered_facts :
+  forall kindAllowsRead authorityAccepted observedKind lineWithinLimit,
+    decideConsoleReadByFacts
+      kindAllowsRead authorityAccepted observedKind lineWithinLimit =
+      ConsoleReadAccepted <->
+    kindAllowsRead = true /\
+    authorityAccepted = true /\
+    match observedKind with
+    | ObservedConsoleLine => lineWithinLimit = true
+    | ObservedConsoleEndOfInput => True
+    | ObservedConsoleReadFailure => True
+    end.
+Proof.
+  intros kindAllowsRead authorityAccepted observedKind lineWithinLimit.
+  destruct kindAllowsRead, authorityAccepted, observedKind, lineWithinLimit;
+    cbn; intuition discriminate.
+Qed.
+
+Theorem console_write_accepts_iff_ordered_facts :
+  forall kindAllowsWrite authorityAccepted observedSuccess progressWithinRequest,
+    decideConsoleWriteByFacts
+      kindAllowsWrite authorityAccepted observedSuccess progressWithinRequest =
+      ConsoleWriteAccepted <->
+    kindAllowsWrite = true /\
+    authorityAccepted = true /\
+    (observedSuccess = true \/ progressWithinRequest = true).
+Proof.
+  intros kindAllowsWrite authorityAccepted observedSuccess progressWithinRequest.
+  destruct kindAllowsWrite, authorityAccepted, observedSuccess,
+           progressWithinRequest;
+    cbn; intuition discriminate.
+Qed.
+
+Theorem console_flush_accepts_iff_ordered_facts :
+  forall kindAllowsFlush authorityAccepted,
+    decideConsoleFlushByFacts kindAllowsFlush authorityAccepted =
+      ConsoleFlushAccepted <->
+    kindAllowsFlush = true /\ authorityAccepted = true.
+Proof.
+  intros kindAllowsFlush authorityAccepted.
+  destruct kindAllowsFlush, authorityAccepted;
+    cbn; intuition discriminate.
+Qed.
