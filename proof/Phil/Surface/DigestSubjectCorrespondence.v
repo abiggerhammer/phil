@@ -160,16 +160,12 @@ Proof.
     payloadBorrowed stableOwnerPresent payloadIsSharedBytes
     beginSubject leftOwner rightOwner leftAccepted rightAccepted
     Hdistinct Hleft Hright Hequal.
-  pose proof
-    (accepted_surface_digest_subject_carries_exact_inputs
-      Hleft) as HleftExact.
-  pose proof
-    (accepted_surface_digest_subject_carries_exact_inputs
-      Hright) as HrightExact.
-  destruct HleftExact as [_ [HleftOwner _]].
-  destruct HrightExact as [_ [HrightOwner _]].
+  destruct noExplicitContext, exactArity, beginNamed, beginIsBegin,
+           payloadBorrowed, stableOwnerPresent, payloadIsSharedBytes;
+    cbn in Hleft, Hright; try discriminate.
+  inversion Hleft; subst.
+  inversion Hright; subst.
   apply Hdistinct.
-  rewrite <- HleftOwner, <- HrightOwner.
   exact Hequal.
 Qed.
 
