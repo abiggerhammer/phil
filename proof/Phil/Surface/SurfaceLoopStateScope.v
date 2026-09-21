@@ -3,8 +3,7 @@ From Stdlib Require Import Lists.List Arith.PeanoNat Lia.
 From Phil.Core Require Import BindingSemantics.
 From Phil.Surface Require Import
   SurfaceBinderScopeCore
-  SurfaceLetPatternScope
-  SurfaceJoinStateScope.
+  SurfaceLetPatternScope.
 
 Import ListNotations.
 
