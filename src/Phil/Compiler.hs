@@ -533,7 +533,6 @@ renderedLocalDefinitions line =
         | Text.isSuffixOf ":" stripped
         , let name = Text.dropEnd 1 stripped
         , not (Text.null name)
-        , Text.all validLLVMUnquotedLocalRest name
         -> [name]
         | otherwise -> []
 
