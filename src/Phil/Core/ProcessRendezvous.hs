@@ -12,6 +12,7 @@ module Phil.Core.ProcessRendezvous
   , checkProcessCommunicationState
   , checkProcessCommunicationSuccessor
   , checkRestrictedProcessRendezvous
+  , checkRestrictedProcessRendezvousSuccessor
   ) where
 
 import qualified Data.Map.Strict as Map
@@ -238,7 +239,37 @@ checkRestrictedProcessRendezvous
   -> ProcessRendezvousRequest
   -> RestrictedMessageTransfer
   -> Either ProcessRendezvousError ProcessCommunicationState
-checkRestrictedProcessRendezvous instanceValue network state request transfer =
+checkRestrictedProcessRendezvous =
+  checkRestrictedProcessRendezvousWith checkJointRendezvous
+
+-- | Restricted transfer from an already-live communication state. This is the
+-- exact analogue of 'checkProcessCommunicationSuccessor': it validates current
+-- endpoint identity/session state rather than reapplying immutable initial
+-- projections, while moving the exact restricted occurrence and both endpoint
+-- owners atomically.
+checkRestrictedProcessRendezvousSuccessor
+  :: BinaryProtocolInstance
+  -> ProcessNetwork
+  -> ProcessCommunicationState
+  -> ProcessRendezvousRequest
+  -> RestrictedMessageTransfer
+  -> Either ProcessRendezvousError ProcessCommunicationState
+checkRestrictedProcessRendezvousSuccessor =
+  checkRestrictedProcessRendezvousWith checkJointRendezvousLive
+
+checkRestrictedProcessRendezvousWith
+  :: (BinaryProtocolInstance
+      -> ProcessNetwork
+      -> Map.Map ProcessKey ProtocolContext
+      -> ProcessRendezvousRequest
+      -> Either ProcessRendezvousError (Map.Map ProcessKey ProtocolContext))
+  -> BinaryProtocolInstance
+  -> ProcessNetwork
+  -> ProcessCommunicationState
+  -> ProcessRendezvousRequest
+  -> RestrictedMessageTransfer
+  -> Either ProcessRendezvousError ProcessCommunicationState
+checkRestrictedProcessRendezvousWith progress instanceValue network state request transfer =
   case request of
     SelectOfferRendezvous _ _ _ -> Left RestrictedMessageRequiresSendReceive
     SendReceiveRendezvous sender receiver -> do
@@ -256,7 +287,7 @@ checkRestrictedProcessRendezvous instanceValue network state request transfer =
       receiverStep <- mapLeft (RendezvousProtocolError (rendezvousProcess receiver)) $
         checkProtocolAction receiverAction receiverBefore
       checkTransferMessageContract sender receiver senderStep receiverStep transfer
-      progressed <- checkJointRendezvous instanceValue network contexts request
+      progressed <- progress instanceValue network contexts request
       senderAfter <- requireContext progressed (rendezvousProcess sender)
       receiverAfter <- requireContext progressed (rendezvousProcess receiver)
       (actualPayloadType, senderResources) <- mapLeft
