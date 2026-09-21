@@ -225,90 +225,37 @@ Proof.
         phase1_surface_normalize_optional_generic_requirements_effects_tree_round_trip.
       exact Hnormalize.
   - destruct
-      (phase1_surface_normalize_generic_requirements_proposition_tree_total_from_derivation
-        (descend path AtOptionalBody)
-        input rest body Hbody)
-      as [base [Hbase Hbase_round_trip]].
-    destruct
-      (phase1_surface_normalize_generic_requirements_effects_tree_total_from_derivation
-        (descend path AtOptionalBody)
-        input rest body Hbody)
-      as [refined [Hrefined_tree Hrefined_round_trip]].
-    assert (Hrefined :
-      phase1_surface_normalize_generic_requirements_effects_spine base =
-        Some refined).
-    {
-      unfold phase1_surface_normalize_generic_requirements_effects_tree
-        in Hrefined_tree.
-      rewrite Hbase in Hrefined_tree.
-      exact Hrefined_tree.
-    }
-    assert (Hbase_optional :
-      phase1_surface_normalize_optional_generic_requirements_proposition_tree
-        tree = Some (Some base)).
-    {
-      rewrite Hsome.
-      unfold
-        phase1_surface_normalize_optional_generic_requirements_proposition_tree.
+      (phase1_surface_normalize_optional_generic_requirements_proposition_tree_total_from_derivation
+        path input rest tree Hderive)
+      as [base_optional [Hbase_optional Hbase_round_trip]].
+    destruct base_optional as [base |].
+    + cbn in Hbase_round_trip.
+      rewrite Hsome in Hbase_round_trip.
+      inversion Hbase_round_trip; subst body.
       destruct
-        (phase1_surface_normalize_optional_generic_requirements_type_tree
-          (PTOptionalSome body))
-        as [requirements |] eqn:Htype_optional.
-      - cbn.
-        destruct requirements as [requirements |].
-        + destruct
-            (phase1_surface_normalize_generic_requirements_proposition_spine
-              requirements)
-            as [actual |] eqn:Hprop; try discriminate.
-          f_equal.
-          assert (Hrequirements :
-            phase1_surface_normalize_generic_requirements_type_tree body =
-              Some requirements).
-          {
-            unfold
-              phase1_surface_normalize_optional_generic_requirements_type_tree
-              in Htype_optional.
-            rewrite Hsome in Htype_optional.
-            cbn in Htype_optional.
-            destruct
-              (phase1_surface_normalize_generic_requirements_type_tree body)
-              as [actual_requirements |] eqn:Hactual;
-              try discriminate Htype_optional.
-            inversion Htype_optional; subst requirements.
-            exact Hactual.
-          }
-          rewrite Hrequirements in Hbase.
-          inversion Hbase.
-          exact Hprop.
-        + discriminate Htype_optional.
-      - exfalso.
+        (phase1_surface_normalize_generic_requirements_effects_spine_total_from_spine_derivation
+          base
+          (descend path AtOptionalBody)
+          input rest Hbody)
+        as [refined Hrefined].
+      assert (Hnormalize :
+        phase1_surface_normalize_optional_generic_requirements_effects_tree
+          tree = Some (Some refined)).
+      {
         unfold
-          phase1_surface_normalize_optional_generic_requirements_type_tree
-          in Htype_optional.
-        rewrite Hsome in Htype_optional.
-        cbn in Htype_optional.
-        rewrite
-          (proj1
-            (phase1_surface_normalize_generic_requirements_proposition_tree_total_from_derivation
-              (descend path AtOptionalBody)
-              input rest body Hbody)).
-        discriminate.
-    }
-    assert (Hnormalize :
-      phase1_surface_normalize_optional_generic_requirements_effects_tree tree =
-        Some (Some refined)).
-    {
-      unfold
-        phase1_surface_normalize_optional_generic_requirements_effects_tree.
-      rewrite Hbase_optional.
-      cbn.
-      rewrite Hrefined.
-      reflexivity.
-    }
-    exists (Some refined).
-    split.
-    + exact Hnormalize.
-    + eapply
-        phase1_surface_normalize_optional_generic_requirements_effects_tree_round_trip.
-      exact Hnormalize.
+          phase1_surface_normalize_optional_generic_requirements_effects_tree.
+        rewrite Hbase_optional.
+        cbn.
+        rewrite Hrefined.
+        reflexivity.
+      }
+      exists (Some refined).
+      split.
+      * exact Hnormalize.
+      * eapply
+          phase1_surface_normalize_optional_generic_requirements_effects_tree_round_trip.
+        exact Hnormalize.
+    + cbn in Hbase_round_trip.
+      rewrite Hsome in Hbase_round_trip.
+      discriminate Hbase_round_trip.
 Qed.
