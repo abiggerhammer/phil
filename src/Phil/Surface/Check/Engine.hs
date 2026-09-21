@@ -729,9 +729,10 @@ evalValidate
   -> Either SurfaceCheckError [SurfacePath]
 evalValidate environment state located claim context subject
   | claim == "DigestMatches" = do
-      when (context /= Nothing) $
-        throw located TypeMismatch
+      case context of
+        Just _ -> throw located TypeMismatch
           "DigestMatches does not accept an explicit context locator"
+        Nothing -> Right ()
       proposition <- digestMatchesForSubject subject
       decision (DigestDecision proposition)
   | otherwise = do
