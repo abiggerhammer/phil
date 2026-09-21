@@ -138,14 +138,14 @@ auditCases = do
           (AcceptWithProof expectedDigestProof)
       , reduced "stable owner identity survives legal move" movedOwner
           (AcceptWithProof expectedDigestProof)
-      , reduced "boolean subject rejects" booleanSubject badShape
-      , reduced "unit subject rejects" unitSubject badShape
-      , reduced "reversed ordered subjects reject" reversedSubject badShape
-      , reduced "third subject rejects" thirdSubject badShape
-      , reduced "wrong second subject type rejects" wrongSecondType badShape
-      , reduced "integer pair rejects" integerPair badShape
-      , reduced "unknown view name rejects" unknownView [StructuralUse]
-      , reduced "explicit context on DigestMatches rejects" explicitContext badShape
+      , reduced "boolean subject rejects" booleanSubject (RejectOneOf badShape)
+      , reduced "unit subject rejects" unitSubject (RejectOneOf badShape)
+      , reduced "reversed ordered subjects reject" reversedSubject (RejectOneOf badShape)
+      , reduced "third subject rejects" thirdSubject (RejectOneOf badShape)
+      , reduced "wrong second subject type rejects" wrongSecondType (RejectOneOf badShape)
+      , reduced "integer pair rejects" integerPair (RejectOneOf badShape)
+      , reduced "unknown view name rejects" unknownView (RejectOneOf [StructuralUse])
+      , reduced "explicit context on DigestMatches rejects" explicitContext (RejectOneOf badShape)
       , AuditCase
           "missing digest evidence remains rejected"
           "examples/rejected/10-accept-before-digest-check.phil"
