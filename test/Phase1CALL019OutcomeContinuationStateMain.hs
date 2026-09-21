@@ -277,6 +277,7 @@ legacyScalarHasNoBranchContinuation = do
         }
       scalarSummary = branchSummary
         { surfaceCallableSemanticAccounts = [scalarAccount]
+        , surfaceCallableSemanticPaths = [[scalarAccount]]
         , surfaceReachableCallableFailures = Set.empty
         }
       scalarContext = callerContext
