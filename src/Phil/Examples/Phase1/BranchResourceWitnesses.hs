@@ -16,6 +16,10 @@ import Phil.Examples.Phase1.AuthorityEffectWitnesses
   ( steveAuthorityEffectStageBundle
   , uploadAuthorityEffectStageBundle
   )
+import Phil.Examples.Phase1.ProviderCallWitnesses
+  ( steveProviderCallExpectations
+  , uploadProviderCallExpectations
+  )
 import Phil.Systems.BranchResourceFailure
 import Phil.Systems.IR (BlockId (..), ValueId (..))
 import Phil.Systems.Phase1Stage (SystemsMechanismKey (..))
@@ -23,7 +27,9 @@ import Phil.Systems.Phase1Stage (SystemsMechanismKey (..))
 uploadBranchResourceStageBundle :: Either String BranchResourceStageBundle
 uploadBranchResourceStageBundle = do
   base <- uploadAuthorityEffectStageBundle
-  pure (makeBranchResourceStageBundle base (Map.fromList
+  authority <- either (Left . show) Right $
+    certifyProviderCallClosureAuthority uploadProviderCallExpectations base
+  pure (makeBranchResourceStageBundle authority base (Map.fromList
     [ (uploadReceiveSite, uploadReceiveContract)
     , (uploadDigestSite, uploadDigestContract)
     ]))
@@ -31,7 +37,9 @@ uploadBranchResourceStageBundle = do
 steveBranchResourceStageBundle :: Either String BranchResourceStageBundle
 steveBranchResourceStageBundle = do
   base <- steveAuthorityEffectStageBundle
-  pure (makeBranchResourceStageBundle base (Map.fromList
+  authority <- either (Left . show) Right $
+    certifyProviderCallClosureAuthority steveProviderCallExpectations base
+  pure (makeBranchResourceStageBundle authority base (Map.fromList
     [ (steveDigestComputeSite, steveDigestComputeContract)
     , (steveBlobInstallSite, steveBlobInstallContract)
     ]))

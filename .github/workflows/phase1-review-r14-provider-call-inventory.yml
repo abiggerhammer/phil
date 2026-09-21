@@ -6,8 +6,19 @@ on:
       - 'src/Phil/Core/ProviderQualification.hs'
       - 'src/Phil/Examples/Phase1/AuthorityEffectWitnesses.hs'
       - 'src/Phil/Examples/Phase1/ProviderCallWitnesses.hs'
+      - 'src/Phil/Examples/Phase1/BranchResourceWitnesses.hs'
+      - 'src/Phil/Examples/Phase1/StageClosureWitnesses.hs'
       - 'src/Phil/Systems/ProviderCallCorrespondence.hs'
       - 'src/Phil/Systems/AuthorityEffectCorrespondence.hs'
+      - 'src/Phil/Systems/BranchResourceFailure.hs'
+      - 'src/Phil/Systems/ControlStateProjection.hs'
+      - 'src/Phil/Systems/ProtocolStateCorrespondence.hs'
+      - 'src/Phil/Systems/BoundaryCommitCorrespondence.hs'
+      - 'src/Phil/Systems/StageClosure.hs'
+      - 'test/Phase1ReviewC1CumulativeProviderClosureMain.hs'
+      - 'test/Phase1BranchResourceFailureMain.hs'
+      - 'test/Phase1StageClosureMain.hs'
+      - 'docs/phase-1/review-r13-r14-cumulative-provider-closure-v1.md'
       - 'test/Phase1ReviewR19QualifiedEntryMain.hs'
       - 'docs/phase-1/review-r19-qualified-entry-correspondence-v1.md'
       - 'test/Phase1ReviewR14ProviderCallInventoryMain.hs'
@@ -21,8 +32,19 @@ on:
       - 'src/Phil/Core/ProviderQualification.hs'
       - 'src/Phil/Examples/Phase1/AuthorityEffectWitnesses.hs'
       - 'src/Phil/Examples/Phase1/ProviderCallWitnesses.hs'
+      - 'src/Phil/Examples/Phase1/BranchResourceWitnesses.hs'
+      - 'src/Phil/Examples/Phase1/StageClosureWitnesses.hs'
       - 'src/Phil/Systems/ProviderCallCorrespondence.hs'
       - 'src/Phil/Systems/AuthorityEffectCorrespondence.hs'
+      - 'src/Phil/Systems/BranchResourceFailure.hs'
+      - 'src/Phil/Systems/ControlStateProjection.hs'
+      - 'src/Phil/Systems/ProtocolStateCorrespondence.hs'
+      - 'src/Phil/Systems/BoundaryCommitCorrespondence.hs'
+      - 'src/Phil/Systems/StageClosure.hs'
+      - 'test/Phase1ReviewC1CumulativeProviderClosureMain.hs'
+      - 'test/Phase1BranchResourceFailureMain.hs'
+      - 'test/Phase1StageClosureMain.hs'
+      - 'docs/phase-1/review-r13-r14-cumulative-provider-closure-v1.md'
       - 'test/Phase1ReviewR19QualifiedEntryMain.hs'
       - 'docs/phase-1/review-r19-qualified-entry-correspondence-v1.md'
       - 'test/Phase1ReviewR14ProviderCallInventoryMain.hs'
@@ -45,6 +67,15 @@ jobs:
           cabal-version: 'latest'
       - name: Build complete Haskell substrate
         run: cabal build all --enable-tests
+      - name: Strict typecheck cumulative provider-closure regression
+        run: cabal exec -- ghc -Wall -Werror -fno-code -isrc test/Phase1ReviewC1CumulativeProviderClosureMain.hs
+      - name: Run cumulative provider-closure regression
+        run: cabal exec -- runghc -Wall -Werror -isrc test/Phase1ReviewC1CumulativeProviderClosureMain.hs
+      - name: Replay branch and final-stage closure controls
+        run: |
+          set -euo pipefail
+          cabal exec -- runghc -Wall -Werror -isrc test/Phase1BranchResourceFailureMain.hs
+          cabal exec -- runghc -Wall -Werror -isrc test/Phase1StageClosureMain.hs
       - name: Strict typecheck R19 qualified-entry regression
         run: cabal exec -- ghc -Wall -Werror -fno-code -isrc test/Phase1ReviewR19QualifiedEntryMain.hs
       - name: Run R19 qualified-entry regression

@@ -2,6 +2,9 @@
 
 module Phil.Systems.BranchResourceFailure
   ( BranchResourceStageRevision (..)
+  , ProviderCallClosureAuthority
+  , certifyProviderCallClosureAuthority
+  , providerCallClosureAuthorityRevision
   , BranchControlClass (..)
   , BranchOwnerFate (..)
   , BranchOutcomeContract (..)
@@ -19,6 +22,8 @@ import qualified Data.Set as Set
 import Data.Set (Set)
 import Data.Text (Text)
 import qualified Data.Text as Text
+import Phil.Assurance.Types (Digest (unDigest), digestText)
+import Phil.Core.ProviderQualification (ProviderOperationKey (..))
 import Phil.Core.Static
   ( SemanticForm (..)
   , canonicalSemanticForm
@@ -27,7 +32,7 @@ import Phil.Systems.AuthorityEffectCorrespondence
   ( AuthorityEffectStageBundle (..)
   , AuthorityEffectStageRevision (..)
   , AuthorityEffectStageVerificationError
-  , verifyAuthorityEffectStageBundle
+  , verifyAuthorityEffectStageBundleAgainst
   )
 import Phil.Systems.IR
 import Phil.Systems.Phase1Stage
@@ -35,10 +40,13 @@ import Phil.Systems.Phase1Stage
   , SystemsMechanismKey (..)
   )
 import Phil.Systems.ProviderCallCorrespondence
-  ( ProviderCallStageBundle (..)
+  ( ProviderCallExpectation (..)
+  , ProviderCallExpectationMap
+  , ProviderCallStageBundle (..)
   )
 import Phil.Systems.SubjectCorrespondence
   ( SubjectStageBundle (..)
+  , SubjectStageRevision (..)
   )
 import qualified SystemsControlPreservationKernel as Kernel
 
@@ -46,6 +54,47 @@ newtype BranchResourceStageRevision = BranchResourceStageRevision
   { unBranchResourceStageRevision :: Text
   }
   deriving (Eq, Ord, Show)
+
+-- | An independently supplied provider inventory checked against one exact
+-- Subject/Systems source. The constructor and all representation fields are
+-- private: a candidate cannot edit the accepted expectations in place.
+--
+-- The producer must derive expectations from source/Core correspondence, not
+-- from the candidate's links. This seals that authority; it does not prove the
+-- correctness of an arbitrary external expectation producer.
+data ProviderCallClosureAuthority = ProviderCallClosureAuthority
+  SubjectStageBundle ProviderCallExpectationMap
+  deriving (Eq, Show)
+
+certifyProviderCallClosureAuthority
+  :: ProviderCallExpectationMap
+  -> AuthorityEffectStageBundle
+  -> Either AuthorityEffectStageVerificationError ProviderCallClosureAuthority
+certifyProviderCallClosureAuthority expectations base = do
+  verifyAuthorityEffectStageBundleAgainst expectations base
+  Right (ProviderCallClosureAuthority (authoritySubjectStage base) expectations)
+
+-- | Commit to the source identity and every independent occurrence/operation
+-- expectation. Hash the canonical context to avoid copying its large source
+-- revision into every cumulative stage a second time. This identifier alone
+-- cannot construct an authority token.
+providerCallClosureAuthorityRevision :: ProviderCallClosureAuthority -> Text
+providerCallClosureAuthorityRevision (ProviderCallClosureAuthority source expectations) =
+  "phil.phase1.provider-call-closure-authority.sha256.v1:"
+    <> unDigest (digestText (canonicalSemanticForm (SemanticRecord (Map.fromList
+      [ ("subject_stage", SemanticAtom (unSubjectStageRevision (subjectStageRevision source)))
+      , ("expectations", SemanticRecord (Map.fromList
+          [ (unSystemsMechanismKey site, SemanticRecord (Map.fromList
+              [ ("occurrence", SemanticAtom (expectedProviderOccurrence expectation))
+              , ("operation", SemanticAtom
+                  (unProviderOperationKey (expectedProviderOperation expectation)))
+              ]))
+          | (site, expectation) <- Map.toAscList expectations
+          ]))
+      ]))))
+
+authoritySubjectStage :: AuthorityEffectStageBundle -> SubjectStageBundle
+authoritySubjectStage = providerCallStageBase . authorityEffectStageBase
 
 data BranchControlClass
   = BranchContinues
@@ -77,6 +126,7 @@ data BranchSiteContract = BranchSiteContract
 
 data BranchResourceStageBundle = BranchResourceStageBundle
   { branchResourceStageBase :: AuthorityEffectStageBundle
+  , branchResourceStageProviderAuthority :: ProviderCallClosureAuthority
   , branchResourceStageRevision :: BranchResourceStageRevision
   , branchResourceStageSites :: Map SystemsMechanismKey BranchSiteContract
   }
@@ -84,6 +134,7 @@ data BranchResourceStageBundle = BranchResourceStageBundle
 
 data BranchResourceStageVerificationError
   = BranchResourceBaseStageError AuthorityEffectStageVerificationError
+  | BranchResourceProviderAuthoritySourceMismatch SubjectStageRevision SubjectStageRevision
   | BranchResourceStageRevisionMismatch BranchResourceStageRevision BranchResourceStageRevision
   | BranchResourceSiteMapKeyMismatch SystemsMechanismKey SystemsMechanismKey
   | BranchResourceUnknownMechanism SystemsMechanismKey
@@ -108,11 +159,13 @@ deriveBranchResourceStageRevision
   :: BranchResourceStageBundle
   -> BranchResourceStageRevision
 deriveBranchResourceStageRevision bundle = BranchResourceStageRevision
-  ("phil.phase1.branch-resource-stage.canonical.v1:"
+  ("phil.phase1.branch-resource-stage.canonical.v2:"
     <> canonicalSemanticForm (SemanticRecord (Map.fromList
       [ ("base_stage", SemanticAtom
           (unAuthorityEffectStageRevision
             (authorityEffectStageRevision (branchResourceStageBase bundle))))
+      , ("provider_authority", SemanticAtom
+          (providerCallClosureAuthorityRevision (branchResourceStageProviderAuthority bundle)))
       , ("sites", SemanticRecord (Map.fromList
           [ (unSystemsMechanismKey key, semanticSite site)
           | (key, site) <- Map.toAscList (branchResourceStageSites bundle)
@@ -120,15 +173,17 @@ deriveBranchResourceStageRevision bundle = BranchResourceStageRevision
       ])))
 
 makeBranchResourceStageBundle
-  :: AuthorityEffectStageBundle
+  :: ProviderCallClosureAuthority
+  -> AuthorityEffectStageBundle
   -> Map SystemsMechanismKey BranchSiteContract
   -> BranchResourceStageBundle
-makeBranchResourceStageBundle base sites =
+makeBranchResourceStageBundle authority base sites =
   provisional
     { branchResourceStageRevision = deriveBranchResourceStageRevision provisional }
   where
     provisional = BranchResourceStageBundle
       { branchResourceStageBase = base
+      , branchResourceStageProviderAuthority = authority
       , branchResourceStageRevision = BranchResourceStageRevision "pending"
       , branchResourceStageSites = sites
       }
@@ -137,8 +192,19 @@ verifyBranchResourceStageBundle
   :: BranchResourceStageBundle
   -> Either BranchResourceStageVerificationError ()
 verifyBranchResourceStageBundle bundle = do
+  let ProviderCallClosureAuthority expectedSource expectations =
+        branchResourceStageProviderAuthority bundle
+      actualSource = authoritySubjectStage (branchResourceStageBase bundle)
+  -- Compare the complete source value, not just its claimed revision. A token
+  -- for another source cannot donate inventory authority to this candidate.
+  if expectedSource == actualSource
+    then Right ()
+    else Left (BranchResourceProviderAuthoritySourceMismatch
+      (subjectStageRevision expectedSource) (subjectStageRevision actualSource))
+  -- Every cumulative consumer reaches this mandatory full-coverage gate. The
+  -- opaque token supplies independent expectations, never the surviving links.
   mapLeft BranchResourceBaseStageError $
-    verifyAuthorityEffectStageBundle (branchResourceStageBase bundle)
+    verifyAuthorityEffectStageBundleAgainst expectations (branchResourceStageBase bundle)
   requireEqual BranchResourceStageRevisionMismatch
     (deriveBranchResourceStageRevision bundle)
     (branchResourceStageRevision bundle)
