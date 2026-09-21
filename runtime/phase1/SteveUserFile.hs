@@ -9,7 +9,7 @@ import qualified Data.ByteString as ByteString
 import Data.ByteString (ByteString)
 import System.Directory (removeFile, renameFile)
 import System.FilePath (takeDirectory, takeFileName)
-import System.IO (hClose, openBinaryTempFile)
+import System.IO (hClose, openBinaryTempFileWithDefaultPermissions)
 
 -- | Replace one host file without modifying the destination before the new
 -- bytes have been written and closed successfully.
@@ -32,7 +32,7 @@ stageAndPublish destination bytes =
   mask $ \restore -> do
     let directory = takeDirectory destination
         template = "." <> takeFileName destination <> ".steve-replace."
-    (temporary, handle) <- openBinaryTempFile directory template
+    (temporary, handle) <- openBinaryTempFileWithDefaultPermissions directory template
     let cleanup = do
           ignoreIOException (hClose handle)
           ignoreIOException (removeFile temporary)
