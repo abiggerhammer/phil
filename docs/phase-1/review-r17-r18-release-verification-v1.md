@@ -28,7 +28,8 @@ For both tar and ZIP packages it requires:
 - no absolute path, traversal component, empty component, or backslash path;
 - no duplicate canonical member path, regardless of member type;
 - ordinary directories only as non-file structure; and
-- regular files only for package contents.
+- regular files only for package contents; and
+- the packaged `bin/philc` must retain an executable mode.
 
 Tar hardlinks, symlinks, devices, FIFOs, and other special member types are
 rejected. ZIP entries whose Unix file type is not regular are rejected,
@@ -42,12 +43,13 @@ path on extraction.
 The permanent regression script contains:
 
 1. a baseline regular tar package-tree acceptance control;
-2. the audit's hardlink-replacement class at `pkg/bin/philc`;
-3. duplicate regular tar members;
-4. tar traversal;
-5. ZIP symlink;
-6. duplicate ZIP members; and
-7. ZIP traversal.
+2. non-executable compiler rejection;
+3. the audit's hardlink-replacement class at `pkg/bin/philc`;
+4. duplicate regular tar members;
+5. tar traversal;
+6. ZIP symlink;
+7. duplicate ZIP members; and
+8. ZIP traversal.
 
 This deliberately rejects ambiguous archive semantics rather than trying to
 model platform-dependent link extraction.
