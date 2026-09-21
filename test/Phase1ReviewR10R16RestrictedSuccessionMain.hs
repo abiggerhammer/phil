@@ -7,7 +7,7 @@ import qualified Data.Set as Set
 import Data.Text (Text)
 import Phil.Core.CheckedBindingMode
 import Phil.Core.ConcurrencyRendezvousCertification
-import Phil.Core.Context (ResourceContext)
+import Phil.Core.Context (ResourceContext (..))
 import Phil.Core.Generic
 import Phil.Core.Process
 import Phil.Core.ProcessActivation
