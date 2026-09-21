@@ -18,6 +18,7 @@ module Phil.Compiler
   ) where
 
 import Control.Monad (forM_, unless, when)
+import Data.Char (ord)
 import qualified Data.Map.Strict as Map
 import qualified Data.Set as Set
 import Data.Text (Text)
@@ -33,7 +34,7 @@ import Phil.Core.Scalar
 import Phil.Core.Static (emptyStaticContext)
 import Phil.Core.Syntax (Ty (TyUInt, TyUnit))
 import Phil.LLVM
-  ( LLVMArtifact
+  ( LLVMArtifact (llvmArtifactText)
   , LLVMTargetProfile (..)
   , LLVMVerificationContext (..)
   , LLVMVerificationError
@@ -200,6 +201,7 @@ compileRunnableForTarget target sourceName source = do
   let targetProfile = compilerTargetLLVMProfile target
       llvmArtifact = lowerSystemsConservative targetProfile systemsArtifact
       llvmContext = runnableLLVMContext systemsContext targetProfile
+  verifyConcreteRunnableLLVMNames (llvmArtifactText llvmArtifact)
   mapLeft RunnableLLVMVerificationError $
     verifyLLVMEmission llvmContext systemsArtifact llvmArtifact
   Right RunnableProgram
@@ -478,7 +480,332 @@ scalarIntegerLiteral scalarType value =
     ScalarBool -> fragment "boolean scalar lowering does not accept integer literals"
 
 sourceScalarValueId :: Text -> ValueId
-sourceScalarValueId name = ValueId ("source.value." <> name)
+sourceScalarValueId name =
+  ValueId ("source.value." <> encodeSourceIdentifierComponent name)
+
+-- | Injective ASCII encoding for one source identifier component.
+--
+-- The conservative LLVM renderer keeps its stable sanitizer for existing
+-- runtime/ABI spellings. Source identifiers therefore arrive at that boundary
+-- in a form for which the sanitizer is injective and legal.
+--
+-- ASCII letters and digits keep their spelling. Underscore doubles, so no raw
+-- source spelling can imitate the escape introducer. Every other Unicode code
+-- point is represented by its decimal scalar value between "_u" and "_".
+encodeSourceIdentifierComponent :: Text -> Text
+encodeSourceIdentifierComponent = Text.concatMap encodeCharacter
+  where
+    encodeCharacter character
+      | isASCIIAlphaNum character = Text.singleton character
+      | character == '_' = "__"
+      | otherwise = "_u" <> Text.pack (show (ord character)) <> "_"
+
+    isASCIIAlphaNum character =
+      ('a' <= character && character <= 'z')
+        || ('A' <= character && character <= 'Z')
+        || ('0' <= character && character <= '9')
+
+-- | Final concrete check for the ordinary public compiler path.
+--
+-- This deliberately inspects the rendered artifact rather than trusting only
+-- semantic identity proofs. The runnable fragment emits one function with no
+-- parameters, so every function-local definition is either an SSA assignment
+-- or a block label. Reject duplicate or illegal unquoted spellings before
+-- returning a compiled program.
+verifyConcreteRunnableLLVMNames :: Text -> Either RunnableCompileError ()
+verifyConcreteRunnableLLVMNames rendered = do
+  let names = concatMap renderedLocalDefinitions (Text.lines rendered)
+  forM_ names $ \name ->
+    unless (validLLVMUnquotedLocalName name) $
+      fragment ("renderer produced an illegal LLVM local identifier: " <> name)
+  case firstDuplicateLocalName Set.empty names of
+    Nothing -> Right ()
+    Just name -> fragment ("renderer produced a duplicate LLVM local identifier: " <> name)
+
+renderedLocalDefinitions :: Text -> [Text]
+renderedLocalDefinitions line =
+  let stripped = Text.strip line
+  in case Text.stripPrefix "%" stripped of
+      Just rest ->
+        let (name, suffix) = Text.breakOn " = " rest
+        in if Text.null suffix then [] else [name]
+      Nothing
+        | Text.isSuffixOf ":" stripped
+        , let name = Text.dropEnd 1 stripped
+        , not (Text.null name)
+        , Text.all validLLVMUnquotedLocalRest name
+        -> [name]
+        | otherwise -> []
+
+validLLVMUnquotedLocalName :: Text -> Bool
+validLLVMUnquotedLocalName name =
+  case Text.uncons name of
+    Nothing -> False
+    Just (first, rest) ->
+      validLLVMUnquotedLocalStart first && Text.all validLLVMUnquotedLocalRest rest
+
+validLLVMUnquotedLocalStart :: Char -> Bool
+validLLVMUnquotedLocalStart character =
+  ('a' <= character && character <= 'z')
+    || ('A' <= character && character <= 'Z')
+    || character == '-'
+    || character == '.'
+    || character == '
+defineNamedScalar
+  :: Text
+  -> ScalarLiteral
+  -> ScalarLowerState
+  -> Either RunnableCompileError ScalarLowerState
+defineNamedScalar name literal state = do
+  let valueId = sourceScalarValueId name
+  unless (Map.notMember valueId (scalarValues state)) $
+    fragment ("Systems scalar value identity is already defined: " <> name)
+  Right (appendScalarDefinition name valueId literal state)
+
+defineSyntheticScalar
+  :: ScalarLiteral
+  -> ScalarLowerState
+  -> Either RunnableCompileError (ScalarLowerState, ValueId)
+defineSyntheticScalar literal state =
+  let (valueId, nextIndex) = freshSyntheticValue state
+      advanced = state { scalarSyntheticIndex = nextIndex }
+      next = appendScalarDefinition "" valueId literal advanced
+  in Right (next, valueId)
+
+freshSyntheticValue :: ScalarLowerState -> (ValueId, Int)
+freshSyntheticValue state = choose (scalarSyntheticIndex state)
+  where
+    choose index =
+      let candidate = ValueId ("synthetic.return.value." <> Text.pack (show index))
+      in if Map.member candidate (scalarValues state)
+          then choose (index + 1)
+          else (candidate, index + 1)
+
+appendScalarDefinition
+  :: Text
+  -> ValueId
+  -> ScalarLiteral
+  -> ScalarLowerState
+  -> ScalarLowerState
+appendScalarDefinition sourceName valueId literal state = state
+  { scalarBindings =
+      if Text.null sourceName
+        then scalarBindings state
+        else Map.insert sourceName valueId (scalarBindings state)
+  , scalarValues = Map.insert valueId scalarValue (scalarValues state)
+  , scalarOperations = scalarOperations state <> [OpScalarLiteral valueId literal]
+  }
+  where
+    scalarValue = SystemsValue
+      { systemsValueId = valueId
+      , systemsValueRole = TypedScalar (scalarLiteralType literal)
+      , systemsStorageIdentity = Nothing
+      }
+
+verifySourceProjection
+  :: RunnableResult
+  -> Located Component
+  -> SystemsArtifact
+  -> Either SourceProjectionError ()
+verifySourceProjection result locatedComponent artifact = do
+  function <- requireProjectionMain artifact
+  blockValue <- requireProjectionEntryBlock function
+  case result of
+    RunnableUnit -> verifyUnitProjection function blockValue
+    RunnableScalar scalarType -> do
+      expected <- expectedScalarProjection
+        scalarType
+        (blockStatements (locatedValue (componentBody (locatedValue locatedComponent))))
+      verifyScalarProjection scalarType expected function blockValue
+
+requireProjectionMain :: SystemsArtifact -> Either SourceProjectionError SystemsFunction
+requireProjectionMain artifact =
+  case Map.toAscList (systemsProgramFunctions (systemsArtifactProgram artifact)) of
+    [("main", function)] -> Right function
+    entries -> Left (SourceProjectionFunctionSetMismatch (map fst entries))
+
+requireProjectionEntryBlock :: SystemsFunction -> Either SourceProjectionError SystemsBlock
+requireProjectionEntryBlock function =
+  case Map.toAscList (systemsFunctionBlocks function) of
+    [(blockId, blockValue)]
+      | blockId == systemsFunctionEntry function -> Right blockValue
+    entries -> Left (SourceProjectionBlockSetMismatch (map fst entries))
+
+verifyUnitProjection
+  :: SystemsFunction
+  -> SystemsBlock
+  -> Either SourceProjectionError ()
+verifyUnitProjection function blockValue = do
+  let scalarIds =
+        [ valueId
+        | (valueId, value) <- Map.toAscList (systemsFunctionValues function)
+        , TypedScalar _ <- [systemsValueRole value]
+        ]
+      definitions = scalarLiteralDefinitions blockValue
+  unless (null scalarIds && Map.null definitions) $
+    Left (SourceProjectionScalarValueSetMismatch [] scalarIds)
+  unless (systemsBlockTerminator blockValue == TermEnd "return-unit") $
+    Left (SourceProjectionUnitTerminatorMismatch (systemsBlockTerminator blockValue))
+
+verifyScalarProjection
+  :: ScalarType
+  -> ExpectedScalarProjection
+  -> SystemsFunction
+  -> SystemsBlock
+  -> Either SourceProjectionError ()
+verifyScalarProjection scalarType expected function blockValue = do
+  let definitions = scalarLiteralDefinitions blockValue
+      typedValues = Map.fromList
+        [ (valueId, actualType)
+        | (valueId, value) <- Map.toAscList (systemsFunctionValues function)
+        , TypedScalar actualType <- [systemsValueRole value]
+        ]
+      definitionIds = Map.keysSet definitions
+      typedIds = Map.keysSet typedValues
+  unless (definitionIds == typedIds) $
+    Left (SourceProjectionScalarValueSetMismatch
+      (Set.toAscList definitionIds)
+      (Set.toAscList typedIds))
+  forM_ (Map.toAscList typedValues) $ \(valueId, actualType) ->
+    unless (actualType == scalarType) $
+      Left (SourceProjectionScalarTypeMismatch valueId scalarType (Just actualType))
+  forM_ (Map.toAscList (expectedNamedLiterals expected)) $ \(valueId, expectedLiteral) ->
+    case Map.lookup valueId definitions of
+      Just actualLiteral | actualLiteral == expectedLiteral -> pure ()
+      actual -> Left (SourceProjectionNamedLiteralMismatch valueId expectedLiteral actual)
+  case expectedScalarReturn expected of
+    ExpectedReturnValue expectedValue -> do
+      unless (systemsBlockTerminator blockValue == TermReturnScalar expectedValue) $
+        Left (SourceProjectionReturnTargetMismatch
+          expectedValue
+          (systemsBlockTerminator blockValue))
+      rejectUnexpectedDefinitions
+        (Map.keysSet (expectedNamedLiterals expected))
+        definitions
+    ExpectedReturnLiteral expectedLiteral ->
+      case systemsBlockTerminator blockValue of
+        TermReturnScalar returnedValue -> do
+          case Map.lookup returnedValue definitions of
+            Just actualLiteral | actualLiteral == expectedLiteral -> pure ()
+            _ -> Left (SourceProjectionReturnLiteralMismatch
+              expectedLiteral
+              (systemsBlockTerminator blockValue))
+          let allowed = Set.insert returnedValue
+                (Map.keysSet (expectedNamedLiterals expected))
+          rejectUnexpectedDefinitions allowed definitions
+        other -> Left (SourceProjectionReturnLiteralMismatch expectedLiteral other)
+  where
+    rejectUnexpectedDefinitions allowed definitions =
+      case
+        [ (valueId, literal)
+        | (valueId, literal) <- Map.toAscList definitions
+        , Set.notMember valueId allowed
+        ] of
+          [] -> pure ()
+          (valueId, literal) : _ ->
+            Left (SourceProjectionUnexpectedLiteralDefinition valueId literal)
+
+scalarLiteralDefinitions :: SystemsBlock -> Map.Map ValueId ScalarLiteral
+scalarLiteralDefinitions blockValue = Map.fromList
+  [ (output, literal)
+  | OpScalarLiteral output literal <- systemsBlockOps blockValue
+  ]
+
+expectedScalarProjection
+  :: ScalarType
+  -> [Located Statement]
+  -> Either SourceProjectionError ExpectedScalarProjection
+expectedScalarProjection scalarType = go Map.empty Map.empty
+  where
+    go _ _ [] = unsupported "scalar source projection has no return"
+    go bindings definitions (statement : rest) =
+      case locatedValue statement of
+        LetStatement patternValue expression ->
+          case locatedValue patternValue of
+            TuplePattern _ -> unsupported "scalar source projection does not support tuple bindings"
+            BindPattern name -> do
+              when (Map.member name bindings) $
+                unsupported ("duplicate scalar source binding: " <> name)
+              case locatedValue expression of
+                IntegerExpression value -> do
+                  literal <- projectionIntegerLiteral scalarType value
+                  let valueId = sourceScalarValueId name
+                  go
+                    (Map.insert name valueId bindings)
+                    (Map.insert valueId literal definitions)
+                    rest
+                VariableExpression source ->
+                  case Map.lookup source bindings of
+                    Nothing -> unsupported ("unknown scalar source alias: " <> source)
+                    Just sourceValue ->
+                      go (Map.insert name sourceValue bindings) definitions rest
+                _ -> unsupported "unsupported scalar source binding expression"
+        ReturnStatement expression -> do
+          unless (null rest) $
+            unsupported "scalar source return is not final"
+          expectedReturn <- case locatedValue expression of
+            VariableExpression name ->
+              case Map.lookup name bindings of
+                Nothing -> unsupported ("unknown scalar source return: " <> name)
+                Just valueId -> Right (ExpectedReturnValue valueId)
+            IntegerExpression value ->
+              ExpectedReturnLiteral <$> projectionIntegerLiteral scalarType value
+            _ -> unsupported "unsupported scalar source return expression"
+          Right ExpectedScalarProjection
+            { expectedNamedLiterals = definitions
+            , expectedScalarReturn = expectedReturn
+            }
+        ExpressionStatement _ ->
+          unsupported "unsupported scalar source expression statement"
+
+projectionIntegerLiteral
+  :: ScalarType
+  -> Integer
+  -> Either SourceProjectionError ScalarLiteral
+projectionIntegerLiteral scalarType value = case scalarType of
+  ScalarUInt width ->
+    let literal = ScalarUIntLiteral width value
+    in if scalarLiteralInRange literal
+        then Right literal
+        else unsupported "scalar source literal is outside its mathematical range"
+  ScalarBool -> unsupported "boolean source projection does not accept integer literals"
+
+unsupported :: Text -> Either SourceProjectionError a
+unsupported = Left . SourceProjectionUnsupportedSource
+
+runnableLLVMContext
+  :: SystemsVerificationContext
+  -> LLVMTargetProfile
+  -> LLVMVerificationContext
+runnableLLVMContext systemsContext target = LLVMVerificationContext
+  { llvmSystemsContext = systemsContext
+  , llvmExpectedLanguageVersion = llvmTargetLanguageVersion target
+  , llvmExpectedToolVersion = llvmTargetToolVersion target
+  , llvmExpectedTargetTriple = llvmTargetTripleName target
+  , llvmExpectedDataLayout = llvmTargetDataLayout target
+  , llvmExpectedRuntimeABIDigest = llvmTargetRuntimeABIDigest target
+  , llvmExpectedRuntimeABIProfile = llvmTargetRuntimeABIProfile target
+  , llvmAuthorizedStrengthenings = Map.empty
+  }
+
+fragment :: Text -> Either RunnableCompileError a
+fragment = Left . RunnableFragmentError
+
+mapLeft :: (left -> mapped) -> Either left right -> Either mapped right
+mapLeft transform = either (Left . transform) Right
+
+    || character == '_'
+
+validLLVMUnquotedLocalRest :: Char -> Bool
+validLLVMUnquotedLocalRest character =
+  validLLVMUnquotedLocalStart character
+    || ('0' <= character && character <= '9')
+
+firstDuplicateLocalName :: Set.Set Text -> [Text] -> Maybe Text
+firstDuplicateLocalName _ [] = Nothing
+firstDuplicateLocalName seen (name : rest)
+  | Set.member name seen = Just name
+  | otherwise = firstDuplicateLocalName (Set.insert name seen) rest
 
 defineNamedScalar
   :: Text
