@@ -98,6 +98,7 @@ if [[ "$(uname -s)" == "Linux" ]]; then
     echo 'Steve replacement left a staged temporary file after failure' >&2
     exit 1
   fi
+  printf 'PASS: PHIL-AUD-STEVE-REPLACE-001 packaged GET preserves prior state on write failure\n'
 fi
 
 printf 'must survive corrupt GET\n' > "$work/user-files/guard.bin"
