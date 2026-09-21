@@ -135,7 +135,7 @@ staleEndpointRejects = do
       (fixtureReplyTransfer fx)
       (fixtureEvidence fx) of
     Left (ConcurrencyRendezvousNativeError
-      (RendezvousEndpointNotOwnedByProcess process name)) ->
+      (RendezvousProtocolError process (ProtocolEndpointUnknown name))) ->
         assert (process == fixtureServerProcess fx && name == serverEndpoint)
           "stale restricted endpoint rejection lost exact server/name identity"
     other -> Left ("stale restricted successor endpoint was accepted: " <> show other)
@@ -411,7 +411,7 @@ payloadArgument = ProtocolMessageArgument
   }
 
 payloadTy :: Ty
-payloadTy = TyUInt 8
+payloadTy = TyOpaque "OwnedPayload"
 
 payloadSemantics :: SemanticForm
 payloadSemantics = SemanticAtom "message.review.r10-r16.payload"
