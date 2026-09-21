@@ -1,0 +1,81 @@
+name: Phase 1 Surface Refinement Binder Scope Proofs
+
+on:
+  pull_request:
+    paths:
+      - 'proof/Phil/Core/BindingSemantics.v'
+      - 'proof/Phil/Surface/SurfaceBinderScopeCore.v'
+      - 'proof/Phil/Surface/SurfaceRefinementBinderScope.v'
+      - 'src/Phil/Surface/GrammarV1/SemanticRefinementType.hs'
+      - 'src/Phil/Surface/GrammarV1/SemanticCheckedType.hs'
+      - 'src/Phil/Surface/GrammarV1/LexicalReferenceScope.hs'
+      - 'test/Phase1GrammarV1IntrinsicRefinementTypeElaborationMain.hs'
+      - 'docs/phase-1/surface-refinement-binder-scope-proof-v1.md'
+      - '.github/workflows/phase1-surface-refinement-binder-scope-proofs.yml'
+  push:
+    branches: [main]
+    paths:
+      - 'proof/Phil/Core/BindingSemantics.v'
+      - 'proof/Phil/Surface/SurfaceBinderScopeCore.v'
+      - 'proof/Phil/Surface/SurfaceRefinementBinderScope.v'
+      - 'src/Phil/Surface/GrammarV1/SemanticRefinementType.hs'
+      - 'src/Phil/Surface/GrammarV1/SemanticCheckedType.hs'
+      - 'src/Phil/Surface/GrammarV1/LexicalReferenceScope.hs'
+      - 'test/Phase1GrammarV1IntrinsicRefinementTypeElaborationMain.hs'
+      - 'docs/phase-1/surface-refinement-binder-scope-proof-v1.md'
+      - '.github/workflows/phase1-surface-refinement-binder-scope-proofs.yml'
+
+permissions:
+  contents: read
+
+jobs:
+  rocq-surface-refinement-binder-scope:
+    runs-on: ubuntu-latest
+    container:
+      image: rocq/rocq-prover:9.2.0
+      options: --user root
+    steps:
+      - uses: actions/checkout@v4
+      - name: Compile Surface refinement binder scope proof
+        shell: bash
+        run: |
+          set -euo pipefail
+          export PATH="/home/rocq/.opam/${COMPILER}/bin:$PATH"
+          rocq c -Q proof/Phil Phil proof/Phil/Core/BindingSemantics.v
+          rocq c -Q proof/Phil Phil proof/Phil/Surface/SurfaceBinderScopeCore.v
+          rocq c -Q proof/Phil Phil proof/Phil/Surface/SurfaceRefinementBinderScope.v
+          sha256sum \
+            proof/Phil/Surface/SurfaceRefinementBinderScope.v \
+            proof/Phil/Surface/SurfaceRefinementBinderScope.vo \
+            > surface-refinement-binder-scope-proof.sha256
+          cat surface-refinement-binder-scope-proof.sha256
+      - uses: actions/upload-artifact@v4
+        with:
+          name: surface-refinement-binder-scope-proof
+          path: surface-refinement-binder-scope-proof.sha256
+          if-no-files-found: error
+
+  verify-surface-refinement-binder-scope:
+    needs: rocq-surface-refinement-binder-scope
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: haskell-actions/setup@v2
+        with:
+          ghc-version: '9.6.7'
+          cabal-version: 'latest'
+      - name: Build complete Haskell substrate
+        run: cabal build all --enable-tests
+      - name: Strict typecheck refinement binder authorities
+        run: |
+          set -euo pipefail
+          for module in \
+            src/Phil/Surface/GrammarV1/SemanticRefinementType.hs \
+            src/Phil/Surface/GrammarV1/SemanticCheckedType.hs \
+            src/Phil/Surface/GrammarV1/LexicalReferenceScope.hs \
+            test/Phase1GrammarV1IntrinsicRefinementTypeElaborationMain.hs
+          do
+            cabal exec -- ghc -isrc -Wall -Werror -fno-code "$module"
+          done
+      - name: Replay SURF-009 semantic refinement binder corpus
+        run: cabal exec -- runghc -Wall -Werror -isrc test/Phase1GrammarV1IntrinsicRefinementTypeElaborationMain.hs
