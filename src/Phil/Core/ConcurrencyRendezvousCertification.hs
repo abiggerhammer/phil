@@ -21,6 +21,7 @@ module Phil.Core.ConcurrencyRendezvousCertification
   , CertifiedRendezvousResult
   , certifiedRendezvousState
   , certifiedRendezvousCausality
+  , certifiedRendezvousActivationMatches
   , ConcurrencyRendezvousCertificationError (..)
   , certifyRendezvousActivation
   , certifyRendezvousProtocol
@@ -417,12 +418,19 @@ certifyRestrictedProcessRendezvousSuccessor
   certifyAcceptedRendezvous
     activation protocol beforeState afterState request (Just transfer) evidence
 
+certifiedRendezvousActivationMatches
+  :: CertifiedRendezvousActivation
+  -> CertifiedRendezvousResult
+  -> Bool
+certifiedRendezvousActivationMatches activation predecessor =
+  certifiedRendezvousActivationAuthority predecessor == activation
+
 requireActivationLineage
   :: CertifiedRendezvousActivation
   -> CertifiedRendezvousResult
   -> Either ConcurrencyRendezvousCertificationError ()
 requireActivationLineage activation predecessor
-  | certifiedRendezvousActivationAuthority predecessor == activation = Right ()
+  | certifiedRendezvousActivationMatches activation predecessor = Right ()
   | otherwise = Left ConcurrencyRendezvousActivationLineageMismatch
 
 certifyAcceptedRendezvous
