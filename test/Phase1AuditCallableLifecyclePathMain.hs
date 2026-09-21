@@ -29,6 +29,7 @@ import Phil.Core.Callable
   , CallableContract (..)
   , CallableInvocationBodySummary (..)
   , CallableOccurrence (..)
+  , ClosureCaptureSummary
   , CallableOccurrenceKey (..)
   , CallableResourceState (..)
   , CallableStateKey (..)
@@ -291,6 +292,7 @@ contracts = Map.fromList
   , (observeDeclKey, semanticContract observeContract)
   ]
 
+emptyCaptures :: ClosureCaptureSummary
 emptyCaptures = case checkClosureCaptures [] of
   Right value -> value
   Left errorValue -> error (show errorValue)
