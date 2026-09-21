@@ -100,8 +100,8 @@ def hardlink_replacement_rejects(tmp: Path) -> None:
 def tar_duplicate_regular_rejects(tmp: Path) -> None:
     archive = tmp / "duplicate.tar.gz"
     with tarfile.open(archive, "w:gz") as tf:
-        add_tar_file(tf, "pkg/bin/philc", b"one")
-        add_tar_file(tf, "pkg/bin/philc", b"two")
+        add_tar_file(tf, "pkg/README.md", b"one")
+        add_tar_file(tf, "pkg/README.md", b"two")
     expect_error(
         "duplicate canonical tar path rejects",
         lambda: bundle.read_archive_tree(archive),
@@ -137,8 +137,8 @@ def zip_symlink_rejects(tmp: Path) -> None:
 def zip_duplicate_rejects(tmp: Path) -> None:
     archive = tmp / "duplicate.zip"
     with zipfile.ZipFile(archive, "w") as zf:
-        zf.writestr("pkg/bin/philc", b"one")
-        zf.writestr("pkg/bin/philc", b"two")
+        zf.writestr("pkg/README.md", b"one")
+        zf.writestr("pkg/README.md", b"two")
     expect_error(
         "duplicate canonical zip path rejects",
         lambda: bundle.read_archive_tree(archive),
