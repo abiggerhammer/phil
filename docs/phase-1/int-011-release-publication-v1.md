@@ -139,11 +139,23 @@ If `phil-v0.1.0-phase1` already exists:
 
 - a different tag commit is a hard failure and requires a new package version;
 - the exact published asset-name set must still match;
-- the existing published release bundle and its checksum are verified;
-- its machine-readable source commit must still equal the tag commit.
+- **all eleven published assets are downloaded** rather than trusting their
+  names or comparing them with freshly rebuilt signed artifacts;
+- both platform archive/checksum pairs and both external release-binding pairs
+  are reverified from the preserved published bytes;
+- archive shape is required to be canonical: one safe root, no duplicate
+  canonical path, and no links or special members;
+- each package `SHA256SUMS`, internal distribution release, compiler digest,
+  frozen handoff digest, archive binding, and Darwin notarization-info JSON are
+  revalidated;
+- the downloaded top-level bundle checksum is verified and the bundle is
+  reconstructed from those verified preserved assets; the downloaded bundle
+  must match that canonical reconstruction byte-for-byte.
 
 A later workflow run may build fresh staging evidence, but it cannot replace the
-published signed artifacts merely because the source commit is unchanged.
+published signed artifacts merely because the source commit is unchanged. The
+immutable-rerun branch therefore validates the preserved publication record
+against itself rather than requiring timestamped rebuilds to be byte-identical.
 
 ## INT-011 exit condition
 

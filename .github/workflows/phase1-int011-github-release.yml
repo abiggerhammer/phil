@@ -16,6 +16,8 @@ on:
       - 'scripts/release/notarize-darwin-archive.sh'
       - 'scripts/release/smoke-phil-phase1-package.sh'
       - 'scripts/release/compose-phil-phase1-release-bundle.py'
+      - 'scripts/release/test-phase1-release-bundle-verifier.py'
+      - 'docs/phase-1/review-r17-r18-release-verification-v1.md'
       - 'handoff/phase1/manifest-v1.tsv'
       - 'docs/tutorials/tour-phase1.md'
       - 'docs/phase-1/surface-grammar-v1.md'
@@ -34,6 +36,8 @@ on:
       - 'scripts/release/notarize-darwin-archive.sh'
       - 'scripts/release/smoke-phil-phase1-package.sh'
       - 'scripts/release/compose-phil-phase1-release-bundle.py'
+      - 'scripts/release/test-phase1-release-bundle-verifier.py'
+      - 'docs/phase-1/review-r17-r18-release-verification-v1.md'
       - 'handoff/phase1/manifest-v1.tsv'
       - 'docs/tutorials/tour-phase1.md'
       - 'docs/phase-1/surface-grammar-v1.md'
@@ -308,6 +312,7 @@ jobs:
         run: |
           set -euo pipefail
           python3 -m py_compile scripts/release/compose-phil-phase1-release-bundle.py
+          python3 scripts/release/test-phase1-release-bundle-verifier.py
           mkdir -p release-assets
           bundle="release-assets/phil-${PACKAGE_VERSION}.release-bundle"
           python3 scripts/release/compose-phil-phase1-release-bundle.py \
@@ -346,6 +351,11 @@ jobs:
             sha256sum -c "$darwin.release.sha256"
             sha256sum -c "phil-${PACKAGE_VERSION}.release-bundle.sha256"
           )
+
+          python3 scripts/release/compose-phil-phase1-release-bundle.py \
+            --source-commit "$GITHUB_SHA" \
+            --version "$PACKAGE_VERSION" \
+            --verify-existing-dir release-assets
 
       - name: Write final Phase-1 release notes
         shell: bash
@@ -437,6 +447,8 @@ jobs:
     permissions:
       contents: write
     steps:
+      - uses: actions/checkout@v4
+
       - uses: actions/download-artifact@v4
         with:
           name: phil-phase1-github-release-bundle
@@ -487,17 +499,14 @@ jobs:
               mkdir -p existing-release
               gh release download "$RELEASE_TAG" \
                 --repo "$GITHUB_REPOSITORY" \
-                --pattern "$bundle" \
-                --pattern "$bundle.sha256" \
                 --dir existing-release
-              (
-                cd existing-release
-                sha256sum -c "$bundle.sha256"
-                grep -q '^PHIL-PHASE1-DISTRIBUTION-BUNDLE-V1$' "$bundle"
-                grep -q "^source[[:space:]]commit=$GITHUB_SHA$" "$bundle"
-              )
 
-              echo "Immutable release $RELEASE_TAG already published and verified from this exact commit."
+              python3 "$GITHUB_WORKSPACE/scripts/release/compose-phil-phase1-release-bundle.py" \
+                --source-commit "$GITHUB_SHA" \
+                --version "$PACKAGE_VERSION" \
+                --verify-existing-dir "$PWD/existing-release"
+
+              echo "Immutable release $RELEASE_TAG already published; all preserved assets verified against its canonical bundle."
               exit 0
             fi
 

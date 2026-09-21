@@ -8,6 +8,7 @@ import hashlib
 import json
 from pathlib import Path
 import re
+import stat
 import tarfile
 import zipfile
 
@@ -270,41 +271,121 @@ def verify_checksum_sidecar(sidecar: Path, payload: Path) -> None:
         raise BundleError(f"checksum mismatch for {payload.name}")
 
 
-def read_archive_files(archive: Path) -> dict[str, bytes]:
-    wanted_suffixes = {
-        "/share/phil/phil.release-package": "release",
-        "/share/phil/phase1-handoff-manifest-v1.tsv": "handoff",
-        "/bin/philc": "compiler",
-        "/SHA256SUMS": "manifest",
-    }
-    found: dict[str, bytes] = {}
+def canonical_archive_name(name: str, *, is_dir: bool) -> str:
+    if not name or "\\x00" in name or "\\\\" in name:
+        raise BundleError(f"unsafe archive member path: {name!r}")
+    if name.startswith("/"):
+        raise BundleError(f"absolute archive member path: {name!r}")
 
-    def accept(name: str, data: bytes) -> None:
-        normalized = "/" + name.lstrip("./")
-        for suffix, key in wanted_suffixes.items():
-            if normalized.endswith(suffix):
-                if key in found:
-                    raise BundleError(f"duplicate {key} member in {archive.name}")
-                found[key] = data
+    while name.startswith("./"):
+        name = name[2:]
+    if is_dir:
+        name = name.rstrip("/")
+
+    parts = name.split("/")
+    if not name or any(part in {"", ".", ".."} for part in parts):
+        raise BundleError(f"non-canonical archive member path: {name!r}")
+    return "/".join(parts)
+
+
+def read_archive_tree(archive: Path) -> tuple[str, dict[str, bytes]]:
+    """Return the exact accepted regular-file tree after rejecting ambiguity.
+
+    Accepted packages contain one canonical package root, ordinary directories,
+    and regular files only. Duplicate canonical paths are rejected regardless
+    of member type, so a later link/special member cannot replace bytes that
+    were verified earlier.
+    """
+
+    files: dict[str, bytes] = {}
+    seen: set[str] = set()
+    roots: set[str] = set()
+
+    def note_member(name: str, *, is_dir: bool, data: bytes | None) -> None:
+        canonical = canonical_archive_name(name, is_dir=is_dir)
+        if canonical in seen:
+            raise BundleError(
+                f"{archive.name} contains duplicate canonical member: {canonical}"
+            )
+        seen.add(canonical)
+        root, separator, relative = canonical.partition("/")
+        roots.add(root)
+        if is_dir:
+            return
+        if not separator or not relative:
+            raise BundleError(
+                f"{archive.name} regular file is not beneath package root: {canonical}"
+            )
+        if data is None:
+            raise BundleError(f"cannot read {canonical}")
+        files[relative] = data
 
     if archive.name.endswith(".tar.gz"):
         with tarfile.open(archive, "r:gz") as tf:
             for member in tf.getmembers():
-                if not member.isfile():
+                if member.isdir():
+                    note_member(member.name, is_dir=True, data=None)
                     continue
+                if not member.isfile():
+                    raise BundleError(
+                        f"{archive.name} contains unsupported tar member "
+                        f"{member.name!r} type={member.type!r}"
+                    )
+                canonical = canonical_archive_name(member.name, is_dir=False)
+                if canonical.endswith("/bin/philc") and not (member.mode & 0o111):
+                    raise BundleError(
+                        f"{archive.name} compiler member is not executable: {canonical}"
+                    )
                 extracted = tf.extractfile(member)
-                if extracted is not None:
-                    accept(member.name, extracted.read())
+                if extracted is None:
+                    raise BundleError(f"cannot read {member.name}")
+                note_member(member.name, is_dir=False, data=extracted.read())
     elif archive.name.endswith(".zip"):
         with zipfile.ZipFile(archive) as zf:
             for info in zf.infolist():
                 if info.is_dir():
+                    note_member(info.filename, is_dir=True, data=None)
                     continue
-                accept(info.filename, zf.read(info))
+
+                unix_mode = (info.external_attr >> 16) & 0xFFFF
+                file_type = stat.S_IFMT(unix_mode)
+                if file_type not in (0, stat.S_IFREG):
+                    raise BundleError(
+                        f"{archive.name} contains unsupported zip member "
+                        f"{info.filename!r} mode={oct(unix_mode)}"
+                    )
+                canonical = canonical_archive_name(info.filename, is_dir=False)
+                if canonical.endswith("/bin/philc") and not (unix_mode & 0o111):
+                    raise BundleError(
+                        f"{archive.name} compiler member is not executable: {canonical}"
+                    )
+                note_member(info.filename, is_dir=False, data=zf.read(info))
     else:
         raise BundleError(f"unsupported release archive: {archive.name}")
 
-    missing = set(wanted_suffixes.values()) - set(found)
+    if len(roots) != 1:
+        raise BundleError(
+            f"{archive.name} does not have exactly one package root: {sorted(roots)}"
+        )
+    if not files:
+        raise BundleError(f"{archive.name} contains no regular package files")
+    return next(iter(roots)), files
+
+
+def read_archive_files(archive: Path) -> dict[str, bytes]:
+    wanted_paths = {
+        "share/phil/phil.release-package": "release",
+        "share/phil/phase1-handoff-manifest-v1.tsv": "handoff",
+        "bin/philc": "compiler",
+        "SHA256SUMS": "manifest",
+    }
+    _, tree = read_archive_tree(archive)
+    found = {
+        key: tree[path]
+        for path, key in wanted_paths.items()
+        if path in tree
+    }
+    missing = set(wanted_paths.values()) - set(found)
     if missing:
         raise BundleError(f"{archive.name} missing package members: {sorted(missing)}")
     return found
@@ -321,47 +402,29 @@ def verify_package_manifest(archive: Path, manifest_bytes: bytes) -> None:
         path = parts[1].lstrip("*")
         if path.startswith("./"):
             path = path[2:]
-        if not path or path in listed:
-            raise BundleError(f"duplicate/blank SHA256SUMS path in {archive.name}: {path!r}")
-        listed[path] = parts[0]
+        canonical = canonical_archive_name(path, is_dir=False)
+        if canonical in listed:
+            raise BundleError(
+                f"duplicate SHA256SUMS path in {archive.name}: {canonical!r}"
+            )
+        listed[canonical] = parts[0]
 
-    actual: dict[str, str] = {}
-    if archive.name.endswith(".tar.gz"):
-        with tarfile.open(archive, "r:gz") as tf:
-            regular = [m for m in tf.getmembers() if m.isfile()]
-            roots = {m.name.split("/", 1)[0] for m in regular}
-            if len(roots) != 1:
-                raise BundleError(f"{archive.name} does not have one package root")
-            root = next(iter(roots))
-            for member in regular:
-                rel = member.name[len(root) + 1 :]
-                if rel == "SHA256SUMS":
-                    continue
-                extracted = tf.extractfile(member)
-                if extracted is None:
-                    raise BundleError(f"cannot read {member.name}")
-                actual[rel] = sha256_bytes(extracted.read())
-    else:
-        with zipfile.ZipFile(archive) as zf:
-            regular = [i for i in zf.infolist() if not i.is_dir()]
-            roots = {i.filename.split("/", 1)[0] for i in regular}
-            if len(roots) != 1:
-                raise BundleError(f"{archive.name} does not have one package root")
-            root = next(iter(roots))
-            for info in regular:
-                rel = info.filename[len(root) + 1 :]
-                if rel == "SHA256SUMS":
-                    continue
-                actual[rel] = sha256_bytes(zf.read(info))
+    _, tree = read_archive_tree(archive)
+    actual = {
+        path: sha256_bytes(data)
+        for path, data in tree.items()
+        if path != "SHA256SUMS"
+    }
 
     if actual != listed:
-        missing = sorted(set(actual) - set(listed))
-        extra = sorted(set(listed) - set(actual))
+        unlisted = sorted(set(actual) - set(listed))
+        missing = sorted(set(listed) - set(actual))
         drift = sorted(
             path for path in set(actual) & set(listed) if actual[path] != listed[path]
         )
         raise BundleError(
-            f"{archive.name} SHA256SUMS mismatch: unlisted={missing}, missing={extra}, drift={drift}"
+            f"{archive.name} SHA256SUMS mismatch: "
+            f"unlisted={unlisted}, missing={missing}, drift={drift}"
         )
 
 
@@ -512,17 +575,89 @@ def render_bundle(
     )
 
 
+def verify_existing_release(
+    directory: Path,
+    *,
+    source_commit: str,
+    version: str,
+) -> None:
+    bundle = directory / f"phil-{version}.release-bundle"
+    bundle_sha = directory / f"phil-{version}.release-bundle.sha256"
+    for path in [bundle, bundle_sha]:
+        if not path.is_file():
+            raise BundleError(f"missing published release input: {path}")
+    verify_checksum_sidecar(bundle_sha, bundle)
+
+    linux_archive = f"phil-{version}-x86_64-linux.tar.gz"
+    darwin_archive = f"phil-{version}-aarch64-apple-darwin.zip"
+    linux = platform_record(
+        directory,
+        linux_archive,
+        LINUX_TARGET,
+        source_commit,
+        version,
+    )
+    darwin = platform_record(
+        directory,
+        darwin_archive,
+        DARWIN_TARGET,
+        source_commit,
+        version,
+        notarization=directory / f"{darwin_archive}.notary-info.json",
+    )
+    if linux["handoff_sha256"] != darwin["handoff_sha256"]:
+        raise BundleError(
+            "published Linux and Darwin distributions bind different Phase-1 handoff roots"
+        )
+
+    expected = render_bundle(
+        source_commit,
+        version,
+        linux["handoff_sha256"],
+        [linux, darwin],
+    )
+    actual = bundle.read_text(encoding="utf-8")
+    if actual != expected:
+        raise BundleError(
+            "published release bundle does not exactly bind the downloaded platform assets"
+        )
+
+    print(f"verified_existing_release={directory}")
+    print(f"bundle_sha256={sha256_file(bundle)}")
+    print(f"linux_archive_sha256={linux['archive_sha256']}")
+    print(f"darwin_archive_sha256={darwin['archive_sha256']}")
+    print(f"darwin_notarization_id={darwin['notarization_id']}")
+
+
 def main() -> int:
     parser = argparse.ArgumentParser()
     parser.add_argument("--source-commit", required=True)
     parser.add_argument("--version", default="0.1.0-phase1")
-    parser.add_argument("--linux-dir", required=True)
-    parser.add_argument("--darwin-dir", required=True)
-    parser.add_argument("--output", required=True)
+    parser.add_argument("--linux-dir")
+    parser.add_argument("--darwin-dir")
+    parser.add_argument("--output")
+    parser.add_argument("--verify-existing-dir")
     args = parser.parse_args()
 
     if not COMMIT_RE.fullmatch(args.source_commit):
         raise BundleError(f"invalid source commit: {args.source_commit}")
+
+    if args.verify_existing_dir:
+        if args.linux_dir or args.darwin_dir or args.output:
+            raise BundleError(
+                "--verify-existing-dir cannot be combined with compose output arguments"
+            )
+        verify_existing_release(
+            Path(args.verify_existing_dir),
+            source_commit=args.source_commit,
+            version=args.version,
+        )
+        return 0
+
+    if not args.linux_dir or not args.darwin_dir or not args.output:
+        raise BundleError(
+            "composition requires --linux-dir, --darwin-dir, and --output"
+        )
 
     linux_dir = Path(args.linux_dir)
     darwin_dir = Path(args.darwin_dir)
