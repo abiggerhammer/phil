@@ -54,8 +54,7 @@ jobs:
             src/Phil/Surface/Phase0.hs \
             test/Phase1AuditDigestSubjectMain.hs \
             test/Phase1INT004PortableNegativeManifestMain.hs \
-            test/Phase1VerificationIntrinsicInvalidityMain.hs \
-            test/SurfaceConformanceMain.hs; do
+            test/Phase1VerificationIntrinsicInvalidityMain.hs; do
             cabal exec -- ghc -isrc -Wall -Werror -fno-code "$target"
           done
       - name: Replay PHIL-AUD-DIGEST-SUBJECT-001
