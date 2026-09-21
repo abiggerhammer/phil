@@ -31,10 +31,16 @@ def expect_error(label: str, action, needle: str) -> None:
     raise AssertionError(f"{label}: verifier accepted malformed archive")
 
 
-def add_tar_file(tf: tarfile.TarFile, name: str, data: bytes) -> None:
+def add_tar_file(
+    tf: tarfile.TarFile,
+    name: str,
+    data: bytes,
+    *,
+    mode: int = 0o644,
+) -> None:
     info = tarfile.TarInfo(name)
     info.size = len(data)
-    info.mode = 0o644
+    info.mode = mode
     tf.addfile(info, io.BytesIO(data))
 
 
@@ -49,7 +55,7 @@ def make_baseline_tar(path: Path) -> None:
         bin_dir.mode = 0o755
         tf.addfile(bin_dir)
         add_tar_file(tf, "pkg/README.md", b"readme\n")
-        add_tar_file(tf, "pkg/bin/philc", b"compiler\n")
+        add_tar_file(tf, "pkg/bin/philc", b"compiler\n", mode=0o755)
 
 
 def baseline_accepts(tmp: Path) -> None:
@@ -64,11 +70,22 @@ def baseline_accepts(tmp: Path) -> None:
     print("PASS: baseline regular tar tree accepts")
 
 
+def non_executable_compiler_rejects(tmp: Path) -> None:
+    archive = tmp / "non-executable.tar.gz"
+    with tarfile.open(archive, "w:gz") as tf:
+        add_tar_file(tf, "pkg/bin/philc", b"compiler\n", mode=0o644)
+    expect_error(
+        "non-executable compiler member rejects",
+        lambda: bundle.read_archive_tree(archive),
+        "compiler member is not executable",
+    )
+
+
 def hardlink_replacement_rejects(tmp: Path) -> None:
     archive = tmp / "hardlink.tar.gz"
     with tarfile.open(archive, "w:gz") as tf:
         add_tar_file(tf, "pkg/README.md", b"readme\n")
-        add_tar_file(tf, "pkg/bin/philc", b"compiler\n")
+        add_tar_file(tf, "pkg/bin/philc", b"compiler\n", mode=0o755)
         link = tarfile.TarInfo("pkg/bin/philc")
         link.type = tarfile.LNKTYPE
         link.linkname = "pkg/README.md"
@@ -144,6 +161,7 @@ def main() -> int:
     with tempfile.TemporaryDirectory(prefix="phil-release-verifier-") as raw:
         tmp = Path(raw)
         baseline_accepts(tmp)
+        non_executable_compiler_rejects(tmp)
         hardlink_replacement_rejects(tmp)
         tar_duplicate_regular_rejects(tmp)
         tar_traversal_rejects(tmp)
