@@ -13,6 +13,8 @@ on:
       - 'test/Phase1ReviewR1LLVMNamesMain.hs'
       - 'test/RunnableMain.hs'
       - 'docs/phase-1/review-r01-target-identity-proof-boundary-v1.md'
+      - 'docs/phase-1/review-r01-concrete-identifier-remediation-v1.md'
+      - 'scripts/ci/resolve-llvm18.sh'
       - '.github/workflows/phase1-review-r01-target-identity-proofs.yml'
   push:
     branches: [main]
@@ -77,3 +79,57 @@ jobs:
         run: cabal exec -- runghc -isrc -Wall -Werror test/Phase1ReviewR1LLVMNamesMain.hs
       - name: Replay ordinary runnable projection regression
         run: cabal exec -- runghc -isrc -Wall -Werror test/RunnableMain.hs
+      - name: Resolve LLVM 18 assembler
+        shell: bash
+        run: |
+          set -euo pipefail
+          PHIL_LLVM18_TOOLS="llvm-as"
+          source scripts/ci/resolve-llvm18.sh
+          echo "LLVM_AS=$LLVM_AS" >> "$GITHUB_ENV"
+      - name: Assemble adversarial public-compiler outputs
+        shell: bash
+        run: |
+          set -euo pipefail
+          PHILC="$(cabal list-bin philc)"
+          work="$(mktemp -d)"
+          trap 'rm -rf "$work"' EXIT
+
+          cat >"$work/apostrophe-underscore.phil" <<'EOF'
+          component main provides U32 {
+            let x' = 1
+            let x_ = 2
+            return x_
+          }
+          EOF
+          cat >"$work/cafe.phil" <<'EOF'
+          component main provides U32 {
+            let café = 7
+            return café
+          }
+          EOF
+          cat >"$work/alpha.phil" <<'EOF'
+          component main provides U32 {
+            let α = 9
+            return α
+          }
+          EOF
+          cat >"$work/escape-looking.phil" <<'EOF'
+          component main provides U32 {
+            let x' = 1
+            let x_u39_ = 2
+            return x_u39_
+          }
+          EOF
+          cat >"$work/generated-lookalike.phil" <<'EOF'
+          component main provides U32 {
+            let synthetic_return_value_0 = 4
+            return 5
+          }
+          EOF
+
+          for source in "$work"/*.phil; do
+            ll="${source%.phil}.ll"
+            bc="${source%.phil}.bc"
+            "$PHILC" emit-llvm --target x86_64-unknown-linux-gnu "$source" >"$ll"
+            "$LLVM_AS" "$ll" -o "$bc"
+          done

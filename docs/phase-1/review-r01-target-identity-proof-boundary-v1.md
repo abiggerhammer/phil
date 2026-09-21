@@ -6,10 +6,10 @@ The aggregate proof composes the existing Surface→Systems exact value-identity
 
 The concrete compiler correspondence remains executable:
 
-- source bindings lower through `source.value.<name>` Systems ValueIds and render as `%source_value_<name>`;
+- source bindings lower through `source.value.<encoded-name>` Systems ValueIds, where the source-name component is injectively ASCII-encoded before the stable LLVM sanitizer, and render in the `%source_value_...` namespace;
 - direct-return temporaries lower through `synthetic.return.value.<n>` and render as `%synthetic_return_value_<n>`;
 - blocks remain typed BlockIds and render in the block-label namespace (for the runnable path, `block_entry:`).
 
-The permanent R01 regression deliberately uses hostile source spellings such as `return_value_0` and `entry` to pressure source/synthetic and value/block collisions.
+The permanent R01 regression deliberately uses hostile source spellings including `return_value_0`, `entry`, apostrophe versus underscore, Unicode identifiers, escape-looking spellings, and generated-temporary lookalikes.
 
-Concrete Text escaping/sanitization, Systems/LLVM container representation, renderer correctness, GHC/runtime correctness, and LLVM toolchain behavior remain explicit implementation boundaries.
+The follow-up implementation remediation adds a concrete post-render check for duplicate or illegal unquoted local definitions on the public runnable compiler path, and the permanent workflow assembles the adversarial outputs with the project-resolved LLVM 18 assembler. The proof theorem itself is unchanged: concrete Text encoding, renderer correctness, GHC/runtime correctness, and LLVM toolchain behavior remain implementation/tool boundaries rather than retroactively becoming proof claims.

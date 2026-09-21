@@ -18,6 +18,7 @@ module Phil.Compiler
   ) where
 
 import Control.Monad (forM_, unless, when)
+import Data.Char (ord)
 import qualified Data.Map.Strict as Map
 import qualified Data.Set as Set
 import Data.Text (Text)
@@ -33,7 +34,7 @@ import Phil.Core.Scalar
 import Phil.Core.Static (emptyStaticContext)
 import Phil.Core.Syntax (Ty (TyUInt, TyUnit))
 import Phil.LLVM
-  ( LLVMArtifact
+  ( LLVMArtifact (llvmArtifactText)
   , LLVMTargetProfile (..)
   , LLVMVerificationContext (..)
   , LLVMVerificationError
@@ -200,6 +201,7 @@ compileRunnableForTarget target sourceName source = do
   let targetProfile = compilerTargetLLVMProfile target
       llvmArtifact = lowerSystemsConservative targetProfile systemsArtifact
       llvmContext = runnableLLVMContext systemsContext targetProfile
+  verifyConcreteRunnableLLVMNames (llvmArtifactText llvmArtifact)
   mapLeft RunnableLLVMVerificationError $
     verifyLLVMEmission llvmContext systemsArtifact llvmArtifact
   Right RunnableProgram
@@ -478,7 +480,82 @@ scalarIntegerLiteral scalarType value =
     ScalarBool -> fragment "boolean scalar lowering does not accept integer literals"
 
 sourceScalarValueId :: Text -> ValueId
-sourceScalarValueId name = ValueId ("source.value." <> name)
+sourceScalarValueId name =
+  ValueId ("source.value." <> encodeSourceIdentifierComponent name)
+
+-- | Injective ASCII encoding for one source identifier component.
+--
+-- The conservative LLVM renderer keeps its stable sanitizer for existing
+-- runtime/ABI spellings. Source identifiers therefore arrive at that boundary
+-- in a form for which the sanitizer is injective and legal.
+--
+-- ASCII letters and digits keep their spelling. Underscore doubles, so no raw
+-- source spelling can imitate the escape introducer. Every other Unicode code
+-- point is represented by its decimal scalar value between "_u" and "_".
+encodeSourceIdentifierComponent :: Text -> Text
+encodeSourceIdentifierComponent = Text.concatMap encodeCharacter
+  where
+    encodeCharacter character
+      | isASCIIAlphaNum character = Text.singleton character
+      | character == '_' = "__"
+      | otherwise = "_u" <> Text.pack (show (ord character)) <> "_"
+
+    isASCIIAlphaNum character =
+      ('a' <= character && character <= 'z')
+        || ('A' <= character && character <= 'Z')
+        || ('0' <= character && character <= '9')
+
+-- | Final concrete check for the ordinary public compiler path.
+verifyConcreteRunnableLLVMNames :: Text -> Either RunnableCompileError ()
+verifyConcreteRunnableLLVMNames rendered = do
+  let names = concatMap renderedLocalDefinitions (Text.lines rendered)
+  forM_ names $ \name ->
+    unless (validLLVMUnquotedLocalName name) $
+      fragment ("renderer produced an illegal LLVM local identifier: " <> name)
+  case firstDuplicateLocalName Set.empty names of
+    Nothing -> Right ()
+    Just name -> fragment ("renderer produced a duplicate LLVM local identifier: " <> name)
+
+renderedLocalDefinitions :: Text -> [Text]
+renderedLocalDefinitions line =
+  let stripped = Text.strip line
+  in case Text.stripPrefix "%" stripped of
+      Just rest ->
+        let (name, suffix) = Text.breakOn " = " rest
+        in if Text.null suffix then [] else [name]
+      Nothing
+        | Text.isSuffixOf ":" stripped
+        , let name = Text.dropEnd 1 stripped
+        , not (Text.null name)
+        -> [name]
+        | otherwise -> []
+
+validLLVMUnquotedLocalName :: Text -> Bool
+validLLVMUnquotedLocalName name =
+  case Text.uncons name of
+    Nothing -> False
+    Just (first, rest) ->
+      validLLVMUnquotedLocalStart first && Text.all validLLVMUnquotedLocalRest rest
+
+validLLVMUnquotedLocalStart :: Char -> Bool
+validLLVMUnquotedLocalStart character =
+  ('a' <= character && character <= 'z')
+    || ('A' <= character && character <= 'Z')
+    || character == '-'
+    || character == '.'
+    || character == '$'
+    || character == '_'
+
+validLLVMUnquotedLocalRest :: Char -> Bool
+validLLVMUnquotedLocalRest character =
+  validLLVMUnquotedLocalStart character
+    || ('0' <= character && character <= '9')
+
+firstDuplicateLocalName :: Set.Set Text -> [Text] -> Maybe Text
+firstDuplicateLocalName _ [] = Nothing
+firstDuplicateLocalName seen (name : rest)
+  | Set.member name seen = Just name
+  | otherwise = firstDuplicateLocalName (Set.insert name seen) rest
 
 defineNamedScalar
   :: Text
