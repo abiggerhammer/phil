@@ -83,3 +83,75 @@ Theorem convenience_writes_introduce_no_post_predecessor_rejection :
   decideWriteUTF8ByFacts true = UTF8CompositionAccepted /\
   decideWriteLineByFacts true = UTF8CompositionAccepted.
 Proof. split; reflexivity. Qed.
+
+Theorem read_utf8_predecessor_rejected_iff :
+  forall predecessorAccepted providerSucceeded decodeSucceeded,
+    decideReadUTF8ByFacts
+      predecessorAccepted providerSucceeded decodeSucceeded =
+      UTF8ReadPredecessorRejected <->
+    predecessorAccepted = false.
+Proof.
+  intros predecessorAccepted providerSucceeded decodeSucceeded.
+  destruct predecessorAccepted, providerSucceeded, decodeSucceeded;
+    cbn; intuition discriminate.
+Qed.
+
+Theorem read_utf8_decoded_iff :
+  forall predecessorAccepted providerSucceeded decodeSucceeded,
+    decideReadUTF8ByFacts
+      predecessorAccepted providerSucceeded decodeSucceeded =
+      UTF8ReadDecoded <->
+    predecessorAccepted = true /\
+    providerSucceeded = true /\
+    decodeSucceeded = true.
+Proof.
+  intros predecessorAccepted providerSucceeded decodeSucceeded.
+  destruct predecessorAccepted, providerSucceeded, decodeSucceeded;
+    cbn; intuition discriminate.
+Qed.
+
+Theorem read_utf8_decode_failed_iff :
+  forall predecessorAccepted providerSucceeded decodeSucceeded,
+    decideReadUTF8ByFacts
+      predecessorAccepted providerSucceeded decodeSucceeded =
+      UTF8ReadDecodeFailed <->
+    predecessorAccepted = true /\
+    providerSucceeded = true /\
+    decodeSucceeded = false.
+Proof.
+  intros predecessorAccepted providerSucceeded decodeSucceeded.
+  destruct predecessorAccepted, providerSucceeded, decodeSucceeded;
+    cbn; intuition discriminate.
+Qed.
+
+Theorem read_utf8_provider_failed_iff :
+  forall predecessorAccepted providerSucceeded decodeSucceeded,
+    decideReadUTF8ByFacts
+      predecessorAccepted providerSucceeded decodeSucceeded =
+      UTF8ReadProviderFailed <->
+    predecessorAccepted = true /\ providerSucceeded = false.
+Proof.
+  intros predecessorAccepted providerSucceeded decodeSucceeded.
+  destruct predecessorAccepted, providerSucceeded, decodeSucceeded;
+    cbn; intuition discriminate.
+Qed.
+
+Theorem write_utf8_accepts_iff_predecessor :
+  forall predecessorAccepted,
+    decideWriteUTF8ByFacts predecessorAccepted =
+      UTF8CompositionAccepted <->
+    predecessorAccepted = true.
+Proof.
+  intros predecessorAccepted.
+  destruct predecessorAccepted; cbn; intuition discriminate.
+Qed.
+
+Theorem write_line_accepts_iff_predecessor :
+  forall predecessorAccepted,
+    decideWriteLineByFacts predecessorAccepted =
+      UTF8CompositionAccepted <->
+    predecessorAccepted = true.
+Proof.
+  intros predecessorAccepted.
+  destruct predecessorAccepted; cbn; intuition discriminate.
+Qed.
