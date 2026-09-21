@@ -1,0 +1,90 @@
+name: Phase 1 Audit Digest Subject Proofs
+
+on:
+  pull_request:
+    paths:
+      - 'proof/Phil/Surface/DigestSubjectCorrespondence.v'
+      - 'proof/Phil/Surface/DigestSubjectCorrespondenceExtraction.v'
+      - 'app/DigestSubjectDecisionCorrespondenceMain.hs'
+      - 'docs/phase-1/audit-digest-subject-proof-remediation-v1.md'
+      - 'test/Phase1AuditDigestSubjectMain.hs'
+      - '.github/workflows/phase1-audit-digest-subject-proofs.yml'
+  push:
+    branches: [main]
+    paths:
+      - 'proof/Phil/Surface/DigestSubjectCorrespondence.v'
+      - 'proof/Phil/Surface/DigestSubjectCorrespondenceExtraction.v'
+      - 'app/DigestSubjectDecisionCorrespondenceMain.hs'
+      - 'docs/phase-1/audit-digest-subject-proof-remediation-v1.md'
+      - 'test/Phase1AuditDigestSubjectMain.hs'
+      - '.github/workflows/phase1-audit-digest-subject-proofs.yml'
+
+permissions:
+  contents: read
+
+jobs:
+  rocq-digest-subject-proof:
+    runs-on: ubuntu-latest
+    container:
+      image: rocq/rocq-prover:9.2.0
+      options: --user root
+    steps:
+      - uses: actions/checkout@v4
+      - name: Compile digest-subject correspondence and extract kernel
+        shell: bash
+        run: |
+          set -euo pipefail
+          export PATH="/home/rocq/.opam/${COMPILER}/bin:$PATH"
+          rocq c -Q proof/Phil Phil proof/Phil/Surface/DigestSubjectCorrespondence.v
+          rm -f SurfaceDigestSubjectKernel.hs
+          rocq c -Q proof/Phil Phil proof/Phil/Surface/DigestSubjectCorrespondenceExtraction.v
+          test -s SurfaceDigestSubjectKernel.hs
+      - name: Record exact proof and kernel identities
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p digest-subject-proof
+          cp \
+            proof/Phil/Surface/DigestSubjectCorrespondence.v \
+            proof/Phil/Surface/DigestSubjectCorrespondence.vo \
+            SurfaceDigestSubjectKernel.hs \
+            digest-subject-proof/
+          sha256sum \
+            digest-subject-proof/DigestSubjectCorrespondence.v \
+            digest-subject-proof/DigestSubjectCorrespondence.vo \
+            digest-subject-proof/SurfaceDigestSubjectKernel.hs \
+            > digest-subject-proof/PHIL-AUD-DIGEST-SUBJECT-001.proof.sha256
+          cat digest-subject-proof/PHIL-AUD-DIGEST-SUBJECT-001.proof.sha256
+      - uses: actions/upload-artifact@v4
+        with:
+          name: rocq-digest-subject-proof
+          path: digest-subject-proof
+          if-no-files-found: error
+
+  verify-digest-subject-correspondence:
+    needs: rocq-digest-subject-proof
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: haskell-actions/setup@v2
+        with:
+          ghc-version: '9.6.7'
+          cabal-version: 'latest'
+      - name: Build Haskell substrate
+        run: cabal build all --enable-tests
+      - uses: actions/download-artifact@v4
+        with:
+          name: rocq-digest-subject-proof
+          path: digest-subject-proof
+      - name: Compile and execute extracted-kernel controls
+        run: |
+          set -euo pipefail
+          cp digest-subject-proof/SurfaceDigestSubjectKernel.hs .
+          cabal exec -- ghc -i. -Wall -Werror -fno-code SurfaceDigestSubjectKernel.hs
+          cabal exec -- ghc -i. -Wall -Werror -fno-code app/DigestSubjectDecisionCorrespondenceMain.hs
+          cabal exec -- runghc -Wall -Werror -i. app/DigestSubjectDecisionCorrespondenceMain.hs
+          sha256sum SurfaceDigestSubjectKernel.hs
+      - name: Replay repaired public digest-subject corpus
+        run: cabal exec -- runghc -isrc -Wall -Werror test/Phase1AuditDigestSubjectMain.hs
+      - name: Replay frozen Surface conformance controls
+        run: cabal test phil-surface-conformance-tests --test-show-details=direct
