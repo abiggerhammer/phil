@@ -1,0 +1,78 @@
+name: Phase 1 Audit Steve Replace
+
+on:
+  pull_request:
+    paths:
+      - 'runtime/phase1/StevePublicMain.hs'
+      - 'runtime/phase1/SteveUserFile.hs'
+      - 'test/Phase1AuditSteveReplaceWorker.hs'
+      - 'scripts/ci/test-steve-replace-failure.sh'
+      - 'scripts/release/build-steve-phase1-package.sh'
+      - 'scripts/release/smoke-steve-phase1-package.sh'
+      - 'docs/phase-1/audit-steve-replace-remediation-v1.md'
+      - '.github/workflows/phase1-audit-steve-replace.yml'
+  push:
+    branches: [main]
+    paths:
+      - 'runtime/phase1/StevePublicMain.hs'
+      - 'runtime/phase1/SteveUserFile.hs'
+      - 'test/Phase1AuditSteveReplaceWorker.hs'
+      - 'scripts/ci/test-steve-replace-failure.sh'
+      - 'scripts/release/build-steve-phase1-package.sh'
+      - 'scripts/release/smoke-steve-phase1-package.sh'
+      - 'docs/phase-1/audit-steve-replace-remediation-v1.md'
+      - '.github/workflows/phase1-audit-steve-replace.yml'
+
+permissions:
+  contents: read
+
+jobs:
+  steve-replace-regression:
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: haskell-actions/setup@v2
+        with:
+          ghc-version: '9.6.7'
+          cabal-version: 'latest'
+
+      - name: Build complete Haskell substrate
+        run: cabal build all --enable-tests
+
+      - name: Strict typecheck public host adapter and failure worker
+        run: |
+          set -euo pipefail
+          cabal exec -- ghc -iruntime/phase1 -package directory -package unix \
+            -Wall -Werror -fno-code runtime/phase1/SteveUserFile.hs
+          cabal exec -- ghc -iruntime/phase1 -package directory -package unix \
+            -Wall -Werror -fno-code test/Phase1AuditSteveReplaceWorker.hs
+
+      - name: Replay helper failure-preservation regressions
+        run: bash scripts/ci/test-steve-replace-failure.sh
+
+      - name: Build public Steve package
+        run: |
+          set -euo pipefail
+          out="$RUNNER_TEMP/phil-audit-steve-replace"
+          mkdir -p "$out"
+          scripts/release/build-steve-phase1-package.sh "$out"
+
+      - name: Replay R01-R03 through packaged bin/steve
+        run: |
+          set -euo pipefail
+          out="$RUNNER_TEMP/phil-audit-steve-replace"
+          archive="$out/phil-steve-0.1.0-phase1-x86_64-linux.tar.gz"
+          consumer="$RUNNER_TEMP/phil-audit-steve-replace-consumer"
+          rm -rf "$consumer"
+          mkdir -p "$consumer"
+          tar -xzf "$archive" -C "$consumer"
+          package="$consumer/phil-steve-0.1.0-phase1-x86_64-linux"
+          (
+            cd "$package"
+            ./smoke-test.sh
+          ) | tee "$out/smoke-evidence.txt"
+          grep -q '^PASS: PHIL-AUD-STEVE-REPLACE-001 packaged GET preserves prior state on write failure$' \
+            "$out/smoke-evidence.txt"
+          grep -q '^PASS: packaged Phase-1 Steve put/get and corruption smoke$' \
+            "$out/smoke-evidence.txt"
