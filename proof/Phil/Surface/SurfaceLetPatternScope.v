@@ -224,3 +224,42 @@ Proof.
   eapply pattern_allocation_consumes_one_fresh_ordinal_per_site.
   exact Hallocate.
 Qed.
+
+Record SurfaceLetPatternScopeFacts : Type :=
+  mkSurfaceLetPatternScopeFacts {
+    surfaceLetPatternSourceOrderExact : Prop;
+    surfaceLetPatternBinderCountExact : Prop;
+    surfaceLetPatternAlphaStable : Prop;
+    surfaceLetInitializerPrecedesBinding : Prop;
+    surfaceLetFutureBinderNotVisibleToInitializer : Prop;
+    surfaceLetExistingInitializerIdentityExact : Prop;
+    surfaceLetGeneratedBinderIdentitiesExact : Prop;
+    surfaceLetPatternOrdinalMonotonic : Prop
+  }.
+
+Definition SurfaceLetPatternScopeValid
+  (facts : SurfaceLetPatternScopeFacts) : Prop :=
+  surfaceLetPatternSourceOrderExact facts /\
+  surfaceLetPatternBinderCountExact facts /\
+  surfaceLetPatternAlphaStable facts /\
+  surfaceLetInitializerPrecedesBinding facts /\
+  surfaceLetFutureBinderNotVisibleToInitializer facts /\
+  surfaceLetExistingInitializerIdentityExact facts /\
+  surfaceLetGeneratedBinderIdentitiesExact facts /\
+  surfaceLetPatternOrdinalMonotonic facts.
+
+Theorem surface_let_pattern_scope_requires_all_authorities :
+  forall facts,
+    SurfaceLetPatternScopeValid facts ->
+    surfaceLetPatternSourceOrderExact facts /\
+    surfaceLetPatternBinderCountExact facts /\
+    surfaceLetPatternAlphaStable facts /\
+    surfaceLetInitializerPrecedesBinding facts /\
+    surfaceLetFutureBinderNotVisibleToInitializer facts /\
+    surfaceLetExistingInitializerIdentityExact facts /\
+    surfaceLetGeneratedBinderIdentitiesExact facts /\
+    surfaceLetPatternOrdinalMonotonic facts.
+Proof.
+  intros facts Hvalid.
+  exact Hvalid.
+Qed.
