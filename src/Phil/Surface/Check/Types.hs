@@ -100,10 +100,10 @@ data FieldInfo = FieldInfo
 data SurfaceShape
   = PlainShape
   | RecordShape Text (Map Text FieldInfo)
-  | OwnedBytesShape RefTerm
+  | OwnedBytesShape RefTerm (Maybe RefTerm)
   | PendingRawShape PendingRawView
   | LegacyRawShape GrammarId FrameId
-  | BorrowedViewShape Name
+  | BorrowedViewShape Name (Maybe RefTerm)
   | ParsedShape ParsedWitness Text
   | LegacyParsedShape GrammarId FrameId Text
   | ExternalParsedShape Text FrameId

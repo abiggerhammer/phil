@@ -1,0 +1,67 @@
+name: Phase 1 Audit Digest Subject
+
+on:
+  pull_request:
+    paths:
+      - 'src/Phil/Surface/Check/Engine.hs'
+      - 'src/Phil/Surface/Check/Support.hs'
+      - 'src/Phil/Surface/Check/Types.hs'
+      - 'src/Phil/Surface/Phase0.hs'
+      - 'src/Phil/Verification.hs'
+      - 'test/Phase1AuditDigestSubjectMain.hs'
+      - 'test/Phase1INT004PortableNegativeManifestMain.hs'
+      - 'test/Phase1VerificationIntrinsicInvalidityMain.hs'
+      - 'test/SurfaceConformanceMain.hs'
+      - 'docs/phase-1/audit-digest-subject-remediation-v1.md'
+      - '.github/workflows/phase1-audit-digest-subject.yml'
+  push:
+    branches: [main]
+    paths:
+      - 'src/Phil/Surface/Check/Engine.hs'
+      - 'src/Phil/Surface/Check/Support.hs'
+      - 'src/Phil/Surface/Check/Types.hs'
+      - 'src/Phil/Surface/Phase0.hs'
+      - 'src/Phil/Verification.hs'
+      - 'test/Phase1AuditDigestSubjectMain.hs'
+      - 'test/Phase1INT004PortableNegativeManifestMain.hs'
+      - 'test/Phase1VerificationIntrinsicInvalidityMain.hs'
+      - 'test/SurfaceConformanceMain.hs'
+      - 'docs/phase-1/audit-digest-subject-remediation-v1.md'
+      - '.github/workflows/phase1-audit-digest-subject.yml'
+
+permissions:
+  contents: read
+
+jobs:
+  digest-subject-regression:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: haskell-actions/setup@v2
+        with:
+          ghc-version: '9.6.7'
+          cabal-version: 'latest'
+      - name: Build complete Haskell substrate
+        run: cabal build all --enable-tests
+      - name: Strict typecheck audit and affected consumers
+        shell: bash
+        run: |
+          set -euo pipefail
+          for target in \
+            src/Phil/Surface/Check/Types.hs \
+            src/Phil/Surface/Check/Support.hs \
+            src/Phil/Surface/Check/Engine.hs \
+            src/Phil/Surface/Phase0.hs \
+            test/Phase1AuditDigestSubjectMain.hs \
+            test/Phase1INT004PortableNegativeManifestMain.hs \
+            test/Phase1VerificationIntrinsicInvalidityMain.hs; do
+            cabal exec -- ghc -isrc -Wall -Werror -fno-code "$target"
+          done
+      - name: Replay PHIL-AUD-DIGEST-SUBJECT-001
+        run: cabal exec -- runghc -isrc -Wall -Werror test/Phase1AuditDigestSubjectMain.hs
+      - name: Replay intrinsic invalidity controls
+        run: cabal exec -- runghc -isrc -Wall -Werror test/Phase1VerificationIntrinsicInvalidityMain.hs
+      - name: Replay frozen Surface conformance controls
+        run: cabal test phil-surface-conformance-tests --test-show-details=direct
+      - name: Replay portable negative manifest consumer
+        run: cabal exec -- runghc -isrc -Wall -Werror test/Phase1INT004PortableNegativeManifestMain.hs

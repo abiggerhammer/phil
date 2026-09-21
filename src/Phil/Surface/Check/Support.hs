@@ -253,7 +253,7 @@ resolveSurfaceType environment state surfaceTy =
           (stateCore state)
           SortNat
           (rewriteRefTerm state raw)
-      Right (Linear, TyBytes index, OwnedBytesShape index)
+      Right (Linear, TyBytes index, OwnedBytesShape index Nothing)
     SurfaceNamedType "StoreCap" _ -> opaque Affine
     SurfaceNamedType "CancelScope" _ -> opaque Linear
     SurfaceNamedType "CancelCap" _ -> opaque Affine
@@ -288,7 +288,7 @@ stripRefinement ty = ty
 shapeForType :: Ty -> SurfaceShape
 shapeForType ty = case stripRefinement ty of
   TyFrame (GrammarId grammar) -> recordShape grammar Nothing
-  TyBytes index -> OwnedBytesShape index
+  TyBytes index -> OwnedBytesShape index Nothing
   _ -> PlainShape
 
 shapeForBinding :: Text -> SurfaceShape -> SurfaceShape
@@ -300,6 +300,10 @@ shapeForBinding name shape = case shape of
         Nothing -> info
           { fieldAlias = Just (RefField (RefVar (Name name)) field (fieldSort info))
           }
+  OwnedBytesShape index Nothing ->
+    OwnedBytesShape index
+      (Just (RefOpaque (SortStableId "OwnedBytes") name))
+  OwnedBytesShape index stable -> OwnedBytesShape index stable
   other -> other
 
 recordShape :: Text -> Maybe Text -> SurfaceShape
@@ -390,7 +394,7 @@ rewriteRefTerm state = go Set.empty
 fieldAliasFor :: Text -> BindingMeta -> Maybe RefTerm
 fieldAliasFor field meta = case bindingShape meta of
   RecordShape _ fields -> Map.lookup field fields >>= fieldAlias
-  OwnedBytesShape _ -> Nothing
+  OwnedBytesShape _ _ -> Nothing
   _ -> Nothing
 
 elaborationEnv :: SurfaceEnvironment -> SurfaceState -> ElaborationEnv
@@ -405,7 +409,7 @@ elaborationEnv environment state =
         [ ([name, fieldName], fieldSort info)
         | (fieldName, info) <- Map.toList fields
         ]
-      OwnedBytesShape _ ->
+      OwnedBytesShape _ _ ->
         [ ([name, "length"], SortUInt 64)
         , ([name, "kind"], SortEnum "PayloadKind")
         , ([name, "id"], SortStableId "OwnedBytes")
@@ -455,11 +459,11 @@ readField environment state whole base field = do
     LegacyParsedShape _ _ grammar
       | field == "value" -> semanticValue grammar
     ExternalParsedShape grammar _ -> semanticField grammar
-    OwnedBytesShape _ -> ownedBytesField
+    OwnedBytesShape _ _ -> ownedBytesField
     FixtureRawShape _ -> rawFailure
     LegacyRawShape _ _ -> rawFailure
     PendingRawShape _ -> rawFailure
-    BorrowedViewShape _ -> rawFailure
+    BorrowedViewShape _ _ -> rawFailure
     _ -> case grammarOfTy (scalarType baseScalar) of
       Just grammar -> semanticField grammar
       Nothing -> throw whole IllegalProjection "value has no declared structured fields"

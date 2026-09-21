@@ -267,7 +267,7 @@ opaqueProofEnvironment base = base
       [ ("begin", unrestricted (TyFrame (GrammarId "Begin")) (recordBegin "begin"))
       , ("payload", InitialBinding Linear
           (TyOpaqueSorted "OwnedPayload" (SortOpaque "OwnedPayload"))
-          (OwnedBytesShape (RefNat 0)))
+          (OwnedBytesShape (RefNat 0) Nothing))
       ]
   }
 
@@ -365,7 +365,7 @@ ownedPayload :: Text -> InitialBinding
 ownedPayload name =
   let lengthUInt = RefField (RefVar (Name name)) "length" (SortUInt 64)
       index = RefToNat lengthUInt
-  in InitialBinding Linear (TyBytes index) (OwnedBytesShape index)
+  in InitialBinding Linear (TyBytes index) (OwnedBytesShape index Nothing)
 
 payloadReleaseTransition :: ReleaseTransitionContract
 payloadReleaseTransition = ReleaseTransitionContract
