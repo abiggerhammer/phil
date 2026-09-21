@@ -927,7 +927,7 @@ evalBorrow environment state located ownerExpression viewName body = do
           "borrow requires an affine or linear owner"
   withView <- insertBindingMeta (locatedSpan located) viewName
     (BindingMeta Unrestricted (scalarType view) (scalarShape view)) loaned
-  bodyPaths <- checkValueBlock environment withView body
+  bodyPaths <- checkScopedValueBlock environment state withView body
   mapM (finish ownerName) bodyPaths
   where
     finish owner path
