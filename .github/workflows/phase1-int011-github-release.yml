@@ -36,6 +36,8 @@ on:
       - 'scripts/release/notarize-darwin-archive.sh'
       - 'scripts/release/smoke-phil-phase1-package.sh'
       - 'scripts/release/compose-phil-phase1-release-bundle.py'
+      - 'scripts/release/test-phase1-release-bundle-verifier.py'
+      - 'docs/phase-1/review-r17-r18-release-verification-v1.md'
       - 'handoff/phase1/manifest-v1.tsv'
       - 'docs/tutorials/tour-phase1.md'
       - 'docs/phase-1/surface-grammar-v1.md'
