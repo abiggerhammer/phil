@@ -82,6 +82,8 @@ import Phil.Core.Value
   , checkValueUsing
   , compareTypes
   )
+import Phil.Surface.Check.DigestSubjectCertification
+  ( certifyDigestSubject )
 import Phil.Surface.Check.Support
 import Phil.Surface.Check.Types
 import Phil.Surface.Elaborate
@@ -733,7 +735,15 @@ evalValidate environment state located claim context subject
         Just _ -> throw located TypeMismatch
           "DigestMatches does not accept an explicit context locator"
         Nothing -> Right ()
-      proposition <- digestMatchesForSubject subject
+      (beginName, stableOwner) <- digestMatchesForSubject subject
+      (certifiedBegin, certifiedOwner) <-
+        case certifyDigestSubject beginName stableOwner of
+          Right pair -> Right pair
+          Left errorValue -> throw located TypeMismatch
+            ("DigestMatches subject correspondence kernel disagreement: "
+              <> Text.pack (show errorValue))
+      let proposition =
+            Atom "DigestMatches" [RefVar certifiedBegin, certifiedOwner]
       decision (DigestDecision proposition)
   | otherwise = do
       contextName <- case context of
@@ -769,7 +779,7 @@ evalValidate environment state located claim context subject
             throw payloadExpression TypeMismatch
               "DigestMatches second subject has the wrong validator type"
 
-          Right (Atom "DigestMatches" [RefVar beginName, stableOwner])
+          Right (beginName, stableOwner)
         TupleExpression _ ->
           throw expression TypeMismatch
             "DigestMatches requires exactly two ordered subjects"
