@@ -31,6 +31,7 @@ module Phil.IO.Console
   , ConsoleCheckError (..)
   ) where
 
+import qualified ConsoleImplementationKernel as Kernel
 import qualified Data.Set as Set
 import Data.Set (Set)
 import Data.Text (Text)
@@ -108,7 +109,12 @@ makeOccurrence
   -> Either ConsoleCheckError ConsoleProviderOccurrence
 makeOccurrence kind raw
   | Text.null raw = Left EmptyConsoleOccurrenceKey
-  | otherwise = Right (checkedOccurrence kind (ConsoleOccurrenceKey raw))
+  | otherwise =
+      case Kernel.decideConsoleOccurrenceByFacts (Text.null raw) of
+        Kernel.ConsoleOccurrenceAccepted ->
+          Right (checkedOccurrence kind (ConsoleOccurrenceKey raw))
+        Kernel.ConsoleOccurrenceEmpty ->
+          Left (ConsoleOccurrenceKernelDisagreement kind raw)
 
 checkedOccurrence :: ConsoleProviderKind -> ConsoleOccurrenceKey -> ConsoleProviderOccurrence
 checkedOccurrence kind key = ConsoleProviderOccurrence
@@ -224,13 +230,34 @@ checkOperationKind
   -> Either ConsoleCheckError ()
 checkOperationKind occurrence operation =
   case (consoleProviderKind occurrence, operation) of
-    (ConsoleInputProvider, ConsoleReadLineOp) -> Right ()
-    (ConsoleOutputProvider, ConsoleWriteOp) -> Right ()
-    (ConsoleOutputProvider, ConsoleFlushOp) -> Right ()
+    (ConsoleInputProvider, ConsoleReadLineOp) -> requireKernelOperation
+    (ConsoleOutputProvider, ConsoleWriteOp) -> requireKernelOperation
+    (ConsoleOutputProvider, ConsoleFlushOp) -> requireKernelOperation
     _ -> Left (ConsoleOperationKindMismatch
       (consoleProviderOccurrenceKey occurrence)
       (consoleProviderKind occurrence)
       operation)
+  where
+    requireKernelOperation =
+      case Kernel.decideConsoleOperationByFacts
+          (kernelOperationAllowed occurrence operation) of
+        Kernel.ConsoleOperationAccepted -> Right ()
+        Kernel.ConsoleOperationKindMismatch ->
+          Left (ConsoleOperationKernelDisagreement
+            (consoleProviderOccurrenceKey occurrence)
+            (consoleProviderKind occurrence)
+            operation)
+
+kernelOperationAllowed
+  :: ConsoleProviderOccurrence
+  -> ConsoleOperation
+  -> Bool
+kernelOperationAllowed occurrence operation =
+  case (consoleProviderKind occurrence, operation) of
+    (ConsoleInputProvider, ConsoleReadLineOp) -> True
+    (ConsoleOutputProvider, ConsoleWriteOp) -> True
+    (ConsoleOutputProvider, ConsoleFlushOp) -> True
+    _ -> False
 
 data ConsoleFailure
   = ConsoleDenied
@@ -268,14 +295,26 @@ checkConsoleReadLine occurrence limit source authorityState outcome = do
   contract <- consoleOperationContract occurrence ConsoleReadLineOp
   checkedAuthority <- mapLeft ConsoleAuthorityError $
     checkAuthorityExercise (consoleContractAuthority contract) source authorityState
-  case outcome of
+  lineWithinLimit <- case outcome of
     ConsoleLine line ->
       let actual = fromIntegral (Text.length line)
       in if actual <= limit
-          then Right ()
+          then Right True
           else Left (ConsoleReadLineExceedsLimit limit actual)
-    ConsoleEndOfInput -> Right ()
-    ConsoleReadFailed _ -> Right ()
+    ConsoleEndOfInput -> Right True
+    ConsoleReadFailed _ -> Right True
+  let observedKind = case outcome of
+        ConsoleLine _ -> Kernel.ObservedConsoleLine
+        ConsoleEndOfInput -> Kernel.ObservedConsoleEndOfInput
+        ConsoleReadFailed _ -> Kernel.ObservedConsoleReadFailure
+  case Kernel.decideConsoleReadByFacts
+      (kernelOperationAllowed occurrence ConsoleReadLineOp)
+      True
+      observedKind
+      lineWithinLimit of
+    Kernel.ConsoleReadAccepted -> Right ()
+    _ -> Left (ConsoleReadKernelDisagreement
+      (consoleProviderOccurrenceKey occurrence))
   Right CheckedConsoleRead
     { checkedConsoleReadOccurrence = occurrence
     , checkedConsoleReadLimit = limit
@@ -312,11 +351,31 @@ checkConsoleWrite occurrence source authorityState requested outcome = do
   checkedAuthority <- mapLeft ConsoleAuthorityError $
     checkAuthorityExercise (consoleContractAuthority contract) source authorityState
   let requestedLength = fromIntegral (Text.length requested)
-  observableLength <- case outcome of
-    ConsoleWriteSucceeded -> Right requestedLength
+  let observedSuccess = case outcome of
+        ConsoleWriteSucceeded -> True
+        ConsoleWriteFailed _ _ -> False
+  (observableLength, progressWithinRequest) <- case outcome of
+    ConsoleWriteSucceeded -> Right (requestedLength, True)
     ConsoleWriteFailed _ prefixLength
-      | prefixLength <= requestedLength -> Right prefixLength
+      | prefixLength <= requestedLength -> Right (prefixLength, True)
       | otherwise -> Left (ConsoleWriteProgressOutOfRange requestedLength prefixLength)
+  let kernelUsesFullRequest =
+        Kernel.consoleWriteUsesFullRequested observedSuccess
+      nativeUsesFullRequest = case outcome of
+        ConsoleWriteSucceeded -> True
+        ConsoleWriteFailed _ _ -> False
+  if kernelUsesFullRequest == nativeUsesFullRequest
+    then Right ()
+    else Left (ConsoleWriteKernelDisagreement
+      (consoleProviderOccurrenceKey occurrence))
+  case Kernel.decideConsoleWriteByFacts
+      (kernelOperationAllowed occurrence ConsoleWriteOp)
+      True
+      observedSuccess
+      progressWithinRequest of
+    Kernel.ConsoleWriteAccepted -> Right ()
+    _ -> Left (ConsoleWriteKernelDisagreement
+      (consoleProviderOccurrenceKey occurrence))
   let observablePrefix = Text.take (fromIntegral observableLength) requested
   Right CheckedConsoleWrite
     { checkedConsoleWriteOccurrence = occurrence
@@ -351,6 +410,12 @@ checkConsoleFlush occurrence source authorityState outcome = do
   contract <- consoleOperationContract occurrence ConsoleFlushOp
   checkedAuthority <- mapLeft ConsoleAuthorityError $
     checkAuthorityExercise (consoleContractAuthority contract) source authorityState
+  case Kernel.decideConsoleFlushByFacts
+      (kernelOperationAllowed occurrence ConsoleFlushOp)
+      True of
+    Kernel.ConsoleFlushAccepted -> Right ()
+    _ -> Left (ConsoleFlushKernelDisagreement
+      (consoleProviderOccurrenceKey occurrence))
   Right CheckedConsoleFlush
     { checkedConsoleFlushOccurrence = occurrence
     , checkedConsoleFlushEffect = consoleContractEffect contract
@@ -364,6 +429,11 @@ data ConsoleCheckError
   | ConsoleAuthorityError AuthorityCheckError
   | ConsoleReadLineExceedsLimit Natural Natural
   | ConsoleWriteProgressOutOfRange Natural Natural
+  | ConsoleOccurrenceKernelDisagreement ConsoleProviderKind Text
+  | ConsoleOperationKernelDisagreement ConsoleOccurrenceKey ConsoleProviderKind ConsoleOperation
+  | ConsoleReadKernelDisagreement ConsoleOccurrenceKey
+  | ConsoleWriteKernelDisagreement ConsoleOccurrenceKey
+  | ConsoleFlushKernelDisagreement ConsoleOccurrenceKey
   deriving (Eq, Ord, Show)
 
 canonicalAtom :: Text -> Text
