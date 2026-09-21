@@ -97,7 +97,7 @@ readAuthorityRejects =
   let stdin = consoleEnvironmentStdin standardConsoleEnvironment
   in case checkConsoleReadLine
       stdin 5 (PossessedCapability stdinCapability) emptyAuthorityState (ConsoleLine "hello") of
-    Left (ConsoleAuthorityError (UnknownCapability key)) -> key == stdinCapability
+    Left (ConsoleAuthorityError (UnknownCapabilityOccurrence key)) -> key == stdinCapability
     _ -> False
 
 successfulWriteExact :: Bool
