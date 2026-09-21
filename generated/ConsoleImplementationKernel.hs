@@ -90,3 +90,4 @@ decideConsoleFlushByFacts kindAllowsFlush authorityAccepted =
      Prelude.True -> ConsoleFlushAccepted;
      Prelude.False -> ConsoleFlushAuthorityRejected};
    Prelude.False -> ConsoleFlushOperationKindMismatch}
+
