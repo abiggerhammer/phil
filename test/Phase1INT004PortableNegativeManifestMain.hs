@@ -855,7 +855,7 @@ parsePortableBindingShape bindingName ty value
   | Just frame <- Text.stripPrefix "fixture-raw:" value
   , not (Text.null frame) = Right (FixtureRawShape (FrameId frame))
   | Just amount <- Text.stripPrefix "owned-bytes:nat:" value =
-      OwnedBytesShape . RefNat <$> parsePortableNat amount
+      (\n -> OwnedBytesShape (RefNat n) Nothing) <$> parsePortableNat amount
   | otherwise = Left ("unsupported portable binding shape: " <> value)
 
 portableRecordShape :: Text -> Text -> Either Text SurfaceShape
