@@ -22,11 +22,11 @@ main = do
               == Left DigestSubjectKernelRejected)
         , ("injected Begin substitution fails closed",
             case certifyDigestSubjectWith substituteBegin begin owner of
-              Left DigestSubjectKernelSubstitution {} -> True
+              Left (DigestSubjectKernelSubstitution _ _ _ _) -> True
               _ -> False)
         , ("injected stable-owner substitution fails closed",
             case certifyDigestSubjectWith (substituteOwner otherOwner) begin owner of
-              Left DigestSubjectKernelSubstitution {} -> True
+              Left (DigestSubjectKernelSubstitution _ _ _ _) -> True
               _ -> False)
         , ("distinct owners remain distinct through exact kernel",
             case
