@@ -1,0 +1,43 @@
+name: Phase 1 Audit Borrow Scope
+
+on:
+  pull_request:
+    paths:
+      - 'src/Phil/Surface/Check/Engine.hs'
+      - 'src/Phil/Surface/Check/Support.hs'
+      - 'src/Phil/Surface/Phase0.hs'
+      - 'test/Phase1AuditBorrowScopeMain.hs'
+      - 'test/SurfaceConformanceMain.hs'
+      - 'docs/phase-1/audit-borrow-local-scope-remediation-v1.md'
+      - '.github/workflows/phase1-audit-borrow-scope.yml'
+  push:
+    branches: [main]
+    paths:
+      - 'src/Phil/Surface/Check/Engine.hs'
+      - 'src/Phil/Surface/Check/Support.hs'
+      - 'src/Phil/Surface/Phase0.hs'
+      - 'test/Phase1AuditBorrowScopeMain.hs'
+      - 'test/SurfaceConformanceMain.hs'
+      - 'docs/phase-1/audit-borrow-local-scope-remediation-v1.md'
+      - '.github/workflows/phase1-audit-borrow-scope.yml'
+
+permissions:
+  contents: read
+
+jobs:
+  borrow-scope-regression:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: haskell-actions/setup@v2
+        with:
+          ghc-version: '9.6.7'
+          cabal-version: 'latest'
+      - name: Build complete Haskell substrate
+        run: cabal build all --enable-tests
+      - name: Strict typecheck borrow-scope regression
+        run: cabal exec -- ghc -isrc -Wall -Werror -fno-code test/Phase1AuditBorrowScopeMain.hs
+      - name: Replay PHIL-AUD-BORROW-LOCAL-001
+        run: cabal exec -- runghc -isrc -Wall -Werror test/Phase1AuditBorrowScopeMain.hs
+      - name: Replay frozen Surface conformance controls
+        run: cabal test surface-conformance --test-show-details=direct
