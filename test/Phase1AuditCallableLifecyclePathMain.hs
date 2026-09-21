@@ -34,7 +34,6 @@ import Phil.Core.Callable
   , CallableResourceState (..)
   , CallableStateKey (..)
   , checkClosureCaptures
-  , lookupCallableOccurrence
   )
 import Phil.Core.CallableOutcome
   ( CallableOutcomeClass (..)
