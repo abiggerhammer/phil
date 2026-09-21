@@ -129,7 +129,10 @@ initializeState environment component = do
   where
     insertInitial state (name, binding) =
       insertBindingMeta syntheticSpan name
-        (BindingMeta (initialMode binding) (initialType binding) (initialShape binding))
+        (BindingMeta
+          (initialMode binding)
+          (initialType binding)
+          (shapeForBinding name (initialShape binding)))
         state
 
     insertParameter state locatedParameter =
@@ -152,7 +155,7 @@ initializeState environment component = do
             Just surfaceTy -> do
               (mode, ty, shape) <- resolveSurfaceType environment state surfaceTy
               insertBindingMeta (locatedSpan locatedParameter) name
-                (BindingMeta mode ty shape) state
+                (BindingMeta mode ty (shapeForBinding name shape)) state
 
 checkProvides :: SurfaceEnvironment -> SurfaceState -> Component -> Either SurfaceCheckError ()
 checkProvides environment state component =
@@ -726,8 +729,11 @@ evalValidate
   -> Either SurfaceCheckError [SurfacePath]
 evalValidate environment state located claim context subject
   | claim == "DigestMatches" = do
-      validateDigestSubject subject
-      decision (DigestDecision digestMatchesProposition)
+      when (context /= Nothing) $
+        throw located TypeMismatch
+          "DigestMatches does not accept an explicit context locator"
+      proposition <- digestMatchesForSubject subject
+      decision (DigestDecision proposition)
   | otherwise = do
       contextName <- case context of
         Just expression -> namedExpression MissingEvidence expression
@@ -736,20 +742,45 @@ evalValidate environment state located claim context subject
       _ <- lookupMeta subject (unName subjectName) state
       decision (ValidationDecision claim contextName subjectName)
   where
-    validateDigestSubject expression = case locatedValue expression of
-      TupleExpression values -> mapM_ (inferReadOnlyScalar environment state) values
-      _ -> inferReadOnlyScalar environment state expression >> Right ()
+    digestMatchesForSubject expression =
+      case locatedValue expression of
+        TupleExpression [beginExpression, payloadExpression] -> do
+          beginName <- namedExpression TypeMismatch beginExpression
+          beginScalar <- inferReadOnlyScalar environment state beginExpression
+          unless (grammarOfTy (scalarType beginScalar) == Just "Begin") $
+            throw beginExpression TypeMismatch
+              "DigestMatches first subject must be a Begin value"
+
+          payloadScalar <- inferReadOnlyScalar environment state payloadExpression
+          stableOwner <- case scalarShape payloadScalar of
+            BorrowedViewShape _ (Just stable) -> Right stable
+            BorrowedViewShape _ Nothing ->
+              throw payloadExpression TypeMismatch
+                "DigestMatches payload view has no stable owner identity"
+            _ -> throw payloadExpression TypeMismatch
+              "DigestMatches second subject must be a borrowed byte view"
+
+          unless
+            (compareTypes
+              (scalarType payloadScalar)
+              (TyOpaqueSorted "SharedBytes" byteSequenceSort)
+              == DefinitionallyEqual) $
+            throw payloadExpression TypeMismatch
+              "DigestMatches second subject has the wrong validator type"
+
+          Right (Atom "DigestMatches" [RefVar beginName, stableOwner])
+        TupleExpression _ ->
+          throw expression TypeMismatch
+            "DigestMatches requires exactly two ordered subjects"
+        _ ->
+          throw expression TypeMismatch
+            "DigestMatches requires an ordered (Begin, borrowed-bytes) subject pair"
 
     decision kind = Right
       [ valuePath state (RuntimeScalar
           (ScalarValue Unrestricted
             (TyOpaque "ValidationDecision")
             (DecisionShape kind)))
-      ]
-
-    digestMatchesProposition = Atom "DigestMatches"
-      [ RefVar (Name "begin")
-      , payloadStableTerm
       ]
 
     _ = located
@@ -812,7 +843,7 @@ evalReceiveExact environment state located count endpointExpression explicitEvid
   let state2 = applySessionContext endpoint (stepContext step) state1
   (successor, state3) <- extractLinearTemp (locatedSpan located) temp state2
 
-  let payload = ScalarValue Linear (TyBytes expectedIndex) (OwnedBytesShape expectedIndex)
+  let payload = ScalarValue Linear (TyBytes expectedIndex) (OwnedBytesShape expectedIndex Nothing)
   Right
     [ valuePath state3
         (RuntimeTuple [RuntimeScalar successor, RuntimeScalar payload])
@@ -920,7 +951,7 @@ evalBorrow environment state located ownerExpression viewName body = do
           Right
             ( ScalarValue Unrestricted
                 (TyOpaqueSorted "SharedBytes" byteSequenceSort)
-                (BorrowedViewShape ownerName)
+                (BorrowedViewShape ownerName (stableByteOwner ownerMeta))
             , state { stateCore = (stateCore state) { resourceContext = context } }
             )
       | otherwise -> throw ownerExpression BorrowEscape
@@ -930,6 +961,11 @@ evalBorrow environment state located ownerExpression viewName body = do
   bodyPaths <- checkScopedValueBlock environment state withView body
   mapM (finish ownerName) bodyPaths
   where
+    stableByteOwner meta =
+      case bindingShape meta of
+        OwnedBytesShape _ stable -> stable
+        _ -> Nothing
+
     finish owner path
       | pathControl path /= PathContinue =
           throw located BorrowEscape "borrow body terminates before the loan ends"
@@ -951,7 +987,7 @@ containsBorrowedView :: Name -> RuntimeValue -> Bool
 containsBorrowedView _ RuntimeUnit = False
 containsBorrowedView owner (RuntimeTuple values) = any (containsBorrowedView owner) values
 containsBorrowedView owner (RuntimeScalar scalar) = case scalarShape scalar of
-  BorrowedViewShape actual -> actual == owner
+  BorrowedViewShape actual _ -> actual == owner
   PendingRawShape _ -> True
   _ -> False
 
