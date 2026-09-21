@@ -12,8 +12,10 @@ import Phil.Core.Authority
   , insertAuthorityCapability
   )
 import Phil.Core.Syntax (Mode (..))
+import Phil.IO.Bytes (makeRuntimeBytes)
 import Phil.IO.Console
   ( ConsoleCheckError (..)
+  , ConsoleProviderOccurrence
   , ConsoleEnvironment (..)
   , ConsoleWriteOutcome (..)
   , defaultConsoleAuthorityCapability
@@ -92,7 +94,7 @@ readDecodeFailure =
       case readAuthority occurrence of
         Left _ -> False
         Right authority ->
-          let bytes = Phil.IO.Bytes.makeRuntimeBytes [0xc3, 0x28]
+          let bytes = makeRuntimeBytes [0xc3, 0x28]
               state = insertFileSystemBinding path bytes emptyFileSystemState
           in case checkReadUTF8
               occurrence path 8
@@ -206,7 +208,7 @@ replaceAuthority occurrence =
     emptyAuthorityState
 
 consoleAuthority
-  :: Phil.IO.Console.ConsoleProviderOccurrence
+  :: ConsoleProviderOccurrence
   -> Either String AuthorityState
 consoleAuthority occurrence = do
   capability <- mapLeft show $
