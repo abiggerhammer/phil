@@ -1,0 +1,62 @@
+name: One-shot INT-007 StageContract Reconcile
+
+on:
+  push:
+    branches:
+      - phase1-audit-digest-subject-production-binding
+    paths:
+      - '.github/workflows/one-shot-int007-stage-contract-reconcile.yml'
+
+permissions:
+  contents: write
+
+jobs:
+  reconcile:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: phase1-audit-digest-subject-production-binding
+      - uses: haskell-actions/setup@v2
+        with:
+          ghc-version: '9.6.7'
+          cabal-version: 'latest'
+      - name: Re-derive exact StageContract summaries
+        shell: bash
+        run: |
+          set -euo pipefail
+          cabal build lib:phil-core --ghc-options=-Werror
+          rm -rf dist/int007-runtime-build-discovery
+          set +e
+          cabal exec -- runghc -isrc -itest -Wall -Werror test/Phase1INT007RuntimeBuildMain.hs
+          status=$?
+          set -e
+          test "$status" -ne 0
+          test -s dist/int007-runtime-build-discovery/Upload-stage-contract-v1.tsv
+          test -s dist/int007-runtime-build-discovery/Steve-stage-contract-v1.tsv
+          cp dist/int007-runtime-build-discovery/Upload-stage-contract-v1.tsv             handoff/phase1/runtime/upload-stage-contract-v1.tsv
+          cp dist/int007-runtime-build-discovery/Steve-stage-contract-v1.tsv             handoff/phase1/runtime/steve-stage-contract-v1.tsv
+          python3 scripts/build_phase1_int007_complete_manifest.py             --output handoff/phase1/manifest-v1.tsv
+      - name: Verify reconciled INT-007 freeze
+        shell: bash
+        run: |
+          set -euo pipefail
+          cabal exec -- runghc -isrc -itest -Wall -Werror test/Phase1INT007RuntimeBuildMain.hs
+          cabal exec -- runghc -isrc -Wall -Werror test/Phase1INT007HandoffManifestMain.hs
+          python3 scripts/build_phase1_conformance_freeze.py --check
+          python3 scripts/build_phase1_int007_complete_manifest.py             --output /tmp/phase1-int007-manifest-v1.tsv
+          cmp handoff/phase1/manifest-v1.tsv /tmp/phase1-int007-manifest-v1.tsv
+      - name: Commit exact regenerated freeze
+        shell: bash
+        run: |
+          set -euo pipefail
+          git config user.name "phil-ci"
+          git config user.email "phil-ci@users.noreply.github.com"
+          git add             handoff/phase1/runtime/upload-stage-contract-v1.tsv             handoff/phase1/runtime/steve-stage-contract-v1.tsv             handoff/phase1/manifest-v1.tsv
+          git diff --cached --check
+          git diff --cached --quiet && {
+            echo "No reconciliation changes required."
+            exit 0
+          }
+          git commit -m "Reconcile INT-007 StageContract freeze"
+          git push origin HEAD:phase1-audit-digest-subject-production-binding
