@@ -55,6 +55,7 @@ data SurfaceCallableInvocationSemanticAccount = SurfaceCallableInvocationSemanti
 -- effects through a source-only shortcut.
 data SurfaceCallableSemanticSummary = SurfaceCallableSemanticSummary
   { surfaceCallableSemanticAccounts :: [SurfaceCallableInvocationSemanticAccount]
+  , surfaceCallableSemanticPaths :: [[SurfaceCallableInvocationSemanticAccount]]
   , surfaceReachableCallableEffects :: Set SemanticEffect
   , surfaceRequiredCallerAuthority :: Set CallableAuthorityRequirement
   , surfaceReachableCallableFailures :: Set CallableFailure
@@ -66,6 +67,8 @@ summarizeSurfaceCallableSemantics
   -> SurfaceCallableSemanticSummary
 summarizeSurfaceCallableSemantics checked = SurfaceCallableSemanticSummary
   { surfaceCallableSemanticAccounts = accounts
+  , surfaceCallableSemanticPaths =
+      map (map semanticAccount) (checkedCallableInvocationPaths checked)
   , surfaceReachableCallableEffects =
       inferReachableCallableEffects
         (map invocationUse (checkedCallableInvocations checked))
