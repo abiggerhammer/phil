@@ -394,7 +394,7 @@ rewriteRefTerm state = go Set.empty
 fieldAliasFor :: Text -> BindingMeta -> Maybe RefTerm
 fieldAliasFor field meta = case bindingShape meta of
   RecordShape _ fields -> Map.lookup field fields >>= fieldAlias
-  OwnedBytesShape _ -> Nothing
+  OwnedBytesShape _ _ -> Nothing
   _ -> Nothing
 
 elaborationEnv :: SurfaceEnvironment -> SurfaceState -> ElaborationEnv
