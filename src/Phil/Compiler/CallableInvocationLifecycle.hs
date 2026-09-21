@@ -73,6 +73,10 @@ data SurfaceCallableInvocationLifecycleError
   | SurfaceCallableLifecycleRejected
       InvocationIdentity
       CallableCheckError
+  | SurfaceCallableLifecyclePathAccountDomainMismatch
+      (Set InvocationIdentity)
+      (Set InvocationIdentity)
+  | SurfaceCallableLifecyclePathJoinMismatch
   deriving (Eq, Ord, Show)
 
 -- | Apply CALL-019 callee lifecycle in exact source/evaluation order. Each
@@ -87,17 +91,50 @@ data SurfaceCallableInvocationLifecycleError
 applySurfaceCallableInvocationLifecycles
   :: Map InvocationIdentity SurfaceCallableInvocationLifecycleBinding
   -> [SurfaceCallableInvocationSemanticAccount]
+  -> [[SurfaceCallableInvocationSemanticAccount]]
   -> CallableResourceState
   -> Either SurfaceCallableInvocationLifecycleError
        ([SurfaceCallableInvocationLifecycleWitness], CallableResourceState)
-applySurfaceCallableInvocationLifecycles bindings accounts initialState = do
+applySurfaceCallableInvocationLifecycles
+    bindings accounts paths initialState = do
   expected <- exactAccountDomain accounts
   let actual = Map.keysSet bindings
   if expected == actual
     then pure ()
     else Left (SurfaceCallableLifecycleBindingDomainMismatch expected actual)
-  go initialState [] accounts
+
+  let pathDomain = Set.fromList
+        [ accountIdentity account
+        | path <- normalizedPaths
+        , account <- path
+        ]
+  if expected == pathDomain
+    then pure ()
+    else Left
+      (SurfaceCallableLifecyclePathAccountDomainMismatch expected pathDomain)
+
+  pathResults <- mapM (go initialState []) normalizedPaths
+  let finalStates = map snd pathResults
+  finalState <- case finalStates of
+    [] -> Right initialState
+    first : rest
+      | all (== first) rest -> Right first
+      | otherwise -> Left SurfaceCallableLifecyclePathJoinMismatch
+
+  witnessMap <- foldl addWitness (Right Map.empty)
+    (concatMap fst pathResults)
+  orderedWitnesses <- mapM
+    (\account -> case Map.lookup (accountIdentity account) witnessMap of
+      Just witness -> Right witness
+      Nothing -> Left
+        (SurfaceCallableLifecyclePathAccountDomainMismatch
+          expected
+          (Map.keysSet witnessMap)))
+    accounts
+  Right (orderedWitnesses, finalState)
   where
+    normalizedPaths = if null paths then [[]] else paths
+
     go state accumulated [] = Right (reverse accumulated, state)
     go state accumulated (account : rest) = do
       let identity = accountIdentity account
@@ -145,6 +182,18 @@ applySurfaceCallableInvocationLifecycles bindings accounts initialState = do
             , surfaceLifecycleWitnessAfter = next
             }
       go next (witness : accumulated) rest
+
+    addWitness accumulated witness = do
+      witnesses <- accumulated
+      let identity =
+            ( surfaceLifecycleWitnessInvocationSpan witness
+            , surfaceLifecycleWitnessDeclarationKey witness
+            )
+      case Map.lookup identity witnesses of
+        Nothing -> Right (Map.insert identity witness witnesses)
+        Just existing
+          | existing == witness -> Right witnesses
+          | otherwise -> Left SurfaceCallableLifecyclePathJoinMismatch
 
 exactAccountDomain
   :: [SurfaceCallableInvocationSemanticAccount]

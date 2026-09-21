@@ -210,6 +210,7 @@ checkSurfaceCallableInvocationSummaryWithOutcomeBranchesAndLifecycle
       applySurfaceCallableInvocationLifecycles
         lifecycleBindings
         accounts
+        (surfaceCallableSemanticPaths summary)
         initialCallableState
   pure CheckedSurfaceCallableInvocationLifecycleContext
     { checkedLifecycleInvocationContext = checkedContext

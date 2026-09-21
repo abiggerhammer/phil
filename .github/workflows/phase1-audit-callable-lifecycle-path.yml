@@ -1,0 +1,82 @@
+name: Phase 1 Audit Callable Lifecycle Paths
+
+on:
+  pull_request:
+    paths:
+      - 'src/Phil/Compiler/CallableSurfaceSemantics.hs'
+      - 'src/Phil/Compiler/CallableInvocationSemantics.hs'
+      - 'src/Phil/Compiler/CallableInvocationLifecycle.hs'
+      - 'src/Phil/Compiler/CallableInvocationContext.hs'
+      - 'test/Phase1AuditCallableLifecyclePathMain.hs'
+      - 'test/Phase1CALL019InvocationLifecycleMain.hs'
+      - 'test/Phase1CALL019LifecycleAwareInvocationContextMain.hs'
+      - 'test/Phase1CALL019InvocationSemanticAccountMain.hs'
+      - 'test/Phase1CALL019BranchAwareInvocationContextMain.hs'
+      - 'test/Phase1CALL019OutcomeContinuationStateMain.hs'
+      - 'docs/phase-1/audit-callable-lifecycle-path-remediation-v1.md'
+      - '.github/workflows/phase1-audit-callable-lifecycle-path.yml'
+  push:
+    branches: [main]
+    paths:
+      - 'src/Phil/Compiler/CallableSurfaceSemantics.hs'
+      - 'src/Phil/Compiler/CallableInvocationSemantics.hs'
+      - 'src/Phil/Compiler/CallableInvocationLifecycle.hs'
+      - 'src/Phil/Compiler/CallableInvocationContext.hs'
+      - 'test/Phase1AuditCallableLifecyclePathMain.hs'
+      - 'test/Phase1CALL019InvocationLifecycleMain.hs'
+      - 'test/Phase1CALL019LifecycleAwareInvocationContextMain.hs'
+      - 'test/Phase1CALL019InvocationSemanticAccountMain.hs'
+      - 'test/Phase1CALL019BranchAwareInvocationContextMain.hs'
+      - 'test/Phase1CALL019OutcomeContinuationStateMain.hs'
+      - 'docs/phase-1/audit-callable-lifecycle-path-remediation-v1.md'
+      - '.github/workflows/phase1-audit-callable-lifecycle-path.yml'
+
+permissions:
+  contents: read
+
+jobs:
+  callable-lifecycle-path-regression:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: haskell-actions/setup@v2
+        with:
+          ghc-version: '9.6.7'
+          cabal-version: 'latest'
+
+      - name: Build complete Haskell substrate
+        run: cabal build all --enable-tests
+
+      - name: Strict typecheck audit and affected CALL-019 consumers
+        shell: bash
+        run: |
+          set -euo pipefail
+          harnesses=(
+            test/Phase1AuditCallableLifecyclePathMain.hs
+            test/Phase1CALL019InvocationLifecycleMain.hs
+            test/Phase1CALL019LifecycleAwareInvocationContextMain.hs
+            test/Phase1CALL019InvocationSemanticAccountMain.hs
+            test/Phase1CALL019BranchAwareInvocationContextMain.hs
+            test/Phase1CALL019OutcomeContinuationStateMain.hs
+          )
+          for harness in "${harnesses[@]}"; do
+            cabal exec -- ghc -isrc -Wall -Werror -fno-code "$harness"
+          done
+
+      - name: Replay PHIL-AUD-CALL-LIFECYCLE-PATH-001
+        run: cabal exec -- runghc -isrc -Wall -Werror test/Phase1AuditCallableLifecyclePathMain.hs
+
+      - name: Replay existing CALL-019 lifecycle controls
+        shell: bash
+        run: |
+          set -euo pipefail
+          harnesses=(
+            test/Phase1CALL019InvocationLifecycleMain.hs
+            test/Phase1CALL019LifecycleAwareInvocationContextMain.hs
+            test/Phase1CALL019InvocationSemanticAccountMain.hs
+            test/Phase1CALL019BranchAwareInvocationContextMain.hs
+            test/Phase1CALL019OutcomeContinuationStateMain.hs
+          )
+          for harness in "${harnesses[@]}"; do
+            cabal exec -- runghc -isrc -Wall -Werror "$harness"
+          done

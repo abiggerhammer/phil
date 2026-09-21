@@ -59,6 +59,7 @@ data SurfaceCallableInvocationWitness = SurfaceCallableInvocationWitness
 data SurfaceSemanticCheckResult = SurfaceSemanticCheckResult
   { checkedSurfaceResult :: SurfaceCheckResult
   , checkedCallableInvocations :: [SurfaceCallableInvocationWitness]
+  , checkedCallableInvocationPaths :: [[SurfaceCallableInvocationWitness]]
   }
   deriving (Eq, Show)
 
@@ -73,11 +74,13 @@ checkSurfaceComponentWithCallableSemantics
   -> Either SurfaceCheckError SurfaceSemanticCheckResult
 checkSurfaceComponentWithCallableSemantics contracts environment component = do
   checked <- checkSurfaceComponent environment component
-  invocations <- collectBlock contracts environment
-    (componentBody (locatedValue component))
+  let body = componentBody (locatedValue component)
+  invocations <- collectBlock contracts environment body
+  invocationPaths <- collectBlockPaths contracts environment body
   pure SurfaceSemanticCheckResult
     { checkedSurfaceResult = checked
     , checkedCallableInvocations = invocations
+    , checkedCallableInvocationPaths = invocationPaths
     }
 
 collectBlock
@@ -275,6 +278,219 @@ collectFallback
 collectFallback contracts environment fallback = case fallback of
   FailFallback _ -> Right []
   RejectFallback expression -> collectExpression contracts environment expression
+
+-- | Feasible callable-invocation traces through the source control-flow tree.
+-- The existing flat invocation list remains the conservative may-occurrence
+-- inventory used by effect/authority/failure aggregation. These paths are the
+-- separate concrete execution relation used by lifecycle composition.
+collectBlockPaths
+  :: Map DeclarationKey SourceCallableSemanticContract
+  -> SurfaceEnvironment
+  -> Located Block
+  -> Either SurfaceCheckError [[SurfaceCallableInvocationWitness]]
+collectBlockPaths contracts environment block =
+  sequencePathResults
+    (map
+      (collectStatementPaths contracts environment)
+      (blockStatements (locatedValue block)))
+
+collectStatementPaths
+  :: Map DeclarationKey SourceCallableSemanticContract
+  -> SurfaceEnvironment
+  -> Located Statement
+  -> Either SurfaceCheckError [[SurfaceCallableInvocationWitness]]
+collectStatementPaths contracts environment statement = case locatedValue statement of
+  LetStatement _ expression -> collectExpressionPaths contracts environment expression
+  ReturnStatement expression -> collectExpressionPaths contracts environment expression
+  ExpressionStatement expression -> collectExpressionPaths contracts environment expression
+
+collectExpressionPaths
+  :: Map DeclarationKey SourceCallableSemanticContract
+  -> SurfaceEnvironment
+  -> Located SurfaceExpression
+  -> Either SurfaceCheckError [[SurfaceCallableInvocationWitness]]
+collectExpressionPaths contracts environment expression = case locatedValue expression of
+  InvokeExpression _ arguments -> do
+    nested <- sequencePathResults
+      (map (collectExpressionPaths contracts environment) arguments)
+    flattened <- collectExpression contracts environment expression
+    witness <- case reverse flattened of
+      value : _ -> Right value
+      [] -> Left SurfaceCheckError
+        { surfaceErrorSpan = locatedSpan expression
+        , surfaceErrorClass = UnknownCallable
+        , surfaceErrorDetail =
+            "callable invocation produced no semantic witness"
+        }
+    Right [path <> [witness] | path <- nested]
+  VariableExpression _ -> empty
+  IntegerExpression _ -> empty
+  BooleanExpression _ -> empty
+  UnitExpression -> empty
+  TupleExpression values -> expressions values
+  CallExpression _ arguments -> expressions arguments
+  FieldExpression base _ -> collectExpressionPaths contracts environment base
+  BinaryExpression _ left right -> expressions [left, right]
+  ConstructExpression _ fields -> expressions (map snd fields)
+  ReceiveExpression messageType endpoint -> sequencePathResults
+    [ collectTypePaths contracts environment messageType
+    , collectExpressionPaths contracts environment endpoint
+    ]
+  ReceiveFrameExpression endpoint -> collectExpressionPaths contracts environment endpoint
+  RecognizeExpression _ raw -> collectExpressionPaths contracts environment raw
+  ValidateExpression _ context subject -> sequencePathResults
+    ( collectExpressionPaths contracts environment subject
+      : maybe [] (pure . collectExpressionPaths contracts environment) context)
+  SendExpression value endpoint -> expressions [value, endpoint]
+  SendExactExpression value endpoint -> expressions [value, endpoint]
+  ReceiveExactExpression count endpoint evidence -> sequencePathResults
+    ( [ collectExpressionPaths contracts environment count
+      , collectExpressionPaths contracts environment endpoint
+      ]
+      <> maybe [] (pure . collectExpressionPaths contracts environment) evidence)
+  SelectExpression branch endpoint evidence -> sequencePathResults
+    ( collectBranchValuePaths contracts environment branch
+      : collectExpressionPaths contracts environment endpoint
+      : maybe [] (pure . collectExpressionPaths contracts environment) evidence)
+  CommitReceiveExpression pending evidence -> expressions [pending, evidence]
+  BorrowExpression owner _ body -> sequencePathResults
+    [ collectExpressionPaths contracts environment owner
+    , collectBlockPaths contracts environment body
+    ]
+  DecideExpression scrutinee arms -> do
+    prefix <- collectExpressionPaths contracts environment scrutinee
+    alternatives <- alternativePathResults
+      (map (collectArmPaths contracts environment) arms)
+    Right (combinePathSets prefix alternatives)
+  OfferExpression endpoint arms -> do
+    prefix <- collectExpressionPaths contracts environment endpoint
+    alternatives <- alternativePathResults
+      (map (collectArmPaths contracts environment) arms)
+    Right (combinePathSets prefix alternatives)
+  FailExpression target resource -> sequencePathResults
+    [ collectFailureTargetPaths contracts environment target
+    , collectExpressionPaths contracts environment resource
+    ]
+  CloseExpression endpoint -> collectExpressionPaths contracts environment endpoint
+  ReleaseExpression owner -> collectExpressionPaths contracts environment owner
+  AcceptExpression value acceptedType -> sequencePathResults
+    [ collectExpressionPaths contracts environment value
+    , collectTypePaths contracts environment acceptedType
+    ]
+  ProveExpression proposition -> collectPropositionPaths contracts environment proposition
+  FallbackExpression primary fallback -> do
+    primaryPaths <- collectExpressionPaths contracts environment primary
+    fallbackPaths <- collectFallbackPaths contracts environment fallback
+    -- A fallback can be reached only after evaluating the primary expression.
+    -- Retain both the successful primary trace and the primary-then-fallback
+    -- trace instead of treating the two expressions as sequential unconditionally.
+    Right (primaryPaths <> combinePathSets primaryPaths fallbackPaths)
+  where
+    empty = Right [[]]
+    expressions = sequencePathResults
+      . map (collectExpressionPaths contracts environment)
+
+collectTypePaths
+  :: Map DeclarationKey SourceCallableSemanticContract
+  -> SurfaceEnvironment
+  -> Located SurfaceType
+  -> Either SurfaceCheckError [[SurfaceCallableInvocationWitness]]
+collectTypePaths contracts environment surfaceType = case locatedValue surfaceType of
+  SurfaceBytesType index -> collectExpressionPaths contracts environment index
+  SurfaceProofType proposition -> collectPropositionPaths contracts environment proposition
+  SurfaceValidatedType _ context subject -> sequencePathResults
+    [ collectExpressionPaths contracts environment context
+    , collectExpressionPaths contracts environment subject
+    ]
+  SurfaceNamedType _ arguments ->
+    sequencePathResults (map (collectExpressionPaths contracts environment) arguments)
+  _ -> Right [[]]
+
+collectPropositionPaths
+  :: Map DeclarationKey SourceCallableSemanticContract
+  -> SurfaceEnvironment
+  -> Located SurfaceProposition
+  -> Either SurfaceCheckError [[SurfaceCallableInvocationWitness]]
+collectPropositionPaths contracts environment proposition = case locatedValue proposition of
+  PropositionEqual left right -> binary left right
+  PropositionNotEqual left right -> binary left right
+  PropositionLessThan left right -> binary left right
+  PropositionLessEqual left right -> binary left right
+  PropositionGreaterThan left right -> binary left right
+  PropositionGreaterEqual left right -> binary left right
+  PropositionAtom _ arguments ->
+    sequencePathResults (map (collectExpressionPaths contracts environment) arguments)
+  PropositionConjunction left right -> propositions left right
+  PropositionDisjunction left right -> propositions left right
+  PropositionNegation inner -> collectPropositionPaths contracts environment inner
+  _ -> Right [[]]
+  where
+    binary left right = sequencePathResults
+      [ collectExpressionPaths contracts environment left
+      , collectExpressionPaths contracts environment right
+      ]
+    propositions left right = sequencePathResults
+      [ collectPropositionPaths contracts environment left
+      , collectPropositionPaths contracts environment right
+      ]
+
+collectArmPaths
+  :: Map DeclarationKey SourceCallableSemanticContract
+  -> SurfaceEnvironment
+  -> Located CaseArm
+  -> Either SurfaceCheckError [[SurfaceCallableInvocationWitness]]
+collectArmPaths contracts environment arm =
+  collectBlockPaths contracts environment (caseArmBody (locatedValue arm))
+
+collectBranchValuePaths
+  :: Map DeclarationKey SourceCallableSemanticContract
+  -> SurfaceEnvironment
+  -> BranchValue
+  -> Either SurfaceCheckError [[SurfaceCallableInvocationWitness]]
+collectBranchValuePaths contracts environment =
+  sequencePathResults
+    . map (collectExpressionPaths contracts environment)
+    . branchValueArguments
+
+collectFailureTargetPaths
+  :: Map DeclarationKey SourceCallableSemanticContract
+  -> SurfaceEnvironment
+  -> FailureTarget
+  -> Either SurfaceCheckError [[SurfaceCallableInvocationWitness]]
+collectFailureTargetPaths contracts environment =
+  sequencePathResults
+    . map (collectExpressionPaths contracts environment)
+    . failureTargetArguments
+
+collectFallbackPaths
+  :: Map DeclarationKey SourceCallableSemanticContract
+  -> SurfaceEnvironment
+  -> Fallback
+  -> Either SurfaceCheckError [[SurfaceCallableInvocationWitness]]
+collectFallbackPaths contracts environment fallback = case fallback of
+  FailFallback _ -> Right [[]]
+  RejectFallback expression -> collectExpressionPaths contracts environment expression
+
+sequencePathResults
+  :: [Either SurfaceCheckError [[SurfaceCallableInvocationWitness]]]
+  -> Either SurfaceCheckError [[SurfaceCallableInvocationWitness]]
+sequencePathResults results =
+  sequence results >>= Right . foldl combinePathSets [[]]
+
+alternativePathResults
+  :: [Either SurfaceCheckError [[SurfaceCallableInvocationWitness]]]
+  -> Either SurfaceCheckError [[SurfaceCallableInvocationWitness]]
+alternativePathResults results = fmap concat (sequence results)
+
+combinePathSets
+  :: [[SurfaceCallableInvocationWitness]]
+  -> [[SurfaceCallableInvocationWitness]]
+  -> [[SurfaceCallableInvocationWitness]]
+combinePathSets left right =
+  [ leftPath <> rightPath
+  | leftPath <- left
+  , rightPath <- right
+  ]
 
 concatM
   :: [Either SurfaceCheckError [SurfaceCallableInvocationWitness]]
