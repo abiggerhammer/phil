@@ -146,6 +146,7 @@ branchAccount = SurfaceCallableInvocationSemanticAccount
 branchSummary :: SurfaceCallableSemanticSummary
 branchSummary = SurfaceCallableSemanticSummary
   { surfaceCallableSemanticAccounts = [branchAccount]
+  , surfaceCallableSemanticPaths = [[branchAccount]]
   , surfaceReachableCallableEffects = Set.empty
   , surfaceRequiredCallerAuthority = Set.empty
   , surfaceReachableCallableFailures = Set.fromList [negativeFailure, terminalFailure]
