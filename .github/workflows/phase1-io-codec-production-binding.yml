@@ -1,0 +1,145 @@
+name: Phase 1 IO Codec Production Binding
+
+on:
+  pull_request:
+    paths:
+      - 'proof/Phil/Core/ProviderRelativePath.v'
+      - 'proof/Phil/Core/RuntimeBytes.v'
+      - 'proof/Phil/Core/GenericStructural.v'
+      - 'proof/Phil/Core/FileSystem.v'
+      - 'proof/Phil/Core/Console.v'
+      - 'proof/Phil/Core/UTF8.v'
+      - 'proof/Phil/Core/UTF8Implementation.v'
+      - 'proof/Phil/Core/UTF8ImplementationExtraction.v'
+      - 'generated/UTF8ImplementationKernel.hs'
+      - 'src/UTF8ImplementationKernel.hs'
+      - 'src/Phil/IO/UTF8.hs'
+      - 'app/UTF8DecisionCorrespondenceMain.hs'
+      - 'app/UTF8ProductionBindingMain.hs'
+      - 'test/Phase1IOCodecUTF8Main.hs'
+      - 'test/Phase1IOFileSystemMain.hs'
+      - 'test/Phase1IOConsoleProvidersMain.hs'
+      - 'docs/phase-1/utf8-codec-implementation-refinement-v1.md'
+      - 'docs/phase-1/utf8-codec-production-binding-v1.md'
+      - '.github/workflows/phase1-io-codec-production-binding.yml'
+  push:
+    branches: [main]
+    paths:
+      - 'proof/Phil/Core/UTF8.v'
+      - 'proof/Phil/Core/UTF8Implementation.v'
+      - 'proof/Phil/Core/UTF8ImplementationExtraction.v'
+      - 'generated/UTF8ImplementationKernel.hs'
+      - 'src/UTF8ImplementationKernel.hs'
+      - 'src/Phil/IO/UTF8.hs'
+      - 'app/UTF8ProductionBindingMain.hs'
+      - 'docs/phase-1/utf8-codec-production-binding-v1.md'
+      - '.github/workflows/phase1-io-codec-production-binding.yml'
+
+permissions:
+  contents: read
+
+jobs:
+  exact-utf8-kernel:
+    runs-on: ubuntu-latest
+    container:
+      image: rocq/rocq-prover:9.2.0
+      options: --user root
+    steps:
+      - uses: actions/checkout@v4
+      - name: Freshly extract exact UTF-8 kernel
+        shell: bash
+        run: |
+          set -euo pipefail
+          export PATH="/home/rocq/.opam/${COMPILER}/bin:$PATH"
+          rocq c -Q proof/Phil Phil proof/Phil/Core/ProviderRelativePath.v
+          rocq c -Q proof/Phil Phil proof/Phil/Core/RuntimeBytes.v
+          rocq c -Q proof/Phil Phil proof/Phil/Core/GenericStructural.v
+          rocq c -Q proof/Phil Phil proof/Phil/Core/FileSystem.v
+          rocq c -Q proof/Phil Phil proof/Phil/Core/Console.v
+          rocq c -Q proof/Phil Phil proof/Phil/Core/UTF8.v
+          rocq c -Q proof/Phil Phil proof/Phil/Core/UTF8Implementation.v
+          rm -f UTF8ImplementationKernel.hs
+          rocq c -Q proof/Phil Phil proof/Phil/Core/UTF8ImplementationExtraction.v
+          test -s UTF8ImplementationKernel.hs
+          test "$(wc -c < UTF8ImplementationKernel.hs)" -eq 1288
+          test "$(sha256sum UTF8ImplementationKernel.hs | awk '{print $1}')" = \
+            161c8ed498d026763b38db994a52ac620a2654d9c59461ef13e5b8f02515d5fb
+          cmp UTF8ImplementationKernel.hs generated/UTF8ImplementationKernel.hs
+          cmp UTF8ImplementationKernel.hs src/UTF8ImplementationKernel.hs
+      - name: Record exact-kernel identities
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p utf8-exact-kernel
+          cp UTF8ImplementationKernel.hs utf8-exact-kernel/
+          sha256sum \
+            UTF8ImplementationKernel.hs \
+            generated/UTF8ImplementationKernel.hs \
+            src/UTF8ImplementationKernel.hs \
+            proof/Phil/Core/UTF8.v \
+            proof/Phil/Core/UTF8Implementation.v \
+            proof/Phil/Core/UTF8ImplementationExtraction.v \
+            > utf8-exact-kernel/PHIL-P1-IO-CODEC-001.exact-kernel.sha256
+          cat utf8-exact-kernel/PHIL-P1-IO-CODEC-001.exact-kernel.sha256
+      - uses: actions/upload-artifact@v4
+        with:
+          name: phil-phase1-utf8-exact-kernel
+          path: utf8-exact-kernel
+          if-no-files-found: error
+
+  utf8-production-binding:
+    needs: exact-utf8-kernel
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: haskell-actions/setup@v2
+        with:
+          ghc-version: '9.6.7'
+          cabal-version: 'latest'
+      - name: Initialize package database
+        run: cabal build exe:phil-certify-core-scalar --ghc-options=-Werror
+      - uses: actions/download-artifact@v4
+        with:
+          name: phil-phase1-utf8-exact-kernel
+          path: utf8-exact-kernel
+      - name: Strict typecheck bound production surface
+        run: |
+          set -euo pipefail
+          ghc -Wall -Werror -fno-code utf8-exact-kernel/UTF8ImplementationKernel.hs
+          cabal exec -- ghc -isrc -Wall -Werror -fno-code src/UTF8ImplementationKernel.hs
+          cabal exec -- ghc -isrc -Wall -Werror -fno-code src/Phil/IO/UTF8.hs
+          cabal exec -- ghc -isrc -Wall -Werror -fno-code app/UTF8ProductionBindingMain.hs
+          cabal exec -- ghc -isrc -Wall -Werror -fno-code test/Phase1IOCodecUTF8Main.hs
+      - name: Re-run exact extracted-kernel controls
+        run: |
+          cabal exec -- runghc \
+            -iutf8-exact-kernel \
+            -Wall -Werror \
+            app/UTF8DecisionCorrespondenceMain.hs
+      - name: Execute production-binding controls
+        run: cabal exec -- runghc -isrc -Wall -Werror app/UTF8ProductionBindingMain.hs
+      - name: Re-run unchanged IO-CODEC corpus
+        run: cabal exec -- runghc -isrc -Wall -Werror test/Phase1IOCodecUTF8Main.hs
+      - name: Re-run implementation-refined predecessor corpora
+        run: |
+          set -euo pipefail
+          cabal exec -- runghc -isrc -Wall -Werror test/Phase1IOFileSystemMain.hs
+          cabal exec -- runghc -isrc -Wall -Werror test/Phase1IOConsoleProvidersMain.hs
+      - name: Record production identities
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p utf8-production-binding
+          sha256sum \
+            src/UTF8ImplementationKernel.hs \
+            src/Phil/IO/UTF8.hs \
+            app/UTF8ProductionBindingMain.hs \
+            test/Phase1IOCodecUTF8Main.hs \
+            docs/phase-1/utf8-codec-production-binding-v1.md \
+            > utf8-production-binding/PHIL-P1-IO-CODEC-001.production.sha256
+          cat utf8-production-binding/PHIL-P1-IO-CODEC-001.production.sha256
+      - uses: actions/upload-artifact@v4
+        with:
+          name: phil-phase1-utf8-production-binding
+          path: utf8-production-binding
+          if-no-files-found: error
