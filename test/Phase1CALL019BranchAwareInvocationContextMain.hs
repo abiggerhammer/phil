@@ -158,6 +158,7 @@ summaryWith
   -> SurfaceCallableSemanticSummary
 summaryWith account failures = SurfaceCallableSemanticSummary
   { surfaceCallableSemanticAccounts = [account]
+  , surfaceCallableSemanticPaths = [[account]]
   , surfaceReachableCallableEffects = Set.empty
   , surfaceRequiredCallerAuthority = Set.empty
   , surfaceReachableCallableFailures = failures
