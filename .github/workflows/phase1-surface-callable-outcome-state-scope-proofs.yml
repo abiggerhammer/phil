@@ -1,0 +1,78 @@
+name: Phase 1 Surface Callable Outcome State Scope Proofs
+
+on:
+  pull_request:
+    paths:
+      - 'proof/Phil/Core/BindingSemantics.v'
+      - 'proof/Phil/Surface/SurfaceBinderScopeCore.v'
+      - 'proof/Phil/Surface/SurfaceLetPatternScope.v'
+      - 'proof/Phil/Surface/SurfaceCallableOutcomeStateScope.v'
+      - 'src/Phil/Surface/GrammarV1/SemanticCallableOutcomeState.hs'
+      - 'src/Phil/Surface/GrammarV1/SemanticCallableOutcomePropositions.hs'
+      - 'test/Phase1GrammarV1CallableOutcomeStateMain.hs'
+      - 'docs/phase-1/surface-callable-outcome-state-scope-proof-v1.md'
+      - '.github/workflows/phase1-surface-callable-outcome-state-scope-proofs.yml'
+  push:
+    branches: [main]
+    paths:
+      - 'proof/Phil/Core/BindingSemantics.v'
+      - 'proof/Phil/Surface/SurfaceBinderScopeCore.v'
+      - 'proof/Phil/Surface/SurfaceLetPatternScope.v'
+      - 'proof/Phil/Surface/SurfaceCallableOutcomeStateScope.v'
+      - 'src/Phil/Surface/GrammarV1/SemanticCallableOutcomeState.hs'
+      - 'src/Phil/Surface/GrammarV1/SemanticCallableOutcomePropositions.hs'
+      - 'test/Phase1GrammarV1CallableOutcomeStateMain.hs'
+      - 'docs/phase-1/surface-callable-outcome-state-scope-proof-v1.md'
+      - '.github/workflows/phase1-surface-callable-outcome-state-scope-proofs.yml'
+
+permissions:
+  contents: read
+
+jobs:
+  rocq-surface-callable-outcome-state-scope:
+    runs-on: ubuntu-latest
+    container:
+      image: rocq/rocq-prover:9.2.0
+      options: --user root
+    steps:
+      - uses: actions/checkout@v4
+      - name: Compile Surface callable outcome-state scope proof
+        shell: bash
+        run: |
+          set -euo pipefail
+          export PATH="/home/rocq/.opam/${COMPILER}/bin:$PATH"
+          rocq c -Q proof/Phil Phil proof/Phil/Core/BindingSemantics.v
+          rocq c -Q proof/Phil Phil proof/Phil/Surface/SurfaceBinderScopeCore.v
+          rocq c -Q proof/Phil Phil proof/Phil/Surface/SurfaceLetPatternScope.v
+          rocq c -Q proof/Phil Phil proof/Phil/Surface/SurfaceCallableOutcomeStateScope.v
+          sha256sum \
+            proof/Phil/Surface/SurfaceCallableOutcomeStateScope.v \
+            proof/Phil/Surface/SurfaceCallableOutcomeStateScope.vo \
+            > surface-callable-outcome-state-scope-proof.sha256
+          cat surface-callable-outcome-state-scope-proof.sha256
+      - uses: actions/upload-artifact@v4
+        with:
+          name: surface-callable-outcome-state-scope-proof
+          path: surface-callable-outcome-state-scope-proof.sha256
+          if-no-files-found: error
+
+  verify-surface-callable-outcome-state-scope:
+    needs: rocq-surface-callable-outcome-state-scope
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: haskell-actions/setup@v2
+        with:
+          ghc-version: '9.6.7'
+          cabal-version: 'latest'
+      - name: Build complete Haskell substrate
+        run: cabal build all --enable-tests
+      - name: Strict typecheck callable outcome-state authority
+        run: |
+          set -euo pipefail
+          cabal exec -- ghc -isrc -Wall -Werror -fno-code \
+            src/Phil/Surface/GrammarV1/SemanticCallableOutcomeState.hs
+          cabal exec -- ghc -isrc -Wall -Werror -fno-code \
+            test/Phase1GrammarV1CallableOutcomeStateMain.hs
+      - name: Replay SURF-009 callable outcome-state corpus
+        run: cabal exec -- runghc -Wall -Werror -isrc test/Phase1GrammarV1CallableOutcomeStateMain.hs
