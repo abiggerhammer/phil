@@ -35,8 +35,10 @@ run_limited() {
 
 # Positive control: ordinary replacement publishes exact bytes.
 printf 'old sentinel\n' > "$work/files/ordinary"
+chmod 0640 "$work/files/ordinary"
 test "$("$worker" "$work/files/ordinary" "$work/payload-small")" = "published"
 cmp "$work/payload-small" "$work/files/ordinary"
+test "$(stat -c '%a' "$work/files/ordinary")" = "640"
 
 # Positive control: an empty replacement is valid even with a zero file-size limit.
 printf 'old sentinel\n' > "$work/files/empty"
