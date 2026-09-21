@@ -79,7 +79,7 @@ restrictedRequestReplyComposes = do
       contexts = communicationProtocolContexts state
   assert
     (Map.lookup payloadOccurrence owners
-      == Just (fixtureClientProcess fx, payloadClient2))
+      == Just (fixtureClientProcess fx, replyBinder))
     "restricted reply did not return the exact payload occurrence to the client"
   assert
     (Map.lookup clientEndpointOccurrence owners
@@ -92,10 +92,10 @@ restrictedRequestReplyComposes = do
   client <- requireProtocolContext (fixtureClientProcess fx) contexts
   server <- requireProtocolContext (fixtureServerProcess fx) contexts
   assert
-    (Map.lookup payloadClient2 (linearBindings (protocolResources client)) == Just payloadTy)
+    (Map.lookup replyBinder (linearBindings (protocolResources client)) == Just payloadTy)
     "client did not receive the returned linear payload"
   assert
-    (Map.notMember payloadServer1 (linearBindings (protocolResources server)))
+    (Map.notMember requestBinder (linearBindings (protocolResources server)))
     "server retained the returned linear payload"
   case certifiedRendezvousEventKind (certifiedRendezvousCausality second) of
     SynchronousRendezvousEvent sender receiver ->
@@ -185,7 +185,7 @@ donorActivationPositiveControl = do
     "donor activation's genuine extra owner was lost on its own successor chain"
   assert
     (Map.lookup payloadOccurrence owners
-      == Just (fixtureClientProcess fx, payloadClient2))
+      == Just (fixtureClientProcess fx, replyBinder))
     "donor activation's payload did not complete the same request/reply chain"
 
 terminalBridgeRejectsDonor :: Either String ()
@@ -286,14 +286,14 @@ fixture = do
       firstTransfer = RestrictedMessageTransfer
         { restrictedMessageOccurrence = payloadOccurrence
         , restrictedMessageSenderName = payloadClient0
-        , restrictedMessageReceiverName = payloadServer1
+        , restrictedMessageReceiverName = requestBinder
         , restrictedMessageMode = Linear
         , restrictedMessageType = payloadTy
         }
       replyTransfer = RestrictedMessageTransfer
         { restrictedMessageOccurrence = payloadOccurrence
-        , restrictedMessageSenderName = payloadServer1
-        , restrictedMessageReceiverName = payloadClient2
+        , restrictedMessageSenderName = requestBinder
+        , restrictedMessageReceiverName = replyBinder
         , restrictedMessageMode = Linear
         , restrictedMessageType = payloadTy
         }
@@ -482,10 +482,10 @@ clientSecondSuccessor, serverSecondSuccessor :: Name
 clientSecondSuccessor = Name "client.ep.2"
 serverSecondSuccessor = Name "server.ep.2"
 
-payloadClient0, payloadServer1, payloadClient2, extraOwner :: Name
+payloadClient0, requestBinder, replyBinder, extraOwner :: Name
 payloadClient0 = Name "payload.client.0"
-payloadServer1 = Name "payload.server.1"
-payloadClient2 = Name "payload.client.2"
+requestBinder = Name "request"
+replyBinder = Name "reply"
 extraOwner = Name "activation-b.extra"
 
 clientEndpointOccurrence, serverEndpointOccurrence, payloadOccurrence, extraOccurrence
