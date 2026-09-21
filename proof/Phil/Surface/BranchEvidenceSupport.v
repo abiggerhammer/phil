@@ -17,8 +17,8 @@ Fixpoint formulaSupport
   | SubjectRef subject =>
       if in_dec Nat.eq_dec subject bound then [] else [subject]
   | SubjectClosed => []
-  | SubjectPair left right =>
-      formulaSupport bound left ++ formulaSupport bound right
+  | SubjectPair left rhs =>
+      formulaSupport bound left ++ formulaSupport bound rhs
   | SubjectBind subject body =>
       formulaSupport (subject :: bound) body
   end.
