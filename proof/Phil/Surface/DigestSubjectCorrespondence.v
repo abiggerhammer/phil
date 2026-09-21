@@ -163,9 +163,10 @@ Proof.
   destruct noExplicitContext, exactArity, beginNamed, beginIsBegin,
            payloadBorrowed, stableOwnerPresent, payloadIsSharedBytes;
     cbn in Hleft, Hright; try discriminate.
-  inversion Hleft; subst.
-  inversion Hright; subst.
+  injection Hleft as HleftOwner.
+  injection Hright as HrightOwner.
   apply Hdistinct.
+  rewrite HleftOwner, HrightOwner.
   exact Hequal.
 Qed.
 
