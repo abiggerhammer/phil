@@ -1,0 +1,202 @@
+name: Phase 1 Surface Binder Scope Closeout
+
+on:
+  pull_request:
+    paths:
+      - 'proof/Phil/Core/BindingSemantics.v'
+      - 'proof/Phil/Surface/SurfaceBinderScopeCore.v'
+      - 'proof/Phil/Surface/SurfaceGenericBinderScope.v'
+      - 'proof/Phil/Surface/SurfaceLetPatternScope.v'
+      - 'proof/Phil/Surface/SurfaceCaseArmScope.v'
+      - 'proof/Phil/Surface/SurfaceBorrowViewScope.v'
+      - 'proof/Phil/Surface/SurfaceJoinStateScope.v'
+      - 'proof/Phil/Surface/SurfaceLoopStateScope.v'
+      - 'proof/Phil/Surface/SurfaceRefinementBinderScope.v'
+      - 'proof/Phil/Surface/SurfaceProtocolBinderScope.v'
+      - 'proof/Phil/Surface/SurfaceCallableOutcomeStateScope.v'
+      - 'proof/Phil/Surface/SurfaceBinderScopeAggregate.v'
+      - 'src/Phil/Surface/GrammarV1/BinderScope.hs'
+      - 'src/Phil/Surface/GrammarV1/GenericBinderScope.hs'
+      - 'src/Phil/Surface/GrammarV1/GenericTermScope.hs'
+      - 'src/Phil/Surface/GrammarV1/LetPatternScope.hs'
+      - 'src/Phil/Surface/GrammarV1/PatternBinderScope.hs'
+      - 'src/Phil/Surface/GrammarV1/CaseArmScope.hs'
+      - 'src/Phil/Surface/GrammarV1/BorrowViewScope.hs'
+      - 'src/Phil/Surface/GrammarV1/JoinStateScope.hs'
+      - 'src/Phil/Surface/GrammarV1/LoopStateScope.hs'
+      - 'src/Phil/Surface/GrammarV1/SemanticRefinementType.hs'
+      - 'src/Phil/Surface/GrammarV1/ProtocolBinderScope.hs'
+      - 'src/Phil/Surface/GrammarV1/SemanticCallableOutcomeState.hs'
+      - 'test/Phase1GrammarV1BinderScopeAggregateMain.hs'
+      - 'test/Phase1GrammarV1BinderScopeMain.hs'
+      - 'test/Phase1GrammarV1GenericBinderScopeMain.hs'
+      - 'test/Phase1GrammarV1GenericTermScopeMain.hs'
+      - 'test/Phase1GrammarV1LetPatternScopeMain.hs'
+      - 'test/Phase1GrammarV1CaseArmScopeMain.hs'
+      - 'test/Phase1GrammarV1BorrowViewScopeMain.hs'
+      - 'test/Phase1GrammarV1JoinLoopMain.hs'
+      - 'test/Phase1GrammarV1IntrinsicRefinementTypeElaborationMain.hs'
+      - 'test/Phase1GrammarV1ProtocolBinderScopeMain.hs'
+      - 'test/Phase1GrammarV1CallableOutcomeStateMain.hs'
+      - 'docs/phase-1/surface-binder-scope-closeout-v1.md'
+      - '.github/workflows/phase1-surface-binder-scope-closeout.yml'
+  push:
+    branches: [main]
+    paths:
+      - 'proof/Phil/Core/BindingSemantics.v'
+      - 'proof/Phil/Surface/SurfaceBinderScopeCore.v'
+      - 'proof/Phil/Surface/SurfaceGenericBinderScope.v'
+      - 'proof/Phil/Surface/SurfaceLetPatternScope.v'
+      - 'proof/Phil/Surface/SurfaceCaseArmScope.v'
+      - 'proof/Phil/Surface/SurfaceBorrowViewScope.v'
+      - 'proof/Phil/Surface/SurfaceJoinStateScope.v'
+      - 'proof/Phil/Surface/SurfaceLoopStateScope.v'
+      - 'proof/Phil/Surface/SurfaceRefinementBinderScope.v'
+      - 'proof/Phil/Surface/SurfaceProtocolBinderScope.v'
+      - 'proof/Phil/Surface/SurfaceCallableOutcomeStateScope.v'
+      - 'proof/Phil/Surface/SurfaceBinderScopeAggregate.v'
+      - 'src/Phil/Surface/GrammarV1/**'
+      - 'test/Phase1GrammarV1BinderScopeAggregateMain.hs'
+      - 'test/Phase1GrammarV1BinderScopeMain.hs'
+      - 'test/Phase1GrammarV1GenericBinderScopeMain.hs'
+      - 'test/Phase1GrammarV1GenericTermScopeMain.hs'
+      - 'test/Phase1GrammarV1LetPatternScopeMain.hs'
+      - 'test/Phase1GrammarV1CaseArmScopeMain.hs'
+      - 'test/Phase1GrammarV1BorrowViewScopeMain.hs'
+      - 'test/Phase1GrammarV1JoinLoopMain.hs'
+      - 'test/Phase1GrammarV1IntrinsicRefinementTypeElaborationMain.hs'
+      - 'test/Phase1GrammarV1ProtocolBinderScopeMain.hs'
+      - 'test/Phase1GrammarV1CallableOutcomeStateMain.hs'
+      - 'docs/phase-1/surface-binder-scope-closeout-v1.md'
+      - '.github/workflows/phase1-surface-binder-scope-closeout.yml'
+
+permissions:
+  contents: read
+
+jobs:
+  rocq-surface-binder-scope-closeout:
+    runs-on: ubuntu-latest
+    container:
+      image: rocq/rocq-prover:9.2.0
+      options: --user root
+    steps:
+      - uses: actions/checkout@v4
+      - name: Compile complete SURF-009 proof chain
+        shell: bash
+        run: |
+          set -euo pipefail
+          export PATH="/home/rocq/.opam/${COMPILER}/bin:$PATH"
+          for proof in \
+            proof/Phil/Core/BindingSemantics.v \
+            proof/Phil/Surface/SurfaceBinderScopeCore.v \
+            proof/Phil/Surface/SurfaceGenericBinderScope.v \
+            proof/Phil/Surface/SurfaceLetPatternScope.v \
+            proof/Phil/Surface/SurfaceCaseArmScope.v \
+            proof/Phil/Surface/SurfaceBorrowViewScope.v \
+            proof/Phil/Surface/SurfaceJoinStateScope.v \
+            proof/Phil/Surface/SurfaceLoopStateScope.v \
+            proof/Phil/Surface/SurfaceRefinementBinderScope.v \
+            proof/Phil/Surface/SurfaceProtocolBinderScope.v \
+            proof/Phil/Surface/SurfaceCallableOutcomeStateScope.v \
+            proof/Phil/Surface/SurfaceBinderScopeAggregate.v
+          do
+            rocq c -Q proof/Phil Phil "$proof"
+          done
+          sha256sum \
+            proof/Phil/Surface/SurfaceBinderScopeAggregate.v \
+            proof/Phil/Surface/SurfaceBinderScopeAggregate.vo \
+            > surface-binder-scope-closeout-proof.sha256
+          cat surface-binder-scope-closeout-proof.sha256
+      - uses: actions/upload-artifact@v4
+        with:
+          name: surface-binder-scope-closeout-proof
+          path: surface-binder-scope-closeout-proof.sha256
+          if-no-files-found: error
+
+  verify-surface-binder-scope-production-binding:
+    needs: rocq-surface-binder-scope-closeout
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: haskell-actions/setup@v2
+        with:
+          ghc-version: '9.6.7'
+          cabal-version: 'latest'
+      - name: Build complete Haskell substrate
+        run: cabal build all --enable-tests
+      - name: Enforce exhaustive production binder-kind inventory
+        run: |
+          cabal exec -- ghc -isrc -Wall -Wincomplete-patterns -Werror -fno-code \
+            test/Phase1GrammarV1BinderScopeAggregateMain.hs
+          cabal exec -- runghc -Wall -Wincomplete-patterns -Werror -isrc \
+            test/Phase1GrammarV1BinderScopeAggregateMain.hs
+      - name: Strict typecheck production binder authorities
+        run: |
+          set -euo pipefail
+          for module in \
+            src/Phil/Surface/GrammarV1/BinderScope.hs \
+            src/Phil/Surface/GrammarV1/GenericBinderScope.hs \
+            src/Phil/Surface/GrammarV1/GenericTermScope.hs \
+            src/Phil/Surface/GrammarV1/PatternBinderScope.hs \
+            src/Phil/Surface/GrammarV1/LetPatternScope.hs \
+            src/Phil/Surface/GrammarV1/CaseArmScope.hs \
+            src/Phil/Surface/GrammarV1/BorrowViewScope.hs \
+            src/Phil/Surface/GrammarV1/JoinStateScope.hs \
+            src/Phil/Surface/GrammarV1/LoopStateScope.hs \
+            src/Phil/Surface/GrammarV1/SemanticRefinementType.hs \
+            src/Phil/Surface/GrammarV1/ProtocolBinderScope.hs \
+            src/Phil/Surface/GrammarV1/SemanticCallableOutcomeState.hs
+          do
+            cabal exec -- ghc -isrc -Wall -Werror -fno-code "$module"
+          done
+      - name: Replay permanent SURF-009 focused corpora
+        run: |
+          set -euo pipefail
+          for test_file in \
+            test/Phase1GrammarV1BinderScopeMain.hs \
+            test/Phase1GrammarV1GenericBinderScopeMain.hs \
+            test/Phase1GrammarV1GenericTermScopeMain.hs \
+            test/Phase1GrammarV1LetPatternScopeMain.hs \
+            test/Phase1GrammarV1CaseArmScopeMain.hs \
+            test/Phase1GrammarV1BorrowViewScopeMain.hs \
+            test/Phase1GrammarV1JoinLoopMain.hs \
+            test/Phase1GrammarV1IntrinsicRefinementTypeElaborationMain.hs \
+            test/Phase1GrammarV1ProtocolBinderScopeMain.hs \
+            test/Phase1GrammarV1CallableOutcomeStateMain.hs
+          do
+            cabal exec -- runghc -Wall -Werror -isrc "$test_file"
+          done
+      - name: Record proof and production-binding identities
+        run: |
+          set -euo pipefail
+          sha256sum \
+            proof/Phil/Surface/SurfaceBinderScopeCore.v \
+            proof/Phil/Surface/SurfaceGenericBinderScope.v \
+            proof/Phil/Surface/SurfaceLetPatternScope.v \
+            proof/Phil/Surface/SurfaceCaseArmScope.v \
+            proof/Phil/Surface/SurfaceBorrowViewScope.v \
+            proof/Phil/Surface/SurfaceJoinStateScope.v \
+            proof/Phil/Surface/SurfaceLoopStateScope.v \
+            proof/Phil/Surface/SurfaceRefinementBinderScope.v \
+            proof/Phil/Surface/SurfaceProtocolBinderScope.v \
+            proof/Phil/Surface/SurfaceCallableOutcomeStateScope.v \
+            proof/Phil/Surface/SurfaceBinderScopeAggregate.v \
+            src/Phil/Surface/GrammarV1/BinderScope.hs \
+            src/Phil/Surface/GrammarV1/GenericBinderScope.hs \
+            src/Phil/Surface/GrammarV1/GenericTermScope.hs \
+            src/Phil/Surface/GrammarV1/LetPatternScope.hs \
+            src/Phil/Surface/GrammarV1/CaseArmScope.hs \
+            src/Phil/Surface/GrammarV1/BorrowViewScope.hs \
+            src/Phil/Surface/GrammarV1/JoinStateScope.hs \
+            src/Phil/Surface/GrammarV1/LoopStateScope.hs \
+            src/Phil/Surface/GrammarV1/SemanticRefinementType.hs \
+            src/Phil/Surface/GrammarV1/ProtocolBinderScope.hs \
+            src/Phil/Surface/GrammarV1/SemanticCallableOutcomeState.hs \
+            test/Phase1GrammarV1BinderScopeAggregateMain.hs \
+            > surface-binder-scope-production-binding.sha256
+          cat surface-binder-scope-production-binding.sha256
+      - uses: actions/upload-artifact@v4
+        with:
+          name: surface-binder-scope-production-binding
+          path: surface-binder-scope-production-binding.sha256
+          if-no-files-found: error
