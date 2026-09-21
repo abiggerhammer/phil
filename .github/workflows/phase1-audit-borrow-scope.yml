@@ -40,4 +40,4 @@ jobs:
       - name: Replay PHIL-AUD-BORROW-LOCAL-001
         run: cabal exec -- runghc -isrc -Wall -Werror test/Phase1AuditBorrowScopeMain.hs
       - name: Replay frozen Surface conformance controls
-        run: cabal test surface-conformance --test-show-details=direct
+        run: cabal test phil-surface-conformance-tests --test-show-details=direct
