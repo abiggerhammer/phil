@@ -1,0 +1,87 @@
+name: Phase 1 Surface Join State Scope Proofs
+
+on:
+  pull_request:
+    paths:
+      - 'proof/Phil/Core/BindingSemantics.v'
+      - 'proof/Phil/Surface/SurfaceBinderScopeCore.v'
+      - 'proof/Phil/Surface/SurfaceLetPatternScope.v'
+      - 'proof/Phil/Surface/SurfaceCaseArmScope.v'
+      - 'proof/Phil/Surface/SurfaceJoinStateScope.v'
+      - 'src/Phil/Surface/GrammarV1/JoinStateScope.hs'
+      - 'src/Phil/Surface/GrammarV1/CaseArmScope.hs'
+      - 'src/Phil/Surface/GrammarV1/LexicalReferenceScope.hs'
+      - 'test/Phase1GrammarV1JoinLoopMain.hs'
+      - 'docs/phase-1/surface-join-state-scope-proof-v1.md'
+      - '.github/workflows/phase1-surface-join-state-scope-proofs.yml'
+  push:
+    branches: [main]
+    paths:
+      - 'proof/Phil/Core/BindingSemantics.v'
+      - 'proof/Phil/Surface/SurfaceBinderScopeCore.v'
+      - 'proof/Phil/Surface/SurfaceLetPatternScope.v'
+      - 'proof/Phil/Surface/SurfaceCaseArmScope.v'
+      - 'proof/Phil/Surface/SurfaceJoinStateScope.v'
+      - 'src/Phil/Surface/GrammarV1/JoinStateScope.hs'
+      - 'src/Phil/Surface/GrammarV1/CaseArmScope.hs'
+      - 'src/Phil/Surface/GrammarV1/LexicalReferenceScope.hs'
+      - 'test/Phase1GrammarV1JoinLoopMain.hs'
+      - 'docs/phase-1/surface-join-state-scope-proof-v1.md'
+      - '.github/workflows/phase1-surface-join-state-scope-proofs.yml'
+
+permissions:
+  contents: read
+
+jobs:
+  rocq-surface-join-state-scope:
+    runs-on: ubuntu-latest
+    container:
+      image: rocq/rocq-prover:9.2.0
+      options: --user root
+    steps:
+      - uses: actions/checkout@v4
+      - name: Compile Surface join-state scope proof
+        shell: bash
+        run: |
+          set -euo pipefail
+          export PATH="/home/rocq/.opam/${COMPILER}/bin:$PATH"
+          rocq c -Q proof/Phil Phil proof/Phil/Core/BindingSemantics.v
+          rocq c -Q proof/Phil Phil proof/Phil/Surface/SurfaceBinderScopeCore.v
+          rocq c -Q proof/Phil Phil proof/Phil/Surface/SurfaceLetPatternScope.v
+          rocq c -Q proof/Phil Phil proof/Phil/Surface/SurfaceCaseArmScope.v
+          rocq c -Q proof/Phil Phil proof/Phil/Surface/SurfaceJoinStateScope.v
+          sha256sum \
+            proof/Phil/Surface/SurfaceJoinStateScope.v \
+            proof/Phil/Surface/SurfaceJoinStateScope.vo \
+            > surface-join-state-scope-proof.sha256
+          cat surface-join-state-scope-proof.sha256
+      - uses: actions/upload-artifact@v4
+        with:
+          name: surface-join-state-scope-proof
+          path: surface-join-state-scope-proof.sha256
+          if-no-files-found: error
+
+  verify-surface-join-state-scope:
+    needs: rocq-surface-join-state-scope
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: haskell-actions/setup@v2
+        with:
+          ghc-version: '9.6.7'
+          cabal-version: 'latest'
+      - name: Build complete Haskell substrate
+        run: cabal build all --enable-tests
+      - name: Strict typecheck join-state scope authorities
+        run: |
+          set -euo pipefail
+          for module in \
+            src/Phil/Surface/GrammarV1/JoinStateScope.hs \
+            src/Phil/Surface/GrammarV1/CaseArmScope.hs \
+            src/Phil/Surface/GrammarV1/LexicalReferenceScope.hs \
+            test/Phase1GrammarV1JoinLoopMain.hs
+          do
+            cabal exec -- ghc -isrc -Wall -Werror -fno-code "$module"
+          done
+      - name: Replay SURF-009 join/loop scope corpus
+        run: cabal exec -- runghc -Wall -Werror -isrc test/Phase1GrammarV1JoinLoopMain.hs
