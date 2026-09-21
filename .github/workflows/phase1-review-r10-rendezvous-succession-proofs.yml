@@ -8,7 +8,9 @@ on:
       - 'proof/Phil/Core/ReviewR10RendezvousSuccessionImplementation.v'
       - 'src/Phil/Core/ProcessRendezvous.hs'
       - 'src/Phil/Core/ConcurrencyRendezvousCertification.hs'
+      - 'src/Phil/Core/ConcurrencyTerminalCertification.hs'
       - 'test/Phase1ReviewR10RendezvousSuccessionMain.hs'
+      - 'test/Phase1ReviewR10R16RestrictedSuccessionMain.hs'
       - 'test/Phase1ExactProcessRendezvousMain.hs'
       - 'docs/phase-1/review-r10-rendezvous-succession-proof-boundary-v1.md'
       - '.github/workflows/phase1-review-r10-rendezvous-succession-proofs.yml'
@@ -89,8 +91,12 @@ jobs:
         run: |
           cabal exec -- ghc -isrc -Wall -Werror -fno-code src/Phil/Core/ProcessRendezvous.hs
           cabal exec -- ghc -isrc -Wall -Werror -fno-code src/Phil/Core/ConcurrencyRendezvousCertification.hs
+          cabal exec -- ghc -isrc -Wall -Werror -fno-code src/Phil/Core/ConcurrencyTerminalCertification.hs
           cabal exec -- ghc -isrc -Wall -Werror -fno-code test/Phase1ReviewR10RendezvousSuccessionMain.hs
+          cabal exec -- ghc -isrc -Wall -Werror -fno-code test/Phase1ReviewR10R16RestrictedSuccessionMain.hs
       - name: Replay R10 succession regression
         run: cabal exec -- runghc -Wall -Werror -isrc test/Phase1ReviewR10RendezvousSuccessionMain.hs
+      - name: Replay R10/R16 restricted succession and lineage regression
+        run: cabal exec -- runghc -Wall -Werror -isrc test/Phase1ReviewR10R16RestrictedSuccessionMain.hs
       - name: Replay exact rendezvous predecessor corpus
         run: cabal exec -- runghc -Wall -Werror -isrc test/Phase1ExactProcessRendezvousMain.hs

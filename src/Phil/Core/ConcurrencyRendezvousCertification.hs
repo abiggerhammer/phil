@@ -21,6 +21,7 @@ module Phil.Core.ConcurrencyRendezvousCertification
   , CertifiedRendezvousResult
   , certifiedRendezvousState
   , certifiedRendezvousCausality
+  , certifiedRendezvousActivationMatches
   , ConcurrencyRendezvousCertificationError (..)
   , certifyRendezvousActivation
   , certifyRendezvousProtocol
@@ -31,6 +32,7 @@ module Phil.Core.ConcurrencyRendezvousCertification
   , certifyProcessRendezvous
   , certifyProcessRendezvousSuccessor
   , certifyRestrictedProcessRendezvous
+  , certifyRestrictedProcessRendezvousSuccessor
   ) where
 
 import qualified ConcurrencyRendezvousKernel as Kernel
@@ -70,6 +72,7 @@ import Phil.Core.ProcessRendezvous
   , checkProcessCommunicationState
   , checkProcessCommunicationSuccessor
   , checkRestrictedProcessRendezvous
+  , checkRestrictedProcessRendezvousSuccessor
   , communicationStateFromActivation
   )
 import Phil.Core.Protocol
@@ -208,6 +211,7 @@ certifiedRendezvousEventKind witness = SynchronousRendezvousEvent
 data CertifiedRendezvousResult = CertifiedRendezvousResult
   { certifiedRendezvousState :: ProcessCommunicationState
   , certifiedRendezvousCausality :: CertifiedRendezvousCausality
+  , certifiedRendezvousActivationAuthority :: CertifiedRendezvousActivation
   }
   deriving (Eq, Show)
 
@@ -216,6 +220,7 @@ data ConcurrencyRendezvousCertificationError
   | ConcurrencyRendezvousProtocolError ProtocolFamilyError
   | ConcurrencyRendezvousProtocolInvariant
   | ConcurrencyRendezvousNativeError ProcessRendezvousError
+  | ConcurrencyRendezvousActivationLineageMismatch
   | ConcurrencyRendezvousReflectionProtocolError ProcessKey ProtocolCheckError
   | ConcurrencyRendezvousMessageError BoundaryMessageError
   | ConcurrencyRendezvousMessageTypeMismatch Ty Ty
@@ -356,6 +361,7 @@ certifyProcessRendezvousSuccessor
   -> RendezvousMessageEvidence
   -> Either ConcurrencyRendezvousCertificationError CertifiedRendezvousResult
 certifyProcessRendezvousSuccessor activation protocol predecessor request evidence = do
+  requireActivationLineage activation predecessor
   let beforeState = certifiedRendezvousState predecessor
   afterState <- mapLeft ConcurrencyRendezvousNativeError $
     checkProcessCommunicationSuccessor
@@ -386,6 +392,46 @@ certifyRestrictedProcessRendezvous activation protocol contexts request transfer
       transfer
   certifyAcceptedRendezvous
     activation protocol beforeState afterState request (Just transfer) evidence
+
+-- | Restricted-message successor from an exact previously certified live state.
+-- The predecessor's immutable activation authority must match before any live
+-- transition is attempted.
+certifyRestrictedProcessRendezvousSuccessor
+  :: CertifiedRendezvousActivation
+  -> CertifiedRendezvousProtocol
+  -> CertifiedRendezvousResult
+  -> ProcessRendezvousRequest
+  -> RestrictedMessageTransfer
+  -> RendezvousMessageEvidence
+  -> Either ConcurrencyRendezvousCertificationError CertifiedRendezvousResult
+certifyRestrictedProcessRendezvousSuccessor
+    activation protocol predecessor request transfer evidence = do
+  requireActivationLineage activation predecessor
+  let beforeState = certifiedRendezvousState predecessor
+  afterState <- mapLeft ConcurrencyRendezvousNativeError $
+    checkRestrictedProcessRendezvousSuccessor
+      (certifiedRendezvousProtocolInstance protocol)
+      (certifiedRendezvousActivationNetwork activation)
+      beforeState
+      request
+      transfer
+  certifyAcceptedRendezvous
+    activation protocol beforeState afterState request (Just transfer) evidence
+
+certifiedRendezvousActivationMatches
+  :: CertifiedRendezvousActivation
+  -> CertifiedRendezvousResult
+  -> Bool
+certifiedRendezvousActivationMatches activation predecessor =
+  certifiedRendezvousActivationAuthority predecessor == activation
+
+requireActivationLineage
+  :: CertifiedRendezvousActivation
+  -> CertifiedRendezvousResult
+  -> Either ConcurrencyRendezvousCertificationError ()
+requireActivationLineage activation predecessor
+  | certifiedRendezvousActivationMatches activation predecessor = Right ()
+  | otherwise = Left ConcurrencyRendezvousActivationLineageMismatch
 
 certifyAcceptedRendezvous
   :: CertifiedRendezvousActivation
@@ -435,6 +481,7 @@ certifyAcceptedRendezvous activation protocol beforeState afterState request tra
         { certifiedRendezvousSenderProcess = senderProcess
         , certifiedRendezvousReceiverProcess = receiverProcess
         }
+    , certifiedRendezvousActivationAuthority = activation
     }
   where
     requireContext processKey contextMap = maybe
