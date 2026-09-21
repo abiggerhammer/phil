@@ -30,7 +30,7 @@ Definition phase1_surface_normalize_effects_requirement_payload
                 phase1_surface_normalize_effect_set_term_arguments_tree
                   effects_tree,
                 phase1_surface_expect_literal ";" terminator_tree with
-          | Some tt, Some tt, Some effects, Some tt, Some tt =>
+          | Some tt, Some tt, Some tt, Some effects, Some tt =>
               Some (name_tree, effects)
           | _, _, _, _, _ => None
           end
