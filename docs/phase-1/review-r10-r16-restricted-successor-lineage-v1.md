@@ -46,6 +46,11 @@ attempting any transition:
 - `certifyProcessRendezvousSuccessor`; and
 - new `certifyRestrictedProcessRendezvousSuccessor`.
 
+The live-to-terminal bridge is bound too: `CertifiedTerminalRuntime` retains the
+activation it was initialized from, and `certifyEnabledRendezvousStep` rejects a
+rendezvous from any other activation lineage before treating it as an enabled
+semantic step.
+
 A mismatch fails with
 `ConcurrencyRendezvousActivationLineageMismatch`. Equality here is the full
 opaque activation witness, not merely process names, protocol instance, role
@@ -69,7 +74,8 @@ The new permanent R10/R16 corpus covers:
 - donor-activation rejection on both unrestricted and restricted successor
   APIs;
 - a positive control in which the donor activation runs its own genuine
-  request/reply chain and preserves its additional owner; and
+  request/reply chain and preserves its additional owner;
+- terminal-runtime rejection of a rendezvous certified under a donor activation; and
 - the initial restricted wrapper continuing to reject already-advanced live
   contexts rather than being weakened into a successor path.
 
