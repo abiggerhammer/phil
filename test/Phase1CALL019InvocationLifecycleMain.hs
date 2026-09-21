@@ -155,6 +155,7 @@ replaceWitness = do
     applySurfaceCallableInvocationLifecycles
       bindings
       [lifecycleAccount]
+      [[lifecycleAccount]]
       (singletonCallableResourceState replacePredecessor)
   assert
     (lookupCallableOccurrence replacePredecessorKey finalState == Nothing)
