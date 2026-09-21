@@ -59,6 +59,48 @@ printf '%s\noutput.bin\n' "$content_id" | \
   HOME="$work/home" bin/steve get "$work/store" "$work/user-files"
 cmp "$work/user-files/input.bin" "$work/user-files/output.bin"
 
+if [[ "$(uname -s)" == "Linux" ]]; then
+  steve_get_limited() {
+    local blocks="$1"
+    local requested_id="$2"
+    local destination="$3"
+    (
+      ulimit -f "$blocks"
+      trap '' XFSZ
+      printf '%s\n%s\n' "$requested_id" "$destination" | \
+        HOME="$work/home" bin/steve get "$work/store" "$work/user-files"
+    )
+  }
+
+  # PHIL-AUD-STEVE-REPLACE-001 / R01: zero-capacity failure preserves
+  # the exact existing destination bytes.
+  printf 'r01 packaged sentinel\n' > "$work/user-files/r01.bin"
+  cp "$work/user-files/r01.bin" "$work/r01.expected"
+  steve_get_limited 0 "$content_id" "r01.bin"
+  cmp "$work/r01.expected" "$work/user-files/r01.bin"
+
+  # R02: permit a partial staged write, then fail before publication.
+  dd if=/dev/zero of="$work/user-files/large-input.bin" bs=1024 count=256 status=none
+  large_content_id="$(printf 'large-input.bin\n' | \
+    HOME="$work/home" bin/steve put "$work/store" "$work/user-files")"
+  test "${#large_content_id}" -eq 64
+  printf 'r02 packaged sentinel\n' > "$work/user-files/r02.bin"
+  cp "$work/user-files/r02.bin" "$work/r02.expected"
+  steve_get_limited 8 "$large_content_id" "r02.bin"
+  cmp "$work/r02.expected" "$work/user-files/r02.bin"
+
+  # R03: failed publication to a previously absent path preserves absence.
+  rm -f "$work/user-files/r03.bin"
+  steve_get_limited 0 "$content_id" "r03.bin"
+  test ! -e "$work/user-files/r03.bin"
+
+  if find "$work/user-files" -maxdepth 1 -name '.*.steve-replace.*' -print -quit | grep -q .; then
+    echo 'Steve replacement left a staged temporary file after failure' >&2
+    exit 1
+  fi
+  printf 'PASS: PHIL-AUD-STEVE-REPLACE-001 packaged GET preserves prior state on write failure\n'
+fi
+
 printf 'must survive corrupt GET\n' > "$work/user-files/guard.bin"
 printf 'tampered bytes\n' > "$work/store/$content_id"
 printf '%s\nguard.bin\n' "$content_id" | \
