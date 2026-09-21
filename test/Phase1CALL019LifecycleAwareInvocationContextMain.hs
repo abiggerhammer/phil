@@ -169,6 +169,7 @@ account transition = SurfaceCallableInvocationSemanticAccount
 summary :: CalleeTransition -> SurfaceCallableSemanticSummary
 summary transition = SurfaceCallableSemanticSummary
   { surfaceCallableSemanticAccounts = [account transition]
+  , surfaceCallableSemanticPaths = [[account transition]]
   , surfaceReachableCallableEffects = Set.empty
   , surfaceRequiredCallerAuthority = Set.empty
   , surfaceReachableCallableFailures = Set.empty
