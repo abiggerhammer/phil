@@ -111,7 +111,8 @@ preserveWitness = do
         (binding preserveSpan preserveKey preserveBody)
       initial = singletonCallableResourceState preserveOccurrence
   (witnesses, finalState) <- mapLeft show $
-    applySurfaceCallableInvocationLifecycles bindings [lifecycleAccount] initial
+    applySurfaceCallableInvocationLifecycles
+      bindings [lifecycleAccount] [[lifecycleAccount]] initial
   assert (length witnesses == 1) "expected exactly one preserving witness"
   witness <- only witnesses
   assert
@@ -137,6 +138,7 @@ consumeWitness = do
     applySurfaceCallableInvocationLifecycles
       bindings
       [lifecycleAccount]
+      [[lifecycleAccount]]
       (singletonCallableResourceState consumeOccurrence)
   assert
     (lookupCallableOccurrence consumeKey finalState == Nothing)
@@ -172,6 +174,7 @@ sequentialConsumeRejectsReuse = do
   case applySurfaceCallableInvocationLifecycles
       bindings
       [first, second]
+      [[first, second]]
       (singletonCallableResourceState consumeOccurrence) of
     Left (SurfaceCallableLifecyclePredecessorUnavailable identity key)
       | identity == (secondConsumeSpan, workerKey)
@@ -188,6 +191,7 @@ transitionSubstitutionRejects = do
   case applySurfaceCallableInvocationLifecycles
       bindings
       [lifecycleAccount]
+      [[lifecycleAccount]]
       (singletonCallableResourceState consumeOccurrence) of
     Left (SurfaceCallableLifecycleTransitionMismatch identity expected actual)
       | identity == (consumeSpan, workerKey)
@@ -205,6 +209,7 @@ bindingDomainMismatchRejects = do
   case applySurfaceCallableInvocationLifecycles
       wrong
       [lifecycleAccount]
+      [[lifecycleAccount]]
       (singletonCallableResourceState consumeOccurrence) of
     Left (SurfaceCallableLifecycleBindingDomainMismatch expected actual)
       | expected == Set.singleton (consumeSpan, workerKey)
@@ -221,6 +226,7 @@ duplicateInvocationRejects = do
   case applySurfaceCallableInvocationLifecycles
       bindings
       [lifecycleAccount, lifecycleAccount]
+      [[lifecycleAccount, lifecycleAccount]]
       (singletonCallableResourceState consumeOccurrence) of
     Left (SurfaceCallableLifecycleDuplicateInvocation identity)
       | identity == (consumeSpan, workerKey) -> Right ()
