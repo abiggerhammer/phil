@@ -36,6 +36,9 @@ main = do
     , test "certificate prerequisite becomes explicit parent-to-child support" certificatePrerequisiteSupportPreserved
     , test "revision graph consumes explicit certificate support direction" certificatePrerequisiteGraphPreserved
     , test "revision graph does not reinterpret generation lineage as support" lineageIsNotGraphSupport
+    , test "certificate evidence binds exact handoff obligation support" certificateEvidenceSupportPreserved
+    , test "certificate evidence rejects a revision mismatch" certificateEvidenceRevisionMismatchRejected
+    , test "certificate evidence binding rejects non-certificate dispositions" nonCertificateEvidenceBindingRejected
     , test "later sibling certificate can depend on earlier sibling revision" siblingPrerequisiteSupportPreserved
     , test "unknown certificate prerequisite fails closed" unknownPrerequisiteRejected
     , test "handoff preserves explicit export disposition" exportDispositionPreserved
@@ -104,6 +107,54 @@ lineageIsNotGraphSupport =
         Left _ -> False
     Left _ -> False
 
+certificateEvidenceSupportPreserved :: Bool
+certificateEvidenceSupportPreserved =
+  case handoffResolvedObligation handoffConfig certificateResolved of
+    Right (parent : child : _) ->
+      let parentRevision = revisionId (handoffRevision parent)
+          childRevision = revisionId (handoffRevision child)
+          upstreamEvidence = EvidenceEntryId "evidence.test.handoff.upstream"
+          staleDependency = RevisionId "rev.test.handoff.stale"
+          provisional = testCertificateEvidence
+            parentRevision
+            [ DependsOnEvidence upstreamEvidence
+            , DependsOnObligation staleDependency
+            ]
+      in case bindHandoffCertificateEvidence parent provisional of
+          Right finalized ->
+            evidenceDependsOn finalized
+              == [ DependsOnEvidence upstreamEvidence
+                 , DependsOnObligation childRevision
+                 ]
+              && evidenceEntryDigest finalized == deriveEvidenceEntryDigest finalized
+              && evidenceEntryDigest finalized /= evidenceEntryDigest provisional
+          Left _ -> False
+    _ -> False
+
+certificateEvidenceRevisionMismatchRejected :: Bool
+certificateEvidenceRevisionMismatchRejected =
+  case handoffResolvedObligation handoffConfig certificateResolved of
+    Right (parent : _) ->
+      let expected = revisionId (handoffRevision parent)
+          actual = RevisionId "rev.test.handoff.other"
+      in case bindHandoffCertificateEvidence
+          parent (testCertificateEvidence actual []) of
+          Left (HandoffEvidenceRevisionMismatch expected' actual') ->
+            expected' == expected && actual' == actual
+          _ -> False
+    _ -> False
+
+nonCertificateEvidenceBindingRejected :: Bool
+nonCertificateEvidenceBindingRejected =
+  case handoffResolvedObligation handoffConfig runtimeResolved of
+    Right (parent : _) ->
+      let revision = revisionId (handoffRevision parent)
+      in case bindHandoffCertificateEvidence
+          parent (testCertificateEvidence revision []) of
+          Left (HandoffEvidenceNotCertificate actual) -> actual == revision
+          _ -> False
+    _ -> False
+
 siblingPrerequisiteSupportPreserved :: Bool
 siblingPrerequisiteSupportPreserved =
   case handoffResolvedObligation handoffConfig siblingResolved of
@@ -120,6 +171,7 @@ unknownPrerequisiteRejected =
     Left (UnknownPrerequisiteSupport consumer prerequisite) ->
       consumer == obligationId unknownParentObligation
         && prerequisite == missingPrerequisiteId
+    Left _ -> False
     Right _ -> False
 
 exportDispositionPreserved :: Bool
@@ -130,6 +182,27 @@ exportDispositionPreserved =
         && handoffCanonicalProposition entry == Falsehood
         && null (handoffSupportDependencies entry)
     _ -> False
+
+testCertificateEvidence :: RevisionId -> [EvidenceDependency] -> EvidenceEntry
+testCertificateEvidence revision dependencies = EvidenceEntry
+  { evidenceEntryId = EvidenceEntryId "evidence.test.handoff.certificate"
+  , evidenceEntryDigest = Digest "stale-before-handoff"
+  , evidenceObligationRevision = revision
+  , evidenceAssuranceKind = KernelChecked
+  , evidenceRole = EvidenceRole "establishes"
+  , evidenceProducer = "test-producer"
+  , evidenceChecker = "test-checker"
+  , evidenceArtifact = Nothing
+  , evidenceInputDigests = []
+  , evidenceAssumptions = []
+  , evidenceDependsOn = dependencies
+  , evidenceValidityScope = ValidityScope mempty
+  , evidenceResult = EvidenceAccepted
+  , evidenceJustifies = ["certificate"]
+  , evidenceRuntimeMechanism = Nothing
+  , evidenceRuntimeResidue = []
+  , evidenceCostRefs = []
+  }
 
 handoffConfig :: HandoffConfig
 handoffConfig = HandoffConfig
