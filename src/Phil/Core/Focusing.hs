@@ -31,7 +31,6 @@ import Phil.Core.Context
 import Phil.Core.Refinement
   ( bindingEvidencePropositions
   , normalizeProposition
-  , substituteProposition
   )
 import Phil.Core.Session
   ( SessionError
@@ -342,7 +341,11 @@ elaborateClaimApplication staticContext state expansionStack claimName arguments
       | claimName `elem` expansionStack ->
           Left (RecursiveTransparentClaim (reverse (claimName : expansionStack)))
       | otherwise -> do
-          let instantiated = foldl substituteOne body (zip parameters elaboratedArguments)
+          let replacements = Map.fromList
+                [ (parameterName, argument)
+                | ((parameterName, _), argument) <- zip parameters elaboratedArguments
+                ]
+              instantiated = substituteClaimArguments replacements body
           (expanded, bodySteps) <- elaborateProposition
             staticContext
             state
@@ -363,8 +366,42 @@ elaborateClaimApplication staticContext state expansionStack claimName arguments
             Right (RefToNat argument', steps ++ [InsertedUIntToNat argument'])
           _ -> Left (ClaimArgumentSortMismatch claimName index expectedSort actualSort)
 
-    substituteOne current ((parameterName, _), argument) =
-      substituteProposition parameterName argument current
+-- | Instantiate all transparent-claim formals against the original body in
+-- one traversal. Replacements are returned verbatim rather than traversed
+-- again, so a caller variable that happens to share a later formal's spelling
+-- cannot be captured by that later substitution.
+substituteClaimArguments :: Map.Map Name RefTerm -> Proposition -> Proposition
+substituteClaimArguments replacements proposition =
+  case proposition of
+    Truth -> Truth
+    Falsehood -> Falsehood
+    Equal left right -> Equal (term left) (term right)
+    NotEqual left right -> NotEqual (term left) (term right)
+    LessThan left right -> LessThan (term left) (term right)
+    LessEqual left right -> LessEqual (term left) (term right)
+    Member value collection -> Member (term value) (term collection)
+    Disjoint left right -> Disjoint (term left) (term right)
+    Conjunction left right -> Conjunction (recur left) (recur right)
+    Disjunction left right -> Disjunction (recur left) (recur right)
+    Negation inner -> Negation (recur inner)
+    Atom claimName arguments -> Atom claimName (map term arguments)
+  where
+    term = substituteClaimTerm replacements
+    recur = substituteClaimArguments replacements
+
+substituteClaimTerm :: Map.Map Name RefTerm -> RefTerm -> RefTerm
+substituteClaimTerm replacements refTerm =
+  case refTerm of
+    RefVar name -> Map.findWithDefault refTerm name replacements
+    RefField base field resultSort -> RefField (recur base) field resultSort
+    RefLen value -> RefLen (recur value)
+    RefToNat value -> RefToNat (recur value)
+    RefAdd left right -> RefAdd (recur left) (recur right)
+    RefSub left right -> RefSub (recur left) (recur right)
+    RefScale coefficient value -> RefScale coefficient (recur value)
+    _ -> refTerm
+  where
+    recur = substituteClaimTerm replacements
 
 elaborateTerm
   :: CheckState
