@@ -1,0 +1,38 @@
+name: Phase 1 Audit Portable Support Correspondence
+
+on:
+  pull_request:
+    paths:
+      - 'src/Phil/Handoff/Phase1AssuranceInputs.hs'
+      - 'test/Phase1AuditPortableSupportCorrespondenceMain.hs'
+      - 'docs/phase-1/audit-portable-support-correspondence-v1.md'
+      - '.github/workflows/phase1-audit-portable-support-correspondence.yml'
+  push:
+    branches: [main]
+    paths:
+      - 'src/Phil/Handoff/Phase1AssuranceInputs.hs'
+      - 'test/Phase1AuditPortableSupportCorrespondenceMain.hs'
+      - 'docs/phase-1/audit-portable-support-correspondence-v1.md'
+      - '.github/workflows/phase1-audit-portable-support-correspondence.yml'
+
+permissions:
+  contents: read
+
+jobs:
+  portable-support-correspondence:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: haskell-actions/setup@v2
+        with:
+          ghc-version: '9.6.7'
+          cabal-version: 'latest'
+
+      - name: Build assurance handoff substrate
+        run: cabal build lib:phil-core --ghc-options=-Werror
+
+      - name: Strict typecheck portable support correspondence
+        run: cabal exec -- ghc -isrc -Wall -Werror -fno-code test/Phase1AuditPortableSupportCorrespondenceMain.hs
+
+      - name: Replay typed support round-trip controls
+        run: cabal exec -- runghc -isrc -Wall -Werror test/Phase1AuditPortableSupportCorrespondenceMain.hs
