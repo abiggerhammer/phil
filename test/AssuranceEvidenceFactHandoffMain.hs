@@ -44,7 +44,7 @@ evidenceFactSupportPreserved =
     Right (parent : child : _) ->
       let childRevision = revisionId (handoffRevision child)
       in handoffSupportDependencies parent
-          == [ DependsOnEvidence evidenceEntryId
+          == [ DependsOnEvidence mappedEvidenceEntryId
              , DependsOnObligation childRevision
              ]
     _ -> False
@@ -75,7 +75,7 @@ certificateEvidenceSupportRebound =
           Right finalized ->
             evidenceDependsOn finalized
               == [ DependsOnEvidence independentEvidence
-                 , DependsOnEvidence evidenceEntryId
+                 , DependsOnEvidence mappedEvidenceEntryId
                  , DependsOnObligation childRevision
                  ]
               && evidenceEntryDigest finalized == deriveEvidenceEntryDigest finalized
@@ -96,7 +96,7 @@ evidenceSupportStaysPrecise =
     _ -> False
 
 evidenceIdentityMap :: Map.Map (Name, Int) EvidenceEntryId
-evidenceIdentityMap = Map.singleton (evidenceName, evidenceIndex) evidenceEntryId
+evidenceIdentityMap = Map.singleton (evidenceName, evidenceIndex) mappedEvidenceEntryId
 
 evidenceName :: Name
 evidenceName = Name "proof"
@@ -104,8 +104,8 @@ evidenceName = Name "proof"
 evidenceIndex :: Int
 evidenceIndex = 1
 
-evidenceEntryId :: EvidenceEntryId
-evidenceEntryId = EvidenceEntryId "evidence.test.handoff.proof.1"
+mappedEvidenceEntryId :: EvidenceEntryId
+mappedEvidenceEntryId = EvidenceEntryId "evidence.test.handoff.proof.1"
 
 mixedResolved :: ResolvedObligation
 mixedResolved = ResolvedObligation
