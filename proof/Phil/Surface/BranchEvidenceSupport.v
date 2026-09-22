@@ -147,7 +147,7 @@ Proof.
     subst.
   - simpl in Hin.
     destruct Hin as [Hequal | Hin].
-    + apply Hdistinct. exact Hequal.
+    + apply Hdistinct. symmetry. exact Hequal.
     + contradiction.
   - eapply HnoRebase. exact Hpair.
 Qed.
