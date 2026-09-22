@@ -244,7 +244,7 @@ checkTypeDefinedness ty state =
     TyBytes index -> sideConditions (Equal index index)
     TyProof proposition -> sideConditions proposition
     TyProduct elements ->
-      fmap concat (mapM (checkTypeDefinedness . productElementType) elements)
+      fmap concat (mapM (\element -> checkTypeDefinedness (productElementType element) state) elements)
     TyRefined _ base _ -> checkTypeDefinedness base state
     _ -> Right []
   where
