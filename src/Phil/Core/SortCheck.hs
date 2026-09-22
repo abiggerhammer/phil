@@ -281,9 +281,6 @@ propositionSideConditions proposition = deduplicate (goProposition proposition)
     deduplicate [] = []
     deduplicate (first : rest) = first : deduplicate (filter (/= first) rest)
 
-sortOfVariable :: CheckState -> Name -> Either SortError RefSort
-sortOfVariable = sortOfVariableWith Map.empty
-
 sortOfVariableWith
   :: LogicalScope
   -> CheckState
