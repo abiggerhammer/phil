@@ -1,0 +1,45 @@
+name: Phase 1 Audit Branch Evidence Capture
+
+on:
+  pull_request:
+    paths:
+      - 'src/Phil/Surface/Check/Engine.hs'
+      - 'test/Phase1AuditBranchEvidenceCaptureMain.hs'
+      - 'docs/phase-1/audit-branch-evidence-capture-remediation-v1.md'
+      - '.github/workflows/phase1-audit-branch-evidence-capture.yml'
+  push:
+    branches: [main]
+    paths:
+      - 'src/Phil/Surface/Check/Engine.hs'
+      - 'test/Phase1AuditBranchEvidenceCaptureMain.hs'
+      - 'docs/phase-1/audit-branch-evidence-capture-remediation-v1.md'
+      - '.github/workflows/phase1-audit-branch-evidence-capture.yml'
+
+permissions:
+  contents: read
+
+jobs:
+  branch-evidence-regression:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: haskell-actions/setup@v2
+        with:
+          ghc-version: '9.6.7'
+          cabal-version: 'latest'
+
+      - name: Build complete Haskell substrate
+        run: cabal build all --enable-tests
+
+      - name: Strict typecheck Surface scope repair and audit replay
+        shell: bash
+        run: |
+          set -euo pipefail
+          cabal exec -- ghc -isrc -Wall -Werror -fno-code src/Phil/Surface/Check/Engine.hs
+          cabal exec -- ghc -isrc -Wall -Werror -fno-code test/Phase1AuditBranchEvidenceCaptureMain.hs
+
+      - name: Replay PHIL-AUD-BRANCH-EVIDENCE-CAPTURE-001
+        run: cabal exec -- runghc -isrc -Wall -Werror test/Phase1AuditBranchEvidenceCaptureMain.hs
+
+      - name: Replay existing Surface and value controls
+        run: cabal test phil-surface-conformance-tests phil-value-tests phil-refinement-evidence-tests --test-show-details=direct
