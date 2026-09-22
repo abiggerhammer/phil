@@ -42,7 +42,10 @@ import Phil.Core.Recognition
   , receiveFrame
   , receiveFrameContext
   , receivePendingSpec
+  , parsedPendingOwner
+  , parsedValueName
   , rawGrammarId
+  , recognitionPendingOwner
   , trustedRecognitionFailure
   , trustedRecognitionSuccess
   )
@@ -64,6 +67,7 @@ import Phil.Core.Session
 import Phil.Core.Syntax
   ( Branch (..)
   , Control (..)
+  , ProductElementType (..)
   , GrammarId (..)
   , Mode (..)
   , Name (..)
@@ -1465,6 +1469,7 @@ pruneScopedPath span' incoming path = do
       locals = mapMaybe
         (\name -> fmap ((,) name) (Map.lookup name (stateBindings state)))
         (Set.toList localNames)
+  ensureEscapingValueSupported localNames (pathValue path)
   mapM_ ensureDiscardable locals
   next <- foldM (\current name -> removeScopedBinding span' name current)
     state
@@ -1478,6 +1483,125 @@ pruneScopedPath span' incoming path = do
           , surfaceErrorDetail = "linear branch-local binding remains live: " <> name
           }
       | otherwise = Right ()
+
+    ensureEscapingValueSupported localNames maybeValue =
+      case maybeValue of
+        Nothing -> Right ()
+        Just value ->
+          let unsupported = Set.intersection localNames (runtimeValueSubjects value)
+          in unless (Set.null unsupported) $
+              Left SurfaceCheckError
+                { surfaceErrorSpan = span'
+                , surfaceErrorClass = TypeMismatch
+                , surfaceErrorDetail =
+                    "branch result depends on out-of-scope subject(s): "
+                      <> Text.intercalate ", " (Set.toAscList unsupported)
+                }
+
+runtimeValueSubjects :: RuntimeValue -> Set Text
+runtimeValueSubjects RuntimeUnit = Set.empty
+runtimeValueSubjects (RuntimeTuple values) =
+  Set.unions (map runtimeValueSubjects values)
+runtimeValueSubjects (RuntimeScalar scalar) =
+  Set.union
+    (freeTypeSubjects (scalarType scalar))
+    (shapeSubjects (scalarShape scalar))
+
+shapeSubjects :: SurfaceShape -> Set Text
+shapeSubjects shape = case shape of
+  PlainShape -> Set.empty
+  RecordShape _ fields ->
+    Set.unions
+      [ Set.union
+          (freeTypeSubjects (fieldType info))
+          (maybe Set.empty (freeTermSubjects Set.empty) (fieldAlias info))
+      | info <- Map.elems fields
+      ]
+  OwnedBytesShape index stable ->
+    Set.union
+      (freeTermSubjects Set.empty index)
+      (maybe Set.empty (freeTermSubjects Set.empty) stable)
+  BorrowedViewShape owner stable ->
+    Set.insert
+      (unName owner)
+      (maybe Set.empty (freeTermSubjects Set.empty) stable)
+  ParsedShape parsed _ ->
+    Set.fromList
+      [ unName (parsedPendingOwner parsed)
+      , unName (parsedValueName parsed)
+      ]
+  RecognitionFailureShape failure ->
+    Set.singleton (unName (recognitionPendingOwner failure))
+  _ -> Set.empty
+
+freeTypeSubjects :: Ty -> Set Text
+freeTypeSubjects = goTy Set.empty
+  where
+    goTy bound ty = case ty of
+      TyBytes index -> freeTermSubjects bound index
+      TyPendingRecv pending ->
+        goSession
+          (Set.insert (unName (pendingBinder pending)) bound)
+          (pendingContinuation pending)
+      TyProof proposition -> freePropositionSubjects bound proposition
+      TyValidated _ context subject ->
+        Set.fromList
+          [ name
+          | name <- [unName context, unName subject]
+          , not (Set.member name bound)
+          ]
+      TyEndpoint session -> goSession bound session
+      TyProduct elements ->
+        Set.unions
+          (map (goTy bound . productElementType) elements)
+      TyRefined binder base proposition ->
+        Set.union
+          (goTy bound base)
+          (freePropositionSubjects
+            (Set.insert (unName binder) bound)
+            proposition)
+      _ -> Set.empty
+
+    goSession bound session = case session of
+      Send binder message continuation ->
+        Set.union
+          (goTy bound message)
+          (goSession
+            (Set.insert (unName binder) bound)
+            continuation)
+      Receive binder message continuation ->
+        Set.union
+          (goTy bound message)
+          (goSession
+            (Set.insert (unName binder) bound)
+            continuation)
+      Select branches -> Set.unions (map (goBranch bound) branches)
+      Offer branches -> Set.unions (map (goBranch bound) branches)
+      End _ -> Set.empty
+      Rec _ body -> goSession bound body
+      SessionVar _ -> Set.empty
+
+    goBranch bound branch =
+      case branchPayload branch of
+        Nothing -> goSession bound (branchContinuation branch)
+        Just (binder, payload) ->
+          Set.union
+            (goTy bound payload)
+            (goSession
+              (Set.insert (unName binder) bound)
+              (branchContinuation branch))
+
+freePropositionSubjects :: Set Text -> Proposition -> Set Text
+freePropositionSubjects bound proposition =
+  Set.difference
+    (Set.fromList (map unName (propositionNames proposition)))
+    bound
+
+freeTermSubjects :: Set Text -> RefTerm -> Set Text
+freeTermSubjects bound term =
+  Set.difference
+    (Set.fromList (map unName (termNames term)))
+    bound
 
 evalFail
   :: SurfaceEnvironment
