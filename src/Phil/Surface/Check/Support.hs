@@ -101,7 +101,8 @@ import Phil.Surface.Elaborate
   , withProjectionSort
   )
 import Phil.Surface.Syntax
-  ( Located (..)
+  ( BinaryOperator (..)
+  , Located (..)
   , SourcePoint (..)
   , SourceSpan (..)
   , SurfaceExpression (..)
@@ -436,12 +437,37 @@ inferReadOnlyScalar environment state located = case locatedValue located of
   BooleanExpression _ -> Right (ScalarValue Unrestricted TyBool (DecisionShape BooleanDecision))
   UnitExpression -> Right (ScalarValue Unrestricted TyUnit PlainShape)
   FieldExpression base field -> readField environment state located base field
-  BinaryExpression _ _ _ -> Right $
-    ScalarValue Unrestricted (TyOpaqueSorted "NatExpr" SortNat) PlainShape
+  BinaryExpression operation left right -> do
+    leftScalar <- inferReadOnlyScalar environment state left
+    rightScalar <- inferReadOnlyScalar environment state right
+    requireNatOperand left leftScalar
+    requireNatOperand right rightScalar
+    case operation of
+      Multiply
+        | not (integerLiteral left || integerLiteral right) ->
+            throw located TypeMismatch
+              "symbolic multiplication is outside the Phase-0 arithmetic fragment"
+      _ -> Right ()
+    Right $
+      ScalarValue Unrestricted (TyOpaqueSorted "NatExpr" SortNat) PlainShape
   TupleExpression values -> do
     mapM_ (inferReadOnlyScalar environment state) values
     Right (ScalarValue Unrestricted (TyOpaque "Tuple") PlainShape)
   _ -> throw located TypeMismatch "expression is not a read-only value at this use site"
+  where
+    requireNatOperand expression scalar =
+      case locatedValue expression of
+        IntegerExpression _ -> Right ()
+        _ -> case refSortOfTy (scalarType scalar) of
+          Just SortNat -> Right ()
+          Just (SortUInt _) -> Right ()
+          _ -> throw expression TypeMismatch
+            "arithmetic operand must be Nat or fixed-width UInt"
+
+    integerLiteral expression =
+      case locatedValue expression of
+        IntegerExpression _ -> True
+        _ -> False
 
 readField
   :: SurfaceEnvironment
