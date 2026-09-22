@@ -21,6 +21,11 @@ import Phil.Core.Syntax
   , RefTerm (..)
   , Ty (..)
   )
+import Phil.Verification
+  ( VerificationObligationGraph (..)
+  , buildVerificationRevisionGraph
+  , buildVerificationRevisionGraphWithSupport
+  )
 import System.Exit (exitFailure)
 
 main :: IO ()
@@ -29,11 +34,18 @@ main = do
     [ test "handoff preserves runtime disposition and canonical proposition" runtimeDispositionPreserved
     , test "generated prerequisite revision records exact parent lineage" prerequisiteLineagePreserved
     , test "certificate prerequisite becomes explicit parent-to-child support" certificatePrerequisiteSupportPreserved
+    , test "revision graph consumes explicit certificate support direction" certificatePrerequisiteGraphPreserved
+    , test "revision graph does not reinterpret generation lineage as support" lineageIsNotGraphSupport
     , test "later sibling certificate can depend on earlier sibling revision" siblingPrerequisiteSupportPreserved
     , test "unknown certificate prerequisite fails closed" unknownPrerequisiteRejected
     , test "handoff preserves explicit export disposition" exportDispositionPreserved
     ]
   if and results then pure () else exitFailure
+
+test :: String -> Bool -> IO Bool
+test label passed = do
+  putStrLn ((if passed then "PASS: " else "FAIL: ") <> label)
+  pure passed
 
 runtimeDispositionPreserved :: Bool
 runtimeDispositionPreserved =
@@ -70,6 +82,27 @@ certificatePrerequisiteSupportPreserved =
           && (parentRevision, childRevision) `elem` supportEdges
           && not ((childRevision, parentRevision) `elem` supportEdges)
     _ -> False
+
+certificatePrerequisiteGraphPreserved :: Bool
+certificatePrerequisiteGraphPreserved =
+  case handoffResolvedObligation handoffConfig certificateResolved of
+    Right entries ->
+      let revisions = map handoffRevision entries
+          supportEdges = handoffSupportEdges entries
+      in case buildVerificationRevisionGraphWithSupport
+          revisions supportEdges mempty of
+          Right graph -> verificationGraphDependencies graph == supportEdges
+          Left _ -> False
+    Left _ -> False
+
+lineageIsNotGraphSupport :: Bool
+lineageIsNotGraphSupport =
+  case handoffResolvedObligation handoffConfig certificateResolved of
+    Right entries ->
+      case buildVerificationRevisionGraph (map handoffRevision entries) mempty of
+        Right graph -> null (verificationGraphDependencies graph)
+        Left _ -> False
+    Left _ -> False
 
 siblingPrerequisiteSupportPreserved :: Bool
 siblingPrerequisiteSupportPreserved =
@@ -267,8 +300,3 @@ exportBinding = ExportBinding
 
 equalRef :: Proposition
 equalRef = Equal (RefNat 1) (RefNat 1)
-
-test :: String -> Bool -> IO Bool
-test label passed = do
-  putStrLn ((if passed then "PASS: " else "FAIL: ") <> label)
-  pure passed
