@@ -3,6 +3,7 @@ module Phil.Assurance.Handoff
   , HandoffError (..)
   , LedgerHandoff (..)
   , handoffResolvedObligation
+  , handoffResolvedObligationWithEvidence
   , handoffSupportEdges
   , bindHandoffCertificateEvidence
   ) where
@@ -15,6 +16,7 @@ import Phil.Assurance.Types
   ( AcceptanceRule
   , EvidenceDependency (..)
   , EvidenceEntry (..)
+  , EvidenceEntryId
   , ObligationRevision (..)
   , RevisionId
   , deriveEvidenceEntryDigest
@@ -32,7 +34,8 @@ import Phil.Core.Discharge
   , StaticDischarge (..)
   )
 import Phil.Core.Syntax
-  ( Obligation (..)
+  ( Name
+  , Obligation (..)
   , ObligationId
   , Proposition
   )
@@ -54,6 +57,7 @@ data HandoffConfig = HandoffConfig
 -- evidence entry is rebound to the wrong obligation/disposition.
 data HandoffError
   = UnknownPrerequisiteSupport ObligationId ObligationId
+  | UnknownEvidenceFactSupport ObligationId Name Int
   | HandoffEvidenceRevisionMismatch RevisionId RevisionId
   | HandoffEvidenceNotCertificate RevisionId
   deriving (Eq, Show)
@@ -75,10 +79,25 @@ data LedgerHandoff = LedgerHandoff
   }
   deriving (Eq, Show)
 
+-- | Handoff without an external evidence-identity environment.  Certificates
+-- that retain an 'EvidenceFact' fail closed here rather than silently losing
+-- that support edge.  Call 'handoffResolvedObligationWithEvidence' when Core
+-- evidence facts have immutable assurance-ledger identities.
+handoffResolvedObligation
+  :: HandoffConfig
+  -> ResolvedObligation
+  -> Either HandoffError [LedgerHandoff]
+handoffResolvedObligation config =
+  handoffResolvedObligationWithEvidence config Map.empty
+
 -- | Flatten a resolved obligation and its generated prerequisites into
--- immutable revision/disposition nodes, then bind every explicit
--- 'PrerequisiteFact' retained by a decision certificate to the exact child
--- revision it depends on.
+-- immutable revision/disposition nodes, then bind every support reference
+-- retained by a decision certificate to an immutable assurance identity.
+--
+-- 'PrerequisiteFact' references resolve against the complete flattened
+-- obligation tree and become 'DependsOnObligation'. 'EvidenceFact' references
+-- resolve against the supplied @(binding name, fact index)@ map and become
+-- 'DependsOnEvidence'. Missing identities fail closed.
 --
 -- Child prerequisite revisions continue to record the parent revision in
 -- 'revisionGeneratedFrom'.  That lineage remains provenance only; it is never
@@ -88,11 +107,12 @@ data LedgerHandoff = LedgerHandoff
 -- certificate may depend on an earlier sibling.  The second pass therefore
 -- resolves support against the complete flattened tree, not just direct
 -- children of the current node.
-handoffResolvedObligation
+handoffResolvedObligationWithEvidence
   :: HandoffConfig
+  -> Map.Map (Name, Int) EvidenceEntryId
   -> ResolvedObligation
   -> Either HandoffError [LedgerHandoff]
-handoffResolvedObligation config root =
+handoffResolvedObligationWithEvidence config evidenceIds root =
   traverse attachSupport flattened
   where
     flattened = flatten [] root
@@ -106,16 +126,28 @@ handoffResolvedObligation config root =
     attachSupport entry =
       let revision = handoffRevision entry
           consumer = revisionObligationId revision
-          prerequisites = dispositionPrerequisites (handoffDisposition entry)
+          disposition = handoffDisposition entry
+          prerequisites = dispositionPrerequisites disposition
+          evidenceFacts = dispositionEvidenceFacts disposition
           missing = prerequisites `Set.difference` Map.keysSet revisionByObligation
       in case Set.lookupMin missing of
           Just prerequisite -> Left (UnknownPrerequisiteSupport consumer prerequisite)
-          Nothing -> Right entry
-            { handoffSupportDependencies =
-                [ DependsOnObligation (revisionByObligation Map.! prerequisite)
-                | prerequisite <- Set.toAscList prerequisites
-                ]
-            }
+          Nothing ->
+            case traverse resolveEvidenceFact (Set.toAscList evidenceFacts) of
+              Left (name, index) ->
+                Left (UnknownEvidenceFactSupport consumer name index)
+              Right evidenceDependencies -> Right entry
+                { handoffSupportDependencies = Set.toAscList . Set.fromList $
+                    evidenceDependencies
+                      <> [ DependsOnObligation (revisionByObligation Map.! prerequisite)
+                         | prerequisite <- Set.toAscList prerequisites
+                         ]
+                }
+
+    resolveEvidenceFact ref =
+      case Map.lookup ref evidenceIds of
+        Just evidenceId -> Right (DependsOnEvidence evidenceId)
+        Nothing -> Left ref
 
     flatten :: [RevisionId] -> ResolvedObligation -> [LedgerHandoff]
     flatten generatedFrom resolved =
@@ -140,9 +172,9 @@ handoffResolvedObligation config root =
       in current : children
 
 -- | Project only the semantic obligation-support relation in graph direction:
--- @(consumer, prerequisite)@.  This is suitable for a successor assurance
--- graph/evidence construction slice and intentionally ignores generation
--- lineage.
+-- @(consumer, prerequisite)@.  Precise evidence-entry dependencies remain in
+-- the evidence layer and do not become revision-graph edges. Generation
+-- lineage is also intentionally ignored here.
 handoffSupportEdges :: [LedgerHandoff] -> Set (RevisionId, RevisionId)
 handoffSupportEdges entries = Set.fromList
   [ (revisionId (handoffRevision entry), prerequisite)
@@ -150,12 +182,12 @@ handoffSupportEdges entries = Set.fromList
   , DependsOnObligation prerequisite <- handoffSupportDependencies entry
   ]
 
--- | Finalize certificate evidence with the exact prerequisite support recorded
--- by the checker handoff. Existing precise evidence-entry dependencies are
--- retained. Existing whole-obligation dependencies are replaced by the
--- authoritative handoff relation, so stale or caller-supplied obligation edges
--- cannot masquerade as support used by this certificate. The evidence digest
--- is then rebound to the resulting dependency set.
+-- | Finalize certificate evidence with the exact support relation recorded by
+-- the checker handoff. Both precise evidence-entry dependencies and whole-
+-- obligation dependencies are replaced by the authoritative handoff relation,
+-- so stale or caller-supplied edges cannot masquerade as support used by this
+-- certificate. The evidence digest is then rebound to the resulting dependency
+-- set.
 bindHandoffCertificateEvidence
   :: LedgerHandoff
   -> EvidenceEntry
@@ -170,13 +202,9 @@ bindHandoffCertificateEvidence handoff evidence
   where
     expectedRevision = revisionId (handoffRevision handoff)
     actualRevision = evidenceObligationRevision evidence
-    preciseEvidenceDependencies =
-      [ dependency
-      | dependency@(DependsOnEvidence _) <- evidenceDependsOn evidence
-      ]
     rebound = evidence
-      { evidenceDependsOn = Set.toAscList . Set.fromList $
-          preciseEvidenceDependencies <> handoffSupportDependencies handoff
+      { evidenceDependsOn =
+          Set.toAscList (Set.fromList (handoffSupportDependencies handoff))
       }
     finalized = rebound
       { evidenceEntryDigest = deriveEvidenceEntryDigest rebound
@@ -187,6 +215,13 @@ dispositionPrerequisites disposition =
   case disposition of
     StaticallyDischarged StaticByCertificate { staticCertificate = certificate } ->
       certificatePrerequisites certificate
+    _ -> Set.empty
+
+dispositionEvidenceFacts :: ObligationDisposition -> Set (Name, Int)
+dispositionEvidenceFacts disposition =
+  case disposition of
+    StaticallyDischarged StaticByCertificate { staticCertificate = certificate } ->
+      certificateEvidenceFacts certificate
     _ -> Set.empty
 
 certificatePrerequisites :: DecisionCertificate -> Set ObligationId
@@ -202,9 +237,28 @@ certificatePrerequisites certificate =
     CertificateNotEqualLeft linear -> linearPrerequisites linear
     CertificateNotEqualRight linear -> linearPrerequisites linear
 
+certificateEvidenceFacts :: DecisionCertificate -> Set (Name, Int)
+certificateEvidenceFacts certificate =
+  case certificate of
+    CertificateTruth -> Set.empty
+    CertificateAssumption assumption _ -> assumptionEvidenceFacts assumption
+    CertificateLinear linear -> linearEvidenceFacts linear
+    CertificateConjunction left right ->
+      certificateEvidenceFacts left `Set.union` certificateEvidenceFacts right
+    CertificateDisjunctionLeft left -> certificateEvidenceFacts left
+    CertificateDisjunctionRight right -> certificateEvidenceFacts right
+    CertificateNotEqualLeft linear -> linearEvidenceFacts linear
+    CertificateNotEqualRight linear -> linearEvidenceFacts linear
+
 linearPrerequisites :: LinearCertificate -> Set ObligationId
 linearPrerequisites linear = Set.unions
   [ basisPrerequisites basis
+  | (basis, _) <- linearTerms linear
+  ]
+
+linearEvidenceFacts :: LinearCertificate -> Set (Name, Int)
+linearEvidenceFacts linear = Set.unions
+  [ basisEvidenceFacts basis
   | (basis, _) <- linearTerms linear
   ]
 
@@ -216,8 +270,22 @@ basisPrerequisites basis =
     BasisUIntLower _ _ -> Set.empty
     BasisUIntUpper _ _ -> Set.empty
 
+basisEvidenceFacts :: LinearBasis -> Set (Name, Int)
+basisEvidenceFacts basis =
+  case basis of
+    BasisAssumption assumption _ -> assumptionEvidenceFacts assumption
+    BasisNatLower _ -> Set.empty
+    BasisUIntLower _ _ -> Set.empty
+    BasisUIntUpper _ _ -> Set.empty
+
 assumptionPrerequisites :: AssumptionRef -> Set ObligationId
 assumptionPrerequisites assumption =
   case assumption of
     PrerequisiteFact obligationId -> Set.singleton obligationId
     EvidenceFact _ _ -> Set.empty
+
+assumptionEvidenceFacts :: AssumptionRef -> Set (Name, Int)
+assumptionEvidenceFacts assumption =
+  case assumption of
+    EvidenceFact name index -> Set.singleton (name, index)
+    PrerequisiteFact _ -> Set.empty
