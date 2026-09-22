@@ -87,6 +87,7 @@ closeVerificationBundle bundle policy context ledger selection = do
   verifyContextObligations
   verifyBundleRevisions
   verifyBundleEvidenceReferences
+  verifySelectedEvidenceMembership
   selectedEvidence <- loadSelectedEvidence
   selectedAssumptions <- loadSelectedAssumptions
   _selectedExports <- loadSelectedExports
@@ -153,6 +154,15 @@ closeVerificationBundle bundle policy context ledger selection = do
 
     verifyBundleEvidenceReferences = mapM_ verifyOneReference
       (Map.toAscList (verificationBundleAcceptedEvidence bundle))
+
+    verifySelectedEvidenceMembership = mapM_ verifySelected
+      (Set.toAscList (manifestClosureEvidence selection))
+      where
+        accepted = verificationBundleAcceptedEvidence bundle
+        verifySelected entryId =
+          if Map.member entryId accepted
+            then Right ()
+            else Left (ManifestClosureAcceptedEvidenceMissing entryId)
 
     verifyOneReference (entryId, reference) =
       case Map.lookup entryId (ledgerEvidence ledger) of
