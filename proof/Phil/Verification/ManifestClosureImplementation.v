@@ -2,6 +2,7 @@ From Stdlib Require Import Bool.Bool Lists.List Arith.PeanoNat.
 
 Import ListNotations.
 
+From Phil.Assurance Require Import ValidityScope.
 From Phil.Verification Require Import ManifestClosure.
 
 Inductive ManifestClosureDecision : Type :=
