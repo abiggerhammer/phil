@@ -42,6 +42,7 @@ import Phil.Core.Recognition
   , receiveFrame
   , receiveFrameContext
   , receivePendingSpec
+  , rawGrammarId
   , trustedRecognitionFailure
   , trustedRecognitionSuccess
   )
@@ -690,6 +691,9 @@ evalRecognize environment state located grammar rawExpression = do
   raw <- inferReadOnlyScalar environment state rawExpression
   case scalarShape raw of
     PendingRawShape rawView -> do
+      unless (rawGrammarId rawView == GrammarId grammar) $
+        throw located RecognitionProvenance
+          "recognizer grammar differs from pending frame grammar"
       parsed <- mapRecognition located $
         trustedRecognitionSuccess
           rawView
