@@ -359,9 +359,9 @@ sourceR01 = Text.unlines
 sourceR02 = Text.unlines
   [ "component Audit {"
   , "let (escaped, marker) = decide flag {"
-  , "  true => { let x = good"
+  , "  true => { let x = good;"
   , "            (prove x == true, unit) }"
-  , "  false => { let x = good"
+  , "  false => { let x = good;"
   , "             (prove x == true, unit) }"
   , "}"
   , "let x = false"
