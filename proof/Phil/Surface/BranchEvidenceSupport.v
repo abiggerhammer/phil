@@ -44,11 +44,11 @@ Proof.
   - intro Hsupport. inversion Hsupport.
   - intro Hsupport.
     apply in_app_iff in Hsupport.
-    destruct Hsupport as [Hleft | Hright].
-    + eapply IHlhs; eauto.
-    + eapply IHrhs; eauto.
-  - eapply IHbody.
-    + simpl. right. exact Hbound.
+    destruct Hsupport as [Hlhs | Hrhs].
+    + exact (IHlhs bound subject Hbound Hlhs).
+    + exact (IHrhs bound subject Hbound Hrhs).
+  - apply (IHbody (binder :: bound) subject).
+    simpl. right. exact Hbound.
 Qed.
 
 Definition NoRebaseFrom
