@@ -27,7 +27,7 @@ main = do
   results <- sequence
     [ test "EvidenceFact resolves to immutable evidence-entry support" evidenceFactSupportPreserved
     , test "missing EvidenceFact identity fails closed" missingEvidenceFactRejected
-    , test "certificate evidence uses authoritative handoff support" certificateEvidenceSupportRebound
+    , test "certificate evidence adds exact mapped support" certificateEvidenceSupportRebound
     , test "evidence support is not projected as revision support" evidenceSupportStaysPrecise
     ]
   if and results then pure () else exitFailure
@@ -65,16 +65,17 @@ certificateEvidenceSupportRebound =
     Right (parent : child : _) ->
       let parentRevision = revisionId (handoffRevision parent)
           childRevision = revisionId (handoffRevision child)
-          staleEvidence = EvidenceEntryId "evidence.test.handoff.stale"
+          independentEvidence = EvidenceEntryId "evidence.test.handoff.external"
           staleRevision = RevisionId "rev.test.handoff.stale"
           provisional = testCertificateEvidence parentRevision
-            [ DependsOnEvidence staleEvidence
+            [ DependsOnEvidence independentEvidence
             , DependsOnObligation staleRevision
             ]
       in case bindHandoffCertificateEvidence parent provisional of
           Right finalized ->
             evidenceDependsOn finalized
-              == [ DependsOnEvidence evidenceEntryId
+              == [ DependsOnEvidence independentEvidence
+                 , DependsOnEvidence evidenceEntryId
                  , DependsOnObligation childRevision
                  ]
               && evidenceEntryDigest finalized == deriveEvidenceEntryDigest finalized
