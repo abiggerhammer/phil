@@ -1,0 +1,49 @@
+name: Phase 1 Audit Recognition Grammar
+
+on:
+  pull_request:
+    paths:
+      - 'src/Phil/Surface/Check/Engine.hs'
+      - 'test/Phase1AuditRecognitionGrammarMain.hs'
+      - 'docs/phase-1/audit-recognition-grammar-remediation-v1.md'
+      - '.github/workflows/phase1-audit-recognition-grammar.yml'
+  push:
+    branches: [main]
+    paths:
+      - 'src/Phil/Surface/Check/Engine.hs'
+      - 'test/Phase1AuditRecognitionGrammarMain.hs'
+      - 'docs/phase-1/audit-recognition-grammar-remediation-v1.md'
+      - '.github/workflows/phase1-audit-recognition-grammar.yml'
+
+permissions:
+  contents: read
+
+jobs:
+  recognition-grammar-regression:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: haskell-actions/setup@v2
+        with:
+          ghc-version: '9.6.7'
+          cabal-version: 'latest'
+
+      - name: Build complete Haskell substrate
+        run: cabal build all --enable-tests
+
+      - name: Strict typecheck audit and affected public consumers
+        shell: bash
+        run: |
+          set -euo pipefail
+          cabal exec -- ghc -isrc -Wall -Werror -fno-code src/Phil/Surface/Check/Engine.hs
+          cabal exec -- ghc -isrc -Wall -Werror -fno-code test/Phase1AuditRecognitionGrammarMain.hs
+          cabal exec -- ghc -isrc -Wall -Werror -fno-code test/Phase1VerificationIntrinsicInvalidityMain.hs
+
+      - name: Replay PHIL-AUD-RECOGNITION-GRAMMAR-001
+        run: cabal exec -- runghc -isrc -Wall -Werror test/Phase1AuditRecognitionGrammarMain.hs
+
+      - name: Replay intrinsic-invalidity controls
+        run: cabal exec -- runghc -isrc -Wall -Werror test/Phase1VerificationIntrinsicInvalidityMain.hs
+
+      - name: Replay frozen Surface conformance controls
+        run: cabal test phil-surface-conformance-tests --test-show-details=direct
