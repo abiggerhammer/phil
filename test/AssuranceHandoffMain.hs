@@ -2,7 +2,6 @@
 
 module Main (main) where
 
-import qualified Data.Set as Set
 import Phil.Assurance
 import Phil.Core.Decision
   ( AssumptionRef (..)
@@ -63,11 +62,13 @@ certificatePrerequisiteSupportPreserved =
     Right entries@(parent : child : _) ->
       let parentRevision = revisionId (handoffRevision parent)
           childRevision = revisionId (handoffRevision child)
+          supportEdges = handoffSupportEdges entries
       in handoffSupportDependencies parent == [DependsOnObligation childRevision]
           && revisionGeneratedFrom (handoffRevision parent) == []
           && revisionGeneratedFrom (handoffRevision child) == [parentRevision]
-          && handoffSupportEdges entries == Set.singleton (parentRevision, childRevision)
-          && not (Set.member (childRevision, parentRevision) (handoffSupportEdges entries))
+          && length supportEdges == 1
+          && (parentRevision, childRevision) `elem` supportEdges
+          && not ((childRevision, parentRevision) `elem` supportEdges)
     _ -> False
 
 siblingPrerequisiteSupportPreserved :: Bool
@@ -77,7 +78,7 @@ siblingPrerequisiteSupportPreserved =
       let firstRevision = revisionId (handoffRevision firstChild)
           secondRevision = revisionId (handoffRevision secondChild)
       in handoffSupportDependencies secondChild == [DependsOnObligation firstRevision]
-          && Set.member (secondRevision, firstRevision) (handoffSupportEdges entries)
+          && (secondRevision, firstRevision) `elem` handoffSupportEdges entries
     _ -> False
 
 unknownPrerequisiteRejected :: Bool
