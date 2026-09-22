@@ -11,6 +11,7 @@ module Phil.Verification
   , VerificationGraphError (..)
   , buildVerificationObligationGraph
   , buildVerificationRevisionGraph
+  , buildVerificationRevisionGraphWithSupport
   , RuntimeClosureProposal (..)
   , RuntimeClosureRejection (..)
   , RuntimeClosureRecord
@@ -145,6 +146,7 @@ data VerificationGraphError
   | CyclicObligationDependencies (Set ObligationId)
   | ConflictingObligationRevisions RevisionId
   | InvalidObligationRevisionIdentity RevisionId RevisionId
+  | UnknownRevisionLineage RevisionId RevisionId
   | UnknownRevisionDependency RevisionId RevisionId
   | UnknownCertificationScopeRevision RevisionId
   | CyclicRevisionDependencies (Set RevisionId)
@@ -187,33 +189,40 @@ buildVerificationObligationGraph rawInputs requestedScope = do
     , verificationGraphCertificationScope = scope
     }
 
--- | Build the same canonical VerificationObligationGraph from already competent
--- exact ObligationRevision records.  This is the bridge used when an assurance
--- ledger is the authoritative carrier of obligation identity: revision identity,
--- provenance dependencies, scope, and graph revision are still checked and
--- canonicalized rather than reconstructed from presentation or Haskell object
--- identity.
+-- | Build a canonical VerificationObligationGraph from already competent exact
+-- ObligationRevision records that have no semantic support dependencies.
+-- 'revisionGeneratedFrom' is still validated as provenance, but it is never
+-- projected into the verification dependency graph.
 buildVerificationRevisionGraph
   :: [ObligationRevision]
   -> Set RevisionId
   -> Either VerificationGraphError VerificationObligationGraph
-buildVerificationRevisionGraph rawRevisions requestedScope = do
+buildVerificationRevisionGraph rawRevisions requestedScope =
+  buildVerificationRevisionGraphWithSupport rawRevisions Set.empty requestedScope
+
+-- | Build a canonical VerificationObligationGraph from exact ledger revisions
+-- plus an explicit semantic support relation.  An edge @(A,B)@ means revision
+-- A depends on revision B.  Generation lineage remains separately recorded in
+-- 'revisionGeneratedFrom' and cannot supply or reverse a support edge.
+buildVerificationRevisionGraphWithSupport
+  :: [ObligationRevision]
+  -> Set (RevisionId, RevisionId)
+  -> Set RevisionId
+  -> Either VerificationGraphError VerificationObligationGraph
+buildVerificationRevisionGraphWithSupport rawRevisions requestedDependencies requestedScope = do
   revisions <- foldM insertExactRevision Map.empty rawRevisions
   validateRevisionScope revisions requestedScope
-  validateRevisionDependencies revisions
-  case cyclicRevisionRegion revisions of
+  validateRevisionLineage revisions
+  validateRevisionDependencies revisions requestedDependencies
+  case cyclicRevisionRegion revisions requestedDependencies of
     Nothing -> pure ()
     Just region -> Left (CyclicRevisionDependencies region)
-  let edges = Set.fromList
-        [ (revisionKey, dependency)
-        | (revisionKey, revision) <- Map.toAscList revisions
-        , dependency <- revisionGeneratedFrom revision
-        ]
-      graphDigest = digestText (renderGraphIdentity revisions edges requestedScope)
+  let graphDigest = digestText
+        (renderGraphIdentity revisions requestedDependencies requestedScope)
   Right VerificationObligationGraph
     { verificationGraphRevision = graphDigest
     , verificationGraphNodes = revisions
-    , verificationGraphDependencies = edges
+    , verificationGraphDependencies = requestedDependencies
     , verificationGraphCertificationScope = requestedScope
     }
 
@@ -245,25 +254,43 @@ validateRevisionScope revisions requestedScope =
     Nothing -> Right ()
     Just missing -> Left (UnknownCertificationScopeRevision missing)
 
-validateRevisionDependencies
+validateRevisionLineage
   :: Map RevisionId ObligationRevision
   -> Either VerificationGraphError ()
-validateRevisionDependencies revisions = mapM_ verifyRevision
-  (Map.toAscList revisions)
+validateRevisionLineage revisions = mapM_ verifyRevision (Map.toAscList revisions)
   where
     known = Map.keysSet revisions
     verifyRevision (revisionKey, revision) =
       case Set.lookupMin
           (Set.fromList (revisionGeneratedFrom revision) `Set.difference` known) of
         Nothing -> Right ()
-        Just missing -> Left (UnknownRevisionDependency revisionKey missing)
+        Just missing -> Left (UnknownRevisionLineage revisionKey missing)
+
+validateRevisionDependencies
+  :: Map RevisionId ObligationRevision
+  -> Set (RevisionId, RevisionId)
+  -> Either VerificationGraphError ()
+validateRevisionDependencies revisions = go . Set.toAscList
+  where
+    go [] = Right ()
+    go ((revisionKey, dependency) : rest)
+      | Map.notMember revisionKey revisions =
+          Left (UnknownRevisionDependency revisionKey dependency)
+      | Map.notMember dependency revisions =
+          Left (UnknownRevisionDependency revisionKey dependency)
+      | otherwise = go rest
 
 cyclicRevisionRegion
   :: Map RevisionId ObligationRevision
+  -> Set (RevisionId, RevisionId)
   -> Maybe (Set RevisionId)
-cyclicRevisionRegion revisions = go dependencyMap
+cyclicRevisionRegion revisions dependencies = go dependencyMap
   where
-    dependencyMap = Map.map (Set.fromList . revisionGeneratedFrom) revisions
+    dependencyMap = foldr addDependency emptyDependencies
+      (Set.toAscList dependencies)
+    emptyDependencies = Map.map (const Set.empty) revisions
+    addDependency (revisionKey, dependency) =
+      Map.adjust (Set.insert dependency) revisionKey
 
     go remaining
       | Map.null remaining = Nothing
@@ -272,8 +299,8 @@ cyclicRevisionRegion revisions = go dependencyMap
       where
         roots =
           [ revisionKey
-          | (revisionKey, dependencies) <- Map.toAscList remaining
-          , Set.null dependencies
+          | (revisionKey, revisionDependencies) <- Map.toAscList remaining
+          , Set.null revisionDependencies
           ]
         rootSet = Set.fromList roots
         withoutRoots = foldr Map.delete remaining roots
