@@ -170,7 +170,7 @@ baseFixture = do
     (map handoffRevision entries)
     (handoffSupportEdges entries)
     scope
-  let supportEvidence = sealEvidence (mkSupportEvidence childRevision)
+  let supportEvidenceEntry = sealEvidence (mkSupportEvidence childRevision)
       provisionalParent = mkParentEvidence parentRevision
   parentEvidenceValue <- mapLeft show $
     bindHandoffCertificateEvidence parent provisionalParent
@@ -185,12 +185,12 @@ baseFixture = do
     [] [] []
     graph
     policy
-    [parentEvidenceValue, supportEvidence]
+    [parentEvidenceValue, supportEvidenceEntry]
   let ledger = emptyLedger
         { ledgerRevisions = verificationGraphNodes graph
         , ledgerEvidence = Map.fromList
             [ (evidenceEntryId parentEvidenceValue, parentEvidenceValue)
-            , (evidenceEntryId supportEvidence, supportEvidence)
+            , (evidenceEntryId supportEvidenceEntry, supportEvidenceEntry)
             ]
         }
       context = emptyVerificationContext
