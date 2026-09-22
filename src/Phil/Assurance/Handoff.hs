@@ -182,12 +182,13 @@ handoffSupportEdges entries = Set.fromList
   , DependsOnObligation prerequisite <- handoffSupportDependencies entry
   ]
 
--- | Finalize certificate evidence with the exact support relation recorded by
--- the checker handoff. Both precise evidence-entry dependencies and whole-
--- obligation dependencies are replaced by the authoritative handoff relation,
--- so stale or caller-supplied edges cannot masquerade as support used by this
--- certificate. The evidence digest is then rebound to the resulting dependency
--- set.
+-- | Finalize certificate evidence with the exact support recorded by the
+-- checker handoff. Existing precise evidence-entry dependencies are retained,
+-- including dependencies outside Core's local fact namespace; exact mapped
+-- 'EvidenceFact' dependencies are unioned with them. Existing whole-obligation
+-- dependencies are replaced by the authoritative handoff relation, so stale
+-- caller-supplied obligation edges cannot masquerade as prerequisite support.
+-- The evidence digest is then rebound to the resulting dependency set.
 bindHandoffCertificateEvidence
   :: LedgerHandoff
   -> EvidenceEntry
@@ -202,9 +203,13 @@ bindHandoffCertificateEvidence handoff evidence
   where
     expectedRevision = revisionId (handoffRevision handoff)
     actualRevision = evidenceObligationRevision evidence
+    preciseEvidenceDependencies =
+      [ dependency
+      | dependency@(DependsOnEvidence _) <- evidenceDependsOn evidence
+      ]
     rebound = evidence
-      { evidenceDependsOn =
-          Set.toAscList (Set.fromList (handoffSupportDependencies handoff))
+      { evidenceDependsOn = Set.toAscList . Set.fromList $
+          preciseEvidenceDependencies <> handoffSupportDependencies handoff
       }
     finalized = rebound
       { evidenceEntryDigest = deriveEvidenceEntryDigest rebound
