@@ -87,8 +87,8 @@ closeVerificationBundle bundle policy context ledger selection = do
   verifyContextObligations
   verifyBundleRevisions
   verifyBundleEvidenceReferences
-  verifySelectedEvidenceMembership
   selectedEvidence <- loadSelectedEvidence
+  verifySelectedEvidenceMembership
   selectedAssumptions <- loadSelectedAssumptions
   _selectedExports <- loadSelectedExports
   _selectedUses <- loadSelectedUses
