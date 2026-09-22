@@ -1,0 +1,42 @@
+name: Phase 1 Audit Alpha Shadow
+
+on:
+  pull_request:
+    paths:
+      - 'src/Phil/Core/Value.hs'
+      - 'test/Phase1AuditAlphaShadowMain.hs'
+      - 'docs/phase-1/audit-alpha-shadow-remediation-v1.md'
+      - '.github/workflows/phase1-audit-alpha-shadow.yml'
+  push:
+    branches: [main]
+    paths:
+      - 'src/Phil/Core/Value.hs'
+      - 'test/Phase1AuditAlphaShadowMain.hs'
+      - 'docs/phase-1/audit-alpha-shadow-remediation-v1.md'
+      - '.github/workflows/phase1-audit-alpha-shadow.yml'
+
+permissions:
+  contents: read
+
+jobs:
+  alpha-shadow-regression:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: haskell-actions/setup@v2
+        with:
+          ghc-version: '9.6.7'
+          cabal-version: 'latest'
+
+      - name: Build complete Haskell substrate
+        run: cabal build all --enable-tests
+
+      - name: Strict typecheck Core equality and exposed audit consumer
+        shell: bash
+        run: |
+          set -euo pipefail
+          cabal exec -- ghc -isrc -Wall -Werror -fno-code src/Phil/Core/Value.hs
+          cabal exec -- ghc -package=phil-core -i -Wall -Werror -fno-code test/Phase1AuditAlphaShadowMain.hs
+
+      - name: Replay PHIL-AUD-ALPHA-SHADOW-001
+        run: cabal exec -- runghc -package=phil-core -i -Wall -Werror test/Phase1AuditAlphaShadowMain.hs
