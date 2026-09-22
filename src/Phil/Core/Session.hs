@@ -1,3 +1,5 @@
+{-# LANGUAGE TupleSections #-}
+
 module Phil.Core.Session
   ( SessionAction (..)
   , MessageSpec (..)
