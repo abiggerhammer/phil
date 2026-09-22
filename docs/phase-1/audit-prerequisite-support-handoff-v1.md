@@ -24,7 +24,7 @@ A retained Core certificate may also depend on `EvidenceFact bindingName factInd
 
 The ordinary `handoffResolvedObligation` route supplies no such map. If a certificate retains an `EvidenceFact`, that route now fails closed rather than silently dropping the dependency.
 
-Once the handoff has resolved both support classes, `bindHandoffCertificateEvidence` treats the handoff relation as authoritative. Caller-supplied `DependsOnEvidence` and `DependsOnObligation` edges are replaced by the exact dependencies retained by the certificate and the evidence digest is rebound. Precise evidence-entry support remains distinct from whole-obligation support: only the latter is projected into the revision support graph.
+When `bindHandoffCertificateEvidence` finalizes the entry, exact mapped `EvidenceFact` dependencies are unioned with any already-retained precise `DependsOnEvidence` dependencies, while whole-obligation dependencies are replaced by the authoritative prerequisite relation from the handoff. This preserves #1309's distinction between independently precise evidence-entry support and whole-obligation support. Only the latter is projected into the revision support graph.
 
 ## Fail-closed behavior
 
@@ -43,7 +43,7 @@ The assurance handoff controls cover:
 - fail-closed rejection of a missing prerequisite revision;
 - exact `EvidenceFact` -> `DependsOnEvidence` translation;
 - fail-closed rejection of an unmapped evidence fact;
-- replacement of stale caller-supplied certificate dependencies by the authoritative handoff relation; and
+- preservation of independent precise evidence dependencies while stale whole-obligation dependencies are replaced; and
 - preservation of the distinction between precise evidence dependencies and revision-graph support.
 
 Existing runtime/export handoff controls remain in place.
