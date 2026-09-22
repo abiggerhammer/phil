@@ -2,7 +2,12 @@
 
 module Main (main) where
 
+import qualified Data.Set as Set
 import Phil.Assurance
+import Phil.Core.Decision
+  ( AssumptionRef (..)
+  , DecisionCertificate (..)
+  )
 import Phil.Core.Discharge
   ( ExportBinding (..)
   , ObligationDisposition (..)
@@ -24,6 +29,9 @@ main = do
   results <- sequence
     [ test "handoff preserves runtime disposition and canonical proposition" runtimeDispositionPreserved
     , test "generated prerequisite revision records exact parent lineage" prerequisiteLineagePreserved
+    , test "certificate prerequisite becomes explicit parent-to-child support" certificatePrerequisiteSupportPreserved
+    , test "later sibling certificate can depend on earlier sibling revision" siblingPrerequisiteSupportPreserved
+    , test "unknown certificate prerequisite fails closed" unknownPrerequisiteRejected
     , test "handoff preserves explicit export disposition" exportDispositionPreserved
     ]
   if and results then pure () else exitFailure
@@ -31,28 +39,62 @@ main = do
 runtimeDispositionPreserved :: Bool
 runtimeDispositionPreserved =
   case handoffResolvedObligation handoffConfig runtimeResolved of
-    parent : _ ->
+    Right (parent : _) ->
       handoffDisposition parent == RuntimeBound runtimeBinding
         && handoffCanonicalProposition parent == equalRef
         && revisionGeneratedFrom (handoffRevision parent) == []
-    [] -> False
+        && null (handoffSupportDependencies parent)
+    _ -> False
 
 prerequisiteLineagePreserved :: Bool
 prerequisiteLineagePreserved =
   case handoffResolvedObligation handoffConfig runtimeResolved of
-    parent : child : _ ->
+    Right (parent : child : _) ->
       revisionGeneratedFrom (handoffRevision child)
         == [revisionId (handoffRevision parent)]
         && handoffCanonicalProposition child == Truth
         && handoffDisposition child == StaticallyDischarged StaticByDefinition
+        && null (handoffSupportDependencies child)
     _ -> False
+
+certificatePrerequisiteSupportPreserved :: Bool
+certificatePrerequisiteSupportPreserved =
+  case handoffResolvedObligation handoffConfig certificateResolved of
+    Right entries@(parent : child : _) ->
+      let parentRevision = revisionId (handoffRevision parent)
+          childRevision = revisionId (handoffRevision child)
+      in handoffSupportDependencies parent == [DependsOnObligation childRevision]
+          && revisionGeneratedFrom (handoffRevision parent) == []
+          && revisionGeneratedFrom (handoffRevision child) == [parentRevision]
+          && handoffSupportEdges entries == Set.singleton (parentRevision, childRevision)
+          && not (Set.member (childRevision, parentRevision) (handoffSupportEdges entries))
+    _ -> False
+
+siblingPrerequisiteSupportPreserved :: Bool
+siblingPrerequisiteSupportPreserved =
+  case handoffResolvedObligation handoffConfig siblingResolved of
+    Right entries@(_parent : firstChild : secondChild : _) ->
+      let firstRevision = revisionId (handoffRevision firstChild)
+          secondRevision = revisionId (handoffRevision secondChild)
+      in handoffSupportDependencies secondChild == [DependsOnObligation firstRevision]
+          && Set.member (secondRevision, firstRevision) (handoffSupportEdges entries)
+    _ -> False
+
+unknownPrerequisiteRejected :: Bool
+unknownPrerequisiteRejected =
+  case handoffResolvedObligation handoffConfig unknownPrerequisiteResolved of
+    Left (UnknownPrerequisiteSupport consumer prerequisite) ->
+      consumer == obligationId unknownParentObligation
+        && prerequisite == missingPrerequisiteId
+    Right _ -> False
 
 exportDispositionPreserved :: Bool
 exportDispositionPreserved =
   case handoffResolvedObligation handoffConfig exportedResolved of
-    [entry] ->
+    Right [entry] ->
       handoffDisposition entry == Exported exportBinding
         && handoffCanonicalProposition entry == Falsehood
+        && null (handoffSupportDependencies entry)
     _ -> False
 
 handoffConfig :: HandoffConfig
@@ -71,6 +113,54 @@ runtimeResolved = ResolvedObligation
   , resolvedPrerequisites = [childResolved]
   , resolvedDisposition = RuntimeBound runtimeBinding
   }
+
+certificateResolved :: ResolvedObligation
+certificateResolved = ResolvedObligation
+  { resolvedObligation = certificateParentObligation
+  , resolvedCanonicalProposition = Truth
+  , resolvedPrerequisites = [childResolved]
+  , resolvedDisposition = prerequisiteCertificateDisposition childObligation
+  }
+
+siblingResolved :: ResolvedObligation
+siblingResolved = ResolvedObligation
+  { resolvedObligation = siblingParentObligation
+  , resolvedCanonicalProposition = Truth
+  , resolvedPrerequisites = [childResolved, siblingConsumerResolved]
+  , resolvedDisposition = StaticallyDischarged StaticByDefinition
+  }
+
+siblingConsumerResolved :: ResolvedObligation
+siblingConsumerResolved = ResolvedObligation
+  { resolvedObligation = siblingConsumerObligation
+  , resolvedCanonicalProposition = Truth
+  , resolvedPrerequisites = []
+  , resolvedDisposition = prerequisiteCertificateDisposition childObligation
+  }
+
+unknownPrerequisiteResolved :: ResolvedObligation
+unknownPrerequisiteResolved = ResolvedObligation
+  { resolvedObligation = unknownParentObligation
+  , resolvedCanonicalProposition = Truth
+  , resolvedPrerequisites = []
+  , resolvedDisposition = StaticallyDischarged StaticByCertificate
+      { staticCertificateProducer = "test-producer"
+      , staticCertificateChecker = "test-checker"
+      , staticCertificate = CertificateAssumption
+          (PrerequisiteFact missingPrerequisiteId)
+          Truth
+      }
+  }
+
+prerequisiteCertificateDisposition :: Obligation -> ObligationDisposition
+prerequisiteCertificateDisposition prerequisite =
+  StaticallyDischarged StaticByCertificate
+    { staticCertificateProducer = "test-producer"
+    , staticCertificateChecker = "test-checker"
+    , staticCertificate = CertificateAssumption
+        (PrerequisiteFact (obligationId prerequisite))
+        Truth
+    }
 
 childResolved :: ResolvedObligation
 childResolved = ResolvedObligation
@@ -96,6 +186,45 @@ parentObligation = Obligation
   , obligationScope = "test.scope"
   , obligationRequiredPoint = "parent.required"
   }
+
+certificateParentObligation :: Obligation
+certificateParentObligation = Obligation
+  { obligationId = ObligationId "test.handoff.certificate-parent"
+  , obligationProposition = Truth
+  , obligationOrigin = "test"
+  , obligationScope = "test.scope"
+  , obligationRequiredPoint = "certificate-parent.required"
+  }
+
+siblingParentObligation :: Obligation
+siblingParentObligation = Obligation
+  { obligationId = ObligationId "test.handoff.sibling-parent"
+  , obligationProposition = Truth
+  , obligationOrigin = "test"
+  , obligationScope = "test.scope"
+  , obligationRequiredPoint = "sibling-parent.required"
+  }
+
+siblingConsumerObligation :: Obligation
+siblingConsumerObligation = Obligation
+  { obligationId = ObligationId "test.handoff.sibling-consumer"
+  , obligationProposition = Truth
+  , obligationOrigin = "test"
+  , obligationScope = "test.scope"
+  , obligationRequiredPoint = "sibling-consumer.required"
+  }
+
+unknownParentObligation :: Obligation
+unknownParentObligation = Obligation
+  { obligationId = ObligationId "test.handoff.unknown-parent"
+  , obligationProposition = Truth
+  , obligationOrigin = "test"
+  , obligationScope = "test.scope"
+  , obligationRequiredPoint = "unknown-parent.required"
+  }
+
+missingPrerequisiteId :: ObligationId
+missingPrerequisiteId = ObligationId "test.handoff.missing-prerequisite"
 
 childObligation :: Obligation
 childObligation = Obligation
