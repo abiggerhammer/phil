@@ -36,7 +36,7 @@ jobs:
         run: |
           set -euo pipefail
           cabal exec -- ghc -isrc -Wall -Werror -fno-code src/Phil/Core/Value.hs
-          cabal exec -- ghc -i -Wall -Werror -fno-code test/Phase1AuditAlphaShadowMain.hs
+          cabal exec -- ghc -package=phil-core -i -Wall -Werror -fno-code test/Phase1AuditAlphaShadowMain.hs
 
       - name: Replay PHIL-AUD-ALPHA-SHADOW-001
-        run: cabal exec -- runghc -i -Wall -Werror test/Phase1AuditAlphaShadowMain.hs
+        run: cabal exec -- runghc -package=phil-core -i -Wall -Werror test/Phase1AuditAlphaShadowMain.hs
