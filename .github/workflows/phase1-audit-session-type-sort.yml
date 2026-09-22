@@ -1,0 +1,43 @@
+name: Phase 1 Audit Session Type Sort
+
+on:
+  pull_request:
+    paths:
+      - 'src/Phil/Core/SortCheck.hs'
+      - 'test/Phase1AuditSessionTypeSortMain.hs'
+      - '.github/workflows/phase1-audit-session-type-sort.yml'
+  push:
+    branches: [main]
+    paths:
+      - 'src/Phil/Core/SortCheck.hs'
+      - 'test/Phase1AuditSessionTypeSortMain.hs'
+      - '.github/workflows/phase1-audit-session-type-sort.yml'
+
+permissions:
+  contents: read
+
+jobs:
+  session-type-sort-regression:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: haskell-actions/setup@v2
+        with:
+          ghc-version: '9.6.7'
+          cabal-version: 'latest'
+
+      - name: Build complete Haskell substrate
+        run: cabal build all --enable-tests
+
+      - name: Strict typecheck Core sorter and audit replay
+        shell: bash
+        run: |
+          set -euo pipefail
+          cabal exec -- ghc -isrc -Wall -Werror -fno-code src/Phil/Core/SortCheck.hs
+          cabal exec -- ghc -isrc -Wall -Werror -fno-code test/Phase1AuditSessionTypeSortMain.hs
+
+      - name: Replay PHIL-AUD-SESSION-TYPE-SORT-001
+        run: cabal exec -- runghc -isrc -Wall -Werror test/Phase1AuditSessionTypeSortMain.hs
+
+      - name: Replay existing sort/value/refinement controls
+        run: cabal test phil-sort-check-tests phil-value-tests phil-refinement-evidence-tests --test-show-details=direct

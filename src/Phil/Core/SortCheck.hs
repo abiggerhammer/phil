@@ -15,11 +15,14 @@ import Data.Text (Text)
 import Phil.Core.Checker (CheckState (..))
 import Phil.Core.Context (ResourceContext (..))
 import Phil.Core.Syntax
-  ( Name
+  ( Branch (..)
+  , Name
+  , PendingRecvSpec (..)
   , ProductElementType (..)
   , Proposition (..)
   , RefSort (..)
   , RefTerm (..)
+  , Session (..)
   , Ty (..)
   )
 
@@ -58,29 +61,87 @@ refSortOfTy ty =
     TyOpaqueSorted _ sort -> Just sort
     _ -> Nothing
 
+type LogicalScope = Map.Map Name Ty
+
 checkTypeSorts :: CheckState -> Ty -> Either SortError ()
-checkTypeSorts state ty =
+checkTypeSorts = checkTypeSortsWith Map.empty
+
+checkTypeSortsWith
+  :: LogicalScope
+  -> CheckState
+  -> Ty
+  -> Either SortError ()
+checkTypeSortsWith scope state ty =
   case ty of
     TyUInt width
       | width <= 0 -> Left (InvalidUIntTypeWidth width)
       | otherwise -> Right ()
     TyBytes index -> do
-      indexSort <- sortOfRefTerm state index
+      indexSort <- sortOfRefTermWith scope state index
       if indexSort == SortNat
         then Right ()
         else Left (InvalidBytesIndexSort index indexSort)
-    TyProof proposition -> checkPropositionSorts state proposition
-    TyProduct elements -> mapM_ (checkTypeSorts state . productElementType) elements
-    TyRefined _ base _ -> checkTypeSorts state base
+    TyPendingRecv pending ->
+      checkSessionSorts
+        (Map.insert
+          (pendingBinder pending)
+          (TyFrame (pendingGrammar pending))
+          scope)
+        state
+        (pendingContinuation pending)
+    TyProof proposition -> checkPropositionSortsWith scope state proposition
+    TyEndpoint session -> checkSessionSorts scope state session
+    TyProduct elements ->
+      mapM_ (checkTypeSortsWith scope state . productElementType) elements
+    TyRefined binder base proposition -> do
+      checkTypeSortsWith scope state base
+      checkPropositionSortsWith (Map.insert binder base scope) state proposition
     TyOpaqueSorted _ sort -> validateRefSort sort
     _ -> Right ()
 
+checkSessionSorts
+  :: LogicalScope
+  -> CheckState
+  -> Session
+  -> Either SortError ()
+checkSessionSorts scope state session =
+  case session of
+    Send binder message continuation -> do
+      checkTypeSortsWith scope state message
+      checkSessionSorts (Map.insert binder message scope) state continuation
+    Receive binder message continuation -> do
+      checkTypeSortsWith scope state message
+      checkSessionSorts (Map.insert binder message scope) state continuation
+    Select branches -> mapM_ checkBranch branches
+    Offer branches -> mapM_ checkBranch branches
+    End _ -> Right ()
+    Rec _ body -> checkSessionSorts scope state body
+    SessionVar _ -> Right ()
+  where
+    checkBranch branch =
+      case branchPayload branch of
+        Nothing ->
+          checkSessionSorts scope state (branchContinuation branch)
+        Just (binder, payload) -> do
+          checkTypeSortsWith scope state payload
+          checkSessionSorts
+            (Map.insert binder payload scope)
+            state
+            (branchContinuation branch)
+
 sortOfRefTerm :: CheckState -> RefTerm -> Either SortError RefSort
-sortOfRefTerm state = go
+sortOfRefTerm = sortOfRefTermWith Map.empty
+
+sortOfRefTermWith
+  :: LogicalScope
+  -> CheckState
+  -> RefTerm
+  -> Either SortError RefSort
+sortOfRefTermWith scope state = go
   where
     go term =
       case term of
-        RefVar name -> sortOfVariable state name
+        RefVar name -> sortOfVariableWith scope state name
         RefNat literal
           | literal < 0 -> Left (InvalidNatLiteral literal)
           | otherwise -> Right SortNat
@@ -128,9 +189,16 @@ sortOfRefTerm state = go
             else Left (ExpectedNatOperand right rightSort)
 
 checkPropositionSorts :: CheckState -> Proposition -> Either SortError ()
-checkPropositionSorts state = go
+checkPropositionSorts = checkPropositionSortsWith Map.empty
+
+checkPropositionSortsWith
+  :: LogicalScope
+  -> CheckState
+  -> Proposition
+  -> Either SortError ()
+checkPropositionSortsWith scope state = go
   where
-    termSort = sortOfRefTerm state
+    termSort = sortOfRefTermWith scope state
 
     go proposition =
       case proposition of
@@ -213,9 +281,13 @@ propositionSideConditions proposition = deduplicate (goProposition proposition)
     deduplicate [] = []
     deduplicate (first : rest) = first : deduplicate (filter (/= first) rest)
 
-sortOfVariable :: CheckState -> Name -> Either SortError RefSort
-sortOfVariable state name =
-  case lookupBinding name (resourceContext state) of
+sortOfVariableWith
+  :: LogicalScope
+  -> CheckState
+  -> Name
+  -> Either SortError RefSort
+sortOfVariableWith scope state name =
+  case Map.lookup name scope <|> lookupBinding name (resourceContext state) of
     Nothing -> Left (UnknownRefinementVariable name)
     Just ty ->
       case refSortOfTy ty of
