@@ -18,8 +18,7 @@ import Phil.Core.Context
 import Phil.Core.Process (continueFlow, flowPaths, joinBranches, pathState)
 import Phil.Core.Refinement (RefinementError (StaticallyFalse))
 import Phil.Core.Session
-  ( SessionError (..)
-  , SessionStep (..)
+  ( SessionStep (..)
   , closeEndpoint
   , selectEndpoint
   )
