@@ -1,0 +1,48 @@
+name: Phase 1 Audit Session Continuation Binding
+
+on:
+  pull_request:
+    paths:
+      - 'src/Phil/Core/Session.hs'
+      - 'src/Phil/Surface/Check/Engine.hs'
+      - 'test/Phase1AuditSessionContinuationBindingMain.hs'
+      - 'docs/phase-1/audit-session-continuation-binding-remediation-v1.md'
+      - '.github/workflows/phase1-audit-session-continuation-binding.yml'
+  push:
+    branches: [main]
+    paths:
+      - 'src/Phil/Core/Session.hs'
+      - 'src/Phil/Surface/Check/Engine.hs'
+      - 'test/Phase1AuditSessionContinuationBindingMain.hs'
+      - 'docs/phase-1/audit-session-continuation-binding-remediation-v1.md'
+      - '.github/workflows/phase1-audit-session-continuation-binding.yml'
+
+permissions:
+  contents: read
+
+jobs:
+  session-continuation-binding-regression:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: haskell-actions/setup@v2
+        with:
+          ghc-version: '9.6.7'
+          cabal-version: 'latest'
+
+      - name: Build complete Haskell substrate
+        run: cabal build all --enable-tests
+
+      - name: Strict typecheck session binding repair and audit replay
+        shell: bash
+        run: |
+          set -euo pipefail
+          cabal exec -- ghc -isrc -Wall -Werror -fno-code src/Phil/Core/Session.hs
+          cabal exec -- ghc -isrc -Wall -Werror -fno-code src/Phil/Surface/Check/Engine.hs
+          cabal exec -- ghc -isrc -Wall -Werror -fno-code test/Phase1AuditSessionContinuationBindingMain.hs
+
+      - name: Replay PHIL-AUD-SESSION-CONTINUATION-BINDING-001
+        run: cabal exec -- runghc -isrc -Wall -Werror test/Phase1AuditSessionContinuationBindingMain.hs
+
+      - name: Replay existing Surface, value, and refinement controls
+        run: cabal test phil-surface-conformance-tests phil-value-tests phil-refinement-evidence-tests --test-show-details=direct

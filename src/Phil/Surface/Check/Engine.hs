@@ -56,9 +56,11 @@ import Phil.Core.Refinement
   )
 import Phil.Core.Session
   ( MessageSpec (..)
+  , SessionError (..)
   , SessionStep (..)
   , closeEndpoint
   , exposeSessionHead
+  , instantiateMessageStep
   , offerEndpoint
   , receiveEndpoint
   , selectEndpoint
@@ -211,7 +213,7 @@ checkStatement
 checkStatement environment locatedStatement path =
   case locatedValue locatedStatement of
     LetStatement pattern' expression -> do
-      evaluated <- evalExpression environment (pathState path) expression
+      evaluated <- evalLetExpression environment (pathState path) pattern' expression
       bound <- mapM (bindPath pattern') evaluated
       joinExclusive (locatedSpan locatedStatement) bound
     ReturnStatement expression -> do
@@ -221,6 +223,31 @@ checkStatement environment locatedStatement path =
       evaluated <- evalExpression environment (pathState path) expression
       discarded <- mapM (discardValue (locatedSpan locatedStatement)) evaluated
       joinExclusive (locatedSpan locatedStatement) discarded
+
+evalLetExpression
+  :: SurfaceEnvironment
+  -> SurfaceState
+  -> Located Pattern
+  -> Located SurfaceExpression
+  -> Either SurfaceCheckError [SurfacePath]
+evalLetExpression environment state pattern' expression =
+  case locatedValue expression of
+    ReceiveExpression messageTy endpoint ->
+      evalReceiveWithBinding
+        environment state expression messageTy endpoint (receivePatternTerm pattern')
+    ReceiveExactExpression count endpoint evidence ->
+      evalReceiveExactWithBinding
+        environment state expression count endpoint evidence (receivePatternTerm pattern')
+    _ -> evalExpression environment state expression
+
+receivePatternTerm :: Located Pattern -> Maybe RefTerm
+receivePatternTerm pattern' =
+  case locatedValue pattern' of
+    TuplePattern [_, payloadPattern] ->
+      case locatedValue payloadPattern of
+        BindPattern name -> Just (RefVar (Name name))
+        _ -> Nothing
+    _ -> Nothing
 
 bindPath :: Located Pattern -> SurfacePath -> Either SurfaceCheckError SurfacePath
 bindPath _ path | pathControl path /= PathContinue = Right path
@@ -630,7 +657,18 @@ evalReceive
   -> Located SurfaceType
   -> Located SurfaceExpression
   -> Either SurfaceCheckError [SurfacePath]
-evalReceive environment state located surfaceMessage endpointExpression = do
+evalReceive environment state located surfaceMessage endpointExpression =
+  evalReceiveWithBinding environment state located surfaceMessage endpointExpression Nothing
+
+evalReceiveWithBinding
+  :: SurfaceEnvironment
+  -> SurfaceState
+  -> Located SurfaceExpression
+  -> Located SurfaceType
+  -> Located SurfaceExpression
+  -> Maybe RefTerm
+  -> Either SurfaceCheckError [SurfacePath]
+evalReceiveWithBinding environment state located surfaceMessage endpointExpression actual = do
   endpoint <- endpointName endpointExpression
   meta <- lookupMeta endpointExpression endpoint state
   expectedMessage <- sessionReceiveMessage located meta
@@ -639,9 +677,10 @@ evalReceive environment state located surfaceMessage endpointExpression = do
     throw surfaceMessage TypeMismatch
       "written receive type does not match the protocol message"
   let (temp, state1) = freshName "$recv" state
-  step <- mapSession located $
+  rawStep <- mapSession located $
     receiveEndpoint (Name endpoint) temp (resourceContext (stateCore state1))
-  message <- requireMessage located step
+  message <- requireMessage located rawStep
+  step <- instantiateSurfaceMessageStep located actual rawStep
   let state2 = applySessionContext endpoint (stepContext step) state1
   (successor, state3) <- extractLinearTemp (locatedSpan located) temp state2
   let received = ScalarValue
@@ -818,11 +857,13 @@ evalSend environment exact state located valueExpression endpointExpression = do
   expected <- sessionSendMessage located endpointMeta
   when (exact && not (isBytesTy expected)) $
     throw located TypeMismatch "send_exact requires a byte protocol message"
+  actual <- messageOccurrenceTerm environment state valueExpression
   (value, state1) <- moveOrReadValue environment state valueExpression
   checkScalarAgainst state1 valueExpression value expected
   let (temp, state2) = freshName "$send" state1
-  step <- mapSession located $
+  rawStep <- mapSession located $
     sendEndpoint (Name endpoint) temp (resourceContext (stateCore state2))
+  step <- instantiateSurfaceMessageStep located actual rawStep
   let state3 = applySessionContext endpoint (stepContext step) state2
   (successor, state4) <- extractLinearTemp (locatedSpan located) temp state3
   Right [valuePath state4 (RuntimeScalar successor)]
@@ -835,7 +876,20 @@ evalReceiveExact
   -> Located SurfaceExpression
   -> Maybe (Located SurfaceExpression)
   -> Either SurfaceCheckError [SurfacePath]
-evalReceiveExact environment state located count endpointExpression explicitEvidence = do
+evalReceiveExact environment state located count endpointExpression explicitEvidence =
+  evalReceiveExactWithBinding
+    environment state located count endpointExpression explicitEvidence Nothing
+
+evalReceiveExactWithBinding
+  :: SurfaceEnvironment
+  -> SurfaceState
+  -> Located SurfaceExpression
+  -> Located SurfaceExpression
+  -> Located SurfaceExpression
+  -> Maybe (Located SurfaceExpression)
+  -> Maybe RefTerm
+  -> Either SurfaceCheckError [SurfacePath]
+evalReceiveExactWithBinding environment state located count endpointExpression explicitEvidence actual = do
   endpoint <- endpointName endpointExpression
   endpointMeta <- lookupMeta endpointExpression endpoint state
   expected <- sessionReceiveMessage located endpointMeta
@@ -857,8 +911,9 @@ evalReceiveExact environment state located count endpointExpression explicitEvid
     throw count TypeMismatch
       "receive_exact count differs from the protocol byte length"
   let (temp, state1) = freshName "$receive-exact" state
-  step <- mapSession located $
+  rawStep <- mapSession located $
     receiveEndpoint (Name endpoint) temp (resourceContext (stateCore state1))
+  step <- instantiateSurfaceMessageStep located actual rawStep
   let state2 = applySessionContext endpoint (stepContext step) state1
   (successor, state3) <- extractLinearTemp (locatedSpan located) temp state2
 
@@ -880,6 +935,7 @@ evalSelect environment state located branch endpointExpression explicitEvidence 
   endpoint <- endpointName endpointExpression
   endpointMeta <- lookupMeta endpointExpression endpoint state
   (expectedPayload, _) <- sessionSelectBranch located endpointMeta (branchValueLabel branch)
+  actual <- selectedOccurrenceTerm environment state expectedPayload (branchValueArguments branch)
   mapM_
     (\requirement -> checkRequirement environment state located requirement explicitEvidence)
     (Map.findWithDefault []
@@ -888,12 +944,13 @@ evalSelect environment state located branch endpointExpression explicitEvidence 
   state1 <- checkSelectedPayload
     environment state expectedPayload (branchValueArguments branch) explicitEvidence
   let (temp, state2) = freshName "$select" state1
-  step <- mapSession located $
+  rawStep <- mapSession located $
     selectEndpoint
       (Name endpoint)
       temp
       (branchValueLabel branch)
       (resourceContext (stateCore state2))
+  step <- instantiateSurfaceMessageStep located actual rawStep
   let state3 = applySessionContext endpoint (stepContext step) state2
   (successor, state4) <- extractLinearTemp (locatedSpan located) temp state3
   Right [valuePath state4 (RuntimeScalar successor)]
@@ -1387,12 +1444,16 @@ checkOfferArm environment incoming endpoint locatedArm = do
   let pattern' = caseArmPattern (locatedValue locatedArm)
       label = casePatternLabel pattern'
       (temp, state1) = freshName "$offer" incoming
-  step <- mapSession locatedArm $
+  rawStep <- mapSession locatedArm $
     offerEndpoint
       (Name endpoint)
       temp
       label
       (resourceContext (stateCore state1))
+  let actual = case (stepMessage rawStep, casePatternBinders pattern') of
+        (Just _, [name]) -> Just (RefVar (Name name))
+        _ -> Nothing
+  step <- instantiateSurfaceMessageStep locatedArm actual rawStep
   let state2 = applySessionContext endpoint (stepContext step) state1
   (successor, state3) <- extractLinearTemp (locatedSpan locatedArm) temp state2
   rebound <- insertBindingMeta (locatedSpan locatedArm) endpoint
@@ -1943,6 +2004,44 @@ checkScalarAgainst state located scalar expected =
     IncompatibleTypes ->
       throw located TypeMismatch
         "value type is incompatible with protocol/target type"
+
+messageOccurrenceTerm
+  :: SurfaceEnvironment
+  -> SurfaceState
+  -> Located SurfaceExpression
+  -> Either SurfaceCheckError (Maybe RefTerm)
+messageOccurrenceTerm environment state expression =
+  case locatedValue expression of
+    VariableExpression name -> Right (Just (RefVar (Name name)))
+    _ -> optionalRefTerm environment state expression
+
+selectedOccurrenceTerm
+  :: SurfaceEnvironment
+  -> SurfaceState
+  -> Maybe MessageSpec
+  -> [Located SurfaceExpression]
+  -> Either SurfaceCheckError (Maybe RefTerm)
+selectedOccurrenceTerm environment state expected arguments =
+  case (expected, arguments) of
+    (Just _, [argument]) -> messageOccurrenceTerm environment state argument
+    _ -> Right Nothing
+
+instantiateSurfaceMessageStep
+  :: Located a
+  -> Maybe RefTerm
+  -> SessionStep
+  -> Either SurfaceCheckError SessionStep
+instantiateSurfaceMessageStep located actual step =
+  case instantiateMessageStep actual step of
+    Left (MissingMessageInstantiation binder) ->
+      throw located TypeMismatch
+        ("dependent session continuation has no logical occurrence for message binder "
+          <> unName binder)
+    Left (UnsupportedMessageInstantiation binder replacement) ->
+      throw located TypeMismatch
+        ("dependent session continuation cannot represent message binder "
+          <> unName binder <> " as " <> Text.pack (show replacement))
+    other -> mapSession located other
 
 moveOrReadValue
   :: SurfaceEnvironment
