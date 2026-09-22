@@ -90,7 +90,11 @@ import Phil.Core.Syntax
   , Session (..)
   , Ty (..)
   )
-import Phil.Core.Value (ValueError (..))
+import Phil.Core.Value
+  ( EqualityBoundary (DefinitionallyEqual)
+  , ValueError (..)
+  , compareTypes
+  )
 import Phil.Surface.Check.Types
 import Phil.Surface.Elaborate
   ( ElaborationEnv
@@ -533,26 +537,77 @@ constructValue
   -> Either SurfaceCheckError ScalarValue
 constructValue environment state located constructor assignments =
   case constructor of
-    "Hello" -> build "Hello" ["versions"]
-    "Begin" -> build "Begin" ["length", "kind", "digestAlg", "digest"]
+    "Hello" -> build "Hello"
+    "Begin" -> build "Begin"
     _ -> throw located TypeMismatch ("unknown constructor: " <> constructor)
   where
-    table = Map.fromList assignments
-
-    build grammar required = do
-      fields <- Map.fromList <$> mapM fieldEntry required
+    build grammar = do
+      schema <- case recordShape grammar Nothing of
+        RecordShape _ fields -> Right fields
+        _ -> throw located TypeMismatch "internal constructor schema error"
+      validateInventory schema
+      let table = Map.fromList assignments
+      fields <- Map.fromList <$> mapM (fieldEntry table) (Map.toAscList schema)
       Right (ScalarValue Unrestricted (TyFrame (GrammarId grammar)) (RecordShape grammar fields))
 
-    fieldEntry fieldName = do
+    validateInventory schema = do
+      case firstDuplicate Set.empty (map fst assignments) of
+        Just duplicate -> throw located TypeMismatch
+          ("duplicate constructor field: " <> duplicate)
+        Nothing -> Right ()
+      let expectedNames = Map.keysSet schema
+          actualNames = Set.fromList (map fst assignments)
+          extras = actualNames `Set.difference` expectedNames
+          missing = expectedNames `Set.difference` actualNames
+      case Set.lookupMin extras of
+        Just extra -> throw located TypeMismatch
+          ("unknown constructor field: " <> extra)
+        Nothing -> Right ()
+      case Set.lookupMin missing of
+        Just absent -> throw located TypeMismatch
+          ("missing constructor field: " <> absent)
+        Nothing -> Right ()
+
+    firstDuplicate _ [] = Nothing
+    firstDuplicate seen (name : names)
+      | Set.member name seen = Just name
+      | otherwise = firstDuplicate (Set.insert name seen) names
+
+    fieldEntry table (fieldName, expected) = do
       expression <- case Map.lookup fieldName table of
         Just value -> Right value
         Nothing -> throw located TypeMismatch ("missing constructor field: " <> fieldName)
       scalar <- inferReadOnlyScalar environment state expression
-      sort <- case refSortOfTy (scalarType scalar) of
+      if scalarMode scalar == Unrestricted
+        then Right ()
+        else throw expression TypeMismatch
+          ("constructor field must be unrestricted: " <> fieldName)
+      if compatibleFieldType (fieldType expected) (scalarType scalar)
+        then Right ()
+        else throw expression TypeMismatch
+          ("constructor field has incompatible type: " <> fieldName)
+      actualSort <- case refSortOfTy (scalarType scalar) of
         Just result -> Right result
         Nothing -> throw expression TypeMismatch "constructor field is not refinement-visible"
+      if actualSort == fieldSort expected
+        then Right ()
+        else throw expression TypeMismatch
+          ("constructor field has incompatible sort: " <> fieldName)
       alias <- optionalRefTerm environment state expression
-      Right (fieldName, FieldInfo (scalarType scalar) sort alias)
+      Right
+        ( fieldName
+        , expected
+            { fieldType = scalarType scalar
+            , fieldAlias = alias
+            }
+        )
+
+    compatibleFieldType expected actual =
+      case (stripRefinement expected, stripRefinement actual) of
+        (TyOpaqueSorted _ expectedSort, TyOpaqueSorted _ actualSort) ->
+          expectedSort == actualSort
+        (expectedBase, actualBase) ->
+          compareTypes expectedBase actualBase == DefinitionallyEqual
 
 optionalRefTerm
   :: SurfaceEnvironment
