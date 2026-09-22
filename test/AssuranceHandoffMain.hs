@@ -171,6 +171,7 @@ unknownPrerequisiteRejected =
     Left (UnknownPrerequisiteSupport consumer prerequisite) ->
       consumer == obligationId unknownParentObligation
         && prerequisite == missingPrerequisiteId
+    Left _ -> False
     Right _ -> False
 
 exportDispositionPreserved :: Bool
