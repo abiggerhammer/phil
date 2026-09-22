@@ -376,7 +376,13 @@ sameDependentFamily left right =
     (TyBytes _, TyBytes _) -> True
     _ -> False
 
-type BinderEnv = [(Name, Name)]
+-- A paired binder entry is kept until both of its sides have been shadowed.
+-- This preserves the independent nearest-binding depth on each side of an
+-- alpha-equivalence comparison.  Dropping an entire pair when only one side is
+-- shadowed loses a still-live binding and can turn two bound names into equal
+-- free spellings.  Fully shadowed entries are removed so recursive comparison
+-- reaches the same canonical environment again.
+type BinderEnv = [(Maybe Name, Maybe Name)]
 
 definitionallyEqualTy :: Ty -> Ty -> Bool
 definitionallyEqualTy = equalTy []
@@ -486,10 +492,15 @@ compareBranch env seen left right =
 
 extendBinder :: Name -> Name -> BinderEnv -> BinderEnv
 extendBinder left right env =
-  (left, right) : filter notShadowed env
+  (Just left, Just right) : foldr keep [] env
   where
-    notShadowed (existingLeft, existingRight) =
-      existingLeft /= left && existingRight /= right
+    keep (existingLeft, existingRight) rest =
+      case
+          ( if existingLeft == Just left then Nothing else existingLeft
+          , if existingRight == Just right then Nothing else existingRight
+          ) of
+        (Nothing, Nothing) -> rest
+        surviving -> surviving : rest
 
 equalReferencedName :: BinderEnv -> Name -> Name -> Bool
 equalReferencedName env left right =
@@ -498,8 +509,12 @@ equalReferencedName env left right =
     (Just leftDepth, Just rightDepth) -> leftDepth == rightDepth
     _ -> False
 
-bindingDepth :: ((Name, Name) -> Name) -> Name -> BinderEnv -> Maybe Int
-bindingDepth project target = findIndex ((== target) . project)
+bindingDepth
+  :: ((Maybe Name, Maybe Name) -> Maybe Name)
+  -> Name
+  -> BinderEnv
+  -> Maybe Int
+bindingDepth project target = findIndex ((== Just target) . project)
 
 equalRefTerm :: BinderEnv -> RefTerm -> RefTerm -> Bool
 equalRefTerm env left right =
