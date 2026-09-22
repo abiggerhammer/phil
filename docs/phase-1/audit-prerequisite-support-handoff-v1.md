@@ -48,8 +48,18 @@ The assurance handoff controls cover:
 
 Existing runtime/export handoff controls remain in place.
 
-## Remaining correspondence
+## INT-002 final-consumer correspondence
 
-The remaining production correspondence is the INT-002/manifest consumer hookup: the shipped manifest-closure path must consume these exact handoff-bound `EvidenceEntry` values and their prerequisite/evidence dependencies rather than reconstructing or accepting a parallel relation. That should remain a separate slice so the final-consumer authority can be reviewed directly.
+`closeVerificationBundleWithHandoff` is the INT-002 closure route for bundles produced from these checker handoff records. It takes the complete relevant `LedgerHandoff` set plus an explicit revision-to-evidence-entry binding for every `StaticByCertificate` node and checks the correspondence before ordinary manifest closure:
 
-No LLVM behavior or other Phase 1 trusted-computing-base component is changed or audited here.
+- every handoff revision must be the exact revision carried by the bundle graph;
+- the graph edges whose consumer is a certificate handoff must equal the handoff's explicit prerequisite-support edges, so generation lineage or a parallel dependency reconstruction cannot substitute for certificate support;
+- every certificate handoff must name exactly one selected immutable evidence entry;
+- reapplying `bindHandoffCertificateEvidence` to that ledger entry must be a fixed point, which requires all handoff `DependsOnEvidence` and `DependsOnObligation` support to be present, rejects stale whole-obligation edges, and requires the rebound digest; and
+- the ordinary `closeVerificationBundle` path then independently checks that the selected entry is exactly the bundle-accepted ledger entry and validates its dependencies through `verifyManifest`.
+
+Independent precise evidence dependencies remain permitted because `bindHandoffCertificateEvidence` preserves them. EvidenceFact dependencies do not become revision-graph edges, and `revisionGeneratedFrom` remains provenance only.
+
+The permanent INT-002 correspondence controls include valid mixed EvidenceFact/prerequisite closure, omission of each dependency kind, omission of the graph support edge, missing certificate-to-evidence binding, and binding a certificate revision to evidence for another revision.
+
+This closes the prerequisite-support consumer hookup tracked by this handoff. It does not establish the broader D-CERT-SUPPORT-01 producer-authority questions for arbitrary `EvidenceFact` maps, nor does it change LLVM behavior or any other Phase 1 trusted-computing-base component.

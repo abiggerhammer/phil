@@ -2,17 +2,22 @@
 
 module Phil.Verification.ManifestClosure
   ( ManifestClosureSelection (..)
+  , ManifestClosureHandoff (..)
   , ManifestClosureError (..)
   , verificationDispositionForAssuranceKind
   , closeVerificationBundle
+  , closeVerificationBundleWithHandoff
   ) where
 
+import Control.Monad (foldM, unless)
 import qualified Data.Map.Strict as Map
 import Data.Map.Strict (Map)
 import qualified Data.Set as Set
 import Data.Set (Set)
+import qualified Phil.Assurance.Handoff as Handoff
 import Phil.Assurance.Types
 import Phil.Assurance.Verify (ManifestError, verifyManifest)
+import qualified Phil.Core.Discharge as Discharge
 import Phil.Verification
   ( ApplicationAssurancePolicy (..)
   , AssurancePolicyRevision
@@ -37,6 +42,18 @@ data ManifestClosureSelection = ManifestClosureSelection
   }
   deriving (Eq, Show)
 
+-- | Exact checker-to-assurance correspondence required when INT-002 closes
+-- evidence produced from 'Phil.Assurance.Handoff'.  Every certificate handoff
+-- in the supplied set must name the concrete immutable evidence entry selected
+-- for that revision.  The closure path checks the handoff revisions, semantic
+-- support graph, and finalized evidence record rather than accepting a
+-- parallel reconstruction of certificate support.
+data ManifestClosureHandoff = ManifestClosureHandoff
+  { manifestClosureHandoffEntries :: [Handoff.LedgerHandoff]
+  , manifestClosureCertificateEvidence :: Map RevisionId EvidenceEntryId
+  }
+  deriving (Eq, Show)
+
 data ManifestClosureError
   = ManifestClosurePolicyRevisionMismatch AssurancePolicyRevision AssurancePolicyRevision
   | ManifestClosureArchitectureDigestMismatch Digest Digest
@@ -53,6 +70,19 @@ data ManifestClosureError
   | ManifestClosureUnusedAssumption AssumptionId
   | ManifestClosureInvalidExportDisposition ExportId VerificationDisposition
   | ManifestClosureUnpermittedDisposition VerificationDisposition
+  | ManifestClosureHandoffDuplicateRevision RevisionId
+  | ManifestClosureHandoffRevisionMissing RevisionId
+  | ManifestClosureHandoffRevisionMismatch RevisionId
+  | ManifestClosureHandoffSupportMismatch
+      (Set (RevisionId, RevisionId))
+      (Set (RevisionId, RevisionId))
+  | ManifestClosureHandoffEvidenceDomainMismatch
+      (Set RevisionId)
+      (Set RevisionId)
+  | ManifestClosureHandoffEvidenceNotSelected RevisionId EvidenceEntryId
+  | ManifestClosureHandoffEvidenceMissing RevisionId EvidenceEntryId
+  | ManifestClosureHandoffEvidenceRejected RevisionId EvidenceEntryId Handoff.HandoffError
+  | ManifestClosureHandoffEvidenceMismatch RevisionId EvidenceEntryId
   | ManifestClosureManifestRejected ManifestError
   deriving (Eq, Show)
 
@@ -259,3 +289,83 @@ closeVerificationBundle bundle policy context ledger selection = do
           (applicationAssurancePolicyPermittedDispositions policy)
         then Right ()
         else Left (ManifestClosureUnpermittedDisposition disposition)
+
+-- | Close a bundle produced from checker handoff records.  This is the
+-- INT-002 path for Core certificate evidence: it first proves that the bundle
+-- graph and selected ledger entries are the exact immutable projection of the
+-- supplied handoff, then delegates all ordinary manifest checks to
+-- 'closeVerificationBundle'.
+--
+-- Exactness is intentionally per certificate consumer.  Generation lineage is
+-- not support; precise evidence dependencies stay in the evidence entry; and
+-- unrelated evidence may remain selected for the same manifest.
+closeVerificationBundleWithHandoff
+  :: VerificationBundle
+  -> ApplicationAssurancePolicy
+  -> VerificationContext
+  -> AssuranceLedger
+  -> ManifestClosureSelection
+  -> ManifestClosureHandoff
+  -> Either ManifestClosureError AssuranceManifest
+closeVerificationBundleWithHandoff bundle policy context ledger selection handoff = do
+  entriesByRevision <- foldM insertHandoff Map.empty
+    (manifestClosureHandoffEntries handoff)
+  mapM_ verifyHandoffRevision (Map.toAscList entriesByRevision)
+  let certificateEntries = Map.filter isCertificateHandoff entriesByRevision
+      certificateRevisions = Map.keysSet certificateEntries
+      suppliedEvidenceDomain = Map.keysSet
+        (manifestClosureCertificateEvidence handoff)
+      expectedSupport = supportFor certificateRevisions
+        (Handoff.handoffSupportEdges (Map.elems entriesByRevision))
+      actualSupport = supportFor certificateRevisions
+        (verificationGraphDependencies graph)
+  unless (expectedSupport == actualSupport) $
+    Left (ManifestClosureHandoffSupportMismatch expectedSupport actualSupport)
+  unless (certificateRevisions == suppliedEvidenceDomain) $
+    Left (ManifestClosureHandoffEvidenceDomainMismatch
+      certificateRevisions suppliedEvidenceDomain)
+  mapM_ (verifyCertificateEvidence certificateEntries)
+    (Map.toAscList (manifestClosureCertificateEvidence handoff))
+  closeVerificationBundle bundle policy context ledger selection
+  where
+    graph = verificationBundleObligationGraph bundle
+
+    insertHandoff entries entry =
+      let revision = Handoff.handoffRevision entry
+          revisionKey = revisionId revision
+      in case Map.lookup revisionKey entries of
+          Nothing -> Right (Map.insert revisionKey entry entries)
+          Just _ -> Left (ManifestClosureHandoffDuplicateRevision revisionKey)
+
+    verifyHandoffRevision (revisionKey, entry) =
+      case Map.lookup revisionKey (verificationGraphNodes graph) of
+        Nothing -> Left (ManifestClosureHandoffRevisionMissing revisionKey)
+        Just graphRevision
+          | graphRevision == Handoff.handoffRevision entry -> Right ()
+          | otherwise -> Left (ManifestClosureHandoffRevisionMismatch revisionKey)
+
+    isCertificateHandoff entry =
+      case Handoff.handoffDisposition entry of
+        Discharge.StaticallyDischarged Discharge.StaticByCertificate {} -> True
+        _ -> False
+
+    supportFor consumers = Set.filter
+      (\(consumer, _) -> Set.member consumer consumers)
+
+    verifyCertificateEvidence certificateEntries (revisionKey, entryId) = do
+      unless (Set.member entryId (manifestClosureEvidence selection)) $
+        Left (ManifestClosureHandoffEvidenceNotSelected revisionKey entryId)
+      entry <- case Map.lookup entryId (ledgerEvidence ledger) of
+        Nothing -> Left (ManifestClosureHandoffEvidenceMissing revisionKey entryId)
+        Just value -> Right value
+      certificateHandoff <- case Map.lookup revisionKey certificateEntries of
+        Nothing -> Left (ManifestClosureHandoffEvidenceDomainMismatch
+          (Map.keysSet certificateEntries)
+          (Map.keysSet (manifestClosureCertificateEvidence handoff)))
+        Just value -> Right value
+      finalized <- case Handoff.bindHandoffCertificateEvidence certificateHandoff entry of
+        Left err -> Left
+          (ManifestClosureHandoffEvidenceRejected revisionKey entryId err)
+        Right value -> Right value
+      unless (finalized == entry) $
+        Left (ManifestClosureHandoffEvidenceMismatch revisionKey entryId)
