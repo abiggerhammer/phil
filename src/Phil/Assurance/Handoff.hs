@@ -4,6 +4,7 @@ module Phil.Assurance.Handoff
   , LedgerHandoff (..)
   , handoffResolvedObligation
   , handoffSupportEdges
+  , bindHandoffCertificateEvidence
   ) where
 
 import qualified Data.Map.Strict as Map
@@ -13,8 +14,10 @@ import Data.Text (Text)
 import Phil.Assurance.Types
   ( AcceptanceRule
   , EvidenceDependency (..)
+  , EvidenceEntry (..)
   , ObligationRevision (..)
   , RevisionId
+  , deriveEvidenceEntryDigest
   , revisionFromCoreObligation
   )
 import Phil.Core.Decision
@@ -47,11 +50,12 @@ data HandoffConfig = HandoffConfig
   , handoffAcceptanceRule :: Obligation -> AcceptanceRule
   }
 
--- | A checked certificate may name a prerequisite that is not present in the
--- resolved handoff tree.  Treat that as an invalid assurance handoff rather
--- than silently dropping the support authority used by the certificate.
+-- | Fail closed when a checker-to-ledger handoff loses support identity or an
+-- evidence entry is rebound to the wrong obligation/disposition.
 data HandoffError
   = UnknownPrerequisiteSupport ObligationId ObligationId
+  | HandoffEvidenceRevisionMismatch RevisionId RevisionId
+  | HandoffEvidenceNotCertificate RevisionId
   deriving (Eq, Show)
 
 -- | Lossless checker-to-ledger handoff node.  The exact Core disposition is
@@ -145,6 +149,38 @@ handoffSupportEdges entries = Set.fromList
   | entry <- entries
   , DependsOnObligation prerequisite <- handoffSupportDependencies entry
   ]
+
+-- | Finalize certificate evidence with the exact prerequisite support recorded
+-- by the checker handoff. Existing precise evidence-entry dependencies are
+-- retained. Existing whole-obligation dependencies are replaced by the
+-- authoritative handoff relation, so stale or caller-supplied obligation edges
+-- cannot masquerade as support used by this certificate. The evidence digest
+-- is then rebound to the resulting dependency set.
+bindHandoffCertificateEvidence
+  :: LedgerHandoff
+  -> EvidenceEntry
+  -> Either HandoffError EvidenceEntry
+bindHandoffCertificateEvidence handoff evidence
+  | actualRevision /= expectedRevision =
+      Left (HandoffEvidenceRevisionMismatch expectedRevision actualRevision)
+  | otherwise =
+      case handoffDisposition handoff of
+        StaticallyDischarged StaticByCertificate {} -> Right finalized
+        _ -> Left (HandoffEvidenceNotCertificate expectedRevision)
+  where
+    expectedRevision = revisionId (handoffRevision handoff)
+    actualRevision = evidenceObligationRevision evidence
+    preciseEvidenceDependencies =
+      [ dependency
+      | dependency@(DependsOnEvidence _) <- evidenceDependsOn evidence
+      ]
+    rebound = evidence
+      { evidenceDependsOn = Set.toAscList . Set.fromList $
+          preciseEvidenceDependencies <> handoffSupportDependencies handoff
+      }
+    finalized = rebound
+      { evidenceEntryDigest = deriveEvidenceEntryDigest rebound
+      }
 
 dispositionPrerequisites :: ObligationDisposition -> Set ObligationId
 dispositionPrerequisites disposition =
