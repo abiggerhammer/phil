@@ -135,8 +135,33 @@ runtimeType (RuntimeTuple values) = TyOpaque ("Tuple[" <> Text.pack (show (lengt
 
 restrictedRuntimeValue :: RuntimeValue -> Bool
 restrictedRuntimeValue RuntimeUnit = False
-restrictedRuntimeValue (RuntimeScalar scalar) = scalarMode scalar /= Unrestricted
+restrictedRuntimeValue (RuntimeScalar scalar) =
+  decisionCarrierMode (scalarMode scalar) (scalarShape scalar) /= Unrestricted
 restrictedRuntimeValue (RuntimeTuple values) = any restrictedRuntimeValue values
+
+-- | A callable decision is not structurally free merely because its opaque
+-- wrapper has no ordinary data mode.  The carrier owns the right to expose its
+-- branch residue exactly once whenever an outcome can transfer linear state,
+-- impose a residual obligation, change caller resources/control, or return a
+-- restricted payload.  Pure callable decisions stay unrestricted; affine-only
+-- payload decisions remain droppable but non-replayable.
+decisionCarrierMode :: Mode -> SurfaceShape -> Mode
+decisionCarrierMode declared shape = case shape of
+  DecisionShape (CallableDecision outcomes resources)
+    | declared == Linear || hasLinearResponsibility -> Linear
+    | declared == Affine || hasAffinePayload -> Affine
+    | otherwise -> Unrestricted
+    where
+      hasLinearResponsibility =
+        not (Map.null resources) || any outcomeRequiresLinear outcomes
+      outcomeRequiresLinear outcome =
+        callableOutcomeControl outcome /= CallableOutcomeContinues
+          || callableOutcomeResidualObligationArity outcome > 0
+          || any ((== Linear) . fst) (callableOutcomePayload outcome)
+      hasAffinePayload = any
+        (any ((== Affine) . fst) . callableOutcomePayload)
+        outcomes
+  _ -> declared
 
 insertBindingMeta
   :: SourceSpan
@@ -145,14 +170,21 @@ insertBindingMeta
   -> SurfaceState
   -> Either SurfaceCheckError SurfaceState
 insertBindingMeta span' name meta state = do
+  let effectiveMeta = meta
+        { bindingMode = decisionCarrierMode (bindingMode meta) (bindingShape meta)
+        }
   context <- mapCore span' StructuralUse $
-    insertBinding (bindingMode meta) (Name name) (bindingType meta) (resourceContext (stateCore state))
-  let active = case bindingType meta of
+    insertBinding
+      (bindingMode effectiveMeta)
+      (Name name)
+      (bindingType effectiveMeta)
+      (resourceContext (stateCore state))
+  let active = case bindingType effectiveMeta of
         TyEndpoint _ -> Just name
         _ -> stateActiveEndpoint state
   Right state
     { stateCore = (stateCore state) { resourceContext = context }
-    , stateBindings = Map.insert name meta (stateBindings state)
+    , stateBindings = Map.insert name effectiveMeta (stateBindings state)
     , stateActiveEndpoint = active
     }
 
