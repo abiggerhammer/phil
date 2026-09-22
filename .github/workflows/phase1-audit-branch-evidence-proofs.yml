@@ -1,0 +1,51 @@
+name: Phase 1 Audit Branch Evidence Proofs
+
+on:
+  pull_request:
+    paths:
+      - 'proof/Phil/Surface/BranchEvidenceSupport.v'
+      - 'docs/phase-1/audit-branch-evidence-proof-remediation-v1.md'
+      - '.github/workflows/phase1-audit-branch-evidence-proofs.yml'
+  push:
+    branches: [main]
+    paths:
+      - 'proof/Phil/Surface/BranchEvidenceSupport.v'
+      - 'docs/phase-1/audit-branch-evidence-proof-remediation-v1.md'
+      - '.github/workflows/phase1-audit-branch-evidence-proofs.yml'
+
+permissions:
+  contents: read
+
+jobs:
+  rocq-branch-evidence-support:
+    runs-on: ubuntu-latest
+    container:
+      image: rocq/rocq-prover:9.2.0
+      options: --user root
+    steps:
+      - uses: actions/checkout@v4
+      - name: Compile scope-stable subject-support proof
+        shell: bash
+        run: |
+          set -euo pipefail
+          export PATH="/home/rocq/.opam/${COMPILER}/bin:$PATH"
+          rocq c -Q proof/Phil Phil proof/Phil/Surface/BranchEvidenceSupport.v
+      - name: Record exact proof identity
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p branch-evidence-proof
+          cp \
+            proof/Phil/Surface/BranchEvidenceSupport.v \
+            proof/Phil/Surface/BranchEvidenceSupport.vo \
+            branch-evidence-proof/
+          sha256sum \
+            branch-evidence-proof/BranchEvidenceSupport.v \
+            branch-evidence-proof/BranchEvidenceSupport.vo \
+            > branch-evidence-proof/PHIL-AUD-BRANCH-EVIDENCE-CAPTURE-001.proof.sha256
+          cat branch-evidence-proof/PHIL-AUD-BRANCH-EVIDENCE-CAPTURE-001.proof.sha256
+      - uses: actions/upload-artifact@v4
+        with:
+          name: rocq-branch-evidence-proof
+          path: branch-evidence-proof
+          if-no-files-found: error
