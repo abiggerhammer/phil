@@ -41,6 +41,7 @@ import Phil.Core.Syntax
   , Mode
   , Name
   , PendingRecvSpec (..)
+  , ProductElementType (..)
   , Proposition (..)
   , RefTerm (..)
   , Session (..)
@@ -87,6 +88,7 @@ synthValue value state =
       (mode, ty, nextContext) <- mapLeft ValueResourceError $
         useBinding name (resourceContext state)
       mapLeft valueSortError (checkTypeSorts state ty)
+      definednessUses <- checkTypeDefinedness ty state
       case ty of
         TyPendingRecv _ -> Left (InternalResourceNotValue name ty)
         _ -> pure ValueResult
@@ -94,8 +96,11 @@ synthValue value state =
           , valueResultMode = Just mode
           , valueResultTerm = Just (RefVar name)
           , valueResultEvidence =
-              map (EvidenceByBinding name . normalizeProposition)
-                (bindingEvidencePropositions name ty)
+              appendEvidenceList
+                definednessUses
+                ( map (EvidenceByBinding name . normalizeProposition)
+                    (bindingEvidencePropositions name ty)
+                )
           , valueResultState = state { resourceContext = nextContext }
           }
     VUnit -> pureLiteral TyUnit Nothing
@@ -190,18 +195,22 @@ checkValueInternal explicitEvidence residualSpec value expected state =
             }
     _ -> do
       mapLeft valueSortError (checkTypeSorts state expected)
+      definednessUses <- checkTypeDefinedness expected state
       synthesized <- synthValue value state
       let actual = valueResultType synthesized
+          accepted = synthesized
+            { valueResultType = expected
+            , valueResultEvidence = appendEvidenceList
+                definednessUses
+                (valueResultEvidence synthesized)
+            }
       case bytesCheckDecision actual expected of
-        RuntimeBytesKernel.BytesCheckAcceptedForgetting ->
-          Right synthesized { valueResultType = expected }
-        RuntimeBytesKernel.BytesCheckAcceptedDefinitionallyEqual ->
-          Right synthesized { valueResultType = expected }
+        RuntimeBytesKernel.BytesCheckAcceptedForgetting -> Right accepted
+        RuntimeBytesKernel.BytesCheckAcceptedDefinitionallyEqual -> Right accepted
         RuntimeBytesKernel.BytesCheckRequiresExplicitTransport ->
           Left (ExplicitTransportRequired actual expected)
         RuntimeBytesKernel.BytesCheckIncompatible
-          | refinementErasesTo actual expected ->
-              Right synthesized { valueResultType = expected }
+          | refinementErasesTo actual expected -> Right accepted
           | otherwise -> Left (ValueTypeMismatch actual expected)
 
 matchingCarriedEvidence :: Proposition -> [EvidenceUse] -> Maybe EvidenceUse
@@ -224,6 +233,23 @@ appendEvidenceList additions existing =
     appendEvidence evidenceUse accumulated
       | evidenceUse `elem` accumulated = accumulated
       | otherwise = accumulated ++ [evidenceUse]
+
+-- | Discharge type-definedness prerequisites before definitional equality can
+-- normalize away the partial term which generated them. Refinement predicates
+-- are handled after their binder is instantiated by the existing refinement
+-- path; product elements can be checked recursively at this boundary.
+checkTypeDefinedness :: Ty -> CheckState -> Either ValueError [EvidenceUse]
+checkTypeDefinedness ty state =
+  case ty of
+    TyBytes index -> sideConditions (Equal index index)
+    TyProof proposition -> sideConditions proposition
+    TyProduct elements ->
+      fmap concat (mapM (checkTypeDefinedness . productElementType) elements)
+    TyRefined _ base _ -> checkTypeDefinedness base state
+    _ -> Right []
+  where
+    sideConditions proposition =
+      mapLeft ValueRefinementError (dischargeSideConditions proposition state)
 
 refinementErasesTo :: Ty -> Ty -> Bool
 refinementErasesTo actual expected =

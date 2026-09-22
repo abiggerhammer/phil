@@ -125,8 +125,20 @@ canonicalizeProposition
   -> Either FocusingError (Proposition, [FocusStep])
 canonicalizeProposition staticContext state proposition = do
   validateStaticContext staticContext
-  (_, canonical, _, steps) <- canonicalizeDetailed staticContext state [] proposition
-  Right (canonical, steps)
+  (expanded, canonical, sideConditions, steps) <-
+    canonicalizeDetailed staticContext state [] proposition
+  case firstStaticallyFalse sideConditions of
+    Just prerequisite -> Left (StaticallyFalseGoal prerequisite)
+    Nothing
+      | all ((== Truth) . normalizeProposition) sideConditions ->
+          Right (canonical, steps)
+      | otherwise ->
+          Right (expanded, filter (not . isNormalizationStep) steps)
+  where
+    firstStaticallyFalse [] = Nothing
+    firstStaticallyFalse (prerequisite : rest)
+      | normalizeProposition prerequisite == Falsehood = Just prerequisite
+      | otherwise = firstStaticallyFalse rest
 
 elaborateRefTermAs
   :: StaticContext
