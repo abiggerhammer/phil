@@ -1530,12 +1530,13 @@ pruneScopedPath span' incoming path = do
       locals = mapMaybe
         (\name -> fmap ((,) name) (Map.lookup name (stateBindings state)))
         (Set.toList localNames)
-  ensureEscapingValueSupported localNames (pathValue path)
+      escapedValue = fmap (forgetScopedRecordAliases localNames) (pathValue path)
+  ensureEscapingValueSupported localNames escapedValue
   mapM_ ensureDiscardable locals
   next <- foldM (\current name -> removeScopedBinding span' name current)
     state
     (map fst locals)
-  Right path { pathState = next }
+  Right path { pathState = next, pathValue = escapedValue }
   where
     ensureDiscardable (name, meta)
       | bindingMode meta == Linear = Left SurfaceCheckError
@@ -1558,6 +1559,32 @@ pruneScopedPath span' incoming path = do
                     "branch result depends on out-of-scope subject(s): "
                       <> Text.intercalate ", " (Set.toAscList unsupported)
                 }
+
+-- A constructed record copies unrestricted field data.  When such a record
+-- leaves a lexical scope, a bare field alias to a local source name can be
+-- forgotten if the field's own type is otherwise closed over that scope.  The
+-- next binding rebases the field to its new projection identity.  Proofs and
+-- genuinely dependent field types still retain their subjects and are rejected
+-- by the support check below.
+forgetScopedRecordAliases :: Set Text -> RuntimeValue -> RuntimeValue
+forgetScopedRecordAliases _ RuntimeUnit = RuntimeUnit
+forgetScopedRecordAliases localNames (RuntimeTuple values) =
+  RuntimeTuple (map (forgetScopedRecordAliases localNames) values)
+forgetScopedRecordAliases localNames (RuntimeScalar scalar) =
+  RuntimeScalar (scalar { scalarShape = forgetShape (scalarShape scalar) })
+  where
+    forgetShape shape = case shape of
+      RecordShape record fields ->
+        RecordShape record (Map.map forgetField fields)
+      other -> other
+
+    forgetField info = case fieldAlias info of
+      Just (RefVar (Name subject))
+        | Set.member subject localNames
+        , Set.null
+            (Set.intersection localNames (freeTypeSubjects (fieldType info))) ->
+            info { fieldAlias = Nothing }
+      _ -> info
 
 runtimeValueSubjects :: RuntimeValue -> Set Text
 runtimeValueSubjects RuntimeUnit = Set.empty
