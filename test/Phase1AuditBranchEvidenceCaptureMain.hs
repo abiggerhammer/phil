@@ -16,7 +16,7 @@ import Phil.Core.Context
   , startSharedLoan
   )
 import Phil.Core.Process (continueFlow, flowPaths, joinBranches, pathState)
-import Phil.Core.Refinement (RefinementError (..))
+import Phil.Core.Refinement (RefinementError (StaticallyFalse))
 import Phil.Core.Session
   ( SessionError (..)
   , SessionStep (..)
