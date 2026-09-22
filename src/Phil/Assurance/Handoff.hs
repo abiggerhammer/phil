@@ -1,22 +1,36 @@
 module Phil.Assurance.Handoff
   ( HandoffConfig (..)
+  , HandoffError (..)
   , LedgerHandoff (..)
   , handoffResolvedObligation
+  , handoffSupportEdges
   ) where
 
+import qualified Data.Map.Strict as Map
+import Data.Set (Set)
+import qualified Data.Set as Set
 import Data.Text (Text)
 import Phil.Assurance.Types
   ( AcceptanceRule
+  , EvidenceDependency (..)
   , ObligationRevision (..)
   , RevisionId
   , revisionFromCoreObligation
   )
+import Phil.Core.Decision
+  ( AssumptionRef (..)
+  , DecisionCertificate (..)
+  , LinearBasis (..)
+  , LinearCertificate (..)
+  )
 import Phil.Core.Discharge
-  ( ObligationDisposition
+  ( ObligationDisposition (..)
   , ResolvedObligation (..)
+  , StaticDischarge (..)
   )
 import Phil.Core.Syntax
-  ( Obligation
+  ( Obligation (..)
+  , ObligationId
   , Proposition
   )
 
@@ -33,29 +47,74 @@ data HandoffConfig = HandoffConfig
   , handoffAcceptanceRule :: Obligation -> AcceptanceRule
   }
 
+-- | A checked certificate may name a prerequisite that is not present in the
+-- resolved handoff tree.  Treat that as an invalid assurance handoff rather
+-- than silently dropping the support authority used by the certificate.
+data HandoffError
+  = UnknownPrerequisiteSupport ObligationId ObligationId
+  deriving (Eq, Show)
+
 -- | Lossless checker-to-ledger handoff node.  The exact Core disposition is
 -- retained rather than prematurely reclassified as final ledger evidence.
 -- Runtime implementation artifacts, exported destination obligations, and
 -- evidence artifact identities are attached only at the assurance layer.
+--
+-- 'handoffSupportDependencies' records semantic support used by a retained
+-- certificate.  It is deliberately separate from 'revisionGeneratedFrom':
+-- generation provenance is child -> parent, while a prerequisite dependency
+-- is evidence for parent/consumer -> child/prerequisite.
 data LedgerHandoff = LedgerHandoff
   { handoffRevision :: ObligationRevision
   , handoffCanonicalProposition :: Proposition
   , handoffDisposition :: ObligationDisposition
+  , handoffSupportDependencies :: [EvidenceDependency]
   }
   deriving (Eq, Show)
 
 -- | Flatten a resolved obligation and its generated prerequisites into
--- immutable revision/disposition nodes.  Child prerequisite revisions record
--- the parent revision in generated_from; the parent does not depend on the
--- child's identity for its own logical revision ID.
+-- immutable revision/disposition nodes, then bind every explicit
+-- 'PrerequisiteFact' retained by a decision certificate to the exact child
+-- revision it depends on.
+--
+-- Child prerequisite revisions continue to record the parent revision in
+-- 'revisionGeneratedFrom'.  That lineage remains provenance only; it is never
+-- reversed or repurposed as semantic support.
+--
+-- Resolution processes sibling prerequisites left-to-right, so a later child
+-- certificate may depend on an earlier sibling.  The second pass therefore
+-- resolves support against the complete flattened tree, not just direct
+-- children of the current node.
 handoffResolvedObligation
   :: HandoffConfig
   -> ResolvedObligation
-  -> [LedgerHandoff]
-handoffResolvedObligation config = go []
+  -> Either HandoffError [LedgerHandoff]
+handoffResolvedObligation config root =
+  traverse attachSupport flattened
   where
-    go :: [RevisionId] -> ResolvedObligation -> [LedgerHandoff]
-    go generatedFrom resolved =
+    flattened = flatten [] root
+
+    revisionByObligation = Map.fromList
+      [ (revisionObligationId revision, revisionId revision)
+      | entry <- flattened
+      , let revision = handoffRevision entry
+      ]
+
+    attachSupport entry =
+      let revision = handoffRevision entry
+          consumer = revisionObligationId revision
+          prerequisites = dispositionPrerequisites (handoffDisposition entry)
+          missing = prerequisites `Set.difference` Map.keysSet revisionByObligation
+      in case Set.lookupMin missing of
+          Just prerequisite -> Left (UnknownPrerequisiteSupport consumer prerequisite)
+          Nothing -> Right entry
+            { handoffSupportDependencies =
+                [ DependsOnObligation (revisionByObligation Map.! prerequisite)
+                | prerequisite <- Set.toAscList prerequisites
+                ]
+            }
+
+    flatten :: [RevisionId] -> ResolvedObligation -> [LedgerHandoff]
+    flatten generatedFrom resolved =
       let obligation = resolvedObligation resolved
           revision = revisionFromCoreObligation
             obligation
@@ -69,8 +128,60 @@ handoffResolvedObligation config = go []
             { handoffRevision = revision
             , handoffCanonicalProposition = resolvedCanonicalProposition resolved
             , handoffDisposition = resolvedDisposition resolved
+            , handoffSupportDependencies = []
             }
           children = concatMap
-            (go [revisionId revision])
+            (flatten [revisionId revision])
             (resolvedPrerequisites resolved)
       in current : children
+
+-- | Project only the semantic obligation-support relation in graph direction:
+-- @(consumer, prerequisite)@.  This is suitable for a successor assurance
+-- graph/evidence construction slice and intentionally ignores generation
+-- lineage.
+handoffSupportEdges :: [LedgerHandoff] -> Set (RevisionId, RevisionId)
+handoffSupportEdges entries = Set.fromList
+  [ (revisionId (handoffRevision entry), prerequisite)
+  | entry <- entries
+  , DependsOnObligation prerequisite <- handoffSupportDependencies entry
+  ]
+
+dispositionPrerequisites :: ObligationDisposition -> Set ObligationId
+dispositionPrerequisites disposition =
+  case disposition of
+    StaticallyDischarged StaticByCertificate { staticCertificate = certificate } ->
+      certificatePrerequisites certificate
+    _ -> Set.empty
+
+certificatePrerequisites :: DecisionCertificate -> Set ObligationId
+certificatePrerequisites certificate =
+  case certificate of
+    CertificateTruth -> Set.empty
+    CertificateAssumption assumption _ -> assumptionPrerequisites assumption
+    CertificateLinear linear -> linearPrerequisites linear
+    CertificateConjunction left right ->
+      certificatePrerequisites left `Set.union` certificatePrerequisites right
+    CertificateDisjunctionLeft left -> certificatePrerequisites left
+    CertificateDisjunctionRight right -> certificatePrerequisites right
+    CertificateNotEqualLeft linear -> linearPrerequisites linear
+    CertificateNotEqualRight linear -> linearPrerequisites linear
+
+linearPrerequisites :: LinearCertificate -> Set ObligationId
+linearPrerequisites linear = Set.unions
+  [ basisPrerequisites basis
+  | (basis, _) <- linearTerms linear
+  ]
+
+basisPrerequisites :: LinearBasis -> Set ObligationId
+basisPrerequisites basis =
+  case basis of
+    BasisAssumption assumption _ -> assumptionPrerequisites assumption
+    BasisNatLower _ -> Set.empty
+    BasisUIntLower _ _ -> Set.empty
+    BasisUIntUpper _ _ -> Set.empty
+
+assumptionPrerequisites :: AssumptionRef -> Set ObligationId
+assumptionPrerequisites assumption =
+  case assumption of
+    PrerequisiteFact obligationId -> Set.singleton obligationId
+    EvidenceFact _ _ -> Set.empty
