@@ -1,0 +1,48 @@
+name: Phase 1 Assurance EvidenceFact Handoff
+
+on:
+  pull_request:
+    paths:
+      - 'src/Phil/Assurance/Handoff.hs'
+      - 'test/AssuranceEvidenceFactHandoffMain.hs'
+      - 'test/AssuranceHandoffMain.hs'
+      - 'docs/phase-1/audit-prerequisite-support-handoff-v1.md'
+      - '.github/workflows/phase1-assurance-evidence-fact-handoff.yml'
+  push:
+    branches: [main]
+    paths:
+      - 'src/Phil/Assurance/Handoff.hs'
+      - 'test/AssuranceEvidenceFactHandoffMain.hs'
+      - 'test/AssuranceHandoffMain.hs'
+      - 'docs/phase-1/audit-prerequisite-support-handoff-v1.md'
+      - '.github/workflows/phase1-assurance-evidence-fact-handoff.yml'
+
+permissions:
+  contents: read
+
+jobs:
+  evidence-fact-handoff-correspondence:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: haskell-actions/setup@v2
+        with:
+          ghc-version: '9.6.7'
+          cabal-version: 'latest'
+
+      - name: Build complete Haskell substrate
+        run: cabal build all --enable-tests
+
+      - name: Strict typecheck assurance handoff controls
+        shell: bash
+        run: |
+          set -euo pipefail
+          cabal exec -- ghc -isrc -Wall -Werror -fno-code src/Phil/Assurance/Handoff.hs
+          cabal exec -- ghc -isrc -Wall -Werror -fno-code test/AssuranceEvidenceFactHandoffMain.hs
+          cabal exec -- ghc -isrc -Wall -Werror -fno-code test/AssuranceHandoffMain.hs
+
+      - name: Replay EvidenceFact immutable-identity correspondence
+        run: cabal exec -- runghc -isrc -Wall -Werror test/AssuranceEvidenceFactHandoffMain.hs
+
+      - name: Replay prerequisite-support handoff controls
+        run: cabal exec -- runghc -isrc -Wall -Werror test/AssuranceHandoffMain.hs
