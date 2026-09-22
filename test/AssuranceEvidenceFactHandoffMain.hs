@@ -3,6 +3,7 @@
 module Main (main) where
 
 import qualified Data.Map.Strict as Map
+import qualified Data.Set as Set
 import Phil.Assurance
 import Phil.Core.Decision
   ( AssumptionRef (..)
@@ -87,38 +88,11 @@ evidenceSupportStaysPrecise =
       handoffConfig evidenceIdentityMap mixedResolved of
     Right entries@(parent : child : _) ->
       handoffSupportEdges entries
-        == mempty
-          `mappend` singletonEdge
-            (revisionId (handoffRevision parent))
-            (revisionId (handoffRevision child))
+        == Set.singleton
+          ( revisionId (handoffRevision parent)
+          , revisionId (handoffRevision child)
+          )
     _ -> False
-  where
-    singletonEdge consumer prerequisite =
-      handoffSupportEdges
-        [ LedgerHandoff
-            { handoffRevision = syntheticRevision consumer
-            , handoffCanonicalProposition = Truth
-            , handoffDisposition = StaticallyDischarged StaticByDefinition
-            , handoffSupportDependencies = [DependsOnObligation prerequisite]
-            }
-        ]
-
-syntheticRevision :: RevisionId -> ObligationRevision
-syntheticRevision revision = ObligationRevision
-  { revisionObligationId = ObligationId "test.synthetic"
-  , revisionId = revision
-  , revisionStatement = "true"
-  , revisionStatementDigest = Digest "test"
-  , revisionKind = "Test"
-  , revisionOrigin = "test"
-  , revisionScope = "test"
-  , revisionRequiredAt = "test"
-  , revisionRepresentation = "Core"
-  , revisionSubjectIds = []
-  , revisionContextIds = []
-  , revisionAcceptanceRule = AcceptEntry KernelChecked (EvidenceRole "test")
-  , revisionGeneratedFrom = []
-  }
 
 evidenceIdentityMap :: Map.Map (Name, Int) EvidenceEntryId
 evidenceIdentityMap = Map.singleton (evidenceName, evidenceIndex) evidenceEntryId
