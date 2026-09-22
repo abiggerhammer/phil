@@ -3,6 +3,7 @@
 module Main (main) where
 
 import qualified Data.Map.Strict as Map
+import Data.Text (Text)
 import Phil.Core.Checker (CheckState (..), emptyCheckState, emitObligation)
 import Phil.Core.Context
   ( CheckError (..)
@@ -242,9 +243,9 @@ mismatchedPair good expected = do
       | actual == good && bad == expected -> Right ()
     other -> Left ("wrong mismatch result: " <> show other)
 
-dependent :: String -> Ty
+dependent :: Text -> Ty
 dependent spelling =
-  let binder = Name (fromString spelling)
+  let binder = Name spelling
   in TyEndpoint
       (Receive
         binder
@@ -318,9 +319,6 @@ unknownReject =
     Left (ValueResourceError (UnknownBinding actual))
       | actual == endpointName -> Right ()
     other -> Left (show other)
-
-fromString :: String -> Data.Text.Text
-fromString = Data.Text.pack
 
 assert :: Bool -> String -> Check
 assert True _ = Right ()
