@@ -1,0 +1,44 @@
+name: Phase 1 Audit Manifest Evidence Membership
+
+on:
+  pull_request:
+    paths:
+      - 'src/Phil/Verification/ManifestClosure.hs'
+      - 'test/Phase1AuditManifestEvidenceMembershipMain.hs'
+      - 'test/Phase1INT002ManifestClosureMain.hs'
+      - '.github/workflows/phase1-audit-manifest-evidence-membership.yml'
+  push:
+    branches: [main]
+    paths:
+      - 'src/Phil/Verification/ManifestClosure.hs'
+      - 'test/Phase1AuditManifestEvidenceMembershipMain.hs'
+      - 'test/Phase1INT002ManifestClosureMain.hs'
+      - '.github/workflows/phase1-audit-manifest-evidence-membership.yml'
+
+permissions:
+  contents: read
+
+jobs:
+  membership-regression:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: haskell-actions/setup@v2
+        with:
+          ghc-version: '9.6.7'
+          cabal-version: 'latest'
+
+      - name: Build complete Haskell substrate
+        run: cabal build all --enable-tests
+
+      - name: Strict typecheck audit and INT-002 closure consumer
+        run: |
+          set -euo pipefail
+          cabal exec -- ghc -isrc -Wall -Werror -fno-code test/Phase1AuditManifestEvidenceMembershipMain.hs
+          cabal exec -- ghc -isrc -Wall -Werror -fno-code test/Phase1INT002ManifestClosureMain.hs
+
+      - name: Replay PHIL-AUD-MANIFEST-EVIDENCE-MEMBERSHIP-001
+        run: cabal exec -- runghc -isrc -Wall -Werror test/Phase1AuditManifestEvidenceMembershipMain.hs
+
+      - name: Replay existing INT-002 manifest closure controls
+        run: cabal exec -- runghc -isrc -Wall -Werror test/Phase1INT002ManifestClosureMain.hs
