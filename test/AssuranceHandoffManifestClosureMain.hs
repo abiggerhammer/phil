@@ -178,7 +178,7 @@ baseFixture = do
         { applicationAssurancePolicyRevision = AssurancePolicyRevision
             "audit-handoff-manifest-v1"
         , applicationAssurancePolicyPermittedDispositions =
-            Set.singleton StaticallyDischarged
+            Set.singleton Phil.Verification.StaticallyDischarged
         }
   bundle <- mapLeft show $ buildVerificationBundle
     (digestText "audit-handoff-manifest-source")
@@ -354,7 +354,7 @@ mixedResolved = ResolvedObligation
   { resolvedObligation = parentObligation
   , resolvedCanonicalProposition = Truth
   , resolvedPrerequisites = [childResolved]
-  , resolvedDisposition = StaticallyDischarged StaticByCertificate
+  , resolvedDisposition = Phil.Core.Discharge.StaticallyDischarged StaticByCertificate
       { staticCertificateProducer = "test-producer"
       , staticCertificateChecker = "test-checker"
       , staticCertificate = CertificateConjunction
@@ -369,7 +369,7 @@ childResolved = ResolvedObligation
   { resolvedObligation = childObligation
   , resolvedCanonicalProposition = Truth
   , resolvedPrerequisites = []
-  , resolvedDisposition = StaticallyDischarged StaticByDefinition
+  , resolvedDisposition = Phil.Core.Discharge.StaticallyDischarged StaticByDefinition
   }
 
 parentObligation :: Obligation
