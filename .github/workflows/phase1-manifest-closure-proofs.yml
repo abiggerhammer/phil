@@ -10,6 +10,7 @@ on:
       - 'proof/Phil/Assurance/ValidityScope.v'
       - 'proof/Phil/Assurance/GenericAssurance.v'
       - 'proof/Phil/Assurance/LineageAuthority.v'
+      - 'proof/Phil/Assurance/PrerequisiteSupport.v'
       - 'src/Phil/Verification/ManifestClosure.hs'
       - 'test/Phase1INT002*.hs'
       - 'test/Phase1INT001WitnessE2EMain.hs'
@@ -18,12 +19,14 @@ on:
       - 'test/Phase1VerificationPolicySensitiveRuntimeClosureMain.hs'
       - 'test/Phase1VerificationIndependentTargetMain.hs'
       - 'docs/phase-1/manifest-closure-proof-boundary-v1.md'
+      - 'docs/phase-1/audit-prerequisite-support-proof-boundary-v1.md'
       - '.github/workflows/phase1-manifest-closure-proofs.yml'
   push:
     branches: [main]
     paths:
       - 'proof/Phil/Verification/ManifestClosure.v'
       - 'proof/Phil/Verification/ManifestClosureImplementation.v'
+      - 'proof/Phil/Assurance/PrerequisiteSupport.v'
       - 'src/Phil/Verification/ManifestClosure.hs'
       - 'test/Phase1INT002*.hs'
       - '.github/workflows/phase1-manifest-closure-proofs.yml'
@@ -47,6 +50,7 @@ jobs:
           rocq c -Q proof/Phil Phil proof/Phil/Assurance/Manifest.v
           rocq c -Q proof/Phil Phil proof/Phil/Assurance/ValidityScope.v
           rocq c -Q proof/Phil Phil proof/Phil/Assurance/LineageAuthority.v
+          rocq c -Q proof/Phil Phil proof/Phil/Assurance/PrerequisiteSupport.v
           rocq c -Q proof/Phil Phil proof/Phil/Verification/VerificationWorkflow.v
           rocq c -Q proof/Phil Phil proof/Phil/Core/GenericStructural.v
           rocq c -Q proof/Phil Phil proof/Phil/Core/GenericRequirements.v
@@ -54,7 +58,7 @@ jobs:
           rocq c -Q proof/Phil Phil proof/Phil/Assurance/GenericAssurance.v
           rocq c -Q proof/Phil Phil proof/Phil/Verification/ManifestClosure.v
           rocq c -Q proof/Phil Phil proof/Phil/Verification/ManifestClosureImplementation.v
-          sha256sum proof/Phil/Verification/ManifestClosure.v             proof/Phil/Verification/ManifestClosure.vo             proof/Phil/Verification/ManifestClosureImplementation.v             proof/Phil/Verification/ManifestClosureImplementation.vo             > manifest-closure-proof.sha256
+          sha256sum proof/Phil/Assurance/PrerequisiteSupport.v             proof/Phil/Assurance/PrerequisiteSupport.vo             proof/Phil/Verification/ManifestClosure.v             proof/Phil/Verification/ManifestClosure.vo             proof/Phil/Verification/ManifestClosureImplementation.v             proof/Phil/Verification/ManifestClosureImplementation.vo             > manifest-closure-proof.sha256
       - uses: actions/upload-artifact@v4
         with:
           name: manifest-closure-proof
