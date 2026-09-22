@@ -5,7 +5,7 @@ module Main (main) where
 import qualified Data.Map.Strict as Map
 import qualified Data.Set as Set
 import Phil.Assurance.Types
-import Phil.Core.Syntax (Obligation (..), ObligationId (..), Proposition (Truth))
+import Phil.Core.Syntax (Obligation (Obligation), ObligationId (..), Proposition (Truth))
 import Phil.Verification
 import Phil.Verification.Bundle
 import Phil.Verification.ManifestClosure
