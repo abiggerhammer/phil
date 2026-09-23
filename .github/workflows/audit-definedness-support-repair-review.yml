@@ -1,0 +1,143 @@
+name: Audit Definedness Support Repair Review
+
+on:
+  push:
+    branches: [audit-definedness-support-repair-review-20260923]
+    paths: ['.github/workflows/audit-definedness-support-repair-review.yml']
+
+permissions:
+  contents: read
+
+concurrency:
+  group: audit-definedness-support-repair-review-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  measure-pinned-consumer:
+    runs-on: ubuntu-latest
+    timeout-minutes: 35
+    steps:
+      - name: Check out exact proposed production repair
+        uses: actions/checkout@v4
+        with:
+          ref: 1216ee184e3382264b3b329add0afc34057a68ff
+          path: subject
+          persist-credentials: false
+      - name: Check out unchanged independent consumer driver
+        uses: actions/checkout@v4
+        with:
+          ref: 1f32aa4ae1aeeaee6db39975b3a86e35adf76890
+          path: driver
+          persist-credentials: false
+      - uses: haskell-actions/setup@v2
+        with:
+          ghc-version: '9.6.7'
+          cabal-version: '3.18.1.0'
+      - name: Record and verify independent identities
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p evidence/build
+          git -C subject rev-parse HEAD > evidence/subject-commit.txt
+          git -C driver rev-parse HEAD > evidence/driver-commit.txt
+          printf '%s\n' '${{ github.sha }}' > evidence/workflow-commit.txt
+          test "$(cat evidence/subject-commit.txt)" = 1216ee184e3382264b3b329add0afc34057a68ff
+          test "$(cat evidence/driver-commit.txt)" = 1f32aa4ae1aeeaee6db39975b3a86e35adf76890
+          git -C subject status --porcelain --untracked-files=all > evidence/subject-status-before.txt
+          test ! -s evidence/subject-status-before.txt
+          cp driver/audit/definedness-final-closure/DefinednessClosureControls.hs evidence/
+          test "$(git hash-object evidence/DefinednessClosureControls.hs)" = c80410a33dfc35c77c6fd358cc00232763405330
+          sha256sum evidence/DefinednessClosureControls.hs > evidence/driver.sha256
+          ghc --numeric-version > evidence/ghc-version.txt
+          cabal --numeric-version > evidence/cabal-version.txt
+          for path in src/Phil/Core/Discharge.hs src/Phil/Assurance/Handoff.hs src/Phil/Assurance/Verify.hs src/Phil/Verification.hs src/Phil/Verification/Bundle.hs src/Phil/Verification/ManifestClosure.hs test/Phase1AuditDefinednessSupportMain.hs test/AssuranceHandoffMain.hs; do
+            printf '%s %s\n' "$(git -C subject rev-parse "HEAD:$path")" "$path" >> evidence/source-git-blobs.txt
+          done
+      - name: Build exact production substrate
+        working-directory: subject
+        shell: bash
+        run: |
+          set -euo pipefail
+          cabal update 2>&1 | tee ../evidence/dependency-index.log
+          cabal build all --enable-tests 2>&1 | tee ../evidence/build.log
+      - name: Strictly compile unchanged external driver
+        working-directory: subject
+        shell: bash
+        run: |
+          set -euo pipefail
+          cabal exec -- ghc -O0 -isrc -Wall -Werror -outputdir ../evidence/build ../evidence/DefinednessClosureControls.hs -o ../evidence/definedness-closure 2>&1 | tee ../evidence/compile.log
+      - name: Measure support, observations, and required correctness separately
+        shell: bash
+        run: |
+          set -euo pipefail
+          # Preserve intentional correctness failures. Workflow success means
+          # complete measurement, never repaired semantics. All exits are kept.
+          for mode in support observe require-fix; do
+            set +e
+            evidence/definedness-closure --"$mode" > "evidence/$mode.log" 2>&1
+            status=$?
+            set -e
+            printf '%s\n' "$status" > "evidence/$mode.exit"
+          done
+          python3 - <<'PY'
+          import json
+          from pathlib import Path
+          result = {'measurement_only': True, 'production_source_adapter_established': False,
+                    'observation_correctness_credit': 0, 'modes': {}}
+          expected = {'support': ['R01', 'R02'],
+                      'observe': [f'C{i:02d}' for i in range(1,10)],
+                      'require-fix': [f'C{i:02d}' for i in range(1,10)]+['R01','R02']}
+          for mode, keys in expected.items():
+              lines = Path(f'evidence/{mode}.log').read_text().splitlines()
+              records = [line.split(' ',2) for line in lines if line.startswith(('PASS ', 'FAIL '))]
+              assert [r[1] for r in records] == keys, (mode, records)
+              assert not any(line.startswith('OBS_SETUP_ERROR ') for line in lines), (mode, lines)
+              observations = [line for line in lines if line.startswith('OBS ')]
+              if mode == 'observe':
+                  assert [line.split(' ',2)[1] for line in observations] == ['O01','O02']
+              else:
+                  assert not observations
+              code = int(Path(f'evidence/{mode}.exit').read_text())
+              assert code in (0,1), (mode, code)
+              assert (code == 0) == all(r[0] == 'PASS' for r in records), (mode, code, records)
+              result['modes'][mode] = {'exit_code': code, 'cases': records,
+                                       'observations': observations}
+          result['all_required_driver_assertions_passed'] = result['modes']['require-fix']['exit_code'] == 0
+          result['repair_certified'] = False
+          Path('evidence/protocol.json').write_text(json.dumps(result,indent=2)+'\n')
+          print(json.dumps({k:v for k,v in result.items() if k != 'modes'}, indent=2))
+          for mode, data in result['modes'].items():
+              print(mode, 'exit=', data['exit_code'], [(r[1],r[0]) for r in data['cases']])
+          PY
+      - name: Replay current repair and permanent consumers
+        working-directory: subject
+        shell: bash
+        run: |
+          set -euo pipefail
+          failed=0
+          for suite in Phase1AuditDefinednessSupportMain DischargeMain AssuranceHandoffMain AssuranceEvidenceFactHandoffMain AssuranceHandoffManifestClosureMain Phase1AuditManifestEvidenceMembershipMain; do
+            cp "test/$suite.hs" "../evidence/$suite.hs"
+            set +e
+            cabal exec -- runghc -isrc -Wall -Werror "test/$suite.hs" > "../evidence/$suite.log" 2>&1
+            status=$?
+            set -e
+            printf '%s %s\n' "$suite" "$status" >> ../evidence/permanent-exits.txt
+            if test "$status" -ne 0; then failed=1; fi
+          done
+          git status --porcelain --untracked-files=all > ../evidence/subject-status-after.txt
+          test ! -s ../evidence/subject-status-after.txt
+          test "$(git rev-parse HEAD)" = 1216ee184e3382264b3b329add0afc34057a68ff
+          exit "$failed"
+      - name: Retain complete measurement, including failed required assertions
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: definedness-support-repair-review-1216ee18
+          path: |
+            evidence/*.txt
+            evidence/*.sha256
+            evidence/*.json
+            evidence/*.hs
+            evidence/*.log
+            evidence/*.exit
+          if-no-files-found: error
