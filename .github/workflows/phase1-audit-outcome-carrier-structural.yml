@@ -3,6 +3,7 @@ name: Phase 1 Audit Outcome Carrier Structural
 on:
   pull_request:
     paths:
+      - 'src/Phil/Surface/Check/Engine.hs'
       - 'src/Phil/Surface/Check/Support.hs'
       - 'test/Phase1AuditOutcomeCarrierStructuralMain.hs'
       - 'docs/phase-1/audit-outcome-carrier-structural-remediation-v1.md'
@@ -10,6 +11,7 @@ on:
   push:
     branches: [main]
     paths:
+      - 'src/Phil/Surface/Check/Engine.hs'
       - 'src/Phil/Surface/Check/Support.hs'
       - 'test/Phase1AuditOutcomeCarrierStructuralMain.hs'
       - 'docs/phase-1/audit-outcome-carrier-structural-remediation-v1.md'
@@ -36,6 +38,7 @@ jobs:
         run: |
           set -euo pipefail
           cabal exec -- ghc -isrc -Wall -Werror -fno-code src/Phil/Surface/Check/Support.hs
+          cabal exec -- ghc -isrc -Wall -Werror -fno-code src/Phil/Surface/Check/Engine.hs
           cabal exec -- ghc -isrc -Wall -Werror -fno-code test/Phase1AuditOutcomeCarrierStructuralMain.hs
 
       - name: Replay PHIL-AUD-OUTCOME-CARRIER-STRUCTURAL-001

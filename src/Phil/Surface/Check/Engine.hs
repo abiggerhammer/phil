@@ -436,7 +436,8 @@ evalCallable environment state located name arguments =
 
     callableRuntimeMode expression value = case value of
       RuntimeUnit -> Right Unrestricted
-      RuntimeScalar scalar -> Right (scalarMode scalar)
+      RuntimeScalar scalar ->
+        Right (decisionCarrierMode (scalarMode scalar) (scalarShape scalar))
       RuntimeTuple _ -> throw expression TypeMismatch
         "tuple-valued callable arguments require an explicit product signature"
 

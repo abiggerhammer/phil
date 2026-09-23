@@ -6,6 +6,7 @@ module Phil.Surface.Check.Support
   , valuePath
   , runtimeType
   , restrictedRuntimeValue
+  , decisionCarrierMode
   , insertBindingMeta
   , lookupMeta
   , moveVariable
