@@ -5,6 +5,7 @@ on:
     paths:
       - 'src/Phil/Surface/Check/Engine.hs'
       - 'test/Phase1AuditBranchEvidenceCaptureMain.hs'
+      - 'test/Phase1AuditBranchEvidenceDelayedMain.hs'
       - 'docs/phase-1/audit-branch-evidence-capture-remediation-v1.md'
       - '.github/workflows/phase1-audit-branch-evidence-capture.yml'
   push:
@@ -12,6 +13,7 @@ on:
     paths:
       - 'src/Phil/Surface/Check/Engine.hs'
       - 'test/Phase1AuditBranchEvidenceCaptureMain.hs'
+      - 'test/Phase1AuditBranchEvidenceDelayedMain.hs'
       - 'docs/phase-1/audit-branch-evidence-capture-remediation-v1.md'
       - '.github/workflows/phase1-audit-branch-evidence-capture.yml'
 
@@ -37,9 +39,14 @@ jobs:
           set -euo pipefail
           cabal exec -- ghc -isrc -Wall -Werror -fno-code src/Phil/Surface/Check/Engine.hs
           cabal exec -- ghc -isrc -Wall -Werror -fno-code test/Phase1AuditBranchEvidenceCaptureMain.hs
+          cabal exec -- ghc -isrc -Wall -Werror -fno-code test/Phase1AuditBranchEvidenceDelayedMain.hs
 
       - name: Replay PHIL-AUD-BRANCH-EVIDENCE-CAPTURE-001
-        run: cabal exec -- runghc -isrc -Wall -Werror test/Phase1AuditBranchEvidenceCaptureMain.hs
+        shell: bash
+        run: |
+          set -euo pipefail
+          cabal exec -- runghc -isrc -Wall -Werror test/Phase1AuditBranchEvidenceCaptureMain.hs
+          cabal exec -- runghc -isrc -Wall -Werror test/Phase1AuditBranchEvidenceDelayedMain.hs
 
       - name: Replay existing Surface and value controls
         run: cabal test phil-surface-conformance-tests phil-value-tests phil-refinement-evidence-tests --test-show-details=direct
