@@ -47,4 +47,4 @@ jobs:
           set -euo pipefail
           cabal exec -- runghc -Wall -Werror -isrc test/ValueMain.hs
           cabal exec -- runghc -Wall -Werror -isrc test/RefinementEvidenceMain.hs
-          cabal exec -- runghc -Wall -Werror -isrc test/Phase1AuditTypeDefinednessCoreMain.hs
+          cabal exec -- runghc -Wall -Werror -isrc -itest test/Phase1AuditTypeDefinednessCoreMain.hs
