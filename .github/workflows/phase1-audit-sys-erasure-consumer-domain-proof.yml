@@ -1,0 +1,41 @@
+name: Phase 1 Audit SYS-012 Consumer Domain Proof
+
+on:
+  pull_request:
+    paths:
+      - 'proof/Phil/Assurance/SystemsErasureConsumerDomainBoundary.v'
+      - 'docs/phase-1/audit-sys-erasure-consumer-domain-proof-boundary-v1.md'
+      - '.github/workflows/phase1-audit-sys-erasure-consumer-domain-proof.yml'
+  push:
+    branches: [main]
+    paths:
+      - 'proof/Phil/Assurance/SystemsErasureConsumerDomainBoundary.v'
+      - 'docs/phase-1/audit-sys-erasure-consumer-domain-proof-boundary-v1.md'
+      - '.github/workflows/phase1-audit-sys-erasure-consumer-domain-proof.yml'
+
+permissions:
+  contents: read
+
+jobs:
+  sys-erasure-consumer-domain-proof:
+    runs-on: ubuntu-latest
+    container:
+      image: rocq/rocq-prover:9.2.0
+      options: --user root
+    steps:
+      - uses: actions/checkout@v4
+      - name: Compile SYS-012 consumer-domain authority boundary proof
+        shell: bash
+        run: |
+          set -euo pipefail
+          export PATH="/home/rocq/.opam/${COMPILER}/bin:$PATH"
+          rocq c -Q proof/Phil Phil proof/Phil/Assurance/SystemsErasureConsumerDomainBoundary.v
+          sha256sum \
+            proof/Phil/Assurance/SystemsErasureConsumerDomainBoundary.v \
+            proof/Phil/Assurance/SystemsErasureConsumerDomainBoundary.vo \
+            > systems-erasure-consumer-domain-proof.sha256
+      - uses: actions/upload-artifact@v4
+        with:
+          name: systems-erasure-consumer-domain-proof
+          path: systems-erasure-consumer-domain-proof.sha256
+          if-no-files-found: error
