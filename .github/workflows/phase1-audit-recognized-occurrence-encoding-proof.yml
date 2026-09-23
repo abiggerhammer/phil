@@ -1,0 +1,41 @@
+name: Phase 1 Audit Recognized Occurrence Encoding Proof
+
+on:
+  pull_request:
+    paths:
+      - 'proof/Phil/Assurance/RecognizedOccurrenceEncodingBoundary.v'
+      - 'docs/phase-1/audit-recognized-occurrence-encoding-proof-boundary-v1.md'
+      - '.github/workflows/phase1-audit-recognized-occurrence-encoding-proof.yml'
+  push:
+    branches: [main]
+    paths:
+      - 'proof/Phil/Assurance/RecognizedOccurrenceEncodingBoundary.v'
+      - 'docs/phase-1/audit-recognized-occurrence-encoding-proof-boundary-v1.md'
+      - '.github/workflows/phase1-audit-recognized-occurrence-encoding-proof.yml'
+
+permissions:
+  contents: read
+
+jobs:
+  recognized-occurrence-encoding-proof:
+    runs-on: ubuntu-latest
+    container:
+      image: rocq/rocq-prover:9.2.0
+      options: --user root
+    steps:
+      - uses: actions/checkout@v4
+      - name: Compile recognized-occurrence encoding authority proof
+        shell: bash
+        run: |
+          set -euo pipefail
+          export PATH="/home/rocq/.opam/${COMPILER}/bin:$PATH"
+          rocq c -Q proof/Phil Phil proof/Phil/Assurance/RecognizedOccurrenceEncodingBoundary.v
+          sha256sum \
+            proof/Phil/Assurance/RecognizedOccurrenceEncodingBoundary.v \
+            proof/Phil/Assurance/RecognizedOccurrenceEncodingBoundary.vo \
+            > recognized-occurrence-encoding-proof.sha256
+      - uses: actions/upload-artifact@v4
+        with:
+          name: recognized-occurrence-encoding-proof
+          path: recognized-occurrence-encoding-proof.sha256
+          if-no-files-found: error
