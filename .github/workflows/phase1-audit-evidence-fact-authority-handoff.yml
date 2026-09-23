@@ -1,0 +1,42 @@
+name: Phase 1 Audit EvidenceFact Authority Handoff
+
+on:
+  pull_request:
+    paths:
+      - 'src/Phil/Assurance/EvidenceFactAuthority.hs'
+      - 'test/AssuranceEvidenceFactAuthorityMain.hs'
+      - 'docs/phase-1/audit-evidence-fact-authority-handoff-v1.md'
+      - '.github/workflows/phase1-audit-evidence-fact-authority-handoff.yml'
+  push:
+    branches: [main]
+    paths:
+      - 'src/Phil/Assurance/EvidenceFactAuthority.hs'
+      - 'test/AssuranceEvidenceFactAuthorityMain.hs'
+      - 'docs/phase-1/audit-evidence-fact-authority-handoff-v1.md'
+      - '.github/workflows/phase1-audit-evidence-fact-authority-handoff.yml'
+
+permissions:
+  contents: read
+
+jobs:
+  evidence-fact-authority-handoff:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: haskell-actions/setup@v2
+        with:
+          ghc-version: '9.6.7'
+          cabal-version: 'latest'
+
+      - name: Build complete Haskell substrate
+        run: cabal build all --enable-tests
+
+      - name: Strict typecheck EvidenceFact authority correspondence
+        shell: bash
+        run: |
+          set -euo pipefail
+          cabal exec -- ghc -isrc -Wall -Werror -fno-code src/Phil/Assurance/EvidenceFactAuthority.hs
+          cabal exec -- ghc -isrc -Wall -Werror -fno-code test/AssuranceEvidenceFactAuthorityMain.hs
+
+      - name: Replay EvidenceFact authority handoff controls
+        run: cabal exec -- runghc -isrc -Wall -Werror test/AssuranceEvidenceFactAuthorityMain.hs
