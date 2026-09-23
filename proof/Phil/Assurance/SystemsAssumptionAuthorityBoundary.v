@@ -110,7 +110,7 @@ Proof.
       [HauthorityScope
       [Hboundary
       [Hselected
-      [Hpermitted Hcurrent]]]]]]]]]]]]].
+      [Hpermitted Hcurrent]]]]]]]]]]]].
   exists authority, scope.
   repeat split; assumption.
 Qed.
@@ -160,7 +160,7 @@ Proof.
       [HauthorityScope
       [Hboundary
       [Hselected
-      [Hpermitted Hcurrent]]]]]]]]]]]]].
+      [Hpermitted Hcurrent]]]]]]]]]]]].
   cbn in Hmap, Hscope, HauthorityScope.
   inversion Hmap; subst authority.
   inversion Hscope; subst scope.
