@@ -225,30 +225,44 @@ rejects expected f = do
 
 controls :: [(String, Either String ())]
 controls =
-  [ ("C01",fixture algebra >>= accepts)
-  , ("C02",fixture definition >>= accepts)
-  , ("C03",fixture explicit >>= accepts)
-  , ("C04",do f <- fixture algebra
-               rejects (\e -> e == M.ManifestClosureManifestRejected (AV.AcceptanceRuleUnsatisfied (rev (prerequisite f))))
-                 f { selected = Set.singleton parentId })
-  , ("C05",do f <- fixture algebra
-               rejects (\e -> e == M.ManifestClosureManifestRejected (AV.OutOfScopeObligationNotExported (rev (prerequisite f))))
-                 f { scope = Set.singleton (rev (parent f)), selected = Set.singleton parentId })
-  , ("C06",do f <- fixture explicit
-               ensure (H.handoffSupportDependencies (parent f) == [A.DependsOnObligation (rev (prerequisite f))]) "explicit support prerequisite not produced"
-               rejects (\e -> e == M.ManifestClosureManifestRejected (AV.DependencyOnExportedObligation parentId (rev (prerequisite f)))) (exportChild f))
-  , ("C07",do f <- fixture algebra
-               rejects (\e -> e == M.ManifestClosureManifestRejected (AV.UnpermittedExportBoundary childExportId boundary))
-                 (exportChild f) { permittedBoundaries = Set.empty })
-  , ("C08",do f <- fixture algebra
-               rejects (== M.ManifestClosureUnpermittedDisposition V.RuntimeBound)
-                 f { allowed = Set.delete V.RuntimeBound (allowed f) })
-  , ("C09",do f <- fixture algebra
-               let change e = if A.evidenceEntryId e == runtimeId
-                     then seal (e { A.evidenceRuntimeMechanism = Nothing })
-                     else e
-               rejects (== M.ManifestClosureManifestRejected (AV.RuntimeEvidenceMissingMechanism runtimeId))
-                 f { evidenceEntries = map change (evidenceEntries f) })
+  [ ("C01", fixture algebra >>= accepts)
+  , ("C02", fixture definition >>= accepts)
+  , ("C03", fixture explicit >>= accepts)
+  , ("C04", do
+      f <- fixture algebra
+      rejects (\e -> e == M.ManifestClosureManifestRejected
+        (AV.AcceptanceRuleUnsatisfied (rev (prerequisite f))))
+        (f { selected = Set.singleton parentId }))
+  , ("C05", do
+      f <- fixture algebra
+      rejects (\e -> e == M.ManifestClosureManifestRejected
+        (AV.OutOfScopeObligationNotExported (rev (prerequisite f))))
+        (f { scope = Set.singleton (rev (parent f)), selected = Set.singleton parentId }))
+  , ("C06", do
+      f <- fixture explicit
+      ensure (H.handoffSupportDependencies (parent f) ==
+        [A.DependsOnObligation (rev (prerequisite f))])
+        "explicit support prerequisite not produced"
+      rejects (\e -> e == M.ManifestClosureManifestRejected
+        (AV.DependencyOnExportedObligation parentId (rev (prerequisite f))))
+        (exportChild f))
+  , ("C07", do
+      f <- fixture algebra
+      rejects (\e -> e == M.ManifestClosureManifestRejected
+        (AV.UnpermittedExportBoundary childExportId boundary))
+        ((exportChild f) { permittedBoundaries = Set.empty }))
+  , ("C08", do
+      f <- fixture algebra
+      rejects (== M.ManifestClosureUnpermittedDisposition V.RuntimeBound)
+        (f { allowed = Set.delete V.RuntimeBound (allowed f) }))
+  , ("C09", do
+      f <- fixture algebra
+      let change e =
+            if A.evidenceEntryId e == runtimeId
+              then seal (e { A.evidenceRuntimeMechanism = Nothing })
+              else e
+      rejects (== M.ManifestClosureManifestRejected (AV.RuntimeEvidenceMissingMechanism runtimeId))
+        (f { evidenceEntries = map change (evidenceEntries f) }))
   ]
 
 observation :: Proposition -> Either String String
