@@ -212,11 +212,9 @@ Proof.
   intros event prerequisite Hoperation.
   cbn in Hoperation |- *.
   destruct (Nat.eqb event 7) eqn:Hevent.
-  - rewrite Hevent in Hoperation.
-    cbn in Hoperation |- *.
+  - cbn in Hoperation |- *.
     exact Hoperation.
-  - rewrite Hevent in Hoperation.
-    cbn in Hoperation.
+  - cbn in Hoperation.
     discriminate.
 Qed.
 
