@@ -1,0 +1,44 @@
+name: Phase 1 Audit EvidenceFact Authority Proof
+
+on:
+  pull_request:
+    paths:
+      - 'proof/Phil/Assurance/EvidenceFactAuthority.v'
+      - 'docs/phase-1/audit-evidence-fact-authority-proof-boundary-v1.md'
+      - '.github/workflows/phase1-audit-evidence-fact-authority-proof.yml'
+  push:
+    branches: [main]
+    paths:
+      - 'proof/Phil/Assurance/EvidenceFactAuthority.v'
+      - 'docs/phase-1/audit-evidence-fact-authority-proof-boundary-v1.md'
+      - '.github/workflows/phase1-audit-evidence-fact-authority-proof.yml'
+
+permissions:
+  contents: read
+
+jobs:
+  evidence-fact-authority-proof:
+    runs-on: ubuntu-latest
+    container:
+      image: rocq/rocq-prover:9.2.0
+      options: --user root
+    steps:
+      - uses: actions/checkout@v4
+      - name: Compile prerequisite and EvidenceFact authority proofs
+        shell: bash
+        run: |
+          set -euo pipefail
+          export PATH="/home/rocq/.opam/${COMPILER}/bin:$PATH"
+          rocq c -Q proof/Phil Phil proof/Phil/Assurance/PrerequisiteSupport.v
+          rocq c -Q proof/Phil Phil proof/Phil/Assurance/EvidenceFactAuthority.v
+          sha256sum \
+            proof/Phil/Assurance/PrerequisiteSupport.v \
+            proof/Phil/Assurance/PrerequisiteSupport.vo \
+            proof/Phil/Assurance/EvidenceFactAuthority.v \
+            proof/Phil/Assurance/EvidenceFactAuthority.vo \
+            > evidence-fact-authority-proof.sha256
+      - uses: actions/upload-artifact@v4
+        with:
+          name: evidence-fact-authority-proof
+          path: evidence-fact-authority-proof.sha256
+          if-no-files-found: error
