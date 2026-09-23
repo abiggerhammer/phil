@@ -23,6 +23,7 @@ import Phil.Core.Refinement
   )
 import Phil.Core.SortCheck
   ( SortError
+  , checkPropositionSorts
   , propositionSideConditions
   , sortOfRefTerm
   )
@@ -100,6 +101,7 @@ checkDecisionCertificate
   -> DecisionCertificate
   -> Either CertificateError ()
 checkDecisionCertificate state assumptions proposition certificate = do
+  mapLeft CertificateSortError (checkPropositionSorts state proposition)
   ensurePartialOperationPrerequisites assumptions proposition
   let goal = decisionForm proposition
   checkCertificate state assumptions goal certificate
@@ -110,9 +112,12 @@ proposeDecisionCertificate
   -> Proposition
   -> Maybe DecisionCertificate
 proposeDecisionCertificate state assumptions proposition =
-  if prerequisitesAvailable assumptions proposition
-    then propose state assumptions (decisionForm proposition)
-    else Nothing
+  case checkPropositionSorts state proposition of
+    Left _ -> Nothing
+    Right () ->
+      if prerequisitesAvailable assumptions proposition
+        then propose state assumptions (decisionForm proposition)
+        else Nothing
 
 checkCertificate
   :: CheckState
