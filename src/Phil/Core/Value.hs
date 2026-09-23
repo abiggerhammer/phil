@@ -286,21 +286,38 @@ appendEvidenceList additions existing =
       | otherwise = accumulated ++ [evidenceUse]
 
 -- | Discharge type-definedness prerequisites before definitional equality can
--- normalize away the partial term which generated them. Refinement predicates
--- are handled after their binder is instantiated by the existing refinement
--- path; product elements can be checked recursively at this boundary.
+-- normalize away the partial term which generated them. Product traversal must
+-- include refinement predicates as well as their bases: nested refinements do
+-- not pass through the top-level value-refinement path which later instantiates
+-- the binder. Give the predicate only a temporary logical binder typed by its
+-- base so its prerequisites can be checked without proving the predicate itself
+-- or changing resource ownership.
 checkTypeDefinedness :: Ty -> CheckState -> Either ValueError [EvidenceUse]
 checkTypeDefinedness ty state =
   case ty of
-    TyBytes index -> sideConditions (Equal index index)
-    TyProof proposition -> sideConditions proposition
+    TyBytes index -> sideConditions state (Equal index index)
+    TyProof proposition -> sideConditions state proposition
     TyProduct elements ->
       fmap concat (mapM (\element -> checkTypeDefinedness (productElementType element) state) elements)
-    TyRefined _ base _ -> checkTypeDefinedness base state
+    TyRefined binder base proposition -> do
+      baseUses <- checkTypeDefinedness base state
+      predicateUses <- sideConditions (refinementBinderState binder base state) proposition
+      pure (appendEvidenceList predicateUses baseUses)
     _ -> Right []
   where
-    sideConditions proposition =
-      mapLeft ValueRefinementError (dischargeSideConditions proposition state)
+    sideConditions logicalState proposition =
+      mapLeft ValueRefinementError (dischargeSideConditions proposition logicalState)
+
+-- A refinement binder is logical scope, not reusable ownership. This view is
+-- used only while checking the predicate's partial-operation prerequisites and
+-- is never returned to the value/resource state.
+refinementBinderState :: Name -> Ty -> CheckState -> CheckState
+refinementBinderState binder base state =
+  let context = resourceContext state
+  in state
+    { resourceContext = context
+        { unrestrictedBindings = Map.insert binder base (unrestrictedBindings context) }
+    }
 
 refinementErasesTo :: Ty -> Ty -> Bool
 refinementErasesTo actual expected =
