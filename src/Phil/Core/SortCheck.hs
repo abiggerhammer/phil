@@ -7,6 +7,7 @@ module Phil.Core.SortCheck
   , sortOfRefTerm
   , checkTypeSorts
   , checkPropositionSorts
+  , checkPropositionSortsUnder
   , propositionSideConditions
   ) where
 
@@ -190,6 +191,18 @@ sortOfRefTermWith scope state = go
 
 checkPropositionSorts :: CheckState -> Proposition -> Either SortError ()
 checkPropositionSorts = checkPropositionSortsWith Map.empty
+
+-- | Sort-check a proposition with explicit logical binders that are not
+-- resource bindings. Bindings are ordered innermost-first, so a nested binder
+-- shadows an outer binder with the same spelling.
+checkPropositionSortsUnder
+  :: [(Name, Ty)]
+  -> CheckState
+  -> Proposition
+  -> Either SortError ()
+checkPropositionSortsUnder bindings =
+  checkPropositionSortsWith
+    (foldr (\(name, ty) scope -> Map.insert name ty scope) Map.empty bindings)
 
 checkPropositionSortsWith
   :: LogicalScope

@@ -4,9 +4,12 @@ on:
   pull_request:
     paths:
       - 'src/Phil/Core/Focusing.hs'
+      - 'src/Phil/Core/Refinement.hs'
+      - 'src/Phil/Core/SortCheck.hs'
       - 'src/Phil/Core/Value.hs'
       - 'test/Phase1AuditTypeDefinednessCommon.hs'
       - 'test/Phase1AuditTypeDefinednessCoreMain.hs'
+      - 'test/Phase1AuditTypeDefinednessProductMain.hs'
       - 'test/Phase1AuditTypeDefinednessSurfaceMain.hs'
       - 'docs/phase-1/audit-type-definedness-remediation-v1.md'
       - '.github/workflows/phase1-audit-type-definedness.yml'
@@ -14,9 +17,12 @@ on:
     branches: [main]
     paths:
       - 'src/Phil/Core/Focusing.hs'
+      - 'src/Phil/Core/Refinement.hs'
+      - 'src/Phil/Core/SortCheck.hs'
       - 'src/Phil/Core/Value.hs'
       - 'test/Phase1AuditTypeDefinednessCommon.hs'
       - 'test/Phase1AuditTypeDefinednessCoreMain.hs'
+      - 'test/Phase1AuditTypeDefinednessProductMain.hs'
       - 'test/Phase1AuditTypeDefinednessSurfaceMain.hs'
       - 'docs/phase-1/audit-type-definedness-remediation-v1.md'
       - '.github/workflows/phase1-audit-type-definedness.yml'
@@ -42,12 +48,18 @@ jobs:
         run: |
           set -euo pipefail
           cabal exec -- ghc -isrc -Wall -Werror -fno-code src/Phil/Core/Focusing.hs
+          cabal exec -- ghc -isrc -Wall -Werror -fno-code src/Phil/Core/SortCheck.hs
+          cabal exec -- ghc -isrc -Wall -Werror -fno-code src/Phil/Core/Refinement.hs
           cabal exec -- ghc -isrc -Wall -Werror -fno-code src/Phil/Core/Value.hs
           cabal exec -- ghc -isrc -itest -Wall -Werror -fno-code test/Phase1AuditTypeDefinednessCoreMain.hs
+          cabal exec -- ghc -isrc -itest -Wall -Werror -fno-code test/Phase1AuditTypeDefinednessProductMain.hs
           cabal exec -- ghc -isrc -itest -Wall -Werror -fno-code test/Phase1AuditTypeDefinednessSurfaceMain.hs
 
       - name: Replay PHIL-AUD-TYPE-DEFINEDNESS-001 core cases
         run: cabal exec -- runghc -isrc -itest -Wall -Werror test/Phase1AuditTypeDefinednessCoreMain.hs
+
+      - name: Replay PHIL-AUD-TYPE-DEFINEDNESS-001 product-composition cases
+        run: cabal exec -- runghc -isrc -itest -Wall -Werror test/Phase1AuditTypeDefinednessProductMain.hs
 
       - name: Replay PHIL-AUD-TYPE-DEFINEDNESS-001 Surface cases
         run: cabal exec -- runghc -isrc -itest -Wall -Werror test/Phase1AuditTypeDefinednessSurfaceMain.hs
