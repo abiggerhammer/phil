@@ -1,0 +1,58 @@
+name: Phase 1 Audit Validation Decision Support Reflection
+
+on:
+  pull_request:
+    paths:
+      - 'proof/Phil/Surface/BranchEvidenceSupport.v'
+      - 'proof/Phil/Surface/BranchValidationSupportReflection.v'
+      - 'docs/phase-1/audit-branch-validation-support-reflection-v1.md'
+      - '.github/workflows/phase1-audit-branch-validation-support-reflection.yml'
+  push:
+    branches: [main]
+    paths:
+      - 'proof/Phil/Surface/BranchEvidenceSupport.v'
+      - 'proof/Phil/Surface/BranchValidationSupportReflection.v'
+      - 'docs/phase-1/audit-branch-validation-support-reflection-v1.md'
+      - '.github/workflows/phase1-audit-branch-validation-support-reflection.yml'
+
+permissions:
+  contents: read
+
+jobs:
+  validation-decision-support-reflection:
+    runs-on: ubuntu-latest
+    container:
+      image: rocq/rocq-prover:9.2.0
+      options: --user root
+    steps:
+      - uses: actions/checkout@v4
+      - name: Compile branch support dependency and validation reflection proof
+        shell: bash
+        run: |
+          set -euo pipefail
+          export PATH="/home/rocq/.opam/${COMPILER}/bin:$PATH"
+          rocq c -Q proof/Phil Phil proof/Phil/Surface/BranchEvidenceSupport.v
+          rocq c -Q proof/Phil Phil proof/Phil/Surface/BranchValidationSupportReflection.v
+      - name: Record exact proof identity
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p branch-validation-support-reflection
+          cp \
+            proof/Phil/Surface/BranchEvidenceSupport.v \
+            proof/Phil/Surface/BranchEvidenceSupport.vo \
+            proof/Phil/Surface/BranchValidationSupportReflection.v \
+            proof/Phil/Surface/BranchValidationSupportReflection.vo \
+            branch-validation-support-reflection/
+          sha256sum \
+            branch-validation-support-reflection/BranchEvidenceSupport.v \
+            branch-validation-support-reflection/BranchEvidenceSupport.vo \
+            branch-validation-support-reflection/BranchValidationSupportReflection.v \
+            branch-validation-support-reflection/BranchValidationSupportReflection.vo \
+            > branch-validation-support-reflection/P-BRANCH-SUPPORT-REFLECTION-01.validation.proof.sha256
+          cat branch-validation-support-reflection/P-BRANCH-SUPPORT-REFLECTION-01.validation.proof.sha256
+      - uses: actions/upload-artifact@v4
+        with:
+          name: branch-validation-support-reflection-proof
+          path: branch-validation-support-reflection
+          if-no-files-found: error
