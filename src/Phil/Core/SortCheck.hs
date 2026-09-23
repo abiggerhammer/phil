@@ -300,7 +300,11 @@ sortOfVariableWith
   -> Name
   -> Either SortError RefSort
 sortOfVariableWith scope state name =
-  case Map.lookup name scope <|> lookupBinding name (resourceContext state) of
+  case
+      Map.lookup name scope
+        <|> Map.lookup name (logicalTypingContext state)
+        <|> lookupBinding name (resourceContext state)
+    of
     Nothing -> Left (UnknownRefinementVariable name)
     Just ty ->
       case refSortOfTy ty of
