@@ -1,0 +1,36 @@
+name: Phase 1 Audit Certificate Goal Admission
+
+on:
+  pull_request:
+    paths:
+      - 'src/Phil/Core/Decision.hs'
+      - 'test/Phase1AuditCertificateGoalAdmissionMain.hs'
+      - '.github/workflows/phase1-audit-certificate-goal-admission.yml'
+  push:
+    branches: [main]
+    paths:
+      - 'src/Phil/Core/Decision.hs'
+      - 'test/Phase1AuditCertificateGoalAdmissionMain.hs'
+      - '.github/workflows/phase1-audit-certificate-goal-admission.yml'
+
+permissions:
+  contents: read
+
+jobs:
+  certificate-goal-admission:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: haskell-actions/setup@v2
+        with:
+          ghc-version: '9.6.7'
+          cabal-version: 'latest'
+
+      - name: Build decision substrate
+        run: cabal build lib:phil-core --ghc-options=-Werror
+
+      - name: Strict typecheck certificate goal-admission correspondence
+        run: cabal exec -- ghc -isrc -Wall -Werror -fno-code test/Phase1AuditCertificateGoalAdmissionMain.hs
+
+      - name: Replay certificate goal-admission controls
+        run: cabal exec -- runghc -isrc -Wall -Werror test/Phase1AuditCertificateGoalAdmissionMain.hs
