@@ -292,7 +292,18 @@ dischargeSideConditionsUnder
   -> Either RefinementError [EvidenceUse]
 dischargeSideConditionsUnder logicalBindings required state = do
   sideConditions <- preparePropositionUnder logicalBindings required state
-  mapM (`directDischarge` state) sideConditions
+  mapM discharge sideConditions
+  where
+    -- A logical binder is not an ambient resource name. Until it has been
+    -- instantiated with a concrete subject, do not let same-spelled ambient
+    -- proof evidence discharge a prerequisite about that binder.
+    discharge prerequisite
+      | any (\(name, _) -> propositionMentions name prerequisite) logicalBindings =
+          case normalizeProposition prerequisite of
+            Truth -> Right (EvidenceByDefinition prerequisite)
+            Falsehood -> Left (StaticallyFalse prerequisite)
+            normalized -> Left (MissingEvidence normalized)
+      | otherwise = directDischarge prerequisite state
 
 residualizeSideConditions
   :: ResidualSpec
