@@ -1,0 +1,112 @@
+name: Audit Independent Support Producer
+
+on:
+  pull_request:
+    paths:
+      - 'audit/independent-support-producer/**'
+      - '.github/workflows/audit-independent-support-producer.yml'
+
+permissions:
+  contents: read
+
+concurrency:
+  group: audit-support-producer-${{ github.event.pull_request.number }}
+  cancel-in-progress: true
+
+jobs:
+  pinned-support-review:
+    runs-on: ubuntu-latest
+    timeout-minutes: 35
+    steps:
+      - name: Check out exact audit driver
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.pull_request.head.sha }}
+          path: audit-driver
+          persist-credentials: false
+      - name: Check out independent production subject
+        uses: actions/checkout@v4
+        with:
+          ref: 5f8e7e9fd540d8e66ee44b0d96dfe6c901001e50
+          path: subject
+          persist-credentials: false
+      - uses: haskell-actions/setup@v2
+        with:
+          ghc-version: '9.6.7'
+          cabal-version: '3.18.1.0'
+      - name: Record subject and driver identities
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p evidence/build
+          test "$(git -C subject rev-parse HEAD)" = 5f8e7e9fd540d8e66ee44b0d96dfe6c901001e50
+          git -C subject rev-parse HEAD > evidence/subject-commit.txt
+          git -C audit-driver rev-parse HEAD > evidence/driver-commit.txt
+          git -C subject status --porcelain > evidence/subject-status-before.txt
+          test ! -s evidence/subject-status-before.txt
+          ghc --numeric-version > evidence/ghc-version.txt
+          cabal --numeric-version > evidence/cabal-version.txt
+          cp audit-driver/audit/independent-support-producer/SupportProducerReview.hs evidence/
+          sha256sum evidence/SupportProducerReview.hs > evidence/driver.sha256
+          for path in src/Phil/Core/Value.hs src/Phil/Core/Refinement.hs src/Phil/Core/Focusing.hs src/Phil/Core/Discharge.hs src/Phil/Assurance/Handoff.hs src/Phil/Assurance/EvidenceFactAuthority.hs src/Phil/Verification.hs src/Phil/Verification/ManifestClosure.hs proof/Phil/Assurance/PrerequisiteSupport.v proof/Phil/Assurance/EvidenceFactAuthority.v; do
+            git -C subject rev-parse "HEAD:$path" | xargs printf '%s ' >> evidence/source-git-blobs.txt
+            printf '%s\n' "$path" >> evidence/source-git-blobs.txt
+            sha256sum "subject/$path" >> evidence/source.sha256
+          done
+      - name: Build unchanged subject substrate
+        working-directory: subject
+        shell: bash
+        run: |
+          set -euo pipefail
+          cabal build all --enable-tests 2>&1 | tee ../evidence/build.log
+      - name: Strict compile external audit driver
+        working-directory: subject
+        shell: bash
+        run: |
+          set -euo pipefail
+          cabal exec -- ghc -O0 -Wall -Werror -isrc -outputdir ../evidence/build ../evidence/SupportProducerReview.hs -o ../evidence/support-producer-review 2>&1 | tee ../evidence/compile.log
+      - name: Replay controls and separately labelled observations
+        shell: bash
+        run: |
+          set -euo pipefail
+          evidence/support-producer-review 2>&1 | tee evidence/results.log
+          python3 - <<'PY'
+          import json
+          from pathlib import Path
+          lines = Path('evidence/results.log').read_text().splitlines()
+          passed = [line.split()[1] for line in lines if line.startswith('PASS ')]
+          observed = [line.split()[1] for line in lines if line.startswith('OBS ')]
+          assert passed == [f'C{i:02d}' for i in range(1, 8)], passed
+          assert observed == [f'O{i:02d}' for i in range(1, 4)], observed
+          assert not any(line.startswith(('FAIL ', 'OBS_SETUP_ERROR ')) for line in lines)
+          assert lines.count('COMPLETE correctness_groups=7 observation_records=3') == 1
+          Path('evidence/protocol.json').write_text(json.dumps({
+            'correctness_groups': passed,
+            'observation_records': observed,
+            'observation_correctness_credit': 0,
+            'final_manifest_acceptance_tested': False,
+            'native_execution_tested': False
+          }, indent=2) + '\n')
+          PY
+      - name: Replay unchanged permanent support consumers
+        working-directory: subject
+        shell: bash
+        run: |
+          set -euo pipefail
+          for driver in DischargeMain AssuranceHandoffMain AssuranceEvidenceFactHandoffMain AssuranceEvidenceFactAuthorityMain AssuranceHandoffManifestClosureMain; do
+            cabal exec -- runghc -isrc -Wall -Werror "test/$driver.hs" 2>&1 | tee "../evidence/$driver.log"
+          done
+          git status --porcelain > ../evidence/subject-status-after.txt
+          test ! -s ../evidence/subject-status-after.txt
+      - name: Preserve audit inputs and raw evidence
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: independent-support-producer-review
+          path: |
+            evidence/*.txt
+            evidence/*.sha256
+            evidence/*.json
+            evidence/*.hs
+            evidence/*.log
+          if-no-files-found: error
