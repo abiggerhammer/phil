@@ -1,0 +1,62 @@
+name: Phase 1 Audit Definedness Support
+
+on:
+  pull_request:
+    paths:
+      - 'src/Phil/Assurance/Handoff.hs'
+      - 'src/Phil/Verification/ManifestClosure.hs'
+      - 'test/Phase1AuditDefinednessSupportMain.hs'
+      - 'test/DischargeMain.hs'
+      - 'test/AssuranceHandoffMain.hs'
+      - 'test/AssuranceEvidenceFactHandoffMain.hs'
+      - 'test/AssuranceHandoffManifestClosureMain.hs'
+      - 'docs/phase-1/audit-definedness-support-remediation-v1.md'
+      - '.github/workflows/phase1-audit-definedness-support.yml'
+  push:
+    branches: [main]
+    paths:
+      - 'src/Phil/Assurance/Handoff.hs'
+      - 'src/Phil/Verification/ManifestClosure.hs'
+      - 'test/Phase1AuditDefinednessSupportMain.hs'
+      - 'test/DischargeMain.hs'
+      - 'test/AssuranceHandoffMain.hs'
+      - 'test/AssuranceEvidenceFactHandoffMain.hs'
+      - 'test/AssuranceHandoffManifestClosureMain.hs'
+      - 'docs/phase-1/audit-definedness-support-remediation-v1.md'
+      - '.github/workflows/phase1-audit-definedness-support.yml'
+
+permissions:
+  contents: read
+
+jobs:
+  definedness-support-regression:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: haskell-actions/setup@v2
+        with:
+          ghc-version: '9.6.7'
+          cabal-version: 'latest'
+
+      - name: Build complete Haskell substrate
+        run: cabal build all --enable-tests
+
+      - name: Strict typecheck definedness support repair
+        shell: bash
+        run: |
+          set -euo pipefail
+          cabal exec -- ghc -isrc -Wall -Werror -fno-code src/Phil/Assurance/Handoff.hs
+          cabal exec -- ghc -isrc -Wall -Werror -fno-code src/Phil/Verification/ManifestClosure.hs
+          cabal exec -- ghc -isrc -Wall -Werror -fno-code test/Phase1AuditDefinednessSupportMain.hs
+
+      - name: Replay PHIL-AUD-PREREQUISITE-SUPPORT-001 definedness composition
+        run: cabal exec -- runghc -isrc -Wall -Werror test/Phase1AuditDefinednessSupportMain.hs
+
+      - name: Replay unchanged resolver and handoff controls
+        shell: bash
+        run: |
+          set -euo pipefail
+          cabal exec -- runghc -isrc -Wall -Werror test/DischargeMain.hs
+          cabal exec -- runghc -isrc -Wall -Werror test/AssuranceHandoffMain.hs
+          cabal exec -- runghc -isrc -Wall -Werror test/AssuranceEvidenceFactHandoffMain.hs
+          cabal exec -- runghc -isrc -Wall -Werror test/AssuranceHandoffManifestClosureMain.hs
