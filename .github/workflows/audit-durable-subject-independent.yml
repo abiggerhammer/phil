@@ -20,7 +20,7 @@ jobs:
       - name: Check out exact proposed implementation
         uses: actions/checkout@v4
         with:
-          ref: 2a740dadd42ddc00a2ac67960ee3c7e8d279c073
+          ref: f1e0d3197b0079c9c6eaee8ab2e601fd4a286a1f
           path: subject
           persist-credentials: false
       - name: Check out exact independent driver
@@ -48,7 +48,7 @@ jobs:
           git -C driver rev-parse HEAD > evidence/driver-commit.txt
           git -C producer rev-parse HEAD > evidence/producer-driver-commit.txt
           printf '%s\n' '${{ github.sha }}' > evidence/workflow-commit.txt
-          test "$(cat evidence/subject-commit.txt)" = 2a740dadd42ddc00a2ac67960ee3c7e8d279c073
+          test "$(cat evidence/subject-commit.txt)" = f1e0d3197b0079c9c6eaee8ab2e601fd4a286a1f
           test "$(cat evidence/driver-commit.txt)" = 88219a267526a32d33179a3b7236e34f738729b1
           test "$(cat evidence/producer-driver-commit.txt)" = f74885816c09bc114afbdfca8c666a8fab67083c
           git -C subject status --porcelain --untracked-files=all > evidence/subject-status-before.txt
@@ -143,13 +143,13 @@ jobs:
           done
           git status --porcelain --untracked-files=all > ../evidence/subject-status-after.txt
           test ! -s ../evidence/subject-status-after.txt
-          test "$(git rev-parse HEAD)" = 2a740dadd42ddc00a2ac67960ee3c7e8d279c073
+          test "$(git rev-parse HEAD)" = f1e0d3197b0079c9c6eaee8ab2e601fd4a286a1f
           exit "$failed"
       - name: Preserve all raw measurements
         if: always()
         uses: actions/upload-artifact@v4
         with:
-          name: durable-subject-independent-2a740dad
+          name: durable-subject-independent-f1e0d319
           path: |
             evidence/*.txt
             evidence/*.sha256
