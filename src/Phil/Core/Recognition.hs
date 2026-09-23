@@ -1,3 +1,5 @@
+{-# LANGUAGE OverloadedStrings #-}
+
 module Phil.Core.Recognition
   ( ReceiveFrameStep (..)
   , CommitReceiveStep (..)
@@ -10,6 +12,7 @@ module Phil.Core.Recognition
   , parsedGrammarId
   , parsedFrameId
   , parsedValueName
+  , recognizedOccurrenceTerm
   , RecognitionFailure
   , recognitionPendingOwner
   , recognitionFailureGrammar
@@ -36,13 +39,22 @@ import Phil.Core.Context
   , insertBinding
   , startSharedLoan
   )
-import Phil.Core.Session (SessionError, exposeSessionHead)
+import Phil.Core.Session
+  ( MessageSpec (..)
+  , SessionAction (ReceiveAction)
+  , SessionError
+  , SessionStep (..)
+  , exposeSessionHead
+  , instantiateMessageStep
+  )
 import Phil.Core.Syntax
-  ( FrameId
-  , GrammarId
+  ( FrameId (..)
+  , GrammarId (..)
   , Mode (..)
-  , Name
+  , Name (..)
   , PendingRecvSpec (..)
+  , RefSort (..)
+  , RefTerm (..)
   , Session (..)
   , Ty (..)
   )
@@ -83,6 +95,7 @@ data RecognitionError
   | ParsedEvidenceMismatch PendingRecvSpec ParsedWitness
   | RecognitionFailureMismatch PendingRecvSpec RecognitionFailure
   | SuccessorReusesIngressIdentity Name
+  | CommitInstantiationLostSuccessor Name
   deriving (Eq, Show)
 
 rawPendingOwner :: PendingRawView -> Name
@@ -105,6 +118,24 @@ parsedFrameId (ParsedWitness _ _ frame _) = frame
 
 parsedValueName :: ParsedWitness -> Name
 parsedValueName (ParsedWitness _ _ _ valueName) = valueName
+
+-- | Stable logical identity for the semantic value produced by one recognized
+-- frame occurrence.  This is deliberately not a source-level variable name:
+-- Surface aliases may change, while the recognition provenance that identifies
+-- this occurrence does not.  Keeping it as an opaque logical term also avoids
+-- manufacturing a live resource binding merely to make the value mentionable
+-- in a dependent continuation.
+recognizedOccurrenceTerm :: ParsedWitness -> RefTerm
+recognizedOccurrenceTerm parsed =
+  RefOpaque (SortOpaque "Frame") $
+    "recognized:"
+      <> unName (parsedPendingOwner parsed)
+      <> ":"
+      <> unGrammarId (parsedGrammarId parsed)
+      <> ":"
+      <> unFrameId (parsedFrameId parsed)
+      <> ":"
+      <> unName (parsedValueName parsed)
 
 recognitionPendingOwner :: RecognitionFailure -> Name
 recognitionPendingOwner (RecognitionFailure owner _ _ _) = owner
@@ -216,11 +247,22 @@ commitReceive pendingName successor parsed context = do
       (_, consumed) <- mapLeft RecognitionResourceError (consumeLinear pendingName context)
       continued <- mapLeft RecognitionResourceError $
         insertBinding Linear successor (TyEndpoint (pendingContinuation pending)) consumed
-      pure CommitReceiveStep
-        { commitParsedWitness = parsed
-        , commitSuccessor = (successor, pendingContinuation pending)
-        , commitContext = continued
-        }
+      let rawStep = SessionStep
+            { stepAction = ReceiveAction
+            , stepMessage = Just (MessageSpec (pendingBinder pending) (TyFrame (pendingGrammar pending)))
+            , stepSuccessor = Just (successor, pendingContinuation pending)
+            , stepContext = continued
+            }
+      instantiated <- mapLeft RecognitionSessionError $
+        instantiateMessageStep (Just (recognizedOccurrenceTerm parsed)) rawStep
+      case stepSuccessor instantiated of
+        Nothing -> Left (CommitInstantiationLostSuccessor successor)
+        Just continuedSuccessor ->
+          pure CommitReceiveStep
+            { commitParsedWitness = parsed
+            , commitSuccessor = continuedSuccessor
+            , commitContext = stepContext instantiated
+            }
 
 failPendingRecognition
   :: Name

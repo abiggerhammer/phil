@@ -70,7 +70,7 @@ import Phil.Core.Context
   , useBinding
   )
 import Phil.Core.Focusing (FocusingError, elaborateRefTermAs)
-import Phil.Core.Recognition (RecognitionError)
+import Phil.Core.Recognition (RecognitionError, recognizedOccurrenceTerm)
 import Phil.Core.Session
   ( MessageSpec (..)
   , SessionError
@@ -516,10 +516,10 @@ readField environment state whole base field = do
   baseScalar <- inferReadOnlyScalar environment state base
   case scalarShape baseScalar of
     RecordShape _ fields -> fieldFrom fields
-    ParsedShape _ grammar
-      | field == "value" -> semanticValue grammar
+    ParsedShape parsed grammar
+      | field == "value" -> semanticValue grammar (Just (recognizedOccurrenceTerm parsed))
     LegacyParsedShape _ _ grammar
-      | field == "value" -> semanticValue grammar
+      | field == "value" -> semanticValue grammar Nothing
     ExternalParsedShape grammar _ -> semanticField grammar
     OwnedBytesShape _ _ -> ownedBytesField
     FixtureRawShape _ -> rawFailure
@@ -534,8 +534,22 @@ readField environment state whole base field = do
       Just info -> Right (ScalarValue Unrestricted (fieldType info) PlainShape)
       Nothing -> throw whole IllegalProjection ("field not declared: " <> field)
 
-    semanticValue grammar = Right $
-      ScalarValue Unrestricted (TyFrame (GrammarId grammar)) (recordShape grammar Nothing)
+    semanticValue grammar occurrence = Right $
+      ScalarValue Unrestricted
+        (TyFrame (GrammarId grammar))
+        (case occurrence of
+          Nothing -> recordShape grammar Nothing
+          Just term -> recordShapeAt grammar term)
+
+    recordShapeAt grammar term =
+      case recordShape grammar Nothing of
+        RecordShape record fields ->
+          RecordShape record $ Map.mapWithKey
+            (\fieldName info -> info
+              { fieldAlias = Just (RefField term fieldName (fieldSort info))
+              })
+            fields
+        other -> other
 
     semanticField grammar = case recordShape grammar (baseVariable base) of
       RecordShape _ fields -> fieldFrom fields
