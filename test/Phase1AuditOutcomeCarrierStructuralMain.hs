@@ -99,6 +99,14 @@ baseEnvironment fixture = (emptySurfaceEnvironment emptyStaticContext)
   , surfaceCallables = Map.fromList
       [ ("Worker", SurfaceCallableSignature workerKey workerParameters Nothing)
       , ("Sink", SurfaceCallableSignature (DeclarationKey "decl.audit.sink") [(Linear, ownerTy)] Nothing)
+      , ("InspectDecision", SurfaceCallableSignature
+          (DeclarationKey "decl.audit.inspect-decision")
+          [(Unrestricted, TyOpaque "CallableDecision")]
+          Nothing)
+      , ("InspectBool", SurfaceCallableSignature
+          (DeclarationKey "decl.audit.inspect-bool")
+          [(Unrestricted, TyBool)]
+          Nothing)
       ]
   }
   where
@@ -230,6 +238,12 @@ cases =
       (wrap "invoke Worker()") RejectCarrier
   , Case "R06-abandon-obligation-carrier" Obligations
       (wrap "let d = invoke Worker()") RejectCarrier
+  , Case "R07-anonymous-owner-carrier-argument" Owners
+      (wrap "invoke InspectDecision(invoke Worker(input))")
+      (RejectClass StructuralUse)
+  , Case "R08-anonymous-obligation-carrier-argument" Obligations
+      (wrap "invoke InspectDecision(invoke Worker())")
+      (RejectClass StructuralUse)
   , Case "C01-direct-owner-once" Owners
       (wrap ("decide invoke Worker(input)" <> ownedArms)) AcceptUnit
   , Case "C02-stored-owner-once" Owners
@@ -274,6 +288,17 @@ cases =
   , Case "C16-nested-path-still-checks-obligation" Obligations
       (wrap "decide invoke Worker() { ok => { decide flag { true => { return unit } false => { unit } } } retry => { unit } }")
       (RejectClass MissingEvidence)
+  , Case "C17-named-owner-carrier-argument" Owners
+      (wrap "let d = invoke Worker(input) invoke InspectDecision(d)")
+      (RejectClass StructuralUse)
+  , Case "C18-named-obligation-carrier-argument" Obligations
+      (wrap "let d = invoke Worker() invoke InspectDecision(d)")
+      (RejectClass StructuralUse)
+  , Case "C19-pure-boolean-anonymous-argument" Obligations
+      (wrap "invoke InspectBool(true)") AcceptUnit
+  , Case "C20-decision-argument-type-mismatch" Obligations
+      (wrap "invoke InspectDecision(true)")
+      (RejectClass TypeMismatch)
   ]
 
 main :: IO ()
