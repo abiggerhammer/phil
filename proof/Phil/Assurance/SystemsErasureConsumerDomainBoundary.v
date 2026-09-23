@@ -172,12 +172,14 @@ Proof.
       exists 101, 201, 301, 401.
       repeat split; try reflexivity.
       discriminate.
-    + cbn in Hactual.
-      apply Nat.eqb_eq in Hactual.
-      subst key.
-      exists 102, 202, 302, 402.
-      repeat split; try reflexivity.
-      discriminate.
+    + destruct (Nat.eqb key 2) eqn:Htwo.
+      * apply Nat.eqb_eq in Htwo.
+        subst key.
+        exists 102, 202, 302, 402.
+        repeat split; try reflexivity.
+        discriminate.
+      * cbn in Hactual.
+        discriminate.
   - intros key Hactual.
     exact Hactual.
 Qed.
