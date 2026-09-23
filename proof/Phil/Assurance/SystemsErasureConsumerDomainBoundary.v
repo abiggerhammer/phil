@@ -161,7 +161,7 @@ Definition exactConsumerDomainWitness : SystemsErasureConsumerDomainModel :=
 Theorem exact_consumer_domain_witness_is_authoritative :
   AuthoritativeConsumerDomainPreserved exactConsumerDomainWitness.
 Proof.
-  repeat split.
+  split; [| split].
   - intro key.
     split; intro H; exact H.
   - intros key Hactual.
