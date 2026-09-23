@@ -224,12 +224,9 @@ Proof.
   intros event prerequisite Hrequired.
   cbn in Hrequired |- *.
   destruct (Nat.eqb event 7) eqn:Hevent.
-  - rewrite Hevent in Hrequired.
-    rewrite Hevent.
-    cbn in Hrequired |- *.
+  - cbn in Hrequired |- *.
     exact Hrequired.
-  - rewrite Hevent in Hrequired.
-    cbn in Hrequired.
+  - cbn in Hrequired.
     discriminate.
 Qed.
 
