@@ -4,7 +4,7 @@ module Main (main) where
 import Control.Monad (unless)
 import qualified Data.Map.Strict as Map
 import Phil.Core.Checker (CheckState (..), emptyCheckState)
-import Phil.Core.Context (insertBinding)
+import Phil.Core.Context (ResourceContext (..), insertBinding)
 import Phil.Core.Refinement (RefinementError (..))
 import Phil.Core.SortCheck (checkTypeSorts)
 import Phil.Core.Syntax
@@ -88,6 +88,14 @@ cases =
         (valueResultType result == productTy Truth)
         "ordinary product equality was broken")
   , ("H05", do
+      state <- withBinding Linear (Name "payload") (TyBytes (RefNat 7)) emptyCheckState
+      let target = TyRefined (Name "s") (TyBytes (RefNat 7))
+            (Equal (RefVar (Name "s")) (RefVar (Name "s")))
+      result <- leftShow $ checkValue (VVar (Name "payload")) target state
+      assert
+        (ownerAbsent (Name "payload") (valueResultState result))
+        "logical definedness view leaked resource ownership")
+  , ("H06", do
       -- Definedness is not inhabitance: an exact false refinement carries no
       -- partial-operation prerequisite and must not be rejected merely because
       -- the proposition itself is false.
@@ -103,6 +111,15 @@ cases =
         (valueResultType result == productTy Falsehood)
         "type-definedness checking incorrectly required predicate truth")
   ]
+
+ownerAbsent :: Name -> CheckState -> Bool
+ownerAbsent name state =
+  let context = resourceContext state
+  in all (Map.notMember name)
+      [ unrestrictedBindings context
+      , affineBindings context
+      , linearBindings context
+      ]
 
 main :: IO ()
 main = do
