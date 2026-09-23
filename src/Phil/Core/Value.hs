@@ -28,6 +28,7 @@ import Phil.Core.Refinement
   , bindingEvidencePropositions
   , dischargeProposition
   , dischargePropositionUsing
+  , dischargeSideConditions
   , dischargeSideConditionsUnder
   , normalizeProposition
   , normalizeRefTerm
