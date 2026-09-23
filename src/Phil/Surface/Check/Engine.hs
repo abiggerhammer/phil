@@ -1804,7 +1804,21 @@ evalRelease environment state located ownerExpression = do
   when (bindingMode meta == Unrestricted) $
     throw ownerExpression ReleaseCompetence
       "release requires an owning affine or linear resource"
-  transition <- case selectReleaseTransition environment (bindingType meta) of
+  -- Architecture release contracts predate source-level occurrence aliases.
+  -- Compare both sides in the live alias-normal form so a recognized frame's
+  -- stable occurrence identity does not invalidate its already-declared owner
+  -- consumer while still selecting only an exact canonical owner type.
+  let canonicalEnvironment = environment
+        { surfaceReleaseTransitions =
+            [ transition
+                { releaseTransitionOwnerType =
+                    rewriteTy state (releaseTransitionOwnerType transition)
+                }
+            | transition <- surfaceReleaseTransitions environment
+            ]
+        }
+  transition <- case
+      selectReleaseTransition canonicalEnvironment (rewriteTy state (bindingType meta)) of
     Left selectionError ->
       throw ownerExpression ReleaseCompetence (Text.pack (show selectionError))
     Right selected -> Right selected
