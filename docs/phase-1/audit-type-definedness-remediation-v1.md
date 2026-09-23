@@ -49,6 +49,6 @@ Independent N3 review at `5f8e7e9fd540d8e66ee44b0d96dfe6c901001e50` found one re
 
 The extension keeps definedness separate from predicate truth. Nested `TyRefined` predicates now have their side conditions checked under an explicit logical binder scope. Those logical binders are used only for sorting the prerequisite; they are not inserted into the resource context, cannot create ownership, and cannot become proof evidence. When an actual subject term exists, the refinement binder is instantiated with that subject before its side conditions are checked. A product aggregate is deliberately not fabricated into an element subject.
 
-The permanent product-composition replay covers the two N3 accepting consumers, the direct-refinement control, a valid `(5 - 3) == (5 - 3)` product, ordinary sort checking, ordinary product equality, and an exact false refinement showing that formation does not require the predicate itself to be true.
+The permanent product-composition replay covers the two N3 accepting consumers, the direct-refinement control, a valid `(5 - 3) == (5 - 3)` product, ordinary sort checking, ordinary product equality, preservation of one-use ownership after the logical refinement view, and an exact false refinement showing that formation does not require the predicate itself to be true.
 
 This remains an extension of `PHIL-AUD-TYPE-DEFINEDNESS-001`, not a new root cause and not a rollback of `PHIL-AUD-PRODUCT-DEFEQ-001`. Session-payload definedness and durable post-consumption logical-subject support remain separate follow-through boundaries.
