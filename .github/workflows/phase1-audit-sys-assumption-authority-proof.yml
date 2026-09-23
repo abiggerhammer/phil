@@ -1,0 +1,41 @@
+name: Phase 1 Audit SYS-013 Assumption Authority Proof
+
+on:
+  pull_request:
+    paths:
+      - 'proof/Phil/Assurance/SystemsAssumptionAuthorityBoundary.v'
+      - 'docs/phase-1/audit-sys-assumption-authority-proof-boundary-v1.md'
+      - '.github/workflows/phase1-audit-sys-assumption-authority-proof.yml'
+  push:
+    branches: [main]
+    paths:
+      - 'proof/Phil/Assurance/SystemsAssumptionAuthorityBoundary.v'
+      - 'docs/phase-1/audit-sys-assumption-authority-proof-boundary-v1.md'
+      - '.github/workflows/phase1-audit-sys-assumption-authority-proof.yml'
+
+permissions:
+  contents: read
+
+jobs:
+  sys-assumption-authority-proof:
+    runs-on: ubuntu-latest
+    container:
+      image: rocq/rocq-prover:9.2.0
+      options: --user root
+    steps:
+      - uses: actions/checkout@v4
+      - name: Compile SYS-013 imported authority boundary proof
+        shell: bash
+        run: |
+          set -euo pipefail
+          export PATH="/home/rocq/.opam/${COMPILER}/bin:$PATH"
+          rocq c -Q proof/Phil Phil proof/Phil/Assurance/SystemsAssumptionAuthorityBoundary.v
+          sha256sum \
+            proof/Phil/Assurance/SystemsAssumptionAuthorityBoundary.v \
+            proof/Phil/Assurance/SystemsAssumptionAuthorityBoundary.vo \
+            > systems-assumption-authority-proof.sha256
+      - uses: actions/upload-artifact@v4
+        with:
+          name: systems-assumption-authority-proof
+          path: systems-assumption-authority-proof.sha256
+          if-no-files-found: error
