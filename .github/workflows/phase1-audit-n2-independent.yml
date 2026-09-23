@@ -1,0 +1,63 @@
+name: Phase 1 Independent N2 Audit Replay
+on:
+  push:
+    branches: [audit-n3-independent-replay-20260923]
+    paths:
+      - 'audit/independent-n2/**'
+      - '.github/workflows/phase1-audit-n2-independent.yml'
+permissions:
+  contents: read
+concurrency:
+  group: independent-n2-${{ github.ref }}
+  cancel-in-progress: true
+jobs:
+  replay:
+    strategy:
+      fail-fast: false
+      matrix:
+        subject:
+          - a9f2c745686d8ae1b923e21045554f4864956e76
+          - 5f8e7e9fd540d8e66ee44b0d96dfe6c901001e50
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+    steps:
+      - name: Check out audit drivers, not production
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ github.sha }}
+          path: audit-drivers
+          persist-credentials: false
+      - name: Check out exact production subject
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ matrix.subject }}
+          path: subject
+          persist-credentials: false
+      - uses: haskell-actions/setup@v2
+        with:
+          ghc-version: '9.6.7'
+          cabal-version: '3.18.1.0'
+      - name: Record identities and build subject
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p evidence
+          git -C audit-drivers rev-parse HEAD > evidence/driver-commit.txt
+          git -C subject rev-parse HEAD > evidence/subject-commit.txt
+          ghc --version > evidence/ghc.txt
+          cabal --version > evidence/cabal.txt
+          cp audit-drivers/audit/independent-n2/replay.py evidence/
+          cp audit-drivers/.github/workflows/phase1-audit-n2-independent.yml evidence/
+          cd subject
+          cabal build all --enable-tests 2>&1 | tee ../evidence/build.log
+      - name: Execute published N2 driver with exact protocol checks
+        shell: bash
+        run: |
+          python3 audit-drivers/audit/independent-n2/replay.py --repo subject --sha '${{ matrix.subject }}' --output evidence
+      - name: Retain inputs, compilation and separate observations
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: independent-n2-${{ matrix.subject }}-${{ github.run_attempt }}
+          path: evidence
+          if-no-files-found: error
