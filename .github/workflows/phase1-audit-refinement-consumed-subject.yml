@@ -1,0 +1,50 @@
+name: Phase 1 Audit Refinement Consumed Subject
+
+on:
+  pull_request:
+    paths:
+      - 'src/Phil/Core/Value.hs'
+      - 'test/Phase1AuditRefinementConsumedSubjectMain.hs'
+      - 'docs/phase-1/audit-refinement-consumed-subject-remediation-v1.md'
+      - '.github/workflows/phase1-audit-refinement-consumed-subject.yml'
+  push:
+    branches: [main]
+    paths:
+      - 'src/Phil/Core/Value.hs'
+      - 'test/Phase1AuditRefinementConsumedSubjectMain.hs'
+      - 'docs/phase-1/audit-refinement-consumed-subject-remediation-v1.md'
+      - '.github/workflows/phase1-audit-refinement-consumed-subject.yml'
+
+permissions:
+  contents: read
+
+jobs:
+  refinement-consumed-subject-regression:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: haskell-actions/setup@v2
+        with:
+          ghc-version: '9.6.7'
+          cabal-version: 'latest'
+
+      - name: Build complete Haskell substrate
+        run: cabal build all --enable-tests
+
+      - name: Strict typecheck logical-subject repair and replay
+        shell: bash
+        run: |
+          set -euo pipefail
+          cabal exec -- ghc -isrc -Wall -Werror -fno-code src/Phil/Core/Value.hs
+          cabal exec -- ghc -isrc -Wall -Werror -fno-code test/Phase1AuditRefinementConsumedSubjectMain.hs
+
+      - name: Replay PHIL-AUD-REFINEMENT-CONSUMED-SUBJECT-001
+        run: cabal exec -- runghc -Wall -Werror -isrc test/Phase1AuditRefinementConsumedSubjectMain.hs
+
+      - name: Replay value, refinement, and definedness controls
+        shell: bash
+        run: |
+          set -euo pipefail
+          cabal exec -- runghc -Wall -Werror -isrc test/ValueMain.hs
+          cabal exec -- runghc -Wall -Werror -isrc test/RefinementEvidenceMain.hs
+          cabal exec -- runghc -Wall -Werror -isrc test/Phase1AuditTypeDefinednessCoreMain.hs

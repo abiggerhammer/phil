@@ -13,10 +13,12 @@ module Phil.Core.Value
   ) where
 
 import Data.List (findIndex, sortOn)
+import qualified Data.Map.Strict as Map
 import qualified Data.Set as Set
 import Phil.Core.Checker (CheckState (..))
 import Phil.Core.Context
   ( CheckError
+  , ResourceContext (..)
   , useBinding
   )
 import Phil.Core.Refinement
@@ -157,16 +159,20 @@ checkValueInternal explicitEvidence residualSpec value expected state =
     TyRefined binder base proposition -> do
       baseResult <- checkValue value base state
       required <- instantiateRefinement binder proposition baseResult
+      let postState = valueResultState baseResult
+          logicalState = refinementLogicalState state baseResult
       case matchingCarriedEvidence required (valueResultEvidence baseResult) of
         Just carried -> do
           (sideUses, nextState) <-
             case residualSpec of
-              Just spec -> mapLeft ValueRefinementError $
-                residualizeSideConditions spec required (valueResultState baseResult)
+              Just spec -> do
+                (uses, refinementState) <- mapLeft ValueRefinementError $
+                  residualizeSideConditions spec required logicalState
+                Right (uses, refinementResultState postState refinementState)
               Nothing -> do
                 uses <- mapLeft ValueRefinementError $
-                  dischargeSideConditions required (valueResultState baseResult)
-                Right (uses, valueResultState baseResult)
+                  dischargeSideConditions required logicalState
+                Right (uses, postState)
           Right baseResult
             { valueResultType = expected
             , valueResultEvidence = appendEvidenceList
@@ -179,15 +185,16 @@ checkValueInternal explicitEvidence residualSpec value expected state =
             case (explicitEvidence, residualSpec) of
               (Just evidenceName, _) -> do
                 uses <- mapLeft ValueRefinementError $
-                  dischargePropositionUsing evidenceName required (valueResultState baseResult)
-                Right (uses, valueResultState baseResult)
-              (Nothing, Just spec) ->
-                mapLeft ValueRefinementError $
-                  residualizeProposition spec required (valueResultState baseResult)
+                  dischargePropositionUsing evidenceName required logicalState
+                Right (uses, postState)
+              (Nothing, Just spec) -> do
+                (uses, refinementState) <- mapLeft ValueRefinementError $
+                  residualizeProposition spec required logicalState
+                Right (uses, refinementResultState postState refinementState)
               (Nothing, Nothing) -> do
                 uses <- mapLeft ValueRefinementError $
-                  dischargeProposition required (valueResultState baseResult)
-                Right (uses, valueResultState baseResult)
+                  dischargeProposition required logicalState
+                Right (uses, postState)
           Right baseResult
             { valueResultType = expected
             , valueResultEvidence = appendEvidenceList evidenceUses (valueResultEvidence baseResult)
@@ -212,6 +219,50 @@ checkValueInternal explicitEvidence residualSpec value expected state =
         RuntimeBytesKernel.BytesCheckIncompatible
           | refinementErasesTo actual expected -> Right accepted
           | otherwise -> Left (ValueTypeMismatch actual expected)
+
+-- Refinement predicates live in a logical typing context, while affine and
+-- linear values still have to make their ordinary one-shot resource transition.
+-- Restore only the subject binding needed to interpret the checked value's
+-- logical term; do not restore unrelated consumed resources or active loans.
+refinementLogicalState :: CheckState -> ValueResult -> CheckState
+refinementLogicalState before result =
+  let after = valueResultState result
+  in after
+    { resourceContext =
+        restoreLogicalSubject
+          (valueResultTerm result)
+          (resourceContext before)
+          (resourceContext after)
+    }
+
+restoreLogicalSubject
+  :: Maybe RefTerm
+  -> ResourceContext
+  -> ResourceContext
+  -> ResourceContext
+restoreLogicalSubject subject before after =
+  case subject of
+    Just (RefVar name) ->
+      case Map.lookup name (unrestrictedBindings before) of
+        Just ty -> after
+          { unrestrictedBindings = Map.insert name ty (unrestrictedBindings after) }
+        Nothing ->
+          case Map.lookup name (affineBindings before) of
+            Just ty -> after
+              { affineBindings = Map.insert name ty (affineBindings after) }
+            Nothing ->
+              case Map.lookup name (linearBindings before) of
+                Just ty -> after
+                  { linearBindings = Map.insert name ty (linearBindings after) }
+                Nothing -> after
+    _ -> after
+
+-- Residualization may add obligations while it is using the logical subject
+-- view. Keep those obligations, but always return the actual post-consumption
+-- resource context from the base value check.
+refinementResultState :: CheckState -> CheckState -> CheckState
+refinementResultState post refinementState =
+  post { residualObligations = residualObligations refinementState }
 
 matchingCarriedEvidence :: Proposition -> [EvidenceUse] -> Maybe EvidenceUse
 matchingCarriedEvidence required = go
