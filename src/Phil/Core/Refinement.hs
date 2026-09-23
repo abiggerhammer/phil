@@ -13,6 +13,7 @@ module Phil.Core.Refinement
   , bindingEvidencePropositions
   , findMatchingEvidence
   , dischargeSideConditions
+  , dischargeSideConditionsUnder
   , residualizeSideConditions
   , dischargeProposition
   , dischargePropositionUsing
@@ -35,6 +36,7 @@ import Phil.Core.Context
 import Phil.Core.SortCheck
   ( SortError
   , checkPropositionSorts
+  , checkPropositionSortsUnder
   , propositionSideConditions
   )
 import Phil.Core.Syntax
@@ -281,6 +283,18 @@ dischargeSideConditions required state = do
   sideConditions <- prepareProposition required state
   mapM (`directDischarge` state) sideConditions
 
+-- | Discharge only the definedness prerequisites of a proposition while
+-- sort-checking it under explicit logical binders. The binders are not added to
+-- the resource context and therefore cannot become proof evidence or ownership.
+dischargeSideConditionsUnder
+  :: [(Name, Ty)]
+  -> Proposition
+  -> CheckState
+  -> Either RefinementError [EvidenceUse]
+dischargeSideConditionsUnder logicalBindings required state = do
+  sideConditions <- preparePropositionUnder logicalBindings required state
+  mapM (`directDischarge` state) sideConditions
+
 residualizeSideConditions
   :: ResidualSpec
   -> Proposition
@@ -320,10 +334,20 @@ residualizeProposition spec required state = do
   pure (deduplicateEvidence (sideUses ++ [mainUse]), finalState)
 
 prepareProposition :: Proposition -> CheckState -> Either RefinementError [Proposition]
-prepareProposition required state = do
-  mapLeft RefinementSortError (checkPropositionSorts state required)
+prepareProposition = preparePropositionUnder []
+
+preparePropositionUnder
+  :: [(Name, Ty)]
+  -> Proposition
+  -> CheckState
+  -> Either RefinementError [Proposition]
+preparePropositionUnder logicalBindings required state = do
+  mapLeft RefinementSortError $
+    checkPropositionSortsUnder logicalBindings state required
   let sideConditions = propositionSideConditions required
-  mapM_ (mapLeft RefinementSortError . checkPropositionSorts state) sideConditions
+  mapM_
+    (mapLeft RefinementSortError . checkPropositionSortsUnder logicalBindings state)
+    sideConditions
   pure sideConditions
 
 directDischarge :: Proposition -> CheckState -> Either RefinementError EvidenceUse
