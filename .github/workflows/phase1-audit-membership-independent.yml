@@ -38,6 +38,7 @@ jobs:
           cp subject/test/Phase1INT002ManifestClosureMain.hs evidence/
           sha256sum evidence/*.hs > evidence/input-sha256.txt
           cd subject
+          cabal update 2>&1 | tee ../evidence/project-index.log
           cabal build all --enable-tests 2>&1 | tee ../evidence/build.log
       - name: Strictly typecheck unchanged permanent suites
         shell: bash
