@@ -18,7 +18,10 @@ module Phil.Core.Discharge
 import qualified Data.Map.Strict as Map
 import Data.Text (Text)
 import qualified Data.Text as Text
-import Phil.Core.Checker (CheckState (..))
+import Phil.Core.Checker
+  ( CheckState (..)
+  , withObligationLogicalSubjects
+  )
 import Phil.Core.Context
   ( CheckError
   , ResourceContext (..)
@@ -171,13 +174,14 @@ resolveObligation
   -> Obligation
   -> Either DischargeError ResolvedObligation
 resolveObligation staticContext state policy obligation = do
+  let logicalState = withObligationLogicalSubjects obligation state
   focusPlan <- mapLeft DischargeFocusingError $
-    focusProposition staticContext state (obligationProposition obligation)
-  evidenceAssumptions <- collectEvidenceAssumptions staticContext state
+    focusProposition staticContext logicalState (obligationProposition obligation)
+  evidenceAssumptions <- collectEvidenceAssumptions staticContext logicalState
   (resolvedSides, sideAssumptions, allSidesLocal) <-
     resolvePrerequisites
       staticContext
-      state
+      logicalState
       policy
       obligation
       evidenceAssumptions
@@ -185,7 +189,7 @@ resolveObligation staticContext state policy obligation = do
   disposition <-
     resolveFocusedRequirement
       staticContext
-      state
+      logicalState
       policy
       obligation
       (evidenceAssumptions ++ sideAssumptions)
