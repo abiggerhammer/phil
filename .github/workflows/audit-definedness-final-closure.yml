@@ -1,0 +1,128 @@
+name: Audit Definedness Final Closure
+on:
+  push:
+    branches: [audit-definedness-final-closure-20260923]
+    paths:
+      - 'audit/definedness-final-closure/**'
+      - '.github/workflows/audit-definedness-final-closure.yml'
+permissions:
+  contents: read
+concurrency:
+  group: audit-definedness-final-closure-${{ github.ref }}
+  cancel-in-progress: true
+jobs:
+  pinned-closure-review:
+    runs-on: ubuntu-latest
+    timeout-minutes: 35
+    steps:
+      - name: Check out exact audit driver
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ github.sha }}
+          path: audit-driver
+          persist-credentials: false
+      - name: Check out immutable production subject
+        uses: actions/checkout@v4
+        with:
+          ref: 5f8e7e9fd540d8e66ee44b0d96dfe6c901001e50
+          path: subject
+          persist-credentials: false
+      - uses: haskell-actions/setup@v2
+        with:
+          ghc-version: '9.6.7'
+          cabal-version: '3.18.1.0'
+      - name: Record exact identities and unchanged inputs
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p evidence/build-closure
+          test "$(git -C subject rev-parse HEAD)" = 5f8e7e9fd540d8e66ee44b0d96dfe6c901001e50
+          git -C subject rev-parse HEAD > evidence/subject-commit.txt
+          git -C audit-driver rev-parse HEAD > evidence/driver-commit.txt
+          git -C subject status --porcelain > evidence/subject-status-before.txt
+          test ! -s evidence/subject-status-before.txt
+          ghc --numeric-version > evidence/ghc-version.txt
+          cabal --numeric-version > evidence/cabal-version.txt
+          cp audit-driver/audit/definedness-final-closure/*.hs evidence/
+          sha256sum evidence/*.hs > evidence/drivers.sha256
+          for path in src/Phil/Core/Discharge.hs src/Phil/Core/Decision.hs src/Phil/Core/Focusing.hs src/Phil/Assurance/Handoff.hs src/Phil/Verification.hs src/Phil/Verification/Bundle.hs src/Phil/Verification/ManifestClosure.hs src/Phil/Assurance/Verify.hs src/Phil/Assurance/Types.hs; do
+            printf '%s %s\n' "$(git -C subject rev-parse "HEAD:$path")" "$path" >> evidence/source-git-blobs.txt
+          done
+      - name: Build unchanged production substrate
+        working-directory: subject
+        shell: bash
+        run: |
+          set -euo pipefail
+          cabal update 2>&1 | tee ../evidence/dependency-index.log
+          cabal build all --enable-tests 2>&1 | tee ../evidence/build.log
+      - name: Strict compile external audit drivers
+        working-directory: subject
+        shell: bash
+        run: |
+          set -euo pipefail
+          cabal exec -- ghc -O0 -Wall -Werror -isrc -outputdir ../evidence/build-closure ../evidence/DefinednessClosureControls.hs -o ../evidence/closure-controls 2>&1 | tee ../evidence/compile-closure.log
+      - name: Record required-correctness support failures without relabelling them
+        shell: bash
+        run: |
+          set -uo pipefail
+          evidence/closure-controls --support 2>&1 | tee evidence/support-results.log
+          status=${PIPESTATUS[0]}
+          printf '%s\n' "$status" > evidence/support-exit.txt
+          exit 0
+      - name: Run final consumer controls and separately labelled observations
+        shell: bash
+        run: |
+          set -euo pipefail
+          evidence/closure-controls --observe 2>&1 | tee evidence/closure-results.log
+      - name: Check complete result protocol and classify known baseline gaps
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 - <<'PY'
+          import json
+          from pathlib import Path
+          support = Path('evidence/support-results.log').read_text().splitlines()
+          closure = Path('evidence/closure-results.log').read_text().splitlines()
+          passed = [l.split()[1] for l in support if l.startswith('PASS ')]
+          failed = [l.split()[1] for l in support if l.startswith('FAIL ')]
+          assert passed == [], passed
+          assert failed == ['R01','R02'], failed
+          assert Path('evidence/support-exit.txt').read_text().strip() == '1'
+          assert not any('setup failed:' in l for l in support)
+          assert [l.split()[1] for l in closure if l.startswith('PASS ')] == [f'C{i:02d}' for i in range(1,10)]
+          assert [l.split()[1] for l in closure if l.startswith('OBS ')] == ['O01','O02']
+          assert not any(l.startswith(('FAIL ','OBS_SETUP_ERROR ')) for l in closure)
+          assert closure.count('COMPLETE controls=9 observations=2') == 1
+          Path('evidence/protocol.json').write_text(json.dumps({
+            'measurement_complete': True,
+            'required_support_regressions': {'R01':'failed','R02':'failed'},
+            'support_preservation_controls_passed': passed,
+            'closure_correctness_controls': 9,
+            'closure_observations': 2,
+            'observation_correctness_credit': 0,
+            'repair_certified': False,
+            'production_source_adapter_established': False
+          }, indent=2)+'\n')
+          PY
+      - name: Replay unchanged permanent assurance consumers
+        working-directory: subject
+        shell: bash
+        run: |
+          set -euo pipefail
+          for driver in DischargeMain AssuranceHandoffManifestClosureMain Phase1AuditManifestEvidenceMembershipMain; do
+            cabal exec -- runghc -isrc -Wall -Werror "test/$driver.hs" 2>&1 | tee "../evidence/$driver.log"
+          done
+          git status --porcelain > ../evidence/subject-status-after.txt
+          test ! -s ../evidence/subject-status-after.txt
+      - name: Preserve raw inputs and evidence
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: definedness-final-closure-review
+          path: |
+            evidence/*.txt
+            evidence/*.hs
+            evidence/*.json
+            evidence/*.sha256
+            evidence/*.log
+          if-no-files-found: error
