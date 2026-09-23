@@ -1623,7 +1623,75 @@ shapeSubjects shape = case shape of
       ]
   RecognitionFailureShape failure ->
     Set.singleton (unName (recognitionPendingOwner failure))
+  DecisionShape decision -> decisionSubjects decision
   _ -> Set.empty
+
+decisionSubjects :: DecisionKind -> Set Text
+decisionSubjects decision = case decision of
+  BooleanDecision -> Set.empty
+  ChooseSupportedDecision ->
+    Set.union
+      (freeTermSubjects Set.empty serverSupportedTerm)
+      (freeTermSubjects Set.empty helloVersionsTerm)
+  RecognitionDecision parsed failure _ ->
+    Set.fromList
+      [ unName (parsedPendingOwner parsed)
+      , unName (parsedValueName parsed)
+      , unName (recognitionPendingOwner failure)
+      ]
+  LegacyRecognitionDecision {} -> Set.empty
+  ValidationDecision _ context subject ->
+    Set.fromList [unName context, unName subject]
+  DigestDecision proposition ->
+    freePropositionSubjects Set.empty proposition
+  StoreDecision -> Set.empty
+  ProviderDecision outcomes ->
+    Set.unions
+      [ freeTypeSubjects ty
+      | outcome <- outcomes
+      , (_, ty) <- providerOutcomePayload outcome
+      ]
+  CallableDecision outcomes resources ->
+    Set.union
+      (Set.unions
+        [ callableOutcomeSubjects outcome
+        | outcome <- outcomes
+        , callableOutcomeControl outcome == CallableOutcomeContinues
+        ])
+      (Set.unions (map callableResourceSubjects (Map.elems resources)))
+  where
+    callableOutcomeSubjects outcome =
+      Set.unions
+        [ Set.unions
+            [ freeTypeSubjects ty
+            | (_, ty) <- callableOutcomePayload outcome
+            ]
+        , Set.unions
+            [ freePropositionSubjects Set.empty proposition
+            | (_, proposition) <- callableOutcomeFacts outcome
+            ]
+        , Set.unions
+            [ freePropositionSubjects Set.empty proposition
+            | (_, proposition) <- callableOutcomeObligations outcome
+            ]
+        ]
+
+    callableResourceSubjects resourceSpec =
+      Set.union
+        (maybe Set.empty Set.singleton
+          (callableOutcomeResourceActiveEndpoint resourceSpec))
+        (Set.unions
+          [ Set.insert name (resourceBindingSubjects binding)
+          | (name, binding) <-
+              Map.toList (callableOutcomeResourceBindings resourceSpec)
+          ])
+
+    resourceBindingSubjects binding = case binding of
+      CallableOutcomeResourceAbsent -> Set.empty
+      CallableOutcomeResourcePresent meta ->
+        Set.union
+          (freeTypeSubjects (bindingType meta))
+          (shapeSubjects (bindingShape meta))
 
 freeTypeSubjects :: Ty -> Set Text
 freeTypeSubjects = goTy Set.empty
