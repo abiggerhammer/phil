@@ -1,0 +1,47 @@
+name: Phase 1 Audit Final Manifest Stage Reflection
+
+on:
+  pull_request:
+    paths:
+      - 'proof/Phil/Verification/FinalManifestStageReflection.v'
+      - 'docs/phase-1/audit-final-manifest-stage-reflection-v1.md'
+      - '.github/workflows/phase1-audit-final-manifest-stage-reflection.yml'
+  push:
+    branches: [main]
+    paths:
+      - 'proof/Phil/Verification/FinalManifestStageReflection.v'
+      - 'docs/phase-1/audit-final-manifest-stage-reflection-v1.md'
+      - '.github/workflows/phase1-audit-final-manifest-stage-reflection.yml'
+
+permissions:
+  contents: read
+
+jobs:
+  final-manifest-stage-reflection:
+    runs-on: ubuntu-latest
+    container:
+      image: rocq/rocq-prover:9.2.0
+      options: --user root
+    steps:
+      - uses: actions/checkout@v4
+      - name: Compile exact final-manifest reflection proof
+        shell: bash
+        run: |
+          set -euo pipefail
+          export PATH="/home/rocq/.opam/${COMPILER}/bin:$PATH"
+          rocq c -Q proof/Phil Phil proof/Phil/Systems/FactDisposition.v
+          rocq c -Q proof/Phil Phil proof/Phil/Assurance/ValidityScope.v
+          rocq c -Q proof/Phil Phil proof/Phil/Core/SystemsStageClosure.v
+          rocq c -Q proof/Phil Phil proof/Phil/Verification/VerificationArtifact.v
+          rocq c -Q proof/Phil Phil proof/Phil/Verification/FinalManifestStageReflection.v
+          sha256sum \
+            proof/Phil/Verification/VerificationArtifact.v \
+            proof/Phil/Verification/VerificationArtifact.vo \
+            proof/Phil/Verification/FinalManifestStageReflection.v \
+            proof/Phil/Verification/FinalManifestStageReflection.vo \
+            > final-manifest-stage-reflection.sha256
+      - uses: actions/upload-artifact@v4
+        with:
+          name: final-manifest-stage-reflection
+          path: final-manifest-stage-reflection.sha256
+          if-no-files-found: error
