@@ -64,6 +64,7 @@ jobs:
       - name: Record required-correctness support failures without relabelling them
         shell: bash
         run: |
+          set +e
           set -uo pipefail
           evidence/closure-controls --support 2>&1 | tee evidence/support-results.log
           status=${PIPESTATUS[0]}
