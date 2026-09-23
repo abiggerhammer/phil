@@ -31,7 +31,7 @@ import System.Exit (exitFailure)
 main :: IO ()
 main = do
   results <- sequence
-    [ test "handoff preserves runtime disposition and canonical proposition" runtimeDispositionPreserved
+    [ test "handoff preserves runtime disposition and resolver prerequisite support" runtimeDispositionPreserved
     , test "generated prerequisite revision records exact parent lineage" prerequisiteLineagePreserved
     , test "certificate prerequisite becomes explicit parent-to-child support" certificatePrerequisiteSupportPreserved
     , test "revision graph consumes explicit certificate support direction" certificatePrerequisiteGraphPreserved
@@ -53,11 +53,12 @@ test label passed = do
 runtimeDispositionPreserved :: Bool
 runtimeDispositionPreserved =
   case handoffResolvedObligation handoffConfig runtimeResolved of
-    Right (parent : _) ->
-      handoffDisposition parent == RuntimeBound runtimeBinding
-        && handoffCanonicalProposition parent == equalRef
-        && revisionGeneratedFrom (handoffRevision parent) == []
-        && null (handoffSupportDependencies parent)
+    Right (parent : child : _) ->
+      let childRevision = revisionId (handoffRevision child)
+      in handoffDisposition parent == RuntimeBound runtimeBinding
+          && handoffCanonicalProposition parent == equalRef
+          && revisionGeneratedFrom (handoffRevision parent) == []
+          && handoffSupportDependencies parent == [DependsOnObligation childRevision]
     _ -> False
 
 prerequisiteLineagePreserved :: Bool
