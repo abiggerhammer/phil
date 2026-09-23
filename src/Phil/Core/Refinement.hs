@@ -35,7 +35,6 @@ import Phil.Core.Context
   )
 import Phil.Core.SortCheck
   ( SortError
-  , checkPropositionSorts
   , checkPropositionSortsUnder
   , propositionSideConditions
   )
