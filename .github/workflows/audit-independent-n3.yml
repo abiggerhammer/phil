@@ -99,6 +99,28 @@ jobs:
           test "$(grep -Ec '^CHECK (R[0-9]{2}|H[0-9]{2}) PASS$' ../evidence/repair-characterize.log)" = 7
           test "$(grep -Ec '^OBS O01 RESULT ' ../evidence/repair-characterize.log)" = 1
           ! grep -Eq '^CHECK .* FAIL|^OBS .* SETUP_ERROR' ../evidence/repair-characterize.log
+      - name: Compile session and scope review controls
+        id: scopecompile
+        if: always() && matrix.repair && steps.build.outcome == 'success'
+        run: |
+          set -euo pipefail
+          cabal exec -- ghc -Wall -Werror -fno-code -fforce-recomp -isrc ../replay/test/audit-independent-n3/SessionScopeReviewMain.hs 2>&1 | tee ../evidence/session-scope-compile.log
+      - name: Run session and scope review (includes explicitly labelled characterizations)
+        if: always() && matrix.repair && steps.scopecompile.outcome == 'success'
+        run: |
+          set -euo pipefail
+          timeout 240 cabal exec -- runghc -isrc ../replay/test/audit-independent-n3/SessionScopeReviewMain.hs 2>&1 | tee ../evidence/session-scope.log
+          test "$(grep -Ec '^CHECK .* PASS$' ../evidence/session-scope.log)" = 8
+          test "$(grep -Ec '^OBS Q01 RAW_CONTEXT ' ../evidence/session-scope.log)" = 1
+          ! grep -Eq '^CHECK .* FAIL|^OBS .* SETUP_ERROR' ../evidence/session-scope.log
+      - name: Replay unchanged permanent session and scope repair suites
+        if: always() && matrix.repair && steps.build.outcome == 'success'
+        run: |
+          set -euo pipefail
+          for suite in Phase1AuditAlphaShadowMain Phase1AuditSessionContinuationBindingMain Phase1AuditRecognitionContinuationBindingMain Phase1AuditBranchEvidenceCaptureMain; do
+            sha256sum "test/${suite}.hs" | tee -a ../evidence/permanent-inputs.txt
+            timeout 240 cabal exec -- runghc -Wall -Werror -isrc "test/${suite}.hs" 2>&1 | tee "../evidence/${suite}.log"
+          done
       - name: Upload raw audit evidence
         if: always()
         uses: actions/upload-artifact@v4
