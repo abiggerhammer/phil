@@ -8,6 +8,7 @@ on:
       - 'test/Phase1AuditTypeDefinednessCommon.hs'
       - 'test/Phase1AuditTypeDefinednessCoreMain.hs'
       - 'test/Phase1AuditTypeDefinednessSurfaceMain.hs'
+      - 'test/RepairCompositionControls.hs'
       - 'docs/phase-1/audit-type-definedness-remediation-v1.md'
       - '.github/workflows/phase1-audit-type-definedness.yml'
   push:
@@ -18,6 +19,7 @@ on:
       - 'test/Phase1AuditTypeDefinednessCommon.hs'
       - 'test/Phase1AuditTypeDefinednessCoreMain.hs'
       - 'test/Phase1AuditTypeDefinednessSurfaceMain.hs'
+      - 'test/RepairCompositionControls.hs'
       - 'docs/phase-1/audit-type-definedness-remediation-v1.md'
       - '.github/workflows/phase1-audit-type-definedness.yml'
 
@@ -45,12 +47,16 @@ jobs:
           cabal exec -- ghc -isrc -Wall -Werror -fno-code src/Phil/Core/Value.hs
           cabal exec -- ghc -isrc -itest -Wall -Werror -fno-code test/Phase1AuditTypeDefinednessCoreMain.hs
           cabal exec -- ghc -isrc -itest -Wall -Werror -fno-code test/Phase1AuditTypeDefinednessSurfaceMain.hs
+          cabal exec -- ghc -isrc -itest -Wall -Werror -fno-code test/RepairCompositionControls.hs
 
       - name: Replay PHIL-AUD-TYPE-DEFINEDNESS-001 core cases
         run: cabal exec -- runghc -isrc -itest -Wall -Werror test/Phase1AuditTypeDefinednessCoreMain.hs
 
       - name: Replay PHIL-AUD-TYPE-DEFINEDNESS-001 Surface cases
         run: cabal exec -- runghc -isrc -itest -Wall -Werror test/Phase1AuditTypeDefinednessSurfaceMain.hs
+
+      - name: Replay N3 repair-composition controls
+        run: cabal exec -- runghc -isrc -itest -Wall -Werror test/RepairCompositionControls.hs require-fix
 
       - name: Replay existing value, focusing, discharge, and Surface controls
         run: cabal test phil-value-tests phil-refinement-evidence-tests phil-focusing-tests phil-discharge-tests phil-surface-conformance-tests --test-show-details=direct
