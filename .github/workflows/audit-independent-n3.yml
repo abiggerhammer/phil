@@ -1,0 +1,131 @@
+name: Independent N3 Audit Replay
+
+on:
+  push:
+    branches: [audit-n3-independent-replay-20260923]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: independent-n3-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  replay:
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - label: repair-review
+            subject: 5f8e7e9fd540d8e66ee44b0d96dfe6c901001e50
+            repair: true
+    defaults:
+      run:
+        shell: bash
+        working-directory: subject
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          path: replay
+          ref: ${{ github.sha }}
+          persist-credentials: false
+      - uses: actions/checkout@v4
+        with:
+          path: subject
+          ref: ${{ matrix.subject }}
+          persist-credentials: false
+      - uses: haskell-actions/setup@v2
+        with:
+          ghc-version: '9.6.7'
+          cabal-version: '3.18.1.0'
+      - name: Record and verify exact inputs
+        run: |
+          set -euo pipefail
+          mkdir -p ../evidence
+          {
+            printf 'subject='; git rev-parse HEAD
+            printf 'drivers='; git -C ../replay rev-parse HEAD
+            ghc --version
+            cabal --version
+            sha256sum ../replay/test/audit-independent-n3/*.hs
+            git status --porcelain
+          } | tee ../evidence/inputs.txt
+          test "$(git rev-parse HEAD)" = '${{ matrix.subject }}'
+          git diff --exit-code
+          git diff --cached --exit-code
+      - name: Build pinned Haskell substrate
+        id: build
+        run: |
+          set -euo pipefail
+          cabal update 2>&1 | tee ../evidence/cabal-update.log
+          cabal build all --enable-tests 2>&1 | tee ../evidence/build.log
+          git diff --exit-code
+          git diff --cached --exit-code
+      - name: Compile numeric consumer controls
+        id: n3compile
+        if: steps.build.outcome == 'success'
+        run: |
+          set -euo pipefail
+          cabal exec -- ghc -Wall -Werror -fno-code -fforce-recomp -isrc ../replay/test/audit-independent-n3/N3ConsumerControls.hs 2>&1 | tee ../evidence/n3-compile.log
+      - name: Run numeric consumer controls
+        if: steps.n3compile.outcome == 'success'
+        run: |
+          set -euo pipefail
+          timeout 180 cabal exec -- runghc -isrc ../replay/test/audit-independent-n3/N3ConsumerControls.hs 2>&1 | tee ../evidence/n3.log
+          test "$(grep -Ec '^CHECK N[0-9]{2} PASS$' ../evidence/n3.log)" = 12
+          ! grep -Eq '^CHECK .* FAIL|^OBS .* SETUP_ERROR' ../evidence/n3.log
+      - name: Compile repair composition controls
+        id: repaircompile
+        if: always() && matrix.repair && steps.build.outcome == 'success'
+        run: |
+          set -euo pipefail
+          cabal exec -- ghc -Wall -Werror -fno-code -fforce-recomp -isrc ../replay/test/audit-independent-n3/RepairCompositionControls.hs 2>&1 | tee ../evidence/repair-compile.log
+      - name: Characterize reviewed repair pin (not a correctness certificate)
+        if: always() && matrix.repair && steps.repaircompile.outcome == 'success'
+        run: |
+          set -euo pipefail
+          timeout 180 cabal exec -- runghc -isrc ../replay/test/audit-independent-n3/RepairCompositionControls.hs characterize 2>&1 | tee ../evidence/repair-characterize.log
+          test "$(grep -Ec '^CHECK (R[0-9]{2}|H[0-9]{2}) PASS$' ../evidence/repair-characterize.log)" = 7
+          test "$(grep -Ec '^OBS O01 RESULT ' ../evidence/repair-characterize.log)" = 1
+          ! grep -Eq '^CHECK .* FAIL|^OBS .* SETUP_ERROR' ../evidence/repair-characterize.log
+      - name: Compile session and scope review controls
+        id: scopecompile
+        if: always() && matrix.repair && steps.build.outcome == 'success'
+        run: |
+          set -euo pipefail
+          cabal exec -- ghc -Wall -Werror -fno-code -fforce-recomp -isrc ../replay/test/audit-independent-n3/SessionScopeReviewMain.hs 2>&1 | tee ../evidence/session-scope-compile.log
+      - name: Run session and scope review (includes explicitly labelled characterizations)
+        if: always() && matrix.repair && steps.scopecompile.outcome == 'success'
+        run: |
+          set -euo pipefail
+          timeout 240 cabal exec -- runghc -isrc ../replay/test/audit-independent-n3/SessionScopeReviewMain.hs 2>&1 | tee ../evidence/session-scope.log
+          test "$(grep -Ec '^CHECK .* PASS$' ../evidence/session-scope.log)" = 8
+          test "$(grep -Ec '^OBS Q01 RAW_CONTEXT ' ../evidence/session-scope.log)" = 1
+          ! grep -Eq '^CHECK .* FAIL|^OBS .* SETUP_ERROR' ../evidence/session-scope.log
+      - name: Replay unchanged permanent suites (warnings retained, not strict-warning certification)
+        if: always() && matrix.repair && steps.build.outcome == 'success'
+        run: |
+          set -euo pipefail
+          failed=0
+          for suite in Phase1AuditAlphaShadowMain Phase1AuditSessionContinuationBindingMain Phase1AuditRecognitionContinuationBindingMain Phase1AuditBranchEvidenceCaptureMain; do
+            sha256sum "test/${suite}.hs" | tee -a ../evidence/permanent-inputs.txt
+            set +e
+            timeout 240 cabal exec -- runghc -Wall -isrc "test/${suite}.hs" 2>&1 | tee "../evidence/${suite}.log"
+            status=${PIPESTATUS[0]}
+            set -e
+            printf '%s\t%s\n' "$suite" "$status" | tee -a ../evidence/permanent-exit-codes.txt
+            if test "$status" -ne 0; then failed=1; fi
+          done
+          exit "$failed"
+      - name: Upload raw audit evidence
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: independent-n3-${{ matrix.label }}-${{ github.run_id }}-${{ github.run_attempt }}
+          path: evidence/
+          if-no-files-found: error
+          retention-days: 30
