@@ -296,9 +296,12 @@ closeVerificationBundle bundle policy context ledger selection = do
 -- supplied handoff, then delegates all ordinary manifest checks to
 -- 'closeVerificationBundle'.
 --
--- Exactness is intentionally per certificate consumer.  Generation lineage is
--- not support; precise evidence dependencies stay in the evidence entry; and
--- unrelated evidence may remain selected for the same manifest.
+-- Exactness is intentionally per support-bearing consumer. Resolver-required
+-- prerequisite support is checked even when a parent closes by definition and
+-- therefore has no certificate evidence. Certificate consumers remain in the
+-- checked domain even when their exact support set is empty. Generation
+-- lineage is not support; precise evidence dependencies stay in the evidence
+-- entry; and unrelated evidence may remain selected for the same manifest.
 closeVerificationBundleWithHandoff
   :: VerificationBundle
   -> ApplicationAssurancePolicy
@@ -315,9 +318,13 @@ closeVerificationBundleWithHandoff bundle policy context ledger selection handof
       certificateRevisions = Map.keysSet certificateEntries
       suppliedEvidenceDomain = Map.keysSet
         (manifestClosureCertificateEvidence handoff)
-      expectedSupport = supportFor certificateRevisions
-        (Handoff.handoffSupportEdges (Map.elems entriesByRevision))
-      actualSupport = supportFor certificateRevisions
+      handoffSupport = Handoff.handoffSupportEdges (Map.elems entriesByRevision)
+      supportConsumers = certificateRevisions `Set.union` Set.fromList
+        [ consumer
+        | (consumer, _) <- Set.toAscList handoffSupport
+        ]
+      expectedSupport = supportFor supportConsumers handoffSupport
+      actualSupport = supportFor supportConsumers
         (verificationGraphDependencies graph)
   unless (expectedSupport == actualSupport) $
     Left (ManifestClosureHandoffSupportMismatch expectedSupport actualSupport)
