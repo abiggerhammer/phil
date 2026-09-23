@@ -1,0 +1,58 @@
+name: Phase 1 Audit Check Event Prerequisite Coverage
+
+on:
+  pull_request:
+    paths:
+      - 'proof/Phil/Assurance/PrerequisiteSupport.v'
+      - 'proof/Phil/Assurance/CheckEventPrerequisiteCoverage.v'
+      - 'docs/phase-1/audit-check-event-prerequisite-coverage-v1.md'
+      - '.github/workflows/phase1-audit-check-event-prerequisite-coverage.yml'
+  push:
+    branches: [main]
+    paths:
+      - 'proof/Phil/Assurance/PrerequisiteSupport.v'
+      - 'proof/Phil/Assurance/CheckEventPrerequisiteCoverage.v'
+      - 'docs/phase-1/audit-check-event-prerequisite-coverage-v1.md'
+      - '.github/workflows/phase1-audit-check-event-prerequisite-coverage.yml'
+
+permissions:
+  contents: read
+
+jobs:
+  check-event-prerequisite-coverage:
+    runs-on: ubuntu-latest
+    container:
+      image: rocq/rocq-prover:9.2.0
+      options: --user root
+    steps:
+      - uses: actions/checkout@v4
+      - name: Compile prerequisite support dependency and event coverage proof
+        shell: bash
+        run: |
+          set -euo pipefail
+          export PATH="/home/rocq/.opam/${COMPILER}/bin:$PATH"
+          rocq c -Q proof/Phil Phil proof/Phil/Assurance/PrerequisiteSupport.v
+          rocq c -Q proof/Phil Phil proof/Phil/Assurance/CheckEventPrerequisiteCoverage.v
+      - name: Record exact proof identity
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p check-event-prerequisite-coverage
+          cp \
+            proof/Phil/Assurance/PrerequisiteSupport.v \
+            proof/Phil/Assurance/PrerequisiteSupport.vo \
+            proof/Phil/Assurance/CheckEventPrerequisiteCoverage.v \
+            proof/Phil/Assurance/CheckEventPrerequisiteCoverage.vo \
+            check-event-prerequisite-coverage/
+          sha256sum \
+            check-event-prerequisite-coverage/PrerequisiteSupport.v \
+            check-event-prerequisite-coverage/PrerequisiteSupport.vo \
+            check-event-prerequisite-coverage/CheckEventPrerequisiteCoverage.v \
+            check-event-prerequisite-coverage/CheckEventPrerequisiteCoverage.vo \
+            > check-event-prerequisite-coverage/D-CERT-SUPPORT-01.event-domain.proof.sha256
+          cat check-event-prerequisite-coverage/D-CERT-SUPPORT-01.event-domain.proof.sha256
+      - uses: actions/upload-artifact@v4
+        with:
+          name: check-event-prerequisite-coverage-proof
+          path: check-event-prerequisite-coverage
+          if-no-files-found: error
