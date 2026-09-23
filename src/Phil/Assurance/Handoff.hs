@@ -67,10 +67,11 @@ data HandoffError
 -- Runtime implementation artifacts, exported destination obligations, and
 -- evidence artifact identities are attached only at the assurance layer.
 --
--- 'handoffSupportDependencies' records semantic support used by a retained
--- certificate.  It is deliberately separate from 'revisionGeneratedFrom':
--- generation provenance is child -> parent, while a prerequisite dependency
--- is evidence for parent/consumer -> child/prerequisite.
+-- 'handoffSupportDependencies' records semantic support required by the
+-- resolver for the original goal, together with any additional support named
+-- by a retained certificate.  It is deliberately separate from
+-- 'revisionGeneratedFrom': generation provenance is child -> parent, while a
+-- prerequisite dependency is parent/consumer -> child/prerequisite.
 data LedgerHandoff = LedgerHandoff
   { handoffRevision :: ObligationRevision
   , handoffCanonicalProposition :: Proposition
@@ -91,22 +92,23 @@ handoffResolvedObligation config =
   handoffResolvedObligationWithEvidence config Map.empty
 
 -- | Flatten a resolved obligation and its generated prerequisites into
--- immutable revision/disposition nodes, then bind every support reference
--- retained by a decision certificate to an immutable assurance identity.
+-- immutable revision/disposition nodes, retaining every direct prerequisite
+-- on which the resolver made the original goal conditional.  Then bind every
+-- additional support reference retained by a decision certificate to an
+-- immutable assurance identity.
 --
--- 'PrerequisiteFact' references resolve against the complete flattened
--- obligation tree and become 'DependsOnObligation'. 'EvidenceFact' references
--- resolve against the supplied @(binding name, fact index)@ map and become
--- 'DependsOnEvidence'. Missing identities fail closed.
+-- Direct resolved prerequisites are semantic support even when arithmetic
+-- normalization yields an empty certificate or the parent closes by
+-- definition.  'PrerequisiteFact' references still resolve against the
+-- complete flattened obligation tree and become 'DependsOnObligation'; this
+-- additionally handles certificate references to earlier sibling support.
+-- 'EvidenceFact' references resolve against the supplied @(binding name, fact
+-- index)@ map and become 'DependsOnEvidence'. Missing certificate identities
+-- fail closed.
 --
 -- Child prerequisite revisions continue to record the parent revision in
 -- 'revisionGeneratedFrom'.  That lineage remains provenance only; it is never
 -- reversed or repurposed as semantic support.
---
--- Resolution processes sibling prerequisites left-to-right, so a later child
--- certificate may depend on an earlier sibling.  The second pass therefore
--- resolves support against the complete flattened tree, not just direct
--- children of the current node.
 handoffResolvedObligationWithEvidence
   :: HandoffConfig
   -> Map.Map (Name, Int) EvidenceEntryId
@@ -127,9 +129,10 @@ handoffResolvedObligationWithEvidence config evidenceIds root =
       let revision = handoffRevision entry
           consumer = revisionObligationId revision
           disposition = handoffDisposition entry
-          prerequisites = dispositionPrerequisites disposition
+          certificatePrerequisiteIds = dispositionPrerequisites disposition
           evidenceFacts = dispositionEvidenceFacts disposition
-          missing = prerequisites `Set.difference` Map.keysSet revisionByObligation
+          missing = certificatePrerequisiteIds `Set.difference` Map.keysSet revisionByObligation
+          resolvedDependencies = handoffSupportDependencies entry
       in case Set.lookupMin missing of
           Just prerequisite -> Left (UnknownPrerequisiteSupport consumer prerequisite)
           Nothing ->
@@ -138,9 +141,10 @@ handoffResolvedObligationWithEvidence config evidenceIds root =
                 Left (UnknownEvidenceFactSupport consumer name index)
               Right evidenceDependencies -> Right entry
                 { handoffSupportDependencies = Set.toAscList . Set.fromList $
-                    evidenceDependencies
+                    resolvedDependencies
+                      <> evidenceDependencies
                       <> [ DependsOnObligation (revisionByObligation Map.! prerequisite)
-                         | prerequisite <- Set.toAscList prerequisites
+                         | prerequisite <- Set.toAscList certificatePrerequisiteIds
                          ]
                 }
 
@@ -151,25 +155,35 @@ handoffResolvedObligationWithEvidence config evidenceIds root =
 
     flatten :: [RevisionId] -> ResolvedObligation -> [LedgerHandoff]
     flatten generatedFrom resolved =
-      let obligation = resolvedObligation resolved
-          revision = revisionFromCoreObligation
-            obligation
-            (handoffRevisionKind config obligation)
-            (handoffRepresentation config obligation)
-            (handoffSubjectIds config obligation)
-            (handoffContextIds config obligation)
-            (handoffAcceptanceRule config obligation)
-            generatedFrom
+      let revision = revisionFor generatedFrom resolved
+          currentRevision = revisionId revision
+          prerequisiteDependencies =
+            [ DependsOnObligation
+                (revisionId (revisionFor [currentRevision] prerequisite))
+            | prerequisite <- resolvedPrerequisites resolved
+            ]
           current = LedgerHandoff
             { handoffRevision = revision
             , handoffCanonicalProposition = resolvedCanonicalProposition resolved
             , handoffDisposition = resolvedDisposition resolved
-            , handoffSupportDependencies = []
+            , handoffSupportDependencies = prerequisiteDependencies
             }
           children = concatMap
-            (flatten [revisionId revision])
+            (flatten [currentRevision])
             (resolvedPrerequisites resolved)
       in current : children
+
+    revisionFor :: [RevisionId] -> ResolvedObligation -> ObligationRevision
+    revisionFor generatedFrom resolved =
+      let obligation = resolvedObligation resolved
+      in revisionFromCoreObligation
+          obligation
+          (handoffRevisionKind config obligation)
+          (handoffRepresentation config obligation)
+          (handoffSubjectIds config obligation)
+          (handoffContextIds config obligation)
+          (handoffAcceptanceRule config obligation)
+          generatedFrom
 
 -- | Project only the semantic obligation-support relation in graph direction:
 -- @(consumer, prerequisite)@.  Precise evidence-entry dependencies remain in
