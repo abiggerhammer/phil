@@ -4,6 +4,8 @@ on:
   pull_request:
     paths:
       - 'src/Phil/Core/Focusing.hs'
+      - 'src/Phil/Core/Refinement.hs'
+      - 'src/Phil/Core/SortCheck.hs'
       - 'src/Phil/Core/Value.hs'
       - 'test/Phase1AuditTypeDefinednessCommon.hs'
       - 'test/Phase1AuditTypeDefinednessCoreMain.hs'
@@ -15,6 +17,8 @@ on:
     branches: [main]
     paths:
       - 'src/Phil/Core/Focusing.hs'
+      - 'src/Phil/Core/Refinement.hs'
+      - 'src/Phil/Core/SortCheck.hs'
       - 'src/Phil/Core/Value.hs'
       - 'test/Phase1AuditTypeDefinednessCommon.hs'
       - 'test/Phase1AuditTypeDefinednessCoreMain.hs'
@@ -44,6 +48,8 @@ jobs:
         run: |
           set -euo pipefail
           cabal exec -- ghc -isrc -Wall -Werror -fno-code src/Phil/Core/Focusing.hs
+          cabal exec -- ghc -isrc -Wall -Werror -fno-code src/Phil/Core/SortCheck.hs
+          cabal exec -- ghc -isrc -Wall -Werror -fno-code src/Phil/Core/Refinement.hs
           cabal exec -- ghc -isrc -Wall -Werror -fno-code src/Phil/Core/Value.hs
           cabal exec -- ghc -isrc -itest -Wall -Werror -fno-code test/Phase1AuditTypeDefinednessCoreMain.hs
           cabal exec -- ghc -isrc -itest -Wall -Werror -fno-code test/Phase1AuditTypeDefinednessProductMain.hs
