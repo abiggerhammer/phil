@@ -1415,9 +1415,12 @@ insertProof
   -> Proposition
   -> SurfaceState
   -> Either SurfaceCheckError SurfaceState
-insertProof located name proposition =
+insertProof located name proposition state =
   insertBindingMeta (locatedSpan located) name
-    (BindingMeta Unrestricted (TyProof proposition) PlainShape)
+    (BindingMeta Unrestricted
+      (TyProof (rewriteProposition state proposition))
+      PlainShape)
+    state
 
 evalOffer
   :: SurfaceEnvironment
