@@ -1,0 +1,59 @@
+name: Phase 1 Audit Recognition Continuation Binding
+
+on:
+  pull_request:
+    paths:
+      - 'src/Phil/Core/Recognition.hs'
+      - 'src/Phil/Core/Session.hs'
+      - 'src/Phil/Surface/Check/Support.hs'
+      - 'test/Phase1AuditRecognitionContinuationBindingMain.hs'
+      - 'test/Phase1AuditSessionContinuationBindingMain.hs'
+      - 'test/Phase1AuditRecognitionGrammarMain.hs'
+      - 'docs/phase-1/audit-recognition-continuation-binding-remediation-v1.md'
+      - '.github/workflows/phase1-audit-recognition-continuation-binding.yml'
+  push:
+    branches: [main]
+    paths:
+      - 'src/Phil/Core/Recognition.hs'
+      - 'src/Phil/Core/Session.hs'
+      - 'src/Phil/Surface/Check/Support.hs'
+      - 'test/Phase1AuditRecognitionContinuationBindingMain.hs'
+      - 'test/Phase1AuditSessionContinuationBindingMain.hs'
+      - 'test/Phase1AuditRecognitionGrammarMain.hs'
+      - 'docs/phase-1/audit-recognition-continuation-binding-remediation-v1.md'
+      - '.github/workflows/phase1-audit-recognition-continuation-binding.yml'
+
+permissions:
+  contents: read
+
+jobs:
+  recognition-continuation-binding-regression:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: haskell-actions/setup@v2
+        with:
+          ghc-version: '9.6.7'
+          cabal-version: 'latest'
+
+      - name: Build complete Haskell substrate
+        run: cabal build all --enable-tests
+
+      - name: Strict typecheck production repair
+        shell: bash
+        run: |
+          set -euo pipefail
+          cabal exec -- ghc -isrc -Wall -Werror -fno-code src/Phil/Core/Recognition.hs
+          cabal exec -- ghc -isrc -Wall -Werror -fno-code src/Phil/Surface/Check/Support.hs
+
+      - name: Replay recognition continuation binding audit
+        run: cabal exec -- runghc -isrc -itest -Wall test/Phase1AuditRecognitionContinuationBindingMain.hs
+
+      - name: Replay ordinary session continuation binding controls
+        run: cabal exec -- runghc -isrc -itest -Wall test/Phase1AuditSessionContinuationBindingMain.hs
+
+      - name: Replay recognition grammar controls
+        run: cabal exec -- runghc -isrc -itest -Wall test/Phase1AuditRecognitionGrammarMain.hs
+
+      - name: Replay existing Surface, value, and refinement controls
+        run: cabal test phil-surface-conformance-tests phil-value-tests phil-refinement-evidence-tests --test-show-details=direct
