@@ -131,9 +131,9 @@ carrierSource :: Bool -> Text
 carrierSource tuple = Text.unlines $
   [ "component Audit {"
   , if tuple then "let (decision, marker) = decide flag {" else "let decision = decide flag {"
-  , " true => { let x = good;"
+  , " true => { let x = (good)"
   , if tuple then " (validate IsTrue at ctx on x, unit) }" else " validate IsTrue at ctx on x }"
-  , " false => { let x = good;"
+  , " false => { let x = (good)"
   , if tuple then " (validate IsTrue at ctx on x, unit) }" else " validate IsTrue at ctx on x }"
   , "}"
   , "let x = false"
