@@ -1,0 +1,79 @@
+name: Phase 1 Independent Membership Audit Replay
+on:
+  push:
+    branches: [audit-n3-independent-replay-20260923]
+    paths:
+      - '.github/workflows/phase1-audit-membership-independent.yml'
+permissions:
+  contents: read
+concurrency:
+  group: independent-membership-${{ github.ref }}
+  cancel-in-progress: true
+jobs:
+  replay:
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+    steps:
+      - name: Check out exact reviewed production
+        uses: actions/checkout@v4
+        with:
+          ref: 5f8e7e9fd540d8e66ee44b0d96dfe6c901001e50
+          path: subject
+          persist-credentials: false
+      - uses: haskell-actions/setup@v2
+        with:
+          ghc-version: '9.6.7'
+          cabal-version: '3.18.1.0'
+      - name: Record subject and original corpus identities
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p evidence
+          git -C subject rev-parse HEAD | tee evidence/subject-commit.txt
+          test "$(cat evidence/subject-commit.txt)" = 5f8e7e9fd540d8e66ee44b0d96dfe6c901001e50
+          printf '%s\n' '${{ github.sha }}' > evidence/workflow-commit.txt
+          ghc --version > evidence/ghc.txt
+          cabal --version > evidence/cabal.txt
+          cp subject/test/Phase1AuditManifestEvidenceMembershipMain.hs evidence/
+          cp subject/test/Phase1INT002ManifestClosureMain.hs evidence/
+          sha256sum evidence/*.hs > evidence/input-sha256.txt
+          cd subject
+          cabal build all --enable-tests 2>&1 | tee ../evidence/build.log
+      - name: Strictly typecheck unchanged permanent suites
+        shell: bash
+        run: |
+          set -euo pipefail
+          cd subject
+          cabal exec -- ghc -isrc -Wall -Werror -fno-code test/Phase1AuditManifestEvidenceMembershipMain.hs 2>&1 | tee ../evidence/membership-compile.log
+          cabal exec -- ghc -isrc -Wall -Werror -fno-code test/Phase1INT002ManifestClosureMain.hs 2>&1 | tee ../evidence/closure-compile.log
+      - name: Replay membership and final-consumer cases
+        shell: bash
+        run: |
+          set -euo pipefail
+          cd subject
+          cabal exec -- runghc -isrc -Wall -Werror test/Phase1AuditManifestEvidenceMembershipMain.hs 2>&1 | tee ../evidence/membership.log
+          cabal exec -- runghc -isrc -Wall -Werror test/Phase1INT002ManifestClosureMain.hs 2>&1 | tee ../evidence/closure.log
+          test -z "$(git status --porcelain --untracked-files=all)"
+          git rev-parse HEAD > ../evidence/subject-after.txt
+      - name: Check complete case inventories
+        shell: bash
+        run: |
+          python3 - <<'PY'
+          import json
+          from pathlib import Path
+          counts = {}
+          for name, expected in [('membership', 8), ('closure', 7)]:
+              lines = Path('evidence/' + name + '.log').read_text().splitlines()
+              passes = [line for line in lines if line.startswith('PASS: ')]
+              failures = [line for line in lines if line.startswith('FAIL: ')]
+              assert len(passes) == expected and len(set(passes)) == expected and not failures, (name, lines)
+              counts[name] = {'passed': len(passes), 'cases': passes}
+          Path('evidence/results.json').write_text(json.dumps(counts, indent=2) + '\n')
+          PY
+      - name: Retain complete input and replay evidence
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: independent-membership-5f8e7e9f-${{ github.run_attempt }}
+          path: evidence
+          if-no-files-found: error
