@@ -244,8 +244,9 @@ controls =
                rejects (== M.ManifestClosureUnpermittedDisposition V.RuntimeBound)
                  f { allowed = Set.delete V.RuntimeBound (allowed f) })
   , ("C09",do f <- fixture algebra
-               let change e | A.evidenceEntryId e == runtimeId = seal e { A.evidenceRuntimeMechanism = Nothing }
-                            | otherwise = e
+               let change e = if A.evidenceEntryId e == runtimeId
+                     then seal (e { A.evidenceRuntimeMechanism = Nothing })
+                     else e
                rejects (== M.ManifestClosureManifestRejected (AV.RuntimeEvidenceMissingMechanism runtimeId))
                  f { evidenceEntries = map change (evidenceEntries f) })
   ]
