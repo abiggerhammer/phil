@@ -440,6 +440,19 @@ equalTy env left right =
           Set.empty
           (pendingContinuation leftPending)
           (pendingContinuation rightPending)
+    (TyProduct leftElements, TyProduct rightElements) ->
+      length leftElements == length rightElements
+        && and
+          ( zipWith
+              (\leftElement rightElement ->
+                productElementMode leftElement == productElementMode rightElement
+                  && equalTy env
+                    (productElementType leftElement)
+                    (productElementType rightElement)
+              )
+              leftElements
+              rightElements
+          )
     (TyRefined leftBinder leftBase leftProp, TyRefined rightBinder rightBase rightProp) ->
       equalTy env leftBase rightBase
         && equalProposition

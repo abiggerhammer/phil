@@ -1,0 +1,51 @@
+name: Phase 1 Audit Product Definitional Equality
+
+on:
+  pull_request:
+    paths:
+      - 'src/Phil/Core/Value.hs'
+      - 'src/Phil/Core/DataMode.hs'
+      - 'test/Phase1AuditProductDefeqMain.hs'
+      - 'docs/phase-1/audit-product-defeq-remediation-v1.md'
+      - '.github/workflows/phase1-audit-product-defeq.yml'
+  push:
+    branches: [main]
+    paths:
+      - 'src/Phil/Core/Value.hs'
+      - 'src/Phil/Core/DataMode.hs'
+      - 'test/Phase1AuditProductDefeqMain.hs'
+      - 'docs/phase-1/audit-product-defeq-remediation-v1.md'
+      - '.github/workflows/phase1-audit-product-defeq.yml'
+
+permissions:
+  contents: read
+
+jobs:
+  product-defeq-regression:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: haskell-actions/setup@v2
+        with:
+          ghc-version: '9.6.7'
+          cabal-version: 'latest'
+
+      - name: Build complete Haskell substrate
+        run: cabal build all --enable-tests
+
+      - name: Strict typecheck product equality repair and replay
+        shell: bash
+        run: |
+          set -euo pipefail
+          cabal exec -- ghc -isrc -Wall -Werror -fno-code src/Phil/Core/Value.hs
+          cabal exec -- ghc -isrc -Wall -Werror -fno-code test/Phase1AuditProductDefeqMain.hs
+
+      - name: Replay PHIL-AUD-PRODUCT-DEFEQ-001
+        run: cabal exec -- runghc -Wall -Werror -isrc test/Phase1AuditProductDefeqMain.hs
+
+      - name: Replay finite-product and alpha-shadow controls
+        shell: bash
+        run: |
+          set -euo pipefail
+          cabal exec -- runghc -Wall -Werror -isrc test/Phase1FiniteProductMain.hs
+          cabal exec -- runghc -Wall -Werror -isrc test/Phase1AuditAlphaShadowMain.hs
