@@ -28,7 +28,7 @@ import Phil.Core.Refinement
   , bindingEvidencePropositions
   , dischargeProposition
   , dischargePropositionUsing
-  , dischargeSideConditions
+  , dischargeSideConditionsUnder
   , normalizeProposition
   , normalizeRefTerm
   , propositionMentions
@@ -90,7 +90,8 @@ synthValue value state =
       (mode, ty, nextContext) <- mapLeft ValueResourceError $
         useBinding name (resourceContext state)
       mapLeft valueSortError (checkTypeSorts state ty)
-      definednessUses <- checkTypeDefinedness ty state
+      definednessUses <-
+        checkTypeDefinednessWithSubject (Just (RefVar name)) [] ty state
       case ty of
         TyPendingRecv _ -> Left (InternalResourceNotValue name ty)
         _ -> pure ValueResult
@@ -286,21 +287,54 @@ appendEvidenceList additions existing =
       | otherwise = accumulated ++ [evidenceUse]
 
 -- | Discharge type-definedness prerequisites before definitional equality can
--- normalize away the partial term which generated them. Refinement predicates
--- are handled after their binder is instantiated by the existing refinement
--- path; product elements can be checked recursively at this boundary.
+-- normalize away the partial term which generated them. Nested refinements are
+-- checked under their logical binders without turning those binders into
+-- resource bindings or requiring the refinement proposition itself to be true.
+-- When a concrete subject term is available, instantiate the binder first.
 checkTypeDefinedness :: Ty -> CheckState -> Either ValueError [EvidenceUse]
-checkTypeDefinedness ty state =
+checkTypeDefinedness = checkTypeDefinednessWithSubject Nothing []
+
+checkTypeDefinednessWithSubject
+  :: Maybe RefTerm
+  -> [(Name, Ty)]
+  -> Ty
+  -> CheckState
+  -> Either ValueError [EvidenceUse]
+checkTypeDefinednessWithSubject subject logicalBindings ty state =
   case ty of
-    TyBytes index -> sideConditions (Equal index index)
-    TyProof proposition -> sideConditions proposition
+    TyBytes index -> sideConditions logicalBindings (Equal index index)
+    TyProof proposition -> sideConditions logicalBindings proposition
     TyProduct elements ->
-      fmap concat (mapM (\element -> checkTypeDefinedness (productElementType element) state) elements)
-    TyRefined _ base _ -> checkTypeDefinedness base state
+      fmap concat $
+        mapM
+          (\element ->
+            -- An aggregate product subject is not a logical subject for any
+            -- individual element. Element refinements therefore keep their
+            -- own binder scope instead of fabricating a field projection.
+            checkTypeDefinednessWithSubject
+              Nothing
+              logicalBindings
+              (productElementType element)
+              state
+          )
+          elements
+    TyRefined binder base proposition -> do
+      baseUses <-
+        checkTypeDefinednessWithSubject subject logicalBindings base state
+      predicateUses <-
+        case subject of
+          Just term ->
+            sideConditions
+              logicalBindings
+              (substituteProposition binder term proposition)
+          Nothing ->
+            sideConditions ((binder, base) : logicalBindings) proposition
+      pure (baseUses ++ predicateUses)
     _ -> Right []
   where
-    sideConditions proposition =
-      mapLeft ValueRefinementError (dischargeSideConditions proposition state)
+    sideConditions bindings proposition =
+      mapLeft ValueRefinementError $
+        dischargeSideConditionsUnder bindings proposition state
 
 refinementErasesTo :: Ty -> Ty -> Bool
 refinementErasesTo actual expected =
