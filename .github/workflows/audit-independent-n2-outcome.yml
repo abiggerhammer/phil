@@ -1,0 +1,131 @@
+name: Independent N2 and Outcome Audit Replay
+
+on:
+  push:
+    branches: [audit-n2-outcome-independent-replay-20260923]
+    paths:
+      - 'test/audit-independent-n2/**'
+      - '.github/workflows/audit-independent-n2-outcome.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: independent-n2-outcome-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  replay:
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - label: frozen
+            subject: a9f2c745686d8ae1b923e21045554f4864956e76
+            repair: false
+          - label: repair-review
+            subject: 5f8e7e9fd540d8e66ee44b0d96dfe6c901001e50
+            repair: true
+    defaults:
+      run:
+        shell: bash
+        working-directory: subject
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          path: replay
+          ref: ${{ github.sha }}
+          persist-credentials: false
+      - uses: actions/checkout@v4
+        with:
+          path: subject
+          ref: ${{ matrix.subject }}
+          persist-credentials: false
+      - uses: haskell-actions/setup@v2
+        with:
+          ghc-version: '9.6.7'
+          cabal-version: '3.18.1.0'
+      - name: Record exact implementation and published driver inputs
+        run: |
+          set -euo pipefail
+          mkdir -p ../evidence
+          {
+            printf 'subject='; git rev-parse HEAD
+            printf 'drivers='; git -C ../replay rev-parse HEAD
+            ghc --version
+            cabal --version
+            sha256sum ../replay/test/audit-independent-n2/*.hs
+            git status --porcelain
+          } | tee ../evidence/inputs.txt
+          test "$(git rev-parse HEAD)" = '${{ matrix.subject }}'
+          printf '%s  %s\n' 5a51b92fcc6ba43d4f124db709fe91437ed19ea6d527163c60035b8442ca5936 ../replay/test/audit-independent-n2/IntegerN2Controls.hs | sha256sum -c -
+          git diff --exit-code
+          git diff --cached --exit-code
+      - name: Build pinned Haskell substrate
+        id: build
+        run: |
+          set -euo pipefail
+          cabal update 2>&1 | tee ../evidence/cabal-update.log
+          cabal build all --enable-tests 2>&1 | tee ../evidence/build.log
+          git diff --exit-code
+          git diff --cached --exit-code
+      - name: Strictly compile published N2 driver
+        id: compile
+        if: steps.build.outcome == 'success'
+        run: |
+          set -euo pipefail
+          cabal exec -- ghc -Wall -Werror -fno-code -fforce-recomp -isrc ../replay/test/audit-independent-n2/IntegerN2Controls.hs 2>&1 | tee ../evidence/n2-compile.log
+      - name: Execute N2 correctness controls
+        if: steps.compile.outcome == 'success'
+        run: |
+          set -euo pipefail
+          timeout 300 cabal exec -- runghc -isrc ../replay/test/audit-independent-n2/IntegerN2Controls.hs 2>&1 | tee ../evidence/n2-controls.log
+          python3 - <<'PY'
+          from pathlib import Path
+          lines = Path('../evidence/n2-controls.log').read_text().splitlines()
+          assert [x for x in lines if x.startswith('N2_PASS ')] == [f'N2_PASS C{i:02d}' for i in range(1,39)]
+          assert lines.count('N2_DONE 38') == 1
+          assert not any(x.startswith(('N2_FAIL ', 'N2_ERROR ')) for x in lines)
+          PY
+      - name: Execute separately classified N2 observations
+        if: always() && steps.compile.outcome == 'success'
+        run: |
+          set -euo pipefail
+          timeout 120 cabal exec -- runghc -isrc ../replay/test/audit-independent-n2/IntegerN2Controls.hs --observations 2>&1 | tee ../evidence/n2-observations.log
+          python3 - <<'PY'
+          from pathlib import Path
+          lines = Path('../evidence/n2-observations.log').read_text().splitlines()
+          assert [x for x in lines if x.startswith('N2_PASS ')] == ['N2_PASS O01','N2_PASS O02']
+          assert lines.count('N2_DONE 2') == 1
+          assert not any(x.startswith(('N2_FAIL ', 'N2_ERROR ')) for x in lines)
+          PY
+      - name: Replay unchanged permanent numeric controls with warnings retained
+        if: always() && steps.build.outcome == 'success'
+        run: |
+          set -uo pipefail
+          status=0
+          for stem in Phase1NumericConversionMain Phase1IntegerShiftMain; do
+            sha256sum test/${stem}.hs | tee -a ../evidence/permanent-inputs.txt
+            timeout 180 cabal exec -- runghc -Wall -isrc test/${stem}.hs 2>&1 | tee ../evidence/${stem}.log
+            result=${PIPESTATUS[0]}
+            printf '%s\t%s\n' "$stem" "$result" | tee -a ../evidence/permanent-results.tsv
+            if [ "$result" -ne 0 ]; then status=1; fi
+          done
+          exit "$status"
+      - name: Replay unchanged outcome carrier repair controls with warnings retained
+        if: always() && matrix.repair && steps.build.outcome == 'success'
+        run: |
+          set -euo pipefail
+          sha256sum test/Phase1AuditOutcomeCarrierStructuralMain.hs | tee ../evidence/outcome-inputs.txt
+          timeout 180 cabal exec -- runghc -Wall -isrc test/Phase1AuditOutcomeCarrierStructuralMain.hs 2>&1 | tee ../evidence/outcome-permanent.log
+      - name: Upload raw evidence even on failure
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: independent-n2-outcome-${{ matrix.label }}-${{ github.run_id }}-${{ github.run_attempt }}
+          path: evidence/
+          if-no-files-found: error
+          retention-days: 30
