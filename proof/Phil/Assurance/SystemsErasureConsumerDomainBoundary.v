@@ -172,7 +172,8 @@ Proof.
       exists 101, 201, 301, 401.
       repeat split; try reflexivity.
       discriminate.
-    + simpl [twoConsumerDomain, Hone] in Hactual.
+    + rewrite Hone in Hactual.
+      cbn in Hactual.
       apply Nat.eqb_eq in Hactual.
       subst key.
       exists 102, 202, 302, 402.
