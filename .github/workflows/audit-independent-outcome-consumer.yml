@@ -1,0 +1,120 @@
+name: Independent Outcome Consumer Review
+
+on:
+  push:
+    branches: [audit-n2-outcome-independent-replay-20260923]
+    paths:
+      - 'test/audit-outcome-review/**'
+      - '.github/workflows/audit-independent-outcome-consumer.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: independent-outcome-consumer-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  outcome-consumer:
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+    defaults:
+      run:
+        shell: bash
+        working-directory: subject
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          path: replay
+          ref: ${{ github.sha }}
+          persist-credentials: false
+      - uses: actions/checkout@v4
+        with:
+          path: subject
+          ref: 5f8e7e9fd540d8e66ee44b0d96dfe6c901001e50
+          persist-credentials: false
+      - uses: haskell-actions/setup@v2
+        with:
+          ghc-version: '9.6.7'
+          cabal-version: '3.18.1.0'
+      - name: Record exact production and fixture inputs
+        run: |
+          set -euo pipefail
+          mkdir -p ../evidence ../audit-fixtures
+          {
+            printf 'subject='; git rev-parse HEAD
+            printf 'drivers='; git -C ../replay rev-parse HEAD
+            ghc --version
+            cabal --version
+            sha256sum ../replay/test/audit-outcome-review/OutcomeConsumerReview.hs
+            git hash-object test/Phase1AuditOutcomeCarrierStructuralMain.hs
+            git status --porcelain
+          } | tee ../evidence/inputs.txt
+          test "$(git rev-parse HEAD)" = 5f8e7e9fd540d8e66ee44b0d96dfe6c901001e50
+          test "$(git hash-object test/Phase1AuditOutcomeCarrierStructuralMain.hs)" = 218837205fa7f173395c66ab14eb5f7656d88b2d
+          python3 - <<'PY'
+          from pathlib import Path
+          import difflib, hashlib
+          src = Path('test/Phase1AuditOutcomeCarrierStructuralMain.hs').read_bytes()
+          old = b'module Main (main) where'
+          new = b'module CarrierFixture where'
+          assert src.count(old) == 1
+          converted = src.replace(old,new)
+          Path('../audit-fixtures/CarrierFixture.hs').write_bytes(converted)
+          Path('../evidence/permanent-fixture.original.hs').write_bytes(src)
+          Path('../evidence/CarrierFixture.hs').write_bytes(converted)
+          Path('../evidence/fixture-header-only.diff').write_text(''.join(difflib.unified_diff(src.decode().splitlines(True),converted.decode().splitlines(True),fromfile='permanent.original',tofile='audit.CarrierFixture')))
+          print('original_sha256=' + hashlib.sha256(src).hexdigest())
+          print('fixture_sha256=' + hashlib.sha256(converted).hexdigest())
+          PY
+          git diff --exit-code
+      - name: Build pinned Haskell substrate
+        id: build
+        run: |
+          set -euo pipefail
+          cabal update 2>&1 | tee ../evidence/cabal-update.log
+          cabal build all --enable-tests 2>&1 | tee ../evidence/build.log
+          git diff --exit-code
+      - name: Strictly compile independent outcome driver
+        id: compile
+        if: steps.build.outcome == 'success'
+        run: |
+          set -euo pipefail
+          cabal exec -- ghc -Wall -Werror -fno-code -fforce-recomp -isrc -i../audit-fixtures ../replay/test/audit-outcome-review/OutcomeConsumerReview.hs 2>&1 | tee ../evidence/outcome-compile.log
+      - name: Characterize current producer-consumer behavior (not repair correctness)
+        if: steps.compile.outcome == 'success'
+        run: |
+          set -euo pipefail
+          timeout 180 cabal exec -- runghc -isrc -i../audit-fixtures ../replay/test/audit-outcome-review/OutcomeConsumerReview.hs --characterize 2>&1 | tee ../evidence/outcome-characterize.log
+          python3 - <<'PY'
+          from pathlib import Path
+          import re
+          lines = Path('../evidence/outcome-characterize.log').read_text().splitlines()
+          assert len([x for x in lines if re.match(r'^CHECK C[0-9]{2}-.* PASS ', x)]) == 6
+          assert len([x for x in lines if re.match(r'^CHAR R[0-9]{2}-.* MATCH ', x)]) == 6
+          assert lines.count('OUTCOME_DONE 12') == 1
+          assert not any(x.startswith('SETUP_ERROR') or ' FAIL ' in x for x in lines)
+          PY
+      - name: Replay unchanged permanent carrier and CALL-019 compatibility suites
+        if: always() && steps.build.outcome == 'success'
+        run: |
+          set -uo pipefail
+          status=0
+          for stem in Phase1AuditOutcomeCarrierStructuralMain Phase1CALL019OutcomeBranchResourceApplyMain Phase1CALL019OutcomeBranchResourceInstallMain Phase1CALL019SurfaceArmResourceResidueMain Phase1CALL019SurfaceArmProofBindingsMain Phase1CALL019SurfaceDecisionBridgeMain; do
+            sha256sum test/${stem}.hs | tee -a ../evidence/permanent-inputs.txt
+            timeout 180 cabal exec -- runghc -Wall -isrc test/${stem}.hs 2>&1 | tee ../evidence/${stem}.log
+            result=${PIPESTATUS[0]}
+            printf '%s\t%s\n' "$stem" "$result" | tee -a ../evidence/permanent-results.tsv
+            if [ "$result" -ne 0 ]; then status=1; fi
+          done
+          git diff --exit-code || status=1
+          exit "$status"
+      - name: Upload raw evidence even on failure
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: independent-outcome-consumer-${{ github.run_id }}-${{ github.run_attempt }}
+          path: evidence/
+          if-no-files-found: error
+          retention-days: 30
