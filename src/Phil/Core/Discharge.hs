@@ -364,7 +364,7 @@ validateRuntimeBinding
 validateRuntimeBinding staticContext state obligation requirement binding = do
   let expectedId = obligationId obligation
       expectedPoint = obligationRequiredPoint obligation
-      expectedProposition = focusedCanonical requirement
+  expectedProposition <- canonicalize (focusedOriginal requirement)
   if runtimeObligationId binding /= expectedId
     then Left (RuntimeBindingIdMismatch expectedId (runtimeObligationId binding))
     else Right ()
@@ -403,7 +403,9 @@ validateExportBinding
 validateExportBinding staticContext state obligation requirement binding = do
   let expectedId = obligationId obligation
       expectedPoint = obligationRequiredPoint obligation
-      expectedProposition = focusedCanonical requirement
+  expectedProposition <-
+    fst <$> mapLeft DischargeFocusingError
+      (canonicalizeProposition staticContext state (focusedOriginal requirement))
   if exportObligationId binding /= expectedId
     then Left (ExportBindingIdMismatch expectedId (exportObligationId binding))
     else Right ()
