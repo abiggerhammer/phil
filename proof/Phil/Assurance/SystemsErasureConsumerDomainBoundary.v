@@ -165,21 +165,20 @@ Proof.
   - intro key.
     split; intro H; exact H.
   - intros key Hactual.
+    change (twoConsumerDomain key = true) in Hactual.
     unfold twoConsumerDomain in Hactual.
-    destruct (Nat.eqb key 1) eqn:Hone.
+    apply orb_true_iff in Hactual.
+    destruct Hactual as [Hone | Htwo].
     + apply Nat.eqb_eq in Hone.
       subst key.
       exists 101, 201, 301, 401.
       repeat split; try reflexivity.
       discriminate.
-    + destruct (Nat.eqb key 2) eqn:Htwo.
-      * apply Nat.eqb_eq in Htwo.
-        subst key.
-        exists 102, 202, 302, 402.
-        repeat split; try reflexivity.
-        discriminate.
-      * cbn in Hactual.
-        discriminate.
+    + apply Nat.eqb_eq in Htwo.
+      subst key.
+      exists 102, 202, 302, 402.
+      repeat split; try reflexivity.
+      discriminate.
   - intros key Hactual.
     exact Hactual.
 Qed.
