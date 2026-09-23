@@ -61,7 +61,7 @@ truth label yes = unless yes (Left (Mismatch label))
 setup :: Show a => Either a b -> Either Failure b
 setup = either (Left . Setup . show) Right
 expectRight :: Show a => Either a b -> Either Failure b
-expectRight = either (Left . Mismatch . ("expected success, got ") . show) Right
+expectRight = either (Left . Mismatch . ("expected success, got " ++) . show) Right
 
 uFits :: Int -> Integer -> Bool
 uFits w n = w > 0 && 0 <= n && n < 2 ^ w
