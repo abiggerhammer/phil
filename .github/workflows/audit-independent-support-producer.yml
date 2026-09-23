@@ -58,6 +58,7 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
+          cabal update 2>&1 | tee ../evidence/dependency-index.log
           cabal build all --enable-tests 2>&1 | tee ../evidence/build.log
       - name: Strict compile external audit driver
         working-directory: subject
