@@ -58,6 +58,7 @@ Proof.
     simpl. left. reflexivity.
   }
   specialize (Hreflect Hin).
+  unfold PreviousDecisionShapeSupport in Hreflect.
   inversion Hreflect.
 Qed.
 
@@ -83,7 +84,9 @@ Proof.
     | source' target sources' targets Hsubject Htail ];
     subst.
   exists target, targets.
-  repeat split; assumption || reflexivity.
+  split.
+  - reflexivity.
+  - split; assumption.
 Qed.
 
 Theorem validation_support_exports_when_both_subjects_survive :
@@ -117,7 +120,7 @@ Proof.
   destruct
     (export_support_cons_inv
       survivors [] context [subject] exported Hexport)
-    as [contextTarget [tail [Hexposed [_ Hrest]]]].
+    as [contextTarget [tail [_ [_ Hrest]]]].
   destruct
     (export_support_cons_inv
       survivors [] subject [] tail Hrest)
