@@ -1,0 +1,58 @@
+name: Phase 1 Audit Evidence Consumer Subject Transport
+
+on:
+  pull_request:
+    paths:
+      - 'proof/Phil/Surface/BranchEvidenceSupport.v'
+      - 'proof/Phil/Assurance/EvidenceConsumerSubjectTransport.v'
+      - 'docs/phase-1/audit-evidence-consumer-subject-transport-v1.md'
+      - '.github/workflows/phase1-audit-evidence-consumer-subject-transport.yml'
+  push:
+    branches: [main]
+    paths:
+      - 'proof/Phil/Surface/BranchEvidenceSupport.v'
+      - 'proof/Phil/Assurance/EvidenceConsumerSubjectTransport.v'
+      - 'docs/phase-1/audit-evidence-consumer-subject-transport-v1.md'
+      - '.github/workflows/phase1-audit-evidence-consumer-subject-transport.yml'
+
+permissions:
+  contents: read
+
+jobs:
+  evidence-consumer-subject-transport:
+    runs-on: ubuntu-latest
+    container:
+      image: rocq/rocq-prover:9.2.0
+      options: --user root
+    steps:
+      - uses: actions/checkout@v4
+      - name: Compile branch support and evidence-consumer subject transport proofs
+        shell: bash
+        run: |
+          set -euo pipefail
+          export PATH="/home/rocq/.opam/${COMPILER}/bin:$PATH"
+          rocq c -Q proof/Phil Phil proof/Phil/Surface/BranchEvidenceSupport.v
+          rocq c -Q proof/Phil Phil proof/Phil/Assurance/EvidenceConsumerSubjectTransport.v
+      - name: Record exact proof identity
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p evidence-consumer-subject-transport
+          cp \
+            proof/Phil/Surface/BranchEvidenceSupport.v \
+            proof/Phil/Surface/BranchEvidenceSupport.vo \
+            proof/Phil/Assurance/EvidenceConsumerSubjectTransport.v \
+            proof/Phil/Assurance/EvidenceConsumerSubjectTransport.vo \
+            evidence-consumer-subject-transport/
+          sha256sum \
+            evidence-consumer-subject-transport/BranchEvidenceSupport.v \
+            evidence-consumer-subject-transport/BranchEvidenceSupport.vo \
+            evidence-consumer-subject-transport/EvidenceConsumerSubjectTransport.v \
+            evidence-consumer-subject-transport/EvidenceConsumerSubjectTransport.vo \
+            > evidence-consumer-subject-transport/D-RES-SUPPORT-01.evidence-consumer-subject-transport.proof.sha256
+          cat evidence-consumer-subject-transport/D-RES-SUPPORT-01.evidence-consumer-subject-transport.proof.sha256
+      - uses: actions/upload-artifact@v4
+        with:
+          name: evidence-consumer-subject-transport-proof
+          path: evidence-consumer-subject-transport
+          if-no-files-found: error
