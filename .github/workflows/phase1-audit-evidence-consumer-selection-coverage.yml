@@ -1,0 +1,72 @@
+name: Phase 1 Audit Evidence Consumer Selection Coverage
+
+on:
+  pull_request:
+    paths:
+      - 'proof/Phil/Surface/BranchEvidenceSupport.v'
+      - 'proof/Phil/Assurance/EvidenceConsumerSubjectTransport.v'
+      - 'proof/Phil/Assurance/EvidenceConsumerEndpointCoverage.v'
+      - 'proof/Phil/Assurance/EvidenceConsumerSelectionCoverage.v'
+      - 'docs/phase-1/audit-evidence-consumer-selection-coverage-v1.md'
+      - '.github/workflows/phase1-audit-evidence-consumer-selection-coverage.yml'
+  push:
+    branches: [main]
+    paths:
+      - 'proof/Phil/Surface/BranchEvidenceSupport.v'
+      - 'proof/Phil/Assurance/EvidenceConsumerSubjectTransport.v'
+      - 'proof/Phil/Assurance/EvidenceConsumerEndpointCoverage.v'
+      - 'proof/Phil/Assurance/EvidenceConsumerSelectionCoverage.v'
+      - 'docs/phase-1/audit-evidence-consumer-selection-coverage-v1.md'
+      - '.github/workflows/phase1-audit-evidence-consumer-selection-coverage.yml'
+
+permissions:
+  contents: read
+
+jobs:
+  evidence-consumer-selection-coverage:
+    runs-on: ubuntu-latest
+    container:
+      image: rocq/rocq-prover:9.2.0
+      options: --user root
+    steps:
+      - uses: actions/checkout@v4
+      - name: Compile subject transport, endpoint coverage, and selection coverage proofs
+        shell: bash
+        run: |
+          set -euo pipefail
+          export PATH="/home/rocq/.opam/${COMPILER}/bin:$PATH"
+          rocq c -Q proof/Phil Phil proof/Phil/Surface/BranchEvidenceSupport.v
+          rocq c -Q proof/Phil Phil proof/Phil/Assurance/EvidenceConsumerSubjectTransport.v
+          rocq c -Q proof/Phil Phil proof/Phil/Assurance/EvidenceConsumerEndpointCoverage.v
+          rocq c -Q proof/Phil Phil proof/Phil/Assurance/EvidenceConsumerSelectionCoverage.v
+      - name: Record exact proof identity
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p evidence-consumer-selection-coverage
+          cp \
+            proof/Phil/Surface/BranchEvidenceSupport.v \
+            proof/Phil/Surface/BranchEvidenceSupport.vo \
+            proof/Phil/Assurance/EvidenceConsumerSubjectTransport.v \
+            proof/Phil/Assurance/EvidenceConsumerSubjectTransport.vo \
+            proof/Phil/Assurance/EvidenceConsumerEndpointCoverage.v \
+            proof/Phil/Assurance/EvidenceConsumerEndpointCoverage.vo \
+            proof/Phil/Assurance/EvidenceConsumerSelectionCoverage.v \
+            proof/Phil/Assurance/EvidenceConsumerSelectionCoverage.vo \
+            evidence-consumer-selection-coverage/
+          sha256sum \
+            evidence-consumer-selection-coverage/BranchEvidenceSupport.v \
+            evidence-consumer-selection-coverage/BranchEvidenceSupport.vo \
+            evidence-consumer-selection-coverage/EvidenceConsumerSubjectTransport.v \
+            evidence-consumer-selection-coverage/EvidenceConsumerSubjectTransport.vo \
+            evidence-consumer-selection-coverage/EvidenceConsumerEndpointCoverage.v \
+            evidence-consumer-selection-coverage/EvidenceConsumerEndpointCoverage.vo \
+            evidence-consumer-selection-coverage/EvidenceConsumerSelectionCoverage.v \
+            evidence-consumer-selection-coverage/EvidenceConsumerSelectionCoverage.vo \
+            > evidence-consumer-selection-coverage/D-RES-SUPPORT-01.consumer-selection-coverage.proof.sha256
+          cat evidence-consumer-selection-coverage/D-RES-SUPPORT-01.consumer-selection-coverage.proof.sha256
+      - uses: actions/upload-artifact@v4
+        with:
+          name: evidence-consumer-selection-coverage-proof
+          path: evidence-consumer-selection-coverage
+          if-no-files-found: error
