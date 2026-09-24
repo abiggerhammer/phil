@@ -190,10 +190,12 @@ Theorem final_use_correspondence_distinguishes_event_reuse_and_omission :
   CompleteEvidenceConsumerFinalUseCorrespondence
     stableSameEventFinalUseWitness.
 Proof.
-  repeat split.
+  split.
   - intros [_ Hfinal].
     exact (wrong_event_final_use_lacks_same_event_preservation Hfinal).
-  - exact omitted_final_use_lacks_same_event_preservation.
-  - exact checked_closed_same_event_has_complete_final_correspondence.
-  - exact stable_same_event_has_complete_final_correspondence.
+  - split.
+    + exact omitted_final_use_lacks_same_event_preservation.
+    + split.
+      * exact checked_closed_same_event_has_complete_final_correspondence.
+      * exact stable_same_event_has_complete_final_correspondence.
 Qed.
