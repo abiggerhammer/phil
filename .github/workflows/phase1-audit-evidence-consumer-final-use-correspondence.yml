@@ -1,0 +1,86 @@
+name: Phase 1 Audit Evidence Consumer Final Use Correspondence
+
+on:
+  pull_request:
+    paths:
+      - 'proof/Phil/Surface/BranchEvidenceSupport.v'
+      - 'proof/Phil/Assurance/EvidenceConsumerSubjectTransport.v'
+      - 'proof/Phil/Assurance/EvidenceConsumerEndpointCoverage.v'
+      - 'proof/Phil/Assurance/EvidenceConsumerSelectionCoverage.v'
+      - 'proof/Phil/Assurance/EvidenceConsumerUseClassification.v'
+      - 'proof/Phil/Assurance/EvidenceConsumerFinalUseCorrespondence.v'
+      - 'docs/phase-1/audit-evidence-consumer-final-use-correspondence-v1.md'
+      - '.github/workflows/phase1-audit-evidence-consumer-final-use-correspondence.yml'
+  push:
+    branches: [main]
+    paths:
+      - 'proof/Phil/Surface/BranchEvidenceSupport.v'
+      - 'proof/Phil/Assurance/EvidenceConsumerSubjectTransport.v'
+      - 'proof/Phil/Assurance/EvidenceConsumerEndpointCoverage.v'
+      - 'proof/Phil/Assurance/EvidenceConsumerSelectionCoverage.v'
+      - 'proof/Phil/Assurance/EvidenceConsumerUseClassification.v'
+      - 'proof/Phil/Assurance/EvidenceConsumerFinalUseCorrespondence.v'
+      - 'docs/phase-1/audit-evidence-consumer-final-use-correspondence-v1.md'
+      - '.github/workflows/phase1-audit-evidence-consumer-final-use-correspondence.yml'
+
+permissions:
+  contents: read
+
+jobs:
+  evidence-consumer-final-use-correspondence:
+    runs-on: ubuntu-latest
+    container:
+      image: rocq/rocq-prover:9.2.0
+      options: --user root
+    steps:
+      - uses: actions/checkout@v4
+      - name: Compile final-use correspondence proofs
+        shell: bash
+        run: |
+          set -euo pipefail
+          export PATH="/home/rocq/.opam/${COMPILER}/bin:$PATH"
+          rocq c -Q proof/Phil Phil proof/Phil/Surface/BranchEvidenceSupport.v
+          rocq c -Q proof/Phil Phil proof/Phil/Assurance/EvidenceConsumerSubjectTransport.v
+          rocq c -Q proof/Phil Phil proof/Phil/Assurance/EvidenceConsumerEndpointCoverage.v
+          rocq c -Q proof/Phil Phil proof/Phil/Assurance/EvidenceConsumerSelectionCoverage.v
+          rocq c -Q proof/Phil Phil proof/Phil/Assurance/EvidenceConsumerUseClassification.v
+          rocq c -Q proof/Phil Phil proof/Phil/Assurance/EvidenceConsumerFinalUseCorrespondence.v
+      - name: Record exact proof identity
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p evidence-consumer-final-use-correspondence
+          cp \
+            proof/Phil/Surface/BranchEvidenceSupport.v \
+            proof/Phil/Surface/BranchEvidenceSupport.vo \
+            proof/Phil/Assurance/EvidenceConsumerSubjectTransport.v \
+            proof/Phil/Assurance/EvidenceConsumerSubjectTransport.vo \
+            proof/Phil/Assurance/EvidenceConsumerEndpointCoverage.v \
+            proof/Phil/Assurance/EvidenceConsumerEndpointCoverage.vo \
+            proof/Phil/Assurance/EvidenceConsumerSelectionCoverage.v \
+            proof/Phil/Assurance/EvidenceConsumerSelectionCoverage.vo \
+            proof/Phil/Assurance/EvidenceConsumerUseClassification.v \
+            proof/Phil/Assurance/EvidenceConsumerUseClassification.vo \
+            proof/Phil/Assurance/EvidenceConsumerFinalUseCorrespondence.v \
+            proof/Phil/Assurance/EvidenceConsumerFinalUseCorrespondence.vo \
+            evidence-consumer-final-use-correspondence/
+          sha256sum \
+            evidence-consumer-final-use-correspondence/BranchEvidenceSupport.v \
+            evidence-consumer-final-use-correspondence/BranchEvidenceSupport.vo \
+            evidence-consumer-final-use-correspondence/EvidenceConsumerSubjectTransport.v \
+            evidence-consumer-final-use-correspondence/EvidenceConsumerSubjectTransport.vo \
+            evidence-consumer-final-use-correspondence/EvidenceConsumerEndpointCoverage.v \
+            evidence-consumer-final-use-correspondence/EvidenceConsumerEndpointCoverage.vo \
+            evidence-consumer-final-use-correspondence/EvidenceConsumerSelectionCoverage.v \
+            evidence-consumer-final-use-correspondence/EvidenceConsumerSelectionCoverage.vo \
+            evidence-consumer-final-use-correspondence/EvidenceConsumerUseClassification.v \
+            evidence-consumer-final-use-correspondence/EvidenceConsumerUseClassification.vo \
+            evidence-consumer-final-use-correspondence/EvidenceConsumerFinalUseCorrespondence.v \
+            evidence-consumer-final-use-correspondence/EvidenceConsumerFinalUseCorrespondence.vo \
+            > evidence-consumer-final-use-correspondence/D-RES-SUPPORT-01.final-use.proof.sha256
+          cat evidence-consumer-final-use-correspondence/D-RES-SUPPORT-01.final-use.proof.sha256
+      - uses: actions/upload-artifact@v4
+        with:
+          name: evidence-consumer-final-use-correspondence-proof
+          path: evidence-consumer-final-use-correspondence
+          if-no-files-found: error
