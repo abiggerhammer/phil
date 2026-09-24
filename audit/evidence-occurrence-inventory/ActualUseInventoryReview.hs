@@ -3,7 +3,6 @@ module Main (main) where
 
 import Control.Monad (foldM, unless)
 import qualified Data.Map.Strict as Map
-import qualified Data.Text as Text
 import qualified Phil.Assurance as A
 import Phil.Core.Checker (CheckState (..), emptyCheckState)
 import Phil.Core.Context (ResourceContext (..), insertBinding)
