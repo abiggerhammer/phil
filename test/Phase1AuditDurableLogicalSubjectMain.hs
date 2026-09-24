@@ -4,6 +4,7 @@ module Main (main) where
 
 import Control.Monad (unless)
 import qualified Data.Map.Strict as Map
+import qualified Data.Text
 import Phil.Core.Checker
   ( CheckState (..)
   , LogicalSubjectSupport (..)
