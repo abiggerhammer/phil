@@ -1,0 +1,100 @@
+name: Phase 1 Audit Evidence Consumer Event Origin Correspondence
+
+on:
+  pull_request:
+    paths:
+      - 'proof/Phil/Surface/BranchEvidenceSupport.v'
+      - 'proof/Phil/Assurance/EvidenceConsumerSubjectTransport.v'
+      - 'proof/Phil/Assurance/EvidenceConsumerEndpointCoverage.v'
+      - 'proof/Phil/Assurance/EvidenceConsumerSelectionCoverage.v'
+      - 'proof/Phil/Assurance/EvidenceConsumerUseClassification.v'
+      - 'proof/Phil/Assurance/EvidenceConsumerFinalUseCorrespondence.v'
+      - 'proof/Phil/Assurance/EvidenceConsumerSubjectOccurrenceCoverage.v'
+      - 'proof/Phil/Assurance/EvidenceConsumerEventOriginCorrespondence.v'
+      - 'docs/phase-1/audit-evidence-consumer-event-origin-correspondence-v1.md'
+      - '.github/workflows/phase1-audit-evidence-consumer-event-origin-correspondence.yml'
+  push:
+    branches: [main]
+    paths:
+      - 'proof/Phil/Surface/BranchEvidenceSupport.v'
+      - 'proof/Phil/Assurance/EvidenceConsumerSubjectTransport.v'
+      - 'proof/Phil/Assurance/EvidenceConsumerEndpointCoverage.v'
+      - 'proof/Phil/Assurance/EvidenceConsumerSelectionCoverage.v'
+      - 'proof/Phil/Assurance/EvidenceConsumerUseClassification.v'
+      - 'proof/Phil/Assurance/EvidenceConsumerFinalUseCorrespondence.v'
+      - 'proof/Phil/Assurance/EvidenceConsumerSubjectOccurrenceCoverage.v'
+      - 'proof/Phil/Assurance/EvidenceConsumerEventOriginCorrespondence.v'
+      - 'docs/phase-1/audit-evidence-consumer-event-origin-correspondence-v1.md'
+      - '.github/workflows/phase1-audit-evidence-consumer-event-origin-correspondence.yml'
+
+permissions:
+  contents: read
+
+jobs:
+  evidence-consumer-event-origin-correspondence:
+    runs-on: ubuntu-latest
+    container:
+      image: rocq/rocq-prover:9.2.0
+      options: --user root
+    steps:
+      - uses: actions/checkout@v4
+      - name: Compile event-origin correspondence proofs
+        shell: bash
+        run: |
+          set -euo pipefail
+          export PATH="/home/rocq/.opam/${COMPILER}/bin:$PATH"
+          rocq c -Q proof/Phil Phil proof/Phil/Surface/BranchEvidenceSupport.v
+          rocq c -Q proof/Phil Phil proof/Phil/Assurance/EvidenceConsumerSubjectTransport.v
+          rocq c -Q proof/Phil Phil proof/Phil/Assurance/EvidenceConsumerEndpointCoverage.v
+          rocq c -Q proof/Phil Phil proof/Phil/Assurance/EvidenceConsumerSelectionCoverage.v
+          rocq c -Q proof/Phil Phil proof/Phil/Assurance/EvidenceConsumerUseClassification.v
+          rocq c -Q proof/Phil Phil proof/Phil/Assurance/EvidenceConsumerFinalUseCorrespondence.v
+          rocq c -Q proof/Phil Phil proof/Phil/Assurance/EvidenceConsumerSubjectOccurrenceCoverage.v
+          rocq c -Q proof/Phil Phil proof/Phil/Assurance/EvidenceConsumerEventOriginCorrespondence.v
+      - name: Record exact proof identity
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p evidence-consumer-event-origin-correspondence
+          cp \
+            proof/Phil/Surface/BranchEvidenceSupport.v \
+            proof/Phil/Surface/BranchEvidenceSupport.vo \
+            proof/Phil/Assurance/EvidenceConsumerSubjectTransport.v \
+            proof/Phil/Assurance/EvidenceConsumerSubjectTransport.vo \
+            proof/Phil/Assurance/EvidenceConsumerEndpointCoverage.v \
+            proof/Phil/Assurance/EvidenceConsumerEndpointCoverage.vo \
+            proof/Phil/Assurance/EvidenceConsumerSelectionCoverage.v \
+            proof/Phil/Assurance/EvidenceConsumerSelectionCoverage.vo \
+            proof/Phil/Assurance/EvidenceConsumerUseClassification.v \
+            proof/Phil/Assurance/EvidenceConsumerUseClassification.vo \
+            proof/Phil/Assurance/EvidenceConsumerFinalUseCorrespondence.v \
+            proof/Phil/Assurance/EvidenceConsumerFinalUseCorrespondence.vo \
+            proof/Phil/Assurance/EvidenceConsumerSubjectOccurrenceCoverage.v \
+            proof/Phil/Assurance/EvidenceConsumerSubjectOccurrenceCoverage.vo \
+            proof/Phil/Assurance/EvidenceConsumerEventOriginCorrespondence.v \
+            proof/Phil/Assurance/EvidenceConsumerEventOriginCorrespondence.vo \
+            evidence-consumer-event-origin-correspondence/
+          sha256sum \
+            evidence-consumer-event-origin-correspondence/BranchEvidenceSupport.v \
+            evidence-consumer-event-origin-correspondence/BranchEvidenceSupport.vo \
+            evidence-consumer-event-origin-correspondence/EvidenceConsumerSubjectTransport.v \
+            evidence-consumer-event-origin-correspondence/EvidenceConsumerSubjectTransport.vo \
+            evidence-consumer-event-origin-correspondence/EvidenceConsumerEndpointCoverage.v \
+            evidence-consumer-event-origin-correspondence/EvidenceConsumerEndpointCoverage.vo \
+            evidence-consumer-event-origin-correspondence/EvidenceConsumerSelectionCoverage.v \
+            evidence-consumer-event-origin-correspondence/EvidenceConsumerSelectionCoverage.vo \
+            evidence-consumer-event-origin-correspondence/EvidenceConsumerUseClassification.v \
+            evidence-consumer-event-origin-correspondence/EvidenceConsumerUseClassification.vo \
+            evidence-consumer-event-origin-correspondence/EvidenceConsumerFinalUseCorrespondence.v \
+            evidence-consumer-event-origin-correspondence/EvidenceConsumerFinalUseCorrespondence.vo \
+            evidence-consumer-event-origin-correspondence/EvidenceConsumerSubjectOccurrenceCoverage.v \
+            evidence-consumer-event-origin-correspondence/EvidenceConsumerSubjectOccurrenceCoverage.vo \
+            evidence-consumer-event-origin-correspondence/EvidenceConsumerEventOriginCorrespondence.v \
+            evidence-consumer-event-origin-correspondence/EvidenceConsumerEventOriginCorrespondence.vo \
+            > evidence-consumer-event-origin-correspondence/D-RES-SUPPORT-01.event-origin.proof.sha256
+          cat evidence-consumer-event-origin-correspondence/D-RES-SUPPORT-01.event-origin.proof.sha256
+      - uses: actions/upload-artifact@v4
+        with:
+          name: evidence-consumer-event-origin-correspondence-proof
+          path: evidence-consumer-event-origin-correspondence
+          if-no-files-found: error
