@@ -33,6 +33,7 @@ import Phil.Core.Checker
   ( CheckState (..)
   , LogicalSubjectSupport (..)
   )
+import Phil.Core.Context (ResourceContext (..))
 import qualified Phil.Core.Discharge as Discharge
 import Phil.Core.Refinement
   ( EvidenceUse (..)
@@ -262,11 +263,31 @@ originalRequiredProposition result =
             Nothing -> Left (OriginalCheckEventSubjectNotVisible binder)
     other -> Left (OriginalCheckEventExpectedRefinement other)
 
+-- | Reuse the exact still-live checked binding when the structural value remains
+-- present after checking.  This preserves the original refined subject type and,
+-- for unrestricted values only, its existing evidence authority.  A consumed
+-- affine or linear owner is never reconstructed: if the returned state no longer
+-- contains the checked binding, the logical root falls back to the refinement's
+-- base type and can only gain stronger typing from exact retained residual
+-- support.
 checkedSubjectBindings :: ValueResult -> Map Name Ty
 checkedSubjectBindings result =
   case (valueResultType result, valueResultTerm result) of
-    (TyRefined _ base _, Just (RefVar name)) -> Map.singleton name base
+    (TyRefined _ base _, Just (RefVar name)) ->
+      Map.singleton name $
+        case checkedLiveBinding result name of
+          Just ty -> ty
+          Nothing -> base
     _ -> Map.empty
+
+checkedLiveBinding :: ValueResult -> Name -> Maybe Ty
+checkedLiveBinding result name =
+  let context = resourceContext (valueResultState result)
+  in case valueResultMode result of
+      Just Unrestricted -> Map.lookup name (unrestrictedBindings context)
+      Just Affine -> Map.lookup name (affineBindings context)
+      Just Linear -> Map.lookup name (linearBindings context)
+      Nothing -> Nothing
 
 validateResidualRecord
   :: CheckState
