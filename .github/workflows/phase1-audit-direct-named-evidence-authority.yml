@@ -1,0 +1,58 @@
+name: Phase 1 Audit Direct Named Evidence Authority
+
+on:
+  pull_request:
+    paths:
+      - 'proof/Phil/Assurance/EvidenceFactAuthority.v'
+      - 'proof/Phil/Assurance/DirectNamedEvidenceAuthority.v'
+      - 'docs/phase-1/audit-direct-named-evidence-authority-v1.md'
+      - '.github/workflows/phase1-audit-direct-named-evidence-authority.yml'
+  push:
+    branches: [main]
+    paths:
+      - 'proof/Phil/Assurance/EvidenceFactAuthority.v'
+      - 'proof/Phil/Assurance/DirectNamedEvidenceAuthority.v'
+      - 'docs/phase-1/audit-direct-named-evidence-authority-v1.md'
+      - '.github/workflows/phase1-audit-direct-named-evidence-authority.yml'
+
+permissions:
+  contents: read
+
+jobs:
+  direct-named-evidence-authority:
+    runs-on: ubuntu-latest
+    container:
+      image: rocq/rocq-prover:9.2.0
+      options: --user root
+    steps:
+      - uses: actions/checkout@v4
+      - name: Compile certificate and direct named-evidence authority proofs
+        shell: bash
+        run: |
+          set -euo pipefail
+          export PATH="/home/rocq/.opam/${COMPILER}/bin:$PATH"
+          rocq c -Q proof/Phil Phil proof/Phil/Assurance/EvidenceFactAuthority.v
+          rocq c -Q proof/Phil Phil proof/Phil/Assurance/DirectNamedEvidenceAuthority.v
+      - name: Record exact proof identity
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p direct-named-evidence-authority
+          cp \
+            proof/Phil/Assurance/EvidenceFactAuthority.v \
+            proof/Phil/Assurance/EvidenceFactAuthority.vo \
+            proof/Phil/Assurance/DirectNamedEvidenceAuthority.v \
+            proof/Phil/Assurance/DirectNamedEvidenceAuthority.vo \
+            direct-named-evidence-authority/
+          sha256sum \
+            direct-named-evidence-authority/EvidenceFactAuthority.v \
+            direct-named-evidence-authority/EvidenceFactAuthority.vo \
+            direct-named-evidence-authority/DirectNamedEvidenceAuthority.v \
+            direct-named-evidence-authority/DirectNamedEvidenceAuthority.vo \
+            > direct-named-evidence-authority/D-CERT-SUPPORT-01.direct-named-authority.proof.sha256
+          cat direct-named-evidence-authority/D-CERT-SUPPORT-01.direct-named-authority.proof.sha256
+      - uses: actions/upload-artifact@v4
+        with:
+          name: direct-named-evidence-authority-proof
+          path: direct-named-evidence-authority
+          if-no-files-found: error
