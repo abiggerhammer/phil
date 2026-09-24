@@ -24,7 +24,7 @@ jobs:
           persist-credentials: false
       - uses: actions/checkout@v4
         with:
-          ref: 7c5340e9f86a57283a1382d5252bcf04b60f5624
+          ref: 4b19228323d151f88e8e7afff850925c2bfbd142
           path: driver
           persist-credentials: false
       - uses: actions/checkout@v4
@@ -46,7 +46,7 @@ jobs:
           git -C historical rev-parse HEAD > evidence/fixture-commit.txt
           printf '%s\n' '${{ github.sha }}' > evidence/workflow-commit.txt
           test "$(cat evidence/subject-commit.txt)" = 55ee6dc454133f1a24bd6df911fbb439209118fc
-          test "$(cat evidence/driver-commit.txt)" = 7c5340e9f86a57283a1382d5252bcf04b60f5624
+          test "$(cat evidence/driver-commit.txt)" = 4b19228323d151f88e8e7afff850925c2bfbd142
           test "$(cat evidence/fixture-commit.txt)" = 1f32aa4ae1aeeaee6db39975b3a86e35adf76890
           git -C subject status --porcelain --untracked-files=all > evidence/subject-status-before.txt
           test ! -s evidence/subject-status-before.txt
