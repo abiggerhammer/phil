@@ -188,8 +188,8 @@ wrongOccurrenceRejected = do
   policy <- runtimeChildPolicy
   let wrong = spec { residualObligationId = ObligationId "audit.other.root" }
   case resolveOriginalCheckEvent emptyStaticContext policy wrong result of
-    Left OriginalCheckEventResidualCoverageMismatch {} -> Right ()
-    Left OriginalCheckEventResidualInventoryMismatch {} -> Right ()
+    Left (OriginalCheckEventResidualCoverageMismatch _ _) -> Right ()
+    Left (OriginalCheckEventResidualInventoryMismatch _ _) -> Right ()
     other -> Left ("wrong occurrence was not rejected by exact coverage: " <> show other)
 
 wrongScopeRejected :: Either String ()
@@ -198,7 +198,7 @@ wrongScopeRejected = do
   policy <- runtimeChildPolicy
   let wrong = spec { residualScope = "audit.other.scope" }
   case resolveOriginalCheckEvent emptyStaticContext policy wrong result of
-    Left OriginalCheckEventResidualMetadataMismatch {} -> Right ()
+    Left (OriginalCheckEventResidualMetadataMismatch _ _ _) -> Right ()
     other -> Left ("wrong scope was not rejected by emitted metadata: " <> show other)
 
 droppedResidualUseRejected :: Either String ()
@@ -215,7 +215,7 @@ droppedResidualUseRejected = do
             ]
         }
   case resolveOriginalCheckEvent emptyStaticContext policy spec tampered of
-    Left OriginalCheckEventResidualInventoryMismatch {} -> Right ()
+    Left (OriginalCheckEventResidualInventoryMismatch _ _) -> Right ()
     other -> Left ("dropped residual use did not fail closed: " <> show other)
 
 staticLiteralRemainsValid :: Either String ()
