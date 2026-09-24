@@ -1,0 +1,85 @@
+name: Phase 1 Audit Evidence Consumer Native Acceptance Reflection
+
+on:
+  pull_request:
+    paths:
+      - 'proof/Phil/Surface/BranchEvidenceSupport.v'
+      - 'proof/Phil/Assurance/EvidenceConsumerSubjectTransport.v'
+      - 'proof/Phil/Assurance/EvidenceConsumerEndpointCoverage.v'
+      - 'proof/Phil/Assurance/EvidenceConsumerSelectionCoverage.v'
+      - 'proof/Phil/Assurance/EvidenceConsumerUseClassification.v'
+      - 'proof/Phil/Assurance/EvidenceConsumerFinalUseCorrespondence.v'
+      - 'proof/Phil/Assurance/EvidenceConsumerSubjectOccurrenceCoverage.v'
+      - 'proof/Phil/Assurance/EvidenceConsumerEventOriginCorrespondence.v'
+      - 'proof/Phil/Assurance/EvidenceConsumerSemanticEndpointAuthority.v'
+      - 'proof/Phil/Assurance/EvidenceConsumerOccurrenceFinalAuthority.v'
+      - 'proof/Phil/Assurance/EvidenceConsumerNativeAcceptanceReflection.v'
+      - 'docs/phase-1/audit-evidence-consumer-native-acceptance-reflection-v1.md'
+      - '.github/workflows/phase1-audit-evidence-consumer-native-acceptance-reflection.yml'
+  push:
+    branches: [main]
+    paths:
+      - 'proof/Phil/Surface/BranchEvidenceSupport.v'
+      - 'proof/Phil/Assurance/EvidenceConsumerSubjectTransport.v'
+      - 'proof/Phil/Assurance/EvidenceConsumerEndpointCoverage.v'
+      - 'proof/Phil/Assurance/EvidenceConsumerSelectionCoverage.v'
+      - 'proof/Phil/Assurance/EvidenceConsumerUseClassification.v'
+      - 'proof/Phil/Assurance/EvidenceConsumerFinalUseCorrespondence.v'
+      - 'proof/Phil/Assurance/EvidenceConsumerSubjectOccurrenceCoverage.v'
+      - 'proof/Phil/Assurance/EvidenceConsumerEventOriginCorrespondence.v'
+      - 'proof/Phil/Assurance/EvidenceConsumerSemanticEndpointAuthority.v'
+      - 'proof/Phil/Assurance/EvidenceConsumerOccurrenceFinalAuthority.v'
+      - 'proof/Phil/Assurance/EvidenceConsumerNativeAcceptanceReflection.v'
+      - 'docs/phase-1/audit-evidence-consumer-native-acceptance-reflection-v1.md'
+      - '.github/workflows/phase1-audit-evidence-consumer-native-acceptance-reflection.yml'
+
+permissions:
+  contents: read
+
+jobs:
+  evidence-consumer-native-acceptance-reflection:
+    runs-on: ubuntu-latest
+    container:
+      image: rocq/rocq-prover:9.2.0
+      options: --user root
+    steps:
+      - uses: actions/checkout@v4
+      - name: Compile native acceptance reflection proofs
+        shell: bash
+        run: |
+          set -euo pipefail
+          export PATH="/home/rocq/.opam/${COMPILER}/bin:$PATH"
+          rocq c -Q proof/Phil Phil proof/Phil/Surface/BranchEvidenceSupport.v
+          rocq c -Q proof/Phil Phil proof/Phil/Assurance/EvidenceConsumerSubjectTransport.v
+          rocq c -Q proof/Phil Phil proof/Phil/Assurance/EvidenceConsumerEndpointCoverage.v
+          rocq c -Q proof/Phil Phil proof/Phil/Assurance/EvidenceConsumerSelectionCoverage.v
+          rocq c -Q proof/Phil Phil proof/Phil/Assurance/EvidenceConsumerUseClassification.v
+          rocq c -Q proof/Phil Phil proof/Phil/Assurance/EvidenceConsumerFinalUseCorrespondence.v
+          rocq c -Q proof/Phil Phil proof/Phil/Assurance/EvidenceConsumerSubjectOccurrenceCoverage.v
+          rocq c -Q proof/Phil Phil proof/Phil/Assurance/EvidenceConsumerEventOriginCorrespondence.v
+          rocq c -Q proof/Phil Phil proof/Phil/Assurance/EvidenceConsumerSemanticEndpointAuthority.v
+          rocq c -Q proof/Phil Phil proof/Phil/Assurance/EvidenceConsumerOccurrenceFinalAuthority.v
+          rocq c -Q proof/Phil Phil proof/Phil/Assurance/EvidenceConsumerNativeAcceptanceReflection.v
+      - name: Record exact proof identity
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p evidence-consumer-native-acceptance-reflection
+          cp \
+            proof/Phil/Assurance/EvidenceConsumerOccurrenceFinalAuthority.v \
+            proof/Phil/Assurance/EvidenceConsumerOccurrenceFinalAuthority.vo \
+            proof/Phil/Assurance/EvidenceConsumerNativeAcceptanceReflection.v \
+            proof/Phil/Assurance/EvidenceConsumerNativeAcceptanceReflection.vo \
+            evidence-consumer-native-acceptance-reflection/
+          sha256sum \
+            evidence-consumer-native-acceptance-reflection/EvidenceConsumerOccurrenceFinalAuthority.v \
+            evidence-consumer-native-acceptance-reflection/EvidenceConsumerOccurrenceFinalAuthority.vo \
+            evidence-consumer-native-acceptance-reflection/EvidenceConsumerNativeAcceptanceReflection.v \
+            evidence-consumer-native-acceptance-reflection/EvidenceConsumerNativeAcceptanceReflection.vo \
+            > evidence-consumer-native-acceptance-reflection/D-RES-SUPPORT-01.native-acceptance-reflection.proof.sha256
+          cat evidence-consumer-native-acceptance-reflection/D-RES-SUPPORT-01.native-acceptance-reflection.proof.sha256
+      - uses: actions/upload-artifact@v4
+        with:
+          name: evidence-consumer-native-acceptance-reflection-proof
+          path: evidence-consumer-native-acceptance-reflection
+          if-no-files-found: error
