@@ -21,6 +21,7 @@ import Data.Text (Text)
 import qualified Data.Text as Text
 import Phil.Core.Checker
   ( CheckState (..)
+  , LogicalSubjectSupport (..)
   , withObligationLogicalSubjects
   )
 import Phil.Core.Context
@@ -176,7 +177,7 @@ resolveObligation
   -> Either DischargeError ResolvedObligation
 resolveObligation staticContext state policy obligation = do
   let logicalState =
-        maskShadowingLogicalSubjects $
+        maskShadowingLogicalSubjects obligation $
           withObligationLogicalSubjects obligation state
   focusPlan <- mapLeft DischargeFocusingError $
     focusProposition staticContext logicalState (obligationProposition obligation)
@@ -207,11 +208,15 @@ resolveObligation staticContext state policy obligation = do
 
 -- | During resolution of an exact retained obligation, a current resource that
 -- reuses one of the retained logical subject spellings is not occurrence-identical
--- to that subject.  Mask only those colliding resource bindings in this local
--- resolution view.  The caller's real post-consumption resource state is left
--- untouched, while separately named proof bindings remain available as evidence.
-maskShadowingLogicalSubjects :: CheckState -> CheckState
-maskShadowingLogicalSubjects state
+-- to that subject.  Captured unrestricted bindings are the bounded exception:
+-- the public ResourceContext transitions neither consume nor replace them, so
+-- an exact captured unrestricted binding that is still present is the live
+-- original occurrence and may retain its own fact authority.  Captured affine
+-- and linear subjects remain masked after possible consumption, including any
+-- same-spelled unrestricted replacement.  The caller's real resource state is
+-- never changed, and separately named proof bindings remain available.
+maskShadowingLogicalSubjects :: Obligation -> CheckState -> CheckState
+maskShadowingLogicalSubjects obligation state
   | Set.null protected = state
   | otherwise = state
       { resourceContext = context
@@ -222,8 +227,18 @@ maskShadowingLogicalSubjects state
           }
       }
   where
-    protected = Map.keysSet (logicalTypingContext state)
     context = resourceContext state
+    protected =
+      Map.keysSet (logicalTypingContext state) `Set.difference` trustedLiveUnrestricted
+    trustedLiveUnrestricted =
+      case Map.lookup (obligationId obligation) (residualLogicalSubjects state) of
+        Just support
+          | logicalSupportObligation support == obligation ->
+              Map.keysSet $
+                Map.filterWithKey
+                  (\name ty -> Map.lookup name (unrestrictedBindings context) == Just ty)
+                  (logicalSupportUnrestrictedBindings support)
+        _ -> Set.empty
 
 resolvePrerequisites
   :: StaticContext
