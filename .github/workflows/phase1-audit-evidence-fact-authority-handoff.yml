@@ -1,25 +1,35 @@
-name: Phase 1 Audit EvidenceFact Authority Handoff
+name: Phase 1 Audit Evidence Authority Handoff
 
 on:
   pull_request:
     paths:
+      - 'src/Phil/Assurance/Handoff.hs'
       - 'src/Phil/Assurance/EvidenceFactAuthority.hs'
+      - 'src/Phil/Verification/ManifestClosure.hs'
       - 'test/AssuranceEvidenceFactAuthorityMain.hs'
+      - 'test/AssuranceHandoffManifestClosureMain.hs'
+      - 'test/AssuranceDirectNamedEvidenceAuthorityMain.hs'
       - 'docs/phase-1/audit-evidence-fact-authority-handoff-v1.md'
+      - 'docs/phase-1/audit-direct-named-evidence-authority-remediation-v1.md'
       - '.github/workflows/phase1-audit-evidence-fact-authority-handoff.yml'
   push:
     branches: [main]
     paths:
+      - 'src/Phil/Assurance/Handoff.hs'
       - 'src/Phil/Assurance/EvidenceFactAuthority.hs'
+      - 'src/Phil/Verification/ManifestClosure.hs'
       - 'test/AssuranceEvidenceFactAuthorityMain.hs'
+      - 'test/AssuranceHandoffManifestClosureMain.hs'
+      - 'test/AssuranceDirectNamedEvidenceAuthorityMain.hs'
       - 'docs/phase-1/audit-evidence-fact-authority-handoff-v1.md'
+      - 'docs/phase-1/audit-direct-named-evidence-authority-remediation-v1.md'
       - '.github/workflows/phase1-audit-evidence-fact-authority-handoff.yml'
 
 permissions:
   contents: read
 
 jobs:
-  evidence-fact-authority-handoff:
+  evidence-authority-handoff:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
@@ -31,12 +41,21 @@ jobs:
       - name: Build complete Haskell substrate
         run: cabal build all --enable-tests
 
-      - name: Strict typecheck EvidenceFact authority correspondence
+      - name: Strict typecheck evidence authority correspondence
         shell: bash
         run: |
           set -euo pipefail
+          cabal exec -- ghc -isrc -Wall -Werror -fno-code src/Phil/Assurance/Handoff.hs
           cabal exec -- ghc -isrc -Wall -Werror -fno-code src/Phil/Assurance/EvidenceFactAuthority.hs
+          cabal exec -- ghc -isrc -Wall -Werror -fno-code src/Phil/Verification/ManifestClosure.hs
           cabal exec -- ghc -isrc -Wall -Werror -fno-code test/AssuranceEvidenceFactAuthorityMain.hs
+          cabal exec -- ghc -isrc -Wall -Werror -fno-code test/AssuranceHandoffManifestClosureMain.hs
+          cabal exec -- ghc -isrc -Wall -Werror -fno-code test/AssuranceDirectNamedEvidenceAuthorityMain.hs
 
-      - name: Replay EvidenceFact authority handoff controls
-        run: cabal exec -- runghc -isrc -Wall -Werror test/AssuranceEvidenceFactAuthorityMain.hs
+      - name: Replay evidence authority handoff controls
+        shell: bash
+        run: |
+          set -euo pipefail
+          cabal exec -- runghc -isrc -Wall -Werror test/AssuranceEvidenceFactAuthorityMain.hs
+          cabal exec -- runghc -isrc -Wall -Werror test/AssuranceHandoffManifestClosureMain.hs
+          cabal exec -- runghc -isrc -Wall -Werror test/AssuranceDirectNamedEvidenceAuthorityMain.hs
