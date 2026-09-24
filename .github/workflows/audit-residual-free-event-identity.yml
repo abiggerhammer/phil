@@ -1,0 +1,111 @@
+name: Audit Residual Free Event Identity
+
+on:
+  push:
+    branches: [audit-durable-subject-independent-20260924]
+    paths: ['.github/workflows/audit-residual-free-event-identity.yml']
+
+permissions:
+  contents: read
+
+concurrency:
+  group: audit-residual-free-event-identity-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  exact-event-contract:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: 91b58ba5a90427b98f9e42935213c1f594c0e751
+          path: subject
+          persist-credentials: false
+      - uses: actions/checkout@v4
+        with:
+          ref: 1a31d6333efbb97deaec509e1ca3cd12a2eb6a11
+          path: driver
+          persist-credentials: false
+      - uses: haskell-actions/setup@v2
+        with:
+          ghc-version: '9.6.7'
+          cabal-version: '3.18.1.0'
+      - name: Verify exact inputs
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p evidence/build evidence/source
+          git -C subject rev-parse HEAD > evidence/subject-commit.txt
+          git -C driver rev-parse HEAD > evidence/driver-commit.txt
+          printf '%s\n' '${{ github.sha }}' > evidence/workflow-commit.txt
+          test "$(cat evidence/subject-commit.txt)" = 91b58ba5a90427b98f9e42935213c1f594c0e751
+          test "$(cat evidence/driver-commit.txt)" = 1a31d6333efbb97deaec509e1ca3cd12a2eb6a11
+          git -C subject status --porcelain --untracked-files=all > evidence/subject-status-before.txt
+          test ! -s evidence/subject-status-before.txt
+          cp driver/audit/residual-free-event-identity/ResidualFreeEventIdentity.hs evidence/
+          test "$(git hash-object evidence/ResidualFreeEventIdentity.hs)" = b68edae5ba743ba3a75961ebe3c0a8a4b14572b2
+          sha256sum evidence/ResidualFreeEventIdentity.hs > evidence/driver.sha256
+          ghc --numeric-version > evidence/ghc-version.txt
+          cabal --numeric-version > evidence/cabal-version.txt
+          for path in src/Phil/Assurance.hs src/Phil/Core/Value.hs src/Phil/Core/Refinement.hs src/Phil/Core/Checker.hs src/Phil/Core/Discharge.hs docs/phase-1/audit-original-event-forest-remediation-v1.md docs/phase-1/audit-original-event-final-closure-remediation-v1.md; do
+            mkdir -p "evidence/source/$(dirname "$path")"
+            cp "subject/$path" "evidence/source/$path"
+            printf '%s %s\n' "$(git -C subject rev-parse "HEAD:$path")" "$path" >> evidence/source-git-blobs.txt
+          done
+      - name: Build and strictly compile the actual API driver
+        working-directory: subject
+        shell: bash
+        run: |
+          set -euo pipefail
+          cabal update 2>&1 | tee ../evidence/dependency-index.log
+          cabal build all --enable-tests 2>&1 | tee ../evidence/build.log
+          cabal exec -- ghc -O0 -Wall -Werror -isrc -outputdir ../evidence/build ../evidence/ResidualFreeEventIdentity.hs -o ../evidence/event-identity 2>&1 | tee ../evidence/compile.log
+      - name: Record controls and separately classified observations
+        shell: bash
+        run: |
+          set -euo pipefail
+          set +e
+          evidence/event-identity > evidence/results.log 2>&1
+          code=$?
+          set -e
+          printf '%s\n' "$code" > evidence/results.exit
+          python3 - <<'PY'
+          import json
+          from pathlib import Path
+          lines=Path('evidence/results.log').read_text().splitlines()
+          rows=[s.split(' ',2) for s in lines if s.startswith(('PASS ','FAIL '))]
+          assert [r[1] for r in rows]==[f'C{i:02d}' for i in range(1,7)],rows
+          assert lines.count('COMPLETE correctness_groups=6 observations=2')==1
+          observations=[s for s in lines if s.startswith('OBS ')]
+          setup=[s for s in lines if s.startswith('OBS_SETUP_ERROR ')]
+          code=int(Path('evidence/results.exit').read_text())
+          result={'production_pin':'91b58ba5a90427b98f9e42935213c1f594c0e751','cases':rows,'observations':observations,'observation_setup_errors':setup,'exit':code,'observation_correctness_credit':0,'unsafe_acceptance_established':False,'source_event_identity_established':False,'release_certified':False}
+          Path('evidence/protocol.json').write_text(json.dumps(result,indent=2)+'\n')
+          print(json.dumps(result,indent=2))
+          assert [s.split(' ',2)[1] for s in observations]==['O01','O02']
+          assert not setup
+          assert code==0 and all(r[0]=='PASS' for r in rows)
+          PY
+      - name: Verify original source state
+        if: always()
+        shell: bash
+        run: |
+          set -euo pipefail
+          git -C subject status --porcelain --untracked-files=all > evidence/subject-status-after.txt
+          test ! -s evidence/subject-status-after.txt
+          test "$(git -C subject rev-parse HEAD)" = 91b58ba5a90427b98f9e42935213c1f594c0e751
+      - name: Preserve complete original measurement
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: residual-free-event-identity-91b58ba5
+          path: |
+            evidence/*.txt
+            evidence/*.sha256
+            evidence/*.log
+            evidence/*.exit
+            evidence/*.json
+            evidence/*.hs
+            evidence/source/
+          if-no-files-found: error
