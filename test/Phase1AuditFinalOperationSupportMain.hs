@@ -219,8 +219,8 @@ mkExport entry = sealed
       { Assurance.exportId = childExportId
       , Assurance.exportDigest = Assurance.Digest ""
       , Assurance.exportObligationRevision = revisionOf entry
-      , Assurance.exportBoundary = exportBoundary
-      , Assurance.exportReplacementObligation =
+      , Assurance.exportDestinationBoundary = exportBoundary
+      , Assurance.exportDerivedObligationId =
           ObligationId "external:audit.final-operation-support.child"
       , Assurance.exportValidityScope = Assurance.ValidityScope Map.empty
       }
