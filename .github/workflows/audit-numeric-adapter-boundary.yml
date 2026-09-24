@@ -1,0 +1,143 @@
+name: Audit Numeric Adapter Boundary
+
+on:
+  push:
+    branches: [audit-evidence-occurrence-inventory-20260924]
+    paths: ['.github/workflows/audit-numeric-adapter-boundary.yml']
+
+permissions:
+  contents: read
+
+concurrency:
+  group: audit-numeric-adapter-boundary-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  pinned-numeric-adapter:
+    runs-on: ubuntu-latest
+    timeout-minutes: 35
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: 91c054904ab8f0076c39f9532dd3d6672b2facff
+          path: subject
+          persist-credentials: false
+      - uses: actions/checkout@v4
+        with:
+          ref: dc41b696e3e849ad2a57d20e299c94134d571b37
+          path: driver
+          persist-credentials: false
+      - uses: haskell-actions/setup@v2
+        with:
+          ghc-version: '9.6.7'
+          cabal-version: '3.18.1.0'
+      - name: Record exact independent inputs and bounded caller inventory
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p evidence/build evidence/source evidence/permanent
+          git -C subject rev-parse HEAD > evidence/subject-commit.txt
+          git -C driver rev-parse HEAD > evidence/driver-commit.txt
+          printf '%s\n' '${{ github.sha }}' > evidence/workflow-commit.txt
+          printf '%s %s\n' '${{ github.run_id }}' '${{ github.run_attempt }}' > evidence/run-attempt.txt
+          test "$(cat evidence/subject-commit.txt)" = 91c054904ab8f0076c39f9532dd3d6672b2facff
+          test "$(cat evidence/driver-commit.txt)" = dc41b696e3e849ad2a57d20e299c94134d571b37
+          git -C subject status --porcelain --untracked-files=all > evidence/subject-status-before.txt
+          test ! -s evidence/subject-status-before.txt
+          cp driver/audit/numeric-adapter-boundary/NumericAdapterBoundary.hs evidence/
+          test "$(git hash-object evidence/NumericAdapterBoundary.hs)" = fc01f949d1bf680504fba298e63007ce3d3b5af6
+          sha256sum evidence/NumericAdapterBoundary.hs > evidence/driver.sha256
+          ghc --numeric-version > evidence/ghc-version.txt
+          cabal --numeric-version > evidence/cabal-version.txt
+          for path in src/Phil/Surface/GrammarV1/NumericConversion.hs src/Phil/Surface/GrammarV1/RuntimeScalar.hs src/Phil/Surface/GrammarV1/Elaborate.hs src/Phil/Surface/GrammarV1/BinderScope.hs src/Phil/Surface/GrammarV1/LexicalReferenceScope.hs src/Phil/Surface/GrammarV1/SemanticBindingState.hs src/Phil/Surface/GrammarV1/UIntArithmetic.hs src/Phil/Surface/GrammarV1/Parser.hs src/Phil/Core/NumericConversion.hs src/Phil/Core/Scalar.hs src/Phil/Core/Value.hs src/Phil/Core/Refinement.hs src/Phil/Core/Context.hs src/Phil/Core/Static.hs; do
+            mkdir -p "evidence/source/$(dirname "$path")"
+            cp "subject/$path" "evidence/source/$path"
+            printf '%s %s\n' "$(git -C subject rev-parse "HEAD:$path")" "$path" >> evidence/source-git-blobs.txt
+          done
+          # Textual inventory of this exact tracked source tree. No match means
+          # no direct spelling in this search, not universal absence of adapters.
+          set +e
+          git -C subject grep -n -E 'GrammarV1NumericEnvironment|evaluateGrammarV1NumericExpression' HEAD -- src > evidence/numeric-source-symbol-inventory.txt
+          scan=$?
+          set -e
+          test "$scan" -le 1
+          printf '%s\n' "$scan" > evidence/numeric-source-symbol-inventory.exit
+      - name: Build exact production substrate
+        working-directory: subject
+        shell: bash
+        run: |
+          set -euo pipefail
+          cabal update 2>&1 | tee ../evidence/dependency-index.log
+          cabal build all --enable-tests 2>&1 | tee ../evidence/build.log
+      - name: Strictly compile the independent actual-producer driver
+        working-directory: subject
+        shell: bash
+        run: |
+          set -euo pipefail
+          cabal exec -- ghc -O0 -Wall -Werror -isrc -outputdir ../evidence/build ../evidence/NumericAdapterBoundary.hs -o ../evidence/numeric-adapter 2>&1 | tee ../evidence/compile.log
+      - name: Require every numeric adapter assertion
+        shell: bash
+        run: |
+          set -euo pipefail
+          set +e
+          evidence/numeric-adapter > evidence/results.log 2>&1
+          status=$?
+          set -e
+          printf '%s\n' "$status" > evidence/results.exit
+          python3 - <<'PY'
+          import json
+          from pathlib import Path
+          lines = Path('evidence/results.log').read_text().splitlines()
+          rows = [line.split(' ',2) for line in lines if line.startswith(('PASS ','FAIL '))]
+          assert [row[1] for row in rows] == [f'C{i:02d}' for i in range(1,17)], rows
+          assert lines.count('COMPLETE numeric_adapter_groups=16') == 1
+          code = int(Path('evidence/results.exit').read_text())
+          assert code in (0,1)
+          assert (code == 0) == all(row[0] == 'PASS' for row in rows)
+          result = {'production_pin':'91c054904ab8f0076c39f9532dd3d6672b2facff',
+                    'cases':rows,'exit':code,'all_required_assertions_passed':code==0,
+                    'numeric_environment_assembly':'audit-owned exact-key join',
+                    'numeric_result_to_core':'audit-owned exact-constructor join',
+                    'general_production_adapter_established':False,
+                    'native_runtime_executed':False,'release_certified':False,
+                    'observation_correctness_credit':0}
+          Path('evidence/protocol.json').write_text(json.dumps(result,indent=2)+'\n')
+          print(json.dumps(result,indent=2))
+          assert code == 0, 'required numeric adapter assertion failed'
+          PY
+      - name: Replay the unchanged permanent conversion suite
+        if: success() || failure()
+        working-directory: subject
+        shell: bash
+        run: |
+          set -euo pipefail
+          cp test/Phase1NumericConversionMain.hs ../evidence/permanent/
+          set +e
+          cabal exec -- runghc -isrc -Wall -Werror test/Phase1NumericConversionMain.hs > ../evidence/permanent/Phase1NumericConversionMain.log 2>&1
+          status=$?
+          set -e
+          printf '%s\n' "$status" > ../evidence/permanent/Phase1NumericConversionMain.exit
+          exit "$status"
+      - name: Verify exact unchanged production checkout
+        if: always()
+        shell: bash
+        run: |
+          set -euo pipefail
+          git -C subject status --porcelain --untracked-files=all > evidence/subject-status-after.txt
+          test ! -s evidence/subject-status-after.txt
+          test "$(git -C subject rev-parse HEAD)" = 91c054904ab8f0076c39f9532dd3d6672b2facff
+      - name: Preserve exact sources and raw evidence including any failure
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: numeric-adapter-boundary-91c05490
+          path: |
+            evidence/*.txt
+            evidence/*.sha256
+            evidence/*.hs
+            evidence/*.log
+            evidence/*.exit
+            evidence/*.json
+            evidence/source/
+            evidence/permanent/
+          if-no-files-found: error
