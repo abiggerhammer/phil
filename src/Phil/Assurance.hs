@@ -1,7 +1,9 @@
 module Phil.Assurance
   ( OriginalCheckEventError (..)
+  , OriginalCheckEventClosureError (..)
   , resolveOriginalCheckEvent
   , handoffOriginalCheckEvent
+  , closeOriginalCheckEventBundle
   , module Phil.Assurance.Types
   , module Phil.Assurance.Handoff
   , module Phil.Assurance.Verify
@@ -18,6 +20,7 @@ import qualified Data.Map.Strict as Map
 import Data.Map.Strict (Map)
 import qualified Data.Set as Set
 import Data.Set (Set)
+import qualified Phil.Assurance.EvidenceFactAuthority as EvidenceAuthority
 import Phil.Assurance.Handoff
 import Phil.Assurance.Phase0
 import Phil.Assurance.Rocq
@@ -50,6 +53,9 @@ import Phil.Core.Syntax
   , Ty (..)
   )
 import Phil.Core.Value (ValueResult (..))
+import Phil.Verification (ApplicationAssurancePolicy)
+import Phil.Verification.Bundle (VerificationBundle)
+import qualified Phil.Verification.ManifestClosure as ManifestClosure
 
 -- | Failure while rebasing one actual residualizing value-check event onto the
 -- resolver/assurance path.  This adapter deliberately starts from the returned
@@ -71,6 +77,16 @@ data OriginalCheckEventError
   | OriginalCheckEventResidualInventoryMismatch (Set ObligationId) (Set ObligationId)
   | OriginalCheckEventResolvedPropositionMismatch ObligationId Proposition Proposition
   | OriginalCheckEventHandoffError HandoffError
+  deriving (Eq, Show)
+
+-- | Failure while taking one actual check event all the way through the
+-- immutable final manifest consumer.  Keep event reconstruction, evidence
+-- authority, and final closure failures distinct so a caller cannot treat a
+-- downstream rejection as permission to rebuild a smaller handoff.
+data OriginalCheckEventClosureError
+  = OriginalCheckEventClosureResolutionError OriginalCheckEventError
+  | OriginalCheckEventClosureAuthorityError EvidenceAuthority.EvidenceFactAuthorityError
+  | OriginalCheckEventClosureManifestError ManifestClosure.ManifestClosureError
   deriving (Eq, Show)
 
 -- | Resolve the exact original check event represented by a residualizing
@@ -172,6 +188,70 @@ handoffOriginalCheckEvent config evidenceIds staticContext policy spec result = 
   resolved <- resolveOriginalCheckEvent staticContext policy spec result
   mapLeft OriginalCheckEventHandoffError $
     handoffResolvedObligationWithEvidence config evidenceIds resolved
+
+-- | Finalize one VerificationBundle from the exact original ValueResult rather
+-- than accepting a caller-supplied handoff forest.  This is the final-consumer
+-- adapter for the original-event rebase: the same resolved tree is first bound
+-- to immutable certificate/direct evidence authority and then passed directly
+-- to 'closeVerificationBundleWithHandoff'.
+--
+-- The caller still supplies architecture-owned evidence identities and final
+-- revision-to-evidence selections, but cannot replace the event-derived
+-- obligation/support forest with a smaller independently reconstructed subset.
+-- Resource ownership comes only from the returned 'ValueResult'; this function
+-- never restores a consumed affine or linear owner.
+closeOriginalCheckEventBundle
+  :: HandoffConfig
+  -> Map (Name, Int) EvidenceAuthority.EvidenceFactAuthorityBinding
+  -> Map (ObligationId, Name) DirectEvidenceAuthorityBinding
+  -> StaticContext
+  -> Discharge.DischargePolicy
+  -> ResidualSpec
+  -> ValueResult
+  -> VerificationBundle
+  -> ApplicationAssurancePolicy
+  -> VerificationContext
+  -> AssuranceLedger
+  -> ManifestClosure.ManifestClosureSelection
+  -> Map RevisionId EvidenceEntryId
+  -> Map RevisionId EvidenceEntryId
+  -> Either OriginalCheckEventClosureError AssuranceManifest
+closeOriginalCheckEventBundle
+    config
+    evidenceAuthorities
+    directAuthorities
+    staticContext
+    dischargePolicy
+    spec
+    result
+    bundle
+    assurancePolicy
+    context
+    ledger
+    selection
+    certificateEvidence
+    directEvidence = do
+  resolved <- mapLeft OriginalCheckEventClosureResolutionError $
+    resolveOriginalCheckEvent staticContext dischargePolicy spec result
+  entries <- mapLeft OriginalCheckEventClosureAuthorityError $
+    EvidenceAuthority.handoffResolvedObligationWithAllEvidenceAuthority
+      config
+      evidenceAuthorities
+      directAuthorities
+      ledger
+      resolved
+  mapLeft OriginalCheckEventClosureManifestError $
+    ManifestClosure.closeVerificationBundleWithHandoff
+      bundle
+      assurancePolicy
+      context
+      ledger
+      selection
+      ManifestClosure.ManifestClosureHandoff
+        { ManifestClosure.manifestClosureHandoffEntries = entries
+        , ManifestClosure.manifestClosureCertificateEvidence = certificateEvidence
+        , ManifestClosure.manifestClosureDirectEvidence = directEvidence
+        }
 
 originalRequiredProposition
   :: ValueResult
