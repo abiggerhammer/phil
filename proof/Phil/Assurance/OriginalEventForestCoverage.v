@@ -1,5 +1,5 @@
 From Stdlib Require Import Bool.Bool Arith.PeanoNat.
-From Phil.Assurance Require Import CheckEventPrerequisiteCoverage.
+From Phil.Assurance Require Import PrerequisiteSupport CheckEventPrerequisiteCoverage.
 
 (*
   Defensive proof-correspondence continuation of the original check-event
