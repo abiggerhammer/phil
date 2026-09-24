@@ -77,6 +77,7 @@ data ManifestClosureError
   | ManifestClosureHandoffSupportMismatch
       (Set (RevisionId, RevisionId))
       (Set (RevisionId, RevisionId))
+  | ManifestClosureHandoffRequiredSupportOutOfScope RevisionId RevisionId
   | ManifestClosureHandoffEvidenceDomainMismatch
       (Set RevisionId)
       (Set RevisionId)
@@ -303,11 +304,14 @@ closeVerificationBundle bundle policy context ledger selection = do
 --
 -- Exactness is intentionally per support-bearing consumer. Resolver-required
 -- prerequisite support is checked even when a parent closes by definition and
--- therefore has no static evidence record. Certificate and direct named-
--- evidence consumers remain in the checked domain even when their obligation
--- support set is empty. Generation lineage is not support; precise evidence
--- dependencies stay in the evidence entry; and unrelated evidence may remain
--- selected for the same manifest.
+-- therefore has no static evidence record. A definitionally discharged parent
+-- credited in the local certification scope must keep every retained
+-- prerequisite in that scope; exporting a required child while retaining the
+-- local parent would otherwise discard the operation-support contract.
+-- Certificate and direct named-evidence consumers remain in the checked domain
+-- even when their obligation support set is empty. Generation lineage is not
+-- support; precise evidence dependencies stay in the evidence entry; and
+-- unrelated evidence may remain selected for the same manifest.
 closeVerificationBundleWithHandoff
   :: VerificationBundle
   -> ApplicationAssurancePolicy
@@ -322,8 +326,10 @@ closeVerificationBundleWithHandoff bundle policy context ledger selection handof
   mapM_ verifyHandoffRevision (Map.toAscList entriesByRevision)
   let certificateEntries = Map.filter isCertificateHandoff entriesByRevision
       directEntries = Map.filter isDirectHandoff entriesByRevision
+      definitionEntries = Map.filter isDefinitionHandoff entriesByRevision
       certificateRevisions = Map.keysSet certificateEntries
       directRevisions = Map.keysSet directEntries
+      definitionRevisions = Map.keysSet definitionEntries
       suppliedEvidenceDomain = Map.keysSet
         (manifestClosureCertificateEvidence handoff)
       suppliedDirectEvidenceDomain = Map.keysSet
@@ -340,6 +346,8 @@ closeVerificationBundleWithHandoff bundle policy context ledger selection handof
         (verificationGraphDependencies graph)
   unless (expectedSupport == actualSupport) $
     Left (ManifestClosureHandoffSupportMismatch expectedSupport actualSupport)
+  mapM_ (verifyDefinitionSupportClosure definitionRevisions)
+    (Set.toAscList expectedSupport)
   unless (certificateRevisions == suppliedEvidenceDomain) $
     Left (ManifestClosureHandoffEvidenceDomainMismatch
       certificateRevisions suppliedEvidenceDomain)
@@ -377,6 +385,18 @@ closeVerificationBundleWithHandoff bundle policy context ledger selection handof
       case Handoff.handoffDisposition entry of
         Discharge.StaticallyDischarged (Discharge.StaticByEvidence _) -> True
         _ -> False
+
+    isDefinitionHandoff entry =
+      case Handoff.handoffDisposition entry of
+        Discharge.StaticallyDischarged Discharge.StaticByDefinition -> True
+        _ -> False
+
+    verifyDefinitionSupportClosure definitionRevisions (consumer, required)
+      | Set.member consumer definitionRevisions
+      , Set.member consumer (verificationGraphCertificationScope graph)
+      , not (Set.member required (verificationGraphCertificationScope graph)) =
+          Left (ManifestClosureHandoffRequiredSupportOutOfScope consumer required)
+      | otherwise = Right ()
 
     supportFor consumers = Set.filter
       (\(consumer, _) -> Set.member consumer consumers)
