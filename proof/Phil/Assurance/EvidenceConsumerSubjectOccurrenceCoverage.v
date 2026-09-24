@@ -360,21 +360,17 @@ Proof.
   unfold twoSubjectOccurrenceEndpoint in Hsource, Htarget.
   destruct (Nat.eqb consumer 7) eqn:Hconsumer.
   - destruct (Nat.eqb occurrence 1) eqn:Hfirst.
-    + rewrite Hconsumer, Hfirst in Hsource, Htarget.
-      inversion Hsource; subst source.
+    + inversion Hsource; subst source.
       inversion Htarget; subst target.
       apply ExportSubject_survives.
       simpl. left. reflexivity.
     + destruct (Nat.eqb occurrence 2) eqn:Hsecond.
-      * rewrite Hconsumer, Hfirst, Hsecond in Hsource, Htarget.
-        inversion Hsource; subst source.
+      * inversion Hsource; subst source.
         inversion Htarget; subst target.
         apply ExportSubject_survives.
         simpl. right. left. reflexivity.
-      * rewrite Hconsumer, Hfirst, Hsecond in Hsource.
-        discriminate Hsource.
-  - rewrite Hconsumer in Hsource.
-    discriminate Hsource.
+      * discriminate Hsource.
+  - discriminate Hsource.
 Qed.
 
 Theorem complete_two_subject_use_has_occurrence_correspondence :
