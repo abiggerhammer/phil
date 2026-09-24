@@ -1,0 +1,48 @@
+name: Phase 1 Audit Evidence Subject Endpoints
+
+on:
+  pull_request:
+    paths:
+      - 'src/Phil/Assurance.hs'
+      - 'test/Phase1AuditEvidenceSubjectEndpointsMain.hs'
+      - 'test/Phase1AuditOriginalEventForestMain.hs'
+      - 'docs/phase-1/audit-evidence-subject-endpoints-remediation-v1.md'
+      - '.github/workflows/phase1-audit-evidence-subject-endpoints.yml'
+  push:
+    branches: [main]
+    paths:
+      - 'src/Phil/Assurance.hs'
+      - 'test/Phase1AuditEvidenceSubjectEndpointsMain.hs'
+      - 'test/Phase1AuditOriginalEventForestMain.hs'
+      - 'docs/phase-1/audit-evidence-subject-endpoints-remediation-v1.md'
+      - '.github/workflows/phase1-audit-evidence-subject-endpoints.yml'
+
+permissions:
+  contents: read
+
+jobs:
+  evidence-subject-endpoint-regression:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: haskell-actions/setup@v2
+        with:
+          ghc-version: '9.6.7'
+          cabal-version: 'latest'
+
+      - name: Build complete Haskell substrate
+        run: cabal build all --enable-tests
+
+      - name: Strict typecheck endpoint correspondence
+        shell: bash
+        run: |
+          set -euo pipefail
+          cabal exec -- ghc -isrc -Wall -Werror -fno-code src/Phil/Assurance.hs
+          cabal exec -- ghc -isrc -Wall -Werror -fno-code test/Phase1AuditEvidenceSubjectEndpointsMain.hs
+          cabal exec -- ghc -isrc -Wall -Werror -fno-code test/Phase1AuditOriginalEventForestMain.hs
+
+      - name: Replay endpoint correspondence controls
+        run: cabal exec -- runghc -isrc -Wall -Werror test/Phase1AuditEvidenceSubjectEndpointsMain.hs
+
+      - name: Replay unchanged original-event final closure controls
+        run: cabal exec -- runghc -isrc -Wall -Werror test/Phase1AuditOriginalEventForestMain.hs
