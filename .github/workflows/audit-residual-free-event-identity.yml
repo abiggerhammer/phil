@@ -24,7 +24,7 @@ jobs:
           persist-credentials: false
       - uses: actions/checkout@v4
         with:
-          ref: 1a31d6333efbb97deaec509e1ca3cd12a2eb6a11
+          ref: 48e2d9cdcda099aa54763c2b0ffaf6d4763937db
           path: driver
           persist-credentials: false
       - uses: haskell-actions/setup@v2
@@ -40,11 +40,11 @@ jobs:
           git -C driver rev-parse HEAD > evidence/driver-commit.txt
           printf '%s\n' '${{ github.sha }}' > evidence/workflow-commit.txt
           test "$(cat evidence/subject-commit.txt)" = 91b58ba5a90427b98f9e42935213c1f594c0e751
-          test "$(cat evidence/driver-commit.txt)" = 1a31d6333efbb97deaec509e1ca3cd12a2eb6a11
+          test "$(cat evidence/driver-commit.txt)" = 48e2d9cdcda099aa54763c2b0ffaf6d4763937db
           git -C subject status --porcelain --untracked-files=all > evidence/subject-status-before.txt
           test ! -s evidence/subject-status-before.txt
           cp driver/audit/residual-free-event-identity/ResidualFreeEventIdentity.hs evidence/
-          test "$(git hash-object evidence/ResidualFreeEventIdentity.hs)" = b68edae5ba743ba3a75961ebe3c0a8a4b14572b2
+          test "$(git hash-object evidence/ResidualFreeEventIdentity.hs)" = 0610343e7902cd2eebf4fa5ff1d91acb4c9f0804
           sha256sum evidence/ResidualFreeEventIdentity.hs > evidence/driver.sha256
           ghc --numeric-version > evidence/ghc-version.txt
           cabal --numeric-version > evidence/cabal-version.txt
