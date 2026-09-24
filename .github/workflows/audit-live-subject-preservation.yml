@@ -1,0 +1,114 @@
+name: Audit Live Subject Preservation
+on:
+  push:
+    branches: [audit-durable-subject-independent-20260924]
+    paths: ['.github/workflows/audit-live-subject-preservation.yml']
+permissions:
+  contents: read
+concurrency:
+  group: audit-live-subject-${{ github.ref }}
+  cancel-in-progress: true
+jobs:
+  compare-live-subject:
+    runs-on: ubuntu-latest
+    timeout-minutes: 35
+    strategy:
+      fail-fast: false
+      matrix:
+        subject:
+          - f1e0d3197b0079c9c6eaee8ab2e601fd4a286a1f
+          - 0aa3b8f3289cb50acc2b64b77b9d20850b64aab3
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ matrix.subject }}
+          path: subject
+          persist-credentials: false
+      - uses: actions/checkout@v4
+        with:
+          ref: cf9728bd95582749c3f60ac46fc12dc20c3ec946
+          path: driver
+          persist-credentials: false
+      - uses: haskell-actions/setup@v2
+        with:
+          ghc-version: '9.6.7'
+          cabal-version: '3.18.1.0'
+      - name: Record and check independent input identities
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p evidence/build
+          git -C subject rev-parse HEAD > evidence/subject-commit.txt
+          git -C driver rev-parse HEAD > evidence/driver-commit.txt
+          printf '%s\n' '${{ github.sha }}' > evidence/workflow-commit.txt
+          test "$(cat evidence/subject-commit.txt)" = '${{ matrix.subject }}'
+          test "$(cat evidence/driver-commit.txt)" = cf9728bd95582749c3f60ac46fc12dc20c3ec946
+          git -C subject status --porcelain --untracked-files=all > evidence/subject-status-before.txt
+          test ! -s evidence/subject-status-before.txt
+          cp driver/audit/durable-subject-review/LiveSubjectPreservation.hs evidence/
+          test "$(git hash-object evidence/LiveSubjectPreservation.hs)" = c7956072f0ba95ee905f46b3df8ca3f618e7313a
+          sha256sum evidence/LiveSubjectPreservation.hs > evidence/driver.sha256
+          ghc --numeric-version > evidence/ghc-version.txt
+          cabal --numeric-version > evidence/cabal-version.txt
+          for path in src/Phil/Core/Checker.hs src/Phil/Core/Discharge.hs src/Phil/Core/Value.hs src/Phil/Core/Refinement.hs src/Phil/Core/Focusing.hs; do
+            printf '%s %s\n' "$(git -C subject rev-parse "HEAD:$path")" "$path" >> evidence/source-git-blobs.txt
+          done
+      - name: Build pinned subject
+        working-directory: subject
+        shell: bash
+        run: |
+          set -euo pipefail
+          cabal update 2>&1 | tee ../evidence/dependency-index.log
+          cabal build all --enable-tests 2>&1 | tee ../evidence/build.log
+      - name: Strictly compile independent preservation driver
+        working-directory: subject
+        shell: bash
+        run: |
+          set -euo pipefail
+          cabal exec -- ghc -O0 -Wall -Werror -isrc -outputdir ../evidence/build ../evidence/LiveSubjectPreservation.hs -o ../evidence/live-subject 2>&1 | tee ../evidence/compile.log
+      - name: Measure unchanged correctness requirements
+        shell: bash
+        run: |
+          set -euo pipefail
+          set +e
+          evidence/live-subject > evidence/results.log 2>&1
+          status=$?
+          set -e
+          printf '%s\n' "$status" > evidence/results.exit
+          python3 - <<'PY'
+          import json
+          from pathlib import Path
+          lines=Path('evidence/results.log').read_text().splitlines()
+          cases=[s.split(' ',2) for s in lines if s.startswith(('PASS ','FAIL '))]
+          assert [r[1] for r in cases] == ['C01','C02','C03','C04','R01'], cases
+          assert not any(s.startswith('OBS_SETUP_ERROR ') for s in lines), lines
+          obs=[s for s in lines if s.startswith('OBS ')]
+          assert [s.split(' ',2)[1] for s in obs] == ['O01'], obs
+          assert lines.count('COMPLETE correctness_groups=5 observations=1') == 1
+          code=int(Path('evidence/results.exit').read_text())
+          all_pass=all(r[0]=='PASS' for r in cases)
+          assert code in (0,1) and ((code==0)==all_pass), (code,cases)
+          result={'measurement_complete':True,'all_required_assertions_passed':all_pass,
+                  'repair_certified':False,'source_adapter_established':False,
+                  'observation_correctness_credit':0,'exit_code':code,
+                  'cases':cases,'observations':obs}
+          Path('evidence/protocol.json').write_text(json.dumps(result,indent=2)+'\n')
+          for row in cases: print(row[0],row[1])
+          assert all(r[0]=='PASS' for r in cases if r[1].startswith('C')), cases
+          PY
+          git -C subject status --porcelain --untracked-files=all > evidence/subject-status-after.txt
+          test ! -s evidence/subject-status-after.txt
+          test "$(git -C subject rev-parse HEAD)" = '${{ matrix.subject }}'
+      - name: Preserve raw comparison evidence
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: live-subject-${{ matrix.subject }}
+          path: |
+            evidence/*.txt
+            evidence/*.sha256
+            evidence/*.hs
+            evidence/*.json
+            evidence/*.exit
+            evidence/*.log
+          if-no-files-found: error

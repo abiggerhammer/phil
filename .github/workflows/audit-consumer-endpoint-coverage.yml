@@ -1,0 +1,105 @@
+name: Audit Consumer Endpoint Coverage
+
+on:
+  push:
+    branches: [audit-durable-subject-independent-20260924]
+    paths: ['.github/workflows/audit-consumer-endpoint-coverage.yml']
+
+permissions:
+  contents: read
+
+concurrency:
+  group: audit-consumer-endpoint-coverage-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  pinned-proof-composition:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    container:
+      image: rocq/rocq-prover:9.2.0
+      options: --user root
+    steps:
+      - name: Check out exact proof under review
+        uses: actions/checkout@v4
+        with:
+          ref: 36f0ac357db1153981f393616c79c822984f1069
+          path: subject
+          persist-credentials: false
+      - name: Check out independent audit supplement
+        uses: actions/checkout@v4
+        with:
+          ref: 4bf9f9bcaffdd970658027b088cb419b756409cd
+          path: driver
+          persist-credentials: false
+      - name: Record exact inputs and copy unchanged sources
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p evidence/proof/Phil/Surface evidence/proof/Phil/Assurance evidence/audit
+          git -C subject rev-parse HEAD > evidence/subject-commit.txt
+          git -C driver rev-parse HEAD > evidence/driver-commit.txt
+          printf '%s\n' '${{ github.sha }}' > evidence/workflow-commit.txt
+          test "$(cat evidence/subject-commit.txt)" = 36f0ac357db1153981f393616c79c822984f1069
+          test "$(cat evidence/driver-commit.txt)" = 4bf9f9bcaffdd970658027b088cb419b756409cd
+          git -C subject status --porcelain --untracked-files=all > evidence/subject-status-before.txt
+          test ! -s evidence/subject-status-before.txt
+          for path in Surface/BranchEvidenceSupport.v Assurance/EvidenceConsumerSubjectTransport.v; do
+            cp "subject/proof/Phil/$path" "evidence/proof/Phil/$path"
+            printf '%s %s\n' "$(git -C subject rev-parse "HEAD:proof/Phil/$path")" "$path" >> evidence/source-git-blobs.txt
+          done
+          cp driver/audit/consumer-endpoint-coverage/ConsumerEndpointCoverage.v evidence/audit/
+          test "$(git hash-object evidence/proof/Phil/Surface/BranchEvidenceSupport.v)" = 359ff12a71e68945da26adf5ef459c16eb368f41
+          test "$(git hash-object evidence/proof/Phil/Assurance/EvidenceConsumerSubjectTransport.v)" = 0b537c2034638c1b9e1715645c9de7618243e23c
+          test "$(git hash-object evidence/audit/ConsumerEndpointCoverage.v)" = a1484868279368840d64abb32c921ded1732e18a
+          printf '%s\n' "${ROCQ_VERSION:-unknown}" "${ROCQ_STDLIB_VERSION:-unknown}" "${COMPILER:-unknown}" > evidence/container-versions.txt
+      - name: Compile unchanged subject and independent coverage proofs
+        shell: bash
+        run: |
+          set -euo pipefail
+          export PATH="/home/rocq/.opam/${COMPILER}/bin:$PATH"
+          rocq c --version > evidence/rocq-version.txt
+          rocq c -Q evidence/proof/Phil Phil evidence/proof/Phil/Surface/BranchEvidenceSupport.v 2>&1 | tee evidence/branch-compile.log
+          rocq c -Q evidence/proof/Phil Phil evidence/proof/Phil/Assurance/EvidenceConsumerSubjectTransport.v 2>&1 | tee evidence/transport-compile.log
+          rocq c -Q evidence/proof/Phil Phil -Q evidence/audit PhilAudit evidence/audit/ConsumerEndpointCoverage.v 2>&1 | tee evidence/audit-compile.log
+      - name: Validate theorem inventory and preserve compilation evidence
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 - <<'PY'
+          import hashlib, json, re
+          from pathlib import Path
+          root = Path('evidence')
+          source = root / 'audit/ConsumerEndpointCoverage.v'
+          data = source.read_bytes()
+          assert hashlib.sha256(data).hexdigest() == '3ad3d5a842d02320c34a8d293c7d102ee491998b64827e1cd4aa584c71a5b63c'
+          names = re.findall(r'^Theorem (\w+)', data.decode(), re.M)
+          assert len(names) == 11 and len(set(names)) == 11
+          output = (root / 'audit-compile.log').read_text()
+          assert output.count('Closed under the global context') == 11, output
+          assert 'Axioms:' not in output, output
+          for p in [root/'proof/Phil/Surface/BranchEvidenceSupport.vo', root/'proof/Phil/Assurance/EvidenceConsumerSubjectTransport.vo', root/'audit/ConsumerEndpointCoverage.vo']:
+              assert p.is_file() and p.stat().st_size > 0, str(p)
+          result = {'subject_commit': (root/'subject-commit.txt').read_text().strip(),
+                    'driver_commit': (root/'driver-commit.txt').read_text().strip(),
+                    'workflow_commit': (root/'workflow-commit.txt').read_text().strip(),
+                    'audit_theorems_compiled': names,
+                    'closed_assumption_reports': 11,
+                    'native_execution': False, 'implementation_repair_certified': False,
+                    'proof_scope': 'endpoint-domain coverage versus conditional pair transport'}
+          (root/'protocol.json').write_text(json.dumps(result, indent=2)+'\n')
+          print(json.dumps(result, indent=2))
+          PY
+          cmp subject/proof/Phil/Surface/BranchEvidenceSupport.v evidence/proof/Phil/Surface/BranchEvidenceSupport.v
+          cmp subject/proof/Phil/Assurance/EvidenceConsumerSubjectTransport.v evidence/proof/Phil/Assurance/EvidenceConsumerSubjectTransport.v
+          cmp driver/audit/consumer-endpoint-coverage/ConsumerEndpointCoverage.v evidence/audit/ConsumerEndpointCoverage.v
+          git -C subject status --porcelain --untracked-files=all > evidence/subject-status-after.txt
+          test ! -s evidence/subject-status-after.txt
+          find evidence -type f \( -name '*.v' -o -name '*.vo' \) -print0 | sort -z | xargs -0 sha256sum > evidence/proof-payloads.sha256
+      - name: Preserve proof sources, objects, logs and exact identities
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: consumer-endpoint-coverage-36f0ac35
+          path: evidence/
+          if-no-files-found: error

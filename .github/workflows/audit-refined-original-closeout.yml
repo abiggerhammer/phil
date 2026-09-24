@@ -1,0 +1,176 @@
+name: Audit Refined Original Closeout
+
+on:
+  push:
+    branches: [audit-durable-subject-independent-20260924]
+    paths: ['.github/workflows/audit-refined-original-closeout.yml']
+
+permissions:
+  contents: read
+
+concurrency:
+  group: audit-refined-original-closeout-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  exact-repair:
+    runs-on: ubuntu-latest
+    timeout-minutes: 35
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: 91b58ba5a90427b98f9e42935213c1f594c0e751
+          path: subject
+          persist-credentials: false
+      - uses: actions/checkout@v4
+        with:
+          ref: 4b19228323d151f88e8e7afff850925c2bfbd142
+          path: driver
+          persist-credentials: false
+      - uses: actions/checkout@v4
+        with:
+          ref: 1f32aa4ae1aeeaee6db39975b3a86e35adf76890
+          path: historical
+          persist-credentials: false
+      - uses: actions/checkout@v4
+        with:
+          ref: 55ee6dc454133f1a24bd6df911fbb439209118fc
+          path: prior
+          persist-credentials: false
+      - uses: haskell-actions/setup@v2
+        with:
+          ghc-version: '9.6.7'
+          cabal-version: '3.18.1.0'
+      - name: Preserve exact implementation and byte-unchanged independent drivers
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p evidence/drivers evidence/source evidence/permanent
+          for tree in subject driver historical prior; do
+            git -C "$tree" rev-parse HEAD > "evidence/$tree-commit.txt"
+          done
+          test "$(cat evidence/subject-commit.txt)" = 91b58ba5a90427b98f9e42935213c1f594c0e751
+          test "$(cat evidence/driver-commit.txt)" = 4b19228323d151f88e8e7afff850925c2bfbd142
+          test "$(cat evidence/historical-commit.txt)" = 1f32aa4ae1aeeaee6db39975b3a86e35adf76890
+          test "$(cat evidence/prior-commit.txt)" = 55ee6dc454133f1a24bd6df911fbb439209118fc
+          printf '%s\n' '${{ github.sha }}' > evidence/workflow-commit.txt
+          git -C subject status --porcelain --untracked-files=all > evidence/subject-status-before.txt
+          test ! -s evidence/subject-status-before.txt
+          cp driver/audit/durable-subject-review/DurableSubjectReview.hs evidence/drivers/
+          cp driver/audit/durable-subject-review/LiveSubjectPreservation.hs evidence/drivers/
+          cp driver/audit/landed-event-chain/EventAdapterPreservation.hs evidence/drivers/
+          cp driver/audit/original-entry-boundary/OriginalEntryBoundary.hs evidence/drivers/
+          test "$(git hash-object evidence/drivers/DurableSubjectReview.hs)" = 14ae49123712fc8f403ab9e4d4e4f753589e5d34
+          test "$(git hash-object evidence/drivers/LiveSubjectPreservation.hs)" = c7956072f0ba95ee905f46b3df8ca3f618e7313a
+          test "$(git hash-object evidence/drivers/EventAdapterPreservation.hs)" = c47f212d786765a869616461cfd0f924ee9ebaf8
+          test "$(git hash-object evidence/drivers/OriginalEntryBoundary.hs)" = 80fcc9f1b480fbe3a132b1ae998d0f8dddbdb2eb
+          cp historical/audit/definedness-final-closure/DefinednessClosureControls.hs evidence/drivers/ClosureFixture.original.hs
+          test "$(git hash-object evidence/drivers/ClosureFixture.original.hs)" = c80410a33dfc35c77c6fd358cc00232763405330
+          cp prior/test/AssuranceDirectNamedEvidenceAuthorityMain.hs evidence/drivers/DirectFixture.original.hs
+          python3 - <<'PY'
+          import difflib
+          from pathlib import Path
+          for name in ['ClosureFixture','DirectFixture']:
+              original=Path(f'evidence/drivers/{name}.original.hs').read_text()
+              assert original.count('module Main (main) where')==1
+              adapted=original.replace('module Main (main) where',f'module {name} where')
+              if name=='ClosureFixture':
+                  old='(Map.fromList [(rev h,parentId) | h <- certificateEntries])'
+                  assert adapted.count(old)==1
+                  adapted=adapted.replace(old,old+'\n        Map.empty')
+              Path(f'evidence/drivers/{name}.hs').write_text(adapted)
+              Path(f'evidence/{name}.diff').write_text(''.join(difflib.unified_diff(original.splitlines(True),adapted.splitlines(True),fromfile='original',tofile='audit-namespace-API-only')))
+          PY
+          sha256sum evidence/drivers/*.hs > evidence/drivers.sha256
+          ghc --numeric-version > evidence/ghc-version.txt
+          cabal --numeric-version > evidence/cabal-version.txt
+          for path in src/Phil/Assurance.hs src/Phil/Core/Value.hs src/Phil/Core/Refinement.hs src/Phil/Core/Checker.hs src/Phil/Core/Context.hs src/Phil/Core/Discharge.hs src/Phil/Assurance/Handoff.hs src/Phil/Assurance/EvidenceFactAuthority.hs src/Phil/Verification/ManifestClosure.hs; do
+            mkdir -p "evidence/source/$(dirname "$path")"
+            cp "subject/$path" "evidence/source/$path"
+            printf '%s %s\n' "$(git -C subject rev-parse "HEAD:$path")" "$path" >> evidence/source-git-blobs.txt
+          done
+      - name: Build exact implementation
+        working-directory: subject
+        shell: bash
+        run: |
+          set -euo pipefail
+          cabal update 2>&1 | tee ../evidence/dependency-index.log
+          cabal build all --enable-tests 2>&1 | tee ../evidence/build.log
+      - name: Strict compile and execute all four unchanged drivers
+        working-directory: subject
+        shell: bash
+        run: |
+          set -euo pipefail
+          for suite in DurableSubjectReview LiveSubjectPreservation EventAdapterPreservation OriginalEntryBoundary; do
+            mkdir -p "../evidence/build-$suite"
+            cabal exec -- ghc -O0 -Wall -Werror -isrc -i../evidence/drivers -outputdir "../evidence/build-$suite" "../evidence/drivers/$suite.hs" -o "../evidence/$suite" > "../evidence/$suite-compile.log" 2>&1
+            set +e
+            "../evidence/$suite" > "../evidence/$suite.log" 2>&1
+            code=$?
+            set -e
+            printf '%s\n' "$code" > "../evidence/$suite.exit"
+          done
+          python3 - <<'PY'
+          import json
+          from pathlib import Path
+          root=Path('../evidence')
+          expected={'DurableSubjectReview':[f'C{i:02d}' for i in range(1,15)]+['R01','R02'],
+                    'LiveSubjectPreservation':['C01','C02','C03','C04','R01'],
+                    'EventAdapterPreservation':[f'C{i:02d}' for i in range(1,9)]+['R01','R02'],
+                    'OriginalEntryBoundary':[f'C{i:02d}' for i in range(1,17)]}
+          result={'production_pin':'91b58ba5a90427b98f9e42935213c1f594c0e751','release_certified':False,'source_event_identity_established':False,'suites':{}}
+          for suite,ids in expected.items():
+              lines=(root/f'{suite}.log').read_text().splitlines()
+              rows=[s.split(' ',2) for s in lines if s.startswith(('PASS ','FAIL '))]
+              assert [r[1] for r in rows]==ids,(suite,rows)
+              code=int((root/f'{suite}.exit').read_text())
+              assert code in (0,1)
+              assert (code==0)==all(r[0]=='PASS' for r in rows)
+              assert not any(s.startswith('OBS_SETUP_ERROR ') for s in lines)
+              result['suites'][suite]={'exit':code,'cases':rows,'observations':[s for s in lines if s.startswith('OBS ')]}
+          result['all_47_required_assertions_passed']=all(s['exit']==0 for s in result['suites'].values())
+          (root/'protocol.json').write_text(json.dumps(result,indent=2)+'\n')
+          print(json.dumps(result,indent=2))
+          assert result['all_47_required_assertions_passed'], 'required independent assertion failed'
+          PY
+      - name: Replay permanent repair and consumer suites
+        if: success() || failure()
+        working-directory: subject
+        shell: bash
+        run: |
+          set -euo pipefail
+          failed=0
+          for suite in Phase1AuditOriginalEventPreservationMain Phase1AuditOriginalEventForestMain Phase1AuditDurableLogicalSubjectMain Phase1AuditLiveSubjectContinuityMain AssuranceDirectNamedEvidenceAuthorityMain Phase1AuditFinalOperationSupportMain AssuranceHandoffManifestClosureMain; do
+            cp "test/$suite.hs" "../evidence/permanent/$suite.hs"
+            set +e
+            cabal exec -- runghc -isrc -Wall -Werror "test/$suite.hs" > "../evidence/permanent/$suite.log" 2>&1
+            code=$?
+            set -e
+            printf '%s %s\n' "$suite" "$code" >> ../evidence/permanent-exits.txt
+            if test "$code" -ne 0; then failed=1; fi
+          done
+          exit "$failed"
+      - name: Verify exact unchanged subject
+        if: always()
+        shell: bash
+        run: |
+          set -euo pipefail
+          git -C subject status --porcelain --untracked-files=all > evidence/subject-status-after.txt
+          test ! -s evidence/subject-status-after.txt
+          test "$(git -C subject rev-parse HEAD)" = 91b58ba5a90427b98f9e42935213c1f594c0e751
+      - name: Retain original inputs and results
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: refined-original-closeout-91b58ba5
+          path: |
+            evidence/*.txt
+            evidence/*.sha256
+            evidence/*.diff
+            evidence/*.log
+            evidence/*.exit
+            evidence/*.json
+            evidence/drivers/
+            evidence/source/
+            evidence/permanent/
+          if-no-files-found: error

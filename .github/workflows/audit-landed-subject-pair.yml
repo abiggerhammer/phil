@@ -1,0 +1,147 @@
+name: Audit Landed Subject Pair
+
+on:
+  push:
+    branches: [audit-durable-subject-independent-20260924]
+    paths: ['.github/workflows/audit-landed-subject-pair.yml']
+
+permissions:
+  contents: read
+
+concurrency:
+  group: audit-landed-subject-pair-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  exact-integrated-repair:
+    runs-on: ubuntu-latest
+    timeout-minutes: 35
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: 6c1b3df8a93c1897ead6d497b3476b6ec0143312
+          path: subject
+          persist-credentials: false
+      - uses: actions/checkout@v4
+        with:
+          ref: 88219a267526a32d33179a3b7236e34f738729b1
+          path: isolation
+          persist-credentials: false
+      - uses: actions/checkout@v4
+        with:
+          ref: cf9728bd95582749c3f60ac46fc12dc20c3ec946
+          path: preservation
+          persist-credentials: false
+      - uses: haskell-actions/setup@v2
+        with:
+          ghc-version: '9.6.7'
+          cabal-version: '3.18.1.0'
+      - name: Record exact independent inputs
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p evidence/source evidence/drivers evidence/build-isolation evidence/build-preservation
+          git -C subject rev-parse HEAD > evidence/subject-commit.txt
+          git -C isolation rev-parse HEAD > evidence/isolation-commit.txt
+          git -C preservation rev-parse HEAD > evidence/preservation-commit.txt
+          printf '%s\n' '${{ github.sha }}' > evidence/workflow-commit.txt
+          test "$(cat evidence/subject-commit.txt)" = 6c1b3df8a93c1897ead6d497b3476b6ec0143312
+          test "$(cat evidence/isolation-commit.txt)" = 88219a267526a32d33179a3b7236e34f738729b1
+          test "$(cat evidence/preservation-commit.txt)" = cf9728bd95582749c3f60ac46fc12dc20c3ec946
+          git -C subject status --porcelain --untracked-files=all > evidence/subject-status-before.txt
+          test ! -s evidence/subject-status-before.txt
+          cp isolation/audit/durable-subject-review/DurableSubjectReview.hs evidence/drivers/
+          cp preservation/audit/durable-subject-review/LiveSubjectPreservation.hs evidence/drivers/
+          test "$(git hash-object evidence/drivers/DurableSubjectReview.hs)" = 14ae49123712fc8f403ab9e4d4e4f753589e5d34
+          test "$(git hash-object evidence/drivers/LiveSubjectPreservation.hs)" = c7956072f0ba95ee905f46b3df8ca3f618e7313a
+          sha256sum evidence/drivers/*.hs > evidence/driver.sha256
+          ghc --numeric-version > evidence/ghc-version.txt
+          cabal --numeric-version > evidence/cabal-version.txt
+          for path in src/Phil/Assurance.hs src/Phil/Assurance/Handoff.hs src/Phil/Assurance/EvidenceFactAuthority.hs src/Phil/Assurance/Verify.hs src/Phil/Verification/ManifestClosure.hs src/Phil/Core/Checker.hs src/Phil/Core/Context.hs src/Phil/Core/Value.hs src/Phil/Core/Discharge.hs src/Phil/Core/Focusing.hs src/Phil/Core/Refinement.hs; do
+            mkdir -p "evidence/source/$(dirname "$path")"
+            cp "subject/$path" "evidence/source/$path"
+            printf '%s %s\n' "$(git -C subject rev-parse "HEAD:$path")" "$path" >> evidence/source-git-blobs.txt
+          done
+      - name: Build exact production substrate
+        working-directory: subject
+        shell: bash
+        run: |
+          set -euo pipefail
+          cabal update 2>&1 | tee ../evidence/dependency-index.log
+          cabal build all --enable-tests 2>&1 | tee ../evidence/build.log
+      - name: Strictly compile both unchanged independent drivers
+        working-directory: subject
+        shell: bash
+        run: |
+          set -euo pipefail
+          cabal exec -- ghc -O0 -isrc -Wall -Werror -outputdir ../evidence/build-isolation ../evidence/drivers/DurableSubjectReview.hs -o ../evidence/isolation-test 2>&1 | tee ../evidence/isolation-compile.log
+          cabal exec -- ghc -O0 -isrc -Wall -Werror -outputdir ../evidence/build-preservation ../evidence/drivers/LiveSubjectPreservation.hs -o ../evidence/preservation-test 2>&1 | tee ../evidence/preservation-compile.log
+      - name: Require isolation and live-original continuity together
+        shell: bash
+        run: |
+          set -euo pipefail
+          for suite in isolation preservation; do
+            set +e
+            "evidence/$suite-test" > "evidence/$suite.log" 2>&1
+            code=$?
+            set -e
+            printf '%s\n' "$code" > "evidence/$suite.exit"
+          done
+          python3 - <<'PY'
+          import json
+          from pathlib import Path
+          expected = {'isolation': [f'C{i:02d}' for i in range(1,15)]+['R01','R02'],
+                      'preservation': ['C01','C02','C03','C04','R01']}
+          result = {'repair_certified': False, 'ordinary_source_adapter_established': False,
+                    'observation_correctness_credit': 0, 'suites': {}}
+          for suite, ids in expected.items():
+              lines=Path(f'evidence/{suite}.log').read_text().splitlines()
+              rows=[s.split(' ',2) for s in lines if s.startswith(('PASS ','FAIL '))]
+              assert [r[1] for r in rows] == ids, (suite,rows)
+              assert not any(s.startswith('OBS_SETUP_ERROR ') for s in lines), lines
+              code=int(Path(f'evidence/{suite}.exit').read_text())
+              assert code in (0,1)
+              assert (code == 0) == all(r[0]=='PASS' for r in rows)
+              result['suites'][suite]={'exit':code,'cases':rows,
+                  'observations':[s for s in lines if s.startswith('OBS ')]}
+          result['all_required_assertions_passed']=all(x['exit']==0 for x in result['suites'].values())
+          Path('evidence/protocol.json').write_text(json.dumps(result,indent=2)+'\n')
+          print(json.dumps(result,indent=2))
+          assert result['all_required_assertions_passed'], 'required semantic assertions failed'
+          PY
+      - name: Replay permanent integration suites at this exact snapshot
+        if: success() || failure()
+        working-directory: subject
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p ../evidence/permanent
+          failed=0
+          for suite in Phase1AuditDurableLogicalSubjectMain Phase1AuditLiveSubjectContinuityMain Phase1AuditOriginalEventForestMain AssuranceDirectNamedEvidenceAuthorityMain Phase1AuditFinalOperationSupportMain AssuranceHandoffManifestClosureMain DischargeMain RefinementEvidenceMain; do
+            cp "test/$suite.hs" "../evidence/permanent/$suite.hs"
+            set +e
+            cabal exec -- runghc -isrc -Wall -Werror "test/$suite.hs" > "../evidence/permanent/$suite.log" 2>&1
+            code=$?
+            set -e
+            printf '%s %s\n' "$suite" "$code" >> ../evidence/permanent-exits.txt
+            if test "$code" -ne 0; then failed=1; fi
+          done
+          git status --porcelain --untracked-files=all > ../evidence/subject-status-after.txt
+          test ! -s ../evidence/subject-status-after.txt
+          test "$(git rev-parse HEAD)" = 6c1b3df8a93c1897ead6d497b3476b6ec0143312
+          exit "$failed"
+      - name: Preserve original sources and every result
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: landed-subject-pair-6c1b3df8
+          path: |
+            evidence/*.txt
+            evidence/*.sha256
+            evidence/*.log
+            evidence/*.exit
+            evidence/*.json
+            evidence/drivers/
+            evidence/source/
+            evidence/permanent/
+          if-no-files-found: error

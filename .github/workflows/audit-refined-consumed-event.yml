@@ -1,0 +1,114 @@
+name: Audit Refined Consumed Event
+
+on:
+  push:
+    branches: [audit-durable-subject-independent-20260924]
+    paths: ['.github/workflows/audit-refined-consumed-event.yml']
+permissions:
+  contents: read
+concurrency:
+  group: audit-refined-consumed-event-${{ github.ref }}
+  cancel-in-progress: true
+jobs:
+  pinned-consumed-refinement:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: 91b58ba5a90427b98f9e42935213c1f594c0e751
+          path: subject
+          persist-credentials: false
+      - uses: actions/checkout@v4
+        with:
+          ref: a3272977e8d50422c98f47a2583378a5662c0604
+          path: driver
+          persist-credentials: false
+      - uses: haskell-actions/setup@v2
+        with:
+          ghc-version: '9.6.7'
+          cabal-version: '3.18.1.0'
+      - name: Preserve exact inputs
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p evidence/build
+          git -C subject rev-parse HEAD > evidence/subject-commit.txt
+          git -C driver rev-parse HEAD > evidence/driver-commit.txt
+          printf '%s\n' '${{ github.sha }}' > evidence/workflow-commit.txt
+          test "$(cat evidence/subject-commit.txt)" = 91b58ba5a90427b98f9e42935213c1f594c0e751
+          test "$(cat evidence/driver-commit.txt)" = a3272977e8d50422c98f47a2583378a5662c0604
+          git -C subject status --porcelain --untracked-files=all > evidence/subject-status-before.txt
+          test ! -s evidence/subject-status-before.txt
+          cp driver/audit/refined-consumed-event/RefinedConsumedEvent.hs evidence/
+          cp driver/audit/landed-event-chain/EventAdapterPreservation.hs evidence/PreservationFixture.original.hs
+          test "$(git hash-object evidence/PreservationFixture.original.hs)" = c47f212d786765a869616461cfd0f924ee9ebaf8
+          python3 - <<'PY'
+          import difflib
+          from pathlib import Path
+          original=Path('evidence/PreservationFixture.original.hs').read_text()
+          assert original.count('module Main (main) where')==1
+          adapted=original.replace('module Main (main) where','module PreservationFixture where')
+          Path('evidence/PreservationFixture.hs').write_text(adapted)
+          Path('evidence/fixture.diff').write_text(''.join(difflib.unified_diff(original.splitlines(True),adapted.splitlines(True),fromfile='original',tofile='namespace-only')))
+          PY
+          sha256sum evidence/*.hs > evidence/drivers.sha256
+          cp subject/src/Phil/Assurance.hs evidence/Assurance.hs.source
+          git -C subject rev-parse HEAD:src/Phil/Assurance.hs > evidence/assurance-git-blob.txt
+          ghc --numeric-version > evidence/ghc-version.txt
+          cabal --numeric-version > evidence/cabal-version.txt
+      - name: Build and strictly compile
+        working-directory: subject
+        shell: bash
+        run: |
+          set -euo pipefail
+          cabal update 2>&1 | tee ../evidence/dependency-index.log
+          cabal build all --enable-tests 2>&1 | tee ../evidence/build.log
+          cabal exec -- ghc -O0 -Wall -Werror -isrc -i../evidence -outputdir ../evidence/build ../evidence/RefinedConsumedEvent.hs -o ../evidence/consumed-refined 2>&1 | tee ../evidence/compile.log
+      - name: Record required assertions without hiding known or new failures
+        shell: bash
+        run: |
+          set -euo pipefail
+          set +e
+          evidence/consumed-refined > evidence/results.log 2>&1
+          status=$?
+          set -e
+          printf '%s\n' "$status" > evidence/results.exit
+          python3 - <<'PY'
+          import json
+          from pathlib import Path
+          lines=Path('evidence/results.log').read_text().splitlines()
+          rows=[s.split(' ',2) for s in lines if s.startswith(('PASS ','FAIL '))]
+          assert [r[1] for r in rows]==['C01','C02','C03','C04','R01','R02']
+          assert lines.count('COMPLETE correctness_groups=6')==1
+          code=int(Path('evidence/results.exit').read_text())
+          assert code in (0,1)
+          assert (code==0)==all(r[0]=='PASS' for r in rows)
+          result={'cases':rows,'exit':code,'all_required_assertions_passed':code==0,'repair_certified':False,'runtime_validator_executed':False,'ordinary_source_entry_established':False}
+          Path('evidence/protocol.json').write_text(json.dumps(result,indent=2)+'\n')
+          print(json.dumps(result,indent=2))
+          assert all(r[0]=='PASS' for r in rows if r[1].startswith('C'))
+          PY
+      - name: Verify exact unchanged source
+        if: always()
+        shell: bash
+        run: |
+          set -euo pipefail
+          git -C subject status --porcelain --untracked-files=all > evidence/subject-status-after.txt
+          test ! -s evidence/subject-status-after.txt
+          test "$(git -C subject rev-parse HEAD)" = 91b58ba5a90427b98f9e42935213c1f594c0e751
+      - name: Preserve complete original measurement
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: refined-consumed-event-91b58ba5
+          path: |
+            evidence/*.txt
+            evidence/*.sha256
+            evidence/*.source
+            evidence/*.diff
+            evidence/*.hs
+            evidence/*.log
+            evidence/*.exit
+            evidence/*.json
+          if-no-files-found: error
