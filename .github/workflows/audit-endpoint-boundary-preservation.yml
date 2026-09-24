@@ -1,0 +1,145 @@
+name: Audit Endpoint Boundary Preservation
+
+on:
+  push:
+    branches: [audit-evidence-occurrence-inventory-20260924]
+    paths: ['.github/workflows/audit-endpoint-boundary-preservation.yml']
+
+permissions:
+  contents: read
+
+concurrency:
+  group: audit-endpoint-boundary-preservation-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  pinned-preservation:
+    runs-on: ubuntu-latest
+    timeout-minutes: 35
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: e02a739b2b28fc281eb67c58c2be9112e081668d
+          path: subject
+          persist-credentials: false
+      - uses: actions/checkout@v4
+        with:
+          ref: 2138f275299cd60d7ed6b7cdb2d415dc21ed4dc2
+          path: driver
+          persist-credentials: false
+      - uses: haskell-actions/setup@v2
+        with:
+          ghc-version: '9.6.7'
+          cabal-version: '3.18.1.0'
+      - name: Preserve exact independent inputs
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p evidence/source evidence/permanent evidence/build-inventory evidence/build-endpoint
+          git -C subject rev-parse HEAD > evidence/subject-commit.txt
+          git -C driver rev-parse HEAD > evidence/driver-commit.txt
+          printf '%s\n' '${{ github.sha }}' > evidence/workflow-commit.txt
+          printf '%s %s\n' '${{ github.run_id }}' '${{ github.run_attempt }}' > evidence/run-attempt.txt
+          test "$(cat evidence/subject-commit.txt)" = e02a739b2b28fc281eb67c58c2be9112e081668d
+          test "$(cat evidence/driver-commit.txt)" = 2138f275299cd60d7ed6b7cdb2d415dc21ed4dc2
+          git -C subject status --porcelain --untracked-files=all > evidence/subject-status-before.txt
+          test ! -s evidence/subject-status-before.txt
+          cp driver/audit/evidence-occurrence-inventory/ActualUseInventoryReview.hs evidence/
+          cp driver/audit/evidence-occurrence-inventory/EndpointBoundaryReview.hs evidence/
+          test "$(git hash-object evidence/ActualUseInventoryReview.hs)" = 89c2f35486d220c2ff5eacf6490e8c338b8a0252
+          sha256sum evidence/*.hs > evidence/drivers.sha256
+          ghc --numeric-version > evidence/ghc-version.txt
+          cabal --numeric-version > evidence/cabal-version.txt
+          for path in src/Phil/Assurance.hs src/Phil/Core/Value.hs src/Phil/Core/Checker.hs src/Phil/Core/Context.hs src/Phil/Core/Refinement.hs src/Phil/Core/Discharge.hs src/Phil/Verification/ManifestClosure.hs docs/phase-1/audit-evidence-subject-endpoints-remediation-v1.md; do
+            mkdir -p "evidence/source/$(dirname "$path")"
+            cp "subject/$path" "evidence/source/$path"
+            printf '%s %s\n' "$(git -C subject rev-parse "HEAD:$path")" "$path" >> evidence/source-git-blobs.txt
+          done
+      - name: Build exact production substrate
+        working-directory: subject
+        shell: bash
+        run: |
+          set -euo pipefail
+          cabal update 2>&1 | tee ../evidence/dependency-index.log
+          cabal build all --enable-tests 2>&1 | tee ../evidence/build.log
+      - name: Strictly compile both independent drivers
+        working-directory: subject
+        shell: bash
+        run: |
+          set -euo pipefail
+          cabal exec -- ghc -O0 -Wall -Werror -isrc -outputdir ../evidence/build-inventory ../evidence/ActualUseInventoryReview.hs -o ../evidence/inventory-review 2>&1 | tee ../evidence/compile-inventory.log
+          cabal exec -- ghc -O0 -Wall -Werror -isrc -outputdir ../evidence/build-endpoint ../evidence/EndpointBoundaryReview.hs -o ../evidence/endpoint-review 2>&1 | tee ../evidence/compile-endpoint.log
+      - name: Require exact inventory and endpoint preservation
+        shell: bash
+        run: |
+          set -euo pipefail
+          set +e
+          evidence/inventory-review > evidence/inventory-results.log 2>&1
+          inv=$?
+          evidence/endpoint-review > evidence/endpoint-results.log 2>&1
+          ep=$?
+          set -e
+          printf '%s\n' "$inv" > evidence/inventory-results.exit
+          printf '%s\n' "$ep" > evidence/endpoint-results.exit
+          python3 - <<'PY'
+          import json
+          from pathlib import Path
+          records = {}
+          for suite, prefix, count, completion in [
+              ('inventory','C',12,'COMPLETE correctness_groups=12 term_constructor_cases=11 proposition_constructor_cases=12 generated_term_cases=96'),
+              ('endpoint','P',4,'COMPLETE endpoint_preservation_groups=4')]:
+              lines = Path(f'evidence/{suite}-results.log').read_text().splitlines()
+              rows = [line.split(' ',2) for line in lines if line.startswith(('PASS ','FAIL '))]
+              assert [r[1] for r in rows] == [f'{prefix}{i:02d}' for i in range(1,count+1)], rows
+              assert lines.count(completion) == 1
+              code = int(Path(f'evidence/{suite}-results.exit').read_text())
+              assert code in (0,1)
+              assert (code == 0) == all(r[0] == 'PASS' for r in rows)
+              records[suite] = {'cases': rows, 'exit': code}
+          records.update(production_pin='e02a739b2b28fc281eb67c58c2be9112e081668d',
+                         runtime_validator_executed=False, release_certified=False,
+                         global_subject_identity_established=False)
+          Path('evidence/protocol.json').write_text(json.dumps(records,indent=2)+'\n')
+          print(json.dumps(records,indent=2))
+          assert all(records[s]['exit']==0 for s in ('inventory','endpoint')), 'required preservation failed'
+          PY
+      - name: Replay unchanged permanent suites
+        if: success() || failure()
+        working-directory: subject
+        shell: bash
+        run: |
+          set -euo pipefail
+          failed=0
+          for suite in Phase1AuditEvidenceUseInventoryMain Phase1AuditOriginalEventPreservationMain RefinementEvidenceMain Phase1AuditEvidenceSubjectEndpointsMain Phase1AuditOriginalEventForestMain; do
+            cp "test/$suite.hs" "../evidence/permanent/$suite.hs"
+            set +e
+            cabal exec -- runghc -isrc -Wall -Werror "test/$suite.hs" > "../evidence/permanent/$suite.log" 2>&1
+            code=$?
+            set -e
+            printf '%s %s\n' "$suite" "$code" >> ../evidence/permanent-exits.txt
+            if test "$code" -ne 0; then failed=1; fi
+          done
+          exit "$failed"
+      - name: Verify unchanged production checkout
+        if: always()
+        shell: bash
+        run: |
+          set -euo pipefail
+          git -C subject status --porcelain --untracked-files=all > evidence/subject-status-after.txt
+          test ! -s evidence/subject-status-after.txt
+          test "$(git -C subject rev-parse HEAD)" = e02a739b2b28fc281eb67c58c2be9112e081668d
+      - name: Preserve original evidence including any failures
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: endpoint-preservation-e02a739b
+          path: |
+            evidence/*.txt
+            evidence/*.sha256
+            evidence/*.hs
+            evidence/*.log
+            evidence/*.exit
+            evidence/*.json
+            evidence/source/
+            evidence/permanent/
+          if-no-files-found: error
