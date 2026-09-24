@@ -87,7 +87,8 @@ data OriginalCheckEventError
 -- closure failures distinct so a caller cannot treat a downstream rejection as
 -- permission to rebuild a smaller handoff.
 data OriginalCheckEventClosureError
-  = OriginalCheckEventClosureResolutionError OriginalCheckEventError
+  = OriginalCheckEventClosureProducerAssociationRequired
+  | OriginalCheckEventClosureResolutionError OriginalCheckEventError
   | OriginalCheckEventClosureManifestError ManifestClosure.ManifestClosureError
   deriving (Eq, Show)
 
@@ -242,15 +243,22 @@ handoffOriginalCheckEvent config evidenceIds staticContext policy spec result = 
 -- adapter for the original-event rebase: the same event-derived handoff is
 -- passed directly to 'closeVerificationBundleWithHandoff'.
 --
--- This first adapter deliberately supplies no local EvidenceFact identity map.
--- A tree which actually depends on such a certificate fact therefore fails
+-- This bounded accepting route requires at least one residual record emitted by
+-- the actual checker.  Such a record carries the event metadata that
+-- 'resolveOriginalCheckEvent' validates against the supplied 'ResidualSpec'. A
+-- residual-free 'ValueResult' does not retain historical event identity, so a
+-- later caller-supplied spec cannot establish producer origin and is rejected
+-- here before manifest closure.  Low-level resolution remains available for
+-- diagnostics and fresh checks, but it does not by itself grant final-use
+-- provenance.
+--
+-- This adapter deliberately supplies no local EvidenceFact identity map.  A
+-- tree which actually depends on such a certificate fact therefore fails
 -- closed in 'handoffOriginalCheckEvent' instead of bypassing the existing
 -- authority-aware handoff.  Direct named evidence likewise remains subject to
--- the final closure's immutable-authority requirements.  This bounded route is
--- for the original-event prerequisite/definition/runtime composition repaired
--- here; the already-existing authority-aware evidence routes remain separate.
--- Resource ownership comes only from the returned 'ValueResult'; this function
--- never restores a consumed affine or linear owner.
+-- the final closure's immutable-authority requirements.  Resource ownership
+-- comes only from the returned 'ValueResult'; this function never restores a
+-- consumed affine or linear owner.
 closeOriginalCheckEventBundle
   :: HandoffConfig
   -> StaticContext
@@ -278,6 +286,8 @@ closeOriginalCheckEventBundle
     selection
     certificateEvidence
     directEvidence = do
+  unless (hasResidualProducerAssociation result) $
+    Left OriginalCheckEventClosureProducerAssociationRequired
   entries <- mapLeft OriginalCheckEventClosureResolutionError $
     handoffOriginalCheckEvent
       config
@@ -436,6 +446,15 @@ validateResolvedResidual resolvedById (obligationId', proposition) =
               obligationId'
               expected
               actual)
+
+hasResidualProducerAssociation :: ValueResult -> Bool
+hasResidualProducerAssociation result =
+  any isResidualUse (valueResultEvidence result)
+  where
+    isResidualUse evidenceUse =
+      case evidenceUse of
+        EvidenceResidual _ _ -> True
+        _ -> False
 
 evidenceUseSubjectNames :: EvidenceUse -> [Name]
 evidenceUseSubjectNames evidenceUse =
