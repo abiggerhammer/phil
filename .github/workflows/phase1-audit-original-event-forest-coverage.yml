@@ -1,0 +1,65 @@
+name: Phase 1 Audit Original Event Forest Coverage
+
+on:
+  pull_request:
+    paths:
+      - 'proof/Phil/Assurance/PrerequisiteSupport.v'
+      - 'proof/Phil/Assurance/CheckEventPrerequisiteCoverage.v'
+      - 'proof/Phil/Assurance/OriginalEventForestCoverage.v'
+      - 'docs/phase-1/audit-original-event-forest-coverage-v1.md'
+      - '.github/workflows/phase1-audit-original-event-forest-coverage.yml'
+  push:
+    branches: [main]
+    paths:
+      - 'proof/Phil/Assurance/PrerequisiteSupport.v'
+      - 'proof/Phil/Assurance/CheckEventPrerequisiteCoverage.v'
+      - 'proof/Phil/Assurance/OriginalEventForestCoverage.v'
+      - 'docs/phase-1/audit-original-event-forest-coverage-v1.md'
+      - '.github/workflows/phase1-audit-original-event-forest-coverage.yml'
+
+permissions:
+  contents: read
+
+jobs:
+  original-event-forest-coverage:
+    runs-on: ubuntu-latest
+    container:
+      image: rocq/rocq-prover:9.2.0
+      options: --user root
+    steps:
+      - uses: actions/checkout@v4
+      - name: Compile event support and forest coverage proofs
+        shell: bash
+        run: |
+          set -euo pipefail
+          export PATH="/home/rocq/.opam/${COMPILER}/bin:$PATH"
+          rocq c -Q proof/Phil Phil proof/Phil/Assurance/PrerequisiteSupport.v
+          rocq c -Q proof/Phil Phil proof/Phil/Assurance/CheckEventPrerequisiteCoverage.v
+          rocq c -Q proof/Phil Phil proof/Phil/Assurance/OriginalEventForestCoverage.v
+      - name: Record exact proof identity
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p original-event-forest-coverage
+          cp \
+            proof/Phil/Assurance/PrerequisiteSupport.v \
+            proof/Phil/Assurance/PrerequisiteSupport.vo \
+            proof/Phil/Assurance/CheckEventPrerequisiteCoverage.v \
+            proof/Phil/Assurance/CheckEventPrerequisiteCoverage.vo \
+            proof/Phil/Assurance/OriginalEventForestCoverage.v \
+            proof/Phil/Assurance/OriginalEventForestCoverage.vo \
+            original-event-forest-coverage/
+          sha256sum \
+            original-event-forest-coverage/PrerequisiteSupport.v \
+            original-event-forest-coverage/PrerequisiteSupport.vo \
+            original-event-forest-coverage/CheckEventPrerequisiteCoverage.v \
+            original-event-forest-coverage/CheckEventPrerequisiteCoverage.vo \
+            original-event-forest-coverage/OriginalEventForestCoverage.v \
+            original-event-forest-coverage/OriginalEventForestCoverage.vo \
+            > original-event-forest-coverage/D-RES-TREE-01.original-event-forest.proof.sha256
+          cat original-event-forest-coverage/D-RES-TREE-01.original-event-forest.proof.sha256
+      - uses: actions/upload-artifact@v4
+        with:
+          name: original-event-forest-coverage-proof
+          path: original-event-forest-coverage
+          if-no-files-found: error
