@@ -6,18 +6,22 @@ import Control.Monad (foldM, unless)
 import qualified Data.Map.Strict as Map
 import qualified Data.Set as Set
 import Data.Text (Text)
+import qualified Data.Text as Text
 import Phil.Assurance
   ( AcceptanceRule (..)
-  , AssuranceKind (KernelChecked)
+  , AssuranceKind (KernelChecked, RuntimeEnforced)
   , EvidenceRole (..)
   , HandoffConfig (..)
   , LedgerHandoff (..)
+  , OriginalCheckEventClosureError (..)
   , OriginalCheckEventError (..)
+  , closeOriginalCheckEventBundle
   , handoffOriginalCheckEvent
   , handoffSupportEdges
   , resolveOriginalCheckEvent
   , revisionId
   )
+import qualified Phil.Assurance as Assurance
 import Phil.Core.Checker (CheckState (..), emptyCheckState)
 import Phil.Core.Context (insertBinding)
 import qualified Phil.Core.Discharge as Discharge
@@ -25,6 +29,9 @@ import Phil.Core.Refinement (EvidenceUse (..), ResidualSpec (..))
 import Phil.Core.Static (emptyStaticContext)
 import Phil.Core.Syntax
 import Phil.Core.Value (ValueResult (..), checkValueWithResidual)
+import qualified Phil.Verification as Verification
+import qualified Phil.Verification.Bundle as Bundle
+import qualified Phil.Verification.ManifestClosure as Closure
 import System.Exit (exitFailure)
 
 main :: IO ()
@@ -36,9 +43,11 @@ main = do
     , run "C04" "wrong scope metadata cannot rebase the checked result" wrongScopeRejected
     , run "C05" "dropped returned residual use cannot shrink the event inventory" droppedResidualUseRejected
     , run "C06" "fully static literal subtraction remains valid" staticLiteralRemainsValid
+    , run "C07" "final manifest closure consumes the event-derived handoff" finalClosureUsesActualEvent
+    , run "C08" "final manifest closure rejects a graph that drops event support" finalClosureRejectsShrunkSupport
     ]
   unless (and results) exitFailure
-  putStrLn "COMPLETE original_check_event_forest_controls=6"
+  putStrLn "COMPLETE original_check_event_forest_controls=8"
 
 run :: String -> String -> Either String () -> IO Bool
 run ident label result =
@@ -111,8 +120,11 @@ runtimeFor obligation = Discharge.RuntimeBinding
   , Discharge.runtimeSuccessEvidence = TyProof (obligationProposition obligation)
   , Discharge.runtimeFailureClass = "ValidationFailure"
   , Discharge.runtimeResourceContract = "preserve unrelated resources"
-  , Discharge.runtimeCostRef = "audit.original-event.runtime"
+  , Discharge.runtimeCostRef = runtimeCost
   }
+
+runtimeCost :: Text
+runtimeCost = "audit.original-event.runtime"
 
 runtimeChildPolicy :: Either String Discharge.DischargePolicy
 runtimeChildPolicy = right $
@@ -134,7 +146,10 @@ config = HandoffConfig
   , handoffRepresentation = const "Core"
   , handoffSubjectIds = const ["audit.original-event.subject"]
   , handoffContextIds = const ["audit.original-event.context"]
-  , handoffAcceptanceRule = const (AcceptEntry KernelChecked (EvidenceRole "audit"))
+  , handoffAcceptanceRule = \obligation ->
+      if obligationId obligation == childId
+        then AcceptEntry RuntimeEnforced (EvidenceRole "runtime")
+        else AcceptEntry KernelChecked (EvidenceRole "establishes")
   }
 
 definitionParentRetainsPrerequisite :: Either String ()
@@ -248,6 +263,179 @@ staticLiteralRemainsValid = do
   case Discharge.resolvedDisposition resolved of
     Discharge.StaticallyDischarged Discharge.StaticByDefinition -> Right ()
     other -> Left ("valid literal equality stopped being definitionally valid: " <> show other)
+
+finalClosureUsesActualEvent :: Either String ()
+finalClosureUsesActualEvent = do
+  (result, entries, closureResult) <- closeActualEvent True
+  ensure
+    (EvidenceResidual childId side `elem` valueResultEvidence result)
+    "actual checker result did not retain its residual prerequisite use"
+  manifest <- right closureResult
+  let expectedScope = Set.fromList (map (revisionId . handoffRevision) entries)
+  ensure
+    (Assurance.manifestCertificationScope manifest == expectedScope)
+    "final closure changed the exact event-derived certification scope"
+
+finalClosureRejectsShrunkSupport :: Either String ()
+finalClosureRejectsShrunkSupport = do
+  (_, entries, closureResult) <- closeActualEvent False
+  let expected = handoffSupportEdges entries
+  ensure (not (Set.null expected)) "fixture unexpectedly has no event support edge"
+  case closureResult of
+    Left (OriginalCheckEventClosureManifestError
+        (Closure.ManifestClosureHandoffSupportMismatch actualExpected actualGraph))
+      | actualExpected == expected
+      , Set.null actualGraph -> Right ()
+    other -> Left
+      ("expected exact event support mismatch at final closure, got " <> show other)
+
+closeActualEvent
+  :: Bool
+  -> Either String
+      ( ValueResult
+      , [LedgerHandoff]
+      , Either OriginalCheckEventClosureError Assurance.AssuranceManifest
+      )
+closeActualEvent keepSupport = do
+  result <- emit reflexiveDifference
+  dischargePolicy <- runtimeChildPolicy
+  entries <- right $
+    handoffOriginalCheckEvent
+      config Map.empty emptyStaticContext dischargePolicy spec result
+  (parent, child) <- case entries of
+    [parentEntry, childEntry] -> Right (parentEntry, childEntry)
+    other -> Left ("expected parent and child handoff entries, got " <> show other)
+  parentEntry <- definitionEvidence parent
+  childEntry <- runtimeEvidence child
+  let fullSupport = handoffSupportEdges entries
+      selectedSupport = if keepSupport then fullSupport else Set.empty
+      scope = Set.fromList [revisionId (handoffRevision parent), revisionId (handoffRevision child)]
+      evidence = [parentEntry, childEntry]
+      assurancePolicy = Verification.ApplicationAssurancePolicy
+        (Verification.AssurancePolicyRevision "audit.original-event.final.policy")
+        (Set.fromList [Verification.StaticallyDischarged, Verification.RuntimeBound])
+  graph <- right $
+    Verification.buildVerificationRevisionGraphWithSupport
+      (map handoffRevision entries)
+      selectedSupport
+      scope
+  bundle <- right $
+    Bundle.buildVerificationBundle
+      (Assurance.digestText "audit.original-event.final.source")
+      [] [] [] graph assurancePolicy evidence
+  let ledger = Assurance.emptyLedger
+        { Assurance.ledgerRevisions = Verification.verificationGraphNodes graph
+        , Assurance.ledgerEvidence = Map.fromList
+            [ (Assurance.evidenceEntryId entry, entry)
+            | entry <- evidence
+            ]
+        }
+      context = Assurance.emptyVerificationContext
+        { Assurance.verificationArchitectureDigest =
+            Bundle.verificationBundleArchitectureDigest bundle
+        , Assurance.verificationPhilCoreDigest =
+            Assurance.digestText "audit.original-event.final.core"
+        , Assurance.verificationImplementationDigest =
+            Assurance.digestText "audit.original-event.final.implementation"
+        , Assurance.verificationTarget = "audit-target"
+        , Assurance.verificationCompilationProfile = "checked-runtime"
+        , Assurance.verificationExpectedObligations =
+            Map.keysSet (Verification.verificationGraphNodes graph)
+        , Assurance.verificationLoweringLedgerRoot =
+            Assurance.digestText "audit.original-event.final.lowering"
+        , Assurance.verificationKnownCostRefs = Set.singleton runtimeCost
+        }
+      selection = Closure.ManifestClosureSelection
+        { Closure.manifestClosureEvidence =
+            Set.fromList [parentEvidenceId, runtimeEvidenceId]
+        , Closure.manifestClosureAssumptions = Set.empty
+        , Closure.manifestClosureExports = Map.empty
+        , Closure.manifestClosureUses = Set.empty
+        }
+      closureResult = closeOriginalCheckEventBundle
+        config
+        emptyStaticContext
+        dischargePolicy
+        spec
+        result
+        bundle
+        assurancePolicy
+        context
+        ledger
+        selection
+        Map.empty
+        Map.empty
+  Right (result, entries, closureResult)
+
+parentEvidenceId, runtimeEvidenceId :: Assurance.EvidenceEntryId
+parentEvidenceId = Assurance.EvidenceEntryId "audit.original-event.final.parent"
+runtimeEvidenceId = Assurance.EvidenceEntryId "audit.original-event.final.runtime"
+
+sealEvidence :: Assurance.EvidenceEntry -> Assurance.EvidenceEntry
+sealEvidence entry = entry
+  { Assurance.evidenceEntryDigest = Assurance.deriveEvidenceEntryDigest entry }
+
+baseEvidence
+  :: Assurance.EvidenceEntryId
+  -> Assurance.AssuranceKind
+  -> Assurance.EvidenceRole
+  -> LedgerHandoff
+  -> Assurance.EvidenceEntry
+baseEvidence entryId kind role entry = Assurance.EvidenceEntry
+  { Assurance.evidenceEntryId = entryId
+  , Assurance.evidenceEntryDigest = Assurance.Digest ""
+  , Assurance.evidenceObligationRevision = revisionId (handoffRevision entry)
+  , Assurance.evidenceAssuranceKind = kind
+  , Assurance.evidenceRole = role
+  , Assurance.evidenceProducer = "actual original-event final closure regression"
+  , Assurance.evidenceChecker = "Phil Core"
+  , Assurance.evidenceArtifact = Nothing
+  , Assurance.evidenceInputDigests = []
+  , Assurance.evidenceAssumptions = []
+  , Assurance.evidenceDependsOn = []
+  , Assurance.evidenceValidityScope = Assurance.ValidityScope Map.empty
+  , Assurance.evidenceResult = Assurance.EvidenceAccepted
+  , Assurance.evidenceJustifies = ["exact event-derived disposition"]
+  , Assurance.evidenceRuntimeMechanism = Nothing
+  , Assurance.evidenceRuntimeResidue = []
+  , Assurance.evidenceCostRefs = []
+  }
+
+definitionEvidence :: LedgerHandoff -> Either String Assurance.EvidenceEntry
+definitionEvidence entry =
+  case handoffDisposition entry of
+    Discharge.StaticallyDischarged Discharge.StaticByDefinition ->
+      Right . sealEvidence $
+        baseEvidence
+          parentEvidenceId
+          KernelChecked
+          (EvidenceRole "establishes")
+          entry
+    other -> Left ("unexpected final parent disposition: " <> show other)
+
+runtimeEvidence :: LedgerHandoff -> Either String Assurance.EvidenceEntry
+runtimeEvidence entry =
+  case handoffDisposition entry of
+    Discharge.RuntimeBound binding ->
+      Right . sealEvidence $
+        (baseEvidence runtimeEvidenceId RuntimeEnforced (EvidenceRole "runtime") entry)
+          { Assurance.evidenceProducer = Discharge.runtimeValidator binding
+          , Assurance.evidenceJustifies =
+              [Assurance.renderPropositionCanonical (Discharge.runtimeProposition binding)]
+          , Assurance.evidenceRuntimeMechanism = Just Assurance.RuntimeMechanism
+              { Assurance.runtimeMechanismName = Discharge.runtimeValidator binding
+              , Assurance.runtimeExecutionPoint = Discharge.runtimeRequiredPoint binding
+              , Assurance.runtimeSuccessEvidenceType =
+                  Text.pack (show (Discharge.runtimeSuccessEvidence binding))
+              , Assurance.runtimeFailureContract =
+                  Discharge.runtimeFailureClass binding <> ": "
+                    <> Discharge.runtimeResourceContract binding
+              , Assurance.runtimeImplementation = Nothing
+              }
+          , Assurance.evidenceRuntimeResidue = ["retain exact declared order check"]
+          , Assurance.evidenceCostRefs = [Discharge.runtimeCostRef binding]
+          }
+    other -> Left ("unexpected final prerequisite disposition: " <> show other)
 
 onlyChild :: Discharge.ResolvedObligation -> Either String Discharge.ResolvedObligation
 onlyChild resolved =

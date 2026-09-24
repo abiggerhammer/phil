@@ -6,6 +6,7 @@ on:
       - 'src/Phil/Assurance.hs'
       - 'test/Phase1AuditOriginalEventForestMain.hs'
       - 'docs/phase-1/audit-original-event-forest-remediation-v1.md'
+      - 'docs/phase-1/audit-original-event-final-closure-remediation-v1.md'
       - '.github/workflows/phase1-audit-original-event-forest.yml'
   push:
     branches: [main]
@@ -13,6 +14,7 @@ on:
       - 'src/Phil/Assurance.hs'
       - 'test/Phase1AuditOriginalEventForestMain.hs'
       - 'docs/phase-1/audit-original-event-forest-remediation-v1.md'
+      - 'docs/phase-1/audit-original-event-final-closure-remediation-v1.md'
       - '.github/workflows/phase1-audit-original-event-forest.yml'
 
 permissions:

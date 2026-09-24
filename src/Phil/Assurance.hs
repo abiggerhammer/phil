@@ -1,7 +1,9 @@
 module Phil.Assurance
   ( OriginalCheckEventError (..)
+  , OriginalCheckEventClosureError (..)
   , resolveOriginalCheckEvent
   , handoffOriginalCheckEvent
+  , closeOriginalCheckEventBundle
   , module Phil.Assurance.Types
   , module Phil.Assurance.Handoff
   , module Phil.Assurance.Verify
@@ -50,6 +52,9 @@ import Phil.Core.Syntax
   , Ty (..)
   )
 import Phil.Core.Value (ValueResult (..))
+import Phil.Verification (ApplicationAssurancePolicy)
+import Phil.Verification.Bundle (VerificationBundle)
+import qualified Phil.Verification.ManifestClosure as ManifestClosure
 
 -- | Failure while rebasing one actual residualizing value-check event onto the
 -- resolver/assurance path.  This adapter deliberately starts from the returned
@@ -71,6 +76,15 @@ data OriginalCheckEventError
   | OriginalCheckEventResidualInventoryMismatch (Set ObligationId) (Set ObligationId)
   | OriginalCheckEventResolvedPropositionMismatch ObligationId Proposition Proposition
   | OriginalCheckEventHandoffError HandoffError
+  deriving (Eq, Show)
+
+-- | Failure while taking one actual check event all the way through the
+-- immutable final manifest consumer.  Keep event reconstruction and final
+-- closure failures distinct so a caller cannot treat a downstream rejection as
+-- permission to rebuild a smaller handoff.
+data OriginalCheckEventClosureError
+  = OriginalCheckEventClosureResolutionError OriginalCheckEventError
+  | OriginalCheckEventClosureManifestError ManifestClosure.ManifestClosureError
   deriving (Eq, Show)
 
 -- | Resolve the exact original check event represented by a residualizing
@@ -172,6 +186,68 @@ handoffOriginalCheckEvent config evidenceIds staticContext policy spec result = 
   resolved <- resolveOriginalCheckEvent staticContext policy spec result
   mapLeft OriginalCheckEventHandoffError $
     handoffResolvedObligationWithEvidence config evidenceIds resolved
+
+-- | Finalize one VerificationBundle from the exact original ValueResult rather
+-- than accepting a caller-supplied handoff forest.  This is the final-consumer
+-- adapter for the original-event rebase: the same event-derived handoff is
+-- passed directly to 'closeVerificationBundleWithHandoff'.
+--
+-- This first adapter deliberately supplies no local EvidenceFact identity map.
+-- A tree which actually depends on such a certificate fact therefore fails
+-- closed in 'handoffOriginalCheckEvent' instead of bypassing the existing
+-- authority-aware handoff.  Direct named evidence likewise remains subject to
+-- the final closure's immutable-authority requirements.  This bounded route is
+-- for the original-event prerequisite/definition/runtime composition repaired
+-- here; the already-existing authority-aware evidence routes remain separate.
+-- Resource ownership comes only from the returned 'ValueResult'; this function
+-- never restores a consumed affine or linear owner.
+closeOriginalCheckEventBundle
+  :: HandoffConfig
+  -> StaticContext
+  -> Discharge.DischargePolicy
+  -> ResidualSpec
+  -> ValueResult
+  -> VerificationBundle
+  -> ApplicationAssurancePolicy
+  -> VerificationContext
+  -> AssuranceLedger
+  -> ManifestClosure.ManifestClosureSelection
+  -> Map RevisionId EvidenceEntryId
+  -> Map RevisionId EvidenceEntryId
+  -> Either OriginalCheckEventClosureError AssuranceManifest
+closeOriginalCheckEventBundle
+    config
+    staticContext
+    dischargePolicy
+    spec
+    result
+    bundle
+    assurancePolicy
+    context
+    ledger
+    selection
+    certificateEvidence
+    directEvidence = do
+  entries <- mapLeft OriginalCheckEventClosureResolutionError $
+    handoffOriginalCheckEvent
+      config
+      Map.empty
+      staticContext
+      dischargePolicy
+      spec
+      result
+  mapLeft OriginalCheckEventClosureManifestError $
+    ManifestClosure.closeVerificationBundleWithHandoff
+      bundle
+      assurancePolicy
+      context
+      ledger
+      selection
+      ManifestClosure.ManifestClosureHandoff
+        { ManifestClosure.manifestClosureHandoffEntries = entries
+        , ManifestClosure.manifestClosureCertificateEvidence = certificateEvidence
+        , ManifestClosure.manifestClosureDirectEvidence = directEvidence
+        }
 
 originalRequiredProposition
   :: ValueResult
