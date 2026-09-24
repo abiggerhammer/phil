@@ -173,5 +173,5 @@ wrongMetadataRejected = do
   result <- multiSubjectResult
   let wrong = spec { residualScope = "audit.endpoint.other-event" }
   case Assurance.actualEvidenceSubjectEndpoints wrong result of
-    Left Assurance.OriginalCheckEventResidualMetadataMismatch {} -> Right ()
+    Left (Assurance.OriginalCheckEventResidualMetadataMismatch _ _ _) -> Right ()
     other -> Left ("wrong event metadata established endpoint authority: " <> show other)
