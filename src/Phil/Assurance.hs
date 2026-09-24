@@ -1,6 +1,9 @@
 module Phil.Assurance
   ( OriginalCheckEventError (..)
   , OriginalCheckEventClosureError (..)
+  , EvidenceSubjectOccurrence (..)
+  , ActualEvidenceUse (..)
+  , actualEvidenceUseInventory
   , resolveOriginalCheckEvent
   , handoffOriginalCheckEvent
   , closeOriginalCheckEventBundle
@@ -48,7 +51,7 @@ import Phil.Core.Syntax
   , Name
   , Obligation (..)
   , ObligationId
-  , Proposition
+  , Proposition (..)
   , RefTerm (..)
   , Ty (..)
   )
@@ -87,6 +90,53 @@ data OriginalCheckEventClosureError
   = OriginalCheckEventClosureResolutionError OriginalCheckEventError
   | OriginalCheckEventClosureManifestError ManifestClosure.ManifestClosureError
   deriving (Eq, Show)
+
+-- | One exact subject occurrence in an evidence use returned by the checker.
+-- Occurrences, rather than a set of names, are retained so multi-subject facts
+-- and repeated appearances of one subject cannot be silently collapsed before
+-- later endpoint/rebase correspondence is established.
+data EvidenceSubjectOccurrence = EvidenceSubjectOccurrence
+  { evidenceSubjectUseIndex :: Int
+  , evidenceSubjectOccurrenceIndex :: Int
+  , evidenceSubjectName :: Name
+  }
+  deriving (Eq, Ord, Show)
+
+-- | Complete classification of one evidence use from an actual 'ValueResult'.
+-- A checked-closed use is credited only when the proposition carried by that
+-- returned evidence use contains no subject occurrences.  Missing endpoint
+-- metadata or failed lookups are never used as a proxy for closedness.
+data ActualEvidenceUse
+  = ActualSubjectBearingEvidenceUse
+      { actualEvidenceUseIndex :: Int
+      , actualEvidenceUse :: EvidenceUse
+      , actualEvidenceSubjects :: [EvidenceSubjectOccurrence]
+      }
+  | ActualCheckedClosedEvidenceUse
+      { actualEvidenceUseIndex :: Int
+      , actualEvidenceUse :: EvidenceUse
+      }
+  deriving (Eq, Ord, Show)
+
+-- | Reflect every evidence use returned by the real checker into an ordered,
+-- occurrence-complete inventory.  The inventory is derived directly from the
+-- 'ValueResult': callers cannot select a smaller evidence domain, and a closed
+-- classification is based on the actual proposition structure rather than an
+-- absent subject mapping.  This function intentionally does not invent an
+-- original/final event identity for residual-free results; same-event final-use
+-- correspondence remains a later boundary.
+actualEvidenceUseInventory :: ValueResult -> [ActualEvidenceUse]
+actualEvidenceUseInventory result =
+  zipWith classify [1 ..] (valueResultEvidence result)
+  where
+    classify useIndex evidenceUse =
+      let subjects = zipWith
+            (EvidenceSubjectOccurrence useIndex)
+            [1 ..]
+            (evidenceUseSubjectNames evidenceUse)
+      in case subjects of
+          [] -> ActualCheckedClosedEvidenceUse useIndex evidenceUse
+          _ -> ActualSubjectBearingEvidenceUse useIndex evidenceUse subjects
 
 -- | Resolve the exact original check event represented by a residualizing
 -- 'ValueResult'.  In particular, do not resolve each normalized pending map
@@ -367,6 +417,48 @@ validateResolvedResidual resolvedById (obligationId', proposition) =
               obligationId'
               expected
               actual)
+
+evidenceUseSubjectNames :: EvidenceUse -> [Name]
+evidenceUseSubjectNames evidenceUse =
+  propositionSubjectNames $
+    case evidenceUse of
+      EvidenceByDefinition proposition -> proposition
+      EvidenceByBinding _ proposition -> proposition
+      EvidenceResidual _ proposition -> proposition
+
+-- Preserve every RefVar occurrence in left-to-right semantic term order.  Do
+-- not deduplicate equal names: a later subject-identity adapter must account for
+-- every relevant occurrence in a multi-subject fact.
+propositionSubjectNames :: Proposition -> [Name]
+propositionSubjectNames proposition =
+  case proposition of
+    Truth -> []
+    Falsehood -> []
+    Equal left right -> termSubjectNames left ++ termSubjectNames right
+    NotEqual left right -> termSubjectNames left ++ termSubjectNames right
+    LessThan left right -> termSubjectNames left ++ termSubjectNames right
+    LessEqual left right -> termSubjectNames left ++ termSubjectNames right
+    Member value collection -> termSubjectNames value ++ termSubjectNames collection
+    Disjoint left right -> termSubjectNames left ++ termSubjectNames right
+    Conjunction left right -> propositionSubjectNames left ++ propositionSubjectNames right
+    Disjunction left right -> propositionSubjectNames left ++ propositionSubjectNames right
+    Negation inner -> propositionSubjectNames inner
+    Atom _ arguments -> concatMap termSubjectNames arguments
+
+termSubjectNames :: RefTerm -> [Name]
+termSubjectNames term =
+  case term of
+    RefVar name -> [name]
+    RefField base _ _ -> termSubjectNames base
+    RefLen value -> termSubjectNames value
+    RefToNat value -> termSubjectNames value
+    RefAdd left right -> termSubjectNames left ++ termSubjectNames right
+    RefSub left right -> termSubjectNames left ++ termSubjectNames right
+    RefScale _ value -> termSubjectNames value
+    RefNat _ -> []
+    RefUInt _ _ -> []
+    RefBool _ -> []
+    RefOpaque _ _ -> []
 
 mapLeft :: (a -> b) -> Either a c -> Either b c
 mapLeft f = either (Left . f) Right
