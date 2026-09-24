@@ -1,0 +1,42 @@
+name: Phase 1 Audit Evidence Use Inventory
+
+on:
+  pull_request:
+    paths:
+      - 'src/Phil/Assurance.hs'
+      - 'test/Phase1AuditEvidenceUseInventoryMain.hs'
+      - 'docs/phase-1/audit-evidence-use-inventory-remediation-v1.md'
+      - '.github/workflows/phase1-audit-evidence-use-inventory.yml'
+  push:
+    branches: [main]
+    paths:
+      - 'src/Phil/Assurance.hs'
+      - 'test/Phase1AuditEvidenceUseInventoryMain.hs'
+      - 'docs/phase-1/audit-evidence-use-inventory-remediation-v1.md'
+      - '.github/workflows/phase1-audit-evidence-use-inventory.yml'
+
+permissions:
+  contents: read
+
+jobs:
+  evidence-use-inventory-regression:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: haskell-actions/setup@v2
+        with:
+          ghc-version: '9.6.7'
+          cabal-version: 'latest'
+
+      - name: Build complete Haskell substrate
+        run: cabal build all --enable-tests
+
+      - name: Strict typecheck actual evidence-use inventory
+        shell: bash
+        run: |
+          set -euo pipefail
+          cabal exec -- ghc -isrc -Wall -Werror -fno-code src/Phil/Assurance.hs
+          cabal exec -- ghc -isrc -Wall -Werror -fno-code test/Phase1AuditEvidenceUseInventoryMain.hs
+
+      - name: Replay actual evidence-use inventory controls
+        run: cabal exec -- runghc -isrc -Wall -Werror test/Phase1AuditEvidenceUseInventoryMain.hs
