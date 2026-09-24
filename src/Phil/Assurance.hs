@@ -55,7 +55,7 @@ import Phil.Core.Syntax
   , RefTerm (..)
   , Ty (..)
   )
-import Phil.Core.Value (ValueResult (..))
+import Phil.Core.Value (ValueResult (..), definitionallyEqualTy)
 import Phil.Verification (ApplicationAssurancePolicy)
 import Phil.Verification.Bundle (VerificationBundle)
 import qualified Phil.Verification.ManifestClosure as ManifestClosure
@@ -173,18 +173,17 @@ resolveOriginalCheckEvent staticContext policy spec result = do
         , obligationScope = residualScope spec
         , obligationRequiredPoint = residualRequiredPoint spec
         }
-      subjectBindings = checkedSubjectBindings result
-      subjectUnrestricted =
+  residualRecords <- mapM (validateResidualRecord state spec) residualUses
+  retainedBindings <- mergeLogicalBindings
+    [ logicalSupportBindings support
+    | (_, support) <- residualRecords
+    ]
+  subjectBindings <- checkedSubjectBindings result retainedBindings
+  let subjectUnrestricted =
         case valueResultMode result of
           Just Unrestricted -> subjectBindings
           _ -> Map.empty
-  residualRecords <- mapM (validateResidualRecord state spec) residualUses
-  logicalBindings <- mergeLogicalBindings
-    ( subjectBindings
-      : [ logicalSupportBindings support
-        | (_, support) <- residualRecords
-        ]
-    )
+  logicalBindings <- mergeLogicalBindings [subjectBindings, retainedBindings]
   liveUnrestricted <- mergeLogicalBindings
     ( subjectUnrestricted
       : [ logicalSupportUnrestrictedBindings support
@@ -314,21 +313,41 @@ originalRequiredProposition result =
     other -> Left (OriginalCheckEventExpectedRefinement other)
 
 -- | Reuse the exact still-live checked binding when the structural value remains
--- present after checking.  This preserves the original refined subject type and,
--- for unrestricted values only, its existing evidence authority.  A consumed
--- affine or linear owner is never reconstructed: if the returned state no longer
--- contains the checked binding, the logical root falls back to the refinement's
--- base type and can only gain stronger typing from exact retained residual
--- support.
-checkedSubjectBindings :: ValueResult -> Map Name Ty
-checkedSubjectBindings result =
+-- present after checking.  If a restricted owner was consumed, prefer only an
+-- exact retained logical interpretation captured by this event's validated
+-- residual support, and require that interpretation to erase to the checked
+-- refinement's actual base type.  Falling back to the base is valid only when
+-- no retained interpretation exists.  None of these logical bindings restores
+-- ownership or unrestricted proof authority.
+checkedSubjectBindings
+  :: ValueResult
+  -> Map Name Ty
+  -> Either OriginalCheckEventError (Map Name Ty)
+checkedSubjectBindings result retainedBindings =
   case (valueResultType result, valueResultTerm result) of
     (TyRefined _ base _, Just (RefVar name)) ->
-      Map.singleton name $
-        case checkedLiveBinding result name of
-          Just ty -> ty
-          Nothing -> base
-    _ -> Map.empty
+      case checkedLiveBinding result name of
+        Just ty -> Right (Map.singleton name ty)
+        Nothing ->
+          case Map.lookup name retainedBindings of
+            Nothing -> Right (Map.singleton name base)
+            Just retained
+              | refinementSupportsBase retained base ->
+                  Right (Map.singleton name retained)
+              | otherwise ->
+                  Left (OriginalCheckEventLogicalTypeConflict name retained base)
+    _ -> Right Map.empty
+
+-- | A retained logical type is a competent interpretation of the checked
+-- subject only when it is the required base itself or a refinement chain whose
+-- erasure reaches that base.  This deliberately does not compare unrelated
+-- refinements merely because they share a subject spelling.
+refinementSupportsBase :: Ty -> Ty -> Bool
+refinementSupportsBase retained expectedBase =
+  definitionallyEqualTy retained expectedBase
+    || case retained of
+        TyRefined _ base _ -> refinementSupportsBase base expectedBase
+        _ -> False
 
 checkedLiveBinding :: ValueResult -> Name -> Maybe Ty
 checkedLiveBinding result name =
