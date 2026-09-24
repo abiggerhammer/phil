@@ -354,8 +354,6 @@ closeActualEvent keepSupport = do
         }
       closureResult = closeOriginalCheckEventBundle
         config
-        Map.empty
-        Map.empty
         emptyStaticContext
         dischargePolicy
         spec
