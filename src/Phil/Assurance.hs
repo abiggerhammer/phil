@@ -41,11 +41,12 @@ import Phil.Core.Refinement
   )
 import Phil.Core.Static (StaticContext)
 import Phil.Core.Syntax
-  ( Name
+  ( Mode (..)
+  , Name
   , Obligation (..)
   , ObligationId
   , Proposition
-  , RefTerm
+  , RefTerm (..)
   , Ty (..)
   )
 import Phil.Core.Value (ValueResult (..))
@@ -82,9 +83,10 @@ data OriginalCheckEventError
 -- metadata is checked against every residual actually returned by the value
 -- checker, and the resulting original-event tree must cover exactly the
 -- pending nodes from that tree which survive in the returned checker state.
--- Logical subject typing is rebuilt only from the exact residual supports
--- captured by the checker.  It is installed in a temporary resolver view and
--- never restores ownership or changes the returned resource state.
+-- Logical subject typing is rebuilt only from the checked subject and exact
+-- residual supports captured by the checker.  It is installed in a temporary
+-- resolver view and never restores ownership or changes the returned resource
+-- state.
 resolveOriginalCheckEvent
   :: StaticContext
   -> Discharge.DischargePolicy
@@ -106,28 +108,35 @@ resolveOriginalCheckEvent staticContext policy spec result = do
         , obligationScope = residualScope spec
         , obligationRequiredPoint = residualRequiredPoint spec
         }
+      subjectBindings = checkedSubjectBindings result
+      subjectUnrestricted =
+        case valueResultMode result of
+          Just Unrestricted -> subjectBindings
+          _ -> Map.empty
   residualRecords <- mapM (validateResidualRecord state spec) residualUses
   logicalBindings <- mergeLogicalBindings
-    [ logicalSupportBindings support
-    | (_, support) <- residualRecords
-    ]
+    ( subjectBindings
+      : [ logicalSupportBindings support
+        | (_, support) <- residualRecords
+        ]
+    )
   liveUnrestricted <- mergeLogicalBindings
-    [ logicalSupportUnrestrictedBindings support
-    | (_, support) <- residualRecords
-    ]
+    ( subjectUnrestricted
+      : [ logicalSupportUnrestrictedBindings support
+        | (_, support) <- residualRecords
+        ]
+    )
   let rootSupport = LogicalSubjectSupport
         { logicalSupportObligation = root
         , logicalSupportBindings = logicalBindings
         , logicalSupportUnrestrictedBindings = liveUnrestricted
         }
-      resolverState
-        | null residualUses = state
-        | otherwise = state
-            { residualLogicalSubjects = Map.insert
-                (obligationId root)
-                rootSupport
-                (residualLogicalSubjects state)
-            }
+      resolverState = state
+        { residualLogicalSubjects = Map.insert
+            (obligationId root)
+            rootSupport
+            (residualLogicalSubjects state)
+        }
   resolved <- mapLeft OriginalCheckEventDischargeError $
     Discharge.resolveObligation staticContext resolverState policy root
   let resolvedById = flattenResolved resolved
@@ -176,6 +185,12 @@ originalRequiredProposition result =
             Just term -> Right (substituteProposition binder term proposition)
             Nothing -> Left (OriginalCheckEventSubjectNotVisible binder)
     other -> Left (OriginalCheckEventExpectedRefinement other)
+
+checkedSubjectBindings :: ValueResult -> Map Name Ty
+checkedSubjectBindings result =
+  case (valueResultType result, valueResultTerm result) of
+    (TyRefined _ base _, Just (RefVar name)) -> Map.singleton name base
+    _ -> Map.empty
 
 validateResidualRecord
   :: CheckState
