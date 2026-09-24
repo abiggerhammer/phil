@@ -1,0 +1,48 @@
+name: Phase 1 Audit Residual-Free Event Origin
+
+on:
+  pull_request:
+    paths:
+      - 'src/Phil/Assurance.hs'
+      - 'test/Phase1AuditResidualFreeEventOriginMain.hs'
+      - 'test/Phase1AuditOriginalEventForestMain.hs'
+      - 'docs/phase-1/audit-residual-free-event-origin-remediation-v1.md'
+      - '.github/workflows/phase1-audit-residual-free-event-origin.yml'
+  push:
+    branches: [main]
+    paths:
+      - 'src/Phil/Assurance.hs'
+      - 'test/Phase1AuditResidualFreeEventOriginMain.hs'
+      - 'test/Phase1AuditOriginalEventForestMain.hs'
+      - 'docs/phase-1/audit-residual-free-event-origin-remediation-v1.md'
+      - '.github/workflows/phase1-audit-residual-free-event-origin.yml'
+
+permissions:
+  contents: read
+
+jobs:
+  residual-free-event-origin-regression:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: haskell-actions/setup@v2
+        with:
+          ghc-version: '9.6.7'
+          cabal-version: 'latest'
+
+      - name: Build complete Haskell substrate
+        run: cabal build all --enable-tests
+
+      - name: Strict typecheck event-origin repair
+        shell: bash
+        run: |
+          set -euo pipefail
+          cabal exec -- ghc -isrc -Wall -Werror -fno-code src/Phil/Assurance.hs
+          cabal exec -- ghc -isrc -Wall -Werror -fno-code test/Phase1AuditResidualFreeEventOriginMain.hs
+          cabal exec -- ghc -isrc -Wall -Werror -fno-code test/Phase1AuditOriginalEventForestMain.hs
+
+      - name: Replay residual-free origin controls
+        run: cabal exec -- runghc -isrc -Wall -Werror test/Phase1AuditResidualFreeEventOriginMain.hs
+
+      - name: Preserve residualizing original-event final closure
+        run: cabal exec -- runghc -isrc -Wall -Werror test/Phase1AuditOriginalEventForestMain.hs
