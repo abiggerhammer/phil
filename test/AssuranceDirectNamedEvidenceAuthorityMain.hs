@@ -4,8 +4,11 @@ module Main (main) where
 
 import qualified Data.Map.Strict as Map
 import qualified Data.Set as Set
+import Data.Text (Text)
 import Phil.Assurance.EvidenceFactAuthority
-  ( handoffResolvedObligationWithAllEvidenceAuthority )
+  ( EvidenceFactAuthorityError (..)
+  , handoffResolvedObligationWithAllEvidenceAuthority
+  )
 import Phil.Assurance.Handoff
   ( DirectEvidenceAuthorityBinding (..)
   , HandoffConfig (..)
@@ -44,8 +47,7 @@ import Phil.Verification.ManifestClosure
 import System.Exit (exitFailure)
 
 data Fixture = Fixture
-  { fixtureEntry :: LedgerHandoff
-  , fixtureGraph :: VerificationObligationGraph
+  { fixtureGraph :: VerificationObligationGraph
   , fixtureBundle :: VerificationBundle
   , fixturePolicy :: ApplicationAssurancePolicy
   , fixtureContext :: VerificationContext
@@ -102,12 +104,11 @@ missingEventAuthorityRejected = do
       authorities = Map.singleton
         (wrongEvent, proofName)
         (DirectEvidenceAuthorityBinding sourceEvidenceId)
+      expected = EvidenceFactAuthorityHandoffError
+        (MissingDirectEvidenceAuthority consumerId proofName)
   case handoffResolvedObligationWithAllEvidenceAuthority
       handoffConfig Map.empty authorities ledger directResolved of
-    Left err
-      | show err == show
-          (EvidenceFactAuthorityHandoffError
-            (MissingDirectEvidenceAuthority consumerId proofName)) -> Right ()
+    Left err | err == expected -> Right ()
     other -> Left ("expected exact-event authority rejection, got " <> show other)
 
 wrongPropositionRejected :: Either String ()
@@ -182,11 +183,11 @@ wrongDirectClosureEvidenceRejected = do
     other -> Left ("expected direct revision mismatch, got " <> show other)
 
 expectAuthorityFailure :: AssuranceLedger -> HandoffError -> Either String ()
-expectAuthorityFailure ledger expected =
-  case handoffResolvedObligationWithAllEvidenceAuthority
+expectAuthorityFailure ledger expectedHandoff =
+  let expected = EvidenceFactAuthorityHandoffError expectedHandoff
+  in case handoffResolvedObligationWithAllEvidenceAuthority
       handoffConfig Map.empty directAuthorities ledger directResolved of
-    Left err
-      | show err == show (EvidenceFactAuthorityHandoffError expected) -> Right ()
+    Left err | err == expected -> Right ()
     other -> Left ("expected authority failure " <> show expected <> ", got " <> show other)
 
 closeFixture :: Fixture -> Either ManifestClosureError AssuranceManifest
@@ -255,8 +256,7 @@ baseFixture = do
             consumerRevisionId consumerEvidenceId
         }
   Right Fixture
-    { fixtureEntry = entry
-    , fixtureGraph = graph
+    { fixtureGraph = graph
     , fixtureBundle = bundle
     , fixturePolicy = policy
     , fixtureContext = context
@@ -317,8 +317,8 @@ sourceLedger revision evidence = emptyLedger
   , ledgerEvidence = Map.singleton (evidenceEntryId evidence) evidence
   }
 
-sourceRevision :: Name -> Proposition -> [Data.Text.Text] -> Data.Text.Text -> ObligationRevision
-sourceRevision (Name suffix) proposition subjects scope =
+sourceRevision :: Text -> Proposition -> [Text] -> Text -> ObligationRevision
+sourceRevision suffix proposition subjects scope =
   revisionFromCoreObligation
     Obligation
       { obligationId = ObligationId ("audit.direct.source." <> suffix)
@@ -425,10 +425,10 @@ proofName = Name "proof"
 directProposition :: Proposition
 directProposition = Atom "DirectClaim" [RefVar (Name "payload")]
 
-subjectId :: Data.Text.Text
+subjectId :: Text
 subjectId = "subject.payload"
 
-consumerScope :: Data.Text.Text
+consumerScope :: Text
 consumerScope = "audit.direct.scope"
 
 sourceEvidenceId :: EvidenceEntryId
