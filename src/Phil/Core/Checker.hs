@@ -29,6 +29,7 @@ import Phil.Core.Syntax
 data LogicalSubjectSupport = LogicalSubjectSupport
   { logicalSupportObligation :: Obligation
   , logicalSupportBindings :: Map Name Ty
+  , logicalSupportUnrestrictedBindings :: Map Name Ty
   }
   deriving (Eq, Show)
 
@@ -61,7 +62,10 @@ emptyCheckState = CheckState
 -- bindings needed to interpret variables in its proposition.  The support is
 -- keyed by the obligation identity and retains the complete obligation record,
 -- so a later same-spelled resource cannot silently stand in for the original
--- logical subject.
+-- logical subject.  Referenced unrestricted bindings are recorded separately:
+-- unlike affine and linear bindings, the public ResourceContext transitions do
+-- not consume or replace them, so a still-present exact binding can retain its
+-- original fact authority without restoring any consumed resource.
 emitObligation :: Obligation -> CheckState -> Either CheckerError CheckState
 emitObligation obligation state =
   case Map.lookup obligationId' (residualObligations state) of
@@ -91,6 +95,8 @@ emitObligation obligation state =
     support = LogicalSubjectSupport
       { logicalSupportObligation = obligation
       , logicalSupportBindings = referencedResourceBindings obligation state
+      , logicalSupportUnrestrictedBindings =
+          referencedUnrestrictedBindings obligation state
       }
 
 -- | Activate only the durable logical typing support captured for this exact
@@ -118,9 +124,21 @@ referencedResourceBindings :: Obligation -> CheckState -> Map Name Ty
 referencedResourceBindings obligation state =
   Map.fromList
     [ (name, ty)
-    | name <- Set.toAscList (propositionVariables (obligationProposition obligation))
+    | name <- referencedNames obligation
     , Just ty <- [lookupResourceBinding name (resourceContext state)]
     ]
+
+referencedUnrestrictedBindings :: Obligation -> CheckState -> Map Name Ty
+referencedUnrestrictedBindings obligation state =
+  Map.fromList
+    [ (name, ty)
+    | name <- referencedNames obligation
+    , Just ty <- [Map.lookup name (unrestrictedBindings (resourceContext state))]
+    ]
+
+referencedNames :: Obligation -> [Name]
+referencedNames obligation =
+  Set.toAscList (propositionVariables (obligationProposition obligation))
 
 lookupResourceBinding :: Name -> ResourceContext -> Maybe Ty
 lookupResourceBinding name context =
@@ -138,7 +156,7 @@ propositionVariables proposition =
     LessThan left right -> termVariables left `Set.union` termVariables right
     LessEqual left right -> termVariables left `Set.union` termVariables right
     Member value collection -> termVariables value `Set.union` termVariables collection
-    Disjoint left right -> termVariables left `Set.union` termVariables right
+    Disjoint left right -> termVariables left `Set.union` termVariables collection
     Conjunction left right -> propositionVariables left `Set.union` propositionVariables right
     Disjunction left right -> propositionVariables left `Set.union` propositionVariables right
     Negation inner -> propositionVariables inner
