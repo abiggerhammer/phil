@@ -1,5 +1,5 @@
 From Stdlib Require Import Bool.Bool Arith.PeanoNat.
-From Phil.Assurance Require Import DirectNamedEvidenceAuthority.
+From Phil.Assurance Require Import EvidenceFactAuthority DirectNamedEvidenceAuthority.
 
 (*
   Defensive proof-correspondence continuation of D-CERT-SUPPORT-01.
