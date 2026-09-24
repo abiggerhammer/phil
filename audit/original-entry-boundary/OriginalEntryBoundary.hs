@@ -157,9 +157,25 @@ otherEvent = do
   p <- pack g (H.handoffSupportEdges (F.entries g))
   F.ensure (valueResultType original /= valueResultType different) "events not different"
   _ <- F.right $ nativeClose F.config spec0 disp different p
-  exactError (A.OriginalCheckEventClosureManifestError
-      (M.ManifestClosureHandoffRevisionMissing (F.rev (F.parent f))))
-    (nativeClose F.config spec0 disp original p)
+  -- Revision keys do not replace equality of the full retained revision.
+  -- Ordered validation may find the child's differing generation lineage
+  -- before the absent parent. Require the exact first native disagreement,
+  -- not an arbitrary rejection or an assumed diagnostic ordering.
+  let expectedEntries = Map.fromList
+        [(F.rev h,H.handoffRevision h) | h <- F.entries f]
+      actualNodes = V.verificationGraphNodes (B.verificationBundleObligationGraph (bundle p))
+      mismatches =
+        [ err
+        | (key,wanted) <- Map.toAscList expectedEntries
+        , err <- case Map.lookup key actualNodes of
+            Nothing -> [M.ManifestClosureHandoffRevisionMissing key]
+            Just stored | stored /= wanted -> [M.ManifestClosureHandoffRevisionMismatch key]
+            _ -> []
+        ]
+  case mismatches of
+    expected : _ -> exactError (A.OriginalCheckEventClosureManifestError expected)
+      (nativeClose F.config spec0 disp original p)
+    [] -> Left "different-event fixture has no exact revision disagreement"
 
 wrongScope :: Either String ()
 wrongScope = do
@@ -233,7 +249,7 @@ authorityFixture route = do
   let sourceRevision = DF.sourceRevision "actual-checked-value" sourceFact [DF.subjectId] DF.consumerScope
       sourceEvidence = DF.sealEvidence (DF.mkSourceEvidence DF.sourceEvidenceId sourceRevision)
       initialLedger = DF.sourceLedger sourceRevision sourceEvidence
-      certAuthority = if route == Arithmetic then Map.singleton (DF.proofName,0)
+      certAuthority = if route == Arithmetic then Map.singleton (DF.proofName,1)
         (E.EvidenceFactAuthorityBinding DF.sourceEvidenceId [DF.subjectId] DF.consumerScope) else Map.empty
       directAuthority = if route == Direct then DF.directAuthorities else Map.empty
   entries <- F.right $ E.handoffResolvedObligationWithAllEvidenceAuthority
@@ -247,7 +263,7 @@ authorityFixture route = do
   graph <- F.right $ V.buildVerificationRevisionGraphWithSupport
     [cr,sourceRevision] (H.handoffSupportEdges entries) (Set.fromList [rid,T.revisionId sourceRevision])
   let pol = V.ApplicationAssurancePolicy (V.AssurancePolicyRevision "audit.actual-evidence") (Set.singleton V.StaticallyDischarged)
-  b <- F.right $ B.buildVerificationBundle (T.digestText "audit.actual-evidence.source") [] [] [] graph pol [consumerEvidence,sourceEvidence]
+  b <- F.right $ B.buildVerificationBundle (T.digestText "audit-direct-evidence-source") [] [] [] graph pol [consumerEvidence,sourceEvidence]
   let l = T.emptyLedger { T.ledgerRevisions = V.verificationGraphNodes graph
         , T.ledgerEvidence = Map.fromList [(DF.consumerEvidenceId,consumerEvidence),(DF.sourceEvidenceId,sourceEvidence)] }
       ctx = T.emptyVerificationContext
@@ -287,7 +303,7 @@ boundedAuthorityRejection route = do
         Direct -> A.OriginalCheckEventClosureManifestError
           (M.ManifestClosureHandoffEvidenceRejected rid DF.consumerEvidenceId (H.HandoffDirectEvidenceSupportMissing rid DF.proofName))
         Arithmetic -> A.OriginalCheckEventClosureResolutionError
-          (A.OriginalCheckEventHandoffError (H.UnknownEvidenceFactSupport DF.consumerId DF.proofName 0))
+          (A.OriginalCheckEventHandoffError (H.UnknownEvidenceFactSupport DF.consumerId DF.proofName 1))
   exactError expected $ nativeClose DF.handoffConfig s D.emptyDischargePolicy result (fromDirectFixture f)
 
 wrongAuthorityEvent :: Either String ()
@@ -303,7 +319,7 @@ wrongFinalEvidence = do
   source <- DF.sourceEvidence f
   let rid = DF.fixtureConsumerRevision f
       p = (fromDirectFixture f) { directs = Map.singleton rid DF.sourceEvidenceId }
-  exactError (M.ManifestClosureHandoffEvidenceRejected rid DF.sourceEvidenceId
+  exactError (M.ManifestClosureHandoffEvidenceRejected rid DF.consumerEvidenceId
     (H.HandoffEvidenceRevisionMismatch rid (T.evidenceObligationRevision source))) $ genericClose entries p
 
 droppedDirectSupport :: Either String ()
