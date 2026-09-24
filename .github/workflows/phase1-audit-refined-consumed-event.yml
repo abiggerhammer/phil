@@ -1,0 +1,42 @@
+name: Phase 1 Audit Refined Consumed Event
+
+on:
+  pull_request:
+    paths:
+      - 'src/Phil/Assurance.hs'
+      - 'test/Phase1AuditRefinedConsumedEventMain.hs'
+      - 'docs/phase-1/audit-refined-consumed-event-remediation-v1.md'
+      - '.github/workflows/phase1-audit-refined-consumed-event.yml'
+  push:
+    branches: [main]
+    paths:
+      - 'src/Phil/Assurance.hs'
+      - 'test/Phase1AuditRefinedConsumedEventMain.hs'
+      - 'docs/phase-1/audit-refined-consumed-event-remediation-v1.md'
+      - '.github/workflows/phase1-audit-refined-consumed-event.yml'
+
+permissions:
+  contents: read
+
+jobs:
+  refined-consumed-event-regression:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: haskell-actions/setup@v2
+        with:
+          ghc-version: '9.6.7'
+          cabal-version: 'latest'
+
+      - name: Build complete Haskell substrate
+        run: cabal build all --enable-tests
+
+      - name: Strict typecheck refined consumed-event repair
+        shell: bash
+        run: |
+          set -euo pipefail
+          cabal exec -- ghc -isrc -Wall -Werror -fno-code src/Phil/Assurance.hs
+          cabal exec -- ghc -isrc -Wall -Werror -fno-code test/Phase1AuditRefinedConsumedEventMain.hs
+
+      - name: Replay refined consumed-event controls
+        run: cabal exec -- runghc -isrc -Wall -Werror test/Phase1AuditRefinedConsumedEventMain.hs
