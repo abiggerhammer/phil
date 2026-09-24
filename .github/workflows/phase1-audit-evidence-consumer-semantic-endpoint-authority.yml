@@ -1,0 +1,107 @@
+name: Phase 1 Audit Evidence Consumer Semantic Endpoint Authority
+
+on:
+  pull_request:
+    paths:
+      - 'proof/Phil/Surface/BranchEvidenceSupport.v'
+      - 'proof/Phil/Assurance/EvidenceConsumerSubjectTransport.v'
+      - 'proof/Phil/Assurance/EvidenceConsumerEndpointCoverage.v'
+      - 'proof/Phil/Assurance/EvidenceConsumerSelectionCoverage.v'
+      - 'proof/Phil/Assurance/EvidenceConsumerUseClassification.v'
+      - 'proof/Phil/Assurance/EvidenceConsumerFinalUseCorrespondence.v'
+      - 'proof/Phil/Assurance/EvidenceConsumerSubjectOccurrenceCoverage.v'
+      - 'proof/Phil/Assurance/EvidenceConsumerEventOriginCorrespondence.v'
+      - 'proof/Phil/Assurance/EvidenceConsumerSemanticEndpointAuthority.v'
+      - 'docs/phase-1/audit-evidence-consumer-semantic-endpoint-authority-v1.md'
+      - '.github/workflows/phase1-audit-evidence-consumer-semantic-endpoint-authority.yml'
+  push:
+    branches: [main]
+    paths:
+      - 'proof/Phil/Surface/BranchEvidenceSupport.v'
+      - 'proof/Phil/Assurance/EvidenceConsumerSubjectTransport.v'
+      - 'proof/Phil/Assurance/EvidenceConsumerEndpointCoverage.v'
+      - 'proof/Phil/Assurance/EvidenceConsumerSelectionCoverage.v'
+      - 'proof/Phil/Assurance/EvidenceConsumerUseClassification.v'
+      - 'proof/Phil/Assurance/EvidenceConsumerFinalUseCorrespondence.v'
+      - 'proof/Phil/Assurance/EvidenceConsumerSubjectOccurrenceCoverage.v'
+      - 'proof/Phil/Assurance/EvidenceConsumerEventOriginCorrespondence.v'
+      - 'proof/Phil/Assurance/EvidenceConsumerSemanticEndpointAuthority.v'
+      - 'docs/phase-1/audit-evidence-consumer-semantic-endpoint-authority-v1.md'
+      - '.github/workflows/phase1-audit-evidence-consumer-semantic-endpoint-authority.yml'
+
+permissions:
+  contents: read
+
+jobs:
+  evidence-consumer-semantic-endpoint-authority:
+    runs-on: ubuntu-latest
+    container:
+      image: rocq/rocq-prover:9.2.0
+      options: --user root
+    steps:
+      - uses: actions/checkout@v4
+      - name: Compile semantic endpoint authority proofs
+        shell: bash
+        run: |
+          set -euo pipefail
+          export PATH="/home/rocq/.opam/${COMPILER}/bin:$PATH"
+          rocq c -Q proof/Phil Phil proof/Phil/Surface/BranchEvidenceSupport.v
+          rocq c -Q proof/Phil Phil proof/Phil/Assurance/EvidenceConsumerSubjectTransport.v
+          rocq c -Q proof/Phil Phil proof/Phil/Assurance/EvidenceConsumerEndpointCoverage.v
+          rocq c -Q proof/Phil Phil proof/Phil/Assurance/EvidenceConsumerSelectionCoverage.v
+          rocq c -Q proof/Phil Phil proof/Phil/Assurance/EvidenceConsumerUseClassification.v
+          rocq c -Q proof/Phil Phil proof/Phil/Assurance/EvidenceConsumerFinalUseCorrespondence.v
+          rocq c -Q proof/Phil Phil proof/Phil/Assurance/EvidenceConsumerSubjectOccurrenceCoverage.v
+          rocq c -Q proof/Phil Phil proof/Phil/Assurance/EvidenceConsumerEventOriginCorrespondence.v
+          rocq c -Q proof/Phil Phil proof/Phil/Assurance/EvidenceConsumerSemanticEndpointAuthority.v
+      - name: Record exact proof identity
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p evidence-consumer-semantic-endpoint-authority
+          cp \
+            proof/Phil/Surface/BranchEvidenceSupport.v \
+            proof/Phil/Surface/BranchEvidenceSupport.vo \
+            proof/Phil/Assurance/EvidenceConsumerSubjectTransport.v \
+            proof/Phil/Assurance/EvidenceConsumerSubjectTransport.vo \
+            proof/Phil/Assurance/EvidenceConsumerEndpointCoverage.v \
+            proof/Phil/Assurance/EvidenceConsumerEndpointCoverage.vo \
+            proof/Phil/Assurance/EvidenceConsumerSelectionCoverage.v \
+            proof/Phil/Assurance/EvidenceConsumerSelectionCoverage.vo \
+            proof/Phil/Assurance/EvidenceConsumerUseClassification.v \
+            proof/Phil/Assurance/EvidenceConsumerUseClassification.vo \
+            proof/Phil/Assurance/EvidenceConsumerFinalUseCorrespondence.v \
+            proof/Phil/Assurance/EvidenceConsumerFinalUseCorrespondence.vo \
+            proof/Phil/Assurance/EvidenceConsumerSubjectOccurrenceCoverage.v \
+            proof/Phil/Assurance/EvidenceConsumerSubjectOccurrenceCoverage.vo \
+            proof/Phil/Assurance/EvidenceConsumerEventOriginCorrespondence.v \
+            proof/Phil/Assurance/EvidenceConsumerEventOriginCorrespondence.vo \
+            proof/Phil/Assurance/EvidenceConsumerSemanticEndpointAuthority.v \
+            proof/Phil/Assurance/EvidenceConsumerSemanticEndpointAuthority.vo \
+            evidence-consumer-semantic-endpoint-authority/
+          sha256sum \
+            evidence-consumer-semantic-endpoint-authority/BranchEvidenceSupport.v \
+            evidence-consumer-semantic-endpoint-authority/BranchEvidenceSupport.vo \
+            evidence-consumer-semantic-endpoint-authority/EvidenceConsumerSubjectTransport.v \
+            evidence-consumer-semantic-endpoint-authority/EvidenceConsumerSubjectTransport.vo \
+            evidence-consumer-semantic-endpoint-authority/EvidenceConsumerEndpointCoverage.v \
+            evidence-consumer-semantic-endpoint-authority/EvidenceConsumerEndpointCoverage.vo \
+            evidence-consumer-semantic-endpoint-authority/EvidenceConsumerSelectionCoverage.v \
+            evidence-consumer-semantic-endpoint-authority/EvidenceConsumerSelectionCoverage.vo \
+            evidence-consumer-semantic-endpoint-authority/EvidenceConsumerUseClassification.v \
+            evidence-consumer-semantic-endpoint-authority/EvidenceConsumerUseClassification.vo \
+            evidence-consumer-semantic-endpoint-authority/EvidenceConsumerFinalUseCorrespondence.v \
+            evidence-consumer-semantic-endpoint-authority/EvidenceConsumerFinalUseCorrespondence.vo \
+            evidence-consumer-semantic-endpoint-authority/EvidenceConsumerSubjectOccurrenceCoverage.v \
+            evidence-consumer-semantic-endpoint-authority/EvidenceConsumerSubjectOccurrenceCoverage.vo \
+            evidence-consumer-semantic-endpoint-authority/EvidenceConsumerEventOriginCorrespondence.v \
+            evidence-consumer-semantic-endpoint-authority/EvidenceConsumerEventOriginCorrespondence.vo \
+            evidence-consumer-semantic-endpoint-authority/EvidenceConsumerSemanticEndpointAuthority.v \
+            evidence-consumer-semantic-endpoint-authority/EvidenceConsumerSemanticEndpointAuthority.vo \
+            > evidence-consumer-semantic-endpoint-authority/D-RES-SUPPORT-01.semantic-endpoint-authority.proof.sha256
+          cat evidence-consumer-semantic-endpoint-authority/D-RES-SUPPORT-01.semantic-endpoint-authority.proof.sha256
+      - uses: actions/upload-artifact@v4
+        with:
+          name: evidence-consumer-semantic-endpoint-authority-proof
+          path: evidence-consumer-semantic-endpoint-authority
+          if-no-files-found: error
