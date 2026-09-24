@@ -20,7 +20,6 @@ import qualified Data.Map.Strict as Map
 import Data.Map.Strict (Map)
 import qualified Data.Set as Set
 import Data.Set (Set)
-import qualified Phil.Assurance.EvidenceFactAuthority as EvidenceAuthority
 import Phil.Assurance.Handoff
 import Phil.Assurance.Phase0
 import Phil.Assurance.Rocq
@@ -80,12 +79,11 @@ data OriginalCheckEventError
   deriving (Eq, Show)
 
 -- | Failure while taking one actual check event all the way through the
--- immutable final manifest consumer.  Keep event reconstruction, evidence
--- authority, and final closure failures distinct so a caller cannot treat a
--- downstream rejection as permission to rebuild a smaller handoff.
+-- immutable final manifest consumer.  Keep event reconstruction and final
+-- closure failures distinct so a caller cannot treat a downstream rejection as
+-- permission to rebuild a smaller handoff.
 data OriginalCheckEventClosureError
   = OriginalCheckEventClosureResolutionError OriginalCheckEventError
-  | OriginalCheckEventClosureAuthorityError EvidenceAuthority.EvidenceFactAuthorityError
   | OriginalCheckEventClosureManifestError ManifestClosure.ManifestClosureError
   deriving (Eq, Show)
 
@@ -191,19 +189,20 @@ handoffOriginalCheckEvent config evidenceIds staticContext policy spec result = 
 
 -- | Finalize one VerificationBundle from the exact original ValueResult rather
 -- than accepting a caller-supplied handoff forest.  This is the final-consumer
--- adapter for the original-event rebase: the same resolved tree is first bound
--- to immutable certificate/direct evidence authority and then passed directly
--- to 'closeVerificationBundleWithHandoff'.
+-- adapter for the original-event rebase: the same event-derived handoff is
+-- passed directly to 'closeVerificationBundleWithHandoff'.
 --
--- The caller still supplies architecture-owned evidence identities and final
--- revision-to-evidence selections, but cannot replace the event-derived
--- obligation/support forest with a smaller independently reconstructed subset.
+-- This first adapter deliberately supplies no local EvidenceFact identity map.
+-- A tree which actually depends on such a certificate fact therefore fails
+-- closed in 'handoffOriginalCheckEvent' instead of bypassing the existing
+-- authority-aware handoff.  Direct named evidence likewise remains subject to
+-- the final closure's immutable-authority requirements.  This bounded route is
+-- for the original-event prerequisite/definition/runtime composition repaired
+-- here; the already-existing authority-aware evidence routes remain separate.
 -- Resource ownership comes only from the returned 'ValueResult'; this function
 -- never restores a consumed affine or linear owner.
 closeOriginalCheckEventBundle
   :: HandoffConfig
-  -> Map (Name, Int) EvidenceAuthority.EvidenceFactAuthorityBinding
-  -> Map (ObligationId, Name) DirectEvidenceAuthorityBinding
   -> StaticContext
   -> Discharge.DischargePolicy
   -> ResidualSpec
@@ -218,8 +217,6 @@ closeOriginalCheckEventBundle
   -> Either OriginalCheckEventClosureError AssuranceManifest
 closeOriginalCheckEventBundle
     config
-    evidenceAuthorities
-    directAuthorities
     staticContext
     dischargePolicy
     spec
@@ -231,15 +228,14 @@ closeOriginalCheckEventBundle
     selection
     certificateEvidence
     directEvidence = do
-  resolved <- mapLeft OriginalCheckEventClosureResolutionError $
-    resolveOriginalCheckEvent staticContext dischargePolicy spec result
-  entries <- mapLeft OriginalCheckEventClosureAuthorityError $
-    EvidenceAuthority.handoffResolvedObligationWithAllEvidenceAuthority
+  entries <- mapLeft OriginalCheckEventClosureResolutionError $
+    handoffOriginalCheckEvent
       config
-      evidenceAuthorities
-      directAuthorities
-      ledger
-      resolved
+      Map.empty
+      staticContext
+      dischargePolicy
+      spec
+      result
   mapLeft OriginalCheckEventClosureManifestError $
     ManifestClosure.closeVerificationBundleWithHandoff
       bundle
