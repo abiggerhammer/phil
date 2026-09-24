@@ -3,7 +3,11 @@ module Phil.Assurance
   , OriginalCheckEventClosureError (..)
   , EvidenceSubjectOccurrence (..)
   , ActualEvidenceUse (..)
+  , OriginalEventIdentity (..)
+  , OriginalEventSubjectId (..)
+  , EvidenceSubjectEndpoint (..)
   , actualEvidenceUseInventory
+  , actualEvidenceSubjectEndpoints
   , resolveOriginalCheckEvent
   , handoffOriginalCheckEvent
   , closeOriginalCheckEventBundle
@@ -75,6 +79,8 @@ data OriginalCheckEventError
   | OriginalCheckEventLogicalSupportMissing ObligationId
   | OriginalCheckEventLogicalSupportMismatch ObligationId Obligation Obligation
   | OriginalCheckEventLogicalTypeConflict Name Ty Ty
+  | OriginalCheckEventSubjectEndpointProducerAssociationRequired
+  | OriginalCheckEventSubjectEndpointMissing Int Int Name
   | OriginalCheckEventDischargeError Discharge.DischargeError
   | OriginalCheckEventResidualCoverageMismatch (Set ObligationId) (Set ObligationId)
   | OriginalCheckEventResidualInventoryMismatch (Set ObligationId) (Set ObligationId)
@@ -119,6 +125,40 @@ data ActualEvidenceUse
       }
   deriving (Eq, Ord, Show)
 
+-- | Event-local identity for the exact producer relationship validated from a
+-- returned residualizing check result.  The residual ids are taken from the
+-- actual EvidenceResidual records, while the supplied ResidualSpec is admitted
+-- only after those records have been checked against the exact retained
+-- obligations.  This is deliberately a scoped Phase-1 identity, not a global
+-- source-name identity or a reusable execution nonce.
+data OriginalEventIdentity = OriginalEventIdentity
+  { originalEventSpec :: ResidualSpec
+  , originalEventResidualIds :: [ObligationId]
+  }
+  deriving (Eq, Ord, Show)
+
+-- | One logical subject inside a validated original event.  Its type comes from
+-- the exact durable logical support captured for the producer event, never from
+-- a later ambient binding with the same source spelling.
+data OriginalEventSubjectId = OriginalEventSubjectId
+  { originalEventSubjectEvent :: OriginalEventIdentity
+  , originalEventSubjectName :: Name
+  , originalEventSubjectType :: Ty
+  }
+  deriving (Eq, Ord, Show)
+
+-- | Concrete occurrence-level endpoint reflection for the supported Phase-1
+-- final-closure boundary.  Phase 1 currently accepts only identity transport
+-- inside one exact original event, so source and target are equal here.  A
+-- future checked rebase may produce distinct endpoints, but this adapter does
+-- not infer one from names or types.
+data EvidenceSubjectEndpoint = EvidenceSubjectEndpoint
+  { evidenceEndpointOccurrence :: EvidenceSubjectOccurrence
+  , evidenceEndpointSource :: OriginalEventSubjectId
+  , evidenceEndpointTarget :: OriginalEventSubjectId
+  }
+  deriving (Eq, Ord, Show)
+
 -- | Reflect every evidence use returned by the real checker into an ordered,
 -- occurrence-complete inventory.  The inventory is derived directly from the
 -- 'ValueResult': callers cannot select a smaller evidence domain, and a closed
@@ -138,6 +178,68 @@ actualEvidenceUseInventory result =
       in case subjects of
           [] -> ActualCheckedClosedEvidenceUse useIndex evidenceUse
           _ -> ActualSubjectBearingEvidenceUse useIndex evidenceUse subjects
+
+-- | Establish the concrete subject endpoints for every actual subject-bearing
+-- evidence occurrence on the supported final-closure route.  Endpoint authority
+-- comes only from the exact durable logical support attached to residuals
+-- emitted by this returned ValueResult.  A live or later ResourceContext binding
+-- is not consulted, so same-spelled replacement resources cannot become proof
+-- authority for an older event.
+--
+-- This Phase-1 boundary intentionally supports only stable identity transport
+-- within the same validated original event.  It does not manufacture a checked
+-- rebase.  If an actual subject occurrence is absent from the exact producer
+-- support, the accepting route fails closed instead of treating the missing
+-- mapping as evidence that the use was closed.
+actualEvidenceSubjectEndpoints
+  :: ResidualSpec
+  -> ValueResult
+  -> Either OriginalCheckEventError [EvidenceSubjectEndpoint]
+actualEvidenceSubjectEndpoints spec result = do
+  let state = valueResultState result
+      residualUses =
+        [ (obligationId', proposition)
+        | EvidenceResidual obligationId' proposition <- valueResultEvidence result
+        ]
+  residualIds <-
+    case residualUses of
+      [] -> Left OriginalCheckEventSubjectEndpointProducerAssociationRequired
+      _ -> Right (map fst residualUses)
+  residualRecords <- mapM (validateResidualRecord state spec) residualUses
+  exactBindings <- mergeLogicalBindings
+    [ logicalSupportBindings support
+    | (_, support) <- residualRecords
+    ]
+  let eventIdentity = OriginalEventIdentity
+        { originalEventSpec = spec
+        , originalEventResidualIds = residualIds
+        }
+  fmap concat $
+    mapM (endpointsForUse eventIdentity exactBindings) (actualEvidenceUseInventory result)
+  where
+    endpointsForUse _ _ ActualCheckedClosedEvidenceUse {} = Right []
+    endpointsForUse eventIdentity exactBindings ActualSubjectBearingEvidenceUse
+        { actualEvidenceSubjects = subjects } =
+      mapM (endpointForOccurrence eventIdentity exactBindings) subjects
+
+    endpointForOccurrence eventIdentity exactBindings occurrence =
+      case Map.lookup (evidenceSubjectName occurrence) exactBindings of
+        Nothing -> Left
+          (OriginalCheckEventSubjectEndpointMissing
+            (evidenceSubjectUseIndex occurrence)
+            (evidenceSubjectOccurrenceIndex occurrence)
+            (evidenceSubjectName occurrence))
+        Just ty ->
+          let subject = OriginalEventSubjectId
+                { originalEventSubjectEvent = eventIdentity
+                , originalEventSubjectName = evidenceSubjectName occurrence
+                , originalEventSubjectType = ty
+                }
+          in Right EvidenceSubjectEndpoint
+              { evidenceEndpointOccurrence = occurrence
+              , evidenceEndpointSource = subject
+              , evidenceEndpointTarget = subject
+              }
 
 -- | Resolve the exact original check event represented by a residualizing
 -- 'ValueResult'.  In particular, do not resolve each normalized pending map
@@ -252,6 +354,12 @@ handoffOriginalCheckEvent config evidenceIds staticContext policy spec result = 
 -- diagnostics and fresh checks, but it does not by itself grant final-use
 -- provenance.
 --
+-- Before the final immutable consumer is entered, every actual subject-bearing
+-- evidence occurrence must also obtain an event-qualified source/target
+-- endpoint from this same producer's exact durable logical support.  Phase 1
+-- supports only unchanged same-event subjects on this route; it never infers a
+-- rebase from source spelling or type equality.
+--
 -- This adapter deliberately supplies no local EvidenceFact identity map.  A
 -- tree which actually depends on such a certificate fact therefore fails
 -- closed in 'handoffOriginalCheckEvent' instead of bypassing the existing
@@ -296,6 +404,8 @@ closeOriginalCheckEventBundle
       dischargePolicy
       spec
       result
+  _ <- mapLeft OriginalCheckEventClosureResolutionError $
+    actualEvidenceSubjectEndpoints spec result
   mapLeft OriginalCheckEventClosureManifestError $
     ManifestClosure.closeVerificationBundleWithHandoff
       bundle
