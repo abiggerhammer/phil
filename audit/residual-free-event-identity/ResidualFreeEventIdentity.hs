@@ -106,8 +106,8 @@ pendingUnresolved :: Either String ()
 pendingUnresolved = do
   (result,wanted) <- pending
   case A.resolveOriginalCheckEvent emptyStaticContext D.emptyDischargePolicy specA result of
-    Left (A.OriginalCheckEventDischargeError (D.UnresolvedObligation actual _))
-      | actual == wanted -> Right ()
+    Left (A.OriginalCheckEventDischargeError (D.UnresolvedObligation actual proposition))
+      | actual == obligationId wanted && proposition == obligationProposition wanted -> Right ()
     other -> Left ("unsupported original pending requirement changed: " <> show other)
 
 falseLiteral :: Either String ()
