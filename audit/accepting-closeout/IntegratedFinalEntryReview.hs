@@ -3,8 +3,10 @@ module Main (main) where
 
 import Control.Monad (unless)
 import qualified EntryFixture as F
-import qualified Phil.Assurance as A
+import qualified ClosureFixture as C
 import qualified DirectFixture as DF
+import qualified Phil.Assurance as A
+import qualified Phil.Core.Discharge as D
 import Phil.Core.Refinement (EvidenceUse (..))
 import Phil.Core.Value (ValueResult (..))
 import System.Exit (exitFailure)
@@ -22,29 +24,21 @@ residualFreeFinalBoundary = do
   (spec,result,_,entries,fixture) <- F.authorityFixture F.Direct
   let residuals = [key | EvidenceResidual key _ <- valueResultEvidence result]
   if null residuals then Right () else Left "direct fixture unexpectedly has a residual"
-  -- Prove this really remains a valid separate authority-aware consumer case;
-  -- do not count arbitrary setup failure as the intended rejection.
+  -- This remains a valid separate authority-aware consumer case. An arbitrary
+  -- setup failure cannot count as the intended producer-association rejection.
   _ <- either (Left . show) Right $
     F.genericClose entries (F.fromDirectFixture fixture)
   F.exactError A.OriginalCheckEventClosureProducerAssociationRequired $
-    F.nativeClose DF.handoffConfig spec memptyPolicy result (F.fromDirectFixture fixture)
-  where
-    -- Obtained from the original fixture's actual discharge contract, not a
-    -- manufactured success flag. The concrete alias is imported below.
-    memptyPolicy = emptyPolicy
-
--- Keep the policy's actual type/constructor in its defining module.
-emptyPolicy :: ADischargePolicy
-emptyPolicy = dischargeEmptyPolicy
+    F.nativeClose DF.handoffConfig spec D.emptyDischargePolicy result (F.fromDirectFixture fixture)
 
 main :: IO ()
 main = do
   results <- sequence
-    [ test "K01" "definitional original event closes with adequate local support" (F.fullScope definitionGoal)
-    , test "K02" "algebraic original event closes with adequate local support" (F.fullScope algebraGoal)
-    , test "K03" "explicit-prerequisite event closes with adequate support" (F.fullScope explicitGoal)
-    , test "K04" "definitional prerequisite cannot be exported under a local parent" (F.exportRequired definitionGoal)
-    , test "K05" "certificate prerequisite cannot be exported under a local parent" (F.exportRequired algebraGoal)
+    [ test "K01" "definitional original event closes with adequate local support" (F.fullScope C.definition)
+    , test "K02" "algebraic original event closes with adequate local support" (F.fullScope C.algebra)
+    , test "K03" "explicit-prerequisite event closes with adequate support" (F.fullScope C.explicit)
+    , test "K04" "definitional prerequisite cannot be exported under a local parent" (F.exportRequired C.definition)
+    , test "K05" "certificate prerequisite cannot be exported under a local parent" (F.exportRequired C.algebra)
     , test "K06" "a smaller graph cannot replace actual event support" F.missingSupport
     , test "K07" "another valid event package cannot substitute for this event" F.otherEvent
     , test "K08" "retained residual requires the exact scope metadata" F.wrongScope
