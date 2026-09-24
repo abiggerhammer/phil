@@ -18,6 +18,7 @@ import Phil.Core.Discharge
   , ObligationDisposition (..)
   , ResolvedObligation (..)
   , RuntimeBinding (..)
+  , StaticDischarge (..)
   , bindRuntime
   , emptyDischargePolicy
   , resolveObligation
@@ -39,6 +40,7 @@ import Phil.Core.Syntax
   )
 import Phil.Core.Value
   ( ValueResult (..)
+  , checkValue
   , checkValueWithResidual
   )
 import System.Exit (exitFailure)
@@ -51,12 +53,18 @@ main = do
     , test "R03 runtime disposition resolves under durable logical subject" testRuntimeResolution
     , test "R04 same-spelled replacement cannot override durable subject typing" testSpellingReuseIsolation
     , test "R05 mismatched obligation metadata cannot borrow captured support" testExactObligationIsolation
+    , test "R06 same-spelled refined Bool cannot prove the consumed subject" testRefinedReplacementEvidenceIsolation
+    , test "R07 same-spelled numeric refinement cannot seed a certificate for the consumed subject" testNumericReplacementEvidenceIsolation
     , test "C01 durable typing does not restore consumed ownership" testOwnershipRemainsConsumed
+    , test "C02 explicit proof about the original logical subject remains usable" testOriginalSubjectProof
     ]
   unless (and results) exitFailure
 
 payload :: Name
 payload = Name "payload"
+
+subject :: Name
+subject = Name "subject"
 
 bytes7 :: Ty
 bytes7 = TyBytes (RefNat 7)
@@ -65,19 +73,25 @@ required :: Proposition
 required = LessEqual (RefNat 1) (RefLen (RefVar payload))
 
 residualSpec :: ResidualSpec
-residualSpec = ResidualSpec
-  { residualObligationId = ObligationId "audit.durable-subject"
+residualSpec = residualSpecFor "audit.durable-subject"
+
+residualSpecFor :: String -> ResidualSpec
+residualSpecFor ident = ResidualSpec
+  { residualObligationId = ObligationId (fromString ident)
   , residualOrigin = "phase1-audit-durable-subject"
   , residualScope = "component:durable-subject"
   , residualRequiredPoint = "after payload consumption"
   }
 
+fromString :: String -> Data.Text.Text
+fromString = Data.Text.pack
+
 targetType :: Ty
 targetType =
   TyRefined
-    (Name "subject")
+    subject
     bytes7
-    (LessEqual (RefNat 1) (RefLen (RefVar (Name "subject"))))
+    (LessEqual (RefNat 1) (RefLen (RefVar subject)))
 
 setupResidual :: Either String (Obligation, CheckState)
 setupResidual = do
@@ -106,13 +120,8 @@ testSupportRecorded = do
 testResolverInterpretsConsumedSubject :: Either String ()
 testResolverInterpretsConsumedSubject = do
   (obligation, returned) <- setupResidual
-  case resolveObligation emptyStaticContext returned emptyDischargePolicy obligation of
-    Left (UnresolvedObligation actualId actualProposition) -> do
-      assert (actualId == obligationId obligation) "resolver changed obligation id"
-      assert (actualProposition == required) "resolver changed canonical proposition"
-    Left (DischargeFocusingError (FocusSortError (UnknownRefinementVariable missing))) ->
-      Left ("durable subject remained uninterpretable: " ++ show missing)
-    other -> Left ("unexpected empty-policy resolution: " ++ show other)
+  expectUnresolved obligation $
+    resolveObligation emptyStaticContext returned emptyDischargePolicy obligation
 
 testRuntimeResolution :: Either String ()
 testRuntimeResolution = do
@@ -155,6 +164,24 @@ testExactObligationIsolation = do
         "metadata mismatch failed for an unrelated term"
     other -> Left ("mismatched obligation reused captured logical support: " ++ show other)
 
+testRefinedReplacementEvidenceIsolation :: Either String ()
+testRefinedReplacementEvidenceIsolation = do
+  (obligation, returned) <- setupBooleanResidual
+  expectUnresolved obligation $
+    resolveObligation emptyStaticContext returned emptyDischargePolicy obligation
+  replacement <- checkedBooleanReplacement returned
+  expectUnresolved obligation $
+    resolveObligation emptyStaticContext replacement emptyDischargePolicy obligation
+
+testNumericReplacementEvidenceIsolation :: Either String ()
+testNumericReplacementEvidenceIsolation = do
+  (obligation, returned) <- setupNumericResidual
+  expectUnresolved obligation $
+    resolveObligation emptyStaticContext returned emptyDischargePolicy obligation
+  replacement <- checkedNumericReplacement returned
+  expectUnresolved obligation $
+    resolveObligation emptyStaticContext replacement emptyDischargePolicy obligation
+
 testOwnershipRemainsConsumed :: Either String ()
 testOwnershipRemainsConsumed = do
   (_, returned) <- setupResidual
@@ -165,6 +192,94 @@ testOwnershipRemainsConsumed = do
     "consumed owner became affine"
   assert (Map.notMember payload (linearBindings context))
     "consumed linear owner was restored"
+
+testOriginalSubjectProof :: Either String ()
+testOriginalSubjectProof = do
+  (obligation, returned) <- setupBooleanResidual
+  let proofName = Name "originalProof"
+  supported <- withBinding
+    Unrestricted
+    proofName
+    (TyProof (obligationProposition obligation))
+    returned
+  resolved <- mapLeft show $
+    resolveObligation emptyStaticContext supported emptyDischargePolicy obligation
+  assert
+    (resolvedDisposition resolved == StaticallyDischarged (StaticByEvidence proofName))
+    "explicit proof about the retained logical subject was rejected"
+
+setupBooleanResidual :: Either String (Obligation, CheckState)
+setupBooleanResidual =
+  setupTypedResidual
+    "audit.durable-subject.bool"
+    Affine
+    TyBool
+    (Equal (RefVar subject) (RefBool True))
+
+setupNumericResidual :: Either String (Obligation, CheckState)
+setupNumericResidual =
+  setupTypedResidual
+    "audit.durable-subject.uint"
+    Affine
+    (TyUInt 8)
+    (LessThan (RefToNat (RefVar subject)) (RefNat 5))
+
+setupTypedResidual
+  :: String
+  -> Mode
+  -> Ty
+  -> Proposition
+  -> Either String (Obligation, CheckState)
+setupTypedResidual ident mode base predicate = do
+  state <- withBinding mode payload base emptyCheckState
+  let spec = residualSpecFor ident
+      target = TyRefined subject base predicate
+  result <- mapLeft show $
+    checkValueWithResidual spec (VVar payload) target state
+  let returned = valueResultState result
+  obligation <- maybe (Left "missing emitted typed residual") Right $
+    Map.lookup (residualObligationId spec) (residualObligations returned)
+  let context = resourceContext returned
+  assert
+    ( Map.notMember payload (unrestrictedBindings context)
+        && Map.notMember payload (affineBindings context)
+        && Map.notMember payload (linearBindings context)
+    )
+    "typed residual restored the consumed owner"
+  Right (obligation, returned)
+
+checkedBooleanReplacement :: CheckState -> Either String CheckState
+checkedBooleanReplacement state = do
+  let ty = TyRefined subject TyBool (Equal (RefVar subject) (RefBool True))
+  admitted <- mapLeft show $ checkValue (VBool True) ty state
+  assert (valueResultType admitted == ty)
+    "Bool replacement refinement was not independently checked"
+  withBinding Unrestricted payload (valueResultType admitted) (valueResultState admitted)
+
+checkedNumericReplacement :: CheckState -> Either String CheckState
+checkedNumericReplacement state = do
+  let ty = TyRefined
+        subject
+        (TyUInt 8)
+        (LessEqual (RefToNat (RefVar subject)) (RefNat 1))
+  admitted <- mapLeft show $ checkValue (VUInt 8 0) ty state
+  assert (valueResultType admitted == ty)
+    "numeric replacement refinement was not independently checked"
+  withBinding Unrestricted payload (valueResultType admitted) (valueResultState admitted)
+
+expectUnresolved
+  :: Obligation
+  -> Either DischargeError ResolvedObligation
+  -> Either String ()
+expectUnresolved obligation result =
+  case result of
+    Left (UnresolvedObligation actualId actualProposition) -> do
+      assert (actualId == obligationId obligation) "resolver changed obligation id"
+      assert (actualProposition == obligationProposition obligation)
+        "resolver changed canonical proposition"
+    Left (DischargeFocusingError (FocusSortError (UnknownRefinementVariable missing))) ->
+      Left ("durable subject remained uninterpretable: " ++ show missing)
+    other -> Left ("unexpected resolution result: " ++ show other)
 
 runtimeFor :: Obligation -> RuntimeBinding
 runtimeFor obligation = RuntimeBinding
