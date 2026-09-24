@@ -1,0 +1,82 @@
+name: Phase 1 Audit Evidence Consumer Occurrence Final Authority
+
+on:
+  pull_request:
+    paths:
+      - 'proof/Phil/Surface/BranchEvidenceSupport.v'
+      - 'proof/Phil/Assurance/EvidenceConsumerSubjectTransport.v'
+      - 'proof/Phil/Assurance/EvidenceConsumerEndpointCoverage.v'
+      - 'proof/Phil/Assurance/EvidenceConsumerSelectionCoverage.v'
+      - 'proof/Phil/Assurance/EvidenceConsumerUseClassification.v'
+      - 'proof/Phil/Assurance/EvidenceConsumerFinalUseCorrespondence.v'
+      - 'proof/Phil/Assurance/EvidenceConsumerSubjectOccurrenceCoverage.v'
+      - 'proof/Phil/Assurance/EvidenceConsumerEventOriginCorrespondence.v'
+      - 'proof/Phil/Assurance/EvidenceConsumerSemanticEndpointAuthority.v'
+      - 'proof/Phil/Assurance/EvidenceConsumerOccurrenceFinalAuthority.v'
+      - 'docs/phase-1/audit-evidence-consumer-occurrence-final-authority-v1.md'
+      - '.github/workflows/phase1-audit-evidence-consumer-occurrence-final-authority.yml'
+  push:
+    branches: [main]
+    paths:
+      - 'proof/Phil/Surface/BranchEvidenceSupport.v'
+      - 'proof/Phil/Assurance/EvidenceConsumerSubjectTransport.v'
+      - 'proof/Phil/Assurance/EvidenceConsumerEndpointCoverage.v'
+      - 'proof/Phil/Assurance/EvidenceConsumerSelectionCoverage.v'
+      - 'proof/Phil/Assurance/EvidenceConsumerUseClassification.v'
+      - 'proof/Phil/Assurance/EvidenceConsumerFinalUseCorrespondence.v'
+      - 'proof/Phil/Assurance/EvidenceConsumerSubjectOccurrenceCoverage.v'
+      - 'proof/Phil/Assurance/EvidenceConsumerEventOriginCorrespondence.v'
+      - 'proof/Phil/Assurance/EvidenceConsumerSemanticEndpointAuthority.v'
+      - 'proof/Phil/Assurance/EvidenceConsumerOccurrenceFinalAuthority.v'
+      - 'docs/phase-1/audit-evidence-consumer-occurrence-final-authority-v1.md'
+      - '.github/workflows/phase1-audit-evidence-consumer-occurrence-final-authority.yml'
+
+permissions:
+  contents: read
+
+jobs:
+  evidence-consumer-occurrence-final-authority:
+    runs-on: ubuntu-latest
+    container:
+      image: rocq/rocq-prover:9.2.0
+      options: --user root
+    steps:
+      - uses: actions/checkout@v4
+      - name: Compile occurrence final authority proofs
+        shell: bash
+        run: |
+          set -euo pipefail
+          export PATH="/home/rocq/.opam/${COMPILER}/bin:$PATH"
+          rocq c -Q proof/Phil Phil proof/Phil/Surface/BranchEvidenceSupport.v
+          rocq c -Q proof/Phil Phil proof/Phil/Assurance/EvidenceConsumerSubjectTransport.v
+          rocq c -Q proof/Phil Phil proof/Phil/Assurance/EvidenceConsumerEndpointCoverage.v
+          rocq c -Q proof/Phil Phil proof/Phil/Assurance/EvidenceConsumerSelectionCoverage.v
+          rocq c -Q proof/Phil Phil proof/Phil/Assurance/EvidenceConsumerUseClassification.v
+          rocq c -Q proof/Phil Phil proof/Phil/Assurance/EvidenceConsumerFinalUseCorrespondence.v
+          rocq c -Q proof/Phil Phil proof/Phil/Assurance/EvidenceConsumerSubjectOccurrenceCoverage.v
+          rocq c -Q proof/Phil Phil proof/Phil/Assurance/EvidenceConsumerEventOriginCorrespondence.v
+          rocq c -Q proof/Phil Phil proof/Phil/Assurance/EvidenceConsumerSemanticEndpointAuthority.v
+          rocq c -Q proof/Phil Phil proof/Phil/Assurance/EvidenceConsumerOccurrenceFinalAuthority.v
+      - name: Record exact proof identity
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p evidence-consumer-occurrence-final-authority
+          cp \
+            proof/Phil/Assurance/EvidenceConsumerSemanticEndpointAuthority.v \
+            proof/Phil/Assurance/EvidenceConsumerSemanticEndpointAuthority.vo \
+            proof/Phil/Assurance/EvidenceConsumerOccurrenceFinalAuthority.v \
+            proof/Phil/Assurance/EvidenceConsumerOccurrenceFinalAuthority.vo \
+            evidence-consumer-occurrence-final-authority/
+          sha256sum \
+            evidence-consumer-occurrence-final-authority/EvidenceConsumerSemanticEndpointAuthority.v \
+            evidence-consumer-occurrence-final-authority/EvidenceConsumerSemanticEndpointAuthority.vo \
+            evidence-consumer-occurrence-final-authority/EvidenceConsumerOccurrenceFinalAuthority.v \
+            evidence-consumer-occurrence-final-authority/EvidenceConsumerOccurrenceFinalAuthority.vo \
+            > evidence-consumer-occurrence-final-authority/D-RES-SUPPORT-01.occurrence-final-authority.proof.sha256
+          cat evidence-consumer-occurrence-final-authority/D-RES-SUPPORT-01.occurrence-final-authority.proof.sha256
+      - uses: actions/upload-artifact@v4
+        with:
+          name: evidence-consumer-occurrence-final-authority-proof
+          path: evidence-consumer-occurrence-final-authority
+          if-no-files-found: error
