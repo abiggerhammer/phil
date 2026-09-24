@@ -43,14 +43,15 @@ data ManifestClosureSelection = ManifestClosureSelection
   deriving (Eq, Show)
 
 -- | Exact checker-to-assurance correspondence required when INT-002 closes
--- evidence produced from 'Phil.Assurance.Handoff'.  Every certificate handoff
--- in the supplied set must name the concrete immutable evidence entry selected
--- for that revision.  The closure path checks the handoff revisions, semantic
--- support graph, and finalized evidence record rather than accepting a
--- parallel reconstruction of certificate support.
+-- evidence produced from 'Phil.Assurance.Handoff'.  Every certificate or
+-- direct named-evidence handoff in the supplied set must name the concrete
+-- immutable evidence entry selected for that revision.  The closure path
+-- checks the handoff revisions, semantic support graph, and finalized evidence
+-- record rather than accepting a parallel reconstruction of checker support.
 data ManifestClosureHandoff = ManifestClosureHandoff
   { manifestClosureHandoffEntries :: [Handoff.LedgerHandoff]
   , manifestClosureCertificateEvidence :: Map RevisionId EvidenceEntryId
+  , manifestClosureDirectEvidence :: Map RevisionId EvidenceEntryId
   }
   deriving (Eq, Show)
 
@@ -77,6 +78,9 @@ data ManifestClosureError
       (Set (RevisionId, RevisionId))
       (Set (RevisionId, RevisionId))
   | ManifestClosureHandoffEvidenceDomainMismatch
+      (Set RevisionId)
+      (Set RevisionId)
+  | ManifestClosureHandoffDirectEvidenceDomainMismatch
       (Set RevisionId)
       (Set RevisionId)
   | ManifestClosureHandoffEvidenceNotSelected RevisionId EvidenceEntryId
@@ -233,7 +237,8 @@ closeVerificationBundle bundle policy context ledger selection = do
           Right (exportKey, export)
 
     loadSelectedUses = fmap Map.fromList $ mapM load
-      (Set.toAscList (manifestClosureUses selection))
+      (Set.toAscList (manifestClosureUses selection)
+      )
       where
         load useKey = case Map.lookup useKey (ledgerUses ledger) of
           Nothing -> Left (ManifestClosureSelectedUseMissing useKey)
@@ -291,17 +296,18 @@ closeVerificationBundle bundle policy context ledger selection = do
         else Left (ManifestClosureUnpermittedDisposition disposition)
 
 -- | Close a bundle produced from checker handoff records.  This is the
--- INT-002 path for Core certificate evidence: it first proves that the bundle
--- graph and selected ledger entries are the exact immutable projection of the
--- supplied handoff, then delegates all ordinary manifest checks to
+-- INT-002 path for Core static evidence: it proves that the bundle graph and
+-- selected ledger entries are the exact immutable projection of the supplied
+-- handoff, then delegates all ordinary manifest checks to
 -- 'closeVerificationBundle'.
 --
 -- Exactness is intentionally per support-bearing consumer. Resolver-required
 -- prerequisite support is checked even when a parent closes by definition and
--- therefore has no certificate evidence. Certificate consumers remain in the
--- checked domain even when their exact support set is empty. Generation
--- lineage is not support; precise evidence dependencies stay in the evidence
--- entry; and unrelated evidence may remain selected for the same manifest.
+-- therefore has no static evidence record. Certificate and direct named-
+-- evidence consumers remain in the checked domain even when their obligation
+-- support set is empty. Generation lineage is not support; precise evidence
+-- dependencies stay in the evidence entry; and unrelated evidence may remain
+-- selected for the same manifest.
 closeVerificationBundleWithHandoff
   :: VerificationBundle
   -> ApplicationAssurancePolicy
@@ -315,14 +321,20 @@ closeVerificationBundleWithHandoff bundle policy context ledger selection handof
     (manifestClosureHandoffEntries handoff)
   mapM_ verifyHandoffRevision (Map.toAscList entriesByRevision)
   let certificateEntries = Map.filter isCertificateHandoff entriesByRevision
+      directEntries = Map.filter isDirectHandoff entriesByRevision
       certificateRevisions = Map.keysSet certificateEntries
+      directRevisions = Map.keysSet directEntries
       suppliedEvidenceDomain = Map.keysSet
         (manifestClosureCertificateEvidence handoff)
+      suppliedDirectEvidenceDomain = Map.keysSet
+        (manifestClosureDirectEvidence handoff)
       handoffSupport = Handoff.handoffSupportEdges (Map.elems entriesByRevision)
-      supportConsumers = certificateRevisions `Set.union` Set.fromList
-        [ consumer
-        | (consumer, _) <- Set.toAscList handoffSupport
-        ]
+      supportConsumers = certificateRevisions
+        `Set.union` directRevisions
+        `Set.union` Set.fromList
+          [ consumer
+          | (consumer, _) <- Set.toAscList handoffSupport
+          ]
       expectedSupport = supportFor supportConsumers handoffSupport
       actualSupport = supportFor supportConsumers
         (verificationGraphDependencies graph)
@@ -331,8 +343,13 @@ closeVerificationBundleWithHandoff bundle policy context ledger selection handof
   unless (certificateRevisions == suppliedEvidenceDomain) $
     Left (ManifestClosureHandoffEvidenceDomainMismatch
       certificateRevisions suppliedEvidenceDomain)
+  unless (directRevisions == suppliedDirectEvidenceDomain) $
+    Left (ManifestClosureHandoffDirectEvidenceDomainMismatch
+      directRevisions suppliedDirectEvidenceDomain)
   mapM_ (verifyCertificateEvidence certificateEntries)
     (Map.toAscList (manifestClosureCertificateEvidence handoff))
+  mapM_ (verifyDirectEvidence directEntries)
+    (Map.toAscList (manifestClosureDirectEvidence handoff))
   closeVerificationBundle bundle policy context ledger selection
   where
     graph = verificationBundleObligationGraph bundle
@@ -356,6 +373,11 @@ closeVerificationBundleWithHandoff bundle policy context ledger selection handof
         Discharge.StaticallyDischarged Discharge.StaticByCertificate {} -> True
         _ -> False
 
+    isDirectHandoff entry =
+      case Handoff.handoffDisposition entry of
+        Discharge.StaticallyDischarged (Discharge.StaticByEvidence _) -> True
+        _ -> False
+
     supportFor consumers = Set.filter
       (\(consumer, _) -> Set.member consumer consumers)
 
@@ -371,6 +393,24 @@ closeVerificationBundleWithHandoff bundle policy context ledger selection handof
           (Map.keysSet (manifestClosureCertificateEvidence handoff)))
         Just value -> Right value
       finalized <- case Handoff.bindHandoffCertificateEvidence certificateHandoff entry of
+        Left err -> Left
+          (ManifestClosureHandoffEvidenceRejected revisionKey entryId err)
+        Right value -> Right value
+      unless (finalized == entry) $
+        Left (ManifestClosureHandoffEvidenceMismatch revisionKey entryId)
+
+    verifyDirectEvidence directEntries (revisionKey, entryId) = do
+      unless (Set.member entryId (manifestClosureEvidence selection)) $
+        Left (ManifestClosureHandoffEvidenceNotSelected revisionKey entryId)
+      entry <- case Map.lookup entryId (ledgerEvidence ledger) of
+        Nothing -> Left (ManifestClosureHandoffEvidenceMissing revisionKey entryId)
+        Just value -> Right value
+      directHandoff <- case Map.lookup revisionKey directEntries of
+        Nothing -> Left (ManifestClosureHandoffDirectEvidenceDomainMismatch
+          (Map.keysSet directEntries)
+          (Map.keysSet (manifestClosureDirectEvidence handoff)))
+        Just value -> Right value
+      finalized <- case Handoff.bindHandoffDirectEvidence directHandoff entry of
         Left err -> Left
           (ManifestClosureHandoffEvidenceRejected revisionKey entryId err)
         Right value -> Right value

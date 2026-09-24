@@ -4,15 +4,18 @@ module Phil.Assurance.EvidenceFactAuthority
   ( EvidenceFactAuthorityBinding (..)
   , EvidenceFactAuthorityError (..)
   , handoffResolvedObligationWithEvidenceAuthority
+  , handoffResolvedObligationWithAllEvidenceAuthority
   ) where
 
 import Data.List (sort)
 import qualified Data.Map.Strict as Map
 import Data.Text (Text)
 import Phil.Assurance.Handoff
-  ( HandoffConfig
+  ( DirectEvidenceAuthorityBinding
+  , HandoffConfig
   , HandoffError
   , LedgerHandoff
+  , attachDirectNamedEvidenceAuthority
   , handoffResolvedObligationWithEvidence
   )
 import Phil.Assurance.Types
@@ -127,6 +130,24 @@ handoffResolvedObligationWithEvidenceAuthority config authorities ledger root = 
         else Left
           (EvidenceFactAuthorityScopeMismatch
             consumer name index expectedScope actualScope)
+
+-- | Validate certificate-used facts first, then attach authority for every
+-- direct 'StaticByEvidence' selection.  This is the combined assurance ingress
+-- for mixed resolution trees: neither evidence route can bypass the other's
+-- identity checks.
+handoffResolvedObligationWithAllEvidenceAuthority
+  :: HandoffConfig
+  -> Map.Map (Name, Int) EvidenceFactAuthorityBinding
+  -> Map.Map (ObligationId, Name) DirectEvidenceAuthorityBinding
+  -> AssuranceLedger
+  -> ResolvedObligation
+  -> Either EvidenceFactAuthorityError [LedgerHandoff]
+handoffResolvedObligationWithAllEvidenceAuthority
+    config evidenceAuthorities directAuthorities ledger root = do
+  entries <- handoffResolvedObligationWithEvidenceAuthority
+    config evidenceAuthorities ledger root
+  mapLeft EvidenceFactAuthorityHandoffError $
+    attachDirectNamedEvidenceAuthority config directAuthorities ledger root entries
 
 usedEvidenceFacts :: ResolvedObligation -> [(ObligationId, Name, Int, Proposition)]
 usedEvidenceFacts resolved =

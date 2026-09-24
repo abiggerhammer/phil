@@ -215,6 +215,7 @@ baseFixture = do
         { manifestClosureHandoffEntries = entries
         , manifestClosureCertificateEvidence = Map.singleton
             parentRevision parentEvidenceId
+        , manifestClosureDirectEvidence = Map.empty
         }
   Right Fixture
     { fixtureEntries = entries

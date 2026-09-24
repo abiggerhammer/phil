@@ -2,24 +2,30 @@ module Phil.Assurance.Handoff
   ( HandoffConfig (..)
   , HandoffError (..)
   , LedgerHandoff (..)
+  , DirectEvidenceAuthorityBinding (..)
   , handoffResolvedObligation
   , handoffResolvedObligationWithEvidence
+  , attachDirectNamedEvidenceAuthority
   , handoffSupportEdges
   , bindHandoffCertificateEvidence
+  , bindHandoffDirectEvidence
   ) where
 
+import Data.List (sort)
 import qualified Data.Map.Strict as Map
 import Data.Set (Set)
 import qualified Data.Set as Set
 import Data.Text (Text)
 import Phil.Assurance.Types
   ( AcceptanceRule
+  , AssuranceLedger (..)
   , EvidenceDependency (..)
   , EvidenceEntry (..)
   , EvidenceEntryId
   , ObligationRevision (..)
   , RevisionId
   , deriveEvidenceEntryDigest
+  , renderPropositionCanonical
   , revisionFromCoreObligation
   )
 import Phil.Core.Decision
@@ -53,13 +59,30 @@ data HandoffConfig = HandoffConfig
   , handoffAcceptanceRule :: Obligation -> AcceptanceRule
   }
 
+-- | Architecture-owned immutable identity for one direct named-evidence use.
+-- The map carrying this value is keyed by the exact checking-event obligation
+-- and selected Core name, so later reuse of the display name cannot silently
+-- substitute another proof record.
+newtype DirectEvidenceAuthorityBinding = DirectEvidenceAuthorityBinding
+  { directAuthorityEvidenceEntryId :: EvidenceEntryId
+  }
+  deriving (Eq, Show)
+
 -- | Fail closed when a checker-to-ledger handoff loses support identity or an
 -- evidence entry is rebound to the wrong obligation/disposition.
 data HandoffError
   = UnknownPrerequisiteSupport ObligationId ObligationId
   | UnknownEvidenceFactSupport ObligationId Name Int
+  | MissingDirectEvidenceAuthority ObligationId Name
+  | MissingDirectAuthorityEvidenceEntry ObligationId Name EvidenceEntryId
+  | MissingDirectAuthorityEvidenceRevision ObligationId Name EvidenceEntryId RevisionId
+  | DirectEvidenceAuthorityPropositionMismatch ObligationId Name Text Text
+  | DirectEvidenceAuthoritySubjectMismatch ObligationId Name [Text] [Text]
+  | DirectEvidenceAuthorityScopeMismatch ObligationId Name Text Text
   | HandoffEvidenceRevisionMismatch RevisionId RevisionId
   | HandoffEvidenceNotCertificate RevisionId
+  | HandoffEvidenceNotDirect RevisionId
+  | HandoffDirectEvidenceSupportMissing RevisionId Name
   deriving (Eq, Show)
 
 -- | Lossless checker-to-ledger handoff node.  The exact Core disposition is
@@ -69,9 +92,10 @@ data HandoffError
 --
 -- 'handoffSupportDependencies' records semantic support required by the
 -- resolver for the original goal, together with any additional support named
--- by a retained certificate.  It is deliberately separate from
--- 'revisionGeneratedFrom': generation provenance is child -> parent, while a
--- prerequisite dependency is parent/consumer -> child/prerequisite.
+-- by a retained certificate or a validated direct named-evidence selection.
+-- It is deliberately separate from 'revisionGeneratedFrom': generation
+-- provenance is child -> parent, while a prerequisite dependency is
+-- parent/consumer -> child/prerequisite.
 data LedgerHandoff = LedgerHandoff
   { handoffRevision :: ObligationRevision
   , handoffCanonicalProposition :: Proposition
@@ -105,6 +129,10 @@ handoffResolvedObligation config =
 -- 'EvidenceFact' references resolve against the supplied @(binding name, fact
 -- index)@ map and become 'DependsOnEvidence'. Missing certificate identities
 -- fail closed.
+--
+-- Direct 'StaticByEvidence' support is intentionally not inferred from a name
+-- here. Use 'attachDirectNamedEvidenceAuthority' after the architecture has
+-- bound the exact checking event and name to an immutable evidence record.
 --
 -- Child prerequisite revisions continue to record the parent revision in
 -- 'revisionGeneratedFrom'.  That lineage remains provenance only; it is never
@@ -185,6 +213,71 @@ handoffResolvedObligationWithEvidence config evidenceIds root =
           (handoffAcceptanceRule config obligation)
           generatedFrom
 
+-- | Bind each direct 'StaticByEvidence' selection to an immutable assurance
+-- record using the exact checking-event obligation and selected name.  The
+-- source evidence revision must carry the exact checker proposition, semantic
+-- subjects, and scope for that event.  This preserves direct valid evidence
+-- while preventing later name reuse from standing in for the selected proof.
+attachDirectNamedEvidenceAuthority
+  :: HandoffConfig
+  -> Map.Map (ObligationId, Name) DirectEvidenceAuthorityBinding
+  -> AssuranceLedger
+  -> ResolvedObligation
+  -> [LedgerHandoff]
+  -> Either HandoffError [LedgerHandoff]
+attachDirectNamedEvidenceAuthority config authorities ledger root entries = do
+  supportPairs <- mapM validateDirectUse (directEvidenceUses root)
+  let supportByConsumer = Map.fromList supportPairs
+  Right (map (attachSupport supportByConsumer) entries)
+  where
+    validateDirectUse (consumer, evidenceName, proposition, obligation) = do
+      authority <-
+        case Map.lookup (consumer, evidenceName) authorities of
+          Just binding -> Right binding
+          Nothing -> Left (MissingDirectEvidenceAuthority consumer evidenceName)
+      let evidenceId = directAuthorityEvidenceEntryId authority
+      evidence <-
+        case Map.lookup evidenceId (ledgerEvidence ledger) of
+          Just entry -> Right entry
+          Nothing -> Left
+            (MissingDirectAuthorityEvidenceEntry consumer evidenceName evidenceId)
+      revision <-
+        case Map.lookup (evidenceObligationRevision evidence) (ledgerRevisions ledger) of
+          Just entry -> Right entry
+          Nothing -> Left
+            (MissingDirectAuthorityEvidenceRevision
+              consumer evidenceName evidenceId (evidenceObligationRevision evidence))
+      let expectedStatement = renderPropositionCanonical proposition
+          actualStatement = revisionStatement revision
+      if actualStatement == expectedStatement
+        then Right ()
+        else Left
+          (DirectEvidenceAuthorityPropositionMismatch
+            consumer evidenceName expectedStatement actualStatement)
+      let expectedSubjects = sort (handoffSubjectIds config obligation)
+          actualSubjects = sort (revisionSubjectIds revision)
+      if actualSubjects == expectedSubjects
+        then Right ()
+        else Left
+          (DirectEvidenceAuthoritySubjectMismatch
+            consumer evidenceName expectedSubjects actualSubjects)
+      let expectedScope = obligationScope obligation
+          actualScope = revisionScope revision
+      if actualScope == expectedScope
+        then Right ()
+        else Left
+          (DirectEvidenceAuthorityScopeMismatch
+            consumer evidenceName expectedScope actualScope)
+      Right (consumer, evidenceId)
+
+    attachSupport support entry =
+      case Map.lookup (revisionObligationId (handoffRevision entry)) support of
+        Nothing -> entry
+        Just evidenceId -> entry
+          { handoffSupportDependencies = Set.toAscList . Set.fromList $
+              DependsOnEvidence evidenceId : handoffSupportDependencies entry
+          }
+
 -- | Project only the semantic obligation-support relation in graph direction:
 -- @(consumer, prerequisite)@.  Precise evidence-entry dependencies remain in
 -- the evidence layer and do not become revision-graph edges. Generation
@@ -228,6 +321,60 @@ bindHandoffCertificateEvidence handoff evidence
     finalized = rebound
       { evidenceEntryDigest = deriveEvidenceEntryDigest rebound
       }
+
+-- | Finalize a direct named-evidence disposition with the exact immutable
+-- support established by 'attachDirectNamedEvidenceAuthority'.  A raw
+-- 'StaticByEvidence' handoff that has only a display name is rejected: final
+-- closure must not infer authority from spelling alone.
+bindHandoffDirectEvidence
+  :: LedgerHandoff
+  -> EvidenceEntry
+  -> Either HandoffError EvidenceEntry
+bindHandoffDirectEvidence handoff evidence
+  | actualRevision /= expectedRevision =
+      Left (HandoffEvidenceRevisionMismatch expectedRevision actualRevision)
+  | otherwise =
+      case handoffDisposition handoff of
+        StaticallyDischarged (StaticByEvidence evidenceName)
+          | hasDirectSupport -> Right finalized
+          | otherwise -> Left
+              (HandoffDirectEvidenceSupportMissing expectedRevision evidenceName)
+        _ -> Left (HandoffEvidenceNotDirect expectedRevision)
+  where
+    expectedRevision = revisionId (handoffRevision handoff)
+    actualRevision = evidenceObligationRevision evidence
+    hasDirectSupport = any isEvidenceDependency (handoffSupportDependencies handoff)
+    isEvidenceDependency dependency = case dependency of
+      DependsOnEvidence _ -> True
+      DependsOnObligation _ -> False
+    preciseEvidenceDependencies =
+      [ dependency
+      | dependency@(DependsOnEvidence _) <- evidenceDependsOn evidence
+      ]
+    rebound = evidence
+      { evidenceDependsOn = Set.toAscList . Set.fromList $
+          preciseEvidenceDependencies <> handoffSupportDependencies handoff
+      }
+    finalized = rebound
+      { evidenceEntryDigest = deriveEvidenceEntryDigest rebound
+      }
+
+directEvidenceUses
+  :: ResolvedObligation
+  -> [(ObligationId, Name, Proposition, Obligation)]
+directEvidenceUses resolved =
+  current <> concatMap directEvidenceUses (resolvedPrerequisites resolved)
+  where
+    obligation = resolvedObligation resolved
+    current = case resolvedDisposition resolved of
+      StaticallyDischarged (StaticByEvidence evidenceName) ->
+        [ ( obligationId obligation
+          , evidenceName
+          , resolvedCanonicalProposition resolved
+          , obligation
+          )
+        ]
+      _ -> []
 
 dispositionPrerequisites :: ObligationDisposition -> Set ObligationId
 dispositionPrerequisites disposition =
