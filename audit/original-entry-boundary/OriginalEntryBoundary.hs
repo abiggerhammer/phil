@@ -319,7 +319,7 @@ wrongFinalEvidence = do
   source <- DF.sourceEvidence f
   let rid = DF.fixtureConsumerRevision f
       p = (fromDirectFixture f) { directs = Map.singleton rid DF.sourceEvidenceId }
-  exactError (M.ManifestClosureHandoffEvidenceRejected rid DF.consumerEvidenceId
+  exactError (M.ManifestClosureHandoffEvidenceRejected rid DF.sourceEvidenceId
     (H.HandoffEvidenceRevisionMismatch rid (T.evidenceObligationRevision source))) $ genericClose entries p
 
 droppedDirectSupport :: Either String ()
