@@ -16,9 +16,13 @@ module Phil.Core.Discharge
   ) where
 
 import qualified Data.Map.Strict as Map
+import qualified Data.Set as Set
 import Data.Text (Text)
 import qualified Data.Text as Text
-import Phil.Core.Checker (CheckState (..))
+import Phil.Core.Checker
+  ( CheckState (..)
+  , withObligationLogicalSubjects
+  )
 import Phil.Core.Context
   ( CheckError
   , ResourceContext (..)
@@ -171,13 +175,16 @@ resolveObligation
   -> Obligation
   -> Either DischargeError ResolvedObligation
 resolveObligation staticContext state policy obligation = do
+  let logicalState =
+        maskShadowingLogicalSubjects $
+          withObligationLogicalSubjects obligation state
   focusPlan <- mapLeft DischargeFocusingError $
-    focusProposition staticContext state (obligationProposition obligation)
-  evidenceAssumptions <- collectEvidenceAssumptions staticContext state
+    focusProposition staticContext logicalState (obligationProposition obligation)
+  evidenceAssumptions <- collectEvidenceAssumptions staticContext logicalState
   (resolvedSides, sideAssumptions, allSidesLocal) <-
     resolvePrerequisites
       staticContext
-      state
+      logicalState
       policy
       obligation
       evidenceAssumptions
@@ -185,7 +192,7 @@ resolveObligation staticContext state policy obligation = do
   disposition <-
     resolveFocusedRequirement
       staticContext
-      state
+      logicalState
       policy
       obligation
       (evidenceAssumptions ++ sideAssumptions)
@@ -197,6 +204,26 @@ resolveObligation staticContext state policy obligation = do
     , resolvedPrerequisites = resolvedSides
     , resolvedDisposition = disposition
     }
+
+-- | During resolution of an exact retained obligation, a current resource that
+-- reuses one of the retained logical subject spellings is not occurrence-identical
+-- to that subject.  Mask only those colliding resource bindings in this local
+-- resolution view.  The caller's real post-consumption resource state is left
+-- untouched, while separately named proof bindings remain available as evidence.
+maskShadowingLogicalSubjects :: CheckState -> CheckState
+maskShadowingLogicalSubjects state
+  | Set.null protected = state
+  | otherwise = state
+      { resourceContext = context
+          { unrestrictedBindings = Map.withoutKeys (unrestrictedBindings context) protected
+          , affineBindings = Map.withoutKeys (affineBindings context) protected
+          , linearBindings = Map.withoutKeys (linearBindings context) protected
+          , sharedLoans = sharedLoans context `Set.difference` protected
+          }
+      }
+  where
+    protected = Map.keysSet (logicalTypingContext state)
+    context = resourceContext state
 
 resolvePrerequisites
   :: StaticContext

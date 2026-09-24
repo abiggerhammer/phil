@@ -1,0 +1,63 @@
+name: Phase 1 Audit Durable Logical Subject
+
+on:
+  pull_request:
+    paths:
+      - 'src/Phil/Core/Checker.hs'
+      - 'src/Phil/Core/Discharge.hs'
+      - 'src/Phil/Core/SortCheck.hs'
+      - 'src/Phil/Core/Value.hs'
+      - 'test/Phase1AuditDurableLogicalSubjectMain.hs'
+      - '.github/workflows/phase1-audit-durable-logical-subject.yml'
+  push:
+    branches: [main]
+    paths:
+      - 'src/Phil/Core/Checker.hs'
+      - 'src/Phil/Core/Discharge.hs'
+      - 'src/Phil/Core/SortCheck.hs'
+      - 'src/Phil/Core/Value.hs'
+      - 'test/Phase1AuditDurableLogicalSubjectMain.hs'
+      - '.github/workflows/phase1-audit-durable-logical-subject.yml'
+
+permissions:
+  contents: read
+
+jobs:
+  durable-logical-subject-regression:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: haskell-actions/setup@v2
+        with:
+          ghc-version: '9.6.7'
+          cabal-version: 'latest'
+
+      - name: Build complete Haskell substrate
+        run: cabal build all --enable-tests
+
+      - name: Strict typecheck durable logical subject repair
+        shell: bash
+        run: |
+          set -euo pipefail
+          cabal exec -- ghc -isrc -Wall -Werror -fno-code src/Phil/Core/Checker.hs
+          cabal exec -- ghc -isrc -Wall -Werror -fno-code src/Phil/Core/SortCheck.hs
+          cabal exec -- ghc -isrc -Wall -Werror -fno-code src/Phil/Core/Discharge.hs
+          cabal exec -- ghc -isrc -Wall -Werror -fno-code src/Phil/Core/Value.hs
+          cabal exec -- ghc -isrc -Wall -Werror -fno-code test/Phase1AuditDurableLogicalSubjectMain.hs
+
+      - name: Replay O01 durable logical subject support
+        run: cabal exec -- runghc -Wall -Werror -isrc test/Phase1AuditDurableLogicalSubjectMain.hs
+
+      - name: Replay consumed-subject and N3 composition controls
+        shell: bash
+        run: |
+          set -euo pipefail
+          cabal exec -- runghc -Wall -Werror -isrc test/Phase1AuditRefinementConsumedSubjectMain.hs
+          cabal exec -- runghc -Wall -Werror -isrc test/audit-independent-n3/RepairCompositionControls.hs require-fix
+
+      - name: Replay resolver and refinement controls
+        shell: bash
+        run: |
+          set -euo pipefail
+          cabal exec -- runghc -Wall -Werror -isrc test/DischargeMain.hs
+          cabal exec -- runghc -Wall -Werror -isrc test/RefinementEvidenceMain.hs

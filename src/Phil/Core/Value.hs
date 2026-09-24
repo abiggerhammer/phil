@@ -260,11 +260,15 @@ restoreLogicalSubject subject before after =
     _ -> after
 
 -- Residualization may add obligations while it is using the logical subject
--- view. Keep those obligations, but always return the actual post-consumption
--- resource context from the base value check.
+-- view. Keep those obligations and their durable logical typing support, but
+-- always return the actual post-consumption resource context from the base
+-- value check.
 refinementResultState :: CheckState -> CheckState -> CheckState
 refinementResultState post refinementState =
-  post { residualObligations = residualObligations refinementState }
+  post
+    { residualObligations = residualObligations refinementState
+    , residualLogicalSubjects = residualLogicalSubjects refinementState
+    }
 
 matchingCarriedEvidence :: Proposition -> [EvidenceUse] -> Maybe EvidenceUse
 matchingCarriedEvidence required = go
