@@ -2,6 +2,7 @@ From Stdlib Require Import Bool.Bool Arith.PeanoNat.
 From Phil.Surface Require Import BranchEvidenceSupport.
 From Phil.Assurance Require Import
   EvidenceConsumerSubjectTransport
+  EvidenceConsumerUseClassification
   EvidenceConsumerFinalUseCorrespondence
   EvidenceConsumerSubjectOccurrenceCoverage
   EvidenceConsumerEventOriginCorrespondence.
