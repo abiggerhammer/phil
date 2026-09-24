@@ -8,6 +8,7 @@ on:
       - 'src/Phil/Core/SortCheck.hs'
       - 'src/Phil/Core/Value.hs'
       - 'test/Phase1AuditDurableLogicalSubjectMain.hs'
+      - 'test/Phase1AuditLiveSubjectContinuityMain.hs'
       - '.github/workflows/phase1-audit-durable-logical-subject.yml'
   push:
     branches: [main]
@@ -17,6 +18,7 @@ on:
       - 'src/Phil/Core/SortCheck.hs'
       - 'src/Phil/Core/Value.hs'
       - 'test/Phase1AuditDurableLogicalSubjectMain.hs'
+      - 'test/Phase1AuditLiveSubjectContinuityMain.hs'
       - '.github/workflows/phase1-audit-durable-logical-subject.yml'
 
 permissions:
@@ -44,9 +46,13 @@ jobs:
           cabal exec -- ghc -isrc -Wall -Werror -fno-code src/Phil/Core/Discharge.hs
           cabal exec -- ghc -isrc -Wall -Werror -fno-code src/Phil/Core/Value.hs
           cabal exec -- ghc -isrc -Wall -Werror -fno-code test/Phase1AuditDurableLogicalSubjectMain.hs
+          cabal exec -- ghc -isrc -Wall -Werror -fno-code test/Phase1AuditLiveSubjectContinuityMain.hs
 
       - name: Replay O01 durable logical subject support
         run: cabal exec -- runghc -Wall -Werror -isrc test/Phase1AuditDurableLogicalSubjectMain.hs
+
+      - name: Replay live original subject continuity
+        run: cabal exec -- runghc -Wall -Werror -isrc test/Phase1AuditLiveSubjectContinuityMain.hs
 
       - name: Replay consumed-subject and N3 composition controls
         shell: bash
