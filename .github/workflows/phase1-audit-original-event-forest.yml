@@ -1,0 +1,42 @@
+name: Phase 1 Audit Original Event Forest
+
+on:
+  pull_request:
+    paths:
+      - 'src/Phil/Assurance.hs'
+      - 'test/Phase1AuditOriginalEventForestMain.hs'
+      - 'docs/phase-1/audit-original-event-forest-remediation-v1.md'
+      - '.github/workflows/phase1-audit-original-event-forest.yml'
+  push:
+    branches: [main]
+    paths:
+      - 'src/Phil/Assurance.hs'
+      - 'test/Phase1AuditOriginalEventForestMain.hs'
+      - 'docs/phase-1/audit-original-event-forest-remediation-v1.md'
+      - '.github/workflows/phase1-audit-original-event-forest.yml'
+
+permissions:
+  contents: read
+
+jobs:
+  original-event-forest-regression:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: haskell-actions/setup@v2
+        with:
+          ghc-version: '9.6.7'
+          cabal-version: 'latest'
+
+      - name: Build complete Haskell substrate
+        run: cabal build all --enable-tests
+
+      - name: Strict typecheck original event forest repair
+        shell: bash
+        run: |
+          set -euo pipefail
+          cabal exec -- ghc -isrc -Wall -Werror -fno-code src/Phil/Assurance.hs
+          cabal exec -- ghc -isrc -Wall -Werror -fno-code test/Phase1AuditOriginalEventForestMain.hs
+
+      - name: Replay original event forest controls
+        run: cabal exec -- runghc -isrc -Wall -Werror test/Phase1AuditOriginalEventForestMain.hs
