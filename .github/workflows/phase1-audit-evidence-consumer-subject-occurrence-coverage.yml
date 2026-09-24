@@ -1,0 +1,93 @@
+name: Phase 1 Audit Evidence Consumer Subject Occurrence Coverage
+
+on:
+  pull_request:
+    paths:
+      - 'proof/Phil/Surface/BranchEvidenceSupport.v'
+      - 'proof/Phil/Assurance/EvidenceConsumerSubjectTransport.v'
+      - 'proof/Phil/Assurance/EvidenceConsumerEndpointCoverage.v'
+      - 'proof/Phil/Assurance/EvidenceConsumerSelectionCoverage.v'
+      - 'proof/Phil/Assurance/EvidenceConsumerUseClassification.v'
+      - 'proof/Phil/Assurance/EvidenceConsumerFinalUseCorrespondence.v'
+      - 'proof/Phil/Assurance/EvidenceConsumerSubjectOccurrenceCoverage.v'
+      - 'docs/phase-1/audit-evidence-consumer-subject-occurrence-coverage-v1.md'
+      - '.github/workflows/phase1-audit-evidence-consumer-subject-occurrence-coverage.yml'
+  push:
+    branches: [main]
+    paths:
+      - 'proof/Phil/Surface/BranchEvidenceSupport.v'
+      - 'proof/Phil/Assurance/EvidenceConsumerSubjectTransport.v'
+      - 'proof/Phil/Assurance/EvidenceConsumerEndpointCoverage.v'
+      - 'proof/Phil/Assurance/EvidenceConsumerSelectionCoverage.v'
+      - 'proof/Phil/Assurance/EvidenceConsumerUseClassification.v'
+      - 'proof/Phil/Assurance/EvidenceConsumerFinalUseCorrespondence.v'
+      - 'proof/Phil/Assurance/EvidenceConsumerSubjectOccurrenceCoverage.v'
+      - 'docs/phase-1/audit-evidence-consumer-subject-occurrence-coverage-v1.md'
+      - '.github/workflows/phase1-audit-evidence-consumer-subject-occurrence-coverage.yml'
+
+permissions:
+  contents: read
+
+jobs:
+  evidence-consumer-subject-occurrence-coverage:
+    runs-on: ubuntu-latest
+    container:
+      image: rocq/rocq-prover:9.2.0
+      options: --user root
+    steps:
+      - uses: actions/checkout@v4
+      - name: Compile subject-occurrence coverage proofs
+        shell: bash
+        run: |
+          set -euo pipefail
+          export PATH="/home/rocq/.opam/${COMPILER}/bin:$PATH"
+          rocq c -Q proof/Phil Phil proof/Phil/Surface/BranchEvidenceSupport.v
+          rocq c -Q proof/Phil Phil proof/Phil/Assurance/EvidenceConsumerSubjectTransport.v
+          rocq c -Q proof/Phil Phil proof/Phil/Assurance/EvidenceConsumerEndpointCoverage.v
+          rocq c -Q proof/Phil Phil proof/Phil/Assurance/EvidenceConsumerSelectionCoverage.v
+          rocq c -Q proof/Phil Phil proof/Phil/Assurance/EvidenceConsumerUseClassification.v
+          rocq c -Q proof/Phil Phil proof/Phil/Assurance/EvidenceConsumerFinalUseCorrespondence.v
+          rocq c -Q proof/Phil Phil proof/Phil/Assurance/EvidenceConsumerSubjectOccurrenceCoverage.v
+      - name: Record exact proof identity
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p evidence-consumer-subject-occurrence-coverage
+          cp \
+            proof/Phil/Surface/BranchEvidenceSupport.v \
+            proof/Phil/Surface/BranchEvidenceSupport.vo \
+            proof/Phil/Assurance/EvidenceConsumerSubjectTransport.v \
+            proof/Phil/Assurance/EvidenceConsumerSubjectTransport.vo \
+            proof/Phil/Assurance/EvidenceConsumerEndpointCoverage.v \
+            proof/Phil/Assurance/EvidenceConsumerEndpointCoverage.vo \
+            proof/Phil/Assurance/EvidenceConsumerSelectionCoverage.v \
+            proof/Phil/Assurance/EvidenceConsumerSelectionCoverage.vo \
+            proof/Phil/Assurance/EvidenceConsumerUseClassification.v \
+            proof/Phil/Assurance/EvidenceConsumerUseClassification.vo \
+            proof/Phil/Assurance/EvidenceConsumerFinalUseCorrespondence.v \
+            proof/Phil/Assurance/EvidenceConsumerFinalUseCorrespondence.vo \
+            proof/Phil/Assurance/EvidenceConsumerSubjectOccurrenceCoverage.v \
+            proof/Phil/Assurance/EvidenceConsumerSubjectOccurrenceCoverage.vo \
+            evidence-consumer-subject-occurrence-coverage/
+          sha256sum \
+            evidence-consumer-subject-occurrence-coverage/BranchEvidenceSupport.v \
+            evidence-consumer-subject-occurrence-coverage/BranchEvidenceSupport.vo \
+            evidence-consumer-subject-occurrence-coverage/EvidenceConsumerSubjectTransport.v \
+            evidence-consumer-subject-occurrence-coverage/EvidenceConsumerSubjectTransport.vo \
+            evidence-consumer-subject-occurrence-coverage/EvidenceConsumerEndpointCoverage.v \
+            evidence-consumer-subject-occurrence-coverage/EvidenceConsumerEndpointCoverage.vo \
+            evidence-consumer-subject-occurrence-coverage/EvidenceConsumerSelectionCoverage.v \
+            evidence-consumer-subject-occurrence-coverage/EvidenceConsumerSelectionCoverage.vo \
+            evidence-consumer-subject-occurrence-coverage/EvidenceConsumerUseClassification.v \
+            evidence-consumer-subject-occurrence-coverage/EvidenceConsumerUseClassification.vo \
+            evidence-consumer-subject-occurrence-coverage/EvidenceConsumerFinalUseCorrespondence.v \
+            evidence-consumer-subject-occurrence-coverage/EvidenceConsumerFinalUseCorrespondence.vo \
+            evidence-consumer-subject-occurrence-coverage/EvidenceConsumerSubjectOccurrenceCoverage.v \
+            evidence-consumer-subject-occurrence-coverage/EvidenceConsumerSubjectOccurrenceCoverage.vo \
+            > evidence-consumer-subject-occurrence-coverage/D-RES-SUPPORT-01.subject-occurrence.proof.sha256
+          cat evidence-consumer-subject-occurrence-coverage/D-RES-SUPPORT-01.subject-occurrence.proof.sha256
+      - uses: actions/upload-artifact@v4
+        with:
+          name: evidence-consumer-subject-occurrence-coverage-proof
+          path: evidence-consumer-subject-occurrence-coverage
+          if-no-files-found: error
