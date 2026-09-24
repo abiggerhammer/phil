@@ -156,7 +156,7 @@ propositionVariables proposition =
     LessThan left right -> termVariables left `Set.union` termVariables right
     LessEqual left right -> termVariables left `Set.union` termVariables right
     Member value collection -> termVariables value `Set.union` termVariables collection
-    Disjoint left right -> termVariables left `Set.union` termVariables collection
+    Disjoint left right -> termVariables left `Set.union` termVariables right
     Conjunction left right -> propositionVariables left `Set.union` propositionVariables right
     Disjunction left right -> propositionVariables left `Set.union` propositionVariables right
     Negation inner -> propositionVariables inner
