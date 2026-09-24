@@ -185,8 +185,13 @@ residualRootRetainsForest = do
 wrongOccurrenceRejected :: Either String ()
 wrongOccurrenceRejected = do
   result <- emit reflexiveDifference
-  policy <- runtimeChildPolicy
   let wrong = spec { residualObligationId = ObligationId "audit.other.root" }
+      wrongChild =
+        childObligation
+          { obligationId = ObligationId "audit.other.root.nat-sub.1"
+          }
+  policy <- right $
+    Discharge.bindRuntime (runtimeFor wrongChild) Discharge.emptyDischargePolicy
   case resolveOriginalCheckEvent emptyStaticContext policy wrong result of
     Left (OriginalCheckEventResidualCoverageMismatch _ _) -> Right ()
     Left (OriginalCheckEventResidualInventoryMismatch _ _) -> Right ()
