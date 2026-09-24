@@ -1,5 +1,7 @@
 From Stdlib Require Import Bool.Bool Arith.PeanoNat.
-From Phil.Assurance Require Import EvidenceConsumerEndpointCoverage.
+From Phil.Surface Require Import BranchEvidenceSupport.
+From Phil.Assurance Require Import
+  EvidenceConsumerSubjectTransport EvidenceConsumerEndpointCoverage.
 
 (*
   Defensive proof-correspondence continuation of D-RES-SUPPORT-01 /
