@@ -7,10 +7,10 @@ import qualified Phil.Assurance as A
 import Phil.Core.Checker (CheckState (..), emptyCheckState)
 import Phil.Core.Context (insertBinding)
 import qualified Phil.Core.Discharge as D
-import Phil.Core.Refinement (EvidenceUse (..), ResidualSpec (..))
+import Phil.Core.Refinement (EvidenceUse (..), RefinementError (..), ResidualSpec (..))
 import Phil.Core.Static (emptyStaticContext)
 import Phil.Core.Syntax
-import Phil.Core.Value (ValueResult (..), checkValue, checkValueWithResidual)
+import Phil.Core.Value (ValueResult (..), ValueError (..), checkValue, checkValueWithResidual)
 import System.Exit (exitFailure)
 
 -- Positive objects come from the actual checker/resolver. We never edit a
@@ -57,7 +57,7 @@ closed s = do
   ensure (valueResultType result == boundTy) "changed actual checked type"
   ensure (Map.null (residualObligations (valueResultState result))) "closed result unexpectedly residual"
   ensure (Map.null (residualLogicalSubjects (valueResultState result))) "closed result acquired residual support"
-  ensure (EvidenceByDefinition Truth `elem` valueResultEvidence result) "closed evidence-use missing"
+  ensure (EvidenceByDefinition closedGoal `elem` valueResultEvidence result) "original unnormalized closed evidence-use missing"
   pure result
 
 liveBefore :: Either String CheckState
@@ -112,8 +112,9 @@ pendingUnresolved = do
 
 falseLiteral :: Either String ()
 falseLiteral = case checkValueWithResidual specA (VUInt 8 2) boundTy emptyCheckState of
-  Left _ -> Right ()
-  Right result -> Left ("false closed bound admitted: " <> show result)
+  Left (ValueRefinementError (StaticallyFalse proposition))
+    | proposition == LessEqual (RefToNat (RefUInt 8 2)) (RefNat 1) -> Right ()
+  other -> Left ("false closed bound did not reject at the exact semantic gate: " <> show other)
 
 closedObservation :: Either String String
 closedObservation = do
