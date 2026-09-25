@@ -72,6 +72,11 @@ productFixture = do
 successors :: [Name]
 successors = map Name ["restored-code","restored-optional","restored-bytes"]
 
+threeSuccessors :: Either String (Name, Name, Name)
+threeSuccessors = case successors of
+  [nu,na,nl] -> Right (nu,na,nl)
+  _ -> Left "audit fixture must provide exactly three successor names"
+
 lookupExact :: Mode -> Name -> Ty -> ResourceContext -> Either String ()
 lookupExact mode name ty context = do
   (actualMode,actualTy,_) <- right $ useBinding name context
@@ -81,7 +86,7 @@ productRoundTrip :: Either String ()
 productRoundTrip = do
   (_,formed) <- productFixture
   restored <- right $ P.eliminateProductBinding productName successors formed
-  let [nu,na,nl] = successors
+  (nu,na,nl) <- threeSuccessors
   base <- right $ insertBinding Unrestricted u refinedTy emptyContext
   withU <- right $ insertBinding Unrestricted nu refinedTy base
   withA <- right $ insertBinding Affine na TyBool withU
@@ -101,7 +106,7 @@ nestedRoundTrip = do
   (_,outer) <- right $ P.formProductBinding outerName [productName,u] inner
   middle <- right $ P.eliminateProductBinding outerName [recovered,copyCode] outer
   restored <- right $ P.eliminateProductBinding recovered successors middle
-  let [nu,na,nl] = successors
+  (nu,na,nl) <- threeSuccessors
   lookupExact Unrestricted nu refinedTy restored
   lookupExact Affine na TyBool restored
   lookupExact Linear nl (TyBytes (RefNat 5)) restored
