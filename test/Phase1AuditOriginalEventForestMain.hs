@@ -13,9 +13,13 @@ import Phil.Assurance
   , EvidenceRole (..)
   , HandoffConfig (..)
   , LedgerHandoff (..)
+  , OriginalCheckEventAcceptance (..)
   , OriginalCheckEventClosureError (..)
   , OriginalCheckEventError (..)
+  , actualEvidenceSubjectEndpoints
+  , actualEvidenceUseInventory
   , closeOriginalCheckEventBundle
+  , closeOriginalCheckEventBundleWithAuthority
   , handoffOriginalCheckEvent
   , handoffSupportEdges
   , resolveOriginalCheckEvent
@@ -45,6 +49,7 @@ main = do
     , run "C06" "fully static literal subtraction remains valid" staticLiteralRemainsValid
     , run "C07" "final manifest closure consumes the event-derived handoff" finalClosureUsesActualEvent
     , run "C08" "final manifest closure rejects a graph that drops event support" finalClosureRejectsShrunkSupport
+    , run "C09" "successful closure reflects the exact accepting operation inputs" finalClosureReflectsAcceptingOperation
     ]
   unless (and results) exitFailure
   putStrLn "COMPLETE original_check_event_forest_controls=8"
@@ -266,7 +271,7 @@ staticLiteralRemainsValid = do
 
 finalClosureUsesActualEvent :: Either String ()
 finalClosureUsesActualEvent = do
-  (result, entries, closureResult) <- closeActualEvent True
+  (result, entries, _, _, closureResult) <- closeActualEvent True
   ensure
     (EvidenceResidual childId side `elem` valueResultEvidence result)
     "actual checker result did not retain its residual prerequisite use"
@@ -278,7 +283,7 @@ finalClosureUsesActualEvent = do
 
 finalClosureRejectsShrunkSupport :: Either String ()
 finalClosureRejectsShrunkSupport = do
-  (_, entries, closureResult) <- closeActualEvent False
+  (_, entries, _, _, closureResult) <- closeActualEvent False
   let expected = handoffSupportEdges entries
   ensure (not (Set.null expected)) "fixture unexpectedly has no event support edge"
   case closureResult of
@@ -289,11 +294,41 @@ finalClosureRejectsShrunkSupport = do
     other -> Left
       ("expected exact event support mismatch at final closure, got " <> show other)
 
+finalClosureReflectsAcceptingOperation :: Either String ()
+finalClosureReflectsAcceptingOperation = do
+  (result, entries, selection, authorityResult, legacyResult) <- closeActualEvent True
+  accepted <- right authorityResult
+  legacyManifest <- right legacyResult
+  expectedEndpoints <- right $ actualEvidenceSubjectEndpoints spec result
+  ensure
+    (originalCheckEventAcceptedSpec accepted == spec)
+    "successful closure did not retain the exact producer spec"
+  ensure
+    (originalCheckEventAcceptedEvidenceUses accepted == actualEvidenceUseInventory result)
+    "successful closure did not retain the authentic ordered evidence-use inventory"
+  ensure
+    (originalCheckEventAcceptedSubjectEndpoints accepted == expectedEndpoints)
+    "successful closure did not retain the exact same-event occurrence endpoints"
+  ensure
+    (originalCheckEventAcceptedHandoff accepted == entries)
+    "successful closure did not retain the exact event-derived handoff"
+  ensure
+    (originalCheckEventAcceptedSelection accepted == selection)
+    "successful closure did not retain the exact final selection"
+  ensure
+    (originalCheckEventAcceptedManifest accepted == legacyManifest)
+    "legacy manifest projection diverged from authoritative closure"
+  ensure
+    (Assurance.manifestAssuranceUses legacyManifest == Closure.manifestClosureUses selection)
+    "returned manifest did not retain the accepting operation's exact assurance-use selection"
+
 closeActualEvent
   :: Bool
   -> Either String
       ( ValueResult
       , [LedgerHandoff]
+      , Closure.ManifestClosureSelection
+      , Either OriginalCheckEventClosureError OriginalCheckEventAcceptance
       , Either OriginalCheckEventClosureError Assurance.AssuranceManifest
       )
 closeActualEvent keepSupport = do
@@ -352,6 +387,19 @@ closeActualEvent keepSupport = do
         , Closure.manifestClosureExports = Map.empty
         , Closure.manifestClosureUses = Set.empty
         }
+      authorityResult = closeOriginalCheckEventBundleWithAuthority
+        config
+        emptyStaticContext
+        dischargePolicy
+        spec
+        result
+        bundle
+        assurancePolicy
+        context
+        ledger
+        selection
+        Map.empty
+        Map.empty
       closureResult = closeOriginalCheckEventBundle
         config
         emptyStaticContext
@@ -365,7 +413,7 @@ closeActualEvent keepSupport = do
         selection
         Map.empty
         Map.empty
-  Right (result, entries, closureResult)
+  Right (result, entries, selection, authorityResult, closureResult)
 
 parentEvidenceId, runtimeEvidenceId :: Assurance.EvidenceEntryId
 parentEvidenceId = Assurance.EvidenceEntryId "audit.original-event.final.parent"

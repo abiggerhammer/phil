@@ -6,10 +6,12 @@ module Phil.Assurance
   , OriginalEventIdentity (..)
   , OriginalEventSubjectId (..)
   , EvidenceSubjectEndpoint (..)
+  , OriginalCheckEventAcceptance (..)
   , actualEvidenceUseInventory
   , actualEvidenceSubjectEndpoints
   , resolveOriginalCheckEvent
   , handoffOriginalCheckEvent
+  , closeOriginalCheckEventBundleWithAuthority
   , closeOriginalCheckEventBundle
   , module Phil.Assurance.Types
   , module Phil.Assurance.Handoff
@@ -96,6 +98,22 @@ data OriginalCheckEventClosureError
   = OriginalCheckEventClosureProducerAssociationRequired
   | OriginalCheckEventClosureResolutionError OriginalCheckEventError
   | OriginalCheckEventClosureManifestError ManifestClosure.ManifestClosureError
+  deriving (Eq, Show)
+
+-- | Successful reflection of the exact supported original-event closure path.
+-- This value is built only after the same authentic returned evidence-use
+-- inventory, same-event subject endpoints, event-derived handoff and caller's
+-- exact final selection have all reached the immutable accepting operation.
+-- It is deliberately a scoped Phase-1 correspondence witness, not a new source
+-- identity scheme or a serialized authority token.
+data OriginalCheckEventAcceptance = OriginalCheckEventAcceptance
+  { originalCheckEventAcceptedSpec :: ResidualSpec
+  , originalCheckEventAcceptedEvidenceUses :: [ActualEvidenceUse]
+  , originalCheckEventAcceptedSubjectEndpoints :: [EvidenceSubjectEndpoint]
+  , originalCheckEventAcceptedHandoff :: [LedgerHandoff]
+  , originalCheckEventAcceptedSelection :: ManifestClosure.ManifestClosureSelection
+  , originalCheckEventAcceptedManifest :: AssuranceManifest
+  }
   deriving (Eq, Show)
 
 -- | One exact subject occurrence in an evidence use returned by the checker.
@@ -367,6 +385,71 @@ handoffOriginalCheckEvent config evidenceIds staticContext policy spec result = 
 -- the final closure's immutable-authority requirements.  Resource ownership
 -- comes only from the returned 'ValueResult'; this function never restores a
 -- consumed affine or linear owner.
+closeOriginalCheckEventBundleWithAuthority
+  :: HandoffConfig
+  -> StaticContext
+  -> Discharge.DischargePolicy
+  -> ResidualSpec
+  -> ValueResult
+  -> VerificationBundle
+  -> ApplicationAssurancePolicy
+  -> VerificationContext
+  -> AssuranceLedger
+  -> ManifestClosure.ManifestClosureSelection
+  -> Map RevisionId EvidenceEntryId
+  -> Map RevisionId EvidenceEntryId
+  -> Either OriginalCheckEventClosureError OriginalCheckEventAcceptance
+closeOriginalCheckEventBundleWithAuthority
+    config
+    staticContext
+    dischargePolicy
+    spec
+    result
+    bundle
+    assurancePolicy
+    context
+    ledger
+    selection
+    certificateEvidence
+    directEvidence = do
+  unless (hasResidualProducerAssociation result) $
+    Left OriginalCheckEventClosureProducerAssociationRequired
+  let actualUses = actualEvidenceUseInventory result
+  entries <- mapLeft OriginalCheckEventClosureResolutionError $
+    handoffOriginalCheckEvent
+      config
+      Map.empty
+      staticContext
+      dischargePolicy
+      spec
+      result
+  endpoints <- mapLeft OriginalCheckEventClosureResolutionError $
+    actualEvidenceSubjectEndpoints spec result
+  manifest <- mapLeft OriginalCheckEventClosureManifestError $
+    ManifestClosure.closeVerificationBundleWithHandoff
+      bundle
+      assurancePolicy
+      context
+      ledger
+      selection
+      ManifestClosure.ManifestClosureHandoff
+        { ManifestClosure.manifestClosureHandoffEntries = entries
+        , ManifestClosure.manifestClosureCertificateEvidence = certificateEvidence
+        , ManifestClosure.manifestClosureDirectEvidence = directEvidence
+        }
+  Right OriginalCheckEventAcceptance
+    { originalCheckEventAcceptedSpec = spec
+    , originalCheckEventAcceptedEvidenceUses = actualUses
+    , originalCheckEventAcceptedSubjectEndpoints = endpoints
+    , originalCheckEventAcceptedHandoff = entries
+    , originalCheckEventAcceptedSelection = selection
+    , originalCheckEventAcceptedManifest = manifest
+    }
+
+-- | Compatibility projection of the authoritative final-closure route.
+-- Keeping the legacy return type cannot bypass accepting-operation reflection:
+-- every successful call first constructs 'OriginalCheckEventAcceptance' from
+-- the same result/spec, endpoint domain, handoff, selection and manifest.
 closeOriginalCheckEventBundle
   :: HandoffConfig
   -> StaticContext
@@ -393,31 +476,21 @@ closeOriginalCheckEventBundle
     ledger
     selection
     certificateEvidence
-    directEvidence = do
-  unless (hasResidualProducerAssociation result) $
-    Left OriginalCheckEventClosureProducerAssociationRequired
-  entries <- mapLeft OriginalCheckEventClosureResolutionError $
-    handoffOriginalCheckEvent
+    directEvidence =
+  fmap originalCheckEventAcceptedManifest $
+    closeOriginalCheckEventBundleWithAuthority
       config
-      Map.empty
       staticContext
       dischargePolicy
       spec
       result
-  _ <- mapLeft OriginalCheckEventClosureResolutionError $
-    actualEvidenceSubjectEndpoints spec result
-  mapLeft OriginalCheckEventClosureManifestError $
-    ManifestClosure.closeVerificationBundleWithHandoff
       bundle
       assurancePolicy
       context
       ledger
       selection
-      ManifestClosure.ManifestClosureHandoff
-        { ManifestClosure.manifestClosureHandoffEntries = entries
-        , ManifestClosure.manifestClosureCertificateEvidence = certificateEvidence
-        , ManifestClosure.manifestClosureDirectEvidence = directEvidence
-        }
+      certificateEvidence
+      directEvidence
 
 originalRequiredProposition
   :: ValueResult

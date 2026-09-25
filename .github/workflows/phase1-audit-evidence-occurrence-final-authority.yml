@@ -1,0 +1,42 @@
+name: Phase 1 Audit Evidence Occurrence Final Authority
+
+on:
+  pull_request:
+    paths:
+      - 'src/Phil/Assurance.hs'
+      - 'test/Phase1AuditOriginalEventForestMain.hs'
+      - 'docs/phase-1/audit-evidence-occurrence-final-authority-remediation-v1.md'
+      - '.github/workflows/phase1-audit-evidence-occurrence-final-authority.yml'
+  push:
+    branches: [main]
+    paths:
+      - 'src/Phil/Assurance.hs'
+      - 'test/Phase1AuditOriginalEventForestMain.hs'
+      - 'docs/phase-1/audit-evidence-occurrence-final-authority-remediation-v1.md'
+      - '.github/workflows/phase1-audit-evidence-occurrence-final-authority.yml'
+
+permissions:
+  contents: read
+
+jobs:
+  evidence-occurrence-final-authority:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: haskell-actions/setup@v2
+        with:
+          ghc-version: '9.6.7'
+          cabal-version: 'latest'
+
+      - name: Build complete Haskell substrate
+        run: cabal build all --enable-tests
+
+      - name: Strict typecheck accepting-operation reflection
+        shell: bash
+        run: |
+          set -euo pipefail
+          cabal exec -- ghc -isrc -Wall -Werror -fno-code src/Phil/Assurance.hs
+          cabal exec -- ghc -isrc -Wall -Werror -fno-code test/Phase1AuditOriginalEventForestMain.hs
+
+      - name: Replay original-event accepting-operation controls
+        run: cabal exec -- runghc -isrc -Wall -Werror test/Phase1AuditOriginalEventForestMain.hs
