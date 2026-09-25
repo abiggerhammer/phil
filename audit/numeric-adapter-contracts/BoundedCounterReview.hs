@@ -7,6 +7,7 @@ import qualified PingFixture as F
 import Phil.Core.Authority (AuthorityState, AuthorityExerciseSource (..), emptyAuthorityState)
 import qualified Phil.Core.NumericConversion as C
 import Phil.Core.ProcessActivation (ActivationOccurrenceKey (..))
+import Phil.Core.ProcessRendezvous (ProcessCommunicationState)
 import Phil.Core.Scalar (ScalarLiteral (..))
 import Phil.Core.Syntax (Ty (..))
 import Phil.IO.Console (ConsoleWriteOutcome (..))
@@ -21,6 +22,11 @@ import System.Exit (exitFailure)
 -- manufactured or edited. Console outcome is a declared fixture input; these
 -- pure runtime-model calls do not perform native I/O or execute emitted code.
 
+type RuntimeResult = Either P.GrammarV1BoundedPingRuntimeError
+  (ProcessCommunicationState, P.GrammarV1BoundedPingRuntimeEvidence)
+
+runAt :: F.Fixture -> AuthorityState -> ActivationOccurrenceKey -> ScalarLiteral
+  -> Either String RuntimeResult
 runAt fx authority occurrence literal = do
   values <- F.roundValuesFromSource F.roundSource
   pure $ P.grammarV1RunBoundedPingFromSource
@@ -28,6 +34,7 @@ runAt fx authority occurrence literal = do
     (F.fixturePlan fx) (P.GrammarV1RootCountValue occurrence literal) values
     (PossessedCapability F.stdoutCapability) authority ConsoleWriteSucceeded
 
+runCount :: F.Fixture -> AuthorityState -> ScalarLiteral -> Either String RuntimeResult
 runCount fx authority literal =
   runAt fx authority (P.boundedPingRuntimeCountOccurrence (F.fixturePlan fx)) literal
 
