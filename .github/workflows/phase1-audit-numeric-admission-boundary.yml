@@ -1,0 +1,37 @@
+name: Phase 1 Audit Numeric Admission Boundary
+
+on:
+  push:
+    paths:
+      - 'src/Phil/Surface/GrammarV1/NumericConversion.hs'
+      - 'test/Phase1AuditNumericAdmissionBoundaryMain.hs'
+      - 'docs/phase-1/audit-numeric-admission-boundary-remediation-v1.md'
+      - '.github/workflows/phase1-audit-numeric-admission-boundary.yml'
+  pull_request:
+    paths:
+      - 'src/Phil/Surface/GrammarV1/NumericConversion.hs'
+      - 'test/Phase1AuditNumericAdmissionBoundaryMain.hs'
+      - 'docs/phase-1/audit-numeric-admission-boundary-remediation-v1.md'
+      - '.github/workflows/phase1-audit-numeric-admission-boundary.yml'
+
+permissions:
+  contents: read
+
+jobs:
+  numeric-admission-boundary:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+      - uses: haskell-actions/setup@v2
+        with:
+          ghc-version: '9.6.7'
+          cabal-version: '3.18.1.0'
+      - name: Update package index
+        run: cabal update
+      - name: Build production substrate
+        run: cabal build all --enable-tests
+      - name: Run numeric admission boundary regression
+        run: cabal exec -- runghc -Wall -Werror -isrc test/Phase1AuditNumericAdmissionBoundaryMain.hs
+      - name: Preserve numeric conversion regression
+        run: cabal exec -- runghc -Wall -Werror -isrc test/Phase1NumericConversionMain.hs

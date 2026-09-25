@@ -1,11 +1,18 @@
 module Phil.Surface.GrammarV1.NumericConversion
   ( GrammarV1NumericEnvironment
+  , GrammarV1AdmittedNumericValues
   , GrammarV1NumericEvaluationError (..)
+  , GrammarV1NumericAdmissionError (..)
+  , grammarV1NumericEnvironmentFromCheckedReferences
   , evaluateGrammarV1NumericExpression
+  , evaluateGrammarV1CheckedNumericExpression
+  , checkGrammarV1UIntNumericResult
+  , evaluateAndCheckGrammarV1UIntNumericExpression
   ) where
 
 import Data.Map.Strict (Map)
 import qualified Data.Map.Strict as Map
+import Phil.Core.Checker (CheckState)
 import Phil.Core.FloatArithmetic
   ( FloatOperator (..)
   , FloatSemanticError
@@ -33,6 +40,8 @@ import Phil.Core.NumericConversion
   , numericTypeFromCoreType
   , numericValueType
   )
+import Phil.Core.Syntax (Name (..), Ty, Value (..))
+import Phil.Core.Value (ValueError, ValueResult, checkValue)
 import Phil.Core.SIntArithmetic
   ( SIntLiteral (..)
   , SIntType
@@ -40,16 +49,28 @@ import Phil.Core.SIntArithmetic
   , sIntLiteralInRange
   , SIntArithmeticOperator (..)
   )
+import Phil.Surface.GrammarV1.BinderScope
+  ( GrammarV1ResolvedBinder (..)
+  )
 import Phil.Surface.GrammarV1.Elaborate (grammarV1PrimitiveType)
+import Phil.Surface.GrammarV1.LexicalReferenceScope
+  ( GrammarV1CheckedLexicalReference (..)
+  )
 import Phil.Surface.GrammarV1.Parser
   ( GrammarV1BinaryOperator (..)
   , GrammarV1Expression (..)
+  , GrammarV1QualifiedName (..)
   , GrammarV1ShiftOperator (..)
-  , GrammarV1StaticReference
+  , GrammarV1StaticReference (..)
+  )
+import Phil.Surface.GrammarV1.SemanticBindingState
+  ( grammarV1RewriteExpressionReferences
   )
 import Phil.Surface.Syntax (Located (..))
 
 type GrammarV1NumericEnvironment = Map GrammarV1StaticReference NumericValue
+
+type GrammarV1AdmittedNumericValues = Map Name NumericValue
 
 data GrammarV1NumericEvaluationError
   = GrammarV1NumericUnknownReference GrammarV1StaticReference
@@ -66,6 +87,70 @@ data GrammarV1NumericEvaluationError
   | GrammarV1NumericShiftCountIntegerRequired NumericType
   | GrammarV1NumericShiftError IntegerShiftError
   deriving (Eq, Show)
+
+data GrammarV1NumericAdmissionError
+  = GrammarV1NumericBindingValueMissing Name
+  | GrammarV1NumericReferenceRewriteUnsupported
+  | GrammarV1NumericEvaluationFailed GrammarV1NumericEvaluationError
+  | GrammarV1NumericResultUnsupported NumericType
+  | GrammarV1NumericResultCheckFailed ValueError
+  deriving (Eq, Show)
+
+grammarV1NumericEnvironmentFromCheckedReferences
+  :: GrammarV1AdmittedNumericValues
+  -> [GrammarV1CheckedLexicalReference]
+  -> Either GrammarV1NumericAdmissionError GrammarV1NumericEnvironment
+grammarV1NumericEnvironmentFromCheckedReferences admitted references =
+  Map.fromList <$> mapM attach references
+  where
+    attach reference = do
+      let binder = grammarV1CheckedLexicalReferenceBinder reference
+          semanticName = grammarV1ResolvedBinderCoreName binder
+      value <- case Map.lookup semanticName admitted of
+        Just numericValue -> Right numericValue
+        Nothing -> Left (GrammarV1NumericBindingValueMissing semanticName)
+      Right (semanticReference semanticName, value)
+
+    semanticReference (Name semanticName) =
+      GrammarV1StaticReference
+        (GrammarV1QualifiedName [semanticName])
+        []
+
+evaluateGrammarV1CheckedNumericExpression
+  :: GrammarV1AdmittedNumericValues
+  -> [GrammarV1CheckedLexicalReference]
+  -> Located GrammarV1Expression
+  -> Either GrammarV1NumericAdmissionError NumericValue
+evaluateGrammarV1CheckedNumericExpression admitted references expression = do
+  rewritten <- case grammarV1RewriteExpressionReferences references expression of
+    Just value -> Right value
+    Nothing -> Left GrammarV1NumericReferenceRewriteUnsupported
+  environment <- grammarV1NumericEnvironmentFromCheckedReferences admitted references
+  mapLeft GrammarV1NumericEvaluationFailed
+    (evaluateGrammarV1NumericExpression environment (locatedValue rewritten))
+
+checkGrammarV1UIntNumericResult
+  :: NumericValue
+  -> Ty
+  -> CheckState
+  -> Either GrammarV1NumericAdmissionError ValueResult
+checkGrammarV1UIntNumericResult value target state =
+  case value of
+    NumericUIntValue width magnitude ->
+      mapLeft GrammarV1NumericResultCheckFailed
+        (checkValue (VUInt width magnitude) target state)
+    _ -> Left (GrammarV1NumericResultUnsupported (numericValueType value))
+
+evaluateAndCheckGrammarV1UIntNumericExpression
+  :: GrammarV1AdmittedNumericValues
+  -> [GrammarV1CheckedLexicalReference]
+  -> Located GrammarV1Expression
+  -> Ty
+  -> CheckState
+  -> Either GrammarV1NumericAdmissionError ValueResult
+evaluateAndCheckGrammarV1UIntNumericExpression admitted references expression target state = do
+  value <- evaluateGrammarV1CheckedNumericExpression admitted references expression
+  checkGrammarV1UIntNumericResult value target state
 
 -- | Evaluate the bounded numeric expression fragment after parsing. Every leaf in
 -- the environment already has exact semantic numeric identity. Binary operators
