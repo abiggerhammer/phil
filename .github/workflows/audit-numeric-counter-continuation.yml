@@ -24,7 +24,7 @@ jobs:
           persist-credentials: false
       - uses: actions/checkout@v4
         with:
-          ref: 0fa4d1e99172b9efaec498e1598d31583b83a13f
+          ref: 476fdf1acdfd216b6c5dc5b56bd7be90320cef90
           path: driver
           persist-credentials: false
       - uses: haskell-actions/setup@v2
@@ -41,14 +41,16 @@ jobs:
           printf '%s\n' '${{ github.sha }}' > evidence/workflow-commit.txt
           printf '%s %s\n' '${{ github.run_id }}' '${{ github.run_attempt }}' > evidence/run-attempt.txt
           test "$(cat evidence/subject-commit.txt)" = 91c054904ab8f0076c39f9532dd3d6672b2facff
-          test "$(cat evidence/driver-commit.txt)" = 0fa4d1e99172b9efaec498e1598d31583b83a13f
+          test "$(cat evidence/driver-commit.txt)" = 476fdf1acdfd216b6c5dc5b56bd7be90320cef90
           git -C subject status --porcelain --untracked-files=all > evidence/subject-status-before.txt
           test ! -s evidence/subject-status-before.txt
           cp driver/audit/numeric-adapter-contracts/NumericAdapterReview.hs evidence/drivers/
           cp driver/audit/numeric-adapter-contracts/BoundedCounterReview.hs evidence/drivers/
+          cp driver/audit/numeric-adapter-contracts/ReconciledNumericAdapterReview.hs evidence/drivers/
           cp subject/test/Phase1INT009BoundedPingRuntimeMain.hs evidence/drivers/PingFixture.original.hs
           test "$(git hash-object evidence/drivers/NumericAdapterReview.hs)" = 9f4a127643019b4a5a89b6c013a1ff9b329da291
           test "$(git hash-object evidence/drivers/BoundedCounterReview.hs)" = a9c1a508727bb299845c4c04dd661f4703e0bea6
+          test "$(git hash-object evidence/drivers/ReconciledNumericAdapterReview.hs)" = d04bf7e363e8b48a83c6385820c9207c4065d0dc
           test "$(git hash-object evidence/drivers/PingFixture.original.hs)" = faa78e550ce3a07bdb3031cfac9d0b83720c9cb4
           python3 - <<'PY'
           import difflib
@@ -64,7 +66,7 @@ jobs:
           sha256sum evidence/drivers/*.hs > evidence/drivers.sha256
           ghc --numeric-version > evidence/ghc-version.txt
           cabal --numeric-version > evidence/cabal-version.txt
-          for path in src/Phil/Surface/GrammarV1/NumericConversion.hs src/Phil/Surface/GrammarV1/RuntimeScalar.hs src/Phil/Surface/GrammarV1/UIntArithmetic.hs src/Phil/Surface/GrammarV1/BoundedPingRuntime.hs src/Phil/Surface/GrammarV1/BoundedPingLoopSource.hs src/Phil/Surface/GrammarV1/BoundedPingSourceValues.hs src/Phil/Surface/GrammarV1/ArchitectureComponentProvisioning.hs src/Phil/Surface/GrammarV1/BinderScope.hs src/Phil/Core/NumericConversion.hs src/Phil/Core/UIntArithmetic.hs src/Phil/Core/Value.hs src/Phil/Core/Discharge.hs src/Phil/Core/Refinement.hs docs/phase-1/numeric-semantics-proof-boundary-v1.md; do
+          for path in src/Phil/Surface/GrammarV1/NumericConversion.hs src/Phil/Surface/GrammarV1/RuntimeScalar.hs src/Phil/Surface/GrammarV1/UIntArithmetic.hs src/Phil/Surface/GrammarV1/BoundedPingRuntime.hs src/Phil/Surface/GrammarV1/BoundedPingLoopSource.hs src/Phil/Surface/GrammarV1/BoundedPingSourceValues.hs src/Phil/Surface/GrammarV1/ArchitectureComponentProvisioning.hs src/Phil/Surface/GrammarV1/BinderScope.hs src/Phil/Core/NumericConversion.hs src/Phil/Core/UIntArithmetic.hs src/Phil/Core/Value.hs src/Phil/Core/Discharge.hs src/Phil/Core/Refinement.hs docs/phase-1/numeric-semantics-proof-boundary-v1.md src/Phil/Surface/GrammarV1/Lexer.hs; do
             mkdir -p "evidence/source/$(dirname "$path")"
             cp "subject/$path" "evidence/source/$path"
             printf '%s %s\n' "$(git -C subject rev-parse "HEAD:$path")" "$path" >> evidence/source-git-blobs.txt
@@ -81,7 +83,7 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
-          cabal exec -- ghc -O0 -Wall -Werror -isrc -i../evidence/drivers -outputdir ../evidence/build-numeric ../evidence/drivers/NumericAdapterReview.hs -o ../evidence/numeric-test 2>&1 | tee ../evidence/numeric-compile.log
+          cabal exec -- ghc -O0 -Wall -Werror -isrc -i../evidence/drivers -outputdir ../evidence/build-numeric ../evidence/drivers/ReconciledNumericAdapterReview.hs -o ../evidence/numeric-test 2>&1 | tee ../evidence/numeric-compile.log
           cabal exec -- ghc -O0 -Wall -Werror -isrc -i../evidence/drivers -outputdir ../evidence/build-counter ../evidence/drivers/BoundedCounterReview.hs -o ../evidence/counter-test 2>&1 | tee ../evidence/counter-compile.log
       - name: Require complete numeric and counter correctness records
         shell: bash
