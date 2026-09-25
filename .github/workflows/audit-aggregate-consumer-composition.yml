@@ -21,7 +21,7 @@ jobs:
           persist-credentials: false
       - uses: actions/checkout@v4
         with:
-          ref: 838ecf20cff692914bec472ffa32d1a04ff00b12
+          ref: b8cb52706d7cd40674cc73bb571ae09044341299
           path: driver
           persist-credentials: false
       - uses: haskell-actions/setup@v2
@@ -38,7 +38,7 @@ jobs:
           printf '%s\n' '${{ github.sha }}' > evidence/workflow-commit.txt
           printf '%s %s\n' '${{ github.run_id }}' '${{ github.run_attempt }}' > evidence/run-attempt.txt
           test "$(cat evidence/subject-commit.txt)" = d67bfcf1b708d6f0323b8455d9c8179f02a0d55f
-          test "$(cat evidence/driver-commit.txt)" = 838ecf20cff692914bec472ffa32d1a04ff00b12
+          test "$(cat evidence/driver-commit.txt)" = b8cb52706d7cd40674cc73bb571ae09044341299
           git -C subject status --porcelain --untracked-files=all > evidence/subject-status-before.txt
           test ! -s evidence/subject-status-before.txt
           cp driver/audit/declaration-schema-replay/AggregateConsumerReview.hs evidence/
