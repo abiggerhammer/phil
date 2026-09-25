@@ -21,6 +21,7 @@ import Phil.Core.DataDestruction
   ( DataDestructionError
   , FieldDisposition (..)
   , OwnedField (..)
+  , checkOwnedFieldSchema
   , consumeAggregateFields
   )
 import qualified Phil.Core.DataSumKernelBridge as KernelBridge
@@ -33,7 +34,8 @@ data SumConstructor = SumConstructor
   deriving (Eq, Show)
 
 data DataSumError
-  = UnknownSumConstructor Int
+  = DuplicateSumConstructorTag Int
+  | UnknownSumConstructor Int
   | DataSumDestructionError DataDestructionError
   | DataSumContextError CheckError
   | MissingExplicitSumPackage Name Ty
@@ -44,15 +46,21 @@ selectSumConstructorPayload
   :: Int
   -> [SumConstructor]
   -> Either DataSumError [OwnedField]
-selectSumConstructorPayload tag constructors =
+selectSumConstructorPayload tag constructors = do
+  -- Constructor tags are the supplied Phase-1 consumer schema. Make them
+  -- unambiguous before the existing lookup can select a first matching entry.
+  checkConstructorTags constructors
   let selected = find ((== tag) . sumConstructorTag) constructors
       nativeDeclared = maybe False (const True) selected
       kernelAccepted = KernelBridge.constructorSelectionAccepted nativeDeclared
-  in if nativeDeclared /= kernelAccepted
-      then Left CertifiedDataSumKernelDisagreement
-      else case selected of
-        Nothing -> Left (UnknownSumConstructor tag)
-        Just constructor -> Right (sumConstructorPayload constructor)
+  if nativeDeclared /= kernelAccepted
+    then Left CertifiedDataSumKernelDisagreement
+    else case selected of
+      Nothing -> Left (UnknownSumConstructor tag)
+      Just constructor -> do
+        let payload = sumConstructorPayload constructor
+        mapLeft DataSumDestructionError (checkOwnedFieldSchema payload)
+        Right payload
 
 consumeSelectedSumPayload
   :: Name
@@ -93,6 +101,16 @@ joinPackagedSumContinuing packageName packageTy contexts = do
   unless (explicitPackagePresent packageName packageTy contexts) $
     Left (MissingExplicitSumPackage packageName packageTy)
   joinSumContinuingByFacts True contexts
+
+checkConstructorTags :: [SumConstructor] -> Either DataSumError ()
+checkConstructorTags = go Map.empty
+  where
+    go _ [] = Right ()
+    go seen (constructor : rest)
+      | Map.member tag seen = Left (DuplicateSumConstructorTag tag)
+      | otherwise = go (Map.insert tag () seen) rest
+      where
+        tag = sumConstructorTag constructor
 
 joinSumContinuingByFacts
   :: Bool

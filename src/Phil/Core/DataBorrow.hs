@@ -17,13 +17,15 @@ import Phil.Core.Context
   , useBinding
   )
 import Phil.Core.DataDestruction
-  ( OwnedField (..)
+  ( DataDestructionError
+  , OwnedField (..)
+  , checkOwnedFieldSchema
   )
 import qualified Phil.Core.DataEliminationKernelBridge as KernelBridge
 import Phil.Core.Syntax (Mode, Name, Ty)
 
 -- | DATA-006 makes aggregate observation explicit without creating another
--- owning occurrence for the selected field.  The aggregate owner remains the
+-- owning occurrence for the selected field. The aggregate owner remains the
 -- resource tracked by the ordinary ADR-002 shared-loan machinery.
 data BorrowedAggregateField = BorrowedAggregateField
   { borrowedAggregateOwner :: Name
@@ -35,6 +37,7 @@ data BorrowedAggregateField = BorrowedAggregateField
 
 data DataBorrowError
   = DataBorrowContextError CheckError
+  | DataBorrowSchemaError DataDestructionError
   | UnknownBorrowedAggregateField Name
   | CertifiedDataEliminationBorrowKernelDisagreement
   deriving (Eq, Show)
@@ -46,6 +49,9 @@ beginBorrowedAggregateField
   -> ResourceContext
   -> Either DataBorrowError (BorrowedAggregateField, ResourceContext)
 beginBorrowedAggregateField owner fields fieldName context = do
+  -- The caller supplies the schema/owner association. Reject ambiguous schema
+  -- identity before the existing name-based lookup chooses any field.
+  mapLeft DataBorrowSchemaError (checkOwnedFieldSchema fields)
   field <- case find ((== fieldName) . ownedFieldName) fields of
     Nothing -> Left (UnknownBorrowedAggregateField fieldName)
     Just value -> Right value
