@@ -21,7 +21,7 @@ jobs:
           persist-credentials: false
       - uses: actions/checkout@v4
         with:
-          ref: d4835f6d50583ab654f85b41fd35d30c78020414
+          ref: 909b51440931a7f3930e632e238d838fbde23a86
           path: driver
           persist-credentials: false
       - uses: haskell-actions/setup@v2
@@ -36,13 +36,13 @@ jobs:
           git -C subject rev-parse HEAD > evidence/subject-commit.txt
           git -C driver rev-parse HEAD > evidence/driver-commit.txt
           test "$(cat evidence/subject-commit.txt)" = e47e31e47b33abd7c55242bad6b9c61cd104d9d0
-          test "$(cat evidence/driver-commit.txt)" = d4835f6d50583ab654f85b41fd35d30c78020414
+          test "$(cat evidence/driver-commit.txt)" = 909b51440931a7f3930e632e238d838fbde23a86
           printf '%s\n' '${{ github.sha }}' > evidence/workflow-commit.txt
           printf '%s %s\n' '${{ github.run_id }}' '${{ github.run_attempt }}' > evidence/run-attempt.txt
           git -C subject status --porcelain --untracked-files=all > evidence/subject-status-before.txt
           test ! -s evidence/subject-status-before.txt
           cp driver/audit/callable-source-connection/SourceConnectionReview.hs evidence/drivers/
-          test "$(git hash-object evidence/drivers/SourceConnectionReview.hs)" = 9d6b2562fec3cc315674a7979ba2f9322e8211f4
+          test "$(git hash-object evidence/drivers/SourceConnectionReview.hs)" = eafd4e6750352e657adf3e2bbb5bdb6fe9c1423a
           cp subject/test/Phase1CALL019CallableResolutionMain.hs evidence/drivers/CatalogFixture.original.hs
           cp subject/test/Phase1INT006SteveApplicationShellMain.hs evidence/drivers/ShellFixture.original.hs
           test "$(git hash-object evidence/drivers/CatalogFixture.original.hs)" = 0caf0051f09004e6bc5f7bb493ab18b365f564df
