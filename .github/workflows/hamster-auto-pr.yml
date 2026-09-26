@@ -46,7 +46,7 @@ jobs:
               ;;
           esac
 
-          title="$(printf '%s\n' "$COMMIT_MESSAGE" | head -n 1)"
+          title="$(printf '%s\n' "$COMMIT_MESSAGE" | sed -n '1p')"
           if [ -z "$title" ]; then
             slug="${BRANCH##*/}"
             title="${slug//-/ }"
@@ -68,6 +68,7 @@ jobs:
           LANE: ${{ steps.meta.outputs.lane }}
           TITLE: ${{ steps.meta.outputs.title }}
           HEAD_SHA: ${{ steps.meta.outputs.head_sha }}
+          COMMIT_MESSAGE: ${{ github.event.head_commit.message }}
         run: |
           set -euo pipefail
 
@@ -79,28 +80,27 @@ jobs:
             --jq '.[0].number // empty')"
 
           if [ -z "$number" ]; then
-            body="$(cat <<EOF
-          Lane: $LANE
+            body_file="$(mktemp)"
+            details="$(printf '%s\n' "$COMMIT_MESSAGE" | tail -n +2)"
 
-          Auto-created by the Mecha Hamster Ball branch-to-PR bridge.
+            printf 'Lane: %s\n\n' "$LANE" > "$body_file"
 
-          Prepared branch: `$BRANCH`
-          Exact head at creation: `$HEAD_SHA`
+            if [ -n "$(printf '%s' "$details" | tr -d '[:space:]')" ]; then
+              printf '%s\n\n' "$details" >> "$body_file"
+            else
+              printf 'Focused successor slice prepared by the %s hamster.\n\n' "$LANE" >> "$body_file"
+            fi
 
-          Note: because this PR is created by GitHub Actions using `GITHUB_TOKEN`,
-          the creating event does not itself fan out ordinary `pull_request`
-          workflows. The hamster controller should issue one content-preserving
-          exact-head wake-up commit after discovering a newly auto-created PR so
-          CI runs on a connector-authored `synchronize` event.
-          EOF
-          )"
+            printf 'Prepared branch: %s\n' "$BRANCH" >> "$body_file"
+            printf 'Exact head at creation: %s\n\n' "$HEAD_SHA" >> "$body_file"
+            printf 'Published mechanically by the Mecha Hamster Ball branch-to-PR bridge.\n' >> "$body_file"
 
             gh pr create \
               --repo "$GH_REPO" \
               --base main \
               --head "$BRANCH" \
               --title "$TITLE" \
-              --body "$body"
+              --body-file "$body_file"
 
             number="$(gh pr list \
               --repo "$GH_REPO" \
@@ -130,7 +130,7 @@ jobs:
           {
             echo "### Hamster branch-to-PR bridge"
             echo
-            echo "- lane: `$LANE`"
+            echo "- lane: $LANE"
             echo "- PR: #$NUMBER"
-            echo "- exact pushed head: `$HEAD_SHA`"
+            echo "- exact pushed head: $HEAD_SHA"
           } >> "$GITHUB_STEP_SUMMARY"
