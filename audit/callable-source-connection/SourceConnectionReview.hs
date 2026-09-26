@@ -16,9 +16,9 @@ import Phil.Core.EffectPolymorphism
 import Phil.Core.Generic
 import Phil.Core.Generic.StaticActual
 import Phil.Core.Static
-import Phil.Core.Syntax (Control (..), Ty (..))
+import Phil.Core.Syntax (Control (..), Proposition (..), Ty (..))
 import Phil.Examples.Steve.ApplicationShell
-import Phil.Surface.Check (SurfaceCheckResult (..))
+import Phil.Surface.Check (RejectionClass (ControlAfterTerminal), SurfaceCheckError (..), SurfaceCheckResult (..))
 import Phil.Surface.Check.Support (emptySurfaceState)
 import Phil.Surface.GrammarV1.CallableEffects
 import Phil.Surface.GrammarV1.CallableSignature
@@ -246,7 +246,7 @@ bodyResults = do
   check (grammarV1CheckedClosedFunctionBody emptyStaticContext hm missing == Just (Left
     (GrammarV1FunctionBodyResultMismatch TyBool [Continue]))) "missing return accepted"
   case grammarV1CheckedClosedFunctionBody emptyStaticContext ht terminated of
-    Just (Left (GrammarV1FunctionBodySurfaceCheckError _)) -> Right ()
+    Just (Left (GrammarV1FunctionBodySurfaceCheckError err)) | surfaceErrorClass err == ControlAfterTerminal -> Right ()
     other -> Left ("sequencing gate changed: " <> show other)
 
 bodyNoncompetence :: Result ()
