@@ -1,0 +1,15 @@
+{
+  "data-nested.phil": "data NestedChoice = Payload((U32, Bool));\n",
+  "data-valid.phil": "data Choice = None | EmptyTuple() | EmptyRecord{} | Payload(Bytes[7]);\n",
+  "data-weak.phil": "data BadChoice mode unrestricted = Payload(Bytes[7]);\n",
+  "record-duplicate.phil": "record Duplicate { item : Bool, item : Bytes[7] }\n",
+  "record-generic.phil": "record Generic[T : Type] { value : T }\n",
+  "record-renamed.phil": "record OtherPacket { flag : Bool, payload : Bytes[7] }\n",
+  "record-required.phil": "record Required requires { proposition true; } { value : U8 }\n",
+  "record-tuple.phil": "record Nested { pair : (U32, Bool) }\n",
+  "record-unknown-proof.phil": "record BadClaim { proof : Proof[Missing(1)] }\n",
+  "record-valid.phil": "record Packet { flag : Bool, payload : Bytes[7] }\n",
+  "record-weak.phil": "record Bad mode unrestricted { payload : Bytes[7] }\n",
+  "roots.phil": "architecture Root {}\nprogram main = instantiate Root;\n",
+  "supplemental-invalid-syntax.phil": "record Broken { payload : }\n"
+}

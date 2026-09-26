@@ -1,0 +1,107 @@
+name: Audit Aggregate Consumer Composition
+
+on:
+  push:
+    branches: [audit-evidence-occurrence-inventory-20260924]
+    paths: ['.github/workflows/audit-aggregate-consumer-composition.yml']
+permissions:
+  contents: read
+concurrency:
+  group: audit-aggregate-consumer-composition-${{ github.ref }}
+  cancel-in-progress: true
+jobs:
+  exact-aggregate-consumers:
+    runs-on: ubuntu-latest
+    timeout-minutes: 35
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: d67bfcf1b708d6f0323b8455d9c8179f02a0d55f
+          path: subject
+          persist-credentials: false
+      - uses: actions/checkout@v4
+        with:
+          ref: b8cb52706d7cd40674cc73bb571ae09044341299
+          path: driver
+          persist-credentials: false
+      - uses: haskell-actions/setup@v2
+        with:
+          ghc-version: '9.6.7'
+          cabal-version: '3.18.1.0'
+      - name: Record exact original inputs
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p evidence/build evidence/source
+          git -C subject rev-parse HEAD > evidence/subject-commit.txt
+          git -C driver rev-parse HEAD > evidence/driver-commit.txt
+          printf '%s\n' '${{ github.sha }}' > evidence/workflow-commit.txt
+          printf '%s %s\n' '${{ github.run_id }}' '${{ github.run_attempt }}' > evidence/run-attempt.txt
+          test "$(cat evidence/subject-commit.txt)" = d67bfcf1b708d6f0323b8455d9c8179f02a0d55f
+          test "$(cat evidence/driver-commit.txt)" = b8cb52706d7cd40674cc73bb571ae09044341299
+          git -C subject status --porcelain --untracked-files=all > evidence/subject-status-before.txt
+          test ! -s evidence/subject-status-before.txt
+          cp driver/audit/declaration-schema-replay/AggregateConsumerReview.hs evidence/
+          git -C driver rev-parse HEAD:audit/declaration-schema-replay/AggregateConsumerReview.hs > evidence/driver-git-blob.txt
+          sha256sum evidence/AggregateConsumerReview.hs > evidence/driver.sha256
+          ghc --numeric-version > evidence/ghc-version.txt
+          cabal --numeric-version > evidence/cabal-version.txt
+          for path in src/Phil/Core/DataMode.hs src/Phil/Core/DataDestruction.hs src/Phil/Core/DataBorrow.hs src/Phil/Core/DataSum.hs src/Phil/Core/Context.hs src/Phil/Core/Value.hs src/Phil/Surface/GrammarV1/RecordFields.hs src/Phil/Surface/GrammarV1/DataVariants.hs src/Phil/Core/DataEliminationKernelBridge.hs src/Phil/Core/DataSumKernelBridge.hs proof/Phil/Core/DataSum.v; do
+            mkdir -p "evidence/source/$(dirname "$path")"
+            cp "subject/$path" "evidence/source/$path"
+            printf '%s %s\n' "$(git -C subject rev-parse "HEAD:$path")" "$path" >> evidence/source-git-blobs.txt
+          done
+      - name: Build exact production substrate and strictly compile external driver
+        working-directory: subject
+        shell: bash
+        run: |
+          set -euo pipefail
+          cabal update 2>&1 | tee ../evidence/dependency-index.log
+          cabal build all --enable-tests 2>&1 | tee ../evidence/build.log
+          cabal exec -- ghc -O0 -Wall -Werror -isrc -outputdir ../evidence/build ../evidence/AggregateConsumerReview.hs -o ../evidence/aggregate-review 2>&1 | tee ../evidence/compile.log
+      - name: Require complete producer-to-consumer preservation
+        shell: bash
+        run: |
+          set -euo pipefail
+          set +e
+          evidence/aggregate-review > evidence/results.log 2>&1
+          status=$?
+          set -e
+          printf '%s\n' "$status" > evidence/results.exit
+          python3 - <<'PY'
+          import json
+          from pathlib import Path
+          lines=Path('evidence/results.log').read_text().splitlines()
+          rows=[s.split(' ',2) for s in lines if s.startswith(('PASS ','FAIL '))]
+          assert [r[1] for r in rows]==[f'P{i:02d}' for i in range(1,17)]
+          assert lines.count('COMPLETE aggregate_consumer_groups=16')==1
+          code=int(Path('evidence/results.exit').read_text())
+          assert code in (0,1)
+          assert (code==0)==all(r[0]=='PASS' for r in rows)
+          result={'production_pin':'d67bfcf1b708d6f0323b8455d9c8179f02a0d55f','cases':rows,'exit':code,'all_required_groups_passed':code==0,'record_sum_schema_association':'explicit audit-owned supplied-interface premise','product_schema':'actual stored result from production formation','general_declaration_exporter_established':False,'release_certified':False}
+          Path('evidence/protocol.json').write_text(json.dumps(result,indent=2)+'\n')
+          print(json.dumps(result,indent=2))
+          assert code==0,'required aggregate-consumer preservation failed'
+          PY
+      - name: Verify untouched exact production checkout
+        if: always()
+        shell: bash
+        run: |
+          set -euo pipefail
+          git -C subject status --porcelain --untracked-files=all > evidence/subject-status-after.txt
+          test ! -s evidence/subject-status-after.txt
+          test "$(git -C subject rev-parse HEAD)" = d67bfcf1b708d6f0323b8455d9c8179f02a0d55f
+      - name: Retain exact sources and all outcomes
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: aggregate-consumer-composition-d67bfcf1
+          path: |
+            evidence/*.txt
+            evidence/*.sha256
+            evidence/*.hs
+            evidence/*.log
+            evidence/*.exit
+            evidence/*.json
+            evidence/source/
+          if-no-files-found: error

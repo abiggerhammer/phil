@@ -1,0 +1,136 @@
+name: Audit Evidence Occurrence Inventory
+
+on:
+  push:
+    branches: [audit-evidence-occurrence-inventory-20260924]
+    paths: ['.github/workflows/audit-evidence-occurrence-inventory.yml']
+
+permissions:
+  contents: read
+
+concurrency:
+  group: audit-evidence-occurrence-inventory-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  pinned-inventory:
+    runs-on: ubuntu-latest
+    timeout-minutes: 35
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: bc4046c866eb2c6117c195ceab0e4e3ccf46da03
+          path: subject
+          persist-credentials: false
+      - uses: actions/checkout@v4
+        with:
+          ref: 493418e41306ce95b21911da1c24b40c2bc4ce2e
+          path: driver
+          persist-credentials: false
+      - uses: haskell-actions/setup@v2
+        with:
+          ghc-version: '9.6.7'
+          cabal-version: '3.18.1.0'
+      - name: Verify and preserve independent exact inputs
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p evidence/source evidence/permanent evidence/build
+          git -C subject rev-parse HEAD > evidence/subject-commit.txt
+          git -C driver rev-parse HEAD > evidence/driver-commit.txt
+          printf '%s\n' '${{ github.sha }}' > evidence/workflow-commit.txt
+          test "$(cat evidence/subject-commit.txt)" = bc4046c866eb2c6117c195ceab0e4e3ccf46da03
+          test "$(cat evidence/driver-commit.txt)" = 493418e41306ce95b21911da1c24b40c2bc4ce2e
+          git -C subject status --porcelain --untracked-files=all > evidence/subject-status-before.txt
+          test ! -s evidence/subject-status-before.txt
+          cp driver/audit/evidence-occurrence-inventory/ActualUseInventoryReview.hs evidence/
+          test "$(git hash-object evidence/ActualUseInventoryReview.hs)" = 89c2f35486d220c2ff5eacf6490e8c338b8a0252
+          sha256sum evidence/ActualUseInventoryReview.hs > evidence/driver.sha256
+          ghc --numeric-version > evidence/ghc-version.txt
+          cabal --numeric-version > evidence/cabal-version.txt
+          for path in src/Phil/Assurance.hs src/Phil/Core/Syntax.hs src/Phil/Core/Refinement.hs src/Phil/Core/Value.hs src/Phil/Core/SortCheck.hs src/Phil/Core/Checker.hs docs/phase-1/audit-evidence-use-inventory-remediation-v1.md; do
+            mkdir -p "evidence/source/$(dirname "$path")"
+            cp "subject/$path" "evidence/source/$path"
+            printf '%s %s\n' "$(git -C subject rev-parse "HEAD:$path")" "$path" >> evidence/source-git-blobs.txt
+          done
+      - name: Build exact production substrate
+        working-directory: subject
+        shell: bash
+        run: |
+          set -euo pipefail
+          cabal update 2>&1 | tee ../evidence/dependency-index.log
+          cabal build all --enable-tests 2>&1 | tee ../evidence/build.log
+      - name: Strictly compile the independent actual-producer driver
+        working-directory: subject
+        shell: bash
+        run: |
+          set -euo pipefail
+          cabal exec -- ghc -O0 -Wall -Werror -isrc -outputdir ../evidence/build ../evidence/ActualUseInventoryReview.hs -o ../evidence/inventory-review 2>&1 | tee ../evidence/compile.log
+      - name: Require every inventory preservation assertion
+        shell: bash
+        run: |
+          set -euo pipefail
+          set +e
+          evidence/inventory-review > evidence/results.log 2>&1
+          status=$?
+          set -e
+          printf '%s\n' "$status" > evidence/results.exit
+          python3 - <<'PY'
+          import json
+          from pathlib import Path
+          lines=Path('evidence/results.log').read_text().splitlines()
+          rows=[line.split(' ',2) for line in lines if line.startswith(('PASS ','FAIL '))]
+          assert [r[1] for r in rows]==[f'C{i:02d}' for i in range(1,13)], rows
+          assert lines.count('COMPLETE correctness_groups=12 term_constructor_cases=11 proposition_constructor_cases=12 generated_term_cases=96')==1
+          code=int(Path('evidence/results.exit').read_text())
+          assert code in (0,1)
+          assert (code==0)==all(r[0]=='PASS' for r in rows)
+          result={'production_pin':'bc4046c866eb2c6117c195ceab0e4e3ccf46da03',
+                  'cases':rows,'exit':code,'all_required_assertions_passed':code==0,
+                  'term_constructor_cases':11,'proposition_constructor_cases':12,
+                  'generated_term_cases':96,'semantic_subject_identity_established':False,
+                  'source_release_hook_established':False,'release_certified':False}
+          Path('evidence/protocol.json').write_text(json.dumps(result,indent=2)+'\n')
+          print(json.dumps(result,indent=2))
+          assert code==0,'required inventory assertion failed'
+          PY
+      - name: Replay unchanged permanent inventory and related checker suites
+        if: success() || failure()
+        working-directory: subject
+        shell: bash
+        run: |
+          set -euo pipefail
+          failed=0
+          for suite in Phase1AuditEvidenceUseInventoryMain Phase1AuditOriginalEventPreservationMain RefinementEvidenceMain; do
+            cp "test/$suite.hs" "../evidence/permanent/$suite.hs"
+            set +e
+            cabal exec -- runghc -isrc -Wall -Werror "test/$suite.hs" > "../evidence/permanent/$suite.log" 2>&1
+            code=$?
+            set -e
+            printf '%s %s\n' "$suite" "$code" >> ../evidence/permanent-exits.txt
+            if test "$code" -ne 0; then failed=1; fi
+          done
+          exit "$failed"
+      - name: Verify exact untouched subject
+        if: always()
+        shell: bash
+        run: |
+          set -euo pipefail
+          git -C subject status --porcelain --untracked-files=all > evidence/subject-status-after.txt
+          test ! -s evidence/subject-status-after.txt
+          test "$(git -C subject rev-parse HEAD)" = bc4046c866eb2c6117c195ceab0e4e3ccf46da03
+      - name: Preserve original sources, results and failures
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: evidence-occurrence-inventory-bc4046c8
+          path: |
+            evidence/*.txt
+            evidence/*.sha256
+            evidence/*.hs
+            evidence/*.log
+            evidence/*.exit
+            evidence/*.json
+            evidence/source/
+            evidence/permanent/
+          if-no-files-found: error

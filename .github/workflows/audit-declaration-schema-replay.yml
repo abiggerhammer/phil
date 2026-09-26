@@ -1,0 +1,155 @@
+name: Audit Declaration Schema Replay
+
+on:
+  push:
+    branches: [audit-evidence-occurrence-inventory-20260924]
+    paths: ['.github/workflows/audit-declaration-schema-replay.yml']
+permissions:
+  contents: read
+concurrency:
+  group: audit-declaration-schema-replay-${{ github.ref }}
+  cancel-in-progress: true
+jobs:
+  exact-schema-replay:
+    runs-on: ubuntu-latest
+    timeout-minutes: 35
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: d67bfcf1b708d6f0323b8455d9c8179f02a0d55f
+          path: subject
+          persist-credentials: false
+      - uses: actions/checkout@v4
+        with:
+          ref: 0196ce170f48c4c532cad1f846224ee1f5392e0b
+          path: driver
+          persist-credentials: false
+      - uses: haskell-actions/setup@v2
+        with:
+          ghc-version: '9.6.7'
+          cabal-version: '3.18.1.0'
+      - name: Preserve exact original inputs
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p evidence/fixtures evidence/build evidence/source evidence/permanent
+          git -C subject rev-parse HEAD > evidence/subject-commit.txt
+          git -C driver rev-parse HEAD > evidence/driver-commit.txt
+          printf '%s\n' '${{ github.sha }}' > evidence/workflow-commit.txt
+          printf '%s %s\n' '${{ github.run_id }}' '${{ github.run_attempt }}' > evidence/run-attempt.txt
+          test "$(cat evidence/subject-commit.txt)" = d67bfcf1b708d6f0323b8455d9c8179f02a0d55f
+          test "$(cat evidence/driver-commit.txt)" = 0196ce170f48c4c532cad1f846224ee1f5392e0b
+          git -C subject status --porcelain --untracked-files=all > evidence/subject-status-before.txt
+          test ! -s evidence/subject-status-before.txt
+          cp driver/audit/declaration-schema-replay/SchemaAudit.hs evidence/
+          cp driver/audit/declaration-schema-replay/fixtures.json evidence/
+          test "$(git hash-object evidence/SchemaAudit.hs)" = 254dd75e25f907f55ff5724b020b7a4eaeaa4a88
+          python3 - <<'PY'
+          import json, hashlib
+          from pathlib import Path
+          expected={
+          'data-nested.phil':'051655bbff056a6f93ec4926a9c2fc48beb3b15ece1142f601af1b3ed3b6ca72',
+          'data-valid.phil':'07d6e5d1606cea932ad70e646e9b15c78fce4ae9f680f937c5a170e0f776c489',
+          'data-weak.phil':'2bab8bad4a1df8649f2d3e4c5aaa2ab867b949fcfa81a27ec0d30cb58aae29ef',
+          'record-duplicate.phil':'b61ea05d97ba5a9807e1ee6fd596493487e0de7b1de30398138549fa5988e4ad',
+          'record-generic.phil':'c390da3a5c4b56e4dd22e84c4a73c6e85b2805905ab71623c9ce3457b3fd4f3b',
+          'record-renamed.phil':'89ee5bd020fc6b72d44c8bded7c052cc8d80ec648ba35a9e09c5013c0b009c05',
+          'record-required.phil':'acc13eac0ce583abde3b8794ef36450cf11a0fb5cec065b46484cd3fbb80fe3a',
+          'record-tuple.phil':'0acd1b7870101ba0f030aef5b257be41fdc31178748b9467ac8cfb71e61c9962',
+          'record-unknown-proof.phil':'2883b80f1b879427ea7969c022c25268478c88c53d6969ddf82130a5f00f6712',
+          'record-valid.phil':'fad4f89c80d7ac2b78f0353c8265d9a8cdc73c278d3bbe694dfd54d6902fe632',
+          'record-weak.phil':'bf3b75c797d22b525b79769133c6079c14c79738b2d54199fb87bbf11cdcb30c',
+          'roots.phil':'a66c566947c40b23ef34bd1be5dbd289f01c9c0d4f8fce4edf82f6ccbb8d3a7c',
+          'supplemental-invalid-syntax.phil':'7ff7045d4941016f074951d0b93a8539e22894f14869743fde10a40448a9b3b1'}
+          fixtures=json.loads(Path('evidence/fixtures.json').read_text())
+          assert set(fixtures)==set(expected)
+          for name,text in fixtures.items():
+              data=text.encode('utf-8')
+              assert hashlib.sha256(data).hexdigest()==expected[name],name
+              Path('evidence/fixtures',name).write_bytes(data)
+          Path('evidence/fixture-manifest.json').write_text(json.dumps(expected,indent=2)+'\n')
+          PY
+          sha256sum evidence/SchemaAudit.hs > evidence/driver.sha256
+          ghc --numeric-version > evidence/ghc-version.txt
+          cabal --numeric-version > evidence/cabal-version.txt
+          for path in src/Phil/Surface/GrammarV1/RecordFields.hs src/Phil/Surface/GrammarV1/DataVariants.hs src/Phil/Core/DataMode.hs src/Phil/Core/DataDestruction.hs src/Phil/Core/DataSum.hs src/Phil/Core/DataBorrow.hs src/Phil/Core/Context.hs src/Phil/Verification/GrammarV1WholeSource.hs docs/phase-1/audit-aggregate-schema-contract-remediation-v1.md; do
+            mkdir -p "evidence/source/$(dirname "$path")"
+            cp "subject/$path" "evidence/source/$path"
+            printf '%s %s\n' "$(git -C subject rev-parse "HEAD:$path")" "$path" >> evidence/source-git-blobs.txt
+          done
+      - name: Build exact production and strictly compile original driver
+        working-directory: subject
+        shell: bash
+        run: |
+          set -euo pipefail
+          cabal update 2>&1 | tee ../evidence/dependency-index.log
+          cabal build all --enable-tests 2>&1 | tee ../evidence/build.log
+          cabal exec -- ghc -O0 -Wall -Werror -isrc -outputdir ../evidence/build ../evidence/SchemaAudit.hs -o ../evidence/schema-audit 2>&1 | tee ../evidence/compile.log
+      - name: Require original correctness and record boundary observations separately
+        shell: bash
+        run: |
+          set -euo pipefail
+          set +e
+          evidence/schema-audit --fixtures evidence/fixtures --observe > evidence/results.log 2>&1
+          code=$?
+          set -e
+          printf '%s\n' "$code" > evidence/results.exit
+          python3 - <<'PY'
+          import json
+          from pathlib import Path
+          lines=Path('evidence/results.log').read_text().splitlines()
+          checks=[s.split('\t') for s in lines if s.startswith('CHECK\t')]
+          observations=[s.split('\t') for s in lines if s.startswith('OBSERVE\t')]
+          assert [x[1].split('-')[0] for x in checks]==[f'C{i:02d}' for i in range(1,13)]
+          assert [x[1].split('-')[0] for x in observations]==[f'O{i:02d}' for i in range(1,7)]
+          assert lines.count('SUMMARY\tchecks=12\tobservations=6')==1
+          code=int(Path('evidence/results.exit').read_text())
+          expected=2 if any(x[2]=='HARNESS' for x in checks+observations) else 1 if any(x[2]=='FAIL' for x in checks) else 3 if any(x[2]=='DRIFT' for x in observations) else 0
+          assert code==expected
+          result={'production_pin':'d67bfcf1b708d6f0323b8455d9c8179f02a0d55f','checks':checks,'observations':observations,'exit':code,'observation_correctness_credit':0,'release_certified':False,'nominal_schema_producer_established':False}
+          Path('evidence/protocol.json').write_text(json.dumps(result,indent=2)+'\n')
+          print(json.dumps(result,indent=2))
+          assert all(x[2]=='PASS' for x in checks), 'required correctness failed'
+          assert all(x[2]=='MATCH' for x in observations), 'observation changed; review contract without relabelling as a defect'
+          PY
+      - name: Replay relevant permanent source and consumer suites
+        if: success() || failure()
+        working-directory: subject
+        shell: bash
+        run: |
+          set -euo pipefail
+          failed=0
+          for suite in Phase1AuditAggregateSchemaContractMain Phase1GrammarV1CheckedRecordFieldsMain Phase1GrammarV1CheckedDataModeCompositionMain Phase1ConsumingRecordDestructionMain Phase1BorrowedAggregateInspectionMain Phase1ConsumingSumMatchMain; do
+            cp "test/$suite.hs" "../evidence/permanent/$suite.hs"
+            set +e
+            cabal exec -- runghc -isrc -Wall -Werror "test/$suite.hs" > "../evidence/permanent/$suite.log" 2>&1
+            status=$?
+            set -e
+            printf '%s %s\n' "$suite" "$status" >> ../evidence/permanent-exits.txt
+            if test "$status" -ne 0; then failed=1; fi
+          done
+          exit "$failed"
+      - name: Require unchanged production checkout
+        if: always()
+        shell: bash
+        run: |
+          set -euo pipefail
+          git -C subject status --porcelain --untracked-files=all > evidence/subject-status-after.txt
+          test ! -s evidence/subject-status-after.txt
+          test "$(git -C subject rev-parse HEAD)" = d67bfcf1b708d6f0323b8455d9c8179f02a0d55f
+      - name: Preserve original source and all raw outcomes
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: declaration-schema-replay-d67bfcf1
+          path: |
+            evidence/*.txt
+            evidence/*.sha256
+            evidence/*.hs
+            evidence/*.log
+            evidence/*.exit
+            evidence/*.json
+            evidence/fixtures/
+            evidence/source/
+            evidence/permanent/
+          if-no-files-found: error

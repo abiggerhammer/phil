@@ -1,0 +1,167 @@
+name: Audit Stage 3 Package Boundary
+
+on:
+  push:
+    branches: [audit-evidence-occurrence-inventory-20260924]
+    paths: ['.github/workflows/audit-stage3-package-boundary.yml']
+permissions:
+  contents: read
+concurrency:
+  group: audit-stage3-package-boundary-${{ github.ref }}
+  cancel-in-progress: true
+jobs:
+  exact-stage3-contract:
+    runs-on: ubuntu-latest
+    timeout-minutes: 35
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: d834016357394c9f25649768d96d0830838127b5
+          path: subject
+          persist-credentials: false
+      - uses: actions/checkout@v4
+        with:
+          ref: 714dfadbe899cd47bd269ce62bd8d900faa61985
+          path: driver
+          persist-credentials: false
+      - uses: haskell-actions/setup@v2
+        with:
+          ghc-version: '9.6.7'
+          cabal-version: '3.18.1.0'
+      - name: Preserve exact independent inputs and namespace-only fixtures
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p evidence/drivers evidence/source evidence/permanent
+          git -C subject rev-parse HEAD > evidence/subject-commit.txt
+          git -C driver rev-parse HEAD > evidence/driver-commit.txt
+          printf '%s\n' '${{ github.sha }}' > evidence/workflow-commit.txt
+          printf '%s %s\n' '${{ github.run_id }}' '${{ github.run_attempt }}' > evidence/run-attempt.txt
+          test "$(cat evidence/subject-commit.txt)" = d834016357394c9f25649768d96d0830838127b5
+          test "$(cat evidence/driver-commit.txt)" = 714dfadbe899cd47bd269ce62bd8d900faa61985
+          git -C subject status --porcelain --untracked-files=all > evidence/subject-status-before.txt
+          test ! -s evidence/subject-status-before.txt
+          cp driver/audit/stage3-package-boundary/Stage3PackageReview.hs evidence/drivers/
+          cp driver/audit/numeric-adapter-contracts/{NumericAdapterReview,ReconciledNumericAdapterReview,BoundedCounterReview}.hs evidence/drivers/
+          cp subject/test/Phase1INT007PingVerificationBundleMain.hs evidence/drivers/PackageFixture.original.hs
+          cp subject/test/Phase1INT009BoundedPingRuntimeMain.hs evidence/drivers/PingFixture.original.hs
+          test "$(git hash-object evidence/drivers/NumericAdapterReview.hs)" = 9f4a127643019b4a5a89b6c013a1ff9b329da291
+          test "$(git hash-object evidence/drivers/ReconciledNumericAdapterReview.hs)" = d04bf7e363e8b48a83c6385820c9207c4065d0dc
+          test "$(git hash-object evidence/drivers/BoundedCounterReview.hs)" = a9c1a508727bb299845c4c04dd661f4703e0bea6
+          test "$(git hash-object evidence/drivers/PingFixture.original.hs)" = faa78e550ce3a07bdb3031cfac9d0b83720c9cb4
+          test "$(git hash-object evidence/drivers/PackageFixture.original.hs)" = 6233d1f040da9c373435145f6e3d54f076fdc73b
+          python3 - <<'PY'
+          import difflib
+          from pathlib import Path
+          root=Path('evidence/drivers')
+          for name,source in [('PackageFixture','PackageFixture.original.hs'),('PingFixture','PingFixture.original.hs'),('NumericFixture','NumericAdapterReview.hs')]:
+              original=(root/source).read_text()
+              assert original.count('module Main (main) where')==1,(name,'module declaration')
+              adapted=original.replace('module Main (main) where',f'module {name} where')
+              (root/f'{name}.hs').write_text(adapted)
+              Path(f'evidence/{name}.diff').write_text(''.join(difflib.unified_diff(original.splitlines(True),adapted.splitlines(True),fromfile=source,tofile=name+'.hs')))
+          PY
+          sha256sum evidence/drivers/*.hs > evidence/drivers.sha256
+          git -C driver rev-parse HEAD:audit/stage3-package-boundary/Stage3PackageReview.hs > evidence/package-driver-git-blob.txt
+          ghc --numeric-version > evidence/ghc-version.txt
+          cabal --numeric-version > evidence/cabal-version.txt
+          for path in src/Phil/Handoff/Phase1WholeSourceVerification.hs src/Phil/Handoff/Phase1VerificationBundle.hs src/Phil/Verification/GrammarV1WholeSource.hs src/Phil/Verification/Bundle.hs src/Phil/Surface/GrammarV1/BoundedPingLoopSource.hs src/Phil/Surface/GrammarV1/BoundedPingSourceValues.hs src/Phil/Surface/GrammarV1/BoundedPingRuntime.hs src/Phil/Surface/GrammarV1/ArchitectureComponentProvisioning.hs src/Phil/Surface/GrammarV1/NumericConversion.hs src/Phil/Core/NumericConversion.hs src/Phil/Core/UIntArithmetic.hs .github/workflows/phase1-int-007-handoff-manifest.yml; do
+            mkdir -p "evidence/source/$(dirname "$path")"
+            cp "subject/$path" "evidence/source/$path"
+            printf '%s %s\n' "$(git -C subject rev-parse "HEAD:$path")" "$path" >> evidence/source-git-blobs.txt
+          done
+          mkdir -p evidence/source/handoff/phase1/ping
+          cp subject/handoff/phase1/ping/stage3-{bounded.phil,round.phil,verification-v1.tsv,bounded-verification-bundle-v1.tsv} evidence/source/handoff/phase1/ping/
+      - name: Build exact Phil production substrate
+        working-directory: subject
+        shell: bash
+        run: |
+          set -euo pipefail
+          cabal update 2>&1 | tee ../evidence/dependency-index.log
+          cabal build all --enable-tests 2>&1 | tee ../evidence/build.log
+      - name: Strictly compile all independent drivers
+        working-directory: subject
+        shell: bash
+        run: |
+          set -euo pipefail
+          for suite in Stage3PackageReview ReconciledNumericAdapterReview BoundedCounterReview; do
+            mkdir -p "../evidence/build-$suite"
+            cabal exec -- ghc -O0 -Wall -Werror -isrc -i../evidence/drivers -outputdir "../evidence/build-$suite" "../evidence/drivers/$suite.hs" -o "../evidence/$suite" > "../evidence/$suite-compile.log" 2>&1
+          done
+      - name: Execute actual package reader and unchanged numeric consumers
+        shell: bash
+        run: |
+          set -euo pipefail
+          set +e
+          evidence/Stage3PackageReview "$PWD/subject" "$PWD/evidence/fixture-packages" > evidence/package-results.log 2>&1
+          package=$?
+          evidence/ReconciledNumericAdapterReview > evidence/numeric-results.log 2>&1
+          numeric=$?
+          evidence/BoundedCounterReview > evidence/counter-results.log 2>&1
+          counter=$?
+          set -e
+          printf '%s\n' "$package" > evidence/package-results.exit
+          printf '%s\n' "$numeric" > evidence/numeric-results.exit
+          printf '%s\n' "$counter" > evidence/counter-results.exit
+          python3 - <<'PY'
+          import json
+          from pathlib import Path
+          result={'production_pin':'d834016357394c9f25649768d96d0830838127b5',
+                  'release_certified':False,'general_numeric_production_adapter_established':False,
+                  'runtime_model_only':True,'observation_correctness_credit':0,'suites':{}}
+          for suite,prefix,keys in [('package','AUDIT_', [f'P{i:02d}' for i in range(1,13)]),('numeric','',[f'C{i:02d}' for i in range(1,17)]),('counter','',[f'P{i:02d}' for i in range(1,7)])]:
+              lines=Path(f'evidence/{suite}-results.log').read_text().splitlines()
+              rows=[s.split(' ',2) for s in lines if s.startswith((prefix+'PASS ',prefix+'FAIL '))]
+              assert [r[1] for r in rows]==keys,(suite,rows)
+              code=int(Path(f'evidence/{suite}-results.exit').read_text())
+              assert code in (0,1)
+              assert (code==0)==all(r[0]==prefix+'PASS' for r in rows),(suite,code)
+              result['suites'][suite]={'cases':rows,'exit':code,'observations':[s for s in lines if s.startswith('OBS ')]}
+          result['all_34_required_groups_passed']=all(v['exit']==0 for v in result['suites'].values())
+          Path('evidence/protocol.json').write_text(json.dumps(result,indent=2)+'\n')
+          print(json.dumps(result,indent=2))
+          assert result['all_34_required_groups_passed'],'required case failed'
+          assert len(result['suites']['package']['observations'])==1
+          PY
+      - name: Replay permanent source-package and bounded runtime consumers
+        if: success() || failure()
+        working-directory: subject
+        shell: bash
+        run: |
+          set -euo pipefail
+          failed=0
+          for suite in Phase1INT007PingVerificationBundleMain Phase1INT009BoundedPingRuntimeMain Phase1NumericConversionMain; do
+            cp "test/$suite.hs" "../evidence/permanent/$suite.hs"
+            set +e
+            cabal exec -- runghc -isrc -Wall -Werror "test/$suite.hs" > "../evidence/permanent/$suite.log" 2>&1
+            code=$?
+            set -e
+            printf '%s %s\n' "$suite" "$code" >> ../evidence/permanent-exits.txt
+            if test "$code" -ne 0; then failed=1; fi
+          done
+          exit "$failed"
+      - name: Verify source checkout remains exact and clean
+        if: always()
+        shell: bash
+        run: |
+          set -euo pipefail
+          git -C subject status --porcelain --untracked-files=all > evidence/subject-status-after.txt
+          test ! -s evidence/subject-status-after.txt
+          test "$(git -C subject rev-parse HEAD)" = d834016357394c9f25649768d96d0830838127b5
+      - name: Preserve every input, fixture and raw result
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: stage3-package-boundary-d8340163
+          path: |
+            evidence/*.txt
+            evidence/*.sha256
+            evidence/*.diff
+            evidence/*.log
+            evidence/*.exit
+            evidence/*.json
+            evidence/drivers/
+            evidence/source/
+            evidence/permanent/
+            evidence/fixture-packages/
+          if-no-files-found: error

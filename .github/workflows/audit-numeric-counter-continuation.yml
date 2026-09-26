@@ -1,0 +1,158 @@
+name: Audit Numeric Counter Continuation
+
+on:
+  push:
+    branches: [audit-evidence-occurrence-inventory-20260924]
+    paths: ['.github/workflows/audit-numeric-counter-continuation.yml']
+
+permissions:
+  contents: read
+
+concurrency:
+  group: audit-numeric-counter-continuation-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  exact-numeric-consumers:
+    runs-on: ubuntu-latest
+    timeout-minutes: 35
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: 91c054904ab8f0076c39f9532dd3d6672b2facff
+          path: subject
+          persist-credentials: false
+      - uses: actions/checkout@v4
+        with:
+          ref: 476fdf1acdfd216b6c5dc5b56bd7be90320cef90
+          path: driver
+          persist-credentials: false
+      - uses: haskell-actions/setup@v2
+        with:
+          ghc-version: '9.6.7'
+          cabal-version: '3.18.1.0'
+      - name: Pin and preserve all original inputs
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p evidence/drivers evidence/source evidence/permanent evidence/build-numeric evidence/build-counter
+          git -C subject rev-parse HEAD > evidence/subject-commit.txt
+          git -C driver rev-parse HEAD > evidence/driver-commit.txt
+          printf '%s\n' '${{ github.sha }}' > evidence/workflow-commit.txt
+          printf '%s %s\n' '${{ github.run_id }}' '${{ github.run_attempt }}' > evidence/run-attempt.txt
+          test "$(cat evidence/subject-commit.txt)" = 91c054904ab8f0076c39f9532dd3d6672b2facff
+          test "$(cat evidence/driver-commit.txt)" = 476fdf1acdfd216b6c5dc5b56bd7be90320cef90
+          git -C subject status --porcelain --untracked-files=all > evidence/subject-status-before.txt
+          test ! -s evidence/subject-status-before.txt
+          cp driver/audit/numeric-adapter-contracts/NumericAdapterReview.hs evidence/drivers/
+          cp driver/audit/numeric-adapter-contracts/BoundedCounterReview.hs evidence/drivers/
+          cp driver/audit/numeric-adapter-contracts/ReconciledNumericAdapterReview.hs evidence/drivers/
+          cp subject/test/Phase1INT009BoundedPingRuntimeMain.hs evidence/drivers/PingFixture.original.hs
+          test "$(git hash-object evidence/drivers/NumericAdapterReview.hs)" = 9f4a127643019b4a5a89b6c013a1ff9b329da291
+          test "$(git hash-object evidence/drivers/BoundedCounterReview.hs)" = a9c1a508727bb299845c4c04dd661f4703e0bea6
+          test "$(git hash-object evidence/drivers/ReconciledNumericAdapterReview.hs)" = d04bf7e363e8b48a83c6385820c9207c4065d0dc
+          test "$(git hash-object evidence/drivers/PingFixture.original.hs)" = faa78e550ce3a07bdb3031cfac9d0b83720c9cb4
+          python3 - <<'PY'
+          import difflib
+          from pathlib import Path
+          root=Path('evidence/drivers')
+          for source,target in [('NumericAdapterReview.hs','NumericFixture'),('PingFixture.original.hs','PingFixture')]:
+              original=(root/source).read_text()
+              assert original.count('module Main (main) where')==1
+              adapted=original.replace('module Main (main) where',f'module {target} where')
+              (root/f'{target}.hs').write_text(adapted)
+              Path(f'evidence/{target}.diff').write_text(''.join(difflib.unified_diff(original.splitlines(True),adapted.splitlines(True),fromfile=source,tofile=target+'.hs')))
+          PY
+          sha256sum evidence/drivers/*.hs > evidence/drivers.sha256
+          ghc --numeric-version > evidence/ghc-version.txt
+          cabal --numeric-version > evidence/cabal-version.txt
+          for path in src/Phil/Surface/GrammarV1/NumericConversion.hs src/Phil/Surface/GrammarV1/RuntimeScalar.hs src/Phil/Surface/GrammarV1/UIntArithmetic.hs src/Phil/Surface/GrammarV1/BoundedPingRuntime.hs src/Phil/Surface/GrammarV1/BoundedPingLoopSource.hs src/Phil/Surface/GrammarV1/BoundedPingSourceValues.hs src/Phil/Surface/GrammarV1/ArchitectureComponentProvisioning.hs src/Phil/Surface/GrammarV1/BinderScope.hs src/Phil/Core/NumericConversion.hs src/Phil/Core/UIntArithmetic.hs src/Phil/Core/Value.hs src/Phil/Core/Discharge.hs src/Phil/Core/Refinement.hs docs/phase-1/numeric-semantics-proof-boundary-v1.md src/Phil/Surface/GrammarV1/Lexer.hs; do
+            mkdir -p "evidence/source/$(dirname "$path")"
+            cp "subject/$path" "evidence/source/$path"
+            printf '%s %s\n' "$(git -C subject rev-parse "HEAD:$path")" "$path" >> evidence/source-git-blobs.txt
+          done
+      - name: Build exact production
+        working-directory: subject
+        shell: bash
+        run: |
+          set -euo pipefail
+          cabal update 2>&1 | tee ../evidence/dependency-index.log
+          cabal build all --enable-tests 2>&1 | tee ../evidence/build.log
+      - name: Strictly compile both external drivers
+        working-directory: subject
+        shell: bash
+        run: |
+          set -euo pipefail
+          cabal exec -- ghc -O0 -Wall -Werror -isrc -i../evidence/drivers -outputdir ../evidence/build-numeric ../evidence/drivers/ReconciledNumericAdapterReview.hs -o ../evidence/numeric-test 2>&1 | tee ../evidence/numeric-compile.log
+          cabal exec -- ghc -O0 -Wall -Werror -isrc -i../evidence/drivers -outputdir ../evidence/build-counter ../evidence/drivers/BoundedCounterReview.hs -o ../evidence/counter-test 2>&1 | tee ../evidence/counter-compile.log
+      - name: Require complete numeric and counter correctness records
+        shell: bash
+        run: |
+          set -euo pipefail
+          for suite in numeric counter; do
+            set +e
+            "evidence/$suite-test" > "evidence/$suite-results.log" 2>&1
+            code=$?
+            set -e
+            printf '%s\n' "$code" > "evidence/$suite-results.exit"
+          done
+          python3 - <<'PY'
+          import json
+          from pathlib import Path
+          result={'production_pin':'91c054904ab8f0076c39f9532dd3d6672b2facff','general_production_numeric_adapter_established':False,'emitted_native_application_executed':False,'runtime_validator_executed':False,'release_certified':False,'suites':{}}
+          for suite,prefix,count,completion in [('numeric','C',16,'COMPLETE numeric_adapter_groups=16'),('counter','P',6,'COMPLETE bounded_counter_groups=6')]:
+              lines=Path(f'evidence/{suite}-results.log').read_text().splitlines()
+              rows=[line.split(' ',2) for line in lines if line.startswith(('PASS ','FAIL '))]
+              assert [row[1] for row in rows]==[f'{prefix}{i:02d}' for i in range(1,count+1)],(suite,rows)
+              assert all(len(row)==3 for row in rows)
+              assert lines.count(completion)==1
+              code=int(Path(f'evidence/{suite}-results.exit').read_text())
+              assert code in (0,1)
+              assert (code==0)==all(row[0]=='PASS' for row in rows)
+              result['suites'][suite]={'exit':code,'cases':rows}
+          result['all_22_required_groups_passed']=all(suite['exit']==0 for suite in result['suites'].values())
+          Path('evidence/protocol.json').write_text(json.dumps(result,indent=2)+'\n')
+          print(json.dumps(result,indent=2))
+          assert result['all_22_required_groups_passed'],'required correctness failure'
+          PY
+      - name: Replay unchanged permanent suites
+        if: success() || failure()
+        working-directory: subject
+        shell: bash
+        run: |
+          set -euo pipefail
+          failed=0
+          for suite in Phase1NumericConversionMain Phase1INT009BoundedPingRuntimeMain; do
+            cp "test/$suite.hs" "../evidence/permanent/$suite.hs"
+            set +e
+            cabal exec -- runghc -isrc -Wall -Werror "test/$suite.hs" > "../evidence/permanent/$suite.log" 2>&1
+            code=$?
+            set -e
+            printf '%s %s\n' "$suite" "$code" >> ../evidence/permanent-exits.txt
+            if test "$code" -ne 0; then failed=1; fi
+          done
+          exit "$failed"
+      - name: Verify production state is still exact and clean
+        if: always()
+        shell: bash
+        run: |
+          set -euo pipefail
+          git -C subject status --porcelain --untracked-files=all > evidence/subject-status-after.txt
+          test ! -s evidence/subject-status-after.txt
+          test "$(git -C subject rev-parse HEAD)" = 91c054904ab8f0076c39f9532dd3d6672b2facff
+      - name: Preserve complete original evidence even on failure
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: numeric-counter-continuation-91c05490
+          path: |
+            evidence/*.txt
+            evidence/*.sha256
+            evidence/*.diff
+            evidence/*.log
+            evidence/*.exit
+            evidence/*.json
+            evidence/drivers/
+            evidence/source/
+            evidence/permanent/
+          if-no-files-found: error
