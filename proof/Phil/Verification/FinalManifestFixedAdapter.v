@@ -1,3 +1,4 @@
+From Phil.Core Require Import SystemsStageClosure.
 From Phil.Verification Require Import
   VerificationArtifact
   FinalManifestStageReflection
