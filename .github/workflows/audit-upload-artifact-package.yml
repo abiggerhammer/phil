@@ -1,0 +1,196 @@
+name: Audit Upload Artifact Package
+
+on:
+  push:
+    branches: [audit-upload-artifact-package-20260926]
+    paths: ['.github/workflows/audit-upload-artifact-package.yml']
+
+permissions:
+  contents: read
+
+concurrency:
+  group: audit-upload-artifact-package-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  pinned-release-association:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 55
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: 89d545b99bbaa48ba6f855a30bfbb3596d70656f
+          path: subject
+          persist-credentials: false
+      - uses: actions/checkout@v4
+        with:
+          ref: 2383db08018e38c4c32150e03538693e0338917e
+          path: driver
+          persist-credentials: false
+      - uses: haskell-actions/setup@v2
+        with:
+          ghc-version: '9.6.7'
+          cabal-version: '3.18.1.0'
+      - name: Preserve exact source and driver identities
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p evidence/drivers evidence/source evidence/permanent evidence/build-review evidence/build-emitter
+          git -C subject rev-parse HEAD > evidence/subject-commit.txt
+          git -C driver rev-parse HEAD > evidence/driver-commit.txt
+          printf '%s\n' '${{ github.sha }}' > evidence/workflow-commit.txt
+          printf '%s %s\n' '${{ github.run_id }}' '${{ github.run_attempt }}' > evidence/run-attempt.txt
+          test "$(cat evidence/subject-commit.txt)" = 89d545b99bbaa48ba6f855a30bfbb3596d70656f
+          test "$(cat evidence/driver-commit.txt)" = 2383db08018e38c4c32150e03538693e0338917e
+          git -C subject status --porcelain --untracked-files=all > evidence/subject-status-before.txt
+          test ! -s evidence/subject-status-before.txt
+          cp driver/audit/upload-artifact-package/{ReleaseAssociationReview.hs,check_saved_outputs.py} evidence/drivers/
+          sha256sum evidence/drivers/* > evidence/drivers.sha256
+          for path in audit/upload-artifact-package/ReleaseAssociationReview.hs audit/upload-artifact-package/check_saved_outputs.py; do
+            printf '%s %s\n' "$(git -C driver rev-parse "HEAD:$path")" "$path" >> evidence/driver-git-blobs.txt
+          done
+          for path in src/Phil/Verification/CertifiedRelease.hs src/Phil/Verification/ReleasePackage.hs src/Phil/Verification/ArtifactClosure.hs test/Phil/Test/Phase1/ManifestWitnesses.hs test/Phil/Test/Phase1/CertifiedReleaseWitnesses.hs test/Phase1INT005EmitCertifiedReleaseMain.hs test/Phase1INT005ReleasePackageMain.hs scripts/ci/phase1-int-005-release-package.sh scripts/ci/phase1-int-005-native-release-smoke.sh scripts/ci/resolve-llvm18.sh .github/workflows/phase1-int-005-certified-release.yml; do
+            mkdir -p "evidence/source/$(dirname "$path")"
+            cp "subject/$path" "evidence/source/$path"
+            printf '%s %s\n' "$(git -C subject rev-parse "HEAD:$path")" "$path" >> evidence/source-git-blobs.txt
+          done
+          mkdir -p evidence/source/examples/{upload,steve}
+          cp subject/examples/upload/{client,server}.phil evidence/source/examples/upload/
+          cp subject/examples/steve/{put,get}.phil evidence/source/examples/steve/
+          ghc --numeric-version > evidence/ghc-version.txt
+          cabal --numeric-version > evidence/cabal-version.txt
+          python3 --version > evidence/python-version.txt
+      - name: Resolve the repository's trusted LLVM 18 toolchain
+        working-directory: subject
+        shell: bash
+        run: |
+          set -euo pipefail
+          source scripts/ci/resolve-llvm18.sh
+          for name in LLVM_AS LLVM_LINK LLVM_DIS CLANG; do
+            printf '%s=%s\n' "$name" "${!name}" >> "$GITHUB_ENV"
+            "${!name}" --version >> ../evidence/llvm-tool-versions.txt
+          done
+      - name: Build the exact Phil implementation
+        working-directory: subject
+        shell: bash
+        run: |
+          set -euo pipefail
+          cabal update 2>&1 | tee ../evidence/dependency-index.log
+          cabal build all --enable-tests 2>&1 | tee ../evidence/build.log
+      - name: Strict compilation and genuine association replay
+        working-directory: subject
+        shell: bash
+        run: |
+          set -euo pipefail
+          cabal exec -- ghc -O0 -Wall -Werror -isrc -itest -outputdir ../evidence/build-review ../evidence/drivers/ReleaseAssociationReview.hs -o ../evidence/association-review 2>&1 | tee ../evidence/association-compile.log
+          cabal exec -- ghc -O0 -Wall -Werror -isrc -itest -outputdir ../evidence/build-emitter test/Phase1INT005EmitCertifiedReleaseMain.hs -o ../evidence/emitter 2>&1 | tee ../evidence/emitter-compile.log
+          set +e
+          ../evidence/association-review ../evidence/expected > ../evidence/association-results.log 2>&1
+          code=$?
+          set -e
+          printf '%s\n' "$code" > ../evidence/association-results.exit
+          python3 - <<'PY'
+          import json
+          from pathlib import Path
+          root=Path('../evidence')
+          lines=(root/'association-results.log').read_text().splitlines()
+          rows=[line.split(' ',2) for line in lines if line.startswith(('PASS ','FAIL '))]
+          assert [r[1] for r in rows]==[f'C{i:02d}' for i in range(1,13)],rows
+          assert lines.count('COMPLETE association_groups=12')==1
+          code=int((root/'association-results.exit').read_text())
+          result={'cases':rows,'exit':code,'all_required_passed':code==0,'release_certified':False,'general_source_reflection_established':False}
+          (root/'association-protocol.json').write_text(json.dumps(result,indent=2)+'\n')
+          assert code==0 and all(r[0]=='PASS' for r in rows)
+          PY
+      - name: Run the actual package script unchanged
+        working-directory: subject
+        shell: bash
+        run: |
+          set -euo pipefail
+          export RUNNER_TEMP="$(realpath ../evidence)/native-temp"
+          mkdir -p "$RUNNER_TEMP"
+          set +e
+          bash scripts/ci/phase1-int-005-release-package.sh > ../evidence/package-script.log 2>&1
+          code=$?
+          set -e
+          printf '%s\n' "$code" > ../evidence/package-script.exit
+          if test -d dist/int005-certified-release; then
+            cp -a dist/int005-certified-release ../evidence/saved-package
+          fi
+          exit "$code"
+      - name: Compare saved bytes and execute the saved artifacts directly
+        shell: bash
+        run: |
+          set -euo pipefail
+          export RUNNER_TEMP="$PWD/evidence/native-temp"
+          set +e
+          python3 evidence/drivers/check_saved_outputs.py "$PWD/subject" "$PWD/evidence" > evidence/saved-results.log 2>&1
+          code=$?
+          set -e
+          printf '%s\n' "$code" > evidence/saved-results.exit
+          python3 - <<'PY'
+          import json
+          from pathlib import Path
+          lines=Path('evidence/saved-results.log').read_text().splitlines()
+          rows=[s.split(' ',2) for s in lines if s.startswith(('PASS ','FAIL '))]
+          assert [r[1] for r in rows]==[f'B{i:02d}' for i in range(1,9)],rows
+          assert lines.count('COMPLETE saved_output_groups=8')==1
+          code=int(Path('evidence/saved-results.exit').read_text())
+          report=json.loads(Path('evidence/saved-output-protocol.json').read_text())
+          assert code==0 and report['all_required_passed'] and all(r[0]=='PASS' for r in rows)
+          PY
+      - name: Replay existing release and stage-gate suites unchanged
+        if: success() || failure()
+        working-directory: subject
+        shell: bash
+        run: |
+          set -euo pipefail
+          failed=0
+          for suite in Phase1INT005CertifiedReleaseEnvelopeMain Phase1INT005RealWitnessManifestMain Phase1INT005ReleasePackageMain Phase1VerificationSourceArtifactClosureMain; do
+            cp "test/$suite.hs" "../evidence/permanent/$suite.hs"
+            set +e
+            cabal exec -- runghc -isrc -itest -Wall -Werror "test/$suite.hs" > "../evidence/permanent/$suite.log" 2>&1
+            code=$?
+            set -e
+            printf '%s %s\n' "$suite" "$code" >> ../evidence/permanent-exits.txt
+            if test "$code" -ne 0; then failed=1; fi
+          done
+          exit "$failed"
+      - name: Verify untouched production source and seal evidence
+        if: always()
+        shell: bash
+        run: |
+          set -euo pipefail
+          git -C subject status --porcelain --untracked-files=all > evidence/subject-status-after.txt
+          test ! -s evidence/subject-status-after.txt
+          test "$(git -C subject rev-parse HEAD)" = 89d545b99bbaa48ba6f855a30bfbb3596d70656f
+          python3 - <<'PY'
+          import hashlib,json
+          from pathlib import Path
+          root=Path('evidence')
+          paths=[p for p in root.rglob('*') if p.is_file() and not any(part.startswith('build-') for part in p.parts)]
+          result={str(p.relative_to(root)):{'size':p.stat().st_size,'sha256':hashlib.sha256(p.read_bytes()).hexdigest()} for p in sorted(paths)}
+          (root/'payload-sha256.json').write_text(json.dumps(result,indent=2)+'\n')
+          PY
+      - name: Retain original source, outputs, native inputs and every failure
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: upload-artifact-package-89d545b9
+          include-hidden-files: true
+          path: |
+            evidence/*.txt
+            evidence/*.sha256
+            evidence/*.log
+            evidence/*.exit
+            evidence/*.json
+            evidence/drivers/
+            evidence/source/
+            evidence/permanent/
+            evidence/expected/
+            evidence/saved-package/
+            evidence/commands/
+            evidence/bad-source/
+            evidence/native-temp/
+            evidence/saved-execution/
+          if-no-files-found: error
