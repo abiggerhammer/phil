@@ -24,7 +24,7 @@ jobs:
           persist-credentials: false
       - uses: actions/checkout@v4
         with:
-          ref: b7c2d8b3b76ae9c8071799448f1b91cc5e5f62be
+          ref: 817ea25b25be0015f94f1b9033dad28d97546bdc
           path: driver
           persist-credentials: false
       - uses: actions/checkout@v4
@@ -42,9 +42,9 @@ jobs:
           set -euo pipefail
           mkdir -p evidence
           test "$(git -C subject rev-parse HEAD)" = e47e31e47b33abd7c55242bad6b9c61cd104d9d0
-          test "$(git -C driver rev-parse HEAD)" = b7c2d8b3b76ae9c8071799448f1b91cc5e5f62be
+          test "$(git -C driver rev-parse HEAD)" = 817ea25b25be0015f94f1b9033dad28d97546bdc
           test "$(git -C workflow rev-parse HEAD)" = '${{ github.sha }}'
-          test "$(git hash-object driver/audit/callable-source-connection-supplement/controls/SourceConnectionReview.hs)" = 8747afd9ba43224a2a39a2058ab77d7c18126616
+          test "$(git hash-object driver/audit/callable-source-connection-supplement/controls/SourceConnectionReview.hs)" = f16876f4515be7358eb260c8f6b044f87c785081
           test "$(git hash-object driver/audit/callable-source-connection-supplement/run_replay.py)" = b3153892e96d46b99bd65e991757cc11e1fe33b3
           cp workflow/.github/workflows/audit-callable-source-connection-supplement.yml evidence/workflow.yml
           python3 - <<'PY'
