@@ -1,0 +1,147 @@
+name: Hamster Merge Intent
+
+on:
+  push:
+    branches:
+      - 'hamster/merge/**'
+
+permissions:
+  contents: write
+  pull-requests: write
+
+concurrency:
+  group: hamster-merge-intent-${{ github.ref }}
+  cancel-in-progress: false
+
+jobs:
+  merge-pr:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Parse merge intent
+        id: intent
+        shell: bash
+        env:
+          REF_NAME: ${{ github.ref_name }}
+        run: |
+          set -euo pipefail
+
+          if [[ "$REF_NAME" =~ ^hamster/merge/([^/]+)/pr-([0-9]+)/([0-9a-f]{40})$ ]]; then
+            lane="${BASH_REMATCH[1]}"
+            pr="${BASH_REMATCH[2]}"
+            expected="${BASH_REMATCH[3]}"
+          else
+            echo "Malformed merge-intent branch: $REF_NAME" >&2
+            exit 1
+          fi
+
+          case "$lane" in
+            proof-audit|rocq-refinement|impl-audit) ;;
+            *)
+              echo "Unsupported hamster lane: $lane" >&2
+              exit 1
+              ;;
+          esac
+
+          {
+            echo "lane=$lane"
+            echo "pr=$pr"
+            echo "expected=$expected"
+          } >> "$GITHUB_OUTPUT"
+
+      - name: Verify exact PR state and merge
+        shell: bash
+        env:
+          GH_TOKEN: ${{ github.token }}
+          GH_REPO: ${{ github.repository }}
+          LANE: ${{ steps.intent.outputs.lane }}
+          PR_NUMBER: ${{ steps.intent.outputs.pr }}
+          EXPECTED_HEAD: ${{ steps.intent.outputs.expected }}
+        run: |
+          set -euo pipefail
+
+          pr_json="$(gh api "repos/$GH_REPO/pulls/$PR_NUMBER")"
+
+          state="$(jq -r '.state' <<<"$pr_json")"
+          draft="$(jq -r '.draft' <<<"$pr_json")"
+          head_sha="$(jq -r '.head.sha' <<<"$pr_json")"
+          head_ref="$(jq -r '.head.ref' <<<"$pr_json")"
+          base_sha="$(jq -r '.base.sha' <<<"$pr_json")"
+
+          test "$state" = "open"
+          test "$draft" = "false"
+          test "$head_sha" = "$EXPECTED_HEAD"
+
+          case "$head_ref" in
+            "hamster/$LANE/"*) ;;
+            *)
+              echo "PR head $head_ref is not owned by lane $LANE" >&2
+              exit 1
+              ;;
+          esac
+
+          labels="$(gh api "repos/$GH_REPO/issues/$PR_NUMBER" --jq '.labels[].name')"
+          if ! grep -Fxq "lane: $LANE" <<<"$labels"; then
+            echo "PR #$PR_NUMBER lacks native lane label lane: $LANE" >&2
+            exit 1
+          fi
+
+          checks_json="$(gh api -H 'Accept: application/vnd.github+json' "repos/$GH_REPO/commits/$EXPECTED_HEAD/check-runs?per_page=100")"
+          total="$(jq -r '.total_count' <<<"$checks_json")"
+          returned="$(jq -r '.check_runs | length' <<<"$checks_json")"
+
+          if [ "$total" -eq 0 ] || [ "$returned" -ne "$total" ]; then
+            echo "Check-run census incomplete: total=$total returned=$returned" >&2
+            exit 1
+          fi
+
+          bad="$(jq -r '[.check_runs[] | select(.status != "completed" or .conclusion != "success")] | length' <<<"$checks_json")"
+          if [ "$bad" -ne 0 ]; then
+            echo "Not all exact-head checks are successful:" >&2
+            jq -r '.check_runs[] | select(.status != "completed" or .conclusion != "success") | "  \(.name): status=\(.status) conclusion=\(.conclusion)"' <<<"$checks_json" >&2
+            exit 1
+          fi
+
+          main_sha="$(gh api "repos/$GH_REPO/branches/main" --jq '.commit.sha')"
+
+          if [ "$base_sha" != "$main_sha" ]; then
+            pr_files="$(mktemp)"
+            main_files="$(mktemp)"
+
+            gh api --paginate "repos/$GH_REPO/pulls/$PR_NUMBER/files?per_page=100" --jq '.[].filename' | sort -u > "$pr_files"
+            gh api "repos/$GH_REPO/compare/$base_sha...$main_sha" --jq '.files[].filename' | sort -u > "$main_files"
+
+            overlap="$(comm -12 "$pr_files" "$main_files")"
+            if [ -n "$overlap" ]; then
+              echo "Intervening main overlaps PR files; refusing merge:" >&2
+              printf '%s\n' "$overlap" >&2
+              exit 1
+            fi
+          fi
+
+          result="$(gh api --method PUT "repos/$GH_REPO/pulls/$PR_NUMBER/merge" \
+            -f sha="$EXPECTED_HEAD" \
+            -f merge_method=merge)"
+
+          merged="$(jq -r '.merged' <<<"$result")"
+          message="$(jq -r '.message' <<<"$result")"
+
+          echo "merged=$merged"
+          echo "message=$message"
+
+          test "$merged" = "true"
+
+      - name: Summary
+        shell: bash
+        env:
+          LANE: ${{ steps.intent.outputs.lane }}
+          PR_NUMBER: ${{ steps.intent.outputs.pr }}
+          EXPECTED_HEAD: ${{ steps.intent.outputs.expected }}
+        run: |
+          {
+            echo "### Hamster merge intent"
+            echo
+            echo "- lane: $LANE"
+            echo "- PR: #$PR_NUMBER"
+            echo "- exact authorized head: $EXPECTED_HEAD"
+            echo "- result: merged"
+          } >> "$GITHUB_STEP_SUMMARY"
