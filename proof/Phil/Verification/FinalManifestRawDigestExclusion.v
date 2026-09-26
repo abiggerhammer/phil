@@ -1,5 +1,6 @@
 From Phil.Verification Require Import
   VerificationArtifact
+  FinalManifestNativeCoordinateReflection
   FinalManifestFixedAdapter.
 
 (*
