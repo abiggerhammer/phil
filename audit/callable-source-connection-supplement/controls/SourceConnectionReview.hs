@@ -215,7 +215,15 @@ requirementOccurrences = do
   shifted <- parseFunction ("\n" <> templateText)
   case (grammarV1FunctionRequirements source, grammarV1FunctionRequirements shifted) of
     ([original], [differentOccurrence]) -> do
-      exact (locatedValue original) (locatedValue differentOccurrence)
+      -- Compare the proposition payload, not its deliberately shifted nested
+      -- Located wrapper. Keep the full original occurrences for all gates below.
+      case (locatedValue original, locatedValue differentOccurrence) of
+        (GrammarV1PropositionRequirement left, GrammarV1PropositionRequirement right) -> do
+          exact GrammarV1TrueProposition (locatedValue left)
+          exact GrammarV1TrueProposition (locatedValue right)
+          assertion (locatedSpan left /= locatedSpan right)
+            "fixture did not move the nested proposition occurrence"
+        pair -> Left (Harness ("expected two parsed Truth requirements: " <> show pair))
       assertion (original /= differentOccurrence) "fixture did not move the located source occurrence"
       let make requirement = GrammarV1ResolvedRequirementDisposition requirement
             (GenericSatisfiedByEvidence (GenericEvidence { genericEvidenceProposition = Truth, genericEvidenceIdentity = "audit.supplied.closed-truth" }))
