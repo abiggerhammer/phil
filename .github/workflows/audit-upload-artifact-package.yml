@@ -162,13 +162,29 @@ jobs:
         run: |
           set -euo pipefail
           git -C subject status --porcelain --untracked-files=all > evidence/subject-status-after.txt
-          test ! -s evidence/subject-status-after.txt
           test "$(git -C subject rev-parse HEAD)" = 89d545b99bbaa48ba6f855a30bfbb3596d70656f
+          git -C subject diff HEAD --exit-code > evidence/subject-tracked-diff.txt
           python3 - <<'PY'
           import hashlib,json
           from pathlib import Path
           root=Path('evidence')
-          paths=[p for p in root.rglob('*') if p.is_file() and not any(part.startswith('build-') for part in p.parts)]
+          expected=sorted('?? dist/int005-certified-release/'+name+suffix
+                          for name in ('upload','steve') for suffix in ('.ll','.release-package'))
+          actual=(root/'subject-status-after.txt').read_text().splitlines()
+          assert sorted(actual)==expected,(actual,expected)
+          output_hashes={}
+          for entry in expected:
+              relative=entry[3:]
+              original=Path('subject')/relative
+              archived=root/'saved-package'/original.name
+              assert original.read_bytes()==archived.read_bytes(),relative
+              output_hashes[relative]=hashlib.sha256(original.read_bytes()).hexdigest()
+          (root/'subject-output-accounting.json').write_text(json.dumps({
+              'tracked_source_unchanged':True,'only_expected_untracked_outputs':True,
+              'expected_output_sha256':output_hashes},indent=2)+'\n')
+          paths=[p for p in root.rglob('*') if p.is_file()
+                 and not any(part.startswith('build-') for part in p.parts)
+                 and p.relative_to(root).as_posix() not in ('association-review','emitter','payload-sha256.json')]
           result={str(p.relative_to(root)):{'size':p.stat().st_size,'sha256':hashlib.sha256(p.read_bytes()).hexdigest()} for p in sorted(paths)}
           (root/'payload-sha256.json').write_text(json.dumps(result,indent=2)+'\n')
           PY
