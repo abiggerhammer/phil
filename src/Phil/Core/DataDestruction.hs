@@ -3,6 +3,7 @@ module Phil.Core.DataDestruction
   , FieldDisposition (..)
   , AggregateDisposition (..)
   , DataDestructionError (..)
+  , checkOwnedFieldSchema
   , checkFieldDispositions
   , checkAggregateDisposition
   , consumeAggregateFields
@@ -40,7 +41,8 @@ data AggregateDisposition
   deriving (Eq, Show)
 
 data DataDestructionError
-  = DuplicateFieldDisposition Name
+  = DuplicateOwnedField Name
+  | DuplicateFieldDisposition Name
   | UnknownFieldDisposition Name
   | MissingLinearFieldDisposition Name
   | DataDestructionContextError CheckError
@@ -49,11 +51,29 @@ data DataDestructionError
   | CertifiedDataEliminationKernelDisagreement
   deriving (Eq, Show)
 
+-- | Aggregate elimination receives an explicitly supplied Phase-1 field schema.
+-- It does not infer nominal declaration identity from names or modes, so that
+-- association remains a caller premise. Once a schema reaches this consumer,
+-- however, field identity must be unambiguous before a name-based disposition
+-- map can discard source multiplicity.
+checkOwnedFieldSchema
+  :: [OwnedField]
+  -> Either DataDestructionError ()
+checkOwnedFieldSchema = go Map.empty
+  where
+    go _ [] = Right ()
+    go seen (field : rest)
+      | Map.member name seen = Left (DuplicateOwnedField name)
+      | otherwise = go (Map.insert name () seen) rest
+      where
+        name = ownedFieldName field
+
 checkFieldDispositions
   :: [OwnedField]
   -> [(Name, FieldDisposition)]
   -> Either DataDestructionError ()
 checkFieldDispositions fields dispositions = do
+  checkOwnedFieldSchema fields
   dispositionMap <- buildDispositionMap dispositions
   mapM_ (checkField dispositionMap) fields
   mapM_ (checkKnownField fields) (Map.keys dispositionMap)

@@ -128,7 +128,7 @@ duplicateSuccessorRejects = do
         [payloadField, payloadField]
         [(payloadName, FieldBound)]
         initial
-        == Left (DataDestructionContextError (DuplicateBinding payloadName))
+        == Left (DuplicateOwnedField payloadName)
     )
     "duplicate successor escaped native ResourceContext rejection"
 

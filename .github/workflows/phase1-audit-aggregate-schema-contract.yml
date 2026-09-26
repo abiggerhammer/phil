@@ -1,0 +1,62 @@
+name: Phase 1 Audit Aggregate Schema Contract
+
+on:
+  pull_request:
+    paths:
+      - 'src/Phil/Core/DataDestruction.hs'
+      - 'src/Phil/Core/DataBorrow.hs'
+      - 'src/Phil/Core/DataSum.hs'
+      - 'src/Phil/Surface/GrammarV1/RecordFields.hs'
+      - 'src/Phil/Surface/GrammarV1/DataVariants.hs'
+      - 'test/Phase1AuditAggregateSchemaContractMain.hs'
+      - 'docs/phase-1/audit-aggregate-schema-contract-remediation-v1.md'
+      - '.github/workflows/phase1-audit-aggregate-schema-contract.yml'
+  push:
+    branches: [main]
+    paths:
+      - 'src/Phil/Core/DataDestruction.hs'
+      - 'src/Phil/Core/DataBorrow.hs'
+      - 'src/Phil/Core/DataSum.hs'
+      - 'src/Phil/Surface/GrammarV1/RecordFields.hs'
+      - 'src/Phil/Surface/GrammarV1/DataVariants.hs'
+      - 'test/Phase1AuditAggregateSchemaContractMain.hs'
+      - 'docs/phase-1/audit-aggregate-schema-contract-remediation-v1.md'
+      - '.github/workflows/phase1-audit-aggregate-schema-contract.yml'
+
+permissions:
+  contents: read
+
+jobs:
+  verify-aggregate-schema-contract:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: haskell-actions/setup@v2
+        with:
+          ghc-version: '9.6.7'
+          cabal-version: 'latest'
+
+      - name: Build Phase 1 Haskell substrate with warnings as errors
+        run: cabal build lib:phil-core --ghc-options=-Werror
+
+      - name: Strict-typecheck D-AGG-SCHEMA-01 production and regression surface
+        shell: bash
+        run: |
+          set -euo pipefail
+          cabal exec -- ghc -isrc -Wall -Werror -fno-code src/Phil/Core/DataDestruction.hs
+          cabal exec -- ghc -isrc -Wall -Werror -fno-code src/Phil/Core/DataBorrow.hs
+          cabal exec -- ghc -isrc -Wall -Werror -fno-code src/Phil/Core/DataSum.hs
+          cabal exec -- ghc -isrc -Wall -Werror -fno-code test/Phase1AuditAggregateSchemaContractMain.hs
+
+      - name: Execute bounded declaration-to-consumer contract controls
+        run: cabal exec -- runghc -isrc -Wall -Werror test/Phase1AuditAggregateSchemaContractMain.hs
+
+      - name: Re-run unchanged aggregate typing and ownership controls
+        shell: bash
+        run: |
+          set -euo pipefail
+          cabal exec -- runghc -isrc -Wall -Werror test/Phase1GrammarV1CheckedRecordFieldsMain.hs
+          cabal exec -- runghc -isrc -Wall -Werror test/Phase1GrammarV1CheckedDataModeCompositionMain.hs
+          cabal exec -- runghc -isrc -Wall -Werror test/Phase1ConsumingRecordDestructionMain.hs
+          cabal exec -- runghc -isrc -Wall -Werror test/Phase1BorrowedAggregateInspectionMain.hs
+          cabal exec -- runghc -isrc -Wall -Werror test/Phase1ConsumingSumMatchMain.hs
