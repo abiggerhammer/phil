@@ -1,0 +1,141 @@
+name: Audit Callable Source Connection
+
+on:
+  push:
+    branches: [audit-callable-binding-replay-20260926]
+    paths: ['.github/workflows/audit-callable-source-connection.yml']
+permissions:
+  contents: read
+concurrency:
+  group: audit-callable-source-connection-${{ github.ref }}
+  cancel-in-progress: true
+jobs:
+  source-contract:
+    runs-on: ubuntu-latest
+    timeout-minutes: 35
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: e47e31e47b33abd7c55242bad6b9c61cd104d9d0
+          path: subject
+          persist-credentials: false
+      - uses: actions/checkout@v4
+        with:
+          ref: d4835f6d50583ab654f85b41fd35d30c78020414
+          path: driver
+          persist-credentials: false
+      - uses: haskell-actions/setup@v2
+        with:
+          ghc-version: '9.6.7'
+          cabal-version: '3.18.1.0'
+      - name: Preserve exact production and external controls
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p evidence/drivers evidence/source evidence/permanent compile-work
+          git -C subject rev-parse HEAD > evidence/subject-commit.txt
+          git -C driver rev-parse HEAD > evidence/driver-commit.txt
+          test "$(cat evidence/subject-commit.txt)" = e47e31e47b33abd7c55242bad6b9c61cd104d9d0
+          test "$(cat evidence/driver-commit.txt)" = d4835f6d50583ab654f85b41fd35d30c78020414
+          printf '%s\n' '${{ github.sha }}' > evidence/workflow-commit.txt
+          printf '%s %s\n' '${{ github.run_id }}' '${{ github.run_attempt }}' > evidence/run-attempt.txt
+          git -C subject status --porcelain --untracked-files=all > evidence/subject-status-before.txt
+          test ! -s evidence/subject-status-before.txt
+          cp driver/audit/callable-source-connection/SourceConnectionReview.hs evidence/drivers/
+          test "$(git hash-object evidence/drivers/SourceConnectionReview.hs)" = 9d6b2562fec3cc315674a7979ba2f9322e8211f4
+          cp subject/test/Phase1CALL019CallableResolutionMain.hs evidence/drivers/CatalogFixture.original.hs
+          cp subject/test/Phase1INT006SteveApplicationShellMain.hs evidence/drivers/ShellFixture.original.hs
+          test "$(git hash-object evidence/drivers/CatalogFixture.original.hs)" = 0caf0051f09004e6bc5f7bb493ab18b365f564df
+          test "$(git hash-object evidence/drivers/ShellFixture.original.hs)" = 08b6f93394731578a14dcc412f46184fccab7c78
+          python3 - <<'PY'
+          from pathlib import Path
+          import difflib
+          root=Path('evidence/drivers')
+          for name in ('CatalogFixture','ShellFixture'):
+              original=(root/(name+'.original.hs')).read_text()
+              assert original.count('module Main (main) where')==1
+              adapted=original.replace('module Main (main) where',f'module {name} where')
+              (root/(name+'.hs')).write_text(adapted)
+              Path('evidence',name+'.diff').write_text(''.join(difflib.unified_diff(original.splitlines(True),adapted.splitlines(True),fromfile=name+'.original.hs',tofile=name+'.hs')))
+          PY
+          sha256sum evidence/drivers/*.hs > evidence/drivers.sha256
+          ghc --numeric-version > evidence/ghc-version.txt
+          cabal --numeric-version > evidence/cabal-version.txt
+          for path in src/Phil/Surface/GrammarV1/GenericBinderScope.hs src/Phil/Surface/GrammarV1/SpecializedStaticReference.hs src/Phil/Surface/GrammarV1/GenericDischarge.hs src/Phil/Surface/GrammarV1/GenericRequirementCore.hs src/Phil/Surface/GrammarV1/CallableSignature.hs src/Phil/Surface/GrammarV1/FunctionBodySurface.hs src/Phil/Surface/GrammarV1/ClosedBodySurface.hs src/Phil/Surface/GrammarV1/CallableEffects.hs src/Phil/Surface/GrammarV1/SemanticEffectPolymorphism.hs src/Phil/Surface/GrammarV1/Parser.hs src/Phil/Compiler/SourceBundle.hs src/Phil/Compiler/CallableInvocation.hs src/Phil/Compiler/CallableSurfaceSemantics.hs src/Phil/Examples/Steve/ApplicationShell.hs src/Phil/Core/Generic.hs src/Phil/Core/Generic/StaticActual.hs src/Phil/Core/EffectPolymorphism.hs src/Phil/Surface/Check.hs src/Phil/Surface/Check/Engine.hs src/Phil/Surface/Check/Types.hs src/Phil/Surface/Lineage.hs examples/steve/put-cli.phil examples/steve/get-cli.phil docs/phase-1/callable-invocation-proof-boundary-v1.md; do
+            mkdir -p "evidence/source/$(dirname "$path")"
+            cp "subject/$path" "evidence/source/$path"
+            printf '%s %s\n' "$(git -C subject rev-parse "HEAD:$path")" "$path" >> evidence/source-git-blobs.txt
+          done
+      - name: Build production and strictly compile independent source controls
+        working-directory: subject
+        shell: bash
+        run: |
+          set -euo pipefail
+          cabal update 2>&1 | tee ../evidence/dependency-index.log
+          cabal build all --enable-tests 2>&1 | tee ../evidence/build.log
+          cabal exec -- ghc -O0 -Wall -Werror -isrc -i../evidence/drivers -outputdir ../compile-work ../evidence/drivers/SourceConnectionReview.hs -o ../source-connection-review 2>&1 | tee ../evidence/compile.log
+      - name: Execute the actual source and consuming interfaces
+        shell: bash
+        run: |
+          set -euo pipefail
+          set +e
+          ./source-connection-review "$PWD/subject" > evidence/results.log 2>&1
+          code=$?
+          set -e
+          printf '%s\n' "$code" > evidence/results.exit
+          python3 - <<'PY'
+          from pathlib import Path
+          import json
+          lines=Path('evidence/results.log').read_text().splitlines()
+          rows=[line.split(' ',2) for line in lines if line.startswith(('PASS ','FAIL '))]
+          assert [row[1] for row in rows]==[f'P{i:02d}' for i in range(1,18)],rows
+          assert lines[-1]=='COMPLETE source_connection_groups=17'
+          code=int(Path('evidence/results.exit').read_text())
+          assert code in (0,1)
+          passed=all(row[0]=='PASS' for row in rows)
+          assert (code==0)==passed
+          result={'subject':'e47e31e47b33abd7c55242bad6b9c61cd104d9d0','groups':rows,'exit':code,'all_17_required_groups_passed':passed,'general_source_to_signature_producer_established':False,'automatic_generic_requirement_substitution_established':False,'native_or_provider_execution':False,'release_certified':False}
+          Path('evidence/protocol.json').write_text(json.dumps(result,indent=2)+'\n')
+          print(json.dumps(result,indent=2))
+          assert passed,'required source-connection control failed'
+          PY
+      - name: Replay permanent source contracts without modifications
+        if: success() || failure()
+        working-directory: subject
+        shell: bash
+        run: |
+          set -euo pipefail
+          failed=0
+          for suite in Phase1GrammarV1GenericBinderScopeMain Phase1GrammarV1SpecializedStaticReferenceMain Phase1GrammarV1GenericRequirementElaborationMain Phase1GrammarV1FunctionHeaderMain Phase1CALL019CallableResolutionMain Phase1INT006SteveApplicationShellMain; do
+            cp "test/$suite.hs" "../evidence/permanent/$suite.hs"
+            set +e
+            cabal exec -- runghc -isrc -Wall -Werror "test/$suite.hs" > "../evidence/permanent/$suite.log" 2>&1
+            code=$?
+            set -e
+            printf '%s %s\n' "$suite" "$code" >> ../evidence/permanent-exits.txt
+            if test "$code" -ne 0; then failed=1; fi
+          done
+          exit "$failed"
+      - name: Check exact clean subject and seal only archived payloads
+        if: always()
+        shell: bash
+        run: |
+          set -euo pipefail
+          git -C subject status --porcelain --untracked-files=all > evidence/subject-status-after.txt
+          test ! -s evidence/subject-status-after.txt
+          test "$(git -C subject rev-parse HEAD)" = e47e31e47b33abd7c55242bad6b9c61cd104d9d0
+          python3 - <<'PY'
+          import hashlib,json
+          from pathlib import Path
+          root=Path('evidence')
+          seal={str(path.relative_to(root)):hashlib.sha256(path.read_bytes()).hexdigest() for path in sorted(root.rglob('*')) if path.is_file() and path.name!='payload-sha256.json'}
+          (root/'payload-sha256.json').write_text(json.dumps(seal,indent=2)+'\n')
+          PY
+      - name: Preserve original sources, namespace-only fixtures and complete logs
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: callable-source-connection-e47e31e4
+          path: evidence/
+          include-hidden-files: true
+          if-no-files-found: error
