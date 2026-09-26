@@ -1,0 +1,127 @@
+name: Hamster Merge Request
+
+on:
+  push:
+    branches:
+      - 'hamster/merge-request/**'
+
+permissions:
+  contents: write
+  pull-requests: write
+
+concurrency:
+  group: hamster-merge-serial
+  cancel-in-progress: false
+
+jobs:
+  merge:
+    name: hamster-merge-request
+    runs-on: ubuntu-latest
+    steps:
+      - name: Verify exact head, CI, and no-overlap rule; then merge
+        shell: bash
+        env:
+          GH_TOKEN: ${{ github.token }}
+          GH_REPO: ${{ github.repository }}
+          REQUEST_REF: ${{ github.ref_name }}
+          REQUEST_SHA: ${{ github.sha }}
+        run: |
+          set -euo pipefail
+
+          pr_number="${REQUEST_REF##*/}"
+          if ! [[ "$pr_number" =~ ^[0-9]+$ ]]; then
+            echo "Merge-request ref must end in a numeric PR number: $REQUEST_REF" >&2
+            exit 1
+          fi
+
+          pr_json="$(gh api "repos/$GH_REPO/pulls/$pr_number")"
+
+          state="$(jq -r '.state' <<<"$pr_json")"
+          draft="$(jq -r '.draft' <<<"$pr_json")"
+          head_sha="$(jq -r '.head.sha' <<<"$pr_json")"
+          request_parent="$(gh api "repos/$GH_REPO/commits/$REQUEST_SHA" --jq '.parents[0].sha')"
+          head_ref="$(jq -r '.head.ref' <<<"$pr_json")"
+          base_sha="$(jq -r '.base.sha' <<<"$pr_json")"
+
+          test "$state" = "open"
+          test "$draft" = "false"
+
+          if [ "$head_sha" != "$request_parent" ]; then
+            echo "Exact-head mismatch: merge-request parent=$request_parent PR=$head_sha" >&2
+            exit 1
+          fi
+
+          case "$head_ref" in
+            hamster/proof-audit/*)
+              expected_label="lane: proof-audit"
+              ;;
+            hamster/rocq-refinement/*)
+              expected_label="lane: rocq-refinement"
+              ;;
+            hamster/impl-audit/*)
+              expected_label="lane: impl-audit"
+              ;;
+            *)
+              echo "Refusing merge for non-hamster PR head: $head_ref" >&2
+              exit 1
+              ;;
+          esac
+
+          if ! jq -e --arg label "$expected_label" '.labels | any(.name == $label)' <<<"$pr_json" >/dev/null; then
+            echo "PR #$pr_number lacks expected native label: $expected_label" >&2
+            exit 1
+          fi
+
+          checks="$(gh api "repos/$GH_REPO/commits/$head_sha/check-runs?per_page=100")"
+          check_count="$(jq '.check_runs | length' <<<"$checks")"
+          if [ "$check_count" -eq 0 ]; then
+            echo "No exact-head CI checks found for $head_sha" >&2
+            exit 1
+          fi
+
+          if ! jq -e '
+            .check_runs
+            | all(.status == "completed" and .conclusion == "success")
+          ' <<<"$checks" >/dev/null; then
+            echo "Exact-head CI is not fully green for $head_sha" >&2
+            jq -r '
+              .check_runs[]
+              | select(.status != "completed" or .conclusion != "success")
+              | [.name, .status, (.conclusion // "null")] | @tsv
+            ' <<<"$checks" >&2
+            exit 1
+          fi
+
+          main_sha="$(gh api "repos/$GH_REPO/branches/main" --jq '.commit.sha')"
+
+          if [ "$base_sha" != "$main_sha" ]; then
+            main_files="$(mktemp)"
+            pr_files="$(mktemp)"
+
+            gh api "repos/$GH_REPO/compare/$base_sha...$main_sha" \
+              --jq '.files[].filename' | sort -u > "$main_files"
+
+            gh api --paginate "repos/$GH_REPO/pulls/$pr_number/files?per_page=100" \
+              --jq '.[].filename' | sort -u > "$pr_files"
+
+            overlap="$(comm -12 "$main_files" "$pr_files")"
+            if [ -n "$overlap" ]; then
+              echo "Refusing merge: main advanced with overlapping files:" >&2
+              printf '%s\n' "$overlap" >&2
+              exit 1
+            fi
+          fi
+
+          result="$(gh api \
+            --method PUT \
+            "repos/$GH_REPO/pulls/$pr_number/merge" \
+            -f sha="$head_sha" \
+            -f merge_method="merge")"
+
+          if [ "$(jq -r '.merged' <<<"$result")" != "true" ]; then
+            echo "GitHub did not merge PR #$pr_number" >&2
+            jq . <<<"$result" >&2
+            exit 1
+          fi
+
+          echo "Merged PR #$pr_number at exact head $head_sha"
