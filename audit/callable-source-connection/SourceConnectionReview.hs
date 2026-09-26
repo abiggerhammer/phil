@@ -252,8 +252,13 @@ bodyResults = do
 bodyNoncompetence :: Result ()
 bodyNoncompetence = do
   param <- function "fn f(x : U8) -> Unit satisfies C { return unit; }"
-  calls <- function "fn f() -> Bool satisfies C { return invoke C(); }"
+  calls <- function "fn f() -> Bool satisfies C { return C(true); }"
   generic <- function "fn f[T : Type]() -> Unit satisfies C { return unit; }"
+  case grammarV1BlockStatements (locatedValue (grammarV1FunctionBody calls)) of
+    [Located _ (GrammarV1ReturnStatement (Located _ (GrammarV1NameExpression target arguments)))] ->
+      check (grammarV1QualifiedNameParts (grammarV1StaticReferenceName target) == ["C"] && length arguments == 1)
+        "call noncompetence fixture did not parse as a named call"
+    _ -> Left "call noncompetence fixture has an unexpected parsed body"
   hp <- header param
   hc <- header calls
   check (grammarV1CheckedClosedFunctionBody emptyStaticContext hp param == Nothing) "parameterized body became competent"
