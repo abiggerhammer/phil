@@ -84,14 +84,14 @@ jobs:
 
           Auto-created by the Mecha Hamster Ball branch-to-PR bridge.
 
-          Prepared branch: `$BRANCH`
-          Exact head at creation: `$HEAD_SHA`
+          Prepared branch: $BRANCH
+          Exact head at creation: $HEAD_SHA
 
-          Note: because this PR is created by GitHub Actions using `GITHUB_TOKEN`,
-          the creating event does not itself fan out ordinary `pull_request`
+          Note: because this PR is created by GitHub Actions using GITHUB_TOKEN,
+          the creating event does not itself fan out ordinary pull_request
           workflows. The hamster controller should issue one content-preserving
           exact-head wake-up commit after discovering a newly auto-created PR so
-          CI runs on a connector-authored `synchronize` event.
+          CI runs on a connector-authored synchronize event.
           EOF
           )"
 
@@ -130,7 +130,7 @@ jobs:
           {
             echo "### Hamster branch-to-PR bridge"
             echo
-            echo "- lane: `$LANE`"
+            echo "- lane: $LANE"
             echo "- PR: #$NUMBER"
-            echo "- exact pushed head: `$HEAD_SHA`"
+            echo "- exact pushed head: $HEAD_SHA"
           } >> "$GITHUB_STEP_SUMMARY"
