@@ -1,0 +1,51 @@
+name: Phase 1 Audit Final Manifest Native Coordinate Reflection
+
+on:
+  pull_request:
+    paths:
+      - 'proof/Phil/Verification/FinalManifestNativeCoordinateReflection.v'
+      - 'docs/phase-1/audit-final-manifest-native-coordinate-reflection-v1.md'
+      - '.github/workflows/phase1-audit-final-manifest-native-coordinate-reflection.yml'
+  push:
+    branches: [main]
+    paths:
+      - 'proof/Phil/Verification/FinalManifestNativeCoordinateReflection.v'
+      - 'docs/phase-1/audit-final-manifest-native-coordinate-reflection-v1.md'
+      - '.github/workflows/phase1-audit-final-manifest-native-coordinate-reflection.yml'
+
+permissions:
+  contents: read
+
+jobs:
+  final-manifest-native-coordinate-reflection:
+    runs-on: ubuntu-latest
+    container:
+      image: rocq/rocq-prover:9.2.0
+      options: --user root
+    steps:
+      - uses: actions/checkout@v4
+      - name: Compile native final-manifest coordinate proof
+        shell: bash
+        run: |
+          set -euo pipefail
+          export PATH="/home/rocq/.opam/${COMPILER}/bin:$PATH"
+          rocq c -Q proof/Phil Phil proof/Phil/Systems/FactDisposition.v
+          rocq c -Q proof/Phil Phil proof/Phil/Assurance/ValidityScope.v
+          rocq c -Q proof/Phil Phil proof/Phil/Core/SystemsStageClosure.v
+          rocq c -Q proof/Phil Phil proof/Phil/Verification/VerificationArtifact.v
+          rocq c -Q proof/Phil Phil proof/Phil/Verification/FinalManifestStageReflection.v
+          rocq c -Q proof/Phil Phil proof/Phil/Verification/FinalManifestNativeCoordinateReflection.v
+      - name: Record exact proof identity
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p final-manifest-native-coordinate-reflection
+          cp proof/Phil/Verification/FinalManifestNativeCoordinateReflection.v final-manifest-native-coordinate-reflection/
+          cp proof/Phil/Verification/FinalManifestNativeCoordinateReflection.vo final-manifest-native-coordinate-reflection/
+          sha256sum final-manifest-native-coordinate-reflection/* > final-manifest-native-coordinate-reflection/proof.sha256
+          cat final-manifest-native-coordinate-reflection/proof.sha256
+      - uses: actions/upload-artifact@v4
+        with:
+          name: final-manifest-native-coordinate-reflection
+          path: final-manifest-native-coordinate-reflection
+          if-no-files-found: error

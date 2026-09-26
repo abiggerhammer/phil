@@ -1,295 +1,189 @@
 From Stdlib Require Import Bool.Bool.
-
 From Phil.Core Require Import SystemsStageClosure.
-From Phil.Verification Require Import
-  VerificationArtifact
-  FinalManifestStageReflection.
+From Phil.Verification Require Import VerificationArtifact FinalManifestStageReflection.
 
 (*
-  D-ARTIFACT-MANIFEST-REFLECTION-01 — native certified-release coordinate
-  separation.
-
-  The existing FinalManifestStageReflection proof deliberately requires an
-  exact representation premise for an independently authoritative native
-  manifest.  The independent package audit then identified an important
-  representation pressure point: the native release path contains several
-  distinct identity classes which must not be collapsed merely because the
-  proof model uses nat-valued abstract coordinates.
-
-  In particular, Phil.Verification.CertifiedRelease checks a manifest
-  implementation digest against the raw Systems artifact digest and separately
-  checks the lowering-ledger root.  The accepted StageClosure additionally
-  carries a normalized/common Systems revision, the common Phase-1 StageContract
-  revision, and the final closed-stage contract revision.  Those meanings are
-  distinct.
-
-  This model therefore keeps the native manifest and native stage coordinates
-  separate, then projects them into the older NativeFinalManifestAuthority only
-  after explicit binding and representation premises have been supplied.
-  Nothing here claims that a Haskell record is automatically an extraction of
-  this model; the concrete native-to-model adapter remains a correspondence
-  boundary.
+  D-ARTIFACT-MANIFEST-REFLECTION-01.
+  Keep the native release manifest's raw Systems digest separate from the
+  normalized Systems revision used by the semantic stage model, and keep the
+  common Phase-1 StageContract revision separate from the final closed-stage
+  revision.
 *)
 
-Record NativeCertifiedReleaseManifest : Type :=
-  mkNativeCertifiedReleaseManifest {
-    nativeReleaseManifestIdentity : nat;
-    nativeReleaseSourceAssuranceIdentity : nat;
-    nativeReleaseImplementationDigest : nat;
-    nativeReleaseLoweringLedgerRoot : nat;
-    nativeReleaseManifestClosed : bool;
-    nativeReleaseManifestScopeMatches : bool
-  }.
+Record NativeReleaseManifest : Type := mkNativeReleaseManifest {
+  releaseManifestIdentity : nat;
+  releaseSourceAssuranceIdentity : nat;
+  releaseImplementationDigest : nat;
+  releaseLoweringRoot : nat;
+  releaseManifestClosed : bool;
+  releaseManifestScopeMatches : bool
+}.
 
-Record NativeCertifiedReleaseStage : Type :=
-  mkNativeCertifiedReleaseStage {
-    nativeReleaseRawSystemsDigest : nat;
-    nativeReleaseStageLoweringLedgerRoot : nat;
-    nativeReleaseSubjectRevision : nat;
-    nativeReleaseInstanceRevision : nat;
-    nativeReleaseRealizationRevision : nat;
-    nativeReleaseNormalizedSystemsRevision : nat;
-    nativeReleaseCommonStageContractRevision : nat;
-    nativeReleaseClosedStageContractRevision : nat;
-    nativeReleaseVerifierProfileRevision : nat
-  }.
+Record NativeReleaseStage : Type := mkNativeReleaseStage {
+  releaseRawSystemsDigest : nat;
+  releaseStageLoweringRoot : nat;
+  releaseSubjectRevision : nat;
+  releaseInstanceRevision : nat;
+  releaseRealizationRevision : nat;
+  releaseNormalizedSystemsRevision : nat;
+  releaseCommonStageContractRevision : nat;
+  releaseClosedStageContractRevision : nat;
+  releaseVerifierProfileRevision : nat
+}.
 
-Definition NativeCertifiedReleaseManifestAccepted
-  (manifest : NativeCertifiedReleaseManifest) : Prop :=
-  nativeReleaseManifestIdentity manifest <> 0 /\
-  nativeReleaseManifestClosed manifest = true /\
-  nativeReleaseManifestScopeMatches manifest = true.
+Definition NativeReleaseManifestAccepted (m : NativeReleaseManifest) : Prop :=
+  releaseManifestIdentity m <> 0 /\
+  releaseManifestClosed m = true /\
+  releaseManifestScopeMatches m = true.
 
-Definition NativeCertifiedReleaseBinding
+Definition NativeReleaseBound
   (source : SourceAssuranceFacts)
-  (manifest : NativeCertifiedReleaseManifest)
-  (stage : NativeCertifiedReleaseStage) : Prop :=
-  nativeReleaseSourceAssuranceIdentity manifest =
-    sourceAssuranceIdentity source /\
-  nativeReleaseImplementationDigest manifest =
-    nativeReleaseRawSystemsDigest stage /\
-  nativeReleaseLoweringLedgerRoot manifest =
-    nativeReleaseStageLoweringLedgerRoot stage.
+  (m : NativeReleaseManifest)
+  (s : NativeReleaseStage) : Prop :=
+  releaseSourceAssuranceIdentity m = sourceAssuranceIdentity source /\
+  releaseImplementationDigest m = releaseRawSystemsDigest s /\
+  releaseLoweringRoot m = releaseStageLoweringRoot s.
 
-Definition NativeCertifiedReleaseStageRepresentsArtifactStage
-  (stage : NativeCertifiedReleaseStage)
+Definition NativeReleaseStageRepresents
+  (s : NativeReleaseStage)
   (artifact : ArtifactStageContext) : Prop :=
-  nativeReleaseSubjectRevision stage =
+  releaseSubjectRevision s =
     closureConcreteSubjectRevision (artifactStageIdentity artifact) /\
-  nativeReleaseInstanceRevision stage =
+  releaseInstanceRevision s =
     closureConcreteInstanceRevision (artifactStageIdentity artifact) /\
-  nativeReleaseRealizationRevision stage =
+  releaseRealizationRevision s =
     closureConcreteRealizationRevision (artifactStageIdentity artifact) /\
-  nativeReleaseNormalizedSystemsRevision stage =
+  releaseNormalizedSystemsRevision s =
     closureConcreteSystemsRevision (artifactStageIdentity artifact) /\
-  nativeReleaseCommonStageContractRevision stage =
+  releaseCommonStageContractRevision s =
     closureConcreteStageContractRevision (artifactStageIdentity artifact) /\
-  nativeReleaseClosedStageContractRevision stage =
+  releaseClosedStageContractRevision s =
     closureStoredFinalRevision (artifactStageIdentity artifact) /\
-  nativeReleaseVerifierProfileRevision stage =
+  releaseVerifierProfileRevision s =
     closureConcreteVerifierProfileRevision (artifactStageIdentity artifact).
 
-Definition FinalManifestRepresentsCertifiedRelease
-  (nativeManifest : NativeCertifiedReleaseManifest)
-  (nativeStage : NativeCertifiedReleaseStage)
-  (manifest : FinalManifestFacts) : Prop :=
-  finalManifestIdentity manifest =
-    nativeReleaseManifestIdentity nativeManifest /\
-  finalManifestClosed manifest =
-    nativeReleaseManifestClosed nativeManifest /\
-  finalManifestScopeMatches manifest =
-    nativeReleaseManifestScopeMatches nativeManifest /\
-  finalManifestSourceAssuranceIdentity manifest =
-    nativeReleaseSourceAssuranceIdentity nativeManifest /\
-  finalManifestSubjectRevision manifest =
-    nativeReleaseSubjectRevision nativeStage /\
-  finalManifestInstanceRevision manifest =
-    nativeReleaseInstanceRevision nativeStage /\
-  finalManifestRealizationRevision manifest =
-    nativeReleaseRealizationRevision nativeStage /\
-  finalManifestSystemsRevision manifest =
-    nativeReleaseNormalizedSystemsRevision nativeStage /\
-  finalManifestStageContractRevision manifest =
-    nativeReleaseCommonStageContractRevision nativeStage /\
-  finalManifestVerifierProfileRevision manifest =
-    nativeReleaseVerifierProfileRevision nativeStage.
+Definition FinalManifestRepresentsRelease
+  (m : NativeReleaseManifest)
+  (s : NativeReleaseStage)
+  (final : FinalManifestFacts) : Prop :=
+  finalManifestIdentity final = releaseManifestIdentity m /\
+  finalManifestClosed final = releaseManifestClosed m /\
+  finalManifestScopeMatches final = releaseManifestScopeMatches m /\
+  finalManifestSourceAssuranceIdentity final = releaseSourceAssuranceIdentity m /\
+  finalManifestSubjectRevision final = releaseSubjectRevision s /\
+  finalManifestInstanceRevision final = releaseInstanceRevision s /\
+  finalManifestRealizationRevision final = releaseRealizationRevision s /\
+  finalManifestSystemsRevision final = releaseNormalizedSystemsRevision s /\
+  finalManifestStageContractRevision final =
+    releaseCommonStageContractRevision s /\
+  finalManifestVerifierProfileRevision final = releaseVerifierProfileRevision s.
 
-Definition projectCertifiedReleaseManifestAuthority
-  (nativeManifest : NativeCertifiedReleaseManifest)
-  (nativeStage : NativeCertifiedReleaseStage) : NativeFinalManifestAuthority :=
+Definition projectReleaseAuthority
+  (m : NativeReleaseManifest) (s : NativeReleaseStage)
+  : NativeFinalManifestAuthority :=
   mkNativeFinalManifestAuthority
-    (nativeReleaseManifestIdentity nativeManifest)
-    (nativeReleaseSourceAssuranceIdentity nativeManifest)
-    (nativeReleaseSubjectRevision nativeStage)
-    (nativeReleaseInstanceRevision nativeStage)
-    (nativeReleaseRealizationRevision nativeStage)
-    (nativeReleaseNormalizedSystemsRevision nativeStage)
-    (nativeReleaseCommonStageContractRevision nativeStage)
-    (nativeReleaseVerifierProfileRevision nativeStage)
-    (nativeReleaseManifestClosed nativeManifest)
-    (nativeReleaseManifestScopeMatches nativeManifest).
+    (releaseManifestIdentity m)
+    (releaseSourceAssuranceIdentity m)
+    (releaseSubjectRevision s)
+    (releaseInstanceRevision s)
+    (releaseRealizationRevision s)
+    (releaseNormalizedSystemsRevision s)
+    (releaseCommonStageContractRevision s)
+    (releaseVerifierProfileRevision s)
+    (releaseManifestClosed m)
+    (releaseManifestScopeMatches m).
 
-Theorem accepted_certified_release_manifest_projects_to_native_authority :
-  forall nativeManifest nativeStage,
-    NativeCertifiedReleaseManifestAccepted nativeManifest ->
-    NativeFinalManifestAccepted
-      (projectCertifiedReleaseManifestAuthority nativeManifest nativeStage).
+Lemma accepted_projection :
+  forall m s,
+    NativeReleaseManifestAccepted m ->
+    NativeFinalManifestAccepted (projectReleaseAuthority m s).
 Proof.
-  intros nativeManifest nativeStage Haccepted.
-  destruct Haccepted as [Hidentity [Hclosed Hscope]].
-  unfold NativeFinalManifestAccepted.
-  simpl.
+  intros m s [Hid [Hclosed Hscope]].
+  unfold NativeFinalManifestAccepted, projectReleaseAuthority; simpl.
   repeat split; assumption.
 Qed.
 
-Theorem certified_release_binding_and_stage_representation_bind_projection :
-  forall source nativeManifest nativeStage artifact,
-    NativeCertifiedReleaseBinding source nativeManifest nativeStage ->
-    NativeCertifiedReleaseStageRepresentsArtifactStage nativeStage artifact ->
+Lemma bound_projection :
+  forall source m s artifact,
+    NativeReleaseBound source m s ->
+    NativeReleaseStageRepresents s artifact ->
     NativeFinalManifestBoundToSourceAndStage
-      source artifact
-      (projectCertifiedReleaseManifestAuthority nativeManifest nativeStage).
+      source artifact (projectReleaseAuthority m s).
 Proof.
-  intros source nativeManifest nativeStage artifact Hbinding Hstage.
-  destruct Hbinding as [Hsource [Himplementation Hlowering]].
+  intros source m s artifact [Hsource _] Hstage.
   destruct Hstage as
-    [Hsubject
-      [Hinstance
-        [Hrealization
-          [Hsystems [Hcommon [Hclosed Hprofile]]]]]].
-  unfold NativeFinalManifestBoundToSourceAndStage.
-  simpl.
+    [Hsub [Hinst [Hreal [Hsys [Hcommon [_ Hprofile]]]]]].
+  unfold NativeFinalManifestBoundToSourceAndStage, projectReleaseAuthority; simpl.
   repeat split; assumption.
 Qed.
 
-Theorem certified_release_manifest_representation_projects_exactly :
-  forall nativeManifest nativeStage manifest,
-    FinalManifestRepresentsCertifiedRelease
-      nativeManifest nativeStage manifest ->
-    FinalManifestRepresentsNative
-      (projectCertifiedReleaseManifestAuthority nativeManifest nativeStage)
-      manifest.
+Lemma represented_projection :
+  forall m s final,
+    FinalManifestRepresentsRelease m s final ->
+    FinalManifestRepresentsNative (projectReleaseAuthority m s) final.
 Proof.
-  intros nativeManifest nativeStage manifest Hrepresentation.
-  unfold FinalManifestRepresentsCertifiedRelease in Hrepresentation.
-  unfold FinalManifestRepresentsNative.
-  simpl.
-  exact Hrepresentation.
+  intros m s final H.
+  unfold FinalManifestRepresentsRelease in H.
+  unfold FinalManifestRepresentsNative, projectReleaseAuthority; simpl.
+  exact H.
 Qed.
 
-Theorem exact_certified_release_coordinate_reflection_establishes_manifest_match :
-  forall source artifact nativeManifest nativeStage manifest,
-    NativeCertifiedReleaseManifestAccepted nativeManifest ->
-    NativeCertifiedReleaseBinding source nativeManifest nativeStage ->
-    NativeCertifiedReleaseStageRepresentsArtifactStage nativeStage artifact ->
-    FinalManifestRepresentsCertifiedRelease
-      nativeManifest nativeStage manifest ->
-    FinalManifestMatches source artifact manifest.
+Theorem exact_native_release_coordinates_establish_manifest_match :
+  forall source artifact m s final,
+    NativeReleaseManifestAccepted m ->
+    NativeReleaseBound source m s ->
+    NativeReleaseStageRepresents s artifact ->
+    FinalManifestRepresentsRelease m s final ->
+    FinalManifestMatches source artifact final.
 Proof.
-  intros source artifact nativeManifest nativeStage manifest
-    Haccepted Hbinding Hstage Hrepresentation.
+  intros source artifact m s final Haccepted Hbound Hstage Hrep.
   eapply exact_native_manifest_reflection_establishes_final_manifest_matches
-    with
-      (native :=
-        projectCertifiedReleaseManifestAuthority nativeManifest nativeStage).
-  - eapply accepted_certified_release_manifest_projects_to_native_authority.
-    exact Haccepted.
-  - eapply certified_release_binding_and_stage_representation_bind_projection.
-    + exact Hbinding.
-    + exact Hstage.
-  - eapply certified_release_manifest_representation_projects_exactly.
-    exact Hrepresentation.
+    with (native := projectReleaseAuthority m s).
+  - now apply accepted_projection.
+  - now apply bound_projection.
+  - now apply represented_projection.
 Qed.
 
-Theorem exact_certified_release_coordinate_reflection_establishes_artifact :
-  forall source artifact nativeManifest nativeStage manifest,
-    SourceAssuranceValid source ->
-    ArtifactStagePreserved artifact ->
-    NativeCertifiedReleaseManifestAccepted nativeManifest ->
-    NativeCertifiedReleaseBinding source nativeManifest nativeStage ->
-    NativeCertifiedReleaseStageRepresentsArtifactStage nativeStage artifact ->
-    FinalManifestRepresentsCertifiedRelease
-      nativeManifest nativeStage manifest ->
-    FinalArtifactCertified source artifact manifest.
+Theorem raw_digest_cannot_replace_normalized_systems_revision :
+  forall m s final,
+    releaseRawSystemsDigest s <> releaseNormalizedSystemsRevision s ->
+    finalManifestSystemsRevision final = releaseRawSystemsDigest s ->
+    ~ FinalManifestRepresentsRelease m s final.
 Proof.
-  intros source artifact nativeManifest nativeStage manifest
-    Hsource Hartifact Haccepted Hbinding Hstage Hrepresentation.
-  apply exact_composition_certifies_artifact.
-  - exact Hsource.
-  - exact Hartifact.
-  - eapply exact_certified_release_coordinate_reflection_establishes_manifest_match.
-    + exact Haccepted.
-    + exact Hbinding.
-    + exact Hstage.
-    + exact Hrepresentation.
+  intros m s final Hneq Hraw Hrep.
+  destruct Hrep as [_ [_ [_ [_ [_ [_ [_ [Hnorm _]]]]]]]].
+  rewrite Hraw in Hnorm.
+  now apply Hneq.
 Qed.
 
-Theorem manifest_implementation_digest_drift_breaks_release_binding :
-  forall source nativeManifest nativeStage,
-    nativeReleaseImplementationDigest nativeManifest <>
-      nativeReleaseRawSystemsDigest nativeStage ->
-    ~ NativeCertifiedReleaseBinding source nativeManifest nativeStage.
+Theorem closed_stage_cannot_replace_common_stage_contract :
+  forall m s final,
+    releaseClosedStageContractRevision s <>
+      releaseCommonStageContractRevision s ->
+    finalManifestStageContractRevision final =
+      releaseClosedStageContractRevision s ->
+    ~ FinalManifestRepresentsRelease m s final.
 Proof.
-  intros source nativeManifest nativeStage Hmismatch Hbinding.
-  destruct Hbinding as [_ [Hdigest _]].
-  apply Hmismatch.
-  exact Hdigest.
-Qed.
-
-Theorem manifest_lowering_root_drift_breaks_release_binding :
-  forall source nativeManifest nativeStage,
-    nativeReleaseLoweringLedgerRoot nativeManifest <>
-      nativeReleaseStageLoweringLedgerRoot nativeStage ->
-    ~ NativeCertifiedReleaseBinding source nativeManifest nativeStage.
-Proof.
-  intros source nativeManifest nativeStage Hmismatch Hbinding.
-  destruct Hbinding as [_ [_ Hroot]].
-  apply Hmismatch.
-  exact Hroot.
-Qed.
-
-Theorem raw_systems_digest_cannot_replace_normalized_systems_revision :
-  forall nativeManifest nativeStage manifest,
-    nativeReleaseRawSystemsDigest nativeStage <>
-      nativeReleaseNormalizedSystemsRevision nativeStage ->
-    finalManifestSystemsRevision manifest =
-      nativeReleaseRawSystemsDigest nativeStage ->
-    ~ FinalManifestRepresentsCertifiedRelease
-        nativeManifest nativeStage manifest.
-Proof.
-  intros nativeManifest nativeStage manifest Hdistinct Hraw Hrepresentation.
-  destruct Hrepresentation as
-    [_ [_ [_ [_ [_ [_ [_ [Hnormalized _]]]]]]]].
-  rewrite Hraw in Hnormalized.
-  apply Hdistinct.
-  exact Hnormalized.
-Qed.
-
-Theorem closed_stage_revision_cannot_replace_common_stage_contract :
-  forall nativeManifest nativeStage manifest,
-    nativeReleaseClosedStageContractRevision nativeStage <>
-      nativeReleaseCommonStageContractRevision nativeStage ->
-    finalManifestStageContractRevision manifest =
-      nativeReleaseClosedStageContractRevision nativeStage ->
-    ~ FinalManifestRepresentsCertifiedRelease
-        nativeManifest nativeStage manifest.
-Proof.
-  intros nativeManifest nativeStage manifest Hdistinct Hclosed Hrepresentation.
-  destruct Hrepresentation as
-    [_ [_ [_ [_ [_ [_ [_ [_ [Hcommon _]]]]]]]]].
+  intros m s final Hneq Hclosed Hrep.
+  destruct Hrep as [_ [_ [_ [_ [_ [_ [_ [_ [Hcommon _]]]]]]]]].
   rewrite Hclosed in Hcommon.
-  apply Hdistinct.
-  exact Hcommon.
+  now apply Hneq.
 Qed.
 
-Theorem represented_closed_stage_revision_targets_stored_final_identity :
-  forall nativeStage artifact,
-    NativeCertifiedReleaseStageRepresentsArtifactStage nativeStage artifact ->
-    nativeReleaseClosedStageContractRevision nativeStage =
-      closureStoredFinalRevision (artifactStageIdentity artifact).
+Theorem release_digest_drift_breaks_binding :
+  forall source m s,
+    releaseImplementationDigest m <> releaseRawSystemsDigest s ->
+    ~ NativeReleaseBound source m s.
 Proof.
-  intros nativeStage artifact Hrepresentation.
-  destruct Hrepresentation as
-    [_ [_ [_ [_ [_ [Hclosed _]]]]]].
-  exact Hclosed.
+  intros source m s Hneq [_ [Heq _]].
+  now apply Hneq.
+Qed.
+
+Theorem release_lowering_root_drift_breaks_binding :
+  forall source m s,
+    releaseLoweringRoot m <> releaseStageLoweringRoot s ->
+    ~ NativeReleaseBound source m s.
+Proof.
+  intros source m s Hneq [_ [_ Heq]].
+  now apply Hneq.
 Qed.
