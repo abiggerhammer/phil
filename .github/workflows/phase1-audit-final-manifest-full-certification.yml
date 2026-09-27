@@ -39,7 +39,10 @@ jobs:
           rocq c -Q proof/Phil Phil proof/Phil/Verification/FinalManifestFixedAdapterCertification.v
 
           cat > /tmp/FinalManifestFixedAdapterCertificationAssumptions.v <<'EOF'
-          From Phil.Verification Require Import FinalManifestFixedAdapterCertification.
+          From Phil.Verification Require Import
+            VerificationArtifact
+            FinalManifestFixedAdapter
+            FinalManifestFixedAdapterCertification.
           Print Assumptions exact_composition_certifies_artifact.
           Print Assumptions fixed_adapter_establishes_final_manifest_match.
           Print Assumptions fixed_adapter_full_certification_preserves_predecessors.
