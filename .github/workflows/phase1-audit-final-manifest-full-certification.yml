@@ -1,0 +1,68 @@
+name: Phase 1 Audit Final Manifest Full Certification Composition
+
+on:
+  pull_request:
+    paths:
+      - 'proof/Phil/Verification/FinalManifestFixedAdapterCertification.v'
+      - '.github/workflows/phase1-audit-final-manifest-full-certification.yml'
+  push:
+    branches: [main]
+    paths:
+      - 'proof/Phil/Verification/FinalManifestFixedAdapterCertification.v'
+      - '.github/workflows/phase1-audit-final-manifest-full-certification.yml'
+
+permissions:
+  contents: read
+
+jobs:
+  final-manifest-full-certification:
+    runs-on: ubuntu-latest
+    container:
+      image: rocq/rocq-prover:9.2.0
+      options: --user root
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Compile full-certification composition proof and dependency closure
+        shell: bash
+        run: |
+          set -euo pipefail
+          export PATH="/home/rocq/.opam/${COMPILER}/bin:$PATH"
+
+          rocq c -Q proof/Phil Phil proof/Phil/Systems/FactDisposition.v
+          rocq c -Q proof/Phil Phil proof/Phil/Assurance/ValidityScope.v
+          rocq c -Q proof/Phil Phil proof/Phil/Core/SystemsStageClosure.v
+          rocq c -Q proof/Phil Phil proof/Phil/Verification/VerificationArtifact.v
+          rocq c -Q proof/Phil Phil proof/Phil/Verification/FinalManifestStageReflection.v
+          rocq c -Q proof/Phil Phil proof/Phil/Verification/FinalManifestNativeCoordinateReflection.v
+          rocq c -Q proof/Phil Phil proof/Phil/Verification/FinalManifestFixedAdapter.v
+          rocq c -Q proof/Phil Phil proof/Phil/Verification/FinalManifestFixedAdapterCertification.v
+
+          cat > /tmp/FinalManifestFixedAdapterCertificationAssumptions.v <<'EOF'
+          From Phil.Verification Require Import
+            VerificationArtifact
+            FinalManifestFixedAdapter
+            FinalManifestFixedAdapterCertification.
+          Print Assumptions exact_composition_certifies_artifact.
+          Print Assumptions fixed_adapter_establishes_final_manifest_match.
+          Print Assumptions fixed_adapter_full_certification_preserves_predecessors.
+          EOF
+          rocq c -Q proof/Phil Phil /tmp/FinalManifestFixedAdapterCertificationAssumptions.v 2>&1 | tee final-manifest-full-certification-assumptions.log
+
+      - name: Record exact proof and object identities
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p final-manifest-full-certification
+          cp proof/Phil/Verification/FinalManifestFixedAdapterCertification.v final-manifest-full-certification/
+          cp proof/Phil/Verification/FinalManifestFixedAdapterCertification.vo final-manifest-full-certification/
+          cp final-manifest-full-certification-assumptions.log final-manifest-full-certification/
+
+          sha256sum             proof/Phil/Verification/VerificationArtifact.v             proof/Phil/Verification/VerificationArtifact.vo             proof/Phil/Verification/FinalManifestFixedAdapter.v             proof/Phil/Verification/FinalManifestFixedAdapter.vo             proof/Phil/Verification/FinalManifestFixedAdapterCertification.v             proof/Phil/Verification/FinalManifestFixedAdapterCertification.vo             final-manifest-full-certification-assumptions.log             > final-manifest-full-certification/identities.sha256
+          cat final-manifest-full-certification/identities.sha256
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: final-manifest-full-certification
+          path: final-manifest-full-certification
+          if-no-files-found: error
