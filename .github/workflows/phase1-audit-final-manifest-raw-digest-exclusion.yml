@@ -1,0 +1,63 @@
+name: Phase 1 Audit Final Manifest Raw Digest Exclusion
+
+on:
+  pull_request:
+    paths:
+      - 'proof/Phil/Verification/FinalManifestRawDigestExclusion.v'
+      - '.github/workflows/phase1-audit-final-manifest-raw-digest-exclusion.yml'
+  push:
+    branches: [main]
+    paths:
+      - 'proof/Phil/Verification/FinalManifestRawDigestExclusion.v'
+      - '.github/workflows/phase1-audit-final-manifest-raw-digest-exclusion.yml'
+
+permissions:
+  contents: read
+
+jobs:
+  final-manifest-raw-digest-exclusion:
+    runs-on: ubuntu-latest
+    container:
+      image: rocq/rocq-prover:9.2.0
+      options: --user root
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Compile raw-digest exclusion proof and dependency closure
+        shell: bash
+        run: |
+          set -euo pipefail
+          export PATH="/home/rocq/.opam/${COMPILER}/bin:$PATH"
+
+          rocq c -Q proof/Phil Phil proof/Phil/Systems/FactDisposition.v
+          rocq c -Q proof/Phil Phil proof/Phil/Assurance/ValidityScope.v
+          rocq c -Q proof/Phil Phil proof/Phil/Core/SystemsStageClosure.v
+          rocq c -Q proof/Phil Phil proof/Phil/Verification/VerificationArtifact.v
+          rocq c -Q proof/Phil Phil proof/Phil/Verification/FinalManifestStageReflection.v
+          rocq c -Q proof/Phil Phil proof/Phil/Verification/FinalManifestNativeCoordinateReflection.v
+          rocq c -Q proof/Phil Phil proof/Phil/Verification/FinalManifestFixedAdapter.v
+          rocq c -Q proof/Phil Phil proof/Phil/Verification/FinalManifestRawDigestExclusion.v
+
+          cat > /tmp/FinalManifestRawDigestExclusionAssumptions.v <<'EOF'
+          From Phil.Verification Require Import FinalManifestRawDigestExclusion.
+          Print Assumptions unequal_raw_systems_digest_excludes_fixed_adapter.
+          EOF
+          rocq c -Q proof/Phil Phil /tmp/FinalManifestRawDigestExclusionAssumptions.v 2>&1 | tee final-manifest-raw-digest-exclusion-assumptions.log
+
+      - name: Record exact proof and object identities
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p final-manifest-raw-digest-exclusion
+          cp proof/Phil/Verification/FinalManifestRawDigestExclusion.v final-manifest-raw-digest-exclusion/
+          cp proof/Phil/Verification/FinalManifestRawDigestExclusion.vo final-manifest-raw-digest-exclusion/
+          cp final-manifest-raw-digest-exclusion-assumptions.log final-manifest-raw-digest-exclusion/
+
+          sha256sum             proof/Phil/Verification/FinalManifestFixedAdapter.v             proof/Phil/Verification/FinalManifestFixedAdapter.vo             proof/Phil/Verification/FinalManifestRawDigestExclusion.v             proof/Phil/Verification/FinalManifestRawDigestExclusion.vo             final-manifest-raw-digest-exclusion-assumptions.log             > final-manifest-raw-digest-exclusion/identities.sha256
+          cat final-manifest-raw-digest-exclusion/identities.sha256
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: final-manifest-raw-digest-exclusion
+          path: final-manifest-raw-digest-exclusion
+          if-no-files-found: error
