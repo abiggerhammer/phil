@@ -1,0 +1,78 @@
+name: Independent payload and inventory inputs
+
+on:
+  push:
+    branches: [audit-callable-binding-replay-20260926]
+    paths: [.github/workflows/phase1-audit-payload-inventory.yml]
+
+permissions:
+  contents: read
+
+jobs:
+  preserve-inputs:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    steps:
+      - name: Checkout audit driver
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+          persist-credentials: false
+      - name: Export exact immutable inputs without executing repository code
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 - <<'PY'
+          import hashlib, json, pathlib, platform, subprocess, sys
+          out = pathlib.Path('audit-payload-inputs')
+          out.mkdir()
+          pins = {
+              'historical': 'a9f2c745686d8ae1b923e21045554f4864956e76',
+              'review': '0d96a19950b70a3ca0897f4467f0579172c49991',
+          }
+          def git(*args):
+              return subprocess.check_output(['git', *args])
+          def blob(data):
+              return hashlib.sha1(b'blob ' + str(len(data)).encode() + b'\0' + data).hexdigest()
+          records = []
+          for label, pin in pins.items():
+              assert git('rev-parse', pin + '^{commit}').decode().strip() == pin
+              with (out / (label + '-repository.tar.gz')).open('wb') as dst:
+                  subprocess.run(['git', 'archive', '--format=tar.gz', pin], stdout=dst, check=True)
+              tree = git('ls-tree', '-r', '--full-tree', pin)
+              (out / (label + '-git-tree.txt')).write_bytes(tree)
+              for witness in ('upload', 'steve'):
+                  path = 'handoff/phase1/runtime/' + witness + '-stage-contract-v1.tsv'
+                  data = git('show', pin + ':' + path)
+                  expected_blob = git('rev-parse', pin + ':' + path).decode().strip()
+                  assert blob(data) == expected_blob
+                  filename = label + '-' + witness + '-stage-contract-v1.tsv'
+                  (out / filename).write_bytes(data)
+                  records.append({'pin': pin, 'path': path, 'file': filename, 'bytes': len(data),
+                                  'git_blob': expected_blob, 'sha256': hashlib.sha256(data).hexdigest()})
+          driver = pathlib.Path('.github/workflows/phase1-audit-payload-inventory.yml').read_bytes()
+          (out / 'export-workflow.yml').write_bytes(driver)
+          manifest = {
+              'event': 'PHIL-AUDIT-20260927-PAYLOAD-INVENTORY-INPUTS',
+              'driver_commit': git('rev-parse', 'HEAD').decode().strip(),
+              'pins': pins, 'python': sys.version, 'platform': platform.platform(),
+              'payloads': records,
+              'claims': ['Exact repository-object export only; no Phil, Haskell, Rocq or native execution.',
+                         'Neither pin is selected as the final release-review candidate.'],
+          }
+          (out / 'input-provenance.json').write_text(json.dumps(manifest, indent=2) + '\n')
+          seal = []
+          for path in sorted(out.iterdir()):
+              data = path.read_bytes()
+              seal.append({'file': path.name, 'bytes': len(data), 'sha256': hashlib.sha256(data).hexdigest()})
+          (out / 'payload-seal.json').write_text(json.dumps(seal, indent=2) + '\n')
+          print(json.dumps(manifest, indent=2))
+          print('PASS: exact pinned inputs exported; no repository code executed')
+          PY
+      - name: Preserve original exporter outputs
+        uses: actions/upload-artifact@v4
+        with:
+          name: phil-independent-payload-inventory-inputs
+          path: audit-payload-inputs/
+          if-no-files-found: error
+          retention-days: 30
