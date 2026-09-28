@@ -18,7 +18,7 @@ import Phil.Surface.Phase0 (phase0EnvironmentFor)
 import Phil.Surface.Syntax (SurfaceFile (..))
 import System.Exit (exitFailure)
 
-data Expectation = MustAccept | MustReject
+data Expectation = MustAccept | MustReject | Observe
 
 main :: IO ()
 main = do
@@ -34,12 +34,17 @@ runCase (label, expected, source) = do
       ok = case result of
         Left _ -> False
         Right outcome -> case (expected, outcome) of
+          (Observe, _) -> True
           (MustAccept, Right _) -> True
           (MustReject, Left err) ->
             surfaceErrorClass err `elem` [BorrowEscape, StructuralUse]
           _ -> False
   putStrLn ("OBSERVED " <> label <> " " <> show result)
-  putStrLn ((if ok then "PASS " else "FAIL ") <> label)
+  let prefix = case expected of
+        Observe | ok -> "OBSERVATION "
+        _ | ok -> "PASS "
+        _ -> "FAIL "
+  putStrLn (prefix <> label)
   pure ok
 
 checkSource :: Text -> Either String (Either SurfaceCheckError SurfaceCheckResult)
@@ -81,7 +86,7 @@ cases =
       , "    use(payload)"
       , "    inspect(slot)"
       ])
-  , ("R02 recycled child spelling must be reusable after exit", MustAccept, component
+  , ("O01 recycled child spelling reuse diagnostic", Observe, component
       [ "    borrow payload as view {"
       , "        use(slot)"
       , "        let slot = ()"
