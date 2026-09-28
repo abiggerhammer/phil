@@ -53,10 +53,10 @@ checkSource source = do
     phase0EnvironmentFor "examples/rejected/16-escape-shared-loan.phil"
   parsed <- either (Left . show) Right $
     parseSurfaceFile "independent-borrow-rebinding.phil" source
-  component <- case parsed of
+  parsedComponent <- case parsed of
     SurfaceFile [value] -> Right value
     SurfaceFile values -> Left ("unexpected component count: " <> show (length values))
-  pure (checkSurfaceComponent environment component)
+  pure (checkSurfaceComponent environment parsedComponent)
 
 cases :: [(String, Expectation, Text)]
 cases =
