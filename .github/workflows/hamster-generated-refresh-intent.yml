@@ -25,7 +25,6 @@ jobs:
         shell: bash
         env:
           REF_NAME: ${{ github.ref_name }}
-          INTENT_SHA: ${{ github.sha }}
         run: |
           set -euo pipefail
 
@@ -55,11 +54,11 @@ jobs:
               ;;
           esac
 
-          if [ "$INTENT_SHA" != "$expected" ]; then
-            echo "Intent branch must point exactly at requested PR head." >&2
-            echo "intent=$INTENT_SHA expected=$expected" >&2
-            exit 1
-          fi
+          # The request branch exists only to carry this workflow and the
+          # authorization tuple encoded in its name. It is expected to be
+          # created from current main, not from the target PR head. The target
+          # head is independently revalidated against GitHub below before any
+          # checkout or mutation.
 
           {
             echo "lane=$lane"
