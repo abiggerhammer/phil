@@ -1,0 +1,293 @@
+name: Hamster Generated Refresh Intent
+
+on:
+  push:
+    branches:
+      - 'hamster/refresh/**'
+
+permissions:
+  contents: write
+  pull-requests: read
+  actions: read
+
+concurrency:
+  group: hamster-generated-refresh-${{ github.ref }}
+  cancel-in-progress: false
+
+jobs:
+  refresh:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 30
+
+    steps:
+      - name: Parse refresh intent
+        id: intent
+        shell: bash
+        env:
+          REF_NAME: ${{ github.ref_name }}
+        run: |
+          set -euo pipefail
+
+          if [[ "$REF_NAME" =~ ^hamster/refresh/([^/]+)/pr-([0-9]+)/([0-9a-f]{40})/([^/]+)$ ]]; then
+            lane="${BASH_REMATCH[1]}"
+            pr="${BASH_REMATCH[2]}"
+            expected="${BASH_REMATCH[3]}"
+            family="${BASH_REMATCH[4]}"
+          else
+            echo "Malformed generated-refresh intent branch: $REF_NAME" >&2
+            exit 1
+          fi
+
+          case "$lane" in
+            impl-audit) ;;
+            *)
+              echo "Unsupported generated-refresh lane: $lane" >&2
+              exit 1
+              ;;
+          esac
+
+          case "$family" in
+            phase1-int007) ;;
+            *)
+              echo "Unsupported generated-refresh family: $family" >&2
+              exit 1
+              ;;
+          esac
+
+          # The request branch exists only to carry this workflow and the
+          # authorization tuple encoded in its name. It is expected to be
+          # created from current main, not from the target PR head. The target
+          # head is independently revalidated against GitHub below before any
+          # checkout or mutation.
+
+          {
+            echo "lane=$lane"
+            echo "pr=$pr"
+            echo "expected=$expected"
+            echo "family=$family"
+          } >> "$GITHUB_OUTPUT"
+
+      - name: Verify exact PR ownership
+        id: pr
+        shell: bash
+        env:
+          GH_TOKEN: ${{ github.token }}
+          GH_REPO: ${{ github.repository }}
+          LANE: ${{ steps.intent.outputs.lane }}
+          PR_NUMBER: ${{ steps.intent.outputs.pr }}
+          EXPECTED_HEAD: ${{ steps.intent.outputs.expected }}
+        run: |
+          set -euo pipefail
+
+          pr_json="$(gh api "repos/$GH_REPO/pulls/$PR_NUMBER")"
+          state="$(jq -r '.state' <<<"$pr_json")"
+          draft="$(jq -r '.draft' <<<"$pr_json")"
+          head_sha="$(jq -r '.head.sha' <<<"$pr_json")"
+          head_ref="$(jq -r '.head.ref' <<<"$pr_json")"
+
+          test "$state" = "open"
+          test "$draft" = "false"
+          test "$head_sha" = "$EXPECTED_HEAD"
+
+          case "$head_ref" in
+            "hamster/$LANE/"*) ;;
+            *)
+              echo "PR head $head_ref is not owned by lane $LANE" >&2
+              exit 1
+              ;;
+          esac
+
+          labels="$(gh api "repos/$GH_REPO/issues/$PR_NUMBER" --jq '.labels[].name')"
+          if ! grep -Fxq "lane: $LANE" <<<"$labels"; then
+            echo "PR #$PR_NUMBER lacks native lane label lane: $LANE" >&2
+            exit 1
+          fi
+
+          {
+            echo "head_ref=$head_ref"
+            echo "head_sha=$head_sha"
+          } >> "$GITHUB_OUTPUT"
+
+      - name: Check out exact authorized head
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ steps.intent.outputs.expected }}
+          fetch-depth: 0
+          token: ${{ secrets.HAMSTER_PR_TOKEN }}
+
+      - name: Set up Haskell
+        uses: haskell-actions/setup@v2
+        with:
+          ghc-version: '9.6.7'
+          cabal-version: 'latest'
+
+      - name: Build Phase-1 generated-artifact substrate
+        shell: bash
+        run: |
+          set -euo pipefail
+          cabal build lib:phil-core --ghc-options=-Werror
+
+      - name: Refresh exact VerificationBundle summaries
+        shell: bash
+        run: |
+          set -euo pipefail
+
+          set +e
+          cabal exec -- runghc -isrc -itest -Wall -Werror             test/Phase1INT007VerificationBundleMain.hs             > /tmp/verification-summary.log 2>&1
+          first_status=$?
+          set -e
+
+          cat /tmp/verification-summary.log
+
+          python3 - <<'PY'
+          from pathlib import Path
+
+          log = Path("/tmp/verification-summary.log").read_text(encoding="utf-8")
+          targets = {
+              "Upload": Path("handoff/phase1/witnesses/upload-verification-bundle-v1.tsv"),
+              "Steve": Path("handoff/phase1/witnesses/steve-verification-bundle-v1.tsv"),
+          }
+
+          for label, path in targets.items():
+              begin = f"ACTUAL {label} VERIFICATION SUMMARY BEGIN\n"
+              end = f"ACTUAL {label} VERIFICATION SUMMARY END"
+              if begin not in log:
+                  continue
+              payload = log.split(begin, 1)[1].split(end, 1)[0]
+              if not payload.endswith("\n"):
+                  payload += "\n"
+              path.write_text(payload, encoding="utf-8")
+              print(f"refreshed {path}")
+          PY
+
+          # After applying any exact emitted summaries, this test must pass.
+          cabal exec -- runghc -isrc -itest -Wall -Werror             test/Phase1INT007VerificationBundleMain.hs
+
+      - name: Refresh exact assurance-closure witnesses
+        shell: bash
+        run: |
+          set -euo pipefail
+
+          rm -rf dist/int007-assurance-closure-discovery
+          mkdir -p dist/int007-assurance-closure-discovery
+
+          set +e
+          cabal exec -- runghc -isrc -itest -Wall -Werror             test/Phase1INT007AssuranceClosureMain.hs
+          first_status=$?
+          set -e
+
+          for name in             upload-assurance-manifest-v1.tsv             upload-residual-tcb-v1.tsv             steve-assurance-manifest-v1.tsv             steve-residual-tcb-v1.tsv
+          do
+            generated="dist/int007-assurance-closure-discovery/$name"
+            checked_in="handoff/phase1/witnesses/$name"
+            if [ -f "$generated" ]; then
+              cp "$generated" "$checked_in"
+              echo "refreshed $checked_in"
+            fi
+          done
+
+          # After applying any exact emitted witnesses, closure must replay exactly.
+          cabal exec -- runghc -isrc -itest -Wall -Werror             test/Phase1INT007AssuranceClosureMain.hs
+
+      - name: Refresh exact top-level handoff manifest
+        shell: bash
+        run: |
+          set -euo pipefail
+
+          python3 scripts/build_phase1_conformance_freeze.py             --output /tmp/phase1-conformance-freeze-v1.tsv
+
+          if ! cmp -s             handoff/phase1/conformance-freeze-v1.tsv             /tmp/phase1-conformance-freeze-v1.tsv
+          then
+            echo "Conformance freeze would change; this intent is not authorized to update it." >&2
+            diff -u               handoff/phase1/conformance-freeze-v1.tsv               /tmp/phase1-conformance-freeze-v1.tsv || true
+            exit 1
+          fi
+
+          python3 scripts/build_phase1_int007_complete_manifest.py             --conformance-path /tmp/phase1-conformance-freeze-v1.tsv             --output /tmp/phase1-manifest-v1.tsv
+
+          cp /tmp/phase1-manifest-v1.tsv handoff/phase1/manifest-v1.tsv
+
+      - name: Enforce generated-file whitelist
+        id: diff
+        shell: bash
+        run: |
+          set -euo pipefail
+
+          allowed='^(handoff/phase1/manifest-v1\.tsv|handoff/phase1/witnesses/(upload|steve)-(verification-bundle|assurance-manifest|residual-tcb)-v1\.tsv)$'
+
+          mapfile -t changed < <(git diff --name-only)
+
+          for path in "${changed[@]}"; do
+            if ! [[ "$path" =~ $allowed ]]; then
+              echo "Generated refresh attempted unauthorized path: $path" >&2
+              exit 1
+            fi
+          done
+
+          git diff --check
+
+          if [ "${#changed[@]}" -eq 0 ]; then
+            echo "changed=false" >> "$GITHUB_OUTPUT"
+            echo "No generated drift remains."
+          else
+            echo "changed=true" >> "$GITHUB_OUTPUT"
+            printf 'Generated refresh will update:\n'
+            printf '  %s\n' "${changed[@]}"
+          fi
+
+      - name: Recheck exact PR head before commit
+        if: steps.diff.outputs.changed == 'true'
+        shell: bash
+        env:
+          GH_TOKEN: ${{ github.token }}
+          GH_REPO: ${{ github.repository }}
+          PR_NUMBER: ${{ steps.intent.outputs.pr }}
+          EXPECTED_HEAD: ${{ steps.intent.outputs.expected }}
+        run: |
+          set -euo pipefail
+          live="$(gh api "repos/$GH_REPO/pulls/$PR_NUMBER" --jq '.head.sha')"
+          if [ "$live" != "$EXPECTED_HEAD" ]; then
+            echo "PR head moved during generated refresh: live=$live expected=$EXPECTED_HEAD" >&2
+            exit 1
+          fi
+
+      - name: Commit exact generated bytes to PR branch
+        if: steps.diff.outputs.changed == 'true'
+        shell: bash
+        env:
+          HEAD_REF: ${{ steps.pr.outputs.head_ref }}
+          EXPECTED_HEAD: ${{ steps.intent.outputs.expected }}
+        run: |
+          set -euo pipefail
+
+          git config user.name "Mecha Hamster Ball"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+
+          git add             handoff/phase1/manifest-v1.tsv             handoff/phase1/witnesses/upload-verification-bundle-v1.tsv             handoff/phase1/witnesses/steve-verification-bundle-v1.tsv             handoff/phase1/witnesses/upload-assurance-manifest-v1.tsv             handoff/phase1/witnesses/steve-assurance-manifest-v1.tsv             handoff/phase1/witnesses/upload-residual-tcb-v1.tsv             handoff/phase1/witnesses/steve-residual-tcb-v1.tsv
+
+          git commit -m "Refresh exact Phase-1 generated handoff artifacts"
+
+          # The commit must be a fast-forward child of the exact authorized PR head.
+          test "$(git rev-parse HEAD^)" = "$EXPECTED_HEAD"
+
+          git push origin "HEAD:refs/heads/$HEAD_REF"
+
+      - name: Summary
+        shell: bash
+        env:
+          LANE: ${{ steps.intent.outputs.lane }}
+          PR_NUMBER: ${{ steps.intent.outputs.pr }}
+          EXPECTED_HEAD: ${{ steps.intent.outputs.expected }}
+          FAMILY: ${{ steps.intent.outputs.family }}
+          CHANGED: ${{ steps.diff.outputs.changed }}
+        run: |
+          {
+            echo "### Hamster generated-refresh intent"
+            echo
+            echo "- lane: $LANE"
+            echo "- PR: #$PR_NUMBER"
+            echo "- exact authorized head: $EXPECTED_HEAD"
+            echo "- family: $FAMILY"
+            echo "- repository mutation needed: $CHANGED"
+            echo "- mutation source: deterministic repository generators only"
+          } >> "$GITHUB_STEP_SUMMARY"
