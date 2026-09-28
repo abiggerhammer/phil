@@ -47,7 +47,7 @@ jobs:
           assert not status
           (out/'source-before.txt').write_bytes(status)
           driver='audit/ownership-loan-review/BorrowRebinding.hs'
-          assert git('audit-driver','rev-parse','HEAD:'+driver).decode().strip()=='608020443027ba4423db9df8be35ebe08146f7da'
+          assert git('audit-driver','rev-parse','HEAD:'+driver).decode().strip()=='c339e1da8b7ccfae76cff718e42152ee55b92189'
           selected=['src/Phil/Core/Context.hs','src/Phil/Core/Checker.hs','src/Phil/Core/Value.hs',
                     'src/Phil/Surface/Check.hs','src/Phil/Surface/Check/Engine.hs',
                     'src/Phil/Surface/Check/Support.hs','src/Phil/Surface/Check/Preflight.hs',
@@ -65,7 +65,7 @@ jobs:
           (out/'workflow.yml').write_bytes(pathlib.Path('audit-driver/.github/workflows/phase1-audit-borrow-rebinding-independent.yml').read_bytes())
           (out/'provenance.json').write_text(json.dumps({'production':pin,
               'driver_commit':git('audit-driver','rev-parse','HEAD').decode().strip(),
-              'driver_blob':'608020443027ba4423db9df8be35ebe08146f7da','sources':records,
+              'driver_blob':'c339e1da8b7ccfae76cff718e42152ee55b92189','sources':records,
               'scope':'Independent source-checker regression for existing BORROW-LOCAL; no production edits or native execution.'},indent=2)+'\n')
           PY
       - name: Build pinned production library
@@ -89,6 +89,7 @@ jobs:
         working-directory: subject
         shell: bash
         run: |
+          set +e
           set -uo pipefail
           ../evidence/borrow-rebinding > ../evidence/results.stdout 2> ../evidence/results.stderr
           result=$?
