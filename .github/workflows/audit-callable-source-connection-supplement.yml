@@ -1,0 +1,108 @@
+name: Audit Callable Source Connection Supplement
+
+on:
+  push:
+    branches: [audit-callable-binding-replay-20260926]
+    paths: ['.github/workflows/audit-callable-source-connection-supplement.yml']
+
+permissions:
+  contents: read
+
+concurrency:
+  group: audit-callable-source-connection-supplement-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  exact-twenty-group-supplement:
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: e47e31e47b33abd7c55242bad6b9c61cd104d9d0
+          path: subject
+          persist-credentials: false
+      - uses: actions/checkout@v4
+        with:
+          ref: 817ea25b25be0015f94f1b9033dad28d97546bdc
+          path: driver
+          persist-credentials: false
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ github.sha }}
+          path: workflow
+          persist-credentials: false
+      - uses: haskell-actions/setup@v2
+        with:
+          ghc-version: '9.6.7'
+          cabal-version: '3.18.1.0'
+      - name: Record immutable input identities
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p evidence
+          test "$(git -C subject rev-parse HEAD)" = e47e31e47b33abd7c55242bad6b9c61cd104d9d0
+          test "$(git -C driver rev-parse HEAD)" = 817ea25b25be0015f94f1b9033dad28d97546bdc
+          test "$(git -C workflow rev-parse HEAD)" = '${{ github.sha }}'
+          test "$(git hash-object driver/audit/callable-source-connection-supplement/controls/SourceConnectionReview.hs)" = f16876f4515be7358eb260c8f6b044f87c785081
+          test "$(git hash-object driver/audit/callable-source-connection-supplement/run_replay.py)" = b3153892e96d46b99bd65e991757cc11e1fe33b3
+          cp workflow/.github/workflows/audit-callable-source-connection-supplement.yml evidence/workflow.yml
+          python3 - <<'PY'
+          import json, os, subprocess
+          from pathlib import Path
+          values = {name: subprocess.check_output(['git','-C',name,'rev-parse','HEAD'],text=True).strip() for name in ['subject','driver','workflow']}
+          values.update(run_id=os.environ['GITHUB_RUN_ID'],run_attempt=os.environ['GITHUB_RUN_ATTEMPT'],
+                        independent_groups=20,previous_seventeen_group_suite_replayed=False,
+                        production_code_changed=False,release_certified=False)
+          Path('evidence/workflow-inputs.json').write_text(json.dumps(values,indent=2)+'\n')
+          PY
+      - name: Execute the unchanged prepared runner and driver
+        shell: bash
+        run: |
+          set -euo pipefail
+          set +e
+          python3 driver/audit/callable-source-connection-supplement/run_replay.py \
+            --subject "$PWD/subject" --output "$PWD/evidence/replay" > evidence/runner.stdout 2> evidence/runner.stderr
+          code=$?
+          set -e
+          printf '%s\n' "$code" > evidence/runner.exit
+          cat evidence/runner.stdout
+          cat evidence/runner.stderr >&2
+          exit "$code"
+      - name: Verify exact source independently of runner completion
+        if: always()
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p evidence
+          git -C subject rev-parse HEAD > evidence/final-subject-head.txt
+          git -C subject status --porcelain --untracked-files=all > evidence/final-subject-status.txt
+          test "$(cat evidence/final-subject-head.txt)" = e47e31e47b33abd7c55242bad6b9c61cd104d9d0
+          test ! -s evidence/final-subject-status.txt
+      - name: Seal the complete archived payload including failures
+        if: always()
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 - <<'PY'
+          import hashlib, json
+          from pathlib import Path
+          root=Path('evidence')
+          sealed={}
+          for path in sorted(root.rglob('*')):
+              if not path.is_file() or 'build-driver' in path.parts or path.name == 'SourceConnectionReview' or path == root/'payload-sha256.json':
+                  continue
+              sealed[path.relative_to(root).as_posix()]=hashlib.sha256(path.read_bytes()).hexdigest()
+          (root/'payload-sha256.json').write_text(json.dumps(sealed,indent=2)+'\n')
+          PY
+      - name: Preserve original sources, commands, results and both seals
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: callable-source-connection-twenty-e47e31e4
+          path: |
+            evidence/**
+            !evidence/replay/build-driver/**
+            !evidence/replay/SourceConnectionReview
+          include-hidden-files: true
+          if-no-files-found: error
