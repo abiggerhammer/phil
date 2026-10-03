@@ -53,3 +53,28 @@ Proof.
   - exact Hcorresponds1.
   - exact Hcorresponds2.
 Qed.
+
+Theorem
+  phase1_surface_reference_shift_refined_record_data_implementation_certified_iff_corresponds :
+  forall tokens implementation,
+    phase1_surface_reference_shift_refined_record_data_implementation_certified
+      tokens implementation <->
+    phase1_surface_reference_shift_refined_record_data_implementation_source_corresponds
+      tokens implementation.
+Proof.
+  intros tokens implementation.
+  split.
+  - intros [Hcorresponds Hcertificate].
+    exact Hcorresponds.
+  - intro Hcorresponds.
+    split.
+    + exact Hcorresponds.
+    + destruct
+        (phase1_surface_reference_shift_refined_record_data_implementation_source_corresponds_sound
+          tokens implementation Hcorresponds)
+        as [refined [Himplementation [Htree [Hparse Hcomplete]]]].
+      rewrite Htree.
+      split.
+      * exact Hparse.
+      * exact Hcomplete.
+Qed.
