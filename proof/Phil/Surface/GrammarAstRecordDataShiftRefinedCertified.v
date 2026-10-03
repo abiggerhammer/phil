@@ -35,3 +35,21 @@ Proof.
     phase1_surface_reference_shift_refined_record_data_implementation_exists_unique_admissible_certificate.
   exact Hadmissible.
 Qed.
+
+Theorem
+  phase1_surface_reference_shift_refined_record_data_implementation_certified_unique :
+  forall tokens implementation1 implementation2,
+    phase1_surface_reference_shift_refined_record_data_implementation_certified
+      tokens implementation1 ->
+    phase1_surface_reference_shift_refined_record_data_implementation_certified
+      tokens implementation2 ->
+    implementation1 = implementation2.
+Proof.
+  intros tokens implementation1 implementation2
+    [Hcorresponds1 Hcertificate1]
+    [Hcorresponds2 Hcertificate2].
+  eapply
+    phase1_surface_reference_shift_refined_record_data_implementation_source_corresponds_unique.
+  - exact Hcorresponds1.
+  - exact Hcorresponds2.
+Qed.
