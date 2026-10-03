@@ -40,8 +40,8 @@ systems.steve.v1	systems	handoff/phase1/runtime/steve-systems-v1.tsv	sha256:d5c9
 stage-contract.steve.v1	stage-contract	handoff/phase1/runtime/steve-stage-contract-v1.tsv	sha256:6747a2ab0bd1b35ba33ce5c30fdc801bcd89d1b43f56150a76d5f34c283e7526	matrix:SYS-020
 lowering.steve.v1	lowering	handoff/phase1/runtime/steve-lowering-v1.tsv	sha256:3a33e6db57c572e9cf2ecd909082d71d460424658ef66a9c15d6858045f1c1fd	matrix:SYS-001
 cost.steve.v1	cost	handoff/phase1/runtime/steve-cost-v1.tsv	sha256:41b5defb9377da3b38973c53eb24673936fbd27f4f8291bb5d835ce03a764398	matrix:SYS-018
-assurance.upload.manifest.v1	assurance-manifest	handoff/phase1/witnesses/upload-assurance-manifest-v1.tsv	sha256:0d3e2ebe7df91f1796992236c6f08f1ecd2935c00c7003f6b3b3f286ec63005b	matrix:INT-002
-assurance.steve.manifest.v1	assurance-manifest	handoff/phase1/witnesses/steve-assurance-manifest-v1.tsv	sha256:2ee05bb2c34bf005bd835275708fcf2f6c903efbd5483fa7ebd3747e05f103d9	matrix:INT-002
-tcb.upload.residual.v1	tcb	handoff/phase1/witnesses/upload-residual-tcb-v1.tsv	sha256:175a68e725acff151521efbada5f8ea09b851e4e93ce39f5f7d6dbe953e87ca6	matrix:INT-005
-tcb.steve.residual.v1	tcb	handoff/phase1/witnesses/steve-residual-tcb-v1.tsv	sha256:252dcf7cadcf02876beaae1021af789e89444116ebf060393835f12bc2b80fea	matrix:INT-005
+assurance.upload.manifest.v1	assurance-manifest	handoff/phase1/witnesses/upload-assurance-manifest-v1.tsv	sha256:db514304b7eb63fff6c1e0303f8469d0373a227140206b71a4e69ec9c0ee691f	matrix:INT-002
+assurance.steve.manifest.v1	assurance-manifest	handoff/phase1/witnesses/steve-assurance-manifest-v1.tsv	sha256:6b48d09860fea6192eb886fdb1c0d3418feacb72237d4d279e859c44e3b13081	matrix:INT-002
+tcb.upload.residual.v1	tcb	handoff/phase1/witnesses/upload-residual-tcb-v1.tsv	sha256:edf28bf8a85a50e8b45b3790288aacfebe1f6a6500da8169df497d56aa9b4ea7	matrix:INT-005
+tcb.steve.residual.v1	tcb	handoff/phase1/witnesses/steve-residual-tcb-v1.tsv	sha256:cce000e0b9346037a61d66f5d182beddb81d890f5dbd433890af321d4f61a802	matrix:INT-005
 conformance.freeze.v1	conformance-manifest	handoff/phase1/conformance-freeze-v1.tsv	sha256:45ac0bdc6a47f0f9cd8043e74c8de514cb0701b14414725458e4467d006bed85	certified:PHIL-P1-CONFORMANCE-001
