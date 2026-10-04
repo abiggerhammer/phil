@@ -78,3 +78,28 @@ Proof.
       * exact Hparse.
       * exact Hcomplete.
 Qed.
+
+Theorem
+  phase1_surface_reference_shift_refined_record_data_implementation_certified_tree_certificate :
+  forall tokens implementation,
+    phase1_surface_reference_shift_refined_record_data_implementation_certified
+      tokens implementation ->
+    exists tree,
+      phase1_surface_shift_refined_record_data_implementation_source_tree
+        implementation = Some tree /\
+      phase1_surface_reference_parse tokens = Some ([], ResultTree tree) /\
+      Phase1CompleteDerivation tokens tree.
+Proof.
+  intros tokens implementation [Hcorresponds Hcertificate].
+  destruct
+    (phase1_surface_shift_refined_record_data_implementation_source_tree
+      implementation)
+    as [tree |] eqn:Htree.
+  - rewrite Htree in Hcertificate.
+    exists tree.
+    split.
+    + exact Htree.
+    + exact Hcertificate.
+  - rewrite Htree in Hcertificate.
+    contradiction.
+Qed.
