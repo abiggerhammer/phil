@@ -45,3 +45,28 @@ Proof.
     + exact Hcertified.
     + exact Hparse.
 Qed.
+
+
+Theorem
+  phase1_surface_reference_shift_refined_record_data_implementation_certified_parse_complete_iff :
+  forall tokens implementation tree,
+    phase1_surface_reference_shift_refined_record_data_implementation_certified
+      tokens implementation ->
+    (phase1_surface_reference_parse tokens = Some ([], ResultTree tree) <->
+     phase1_surface_shift_refined_record_data_implementation_source_tree
+       implementation = Some tree /\
+     Phase1CompleteDerivation tokens tree).
+Proof.
+  intros tokens implementation tree Hcertified.
+  split.
+  - intro Hparse.
+    eapply
+      phase1_surface_reference_shift_refined_record_data_implementation_certified_parse_certificate;
+      eauto.
+  - intros [Hsource _].
+    apply
+      (proj1
+        (phase1_surface_reference_shift_refined_record_data_implementation_certified_source_tree_parse_iff
+          tokens implementation Hcertified tree)).
+    exact Hsource.
+Qed.
