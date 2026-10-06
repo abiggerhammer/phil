@@ -56,6 +56,10 @@ main = do
   contextChanged <- graphOrFail "context edit" (buildGraph rootContextChangedInput unrelatedInput)
   dependencyChanged <- graphOrFail "dependency edit" (buildGraph rootDependencyChangedInput unrelatedInput)
   scopeChanged <- graphOrFail "scope edit" (buildGraphWithScope rootInput unrelatedInput Set.empty)
+  r20SubjectSingle <- graphOrFail "R20 comma-bearing subject" (buildGraph r20SubjectSingleInput unrelatedInput)
+  r20SubjectSplit <- graphOrFail "R20 split subject list" (buildGraph r20SubjectSplitInput unrelatedInput)
+  r20ContextSingle <- graphOrFail "R20 comma-bearing context" (buildGraph r20ContextSingleInput unrelatedInput)
+  r20ContextSplit <- graphOrFail "R20 split context list" (buildGraph r20ContextSplitInput unrelatedInput)
   certificate <- case proposeDecisionCertificate emptyCheckState [] rootProposition of
     Nothing -> failCase "competent producer fixture returned no certificate"
     Just value -> pure value
@@ -67,6 +71,8 @@ main = do
   reusable <- case prepareReusableProofEvidence baseline baseValidity checked of
     Left errorValue -> failCase ("could not prepare VER-006 reusable evidence: " ++ show errorValue)
     Right value -> pure value
+  r20SubjectReusable <- prepareForInput "R20 subject alias" r20SubjectSingle r20SubjectSingleInput certificate
+  r20ContextReusable <- prepareForInput "R20 context alias" r20ContextSingle r20ContextSingleInput certificate
   let checks =
         [ ("cache record captures exact dependencies and declared validity dimensions",
             testPrepared baseline reusable)
@@ -90,6 +96,18 @@ main = do
             testScopeChange scopeChanged reusable)
         , ("old evidence cannot be rebound to a changed graph before caching",
             testPreparationGraphBinding dependencyChanged checked)
+        , ("R20 comma-bearing subject and split subject list have distinct revisions",
+            revisionFor r20SubjectSingle rootId /= revisionFor r20SubjectSplit rootId)
+        , ("R20 comma-bearing subject and split subject list have distinct graph identities",
+            verificationGraphRevision r20SubjectSingle /= verificationGraphRevision r20SubjectSplit)
+        , ("R20 cached evidence for a comma-bearing subject is stale for the split subject list",
+            testTargetRevisionChange r20SubjectSplit r20SubjectReusable)
+        , ("R20 comma-bearing context and split context list have distinct revisions",
+            revisionFor r20ContextSingle rootId /= revisionFor r20ContextSplit rootId)
+        , ("R20 comma-bearing context and split context list have distinct graph identities",
+            verificationGraphRevision r20ContextSingle /= verificationGraphRevision r20ContextSplit)
+        , ("R20 cached evidence for a comma-bearing context is stale for the split context list",
+            testTargetRevisionChange r20ContextSplit r20ContextReusable)
         ]
   mapM_ report checks
   unless (and (map snd checks)) exitFailure
@@ -174,6 +192,22 @@ rootDependencyChangedInput :: VerificationObligationInput
 rootDependencyChangedInput = rootInput
   { verificationInputDependencies = Set.singleton depBId }
 
+r20SubjectSingleInput :: VerificationObligationInput
+r20SubjectSingleInput = rootInput
+  { verificationInputSubjectIds = ["subject:ver006.left,subject:ver006.right"] }
+
+r20SubjectSplitInput :: VerificationObligationInput
+r20SubjectSplitInput = rootInput
+  { verificationInputSubjectIds = ["subject:ver006.left", "subject:ver006.right"] }
+
+r20ContextSingleInput :: VerificationObligationInput
+r20ContextSingleInput = rootInput
+  { verificationInputContextIds = ["context:ver006.left,context:ver006.right"] }
+
+r20ContextSplitInput :: VerificationObligationInput
+r20ContextSplitInput = rootInput
+  { verificationInputContextIds = ["context:ver006.left", "context:ver006.right"] }
+
 depAInput :: VerificationObligationInput
 depAInput = mkInput
   (mkObligation depAId (Equal (RefNat 1) (RefNat 1)) "ver006.dep-a")
@@ -238,6 +272,24 @@ proposalFor revision certificate = ProofProposal
   , proofProposalProposition = rootProposition
   , proofProposalCertificate = certificate
   }
+
+prepareForInput
+  :: String
+  -> VerificationObligationGraph
+  -> VerificationObligationInput
+  -> DecisionCertificate
+  -> IO ReusableProofEvidence
+prepareForInput label graph input certificate = do
+  let proposal = (proposalFor (revisionFor graph rootId) certificate)
+        { proofProposalSubjectIds = verificationInputSubjectIds input
+        , proofProposalContextIds = verificationInputContextIds input
+        }
+  checkedEvidence <- case checkProofProposal graph emptyCheckState [] proposal of
+    Left errorValue -> failCase ("competent checker rejected " ++ label ++ " fixture: " ++ show errorValue)
+    Right value -> pure value
+  case prepareReusableProofEvidence graph baseValidity checkedEvidence of
+    Left errorValue -> failCase ("could not prepare " ++ label ++ " reusable evidence: " ++ show errorValue)
+    Right value -> pure value
 
 baseValidity :: ValidityScope
 baseValidity = ValidityScope (Map.fromList
