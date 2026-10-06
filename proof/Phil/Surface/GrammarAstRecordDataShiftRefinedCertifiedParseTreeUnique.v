@@ -1,7 +1,8 @@
 From Stdlib Require Import Lists.List.
 
 From Phil.Surface Require Import
-  GrammarAstRecordDataShiftRefinedCertified.
+  GrammarAstRecordDataShiftRefinedCertified
+  GrammarAstRecordDataShiftRefinedCertifiedParseComplete.
 
 Import ListNotations.
 
@@ -43,4 +44,31 @@ Proof.
     rewrite Hparse in Hparse'.
     inversion Hparse'.
     reflexivity.
+Qed.
+
+
+Theorem
+  phase1_surface_reference_shift_refined_record_data_implementation_certified_parse_complete_exists_unique :
+  forall tokens implementation,
+    phase1_surface_reference_shift_refined_record_data_implementation_certified
+      tokens implementation ->
+    exists! tree,
+      phase1_surface_reference_parse tokens = Some ([], ResultTree tree) /\
+      Phase1CompleteDerivation tokens tree.
+Proof.
+  intros tokens implementation Hcertified.
+  destruct
+    (phase1_surface_reference_shift_refined_record_data_implementation_certified_parse_tree_exists_unique
+      tokens implementation Hcertified)
+    as [tree [Hparse Htree_unique]].
+  exists tree.
+  - split.
+    + exact Hparse.
+    + eapply
+        phase1_surface_reference_shift_refined_record_data_implementation_certified_parse_complete.
+      * exact Hcertified.
+      * exact Hparse.
+  - intros tree' [Hparse' _].
+    apply Htree_unique.
+    exact Hparse'.
 Qed.
