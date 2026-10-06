@@ -1,0 +1,146 @@
+name: Audit Callable Binding Replay
+
+on:
+  push:
+    branches: [audit-callable-binding-replay-20260926]
+    paths: ['.github/workflows/audit-callable-binding-replay.yml']
+
+permissions:
+  contents: read
+
+concurrency:
+  group: audit-callable-binding-replay-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  exact-call-contract:
+    runs-on: ubuntu-latest
+    timeout-minutes: 35
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - label: frozen
+            pin: a9f2c745686d8ae1b923e21045554f4864956e76
+          - label: integrated
+            pin: e47e31e47b33abd7c55242bad6b9c61cd104d9d0
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ matrix.pin }}
+          path: subject
+          persist-credentials: false
+      - uses: actions/checkout@v4
+        with:
+          ref: 4440eaeb6fb437062e957070d963133473dd5ae3
+          path: driver
+          persist-credentials: false
+      - uses: haskell-actions/setup@v2
+        with:
+          ghc-version: '9.6.7'
+          cabal-version: '3.18.1.0'
+      - name: Preserve immutable original controls and subject identity
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p evidence/source evidence/permanent build-driver
+          git -C subject rev-parse HEAD > evidence/subject-commit.txt
+          git -C driver rev-parse HEAD > evidence/driver-commit.txt
+          printf '%s\n' '${{ github.sha }}' > evidence/workflow-commit.txt
+          printf '%s %s\n' '${{ github.run_id }}' '${{ github.run_attempt }}' > evidence/run-attempt.txt
+          test "$(cat evidence/subject-commit.txt)" = '${{ matrix.pin }}'
+          test "$(cat evidence/driver-commit.txt)" = 4440eaeb6fb437062e957070d963133473dd5ae3
+          git -C subject status --porcelain --untracked-files=all > evidence/subject-status-before.txt
+          test ! -s evidence/subject-status-before.txt
+          cp driver/audit/callable-binding-replay/CallBindingControls.hs evidence/
+          test "$(git hash-object evidence/CallBindingControls.hs)" = f269f127170b9d98b3700f5850fc6bd189081b60
+          echo 'abbc74c5d84c0f63bf090d5ac783faffa45b8af944f74559df7eeabe700e5205  evidence/CallBindingControls.hs' | sha256sum --check
+          sha256sum evidence/CallBindingControls.hs > evidence/driver.sha256
+          ghc --numeric-version > evidence/ghc-version.txt
+          cabal --numeric-version > evidence/cabal-version.txt
+          for path in src/Phil/Core/Generic/StaticActual.hs src/Phil/Core/EffectPolymorphism.hs src/Phil/Surface/GrammarV1/SemanticEffectPolymorphism.hs src/Phil/Surface/GrammarV1/GenericBinderScope.hs src/Phil/Surface/GrammarV1/SpecializedStaticReference.hs src/Phil/Surface/GrammarV1/GenericDischarge.hs src/Phil/Surface/GrammarV1/FunctionBodySurface.hs src/Phil/Surface/GrammarV1/CallableSignature.hs src/Phil/Surface/Check.hs src/Phil/Surface/Check/Engine.hs src/Phil/Surface/Check/Types.hs src/Phil/Surface/Parser.hs; do
+            mkdir -p "evidence/source/$(dirname "$path")"
+            cp "subject/$path" "evidence/source/$path"
+            printf '%s %s\n' "$(git -C subject rev-parse "HEAD:$path")" "$path" >> evidence/source-git-blobs.txt
+          done
+      - name: Build exact production and strictly compile external controls
+        working-directory: subject
+        shell: bash
+        run: |
+          set -euo pipefail
+          cabal update 2>&1 | tee ../evidence/dependency-index.log
+          cabal build all --enable-tests 2>&1 | tee ../evidence/build.log
+          cabal exec -- ghc -O0 -Wall -Werror -isrc -outputdir ../build-driver ../evidence/CallBindingControls.hs -o ../call-binding-controls 2>&1 | tee ../evidence/compile.log
+      - name: Run every original requirement without rewriting its oracle
+        shell: bash
+        run: |
+          set -euo pipefail
+          set +e
+          ./call-binding-controls > evidence/results.log 2>&1
+          code=$?
+          set -e
+          printf '%s\n' "$code" > evidence/results.exit
+          python3 - <<'PY'
+          import json,re
+          from pathlib import Path
+          lines=Path('evidence/results.log').read_text().splitlines()
+          rows=[]
+          for line in lines:
+              match=re.fullmatch(r'(C[0-9]{2}) (PASS|FAIL) (.+)',line)
+              if match: rows.append(list(match.groups()))
+          assert [r[0] for r in rows]==[f'C{i:02d}' for i in range(1,21)],rows
+          assert len(lines)==20,lines
+          code=int(Path('evidence/results.exit').read_text())
+          assert code in (0,1)
+          assert (code==0)==all(r[1]=='PASS' for r in rows)
+          result={'production_pin':Path('evidence/subject-commit.txt').read_text().strip(),
+                  'driver_pin':Path('evidence/driver-commit.txt').read_text().strip(),
+                  'cases':rows,'exit':code,'all_20_requirements_passed':code==0,
+                  'source_signature_adapter_established':False,
+                  'generic_requirement_instantiation_established':False,
+                  'native_or_validator_execution':False,'release_certified':False}
+          Path('evidence/protocol.json').write_text(json.dumps(result,indent=2)+'\n')
+          print(json.dumps(result,indent=2))
+          assert code==0,'required original assertion failed'
+          PY
+      - name: Replay permanent local contracts unchanged
+        if: success() || failure()
+        working-directory: subject
+        shell: bash
+        run: |
+          set -euo pipefail
+          failed=0
+          for suite in Phase1CALL019InvokeSurfaceMain Phase1GenericStaticKindMain Phase1GrammarV1StaticKindElaborationMain; do
+            cp "test/$suite.hs" "../evidence/permanent/$suite.hs"
+            set +e
+            cabal exec -- runghc -isrc -Wall -Werror "test/$suite.hs" > "../evidence/permanent/$suite.log" 2>&1
+            code=$?
+            set -e
+            printf '%s %s\n' "$suite" "$code" >> ../evidence/permanent-exits.txt
+            if test "$code" -ne 0; then failed=1; fi
+          done
+          exit "$failed"
+      - name: Verify exact clean production and seal evidence
+        if: always()
+        shell: bash
+        run: |
+          set -euo pipefail
+          git -C subject status --porcelain --untracked-files=all > evidence/subject-status-after.txt
+          test ! -s evidence/subject-status-after.txt
+          test "$(git -C subject rev-parse HEAD)" = '${{ matrix.pin }}'
+          python3 - <<'PY'
+          import hashlib,json
+          from pathlib import Path
+          root=Path('evidence')
+          inventory={str(p.relative_to(root)):hashlib.sha256(p.read_bytes()).hexdigest()
+                     for p in sorted(root.rglob('*')) if p.is_file() and p.name!='payload-sha256.json'}
+          (root/'payload-sha256.json').write_text(json.dumps(inventory,indent=2)+'\n')
+          PY
+      - name: Preserve complete results including any original failures
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: callable-binding-${{ matrix.label }}
+          path: evidence/
+          if-no-files-found: error
+          include-hidden-files: true
