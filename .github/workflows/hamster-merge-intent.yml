@@ -48,6 +48,86 @@ jobs:
             echo "expected=$expected"
           } >> "$GITHUB_OUTPUT"
 
+      - name: Check out current MHB lint implementation
+        continue-on-error: true
+        uses: actions/checkout@v4
+        with:
+          ref: main
+          path: mhb-lint-shadow
+          persist-credentials: false
+
+      - name: Run MHB lint in shadow mode
+        continue-on-error: true
+        shell: bash
+        env:
+          GH_TOKEN: ${{ github.token }}
+          GH_REPO: ${{ github.repository }}
+          LANE: ${{ steps.intent.outputs.lane }}
+          PR_NUMBER: ${{ steps.intent.outputs.pr }}
+          EXPECTED_HEAD: ${{ steps.intent.outputs.expected }}
+        run: |
+          set -euo pipefail
+
+          pr_json="$(gh api "repos/$GH_REPO/pulls/$PR_NUMBER")"
+          labels_json="$(gh api "repos/$GH_REPO/issues/$PR_NUMBER" --jq '[.labels[].name]')"
+          checks_json="$(gh api -H 'Accept: application/vnd.github+json' "repos/$GH_REPO/commits/$EXPECTED_HEAD/check-runs?per_page=100")"
+          main_sha="$(gh api "repos/$GH_REPO/branches/main" --jq '.commit.sha')"
+          base_sha="$(jq -r '.base.sha' <<<"$pr_json")"
+
+          pr_files_json="$(
+            gh api --paginate "repos/$GH_REPO/pulls/$PR_NUMBER/files?per_page=100" --jq '.[].filename'               | jq -R -s 'split("\n") | map(select(length > 0))'
+          )"
+
+          if [ "$base_sha" != "$main_sha" ]; then
+            intervening_json="$(
+              gh api "repos/$GH_REPO/compare/$base_sha...$main_sha" --jq '.files[].filename'                 | jq -R -s 'split("\n") | map(select(length > 0))'
+            )"
+          else
+            intervening_json='[]'
+          fi
+
+          jq -n             --arg operation "merge"             --arg lane "$LANE"             --arg expected_head "$EXPECTED_HEAD"             --arg main_sha "$main_sha"             --arg head_ref "$(jq -r '.head.ref' <<<"$pr_json")"             --arg head_sha "$(jq -r '.head.sha' <<<"$pr_json")"             --arg base_sha "$base_sha"             --argjson labels "$labels_json"             --argjson changed_files "$pr_files_json"             --argjson intervening_main_files "$intervening_json"             --argjson total_count "$(jq '.total_count' <<<"$checks_json")"             --argjson runs "$(jq '[.check_runs[] | {name, status, conclusion}]' <<<"$checks_json")"             '{
+              operation: $operation,
+              lane: $lane,
+              expected_head: $expected_head,
+              main_sha: $main_sha,
+              pr: {
+                labels: $labels,
+                head_ref: $head_ref,
+                head_sha: $head_sha,
+                base_sha: $base_sha,
+                changed_files: $changed_files
+              },
+              checks: {
+                total_count: $total_count,
+                runs: $runs
+              },
+              intervening_main_files: $intervening_main_files
+            }' > /tmp/mhb-merge-snapshot.json
+
+          set +e
+          python3 mhb-lint-shadow/scripts/mhb_lint.py             --format json /tmp/mhb-merge-snapshot.json             > /tmp/mhb-lint.json
+          lint_status=$?
+          set -e
+
+          {
+            echo "### MHB lint shadow"
+            echo
+            echo "- operation: merge"
+            echo "- lane: $LANE"
+            echo "- PR: #$PR_NUMBER"
+            echo "- exact authorized head: $EXPECTED_HEAD"
+            if [ "$lint_status" -eq 0 ]; then
+              echo "- shadow result: clean"
+            else
+              echo "- shadow result: diagnostics observed (non-authoritative)"
+              sed 's/^/    /' /tmp/mhb-lint.json
+            fi
+          } >> "$GITHUB_STEP_SUMMARY"
+
+          # Shadow mode deliberately does not affect merge authority.
+          exit 0
+
       - name: Verify exact PR state and merge
         shell: bash
         env:
