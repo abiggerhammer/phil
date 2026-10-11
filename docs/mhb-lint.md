@@ -152,6 +152,20 @@ That separation is intentional:
 The first implementation should cover MHB001–MHB008 before expanding into
 semantic/provenance rules.
 
+## Deployment
+
+The first live deployment is intentionally non-authoritative. The merge-intent
+bridge collects the same repository/GitHub facts used by its existing policy
+checks, serializes them as an MHB lint snapshot, and runs the checker in shadow
+mode.
+
+Shadow diagnostics are written to the workflow summary but do not block or
+permit a merge. The pre-existing bridge checks remain the sole merge authority
+until observed shadow behavior agrees with them across real runs and explicit
+negative/replay cases.
+
+This staged deployment keeps checker validation separate from checker authority.
+
 ## Non-goals for the first slice
 
 - proving Phil semantics,
