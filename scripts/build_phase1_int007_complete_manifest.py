@@ -24,6 +24,8 @@ ADDITIONS = [
     ("stage-contract.steve.v1", "stage-contract", "handoff/phase1/runtime/steve-stage-contract-v1.tsv", "matrix:SYS-020"),
     ("lowering.steve.v1", "lowering", "handoff/phase1/runtime/steve-lowering-v1.tsv", "matrix:SYS-001"),
     ("cost.steve.v1", "cost", "handoff/phase1/runtime/steve-cost-v1.tsv", "matrix:SYS-018"),
+    ("verification.upload.bundle.v1", "verification-bundle", "handoff/phase1/witnesses/upload-verification-bundle-v1.tsv", "matrix:INT-002;matrix:VER-012"),
+    ("verification.steve.bundle.v1", "verification-bundle", "handoff/phase1/witnesses/steve-verification-bundle-v1.tsv", "matrix:INT-002;matrix:VER-012"),
     ("assurance.upload.manifest.v1", "assurance-manifest", "handoff/phase1/witnesses/upload-assurance-manifest-v1.tsv", "matrix:INT-002"),
     ("assurance.steve.manifest.v1", "assurance-manifest", "handoff/phase1/witnesses/steve-assurance-manifest-v1.tsv", "matrix:INT-002"),
     ("tcb.upload.residual.v1", "tcb", "handoff/phase1/witnesses/upload-residual-tcb-v1.tsv", "matrix:INT-005"),
