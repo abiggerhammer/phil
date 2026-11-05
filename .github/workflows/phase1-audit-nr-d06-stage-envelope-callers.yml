@@ -1,0 +1,92 @@
+name: Phase 1 Audit NR-D06 Stage Envelope Caller Reconciliation
+
+on:
+  pull_request:
+    paths:
+      - 'audit/nr-d06-stage-closure-certified-envelope-review-2026-11-05.md'
+      - 'test/Phase1INT005CertifiedReleaseEnvelopeMain.hs'
+      - '.github/workflows/phase1-audit-nr-d06-stage-envelope-callers.yml'
+  push:
+    branches: [main]
+    paths:
+      - 'audit/nr-d06-stage-closure-certified-envelope-review-2026-11-05.md'
+      - 'test/Phase1INT005CertifiedReleaseEnvelopeMain.hs'
+      - '.github/workflows/phase1-audit-nr-d06-stage-envelope-callers.yml'
+
+permissions:
+  contents: read
+
+jobs:
+  nr-d06-native-caller-replay:
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+      - uses: haskell-actions/setup@v2
+        with:
+          ghc-version: '9.6.7'
+          cabal-version: 'latest'
+      - name: Build complete Haskell substrate with warnings fatal
+        run: cabal build all --enable-tests --ghc-options=-Werror
+      - name: Strict-typecheck native caller and source/stage controls
+        run: |
+          set -euo pipefail
+          for file in \
+            test/Phase1INT005CertifiedReleaseEnvelopeMain.hs \
+            test/Phase1VerificationSourceArtifactClosureMain.hs \
+            test/Phase1StageClosureMain.hs \
+            test/Phase1INT005ReleasePackageMain.hs
+          do
+            cabal exec -- ghc -isrc -itest -Wall -Werror -fno-code "$file"
+          done
+      - name: Verify two actual release envelope callers and NR-D06 negatives
+        run: cabal exec -- runghc -Wall -Werror -isrc test/Phase1INT005CertifiedReleaseEnvelopeMain.hs
+      - name: Verify independent VER-010 source/artifact boundary
+        run: cabal exec -- runghc -Wall -Werror -isrc test/Phase1VerificationSourceArtifactClosureMain.hs
+      - name: Verify SYS-020 concrete and next-stage trunk consistency
+        run: cabal exec -- runghc -Wall -Werror -isrc test/Phase1StageClosureMain.hs
+      - name: Verify that package is an inspectable certified sidecar
+        run: cabal exec -- runghc -Wall -Werror -isrc -itest test/Phase1INT005ReleasePackageMain.hs
+
+  nr-d06-proof-premise-replay:
+    runs-on: ubuntu-24.04
+    container:
+      image: rocq/rocq-prover:9.2.0
+      options: --user root
+    steps:
+      - uses: actions/checkout@v4
+      - name: Compile existing final-authority proof chain and inspect assumptions
+        shell: bash
+        run: |
+          set -euo pipefail
+          export PATH="/home/rocq/.opam/${COMPILER}/bin:$PATH"
+          rocq c -Q proof/Phil Phil proof/Phil/Systems/FactDisposition.v
+          rocq c -Q proof/Phil Phil proof/Phil/Assurance/ValidityScope.v
+          rocq c -Q proof/Phil Phil proof/Phil/Core/SystemsStageClosure.v
+          rocq c -Q proof/Phil Phil proof/Phil/Verification/VerificationArtifact.v
+          rocq c -Q proof/Phil Phil proof/Phil/Verification/FinalManifestStageReflection.v
+          rocq c -Q proof/Phil Phil proof/Phil/Verification/FinalManifestNativeCoordinateReflection.v
+          rocq c -Q proof/Phil Phil proof/Phil/Verification/FinalManifestFixedAdapter.v
+          cat >/tmp/NRD06Assumptions.v <<'EOF'
+          From Phil.Verification Require Import FinalManifestFixedAdapter.
+          Print Assumptions fixed_adapter_release_bound.
+          Print Assumptions fixed_adapter_stage_represents.
+          Print Assumptions fixed_adapter_establishes_final_manifest_match.
+          EOF
+          rocq c -Q proof/Phil Phil /tmp/NRD06Assumptions.v 2>&1 | tee nr-d06-assumptions.log
+          sha256sum \
+            proof/Phil/Verification/VerificationArtifact.v \
+            proof/Phil/Verification/VerificationArtifact.vo \
+            proof/Phil/Verification/FinalManifestStageReflection.v \
+            proof/Phil/Verification/FinalManifestStageReflection.vo \
+            proof/Phil/Verification/FinalManifestNativeCoordinateReflection.v \
+            proof/Phil/Verification/FinalManifestNativeCoordinateReflection.vo \
+            proof/Phil/Verification/FinalManifestFixedAdapter.v \
+            proof/Phil/Verification/FinalManifestFixedAdapter.vo \
+            nr-d06-assumptions.log > nr-d06-proof-identities.sha256
+      - uses: actions/upload-artifact@v4
+        with:
+          name: nr-d06-proof-and-assumption-evidence
+          path: |
+            nr-d06-assumptions.log
+            nr-d06-proof-identities.sha256
+          if-no-files-found: error
