@@ -139,14 +139,24 @@ certifiedRendezvousParticipantClassification =
 -- orientation and exact initial dual projections required by the Certified
 -- rendezvous theorem.
 data CertifiedRendezvousProtocol = CertifiedRendezvousProtocol
-  { certifiedRendezvousProtocolInstance :: BinaryProtocolInstance
-  , certifiedRendezvousPrimaryRole :: ProtocolRoleKey
-  , certifiedRendezvousPeerRole :: ProtocolRoleKey
+  { privateRendezvousProtocolInstanceField :: BinaryProtocolInstance
+  , privateRendezvousPrimaryRoleField :: ProtocolRoleKey
+  , privateRendezvousPeerRoleField :: ProtocolRoleKey
   , certifiedRendezvousPrimarySession :: Session
   , certifiedRendezvousPeerSession :: Session
   , certifiedRendezvousProtocolArguments :: [ProtocolMessageArgument]
   }
   deriving (Eq, Show)
+
+-- Public read-only accessors: the record labels themselves are private.
+certifiedRendezvousProtocolInstance :: CertifiedRendezvousProtocol -> BinaryProtocolInstance
+certifiedRendezvousProtocolInstance = privateRendezvousProtocolInstanceField
+
+certifiedRendezvousPrimaryRole :: CertifiedRendezvousProtocol -> ProtocolRoleKey
+certifiedRendezvousPrimaryRole = privateRendezvousPrimaryRoleField
+
+certifiedRendezvousPeerRole :: CertifiedRendezvousProtocol -> ProtocolRoleKey
+certifiedRendezvousPeerRole = privateRendezvousPeerRoleField
 
 data RendezvousMessageEvidence = RendezvousMessageEvidence
   { rendezvousMessageEvidenceType :: Ty
@@ -198,22 +208,34 @@ data RendezvousMessageCoarseKernelFacts = RendezvousMessageCoarseKernelFacts
   deriving (Eq, Show)
 
 data CertifiedRendezvousCausality = CertifiedRendezvousCausality
-  { certifiedRendezvousSenderProcess :: ProcessKey
-  , certifiedRendezvousReceiverProcess :: ProcessKey
+  { privateRendezvousSenderProcessField :: ProcessKey
+  , privateRendezvousReceiverProcessField :: ProcessKey
   }
   deriving (Eq, Show)
+
+certifiedRendezvousSenderProcess :: CertifiedRendezvousCausality -> ProcessKey
+certifiedRendezvousSenderProcess = privateRendezvousSenderProcessField
+
+certifiedRendezvousReceiverProcess :: CertifiedRendezvousCausality -> ProcessKey
+certifiedRendezvousReceiverProcess = privateRendezvousReceiverProcessField
 
 certifiedRendezvousEventKind :: CertifiedRendezvousCausality -> ProcessEventKind
 certifiedRendezvousEventKind witness = SynchronousRendezvousEvent
-  (certifiedRendezvousSenderProcess witness)
-  (certifiedRendezvousReceiverProcess witness)
+  (privateRendezvousSenderProcessField witness)
+  (privateRendezvousReceiverProcessField witness)
 
 data CertifiedRendezvousResult = CertifiedRendezvousResult
-  { certifiedRendezvousState :: ProcessCommunicationState
-  , certifiedRendezvousCausality :: CertifiedRendezvousCausality
+  { privateRendezvousStateField :: ProcessCommunicationState
+  , privateRendezvousCausalityField :: CertifiedRendezvousCausality
   , certifiedRendezvousActivationAuthority :: CertifiedRendezvousActivation
   }
   deriving (Eq, Show)
+
+certifiedRendezvousState :: CertifiedRendezvousResult -> ProcessCommunicationState
+certifiedRendezvousState = privateRendezvousStateField
+
+certifiedRendezvousCausality :: CertifiedRendezvousResult -> CertifiedRendezvousCausality
+certifiedRendezvousCausality = privateRendezvousCausalityField
 
 data ConcurrencyRendezvousCertificationError
   = ConcurrencyRendezvousActivationError ConcurrencyActivationCertificationError
@@ -263,9 +285,9 @@ certifyRendezvousProtocol policy family arguments dispositions = do
       peerSession = protocolProjectionSession peer
   if primaryRole /= peerRole && peerSession == dualSession primarySession
     then Right CertifiedRendezvousProtocol
-      { certifiedRendezvousProtocolInstance = instanceValue
-      , certifiedRendezvousPrimaryRole = primaryRole
-      , certifiedRendezvousPeerRole = peerRole
+      { privateRendezvousProtocolInstanceField = instanceValue
+      , privateRendezvousPrimaryRoleField = primaryRole
+      , privateRendezvousPeerRoleField = peerRole
       , certifiedRendezvousPrimarySession = primarySession
       , certifiedRendezvousPeerSession = peerSession
       , certifiedRendezvousProtocolArguments = arguments
@@ -343,7 +365,7 @@ certifyProcessRendezvous activation protocol contexts request evidence = do
       (certifiedRendezvousActivationState activation) contexts
   afterState <- mapLeft ConcurrencyRendezvousNativeError $
     checkProcessCommunicationState
-      (certifiedRendezvousProtocolInstance protocol)
+      (privateRendezvousProtocolInstanceField protocol)
       (certifiedRendezvousActivationNetwork activation)
       beforeState
       request
@@ -362,10 +384,10 @@ certifyProcessRendezvousSuccessor
   -> Either ConcurrencyRendezvousCertificationError CertifiedRendezvousResult
 certifyProcessRendezvousSuccessor activation protocol predecessor request evidence = do
   requireActivationLineage activation predecessor
-  let beforeState = certifiedRendezvousState predecessor
+  let beforeState = privateRendezvousStateField predecessor
   afterState <- mapLeft ConcurrencyRendezvousNativeError $
     checkProcessCommunicationSuccessor
-      (certifiedRendezvousProtocolInstance protocol)
+      (privateRendezvousProtocolInstanceField protocol)
       (certifiedRendezvousActivationNetwork activation)
       beforeState
       request
@@ -385,7 +407,7 @@ certifyRestrictedProcessRendezvous activation protocol contexts request transfer
       (certifiedRendezvousActivationState activation) contexts
   afterState <- mapLeft ConcurrencyRendezvousNativeError $
     checkRestrictedProcessRendezvous
-      (certifiedRendezvousProtocolInstance protocol)
+      (privateRendezvousProtocolInstanceField protocol)
       (certifiedRendezvousActivationNetwork activation)
       beforeState
       request
@@ -407,10 +429,10 @@ certifyRestrictedProcessRendezvousSuccessor
 certifyRestrictedProcessRendezvousSuccessor
     activation protocol predecessor request transfer evidence = do
   requireActivationLineage activation predecessor
-  let beforeState = certifiedRendezvousState predecessor
+  let beforeState = privateRendezvousStateField predecessor
   afterState <- mapLeft ConcurrencyRendezvousNativeError $
     checkRestrictedProcessRendezvousSuccessor
-      (certifiedRendezvousProtocolInstance protocol)
+      (privateRendezvousProtocolInstanceField protocol)
       (certifiedRendezvousActivationNetwork activation)
       beforeState
       request
@@ -476,10 +498,10 @@ certifyAcceptedRendezvous activation protocol beforeState afterState request tra
   verifyRendezvousMessageCoarseKernelFacts messageFacts
   verifyExactInternalRendezvousKernelFacts True True True
   pure CertifiedRendezvousResult
-    { certifiedRendezvousState = afterState
-    , certifiedRendezvousCausality = CertifiedRendezvousCausality
-        { certifiedRendezvousSenderProcess = senderProcess
-        , certifiedRendezvousReceiverProcess = receiverProcess
+    { privateRendezvousStateField = afterState
+    , privateRendezvousCausalityField = CertifiedRendezvousCausality
+        { privateRendezvousSenderProcessField = senderProcess
+        , privateRendezvousReceiverProcessField = receiverProcess
         }
     , certifiedRendezvousActivationAuthority = activation
     }
@@ -504,7 +526,7 @@ rendezvousEndpointFacts
 rendezvousEndpointFacts protocol sender receiver senderBefore receiverBefore senderAfter receiverAfter senderStep receiverStep =
   RendezvousEndpointKernelFacts
     { rendezvousBinaryWellFormed =
-        certifiedRendezvousPrimaryRole protocol /= certifiedRendezvousPeerRole protocol
+        privateRendezvousPrimaryRoleField protocol /= privateRendezvousPeerRoleField protocol
           && certifiedRendezvousPeerSession protocol
               == dualSession (certifiedRendezvousPrimarySession protocol)
     , rendezvousSenderProgression = progressionExact sender senderBefore senderAfter senderStep
@@ -531,12 +553,12 @@ rendezvousEndpointFacts protocol sender receiver senderBefore receiverBefore sen
     }
   where
     exactInstance = binaryProtocolInstanceRevision
-      (certifiedRendezvousProtocolInstance protocol)
+      (privateRendezvousProtocolInstanceField protocol)
 
 certifiedRoleMember :: CertifiedRendezvousProtocol -> ProtocolRoleKey -> Bool
 certifiedRoleMember protocol role =
-  role == certifiedRendezvousPrimaryRole protocol
-    || role == certifiedRendezvousPeerRole protocol
+  role == privateRendezvousPrimaryRoleField protocol
+    || role == privateRendezvousPeerRoleField protocol
 
 certifiedRolePairExact
   :: CertifiedRendezvousProtocol
@@ -544,10 +566,10 @@ certifiedRolePairExact
   -> ProtocolRoleKey
   -> Bool
 certifiedRolePairExact protocol senderRole receiverRole =
-  (senderRole == certifiedRendezvousPrimaryRole protocol
-    && receiverRole == certifiedRendezvousPeerRole protocol)
-  || (senderRole == certifiedRendezvousPeerRole protocol
-    && receiverRole == certifiedRendezvousPrimaryRole protocol)
+  (senderRole == privateRendezvousPrimaryRoleField protocol
+    && receiverRole == privateRendezvousPeerRoleField protocol)
+  || (senderRole == privateRendezvousPeerRoleField protocol
+    && receiverRole == privateRendezvousPrimaryRoleField protocol)
 
 rendezvousParticipantFacts
   :: CertifiedRendezvousActivation
@@ -573,7 +595,7 @@ rendezvousParticipantFacts activation protocol sender receiver senderStep receiv
     }
   where
     exactInstance = binaryProtocolInstanceRevision
-      (certifiedRendezvousProtocolInstance protocol)
+      (privateRendezvousProtocolInstanceField protocol)
     senderOccurrence = ProtocolRoleOccurrence exactInstance (rendezvousRole sender)
     receiverOccurrence = ProtocolRoleOccurrence exactInstance (rendezvousRole receiver)
     classifications = participantClassifications
@@ -616,7 +638,7 @@ rendezvousMessageCoarseFacts protocol beforeState afterState sender receiver tra
     }
   where
     exactInstance = binaryProtocolInstanceRevision
-      (certifiedRendezvousProtocolInstance protocol)
+      (privateRendezvousProtocolInstanceField protocol)
     restrictedOwnershipExact = case transfer of
       Nothing -> True
       Just moved ->
