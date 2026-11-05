@@ -13,7 +13,7 @@ module Phil.Compiler.SteveCAS
   , readBlob
   ) where
 
-import Control.Exception (IOException, try)
+import Control.Exception (IOException, onException, try)
 import qualified Crypto.Hash.SHA256 as SHA256
 import Data.Bits ((.&.), shiftR)
 import qualified Data.ByteString as ByteString
@@ -104,7 +104,15 @@ installBlob root contentId bytes
       case tempResult of
         Left err -> pure (Left (ioErrorText err))
         Right (tempPath, handle) -> do
-          writeResult <- try (ByteString.hPut handle bytes >> hClose handle)
+          -- A failed hPut can leave the temporary handle open even after its
+          -- pathname is unlinked. Close that acquired handle before returning,
+          -- but never let a secondary close exception replace the write error.
+          let closeOnFailedWrite = do
+                _ <- try (hClose handle) :: IO (Either IOException ())
+                pure ()
+          writeResult <- try $ do
+            ByteString.hPut handle bytes `onException` closeOnFailedWrite
+            hClose handle
           case writeResult of
             Left err -> do
               _ <- tryRemove tempPath
