@@ -75,13 +75,15 @@ jobs:
 
   certify-control-codec:
     needs: rocq-control-codec
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     steps:
       - uses: actions/checkout@v4
       - uses: haskell-actions/setup@v2
         with:
           ghc-version: '9.6.7'
           cabal-version: 'latest'
+      - name: Install and verify LLVM 18
+        run: bash scripts/ci/setup-llvm18.sh
       - uses: actions/download-artifact@v4
         with:
           name: rocq-control-codec-checked-proof-objects
