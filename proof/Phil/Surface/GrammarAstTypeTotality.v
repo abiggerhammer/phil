@@ -83,6 +83,7 @@ Lemma phase1_surface_nonreference_type_item_matches_tag :
       phase1_surface_nonreference_type_tag_of_index index = Some tag.
 Proof.
   intros index item Hnth.
+  unfold phase1_surface_nonreference_type_items_for_totality in Hnth.
   destruct index as [|index]; cbn in Hnth.
   - exists Phase1UnitType. reflexivity.
   - destruct index as [|index]; cbn in Hnth.
