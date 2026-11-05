@@ -8,6 +8,7 @@ on:
 permissions:
   contents: write
   pull-requests: write
+  actions: read
 
 concurrency:
   group: hamster-merge-intent-${{ github.ref }}
@@ -174,11 +175,72 @@ jobs:
             exit 1
           fi
 
-          bad="$(jq -r '[.check_runs[] | select(.status != "completed" or .conclusion != "success")] | length' <<<"$checks_json")"
+          # Fail closed for all incomplete, failed, cancelled, neutral, or
+          # otherwise non-successful checks. A single PR-only release publish
+          # skip is handled separately after verifying GitHub provenance.
+          bad="$(jq -r '[.check_runs[] | select(.status != "completed" or (.conclusion != "success" and .conclusion != "skipped"))] | length' <<<"$checks_json")"
           if [ "$bad" -ne 0 ]; then
             echo "Not all exact-head checks are successful:" >&2
-            jq -r '.check_runs[] | select(.status != "completed" or .conclusion != "success") | "  \(.name): status=\(.status) conclusion=\(.conclusion)"' <<<"$checks_json" >&2
+            jq -r '.check_runs[] | select(.status != "completed" or (.conclusion != "success" and .conclusion != "skipped")) | "  \(.name): status=\(.status) conclusion=\(.conclusion)"' <<<"$checks_json" >&2
             exit 1
+          fi
+
+          skipped_count="$(jq -r '[.check_runs[] | select(.conclusion == "skipped")] | length' <<<"$checks_json")"
+          if [ "$skipped_count" -gt 1 ]; then
+            echo "Multiple skipped checks; refusing merge." >&2
+            exit 1
+          fi
+          if [ "$skipped_count" -eq 1 ]; then
+            skipped="$(jq -c '.check_runs[] | select(.conclusion == "skipped")' <<<"$checks_json")"
+            if ! jq -e --arg expected_head "$EXPECTED_HEAD" \
+              '(.name == "publish") and (.status == "completed") and (.app.slug == "github-actions") and (.head_sha == $expected_head)' \
+              <<<"$skipped" >/dev/null; then
+              echo "Skipped check is not the expected GitHub Actions publish job." >&2
+              exit 1
+            fi
+
+            # The job must come from the trusted INT-011 release workflow
+            # on this exact PR head, not merely have the name "publish".
+            url_prefix="https://github.com/$GH_REPO/actions/runs/"
+            run_id="$(jq -r --arg prefix "$url_prefix" \
+              '.details_url | select(startswith($prefix)) | ltrimstr($prefix) | capture("^(?<run>[0-9]+)/job/(?<job>[0-9]+)$").run' \
+              <<<"$skipped")"
+            job_id="$(jq -r --arg prefix "$url_prefix" \
+              '.details_url | select(startswith($prefix)) | ltrimstr($prefix) | capture("^(?<run>[0-9]+)/job/(?<job>[0-9]+)$").job' \
+              <<<"$skipped")"
+            if ! [[ "$run_id" =~ ^[0-9]+$ && "$job_id" =~ ^[0-9]+$ ]]; then
+              echo "Skipped publish check has no valid Actions run/job URL." >&2
+              exit 1
+            fi
+
+            release_run="$(gh api "repos/$GH_REPO/actions/runs/$run_id")"
+            if ! jq -e \
+              --arg expected_head "$EXPECTED_HEAD" \
+              --arg expected_branch "$head_ref" \
+              '(.name == "Phase 1 INT-011 GitHub Release")
+                and (.path == ".github/workflows/phase1-int011-github-release.yml")
+                and (.event == "pull_request")
+                and (.head_sha == $expected_head)
+                and (.head_branch == $expected_branch)
+                and (.status == "completed")
+                and (.conclusion == "success")' \
+              <<<"$release_run" >/dev/null; then
+              echo "Skipped publish check is not from a successful exact-head INT-011 PR run." >&2
+              exit 1
+            fi
+
+            publish_job="$(gh api "repos/$GH_REPO/actions/jobs/$job_id")"
+            if ! jq -e \
+              --argjson expected_run "$run_id" \
+              --argjson expected_job "$job_id" \
+              '(.id == $expected_job) and (.run_id == $expected_run)
+                and (.name == "publish") and (.status == "completed")
+                and (.conclusion == "skipped")' \
+              <<<"$publish_job" >/dev/null; then
+              echo "Skipped check does not correspond to the trusted publish job." >&2
+              exit 1
+            fi
+            echo "Allowed: only INT-011 publish skipped on this exact PR head."
           fi
 
           main_sha="$(gh api "repos/$GH_REPO/branches/main" --jq '.commit.sha')"
