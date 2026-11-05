@@ -1,6 +1,12 @@
 From Stdlib Require Import Lists.List Strings.String.
 
 From Phil.Surface Require Import
+  Grammar
+  GrammarAstGenericRequirementsTotality
+  GrammarAstSourceHeader
+  GrammarAstTopLevelSpine
+  GrammarDerivation
+  GrammarDeterminacySimpleResolverSoundness
   GrammarAstPostfixExpressionSpine
   GrammarAstSourceHeaderTotality.
 
@@ -182,6 +188,5 @@ Proof.
       * exact Hnormalize.
       * eapply phase1_surface_normalize_postfix_expression_spine_round_trip.
         exact Hnormalize.
-    + cbn in Hnth.
-      discriminate Hnth.
+    + destruct index; cbn in Hnth; discriminate Hnth.
 Qed.

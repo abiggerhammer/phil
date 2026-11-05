@@ -1,6 +1,16 @@
 From Stdlib Require Import Lists.List Strings.String.
 
 From Phil.Surface Require Import
+  Grammar
+  GrammarAstParenthesizedExpressionSpineTotality
+  GrammarAstPrimaryExpressionGroupingSpine
+  GrammarAstPrimaryExpressionSpine
+  GrammarAstPrimaryExpressionSpineTotality
+  GrammarAstSourceHeader
+  GrammarAstTopLevelSpine
+  GrammarAstTupleExpressionSpineTotality
+  GrammarDerivation
+  GrammarDeterminacySimpleResolverSoundness
   GrammarAstPrimaryExpressionLiteralSpine
   GrammarAstPrimaryExpressionGroupingSpineTotality.
 

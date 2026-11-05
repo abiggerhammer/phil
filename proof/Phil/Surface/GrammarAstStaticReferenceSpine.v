@@ -1,6 +1,7 @@
 From Stdlib Require Import Lists.List Strings.String.
 
 From Phil.Surface Require Import
+  GrammarDerivation
   GrammarAstRefinementTupleTypePayloadSpine
   GrammarAstSourceHeader
   GrammarAstGenericRequirementsSpine.
@@ -130,7 +131,9 @@ Proof.
     (phase1_surface_normalize_optional_static_arguments_round_trip
       arguments_tree arguments Harguments) as Harguments_round_trip.
   unfold phase1_surface_static_reference_spine_tree.
-  cbn.
+  cbn [phase1_static_reference_spine_name
+    phase1_static_reference_spine_arguments].
+  unfold phase1_surface_qualified_name_tree.
   rewrite (phase1_surface_expect_nonterminal_round_trip
     "static_reference" tree body Hnode).
   rewrite (phase1_surface_expect_sequence_round_trip body items Hsequence).

@@ -1,8 +1,10 @@
 From Stdlib Require Import Lists.List Strings.String.
 
 From Phil.Surface Require Import
+  GrammarDerivation
   GrammarAstSourceHeader
-  GrammarAstUnaryExpressionSpineTotality.
+  GrammarAstTopLevelSpine
+  GrammarAstGenericRequirementsSpine.
 
 Import ListNotations.
 Open Scope string_scope.

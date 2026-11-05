@@ -1,8 +1,10 @@
 From Stdlib Require Import Lists.List Strings.String.
 
 From Phil.Surface Require Import
+  GrammarAstSourceHeader
+  GrammarDerivation
   GrammarAstNamedPostfixExpressionSpine
-  GrammarAstNamedPostfixTermProjectionSpineTotality.
+  GrammarAstNamedPostfixTermProjectionSpine.
 
 Import ListNotations.
 Open Scope string_scope.
@@ -105,12 +107,20 @@ Theorem
 Proof.
   intros expression refined Hnormalize.
   destruct expression as [name tail].
-  cbn in Hnormalize.
+  unfold phase1_surface_normalize_named_postfix_expression_refined_tail_spine
+    in Hnormalize.
+  cbn [phase1_named_postfix_expression_spine_tail
+    phase1_named_postfix_expression_spine_name] in Hnormalize.
   destruct
     (phase1_surface_normalize_named_postfix_expression_refined_tail tail)
     as [tail_value |] eqn:Htail; try discriminate Hnormalize.
   inversion Hnormalize; subst refined.
-  cbn.
+  unfold phase1_surface_named_postfix_expression_refined_tail_spine_tree,
+    phase1_surface_named_postfix_expression_spine_tree.
+  cbn [phase1_named_postfix_expression_refined_tail_name
+    phase1_named_postfix_expression_refined_tail
+    phase1_named_postfix_expression_spine_name
+    phase1_named_postfix_expression_spine_tail].
   rewrite
     (phase1_surface_normalize_named_postfix_expression_refined_tail_round_trip
       tail tail_value Htail).

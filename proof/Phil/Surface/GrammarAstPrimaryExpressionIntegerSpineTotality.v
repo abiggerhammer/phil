@@ -1,6 +1,15 @@
-From Stdlib Require Import Lists.List Strings.String.
+From Stdlib Require Import Arith.PeanoNat Lists.List Strings.String.
 
 From Phil.Surface Require Import
+  Grammar
+  GrammarAstPrimaryExpressionCharSpine
+  GrammarAstPrimaryExpressionFloatSpine
+  GrammarAstPrimaryExpressionLiteralSpine
+  GrammarAstPrimaryExpressionSpineTotality
+  GrammarAstPrimaryExpressionStringSpine
+  GrammarAstSourceHeader
+  GrammarDerivation
+  GrammarDeterminacySimpleResolverSoundness
   GrammarAstPrimaryExpressionIntegerSpine
   GrammarAstPrimaryExpressionFloatSpineTotality.
 

@@ -1,6 +1,8 @@
 From Stdlib Require Import Lists.List Strings.String.
 
 From Phil.Surface Require Import
+  GrammarAstSourceHeader
+  GrammarDerivation
   GrammarAstGenericRequirementsSpine.
 
 Import ListNotations.
@@ -122,7 +124,7 @@ Proof.
     + eapply phase1_surface_normalize_term_argument_suffix_round_trip.
       exact Hargument.
     + eapply IH.
-      exact Hrest.
+      reflexivity.
 Qed.
 
 Definition phase1_surface_term_argument_entries_tree

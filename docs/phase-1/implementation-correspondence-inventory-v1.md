@@ -88,6 +88,23 @@ A proof that adds a recursive payload carrier or reconstruction theorem advances
 G3. It does not by itself close G2 or G4, establish production completeness, or
 promote either active ledger target.
 
+### Follow-up formal carrier evidence
+
+The [recursive grouping slice](surface-parser-recursive-grouping-correspondence-v1.md)
+merged in `9cf11bc88ff4b3d006e1f34336151b4ae7a30506` proves a lossless grouping
+transformation and totality from a canonical grammar derivation using computed
+tree-size fuel. Its command/fallback bodies remain explicit retained boundaries.
+
+The subsequent
+[primary/postfix composition slice](surface-parser-primary-postfix-recursive-grouping-v1.md)
+uses that result to replace the actual tuple/parenthesized child fields in a
+nine-alternative primary carrier, then embeds that replacement in the immediate
+postfix consumer. It supplies exact reconstruction and grammar-derived totality,
+including adapters for the existing carriers. Its named-postfix branch retains
+the established representation. This is further formal evidence toward G3;
+lifting the new consumed field through the arithmetic and record/data chain,
+and binding it to the production AST, remain distinct work.
+
 ## Work needed to finish the umbrella inventory
 
 The next inventory pass must make coverage reviewable before an umbrella

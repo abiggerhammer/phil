@@ -3,6 +3,8 @@ From Stdlib Require Import Lists.List Strings.String.
 From Phil.Surface Require Export GrammarAstSourceHeader.
 
 From Phil.Surface Require Import
+  GrammarAstTypeSpine
+  GrammarDerivation
   GrammarAstShallowCompoundTypePayloadSpine
   GrammarAstVariantPayloadSpine
   GrammarAstGenericRequirementsSpine.
@@ -134,6 +136,9 @@ Proof.
     as [[] |] eqn:Hclose; try discriminate Hnormalize.
   inversion Hnormalize; subst refinement.
   unfold phase1_surface_refinement_type_spine_tree.
+  cbn [phase1_refinement_type_spine_binder
+    phase1_refinement_type_spine_base_type_tree
+    phase1_refinement_type_spine_proposition_tree].
   rewrite (phase1_surface_expect_nonterminal_round_trip
     "refinement_type" tree body Hnode).
   rewrite (phase1_surface_expect_sequence_round_trip body items Hsequence).
@@ -243,6 +248,8 @@ Proof.
     as [rest |] eqn:Hrest; try discriminate Hnormalize.
   inversion Hnormalize; subst tuple_type.
   unfold phase1_surface_tuple_type_spine_tree.
+  cbn [phase1_tuple_type_spine_first
+    phase1_tuple_type_spine_second phase1_tuple_type_spine_rest].
   rewrite (phase1_surface_expect_nonterminal_round_trip
     "tuple_type" tree body Hnode).
   rewrite (phase1_surface_expect_sequence_round_trip body items Hsequence).

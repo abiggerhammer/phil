@@ -1,6 +1,12 @@
 From Stdlib Require Import Lists.List Strings.String.
 
 From Phil.Surface Require Import
+  Grammar
+  GrammarAstGenericRequirementsTotality
+  GrammarAstSourceHeader
+  GrammarAstTopLevelSpine
+  GrammarDerivation
+  GrammarDeterminacySimpleResolverSoundness
   GrammarAstPrimaryExpressionSpine
   GrammarAstSourceHeaderTotality.
 
@@ -46,19 +52,19 @@ Proof.
         destruct (literal_derivation_is_exact
           phase1_surface_rules path "true" input rest selected Hderive)
           as [tail [_ [_ Htree]]].
-        rewrite Htree. cbn. rewrite String.eqb_refl. reflexivity.
+        rewrite Htree. reflexivity.
       * destruct index as [|index].
         -- cbn in Hnth. inversion Hnth; subst item.
            destruct (literal_derivation_is_exact
              phase1_surface_rules path "false" input rest selected Hderive)
              as [tail [_ [_ Htree]]].
-           rewrite Htree. cbn. rewrite String.eqb_refl. reflexivity.
+           rewrite Htree. reflexivity.
         -- destruct index as [|index].
            ++ cbn in Hnth. inversion Hnth; subst item.
               destruct (literal_derivation_is_exact
                 phase1_surface_rules path "unit" input rest selected Hderive)
                 as [tail [_ [_ Htree]]].
-              rewrite Htree. cbn. rewrite String.eqb_refl. reflexivity.
+              rewrite Htree. reflexivity.
            ++ destruct index as [|index].
               ** cbn in Hnth. inversion Hnth; subst item.
                  exact (phase1_surface_validate_named_node_total_from_derivation
@@ -75,7 +81,7 @@ Proof.
                          *** cbn in Hnth. inversion Hnth; subst item.
                              exact (phase1_surface_validate_named_node_total_from_derivation
                                "integer_literal" path input rest selected Hderive).
-                         *** cbn in Hnth. discriminate Hnth.
+                         *** destruct index; cbn in Hnth; discriminate Hnth.
 Qed.
 
 Theorem phase1_surface_normalize_primary_expression_spine_total_from_derivation :
@@ -101,9 +107,9 @@ Proof.
   pose proof
     (phase1_surface_primary_expression_branch_valid_total_from_derivation
       index item _ _ _ selected Hnth Hselected) as Hvalid.
-  let expression := constr:(
+  set (expression :=
     {| phase1_primary_expression_spine_branch := index;
-       phase1_primary_expression_spine_selected := selected |}) in
+       phase1_primary_expression_spine_selected := selected |}).
   assert (Hnormalize :
     phase1_surface_normalize_primary_expression_spine tree = Some expression).
   {

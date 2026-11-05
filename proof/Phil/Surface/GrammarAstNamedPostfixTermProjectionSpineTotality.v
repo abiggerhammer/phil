@@ -1,6 +1,21 @@
 From Stdlib Require Import Lists.List Strings.String.
 
 From Phil.Surface Require Import
+  Grammar
+  GrammarAstNamedPostfixExpressionSpineTotality
+  GrammarAstNamedPostfixStaticArgumentsSpine
+  GrammarAstNamedPostfixStaticProjectionSpine
+  GrammarAstNamedPostfixStaticTermArgumentsSpine
+  GrammarAstNamedPostfixStaticTermArgumentsSpineTotality
+  GrammarAstNamedPostfixTailChoiceSpine
+  GrammarAstNamedPostfixTailChoiceSpineTotality
+  GrammarAstNamedPostfixTermArgumentsSpine
+  GrammarAstSourceHeader
+  GrammarAstSourceHeaderTotality
+  GrammarAstStaticArgumentsTotality
+  GrammarAstTopLevelSpine
+  GrammarDerivation
+  GrammarDeterminacySimpleResolverSoundness
   GrammarAstNamedPostfixTermProjectionSpine
   GrammarAstTermArgumentsTotality.
 
@@ -45,7 +60,7 @@ Proof.
     inversion Hnth; subst item.
     destruct
       (derives_sequence_expression_exposes_items
-        phase1_surface_rules path
+        phase1_surface_rules (descend path (AtAlternative 0))
         [ ENonterminal "static_arguments";
           EOptional (ENonterminal "term_arguments");
           ERepetition
@@ -53,6 +68,7 @@ Proof.
         ]
         input rest selected Hselected)
       as [trees [Hselected_tree Hitems]].
+    revert Htree Hselected_tree.
     repeat match goal with
     | Hseq : DerivesSequence phase1_surface_rules _ _ (_ :: _) _ _ _ |- _ =>
         inversion Hseq; subst; clear Hseq
@@ -61,6 +77,7 @@ Proof.
     | Hnil : DerivesSequence phase1_surface_rules _ _ [] _ _ _ |- _ =>
         inversion Hnil; subst; clear Hnil
     end.
+    intros Htree Hselected_tree.
     match goal with
     | Hstatic : Derives phase1_surface_rules _
         (ENonterminal "static_arguments") _ _ ?static_arguments_tree |- _ =>
@@ -135,13 +152,14 @@ Proof.
       inversion Hnth; subst item.
       destruct
         (derives_sequence_expression_exposes_items
-          phase1_surface_rules path
+          phase1_surface_rules (descend path (AtAlternative 1))
           [ ENonterminal "term_arguments";
             ERepetition
               phase1_surface_named_postfix_projection_expression_for_totality
           ]
           input rest selected Hselected)
         as [trees [Hselected_tree Hitems]].
+      revert Htree Hselected_tree.
       repeat match goal with
       | Hseq : DerivesSequence phase1_surface_rules _ _ (_ :: _) _ _ _ |- _ =>
           inversion Hseq; subst; clear Hseq
@@ -150,6 +168,7 @@ Proof.
       | Hnil : DerivesSequence phase1_surface_rules _ _ [] _ _ _ |- _ =>
           inversion Hnil; subst; clear Hnil
       end.
+      intros Htree Hselected_tree.
       match goal with
       | Harguments : Derives phase1_surface_rules _
           (ENonterminal "term_arguments") _ _ ?term_arguments_tree,
@@ -208,6 +227,5 @@ Proof.
                 phase1_surface_normalize_named_postfix_term_projection_tree_round_trip;
               exact Hnormalize ] ]
       end.
-    + cbn in Hnth.
-      discriminate Hnth.
+    + destruct index; cbn in Hnth; discriminate Hnth.
 Qed.
