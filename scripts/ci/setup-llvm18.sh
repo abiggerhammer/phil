@@ -11,9 +11,9 @@ fi
 
 for binary in llvm-as-18 llvm-link-18 clang-18; do
   command -v "$binary"
-  "$binary" --version | head -n 2
+  "$binary" --version | sed -n '1,2p'
 done
 
-llvm-as-18 --version | grep -Eq 'version 18\\.'
-llvm-link-18 --version | grep -Eq 'version 18\\.'
-clang-18 --version | grep -Eq 'version 18\\.'
+llvm-as-18 --version | grep -Eq 'version 18[.]'
+llvm-link-18 --version | grep -Eq 'version 18[.]'
+clang-18 --version | grep -Eq 'version 18[.]'
