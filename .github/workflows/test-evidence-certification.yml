@@ -60,9 +60,11 @@ permissions:
 
 jobs:
   certify-test-evidence:
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     steps:
       - uses: actions/checkout@v4
+      - name: Install and verify LLVM 18
+        run: bash scripts/ci/setup-llvm18.sh
 
       - uses: haskell-actions/setup@v2
         with:
@@ -217,9 +219,11 @@ jobs:
           retention-days: 30
 
   certify-remaining-runtime-test-evidence:
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     steps:
       - uses: actions/checkout@v4
+      - name: Install and verify LLVM 18
+        run: bash scripts/ci/setup-llvm18.sh
 
       - uses: haskell-actions/setup@v2
         with:

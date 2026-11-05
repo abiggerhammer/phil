@@ -15,10 +15,13 @@ permissions:
 
 jobs:
   build-and-test:
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     steps:
       - name: Check out repository
         uses: actions/checkout@v4
+
+      - name: Install and verify LLVM 18
+        run: bash scripts/ci/setup-llvm18.sh
 
       - name: Set up Haskell
         uses: haskell-actions/setup@v2
