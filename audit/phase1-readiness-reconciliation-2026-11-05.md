@@ -37,3 +37,13 @@ The source-confirmed `ReusableProofEvidence` record-field exposure listed in thi
 The three record labels are private; original getter names remain usable. The tests compile positive getter clients, require each external record-update attempt to fail, and replay genuine prepared cache acceptance and dependency/revision/scope/validity invalidation through VER-006. The earlier source observations above remain historical at their review pin. This closes only this protected-field mutation bypass, not all potential cache-consumption or identity errors.
 
 **Remaining immediate implementation candidate:** `FloatValue` record-label exposure; ABI-01/02 and current RT-01/02/03 dispositions remain distinct. Independent freeze verdict remains **NOT YET**.
+
+## Implementation delta — 2026-11-05: FloatValue record-update boundary
+
+The historical `430aba3/FLOAT-BOUNDARY` source-import record-label exposure is **implemented and tested** by [PR #1570](https://github.com/abiggerhammer/phil/pull/1570), exact green head `45a13f9bf91287883ac862158116808610d51d7b`, squash merge `85d0b4049ad3023ea34ee0216228e3c164df1be0`.
+
+All **21/21** reported exact-head PR workflows completed successfully, including the [dedicated FloatValue boundary run](https://github.com/abiggerhammer/phil/actions/runs/42023795612), existing numeric-semantics proof checks and warning-free Haskell integration. The two actual record labels are private, original read-only getters remain, external attempts to update either field are compile-negative, and F32 range / valid F32 and F64 / same-format numeric conversion controls pass.
+
+**Scope:** `Phil.Core.FloatArithmetic` is an internal Cabal `other-modules` component. This closes the tested source-import mutation path, not a demonstrated public installed-package exploit, whole IEEE arithmetic refinement, or all numeric trust assumptions. Preserve the historical audit observations at their original pins.
+
+**Remaining immediate implementation item:** runtime ABI-01/02 and the default calling-convention premise. RT-01/02/03, NR-D06, release asset verification and independent final-delta sign-off remain separate. Independent-audit freeze: **NOT YET**.
