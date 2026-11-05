@@ -52,3 +52,35 @@ The extension keeps definedness separate from predicate truth. Nested `TyRefined
 The permanent product-composition replay covers the two N3 accepting consumers, the direct-refinement control, a valid `(5 - 3) == (5 - 3)` product, ordinary sort checking, ordinary product equality, preservation of one-use ownership after the logical refinement view, and an exact false refinement showing that formation does not require the predicate itself to be true.
 
 This remains an extension of `PHIL-AUD-TYPE-DEFINEDNESS-001`, not a new root cause and not a rollback of `PHIL-AUD-PRODUCT-DEFEQ-001`. Session-payload definedness and durable post-consumption logical-subject support remain separate follow-through boundaries.
+
+## D01–D03 endpoint/session definedness follow-through (November 2026)
+
+The earlier assurance boundary explicitly left dependent-session payload
+definedness for later work. This extension addresses that Core value-boundary
+gap without changing the separate type-sort or inhabitance checks.
+
+`checkTypeDefinednessWithSubject` now descends into the finite syntax of
+`TyEndpoint` and `TyPendingRecv`. It validates send/receive message types,
+select/offer branch payloads, continuation message types, and nested
+Bytes/Proof/product/refinement types before definitional equality can erase a
+Nat-subtraction prerequisite. `Rec` is traversed once and `SessionVar` is
+a leaf; no recursive protocol unfolding is introduced.
+
+Session message and branch binders extend only their continuations, as in
+`checkSessionSorts`. Each choice branch has a separate scope. The pending
+receive frame binder is a logical `TyFrame` binder, not an owner. No endpoint
+term is fabricated as the subject of a nested payload refinement. Existing
+`dischargeSideConditionsUnder` checks these prerequisites without treating
+logical binders as proof evidence or resource bindings.
+
+The dedicated endpoint-definedness replay, 
+`test/Phase1AuditSessionTypeDefinednessMain.hs`, checks receive, send,
+select/offer, later continuations, nested product refinements, pending
+receives, and stored endpoint synthesis, with controls for valid dependent
+continuations, finite recursion, one-shot ownership, and uninhabited but
+well-formed refinements. The existing session-sort, type-definedness,
+verification and release suites remain required.
+
+This repair is scoped to the Core value/ascription boundary. It does not
+claim a global dependent-session theorem, a new residual-ID API, or
+implementation/Rocq correspondence.
