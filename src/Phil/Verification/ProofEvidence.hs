@@ -367,11 +367,23 @@ requireProofTarget graph revision = do
 -- preparation so the dependency set is captured from the exact graph in which
 -- the evidence was originally accepted.
 data ReusableProofEvidence = ReusableProofEvidence
-  { reusableCheckedProofEvidence :: CheckedProofEvidence
-  , reusableProofDependencies :: Set RevisionId
-  , reusableProofValidityScope :: ValidityScope
+  { privateReusableCheckedProofEvidenceField :: CheckedProofEvidence
+  , privateReusableProofDependenciesField :: Set RevisionId
+  , privateReusableProofValidityScopeField :: ValidityScope
   }
   deriving (Eq, Show)
+
+-- | Read-only projections. These names intentionally are not record labels:
+-- exporting the old labels permitted external copies of prepared cache evidence
+-- to be updated without repeating 'prepareReusableProofEvidence'.
+reusableCheckedProofEvidence :: ReusableProofEvidence -> CheckedProofEvidence
+reusableCheckedProofEvidence = privateReusableCheckedProofEvidenceField
+
+reusableProofDependencies :: ReusableProofEvidence -> Set RevisionId
+reusableProofDependencies = privateReusableProofDependenciesField
+
+reusableProofValidityScope :: ReusableProofEvidence -> ValidityScope
+reusableProofValidityScope = privateReusableProofValidityScopeField
 
 data EvidenceReuseError
   = ReusePreparationGraphRevisionMismatch Digest Digest
@@ -416,9 +428,9 @@ prepareReusableProofEvidence graph validityScope checked = do
     else Left (ReusePreparationOutsideCertificationScope target)
   validateValidityScope validityScope
   Right ReusableProofEvidence
-    { reusableCheckedProofEvidence = checked
-    , reusableProofDependencies = targetDependencies graph target
-    , reusableProofValidityScope = validityScope
+    { privateReusableCheckedProofEvidenceField = checked
+    , privateReusableProofDependenciesField = targetDependencies graph target
+    , privateReusableProofValidityScopeField = validityScope
     }
 
 -- | Evaluate cached proof evidence in a current semantic context.  Reuse checks
@@ -435,11 +447,11 @@ evaluateReusableProofEvidence graph (ValidityScope currentDimensions) reusable =
     [] -> EvidenceReusable
     _ -> EvidenceStale reasons
   where
-    checked = reusableCheckedProofEvidence reusable
+    checked = privateReusableCheckedProofEvidenceField reusable
     target = checkedProofObligationRevision checked
     targetPresent = Map.member target (verificationGraphNodes graph)
     targetInScope = Set.member target (verificationGraphCertificationScope graph)
-    expectedDependencies = reusableProofDependencies reusable
+    expectedDependencies = privateReusableProofDependenciesField reusable
     currentDependencies = targetDependencies graph target
     targetReasons
       | not targetPresent = [ReuseTargetRevisionUnavailable target]
@@ -450,7 +462,7 @@ evaluateReusableProofEvidence graph (ValidityScope currentDimensions) reusable =
           ++ [ ReuseDependencySetChanged expectedDependencies currentDependencies
              | expectedDependencies /= currentDependencies
              ]
-    ValidityScope expectedDimensions = reusableProofValidityScope reusable
+    ValidityScope expectedDimensions = privateReusableProofValidityScopeField reusable
     validityReasons = concatMap checkDimension (Map.toAscList expectedDimensions)
     checkDimension (dimension, expectedValue) =
       case Map.lookup dimension currentDimensions of
