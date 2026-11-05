@@ -5,10 +5,12 @@ module Phil.Verification.SourceManifestBinding
   , sourceManifestBindingManifest
   , SourceManifestBindingError (..)
   , closeSourceManifestBinding
+  , closeSourceManifestBindingForInstance
   , bindProducedFinalAuthority
   ) where
 
 import qualified Data.Set as Set
+import qualified Data.Map.Strict as Map
 import Phil.Assurance.Types
   ( AssuranceLedger
   , AssuranceManifest (..)
@@ -16,10 +18,13 @@ import Phil.Assurance.Types
   )
 import Phil.Core.Generic
   ( GenericApplicationIdentity (..)
+  , GenericStaticParameterKey (..)
   , GenericDischargeLineage (..)
   )
 import Phil.Core.Static
   ( DeclarationIdentity (..)
+  , ArchitectureInstanceDescriptor (..)
+  , deriveArchitectureInstanceIdentity
   )
 import Phil.Verification
   ( ApplicationAssurancePolicy
@@ -64,6 +69,9 @@ sourceManifestBindingManifest (CertifiedSourceManifestBinding _ manifest) = mani
 
 data SourceManifestBindingError
   = SourceManifestDeclarationNotInVerificationBundle DeclarationIdentity
+  | SourceManifestInstanceDeclarationMismatch DeclarationIdentity DeclarationIdentity
+  | SourceManifestStaticArgumentsMismatch
+  | SourceManifestInstanceNotInVerificationBundle
   | SourceManifestClosureRejected ManifestClosureError
   | SourceManifestReleaseManifestMismatch
   | SourceManifestNativeBindingRejected NativeFinalAuthorityError
@@ -94,6 +102,45 @@ closeSourceManifestBinding source bundle policy context ledger selection = do
   manifest <- either (Left . SourceManifestClosureRejected) Right
     (closeVerificationBundle bundle policy context ledger selection)
   pure (CertifiedSourceManifestBinding application manifest)
+
+-- | Stronger closeout of one exact generic application against an actual
+-- architecture instance descriptor. The descriptor is checked against the
+-- bundle's stored canonical instance identity, rather than trusted by name.
+-- The static-argument map must equal the instance bindings in full: no
+-- omissions, additional parameters, or silently ignored source arguments.
+closeSourceManifestBindingForInstance
+  :: GenericApplicationAssurance
+  -> ArchitectureInstanceDescriptor
+  -> VerificationBundle
+  -> ApplicationAssurancePolicy
+  -> VerificationContext
+  -> AssuranceLedger
+  -> ManifestClosureSelection
+  -> Either SourceManifestBindingError CertifiedSourceManifestBinding
+closeSourceManifestBindingForInstance source descriptor bundle policy context ledger selection = do
+  let lineage = genericApplicationAssuranceLineage source
+      application = genericDischargeApplicationIdentity lineage
+      declaration = DeclarationIdentity
+        { identityDeclarationKey = genericApplicationDeclarationKey application
+        , identityInterfaceRevision = genericApplicationInterfaceRevision application
+        , identityDefinitionRevision = genericDischargeDefinitionRevision lineage
+        }
+      descriptorDeclaration = architectureDeclarationIdentity descriptor
+      sourceBindings = Map.fromList
+        [ (unGenericStaticParameterKey key, value)
+        | (key, value) <- Map.toAscList (genericApplicationSemanticArguments application)
+        ]
+      instanceIdentity = deriveArchitectureInstanceIdentity descriptor
+  if declaration == descriptorDeclaration
+    then Right ()
+    else Left (SourceManifestInstanceDeclarationMismatch declaration descriptorDeclaration)
+  if sourceBindings == architectureStaticBindings descriptor
+    then Right ()
+    else Left SourceManifestStaticArgumentsMismatch
+  if Set.member instanceIdentity (verificationBundleArchitectureInstances bundle)
+    then Right ()
+    else Left SourceManifestInstanceNotInVerificationBundle
+  closeSourceManifestBinding source bundle policy context ledger selection
 
 -- | The final adapter must consume the same produced manifest, not a second
 -- independently supplied manifest with a caller-selected identity pair.
