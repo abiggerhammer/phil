@@ -20,3 +20,23 @@ GC finalizers from masking an open-handle defect.
 
 This does not establish crash durability, a full asynchronous-interruption
 contract, hostile-directory policy, read-size limits or provider-wide proof.
+
+## Follow-up: pre-close negative-control distinction
+
+The original real-filesystem RLIMIT_FSIZE probe passed on both the historical
+unfixed source and repaired source. It therefore did not isolate the hPut
+failure point: an exception during hClose can close the descriptor already.
+
+The stronger regression verifies the pinned original source blob
+`ccc9e975be0ee318e333808387217c71d8217af5` at commit
+`9ad035731fc4c87c5be2aba7e4bc589b738f1231`. It compiles isolated
+copies of the original and repaired module, each instrumented in temporary
+test-only source at exactly one hPut call with an identifying IOException.
+The source checkout and public interfaces are unmodified. GHC must compile
+the instrumented source path.
+
+The original must fail specifically because its descriptor is still open
+after that pre-close exception; the repaired module must pass and retry in
+the same process. The real RLIMIT failure remains a separate positive
+control, not evidence about which write/flush operation threw. This is a
+bounded Linux/GHC regression rather than proof of all exception cases.

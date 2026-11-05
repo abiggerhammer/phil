@@ -4,6 +4,7 @@ module Main (main) where
 import Control.Monad (forM, unless)
 import qualified Data.ByteString as ByteString
 import Data.List (isInfixOf)
+import qualified Data.Text as Text
 import Phil.Compiler.SteveCAS
   ( InstallResult (..), SteveCASError (..), computeContentId, installBlob )
 import System.Directory (listDirectory)
@@ -12,14 +13,16 @@ import System.Exit (die)
 import System.IO.Error (catchIOError)
 import System.Posix.Files (readSymbolicLink)
 
--- Executed with RLIMIT_FSIZE=0, SIGXFSZ ignored, and a large RTS nursery.
+-- Injected mode verifies a specific pre-close exception; real mode probes
+-- RLIMIT_FSIZE but does not attribute the error to hPut versus hClose.
 -- Inspect the same process's descriptors before GC or process exit.
 main :: IO ()
 main = do
   args <- getArgs
-  root <- case args of
-    [path] -> pure path
-    _ -> die "usage: steve-cas-cleanup-worker <absolute-store-directory>"
+  (root, injected) <- case args of
+    [path, "injected"] -> pure (path, True)
+    [path, "real"] -> pure (path, False)
+    _ -> die "usage: steve-cas-cleanup-worker <store-dir> (injected|real)"
 
   before <- stagedDescriptors
   unless (null before) $
@@ -29,8 +32,12 @@ main = do
       digest = computeContentId payload
   failed <- installBlob root digest payload
   case failed of
-    Left (StoreIOError _) -> pure ()
-    other -> die ("expected OS write failure, got: " ++ show other)
+    Left (StoreIOError message)
+      | injected && not (Text.isInfixOf
+          "E-STEVE-CLEANUP-01-injected-preclose-failure" message) ->
+            die ("wrong injected exception: " ++ Text.unpack message)
+      | otherwise -> pure ()
+    other -> die ("expected CAS write failure, got: " ++ show other)
 
   after <- stagedDescriptors
   unless (null after) $
@@ -38,7 +45,8 @@ main = do
   entries <- listDirectory root
   unless (null entries) $
     die ("temporary name or published object survived failure: " ++ show entries)
-  putStrLn "PASS: E-STEVE-CLEANUP-01 failed hPut closes the live temp descriptor"
+  putStrLn ("PASS: E-STEVE-CLEANUP-01 no live temp FD after " ++
+    if injected then "injected pre-close failure" else "filesystem failure")
 
   -- Retry in the same process and preserve hard-link no-replace behavior.
   let emptyId = computeContentId ByteString.empty

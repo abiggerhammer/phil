@@ -23,6 +23,8 @@ jobs:
     runs-on: ubuntu-24.04
     steps:
       - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
       - uses: haskell-actions/setup@v2
         with:
           ghc-version: '9.6.7'
@@ -36,7 +38,7 @@ jobs:
             -package bytestring -package text -package directory \
             -package unix -package cryptohash-sha256 \
             test/Phase1AuditSteveCASCleanupWorker.hs
-      - name: Reproduce E-STEVE-CLEANUP-01 under forced write error
+      - name: Verify pinned baseline failure and repaired pre-close cleanup
         run: bash scripts/ci/test-steve-cas-handle-cleanup.sh
       - name: Replay ordinary Steve CAS install/read/no-replace controls
         run: cabal exec -- runghc -isrc -itest -Wall -Werror test/Phase1INT006SteveCASMain.hs
