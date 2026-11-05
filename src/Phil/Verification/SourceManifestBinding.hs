@@ -26,7 +26,6 @@ import Phil.Verification
   )
 import Phil.Verification.ArtifactClosure
   ( CertifiedApplicationArtifact
-  , certifiedApplicationSourceAssurance
   )
 import Phil.Verification.Bundle
   ( VerificationBundle (..)
