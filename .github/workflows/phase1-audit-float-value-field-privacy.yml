@@ -1,0 +1,33 @@
+name: Phase 1 Audit FloatValue Record Field Privacy
+
+on:
+  pull_request:
+    paths:
+      - 'src/Phil/Core/FloatArithmetic.hs'
+      - 'test/Phase1AuditFloatValueFieldPrivacyMain.hs'
+      - 'scripts/ci/phase1-audit-float-value-field-privacy.sh'
+      - '.github/workflows/phase1-audit-float-value-field-privacy.yml'
+  push:
+    branches: [main]
+    paths:
+      - 'src/Phil/Core/FloatArithmetic.hs'
+      - 'test/Phase1AuditFloatValueFieldPrivacyMain.hs'
+      - 'scripts/ci/phase1-audit-float-value-field-privacy.sh'
+      - '.github/workflows/phase1-audit-float-value-field-privacy.yml'
+
+permissions:
+  contents: read
+
+jobs:
+  float-value-privacy:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: haskell-actions/setup@v2
+        with:
+          ghc-version: '9.6.7'
+          cabal-version: 'latest'
+      - name: Build Haskell with warnings fatal
+        run: cabal build all --enable-tests --ghc-options=-Werror
+      - name: Check external-client privacy and numeric consumers
+        run: bash scripts/ci/phase1-audit-float-value-field-privacy.sh
