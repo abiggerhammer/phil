@@ -1,0 +1,75 @@
+name: Phase 1 Audit RT-01 RT-02 RT-03 Current Reproduction
+
+on:
+  pull_request:
+    paths:
+      - 'src/Phil/Compiler/RuntimeChoiceLLVM.hs'
+      - 'test/Phase1INT006RuntimeChoiceLLVMMain.hs'
+      - 'runtime/phase0/control_codec_v1.c'
+      - 'test/Phase1AuditRT03TransportAliasing.c'
+      - '.github/workflows/phase1-audit-rt01-rt03-current-replay.yml'
+  push:
+    branches: [main]
+    paths:
+      - 'src/Phil/Compiler/RuntimeChoiceLLVM.hs'
+      - 'test/Phase1INT006RuntimeChoiceLLVMMain.hs'
+      - 'runtime/phase0/control_codec_v1.c'
+      - 'test/Phase1AuditRT03TransportAliasing.c'
+      - '.github/workflows/phase1-audit-rt01-rt03-current-replay.yml'
+
+permissions:
+  contents: read
+
+jobs:
+  rt01-rt02-runtime-choice:
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+      - uses: haskell-actions/setup@v2
+        with:
+          ghc-version: '9.6.7'
+          cabal-version: 'latest'
+      - name: Build complete Haskell substrate with warnings fatal
+        run: cabal build all --enable-tests --ghc-options=-Werror
+      - name: Reproduce cleanup-only input and payload CFG pressure on real Steve plan
+        run: cabal exec -- runghc -Wall -Werror -isrc test/Phase1INT006RuntimeChoiceLLVMMain.hs
+      - name: Verify actual emitted LLVM using supported LLVM 18
+        run: |
+          bash scripts/ci/setup-llvm18.sh
+          cabal exec -- runghc -Wall -Werror -isrc test/Phase1INT006RuntimeChoiceLLVMMain.hs emit > "$RUNNER_TEMP/steve-rt-llvm.ll"
+          llvm-as-18 "$RUNNER_TEMP/steve-rt-llvm.ll" -o "$RUNNER_TEMP/steve-rt-llvm.bc"
+          opt-18 -passes=verify -disable-output "$RUNNER_TEMP/steve-rt-llvm.bc"
+
+  rt03-native-transport:
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - name: Compile historical source and current source under ASan/UBSan
+        shell: bash
+        run: |
+          set -euo pipefail
+          git cat-file blob 42c7bc907836169f8149aee6d9c84d5b3cd2f2ec > "$RUNNER_TEMP/old-control-codec.c"
+          clang -std=c11 -Wall -Wextra -Wpedantic -Werror -O1 -g \
+            -fsanitize=address,undefined -fno-omit-frame-pointer -Iruntime/phase0 \
+            "$RUNNER_TEMP/old-control-codec.c" test/Phase1AuditRT03TransportAliasing.c \
+            -o "$RUNNER_TEMP/rt03-historical"
+          clang -std=c11 -Wall -Wextra -Wpedantic -Werror -O1 -g \
+            -fsanitize=address,undefined -fno-omit-frame-pointer -Iruntime/phase0 \
+            runtime/phase0/control_codec_v1.c test/Phase1AuditRT03TransportAliasing.c \
+            -o "$RUNNER_TEMP/rt03-repaired"
+      - name: Historical UAF is reproduced; repaired full C translation unit passes
+        shell: bash
+        run: |
+          set -euo pipefail
+          ulimit -c 0
+          if ASAN_OPTIONS=detect_leaks=0:halt_on_error=1:abort_on_error=1 \
+             "$RUNNER_TEMP/rt03-historical" > "$RUNNER_TEMP/rt03-old.log" 2>&1; then
+            echo "FAIL: pinned historical codec did not reproduce RT-03" >&2
+            exit 1
+          fi
+          grep -Fq "heap-use-after-free" "$RUNNER_TEMP/rt03-old.log"
+          echo "PASS: historical full-source RT-03 ASan negative control"
+          ASAN_OPTIONS=detect_leaks=1:halt_on_error=1:abort_on_error=1 \
+            "$RUNNER_TEMP/rt03-repaired"

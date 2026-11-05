@@ -6,6 +6,8 @@ module Phil.Compiler.RuntimeChoiceLLVM
   , runtimeChoiceProviderABIDescriptor
   , phase1RuntimeChoiceLLVMTarget
   , lowerRuntimeChoiceABIToLLVM
+  , runtimeChoiceLLVMExternalInputs
+  , validateRuntimeChoicePayloadPredecessors
   ) where
 
 import Control.Monad (forM_, unless)
@@ -77,6 +79,7 @@ data RuntimeChoiceLLVMError
   | RuntimeChoiceLLVMPayloadCarrierMismatch RuntimeChoiceSite Text ValueId RuntimeChoiceABICarrier RuntimeChoiceABICarrier
   | RuntimeChoiceLLVMValueMissing RuntimeChoiceSite ValueId
   | RuntimeChoiceLLVMPayloadTargetAmbiguous Text BlockId
+  | RuntimeChoiceLLVMPayloadTargetPredecessors Text BlockId [BlockId] [BlockId]
   | RuntimeChoiceLLVMUnsupportedOperation Text BlockId SystemsOp
   | RuntimeChoiceLLVMUnsupportedTerminator Text BlockId SystemsTerminator
   deriving (Eq, Show)
@@ -238,6 +241,7 @@ renderFunction
   -> (Text, SystemsFunction)
   -> Either RuntimeChoiceLLVMError [Text]
 renderFunction abiPlan (functionName, functionValue) = do
+  validateRuntimeChoicePayloadPredecessors functionName functionValue abiPlan
   incoming <- incomingPayloads functionName abiPlan
   renderedBlocks <- mapM (renderBlock functionName functionValue abiPlan incoming outcomeCodes)
     (orderedBlocks functionValue)
@@ -245,7 +249,7 @@ renderFunction abiPlan (functionName, functionValue) = do
     [ "define i32 @" <> symbol functionName
         <> "(" <> Text.intercalate ", "
           [ "ptr %" <> symbol (unValueId valueId)
-          | valueId <- externalInputs functionName abiPlan
+          | valueId <- runtimeChoiceLLVMExternalInputs functionName functionValue abiPlan
           ]
         <> ") {"
     ]
@@ -358,6 +362,44 @@ renderRuntimeChoice site abiSite =
       ("phil_runtime_choice_invalid_"
         <> runtimeChoiceSiteFunction site <> "_" <> runtimeChoiceSiteBlock site)
 
+-- | Loading a runtime-choice result at target-block entry is valid only
+-- when every incoming edge originates from the producing choice. Otherwise a
+-- path can reach the load without ever initializing the out-slot.
+validateRuntimeChoicePayloadPredecessors
+  :: Text
+  -> SystemsFunction
+  -> RuntimeChoiceABIPlan
+  -> Either RuntimeChoiceLLVMError ()
+validateRuntimeChoicePayloadPredecessors functionName functionValue abiPlan =
+  forM_ (Map.toAscList choices) $ \(target, expected) -> do
+    let actual = sortValuesBlocks . Set.toList . Set.fromList $
+          [ predecessor
+          | (predecessor, blockValue) <- Map.toAscList (systemsFunctionBlocks functionValue)
+          , target `elem` blockSuccessors blockValue
+          ]
+        sources = sortValuesBlocks (Set.toList expected)
+    unless (target /= systemsFunctionEntry functionValue
+            && actual == sources
+            && all (allArmsBoundAtTarget target) (Set.toList expected)) $
+      Left (RuntimeChoiceLLVMPayloadTargetPredecessors functionName target sources actual)
+  where
+    choices :: Map BlockId (Set BlockId)
+    choices = Map.fromListWith Set.union
+      [ (runtimeChoiceABIArmTarget armValue,
+          Set.singleton (BlockId (runtimeChoiceSiteBlock site)))
+      | (site, abiSite) <- Map.toAscList (runtimeChoiceABISites abiPlan)
+      , runtimeChoiceSiteFunction site == functionName
+      , (_, armValue) <- Map.toAscList (runtimeChoiceABIArms abiSite)
+      , Just _ <- [runtimeChoiceABIArmPayload armValue]
+      ]
+    allArmsBoundAtTarget target sourceBlock =
+      case Map.lookup sourceBlock (systemsFunctionBlocks functionValue) of
+        Just SystemsBlock { systemsBlockTerminator = TermRuntimeChoice { runtimeChoiceArms = arms } } ->
+          all (\arm -> runtimeChoiceArmTarget arm /= target
+                || runtimeChoiceArmPayloadBinding arm /= Nothing) (Map.elems arms)
+        _ -> False
+    sortValuesBlocks = map snd . sort . map (\blockId -> (unBlockId blockId, blockId))
+
 incomingPayloads
   :: Text
   -> RuntimeChoiceABIPlan
@@ -380,8 +422,12 @@ incomingPayloads functionName abiPlan =
           | existing == (site, valueId) -> Right result
           | otherwise -> Left (RuntimeChoiceLLVMPayloadTargetAmbiguous functionName target)
 
-externalInputs :: Text -> RuntimeChoiceABIPlan -> [ValueId]
-externalInputs functionName abiPlan =
+-- | Every supported concrete operation's uses contribute to the function
+-- parameter roots, not just runtime provider calls. In particular a value
+-- released only on a cleanup path must still be defined in emitted LLVM.
+runtimeChoiceLLVMExternalInputs
+  :: Text -> SystemsFunction -> RuntimeChoiceABIPlan -> [ValueId]
+runtimeChoiceLLVMExternalInputs functionName functionValue abiPlan =
   sortValues . Set.toList $ required `Set.difference` produced
   where
     functionSites =
@@ -390,10 +436,15 @@ externalInputs functionName abiPlan =
       , runtimeChoiceSiteFunction site == functionName
       ]
     required = Set.fromList
-      [ runtimeInputRoot input
-      | abiSite <- functionSites
-      , input <- runtimeChoiceABIInputs abiSite
-      ]
+      ( [ runtimeInputRoot input
+        | abiSite <- functionSites
+        , input <- runtimeChoiceABIInputs abiSite
+        ]
+        <> [ owner
+           | blockValue <- Map.elems (systemsFunctionBlocks functionValue)
+           , OpReleaseOwner { releaseOwner = owner } <- systemsBlockOps blockValue
+           ]
+      )
     produced = Set.fromList
       [ valueId
       | abiSite <- functionSites

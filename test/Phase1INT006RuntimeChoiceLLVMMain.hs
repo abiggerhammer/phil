@@ -15,7 +15,19 @@ import Phil.Examples.Phase1.SystemsWitnesses
   ( steveCoreProgram
   , stevePhase1StageBundle
   )
-import Phil.Systems.IR (systemsArtifactDigest)
+import Phil.Systems.IR
+  ( BlockId (..)
+  , DecisionId (..)
+  , SystemsArtifact (systemsArtifactProgram)
+  , SystemsBlock (..)
+  , SystemsFunction (..)
+  , SystemsProgram (..)
+  , SystemsOp (..)
+  , SystemsRuntimeChoiceArm (..)
+  , SystemsTerminator (..)
+  , ValueId (..)
+  , systemsArtifactDigest
+  )
 import Phil.Systems.Phase1Stage
   ( Phase1StageBundle
   , phase1StageSystemsArtifact
@@ -41,6 +53,9 @@ main = do
             , ("invalid provider tags trap closed", invalidTagsTrap)
             , ("ambient runtime-choice state is absent", noAmbientChoiceState)
             , ("unbound Systems stage is rejected", unboundStageRejects)
+            , ("cleanup-only owner is a real LLVM function parameter", cleanupOnlyOwnerIsInput)
+            , ("payload target rejects an unrelated predecessor", payloadExtraPredecessorRejects)
+            , ("payload target rejects an unbound same-choice arm", payloadUnboundArmRejects)
             ]
       results <- mapM report checks
       if and results then pure () else exitFailure
@@ -141,6 +156,71 @@ unboundStageRejects = case (stevePlan, stevePhase1StageBundle) of
           Left RuntimeChoiceLLVMPayloadCarrierMismatch {} -> True
           _ -> False
   _ -> False
+
+-- RT-01: use the same Steve ABI plan but add a legal cleanup-only
+-- source operand. It must not disappear merely because no provider receives it.
+cleanupOnlyOwnerIsInput :: Bool
+cleanupOnlyOwnerIsInput = case steveLowered of
+  Left _ -> False
+  Right (stage, abi, _) ->
+    let functions = systemsProgramFunctions
+          (systemsArtifactProgram (phase1StageSystemsArtifact stage))
+    in case Map.lookup "StevePut" functions of
+      Nothing -> False
+      Just function -> case Map.lookup (BlockId "put.ok") (systemsFunctionBlocks function) of
+        Nothing -> False
+        Just blockValue ->
+          let owner = ValueId "cleanup.only"
+              changed = blockValue
+                { systemsBlockOps = OpReleaseOwner owner (DecisionId "cleanup") :
+                    systemsBlockOps blockValue }
+              revised = function { systemsFunctionBlocks =
+                Map.insert (BlockId "put.ok") changed (systemsFunctionBlocks function) }
+          in owner `elem` runtimeChoiceLLVMExternalInputs "StevePut" revised abi
+
+-- RT-02: a non-producing edge into a payload load is invalid LLVM SSA.
+payloadExtraPredecessorRejects :: Bool
+payloadExtraPredecessorRejects = case steveLowered of
+  Left _ -> False
+  Right (stage, abi, _) ->
+    let functions = systemsProgramFunctions
+          (systemsArtifactProgram (phase1StageSystemsArtifact stage))
+    in case Map.lookup "StevePut" functions of
+      Nothing -> False
+      Just function -> case Map.lookup (BlockId "put.failure") (systemsFunctionBlocks function) of
+        Nothing -> False
+        Just blockValue ->
+          let changed = blockValue { systemsBlockTerminator = TermJump (BlockId "put.install") }
+              revised = function { systemsFunctionBlocks =
+                Map.insert (BlockId "put.failure") changed (systemsFunctionBlocks function) }
+          in case validateRuntimeChoicePayloadPredecessors "StevePut" revised abi of
+               Left RuntimeChoiceLLVMPayloadTargetPredecessors {} -> True
+               _ -> False
+
+-- An additional arm from the same choice must not enter the payload target
+-- without initializing that result, even though its predecessor block agrees.
+payloadUnboundArmRejects :: Bool
+payloadUnboundArmRejects = case steveLowered of
+  Left _ -> False
+  Right (stage, abi, _) ->
+    let functions = systemsProgramFunctions
+          (systemsArtifactProgram (phase1StageSystemsArtifact stage))
+    in case Map.lookup "StevePut" functions of
+      Nothing -> False
+      Just function -> case Map.lookup (BlockId "put.entry") (systemsFunctionBlocks function) of
+        Nothing -> False
+        Just blockValue ->
+          case systemsBlockTerminator blockValue of
+            choice@TermRuntimeChoice { runtimeChoiceArms = arms } ->
+              let added = SystemsRuntimeChoiceArm Nothing (BlockId "put.install")
+                  changed = blockValue { systemsBlockTerminator =
+                    choice { runtimeChoiceArms = Map.insert "unbound" added arms } }
+                  revised = function { systemsFunctionBlocks =
+                    Map.insert (BlockId "put.entry") changed (systemsFunctionBlocks function) }
+              in case validateRuntimeChoicePayloadPredecessors "StevePut" revised abi of
+                   Left RuntimeChoiceLLVMPayloadTargetPredecessors {} -> True
+                   _ -> False
+            _ -> False
 
 steveLLVMText :: Maybe Text
 steveLLVMText = case steveLowered of
