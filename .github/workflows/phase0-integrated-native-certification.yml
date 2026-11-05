@@ -46,13 +46,16 @@ permissions:
 
 jobs:
   phase0-integrated-native-upload:
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     steps:
       - uses: actions/checkout@v4
       - uses: haskell-actions/setup@v2
         with:
           ghc-version: '9.6.7'
           cabal-version: 'latest'
+
+      - name: Install and verify LLVM 18
+        run: bash scripts/ci/setup-llvm18.sh
 
       - name: Resolve LLVM 18 tools
         shell: bash
@@ -150,13 +153,16 @@ jobs:
           ./phase0-integrated-upload
 
   certify-phase0-integrated-native-upload:
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     steps:
       - uses: actions/checkout@v4
       - uses: haskell-actions/setup@v2
         with:
           ghc-version: '9.6.7'
           cabal-version: 'latest'
+
+      - name: Install and verify LLVM 18
+        run: bash scripts/ci/setup-llvm18.sh
 
       - name: Resolve LLVM 18 tools
         shell: bash
