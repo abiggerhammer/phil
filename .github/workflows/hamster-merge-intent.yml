@@ -71,7 +71,10 @@ jobs:
 
           pr_json="$(gh api "repos/$GH_REPO/pulls/$PR_NUMBER")"
           labels_json="$(gh api "repos/$GH_REPO/issues/$PR_NUMBER" --jq '[.labels[].name]')"
-          checks_json="$(gh api -H 'Accept: application/vnd.github+json' "repos/$GH_REPO/commits/$EXPECTED_HEAD/check-runs?per_page=100")"
+          checks_json="$(
+            gh api --paginate -H 'Accept: application/vnd.github+json' "repos/$GH_REPO/commits/$EXPECTED_HEAD/check-runs?per_page=100" \
+              | jq -s '{total_count: (.[0].total_count // 0), check_runs: [.[].check_runs[]]}'
+          )"
           main_sha="$(gh api "repos/$GH_REPO/branches/main" --jq '.commit.sha')"
           base_sha="$(jq -r '.base.sha' <<<"$pr_json")"
 
@@ -166,7 +169,10 @@ jobs:
             exit 1
           fi
 
-          checks_json="$(gh api -H 'Accept: application/vnd.github+json' "repos/$GH_REPO/commits/$EXPECTED_HEAD/check-runs?per_page=100")"
+          checks_json="$(
+            gh api --paginate -H 'Accept: application/vnd.github+json' "repos/$GH_REPO/commits/$EXPECTED_HEAD/check-runs?per_page=100" \
+              | jq -s '{total_count: (.[0].total_count // 0), check_runs: [.[].check_runs[]]}'
+          )"
           total="$(jq -r '.total_count' <<<"$checks_json")"
           returned="$(jq -r '.check_runs | length' <<<"$checks_json")"
 
