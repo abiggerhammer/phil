@@ -5,8 +5,34 @@ module Main (main) where
 import qualified Data.Map.Strict as Map
 import qualified Data.Set as Set
 import Data.Text (Text)
+import Phil.Core.Generic
+  ( GenericApplicationIdentity
+  , GenericDischargeLineage (..)
+  , checkGenericInstantiation
+  , deriveGenericApplicationIdentity
+  , deriveGenericDischargeLineage
+  , strictGenericInstantiationPolicy
+  )
+import Phil.Core.Static
+  ( DeclarationKey (..)
+  , DefinitionRevision (..)
+  , InterfaceRevision (..)
+  )
+import Phil.Verification.ArtifactClosure
+  ( CertifiedApplicationArtifact
+  , certifyApplicationArtifact
+  )
+import Phil.Verification.FinalAuthorityAdapter
+import Phil.Verification.GenericAssurance
+  ( GenericApplicationAssurance
+  , composeGenericApplicationAssurance
+  , genericApplicationAssuranceLineage
+  , prepareReusableGenericBodyAssurance
+  )
 import Phil.Assurance.Types
-  ( AssuranceLedger
+  ( ArtifactIdentity (..)
+  , ArtifactRef (..)
+  , AssuranceLedger
   , AssuranceManifest (..)
   , Digest
   , VerificationContext (..)
@@ -55,6 +81,9 @@ main :: IO ()
 main = do
   uploadStage <- requireStage "Upload" uploadStageClosureBundle
   steveStage <- requireStage "Steve" steveStageClosureBundle
+  source <- case nativeAdapterSourceAssurance of
+    Left detail -> putStrLn ("FAIL: final-native-adapter source fixture: " <> detail) >> exitFailure
+    Right value -> pure value
   let upload = releaseFixture "upload" uploadStage
       steve = releaseFixture "steve" steveStage
       checks =
@@ -76,6 +105,16 @@ main = do
           , duplicateTrustIdentityRejected upload)
         , ( "INT-005 residual TCB entries must name their trusted basis"
           , blankTrustBasisRejected upload)
+        , ( "Native final-authority adapter binds Upload source, manifest and exact stage"
+          , nativeAdapterAccepts source upload)
+        , ( "Native final-authority adapter binds Steve source, manifest and exact stage"
+          , nativeAdapterAccepts source steve)
+        , ( "Native adapter rejects a swapped certified release stage"
+          , nativeAdapterSwappedStageRejects source upload steve)
+        , ( "Native adapter rejects a wrong independent source identity"
+          , nativeAdapterWrongSourceRejects source upload)
+        , ( "Native adapter rejects a wrong independent manifest identity"
+          , nativeAdapterWrongManifestRejects source upload steve)
         , ( "NR-D06 stale stored Systems revision fails through certified-release caller"
           , staleStageSystemsRejected upload)
         , ( "NR-D06 stale closed-stage revision fails through certified-release caller"
@@ -292,6 +331,110 @@ independentlyRehashedSystemsManifestRejected fixture =
           && actual == wrong
       _ -> False
 
+-- The application is genuinely composed through the checked VER-009
+-- constructors, rather than inventing GenericApplicationAssurance internals.
+nativeAdapterSourceAssurance
+  :: Either String GenericApplicationAssurance
+nativeAdapterSourceAssurance = do
+  let declaration = DeclarationKey "nr-d06.generic.map"
+      interface = InterfaceRevision "nr-d06.interface.v1"
+      definition = DefinitionRevision "nr-d06.definition.v1"
+      requirements = Set.empty
+      sourceArtifact = ArtifactIdentity
+        (ArtifactRef "nr-d06.accepted-source-proof")
+        (digestText "nr-d06.content-checked-source-evidence")
+  body <- mapLeft show (prepareReusableGenericBodyAssurance
+    declaration interface definition requirements sourceArtifact)
+  application <- mapLeft show (deriveGenericApplicationIdentity declaration interface [])
+  disposition <- mapLeft show (checkGenericInstantiation
+    strictGenericInstantiationPolicy requirements [])
+  mapLeft show (composeGenericApplicationAssurance
+    body requirements (deriveGenericDischargeLineage application definition disposition))
+
+nativeAdapterSourceId :: GenericApplicationAssurance -> GenericApplicationIdentity
+nativeAdapterSourceId source =
+  genericDischargeApplicationIdentity (genericApplicationAssuranceLineage source)
+
+nativeAdapterPair
+  :: GenericApplicationAssurance
+  -> ReleaseFixture
+  -> Maybe (CertifiedApplicationArtifact, CertifiedReleaseArtifact)
+nativeAdapterPair source fixture =
+  case (certifyApplicationArtifact source (fixtureStage fixture), runRelease fixture) of
+    (Right sourceArtifact, Right release) -> Just (sourceArtifact, release)
+    _ -> Nothing
+
+nativeAdapterAssociation
+  :: GenericApplicationAssurance -> ReleaseFixture -> ExpectedSourceManifestAssociation
+nativeAdapterAssociation source fixture = ExpectedSourceManifestAssociation
+  (nativeAdapterSourceId source) (manifestId (fixtureManifest fixture))
+
+nativeAdapterAccepts :: GenericApplicationAssurance -> ReleaseFixture -> Bool
+nativeAdapterAccepts source fixture = case nativeAdapterPair source fixture of
+  Nothing -> False
+  Just (sourceArtifact, release) ->
+    case bindNativeFinalAuthority
+        (nativeAdapterAssociation source fixture) sourceArtifact release of
+      Left _ -> False
+      Right native ->
+        let stage = fixtureStage fixture
+            subject = concreteSubjectStage (stageClosureConcrete stage)
+            common = subjectStageBase subject
+        in nativeFinalSourceIdentity native == nativeAdapterSourceId source
+          && nativeFinalManifestId native == manifestId (fixtureManifest fixture)
+          && nativeFinalRawSystemsDigest native == stageSystemsDigest stage
+          && nativeFinalLoweringRoot native == stageLoweringRoot stage
+          && nativeFinalSubjectRevision native == subjectStageRevision subject
+          && nativeFinalInstanceRevision native == phase1StageInstanceRevision common
+          && nativeFinalRealizationRevision native == phase1StageRealizationRevision common
+          && nativeFinalSystemsRevision native == phase1StageSystemsArtifactRevision common
+          && nativeFinalCommonContractRevision native == phase1StageContractRevision common
+          && nativeFinalClosedContractRevision native == stageClosureContractRevision stage
+          && nativeFinalVerifierProfile native == phase1StageVerifierProfileRevision common
+
+nativeAdapterSwappedStageRejects
+  :: GenericApplicationAssurance -> ReleaseFixture -> ReleaseFixture -> Bool
+nativeAdapterSwappedStageRejects source sourceFixture releaseFixtureValue =
+  case ( certifyApplicationArtifact source (fixtureStage sourceFixture)
+       , runRelease releaseFixtureValue ) of
+    (Right sourceArtifact, Right release) ->
+      case bindNativeFinalAuthority
+          (nativeAdapterAssociation source releaseFixtureValue) sourceArtifact release of
+        Left NativeFinalStageMismatch -> True
+        _ -> False
+    _ -> False
+
+nativeAdapterWrongSourceRejects
+  :: GenericApplicationAssurance -> ReleaseFixture -> Bool
+nativeAdapterWrongSourceRejects source fixture =
+  case ( nativeAdapterPair source fixture
+       , deriveGenericApplicationIdentity
+           (DeclarationKey "nr-d06.other.source")
+           (InterfaceRevision "nr-d06.interface.v1") [] ) of
+    (Just (sourceArtifact, release), Right other) ->
+      let association = (nativeAdapterAssociation source fixture)
+            { expectedSourceApplicationIdentity = other }
+      in case bindNativeFinalAuthority association sourceArtifact release of
+          Left (NativeFinalSourceMismatch expected actual) ->
+            expected == other && actual == nativeAdapterSourceId source
+          _ -> False
+    _ -> False
+
+nativeAdapterWrongManifestRejects
+  :: GenericApplicationAssurance -> ReleaseFixture -> ReleaseFixture -> Bool
+nativeAdapterWrongManifestRejects source fixture otherFixture =
+  case nativeAdapterPair source fixture of
+    Nothing -> False
+    Just (sourceArtifact, release) ->
+      let wrong = manifestId (fixtureManifest otherFixture)
+          association = (nativeAdapterAssociation source fixture)
+            { expectedSourceManifestId = wrong }
+      in wrong /= manifestId (fixtureManifest fixture)
+         && case bindNativeFinalAuthority association sourceArtifact release of
+              Left (NativeFinalManifestMismatch expected actual) ->
+                expected == wrong && actual == manifestId (fixtureManifest fixture)
+              _ -> False
+
 data ReleaseFixture = ReleaseFixture
   { fixtureProfile :: CertifiedReleaseProfile
   , fixtureContext :: VerificationContext
@@ -423,3 +566,6 @@ conventionalTrust =
       , releaseTrustRevision = revision
       , releaseTrustBasis = basis
       }
+
+mapLeft :: (a -> b) -> Either a c -> Either b c
+mapLeft convert = either (Left . convert) Right

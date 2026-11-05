@@ -103,6 +103,58 @@ library
       Phil.Assurance.RocqExactReceive
       Phil.Assurance.RocqDigestValidation
       Phil.Assurance.RocqStorage
+      Phil.Verification.FinalAuthorityAdapter
+      AuthorityAttenuationKernel
+      AuthorityConfinementKernel
+      AuthorityPossessionKernel
+      BoundarySubjectKernel
+      CallableEffectKernel
+      CallableLifecycleKernel
+      CallableLoweringKernel
+      CallableModeKernel
+      CallableRefinementKernel
+      CallableScopeKernel
+      Phil.Core.Authority
+      Phil.Core.AuthorityAttenuation
+      Phil.Core.AuthorityConfinement
+      Phil.Core.Callable
+      Phil.Core.CallableRefinement
+      Phil.Core.CallableScope
+      Phil.Core.ProviderAuthorityQualification
+      Phil.Core.ProviderQualification
+      Phil.Core.ProviderQualificationIdentity
+      Phil.Systems.AssumptionDependency
+      Phil.Systems.AuthorityEffectCorrespondence
+      Phil.Systems.BoundaryCommitCorrespondence
+      Phil.Systems.BranchResourceFailure
+      Phil.Systems.CallableLowering
+      Phil.Systems.ControlStateProjection
+      Phil.Systems.CostAttribution
+      Phil.Systems.EvidenceErasure
+      Phil.Systems.EvidenceSubjectTransfer
+      Phil.Systems.NextStageRequirement
+      Phil.Systems.Phase1Stage
+      Phil.Systems.ProtocolStateCorrespondence
+      Phil.Systems.ProviderCallCorrespondence
+      Phil.Systems.RuntimeClaimBinding
+      Phil.Systems.RuntimePrimitiveReuse
+      Phil.Systems.StageClosure
+      Phil.Systems.StagingEffect
+      Phil.Systems.SubjectCorrespondence
+      Phil.Systems.TargetStrengthening
+      Phil.Verification.ArtifactClosure
+      Phil.Verification.CertifiedRelease
+      Phil.Verification.GenericAssurance
+      ProviderQualificationKernel
+      ProviderQualificationLineageCoreKernel
+      SystemsControlPreservationKernel
+      SystemsEvidencePreservationKernel
+      SystemsGenericLoweringKernel
+      SystemsRealizationEffectsKernel
+      SystemsRevisionCanonicalizationKernel
+      SystemsRuntimeGraphKernel
+      SystemsStageClosureKernel
+      SystemsSubjectAuthorityKernel
       Phil.Verification.Bundle
       Phil.Verification.ManifestClosure
       DataModeKernel
