@@ -26,11 +26,11 @@ ping.stage3.verification-bundle.v1	verification-bundle	handoff/phase1/ping/stage
 ping.stage4.verification-bundle.v1	verification-bundle	handoff/phase1/ping/stage4-unbounded-verification-bundle-v1.tsv	sha256:55012b1b867d3d75979584d7dbc966be292f71e6086b3a6d05dd9cc5b2562e4d	matrix:INT-009;matrix:VER-012
 ping.stage5.verification-bundle.v1	verification-bundle	handoff/phase1/ping/stage5-interruptible-verification-bundle-v1.tsv	sha256:288b596ef3a7f83cd0d4f2dca3b7d0346ddb903de618537dcc73459b2a377ce1	matrix:INT-009;matrix:VER-012
 corpus.negative.v1	conformance-manifest	test/fixtures/phase1-negative/manifest.tsv	sha256:c7cae373d4f6c25ababb779df45316cf0c2b5401be5f7e22e8396ec65d8855ef	matrix:INT-004
-realization.upload.v1	architecture-realization	handoff/phase1/runtime/upload-realization-v1.tsv	sha256:328ece7f733ec6c1260c33d6fdb1304e2e4c67d8d69bb010da7ffdd0159e208c	matrix:VER-010
-systems.upload.v1	systems	handoff/phase1/runtime/upload-systems-v1.tsv	sha256:295d0bcb71e0551ec4ef6f5f4282113fd3bccb39a2aab419a321938c37c32b03	matrix:SYS-001
-stage-contract.upload.v1	stage-contract	handoff/phase1/runtime/upload-stage-contract-v1.tsv	sha256:b083f64116aef0d27242c82dddfa3f082f924f08e6dae66a2410d56e1f9c6e8f	matrix:SYS-020
-lowering.upload.v1	lowering	handoff/phase1/runtime/upload-lowering-v1.tsv	sha256:3729ba1275643002119fafb1550d92cd5222cf97e08d1d52889e098ee9956407	matrix:SYS-001
-cost.upload.v1	cost	handoff/phase1/runtime/upload-cost-v1.tsv	sha256:88e3b36c3f9bb3140b146368d46b93715e28429778b64124acfa74a5f294c8e4	matrix:SYS-018
+realization.upload.v1	architecture-realization	handoff/phase1/runtime/upload-realization-v1.tsv	sha256:8a03d46892bb34ac67f0a48a6db842079e5ebbbd56bc96b9ec203577e784c30e	matrix:VER-010
+systems.upload.v1	systems	handoff/phase1/runtime/upload-systems-v1.tsv	sha256:3c09d40e81fa1bbc564540ea5b129a87a67d8a9c3f007cf670462df834afd67a	matrix:SYS-001
+stage-contract.upload.v1	stage-contract	handoff/phase1/runtime/upload-stage-contract-v1.tsv	sha256:0e60a5dcddc61db43c5332a44d21e4ca0ca0a0a0b21dc96bc02a56b6b0951a7e	matrix:SYS-020
+lowering.upload.v1	lowering	handoff/phase1/runtime/upload-lowering-v1.tsv	sha256:5627bff0e6de633fe88576e2da3fc070ebced35c4e3aa242771d062bdda7ae28	matrix:SYS-001
+cost.upload.v1	cost	handoff/phase1/runtime/upload-cost-v1.tsv	sha256:c329e6a3e3096d0e2b76f391132cca970e7b2929f81cc519e3d120b07a1592fd	matrix:SYS-018
 realization.steve.v1	architecture-realization	handoff/phase1/runtime/steve-realization-v1.tsv	sha256:7fcaf2c33b64c2c6c9118086560ed6dd7ca9f5d411a1db4e20753c81e5d1af11	matrix:VER-010
 systems.steve.v1	systems	handoff/phase1/runtime/steve-systems-v1.tsv	sha256:d5c9db471bc867b0c00558e64cb3aafeeea29617410dc46a8e977855a4ff1d4c	matrix:SYS-001
 stage-contract.steve.v1	stage-contract	handoff/phase1/runtime/steve-stage-contract-v1.tsv	sha256:6747a2ab0bd1b35ba33ce5c30fdc801bcd89d1b43f56150a76d5f34c283e7526	matrix:SYS-020
