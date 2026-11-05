@@ -18,6 +18,7 @@ module Phil.Verification.FinalAuthorityAdapter
   , bindNativeFinalAuthority
   ) where
 
+import Data.Text (Text)
 import Phil.Assurance.Types
   ( AssuranceManifest (..)
   , Digest
@@ -81,7 +82,7 @@ data NativeFinalAuthority = NativeFinalAuthority
   SystemsArtifactRevision
   Phase1StageContractRevision
   ClosedStageContractRevision
-  String
+  Text
   deriving (Eq, Show)
 
 nativeFinalSourceIdentity :: NativeFinalAuthority -> GenericApplicationIdentity
@@ -114,7 +115,7 @@ nativeFinalCommonContractRevision (NativeFinalAuthority _ _ _ _ _ _ _ _ contract
 nativeFinalClosedContractRevision :: NativeFinalAuthority -> ClosedStageContractRevision
 nativeFinalClosedContractRevision (NativeFinalAuthority _ _ _ _ _ _ _ _ _ closed _) = closed
 
-nativeFinalVerifierProfile :: NativeFinalAuthority -> String
+nativeFinalVerifierProfile :: NativeFinalAuthority -> Text
 nativeFinalVerifierProfile (NativeFinalAuthority _ _ _ _ _ _ _ _ _ _ profile) = profile
 
 data NativeFinalAuthorityError
@@ -171,4 +172,4 @@ bindNativeFinalAuthority association sourceArtifact release = do
     (phase1StageSystemsArtifactRevision common)
     (phase1StageContractRevision common)
     (stageClosureContractRevision releaseStage)
-    (show (phase1StageVerifierProfileRevision common)))
+    (phase1StageVerifierProfileRevision common))
