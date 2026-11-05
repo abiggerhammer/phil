@@ -27,7 +27,7 @@ allRead token =
     (seq (viewDependencies token)
       (seq (viewValidityScope token) True))
 HS
-cabal exec -- ghc -isrc -Wall -Werror -fno-code "$scratch/ReadCache.hs"
+cabal exec -- ghc -isrc -fno-code "$scratch/ReadCache.hs"
 
 while read -r field; do
   cat > "$scratch/ForgeCache.hs" <<HS
