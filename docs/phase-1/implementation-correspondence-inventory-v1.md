@@ -101,9 +101,17 @@ uses that result to replace the actual tuple/parenthesized child fields in a
 nine-alternative primary carrier, then embeds that replacement in the immediate
 postfix consumer. It supplies exact reconstruction and grammar-derived totality,
 including adapters for the existing carriers. Its named-postfix branch retains
-the established representation. This is further formal evidence toward G3;
-lifting the new consumed field through the arithmetic and record/data chain,
-and binding it to the production AST, remain distinct work.
+the established representation. This is further formal evidence toward G3.
+
+Based on that slice's merge, `a611f3d4c42647c1eb31831746b582078b14b900`, the
+[arithmetic continuation](surface-parser-arithmetic-recursive-grouping-v1.md)
+replaces the postfix leaf under recursive unary negation and every leading and
+suffix operand through multiplication, addition, and shifts. It supplies
+grammar-derived totality with computed fuel and exact reconstruction at each
+layer. Connecting the replacement to the enclosing expression, effect-requirement,
+and record/data carriers, and binding the result to the production AST, remain
+distinct work. These local carrier results do not close G2 or G4 or promote an
+umbrella target.
 
 ## Work needed to finish the umbrella inventory
 

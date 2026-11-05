@@ -120,6 +120,11 @@ generic-requirement, or record/data carriers. The next composition must replace
 their consumed postfix field and lift the corresponding reconstruction and
 derivation-totality proofs through that chain.
 
+The [arithmetic continuation](surface-parser-arithmetic-recursive-grouping-v1.md)
+performs the unary, multiplicative, additive, and shift consumer lifts, including
+every repeated suffix operand. Its own record states the remaining enclosing
+expression/source composition boundary.
+
 The existing shift-refined record/data chain reaches this expression path
 through the `effects ... within ...` generic-requirement alternative. Its other
 generic-requirement alternatives, retained type/field payloads, and other

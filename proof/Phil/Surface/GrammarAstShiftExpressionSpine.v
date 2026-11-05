@@ -1,7 +1,10 @@
 From Stdlib Require Import Lists.List Strings.String.
 
 From Phil.Surface Require Import
-  GrammarAstBaseExpressionChoiceSpine.
+  GrammarDerivation
+  GrammarAstSourceHeader
+  GrammarAstTopLevelSpine
+  GrammarAstGenericRequirementsSpine.
 
 Import ListNotations.
 Open Scope string_scope.
@@ -130,10 +133,10 @@ Definition phase1_surface_normalize_shift_suffix_spine
       | Some (operator_tree, right_tree) =>
           match phase1_surface_normalize_shift_operator_spine operator_tree,
                 phase1_surface_normalize_additive_expression_node right_tree with
-          | Some operator, Some right =>
+          | Some operator, Some right_operand =>
               Some
                 {| phase1_shift_suffix_spine_operator := operator;
-                   phase1_shift_suffix_spine_right := right |}
+                   phase1_shift_suffix_spine_right := right_operand |}
           | _, _ => None
           end
       | None => None
@@ -159,7 +162,8 @@ Proof.
     as [right |] eqn:Hright; try discriminate Hnormalize.
   inversion Hnormalize; subst suffix.
   unfold phase1_surface_shift_suffix_spine_tree.
-  cbn.
+  cbn -[phase1_surface_additive_expression_node_tree
+    phase1_surface_shift_suffix_spine_tree].
   rewrite
     (phase1_surface_expect_sequence_round_trip tree items Hsequence).
   rewrite
@@ -202,12 +206,13 @@ Proof.
     destruct (phase1_surface_normalize_shift_suffix_spines rest)
       as [suffixes_rest |] eqn:Hrest; try discriminate Hnormalize.
     inversion Hnormalize; subst suffixes.
-    cbn.
+    cbn -[phase1_surface_additive_expression_node_tree
+    phase1_surface_shift_suffix_spine_tree].
     f_equal.
     + eapply phase1_surface_normalize_shift_suffix_spine_round_trip.
       exact Hsuffix.
     + eapply IH.
-      exact Hrest.
+      reflexivity.
 Qed.
 
 Record Phase1SurfaceShiftExpressionSpine : Type := {
@@ -275,7 +280,8 @@ Proof.
     as [rest |] eqn:Hrest; try discriminate Hnormalize.
   inversion Hnormalize; subst expression.
   unfold phase1_surface_shift_expression_spine_tree.
-  cbn.
+  cbn -[phase1_surface_additive_expression_node_tree
+    phase1_surface_shift_suffix_spine_tree].
   rewrite
     (phase1_surface_expect_nonterminal_round_trip
       "shift_expression" tree body Hnode).

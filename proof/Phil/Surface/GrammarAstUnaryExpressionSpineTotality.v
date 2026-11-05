@@ -1,8 +1,15 @@
 From Stdlib Require Import Lists.List Strings.String.
 
 From Phil.Surface Require Import
+  Grammar
+  GrammarDerivation
+  GrammarDeterminacySimpleResolverSoundness
+  GrammarAstRecordTotality
+  GrammarAstSourceHeader
+  GrammarAstTopLevelSpine
   GrammarAstUnaryExpressionSpine
-  GrammarAstMultiplicativeExpressionSpineTotality.
+  GrammarAstMultiplicativeExpressionSpineTotality
+  GrammarAstGenericRequirementsTotality.
 
 Import ListNotations.
 Open Scope string_scope.
@@ -149,6 +156,5 @@ Proof.
       * exact Hnormalize.
       * eapply phase1_surface_normalize_unary_expression_spine_round_trip.
         exact Hnormalize.
-    + cbn in Hnth.
-      discriminate Hnth.
+    + destruct index; cbn in Hnth; discriminate Hnth.
 Qed.
