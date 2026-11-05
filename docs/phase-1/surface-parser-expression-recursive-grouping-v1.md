@@ -102,31 +102,34 @@ theorem for that decoder. The new expression entry point has no fuel parameter.
 As in the preceding slice, tuple operands in the arithmetic fixture establish
 grammar structure without asserting typing or arithmetic evaluation.
 
-The [source-spine workflow](../../.github/workflows/phase1-surface-grammar-rocq-source-spine-correspondence.yml)
-retains its prior targets and adds all seven new modules under Rocq 9.2.0. It
-inspects thirty-three configured theorem assumptions, requires closure under
-the global context, and runs the full recursive compiled-proof checker over the
-new totalities and examples with their dependencies. The artifact includes the
+At this slice's merge, the [source-spine workflow](../../.github/workflows/phase1-surface-grammar-rocq-source-spine-correspondence.yml)
+retained its prior targets and added all seven new modules under Rocq 9.2.0. It
+inspected thirty-three configured theorem assumptions, required closure under
+the global context, and ran the full recursive compiled-proof checker over the
+new totalities and examples with their dependencies. The artifact included the
 new source/object pairs, producing fifty-four files and fifty-seven recorded
 source/object identities across the accumulated evidence.
 
-Twelve existing prerequisite modules receive direct-owner import and proof-script
+Twelve existing prerequisite modules received direct-owner import and proof-script
 repairs. Their definitions and theorem statements remain unchanged. The new
 proofs consume the shallow choice/optional totalities and the old adapter input
 definitions; they do not import the old full shared-fuel totality/support chain.
 
 ## Remaining composition boundaries
 
-This completes the outer base/fallback/expression-shell lift. The existing
-term-argument carriers still contain the old expression representation. Their
-list traversal is the next consumer, followed by optional effect arguments,
-effect-set literals, the `effects ... within ...` generic-requirement branch,
-and the established record/data route. That restricted route is not evidence
-for every generic requirement, declaration body, or complete source AST.
+This completes the outer base/fallback/expression-shell lift. At this slice's
+merge, the term-argument carriers still contained the old expression
+representation. The subsequent
+[term-argument continuation](surface-parser-term-arguments-recursive-grouping-v1.md)
+replaces every expression in that outer list and proves exact preservation of
+the complete list, its order, commas, and parentheses.
 
-The term-argument lift must preserve the empty/nonempty distinction, every list
-element, argument order, commas, and parentheses. The subsequent effect-argument
-lift must also distinguish absent arguments from present empty `()` arguments.
+The next consumer after that continuation is optional effect arguments,
+followed by effect-set literals, the `effects ... within ...` generic-requirement
+branch, and the established record/data route. The effect-argument lift must
+distinguish absent arguments from present empty `()` arguments. This restricted
+route is not evidence for every generic requirement, declaration body, or
+complete source AST.
 
 The generic recursive-grouping expression type used inside parenthesized/tuple
 children still has its own retained fallback `ParseTree` boundary. Replacing
