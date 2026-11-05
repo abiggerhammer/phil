@@ -103,6 +103,7 @@ library
       Phil.Assurance.RocqExactReceive
       Phil.Assurance.RocqDigestValidation
       Phil.Assurance.RocqStorage
+      Phil.Verification.FinalAuthorityAdapter
       Phil.Verification.Bundle
       Phil.Verification.ManifestClosure
       DataModeKernel
