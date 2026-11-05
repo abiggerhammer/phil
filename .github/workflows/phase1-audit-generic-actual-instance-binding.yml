@@ -1,0 +1,39 @@
+name: Phase 1 Audit Generic Actual Instance Binding
+
+on:
+  pull_request:
+    paths:
+      - 'src/Phil/Verification/SourceManifestBinding.hs'
+      - 'test/Phase1INT005CertifiedReleaseEnvelopeMain.hs'
+      - 'docs/phase-1/audit-generic-actual-instance-binding-v1.md'
+      - '.github/workflows/phase1-audit-generic-actual-instance-binding.yml'
+  push:
+    branches: [main]
+    paths:
+      - 'src/Phil/Verification/SourceManifestBinding.hs'
+      - 'test/Phase1INT005CertifiedReleaseEnvelopeMain.hs'
+      - 'docs/phase-1/audit-generic-actual-instance-binding-v1.md'
+      - '.github/workflows/phase1-audit-generic-actual-instance-binding.yml'
+
+permissions:
+  contents: read
+
+jobs:
+  generic-actual-instance:
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+      - uses: haskell-actions/setup@v2
+        with:
+          ghc-version: '9.6.7'
+          cabal-version: 'latest'
+      - name: Strict complete Haskell build
+        run: cabal build all --enable-tests --ghc-options=-Werror
+      - name: Strictly typecheck producer and INT-005 native caller
+        run: |
+          cabal exec -- ghc -isrc -itest -Wall -Werror -fno-code src/Phil/Verification/SourceManifestBinding.hs
+          cabal exec -- ghc -isrc -itest -Wall -Werror -fno-code test/Phase1INT005CertifiedReleaseEnvelopeMain.hs
+      - name: Check generic argument/instance identity and fail-closed controls
+        run: cabal exec -- runghc -isrc -Wall -Werror test/Phase1INT005CertifiedReleaseEnvelopeMain.hs
+      - name: Preserve source-artifact independent acceptance controls
+        run: cabal exec -- runghc -isrc -Wall -Werror test/Phase1VerificationSourceArtifactClosureMain.hs
