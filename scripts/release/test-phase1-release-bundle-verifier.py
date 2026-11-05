@@ -123,7 +123,7 @@ def tar_traversal_rejects(tmp: Path) -> None:
 def archive_member_character_guard_rejects() -> None:
     for label, name in [
         ("embedded NUL", "pkg/sub\x00item"),
-        ("single backslash", "pkg/sub\README.md"),
+        ("single backslash", r"pkg/sub\README.md"),
     ]:
         expect_error(
             f"{label} archive member path rejects",
