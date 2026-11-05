@@ -1,6 +1,8 @@
 From Stdlib Require Import Lists.List Strings.String.
 
 From Phil.Surface Require Import
+  GrammarDerivation
+  GrammarAstExpressionFallbackBaseChoiceSpine
   GrammarAstTermArgumentsExpressionFallbackBaseChoiceSpine
   GrammarAstExpressionFallbackBaseChoiceShiftSpine
   GrammarAstExpressionFallbackBaseChoiceShiftRefinedSpine.
@@ -101,7 +103,7 @@ Proof.
         phase1_surface_normalize_expression_fallback_base_choice_shift_refined_from_base_choice_spine_fuel_round_trip.
       exact Hargument.
     + eapply IH.
-      exact Hrest.
+      reflexivity.
 Qed.
 
 Definition
@@ -169,6 +171,12 @@ Proof.
     unfold
       phase1_surface_term_argument_expression_fallback_base_choice_suffix_tree.
     cbn in Hrest_round_trip |- *.
+    rewrite <-
+      (map_map phase1_surface_expression_fallback_base_choice_shift_refined_spine_tree
+        (fun tree => PTSequence [PTLiteral ","; tree]) actual_rest).
+    rewrite <-
+      (map_map phase1_surface_expression_fallback_base_choice_spine_tree
+        (fun tree => PTSequence [PTLiteral ","; tree]) rest).
     rewrite Hrest_round_trip.
     reflexivity.
 Qed.
@@ -224,13 +232,19 @@ Theorem
       arguments.
 Proof.
   intros fuel [values] refined Hnormalize.
-  cbn in Hnormalize.
+  unfold phase1_surface_normalize_term_arguments_expression_fallback_base_choice_shift_refined_spine_fuel
+    in Hnormalize.
+  cbn [phase1_term_arguments_expression_fallback_base_choice_spine_arguments]
+    in Hnormalize.
   destruct
     (phase1_surface_normalize_term_argument_expression_fallback_base_choice_shift_refined_values_fuel
       fuel values)
     as [actual |] eqn:Hvalues; try discriminate Hnormalize.
   inversion Hnormalize; subst refined.
-  cbn.
+  unfold phase1_surface_term_arguments_expression_fallback_base_choice_shift_refined_spine_tree,
+    phase1_surface_term_arguments_expression_fallback_base_choice_spine_tree.
+  cbn [phase1_term_arguments_expression_fallback_base_choice_shift_refined_spine_arguments
+    phase1_term_arguments_expression_fallback_base_choice_spine_arguments].
   rewrite
     (phase1_surface_normalize_term_argument_expression_fallback_base_choice_shift_refined_values_entries_fuel_round_trip
       fuel values actual Hvalues).

@@ -116,9 +116,19 @@ replaces the outer base-expression shift branch and uses that replacement in
 both the main expression base and its separate reject-fallback operand. It
 preserves optional absence/presence, commands, and failure targets, and supplies
 exact reconstruction and derivation-only totality for the raw normalizers and
-legacy adapters. The term-argument/effect-requirement/record-data consumers still
-need to adopt this expression carrier. The generic grouping carrier's nested
-fallback boundary and production AST binding remain separate obligations.
+legacy adapters.
+
+Based on the expression slice's merge, `bbfdfa9f19c3da4b52c248e6d80223d872bfbe84`,
+the [term-argument continuation](surface-parser-term-arguments-recursive-grouping-v1.md)
+replaces every expression in the selected outer argument list. Its exact
+map-of-erasure equality preserves the complete list, including arity and order;
+the shell/raw/legacy entry points have derivation-only totality. An empty list
+denotes present `()` syntax, not an absent optional payload. The next consumers
+are optional effect arguments, effect-set literal elements, the
+`effects ... within ...` generic-requirement alternative, and the established
+record/data route. Named-postfix argument payloads, command bodies,
+failure-target arguments, the generic grouping carrier's nested fallback
+boundary, and production AST binding retain their separate obligations.
 These local carrier results do not close G2 or G4 or promote an umbrella target.
 
 ## Work needed to finish the umbrella inventory
