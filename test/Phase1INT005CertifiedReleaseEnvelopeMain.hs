@@ -35,10 +35,15 @@ import Phil.Systems.IR
   )
 import Phil.Systems.Phase1Stage
   ( Phase1StageBundle (..)
+  , SystemsArtifactRevision (..)
   )
 import Phil.Systems.StageClosure
-  ( StageClosureBundle (..)
+  ( ClosedStageContractRevision (..)
+  , StageClosureBundle (..)
+  , StageClosureVerificationError (..)
   , concreteSubjectStage
+  , deriveClosedStageContractRevision
+  , verifyStageClosureBundle
   )
 import Phil.Systems.SubjectCorrespondence
   ( SubjectStageBundle (..)
@@ -71,6 +76,14 @@ main = do
           , duplicateTrustIdentityRejected upload)
         , ( "INT-005 residual TCB entries must name their trusted basis"
           , blankTrustBasisRejected upload)
+        , ( "NR-D06 stale stored Systems revision fails through certified-release caller"
+          , staleStageSystemsRejected upload)
+        , ( "NR-D06 stale closed-stage revision fails through certified-release caller"
+          , staleClosedStageRejected upload)
+        , ( "NR-D06 rehashed independently supplied manifest cannot retarget stage Systems digest"
+          , independentlyRehashedSystemsManifestRejected upload)
+        , ( "NR-D06 Steve stage closure retains same fail-closed release boundary"
+          , staleStageSystemsRejected steve && staleClosedStageRejected steve)
         ]
   results <- mapM (uncurry report) checks
   if and results then pure () else exitFailure
@@ -208,6 +221,76 @@ blankTrustBasisRejected fixture =
           Left (CertifiedReleaseEmptyTrustBasis boundaryId) ->
             boundaryId == releaseTrustBoundaryId first
           _ -> False
+
+-- NR-D06: accepted source and manifest fixtures do not authorize a stale
+-- realization. Preserve the original supplied manifest and emitted LLVM while
+-- changing only a StageClosure identity.
+staleStageSystemsRejected :: ReleaseFixture -> Bool
+staleStageSystemsRejected fixture =
+  let stage = fixtureStage fixture
+      corrupted = stage
+        { stageClosureSystemsArtifactRevision =
+            SystemsArtifactRevision "nr-d06.stale-systems-revision" }
+      independentlyRejected = case verifyStageClosureBundle corrupted of
+        Left (StageClosureStoredSystemsRevisionMismatch _ actual) ->
+          actual == SystemsArtifactRevision "nr-d06.stale-systems-revision"
+        _ -> False
+  in independentlyRejected
+      && case certifyReleaseArtifact
+          (fixtureProfile fixture)
+          (fixtureContext fixture)
+          (fixtureLedger fixture)
+          (fixtureManifest fixture)
+          corrupted
+          (fixtureLLVM fixture)
+          (fixtureTrust fixture) of
+        Left (CertifiedReleaseStageClosureRejected
+          (StageClosureStoredSystemsRevisionMismatch _ actual)) ->
+            actual == SystemsArtifactRevision "nr-d06.stale-systems-revision"
+        _ -> False
+
+staleClosedStageRejected :: ReleaseFixture -> Bool
+staleClosedStageRejected fixture =
+  let stage = fixtureStage fixture
+      stale = ClosedStageContractRevision "nr-d06.stale-closed-stage"
+      corrupted = stage { stageClosureContractRevision = stale }
+  in case (verifyStageClosureBundle corrupted,
+           certifyReleaseArtifact
+             (fixtureProfile fixture)
+             (fixtureContext fixture)
+             (fixtureLedger fixture)
+             (fixtureManifest fixture)
+             corrupted
+             (fixtureLLVM fixture)
+             (fixtureTrust fixture)) of
+      ( Left (StageClosureContractRevisionMismatch _ actual1)
+        , Left (CertifiedReleaseStageClosureRejected
+            (StageClosureContractRevisionMismatch _ actual2)) ) ->
+          actual1 == stale
+            && actual2 == stale
+            && deriveClosedStageContractRevision stage
+              == stageClosureContractRevision stage
+      _ -> False
+
+-- An attacker can form an internally consistent manifest and VerificationContext
+-- with a different raw Systems digest. Acceptance still requires comparison to
+-- the independently verified StageClosure's real Systems artifact.
+independentlyRehashedSystemsManifestRejected :: ReleaseFixture -> Bool
+independentlyRehashedSystemsManifestRejected fixture =
+  let wrong = digestText "nr-d06.independent-but-wrong-systems"
+      context = (fixtureContext fixture)
+        { verificationImplementationDigest = wrong }
+      proposed = (fixtureManifest fixture)
+        { manifestId = digestText "pending"
+        , manifestImplementationDigest = wrong }
+      manifest = proposed
+        { manifestId = deriveManifestId (fixtureLedger fixture) proposed }
+  in case runReleaseWith fixture context manifest
+        (fixtureLLVM fixture) (fixtureTrust fixture) of
+      Left (CertifiedReleaseManifestImplementationDigestMismatch expected actual) ->
+        expected == stageSystemsDigest (fixtureStage fixture)
+          && actual == wrong
+      _ -> False
 
 data ReleaseFixture = ReleaseFixture
   { fixtureProfile :: CertifiedReleaseProfile
