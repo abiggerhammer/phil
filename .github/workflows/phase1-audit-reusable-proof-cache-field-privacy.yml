@@ -1,0 +1,33 @@
+name: Phase 1 Audit Reusable Proof Cache Field Privacy
+
+on:
+  pull_request:
+    paths:
+      - 'src/Phil/Verification/ProofEvidence.hs'
+      - 'test/Phase1VerificationEvidenceReuseInvalidationMain.hs'
+      - 'scripts/ci/phase1-audit-reusable-proof-cache-field-privacy.sh'
+      - '.github/workflows/phase1-audit-reusable-proof-cache-field-privacy.yml'
+  push:
+    branches: [main]
+    paths:
+      - 'src/Phil/Verification/ProofEvidence.hs'
+      - 'test/Phase1VerificationEvidenceReuseInvalidationMain.hs'
+      - 'scripts/ci/phase1-audit-reusable-proof-cache-field-privacy.sh'
+      - '.github/workflows/phase1-audit-reusable-proof-cache-field-privacy.yml'
+
+permissions:
+  contents: read
+
+jobs:
+  protected-cache-witness:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: haskell-actions/setup@v2
+        with:
+          ghc-version: '9.6.7'
+          cabal-version: 'latest'
+      - name: Build all Haskell modules and tests with warnings fatal
+        run: cabal build all --enable-tests --ghc-options=-Werror
+      - name: Test protected cache external-client compilation and actual reuse
+        run: bash scripts/ci/phase1-audit-reusable-proof-cache-field-privacy.sh
