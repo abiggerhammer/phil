@@ -7,6 +7,7 @@ import qualified Data.Set as Set
 import Data.Text (Text)
 import Phil.Core.Generic
   ( GenericApplicationIdentity (..)
+  , GenericStaticParameterKey (..)
   , GenericDischargeLineage (..)
   , checkGenericInstantiation
   , deriveGenericApplicationIdentity
@@ -14,7 +15,11 @@ import Phil.Core.Generic
   , strictGenericInstantiationPolicy
   )
 import Phil.Core.Static
-  ( DeclarationIdentity (..)
+  ( ArchitectureInstanceDescriptor (..)
+  , DeclarationIdentity (..)
+  , InstanceKey (..)
+  , SemanticForm (..)
+  , deriveArchitectureInstanceIdentity
   , DeclarationKey (..)
   , DefinitionRevision (..)
   , InterfaceRevision (..)
@@ -134,6 +139,16 @@ main = do
           , producedBindingAccepted source upload)
         , ( "Source-manifest producer closes Steve from checked declaration and bundle"
           , producedBindingAccepted source steve)
+        , ( "Generic actuals match canonical Upload architecture-instance binding"
+          , producedBindingAccepted source upload)
+        , ( "Generic actuals reject changed static instance binding"
+          , instanceRejectsWrongStaticArgument source upload)
+        , ( "Generic actuals reject missing static instance binding"
+          , instanceRejectsMissingStaticArgument source upload)
+        , ( "Generic actuals reject unregistered architecture instance"
+          , instanceRejectsUnregisteredIdentity source upload)
+        , ( "Generic actuals reject substituted declaration lineage"
+          , instanceRejectsWrongDeclaration source upload)
         , ( "Source-manifest producer rejects unlisted source declaration"
           , producerRejectsUnlistedDeclaration source upload)
         , ( "Source-manifest producer rejects unbound architecture digest"
@@ -370,7 +385,8 @@ nativeAdapterSourceAssurance = do
         (digestText "nr-d06.content-checked-source-evidence")
   body <- mapLeft show (prepareReusableGenericBodyAssurance
     declaration interface definition requirements sourceArtifact)
-  application <- mapLeft show (deriveGenericApplicationIdentity declaration interface [])
+  application <- mapLeft show (deriveGenericApplicationIdentity declaration interface
+    [(GenericStaticParameterKey "T", SemanticAtom "Blob")])
   disposition <- mapLeft show (checkGenericInstantiation
     strictGenericInstantiationPolicy requirements [])
   mapLeft show (composeGenericApplicationAssurance
@@ -478,8 +494,26 @@ producerInputs source = do
         (AssurancePolicyRevision "audit.source-manifest-binding.v1") Set.empty
   bundle <- mapLeft show (buildVerificationBundle
     (digestText "audit.accepted.source.revision")
-    [declaration] [] [] graph policy [])
+    [declaration] [deriveArchitectureInstanceIdentity (sourceInstanceDescriptor source)] [] graph policy [])
   Right (bundle, policy)
+
+sourceInstanceDescriptor :: GenericApplicationAssurance -> ArchitectureInstanceDescriptor
+sourceInstanceDescriptor source =
+  let lineage = genericApplicationAssuranceLineage source
+      application = genericDischargeApplicationIdentity lineage
+      declaration = DeclarationIdentity
+        { identityDeclarationKey = genericApplicationDeclarationKey application
+        , identityInterfaceRevision = genericApplicationInterfaceRevision application
+        , identityDefinitionRevision = genericDischargeDefinitionRevision lineage }
+  in ArchitectureInstanceDescriptor
+    { architectureInstanceKey = InstanceKey "audit.generic.actual.instance"
+    , architectureParentInstanceKey = Nothing
+    , architectureDeclarationIdentity = declaration
+    , architectureStaticBindings = Map.fromList
+        [ (unGenericStaticParameterKey key, value)
+        | (key,value) <- Map.toAscList (genericApplicationSemanticArguments application)
+        ]
+    }
 
 emptyProducerSelection :: ManifestClosureSelection
 emptyProducerSelection = ManifestClosureSelection
@@ -497,7 +531,8 @@ produceFixture source fixture = do
   (bundle, policy) <- producerInputs source
   let context = (fixtureContext fixture)
         { verificationArchitectureDigest = verificationBundleArchitectureDigest bundle }
-  binding <- mapLeft show (closeSourceManifestBinding source bundle policy
+  binding <- mapLeft show (closeSourceManifestBindingForInstance
+    source (sourceInstanceDescriptor source) bundle policy
     context (fixtureLedger fixture) emptyProducerSelection)
   let updated = fixture
         { fixtureContext = context
@@ -520,6 +555,68 @@ producedBindingAccepted source fixture = case produceFixture source fixture of
                 == manifestId (fixtureManifest producedFixture)
               && nativeFinalRawSystemsDigest native
                 == stageSystemsDigest (fixtureStage fixture)
+
+instanceRejectsWrongStaticArgument
+  :: GenericApplicationAssurance -> ReleaseFixture -> Bool
+instanceRejectsWrongStaticArgument source fixture =
+  case producerInputs source of
+    Left _ -> False
+    Right (bundle, policy) ->
+      let descriptor = (sourceInstanceDescriptor source)
+            { architectureStaticBindings = Map.singleton "T" (SemanticAtom "Other") }
+          context = (fixtureContext fixture)
+            { verificationArchitectureDigest = verificationBundleArchitectureDigest bundle }
+      in case closeSourceManifestBindingForInstance source descriptor bundle policy
+           context (fixtureLedger fixture) emptyProducerSelection of
+        Left SourceManifestStaticArgumentsMismatch -> True
+        _ -> False
+
+instanceRejectsMissingStaticArgument
+  :: GenericApplicationAssurance -> ReleaseFixture -> Bool
+instanceRejectsMissingStaticArgument source fixture =
+  case producerInputs source of
+    Left _ -> False
+    Right (bundle, policy) ->
+      let descriptor = (sourceInstanceDescriptor source)
+            { architectureStaticBindings = Map.empty }
+          context = (fixtureContext fixture)
+            { verificationArchitectureDigest = verificationBundleArchitectureDigest bundle }
+      in case closeSourceManifestBindingForInstance source descriptor bundle policy
+           context (fixtureLedger fixture) emptyProducerSelection of
+        Left SourceManifestStaticArgumentsMismatch -> True
+        _ -> False
+
+instanceRejectsUnregisteredIdentity
+  :: GenericApplicationAssurance -> ReleaseFixture -> Bool
+instanceRejectsUnregisteredIdentity source fixture =
+  case producerInputs source of
+    Left _ -> False
+    Right (bundle, policy) ->
+      let descriptor = (sourceInstanceDescriptor source)
+            { architectureInstanceKey = InstanceKey "audit.unregistered.instance" }
+          context = (fixtureContext fixture)
+            { verificationArchitectureDigest = verificationBundleArchitectureDigest bundle }
+      in case closeSourceManifestBindingForInstance source descriptor bundle policy
+           context (fixtureLedger fixture) emptyProducerSelection of
+        Left SourceManifestInstanceNotInVerificationBundle -> True
+        _ -> False
+
+instanceRejectsWrongDeclaration
+  :: GenericApplicationAssurance -> ReleaseFixture -> Bool
+instanceRejectsWrongDeclaration source fixture =
+  case producerInputs source of
+    Left _ -> False
+    Right (bundle, policy) ->
+      let descriptor = (sourceInstanceDescriptor source)
+            { architectureDeclarationIdentity = (architectureDeclarationIdentity
+                (sourceInstanceDescriptor source))
+                { identityDefinitionRevision = DefinitionRevision "audit.wrong.definition" } }
+          context = (fixtureContext fixture)
+            { verificationArchitectureDigest = verificationBundleArchitectureDigest bundle }
+      in case closeSourceManifestBindingForInstance source descriptor bundle policy
+           context (fixtureLedger fixture) emptyProducerSelection of
+        Left (SourceManifestInstanceDeclarationMismatch _ _) -> True
+        _ -> False
 
 producerRejectsUnlistedDeclaration
   :: GenericApplicationAssurance -> ReleaseFixture -> Bool
