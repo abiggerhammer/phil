@@ -131,12 +131,21 @@ replaces its optional term-argument payload with the complete-list carrier.
 It preserves absent arguments versus present empty `()`, reconstructs the exact
 old shallow carrier and tree, and directly preserves the complete static-reference
 carrier in the legacy adapter. All public totalities require only the relevant
-grammar derivation. The next consumers are effect-set literal elements, the
-`effects ... within ...` generic-requirement alternative, and the established
-record/data route. Static-reference argument interiors, named-postfix argument
-payloads, command bodies, failure-target arguments, the generic grouping
-carrier's nested fallback boundary, and production AST binding retain their
-separate obligations.
+grammar derivation.
+
+Based on the effect-expression slice's merge,
+`838cd27598edf23aa43d5e1a7b3251e45b489a8e`, the
+[effect-set continuation](surface-parser-effect-set-recursive-grouping-v1.md)
+replaces every literal member with that effect carrier and preserves the
+enclosing literal/reference choice. Raw and direct legacy list traversals
+preserve count, order, multiplicity, and complete member erasure. All six
+literal/choice shell, raw-tree, and legacy totalities require only the relevant
+grammar derivation. The next selected consumer is the effect-set field in the
+`effects ... within ...` generic-requirement alternative (index 6), followed by
+the established record/data route. Static-reference argument interiors,
+named-postfix argument payloads, command bodies, failure-target arguments,
+the generic grouping carrier's nested fallback boundary, and production AST
+binding retain their separate obligations.
 These local carrier results do not close G2 or G4 or promote an umbrella target.
 
 ## Work needed to finish the umbrella inventory

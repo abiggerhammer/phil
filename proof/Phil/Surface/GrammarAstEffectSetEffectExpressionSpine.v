@@ -1,6 +1,9 @@
 From Stdlib Require Import Lists.List Strings.String.
 
 From Phil.Surface Require Import
+  GrammarDerivation
+  GrammarAstStaticReferenceSpine
+  GrammarAstEffectSetSpine
   GrammarAstEffectExpressionSpine.
 
 Import ListNotations.
@@ -49,7 +52,7 @@ Proof.
     + eapply phase1_surface_normalize_effect_expression_spine_round_trip.
       exact Heffect.
     + eapply IH.
-      exact Hrest.
+      reflexivity.
 Qed.
 
 Definition phase1_surface_effect_expression_refined_suffix_tree
@@ -99,7 +102,8 @@ Proof.
     unfold phase1_surface_effect_expression_refined_suffix_tree.
     unfold phase1_surface_effect_set_suffix_tree.
     cbn in Hrest_round_trip |- *.
-    rewrite Hrest_round_trip.
+    rewrite <- Hrest_round_trip.
+    rewrite map_map.
     reflexivity.
 Qed.
 
@@ -141,11 +145,16 @@ Theorem
       phase1_surface_effect_set_literal_spine_tree literal.
 Proof.
   intros [effects] refined Hnormalize.
-  cbn in Hnormalize.
+  unfold phase1_surface_normalize_effect_set_effect_expression_literal_spine
+    in Hnormalize.
+  cbn [phase1_effect_set_literal_spine_effects] in Hnormalize.
   destruct (phase1_surface_normalize_effect_expression_values effects)
     as [actual |] eqn:Heffects; try discriminate Hnormalize.
   inversion Hnormalize; subst refined.
-  cbn.
+  unfold phase1_surface_effect_set_effect_expression_literal_spine_tree,
+    phase1_surface_effect_set_literal_spine_tree.
+  cbn [phase1_effect_set_effect_expression_literal_spine_effects
+    phase1_effect_set_literal_spine_effects].
   rewrite
     (phase1_surface_normalize_effect_expression_values_entries_round_trip
       effects actual Heffects).

@@ -1,6 +1,9 @@
 From Stdlib Require Import Lists.List Strings.String.
 
 From Phil.Surface Require Import
+  GrammarDerivation
+  GrammarAstStaticReferenceSpine
+  GrammarAstEffectExpressionExpressionOuterSpine
   GrammarAstEffectSetExpressionOuterSpine
   GrammarAstEffectExpressionExpressionFallbackBaseChoiceSpine.
 
@@ -64,7 +67,7 @@ Proof.
         phase1_surface_normalize_effect_expression_expression_fallback_base_choice_spine_round_trip.
       exact Heffect.
     + eapply IH.
-      exact Hrest.
+      reflexivity.
 Qed.
 
 Definition
@@ -130,6 +133,12 @@ Proof.
       phase1_surface_effect_expression_expression_fallback_base_choice_suffix_tree.
     unfold phase1_surface_effect_expression_expression_outer_suffix_tree.
     cbn in Hrest_round_trip |- *.
+    rewrite <-
+      (map_map phase1_surface_effect_expression_expression_fallback_base_choice_spine_tree
+        (fun tree => PTSequence [PTLiteral ","; tree]) actual_rest).
+    rewrite <-
+      (map_map phase1_surface_effect_expression_expression_outer_spine_tree
+        (fun tree => PTSequence [PTLiteral ","; tree]) rest).
     rewrite Hrest_round_trip.
     reflexivity.
 Qed.
@@ -177,13 +186,18 @@ Theorem
       phase1_surface_effect_set_expression_outer_literal_spine_tree literal.
 Proof.
   intros [effects] refined Hnormalize.
-  cbn in Hnormalize.
+  unfold phase1_surface_normalize_effect_set_expression_fallback_base_choice_literal_spine
+    in Hnormalize.
+  cbn [phase1_effect_set_expression_outer_literal_spine_effects] in Hnormalize.
   destruct
     (phase1_surface_normalize_effect_expression_expression_fallback_base_choice_values
       effects)
     as [actual |] eqn:Heffects; try discriminate Hnormalize.
   inversion Hnormalize; subst refined.
-  cbn.
+  unfold phase1_surface_effect_set_expression_fallback_base_choice_literal_spine_tree,
+    phase1_surface_effect_set_expression_outer_literal_spine_tree.
+  cbn [phase1_effect_set_expression_fallback_base_choice_literal_spine_effects
+    phase1_effect_set_expression_outer_literal_spine_effects].
   rewrite
     (phase1_surface_normalize_effect_expression_expression_fallback_base_choice_values_entries_round_trip
       effects actual Heffects).

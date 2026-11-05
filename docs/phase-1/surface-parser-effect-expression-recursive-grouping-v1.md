@@ -94,15 +94,15 @@ Node-count fuel in the old-decoder fixture is only a concrete compatibility
 control, not a universal bound for that decoder. The new entry points have no
 fuel parameter.
 
-The [source-spine workflow](../../.github/workflows/phase1-surface-grammar-rocq-source-spine-correspondence.yml)
-retains its prior targets and adds all three new modules under Rocq 9.2.0.
-It checks forty-two configured theorem assumptions for closure under the global
-context and runs the full recursive compiled-proof checker over eighteen
+At this slice's merge, the [source-spine workflow](../../.github/workflows/phase1-surface-grammar-rocq-source-spine-correspondence.yml)
+retained its prior targets and added all three new modules under Rocq 9.2.0.
+It checked forty-two configured theorem assumptions for closure under the global
+context and ran the full recursive compiled-proof checker over eighteen
 configured totality/example endpoints and their dependencies. The accumulated
-artifact contains sixty-six files and sixty-nine recorded identities, including
+artifact contained sixty-six files and sixty-nine recorded identities, including
 all three new source/object pairs.
 
-Six existing effect-expression prerequisite modules receive direct-owner import
+Six existing effect-expression prerequisite modules received direct-owner import
 and proof-script repairs. Their definitions and theorem statements remain
 unchanged. The new proof route uses the shallow effect totality and the new
 term-arguments totalities; no old full shared-fuel totality/support chain is
@@ -111,13 +111,16 @@ in favor of the helpers' direct owners.
 
 ## Remaining composition boundaries
 
-The next consumer is the ordered list in an effect-set literal. Its lift must
-replace every effect expression while preserving empty `{}`, commas, order,
-and the enclosing literal/reference alternative. The subsequent route proceeds
-through the `effects ... within ...` generic-requirement alternative, optional
-requirement lists in record/data declarations, and the corresponding retained
-implementation-representation field. This route does not cover every generic
-requirement or declaration body.
+At this slice's merge, the next consumer was the ordered list in an effect-set
+literal. The subsequent
+[effect-set continuation](surface-parser-effect-set-recursive-grouping-v1.md)
+replaces every member while preserving empty `{}`, commas, order, multiplicity,
+and the enclosing literal/reference alternative.
+
+The route then proceeds through the `effects ... within ...` generic-requirement
+alternative, optional requirement lists in record/data declarations, and the
+corresponding retained implementation-representation field. This route does not
+cover every generic requirement or declaration body.
 
 Static-reference argument interiors, named-postfix argument payloads, command
 bodies, failure-target arguments, and the generic grouping expression's nested
