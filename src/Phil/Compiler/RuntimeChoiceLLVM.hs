@@ -372,13 +372,15 @@ validateRuntimeChoicePayloadPredecessors
   -> Either RuntimeChoiceLLVMError ()
 validateRuntimeChoicePayloadPredecessors functionName functionValue abiPlan =
   forM_ (Map.toAscList choices) $ \(target, expected) -> do
-    let actual = sortValuesBlocks
+    let actual = sortValuesBlocks . Set.toList . Set.fromList $
           [ predecessor
           | (predecessor, blockValue) <- Map.toAscList (systemsFunctionBlocks functionValue)
           , target `elem` blockSuccessors blockValue
           ]
         sources = sortValuesBlocks (Set.toList expected)
-    unless (target /= systemsFunctionEntry functionValue && actual == sources) $
+    unless (target /= systemsFunctionEntry functionValue
+            && actual == sources
+            && all (allArmsBoundAtTarget target) (Set.toList expected)) $
       Left (RuntimeChoiceLLVMPayloadTargetPredecessors functionName target sources actual)
   where
     choices :: Map BlockId (Set BlockId)
@@ -390,6 +392,12 @@ validateRuntimeChoicePayloadPredecessors functionName functionValue abiPlan =
       , (_, armValue) <- Map.toAscList (runtimeChoiceABIArms abiSite)
       , Just _ <- [runtimeChoiceABIArmPayload armValue]
       ]
+    allArmsBoundAtTarget target sourceBlock =
+      case Map.lookup sourceBlock (systemsFunctionBlocks functionValue) of
+        Just SystemsBlock { systemsBlockTerminator = TermRuntimeChoice { runtimeChoiceArms = arms } } ->
+          all (\arm -> runtimeChoiceArmTarget arm /= target
+                || runtimeChoiceArmPayloadBinding arm /= Nothing) (Map.elems arms)
+        _ -> False
     sortValuesBlocks = map snd . sort . map (\blockId -> (unBlockId blockId, blockId))
 
 incomingPayloads
