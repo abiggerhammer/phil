@@ -6,7 +6,7 @@ import qualified Data.Map.Strict as Map
 import qualified Data.Set as Set
 import Data.Text (Text)
 import Phil.Core.Generic
-  ( GenericApplicationIdentity
+  ( GenericApplicationIdentity (..)
   , GenericDischargeLineage (..)
   , checkGenericInstantiation
   , deriveGenericApplicationIdentity
@@ -14,7 +14,8 @@ import Phil.Core.Generic
   , strictGenericInstantiationPolicy
   )
 import Phil.Core.Static
-  ( DeclarationKey (..)
+  ( DeclarationIdentity (..)
+  , DeclarationKey (..)
   , DefinitionRevision (..)
   , InterfaceRevision (..)
   )
@@ -23,6 +24,20 @@ import Phil.Verification.ArtifactClosure
   , certifyApplicationArtifact
   )
 import Phil.Verification.FinalAuthorityAdapter
+import Phil.Verification.SourceManifestBinding
+import Phil.Verification.Bundle
+  ( VerificationBundle (..)
+  , buildVerificationBundle
+  , verificationBundleArchitectureDigest
+  )
+import Phil.Verification.ManifestClosure
+  ( ManifestClosureSelection (..)
+  )
+import Phil.Verification
+  ( ApplicationAssurancePolicy (..)
+  , AssurancePolicyRevision (..)
+  , buildVerificationRevisionGraph
+  )
 import Phil.Verification.GenericAssurance
   ( GenericApplicationAssurance
   , composeGenericApplicationAssurance
@@ -115,6 +130,16 @@ main = do
           , nativeAdapterWrongSourceRejects source upload)
         , ( "Native adapter rejects a wrong independent manifest identity"
           , nativeAdapterWrongManifestRejects source upload steve)
+        , ( "Source-manifest producer closes Upload from checked declaration and bundle"
+          , producedBindingAccepted source upload)
+        , ( "Source-manifest producer closes Steve from checked declaration and bundle"
+          , producedBindingAccepted source steve)
+        , ( "Source-manifest producer rejects unlisted source declaration"
+          , producerRejectsUnlistedDeclaration source upload)
+        , ( "Source-manifest producer rejects unbound architecture digest"
+          , producerRejectsWrongArchitecture source upload)
+        , ( "Produced binding rejects a release not carrying its exact closed manifest"
+          , producedBindingRejectsOtherRelease source upload steve)
         , ( "NR-D06 stale stored Systems revision fails through certified-release caller"
           , staleStageSystemsRejected upload)
         , ( "NR-D06 stale closed-stage revision fails through certified-release caller"
@@ -434,6 +459,109 @@ nativeAdapterWrongManifestRejects source fixture otherFixture =
               Left (NativeFinalManifestMismatch expected actual) ->
                 expected == wrong && actual == manifestId (fixtureManifest fixture)
               _ -> False
+
+-- Producer tests distinguish the checked VER-012/INT-002 source manifest
+-- closure from a caller-created pair of source and manifest identifiers.
+producerInputs
+  :: GenericApplicationAssurance
+  -> Either String (VerificationBundle, ApplicationAssurancePolicy)
+producerInputs source = do
+  graph <- mapLeft show (buildVerificationRevisionGraph [] Set.empty)
+  let lineage = genericApplicationAssuranceLineage source
+      application = genericDischargeApplicationIdentity lineage
+      declaration = DeclarationIdentity
+        { identityDeclarationKey = genericApplicationDeclarationKey application
+        , identityInterfaceRevision = genericApplicationInterfaceRevision application
+        , identityDefinitionRevision = genericDischargeDefinitionRevision lineage
+        }
+      policy = ApplicationAssurancePolicy
+        (AssurancePolicyRevision "audit.source-manifest-binding.v1") Set.empty
+  bundle <- mapLeft show (buildVerificationBundle
+    (digestText "audit.accepted.source.revision")
+    [declaration] [] [] graph policy [])
+  Right (bundle, policy)
+
+emptyProducerSelection :: ManifestClosureSelection
+emptyProducerSelection = ManifestClosureSelection
+  { manifestClosureEvidence = Set.empty
+  , manifestClosureAssumptions = Set.empty
+  , manifestClosureExports = Map.empty
+  , manifestClosureUses = Set.empty
+  }
+
+produceFixture
+  :: GenericApplicationAssurance
+  -> ReleaseFixture
+  -> Either String (CertifiedSourceManifestBinding, ReleaseFixture)
+produceFixture source fixture = do
+  (bundle, policy) <- producerInputs source
+  let context = (fixtureContext fixture)
+        { verificationArchitectureDigest = verificationBundleArchitectureDigest bundle }
+  binding <- mapLeft show (closeSourceManifestBinding source bundle policy
+    context (fixtureLedger fixture) emptyProducerSelection)
+  let updated = fixture
+        { fixtureContext = context
+        , fixtureManifest = sourceManifestBindingManifest binding }
+  Right (binding, updated)
+
+producedBindingAccepted
+  :: GenericApplicationAssurance -> ReleaseFixture -> Bool
+producedBindingAccepted source fixture = case produceFixture source fixture of
+  Left _ -> False
+  Right (binding, producedFixture) ->
+    case nativeAdapterPair source producedFixture of
+      Nothing -> False
+      Just (sourceArtifact, release) ->
+        case bindProducedFinalAuthority binding sourceArtifact release of
+          Left _ -> False
+          Right native ->
+            nativeFinalSourceIdentity native == nativeAdapterSourceId source
+              && nativeFinalManifestId native
+                == manifestId (fixtureManifest producedFixture)
+              && nativeFinalRawSystemsDigest native
+                == stageSystemsDigest (fixtureStage fixture)
+
+producerRejectsUnlistedDeclaration
+  :: GenericApplicationAssurance -> ReleaseFixture -> Bool
+producerRejectsUnlistedDeclaration source fixture =
+  case producerInputs source of
+    Left _ -> False
+    Right (bundle, policy) ->
+      let wrong = bundle { verificationBundleDeclarations = Set.empty }
+          context = (fixtureContext fixture)
+            { verificationArchitectureDigest =
+                verificationBundleArchitectureDigest wrong }
+      in case closeSourceManifestBinding source wrong policy context
+           (fixtureLedger fixture) emptyProducerSelection of
+          Left (SourceManifestDeclarationNotInVerificationBundle _) -> True
+          _ -> False
+
+producerRejectsWrongArchitecture
+  :: GenericApplicationAssurance -> ReleaseFixture -> Bool
+producerRejectsWrongArchitecture source fixture =
+  case producerInputs source of
+    Left _ -> False
+    Right (bundle, policy) ->
+      case closeSourceManifestBinding source bundle policy
+           (fixtureContext fixture) (fixtureLedger fixture)
+           emptyProducerSelection of
+        Left (SourceManifestClosureRejected _) -> True
+        _ -> False
+
+producedBindingRejectsOtherRelease
+  :: GenericApplicationAssurance -> ReleaseFixture -> ReleaseFixture -> Bool
+producedBindingRejectsOtherRelease source fixture other =
+  case (produceFixture source fixture, produceFixture source other) of
+    (Right (binding, leftFixture), Right (_, rightFixture)) ->
+      case (nativeAdapterPair source leftFixture, runRelease rightFixture) of
+        (Just (sourceArtifact, _), Right rightRelease) ->
+          manifestId (fixtureManifest leftFixture)
+            /= manifestId (fixtureManifest rightFixture)
+          && case bindProducedFinalAuthority binding sourceArtifact rightRelease of
+               Left SourceManifestReleaseManifestMismatch -> True
+               _ -> False
+        _ -> False
+    _ -> False
 
 data ReleaseFixture = ReleaseFixture
   { fixtureProfile :: CertifiedReleaseProfile
