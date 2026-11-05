@@ -105,6 +105,7 @@ library
       Phil.Assurance.RocqStorage
       Phil.Verification.FinalAuthorityAdapter
       Phil.Verification.SourceManifestBinding
+      Phil.Verification.NativeFinalInstanceCorrespondence
       AuthorityAttenuationKernel
       AuthorityConfinementKernel
       AuthorityPossessionKernel

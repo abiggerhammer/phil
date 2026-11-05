@@ -30,6 +30,7 @@ import Phil.Verification.ArtifactClosure
   )
 import Phil.Verification.FinalAuthorityAdapter
 import Phil.Verification.SourceManifestBinding
+import Phil.Verification.NativeFinalInstanceCorrespondence
 import Phil.Verification.Bundle
   ( VerificationBundle (..)
   , buildVerificationBundle
@@ -141,6 +142,16 @@ main = do
           , producedBindingAccepted source steve)
         , ( "Generic actuals match canonical Upload architecture-instance binding"
           , producedBindingAccepted source upload)
+        , ( "Typed native final instance witness closes Upload accepted consumer"
+          , nativeFinalInstanceAccepts source upload)
+        , ( "Typed native final instance witness closes Steve accepted consumer"
+          , nativeFinalInstanceAccepts source steve)
+        , ( "Typed native final instance rejects modified semantic actuals"
+          , nativeFinalInstanceWrongActualRejects source upload)
+        , ( "Typed native final instance rejects a different certified manifest"
+          , nativeFinalInstanceOtherReleaseRejects source upload steve)
+        , ( "Typed native final instance rejects a different StageClosure"
+          , nativeFinalInstanceWrongStageRejects source upload steve)
         , ( "Generic actuals reject changed static instance binding"
           , instanceRejectsWrongStaticArgument source upload)
         , ( "Generic actuals reject missing static instance binding"
@@ -555,6 +566,96 @@ producedBindingAccepted source fixture = case produceFixture source fixture of
                 == manifestId (fixtureManifest producedFixture)
               && nativeFinalRawSystemsDigest native
                 == stageSystemsDigest (fixtureStage fixture)
+
+
+-- This new consumer is deliberately *stronger* than the old caller-supplied
+-- association: it runs the exact generic-actuals / architecture instance
+-- producer again, and then compares both separately accepted consumer objects.
+nativeFinalInstanceAccepts
+  :: GenericApplicationAssurance -> ReleaseFixture -> Bool
+nativeFinalInstanceAccepts source fixture =
+  case (producerInputs source, produceFixture source fixture) of
+    (Right (bundle, policy), Right (_, produced)) ->
+      case nativeAdapterPair source produced of
+        Nothing -> False
+        Just (sourceArtifact, release) ->
+          case closeNativeFinalInstanceCorrespondence
+              source (sourceInstanceDescriptor source) bundle policy
+              (fixtureContext produced) (fixtureLedger produced)
+              emptyProducerSelection sourceArtifact release of
+            Left _ -> False
+            Right witnessed ->
+              let authority = nativeCorrespondenceAuthority witnessed
+                  stage = fixtureStage produced
+                  subject = concreteSubjectStage (stageClosureConcrete stage)
+                  common = subjectStageBase subject
+              in nativeCorrespondenceArchitectureInstance witnessed
+                    == deriveArchitectureInstanceIdentity (sourceInstanceDescriptor source)
+                && nativeFinalSourceIdentity authority == nativeAdapterSourceId source
+                && nativeFinalManifestId authority == manifestId (fixtureManifest produced)
+                && nativeFinalRawSystemsDigest authority == stageSystemsDigest stage
+                && nativeFinalLoweringRoot authority == stageLoweringRoot stage
+                && nativeFinalSubjectRevision authority == subjectStageRevision subject
+                && nativeFinalInstanceRevision authority == phase1StageInstanceRevision common
+                && nativeFinalRealizationRevision authority == phase1StageRealizationRevision common
+                && nativeFinalSystemsRevision authority == phase1StageSystemsArtifactRevision common
+                && nativeFinalCommonContractRevision authority == phase1StageContractRevision common
+                && nativeFinalClosedContractRevision authority == stageClosureContractRevision stage
+                && nativeFinalVerifierProfile authority == phase1StageVerifierProfileRevision common
+    _ -> False
+
+nativeFinalInstanceWrongActualRejects
+  :: GenericApplicationAssurance -> ReleaseFixture -> Bool
+nativeFinalInstanceWrongActualRejects source fixture =
+  case (producerInputs source, produceFixture source fixture) of
+    (Right (bundle, policy), Right (_, produced)) ->
+      case nativeAdapterPair source produced of
+        Nothing -> False
+        Just (sourceArtifact, release) ->
+          let bad = (sourceInstanceDescriptor source)
+                { architectureStaticBindings =
+                    Map.singleton "T" (SemanticAtom "substituted") }
+          in case closeNativeFinalInstanceCorrespondence source bad bundle policy
+              (fixtureContext produced) (fixtureLedger produced)
+              emptyProducerSelection sourceArtifact release of
+               Left (NativeFinalInstanceSourceRejected
+                 SourceManifestStaticArgumentsMismatch) -> True
+               _ -> False
+    _ -> False
+
+nativeFinalInstanceOtherReleaseRejects
+  :: GenericApplicationAssurance -> ReleaseFixture -> ReleaseFixture -> Bool
+nativeFinalInstanceOtherReleaseRejects source fixture other =
+  case (producerInputs source, produceFixture source fixture, runRelease other) of
+    (Right (bundle, policy), Right (_, produced), Right otherRelease) ->
+      case nativeAdapterPair source produced of
+        Nothing -> False
+        Just (sourceArtifact, _) ->
+          case closeNativeFinalInstanceCorrespondence source
+              (sourceInstanceDescriptor source) bundle policy
+              (fixtureContext produced) (fixtureLedger produced)
+              emptyProducerSelection sourceArtifact otherRelease of
+            Left (NativeFinalInstanceReleaseRejected
+              SourceManifestReleaseManifestMismatch) -> True
+            _ -> False
+    _ -> False
+
+nativeFinalInstanceWrongStageRejects
+  :: GenericApplicationAssurance -> ReleaseFixture -> ReleaseFixture -> Bool
+nativeFinalInstanceWrongStageRejects source fixture other =
+  case (producerInputs source, produceFixture source fixture) of
+    (Right (bundle, policy), Right (_, produced)) ->
+      case (certifyApplicationArtifact source (fixtureStage other), runRelease produced) of
+        (Right wrongSourceArtifact, Right release) ->
+          case closeNativeFinalInstanceCorrespondence source
+              (sourceInstanceDescriptor source) bundle policy
+              (fixtureContext produced) (fixtureLedger produced)
+              emptyProducerSelection wrongSourceArtifact release of
+            Left (NativeFinalInstanceReleaseRejected
+              (SourceManifestNativeBindingRejected NativeFinalStageMismatch)) -> True
+            _ -> False
+        _ -> False
+    _ -> False
 
 instanceRejectsWrongStaticArgument
   :: GenericApplicationAssurance -> ReleaseFixture -> Bool
