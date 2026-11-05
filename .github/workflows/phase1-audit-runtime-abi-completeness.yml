@@ -39,6 +39,10 @@ jobs:
           echo "PASS: pinned historical checker reproduces ABI-01/02 and CC failures"
       - name: Exercise scalar, aggregate, address-space, quoted/multiline and CC controls
         run: python3 -m unittest discover -s scripts/ci -p test_runtime_abi_checker.py -v
+      - uses: haskell-actions/setup@v2
+        with:
+          ghc-version: '9.6.7'
+          cabal-version: 'latest'
       - name: Existing Phase 0 native ABI integration
         run: |
           bash scripts/ci/setup-llvm18.sh
