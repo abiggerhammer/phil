@@ -8,8 +8,6 @@ bundle.upload.source.v1	source-bundle	handoff/phase1/witnesses/upload-source-bun
 bundle.steve.source.v1	source-bundle	handoff/phase1/witnesses/steve-source-bundle-v1.tsv	sha256:5763040b08d9c0a874e7063b8128718ad096091052dee7f21932592f33c3559c	matrix:INT-001;matrix:SURF-010
 checked.upload.architecture.v1	checked-semantics	handoff/phase1/witnesses/upload-checked-architecture-v1.tsv	sha256:bc7668758313bc36caff38426a1a73b05696a6f07f24bc7eb2527330c39ebf48	matrix:INT-001;certified:PHIL-ARCH-ID-001;certified:PHIL-ARCH-INST-001
 checked.steve.architecture.v1	checked-semantics	handoff/phase1/witnesses/steve-checked-architecture-v1.tsv	sha256:8bb6704a9009c6741093a1f4876074455a1085dd95304e2f12bfad7a6b75a563	matrix:INT-001;certified:PHIL-ARCH-ID-001;certified:PHIL-ARCH-INST-001
-verification.upload.bundle.v1	verification-bundle	handoff/phase1/witnesses/upload-verification-bundle-v1.tsv	sha256:3b1acec86534b6eb35e1f4e78b190f68833bea1b93e5cfc8d87a78a7fcfea7ca	matrix:INT-002;matrix:VER-012
-verification.steve.bundle.v1	verification-bundle	handoff/phase1/witnesses/steve-verification-bundle-v1.tsv	sha256:f6e3bb1916b2777006d3e422c19960b9c2254155bcd5f58cd5efe1b5543ac8e9	matrix:INT-002;matrix:VER-012
 ping.stage1.source.v1	whole-source	handoff/phase1/ping/stage1-one-shot.phil	sha256:6a12f4b2d90648bd4624ced4114d37b18e232db8136a207a72b146b72ce75a2f	matrix:INT-008
 ping.stage2.source.v1	whole-source	handoff/phase1/ping/stage2-request-reply.phil	sha256:95ee0135a3a21aaec234b587ae6ff5ac635f5d68a73d3c025f6b79aeb872ea0e	matrix:INT-009
 ping.stage3.source.v1	whole-source	handoff/phase1/ping/stage3-bounded.phil	sha256:00fcbd07fea16438133e26a29a3409e7abb60ef1060bc419e46d6b2ed4fe9705	matrix:INT-009
@@ -40,6 +38,8 @@ systems.steve.v1	systems	handoff/phase1/runtime/steve-systems-v1.tsv	sha256:d5c9
 stage-contract.steve.v1	stage-contract	handoff/phase1/runtime/steve-stage-contract-v1.tsv	sha256:6747a2ab0bd1b35ba33ce5c30fdc801bcd89d1b43f56150a76d5f34c283e7526	matrix:SYS-020
 lowering.steve.v1	lowering	handoff/phase1/runtime/steve-lowering-v1.tsv	sha256:3a33e6db57c572e9cf2ecd909082d71d460424658ef66a9c15d6858045f1c1fd	matrix:SYS-001
 cost.steve.v1	cost	handoff/phase1/runtime/steve-cost-v1.tsv	sha256:41b5defb9377da3b38973c53eb24673936fbd27f4f8291bb5d835ce03a764398	matrix:SYS-018
+verification.upload.bundle.v1	verification-bundle	handoff/phase1/witnesses/upload-verification-bundle-v1.tsv	sha256:04d2f15bb6b5d7b60c48e89886fd4806987a4058d46d0c9b588a8ac279c89fa4	matrix:INT-002;matrix:VER-012
+verification.steve.bundle.v1	verification-bundle	handoff/phase1/witnesses/steve-verification-bundle-v1.tsv	sha256:2b622b47b358bad44638b21950c0a557eee522282c7766128b43de6575702f26	matrix:INT-002;matrix:VER-012
 assurance.upload.manifest.v1	assurance-manifest	handoff/phase1/witnesses/upload-assurance-manifest-v1.tsv	sha256:db514304b7eb63fff6c1e0303f8469d0373a227140206b71a4e69ec9c0ee691f	matrix:INT-002
 assurance.steve.manifest.v1	assurance-manifest	handoff/phase1/witnesses/steve-assurance-manifest-v1.tsv	sha256:6b48d09860fea6192eb886fdb1c0d3418feacb72237d4d279e859c44e3b13081	matrix:INT-002
 tcb.upload.residual.v1	tcb	handoff/phase1/witnesses/upload-residual-tcb-v1.tsv	sha256:edf28bf8a85a50e8b45b3790288aacfebe1f6a6500da8169df497d56aa9b4ea7	matrix:INT-005
