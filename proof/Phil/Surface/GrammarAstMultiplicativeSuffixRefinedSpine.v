@@ -1,6 +1,7 @@
 From Stdlib Require Import Lists.List Strings.String.
 
 From Phil.Surface Require Import
+  GrammarDerivation
   GrammarAstMultiplicativeExpressionSpine
   GrammarAstUnaryExpressionRecursiveRefinedSpine.
 
@@ -57,11 +58,11 @@ Definition phase1_surface_normalize_multiplicative_suffix_refined_spine_fuel
       fuel
       (phase1_multiplicative_suffix_spine_right suffix)
   with
-  | Some right =>
+  | Some right_operand =>
       Some
         {| phase1_multiplicative_suffix_refined_spine_operator :=
              phase1_multiplicative_suffix_spine_operator suffix;
-           phase1_multiplicative_suffix_refined_spine_right := right |}
+           phase1_multiplicative_suffix_refined_spine_right := right_operand |}
   | None => None
   end.
 

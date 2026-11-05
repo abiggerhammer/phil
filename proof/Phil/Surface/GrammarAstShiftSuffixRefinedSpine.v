@@ -1,6 +1,7 @@
 From Stdlib Require Import Lists.List Strings.String.
 
 From Phil.Surface Require Import
+  GrammarDerivation
   GrammarAstShiftExpressionSpine
   GrammarAstAdditiveExpressionRefinedSpine.
 
@@ -59,11 +60,11 @@ Definition phase1_surface_normalize_shift_suffix_refined_spine_fuel
       fuel
       (phase1_shift_suffix_spine_right suffix)
   with
-  | Some right =>
+  | Some right_operand =>
       Some
         {| phase1_shift_suffix_refined_spine_operator :=
              phase1_shift_suffix_spine_operator suffix;
-           phase1_shift_suffix_refined_spine_right := right |}
+           phase1_shift_suffix_refined_spine_right := right_operand |}
   | None => None
   end.
 

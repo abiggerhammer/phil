@@ -67,7 +67,16 @@ jobs:
             proof/Phil/Surface/GrammarAstPrimaryExpressionRecursiveGroupingSpineTotality.vo \
             proof/Phil/Surface/GrammarAstPostfixExpressionRecursiveGroupingSpine.vo \
             proof/Phil/Surface/GrammarAstPostfixExpressionRecursiveGroupingSpineTotality.vo \
-            proof/Phil/Surface/GrammarAstPrimaryPostfixRecursiveGroupingExamples.vo
+            proof/Phil/Surface/GrammarAstPrimaryPostfixRecursiveGroupingExamples.vo \
+            proof/Phil/Surface/GrammarAstUnaryExpressionRecursiveGroupingSpine.vo \
+            proof/Phil/Surface/GrammarAstUnaryExpressionRecursiveGroupingSpineTotality.vo \
+            proof/Phil/Surface/GrammarAstMultiplicativeExpressionRecursiveGroupingSpine.vo \
+            proof/Phil/Surface/GrammarAstMultiplicativeExpressionRecursiveGroupingSpineTotality.vo \
+            proof/Phil/Surface/GrammarAstAdditiveExpressionRecursiveGroupingSpine.vo \
+            proof/Phil/Surface/GrammarAstAdditiveExpressionRecursiveGroupingSpineTotality.vo \
+            proof/Phil/Surface/GrammarAstShiftExpressionRecursiveGroupingSpine.vo \
+            proof/Phil/Surface/GrammarAstShiftExpressionRecursiveGroupingSpineTotality.vo \
+            proof/Phil/Surface/GrammarAstArithmeticRecursiveGroupingExamples.vo
 
       - name: Check recursive grouping and carrier composition theorem assumptions
         shell: bash
@@ -82,7 +91,15 @@ jobs:
             GrammarAstPrimaryExpressionRecursiveGroupingSpine
             GrammarAstPrimaryExpressionRecursiveGroupingSpineTotality
             GrammarAstPostfixExpressionRecursiveGroupingSpine
-            GrammarAstPostfixExpressionRecursiveGroupingSpineTotality.
+            GrammarAstPostfixExpressionRecursiveGroupingSpineTotality
+            GrammarAstUnaryExpressionRecursiveGroupingSpine
+            GrammarAstUnaryExpressionRecursiveGroupingSpineTotality
+            GrammarAstMultiplicativeExpressionRecursiveGroupingSpine
+            GrammarAstMultiplicativeExpressionRecursiveGroupingSpineTotality
+            GrammarAstAdditiveExpressionRecursiveGroupingSpine
+            GrammarAstAdditiveExpressionRecursiveGroupingSpineTotality
+            GrammarAstShiftExpressionRecursiveGroupingSpine
+            GrammarAstShiftExpressionRecursiveGroupingSpineTotality.
           Print Assumptions phase1_surface_normalize_recursive_grouping_fuel_round_trip.
           Print Assumptions phase1_surface_grouping_well_formed_from_derivation_mutual.
           Print Assumptions phase1_surface_recursive_grouping_sufficient_fuel.
@@ -94,13 +111,26 @@ jobs:
           Print Assumptions phase1_surface_normalize_postfix_expression_recursive_grouping_tree_round_trip.
           Print Assumptions phase1_surface_normalize_postfix_expression_recursive_grouping_tree_total_from_derivation.
           Print Assumptions phase1_surface_refine_postfix_expression_recursive_grouping_total_from_derivation.
+          Print Assumptions phase1_surface_normalize_unary_expression_recursive_grouping_tree_round_trip.
+          Print Assumptions phase1_surface_unary_expression_recursive_grouping_sufficient_fuel_from_derivation.
+          Print Assumptions phase1_surface_normalize_unary_expression_recursive_grouping_tree_total_from_derivation.
+          Print Assumptions phase1_surface_refine_unary_expression_recursive_grouping_total_from_derivation.
+          Print Assumptions phase1_surface_normalize_multiplicative_expression_recursive_grouping_tree_round_trip.
+          Print Assumptions phase1_surface_normalize_multiplicative_expression_recursive_grouping_tree_total_from_derivation.
+          Print Assumptions phase1_surface_refine_multiplicative_expression_recursive_grouping_total_from_derivation.
+          Print Assumptions phase1_surface_normalize_additive_expression_recursive_grouping_tree_round_trip.
+          Print Assumptions phase1_surface_normalize_additive_expression_recursive_grouping_tree_total_from_derivation.
+          Print Assumptions phase1_surface_refine_additive_expression_recursive_grouping_total_from_derivation.
+          Print Assumptions phase1_surface_normalize_shift_expression_recursive_grouping_tree_round_trip.
+          Print Assumptions phase1_surface_normalize_shift_expression_recursive_grouping_tree_total_from_derivation.
+          Print Assumptions phase1_surface_refine_shift_expression_recursive_grouping_total_from_derivation.
           EOF
           rocq c -Q proof/Phil Phil RecursiveGroupingAssumptions.v \
             | tee recursive-grouping-assumptions.txt
           python3 - <<'PY'
           from pathlib import Path
           output = Path("recursive-grouping-assumptions.txt").read_text()
-          assert output.count("Closed under the global context") == 11, output
+          assert output.count("Closed under the global context") == 24, output
           assert "Axioms:" not in output, output
           PY
           rocq check -silent -Q proof/Phil Phil \
@@ -108,7 +138,12 @@ jobs:
             Phil.Surface.GrammarAstRecursiveGroupingExamples \
             Phil.Surface.GrammarAstPrimaryExpressionRecursiveGroupingSpineTotality \
             Phil.Surface.GrammarAstPostfixExpressionRecursiveGroupingSpineTotality \
-            Phil.Surface.GrammarAstPrimaryPostfixRecursiveGroupingExamples
+            Phil.Surface.GrammarAstPrimaryPostfixRecursiveGroupingExamples \
+            Phil.Surface.GrammarAstUnaryExpressionRecursiveGroupingSpineTotality \
+            Phil.Surface.GrammarAstMultiplicativeExpressionRecursiveGroupingSpineTotality \
+            Phil.Surface.GrammarAstAdditiveExpressionRecursiveGroupingSpineTotality \
+            Phil.Surface.GrammarAstShiftExpressionRecursiveGroupingSpineTotality \
+            Phil.Surface.GrammarAstArithmeticRecursiveGroupingExamples
 
       - name: Record source representation and recursive grouping identities
         shell: bash
@@ -127,6 +162,16 @@ jobs:
           cp proof/Phil/Surface/GrammarAstPostfixExpressionRecursiveGrouping*.vo surface-grammar-ast-representation/
           cp proof/Phil/Surface/GrammarAstPrimaryPostfixRecursiveGroupingExamples.v surface-grammar-ast-representation/
           cp proof/Phil/Surface/GrammarAstPrimaryPostfixRecursiveGroupingExamples.vo surface-grammar-ast-representation/
+          cp proof/Phil/Surface/GrammarAstUnaryExpressionRecursiveGrouping*.v surface-grammar-ast-representation/
+          cp proof/Phil/Surface/GrammarAstUnaryExpressionRecursiveGrouping*.vo surface-grammar-ast-representation/
+          cp proof/Phil/Surface/GrammarAstMultiplicativeExpressionRecursiveGrouping*.v surface-grammar-ast-representation/
+          cp proof/Phil/Surface/GrammarAstMultiplicativeExpressionRecursiveGrouping*.vo surface-grammar-ast-representation/
+          cp proof/Phil/Surface/GrammarAstAdditiveExpressionRecursiveGrouping*.v surface-grammar-ast-representation/
+          cp proof/Phil/Surface/GrammarAstAdditiveExpressionRecursiveGrouping*.vo surface-grammar-ast-representation/
+          cp proof/Phil/Surface/GrammarAstShiftExpressionRecursiveGrouping*.v surface-grammar-ast-representation/
+          cp proof/Phil/Surface/GrammarAstShiftExpressionRecursiveGrouping*.vo surface-grammar-ast-representation/
+          cp proof/Phil/Surface/GrammarAstArithmeticRecursiveGroupingExamples.v surface-grammar-ast-representation/
+          cp proof/Phil/Surface/GrammarAstArithmeticRecursiveGroupingExamples.vo surface-grammar-ast-representation/
           cp recursive-grouping-assumptions.txt surface-grammar-ast-representation/
           sha256sum \
             grammar/phase1-surface.ebnf \
@@ -154,6 +199,24 @@ jobs:
             proof/Phil/Surface/GrammarAstPostfixExpressionRecursiveGroupingSpineTotality.vo \
             proof/Phil/Surface/GrammarAstPrimaryPostfixRecursiveGroupingExamples.v \
             proof/Phil/Surface/GrammarAstPrimaryPostfixRecursiveGroupingExamples.vo \
+            proof/Phil/Surface/GrammarAstUnaryExpressionRecursiveGroupingSpine.v \
+            proof/Phil/Surface/GrammarAstUnaryExpressionRecursiveGroupingSpine.vo \
+            proof/Phil/Surface/GrammarAstUnaryExpressionRecursiveGroupingSpineTotality.v \
+            proof/Phil/Surface/GrammarAstUnaryExpressionRecursiveGroupingSpineTotality.vo \
+            proof/Phil/Surface/GrammarAstMultiplicativeExpressionRecursiveGroupingSpine.v \
+            proof/Phil/Surface/GrammarAstMultiplicativeExpressionRecursiveGroupingSpine.vo \
+            proof/Phil/Surface/GrammarAstMultiplicativeExpressionRecursiveGroupingSpineTotality.v \
+            proof/Phil/Surface/GrammarAstMultiplicativeExpressionRecursiveGroupingSpineTotality.vo \
+            proof/Phil/Surface/GrammarAstAdditiveExpressionRecursiveGroupingSpine.v \
+            proof/Phil/Surface/GrammarAstAdditiveExpressionRecursiveGroupingSpine.vo \
+            proof/Phil/Surface/GrammarAstAdditiveExpressionRecursiveGroupingSpineTotality.v \
+            proof/Phil/Surface/GrammarAstAdditiveExpressionRecursiveGroupingSpineTotality.vo \
+            proof/Phil/Surface/GrammarAstShiftExpressionRecursiveGroupingSpine.v \
+            proof/Phil/Surface/GrammarAstShiftExpressionRecursiveGroupingSpine.vo \
+            proof/Phil/Surface/GrammarAstShiftExpressionRecursiveGroupingSpineTotality.v \
+            proof/Phil/Surface/GrammarAstShiftExpressionRecursiveGroupingSpineTotality.vo \
+            proof/Phil/Surface/GrammarAstArithmeticRecursiveGroupingExamples.v \
+            proof/Phil/Surface/GrammarAstArithmeticRecursiveGroupingExamples.vo \
             > surface-grammar-ast-representation/identities.sha256
           cat surface-grammar-ast-representation/identities.sha256
 
