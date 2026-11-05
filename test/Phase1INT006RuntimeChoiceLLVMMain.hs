@@ -18,7 +18,7 @@ import Phil.Examples.Phase1.SystemsWitnesses
 import Phil.Systems.IR
   ( BlockId (..)
   , DecisionId (..)
-  , SystemsArtifact (..)
+  , SystemsArtifact (systemsArtifactProgram)
   , SystemsBlock (..)
   , SystemsFunction (..)
   , SystemsProgram (..)
@@ -162,7 +162,10 @@ unboundStageRejects = case (stevePlan, stevePhase1StageBundle) of
 cleanupOnlyOwnerIsInput :: Bool
 cleanupOnlyOwnerIsInput = case steveLowered of
   Left _ -> False
-  Right (stage, abi, _) -> case Map.lookup "StevePut" functions of
+  Right (stage, abi, _) ->
+    let functions = systemsProgramFunctions
+          (systemsArtifactProgram (phase1StageSystemsArtifact stage))
+    in case Map.lookup "StevePut" functions of
     Nothing -> False
     Just function -> case Map.lookup (BlockId "put.ok") (systemsFunctionBlocks function) of
       Nothing -> False
@@ -174,15 +177,15 @@ cleanupOnlyOwnerIsInput = case steveLowered of
             revised = function { systemsFunctionBlocks =
               Map.insert (BlockId "put.ok") changed (systemsFunctionBlocks function) }
         in owner `elem` runtimeChoiceLLVMExternalInputs "StevePut" revised abi
-    where
-      functions = systemsProgramFunctions
-        (systemsArtifactProgram (phase1StageSystemsArtifact stage))
 
 -- RT-02: a non-producing edge into a payload load is invalid LLVM SSA.
 payloadExtraPredecessorRejects :: Bool
 payloadExtraPredecessorRejects = case steveLowered of
   Left _ -> False
-  Right (stage, abi, _) -> case Map.lookup "StevePut" functions of
+  Right (stage, abi, _) ->
+    let functions = systemsProgramFunctions
+          (systemsArtifactProgram (phase1StageSystemsArtifact stage))
+    in case Map.lookup "StevePut" functions of
     Nothing -> False
     Just function -> case Map.lookup (BlockId "put.failure") (systemsFunctionBlocks function) of
       Nothing -> False
@@ -193,16 +196,16 @@ payloadExtraPredecessorRejects = case steveLowered of
         in case validateRuntimeChoicePayloadPredecessors "StevePut" revised abi of
              Left RuntimeChoiceLLVMPayloadTargetPredecessors {} -> True
              _ -> False
-    where
-      functions = systemsProgramFunctions
-        (systemsArtifactProgram (phase1StageSystemsArtifact stage))
 
 -- An additional arm from the same choice must not enter the payload target
 -- without initializing that result, even though its predecessor block agrees.
 payloadUnboundArmRejects :: Bool
 payloadUnboundArmRejects = case steveLowered of
   Left _ -> False
-  Right (stage, abi, _) -> case Map.lookup "StevePut" functions of
+  Right (stage, abi, _) ->
+    let functions = systemsProgramFunctions
+          (systemsArtifactProgram (phase1StageSystemsArtifact stage))
+    in case Map.lookup "StevePut" functions of
     Nothing -> False
     Just function -> case Map.lookup (BlockId "put.entry") (systemsFunctionBlocks function) of
       Nothing -> False
@@ -218,9 +221,6 @@ payloadUnboundArmRejects = case steveLowered of
                  Left RuntimeChoiceLLVMPayloadTargetPredecessors {} -> True
                  _ -> False
           _ -> False
-    where
-      functions = systemsProgramFunctions
-        (systemsArtifactProgram (phase1StageSystemsArtifact stage))
 
 steveLLVMText :: Maybe Text
 steveLLVMText = case steveLowered of
