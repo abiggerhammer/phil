@@ -309,6 +309,15 @@ checkTypeDefinednessWithSubject subject logicalBindings ty state =
   case ty of
     TyBytes index -> sideConditions logicalBindings (Equal index index)
     TyProof proposition -> sideConditions logicalBindings proposition
+    -- Endpoint payload definedness is a type-formation prerequisite, just
+    -- like Bytes, Proof, and product definedness. Traverse the finite session
+    -- syntax without unfolding recursion or fabricating a payload subject.
+    TyEndpoint session ->
+      checkSessionDefinedness logicalBindings session
+    TyPendingRecv pending ->
+      checkSessionDefinedness
+        ((pendingBinder pending, TyFrame (pendingGrammar pending)) : logicalBindings)
+        (pendingContinuation pending)
     TyProduct elements ->
       fmap concat $
         mapM
@@ -340,6 +349,34 @@ checkTypeDefinednessWithSubject subject logicalBindings ty state =
     sideConditions bindings proposition =
       mapLeft ValueRefinementError $
         dischargeSideConditionsUnder bindings proposition state
+
+    -- The message binder scopes only the continuation, not the message
+    -- type itself. Every choice branch starts with its own lexical scope.
+    -- These logical bindings do not create ownership or proof authority.
+    checkSessionDefinedness bindings session =
+      case session of
+        Send binder payload continuation ->
+          checkMessage bindings binder payload continuation
+        Receive binder payload continuation ->
+          checkMessage bindings binder payload continuation
+        Select branches -> fmap concat (mapM (checkBranch bindings) branches)
+        Offer branches -> fmap concat (mapM (checkBranch bindings) branches)
+        End _ -> Right []
+        Rec _ body -> checkSessionDefinedness bindings body
+        SessionVar _ -> Right []
+
+    checkMessage bindings binder payload continuation = do
+      payloadUses <-
+        checkTypeDefinednessWithSubject Nothing bindings payload state
+      continuationUses <-
+        checkSessionDefinedness ((binder, payload) : bindings) continuation
+      pure (payloadUses ++ continuationUses)
+
+    checkBranch bindings branch =
+      case branchPayload branch of
+        Nothing -> checkSessionDefinedness bindings (branchContinuation branch)
+        Just (binder, payload) ->
+          checkMessage bindings binder payload (branchContinuation branch)
 
 refinementErasesTo :: Ty -> Ty -> Bool
 refinementErasesTo actual expected =
