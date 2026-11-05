@@ -1,7 +1,9 @@
 From Stdlib Require Import Lists.List Strings.String.
 
 From Phil.Surface Require Import
-  GrammarAstPrimaryExpressionSpineTotality.
+  GrammarDerivation
+  GrammarAstSourceHeader
+  GrammarAstGenericRequirementsSpine.
 
 Import ListNotations.
 Open Scope string_scope.

@@ -1,8 +1,9 @@
 From Stdlib Require Import Lists.List Strings.String.
 
 From Phil.Surface Require Import
-  GrammarAstParenthesizedExpressionSpineTotality
-  GrammarAstRefinementTupleTypePayloadSpine.
+  GrammarDerivation
+  GrammarAstSourceHeader
+  GrammarAstGenericRequirementsSpine.
 
 Import ListNotations.
 Open Scope string_scope.
@@ -106,7 +107,7 @@ Proof.
     + eapply phase1_surface_normalize_tuple_expression_suffix_round_trip.
       exact Htree.
     + eapply IH.
-      exact Hrest.
+      reflexivity.
 Qed.
 
 Record Phase1SurfaceTupleExpressionSpine : Type := {
@@ -203,6 +204,7 @@ Proof.
     as [rest |] eqn:Hrest; try discriminate Hnormalize.
   inversion Hnormalize; subst tuple_expression.
   unfold phase1_surface_tuple_expression_spine_tree.
+  cbn.
   rewrite
     (phase1_surface_expect_nonterminal_round_trip
       "tuple_expression" tree body Hnode).

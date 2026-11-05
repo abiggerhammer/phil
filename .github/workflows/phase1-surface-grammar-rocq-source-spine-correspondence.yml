@@ -41,7 +41,7 @@ jobs:
           python3 scripts/derive_phase1_surface_grammar.py --check
           python3 scripts/derive_phase1_surface_determinacy_certificate.py --check
 
-      - name: Compile proof-side source correspondence and representation bridges
+      - name: Compile source correspondence, representation bridges, and recursive grouping
         shell: bash
         run: |
           set -euo pipefail
@@ -56,9 +56,41 @@ jobs:
             proof/Phil/Surface/GrammarAstImplementationRepresentation.vo \
             proof/Phil/Surface/GrammarAstImplementationRepresentationExtraction.vo \
             proof/Phil/Surface/GrammarAstTopLevelImplementationRepresentation.vo \
-            proof/Phil/Surface/GrammarAstTopLevelImplementationRepresentationExtraction.vo
+            proof/Phil/Surface/GrammarAstTopLevelImplementationRepresentationExtraction.vo \
+            proof/Phil/Surface/GrammarAstRecursiveGrouping.vo \
+            proof/Phil/Surface/GrammarAstRecursiveGroupingWellFormed.vo \
+            proof/Phil/Surface/GrammarAstRecursiveGroupingTotality.vo \
+            proof/Phil/Surface/GrammarAstRecursiveGroupingExamples.vo
 
-      - name: Record source and top-level representation identities
+      - name: Check recursive grouping theorem assumptions
+        shell: bash
+        run: |
+          set -euo pipefail
+          export PATH="/home/rocq/.opam/${COMPILER}/bin:$PATH"
+          cat > RecursiveGroupingAssumptions.v <<'EOF'
+          From Phil.Surface Require Import
+            GrammarAstRecursiveGrouping
+            GrammarAstRecursiveGroupingWellFormed
+            GrammarAstRecursiveGroupingTotality.
+          Print Assumptions phase1_surface_normalize_recursive_grouping_fuel_round_trip.
+          Print Assumptions phase1_surface_grouping_well_formed_from_derivation_mutual.
+          Print Assumptions phase1_surface_recursive_grouping_sufficient_fuel.
+          Print Assumptions phase1_surface_recursive_grouping_total_from_derivation.
+          Print Assumptions phase1_surface_recursive_grouping_expression_total_from_derivation.
+          EOF
+          rocq c -Q proof/Phil Phil RecursiveGroupingAssumptions.v \
+            | tee recursive-grouping-assumptions.txt
+          python3 - <<'PY'
+          from pathlib import Path
+          output = Path("recursive-grouping-assumptions.txt").read_text()
+          assert output.count("Closed under the global context") == 5, output
+          assert "Axioms:" not in output, output
+          PY
+          rocq check -silent -Q proof/Phil Phil \
+            Phil.Surface.GrammarAstRecursiveGroupingTotality \
+            Phil.Surface.GrammarAstRecursiveGroupingExamples
+
+      - name: Record source representation and recursive grouping identities
         shell: bash
         run: |
           set -euo pipefail
@@ -67,6 +99,9 @@ jobs:
           mkdir -p surface-grammar-ast-representation
           cp SurfaceGrammarAstRepresentationKernel.hs surface-grammar-ast-representation/
           cp SurfaceGrammarAstTopLevelRepresentationKernel.hs surface-grammar-ast-representation/
+          cp proof/Phil/Surface/GrammarAstRecursiveGrouping*.v surface-grammar-ast-representation/
+          cp proof/Phil/Surface/GrammarAstRecursiveGrouping*.vo surface-grammar-ast-representation/
+          cp recursive-grouping-assumptions.txt surface-grammar-ast-representation/
           sha256sum \
             grammar/phase1-surface.ebnf \
             proof/Phil/Surface/GrammarAstImplementationRepresentation.v \
@@ -75,6 +110,14 @@ jobs:
             proof/Phil/Surface/GrammarAstTopLevelImplementationRepresentation.v \
             proof/Phil/Surface/GrammarAstTopLevelImplementationRepresentation.vo \
             SurfaceGrammarAstTopLevelRepresentationKernel.hs \
+            proof/Phil/Surface/GrammarAstRecursiveGrouping.v \
+            proof/Phil/Surface/GrammarAstRecursiveGrouping.vo \
+            proof/Phil/Surface/GrammarAstRecursiveGroupingWellFormed.v \
+            proof/Phil/Surface/GrammarAstRecursiveGroupingWellFormed.vo \
+            proof/Phil/Surface/GrammarAstRecursiveGroupingTotality.v \
+            proof/Phil/Surface/GrammarAstRecursiveGroupingTotality.vo \
+            proof/Phil/Surface/GrammarAstRecursiveGroupingExamples.v \
+            proof/Phil/Surface/GrammarAstRecursiveGroupingExamples.vo \
             > surface-grammar-ast-representation/identities.sha256
           cat surface-grammar-ast-representation/identities.sha256
 

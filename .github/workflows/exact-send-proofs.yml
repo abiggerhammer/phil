@@ -142,9 +142,18 @@ jobs:
 
   certify-exact-send:
     needs: rocq-exact-send
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     steps:
       - uses: actions/checkout@v4
+      - name: Provision the LLVM 18 certification toolchain
+        shell: bash
+        run: |
+          set -euo pipefail
+          sudo apt-get update
+          sudo apt-get install -y llvm-18 clang-18
+          llvm-as-18 --version
+          llvm-link-18 --version
+          clang-18 --version
       - uses: haskell-actions/setup@v2
         with:
           ghc-version: '9.6.7'

@@ -258,6 +258,30 @@ Proof.
   reflexivity.
 Qed.
 
+Definition phase1_surface_exact6 {A : Type}
+  (items : list A) : option (A * A * A * A * A * A) :=
+  match items with
+  | [a; b; c; d; e; f] => Some (a, b, c, d, e, f)
+  | _ => None
+  end.
+
+Lemma phase1_surface_exact6_round_trip {A : Type} :
+  forall (items : list A) (a b c d e f : A),
+    phase1_surface_exact6 items = Some (a, b, c, d, e, f) ->
+    items = [a; b; c; d; e; f].
+Proof.
+  intros items a b c d e f Hitems.
+  destruct items as [|x1 items]; cbn in Hitems; try discriminate Hitems.
+  destruct items as [|x2 items]; cbn in Hitems; try discriminate Hitems.
+  destruct items as [|x3 items]; cbn in Hitems; try discriminate Hitems.
+  destruct items as [|x4 items]; cbn in Hitems; try discriminate Hitems.
+  destruct items as [|x5 items]; cbn in Hitems; try discriminate Hitems.
+  destruct items as [|x6 items]; cbn in Hitems; try discriminate Hitems.
+  destruct items as [|extra items]; cbn in Hitems; try discriminate Hitems.
+  inversion Hitems; subst.
+  reflexivity.
+Qed.
+
 Definition phase1_surface_identifier_tree (value : string) : ParseTree :=
   PTNonterminal "identifier" (PTLexical "IDENTIFIER" value).
 

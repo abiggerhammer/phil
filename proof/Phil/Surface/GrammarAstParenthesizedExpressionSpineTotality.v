@@ -1,8 +1,12 @@
 From Stdlib Require Import Lists.List Strings.String.
 
 From Phil.Surface Require Import
-  GrammarAstParenthesizedExpressionSpine
-  GrammarAstSourceHeaderTotality.
+  GrammarDerivation
+  GrammarDeterminacySimpleResolverSoundness
+  GrammarAstSourceHeader
+  GrammarAstGenericRequirementsSpine
+  GrammarAstGenericRequirementsTotality
+  GrammarAstParenthesizedExpressionSpine.
 
 Import ListNotations.
 Open Scope string_scope.
@@ -59,6 +63,7 @@ Proof.
       ]
       input rest subtree Hbody)
     as [trees [Hsubtree Hitems]].
+  revert Htree Hsubtree.
   repeat match goal with
   | Hseq : DerivesSequence phase1_surface_rules _ _ (_ :: _) _ _ _ |- _ =>
       inversion Hseq; subst; clear Hseq
@@ -67,6 +72,7 @@ Proof.
   | Hnil : DerivesSequence phase1_surface_rules _ _ [] _ _ _ |- _ =>
       inversion Hnil; subst; clear Hnil
   end.
+  intros Htree Hsubtree.
   match goal with
   | Hopen : Derives phase1_surface_rules _ (ELiteral "(") _ _ ?open_tree,
     Hexpression : Derives phase1_surface_rules _
