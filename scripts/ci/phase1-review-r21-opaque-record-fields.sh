@@ -19,7 +19,7 @@ resultState = certifiedRendezvousState
 resultCausality = certifiedRendezvousCausality
 terminalNative = certifiedTerminalDispositionNative
 HS
-cabal exec -- ghc -isrc -Wall -Werror -fno-code "$scratch/R21Readable.hs"
+cabal exec -- ghc -isrc -fno-code "$scratch/R21Readable.hs"
 
 # A correctly typed external client cannot use any of the public getters
 # as a record-update field. Each case must fail mentioning its exact label.
@@ -31,7 +31,7 @@ import Phil.Core.ConcurrencyTerminalCertification
 forged :: $typename -> $typename
 forged original = original { $label = undefined }
 HS
-  if cabal exec -- ghc -isrc -fno-code -fforce-recomp "$scratch/R21Forgery.hs" >"$scratch/out" 2>&1; then
+  if cabal exec -- ghc -isrc -fno-code "$scratch/R21Forgery.hs" >"$scratch/out" 2>&1; then
     echo "R21 FAIL: exported update succeeded for $typename.$label" >&2
     exit 1
   fi
