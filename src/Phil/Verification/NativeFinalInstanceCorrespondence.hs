@@ -6,6 +6,11 @@ module Phil.Verification.NativeFinalInstanceCorrespondence
   ( NativeFinalInstanceCorrespondence
   , nativeCorrespondenceArchitectureInstance
   , nativeCorrespondenceAuthority
+  , NativeStageRevisionEquality
+  , nativeStageRevisionEqualityOccurrence
+  , nativeStageRevisionEqualityStageRevision
+  , NativeStageRevisionEqualityError (..)
+  , checkNativeStageRevisionEquality
   , NativeFinalInstanceCorrespondenceError (..)
   , closeNativeFinalInstanceCorrespondence
   ) where
@@ -13,14 +18,18 @@ module Phil.Verification.NativeFinalInstanceCorrespondence
 import Phil.Assurance.Types (AssuranceLedger, VerificationContext)
 import Phil.Core.Static
   ( ArchitectureInstanceDescriptor
-  , ArchitectureInstanceIdentity
+  , ArchitectureInstanceIdentity (..)
+  , InstanceRevision
   , deriveArchitectureInstanceIdentity
   )
 import Phil.Verification (ApplicationAssurancePolicy)
 import Phil.Verification.ArtifactClosure (CertifiedApplicationArtifact)
 import Phil.Verification.Bundle (VerificationBundle)
 import Phil.Verification.CertifiedRelease (CertifiedReleaseArtifact)
-import Phil.Verification.FinalAuthorityAdapter (NativeFinalAuthority)
+import Phil.Verification.FinalAuthorityAdapter
+  ( NativeFinalAuthority
+  , nativeFinalInstanceRevision
+  )
 import Phil.Verification.GenericAssurance (GenericApplicationAssurance)
 import Phil.Verification.ManifestClosure (ManifestClosureSelection)
 import Phil.Verification.SourceManifestBinding
@@ -48,6 +57,42 @@ nativeCorrespondenceAuthority
   :: NativeFinalInstanceCorrespondence -> NativeFinalAuthority
 nativeCorrespondenceAuthority
   (NativeFinalInstanceCorrespondence _ authority) = authority
+
+-- | Equality of the architecture occurrence's canonical revision with the
+-- retained concrete stage's InstanceRevision. The constructor is private.
+-- Crucially, this is a necessary consistency check, NOT evidence that the
+-- stage was produced by that occurrence: StageClosure stores no InstanceKey.
+data NativeStageRevisionEquality = NativeStageRevisionEquality
+  ArchitectureInstanceIdentity InstanceRevision
+  deriving (Eq, Show)
+
+nativeStageRevisionEqualityOccurrence
+  :: NativeStageRevisionEquality -> ArchitectureInstanceIdentity
+nativeStageRevisionEqualityOccurrence
+  (NativeStageRevisionEquality occurrence _) = occurrence
+
+nativeStageRevisionEqualityStageRevision
+  :: NativeStageRevisionEquality -> InstanceRevision
+nativeStageRevisionEqualityStageRevision
+  (NativeStageRevisionEquality _ revision) = revision
+
+data NativeStageRevisionEqualityError
+  = NativeStageRevisionDifferent InstanceRevision InstanceRevision
+  deriving (Eq, Show)
+
+-- | A second, fail-closed gate on an already accepted native witness. It does
+-- not retrofit a stage-origin proof into the upstream certified producers.
+-- Same revision with a different occurrence key remains insufficient.
+checkNativeStageRevisionEquality
+  :: NativeFinalInstanceCorrespondence
+  -> Either NativeStageRevisionEqualityError NativeStageRevisionEquality
+checkNativeStageRevisionEquality witness =
+  let occurrence = nativeCorrespondenceArchitectureInstance witness
+      expected = identityInstanceRevision occurrence
+      actual = nativeFinalInstanceRevision (nativeCorrespondenceAuthority witness)
+  in if expected == actual
+      then Right (NativeStageRevisionEquality occurrence actual)
+      else Left (NativeStageRevisionDifferent expected actual)
 
 data NativeFinalInstanceCorrespondenceError
   = NativeFinalInstanceSourceRejected SourceManifestBindingError

@@ -74,6 +74,9 @@ jobs:
           Print Assumptions raw_digest_drift_cannot_bind.
           Print Assumptions lowering_root_drift_cannot_bind.
           Print Assumptions absent_stage_instance_premise_blocks_extension.
+          Print Assumptions stage_revision_drift_blocks_equality_gate.
+          Print Assumptions revision_equality_does_not_discharge_origin_premise.
+          Print Assumptions same_revision_does_not_identify_occurrence.
           Print Assumptions fixed_adapter_full_certification_preserves_predecessors.
           EOF
           rocq c -Q proof/Phil Phil /tmp/NativeFinalInstanceAssumptions.v 2>&1 | tee typed-native-instance-assumptions.log

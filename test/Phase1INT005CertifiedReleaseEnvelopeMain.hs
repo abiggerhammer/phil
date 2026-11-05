@@ -16,6 +16,7 @@ import Phil.Core.Generic
   )
 import Phil.Core.Static
   ( ArchitectureInstanceDescriptor (..)
+  , ArchitectureInstanceIdentity (..)
   , DeclarationIdentity (..)
   , InstanceKey (..)
   , SemanticForm (..)
@@ -146,6 +147,12 @@ main = do
           , nativeFinalInstanceAccepts source upload)
         , ( "Typed native final instance witness closes Steve accepted consumer"
           , nativeFinalInstanceAccepts source steve)
+        , ( "Stage revision gate rejects unrelated Upload source occurrence"
+          , nativeStageRevisionGateRejectsUnrelated source upload)
+        , ( "Stage revision gate rejects unrelated Steve source occurrence"
+          , nativeStageRevisionGateRejectsUnrelated source steve)
+        , ( "Matching instance revision alone does not identify occurrence key"
+          , sameInstanceRevisionDifferentOccurrenceKey source)
         , ( "Typed native final instance rejects modified semantic actuals"
           , nativeFinalInstanceWrongActualRejects source upload)
         , ( "Typed native final instance rejects a different certified manifest"
@@ -656,6 +663,46 @@ nativeFinalInstanceWrongStageRejects source fixture other =
             _ -> False
         _ -> False
     _ -> False
+
+-- The NR-D06 source occurrence is independently accepted, but it is not the
+-- occurrence that generated either Upload or Steve. The earlier native witness
+-- must remain usable for its *bounded* manifest/stage equalities; the stronger
+-- revision gate must expose the missing origin connection, not bless it.
+nativeStageRevisionGateRejectsUnrelated
+  :: GenericApplicationAssurance -> ReleaseFixture -> Bool
+nativeStageRevisionGateRejectsUnrelated source fixture =
+  case (producerInputs source, produceFixture source fixture) of
+    (Right (bundle, policy), Right (_, produced)) ->
+      case nativeAdapterPair source produced of
+        Nothing -> False
+        Just (sourceArtifact, release) ->
+          case closeNativeFinalInstanceCorrespondence
+              source (sourceInstanceDescriptor source) bundle policy
+              (fixtureContext produced) (fixtureLedger produced)
+              emptyProducerSelection sourceArtifact release of
+            Left _ -> False
+            Right witness ->
+              let occurrence = nativeCorrespondenceArchitectureInstance witness
+                  expected = identityInstanceRevision occurrence
+                  actual = nativeFinalInstanceRevision
+                    (nativeCorrespondenceAuthority witness)
+              in expected /= actual
+                && case checkNativeStageRevisionEquality witness of
+                    Left (NativeStageRevisionDifferent expected' actual') ->
+                      expected' == expected && actual' == actual
+                    _ -> False
+    _ -> False
+
+-- An explicitly constructed *counterexample*, not a certified occurrence:
+-- revision equality cannot recover the key that StageClosure never stored.
+sameInstanceRevisionDifferentOccurrenceKey
+  :: GenericApplicationAssurance -> Bool
+sameInstanceRevisionDifferentOccurrenceKey source =
+  let original = deriveArchitectureInstanceIdentity (sourceInstanceDescriptor source)
+      other = original
+        { identityInstanceKey = InstanceKey "audit.different.occurrence" }
+  in original /= other
+    && identityInstanceRevision original == identityInstanceRevision other
 
 instanceRejectsWrongStaticArgument
   :: GenericApplicationAssurance -> ReleaseFixture -> Bool

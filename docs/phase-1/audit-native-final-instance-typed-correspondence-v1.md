@@ -24,3 +24,32 @@ The proof deliberately does **not** construct `FixedFinalAuthorityAdapter`, `Fin
 4. Revalidate public release **bytes** and independent pinned final-delta signoff separately; LLVM and provider/runtime trust remain Phase-1 TCB.
 
 The independent audit freeze verdict remains **NOT YET**. No change to 244 normative cases, historical audit evidence, release artifacts, or Phase 2 features. Passing this slice is evidence only of the bounded checked chain and typed negative model pressure.
+
+## 2026-11-06 — necessary stage-instance revision gate (issue #1584)
+
+The sealed native witness now has a distinct opt-in
+`checkNativeStageRevisionEquality` gate. It compares
+`identityInstanceRevision (deriveArchitectureInstanceIdentity descriptor)`
+to `nativeFinalInstanceRevision` read from the **already accepted**
+`NativeFinalAuthority`/concrete StageClosure. Its success record's constructor
+is private. Mismatch includes the expected canonical and actual accepted
+`InstanceRevision` values; this cannot be bypassed by substituting the
+manifest, Systems revision, common stage contract or closed revision.
+
+The independent NR-D06 source occurrence is not the occurrence that produced
+the Upload or Steve stage fixtures. Both *still* close the original bounded
+manifest/source/StageClosure witness; both **must fail** the stronger necessary
+revision gate, rather than being presented as full source-to-stage provenance.
+A separate Haskell negative shows two distinct occurrence keys with equal
+`InstanceRevision`. The Rocq extension proves drift blocks the necessary
+equality gate, makes the missing occurrence-to-stage origin relation explicitly
+independent, and gives a concrete *logical counterexample*, not a native
+`nat` encoding. The CI replay includes `Print Assumptions` for those theorems.
+
+**What this does not establish:** equality of revisions is not enough to
+authenticate the occurrence key and its stage-production lineage. Even an
+eventual passing gate cannot discharge `architectureOccurrenceRepresentsStageInstance`,
+the fixed-adapter representation, source/assumption/erasure predecessors,
+`FinalArtifactCertified`, public-release byte verification, or independent
+final-delta approval. These remain separate obligations; Phase 1 audit freeze
+is **NOT YET**, and 244 normative cases are unchanged.

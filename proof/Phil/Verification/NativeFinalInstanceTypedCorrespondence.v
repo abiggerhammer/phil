@@ -123,4 +123,55 @@ Section NativeFinalInstanceTypedCorrespondence.
   Proof.
     intros w H. exact H.
   Qed.
+  (*
+    The native instance identity contains a revision; the concrete StageClosure
+    carries that revision but not the occurrence key. Equality is a necessary
+    optional gate, and cannot construct the independent origin relation.
+  *)
+  Context (architectureIdentityRevision :
+    ArchitectureInstanceIdentity -> StageInstanceRevision).
+
+  Definition NativeStageRevisionEqualityOnly
+    (w : NativeFinalInstanceCoordinates) : Prop :=
+    NativeProducerConsumerBound w /\
+    architectureIdentityRevision (checkedArchitectureInstance w) =
+      stageInstanceRevision w.
+
+  Theorem stage_revision_drift_blocks_equality_gate :
+    forall w,
+      architectureIdentityRevision (checkedArchitectureInstance w) <>
+        stageInstanceRevision w ->
+      ~ NativeStageRevisionEqualityOnly w.
+  Proof.
+    intros w Hdiff [_ Heq]. exact (Hdiff Heq).
+  Qed.
+
+  Theorem revision_equality_does_not_discharge_origin_premise :
+    forall w,
+      ~ architectureOccurrenceRepresentsStageInstance
+          (checkedArchitectureInstance w) (stageInstanceRevision w) ->
+      ~ (NativeStageRevisionEqualityOnly w /\
+          architectureOccurrenceRepresentsStageInstance
+            (checkedArchitectureInstance w) (stageInstanceRevision w)).
+  Proof.
+    intros w Hmissing [_ Hrelated]. exact (Hmissing Hrelated).
+  Qed.
 End NativeFinalInstanceTypedCorrespondence.
+
+(* A concrete logical counterexample, NOT an encoding of Haskell identity
+   values into nat: two distinct occurrence keys can carry one revision.
+   The actual native equality decision also compares the occurrence key. *)
+Record RevisionCollisionOccurrence := {
+  collisionKey : nat;
+  collisionRevision : nat
+}.
+
+Theorem same_revision_does_not_identify_occurrence :
+  exists a b : RevisionCollisionOccurrence,
+    collisionRevision a = collisionRevision b /\
+    collisionKey a <> collisionKey b.
+Proof.
+  exists {| collisionKey := 1; collisionRevision := 3 |}.
+  exists {| collisionKey := 2; collisionRevision := 3 |}.
+  simpl. split; [reflexivity | discriminate].
+Qed.
