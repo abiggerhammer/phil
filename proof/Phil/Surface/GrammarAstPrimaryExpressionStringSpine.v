@@ -1,7 +1,10 @@
 From Stdlib Require Import Arith.PeanoNat Lists.List Strings.String.
 
 From Phil.Surface Require Import
-  GrammarAstPrimaryExpressionCharSpineTotality.
+  GrammarDerivation
+  GrammarAstSourceHeader
+  GrammarAstPrimaryExpressionLiteralSpine
+  GrammarAstPrimaryExpressionCharSpine.
 
 Import ListNotations.
 Open Scope string_scope.

@@ -1,6 +1,16 @@
 From Stdlib Require Import Lists.List Strings.String.
 
 From Phil.Surface Require Import
+  Grammar
+  GrammarAstNamedPostfixExpressionSpineTotality
+  GrammarAstNamedPostfixStaticArgumentsSpine
+  GrammarAstNamedPostfixTailChoiceSpine
+  GrammarAstNamedPostfixTailChoiceSpineTotality
+  GrammarAstSourceHeader
+  GrammarAstStaticArgumentsTotality
+  GrammarAstTopLevelSpine
+  GrammarDerivation
+  GrammarDeterminacySimpleResolverSoundness
   GrammarAstNamedPostfixStaticTermArgumentsSpine
   GrammarAstTermArgumentsTotality.
 
@@ -100,7 +110,7 @@ Proof.
     inversion Hnth; subst item.
     destruct
       (derives_sequence_expression_exposes_items
-        phase1_surface_rules path
+        phase1_surface_rules (descend path (AtAlternative 0))
         [ ENonterminal "static_arguments";
           EOptional (ENonterminal "term_arguments");
           ERepetition
@@ -108,6 +118,7 @@ Proof.
         ]
         input rest selected Hselected)
       as [trees [Hselected_tree Hitems]].
+    revert Htree Hselected_tree.
     repeat match goal with
     | Hseq : DerivesSequence phase1_surface_rules _ _ (_ :: _) _ _ _ |- _ =>
         inversion Hseq; subst; clear Hseq
@@ -116,6 +127,7 @@ Proof.
     | Hnil : DerivesSequence phase1_surface_rules _ _ [] _ _ _ |- _ =>
         inversion Hnil; subst; clear Hnil
     end.
+    intros Htree Hselected_tree.
     match goal with
     | Hstatic : Derives phase1_surface_rules _
         (ENonterminal "static_arguments") _ _ ?static_arguments_tree |- _ =>
@@ -167,8 +179,8 @@ Proof.
   - destruct index as [|index].
     + cbn in Hnth.
       inversion Hnth; subst item.
-      let refined := constr:(
-        Phase1NamedPostfixTermRetainedAfterStaticTermArguments selected) in
+      set (refined :=
+        Phase1NamedPostfixTermRetainedAfterStaticTermArguments selected).
       assert (Hnormalize :
         phase1_surface_normalize_named_postfix_static_term_arguments_tree tree =
           Some refined).
@@ -190,6 +202,5 @@ Proof.
       * eapply
           phase1_surface_normalize_named_postfix_static_term_arguments_tree_round_trip.
         exact Hnormalize.
-    + cbn in Hnth.
-      discriminate Hnth.
+    + destruct index; cbn in Hnth; discriminate Hnth.
 Qed.

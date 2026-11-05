@@ -1,7 +1,8 @@
 From Stdlib Require Import Lists.List Strings.String.
 
 From Phil.Surface Require Import
-  GrammarAstPostfixExpressionSpineTotality
+  GrammarDerivation
+  GrammarAstGenericRequirementsSpine
   GrammarAstSourceHeader.
 
 Import ListNotations.
@@ -89,7 +90,8 @@ Proof.
     as [[tail |] |] eqn:Htail; try discriminate Hnormalize.
   - inversion Hnormalize; subst expression.
     unfold phase1_surface_named_postfix_expression_spine_tree.
-    cbn.
+    cbn [phase1_named_postfix_expression_spine_name
+      phase1_named_postfix_expression_spine_tail].
     rewrite
       (phase1_surface_expect_nonterminal_round_trip
         "named_postfix_expression" tree body Hnode).
@@ -98,6 +100,7 @@ Proof.
     rewrite
       (phase1_surface_exact2_round_trip
         items name_tree tail_tree Hitems).
+    unfold phase1_surface_qualified_name_tree.
     rewrite
       (phase1_surface_normalize_name_list_round_trip
         "qualified_name" "." name_tree name Hname).
@@ -107,7 +110,8 @@ Proof.
     reflexivity.
   - inversion Hnormalize; subst expression.
     unfold phase1_surface_named_postfix_expression_spine_tree.
-    cbn.
+    cbn [phase1_named_postfix_expression_spine_name
+      phase1_named_postfix_expression_spine_tail].
     rewrite
       (phase1_surface_expect_nonterminal_round_trip
         "named_postfix_expression" tree body Hnode).
@@ -116,6 +120,7 @@ Proof.
     rewrite
       (phase1_surface_exact2_round_trip
         items name_tree tail_tree Hitems).
+    unfold phase1_surface_qualified_name_tree.
     rewrite
       (phase1_surface_normalize_name_list_round_trip
         "qualified_name" "." name_tree name Hname).

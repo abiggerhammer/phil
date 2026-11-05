@@ -1,6 +1,11 @@
 From Stdlib Require Import Lists.List Strings.String.
 
 From Phil.Surface Require Import
+  GrammarAstGenericRequirementsSpine
+  GrammarAstRefinementTupleTypePayloadSpine
+  GrammarAstSourceHeader
+  GrammarAstTopLevelSpine
+  GrammarDerivation
   GrammarAstStaticReferenceSpine.
 
 Import ListNotations.
@@ -266,7 +271,7 @@ Proof.
     + eapply phase1_surface_normalize_static_argument_suffix_round_trip.
       exact Htree.
     + eapply IH.
-      exact Hrest.
+      reflexivity.
 Qed.
 
 Record Phase1SurfaceStaticArgumentListSpine : Type := {
@@ -328,6 +333,8 @@ Proof.
     as [rest |] eqn:Hrest; try discriminate Hnormalize.
   inversion Hnormalize; subst arguments.
   unfold phase1_surface_static_argument_list_spine_tree.
+  cbn [phase1_static_argument_list_spine_first
+    phase1_static_argument_list_spine_rest].
   rewrite (phase1_surface_expect_sequence_round_trip tree items Hsequence).
   rewrite (phase1_surface_exact2_round_trip
     items first_tree rest_tree Hitems).
@@ -451,6 +458,7 @@ Proof.
     as [[] |] eqn:Hclose; try discriminate Hnormalize.
   inversion Hnormalize; subst arguments.
   unfold phase1_surface_static_arguments_spine_tree.
+  cbn [phase1_static_arguments_spine_items].
   rewrite (phase1_surface_expect_nonterminal_round_trip
     "static_arguments" tree body Hnode).
   rewrite (phase1_surface_expect_sequence_round_trip body items Hsequence).
@@ -517,7 +525,13 @@ Proof.
   - destruct (phase1_surface_normalize_static_arguments_spine arguments_tree)
       as [arguments |] eqn:Harguments; try discriminate Hnormalize.
     inversion Hnormalize; subst refined.
-    cbn.
+    unfold phase1_surface_static_arguments_reference_spine_tree,
+      phase1_surface_static_reference_spine_tree.
+    cbn [phase1_static_arguments_reference_spine_name
+      phase1_static_arguments_reference_spine_arguments
+      phase1_static_reference_spine_name
+      phase1_static_reference_spine_arguments
+      phase1_surface_optional_static_arguments_tree].
     rewrite (phase1_surface_normalize_static_arguments_spine_round_trip
       arguments_tree arguments Harguments).
     reflexivity.
@@ -575,7 +589,8 @@ Proof.
       (phase1_surface_normalize_static_arguments_reference_spine reference)
       as [actual |] eqn:Hreference; try discriminate Hnormalize.
     inversion Hnormalize; subst refined.
-    cbn.
+    cbn [phase1_surface_static_arguments_type_spine_tree
+      phase1_surface_static_reference_type_spine_tree].
     rewrite
       (phase1_surface_normalize_static_arguments_reference_spine_round_trip
         reference actual Hreference).

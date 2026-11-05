@@ -1,6 +1,11 @@
 From Stdlib Require Import Lists.List Strings.String.
 
 From Phil.Surface Require Import
+  Grammar
+  GrammarAstSourceHeader
+  GrammarAstSourceHeaderTotality
+  GrammarDerivation
+  GrammarDeterminacySimpleResolverSoundness
   GrammarAstTermArgumentsSpine
   GrammarAstGenericRequirementsTotality.
 

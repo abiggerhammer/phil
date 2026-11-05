@@ -1,6 +1,13 @@
 From Stdlib Require Import Lists.List Strings.String.
 
 From Phil.Surface Require Import
+  Grammar
+  GrammarAstNamedPostfixExpressionSpine
+  GrammarAstNamedPostfixExpressionSpineTotality
+  GrammarAstNamedPostfixTermProjectionSpineTotality
+  GrammarAstSourceHeader
+  GrammarDerivation
+  GrammarDeterminacySimpleResolverSoundness
   GrammarAstNamedPostfixExpressionRefinedTailSpine
   GrammarAstSourceHeaderTotality.
 
@@ -83,6 +90,7 @@ Proof.
       ]
       input rest subtree Hbody)
     as [trees [Hsubtree Hitems]].
+  revert Htree Hsubtree.
   repeat match goal with
   | Hseq : DerivesSequence phase1_surface_rules _ _ (_ :: _) _ _ _ |- _ =>
       inversion Hseq; subst; clear Hseq
@@ -91,6 +99,7 @@ Proof.
   | Hnil : DerivesSequence phase1_surface_rules _ _ [] _ _ _ |- _ =>
       inversion Hnil; subst; clear Hnil
   end.
+  intros Htree Hsubtree.
   match goal with
   | Hname : Derives phase1_surface_rules _
       (ENonterminal "qualified_name") _ _ ?name_tree,
@@ -120,7 +129,7 @@ Proof.
           phase1_surface_expect_sequence,
           phase1_surface_exact2;
         cbn;
-        rewrite String.eqb_refl;
+        repeat rewrite String.eqb_refl;
         rewrite Hname_normalize;
         rewrite Htail_expect;
         reflexivity

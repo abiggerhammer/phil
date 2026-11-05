@@ -1,6 +1,11 @@
 From Stdlib Require Import Lists.List Strings.String.
 
 From Phil.Surface Require Import
+  Grammar
+  GrammarAstSourceHeader
+  GrammarAstTopLevelSpine
+  GrammarDerivation
+  GrammarDeterminacySimpleResolverSoundness
   GrammarAstStaticArgumentsSpine
   GrammarAstStaticReferenceTotality
   GrammarAstSourceHeaderTotality
@@ -91,9 +96,9 @@ Proof.
       (phase1_surface_validate_named_node_total_from_derivation
         "nonreference_type_expression" _ _ _ selected Hselected)
       as Hvalidate.
-    let argument := constr:(
+    set (argument :=
       {| phase1_static_argument_spine_tag := Phase1StaticTypeArgument;
-         phase1_static_argument_spine_selected_tree := selected |}) in
+         phase1_static_argument_spine_selected_tree := selected |}).
     assert (Hnormalize :
       phase1_surface_normalize_static_argument_spine tree = Some argument).
     {
@@ -119,9 +124,9 @@ Proof.
         (phase1_surface_validate_named_node_total_from_derivation
           "nonreference_session_expression" _ _ _ selected Hselected)
         as Hvalidate.
-      let argument := constr:(
+      set (argument :=
         {| phase1_static_argument_spine_tag := Phase1StaticSessionArgument;
-           phase1_static_argument_spine_selected_tree := selected |}) in
+           phase1_static_argument_spine_selected_tree := selected |}).
       assert (Hnormalize :
         phase1_surface_normalize_static_argument_spine tree = Some argument).
       {
@@ -147,9 +152,9 @@ Proof.
           (phase1_surface_validate_named_node_total_from_derivation
             "static_value_expression" _ _ _ selected Hselected)
           as Hvalidate.
-        let argument := constr:(
+        set (argument :=
           {| phase1_static_argument_spine_tag := Phase1StaticValueArgument;
-             phase1_static_argument_spine_selected_tree := selected |}) in
+             phase1_static_argument_spine_selected_tree := selected |}).
         assert (Hnormalize :
           phase1_surface_normalize_static_argument_spine tree = Some argument).
         {
@@ -175,9 +180,9 @@ Proof.
              (phase1_surface_validate_named_node_total_from_derivation
                "effect_set_literal" _ _ _ selected Hselected)
              as Hvalidate.
-           let argument := constr:(
+           set (argument :=
              {| phase1_static_argument_spine_tag := Phase1StaticEffectSetArgument;
-                phase1_static_argument_spine_selected_tree := selected |}) in
+                phase1_static_argument_spine_selected_tree := selected |}).
            assert (Hnormalize :
              phase1_surface_normalize_static_argument_spine tree = Some argument).
            {
@@ -196,8 +201,7 @@ Proof.
            ++ exact Hnormalize.
            ++ eapply phase1_surface_normalize_static_argument_spine_round_trip.
               exact Hnormalize.
-        -- cbn in Hnth.
-           discriminate Hnth.
+        -- destruct index; cbn in Hnth; discriminate Hnth.
 Qed.
 
 Lemma phase1_surface_normalize_static_argument_suffix_total_from_derivation :
@@ -219,6 +223,7 @@ Proof.
       ]
       input rest tree Hderive)
     as [trees [Htree Hitems]].
+  revert Htree.
   repeat match goal with
   | Hseq : DerivesSequence phase1_surface_rules _ _ (_ :: _) _ _ _ |- _ =>
       inversion Hseq; subst; clear Hseq
@@ -227,6 +232,7 @@ Proof.
   | Hnil : DerivesSequence phase1_surface_rules _ _ [] _ _ _ |- _ =>
       inversion Hnil; subst; clear Hnil
   end.
+  intros Htree.
   match goal with
   | Hcomma : Derives phase1_surface_rules _
       (ELiteral ",") _ _ ?comma_tree,
@@ -306,6 +312,7 @@ Proof.
       ]
       input rest tree Hderive)
     as [trees [Htree Hitems]].
+  revert Htree.
   repeat match goal with
   | Hseq : DerivesSequence phase1_surface_rules _ _ (_ :: _) _ _ _ |- _ =>
       inversion Hseq; subst; clear Hseq
@@ -314,6 +321,7 @@ Proof.
   | Hnil : DerivesSequence phase1_surface_rules _ _ [] _ _ _ |- _ =>
       inversion Hnil; subst; clear Hnil
   end.
+  intros Htree.
   match goal with
   | Hfirst : Derives phase1_surface_rules _
       (ENonterminal "static_argument") _ _ ?first_tree,
@@ -434,6 +442,7 @@ Proof.
       ]
       input rest subtree Hbody)
     as [trees [Hsubtree Hitems]].
+  revert Htree Hsubtree.
   repeat match goal with
   | Hseq : DerivesSequence phase1_surface_rules _ _ (_ :: _) _ _ _ |- _ =>
       inversion Hseq; subst; clear Hseq
@@ -442,6 +451,7 @@ Proof.
   | Hnil : DerivesSequence phase1_surface_rules _ _ [] _ _ _ |- _ =>
       inversion Hnil; subst; clear Hnil
   end.
+  intros Htree Hsubtree.
   match goal with
   | Hopen : Derives phase1_surface_rules _
       (ELiteral "[") _ _ ?open_tree,

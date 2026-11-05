@@ -1,6 +1,16 @@
 From Stdlib Require Import Lists.List Strings.String.
 
 From Phil.Surface Require Import
+  Grammar
+  GrammarAstNamedPostfixExpressionRefinedTailSpineTotality
+  GrammarAstPostfixExpressionNamedRefinedSpine
+  GrammarAstPostfixExpressionSpine
+  GrammarAstPostfixExpressionSpineTotality
+  GrammarAstSourceHeader
+  GrammarAstSourceHeaderTotality
+  GrammarAstTopLevelSpine
+  GrammarDerivation
+  GrammarDeterminacySimpleResolverSoundness
   GrammarAstPostfixExpressionRefinedSpine
   GrammarAstPostfixExpressionNamedRefinedSpineTotality
   GrammarAstPrimaryExpressionIntegerSpineTotality.
@@ -194,6 +204,5 @@ Proof.
       * eapply
           phase1_surface_normalize_postfix_expression_refined_tree_round_trip.
         exact Hnormalize.
-    + cbn in Hnth.
-      discriminate Hnth.
+    + destruct index; cbn in Hnth; discriminate Hnth.
 Qed.

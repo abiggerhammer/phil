@@ -83,6 +83,12 @@ output, alter the production parser, or expand the existing record/data
 implementation carrier automatically. A successor must compose the refinement
 into the selected larger carrier and its representation proof.
 
+The [primary/postfix continuation](surface-parser-primary-postfix-recursive-grouping-v1.md)
+performs the first such consumer step by replacing the primary carrier's tuple
+and parenthesized children and embedding that replacement in a new postfix
+carrier. Its own record states the remaining arithmetic/source composition
+boundary.
+
 Recursive command/fallback payloads, dedicated carriers for the other recursive
 expression/type/proposition/session/effect forms, complete declaration-body
 translation, and the faithful production AST binding retain their own proof

@@ -1,6 +1,10 @@
 From Stdlib Require Import Lists.List Strings.String.
 
 From Phil.Surface Require Import
+  Grammar
+  GrammarAstNamedPostfixExpressionSpineTotality
+  GrammarAstTopLevelSpine
+  GrammarDerivation
   GrammarAstNamedPostfixTailChoiceSpine.
 
 Import ListNotations.
@@ -90,6 +94,5 @@ Proof.
       * eapply
           phase1_surface_normalize_named_postfix_tail_choice_spine_round_trip.
         exact Hnormalize.
-    + cbn in Hnth.
-      discriminate Hnth.
+    + destruct index; cbn in Hnth; discriminate Hnth.
 Qed.

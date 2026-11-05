@@ -1,6 +1,18 @@
 From Stdlib Require Import Lists.List Strings.String.
 
 From Phil.Surface Require Import
+  Grammar
+  GrammarAstParenthesizedExpressionSpineTotality
+  GrammarAstPrimaryExpressionCharSpine
+  GrammarAstPrimaryExpressionGroupingSpine
+  GrammarAstPrimaryExpressionLiteralSpine
+  GrammarAstPrimaryExpressionSpine
+  GrammarAstPrimaryExpressionSpineTotality
+  GrammarAstSourceHeader
+  GrammarAstTopLevelSpine
+  GrammarAstTupleExpressionSpineTotality
+  GrammarDerivation
+  GrammarDeterminacySimpleResolverSoundness
   GrammarAstPrimaryExpressionStringSpine
   GrammarAstPrimaryExpressionCharSpineTotality.
 
@@ -62,7 +74,7 @@ Proof.
       (Phase1PrimaryExpressionStringPrior
         (Phase1PrimaryExpressionCharPrior
           (Phase1PrimaryExpressionLiteralTuple tuple_expression))).
-    repeat split.
+    repeat apply conj.
     + cbn.
       rewrite Htuple.
       reflexivity.
@@ -84,7 +96,7 @@ Proof.
         (Phase1PrimaryExpressionStringPrior
           (Phase1PrimaryExpressionCharPrior
             (Phase1PrimaryExpressionLiteralParenthesized parenthesized))).
-      repeat split.
+      repeat apply conj.
       * cbn.
         rewrite Hparenthesized.
         reflexivity.
@@ -104,7 +116,7 @@ Proof.
           (Phase1PrimaryExpressionCharPrior Phase1PrimaryExpressionTrue),
           (Phase1PrimaryExpressionStringPrior
             (Phase1PrimaryExpressionCharPrior Phase1PrimaryExpressionTrue)).
-        repeat split.
+        repeat apply conj.
         -- reflexivity.
         -- cbn.
            rewrite Hselected.
@@ -124,7 +136,7 @@ Proof.
              (Phase1PrimaryExpressionCharPrior Phase1PrimaryExpressionFalse),
              (Phase1PrimaryExpressionStringPrior
                (Phase1PrimaryExpressionCharPrior Phase1PrimaryExpressionFalse)).
-           repeat split.
+           repeat apply conj.
            ++ reflexivity.
            ++ cbn.
               rewrite Hselected.
@@ -144,7 +156,7 @@ Proof.
                 (Phase1PrimaryExpressionCharPrior Phase1PrimaryExpressionUnit),
                 (Phase1PrimaryExpressionStringPrior
                   (Phase1PrimaryExpressionCharPrior Phase1PrimaryExpressionUnit)).
-              repeat split.
+              repeat apply conj.
               ** reflexivity.
               ** cbn.
                  rewrite Hselected.
@@ -175,7 +187,7 @@ Proof.
                    (Phase1PrimaryExpressionCharRefined value),
                    (Phase1PrimaryExpressionStringPrior
                      (Phase1PrimaryExpressionCharRefined value)).
-                 repeat split.
+                 repeat apply conj.
                  --- reflexivity.
                  --- reflexivity.
                  --- cbn.
@@ -210,7 +222,7 @@ Proof.
                        (Phase1PrimaryExpressionCharPrior
                          (Phase1PrimaryExpressionLexicalRetained 6 selected)),
                        (Phase1PrimaryExpressionStringRefined value).
-                     repeat split.
+                     repeat apply conj.
                      +++ reflexivity.
                      +++ reflexivity.
                      +++ reflexivity.
