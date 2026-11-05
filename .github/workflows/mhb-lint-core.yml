@@ -1,0 +1,30 @@
+name: MHB Lint Core
+
+on:
+  pull_request:
+    paths:
+      - 'scripts/mhb_lint.py'
+      - 'scripts/test_mhb_lint.py'
+      - 'docs/mhb-lint.md'
+      - '.github/workflows/mhb-lint-core.yml'
+  push:
+    branches:
+      - main
+    paths:
+      - 'scripts/mhb_lint.py'
+      - 'scripts/test_mhb_lint.py'
+      - 'docs/mhb-lint.md'
+      - '.github/workflows/mhb-lint-core.yml'
+
+permissions:
+  contents: read
+
+jobs:
+  replay-tests:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Compile checker
+        run: python3 -m py_compile scripts/mhb_lint.py scripts/test_mhb_lint.py
+      - name: Run replay tests
+        run: python3 scripts/test_mhb_lint.py
