@@ -1,0 +1,49 @@
+name: Phase 1 Audit Runtime ABI Completeness
+
+on:
+  pull_request:
+    paths:
+      - 'scripts/check_runtime_abi.py'
+      - 'scripts/ci/test_runtime_abi_checker.py'
+      - '.github/workflows/phase1-audit-runtime-abi-completeness.yml'
+  push:
+    branches: [main]
+    paths:
+      - 'scripts/check_runtime_abi.py'
+      - 'scripts/ci/test_runtime_abi_checker.py'
+      - '.github/workflows/phase1-audit-runtime-abi-completeness.yml'
+
+permissions:
+  contents: read
+
+jobs:
+  abi-01-02-regressions:
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - name: Require the pinned historical checker to fail ABI-01/02 and CC controls
+        shell: bash
+        run: |
+          set -euo pipefail
+          git cat-file blob 51db1085eeb92b99fe11cb7c8bd7bcb2af6ef164 > "$RUNNER_TEMP/historical-abi-checker.py"
+          if PHIL_ABI_CHECKER="$RUNNER_TEMP/historical-abi-checker.py" python3 scripts/ci/test_runtime_abi_checker.py > "$RUNNER_TEMP/historical-red.log" 2>&1; then
+            echo "Historical checker unexpectedly passed the regression suite" >&2
+            exit 1
+          fi
+          grep -Fq "FAIL: test_abi01_pointer_argument_address_space" "$RUNNER_TEMP/historical-red.log"
+          grep -Fq "FAIL: test_abi02_quoted_required_name_is_not_skipped" "$RUNNER_TEMP/historical-red.log"
+          grep -Fq "FAIL: test_abi02_multiline_required_name_is_not_skipped" "$RUNNER_TEMP/historical-red.log"
+          grep -Fq "FAIL: test_nondefault_fastcc_is_rejected" "$RUNNER_TEMP/historical-red.log"
+          echo "PASS: pinned historical checker reproduces ABI-01/02 and CC failures"
+      - name: Exercise scalar, aggregate, address-space, quoted/multiline and CC controls
+        run: python3 -m unittest discover -s scripts/ci -p test_runtime_abi_checker.py -v
+      - uses: haskell-actions/setup@v2
+        with:
+          ghc-version: '9.6.7'
+          cabal-version: 'latest'
+      - name: Existing Phase 0 native ABI integration
+        run: |
+          bash scripts/ci/setup-llvm18.sh
+          bash scripts/ci/phase0-integrated-native.sh

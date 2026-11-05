@@ -113,7 +113,7 @@ permissions:
 jobs:
   runtime:
     name: Runtime / ${{ matrix.profile }}
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     strategy:
       fail-fast: false
       matrix:
@@ -137,5 +137,7 @@ jobs:
         with:
           ghc-version: '9.6.7'
           cabal-version: 'latest'
+      - name: Install and verify LLVM 18
+        run: bash scripts/ci/setup-llvm18.sh
       - name: Run focused runtime regression
         run: bash scripts/ci/phase0-focused-runtime-dispatch.sh '${{ matrix.profile }}'

@@ -18,8 +18,12 @@ from dataclasses import dataclass
 from pathlib import Path
 
 
-FUNCTION_RE = re.compile(r"@(?P<name>phil_[A-Za-z0-9_.$-]+)\((?P<args>.*)\)")
-SCALAR_TYPE_RE = re.compile(r"\b(?:void|ptr|i[0-9]+)\b")
+# Recognize quoted and unquoted LLVM global identifiers. Preserve the actual
+# address space in opaque-pointer types rather than reducing all pointers to ptr.
+FUNCTION_RE = re.compile(r'@(?:"(?P<quoted>[^"]+)"|(?P<plain>[A-Za-z0-9_.$-]+))\s*\(')
+SCALAR_TYPE_RE = re.compile(r'\b(?:void|ptr(?:\s+addrspace\(\d+\))?|i[0-9]+)(?!\w)')
+ARGUMENT_TYPE_RE = re.compile(r'^(?:ptr(?:\s+addrspace\(\d+\))?|i[0-9]+)(?!\w)')
+NONDEFAULT_CC_RE = re.compile(r'\b(?:[A-Za-z_][A-Za-z0-9_]*cc|cc\s+[0-9]+)\b')
 
 
 @dataclass(frozen=True)
@@ -105,27 +109,94 @@ def argument_type(argument: str) -> str:
                 if depth == 0:
                     return canonical_type(argument[: index + 1])
         raise ValueError(f"unbalanced aggregate argument type: {argument!r}")
-    match = re.match(r"(?:ptr|i[0-9]+)\b", argument)
+    match = ARGUMENT_TYPE_RE.match(argument)
     if match is None:
         raise ValueError(f"cannot identify LLVM argument type in: {argument!r}")
-    return match.group(0)
+    if match.group(0) == "ptr" and re.match(r"^ptr\s+addrspace\b", argument):
+        raise ValueError(f"malformed pointer address space in: {argument!r}")
+    return canonical_type(match.group(0))
+
+
+def matching_close_parenthesis(text: str, opening: int) -> int | None:
+    depth = 0
+    for index in range(opening, len(text)):
+        if text[index] == "(":
+            depth += 1
+        elif text[index] == ")":
+            depth -= 1
+            if depth == 0:
+                return index
+    return None
+
+
+def required_function_header(header: str, path: Path, line_number: int) -> tuple[str, Signature] | None:
+    match = FUNCTION_RE.search(header)
+    if match is None:
+        if "phil_" in header:
+            raise ValueError(
+                f"{path}:{line_number}: cannot parse required Phil ABI declaration/definition: {header!r}"
+            )
+        return None
+
+    name = match.group("quoted") or match.group("plain")
+    if not name.startswith("phil_"):
+        return None
+    if not re.fullmatch(r"phil_[A-Za-z0-9_.$-]+", name):
+        raise ValueError(f"{path}:{line_number}: unsupported Phil ABI symbol spelling: {name!r}")
+
+    prefix = header[:match.start()]
+    # The only supported calling convention at this boundary is the default
+    # C calling convention (implicit or explicit ccc). Attributes remain outside
+    # the exact signature comparison by the documented Phase 0 contract.
+    conventions = NONDEFAULT_CC_RE.findall(prefix)
+    if any(convention != "ccc" for convention in conventions):
+        raise ValueError(
+            f"{path}:{line_number}: unsupported calling convention for @{name}: {conventions}"
+        )
+    closing = matching_close_parenthesis(header, match.end() - 1)
+    if closing is None:
+        raise ValueError(f"{path}:{line_number}: incomplete Phil ABI parameters for @{name}")
+    arguments = header[match.end():closing]
+    signature = Signature(
+        result=result_type(prefix),
+        arguments=tuple(argument_type(piece) for piece in split_arguments(arguments)),
+    )
+    return name, signature
 
 
 def parse_functions(path: Path, keyword: str) -> dict[str, Signature]:
     functions: dict[str, Signature] = {}
-    for line_number, raw_line in enumerate(path.read_text(encoding="utf-8").splitlines(), 1):
-        line = raw_line.strip()
-        if not line.startswith(keyword + " "):
+    lines = path.read_text(encoding="utf-8").splitlines()
+    index = 0
+    while index < len(lines):
+        line_number = index + 1
+        line = lines[index].strip()
+        index += 1
+        if not re.match(rf"^{keyword}\s+", line):
             continue
-        match = FUNCTION_RE.search(line)
-        if match is None:
+
+        # LLVM permits line wrapping in declarations and in function headers.
+        # Collect the header only through the parameter-closing parenthesis;
+        # never consume the function body or unrelated following declarations.
+        header = line
+        while True:
+            found = FUNCTION_RE.search(header)
+            if found is not None and matching_close_parenthesis(header, found.end() - 1) is not None:
+                break
+            if index >= len(lines):
+                break
+            next_line = lines[index].strip()
+            if re.match(r"^(?:declare|define)\s+", next_line) or next_line.startswith("}"):
+                break
+            header += " " + next_line
+            index += 1
+            if index - line_number >= 100:
+                raise ValueError(f"{path}:{line_number}: oversized or malformed LLVM function header")
+
+        parsed = required_function_header(header, path, line_number)
+        if parsed is None:
             continue
-        name = match.group("name")
-        prefix = line[: match.start()]
-        signature = Signature(
-            result=result_type(prefix),
-            arguments=tuple(argument_type(piece) for piece in split_arguments(match.group("args"))),
-        )
+        name, signature = parsed
         if name in functions:
             raise ValueError(f"{path}:{line_number}: duplicate {keyword} for @{name}")
         functions[name] = signature
@@ -140,8 +211,12 @@ def main() -> int:
     parser.add_argument("provider_ir", type=Path)
     args = parser.parse_args()
 
-    expected = parse_functions(args.phil_ir, "declare")
-    actual = parse_functions(args.provider_ir, "define")
+    try:
+        expected = parse_functions(args.phil_ir, "declare")
+        actual = parse_functions(args.provider_ir, "define")
+    except ValueError as error:
+        print(f"runtime ABI parse error: {error}", file=sys.stderr)
+        return 2
 
     if not expected:
         print(f"no phil_* declarations found in {args.phil_ir}", file=sys.stderr)
