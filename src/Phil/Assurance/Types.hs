@@ -357,7 +357,7 @@ atomText :: Text -> Text
 atomText value = Text.pack (show (Text.length value)) <> ":" <> value
 
 listText :: [Text] -> Text
-listText values = "[" <> Text.intercalate "," values <> "]"
+listText values = "list.v2[" <> Text.intercalate "," (map atomText values) <> "]"
 
 canonicalFields :: [(Text, Text)] -> Text
 canonicalFields fields = Text.intercalate "|"
