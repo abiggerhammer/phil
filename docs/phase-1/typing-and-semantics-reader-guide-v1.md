@@ -31,6 +31,19 @@ There are several layers of authority; they must not be conflated.
 → the specific proof and implementation correspondence for any claim you want
 to challenge.
 
+## Worked Phase 1 rule families (companion worksheet)
+
+For three paired accepted/expected-rejected examples and explicitly
+**schematic** checking rules, see
+[Phase 1 typing rules: resource scope, session progression, and root
+architecture validity](typing-rules-worked-examples-draft-v1.md).
+
+That worksheet also records the research-review point that a
+progress/preservation argument for a chosen Core semantics is not enough
+without typing and behavioral correspondence for each elaboration and
+realization boundary. It is a review draft, **not** a newly certified
+end-to-end soundness theorem.
+
 ## 1. Judgment vocabulary and the checker/assurance boundary
 
 The Phase 0 Core judgment vocabulary is a useful starting point:
