@@ -29,3 +29,11 @@ These are source-level findings as of this baseline, not fresh executed exploit 
 ## Verdict and next tranche
 
 **Independent-audit freeze: NOT YET.** Implement and regression-test the reusable proof-cache token boundary first, then FloatValue and ABI checker. Reconcile historical runtime/native findings by exact current-source tests, finish independent NR-D06 and release byte verification, then pin a candidate for independent delta review. Preserve all historical audit evidence and the original 244 normative conformance cases; these are supplemental findings, not new normative rows.
+
+## Implementation delta — 2026-11-05: reusable proof-cache field privacy
+
+The source-confirmed `ReusableProofEvidence` record-field exposure listed in this report's initial baseline is **implemented and tested** by [PR #1568](https://github.com/abiggerhammer/phil/pull/1568), exact green head `eb73dd28aec16404c47e8d860cf9b7f73b410e06`, squash-merged at `95c0bdd5fff5f5c5c4a809e32e092c23ad4d14d6`. All **31/31** exact-head PR workflows succeeded, including the [dedicated external-client / cache-reuse workflow](https://github.com/abiggerhammer/phil/actions/runs/42020898390).
+
+The three record labels are private; original getter names remain usable. The tests compile positive getter clients, require each external record-update attempt to fail, and replay genuine prepared cache acceptance and dependency/revision/scope/validity invalidation through VER-006. The earlier source observations above remain historical at their review pin. This closes only this protected-field mutation bypass, not all potential cache-consumption or identity errors.
+
+**Remaining immediate implementation candidate:** `FloatValue` record-label exposure; ABI-01/02 and current RT-01/02/03 dispositions remain distinct. Independent freeze verdict remains **NOT YET**.
