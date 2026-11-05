@@ -28,7 +28,7 @@ import sys
 
 work = Path(sys.argv[1])
 needle = "ByteString.hPut handle bytes"
-fault = '(ioError (userError "E-STEVE-CLEANUP-01-injected-preclose-failure"))'
+fault = '((ioError (userError "E-STEVE-CLEANUP-01-injected-preclose-failure")) :: IO ())'
 for label, original in [("baseline", "original-source.hs"),
                         ("repaired", "repaired-source.hs")]:
     source = (work / original).read_text()
