@@ -64,10 +64,18 @@ data FloatFormat
   deriving (Eq, Ord, Show)
 
 data FloatValue = FloatValue
-  { floatFormat :: FloatFormat
-  , floatBits :: Word64
+  { privateFloatFormatField :: FloatFormat
+  , privateFloatBitsField :: Word64
   }
   deriving (Eq, Ord, Show)
+
+-- | Read-only projections: the invariant-bearing record labels are private,
+-- preventing external clients from updating validated F32/F64 values.
+floatFormat :: FloatValue -> FloatFormat
+floatFormat = privateFloatFormatField
+
+floatBits :: FloatValue -> Word64
+floatBits = privateFloatBitsField
 
 data FloatClass
   = FloatFinite Rational
@@ -368,7 +376,7 @@ decode value = case classifyFloat value of
 
 addValues :: FloatValue -> FloatValue -> FloatValue
 addValues left right =
-  let format = floatFormat left
+  let format = privateFloatFormatField left
   in case (decode left, decode right) of
       (DecodedNaN, _) -> canonicalNaN format
       (_, DecodedNaN) -> canonicalNaN format
@@ -393,7 +401,7 @@ addValues left right =
 
 multiplyValues :: FloatValue -> FloatValue -> FloatValue
 multiplyValues left right =
-  let format = floatFormat left
+  let format = privateFloatFormatField left
   in case (decode left, decode right) of
       (DecodedNaN, _) -> canonicalNaN format
       (_, DecodedNaN) -> canonicalNaN format
@@ -412,7 +420,7 @@ multiplyValues left right =
 
 divideValues :: FloatValue -> FloatValue -> FloatValue
 divideValues left right =
-  let format = floatFormat left
+  let format = privateFloatFormatField left
   in case (decode left, decode right) of
       (DecodedNaN, _) -> canonicalNaN format
       (_, DecodedNaN) -> canonicalNaN format
@@ -451,8 +459,8 @@ compareFinite left right = case compare left right of
 
 ensureSameFormat :: FloatValue -> FloatValue -> Either FloatSemanticError ()
 ensureSameFormat left right
-  | floatFormat left == floatFormat right = Right ()
-  | otherwise = Left (FloatFormatMismatch (floatFormat left) (floatFormat right))
+  | privateFloatFormatField left == privateFloatFormatField right = Right ()
+  | otherwise = Left (FloatFormatMismatch (privateFloatFormatField left) (privateFloatFormatField right))
 
 roundFinite :: FloatFormat -> Rational -> Bool -> FloatValue
 roundFinite format value negativeExactZero
