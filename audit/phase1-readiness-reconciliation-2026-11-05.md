@@ -57,3 +57,15 @@ The checker now compares opaque pointer address spaces in arguments/results, rec
 The same PR fixes LLVM 18 installation in previously red Phase 0 integrated-native certification, focused runtime, LLVM boundary proof certification, and control-codec certification jobs. All reran successfully on the exact green PR head. These were toolchain-provisioning faults, not newly discovered compiler semantic defects.
 
 **Boundary:** no claim of a complete LLVM parser, arbitrary ABI attributes or calling conventions, all-platform linkage correctness, proof correspondence beyond existing named suites, or final public-release byte certification. Historical source/synthetic audit findings remain preserved. **Next:** reconcile historical `f2ed3c1/RT-01/02/03` against current source and supported-toolchain reproduction, then independent NR-D06, release asset-byte validation, and pinned final-delta review. Independent-audit freeze: **NOT YET**.
+
+## Implementation delta — 2026-11-05: RT-01/02/03 current-source repairs
+
+Historical `f2ed3c1/RT-01`, `RT-02` and `RT-03` are **implemented and tested at the bounded source/ABI/runtime boundaries** in [PR #1574](https://github.com/abiggerhammer/phil/pull/1574), exact green PR head `44029cd525983b00d9dec4e313d0969cc3114477`, squash merge `75b6226ff59883ea06b0ca4d4f87a8340b13ec67`. All **22/22** reported exact-head PR workflows completed successfully, including the [dedicated RT reproduction workflow](https://github.com/abiggerhammer/phil/actions/runs/42060839542) and [Steve release workflow](https://github.com/abiggerhammer/phil/actions/runs/42060839267).
+
+- **RT-01:** Runtime-choice LLVM function inputs now include cleanup-only owner operands, rather than only provider-call inputs. The actual Steve runtime-choice plan is extended with a cleanup-only owner and checked for parameter inclusion.
+- **RT-02:** LLVM emission rejects runtime-choice payload targets with non-producing predecessors or an unbound arm that reaches the payload load. The Steve fixture exercises both negative CFG cases, and the generated LLVM is checked under LLVM 18.
+- **RT-03:** Native `control_codec_v1.c` transport append retains source offsets across `realloc`, checks alias ranges against the logical length, and rebases before copying. Sanitized regression contrasts the pinned historical complete-source translation-unit UAF against repaired whole-buffer and interior self-append cases, preserving independent append behavior.
+
+These are **new current-head executed test results**, not retroactive credit for historical report-only reconstructions. The historical finding observations, pins and initial evidence classifications remain unchanged.
+
+**Limit:** This does not certify arbitrary runtime-choice graph shapes, all native transport call sites, proof correspondence beyond the named gates, or final release assets. Remaining independent work: NR-D06 StageClosure/certified-envelope review, pinned final integration/delta review and release public-byte validation. **Independent-audit freeze: NOT YET.**
