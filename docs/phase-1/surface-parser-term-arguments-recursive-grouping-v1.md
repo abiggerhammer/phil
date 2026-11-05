@@ -88,15 +88,15 @@ fixture supplies node-count fuel to the old decoder as a concrete control;
 it makes no universal sufficient-fuel claim for that old decoder. The new
 entry points have no fuel parameter.
 
-The [source-spine workflow](../../.github/workflows/phase1-surface-grammar-rocq-source-spine-correspondence.yml)
-retains its prior targets and adds all three new modules under Rocq 9.2.0.
-It checks thirty-seven configured theorem assumptions for closure under the
-global context and runs the full recursive compiled-proof checker over the
+At this slice's merge, the [source-spine workflow](../../.github/workflows/phase1-surface-grammar-rocq-source-spine-correspondence.yml)
+retained its prior targets and added all three new modules under Rocq 9.2.0.
+It checked thirty-seven configured theorem assumptions for closure under the
+global context and ran the full recursive compiled-proof checker over the
 accumulated totalities and examples, including their dependencies. The artifact
-includes the new source/object pairs, producing sixty files and sixty-three
+included the new source/object pairs, producing sixty files and sixty-three
 recorded source/object identities across the accumulated evidence.
 
-Three existing term-argument prerequisite modules receive direct-owner import
+Three existing term-argument prerequisite modules received direct-owner import
 and proof-script repairs. Their definitions and theorem statements remain
 unchanged. The new totality proof uses the shallow term-arguments totality and
 the new expression totality; it does not import the old full shared-fuel
@@ -104,14 +104,18 @@ term-argument totality/support chain.
 
 ## Remaining composition boundaries
 
-This completes the selected outer term-argument list lift. The next consumer
-is the optional argument field in the effect-expression carrier. Its conversion
-must distinguish absent arguments from present empty `()` arguments while
-preserving the static reference. The established route then proceeds through
-every effect-set literal element, the `effects ... within ...` generic-requirement
-alternative, optional requirement lists in record/data declarations, and the
-corresponding retained implementation-representation field. This route does not
-cover every generic requirement or declaration body.
+This completes the selected outer term-argument list lift. At this slice's
+merge, the next consumer was the optional argument field in the effect-expression
+carrier. The subsequent
+[effect-expression continuation](surface-parser-effect-expression-recursive-grouping-v1.md)
+replaces that field, preserving absent arguments versus present empty `()` and
+the complete static-reference carrier.
+
+The established route then proceeds through every effect-set literal element,
+the `effects ... within ...` generic-requirement alternative, optional requirement
+lists in record/data declarations, and the corresponding retained
+implementation-representation field. This route does not cover every generic
+requirement or declaration body.
 
 Named-postfix static and term arguments remain separate consumers of their
 preceding representations. Command bodies and failure-target arguments remain
