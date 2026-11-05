@@ -108,10 +108,18 @@ Based on that slice's merge, `a611f3d4c42647c1eb31831746b582078b14b900`, the
 replaces the postfix leaf under recursive unary negation and every leading and
 suffix operand through multiplication, addition, and shifts. It supplies
 grammar-derived totality with computed fuel and exact reconstruction at each
-layer. Connecting the replacement to the enclosing expression, effect-requirement,
-and record/data carriers, and binding the result to the production AST, remain
-distinct work. These local carrier results do not close G2 or G4 or promote an
-umbrella target.
+layer.
+
+Based on its merge, `9662568df0debc8ddcf6a0f8d3c7c14e2594c83c`, the
+[expression continuation](surface-parser-expression-recursive-grouping-v1.md)
+replaces the outer base-expression shift branch and uses that replacement in
+both the main expression base and its separate reject-fallback operand. It
+preserves optional absence/presence, commands, and failure targets, and supplies
+exact reconstruction and derivation-only totality for the raw normalizers and
+legacy adapters. The term-argument/effect-requirement/record-data consumers still
+need to adopt this expression carrier. The generic grouping carrier's nested
+fallback boundary and production AST binding remain separate obligations.
+These local carrier results do not close G2 or G4 or promote an umbrella target.
 
 ## Work needed to finish the umbrella inventory
 

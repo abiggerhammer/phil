@@ -129,15 +129,15 @@ shared-fuel totality/support chain to the new proof's premises.
 ## Remaining composition boundary
 
 This completes propagation of the recursive grouping refinement through unary,
-multiplicative, additive, and shift operator fields. The existing enclosing
-base-choice/expression, term-argument, effect-requirement, and record/data
-carriers still need to consume the replacement shift carrier and lift their
-correspondence proofs accordingly.
+multiplicative, additive, and shift operator fields. At this slice's merge, the
+existing enclosing base-choice/expression, term-argument, effect-requirement,
+and record/data carriers still needed to consume the replacement shift carrier
+and lift their correspondence proofs accordingly.
 
-The immediate field is `Phase1BaseExpressionShiftRefinedShift`, which still
-contains the old shift carrier. A focused successor should then use the new
-base carrier in both the ordinary expression's main base and its `reject`
-fallback operand. Those are separate arithmetic-bearing positions; updating
+The immediate field was `Phase1BaseExpressionShiftRefinedShift`, which contained
+the old shift carrier. A focused successor needed to use the new base carrier
+in both the ordinary expression's main base and its `reject` fallback operand.
+Those are separate arithmetic-bearing positions; updating
 the main base alone would leave the fallback operand on its older carrier.
 
 The prior shift-refined record/data route reaches these expressions through
@@ -152,3 +152,11 @@ structural constructors; this operator-field lift does not make them a complete
 semantic AST. The formal claim remains about token-level grammar trees, with
 source-byte lexing, faithful production AST correspondence, and the broader
 implementation-interface coverage contract retaining their separate obligations.
+
+### Subsequent expression lift
+
+The [expression continuation](surface-parser-expression-recursive-grouping-v1.md)
+consumes this shift carrier in the enclosing base-expression choice and in both
+the main and reject-fallback bases of the ordinary-expression shell. It records
+the remaining term-argument/effect/record-data route and the separate fallback
+boundary inside the generic recursive-grouping expression type.
