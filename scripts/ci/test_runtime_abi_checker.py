@@ -2,13 +2,14 @@
 """Exact runtime ABI checker regressions for historical ABI-01/ABI-02."""
 from __future__ import annotations
 
+import os
 import subprocess
 import sys
 import tempfile
 import unittest
 from pathlib import Path
 
-CHECKER = Path(__file__).resolve().parents[1] / "check_runtime_abi.py"
+CHECKER = Path(os.environ.get("PHIL_ABI_CHECKER", str(Path(__file__).resolve().parents[1] / "check_runtime_abi.py")) )
 
 
 class ABICompletenessTests(unittest.TestCase):
