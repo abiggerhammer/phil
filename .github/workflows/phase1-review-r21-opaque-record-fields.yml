@@ -1,0 +1,30 @@
+name: Phase 1 Review R21 Certified Record Boundary
+on:
+  pull_request:
+    paths:
+      - 'src/Phil/Core/ConcurrencyRendezvousCertification.hs'
+      - 'src/Phil/Core/ConcurrencyTerminalCertification.hs'
+      - 'scripts/ci/phase1-review-r21-opaque-record-fields.sh'
+      - '.github/workflows/phase1-review-r21-opaque-record-fields.yml'
+  push:
+    branches: [main]
+    paths:
+      - 'src/Phil/Core/ConcurrencyRendezvousCertification.hs'
+      - 'src/Phil/Core/ConcurrencyTerminalCertification.hs'
+      - 'scripts/ci/phase1-review-r21-opaque-record-fields.sh'
+      - '.github/workflows/phase1-review-r21-opaque-record-fields.yml'
+permissions:
+  contents: read
+jobs:
+  certified-record-privacy:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: haskell-actions/setup@v2
+        with:
+          ghc-version: '9.6.7'
+          cabal-version: 'latest'
+      - name: Build Haskell and tests with warnings fatal
+        run: cabal build all --enable-tests --ghc-options=-Werror
+      - name: Verify external-client getters and rejection of all certified record updates
+        run: bash scripts/ci/phase1-review-r21-opaque-record-fields.sh
