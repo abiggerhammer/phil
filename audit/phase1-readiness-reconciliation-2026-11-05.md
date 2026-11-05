@@ -47,3 +47,13 @@ All **21/21** reported exact-head PR workflows completed successfully, including
 **Scope:** `Phil.Core.FloatArithmetic` is an internal Cabal `other-modules` component. This closes the tested source-import mutation path, not a demonstrated public installed-package exploit, whole IEEE arithmetic refinement, or all numeric trust assumptions. Preserve the historical audit observations at their original pins.
 
 **Remaining immediate implementation item:** runtime ABI-01/02 and the default calling-convention premise. RT-01/02/03, NR-D06, release asset verification and independent final-delta sign-off remain separate. Independent-audit freeze: **NOT YET**.
+
+## Implementation delta — 2026-11-05: runtime ABI-01/02 and default calling convention
+
+The historical `7973d01/ABI-01` and `ABI-02` checker gaps, plus the unguarded default-calling-convention premise, are **implemented and tested at the documented Phase 0 ABI-gate scope** by [PR #1571](https://github.com/abiggerhammer/phil/pull/1571), exact green head `7a093228a98d0623bc738a272f2b84d8d355bb70`, squash merge `610031d8b3a010622700b4ee2fc99db6b3fecf78`. All **26/26** exact-head PR workflows completed successfully.
+
+The checker now compares opaque pointer address spaces in arguments/results, recognizes quoted and multiline required `phil_*` LLVM headers, fails closed for malformed required declarations, and enforces the documented default calling convention. Dedicated tests exhibit failures on pinned historical checker blob `51db1085eeb92b99fe11cb7c8bd7bcb2af6ef164` and success with the repaired checker. Existing `--partial` controls and the deliberately excluded linkage/attribute comparison scope are preserved. [Dedicated ABI regression workflow](https://github.com/abiggerhammer/phil/actions/workflows/phase1-audit-runtime-abi-completeness.yml) passed.
+
+The same PR fixes LLVM 18 installation in previously red Phase 0 integrated-native certification, focused runtime, LLVM boundary proof certification, and control-codec certification jobs. All reran successfully on the exact green PR head. These were toolchain-provisioning faults, not newly discovered compiler semantic defects.
+
+**Boundary:** no claim of a complete LLVM parser, arbitrary ABI attributes or calling conventions, all-platform linkage correctness, proof correspondence beyond existing named suites, or final public-release byte certification. Historical source/synthetic audit findings remain preserved. **Next:** reconcile historical `f2ed3c1/RT-01/02/03` against current source and supported-toolchain reproduction, then independent NR-D06, release asset-byte validation, and pinned final-delta review. Independent-audit freeze: **NOT YET**.
