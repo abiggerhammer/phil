@@ -1,6 +1,7 @@
 #include "control_codec_v1.h"
 
 #include <stdlib.h>
+#include <stdint.h>
 #include <string.h>
 
 #define PHIL_CODEC_V1_MAGIC_0 0x50u
@@ -163,12 +164,36 @@ static void transport_append_or_abort(
     struct PhilCodecTransport *transport,
     const uint8_t *bytes,
     size_t length) {
+  size_t alias_offset = 0u;
+  int aliases_transport = 0;
   if (transport == NULL || (length != 0u && bytes == NULL)) {
     codec_abort();
   }
+  /*
+   * A caller may append an interior view of this very transport. realloc can
+   * invalidate that view, so capture its logical offset before reserving and
+   * rebase it afterward. Never read the uninitialized capacity tail.
+   * uintptr_t comparisons also avoid undefined relational pointer comparisons
+   * between independently allocated objects.
+   */
+  if (length != 0u && transport->bytes != NULL) {
+    uintptr_t source_address = (uintptr_t)bytes;
+    uintptr_t base_address = (uintptr_t)transport->bytes;
+    if (source_address >= base_address
+        && source_address - base_address < transport->capacity) {
+      aliases_transport = 1;
+      alias_offset = (size_t)(source_address - base_address);
+      if (alias_offset > transport->length
+          || length > transport->length - alias_offset) {
+        codec_abort();
+      }
+    }
+  }
   transport_reserve(transport, length);
   if (length != 0u) {
-    memcpy(transport->bytes + transport->length, bytes, length);
+    const uint8_t *source = aliases_transport
+        ? transport->bytes + alias_offset : bytes;
+    memmove(transport->bytes + transport->length, source, length);
   }
   transport->length += length;
 }
