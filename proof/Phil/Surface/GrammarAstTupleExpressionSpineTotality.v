@@ -1,8 +1,13 @@
 From Stdlib Require Import Lists.List Strings.String.
 
 From Phil.Surface Require Import
-  GrammarAstTupleExpressionSpine
-  GrammarAstParenthesizedExpressionSpineTotality.
+  GrammarDerivation
+  GrammarDeterminacySimpleResolverSoundness
+  GrammarAstSourceHeader
+  GrammarAstSourceHeaderTotality
+  GrammarAstGenericRequirementsSpine
+  GrammarAstGenericRequirementsTotality
+  GrammarAstTupleExpressionSpine.
 
 Import ListNotations.
 Open Scope string_scope.
@@ -49,6 +54,7 @@ Proof.
       [ELiteral ","; ENonterminal "expression"]
       input rest tree Hderive)
     as [trees [Htree Hitems]].
+  revert Htree.
   repeat match goal with
   | Hseq : DerivesSequence phase1_surface_rules _ _ (_ :: _) _ _ _ |- _ =>
       inversion Hseq; subst; clear Hseq
@@ -57,6 +63,7 @@ Proof.
   | Hnil : DerivesSequence phase1_surface_rules _ _ [] _ _ _ |- _ =>
       inversion Hnil; subst; clear Hnil
   end.
+  intro Htree.
   match goal with
   | Hcomma : Derives phase1_surface_rules _ (ELiteral ",") _ _ ?comma_tree,
     Hexpression : Derives phase1_surface_rules _
@@ -146,6 +153,7 @@ Proof.
       ]
       input rest subtree Hbody)
     as [trees [Hsubtree Hitems]].
+  revert Htree Hsubtree.
   repeat match goal with
   | Hseq : DerivesSequence phase1_surface_rules _ _ (_ :: _) _ _ _ |- _ =>
       inversion Hseq; subst; clear Hseq
@@ -154,6 +162,7 @@ Proof.
   | Hnil : DerivesSequence phase1_surface_rules _ _ [] _ _ _ |- _ =>
       inversion Hnil; subst; clear Hnil
   end.
+  intros Htree Hsubtree.
   match goal with
   | Hopen : Derives phase1_surface_rules _ (ELiteral "(") _ _ ?open_tree,
     Hfirst : Derives phase1_surface_rules _
