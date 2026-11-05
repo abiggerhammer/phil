@@ -1,0 +1,44 @@
+name: Phase 1 Audit Steve CAS Handle Cleanup
+
+on:
+  pull_request:
+    paths:
+      - 'src/Phil/Compiler/SteveCAS.hs'
+      - 'test/Phase1AuditSteveCASCleanupWorker.hs'
+      - 'scripts/ci/test-steve-cas-handle-cleanup.sh'
+      - '.github/workflows/phase1-audit-steve-cas-cleanup.yml'
+  push:
+    branches: [main]
+    paths:
+      - 'src/Phil/Compiler/SteveCAS.hs'
+      - 'test/Phase1AuditSteveCASCleanupWorker.hs'
+      - 'scripts/ci/test-steve-cas-handle-cleanup.sh'
+      - '.github/workflows/phase1-audit-steve-cas-cleanup.yml'
+
+permissions:
+  contents: read
+
+jobs:
+  cas-handle-cleanup:
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - uses: haskell-actions/setup@v2
+        with:
+          ghc-version: '9.6.7'
+          cabal-version: 'latest'
+      - name: Build ordinary Haskell substrate
+        run: cabal build all --enable-tests --ghc-options=-Werror
+      - name: Strict typecheck CAS and failure-injection worker
+        run: |
+          cabal exec -- ghc -isrc -Wall -Werror -fno-code src/Phil/Compiler/SteveCAS.hs
+          cabal exec -- ghc -isrc -Wall -Werror -fno-code \
+            -package bytestring -package text -package directory \
+            -package unix -package cryptohash-sha256 \
+            test/Phase1AuditSteveCASCleanupWorker.hs
+      - name: Verify pinned baseline failure and repaired pre-close cleanup
+        run: bash scripts/ci/test-steve-cas-handle-cleanup.sh
+      - name: Replay ordinary Steve CAS install/read/no-replace controls
+        run: cabal exec -- runghc -isrc -itest -Wall -Werror test/Phase1INT006SteveCASMain.hs
