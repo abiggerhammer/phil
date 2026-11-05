@@ -15,10 +15,22 @@ permissions:
 
 jobs:
   build-and-test:
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     steps:
       - name: Check out repository
         uses: actions/checkout@v4
+
+      # LLVM 18 was removed from the current ubuntu-latest runner image.
+      # Provision the exact compiler toolchain used by the Phase 0 smoke test.
+      - name: Install and verify LLVM 18
+        run: |
+          set -euo pipefail
+          sudo apt-get update
+          sudo apt-get install -y llvm-18 clang-18
+          for tool in llvm-as-18 llvm-link-18 llvm-dis-18 clang-18; do
+            command -v "$tool"
+            "$tool" --version | grep -Eq 'version 18[.]'
+          done
 
       - name: Set up Haskell
         uses: haskell-actions/setup@v2
