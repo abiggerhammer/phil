@@ -1,0 +1,29 @@
+name: Phase 1 Audit Runtime ABI Completeness
+
+on:
+  pull_request:
+    paths:
+      - 'scripts/check_runtime_abi.py'
+      - 'scripts/ci/test_runtime_abi_checker.py'
+      - '.github/workflows/phase1-audit-runtime-abi-completeness.yml'
+  push:
+    branches: [main]
+    paths:
+      - 'scripts/check_runtime_abi.py'
+      - 'scripts/ci/test_runtime_abi_checker.py'
+      - '.github/workflows/phase1-audit-runtime-abi-completeness.yml'
+
+permissions:
+  contents: read
+
+jobs:
+  abi-01-02-regressions:
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+      - name: Exercise scalar, aggregate, address-space, quoted/multiline and CC controls
+        run: python3 -m unittest discover -s scripts/ci -p test_runtime_abi_checker.py -v
+      - name: Existing Phase 0 native ABI integration
+        run: |
+          bash scripts/ci/setup-llvm18.sh
+          bash scripts/ci/phase0-integrated-native.sh
